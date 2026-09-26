@@ -43,6 +43,7 @@ interface Props {
   visibility?: Frame3DVisibility;
   onVisibilityChange?: (visibility: Frame3DVisibility) => void;
   structuralGrid?: StructuralGrid;
+  gridSpacingM?: number;
   result?: Frame3DSolveResult | null;
   checks?: Frame3DSteelChecks | null;
   concreteChecks?: Frame3DConcreteChecks | null;
@@ -62,7 +63,7 @@ export default function Frame3DEditor({
   model, calculationModel, onChange, visibilityOpen = false, onVisibilityClose,
   tool = "select", onToolChange, deleteToken = 0, fitRequest = 0, viewRequest,
   selection: controlledSelection, onSelectionChange,
-  visibility: visibilityProp, onVisibilityChange, structuralGrid,
+  visibility: visibilityProp, onVisibilityChange, structuralGrid, gridSpacingM,
   result = null, checks = null, concreteChecks = null,
   solving = false, solveError = null, activeLoadCaseId,
   viewSets = [], currentView = "iso", currentCombinationId = null, combinationOptions = [],
@@ -167,8 +168,10 @@ export default function Frame3DEditor({
           onSelect={setSelection}
           fitToken={fitToken + fitRequest}
           viewRequest={viewRequest}
+          currentView={currentView}
           visibility={visibility}
           structuralGrid={structuralGrid}
+          gridSpacingM={gridSpacingM}
           result={result}
           utilizations={utilizations}
           activeLoadCaseId={activeLoadCaseId}

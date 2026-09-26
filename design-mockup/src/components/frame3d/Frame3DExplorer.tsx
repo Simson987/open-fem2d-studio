@@ -106,7 +106,9 @@ export default function Frame3DExplorer(props: Props) {
         </Branch>
         <Branch label="Platen" count={(props.model.plates ?? []).length}>
           {(props.model.plates ?? []).map((plate) => <Leaf key={plate.id} label={`Plaat ${plate.id}`}
-            value={`${plate.nodeIds.length} hoeken · ${plate.thicknessM} m · ${plate.openings?.length ?? 0} openingen`}
+            value={plate.boundary
+              ? `${plate.boundary.length} segmenten · ${plate.boundary.filter((segment) => segment.kind === "arc").length} boog · ${plate.thicknessM} m · ${plate.openings?.length ?? 0} openingen`
+              : `${plate.nodeIds.length} hoeken · ${plate.thicknessM} m · ${plate.openings?.length ?? 0} openingen`}
             active={frame3DSelectionContains(props.selection, "plate", plate.id)}
             onClick={(event) => select(event, { type: "plate", id: plate.id })} />)}
         </Branch>

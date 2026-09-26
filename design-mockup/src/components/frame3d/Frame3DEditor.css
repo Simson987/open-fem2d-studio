@@ -67,7 +67,19 @@
 .frame3d-utilization-high { color:#b45309; }
 .frame3d-utilization-fail { color:#b91c1c; }
 .frame3d-utilization-not-applicable { color:#64748b; }
-.frame3d-tool-addNode,.frame3d-tool-addBeam { cursor:crosshair; }
+.frame3d-tool-addNode,.frame3d-tool-addBeam,.frame3d-tool-addPlate,.frame3d-tool-addPlateArc,.frame3d-tool-addOpening { cursor:crosshair; }
+.frame3d-snap-label,
+.frame3d-snap-hint {
+  padding: 2px 5px;
+  border: 1px solid #f59e0b;
+  border-radius: 3px;
+  background: rgba(255,255,255,.94);
+  color: #92400e;
+  font: 600 10px/1.2 system-ui,sans-serif;
+  pointer-events: none;
+  transform: translate(9px,-9px);
+}
+.frame3d-snap-hint { position:absolute; z-index:4; }
 .frame3d-node-label { margin: 0 0 7px 9px; }
 .frame3d-beam-number { margin-bottom: 7px; color: #1d4ed8; }
 .frame3d-profile-label { margin: 17px 0 0 7px; color: #475569; font-size: 10px; }

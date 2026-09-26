@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-import { addFrame3DPlate, addFrame3DPlateOpening, frame3DLoadCaseId, splitFrame3DBeam, type Frame3DModel } from "./frame3dModel";
+import { addFrame3DPlate, addFrame3DPlateOpening, frame3DLoadCaseId, splitFrame3DBeam, type Frame3DModel, type Frame3DPlateBoundarySegment } from "./frame3dModel";
 import type { Frame3DVisibility } from "./frame3dVisibility";
 import type { Frame3DView } from "./frame3dCommands";
 import { addFrame3DConditionMarkers } from "./frame3dMarkers";
@@ -25,10 +25,11 @@ import { frame3DMaximumDisplacementM, frame3DMemberDisplacementStations } from "
 import {
   frame3DSelectionContains,
   toggleFrame3DSelection,
-  type Frame3DSelection,
+  type Frame3DSelection, type Frame3DSelectionType,
 } from "./frame3dSelection";
 import type { Frame3DCameraState } from "./frame3dViewSets";
 import { createFrame3DPlateGeometry } from "./frame3dPlateGeometry";
+import { useSnapInstellingen, type SnapInstellingen, type SnapSoort } from "../../hooks/useSnapInstellingen";
 
 // De analytische knoop is een punt, maar in de editor moet hij ook op afstand
 // goed aanklikbaar en herkenbaar blijven. De staaf loopt tot het middelpunt van
@@ -134,7 +135,9 @@ interface Props {
   fitToken: number;
   visibility: Frame3DVisibility;
   structuralGrid?: StructuralGrid;
+  gridSpacingM?: number;
   viewRequest?: { kind: Frame3DView; token: number };
+  currentView?: Frame3DView;
   result?: Frame3DSolveResult | null;
   utilizations?: Frame3DUtilization[];
   activeLoadCaseId?: number;
@@ -149,10 +152,24 @@ interface SceneState {
   labelRenderer: CSS2DRenderer;
   controls: OrbitControls;
   geometry: THREE.Group;
+  preview: THREE.Group;
+  previewHint: HTMLSpanElement;
   grid: THREE.GridHelper;
   axes: THREE.AxesHelper;
   axisLabels: CSS2DObject[];
 }
+
+interface PlateSketch {
+  nodeIds: number[];
+  segments: Frame3DPlateBoundarySegment[];
+  firstNodeId: number | null;
+  lastNodeId: number | null;
+  arcControlNodeId: number | null;
+}
+
+const emptyPlateSketch = (): PlateSketch => ({
+  nodeIds: [], segments: [], firstNodeId: null, lastNodeId: null, arcControlNodeId: null,
+});
 
 function disposeGroup(group: THREE.Group) {
   for (const child of [...group.children]) {
@@ -167,6 +184,40 @@ function disposeGroup(group: THREE.Group) {
       }
     });
   }
+}
+
+function hidePreview(group: THREE.Group) {
+  group.children.forEach((child) => { child.visible = false; });
+}
+
+const SELECTABLE_TYPES = new Set<Frame3DSelectionType>([
+  "node", "beam", "plate", "nodalLoad", "memberLoad", "memberPointLoad", "thermalLoad", "surfaceLoad",
+]);
+
+/** Werk alleen de materiaalkleur bij; selecteren mag de zware profielgeometrie niet opnieuw bouwen. */
+function applySelectionHighlight(group: THREE.Group, selection: Frame3DSelection) {
+  group.traverse((object) => {
+    const type = object.userData.type as Frame3DSelectionType | undefined;
+    const id = object.userData.id;
+    if (!type || !SELECTABLE_TYPES.has(type) || typeof id !== "number") return;
+    const drawable = object as THREE.Object3D & { material?: THREE.Material | THREE.Material[] };
+    if (!drawable.material) return;
+    const materials = Array.isArray(drawable.material) ? drawable.material : [drawable.material];
+    const baseColors = (object.userData.selectionBaseColors ??= []) as Array<number | undefined>;
+    const selected = frame3DSelectionContains(selection, type, id);
+    materials.forEach((material, index) => {
+      const colored = material as THREE.Material & { color?: THREE.Color };
+      if (!colored.color) return;
+      if (baseColors[index] === undefined) baseColors[index] = colored.color.getHex();
+      colored.color.setHex(selected ? (object.userData.selectionColor ?? 0xd97706) : baseColors[index]!);
+      material.needsUpdate = true;
+    });
+    if (object.userData.selectionOpacity !== undefined) {
+      materials.forEach((material) => {
+        material.opacity = selected ? object.userData.selectionOpacity : object.userData.baseOpacity;
+      });
+    }
+  });
 }
 
 function makeLabel(text: string, className: string, position: THREE.Vector3): CSS2DObject {
@@ -350,7 +401,7 @@ function resultScale(model: Frame3DModel, result: Frame3DSolveResult): number {
   return maxDisplacement > 1e-15 ? Math.min(10_000, modelSize * 0.12 / maxDisplacement) : 1;
 }
 
-export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool, selection, onSelect, fitToken, visibility, viewRequest, structuralGrid, result, utilizations = [], activeLoadCaseId, cameraRequest, onCameraChange }: Props) {
+export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool, selection, onSelect, fitToken, visibility, viewRequest, currentView = "iso", structuralGrid, gridSpacingM = 0.5, result, utilizations = [], activeLoadCaseId, cameraRequest, onCameraChange }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneState | null>(null);
   const selectRef = useRef(onSelect);
@@ -361,15 +412,44 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   changeRef.current = onChange;
   const toolRef = useRef(tool);
   toolRef.current = tool;
+  // De actieve invoerrichting wordt in dezelfde effect bijgewerkt als de
+  // camera. Zo gebruikt een klik nooit nog de vorige aanzichtsrichting.
+  const viewRef = useRef<Frame3DView>(viewRequest?.kind ?? currentView);
+  viewRef.current = viewRequest?.kind ?? currentView;
+  const snaps = useSnapInstellingen();
+  const snapsRef = useRef<SnapInstellingen>(snaps);
+  snapsRef.current = snaps;
+  const structuralGridRef = useRef(structuralGrid);
+  structuralGridRef.current = structuralGrid;
+  const gridSpacingRef = useRef(gridSpacingM);
+  gridSpacingRef.current = gridSpacingM;
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
-  const plateDraftRef = useRef<number[]>([]);
+  const nodePickTargetsRef = useRef<THREE.Object3D[]>([]);
+  const selectionPickTargetsRef = useRef<THREE.Object3D[]>([]);
+  const plateDraftRef = useRef<PlateSketch>(emptyPlateSketch());
+  const openingDraftRef = useRef<number[]>([]);
+  const beamStartRef = useRef<number | null>(null);
   const openingPlateRef = useRef<number | null>(null);
   const cameraChangeRef = useRef(onCameraChange);
   cameraChangeRef.current = onCameraChange;
+  const previousToolRef = useRef(tool);
   useEffect(() => {
-    plateDraftRef.current = [];
+    const plateTools: Frame3DTool[] = ["addPlate", "addPlateArc"];
+    if (!(plateTools.includes(previousToolRef.current) && plateTools.includes(tool))) {
+      plateDraftRef.current = emptyPlateSketch();
+    }
+    if (tool !== "addOpening") openingDraftRef.current = [];
+    if (tool !== "addBeam") beamStartRef.current = null;
+    previousToolRef.current = tool;
     openingPlateRef.current = tool === "addOpening" && selection?.type === "plate" ? selection.id : null;
+    const state = sceneRef.current;
+    if (state) {
+      hidePreview(state.preview);
+      state.previewHint.hidden = true;
+      state.renderer.render(state.scene, state.camera);
+      state.labelRenderer.render(state.scene, state.camera);
+    }
   }, [tool]);
 
   useEffect(() => {
@@ -381,7 +461,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     camera.up.set(0, 0, 1);
     camera.position.set(8, 8, 6);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    // 1,5 is op hoge-dpi schermen scherp genoeg voor CAD-lijnen en voorkomt
+    // dat elke 3D-frame viermaal zoveel pixels als CSS-pixels hoeft te vullen.
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     container.appendChild(renderer.domElement);
     const labelRenderer = new CSS2DRenderer();
     labelRenderer.domElement.className = "frame3d-label-layer";
@@ -421,7 +503,32 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     scene.add(light);
     const geometry = new THREE.Group();
     scene.add(geometry);
-    sceneRef.current = { scene, camera, renderer, labelRenderer, controls, geometry, grid, axes, axisLabels };
+    const preview = new THREE.Group();
+    preview.renderOrder = 100;
+    const previewPositions = new Float32Array(25 * 3);
+    const previewGeometry = new THREE.BufferGeometry();
+    previewGeometry.setAttribute("position", new THREE.BufferAttribute(previewPositions, 3));
+    previewGeometry.setDrawRange(0, 0);
+    const previewLine = new THREE.Line(
+      previewGeometry,
+      new THREE.LineBasicMaterial({ color: 0x0284c7, depthTest: false }),
+    );
+    previewLine.renderOrder = 101;
+    previewLine.visible = false;
+    preview.add(previewLine);
+    const previewCursor = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 14, 10),
+      new THREE.MeshBasicMaterial({ color: 0xf59e0b, depthTest: false }),
+    );
+    previewCursor.renderOrder = 102;
+    previewCursor.visible = false;
+    preview.add(previewCursor);
+    const previewHint = document.createElement("span");
+    previewHint.className = "frame3d-snap-hint";
+    previewHint.hidden = true;
+    container.appendChild(previewHint);
+    scene.add(preview);
+    sceneRef.current = { scene, camera, renderer, labelRenderer, controls, geometry, preview, previewHint, grid, axes, axisLabels };
 
     // Damping staat uit, dus continu renderen levert alleen CPU/GPU-belasting op.
     // Teken uitsluitend na camera-, formaat- of modelwijzigingen. Dat houdt ook
@@ -429,6 +536,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const renderScene = () => {
       renderer.render(scene, camera);
       labelRenderer.render(scene, camera);
+    };
+    const saveCamera = () => {
       cameraChangeRef.current?.({
         position: camera.position.toArray() as [number, number, number],
         target: controls.target.toArray() as [number, number, number],
@@ -436,6 +545,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       });
     };
     controls.addEventListener("change", renderScene);
+    // Camera-instellingen gaan pas na de interactie naar React. Tijdens
+    // pannen/roteren hoeft daardoor geen componentstate per muispixel mee.
+    controls.addEventListener("end", saveCamera);
 
     const resize = () => {
       const width = Math.max(1, container.clientWidth);
@@ -452,6 +564,154 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
 
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
+    const setPointer = (event: PointerEvent) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1,
+                  -((event.clientY - rect.top) / rect.height) * 2 + 1);
+      raycaster.setFromCamera(pointer, camera);
+    };
+    const drawingAnchor = () => {
+      const current = modelRef.current;
+      const sketch = plateDraftRef.current;
+      const nodeId = toolRef.current === "addBeam" ? beamStartRef.current : sketch.firstNodeId;
+      return nodeId === null ? undefined : current.nodes.find((node) => node.id === nodeId);
+    };
+    const drawingPlane = () => {
+      const anchor = drawingAnchor();
+      const cameraOffset = camera.position.clone().sub(controls.target).normalize();
+      // Lees het orthogonale aanzicht ook uit de echte camera. Dit houdt het
+      // werkvlak correct wanneer een opgeslagen camera of Fast Refresh de
+      // laatst aangevraagde view voorbijgaat.
+      const cameraView: Frame3DView | null = Math.abs(cameraOffset.z) > 0.985 ? "top"
+        : Math.abs(cameraOffset.y) > 0.985 ? "front"
+        : Math.abs(cameraOffset.x) > 0.985 ? "side"
+        : null;
+      const view = cameraView ?? viewRef.current;
+      // Boven gebruikt XY, voor gebruikt XZ en zij gebruikt YZ. In een vrij
+      // 3D-aanzicht tekenen we bewust in het horizontale XY-werkvlak. Dit is
+      // stabieler en voorspelbaarder dan een vlak dat met de camera meedraait.
+      const normal = view === "front" ? new THREE.Vector3(0, 1, 0)
+        : view === "side" ? new THREE.Vector3(1, 0, 0)
+        : new THREE.Vector3(0, 0, 1);
+      const origin = anchor
+        ? new THREE.Vector3(anchor.x, anchor.y, anchor.z)
+        : controls.target.clone();
+      return { anchor, view, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, origin) };
+    };
+    type DrawingSnap = { position: THREE.Vector3; nodeId?: number; kind?: SnapSoort };
+    const drawingSnap = (): DrawingSnap | null => {
+      const current = modelRef.current;
+      const settings = snapsRef.current;
+      if (settings.knoop) {
+        const nodeHit = raycaster.intersectObjects(nodePickTargetsRef.current, false)[0];
+        if (nodeHit) {
+          const node = current.nodes.find((item) => item.id === nodeHit.object.userData.id);
+          if (node) return { position: new THREE.Vector3(node.x, node.y, node.z), nodeId: node.id, kind: "knoop" };
+        }
+      }
+      const { anchor, view, plane } = drawingPlane();
+      const position = new THREE.Vector3();
+      if (!raycaster.ray.intersectPlane(plane, position)) return null;
+      const raw = position.clone();
+      if (settings.stramien && structuralGridRef.current?.enabled) {
+        const structural = structuralGridRef.current;
+        const xValues = structural.xAxes.map((axis) => axis.position / 1000);
+        const yValues = (structural.yAxes ?? []).map((axis) => axis.position / 1000);
+        const zValues = structural.zAxes.map((axis) => axis.position / 1000);
+        const candidates: THREE.Vector3[] = [];
+        const addSingleAxes = (key: "x" | "y" | "z", values: number[]) => values.forEach((value) => {
+          const candidate = raw.clone();
+          candidate[key] = value;
+          candidates.push(candidate);
+        });
+        if (view === "front") {
+          addSingleAxes("x", xValues); addSingleAxes("z", zValues);
+          xValues.forEach((x) => zValues.forEach((z) => candidates.push(new THREE.Vector3(x, anchor?.y ?? controls.target.y, z))));
+        } else if (view === "side") {
+          addSingleAxes("y", yValues); addSingleAxes("z", zValues);
+          yValues.forEach((y) => zValues.forEach((z) => candidates.push(new THREE.Vector3(anchor?.x ?? controls.target.x, y, z))));
+        } else {
+          addSingleAxes("x", xValues); addSingleAxes("y", yValues);
+          xValues.forEach((x) => yValues.forEach((y) => candidates.push(new THREE.Vector3(x, y, anchor?.z ?? controls.target.z))));
+        }
+        const rect = renderer.domElement.getBoundingClientRect();
+        const pixelDistance = (candidate: THREE.Vector3) => {
+          const projected = candidate.clone().project(camera);
+          return Math.hypot((projected.x - pointer.x) * rect.width / 2, (projected.y - pointer.y) * rect.height / 2);
+        };
+        const nearest = candidates.reduce<{ point: THREE.Vector3; distance: number } | null>((best, candidate) => {
+          const distance = pixelDistance(candidate);
+          return !best || distance < best.distance ? { point: candidate, distance } : best;
+        }, null);
+        if (nearest && nearest.distance <= 14) return { position: nearest.point, kind: "stramien" };
+      }
+      if (settings.raster) {
+        const spacing = Math.max(0.001, gridSpacingRef.current);
+        const round = (value: number) => Math.round(value / spacing) * spacing;
+        if (view === "front") position.set(round(raw.x), anchor?.y ?? controls.target.y, round(raw.z));
+        else if (view === "side") position.set(anchor?.x ?? controls.target.x, round(raw.y), round(raw.z));
+        else position.set(round(raw.x), round(raw.y), anchor?.z ?? controls.target.z);
+        return { position, kind: "raster" };
+      }
+      return { position: raw };
+    };
+    let previewFrame = 0;
+    let latestPointerEvent: PointerEvent | null = null;
+    const drawPointerPreview = () => {
+      previewFrame = 0;
+      const event = latestPointerEvent;
+      latestPointerEvent = null;
+      if (!event) return;
+      const activeTool = toolRef.current;
+      if (activeTool !== "addBeam" && activeTool !== "addPlate" && activeTool !== "addPlateArc") return;
+      setPointer(event);
+      hidePreview(preview);
+      previewHint.hidden = true;
+      const sketch = plateDraftRef.current;
+      const lastId = activeTool === "addBeam" ? beamStartRef.current : sketch.lastNodeId;
+      const last = lastId === null ? undefined : modelRef.current.nodes.find((node) => node.id === lastId);
+      const target = drawingSnap();
+      if (last && target) {
+        const start = new THREE.Vector3(last.x, last.y, last.z);
+        let points: THREE.Vector3[];
+        if (activeTool === "addPlateArc" && sketch.arcControlNodeId !== null) {
+          const control = modelRef.current.nodes.find((node) => node.id === sketch.arcControlNodeId);
+          points = control
+            ? new THREE.QuadraticBezierCurve3(start, new THREE.Vector3(control.x, control.y, control.z), target.position).getPoints(24)
+            : [start, target.position];
+        } else {
+          points = [start, target.position];
+        }
+        const attribute = previewGeometry.getAttribute("position") as THREE.BufferAttribute;
+        points.forEach((point, index) => attribute.setXYZ(index, point.x, point.y, point.z));
+        attribute.needsUpdate = true;
+        previewGeometry.setDrawRange(0, points.length);
+        (previewLine.material as THREE.LineBasicMaterial).color.setHex(activeTool === "addPlateArc" ? 0x7c3aed : 0x0284c7);
+        previewLine.visible = true;
+        previewCursor.position.copy(target.position);
+        previewCursor.scale.setScalar(Math.max(visualNodeRadius(modelRef.current) * 1.25, 0.025));
+        previewCursor.visible = true;
+        if (target.kind) {
+          const rect = renderer.domElement.getBoundingClientRect();
+          previewHint.textContent = target.kind === "knoop" ? "Knoop" : target.kind === "stramien" ? "Stramien" : "Raster";
+          previewHint.className = `frame3d-snap-hint frame3d-snap-${target.kind}`;
+          previewHint.style.left = `${event.clientX - rect.left}px`;
+          previewHint.style.top = `${event.clientY - rect.top}px`;
+          previewHint.hidden = false;
+        }
+      }
+      renderer.render(scene, camera);
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      latestPointerEvent = event;
+      if (!previewFrame) previewFrame = requestAnimationFrame(drawPointerPreview);
+    };
+    const onPointerLeave = () => {
+      latestPointerEvent = null;
+      hidePreview(preview);
+      previewHint.hidden = true;
+      renderScene();
+    };
     let down: { x: number; y: number } | null = null;
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0) {
@@ -469,75 +729,147 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         down = null;
         return;
       }
-      const rect = renderer.domElement.getBoundingClientRect();
-      pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1,
-                  -((event.clientY - rect.top) / rect.height) * 2 + 1);
-      raycaster.setFromCamera(pointer, camera);
-      const intersection = raycaster.intersectObjects(geometry.children, true)[0];
+      setPointer(event);
+      // Raycast alleen tegen objecten die werkelijk selecteerbaar zijn. Labels,
+      // rasters en resultaatlijnen hoeven bij grote modellen niet bij iedere
+      // klik opnieuw doorzocht te worden.
+      const intersection = raycaster.intersectObjects(selectionPickTargetsRef.current, false)[0];
       let hit: THREE.Object3D | undefined = intersection?.object;
       while (hit && hit !== geometry && typeof hit.userData.type !== "string") hit = hit.parent ?? undefined;
       const type = hit?.userData.type;
       const id = hit?.userData.id;
       const activeTool = toolRef.current;
-      const current = modelRef.current;
-      if (activeTool === "addNode") {
-        const point = new THREE.Vector3();
-        const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-        if (raycaster.ray.intersectPlane(plane, point)) {
-          const snap = (value: number) => Math.round(value * 10) / 10;
-          const x = snap(point.x), y = snap(point.y), z = 0;
-          const existing = current.nodes.find((node) => Math.hypot(node.x - x, node.y - y, node.z - z) < 1e-7);
-          if (existing) selectRef.current({ type: "node", id: existing.id });
-          else {
-            const newId = Math.max(0, ...current.nodes.map((node) => node.id)) + 1;
-            changeRef.current({ ...current, nodes: [...current.nodes, { id: newId, x, y, z }] });
-            selectRef.current({ type: "node", id: newId });
+      let current = modelRef.current;
+      const commitModel = (next: Frame3DModel) => {
+        modelRef.current = next;
+        current = next;
+        changeRef.current(next);
+      };
+      const ensureDrawingNode = (): number | null => {
+        if (activeTool === "addBeam" && type === "beam" && typeof id === "number" && intersection) {
+          const beam = current.beams.find((item) => item.id === id);
+          const start = beam && current.nodes.find((node) => node.id === beam.startNodeId);
+          const end = beam && current.nodes.find((node) => node.id === beam.endNodeId);
+          if (beam && start && end) {
+            const a = new THREE.Vector3(start.x, start.y, start.z);
+            const delta = new THREE.Vector3(end.x - start.x, end.y - start.y, end.z - start.z);
+            const ratio = intersection.point.clone().sub(a).dot(delta) / delta.lengthSq();
+            if (ratio <= 1e-6) return start.id;
+            if (ratio >= 1 - 1e-6) return end.id;
+            const split = splitFrame3DBeam(current, beam.id, ratio);
+            commitModel(split.model);
+            return split.nodeId;
           }
         }
+        const snapped = drawingSnap();
+        if (!snapped) return null;
+        if (snapped.nodeId !== undefined) return snapped.nodeId;
+        const position = snapped.position;
+        const existing = current.nodes.find((node) =>
+          Math.hypot(node.x - position.x, node.y - position.y, node.z - position.z) < 1e-7);
+        if (existing) return existing.id;
+        const nodeId = Math.max(0, ...current.nodes.map((node) => node.id)) + 1;
+        commitModel({ ...current, nodes: [...current.nodes, { id: nodeId, x: position.x, y: position.y, z: position.z }] });
+        return nodeId;
+      };
+      if (activeTool === "addNode") {
+        const nodeId = ensureDrawingNode();
+        if (nodeId !== null) selectRef.current({ type: "node", id: nodeId });
       } else if (activeTool === "addBeam") {
-        if (type === "node" && typeof id === "number") {
-          const start = selectionRef.current?.type === "node" ? selectionRef.current.id : null;
-          if (start === null || start === id) selectRef.current({ type: "node", id });
+        const nodeId = ensureDrawingNode();
+        if (nodeId !== null) {
+          const start = beamStartRef.current;
+          if (start === null || start === nodeId) {
+            beamStartRef.current = nodeId;
+            selectRef.current({ type: "node", id: nodeId });
+          }
           else {
             const duplicate = current.beams.some((beam) =>
-              beam.startNodeId === start && beam.endNodeId === id ||
-              beam.startNodeId === id && beam.endNodeId === start);
+              beam.startNodeId === start && beam.endNodeId === nodeId ||
+              beam.startNodeId === nodeId && beam.endNodeId === start);
             if (!duplicate) {
               const beamId = Math.max(0, ...current.beams.map((beam) => beam.id)) + 1;
-              changeRef.current({
+              commitModel({
                 ...current,
                 beams: [...current.beams, {
                   id: beamId,
                   startNodeId: start,
-                  endNodeId: id,
+                  endNodeId: nodeId,
                   material: "S235",
                   profileName: "IPE 200",
                 }],
               });
-              selectRef.current({ type: "beam", id: beamId });
             }
+            beamStartRef.current = nodeId;
+            selectRef.current({ type: "node", id: nodeId });
           }
         }
-      } else if (activeTool === "addPlate" || activeTool === "addOpening") {
-        if (type === "node" && typeof id === "number") {
-          const draft = plateDraftRef.current;
-          if (draft.length >= 3 && id === draft[0]) {
-            try {
-              if (activeTool === "addPlate") {
-                const next = addFrame3DPlate(current, draft, { thicknessM: 0.2, material: "C30/37" });
-                changeRef.current(next);
+      } else if (activeTool === "addPlate" || activeTool === "addPlateArc") {
+        const nodeId = ensureDrawingNode();
+        if (nodeId !== null) {
+          const sketch = plateDraftRef.current;
+          if (sketch.firstNodeId === null) {
+            plateDraftRef.current = { ...emptyPlateSketch(), nodeIds: [nodeId], firstNodeId: nodeId, lastNodeId: nodeId };
+          } else if (activeTool === "addPlateArc" && sketch.arcControlNodeId === null) {
+            if (nodeId !== sketch.lastNodeId && nodeId !== sketch.firstNodeId && !sketch.nodeIds.includes(nodeId)) {
+              plateDraftRef.current = {
+                ...sketch,
+                nodeIds: [...sketch.nodeIds, nodeId],
+                arcControlNodeId: nodeId,
+              };
+            }
+          } else if (sketch.lastNodeId !== null && nodeId !== sketch.lastNodeId) {
+            const closes = nodeId === sketch.firstNodeId;
+            if (!closes && sketch.nodeIds.includes(nodeId)) {
+              down = null;
+              return;
+            }
+            const segment: Frame3DPlateBoundarySegment = activeTool === "addPlateArc"
+              ? { kind: "arc", startNodeId: sketch.lastNodeId, controlNodeId: sketch.arcControlNodeId!, endNodeId: nodeId }
+              : { kind: "line", startNodeId: sketch.lastNodeId, endNodeId: nodeId };
+            const segments = [...sketch.segments, segment];
+            const nodeIds = closes ? sketch.nodeIds : [...sketch.nodeIds, nodeId];
+            if (closes && segments.length >= 2 && nodeIds.length >= 3) {
+              try {
+                const next = addFrame3DPlate(current, nodeIds, {
+                  thicknessM: 0.2,
+                  material: "C30/37",
+                  boundary: segments,
+                });
+                commitModel(next);
                 selectRef.current({ type: "plate", id: Math.max(...(next.plates ?? []).map((plate) => plate.id)) });
-              } else if (openingPlateRef.current !== null) {
-                const next = addFrame3DPlateOpening(current, openingPlateRef.current, draft);
-                changeRef.current(next);
-                selectRef.current({ type: "plate", id: openingPlateRef.current });
+              } finally {
+                plateDraftRef.current = emptyPlateSketch();
               }
+            } else if (!closes) {
+              plateDraftRef.current = {
+                nodeIds,
+                segments,
+                firstNodeId: sketch.firstNodeId,
+                lastNodeId: nodeId,
+                arcControlNodeId: null,
+              };
+            }
+          }
+          const draft = plateDraftRef.current;
+          if (draft.firstNodeId !== null) {
+            selectRef.current({ type: "multi", nodeIds: [...draft.nodeIds], beamIds: [] });
+          }
+        }
+      } else if (activeTool === "addOpening") {
+        if (type === "node" && typeof id === "number") {
+          const draft = openingDraftRef.current;
+          if (draft.length >= 3 && id === draft[0] && openingPlateRef.current !== null) {
+            try {
+              const next = addFrame3DPlateOpening(current, openingPlateRef.current, draft);
+              commitModel(next);
+              selectRef.current({ type: "plate", id: openingPlateRef.current });
             } finally {
-              plateDraftRef.current = [];
+              openingDraftRef.current = [];
             }
           } else if (!draft.includes(id)) {
-            plateDraftRef.current = [...draft, id];
-            selectRef.current({ type: "multi", nodeIds: [...plateDraftRef.current], beamIds: [] });
+            openingDraftRef.current = [...draft, id];
+            selectRef.current({ type: "multi", nodeIds: [...openingDraftRef.current], beamIds: [] });
           }
         }
       } else if (activeTool === "addSubNode") {
@@ -567,18 +899,40 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           ? toggleFrame3DSelection(selectionRef.current, selectable, event.shiftKey || event.ctrlKey || event.metaKey)
           : null);
       }
+      hidePreview(preview);
+      previewHint.hidden = true;
+      renderScene();
       down = null;
     };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      plateDraftRef.current = emptyPlateSketch();
+      openingDraftRef.current = [];
+      beamStartRef.current = null;
+      hidePreview(preview);
+      previewHint.hidden = true;
+      selectRef.current(null);
+      renderScene();
+    };
     renderer.domElement.addEventListener("pointerdown", onPointerDown);
+    renderer.domElement.addEventListener("pointermove", onPointerMove);
+    renderer.domElement.addEventListener("pointerleave", onPointerLeave);
     renderer.domElement.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("keydown", onKeyDown);
 
     return () => {
       observer.disconnect();
+      if (previewFrame) cancelAnimationFrame(previewFrame);
       renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+      renderer.domElement.removeEventListener("pointermove", onPointerMove);
+      renderer.domElement.removeEventListener("pointerleave", onPointerLeave);
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("keydown", onKeyDown);
       controls.removeEventListener("change", renderScene);
+      controls.removeEventListener("end", saveCamera);
       controls.dispose();
       disposeGroup(geometry);
+      disposeGroup(preview);
       grid.geometry.dispose();
       (grid.material as THREE.Material).dispose();
       axes.geometry.dispose();
@@ -587,6 +941,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       renderer.dispose();
       renderer.domElement.remove();
       labelRenderer.domElement.remove();
+      previewHint.remove();
       sceneRef.current = null;
     };
   }, []);
@@ -596,11 +951,37 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     if (!state) return;
     const { geometry } = state;
     disposeGroup(geometry);
+    nodePickTargetsRef.current = [];
+    selectionPickTargetsRef.current = [];
     state.grid.visible = visibility.grid;
     state.axes.visible = visibility.axes;
     state.axisLabels.forEach((label) => { label.visible = visibility.axes; });
     const byId = new Map(model.nodes.map((node) => [node.id, node]));
     const nodeRadius = visualNodeRadius(model);
+    // Deel onveranderlijke buffers binnen één scène-opbouw. Vooral echte
+    // profiel-extrusies en knoopbollen zijn anders bij grote modellen een
+    // kostbare herhaling voor ieder element.
+    const profileGeometryCache = new Map<string, THREE.BufferGeometry | null>();
+    const profileGeometryFor = (profileName: string | undefined, length: number) => {
+      if (!profileName) return null;
+      const key = `${profileName}\u0000${length.toFixed(9)}`;
+      if (!profileGeometryCache.has(key)) {
+        profileGeometryCache.set(key, createFrame3DProfileGeometry(profileName, length));
+      }
+      return profileGeometryCache.get(key) ?? null;
+    };
+    const analyticalGeometryCache = new Map<string, THREE.CylinderGeometry>();
+    const analyticalGeometryFor = (radius: number, length: number, segments: number) => {
+      const key = `${radius}:${length.toFixed(9)}:${segments}`;
+      let cached = analyticalGeometryCache.get(key);
+      if (!cached) {
+        cached = new THREE.CylinderGeometry(radius, radius, length, segments);
+        analyticalGeometryCache.set(key, cached);
+      }
+      return cached;
+    };
+    const nodeGeometry = visibility.nodes ? new THREE.SphereGeometry(nodeRadius, 24, 16) : null;
+    const nodeHitGeometry = visibility.nodes ? new THREE.SphereGeometry(nodeRadius * 2.6, 12, 8) : null;
     const utilizationByMember = new Map(utilizations.map((value) => [value.beamId, value]));
     for (const beam of model.beams) {
       const start = byId.get(beam.startNodeId);
@@ -615,15 +996,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       if (visibility.beams) {
         const utilization = visibility.utilization ? utilizationByMember.get(beam.id) : undefined;
         const utilizationClass = utilization ? frame3DUtilizationClass(utilization) : undefined;
-        const color = frame3DSelectionContains(selection, "beam", beam.id)
-          ? 0xd97706
-          : utilizationClass ? FRAME_3D_UTILIZATION_COLORS[utilizationClass] : 0x2563eb;
+        const color = utilizationClass ? FRAME_3D_UTILIZATION_COLORS[utilizationClass] : 0x2563eb;
         const profileGeometry = visibility.profiles
-          ? createFrame3DProfileGeometry(beam.profileName, length)
+          ? profileGeometryFor(beam.profileName, length)
           : null;
         const radius = visibility.profiles ? PROFILE_BEAM_RADIUS_M : ANALYTICAL_BEAM_RADIUS_M;
         const mesh = new THREE.Mesh(
-          profileGeometry ?? new THREE.CylinderGeometry(radius, radius, length, visibility.profiles ? 24 : 12),
+          profileGeometry ?? analyticalGeometryFor(radius, length, visibility.profiles ? 24 : 12),
           new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.04 }),
         );
         mesh.position.copy(a).add(b).multiplyScalar(0.5);
@@ -666,31 +1045,32 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       for (const plate of model.plates ?? []) {
         const built = createFrame3DPlateGeometry(model, plate);
         if (!built) continue;
-        const selected = frame3DSelectionContains(selection, "plate", plate.id);
         const mesh = new THREE.Mesh(built.geometry, new THREE.MeshStandardMaterial({
-          color: selected ? 0xd97706 : 0x94a3b8,
+          color: 0x94a3b8,
           roughness: 0.78,
           metalness: 0.01,
           transparent: true,
-          opacity: selected ? 0.88 : 0.7,
+          opacity: 0.7,
           side: THREE.DoubleSide,
         }));
         mesh.position.copy(built.position);
         mesh.quaternion.copy(built.quaternion);
-        mesh.userData = { type: "plate", id: plate.id };
-        mesh.add(new THREE.LineSegments(
+        mesh.userData = { type: "plate", id: plate.id, baseOpacity: 0.7, selectionOpacity: 0.88 };
+        const edges = new THREE.LineSegments(
           new THREE.EdgesGeometry(built.geometry, 22),
-          new THREE.LineBasicMaterial({ color: selected ? 0x92400e : 0x475569, transparent: true, opacity: 0.78 }),
-        ));
+          new THREE.LineBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.78 }),
+        );
+        edges.userData = { type: "plate", id: plate.id, selectionColor: 0x92400e };
+        mesh.add(edges);
         geometry.add(mesh);
       }
     }
     for (const node of model.nodes) {
       if (visibility.nodes) {
         const mesh = new THREE.Mesh(
-          new THREE.SphereGeometry(nodeRadius, 24, 16),
+          nodeGeometry!,
           new THREE.MeshStandardMaterial({
-            color: frame3DSelectionContains(selection, "node", node.id) ? 0xd97706 : 0x334155,
+            color: 0x334155,
             roughness: 0.5,
             metalness: 0.06,
           }),
@@ -701,12 +1081,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         // De zichtbare bol blijft klein zoals in 2D; een transparante grotere
         // bol geeft hem een comfortabele klikzone zonder het beeld te vullen.
         const hitTarget = new THREE.Mesh(
-          new THREE.SphereGeometry(nodeRadius * 2.6, 12, 8),
+          nodeHitGeometry!,
           new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
         );
         hitTarget.position.copy(mesh.position);
         hitTarget.userData = { type: "node", id: node.id };
         geometry.add(hitTarget);
+        nodePickTargetsRef.current.push(hitTarget);
       }
       if (visibility.nodeNumbers || visibility.nodeCoordinates) {
         const parts = [
@@ -756,7 +1137,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           for (let index = 0; index < points.length - 1; index += 1) {
             const a = points[index], b = points[index + 1];
             const delta = b.clone().sub(a), length = delta.length();
-            const profile = length > 1e-10 ? createFrame3DProfileGeometry(beam.profileName, length) : null;
+            const profile = length > 1e-10 ? profileGeometryFor(beam.profileName, length) : null;
             if (!profile) continue;
             const deformed = new THREE.Mesh(profile, new THREE.MeshStandardMaterial({
               color: 0xdc2626, transparent: true, opacity: 0.48, depthWrite: false, roughness: 0.65,
@@ -826,9 +1207,23 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         }
       }
     }
+    geometry.traverse((object) => {
+      const type = object.userData.type as Frame3DSelectionType | undefined;
+      if (type && SELECTABLE_TYPES.has(type) && typeof (object as { raycast?: unknown }).raycast === "function") {
+        selectionPickTargetsRef.current.push(object);
+      }
+    });
+    applySelectionHighlight(geometry, selectionRef.current);
     state.renderer.render(state.scene, state.camera);
     state.labelRenderer.render(state.scene, state.camera);
-  }, [model, conditionModel, selection, visibility, structuralGrid, result, utilizations, activeLoadCaseId]);
+  }, [model, conditionModel, visibility, structuralGrid, result, utilizations, activeLoadCaseId]);
+
+  useEffect(() => {
+    const state = sceneRef.current;
+    if (!state) return;
+    applySelectionHighlight(state.geometry, selection);
+    state.renderer.render(state.scene, state.camera);
+  }, [selection]);
 
   useEffect(() => {
     const state = sceneRef.current;
@@ -838,6 +1233,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const hasGeometry = !box.isEmpty();
     const center = hasGeometry ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3();
     const view = viewRequest?.kind ?? "iso";
+    viewRef.current = view;
     const direction = view === "top" ? new THREE.Vector3(0, 0, 1)
       : view === "front" ? new THREE.Vector3(0, -1, 0)
       : view === "side" ? new THREE.Vector3(1, 0, 0)
@@ -855,7 +1251,6 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     state.labelRenderer.render(state.scene, state.camera);
   }, [
     fitToken, viewRequest?.token, viewRequest?.kind,
-    model.nodes.map((node) => `${node.id}:${node.x}:${node.y}:${node.z}`).join("|"),
   ]);
 
   useEffect(() => {
@@ -870,5 +1265,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     state.labelRenderer.render(state.scene, state.camera);
   }, [cameraRequest?.token]);
 
-  return <div className={`frame3d-canvas frame3d-tool-${tool}`} ref={containerRef} aria-label="3D raamwerk" />;
+  return <div
+    className={`frame3d-canvas frame3d-tool-${tool}`}
+    ref={containerRef}
+    aria-label={`3D raamwerk · ${viewRequest?.kind ?? currentView}`}
+  />;
 }

@@ -127,13 +127,21 @@ export interface Frame3DPlateOpening {
   id: number;
   /** Knoopvolgorde rond de opening; dezelfde vlakke basis als de plaat. */
   nodeIds: number[];
+  /** Getekende gesloten contour. Een boog gebruikt begin-, stuur- en eindknoop. */
+  boundary?: Frame3DPlateBoundarySegment[];
   cornerRadiusM?: number;
 }
+
+export type Frame3DPlateBoundarySegment =
+  | { kind: "line"; startNodeId: number; endNodeId: number }
+  | { kind: "arc"; startNodeId: number; controlNodeId: number; endNodeId: number };
 
 export interface Frame3DPlate {
   id: number;
   /** Knoopvolgorde rond de buitenrand, minimaal drie. */
   nodeIds: number[];
+  /** Werkelijke getekende rand; ontbreekt bij oudere hoekpuntplaten. */
+  boundary?: Frame3DPlateBoundarySegment[];
   thicknessM: number;
   material?: string;
   /** Werkelijke afrondingsstraal van de plaatrand. */
@@ -449,6 +457,37 @@ function readPlateNodeLoop(value: unknown, nodeIds: Set<number>, label: string):
   return result;
 }
 
+function readPlateBoundary(
+  value: unknown, loop: number[], nodeIds: Set<number>, label: string,
+): Frame3DPlateBoundarySegment[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length < 2) throw new Error(`${label} bevat geen geldige getekende contour.`);
+  const segments = value.map((raw, index): Frame3DPlateBoundarySegment => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${label} bevat een ongeldig randsegment.`);
+    const segment = raw as Record<string, unknown>;
+    const startNodeId = Number(segment.startNodeId), endNodeId = Number(segment.endNodeId);
+    if (!nodeIds.has(startNodeId) || !nodeIds.has(endNodeId) || startNodeId === endNodeId ||
+        !loop.includes(startNodeId) || !loop.includes(endNodeId)) {
+      throw new Error(`${label} bevat een randsegment met een ongeldige knoopverwijzing.`);
+    }
+    if (segment.kind === "line") return { kind: "line", startNodeId, endNodeId };
+    if (segment.kind === "arc") {
+      const controlNodeId = Number(segment.controlNodeId);
+      if (!nodeIds.has(controlNodeId) || !loop.includes(controlNodeId) ||
+          controlNodeId === startNodeId || controlNodeId === endNodeId) {
+        throw new Error(`${label} bevat een boog met een ongeldige stuurknoop.`);
+      }
+      return { kind: "arc", startNodeId, controlNodeId, endNodeId };
+    }
+    throw new Error(`${label} bevat een onbekend randsegment op positie ${index + 1}.`);
+  });
+  for (let index = 0; index < segments.length; index += 1) {
+    const current = segments[index], next = segments[(index + 1) % segments.length];
+    if (current.endNodeId !== next.startNodeId) throw new Error(`${label} moet één aansluitende gesloten contour vormen.`);
+  }
+  return segments;
+}
+
 function validatePlatePlane(nodes: Frame3DNode[], nodeIds: number[], label: string): void {
   const points = nodeIds.map((id) => nodes.find((node) => node.id === id)!);
   const a = points[0];
@@ -538,6 +577,7 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
     if (!Number.isSafeInteger(plate.id) || id <= 0 || plateIds.has(id)) throw new Error("Het 3D-model bevat een plaat met een ongeldige of dubbele id.");
     const loop = readPlateNodeLoop(plate.nodeIds, nodeIds, `3D-plaat ${id}`);
     validatePlatePlane(nodes, loop, `3D-plaat ${id}`);
+    const boundary = readPlateBoundary(plate.boundary, loop, nodeIds, `3D-plaat ${id}`);
     const thicknessM = Number(plate.thicknessM ?? 0.2);
     const cornerRadiusM = Number(plate.cornerRadiusM ?? 0);
     if (!(thicknessM > 0) || !Number.isFinite(thicknessM) || cornerRadiusM < 0 || !Number.isFinite(cornerRadiusM)) {
@@ -553,12 +593,16 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
       if (!Number.isSafeInteger(opening.id) || openingId <= 0 || openingIds.has(openingId)) throw new Error(`3D-plaat ${id} bevat een opening met ongeldige of dubbele id.`);
       const openingLoop = readPlateNodeLoop(opening.nodeIds, nodeIds, `Opening ${openingId} van 3D-plaat ${id}`);
       validatePlatePlane(nodes, openingLoop, `Opening ${openingId} van 3D-plaat ${id}`);
+      const openingBoundary = readPlateBoundary(opening.boundary, openingLoop, nodeIds, `Opening ${openingId} van 3D-plaat ${id}`);
       const openingRadius = Number(opening.cornerRadiusM ?? 0);
       if (openingRadius < 0 || !Number.isFinite(openingRadius)) throw new Error(`Opening ${openingId} heeft een ongeldige randstraal.`);
-      openings.push({ id: openingId, nodeIds: openingLoop, ...(openingRadius > 0 ? { cornerRadiusM: openingRadius } : {}) });
+      openings.push({ id: openingId, nodeIds: openingLoop,
+        ...(openingBoundary ? { boundary: openingBoundary } : {}),
+        ...(openingRadius > 0 ? { cornerRadiusM: openingRadius } : {}) });
       openingIds.add(openingId);
     }
     plates.push({ id, nodeIds: loop, thicknessM,
+      ...(boundary ? { boundary } : {}),
       ...(typeof plate.material === "string" && plate.material.trim() ? { material: plate.material.trim() } : {}),
       ...(cornerRadiusM > 0 ? { cornerRadiusM } : {}), ...(openings.length ? { openings } : {}) });
     plateIds.add(id);
@@ -1091,13 +1135,14 @@ export function removeFrame3DBeam(model: Frame3DModel, beamId: number): Frame3DM
 export function addFrame3DPlate(
   model: Frame3DModel,
   nodeIds: number[],
-  options: { thicknessM?: number; material?: string; cornerRadiusM?: number } = {},
+  options: { thicknessM?: number; material?: string; cornerRadiusM?: number; boundary?: Frame3DPlateBoundarySegment[] } = {},
 ): Frame3DModel {
   const id = Math.max(0, ...(model.plates ?? []).map((plate) => plate.id)) + 1;
   return parseFrame3DModel({
     ...model,
     plates: [...(model.plates ?? []), {
       id, nodeIds, thicknessM: options.thicknessM ?? 0.2, material: options.material ?? "C30/37",
+      ...(options.boundary?.length ? { boundary: options.boundary } : {}),
       ...(options.cornerRadiusM && options.cornerRadiusM > 0 ? { cornerRadiusM: options.cornerRadiusM } : {}),
     }],
   });

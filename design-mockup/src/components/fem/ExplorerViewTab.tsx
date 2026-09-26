@@ -191,7 +191,7 @@ export default function ExplorerViewTab({
           aria-label={t("search")}
         />
       </div>
-      {workspace === "3d" ? rows3d : <>{rows2d}{snapRows}</>}
+      {workspace === "3d" ? <>{rows3d}{snapRows}</> : <>{rows2d}{snapRows}</>}
     </div>
   );
 }

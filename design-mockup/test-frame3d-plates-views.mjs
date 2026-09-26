@@ -21,6 +21,7 @@ const base = parseFrame3DModel({
     { id: 3, x: 6, y: 4, z: 0 }, { id: 4, x: 0, y: 4, z: 0 },
     { id: 5, x: 2, y: 1, z: 0 }, { id: 6, x: 4, y: 1, z: 0 },
     { id: 7, x: 4, y: 3, z: 0 }, { id: 8, x: 2, y: 3, z: 0 },
+    { id: 9, x: 3, y: -1.5, z: 0 },
   ],
   beams: [],
 });
@@ -32,6 +33,22 @@ assert.equal(withOpening.plates[0].openings.length, 1);
 const rendered = createFrame3DPlateGeometry(withOpening, withOpening.plates[0]);
 assert.ok(rendered?.geometry.attributes.position.count > 0, "plaat met afgeronde buitenrand en opening krijgt een mesh");
 assert.ok(Math.abs(rendered.normal.z) > 0.999, "horizontale plaat krijgt een verticale normaal");
+
+const curved = addFrame3DPlate(base, [1, 9, 2, 3, 4], {
+  thicknessM: 0.2,
+  material: "C30/37",
+  boundary: [
+    { kind: "arc", startNodeId: 1, controlNodeId: 9, endNodeId: 2 },
+    { kind: "line", startNodeId: 2, endNodeId: 3 },
+    { kind: "line", startNodeId: 3, endNodeId: 4 },
+    { kind: "line", startNodeId: 4, endNodeId: 1 },
+  ],
+});
+assert.equal(curved.plates[0].boundary[0].kind, "arc", "de getekende boog blijft modeldata");
+assert.ok(createFrame3DPlateGeometry(curved, curved.plates[0])?.geometry.attributes.position.count > 0,
+  "een gemengde lijn-boogcontour krijgt een echte extrusie");
+assert.deepEqual(parseFrame3DModel(JSON.parse(JSON.stringify(curved))).plates[0].boundary, curved.plates[0].boundary,
+  "lijn- en boogsegmenten overleven opslaan en openen");
 
 const loaded = addFrame3DSurfaceLoad(withOpening, 1, { qx: 1, qy: 0, qz: -5 }, 2);
 assert.deepEqual(loaded.surfaceLoads, [{ id: 1, plateId: 1, caseId: 2, qx: 1, qy: 0, qz: -5 }]);

@@ -2586,6 +2586,7 @@ function App() {
               visibility={frame3dVisibility}
               onVisibilityChange={setFrame3dVisibility}
               structuralGrid={fem.structuralGrid}
+              gridSpacingM={grid.spacingMm / 1000}
               result={frame3dResult}
               checks={frame3dChecks}
               concreteChecks={frame3dConcreteChecks}
@@ -3352,7 +3353,7 @@ function App() {
         solverStatus={solverStatus}
         // Snapknopjes horen bij de tekenweergave; in de rapport-/IFC-weergave
         // valt er niets te snappen.
-        toonSnap={modelDimension === "2d" && !isFullWidthView}
+        toonSnap={!isFullWidthView && (modelDimension === "2d" || activeView === "frame3d")}
         bedieningActief={bedieningActief}
       />
       <Backstage

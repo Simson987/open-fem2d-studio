@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { Frame3DModel, Frame3DNode, Frame3DPlate } from "./frame3dModel";
+import type { Frame3DModel, Frame3DNode, Frame3DPlate, Frame3DPlateBoundarySegment } from "./frame3dModel";
 
 export interface Frame3DPlateGeometry {
   geometry: THREE.ExtrudeGeometry;
@@ -38,7 +38,36 @@ function point(node: Frame3DNode): THREE.Vector3 {
   return new THREE.Vector3(node.x, node.y, node.z);
 }
 
+function boundaryPath(
+  boundary: readonly Frame3DPlateBoundarySegment[],
+  byId: Map<number, Frame3DNode>,
+  project: (node: Frame3DNode) => THREE.Vector2,
+  shape: boolean,
+): THREE.Shape | THREE.Path | null {
+  const first = byId.get(boundary[0]?.startNodeId);
+  if (!first) return null;
+  const path = shape ? new THREE.Shape() : new THREE.Path();
+  const start = project(first);
+  path.moveTo(start.x, start.y);
+  for (const segment of boundary) {
+    const endNode = byId.get(segment.endNodeId);
+    if (!endNode) return null;
+    const end = project(endNode);
+    if (segment.kind === "arc") {
+      const controlNode = byId.get(segment.controlNodeId);
+      if (!controlNode) return null;
+      const control = project(controlNode);
+      path.quadraticCurveTo(control.x, control.y, end.x, end.y);
+    } else {
+      path.lineTo(end.x, end.y);
+    }
+  }
+  path.closePath();
+  return path;
+}
+
 export function createFrame3DPlateGeometry(model: Frame3DModel, plate: Frame3DPlate): Frame3DPlateGeometry | null {
+  const byId = new Map(model.nodes.map((node) => [node.id, node]));
   const nodes = plate.nodeIds.map((id) => model.nodes.find((node) => node.id === id)).filter(Boolean) as Frame3DNode[];
   if (nodes.length < 3) return null;
   const position = point(nodes[0]);
@@ -54,10 +83,18 @@ export function createFrame3DPlateGeometry(model: Frame3DModel, plate: Frame3DPl
     const relative = point(node).sub(position);
     return new THREE.Vector2(relative.dot(u), relative.dot(v));
   };
-  const shape = roundedPath(nodes.map(project), plate.cornerRadiusM ?? 0, true) as THREE.Shape;
+  const shape = (plate.boundary
+    ? boundaryPath(plate.boundary, byId, project, true)
+    : roundedPath(nodes.map(project), plate.cornerRadiusM ?? 0, true)) as THREE.Shape | null;
+  if (!shape) return null;
   for (const opening of plate.openings ?? []) {
     const openingNodes = opening.nodeIds.map((id) => model.nodes.find((node) => node.id === id)).filter(Boolean) as Frame3DNode[];
-    if (openingNodes.length >= 3) shape.holes.push(roundedPath(openingNodes.map(project), opening.cornerRadiusM ?? 0, false) as THREE.Path);
+    if (openingNodes.length >= 3) {
+      const hole = opening.boundary
+        ? boundaryPath(opening.boundary, byId, project, false)
+        : roundedPath(openingNodes.map(project), opening.cornerRadiusM ?? 0, false);
+      if (hole) shape.holes.push(hole as THREE.Path);
+    }
   }
   const geometry = new THREE.ExtrudeGeometry(shape, {
     depth: plate.thicknessM,

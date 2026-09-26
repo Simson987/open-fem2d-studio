@@ -275,7 +275,8 @@ export default function Frame3DProperties({
       {tab === "general" && plate && <>
         <Section title="Plaat­geometrie">
           <Row label="ID"><code>{plate.id}</code></Row>
-          <Row label="Hoekknopen"><code>{plate.nodeIds.map((id) => `K${id}`).join(" · ")}</code></Row>
+          <Row label={plate.boundary ? "Contourknopen" : "Hoekknopen"}><code>{plate.nodeIds.map((id) => `K${id}`).join(" · ")}</code></Row>
+          {plate.boundary && <Row label="Randsegmenten"><code>{plate.boundary.length} · {plate.boundary.filter((segment) => segment.kind === "arc").length} boog</code></Row>}
           <Row label="Dikte (m)"><input className="fem-prop-input" type="number" min="0.001" step="0.01"
             defaultValue={plate.thicknessM} key={`thickness-${plate.id}-${plate.thicknessM}`}
             onBlur={(event) => { const next = Number(event.currentTarget.value); if (next > 0) onChange(updateFrame3DPlate(model, plate.id, { thicknessM: next })); }} /></Row>

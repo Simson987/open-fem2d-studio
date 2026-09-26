@@ -184,7 +184,7 @@ import {
   isSteelCheckResult, isConcreteCheckResult,
 } from "../lib/checkTypes";
 import type { ReinforcementCage } from "../lib/types/concrete/ReinforcementCage";
-import { frame3DLoadCaseId, frame3DMemberAxes, parseFrame3DModel, type Frame3DModel } from "../components/frame3d/frame3dModel";
+import { frame3DLoadCaseId, frame3DMemberAxes, parseFrame3DModel, type Frame3DModel, type Frame3DPlateBoundarySegment } from "../components/frame3d/frame3dModel";
 
 // ── Invoertype ──────────────────────────────────────────────────────────────
 
@@ -1074,6 +1074,38 @@ function bemonsterAfgeronde3DLus(punten: Punt3D[], straal: number, segmenten = 1
   return resultaat;
 }
 
+/** IFC PolyLoop kent alleen rechte zijden; sample de exact getekende bogen daarom beheerst. */
+function bemonsterGetekende3DLus(
+  grens: readonly Frame3DPlateBoundarySegment[],
+  knoopPerId: Map<number, { x: number; y: number; z: number }>,
+  segmenten = 12,
+): Punt3D[] {
+  const punt = (id: number): Punt3D => {
+    const knoop = knoopPerId.get(id)!;
+    return [knoop.x, knoop.y, knoop.z];
+  };
+  const resultaat: Punt3D[] = [punt(grens[0].startNodeId)];
+  for (const rand of grens) {
+    const einde = punt(rand.endNodeId);
+    if (rand.kind === "line") {
+      resultaat.push(einde);
+      continue;
+    }
+    const begin = punt(rand.startNodeId), stuur = punt(rand.controlNodeId);
+    for (let stap = 1; stap <= segmenten; stap += 1) {
+      const t = stap / segmenten, s = 1 - t;
+      resultaat.push([
+        s * s * begin[0] + 2 * s * t * stuur[0] + t * t * einde[0],
+        s * s * begin[1] + 2 * s * t * stuur[1] + t * t * einde[1],
+        s * s * begin[2] + 2 * s * t * stuur[2] + t * t * einde[2],
+      ]);
+    }
+  }
+  // Het sluitpunt is impliciet in IfcPolyLoop en mag niet dubbel voorkomen.
+  if (resultaat.length > 1) resultaat.pop();
+  return resultaat;
+}
+
 function schrijf3DRekenmodel(
   w: SpfSchrijver,
   frame3d: Frame3DModel,
@@ -1218,7 +1250,9 @@ function schrijf3DRekenmodel(
     if (normaal === null) continue;
     const schrijfPunt = (punt: Punt3D) => w.ent("IFCCARTESIANPOINT",
       `(${reeel(punt[0])},${reeel(punt[1])},${reeel(punt[2])})`);
-    const buitenLusPunten = bemonsterAfgeronde3DLus(buitenPunten, plaat.cornerRadiusM ?? 0);
+    const buitenLusPunten = plaat.boundary
+      ? bemonsterGetekende3DLus(plaat.boundary, knoopPerId)
+      : bemonsterAfgeronde3DLus(buitenPunten, plaat.cornerRadiusM ?? 0);
     const buitenLus = w.ent("IFCPOLYLOOP", lijst(buitenLusPunten.map(schrijfPunt)));
     const buitenRand = w.ent("IFCFACEOUTERBOUND", ref(buitenLus), ".T.");
     const binnenRanden = (plaat.openings ?? []).map((opening) => {
@@ -1226,8 +1260,10 @@ function schrijf3DRekenmodel(
         const knoop = knoopPerId.get(id)!;
         return [knoop.x, knoop.y, knoop.z] as const;
       });
-      const lus = w.ent("IFCPOLYLOOP", lijst(bemonsterAfgeronde3DLus(
-        openingPunten, opening.cornerRadiusM ?? 0).map(schrijfPunt)));
+      const lusPunten = opening.boundary
+        ? bemonsterGetekende3DLus(opening.boundary, knoopPerId)
+        : bemonsterAfgeronde3DLus(openingPunten, opening.cornerRadiusM ?? 0);
+      const lus = w.ent("IFCPOLYLOOP", lijst(lusPunten.map(schrijfPunt)));
       return w.ent("IFCFACEBOUND", ref(lus), ".T.");
     });
     const normaalRichting = w.ent("IFCDIRECTION",
@@ -1261,6 +1297,9 @@ function schrijf3DRekenmodel(
       eMaat("Dikte", "IFCPOSITIVELENGTHMEASURE", plaat.thicknessM),
       eMaat("Randstraal", "IFCPOSITIVELENGTHMEASURE", plaat.cornerRadiusM ?? 0),
       eLabel("Materiaal", plaat.material ?? ""),
+      eLabel("Randsegmenten", plaat.boundary?.map((rand) => rand.kind === "arc"
+        ? `boog ${rand.startNodeId}-${rand.controlNodeId}-${rand.endNodeId}`
+        : `lijn ${rand.startNodeId}-${rand.endNodeId}`).join("; ") ?? "hoekpunten"),
       eLabel("Hoekknopen", plaat.nodeIds.join(", ")),
       eLabel("Openingen", (plaat.openings ?? []).map((opening) =>
         `${opening.id}: ${opening.nodeIds.join(", ")} (r=${nl(opening.cornerRadiusM ?? 0)} m)`).join("; ") || "geen"),

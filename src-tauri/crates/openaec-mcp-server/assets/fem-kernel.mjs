@@ -5744,6 +5744,10 @@ var DEFAULT_STRUCTURAL_GRID = {
     { id: "A", label: "A", position: 0 },
     { id: "B", label: "B", position: 12e3 }
   ],
+  yAxes: [
+    { id: "Y-A", label: "1", position: 0 },
+    { id: "Y-B", label: "2", position: 6e3 }
+  ],
   zAxes: [
     { id: "1", label: "1", position: 0 },
     { id: "2", label: "2", position: 5e3 }
@@ -13165,7 +13169,7 @@ function blijvendeZakking(opties) {
   return { mm: gekozen.w, combo: gekozen.combo, notes };
 }
 
-// node_modules/zustand/esm/vanilla.mjs
+// node_modules/.pnpm/zustand@5.0.15_@types+react@19.3.0_react@19.3.0_use-sync-external-store@1.7.0_react@19.3.0_/node_modules/zustand/esm/vanilla.mjs
 var createStoreImpl = (createState) => {
   let state;
   const listeners = /* @__PURE__ */ new Set();
@@ -14013,6 +14017,9 @@ function alphaCrStaafNotitie(stabiliteit, nEdMinKn, kniklengteYOpgegeven) {
   return `EERSTE ORDE MET \u03B1_cr = ${nl4(laagste.alphaCr ?? NaN)} (combinatie "${laagste.naam}") < ${ALPHA_CR_GRENS_EERSTE_ORDE}: deze staaf staat onder druk en de kniklengte in het vlak valt terug op de systeemlengte. NEN-EN 1993-1-1 5.2.2(7)b staat die terugval alleen toe bij krachten uit een tweede-orde-berekening met imperfecties, en 5.2.1(3) staat eerste orde bij \u03B1_cr < 10 niet toe. De knikweerstand om de y-as hieronder is daarom NIET normconform bepaald: kies tweede orde (P-\u0394) met scheefstand, of geef L_cr,y uit de zijdelingse knikvorm op (5.2.2(8)).`;
 }
 
+// src/lib/steelGrades.ts
+var STEEL_GRADES = ["S235", "S275", "S355", "S420", "S460"];
+
 // src/lib/kniklengte.ts
 var TOLERANTIE_STEUNPAAR_MM = 1;
 
@@ -14108,7 +14115,6 @@ function mapDeflectionClass(cls) {
       return "Floor";
   }
 }
-var STEEL_GRADES = ["S235", "S275", "S355", "S420", "S460"];
 function isSteelProfile(profileName) {
   if (!profileName) return false;
   if (isEigenProfiel(profileName)) return true;
@@ -15527,6 +15533,21 @@ function parseVrijMateriaal(material) {
   return { naam, eMod, dichtheid, fToel, gammaM };
 }
 
+// src/lib/aluminiumMateriaal.ts
+var MATERIAAL = {
+  aanduiding: "EN AW-6063-T6",
+  eMod: 7e4,
+  dichtheid: 2700
+};
+function isAluminiumMateriaal(naam) {
+  return /^\s*ALU:/i.test(naam ?? "");
+}
+function parseAluminiumMateriaal(naam) {
+  if (!isAluminiumMateriaal(naam)) return null;
+  const legering = naam.replace(/^\s*ALU:\s*/i, "").replace(/[\s-]/g, "").toUpperCase();
+  return legering === "ENAW6063T6" ? MATERIAAL : null;
+}
+
 // src/lib/sectionResolver.ts
 var TIMBER_E_MEAN = {
   C14: 7e3,
@@ -15657,11 +15678,15 @@ function betonDoorsnede(profile) {
 function eVanMateriaal(material) {
   const vrij = parseVrijMateriaal(material);
   if (vrij) return { E: vrij.eMod, soort: "vrij" };
+  const aluminium = parseAluminiumMateriaal(material);
+  if (aluminium) return { E: aluminium.eMod, soort: "aluminium" };
+  if (isAluminiumMateriaal(material)) return { E: NaN, soort: "onbekend" };
   const mat = material;
   if (mat in CONCRETE_E_CM) return { E: CONCRETE_E_CM[mat], soort: "beton" };
   const isHout = SUPPORTED_TIMBER_GRADES.includes(mat) || mat in TIMBER_E_MEAN;
   if (isHout) return { E: TIMBER_E_MEAN[mat] ?? 11e3, soort: "hout" };
-  return { E: E_STAAL, soort: "staal" };
+  if (STEEL_GRADES.includes(mat)) return { E: E_STAAL, soort: "staal" };
+  return { E: NaN, soort: "onbekend" };
 }
 function voorbeeldProfiel(soort) {
   switch (soort) {
@@ -15673,6 +15698,10 @@ function voorbeeldProfiel(soort) {
       return 'een rechthoek als "100x200", een catalogusprofiel als "HEA 200" of een eigen doorsnede uit de profieleditor';
     case "staal":
       return 'een catalogusprofiel als "HEA 200" of een eigen doorsnede uit de profieleditor';
+    case "aluminium":
+      return 'een rechthoek als "100x200" of een eigen doorsnede uit de profieleditor';
+    case "onbekend":
+      return "een herkend constructiemateriaal";
   }
 }
 function resolveSection(material, profile) {
@@ -15684,6 +15713,9 @@ function resolveSection(material, profile) {
   }
   const mat = material;
   const { E, soort } = eVanMateriaal(material);
+  if (soort === "onbekend") {
+    return { ...DEFAULT_DOORSNEDE, reden: `materiaal "${mat}" is niet ondersteund \u2014 er wordt niet met staalstijfheid gerekend` };
+  }
   if (isEigenProfiel(profile)) {
     const eigen = zoekEigenDoorsnede(profile);
     if (eigen) {
@@ -15699,14 +15731,24 @@ function resolveSection(material, profile) {
       reden: `eigen doorsnede "${eigenNaamVan(profile)}" is niet (meer) bewaard \u2014 open de profieleditor en bewaar hem opnieuw, of kies een ander profiel`
     };
   }
-  if (soort === "vrij") {
+  if (soort === "vrij" || soort === "aluminium") {
     const rect = parseRechthoek(profile);
     if (rect) {
       const { b, h } = rect;
-      return { E, A: b * h, I: b * h * h * h / 12, bron: "vrij" };
+      return {
+        E,
+        A: b * h,
+        I: b * h * h * h / 12,
+        bron: soort === "aluminium" ? "aluminium-bxh" : "vrij"
+      };
     }
     const sec = STEEL_SECTIONS[normaliseer(profile ?? "")];
-    if (sec) return { E, A: sec.A, I: sec.Iy, bron: "vrij" };
+    if (sec) return {
+      E,
+      A: sec.A,
+      I: sec.Iy,
+      bron: soort === "aluminium" ? "aluminium-catalogus" : "vrij"
+    };
   } else if (soort === "beton") {
     const vorm = betonDoorsnede(profile);
     if (vorm) return { E, A: vorm.A, I: vorm.I, bron: vorm.bron };
@@ -15758,9 +15800,15 @@ function eigenGewichtPerMeter(material, profile) {
   return eigenGewichtVanDoorsnede(material, aBruto ?? A);
 }
 function dichtheidVanMateriaal(material) {
-  const mat = material ?? "S235";
+  const mat = material ?? "";
   const vrij = parseVrijMateriaal(material);
-  return vrij?.dichtheid ?? TIMBER_RHO_MEAN[mat] ?? (mat in CONCRETE_E_CM ? RHO_BETON : RHO_STAAL);
+  if (vrij) return vrij.dichtheid;
+  const aluminium = parseAluminiumMateriaal(material);
+  if (aluminium) return aluminium.dichtheid;
+  if (mat in TIMBER_RHO_MEAN) return TIMBER_RHO_MEAN[mat];
+  if (mat in CONCRETE_E_CM) return RHO_BETON;
+  if (STEEL_GRADES.includes(mat)) return RHO_STAAL;
+  throw new Error(`materiaal "${mat || "\u2014"}" heeft geen bekende dichtheid`);
 }
 function eigenGewichtVanDoorsnede(material, A_mm2) {
   return -(dichtheidVanMateriaal(material) * (A_mm2 * 1e-6) * G) / 1e3;
@@ -15858,6 +15906,7 @@ function bepaalVerloop(material, profile, profileEnd) {
     reden: `verlopend profiel wordt voor deze doorsnede niet ondersteund (${wat}) \u2014 alleen een rechthoek b\xD7h of een I/H-profiel uit de staalcatalogus kan verlopen`
   });
   if (soort === "beton") return nietOndersteund("beton");
+  if (soort === "onbekend" || soort === "aluminium") return nietOndersteund(soort);
   if (isCltProfiel(profile) || isCltProfiel(eind)) return nietOndersteund("kruislaaghout");
   const eigenMaten = (naam) => isEigenProfiel(naam) ? gelasteIMatenVanEigen(naam) ?? null : "geen";
   const mEigenB = eigenMaten(profile);
@@ -20865,9 +20914,12 @@ function beoordeelCombinatiesBijOpenen(p2) {
 
 // src/lib/thermalAlpha.ts
 var ALPHA_STAAL = 12e-6;
+var ALPHA_BETON = 1e-5;
 var ALPHA_HOUT = 5e-6;
 function thermalAlphaForMaterial(material) {
-  return material !== void 0 && material in TIMBER_E_MEAN ? ALPHA_HOUT : ALPHA_STAAL;
+  if (material !== void 0 && material in CONCRETE_E_CM) return ALPHA_BETON;
+  if (material !== void 0 && material in TIMBER_E_MEAN) return ALPHA_HOUT;
+  return ALPHA_STAAL;
 }
 
 // src/lib/betonZoneSneden.ts
@@ -21980,9 +22032,475 @@ function bepaalScheefstand(keuze, geometrie, toepasselijk) {
   };
 }
 
+// src/components/frame3d/frame3dModel.ts
+var SUPPORT_DOF = ["ux", "uy", "uz", "rx", "ry", "rz"];
+var SPRING_DOF = ["kxKnPerM", "kyKnPerM", "kzKnPerM", "krxKnmPerRad", "kryKnmPerRad", "krzKnmPerRad"];
+var PRESCRIBED_DOF = ["uxM", "uyM", "uzM", "rxRad", "ryRad", "rzRad"];
+var LOAD_DOF = ["fx", "fy", "fz", "mx", "my", "mz"];
+var RELEASE_DOF = ["myStart", "myEnd", "mzStart", "mzEnd", "torsionStart", "torsionEnd"];
+function readEndReleases(value) {
+  if (value === void 0) return void 0;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Een 3D-staaf bevat ongeldige eindscharnieren.");
+  }
+  const releases = value;
+  if (RELEASE_DOF.some((axis) => releases[axis] !== void 0 && typeof releases[axis] !== "boolean")) {
+    throw new Error("Een 3D-staaf bevat een ongeldig eindscharnier.");
+  }
+  return Object.fromEntries(RELEASE_DOF.map((axis) => [axis, releases[axis] === true]));
+}
+function readOptionalCaseId(value) {
+  if (value === void 0) return void 0;
+  if (!Number.isSafeInteger(value) || Number(value) <= 0) {
+    throw new Error("Een 3D-belasting heeft een ongeldig belastinggeval.");
+  }
+  return Number(value);
+}
+function readSupportRestraints(value) {
+  if (SUPPORT_DOF.some((axis) => typeof value[axis] !== "boolean")) {
+    throw new Error("Een 3D-oplegging moet zes geldige vrijheidsgraden hebben.");
+  }
+  return Object.fromEntries(SUPPORT_DOF.map((axis) => [axis, value[axis]]));
+}
+function readSupportSprings(value) {
+  if (value === void 0) return void 0;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Een 3D-oplegging bevat ongeldige veerstijfheden.");
+  }
+  const raw = value;
+  const springs = {};
+  for (const key of SPRING_DOF) {
+    const stiffness = raw[key];
+    if (stiffness === void 0) continue;
+    if (typeof stiffness !== "number" || !Number.isFinite(stiffness) || stiffness <= 0) {
+      throw new Error(`Een 3D-oplegging bevat een ongeldige positieve veerstijfheid ${key}.`);
+    }
+    springs[key] = stiffness;
+  }
+  return Object.keys(springs).length > 0 ? springs : void 0;
+}
+function readPrescribedDisplacements(value) {
+  if (value === void 0) return void 0;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Een 3D-oplegging bevat ongeldige opgelegde verplaatsingen.");
+  }
+  const raw = value;
+  const prescribed = {};
+  for (const key of PRESCRIBED_DOF) {
+    const displacement = raw[key];
+    if (displacement === void 0) continue;
+    if (typeof displacement !== "number" || !Number.isFinite(displacement)) {
+      throw new Error(`Een 3D-oplegging bevat een ongeldige opgelegde waarde ${key}.`);
+    }
+    if (displacement !== 0) prescribed[key] = displacement;
+  }
+  return Object.keys(prescribed).length > 0 ? prescribed : void 0;
+}
+function readNodalLoadComponents(value) {
+  if (LOAD_DOF.some((axis) => typeof value[axis] !== "number" || !Number.isFinite(value[axis])) || !LOAD_DOF.some((axis) => value[axis] !== 0)) {
+    throw new Error("Een 3D-knoopbelasting moet zes eindige componenten en minstens \xE9\xE9n niet-nulwaarde hebben.");
+  }
+  return Object.fromEntries(LOAD_DOF.map((axis) => [axis, value[axis]]));
+}
+function beamLength(model, beamId) {
+  const beam = model.beams.find((item) => item.id === beamId);
+  if (!beam) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
+  const start = model.nodes.find((node) => node.id === beam.startNodeId);
+  const end = model.nodes.find((node) => node.id === beam.endNodeId);
+  return Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
+}
+function readMemberLoad(value, model, id, beamId) {
+  const components = ["qyStart", "qyEnd", "qzStart", "qzEnd"];
+  if (components.some((name) => typeof value[name] !== "number" || !Number.isFinite(value[name])) || components.every((name) => value[name] === 0)) {
+    throw new Error("Een 3D-staafbelasting moet vier eindige componenten en minstens \xE9\xE9n niet-nulwaarde hebben.");
+  }
+  const length = beamLength(model, beamId);
+  const startPositionM = Number(value.startPositionM);
+  const endPositionM = Number(value.endPositionM);
+  if (!Number.isFinite(startPositionM) || !Number.isFinite(endPositionM) || startPositionM < 0 || endPositionM <= startPositionM || endPositionM > length + 1e-9) {
+    throw new Error(`Een 3D-staafbelasting moet binnen de staaflengte van ${length} m liggen.`);
+  }
+  const caseId = readOptionalCaseId(value.caseId);
+  return {
+    id,
+    beamId,
+    ...caseId !== void 0 ? { caseId } : {},
+    qyStart: Number(value.qyStart),
+    qyEnd: Number(value.qyEnd),
+    qzStart: Number(value.qzStart),
+    qzEnd: Number(value.qzEnd),
+    startPositionM,
+    endPositionM
+  };
+}
+function readMemberPointLoad(value, model, id, beamId) {
+  const py = Number(value.py), pz = Number(value.pz), positionM = Number(value.positionM);
+  if (![py, pz].every(Number.isFinite) || py === 0 && pz === 0) {
+    throw new Error("Een 3D-staafpuntlast moet twee eindige componenten en minstens \xE9\xE9n niet-nulwaarde hebben.");
+  }
+  const length = beamLength(model, beamId);
+  if (!Number.isFinite(positionM) || positionM < 0 || positionM > length + 1e-9) {
+    throw new Error(`Een 3D-staafpuntlast moet binnen de staaflengte van ${length} m liggen.`);
+  }
+  const caseId = readOptionalCaseId(value.caseId);
+  return { id, beamId, ...caseId !== void 0 ? { caseId } : {}, py, pz, positionM };
+}
+function readThermalLoad(value, model, id, beamId) {
+  beamLength(model, beamId);
+  const deltaTUniformK = Number(value.deltaTUniformK);
+  const deltaTGradientYK = Number(value.deltaTGradientYK ?? 0);
+  const deltaTGradientZK = Number(value.deltaTGradientZK ?? 0);
+  if (![deltaTUniformK, deltaTGradientYK, deltaTGradientZK].every(Number.isFinite) || [deltaTUniformK, deltaTGradientYK, deltaTGradientZK].every((component) => component === 0)) {
+    throw new Error("Een 3D-temperatuurbelasting moet eindige waarden en minstens \xE9\xE9n niet-nulwaarde hebben.");
+  }
+  const caseId = readOptionalCaseId(value.caseId);
+  return { id, beamId, ...caseId !== void 0 ? { caseId } : {}, deltaTUniformK, deltaTGradientYK, deltaTGradientZK };
+}
+function readPlateNodeLoop(value, nodeIds, label) {
+  if (!Array.isArray(value) || value.length < 3) throw new Error(`${label} moet minstens drie hoekknopen hebben.`);
+  const result = value.map(Number);
+  if (result.some((id, index) => !Number.isSafeInteger(id) || !nodeIds.has(id) || result.indexOf(id) !== index)) {
+    throw new Error(`${label} bevat een ongeldige, ontbrekende of dubbele knoop.`);
+  }
+  return result;
+}
+function readPlateBoundary(value, loop, nodeIds, label) {
+  if (value === void 0) return void 0;
+  if (!Array.isArray(value) || value.length < 2) throw new Error(`${label} bevat geen geldige getekende contour.`);
+  const segments = value.map((raw, index) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${label} bevat een ongeldig randsegment.`);
+    const segment = raw;
+    const startNodeId = Number(segment.startNodeId), endNodeId = Number(segment.endNodeId);
+    if (!nodeIds.has(startNodeId) || !nodeIds.has(endNodeId) || startNodeId === endNodeId || !loop.includes(startNodeId) || !loop.includes(endNodeId)) {
+      throw new Error(`${label} bevat een randsegment met een ongeldige knoopverwijzing.`);
+    }
+    if (segment.kind === "line") return { kind: "line", startNodeId, endNodeId };
+    if (segment.kind === "arc") {
+      const controlNodeId = Number(segment.controlNodeId);
+      if (!nodeIds.has(controlNodeId) || !loop.includes(controlNodeId) || controlNodeId === startNodeId || controlNodeId === endNodeId) {
+        throw new Error(`${label} bevat een boog met een ongeldige stuurknoop.`);
+      }
+      return { kind: "arc", startNodeId, controlNodeId, endNodeId };
+    }
+    throw new Error(`${label} bevat een onbekend randsegment op positie ${index + 1}.`);
+  });
+  for (let index = 0; index < segments.length; index += 1) {
+    const current = segments[index], next = segments[(index + 1) % segments.length];
+    if (current.endNodeId !== next.startNodeId) throw new Error(`${label} moet \xE9\xE9n aansluitende gesloten contour vormen.`);
+  }
+  return segments;
+}
+function validatePlatePlane(nodes, nodeIds, label) {
+  const points = nodeIds.map((id) => nodes.find((node) => node.id === id));
+  const a = points[0];
+  let normal = null;
+  for (let index = 1; index < points.length - 1 && !normal; index += 1) {
+    const b = points[index], c = points[index + 1];
+    const ab = [b.x - a.x, b.y - a.y, b.z - a.z];
+    const ac = [c.x - a.x, c.y - a.y, c.z - a.z];
+    const candidate = [
+      ab[1] * ac[2] - ab[2] * ac[1],
+      ab[2] * ac[0] - ab[0] * ac[2],
+      ab[0] * ac[1] - ab[1] * ac[0]
+    ];
+    if (Math.hypot(...candidate) > 1e-10) normal = candidate;
+  }
+  if (!normal) throw new Error(`${label} heeft geen oppervlakte.`);
+  const length = Math.hypot(...normal);
+  const scale = Math.max(1, ...points.map((point) => Math.hypot(point.x - a.x, point.y - a.y, point.z - a.z)));
+  if (points.some((point) => Math.abs((point.x - a.x) * normal[0] + (point.y - a.y) * normal[1] + (point.z - a.z) * normal[2]) / length > scale * 1e-7)) {
+    throw new Error(`${label} moet vlak zijn.`);
+  }
+}
+function parseFrame3DModel(value) {
+  if (value === void 0) return { nodes: [], beams: [] };
+  if (!value || typeof value !== "object") throw new Error("Het 3D-model is geen object.");
+  const raw = value;
+  if (!Array.isArray(raw.nodes) || !Array.isArray(raw.beams)) {
+    throw new Error("Het 3D-model mist de lijsten nodes en beams.");
+  }
+  const nodes = [];
+  const nodeIds = /* @__PURE__ */ new Set();
+  for (const item of raw.nodes) {
+    if (!item || typeof item !== "object") throw new Error("Het 3D-model bevat een ongeldige knoop.");
+    const node = item;
+    if (!Number.isSafeInteger(node.id) || Number(node.id) <= 0 || ![node.x, node.y, node.z].every((n2) => typeof n2 === "number" && Number.isFinite(n2)) || nodeIds.has(Number(node.id))) {
+      throw new Error("Het 3D-model bevat een knoop met ongeldige of dubbele id/co\xF6rdinaten.");
+    }
+    const id = Number(node.id);
+    nodes.push({ id, x: Number(node.x), y: Number(node.y), z: Number(node.z) });
+    nodeIds.add(id);
+  }
+  const beams = [];
+  const beamIds = /* @__PURE__ */ new Set();
+  for (const item of raw.beams) {
+    if (!item || typeof item !== "object") throw new Error("Het 3D-model bevat een ongeldige staaf.");
+    const beam = item;
+    const id = Number(beam.id);
+    const startNodeId = Number(beam.startNodeId);
+    const endNodeId = Number(beam.endNodeId);
+    if (!Number.isSafeInteger(beam.id) || id <= 0 || beamIds.has(id) || !Number.isSafeInteger(beam.startNodeId) || !Number.isSafeInteger(beam.endNodeId) || !nodeIds.has(startNodeId) || !nodeIds.has(endNodeId) || startNodeId === endNodeId) {
+      throw new Error("Het 3D-model bevat een staaf met ongeldige id of knoopverwijzing.");
+    }
+    const start = nodes.find((node) => node.id === startNodeId);
+    const end = nodes.find((node) => node.id === endNodeId);
+    if (start.x === end.x && start.y === end.y && start.z === end.z) {
+      throw new Error("Het 3D-model bevat een staaf zonder lengte.");
+    }
+    beams.push({
+      id,
+      startNodeId,
+      endNodeId,
+      ...typeof beam.profileName === "string" && beam.profileName.trim() ? { profileName: beam.profileName.trim() } : {},
+      ...typeof beam.material === "string" && beam.material.trim() ? { material: beam.material.trim() } : {},
+      ...beam.checkConfig && typeof beam.checkConfig === "object" && !Array.isArray(beam.checkConfig) ? { checkConfig: beam.checkConfig } : {},
+      ...beam.rollAngleRad !== void 0 ? typeof beam.rollAngleRad === "number" && Number.isFinite(beam.rollAngleRad) ? { rollAngleRad: beam.rollAngleRad } : (() => {
+        throw new Error("Een 3D-staaf bevat een ongeldige profielrotatie.");
+      })() : {},
+      ...beam.releases !== void 0 ? { releases: readEndReleases(beam.releases) } : {}
+    });
+    beamIds.add(id);
+  }
+  const plates = [];
+  const plateIds = /* @__PURE__ */ new Set();
+  if (raw.plates !== void 0 && !Array.isArray(raw.plates)) throw new Error("Het 3D-model bevat geen geldige lijst plates.");
+  for (const item of raw.plates ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Het 3D-model bevat een ongeldige plaat.");
+    const plate = item;
+    const id = Number(plate.id);
+    if (!Number.isSafeInteger(plate.id) || id <= 0 || plateIds.has(id)) throw new Error("Het 3D-model bevat een plaat met een ongeldige of dubbele id.");
+    const loop = readPlateNodeLoop(plate.nodeIds, nodeIds, `3D-plaat ${id}`);
+    validatePlatePlane(nodes, loop, `3D-plaat ${id}`);
+    const boundary = readPlateBoundary(plate.boundary, loop, nodeIds, `3D-plaat ${id}`);
+    const thicknessM = Number(plate.thicknessM ?? 0.2);
+    const cornerRadiusM = Number(plate.cornerRadiusM ?? 0);
+    if (!(thicknessM > 0) || !Number.isFinite(thicknessM) || cornerRadiusM < 0 || !Number.isFinite(cornerRadiusM)) {
+      throw new Error(`3D-plaat ${id} heeft een ongeldige dikte of randstraal.`);
+    }
+    const openingIds = /* @__PURE__ */ new Set();
+    const openings = [];
+    if (plate.openings !== void 0 && !Array.isArray(plate.openings)) throw new Error(`3D-plaat ${id} bevat geen geldige lijst openingen.`);
+    for (const rawOpening of plate.openings ?? []) {
+      if (!rawOpening || typeof rawOpening !== "object" || Array.isArray(rawOpening)) throw new Error(`3D-plaat ${id} bevat een ongeldige opening.`);
+      const opening = rawOpening;
+      const openingId = Number(opening.id);
+      if (!Number.isSafeInteger(opening.id) || openingId <= 0 || openingIds.has(openingId)) throw new Error(`3D-plaat ${id} bevat een opening met ongeldige of dubbele id.`);
+      const openingLoop = readPlateNodeLoop(opening.nodeIds, nodeIds, `Opening ${openingId} van 3D-plaat ${id}`);
+      validatePlatePlane(nodes, openingLoop, `Opening ${openingId} van 3D-plaat ${id}`);
+      const openingBoundary = readPlateBoundary(opening.boundary, openingLoop, nodeIds, `Opening ${openingId} van 3D-plaat ${id}`);
+      const openingRadius = Number(opening.cornerRadiusM ?? 0);
+      if (openingRadius < 0 || !Number.isFinite(openingRadius)) throw new Error(`Opening ${openingId} heeft een ongeldige randstraal.`);
+      openings.push({
+        id: openingId,
+        nodeIds: openingLoop,
+        ...openingBoundary ? { boundary: openingBoundary } : {},
+        ...openingRadius > 0 ? { cornerRadiusM: openingRadius } : {}
+      });
+      openingIds.add(openingId);
+    }
+    plates.push({
+      id,
+      nodeIds: loop,
+      thicknessM,
+      ...boundary ? { boundary } : {},
+      ...typeof plate.material === "string" && plate.material.trim() ? { material: plate.material.trim() } : {},
+      ...cornerRadiusM > 0 ? { cornerRadiusM } : {},
+      ...openings.length ? { openings } : {}
+    });
+    plateIds.add(id);
+  }
+  const supports = [];
+  const supportedNodes = /* @__PURE__ */ new Set();
+  if (raw.supports !== void 0 && !Array.isArray(raw.supports)) {
+    throw new Error("Het 3D-model bevat geen geldige lijst supports.");
+  }
+  for (const item of raw.supports ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("Het 3D-model bevat een ongeldige oplegging.");
+    }
+    const support = item;
+    const nodeId = Number(support.nodeId);
+    if (!Number.isSafeInteger(support.nodeId) || !nodeIds.has(nodeId) || supportedNodes.has(nodeId)) {
+      throw new Error("Het 3D-model bevat een oplegging met ongeldige, dubbele of ontbrekende knoopverwijzing.");
+    }
+    const restraints = readSupportRestraints(support);
+    const springs = readSupportSprings(support.springs);
+    const prescribed = readPrescribedDisplacements(support.prescribed);
+    if (!SUPPORT_DOF.some((axis) => restraints[axis]) && !springs) {
+      throw new Error("Een 3D-oplegging moet minstens \xE9\xE9n vrijheidsgraad blokkeren of veren.");
+    }
+    for (let index = 0; index < SUPPORT_DOF.length; index += 1) {
+      if (restraints[SUPPORT_DOF[index]] && springs?.[SPRING_DOF[index]] !== void 0) {
+        throw new Error("Een 3D-oplegging kan dezelfde vrijheidsgraad niet tegelijk blokkeren en veren.");
+      }
+      if (prescribed?.[PRESCRIBED_DOF[index]] !== void 0 && !restraints[SUPPORT_DOF[index]]) {
+        throw new Error("Een opgelegde 3D-verplaatsing vereist een geblokkeerde vrijheidsgraad.");
+      }
+    }
+    supports.push({ nodeId, ...restraints, ...springs ? { springs } : {}, ...prescribed ? { prescribed } : {} });
+    supportedNodes.add(nodeId);
+  }
+  const loads = [];
+  const loadIds = /* @__PURE__ */ new Set();
+  if (raw.loads !== void 0 && !Array.isArray(raw.loads)) {
+    throw new Error("Het 3D-model bevat geen geldige lijst loads.");
+  }
+  for (const item of raw.loads ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("Het 3D-model bevat een ongeldige knoopbelasting.");
+    }
+    const load = item;
+    const id = Number(load.id);
+    const nodeId = Number(load.nodeId);
+    if (!Number.isSafeInteger(load.id) || id <= 0 || loadIds.has(id) || !Number.isSafeInteger(load.nodeId) || !nodeIds.has(nodeId)) {
+      throw new Error("Het 3D-model bevat een knoopbelasting met ongeldige, dubbele of ontbrekende knoopverwijzing.");
+    }
+    const caseId = readOptionalCaseId(load.caseId);
+    loads.push({ id, nodeId, ...readNodalLoadComponents(load), ...caseId !== void 0 ? { caseId } : {} });
+    loadIds.add(id);
+  }
+  const model = {
+    nodes,
+    beams,
+    ...raw.plates !== void 0 ? { plates } : {},
+    supports,
+    loads,
+    ...raw.memberLoads !== void 0 ? { memberLoads: [] } : {},
+    ...raw.memberPointLoads !== void 0 ? { memberPointLoads: [] } : {},
+    ...raw.thermalLoads !== void 0 ? { thermalLoads: [] } : {},
+    ...raw.surfaceLoads !== void 0 ? { surfaceLoads: [] } : {}
+  };
+  const memberLoadIds = /* @__PURE__ */ new Set();
+  if (raw.memberLoads !== void 0 && !Array.isArray(raw.memberLoads)) {
+    throw new Error("Het 3D-model bevat geen geldige lijst memberLoads.");
+  }
+  for (const item of raw.memberLoads ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("Het 3D-model bevat een ongeldige staafbelasting.");
+    }
+    const load = item;
+    const id = Number(load.id);
+    const beamId = Number(load.beamId);
+    if (!Number.isSafeInteger(load.id) || id <= 0 || memberLoadIds.has(id) || !Number.isSafeInteger(load.beamId) || !beamIds.has(beamId)) {
+      throw new Error("Het 3D-model bevat een staafbelasting met ongeldige, dubbele of ontbrekende staafverwijzing.");
+    }
+    model.memberLoads.push(readMemberLoad(load, model, id, beamId));
+    memberLoadIds.add(id);
+  }
+  const memberPointLoadIds = /* @__PURE__ */ new Set();
+  if (raw.memberPointLoads !== void 0 && !Array.isArray(raw.memberPointLoads)) {
+    throw new Error("Het 3D-model bevat geen geldige lijst memberPointLoads.");
+  }
+  for (const item of raw.memberPointLoads ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("Het 3D-model bevat een ongeldige staafpuntlast.");
+    }
+    const load = item;
+    const id = Number(load.id), beamId = Number(load.beamId);
+    if (!Number.isSafeInteger(load.id) || id <= 0 || memberPointLoadIds.has(id) || !Number.isSafeInteger(load.beamId) || !beamIds.has(beamId)) {
+      throw new Error("Het 3D-model bevat een staafpuntlast met ongeldige, dubbele of ontbrekende staafverwijzing.");
+    }
+    model.memberPointLoads.push(readMemberPointLoad(load, model, id, beamId));
+    memberPointLoadIds.add(id);
+  }
+  const thermalLoadIds = /* @__PURE__ */ new Set();
+  if (raw.thermalLoads !== void 0 && !Array.isArray(raw.thermalLoads)) {
+    throw new Error("Het 3D-model bevat geen geldige lijst thermalLoads.");
+  }
+  for (const item of raw.thermalLoads ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("Het 3D-model bevat een ongeldige temperatuurbelasting.");
+    }
+    const load = item;
+    const id = Number(load.id), beamId = Number(load.beamId);
+    if (!Number.isSafeInteger(load.id) || id <= 0 || thermalLoadIds.has(id) || !Number.isSafeInteger(load.beamId) || !beamIds.has(beamId)) {
+      throw new Error("Het 3D-model bevat een temperatuurbelasting met ongeldige, dubbele of ontbrekende staafverwijzing.");
+    }
+    model.thermalLoads.push(readThermalLoad(load, model, id, beamId));
+    thermalLoadIds.add(id);
+  }
+  const surfaceLoadIds = /* @__PURE__ */ new Set();
+  if (raw.surfaceLoads !== void 0 && !Array.isArray(raw.surfaceLoads)) throw new Error("Het 3D-model bevat geen geldige lijst surfaceLoads.");
+  for (const item of raw.surfaceLoads ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Het 3D-model bevat een ongeldige oppervlaktebelasting.");
+    const load = item;
+    const id = Number(load.id), plateId = Number(load.plateId);
+    const qx = Number(load.qx ?? 0), qy = Number(load.qy ?? 0), qz = Number(load.qz ?? 0);
+    if (!Number.isSafeInteger(load.id) || id <= 0 || surfaceLoadIds.has(id) || !Number.isSafeInteger(load.plateId) || !plateIds.has(plateId) || ![qx, qy, qz].every(Number.isFinite) || [qx, qy, qz].every((component) => component === 0)) {
+      throw new Error("Het 3D-model bevat een oppervlaktebelasting met ongeldige waarden of plaatverwijzing.");
+    }
+    const caseId = readOptionalCaseId(load.caseId);
+    model.surfaceLoads.push({ id, plateId, ...caseId !== void 0 ? { caseId } : {}, qx, qy, qz });
+    surfaceLoadIds.add(id);
+  }
+  return model;
+}
+
+// src/components/frame3d/frame3dVisibility.ts
+var DEFAULT_FRAME_3D_VISIBILITY = {
+  nodes: true,
+  beams: true,
+  plates: true,
+  profiles: false,
+  nodeNumbers: true,
+  beamNumbers: false,
+  nodeCoordinates: false,
+  supports: true,
+  loads: true,
+  grid: true,
+  axes: true,
+  structuralGrid: true,
+  deformation: true,
+  reactions: true,
+  utilization: true,
+  axialForce: false,
+  shearY: false,
+  shearZ: false,
+  torsion: false,
+  momentY: false,
+  momentZ: false
+};
+
+// src/components/frame3d/frame3dViewSets.ts
+var VIEWS = ["iso", "top", "front", "side"];
+function vector3(value) {
+  if (!Array.isArray(value) || value.length !== 3 || !value.every((item) => typeof item === "number" && Number.isFinite(item))) return null;
+  return [Number(value[0]), Number(value[1]), Number(value[2])];
+}
+function parseFrame3DViewSets(value) {
+  if (value === void 0) return [];
+  if (!Array.isArray(value)) throw new Error("De opgeslagen 3D-weergaven zijn ongeldig.");
+  const ids = /* @__PURE__ */ new Set();
+  return value.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Een opgeslagen 3D-weergave is ongeldig.");
+    const raw = item;
+    const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : `view-${index + 1}`;
+    const name = typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : `Weergave ${index + 1}`;
+    const view = VIEWS.includes(raw.view) ? raw.view : "iso";
+    const cameraRaw = raw.camera;
+    const position = vector3(cameraRaw?.position), target = vector3(cameraRaw?.target), up = vector3(cameraRaw?.up);
+    if (!position || !target || !up || ids.has(id)) throw new Error("Een opgeslagen 3D-weergave heeft een ongeldige camera of dubbele id.");
+    const savedVisibility = raw.visibility;
+    if (!savedVisibility || typeof savedVisibility !== "object" || Array.isArray(savedVisibility)) {
+      throw new Error("Een opgeslagen 3D-weergave mist de zichtbaarheidsinstellingen.");
+    }
+    const visibility = { ...DEFAULT_FRAME_3D_VISIBILITY };
+    for (const key of Object.keys(visibility)) {
+      const entry = savedVisibility[key];
+      if (typeof entry === "boolean") visibility[key] = entry;
+    }
+    const combinationId = raw.combinationId === null || raw.combinationId === void 0 ? null : Number.isSafeInteger(raw.combinationId) && Number(raw.combinationId) > 0 ? Number(raw.combinationId) : (() => {
+      throw new Error("Een opgeslagen 3D-weergave verwijst naar een ongeldige resultaatcombinatie.");
+    })();
+    ids.add(id);
+    return { id, name, view, camera: { position, target, up }, visibility, combinationId };
+  });
+}
+
 // src/io/projectFile.ts
 var PROJECT_FILE_EXT = "ifcfem2d";
 var PROJECT_FORMAT_VERSION = 2;
+var PROJECT_FORMAT_VERSION_3D = 3;
 var SOORTEN = ["6.10a", "6.10b", "6.14b", "6.15b", "6.16b"];
 function combinationsToFile(combos) {
   return combos.map((c) => ({
@@ -22011,6 +22529,7 @@ function kenmerkUitBestand(raw) {
   };
 }
 var ProjectBestandFout = class extends Error {
+  redenen;
   constructor(redenen) {
     super(redenen.join(" "));
     this.redenen = redenen;
@@ -22052,11 +22571,17 @@ function combinationsFromFile(raw) {
   return uit;
 }
 function serializeProject(state) {
+  const modelDimension = state.modelDimension ?? (state.model3d !== void 0 ? "3d" : "2d");
   const file = {
     format: "open-fem2d-studio-v2",
-    version: PROJECT_FORMAT_VERSION,
+    version: modelDimension === "3d" ? PROJECT_FORMAT_VERSION_3D : PROJECT_FORMAT_VERSION,
     savedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    ...state
+    ...state,
+    modelDimension,
+    // Canonieke bestanden dragen nooit een tweede actief modeltype. De oude
+    // 2D-lijsten blijven bij 3D alleen als controle- en compatibiliteitsspoor.
+    model3d: modelDimension === "3d" ? parseFrame3DModel(state.model3d) : void 0,
+    frame3dViewSets: modelDimension === "3d" ? parseFrame3DViewSets(state.frame3dViewSets) : void 0
   };
   return JSON.stringify(file, null, 2);
 }
@@ -22094,7 +22619,10 @@ var BEKENDE_TOPVELDEN = [
   "eigenCltOpbouwen",
   "projectInfo",
   "windInstellingen",
-  "rapport"
+  "rapport",
+  "modelDimension",
+  "model3d",
+  "frame3dViewSets"
 ];
 function deserializeProject(text) {
   const parsed = JSON.parse(text);
@@ -22104,8 +22632,12 @@ function deserializeProject(text) {
   if (typeof parsed.version !== "number") {
     throw new Error("Bestand mist version-tag");
   }
-  if (parsed.version > PROJECT_FORMAT_VERSION) {
+  if (parsed.version > PROJECT_FORMAT_VERSION_3D) {
     throw new Error(`Bestand is opgeslagen met nieuwere versie (${parsed.version}) \u2014 werk je app bij`);
+  }
+  const hadExplicitDimension = parsed.modelDimension !== void 0;
+  if (hadExplicitDimension && parsed.modelDimension !== "2d" && parsed.modelDimension !== "3d") {
+    throw new ProjectBestandFout([`Onbekende modeldimensie ${JSON.stringify(parsed.modelDimension)}; alleen "2d" en "3d" bestaan.`]);
   }
   const redenen = [];
   for (const veld of VERPLICHTE_LIJSTEN) {
@@ -22117,6 +22649,25 @@ function deserializeProject(text) {
   }
   if (redenen.length > 0) throw new ProjectBestandFout(redenen);
   analysetypeUitBestand(parsed.analysetype, parsed.nonlinearEnabled);
+  if (parsed.model3d !== void 0) {
+    try {
+      parsed.model3d = parseFrame3DModel(parsed.model3d);
+    } catch (error) {
+      throw new ProjectBestandFout([error instanceof Error ? error.message : String(error)]);
+    }
+  }
+  if (parsed.frame3dViewSets !== void 0) {
+    parsed.frame3dViewSets = parseFrame3DViewSets(parsed.frame3dViewSets);
+  }
+  if (hadExplicitDimension && parsed.modelDimension === "2d" && parsed.model3d !== void 0) {
+    throw new ProjectBestandFout(["Een 2D-project mag geen tweede 3D-model bevatten."]);
+  }
+  if (parsed.modelDimension === void 0) {
+    parsed.modelDimension = parsed.model3d !== void 0 ? "3d" : "2d";
+  }
+  if (parsed.modelDimension === "3d" && parsed.model3d === void 0) {
+    parsed.model3d = parseFrame3DModel(void 0);
+  }
   combinationsFromFile(parsed.combinations);
   return parsed;
 }
@@ -24924,15 +25475,21 @@ function eigenGewichtOverzicht(model) {
     staven: [],
     platen: [],
     aantalLasten: 0,
-    gewichtStavenKN: 0
+    gewichtStavenKN: 0,
+    overgeslagen: []
   };
   if (!geval) return leeg2;
   const staven = [];
+  const overgeslagen = [];
   for (const b of model.beams) {
+    const sec = resolveSection(b.material, b.profile);
+    if (sec.reden) {
+      overgeslagen.push({ beamId: b.id, reden: sec.reden });
+      continue;
+    }
     const lengteMm = staafLengteMm(b, model.nodes);
     const lasten = eigenGewichtLasten(b, lengteMm, geval.id);
     const verlopend = bepaalVerloop(b.material, b.profile, b.profileEnd).status === "verlopend";
-    const sec = resolveSection(b.material, b.profile);
     const rho = dichtheidVanMateriaal(b.material);
     const delen = lasten.map((l) => ({
       q: l.q,
@@ -24978,7 +25535,8 @@ function eigenGewichtOverzicht(model) {
     staven,
     platen,
     aantalLasten: staven.reduce((s, x) => s + x.delen.length, 0) + platen.length,
-    gewichtStavenKN: staven.reduce((s, x) => s + x.gewichtKN, 0)
+    gewichtStavenKN: staven.reduce((s, x) => s + x.gewichtKN, 0),
+    overgeslagen
   };
 }
 export {

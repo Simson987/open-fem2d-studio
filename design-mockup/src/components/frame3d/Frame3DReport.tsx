@@ -135,10 +135,10 @@ export default function Frame3DReport({
           {(model.plates?.length ?? 0) > 0 && <section>
             <h2>Platen en openingen</h2>
             <table className="frame3d-report-wide"><thead><tr>
-              <th>Plaat</th><th>Hoekknopen</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>Openingen</th>
+              <th>Plaat</th><th>Contourknopen</th><th>Rand</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>Openingen</th>
             </tr></thead><tbody>
               {(model.plates ?? []).map((plate) => <tr key={plate.id}>
-                <td>{plate.id}</td><td>{plate.nodeIds.join(" · ")}</td><td>{number(plate.thicknessM)} m</td>
+                <td>{plate.id}</td><td>{plate.nodeIds.join(" · ")}</td><td>{plate.boundary ? `${plate.boundary.length} segmenten (${plate.boundary.filter((segment) => segment.kind === "arc").length} boog)` : "hoekpunten"}</td><td>{number(plate.thicknessM)} m</td>
                 <td>{number(plate.cornerRadiusM ?? 0)} m</td><td>{plate.material || "—"}</td>
                 <td>{(plate.openings ?? []).length === 0 ? "—" : (plate.openings ?? []).map((opening) =>
                   `#${opening.id}: ${opening.nodeIds.join(" · ")} (r=${number(opening.cornerRadiusM ?? 0)} m)`).join("; ")}</td>
@@ -213,10 +213,10 @@ export default function Frame3DReport({
             {(model.plates?.length ?? 0) > 0 && <>
               <h3>Platen en openingen</h3>
               <table className="frame3d-report-wide"><thead><tr>
-                <th>Plaat</th><th>Hoekknopen</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>Openingen</th>
+                <th>Plaat</th><th>Contourknopen</th><th>Rand</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>Openingen</th>
               </tr></thead><tbody>
                 {(model.plates ?? []).map((plate) => <tr key={plate.id}>
-                  <td>{plate.id}</td><td>{plate.nodeIds.join(" · ")}</td><td>{number(plate.thicknessM)} m</td>
+                  <td>{plate.id}</td><td>{plate.nodeIds.join(" · ")}</td><td>{plate.boundary ? `${plate.boundary.length} segmenten (${plate.boundary.filter((segment) => segment.kind === "arc").length} boog)` : "hoekpunten"}</td><td>{number(plate.thicknessM)} m</td>
                   <td>{number(plate.cornerRadiusM ?? 0)} m</td><td>{plate.material || "—"}</td>
                   <td>{(plate.openings ?? []).length === 0 ? "—" : (plate.openings ?? []).map((opening) =>
                     `#${opening.id}: ${opening.nodeIds.join(" · ")} (r=${number(opening.cornerRadiusM ?? 0)} m)`).join("; ")}</td>
