@@ -66,9 +66,13 @@ function boundaryPath(
   return path;
 }
 
-export function createFrame3DPlateGeometry(model: Frame3DModel, plate: Frame3DPlate): Frame3DPlateGeometry | null {
-  const byId = new Map(model.nodes.map((node) => [node.id, node]));
-  const nodes = plate.nodeIds.map((id) => model.nodes.find((node) => node.id === id)).filter(Boolean) as Frame3DNode[];
+export function createFrame3DPlateGeometry(
+  model: Frame3DModel,
+  plate: Frame3DPlate,
+  nodeIndex?: ReadonlyMap<number, Frame3DNode>,
+): Frame3DPlateGeometry | null {
+  const byId = nodeIndex ?? new Map(model.nodes.map((node) => [node.id, node]));
+  const nodes = plate.nodeIds.map((id) => byId.get(id)).filter(Boolean) as Frame3DNode[];
   if (nodes.length < 3) return null;
   const position = point(nodes[0]);
   const u = point(nodes[1]).sub(position).normalize();
@@ -88,7 +92,7 @@ export function createFrame3DPlateGeometry(model: Frame3DModel, plate: Frame3DPl
     : roundedPath(nodes.map(project), plate.cornerRadiusM ?? 0, true)) as THREE.Shape | null;
   if (!shape) return null;
   for (const opening of plate.openings ?? []) {
-    const openingNodes = opening.nodeIds.map((id) => model.nodes.find((node) => node.id === id)).filter(Boolean) as Frame3DNode[];
+    const openingNodes = opening.nodeIds.map((id) => byId.get(id)).filter(Boolean) as Frame3DNode[];
     if (openingNodes.length >= 3) {
       const hole = opening.boundary
         ? boundaryPath(opening.boundary, byId, project, false)

@@ -1071,6 +1071,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     state.axes.visible = visibility.axes;
     state.axisLabels.forEach((label) => { label.visible = visibility.axes; });
     const byId = new Map(model.nodes.map((node) => [node.id, node]));
+    const plateGeometryById = new Map<number, ReturnType<typeof createFrame3DPlateGeometry>>();
+    const plateGeometryFor = (plate: NonNullable<Frame3DModel["plates"]>[number]) => {
+      if (!plateGeometryById.has(plate.id)) {
+        plateGeometryById.set(plate.id, createFrame3DPlateGeometry(model, plate, byId));
+      }
+      return plateGeometryById.get(plate.id) ?? null;
+    };
     const nodeRadius = visualNodeRadius(model);
     // Deel onveranderlijke buffers binnen één scène-opbouw. Vooral echte
     // profiel-extrusies en knoopbollen zijn anders bij grote modellen een
@@ -1234,7 +1241,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     }
     if (visibility.plates) {
       for (const plate of model.plates ?? []) {
-        const built = createFrame3DPlateGeometry(model, plate);
+        const built = plateGeometryFor(plate);
         if (!built) continue;
         const mesh = new THREE.Mesh(built.geometry, new THREE.MeshStandardMaterial({
           color: 0x94a3b8,
@@ -1251,7 +1258,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           new THREE.EdgesGeometry(built.geometry, 22),
           new THREE.LineBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.78 }),
         );
-        edges.userData = { type: "plate", id: plate.id, selectionColor: 0x92400e };
+        // De plaatmesh zelf is de klikzone. De rand kleurt wel mee met de
+        // selectie, maar verdubbelt niet het aantal raycast-doelen.
+        edges.userData = { type: "plate", id: plate.id, selectionColor: 0x92400e, pickable: false };
         mesh.add(edges);
         geometry.add(mesh);
       }
@@ -1329,10 +1338,12 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     addFrame3DConditionMarkers(geometry, conditionModel ?? model, visibility, activeLoadCaseId);
 
     if (visibility.loads) {
-      for (const load of model.surfaceLoads ?? []) {
-        if (activeLoadCaseId !== undefined && frame3DLoadCaseId(load) !== activeLoadCaseId) continue;
-        const plate = (model.plates ?? []).find((item) => item.id === load.plateId);
-        const built = plate && createFrame3DPlateGeometry(model, plate);
+      const visibleSurfaceLoads = (model.surfaceLoads ?? []).filter((load) =>
+        activeLoadCaseId === undefined || frame3DLoadCaseId(load) === activeLoadCaseId);
+      const surfaceLoadLabelStride = labelStride(visibleSurfaceLoads.length);
+      for (const [loadIndex, load] of visibleSurfaceLoads.entries()) {
+        const plate = plateByIdRef.current!.get(load.plateId);
+        const built = plate && plateGeometryFor(plate);
         if (!built) continue;
         const vector = new THREE.Vector3(load.qx, load.qy, load.qz);
         const magnitude = vector.length();
@@ -1342,11 +1353,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         const arrow = new THREE.ArrowHelper(direction, built.centroid.clone().addScaledVector(direction, -length), length, 0x0284c7, 0.22, 0.12);
         arrow.traverse((child) => { child.userData = { type: "surfaceLoad", id: load.id }; });
         geometry.add(arrow);
-        geometry.add(makeLabel(
-          `q = ${resultValue(magnitude)} kN/m²`,
-          "frame3d-result-label frame3d-surface-load-label",
-          built.centroid.clone().addScaledVector(built.normal, 0.12),
-        ));
+        if (loadIndex % surfaceLoadLabelStride === 0) {
+          geometry.add(makeLabel(
+            `q = ${resultValue(magnitude)} kN/m²`,
+            "frame3d-result-label frame3d-surface-load-label",
+            built.centroid.clone().addScaledVector(built.normal, 0.12),
+          ));
+        }
       }
     }
 
@@ -1437,10 +1450,16 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     }
     geometry.traverse((object) => {
       const type = object.userData.type as Frame3DSelectionType | undefined;
-      if (type && SELECTABLE_TYPES.has(type) && typeof (object as { raycast?: unknown }).raycast === "function") {
+      if (type && object.userData.pickable !== false && SELECTABLE_TYPES.has(type) && typeof (object as { raycast?: unknown }).raycast === "function") {
         selectionPickTargetsRef.current.push(object);
       }
     });
+    // Als alleen belastingen zichtbaar zijn, gebruiken we de plaatmesh enkel
+    // om normaal en zwaartepunt te bepalen. Die tijdelijke GPU-buffer hangt
+    // dan niet in de scène en moet hier meteen worden vrijgegeven.
+    if (!visibility.plates) {
+      plateGeometryById.forEach((built) => built?.geometry.dispose());
+    }
     applySelectionHighlight(geometry, selectionRef.current);
     state.renderer.render(state.scene, state.camera);
     state.labelRenderer.render(state.scene, state.camera);
