@@ -926,6 +926,7 @@
     }
   },
   "tree": {
+    "showNext": "Nächste {{count}} anzeigen",
     "runToSeeResults": "Führen Sie \"Berechnen\" aus, um Ergebnisse zu sehen.",
     "rowDeflection": "Verschiebung",
     "rowDeflectionHint": "Verformte Lage — Hermite-Kurve der Knotenverschiebungen",

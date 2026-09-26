@@ -613,12 +613,19 @@ export async function openProject(): Promise<{ text: string; path: string } | nu
     const input = document.createElement("input");
     input.type = "file";
     input.accept = `.${PROJECT_FILE_EXT},application/json`;
+    input.hidden = true;
+    document.body.appendChild(input);
+    const finish = (value: { text: string; path: string } | null) => {
+      input.remove();
+      resolve(value);
+    };
     input.onchange = async () => {
       const file = input.files?.[0];
-      if (!file) { resolve(null); return; }
+      if (!file) { finish(null); return; }
       const text = await file.text();
-      resolve({ text, path: file.name });
+      finish({ text, path: file.name });
     };
+    input.addEventListener("cancel", () => finish(null), { once: true });
     input.click();
   });
 }

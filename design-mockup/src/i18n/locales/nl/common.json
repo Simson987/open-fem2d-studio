@@ -926,6 +926,7 @@
     }
   },
   "tree": {
+    "showNext": "Toon volgende {{count}}",
     "runToSeeResults": "Voer \"Berekenen\" uit om resultaten te zien.",
     "rowDeflection": "Verplaatsing",
     "rowDeflectionHint": "Vervormde stand — Hermite-curve van knoopverplaatsingen",

@@ -51,6 +51,39 @@ function Branch({ label, count, children }: { label: string; count: number; chil
   </div>;
 }
 
+const GROTE_TAK_GRENS = 200;
+const TAK_PAGINA = 250;
+
+function ItemBranch<T>({
+  label, items, renderItem, showNextLabel,
+}: {
+  label: string;
+  items: readonly T[];
+  renderItem: (item: T) => React.ReactNode;
+  showNextLabel: (count: number) => string;
+}) {
+  const [open, setOpen] = useState(items.length <= GROTE_TAK_GRENS);
+  const [limit, setLimit] = useState(TAK_PAGINA);
+  const visibleItems = open ? items.slice(0, limit) : [];
+  return <div className="fem-tree-node">
+    <button className="fem-tree-row" onClick={() => setOpen(!open)}>
+      <span className={`fem-tree-chevron${open ? " open" : ""}`}><svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M3 2l4 3-4 3z" /></svg></span>
+      <span className="fem-tree-label">{label}</span><span className="fem-tree-count">{items.length}</span>
+    </button>
+    {open && <div className="fem-tree-children">
+      {visibleItems.map(renderItem)}
+      {limit < items.length && <button
+        type="button"
+        className="fem-tree-leaf clickable"
+        onClick={() => setLimit((current) => Math.min(items.length, current + TAK_PAGINA))}
+      >
+        <span className="fem-tree-leaf-label">{showNextLabel(Math.min(TAK_PAGINA, items.length - limit))}</span>
+        <span className="fem-tree-leaf-value">{limit} / {items.length}</span>
+      </button>}
+    </div>}
+  </div>;
+}
+
 function Leaf({ label, value, active, onClick }: { label: string; value?: string; active?: boolean; onClick: (event: React.MouseEvent<HTMLButtonElement>) => void }) {
   return <button type="button" className={`fem-tree-leaf clickable${active ? " active" : ""}`} onClick={onClick}>
     <span className="fem-tree-leaf-label">{label}</span>{value && <span className="fem-tree-leaf-value">{value}</span>}
@@ -92,18 +125,20 @@ export default function Frame3DExplorer(props: Props) {
     </div>
     <div className="fem-tree-body">
       {tab === "project" && <>
-        <Branch label={t("tree.nodes")} count={props.model.nodes.length}>
-          {props.model.nodes.map((node) => <Leaf key={node.id} label={t("tree.nodeLabel", { id: node.id })}
+        <ItemBranch label={t("tree.nodes")} items={props.model.nodes}
+          showNextLabel={(count) => t("tree.showNext", { count })} renderItem={(node) =>
+          <Leaf key={node.id} label={t("tree.nodeLabel", { id: node.id })}
             value={`X:${node.x} Y:${node.y} Z:${node.z}`}
             active={frame3DSelectionContains(props.selection, "node", node.id)}
-            onClick={(event) => select(event, { type: "node", id: node.id })} />)}
-        </Branch>
-        <Branch label={t("tree.elements")} count={props.model.beams.length}>
-          {props.model.beams.map((beam) => <Leaf key={beam.id} label={t("tree.barLabel", { id: beam.id })}
+            onClick={(event) => select(event, { type: "node", id: node.id })} />
+        } />
+        <ItemBranch label={t("tree.elements")} items={props.model.beams}
+          showNextLabel={(count) => t("tree.showNext", { count })} renderItem={(beam) =>
+          <Leaf key={beam.id} label={t("tree.barLabel", { id: beam.id })}
             value={`${beam.startNodeId}-${beam.endNodeId} · ${beam.profileName ?? "—"}`}
             active={frame3DSelectionContains(props.selection, "beam", beam.id)}
-            onClick={(event) => select(event, { type: "beam", id: beam.id })} />)}
-        </Branch>
+            onClick={(event) => select(event, { type: "beam", id: beam.id })} />
+        } />
         <Branch label="Platen" count={(props.model.plates ?? []).length}>
           {(props.model.plates ?? []).map((plate) => <Leaf key={plate.id} label={`Plaat ${plate.id}`}
             value={plate.boundary

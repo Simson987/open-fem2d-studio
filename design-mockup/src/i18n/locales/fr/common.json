@@ -926,6 +926,7 @@
     }
   },
   "tree": {
+    "showNext": "Afficher les {{count}} suivants",
     "runToSeeResults": "Lancez « Calculer » pour voir les résultats.",
     "rowDeflection": "Déplacement",
     "rowDeflectionHint": "Déformée — courbe d'Hermite des déplacements nodaux",

@@ -198,8 +198,24 @@ const SELECTABLE_TYPES = new Set<Frame3DSelectionType>([
 function applySelectionHighlight(group: THREE.Group, selection: Frame3DSelection) {
   group.traverse((object) => {
     const type = object.userData.type as Frame3DSelectionType | undefined;
+    if (!type || !SELECTABLE_TYPES.has(type)) return;
+    if (object instanceof THREE.InstancedMesh && Array.isArray(object.userData.instanceIds)) {
+      const ids = object.userData.instanceIds as number[];
+      const baseColors = object.userData.instanceBaseColors as number[] | undefined;
+      if (!baseColors || baseColors.length !== ids.length) return;
+      ids.forEach((id, index) => {
+        object.setColorAt(
+          index,
+          new THREE.Color(frame3DSelectionContains(selection, type, id)
+            ? (object.userData.selectionColor ?? 0xd97706)
+            : baseColors[index]),
+        );
+      });
+      if (object.instanceColor) object.instanceColor.needsUpdate = true;
+      return;
+    }
     const id = object.userData.id;
-    if (!type || !SELECTABLE_TYPES.has(type) || typeof id !== "number") return;
+    if (typeof id !== "number") return;
     const drawable = object as THREE.Object3D & { material?: THREE.Material | THREE.Material[] };
     if (!drawable.material) return;
     const materials = Array.isArray(drawable.material) ? drawable.material : [drawable.material];
@@ -605,7 +621,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       if (settings.knoop) {
         const nodeHit = raycaster.intersectObjects(nodePickTargetsRef.current, false)[0];
         if (nodeHit) {
-          const node = current.nodes.find((item) => item.id === nodeHit.object.userData.id);
+          const instanceIds = nodeHit.object.userData.instanceIds as number[] | undefined;
+          const hitId = instanceIds && nodeHit.instanceId !== undefined
+            ? instanceIds[nodeHit.instanceId]
+            : nodeHit.object.userData.id;
+          const node = current.nodes.find((item) => item.id === hitId);
           if (node) return { position: new THREE.Vector3(node.x, node.y, node.z), nodeId: node.id, kind: "knoop" };
         }
       }
@@ -737,7 +757,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       let hit: THREE.Object3D | undefined = intersection?.object;
       while (hit && hit !== geometry && typeof hit.userData.type !== "string") hit = hit.parent ?? undefined;
       const type = hit?.userData.type;
-      const id = hit?.userData.id;
+      const instanceIds = hit?.userData.instanceIds as number[] | undefined;
+      const id = instanceIds && intersection?.instanceId !== undefined
+        ? instanceIds[intersection.instanceId]
+        : hit?.userData.id;
       const activeTool = toolRef.current;
       let current = modelRef.current;
       const commitModel = (next: Frame3DModel) => {
@@ -980,10 +1003,36 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       }
       return cached;
     };
+    const profileEdgeCache = new Map<THREE.BufferGeometry, THREE.EdgesGeometry>();
+    const profileEdgesFor = (profile: THREE.BufferGeometry) => {
+      let cached = profileEdgeCache.get(profile);
+      if (!cached) {
+        cached = new THREE.EdgesGeometry(profile, 28);
+        profileEdgeCache.set(profile, cached);
+      }
+      return cached;
+    };
+    type BeamInstance = { id: number; matrix: THREE.Matrix4; color: number };
+    type BeamInstanceBatch = {
+      geometry: THREE.BufferGeometry;
+      instances: BeamInstance[];
+    };
+    const beamInstanceBatches = new Map<string, BeamInstanceBatch>();
+    // Vanaf deze omvang kost duizenden losse Object3D's meer dan de echte
+    // geometrie. Eén InstancedMesh per profiel/lengte houdt ieder element
+    // afzonderlijk selecteerbaar, maar stuurt de transformaties in één batch
+    // naar de GPU.
+    const useBeamInstancing = model.beams.length >= 250;
+    // Nummerlabels zijn DOM-elementen. Duizenden labels boven op elkaar zijn
+    // onleesbaar en blokkeren de hoofdthread. Houd per soort een gelijkmatig
+    // verdeelde, representatieve set zichtbaar bij grote modellen.
+    const labelStride = (count: number) => count <= 200 ? 1 : Math.ceil(count / 24);
+    const beamLabelStride = labelStride(model.beams.length);
+    const nodeLabelStride = labelStride(model.nodes.length);
     const nodeGeometry = visibility.nodes ? new THREE.SphereGeometry(nodeRadius, 24, 16) : null;
     const nodeHitGeometry = visibility.nodes ? new THREE.SphereGeometry(nodeRadius * 2.6, 12, 8) : null;
     const utilizationByMember = new Map(utilizations.map((value) => [value.beamId, value]));
-    for (const beam of model.beams) {
+    for (const [beamIndex, beam] of model.beams.entries()) {
       const start = byId.get(beam.startNodeId);
       const end = byId.get(beam.endNodeId);
       if (!start || !end) continue;
@@ -1001,24 +1050,49 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           ? profileGeometryFor(beam.profileName, length)
           : null;
         const radius = visibility.profiles ? PROFILE_BEAM_RADIUS_M : ANALYTICAL_BEAM_RADIUS_M;
-        const mesh = new THREE.Mesh(
-          profileGeometry ?? analyticalGeometryFor(radius, length, visibility.profiles ? 24 : 12),
-          new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.04 }),
-        );
-        mesh.position.copy(a).add(b).multiplyScalar(0.5);
-        mesh.quaternion.copy(profileGeometry
+        const rotation = profileGeometry
           ? memberRotation(delta, beam.rollAngleRad ?? 0)
-          : new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.clone().normalize()));
-        mesh.userData = { type: "beam", id: beam.id };
-        if (profileGeometry) {
-          // Een dunne rand maakt lijf, flenzen en holle kokers ook bij een
-          // witte achtergrond als echte doorsnede leesbaar.
-          mesh.add(new THREE.LineSegments(
-            new THREE.EdgesGeometry(profileGeometry, 28),
-            new THREE.LineBasicMaterial({ color: 0x1e293b, transparent: true, opacity: 0.42 }),
-          ));
+          : new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.clone().normalize());
+        const midpoint = a.clone().add(b).multiplyScalar(0.5);
+        if (useBeamInstancing) {
+          const key = profileGeometry
+            ? `profile\u0000${beam.profileName}\u0000${length.toFixed(9)}`
+            : `analytical\u0000${radius}\u0000${visibility.profiles ? 24 : 12}`;
+          let batch = beamInstanceBatches.get(key);
+          if (!batch) {
+            batch = {
+              geometry: profileGeometry ?? analyticalGeometryFor(radius, 1, visibility.profiles ? 24 : 12),
+              instances: [],
+            };
+            beamInstanceBatches.set(key, batch);
+          }
+          batch.instances.push({
+            id: beam.id,
+            color,
+            matrix: new THREE.Matrix4().compose(
+              midpoint,
+              rotation,
+              profileGeometry ? new THREE.Vector3(1, 1, 1) : new THREE.Vector3(1, length, 1),
+            ),
+          });
+        } else {
+          const mesh = new THREE.Mesh(
+            profileGeometry ?? analyticalGeometryFor(radius, length, visibility.profiles ? 24 : 12),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.04 }),
+          );
+          mesh.position.copy(midpoint);
+          mesh.quaternion.copy(rotation);
+          mesh.userData = { type: "beam", id: beam.id };
+          if (profileGeometry) {
+            // Een dunne rand maakt lijf, flenzen en holle kokers ook bij een
+            // witte achtergrond als echte doorsnede leesbaar.
+            mesh.add(new THREE.LineSegments(
+              profileEdgesFor(profileGeometry),
+              new THREE.LineBasicMaterial({ color: 0x1e293b, transparent: true, opacity: 0.42 }),
+            ));
+          }
+          geometry.add(mesh);
         }
-        geometry.add(mesh);
         if (utilization) {
           const midpoint = a.clone().add(b).multiplyScalar(0.5)
             .addScaledVector(axes.ez, 0.42)
@@ -1032,14 +1106,33 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           ));
         }
       }
-      if (visibility.beamNumbers) {
+      if (visibility.beamNumbers && beamIndex % beamLabelStride === 0) {
         const midpoint = a.clone().add(b).multiplyScalar(0.5).addScaledVector(axes.ey, 0.3);
         geometry.add(makeLabel(`(${beam.id})`, "frame3d-beam-number", midpoint));
       }
-      if (visibility.profiles && beam.profileName) {
+      if (visibility.profiles && beam.profileName && !useBeamInstancing) {
         const midpoint = a.clone().add(b).multiplyScalar(0.5).addScaledVector(axes.ez, -0.3);
         geometry.add(makeLabel(beam.profileName, "frame3d-profile-label", midpoint));
       }
+    }
+    for (const batch of beamInstanceBatches.values()) {
+      const mesh = new THREE.InstancedMesh(
+        batch.geometry,
+        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.62, metalness: 0.04 }),
+        batch.instances.length,
+      );
+      const instanceIds = batch.instances.map((instance) => instance.id);
+      const instanceBaseColors = batch.instances.map((instance) => instance.color);
+      mesh.userData = { type: "beam", instanceIds, instanceBaseColors };
+      batch.instances.forEach((instance, index) => {
+        mesh.setMatrixAt(index, instance.matrix);
+        mesh.setColorAt(index, new THREE.Color(instance.color));
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.computeBoundingBox();
+      mesh.computeBoundingSphere();
+      geometry.add(mesh);
     }
     if (visibility.plates) {
       for (const plate of model.plates ?? []) {
@@ -1065,8 +1158,43 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         geometry.add(mesh);
       }
     }
-    for (const node of model.nodes) {
-      if (visibility.nodes) {
+    const useNodeInstancing = model.nodes.length >= 250;
+    if (visibility.nodes && useNodeInstancing) {
+      const instanceIds = model.nodes.map((node) => node.id);
+      const instanceBaseColors = model.nodes.map(() => 0x334155);
+      const visibleNodes = new THREE.InstancedMesh(
+        nodeGeometry!,
+        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.06 }),
+        model.nodes.length,
+      );
+      const hitNodes = new THREE.InstancedMesh(
+        nodeHitGeometry!,
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+        model.nodes.length,
+      );
+      visibleNodes.userData = { type: "node", instanceIds, instanceBaseColors };
+      hitNodes.userData = { type: "node", instanceIds, instanceBaseColors };
+      const matrix = new THREE.Matrix4();
+      model.nodes.forEach((node, index) => {
+        matrix.makeTranslation(node.x, node.y, node.z);
+        visibleNodes.setMatrixAt(index, matrix);
+        visibleNodes.setColorAt(index, new THREE.Color(0x334155));
+        hitNodes.setMatrixAt(index, matrix);
+        hitNodes.setColorAt(index, new THREE.Color(0x334155));
+      });
+      visibleNodes.instanceMatrix.needsUpdate = true;
+      hitNodes.instanceMatrix.needsUpdate = true;
+      if (visibleNodes.instanceColor) visibleNodes.instanceColor.needsUpdate = true;
+      if (hitNodes.instanceColor) hitNodes.instanceColor.needsUpdate = true;
+      visibleNodes.computeBoundingBox();
+      visibleNodes.computeBoundingSphere();
+      hitNodes.computeBoundingBox();
+      hitNodes.computeBoundingSphere();
+      geometry.add(visibleNodes, hitNodes);
+      nodePickTargetsRef.current.push(hitNodes);
+    }
+    for (const [nodeIndex, node] of model.nodes.entries()) {
+      if (visibility.nodes && !useNodeInstancing) {
         const mesh = new THREE.Mesh(
           nodeGeometry!,
           new THREE.MeshStandardMaterial({
@@ -1089,7 +1217,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         geometry.add(hitTarget);
         nodePickTargetsRef.current.push(hitTarget);
       }
-      if (visibility.nodeNumbers || visibility.nodeCoordinates) {
+      if ((visibility.nodeNumbers || visibility.nodeCoordinates) && nodeIndex % nodeLabelStride === 0) {
         const parts = [
           visibility.nodeNumbers ? String(node.id) : "",
           visibility.nodeCoordinates ? `(${node.x}, ${node.y}, ${node.z}) m` : "",

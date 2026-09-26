@@ -926,6 +926,7 @@
     }
   },
   "tree": {
+    "showNext": "Show next {{count}}",
     "runToSeeResults": "Run \"Solve\" to see results.",
     "rowDeflection": "Displacement",
     "rowDeflectionHint": "Deformed shape — Hermite curve of nodal displacements",
