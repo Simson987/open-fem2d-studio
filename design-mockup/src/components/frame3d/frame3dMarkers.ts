@@ -15,6 +15,107 @@ const GLOBAL_AXES = {
   z: new THREE.Vector3(0, 0, 1),
 } as const;
 
+const MARKER_BATCHER_KEY = "__frame3dMarkerBatcher";
+
+type MarkerInstance = { id: number; matrix: THREE.Matrix4 };
+type MarkerBatch = {
+  geometry: THREE.BufferGeometry;
+  color: number;
+  selectionType: Frame3DSingleSelection["type"];
+  instances: MarkerInstance[];
+};
+
+interface MarkerBatcher {
+  geometryFor: (key: string, factory: () => THREE.BufferGeometry) => THREE.BufferGeometry;
+  add: (
+    geometry: THREE.BufferGeometry,
+    color: number,
+    id: number,
+    position: THREE.Vector3,
+    quaternion: THREE.Quaternion | undefined,
+    selectionType: Frame3DSingleSelection["type"],
+  ) => void;
+  flush: () => void;
+}
+
+function markerGeometrySignature(geometry: THREE.BufferGeometry): string {
+  try {
+    return `${geometry.type}:${JSON.stringify((geometry as THREE.BufferGeometry & { parameters?: unknown }).parameters ?? {})}`;
+  } catch {
+    return geometry.uuid;
+  }
+}
+
+function createMarkerBatcher(group: THREE.Group): MarkerBatcher {
+  const batches = new Map<string, MarkerBatch>();
+  const geometries = new Map<string, THREE.BufferGeometry>();
+  const identityScale = new THREE.Vector3(1, 1, 1);
+  return {
+    geometryFor(key, factory) {
+      let geometry = geometries.get(key);
+      if (!geometry) {
+        geometry = factory();
+        geometries.set(key, geometry);
+      }
+      return geometry;
+    },
+    add(geometry, color, id, position, quaternion, selectionType) {
+      const key = `${selectionType}\u0000${color}\u0000${markerGeometrySignature(geometry)}`;
+      let batch = batches.get(key);
+      if (!batch) {
+        batch = { geometry, color, selectionType, instances: [] };
+        batches.set(key, batch);
+      } else if (geometry !== batch.geometry) {
+        geometry.dispose();
+      }
+      batch.instances.push({
+        id,
+        matrix: new THREE.Matrix4().compose(
+          position,
+          quaternion ?? new THREE.Quaternion(),
+          identityScale,
+        ),
+      });
+    },
+    flush() {
+      for (const batch of batches.values()) {
+        const mesh = new THREE.InstancedMesh(
+          batch.geometry,
+          new THREE.MeshStandardMaterial({
+            color: 0xffffff, metalness: 0.06, roughness: 0.65, side: THREE.DoubleSide,
+          }),
+          batch.instances.length,
+        );
+        const instanceIds = batch.instances.map((instance) => instance.id);
+        const instanceBaseColors = batch.instances.map(() => batch.color);
+        mesh.userData = { type: batch.selectionType, instanceIds, instanceBaseColors };
+        batch.instances.forEach((instance, index) => {
+          mesh.setMatrixAt(index, instance.matrix);
+          mesh.setColorAt(index, new THREE.Color(batch.color));
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) {
+          mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+          mesh.instanceColor.needsUpdate = true;
+        }
+        mesh.computeBoundingBox();
+        mesh.computeBoundingSphere();
+        group.add(mesh);
+      }
+      batches.clear();
+    },
+  };
+}
+
+function markerGeometry(
+  group: THREE.Group,
+  key: string,
+  factory: () => THREE.BufferGeometry,
+): THREE.BufferGeometry {
+  const batcher = group.userData[MARKER_BATCHER_KEY] as MarkerBatcher | undefined;
+  return batcher ? batcher.geometryFor(key, factory) : factory();
+}
+
 function nodePoint(node: Frame3DNode): THREE.Vector3 {
   return new THREE.Vector3(node.x, node.y, node.z);
 }
@@ -24,12 +125,18 @@ function addMesh(
   nodeId: number, position: THREE.Vector3, quaternion?: THREE.Quaternion,
   selection?: Frame3DSingleSelection,
 ) {
+  const selectionData = selection ?? { type: "node" as const, id: nodeId };
+  const batcher = group.userData[MARKER_BATCHER_KEY] as MarkerBatcher | undefined;
+  if (batcher) {
+    batcher.add(geometry, color, selectionData.id, position, quaternion, selectionData.type);
+    return;
+  }
   const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
     color, metalness: 0.06, roughness: 0.65, side: THREE.DoubleSide,
   }));
   mesh.position.copy(position);
   if (quaternion) mesh.quaternion.copy(quaternion);
-  mesh.userData = selection ?? { type: "node", id: nodeId };
+  mesh.userData = selectionData;
   group.add(mesh);
 }
 
@@ -52,11 +159,13 @@ function addSupport(group: THREE.Group, node: Frame3DNode, support: Frame3DSuppo
   const baseColor = 0x475569;
   const horizontal = new THREE.Quaternion().setFromUnitVectors(Y_AXIS, Z_AXIS);
   if (allFixed) {
-    addMesh(group, new THREE.CylinderGeometry(size * 0.76, size * 0.76, size * 0.36, 32), color, node.id,
+    addMesh(group, markerGeometry(group, `support-fixed:${size}`, () =>
+      new THREE.CylinderGeometry(size * 0.76, size * 0.76, size * 0.36, 32)), color, node.id,
       p.clone().add(new THREE.Vector3(0, 0, -size * 0.18)), horizontal);
     // Donkere arcering maakt een inklemming ook in bovenaanzicht herkenbaar.
     for (let offset = -0.55; offset <= 0.55; offset += 0.37) {
-      addMesh(group, new THREE.BoxGeometry(size * 0.09, size * 1.85, size * 0.09), baseColor, node.id,
+      addMesh(group, markerGeometry(group, `support-hatch:${size}`, () =>
+        new THREE.BoxGeometry(size * 0.09, size * 1.85, size * 0.09)), baseColor, node.id,
         p.clone().add(new THREE.Vector3(offset * size, 0, -size * 0.43)),
         new THREE.Quaternion().setFromAxisAngle(Z_AXIS, Math.PI / 4));
     }
@@ -66,22 +175,28 @@ function addSupport(group: THREE.Group, node: Frame3DNode, support: Frame3DSuppo
     // willekeurig camerastandpunt herkenbaar.
     const axis = GLOBAL_AXES[revoluteAxis];
     const orientation = new THREE.Quaternion().setFromUnitVectors(Z_AXIS, axis);
-    addMesh(group, new THREE.CylinderGeometry(size * 0.64, size * 0.64, size * 0.32, 32), color, node.id,
+    addMesh(group, markerGeometry(group, `support-revolute-base:${size}`, () =>
+      new THREE.CylinderGeometry(size * 0.64, size * 0.64, size * 0.32, 32)), color, node.id,
       p.clone().add(new THREE.Vector3(0, 0, -size * 0.2)), horizontal);
-    addMesh(group, new THREE.TorusGeometry(size * 0.62, size * 0.09, 12, 48), color, node.id,
+    addMesh(group, markerGeometry(group, `support-revolute-ring:${size}`, () =>
+      new THREE.TorusGeometry(size * 0.62, size * 0.09, 12, 48)), color, node.id,
       p.clone().addScaledVector(axis, size * 0.18), orientation);
-    addMesh(group, new THREE.CylinderGeometry(size * 0.07, size * 0.07, size * 1.65, 10), baseColor, node.id,
+    addMesh(group, markerGeometry(group, `support-revolute-axis:${size}`, () =>
+      new THREE.CylinderGeometry(size * 0.07, size * 0.07, size * 1.65, 10)), baseColor, node.id,
       p.clone(), new THREE.Quaternion().setFromUnitVectors(Y_AXIS, axis));
   } else if (pinned) {
-    addMesh(group, new THREE.ConeGeometry(size * 0.7, size, 32), color, node.id,
+    addMesh(group, markerGeometry(group, `support-cone:${size}`, () =>
+      new THREE.ConeGeometry(size * 0.7, size, 32)), color, node.id,
       p.clone().add(new THREE.Vector3(0, 0, -size * 0.55)),
       new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));
   } else if (roller) {
-    addMesh(group, new THREE.ConeGeometry(size * 0.7, size, 32), color, node.id,
+    addMesh(group, markerGeometry(group, `support-cone:${size}`, () =>
+      new THREE.ConeGeometry(size * 0.7, size, 32)), color, node.id,
       p.clone().addScaledVector(rollerNormal, -size * 0.55),
       new THREE.Quaternion().setFromUnitVectors(Y_AXIS, rollerNormal));
   } else {
-    addMesh(group, new THREE.SphereGeometry(size * 0.62, 24, 16), color, node.id,
+    addMesh(group, markerGeometry(group, `support-sphere:${size}`, () =>
+      new THREE.SphereGeometry(size * 0.62, 24, 16)), color, node.id,
       p.clone().add(new THREE.Vector3(0, 0, -size * 0.5)));
   }
   if (roller) {
@@ -94,17 +209,20 @@ function addSupport(group: THREE.Group, node: Frame3DNode, support: Frame3DSuppo
     for (const offset of [-0.34, 0.34]) {
       const position = p.clone().addScaledVector(rollerNormal, -size * 1.1)
         .addScaledVector(offsetAxis, offset * size);
-      addMesh(group, new THREE.CylinderGeometry(size * 0.13, size * 0.13, size * 0.95, 24),
+      addMesh(group, markerGeometry(group, `support-roller:${size}`, () =>
+        new THREE.CylinderGeometry(size * 0.13, size * 0.13, size * 0.95, 24)),
         baseColor, node.id, position, rollerRotation);
     }
   }
   if (roller) {
-    addMesh(group, new THREE.CylinderGeometry(size * 0.9, size * 0.9, size * 0.09, 40), baseColor, node.id,
+    addMesh(group, markerGeometry(group, `support-base:${size}`, () =>
+      new THREE.CylinderGeometry(size * 0.9, size * 0.9, size * 0.09, 40)), baseColor, node.id,
       p.clone().addScaledVector(rollerNormal, -size * 1.32),
       new THREE.Quaternion().setFromUnitVectors(Y_AXIS, rollerNormal));
   } else {
     const baseZ = allFixed || revoluteAxis ? -size * 0.48 : -size * 1.08;
-    addMesh(group, new THREE.CylinderGeometry(size * 0.9, size * 0.9, size * 0.09, 40), baseColor, node.id,
+    addMesh(group, markerGeometry(group, `support-base:${size}`, () =>
+      new THREE.CylinderGeometry(size * 0.9, size * 0.9, size * 0.09, 40)), baseColor, node.id,
       p.clone().add(new THREE.Vector3(0, 0, baseZ)), horizontal);
   }
 
@@ -147,7 +265,8 @@ function addSupport(group: THREE.Group, node: Frame3DNode, support: Frame3DSuppo
   rotational.forEach(([stiffness, axis]) => {
     if (stiffness === undefined) return;
     const orientation = new THREE.Quaternion().setFromUnitVectors(Z_AXIS, axis);
-    addMesh(group, new THREE.TorusGeometry(size * 0.72, size * 0.07, 8, 32, Math.PI * 1.72),
+    addMesh(group, markerGeometry(group, `support-rotational-spring:${size}`, () =>
+      new THREE.TorusGeometry(size * 0.72, size * 0.07, 8, 32, Math.PI * 1.72)),
       springColor, node.id, p.clone().addScaledVector(axis, size * 0.28), orientation);
   });
 
@@ -176,9 +295,11 @@ function addForceArrow(
   const headCenter = nodePoint(node).addScaledVector(direction, -size * 0.35);
   const stemCenter = headCenter.clone().addScaledVector(direction, -size * 0.78);
   const orientation = new THREE.Quaternion().setFromUnitVectors(Y_AXIS, direction);
-  addMesh(group, new THREE.CylinderGeometry(size * 0.065, size * 0.065, size * 0.9, 8),
+  addMesh(group, markerGeometry(group, `force-stem:${size}`, () =>
+    new THREE.CylinderGeometry(size * 0.065, size * 0.065, size * 0.9, 8)),
     color, node.id, stemCenter, orientation, selection);
-  addMesh(group, new THREE.ConeGeometry(size * 0.22, size * 0.42, 10),
+  addMesh(group, markerGeometry(group, `force-head:${size}`, () =>
+    new THREE.ConeGeometry(size * 0.22, size * 0.42, 10)),
     color, node.id, headCenter, orientation, selection);
 }
 
@@ -189,11 +310,13 @@ function addMomentArc(
   const orientation = new THREE.Quaternion().setFromUnitVectors(Z_AXIS, axis);
   const center = nodePoint(node).addScaledVector(axis, size * 0.55);
   const radius = size * 0.48;
-  addMesh(group, new THREE.TorusGeometry(radius, size * 0.055, 6, 18, Math.PI * 1.5),
+  addMesh(group, markerGeometry(group, `moment-ring:${size}`, () =>
+    new THREE.TorusGeometry(radius, size * 0.055, 6, 18, Math.PI * 1.5)),
     color, node.id, center, orientation, selection);
   const localEnd = new THREE.Vector3(0, -radius, 0).applyQuaternion(orientation);
   const tangent = new THREE.Vector3(sign, 0, 0).applyQuaternion(orientation);
-  addMesh(group, new THREE.ConeGeometry(size * 0.13, size * 0.28, 8),
+  addMesh(group, markerGeometry(group, `moment-head:${size}`, () =>
+    new THREE.ConeGeometry(size * 0.13, size * 0.28, 8)),
     color, node.id, center.clone().add(localEnd),
     new THREE.Quaternion().setFromUnitVectors(Y_AXIS, tangent), selection);
 }
@@ -338,6 +461,13 @@ export function addFrame3DConditionMarkers(
   visibility: Frame3DConditionVisibility = { supports: true, loads: true },
   activeLoadCaseId?: number,
 ): void {
+  const markerCount = (model.supports?.length ?? 0)
+    + (model.loads?.length ?? 0)
+    + (model.memberLoads?.length ?? 0)
+    + (model.memberPointLoads?.length ?? 0)
+    + (model.thermalLoads?.length ?? 0);
+  const batcher = markerCount >= 200 ? createMarkerBatcher(group) : undefined;
+  if (batcher) group.userData[MARKER_BATCHER_KEY] = batcher;
   const byId = new Map(model.nodes.map((node) => [node.id, node]));
   const beamById = new Map(model.beams.map((beam) => [beam.id, beam]));
   const bounds = new THREE.Box3().setFromPoints(model.nodes.map(nodePoint));
@@ -385,5 +515,9 @@ export function addFrame3DConditionMarkers(
       const start = byId.get(beam.startNodeId), end = byId.get(beam.endNodeId);
       if (start && end) addThermalLoad(group, load, start, end, size);
     }
+  }
+  if (batcher) {
+    delete group.userData[MARKER_BATCHER_KEY];
+    batcher.flush();
   }
 }

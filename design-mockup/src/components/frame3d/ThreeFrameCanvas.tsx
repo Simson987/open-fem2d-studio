@@ -289,6 +289,13 @@ function resultValue(value: number): string {
       : cleaned.toFixed(3);
 }
 
+interface ResultDiagramBatch {
+  color: number;
+  fillPositions: number[];
+  zeroPoints: THREE.Vector3[];
+  curvePoints: THREE.Vector3[];
+}
+
 function addResultDiagram(
   group: THREE.Group,
   beamId: number,
@@ -299,6 +306,8 @@ function addResultDiagram(
   maximum: number,
   height: number,
   style: { symbol: string; unit: string; color: number },
+  showLabels = true,
+  batch?: ResultDiagramBatch,
 ) {
   if (!(maximum > 1e-12) || samples.length < 2) return;
   const scale = height / maximum;
@@ -316,33 +325,41 @@ function addResultDiagram(
     const c = diagramPoints[index + 1], d = diagramPoints[index];
     for (const point of [a, b, c, a, c, d]) fillPositions.push(point.x, point.y, point.z);
   }
-  const fillGeometry = new THREE.BufferGeometry();
-  fillGeometry.setAttribute("position", new THREE.Float32BufferAttribute(fillPositions, 3));
-  fillGeometry.computeVertexNormals();
-  const fill = new THREE.Mesh(fillGeometry, new THREE.MeshBasicMaterial({
-    color: style.color, transparent: true, opacity: 0.2, side: THREE.DoubleSide,
-    depthWrite: false,
-  }));
-  fill.userData = { type: "beam", id: beamId };
-  group.add(fill);
+  if (batch) {
+    batch.fillPositions.push(...fillPositions);
+    batch.zeroPoints.push(start, end);
+    for (let index = 0; index < diagramPoints.length - 1; index += 1) {
+      batch.curvePoints.push(diagramPoints[index], diagramPoints[index + 1]);
+    }
+  } else {
+    const fillGeometry = new THREE.BufferGeometry();
+    fillGeometry.setAttribute("position", new THREE.Float32BufferAttribute(fillPositions, 3));
+    const fill = new THREE.Mesh(fillGeometry, new THREE.MeshBasicMaterial({
+      color: style.color, transparent: true, opacity: 0.2, side: THREE.DoubleSide,
+      depthWrite: false,
+    }));
+    fill.userData = { type: "beam", id: beamId };
+    group.add(fill);
 
-  const zeroLine = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints([start, end]),
-    new THREE.LineDashedMaterial({ color: style.color, dashSize: 0.18, gapSize: 0.1, opacity: 0.55, transparent: true }),
-  );
-  zeroLine.computeLineDistances();
-  zeroLine.userData = { type: "beam", id: beamId };
-  group.add(zeroLine);
-  const curve = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints(diagramPoints),
-    new THREE.LineBasicMaterial({ color: style.color }),
-  );
-  curve.userData = { type: "beam", id: beamId };
-  group.add(curve);
+    const zeroLine = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([start, end]),
+      new THREE.LineDashedMaterial({ color: style.color, dashSize: 0.18, gapSize: 0.1, opacity: 0.55, transparent: true }),
+    );
+    zeroLine.computeLineDistances();
+    zeroLine.userData = { type: "beam", id: beamId };
+    group.add(zeroLine);
+    const curve = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(diagramPoints),
+      new THREE.LineBasicMaterial({ color: style.color }),
+    );
+    curve.userData = { type: "beam", id: beamId };
+    group.add(curve);
+  }
 
   // De tekst toont de echte eindwaarden, maar staat iets binnen de staaf. Op
   // een gedeelde knoop zouden alle staafeindlabels anders exact over elkaar
   // vallen. De diagramlijn zelf blijft gewoon tot beide knopen doorlopen.
+  if (!showLabels) return;
   const labelClass = `frame3d-result-label frame3d-diagram-label frame3d-diagram-${style.symbol.toLowerCase()}`;
   const last = samples.length - 1;
   const inset = Math.min(last, Math.max(1, Math.round(last * 0.18)));
@@ -360,6 +377,31 @@ function addResultDiagram(
       `${style.symbol} ${resultValue(samples[peakIndex].value)} ${style.unit}`,
       `${labelClass} frame3d-diagram-peak-label`,
       diagramPoints[peakIndex],
+    ));
+  }
+}
+
+function flushResultDiagramBatch(group: THREE.Group, batch: ResultDiagramBatch) {
+  if (batch.fillPositions.length > 0) {
+    const fillGeometry = new THREE.BufferGeometry();
+    fillGeometry.setAttribute("position", new THREE.Float32BufferAttribute(batch.fillPositions, 3));
+    group.add(new THREE.Mesh(fillGeometry, new THREE.MeshBasicMaterial({
+      color: batch.color, transparent: true, opacity: 0.2, side: THREE.DoubleSide,
+      depthWrite: false,
+    })));
+  }
+  if (batch.zeroPoints.length > 0) {
+    const zeroLines = new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints(batch.zeroPoints),
+      new THREE.LineDashedMaterial({ color: batch.color, dashSize: 0.18, gapSize: 0.1, opacity: 0.55, transparent: true }),
+    );
+    zeroLines.computeLineDistances();
+    group.add(zeroLines);
+  }
+  if (batch.curvePoints.length > 0) {
+    group.add(new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints(batch.curvePoints),
+      new THREE.LineBasicMaterial({ color: batch.color }),
     ));
   }
 }
@@ -1127,6 +1169,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const labelStride = (count: number) => count <= 200 ? 1 : Math.ceil(count / 24);
     const beamLabelStride = labelStride(model.beams.length);
     const nodeLabelStride = labelStride(model.nodes.length);
+    const resultLabelStride = model.beams.length <= 200 ? 1 : Math.ceil(model.beams.length / 12);
+    const resultLabelVisible = (beamId: number, beamIndex: number) => {
+      if (beamIndex % resultLabelStride === 0) return true;
+      const selected = selectionRef.current;
+      return (selected?.type === "beam" && selected.id === beamId)
+        || (selected?.type === "multi" && selected.beamIds.includes(beamId));
+    };
     const nodeGeometry = visibility.nodes ? new THREE.SphereGeometry(nodeRadius, 24, 16) : null;
     const nodeHitGeometry = visibility.nodes ? new THREE.SphereGeometry(nodeRadius * 2.6, 12, 8) : null;
     const utilizationByMember = new Map(utilizations.map((value) => [value.beamId, value]));
@@ -1195,7 +1244,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           }
           geometry.add(mesh);
         }
-        if (utilization) {
+        if (utilization && resultLabelVisible(beam.id, beamIndex)) {
           const midpoint = a.clone().add(b).multiplyScalar(0.5)
             .addScaledVector(axes.ez, 0.42)
             .addScaledVector(axes.ey, 0.12);
@@ -1365,6 +1414,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
 
     if (result && visibility.deformation) {
       const scale = resultScale(model, result);
+      const deformedProfileBatches = new Map<string, {
+        geometry: THREE.BufferGeometry;
+        matrices: THREE.Matrix4[];
+      }>();
       for (const beam of model.beams) {
         const start = byId.get(beam.startNodeId);
         const end = byId.get(beam.endNodeId);
@@ -1378,14 +1431,18 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           for (let index = 0; index < points.length - 1; index += 1) {
             const a = points[index], b = points[index + 1];
             const delta = b.clone().sub(a), length = delta.length();
-            const profile = length > 1e-10 ? profileGeometryFor(beam.profileName, length) : null;
+            const profile = length > 1e-10 ? profileGeometryFor(beam.profileName, 1) : null;
             if (!profile) continue;
-            const deformed = new THREE.Mesh(profile, new THREE.MeshStandardMaterial({
-              color: 0xdc2626, transparent: true, opacity: 0.48, depthWrite: false, roughness: 0.65,
-            }));
-            deformed.position.copy(a).add(b).multiplyScalar(0.5);
-            deformed.quaternion.copy(memberRotation(delta, beam.rollAngleRad ?? 0));
-            geometry.add(deformed);
+            let batch = deformedProfileBatches.get(beam.profileName);
+            if (!batch) {
+              batch = { geometry: profile, matrices: [] };
+              deformedProfileBatches.set(beam.profileName, batch);
+            }
+            batch.matrices.push(new THREE.Matrix4().compose(
+              a.clone().add(b).multiplyScalar(0.5),
+              memberRotation(delta, beam.rollAngleRad ?? 0),
+              frame3DProfileInstanceScale(length),
+            ));
           }
         } else {
           geometry.add(new THREE.Line(
@@ -1394,11 +1451,28 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           ));
         }
       }
+      for (const batch of deformedProfileBatches.values()) {
+        const deformed = new THREE.InstancedMesh(
+          batch.geometry,
+          new THREE.MeshStandardMaterial({
+            color: 0xdc2626, transparent: true, opacity: 0.48, depthWrite: false, roughness: 0.65,
+          }),
+          batch.matrices.length,
+        );
+        batch.matrices.forEach((matrix, index) => deformed.setMatrixAt(index, matrix));
+        deformed.instanceMatrix.needsUpdate = true;
+        deformed.computeBoundingBox();
+        deformed.computeBoundingSphere();
+        geometry.add(deformed);
+      }
     }
 
     if (result && visibility.reactions) {
       const maxForce = result.reactions.reduce((maximum, value) =>
         Math.max(maximum, Math.hypot(value.fx, value.fy, value.fz)), 0);
+      const batchedReactionLines: THREE.Vector3[] = [];
+      const batchedReactionHeads: THREE.Matrix4[] = [];
+      const batchReactions = result.reactions.length >= 200;
       for (const reaction of result.reactions) {
         const node = byId.get(reaction.nodeId);
         const magnitude = Math.hypot(reaction.fx, reaction.fy, reaction.fz);
@@ -1406,7 +1480,35 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         const direction = new THREE.Vector3(reaction.fx, reaction.fy, reaction.fz).normalize();
         const length = 0.45 + 1.1 * magnitude / maxForce;
         const origin = new THREE.Vector3(node.x, node.y, node.z).addScaledVector(direction, -length);
-        geometry.add(new THREE.ArrowHelper(direction, origin, length, 0x16a34a, Math.min(0.28, length * 0.28), Math.min(0.16, length * 0.16)));
+        const headLength = Math.min(0.28, length * 0.28);
+        const headWidth = Math.min(0.16, length * 0.16);
+        if (batchReactions) {
+          const endpoint = origin.clone().addScaledVector(direction, length);
+          batchedReactionLines.push(origin, endpoint.clone().addScaledVector(direction, -headLength));
+          batchedReactionHeads.push(new THREE.Matrix4().compose(
+            endpoint.clone().addScaledVector(direction, -headLength / 2),
+            new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction),
+            new THREE.Vector3(headWidth, headLength, headWidth),
+          ));
+        } else {
+          geometry.add(new THREE.ArrowHelper(direction, origin, length, 0x16a34a, headLength, headWidth));
+        }
+      }
+      if (batchedReactionLines.length > 0) {
+        geometry.add(new THREE.LineSegments(
+          new THREE.BufferGeometry().setFromPoints(batchedReactionLines),
+          new THREE.LineBasicMaterial({ color: 0x16a34a }),
+        ));
+        const heads = new THREE.InstancedMesh(
+          new THREE.ConeGeometry(1, 1, 8),
+          new THREE.MeshBasicMaterial({ color: 0x16a34a }),
+          batchedReactionHeads.length,
+        );
+        batchedReactionHeads.forEach((matrix, index) => heads.setMatrixAt(index, matrix));
+        heads.instanceMatrix.needsUpdate = true;
+        heads.computeBoundingBox();
+        heads.computeBoundingSphere();
+        geometry.add(heads);
       }
     }
 
@@ -1415,6 +1517,14 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       const forceByMember = new Map(result.memberForces.map((force) => [force.memberId, force]));
       const activeDiagrams = (Object.keys(DIAGRAM_STYLE) as DiagramComponent[])
         .filter((component) => visibility[component]);
+      const diagramBatches = model.beams.length >= 250
+        ? new Map(activeDiagrams.map((component) => [component, {
+          color: DIAGRAM_STYLE[component].color,
+          fillPositions: [],
+          zeroPoints: [],
+          curvePoints: [],
+        } satisfies ResultDiagramBatch]))
+        : undefined;
       const maxima = new Map(activeDiagrams.map((component) => [
         component,
         result.memberForces.reduce((maximum, force) =>
@@ -1422,7 +1532,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       ]));
       const modelBox = new THREE.Box3().setFromPoints(model.nodes.map((node) => new THREE.Vector3(node.x, node.y, node.z)));
       const diagramHeight = Math.max(0.35, Math.min(3, modelBox.getSize(new THREE.Vector3()).length() * 0.085));
-      for (const beam of model.beams) {
+      for (const [beamIndex, beam] of model.beams.entries()) {
         const start = byId.get(beam.startNodeId), end = byId.get(beam.endNodeId);
         const force = forceByMember.get(beam.id);
         if (!start || !end || !force) continue;
@@ -1435,6 +1545,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
             geometry, beam.id, a, b, style.direction(axes), diagramPoints(result, component, force),
             maxima.get(component) ?? 0, diagramHeight,
             { symbol: style.symbol, unit: style.unit, color: style.color },
+            resultLabelVisible(beam.id, beamIndex),
+            diagramBatches?.get(component),
           );
         }
         const max = (a: number, b: number) => Math.max(Math.abs(a), Math.abs(b)).toFixed(2);
@@ -1442,13 +1554,16 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           visibility.axialForce ? `N ${max(force.nStartKn, force.nEndKn)} kN` : "",
           visibility.torsion ? `T ${max(force.torsionStartKnm, force.torsionEndKnm)} kNm` : "",
         ].filter(Boolean);
-        if (parts.length > 0) {
+        if (parts.length > 0 && resultLabelVisible(beam.id, beamIndex)) {
           const midpoint = a.clone().add(b).multiplyScalar(0.5);
           geometry.add(makeLabel(parts.join(" · "), "frame3d-result-label", midpoint));
         }
       }
+      diagramBatches?.forEach((batch) => flushResultDiagramBatch(geometry, batch));
     }
+    let visibleLabelCount = 0;
     geometry.traverse((object) => {
+      if (object instanceof CSS2DObject) visibleLabelCount += 1;
       const type = object.userData.type as Frame3DSelectionType | undefined;
       if (type && object.userData.pickable !== false && SELECTABLE_TYPES.has(type) && typeof (object as { raycast?: unknown }).raycast === "function") {
         selectionPickTargetsRef.current.push(object);
@@ -1468,6 +1583,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
       containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
       containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);
+      containerRef.current.dataset.frame3dLabels = String(visibleLabelCount);
     }
   }, [model, conditionModel, visibility, structuralGrid, result, utilizations, activeLoadCaseId]);
 

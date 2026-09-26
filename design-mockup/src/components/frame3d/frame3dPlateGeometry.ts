@@ -40,7 +40,7 @@ function point(node: Frame3DNode): THREE.Vector3 {
 
 function boundaryPath(
   boundary: readonly Frame3DPlateBoundarySegment[],
-  byId: Map<number, Frame3DNode>,
+  byId: ReadonlyMap<number, Frame3DNode>,
   project: (node: Frame3DNode) => THREE.Vector2,
   shape: boolean,
 ): THREE.Shape | THREE.Path | null {

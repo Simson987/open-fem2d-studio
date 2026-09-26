@@ -279,6 +279,21 @@ assert.ok(imposedOnly.children.some((child) => child.material?.color?.getHex() =
 const loadOnly = new THREE.Group();
 addFrame3DConditionMarkers(loadOnly, withConditions, { supports: false, loads: true });
 assert.ok(loadOnly.children.length > 0);
+const largeMarkerModel = {
+  nodes: Array.from({ length: 120 }, (_, index) => ({ id: index + 1, x: index % 20, y: Math.floor(index / 20), z: 0 })),
+  beams: [],
+  supports: Array.from({ length: 120 }, (_, index) => ({ nodeId: index + 1, ...FRAME3D_SUPPORT_PRESETS.fixed })),
+  loads: Array.from({ length: 120 }, (_, index) => ({
+    id: index + 1, nodeId: index + 1, fx: 2, fy: 0, fz: -5, mx: 0, my: 0, mz: 0,
+  })),
+};
+const largeMarkers = new THREE.Group();
+addFrame3DConditionMarkers(largeMarkers, largeMarkerModel, { supports: true, loads: true });
+assert.ok(largeMarkers.children.length <= 8, "grote aantallen opleggingen en lasten blijven enkele GPU-batches");
+assert.ok(largeMarkers.children.every((child) => child instanceof THREE.InstancedMesh),
+  "ieder groot markersymbool wordt als selecteerbare instancing-batch getekend");
+assert.ok(largeMarkers.children.every((child) => child.userData.instanceIds.length === child.count),
+  "iedere markerinstantie behoudt zijn selecteerbare model-id");
 const hidden = new THREE.Group();
 addFrame3DConditionMarkers(hidden, withConditions, { supports: false, loads: false });
 assert.equal(hidden.children.length, 0);
@@ -286,7 +301,7 @@ const thermalOnly = new THREE.Group();
 addFrame3DConditionMarkers(thermalOnly, thermal, { supports: false, loads: true }, 2);
 assert.ok(thermalOnly.children.some((child) => child.userData.kind === "thermal"), "temperatuurlast heeft een zichtbaar 3D-symbool");
 
-for (const group of [supportOnly, rollerOnly, springOnly, imposedOnly, loadOnly, thermalOnly]) {
+for (const group of [supportOnly, rollerOnly, springOnly, imposedOnly, loadOnly, largeMarkers, thermalOnly]) {
   for (const child of group.children) {
     child.geometry?.dispose();
     child.material?.dispose();
