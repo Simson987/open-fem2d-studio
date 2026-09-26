@@ -252,7 +252,7 @@ function AboutPanel() {
       <h2 className="bs-about-title">{t("aboutPanel.title")}</h2>
       <div className="bs-about-app">
         <div className="bs-about-logo">
-          {/* Open FEM2D Studio logo — gestyleerd portaal-frame met scharnier-
+          {/* Open FEM Studio logo — gestyleerd portaal-frame met scharnier-
               opleggingen, FE-knopen en doorbuigingscurve. */}
           <svg
             viewBox="0 0 64 64"

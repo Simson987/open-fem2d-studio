@@ -1,7 +1,7 @@
 [package]
 name = "open-fem2d-studio"
 version = "0.1.0"
-description = "Open FEM2D Studio — Tauri desktop app"
+description = "Open FEM Studio — Tauri desktop app"
 authors = ["Impertio"]
 edition = "2021"
 

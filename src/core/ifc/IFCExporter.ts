@@ -47,9 +47,9 @@ export function createIFCModel(projectName: string): IFCModel {
       implementationLevel: '2;1',
       fileName: `${projectName}.ifc`,
       timeStamp: timestamp,
-      author: 'Open-FEM2D-Studio User',
-      organization: 'Open-FEM2D-Studio',
-      application: 'Open-FEM2D-Studio',
+      author: 'Open FEM Studio User',
+      organization: 'OpenAEC Foundation',
+      application: 'Open FEM Studio',
       schema: 'IFC4X3_ADD2',
     },
   };
@@ -126,13 +126,13 @@ export function exportMeshToIFC(
   const person = addEntity(model, 'IFCPERSON', [null, null, null, null, null, null, null, null]);
 
   // IfcOrganization
-  const org = addEntity(model, 'IFCORGANIZATION', [null, 'Open-FEM2D-Studio', null, null, null]);
+  const org = addEntity(model, 'IFCORGANIZATION', [null, 'OpenAEC Foundation', null, null, null]);
 
   // IfcPersonAndOrganization
   const personOrg = addEntity(model, 'IFCPERSONANDORGANIZATION', [person, org, null]);
 
   // IfcApplication
-  const app = addEntity(model, 'IFCAPPLICATION', [org, '1.0', 'Open-FEM2D-Studio', 'FEM2D']);
+  const app = addEntity(model, 'IFCAPPLICATION', [org, '1.0', 'Open FEM Studio', 'FEM2D']);
 
   // IfcOwnerHistory
   const ownerHistory = addEntity(model, 'IFCOWNERHISTORY', [

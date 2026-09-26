@@ -42,22 +42,24 @@ const paren = Object.keys({ ...pakket.dependencies, ...pakket.devDependencies })
   .map((n) => [n, "tauri-" + n.slice("@tauri-apps/".length)]);
 paren.push(["@tauri-apps/api", "tauri"]);
 
-// JS-plugins zonder geregistreerde Rust-kant. De aanroepen hebben een terugval
-// (window.open / navigator.platform) en blokkeren niets; zie issue #38.
-const ZONDER_RUST_KANT = new Set(["@tauri-apps/plugin-opener", "@tauri-apps/plugin-os"]);
-
 check("er zijn Tauri-plugins gevonden om te vergelijken", paren.length >= 2, `${paren.length}`);
 for (const [js, crate] of paren) {
   const j = jsVersie(js);
   const r = rustVersie(crate);
-  if (!r && ZONDER_RUST_KANT.has(js)) {
-    log(`  · bekende afwijking (#38): ${js} ${j} heeft geen Rust-kant`);
-    continue;
-  }
-  check(`${js}: staat niet onnodig op de lijst zonder Rust-kant`, !ZONDER_RUST_KANT.has(js));
   check(`${js} ${j} naast ${crate} ${r}: zelfde hoofd- en subversie`,
     Boolean(j) && Boolean(r) && hoofdSub(j) === hoofdSub(r),
     !j ? "niet in package-lock.json" : !r ? "niet in Cargo.lock" : "werk de achterlopende kant bij");
+}
+
+// De pakketten alleen opnemen is niet genoeg: Tauri moet de plugins ook
+// initialiseren en de gebruikte JS-functies toegang geven.
+const rustApp = lees("..", "src-tauri", "src", "lib.rs");
+const capabilities = JSON.parse(lees("..", "src-tauri", "capabilities", "default.json"));
+for (const plugin of ["opener", "os"]) {
+  check(`${plugin}: Rust-plugin geregistreerd`, rustApp.includes(`.plugin(tauri_plugin_${plugin}::init())`));
+}
+for (const permission of ["opener:allow-open-url", "opener:allow-default-urls", "os:allow-arch", "os:allow-os-type", "os:allow-version"]) {
+  check(`${permission}: toegestaan`, capabilities.permissions.includes(permission));
 }
 
 // ── [2] commando's van de dialoogplugin ─────────────────────────────────────

@@ -7,6 +7,8 @@ import SettingsTab from "./SettingsTab";
 import InsightsTab from "./InsightsTab";
 import IfcTab from "./IfcTab";
 import ReportTab from "./ReportTab";
+import type { Frame3DTool, Frame3DView } from "../frame3d/frame3dCommands";
+import type { Frame3DSupportPreset } from "../frame3d/frame3dModel";
 import "./Ribbon.css";
 
 interface RibbonProps {
@@ -21,10 +23,12 @@ interface RibbonProps {
   onOpenLibrary?: (tab: "sections" | "materials") => void;
   activeView: string;
   onViewChange: (view: string) => void;
+  modelDimension?: "2d" | "3d";
+  onConvertTo3D?: () => void;
   /** Active FEM canvas tool. Routed into HomeTab so draw buttons can highlight + dispatch. */
   femTool?: import("../fem/femTypes").Tool;
   onFemToolChange?: (t: import("../fem/femTypes").Tool) => void;
-  /** Start de volledige berekening vanaf de Start-tab. */
+  /** Start de volledige 2D-berekening vanaf de 2D-tab. */
   onSolve?: () => void;
   /** True when any solver result is available; lights up the Berekenen button on Home. */
   hasResults?: boolean;
@@ -77,6 +81,26 @@ interface RibbonProps {
   onOpenProject?: () => void;
   onSaveProject?: () => void;
   onSaveProjectAs?: () => void;
+  /** 3D-gereedschap voor hetzelfde modellint wanneer het project 3D is. */
+  frame3dTool?: Frame3DTool;
+  availableFrame3DTools?: readonly Frame3DTool[];
+  onFrame3DToolChange?: (tool: Frame3DTool) => void;
+  canFrame3DDelete?: boolean;
+  onFrame3DFit?: () => void;
+  onFrame3DViewChange?: (view: Frame3DView) => void;
+  frame3dView?: Frame3DView;
+  onToggle3DVisibility?: () => void;
+  visibility3DOpen?: boolean;
+  hasFrame3DNodeSelection?: boolean;
+  hasFrame3DBeamSelection?: boolean;
+  hasFrame3DPlateSelection?: boolean;
+  onFrame3DSupportPreset?: (preset: Frame3DSupportPreset) => void;
+  onFrame3DRequestSpring?: (axis: "kx" | "ky" | "kz" | "krx" | "kry" | "krz") => void;
+  onFrame3DRequestNodalLoad?: (kind: "force" | "moment") => void;
+  onFrame3DRequestMemberLoad?: () => void;
+  onFrame3DRequestMemberPointLoad?: () => void;
+  onFrame3DRequestThermalLoad?: () => void;
+  onFrame3DRequestSurfaceLoad?: () => void;
   /** @deprecated — read from useReportStore in the Report tab/preview. Kept for prop-compat. */
   pageSize?: "A4" | "A3";
   /** @deprecated */
@@ -103,11 +127,17 @@ type TabId = (typeof TABS)[number];
 
 export default function Ribbon({
   onFileTabClick, onSettingsClick, onProjectSettingsClick, activeView, onViewChange,
+  modelDimension = "2d", onConvertTo3D,
   theme, onThemeSelect, onOpenLibrary,
   femTool, onFemToolChange, onSolve, hasResults,
   onDelete, onUndo, onRedo, canUndo, canRedo, onOpenGrids,
   onOpenLoadCases, onOpenLoadCombinations, onOpenWindGenerator, onNewProject, onOpenProject,
   onSaveProject, onSaveProjectAs,
+  frame3dTool, availableFrame3DTools, onFrame3DToolChange, canFrame3DDelete,
+  onFrame3DFit, onFrame3DViewChange, frame3dView,
+  onToggle3DVisibility, visibility3DOpen, hasFrame3DNodeSelection, hasFrame3DBeamSelection, hasFrame3DPlateSelection,
+  onFrame3DSupportPreset, onFrame3DRequestSpring, onFrame3DRequestNodalLoad, onFrame3DRequestMemberLoad,
+  onFrame3DRequestMemberPointLoad, onFrame3DRequestThermalLoad, onFrame3DRequestSurfaceLoad,
   onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid,
   onFilterSelection,
   onExportHtml, scheefstandToelichting, analyseToelichting, windToelichting,
@@ -168,21 +198,23 @@ export default function Ribbon({
     else if (newTab === "report") onViewChange("report");
     else if (newTab === "insights") onViewChange("insights");
     else if (newTab === "table") onViewChange("table");
-    else onViewChange("default");
-  }, [activeTab, onViewChange]);
+    else onViewChange(modelDimension === "3d" ? "frame3d" : "default");
+  }, [activeTab, modelDimension, onViewChange]);
 
   // Houd de ribbon-tab in sync wanneer App de hoofdview programmatisch
   // wisselt (bv. TitleBar-Afdrukken → rapportweergave). Alleen voor views
   // die 1-op-1 bij een tab horen; "default" hoort bij meerdere tabs
-  // (Start/Tabel/Instellingen) en blijft daarom ongemoeid.
+  // (2D/Tabel/Instellingen) en blijft daarom ongemoeid, behalve wanneer een
+  // programma-actie de 3D-weergave verlaat (bv. Nieuw project/Berekenen).
   useEffect(() => {
     if (
-      (activeView === "report" || activeView === "ifc" ||
-       activeView === "insights" ||
+      (activeView === "report" || activeView === "ifc" || activeView === "insights" ||
        activeView === "table") &&
       activeTab !== activeView
     ) {
       switchTab(activeView as TabId);
+    } else if (activeView === "frame3d" && activeTab !== "home") {
+      switchTab("home");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView]);
@@ -230,6 +262,27 @@ export default function Ribbon({
           onOpenProject={onOpenProject}
           onSaveProject={onSaveProject}
           onSaveProjectAs={onSaveProjectAs}
+          modelDimension={modelDimension}
+          onConvertTo3D={onConvertTo3D}
+          frame3dTool={frame3dTool}
+          availableFrame3DTools={availableFrame3DTools}
+          onFrame3DToolChange={onFrame3DToolChange}
+          canFrame3DDelete={canFrame3DDelete}
+          onFrame3DFit={onFrame3DFit}
+          onFrame3DViewChange={onFrame3DViewChange}
+          frame3dView={frame3dView}
+          onToggle3DVisibility={onToggle3DVisibility}
+          visibility3DOpen={visibility3DOpen}
+          hasFrame3DNodeSelection={hasFrame3DNodeSelection}
+          hasFrame3DBeamSelection={hasFrame3DBeamSelection}
+          hasFrame3DPlateSelection={hasFrame3DPlateSelection}
+          onFrame3DSupportPreset={onFrame3DSupportPreset}
+          onFrame3DRequestSpring={onFrame3DRequestSpring}
+          onFrame3DRequestNodalLoad={onFrame3DRequestNodalLoad}
+          onFrame3DRequestMemberLoad={onFrame3DRequestMemberLoad}
+          onFrame3DRequestMemberPointLoad={onFrame3DRequestMemberPointLoad}
+          onFrame3DRequestThermalLoad={onFrame3DRequestThermalLoad}
+          onFrame3DRequestSurfaceLoad={onFrame3DRequestSurfaceLoad}
         />;
       case "table":
         return <TableTab
@@ -273,7 +326,7 @@ export default function Ribbon({
         {TABS.map((tab) => (
           <RibbonTab
             key={tab}
-            label={t(`tabs.${tab}`)}
+            label={tab === "home" ? modelDimension.toUpperCase() : t(`tabs.${tab}`)}
             isActive={activeTab === tab}
             onClick={() => switchTab(tab)}
           />

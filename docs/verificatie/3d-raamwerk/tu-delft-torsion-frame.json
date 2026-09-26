@@ -1,0 +1,26 @@
+{
+  "id": "tu-delft-3d-frame-torsion-reduced",
+  "status": "published_matrix_checked_full_6dof_solver_case_pending",
+  "source": "https://oit.tudelft.nl/CIEM5000/2026/lecture2/example.html",
+  "scope": "Published reduced rotational subsystem of a 3D frame. This checks assembly and boundary handling; it is not a full 6-DOF model fixture without the source figure geometry and releases.",
+  "units": { "rotations": "rad", "loadsAndReactions": "kN m", "stiffness": "kN m/rad" },
+  "dofs": ["phi_y_node_1", "phi_y_node_2", "phi_y_node_3", "phi_y_node_4", "phi_y_node_5"],
+  "stiffness": [
+    [2000, 1000, 0, 0, 0],
+    [1000, 4400, 1000, -400, 0],
+    [0, 1000, 2400, 0, -400],
+    [0, -400, 0, 400, 0],
+    [0, 0, -400, 0, 400]
+  ],
+  "loadVector": [0, 2, 4, 0, 2],
+  "fixedDofIndicesZeroBased": [0, 3, 4],
+  "expected": {
+    "rotations": [0, 0.00008368200836820084, 0.0016317991631799164, 0, 0],
+    "reactionsAtFixedDofs": {
+      "0": 0.08368200836820083,
+      "3": -0.03347280334728033,
+      "4": -2.6527196652719667
+    }
+  },
+  "derivation": "The free subsystem is [[4400,1000],[1000,2400]] * [phi_2,phi_3] = [2,4]. Exact phi_2=1/11950, phi_3=39/23900. Support reactions are K*u-f at fixed DOFs: [20/239,-8/239,-634/239] kN m."
+}

@@ -15,4 +15,4 @@ export function isTauriApp(): boolean {
 
 /** Nederlandse melding voor functies die de desktop-app vereisen. */
 export const DESKTOP_ONLY_MSG =
-  "Toetsing vereist de desktop-app. Start Open FEM2D Studio als desktop-applicatie (Tauri) om de EN 1993/EN 1995-rekenkern te gebruiken.";
+  "Toetsing vereist de desktop-app. Start Open FEM Studio als desktop-applicatie (Tauri) om de EN 1993/EN 1995-rekenkern te gebruiken.";

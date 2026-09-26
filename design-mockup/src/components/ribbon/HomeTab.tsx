@@ -2,6 +2,8 @@ import { useTranslation } from "react-i18next";
 import RibbonGroup from "./RibbonGroup";
 import RibbonButton from "./RibbonButton";
 import RibbonButtonStack from "./RibbonButtonStack";
+import type { Frame3DTool, Frame3DView } from "../frame3d/frame3dCommands";
+import type { Frame3DSupportPreset } from "../frame3d/frame3dModel";
 import {
   fileNewIcon,
   fileOpenIcon,
@@ -34,6 +36,7 @@ import {
   redoIcon,
   copyIcon,
   filterIcon,
+  zichtbaarheidIcon,
 } from "./icons";
 
 interface HomeTabProps {
@@ -63,6 +66,27 @@ interface HomeTabProps {
   onOpenProject?: () => void;
   onSaveProject?: () => void;
   onSaveProjectAs?: () => void;
+  modelDimension?: "2d" | "3d";
+  onConvertTo3D?: () => void;
+  frame3dTool?: Frame3DTool;
+  availableFrame3DTools?: readonly Frame3DTool[];
+  onFrame3DToolChange?: (tool: Frame3DTool) => void;
+  canFrame3DDelete?: boolean;
+  onFrame3DFit?: () => void;
+  onFrame3DViewChange?: (view: Frame3DView) => void;
+  frame3dView?: Frame3DView;
+  onToggle3DVisibility?: () => void;
+  visibility3DOpen?: boolean;
+  hasFrame3DNodeSelection?: boolean;
+  hasFrame3DBeamSelection?: boolean;
+  hasFrame3DPlateSelection?: boolean;
+  onFrame3DSupportPreset?: (preset: Frame3DSupportPreset) => void;
+  onFrame3DRequestSpring?: (axis: "kx" | "ky" | "kz" | "krx" | "kry" | "krz") => void;
+  onFrame3DRequestNodalLoad?: (kind: "force" | "moment") => void;
+  onFrame3DRequestMemberLoad?: () => void;
+  onFrame3DRequestMemberPointLoad?: () => void;
+  onFrame3DRequestThermalLoad?: () => void;
+  onFrame3DRequestSurfaceLoad?: () => void;
 }
 
 const stub = (label: string) => () => console.log(`TODO: ${label}`);
@@ -73,6 +97,13 @@ const subnodeIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
 const mirrorIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16M6 8l-3 4 3 4M18 8l3 4-3 4"/></svg>`;
 // Solve / "play" icon — used for the Berekenen button.
 const solveIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l14 9-14 9V3z"/></svg>`;
+const cubeIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.8" stroke-linejoin="round" d="m12 2 9 5v10l-9 5-9-5V7zM3 7l9 5 9-5m-9 5v10"/></svg>`;
+const fitIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg>`;
+const topIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" stroke-width="2"/><path d="M12 4v16M4 12h16" stroke-width="1"/></svg>`;
+const frontIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 20V4m0 16h16"/><path stroke-width="1.5" d="M7 17V9l5-4 5 4v8H7z"/></svg>`;
+const sideIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 20V4m0 16h16"/><path stroke-width="1.5" d="M8 17V7h9v10H8z"/></svg>`;
+const revoluteIcon = (axis: "X" | "Y" | "Z") => `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.8" stroke-linecap="round" d="M7 16a7 7 0 1 1 10 0"/><path stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="m6 12 1 4 4-1"/><circle cx="12" cy="12" r="2"/><text x="12" y="22" text-anchor="middle" fill="currentColor" stroke="none" font-size="6" font-family="sans-serif">${axis}</text></svg>`;
+const yRollerIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.8" stroke-linejoin="round" d="M5 12h14l-7-7-7 7Z"/><circle cx="9" cy="16" r="2"/><circle cx="15" cy="16" r="2"/><path stroke-width="1.8" d="M4 20h16"/><text x="20" y="8" text-anchor="middle" fill="currentColor" stroke="none" font-size="6" font-family="sans-serif">Y</text></svg>`;
 
 export default function HomeTab({
   onSettingsClick: _onSettingsClick,
@@ -84,9 +115,38 @@ export default function HomeTab({
   onOpenLoadCases, onOpenLoadCombinations, onOpenWindGenerator, onNewProject, onOpenProject,
   onSaveProject, onSaveProjectAs,
   onFilterSelection,
+  modelDimension = "2d", onConvertTo3D,
+  frame3dTool = "select", availableFrame3DTools = ["select", "addNode", "addBeam", "addSubNode", "addPlate", "addOpening", "move", "rotate", "copy", "mirror"],
+  onFrame3DToolChange, canFrame3DDelete,
+  onFrame3DFit, onFrame3DViewChange, frame3dView = "iso",
+  onToggle3DVisibility, visibility3DOpen,
+  hasFrame3DNodeSelection, hasFrame3DBeamSelection, hasFrame3DPlateSelection, onFrame3DSupportPreset, onFrame3DRequestSpring,
+  onFrame3DRequestNodalLoad, onFrame3DRequestMemberLoad, onFrame3DRequestMemberPointLoad, onFrame3DRequestThermalLoad, onFrame3DRequestSurfaceLoad,
 }: HomeTabProps) {
   const { t } = useTranslation("ribbon");
-  const setTool = (tool: import("../fem/femTypes").Tool) => onFemToolChange?.(tool);
+  const is3D = modelDimension === "3d";
+  const unsupported3D = t("home.notAvailable3D");
+  const frameToolFor = (tool: import("../fem/femTypes").Tool): Frame3DTool | undefined => {
+    if (tool === "select" || tool === "addNode" || tool === "addBeam" || tool === "addSubNode" ||
+        tool === "addPlate" || tool === "addOpening" || tool === "move" || tool === "rotate" || tool === "copy" || tool === "mirror") return tool;
+    return undefined;
+  };
+  const frameToolAvailable = (tool: import("../fem/femTypes").Tool) => {
+    const mapped = frameToolFor(tool);
+    return mapped !== undefined && availableFrame3DTools.includes(mapped);
+  };
+  const setTool = (tool: import("../fem/femTypes").Tool) => {
+    if (!is3D) onFemToolChange?.(tool);
+    else {
+      const mapped = frameToolFor(tool);
+      if (mapped && availableFrame3DTools.includes(mapped)) onFrame3DToolChange?.(mapped);
+    }
+  };
+  const toolActive = (tool: import("../fem/femTypes").Tool) => is3D
+    ? frameToolFor(tool) === frame3dTool
+    : femTool === tool;
+  const nodeConditionTitle = hasFrame3DNodeSelection ? undefined : t("frame3d.selectNodeFirst");
+  const beamConditionTitle = hasFrame3DBeamSelection ? undefined : t("frame3d.selectBeamFirst", "Selecteer eerst een 3D-staaf.");
 
   return (
     <div className="ribbon-content">
@@ -99,6 +159,7 @@ export default function HomeTab({
             size="large"
             active={hasResults}
             onClick={() => onSolve?.()}
+            disabled={!onSolve}
           />
         </RibbonGroup>
 
@@ -146,6 +207,16 @@ export default function HomeTab({
             size="large"
             onClick={onProjectSettingsClick ?? stub("Project info dialog")}
           />
+          {!is3D && (
+            <RibbonButton
+              icon={cubeIcon}
+              label={t("home.to3D")}
+              size="small"
+              onClick={onConvertTo3D}
+              disabled={!onConvertTo3D}
+              title={t("home.to3DHint")}
+            />
+          )}
         </RibbonGroup>
 
         {/* Draw — Select (large), Bar/Node/Plate/Grids (mix) */}
@@ -154,14 +225,14 @@ export default function HomeTab({
             icon={selectIcon}
             label={t("home.select")}
             size="large"
-            active={femTool === "select"}
+            active={toolActive("select")}
             onClick={() => setTool("select")}
           />
           <RibbonButton
             icon={barIcon}
             label={t("home.bar")}
             size="large"
-            active={femTool === "addBeam"}
+            active={toolActive("addBeam")}
             onClick={() => setTool("addBeam")}
           />
           <RibbonButtonStack>
@@ -169,22 +240,26 @@ export default function HomeTab({
               icon={nodeIcon}
               label={t("home.node")}
               size="small"
-              active={femTool === "addNode"}
+              active={toolActive("addNode")}
               onClick={() => setTool("addNode")}
             />
             <RibbonButton
               icon={subnodeIcon}
               label={t("home.subNode")}
               size="small"
-              active={femTool === "addSubNode"}
+              active={toolActive("addSubNode")}
               onClick={() => setTool("addSubNode")}
+              disabled={is3D && !frameToolAvailable("addSubNode")}
+              title={is3D && !frameToolAvailable("addSubNode") ? unsupported3D : undefined}
             />
             <RibbonButton
               icon={plateIcon}
               label={t("home.plate")}
               size="small"
-              active={femTool === "addPlate"}
+              active={toolActive("addPlate")}
               onClick={() => setTool("addPlate")}
+              disabled={is3D && !frameToolAvailable("addPlate")}
+              title={is3D ? "Klik bestaande knopen rondom de plaat en klik daarna opnieuw op de eerste knoop." : undefined}
             />
           </RibbonButtonStack>
           <RibbonButtonStack>
@@ -192,11 +267,21 @@ export default function HomeTab({
               icon={openingIcon}
               label={t("home.opening")}
               size="small"
-              active={femTool === "addOpening"}
+              active={toolActive("addOpening")}
               onClick={() => setTool("addOpening")}
+              disabled={is3D && (!frameToolAvailable("addOpening") || !hasFrame3DPlateSelection)}
+              title={is3D ? (hasFrame3DPlateSelection ? "Klik de hoekknopen en sluit door opnieuw op de eerste knoop te klikken." : "Selecteer eerst een 3D-plaat.") : undefined}
             />
           </RibbonButtonStack>
           <RibbonButtonStack>
+            {is3D && <RibbonButton
+              icon={loadLineIcon}
+              label="Oppervlaktelast"
+              size="small"
+              onClick={onFrame3DRequestSurfaceLoad}
+              disabled={!hasFrame3DPlateSelection || !onFrame3DRequestSurfaceLoad}
+              title={hasFrame3DPlateSelection ? "Voeg een globale belasting in kN/m² toe." : "Selecteer eerst een 3D-plaat."}
+            />}
             <RibbonButton
               icon={gridIcon}
               label={t("home.grids")}
@@ -212,53 +297,89 @@ export default function HomeTab({
             icon={bcPinnedIcon}
             label={t("home.pinned")}
             size="large"
-            active={femTool === "addPinned"}
-            onClick={() => setTool("addPinned")}
+            active={!is3D && toolActive("addPinned")}
+            onClick={() => is3D ? onFrame3DSupportPreset?.("pinned") : setTool("addPinned")}
+            disabled={is3D && (!hasFrame3DNodeSelection || !onFrame3DSupportPreset)}
+            title={is3D ? nodeConditionTitle : undefined}
           />
           <RibbonButtonStack>
             <RibbonButton
               icon={bcXRollerIcon}
               label={t("home.xRoller")}
               size="small"
-              active={femTool === "addXRoller"}
-              onClick={() => setTool("addXRoller")}
+              active={!is3D && toolActive("addXRoller")}
+              onClick={() => is3D ? onFrame3DSupportPreset?.("xRoller") : setTool("addXRoller")}
+              disabled={is3D && (!hasFrame3DNodeSelection || !onFrame3DSupportPreset)}
+              title={is3D ? nodeConditionTitle : undefined}
             />
             <RibbonButton
               icon={bcZRollerIcon}
               label={t("home.zRoller")}
               size="small"
-              active={femTool === "addZRoller"}
-              onClick={() => setTool("addZRoller")}
+              active={!is3D && toolActive("addZRoller")}
+              onClick={() => is3D ? onFrame3DSupportPreset?.("zRoller") : setTool("addZRoller")}
+              disabled={is3D && (!hasFrame3DNodeSelection || !onFrame3DSupportPreset)}
+              title={is3D ? nodeConditionTitle : undefined}
             />
+            {is3D && <RibbonButton
+              icon={yRollerIcon}
+              label={t("frame3d.yRoller", "Y-rol")}
+              size="small"
+              onClick={() => onFrame3DSupportPreset?.("yRoller")}
+              disabled={!hasFrame3DNodeSelection || !onFrame3DSupportPreset}
+              title={nodeConditionTitle}
+            />}
             <RibbonButton
               icon={bcFixedIcon}
               label={t("home.fixed")}
               size="small"
-              active={femTool === "addFixed"}
-              onClick={() => setTool("addFixed")}
+              active={!is3D && toolActive("addFixed")}
+              onClick={() => is3D ? onFrame3DSupportPreset?.("fixed") : setTool("addFixed")}
+              disabled={is3D && (!hasFrame3DNodeSelection || !onFrame3DSupportPreset)}
+              title={is3D ? nodeConditionTitle : undefined}
             />
           </RibbonButtonStack>
+          {is3D && <RibbonButtonStack>
+            {(["X", "Y", "Z"] as const).map((axis) => {
+              const preset = `revolute${axis}` as Frame3DSupportPreset;
+              return <RibbonButton
+                key={axis}
+                icon={revoluteIcon(axis)}
+                label={t(`frame3d.revolute${axis}`)}
+                size="small"
+                onClick={() => onFrame3DSupportPreset?.(preset)}
+                disabled={!hasFrame3DNodeSelection || !onFrame3DSupportPreset}
+                title={hasFrame3DNodeSelection ? t("frame3d.revoluteHint", { axis }) : nodeConditionTitle}
+              />;
+            })}
+          </RibbonButtonStack>}
           <RibbonButtonStack>
             <RibbonButton
               icon={bcZSpringIcon}
               label={t("home.zSpring")}
               size="small"
-              active={femTool === "addZSpring"}
-              onClick={() => setTool("addZSpring")}
+              active={!is3D && toolActive("addZSpring")}
+              onClick={() => is3D ? onFrame3DRequestSpring?.("kz") : setTool("addZSpring")}
+              disabled={is3D && (!hasFrame3DNodeSelection || !onFrame3DRequestSpring)}
+              title={is3D ? nodeConditionTitle : undefined}
             />
             <RibbonButton
               icon={bcXSpringIcon}
               label={t("home.xSpring")}
               size="small"
-              active={femTool === "addXSpring"}
-              onClick={() => setTool("addXSpring")}
+              active={!is3D && toolActive("addXSpring")}
+              onClick={() => is3D ? onFrame3DRequestSpring?.("kx") : setTool("addXSpring")}
+              disabled={is3D && (!hasFrame3DNodeSelection || !onFrame3DRequestSpring)}
+              title={is3D ? nodeConditionTitle : undefined}
             />
             <RibbonButton
               icon={bcRotSpringIcon}
               label={t("home.rotSpring")}
               size="small"
-              active={femTool === "addRotSpring"}
-              onClick={() => setTool("addRotSpring")}
+              active={!is3D && toolActive("addRotSpring")}
+              onClick={() => is3D ? onFrame3DRequestSpring?.("kry") : setTool("addRotSpring")}
+              disabled={is3D && (!hasFrame3DNodeSelection || !onFrame3DRequestSpring)}
+              title={is3D ? nodeConditionTitle : undefined}
             />
           </RibbonButtonStack>
         </RibbonGroup>
@@ -269,37 +390,54 @@ export default function HomeTab({
             icon={loadPointIcon}
             label={t("home.pointLoad")}
             size="large"
-            active={femTool === "addPointLoad"}
-            onClick={() => setTool("addPointLoad")}
+            active={!is3D && toolActive("addPointLoad")}
+            onClick={() => is3D
+              ? hasFrame3DBeamSelection
+                ? onFrame3DRequestMemberPointLoad?.()
+                : onFrame3DRequestNodalLoad?.("force")
+              : setTool("addPointLoad")}
+            disabled={is3D && !(
+              (hasFrame3DNodeSelection && onFrame3DRequestNodalLoad) ||
+              (hasFrame3DBeamSelection && onFrame3DRequestMemberPointLoad)
+            )}
+            title={is3D ? (hasFrame3DBeamSelection ? beamConditionTitle : nodeConditionTitle) : undefined}
           />
           <RibbonButton
             icon={loadLineIcon}
             label={t("home.lineLoad")}
             size="large"
-            active={femTool === "addLineLoad"}
-            onClick={() => setTool("addLineLoad")}
+            active={!is3D && toolActive("addLineLoad")}
+            onClick={() => is3D ? onFrame3DRequestMemberLoad?.() : setTool("addLineLoad")}
+            disabled={is3D && (!hasFrame3DBeamSelection || !onFrame3DRequestMemberLoad)}
+            title={is3D ? beamConditionTitle : undefined}
           />
           <RibbonButtonStack>
             <RibbonButton
               icon={loadPointHIcon}
               label={t("home.pointLoadH")}
               size="small"
-              active={femTool === "addPointLoadH"}
-              onClick={() => setTool("addPointLoadH")}
+              active={!is3D && toolActive("addPointLoadH")}
+              onClick={() => is3D ? onFrame3DRequestNodalLoad?.("force") : setTool("addPointLoadH")}
+              disabled={is3D && (!hasFrame3DNodeSelection || !onFrame3DRequestNodalLoad)}
+              title={is3D ? nodeConditionTitle : undefined}
             />
             <RibbonButton
               icon={loadMomentIcon}
               label={t("home.moment")}
               size="small"
-              active={femTool === "addMoment"}
-              onClick={() => setTool("addMoment")}
+              active={!is3D && toolActive("addMoment")}
+              onClick={() => is3D ? onFrame3DRequestNodalLoad?.("moment") : setTool("addMoment")}
+              disabled={is3D && (!hasFrame3DNodeSelection || !onFrame3DRequestNodalLoad)}
+              title={is3D ? nodeConditionTitle : undefined}
             />
             <RibbonButton
               icon={loadTempIcon}
               label={t("home.temp")}
               size="small"
-              active={femTool === "addThermal"}
-              onClick={() => setTool("addThermal")}
+              active={!is3D && toolActive("addThermal")}
+              onClick={() => is3D ? onFrame3DRequestThermalLoad?.() : setTool("addThermal")}
+              disabled={is3D && (!hasFrame3DBeamSelection || !onFrame3DRequestThermalLoad)}
+              title={is3D ? beamConditionTitle : undefined}
             />
           </RibbonButtonStack>
           <RibbonButtonStack>
@@ -308,12 +446,16 @@ export default function HomeTab({
               label={t("home.loadCases")}
               size="small"
               onClick={onOpenLoadCases ?? stub("Load cases dialog (no handler)")}
+              disabled={is3D}
+              title={is3D ? unsupported3D : undefined}
             />
             <RibbonButton
               icon={loadCombinationsIcon}
               label={t("home.combinations")}
               size="small"
               onClick={onOpenLoadCombinations ?? stub("Load combinations dialog (no handler)")}
+              disabled={is3D}
+              title={is3D ? unsupported3D : undefined}
             />
             {/* Windbelastinggenerator — EN 1991-1-4 + Nederlandse NB. */}
             <RibbonButton
@@ -321,6 +463,8 @@ export default function HomeTab({
               label={t("home.windGenerator")}
               size="small"
               onClick={onOpenWindGenerator ?? stub("Wind generator dialog (no handler)")}
+              disabled={is3D}
+              title={is3D ? unsupported3D : undefined}
             />
           </RibbonButtonStack>
         </RibbonGroup>
@@ -331,30 +475,38 @@ export default function HomeTab({
             icon={moveIcon}
             label={t("home.move")}
             size="large"
-            active={femTool === "move"}
+            active={toolActive("move")}
             onClick={() => setTool("move")}
+            disabled={is3D && (!frameToolAvailable("move") || !canFrame3DDelete)}
+            title={is3D && !frameToolAvailable("move") ? unsupported3D : undefined}
           />
           <RibbonButtonStack>
             <RibbonButton
               icon={rotateIcon}
               label={t("home.rotate")}
               size="small"
-              active={femTool === "rotate"}
+              active={toolActive("rotate")}
               onClick={() => setTool("rotate")}
+              disabled={is3D && (!frameToolAvailable("rotate") || !canFrame3DDelete)}
+              title={is3D && !frameToolAvailable("rotate") ? unsupported3D : undefined}
             />
             <RibbonButton
               icon={copyIcon}
               label={t("home.copy")}
               size="small"
-              active={femTool === "copy"}
+              active={toolActive("copy")}
               onClick={() => setTool("copy")}
+              disabled={is3D && (!frameToolAvailable("copy") || !canFrame3DDelete)}
+              title={is3D && !frameToolAvailable("copy") ? unsupported3D : undefined}
             />
             <RibbonButton
               icon={mirrorIcon}
               label={t("home.mirror")}
               size="small"
-              active={femTool === "mirror"}
+              active={toolActive("mirror")}
               onClick={() => setTool("mirror")}
+              disabled={is3D && (!frameToolAvailable("mirror") || !canFrame3DDelete)}
+              title={is3D && !frameToolAvailable("mirror") ? unsupported3D : undefined}
             />
           </RibbonButtonStack>
           <RibbonButtonStack>
@@ -377,6 +529,7 @@ export default function HomeTab({
               label={t("common:delete")}
               size="small"
               onClick={() => onDelete?.()}
+              disabled={is3D && !canFrame3DDelete}
             />
           </RibbonButtonStack>
         </RibbonGroup>
@@ -388,8 +541,25 @@ export default function HomeTab({
             label={t("home.filterSelection")}
             size="large"
             onClick={onFilterSelection ?? stub("Filter selection (no handler)")}
+            disabled={is3D}
+            title={is3D ? unsupported3D : undefined}
           />
         </RibbonGroup>
+
+        {is3D && (
+          <RibbonGroup label={t("frame3d.viewGroup")}>
+            <RibbonButton icon={fitIcon} label={t("frame3d.fit")} onClick={onFrame3DFit} disabled={!onFrame3DFit} />
+            <RibbonButtonStack>
+              <RibbonButton icon={cubeIcon} label={t("frame3d.isoView")} size="small" active={frame3dView === "iso"} onClick={() => onFrame3DViewChange?.("iso")} disabled={!onFrame3DViewChange} />
+              <RibbonButton icon={topIcon} label={t("frame3d.topView")} size="small" active={frame3dView === "top"} onClick={() => onFrame3DViewChange?.("top")} disabled={!onFrame3DViewChange} />
+            </RibbonButtonStack>
+            <RibbonButtonStack>
+              <RibbonButton icon={frontIcon} label={t("frame3d.frontView")} size="small" active={frame3dView === "front"} onClick={() => onFrame3DViewChange?.("front")} disabled={!onFrame3DViewChange} />
+              <RibbonButton icon={sideIcon} label={t("frame3d.sideView")} size="small" active={frame3dView === "side"} onClick={() => onFrame3DViewChange?.("side")} disabled={!onFrame3DViewChange} />
+              <RibbonButton icon={zichtbaarheidIcon} label={t("frame3d.visibility")} size="small" active={visibility3DOpen} onClick={onToggle3DVisibility} disabled={!onToggle3DVisibility} />
+            </RibbonButtonStack>
+          </RibbonGroup>
+        )}
 
         {/* De vroegere View-groep (Grafiek / Agent / Console) is verwijderd:
             de toggles zetten alleen App-state die nergens werd geconsumeerd —

@@ -1026,7 +1026,7 @@ export const nl: Record<string, string> = {
   'backstage.preferences': 'Voorkeuren',
   'backstage.preferencesDesc': 'Open het instellingenvenster (thema, taal).',
   'backstage.about': 'Over',
-  'backstage.aboutDesc': 'Informatie over Open FEM2D Studio.',
+  'backstage.aboutDesc': 'Informatie over Open FEM Studio.',
   'backstage.exit': 'Afsluiten',
   'backstage.exitDesc': 'Sluit de applicatie.',
 
@@ -1041,7 +1041,7 @@ export const nl: Record<string, string> = {
   'settings.theme.openaec': 'OpenAEC',
 
   // Over-venster
-  'about.title': 'Over Open FEM2D Studio',
+  'about.title': 'Over Open FEM Studio',
   'about.builtOn': 'Gebouwd op het OpenAEC platform',
 
   // Ribbon tab: Toetsing

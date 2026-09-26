@@ -370,9 +370,11 @@ export function aanzichtDoorsnede(material: string | undefined, profile: string 
       return { delen, zc, naden: [] };
     }
     case "staal-db":
-    case "vrij": {
+    case "vrij":
+    case "aluminium-bxh":
+    case "aluminium-catalogus": {
       const rect = parseRechthoek(profile);
-      if (sec.bron === "vrij" && rect) return rechthoekDoorsnede(rect.b, rect.h);
+      if ((sec.bron === "vrij" || sec.bron === "aluminium-bxh") && rect) return rechthoekDoorsnede(rect.b, rect.h);
       const d = STEEL_SECTION_DIMS[profileLookupKey(profile ?? "")];
       if (!d) return null;
       const delen = catalogusDelen(d.kind, d.h, d.b, d.tw, d.tf);

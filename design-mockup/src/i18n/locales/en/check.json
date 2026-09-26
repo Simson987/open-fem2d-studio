@@ -987,6 +987,8 @@
       "sameAsPlane": "— same as in the plane —",
       "l0zCustom": "enter l₀,z manually…",
       "m0EdzExternal": "M₀Ed,z external",
+      "zAxisHeader3d": "About the local z-axis — cl. 5.8.9",
+      "zAxisHint3d": "The 3D frame solver supplies both M_y and M_z. The engine uses M_z from the local 3D member forces directly; M₀Ed,z external is only added as an extra constant first-order moment. The imperfection of cl. 5.2 and the code second-order effect about this axis are then determined and checked against M_Rd,z. Clause 5.8.9 subsequently decides whether both directions may be checked separately ((5.38a) and (5.38b)) or interaction (5.39) is required. Bracing and buckling length are separate inputs for each local axis; empty adopts the first-axis choice and records that in the report.",
       "zAxisHint": "The frame solver calculates in one plane and gives M_z = 0, but a column also buckles about the z-axis: the imperfection of cl. 5.2 (θ₀ = 1/300, national annex) and the second-order effect in that direction do not depend on the model. The engine therefore always calculates M_Ed,z = M₀Ed,z + N_Ed·(e_i + e₂), checks it against M_Rd,z with the bars in their positions across the width, and then verifies cl. 5.8.9: may the directions be treated separately ((5.38a) and (5.38b)), and if not, the interaction (5.39). The bracing and buckling length about z are SEPARATE inputs — a column can be braced in the plane and unbraced perpendicular to it; empty = the choice for the plane is adopted, with that note in the report. M₀Ed,z external is a first-order moment about z from a spatial model or a hand calculation; 0 = none.",
       "stirrupZone": "Stirrup zone",
       "stirrupZoneNotGiven": "— not specified, s_cl,tmax is not checked —",

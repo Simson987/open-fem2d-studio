@@ -52,6 +52,11 @@ export const ZICHTBAARHEID: Record<ZichtbaarheidGroep, ZichtbaarheidRij[]> = {
     { sleutel: "maatlijnen", label: "zichtbaarheid.maatlijnen", hint: "zichtbaarheid.maatlijnenHint" },
   ],
   geometrie: [
+    { sleutel: "knopen", label: "zichtbaarheid.knopen", hint: "zichtbaarheid.knopenHint" },
+    { sleutel: "staven", label: "zichtbaarheid.staven", hint: "zichtbaarheid.stavenHint" },
+    { sleutel: "platen", label: "zichtbaarheid.platen", hint: "zichtbaarheid.platenHint" },
+    { sleutel: "belastingen", label: "zichtbaarheid.belastingen", hint: "zichtbaarheid.belastingenHint" },
+    { sleutel: "assenstelsel", label: "zichtbaarheid.assenstelsel", hint: "zichtbaarheid.assenstelselHint" },
     { sleutel: "aanzicht", label: "tree.rowAanzicht", hint: "tree.rowAanzichtHint" },
     { sleutel: "aanzichtBreedte", label: "zichtbaarheid.aanzichtBreedte", hint: "zichtbaarheid.aanzichtBreedteHint", onder: "aanzicht" },
     { sleutel: "kipsteunen", label: "tree.rowKipsteunen", hint: "tree.rowKipsteunenHint" },

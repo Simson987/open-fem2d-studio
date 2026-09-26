@@ -38,7 +38,20 @@ import { useReportStore } from "../stores/reportStore";
 import { leesRapportKopOverschrijving } from "../components/report/useProjectInfo";
 import { leesPagineerToestand } from "../components/report/rapportGereedheid";
 import { tocToestand } from "../components/report/toc";
-import type { Beam, Selection, SupportType, Load, Analysetype } from "../components/fem/femTypes";
+import type { Beam, Selection, SupportType, Load, Analysetype, StructuralGrid } from "../components/fem/femTypes";
+import {
+  FRAME3D_SUPPORT_PRESETS,
+  parseFrame3DModel,
+  splitFrame3DBeam,
+  type Frame3DModel,
+} from "../components/frame3d/frame3dModel";
+import type { Frame3DVisibility } from "../components/frame3d/frame3dVisibility";
+import type { Frame3DView } from "../components/frame3d/frame3dCommands";
+import type { Frame3DSolveResult } from "../components/frame3d/frame3dSolver";
+import type { Frame3DSteelChecks } from "../components/frame3d/frame3dSteelCheck";
+import type { Frame3DConcreteChecks } from "../components/frame3d/frame3dConcreteCheck";
+import type { Frame3DSelection } from "../components/frame3d/frame3dSelection";
+import { frame3DMaximumDisplacementM } from "../components/frame3d/frame3dDisplacement";
 import type { SolverResult } from "../components/fem/solver/types";
 import type { ReinforcementCage } from "../lib/types/concrete/ReinforcementCage";
 import { isEigenGewichtGeval } from "../lib/eigenGewicht";
@@ -96,6 +109,32 @@ export interface BedieningActies {
     addLoadCase: (name: string) => void;
     setAnalysetype: (v: Analysetype) => void;
   };
+  modelDimension: "2d" | "3d";
+  frame3d: {
+    model: Frame3DModel;
+    visibility: Frame3DVisibility;
+    structuralGrid: StructuralGrid;
+    replaceModel: (model: Frame3DModel) => void;
+    setVisibility: (visibility: Frame3DVisibility) => void;
+    setStructuralGrid: (grid: StructuralGrid) => void;
+    setView: (view: Frame3DView) => void;
+    setSelection: (selection: Frame3DSelection) => void;
+    selectCombination: (id: number) => void;
+    updateBeam: (id: number, updates: Partial<Frame3DModel["beams"][number]>) => void;
+    solve: () => Promise<void>;
+    result: Frame3DSolveResult | null;
+    caseResults: ReadonlyMap<number, Frame3DSolveResult>;
+    combinationResults: ReadonlyMap<number, Frame3DSolveResult>;
+    activeCombinationId: number | null;
+    solveError: string | null;
+    checks: Frame3DSteelChecks | null;
+    concreteChecks: Frame3DConcreteChecks | null;
+    /** Hoogt op bij iedere 3D-modelwijziging en iedere 3D-rekengang. */
+    generation: () => number;
+    solving: boolean;
+    checksRunning: boolean;
+    checksError: string | null;
+  };
   activeView: string;
   selection: Selection;
   setSelection: (s: Selection) => void;
@@ -150,6 +189,24 @@ function wachtOpStore<S>(
       if (voldoet(s)) { window.clearTimeout(timer); af(); los(s); }
     });
   });
+}
+
+/**
+ * `handleSolve` wacht zelf al op solver én normtoetsen. React kan de laatste
+ * statusupdates echter over twee commits verdelen, waardoor het eerste
+ * API-antwoord soms nog de vorige `checksRunning=true`-render bevatte. Forceer
+ * enkele verse commits en antwoord pas vanuit de aantoonbaar rustige render.
+ */
+async function wachtOpFrame3DRender(
+  acties: () => BedieningActies,
+  verseRender: () => Promise<void>,
+): Promise<void> {
+  for (let poging = 0; poging < 8; poging += 1) {
+    await verseRender();
+    const state = acties().frame3d;
+    if (!state.solving && !state.checksRunning) return;
+  }
+  throw new Error("de 3D-rekengang is afgerond, maar de gebruikersinterface meldt nog steeds dat de toetsing loopt");
 }
 
 // ── De hook ─────────────────────────────────────────────────────────────────
@@ -293,6 +350,24 @@ export async function voerUit(
           profileName: (b as { profileName?: string }).profileName ?? null,
           heeftKorf: b.checkConfig?.betonKorf != null,
         })),
+        modelDimension: a().modelDimension,
+        model3d: {
+          aantalKnopen: a().frame3d.model.nodes.length,
+          aantalStaven: a().frame3d.model.beams.length,
+          aantalPlaten: a().frame3d.model.plates?.length ?? 0,
+          aantalOpleggingen: a().frame3d.model.supports?.length ?? 0,
+          aantalLasten: (a().frame3d.model.loads?.length ?? 0) + (a().frame3d.model.memberLoads?.length ?? 0) +
+            (a().frame3d.model.memberPointLoads?.length ?? 0) + (a().frame3d.model.thermalLoads?.length ?? 0) +
+            (a().frame3d.model.surfaceLoads?.length ?? 0) +
+            (a().frame3d.model.supports ?? []).filter((support) => Object.keys(support.prescribed ?? {}).length > 0).length,
+          aantalOpgelegdeVerplaatsingen: (a().frame3d.model.supports ?? []).reduce((count, support) =>
+            count + Object.keys(support.prescribed ?? {}).length, 0),
+          generatie: a().frame3d.generation(),
+          heeftResultaat: a().frame3d.result !== null,
+          rekenfout: a().frame3d.solveError,
+          zichtbaarheid: a().frame3d.visibility,
+          stramien: a().frame3d.structuralGrid,
+        },
       };
     }
 
@@ -354,19 +429,326 @@ export async function voerUit(
       };
     }
 
+    case "model_3d_bouwen": {
+      const rawNodes = Array.isArray(args.nodes) ? args.nodes : [];
+      const rawBeams = Array.isArray(args.beams) ? args.beams : [];
+      const rawSupports = Array.isArray(args.supports) ? args.supports : [];
+      const rawLoads = Array.isArray(args.loads) ? args.loads : [];
+      const rawMemberLoads = Array.isArray(args.member_loads) ? args.member_loads : [];
+      const rawMemberPointLoads = Array.isArray(args.member_point_loads) ? args.member_point_loads : [];
+      const rawThermalLoads = Array.isArray(args.thermal_loads) ? args.thermal_loads : [];
+      const rawPlates = Array.isArray(args.plates) ? args.plates : [];
+      const rawSurfaceLoads = Array.isArray(args.surface_loads) ? args.surface_loads : [];
+      const nodes = rawNodes.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-knoop ${index + 1} is ongeldig`);
+        const node = value as Record<string, unknown>;
+        return { id: index + 1, x: node.x, y: node.y, z: node.z };
+      });
+      const beams = rawBeams.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-staaf ${index + 1} is ongeldig`);
+        const beam = value as Record<string, unknown>;
+        if (!Number.isSafeInteger(beam.from) || !Number.isSafeInteger(beam.to)) {
+          throw new Error(`3D-staaf ${index + 1}: from/to moeten knoopindices zijn`);
+        }
+        return {
+          id: index + 1,
+          startNodeId: Number(beam.from),
+          endNodeId: Number(beam.to),
+          ...(typeof beam.profile_name === "string" ? { profileName: beam.profile_name } : {}),
+          ...(typeof beam.material === "string" ? { material: beam.material } : {}),
+          ...(beam.roll_angle_deg !== undefined
+            ? { rollAngleRad: typeof beam.roll_angle_deg === "number" ? beam.roll_angle_deg * Math.PI / 180 : beam.roll_angle_deg }
+            : {}),
+          ...(beam.releases && typeof beam.releases === "object" && !Array.isArray(beam.releases)
+            ? { releases: {
+                myStart: (beam.releases as Record<string, unknown>).my_start,
+                myEnd: (beam.releases as Record<string, unknown>).my_end,
+                mzStart: (beam.releases as Record<string, unknown>).mz_start,
+                mzEnd: (beam.releases as Record<string, unknown>).mz_end,
+                torsionStart: (beam.releases as Record<string, unknown>).torsion_start,
+                torsionEnd: (beam.releases as Record<string, unknown>).torsion_end,
+              } }
+            : beam.releases === undefined ? {} : { releases: beam.releases }),
+          ...(beam.check_config && typeof beam.check_config === "object" && !Array.isArray(beam.check_config)
+            ? { checkConfig: beam.check_config }
+            : {}),
+        };
+      });
+      const supports = rawSupports.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-oplegging ${index + 1} is ongeldig`);
+        const support = value as Record<string, unknown>;
+        const preset = support.type;
+        if ((preset !== undefined && (typeof preset !== "string" || !(preset in FRAME3D_SUPPORT_PRESETS))) ||
+            !Number.isSafeInteger(support.node)) {
+          throw new Error(`3D-oplegging ${index + 1}: gebruik node en optioneel type ${Object.keys(FRAME3D_SUPPORT_PRESETS).join(", ")}`);
+        }
+        const rawSprings = support.springs;
+        if (rawSprings !== undefined && (!rawSprings || typeof rawSprings !== "object" || Array.isArray(rawSprings))) {
+          throw new Error(`3D-oplegging ${index + 1}: springs moet een object zijn`);
+        }
+        const springs = rawSprings as Record<string, unknown> | undefined;
+        const rawPrescribed = support.prescribed;
+        if (rawPrescribed !== undefined && (!rawPrescribed || typeof rawPrescribed !== "object" || Array.isArray(rawPrescribed))) {
+          throw new Error(`3D-oplegging ${index + 1}: prescribed moet een object zijn`);
+        }
+        const prescribed = rawPrescribed as Record<string, unknown> | undefined;
+        return {
+          nodeId: Number(support.node),
+          ...(preset === undefined
+            ? { ux: false, uy: false, uz: false, rx: false, ry: false, rz: false }
+            : FRAME3D_SUPPORT_PRESETS[preset as keyof typeof FRAME3D_SUPPORT_PRESETS]),
+          ...(springs ? { springs: {
+            ...(springs.kx_kn_per_m !== undefined ? { kxKnPerM: springs.kx_kn_per_m } : {}),
+            ...(springs.ky_kn_per_m !== undefined ? { kyKnPerM: springs.ky_kn_per_m } : {}),
+            ...(springs.kz_kn_per_m !== undefined ? { kzKnPerM: springs.kz_kn_per_m } : {}),
+            ...(springs.krx_knm_per_rad !== undefined ? { krxKnmPerRad: springs.krx_knm_per_rad } : {}),
+            ...(springs.kry_knm_per_rad !== undefined ? { kryKnmPerRad: springs.kry_knm_per_rad } : {}),
+            ...(springs.krz_knm_per_rad !== undefined ? { krzKnmPerRad: springs.krz_knm_per_rad } : {}),
+          } } : {}),
+          ...(prescribed ? { prescribed: {
+            ...(prescribed.ux_m !== undefined ? { uxM: prescribed.ux_m } : {}),
+            ...(prescribed.uy_m !== undefined ? { uyM: prescribed.uy_m } : {}),
+            ...(prescribed.uz_m !== undefined ? { uzM: prescribed.uz_m } : {}),
+            ...(prescribed.rx_rad !== undefined ? { rxRad: prescribed.rx_rad } : {}),
+            ...(prescribed.ry_rad !== undefined ? { ryRad: prescribed.ry_rad } : {}),
+            ...(prescribed.rz_rad !== undefined ? { rzRad: prescribed.rz_rad } : {}),
+          } } : {}),
+        };
+      });
+      const loads = rawLoads.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-knoopbelasting ${index + 1} is ongeldig`);
+        const load = value as Record<string, unknown>;
+        return {
+          id: index + 1,
+          nodeId: load.node,
+          ...(load.case_id !== undefined ? { caseId: load.case_id } : {}),
+          fx: load.fx ?? 0, fy: load.fy ?? 0, fz: load.fz ?? 0,
+          mx: load.mx ?? 0, my: load.my ?? 0, mz: load.mz ?? 0,
+        };
+      });
+      const memberLoads = rawMemberLoads.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-staafbelasting ${index + 1} is ongeldig`);
+        const load = value as Record<string, unknown>;
+        const beamId = Number(load.beam);
+        if (!Number.isSafeInteger(load.beam) || !beams.some((beam) => beam.id === beamId)) {
+          throw new Error(`3D-staafbelasting ${index + 1}: beam verwijst niet naar een bestaande staaf`);
+        }
+        const beam = beams.find((item) => item.id === beamId)!;
+        const start = nodes.find((node) => node.id === beam.startNodeId)!;
+        const end = nodes.find((node) => node.id === beam.endNodeId)!;
+        const length = Math.hypot(Number(end.x) - Number(start.x), Number(end.y) - Number(start.y), Number(end.z) - Number(start.z));
+        return {
+          id: index + 1,
+          beamId,
+          ...(load.case_id !== undefined ? { caseId: load.case_id } : {}),
+          qyStart: load.qy_start ?? 0,
+          qyEnd: load.qy_end ?? load.qy_start ?? 0,
+          qzStart: load.qz_start ?? 0,
+          qzEnd: load.qz_end ?? load.qz_start ?? 0,
+          startPositionM: load.start_m ?? 0,
+          endPositionM: load.end_m ?? length,
+        };
+      });
+      const memberPointLoads = rawMemberPointLoads.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-staafpuntlast ${index + 1} is ongeldig`);
+        const load = value as Record<string, unknown>;
+        const beamId = Number(load.beam);
+        if (!Number.isSafeInteger(load.beam) || !beams.some((beam) => beam.id === beamId)) {
+          throw new Error(`3D-staafpuntlast ${index + 1}: beam verwijst niet naar een bestaande staaf`);
+        }
+        return {
+          id: index + 1,
+          beamId,
+          ...(load.case_id !== undefined ? { caseId: load.case_id } : {}),
+          py: load.py ?? 0,
+          pz: load.pz ?? 0,
+          positionM: load.position_m,
+        };
+      });
+      const thermalLoads = rawThermalLoads.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-temperatuurbelasting ${index + 1} is ongeldig`);
+        const load = value as Record<string, unknown>;
+        const beamId = Number(load.beam);
+        if (!Number.isSafeInteger(load.beam) || !beams.some((beam) => beam.id === beamId)) {
+          throw new Error(`3D-temperatuurbelasting ${index + 1}: beam verwijst niet naar een bestaande staaf`);
+        }
+        return {
+          id: index + 1,
+          beamId,
+          ...(load.case_id !== undefined ? { caseId: load.case_id } : {}),
+          deltaTUniformK: load.delta_t_uniform_k ?? 0,
+          deltaTGradientYK: load.delta_t_gradient_y_k ?? 0,
+          deltaTGradientZK: load.delta_t_gradient_z_k ?? 0,
+        };
+      });
+      const plates = rawPlates.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-plaat ${index + 1} is ongeldig`);
+        const plate = value as Record<string, unknown>;
+        if (!Array.isArray(plate.nodes)) throw new Error(`3D-plaat ${index + 1}: nodes moet een lijst met knoopindices zijn`);
+        const openings = Array.isArray(plate.openings) ? plate.openings.map((rawOpening, openingIndex) => {
+          if (!rawOpening || typeof rawOpening !== "object" || Array.isArray(rawOpening)) throw new Error(`Opening ${openingIndex + 1} van 3D-plaat ${index + 1} is ongeldig`);
+          const opening = rawOpening as Record<string, unknown>;
+          return { id: openingIndex + 1, nodeIds: opening.nodes,
+            ...(opening.corner_radius_m !== undefined ? { cornerRadiusM: opening.corner_radius_m } : {}) };
+        }) : plate.openings;
+        return { id: index + 1, nodeIds: plate.nodes, thicknessM: plate.thickness_m ?? 0.2,
+          ...(typeof plate.material === "string" ? { material: plate.material } : {}),
+          ...(plate.corner_radius_m !== undefined ? { cornerRadiusM: plate.corner_radius_m } : {}),
+          ...(openings !== undefined ? { openings } : {}) };
+      });
+      const surfaceLoads = rawSurfaceLoads.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-oppervlaktebelasting ${index + 1} is ongeldig`);
+        const load = value as Record<string, unknown>;
+        return { id: index + 1, plateId: load.plate,
+          ...(load.case_id !== undefined ? { caseId: load.case_id } : {}),
+          qx: load.qx ?? 0, qy: load.qy ?? 0, qz: load.qz ?? 0 };
+      });
+      const model = parseFrame3DModel({ nodes, beams, plates, supports, loads, memberLoads, memberPointLoads, thermalLoads, surfaceLoads });
+      a().frame3d.replaceModel(model);
+      await verseRender();
+      return {
+        modelDimension: a().modelDimension,
+        nodeIds: model.nodes.map((node) => node.id),
+        plateIds: (model.plates ?? []).map((plate) => plate.id),
+        beamIds: model.beams.map((beam) => beam.id),
+        aantalOpleggingen: model.supports?.length ?? 0,
+        aantalOplegveren: (model.supports ?? []).reduce((count, support) => count + Object.keys(support.springs ?? {}).length, 0),
+        aantalOpgelegdeVerplaatsingen: (model.supports ?? []).reduce((count, support) => count + Object.keys(support.prescribed ?? {}).length, 0),
+        aantalLasten: model.loads?.length ?? 0,
+        aantalStaaflasten: model.memberLoads?.length ?? 0,
+        aantalStaafpuntlasten: model.memberPointLoads?.length ?? 0,
+        aantalTemperatuurlasten: model.thermalLoads?.length ?? 0,
+        aantalOppervlaktelasten: model.surfaceLoads?.length ?? 0,
+      };
+    }
+
+    case "weergave_3d_configureren": {
+      if (a().modelDimension !== "3d") throw new Error("de actieve projectdimensie is 2D; bouw of converteer eerst een 3D-model");
+      if (args.visibility !== undefined) {
+        if (!args.visibility || typeof args.visibility !== "object" || Array.isArray(args.visibility)) {
+          throw new Error("`visibility` moet een object zijn");
+        }
+        const current = a().frame3d.visibility;
+        const next = { ...current };
+        for (const [key, value] of Object.entries(args.visibility as Record<string, unknown>)) {
+          if (!(key in current) || typeof value !== "boolean") throw new Error(`ongeldige 3D-zichtbaarheidsoptie ${key}`);
+          next[key as keyof Frame3DVisibility] = value;
+        }
+        a().frame3d.setVisibility(next);
+      }
+      if (args.structural_grid !== undefined) {
+        if (!args.structural_grid || typeof args.structural_grid !== "object" || Array.isArray(args.structural_grid)) {
+          throw new Error("`structural_grid` moet een object zijn");
+        }
+        const raw = args.structural_grid as Record<string, unknown>;
+        const axisList = (key: string, prefix: string) => {
+          const value = raw[key];
+          if (value === undefined) return undefined;
+          if (!Array.isArray(value)) throw new Error(`structural_grid.${key} moet een lijst zijn`);
+          return value.map((axis, index) => {
+            if (!axis || typeof axis !== "object" || Array.isArray(axis)) throw new Error(`structural_grid.${key}[${index}] is ongeldig`);
+            const item = axis as Record<string, unknown>;
+            if (typeof item.label !== "string" || typeof item.position_m !== "number" || !Number.isFinite(item.position_m)) {
+              throw new Error(`structural_grid.${key}[${index}] vereist label en position_m`);
+            }
+            return { id: `${prefix}-${index + 1}`, label: item.label, position: item.position_m * 1000 };
+          });
+        };
+        if (raw.enabled !== undefined && typeof raw.enabled !== "boolean") throw new Error("structural_grid.enabled moet boolean zijn");
+        const current = a().frame3d.structuralGrid;
+        a().frame3d.setStructuralGrid({
+          ...current,
+          ...(raw.enabled === undefined ? {} : { enabled: raw.enabled }),
+          ...(axisList("x_axes", "x") ? { xAxes: axisList("x_axes", "x")! } : {}),
+          ...(axisList("y_axes", "y") ? { yAxes: axisList("y_axes", "y")! } : {}),
+          ...(axisList("z_levels", "z") ? { zAxes: axisList("z_levels", "z")! } : {}),
+        });
+      }
+      if (args.view !== undefined) {
+        if (args.view !== "iso" && args.view !== "top" && args.view !== "front" && args.view !== "side") {
+          throw new Error("`view` moet iso, top, front of side zijn");
+        }
+        a().frame3d.setView(args.view);
+      }
+      await verseRender();
+      return { zichtbaarheid: a().frame3d.visibility, stramien: a().frame3d.structuralGrid, view: args.view ?? null };
+    }
+
+    case "resultaat_3d_kiezen": {
+      if (a().modelDimension !== "3d") throw new Error("de actieve projectdimensie is 2D");
+      const id = getal("id");
+      if (!a().frame3d.combinationResults.has(id)) {
+        throw new Error(`3D-combinatie ${id} heeft geen berekend resultaat; voer eerst rekenen uit`);
+      }
+      a().frame3d.selectCombination(id);
+      await verseRender();
+      return frame3dUitlezen(a());
+    }
+
     case "staaf_selecteren": {
       const id = getal("id");
+      if (a().modelDimension === "3d") {
+        const beam = a().frame3d.model.beams.find((candidate) => candidate.id === id);
+        if (!beam) throw new Error(`3D-staaf ${id} bestaat niet`);
+        a().frame3d.setSelection({ type: "beam", id });
+        a().setActiveView("frame3d");
+        await verseRender();
+        return beam;
+      }
       staaf(id);
       a().setSelection({ type: "beam", id });
       await verseRender();
       return staaf(id);
     }
 
+    case "plaat_3d_selecteren": {
+      if (a().modelDimension !== "3d") throw new Error("de actieve projectdimensie is 2D");
+      const id = getal("id");
+      const plate = (a().frame3d.model.plates ?? []).find((candidate) => candidate.id === id);
+      if (!plate) throw new Error(`3D-plaat ${id} bestaat niet`);
+      a().frame3d.setSelection({ type: "plate", id });
+      a().setActiveView("frame3d");
+      await verseRender();
+      return plate;
+    }
+
+    case "staaf_3d_splitsen": {
+      if (a().modelDimension !== "3d") throw new Error("de actieve projectdimensie is 2D; bouw of converteer eerst een 3D-model");
+      const beamId = getal("beamId");
+      const ratio = getal("ratio");
+      const split = splitFrame3DBeam(a().frame3d.model, beamId, ratio);
+      a().frame3d.replaceModel(split.model);
+      a().frame3d.setSelection({ type: "node", id: split.nodeId });
+      a().setActiveView("frame3d");
+      await verseRender();
+      return {
+        nodeId: split.nodeId,
+        firstBeamId: split.firstBeamId,
+        secondBeamId: split.secondBeamId,
+        nodes: split.model.nodes,
+        beams: split.model.beams,
+        memberLoads: split.model.memberLoads ?? [],
+        memberPointLoads: split.model.memberPointLoads ?? [],
+        thermalLoads: split.model.thermalLoads ?? [],
+      };
+    }
+
     case "korf_zetten": {
       const id = getal("beamId");
-      staaf(id);
       const korf = args.korf as ReinforcementCage | undefined;
       if (!korf || typeof korf !== "object") throw new Error("`korf` ontbreekt");
+      if (a().modelDimension === "3d") {
+        const beam = a().frame3d.model.beams.find((candidate) => candidate.id === id);
+        if (!beam) throw new Error(`3D-staaf ${id} bestaat niet`);
+        a().frame3d.updateBeam(id, {
+          checkConfig: { ...(beam.checkConfig ?? {}), betonKorf: korf },
+        });
+        await verseRender();
+        return a().frame3d.model.beams.find((candidate) => candidate.id === id) ?? {
+          ...beam, checkConfig: { ...(beam.checkConfig ?? {}), betonKorf: korf },
+        };
+      }
+      staaf(id);
       // De korf hangt aan `checkConfig.betonKorf`, niet aan de staaf zelf —
       // dezelfde plek waar het startmodel en de eigenschappendialoog hem
       // zetten. De rest van checkConfig blijft staan.
@@ -387,6 +769,15 @@ export async function voerUit(
     }
 
     case "rekenen": {
+      if (a().modelDimension === "3d") {
+        await a().frame3d.solve();
+        await wachtOpFrame3DRender(a, verseRender);
+        const state = a().frame3d;
+        if (!state.result || state.solveError) {
+          throw new Error(`3D doorrekenen mislukt: ${state.solveError ?? "de rekengang leverde geen resultaat"}`);
+        }
+        return frame3dUitlezen(a());
+      }
       // Dezelfde rekengang als de knop Berekenen, en pas terug als hij HELEMAAL
       // klaar is: doorrekenen, bij tweedeOrdeFysisch de fysisch niet-lineaire
       // ronde, en de toetsing. Stond er na een modelwijziging al een
@@ -421,13 +812,22 @@ export async function voerUit(
     }
 
     case "toetsen": {
+      if (a().modelDimension === "3d") {
+        await a().frame3d.solve();
+        await wachtOpFrame3DRender(a, verseRender);
+        const state = a().frame3d;
+        if (!state.result || state.solveError) {
+          throw new Error(`3D doorrekenen mislukt: ${state.solveError ?? "de rekengang leverde geen resultaat"}`);
+        }
+        return frame3dUitlezen(a());
+      }
       await a().handleRunMemberChecks({ openPanel: false });
       await wachtOpStore(useCheckStore, (s) => !s.isRunning, 300_000, "de toetsing");
       return toetsenUitlezen();
     }
 
     case "toetsen_uitlezen":
-      return toetsenUitlezen();
+      return a().modelDimension === "3d" ? frame3dUitlezen(a()) : toetsenUitlezen();
 
     case "dekkingslijn_openen": {
       const id = getal("beamId");
@@ -474,7 +874,40 @@ export async function voerUit(
 
     case "screenshot_dom": {
       const { default: html2canvas } = await import("html2canvas");
-      const canvas = await html2canvas(document.body, { useCORS: true, logging: false });
+      const compatibeleKleur = (waarde: string) => waarde.replace(
+        /color\(\s*(?:srgb|display-p3)\s+([^)]*)\)/gi,
+        (_volledig, inhoud: string) => {
+          const [kanalen, alfaTekst] = inhoud.split("/").map((deel) => deel.trim());
+          const getallen = kanalen.split(/\s+/).map((deel) =>
+            deel.endsWith("%") ? Number.parseFloat(deel) / 100 : Number.parseFloat(deel));
+          if (getallen.length < 3 || getallen.some((getal) => !Number.isFinite(getal))) return "rgba(0,0,0,0)";
+          const alfa = alfaTekst === undefined
+            ? 1
+            : alfaTekst.endsWith("%") ? Number.parseFloat(alfaTekst) / 100 : Number.parseFloat(alfaTekst);
+          const kleur = getallen.slice(0, 3).map((getal) => Math.round(Math.max(0, Math.min(1, getal)) * 255));
+          return `rgba(${kleur[0]},${kleur[1]},${kleur[2]},${Number.isFinite(alfa) ? Math.max(0, Math.min(1, alfa)) : 1})`;
+        },
+      );
+      const kleurEigenschappen = [
+        "color", "background-color", "border-top-color", "border-right-color",
+        "border-bottom-color", "border-left-color", "outline-color",
+        "text-decoration-color", "fill", "stroke", "box-shadow", "text-shadow",
+      ] as const;
+      const canvas = await html2canvas(document.body, {
+        useCORS: true,
+        logging: false,
+        onclone: (kopie) => {
+          const bron = [document.documentElement, ...document.querySelectorAll<HTMLElement | SVGElement>("*")];
+          const doel = [kopie.documentElement, ...kopie.querySelectorAll<HTMLElement | SVGElement>("*")];
+          for (let index = 0; index < Math.min(bron.length, doel.length); index += 1) {
+            const berekend = getComputedStyle(bron[index]);
+            for (const eigenschap of kleurEigenschappen) {
+              const waarde = berekend.getPropertyValue(eigenschap);
+              if (waarde.includes("color(")) doel[index].style.setProperty(eigenschap, compatibeleKleur(waarde));
+            }
+          }
+        },
+      });
       return { dataUrl: canvas.toDataURL("image/png") };
     }
 
@@ -506,6 +939,32 @@ function toetsenUitlezen() {
     error: s.error,
     lastRunAt: s.lastRunAt,
     inputs: s.lastRunInputs,
+  };
+}
+
+/** Volledige 3D-kernuitvoer plus dezelfde EN 1992/EN 1993-resultaten als de GUI. */
+function frame3dUitlezen(a: BedieningActies) {
+  return {
+    dimension: "3d",
+    result: a.frame3d.result,
+    maxVerplaatsingMm: a.frame3d.result
+      ? frame3DMaximumDisplacementM(a.frame3d.model, a.frame3d.result) * 1000
+      : null,
+    belastinggevallenBerekend: a.frame3d.caseResults.size,
+    combinatiesBerekend: a.frame3d.combinationResults.size,
+    actieveCombinatie: a.frame3d.activeCombinationId,
+    combinatieResultaten: [...a.frame3d.combinationResults].map(([id, result]) => ({
+      id,
+      maxVerplaatsingMm: frame3DMaximumDisplacementM(a.frame3d.model, result) * 1000,
+      alphaCr: result.buckling.status === "available" ? result.buckling.modes[0]?.loadFactor ?? null : null,
+      convergent: result.secondOrder?.converged ?? true,
+      stabiel: result.secondOrder?.stable ?? result.buckling.status !== "failed",
+    })),
+    steel: a.frame3d.checks,
+    concrete: a.frame3d.concreteChecks,
+    checksRunning: a.frame3d.checksRunning,
+    solveError: a.frame3d.solveError,
+    checksError: a.frame3d.checksError,
   };
 }
 

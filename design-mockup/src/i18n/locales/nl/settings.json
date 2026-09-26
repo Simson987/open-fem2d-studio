@@ -5,6 +5,7 @@
   "tabs": {
     "general": "Algemeen",
     "appearance": "Uiterlijk",
+    "calculation": "Rekenen",
     "editor": "Editor",
     "files": "Bestanden",
     "shortcuts": "Sneltoetsen",
@@ -30,6 +31,29 @@
     "contrast": "Hoog contrast",
     "font": "Lettertype",
     "uiFontSize": "UI-lettergrootte"
+  },
+  "calculation": {
+    "engine": "Rekenkern",
+    "solver": "Solverkeuze",
+    "automatic": "Automatisch (aanbevolen)",
+    "automaticDescription": "Open FEM kiest automatisch één beschikbare solver die de volledige berekening ondersteunt.",
+    "manualDescription": "{{solver}} wordt gebruikt wanneer deze solver de gevraagde berekening ondersteunt.",
+    "available": "Beschikbaar",
+    "unavailable": "Nog niet meegebouwd",
+    "license": "Licentie",
+    "version": "Versie",
+    "supports": "Ondersteunt",
+    "adapterPending": "De Rust-adapter is geregistreerd en wordt selecteerbaar zodra hij met de app wordt meegeleverd.",
+    "analysis": {
+      "linear": "lineair",
+      "p-delta": "tweede orde P-Δ",
+      "material-nonlinear": "fysisch niet-lineair"
+    },
+    "elements": {
+      "frame": "raamwerk",
+      "plate": "plaat",
+      "solid": "volume"
+    }
   },
   "editor": {
     "general": "Algemeen",
@@ -77,7 +101,7 @@
     "timberGroup": "Houtsterkteklassen (EN 338 / EN 14080)"
   },
   "about": {
-    "appName": "Open FEM2D Studio",
+    "appName": "Open FEM Studio",
     "version": "Versie",
     "framework": "Framework",
     "license": "Licentie",

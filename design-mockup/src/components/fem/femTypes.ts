@@ -1838,6 +1838,8 @@ export interface StructuralGrid {
   enabled: boolean;
   /** vertical lines, varying x */
   xAxes: GridAxisLine[];
+  /** 3D-plan axes, varying y; optional in older and purely 2D projects. */
+  yAxes?: GridAxisLine[];
   /** horizontal lines, varying z */
   zAxes: GridAxisLine[];
 }
@@ -1847,6 +1849,10 @@ export const DEFAULT_STRUCTURAL_GRID: StructuralGrid = {
   xAxes: [
     { id: "A", label: "A", position: 0 },
     { id: "B", label: "B", position: 12000 },
+  ],
+  yAxes: [
+    { id: "Y-A", label: "1", position: 0 },
+    { id: "Y-B", label: "2", position: 6000 },
   ],
   zAxes: [
     { id: "1", label: "1", position: 0 },

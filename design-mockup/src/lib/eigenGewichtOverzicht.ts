@@ -69,6 +69,8 @@ export interface EigenGewichtOverzicht {
   aantalLasten: number;
   /** Totaal gewicht van alle staven in kN (platen niet: hun oppervlak volgt uit het mesh). */
   gewichtStavenKN: number;
+  /** Zonder geldig materiaal of profiel is geen eigen gewicht afgeleid. */
+  overgeslagen?: { beamId: number; reden: string }[];
 }
 
 /**
@@ -86,17 +88,22 @@ export function eigenGewichtOverzicht(model: {
   const doel = eigenGewichtDoel(model.loadCases);
   const geval = eigenGewichtGeval(model.loadCases, model.selfWeightEnabled);
   const leeg: EigenGewichtOverzicht = {
-    doel, caseId: null, g: G, staven: [], platen: [], aantalLasten: 0, gewichtStavenKN: 0,
+    doel, caseId: null, g: G, staven: [], platen: [], aantalLasten: 0, gewichtStavenKN: 0, overgeslagen: [],
   };
   if (!geval) return leeg;
 
   const staven: EigenGewichtStaaf[] = [];
+  const overgeslagen: NonNullable<EigenGewichtOverzicht["overgeslagen"]> = [];
   for (const b of model.beams) {
+    const sec = resolveSection(b.material, b.profile);
+    if (sec.reden) {
+      overgeslagen.push({ beamId: b.id, reden: sec.reden });
+      continue;
+    }
     const lengteMm = staafLengteMm(b, model.nodes);
     // DE bron: dezelfde aanroep als in `bouwMultiInput`.
     const lasten = eigenGewichtLasten(b, lengteMm, geval.id);
     const verlopend = bepaalVerloop(b.material, b.profile, b.profileEnd).status === "verlopend";
-    const sec = resolveSection(b.material, b.profile);
     const rho = dichtheidVanMateriaal(b.material);
     const delen: EigenGewichtDeel[] = lasten.map((l) => ({
       q: l.q,
@@ -138,5 +145,6 @@ export function eigenGewichtOverzicht(model: {
     doel, caseId: geval.id, g: G, staven, platen,
     aantalLasten: staven.reduce((s, x) => s + x.delen.length, 0) + platen.length,
     gewichtStavenKN: staven.reduce((s, x) => s + x.gewichtKN, 0),
+    overgeslagen,
   };
 }

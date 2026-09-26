@@ -1,0 +1,33 @@
+.frame3d-check-ok { color: #15803d; }
+.frame3d-check-not-ok { color: #b91c1c; }
+.frame3d-check-list { display: grid; gap: 3px; margin-top: 8px; }
+.frame3d-check-list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-top: 1px solid var(--theme-border);
+  color: var(--theme-text-muted);
+  font-size: 11px;
+}
+.frame3d-check-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frame3d-check-list code { color: var(--theme-text); font-weight: 700; }
+.frame3d-roll-input { display: inline-flex; align-items: center; gap: 4px; }
+.frame3d-roll-input input { width: 82px; }
+.frame3d-release-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 7px;
+}
+.frame3d-release-grid label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border: 1px solid var(--theme-border);
+  border-radius: 4px;
+  color: var(--theme-text);
+  font-size: 11px;
+}

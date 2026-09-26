@@ -1,5 +1,5 @@
 <p align="center">
-  <strong>Open FEM2D Studio</strong>
+  <strong>Open FEM Studio</strong>
 </p>
 
 <p align="center">
@@ -17,6 +17,7 @@
 ## Wat het programma doet
 
 - Staven en platen (wandschijven, belast in het vlak) in 2D: lineair, tweede orde en fysisch niet-lineair
+- 3D-tab voor het modelleren van knopen en staven; 3D-berekening is nog niet beschikbaar
 - Belastinggevallen, belastingcombinaties en omhullenden
 - Normtoetsing per staaf: staal (NEN-EN 1993-1-1, langslassen NEN-EN 1993-1-8), hout en kruislaaghout
   (NEN-EN 1995-1-1), gewapend beton (NEN-EN 1992-1-1), plus een vrije spanningstoets

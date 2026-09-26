@@ -1,12 +1,12 @@
 # openaec-mcp-server
 
-Model Context Protocol (MCP) server that exposes the **Open FEM2D Studio** /
+Model Context Protocol (MCP) server that exposes the **Open FEM Studio** /
 **OpenAEC** check engines and the 2D FEM solver to MCP clients (Claude Desktop,
 Claude Code, etc.). It speaks JSON-RPC 2.0 over stdio and wraps the same
 Rust crates the Tauri desktop app uses, so a tool call from Claude returns
 byte-identical results to clicking through the UI.
 
-The 41 tools, in seven groups (the exact roster is pinned by
+The 45 tools, in eight groups (the exact roster is pinned by
 `tests/stdio_roundtrip.rs` and `tests/drie_wegen_kruistabel.rs`):
 
 | group | tools |
@@ -16,8 +16,9 @@ The 41 tools, in seven groups (the exact roster is pinned by
 | concrete — EN 1992-1-1 | `list_concrete_classes`, `list_reinforcement_grades`, `list_exposure_classes`, `check_concrete_beam`, `concrete_column_check`, `concrete_mn_kappa`, `concrete_segment_stiffness`, `concrete_dekkingslijn`, `concrete_effective_flange_width`, `concrete_cover_check`, `concrete_creep_coefficient` |
 | plates (wall plates loaded in their plane) | `check_plates` |
 | 2D FEM solver | `fem_solver_status`, `validate_fem_model`, `load_fem_project`, `solve_fem_model`, `check_fem_model` |
+| 3D frame solver | `solve_frame3d` |
 | reporting | `generate_steel_report_pdf` |
-| driving the running app | fifteen `gui_*` tools, see the last section |
+| driving the running app | eighteen `gui_*` tools, see the last section |
 
 `generate_steel_report_pdf` sits in its own group on purpose: the name is
 historical, but the report carries steel, timber, cross-laminated timber,
@@ -48,8 +49,8 @@ server next to the app, so no Rust toolchain is needed:
 
 | platform | path |
 |---|---|
-| Windows | `%LOCALAPPDATA%\Open FEM2D Studio\openaec-mcp-server.exe` |
-| macOS | `/Applications/Open FEM2D Studio.app/Contents/MacOS/openaec-mcp-server` |
+| Windows | `%LOCALAPPDATA%\Open FEM Studio\openaec-mcp-server.exe` |
+| macOS | `/Applications/Open FEM Studio.app/Contents/MacOS/openaec-mcp-server` |
 | Linux (.deb) | `/usr/bin/openaec-mcp-server` |
 
 It is wired in through `bundle.externalBin` in `src-tauri/tauri.bundel.conf.json`,
@@ -90,7 +91,7 @@ Add an entry to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "openaec-fem": {
-      "command": "C:\\Users\\you\\AppData\\Local\\Open FEM2D Studio\\openaec-mcp-server.exe"
+      "command": "C:\\Users\\you\\AppData\\Local\\Open FEM Studio\\openaec-mcp-server.exe"
     }
   }
 }
@@ -101,11 +102,11 @@ The config file lives at:
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
-Restart Claude Desktop after editing. All 41 tools should appear in the tools
+Restart Claude Desktop after editing. All 45 tools should appear in the tools
 picker. For Claude Code:
 
 ```bash
-claude mcp add openaec-fem -- "C:\Users\you\AppData\Local\Open FEM2D Studio\openaec-mcp-server.exe"
+claude mcp add openaec-fem -- "C:\Users\you\AppData\Local\Open FEM Studio\openaec-mcp-server.exe"
 ```
 
 To raise the log level (logs go to **stderr** so they never collide with
@@ -568,7 +569,7 @@ silently. The steel and concrete check tools run entirely in Rust, so
 
 ## GUI tools: driving the running desktop app (`gui_*`)
 
-Fifteen tools operate the **running** Open FEM2D Studio desktop app through
+Seventeen tools operate the **running** Open FEM Studio desktop app through
 its control channel. They are not engine calls and are therefore outside the
 three-ways rule — they *are* the way to the GUI.
 
@@ -576,7 +577,7 @@ Start the app with the channel enabled:
 
 ```
 set OPENAEC_GUI_CONTROL=1
-"%LOCALAPPDATA%\Open FEM2D Studio\open-fem2d-studio.exe"
+"%LOCALAPPDATA%\Open FEM Studio\open-fem2d-studio.exe"
 ```
 
 The app then listens on `127.0.0.1:<free port>` with a per-session token and
@@ -592,6 +593,8 @@ on exit (`gui_quit` exits through the app's own path so that happens).
 | `gui_status` | reachable? pid, port, version, active view, selection, member count |
 | `gui_load_model {path}` | loads a `.femp`/`.ifcfem2d` (read by the app process) |
 | `gui_build_model {...}` | builds nodes/beams/supports/loads through the store actions |
+| `gui_build_3d_model {...}` | builds a 3D frame in metres, with supports, nodal loads and optional member profiles |
+| `gui_configure_3d_view {...}` | sets the 3D camera, visibility, profile volumes and X/Y/Z structural grid |
 | `gui_select_member {id}` | selects a member as if clicked |
 | `gui_set_cage {beam_id, cage}` | sets `checkConfig.betonKorf` (same `ReinforcementCage` as `check_concrete_beam`) |
 | `gui_set_analysis {analysis_type}` | `eersteOrde` / `tweedeOrdeGeometrisch` / `tweedeOrdeFysisch` |

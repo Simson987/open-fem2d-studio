@@ -107,6 +107,8 @@ interface Props {
    * uit de normaalDRUK en niet uit de meetkunde.
    */
   overwegendVerticaal: boolean;
+  /** Een ruimtelijke solver levert Mz zelf; pas de uitleg daarop aan. */
+  spatialModel?: boolean;
   idPrefix?: string;
 }
 
@@ -115,6 +117,7 @@ export default function KolomVelden({
   onChange,
   lengteMm,
   overwegendVerticaal,
+  spatialModel = false,
   idPrefix = "kolom",
 }: Props) {
   const { t } = useTranslation("check");
@@ -256,7 +259,7 @@ export default function KolomVelden({
           </div>
 
           {/* ── De tweede as ─────────────────────────────────────────── */}
-          <div className="beton-groep-kop">{t("concrete.column.zAxisHeader")}</div>
+          <div className="beton-groep-kop">{t(spatialModel ? "concrete.column.zAxisHeader3d" : "concrete.column.zAxisHeader")}</div>
 
           <label className="beton-rij" htmlFor={`${idPrefix}-schoring-z`}>
             <span className="beton-label">{t("concrete.column.bracingZ")}</span>
@@ -328,7 +331,7 @@ export default function KolomVelden({
 
           <div className="beton-hint">
             {l0zMm !== null && lengteMm > 0 && <>l₀,z = {formatLength(l0zMm)} mm. </>}
-            {t("concrete.column.zAxisHint")}
+            {t(spatialModel ? "concrete.column.zAxisHint3d" : "concrete.column.zAxisHint")}
           </div>
 
           {/* ── §9.5 ──────────────────────────────────────────────────── */}

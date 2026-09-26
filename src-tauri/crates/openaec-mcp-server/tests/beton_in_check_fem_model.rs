@@ -36,7 +36,10 @@ const STAAL_MODELPAD: &str =
     concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/portaal.ifcfem2d");
 
 async fn eis_node() {
-    let status = sidecar::status(&SidecarOpties::default()).await;
+    // Respect OPENAEC_NODE just like the production server does. Using
+    // `default()` here made this end-to-end test ignore an explicitly supplied
+    // bundled runtime and then depend on the host-wide PATH by accident.
+    let status = sidecar::status(&SidecarOpties::uit_omgeving()).await;
     assert!(
         status.available,
         "Deze test vereist Node.js {} of nieuwer. Gemeld: [{}] {}",

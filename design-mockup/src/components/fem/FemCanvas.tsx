@@ -614,6 +614,10 @@ export default function FemCanvas(props: FemCanvasProps) {
    */
   const [beamDoorgaan, setBeamDoorgaan] = useState(false);
   const [plateCorners, setPlateCorners] = useState<number[]>([]);
+  const [selectedPlateElement, setSelectedPlateElement] = useState<{
+    plateId: number;
+    elementId: number;
+  } | null>(null);
   // Openinggereedschap (stap 2): rechthoek slepen binnen een plaat. Start en
   // eind in modelcoördinaten (mm, gesnapt), de plaat waarin gestart is.
   const [openingDrag, setOpeningDrag] = useState<{
@@ -640,6 +644,11 @@ export default function FemCanvas(props: FemCanvasProps) {
   // model afhankelijk, dus niet opnieuw bij pannen, zoomen of hover.
   const toonKipsteunen = displayFlags.kipsteunen !== false;
   // Weergavevlaggen van het venster Zichtbaarheid (issue #47).
+  const toonKnopen = vlagAan(displayFlags, "knopen");
+  const toonStaven = vlagAan(displayFlags, "staven");
+  const toonPlaten = vlagAan(displayFlags, "platen");
+  const toonBelastingen = vlagAan(displayFlags, "belastingen");
+  const toonAssenstelsel = vlagAan(displayFlags, "assenstelsel");
   const toonKnoopnummers = vlagAan(displayFlags, "knoopnummers");
   const toonStaafnummers = vlagAan(displayFlags, "staafnummers");
   const toonPeilmaten = vlagAan(displayFlags, "peilmaten");
@@ -2226,7 +2235,7 @@ export default function FemCanvas(props: FemCanvasProps) {
       const rect = svg.getBoundingClientRect();
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
-      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      const factor = e.deltaY < 0 ? 1.35 : 1 / 1.35;
       setView(v => {
         const nextScale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, v.scale * factor));
         if (nextScale === v.scale) return v;
@@ -3299,7 +3308,11 @@ export default function FemCanvas(props: FemCanvasProps) {
           d={pad}
           fillRule="evenodd"
           className={`fem-plate${isSel ? " selected" : ""}`}
-          onClick={(e) => { if (tool === "select") { e.stopPropagation(); setSelection({ type: "plate", id: pl.id }); } }}
+          onClick={(e) => { if (tool === "select") {
+            e.stopPropagation();
+            setSelectedPlateElement(null);
+            setSelection({ type: "plate", id: pl.id });
+          } }}
         />
         {openingen.map((o) => (
           <path key={`po${pl.id}-${o.id}`} d={lus(o.punten)} className="fem-plate-opening" pointerEvents="none" />
@@ -3388,13 +3401,39 @@ export default function FemCanvas(props: FemCanvasProps) {
     const platenRes = overlayResult?.plateElements;
     if (!platenRes || platenRes.length === 0) return null;
     let min = Infinity, max = -Infinity;
+    // Elementspanningen zijn constant per element. Voor een leesbaar continu
+    // contourbeeld middelen we ze eerst in elke gedeelde meshknoop. Elk
+    // element gebruikt daarna dezelfde hoekwaarden als zijn buren, zodat de
+    // kleur aan een elementrand niet verspringt.
+    const somPerKnoop = new Map<string, { som: number; aantal: number }>();
+    const sleutel = (x: number, z: number) => `${x.toFixed(6)}:${z.toFixed(6)}`;
     for (const pr of platenRes) {
       const r = pr.ranges[plaatComponent];
       if (r) { min = Math.min(min, r.min); max = Math.max(max, r.max); }
+      for (const element of pr.elements) {
+        const waarde = element[plaatComponent];
+        for (const hoek of element.corners) {
+          const key = sleutel(hoek.x, hoek.z);
+          const huidig = somPerKnoop.get(key) ?? { som: 0, aantal: 0 };
+          huidig.som += waarde;
+          huidig.aantal += 1;
+          somPerKnoop.set(key, huidig);
+        }
+      }
     }
     if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
-    return { platenRes, min, max };
+    const waardePerKnoop = new Map(Array.from(somPerKnoop, ([key, waarde]) =>
+      [key, waarde.som / waarde.aantal] as const));
+    return { platenRes, min, max, waardePerKnoop, sleutel };
   }, [overlayResult, plaatComponent, displayFlags.plaatContour, showLoads]);
+
+  const geselecteerdPlaatElement = useMemo(() => {
+    if (!plaatContourData || !selectedPlateElement ||
+        selection?.type !== "plate" || selection.id !== selectedPlateElement.plateId) return null;
+    const plaat = plaatContourData.platenRes.find((item) => item.plateId === selectedPlateElement.plateId);
+    const element = plaat?.elements.find((item) => item.elementId === selectedPlateElement.elementId);
+    return element ? { ...selectedPlateElement, waarde: element[plaatComponent] } : null;
+  }, [plaatContourData, selectedPlateElement, selection, plaatComponent]);
 
   // ── Plaattoets op het canvas (issue #15) ────────────────────────────────
   // Per getoetst element de omhullende UC als kleur, en per plaat een badge
@@ -3978,7 +4017,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         })()}
 
         {/* Plates BELOW beams (so beam lines render on top) */}
-        <g className="fem-plates-layer">
+        {toonPlaten && <g className="fem-plates-layer">
           {plates.map(renderPlate)}
           {/* Spanningscontouren (P3.2): elementvlakken op de gekozen
               component, in dezelfde laag boven de basis-plaatpolygonen maar
@@ -3986,37 +4025,60 @@ export default function FemCanvas(props: FemCanvasProps) {
               staafdiagrammen blijven dus onaangetast. pointerEvents none:
               kliks vallen door naar de plaatpolygoon (selectie werkt). */}
           {plaatContourData && (
-            <g pointerEvents="none">
+            <g pointerEvents={tool === "select" ? "visiblePainted" : "none"}>
               {plaatContourData.platenRes.flatMap(pr =>
                 pr.elements.map(el => {
-                  const pts = el.corners.map(c => {
-                    const p = worldToScreen(c.x, c.z);
-                    return `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
-                  }).join(" ");
+                  const screenCorners = el.corners.map(c => worldToScreen(c.x, c.z));
+                  const pts = screenCorners.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
                   const span = plaatContourData.max - plaatContourData.min;
-                  const t = span > 1e-12
-                    ? (el[plaatComponent] - plaatContourData.min) / span
-                    : 0.5; // uniform veld → middenkleur
+                  const hoekwaarden = el.corners.map((corner) =>
+                    plaatContourData.waardePerKnoop.get(plaatContourData.sleutel(corner.x, corner.z)) ?? el[plaatComponent]);
+                  let minIndex = 0, maxIndex = 0;
+                  hoekwaarden.forEach((waarde, index) => {
+                    if (waarde < hoekwaarden[minIndex]) minIndex = index;
+                    if (waarde > hoekwaarden[maxIndex]) maxIndex = index;
+                  });
+                  const tMin = span > 1e-12 ? (hoekwaarden[minIndex] - plaatContourData.min) / span : 0.5;
+                  const tMax = span > 1e-12 ? (hoekwaarden[maxIndex] - plaatContourData.min) / span : 0.5;
+                  const gradientId = `plaat-gradient-${pr.plateId}-${el.elementId}`;
                   const toonMesh = displayFlags.plaatMesh !== false;
+                  const geselecteerd = geselecteerdPlaatElement?.plateId === pr.plateId &&
+                    geselecteerdPlaatElement.elementId === el.elementId;
                   return (
-                    <polygon
-                      key={`pc${pr.plateId}-${el.elementId}`}
-                      points={pts}
-                      fill={contourKleur(t)}
-                      fillOpacity={0.85}
-                      stroke={toonMesh ? "rgba(15, 23, 42, 0.35)" : "none"}
-                      strokeWidth={toonMesh ? 0.6 : 0}
-                    />
+                    <g key={`pc${pr.plateId}-${el.elementId}`}>
+                      {minIndex !== maxIndex && <defs>
+                        <linearGradient id={gradientId} gradientUnits="userSpaceOnUse"
+                          x1={screenCorners[minIndex].x} y1={screenCorners[minIndex].y}
+                          x2={screenCorners[maxIndex].x} y2={screenCorners[maxIndex].y}>
+                          <stop offset="0%" stopColor={contourKleur(tMin)} />
+                          <stop offset="100%" stopColor={contourKleur(tMax)} />
+                        </linearGradient>
+                      </defs>}
+                      <polygon
+                        points={pts}
+                        fill={minIndex === maxIndex ? contourKleur(tMin) : `url(#${gradientId})`}
+                        fillOpacity={0.88}
+                        stroke={geselecteerd ? "#111827" : toonMesh ? "rgba(15, 23, 42, 0.35)" : "none"}
+                        strokeWidth={geselecteerd ? 2.2 : toonMesh ? 0.6 : 0}
+                        role={tool === "select" ? "button" : undefined}
+                        aria-label={tool === "select" ? `Plaatelement ${el.elementId}` : undefined}
+                        onClick={tool === "select" ? (event) => {
+                          event.stopPropagation();
+                          setSelection({ type: "plate", id: pr.plateId });
+                          setSelectedPlateElement({ plateId: pr.plateId, elementId: el.elementId });
+                        } : undefined}
+                      />
+                    </g>
                   );
                 })
               )}
             </g>
           )}
-        </g>
+        </g>}
 
         {/* Plaattoets: elementen gekleurd naar hun omhullende UC, boven de
             spanningscontouren en onder de staven. */}
-        {plaatUcData && (
+        {toonPlaten && plaatUcData && (
           <g className="fem-plaat-uc" pointerEvents="none">
             {plaatUcData.flatMap((p) =>
               p.elementen.map((el) => (
@@ -4042,7 +4104,7 @@ export default function FemCanvas(props: FemCanvasProps) {
 
         {/* Aanzicht op ware grootte (issue #45): ONDER de systeemlijnen, zodat
             die zichtbaar en aanklikbaar blijven; de laag zelf vangt geen muis. */}
-        {toonAanzicht && aanzichten.length > 0 && (
+        {toonStaven && toonAanzicht && aanzichten.length > 0 && (
           <AanzichtLaag
             aanzichten={aanzichten}
             naarScherm={worldToScreen}
@@ -4052,7 +4114,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         )}
 
         {/* Beams */}
-        {beamsWithCoords.map(({ b, p1, p2 }) => {
+        {toonStaven && beamsWithCoords.map(({ b, p1, p2 }) => {
           const isSel = isBeamInSelection(b.id, selection);
           const isSnap = snapBeam === b.id;
           const selectBeam = (e: React.MouseEvent) => {
@@ -4097,7 +4159,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         {/* Kipsteunen: symbolen langs de staaf, en van de geselecteerde of
             aangewezen staaf de kipveldlengtes in mm. Boven de staven, zodat
             een symbool niet achter de staaflijn verdwijnt. */}
-        {toonKipsteunen && kipBeelden.length > 0 && (
+        {toonStaven && toonKipsteunen && kipBeelden.length > 0 && (
           <KipsteunLaag
             beelden={kipBeelden}
             naarScherm={worldToScreen}
@@ -4191,10 +4253,10 @@ export default function FemCanvas(props: FemCanvasProps) {
         {/* Zonder "Belastingwaarden" (issue #47) blijven de pijlen staan en
             verdwijnen alleen de getallen (CSS: .zonder-waarden). */}
         <g className={`fem-loads-layer${vlagAan(displayFlags, "lastWaarden") ? "" : " zonder-waarden"}`}>
-          {activeLoads.map(renderLoad)}
+          {toonBelastingen && activeLoads.map(renderLoad)}
         </g>
         {/* Automatisch eigen gewicht (issue #42) — alleen-lezen, eigen component. */}
-        {showLoads && !resultsMode && eigenGewicht && eigenGewicht.caseId === activeLoadCaseId && (
+        {toonBelastingen && showLoads && !resultsMode && eigenGewicht && eigenGewicht.caseId === activeLoadCaseId && (
           <EigenGewichtLaag overzicht={eigenGewicht} nodes={nodes} beams={beams} plates={plates}
             worldToScreen={worldToScreen} autoLabel={tCommon("eigenGewicht.auto")} />
         )}
@@ -4203,7 +4265,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         {vlagAan(displayFlags, "opleggingen") && supports.map(renderSupport)}
 
         {/* Nodes */}
-        {nodes.map(n => {
+        {toonKnopen && nodes.map(n => {
           const p = worldToScreen(n.x, n.z);
           const isSnap = snapNode === n.id;
           const isSel = isNodeInSelection(n.id, selection);
@@ -4682,7 +4744,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         {/* Assenstelsel-widget: +X (rechts), +Z (omhoog) en een boogpijl om de
             y-as die de positieve My-richting toont — zelfde draairichting als
             een positief puntmoment op het canvas (sweep 1). */}
-        <div
+        {toonAssenstelsel && <div
           className="fem-hud-card fem-coord-widget"
           style={{ marginTop: 6, padding: 6 }}
           title={tCommon("canvas.hud.axesTitle")}
@@ -4720,7 +4782,7 @@ export default function FemCanvas(props: FemCanvasProps) {
             {/* Oorsprong */}
             <circle cx={26} cy={41} r={2.5} fill="var(--theme-accent)" />
           </svg>
-        </div>
+        </div>}
       </div>
       <div className="fem-hud fem-hud-tr">
         <div className="fem-hud-card fem-hud-mono">
@@ -4827,6 +4889,17 @@ export default function FemCanvas(props: FemCanvasProps) {
             </div>
             <span style={{ fontSize: 10, opacity: 0.7 }}>
               {PLAAT_COMPONENTEN[plaatComponent].eenheid}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {geselecteerdPlaatElement && (
+        <div className="fem-hud" style={{ left: 12, bottom: 54 }}>
+          <div className="fem-hud-card" style={{ padding: "7px 10px", fontSize: 11 }}>
+            <strong>Plaatelement {geselecteerdPlaatElement.elementId}</strong>
+            <span className="fem-hud-mono" style={{ marginLeft: 8 }}>
+              {PLAAT_COMPONENTEN[plaatComponent].label} = {fmtLegenda(geselecteerdPlaatElement.waarde)} {PLAAT_COMPONENTEN[plaatComponent].eenheid}
             </span>
           </div>
         </div>

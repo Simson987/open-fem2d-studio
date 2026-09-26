@@ -89,7 +89,7 @@ function TitleBar({
       <div className="titlebar-drag" data-tauri-drag-region />
 
       <div className="titlebar-left">
-        <div className="titlebar-icon" title="Open FEM2D Studio">
+        <div className="titlebar-icon" title="Open FEM Studio">
           {/* Logo — gestyleerd portaal-frame met scharnier-opleggingen, FE-knopen
               en een doorbuigingscurve. Accent-tile + wit lijnwerk. */}
           <svg
@@ -98,7 +98,7 @@ function TitleBar({
             viewBox="0 0 64 64"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
-            aria-label="Open FEM2D Studio"
+            aria-label="Open FEM Studio"
           >
             <rect x="0" y="0" width="64" height="64" rx="12" fill="var(--theme-accent)" />
             {/* Portaal-frame: kolommen + bovenligger */}

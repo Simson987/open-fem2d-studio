@@ -5,6 +5,7 @@
   "tabs": {
     "general": "General",
     "appearance": "Appearance",
+    "calculation": "Calculation",
     "editor": "Editor",
     "files": "Files",
     "shortcuts": "Shortcuts",
@@ -30,6 +31,29 @@
     "contrast": "High contrast",
     "font": "Font",
     "uiFontSize": "UI Font Size"
+  },
+  "calculation": {
+    "engine": "Calculation engine",
+    "solver": "Solver",
+    "automatic": "Automatic (recommended)",
+    "automaticDescription": "Open FEM automatically selects one available solver that supports the complete analysis.",
+    "manualDescription": "{{solver}} is used when it supports the requested analysis.",
+    "available": "Available",
+    "unavailable": "Not included yet",
+    "license": "License",
+    "version": "Version",
+    "supports": "Supports",
+    "adapterPending": "The Rust adapter is registered and becomes selectable when it is shipped with the app.",
+    "analysis": {
+      "linear": "linear",
+      "p-delta": "second order P-Δ",
+      "material-nonlinear": "material nonlinear"
+    },
+    "elements": {
+      "frame": "frame",
+      "plate": "plate",
+      "solid": "solid"
+    }
   },
   "editor": {
     "general": "General",
@@ -77,7 +101,7 @@
     "timberGroup": "Timber strength classes (EN 338 / EN 14080)"
   },
   "about": {
-    "appName": "Open FEM2D Studio",
+    "appName": "Open FEM Studio",
     "version": "Version",
     "framework": "Framework",
     "license": "License",

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, useReducer, lazy, Suspense } from "react";
 import { zonderResultaten } from "./lib/weergaveModel";
 import { undoRoute, moetEerstVastleggen } from "./lib/undoRoute";
 import { useTranslation } from "react-i18next";
@@ -25,6 +25,30 @@ import CheckPanel, { CheckPanelToggle } from "./components/panels/CheckPanel";
 import FemProjectTree from "./components/fem/FemProjectTree";
 import FemProperties from "./components/fem/FemProperties";
 import FemCanvas from "./components/fem/FemCanvas";
+import { FRAME3D_SUPPORT_PRESETS, addFrame3DSurfaceLoad, setFrame3DSupport, withFrame3DSelfWeight, type Frame3DModel } from "./components/frame3d/frame3dModel";
+import type { Frame3DTool, Frame3DView } from "./components/frame3d/frame3dCommands";
+import type { Frame3DSelection } from "./components/frame3d/frame3dSelection";
+import type { Frame3DViewSet } from "./components/frame3d/frame3dViewSets";
+import { readFrame3DVisibility, saveFrame3DVisibility } from "./components/frame3d/frame3dVisibility";
+import { convert2DTo3D } from "./components/frame3d/convert2DTo3D";
+import { solveFrame3D, solveFrame3DCombination, type Frame3DSolveResult } from "./components/frame3d/frame3dSolver";
+import Frame3DReport from "./components/frame3d/Frame3DReport";
+import Frame3DExplorer from "./components/frame3d/Frame3DExplorer";
+import Frame3DProperties from "./components/frame3d/Frame3DProperties";
+import {
+  runFrame3DSteelChecks,
+  type Frame3DSteelChecks,
+} from "./components/frame3d/frame3dSteelCheck";
+import {
+  runFrame3DConcreteChecks,
+  type Frame3DConcreteChecks,
+} from "./components/frame3d/frame3dConcreteCheck";
+import {
+  SOLVER_PREFERENCE_KEY,
+  normaliseSolverPreference,
+  resolveSolver,
+  type SolverAnalysisKind,
+} from "./core/solver/SolverRegistry";
 import LibraryDialog, { type LibraryTab } from "./components/settings/LibraryDialog";
 import TableView from "./components/table/TableView";
 import type { TableDataset, TableViewApi } from "./components/table/tableTypes";
@@ -35,7 +59,6 @@ import { windUitgangspunten } from "./lib/wind/windGenerator";
 import { useWindGenerator } from "./stores/windStore";
 import { pasRapportSnapshotToe, rapportSnapshot, useReportStore } from "./stores/reportStore";
 import { snoeiCheckFocus } from "./lib/verdwenenStaven";
-import { setSetting as zetInstelling } from "./store";
 import Sheet from "./components/openaec/Sheet";
 import { getDetachedParams, useWindowManager } from "./hooks/useWindowManager";
 // Het bedieningskanaal (OPENAEC_GUI_CONTROL=1): dezelfde closures als de knoppen,
@@ -86,7 +109,7 @@ import { WEERGAVE_VOORKEUREN_SLEUTEL, metVoorkeuren, voorkeurenVan } from "./lib
 import { bouwMultiInput } from "./lib/modelNaarSolverInput";
 import {
   EIGEN_GEWICHT_STANDAARD_AAN, STANDAARD_ACTIEF_GEVAL_ID, eigenGewichtAanbodVanToepassing,
-  standaardBelastinggevallen,
+  standaardBelastinggevallen, eigenGewichtGeval,
 } from "./lib/eigenGewicht";
 import { eigenGewichtOverzicht } from "./lib/eigenGewichtOverzicht";
 import { controleerVoorRekenen, leesbareRekenfout } from "./lib/rekenPoort";
@@ -127,6 +150,31 @@ import "./App.css";
 import { bijlageUitBestand, type NationaleBijlageCode } from "./lib/normAanduidingen";
 
 const ThreeViewer = lazy(() => import("./components/panels/ThreeViewer"));
+const Frame3DEditor = lazy(() => import("./components/frame3d/Frame3DEditor"));
+
+interface Frame3DHistory {
+  model: Frame3DModel;
+  past: Frame3DModel[];
+  future: Frame3DModel[];
+}
+
+type Frame3DAction =
+  | { type: "edit" | "replace"; model: Frame3DModel }
+  | { type: "undo" | "redo" };
+
+function frame3dHistoryReducer(state: Frame3DHistory, action: Frame3DAction): Frame3DHistory {
+  if (action.type === "replace") return { model: action.model, past: [], future: [] };
+  if (action.type === "edit") {
+    if (action.model === state.model) return state;
+    return { model: action.model, past: [...state.past.slice(-99), state.model], future: [] };
+  }
+  if (action.type === "undo") {
+    const previous = state.past[state.past.length - 1];
+    return previous ? { model: previous, past: state.past.slice(0, -1), future: [state.model, ...state.future] } : state;
+  }
+  const next = state.future[0];
+  return next ? { model: next, past: [...state.past, state.model], future: state.future.slice(1) } : state;
+}
 
 /**
  * Rust tussen de laatste modelwijziging en de live-herberekening. Lang genoeg
@@ -177,7 +225,7 @@ function DetachedApp({ view, title }: { view: string; title: string }) {
   useEffect(() => {
     getSetting("theme", "light").then((saved) => applyTheme(saved));
     // Browservenster (window.open-fallback): venstertitel zelf zetten.
-    document.title = `${title} — Open FEM2D Studio`;
+    document.title = `${title} — Open FEM Studio`;
     import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
       getCurrentWindow().show();
     }).catch(() => {});
@@ -285,6 +333,52 @@ function App() {
     void setSetting("theme", value);
   }, []);
   const [activeView, setActiveView] = useState("default");
+  // Eén gezaghebbende modeldimensie. Omzetten naar 3D is bewust eenrichtingsverkeer.
+  const [modelDimension, setModelDimension] = useState<"2d" | "3d">("2d");
+  const [frame3dHistory, dispatchFrame3D] = useReducer(frame3dHistoryReducer, {
+    model: { nodes: [], beams: [] }, past: [], future: [],
+  });
+  const frame3d = frame3dHistory.model;
+  const setFrame3d = useCallback((model: Frame3DModel) => dispatchFrame3D({ type: "edit", model }), []);
+  const [frame3dTool, setFrame3dTool] = useState<Frame3DTool>("select");
+  const [frame3dSelection, setFrame3dSelection] = useState<Frame3DSelection>(null);
+  const [frame3dDeleteToken, setFrame3dDeleteToken] = useState(0);
+  const [frame3dFitToken, setFrame3dFitToken] = useState(0);
+  const [frame3dViewRequest, setFrame3dViewRequest] = useState<{ kind: Frame3DView; token: number }>({ kind: "iso", token: 0 });
+  const [frame3dLoadEditorRequest, setFrame3dLoadEditorRequest] = useState<{ kind: "force" | "moment"; serial: number } | null>(null);
+  const [frame3dSpringEditorRequest, setFrame3dSpringEditorRequest] = useState<{
+    axis: "kx" | "ky" | "kz" | "krx" | "kry" | "krz"; serial: number;
+  } | null>(null);
+  const [frame3dMemberLoadEditorRequest, setFrame3dMemberLoadEditorRequest] = useState(0);
+  const [frame3dMemberPointLoadEditorRequest, setFrame3dMemberPointLoadEditorRequest] = useState(0);
+  const [frame3dThermalLoadEditorRequest, setFrame3dThermalLoadEditorRequest] = useState(0);
+  const [frame3dResult, setFrame3dResult] = useState<Frame3DSolveResult | null>(null);
+  const [frame3dCaseResults, setFrame3dCaseResults] = useState<Map<number, Frame3DSolveResult>>(new Map());
+  const [frame3dCombinationResults, setFrame3dCombinationResults] = useState<Map<number, Frame3DSolveResult>>(new Map());
+  const [frame3dActiveCombinationId, setFrame3dActiveCombinationId] = useState<number | null>(null);
+  const [frame3dSolveError, setFrame3dSolveError] = useState<string | null>(null);
+  const [frame3dChecks, setFrame3dChecks] = useState<Frame3DSteelChecks | null>(null);
+  const [frame3dConcreteChecks, setFrame3dConcreteChecks] = useState<Frame3DConcreteChecks | null>(null);
+  const [frame3dChecksRunning, setFrame3dChecksRunning] = useState(false);
+  const [frame3dChecksError, setFrame3dChecksError] = useState<string | null>(null);
+  const frame3dSolveGenerationRef = useRef(0);
+  const [visibility3DOpen, setVisibility3DOpen] = useState(false);
+  const [frame3dVisibility, setFrame3dVisibility] = useState(readFrame3DVisibility);
+  const [frame3dViewSets, setFrame3dViewSets] = useState<Frame3DViewSet[]>([]);
+  useEffect(() => saveFrame3DVisibility(frame3dVisibility), [frame3dVisibility]);
+  useEffect(() => {
+    frame3dSolveGenerationRef.current += 1;
+    setFrame3dResult(null);
+    setFrame3dCaseResults(new Map());
+    setFrame3dCombinationResults(new Map());
+    setFrame3dActiveCombinationId(null);
+    setFrame3dSolveError(null);
+    setFrame3dChecks(null);
+    setFrame3dConcreteChecks(null);
+    setFrame3dChecksRunning(false);
+    setFrame3dChecksError(null);
+    if (modelDimension === "3d") setSolverStatus({ kind: "ready" });
+  }, [frame3d, modelDimension]);
   // FEM tool state — shared between Ribbon (active highlight) + FemCanvas (action)
   const [femTool, setFemTool] = useState<Tool>("select");
   // Projectgegevens uit de projectinstellingen — voeden onder meer de
@@ -304,6 +398,34 @@ function App() {
     // toetsing (normnaad); een wijziging laat de resultaten vervallen.
     nationaleBijlage: projectInfo.uitgangspunten?.nationaleBijlage ?? null,
   });
+  useEffect(() => {
+    if (modelDimension !== "3d") return;
+    setFrame3dActiveCombinationId(null);
+    const result = frame3dCaseResults.get(fem.activeLoadCaseId) ?? null;
+    setFrame3dResult(result);
+    // Een mislukte rekengang maakt de resultaatmap leeg en zet daarna de
+    // concrete solverfout. Die lege map mag de fout niet in dezelfde commit
+    // weer wissen. Alleen een werkelijk gevulde, geldige resultatenset mag de
+    // oude foutstatus vervangen wanneer de gebruiker van belastinggeval wisselt.
+    if (frame3dCaseResults.size > 0) {
+      setFrame3dSolveError(null);
+      setSolverStatus(result ? { kind: "solved", at: Date.now() } : { kind: "ready" });
+    }
+  }, [fem.activeLoadCaseId, modelDimension, frame3dCaseResults]);
+  useEffect(() => {
+    if (modelDimension !== "3d") return;
+    frame3dSolveGenerationRef.current += 1;
+    setFrame3dResult(null);
+    setFrame3dCaseResults(new Map());
+    setFrame3dCombinationResults(new Map());
+    setFrame3dActiveCombinationId(null);
+    setFrame3dSolveError(null);
+    setFrame3dChecks(null);
+    setFrame3dConcreteChecks(null);
+    setFrame3dChecksRunning(false);
+    setFrame3dChecksError(null);
+    setSolverStatus({ kind: "ready" });
+  }, [fem.rekenInstellingenVersie, modelDimension]);
   // Altijd de verse store, ook vanuit een meldingsknop die in een eerder event
   // is gemaakt (het aanbod "Eigen gewicht naar een eigen geval" bij het openen).
   const femRef = useRef(fem);
@@ -315,6 +437,20 @@ function App() {
     nodes: fem.nodes, beams: fem.beams, plates: fem.plates,
     loadCases: fem.loadCases, selfWeightEnabled: fem.selfWeightEnabled,
   }), [fem.nodes, fem.beams, fem.plates, fem.loadCases, fem.selfWeightEnabled]);
+  const frame3dCalculation = useMemo(() => {
+    if (modelDimension !== "3d") return { model: frame3d, selfWeightError: null as string | null };
+    const eigenGewichtCase = eigenGewichtGeval(fem.loadCases, fem.selfWeightEnabled);
+    if (!eigenGewichtCase) return { model: frame3d, selfWeightError: null as string | null };
+    try {
+      return { model: withFrame3DSelfWeight(frame3d, eigenGewichtCase.id), selfWeightError: null as string | null };
+    } catch (cause) {
+      return {
+        model: frame3d,
+        selfWeightError: cause instanceof Error ? cause.message : String(cause),
+      };
+    }
+  }, [frame3d, modelDimension, fem.loadCases, fem.selfWeightEnabled]);
+  const frame3dCalculationModel = frame3dCalculation.model;
   const biedEigenGewichtGevalAan = eigenGewichtAanbodVanToepassing({
     loadCases: fem.loadCases, selfWeightEnabled: fem.selfWeightEnabled,
   });
@@ -595,7 +731,10 @@ function App() {
     projectInfo: projectInfo as unknown as Record<string, unknown>,
     windInstellingen: windGenerator.instellingen as unknown as Record<string, unknown>,
     rapport: rapportSnapshot() as unknown as Record<string, unknown>,
-  }), [fem, projectInfo, windGenerator.instellingen]);
+    modelDimension,
+    ...(modelDimension === "3d" ? { model3d: frame3d } : {}),
+    ...(modelDimension === "3d" ? { frame3dViewSets } : {}),
+  }), [fem, frame3d, frame3dViewSets, modelDimension, projectInfo, windGenerator.instellingen]);
 
   /**
    * De JSON waarop de dirty-vlag rust: het MODEL, zonder projectgegevens,
@@ -622,6 +761,9 @@ function App() {
   // deze vlag vraagt de dirty-check-effect om de eerstvolgende run als nieuwe
   // baseline te nemen.
   const baselineResetRef = useRef(false);
+  // Een tweede actie tijdens een open dialoog mag geen tweede, identieke
+  // bevestiging starten (bijvoorbeeld twee sluitverzoeken achter elkaar).
+  const unsavedConfirmationPendingRef = useRef(false);
 
   /** Opslaan als — retourneert true als er daadwerkelijk is opgeslagen. */
   const handleSaveProjectAs = useCallback(async (): Promise<boolean> => {
@@ -679,35 +821,41 @@ function App() {
    */
   const confirmUnsavedAction = useCallback(async (): Promise<boolean> => {
     if (!isDirtyRef.current) return true;
-    if (isTauriApp()) {
-      // Faalt de native dialoog (bv. een JS-plugin die een commando aanroept
-      // dat de Rust-plugin niet kent), dan mag dat de gebruiker niet in de app
-      // opsluiten: zonder vangnet breekt onCloseRequested af vóór destroy() en
-      // doet het kruisje niets. Dan vragen we het met de webview-dialoog.
-      try {
-        const { ask, confirm } = await import("@tauri-apps/plugin-dialog");
-        const wantsSave = await ask(t("unsaved.askSave"), {
-          title: t("unsaved.title"),
-          kind: "warning",
-          okLabel: t("unsaved.saveBtn"),
-          cancelLabel: t("unsaved.dontSaveBtn"),
-        });
-        if (wantsSave) return handleSaveProject();
-        // "Niet opslaan" → één extra bevestiging zodat Esc of een misklik geen
-        // werk weggooit.
-        return await confirm(t("unsaved.confirmDiscard"), {
-          title: t("unsaved.title"),
-          kind: "warning",
-          okLabel: t("unsaved.proceedBtn"),
-          cancelLabel: t("unsaved.cancelBtn"),
-        });
-      } catch (error) {
-        console.error("native dialoog voor niet-opgeslagen werk faalde", error);
-        return window.confirm(t("unsaved.confirmDiscard"));
+    if (unsavedConfirmationPendingRef.current) return false;
+    unsavedConfirmationPendingRef.current = true;
+    try {
+      if (isTauriApp()) {
+        // Faalt de native dialoog (bv. een JS-plugin die een commando aanroept
+        // dat de Rust-plugin niet kent), dan mag dat de gebruiker niet in de app
+        // opsluiten: zonder vangnet breekt onCloseRequested af vóór destroy() en
+        // doet het kruisje niets. Dan vragen we het met de webview-dialoog.
+        try {
+          const { ask, confirm } = await import("@tauri-apps/plugin-dialog");
+          const wantsSave = await ask(t("unsaved.askSave"), {
+            title: t("unsaved.title"),
+            kind: "warning",
+            okLabel: t("unsaved.saveBtn"),
+            cancelLabel: t("unsaved.dontSaveBtn"),
+          });
+          if (wantsSave) return handleSaveProject();
+          // "Niet opslaan" → één extra bevestiging zodat Esc of een misklik geen
+          // werk weggooit.
+          return await confirm(t("unsaved.confirmDiscard"), {
+            title: t("unsaved.title"),
+            kind: "warning",
+            okLabel: t("unsaved.proceedBtn"),
+            cancelLabel: t("unsaved.cancelBtn"),
+          });
+        } catch (error) {
+          console.error("native dialoog voor niet-opgeslagen werk faalde", error);
+          return window.confirm(t("unsaved.confirmDiscard"));
+        }
       }
+      // Browser-fallback: window.confirm kent maar twee knoppen.
+      return window.confirm(t("unsaved.confirmDiscard"));
+    } finally {
+      unsavedConfirmationPendingRef.current = false;
     }
-    // Browser-fallback: window.confirm kent maar twee knoppen.
-    return window.confirm(t("unsaved.confirmDiscard"));
   }, [handleSaveProject, t]);
 
   /**
@@ -725,6 +873,12 @@ function App() {
       baselineResetRef.current = true;
       // Vóór het model: de staven verwijzen naar deze doorsneden.
       const overschreven = voegBibliothekenSamen(parsed);
+      dispatchFrame3D({ type: "replace", model: parsed.model3d ?? { nodes: [], beams: [] } });
+      setFrame3dViewSets(parsed.frame3dViewSets ?? []);
+      setFrame3dSelection(null);
+      const volgendeDimensie = parsed.modelDimension === "3d" ? "3d" : "2d";
+      setModelDimension(volgendeDimensie);
+      setActiveView(volgendeDimensie === "3d" ? "frame3d" : "default");
       // De gevolgklasse van het BESTAND, vóór het laden: de standaardcombinaties
       // die bij het openen ontstaan horen bij de klasse van dit project, niet
       // bij die van het vorige.
@@ -813,12 +967,12 @@ function App() {
         const basis = (parsed.projectInfo && typeof parsed.projectInfo === "object"
           ? parsed.projectInfo
           : projectInfo) as typeof projectInfo;
-        void zetInstelling("projectInfo", {
+        void setSetting("projectInfo", {
           ...basis,
           uitgangspunten: { ...(basis.uitgangspunten ?? DEFAULT_UITGANGSPUNTEN), gevolgklasse: geopendeKlasse },
         });
       } else if (parsed.projectInfo && typeof parsed.projectInfo === "object") {
-        void zetInstelling("projectInfo", parsed.projectInfo);
+        void setSetting("projectInfo", parsed.projectInfo);
       }
       if (parsed.windInstellingen && typeof parsed.windInstellingen === "object") {
         windGenerator.setInstellingen(parsed.windInstellingen as Partial<typeof windGenerator.instellingen>);
@@ -906,6 +1060,10 @@ function App() {
   const handleNewProject = useCallback(async () => {
     if (!(await confirmUnsavedAction())) return;
     baselineResetRef.current = true;
+    dispatchFrame3D({ type: "replace", model: { nodes: [], beams: [] } });
+    setFrame3dSelection(null);
+    setModelDimension("2d");
+    setFrame3dViewSets([]);
     fem.loadProjectState({
       nodes: [], beams: [], supports: [], plates: [], loads: [],
       // Zelfde bron als het startmodel (lib/eigenGewicht): het geval "Eigen
@@ -1003,12 +1161,16 @@ function App() {
       locatie: projectInfo.location,
       omschrijving: projectInfo.description,
     },
-    nodes: fem.nodes,
-    beams: fem.beams,
-    supports: fem.supports,
-    loads: fem.loads,
+    // Een project heeft precies één actief modeltype. Na de eenmalige
+    // omzetting mag de IFC-route de oude 2D-compatibiliteitsvelden niet als
+    // tweede constructie exporteren.
+    nodes: modelDimension === "2d" ? fem.nodes : [],
+    beams: modelDimension === "2d" ? fem.beams : [],
+    supports: modelDimension === "2d" ? fem.supports : [],
+    loads: modelDimension === "2d" ? fem.loads : [],
     loadCases: fem.loadCases,
-    plates: fem.plates,
+    model3d: modelDimension === "3d" ? frame3dCalculationModel : undefined,
+    plates: modelDimension === "2d" ? fem.plates : [],
     eigenGewicht: fem.selfWeightEnabled,
     aantalCombinaties: fem.combinations.length,
     combinations: fem.combinations,
@@ -1032,8 +1194,8 @@ function App() {
     // leeg en meldt `verzamelIfcBeperkingen` dat er geen uitslag in staat.
     toetsresultaten: checkResults,
   }), [
-    projectPath, projectInfo,
-    fem.nodes, fem.beams, fem.supports, fem.loads, fem.loadCases,
+    projectPath, projectInfo, modelDimension,
+    fem.nodes, fem.beams, fem.supports, fem.loads, fem.loadCases, frame3dCalculationModel,
     fem.plates, fem.selfWeightEnabled, fem.combinations, checkResults,
     // De rekeninstellingen stonden hier niet, terwijl ze wel in de set
     // OpenFEM2D_Analyse belanden: een gewijzigde scheefstand of een ander
@@ -1163,7 +1325,24 @@ function App() {
   const [resultsTabActive, setResultsTabActive] = useState(false);
   // Tab in the project-tree (verkenner) — controlled door App zodat Berekenen
   // automatisch naar "results" springt.
-  const [treeTab, setTreeTab] = useState<"project" | "results">("project");
+  const [treeTab, setTreeTab] = useState<"project" | "view" | "results">("project");
+  useEffect(() => {
+    if (modelDimension === "3d") setTreeTab("project");
+  }, [modelDimension]);
+  const handleConvertTo3D = useCallback(() => {
+    if (modelDimension === "3d") return;
+    const converted = convert2DTo3D({
+      nodes: fem.nodes,
+      beams: fem.beams,
+      supports: fem.supports,
+      loads: fem.loads,
+    });
+    dispatchFrame3D({ type: "replace", model: converted.model });
+    setFrame3dSelection(null);
+    setModelDimension("3d");
+    setActiveView("frame3d");
+    setTreeTab("view");
+  }, [modelDimension, fem.nodes, fem.beams, fem.supports, fem.loads]);
   // Grid settings (mutated by Grids dialog)
   const [grid, setGrid] = useState<GridSettings>(DEFAULT_GRID);
   const [gridsOpen, setGridsOpen] = useState(false);
@@ -1895,13 +2074,127 @@ function App() {
   // uit de rekengang zelf.
   useEffect(() => {
     if (activeView !== "report") return;
+    // Het 3D-rapport gebruikt de eigen 3D-rekenuitkomst. Zonder deze guard
+    // startte het openen van een 3D-rapport op de achtergrond óók de 2D-kern,
+    // waardoor de statusbalk bleef rekenen en een misleidende 2D-fout kon
+    // verschijnen naast een geldig 3D-resultaat.
+    if (modelDimension === "3d") return;
     if (fem.combinationResults || rapportRekenPogingRef.current) return;
     if (herberekeningGeplandRef.current || lopendeRekengangenRef.current > 0) return;
     void rekenDoorRef.current();
-  }, [activeView, fem.combinationResults, fem.nodes, fem.beams, fem.supports,
+  }, [activeView, modelDimension, fem.combinationResults, fem.nodes, fem.beams, fem.supports,
     fem.loads, fem.plates, fem.rekenInstellingenVersie]);
 
-  const handleSolve = useCallback(() => {
+  const handleSolve = useCallback(async () => {
+    const analysis: SolverAnalysisKind = modelDimension === "3d"
+      ? "p-delta"
+      : fem.analysetype === "eersteOrde"
+        ? "linear"
+        : fem.analysetype === "tweedeOrdeFysisch"
+          ? "material-nonlinear"
+          : "p-delta";
+    try {
+      const preference = normaliseSolverPreference(
+        await getSetting<unknown>(SOLVER_PREFERENCE_KEY, "automatic"),
+      );
+      resolveSolver(preference, {
+        schemaVersion: 1,
+        dimension: modelDimension,
+        analysis,
+        elementFamilies: modelDimension === "3d" ? ["frame"] : fem.plates.length > 0 ? ["frame", "plate"] : ["frame"],
+      });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setSolverStatus({ kind: "error" });
+      setSolverErrorText(message);
+      if (modelDimension === "3d") setFrame3dSolveError(message);
+      void import("./io/notify").then(({ notifyWarning }) =>
+        notifyWarning(i18next.t("common:app.solve.failed"), message)).catch(() => {});
+      return;
+    }
+    if (modelDimension === "3d") {
+      setActiveView("frame3d");
+      setSolverStatus({ kind: "rekenen" });
+      setFrame3dSolveError(null);
+      const generation = ++frame3dSolveGenerationRef.current;
+      try {
+        if (frame3dCalculation.selfWeightError) throw new Error(frame3dCalculation.selfWeightError);
+        const loadedCaseIds = new Set<number>([
+          ...(frame3dCalculationModel.loads ?? []).map((load) => load.caseId ?? 1),
+          ...(frame3dCalculationModel.memberLoads ?? []).map((load) => load.caseId ?? 1),
+          ...(frame3dCalculationModel.memberPointLoads ?? []).map((load) => load.caseId ?? 1),
+          ...(frame3dCalculationModel.thermalLoads ?? []).map((load) => load.caseId ?? 1),
+          ...(frame3dCalculationModel.surfaceLoads ?? []).map((load) => load.caseId ?? 1),
+        ]);
+        if ((frame3dCalculationModel.supports ?? []).some((support) =>
+          Object.keys(support.prescribed ?? {}).length > 0)) {
+          // Opgelegde verplaatsingen zijn een modelrandvoorwaarde en werken in
+          // ieder rekenspoor. Bewaar daarom altijd ook een resultaat onder het
+          // actieve geval, zelfs wanneer eigen gewicht een ander geval vult.
+          loadedCaseIds.add(fem.activeLoadCaseId);
+        }
+        if (loadedCaseIds.size === 0) throw new Error("Voeg minstens één 3D-belasting of opgelegde verplaatsing toe.");
+        const combinations = fem.combinations.filter((combination) =>
+          [...loadedCaseIds].some((caseId) => (combination.factors.get(caseId) ?? 0) !== 0));
+
+        // Elk geval blijft afzonderlijk beschikbaar voor invoercontrole. Iedere
+        // combinatie gaat daarnaast als één volledige lastvector door dezelfde
+        // P-Delta-kern; tweede-orde-uitkomsten worden dus nooit gesuperponeerd.
+        const [casePairs, combinationPairs] = await Promise.all([
+          Promise.all([...loadedCaseIds].map(async (caseId) =>
+            [caseId, await solveFrame3D(frame3dCalculationModel, caseId)] as const)),
+          Promise.all(combinations.map(async (combination) =>
+            [combination.id, await solveFrame3DCombination(frame3dCalculationModel, combination.factors)] as const)),
+        ]);
+        if (generation !== frame3dSolveGenerationRef.current) {
+          const message = `De 3D-berekening is vervallen doordat model of rekeninstellingen tijdens de berekening wijzigden (generatie ${generation} → ${frame3dSolveGenerationRef.current}).`;
+          setFrame3dSolveError(message);
+          setSolverErrorText(message);
+          setSolverStatus({ kind: "error" });
+          return;
+        }
+        const caseResults = new Map(casePairs);
+        const combinationResults = new Map(combinationPairs);
+        const result = caseResults.get(fem.activeLoadCaseId) ?? casePairs[0]?.[1] ?? combinationPairs[0]?.[1];
+        if (!result) throw new Error("De 3D-rekenkern leverde geen resultaat voor de aanwezige belastingen.");
+        setFrame3dCaseResults(caseResults);
+        setFrame3dCombinationResults(combinationResults);
+        setFrame3dActiveCombinationId(null);
+        setFrame3dResult(result);
+        setSolverErrorText(null);
+        setSolverStatus({ kind: "solved", at: Date.now() });
+        setTreeTab("results");
+        setFrame3dChecksRunning(true);
+        setFrame3dChecksError(null);
+        const combinationSet = { combinations, results: combinationResults, loadCases: fem.loadCases };
+        const [steel, concrete] = await Promise.allSettled([
+          runFrame3DSteelChecks(frame3d, result, combinationSet),
+          runFrame3DConcreteChecks(frame3d, result, combinationSet),
+        ]);
+        if (generation !== frame3dSolveGenerationRef.current) return;
+        setFrame3dChecks(steel.status === "fulfilled" ? steel.value : null);
+        setFrame3dConcreteChecks(concrete.status === "fulfilled" ? concrete.value : null);
+        const errors = [steel, concrete]
+          .filter((item): item is PromiseRejectedResult => item.status === "rejected")
+          .map((item) => item.reason instanceof Error ? item.reason.message : String(item.reason));
+        setFrame3dChecksError(errors.length > 0 ? errors.join("; ") : null);
+      } catch (cause) {
+        if (generation !== frame3dSolveGenerationRef.current) return;
+        const message = cause instanceof Error ? cause.message : String(cause);
+        setFrame3dResult(null);
+        setFrame3dCaseResults(new Map());
+        setFrame3dCombinationResults(new Map());
+        setFrame3dActiveCombinationId(null);
+        setFrame3dSolveError(message);
+        setSolverErrorText(message);
+        setSolverStatus({ kind: "error" });
+        void import("./io/notify").then(({ notifyWarning }) =>
+          notifyWarning(i18next.t("common:app.solve.failed"), message)).catch(() => {});
+      } finally {
+        if (generation === frame3dSolveGenerationRef.current) setFrame3dChecksRunning(false);
+      }
+      return;
+    }
     // Make sure the user is looking at the canvas (not the report/IFC view).
     setActiveView("default");
     // Spring direct naar de Resultaten-tab in BEIDE plekken:
@@ -1922,7 +2215,7 @@ function App() {
     fem.setSelection(null);
     // Rekenen + toetsen; vanaf nu blijft het model live.
     void rekenDoor();
-  }, [fem, rekenDoor]);
+  }, [fem, frame3d, frame3dCalculation, frame3dCalculationModel, modelDimension, rekenDoor]);
 
   // Keyboard: Ctrl+Z / Ctrl+Y for undo/redo. In vrije-tekstvelden blijft het de
   // tekst-undo van de browser; in getalvelden, keuzelijsten e.d. gaat het naar
@@ -1940,7 +2233,10 @@ function App() {
       const t = e.target as HTMLElement | null;
       if (undoRoute(t as HTMLInputElement | null) === "veld") return;
       e.preventDefault();
-      const voerUit = () => (isUndo ? undoRedoRef.current.undo() : undoRedoRef.current.redo());
+      const voerUit = () => {
+        if (activeView === "frame3d") dispatchFrame3D({ type: isUndo ? "undo" : "redo" });
+        else (isUndo ? undoRedoRef.current.undo() : undoRedoRef.current.redo());
+      };
       if (moetEerstVastleggen(t)) {
         // Eerst vastleggen: een half ingetypte waarde wordt een historiestap en
         // gaat dan mee terug. Een tik wachten, zodat undo de stap van de blur kent.
@@ -1952,7 +2248,7 @@ function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [activeView]);
 
   // C1: Ctrl+S / Cmd+S = Opslaan, Ctrl+Shift+S = Opslaan als. Altijd
   // preventDefault zodat de browser-save-dialoog nooit verschijnt; opslaan
@@ -1991,11 +2287,13 @@ function App() {
       // De normkeuze staat óók in de snapshot; zonder deze drie zou een
       // gewijzigde scheefstandbron het bestand niet als "gewijzigd" markeren
       // en stil verloren gaan bij het afsluiten.
-      fem.scheefstandBron, fem.scheefstandHoogteM, fem.scheefstandAantalElementen]);
+      fem.scheefstandBron, fem.scheefstandHoogteM, fem.scheefstandAantalElementen,
+      frame3d]);
 
   // C2: sluitbeveiliging. Tauri: onCloseRequested + native dialoog (dekt de
   // titelbalk-sluitknop, Bestand → Afsluiten en Alt+F4). Browser: beforeunload.
   const confirmUnsavedRef = useRef(confirmUnsavedAction);
+  const closeRequestPendingRef = useRef(false);
   useEffect(() => { confirmUnsavedRef.current = confirmUnsavedAction; });
   useEffect(() => {
     if (isTauriApp()) {
@@ -2004,9 +2302,22 @@ function App() {
       import("@tauri-apps/api/window")
         .then(({ getCurrentWindow }) =>
           getCurrentWindow().onCloseRequested(async (event) => {
+            if (closeRequestPendingRef.current) {
+              event.preventDefault();
+              return;
+            }
             if (!isDirtyRef.current) return;
-            const proceed = await confirmUnsavedRef.current();
-            if (!proceed) event.preventDefault();
+            closeRequestPendingRef.current = true;
+            let proceed = false;
+            try {
+              proceed = await confirmUnsavedRef.current();
+            } catch (error) {
+              console.error("sluitbeveiliging faalde", error);
+            }
+            if (!proceed) {
+              event.preventDefault();
+              closeRequestPendingRef.current = false;
+            }
           })
         )
         .then((u) => { if (disposed) u(); else unlisten = u; })
@@ -2027,7 +2338,7 @@ function App() {
   // zodat venstertitel en documenttab nooit verschillende namen tonen.
   useEffect(() => {
     const name = projectPath ? projectPath.split(/[\\/]/).pop() : i18next.t("ribbon:report.unnamedProject");
-    document.title = `${isDirty ? "● " : ""}${name} — Open FEM2D Studio`;
+    document.title = `${isDirty ? "● " : ""}${name} — Open FEM Studio`;
   }, [isDirty, projectPath]);
 
   // Startvenster verwijderd op verzoek: de app opent direct in het model.
@@ -2217,7 +2528,7 @@ function App() {
   // NIET bij: klikken op een UC-badge moet de toetsing van díé staaf NAAST het
   // model tonen, niet in de plaats daarvan. Zo blijft het model in beeld
   // terwijl je de afleiding leest, en zie je welke staaf je voor je hebt.
-  const isFullWidthView = activeView === "viewer" || activeView === "ifc" || activeView === "report" || activeView === "insights";
+  const isFullWidthView = activeView === "frame3d" || activeView === "viewer" || activeView === "ifc" || activeView === "report" || activeView === "insights";
 
   /**
    * De geselecteerde BETONstaaf, of `null`.
@@ -2256,9 +2567,70 @@ function App() {
 
   const renderMainContent = () => {
     switch (activeView) {
+      case "frame3d":
+        return (
+          <Suspense fallback={<div className="placeholder"><p>{t("app.view.loading3d")}</p></div>}>
+            <Frame3DEditor
+              model={frame3d}
+              calculationModel={frame3dCalculationModel}
+              onChange={setFrame3d}
+              tool={frame3dTool}
+              onToolChange={setFrame3dTool}
+              deleteToken={frame3dDeleteToken}
+              fitRequest={frame3dFitToken}
+              viewRequest={frame3dViewRequest}
+              selection={frame3dSelection}
+              onSelectionChange={setFrame3dSelection}
+              visibilityOpen={visibility3DOpen}
+              onVisibilityClose={() => setVisibility3DOpen(false)}
+              visibility={frame3dVisibility}
+              onVisibilityChange={setFrame3dVisibility}
+              structuralGrid={fem.structuralGrid}
+              result={frame3dResult}
+              checks={frame3dChecks}
+              concreteChecks={frame3dConcreteChecks}
+              solving={solverStatus.kind === "rekenen"}
+              solveError={frame3dSolveError}
+              activeLoadCaseId={fem.activeLoadCaseId}
+              viewSets={frame3dViewSets}
+              currentView={frame3dViewRequest.kind}
+              currentCombinationId={frame3dActiveCombinationId}
+              combinationOptions={fem.combinations.map((combination) => ({ id: combination.id, name: combination.name }))}
+              onViewSetsChange={setFrame3dViewSets}
+              onApplyViewSet={(viewSet) => {
+                setFrame3dVisibility({ ...viewSet.visibility });
+                setFrame3dViewRequest((previous) => ({ kind: viewSet.view, token: previous.token + 1 }));
+                if (viewSet.combinationId === null) {
+                  setFrame3dActiveCombinationId(null);
+                  setFrame3dResult(frame3dCaseResults.get(fem.activeLoadCaseId) ?? null);
+                } else {
+                  setFrame3dActiveCombinationId(viewSet.combinationId);
+                  setFrame3dResult(frame3dCombinationResults.get(viewSet.combinationId) ?? null);
+                }
+              }}
+            />
+          </Suspense>
+        );
       case "ifc":
         return <IfcViewerPanel model={ifcModel} />;
       case "report":
+        if (modelDimension === "3d") {
+          return <Frame3DReport
+            model={frame3dCalculationModel}
+            result={frame3dResult}
+            checks={frame3dChecks}
+            concreteChecks={frame3dConcreteChecks}
+            checksRunning={frame3dChecksRunning}
+            checksError={frame3dChecksError}
+            projectName={projectPath ? projectPath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "") : projectInfo.name}
+            activeLoadCaseId={fem.activeLoadCaseId}
+            activeLoadCaseName={fem.loadCases.find((loadCase) => loadCase.id === fem.activeLoadCaseId)?.name}
+            activeCombinationName={fem.combinations.find((combination) => combination.id === frame3dActiveCombinationId)?.name}
+            activeCombinationFactors={fem.combinations.find((combination) => combination.id === frame3dActiveCombinationId)?.factors}
+            combinations={fem.combinations}
+            combinationResults={frame3dCombinationResults}
+          />;
+        }
         // Doorgeef-regels naar het live rapport (ReportDataContext) — de
         // secties lezen deze modelstate en volgen elke wijziging direct.
         return <ReportPreview data={reportData} onDetach={handleDetachReport} />;
@@ -2271,7 +2643,7 @@ function App() {
           </Suspense>
         );
       default: {
-        // FEM canvas (Start-tab). In de Tabel-weergave wordt dit een
+        // FEM canvas (2D-tab). In de Tabel-weergave wordt dit een
         // split-view: canvas links, tabel rechts, met een versleepbare
         // scheidingsbalk — het model blijft zichtbaar terwijl je in de
         // tabel werkt en rij-selectie licht direct op in het canvas.
@@ -2421,6 +2793,52 @@ function App() {
   // luistert alleen als Rust zegt dat OPENAEC_GUI_CONTROL=1 gezet was.
   const bedieningActief = useBediening({
     fem,
+    modelDimension,
+    frame3d: {
+      model: frame3d,
+      visibility: frame3dVisibility,
+      structuralGrid: fem.structuralGrid,
+      replaceModel: (model) => {
+        dispatchFrame3D({ type: "replace", model });
+        setFrame3dSelection(null);
+        setModelDimension("3d");
+        setActiveView("frame3d");
+        setTreeTab("view");
+      },
+      setVisibility: setFrame3dVisibility,
+      setStructuralGrid: (next) => fem.setStructuralGrid(next),
+      setView: (kind) => {
+        setActiveView("frame3d");
+        setFrame3dViewRequest((previous) => ({ kind, token: previous.token + 1 }));
+      },
+      setSelection: setFrame3dSelection,
+      selectCombination: (id) => {
+        const result = frame3dCombinationResults.get(id);
+        if (!result) return;
+        setFrame3dActiveCombinationId(id);
+        setFrame3dResult(result);
+        setActiveView("frame3d");
+        setResultsTabActive(true);
+        setTreeTab("results");
+        setFrame3dVisibility((value) => ({ ...value, loads: false }));
+      },
+      updateBeam: (id, updates) => setFrame3d({
+        ...frame3d,
+        beams: frame3d.beams.map((beam) => beam.id === id ? { ...beam, ...updates } : beam),
+      }),
+      solve: handleSolve,
+      result: frame3dResult,
+      caseResults: frame3dCaseResults,
+      combinationResults: frame3dCombinationResults,
+      activeCombinationId: frame3dActiveCombinationId,
+      solveError: frame3dSolveError,
+      checks: frame3dChecks,
+      concreteChecks: frame3dConcreteChecks,
+      generation: () => frame3dSolveGenerationRef.current,
+      solving: solverStatus.kind === "rekenen",
+      checksRunning: frame3dChecksRunning,
+      checksError: frame3dChecksError,
+    },
     activeView,
     selection: fem.selection,
     setSelection: fem.setSelection,
@@ -2445,10 +2863,10 @@ function App() {
         onSettingsClick={() => setSettingsOpen(true)}
         onFeedbackClick={() => setFeedbackOpen(true)}
         onSaveClick={() => { void handleSaveProject(); }}
-        onUndoClick={fem.undo}
-        onRedoClick={fem.redo}
-        canUndo={fem.canUndo}
-        canRedo={fem.canRedo}
+        onUndoClick={modelDimension === "3d" ? () => dispatchFrame3D({ type: "undo" }) : fem.undo}
+        onRedoClick={modelDimension === "3d" ? () => dispatchFrame3D({ type: "redo" }) : fem.redo}
+        canUndo={modelDimension === "3d" ? frame3dHistory.past.length > 0 : fem.canUndo}
+        canRedo={modelDimension === "3d" ? frame3dHistory.future.length > 0 : fem.canRedo}
         onPrintClick={() => setActiveView("report")}
       />
       <ToastHost />
@@ -2466,15 +2884,60 @@ function App() {
         onOpenLibrary={(tab) => { setLibraryTab(tab); setLibraryOpen(true); }}
         activeView={activeView}
         onViewChange={setActiveView}
+        modelDimension={modelDimension}
+        onConvertTo3D={handleConvertTo3D}
         femTool={femTool}
         onFemToolChange={setFemTool}
+        frame3dTool={frame3dTool}
+        onFrame3DToolChange={setFrame3dTool}
+        canFrame3DDelete={frame3dSelection !== null}
+        onFrame3DFit={() => setFrame3dFitToken((token) => token + 1)}
+        onFrame3DViewChange={(kind) => setFrame3dViewRequest((previous) => ({ kind, token: previous.token + 1 }))}
+        frame3dView={frame3dViewRequest.kind}
+        onToggle3DVisibility={() => setVisibility3DOpen((open) => !open)}
+        visibility3DOpen={visibility3DOpen}
+        hasFrame3DNodeSelection={frame3dSelection?.type === "node" && frame3d.nodes.some((node) => node.id === frame3dSelection.id)}
+        hasFrame3DBeamSelection={frame3dSelection?.type === "beam" && frame3d.beams.some((beam) => beam.id === frame3dSelection.id)}
+        hasFrame3DPlateSelection={frame3dSelection?.type === "plate" && (frame3d.plates ?? []).some((plate) => plate.id === frame3dSelection.id)}
+        onFrame3DSupportPreset={(preset) => {
+          if (frame3dSelection?.type !== "node" || !frame3d.nodes.some((node) => node.id === frame3dSelection.id)) return;
+          setFrame3d(setFrame3DSupport(frame3d, frame3dSelection.id, FRAME3D_SUPPORT_PRESETS[preset]));
+        }}
+        onFrame3DRequestSpring={(axis) => {
+          setRightPanelOpen(true);
+          setFrame3dSpringEditorRequest((request) => ({ axis, serial: (request?.serial ?? 0) + 1 }));
+        }}
+        onFrame3DRequestNodalLoad={(kind) => {
+          setRightPanelOpen(true);
+          setFrame3dLoadEditorRequest((request) => ({ kind, serial: (request?.serial ?? 0) + 1 }));
+        }}
+        onFrame3DRequestMemberLoad={() => {
+          setRightPanelOpen(true);
+          setFrame3dMemberLoadEditorRequest((serial) => serial + 1);
+        }}
+        onFrame3DRequestMemberPointLoad={() => {
+          setRightPanelOpen(true);
+          setFrame3dMemberPointLoadEditorRequest((serial) => serial + 1);
+        }}
+        onFrame3DRequestThermalLoad={() => {
+          setRightPanelOpen(true);
+          setFrame3dThermalLoadEditorRequest((serial) => serial + 1);
+        }}
+        onFrame3DRequestSurfaceLoad={() => {
+          if (frame3dSelection?.type !== "plate") return;
+          const next = addFrame3DSurfaceLoad(frame3d, frame3dSelection.id, { qx: 0, qy: 0, qz: -5 }, fem.activeLoadCaseId);
+          setFrame3d(next);
+          const load = next.surfaceLoads?.[Math.max(0, (next.surfaceLoads?.length ?? 1) - 1)];
+          if (load) setFrame3dSelection({ type: "surfaceLoad", id: load.id });
+          setRightPanelOpen(true);
+        }}
         onSolve={handleSolve}
-        hasResults={solverResult !== null || fem.envelope !== null}
-        onDelete={fem.deleteSelected}
-        onUndo={fem.undo}
-        onRedo={fem.redo}
-        canUndo={fem.canUndo}
-        canRedo={fem.canRedo}
+        hasResults={modelDimension === "3d" ? frame3dResult !== null : solverResult !== null || fem.envelope !== null}
+        onDelete={modelDimension === "3d" ? () => setFrame3dDeleteToken((token) => token + 1) : fem.deleteSelected}
+        onUndo={modelDimension === "3d" ? () => dispatchFrame3D({ type: "undo" }) : fem.undo}
+        onRedo={modelDimension === "3d" ? () => dispatchFrame3D({ type: "redo" }) : fem.redo}
+        canUndo={modelDimension === "3d" ? frame3dHistory.past.length > 0 : fem.canUndo}
+        canRedo={modelDimension === "3d" ? frame3dHistory.future.length > 0 : fem.canRedo}
         onOpenGrids={() => setGridsOpen(true)}
         onOpenLoadCases={() => { setLoadCasesTab("cases"); setLoadCasesOpen(true); }}
         onOpenLoadCombinations={() => { setLoadCasesTab("combos"); setLoadCasesOpen(true); }}
@@ -2524,7 +2987,7 @@ function App() {
       />
       <div className="content">
         {/* Left panel — Explorer (hidden in full-width views) */}
-        {!isFullWidthView && (
+        {(!isFullWidthView || activeView === "frame3d") && (
           <aside className={`left-panel${leftPanelOpen ? "" : " collapsed"}${isResizing ? " no-transition" : ""}`} style={{ width: leftPanelOpen ? leftPanelWidth : 28 }}>
             {leftPanelOpen ? (
               <>
@@ -2535,7 +2998,40 @@ function App() {
                   </button>
                 </div>
                 <div className="left-panel-body">
-                  <FemProjectTree
+                  {modelDimension === "3d" ? <Frame3DExplorer
+                    model={frame3d}
+                    calculationModel={frame3dCalculationModel}
+                    selection={frame3dSelection}
+                    setSelection={setFrame3dSelection}
+                    result={frame3dResult}
+                    checks={frame3dChecks}
+                    concreteChecks={frame3dConcreteChecks}
+                    checksRunning={frame3dChecksRunning}
+                    checksError={frame3dChecksError}
+                    activeTab={treeTab}
+                    setActiveTab={setTreeTab}
+                    visibility={frame3dVisibility}
+                    setVisibility={setFrame3dVisibility}
+                    displayFlags={displayFlags}
+                    setDisplayFlags={setDisplayFlags}
+                    gridShow={grid.show}
+                    setGridShow={(show) => setGrid((current) => ({ ...current, show }))}
+                    structuralGrid={fem.structuralGrid}
+                    setStructuralGridEnabled={(enabled) => fem.setStructuralGrid((current) => ({ ...current, enabled }))}
+                    activeLoadCaseId={fem.activeLoadCaseId}
+                    combinations={fem.combinations}
+                    combinationResults={frame3dCombinationResults}
+                    activeCombinationId={frame3dActiveCombinationId}
+                    setActiveCombinationId={(id) => {
+                      const result = frame3dCombinationResults.get(id);
+                      if (!result) return;
+                      setFrame3dActiveCombinationId(id);
+                      setFrame3dResult(result);
+                      setResultsTabActive(true);
+                      setTreeTab("results");
+                      setFrame3dVisibility((value) => ({ ...value, loads: false }));
+                    }}
+                  /> : <FemProjectTree
                     nodes={fem.nodes}
                     beams={fem.beams}
                     supports={fem.supports}
@@ -2587,11 +3083,17 @@ function App() {
                     envelope={fem.envelope}
                     displayFlags={displayFlags}
                     setDisplayFlags={setDisplayFlags}
-                    onOpenZichtbaarheid={() => setZichtbaarheidOpen(true)}
                     hasResults={solverResult !== null || fem.envelope !== null}
                     activeTab={treeTab}
                     setActiveTab={setTreeTab}
-                  />
+                    workspace={modelDimension}
+                    gridShow={grid.show}
+                    setGridShow={(show) => setGrid((current) => ({ ...current, show }))}
+                    stramienAan={fem.structuralGrid.enabled}
+                    setStramienAan={(enabled) => fem.setStructuralGrid((current) => ({ ...current, enabled }))}
+                    frame3dVisibility={frame3dVisibility}
+                    setFrame3DVisibility={setFrame3dVisibility}
+                  />}
                 </div>
                 <div className="left-panel-resize" onMouseDown={handleLeftResizeMouseDown} />
               </>
@@ -2608,7 +3110,7 @@ function App() {
         </main>
 
         {/* Right panel — Properties (hidden in full-width views) */}
-        {!isFullWidthView && (
+        {(!isFullWidthView || activeView === "frame3d") && (
           <aside className={`right-panel${rightPanelOpen ? "" : " collapsed"}${isResizing ? " no-transition" : ""}`} style={{ width: rightPanelOpen ? rightPanelWidth : 28 }}>
             {rightPanelOpen ? (
               <>
@@ -2620,7 +3122,22 @@ function App() {
                   </button>
                 </div>
                 <div className="right-panel-body">
-                  {/* In de tab Model (geen lasten, geen resultaten) hoort de toetsing
+                  {modelDimension === "3d" ? <Frame3DProperties
+                    model={frame3d}
+                    selection={frame3dSelection}
+                    onChange={setFrame3d}
+                    result={frame3dResult}
+                    checks={frame3dChecks}
+                    concreteChecks={frame3dConcreteChecks}
+                    checksRunning={frame3dChecksRunning}
+                    checksError={frame3dChecksError}
+                    loadEditorRequest={frame3dLoadEditorRequest}
+                    springEditorRequest={frame3dSpringEditorRequest}
+                    memberLoadEditorRequest={frame3dMemberLoadEditorRequest}
+                    memberPointLoadEditorRequest={frame3dMemberPointLoadEditorRequest}
+                    thermalLoadEditorRequest={frame3dThermalLoadEditorRequest}
+                    activeLoadCaseId={fem.activeLoadCaseId}
+                  /> : <>{/* In de tab Model (geen lasten, geen resultaten) hoort de toetsing
                       niet in beeld; bij de belastinggevallen en Resultaten wel. */}
                   {fem.showLoads && (
                     <CheckPanelToggle open={activeView === "check"} onToggle={() => {
@@ -2645,7 +3162,7 @@ function App() {
                     pendingLoadFocus={fem.pendingLoadFocus}
                     clearPendingLoadFocus={() => fem.setPendingLoadFocus(null)}
                     results={solverResult}
-                  />
+                  /></>}
                 </div>
               </>
             ) : (
@@ -2705,8 +3222,43 @@ function App() {
         </aside>
       )}
 
-      {/* Load case tab strip — hidden on full-width IFC/Report views. */}
-      {!isFullWidthView && (
+      {/* In 3D blijft dezelfde belastinggevallenstrook zichtbaar. Alleen de
+          2D-specifieke opties voor eigen gewicht, fysische niet-lineariteit en
+          scheefstand worden daar niet getoond. */}
+      {(!isFullWidthView || activeView === "frame3d") && (modelDimension === "3d" ? (
+        <LoadCaseTabBar
+          loadCases={fem.loadCases}
+          activeLoadCaseId={fem.activeLoadCaseId}
+          setActiveLoadCaseId={(id) => {
+            fem.setActiveLoadCaseId(id);
+            setFrame3dVisibility((value) => ({ ...value, loads: true }));
+            setResultsTabActive(false);
+            setTreeTab("project");
+          }}
+          addLoadCase={fem.addLoadCase}
+          loads={[
+            ...(frame3dCalculationModel.loads ?? []).map((load) => ({ id: load.id, type: "pointForce" as const, caseId: load.caseId ?? 1 })),
+            ...(frame3dCalculationModel.memberLoads ?? []).map((load) => ({ id: load.id, type: "lineLoad" as const, caseId: load.caseId ?? 1 })),
+            ...(frame3dCalculationModel.memberPointLoads ?? []).map((load) => ({ id: load.id, type: "pointForce" as const, caseId: load.caseId ?? 1 })),
+            ...(frame3dCalculationModel.thermalLoads ?? []).map((load) => ({ id: load.id, type: "thermal" as const, caseId: load.caseId ?? 1 })),
+          ]}
+          showLoads={frame3dVisibility.loads}
+          setShowLoads={(loads) => {
+            setFrame3dVisibility((value) => ({ ...value, loads }));
+            if (!loads) {
+              setResultsTabActive(false);
+              setTreeTab("project");
+            }
+          }}
+          hasResults={frame3dResult !== null}
+          resultsActive={resultsTabActive}
+          onShowResults={() => {
+            setResultsTabActive(true);
+            setTreeTab("results");
+            setFrame3dVisibility((value) => ({ ...value, loads: true }));
+          }}
+        />
+      ) : (
         <LoadCaseTabBar
           loadCases={fem.loadCases}
           activeLoadCaseId={fem.activeLoadCaseId}
@@ -2787,16 +3339,20 @@ function App() {
             }));
           }}
         />
-      )}
+      ))}
       <StatusBar
-        nodeCount={fem.nodes.length}
-        beamCount={fem.beams.length}
-        loadCount={fem.loads.length}
+        nodeCount={modelDimension === "3d" ? frame3d.nodes.length : fem.nodes.length}
+        beamCount={modelDimension === "3d" ? frame3d.beams.length : fem.beams.length}
+        loadCount={modelDimension === "3d"
+          ? (frame3d.loads ?? []).length + (frame3d.memberLoads ?? []).length +
+            (frame3d.memberPointLoads ?? []).length + (frame3d.thermalLoads ?? []).length +
+            (frame3d.supports ?? []).filter((support) => Object.keys(support.prescribed ?? {}).length > 0).length
+          : fem.loads.length}
         zoomPct={activeView === "default" ? zoomPct : undefined}
         solverStatus={solverStatus}
         // Snapknopjes horen bij de tekenweergave; in de rapport-/IFC-weergave
         // valt er niets te snappen.
-        toonSnap={!isFullWidthView}
+        toonSnap={modelDimension === "2d" && !isFullWidthView}
         bedieningActief={bedieningActief}
       />
       <Backstage
@@ -2861,28 +3417,32 @@ function App() {
         />
       )}
       {/* Grids dialog — right-docked sheet, controls grid show/hide/spacing + stramien */}
-      {!isFullWidthView && (
+      {(!isFullWidthView || modelDimension === "3d") && (
         <Sheet open={gridsOpen} title={tRibbon("home.grids")} onClose={() => setGridsOpen(false)}>
           <div className="oa-grid-form">
             <div className="oa-grid-section-title">{t("app.grid.backgroundGrid")}</div>
             <label className="oa-grid-row">
               <span>{t("app.grid.showGrid")}</span>
-              <input type="checkbox" checked={grid.show}
-                onChange={e => setGrid(g => ({ ...g, show: e.target.checked }))} />
+              <input type="checkbox" checked={modelDimension === "3d" ? frame3dVisibility.grid : grid.show}
+                onChange={e => modelDimension === "3d"
+                  ? setFrame3dVisibility(v => ({ ...v, grid: e.target.checked }))
+                  : setGrid(g => ({ ...g, show: e.target.checked }))} />
             </label>
-            <label className="oa-grid-row">
-              <span>{t("app.grid.showGridLines")}</span>
-              <input type="checkbox" checked={grid.showLines}
-                onChange={e => setGrid(g => ({ ...g, showLines: e.target.checked }))} />
-            </label>
-            <label className="oa-grid-row">
-              <span>{t("app.grid.spacing")}</span>
-              <input type="number" step="50" min="50" value={grid.spacingMm}
-                onChange={e => {
-                  const v = Math.max(50, Number(e.target.value) || 500);
-                  setGrid(g => ({ ...g, spacingMm: v }));
-                }} />
-            </label>
+            {modelDimension === "2d" && <>
+              <label className="oa-grid-row">
+                <span>{t("app.grid.showGridLines")}</span>
+                <input type="checkbox" checked={grid.showLines}
+                  onChange={e => setGrid(g => ({ ...g, showLines: e.target.checked }))} />
+              </label>
+              <label className="oa-grid-row">
+                <span>{t("app.grid.spacing")}</span>
+                <input type="number" step="50" min="50" value={grid.spacingMm}
+                  onChange={e => {
+                    const v = Math.max(50, Number(e.target.value) || 500);
+                    setGrid(g => ({ ...g, spacingMm: v }));
+                  }} />
+              </label>
+            </>}
 
             <div className="oa-grid-section-title" style={{ marginTop: 14 }}>{t("app.grid.structural")}</div>
             <label className="oa-grid-row">
@@ -2920,6 +3480,36 @@ function App() {
                 return { ...p, xAxes: [...p.xAxes, { id: `x-${Date.now()}`, label: lbl || `X${p.xAxes.length + 1}`, position: maxPos + 3000 }] };
               })}
             >{t("app.grid.add")}</button>
+
+            {modelDimension === "3d" && <>
+              <div className="oa-grid-subtitle">{t("app.grid.yAxis")}</div>
+              <table className="oa-grid-table">
+                <thead><tr><th>{t("app.grid.label")}</th><th>Y (mm)</th><th></th></tr></thead>
+                <tbody>
+                  {(fem.structuralGrid.yAxes ?? []).map((ax, i) => (
+                    <tr key={ax.id}>
+                      <td><input type="text" value={ax.label}
+                        onChange={e => fem.setStructuralGrid(p => ({ ...p, yAxes: (p.yAxes ?? []).map((a, j) => j === i ? { ...a, label: e.target.value } : a) }))} /></td>
+                      <td><input type="number" step="100" value={ax.position}
+                        onChange={e => fem.setStructuralGrid(p => ({ ...p, yAxes: (p.yAxes ?? []).map((a, j) => j === i ? { ...a, position: Number(e.target.value) || 0 } : a) }))} /></td>
+                      <td><button className="oa-grid-x-btn"
+                        onClick={() => fem.setStructuralGrid(p => ({ ...p, yAxes: (p.yAxes ?? []).filter((_, j) => j !== i) }))}
+                        title={t("delete")}>×</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button className="oa-grid-add-btn"
+                onClick={() => fem.setStructuralGrid(p => {
+                  const axes = p.yAxes ?? [];
+                  const used = new Set(axes.map(a => a.label));
+                  let lbl = "";
+                  for (let k = 1; k <= 99; k++) if (!used.has(String(k))) { lbl = String(k); break; }
+                  const maxPos = axes.length ? Math.max(...axes.map(a => a.position)) : 0;
+                  return { ...p, yAxes: [...axes, { id: `y-${Date.now()}`, label: lbl || `Y${axes.length + 1}`, position: maxPos + 3000 }] };
+                })}
+              >{t("app.grid.add")}</button>
+            </>}
 
             <div className="oa-grid-subtitle">{t("app.grid.zAxis")}</div>
             <table className="oa-grid-table">

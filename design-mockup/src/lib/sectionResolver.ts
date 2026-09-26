@@ -58,6 +58,8 @@ import {
 } from "./profieleditor/eigenDoorsnedenStore";
 import { parseConcreteSection } from "./betonCheckBuilder";
 import { parseVrijMateriaal } from "./vrijMateriaal";
+import { isAluminiumMateriaal, parseAluminiumMateriaal } from "./aluminiumMateriaal";
+import { STEEL_GRADES } from "./steelGrades";
 
 /** E_0,mean in N/mm² per sterkteklasse — EN 338 (C) en EN 14080 (GL). */
 export const TIMBER_E_MEAN: Record<string, number> = {
@@ -171,6 +173,10 @@ export interface ResolvedSection {
     | "beton-bxh"
     /** Beton, T of L — A en I over de banden en niet over b × h. */
     | "beton-vorm"
+    /** Aluminium, rechthoek uit profielnaam. */
+    | "aluminium-bxh"
+    /** Aluminium, geometrie uit de profielcatalogus. */
+    | "aluminium-catalogus"
     | "vrij"
     | "default";
   /**
@@ -266,7 +272,7 @@ function betonDoorsnede(
 }
 
 /** Waar de E-modulus van een staaf vandaan komt. */
-type Materiaalsoort = "vrij" | "hout" | "beton" | "staal";
+type Materiaalsoort = "vrij" | "hout" | "beton" | "staal" | "aluminium" | "onbekend";
 
 /**
  * De E-modulus die bij het MATERIAAL hoort, los van de doorsnede.
@@ -279,6 +285,9 @@ type Materiaalsoort = "vrij" | "hout" | "beton" | "staal";
 function eVanMateriaal(material: string): { E: number; soort: Materiaalsoort } {
   const vrij = parseVrijMateriaal(material);
   if (vrij) return { E: vrij.eMod, soort: "vrij" };
+  const aluminium = parseAluminiumMateriaal(material);
+  if (aluminium) return { E: aluminium.eMod, soort: "aluminium" };
+  if (isAluminiumMateriaal(material)) return { E: NaN, soort: "onbekend" };
   // Een ontbrekend materiaal komt hier niet meer: `resolveSection` houdt het
   // vooraf tegen met een reden, in plaats van het als S235 te lezen.
   const mat = material;
@@ -288,7 +297,8 @@ function eVanMateriaal(material: string): { E: number; soort: Materiaalsoort } {
   // runtime-lijst wél kent maar deze tabel niet; SUPPORTED_TIMBER_GRADES en
   // TIMBER_E_MEAN lopen gelijk, dus in de praktijk gebeurt dat niet.
   if (isHout) return { E: TIMBER_E_MEAN[mat] ?? 11000, soort: "hout" };
-  return { E: E_STAAL, soort: "staal" };
+  if (STEEL_GRADES.includes(mat)) return { E: E_STAAL, soort: "staal" };
+  return { E: NaN, soort: "onbekend" };
 }
 
 /** Een voorbeeld van wat er wél als profielnaam wordt begrepen, per materiaal. */
@@ -298,6 +308,8 @@ function voorbeeldProfiel(soort: Materiaalsoort): string {
     case "beton": return 'een rechthoek als "300x500", een T of L als "T 400x450 bw=200 hf=50", of een eigen doorsnede uit de profieleditor';
     case "vrij":  return 'een rechthoek als "100x200", een catalogusprofiel als "HEA 200" of een eigen doorsnede uit de profieleditor';
     case "staal": return 'een catalogusprofiel als "HEA 200" of een eigen doorsnede uit de profieleditor';
+    case "aluminium": return 'een rechthoek als "100x200" of een eigen doorsnede uit de profieleditor';
+    case "onbekend": return "een herkend constructiemateriaal";
   }
 }
 
@@ -320,6 +332,9 @@ export function resolveSection(material: string | undefined, profile: string | u
   }
   const mat = material;
   const { E, soort } = eVanMateriaal(material);
+  if (soort === "onbekend") {
+    return { ...DEFAULT_DOORSNEDE, reden: `materiaal "${mat}" is niet ondersteund — er wordt niet met staalstijfheid gerekend` };
+  }
 
   // ── 1. Eigen doorsnede uit de profieleditor ────────────────────────────
   //
@@ -351,17 +366,19 @@ export function resolveSection(material: string | undefined, profile: string | u
   }
 
   // ── 2. Doorsnede uit de profielnaam, per materiaalsoort ───────────────
-  if (soort === "vrij") {
+  if (soort === "vrij" || soort === "aluminium") {
     // Vrij materiaal: de doorsnede mag een rechthoek zijn of een
     // catalogusprofiel — "even staal op spanning toetsen" is dezelfde route
     // als natuursteen, alleen met een andere f_toel.
     const rect = parseRechthoek(profile);
     if (rect) {
       const { b, h } = rect;
-      return { E, A: b * h, I: (b * h * h * h) / 12, bron: "vrij" };
+      return { E, A: b * h, I: (b * h * h * h) / 12,
+        bron: soort === "aluminium" ? "aluminium-bxh" : "vrij" };
     }
     const sec = STEEL_SECTIONS[normaliseer(profile ?? "")];
-    if (sec) return { E, A: sec.A, I: sec.Iy, bron: "vrij" };
+    if (sec) return { E, A: sec.A, I: sec.Iy,
+      bron: soort === "aluminium" ? "aluminium-catalogus" : "vrij" };
   } else if (soort === "beton") {
     // Beton: ongescheurde doorsnede met E_cm. De wapening telt niet mee in de
     // stijfheid — de gebruikelijke lineaire aanname voor de krachtsverdeling;
@@ -485,13 +502,15 @@ export function eigenGewichtPerMeter(
  * en van een verlopende staaf nooit een andere dichtheid kunnen krijgen.
  */
 export function dichtheidVanMateriaal(material: string | undefined): number {
-  const mat = material ?? "S235";
+  const mat = material ?? "";
   const vrij = parseVrijMateriaal(material);
-  return (
-    vrij?.dichtheid ??
-    TIMBER_RHO_MEAN[mat] ??
-    (mat in CONCRETE_E_CM ? RHO_BETON : RHO_STAAL)
-  );
+  if (vrij) return vrij.dichtheid;
+  const aluminium = parseAluminiumMateriaal(material);
+  if (aluminium) return aluminium.dichtheid;
+  if (mat in TIMBER_RHO_MEAN) return TIMBER_RHO_MEAN[mat];
+  if (mat in CONCRETE_E_CM) return RHO_BETON;
+  if (STEEL_GRADES.includes(mat)) return RHO_STAAL;
+  throw new Error(`materiaal "${mat || "—"}" heeft geen bekende dichtheid`);
 }
 
 /**
@@ -738,6 +757,7 @@ export function bepaalVerloop(
       "alleen een rechthoek b×h of een I/H-profiel uit de staalcatalogus kan verlopen",
   });
   if (soort === "beton") return nietOndersteund("beton");
+  if (soort === "onbekend" || soort === "aluminium") return nietOndersteund(soort);
   if (isCltProfiel(profile) || isCltProfiel(eind)) return nietOndersteund("kruislaaghout");
 
   // Een eigen doorsnede is alleen bruikbaar als hij een gelast,
@@ -848,4 +868,3 @@ export function bepaalVerloop(
     },
   };
 }
-

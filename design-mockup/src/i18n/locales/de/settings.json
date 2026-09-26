@@ -5,6 +5,7 @@
   "tabs": {
     "general": "Allgemein",
     "appearance": "Darstellung",
+    "calculation": "Berechnung",
     "editor": "Editor",
     "files": "Dateien",
     "shortcuts": "Tastenkürzel",
@@ -30,6 +31,29 @@
     "contrast": "Hoher Kontrast",
     "font": "Schriftart",
     "uiFontSize": "UI-Schriftgröße"
+  },
+  "calculation": {
+    "engine": "Rechenkern",
+    "solver": "Solverauswahl",
+    "automatic": "Automatisch (empfohlen)",
+    "automaticDescription": "Open FEM wählt automatisch einen verfügbaren Solver, der die vollständige Berechnung unterstützt.",
+    "manualDescription": "{{solver}} wird verwendet, wenn dieser Solver die angeforderte Berechnung unterstützt.",
+    "available": "Verfügbar",
+    "unavailable": "Noch nicht enthalten",
+    "license": "Lizenz",
+    "version": "Version",
+    "supports": "Unterstützt",
+    "adapterPending": "Der Rust-Adapter ist registriert und wird auswählbar, sobald er mit der App ausgeliefert wird.",
+    "analysis": {
+      "linear": "linear",
+      "p-delta": "zweite Ordnung P-Δ",
+      "material-nonlinear": "materiell nichtlinear"
+    },
+    "elements": {
+      "frame": "Rahmen",
+      "plate": "Platte",
+      "solid": "Volumen"
+    }
   },
   "editor": {
     "general": "Allgemein",
@@ -77,7 +101,7 @@
     "timberGroup": "Holzfestigkeitsklassen (EN 338 / EN 14080)"
   },
   "about": {
-    "appName": "Open FEM2D Studio",
+    "appName": "Open FEM Studio",
     "version": "Version",
     "framework": "Framework",
     "license": "Lizenz",

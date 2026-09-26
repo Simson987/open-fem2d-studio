@@ -77,8 +77,8 @@ export default function StatusBar({
       <div className="status-bar-left">
         {/* App-logo (mini) — portaal-frame + scharnier-opleggingen, in lijn met
             de TitleBar / Backstage / taakbalk-icoon. */}
-        <span className="status-bar-logo" title="Open FEM2D Studio">
-          <svg width="14" height="14" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-label="Open FEM2D Studio">
+        <span className="status-bar-logo" title="Open FEM Studio">
+          <svg width="14" height="14" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-label="Open FEM Studio">
             <rect x="0" y="0" width="64" height="64" rx="12" fill="var(--theme-accent)" />
             <line x1="14" y1="18" x2="14" y2="46" stroke="white" strokeWidth="3.5" strokeLinecap="round" />
             <line x1="50" y1="18" x2="50" y2="46" stroke="white" strokeWidth="3.5" strokeLinecap="round" />

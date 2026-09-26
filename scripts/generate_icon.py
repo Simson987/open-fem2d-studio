@@ -1,5 +1,5 @@
 """
-Generate professional icon for Open FEM2D Studio.
+Generate professional icon for Open FEM Studio.
 Creates a structural engineering themed icon with triangular mesh pattern.
 """
 from PIL import Image, ImageDraw, ImageFont

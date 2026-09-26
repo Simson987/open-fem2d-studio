@@ -15,6 +15,8 @@ import { BIJLAGEN_GEVULD, STANDAARD_BIJLAGE, type NationaleBijlageCode } from ".
 import type { EigenDoorsnede } from "../lib/profieleditor/types";
 import type { KruipInvoerProject } from "../lib/kruipcoefficient";
 import type { EigenCltOpbouw } from "../lib/profieleditor/cltOpbouwenStore";
+import { parseFrame3DModel, type Frame3DModel } from "../components/frame3d/frame3dModel";
+import { parseFrame3DViewSets, type Frame3DViewSet } from "../components/frame3d/frame3dViewSets";
 
 export const PROJECT_FILE_EXT = "ifcfem2d";
 /**
@@ -134,11 +136,18 @@ export const PROJECT_FILE_EXT = "ifcfem2d";
  *      Ontbreekt het veld, dan is de staaf prismatisch en rekent het bestand
  *      exact zoals voorheen; een oudere versie van de app negeert het veld en
  *      rekent de staaf prismatisch met het beginprofiel (zie femTypes.Beam).
+ *  3 — optioneel `model3d` met aparte knopen en staven in meters. Alleen een
+ *      bestand dat werkelijk 3D-geometrie bevat krijgt versie 3, zodat een
+ *      oudere app het weigert in plaats van de 3D-geometrie stil te verliezen.
+ *      Een zuiver 2D-project blijft versie 2.
  * v1-bestanden blijven leesbaar: de v2-velden zijn optioneel en ontbrekende
  * velden krijgen bij het laden de bestaande defaults (defaultCombinations()
  * en DEFAULT_STRUCTURAL_GRID in useFemStore.loadProjectState).
  */
+/** Versie van zuivere 2D-bestanden (blijft leesbaar door eerdere uitgaven). */
 export const PROJECT_FORMAT_VERSION = 2;
+/** 3D-data vereist een versie die eerdere uitgaven weigeren. */
+export const PROJECT_FORMAT_VERSION_3D = 3;
 
 /** JSON-vorm van één belastingcombinatie: `factors` als { caseId: factor }. */
 export interface ProjectFileCombination {
@@ -199,8 +208,11 @@ function kenmerkUitBestand(raw: unknown): LoadCombination["standaard"] {
  * niet openen" ze zonder verdere bewerking toont.
  */
 export class ProjectBestandFout extends Error {
-  constructor(readonly redenen: string[]) {
+  readonly redenen: string[];
+
+  constructor(redenen: string[]) {
     super(redenen.join(" "));
+    this.redenen = redenen;
     this.name = "ProjectBestandFout";
   }
 }
@@ -272,6 +284,8 @@ export interface ProjectFile {
   format: "open-fem2d-studio-v2";
   version: number;
   savedAt: string;          // ISO timestamp
+  /** Eén gezaghebbende modeldimensie. Ontbreekt alleen in oudere bestanden. */
+  modelDimension?: "2d" | "3d";
   // Model
   nodes: Node[];
   beams: Beam[];
@@ -398,14 +412,24 @@ export interface ProjectFile {
    * manier samengevoegd als de eigen doorsneden.
    */
   eigenCltOpbouwen?: EigenCltOpbouw[];
+  /** Geometrie van een 3D-model; gezaghebbend wanneer modelDimension = "3d". */
+  model3d?: Frame3DModel;
+  /** Benoemde camera-, resultaat- en zichtbaarheidsstanden van de 3D-werkruimte. */
+  frame3dViewSets?: Frame3DViewSet[];
 }
 
 export function serializeProject(state: Omit<ProjectFile, "format" | "version" | "savedAt">): string {
+  const modelDimension = state.modelDimension ?? (state.model3d !== undefined ? "3d" : "2d");
   const file: ProjectFile = {
     format: "open-fem2d-studio-v2",
-    version: PROJECT_FORMAT_VERSION,
+    version: modelDimension === "3d" ? PROJECT_FORMAT_VERSION_3D : PROJECT_FORMAT_VERSION,
     savedAt: new Date().toISOString(),
     ...state,
+    modelDimension,
+    // Canonieke bestanden dragen nooit een tweede actief modeltype. De oude
+    // 2D-lijsten blijven bij 3D alleen als controle- en compatibiliteitsspoor.
+    model3d: modelDimension === "3d" ? parseFrame3DModel(state.model3d) : undefined,
+    frame3dViewSets: modelDimension === "3d" ? parseFrame3DViewSets(state.frame3dViewSets) : undefined,
   };
   return JSON.stringify(file, null, 2);
 }
@@ -439,7 +463,7 @@ const BEKENDE_TOPVELDEN: readonly string[] = [
   "scheefstandEnabled", "scheefstandNoemer", "scheefstandRichting",
   "scheefstandBron", "scheefstandHoogteM", "scheefstandAantalElementen",
   "eigenDoorsneden", "eigenCltOpbouwen", "projectInfo", "windInstellingen",
-  "rapport",
+  "rapport", "modelDimension", "model3d", "frame3dViewSets",
 ];
 
 /**
@@ -461,8 +485,12 @@ export function deserializeProject(text: string): ProjectFile {
   if (typeof parsed.version !== "number") {
     throw new Error("Bestand mist version-tag");
   }
-  if (parsed.version > PROJECT_FORMAT_VERSION) {
+  if (parsed.version > PROJECT_FORMAT_VERSION_3D) {
     throw new Error(`Bestand is opgeslagen met nieuwere versie (${parsed.version}) — werk je app bij`);
+  }
+  const hadExplicitDimension = parsed.modelDimension !== undefined;
+  if (hadExplicitDimension && parsed.modelDimension !== "2d" && parsed.modelDimension !== "3d") {
+    throw new ProjectBestandFout([`Onbekende modeldimensie ${JSON.stringify(parsed.modelDimension)}; alleen "2d" en "3d" bestaan.`]);
   }
   // Structuur. Hier stond `return parsed as ProjectFile` en verder niets: de
   // drie poorten hierboven keken alleen naar de kaft van het bestand.
@@ -483,6 +511,27 @@ export function deserializeProject(text: string): ProjectFile {
   // De weigering hoort hier te vallen, bij het openen, en niet halverwege het
   // laden in de store.
   analysetypeUitBestand(parsed.analysetype, parsed.nonlinearEnabled);
+  if (parsed.model3d !== undefined) {
+    try {
+      parsed.model3d = parseFrame3DModel(parsed.model3d);
+    } catch (error) {
+      throw new ProjectBestandFout([error instanceof Error ? error.message : String(error)]);
+    }
+  }
+  if (parsed.frame3dViewSets !== undefined) {
+    parsed.frame3dViewSets = parseFrame3DViewSets(parsed.frame3dViewSets);
+  }
+  if (hadExplicitDimension && parsed.modelDimension === "2d" && parsed.model3d !== undefined) {
+    throw new ProjectBestandFout(["Een 2D-project mag geen tweede 3D-model bevatten."]);
+  }
+  // Bestanden van de eerste 3D-uitgave hadden nog geen expliciete dimensie.
+  // Een aanwezig 3D-model maakte het project toen al 3D; neem dat hier over.
+  if (parsed.modelDimension === undefined) {
+    parsed.modelDimension = parsed.model3d !== undefined ? "3d" : "2d";
+  }
+  if (parsed.modelDimension === "3d" && parsed.model3d === undefined) {
+    parsed.model3d = parseFrame3DModel(undefined);
+  }
   // Combinatietypen en factoren (basisaudit ruw 29): `combinationsFromFile`
   // weigert een onbekend type en een niet-eindige factor. Hier alvast, zodat
   // een bestand met een tikfout niet half geladen op het scherm komt.
@@ -507,7 +556,7 @@ export async function saveProjectAs(text: string, suggestedName: string): Promis
     const { writeTextFile } = await import("@tauri-apps/plugin-fs");
     const path = await save({
       defaultPath: suggestedName,
-      filters: [{ name: "Open FEM2D Studio project", extensions: [PROJECT_FILE_EXT] }],
+      filters: [{ name: "Open FEM Studio project", extensions: [PROJECT_FILE_EXT] }],
     });
     if (!path) return "";  // user cancelled
     await writeTextFile(path, text);
@@ -553,7 +602,7 @@ export async function openProject(): Promise<{ text: string; path: string } | nu
     const { readTextFile } = await import("@tauri-apps/plugin-fs");
     const selected = await open({
       multiple: false,
-      filters: [{ name: "Open FEM2D Studio project", extensions: [PROJECT_FILE_EXT] }],
+      filters: [{ name: "Open FEM Studio project", extensions: [PROJECT_FILE_EXT] }],
     });
     if (!selected || Array.isArray(selected)) return null;
     const text = await readTextFile(selected as string);

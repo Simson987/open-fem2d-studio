@@ -148,7 +148,7 @@ export default function ReportShell({ onDetach }: ReportShellProps) {
   size: ${pageSize} ${orientation};
   margin: ${margeBoven}mm ${margeRechts}mm ${margeOnder}mm ${margeLinks}mm;
   @bottom-left {
-    content: "Open FEM2D Studio";
+    content: "Open FEM Studio";
     font-family: "Segoe UI", system-ui, sans-serif;
     font-size: 8pt;
     color: #666;
@@ -167,13 +167,11 @@ export default function ReportShell({ onDetach }: ReportShellProps) {
   const kopRegels: Array<[string, string]> = [
     [t("report.kopProjectnummer", "Projectnummer"), info.projectNumber],
     [t("report.kopProject", "Project"), headerText],
-    [t("report.kopOmschrijving", "Omschrijving"), info.description],
   ].filter((r): r is [string, string] => !!r[1]);
   const kopRechts: Array<[string, string]> = [
     // Voluit en in de taal van de app, zoals op het titelblad en in de PDF
     // (issue #20); hier stond de ruwe JJJJ-MM-DD.
     [t("report.kopDatum", "Datum"), datumVoluit(info.date, i18n.language)],
-    [t("report.kopConstructeur", "Constructeur"), info.engineer],
   ].filter((r): r is [string, string] => !!r[1]);
   const kopBedrijf = info.reportHeader || info.company;
 
@@ -252,7 +250,7 @@ export default function ReportShell({ onDetach }: ReportShellProps) {
       velHoogteMm: dims.h,
       margeBovenMm: margeBoven,
       margeOnderMm: margeOnder,
-      merk: "Open FEM2D Studio",
+      merk: "Open FEM Studio",
       paginaLabel,
     });
     setAantalVellen(n);

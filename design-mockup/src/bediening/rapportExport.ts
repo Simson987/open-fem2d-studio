@@ -70,6 +70,27 @@ function pauze(ms: number): Promise<void> {
 
 /** De rekenvoorwaarden zoals ze NU in de app staan (render-toestand via de acties). */
 export function rekenVoorwaardenNu(a: BedieningActies): RekenVoorwaarden {
+  if (a.modelDimension === "3d") {
+    const f = a.frame3d;
+    const toetsingCompleet = f.checks !== null && f.concreteChecks !== null;
+    return {
+      heeftModel: f.model.nodes.length > 0 || f.model.beams.length > 0,
+      heeftResultaten: f.result !== null,
+      rekenfout: f.solveError,
+      herberekeningGepland: false,
+      lopendeRekengangen: f.solving ? 1 : 0,
+      toetsingLoopt: f.checksRunning,
+      toetsfout: f.checksError,
+      toetsingGedraaid: toetsingCompleet,
+      toetsingHoortBijResultaten: f.result !== null && toetsingCompleet,
+      // Beide 3D-toetsbouwers geven óók een volledig `skipped`-overzicht
+      // terug. Daarom moet iedere staaf door die ronde zijn gegaan, ook als
+      // materiaal of profiel uiteindelijk niet toetsbaar blijkt.
+      toetsbareStaven: f.model.beams.length > 0,
+      analysetype: "tweedeOrdeGeometrisch",
+      resultatenUitVolledigeRekengang: true,
+    };
+  }
   const f = a.fem;
   const r = a.rekenToestand();
   const c = useCheckStore.getState();
@@ -95,6 +116,11 @@ export function rekenVoorwaardenNu(a: BedieningActies): RekenVoorwaarden {
 
 /** Is de rekengang in rust: niets gepland, niets lopend, geen toetsing bezig? */
 function inRust(a: BedieningActies): string | null {
+  if (a.modelDimension === "3d") {
+    if (a.frame3d.solving) return "er loopt een 3D-rekengang";
+    if (a.frame3d.checksRunning) return "de 3D-toetsing loopt";
+    return null;
+  }
   const r = a.rekenToestand();
   if (r.lopendeRekengangen > 0) return "er loopt een rekengang";
   if (r.herberekeningGepland) return "er staat een herberekening gepland";
@@ -161,6 +187,16 @@ let lopende: LopendeExport | null = null;
 let volgnummer = 0;
 
 function momentNu(a: BedieningActies): ExportMoment {
+  if (a.modelDimension === "3d") {
+    const toetsingCompleet = a.frame3d.checks !== null && a.frame3d.concreteChecks !== null;
+    return {
+      generatie: a.frame3d.generation(),
+      slagen: 0,
+      aantalVellen: 0,
+      toetsingOp: toetsingCompleet ? a.frame3d.generation() : null,
+      weergave: a.activeView,
+    };
+  }
   const p = leesPagineerToestand();
   return {
     generatie: a.rekenToestand().generatie,
@@ -242,8 +278,11 @@ export async function rapportVoorbereiden(
       a().setActiveView("report");
       await wachtOpRender();
     }
-    // Pas NA alle wijzigingen: de slag die dit nummer beantwoordt, heeft ze gezien.
-    const verzoek = vraagHerpaginering();
+    const driedimensionaal = a().modelDimension === "3d";
+    // Het 2D-rapport wordt vooraf in losse vellen gepagineerd. Het compacte
+    // 3D-rapport is één gewone printflow die Chromium zelf over het gekozen
+    // papier verdeelt; daar wachten we op gemonteerde inhoud en lettertypen.
+    const verzoek = driedimensionaal ? 0 : vraagHerpaginering();
 
     // 4. Het klaar-signaal: rekenen/toetsen nog steeds in orde, en de paginering klaar.
     let laatsteReden = "";
@@ -256,6 +295,16 @@ export async function rapportVoorbereiden(
       }
       if (r.soort === "wacht") {
         laatsteReden = r.reden;
+      } else if (driedimensionaal) {
+        const gemonteerd = document.querySelector('[data-frame3d-report="calculated"]') !== null;
+        const fontsBinnen = !("fonts" in document) || document.fonts.status === "loaded";
+        if (gemonteerd && fontsBinnen) {
+          // Nul is hier bewust: de 3D-printflow wordt pas in de WebView-PDF
+          // gefragmenteerd. Rust telt daarna de echte PDF-pagina's.
+          aantalVellen = 0;
+          break;
+        }
+        laatsteReden = gemonteerd ? "de lettertypen van het 3D-rapport laden nog" : "het 3D-rapport is nog niet gemonteerd";
       } else {
         const p = beoordeelPaginering({
           pagineer: leesPagineerToestand(),
@@ -304,6 +353,7 @@ export async function rapportVoorbereiden(
       // Enkelzijdig drukwerk: binnen = links, buiten = rechts (reportStore).
       margesMm: { boven: s.margeBoven, onder: s.margeOnder, links: s.margeBinnen, rechts: s.margeBuiten },
       rapportType: s.rapportType,
+      rapportDimensie: a().modelDimension,
       toetsingDetail: s.toetsingDetail,
       projectKop: {
         naam: kop.name,
@@ -313,8 +363,15 @@ export async function rapportVoorbereiden(
         datum: kop.date,
         bron: opties.kop ? "argument" : "projectgegevens",
       },
-      analysetype: f.analysetype,
-      toetsing: {
+      analysetype: driedimensionaal ? "tweedeOrdeGeometrisch" : f.analysetype,
+      toetsing: driedimensionaal ? {
+        toetsbareStaven: a().frame3d.model.beams.length > 0,
+        staalGetoetst: a().frame3d.checks?.results.length ?? 0,
+        staalOvergeslagen: a().frame3d.checks?.skipped.length ?? 0,
+        betonGetoetst: a().frame3d.concreteChecks?.results.length ?? 0,
+        betonOvergeslagen: a().frame3d.concreteChecks?.skipped.length ?? 0,
+        generatie: a().frame3d.generation(),
+      } : {
         toetsbareStaven: anyCheckableBeams([...f.beams]),
         getoetst: c.results.length,
         overgeslagen: c.skipped.length,
@@ -323,8 +380,9 @@ export async function rapportVoorbereiden(
           c.plateResults.filter((r) => r.geweigerd !== undefined).length + c.plateSkipped.length,
         uitgevoerdOp: c.lastRunAt,
       },
-      fysischeRonde:
-        f.analysetype === "tweedeOrdeFysisch"
+      fysischeRonde: driedimensionaal
+        ? null
+        : f.analysetype === "tweedeOrdeFysisch"
           ? { combinaties: st.combinaties.length, overgeslagenStaven: st.overgeslagen.length }
           : null,
       vorigeToestand: {

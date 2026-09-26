@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Open FEM2D Studio",
+  "productName": "Open FEM Studio",
   "version": "0.3.15",
   "identifier": "org.openaec.fem2d-studio",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Open FEM2D Studio",
+        "title": "Open FEM Studio",
         "label": "main",
         "width": 1400,
         "height": 900,
@@ -58,7 +58,7 @@
     "copyright": "© 2026 OpenAEC Foundation. CC BY-SA 4.0",
     "category": "Productivity",
     "shortDescription": "2D Finite Element Method solver",
-    "longDescription": "Open FEM2D Studio — open-source 2D Finite Element Method solver for structural analysis. Part of the OpenAEC Foundation portfolio."
+    "longDescription": "Open FEM Studio — open-source 2D Finite Element Method solver for structural analysis. Part of the OpenAEC Foundation portfolio."
   },
   "plugins": {}
 }

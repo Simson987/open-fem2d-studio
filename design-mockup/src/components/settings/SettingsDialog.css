@@ -87,6 +87,12 @@
   margin-bottom: 0;
 }
 
+.settings-row-stacked {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 5px;
+}
+
 .settings-label {
   font-size: 11px;
   color: var(--theme-dialog-content-text);
@@ -119,6 +125,72 @@
 .settings-select option {
   background: var(--theme-bg);
   color: var(--theme-text);
+}
+
+.settings-select option:disabled {
+  color: var(--theme-dialog-content-secondary);
+}
+
+.settings-solver-select {
+  width: 100%;
+  min-height: 28px;
+}
+
+.settings-solver-explanation {
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.settings-solver-list {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-solver-card {
+  border: 1px solid var(--theme-dialog-section-border);
+  background: var(--theme-dialog-input-bg);
+  padding: 8px;
+}
+
+.settings-solver-card.unavailable {
+  opacity: 0.72;
+}
+
+.settings-solver-card-title {
+  align-items: center;
+  display: flex;
+  font-size: 11px;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.settings-solver-status {
+  border-radius: 9px;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 6px;
+}
+
+.settings-solver-status.available {
+  background: color-mix(in srgb, #16a34a 18%, transparent);
+  color: #15803d;
+}
+
+.settings-solver-status.unavailable {
+  background: color-mix(in srgb, #d97706 18%, transparent);
+  color: #b45309;
+}
+
+.settings-solver-meta,
+.settings-solver-note {
+  color: var(--theme-dialog-content-secondary);
+  font-size: 10px;
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+.settings-solver-note {
+  color: var(--theme-dialog-content-text);
 }
 
 .settings-input {

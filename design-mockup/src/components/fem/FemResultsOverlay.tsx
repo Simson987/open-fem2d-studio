@@ -22,6 +22,12 @@ import {
 
 /** Per-result display toggles — multi-active diagram picker. */
 export interface DisplayFlags {
+  /** Hoofdgeometrie van het 2D-canvas. */
+  knopen: boolean;
+  staven: boolean;
+  platen: boolean;
+  belastingen: boolean;
+  assenstelsel: boolean;
   deflection: boolean;
   N: boolean;
   V: boolean;
@@ -121,6 +127,7 @@ export interface DisplayFlags {
 }
 
 export const DEFAULT_DISPLAY_FLAGS: DisplayFlags = {
+  knopen: true, staven: true, platen: true, belastingen: true, assenstelsel: true,
   deflection: true, N: false, V: false, M: true, reactions: true,
   // Uit by default: het zijn extra standen naast N/V/M, en EI heeft alleen
   // inhoud bij een fysisch niet-lineaire betonberekening.

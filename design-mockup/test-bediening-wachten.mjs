@@ -56,7 +56,7 @@ log("\n[1] opdrachten die niets veranderen komen direct terug");
 /** Nagebootste acties: een raamwerk met één staaf, weergave "default". */
 function maakActies() {
   const staaf = { id: 1, nodeIds: [1, 2], material: "C30/37", checkConfig: {} };
-  const toestand = { activeView: "default", selection: { type: "beam", id: 1 } };
+  const toestand = { activeView: "default", selection: { type: "beam", id: 1 }, modelDimension: "2d", frameView: "iso" };
   const fem = {
     nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 6000, z: 0 }],
     beams: [staaf],
@@ -75,6 +75,21 @@ function maakActies() {
   };
   const acties = {
     fem,
+    get modelDimension() { return toestand.modelDimension; },
+    frame3d: {
+      model: { nodes: [], beams: [], supports: [], loads: [] },
+      visibility: { nodes: true, beams: true, profiles: false, nodeNumbers: true, beamNumbers: false, nodeCoordinates: false, supports: true, loads: true, grid: true, axes: true, structuralGrid: true },
+      structuralGrid: { enabled: true, xAxes: [], yAxes: [], zAxes: [] },
+      replaceModel(model) { this.model = model; toestand.modelDimension = "3d"; toestand.activeView = "frame3d"; },
+      setVisibility(visibility) { this.visibility = visibility; },
+      setStructuralGrid(grid) { this.structuralGrid = grid; },
+      setView(view) { toestand.frameView = view; toestand.activeView = "frame3d"; },
+      setSelection(selection) { toestand.selection = selection; },
+      caseResults: new Map(),
+      combinationResults: new Map(),
+      activeCombinationId: null,
+      generation: () => 0,
+      },
     get activeView() { return toestand.activeView; },
     get selection() { return toestand.selection; },
     setSelection: (s) => { toestand.selection = s; },
@@ -126,9 +141,110 @@ async function binnenGrens(naam, args, acties) {
 }
 {
   const a = maakActies();
+  const u = await binnenGrens("model_3d_bouwen", {
+    nodes: [
+      { x: 0, y: 0, z: 0 }, { x: 6, y: 0, z: 0 }, { x: 6, y: 4, z: 0 }, { x: 0, y: 4, z: 0 },
+      { x: 2, y: 1, z: 0 }, { x: 4, y: 1, z: 0 }, { x: 4, y: 3, z: 0 }, { x: 2, y: 3, z: 0 },
+    ],
+    plates: [{ nodes: [1, 2, 3, 4], thickness_m: 0.25, material: "C30/37", corner_radius_m: 0.3,
+      openings: [{ nodes: [5, 6, 7, 8], corner_radius_m: 0.15 }] }],
+    surface_loads: [{ plate: 1, case_id: 2, qz: -5 }],
+  }, a);
+  check("model_3d_bouwen bewaart platen, ronde openingen en oppervlaktebelastingen",
+    u !== "VERLOPEN" && u?.plateIds?.length === 1 && u?.aantalOppervlaktelasten === 1 && a.frame3d.model.plates[0]?.cornerRadiusM === 0.3 &&
+    a.frame3d.model.plates[0]?.openings[0]?.cornerRadiusM === 0.15 && a.frame3d.model.surfaceLoads[0]?.qz === -5,
+    JSON.stringify(u));
+  const selected = await binnenGrens("plaat_3d_selecteren", { id: 1 }, a);
+  check("plaat_3d_selecteren kiest de echte plaat in de 3D-werkruimte",
+    selected !== "VERLOPEN" && selected?.id === 1 && a.selection?.type === "plate" && a.selection?.id === 1,
+    JSON.stringify(selected));
+}
+{
+  const a = maakActies();
+  const u = await binnenGrens("model_3d_bouwen", {
+    nodes: [{ x: 0, y: 0, z: 0 }, { x: 6, y: 0, z: 0 }],
+    beams: [{ from: 1, to: 2, profile_name: "IPE300", material: "S355" }],
+    supports: [{ node: 1, type: "revoluteY", prescribed: { ux_m: 0.001 } }, { node: 2, springs: { kz_kn_per_m: 370 } }],
+    loads: [{ node: 2, fz: -25 }],
+    member_loads: [{ beam: 1, qz_start: -4, qz_end: -6, start_m: 1, end_m: 5 }],
+    member_point_loads: [{ beam: 1, case_id: 2, py: 3, pz: -10, position_m: 2.5 }],
+    thermal_loads: [{ beam: 1, case_id: 2, delta_t_uniform_k: 25, delta_t_gradient_z_k: -6 }],
+  }, a);
+  check("model_3d_bouwen opent één geldig 3D-model met profiel, oplegging en last",
+    u !== "VERLOPEN" && u?.modelDimension === "3d" && u?.beamIds?.length === 1 &&
+    a.frame3d.model.beams[0]?.profileName === "IPE300" && a.frame3d.model.supports.length === 2 &&
+    a.frame3d.model.loads.length === 1 && a.frame3d.model.memberLoads[0]?.beamId === 1 &&
+    a.frame3d.model.memberLoads[0]?.qzEnd === -6 && a.frame3d.model.memberLoads[0]?.endPositionM === 5 &&
+    a.frame3d.model.memberPointLoads[0]?.py === 3 && a.frame3d.model.memberPointLoads[0]?.positionM === 2.5 &&
+    a.frame3d.model.thermalLoads[0]?.deltaTUniformK === 25 && a.frame3d.model.thermalLoads[0]?.deltaTGradientZK === -6 &&
+    u?.aantalStaafpuntlasten === 1 && u?.aantalTemperatuurlasten === 1 && u?.aantalOplegveren === 1 &&
+    u?.aantalOpgelegdeVerplaatsingen === 1 && a.frame3d.model.supports[0]?.prescribed?.uxM === 0.001 &&
+    a.frame3d.model.supports[1]?.springs?.kzKnPerM === 370,
+    JSON.stringify(u));
+  check("model_3d_bouwen bewaart een revolute Y als alleen Ry vrij",
+    a.frame3d.model.supports[0]?.ux === true && a.frame3d.model.supports[0]?.uy === true &&
+    a.frame3d.model.supports[0]?.uz === true && a.frame3d.model.supports[0]?.rx === true &&
+    a.frame3d.model.supports[0]?.ry === false && a.frame3d.model.supports[0]?.rz === true,
+    JSON.stringify(a.frame3d.model.supports[0]));
+
+  const u2 = await binnenGrens("weergave_3d_configureren", {
+    view: "top",
+    visibility: { profiles: true, grid: false },
+    structural_grid: {
+      enabled: true,
+      x_axes: [{ label: "A", position_m: 0 }],
+      y_axes: [{ label: "1", position_m: 4 }],
+      z_levels: [{ label: "+6", position_m: 6 }],
+    },
+  }, a);
+  check("weergave_3d_configureren stuurt camera, profielvolume en X/Y/Z-stramien",
+    u2 !== "VERLOPEN" && a.frame3d.visibility.profiles === true && a.frame3d.visibility.grid === false &&
+    a.frame3d.structuralGrid.yAxes[0]?.position === 4000 && a.frame3d.structuralGrid.zAxes[0]?.position === 6000,
+    JSON.stringify(u2));
+
+  const u3 = await binnenGrens("staaf_3d_splitsen", { beamId: 1, ratio: 0.5 }, a);
+  check("staaf_3d_splitsen knipt de echte modeltoestand en verdeelt alle staaflasten",
+    u3 !== "VERLOPEN" && u3?.nodeId === 3 && u3?.secondBeamId === 2 &&
+    a.frame3d.model.nodes.length === 3 && a.frame3d.model.beams.length === 2 &&
+    a.frame3d.model.memberLoads.length === 2 && a.frame3d.model.memberLoads[1]?.beamId === 2 &&
+    a.frame3d.model.memberLoads[0]?.qzEnd === -5 && a.frame3d.model.memberLoads[1]?.qzStart === -5 &&
+    a.frame3d.model.memberPointLoads[0]?.beamId === 1 &&
+    a.frame3d.model.thermalLoads.length === 2 && a.frame3d.model.thermalLoads[1]?.beamId === 2,
+    JSON.stringify(u3));
+}
+{
+  const a = maakActies();
   const u = await binnenGrens("staaf_selecteren", { id: 1 }, a);
   check("staaf_selecteren van de al geselecteerde staaf komt terug",
     u !== "VERLOPEN" && u?.id === 1, JSON.stringify(u));
+}
+{
+  const a = maakActies();
+  a.frame3d.replaceModel({ nodes: [], beams: [], supports: [], loads: [] });
+  a.frame3d.result = null;
+  a.frame3d.solveError = null;
+  a.frame3d.checks = null;
+  a.frame3d.concreteChecks = null;
+  a.frame3d.solving = false;
+  a.frame3d.checksRunning = false;
+  a.frame3d.checksError = null;
+  a.frame3d.solve = async () => {
+    a.frame3d.result = { displacements: [], memberForces: [] };
+    // React kan deze tussenrender publiceren vóór de afsluitende render.
+    a.frame3d.checksRunning = true;
+  };
+  let renders = 0;
+  const afronden = async () => {
+    renders += 1;
+    if (renders === 2) {
+      a.frame3d.checksRunning = false;
+      a.frame3d.checks = { results: [], skipped: [], notes: [] };
+    }
+  };
+  const u = await voerUit("rekenen", {}, { current: a }, nooit, afronden);
+  check("3D rekenen antwoordt pas na de afsluitende toetsingsrender",
+    u?.checksRunning === false && u?.steel?.results?.length === 0 && renders === 2,
+    JSON.stringify({ renders, uitkomst: u }));
 }
 {
   const a = maakActies();

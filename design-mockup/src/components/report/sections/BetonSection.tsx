@@ -398,13 +398,13 @@ function BetonStaafBlok({
               gedetailleerde niveau staat en waar ook de kipketen van staal
               staat. Haar hier hérhalen zou hetzelfde twee keer in één rapport
               zetten; dit hoofdstuk gaat over het BEELD (de korf in de
-              doorsnede, de twee diagrammen) en de invoer. */}
+              doorsnede, de twee diagrammen) en de invoer. Een herhaalde
+              verwijzing naar dat detailhoofdstuk per staaf is overbodig. */}
           {(() => {
             const named = r.checks.find((c) => c.id === r.governing_check_id);
             if (!named) return null;
             const c = named.kind.data;
             const { latex } = afleidingLatex(c);
-            const heeftKeten = (c.deelstappen?.length ?? 0) > 0;
             return (
               <div className="rpt-bet-afleiding">
                 <p className="rpt-bet-kopje">
@@ -414,15 +414,6 @@ function BetonStaafBlok({
                   className="rpt-bet-formuleblok"
                   dangerouslySetInnerHTML={{ __html: renderLatexHtml(latex, true) }}
                 />
-                {heeftKeten && (
-                  <p className="rpt-bet-verwijzing">
-                    {t("report.betonKetenVerwijzing", {
-                      defaultValue:
-                        "De volledige afleiding van deze toets — {{aantal}} stappen, elk met formule, ingevulde waarden, vindplaats en de aannamen die eronder liggen — staat in het hoofdstuk “Toetsing per staaf”, op het gedetailleerde niveau.",
-                      aantal: c.deelstappen.length,
-                    })}
-                  </p>
-                )}
               </div>
             );
           })()}

@@ -1,0 +1,42 @@
+.frame3d-report-shell { height:100%; overflow:auto; background:#e5e7eb; color:#172033; padding:18px; box-sizing:border-box; }
+.frame3d-report-toolbar { position:sticky; top:-18px; z-index:3; margin:-18px -18px 18px; padding:10px 18px; display:flex; justify-content:space-between; align-items:center; background:#fff; border-bottom:1px solid #cbd5e1; }
+.frame3d-report-toolbar button { border:0; border-radius:4px; padding:7px 13px; background:#d97706; color:#fff; font-weight:650; cursor:pointer; }
+.frame3d-report-page { width:min(190mm, calc(100% - 16px)); min-height:267mm; margin:0 auto; padding:16mm 17mm; box-sizing:border-box; background:white; box-shadow:0 5px 22px #0002; font:10pt/1.42 "Segoe UI",Arial,sans-serif; }
+.frame3d-report-page header { display:flex; justify-content:space-between; gap:24px; padding-bottom:9mm; border-bottom:2px solid #d97706; }
+.frame3d-report-page h1 { margin:1mm 0; font-size:22pt; color:#111827; }
+.frame3d-report-page h2 { margin:7mm 0 2.5mm; padding-bottom:1.3mm; border-bottom:1px solid #cbd5e1; font-size:13pt; color:#1f2937; }
+.frame3d-report-page h3 { margin:4mm 0 2mm; font-size:10.5pt; }
+.frame3d-report-page p { margin:1.5mm 0; }
+.frame3d-report-kicker { margin:0!important; color:#d97706; font-weight:750; letter-spacing:.08em; text-transform:uppercase; }
+.frame3d-report-page dl { min-width:58mm; margin:0; font-size:9pt; }
+.frame3d-report-page dl div { display:grid; grid-template-columns:18mm 1fr; gap:3mm; padding:1mm 0; }
+.frame3d-report-page dt { color:#64748b; }.frame3d-report-page dd { margin:0; font-weight:600; }
+.frame3d-report-cards { display:grid; grid-template-columns:repeat(3,1fr); gap:2.5mm; }
+.frame3d-report-cards div { border:1px solid #dbe2ea; border-radius:3px; padding:2.5mm 3mm; background:#f8fafc; }
+.frame3d-report-cards span { display:block; color:#64748b; font-size:8pt; }.frame3d-report-cards strong { display:block; margin-top:.7mm; font-size:10pt; }
+.frame3d-report-views { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:2.5mm; }
+.frame3d-report-projection { margin:0; border:1px solid #dbe2ea; background:#fff; break-inside:avoid; }
+.frame3d-report-projection-isometric { grid-column:1 / -1; }
+.frame3d-report-projection figcaption { padding:1.2mm 2mm; border-bottom:1px solid #e2e8f0; background:#f8fafc; color:#475569; font-size:8pt; font-weight:700; }
+.frame3d-report-projection svg { display:block; width:100%; height:auto; max-height:72mm; }
+.frame3d-report-projection:not(.frame3d-report-projection-isometric) svg { max-height:47mm; }
+.frame3d-report-svg-label { fill:#334155; font:600 11px "Segoe UI",Arial,sans-serif; paint-order:stroke; stroke:#fff; stroke-width:3px; }
+.frame3d-report-svg-node { fill:#475569; font:10px "Segoe UI",Arial,sans-serif; paint-order:stroke; stroke:#fff; stroke-width:3px; }
+.frame3d-report-axis-key { fill:#475569; font:700 11px "Segoe UI",Arial,sans-serif; }
+.frame3d-report-view-legend { grid-column:1 / -1; margin:0!important; color:#64748b; font-size:8pt; }
+.frame3d-report-page table { width:100%; border-collapse:collapse; font-size:8.6pt; }
+.frame3d-report-page th,.frame3d-report-page td { padding:1.35mm 1.7mm; border-bottom:1px solid #e2e8f0; text-align:right; white-space:nowrap; }
+.frame3d-report-page th:first-child,.frame3d-report-page td:first-child { text-align:left; }.frame3d-report-page thead th { background:#f1f5f9; color:#475569; font-weight:700; }
+.frame3d-report-page tbody th { width:44mm; color:#475569; font-weight:600; }.frame3d-report-page tbody th+td { text-align:left; }
+.frame3d-report-checks th:nth-child(2),.frame3d-report-checks td:nth-child(2),
+.frame3d-report-checks th:nth-child(3),.frame3d-report-checks td:nth-child(3) { text-align:left; white-space:normal; }
+.frame3d-report-good { color:#15803d; }.frame3d-report-bad { color:#b91c1c; }.frame3d-report-note { color:#64748b; font-size:8pt; }
+.frame3d-report-empty { margin-top:15mm; padding:10mm; border:1px dashed #94a3b8; background:#f8fafc; }
+@media print {
+  .frame3d-report-shell { height:auto; overflow:visible; padding:0; background:white; }
+  .frame3d-report-toolbar { display:none; }
+  .frame3d-report-page { width:auto; min-height:0; margin:0; padding:12mm 14mm; box-shadow:none; }
+  .frame3d-report-page section { break-inside:avoid; }
+  .frame3d-report-page details:not([open]) > :not(summary) { display:block; }
+  @page { size:A4 portrait; margin:0; }
+}

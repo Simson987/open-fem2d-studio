@@ -47,6 +47,7 @@ import { bepaalStaafeinden, voegDoorgaandeLijnenSamen } from "./doorgaandeLijn";
 import { alphaCrStaafNotitie, type StabiliteitVoorToets } from "../components/fem/solver/alphaCr";
 import { STEEL_SECTIONS } from "./steelSections.generated";
 import { bepaalVerloop } from "./sectionResolver";
+import { STEEL_GRADES } from "./steelGrades";
 import { STANDAARD_BIJLAGE, type NationaleBijlageCode } from "./normAanduidingen";
 import { blijvendeZakking } from "./blijvendeZakking";
 import { kipsteunenVanStaaf } from "./kipsteunen";
@@ -81,7 +82,7 @@ export { sanitizeRestraintFractions } from "./kipsteunen";
  * de staafdialoog deze lijst nodig hebben; er stond een tweede exemplaar in
  * `BarPropertiesDialog.tsx`, en twee lijsten lopen vroeg of laat uiteen.
  */
-export const STEEL_GRADES = ["S235", "S275", "S355", "S420", "S460"];
+export { STEEL_GRADES } from "./steelGrades";
 
 /**
  * Is dit een staalprofiel dat de EN 1993-kern kan toetsen?
