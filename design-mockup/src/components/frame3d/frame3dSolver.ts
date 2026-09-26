@@ -320,16 +320,47 @@ export async function solveFrame3DCombination(
 }
 
 async function callFrame3DSolver(input: ReturnType<typeof buildFrame3DSolveRequest>): Promise<Frame3DSolveResult> {
+  const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
+  const usesLegacyCompatibleLoads = input.memberLoads.length === 0
+    && input.memberPointLoads.length === 0
+    && input.thermalLoads.length === 0;
+  const isLegacyMaterialContract = (error: unknown) => usesLegacyCompatibleLoads
+    && errorText(error).includes("unknown field `alphaPerK`");
+  const legacyInput = () => {
+    const {
+      memberLoads: _memberLoads,
+      memberPointLoads: _memberPointLoads,
+      thermalLoads: _thermalLoads,
+      ...legacy
+    } = input;
+    return {
+      ...legacy,
+      materials: input.materials.map(({ alphaPerK: _alphaPerK, ...material }) => material),
+    };
+  };
   if (isTauriApp()) {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<Frame3DSolveResult>("solve_frame3d", { input });
+    try {
+      return await invoke<Frame3DSolveResult>("solve_frame3d", { input });
+    } catch (error) {
+      if (!isLegacyMaterialContract(error)) throw error;
+      return invoke<Frame3DSolveResult>("solve_frame3d", { input: legacyInput() });
+    }
   }
-  const response = await fetch("/api/frame3d/solve", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  const data = await response.json().catch(() => ({})) as Frame3DSolveResult & { fout?: string };
-  if (!response.ok || data.fout) throw new Error(data.fout || `3D-rekenkern gaf HTTP ${response.status}`);
-  return data;
+  const post = async (request: typeof input | ReturnType<typeof legacyInput>) => {
+    const response = await fetch("/api/frame3d/solve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+    const data = await response.json().catch(() => ({})) as Frame3DSolveResult & { fout?: string };
+    if (!response.ok || data.fout) throw new Error(data.fout || `3D-rekenkern gaf HTTP ${response.status}`);
+    return data;
+  };
+  try {
+    return await post(input);
+  } catch (error) {
+    if (!isLegacyMaterialContract(error)) throw error;
+    return post(legacyInput());
+  }
 }
