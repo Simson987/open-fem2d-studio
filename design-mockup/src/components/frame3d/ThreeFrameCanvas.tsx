@@ -20,7 +20,7 @@ import {
   frame3DUtilizationClass,
   type Frame3DUtilization,
 } from "./frame3dUtilization";
-import { createFrame3DProfileGeometry, frame3DProfileSection } from "./frame3dProfileGeometry";
+import { createFrame3DProfileGeometry, frame3DProfileInstanceScale, frame3DProfileSection } from "./frame3dProfileGeometry";
 import { frame3DMaximumDisplacementM, frame3DMemberDisplacementStations } from "./frame3dDisplacement";
 import {
   frame3DSelectionContains,
@@ -423,7 +423,22 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const selectRef = useRef(onSelect);
   selectRef.current = onSelect;
   const modelRef = useRef(model);
-  modelRef.current = model;
+  const nodeByIdRef = useRef<Map<number, Frame3DModel["nodes"][number]> | null>(null);
+  const beamByIdRef = useRef<Map<number, Frame3DModel["beams"][number]> | null>(null);
+  nodeByIdRef.current ??= new Map(model.nodes.map((node) => [node.id, node]));
+  beamByIdRef.current ??= new Map(model.beams.map((beam) => [beam.id, beam]));
+  // Pointer previews run at most once per animation frame. Keep their lookups
+  // O(1), so snapping stays direct when a model contains thousands of nodes.
+  // Only rebuild an index when its underlying immutable array changed.
+  if (modelRef.current !== model) {
+    if (modelRef.current.nodes !== model.nodes) {
+      nodeByIdRef.current = new Map(model.nodes.map((node) => [node.id, node]));
+    }
+    if (modelRef.current.beams !== model.beams) {
+      beamByIdRef.current = new Map(model.beams.map((beam) => [beam.id, beam]));
+    }
+    modelRef.current = model;
+  }
   const changeRef = useRef(onChange);
   changeRef.current = onChange;
   const toolRef = useRef(tool);
@@ -587,10 +602,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       raycaster.setFromCamera(pointer, camera);
     };
     const drawingAnchor = () => {
-      const current = modelRef.current;
       const sketch = plateDraftRef.current;
       const nodeId = toolRef.current === "addBeam" ? beamStartRef.current : sketch.firstNodeId;
-      return nodeId === null ? undefined : current.nodes.find((node) => node.id === nodeId);
+      return nodeId === null ? undefined : nodeByIdRef.current!.get(nodeId);
     };
     const drawingPlane = () => {
       const anchor = drawingAnchor();
@@ -616,7 +630,6 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     };
     type DrawingSnap = { position: THREE.Vector3; nodeId?: number; kind?: SnapSoort };
     const drawingSnap = (): DrawingSnap | null => {
-      const current = modelRef.current;
       const settings = snapsRef.current;
       if (settings.knoop) {
         const nodeHit = raycaster.intersectObjects(nodePickTargetsRef.current, false)[0];
@@ -625,7 +638,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           const hitId = instanceIds && nodeHit.instanceId !== undefined
             ? instanceIds[nodeHit.instanceId]
             : nodeHit.object.userData.id;
-          const node = current.nodes.find((item) => item.id === hitId);
+          const node = nodeByIdRef.current!.get(hitId);
           if (node) return { position: new THREE.Vector3(node.x, node.y, node.z), nodeId: node.id, kind: "knoop" };
         }
       }
@@ -678,6 +691,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     let previewFrame = 0;
     let latestPointerEvent: PointerEvent | null = null;
     const drawPointerPreview = () => {
+      const previewStartedAt = performance.now();
       previewFrame = 0;
       const event = latestPointerEvent;
       latestPointerEvent = null;
@@ -689,13 +703,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       previewHint.hidden = true;
       const sketch = plateDraftRef.current;
       const lastId = activeTool === "addBeam" ? beamStartRef.current : sketch.lastNodeId;
-      const last = lastId === null ? undefined : modelRef.current.nodes.find((node) => node.id === lastId);
+      const last = lastId === null ? undefined : nodeByIdRef.current!.get(lastId);
       const target = drawingSnap();
       if (last && target) {
         const start = new THREE.Vector3(last.x, last.y, last.z);
         let points: THREE.Vector3[];
         if (activeTool === "addPlateArc" && sketch.arcControlNodeId !== null) {
-          const control = modelRef.current.nodes.find((node) => node.id === sketch.arcControlNodeId);
+          const control = nodeByIdRef.current!.get(sketch.arcControlNodeId);
           points = control
             ? new THREE.QuadraticBezierCurve3(start, new THREE.Vector3(control.x, control.y, control.z), target.position).getPoints(24)
             : [start, target.position];
@@ -721,6 +735,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         }
       }
       renderer.render(scene, camera);
+      container.dataset.frame3dPreviewMs = (performance.now() - previewStartedAt).toFixed(2);
     };
     const onPointerMove = (event: PointerEvent) => {
       latestPointerEvent = event;
@@ -764,15 +779,21 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       const activeTool = toolRef.current;
       let current = modelRef.current;
       const commitModel = (next: Frame3DModel) => {
+        if (current.nodes !== next.nodes) {
+          nodeByIdRef.current = new Map(next.nodes.map((node) => [node.id, node]));
+        }
+        if (current.beams !== next.beams) {
+          beamByIdRef.current = new Map(next.beams.map((beam) => [beam.id, beam]));
+        }
         modelRef.current = next;
         current = next;
         changeRef.current(next);
       };
       const ensureDrawingNode = (): number | null => {
         if (activeTool === "addBeam" && type === "beam" && typeof id === "number" && intersection) {
-          const beam = current.beams.find((item) => item.id === id);
-          const start = beam && current.nodes.find((node) => node.id === beam.startNodeId);
-          const end = beam && current.nodes.find((node) => node.id === beam.endNodeId);
+          const beam = beamByIdRef.current!.get(id);
+          const start = beam && nodeByIdRef.current!.get(beam.startNodeId);
+          const end = beam && nodeByIdRef.current!.get(beam.endNodeId);
           if (beam && start && end) {
             const a = new THREE.Vector3(start.x, start.y, start.z);
             const delta = new THREE.Vector3(end.x - start.x, end.y - start.y, end.z - start.z);
@@ -897,9 +918,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         }
       } else if (activeTool === "addSubNode") {
         if (type === "beam" && typeof id === "number" && intersection) {
-          const beam = current.beams.find((item) => item.id === id);
-          const start = beam && current.nodes.find((node) => node.id === beam.startNodeId);
-          const end = beam && current.nodes.find((node) => node.id === beam.endNodeId);
+          const beam = beamByIdRef.current!.get(id);
+          const start = beam && nodeByIdRef.current!.get(beam.startNodeId);
+          const end = beam && nodeByIdRef.current!.get(beam.endNodeId);
           if (beam && start && end) {
             const a = new THREE.Vector3(start.x, start.y, start.z);
             const delta = new THREE.Vector3(end.x - start.x, end.y - start.y, end.z - start.z);
@@ -972,6 +993,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   useEffect(() => {
     const state = sceneRef.current;
     if (!state) return;
+    const rebuildStartedAt = performance.now();
     const { geometry } = state;
     disposeGroup(geometry);
     nodePickTargetsRef.current = [];
@@ -1046,8 +1068,12 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         const utilization = visibility.utilization ? utilizationByMember.get(beam.id) : undefined;
         const utilizationClass = utilization ? frame3DUtilizationClass(utilization) : undefined;
         const color = utilizationClass ? FRAME_3D_UTILIZATION_COLORS[utilizationClass] : 0x2563eb;
+        // Voor grote modellen wordt één extrusie van één meter per profiel
+        // gedeeld. Alleen de lokale staafas schaalt mee met de echte lengte.
+        // De doorsnede zelf blijft daardoor exact, terwijl ongelijke
+        // staaflengtes toch in één GPU-batch passen.
         const profileGeometry = visibility.profiles
-          ? profileGeometryFor(beam.profileName, length)
+          ? profileGeometryFor(beam.profileName, useBeamInstancing ? 1 : length)
           : null;
         const radius = visibility.profiles ? PROFILE_BEAM_RADIUS_M : ANALYTICAL_BEAM_RADIUS_M;
         const rotation = profileGeometry
@@ -1056,7 +1082,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         const midpoint = a.clone().add(b).multiplyScalar(0.5);
         if (useBeamInstancing) {
           const key = profileGeometry
-            ? `profile\u0000${beam.profileName}\u0000${length.toFixed(9)}`
+            ? `profile\u0000${beam.profileName}`
             : `analytical\u0000${radius}\u0000${visibility.profiles ? 24 : 12}`;
           let batch = beamInstanceBatches.get(key);
           if (!batch) {
@@ -1072,7 +1098,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
             matrix: new THREE.Matrix4().compose(
               midpoint,
               rotation,
-              profileGeometry ? new THREE.Vector3(1, 1, 1) : new THREE.Vector3(1, length, 1),
+              profileGeometry ? frame3DProfileInstanceScale(length) : new THREE.Vector3(1, length, 1),
             ),
           });
         } else {
@@ -1129,7 +1155,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         mesh.setColorAt(index, new THREE.Color(instance.color));
       });
       mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      if (mesh.instanceColor) {
+        mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+        mesh.instanceColor.needsUpdate = true;
+      }
       mesh.computeBoundingBox();
       mesh.computeBoundingSphere();
       geometry.add(mesh);
@@ -1186,6 +1215,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       hitNodes.instanceMatrix.needsUpdate = true;
       if (visibleNodes.instanceColor) visibleNodes.instanceColor.needsUpdate = true;
       if (hitNodes.instanceColor) hitNodes.instanceColor.needsUpdate = true;
+      visibleNodes.instanceColor?.setUsage(THREE.DynamicDrawUsage);
+      hitNodes.instanceColor?.setUsage(THREE.DynamicDrawUsage);
       visibleNodes.computeBoundingBox();
       visibleNodes.computeBoundingSphere();
       hitNodes.computeBoundingBox();
@@ -1344,13 +1375,23 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     applySelectionHighlight(geometry, selectionRef.current);
     state.renderer.render(state.scene, state.camera);
     state.labelRenderer.render(state.scene, state.camera);
+    if (containerRef.current) {
+      containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+      containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
+      containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
+      containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);
+    }
   }, [model, conditionModel, visibility, structuralGrid, result, utilizations, activeLoadCaseId]);
 
   useEffect(() => {
     const state = sceneRef.current;
     if (!state) return;
+    const selectionStartedAt = performance.now();
     applySelectionHighlight(state.geometry, selection);
     state.renderer.render(state.scene, state.camera);
+    if (containerRef.current) {
+      containerRef.current.dataset.frame3dSelectionMs = (performance.now() - selectionStartedAt).toFixed(2);
+    }
   }, [selection]);
 
   useEffect(() => {

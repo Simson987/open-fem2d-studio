@@ -14,6 +14,14 @@ export interface Frame3DProfileSection {
   heightM: number;
 }
 
+/**
+ * Instanced profielgeometrie is één meter lang op de lokale z-as. Alleen die
+ * as mag met de staaflengte schalen; x en y zijn de echte catalogusdoorsnede.
+ */
+export function frame3DProfileInstanceScale(lengthM: number): THREE.Vector3 {
+  return new THREE.Vector3(1, 1, lengthM);
+}
+
 const sectionCache = new Map<string, Frame3DProfileSection | null>();
 const svgLoader = new SVGLoader();
 
