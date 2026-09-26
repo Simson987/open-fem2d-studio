@@ -22,6 +22,7 @@ const base = parseFrame3DModel({
     { id: 5, x: 2, y: 1, z: 0 }, { id: 6, x: 4, y: 1, z: 0 },
     { id: 7, x: 4, y: 3, z: 0 }, { id: 8, x: 2, y: 3, z: 0 },
     { id: 9, x: 3, y: -1.5, z: 0 },
+    { id: 10, x: 3, y: 0.5, z: 0 },
   ],
   beams: [],
 });
@@ -33,6 +34,24 @@ assert.equal(withOpening.plates[0].openings.length, 1);
 const rendered = createFrame3DPlateGeometry(withOpening, withOpening.plates[0]);
 assert.ok(rendered?.geometry.attributes.position.count > 0, "plaat met afgeronde buitenrand en opening krijgt een mesh");
 assert.ok(Math.abs(rendered.normal.z) > 0.999, "horizontale plaat krijgt een verticale normaal");
+
+const curvedOpening = addFrame3DPlateOpening(rounded, 1, [5, 10, 6, 7, 8], {
+  boundary: [
+    { kind: "arc", startNodeId: 5, controlNodeId: 10, endNodeId: 6 },
+    { kind: "line", startNodeId: 6, endNodeId: 7 },
+    { kind: "line", startNodeId: 7, endNodeId: 8 },
+    { kind: "line", startNodeId: 8, endNodeId: 5 },
+  ],
+});
+assert.equal(curvedOpening.plates[0].openings[0].boundary[0].kind, "arc",
+  "een getekende boogrand van een opening blijft modeldata");
+assert.ok(createFrame3DPlateGeometry(curvedOpening, curvedOpening.plates[0])?.geometry.attributes.position.count > 0,
+  "een opening met lijn- en boogranden krijgt een echte plaatuitsparing");
+assert.deepEqual(
+  parseFrame3DModel(JSON.parse(JSON.stringify(curvedOpening))).plates[0].openings[0].boundary,
+  curvedOpening.plates[0].openings[0].boundary,
+  "boogranden van openingen overleven opslaan en openen",
+);
 
 const curved = addFrame3DPlate(base, [1, 9, 2, 3, 4], {
   thicknessM: 0.2,

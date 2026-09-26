@@ -117,7 +117,7 @@ export default function HomeTab({
   onSaveProject, onSaveProjectAs,
   onFilterSelection,
   modelDimension = "2d", onConvertTo3D,
-  frame3dTool = "select", availableFrame3DTools = ["select", "addNode", "addBeam", "addSubNode", "addPlate", "addPlateArc", "addOpening", "move", "rotate", "copy", "mirror"],
+  frame3dTool = "select", availableFrame3DTools = ["select", "addNode", "addBeam", "addSubNode", "addPlate", "addPlateArc", "addOpening", "addOpeningArc", "move", "rotate", "copy", "mirror"],
   onFrame3DToolChange, canFrame3DDelete,
   onFrame3DFit, onFrame3DViewChange, frame3dView = "iso",
   onToggle3DVisibility, visibility3DOpen,
@@ -148,6 +148,7 @@ export default function HomeTab({
     : femTool === tool;
   const nodeConditionTitle = hasFrame3DNodeSelection ? undefined : t("frame3d.selectNodeFirst");
   const beamConditionTitle = hasFrame3DBeamSelection ? undefined : t("frame3d.selectBeamFirst", "Selecteer eerst een 3D-staaf.");
+  const drawingOpening3D = frame3dTool === "addOpening" || frame3dTool === "addOpeningArc";
 
   return (
     <div className="ribbon-content">
@@ -266,10 +267,12 @@ export default function HomeTab({
               icon={plateArcIcon}
               label="Boogrand"
               size="small"
-              active={frame3dTool === "addPlateArc"}
-              onClick={() => onFrame3DToolChange?.("addPlateArc")}
-              disabled={!availableFrame3DTools.includes("addPlateArc")}
-              title="Klik een stuurpunt en daarna het boogeindpunt. Wissel tijdens dezelfde plaat tussen Lijn en Boogrand."
+              active={frame3dTool === "addPlateArc" || frame3dTool === "addOpeningArc"}
+              onClick={() => onFrame3DToolChange?.(drawingOpening3D ? "addOpeningArc" : "addPlateArc")}
+              disabled={!availableFrame3DTools.includes(drawingOpening3D ? "addOpeningArc" : "addPlateArc")}
+              title={drawingOpening3D
+                ? "Klik een stuurpunt en daarna het boogeindpunt. Klik Opening om weer een rechte openingsrand te tekenen."
+                : "Klik een stuurpunt en daarna het boogeindpunt. Wissel tijdens dezelfde plaat tussen Plaat en Boogrand."}
             />}
           </RibbonButtonStack>
           <RibbonButtonStack>
@@ -277,10 +280,12 @@ export default function HomeTab({
               icon={openingIcon}
               label={t("home.opening")}
               size="small"
-              active={toolActive("addOpening")}
+              active={is3D ? drawingOpening3D : toolActive("addOpening")}
               onClick={() => setTool("addOpening")}
-              disabled={is3D && (!frameToolAvailable("addOpening") || !hasFrame3DPlateSelection)}
-              title={is3D ? (hasFrame3DPlateSelection ? "Klik de hoekknopen en sluit door opnieuw op de eerste knoop te klikken." : "Selecteer eerst een 3D-plaat.") : undefined}
+              disabled={is3D && (!frameToolAvailable("addOpening") || (!hasFrame3DPlateSelection && !drawingOpening3D))}
+              title={is3D ? (hasFrame3DPlateSelection || drawingOpening3D
+                ? "Teken rechte openingsranden met automatische knopen en snapping. Klik de eerste knoop om te sluiten."
+                : "Selecteer eerst een 3D-plaat.") : undefined}
             />
           </RibbonButtonStack>
           <RibbonButtonStack>

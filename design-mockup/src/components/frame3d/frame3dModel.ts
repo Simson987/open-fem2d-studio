@@ -1157,16 +1157,27 @@ export function updateFrame3DPlate(
 }
 
 export function addFrame3DPlateOpening(
-  model: Frame3DModel, plateId: number, nodeIds: number[], cornerRadiusM = 0,
+  model: Frame3DModel,
+  plateId: number,
+  nodeIds: number[],
+  cornerRadiusOrOptions: number | { cornerRadiusM?: number; boundary?: Frame3DPlateBoundarySegment[] } = 0,
 ): Frame3DModel {
   const plate = (model.plates ?? []).find((item) => item.id === plateId);
   if (!plate) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
+  const options = typeof cornerRadiusOrOptions === "number"
+    ? { cornerRadiusM: cornerRadiusOrOptions }
+    : cornerRadiusOrOptions;
   const id = Math.max(0, ...(plate.openings ?? []).map((opening) => opening.id)) + 1;
   return parseFrame3DModel({
     ...model,
     plates: (model.plates ?? []).map((item) => item.id === plateId ? {
       ...item,
-      openings: [...(item.openings ?? []), { id, nodeIds, ...(cornerRadiusM > 0 ? { cornerRadiusM } : {}) }],
+      openings: [...(item.openings ?? []), {
+        id,
+        nodeIds,
+        ...(options.boundary?.length ? { boundary: options.boundary } : {}),
+        ...(options.cornerRadiusM && options.cornerRadiusM > 0 ? { cornerRadiusM: options.cornerRadiusM } : {}),
+      }],
     } : item),
   });
 }

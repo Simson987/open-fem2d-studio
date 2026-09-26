@@ -171,6 +171,9 @@ const emptyPlateSketch = (): PlateSketch => ({
   nodeIds: [], segments: [], firstNodeId: null, lastNodeId: null, arcControlNodeId: null,
 });
 
+const isOpeningTool = (tool: Frame3DTool) => tool === "addOpening" || tool === "addOpeningArc";
+const isArcBoundaryTool = (tool: Frame3DTool) => tool === "addPlateArc" || tool === "addOpeningArc";
+
 function disposeGroup(group: THREE.Group) {
   for (const child of [...group.children]) {
     group.remove(child);
@@ -425,8 +428,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const modelRef = useRef(model);
   const nodeByIdRef = useRef<Map<number, Frame3DModel["nodes"][number]> | null>(null);
   const beamByIdRef = useRef<Map<number, Frame3DModel["beams"][number]> | null>(null);
+  const plateByIdRef = useRef<Map<number, NonNullable<Frame3DModel["plates"]>[number]> | null>(null);
   nodeByIdRef.current ??= new Map(model.nodes.map((node) => [node.id, node]));
   beamByIdRef.current ??= new Map(model.beams.map((beam) => [beam.id, beam]));
+  plateByIdRef.current ??= new Map((model.plates ?? []).map((plate) => [plate.id, plate]));
   // Pointer previews run at most once per animation frame. Keep their lookups
   // O(1), so snapping stays direct when a model contains thousands of nodes.
   // Only rebuild an index when its underlying immutable array changed.
@@ -436,6 +441,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     }
     if (modelRef.current.beams !== model.beams) {
       beamByIdRef.current = new Map(model.beams.map((beam) => [beam.id, beam]));
+    }
+    if (modelRef.current.plates !== model.plates) {
+      plateByIdRef.current = new Map((model.plates ?? []).map((plate) => [plate.id, plate]));
     }
     modelRef.current = model;
   }
@@ -459,21 +467,29 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const nodePickTargetsRef = useRef<THREE.Object3D[]>([]);
   const selectionPickTargetsRef = useRef<THREE.Object3D[]>([]);
   const plateDraftRef = useRef<PlateSketch>(emptyPlateSketch());
-  const openingDraftRef = useRef<number[]>([]);
+  const openingDraftRef = useRef<PlateSketch>(emptyPlateSketch());
   const beamStartRef = useRef<number | null>(null);
   const openingPlateRef = useRef<number | null>(null);
   const cameraChangeRef = useRef(onCameraChange);
   cameraChangeRef.current = onCameraChange;
   const previousToolRef = useRef(tool);
   useEffect(() => {
+    const previousTool = previousToolRef.current;
     const plateTools: Frame3DTool[] = ["addPlate", "addPlateArc"];
-    if (!(plateTools.includes(previousToolRef.current) && plateTools.includes(tool))) {
+    const openingTools: Frame3DTool[] = ["addOpening", "addOpeningArc"];
+    if (!(plateTools.includes(previousTool) && plateTools.includes(tool))) {
       plateDraftRef.current = emptyPlateSketch();
     }
-    if (tool !== "addOpening") openingDraftRef.current = [];
+    if (!(openingTools.includes(previousTool) && openingTools.includes(tool))) {
+      openingDraftRef.current = emptyPlateSketch();
+    }
     if (tool !== "addBeam") beamStartRef.current = null;
     previousToolRef.current = tool;
-    openingPlateRef.current = tool === "addOpening" && selection?.type === "plate" ? selection.id : null;
+    if (openingTools.includes(tool)) {
+      if (!openingTools.includes(previousTool) && selection?.type === "plate") openingPlateRef.current = selection.id;
+    } else {
+      openingPlateRef.current = null;
+    }
     const state = sceneRef.current;
     if (state) {
       hidePreview(state.preview);
@@ -602,7 +618,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       raycaster.setFromCamera(pointer, camera);
     };
     const drawingAnchor = () => {
-      const sketch = plateDraftRef.current;
+      const sketch = isOpeningTool(toolRef.current) ? openingDraftRef.current : plateDraftRef.current;
       const nodeId = toolRef.current === "addBeam" ? beamStartRef.current : sketch.firstNodeId;
       return nodeId === null ? undefined : nodeByIdRef.current!.get(nodeId);
     };
@@ -620,12 +636,29 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       // Boven gebruikt XY, voor gebruikt XZ en zij gebruikt YZ. In een vrij
       // 3D-aanzicht tekenen we bewust in het horizontale XY-werkvlak. Dit is
       // stabieler en voorspelbaarder dan een vlak dat met de camera meedraait.
-      const normal = view === "front" ? new THREE.Vector3(0, 1, 0)
+      let normal = view === "front" ? new THREE.Vector3(0, 1, 0)
         : view === "side" ? new THREE.Vector3(1, 0, 0)
         : new THREE.Vector3(0, 0, 1);
+      let plateOrigin: THREE.Vector3 | undefined;
+      if (isOpeningTool(toolRef.current) && openingPlateRef.current !== null) {
+        const plate = plateByIdRef.current!.get(openingPlateRef.current);
+        const boundaryNodes = plate?.nodeIds.map((id) => nodeByIdRef.current!.get(id)).filter(Boolean);
+        if (boundaryNodes && boundaryNodes.length >= 3) {
+          plateOrigin = new THREE.Vector3(boundaryNodes[0]!.x, boundaryNodes[0]!.y, boundaryNodes[0]!.z);
+          for (let index = 1; index < boundaryNodes.length - 1; index += 1) {
+            const p1 = boundaryNodes[index]!, p2 = boundaryNodes[index + 1]!;
+            const candidate = new THREE.Vector3(p1.x, p1.y, p1.z).sub(plateOrigin)
+              .cross(new THREE.Vector3(p2.x, p2.y, p2.z).sub(plateOrigin));
+            if (candidate.lengthSq() > 1e-16) {
+              normal = candidate.normalize();
+              break;
+            }
+          }
+        }
+      }
       const origin = anchor
         ? new THREE.Vector3(anchor.x, anchor.y, anchor.z)
-        : controls.target.clone();
+        : plateOrigin ?? controls.target.clone();
       return { anchor, view, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, origin) };
     };
     type DrawingSnap = { position: THREE.Vector3; nodeId?: number; kind?: SnapSoort };
@@ -697,18 +730,18 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       latestPointerEvent = null;
       if (!event) return;
       const activeTool = toolRef.current;
-      if (activeTool !== "addBeam" && activeTool !== "addPlate" && activeTool !== "addPlateArc") return;
+      if (activeTool !== "addBeam" && activeTool !== "addPlate" && activeTool !== "addPlateArc" && !isOpeningTool(activeTool)) return;
       setPointer(event);
       hidePreview(preview);
       previewHint.hidden = true;
-      const sketch = plateDraftRef.current;
+      const sketch = isOpeningTool(activeTool) ? openingDraftRef.current : plateDraftRef.current;
       const lastId = activeTool === "addBeam" ? beamStartRef.current : sketch.lastNodeId;
       const last = lastId === null ? undefined : nodeByIdRef.current!.get(lastId);
       const target = drawingSnap();
       if (last && target) {
         const start = new THREE.Vector3(last.x, last.y, last.z);
         let points: THREE.Vector3[];
-        if (activeTool === "addPlateArc" && sketch.arcControlNodeId !== null) {
+        if (isArcBoundaryTool(activeTool) && sketch.arcControlNodeId !== null) {
           const control = nodeByIdRef.current!.get(sketch.arcControlNodeId);
           points = control
             ? new THREE.QuadraticBezierCurve3(start, new THREE.Vector3(control.x, control.y, control.z), target.position).getPoints(24)
@@ -720,7 +753,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         points.forEach((point, index) => attribute.setXYZ(index, point.x, point.y, point.z));
         attribute.needsUpdate = true;
         previewGeometry.setDrawRange(0, points.length);
-        (previewLine.material as THREE.LineBasicMaterial).color.setHex(activeTool === "addPlateArc" ? 0x7c3aed : 0x0284c7);
+        (previewLine.material as THREE.LineBasicMaterial).color.setHex(isArcBoundaryTool(activeTool) ? 0x7c3aed : 0x0284c7);
         previewLine.visible = true;
         previewCursor.position.copy(target.position);
         previewCursor.scale.setScalar(Math.max(visualNodeRadius(modelRef.current) * 1.25, 0.025));
@@ -784,6 +817,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         }
         if (current.beams !== next.beams) {
           beamByIdRef.current = new Map(next.beams.map((beam) => [beam.id, beam]));
+        }
+        if (current.plates !== next.plates) {
+          plateByIdRef.current = new Map((next.plates ?? []).map((plate) => [plate.id, plate]));
         }
         modelRef.current = next;
         current = next;
@@ -900,20 +936,53 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
             selectRef.current({ type: "multi", nodeIds: [...draft.nodeIds], beamIds: [] });
           }
         }
-      } else if (activeTool === "addOpening") {
-        if (type === "node" && typeof id === "number") {
-          const draft = openingDraftRef.current;
-          if (draft.length >= 3 && id === draft[0] && openingPlateRef.current !== null) {
-            try {
-              const next = addFrame3DPlateOpening(current, openingPlateRef.current, draft);
-              commitModel(next);
-              selectRef.current({ type: "plate", id: openingPlateRef.current });
-            } finally {
-              openingDraftRef.current = [];
+      } else if (isOpeningTool(activeTool)) {
+        const nodeId = ensureDrawingNode();
+        const openingPlateId = openingPlateRef.current;
+        if (nodeId !== null && openingPlateId !== null) {
+          const sketch = openingDraftRef.current;
+          if (sketch.firstNodeId === null) {
+            openingDraftRef.current = { ...emptyPlateSketch(), nodeIds: [nodeId], firstNodeId: nodeId, lastNodeId: nodeId };
+          } else if (isArcBoundaryTool(activeTool) && sketch.arcControlNodeId === null) {
+            if (nodeId !== sketch.lastNodeId && nodeId !== sketch.firstNodeId && !sketch.nodeIds.includes(nodeId)) {
+              openingDraftRef.current = {
+                ...sketch,
+                nodeIds: [...sketch.nodeIds, nodeId],
+                arcControlNodeId: nodeId,
+              };
             }
-          } else if (!draft.includes(id)) {
-            openingDraftRef.current = [...draft, id];
-            selectRef.current({ type: "multi", nodeIds: [...openingDraftRef.current], beamIds: [] });
+          } else if (sketch.lastNodeId !== null && nodeId !== sketch.lastNodeId) {
+            const closes = nodeId === sketch.firstNodeId;
+            if (!closes && sketch.nodeIds.includes(nodeId)) {
+              down = null;
+              return;
+            }
+            const segment: Frame3DPlateBoundarySegment = isArcBoundaryTool(activeTool)
+              ? { kind: "arc", startNodeId: sketch.lastNodeId, controlNodeId: sketch.arcControlNodeId!, endNodeId: nodeId }
+              : { kind: "line", startNodeId: sketch.lastNodeId, endNodeId: nodeId };
+            const segments = [...sketch.segments, segment];
+            const nodeIds = closes ? sketch.nodeIds : [...sketch.nodeIds, nodeId];
+            if (closes && segments.length >= 2 && nodeIds.length >= 3) {
+              try {
+                const next = addFrame3DPlateOpening(current, openingPlateId, nodeIds, { boundary: segments });
+                commitModel(next);
+                selectRef.current({ type: "plate", id: openingPlateId });
+              } finally {
+                openingDraftRef.current = emptyPlateSketch();
+              }
+            } else if (!closes) {
+              openingDraftRef.current = {
+                nodeIds,
+                segments,
+                firstNodeId: sketch.firstNodeId,
+                lastNodeId: nodeId,
+                arcControlNodeId: null,
+              };
+            }
+          }
+          const draft = openingDraftRef.current;
+          if (draft.firstNodeId !== null) {
+            selectRef.current({ type: "multi", nodeIds: [...draft.nodeIds], beamIds: [] });
           }
         }
       } else if (activeTool === "addSubNode") {
@@ -951,7 +1020,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       plateDraftRef.current = emptyPlateSketch();
-      openingDraftRef.current = [];
+      openingDraftRef.current = emptyPlateSketch();
       beamStartRef.current = null;
       hidePreview(preview);
       previewHint.hidden = true;
