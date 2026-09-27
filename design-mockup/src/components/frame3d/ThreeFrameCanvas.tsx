@@ -56,21 +56,32 @@ function buildBeamConnectionIndex(beams: Frame3DModel["beams"]): Set<string> {
   return index;
 }
 
+function sortedGridAxisValues(axes: readonly { position: number }[]): number[] {
+  return axes.map((axis) => axis.position / 1000).sort((a, b) => a - b);
+}
+
 function nearestGridAxisValues(
-  axes: readonly { position: number }[],
+  values: readonly number[],
   targetM: number,
   count = 3,
 ): number[] {
-  const nearest: Array<{ value: number; distance: number }> = [];
-  for (const axis of axes) {
-    const value = axis.position / 1000;
-    const distance = Math.abs(value - targetM);
-    let insertAt = nearest.findIndex((entry) => distance < entry.distance);
-    if (insertAt < 0) insertAt = nearest.length;
-    if (insertAt < count) nearest.splice(insertAt, 0, { value, distance });
-    if (nearest.length > count) nearest.pop();
+  let low = 0;
+  let high = values.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (values[middle] < targetM) low = middle + 1;
+    else high = middle;
   }
-  return nearest.map((entry) => entry.value);
+  let left = low - 1;
+  let right = low;
+  const nearest: number[] = [];
+  while (nearest.length < count && (left >= 0 || right < values.length)) {
+    const leftDistance = left >= 0 ? Math.abs(values[left] - targetM) : Number.POSITIVE_INFINITY;
+    const rightDistance = right < values.length ? Math.abs(values[right] - targetM) : Number.POSITIVE_INFINITY;
+    if (leftDistance <= rightDistance) nearest.push(values[left--]);
+    else nearest.push(values[right++]);
+  }
+  return nearest;
 }
 
 const SAME_NODE_TOLERANCE_M = 1e-7;
@@ -733,6 +744,16 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   snapsRef.current = snaps;
   const structuralGridRef = useRef(structuralGrid);
   structuralGridRef.current = structuralGrid;
+  const structuralSnapAxesSourceRef = useRef<StructuralGrid | undefined>(undefined);
+  const structuralSnapAxesRef = useRef({ x: [] as number[], y: [] as number[], z: [] as number[] });
+  if (structuralSnapAxesSourceRef.current !== structuralGrid) {
+    structuralSnapAxesSourceRef.current = structuralGrid;
+    structuralSnapAxesRef.current = {
+      x: sortedGridAxisValues(structuralGrid?.xAxes ?? []),
+      y: sortedGridAxisValues(structuralGrid?.yAxes ?? []),
+      z: sortedGridAxisValues(structuralGrid?.zAxes ?? []),
+    };
+  }
   const gridSpacingRef = useRef(gridSpacingM);
   gridSpacingRef.current = gridSpacingM;
   const selectionRef = useRef(selection);
@@ -1005,7 +1026,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       if (!raycaster.ray.intersectPlane(plane, position)) return null;
       const raw = position.clone();
       if (settings.stramien && structuralGridRef.current?.enabled) {
-        const structural = structuralGridRef.current;
+        const structuralAxes = structuralSnapAxesRef.current;
         const candidates: THREE.Vector3[] = [];
         const rect = renderer.domElement.getBoundingClientRect();
         const pixelDistance = (candidate: THREE.Vector3) => {
@@ -1015,25 +1036,25 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         // Alleen de drie assen die in modelruimte het dichtst bij de aanwijzer
         // liggen kunnen binnen de 14 px snapzone winnen. Zo blijft een zeer
         // groot stramien per beeldframe op maximaal vijftien projecties.
-        const addSingleAxes = (key: "x" | "y" | "z", axes: readonly { position: number }[]) => {
-          const values = nearestGridAxisValues(axes, raw[key]);
-          values.forEach((value) => {
+        const addSingleAxes = (key: "x" | "y" | "z", values: readonly number[]) => {
+          const nearest = nearestGridAxisValues(values, raw[key]);
+          nearest.forEach((value) => {
             const candidate = raw.clone();
             candidate[key] = value;
             candidates.push(candidate);
           });
-          return values;
+          return nearest;
         };
         if (view === "front") {
-          const nearX = addSingleAxes("x", structural.xAxes), nearZ = addSingleAxes("z", structural.zAxes);
+          const nearX = addSingleAxes("x", structuralAxes.x), nearZ = addSingleAxes("z", structuralAxes.z);
           nearX.forEach((x) => nearZ.forEach((z) =>
               candidates.push(new THREE.Vector3(x, anchor?.y ?? controls.target.y, z))));
         } else if (view === "side") {
-          const nearY = addSingleAxes("y", structural.yAxes ?? []), nearZ = addSingleAxes("z", structural.zAxes);
+          const nearY = addSingleAxes("y", structuralAxes.y), nearZ = addSingleAxes("z", structuralAxes.z);
           nearY.forEach((y) => nearZ.forEach((z) =>
               candidates.push(new THREE.Vector3(anchor?.x ?? controls.target.x, y, z))));
         } else {
-          const nearX = addSingleAxes("x", structural.xAxes), nearY = addSingleAxes("y", structural.yAxes ?? []);
+          const nearX = addSingleAxes("x", structuralAxes.x), nearY = addSingleAxes("y", structuralAxes.y);
           nearX.forEach((x) => nearY.forEach((y) =>
               candidates.push(new THREE.Vector3(x, y, anchor?.z ?? controls.target.z))));
         }
