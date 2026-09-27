@@ -151,7 +151,7 @@ export default function Frame3DEditor({
   const applyTransform = (command: Frame3DTransformCommand) => {
     if (!transformSelection) return;
     const transformed = transformFrame3D(model, transformSelection, command);
-    onChange(transformed.model);
+    if (transformed.model !== model) onChange(transformed.model);
     setSelection(transformed.selection);
     onToolChange?.("select");
   };

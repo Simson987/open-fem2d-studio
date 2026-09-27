@@ -470,7 +470,8 @@ export function addFrame3DConditionMarkers(
   if (batcher) group.userData[MARKER_BATCHER_KEY] = batcher;
   const byId = new Map(model.nodes.map((node) => [node.id, node]));
   const beamById = new Map(model.beams.map((beam) => [beam.id, beam]));
-  const bounds = new THREE.Box3().setFromPoints(model.nodes.map(nodePoint));
+  const bounds = new THREE.Box3();
+  for (const node of model.nodes) bounds.expandByPoint(nodePoint(node));
   const size = model.nodes.length > 0
     ? Math.max(0.25, Math.min(0.8, bounds.getSize(new THREE.Vector3()).length() * 0.045))
     : 0.3;

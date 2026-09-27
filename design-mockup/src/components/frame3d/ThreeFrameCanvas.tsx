@@ -117,10 +117,16 @@ function profileBatchName(profileName: string): string {
   return profileName.trim().toUpperCase().replace(/\s+(?=\d)/g, "");
 }
 
+function frame3DNodeBounds(model: Frame3DModel): THREE.Box3 {
+  const box = new THREE.Box3();
+  for (const node of model.nodes) box.expandByPoint(new THREE.Vector3(node.x, node.y, node.z));
+  return box;
+}
+
 /** Ongeveer dezelfde 10 px diameter als de 2D-knoop bij passend beeld. */
 function visualNodeRadius(model: Frame3DModel): number {
   if (model.nodes.length < 2) return 0.035;
-  const box = new THREE.Box3().setFromPoints(model.nodes.map((node) => new THREE.Vector3(node.x, node.y, node.z)));
+  const box = frame3DNodeBounds(model);
   return Math.max(0.012, Math.min(0.08, box.getSize(new THREE.Vector3()).length() * 0.006));
 }
 
@@ -147,8 +153,7 @@ function sceneBounds(
   model: Frame3DModel,
   visibility: Frame3DVisibility,
 ): THREE.Box3 {
-  const box = new THREE.Box3();
-  model.nodes.forEach((node) => box.expandByPoint(new THREE.Vector3(node.x, node.y, node.z)));
+  const box = frame3DNodeBounds(model);
   // Fit view focuses on the structural model. A project grid can deliberately
   // extend far beyond a small starter frame; including it here shrank the
   // actual model to a thumbnail even though all geometry technically fitted.
@@ -244,6 +249,17 @@ function writeCameraDiagnostics(container: HTMLElement | null, state: SceneState
   container.dataset.frame3dCameraPosition = value(state.camera.position);
   container.dataset.frame3dCameraTarget = value(state.controls.target);
   container.dataset.frame3dCameraUp = value(state.camera.up);
+}
+
+function writeBuildMode(container: HTMLElement, mode: string) {
+  container.dataset.frame3dBuildMode = mode;
+  const history = (container.dataset.frame3dBuildHistory ?? "").split(",").filter(Boolean);
+  history.push(mode);
+  container.dataset.frame3dBuildHistory = history.slice(-8).join(",");
+}
+
+function sameFrame3DVisibility(a: Frame3DVisibility, b: Frame3DVisibility): boolean {
+  return (Object.keys(a) as (keyof Frame3DVisibility)[]).every((key) => a[key] === b[key]);
 }
 
 interface PlateSketch {
@@ -532,18 +548,30 @@ function addDashedSegments(group: THREE.Group, points: THREE.Vector3[], color = 
 
 function addStructuralGrid(group: THREE.Group, model: Frame3DModel, grid: StructuralGrid) {
   if (!grid.enabled) return;
-  const xValues = [...grid.xAxes.map((axis) => axis.position / 1000), ...model.nodes.map((node) => node.x)];
-  const yValues = [...(grid.yAxes ?? []).map((axis) => axis.position / 1000), ...model.nodes.map((node) => node.y)];
-  const zValues = [...grid.zAxes.map((axis) => axis.position / 1000), ...model.nodes.map((node) => node.z)];
-  const range = (values: number[], fallback: [number, number]): [number, number] => {
-    if (values.length === 0) return fallback;
-    const min = Math.min(...values), max = Math.max(...values);
+  const range = (
+    axes: readonly { position: number }[],
+    coordinate: "x" | "y" | "z",
+    fallback: [number, number],
+  ): [number, number] => {
+    let min = Number.POSITIVE_INFINITY;
+    let max = Number.NEGATIVE_INFINITY;
+    for (const axis of axes) {
+      const value = axis.position / 1000;
+      if (value < min) min = value;
+      if (value > max) max = value;
+    }
+    for (const node of model.nodes) {
+      const value = node[coordinate];
+      if (value < min) min = value;
+      if (value > max) max = value;
+    }
+    if (!Number.isFinite(min)) return fallback;
     const margin = Math.max(1, (max - min) * 0.12);
     return [min - margin, max + margin];
   };
-  const [xMin, xMax] = range(xValues, [-5, 5]);
-  const [yMin, yMax] = range(yValues, [-5, 5]);
-  const [zMin, zMax] = range(zValues, [0, 5]);
+  const [xMin, xMax] = range(grid.xAxes, "x", [-5, 5]);
+  const [yMin, yMax] = range(grid.yAxes ?? [], "y", [-5, 5]);
+  const [zMin, zMax] = range(grid.zAxes, "z", [0, 5]);
   const baseZ = grid.zAxes[0]?.position !== undefined ? grid.zAxes[0].position / 1000 : zMin;
   const baseSegments: THREE.Vector3[] = [];
   const levelSegments: THREE.Vector3[] = [];
@@ -588,8 +616,7 @@ function addStructuralGrid(group: THREE.Group, model: Frame3DModel, grid: Struct
 }
 
 function resultScale(model: Frame3DModel, result: Frame3DSolveResult): number {
-  const box = new THREE.Box3();
-  model.nodes.forEach((node) => box.expandByPoint(new THREE.Vector3(node.x, node.y, node.z)));
+  const box = frame3DNodeBounds(model);
   const modelSize = Math.max(box.getSize(new THREE.Vector3()).length(), 1);
   const maxDisplacement = frame3DMaximumDisplacementM(model, result);
   return maxDisplacement > 1e-15 ? Math.min(10_000, modelSize * 0.12 / maxDisplacement) : 1;
@@ -671,6 +698,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const selectionPickTargetsRef = useRef<THREE.Object3D[]>([]);
   const lastBuiltModelRef = useRef<Frame3DModel | null>(null);
   const lastBuiltConditionModelRef = useRef<Frame3DModel | undefined>(undefined);
+  const lastBuiltPresentationRef = useRef<{
+    visibility: Frame3DVisibility;
+    structuralGrid: StructuralGrid | undefined;
+    result: Frame3DSolveResult | null | undefined;
+    utilizations: Frame3DUtilization[];
+    activeLoadCaseId: number | undefined;
+  } | null>(null);
   const lastBuiltNodeBoundsRef = useRef<THREE.Box3 | null>(null);
   const visualNodeRadiusRef = useRef(0.035);
   const plateDraftRef = useRef<PlateSketch>(emptyPlateSketch());
@@ -681,6 +715,12 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const openingPlateRef = useRef<number | null>(null);
   const cameraChangeRef = useRef(onCameraChange);
   cameraChangeRef.current = onCameraChange;
+  const rememberBuiltPresentation = () => {
+    lastBuiltConditionModelRef.current = conditionModel;
+    lastBuiltPresentationRef.current = {
+      visibility, structuralGrid, result, utilizations, activeLoadCaseId,
+    };
+  };
   const discardDraftNodes = (createdNodeIds: Set<number>) => {
     if (createdNodeIds.size === 0) return;
     const current = modelRef.current;
@@ -1373,6 +1413,66 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const rebuildStartedAt = performance.now();
     const { geometry } = state;
     const previousModel = lastBuiltModelRef.current;
+    const previousPresentation = lastBuiltPresentationRef.current;
+    // Oppervlaktebelastingen gebruiken de tijdens de volledige plaatopbouw
+    // berekende driehoeksmesh en worden daarom niet los ververst.
+    const conditionLayerHasNoSurfaceLoads = !visibility.loads || (
+      (conditionModel?.surfaceLoads?.length ?? model.surfaceLoads?.length ?? 0) === 0
+      && (lastBuiltConditionModelRef.current?.surfaceLoads?.length
+        ?? previousModel?.surfaceLoads?.length ?? 0) === 0
+    );
+    const conditionLayerOnly = previousModel === model
+      && previousPresentation !== null
+      && sameFrame3DVisibility(visibility, previousPresentation.visibility)
+      && structuralGrid === previousPresentation.structuralGrid
+      && result === previousPresentation.result
+      && utilizations === previousPresentation.utilizations
+      && conditionLayerHasNoSurfaceLoads
+      && (conditionModel !== lastBuiltConditionModelRef.current
+        || activeLoadCaseId !== previousPresentation.activeLoadCaseId);
+    if (conditionLayerOnly) {
+      const oldConditions = geometry.children.find((child) => child.userData.frame3dConditions === true);
+      const removedConditionObjects = new Set<THREE.Object3D>();
+      let removedLabelCount = 0;
+      if (oldConditions instanceof THREE.Group) {
+        oldConditions.traverse((object) => {
+          removedConditionObjects.add(object);
+          if (object instanceof CSS2DObject) removedLabelCount += 1;
+        });
+        disposeGroup(oldConditions);
+        geometry.remove(oldConditions);
+      }
+      selectionPickTargetsRef.current = selectionPickTargetsRef.current
+        .filter((target) => !removedConditionObjects.has(target));
+      const nextConditions = new THREE.Group();
+      nextConditions.userData.frame3dConditions = true;
+      addFrame3DConditionMarkers(nextConditions, conditionModel ?? model, visibility, activeLoadCaseId);
+      geometry.add(nextConditions);
+      let addedLabelCount = 0;
+      nextConditions.traverse((object) => {
+        if (object instanceof CSS2DObject) addedLabelCount += 1;
+        const type = object.userData.type as Frame3DSelectionType | undefined;
+        if (type && object.userData.pickable !== false && SELECTABLE_TYPES.has(type)
+          && typeof (object as { raycast?: unknown }).raycast === "function") {
+          selectionPickTargetsRef.current.push(object);
+        }
+      });
+      applySelectionHighlight(nextConditions, selectionRef.current);
+      state.renderer.render(state.scene, state.camera);
+      state.labelRenderer.render(state.scene, state.camera);
+      rememberBuiltPresentation();
+      if (containerRef.current) {
+        const previousLabelCount = Number(containerRef.current.dataset.frame3dLabels ?? 0);
+        const visibleLabelCount = Math.max(0, previousLabelCount - removedLabelCount + addedLabelCount);
+        writeBuildMode(containerRef.current, "conditions");
+        containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+        containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
+        containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
+        containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);
+        containerRef.current.dataset.frame3dLabels = String(visibleLabelCount);
+      }
+      return;
+    }
     const pendingAppend = pendingAppendRef.current?.model === model ? pendingAppendRef.current : null;
     const appendedNode = previousModel !== null && pendingAppend?.node !== undefined
       && model.nodes.length === previousModel.nodes.length + 1
@@ -1429,6 +1529,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const previousBounds = lastBuiltNodeBoundsRef.current;
     const movedInsideBounds = previousBounds !== null
       && movedNodes.every((node) => previousBounds.containsPoint(new THREE.Vector3(node.x, node.y, node.z)));
+    const movedNodeRadiusStable = movedInsideBounds
+      || Math.abs(visualNodeRadius(model) - visualNodeRadiusRef.current) < 1e-12;
     const incrementalNodeMove = previousModel !== null
       && unchangedCollections
       && nodeTopologyStable
@@ -1437,12 +1539,29 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       && movedNodes.length > 0
       && movedNodes.length <= 512
       && previousModel.nodes.length >= 250
-      && movedInsideBounds
+      && movedNodeRadiusStable
       && (!visibility.plates || affectedPlates.length === 0)
       && !visibility.beamNumbers
       && conditionGeometryStable
       && resultGeometryStable
       && utilizationGeometryStable;
+    if (containerRef.current && previousModel !== null && model !== previousModel && !incrementalNodeMove) {
+      containerRef.current.dataset.frame3dMoveFallback = [
+        model.nodes === previousModel.nodes ? "nodes-unchanged" : "",
+        !nodeTopologyStable ? "node-topology" : "",
+        movedNodes.length === 0 ? "no-coordinate-change" : "",
+        !unchangedCollections ? "collections" : "",
+        model.beams !== previousModel.beams ? "beams" : "",
+        movedNodes.length > 512 ? "selection-size" : "",
+        previousModel.nodes.length < 250 ? "small-model" : "",
+        !movedNodeRadiusStable ? "node-radius" : "",
+        visibility.plates && affectedPlates.length > 0 ? "plates" : "",
+        visibility.beamNumbers ? "beam-labels" : "",
+        !conditionGeometryStable ? "conditions" : "",
+        !resultGeometryStable ? "results" : "",
+        !utilizationGeometryStable ? "utilization" : "",
+      ].filter(Boolean).join(",");
+    }
     if (incrementalNodeMove) {
       const visibleNodes = geometry.children.find((child) => child.userData.frame3dNodeVisual === true);
       const hitNodes = geometry.children.find((child) => child.userData.frame3dNodeHit === true);
@@ -1502,6 +1621,24 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         }
       }
       if (fastPathReady) {
+        if (!movedInsideBounds) {
+          nodeMeshes.forEach((mesh) => {
+            mesh.computeBoundingBox();
+            mesh.computeBoundingSphere();
+          });
+          if (visibility.structuralGrid && structuralGrid?.enabled) {
+            const oldGrid = geometry.children.find((child) => child.userData.frame3dStructuralGrid === true);
+            if (oldGrid instanceof THREE.Group) {
+              disposeGroup(oldGrid);
+              geometry.remove(oldGrid);
+            }
+            const nextGrid = new THREE.Group();
+            nextGrid.userData.frame3dStructuralGrid = true;
+            addStructuralGrid(nextGrid, model, structuralGrid);
+            geometry.add(nextGrid);
+          }
+          lastBuiltNodeBoundsRef.current = frame3DNodeBounds(model);
+        }
         touchedBeamMeshes.forEach((mesh) => {
           mesh.computeBoundingBox();
           mesh.computeBoundingSphere();
@@ -1523,16 +1660,18 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         state.labelRenderer.render(state.scene, state.camera);
         selectionRenderedWithModelRef.current = selectionRef.current;
         lastBuiltModelRef.current = model;
-        lastBuiltConditionModelRef.current = conditionModel;
+        rememberBuiltPresentation();
         pendingAppendRef.current = null;
         if (containerRef.current) {
           delete containerRef.current.dataset.frame3dIncrementalFallback;
-          containerRef.current.dataset.frame3dBuildMode = "move-nodes";
+          delete containerRef.current.dataset.frame3dMoveFallback;
+          writeBuildMode(containerRef.current, "move-nodes");
           containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
           containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
         }
         return;
       }
+      if (containerRef.current) containerRef.current.dataset.frame3dMoveFallback = "gpu-target";
     }
     const unhintedNodeCount = previousModel && pendingAppend === null
       ? model.nodes.length - previousModel.nodes.length : 0;
@@ -1670,11 +1809,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         state.labelRenderer.render(state.scene, state.camera);
         selectionRenderedWithModelRef.current = selectionRef.current;
         lastBuiltModelRef.current = model;
-        lastBuiltConditionModelRef.current = conditionModel;
+        rememberBuiltPresentation();
         pendingAppendRef.current = null;
         if (containerRef.current) {
           delete containerRef.current.dataset.frame3dIncrementalFallback;
-          containerRef.current.dataset.frame3dBuildMode = "append-copy";
+          writeBuildMode(containerRef.current, "append-copy");
           containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
           containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
           containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
@@ -1781,11 +1920,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         state.labelRenderer.render(state.scene, state.camera);
         selectionRenderedWithModelRef.current = selectionRef.current;
         lastBuiltModelRef.current = model;
-        lastBuiltConditionModelRef.current = conditionModel;
+        rememberBuiltPresentation();
         pendingAppendRef.current = null;
         if (containerRef.current) {
           delete containerRef.current.dataset.frame3dIncrementalFallback;
-          containerRef.current.dataset.frame3dBuildMode = "remove-copy";
+          writeBuildMode(containerRef.current, "remove-copy");
           containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
           containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
           containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
@@ -1922,13 +2061,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         state.labelRenderer.render(state.scene, state.camera);
         selectionRenderedWithModelRef.current = selectionRef.current;
         lastBuiltModelRef.current = model;
-        lastBuiltConditionModelRef.current = conditionModel;
+        rememberBuiltPresentation();
         pendingAppendRef.current = null;
         if (containerRef.current) {
           delete containerRef.current.dataset.frame3dIncrementalFallback;
-          containerRef.current.dataset.frame3dBuildMode = beam
+          writeBuildMode(containerRef.current, beam
             ? node ? "append-node-beam" : "append-beam"
-            : "append-node";
+            : "append-node");
           containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
           containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
           containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
@@ -2273,8 +2412,16 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         ));
       }
     }
-    if (visibility.structuralGrid && structuralGrid) addStructuralGrid(geometry, model, structuralGrid);
-    addFrame3DConditionMarkers(geometry, conditionModel ?? model, visibility, activeLoadCaseId);
+    if (visibility.structuralGrid && structuralGrid) {
+      const structuralGridGroup = new THREE.Group();
+      structuralGridGroup.userData.frame3dStructuralGrid = true;
+      addStructuralGrid(structuralGridGroup, model, structuralGrid);
+      geometry.add(structuralGridGroup);
+    }
+    const conditionGroup = new THREE.Group();
+    conditionGroup.userData.frame3dConditions = true;
+    addFrame3DConditionMarkers(conditionGroup, conditionModel ?? model, visibility, activeLoadCaseId);
+    geometry.add(conditionGroup);
 
     if (visibility.loads) {
       const visibleSurfaceLoads = (model.surfaceLoads ?? []).filter((load) =>
@@ -2420,7 +2567,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         result.memberForces.reduce((maximum, force) =>
           Math.max(maximum, ...diagramPoints(result, component, force).map((point) => Math.abs(point.value))), 0),
       ]));
-      const modelBox = new THREE.Box3().setFromPoints(model.nodes.map((node) => new THREE.Vector3(node.x, node.y, node.z)));
+      const modelBox = frame3DNodeBounds(model);
       const diagramHeight = Math.max(0.35, Math.min(3, modelBox.getSize(new THREE.Vector3()).length() * 0.085));
       for (const [beamIndex, beam] of model.beams.entries()) {
         const start = byId.get(beam.startNodeId), end = byId.get(beam.endNodeId);
@@ -2471,7 +2618,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     selectionRenderedWithModelRef.current = selectionRef.current;
     writeCameraDiagnostics(containerRef.current, state);
     if (containerRef.current) {
-      containerRef.current.dataset.frame3dBuildMode = "full";
+      writeBuildMode(containerRef.current, "full");
       containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
       containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
       containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
@@ -2480,7 +2627,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       containerRef.current.dataset.frame3dLabels = String(visibleLabelCount);
     }
     lastBuiltModelRef.current = model;
-    lastBuiltConditionModelRef.current = conditionModel;
+    rememberBuiltPresentation();
     const nodeBounds = new THREE.Box3();
     model.nodes.forEach((node) => nodeBounds.expandByPoint(new THREE.Vector3(node.x, node.y, node.z)));
     lastBuiltNodeBoundsRef.current = nodeBounds;

@@ -32,10 +32,13 @@ function project(node: Pick<Frame3DNode, "x" | "y" | "z">, projection: Projectio
 }
 
 function fit(points: Point2D[]) {
-  const us = points.map((point) => point.u);
-  const vs = points.map((point) => point.v);
-  const minU = Math.min(...us, 0), maxU = Math.max(...us, 0);
-  const minV = Math.min(...vs, 0), maxV = Math.max(...vs, 0);
+  let minU = 0, maxU = 0, minV = 0, maxV = 0;
+  for (const point of points) {
+    if (point.u < minU) minU = point.u;
+    if (point.u > maxU) maxU = point.u;
+    if (point.v < minV) minV = point.v;
+    if (point.v > maxV) maxV = point.v;
+  }
   const spanU = Math.max(maxU - minU, 1e-6);
   const spanV = Math.max(maxV - minV, 1e-6);
   const scale = Math.min((WIDTH - 2 * PADDING) / spanU, (HEIGHT - 2 * PADDING) / spanV);
@@ -58,11 +61,21 @@ function utilizationColor(value: ReturnType<typeof buildFrame3DUtilizations>[num
 
 function deformationScale(model: Frame3DModel, result: Frame3DSolveResult) {
   if (model.nodes.length === 0) return 1;
-  const xs = model.nodes.map((node) => node.x), ys = model.nodes.map((node) => node.y), zs = model.nodes.map((node) => node.z);
+  let minX = Number.POSITIVE_INFINITY, maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY, maxY = Number.NEGATIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY, maxZ = Number.NEGATIVE_INFINITY;
+  for (const node of model.nodes) {
+    if (node.x < minX) minX = node.x;
+    if (node.x > maxX) maxX = node.x;
+    if (node.y < minY) minY = node.y;
+    if (node.y > maxY) maxY = node.y;
+    if (node.z < minZ) minZ = node.z;
+    if (node.z > maxZ) maxZ = node.z;
+  }
   const modelSize = Math.max(Math.hypot(
-    Math.max(...xs) - Math.min(...xs),
-    Math.max(...ys) - Math.min(...ys),
-    Math.max(...zs) - Math.min(...zs),
+    maxX - minX,
+    maxY - minY,
+    maxZ - minZ,
   ), 1);
   const maxDisplacement = frame3DMaximumDisplacementM(model, result);
   return maxDisplacement > 1e-15 ? Math.min(10_000, modelSize * 0.12 / maxDisplacement) : 1;

@@ -119,6 +119,12 @@ export function transformFrame3D(
   if (command.kind === "move" || command.kind === "copy") finite([command.dx, command.dy, command.dz]);
   if (command.kind === "rotate") finite([command.angleDeg]);
   if (command.kind === "mirror") finite([command.offset]);
+  if (command.kind === "move" && command.dx === 0 && command.dy === 0 && command.dz === 0) {
+    return { model, selection };
+  }
+  if (command.kind === "rotate" && command.angleDeg % 360 === 0) {
+    return { model, selection };
+  }
 
   if (command.kind === "copy") {
     const nextNode = nextId(model.nodes);
@@ -212,19 +218,24 @@ export function transformFrame3D(
     z: sum.z + node.z / ids.length,
   }), { x: 0, y: 0, z: 0 });
   const nodes = model.nodes.slice();
+  let changed = false;
   for (const id of ids) {
     const nodeIndex = index.nodeIndexById.get(id)!;
     const node = model.nodes[nodeIndex];
-    if (command.kind === "move") nodes[nodeIndex] = {
+    let next: typeof node;
+    if (command.kind === "move") next = {
       ...node, x: node.x + command.dx, y: node.y + command.dy, z: node.z + command.dz,
     };
-    else if (command.kind === "rotate") nodes[nodeIndex] = {
+    else if (command.kind === "rotate") next = {
       ...node, ...rotatePoint(node, center, command.axis, command.angleDeg * Math.PI / 180),
     };
     else {
       const coordinate = node[command.axis];
-      nodes[nodeIndex] = { ...node, [command.axis]: 2 * command.offset - coordinate };
+      next = { ...node, [command.axis]: 2 * command.offset - coordinate };
     }
+    if (next.x !== node.x || next.y !== node.y || next.z !== node.z) changed = true;
+    nodes[nodeIndex] = next;
   }
+  if (!changed) return { model, selection };
   return { model: { ...model, nodes }, selection };
 }

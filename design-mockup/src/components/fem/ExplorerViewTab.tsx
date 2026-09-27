@@ -91,6 +91,9 @@ export default function ExplorerViewTab({
   const allSnaps = SNAP_SOORTEN.every((key) => snaps[key]);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matches = (label: string) => !normalizedQuery || label.toLocaleLowerCase().includes(normalizedQuery);
+  const matchesSnapGroup = Boolean(normalizedQuery)
+    && t("zichtbaarheid.snap").toLocaleLowerCase().includes(normalizedQuery);
+  const matchesSnap = (label: string) => matchesSnapGroup || matches(label);
 
   const setFlag = (key: AanUitVlag, value: boolean) =>
     setDisplayFlags((flags) => zetVlag(flags, key, value));
@@ -161,8 +164,8 @@ export default function ExplorerViewTab({
     <section className="explorer-view-section">
       <div className="fem-results-section-title">{t("zichtbaarheid.snap")}</div>
       <div className="fem-results-toggle-list">
-        {matches(t("zichtbaarheid.snapAll")) && <ToggleRow icon={selectIcon} label={t("zichtbaarheid.snapAll")} value={allSnaps} onChange={zetAlleSnaps} />}
-        {SNAP_SOORTEN.filter((key: SnapSoort) => matches(t(`snap.${key}`))).map((key: SnapSoort) => (
+        {matchesSnap(t("zichtbaarheid.snapAll")) && <ToggleRow icon={selectIcon} label={t("zichtbaarheid.snapAll")} value={allSnaps} onChange={zetAlleSnaps} />}
+        {SNAP_SOORTEN.filter((key: SnapSoort) => matchesSnap(t(`snap.${key}`))).map((key: SnapSoort) => (
           <ToggleRow
             key={key}
             label={t(`snap.${key}`)}

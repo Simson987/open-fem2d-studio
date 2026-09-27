@@ -38,6 +38,17 @@ assert.ok(Math.abs(rotated.model.nodes[1].y - 2) < 1e-12);
 const mirrored = transformFrame3D(model, { type: "node", id: 3 }, { kind: "mirror", axis: "y", offset: 1 });
 assert.deepEqual(mirrored.model.nodes[2], { id: 3, x: 4, y: -1, z: 0 });
 
+assert.strictEqual(
+  transformFrame3D(model, { type: "beam", id: 1 }, { kind: "move", dx: 0, dy: 0, dz: 0 }).model,
+  model,
+  "een nulverplaatsing maakt geen nieuw model",
+);
+assert.strictEqual(
+  transformFrame3D(model, { type: "beam", id: 1 }, { kind: "rotate", axis: "x", angleDeg: 90 }).model,
+  model,
+  "rotatie om de eigen geometrische as maakt geen nieuw model",
+);
+
 const copied = transformFrame3D(model, { type: "beam", id: 1 }, { kind: "copy", dx: 0, dy: 5, dz: 0 });
 assert.deepEqual(copied.selection, { type: "beam", id: 3 });
 assert.equal(copied.model.nodes.length, 5);
