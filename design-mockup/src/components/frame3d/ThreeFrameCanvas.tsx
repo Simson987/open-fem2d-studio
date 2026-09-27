@@ -335,6 +335,22 @@ function sameFrame3DVisibility(a: Frame3DVisibility, b: Frame3DVisibility): bool
   return (Object.keys(a) as (keyof Frame3DVisibility)[]).every((key) => a[key] === b[key]);
 }
 
+function sameFrame3DNodes(a: Frame3DModel["nodes"], b: Frame3DModel["nodes"]): boolean {
+  if (a === b) return true;
+  return a.length === b.length && a.every((node, index) => {
+    const other = b[index];
+    return node.id === other.id && node.x === other.x && node.y === other.y && node.z === other.z;
+  });
+}
+
+function sameFrame3DEntities<T>(a: readonly T[] | undefined, b: readonly T[] | undefined): boolean {
+  if (a === b) return true;
+  const left = a ?? [];
+  const right = b ?? [];
+  return left.length === right.length && left.every((value, index) =>
+    value === right[index] || JSON.stringify(value) === JSON.stringify(right[index]));
+}
+
 interface PlateSketch {
   nodeIds: number[];
   segments: Frame3DPlateBoundarySegment[];
@@ -350,18 +366,33 @@ const emptyPlateSketch = (): PlateSketch => ({
 const isOpeningTool = (tool: Frame3DTool) => tool === "addOpening" || tool === "addOpeningArc";
 const isArcBoundaryTool = (tool: Frame3DTool) => tool === "addPlateArc" || tool === "addOpeningArc";
 
+function createPlateMaterial(color = 0x94a3b8): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.78,
+    metalness: 0.01,
+    transparent: true,
+    opacity: 0.7,
+    side: THREE.DoubleSide,
+  });
+}
+
+function disposeObject3D(root: THREE.Object3D) {
+  root.traverse((object) => {
+    if (object instanceof CSS2DObject) object.element.remove();
+    const drawable = object as THREE.Object3D & { geometry?: THREE.BufferGeometry; material?: THREE.Material | THREE.Material[] };
+    drawable.geometry?.dispose();
+    if (drawable.material) {
+      const materials = Array.isArray(drawable.material) ? drawable.material : [drawable.material];
+      materials.forEach((material) => material.dispose());
+    }
+  });
+}
+
 function disposeGroup(group: THREE.Group) {
   for (const child of [...group.children]) {
     group.remove(child);
-    child.traverse((object) => {
-      if (object instanceof CSS2DObject) object.element.remove();
-      const drawable = object as THREE.Object3D & { geometry?: THREE.BufferGeometry; material?: THREE.Material | THREE.Material[] };
-      drawable.geometry?.dispose();
-      if (drawable.material) {
-        const materials = Array.isArray(drawable.material) ? drawable.material : [drawable.material];
-        materials.forEach((material) => material.dispose());
-      }
-    });
+    disposeObject3D(child);
   }
 }
 
@@ -940,6 +971,19 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const light = new THREE.DirectionalLight(0xffffff, 1.2);
     light.position.set(8, 6, 12);
     scene.add(light);
+    // Compileer het transparante dubbelzijdige plaatmateriaal terwijl de
+    // viewer opent. Zonder deze opwarming blokkeerde het sluiten van de eerste
+    // plaat tientallen milliseconden op shadercompilatie, terwijl de eigenlijke
+    // extrusie maar enkele milliseconden kost.
+    const plateWarmupStartedAt = performance.now();
+    const plateWarmupGeometry = new THREE.PlaneGeometry(1, 1);
+    const plateWarmupMaterial = createPlateMaterial();
+    const plateWarmupMesh = new THREE.Mesh(plateWarmupGeometry, plateWarmupMaterial);
+    plateWarmupMesh.frustumCulled = false;
+    scene.add(plateWarmupMesh);
+    renderer.compile(scene, camera);
+    scene.remove(plateWarmupMesh);
+    container.dataset.frame3dPlateShaderWarmupMs = (performance.now() - plateWarmupStartedAt).toFixed(2);
     const geometry = new THREE.Group();
     scene.add(geometry);
     const draftGeometry = new THREE.BufferGeometry();
@@ -1669,6 +1713,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       axes.geometry.dispose();
       (axes.material as THREE.Material).dispose();
       axisLabels.forEach((label) => label.element.remove());
+      plateWarmupGeometry.dispose();
+      plateWarmupMaterial.dispose();
       renderer.dispose();
       renderer.domElement.remove();
       labelRenderer.domElement.remove();
@@ -1758,6 +1804,110 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       && model.memberPointLoads === previousModel.memberPointLoads
       && model.thermalLoads === previousModel.thermalLoads
       && model.surfaceLoads === previousModel.surfaceLoads;
+    const previousPlates = previousModel?.plates ?? [];
+    const nextPlates = model.plates ?? [];
+    const presentationStable = previousPresentation !== null
+      && sameFrame3DVisibility(visibility, previousPresentation.visibility)
+      && structuralGrid === previousPresentation.structuralGrid
+      && result === previousPresentation.result
+      && utilizations === previousPresentation.utilizations
+      && activeLoadCaseId === previousPresentation.activeLoadCaseId;
+    const nonPlateCollectionsUnchanged = previousModel !== null
+      && sameFrame3DNodes(model.nodes, previousModel.nodes)
+      && sameFrame3DEntities(model.beams, previousModel.beams)
+      && sameFrame3DEntities(model.supports, previousModel.supports)
+      && sameFrame3DEntities(model.loads, previousModel.loads)
+      && sameFrame3DEntities(model.memberLoads, previousModel.memberLoads)
+      && sameFrame3DEntities(model.memberPointLoads, previousModel.memberPointLoads)
+      && sameFrame3DEntities(model.thermalLoads, previousModel.thermalLoads)
+      && sameFrame3DEntities(model.surfaceLoads, previousModel.surfaceLoads);
+    const appendedPlate = previousModel !== null
+      && nonPlateCollectionsUnchanged
+      && nextPlates.length === previousPlates.length + 1
+      && nextPlates.length < 100
+      && previousPlates.every((plate, index) => sameFrame3DEntities([plate], [nextPlates[index]]))
+      ? nextPlates[nextPlates.length - 1]
+      : undefined;
+    const replacedPlateIndices = previousModel !== null && nonPlateCollectionsUnchanged
+      && nextPlates.length === previousPlates.length && nextPlates.length < 100
+      ? nextPlates.flatMap((plate, index) => sameFrame3DEntities([plate], [previousPlates[index]]) ? [] : [index])
+      : [];
+    const replacedPlate = replacedPlateIndices.length === 1
+      ? nextPlates[replacedPlateIndices[0]]
+      : undefined;
+    const changedPlate = appendedPlate ?? replacedPlate;
+    if (containerRef.current && previousModel !== null && model.plates !== previousModel.plates) {
+      containerRef.current.dataset.frame3dPlateIncrementalFallback = [
+        model.nodes !== previousModel.nodes ? "nodes" : "",
+        model.beams !== previousModel.beams ? "beams" : "",
+        model.supports !== previousModel.supports ? "supports" : "",
+        model.loads !== previousModel.loads ? "loads" : "",
+        model.memberLoads !== previousModel.memberLoads ? "member-loads" : "",
+        model.memberPointLoads !== previousModel.memberPointLoads ? "point-loads" : "",
+        model.thermalLoads !== previousModel.thermalLoads ? "thermal-loads" : "",
+        model.surfaceLoads !== previousModel.surfaceLoads ? "surface-loads-collection" : "",
+        nextPlates.length !== previousPlates.length && !appendedPlate
+          ? `plate-count-${previousPlates.length}-${nextPlates.length}` : "",
+        !changedPlate ? `plate-delta-${replacedPlateIndices.length}` : "",
+        !presentationStable ? "presentation" : "",
+        !visibility.plates ? "hidden" : "",
+        !conditionLayerHasNoSurfaceLoads ? "surface-loads" : "",
+      ].filter(Boolean).join(",");
+    }
+    if (changedPlate && presentationStable && visibility.plates && conditionLayerHasNoSurfaceLoads) {
+      const plateLayerStartedAt = performance.now();
+      const built = createFrame3DPlateGeometry(model, changedPlate, nodeByIdRef.current ?? undefined);
+      const plateGeometryMs = performance.now() - plateLayerStartedAt;
+      const oldPlateMesh = replacedPlate
+        ? geometry.children.find((child) => child.userData.type === "plate" && child.userData.id === replacedPlate.id)
+        : undefined;
+      if (built && (!replacedPlate || oldPlateMesh)) {
+        if (oldPlateMesh) {
+          geometry.remove(oldPlateMesh);
+          selectionPickTargetsRef.current = selectionPickTargetsRef.current
+            .filter((target) => target !== oldPlateMesh);
+          nonNodePickTargetsRef.current = nonNodePickTargetsRef.current
+            .filter((target) => target !== oldPlateMesh);
+          disposeObject3D(oldPlateMesh);
+        }
+        const mesh = new THREE.Mesh(built.geometry, createPlateMaterial());
+        mesh.position.copy(built.position);
+        mesh.quaternion.copy(built.quaternion);
+        mesh.userData = { type: "plate", id: changedPlate.id, baseOpacity: 0.7, selectionOpacity: 0.88 };
+        const edges = new THREE.LineSegments(
+          new THREE.EdgesGeometry(built.geometry, 22),
+          new THREE.LineBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.78 }),
+        );
+        edges.userData = { type: "plate", id: changedPlate.id, selectionColor: 0x92400e, pickable: false };
+        mesh.add(edges);
+        geometry.add(mesh);
+        selectionPickTargetsRef.current.push(mesh);
+        nonNodePickTargetsRef.current.push(mesh);
+        applySelectionHighlight(geometry, selectionRef.current);
+        const plateLayerMs = performance.now() - plateLayerStartedAt;
+        const renderStartedAt = performance.now();
+        state.renderer.render(state.scene, state.camera);
+        state.labelRenderer.render(state.scene, state.camera);
+        const renderMs = performance.now() - renderStartedAt;
+        selectionRenderedWithModelRef.current = selectionRef.current;
+        lastBuiltModelRef.current = model;
+        rememberBuiltPresentation();
+        pendingAppendRef.current = null;
+        if (containerRef.current) {
+          delete containerRef.current.dataset.frame3dPlateIncrementalFallback;
+          writeBuildMode(containerRef.current, appendedPlate ? "append-plate" : "update-plate");
+          containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+          containerRef.current.dataset.frame3dPlateGeometryMs = plateGeometryMs.toFixed(2);
+          containerRef.current.dataset.frame3dPlateLayerMs = plateLayerMs.toFixed(2);
+          containerRef.current.dataset.frame3dFullRenderMs = renderMs.toFixed(2);
+          containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
+          containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
+          containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);
+        }
+        return;
+      }
+      built?.geometry.dispose();
+    }
     const movedNodes: Frame3DModel["nodes"] = [];
     let nodeTopologyStable = previousModel !== null && model.nodes.length === previousModel.nodes.length;
     if (previousModel && nodeTopologyStable && model.nodes !== previousModel.nodes) {
@@ -2411,10 +2561,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     state.axes.visible = visibility.axes;
     state.axisLabels.forEach((label) => { label.visible = visibility.axes; });
     const byId = indexFrame3DNodes(model);
+    let plateGeometryMs = 0;
     const plateGeometryById = new Map<number, ReturnType<typeof createFrame3DPlateGeometry>>();
     const plateGeometryFor = (plate: NonNullable<Frame3DModel["plates"]>[number]) => {
       if (!plateGeometryById.has(plate.id)) {
+        const startedAt = performance.now();
         plateGeometryById.set(plate.id, createFrame3DPlateGeometry(model, plate, byId));
+        plateGeometryMs += performance.now() - startedAt;
       }
       return plateGeometryById.get(plate.id) ?? null;
     };
@@ -2605,6 +2758,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       mesh.computeBoundingSphere();
       geometry.add(mesh);
     }
+    const plateLayerStartedAt = performance.now();
     const plateBatchOwnedGeometries = new Set<THREE.BufferGeometry>();
     if (visibility.plates) {
       const plates = model.plates ?? [];
@@ -2633,14 +2787,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         for (const [batchKey, batch] of batches) {
           const mesh = new THREE.InstancedMesh(
             batch.geometry,
-            new THREE.MeshStandardMaterial({
-              color: 0xffffff,
-              roughness: 0.78,
-              metalness: 0.01,
-              transparent: true,
-              opacity: 0.7,
-              side: THREE.DoubleSide,
-            }),
+            createPlateMaterial(0xffffff),
             batch.instances.length,
           );
           const instanceIds = batch.instances.map((instance) => instance.id);
@@ -2691,14 +2838,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           const built = plateGeometryFor(plate);
           if (!built) continue;
           plateBatchOwnedGeometries.add(built.geometry);
-          const mesh = new THREE.Mesh(built.geometry, new THREE.MeshStandardMaterial({
-            color: 0x94a3b8,
-            roughness: 0.78,
-            metalness: 0.01,
-            transparent: true,
-            opacity: 0.7,
-            side: THREE.DoubleSide,
-          }));
+          const mesh = new THREE.Mesh(built.geometry, createPlateMaterial());
           mesh.position.copy(built.position);
           mesh.quaternion.copy(built.quaternion);
           mesh.userData = { type: "plate", id: plate.id, baseOpacity: 0.7, selectionOpacity: 0.88 };
@@ -2712,6 +2852,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         }
       }
     }
+    const plateLayerMs = performance.now() - plateLayerStartedAt;
     // Bereid de zichtbare knoopbatch en transparante snapbatch ook voor bij een
     // leeg model. Daardoor kan de allereerste tekenklik direct een instantie
     // toevoegen en verschuift de eenmalige WebGL-opstartkost naar het openen
@@ -3014,13 +3155,18 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       if (built && !plateBatchOwnedGeometries.has(built.geometry)) built.geometry.dispose();
     });
     applySelectionHighlight(geometry, selectionRef.current);
+    const renderStartedAt = performance.now();
     state.renderer.render(state.scene, state.camera);
     state.labelRenderer.render(state.scene, state.camera);
+    const renderMs = performance.now() - renderStartedAt;
     selectionRenderedWithModelRef.current = selectionRef.current;
     writeCameraDiagnostics(containerRef.current, state);
     if (containerRef.current) {
       writeBuildMode(containerRef.current, preservedStructuralGrid ? "full-grid-reuse" : "full");
       containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+      containerRef.current.dataset.frame3dPlateGeometryMs = plateGeometryMs.toFixed(2);
+      containerRef.current.dataset.frame3dPlateLayerMs = plateLayerMs.toFixed(2);
+      containerRef.current.dataset.frame3dFullRenderMs = renderMs.toFixed(2);
       containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
       containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
       containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);

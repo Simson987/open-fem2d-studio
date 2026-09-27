@@ -1144,7 +1144,7 @@ export function addFrame3DPlate(
   options: { thicknessM?: number; material?: string; cornerRadiusM?: number; boundary?: Frame3DPlateBoundarySegment[] } = {},
 ): Frame3DModel {
   const id = nextEntityId(model.plates ?? []);
-  return parseFrame3DModel({
+  const parsed = parseFrame3DModel({
     ...model,
     plates: [...(model.plates ?? []), {
       id, nodeIds, thicknessM: options.thicknessM ?? 0.2, material: options.material ?? "C30/37",
@@ -1152,6 +1152,13 @@ export function addFrame3DPlate(
       ...(options.cornerRadiusM && options.cornerRadiusM > 0 ? { cornerRadiusM: options.cornerRadiusM } : {}),
     }],
   });
+  const addedPlate = parsed.plates?.[parsed.plates.length - 1];
+  if (!addedPlate) throw new Error("De nieuwe 3D-plaat kon niet worden gevalideerd.");
+  // Het invoermodel is al gevalideerd. Behoud daarom zijn onveranderde
+  // objectreferenties en neem alleen de nieuwe, gevalideerde plaat over. De
+  // 3D-viewer kan de plaat dan toevoegen zonder knopen, labels en staven
+  // opnieuw op te bouwen.
+  return { ...model, plates: [...(model.plates ?? []), addedPlate] };
 }
 
 export function updateFrame3DPlate(
@@ -1159,7 +1166,16 @@ export function updateFrame3DPlate(
   patch: Partial<Pick<Frame3DPlate, "thicknessM" | "material" | "cornerRadiusM">>,
 ): Frame3DModel {
   if (!(model.plates ?? []).some((plate) => plate.id === plateId)) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
-  return parseFrame3DModel({ ...model, plates: (model.plates ?? []).map((plate) => plate.id === plateId ? { ...plate, ...patch } : plate) });
+  const parsed = parseFrame3DModel({
+    ...model,
+    plates: (model.plates ?? []).map((plate) => plate.id === plateId ? { ...plate, ...patch } : plate),
+  });
+  const updatedPlate = parsed.plates?.find((plate) => plate.id === plateId);
+  if (!updatedPlate) throw new Error(`3D-plaat ${plateId} kon niet worden gevalideerd.`);
+  return {
+    ...model,
+    plates: (model.plates ?? []).map((plate) => plate.id === plateId ? updatedPlate : plate),
+  };
 }
 
 export function addFrame3DPlateOpening(
@@ -1174,7 +1190,7 @@ export function addFrame3DPlateOpening(
     ? { cornerRadiusM: cornerRadiusOrOptions }
     : cornerRadiusOrOptions;
   const id = nextEntityId(plate.openings ?? []);
-  return parseFrame3DModel({
+  const parsed = parseFrame3DModel({
     ...model,
     plates: (model.plates ?? []).map((item) => item.id === plateId ? {
       ...item,
@@ -1186,6 +1202,12 @@ export function addFrame3DPlateOpening(
       }],
     } : item),
   });
+  const updatedPlate = parsed.plates?.find((item) => item.id === plateId);
+  if (!updatedPlate) throw new Error(`De opening in 3D-plaat ${plateId} kon niet worden gevalideerd.`);
+  return {
+    ...model,
+    plates: (model.plates ?? []).map((item) => item.id === plateId ? updatedPlate : item),
+  };
 }
 
 export function removeFrame3DPlate(model: Frame3DModel, plateId: number): Frame3DModel {
