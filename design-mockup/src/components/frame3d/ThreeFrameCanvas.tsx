@@ -38,6 +38,80 @@ import { useSnapInstellingen, type SnapInstellingen, type SnapSoort } from "../.
 const ANALYTICAL_BEAM_RADIUS_M = 0.035;
 const PROFILE_BEAM_RADIUS_M = 0.12;
 
+function nextNumericId(items: readonly { id: number }[]): number {
+  let maximum = 0;
+  for (const item of items) maximum = Math.max(maximum, item.id);
+  return maximum + 1;
+}
+
+const SAME_NODE_TOLERANCE_M = 1e-7;
+
+function nodePositionBucket(x: number, y: number, z: number): [number, number, number] {
+  return [
+    Math.floor(x / SAME_NODE_TOLERANCE_M),
+    Math.floor(y / SAME_NODE_TOLERANCE_M),
+    Math.floor(z / SAME_NODE_TOLERANCE_M),
+  ];
+}
+
+function nodePositionBucketKey(x: number, y: number, z: number): string {
+  const bucket = nodePositionBucket(x, y, z);
+  return `${bucket[0]}|${bucket[1]}|${bucket[2]}`;
+}
+
+function addNodeToPositionIndex(index: Map<string, number[]>, node: Frame3DModel["nodes"][number]) {
+  const key = nodePositionBucketKey(node.x, node.y, node.z);
+  const ids = index.get(key);
+  if (ids) ids.push(node.id);
+  else index.set(key, [node.id]);
+}
+
+function buildNodePositionIndex(nodes: Frame3DModel["nodes"]): Map<string, number[]> {
+  const index = new Map<string, number[]>();
+  nodes.forEach((node) => addNodeToPositionIndex(index, node));
+  return index;
+}
+
+function nodeAtPosition(
+  index: Map<string, number[]>,
+  nodesById: Map<number, Frame3DModel["nodes"][number]>,
+  position: THREE.Vector3,
+): Frame3DModel["nodes"][number] | undefined {
+  const [bx, by, bz] = nodePositionBucket(position.x, position.y, position.z);
+  for (let dx = -1; dx <= 1; dx += 1) {
+    for (let dy = -1; dy <= 1; dy += 1) {
+      for (let dz = -1; dz <= 1; dz += 1) {
+        const ids = index.get(`${bx + dx}|${by + dy}|${bz + dz}`) ?? [];
+        for (const id of ids) {
+          const node = nodesById.get(id);
+          if (node && Math.hypot(node.x - position.x, node.y - position.y, node.z - position.z) < SAME_NODE_TOLERANCE_M) {
+            return node;
+          }
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+function expandInstancedMeshBounds(mesh: THREE.InstancedMesh, matrix: THREE.Matrix4) {
+  if (mesh.geometry.boundingBox === null) mesh.geometry.computeBoundingBox();
+  const instanceBox = mesh.geometry.boundingBox?.clone().applyMatrix4(matrix);
+  if (!instanceBox) return;
+  if (mesh.boundingBox) mesh.boundingBox.union(instanceBox);
+  else mesh.boundingBox = instanceBox;
+  mesh.boundingSphere = mesh.boundingBox.getBoundingSphere(mesh.boundingSphere ?? new THREE.Sphere());
+}
+
+function markInstanceChanged(mesh: THREE.InstancedMesh, index: number) {
+  mesh.instanceMatrix.addUpdateRange(index * 16, 16);
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) {
+    mesh.instanceColor.addUpdateRange(index * 3, 3);
+    mesh.instanceColor.needsUpdate = true;
+  }
+}
+
 /** Catalogusnamen als `IPE 200` en `IPE200` delen dezelfde GPU-batch. */
 function profileBatchName(profileName: string): string {
   return profileName.trim().toUpperCase().replace(/\s+(?=\d)/g, "");
@@ -498,27 +572,54 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const sceneRef = useRef<SceneState | null>(null);
   const selectRef = useRef(onSelect);
   selectRef.current = onSelect;
+  const pendingAppendRef = useRef<{
+    baseModel: Frame3DModel;
+    model: Frame3DModel;
+    node?: Frame3DModel["nodes"][number];
+    beam?: Frame3DModel["beams"][number];
+  } | null>(null);
   const modelRef = useRef(model);
   const nodeByIdRef = useRef<Map<number, Frame3DModel["nodes"][number]> | null>(null);
+  const nodePositionIndexRef = useRef<Map<string, number[]> | null>(null);
   const beamByIdRef = useRef<Map<number, Frame3DModel["beams"][number]> | null>(null);
   const plateByIdRef = useRef<Map<number, NonNullable<Frame3DModel["plates"]>[number]> | null>(null);
-  nodeByIdRef.current ??= new Map(model.nodes.map((node) => [node.id, node]));
-  beamByIdRef.current ??= new Map(model.beams.map((beam) => [beam.id, beam]));
+  const nextNodeIdRef = useRef(1);
+  const nextBeamIdRef = useRef(1);
+  if (nodeByIdRef.current === null) {
+    nodeByIdRef.current = new Map(model.nodes.map((node) => [node.id, node]));
+    nodePositionIndexRef.current = buildNodePositionIndex(model.nodes);
+    nextNodeIdRef.current = nextNumericId(model.nodes);
+  }
+  nodePositionIndexRef.current ??= buildNodePositionIndex(model.nodes);
+  if (beamByIdRef.current === null) {
+    beamByIdRef.current = new Map(model.beams.map((beam) => [beam.id, beam]));
+    nextBeamIdRef.current = nextNumericId(model.beams);
+  }
   plateByIdRef.current ??= new Map((model.plates ?? []).map((plate) => [plate.id, plate]));
   // Pointer previews run at most once per animation frame. Keep their lookups
   // O(1), so snapping stays direct when a model contains thousands of nodes.
   // Only rebuild an index when its underlying immutable array changed.
   if (modelRef.current !== model) {
-    if (modelRef.current.nodes !== model.nodes) {
-      nodeByIdRef.current = new Map(model.nodes.map((node) => [node.id, node]));
+    const pendingAppend = pendingAppendRef.current;
+    // Een selectie-update kan tijdens dezelfde klik nog eenmaal renderen met
+    // het oude model. Laat die verouderde render de al opgebouwde append-info
+    // en indices niet terugdraaien voordat de model-update binnenkomt.
+    if (pendingAppend?.baseModel !== model) {
+      pendingAppendRef.current = null;
+      if (modelRef.current.nodes !== model.nodes) {
+        nodeByIdRef.current = new Map(model.nodes.map((node) => [node.id, node]));
+        nodePositionIndexRef.current = buildNodePositionIndex(model.nodes);
+        nextNodeIdRef.current = nextNumericId(model.nodes);
+      }
+      if (modelRef.current.beams !== model.beams) {
+        beamByIdRef.current = new Map(model.beams.map((beam) => [beam.id, beam]));
+        nextBeamIdRef.current = nextNumericId(model.beams);
+      }
+      if (modelRef.current.plates !== model.plates) {
+        plateByIdRef.current = new Map((model.plates ?? []).map((plate) => [plate.id, plate]));
+      }
+      modelRef.current = model;
     }
-    if (modelRef.current.beams !== model.beams) {
-      beamByIdRef.current = new Map(model.beams.map((beam) => [beam.id, beam]));
-    }
-    if (modelRef.current.plates !== model.plates) {
-      plateByIdRef.current = new Map((model.plates ?? []).map((plate) => [plate.id, plate]));
-    }
-    modelRef.current = model;
   }
   const changeRef = useRef(onChange);
   changeRef.current = onChange;
@@ -537,10 +638,12 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   gridSpacingRef.current = gridSpacingM;
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
+  const selectionRenderedWithModelRef = useRef<Frame3DSelection | undefined>(undefined);
   const nodePickTargetsRef = useRef<THREE.Object3D[]>([]);
   const selectionPickTargetsRef = useRef<THREE.Object3D[]>([]);
   const lastBuiltModelRef = useRef<Frame3DModel | null>(null);
   const lastBuiltConditionModelRef = useRef<Frame3DModel | undefined>(undefined);
+  const lastBuiltNodeBoundsRef = useRef<THREE.Box3 | null>(null);
   const plateDraftRef = useRef<PlateSketch>(emptyPlateSketch());
   const openingDraftRef = useRef<PlateSketch>(emptyPlateSketch());
   const plateDraftCreatedNodesRef = useRef<Set<number>>(new Set());
@@ -567,7 +670,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     createdNodeIds.clear();
     if (removable.size === 0) return;
     const next = { ...current, nodes: current.nodes.filter((node) => !removable.has(node.id)) };
+    pendingAppendRef.current = null;
     nodeByIdRef.current = new Map(next.nodes.map((node) => [node.id, node]));
+    nodePositionIndexRef.current = buildNodePositionIndex(next.nodes);
+    nextNodeIdRef.current = nextNumericId(next.nodes);
     modelRef.current = next;
     changeRef.current(next);
     selectRef.current(null);
@@ -934,12 +1040,39 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         : hit?.userData.id;
       const activeTool = toolRef.current;
       let current = modelRef.current;
-      const commitModel = (next: Frame3DModel) => {
+      const commitModel = (next: Frame3DModel, appended?: {
+        node?: Frame3DModel["nodes"][number];
+        beam?: Frame3DModel["beams"][number];
+      }) => {
+        const priorAppend = pendingAppendRef.current?.model === current
+          ? pendingAppendRef.current
+          : null;
+        const appendedNode = appended?.node ?? priorAppend?.node;
+        const appendedBeam = appended?.beam ?? priorAppend?.beam;
+        pendingAppendRef.current = appendedNode || appendedBeam
+          ? { baseModel: priorAppend?.baseModel ?? current, model: next, node: appendedNode, beam: appendedBeam }
+          : null;
         if (current.nodes !== next.nodes) {
-          nodeByIdRef.current = new Map(next.nodes.map((node) => [node.id, node]));
+          if (appendedNode && next.nodes.length === current.nodes.length + 1
+            && next.nodes[next.nodes.length - 1] === appendedNode) {
+            nodeByIdRef.current!.set(appendedNode.id, appendedNode);
+            addNodeToPositionIndex(nodePositionIndexRef.current!, appendedNode);
+            nextNodeIdRef.current = Math.max(nextNodeIdRef.current, appendedNode.id + 1);
+          } else {
+            nodeByIdRef.current = new Map(next.nodes.map((node) => [node.id, node]));
+            nodePositionIndexRef.current = buildNodePositionIndex(next.nodes);
+            nextNodeIdRef.current = nextNumericId(next.nodes);
+          }
         }
         if (current.beams !== next.beams) {
-          beamByIdRef.current = new Map(next.beams.map((beam) => [beam.id, beam]));
+          if (appendedBeam && next.beams.length === current.beams.length + 1
+            && next.beams[next.beams.length - 1] === appendedBeam) {
+            beamByIdRef.current!.set(appendedBeam.id, appendedBeam);
+            nextBeamIdRef.current = Math.max(nextBeamIdRef.current, appendedBeam.id + 1);
+          } else {
+            beamByIdRef.current = new Map(next.beams.map((beam) => [beam.id, beam]));
+            nextBeamIdRef.current = nextNumericId(next.beams);
+          }
         }
         if (current.plates !== next.plates) {
           plateByIdRef.current = new Map((next.plates ?? []).map((plate) => [plate.id, plate]));
@@ -968,11 +1101,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         if (!snapped) return null;
         if (snapped.nodeId !== undefined) return snapped.nodeId;
         const position = snapped.position;
-        const existing = current.nodes.find((node) =>
-          Math.hypot(node.x - position.x, node.y - position.y, node.z - position.z) < 1e-7);
+        const existing = nodeAtPosition(nodePositionIndexRef.current!, nodeByIdRef.current!, position);
         if (existing) return existing.id;
-        const nodeId = Math.max(0, ...current.nodes.map((node) => node.id)) + 1;
-        commitModel({ ...current, nodes: [...current.nodes, { id: nodeId, x: position.x, y: position.y, z: position.z }] });
+        const nodeId = nextNodeIdRef.current;
+        const node = { id: nodeId, x: position.x, y: position.y, z: position.z };
+        commitModel({ ...current, nodes: [...current.nodes, node] }, { node });
         if (activeTool === "addPlate" || activeTool === "addPlateArc") {
           plateDraftCreatedNodesRef.current.add(nodeId);
         } else if (isOpeningTool(activeTool)) {
@@ -996,17 +1129,18 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
               beam.startNodeId === start && beam.endNodeId === nodeId ||
               beam.startNodeId === nodeId && beam.endNodeId === start);
             if (!duplicate) {
-              const beamId = Math.max(0, ...current.beams.map((beam) => beam.id)) + 1;
+              const beamId = nextBeamIdRef.current;
+              const beam = {
+                id: beamId,
+                startNodeId: start,
+                endNodeId: nodeId,
+                material: "S235",
+                profileName: "IPE 200",
+              };
               commitModel({
                 ...current,
-                beams: [...current.beams, {
-                  id: beamId,
-                  startNodeId: start,
-                  endNodeId: nodeId,
-                  material: "S235",
-                  profileName: "IPE 200",
-                }],
-              });
+                beams: [...current.beams, beam],
+              }, { beam });
             }
             beamStartRef.current = nodeId;
             selectRef.current({ type: "node", id: nodeId });
@@ -1047,7 +1181,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
                 });
                 commitModel(next);
                 committed = true;
-                selectRef.current({ type: "plate", id: Math.max(...(next.plates ?? []).map((plate) => plate.id)) });
+                const addedPlate = next.plates?.[next.plates.length - 1];
+                if (addedPlate) selectRef.current({ type: "plate", id: addedPlate.id });
               } finally {
                 plateDraftRef.current = emptyPlateSketch();
                 if (committed) plateDraftCreatedNodesRef.current.clear();
@@ -1205,12 +1340,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const rebuildStartedAt = performance.now();
     const { geometry } = state;
     const previousModel = lastBuiltModelRef.current;
-    const appendedNode = previousModel !== null
+    const pendingAppend = pendingAppendRef.current?.model === model ? pendingAppendRef.current : null;
+    const appendedNode = previousModel !== null && pendingAppend?.node !== undefined
       && model.nodes.length === previousModel.nodes.length + 1
-      && previousModel.nodes.every((node, index) => node === model.nodes[index]);
-    const appendedBeam = previousModel !== null
+      && model.nodes[model.nodes.length - 1] === pendingAppend.node;
+    const appendedBeam = previousModel !== null && pendingAppend?.beam !== undefined
       && model.beams.length === previousModel.beams.length + 1
-      && previousModel.beams.every((beam, index) => beam === model.beams[index]);
+      && model.beams[model.beams.length - 1] === pendingAppend.beam;
     const unchangedCollections = previousModel !== null
       && model.plates === previousModel.plates
       && model.supports === previousModel.supports
@@ -1225,8 +1361,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     if (previousModel && unchangedCollections && previousModel.nodes.length >= 250
       && (incrementalNodeOnly || incrementalBeam)) {
       const node = appendedNode ? model.nodes[model.nodes.length - 1]! : undefined;
-      const previousBounds = new THREE.Box3().setFromPoints(previousModel.nodes.map((item) =>
-        new THREE.Vector3(item.x, item.y, item.z)));
+      const previousBounds = lastBuiltNodeBoundsRef.current;
       const visibleNodes = geometry.children.find((child) => child.userData.frame3dNodeVisual === true);
       const hitNodes = geometry.children.find((child) => child.userData.frame3dNodeHit === true);
       const meshes = [visibleNodes, hitNodes].filter((child): child is THREE.InstancedMesh =>
@@ -1265,7 +1400,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           && conditionModel?.memberPointLoads === previousConditionModel.memberPointLoads
           && conditionModel?.thermalLoads === previousConditionModel.thermalLoads);
       const nodeInsideBounds = !node
-        || previousBounds.containsPoint(new THREE.Vector3(node.x, node.y, node.z));
+        || (previousBounds !== null && previousBounds.containsPoint(new THREE.Vector3(node.x, node.y, node.z)));
       const fastPathReady = nodeCapacityAvailable && beamCapacityAvailable && beamEndpointsValid
         && conditionLoadsStable && nodeLabelSamplingStable && beamLabelSamplingStable && nodeInsideBounds;
       // Binnen de bestaande begrenzing blijven knoopstraal, opleggingsgrootte
@@ -1281,10 +1416,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
             (mesh.userData.instanceBaseColors as number[]).push(0x334155);
             mesh.setMatrixAt(index, matrix);
             mesh.setColorAt(index, new THREE.Color(0x334155));
-            mesh.instanceMatrix.needsUpdate = true;
-            if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-            mesh.computeBoundingBox();
-            mesh.computeBoundingSphere();
+            markInstanceChanged(mesh, index);
+            expandInstancedMeshBounds(mesh, matrix);
           }
         }
         let addedLabels = 0;
@@ -1317,15 +1450,14 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           beamMesh.count += 1;
           (beamMesh.userData.instanceIds as number[]).push(beam.id);
           (beamMesh.userData.instanceBaseColors as number[]).push(color);
-          beamMesh.setMatrixAt(index, new THREE.Matrix4().compose(
+          const beamMatrix = new THREE.Matrix4().compose(
             a.add(b).multiplyScalar(0.5), rotation,
             isProfile ? frame3DProfileInstanceScale(length) : new THREE.Vector3(1, length, 1),
-          ));
+          );
+          beamMesh.setMatrixAt(index, beamMatrix);
           beamMesh.setColorAt(index, new THREE.Color(color));
-          beamMesh.instanceMatrix.needsUpdate = true;
-          if (beamMesh.instanceColor) beamMesh.instanceColor.needsUpdate = true;
-          beamMesh.computeBoundingBox();
-          beamMesh.computeBoundingSphere();
+          markInstanceChanged(beamMesh, index);
+          expandInstancedMeshBounds(beamMesh, beamMatrix);
           if (visibility.beamNumbers && (model.beams.length - 1) % beamLabelStride === 0) {
             const midpoint = new THREE.Vector3(start.x, start.y, start.z)
               .add(new THREE.Vector3(end.x, end.y, end.z)).multiplyScalar(0.5)
@@ -1337,8 +1469,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         applySelectionHighlight(geometry, selectionRef.current);
         state.renderer.render(state.scene, state.camera);
         state.labelRenderer.render(state.scene, state.camera);
+        selectionRenderedWithModelRef.current = selectionRef.current;
         lastBuiltModelRef.current = model;
         lastBuiltConditionModelRef.current = conditionModel;
+        pendingAppendRef.current = null;
         if (containerRef.current) {
           delete containerRef.current.dataset.frame3dIncrementalFallback;
           containerRef.current.dataset.frame3dBuildMode = beam
@@ -1550,6 +1684,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         mesh.setColorAt(index, new THREE.Color(instance.color));
       });
       mesh.instanceMatrix.needsUpdate = true;
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       if (mesh.instanceColor) {
         mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
         mesh.instanceColor.needsUpdate = true;
@@ -1620,6 +1755,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       });
       if (visibleNodes) visibleNodes.instanceMatrix.needsUpdate = true;
       hitNodes.instanceMatrix.needsUpdate = true;
+      visibleNodes?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      hitNodes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       if (visibleNodes?.instanceColor) visibleNodes.instanceColor.needsUpdate = true;
       if (hitNodes.instanceColor) hitNodes.instanceColor.needsUpdate = true;
       visibleNodes?.instanceColor?.setUsage(THREE.DynamicDrawUsage);
@@ -1861,6 +1998,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     applySelectionHighlight(geometry, selectionRef.current);
     state.renderer.render(state.scene, state.camera);
     state.labelRenderer.render(state.scene, state.camera);
+    selectionRenderedWithModelRef.current = selectionRef.current;
     writeCameraDiagnostics(containerRef.current, state);
     if (containerRef.current) {
       containerRef.current.dataset.frame3dBuildMode = "full";
@@ -1873,11 +2011,20 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     }
     lastBuiltModelRef.current = model;
     lastBuiltConditionModelRef.current = conditionModel;
+    const nodeBounds = new THREE.Box3();
+    model.nodes.forEach((node) => nodeBounds.expandByPoint(new THREE.Vector3(node.x, node.y, node.z)));
+    lastBuiltNodeBoundsRef.current = nodeBounds;
+    if (pendingAppendRef.current?.model === model) pendingAppendRef.current = null;
   }, [model, conditionModel, visibility, structuralGrid, result, utilizations, activeLoadCaseId]);
 
   useEffect(() => {
     const state = sceneRef.current;
     if (!state) return;
+    if (selectionRenderedWithModelRef.current === selection) {
+      selectionRenderedWithModelRef.current = undefined;
+      if (containerRef.current) containerRef.current.dataset.frame3dSelectionMs = "0.00";
+      return;
+    }
     const selectionStartedAt = performance.now();
     applySelectionHighlight(state.geometry, selection);
     state.renderer.render(state.scene, state.camera);
