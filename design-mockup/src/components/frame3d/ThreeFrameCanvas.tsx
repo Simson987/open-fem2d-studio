@@ -597,8 +597,7 @@ function addDashedSegments(group: THREE.Group, points: THREE.Vector3[], color = 
   group.add(lines);
 }
 
-function addStructuralGrid(group: THREE.Group, model: Frame3DModel, grid: StructuralGrid) {
-  if (!grid.enabled) return;
+function structuralGridLayout(model: Frame3DModel, grid: StructuralGrid) {
   const range = (
     axes: readonly { position: number }[],
     coordinate: "x" | "y" | "z",
@@ -624,6 +623,17 @@ function addStructuralGrid(group: THREE.Group, model: Frame3DModel, grid: Struct
   const [yMin, yMax] = range(grid.yAxes ?? [], "y", [-5, 5]);
   const [zMin, zMax] = range(grid.zAxes, "z", [0, 5]);
   const baseZ = grid.zAxes[0]?.position !== undefined ? grid.zAxes[0].position / 1000 : zMin;
+  return { xMin, xMax, yMin, yMax, zMin, zMax, baseZ };
+}
+
+function structuralGridLayoutKey(model: Frame3DModel, grid: StructuralGrid): string {
+  const layout = structuralGridLayout(model, grid);
+  return [layout.xMin, layout.xMax, layout.yMin, layout.yMax, layout.zMin, layout.zMax, layout.baseZ].join("|");
+}
+
+function addStructuralGrid(group: THREE.Group, model: Frame3DModel, grid: StructuralGrid) {
+  if (!grid.enabled) return;
+  const { xMin, xMax, yMin, yMax, zMin, zMax, baseZ } = structuralGridLayout(model, grid);
   const baseSegments: THREE.Vector3[] = [];
   const levelSegments: THREE.Vector3[] = [];
   // Honderden DOM-labels boven op elkaar vertragen pannen en zoomen zonder
@@ -763,6 +773,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const selectionPickTargetsRef = useRef<THREE.Object3D[]>([]);
   const lastBuiltModelRef = useRef<Frame3DModel | null>(null);
   const lastBuiltConditionModelRef = useRef<Frame3DModel | undefined>(undefined);
+  const lastBuiltStructuralGridLayoutRef = useRef<string | null>(null);
   const lastBuiltPresentationRef = useRef<{
     visibility: Frame3DVisibility;
     structuralGrid: StructuralGrid | undefined;
@@ -1696,6 +1707,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
             nextGrid.userData.frame3dStructuralGrid = true;
             addStructuralGrid(nextGrid, model, structuralGrid);
             geometry.add(nextGrid);
+            lastBuiltStructuralGridLayoutRef.current = structuralGridLayoutKey(model, structuralGrid);
           }
           lastBuiltNodeBoundsRef.current = frame3DNodeBounds(model);
         }
@@ -2153,7 +2165,24 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         ].filter(Boolean).join(",");
       }
     }
+    const nextStructuralGridLayout = visibility.structuralGrid && structuralGrid?.enabled
+      ? structuralGridLayoutKey(model, structuralGrid)
+      : null;
+    const oldStructuralGrid = geometry.children.find((child) => child.userData.frame3dStructuralGrid === true);
+    const preservedStructuralGrid = oldStructuralGrid instanceof THREE.Group
+      && previousPresentation?.structuralGrid === structuralGrid
+      && previousPresentation?.visibility.structuralGrid
+      && nextStructuralGridLayout !== null
+      && nextStructuralGridLayout === lastBuiltStructuralGridLayoutRef.current
+      ? oldStructuralGrid
+      : null;
+    // De stramienbuffer kan tienduizenden lijnpunten bevatten. Wanneer alleen
+    // het model wijzigt en zijn bereik binnen hetzelfde stramien blijft, hang
+    // die ongewijzigde groep tijdelijk los zodat de volledige modelopbouw hem
+    // niet weggooit en direct daarna opnieuw maakt.
+    if (preservedStructuralGrid) geometry.remove(preservedStructuralGrid);
     disposeGroup(geometry);
+    if (preservedStructuralGrid) geometry.add(preservedStructuralGrid);
     nodePickTargetsRef.current = [];
     selectionPickTargetsRef.current = [];
     state.grid.visible = visibility.grid;
@@ -2472,7 +2501,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         ));
       }
     }
-    if (visibility.structuralGrid && structuralGrid) {
+    if (visibility.structuralGrid && structuralGrid && !preservedStructuralGrid) {
       const structuralGridGroup = new THREE.Group();
       structuralGridGroup.userData.frame3dStructuralGrid = true;
       addStructuralGrid(structuralGridGroup, model, structuralGrid);
@@ -2678,7 +2707,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     selectionRenderedWithModelRef.current = selectionRef.current;
     writeCameraDiagnostics(containerRef.current, state);
     if (containerRef.current) {
-      writeBuildMode(containerRef.current, "full");
+      writeBuildMode(containerRef.current, preservedStructuralGrid ? "full-grid-reuse" : "full");
       containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
       containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
       containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
@@ -2689,6 +2718,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     lastBuiltModelRef.current = model;
     rememberBuiltPresentation();
     lastBuiltNodeBoundsRef.current = frame3DNodeBounds(model);
+    lastBuiltStructuralGridLayoutRef.current = nextStructuralGridLayout;
     if (pendingAppendRef.current?.model === model) pendingAppendRef.current = null;
   }, [model, conditionModel, visibility, structuralGrid, result, utilizations, activeLoadCaseId]);
 
