@@ -968,12 +968,32 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     // Damping staat uit, dus continu renderen levert alleen CPU/GPU-belasting op.
     // Teken uitsluitend na camera-, formaat- of modelwijzigingen. Dat houdt ook
     // meerdere geopende 3D-vensters responsief.
+    let cameraRenderFrame = 0;
     const renderScene = () => {
+      if (cameraRenderFrame) {
+        cancelAnimationFrame(cameraRenderFrame);
+        cameraRenderFrame = 0;
+      }
       const renderStartedAt = performance.now();
       renderer.render(scene, camera);
       labelRenderer.render(scene, camera);
       writeCameraDiagnostics(container, sceneRef.current!);
       container.dataset.frame3dCameraRenderMs = (performance.now() - renderStartedAt).toFixed(2);
+    };
+    const renderCameraInteraction = () => {
+      // Pointer-events kunnen sneller binnenkomen dan het beeldscherm tekent.
+      // Bundel ze tot hoogstens één WebGL-render per animatieframe. De
+      // CSS-labels blijven tijdens slepen verborgen: hun DOM-layout was bij
+      // grote stramienen duurder dan het hele 3D-beeld en is pas bij de
+      // uiteindelijke camerastand weer nodig.
+      if (cameraRenderFrame) return;
+      cameraRenderFrame = requestAnimationFrame(() => {
+        cameraRenderFrame = 0;
+        const renderStartedAt = performance.now();
+        renderer.render(scene, camera);
+        writeCameraDiagnostics(container, sceneRef.current!);
+        container.dataset.frame3dCameraRenderMs = (performance.now() - renderStartedAt).toFixed(2);
+      });
     };
     const saveCamera = () => {
       cameraChangeRef.current?.({
@@ -982,10 +1002,21 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         up: camera.up.toArray() as [number, number, number],
       });
     };
-    controls.addEventListener("change", renderScene);
+    const startCameraInteraction = () => {
+      labelRenderer.domElement.style.visibility = "hidden";
+      container.dataset.frame3dLabelsSuspended = "true";
+    };
+    const endCameraInteraction = () => {
+      renderScene();
+      labelRenderer.domElement.style.visibility = "visible";
+      container.dataset.frame3dLabelsSuspended = "false";
+      saveCamera();
+    };
+    controls.addEventListener("start", startCameraInteraction);
+    controls.addEventListener("change", renderCameraInteraction);
     // Camera-instellingen gaan pas na de interactie naar React. Tijdens
     // pannen/roteren hoeft daardoor geen componentstate per muispixel mee.
-    controls.addEventListener("end", saveCamera);
+    controls.addEventListener("end", endCameraInteraction);
 
     const resize = () => {
       const width = Math.max(1, container.clientWidth);
@@ -1554,8 +1585,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       renderer.domElement.removeEventListener("pointerleave", onPointerLeave);
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("keydown", onKeyDown);
-      controls.removeEventListener("change", renderScene);
-      controls.removeEventListener("end", saveCamera);
+      controls.removeEventListener("start", startCameraInteraction);
+      controls.removeEventListener("change", renderCameraInteraction);
+      controls.removeEventListener("end", endCameraInteraction);
+      if (cameraRenderFrame) cancelAnimationFrame(cameraRenderFrame);
       controls.dispose();
       disposeGroup(geometry);
       disposeGroup(preview);
