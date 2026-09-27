@@ -287,6 +287,7 @@ interface SceneState {
   labelRenderer: CSS2DRenderer;
   controls: OrbitControls;
   geometry: THREE.Group;
+  draftLine: THREE.LineSegments;
   preview: THREE.Group;
   previewHint: HTMLSpanElement;
   grid: THREE.GridHelper;
@@ -846,6 +847,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const state = sceneRef.current;
     if (state) {
       hidePreview(state.preview);
+      if (!(plateTools.includes(tool) || openingTools.includes(tool))) state.draftLine.visible = false;
       state.previewHint.hidden = true;
       state.renderer.render(state.scene, state.camera);
       state.labelRenderer.render(state.scene, state.camera);
@@ -903,6 +905,16 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     scene.add(light);
     const geometry = new THREE.Group();
     scene.add(geometry);
+    const draftGeometry = new THREE.BufferGeometry();
+    draftGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(512 * 3), 3));
+    draftGeometry.setDrawRange(0, 0);
+    const draftLine = new THREE.LineSegments(
+      draftGeometry,
+      new THREE.LineBasicMaterial({ color: 0x0284c7, depthTest: false, transparent: true, opacity: 0.9 }),
+    );
+    draftLine.renderOrder = 100;
+    draftLine.visible = false;
+    scene.add(draftLine);
     const preview = new THREE.Group();
     preview.renderOrder = 100;
     const previewPositions = new Float32Array(25 * 3);
@@ -928,7 +940,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     previewHint.hidden = true;
     container.appendChild(previewHint);
     scene.add(preview);
-    sceneRef.current = { scene, camera, renderer, labelRenderer, controls, geometry, preview, previewHint, grid, axes, axisLabels };
+    sceneRef.current = { scene, camera, renderer, labelRenderer, controls, geometry, draftLine, preview, previewHint, grid, axes, axisLabels };
 
     // Damping staat uit, dus continu renderen levert alleen CPU/GPU-belasting op.
     // Teken uitsluitend na camera-, formaat- of modelwijzigingen. Dat houdt ook
@@ -1085,6 +1097,58 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         return { position, kind: "raster" };
       }
       return { position: raw };
+    };
+    const drawDraftContour = (sketch: PlateSketch | null, opening = false) => {
+      const vertices: THREE.Vector3[] = [];
+      const pushSegment = (start: THREE.Vector3, end: THREE.Vector3) => {
+        vertices.push(start, end);
+      };
+      if (sketch) {
+        for (const segment of sketch.segments) {
+          const startNode = nodeByIdRef.current!.get(segment.startNodeId);
+          const endNode = nodeByIdRef.current!.get(segment.endNodeId);
+          if (!startNode || !endNode) continue;
+          const start = new THREE.Vector3(startNode.x, startNode.y, startNode.z);
+          const end = new THREE.Vector3(endNode.x, endNode.y, endNode.z);
+          if (segment.kind === "arc") {
+            const controlNode = nodeByIdRef.current!.get(segment.controlNodeId);
+            if (!controlNode) continue;
+            const points = new THREE.QuadraticBezierCurve3(
+              start,
+              new THREE.Vector3(controlNode.x, controlNode.y, controlNode.z),
+              end,
+            ).getPoints(24);
+            for (let index = 0; index < points.length - 1; index += 1) {
+              pushSegment(points[index], points[index + 1]);
+            }
+          } else {
+            pushSegment(start, end);
+          }
+        }
+        if (sketch.arcControlNodeId !== null && sketch.lastNodeId !== null) {
+          const startNode = nodeByIdRef.current!.get(sketch.lastNodeId);
+          const controlNode = nodeByIdRef.current!.get(sketch.arcControlNodeId);
+          if (startNode && controlNode) {
+            pushSegment(
+              new THREE.Vector3(startNode.x, startNode.y, startNode.z),
+              new THREE.Vector3(controlNode.x, controlNode.y, controlNode.z),
+            );
+          }
+        }
+      }
+      let attribute = draftGeometry.getAttribute("position") as THREE.BufferAttribute;
+      if (attribute.count < vertices.length) {
+        const capacity = 2 ** Math.ceil(Math.log2(Math.max(512, vertices.length)));
+        attribute = new THREE.BufferAttribute(new Float32Array(capacity * 3), 3);
+        draftGeometry.setAttribute("position", attribute);
+      }
+      vertices.forEach((point, index) => attribute.setXYZ(index, point.x, point.y, point.z));
+      if (vertices.length > 0) attribute.needsUpdate = true;
+      draftGeometry.setDrawRange(0, vertices.length);
+      (draftLine.material as THREE.LineBasicMaterial).color.setHex(opening ? 0x7c3aed : 0x0284c7);
+      draftLine.visible = vertices.length > 0;
+      container.dataset.frame3dDraftSegments = String(sketch?.segments.length ?? 0);
+      container.dataset.frame3dDraftVertices = String(vertices.length);
     };
     let previewFrame = 0;
     let latestPointerEvent: PointerEvent | null = null;
@@ -1427,6 +1491,12 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           ? toggleFrame3DSelection(selectionRef.current, selectable, event.shiftKey || event.ctrlKey || event.metaKey)
           : null);
       }
+      drawDraftContour(
+        isOpeningTool(activeTool)
+          ? openingDraftRef.current
+          : activeTool === "addPlate" || activeTool === "addPlateArc" ? plateDraftRef.current : null,
+        isOpeningTool(activeTool),
+      );
       hidePreview(preview);
       previewHint.hidden = true;
       renderScene();
@@ -1439,6 +1509,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       plateDraftRef.current = emptyPlateSketch();
       openingDraftRef.current = emptyPlateSketch();
       beamStartRef.current = null;
+      drawDraftContour(null);
       hidePreview(preview);
       previewHint.hidden = true;
       selectRef.current(null);
@@ -1465,6 +1536,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       controls.dispose();
       disposeGroup(geometry);
       disposeGroup(preview);
+      draftGeometry.dispose();
+      (draftLine.material as THREE.Material).dispose();
       grid.geometry.dispose();
       (grid.material as THREE.Material).dispose();
       axes.geometry.dispose();
