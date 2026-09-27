@@ -44,16 +44,26 @@ export function buildFrame3DNodeSnapScreenIndex(
   const safeHeight = Math.max(1, height);
   const safeCellSize = Math.max(1, cellSizePx);
   const buckets = new Map<string, Frame3DNodeScreenPoint[]>();
-  const projected = new THREE.Vector3();
+  // Eén gecombineerde matrix en kale getallen zijn bij tienduizenden knopen
+  // aanzienlijk goedkoper dan per knoop Vector3.project() aanroepen.
+  const elements = new THREE.Matrix4()
+    .multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    .elements;
   for (const node of nodes) {
-    projected.set(node.x, node.y, node.z).project(camera);
-    if (!Number.isFinite(projected.x) || !Number.isFinite(projected.y) || !Number.isFinite(projected.z)) continue;
-    if (projected.z < -1 || projected.z > 1) continue;
+    const clipX = elements[0] * node.x + elements[4] * node.y + elements[8] * node.z + elements[12];
+    const clipY = elements[1] * node.x + elements[5] * node.y + elements[9] * node.z + elements[13];
+    const clipZ = elements[2] * node.x + elements[6] * node.y + elements[10] * node.z + elements[14];
+    const clipW = elements[3] * node.x + elements[7] * node.y + elements[11] * node.z + elements[15];
+    if (!Number.isFinite(clipW) || clipW <= 0) continue;
+    const x = clipX / clipW;
+    const y = clipY / clipW;
+    const depth = clipZ / clipW;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(depth) || depth < -1 || depth > 1) continue;
     const point: Frame3DNodeScreenPoint = {
       id: node.id,
-      xPx: (projected.x + 1) * safeWidth / 2,
-      yPx: (1 - projected.y) * safeHeight / 2,
-      depth: projected.z,
+      xPx: (x + 1) * safeWidth / 2,
+      yPx: (1 - y) * safeHeight / 2,
+      depth,
     };
     const key = bucketKey(Math.floor(point.xPx / safeCellSize), Math.floor(point.yPx / safeCellSize));
     const bucket = buckets.get(key);

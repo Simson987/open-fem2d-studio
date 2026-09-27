@@ -731,6 +731,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const nodePositionIndexRef = useRef<Map<string, number[]> | null>(null);
   const nodeSnapScreenIndexRef = useRef<Frame3DNodeSnapScreenIndex | null>(null);
   const nodeSnapScreenIndexDirtyRef = useRef(true);
+  const nodeSnapPrewarmRef = useRef<(() => void) | null>(null);
+  const nodeSnapPrewarmFrameRef = useRef(0);
   const beamByIdRef = useRef<Map<number, Frame3DModel["beams"][number]> | null>(null);
   const beamConnectionIndexRef = useRef<Set<string> | null>(null);
   const plateByIdRef = useRef<Map<number, NonNullable<Frame3DModel["plates"]>[number]> | null>(null);
@@ -806,6 +808,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const selectionRenderedWithModelRef = useRef<Frame3DSelection | undefined>(undefined);
   const nodePickTargetsRef = useRef<THREE.Object3D[]>([]);
   const selectionPickTargetsRef = useRef<THREE.Object3D[]>([]);
+  const nonNodePickTargetsRef = useRef<THREE.Object3D[]>([]);
   const lastBuiltModelRef = useRef<Frame3DModel | null>(null);
   const lastBuiltConditionModelRef = useRef<Frame3DModel | undefined>(undefined);
   const lastBuiltStructuralGridLayoutRef = useRef<string | null>(null);
@@ -1023,6 +1026,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       labelRenderer.domElement.style.visibility = "visible";
       container.dataset.frame3dLabelsSuspended = "false";
       saveCamera();
+      nodeSnapPrewarmRef.current?.();
     };
     controls.addEventListener("start", startCameraInteraction);
     controls.addEventListener("change", renderCameraInteraction);
@@ -1039,6 +1043,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       labelRenderer.setSize(width, height);
       nodeSnapScreenIndexDirtyRef.current = true;
       renderScene();
+      nodeSnapPrewarmRef.current?.();
     };
     const observer = new ResizeObserver(resize);
     observer.observe(container);
@@ -1112,6 +1117,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         container.dataset.frame3dNodeSnapBuckets = String(nodeSnapScreenIndexRef.current.buckets.size);
       }
       return nodeSnapScreenIndexRef.current!;
+    };
+    nodeSnapPrewarmRef.current = () => {
+      if (nodeSnapPrewarmFrameRef.current) cancelAnimationFrame(nodeSnapPrewarmFrameRef.current);
+      nodeSnapPrewarmFrameRef.current = requestAnimationFrame(() => {
+        nodeSnapPrewarmFrameRef.current = 0;
+        ensureNodeSnapScreenIndex();
+      });
     };
     const drawingSnap = (): DrawingSnap | null => {
       const snapStartedAt = performance.now();
@@ -1318,20 +1330,35 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       // Raycast alleen tegen objecten die werkelijk selecteerbaar zijn. Labels,
       // rasters en resultaatlijnen hoeven bij grote modellen niet bij iedere
       // klik opnieuw doorzocht te worden.
-      const intersections = raycaster.intersectObjects(selectionPickTargetsRef.current, false);
+      const pickStartedAt = performance.now();
+      const intersections = raycaster.intersectObjects(nonNodePickTargetsRef.current, false);
       // Lastpijlen eindigen bewust op de constructie en liggen daardoor vaak
       // exact voor een staaf of knoop. Wanneer dezelfde klik beide raakt,
       // krijgt het zichtbare lastteken voorrang; anders was een belasting op
       // drukke 3D-modellen praktisch niet via het canvas te selecteren.
-      const intersection = intersections.find((candidate) =>
-        LOAD_SELECTION_TYPES.has(candidate.object.userData.type as Frame3DSelectionType)) ?? intersections[0];
+      const loadIntersection = intersections.find((candidate) =>
+        LOAD_SELECTION_TYPES.has(candidate.object.userData.type as Frame3DSelectionType));
+      const nodeIndex = ensureNodeSnapScreenIndex();
+      const nodeHit = nodePickTargetsRef.current.some((target) => target.userData.pickable !== false)
+        ? findFrame3DNodeScreenSnap(
+            nodeIndex,
+            (pointer.x + 1) * nodeIndex.width / 2,
+            (1 - pointer.y) * nodeIndex.height / 2,
+          )
+        : null;
+      // Een last wint altijd. Binnen de knoopsnapzone wint daarna de knoop,
+      // zodat het staafeinde net zo direct selecteerbaar is als in 2D.
+      const intersection = loadIntersection ?? (nodeHit ? undefined : intersections[0]);
       let hit: THREE.Object3D | undefined = intersection?.object;
       while (hit && hit !== geometry && typeof hit.userData.type !== "string") hit = hit.parent ?? undefined;
-      const type = hit?.userData.type;
+      const type = nodeHit && !loadIntersection ? "node" : hit?.userData.type;
       const instanceIds = hit?.userData.instanceIds as number[] | undefined;
-      const id = instanceIds && intersection?.instanceId !== undefined
+      const id = nodeHit && !loadIntersection ? nodeHit.point.id
+        : instanceIds && intersection?.instanceId !== undefined
         ? instanceIds[intersection.instanceId]
         : hit?.userData.id;
+      container.dataset.frame3dPickMs = (performance.now() - pickStartedAt).toFixed(2);
+      container.dataset.frame3dPickNodeCandidates = String(nodeHit?.candidateCount ?? 0);
       const activeTool = toolRef.current;
       let current = modelRef.current;
       const commitModel = (next: Frame3DModel, appended?: {
@@ -1630,6 +1657,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       controls.removeEventListener("change", renderCameraInteraction);
       controls.removeEventListener("end", endCameraInteraction);
       if (cameraRenderFrame) cancelAnimationFrame(cameraRenderFrame);
+      if (nodeSnapPrewarmFrameRef.current) cancelAnimationFrame(nodeSnapPrewarmFrameRef.current);
+      nodeSnapPrewarmRef.current = null;
       controls.dispose();
       disposeGroup(geometry);
       disposeGroup(preview);
@@ -2355,6 +2384,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     if (preservedStructuralGrid) geometry.add(preservedStructuralGrid);
     nodePickTargetsRef.current = [];
     selectionPickTargetsRef.current = [];
+    nonNodePickTargetsRef.current = [];
     state.grid.visible = visibility.grid;
     state.axes.visible = visibility.axes;
     state.axisLabels.forEach((label) => { label.visible = visibility.axes; });
@@ -2948,6 +2978,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       const type = object.userData.type as Frame3DSelectionType | undefined;
       if (type && object.userData.pickable !== false && SELECTABLE_TYPES.has(type) && typeof (object as { raycast?: unknown }).raycast === "function") {
         selectionPickTargetsRef.current.push(object);
+        if (type !== "node") nonNodePickTargetsRef.current.push(object);
       }
     });
     // Bij GPU-batches blijft per vorm één geometrie aan de scène gekoppeld.
@@ -2975,6 +3006,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     lastBuiltNodeBoundsRef.current = frame3DNodeBounds(model);
     lastBuiltStructuralGridLayoutRef.current = nextStructuralGridLayout;
     if (pendingAppendRef.current?.model === model) pendingAppendRef.current = null;
+    nodeSnapPrewarmRef.current?.();
   }, [model, conditionModel, visibility, structuralGrid, result, utilizations, activeLoadCaseId]);
 
   useEffect(() => {
@@ -3019,6 +3051,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     state.renderer.render(state.scene, state.camera);
     state.labelRenderer.render(state.scene, state.camera);
     writeCameraDiagnostics(containerRef.current, state);
+    nodeSnapPrewarmRef.current?.();
   }, [
     fitToken, viewRequest?.token, viewRequest?.kind,
   ]);
@@ -3035,6 +3068,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     state.renderer.render(state.scene, state.camera);
     state.labelRenderer.render(state.scene, state.camera);
     writeCameraDiagnostics(containerRef.current, state);
+    nodeSnapPrewarmRef.current?.();
   }, [cameraRequest?.token]);
 
   return <div
