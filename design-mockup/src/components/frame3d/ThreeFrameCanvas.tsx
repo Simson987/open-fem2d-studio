@@ -367,6 +367,9 @@ function hidePreview(group: THREE.Group) {
 const SELECTABLE_TYPES = new Set<Frame3DSelectionType>([
   "node", "beam", "plate", "nodalLoad", "memberLoad", "memberPointLoad", "thermalLoad", "surfaceLoad",
 ]);
+const LOAD_SELECTION_TYPES = new Set<Frame3DSelectionType>([
+  "nodalLoad", "memberLoad", "memberPointLoad", "thermalLoad", "surfaceLoad",
+]);
 
 function selectedIdsForType(selection: Frame3DSelection, type: Frame3DSelectionType): readonly number[] {
   if (!selection) return [];
@@ -1284,7 +1287,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       // Raycast alleen tegen objecten die werkelijk selecteerbaar zijn. Labels,
       // rasters en resultaatlijnen hoeven bij grote modellen niet bij iedere
       // klik opnieuw doorzocht te worden.
-      const intersection = raycaster.intersectObjects(selectionPickTargetsRef.current, false)[0];
+      const intersections = raycaster.intersectObjects(selectionPickTargetsRef.current, false);
+      // Lastpijlen eindigen bewust op de constructie en liggen daardoor vaak
+      // exact voor een staaf of knoop. Wanneer dezelfde klik beide raakt,
+      // krijgt het zichtbare lastteken voorrang; anders was een belasting op
+      // drukke 3D-modellen praktisch niet via het canvas te selecteren.
+      const intersection = intersections.find((candidate) =>
+        LOAD_SELECTION_TYPES.has(candidate.object.userData.type as Frame3DSelectionType)) ?? intersections[0];
       let hit: THREE.Object3D | undefined = intersection?.object;
       while (hit && hit !== geometry && typeof hit.userData.type !== "string") hit = hit.parent ?? undefined;
       const type = hit?.userData.type;

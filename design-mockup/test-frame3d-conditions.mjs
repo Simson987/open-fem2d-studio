@@ -294,6 +294,26 @@ assert.ok(largeMarkers.children.every((child) => child instanceof THREE.Instance
   "ieder groot markersymbool wordt als selecteerbare instancing-batch getekend");
 assert.ok(largeMarkers.children.every((child) => child.userData.instanceIds.length === child.count),
   "iedere markerinstantie behoudt zijn selecteerbare model-id");
+const largeMemberLoadModel = {
+  nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 12, y: 0, z: 0 }],
+  beams: [{ id: 1, startNodeId: 1, endNodeId: 2 }],
+  supports: [], loads: [],
+  memberLoads: Array.from({ length: 240 }, (_, index) => ({
+    id: index + 1, beamId: 1,
+    qyStart: -2 - index / 240, qyEnd: -3 - index / 240,
+    qzStart: 0, qzEnd: 0, startPositionM: 0, endPositionM: 12,
+  })),
+};
+const largeMemberLoadMarkers = new THREE.Group();
+addFrame3DConditionMarkers(largeMemberLoadMarkers, largeMemberLoadModel, { supports: false, loads: true });
+const memberLoadInstances = largeMemberLoadMarkers.children.filter((child) => child instanceof THREE.InstancedMesh);
+assert.equal(memberLoadInstances.length, 2, "verdeelde lasten delen één staaf- en één pijlpuntbatch");
+assert.equal(largeMemberLoadMarkers.children.filter((child) => child instanceof THREE.LineSegments).length, 1,
+  "alle hulplijnen van verdeelde lasten delen één tekenaanroep");
+assert.ok(memberLoadInstances.every((child) => child.userData.type === "memberLoad"),
+  "gebatchte lastpijlen blijven als staafbelasting selecteerbaar");
+assert.ok(memberLoadInstances.every((child) => child.userData.instanceIds.includes(1)
+  && child.userData.instanceIds.includes(240)), "iedere last-id blijft in de selectiebatch aanwezig");
 const hidden = new THREE.Group();
 addFrame3DConditionMarkers(hidden, withConditions, { supports: false, loads: false });
 assert.equal(hidden.children.length, 0);
@@ -301,7 +321,9 @@ const thermalOnly = new THREE.Group();
 addFrame3DConditionMarkers(thermalOnly, thermal, { supports: false, loads: true }, 2);
 assert.ok(thermalOnly.children.some((child) => child.userData.kind === "thermal"), "temperatuurlast heeft een zichtbaar 3D-symbool");
 
-for (const group of [supportOnly, rollerOnly, springOnly, imposedOnly, loadOnly, largeMarkers, thermalOnly]) {
+for (const group of [
+  supportOnly, rollerOnly, springOnly, imposedOnly, loadOnly, largeMarkers, largeMemberLoadMarkers, thermalOnly,
+]) {
   for (const child of group.children) {
     child.geometry?.dispose();
     child.material?.dispose();

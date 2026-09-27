@@ -34,7 +34,9 @@ interface MarkerBatcher {
     position: THREE.Vector3,
     quaternion: THREE.Quaternion | undefined,
     selectionType: Frame3DSingleSelection["type"],
+    scale?: THREE.Vector3,
   ) => void;
+  addPolyline: (color: number, points: readonly THREE.Vector3[]) => void;
   flush: () => void;
 }
 
@@ -49,6 +51,7 @@ function markerGeometrySignature(geometry: THREE.BufferGeometry): string {
 function createMarkerBatcher(group: THREE.Group): MarkerBatcher {
   const batches = new Map<string, MarkerBatch>();
   const geometries = new Map<string, THREE.BufferGeometry>();
+  const lineBatches = new Map<number, THREE.Vector3[]>();
   const identityScale = new THREE.Vector3(1, 1, 1);
   return {
     geometryFor(key, factory) {
@@ -59,7 +62,7 @@ function createMarkerBatcher(group: THREE.Group): MarkerBatcher {
       }
       return geometry;
     },
-    add(geometry, color, id, position, quaternion, selectionType) {
+    add(geometry, color, id, position, quaternion, selectionType, scale) {
       const key = `${selectionType}\u0000${color}\u0000${markerGeometrySignature(geometry)}`;
       let batch = batches.get(key);
       if (!batch) {
@@ -73,9 +76,20 @@ function createMarkerBatcher(group: THREE.Group): MarkerBatcher {
         matrix: new THREE.Matrix4().compose(
           position,
           quaternion ?? new THREE.Quaternion(),
-          identityScale,
+          scale ?? identityScale,
         ),
       });
+    },
+    addPolyline(color, points) {
+      if (points.length < 2) return;
+      let segments = lineBatches.get(color);
+      if (!segments) {
+        segments = [];
+        lineBatches.set(color, segments);
+      }
+      for (let index = 0; index < points.length - 1; index += 1) {
+        segments.push(points[index], points[index + 1]);
+      }
     },
     flush() {
       for (const batch of batches.values()) {
@@ -102,7 +116,18 @@ function createMarkerBatcher(group: THREE.Group): MarkerBatcher {
         mesh.computeBoundingSphere();
         group.add(mesh);
       }
+      for (const [color, points] of lineBatches) {
+        const lines = new THREE.LineSegments(
+          new THREE.BufferGeometry().setFromPoints(points),
+          new THREE.LineBasicMaterial({ color }),
+        );
+        // De pijlen blijven per last selecteerbaar. Deze verbindingslijn is
+        // alleen visuele context en hoeft dus niet als extra raycast-doel mee.
+        lines.userData = { pickable: false, frame3dLoadGuide: true };
+        group.add(lines);
+      }
       batches.clear();
+      lineBatches.clear();
     },
   };
 }
@@ -124,11 +149,12 @@ function addMesh(
   group: THREE.Group, geometry: THREE.BufferGeometry, color: number,
   nodeId: number, position: THREE.Vector3, quaternion?: THREE.Quaternion,
   selection?: Frame3DSingleSelection,
+  scale?: THREE.Vector3,
 ) {
   const selectionData = selection ?? { type: "node" as const, id: nodeId };
   const batcher = group.userData[MARKER_BATCHER_KEY] as MarkerBatcher | undefined;
   if (batcher) {
-    batcher.add(geometry, color, selectionData.id, position, quaternion, selectionData.type);
+    batcher.add(geometry, color, selectionData.id, position, quaternion, selectionData.type, scale);
     return;
   }
   const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
@@ -136,8 +162,56 @@ function addMesh(
   }));
   mesh.position.copy(position);
   if (quaternion) mesh.quaternion.copy(quaternion);
+  if (scale) mesh.scale.copy(scale);
   mesh.userData = selectionData;
   group.add(mesh);
+}
+
+function addSelectableArrow(
+  group: THREE.Group,
+  direction: THREE.Vector3,
+  origin: THREE.Vector3,
+  length: number,
+  color: number,
+  headLength: number,
+  headWidth: number,
+  selection: Frame3DSingleSelection,
+) {
+  const batcher = group.userData[MARKER_BATCHER_KEY] as MarkerBatcher | undefined;
+  if (!batcher) {
+    const arrow = new THREE.ArrowHelper(direction, origin, length, color, headLength, headWidth);
+    arrow.userData = selection;
+    for (const child of arrow.children) child.userData = selection;
+    group.add(arrow);
+    return;
+  }
+  const normalized = direction.clone().normalize();
+  const orientation = new THREE.Quaternion().setFromUnitVectors(Y_AXIS, normalized);
+  const actualHeadLength = Math.min(headLength, length * 0.9);
+  const stemLength = Math.max(0, length - actualHeadLength);
+  if (stemLength > 1e-10) {
+    const radius = Math.max(headWidth * 0.1, 0.004);
+    addMesh(
+      group,
+      markerGeometry(group, "load-arrow-stem-unit", () => new THREE.CylinderGeometry(1, 1, 1, 8)),
+      color,
+      selection.id,
+      origin.clone().addScaledVector(normalized, stemLength / 2),
+      orientation,
+      selection,
+      new THREE.Vector3(radius, stemLength, radius),
+    );
+  }
+  addMesh(
+    group,
+    markerGeometry(group, "load-arrow-head-unit", () => new THREE.ConeGeometry(1, 1, 10)),
+    color,
+    selection.id,
+    origin.clone().addScaledVector(normalized, length - actualHeadLength / 2),
+    orientation,
+    selection,
+    new THREE.Vector3(headWidth, actualHeadLength, headWidth),
+  );
 }
 
 function addSupport(group: THREE.Group, node: Frame3DNode, support: Frame3DSupport, size: number) {
@@ -369,21 +443,23 @@ function addMemberLoad(
     const head = a.clone().addScaledVector(ex, position);
     const tail = head.clone().addScaledVector(direction, -arrowLength);
     tails.push(tail);
-    const arrow = new THREE.ArrowHelper(
-      direction, tail, arrowLength, 0xef4444,
+    addSelectableArrow(
+      group, direction, tail, arrowLength, 0xef4444,
       Math.min(size * 0.36, arrowLength * 0.35), Math.min(size * 0.2, arrowLength * 0.2),
+      { type: "memberLoad", id: load.id },
     );
-    arrow.userData = { type: "memberLoad", id: load.id };
-    for (const child of arrow.children) child.userData = arrow.userData;
-    group.add(arrow);
   }
   if (tails.length >= 2) {
-    const line = new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints(tails),
-      new THREE.LineBasicMaterial({ color: 0xef4444 }),
-    );
-    line.userData = { type: "memberLoad", id: load.id };
-    group.add(line);
+    const batcher = group.userData[MARKER_BATCHER_KEY] as MarkerBatcher | undefined;
+    if (batcher) batcher.addPolyline(0xef4444, tails);
+    else {
+      const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(tails),
+        new THREE.LineBasicMaterial({ color: 0xef4444 }),
+      );
+      line.userData = { type: "memberLoad", id: load.id };
+      group.add(line);
+    }
   }
 }
 
@@ -405,13 +481,11 @@ function addMemberPointLoad(
   const arrowLength = size * 1.8;
   const head = a.clone().addScaledVector(ex, load.positionM);
   const tail = head.clone().addScaledVector(direction, -arrowLength);
-  const arrow = new THREE.ArrowHelper(
-    direction, tail, arrowLength, 0xdc2626,
+  addSelectableArrow(
+    group, direction, tail, arrowLength, 0xdc2626,
     Math.min(size * 0.42, arrowLength * 0.35), Math.min(size * 0.24, arrowLength * 0.2),
+    { type: "memberPointLoad", id: load.id },
   );
-  arrow.userData = { type: "memberPointLoad", id: load.id };
-  for (const child of arrow.children) child.userData = arrow.userData;
-  group.add(arrow);
 }
 
 function addThermalLoad(
