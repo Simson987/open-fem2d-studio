@@ -536,19 +536,46 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const selectionPickTargetsRef = useRef<THREE.Object3D[]>([]);
   const plateDraftRef = useRef<PlateSketch>(emptyPlateSketch());
   const openingDraftRef = useRef<PlateSketch>(emptyPlateSketch());
+  const plateDraftCreatedNodesRef = useRef<Set<number>>(new Set());
+  const openingDraftCreatedNodesRef = useRef<Set<number>>(new Set());
   const beamStartRef = useRef<number | null>(null);
   const openingPlateRef = useRef<number | null>(null);
   const cameraChangeRef = useRef(onCameraChange);
   cameraChangeRef.current = onCameraChange;
+  const discardDraftNodes = (createdNodeIds: Set<number>) => {
+    if (createdNodeIds.size === 0) return;
+    const current = modelRef.current;
+    const referenced = new Set<number>();
+    current.beams.forEach((beam) => {
+      referenced.add(beam.startNodeId);
+      referenced.add(beam.endNodeId);
+    });
+    (current.plates ?? []).forEach((plate) => {
+      plate.nodeIds.forEach((id) => referenced.add(id));
+      plate.openings?.forEach((opening) => opening.nodeIds.forEach((id) => referenced.add(id)));
+    });
+    current.supports?.forEach((support) => referenced.add(support.nodeId));
+    current.loads?.forEach((load) => referenced.add(load.nodeId));
+    const removable = new Set([...createdNodeIds].filter((id) => !referenced.has(id)));
+    createdNodeIds.clear();
+    if (removable.size === 0) return;
+    const next = { ...current, nodes: current.nodes.filter((node) => !removable.has(node.id)) };
+    nodeByIdRef.current = new Map(next.nodes.map((node) => [node.id, node]));
+    modelRef.current = next;
+    changeRef.current(next);
+    selectRef.current(null);
+  };
   const previousToolRef = useRef(tool);
   useEffect(() => {
     const previousTool = previousToolRef.current;
     const plateTools: Frame3DTool[] = ["addPlate", "addPlateArc"];
     const openingTools: Frame3DTool[] = ["addOpening", "addOpeningArc"];
     if (!(plateTools.includes(previousTool) && plateTools.includes(tool))) {
+      discardDraftNodes(plateDraftCreatedNodesRef.current);
       plateDraftRef.current = emptyPlateSketch();
     }
     if (!(openingTools.includes(previousTool) && openingTools.includes(tool))) {
+      discardDraftNodes(openingDraftCreatedNodesRef.current);
       openingDraftRef.current = emptyPlateSketch();
     }
     if (tool !== "addBeam") beamStartRef.current = null;
@@ -939,6 +966,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         if (existing) return existing.id;
         const nodeId = Math.max(0, ...current.nodes.map((node) => node.id)) + 1;
         commitModel({ ...current, nodes: [...current.nodes, { id: nodeId, x: position.x, y: position.y, z: position.z }] });
+        if (activeTool === "addPlate" || activeTool === "addPlateArc") {
+          plateDraftCreatedNodesRef.current.add(nodeId);
+        } else if (isOpeningTool(activeTool)) {
+          openingDraftCreatedNodesRef.current.add(nodeId);
+        }
         return nodeId;
       };
       if (activeTool === "addNode") {
@@ -999,6 +1031,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
             const segments = [...sketch.segments, segment];
             const nodeIds = closes ? sketch.nodeIds : [...sketch.nodeIds, nodeId];
             if (closes && segments.length >= 2 && nodeIds.length >= 3) {
+              let committed = false;
               try {
                 const next = addFrame3DPlate(current, nodeIds, {
                   thicknessM: 0.2,
@@ -1006,9 +1039,12 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
                   boundary: segments,
                 });
                 commitModel(next);
+                committed = true;
                 selectRef.current({ type: "plate", id: Math.max(...(next.plates ?? []).map((plate) => plate.id)) });
               } finally {
                 plateDraftRef.current = emptyPlateSketch();
+                if (committed) plateDraftCreatedNodesRef.current.clear();
+                else discardDraftNodes(plateDraftCreatedNodesRef.current);
               }
             } else if (!closes) {
               plateDraftRef.current = {
@@ -1052,12 +1088,16 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
             const segments = [...sketch.segments, segment];
             const nodeIds = closes ? sketch.nodeIds : [...sketch.nodeIds, nodeId];
             if (closes && segments.length >= 2 && nodeIds.length >= 3) {
+              let committed = false;
               try {
                 const next = addFrame3DPlateOpening(current, openingPlateId, nodeIds, { boundary: segments });
                 commitModel(next);
+                committed = true;
                 selectRef.current({ type: "plate", id: openingPlateId });
               } finally {
                 openingDraftRef.current = emptyPlateSketch();
+                if (committed) openingDraftCreatedNodesRef.current.clear();
+                else discardDraftNodes(openingDraftCreatedNodesRef.current);
               }
             } else if (!closes) {
               openingDraftRef.current = {
@@ -1108,6 +1148,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      discardDraftNodes(plateDraftCreatedNodesRef.current);
+      discardDraftNodes(openingDraftCreatedNodesRef.current);
       plateDraftRef.current = emptyPlateSketch();
       openingDraftRef.current = emptyPlateSketch();
       beamStartRef.current = null;
@@ -1123,6 +1165,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     window.addEventListener("keydown", onKeyDown);
 
     return () => {
+      discardDraftNodes(plateDraftCreatedNodesRef.current);
+      discardDraftNodes(openingDraftCreatedNodesRef.current);
       observer.disconnect();
       if (previewFrame) cancelAnimationFrame(previewFrame);
       renderer.domElement.removeEventListener("pointerdown", onPointerDown);
