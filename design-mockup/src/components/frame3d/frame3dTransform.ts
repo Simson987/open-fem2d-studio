@@ -179,13 +179,16 @@ export function transformFrame3D(
         ...model,
         nodes: [...model.nodes, ...copiedNodes],
         beams: [...model.beams, ...copiedBeams],
-        supports: [...(model.supports ?? []), ...copiedSupports],
-        loads: [...(model.loads ?? []), ...copiedLoads],
-        memberLoads: [...(model.memberLoads ?? []), ...copiedMemberLoads],
-        memberPointLoads: [...(model.memberPointLoads ?? []), ...copiedMemberPointLoads],
-        thermalLoads: [...(model.thermalLoads ?? []), ...copiedThermalLoads],
-        plates: [...(model.plates ?? []), ...copiedPlates],
-        surfaceLoads: [...(model.surfaceLoads ?? []), ...copiedSurfaceLoads],
+        supports: copiedSupports.length > 0 ? [...(model.supports ?? []), ...copiedSupports] : model.supports,
+        loads: copiedLoads.length > 0 ? [...(model.loads ?? []), ...copiedLoads] : model.loads,
+        memberLoads: copiedMemberLoads.length > 0 ? [...(model.memberLoads ?? []), ...copiedMemberLoads] : model.memberLoads,
+        memberPointLoads: copiedMemberPointLoads.length > 0
+          ? [...(model.memberPointLoads ?? []), ...copiedMemberPointLoads] : model.memberPointLoads,
+        thermalLoads: copiedThermalLoads.length > 0
+          ? [...(model.thermalLoads ?? []), ...copiedThermalLoads] : model.thermalLoads,
+        plates: copiedPlates.length > 0 ? [...(model.plates ?? []), ...copiedPlates] : model.plates,
+        surfaceLoads: copiedSurfaceLoads.length > 0
+          ? [...(model.surfaceLoads ?? []), ...copiedSurfaceLoads] : model.surfaceLoads,
       },
       selection: selection.type === "multi"
         ? {

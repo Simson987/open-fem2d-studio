@@ -1534,6 +1534,267 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         return;
       }
     }
+    const unhintedNodeCount = previousModel && pendingAppend === null
+      ? model.nodes.length - previousModel.nodes.length : 0;
+    const unhintedBeamCount = previousModel && pendingAppend === null
+      ? model.beams.length - previousModel.beams.length : 0;
+    let appendPrefixesStable = unhintedNodeCount > 0 && unhintedNodeCount <= 64
+      && unhintedBeamCount >= 0 && unhintedBeamCount <= 64;
+    if (previousModel && appendPrefixesStable) {
+      for (let index = 0; index < previousModel.nodes.length; index += 1) {
+        if (model.nodes[index] !== previousModel.nodes[index]) { appendPrefixesStable = false; break; }
+      }
+      if (appendPrefixesStable) {
+        for (let index = 0; index < previousModel.beams.length; index += 1) {
+          if (model.beams[index] !== previousModel.beams[index]) { appendPrefixesStable = false; break; }
+        }
+      }
+    }
+    const unhintedNodes = previousModel && appendPrefixesStable
+      ? model.nodes.slice(previousModel.nodes.length) : [];
+    const unhintedBeams = previousModel && appendPrefixesStable
+      ? model.beams.slice(previousModel.beams.length) : [];
+    const unhintedInsideBounds = previousBounds !== null
+      && unhintedNodes.every((node) => previousBounds.containsPoint(new THREE.Vector3(node.x, node.y, node.z)));
+    const previousNodeLabelStride = previousModel
+      ? previousModel.nodes.length <= 200 ? 1 : Math.ceil(previousModel.nodes.length / 24) : 1;
+    const nextNodeLabelStride = model.nodes.length <= 200 ? 1 : Math.ceil(model.nodes.length / 24);
+    const previousConditionModel = lastBuiltConditionModelRef.current;
+    const appendConditionGeometryStable = !visibility.loads || (
+      conditionModel?.loads === previousConditionModel?.loads
+      && conditionModel?.memberLoads === previousConditionModel?.memberLoads
+      && conditionModel?.memberPointLoads === previousConditionModel?.memberPointLoads
+      && conditionModel?.thermalLoads === previousConditionModel?.thermalLoads
+      && conditionModel?.surfaceLoads === previousConditionModel?.surfaceLoads
+    );
+    const unhintedAppend = previousModel !== null
+      && previousModel.nodes.length >= 250
+      && appendPrefixesStable
+      && unchangedCollections
+      && unhintedInsideBounds
+      && (!(visibility.nodeNumbers || visibility.nodeCoordinates)
+        || previousNodeLabelStride === nextNodeLabelStride)
+      && !visibility.beamNumbers
+      && appendConditionGeometryStable
+      && !result
+      && (!visibility.utilization || utilizations.length === 0);
+    if (unhintedAppend) {
+      const visibleNodes = geometry.children.find((child) => child.userData.frame3dNodeVisual === true);
+      const hitNodes = geometry.children.find((child) => child.userData.frame3dNodeHit === true);
+      const nodeMeshes = [visibleNodes, hitNodes].filter((child): child is THREE.InstancedMesh =>
+        child instanceof THREE.InstancedMesh);
+      let fastPathReady = nodeMeshes.length > 0
+        && nodeMeshes.every((mesh) => mesh.count + unhintedNodes.length <= mesh.instanceMatrix.count);
+      const beamUpdates: Array<{
+        beam: Frame3DModel["beams"][number];
+        mesh: THREE.InstancedMesh;
+        matrix: THREE.Matrix4;
+        color: number;
+      }> = [];
+      const additionsPerMesh = new Map<THREE.InstancedMesh, number>();
+      if (fastPathReady) {
+        for (const beam of unhintedBeams) {
+          const start = nodeByIdRef.current!.get(beam.startNodeId);
+          const end = nodeByIdRef.current!.get(beam.endNodeId);
+          if (!start || !end) { fastPathReady = false; break; }
+          const a = new THREE.Vector3(start.x, start.y, start.z);
+          const b = new THREE.Vector3(end.x, end.y, end.z);
+          const delta = b.clone().sub(a);
+          const length = delta.length();
+          if (length <= 1e-12) { fastPathReady = false; break; }
+          const isProfile = visibility.profiles && Boolean(beam.profileName);
+          const profileKey = isProfile
+            ? `profile\u0000${profileBatchName(beam.profileName!)}`
+            : `analytical\u0000${visibility.profiles ? PROFILE_BEAM_RADIUS_M : ANALYTICAL_BEAM_RADIUS_M}\u0000${visibility.profiles ? 24 : 12}`;
+          const candidate = geometry.children.find((child) => child.userData.frame3dBeamBatchKey === profileKey);
+          if (!(candidate instanceof THREE.InstancedMesh)) { fastPathReady = false; break; }
+          const count = (additionsPerMesh.get(candidate) ?? 0) + 1;
+          additionsPerMesh.set(candidate, count);
+          if (candidate.count + count > candidate.instanceMatrix.count) { fastPathReady = false; break; }
+          const rotation = isProfile
+            ? memberRotation(delta, beam.rollAngleRad ?? 0)
+            : new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.clone().normalize());
+          const utilization = visibility.utilization
+            ? utilizations.find((value) => value.beamId === beam.id)
+            : undefined;
+          const utilizationClass = utilization ? frame3DUtilizationClass(utilization) : undefined;
+          beamUpdates.push({
+            beam,
+            mesh: candidate,
+            color: utilizationClass ? FRAME_3D_UTILIZATION_COLORS[utilizationClass] : 0x2563eb,
+            matrix: new THREE.Matrix4().compose(
+              a.add(b).multiplyScalar(0.5), rotation,
+              isProfile ? frame3DProfileInstanceScale(length) : new THREE.Vector3(1, length, 1),
+            ),
+          });
+        }
+      }
+      if (fastPathReady) {
+        for (const node of unhintedNodes) {
+          const nodeMatrix = new THREE.Matrix4().makeTranslation(node.x, node.y, node.z);
+          for (const mesh of nodeMeshes) {
+            const instanceIndex = mesh.count;
+            mesh.count += 1;
+            (mesh.userData.instanceIds as number[]).push(node.id);
+            (mesh.userData.instanceBaseColors as number[]).push(0x334155);
+            (mesh.userData.instanceIndexById as Map<number, number>).set(node.id, instanceIndex);
+            mesh.setMatrixAt(instanceIndex, nodeMatrix);
+            mesh.setColorAt(instanceIndex, new THREE.Color(0x334155));
+            markInstanceChanged(mesh, instanceIndex);
+          }
+          const nodeIndex = model.nodes.indexOf(node);
+          if ((visibility.nodeNumbers || visibility.nodeCoordinates) && nodeIndex % nextNodeLabelStride === 0) {
+            const parts = [
+              visibility.nodeNumbers ? String(node.id) : "",
+              visibility.nodeCoordinates ? `(${node.x}, ${node.y}, ${node.z}) m` : "",
+            ].filter(Boolean);
+            geometry.add(makeLabel(
+              parts.join(" · "), "frame3d-node-label",
+              new THREE.Vector3(node.x, node.y, node.z), { type: "node", id: node.id },
+            ));
+          }
+        }
+        for (const update of beamUpdates) {
+          const instanceIndex = update.mesh.count;
+          update.mesh.count += 1;
+          (update.mesh.userData.instanceIds as number[]).push(update.beam.id);
+          (update.mesh.userData.instanceBaseColors as number[]).push(update.color);
+          (update.mesh.userData.instanceIndexById as Map<number, number>).set(update.beam.id, instanceIndex);
+          update.mesh.setMatrixAt(instanceIndex, update.matrix);
+          update.mesh.setColorAt(instanceIndex, new THREE.Color(update.color));
+          markInstanceChanged(update.mesh, instanceIndex);
+          expandInstancedMeshBounds(update.mesh, update.matrix);
+        }
+        applySelectionHighlight(geometry, selectionRef.current);
+        state.renderer.render(state.scene, state.camera);
+        state.labelRenderer.render(state.scene, state.camera);
+        selectionRenderedWithModelRef.current = selectionRef.current;
+        lastBuiltModelRef.current = model;
+        lastBuiltConditionModelRef.current = conditionModel;
+        pendingAppendRef.current = null;
+        if (containerRef.current) {
+          delete containerRef.current.dataset.frame3dIncrementalFallback;
+          containerRef.current.dataset.frame3dBuildMode = "append-copy";
+          containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+          containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
+          containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
+          containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);
+          containerRef.current.dataset.frame3dNodeSnapTargets = String(nodePickTargetsRef.current.length);
+        }
+        return;
+      }
+    }
+    const removedNodeCount = previousModel ? previousModel.nodes.length - model.nodes.length : 0;
+    const removedBeamCount = previousModel ? previousModel.beams.length - model.beams.length : 0;
+    let removalPrefixesStable = removedNodeCount > 0 && removedNodeCount <= 64
+      && removedBeamCount >= 0 && removedBeamCount <= 64;
+    if (previousModel && removalPrefixesStable) {
+      for (let index = 0; index < model.nodes.length; index += 1) {
+        if (model.nodes[index] !== previousModel.nodes[index]) { removalPrefixesStable = false; break; }
+      }
+      if (removalPrefixesStable) {
+        for (let index = 0; index < model.beams.length; index += 1) {
+          if (model.beams[index] !== previousModel.beams[index]) { removalPrefixesStable = false; break; }
+        }
+      }
+    }
+    const removedNodes = previousModel && removalPrefixesStable
+      ? previousModel.nodes.slice(model.nodes.length) : [];
+    const removedBeams = previousModel && removalPrefixesStable
+      ? previousModel.beams.slice(model.beams.length) : [];
+    const removalNodeLabelStrideStable = previousModel
+      ? (previousModel.nodes.length <= 200 ? 1 : Math.ceil(previousModel.nodes.length / 24)) === nextNodeLabelStride
+      : false;
+    const incrementalTailRemoval = previousModel !== null
+      && model.nodes.length >= 250
+      && removalPrefixesStable
+      && unchangedCollections
+      && (!(visibility.nodeNumbers || visibility.nodeCoordinates) || removalNodeLabelStrideStable)
+      && !visibility.beamNumbers
+      && appendConditionGeometryStable
+      && !result
+      && (!visibility.utilization || utilizations.length === 0);
+    if (incrementalTailRemoval) {
+      const removedNodeIds = new Set(removedNodes.map((node) => node.id));
+      const visibleNodes = geometry.children.find((child) => child.userData.frame3dNodeVisual === true);
+      const hitNodes = geometry.children.find((child) => child.userData.frame3dNodeHit === true);
+      const nodeMeshes = [visibleNodes, hitNodes].filter((child): child is THREE.InstancedMesh =>
+        child instanceof THREE.InstancedMesh);
+      let fastPathReady = nodeMeshes.length > 0 && nodeMeshes.every((mesh) => {
+        const ids = mesh.userData.instanceIds as number[];
+        return ids.length === previousModel.nodes.length
+          && removedNodes.every((node, index) => ids[model.nodes.length + index] === node.id);
+      });
+      const beamRemovals = new Map<THREE.InstancedMesh, number[]>();
+      if (fastPathReady) {
+        for (const beam of removedBeams) {
+          const profileKey = visibility.profiles && beam.profileName
+            ? `profile\u0000${profileBatchName(beam.profileName)}`
+            : `analytical\u0000${visibility.profiles ? PROFILE_BEAM_RADIUS_M : ANALYTICAL_BEAM_RADIUS_M}\u0000${visibility.profiles ? 24 : 12}`;
+          const candidate = geometry.children.find((child) => child.userData.frame3dBeamBatchKey === profileKey);
+          if (!(candidate instanceof THREE.InstancedMesh)) { fastPathReady = false; break; }
+          const ids = beamRemovals.get(candidate) ?? [];
+          ids.push(beam.id);
+          beamRemovals.set(candidate, ids);
+        }
+      }
+      if (fastPathReady) {
+        for (const [mesh, idsToRemove] of beamRemovals) {
+          const ids = mesh.userData.instanceIds as number[];
+          const tail = ids.slice(ids.length - idsToRemove.length);
+          if (tail.length !== idsToRemove.length || tail.some((id, index) => id !== idsToRemove[index])) {
+            fastPathReady = false;
+            break;
+          }
+        }
+      }
+      if (fastPathReady) {
+        for (const mesh of nodeMeshes) {
+          const ids = mesh.userData.instanceIds as number[];
+          const colors = mesh.userData.instanceBaseColors as number[];
+          const indexById = mesh.userData.instanceIndexById as Map<number, number>;
+          removedNodes.forEach((node) => indexById.delete(node.id));
+          ids.length = model.nodes.length;
+          colors.length = model.nodes.length;
+          mesh.count = model.nodes.length;
+          mesh.userData.selectedInstanceIndices = new Set<number>();
+        }
+        for (const [mesh, idsToRemove] of beamRemovals) {
+          const ids = mesh.userData.instanceIds as number[];
+          const colors = mesh.userData.instanceBaseColors as number[];
+          const indexById = mesh.userData.instanceIndexById as Map<number, number>;
+          idsToRemove.forEach((id) => indexById.delete(id));
+          ids.length -= idsToRemove.length;
+          colors.length -= idsToRemove.length;
+          mesh.count -= idsToRemove.length;
+          mesh.userData.selectedInstanceIndices = new Set<number>();
+        }
+        for (const child of [...geometry.children]) {
+          if (!(child instanceof CSS2DObject)) continue;
+          const follow = child.userData.frame3dFollow as { type: "node" | "beam"; id: number } | undefined;
+          if (follow?.type !== "node" || !removedNodeIds.has(follow.id)) continue;
+          geometry.remove(child);
+          child.element.remove();
+        }
+        applySelectionHighlight(geometry, selectionRef.current);
+        state.renderer.render(state.scene, state.camera);
+        state.labelRenderer.render(state.scene, state.camera);
+        selectionRenderedWithModelRef.current = selectionRef.current;
+        lastBuiltModelRef.current = model;
+        lastBuiltConditionModelRef.current = conditionModel;
+        pendingAppendRef.current = null;
+        if (containerRef.current) {
+          delete containerRef.current.dataset.frame3dIncrementalFallback;
+          containerRef.current.dataset.frame3dBuildMode = "remove-copy";
+          containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+          containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
+          containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
+          containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);
+          containerRef.current.dataset.frame3dNodeSnapTargets = String(nodePickTargetsRef.current.length);
+        }
+        return;
+      }
+    }
     const incrementalNodeOnly = appendedNode && model.beams === previousModel?.beams;
     const incrementalBeam = appendedBeam
       && (model.nodes === previousModel?.nodes || appendedNode);
