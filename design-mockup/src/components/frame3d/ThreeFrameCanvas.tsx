@@ -1142,7 +1142,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       } else if (activeTool === "addBeam") {
         const nodeId = ensureDrawingNode();
         if (nodeId !== null) {
-          const start = beamStartRef.current;
+          const rememberedStart = beamStartRef.current;
+          const start = rememberedStart !== null && nodeByIdRef.current!.has(rememberedStart)
+            ? rememberedStart
+            : null;
+          if (rememberedStart !== start) beamStartRef.current = null;
           if (start === null || start === nodeId) {
             beamStartRef.current = nodeId;
             selectRef.current({ type: "node", id: nodeId });
