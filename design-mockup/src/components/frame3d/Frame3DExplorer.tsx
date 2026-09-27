@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { Children, useState, type Dispatch, type SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 import ExplorerViewTab from "../fem/ExplorerViewTab";
 import type { DisplayFlags } from "../fem/FemResultsOverlay";
@@ -40,19 +40,36 @@ interface Props {
   setActiveCombinationId?: (id: number) => void;
 }
 
-function Branch({ label, count, children }: { label: string; count: number; children: React.ReactNode }) {
-  const [open, setOpen] = useState(true);
+const GROTE_TAK_GRENS = 80;
+const TAK_PAGINA = 80;
+
+function Branch({ label, count, children, showNextLabel }: {
+  label: string;
+  count: number;
+  children: React.ReactNode;
+  showNextLabel: (count: number) => string;
+}) {
+  const [open, setOpen] = useState(count <= GROTE_TAK_GRENS);
+  const [limit, setLimit] = useState(TAK_PAGINA);
+  const items = open ? Children.toArray(children) : [];
   return <div className="fem-tree-node">
     <button className="fem-tree-row" onClick={() => setOpen(!open)}>
       <span className={`fem-tree-chevron${open ? " open" : ""}`}><svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M3 2l4 3-4 3z" /></svg></span>
       <span className="fem-tree-label">{label}</span><span className="fem-tree-count">{count}</span>
     </button>
-    {open && <div className="fem-tree-children">{children}</div>}
+    {open && <div className="fem-tree-children">
+      {items.slice(0, limit)}
+      {limit < items.length && <button
+        type="button"
+        className="fem-tree-leaf clickable"
+        onClick={() => setLimit((current) => Math.min(items.length, current + TAK_PAGINA))}
+      >
+        <span className="fem-tree-leaf-label">{showNextLabel(Math.min(TAK_PAGINA, items.length - limit))}</span>
+        <span className="fem-tree-leaf-value">{limit} / {items.length}</span>
+      </button>}
+    </div>}
   </div>;
 }
-
-const GROTE_TAK_GRENS = 200;
-const TAK_PAGINA = 250;
 
 function ItemBranch<T>({
   label, items, renderItem, showNextLabel,
@@ -139,7 +156,8 @@ export default function Frame3DExplorer(props: Props) {
             active={frame3DSelectionContains(props.selection, "beam", beam.id)}
             onClick={(event) => select(event, { type: "beam", id: beam.id })} />
         } />
-        <Branch label="Platen" count={(props.model.plates ?? []).length}>
+        <Branch label="Platen" count={(props.model.plates ?? []).length}
+          showNextLabel={(count) => t("tree.showNext", { count })}>
           {(props.model.plates ?? []).map((plate) => <Leaf key={plate.id} label={`Plaat ${plate.id}`}
             value={plate.boundary
               ? `${plate.boundary.length} segmenten · ${plate.boundary.filter((segment) => segment.kind === "arc").length} boog · ${plate.thicknessM} m · ${plate.openings?.length ?? 0} openingen`
@@ -147,7 +165,8 @@ export default function Frame3DExplorer(props: Props) {
             active={frame3DSelectionContains(props.selection, "plate", plate.id)}
             onClick={(event) => select(event, { type: "plate", id: plate.id })} />)}
         </Branch>
-        <Branch label={t("tree.supports")} count={(props.model.supports ?? []).length}>
+        <Branch label={t("tree.supports")} count={(props.model.supports ?? []).length}
+          showNextLabel={(count) => t("tree.showNext", { count })}>
           {(props.model.supports ?? []).map((support) => <Leaf key={support.nodeId}
             label={t("tree.nodeLabel", { id: support.nodeId })}
             value={[
@@ -165,7 +184,8 @@ export default function Frame3DExplorer(props: Props) {
             active={frame3DSelectionContains(props.selection, "node", support.nodeId)}
             onClick={(event) => select(event, { type: "node", id: support.nodeId })} />)}
         </Branch>
-        <Branch label={t("tree.loads")} count={nodalLoads.length + memberLoads.length + memberPointLoads.length + thermalLoads.length + surfaceLoads.length}>
+        <Branch label={t("tree.loads")} count={nodalLoads.length + memberLoads.length + memberPointLoads.length + thermalLoads.length + surfaceLoads.length}
+          showNextLabel={(count) => t("tree.showNext", { count })}>
           {nodalLoads.map((load) => <Leaf key={load.id} label={`#${load.id} · ${t("tree.nodeLabel", { id: load.nodeId })}`}
             value={[load.fx && `Fx ${load.fx}`, load.fy && `Fy ${load.fy}`, load.fz && `Fz ${load.fz}`, load.mx && `Mx ${load.mx}`, load.my && `My ${load.my}`, load.mz && `Mz ${load.mz}`].filter(Boolean).join(" · ")}
             active={frame3DSelectionContains(props.selection, "nodalLoad", load.id)}
@@ -214,6 +234,7 @@ export default function Frame3DExplorer(props: Props) {
         {(props.combinations?.length ?? 0) > 0 && (props.combinationResults?.size ?? 0) > 0 && <Branch
           label="Belastingcombinaties"
           count={props.combinationResults?.size ?? 0}
+          showNextLabel={(count) => t("tree.showNext", { count })}
         >
           {props.combinations?.filter((combination) => props.combinationResults?.has(combination.id)).map((combination) => {
             const result = props.combinationResults?.get(combination.id);
