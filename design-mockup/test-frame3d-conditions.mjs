@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import * as THREE from "three";
+import { buildFrame3DNodeSnapScreenIndex, findFrame3DNodeScreenSnap } from "./src/components/frame3d/frame3dNodeSnapIndex.ts";
 import {
   FRAME3D_SUPPORT_PRESETS,
   addFrame3DNodalLoad,
@@ -314,6 +315,22 @@ assert.ok(memberLoadInstances.every((child) => child.userData.type === "memberLo
   "gebatchte lastpijlen blijven als staafbelasting selecteerbaar");
 assert.ok(memberLoadInstances.every((child) => child.userData.instanceIds.includes(1)
   && child.userData.instanceIds.includes(240)), "iedere last-id blijft in de selectiebatch aanwezig");
+const snapCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+snapCamera.position.set(0, 0, 80);
+snapCamera.lookAt(0, 0, 0);
+snapCamera.updateProjectionMatrix();
+snapCamera.updateMatrixWorld();
+const snapNodes = Array.from({ length: 20_301 }, (_, index) => ({
+  id: index + 1,
+  x: (index % 201) - 100,
+  y: Math.floor(index / 201) - 50,
+  z: 0,
+}));
+const snapIndex = buildFrame3DNodeSnapScreenIndex(snapNodes, snapCamera, 1000, 1000);
+const centerSnap = findFrame3DNodeScreenSnap(snapIndex, 500, 500);
+assert.equal(centerSnap?.point.id, 10_151, "schermindex vindt de middelste knoop van 20.301 knopen");
+assert.ok((centerSnap?.candidateCount ?? Number.POSITIVE_INFINITY) < 250,
+  "knoopsnap bekijkt alleen lokale schermcellen en niet het hele grote model");
 const hidden = new THREE.Group();
 addFrame3DConditionMarkers(hidden, withConditions, { supports: false, loads: false });
 assert.equal(hidden.children.length, 0);

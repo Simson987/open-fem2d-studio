@@ -30,6 +30,11 @@ import {
 import type { Frame3DCameraState } from "./frame3dViewSets";
 import { createFrame3DPlateGeometry } from "./frame3dPlateGeometry";
 import { useSnapInstellingen, type SnapInstellingen, type SnapSoort } from "../../hooks/useSnapInstellingen";
+import {
+  buildFrame3DNodeSnapScreenIndex,
+  findFrame3DNodeScreenSnap,
+  type Frame3DNodeSnapScreenIndex,
+} from "./frame3dNodeSnapIndex";
 
 // De analytische knoop is een punt, maar in de editor moet hij ook op afstand
 // goed aanklikbaar en herkenbaar blijven. De staaf loopt tot het middelpunt van
@@ -724,6 +729,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const modelRef = useRef(model);
   const nodeByIdRef = useRef<Map<number, Frame3DModel["nodes"][number]> | null>(null);
   const nodePositionIndexRef = useRef<Map<string, number[]> | null>(null);
+  const nodeSnapScreenIndexRef = useRef<Frame3DNodeSnapScreenIndex | null>(null);
+  const nodeSnapScreenIndexDirtyRef = useRef(true);
   const beamByIdRef = useRef<Map<number, Frame3DModel["beams"][number]> | null>(null);
   const beamConnectionIndexRef = useRef<Set<string> | null>(null);
   const plateByIdRef = useRef<Map<number, NonNullable<Frame3DModel["plates"]>[number]> | null>(null);
@@ -755,6 +762,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       if (modelRef.current.nodes !== model.nodes) {
         nodeByIdRef.current = indexFrame3DNodes(model);
         nodePositionIndexRef.current = buildNodePositionIndex(model.nodes);
+        nodeSnapScreenIndexDirtyRef.current = true;
         nextNodeIdRef.current = nextNumericId(model.nodes);
       }
       if (modelRef.current.beams !== model.beams) {
@@ -1006,6 +1014,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       });
     };
     const startCameraInteraction = () => {
+      nodeSnapScreenIndexDirtyRef.current = true;
       labelRenderer.domElement.style.visibility = "hidden";
       container.dataset.frame3dLabelsSuspended = "true";
     };
@@ -1028,6 +1037,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       camera.updateProjectionMatrix();
       renderer.setSize(width, height);
       labelRenderer.setSize(width, height);
+      nodeSnapScreenIndexDirtyRef.current = true;
       renderScene();
     };
     const observer = new ResizeObserver(resize);
@@ -1087,23 +1097,44 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       return { anchor, view, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, origin) };
     };
     type DrawingSnap = { position: THREE.Vector3; nodeId?: number; kind?: SnapSoort };
+    const ensureNodeSnapScreenIndex = () => {
+      const width = Math.max(1, renderer.domElement.clientWidth);
+      const height = Math.max(1, renderer.domElement.clientHeight);
+      const current = nodeSnapScreenIndexRef.current;
+      if (nodeSnapScreenIndexDirtyRef.current || !current || current.width !== width || current.height !== height
+        || current.nodeCount !== modelRef.current.nodes.length) {
+        camera.updateMatrixWorld();
+        nodeSnapScreenIndexRef.current = buildFrame3DNodeSnapScreenIndex(
+          modelRef.current.nodes, camera, width, height,
+        );
+        nodeSnapScreenIndexDirtyRef.current = false;
+        container.dataset.frame3dNodeSnapIndexed = String(modelRef.current.nodes.length);
+        container.dataset.frame3dNodeSnapBuckets = String(nodeSnapScreenIndexRef.current.buckets.size);
+      }
+      return nodeSnapScreenIndexRef.current!;
+    };
     const drawingSnap = (): DrawingSnap | null => {
+      const snapStartedAt = performance.now();
+      const finish = (value: DrawingSnap | null) => {
+        container.dataset.frame3dSnapMs = (performance.now() - snapStartedAt).toFixed(2);
+        return value;
+      };
       delete container.dataset.frame3dSnapCandidates;
       const settings = snapsRef.current;
       if (settings.knoop) {
-        const nodeHit = raycaster.intersectObjects(nodePickTargetsRef.current, false)[0];
+        const index = ensureNodeSnapScreenIndex();
+        const xPx = (pointer.x + 1) * index.width / 2;
+        const yPx = (1 - pointer.y) * index.height / 2;
+        const nodeHit = findFrame3DNodeScreenSnap(index, xPx, yPx);
+        container.dataset.frame3dNodeSnapCandidates = String(nodeHit?.candidateCount ?? 0);
         if (nodeHit) {
-          const instanceIds = nodeHit.object.userData.instanceIds as number[] | undefined;
-          const hitId = instanceIds && nodeHit.instanceId !== undefined
-            ? instanceIds[nodeHit.instanceId]
-            : nodeHit.object.userData.id;
-          const node = nodeByIdRef.current!.get(hitId);
-          if (node) return { position: new THREE.Vector3(node.x, node.y, node.z), nodeId: node.id, kind: "knoop" };
+          const node = nodeByIdRef.current!.get(nodeHit.point.id);
+          if (node) return finish({ position: new THREE.Vector3(node.x, node.y, node.z), nodeId: node.id, kind: "knoop" });
         }
       }
       const { anchor, view, plane } = drawingPlane();
       const position = new THREE.Vector3();
-      if (!raycaster.ray.intersectPlane(plane, position)) return null;
+      if (!raycaster.ray.intersectPlane(plane, position)) return finish(null);
       const raw = position.clone();
       if (settings.stramien && structuralGridRef.current?.enabled) {
         const structuralAxes = structuralSnapAxesRef.current;
@@ -1143,7 +1174,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           const distance = pixelDistance(candidate);
           return !best || distance < best.distance ? { point: candidate, distance } : best;
         }, null);
-        if (nearest && nearest.distance <= 14) return { position: nearest.point, kind: "stramien" };
+        if (nearest && nearest.distance <= 14) return finish({ position: nearest.point, kind: "stramien" });
       }
       if (settings.raster) {
         const spacing = Math.max(0.001, gridSpacingRef.current);
@@ -1151,9 +1182,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         if (view === "front") position.set(round(raw.x), anchor?.y ?? controls.target.y, round(raw.z));
         else if (view === "side") position.set(anchor?.x ?? controls.target.x, round(raw.y), round(raw.z));
         else position.set(round(raw.x), round(raw.y), anchor?.z ?? controls.target.z);
-        return { position, kind: "raster" };
+        return finish({ position, kind: "raster" });
       }
-      return { position: raw };
+      return finish({ position: raw });
     };
     const drawDraftContour = (sketch: PlateSketch | null, opening = false) => {
       const vertices: THREE.Vector3[] = [];
@@ -1316,6 +1347,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           ? { baseModel: priorAppend?.baseModel ?? current, model: next, node: appendedNode, beam: appendedBeam }
           : null;
         if (current.nodes !== next.nodes) {
+          nodeSnapScreenIndexDirtyRef.current = true;
           if (appendedNode && next.nodes.length === current.nodes.length + 1
             && next.nodes[next.nodes.length - 1] === appendedNode) {
             nodeByIdRef.current!.set(appendedNode.id, appendedNode);
@@ -2380,7 +2412,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     // Ook middelgrote raamwerken worden vaak interactief bewerkt. Vanaf
     // honderd staven zijn losse meshes en raycast-doelen al merkbaar duurder
     // dan één selecteerbare GPU-batch per profiel.
-    const useBeamInstancing = model.beams.length >= 100;
+    // Een model met veel knopen is ook duur om volledig opnieuw op te bouwen
+    // wanneer er nog maar enkele staven zijn. Maak daar vanaf de eerste staaf
+    // al een uitbreidbare batch van, zodat doorlopend tekenen na die eerste
+    // staaf op het incrementele pad blijft.
+    const useBeamInstancing = model.beams.length >= 100 || model.nodes.length >= 250;
     // Nummerlabels zijn DOM-elementen. Duizenden labels boven op elkaar zijn
     // onleesbaar en blokkeren de hoofdthread. Houd per soort een gelijkmatig
     // verdeelde, representatieve set zichtbaar bij grote modellen.
@@ -2960,6 +2996,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   useEffect(() => {
     const state = sceneRef.current;
     if (!state) return;
+    nodeSnapScreenIndexDirtyRef.current = true;
     const current = modelRef.current;
     const box = sceneBounds(current, visibility);
     const hasGeometry = !box.isEmpty();
@@ -2989,6 +3026,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   useEffect(() => {
     const state = sceneRef.current;
     if (!state || !cameraRequest) return;
+    nodeSnapScreenIndexDirtyRef.current = true;
     state.camera.position.fromArray(cameraRequest.state.position);
     state.camera.up.fromArray(cameraRequest.state.up);
     state.controls.target.fromArray(cameraRequest.state.target);
