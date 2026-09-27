@@ -159,6 +159,14 @@ interface SceneState {
   axisLabels: CSS2DObject[];
 }
 
+function writeCameraDiagnostics(container: HTMLElement | null, state: SceneState) {
+  if (!container) return;
+  const value = (vector: THREE.Vector3) => vector.toArray().map((component) => component.toFixed(6)).join(",");
+  container.dataset.frame3dCameraPosition = value(state.camera.position);
+  container.dataset.frame3dCameraTarget = value(state.controls.target);
+  container.dataset.frame3dCameraUp = value(state.camera.up);
+}
+
 interface PlateSketch {
   nodeIds: number[];
   segments: Frame3DPlateBoundarySegment[];
@@ -625,6 +633,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const renderScene = () => {
       renderer.render(scene, camera);
       labelRenderer.render(scene, camera);
+      writeCameraDiagnostics(container, sceneRef.current!);
     };
     const saveCamera = () => {
       cameraChangeRef.current?.({
@@ -1177,7 +1186,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         || (selected?.type === "multi" && selected.beamIds.includes(beamId));
     };
     const nodeGeometry = visibility.nodes ? new THREE.SphereGeometry(nodeRadius, 24, 16) : null;
-    const nodeHitGeometry = visibility.nodes ? new THREE.SphereGeometry(nodeRadius * 2.6, 12, 8) : null;
+    // Snapzones blijven bestaan wanneer de knoopbollen verborgen zijn. Zo is
+    // Weergave onafhankelijk van de actieve Knoop-snap, zoals in de 2D-editor.
+    const nodeHitGeometry = new THREE.SphereGeometry(nodeRadius * 2.6, 12, 8);
     const utilizationByMember = new Map(utilizations.map((value) => [value.beamId, value]));
     for (const [beamIndex, beam] of model.beams.entries()) {
       const start = byId.get(beam.startNodeId);
@@ -1315,63 +1326,64 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       }
     }
     const useNodeInstancing = model.nodes.length >= 250;
-    if (visibility.nodes && useNodeInstancing) {
+    if (useNodeInstancing) {
       const instanceIds = model.nodes.map((node) => node.id);
       const instanceBaseColors = model.nodes.map(() => 0x334155);
-      const visibleNodes = new THREE.InstancedMesh(
-        nodeGeometry!,
-        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.06 }),
-        model.nodes.length,
-      );
+      const visibleNodes = visibility.nodes ? new THREE.InstancedMesh(
+        nodeGeometry!, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.06 }), model.nodes.length,
+      ) : null;
       const hitNodes = new THREE.InstancedMesh(
-        nodeHitGeometry!,
+        nodeHitGeometry,
         new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
         model.nodes.length,
       );
-      visibleNodes.userData = { type: "node", instanceIds, instanceBaseColors };
-      hitNodes.userData = { type: "node", instanceIds, instanceBaseColors };
+      if (visibleNodes) visibleNodes.userData = { type: "node", instanceIds, instanceBaseColors };
+      hitNodes.userData = { type: "node", instanceIds, instanceBaseColors, pickable: visibility.nodes };
       const matrix = new THREE.Matrix4();
       model.nodes.forEach((node, index) => {
         matrix.makeTranslation(node.x, node.y, node.z);
-        visibleNodes.setMatrixAt(index, matrix);
-        visibleNodes.setColorAt(index, new THREE.Color(0x334155));
+        visibleNodes?.setMatrixAt(index, matrix);
+        visibleNodes?.setColorAt(index, new THREE.Color(0x334155));
         hitNodes.setMatrixAt(index, matrix);
         hitNodes.setColorAt(index, new THREE.Color(0x334155));
       });
-      visibleNodes.instanceMatrix.needsUpdate = true;
+      if (visibleNodes) visibleNodes.instanceMatrix.needsUpdate = true;
       hitNodes.instanceMatrix.needsUpdate = true;
-      if (visibleNodes.instanceColor) visibleNodes.instanceColor.needsUpdate = true;
+      if (visibleNodes?.instanceColor) visibleNodes.instanceColor.needsUpdate = true;
       if (hitNodes.instanceColor) hitNodes.instanceColor.needsUpdate = true;
-      visibleNodes.instanceColor?.setUsage(THREE.DynamicDrawUsage);
+      visibleNodes?.instanceColor?.setUsage(THREE.DynamicDrawUsage);
       hitNodes.instanceColor?.setUsage(THREE.DynamicDrawUsage);
-      visibleNodes.computeBoundingBox();
-      visibleNodes.computeBoundingSphere();
+      visibleNodes?.computeBoundingBox();
+      visibleNodes?.computeBoundingSphere();
       hitNodes.computeBoundingBox();
       hitNodes.computeBoundingSphere();
-      geometry.add(visibleNodes, hitNodes);
+      if (visibleNodes) geometry.add(visibleNodes);
+      geometry.add(hitNodes);
       nodePickTargetsRef.current.push(hitNodes);
     }
     for (const [nodeIndex, node] of model.nodes.entries()) {
-      if (visibility.nodes && !useNodeInstancing) {
-        const mesh = new THREE.Mesh(
-          nodeGeometry!,
-          new THREE.MeshStandardMaterial({
-            color: 0x334155,
-            roughness: 0.5,
-            metalness: 0.06,
-          }),
-        );
-        mesh.position.set(node.x, node.y, node.z);
-        mesh.userData = { type: "node", id: node.id };
-        geometry.add(mesh);
+      if (!useNodeInstancing) {
+        if (visibility.nodes) {
+          const mesh = new THREE.Mesh(
+            nodeGeometry!,
+            new THREE.MeshStandardMaterial({
+              color: 0x334155,
+              roughness: 0.5,
+              metalness: 0.06,
+            }),
+          );
+          mesh.position.set(node.x, node.y, node.z);
+          mesh.userData = { type: "node", id: node.id };
+          geometry.add(mesh);
+        }
         // De zichtbare bol blijft klein zoals in 2D; een transparante grotere
         // bol geeft hem een comfortabele klikzone zonder het beeld te vullen.
         const hitTarget = new THREE.Mesh(
-          nodeHitGeometry!,
+          nodeHitGeometry,
           new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
         );
-        hitTarget.position.copy(mesh.position);
-        hitTarget.userData = { type: "node", id: node.id };
+        hitTarget.position.set(node.x, node.y, node.z);
+        hitTarget.userData = { type: "node", id: node.id, pickable: visibility.nodes };
         geometry.add(hitTarget);
         nodePickTargetsRef.current.push(hitTarget);
       }
@@ -1578,11 +1590,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     applySelectionHighlight(geometry, selectionRef.current);
     state.renderer.render(state.scene, state.camera);
     state.labelRenderer.render(state.scene, state.camera);
+    writeCameraDiagnostics(containerRef.current, state);
     if (containerRef.current) {
       containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
       containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
       containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
       containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);
+      containerRef.current.dataset.frame3dNodeSnapTargets = String(nodePickTargetsRef.current.length);
       containerRef.current.dataset.frame3dLabels = String(visibleLabelCount);
     }
   }, [model, conditionModel, visibility, structuralGrid, result, utilizations, activeLoadCaseId]);
@@ -1622,6 +1636,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     state.controls.update();
     state.renderer.render(state.scene, state.camera);
     state.labelRenderer.render(state.scene, state.camera);
+    writeCameraDiagnostics(containerRef.current, state);
   }, [
     fitToken, viewRequest?.token, viewRequest?.kind,
   ]);
@@ -1636,6 +1651,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     state.controls.update();
     state.renderer.render(state.scene, state.camera);
     state.labelRenderer.render(state.scene, state.camera);
+    writeCameraDiagnostics(containerRef.current, state);
   }, [cameraRequest?.token]);
 
   return <div
