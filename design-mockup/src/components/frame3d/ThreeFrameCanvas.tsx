@@ -2712,11 +2712,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         }
       }
     }
-    // Ook een klein interactief model krijgt één zichtbare knoopbatch en één
-    // transparante snapbatch. De schermindex bewaart de individuele ID's, dus
-    // losse Mesh-objecten leveren geen selectievoordeel meer en vermenigvuldigen
-    // alleen scène-objecten en tekenopdrachten tijdens plaat- en staaftekenen.
-    const useNodeInstancing = model.nodes.length > 0;
+    // Bereid de zichtbare knoopbatch en transparante snapbatch ook voor bij een
+    // leeg model. Daardoor kan de allereerste tekenklik direct een instantie
+    // toevoegen en verschuift de eenmalige WebGL-opstartkost naar het openen
+    // van de 3D-viewer. De schermindex bewaart de individuele ID's.
+    const useNodeInstancing = true;
     if (useNodeInstancing) {
       const instanceIds = model.nodes.map((node) => node.id);
       const instanceBaseColors = new Array<number>(model.nodes.length).fill(0x334155);
