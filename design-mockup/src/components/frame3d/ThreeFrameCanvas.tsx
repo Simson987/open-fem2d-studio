@@ -2208,7 +2208,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const incrementalNodeOnly = appendedNode && model.beams === previousModel?.beams;
     const incrementalBeam = appendedBeam
       && (model.nodes === previousModel?.nodes || appendedNode);
-    if (previousModel && unchangedCollections && previousModel.nodes.length >= 250
+    const interactivePlateNodeAppend = Boolean(incrementalNodeOnly)
+      && (toolRef.current === "addPlate" || toolRef.current === "addPlateArc" || isOpeningTool(toolRef.current));
+    if (previousModel && unchangedCollections
+      && (previousModel.nodes.length >= 250 || interactivePlateNodeAppend)
       && (incrementalNodeOnly || incrementalBeam)) {
       const node = appendedNode ? model.nodes[model.nodes.length - 1]! : undefined;
       const previousBounds = lastBuiltNodeBoundsRef.current;
@@ -2249,7 +2252,12 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           && conditionModel?.memberLoads === previousConditionModel.memberLoads
           && conditionModel?.memberPointLoads === previousConditionModel.memberPointLoads
           && conditionModel?.thermalLoads === previousConditionModel.thermalLoads);
-      const nodeInsideBounds = !node
+      // Tijdens het tekenen van een plaat is iedere klik eerst een losse
+      // conceptknoop. Ook wanneer die de bestaande modelbegrenzing vergroot,
+      // kunnen we de al aanwezige knoopbatches veilig hergebruiken. De
+      // definitieve plaatopbouw ververst daarna de overige begrenzingsafhankelijke
+      // geometrie in één keer.
+      const nodeInsideBounds = !node || interactivePlateNodeAppend
         || (previousBounds !== null && previousBounds.containsPoint(new THREE.Vector3(node.x, node.y, node.z)));
       const fastPathReady = nodeCapacityAvailable && beamCapacityAvailable && beamEndpointsValid
         && conditionLoadsStable && nodeLabelSamplingStable && beamLabelSamplingStable && nodeInsideBounds;
@@ -2257,6 +2265,19 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       // en stramienbereik gelijk. Voeg de knoop dan rechtstreeks aan de al
       // aanwezige GPU-batches toe; alle onveranderde geometrie blijft staan.
       if (fastPathReady) {
+        if (node && interactivePlateNodeAppend) {
+          const nextRadius = visualNodeRadius(model);
+          const previousRadius = visualNodeRadiusRef.current;
+          if (previousRadius > 0 && Math.abs(nextRadius - previousRadius) > 1e-12) {
+            const radiusScale = nextRadius / previousRadius;
+            for (const mesh of meshes) {
+              mesh.geometry.scale(radiusScale, radiusScale, radiusScale);
+              mesh.geometry.computeBoundingBox();
+              mesh.geometry.computeBoundingSphere();
+            }
+            visualNodeRadiusRef.current = nextRadius;
+          }
+        }
         if (node) {
           const matrix = new THREE.Matrix4().makeTranslation(node.x, node.y, node.z);
           for (const mesh of meshes) {
@@ -2332,6 +2353,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         state.labelRenderer.render(state.scene, state.camera);
         selectionRenderedWithModelRef.current = selectionRef.current;
         lastBuiltModelRef.current = model;
+        lastBuiltNodeBoundsRef.current = frame3DNodeBounds(model);
         rememberBuiltPresentation();
         pendingAppendRef.current = null;
         if (containerRef.current) {
