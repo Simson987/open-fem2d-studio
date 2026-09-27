@@ -38,6 +38,11 @@ import { useSnapInstellingen, type SnapInstellingen, type SnapSoort } from "../.
 const ANALYTICAL_BEAM_RADIUS_M = 0.035;
 const PROFILE_BEAM_RADIUS_M = 0.12;
 
+/** Catalogusnamen als `IPE 200` en `IPE200` delen dezelfde GPU-batch. */
+function profileBatchName(profileName: string): string {
+  return profileName.trim().toUpperCase().replace(/\s+(?=\d)/g, "");
+}
+
 /** Ongeveer dezelfde 10 px diameter als de 2D-knoop bij passend beeld. */
 function visualNodeRadius(model: Frame3DModel): number {
   if (model.nodes.length < 2) return 0.035;
@@ -535,6 +540,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const nodePickTargetsRef = useRef<THREE.Object3D[]>([]);
   const selectionPickTargetsRef = useRef<THREE.Object3D[]>([]);
   const lastBuiltModelRef = useRef<Frame3DModel | null>(null);
+  const lastBuiltConditionModelRef = useRef<Frame3DModel | undefined>(undefined);
   const plateDraftRef = useRef<PlateSketch>(emptyPlateSketch());
   const openingDraftRef = useRef<PlateSketch>(emptyPlateSketch());
   const plateDraftCreatedNodesRef = useRef<Set<number>>(new Set());
@@ -1199,10 +1205,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const rebuildStartedAt = performance.now();
     const { geometry } = state;
     const previousModel = lastBuiltModelRef.current;
-    const onlyAppendedNode = previousModel !== null
+    const appendedNode = previousModel !== null
       && model.nodes.length === previousModel.nodes.length + 1
-      && previousModel.nodes.every((node, index) => node === model.nodes[index])
-      && model.beams === previousModel.beams
+      && previousModel.nodes.every((node, index) => node === model.nodes[index]);
+    const appendedBeam = previousModel !== null
+      && model.beams.length === previousModel.beams.length + 1
+      && previousModel.beams.every((beam, index) => beam === model.beams[index]);
+    const unchangedCollections = previousModel !== null
       && model.plates === previousModel.plates
       && model.supports === previousModel.supports
       && model.loads === previousModel.loads
@@ -1210,68 +1219,154 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       && model.memberPointLoads === previousModel.memberPointLoads
       && model.thermalLoads === previousModel.thermalLoads
       && model.surfaceLoads === previousModel.surfaceLoads;
-    if (onlyAppendedNode && previousModel.nodes.length >= 250) {
-      const node = model.nodes[model.nodes.length - 1]!;
+    const incrementalNodeOnly = appendedNode && model.beams === previousModel?.beams;
+    const incrementalBeam = appendedBeam
+      && (model.nodes === previousModel?.nodes || appendedNode);
+    if (previousModel && unchangedCollections && previousModel.nodes.length >= 250
+      && (incrementalNodeOnly || incrementalBeam)) {
+      const node = appendedNode ? model.nodes[model.nodes.length - 1]! : undefined;
       const previousBounds = new THREE.Box3().setFromPoints(previousModel.nodes.map((item) =>
         new THREE.Vector3(item.x, item.y, item.z)));
       const visibleNodes = geometry.children.find((child) => child.userData.frame3dNodeVisual === true);
       const hitNodes = geometry.children.find((child) => child.userData.frame3dNodeHit === true);
       const meshes = [visibleNodes, hitNodes].filter((child): child is THREE.InstancedMesh =>
         child instanceof THREE.InstancedMesh);
-      const capacityAvailable = meshes.length > 0
-        && meshes.every((mesh) => model.nodes.length <= mesh.instanceMatrix.count);
+      const nodeCapacityAvailable = !node || (meshes.length > 0
+        && meshes.every((mesh) => model.nodes.length <= mesh.instanceMatrix.count));
       const previousNodeLabelStride = previousModel.nodes.length <= 200
         ? 1 : Math.ceil(previousModel.nodes.length / 24);
       const nodeLabelStride = model.nodes.length <= 200 ? 1 : Math.ceil(model.nodes.length / 24);
-      const labelSamplingStable = !(visibility.nodeNumbers || visibility.nodeCoordinates)
+      const nodeLabelSamplingStable = !(visibility.nodeNumbers || visibility.nodeCoordinates)
         || previousNodeLabelStride === nodeLabelStride;
+      const beam = appendedBeam ? model.beams[model.beams.length - 1]! : undefined;
+      const previousBeamLabelStride = previousModel.beams.length <= 200
+        ? 1 : Math.ceil(previousModel.beams.length / 24);
+      const beamLabelStride = model.beams.length <= 200 ? 1 : Math.ceil(model.beams.length / 24);
+      const beamLabelSamplingStable = !visibility.beamNumbers
+        || previousBeamLabelStride === beamLabelStride;
+      const profileKey = beam && visibility.profiles && beam.profileName
+        ? `profile\u0000${profileBatchName(beam.profileName)}`
+        : beam ? `analytical\u0000${visibility.profiles ? PROFILE_BEAM_RADIUS_M : ANALYTICAL_BEAM_RADIUS_M}\u0000${visibility.profiles ? 24 : 12}`
+          : undefined;
+      const beamMesh = profileKey
+        ? geometry.children.find((child) => child.userData.frame3dBeamBatchKey === profileKey)
+        : undefined;
+      const beamStart = beam ? nodeByIdRef.current!.get(beam.startNodeId) : undefined;
+      const beamEnd = beam ? nodeByIdRef.current!.get(beam.endNodeId) : undefined;
+      const beamEndpointsValid = !beam || (beamStart !== undefined && beamEnd !== undefined
+        && Math.hypot(beamEnd.x - beamStart.x, beamEnd.y - beamStart.y, beamEnd.z - beamStart.z) > 1e-12);
+      const beamCapacityAvailable = !beam || (beamMesh instanceof THREE.InstancedMesh
+        && beamMesh.count + 1 <= beamMesh.instanceMatrix.count);
+      const previousConditionModel = lastBuiltConditionModelRef.current;
+      const conditionLoadsStable = !beam || !visibility.loads
+        || (previousConditionModel !== undefined
+          && conditionModel?.loads === previousConditionModel.loads
+          && conditionModel?.memberLoads === previousConditionModel.memberLoads
+          && conditionModel?.memberPointLoads === previousConditionModel.memberPointLoads
+          && conditionModel?.thermalLoads === previousConditionModel.thermalLoads);
+      const nodeInsideBounds = !node
+        || previousBounds.containsPoint(new THREE.Vector3(node.x, node.y, node.z));
+      const fastPathReady = nodeCapacityAvailable && beamCapacityAvailable && beamEndpointsValid
+        && conditionLoadsStable && nodeLabelSamplingStable && beamLabelSamplingStable && nodeInsideBounds;
       // Binnen de bestaande begrenzing blijven knoopstraal, opleggingsgrootte
       // en stramienbereik gelijk. Voeg de knoop dan rechtstreeks aan de al
-      // aanwezige GPU-batch toe; alle onveranderde staven en lasten hoeven niet
-      // opnieuw opgebouwd te worden.
-      if (capacityAvailable && labelSamplingStable
-        && previousBounds.containsPoint(new THREE.Vector3(node.x, node.y, node.z))) {
-        const matrix = new THREE.Matrix4().makeTranslation(node.x, node.y, node.z);
-        for (const mesh of meshes) {
-          const index = mesh.count;
-          mesh.count += 1;
-          (mesh.userData.instanceIds as number[]).push(node.id);
-          (mesh.userData.instanceBaseColors as number[]).push(0x334155);
-          mesh.setMatrixAt(index, matrix);
-          mesh.setColorAt(index, new THREE.Color(0x334155));
-          mesh.instanceMatrix.needsUpdate = true;
-          if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-          mesh.computeBoundingBox();
-          mesh.computeBoundingSphere();
+      // aanwezige GPU-batches toe; alle onveranderde geometrie blijft staan.
+      if (fastPathReady) {
+        if (node) {
+          const matrix = new THREE.Matrix4().makeTranslation(node.x, node.y, node.z);
+          for (const mesh of meshes) {
+            const index = mesh.count;
+            mesh.count += 1;
+            (mesh.userData.instanceIds as number[]).push(node.id);
+            (mesh.userData.instanceBaseColors as number[]).push(0x334155);
+            mesh.setMatrixAt(index, matrix);
+            mesh.setColorAt(index, new THREE.Color(0x334155));
+            mesh.instanceMatrix.needsUpdate = true;
+            if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+            mesh.computeBoundingBox();
+            mesh.computeBoundingSphere();
+          }
         }
-        let addedLabel = false;
-        if ((visibility.nodeNumbers || visibility.nodeCoordinates)
+        let addedLabels = 0;
+        if (node && (visibility.nodeNumbers || visibility.nodeCoordinates)
           && (model.nodes.length - 1) % nodeLabelStride === 0) {
           const parts = [
             visibility.nodeNumbers ? String(node.id) : "",
             visibility.nodeCoordinates ? `(${node.x}, ${node.y}, ${node.z}) m` : "",
           ].filter(Boolean);
           geometry.add(makeLabel(parts.join(" · "), "frame3d-node-label", new THREE.Vector3(node.x, node.y, node.z)));
-          addedLabel = true;
+          addedLabels += 1;
+        }
+        if (beam && beamMesh instanceof THREE.InstancedMesh) {
+          const start = beamStart!;
+          const end = beamEnd!;
+          const a = new THREE.Vector3(start.x, start.y, start.z);
+          const b = new THREE.Vector3(end.x, end.y, end.z);
+          const delta = b.clone().sub(a);
+          const length = delta.length();
+          const isProfile = profileKey?.startsWith("profile\u0000") ?? false;
+          const rotation = isProfile
+            ? memberRotation(delta, beam.rollAngleRad ?? 0)
+            : new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.clone().normalize());
+          const utilization = visibility.utilization
+            ? utilizations.find((value) => value.beamId === beam.id)
+            : undefined;
+          const utilizationClass = utilization ? frame3DUtilizationClass(utilization) : undefined;
+          const color = utilizationClass ? FRAME_3D_UTILIZATION_COLORS[utilizationClass] : 0x2563eb;
+          const index = beamMesh.count;
+          beamMesh.count += 1;
+          (beamMesh.userData.instanceIds as number[]).push(beam.id);
+          (beamMesh.userData.instanceBaseColors as number[]).push(color);
+          beamMesh.setMatrixAt(index, new THREE.Matrix4().compose(
+            a.add(b).multiplyScalar(0.5), rotation,
+            isProfile ? frame3DProfileInstanceScale(length) : new THREE.Vector3(1, length, 1),
+          ));
+          beamMesh.setColorAt(index, new THREE.Color(color));
+          beamMesh.instanceMatrix.needsUpdate = true;
+          if (beamMesh.instanceColor) beamMesh.instanceColor.needsUpdate = true;
+          beamMesh.computeBoundingBox();
+          beamMesh.computeBoundingSphere();
+          if (visibility.beamNumbers && (model.beams.length - 1) % beamLabelStride === 0) {
+            const midpoint = new THREE.Vector3(start.x, start.y, start.z)
+              .add(new THREE.Vector3(end.x, end.y, end.z)).multiplyScalar(0.5)
+              .addScaledVector(memberAxes(delta, beam.rollAngleRad ?? 0).ey, 0.3);
+            geometry.add(makeLabel(`(${beam.id})`, "frame3d-beam-number", midpoint));
+            addedLabels += 1;
+          }
         }
         applySelectionHighlight(geometry, selectionRef.current);
         state.renderer.render(state.scene, state.camera);
         state.labelRenderer.render(state.scene, state.camera);
         lastBuiltModelRef.current = model;
+        lastBuiltConditionModelRef.current = conditionModel;
         if (containerRef.current) {
-          containerRef.current.dataset.frame3dBuildMode = "append-node";
+          delete containerRef.current.dataset.frame3dIncrementalFallback;
+          containerRef.current.dataset.frame3dBuildMode = beam
+            ? node ? "append-node-beam" : "append-beam"
+            : "append-node";
           containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
           containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
           containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
           containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);
           containerRef.current.dataset.frame3dNodeSnapTargets = String(nodePickTargetsRef.current.length);
-          if (addedLabel) {
+          if (addedLabels > 0) {
             containerRef.current.dataset.frame3dLabels = String(
-              Number(containerRef.current.dataset.frame3dLabels ?? 0) + 1,
+              Number(containerRef.current.dataset.frame3dLabels ?? 0) + addedLabels,
             );
           }
         }
         return;
+      }
+      if (containerRef.current) {
+        containerRef.current.dataset.frame3dIncrementalFallback = [
+          !nodeCapacityAvailable ? "node-capacity" : "",
+          !beamCapacityAvailable ? "beam-capacity" : "",
+          !beamEndpointsValid ? "beam-endpoints" : "",
+          !conditionLoadsStable ? "condition-loads" : "",
+          !nodeLabelSamplingStable ? "node-labels" : "",
+          !beamLabelSamplingStable ? "beam-labels" : "",
+          !nodeInsideBounds ? "bounds" : "",
+        ].filter(Boolean).join(",");
       }
     }
     disposeGroup(geometry);
@@ -1380,7 +1475,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         const midpoint = a.clone().add(b).multiplyScalar(0.5);
         if (useBeamInstancing) {
           const key = profileGeometry
-            ? `profile\u0000${beam.profileName}`
+            ? `profile\u0000${profileBatchName(beam.profileName!)}`
             : `analytical\u0000${radius}\u0000${visibility.profiles ? 24 : 12}`;
           let batch = beamInstanceBatches.get(key);
           if (!batch) {
@@ -1439,15 +1534,17 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         geometry.add(makeLabel(beam.profileName, "frame3d-profile-label", midpoint));
       }
     }
-    for (const batch of beamInstanceBatches.values()) {
+    for (const [batchKey, batch] of beamInstanceBatches) {
+      const instanceCapacity = 2 ** Math.ceil(Math.log2(Math.max(8, batch.instances.length + 1)));
       const mesh = new THREE.InstancedMesh(
         batch.geometry,
         new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.62, metalness: 0.04 }),
-        batch.instances.length,
+        instanceCapacity,
       );
       const instanceIds = batch.instances.map((instance) => instance.id);
       const instanceBaseColors = batch.instances.map((instance) => instance.color);
-      mesh.userData = { type: "beam", instanceIds, instanceBaseColors };
+      mesh.count = batch.instances.length;
+      mesh.userData = { type: "beam", instanceIds, instanceBaseColors, frame3dBeamBatchKey: batchKey };
       batch.instances.forEach((instance, index) => {
         mesh.setMatrixAt(index, instance.matrix);
         mesh.setColorAt(index, new THREE.Color(instance.color));
@@ -1775,6 +1872,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       containerRef.current.dataset.frame3dLabels = String(visibleLabelCount);
     }
     lastBuiltModelRef.current = model;
+    lastBuiltConditionModelRef.current = conditionModel;
   }, [model, conditionModel, visibility, structuralGrid, result, utilizations, activeLoadCaseId]);
 
   useEffect(() => {
