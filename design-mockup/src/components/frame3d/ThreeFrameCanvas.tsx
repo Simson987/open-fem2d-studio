@@ -44,7 +44,40 @@ function nextNumericId(items: readonly { id: number }[]): number {
   return maximum + 1;
 }
 
+function beamConnectionKey(startNodeId: number, endNodeId: number): string {
+  return startNodeId < endNodeId
+    ? `${startNodeId}|${endNodeId}`
+    : `${endNodeId}|${startNodeId}`;
+}
+
+function buildBeamConnectionIndex(beams: Frame3DModel["beams"]): Set<string> {
+  const index = new Set<string>();
+  for (const beam of beams) index.add(beamConnectionKey(beam.startNodeId, beam.endNodeId));
+  return index;
+}
+
+function nearestGridAxisValues(
+  axes: readonly { position: number }[],
+  targetM: number,
+  count = 3,
+): number[] {
+  const nearest: Array<{ value: number; distance: number }> = [];
+  for (const axis of axes) {
+    const value = axis.position / 1000;
+    const distance = Math.abs(value - targetM);
+    let insertAt = nearest.findIndex((entry) => distance < entry.distance);
+    if (insertAt < 0) insertAt = nearest.length;
+    if (insertAt < count) nearest.splice(insertAt, 0, { value, distance });
+    if (nearest.length > count) nearest.pop();
+  }
+  return nearest.map((entry) => entry.value);
+}
+
 const SAME_NODE_TOLERANCE_M = 1e-7;
+
+function cleanDrawingCoordinate(value: number): number {
+  return Math.abs(value) < 1e-10 ? 0 : value;
+}
 
 function nodePositionBucket(x: number, y: number, z: number): [number, number, number] {
   return [
@@ -644,6 +677,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const nodeByIdRef = useRef<Map<number, Frame3DModel["nodes"][number]> | null>(null);
   const nodePositionIndexRef = useRef<Map<string, number[]> | null>(null);
   const beamByIdRef = useRef<Map<number, Frame3DModel["beams"][number]> | null>(null);
+  const beamConnectionIndexRef = useRef<Set<string> | null>(null);
   const plateByIdRef = useRef<Map<number, NonNullable<Frame3DModel["plates"]>[number]> | null>(null);
   const nextNodeIdRef = useRef(1);
   const nextBeamIdRef = useRef(1);
@@ -655,8 +689,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   nodePositionIndexRef.current ??= buildNodePositionIndex(model.nodes);
   if (beamByIdRef.current === null) {
     beamByIdRef.current = new Map(model.beams.map((beam) => [beam.id, beam]));
+    beamConnectionIndexRef.current = buildBeamConnectionIndex(model.beams);
     nextBeamIdRef.current = nextNumericId(model.beams);
   }
+  beamConnectionIndexRef.current ??= buildBeamConnectionIndex(model.beams);
   plateByIdRef.current ??= new Map((model.plates ?? []).map((plate) => [plate.id, plate]));
   // Pointer previews run at most once per animation frame. Keep their lookups
   // O(1), so snapping stays direct when a model contains thousands of nodes.
@@ -675,6 +711,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       }
       if (modelRef.current.beams !== model.beams) {
         beamByIdRef.current = new Map(model.beams.map((beam) => [beam.id, beam]));
+        beamConnectionIndexRef.current = buildBeamConnectionIndex(model.beams);
         nextBeamIdRef.current = nextNumericId(model.beams);
       }
       if (modelRef.current.plates !== model.plates) {
@@ -950,6 +987,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     };
     type DrawingSnap = { position: THREE.Vector3; nodeId?: number; kind?: SnapSoort };
     const drawingSnap = (): DrawingSnap | null => {
+      delete container.dataset.frame3dSnapCandidates;
       const settings = snapsRef.current;
       if (settings.knoop) {
         const nodeHit = raycaster.intersectObjects(nodePickTargetsRef.current, false)[0];
@@ -968,45 +1006,35 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       const raw = position.clone();
       if (settings.stramien && structuralGridRef.current?.enabled) {
         const structural = structuralGridRef.current;
-        const xValues = structural.xAxes.map((axis) => axis.position / 1000);
-        const yValues = (structural.yAxes ?? []).map((axis) => axis.position / 1000);
-        const zValues = structural.zAxes.map((axis) => axis.position / 1000);
         const candidates: THREE.Vector3[] = [];
         const rect = renderer.domElement.getBoundingClientRect();
         const pixelDistance = (candidate: THREE.Vector3) => {
           const projected = candidate.clone().project(camera);
           return Math.hypot((projected.x - pointer.x) * rect.width / 2, (projected.y - pointer.y) * rect.height / 2);
         };
-        // Een groot stramien heeft snel honderdduizenden snijpunten. Voor
-        // snappen zijn alle afzonderlijke assen nodig, maar bij hun cartesisch
-        // product kunnen alleen de assen dicht bij de aanwijzer winnen. Houd
-        // daarom per richting de drie beste assen over voor de kruisingen.
-        const addSingleAxes = (key: "x" | "y" | "z", values: number[]) => {
-          const ranked: { value: number; distance: number }[] = [];
+        // Alleen de drie assen die in modelruimte het dichtst bij de aanwijzer
+        // liggen kunnen binnen de 14 px snapzone winnen. Zo blijft een zeer
+        // groot stramien per beeldframe op maximaal vijftien projecties.
+        const addSingleAxes = (key: "x" | "y" | "z", axes: readonly { position: number }[]) => {
+          const values = nearestGridAxisValues(axes, raw[key]);
           values.forEach((value) => {
             const candidate = raw.clone();
             candidate[key] = value;
             candidates.push(candidate);
-            ranked.push({ value, distance: pixelDistance(candidate) });
           });
-          return ranked.sort((a, b) => a.distance - b.distance).slice(0, 3).map((entry) => entry.value);
+          return values;
         };
-        const intersectionValues = (all: number[], near: number[], otherCount: number) =>
-          all.length * otherCount <= 4096 ? all : near;
         if (view === "front") {
-          const nearX = addSingleAxes("x", xValues), nearZ = addSingleAxes("z", zValues);
-          intersectionValues(xValues, nearX, zValues.length).forEach((x) =>
-            intersectionValues(zValues, nearZ, xValues.length).forEach((z) =>
+          const nearX = addSingleAxes("x", structural.xAxes), nearZ = addSingleAxes("z", structural.zAxes);
+          nearX.forEach((x) => nearZ.forEach((z) =>
               candidates.push(new THREE.Vector3(x, anchor?.y ?? controls.target.y, z))));
         } else if (view === "side") {
-          const nearY = addSingleAxes("y", yValues), nearZ = addSingleAxes("z", zValues);
-          intersectionValues(yValues, nearY, zValues.length).forEach((y) =>
-            intersectionValues(zValues, nearZ, yValues.length).forEach((z) =>
+          const nearY = addSingleAxes("y", structural.yAxes ?? []), nearZ = addSingleAxes("z", structural.zAxes);
+          nearY.forEach((y) => nearZ.forEach((z) =>
               candidates.push(new THREE.Vector3(anchor?.x ?? controls.target.x, y, z))));
         } else {
-          const nearX = addSingleAxes("x", xValues), nearY = addSingleAxes("y", yValues);
-          intersectionValues(xValues, nearX, yValues.length).forEach((x) =>
-            intersectionValues(yValues, nearY, xValues.length).forEach((y) =>
+          const nearX = addSingleAxes("x", structural.xAxes), nearY = addSingleAxes("y", structural.yAxes ?? []);
+          nearX.forEach((x) => nearY.forEach((y) =>
               candidates.push(new THREE.Vector3(x, y, anchor?.z ?? controls.target.z))));
         }
         container.dataset.frame3dSnapCandidates = String(candidates.length);
@@ -1144,9 +1172,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           if (appendedBeam && next.beams.length === current.beams.length + 1
             && next.beams[next.beams.length - 1] === appendedBeam) {
             beamByIdRef.current!.set(appendedBeam.id, appendedBeam);
+            beamConnectionIndexRef.current!.add(beamConnectionKey(appendedBeam.startNodeId, appendedBeam.endNodeId));
             nextBeamIdRef.current = Math.max(nextBeamIdRef.current, appendedBeam.id + 1);
           } else {
             beamByIdRef.current = new Map(next.beams.map((beam) => [beam.id, beam]));
+            beamConnectionIndexRef.current = buildBeamConnectionIndex(next.beams);
             nextBeamIdRef.current = nextNumericId(next.beams);
           }
         }
@@ -1176,7 +1206,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         const snapped = drawingSnap();
         if (!snapped) return null;
         if (snapped.nodeId !== undefined) return snapped.nodeId;
-        const position = snapped.position;
+        const position = snapped.position.set(
+          cleanDrawingCoordinate(snapped.position.x),
+          cleanDrawingCoordinate(snapped.position.y),
+          cleanDrawingCoordinate(snapped.position.z),
+        );
         const existing = nodeAtPosition(nodePositionIndexRef.current!, nodeByIdRef.current!, position);
         if (existing) return existing.id;
         const nodeId = nextNodeIdRef.current;
@@ -1205,10 +1239,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
             selectRef.current({ type: "node", id: nodeId });
           }
           else {
-            const duplicate = current.beams.some((beam) =>
-              beam.startNodeId === start && beam.endNodeId === nodeId ||
-              beam.startNodeId === nodeId && beam.endNodeId === start);
-            if (!duplicate) {
+            const connectionKey = beamConnectionKey(start, nodeId);
+            if (!beamConnectionIndexRef.current!.has(connectionKey)) {
               const beamId = nextBeamIdRef.current;
               const beam = {
                 id: beamId,
