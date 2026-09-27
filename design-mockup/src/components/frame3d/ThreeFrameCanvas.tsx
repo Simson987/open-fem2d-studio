@@ -414,12 +414,13 @@ function flushResultDiagramBatch(group: THREE.Group, batch: ResultDiagramBatch) 
   }
 }
 
-function addDashedLine(group: THREE.Group, a: THREE.Vector3, b: THREE.Vector3, color = 0x7c8da0) {
-  const geometry = new THREE.BufferGeometry().setFromPoints([a, b]);
+function addDashedSegments(group: THREE.Group, points: THREE.Vector3[], color = 0x7c8da0) {
+  if (points.length === 0) return;
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
   const material = new THREE.LineDashedMaterial({ color, dashSize: 0.22, gapSize: 0.12, transparent: true, opacity: 0.85 });
-  const line = new THREE.Line(geometry, material);
-  line.computeLineDistances();
-  group.add(line);
+  const lines = new THREE.LineSegments(geometry, material);
+  lines.computeLineDistances();
+  group.add(lines);
 }
 
 function addStructuralGrid(group: THREE.Group, model: Frame3DModel, grid: StructuralGrid) {
@@ -437,29 +438,46 @@ function addStructuralGrid(group: THREE.Group, model: Frame3DModel, grid: Struct
   const [yMin, yMax] = range(yValues, [-5, 5]);
   const [zMin, zMax] = range(zValues, [0, 5]);
   const baseZ = grid.zAxes[0]?.position !== undefined ? grid.zAxes[0].position / 1000 : zMin;
+  const baseSegments: THREE.Vector3[] = [];
+  const levelSegments: THREE.Vector3[] = [];
+  // Honderden DOM-labels boven op elkaar vertragen pannen en zoomen zonder
+  // nog leesbare informatie te geven. De lijnen en snap-assen blijven alle
+  // aanwezig; alleen de zichtbare tekst wordt gelijkmatig uitgedund.
+  const labelStride = (count: number) => count <= 80 ? 1 : Math.ceil(count / 40);
+  const xLabelStride = labelStride(grid.xAxes.length);
+  const yLabelStride = labelStride(grid.yAxes?.length ?? 0);
+  const zLabelStride = labelStride(grid.zAxes.length);
 
-  for (const axis of grid.xAxes) {
+  for (const [index, axis] of grid.xAxes.entries()) {
     const x = axis.position / 1000;
-    addDashedLine(group, new THREE.Vector3(x, yMin, baseZ), new THREE.Vector3(x, yMax, baseZ));
-    group.add(makeLabel(axis.label, "frame3d-grid-label", new THREE.Vector3(x, yMin, baseZ)));
+    baseSegments.push(new THREE.Vector3(x, yMin, baseZ), new THREE.Vector3(x, yMax, baseZ));
+    if (index % xLabelStride === 0) {
+      group.add(makeLabel(axis.label, "frame3d-grid-label", new THREE.Vector3(x, yMin, baseZ)));
+    }
   }
-  for (const axis of grid.yAxes ?? []) {
+  for (const [index, axis] of (grid.yAxes ?? []).entries()) {
     const y = axis.position / 1000;
-    addDashedLine(group, new THREE.Vector3(xMin, y, baseZ), new THREE.Vector3(xMax, y, baseZ));
-    group.add(makeLabel(axis.label, "frame3d-grid-label", new THREE.Vector3(xMin, y, baseZ)));
+    baseSegments.push(new THREE.Vector3(xMin, y, baseZ), new THREE.Vector3(xMax, y, baseZ));
+    if (index % yLabelStride === 0) {
+      group.add(makeLabel(axis.label, "frame3d-grid-label", new THREE.Vector3(xMin, y, baseZ)));
+    }
   }
-  for (const level of grid.zAxes) {
+  for (const [levelIndex, level] of grid.zAxes.entries()) {
     const z = level.position / 1000;
     const corners = [
       new THREE.Vector3(xMin, yMin, z), new THREE.Vector3(xMax, yMin, z),
       new THREE.Vector3(xMax, yMax, z), new THREE.Vector3(xMin, yMax, z),
     ];
-    corners.forEach((corner, index) => addDashedLine(group, corner, corners[(index + 1) % corners.length], 0x94a3b8));
-    group.add(makeLabel(level.label, "frame3d-grid-label frame3d-level-label", new THREE.Vector3(xMin, yMin, z)));
+    corners.forEach((corner, index) => levelSegments.push(corner, corners[(index + 1) % corners.length]));
+    if (levelIndex % zLabelStride === 0) {
+      group.add(makeLabel(level.label, "frame3d-grid-label frame3d-level-label", new THREE.Vector3(xMin, yMin, z)));
+    }
   }
   if (grid.zAxes.length === 0) {
-    addDashedLine(group, new THREE.Vector3(xMin, yMin, zMin), new THREE.Vector3(xMin, yMin, zMax), 0x94a3b8);
+    levelSegments.push(new THREE.Vector3(xMin, yMin, zMin), new THREE.Vector3(xMin, yMin, zMax));
   }
+  addDashedSegments(group, baseSegments);
+  addDashedSegments(group, levelSegments, 0x94a3b8);
 }
 
 function resultScale(model: Frame3DModel, result: Frame3DSolveResult): number {
@@ -631,9 +649,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     // Teken uitsluitend na camera-, formaat- of modelwijzigingen. Dat houdt ook
     // meerdere geopende 3D-vensters responsief.
     const renderScene = () => {
+      const renderStartedAt = performance.now();
       renderer.render(scene, camera);
       labelRenderer.render(scene, camera);
       writeCameraDiagnostics(container, sceneRef.current!);
+      container.dataset.frame3dCameraRenderMs = (performance.now() - renderStartedAt).toFixed(2);
     };
     const saveCamera = () => {
       cameraChangeRef.current?.({
@@ -736,26 +756,44 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         const yValues = (structural.yAxes ?? []).map((axis) => axis.position / 1000);
         const zValues = structural.zAxes.map((axis) => axis.position / 1000);
         const candidates: THREE.Vector3[] = [];
-        const addSingleAxes = (key: "x" | "y" | "z", values: number[]) => values.forEach((value) => {
-          const candidate = raw.clone();
-          candidate[key] = value;
-          candidates.push(candidate);
-        });
-        if (view === "front") {
-          addSingleAxes("x", xValues); addSingleAxes("z", zValues);
-          xValues.forEach((x) => zValues.forEach((z) => candidates.push(new THREE.Vector3(x, anchor?.y ?? controls.target.y, z))));
-        } else if (view === "side") {
-          addSingleAxes("y", yValues); addSingleAxes("z", zValues);
-          yValues.forEach((y) => zValues.forEach((z) => candidates.push(new THREE.Vector3(anchor?.x ?? controls.target.x, y, z))));
-        } else {
-          addSingleAxes("x", xValues); addSingleAxes("y", yValues);
-          xValues.forEach((x) => yValues.forEach((y) => candidates.push(new THREE.Vector3(x, y, anchor?.z ?? controls.target.z))));
-        }
         const rect = renderer.domElement.getBoundingClientRect();
         const pixelDistance = (candidate: THREE.Vector3) => {
           const projected = candidate.clone().project(camera);
           return Math.hypot((projected.x - pointer.x) * rect.width / 2, (projected.y - pointer.y) * rect.height / 2);
         };
+        // Een groot stramien heeft snel honderdduizenden snijpunten. Voor
+        // snappen zijn alle afzonderlijke assen nodig, maar bij hun cartesisch
+        // product kunnen alleen de assen dicht bij de aanwijzer winnen. Houd
+        // daarom per richting de drie beste assen over voor de kruisingen.
+        const addSingleAxes = (key: "x" | "y" | "z", values: number[]) => {
+          const ranked: { value: number; distance: number }[] = [];
+          values.forEach((value) => {
+            const candidate = raw.clone();
+            candidate[key] = value;
+            candidates.push(candidate);
+            ranked.push({ value, distance: pixelDistance(candidate) });
+          });
+          return ranked.sort((a, b) => a.distance - b.distance).slice(0, 3).map((entry) => entry.value);
+        };
+        const intersectionValues = (all: number[], near: number[], otherCount: number) =>
+          all.length * otherCount <= 4096 ? all : near;
+        if (view === "front") {
+          const nearX = addSingleAxes("x", xValues), nearZ = addSingleAxes("z", zValues);
+          intersectionValues(xValues, nearX, zValues.length).forEach((x) =>
+            intersectionValues(zValues, nearZ, xValues.length).forEach((z) =>
+              candidates.push(new THREE.Vector3(x, anchor?.y ?? controls.target.y, z))));
+        } else if (view === "side") {
+          const nearY = addSingleAxes("y", yValues), nearZ = addSingleAxes("z", zValues);
+          intersectionValues(yValues, nearY, zValues.length).forEach((y) =>
+            intersectionValues(zValues, nearZ, yValues.length).forEach((z) =>
+              candidates.push(new THREE.Vector3(anchor?.x ?? controls.target.x, y, z))));
+        } else {
+          const nearX = addSingleAxes("x", xValues), nearY = addSingleAxes("y", yValues);
+          intersectionValues(xValues, nearX, yValues.length).forEach((x) =>
+            intersectionValues(yValues, nearY, xValues.length).forEach((y) =>
+              candidates.push(new THREE.Vector3(x, y, anchor?.z ?? controls.target.z))));
+        }
+        container.dataset.frame3dSnapCandidates = String(candidates.length);
         const nearest = candidates.reduce<{ point: THREE.Vector3; distance: number } | null>((best, candidate) => {
           const distance = pixelDistance(candidate);
           return !best || distance < best.distance ? { point: candidate, distance } : best;
