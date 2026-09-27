@@ -2690,7 +2690,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         }
       }
     }
-    const useNodeInstancing = model.nodes.length >= 250;
+    // Ook een klein interactief model krijgt één zichtbare knoopbatch en één
+    // transparante snapbatch. De schermindex bewaart de individuele ID's, dus
+    // losse Mesh-objecten leveren geen selectievoordeel meer en vermenigvuldigen
+    // alleen scène-objecten en tekenopdrachten tijdens plaat- en staaftekenen.
+    const useNodeInstancing = model.nodes.length > 0;
     if (useNodeInstancing) {
       const instanceIds = model.nodes.map((node) => node.id);
       const instanceBaseColors = new Array<number>(model.nodes.length).fill(0x334155);
