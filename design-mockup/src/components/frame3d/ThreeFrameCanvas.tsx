@@ -1209,7 +1209,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     // geometrie. Eén InstancedMesh per profiel/lengte houdt ieder element
     // afzonderlijk selecteerbaar, maar stuurt de transformaties in één batch
     // naar de GPU.
-    const useBeamInstancing = model.beams.length >= 250;
+    // Ook middelgrote raamwerken worden vaak interactief bewerkt. Vanaf
+    // honderd staven zijn losse meshes en raycast-doelen al merkbaar duurder
+    // dan één selecteerbare GPU-batch per profiel.
+    const useBeamInstancing = model.beams.length >= 100;
     // Nummerlabels zijn DOM-elementen. Duizenden labels boven op elkaar zijn
     // onleesbaar en blokkeren de hoofdthread. Houd per soort een gelijkmatig
     // verdeelde, representatieve set zichtbaar bij grote modellen.
