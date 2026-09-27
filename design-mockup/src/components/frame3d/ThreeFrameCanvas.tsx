@@ -161,6 +161,22 @@ function profileBatchName(profileName: string): string {
   return profileName.trim().toUpperCase().replace(/\s+(?=\d)/g, "");
 }
 
+function geometrySignature(geometry: THREE.BufferGeometry): string {
+  let hash = 2166136261;
+  const mix = (value: number) => { hash = Math.imul(hash ^ value, 16777619); };
+  const position = geometry.getAttribute("position");
+  const positionArray = position.array;
+  if (positionArray instanceof Float32Array) {
+    const words = new Uint32Array(positionArray.buffer, positionArray.byteOffset, positionArray.length);
+    for (const value of words) mix(value);
+  } else {
+    for (let index = 0; index < positionArray.length; index += 1) mix(Math.fround(Number(positionArray[index])) * 1e6);
+  }
+  const indices = geometry.index?.array;
+  if (indices) for (let index = 0; index < indices.length; index += 1) mix(Number(indices[index]));
+  return `${position.count}:${geometry.index?.count ?? 0}:${hash >>> 0}`;
+}
+
 function frame3DNodeBounds(model: Frame3DModel): THREE.Box3 {
   const box = new THREE.Box3();
   const point = new THREE.Vector3();
@@ -405,14 +421,21 @@ function applySelectionHighlight(group: THREE.Group, selection: Frame3DSelection
       const colored = material as THREE.Material & { color?: THREE.Color };
       if (!colored.color) return;
       if (baseColors[index] === undefined) baseColors[index] = colored.color.getHex();
-      colored.color.setHex(selected ? (object.userData.selectionColor ?? 0xd97706) : baseColors[index]!);
-      material.needsUpdate = true;
+    });
+    if (object.userData.frame3dSelected === selected) return;
+    materials.forEach((material, index) => {
+      const colored = material as THREE.Material & { color?: THREE.Color };
+      if (!colored.color || baseColors[index] === undefined) return;
+      const color = selected ? (object.userData.selectionColor ?? 0xd97706) : baseColors[index]!;
+      if (colored.color.getHex() !== color) colored.color.setHex(color);
     });
     if (object.userData.selectionOpacity !== undefined) {
       materials.forEach((material) => {
-        material.opacity = selected ? object.userData.selectionOpacity : object.userData.baseOpacity;
+        const opacity = selected ? object.userData.selectionOpacity : object.userData.baseOpacity;
+        if (material.opacity !== opacity) material.opacity = opacity;
       });
     }
+    object.userData.frame3dSelected = selected;
   });
 }
 
@@ -2452,30 +2475,111 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       mesh.computeBoundingSphere();
       geometry.add(mesh);
     }
+    const plateBatchOwnedGeometries = new Set<THREE.BufferGeometry>();
     if (visibility.plates) {
-      for (const plate of model.plates ?? []) {
-        const built = plateGeometryFor(plate);
-        if (!built) continue;
-        const mesh = new THREE.Mesh(built.geometry, new THREE.MeshStandardMaterial({
-          color: 0x94a3b8,
-          roughness: 0.78,
-          metalness: 0.01,
-          transparent: true,
-          opacity: 0.7,
-          side: THREE.DoubleSide,
-        }));
-        mesh.position.copy(built.position);
-        mesh.quaternion.copy(built.quaternion);
-        mesh.userData = { type: "plate", id: plate.id, baseOpacity: 0.7, selectionOpacity: 0.88 };
-        const edges = new THREE.LineSegments(
-          new THREE.EdgesGeometry(built.geometry, 22),
-          new THREE.LineBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.78 }),
-        );
-        // De plaatmesh zelf is de klikzone. De rand kleurt wel mee met de
-        // selectie, maar verdubbelt niet het aantal raycast-doelen.
-        edges.userData = { type: "plate", id: plate.id, selectionColor: 0x92400e, pickable: false };
-        mesh.add(edges);
-        geometry.add(mesh);
+      const plates = model.plates ?? [];
+      if (plates.length >= 100) {
+        type PlateInstance = { id: number; matrix: THREE.Matrix4 };
+        const batches = new Map<string, { geometry: THREE.BufferGeometry; instances: PlateInstance[] }>();
+        for (const plate of plates) {
+          const built = plateGeometryFor(plate);
+          if (!built) continue;
+          const key = geometrySignature(built.geometry);
+          let batch = batches.get(key);
+          if (!batch) {
+            batch = { geometry: built.geometry, instances: [] };
+            batches.set(key, batch);
+            plateBatchOwnedGeometries.add(built.geometry);
+          }
+          batch.instances.push({
+            id: plate.id,
+            matrix: new THREE.Matrix4().compose(
+              built.position,
+              built.quaternion,
+              new THREE.Vector3(1, 1, 1),
+            ),
+          });
+        }
+        for (const [batchKey, batch] of batches) {
+          const mesh = new THREE.InstancedMesh(
+            batch.geometry,
+            new THREE.MeshStandardMaterial({
+              color: 0xffffff,
+              roughness: 0.78,
+              metalness: 0.01,
+              transparent: true,
+              opacity: 0.7,
+              side: THREE.DoubleSide,
+            }),
+            batch.instances.length,
+          );
+          const instanceIds = batch.instances.map((instance) => instance.id);
+          mesh.userData = {
+            type: "plate",
+            instanceIds,
+            instanceBaseColors: new Array<number>(instanceIds.length).fill(0x94a3b8),
+            instanceIndexById: new Map(instanceIds.map((id, index) => [id, index])),
+            frame3dPlateBatchKey: batchKey,
+          };
+          batch.instances.forEach((instance, index) => {
+            mesh.setMatrixAt(index, instance.matrix);
+            mesh.setColorAt(index, new THREE.Color(0x94a3b8));
+          });
+          mesh.instanceMatrix.needsUpdate = true;
+          if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+          mesh.computeBoundingBox();
+          mesh.computeBoundingSphere();
+          geometry.add(mesh);
+
+          const localEdges = new THREE.EdgesGeometry(batch.geometry, 22);
+          const localPositions = localEdges.getAttribute("position") as THREE.BufferAttribute;
+          const worldPositions = new Float32Array(localPositions.count * batch.instances.length * 3);
+          const edgePoint = new THREE.Vector3();
+          let worldIndex = 0;
+          for (const instance of batch.instances) {
+            for (let index = 0; index < localPositions.count; index += 1) {
+              edgePoint.fromBufferAttribute(localPositions, index).applyMatrix4(instance.matrix);
+              worldPositions[worldIndex++] = edgePoint.x;
+              worldPositions[worldIndex++] = edgePoint.y;
+              worldPositions[worldIndex++] = edgePoint.z;
+            }
+          }
+          localEdges.dispose();
+          const edgeGeometry = new THREE.BufferGeometry();
+          edgeGeometry.setAttribute("position", new THREE.BufferAttribute(worldPositions, 3));
+          edgeGeometry.computeBoundingBox();
+          edgeGeometry.computeBoundingSphere();
+          const edges = new THREE.LineSegments(
+            edgeGeometry,
+            new THREE.LineBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.78 }),
+          );
+          edges.userData = { frame3dPlateEdges: true, pickable: false };
+          geometry.add(edges);
+        }
+      } else {
+        for (const plate of plates) {
+          const built = plateGeometryFor(plate);
+          if (!built) continue;
+          plateBatchOwnedGeometries.add(built.geometry);
+          const mesh = new THREE.Mesh(built.geometry, new THREE.MeshStandardMaterial({
+            color: 0x94a3b8,
+            roughness: 0.78,
+            metalness: 0.01,
+            transparent: true,
+            opacity: 0.7,
+            side: THREE.DoubleSide,
+          }));
+          mesh.position.copy(built.position);
+          mesh.quaternion.copy(built.quaternion);
+          mesh.userData = { type: "plate", id: plate.id, baseOpacity: 0.7, selectionOpacity: 0.88 };
+          const edges = new THREE.LineSegments(
+            new THREE.EdgesGeometry(built.geometry, 22),
+            new THREE.LineBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.78 }),
+          );
+          edges.userData = { type: "plate", id: plate.id, selectionColor: 0x92400e, pickable: false };
+          mesh.add(edges);
+          geometry.add(mesh);
+        }
       }
     }
     const useNodeInstancing = model.nodes.length >= 250;
@@ -2768,12 +2872,12 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         selectionPickTargetsRef.current.push(object);
       }
     });
-    // Als alleen belastingen zichtbaar zijn, gebruiken we de plaatmesh enkel
-    // om normaal en zwaartepunt te bepalen. Die tijdelijke GPU-buffer hangt
-    // dan niet in de scène en moet hier meteen worden vrijgegeven.
-    if (!visibility.plates) {
-      plateGeometryById.forEach((built) => built?.geometry.dispose());
-    }
+    // Bij GPU-batches blijft per vorm één geometrie aan de scène gekoppeld.
+    // De overige, alleen voor herkenning of lastpositie gebruikte geometrieën
+    // hangen nergens en worden daarom meteen vrijgegeven.
+    plateGeometryById.forEach((built) => {
+      if (built && !plateBatchOwnedGeometries.has(built.geometry)) built.geometry.dispose();
+    });
     applySelectionHighlight(geometry, selectionRef.current);
     state.renderer.render(state.scene, state.camera);
     state.labelRenderer.render(state.scene, state.camera);
