@@ -644,6 +644,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const lastBuiltModelRef = useRef<Frame3DModel | null>(null);
   const lastBuiltConditionModelRef = useRef<Frame3DModel | undefined>(undefined);
   const lastBuiltNodeBoundsRef = useRef<THREE.Box3 | null>(null);
+  const visualNodeRadiusRef = useRef(0.035);
   const plateDraftRef = useRef<PlateSketch>(emptyPlateSketch());
   const openingDraftRef = useRef<PlateSketch>(emptyPlateSketch());
   const plateDraftCreatedNodesRef = useRef<Set<number>>(new Set());
@@ -985,7 +986,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         (previewLine.material as THREE.LineBasicMaterial).color.setHex(isArcBoundaryTool(activeTool) ? 0x7c3aed : 0x0284c7);
         previewLine.visible = true;
         previewCursor.position.copy(target.position);
-        previewCursor.scale.setScalar(Math.max(visualNodeRadius(modelRef.current) * 1.25, 0.025));
+        previewCursor.scale.setScalar(Math.max(visualNodeRadiusRef.current * 1.25, 0.025));
         previewCursor.visible = true;
         if (target.kind) {
           const rect = renderer.domElement.getBoundingClientRect();
@@ -1518,6 +1519,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       return plateGeometryById.get(plate.id) ?? null;
     };
     const nodeRadius = visualNodeRadius(model);
+    visualNodeRadiusRef.current = nodeRadius;
     // Deel onveranderlijke buffers binnen één scène-opbouw. Vooral echte
     // profiel-extrusies en knoopbollen zijn anders bij grote modellen een
     // kostbare herhaling voor ieder element.
