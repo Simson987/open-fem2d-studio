@@ -284,24 +284,46 @@ const SELECTABLE_TYPES = new Set<Frame3DSelectionType>([
   "node", "beam", "plate", "nodalLoad", "memberLoad", "memberPointLoad", "thermalLoad", "surfaceLoad",
 ]);
 
+function selectedIdsForType(selection: Frame3DSelection, type: Frame3DSelectionType): readonly number[] {
+  if (!selection) return [];
+  if (selection.type === type) return [selection.id];
+  if (selection.type !== "multi") return [];
+  if (type === "node") return selection.nodeIds;
+  if (type === "beam") return selection.beamIds;
+  if (type === "plate") return selection.plateIds ?? [];
+  return [];
+}
+
 /** Werk alleen de materiaalkleur bij; selecteren mag de zware profielgeometrie niet opnieuw bouwen. */
 function applySelectionHighlight(group: THREE.Group, selection: Frame3DSelection) {
   group.traverse((object) => {
     const type = object.userData.type as Frame3DSelectionType | undefined;
     if (!type || !SELECTABLE_TYPES.has(type)) return;
     if (object instanceof THREE.InstancedMesh && Array.isArray(object.userData.instanceIds)) {
+      if (object.userData.selectionHighlight === false) return;
       const ids = object.userData.instanceIds as number[];
       const baseColors = object.userData.instanceBaseColors as number[] | undefined;
       if (!baseColors || baseColors.length !== ids.length) return;
-      ids.forEach((id, index) => {
-        object.setColorAt(
-          index,
-          new THREE.Color(frame3DSelectionContains(selection, type, id)
-            ? (object.userData.selectionColor ?? 0xd97706)
-            : baseColors[index]),
-        );
+      const indexById = object.userData.instanceIndexById as Map<number, number> | undefined
+        ?? new Map(ids.map((id, index) => [id, index]));
+      object.userData.instanceIndexById = indexById;
+      const previous = object.userData.selectedInstanceIndices as Set<number> | undefined ?? new Set<number>();
+      const next = new Set<number>();
+      selectedIdsForType(selection, type).forEach((id) => {
+        const index = indexById.get(id);
+        if (index !== undefined) next.add(index);
       });
-      if (object.instanceColor) object.instanceColor.needsUpdate = true;
+      const changed = new Set<number>([...previous, ...next]);
+      changed.forEach((index) => {
+        const selected = next.has(index);
+        if (selected === previous.has(index)) return;
+        object.setColorAt(index, new THREE.Color(selected
+          ? (object.userData.selectionColor ?? 0xd97706)
+          : baseColors[index]));
+        if (object.instanceColor) object.instanceColor.addUpdateRange(index * 3, 3);
+      });
+      object.userData.selectedInstanceIndices = next;
+      if (changed.size > 0 && object.instanceColor) object.instanceColor.needsUpdate = true;
       return;
     }
     const id = object.userData.id;
@@ -1415,6 +1437,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
             mesh.count += 1;
             (mesh.userData.instanceIds as number[]).push(node.id);
             (mesh.userData.instanceBaseColors as number[]).push(0x334155);
+            const nodeIndexById = mesh.userData.instanceIndexById as Map<number, number> | undefined
+              ?? new Map((mesh.userData.instanceIds as number[]).map((id, instanceIndex) => [id, instanceIndex]));
+            mesh.userData.instanceIndexById = nodeIndexById;
+            nodeIndexById.set(node.id, index);
             mesh.setMatrixAt(index, matrix);
             mesh.setColorAt(index, new THREE.Color(0x334155));
             markInstanceChanged(mesh, index);
@@ -1451,6 +1477,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           beamMesh.count += 1;
           (beamMesh.userData.instanceIds as number[]).push(beam.id);
           (beamMesh.userData.instanceBaseColors as number[]).push(color);
+          const beamIndexById = beamMesh.userData.instanceIndexById as Map<number, number> | undefined
+            ?? new Map((beamMesh.userData.instanceIds as number[]).map((id, instanceIndex) => [id, instanceIndex]));
+          beamMesh.userData.instanceIndexById = beamIndexById;
+          beamIndexById.set(beam.id, index);
           const beamMatrix = new THREE.Matrix4().compose(
             a.add(b).multiplyScalar(0.5), rotation,
             isProfile ? frame3DProfileInstanceScale(length) : new THREE.Vector3(1, length, 1),
@@ -1680,7 +1710,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       const instanceIds = batch.instances.map((instance) => instance.id);
       const instanceBaseColors = batch.instances.map((instance) => instance.color);
       mesh.count = batch.instances.length;
-      mesh.userData = { type: "beam", instanceIds, instanceBaseColors, frame3dBeamBatchKey: batchKey };
+      mesh.userData = {
+        type: "beam",
+        instanceIds,
+        instanceBaseColors,
+        instanceIndexById: new Map(instanceIds.map((id, index) => [id, index])),
+        frame3dBeamBatchKey: batchKey,
+      };
       batch.instances.forEach((instance, index) => {
         mesh.setMatrixAt(index, instance.matrix);
         mesh.setColorAt(index, new THREE.Color(instance.color));
@@ -1742,11 +1778,20 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           type: "node",
           instanceIds: [...instanceIds],
           instanceBaseColors: [...instanceBaseColors],
+          instanceIndexById: new Map(instanceIds.map((id, index) => [id, index])),
           frame3dNodeVisual: true,
         };
       }
       hitNodes.count = model.nodes.length;
-      hitNodes.userData = { type: "node", instanceIds, instanceBaseColors, pickable: visibility.nodes, frame3dNodeHit: true };
+      hitNodes.userData = {
+        type: "node",
+        instanceIds,
+        instanceBaseColors,
+        instanceIndexById: new Map(instanceIds.map((id, index) => [id, index])),
+        pickable: visibility.nodes,
+        selectionHighlight: false,
+        frame3dNodeHit: true,
+      };
       const matrix = new THREE.Matrix4();
       model.nodes.forEach((node, index) => {
         matrix.makeTranslation(node.x, node.y, node.z);
