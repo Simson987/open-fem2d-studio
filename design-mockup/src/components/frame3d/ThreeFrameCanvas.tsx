@@ -119,8 +119,15 @@ function profileBatchName(profileName: string): string {
 
 function frame3DNodeBounds(model: Frame3DModel): THREE.Box3 {
   const box = new THREE.Box3();
-  for (const node of model.nodes) box.expandByPoint(new THREE.Vector3(node.x, node.y, node.z));
+  const point = new THREE.Vector3();
+  for (const node of model.nodes) box.expandByPoint(point.set(node.x, node.y, node.z));
   return box;
+}
+
+function indexFrame3DNodes(model: Frame3DModel): Map<number, Frame3DModel["nodes"][number]> {
+  const byId = new Map<number, Frame3DModel["nodes"][number]>();
+  for (const node of model.nodes) byId.set(node.id, node);
+  return byId;
 }
 
 /** Ongeveer dezelfde 10 px diameter als de 2D-knoop bij passend beeld. */
@@ -641,7 +648,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const nextNodeIdRef = useRef(1);
   const nextBeamIdRef = useRef(1);
   if (nodeByIdRef.current === null) {
-    nodeByIdRef.current = new Map(model.nodes.map((node) => [node.id, node]));
+    nodeByIdRef.current = indexFrame3DNodes(model);
     nodePositionIndexRef.current = buildNodePositionIndex(model.nodes);
     nextNodeIdRef.current = nextNumericId(model.nodes);
   }
@@ -662,7 +669,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     if (pendingAppend?.baseModel !== model) {
       pendingAppendRef.current = null;
       if (modelRef.current.nodes !== model.nodes) {
-        nodeByIdRef.current = new Map(model.nodes.map((node) => [node.id, node]));
+        nodeByIdRef.current = indexFrame3DNodes(model);
         nodePositionIndexRef.current = buildNodePositionIndex(model.nodes);
         nextNodeIdRef.current = nextNumericId(model.nodes);
       }
@@ -2099,7 +2106,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     state.grid.visible = visibility.grid;
     state.axes.visible = visibility.axes;
     state.axisLabels.forEach((label) => { label.visible = visibility.axes; });
-    const byId = new Map(model.nodes.map((node) => [node.id, node]));
+    const byId = indexFrame3DNodes(model);
     const plateGeometryById = new Map<number, ReturnType<typeof createFrame3DPlateGeometry>>();
     const plateGeometryFor = (plate: NonNullable<Frame3DModel["plates"]>[number]) => {
       if (!plateGeometryById.has(plate.id)) {
@@ -2319,7 +2326,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const useNodeInstancing = model.nodes.length >= 250;
     if (useNodeInstancing) {
       const instanceIds = model.nodes.map((node) => node.id);
-      const instanceBaseColors = model.nodes.map(() => 0x334155);
+      const instanceBaseColors = new Array<number>(model.nodes.length).fill(0x334155);
       // Reserveer in machten van twee ruimte voor interactief bijtekenen. Een
       // enkele nieuwe knoop past dan meestal in de bestaande GPU-buffer.
       const instanceCapacity = 2 ** Math.ceil(Math.log2(Math.max(256, model.nodes.length + 1)));
@@ -2628,9 +2635,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     }
     lastBuiltModelRef.current = model;
     rememberBuiltPresentation();
-    const nodeBounds = new THREE.Box3();
-    model.nodes.forEach((node) => nodeBounds.expandByPoint(new THREE.Vector3(node.x, node.y, node.z)));
-    lastBuiltNodeBoundsRef.current = nodeBounds;
+    lastBuiltNodeBoundsRef.current = frame3DNodeBounds(model);
     if (pendingAppendRef.current?.model === model) pendingAppendRef.current = null;
   }, [model, conditionModel, visibility, structuralGrid, result, utilizations, activeLoadCaseId]);
 

@@ -71,7 +71,9 @@ export function createFrame3DPlateGeometry(
   plate: Frame3DPlate,
   nodeIndex?: ReadonlyMap<number, Frame3DNode>,
 ): Frame3DPlateGeometry | null {
-  const byId = nodeIndex ?? new Map(model.nodes.map((node) => [node.id, node]));
+  const generatedIndex = new Map<number, Frame3DNode>();
+  if (!nodeIndex) for (const node of model.nodes) generatedIndex.set(node.id, node);
+  const byId = nodeIndex ?? generatedIndex;
   const nodes = plate.nodeIds.map((id) => byId.get(id)).filter(Boolean) as Frame3DNode[];
   if (nodes.length < 3) return null;
   const position = point(nodes[0]);

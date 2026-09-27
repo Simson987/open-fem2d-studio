@@ -84,7 +84,8 @@ function deformationScale(model: Frame3DModel, result: Frame3DSolveResult) {
 function View({
   model, result, projection, title, checks, concreteChecks,
 }: Props & { projection: Projection; title: string }) {
-  const nodeById = new Map(model.nodes.map((node) => [node.id, node]));
+  const nodeById = new Map<number, Frame3DNode>();
+  for (const node of model.nodes) nodeById.set(node.id, node);
   const utilization = new Map(buildFrame3DUtilizations(checks, concreteChecks).map((value) => [value.beamId, value]));
   const magnification = deformationScale(model, result);
   const undeformed = model.nodes.map((node) => project(node, projection));

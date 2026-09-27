@@ -176,6 +176,12 @@ export const EMPTY_FRAME_3D: Frame3DModel = {
   nodes: [], beams: [], supports: [], loads: [], memberLoads: [], memberPointLoads: [], thermalLoads: [], plates: [], surfaceLoads: [],
 };
 
+function nextEntityId(items: readonly { id: number }[]): number {
+  let maximum = 0;
+  for (const item of items) if (item.id > maximum) maximum = item.id;
+  return maximum + 1;
+}
+
 export const FRAME3D_SUPPORT_PRESETS = {
   fixed: { ux: true, uy: true, uz: true, rx: true, ry: true, rz: true },
   pinned: { ux: true, uy: true, uz: true, rx: false, ry: false, rz: false },
@@ -287,8 +293,8 @@ export function withFrame3DSelfWeight(model: Frame3DModel, caseId: number): Fram
   if (!Number.isSafeInteger(caseId) || caseId <= 0) throw new Error("Het belastinggeval voor 3D-eigen gewicht is ongeldig.");
   const loads = [...(model.loads ?? [])];
   const memberLoads = [...(model.memberLoads ?? [])];
-  let nextLoadId = Math.max(0, ...loads.map((load) => load.id)) + 1;
-  let nextMemberLoadId = Math.max(0, ...memberLoads.map((load) => load.id)) + 1;
+  let nextLoadId = nextEntityId(loads);
+  let nextMemberLoadId = nextEntityId(memberLoads);
 
   for (const beam of model.beams) {
     const start = model.nodes.find((node) => node.id === beam.startNodeId)!;
@@ -840,7 +846,7 @@ export function addFrame3DNodalLoad(
   const values = readNodalLoadComponents(components as unknown as Record<string, unknown>);
   const validCaseId = readOptionalCaseId(caseId);
   const previous = model.loads ?? [];
-  const id = Math.max(0, ...previous.map((load) => load.id)) + 1;
+  const id = nextEntityId(previous);
   return { ...model, loads: [...previous, { id, nodeId, ...values, ...(validCaseId !== undefined ? { caseId: validCaseId } : {}) }] };
 }
 
@@ -867,7 +873,7 @@ export function addFrame3DMemberLoad(
   caseId?: number,
 ): Frame3DModel {
   const previous = model.memberLoads ?? [];
-  const id = Math.max(0, ...previous.map((load) => load.id)) + 1;
+  const id = nextEntityId(previous);
   const load = readMemberLoad({ ...values, ...(caseId !== undefined ? { caseId } : {}) } as unknown as Record<string, unknown>, model, id, beamId);
   return { ...model, memberLoads: [...previous, load] };
 }
@@ -895,7 +901,7 @@ export function addFrame3DMemberPointLoad(
   caseId?: number,
 ): Frame3DModel {
   const previous = model.memberPointLoads ?? [];
-  const id = Math.max(0, ...previous.map((load) => load.id)) + 1;
+  const id = nextEntityId(previous);
   const load = readMemberPointLoad(
     { ...values, ...(caseId !== undefined ? { caseId } : {}) } as unknown as Record<string, unknown>,
     model, id, beamId,
@@ -929,7 +935,7 @@ export function addFrame3DThermalLoad(
   caseId?: number,
 ): Frame3DModel {
   const previous = model.thermalLoads ?? [];
-  const id = Math.max(0, ...previous.map((load) => load.id)) + 1;
+  const id = nextEntityId(previous);
   const load = readThermalLoad(
     { ...values, ...(caseId !== undefined ? { caseId } : {}) } as unknown as Record<string, unknown>,
     model, id, beamId,
@@ -1025,8 +1031,8 @@ export function splitFrame3DBeam(
   const existingNode = model.nodes.find((node) =>
     node.id !== start.id && node.id !== end.id &&
     Math.hypot(node.x - splitPoint.x, node.y - splitPoint.y, node.z - splitPoint.z) <= 1e-8);
-  const nodeId = existingNode?.id ?? Math.max(0, ...model.nodes.map((node) => node.id)) + 1;
-  const secondBeamId = Math.max(0, ...model.beams.map((item) => item.id)) + 1;
+  const nodeId = existingNode?.id ?? nextEntityId(model.nodes);
+  const secondBeamId = nextEntityId(model.beams);
   const duplicateSegment = model.beams.find((item) => item.id !== beamId && (
     (item.startNodeId === beam.startNodeId && item.endNodeId === nodeId) ||
     (item.startNodeId === nodeId && item.endNodeId === beam.startNodeId) ||
@@ -1066,7 +1072,7 @@ export function splitFrame3DBeam(
   const beams = model.beams.flatMap((item) => item.id === beamId ? [firstBeam, secondBeam] : [item]);
   const splitDistance = ratio * length;
 
-  let nextMemberLoadId = Math.max(0, ...(model.memberLoads ?? []).map((load) => load.id)) + 1;
+  let nextMemberLoadId = nextEntityId(model.memberLoads ?? []);
   const memberLoads = (model.memberLoads ?? []).flatMap((load): Frame3DMemberLoad[] => {
     if (load.beamId !== beamId) return [load];
     if (load.endPositionM <= splitDistance) return [load];
@@ -1101,7 +1107,7 @@ export function splitFrame3DBeam(
     return { ...load, beamId: secondBeamId, positionM: load.positionM - splitDistance };
   });
 
-  let nextThermalLoadId = Math.max(0, ...(model.thermalLoads ?? []).map((load) => load.id)) + 1;
+  let nextThermalLoadId = nextEntityId(model.thermalLoads ?? []);
   const thermalLoads = (model.thermalLoads ?? []).flatMap((load): Frame3DThermalLoad[] =>
     load.beamId !== beamId
       ? [load]
@@ -1137,7 +1143,7 @@ export function addFrame3DPlate(
   nodeIds: number[],
   options: { thicknessM?: number; material?: string; cornerRadiusM?: number; boundary?: Frame3DPlateBoundarySegment[] } = {},
 ): Frame3DModel {
-  const id = Math.max(0, ...(model.plates ?? []).map((plate) => plate.id)) + 1;
+  const id = nextEntityId(model.plates ?? []);
   return parseFrame3DModel({
     ...model,
     plates: [...(model.plates ?? []), {
@@ -1167,7 +1173,7 @@ export function addFrame3DPlateOpening(
   const options = typeof cornerRadiusOrOptions === "number"
     ? { cornerRadiusM: cornerRadiusOrOptions }
     : cornerRadiusOrOptions;
-  const id = Math.max(0, ...(plate.openings ?? []).map((opening) => opening.id)) + 1;
+  const id = nextEntityId(plate.openings ?? []);
   return parseFrame3DModel({
     ...model,
     plates: (model.plates ?? []).map((item) => item.id === plateId ? {
@@ -1190,7 +1196,7 @@ export function removeFrame3DPlate(model: Frame3DModel, plateId: number): Frame3
 export function addFrame3DSurfaceLoad(
   model: Frame3DModel, plateId: number, values: Pick<Frame3DSurfaceLoad, "qx" | "qy" | "qz">, caseId?: number,
 ): Frame3DModel {
-  const id = Math.max(0, ...(model.surfaceLoads ?? []).map((load) => load.id)) + 1;
+  const id = nextEntityId(model.surfaceLoads ?? []);
   return parseFrame3DModel({ ...model, surfaceLoads: [...(model.surfaceLoads ?? []), { id, plateId, ...values, ...(caseId ? { caseId } : {}) }] });
 }
 

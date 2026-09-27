@@ -468,10 +468,12 @@ export function addFrame3DConditionMarkers(
     + (model.thermalLoads?.length ?? 0);
   const batcher = markerCount >= 200 ? createMarkerBatcher(group) : undefined;
   if (batcher) group.userData[MARKER_BATCHER_KEY] = batcher;
-  const byId = new Map(model.nodes.map((node) => [node.id, node]));
+  const byId = new Map<number, Frame3DNode>();
+  for (const node of model.nodes) byId.set(node.id, node);
   const beamById = new Map(model.beams.map((beam) => [beam.id, beam]));
   const bounds = new THREE.Box3();
-  for (const node of model.nodes) bounds.expandByPoint(nodePoint(node));
+  const boundsPoint = new THREE.Vector3();
+  for (const node of model.nodes) bounds.expandByPoint(boundsPoint.set(node.x, node.y, node.z));
   const size = model.nodes.length > 0
     ? Math.max(0.25, Math.min(0.8, bounds.getSize(new THREE.Vector3()).length() * 0.045))
     : 0.3;
