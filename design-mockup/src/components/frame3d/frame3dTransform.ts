@@ -16,20 +16,44 @@ export interface Frame3DTransformResult {
   selection: Frame3DTransformSelection;
 }
 
-function selectedNodeIds(model: Frame3DModel, selection: Frame3DTransformSelection): number[] {
+interface Frame3DTransformIndex {
+  nodeIndexById: Map<number, number>;
+  beamById: Map<number, Frame3DModel["beams"][number]>;
+  plateById: Map<number, NonNullable<Frame3DModel["plates"]>[number]>;
+}
+
+function buildTransformIndex(model: Frame3DModel): Frame3DTransformIndex {
+  const nodeIndexById = new Map<number, number>();
+  for (let index = 0; index < model.nodes.length; index += 1) {
+    nodeIndexById.set(model.nodes[index].id, index);
+  }
+  return {
+    nodeIndexById,
+    beamById: new Map(model.beams.map((beam) => [beam.id, beam])),
+    plateById: new Map((model.plates ?? []).map((plate) => [plate.id, plate])),
+  };
+}
+
+function nextId(items: ReadonlyArray<{ id: number }>): number {
+  let maximum = 0;
+  for (const item of items) if (item.id > maximum) maximum = item.id;
+  return maximum + 1;
+}
+
+function selectedNodeIds(index: Frame3DTransformIndex, selection: Frame3DTransformSelection): number[] {
   if (selection.type === "multi") {
     for (const id of selection.nodeIds) {
-      if (!model.nodes.some((node) => node.id === id)) throw new Error(`3D-knoop ${id} bestaat niet.`);
+      if (!index.nodeIndexById.has(id)) throw new Error(`3D-knoop ${id} bestaat niet.`);
     }
     const ids = new Set(selection.nodeIds);
     for (const beamId of selection.beamIds) {
-      const beam = model.beams.find((item) => item.id === beamId);
+      const beam = index.beamById.get(beamId);
       if (!beam) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
       ids.add(beam.startNodeId);
       ids.add(beam.endNodeId);
     }
     for (const plateId of selection.plateIds ?? []) {
-      const plate = (model.plates ?? []).find((item) => item.id === plateId);
+      const plate = index.plateById.get(plateId);
       if (!plate) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
       plate.nodeIds.forEach((id) => ids.add(id));
       plate.openings?.forEach((opening) => opening.nodeIds.forEach((id) => ids.add(id)));
@@ -38,31 +62,31 @@ function selectedNodeIds(model: Frame3DModel, selection: Frame3DTransformSelecti
     return [...ids];
   }
   if (selection.type === "node") {
-    if (!model.nodes.some((node) => node.id === selection.id)) throw new Error(`3D-knoop ${selection.id} bestaat niet.`);
+    if (!index.nodeIndexById.has(selection.id)) throw new Error(`3D-knoop ${selection.id} bestaat niet.`);
     return [selection.id];
   }
   if (selection.type === "plate") {
-    const plate = (model.plates ?? []).find((item) => item.id === selection.id);
+    const plate = index.plateById.get(selection.id);
     if (!plate) throw new Error(`3D-plaat ${selection.id} bestaat niet.`);
     return [...new Set([...plate.nodeIds, ...(plate.openings ?? []).flatMap((opening) => opening.nodeIds)])];
   }
-  const beam = model.beams.find((item) => item.id === selection.id);
+  const beam = index.beamById.get(selection.id);
   if (!beam) throw new Error(`3D-staaf ${selection.id} bestaat niet.`);
   return [beam.startNodeId, beam.endNodeId];
 }
 
-function selectedBeamIds(model: Frame3DModel, selection: Frame3DTransformSelection): number[] {
+function selectedBeamIds(index: Frame3DTransformIndex, selection: Frame3DTransformSelection): number[] {
   if (selection.type === "node" || selection.type === "plate") return [];
   const ids = selection.type === "beam" ? [selection.id] : selection.beamIds;
   for (const id of ids) {
-    if (!model.beams.some((beam) => beam.id === id)) throw new Error(`3D-staaf ${id} bestaat niet.`);
+    if (!index.beamById.has(id)) throw new Error(`3D-staaf ${id} bestaat niet.`);
   }
   return ids;
 }
 
-function selectedPlateIds(model: Frame3DModel, selection: Frame3DTransformSelection): number[] {
+function selectedPlateIds(index: Frame3DTransformIndex, selection: Frame3DTransformSelection): number[] {
   const ids = selection.type === "plate" ? [selection.id] : selection.type === "multi" ? (selection.plateIds ?? []) : [];
-  for (const id of ids) if (!(model.plates ?? []).some((plate) => plate.id === id)) throw new Error(`3D-plaat ${id} bestaat niet.`);
+  for (const id of ids) if (!index.plateById.has(id)) throw new Error(`3D-plaat ${id} bestaat niet.`);
   return ids;
 }
 
@@ -89,27 +113,28 @@ export function transformFrame3D(
   selection: Frame3DTransformSelection,
   command: Frame3DTransformCommand,
 ): Frame3DTransformResult {
-  const ids = selectedNodeIds(model, selection);
+  const index = buildTransformIndex(model);
+  const ids = selectedNodeIds(index, selection);
   const idSet = new Set(ids);
   if (command.kind === "move" || command.kind === "copy") finite([command.dx, command.dy, command.dz]);
   if (command.kind === "rotate") finite([command.angleDeg]);
   if (command.kind === "mirror") finite([command.offset]);
 
   if (command.kind === "copy") {
-    const nextNode = Math.max(0, ...model.nodes.map((node) => node.id)) + 1;
-    const idMap = new Map(ids.map((id, index) => [id, nextNode + index]));
-    const copiedNodes = model.nodes.filter((node) => idSet.has(node.id)).map((node) => ({
+    const nextNode = nextId(model.nodes);
+    const idMap = new Map(ids.map((id, selectionIndex) => [id, nextNode + selectionIndex]));
+    const copiedNodes = ids.map((sourceId) => model.nodes[index.nodeIndexById.get(sourceId)!]).map((node) => ({
       ...node,
       id: idMap.get(node.id)!,
       x: node.x + command.dx,
       y: node.y + command.dy,
       z: node.z + command.dz,
     }));
-    const beamIds = selectedBeamIds(model, selection);
+    const beamIds = selectedBeamIds(index, selection);
     const beamIdSet = new Set(beamIds);
-    let nextBeam = Math.max(0, ...model.beams.map((beam) => beam.id)) + 1;
+    let nextBeam = nextId(model.beams);
     const beamIdMap = new Map<number, number>();
-    const copiedBeams = model.beams.filter((beam) => beamIdSet.has(beam.id)).map((source) => {
+    const copiedBeams = beamIds.map((beamId) => index.beamById.get(beamId)!).map((source) => {
       const id = nextBeam++;
       beamIdMap.set(source.id, id);
       return {
@@ -121,23 +146,23 @@ export function transformFrame3D(
     });
     const copiedSupports = (model.supports ?? []).filter((support) => idSet.has(support.nodeId))
       .map((support) => ({ ...support, nodeId: idMap.get(support.nodeId)! }));
-    let nextLoad = Math.max(0, ...(model.loads ?? []).map((load) => load.id)) + 1;
+    let nextLoad = nextId(model.loads ?? []);
     const copiedLoads = (model.loads ?? []).filter((load) => idSet.has(load.nodeId))
       .map((load) => ({ ...load, id: nextLoad++, nodeId: idMap.get(load.nodeId)! }));
-    let nextMemberLoad = Math.max(0, ...(model.memberLoads ?? []).map((load) => load.id)) + 1;
+    let nextMemberLoad = nextId(model.memberLoads ?? []);
     const copiedMemberLoads = (model.memberLoads ?? []).filter((load) => beamIdSet.has(load.beamId))
       .map((load) => ({ ...load, id: nextMemberLoad++, beamId: beamIdMap.get(load.beamId)! }));
-    let nextMemberPointLoad = Math.max(0, ...(model.memberPointLoads ?? []).map((load) => load.id)) + 1;
+    let nextMemberPointLoad = nextId(model.memberPointLoads ?? []);
     const copiedMemberPointLoads = (model.memberPointLoads ?? []).filter((load) => beamIdSet.has(load.beamId))
       .map((load) => ({ ...load, id: nextMemberPointLoad++, beamId: beamIdMap.get(load.beamId)! }));
-    let nextThermalLoad = Math.max(0, ...(model.thermalLoads ?? []).map((load) => load.id)) + 1;
+    let nextThermalLoad = nextId(model.thermalLoads ?? []);
     const copiedThermalLoads = (model.thermalLoads ?? []).filter((load) => beamIdSet.has(load.beamId))
       .map((load) => ({ ...load, id: nextThermalLoad++, beamId: beamIdMap.get(load.beamId)! }));
-    const plateIds = selectedPlateIds(model, selection);
+    const plateIds = selectedPlateIds(index, selection);
     const plateIdSet = new Set(plateIds);
-    let nextPlate = Math.max(0, ...(model.plates ?? []).map((plate) => plate.id)) + 1;
+    let nextPlate = nextId(model.plates ?? []);
     const plateIdMap = new Map<number, number>();
-    const copiedPlates = (model.plates ?? []).filter((plate) => plateIdSet.has(plate.id)).map((plate) => {
+    const copiedPlates = plateIds.map((plateId) => index.plateById.get(plateId)!).map((plate) => {
       const id = nextPlate++;
       plateIdMap.set(plate.id, id);
       return {
@@ -146,7 +171,7 @@ export function transformFrame3D(
         openings: plate.openings?.map((opening) => ({ ...opening, nodeIds: opening.nodeIds.map((nodeId) => idMap.get(nodeId)!) })),
       };
     });
-    let nextSurfaceLoad = Math.max(0, ...(model.surfaceLoads ?? []).map((load) => load.id)) + 1;
+    let nextSurfaceLoad = nextId(model.surfaceLoads ?? []);
     const copiedSurfaceLoads = (model.surfaceLoads ?? []).filter((load) => plateIdSet.has(load.plateId))
       .map((load) => ({ ...load, id: nextSurfaceLoad++, plateId: plateIdMap.get(load.plateId)! }));
     return {
@@ -177,22 +202,26 @@ export function transformFrame3D(
     };
   }
 
-  const selectedNodes = model.nodes.filter((node) => idSet.has(node.id));
+  const selectedNodes = ids.map((id) => model.nodes[index.nodeIndexById.get(id)!]);
   const center = selectedNodes.reduce((sum, node) => ({
-    x: sum.x + node.x / selectedNodes.length,
-    y: sum.y + node.y / selectedNodes.length,
-    z: sum.z + node.z / selectedNodes.length,
+    x: sum.x + node.x / ids.length,
+    y: sum.y + node.y / ids.length,
+    z: sum.z + node.z / ids.length,
   }), { x: 0, y: 0, z: 0 });
-  const nodes = model.nodes.map((node) => {
-    if (!idSet.has(node.id)) return node;
-    if (command.kind === "move") return {
+  const nodes = model.nodes.slice();
+  for (const id of ids) {
+    const nodeIndex = index.nodeIndexById.get(id)!;
+    const node = model.nodes[nodeIndex];
+    if (command.kind === "move") nodes[nodeIndex] = {
       ...node, x: node.x + command.dx, y: node.y + command.dy, z: node.z + command.dz,
     };
-    if (command.kind === "rotate") return {
+    else if (command.kind === "rotate") nodes[nodeIndex] = {
       ...node, ...rotatePoint(node, center, command.axis, command.angleDeg * Math.PI / 180),
     };
-    const coordinate = node[command.axis];
-    return { ...node, [command.axis]: 2 * command.offset - coordinate };
-  });
+    else {
+      const coordinate = node[command.axis];
+      nodes[nodeIndex] = { ...node, [command.axis]: 2 * command.offset - coordinate };
+    }
+  }
   return { model: { ...model, nodes }, selection };
 }

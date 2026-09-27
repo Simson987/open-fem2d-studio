@@ -348,13 +348,19 @@ function applySelectionHighlight(group: THREE.Group, selection: Frame3DSelection
   });
 }
 
-function makeLabel(text: string, className: string, position: THREE.Vector3): CSS2DObject {
+function makeLabel(
+  text: string,
+  className: string,
+  position: THREE.Vector3,
+  follow?: { type: "node" | "beam"; id: number },
+): CSS2DObject {
   const element = document.createElement("span");
   element.className = className;
   element.textContent = text;
   const label = new CSS2DObject(element);
   label.position.copy(position);
   label.center.set(0, 1);
+  if (follow) label.userData.frame3dFollow = follow;
   return label;
 }
 
@@ -1382,6 +1388,152 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       && model.memberPointLoads === previousModel.memberPointLoads
       && model.thermalLoads === previousModel.thermalLoads
       && model.surfaceLoads === previousModel.surfaceLoads;
+    const movedNodes: Frame3DModel["nodes"] = [];
+    let nodeTopologyStable = previousModel !== null && model.nodes.length === previousModel.nodes.length;
+    if (previousModel && nodeTopologyStable && model.nodes !== previousModel.nodes) {
+      for (let index = 0; index < model.nodes.length; index += 1) {
+        const before = previousModel.nodes[index];
+        const after = model.nodes[index];
+        if (before.id !== after.id) {
+          nodeTopologyStable = false;
+          break;
+        }
+        if (before.x !== after.x || before.y !== after.y || before.z !== after.z) movedNodes.push(after);
+      }
+    }
+    const movedNodeIds = new Set(movedNodes.map((node) => node.id));
+    const affectedBeams = movedNodes.length > 0 && previousModel && model.beams === previousModel.beams
+      ? model.beams.filter((beam) => movedNodeIds.has(beam.startNodeId) || movedNodeIds.has(beam.endNodeId))
+      : [];
+    const affectedBeamIds = new Set(affectedBeams.map((beam) => beam.id));
+    const affectedPlates = (model.plates ?? []).filter((plate) =>
+      plate.nodeIds.some((id) => movedNodeIds.has(id))
+      || (plate.openings ?? []).some((opening) => opening.nodeIds.some((id) => movedNodeIds.has(id))));
+    const affectedPlateIds = new Set(affectedPlates.map((plate) => plate.id));
+    const markerModel = conditionModel ?? model;
+    const conditionGeometryStable = (!visibility.supports
+        || !(markerModel.supports ?? []).some((support) => movedNodeIds.has(support.nodeId)))
+      && (!visibility.loads || (
+        !(markerModel.loads ?? []).some((load) => movedNodeIds.has(load.nodeId))
+        && !(markerModel.memberLoads ?? []).some((load) => affectedBeamIds.has(load.beamId))
+        && !(markerModel.memberPointLoads ?? []).some((load) => affectedBeamIds.has(load.beamId))
+        && !(markerModel.thermalLoads ?? []).some((load) => affectedBeamIds.has(load.beamId))
+        && !(markerModel.surfaceLoads ?? []).some((load) => affectedPlateIds.has(load.plateId))
+      ));
+    const resultGeometryStable = !result || !(
+      visibility.deformation || visibility.reactions || visibility.axialForce || visibility.shearY
+      || visibility.shearZ || visibility.torsion || visibility.momentY || visibility.momentZ
+    );
+    const utilizationGeometryStable = !visibility.utilization
+      || !utilizations.some((value) => affectedBeamIds.has(value.beamId));
+    const previousBounds = lastBuiltNodeBoundsRef.current;
+    const movedInsideBounds = previousBounds !== null
+      && movedNodes.every((node) => previousBounds.containsPoint(new THREE.Vector3(node.x, node.y, node.z)));
+    const incrementalNodeMove = previousModel !== null
+      && unchangedCollections
+      && nodeTopologyStable
+      && model.nodes !== previousModel.nodes
+      && model.beams === previousModel.beams
+      && movedNodes.length > 0
+      && movedNodes.length <= 512
+      && previousModel.nodes.length >= 250
+      && movedInsideBounds
+      && (!visibility.plates || affectedPlates.length === 0)
+      && !visibility.beamNumbers
+      && conditionGeometryStable
+      && resultGeometryStable
+      && utilizationGeometryStable;
+    if (incrementalNodeMove) {
+      const visibleNodes = geometry.children.find((child) => child.userData.frame3dNodeVisual === true);
+      const hitNodes = geometry.children.find((child) => child.userData.frame3dNodeHit === true);
+      const nodeMeshes = [visibleNodes, hitNodes].filter((child): child is THREE.InstancedMesh =>
+        child instanceof THREE.InstancedMesh);
+      let fastPathReady = nodeMeshes.length > 0;
+      const matrix = new THREE.Matrix4();
+      for (const node of movedNodes) {
+        matrix.makeTranslation(node.x, node.y, node.z);
+        for (const mesh of nodeMeshes) {
+          const instanceIndex = (mesh.userData.instanceIndexById as Map<number, number> | undefined)?.get(node.id);
+          if (instanceIndex === undefined) {
+            fastPathReady = false;
+            break;
+          }
+          mesh.setMatrixAt(instanceIndex, matrix);
+          mesh.instanceMatrix.addUpdateRange(instanceIndex * 16, 16);
+          mesh.instanceMatrix.needsUpdate = true;
+        }
+        if (!fastPathReady) break;
+      }
+      const touchedBeamMeshes = new Set<THREE.InstancedMesh>();
+      if (fastPathReady && visibility.beams) {
+        for (const beam of affectedBeams) {
+          const start = nodeByIdRef.current!.get(beam.startNodeId);
+          const end = nodeByIdRef.current!.get(beam.endNodeId);
+          if (!start || !end) { fastPathReady = false; break; }
+          const a = new THREE.Vector3(start.x, start.y, start.z);
+          const b = new THREE.Vector3(end.x, end.y, end.z);
+          const delta = b.clone().sub(a);
+          const length = delta.length();
+          if (length <= 1e-12) { fastPathReady = false; break; }
+          const profileKey = visibility.profiles && beam.profileName
+            ? `profile\u0000${profileBatchName(beam.profileName)}`
+            : `analytical\u0000${visibility.profiles ? PROFILE_BEAM_RADIUS_M : ANALYTICAL_BEAM_RADIUS_M}\u0000${visibility.profiles ? 24 : 12}`;
+          const mesh = geometry.children.find((child) => child.userData.frame3dBeamBatchKey === profileKey);
+          const instanceIndex = mesh instanceof THREE.InstancedMesh
+            ? (mesh.userData.instanceIndexById as Map<number, number> | undefined)?.get(beam.id)
+            : undefined;
+          if (!(mesh instanceof THREE.InstancedMesh) || instanceIndex === undefined) {
+            fastPathReady = false;
+            break;
+          }
+          const rotation = visibility.profiles && beam.profileName
+            ? memberRotation(delta, beam.rollAngleRad ?? 0)
+            : new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.clone().normalize());
+          const beamMatrix = new THREE.Matrix4().compose(
+            a.add(b).multiplyScalar(0.5), rotation,
+            visibility.profiles && beam.profileName
+              ? frame3DProfileInstanceScale(length)
+              : new THREE.Vector3(1, length, 1),
+          );
+          mesh.setMatrixAt(instanceIndex, beamMatrix);
+          mesh.instanceMatrix.addUpdateRange(instanceIndex * 16, 16);
+          mesh.instanceMatrix.needsUpdate = true;
+          touchedBeamMeshes.add(mesh);
+        }
+      }
+      if (fastPathReady) {
+        touchedBeamMeshes.forEach((mesh) => {
+          mesh.computeBoundingBox();
+          mesh.computeBoundingSphere();
+        });
+        geometry.traverse((object) => {
+          if (!(object instanceof CSS2DObject)) return;
+          const follow = object.userData.frame3dFollow as { type: "node" | "beam"; id: number } | undefined;
+          if (follow?.type !== "node" || !movedNodeIds.has(follow.id)) return;
+          const node = nodeByIdRef.current!.get(follow.id);
+          if (!node) return;
+          object.position.set(node.x, node.y, node.z);
+          object.element.textContent = [
+            visibility.nodeNumbers ? String(node.id) : "",
+            visibility.nodeCoordinates ? `(${node.x}, ${node.y}, ${node.z}) m` : "",
+          ].filter(Boolean).join(" · ");
+        });
+        applySelectionHighlight(geometry, selectionRef.current);
+        state.renderer.render(state.scene, state.camera);
+        state.labelRenderer.render(state.scene, state.camera);
+        selectionRenderedWithModelRef.current = selectionRef.current;
+        lastBuiltModelRef.current = model;
+        lastBuiltConditionModelRef.current = conditionModel;
+        pendingAppendRef.current = null;
+        if (containerRef.current) {
+          delete containerRef.current.dataset.frame3dIncrementalFallback;
+          containerRef.current.dataset.frame3dBuildMode = "move-nodes";
+          containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+          containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
+        }
+        return;
+      }
+    }
     const incrementalNodeOnly = appendedNode && model.beams === previousModel?.beams;
     const incrementalBeam = appendedBeam
       && (model.nodes === previousModel?.nodes || appendedNode);
@@ -1458,7 +1610,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
             visibility.nodeNumbers ? String(node.id) : "",
             visibility.nodeCoordinates ? `(${node.x}, ${node.y}, ${node.z}) m` : "",
           ].filter(Boolean);
-          geometry.add(makeLabel(parts.join(" · "), "frame3d-node-label", new THREE.Vector3(node.x, node.y, node.z)));
+          geometry.add(makeLabel(
+            parts.join(" · "), "frame3d-node-label",
+            new THREE.Vector3(node.x, node.y, node.z), { type: "node", id: node.id },
+          ));
           addedLabels += 1;
         }
         if (beam && beamMesh instanceof THREE.InstancedMesh) {
@@ -1851,7 +2006,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           visibility.nodeNumbers ? String(node.id) : "",
           visibility.nodeCoordinates ? `(${node.x}, ${node.y}, ${node.z}) m` : "",
         ].filter(Boolean);
-        geometry.add(makeLabel(parts.join(" · "), "frame3d-node-label", new THREE.Vector3(node.x, node.y, node.z)));
+        geometry.add(makeLabel(
+          parts.join(" · "), "frame3d-node-label",
+          new THREE.Vector3(node.x, node.y, node.z), { type: "node", id: node.id },
+        ));
       }
     }
     if (visibility.structuralGrid && structuralGrid) addStructuralGrid(geometry, model, structuralGrid);
