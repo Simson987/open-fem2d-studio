@@ -28,6 +28,15 @@ import type { Frame3DCameraState, Frame3DViewSet } from "./frame3dViewSets";
 import type { Frame3DEditMeta } from "./frame3dHistory";
 import "./Frame3DEditor.css";
 
+const DRAW_HELP_KEYS: Partial<Record<Frame3DTool, string>> = {
+  addNode: "frame3d.nodeHelp",
+  addBeam: "frame3d.beamHelp",
+  addPlate: "frame3d.plateHelp",
+  addPlateArc: "frame3d.plateArcHelp",
+  addOpening: "frame3d.openingHelp",
+  addOpeningArc: "frame3d.openingArcHelp",
+};
+
 interface Props {
   model: Frame3DModel;
   calculationModel?: Frame3DModel;
@@ -191,7 +200,7 @@ export default function Frame3DEditor({
         />
         <div className="frame3d-stage-header">
           <strong>{t("frame3d.title")}</strong>
-          <span>{t("frame3d.axisHelp")}</span>
+          <span>{t(tool.startsWith("support:") ? "frame3d.supportPlacementHelp" : DRAW_HELP_KEYS[tool] ?? "frame3d.axisHelp", { defaultValue: t("frame3d.axisHelp") })}</span>
         </div>
         {drawError && <div className="frame3d-draw-error" role="alert">
           <span>{drawError}</span>

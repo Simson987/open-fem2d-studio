@@ -147,6 +147,7 @@ export default function HomeTab({
     ? frameToolFor(tool) === frame3dTool
     : femTool === tool;
   const nodeConditionTitle = hasFrame3DNodeSelection ? undefined : t("frame3d.selectNodeFirst");
+  const supportPlacementTitle = t("frame3d.supportPlacementHelp", { defaultValue: t("frame3d.selectNodeFirst") });
   const beamConditionTitle = hasFrame3DBeamSelection ? undefined : t("frame3d.selectBeamFirst", "Selecteer eerst een 3D-staaf.");
   const drawingOpening3D = frame3dTool === "addOpening" || frame3dTool === "addOpeningArc";
 
@@ -312,46 +313,47 @@ export default function HomeTab({
             icon={bcPinnedIcon}
             label={t("home.pinned")}
             size="large"
-            active={!is3D && toolActive("addPinned")}
+            active={is3D ? frame3dTool === "support:pinned" : toolActive("addPinned")}
             onClick={() => is3D ? onFrame3DSupportPreset?.("pinned") : setTool("addPinned")}
-            disabled={is3D && (!hasFrame3DNodeSelection || !onFrame3DSupportPreset)}
-            title={is3D ? nodeConditionTitle : undefined}
+            disabled={is3D && !onFrame3DSupportPreset}
+            title={is3D ? supportPlacementTitle : undefined}
           />
           <RibbonButtonStack>
             <RibbonButton
               icon={bcXRollerIcon}
               label={t("home.xRoller")}
               size="small"
-              active={!is3D && toolActive("addXRoller")}
+              active={is3D ? frame3dTool === "support:xRoller" : toolActive("addXRoller")}
               onClick={() => is3D ? onFrame3DSupportPreset?.("xRoller") : setTool("addXRoller")}
-              disabled={is3D && (!hasFrame3DNodeSelection || !onFrame3DSupportPreset)}
-              title={is3D ? nodeConditionTitle : undefined}
+              disabled={is3D && !onFrame3DSupportPreset}
+              title={is3D ? supportPlacementTitle : undefined}
             />
             <RibbonButton
               icon={bcZRollerIcon}
               label={t("home.zRoller")}
               size="small"
-              active={!is3D && toolActive("addZRoller")}
+              active={is3D ? frame3dTool === "support:zRoller" : toolActive("addZRoller")}
               onClick={() => is3D ? onFrame3DSupportPreset?.("zRoller") : setTool("addZRoller")}
-              disabled={is3D && (!hasFrame3DNodeSelection || !onFrame3DSupportPreset)}
-              title={is3D ? nodeConditionTitle : undefined}
+              disabled={is3D && !onFrame3DSupportPreset}
+              title={is3D ? supportPlacementTitle : undefined}
             />
             {is3D && <RibbonButton
               icon={yRollerIcon}
               label={t("frame3d.yRoller", "Y-rol")}
               size="small"
+              active={frame3dTool === "support:yRoller"}
               onClick={() => onFrame3DSupportPreset?.("yRoller")}
-              disabled={!hasFrame3DNodeSelection || !onFrame3DSupportPreset}
-              title={nodeConditionTitle}
+              disabled={!onFrame3DSupportPreset}
+              title={supportPlacementTitle}
             />}
             <RibbonButton
               icon={bcFixedIcon}
               label={t("home.fixed")}
               size="small"
-              active={!is3D && toolActive("addFixed")}
+              active={is3D ? frame3dTool === "support:fixed" : toolActive("addFixed")}
               onClick={() => is3D ? onFrame3DSupportPreset?.("fixed") : setTool("addFixed")}
-              disabled={is3D && (!hasFrame3DNodeSelection || !onFrame3DSupportPreset)}
-              title={is3D ? nodeConditionTitle : undefined}
+              disabled={is3D && !onFrame3DSupportPreset}
+              title={is3D ? supportPlacementTitle : undefined}
             />
           </RibbonButtonStack>
           {is3D && <RibbonButtonStack>
@@ -362,9 +364,10 @@ export default function HomeTab({
                 icon={revoluteIcon(axis)}
                 label={t(`frame3d.revolute${axis}`)}
                 size="small"
+                active={frame3dTool === `support:${preset}`}
                 onClick={() => onFrame3DSupportPreset?.(preset)}
-                disabled={!hasFrame3DNodeSelection || !onFrame3DSupportPreset}
-                title={hasFrame3DNodeSelection ? t("frame3d.revoluteHint", { axis }) : nodeConditionTitle}
+                disabled={!onFrame3DSupportPreset}
+                title={`${t("frame3d.revoluteHint", { axis })} ${supportPlacementTitle}`}
               />;
             })}
           </RibbonButtonStack>}

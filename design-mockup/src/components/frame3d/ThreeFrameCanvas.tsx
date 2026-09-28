@@ -3590,7 +3590,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
   }, [cameraRequest?.token]);
 
   return <div
-    className={`frame3d-canvas frame3d-tool-${tool}`}
+    className={`frame3d-canvas frame3d-tool-${tool} ${tool.startsWith("support:") ? "frame3d-tool-support" : ""}`}
     ref={containerRef}
     aria-label={`3D raamwerk · ${viewRequest?.kind ?? currentView}`}
   />;

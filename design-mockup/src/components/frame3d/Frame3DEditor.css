@@ -77,6 +77,7 @@
 .frame3d-utilization-fail { color:#b91c1c; }
 .frame3d-utilization-not-applicable { color:#64748b; }
 .frame3d-tool-addNode,.frame3d-tool-addBeam,.frame3d-tool-addPlate,.frame3d-tool-addPlateArc,.frame3d-tool-addOpening,.frame3d-tool-addOpeningArc { cursor:crosshair; }
+.frame3d-tool-support { cursor:crosshair; }
 .frame3d-snap-label,
 .frame3d-snap-hint {
   padding: 2px 5px;

@@ -25,7 +25,7 @@ import CheckPanel, { CheckPanelToggle } from "./components/panels/CheckPanel";
 import FemProjectTree from "./components/fem/FemProjectTree";
 import FemProperties from "./components/fem/FemProperties";
 import FemCanvas from "./components/fem/FemCanvas";
-import { FRAME3D_SUPPORT_PRESETS, addFrame3DSurfaceLoad, setFrame3DSupport, withFrame3DSelfWeight, type Frame3DModel } from "./components/frame3d/frame3dModel";
+import { FRAME3D_SUPPORT_PRESETS, addFrame3DSurfaceLoad, setFrame3DSupport, withFrame3DSelfWeight, type Frame3DModel, type Frame3DSupportPreset } from "./components/frame3d/frame3dModel";
 import { frame3dHistoryReducer, type Frame3DEditMeta } from "./components/frame3d/frame3dHistory";
 import type { Frame3DTool, Frame3DView } from "./components/frame3d/frame3dCommands";
 import type { Frame3DSelection } from "./components/frame3d/frame3dSelection";
@@ -320,6 +320,13 @@ function App() {
     dispatchFrame3D({ type: "edit", model, ...meta }), []);
   const [frame3dTool, setFrame3dTool] = useState<Frame3DTool>("select");
   const [frame3dSelection, setFrame3dSelection] = useState<Frame3DSelection>(null);
+  const handleFrame3DSelectionChange = (next: Frame3DSelection) => {
+    setFrame3dSelection(next);
+    if (!frame3dTool.startsWith("support:") || next?.type !== "node") return;
+    if (!frame3d.nodes.some((node) => node.id === next.id)) return;
+    const preset = frame3dTool.slice("support:".length) as Frame3DSupportPreset;
+    setFrame3d(setFrame3DSupport(frame3d, next.id, FRAME3D_SUPPORT_PRESETS[preset]));
+  };
   const [frame3dDeleteToken, setFrame3dDeleteToken] = useState(0);
   const [frame3dFitToken, setFrame3dFitToken] = useState(0);
   const [frame3dViewRequest, setFrame3dViewRequest] = useState<{ kind: Frame3DView; token: number }>({ kind: "iso", token: 0 });
@@ -2581,7 +2588,7 @@ function App() {
               onCameraViewChange={(kind) => setFrame3dViewRequest((previous) =>
                 previous.kind === kind ? previous : { ...previous, kind })}
               selection={frame3dSelection}
-              onSelectionChange={setFrame3dSelection}
+              onSelectionChange={handleFrame3DSelectionChange}
               visibilityOpen={visibility3DOpen}
               onVisibilityClose={() => setVisibility3DOpen(false)}
               visibility={frame3dVisibility}
@@ -2909,8 +2916,10 @@ function App() {
         hasFrame3DBeamSelection={frame3dSelection?.type === "beam" && frame3d.beams.some((beam) => beam.id === frame3dSelection.id)}
         hasFrame3DPlateSelection={frame3dSelection?.type === "plate" && (frame3d.plates ?? []).some((plate) => plate.id === frame3dSelection.id)}
         onFrame3DSupportPreset={(preset) => {
-          if (frame3dSelection?.type !== "node" || !frame3d.nodes.some((node) => node.id === frame3dSelection.id)) return;
-          setFrame3d(setFrame3DSupport(frame3d, frame3dSelection.id, FRAME3D_SUPPORT_PRESETS[preset]));
+          setFrame3dTool(`support:${preset}`);
+          if (frame3dSelection?.type === "node" && frame3d.nodes.some((node) => node.id === frame3dSelection.id)) {
+            setFrame3d(setFrame3DSupport(frame3d, frame3dSelection.id, FRAME3D_SUPPORT_PRESETS[preset]));
+          }
         }}
         onFrame3DRequestSpring={(axis) => {
           setRightPanelOpen(true);
@@ -3011,7 +3020,7 @@ function App() {
                     model={frame3d}
                     calculationModel={frame3dCalculationModel}
                     selection={frame3dSelection}
-                    setSelection={setFrame3dSelection}
+                    setSelection={handleFrame3DSelectionChange}
                     result={frame3dShowLoadCase ? frame3dResult : null}
                     checks={frame3dShowLoadCase ? frame3dChecks : null}
                     concreteChecks={frame3dShowLoadCase ? frame3dConcreteChecks : null}

@@ -115,6 +115,13 @@ npm run tauri:dev     # desktop-app in ontwikkelstand (devserver op poort 1440)
 npm run tauri:build   # installer; bouwt de frontend, de solverbundel en de MCP-server zelf
 ```
 
+Op Linux start `bash scripts/dev-desktop.sh` dezelfde actuele frontend en de Tauri-app
+als één ontwikkelsessie. Het script gebruikt een al draaiende Vite-server op poort 1440
+of start er zelf één, en sluit de eigen server weer af wanneer de app stopt. Start niet
+rechtstreeks `src-tauri/target/debug/open-fem2d-studio`: dat is een eerdere build met
+ingebouwde, mogelijk verouderde frontend. Voor een Linux-build zijn onder andere de
+ontwikkelpakketten voor Cairo, GTK 3 en WebKitGTK 4.1 nodig.
+
 De installer levert de MCP-server mee als `openaec-mcp-server` naast de app (`scripts/mcp-sidecar.mjs`,
 `src-tauri/tauri.bundel.conf.json`); koppelen aan een MCP-client staat in
 [`src-tauri/crates/openaec-mcp-server/README.md`](src-tauri/crates/openaec-mcp-server/README.md).
