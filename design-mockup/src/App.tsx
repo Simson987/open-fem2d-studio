@@ -2164,6 +2164,18 @@ function App() {
         setSolverErrorText(null);
         setSolverStatus({ kind: "solved", at: Date.now() });
         setTreeTab("results");
+        const unbalanced = [...casePairs, ...combinationPairs]
+          .map(([, value]) => value.forceBalance)
+          .filter((balance): balance is NonNullable<Frame3DSolveResult["forceBalance"]> => balance?.ok === false);
+        if (unbalanced.length > 0) {
+          const maximum = Math.max(...unbalanced.map((balance) => balance.maxImbalanceKn));
+          setFrame3dChecks(null);
+          setFrame3dConcreteChecks(null);
+          setFrame3dChecksError(
+            `geblokkeerd — krachtensom in ${unbalanced.length} resultaten wijkt tot ${maximum.toFixed(3)} kN af.`,
+          );
+          return;
+        }
         setFrame3dChecksRunning(true);
         setFrame3dChecksError(null);
         const combinationSet = { combinations, results: combinationResults, loadCases: fem.loadCases };

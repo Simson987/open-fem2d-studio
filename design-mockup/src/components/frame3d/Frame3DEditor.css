@@ -123,6 +123,7 @@
   justify-content: space-between;
   color: #64748b;
 }
+.frame3d-stage-footer [data-frame3d-solver-status="warning"] { color: #b91c1c; font-weight: 700; }
 
 .frame3d-fit {
   position: absolute;

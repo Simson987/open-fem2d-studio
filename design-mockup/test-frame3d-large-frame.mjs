@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildFrame3DSolveRequest } from "./src/components/frame3d/frame3dSolver.ts";
+import { buildFrame3DSolveRequest, frame3DGlobalForceBalance } from "./src/components/frame3d/frame3dSolver.ts";
 import { parseFrame3DModel } from "./src/components/frame3d/frame3dModel.ts";
 import { deserializeProject, serializeProject } from "./src/io/projectFile.ts";
 
@@ -65,6 +65,17 @@ assert.ok(existsSync(fixturePath), "het GUI-verificatieproject moet aanwezig zij
 const opened = deserializeProject(readFileSync(fixturePath, "utf8"));
 assert.deepEqual(opened.model3d, model, "het project bewaart alle 3D-knopen, staven en belastingen");
 
+const xBeam = model.beams.find((beam) => beam.startNodeId === 33 && beam.endNodeId === 34);
+assert.ok(xBeam, "een horizontale ligger voor de lokale-asproef");
+const localForceInput = {
+  ...buildFrame3DSolveRequest(model, "linear", 1), nodalLoads: [],
+  memberLoads: [{ id: 1, memberId: xBeam.id, qyStartKnPerM: 1, qyEndKnPerM: 3,
+    qzStartKnPerM: 0, qzEndKnPerM: 0, startPositionM: 0, endPositionM: 3 }],
+  memberPointLoads: [{ id: 1, memberId: xBeam.id, pyKn: 0, pzKn: -5, positionM: 1.5 }],
+};
+assert.deepEqual(frame3DGlobalForceBalance(localForceInput, { reactions: [] }).imbalanceKn,
+  [0, 6, -5], "een lineair variërende qy en een lokale pz-puntlast tellen in globale assen op");
+
 const solverBinary = process.platform === "win32" ? "frame3d-solver.exe" : "frame3d-solver";
 const solverPath = fileURLToPath(new URL(`../src-tauri/target/debug/${solverBinary}`, import.meta.url));
 if (!existsSync(solverPath)) {
@@ -75,7 +86,7 @@ const solve = (analysis, factors) => {
   const request = { ...buildFrame3DSolveRequest(model, analysis, factors), bucklingModes: 0 };
   const started = performance.now();
   const result = JSON.parse(execFileSync(solverPath, { input: JSON.stringify(request), maxBuffer: 16 * 1024 * 1024 }).toString());
-  return { result, elapsedMs: performance.now() - started };
+  return { result, elapsedMs: performance.now() - started, balance: frame3DGlobalForceBalance(request, result) };
 };
 const sum = (items, key) => items.reduce((total, item) => total + item[key], 0);
 const close = (actual, expected, tolerance, label) => assert.ok(
@@ -104,13 +115,16 @@ const check = (result, forces, moments, label) => {
 
 const gravity = solve("linear", 1);
 check(gravity.result, { fx: 0, fy: 0, fz: 320 }, { mx: 1920, my: -1440, mz: 0 }, "daklast");
+assert.equal(gravity.balance.ok, true, "de onafhankelijke krachtensom sluit bij daklast");
 for (const reaction of gravity.result.reactions) {
   close(reaction.fz, 20, 1e-5, `symmetrische verticale reactie steun ${reaction.nodeId}`);
 }
 const lateral = solve("linear", 2);
 check(lateral.result, { fx: -32, fy: 0, fz: 0 }, { mx: 0, my: -224, mz: 192 }, "horizontaal");
+assert.equal(lateral.balance.ok, true, "de onafhankelijke krachtensom sluit bij horizontale last");
 const distributed = solve("linear", 3);
 check(distributed.result, { fx: 0, fy: 0, fz: 72 }, { mx: 432, my: -324, mz: 0 }, "verdeelde liggerlast");
+assert.equal(distributed.balance.ok, true, "ook de lokale lijnlast sluit na omrekening naar globale assen");
 const combined = solve("p-delta", new Map([[1, 1], [2, 1]]));
 assert.equal(combined.result.displacements.length, 48);
 assert.equal(combined.result.memberForces.length, 104);
@@ -118,11 +132,8 @@ assert.ok(combined.result.displacements.every((d) =>
   [d.ux, d.uy, d.uz, d.rx, d.ry, d.rz].every(Number.isFinite)));
 assert.equal(combined.result.secondOrder?.converged, true, "tweede-orde-iteraties convergeren");
 assert.equal(combined.result.secondOrder?.stable, true, "grote raamwerk blijft stabiel onder de gekozen lasten");
-const secondOrderForceImbalanceKn = {
-  fx: sum(combined.result.reactions, "fx") + 32,
-  fy: sum(combined.result.reactions, "fy"),
-  fz: sum(combined.result.reactions, "fz") - 320,
-};
+const secondOrderForceImbalanceKn = Object.fromEntries(
+  ["fx", "fy", "fz"].map((axis, index) => [axis, combined.balance.imbalanceKn[index]]));
 
 console.log(JSON.stringify({
   model: { nodes: 48, beams: 104, supports: 16, nodalLoads: 32, memberLoads: 12 },
@@ -133,4 +144,5 @@ console.log(JSON.stringify({
     secondOrder: result.secondOrder,
   })),
   secondOrderForceImbalanceKn,
+  secondOrderForceBalanceOk: combined.balance.ok,
 }, null, 2));

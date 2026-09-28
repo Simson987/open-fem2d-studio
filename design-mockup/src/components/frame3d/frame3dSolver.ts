@@ -9,7 +9,7 @@ import {
 import { STEEL_GRADES } from "../../lib/steelGrades";
 import { STEEL_SECTION_DIMS } from "../../lib/steelSectionDims.generated";
 import { thermalAlphaForMaterial } from "../../lib/thermalAlpha";
-import { frame3DLoadCaseId, type Frame3DModel } from "./frame3dModel";
+import { frame3DLoadCaseId, frame3DMemberAxes, type Frame3DModel } from "./frame3dModel";
 
 export type Frame3DAnalysisKind = "linear" | "p-delta";
 
@@ -86,8 +86,50 @@ export interface Frame3DSolveResult {
   secondOrder?: { iterations: number; converged: boolean; stable: boolean; maxAmplification: number };
   buckling: Frame3DBuckling;
   equilibrium?: { relativeResidual: number; residualOk: boolean; maxImbalanceKn: number; equilibriumOk: boolean };
+  /** Onafhankelijke som van aangebrachte krachten en oplegreacties in globale assen. */
+  forceBalance?: { imbalanceKn: [number, number, number]; maxImbalanceKn: number; toleranceKn: number; ok: boolean };
   solverPath?: string;
   diagnostics: string[];
+}
+
+/** Controleer de globale krachtensom ook wanneer de P-Delta-kern geen eigen evenwichtsobject levert. */
+export function frame3DGlobalForceBalance(
+  input: ReturnType<typeof buildFrame3DSolveRequest>,
+  result: Pick<Frame3DSolveResult, "reactions">,
+): NonNullable<Frame3DSolveResult["forceBalance"]> {
+  const applied: [number, number, number] = [0, 0, 0];
+  const nodeById = new Map(input.nodes.map((node) => [node.id, node]));
+  const memberById = new Map(input.members.map((member) => [member.id, member]));
+  const addLocalMemberForce = (memberId: number, fy: number, fz: number) => {
+    const member = memberById.get(memberId);
+    const start = member && nodeById.get(member.startNodeId);
+    const end = member && nodeById.get(member.endNodeId);
+    if (!start || !end) throw new Error(`Staaf ${memberId} ontbreekt bij de onafhankelijke krachtensom.`);
+    const { ey, ez } = frame3DMemberAxes(start, end, member?.rollAngleRad ?? 0);
+    for (let axis = 0; axis < 3; axis++) applied[axis] += fy * ey[axis] + fz * ez[axis];
+  };
+  for (const load of input.nodalLoads) {
+    applied[0] += load.fx;
+    applied[1] += load.fy;
+    applied[2] += load.fz;
+  }
+  for (const load of input.memberLoads) {
+    const length = load.endPositionM - load.startPositionM;
+    addLocalMemberForce(load.memberId,
+      (load.qyStartKnPerM + load.qyEndKnPerM) * length / 2,
+      (load.qzStartKnPerM + load.qzEndKnPerM) * length / 2);
+  }
+  for (const load of input.memberPointLoads) addLocalMemberForce(load.memberId, load.pyKn, load.pzKn);
+  const imbalanceKn: [number, number, number] = [...applied];
+  for (const reaction of result.reactions) {
+    imbalanceKn[0] += reaction.fx;
+    imbalanceKn[1] += reaction.fy;
+    imbalanceKn[2] += reaction.fz;
+  }
+  const maxImbalanceKn = Math.max(...imbalanceKn.map(Math.abs));
+  const scaleKn = Math.max(1, ...applied.map(Math.abs));
+  const toleranceKn = 1e-5 * scaleKn;
+  return { imbalanceKn, maxImbalanceKn, toleranceKn, ok: Number.isFinite(maxImbalanceKn) && maxImbalanceKn <= toleranceKn };
 }
 
 /**
@@ -320,6 +362,10 @@ export async function solveFrame3DCombination(
 }
 
 async function callFrame3DSolver(input: ReturnType<typeof buildFrame3DSolveRequest>): Promise<Frame3DSolveResult> {
+  const checked = (result: Frame3DSolveResult): Frame3DSolveResult => ({
+    ...result,
+    forceBalance: frame3DGlobalForceBalance(input, result),
+  });
   const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
   const usesLegacyCompatibleLoads = input.memberLoads.length === 0
     && input.memberPointLoads.length === 0
@@ -341,10 +387,10 @@ async function callFrame3DSolver(input: ReturnType<typeof buildFrame3DSolveReque
   if (isTauriApp()) {
     const { invoke } = await import("@tauri-apps/api/core");
     try {
-      return await invoke<Frame3DSolveResult>("solve_frame3d", { input });
+      return checked(await invoke<Frame3DSolveResult>("solve_frame3d", { input }));
     } catch (error) {
       if (!isLegacyMaterialContract(error)) throw error;
-      return invoke<Frame3DSolveResult>("solve_frame3d", { input: legacyInput() });
+      return checked(await invoke<Frame3DSolveResult>("solve_frame3d", { input: legacyInput() }));
     }
   }
   const post = async (request: typeof input | ReturnType<typeof legacyInput>) => {
@@ -355,7 +401,7 @@ async function callFrame3DSolver(input: ReturnType<typeof buildFrame3DSolveReque
     });
     const data = await response.json().catch(() => ({})) as Frame3DSolveResult & { fout?: string };
     if (!response.ok || data.fout) throw new Error(data.fout || `3D-rekenkern gaf HTTP ${response.status}`);
-    return data;
+    return checked(data);
   };
   try {
     return await post(input);

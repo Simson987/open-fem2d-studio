@@ -166,7 +166,8 @@ export default function Frame3DReport({
               <div><span>Max. verplaatsing</span><strong>{number(maxDisplacement * 1000)} mm</strong></div>
               <div><span>Convergentie</span><strong>{result.secondOrder ? `${result.secondOrder.iterations} iteratie${result.secondOrder.iterations === 1 ? "" : "s"}` : "direct"}</strong></div>
               <div><span>Eerste knikfactor αcr</span><strong>{firstMode ? number(firstMode.loadFactor) : "n.v.t."}</strong></div>
-              <div><span>Evenwicht</span><strong className={equilibrium?.equilibriumOk === true ? "frame3d-report-good" : "frame3d-report-bad"}>{equilibrium?.equilibriumOk === true ? "akkoord" : equilibrium?.equilibriumOk === false ? "afwijking" : "niet geverifieerd"}</strong></div>
+              <div><span>Evenwicht</span><strong className={equilibrium?.equilibriumOk === true && result.forceBalance?.ok !== false ? "frame3d-report-good" : "frame3d-report-bad"}>{equilibrium?.equilibriumOk === true && result.forceBalance?.ok !== false ? "akkoord" : equilibrium?.equilibriumOk === false || result.forceBalance?.ok === false ? "afwijking" : "niet geverifieerd"}</strong></div>
+              {result.forceBalance && <div><span>Globale krachtensom</span><strong className={result.forceBalance.ok ? "frame3d-report-good" : "frame3d-report-bad"}>{result.forceBalance.ok ? "akkoord" : `${number(result.forceBalance.maxImbalanceKn, 4)} kN afwijking`}</strong></div>}
               <div><span>Max. versterking</span><strong>{result.secondOrder ? number(result.secondOrder.maxAmplification) : "1,000"}</strong></div>
             </div>
           </section>
@@ -307,6 +308,7 @@ export default function Frame3DReport({
               <tr><th>Tweede orde</th><td>{result.secondOrder ? `${result.secondOrder.converged ? "geconvergeerd" : "niet geconvergeerd"}; ${result.secondOrder.stable ? "stabiel" : "instabiel"}` : "niet uitgevoerd"}</td></tr>
               <tr><th>Relatief evenwichtsresidu</th><td>{equilibrium ? number(equilibrium.relativeResidual, 8) : "niet beschikbaar"}</td></tr>
               <tr><th>Max. onbalans</th><td>{equilibrium ? `${number(equilibrium.maxImbalanceKn, 8)} kN` : "niet beschikbaar"}</td></tr>
+              {result.forceBalance && <tr><th>Onafhankelijke krachtensom X/Y/Z</th><td>{result.forceBalance.imbalanceKn.map((value) => number(value, 5)).join(" / ")} kN (grens {number(result.forceBalance.toleranceKn, 5)} kN)</td></tr>}
             </tbody></table>
           </section>
 
@@ -329,7 +331,7 @@ export default function Frame3DReport({
           <section>
             <h2>EN 1993 staaltoetsing</h2>
             {checksRunning && <p>De normtoetsing wordt uitgevoerd…</p>}
-            {checksError && <p className="frame3d-report-bad">De normtoetsing is mislukt: {checksError}</p>}
+            {checksError && <p className="frame3d-report-bad">Normtoetsing: {checksError}</p>}
             {!checksRunning && !checksError && checks && checks.results.length > 0 && <>
               <table className="frame3d-report-wide"><thead><tr>
                 <th>Staaf</th><th>Profiel</th><th>Staal</th><th>Klasse</th><th>UC UGT</th><th>Maatgevend</th><th>Status</th>
@@ -356,7 +358,7 @@ export default function Frame3DReport({
           <section>
             <h2>EN 1992 betontoetsing</h2>
             {checksRunning && <p>De normtoetsing wordt uitgevoerd…</p>}
-            {checksError && <p className="frame3d-report-bad">De normtoetsing is mislukt: {checksError}</p>}
+            {checksError && <p className="frame3d-report-bad">Normtoetsing: {checksError}</p>}
             {!checksRunning && !checksError && concreteChecks && concreteChecks.results.length > 0 && <>
               <table className="frame3d-report-wide"><thead><tr>
                 <th>Staaf</th><th>Doorsnede</th><th>Beton</th><th>Wapening</th><th>UC UGT</th><th>Maatgevend</th><th>Status</th>

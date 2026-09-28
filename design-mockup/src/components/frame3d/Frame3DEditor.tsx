@@ -207,9 +207,10 @@ export default function Frame3DEditor({
         {model.nodes.length === 0 && <div className="frame3d-empty">{t("frame3d.empty")}</div>}
         <div className="frame3d-stage-footer">
           <span>{t("frame3d.nodeCount", { count: model.nodes.length })} · {t("frame3d.beamCount", { count: model.beams.length })}</span>
-          <span data-frame3d-solver-status={solveError ? "error" : solving ? "solving" : result ? "solved" : "ready"}>
+          <span data-frame3d-solver-status={solveError ? "error" : solving ? "solving" : result?.forceBalance?.ok === false ? "warning" : result ? "solved" : "ready"}>
             {solveError ? solveError
               : solving ? t("frame3d.solving")
+              : result?.forceBalance?.ok === false ? `Krachtensom wijkt ${result.forceBalance.maxImbalanceKn.toFixed(3)} kN af · resultaat niet geverifieerd`
               : result ? t("frame3d.solved", { engine: result.engine.name, value: (maxDisplacement * 1000).toPrecision(4) })
               : t("frame3d.readyToCalculate")}
           </span>
