@@ -3421,21 +3421,21 @@ function App() {
                   ? setFrame3dVisibility(v => ({ ...v, grid: e.target.checked }))
                   : setGrid(g => ({ ...g, show: e.target.checked }))} />
             </label>
-            {modelDimension === "2d" && <>
+            {modelDimension === "2d" && (
               <label className="oa-grid-row">
                 <span>{t("app.grid.showGridLines")}</span>
                 <input type="checkbox" checked={grid.showLines}
                   onChange={e => setGrid(g => ({ ...g, showLines: e.target.checked }))} />
               </label>
-              <label className="oa-grid-row">
-                <span>{t("app.grid.spacing")}</span>
-                <input type="number" step="50" min="50" value={grid.spacingMm}
-                  onChange={e => {
-                    const v = Math.max(50, Number(e.target.value) || 500);
-                    setGrid(g => ({ ...g, spacingMm: v }));
-                  }} />
-              </label>
-            </>}
+            )}
+            <label className="oa-grid-row">
+              <span>{t("app.grid.spacing")}</span>
+              <input type="number" step="50" min="50" value={grid.spacingMm}
+                onChange={e => {
+                  const v = Math.max(50, Number(e.target.value) || 500);
+                  setGrid(g => ({ ...g, spacingMm: v }));
+                }} />
+            </label>
 
             <div className="oa-grid-section-title" style={{ marginTop: 14 }}>{t("app.grid.structural")}</div>
             <label className="oa-grid-row">

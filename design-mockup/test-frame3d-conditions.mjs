@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import * as THREE from "three";
 import { buildFrame3DNodeSnapScreenIndex, findFrame3DNodeScreenSnap } from "./src/components/frame3d/frame3dNodeSnapIndex.ts";
+import { frame3DGridLayout } from "./src/components/frame3d/frame3dGrid.ts";
 import {
   FRAME3D_SUPPORT_PRESETS,
   addFrame3DNodalLoad,
@@ -337,6 +338,20 @@ assert.notEqual(withoutArcControl?.point.id, 10_151,
 const onlyArcControl = buildFrame3DNodeSnapScreenIndex([snapNodes[10_150]], snapCamera, 1000, 1000);
 assert.equal(findFrame3DNodeScreenSnap(onlyArcControl, 500, 500, 14, 10_151), null,
   "zonder andere knopen kan het boogeindpunt weer op raster of werkvlak vallen");
+const demoGrid = frame3DGridLayout([
+  { id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 36, y: 0, z: 0 },
+], 0.5);
+assert.equal(demoGrid.visibleSpacingM, 0.5, "zichtbaar raster en knoopsnap gebruiken dezelfde stap");
+assert.ok(demoGrid.centerX - demoGrid.sizeM / 2 <= 0
+  && demoGrid.centerX + demoGrid.sizeM / 2 >= 36,
+"het zichtbare raster loopt door over het hele 36 meter brede model");
+const largeGrid = frame3DGridLayout([
+  { id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 1000, y: 1000, z: 0 },
+], 0.5);
+assert.ok(largeGrid.divisions <= 200, "een groot model maakt niet duizenden rasterlijnen");
+assert.ok(largeGrid.centerX - largeGrid.sizeM / 2 <= 0
+  && largeGrid.centerX + largeGrid.sizeM / 2 >= 1000,
+"ook het begrensde raster blijft over het grote model liggen");
 const hidden = new THREE.Group();
 addFrame3DConditionMarkers(hidden, withConditions, { supports: false, loads: false });
 assert.equal(hidden.children.length, 0);

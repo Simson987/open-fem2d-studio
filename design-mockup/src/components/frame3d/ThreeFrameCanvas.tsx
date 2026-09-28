@@ -31,6 +31,7 @@ import type { Frame3DCameraState } from "./frame3dViewSets";
 import { createFrame3DPlateGeometry } from "./frame3dPlateGeometry";
 import type { Frame3DEditMeta } from "./frame3dHistory";
 import { useSnapInstellingen, type SnapInstellingen, type SnapSoort } from "../../hooks/useSnapInstellingen";
+import { frame3DGridLayout } from "./frame3dGrid";
 import {
   buildFrame3DNodeSnapScreenIndex,
   findFrame3DNodeScreenSnap,
@@ -1784,8 +1785,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       disposeGroup(preview);
       draftGeometry.dispose();
       (draftLine.material as THREE.Material).dispose();
-      grid.geometry.dispose();
-      (grid.material as THREE.Material).dispose();
+      const activeGrid = sceneRef.current?.grid ?? grid;
+      activeGrid.geometry.dispose();
+      (activeGrid.material as THREE.Material).dispose();
       axes.geometry.dispose();
       (axes.material as THREE.Material).dispose();
       axisLabels.forEach((label) => label.element.remove());
@@ -1798,6 +1800,31 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       sceneRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const state = sceneRef.current;
+    if (!state) return;
+    const layout = frame3DGridLayout(model.nodes, gridSpacingM);
+    const previous = state.grid.userData.layout as ReturnType<typeof frame3DGridLayout> | undefined;
+    if (previous && Object.keys(layout).every((key) =>
+      previous[key as keyof typeof layout] === layout[key as keyof typeof layout])) return;
+    const nextGrid = new THREE.GridHelper(layout.sizeM, layout.divisions, 0xb6c2cf, 0xe2e8f0);
+    nextGrid.rotation.x = Math.PI / 2;
+    nextGrid.position.set(layout.centerX, layout.centerY, 0);
+    nextGrid.visible = state.grid.visible;
+    nextGrid.userData.layout = layout;
+    state.scene.remove(state.grid);
+    state.grid.geometry.dispose();
+    (state.grid.material as THREE.Material).dispose();
+    state.grid = nextGrid;
+    state.scene.add(nextGrid);
+    if (containerRef.current) {
+      containerRef.current.dataset.frame3dGridSizeM = String(layout.sizeM);
+      containerRef.current.dataset.frame3dGridSpacingM = String(layout.visibleSpacingM);
+      containerRef.current.dataset.frame3dGridDivisions = String(layout.divisions);
+    }
+    state.renderer.render(state.scene, state.camera);
+  }, [model.nodes, gridSpacingM]);
 
   useEffect(() => {
     const state = sceneRef.current;
