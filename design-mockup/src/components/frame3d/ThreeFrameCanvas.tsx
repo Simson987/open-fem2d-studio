@@ -441,7 +441,7 @@ function applySelectionHighlight(group: THREE.Group, selection: Frame3DSelection
         const selected = next.has(index);
         if (selected === previous.has(index)) return;
         object.setColorAt(index, new THREE.Color(selected
-          ? (object.userData.selectionColor ?? 0xd97706)
+          ? (object.userData.selectionColor ?? 0xffa31a)
           : baseColors[index]));
         if (object.instanceColor) object.instanceColor.addUpdateRange(index * 3, 3);
       });
@@ -465,7 +465,7 @@ function applySelectionHighlight(group: THREE.Group, selection: Frame3DSelection
     materials.forEach((material, index) => {
       const colored = material as THREE.Material & { color?: THREE.Color };
       if (!colored.color || baseColors[index] === undefined) return;
-      const color = selected ? (object.userData.selectionColor ?? 0xd97706) : baseColors[index]!;
+      const color = selected ? (object.userData.selectionColor ?? 0xffa31a) : baseColors[index]!;
       if (colored.color.getHex() !== color) colored.color.setHex(color);
     });
     if (object.userData.selectionOpacity !== undefined) {
@@ -2586,7 +2586,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
               new THREE.EdgesGeometry(profileGeometry, 28),
               new THREE.LineBasicMaterial({ color: 0x1e293b, transparent: true, opacity: 0.42 }),
             );
-            edges.userData = { type: "beam", id: beam.id, pickable: false };
+            edges.userData = { type: "beam", id: beam.id, selectionColor: 0x7c2d12, pickable: false };
             mesh.add(edges);
           }
           geometry.add(mesh);
@@ -2738,7 +2738,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const labelStride = (count: number) => count <= 200 ? 1 : Math.ceil(count / 24);
     const beamLabelStride = labelStride(model.beams.length);
     const nodeLabelStride = labelStride(model.nodes.length);
-    const resultLabelStride = model.beams.length <= 200 ? 1 : Math.ceil(model.beams.length / 12);
+    // Bij een groter raamwerk maken tientallen badges zowel het model als de
+    // bediening traag en onleesbaar. Details blijven per staaf selecteerbaar.
+    const resultLabelStride = model.beams.length <= 24 ? 1 : Math.ceil(model.beams.length / 16);
     const resultLabelVisible = (beamId: number, beamIndex: number) => {
       if (beamIndex % resultLabelStride === 0) return true;
       const selected = selectionRef.current;
@@ -2808,10 +2810,12 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           if (profileGeometry) {
             // Een dunne rand maakt lijf, flenzen en holle kokers ook bij een
             // witte achtergrond als echte doorsnede leesbaar.
-            mesh.add(new THREE.LineSegments(
+            const edges = new THREE.LineSegments(
               profileEdgesFor(profileGeometry),
               new THREE.LineBasicMaterial({ color: 0x1e293b, transparent: true, opacity: 0.42 }),
-            ));
+            );
+            edges.userData = { type: "beam", id: beam.id, selectionColor: 0x7c2d12, pickable: false };
+            mesh.add(edges);
           }
           geometry.add(mesh);
         }
@@ -3205,7 +3209,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       const forceByMember = new Map(result.memberForces.map((force) => [force.memberId, force]));
       const activeDiagrams = (Object.keys(DIAGRAM_STYLE) as DiagramComponent[])
         .filter((component) => visibility[component]);
-      const diagramBatches = model.beams.length >= 250
+      const diagramBatches = model.beams.length >= 100
         ? new Map(activeDiagrams.map((component) => [component, {
           color: DIAGRAM_STYLE[component].color,
           fillPositions: [],

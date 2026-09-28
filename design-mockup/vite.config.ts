@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
@@ -168,12 +168,15 @@ function doorsnedemotor(): Plugin {
 
 /** Dezelfde 3D-Rustadapter als de desktop-app, bereikbaar in de devbrowser. */
 function frame3dSolver(): Plugin {
-  const exe = resolve(
-    hier,
-    "../src-tauri/target/release",
-    // @ts-expect-error process is a nodejs global
-    process.platform === "win32" ? "frame3d-solver.exe" : "frame3d-solver",
-  );
+  // Tijdens ontwikkeling kan de debug-kern recenter zijn dan een bestaande
+  // release-kern. Gebruik het nieuwste contract; anders vallen nieuwe
+  // staafbelastingen in de browser stil terug op een verouderde binary.
+  // @ts-expect-error process is a nodejs global
+  const binary = process.platform === "win32" ? "frame3d-solver.exe" : "frame3d-solver";
+  const release = resolve(hier, "../src-tauri/target/release", binary);
+  const debug = resolve(hier, "../src-tauri/target/debug", binary);
+  const exe = existsSync(debug) && (!existsSync(release) || statSync(debug).mtimeMs > statSync(release).mtimeMs)
+    ? debug : release;
   return {
     name: "open-fem-frame3d-solver",
     configureServer(server) {
