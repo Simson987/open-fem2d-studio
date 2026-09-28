@@ -29,6 +29,7 @@ import {
 } from "./frame3dSelection";
 import type { Frame3DCameraState } from "./frame3dViewSets";
 import { createFrame3DPlateGeometry } from "./frame3dPlateGeometry";
+import type { Frame3DEditMeta } from "./frame3dHistory";
 import { useSnapInstellingen, type SnapInstellingen, type SnapSoort } from "../../hooks/useSnapInstellingen";
 import {
   buildFrame3DNodeSnapScreenIndex,
@@ -42,6 +43,8 @@ import {
 // er nergens een zichtbare kier tussen staaf en knoop.
 const ANALYTICAL_BEAM_RADIUS_M = 0.035;
 const PROFILE_BEAM_RADIUS_M = 0.12;
+let contourHistorySerial = 0;
+const nextContourHistoryGroup = () => `contour-${++contourHistorySerial}`;
 
 function nextNumericId(items: readonly { id: number }[]): number {
   let maximum = 0;
@@ -284,7 +287,7 @@ interface Props {
   model: Frame3DModel;
   /** Zelfde geometrie met vluchtige automatische lasten, alleen voor symbolen. */
   conditionModel?: Frame3DModel;
-  onChange: (model: Frame3DModel) => void;
+  onChange: (model: Frame3DModel, meta?: Frame3DEditMeta) => void;
   tool: Frame3DTool;
   selection: Frame3DSelection;
   onSelect: (selection: Frame3DSelection) => void;
@@ -858,8 +861,29 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   const openingDraftRef = useRef<PlateSketch>(emptyPlateSketch());
   const plateDraftCreatedNodesRef = useRef<Set<number>>(new Set());
   const openingDraftCreatedNodesRef = useRef<Set<number>>(new Set());
+  const plateHistoryGroupRef = useRef<string | null>(null);
+  const openingHistoryGroupRef = useRef<string | null>(null);
   const beamStartRef = useRef<number | null>(null);
   const openingPlateRef = useRef<number | null>(null);
+  useEffect(() => {
+    // Ongedaan maken kan plaatsvinden terwijl een contour nog open is.
+    // Verwijder dan ook de lokale schets, zodat de volgende klik niet naar
+    // inmiddels verdwenen knoopnummers verwijst.
+    const existing = new Set(model.nodes.map((node) => node.id));
+    const resetMissingSketch = (
+      sketchRef: { current: PlateSketch },
+      createdRef: { current: Set<number> },
+      groupRef: { current: string | null },
+    ) => {
+      if (sketchRef.current.nodeIds.every((id) => existing.has(id))) return;
+      sketchRef.current = emptyPlateSketch();
+      createdRef.current.clear();
+      groupRef.current = null;
+      if (sceneRef.current) sceneRef.current.draftLine.visible = false;
+    };
+    resetMissingSketch(plateDraftRef, plateDraftCreatedNodesRef, plateHistoryGroupRef);
+    resetMissingSketch(openingDraftRef, openingDraftCreatedNodesRef, openingHistoryGroupRef);
+  }, [model.nodes]);
   const cameraChangeRef = useRef(onCameraChange);
   cameraChangeRef.current = onCameraChange;
   const rememberBuiltPresentation = () => {
@@ -868,7 +892,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       visibility, structuralGrid, result, utilizations, activeLoadCaseId,
     };
   };
-  const discardDraftNodes = (createdNodeIds: Set<number>) => {
+  const discardDraftNodes = (createdNodeIds: Set<number>, historyGroupRef: { current: string | null }) => {
+    const historyGroup = historyGroupRef.current;
+    historyGroupRef.current = null;
     if (createdNodeIds.size === 0) return;
     const current = modelRef.current;
     const referenced = new Set<number>();
@@ -891,7 +917,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     nodePositionIndexRef.current = buildNodePositionIndex(next.nodes);
     nextNodeIdRef.current = nextNumericId(next.nodes);
     modelRef.current = next;
-    changeRef.current(next);
+    changeRef.current(next, { historyGroup: historyGroup ?? undefined, cancelHistoryGroup: true });
     selectRef.current(null);
   };
   const previousToolRef = useRef(tool);
@@ -900,11 +926,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const plateTools: Frame3DTool[] = ["addPlate", "addPlateArc"];
     const openingTools: Frame3DTool[] = ["addOpening", "addOpeningArc"];
     if (!(plateTools.includes(previousTool) && plateTools.includes(tool))) {
-      discardDraftNodes(plateDraftCreatedNodesRef.current);
+      discardDraftNodes(plateDraftCreatedNodesRef.current, plateHistoryGroupRef);
       plateDraftRef.current = emptyPlateSketch();
     }
     if (!(openingTools.includes(previousTool) && openingTools.includes(tool))) {
-      discardDraftNodes(openingDraftCreatedNodesRef.current);
+      discardDraftNodes(openingDraftCreatedNodesRef.current, openingHistoryGroupRef);
       openingDraftRef.current = emptyPlateSketch();
     }
     if (tool !== "addBeam") beamStartRef.current = null;
@@ -1479,7 +1505,14 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         }
         modelRef.current = next;
         current = next;
-        changeRef.current(next);
+        const historyGroupRef = activeTool === "addPlate" || activeTool === "addPlateArc"
+          ? plateHistoryGroupRef
+          : isOpeningTool(activeTool) ? openingHistoryGroupRef : null;
+        if (historyGroupRef && historyGroupRef.current === null) {
+          historyGroupRef.current = nextContourHistoryGroup();
+        }
+        changeRef.current(next, historyGroupRef?.current
+          ? { historyGroup: historyGroupRef.current } : undefined);
       };
       const ensureDrawingNode = (): number | null => {
         if (activeTool === "addBeam" && type === "beam" && typeof id === "number" && intersection) {
@@ -1591,8 +1624,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
                 if (addedPlate) selectRef.current({ type: "plate", id: addedPlate.id });
               } finally {
                 plateDraftRef.current = emptyPlateSketch();
-                if (committed) plateDraftCreatedNodesRef.current.clear();
-                else discardDraftNodes(plateDraftCreatedNodesRef.current);
+                if (committed) {
+                  plateDraftCreatedNodesRef.current.clear();
+                  plateHistoryGroupRef.current = null;
+                } else discardDraftNodes(plateDraftCreatedNodesRef.current, plateHistoryGroupRef);
               }
             } else if (!closes) {
               plateDraftRef.current = {
@@ -1645,8 +1680,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
                 selectRef.current({ type: "plate", id: openingPlateId });
               } finally {
                 openingDraftRef.current = emptyPlateSketch();
-                if (committed) openingDraftCreatedNodesRef.current.clear();
-                else discardDraftNodes(openingDraftCreatedNodesRef.current);
+                if (committed) {
+                  openingDraftCreatedNodesRef.current.clear();
+                  openingHistoryGroupRef.current = null;
+                } else discardDraftNodes(openingDraftCreatedNodesRef.current, openingHistoryGroupRef);
               }
             } else if (!closes) {
               openingDraftRef.current = {
@@ -1703,8 +1740,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      discardDraftNodes(plateDraftCreatedNodesRef.current);
-      discardDraftNodes(openingDraftCreatedNodesRef.current);
+      discardDraftNodes(plateDraftCreatedNodesRef.current, plateHistoryGroupRef);
+      discardDraftNodes(openingDraftCreatedNodesRef.current, openingHistoryGroupRef);
       plateDraftRef.current = emptyPlateSketch();
       openingDraftRef.current = emptyPlateSketch();
       beamStartRef.current = null;
@@ -1721,8 +1758,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     window.addEventListener("keydown", onKeyDown);
 
     return () => {
-      discardDraftNodes(plateDraftCreatedNodesRef.current);
-      discardDraftNodes(openingDraftCreatedNodesRef.current);
+      discardDraftNodes(plateDraftCreatedNodesRef.current, plateHistoryGroupRef);
+      discardDraftNodes(openingDraftCreatedNodesRef.current, openingHistoryGroupRef);
       observer.disconnect();
       if (previewFrame) cancelAnimationFrame(previewFrame);
       renderer.domElement.removeEventListener("pointerdown", onPointerDown);

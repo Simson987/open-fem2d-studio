@@ -26,6 +26,7 @@ import FemProjectTree from "./components/fem/FemProjectTree";
 import FemProperties from "./components/fem/FemProperties";
 import FemCanvas from "./components/fem/FemCanvas";
 import { FRAME3D_SUPPORT_PRESETS, addFrame3DSurfaceLoad, setFrame3DSupport, withFrame3DSelfWeight, type Frame3DModel } from "./components/frame3d/frame3dModel";
+import { frame3dHistoryReducer, type Frame3DEditMeta } from "./components/frame3d/frame3dHistory";
 import type { Frame3DTool, Frame3DView } from "./components/frame3d/frame3dCommands";
 import type { Frame3DSelection } from "./components/frame3d/frame3dSelection";
 import type { Frame3DViewSet } from "./components/frame3d/frame3dViewSets";
@@ -151,30 +152,6 @@ import { bijlageUitBestand, type NationaleBijlageCode } from "./lib/normAanduidi
 
 const ThreeViewer = lazy(() => import("./components/panels/ThreeViewer"));
 const Frame3DEditor = lazy(() => import("./components/frame3d/Frame3DEditor"));
-
-interface Frame3DHistory {
-  model: Frame3DModel;
-  past: Frame3DModel[];
-  future: Frame3DModel[];
-}
-
-type Frame3DAction =
-  | { type: "edit" | "replace"; model: Frame3DModel }
-  | { type: "undo" | "redo" };
-
-function frame3dHistoryReducer(state: Frame3DHistory, action: Frame3DAction): Frame3DHistory {
-  if (action.type === "replace") return { model: action.model, past: [], future: [] };
-  if (action.type === "edit") {
-    if (action.model === state.model) return state;
-    return { model: action.model, past: [...state.past.slice(-99), state.model], future: [] };
-  }
-  if (action.type === "undo") {
-    const previous = state.past[state.past.length - 1];
-    return previous ? { model: previous, past: state.past.slice(0, -1), future: [state.model, ...state.future] } : state;
-  }
-  const next = state.future[0];
-  return next ? { model: next, past: [...state.past, state.model], future: state.future.slice(1) } : state;
-}
 
 /**
  * Rust tussen de laatste modelwijziging en de live-herberekening. Lang genoeg
@@ -339,7 +316,8 @@ function App() {
     model: { nodes: [], beams: [] }, past: [], future: [],
   });
   const frame3d = frame3dHistory.model;
-  const setFrame3d = useCallback((model: Frame3DModel) => dispatchFrame3D({ type: "edit", model }), []);
+  const setFrame3d = useCallback((model: Frame3DModel, meta?: Frame3DEditMeta) =>
+    dispatchFrame3D({ type: "edit", model, ...meta }), []);
   const [frame3dTool, setFrame3dTool] = useState<Frame3DTool>("select");
   const [frame3dSelection, setFrame3dSelection] = useState<Frame3DSelection>(null);
   const [frame3dDeleteToken, setFrame3dDeleteToken] = useState(0);

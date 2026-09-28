@@ -25,12 +25,13 @@ import Frame3DTransformPanel from "./Frame3DTransformPanel";
 import { transformFrame3D, type Frame3DTransformCommand } from "./frame3dTransform";
 import { frame3DSelectionCount, type Frame3DSelection } from "./frame3dSelection";
 import type { Frame3DCameraState, Frame3DViewSet } from "./frame3dViewSets";
+import type { Frame3DEditMeta } from "./frame3dHistory";
 import "./Frame3DEditor.css";
 
 interface Props {
   model: Frame3DModel;
   calculationModel?: Frame3DModel;
-  onChange: (model: Frame3DModel) => void;
+  onChange: (model: Frame3DModel, meta?: Frame3DEditMeta) => void;
   visibilityOpen?: boolean;
   onVisibilityClose?: () => void;
   tool?: Frame3DTool;
