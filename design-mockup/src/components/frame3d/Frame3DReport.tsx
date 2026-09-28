@@ -166,7 +166,7 @@ export default function Frame3DReport({
               <div><span>Max. verplaatsing</span><strong>{number(maxDisplacement * 1000)} mm</strong></div>
               <div><span>Convergentie</span><strong>{result.secondOrder ? `${result.secondOrder.iterations} iteratie${result.secondOrder.iterations === 1 ? "" : "s"}` : "direct"}</strong></div>
               <div><span>Eerste knikfactor αcr</span><strong>{firstMode ? number(firstMode.loadFactor) : "n.v.t."}</strong></div>
-              <div><span>Evenwicht</span><strong className={equilibrium?.equilibriumOk === false ? "frame3d-report-bad" : "frame3d-report-good"}>{equilibrium?.equilibriumOk === false ? "afwijking" : "akkoord"}</strong></div>
+              <div><span>Evenwicht</span><strong className={equilibrium?.equilibriumOk === true ? "frame3d-report-good" : "frame3d-report-bad"}>{equilibrium?.equilibriumOk === true ? "akkoord" : equilibrium?.equilibriumOk === false ? "afwijking" : "niet geverifieerd"}</strong></div>
               <div><span>Max. versterking</span><strong>{result.secondOrder ? number(result.secondOrder.maxAmplification) : "1,000"}</strong></div>
             </div>
           </section>
