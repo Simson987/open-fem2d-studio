@@ -602,6 +602,20 @@ export default function FemCanvas(props: FemCanvasProps) {
   void props.updateNode;
 
   const svgRef = useRef<SVGSVGElement>(null);
+  /**
+   * Pointer-events kunnen veel sneller binnenkomen dan het scherm tekent.
+   * Een gewone hover of pan zette voorheen bij ieder event React-state, waarna
+   * het volledige SVG-model opnieuw werd opgebouwd. Op een snelle muis liep
+   * dat op tot honderden renders per seconde. Bewaar alleen de nieuwste
+   * positie en verwerk die maximaal één keer per animatieframe.
+   */
+  const hoverFrameRef = useRef(0);
+  const pendingHoverRef = useRef<{ sx: number; sy: number } | null>(null);
+  const panFrameRef = useRef(0);
+  const pendingPanRef = useRef<{
+    sx: number; sy: number;
+    startSX: number; startSY: number; startOX: number; startOY: number;
+  } | null>(null);
   const [size, setSize] = useState({ w: 1000, h: 600 });
   const [hoverModel, setHoverModel] = useState<{ x: number; z: number } | null>(null);
   const [snapNode, setSnapNode] = useState<number | null>(null);
@@ -882,6 +896,11 @@ export default function FemCanvas(props: FemCanvasProps) {
     });
     ro.observe(svgRef.current.parentElement!);
     return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => () => {
+    if (hoverFrameRef.current) cancelAnimationFrame(hoverFrameRef.current);
+    if (panFrameRef.current) cancelAnimationFrame(panFrameRef.current);
   }, []);
 
   // ── Coordinate transforms (view-aware) ─────────────────────────────────
@@ -1243,19 +1262,83 @@ export default function FemCanvas(props: FemCanvasProps) {
   const cancelRotate = useCallback(() => setRotateMode(null), []);
 
   // ── Mouse handlers ──────────────────────────────────────────────────────
+  const updatePointerHover = (sx: number, sy: number) => {
+    const startedAt = performance.now();
+    const world = screenToWorld(sx, sy);
+    const snapped = snapPunt(world.x, world.z);
+    // Bij raster-snap vallen meerdere pointer-events vaak op exact hetzelfde
+    // modelpunt. Houd dan hetzelfde object vast zodat React de update overslaat.
+    setHoverModel((previous) => previous?.x === snapped.x && previous.z === snapped.z
+      ? previous
+      : { x: snapped.x, z: snapped.z });
+    // Hover halo (Select tool only)
+    if (tool === "select" && !boxSelect && !dragState && !grabMode && !rotateMode) {
+      setSnapNode(findSnapNode(sx, sy));
+      const sb = findSnapBeam(sx, sy);
+      setSnapBeam(sb?.beamId ?? null);
+    } else {
+      // Beam-targeting tools snap to BEAMS, not nodes. Showing a node-halo
+      // while placing a line load is misleading ("puntje aan je cursor").
+      const isBeamTool = tool === "addLineLoad" || tool === "addThermal";
+      const hoverNode = isBeamTool ? null : findSnapNode(sx, sy);
+      setSnapNode(hoverNode);
+      // Het puntlast-gereedschap snapt zowel op een KNOOP (voorrang) als op
+      // een vrije positie op een STAAF; de staaf-halo verschijnt daarom pas
+      // wanneer er geen knoop onder de muis ligt.
+      const isPuntlastTool = tool === "addPointLoad" || tool === "addPointLoadH";
+      const beamSnapTools = tool === "addSubNode" || isBeamTool
+        || (isPuntlastTool && hoverNode === null);
+      setSnapBeam(beamSnapTools ? (findSnapBeam(sx, sy)?.beamId ?? null) : null);
+    }
+    if (svgRef.current) {
+      svgRef.current.dataset.femPointerUpdateMs = (performance.now() - startedAt).toFixed(2);
+      svgRef.current.dataset.femPointerUpdateMode = "frame";
+    }
+    return { world, snapped };
+  };
+
+  const schedulePointerHover = (sx: number, sy: number) => {
+    pendingHoverRef.current = { sx, sy };
+    if (hoverFrameRef.current) return;
+    hoverFrameRef.current = requestAnimationFrame(() => {
+      hoverFrameRef.current = 0;
+      const pending = pendingHoverRef.current;
+      pendingHoverRef.current = null;
+      if (pending) updatePointerHover(pending.sx, pending.sy);
+    });
+  };
+
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = svgRef.current!.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
 
     if (panRef.current.active) {
-      const dx = sx - panRef.current.startSX;
-      const dy = sy - panRef.current.startSY;
-      setView(v => ({
-        ...v,
-        offsetX: panRef.current.startOX + dx,
-        offsetY: panRef.current.startOY + dy,
-      }));
+      pendingPanRef.current = {
+        sx, sy,
+        startSX: panRef.current.startSX,
+        startSY: panRef.current.startSY,
+        startOX: panRef.current.startOX,
+        startOY: panRef.current.startOY,
+      };
+      if (!panFrameRef.current) {
+        panFrameRef.current = requestAnimationFrame(() => {
+          panFrameRef.current = 0;
+          const pending = pendingPanRef.current;
+          pendingPanRef.current = null;
+          if (!pending) return;
+          const dx = pending.sx - pending.startSX;
+          const dy = pending.sy - pending.startSY;
+          setView(v => {
+            const offsetX = pending.startOX + dx;
+            const offsetY = pending.startOY + dy;
+            return v.offsetX === offsetX && v.offsetY === offsetY
+              ? v
+              : { ...v, offsetX, offsetY };
+          });
+          if (svgRef.current) svgRef.current.dataset.femPanUpdateMode = "frame";
+        });
+      }
       return;
     }
 
@@ -1292,28 +1375,16 @@ export default function FemCanvas(props: FemCanvasProps) {
       return;
     }
 
-    // Snap to stramien intersection if close, else to grid spacing.
-    const snapped = snapPunt(world.x, world.z);
-    setHoverModel({ x: snapped.x, z: snapped.z });
-    // Hover halo (Select tool only)
-    if (tool === "select" && !boxSelect && !dragState && !grabMode && !rotateMode) {
-      setSnapNode(findSnapNode(sx, sy));
-      const sb = findSnapBeam(sx, sy);
-      setSnapBeam(sb?.beamId ?? null);
-    } else {
-      // Beam-targeting tools snap to BEAMS, not nodes. Showing a node-halo
-      // while placing a line load is misleading ("puntje aan je cursor").
-      const isBeamTool = tool === "addLineLoad" || tool === "addThermal";
-      const hoverNode = isBeamTool ? null : findSnapNode(sx, sy);
-      setSnapNode(hoverNode);
-      // Het puntlast-gereedschap snapt zowel op een KNOOP (voorrang) als op
-      // een vrije positie op een STAAF; de staaf-halo verschijnt daarom pas
-      // wanneer er geen knoop onder de muis ligt.
-      const isPuntlastTool = tool === "addPointLoad" || tool === "addPointLoadH";
-      const beamSnapTools = tool === "addSubNode" || isBeamTool
-        || (isPuntlastTool && hoverNode === null);
-      setSnapBeam(beamSnapTools ? (findSnapBeam(sx, sy)?.beamId ?? null) : null);
+    // Zonder actieve sleep is dit alleen hover/preview. Bundel de events tot
+    // één update per beeldframe; actieve gereedschappen hieronder houden hun
+    // directe positie voor een nauwkeurige commit bij mouse-up.
+    if (!dragState && !boxSelect && !openingDrag && !grabMode && !rotateMode) {
+      schedulePointerHover(sx, sy);
+      return;
     }
+
+    // Snap to stramien intersection if close, else to grid spacing.
+    const { snapped } = updatePointerHover(sx, sy);
 
     // Drag-to-move: update ghost preview delta in mm (snapped) — maar pas
     // zodra de muis echt bewogen is; tot die tijd is het een klik.
@@ -1362,6 +1433,9 @@ export default function FemCanvas(props: FemCanvasProps) {
   };
 
   const handleMouseLeave = () => {
+    if (hoverFrameRef.current) cancelAnimationFrame(hoverFrameRef.current);
+    hoverFrameRef.current = 0;
+    pendingHoverRef.current = null;
     setHoverModel(null);
     setSnapNode(null);
     setSnapBeam(null);
