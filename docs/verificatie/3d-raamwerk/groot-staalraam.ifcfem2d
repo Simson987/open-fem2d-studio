@@ -1,7 +1,7 @@
 {
   "format": "open-fem2d-studio-v2",
   "version": 3,
-  "savedAt": "2026-09-28T15:39:25.501Z",
+  "savedAt": "2026-09-28T17:01:16.189Z",
   "nodes": [],
   "beams": [],
   "supports": [],
@@ -22,6 +22,11 @@
       "id": 3,
       "name": "Liggerlast",
       "type": "live"
+    },
+    {
+      "id": 4,
+      "name": "Excentrisch Y en staafpuntlast",
+      "type": "wind"
     }
   ],
   "activeLoadCaseId": 1,
@@ -1548,6 +1553,50 @@
         "my": 0,
         "mz": 0,
         "caseId": 2
+      },
+      {
+        "id": 33,
+        "nodeId": 45,
+        "fx": 0,
+        "fy": 3,
+        "fz": 0,
+        "mx": 0,
+        "my": 1,
+        "mz": 0,
+        "caseId": 4
+      },
+      {
+        "id": 34,
+        "nodeId": 46,
+        "fx": 0,
+        "fy": 3,
+        "fz": 0,
+        "mx": 0,
+        "my": 1,
+        "mz": 0,
+        "caseId": 4
+      },
+      {
+        "id": 35,
+        "nodeId": 47,
+        "fx": 0,
+        "fy": 3,
+        "fz": 0,
+        "mx": 0,
+        "my": 1,
+        "mz": 0,
+        "caseId": 4
+      },
+      {
+        "id": 36,
+        "nodeId": 48,
+        "fx": 0,
+        "fy": 3,
+        "fz": 0,
+        "mx": 0,
+        "my": 1,
+        "mz": 0,
+        "caseId": 4
       }
     ],
     "memberLoads": [
@@ -1682,6 +1731,16 @@
         "qzEnd": -2,
         "startPositionM": 0,
         "endPositionM": 3
+      }
+    ],
+    "memberPointLoads": [
+      {
+        "id": 1,
+        "beamId": 81,
+        "caseId": 4,
+        "py": 0,
+        "pz": -5,
+        "positionM": 1.5
       }
     ]
   },

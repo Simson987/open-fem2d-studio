@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { buildFrame3DSolveRequest, frame3DGlobalForceBalance } from "./src/components/frame3d/frame3dSolver.ts";
@@ -41,10 +41,25 @@ const memberLoads = beams.filter((beam) => {
   qyStart: 0, qyEnd: 0, qzStart: -2, qzEnd: -2,
   startPositionM: 0, endPositionM: 3,
 }));
-const model = parseFrame3DModel({ nodes, beams, supports, loads, memberLoads });
+// Een excentrische dwarslast met knoopmomenten en een puntlast op een ligger.
+// Dit geval belast ook de tweede horizontale as en de ruimtelijke torsieroute.
+for (let ix = 0; ix < nx; ix++) {
+  loads.push({
+    id: loads.length + 1, nodeId: nodeId(ix, ny - 1, nz - 1), caseId: 4,
+    fx: 0, fy: 3, fz: 0, mx: 0, my: 1, mz: 0,
+  });
+}
+const pointLoadBeam = beams.find((beam) => beam.startNodeId === 33 && beam.endNodeId === 34);
+assert.ok(pointLoadBeam, "dakligger voor excentrische staafpuntlast");
+const memberPointLoads = [{
+  id: 1, beamId: pointLoadBeam.id, caseId: 4, py: 0, pz: -5, positionM: 1.5,
+}];
+const model = parseFrame3DModel({ nodes, beams, supports, loads, memberLoads, memberPointLoads });
 assert.equal(model.nodes.length, 48);
 assert.equal(model.beams.length, 104);
 assert.equal(memberLoads.length, 12);
+assert.equal(model.loads.length, 36);
+assert.equal(model.memberPointLoads.length, 1);
 
 const fixturePath = fileURLToPath(new URL("../docs/verificatie/3d-raamwerk/groot-staalraam.ifcfem2d", import.meta.url));
 const project = {
@@ -53,6 +68,7 @@ const project = {
     { id: 1, name: "Daklast", type: "dead" },
     { id: 2, name: "Horizontale belasting", type: "wind" },
     { id: 3, name: "Liggerlast", type: "live" },
+    { id: 4, name: "Excentrisch Y en staafpuntlast", type: "wind" },
   ],
   activeLoadCaseId: 1, selfWeightEnabled: false, nonlinearEnabled: true,
   analysetype: "tweedeOrdeGeometrisch", modelDimension: "3d", model3d: model,
@@ -88,15 +104,38 @@ assert.equal(momentOnlyMismatch.momentImbalanceKnm[1], 30);
 assert.equal(momentOnlyMismatch.ok, false, "een sluitende krachtensom mag een fout moment niet verhullen");
 
 const solverBinary = process.platform === "win32" ? "frame3d-solver.exe" : "frame3d-solver";
-const solverPath = fileURLToPath(new URL(`../src-tauri/target/debug/${solverBinary}`, import.meta.url));
+const solverPath = process.env.FRAME3D_SOLVER_PATH
+  ?? fileURLToPath(new URL(`../src-tauri/target/debug/${solverBinary}`, import.meta.url));
 if (!existsSync(solverPath)) {
   console.log("Groot 3D-project en belastingen gevalideerd; bouw de 3D-rekenkern voor de numerieke verificatie.");
   process.exit(0);
 }
-const solve = (analysis, factors) => {
+const invokeSolver = (request) => new Promise((resolve, reject) => {
+  const child = spawn(solverPath, [], { stdio: ["pipe", "pipe", "pipe"] });
+  const stdout = [], stderr = [];
+  let size = 0;
+  const timeout = setTimeout(() => child.kill(), 120_000);
+  child.stdout.on("data", (chunk) => {
+    size += chunk.length;
+    if (size > 16 * 1024 * 1024) child.kill();
+    else stdout.push(chunk);
+  });
+  child.stderr.on("data", (chunk) => stderr.push(chunk));
+  child.on("error", reject);
+  child.on("close", (code) => {
+    clearTimeout(timeout);
+    if (code !== 0) return reject(new Error(`3D-kern: exit ${code}; ${Buffer.concat(stderr).toString()}`));
+    try { resolve(JSON.parse(Buffer.concat(stdout).toString())); }
+    catch (error) { reject(error); }
+  });
+  child.stdin.on("error", reject);
+  child.stdin.end(JSON.stringify(request));
+});
+const solve = async (analysis, factors) => {
   const request = { ...buildFrame3DSolveRequest(model, analysis, factors), bucklingModes: 0 };
+  if (process.argv.includes("--progress")) console.error(`Rekenen: ${analysis}, ${typeof factors === "number" ? factors : "combinatie"}`);
   const started = performance.now();
-  const result = JSON.parse(execFileSync(solverPath, { input: JSON.stringify(request), maxBuffer: 16 * 1024 * 1024 }).toString());
+  const result = await invokeSolver(request);
   return { result, elapsedMs: performance.now() - started, balance: frame3DGlobalForceBalance(request, result) };
 };
 const sum = (items, key) => items.reduce((total, item) => total + item[key], 0);
@@ -124,22 +163,28 @@ const check = (result, forces, moments, label) => {
   }
 };
 
-const gravity = solve("linear", 1);
+const gravity = await solve("linear", 1);
 check(gravity.result, { fx: 0, fy: 0, fz: 320 }, { mx: 1920, my: -1440, mz: 0 }, "daklast");
 assert.equal(gravity.balance.ok, true, "de onafhankelijke krachtensom sluit bij daklast");
 assert.ok(gravity.balance.maxMomentImbalanceKnm < 1e-3, "ook het globale moment sluit bij daklast");
 for (const reaction of gravity.result.reactions) {
   close(reaction.fz, 20, 1e-5, `symmetrische verticale reactie steun ${reaction.nodeId}`);
 }
-const lateral = solve("linear", 2);
+const lateral = await solve("linear", 2);
 check(lateral.result, { fx: -32, fy: 0, fz: 0 }, { mx: 0, my: -224, mz: 192 }, "horizontaal");
 assert.equal(lateral.balance.ok, true, "de onafhankelijke krachtensom sluit bij horizontale last");
 assert.ok(lateral.balance.maxMomentImbalanceKnm < 1e-3, "ook het globale moment sluit bij horizontale last");
-const distributed = solve("linear", 3);
+const distributed = await solve("linear", 3);
 check(distributed.result, { fx: 0, fy: 0, fz: 72 }, { mx: 432, my: -324, mz: 0 }, "verdeelde liggerlast");
 assert.equal(distributed.balance.ok, true, "ook de lokale lijnlast sluit na omrekening naar globale assen");
 assert.ok(distributed.balance.maxMomentImbalanceKnm < 1e-3, "de lijnlast gebruikt zijn exacte aangrijpingspunt");
-const allLinear = solve("linear", new Map([[1, 1], [2, 1], [3, 1]]));
+const eccentric = await solve("linear", 4);
+check(eccentric.result, { fx: 0, fy: -12, fz: 5 },
+  { mx: 84, my: -11.5, mz: -54 }, "excentrische Y-last, knoopmomenten en staafpuntlast");
+assert.equal(eccentric.balance.ok, true, "ook de excentrische belasting sluit in alle globale assen");
+assert.ok(eccentric.balance.maxMomentImbalanceKnm < 1e-3,
+  "de excentrische knoopmomenten en de staafpuntlast hebben hun juiste hefboomarm");
+const allLinear = await solve("linear", new Map([[1, 1], [2, 1], [3, 1]]));
 check(allLinear.result, { fx: -32, fy: 0, fz: 392 },
   { mx: 2352, my: -1988, mz: 192 }, "lineaire combinatie van drie belastinggevallen");
 assert.equal(allLinear.balance.ok, true, "ook het gecombineerde lineaire evenwicht sluit");
@@ -159,7 +204,28 @@ for (const [index, response] of allLinear.result.reactions.entries()) {
       `lineaire superpositie reactie steun ${response.nodeId}, ${axis}`);
   }
 }
-const combined = solve("p-delta", new Map([[1, 1], [2, 1]]));
+const allFour = await solve("linear", new Map([[1, 1], [2, 1], [3, 1], [4, 1]]));
+check(allFour.result, { fx: -32, fy: -12, fz: 397 },
+  { mx: 2436, my: -1999.5, mz: 138 }, "combinatie van vier ruimtelijke belastinggevallen");
+assert.equal(allFour.balance.ok, true, "de volledige ruimtelijke combinatie sluit");
+for (const [index, response] of allFour.result.displacements.entries()) {
+  const cases = [gravity, lateral, distributed, eccentric].map(({ result }) => result.displacements[index]);
+  assert.equal(response.nodeId, cases[0].nodeId);
+  for (const axis of ["ux", "uy", "uz", "rx", "ry", "rz"]) {
+    close(response[axis], cases.reduce((value, item) => value + item[axis], 0), 1e-8,
+      `vierweg superpositie knoop ${response.nodeId}, ${axis}`);
+  }
+}
+for (const [index, response] of allFour.result.memberForces.entries()) {
+  const cases = [gravity, lateral, distributed, eccentric].map(({ result }) => result.memberForces[index]);
+  assert.equal(response.memberId, cases[0].memberId);
+  for (const axis of ["nStartKn", "nEndKn", "vyStartKn", "vyEndKn", "vzStartKn", "vzEndKn",
+    "torsionStartKnm", "torsionEndKnm", "myStartKnm", "myEndKnm", "mzStartKnm", "mzEndKnm"]) {
+    close(response[axis], cases.reduce((value, item) => value + item[axis], 0), 1e-5,
+      `vierweg superpositie staaf ${response.memberId}, ${axis}`);
+  }
+}
+const combined = await solve("p-delta", new Map([[1, 1], [2, 1]]));
 assert.equal(combined.result.displacements.length, 48);
 assert.equal(combined.result.memberForces.length, 104);
 assert.ok(combined.result.displacements.every((d) =>
@@ -172,9 +238,10 @@ const secondOrderMomentImbalanceKnm = Object.fromEntries(
   ["mx", "my", "mz"].map((axis, index) => [axis, combined.balance.momentImbalanceKnm[index]]));
 
 console.log(JSON.stringify({
-  model: { nodes: 48, beams: 104, supports: 16, nodalLoads: 32, memberLoads: 12 },
-  cases: [gravity, lateral, distributed, allLinear, combined].map(({ result, elapsedMs }, index) => ({
-    name: ["daklast", "horizontaal", "liggerlast", "combinatie lineair", "combinatie tweede orde"][index],
+  model: { nodes: 48, beams: 104, supports: 16, nodalLoads: 36, memberLoads: 12, memberPointLoads: 1 },
+  cases: [gravity, lateral, distributed, eccentric, allLinear, allFour, combined].map(({ result, elapsedMs }, index) => ({
+    name: ["daklast", "horizontaal", "liggerlast", "excentrisch", "combinatie lineair",
+      "combinatie 4 gevallen", "combinatie tweede orde"][index],
     elapsedMs: +elapsedMs.toFixed(1),
     relativeResidual: result.equilibrium?.relativeResidual,
     secondOrder: result.secondOrder,
