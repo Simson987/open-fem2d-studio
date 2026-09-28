@@ -43,6 +43,7 @@ interface Props {
   onSelectionChange?: (selection: Frame3DSelection) => void;
   visibility?: Frame3DVisibility;
   onVisibilityChange?: (visibility: Frame3DVisibility) => void;
+  showLoadCase?: boolean;
   structuralGrid?: StructuralGrid;
   gridSpacingM?: number;
   result?: Frame3DSolveResult | null;
@@ -64,7 +65,7 @@ export default function Frame3DEditor({
   model, calculationModel, onChange, visibilityOpen = false, onVisibilityClose,
   tool = "select", onToolChange, deleteToken = 0, fitRequest = 0, viewRequest,
   selection: controlledSelection, onSelectionChange,
-  visibility: visibilityProp, onVisibilityChange, structuralGrid, gridSpacingM,
+  visibility: visibilityProp, onVisibilityChange, showLoadCase = true, structuralGrid, gridSpacingM,
   result = null, checks = null, concreteChecks = null,
   solving = false, solveError = null, activeLoadCaseId,
   viewSets = [], currentView = "iso", currentCombinationId = null, combinationOptions = [],
@@ -84,6 +85,10 @@ export default function Frame3DEditor({
   });
   const [cameraRequest, setCameraRequest] = useState<{ state: Frame3DCameraState; token: number }>();
   const visibility = visibilityProp ?? internalVisibility;
+  const canvasVisibility = useMemo(
+    () => showLoadCase ? visibility : { ...visibility, loads: false },
+    [showLoadCase, visibility],
+  );
   const lastDeleteToken = useRef(deleteToken);
   const setVisibility = (next: Frame3DVisibility) => {
     if (onVisibilityChange) onVisibilityChange(next);
@@ -170,7 +175,7 @@ export default function Frame3DEditor({
           fitToken={fitToken + fitRequest}
           viewRequest={viewRequest}
           currentView={currentView}
-          visibility={visibility}
+          visibility={canvasVisibility}
           structuralGrid={structuralGrid}
           gridSpacingM={gridSpacingM}
           result={result}

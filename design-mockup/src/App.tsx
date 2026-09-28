@@ -342,6 +342,9 @@ function App() {
   const frame3dSolveGenerationRef = useRef(0);
   const [visibility3DOpen, setVisibility3DOpen] = useState(false);
   const [frame3dVisibility, setFrame3dVisibility] = useState(readFrame3DVisibility);
+  // De Model-tab is een weergavestand; het tonen van lastsymbolen is een
+  // afzonderlijke keuze in Weergave en mag deze tabselectie niet veranderen.
+  const [frame3dShowLoadCase, setFrame3dShowLoadCase] = useState(true);
   const [frame3dViewSets, setFrame3dViewSets] = useState<Frame3DViewSet[]>([]);
   useEffect(() => saveFrame3DVisibility(frame3dVisibility), [frame3dVisibility]);
   useEffect(() => {
@@ -2577,11 +2580,12 @@ function App() {
               onVisibilityClose={() => setVisibility3DOpen(false)}
               visibility={frame3dVisibility}
               onVisibilityChange={setFrame3dVisibility}
+              showLoadCase={frame3dShowLoadCase}
               structuralGrid={fem.structuralGrid}
               gridSpacingM={grid.spacingMm / 1000}
-              result={frame3dResult}
-              checks={frame3dChecks}
-              concreteChecks={frame3dConcreteChecks}
+              result={frame3dShowLoadCase ? frame3dResult : null}
+              checks={frame3dShowLoadCase ? frame3dChecks : null}
+              concreteChecks={frame3dShowLoadCase ? frame3dConcreteChecks : null}
               solving={solverStatus.kind === "rekenen"}
               solveError={frame3dSolveError}
               activeLoadCaseId={fem.activeLoadCaseId}
@@ -2996,9 +3000,9 @@ function App() {
                     calculationModel={frame3dCalculationModel}
                     selection={frame3dSelection}
                     setSelection={setFrame3dSelection}
-                    result={frame3dResult}
-                    checks={frame3dChecks}
-                    concreteChecks={frame3dConcreteChecks}
+                    result={frame3dShowLoadCase ? frame3dResult : null}
+                    checks={frame3dShowLoadCase ? frame3dChecks : null}
+                    concreteChecks={frame3dShowLoadCase ? frame3dConcreteChecks : null}
                     checksRunning={frame3dChecksRunning}
                     checksError={frame3dChecksError}
                     activeTab={treeTab}
@@ -3119,9 +3123,9 @@ function App() {
                     model={frame3d}
                     selection={frame3dSelection}
                     onChange={setFrame3d}
-                    result={frame3dResult}
-                    checks={frame3dChecks}
-                    concreteChecks={frame3dConcreteChecks}
+                    result={frame3dShowLoadCase ? frame3dResult : null}
+                    checks={frame3dShowLoadCase ? frame3dChecks : null}
+                    concreteChecks={frame3dShowLoadCase ? frame3dConcreteChecks : null}
                     checksRunning={frame3dChecksRunning}
                     checksError={frame3dChecksError}
                     loadEditorRequest={frame3dLoadEditorRequest}
@@ -3224,7 +3228,7 @@ function App() {
           activeLoadCaseId={fem.activeLoadCaseId}
           setActiveLoadCaseId={(id) => {
             fem.setActiveLoadCaseId(id);
-            setFrame3dVisibility((value) => ({ ...value, loads: true }));
+            setFrame3dShowLoadCase(true);
             setResultsTabActive(false);
             setTreeTab("project");
           }}
@@ -3235,10 +3239,10 @@ function App() {
             ...(frame3dCalculationModel.memberPointLoads ?? []).map((load) => ({ id: load.id, type: "pointForce" as const, caseId: load.caseId ?? 1 })),
             ...(frame3dCalculationModel.thermalLoads ?? []).map((load) => ({ id: load.id, type: "thermal" as const, caseId: load.caseId ?? 1 })),
           ]}
-          showLoads={frame3dVisibility.loads}
-          setShowLoads={(loads) => {
-            setFrame3dVisibility((value) => ({ ...value, loads }));
-            if (!loads) {
+          showLoads={frame3dShowLoadCase}
+          setShowLoads={(showLoadCase) => {
+            setFrame3dShowLoadCase(showLoadCase);
+            if (!showLoadCase) {
               setResultsTabActive(false);
               setTreeTab("project");
             }
@@ -3248,7 +3252,7 @@ function App() {
           onShowResults={() => {
             setResultsTabActive(true);
             setTreeTab("results");
-            setFrame3dVisibility((value) => ({ ...value, loads: true }));
+            setFrame3dShowLoadCase(true);
           }}
         />
       ) : (
