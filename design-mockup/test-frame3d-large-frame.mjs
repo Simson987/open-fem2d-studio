@@ -139,6 +139,26 @@ const distributed = solve("linear", 3);
 check(distributed.result, { fx: 0, fy: 0, fz: 72 }, { mx: 432, my: -324, mz: 0 }, "verdeelde liggerlast");
 assert.equal(distributed.balance.ok, true, "ook de lokale lijnlast sluit na omrekening naar globale assen");
 assert.ok(distributed.balance.maxMomentImbalanceKnm < 1e-3, "de lijnlast gebruikt zijn exacte aangrijpingspunt");
+const allLinear = solve("linear", new Map([[1, 1], [2, 1], [3, 1]]));
+check(allLinear.result, { fx: -32, fy: 0, fz: 392 },
+  { mx: 2352, my: -1988, mz: 192 }, "lineaire combinatie van drie belastinggevallen");
+assert.equal(allLinear.balance.ok, true, "ook het gecombineerde lineaire evenwicht sluit");
+for (const [index, response] of allLinear.result.displacements.entries()) {
+  const cases = [gravity, lateral, distributed].map(({ result }) => result.displacements[index]);
+  assert.equal(response.nodeId, cases[0].nodeId);
+  for (const axis of ["ux", "uy", "uz", "rx", "ry", "rz"]) {
+    close(response[axis], cases.reduce((value, item) => value + item[axis], 0), 1e-8,
+      `lineaire superpositie knoop ${response.nodeId}, ${axis}`);
+  }
+}
+for (const [index, response] of allLinear.result.reactions.entries()) {
+  const cases = [gravity, lateral, distributed].map(({ result }) => result.reactions[index]);
+  assert.equal(response.nodeId, cases[0].nodeId);
+  for (const axis of ["fx", "fy", "fz", "mx", "my", "mz"]) {
+    close(response[axis], cases.reduce((value, item) => value + item[axis], 0), 1e-5,
+      `lineaire superpositie reactie steun ${response.nodeId}, ${axis}`);
+  }
+}
 const combined = solve("p-delta", new Map([[1, 1], [2, 1]]));
 assert.equal(combined.result.displacements.length, 48);
 assert.equal(combined.result.memberForces.length, 104);
@@ -153,8 +173,8 @@ const secondOrderMomentImbalanceKnm = Object.fromEntries(
 
 console.log(JSON.stringify({
   model: { nodes: 48, beams: 104, supports: 16, nodalLoads: 32, memberLoads: 12 },
-  cases: [gravity, lateral, distributed, combined].map(({ result, elapsedMs }, index) => ({
-    name: ["daklast", "horizontaal", "liggerlast", "combinatie tweede orde"][index],
+  cases: [gravity, lateral, distributed, allLinear, combined].map(({ result, elapsedMs }, index) => ({
+    name: ["daklast", "horizontaal", "liggerlast", "combinatie lineair", "combinatie tweede orde"][index],
     elapsedMs: +elapsedMs.toFixed(1),
     relativeResidual: result.equilibrium?.relativeResidual,
     secondOrder: result.secondOrder,

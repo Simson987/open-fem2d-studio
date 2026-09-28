@@ -379,6 +379,21 @@ const BUNDEL_TESTS = new Set([
  * vergeten regel.
  */
 const ALLEEN_BRON = new Map([
+  // De 3D-proeven raken React/Three, de projectadapter of de aparte Rust-kern.
+  // Deze modules zitten niet in de 2D-sidecarbundel.
+  ...[
+    "frame3d-concrete-check", "frame3d-conditions", "frame3d-conversion",
+    "frame3d-current", "frame3d-displacement", "frame3d-force-stations",
+    "frame3d-history", "frame3d-large-frame", "frame3d-member-load",
+    "frame3d-plates-views", "frame3d-profile-geometry", "frame3d-report-views",
+    "frame3d-steel-check", "frame3d-transform", "frame3d-utilization",
+  ].map((name) => [name, "3D-app, Three-weergave of aparte Rust-kern; geen module van de 2D-sidecarbundel."]),
+  ["aluminium-materiaal", "Materiaalbibliotheek en doorsnedeadapter buiten de sidecarbarrel."],
+  ["aluminium-solver-verificatie", "Bouwt het model met modelNaarSolverInput, buiten de sidecarbarrel."],
+  ["aluminium-voorspanning-verificatie", "Aluminium- en voorspancontrole buiten de sidecarbarrel."],
+  ["drie-lagen-beton-verificatie", "Specifieke betontoets buiten de sidecarbarrel."],
+  ["ifc-3d", "3D-projectopslag en IFC-export buiten de sidecarbarrel."],
+  ["toets-resultaat-3d", "3D-toetsresultaatcontract buiten de 2D-sidecarbarrel."],
   ["beton-bediening-ui", "React-interactie voor wapeningsselectie, sleepvoorbeelden en doorsnedebediening in Chromium; geen sidecarcode."],
   ["reken-ui", "React-interactie voor resultaatselectie, meldingen en het toetsingspaneel; geen sidecarcode."],
   ["rekengang-generatie", "Asynchrone rekenregie van de app met afgeschermde React- en native IO-grenzen; niet beschikbaar in de sidecarbundel."],
