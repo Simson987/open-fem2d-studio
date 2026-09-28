@@ -86,50 +86,100 @@ export interface Frame3DSolveResult {
   secondOrder?: { iterations: number; converged: boolean; stable: boolean; maxAmplification: number };
   buckling: Frame3DBuckling;
   equilibrium?: { relativeResidual: number; residualOk: boolean; maxImbalanceKn: number; equilibriumOk: boolean };
-  /** Onafhankelijke som van aangebrachte krachten en oplegreacties in globale assen. */
-  forceBalance?: { imbalanceKn: [number, number, number]; maxImbalanceKn: number; toleranceKn: number; ok: boolean };
+  /** Onafhankelijke globale kracht- en momentensom, inclusief hefboomarmen om de oorsprong. */
+  forceBalance?: {
+    imbalanceKn: [number, number, number]; maxImbalanceKn: number; toleranceKn: number;
+    momentImbalanceKnm: [number, number, number]; maxMomentImbalanceKnm: number; momentToleranceKnm: number;
+    ok: boolean;
+  };
   solverPath?: string;
   diagnostics: string[];
 }
 
-/** Controleer de globale krachtensom ook wanneer de P-Delta-kern geen eigen evenwichtsobject levert. */
+/** Controleer de globale statica ook wanneer de P-Delta-kern geen eigen evenwichtsobject levert. */
 export function frame3DGlobalForceBalance(
   input: ReturnType<typeof buildFrame3DSolveRequest>,
   result: Pick<Frame3DSolveResult, "reactions">,
 ): NonNullable<Frame3DSolveResult["forceBalance"]> {
   const applied: [number, number, number] = [0, 0, 0];
+  const appliedMoment: [number, number, number] = [0, 0, 0];
   const nodeById = new Map(input.nodes.map((node) => [node.id, node]));
   const memberById = new Map(input.members.map((member) => [member.id, member]));
-  const addLocalMemberForce = (memberId: number, fy: number, fz: number) => {
+  type Vector3 = [number, number, number];
+  const cross = (a: Vector3, b: Vector3): Vector3 => [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
+  const add = (target: Vector3, value: Vector3) => {
+    for (let axis = 0; axis < 3; axis++) target[axis] += value[axis];
+  };
+  const addForceAt = (force: Vector3, position: Vector3, couple: Vector3 = [0, 0, 0]) => {
+    add(applied, force);
+    add(appliedMoment, cross(position, force));
+    add(appliedMoment, couple);
+  };
+  const memberGeometry = (memberId: number) => {
     const member = memberById.get(memberId);
     const start = member && nodeById.get(member.startNodeId);
     const end = member && nodeById.get(member.endNodeId);
     if (!start || !end) throw new Error(`Staaf ${memberId} ontbreekt bij de onafhankelijke krachtensom.`);
-    const { ey, ez } = frame3DMemberAxes(start, end, member?.rollAngleRad ?? 0);
-    for (let axis = 0; axis < 3; axis++) applied[axis] += fy * ey[axis] + fz * ez[axis];
+    return { start, ...frame3DMemberAxes(start, end, member?.rollAngleRad ?? 0) };
+  };
+  const localVector = (ey: readonly number[], ez: readonly number[], fy: number, fz: number): Vector3 => [
+    fy * ey[0] + fz * ez[0], fy * ey[1] + fz * ez[1], fy * ey[2] + fz * ez[2],
+  ];
+  const memberPoint = (start: { x: number; y: number; z: number }, ex: readonly number[], distance: number): Vector3 => [
+    start.x + distance * ex[0], start.y + distance * ex[1], start.z + distance * ex[2],
+  ];
+  const addLocalMemberForce = (memberId: number, fy: number, fz: number, positionM: number) => {
+    const { start, ex, ey, ez } = memberGeometry(memberId);
+    addForceAt(localVector(ey, ez, fy, fz), memberPoint(start, ex, positionM));
   };
   for (const load of input.nodalLoads) {
-    applied[0] += load.fx;
-    applied[1] += load.fy;
-    applied[2] += load.fz;
+    const node = nodeById.get(load.nodeId);
+    if (!node) throw new Error(`Knoop ${load.nodeId} ontbreekt bij de onafhankelijke krachtensom.`);
+    addForceAt([load.fx, load.fy, load.fz], [node.x, node.y, node.z], [load.mx, load.my, load.mz]);
   }
   for (const load of input.memberLoads) {
+    const { start, ex, ey, ez } = memberGeometry(load.memberId);
     const length = load.endPositionM - load.startPositionM;
-    addLocalMemberForce(load.memberId,
-      (load.qyStartKnPerM + load.qyEndKnPerM) * length / 2,
-      (load.qzStartKnPerM + load.qzEndKnPerM) * length / 2);
+    const fy = (load.qyStartKnPerM + load.qyEndKnPerM) * length / 2;
+    const fz = (load.qzStartKnPerM + load.qzEndKnPerM) * length / 2;
+    const force = localVector(ey, ez, fy, fz);
+    add(applied, force);
+    add(appliedMoment, cross([start.x, start.y, start.z], force));
+    // ∫s·q(s)ds over a linearly varying load; a is measured from the member start.
+    const sy = load.startPositionM * fy
+      + length ** 2 * (load.qyStartKnPerM / 6 + load.qyEndKnPerM / 3);
+    const sz = load.startPositionM * fz
+      + length ** 2 * (load.qzStartKnPerM / 6 + load.qzEndKnPerM / 3);
+    add(appliedMoment, cross(ex as Vector3, localVector(ey, ez, sy, sz)));
   }
-  for (const load of input.memberPointLoads) addLocalMemberForce(load.memberId, load.pyKn, load.pzKn);
+  for (const load of input.memberPointLoads) addLocalMemberForce(load.memberId, load.pyKn, load.pzKn, load.positionM);
   const imbalanceKn: [number, number, number] = [...applied];
+  const momentImbalanceKnm: [number, number, number] = [...appliedMoment];
   for (const reaction of result.reactions) {
+    const node = nodeById.get(reaction.nodeId);
+    if (!node) throw new Error(`Reactieknoop ${reaction.nodeId} ontbreekt bij de onafhankelijke momentensom.`);
     imbalanceKn[0] += reaction.fx;
     imbalanceKn[1] += reaction.fy;
     imbalanceKn[2] += reaction.fz;
+    add(momentImbalanceKnm, cross([node.x, node.y, node.z], [reaction.fx, reaction.fy, reaction.fz]));
+    add(momentImbalanceKnm, [reaction.mx, reaction.my, reaction.mz]);
   }
   const maxImbalanceKn = Math.max(...imbalanceKn.map(Math.abs));
+  const maxMomentImbalanceKnm = Math.max(...momentImbalanceKnm.map(Math.abs));
   const scaleKn = Math.max(1, ...applied.map(Math.abs));
+  const scaleKnm = Math.max(1, ...appliedMoment.map(Math.abs));
   const toleranceKn = 1e-5 * scaleKn;
-  return { imbalanceKn, maxImbalanceKn, toleranceKn, ok: Number.isFinite(maxImbalanceKn) && maxImbalanceKn <= toleranceKn };
+  const momentToleranceKnm = 1e-5 * scaleKnm;
+  return {
+    imbalanceKn, maxImbalanceKn, toleranceKn,
+    momentImbalanceKnm, maxMomentImbalanceKnm, momentToleranceKnm,
+    ok: Number.isFinite(maxImbalanceKn) && Number.isFinite(maxMomentImbalanceKnm)
+      && maxImbalanceKn <= toleranceKn && maxMomentImbalanceKnm <= momentToleranceKnm,
+  };
 }
 
 /**

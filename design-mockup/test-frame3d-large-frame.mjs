@@ -73,8 +73,19 @@ const localForceInput = {
     qzStartKnPerM: 0, qzEndKnPerM: 0, startPositionM: 0, endPositionM: 3 }],
   memberPointLoads: [{ id: 1, memberId: xBeam.id, pyKn: 0, pzKn: -5, positionM: 1.5 }],
 };
-assert.deepEqual(frame3DGlobalForceBalance(localForceInput, { reactions: [] }).imbalanceKn,
+const localBalance = frame3DGlobalForceBalance(localForceInput, { reactions: [] });
+assert.deepEqual(localBalance.imbalanceKn,
   [0, 6, -5], "een lineair variërende qy en een lokale pz-puntlast tellen in globale assen op");
+assert.deepEqual(localBalance.momentImbalanceKnm,
+  [-42, 7.5, 10.5], "dezelfde lasten hebben hun exacte hefboomarm om de globale oorsprong");
+const momentOnlyMismatch = frame3DGlobalForceBalance({
+  ...localForceInput,
+  nodalLoads: [{ id: 1, nodeId: xBeam.endNodeId, fx: 0, fy: 0, fz: -10, mx: 0, my: 0, mz: 0 }],
+  memberLoads: [], memberPointLoads: [],
+}, { reactions: [{ nodeId: xBeam.startNodeId, fx: 0, fy: 0, fz: 10, mx: 0, my: 0, mz: 0 }] });
+assert.deepEqual(momentOnlyMismatch.imbalanceKn, [0, 0, 0]);
+assert.equal(momentOnlyMismatch.momentImbalanceKnm[1], 30);
+assert.equal(momentOnlyMismatch.ok, false, "een sluitende krachtensom mag een fout moment niet verhullen");
 
 const solverBinary = process.platform === "win32" ? "frame3d-solver.exe" : "frame3d-solver";
 const solverPath = fileURLToPath(new URL(`../src-tauri/target/debug/${solverBinary}`, import.meta.url));
@@ -116,15 +127,18 @@ const check = (result, forces, moments, label) => {
 const gravity = solve("linear", 1);
 check(gravity.result, { fx: 0, fy: 0, fz: 320 }, { mx: 1920, my: -1440, mz: 0 }, "daklast");
 assert.equal(gravity.balance.ok, true, "de onafhankelijke krachtensom sluit bij daklast");
+assert.ok(gravity.balance.maxMomentImbalanceKnm < 1e-3, "ook het globale moment sluit bij daklast");
 for (const reaction of gravity.result.reactions) {
   close(reaction.fz, 20, 1e-5, `symmetrische verticale reactie steun ${reaction.nodeId}`);
 }
 const lateral = solve("linear", 2);
 check(lateral.result, { fx: -32, fy: 0, fz: 0 }, { mx: 0, my: -224, mz: 192 }, "horizontaal");
 assert.equal(lateral.balance.ok, true, "de onafhankelijke krachtensom sluit bij horizontale last");
+assert.ok(lateral.balance.maxMomentImbalanceKnm < 1e-3, "ook het globale moment sluit bij horizontale last");
 const distributed = solve("linear", 3);
 check(distributed.result, { fx: 0, fy: 0, fz: 72 }, { mx: 432, my: -324, mz: 0 }, "verdeelde liggerlast");
 assert.equal(distributed.balance.ok, true, "ook de lokale lijnlast sluit na omrekening naar globale assen");
+assert.ok(distributed.balance.maxMomentImbalanceKnm < 1e-3, "de lijnlast gebruikt zijn exacte aangrijpingspunt");
 const combined = solve("p-delta", new Map([[1, 1], [2, 1]]));
 assert.equal(combined.result.displacements.length, 48);
 assert.equal(combined.result.memberForces.length, 104);
@@ -134,6 +148,8 @@ assert.equal(combined.result.secondOrder?.converged, true, "tweede-orde-iteratie
 assert.equal(combined.result.secondOrder?.stable, true, "grote raamwerk blijft stabiel onder de gekozen lasten");
 const secondOrderForceImbalanceKn = Object.fromEntries(
   ["fx", "fy", "fz"].map((axis, index) => [axis, combined.balance.imbalanceKn[index]]));
+const secondOrderMomentImbalanceKnm = Object.fromEntries(
+  ["mx", "my", "mz"].map((axis, index) => [axis, combined.balance.momentImbalanceKnm[index]]));
 
 console.log(JSON.stringify({
   model: { nodes: 48, beams: 104, supports: 16, nodalLoads: 32, memberLoads: 12 },
@@ -144,5 +160,6 @@ console.log(JSON.stringify({
     secondOrder: result.secondOrder,
   })),
   secondOrderForceImbalanceKn,
+  secondOrderMomentImbalanceKnm,
   secondOrderForceBalanceOk: combined.balance.ok,
 }, null, 2));

@@ -2146,11 +2146,13 @@ function App() {
           .map(([, value]) => value.forceBalance)
           .filter((balance): balance is NonNullable<Frame3DSolveResult["forceBalance"]> => balance?.ok === false);
         if (unbalanced.length > 0) {
-          const maximum = Math.max(...unbalanced.map((balance) => balance.maxImbalanceKn));
+          const maximumForce = Math.max(...unbalanced.map((balance) => balance.maxImbalanceKn));
+          const maximumMoment = Math.max(...unbalanced.map((balance) => balance.maxMomentImbalanceKnm ?? 0));
           setFrame3dChecks(null);
           setFrame3dConcreteChecks(null);
           setFrame3dChecksError(
-            `geblokkeerd — krachtensom in ${unbalanced.length} resultaten wijkt tot ${maximum.toFixed(3)} kN af.`,
+            `geblokkeerd — globaal evenwicht in ${unbalanced.length} resultaten wijkt af: ` +
+            `kracht maximaal ${maximumForce.toFixed(3)} kN, moment maximaal ${maximumMoment.toFixed(3)} kNm.`,
           );
           return;
         }

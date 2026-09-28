@@ -211,7 +211,9 @@ export default function Frame3DEditor({
           <span data-frame3d-solver-status={solveError ? "error" : solving ? "solving" : result?.forceBalance?.ok === false ? "warning" : result ? "solved" : "ready"}>
             {solveError ? solveError
               : solving ? t("frame3d.solving")
-              : result?.forceBalance?.ok === false ? `Krachtensom wijkt ${result.forceBalance.maxImbalanceKn.toFixed(3)} kN af · resultaat niet geverifieerd`
+              : result?.forceBalance?.ok === false ? `Evenwicht wijkt af: ${result.forceBalance.maxImbalanceKn.toFixed(3)} kN` +
+                (Number.isFinite(result.forceBalance.maxMomentImbalanceKnm) ? ` / ${result.forceBalance.maxMomentImbalanceKnm.toFixed(3)} kNm` : "") +
+                " · resultaat niet geverifieerd"
               : result ? t("frame3d.solved", { engine: result.engine.name, value: (maxDisplacement * 1000).toPrecision(4) })
               : t("frame3d.readyToCalculate")}
           </span>

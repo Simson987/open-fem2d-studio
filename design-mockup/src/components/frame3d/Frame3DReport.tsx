@@ -167,7 +167,8 @@ export default function Frame3DReport({
               <div><span>Convergentie</span><strong>{result.secondOrder ? `${result.secondOrder.iterations} iteratie${result.secondOrder.iterations === 1 ? "" : "s"}` : "direct"}</strong></div>
               <div><span>Eerste knikfactor αcr</span><strong>{firstMode ? number(firstMode.loadFactor) : "n.v.t."}</strong></div>
               <div><span>Evenwicht</span><strong className={equilibrium?.equilibriumOk === true && result.forceBalance?.ok !== false ? "frame3d-report-good" : "frame3d-report-bad"}>{equilibrium?.equilibriumOk === true && result.forceBalance?.ok !== false ? "akkoord" : equilibrium?.equilibriumOk === false || result.forceBalance?.ok === false ? "afwijking" : "niet geverifieerd"}</strong></div>
-              {result.forceBalance && <div><span>Globale krachtensom</span><strong className={result.forceBalance.ok ? "frame3d-report-good" : "frame3d-report-bad"}>{result.forceBalance.ok ? "akkoord" : `${number(result.forceBalance.maxImbalanceKn, 4)} kN afwijking`}</strong></div>}
+              {result.forceBalance && <div><span>Globale krachtensom</span><strong className={result.forceBalance.maxImbalanceKn <= result.forceBalance.toleranceKn ? "frame3d-report-good" : "frame3d-report-bad"}>{result.forceBalance.maxImbalanceKn <= result.forceBalance.toleranceKn ? "akkoord" : `${number(result.forceBalance.maxImbalanceKn, 4)} kN afwijking`}</strong></div>}
+              {result.forceBalance && <div><span>Globale momentensom</span><strong className={result.forceBalance.maxMomentImbalanceKnm <= result.forceBalance.momentToleranceKnm ? "frame3d-report-good" : "frame3d-report-bad"}>{result.forceBalance.maxMomentImbalanceKnm === undefined ? "niet geverifieerd" : result.forceBalance.maxMomentImbalanceKnm <= result.forceBalance.momentToleranceKnm ? "akkoord" : `${number(result.forceBalance.maxMomentImbalanceKnm, 4)} kNm afwijking`}</strong></div>}
               <div><span>Max. versterking</span><strong>{result.secondOrder ? number(result.secondOrder.maxAmplification) : "1,000"}</strong></div>
             </div>
           </section>
@@ -309,6 +310,7 @@ export default function Frame3DReport({
               <tr><th>Relatief evenwichtsresidu</th><td>{equilibrium ? number(equilibrium.relativeResidual, 8) : "niet beschikbaar"}</td></tr>
               <tr><th>Max. onbalans</th><td>{equilibrium ? `${number(equilibrium.maxImbalanceKn, 8)} kN` : "niet beschikbaar"}</td></tr>
               {result.forceBalance && <tr><th>Onafhankelijke krachtensom X/Y/Z</th><td>{result.forceBalance.imbalanceKn.map((value) => number(value, 5)).join(" / ")} kN (grens {number(result.forceBalance.toleranceKn, 5)} kN)</td></tr>}
+              {result.forceBalance?.momentImbalanceKnm && <tr><th>Onafhankelijke momentensom X/Y/Z</th><td>{result.forceBalance.momentImbalanceKnm.map((value) => number(value, 5)).join(" / ")} kNm (grens {number(result.forceBalance.momentToleranceKnm, 5)} kNm)</td></tr>}
             </tbody></table>
           </section>
 
