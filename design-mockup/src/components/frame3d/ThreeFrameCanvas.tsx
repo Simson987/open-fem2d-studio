@@ -29,6 +29,7 @@ import {
 } from "./frame3dSelection";
 import type { Frame3DCameraState } from "./frame3dViewSets";
 import { createFrame3DPlateGeometry } from "./frame3dPlateGeometry";
+import { sampleCircularArc3D } from "./frame3dCircularArc";
 import type { Frame3DEditMeta } from "./frame3dHistory";
 import { useSnapInstellingen, type SnapInstellingen, type SnapSoort } from "../../hooks/useSnapInstellingen";
 import { frame3DGridLayout } from "./frame3dGrid";
@@ -289,6 +290,7 @@ interface Props {
   /** Zelfde geometrie met vluchtige automatische lasten, alleen voor symbolen. */
   conditionModel?: Frame3DModel;
   onChange: (model: Frame3DModel, meta?: Frame3DEditMeta) => void;
+  onDrawError?: (message: string | null) => void;
   tool: Frame3DTool;
   selection: Frame3DSelection;
   onSelect: (selection: Frame3DSelection) => void;
@@ -767,7 +769,7 @@ function resultScale(model: Frame3DModel, result: Frame3DSolveResult): number {
   return maxDisplacement > 1e-15 ? Math.min(10_000, modelSize * 0.12 / maxDisplacement) : 1;
 }
 
-export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool, selection, onSelect, fitToken, visibility, viewRequest, currentView = "iso", structuralGrid, gridSpacingM = 0.5, result, utilizations = [], activeLoadCaseId, cameraRequest, onCameraChange }: Props) {
+export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDrawError, tool, selection, onSelect, fitToken, visibility, viewRequest, currentView = "iso", structuralGrid, gridSpacingM = 0.5, result, utilizations = [], activeLoadCaseId, cameraRequest, onCameraChange }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneState | null>(null);
   const selectRef = useRef(onSelect);
@@ -834,6 +836,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
   }
   const changeRef = useRef(onChange);
   changeRef.current = onChange;
+  const drawErrorRef = useRef(onDrawError);
+  drawErrorRef.current = onDrawError;
   const toolRef = useRef(tool);
   toolRef.current = tool;
   // De actieve invoerrichting wordt in dezelfde effect bijgewerkt als de
@@ -1328,11 +1332,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           if (segment.kind === "arc") {
             const controlNode = nodeByIdRef.current!.get(segment.controlNodeId);
             if (!controlNode) continue;
-            const points = new THREE.QuadraticBezierCurve3(
-              start,
-              new THREE.Vector3(controlNode.x, controlNode.y, controlNode.z),
-              end,
-            ).getPoints(24);
+            const points = sampleCircularArc3D(start, controlNode, end)?.map((value) =>
+              new THREE.Vector3(value.x, value.y, value.z)) ?? [start, end];
             for (let index = 0; index < points.length - 1; index += 1) {
               pushSegment(points[index], points[index + 1]);
             }
@@ -1387,9 +1388,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         let points: THREE.Vector3[];
         if (isArcBoundaryTool(activeTool) && sketch.arcControlNodeId !== null) {
           const control = nodeByIdRef.current!.get(sketch.arcControlNodeId);
-          points = control
-            ? new THREE.QuadraticBezierCurve3(start, new THREE.Vector3(control.x, control.y, control.z), target.position).getPoints(24)
-            : [start, target.position];
+          const arc = control ? sampleCircularArc3D(start, control, target.position) : null;
+          points = arc?.map((value) => new THREE.Vector3(value.x, value.y, value.z))
+            ?? [start, target.position];
         } else {
           points = [start, target.position];
         }
@@ -1645,7 +1646,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
                 const addedPlate = next.plates?.[next.plates.length - 1];
                 commitModel(next, { plate: addedPlate });
                 committed = true;
+                drawErrorRef.current?.(null);
                 if (addedPlate) selectRef.current({ type: "plate", id: addedPlate.id });
+              } catch (error) {
+                drawErrorRef.current?.(error instanceof Error ? error.message : String(error));
               } finally {
                 plateDraftRef.current = emptyPlateSketch();
                 if (committed) {
@@ -1701,7 +1705,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
                 const updatedPlate = next.plates?.find((plate) => plate.id === openingPlateId);
                 commitModel(next, { plate: updatedPlate, replacedPlateId: openingPlateId });
                 committed = true;
+                drawErrorRef.current?.(null);
                 selectRef.current({ type: "plate", id: openingPlateId });
+              } catch (error) {
+                drawErrorRef.current?.(error instanceof Error ? error.message : String(error));
               } finally {
                 openingDraftRef.current = emptyPlateSketch();
                 if (committed) {

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Frame3DModel, Frame3DNode, Frame3DPlate, Frame3DPlateBoundarySegment } from "./frame3dModel";
+import { circularArcThroughPoints2D } from "./frame3dCircularArc";
 
 export interface Frame3DPlateGeometry {
   geometry: THREE.ExtrudeGeometry;
@@ -54,10 +55,13 @@ function boundaryPath(
     if (!endNode) return null;
     const end = project(endNode);
     if (segment.kind === "arc") {
+      const startNode = byId.get(segment.startNodeId);
       const controlNode = byId.get(segment.controlNodeId);
-      if (!controlNode) return null;
+      if (!startNode || !controlNode) return null;
       const control = project(controlNode);
-      path.quadraticCurveTo(control.x, control.y, end.x, end.y);
+      const arc = circularArcThroughPoints2D(project(startNode), control, end);
+      if (!arc) return null;
+      path.absarc(arc.center.x, arc.center.y, arc.radius, arc.startAngle, arc.endAngle, arc.clockwise);
     } else {
       path.lineTo(end.x, end.y);
     }

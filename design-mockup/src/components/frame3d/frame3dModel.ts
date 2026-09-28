@@ -1,5 +1,6 @@
 import type { BeamCheckConfig } from "../fem/femTypes";
 import { dichtheidVanMateriaal, G, resolveSection } from "../../lib/sectionResolver";
+import { sampleCircularArc3D, type ArcPoint3D } from "./frame3dCircularArc";
 
 /** Geometry for the 3D workspace. Coordinates are metres; Z is vertical, like 2D. */
 export interface Frame3DNode {
@@ -464,7 +465,7 @@ function readPlateNodeLoop(value: unknown, nodeIds: Set<number>, label: string):
 }
 
 function readPlateBoundary(
-  value: unknown, loop: number[], nodeIds: Set<number>, label: string,
+  value: unknown, loop: number[], nodeIds: Set<number>, nodes: ReadonlyMap<number, Frame3DNode>, label: string,
 ): Frame3DPlateBoundarySegment[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || value.length < 2) throw new Error(`${label} bevat geen geldige getekende contour.`);
@@ -482,6 +483,17 @@ function readPlateBoundary(
       if (!nodeIds.has(controlNodeId) || !loop.includes(controlNodeId) ||
           controlNodeId === startNodeId || controlNodeId === endNodeId) {
         throw new Error(`${label} bevat een boog met een ongeldige stuurknoop.`);
+      }
+      const start = nodes.get(startNodeId)!, control = nodes.get(controlNodeId)!, end = nodes.get(endNodeId)!;
+      const first = [control.x - start.x, control.y - start.y, control.z - start.z];
+      const second = [end.x - start.x, end.y - start.y, end.z - start.z];
+      const cross = Math.hypot(
+        first[1] * second[2] - first[2] * second[1],
+        first[2] * second[0] - first[0] * second[2],
+        first[0] * second[1] - first[1] * second[0],
+      );
+      if (cross <= 1e-12 * Math.hypot(...first) * Math.hypot(...second)) {
+        throw new Error(`${label} bevat een boog waarvan begin-, stuur- en eindpunt op één lijn liggen.`);
       }
       return { kind: "arc", startNodeId, controlNodeId, endNodeId };
     }
@@ -515,6 +527,75 @@ function validatePlatePlane(nodes: Frame3DNode[], nodeIds: number[], label: stri
   }
 }
 
+/** An opening must lie strictly in the plate; a touching edge is not a meshable hole. */
+function validateOpeningInsidePlate(
+  nodes: ReadonlyMap<number, Frame3DNode>,
+  plateLoop: readonly number[], plateBoundary: readonly Frame3DPlateBoundarySegment[] | undefined,
+  openingLoop: readonly number[], openingBoundary: readonly Frame3DPlateBoundarySegment[] | undefined,
+  label: string,
+): void {
+  const contour = (loop: readonly number[], boundary: readonly Frame3DPlateBoundarySegment[] | undefined) => {
+    if (!boundary) return loop.map((id) => nodes.get(id)!);
+    const points: ArcPoint3D[] = [nodes.get(boundary[0].startNodeId)!];
+    for (const segment of boundary) {
+      if (segment.kind === "line") points.push(nodes.get(segment.endNodeId)!);
+      else {
+        const arc = sampleCircularArc3D(
+          nodes.get(segment.startNodeId)!, nodes.get(segment.controlNodeId)!, nodes.get(segment.endNodeId)!, 32,
+        );
+        if (!arc) throw new Error(`${label} bevat een ongeldige cirkelboog.`);
+        points.push(...arc.slice(1));
+      }
+    }
+    points.pop(); // de laatste knoop herhaalt de eerste bij een gesloten contour
+    return points;
+  };
+  const outer = contour(plateLoop, plateBoundary);
+  const opening = contour(openingLoop, openingBoundary);
+  const origin = nodes.get(plateLoop[0])!;
+  let normal: [number, number, number] | null = null;
+  for (let index = 1; index < plateLoop.length - 1 && !normal; index += 1) {
+    const a = nodes.get(plateLoop[index])!, b = nodes.get(plateLoop[index + 1])!;
+    const ax = a.x - origin.x, ay = a.y - origin.y, az = a.z - origin.z;
+    const bx = b.x - origin.x, by = b.y - origin.y, bz = b.z - origin.z;
+    const cross: [number, number, number] = [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx];
+    if (Math.hypot(...cross) > 1e-12) normal = cross;
+  }
+  if (!normal) throw new Error(`${label} heeft geen vlakke buitencontour.`);
+  const norm = Math.hypot(...normal);
+  const drop = Math.abs(normal[0]) > Math.abs(normal[1])
+    ? Math.abs(normal[0]) > Math.abs(normal[2]) ? "x" : "z"
+    : Math.abs(normal[1]) > Math.abs(normal[2]) ? "y" : "z";
+  const project = (point: ArcPoint3D) => drop === "x" ? [point.y, point.z] as const
+    : drop === "y" ? [point.x, point.z] as const : [point.x, point.y] as const;
+  const outline = outer.map(project);
+  const span = outer.reduce((largest, point) => Math.max(largest,
+    Math.hypot(point.x - origin.x, point.y - origin.y, point.z - origin.z)), 1);
+  const tolerance = span * 1e-8;
+  const inside = (point: readonly [number, number]) => {
+    let contained = false;
+    for (let index = 0; index < outline.length; index += 1) {
+      const a = outline[index], b = outline[(index + 1) % outline.length];
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const lengthSquared = dx * dx + dy * dy;
+      const t = lengthSquared > 0
+        ? Math.max(0, Math.min(1, ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / lengthSquared)) : 0;
+      if (Math.hypot(point[0] - a[0] - t * dx, point[1] - a[1] - t * dy) <= tolerance) return false;
+      if ((a[1] > point[1]) !== (b[1] > point[1])
+        && point[0] < a[0] + (point[1] - a[1]) * dx / dy) contained = !contained;
+    }
+    return contained;
+  };
+  for (const point of [...opening, ...openingLoop.map((id) => nodes.get(id)!)]) {
+    const planeDistance = Math.abs(
+      (point.x - origin.x) * normal[0] + (point.y - origin.y) * normal[1]
+      + (point.z - origin.z) * normal[2]) / norm;
+    if (planeDistance > tolerance || !inside(project(point))) {
+      throw new Error(`${label} moet volledig binnen de plaat liggen, zonder de buitenrand te raken.`);
+    }
+  }
+}
+
 /** Reject malformed geometry at the file boundary instead of showing a partial model. */
 export function parseFrame3DModel(value: unknown): Frame3DModel {
   if (value === undefined) return { nodes: [], beams: [] };
@@ -537,6 +618,7 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
     nodes.push({ id, x: Number(node.x), y: Number(node.y), z: Number(node.z) });
     nodeIds.add(id);
   }
+  const nodeIndex = new Map(nodes.map((node) => [node.id, node]));
   const beams: Frame3DBeam[] = [];
   const beamIds = new Set<number>();
   for (const item of raw.beams) {
@@ -583,7 +665,7 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
     if (!Number.isSafeInteger(plate.id) || id <= 0 || plateIds.has(id)) throw new Error("Het 3D-model bevat een plaat met een ongeldige of dubbele id.");
     const loop = readPlateNodeLoop(plate.nodeIds, nodeIds, `3D-plaat ${id}`);
     validatePlatePlane(nodes, loop, `3D-plaat ${id}`);
-    const boundary = readPlateBoundary(plate.boundary, loop, nodeIds, `3D-plaat ${id}`);
+    const boundary = readPlateBoundary(plate.boundary, loop, nodeIds, nodeIndex, `3D-plaat ${id}`);
     const thicknessM = Number(plate.thicknessM ?? 0.2);
     const cornerRadiusM = Number(plate.cornerRadiusM ?? 0);
     if (!(thicknessM > 0) || !Number.isFinite(thicknessM) || cornerRadiusM < 0 || !Number.isFinite(cornerRadiusM)) {
@@ -599,7 +681,9 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
       if (!Number.isSafeInteger(opening.id) || openingId <= 0 || openingIds.has(openingId)) throw new Error(`3D-plaat ${id} bevat een opening met ongeldige of dubbele id.`);
       const openingLoop = readPlateNodeLoop(opening.nodeIds, nodeIds, `Opening ${openingId} van 3D-plaat ${id}`);
       validatePlatePlane(nodes, openingLoop, `Opening ${openingId} van 3D-plaat ${id}`);
-      const openingBoundary = readPlateBoundary(opening.boundary, openingLoop, nodeIds, `Opening ${openingId} van 3D-plaat ${id}`);
+      const openingBoundary = readPlateBoundary(opening.boundary, openingLoop, nodeIds, nodeIndex, `Opening ${openingId} van 3D-plaat ${id}`);
+      validateOpeningInsidePlate(nodeIndex, loop, boundary, openingLoop, openingBoundary,
+        `Opening ${openingId} van 3D-plaat ${id}`);
       const openingRadius = Number(opening.cornerRadiusM ?? 0);
       if (openingRadius < 0 || !Number.isFinite(openingRadius)) throw new Error(`Opening ${openingId} heeft een ongeldige randstraal.`);
       openings.push({ id: openingId, nodeIds: openingLoop,

@@ -118,6 +118,25 @@
 .frame3d-stage-header { top: 14px; }
 .frame3d-stage-header strong { font-size: 15px; }
 .frame3d-stage-header span { color: #64748b; }
+.frame3d-draw-error {
+  position: absolute;
+  z-index: 9;
+  top: 48px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid #fca5a5;
+  border-radius: 5px;
+  background: #fff1f2;
+  color: #991b1b;
+  font-size: 12px;
+  box-shadow: 0 2px 8px #7f1d1d1a;
+}
+.frame3d-draw-error button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 18px; }
 .frame3d-stage-footer {
   bottom: 14px;
   justify-content: space-between;

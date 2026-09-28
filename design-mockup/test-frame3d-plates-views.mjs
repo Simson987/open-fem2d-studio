@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from "three";
 import {
   addFrame3DPlate,
   addFrame3DPlateOpening,
@@ -9,6 +10,7 @@ import {
   updateFrame3DSurfaceLoad,
 } from "./src/components/frame3d/frame3dModel.ts";
 import { createFrame3DPlateGeometry } from "./src/components/frame3d/frame3dPlateGeometry.ts";
+import { circularArcThroughPoints2D, sampleCircularArc3D } from "./src/components/frame3d/frame3dCircularArc.ts";
 import { parseFrame3DViewSets } from "./src/components/frame3d/frame3dViewSets.ts";
 import { buildFrame3DSolveRequest } from "./src/components/frame3d/frame3dSolver.ts";
 import { DEFAULT_FRAME_3D_VISIBILITY } from "./src/components/frame3d/frame3dVisibility.ts";
@@ -34,6 +36,20 @@ assert.equal(withOpening.plates[0].openings.length, 1);
 const rendered = createFrame3DPlateGeometry(withOpening, withOpening.plates[0]);
 assert.ok(rendered?.geometry.attributes.position.count > 0, "plaat met afgeronde buitenrand en opening krijgt een mesh");
 assert.ok(Math.abs(rendered.normal.z) > 0.999, "horizontale plaat krijgt een verticale normaal");
+const plateMesh = new Mesh(rendered.geometry, new MeshBasicMaterial({ side: DoubleSide }));
+plateMesh.position.copy(rendered.position);
+plateMesh.quaternion.copy(rendered.quaternion);
+plateMesh.updateMatrixWorld(true);
+assert.equal(new Raycaster(new Vector3(3, 2, 2), new Vector3(0, 0, -1)).intersectObject(plateMesh).length, 0,
+  "een opening laat in de gemeshte plaat werkelijk een leeg vlak achter");
+assert.ok(new Raycaster(new Vector3(1, 2, 2), new Vector3(0, 0, -1)).intersectObject(plateMesh).length > 0,
+  "naast de opening blijft de plaat gesloten");
+assert.throws(() => addFrame3DPlateOpening(withPlate, 1, [1, 5, 6]), /binnen.*buitenrand/,
+  "een opening die de plaatrand raakt mag geen schijnbare uitsparing worden");
+assert.throws(() => parseFrame3DModel({ ...withOpening,
+  nodes: withOpening.nodes.map((node) => [5, 6, 7, 8].includes(node.id) ? { ...node, z: 1 } : node),
+}), /binnen.*buitenrand/,
+  "een vlakke opening op een andere hoogte hoort niet in deze plaatmesh");
 
 const curvedOpening = addFrame3DPlateOpening(rounded, 1, [5, 10, 6, 7, 8], {
   boundary: [
@@ -64,8 +80,26 @@ const curved = addFrame3DPlate(base, [1, 9, 2, 3, 4], {
   ],
 });
 assert.equal(curved.plates[0].boundary[0].kind, "arc", "de getekende boog blijft modeldata");
-assert.ok(createFrame3DPlateGeometry(curved, curved.plates[0])?.geometry.attributes.position.count > 0,
+const curvedMesh = createFrame3DPlateGeometry(curved, curved.plates[0]);
+assert.ok(curvedMesh?.geometry.attributes.position.count > 0,
   "een gemengde lijn-boogcontour krijgt een echte extrusie");
+const vertices = curvedMesh.geometry.getAttribute("position");
+const distanceToSteeringPoint = Math.min(...Array.from({ length: vertices.count }, (_, index) => {
+  const vertex = new Vector3(vertices.getX(index), vertices.getY(index), vertices.getZ(index))
+    .applyQuaternion(curvedMesh.quaternion).add(curvedMesh.position);
+  return Math.hypot(vertex.x - 3, vertex.y + 1.5);
+}));
+assert.ok(distanceToSteeringPoint < 1e-5,
+  `de cirkelboog moet door het aangeklikte stuurpunt lopen; afwijking ${distanceToSteeringPoint} m`);
+const arc3D = sampleCircularArc3D({ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 1 }, { x: 2, y: 0, z: 0 }, 24);
+assert.ok(arc3D && Math.hypot(arc3D[12].x - 1, arc3D[12].y, arc3D[12].z - 1) < 1e-12,
+  "de 3D-tekenpreview loopt ook in een verticaal vlak door het stuurpunt");
+const longArc = circularArcThroughPoints2D({ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 });
+assert.ok(longArc?.clockwise && Math.abs(longArc.sweep + 3 * Math.PI / 2) < 1e-12,
+  "een stuurpunt buiten de korte boog kiest de lange cirkelboog");
+assert.throws(() => parseFrame3DModel({ ...curved,
+  nodes: curved.nodes.map((node) => node.id === 9 ? { ...node, y: 0 } : node),
+}), /boog.*één lijn/, "drie collineaire punten vormen geen cirkelboog");
 assert.deepEqual(parseFrame3DModel(JSON.parse(JSON.stringify(curved))).plates[0].boundary, curved.plates[0].boundary,
   "lijn- en boogsegmenten overleven opslaan en openen");
 

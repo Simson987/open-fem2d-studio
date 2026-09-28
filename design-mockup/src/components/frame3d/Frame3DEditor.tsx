@@ -80,6 +80,7 @@ export default function Frame3DEditor({
     onSelectionChange?.(next);
   };
   const [fitToken, setFitToken] = useState(0);
+  const [drawError, setDrawError] = useState<string | null>(null);
   const [internalVisibility, setInternalVisibility] = useState(readFrame3DVisibility);
   const [cameraState, setCameraState] = useState<Frame3DCameraState>({
     position: [8, 8, 6], target: [0, 0, 0], up: [0, 0, 1],
@@ -170,6 +171,7 @@ export default function Frame3DEditor({
           model={model}
           conditionModel={calculationModel}
           onChange={onChange}
+          onDrawError={setDrawError}
           tool={tool}
           selection={selection}
           onSelect={setSelection}
@@ -189,6 +191,10 @@ export default function Frame3DEditor({
           <strong>{t("frame3d.title")}</strong>
           <span>{t("frame3d.axisHelp")}</span>
         </div>
+        {drawError && <div className="frame3d-draw-error" role="alert">
+          <span>{drawError}</span>
+          <button type="button" aria-label="Melding sluiten" onClick={() => setDrawError(null)}>×</button>
+        </div>}
         <button className="frame3d-fit" onClick={() => setFitToken((n) => n + 1)} type="button">
           {t("frame3d.fit")}
         </button>
