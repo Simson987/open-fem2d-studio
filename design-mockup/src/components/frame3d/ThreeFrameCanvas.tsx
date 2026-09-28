@@ -349,6 +349,14 @@ function renderFrame3DLabels(state: SceneState, container: HTMLElement | null) {
   // zodat een gewijzigde camerastand opnieuw eerlijk kan worden ingedeeld.
   labels.forEach((label) => { label.style.visibility = ""; });
   const viewport = layer.getBoundingClientRect();
+  // De vaste titel, fitknop, status en eventuele bedienpanelen liggen boven
+  // het WebGL-canvas. Behandel hun rechthoeken als bezet schermgebied, zodat
+  // knoop- en resultaatlabels deze bediening niet overdrukken bij zoomen.
+  const reserved = Array.from(container?.parentElement?.querySelectorAll<HTMLElement>(
+    ".frame3d-stage-header, .frame3d-stage-footer, .frame3d-fit, "
+    + ".frame3d-draw-error, .frame3d-transform-panel, .frame3d-uc-legend",
+  ) ?? []).map((element) => element.getBoundingClientRect())
+    .filter((box) => box.width > 0 && box.height > 0);
   const priority = (label: HTMLElement) => label.classList.contains("frame3d-utilization-fail") ? 0
     : label.classList.contains("frame3d-diagram-peak-label") ? 1
       : label.classList.contains("frame3d-diagram-label") ? 2
@@ -362,13 +370,15 @@ function renderFrame3DLabels(state: SceneState, container: HTMLElement | null) {
   })).filter(({ box }) => box.width > 0 && box.height > 0);
   candidates.sort((a, b) => a.priority - b.priority || a.index - b.index);
   const accepted: DOMRect[] = [];
+  const overlaps = (box: DOMRect, other: DOMRect) => box.left < other.right + 2
+    && box.right > other.left - 2 && box.top < other.bottom + 2
+    && box.bottom > other.top - 2;
   let hidden = 0;
   for (const { label, box } of candidates) {
     const outside = box.right <= viewport.left || box.left >= viewport.right
       || box.bottom <= viewport.top || box.top >= viewport.bottom;
-    const collision = accepted.some((other) => box.left < other.right + 2
-      && box.right > other.left - 2 && box.top < other.bottom + 2
-      && box.bottom > other.top - 2);
+    const collision = reserved.some((other) => overlaps(box, other))
+      || accepted.some((other) => overlaps(box, other));
     if (outside || collision) {
       label.style.visibility = "hidden";
       hidden += 1;

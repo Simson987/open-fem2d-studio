@@ -66,3 +66,23 @@ Daarna is op het midden van een bestaande staaf geklikt. Zonder knoop in de
 snapzone werd die staaf nog steeds gesplitst en een aansluitende staaf
 getekend: tien knopen en negen staven. De knoopsnap krijgt dus alleen
 voorrang waar daadwerkelijk een bestaande knoop onder de cursor ligt.
+
+## Groot model: selectie, snelheid en labels
+
+Het bestaande vierlaagse verificatiemodel is opnieuw in de GUI geopend:
+**100 knopen, 235 staven, 25 opleggingen en 72 lasten**. Een kader om de
+volledige constructie selecteerde alle 235 stalen profielvolumes in 3,7 ms;
+de verborgen knopen bleven buiten de selectie. De eerste volledige
+scèneopbouw duurde 26,8 ms en gebruikte vijf tekenopdrachten. Een wielzoom
+verschoof cameradoel en positie naar de cursor en tekende het gezoomde beeld
+in 7,2 ms. Dit zijn eenmalige diagnostische metingen op de testmachine.
+
+Met knoop- en staafnummers aan overlapten vóór de correctie vijf zichtbare
+labels de canvasheader en één label de statusregel. De labelindeling houdt
+nu ook de header, fitknop, status, toetslegenda en tijdelijke bedienpanelen
+vrij. Bij dezelfde gezoomde stand bleven 67 nummerlabels zichtbaar en was
+er **geen overlap** met die schermdelen; de indeling duurde 5,9 ms. Na
+berekenen gaf de daklast opnieuw `umax = 0,09559 mm`. Met resultaat- en
+toetslabels aan bleef de overlap ook na `Passend beeld` en een wissel naar
+dwarskracht Vy nul. In die zwaardere resultaatstand duurde de labelindeling
+13,2 tot 16,3 ms; dit blijft een aandachtspunt voor nog grotere modellen.
