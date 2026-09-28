@@ -1196,7 +1196,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       const raw = position.clone();
       if (settings.stramien && structuralGridRef.current?.enabled) {
         const structuralAxes = structuralSnapAxesRef.current;
-        const candidates: THREE.Vector3[] = [];
+        const candidates: Array<{
+          point: THREE.Vector3;
+          axes: readonly ("x" | "y" | "z")[];
+        }> = [];
         const rect = renderer.domElement.getBoundingClientRect();
         const pixelDistance = (candidate: THREE.Vector3) => {
           const projected = candidate.clone().project(camera);
@@ -1210,29 +1213,45 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
           nearest.forEach((value) => {
             const candidate = raw.clone();
             candidate[key] = value;
-            candidates.push(candidate);
+            candidates.push({ point: candidate, axes: [key] });
           });
           return nearest;
         };
         if (view === "front") {
           const nearX = addSingleAxes("x", structuralAxes.x), nearZ = addSingleAxes("z", structuralAxes.z);
           nearX.forEach((x) => nearZ.forEach((z) =>
-              candidates.push(new THREE.Vector3(x, anchor?.y ?? controls.target.y, z))));
+              candidates.push({ point: new THREE.Vector3(x, anchor?.y ?? controls.target.y, z), axes: ["x", "z"] })));
         } else if (view === "side") {
           const nearY = addSingleAxes("y", structuralAxes.y), nearZ = addSingleAxes("z", structuralAxes.z);
           nearY.forEach((y) => nearZ.forEach((z) =>
-              candidates.push(new THREE.Vector3(anchor?.x ?? controls.target.x, y, z))));
+              candidates.push({ point: new THREE.Vector3(anchor?.x ?? controls.target.x, y, z), axes: ["y", "z"] })));
         } else {
           const nearX = addSingleAxes("x", structuralAxes.x), nearY = addSingleAxes("y", structuralAxes.y);
           nearX.forEach((x) => nearY.forEach((y) =>
-              candidates.push(new THREE.Vector3(x, y, anchor?.z ?? controls.target.z))));
+              candidates.push({ point: new THREE.Vector3(x, y, anchor?.z ?? controls.target.z), axes: ["x", "y"] })));
         }
         container.dataset.frame3dSnapCandidates = String(candidates.length);
-        const nearest = candidates.reduce<{ point: THREE.Vector3; distance: number } | null>((best, candidate) => {
-          const distance = pixelDistance(candidate);
-          return !best || distance < best.distance ? { point: candidate, distance } : best;
+        const nearest = candidates.reduce<{ point: THREE.Vector3; axes: readonly ("x" | "y" | "z")[]; distance: number } | null>((best, candidate) => {
+          const distance = pixelDistance(candidate.point);
+          return !best || distance < best.distance ? { ...candidate, distance } : best;
         }, null);
-        if (nearest && nearest.distance <= 14) return finish({ position: nearest.point, kind: "stramien" });
+        if (nearest && nearest.distance <= 14) {
+          // Een stramienas wint per richting van het raster. De andere
+          // richting blijft wél raster-snap volgen, zoals in het 2D-tekenvlak.
+          // Zonder deze stap leverde een klik op X=9,25 m bijvoorbeeld
+          // Z=2,8509 m op terwijl raster-snap nog aan stond.
+          if (settings.raster) {
+            const spacing = Math.max(0.001, gridSpacingRef.current);
+            const round = (value: number) => Math.round(value / spacing) * spacing;
+            const activeAxes = view === "front" ? ["x", "z"] as const
+              : view === "side" ? ["y", "z"] as const
+              : ["x", "y"] as const;
+            activeAxes.forEach((axis) => {
+              if (!nearest.axes.includes(axis)) nearest.point[axis] = round(raw[axis]);
+            });
+          }
+          return finish({ position: nearest.point, kind: "stramien" });
+        }
       }
       if (settings.raster) {
         const spacing = Math.max(0.001, gridSpacingRef.current);
