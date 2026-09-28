@@ -143,6 +143,34 @@ const check = (solved, expectedForces, expectedMoments, name) => {
 // x=y=8 m; voor de 20 dakliggers geldt q·L=−12 kN per ligger.
 const roof = await solve(1);
 check(roof, { fx: 0, fy: 0, fz: 300 }, { mx: 2400, my: -2400, mz: 0 }, "daklast");
+// Onafhankelijke vervormingsoplossing: alle 25 identieke kolomlijnen dragen
+// precies 12 kN. Op ieder niveau is de verkorting P·z/(E·A), terwijl alle
+// horizontale liggers tussen gelijk verplaatste knopen onbelast blijven.
+// E staat in MPa (= 1000 kN/m²) en A in m² in het solvercontract.
+const roofRequest = buildFrame3DSolveRequest(model, "linear", 1);
+const column = roofRequest.members.find((member) => member.id === 1);
+const steel = roofRequest.materials.find((material) => material.id === column.materialId);
+const columnSection = roofRequest.sections.find((section) => section.id === column.sectionId);
+assert.ok(steel && columnSection);
+close(steel.eMpa, 210_000, 1e-9, "S235 elasticiteitsmodulus in solveraanvraag");
+close(columnSection.areaM2, 0.00538, 1e-12, "HEA 200-oppervlakte in solveraanvraag");
+const roofShorteningPerM = 12 / (210_000 * 1000 * 0.00538);
+for (const displacement of roof.result.displacements) {
+  const node = nodes[displacement.nodeId - 1];
+  close(displacement.uz, -roofShorteningPerM * node.z, 1e-8,
+    `kolomverkorting knoop ${node.id}`);
+  for (const key of ["ux", "uy", "rx", "ry", "rz"]) {
+    close(displacement[key], 0, 1e-8, `symmetrische daklast ${key} knoop ${node.id}`);
+  }
+}
+for (const force of roof.result.memberForces) {
+  if (force.memberId <= 75) {
+    close(Math.abs(force.nStartKn), 12, 1e-5, `kolom ${force.memberId} drukkracht`);
+    close(Math.abs(force.nEndKn), 12, 1e-5, `kolom ${force.memberId} eindkracht`);
+  } else {
+    close(force.nStartKn, 0, 1e-5, `onbelaste ligger ${force.memberId}`);
+  }
+}
 for (const reaction of roof.result.reactions) {
   close(reaction.fz, 12, 1e-5, `symmetrische daklast, steun ${reaction.nodeId}`);
 }
@@ -210,6 +238,7 @@ if (process.argv.includes("--buckling-regression")) {
 }
 console.log(JSON.stringify({
   model: { nodes: 100, beams: 235, supports: 25, nodalLoads: 51, memberLoads: 20, memberPointLoads: 1 },
+  analyticRoofShorteningMm: +(roofShorteningPerM * 9 * 1000).toFixed(5),
   cases: [roof, wind, distributed, eccentric, combined].map((solved, index) => ({
     name: ["daklast", "wind Y", "dakliggerlast", "excentrisch", "combinatie"][index],
     elapsedMs: +solved.elapsedMs.toFixed(1),
