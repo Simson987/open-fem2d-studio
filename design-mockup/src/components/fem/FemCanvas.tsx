@@ -914,6 +914,10 @@ export default function FemCanvas(props: FemCanvasProps) {
     z: (size.h - ORIGIN_Y_FROM_BOTTOM + view.offsetY - sy) / view.scale,
   }), [size.h, view]);
 
+  // De cursor en het tekenwerk raadplegen deze verbindingen op ieder frame.
+  // Een Map voorkomt een volledige knopenscan voor elk staafeind.
+  const nodesById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+
   // Snap per soort aan/uit — de knopjes staan in de statusbalk onderin
   // (StatusBar). Alles uit = vrij tekenen/slepen op de exacte muispositie.
   const snapInstellingen = useSnapInstellingen();
@@ -1021,8 +1025,8 @@ export default function FemCanvas(props: FemCanvasProps) {
     const RADIUS_PX = 8;
     let best: { beamId: number; d: number; px: number; py: number } | null = null;
     for (const b of beams) {
-      const nA = nodes.find(n => n.id === b.from);
-      const nB = nodes.find(n => n.id === b.to);
+      const nA = nodesById.get(b.from);
+      const nB = nodesById.get(b.to);
       if (!nA || !nB) continue;
       const a = worldToScreen(nA.x, nA.z);
       const c = worldToScreen(nB.x, nB.z);
@@ -1039,7 +1043,7 @@ export default function FemCanvas(props: FemCanvasProps) {
     if (!best) return null;
     const w = screenToWorld(best.px, best.py);
     return { beamId: best.beamId, x: snap(w.x), z: snap(w.z) };
-  }, [beams, nodes, worldToScreen, screenToWorld, snap]);
+  }, [beams, nodesById, worldToScreen, screenToWorld, snap]);
 
   /**
    * Positie op een staaf als FRACTIE 0..1 vanaf de startknoop, voor een punt
@@ -2360,44 +2364,39 @@ export default function FemCanvas(props: FemCanvasProps) {
   }, [nodes.length, size.w, size.h, fitView]);
 
   // ── Render helpers ──────────────────────────────────────────────────────
-  const renderGrid = () => {
+  const gridLayer = useMemo(() => {
     if (!grid.show || !grid.showLines) return null;
-    const lines: React.ReactNode[] = [];
     const minor = grid.spacingMm * view.scale;
-    // Skip rendering if the minor step would render thousands of lines
+    // Het raster tekende voorheen een apart SVG-element per lijn. Die hele
+    // lijst werd bij iedere hover opnieuw gemaakt en vergeleken door React.
+    // Eén herhalend SVG-patroon behoudt dezelfde wereld-oorsprong en zoom.
     if (minor < 4 || minor > 400) return null;
     const major = minor * 5;
-    // X grid lines (vertical lines in screen) — start at origin offset
     const baseX = ORIGIN_X + view.offsetX;
-    const xStart = baseX - Math.ceil(baseX / minor) * minor;
-    for (let x = xStart; x < size.w; x += minor) {
-      if (x < 0) continue;
-      const rel = (x - baseX);
-      const isMajor = Math.abs(rel % major) < 0.5 || Math.abs((rel % major) - major) < 0.5;
-      lines.push(<line key={`vx${x.toFixed(1)}`} x1={x} y1={0} x2={x} y2={size.h}
-        className={isMajor ? "fem-grid-major" : "fem-grid-minor"} />);
-    }
-    // Y grid lines
     const baseY = size.h - ORIGIN_Y_FROM_BOTTOM + view.offsetY;
-    const yStart = baseY - Math.ceil(baseY / minor) * minor;
-    for (let y = yStart; y < size.h; y += minor) {
-      if (y < 0) continue;
-      const rel = y - baseY;
-      const isMajor = Math.abs(rel % major) < 0.5 || Math.abs((rel % major) - major) < 0.5;
-      lines.push(<line key={`hy${y.toFixed(1)}`} x1={0} y1={y} x2={size.w} y2={y}
-        className={isMajor ? "fem-grid-major" : "fem-grid-minor"} />);
-    }
-    return lines;
-  };
+    const minorLines = [1, 2, 3, 4].map((index) => {
+      const position = index * minor;
+      return `M ${position} 0 V ${major} M 0 ${position} H ${major}`;
+    }).join(" ");
+    return <>
+      <defs>
+        <pattern id="fem-grid-pattern" x={baseX} y={baseY}
+          width={major} height={major} patternUnits="userSpaceOnUse">
+          <path d={minorLines} className="fem-grid-minor" fill="none" />
+          <path d={`M 0 0 V ${major} M 0 0 H ${major}`}
+            className="fem-grid-major" fill="none" />
+        </pattern>
+      </defs>
+      <rect width={size.w} height={size.h} fill="url(#fem-grid-pattern)" />
+    </>;
+  }, [grid.show, grid.showLines, grid.spacingMm, view.scale, view.offsetX, view.offsetY, size.w, size.h]);
 
-  const beamsWithCoords = beams.map(b => {
-    const n1 = nodes.find(n => n.id === b.from);
-    const n2 = nodes.find(n => n.id === b.to);
-    if (!n1 || !n2) return null;
-    const p1 = worldToScreen(n1.x, n1.z);
-    const p2 = worldToScreen(n2.x, n2.z);
-    return { b, p1, p2 };
-  }).filter(Boolean) as { b: Beam; p1: { x: number; y: number }; p2: { x: number; y: number } }[];
+  const beamsWithCoords = useMemo(() => beams.flatMap((b) => {
+    const n1 = nodesById.get(b.from);
+    const n2 = nodesById.get(b.to);
+    if (!n1 || !n2) return [];
+    return [{ b, p1: worldToScreen(n1.x, n1.z), p2: worldToScreen(n2.x, n2.z) }];
+  }), [beams, nodesById, worldToScreen]);
 
   const renderSupport = (s: Support) => {
     const n = nodes.find(nn => nn.id === s.nodeId);
@@ -3757,7 +3756,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         </defs>
 
         {/* Grid */}
-        <g className="fem-grid-layer">{renderGrid()}</g>
+        <g className="fem-grid-layer">{gridLayer}</g>
 
         {/* Structural grid (stramien) — amber axis lines bounded by the model
             extents (with padding) + dimension chains between consecutive axes.
