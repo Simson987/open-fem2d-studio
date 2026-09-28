@@ -2396,9 +2396,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       && (model.nodes === previousModel?.nodes || appendedNode);
     const interactivePlateNodeAppend = Boolean(incrementalNodeOnly)
       && (toolRef.current === "addPlate" || toolRef.current === "addPlateArc" || isOpeningTool(toolRef.current));
-    if (previousModel && unchangedCollections
-      && (previousModel.nodes.length >= 250 || interactivePlateNodeAppend || incrementalBeam)
-      && (incrementalNodeOnly || incrementalBeam)) {
+    if (previousModel && unchangedCollections && (incrementalNodeOnly || incrementalBeam)) {
       const node = appendedNode ? model.nodes[model.nodes.length - 1]! : undefined;
       const previousBounds = lastBuiltNodeBoundsRef.current;
       const visibleNodes = geometry.children.find((child) => child.userData.frame3dNodeVisual === true);
