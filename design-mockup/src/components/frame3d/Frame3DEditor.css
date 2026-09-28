@@ -33,6 +33,15 @@
   pointer-events: none;
   overflow: hidden;
 }
+.frame3d-selection-box {
+  position: absolute;
+  z-index: 4;
+  box-sizing: border-box;
+  border: 1px solid #2563eb;
+  background: #2563eb22;
+  pointer-events: none;
+}
+.frame3d-selection-box[hidden] { display: none; }
 .frame3d-node-label,
 .frame3d-beam-number,
 .frame3d-axis-label,

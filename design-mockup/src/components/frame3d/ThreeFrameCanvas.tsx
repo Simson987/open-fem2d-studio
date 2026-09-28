@@ -30,6 +30,7 @@ import {
 import type { Frame3DCameraState } from "./frame3dViewSets";
 import { createFrame3DPlateGeometry } from "./frame3dPlateGeometry";
 import { sampleCircularArc3D } from "./frame3dCircularArc";
+import { selectFrame3DInScreenBox } from "./frame3dBoxSelection";
 import type { Frame3DEditMeta } from "./frame3dHistory";
 import { useSnapInstellingen, type SnapInstellingen, type SnapSoort } from "../../hooks/useSnapInstellingen";
 import { frame3DGridLayout } from "./frame3dGrid";
@@ -327,6 +328,59 @@ interface SceneState {
   grid: THREE.GridHelper;
   axes: THREE.AxesHelper;
   axisLabels: CSS2DObject[];
+}
+
+function renderFrame3DLabels(state: SceneState, container: HTMLElement | null) {
+  state.labelRenderer.render(state.scene, state.camera);
+  const layer = state.labelRenderer.domElement;
+  const labels = Array.from(layer.querySelectorAll<HTMLElement>(
+    ".frame3d-result-label, .frame3d-utilization-label, .frame3d-profile-label, "
+    + ".frame3d-axis-label, .frame3d-node-label, .frame3d-beam-number, .frame3d-grid-label",
+  ));
+  if (labels.length === 0) {
+    if (container) {
+      container.dataset.frame3dOverlayLabelsShown = "0";
+      container.dataset.frame3dOverlayLabelsHidden = "0";
+    }
+    return;
+  }
+  const startedAt = performance.now();
+  // Verborgen labels behouden hun afmetingen. Zet ze eerst allemaal terug,
+  // zodat een gewijzigde camerastand opnieuw eerlijk kan worden ingedeeld.
+  labels.forEach((label) => { label.style.visibility = ""; });
+  const viewport = layer.getBoundingClientRect();
+  const priority = (label: HTMLElement) => label.classList.contains("frame3d-utilization-fail") ? 0
+    : label.classList.contains("frame3d-diagram-peak-label") ? 1
+      : label.classList.contains("frame3d-diagram-label") ? 2
+        : label.classList.contains("frame3d-result-label") ? 3
+          : label.classList.contains("frame3d-axis-label") ? 4
+            : label.classList.contains("frame3d-utilization-label") ? 5
+              : label.classList.contains("frame3d-node-label")
+                || label.classList.contains("frame3d-beam-number") ? 6 : 7;
+  const candidates = labels.map((label, index) => ({
+    label, index, priority: priority(label), box: label.getBoundingClientRect(),
+  })).filter(({ box }) => box.width > 0 && box.height > 0);
+  candidates.sort((a, b) => a.priority - b.priority || a.index - b.index);
+  const accepted: DOMRect[] = [];
+  let hidden = 0;
+  for (const { label, box } of candidates) {
+    const outside = box.right <= viewport.left || box.left >= viewport.right
+      || box.bottom <= viewport.top || box.top >= viewport.bottom;
+    const collision = accepted.some((other) => box.left < other.right + 2
+      && box.right > other.left - 2 && box.top < other.bottom + 2
+      && box.bottom > other.top - 2);
+    if (outside || collision) {
+      label.style.visibility = "hidden";
+      hidden += 1;
+    } else {
+      accepted.push(box);
+    }
+  }
+  if (container) {
+    container.dataset.frame3dOverlayLabelsShown = String(accepted.length);
+    container.dataset.frame3dOverlayLabelsHidden = String(hidden);
+    container.dataset.frame3dOverlayLayoutMs = (performance.now() - startedAt).toFixed(2);
+  }
 }
 
 function writeCameraDiagnostics(container: HTMLElement | null, state: SceneState) {
@@ -847,6 +901,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
   drawErrorRef.current = onDrawError;
   const toolRef = useRef(tool);
   toolRef.current = tool;
+  const visibilityRef = useRef(visibility);
+  visibilityRef.current = visibility;
   // De actieve invoerrichting wordt in dezelfde effect bijgewerkt als de
   // camera. Zo gebruikt een klik nooit nog de vorige aanzichtsrichting.
   const viewRef = useRef<Frame3DView>(viewRequest?.kind ?? currentView);
@@ -975,7 +1031,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       if (!(plateTools.includes(tool) || openingTools.includes(tool))) state.draftLine.visible = false;
       state.previewHint.hidden = true;
       state.renderer.render(state.scene, state.camera);
-      state.labelRenderer.render(state.scene, state.camera);
+      renderFrame3DLabels(state, containerRef.current);
     }
   }, [tool]);
 
@@ -1000,6 +1056,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     // scrollknop pant in het schermvlak en er is geen uitloop na loslaten.
     controls.enableDamping = false;
     controls.zoomSpeed = 2.4;
+    controls.zoomToCursor = true;
     controls.enablePan = true;
     controls.screenSpacePanning = true;
     // Links blijft volledig voor selecteren/plaatsen. Rechts roteert het model.
@@ -1077,6 +1134,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     previewHint.className = "frame3d-snap-hint";
     previewHint.hidden = true;
     container.appendChild(previewHint);
+    const selectionBox = document.createElement("div");
+    selectionBox.className = "frame3d-selection-box";
+    selectionBox.hidden = true;
+    container.appendChild(selectionBox);
     scene.add(preview);
     sceneRef.current = { scene, camera, renderer, labelRenderer, controls, geometry, draftLine, preview, previewHint, grid, axes, axisLabels };
 
@@ -1091,7 +1152,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       }
       const renderStartedAt = performance.now();
       renderer.render(scene, camera);
-      labelRenderer.render(scene, camera);
+      renderFrame3DLabels(sceneRef.current!, container);
       writeCameraDiagnostics(container, sceneRef.current!);
       container.dataset.frame3dCameraRenderMs = (performance.now() - renderStartedAt).toFixed(2);
     };
@@ -1422,7 +1483,26 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       renderer.render(scene, camera);
       container.dataset.frame3dPreviewMs = (performance.now() - previewStartedAt).toFixed(2);
     };
+    let down: { x: number; y: number; additive: boolean } | null = null;
+    const drawSelectionBox = (x: number, y: number) => {
+      if (!down) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      const x1 = THREE.MathUtils.clamp(down.x - rect.left, 0, rect.width);
+      const y1 = THREE.MathUtils.clamp(down.y - rect.top, 0, rect.height);
+      const x2 = THREE.MathUtils.clamp(x - rect.left, 0, rect.width);
+      const y2 = THREE.MathUtils.clamp(y - rect.top, 0, rect.height);
+      selectionBox.style.left = `${Math.min(x1, x2)}px`;
+      selectionBox.style.top = `${Math.min(y1, y2)}px`;
+      selectionBox.style.width = `${Math.abs(x2 - x1)}px`;
+      selectionBox.style.height = `${Math.abs(y2 - y1)}px`;
+      selectionBox.hidden = false;
+    };
     const onPointerMove = (event: PointerEvent) => {
+      if (down && toolRef.current === "select"
+        && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 5) {
+        drawSelectionBox(event.clientX, event.clientY);
+        return;
+      }
       latestPointerEvent = event;
       if (!previewFrame) previewFrame = requestAnimationFrame(drawPointerPreview);
     };
@@ -1432,19 +1512,47 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       previewHint.hidden = true;
       renderScene();
     };
-    let down: { x: number; y: number } | null = null;
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0) {
         down = null;
         return;
       }
-      down = { x: event.clientX, y: event.clientY };
+      down = { x: event.clientX, y: event.clientY,
+        additive: event.shiftKey || event.ctrlKey || event.metaKey };
+      if (toolRef.current === "select") renderer.domElement.setPointerCapture(event.pointerId);
+    };
+    const onPointerCancel = () => {
+      down = null;
+      selectionBox.hidden = true;
     };
     const onPointerUp = (event: PointerEvent) => {
       if (event.button !== 0) {
         down = null;
+        selectionBox.hidden = true;
         return;
       }
+      if (down && toolRef.current === "select"
+        && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 5) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        const box = {
+          left: Math.min(down.x, event.clientX) - rect.left,
+          right: Math.max(down.x, event.clientX) - rect.left,
+          top: Math.min(down.y, event.clientY) - rect.top,
+          bottom: Math.max(down.y, event.clientY) - rect.top,
+        };
+        const startedAt = performance.now();
+        selectRef.current(selectFrame3DInScreenBox(
+          modelRef.current, selectionPickTargetsRef.current, camera,
+          rect.width, rect.height, box, selectionRef.current, down.additive,
+          visibilityRef.current.nodes,
+        ));
+        container.dataset.frame3dBoxSelectMs = (performance.now() - startedAt).toFixed(2);
+        selectionBox.hidden = true;
+        down = null;
+        renderScene();
+        return;
+      }
+      selectionBox.hidden = true;
       if (!down || Math.hypot(event.clientX - down.x, event.clientY - down.y) > 5) {
         down = null;
         return;
@@ -1778,6 +1886,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      down = null;
+      selectionBox.hidden = true;
       discardDraftNodes(plateDraftCreatedNodesRef.current, plateHistoryGroupRef);
       discardDraftNodes(openingDraftCreatedNodesRef.current, openingHistoryGroupRef);
       plateDraftRef.current = emptyPlateSketch();
@@ -1793,6 +1903,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     renderer.domElement.addEventListener("pointermove", onPointerMove);
     renderer.domElement.addEventListener("pointerleave", onPointerLeave);
     renderer.domElement.addEventListener("pointerup", onPointerUp);
+    renderer.domElement.addEventListener("pointercancel", onPointerCancel);
     window.addEventListener("keydown", onKeyDown);
 
     return () => {
@@ -1804,6 +1915,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       renderer.domElement.removeEventListener("pointermove", onPointerMove);
       renderer.domElement.removeEventListener("pointerleave", onPointerLeave);
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
+      renderer.domElement.removeEventListener("pointercancel", onPointerCancel);
+      selectionBox.remove();
       window.removeEventListener("keydown", onKeyDown);
       controls.removeEventListener("start", startCameraInteraction);
       controls.removeEventListener("change", renderCameraInteraction);
@@ -1909,7 +2022,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       });
       applySelectionHighlight(nextConditions, selectionRef.current);
       state.renderer.render(state.scene, state.camera);
-      state.labelRenderer.render(state.scene, state.camera);
+      renderFrame3DLabels(state, containerRef.current);
       rememberBuiltPresentation();
       if (containerRef.current) {
         const previousLabelCount = Number(containerRef.current.dataset.frame3dLabels ?? 0);
@@ -2043,7 +2156,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         const plateLayerMs = performance.now() - plateLayerStartedAt;
         const renderStartedAt = performance.now();
         state.renderer.render(state.scene, state.camera);
-        state.labelRenderer.render(state.scene, state.camera);
+        renderFrame3DLabels(state, containerRef.current);
         const renderMs = performance.now() - renderStartedAt;
         selectionRenderedWithModelRef.current = selectionRef.current;
         lastBuiltModelRef.current = model;
@@ -2234,7 +2347,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         });
         applySelectionHighlight(geometry, selectionRef.current);
         state.renderer.render(state.scene, state.camera);
-        state.labelRenderer.render(state.scene, state.camera);
+        renderFrame3DLabels(state, containerRef.current);
         selectionRenderedWithModelRef.current = selectionRef.current;
         lastBuiltModelRef.current = model;
         rememberBuiltPresentation();
@@ -2383,7 +2496,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         }
         applySelectionHighlight(geometry, selectionRef.current);
         state.renderer.render(state.scene, state.camera);
-        state.labelRenderer.render(state.scene, state.camera);
+        renderFrame3DLabels(state, containerRef.current);
         selectionRenderedWithModelRef.current = selectionRef.current;
         lastBuiltModelRef.current = model;
         rememberBuiltPresentation();
@@ -2494,7 +2607,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         }
         applySelectionHighlight(geometry, selectionRef.current);
         state.renderer.render(state.scene, state.camera);
-        state.labelRenderer.render(state.scene, state.camera);
+        renderFrame3DLabels(state, containerRef.current);
         selectionRenderedWithModelRef.current = selectionRef.current;
         lastBuiltModelRef.current = model;
         rememberBuiltPresentation();
@@ -2707,7 +2820,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         }
         applySelectionHighlight(geometry, selectionRef.current);
         state.renderer.render(state.scene, state.camera);
-        state.labelRenderer.render(state.scene, state.camera);
+        renderFrame3DLabels(state, containerRef.current);
         selectionRenderedWithModelRef.current = selectionRef.current;
         lastBuiltModelRef.current = model;
         lastBuiltNodeBoundsRef.current = frame3DNodeBounds(model);
@@ -3368,7 +3481,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     applySelectionHighlight(geometry, selectionRef.current);
     const renderStartedAt = performance.now();
     state.renderer.render(state.scene, state.camera);
-    state.labelRenderer.render(state.scene, state.camera);
+    renderFrame3DLabels(state, containerRef.current);
     const renderMs = performance.now() - renderStartedAt;
     selectionRenderedWithModelRef.current = selectionRef.current;
     writeCameraDiagnostics(containerRef.current, state);
@@ -3435,7 +3548,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     state.camera.updateProjectionMatrix();
     state.controls.update();
     state.renderer.render(state.scene, state.camera);
-    state.labelRenderer.render(state.scene, state.camera);
+    renderFrame3DLabels(state, containerRef.current);
     writeCameraDiagnostics(containerRef.current, state);
     nodeSnapPrewarmRef.current?.();
   }, [
@@ -3452,7 +3565,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     state.camera.updateProjectionMatrix();
     state.controls.update();
     state.renderer.render(state.scene, state.camera);
-    state.labelRenderer.render(state.scene, state.camera);
+    renderFrame3DLabels(state, containerRef.current);
     writeCameraDiagnostics(containerRef.current, state);
     nodeSnapPrewarmRef.current?.();
   }, [cameraRequest?.token]);

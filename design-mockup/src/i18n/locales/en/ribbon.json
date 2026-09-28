@@ -13,7 +13,7 @@
   "frame3d": {
     "title": "3D frame",
     "editor": "3D model",
-    "axisHelp": "Left: select · drag wheel: pan · right: rotate · wheel: zoom",
+    "axisHelp": "Left: select or drag a box · drag wheel: pan · right: rotate · wheel: zoom at cursor",
     "fit": "Fit view",
     "viewGroup": "View",
     "isoView": "Isometric",

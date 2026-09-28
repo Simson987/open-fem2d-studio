@@ -13,7 +13,7 @@
   "frame3d": {
     "title": "3D-Rahmen",
     "editor": "3D-Modell",
-    "axisHelp": "Links: wählen · Rad ziehen: verschieben · rechts: drehen · Rad: zoomen",
+    "axisHelp": "Links: wählen oder Rahmen ziehen · Rad ziehen: verschieben · rechts: drehen · Rad: Zoom am Mauszeiger",
     "fit": "Ansicht anpassen",
     "viewGroup": "Ansicht",
     "isoView": "Isometrisch",

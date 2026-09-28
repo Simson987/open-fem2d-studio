@@ -13,7 +13,7 @@
   "frame3d": {
     "title": "Portique 3D",
     "editor": "Modèle 3D",
-    "axisHelp": "Gauche : sélectionner · molette glissée : déplacer · droite : tourner · molette : zoomer",
+    "axisHelp": "Gauche : sélectionner ou tracer un cadre · molette glissée : déplacer · droite : tourner · molette : zoomer sur le curseur",
     "fit": "Ajuster la vue",
     "viewGroup": "Vue",
     "isoView": "Isométrique",

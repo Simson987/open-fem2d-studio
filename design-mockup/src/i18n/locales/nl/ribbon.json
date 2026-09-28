@@ -13,7 +13,7 @@
   "frame3d": {
     "title": "3D raamwerk",
     "editor": "3D-model",
-    "axisHelp": "Links: selecteren · wiel slepen: pannen · rechts: draaien · wiel: zoomen",
+    "axisHelp": "Links: selecteren of kader slepen · wiel slepen: pannen · rechts: draaien · wiel: zoomen bij cursor",
     "fit": "Passend beeld",
     "viewGroup": "Beeld",
     "isoView": "Isometrisch",
