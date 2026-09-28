@@ -27,7 +27,7 @@ import {
   toggleFrame3DSelection,
   type Frame3DSelection, type Frame3DSelectionType,
 } from "./frame3dSelection";
-import type { Frame3DCameraState } from "./frame3dViewSets";
+import { frame3DViewFromCamera, type Frame3DCameraState } from "./frame3dViewSets";
 import { createFrame3DPlateGeometry } from "./frame3dPlateGeometry";
 import { sampleCircularArc3D } from "./frame3dCircularArc";
 import { selectFrame3DInScreenBox } from "./frame3dBoxSelection";
@@ -313,6 +313,7 @@ interface Props {
   activeLoadCaseId?: number;
   cameraRequest?: { state: Frame3DCameraState; token: number };
   onCameraChange?: (state: Frame3DCameraState) => void;
+  onCameraViewChange?: (view: Frame3DView) => void;
 }
 
 interface SceneState {
@@ -840,7 +841,7 @@ function resultScale(model: Frame3DModel, result: Frame3DSolveResult): number {
   return maxDisplacement > 1e-15 ? Math.min(10_000, modelSize * 0.12 / maxDisplacement) : 1;
 }
 
-export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDrawError, tool, selection, onSelect, fitToken, visibility, viewRequest, currentView = "iso", structuralGrid, gridSpacingM = 0.5, result, utilizations = [], activeLoadCaseId, cameraRequest, onCameraChange }: Props) {
+export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDrawError, tool, selection, onSelect, fitToken, visibility, viewRequest, currentView = "iso", structuralGrid, gridSpacingM = 0.5, result, utilizations = [], activeLoadCaseId, cameraRequest, onCameraChange, onCameraViewChange }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneState | null>(null);
   const selectRef = useRef(onSelect);
@@ -913,10 +914,6 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
   toolRef.current = tool;
   const visibilityRef = useRef(visibility);
   visibilityRef.current = visibility;
-  // De actieve invoerrichting wordt in dezelfde effect bijgewerkt als de
-  // camera. Zo gebruikt een klik nooit nog de vorige aanzichtsrichting.
-  const viewRef = useRef<Frame3DView>(viewRequest?.kind ?? currentView);
-  viewRef.current = viewRequest?.kind ?? currentView;
   const snaps = useSnapInstellingen();
   const snapsRef = useRef<SnapInstellingen>(snaps);
   snapsRef.current = snaps;
@@ -981,6 +978,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
   }, [model.nodes]);
   const cameraChangeRef = useRef(onCameraChange);
   cameraChangeRef.current = onCameraChange;
+  const cameraViewChangeRef = useRef(onCameraViewChange);
+  cameraViewChangeRef.current = onCameraViewChange;
   const rememberBuiltPresentation = () => {
     lastBuiltConditionModelRef.current = conditionModel;
     lastBuiltPresentationRef.current = {
@@ -1198,6 +1197,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       labelRenderer.domElement.style.visibility = "visible";
       container.dataset.frame3dLabelsSuspended = "false";
       saveCamera();
+      cameraViewChangeRef.current?.(frame3DViewFromCamera(camera.position, controls.target));
       nodeSnapPrewarmRef.current?.();
     };
     controls.addEventListener("start", startCameraInteraction);
@@ -1236,15 +1236,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     };
     const drawingPlane = () => {
       const anchor = drawingAnchor();
-      const cameraOffset = camera.position.clone().sub(controls.target).normalize();
-      // Lees het orthogonale aanzicht ook uit de echte camera. Dit houdt het
-      // werkvlak correct wanneer een opgeslagen camera of Fast Refresh de
-      // laatst aangevraagde view voorbijgaat.
-      const cameraView: Frame3DView | null = Math.abs(cameraOffset.z) > 0.985 ? "top"
-        : Math.abs(cameraOffset.y) > 0.985 ? "front"
-        : Math.abs(cameraOffset.x) > 0.985 ? "side"
-        : null;
-      const view = cameraView ?? viewRef.current;
+      // De echte camerastand bepaalt het tekenvlak. Een opgeslagen vooraanzicht
+      // kan immers later schuin zijn gedraaid; de oude aanzichtsnaam mag dan
+      // geen onzichtbaar verticaal werkvlak blijven afdwingen.
+      const view = frame3DViewFromCamera(camera.position, controls.target);
       // Boven gebruikt XY, voor gebruikt XZ en zij gebruikt YZ. In een vrij
       // 3D-aanzicht tekenen we bewust in het horizontale XY-werkvlak. Dit is
       // stabieler en voorspelbaarder dan een vlak dat met de camera meedraait.
@@ -3543,7 +3538,6 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     const hasGeometry = !box.isEmpty();
     const center = hasGeometry ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3();
     const view = viewRequest?.kind ?? "iso";
-    viewRef.current = view;
     const direction = view === "top" ? new THREE.Vector3(0, 0, 1)
       : view === "front" ? new THREE.Vector3(0, -1, 0)
       : view === "side" ? new THREE.Vector3(1, 0, 0)
@@ -3560,12 +3554,18 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     state.camera.far = Math.max(1_000, distance * 100);
     state.camera.updateProjectionMatrix();
     state.controls.update();
+    cameraChangeRef.current?.({
+      position: state.camera.position.toArray() as [number, number, number],
+      target: state.controls.target.toArray() as [number, number, number],
+      up: state.camera.up.toArray() as [number, number, number],
+    });
     state.renderer.render(state.scene, state.camera);
     renderFrame3DLabels(state, containerRef.current);
     writeCameraDiagnostics(containerRef.current, state);
     nodeSnapPrewarmRef.current?.();
   }, [
-    fitToken, viewRequest?.token, viewRequest?.kind,
+    // Een door cameradraaien afgeleide aanzichtsnaam verandert de camera niet.
+    fitToken, viewRequest?.token,
   ]);
 
   useEffect(() => {
@@ -3577,6 +3577,12 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     state.controls.target.fromArray(cameraRequest.state.target);
     state.camera.updateProjectionMatrix();
     state.controls.update();
+    cameraChangeRef.current?.({
+      position: state.camera.position.toArray() as [number, number, number],
+      target: state.controls.target.toArray() as [number, number, number],
+      up: state.camera.up.toArray() as [number, number, number],
+    });
+    cameraViewChangeRef.current?.(frame3DViewFromCamera(state.camera.position, state.controls.target));
     state.renderer.render(state.scene, state.camera);
     renderFrame3DLabels(state, containerRef.current);
     writeCameraDiagnostics(containerRef.current, state);

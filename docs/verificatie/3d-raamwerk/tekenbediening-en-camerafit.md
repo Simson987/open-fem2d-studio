@@ -77,6 +77,22 @@ snapzone werd die staaf nog steeds gesplitst en een aansluitende staaf
 getekend: tien knopen en negen staven. De knoopsnap krijgt dus alleen
 voorrang waar daadwerkelijk een bestaande knoop onder de cursor ligt.
 
+## Tekenwerkvlak na cameradraaien
+
+Een GUI-proef op een portaal met twee knopen en één stalen staaf gebruikte een
+opgeslagen **front**-view met een schuine camera. Voor de correctie maakte een
+klik op lege ruimte een knoop op het oude XZ-vlak (`Y = 0`, `Z = 5 m`), hoewel
+de camera duidelijk schuin stond. Na de correctie maakte dezelfde klik een
+knoop op het horizontale XY-vlak door het cameradoel (`Y = −5,5 m`, `Z = 2,5 m`).
+Een handmatig gedraaide of opgeslagen schuine camera wordt in de bediening nu
+als vrij 3D-aanzicht aangeduid.
+
+Daarna is via de aanzichtknop een echt vooraanzicht gekozen en als view
+opgeslagen. Na een wissel naar isometrie herstelde deze view exact de bewaarde
+camerapositie `(-10,75; -21,847532; 2,5) m` en doelpositie
+`(-10,75; -2,75; 2,5) m`; het actieve aanzicht werd weer **front**. De camera
+wordt dus ook na een aanzichtknop direct in de view opgeslagen.
+
 ## Groot model: selectie, snelheid en labels
 
 Het bestaande vierlaagse verificatiemodel is opnieuw in de GUI geopend:

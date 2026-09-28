@@ -11,11 +11,16 @@ import {
 } from "./src/components/frame3d/frame3dModel.ts";
 import { createFrame3DPlateGeometry } from "./src/components/frame3d/frame3dPlateGeometry.ts";
 import { circularArcThroughPoints2D, sampleCircularArc3D } from "./src/components/frame3d/frame3dCircularArc.ts";
-import { parseFrame3DViewSets } from "./src/components/frame3d/frame3dViewSets.ts";
+import { frame3DViewFromCamera, parseFrame3DViewSets } from "./src/components/frame3d/frame3dViewSets.ts";
 import { buildFrame3DSolveRequest } from "./src/components/frame3d/frame3dSolver.ts";
 import { DEFAULT_FRAME_3D_VISIBILITY } from "./src/components/frame3d/frame3dVisibility.ts";
 import { toggleFrame3DSelection } from "./src/components/frame3d/frame3dSelection.ts";
 import { deserializeProject, serializeProject } from "./src/io/projectFile.ts";
+
+assert.equal(frame3DViewFromCamera({ x: 0, y: -10, z: 2.5 }, { x: 0, y: 0, z: 2.5 }), "front");
+assert.equal(frame3DViewFromCamera({ x: 0, y: 0, z: 10 }, { x: 0, y: 0, z: 0 }), "top");
+assert.equal(frame3DViewFromCamera({ x: 12, y: 12, z: 11 }, { x: 0, y: 0, z: 2.5 }), "iso",
+  "een schuin gedraaide front-view is voor het tekenvlak en de bediening een vrij 3D-aanzicht");
 
 const base = parseFrame3DModel({
   nodes: [

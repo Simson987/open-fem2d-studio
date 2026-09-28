@@ -2578,6 +2578,8 @@ function App() {
               deleteToken={frame3dDeleteToken}
               fitRequest={frame3dFitToken}
               viewRequest={frame3dViewRequest}
+              onCameraViewChange={(kind) => setFrame3dViewRequest((previous) =>
+                previous.kind === kind ? previous : { ...previous, kind })}
               selection={frame3dSelection}
               onSelectionChange={setFrame3dSelection}
               visibilityOpen={visibility3DOpen}

@@ -39,6 +39,7 @@ interface Props {
   deleteToken?: number;
   fitRequest?: number;
   viewRequest?: { kind: Frame3DView; token: number };
+  onCameraViewChange?: (view: Frame3DView) => void;
   selection?: Frame3DSelection;
   onSelectionChange?: (selection: Frame3DSelection) => void;
   visibility?: Frame3DVisibility;
@@ -64,7 +65,7 @@ interface Props {
 /** Canvas only: 3D uses the shared ribbon, Explorer and Properties panels. */
 export default function Frame3DEditor({
   model, calculationModel, onChange, visibilityOpen = false, onVisibilityClose,
-  tool = "select", onToolChange, deleteToken = 0, fitRequest = 0, viewRequest,
+  tool = "select", onToolChange, deleteToken = 0, fitRequest = 0, viewRequest, onCameraViewChange,
   selection: controlledSelection, onSelectionChange,
   visibility: visibilityProp, onVisibilityChange, showLoadCase = true, resultsActive = false, structuralGrid, gridSpacingM,
   result = null, checks = null, concreteChecks = null,
@@ -186,6 +187,7 @@ export default function Frame3DEditor({
           activeLoadCaseId={activeLoadCaseId}
           cameraRequest={cameraRequest}
           onCameraChange={setCameraState}
+          onCameraViewChange={onCameraViewChange}
         />
         <div className="frame3d-stage-header">
           <strong>{t("frame3d.title")}</strong>

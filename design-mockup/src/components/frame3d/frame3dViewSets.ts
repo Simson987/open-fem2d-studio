@@ -7,6 +7,22 @@ export interface Frame3DCameraState {
   up: [number, number, number];
 }
 
+/** Classificeer het zichtbare aanzicht uit de camera, niet uit de laatst gekozen knop. */
+export function frame3DViewFromCamera(
+  position: { x: number; y: number; z: number },
+  target: { x: number; y: number; z: number },
+): Frame3DView {
+  const dx = position.x - target.x;
+  const dy = position.y - target.y;
+  const dz = position.z - target.z;
+  const length = Math.hypot(dx, dy, dz);
+  if (!(length > 1e-9)) return "iso";
+  if (Math.abs(dz / length) > 0.985) return "top";
+  if (Math.abs(dy / length) > 0.985) return "front";
+  if (Math.abs(dx / length) > 0.985) return "side";
+  return "iso";
+}
+
 /** Een projectgebonden, benoemde 3D-weergave. */
 export interface Frame3DViewSet {
   id: string;
