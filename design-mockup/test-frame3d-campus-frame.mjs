@@ -78,11 +78,12 @@ const solverBinary = process.platform === "win32" ? "frame3d-solver.exe" : "fram
 const solverPath = process.env.FRAME3D_SOLVER_PATH
   ?? fileURLToPath(new URL(`../src-tauri/target/debug/${solverBinary}`, import.meta.url));
 assert.ok(existsSync(solverPath), "Bouw eerst de Rust-rekenkern.");
-const invokeSolver = (request) => new Promise((resolve, reject) => {
+const invokeSolver = (request, allowSolverError = false, timeoutMs = 120_000) => new Promise((resolve, reject) => {
   const child = spawn(solverPath, [], { stdio: ["pipe", "pipe", "pipe"] });
   const stdout = [], stderr = [];
   let size = 0;
-  const timeout = setTimeout(() => child.kill(), 120_000);
+  let timedOut = false;
+  const timeout = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
   child.stdout.on("data", (chunk) => {
     size += chunk.length;
     if (size > 16 * 1024 * 1024) child.kill();
@@ -92,7 +93,14 @@ const invokeSolver = (request) => new Promise((resolve, reject) => {
   child.on("error", reject);
   child.on("close", (code) => {
     clearTimeout(timeout);
-    if (code !== 0) return reject(new Error(`3D-kern: exit ${code}; ${Buffer.concat(stderr).toString()}`));
+    if (code !== 0 && !allowSolverError) return reject(new Error(`3D-kern: exit ${code}; ${Buffer.concat(stderr).toString()}`));
+    if (stdout.length === 0) {
+      if (allowSolverError) return resolve({
+        fout: timedOut ? `3D-kern overschreed ${timeoutMs} ms` : `3D-kern crashte met exit ${code}: ${Buffer.concat(stderr).toString().slice(0, 300)}`,
+        processFailure: true,
+      });
+      return reject(new Error(timedOut ? `3D-kern overschreed ${timeoutMs} ms` : `3D-kern crashte met exit ${code}`));
+    }
     try { resolve(JSON.parse(Buffer.concat(stdout).toString())); }
     catch (error) { reject(error); }
   });
@@ -156,6 +164,50 @@ for (const collection of ["displacements", "reactions", "memberForces"]) {
     }
   }
 }
+let bucklingRegression;
+if (process.argv.includes("--buckling-regression")) {
+  const linearRequest = { ...buildFrame3DSolveRequest(model, "linear", 1), bucklingModes: 3 };
+  const linearWithBuckling = await invokeSolver(linearRequest);
+  assert.equal(linearWithBuckling.displacements.length, 100,
+    "een upstream-knikfout mag de lineaire raamwerkuitkomst niet laten crashen");
+  assert.ok(["available", "failed", "notApplicable"].includes(linearWithBuckling.buckling.status));
+  const secondOrderRequest = { ...buildFrame3DSolveRequest(model, "p-delta", 1), bucklingModes: 3 };
+  const secondOrder = await invokeSolver(secondOrderRequest, true);
+  const lateralSecondOrderRequest = {
+    ...buildFrame3DSolveRequest(model, "p-delta", new Map([[1, 1], [2, 1]])),
+    bucklingModes: 3,
+  };
+  const lateralSecondOrder = await invokeSolver(lateralSecondOrderRequest, true, 20_000);
+  if (secondOrder.fout) {
+    assert.match(secondOrder.fout,
+      /stabiliteitscontrole faalde|matrixfactorisatie faalde|instabiliteit|convergeerde niet|numerieke oplossing/,
+      "een afgewezen tweede-orde-uitkomst moet een concrete reden geven");
+  } else {
+    assert.equal(secondOrder.secondOrder?.converged, true);
+    assert.equal(secondOrder.secondOrder?.stable, true);
+  }
+  assert.notEqual(lateralSecondOrder.processFailure, true,
+    `de tweede-orde-combinatie mag niet crashen of langer dan 20 s rekenen: ${lateralSecondOrder.fout}`);
+  if (lateralSecondOrder.fout) {
+    assert.match(lateralSecondOrder.fout, /matrixfactorisatie faalde|stabiliteitscontrole faalde|instabiliteit/,
+      "een onbetrouwbare tweede-orde-uitkomst moet expliciet worden geweigerd");
+  }
+  bucklingRegression = {
+    linearStatus: linearWithBuckling.buckling.status,
+    firstBucklingFactor: linearWithBuckling.buckling.status === "available"
+      ? linearWithBuckling.buckling.modes[0]?.loadFactor ?? null : null,
+    secondOrderStatus: secondOrder.fout ? "geweigerd" : "berekend",
+    secondOrderMessage: secondOrder.fout ?? null,
+    ...(secondOrder.fout ? {} : {
+      secondOrderForceBalance: frame3DGlobalForceBalance(secondOrderRequest, secondOrder),
+    }),
+    lateralSecondOrderStatus: lateralSecondOrder.fout ? "geweigerd" : "berekend",
+    lateralSecondOrderMessage: lateralSecondOrder.fout ?? null,
+    ...(lateralSecondOrder.fout ? {} : {
+      lateralSecondOrderForceBalance: frame3DGlobalForceBalance(lateralSecondOrderRequest, lateralSecondOrder),
+    }),
+  };
+}
 console.log(JSON.stringify({
   model: { nodes: 100, beams: 235, supports: 25, nodalLoads: 51, memberLoads: 20, memberPointLoads: 1 },
   cases: [roof, wind, distributed, eccentric, combined].map((solved, index) => ({
@@ -168,4 +220,5 @@ console.log(JSON.stringify({
     maxMomentImbalanceKnm: solved.balance.maxMomentImbalanceKnm,
     relativeResidual: solved.result.equilibrium?.relativeResidual,
   })),
+  ...(bucklingRegression ? { bucklingRegression } : {}),
 }, null, 2));

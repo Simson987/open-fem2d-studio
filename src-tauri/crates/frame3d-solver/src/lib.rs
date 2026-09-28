@@ -742,6 +742,9 @@ fn buckling_summary(input: &SolverInput3D, modes: usize) -> BucklingSummary {
             }).collect();
             BucklingSummary::Available { modes: summaries, members }
         },
+        Err(reason) if reason.contains("No free DOFs") => BucklingSummary::NotApplicable {
+            reason: "alle vrijheidsgraden zijn voorgeschreven".into(),
+        },
         Err(reason) if reason.contains("No compressed elements") => BucklingSummary::NotApplicable {
             reason: "geen drukstaaf aanwezig".into(),
         },
@@ -926,7 +929,16 @@ pub fn solve(request: SolveRequest3D) -> Result<SolveResult3D, String> {
                     }
                 }
             }
-            let result = match solve_pdelta_3d(&input, request.max_iterations, request.tolerance) {
+            let pdelta_solution = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(||
+                solve_pdelta_3d(&input, request.max_iterations, request.tolerance)
+            )) {
+                Ok(solved) => solved,
+                Err(_) => return Err(
+                    "tweede-orde 3D-berekening is geweigerd: de externe matrixfactorisatie faalde voor dit model; geen betrouwbare tweede-orde-uitkomst beschikbaar"
+                        .into(),
+                ),
+            };
+            let result = match pdelta_solution {
                 Ok(result) => result,
                 Err(error) if error.to_string().contains("No free DOFs") => {
                     // Een volledig voorgeschreven model heeft wel geldige
