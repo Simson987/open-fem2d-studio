@@ -2581,6 +2581,7 @@ function App() {
               visibility={frame3dVisibility}
               onVisibilityChange={setFrame3dVisibility}
               showLoadCase={frame3dShowLoadCase}
+              resultsActive={resultsTabActive}
               structuralGrid={fem.structuralGrid}
               gridSpacingM={grid.spacingMm / 1000}
               result={frame3dShowLoadCase ? frame3dResult : null}
@@ -2597,6 +2598,11 @@ function App() {
               onApplyViewSet={(viewSet) => {
                 setFrame3dVisibility({ ...viewSet.visibility });
                 setFrame3dViewRequest((previous) => ({ kind: viewSet.view, token: previous.token + 1 }));
+                if (viewSet.mode) {
+                  setFrame3dShowLoadCase(viewSet.mode !== "model");
+                  setResultsTabActive(viewSet.mode === "results");
+                  setTreeTab(viewSet.mode === "results" ? "results" : "project");
+                }
                 if (viewSet.combinationId === null) {
                   setFrame3dActiveCombinationId(null);
                   setFrame3dResult(frame3dCaseResults.get(fem.activeLoadCaseId) ?? null);

@@ -44,6 +44,7 @@ interface Props {
   visibility?: Frame3DVisibility;
   onVisibilityChange?: (visibility: Frame3DVisibility) => void;
   showLoadCase?: boolean;
+  resultsActive?: boolean;
   structuralGrid?: StructuralGrid;
   gridSpacingM?: number;
   result?: Frame3DSolveResult | null;
@@ -65,7 +66,7 @@ export default function Frame3DEditor({
   model, calculationModel, onChange, visibilityOpen = false, onVisibilityClose,
   tool = "select", onToolChange, deleteToken = 0, fitRequest = 0, viewRequest,
   selection: controlledSelection, onSelectionChange,
-  visibility: visibilityProp, onVisibilityChange, showLoadCase = true, structuralGrid, gridSpacingM,
+  visibility: visibilityProp, onVisibilityChange, showLoadCase = true, resultsActive = false, structuralGrid, gridSpacingM,
   result = null, checks = null, concreteChecks = null,
   solving = false, solveError = null, activeLoadCaseId,
   viewSets = [], currentView = "iso", currentCombinationId = null, combinationOptions = [],
@@ -233,6 +234,7 @@ export default function Frame3DEditor({
         currentView={currentView}
         currentCamera={cameraState}
         currentCombinationId={currentCombinationId}
+        currentMode={!showLoadCase ? "model" : resultsActive ? "results" : "loadCase"}
         combinationOptions={combinationOptions}
         onViewSetsChange={onViewSetsChange}
         onApplyViewSet={(viewSet) => {

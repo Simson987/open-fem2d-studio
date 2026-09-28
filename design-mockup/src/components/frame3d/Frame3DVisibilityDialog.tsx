@@ -15,6 +15,7 @@ interface Props {
   currentView: Frame3DView;
   currentCamera: Frame3DCameraState;
   currentCombinationId: number | null;
+  currentMode: "model" | "loadCase" | "results";
   combinationOptions: { id: number; name: string }[];
   onViewSetsChange?: (viewSets: Frame3DViewSet[]) => void;
   onApplyViewSet?: (viewSet: Frame3DViewSet) => void;
@@ -29,7 +30,7 @@ const GROUPS: { title: string; keys: (keyof Frame3DVisibility)[] }[] = [
 
 export default function Frame3DVisibilityDialog({
   open, onClose, visibility, onChange, viewSets, currentView, currentCamera,
-  currentCombinationId, combinationOptions, onViewSetsChange, onApplyViewSet,
+  currentCombinationId, currentMode, combinationOptions, onViewSetsChange, onApplyViewSet,
 }: Props) {
   const { t } = useTranslation("common");
   const [name, setName] = useState("");
@@ -47,6 +48,7 @@ export default function Frame3DVisibilityDialog({
       },
       visibility: { ...visibility },
       combinationId: currentCombinationId,
+      mode: currentMode,
     };
     onViewSetsChange(existing
       ? viewSets.map((item) => item.id === existing.id ? viewSet : item)
@@ -70,7 +72,7 @@ export default function Frame3DVisibilityDialog({
     >
       <section className="frame3d-viewsets" aria-label="Opgeslagen 3D-weergaven">
         <h3>Opgeslagen views</h3>
-        <p>Bewaar de camera, resultaatcombinatie en alle onderstaande zichtbaarheidsschakelaars samen.</p>
+        <p>Bewaar de camera, tabstand, resultaatcombinatie en alle onderstaande zichtbaarheidsschakelaars samen.</p>
         <div className="frame3d-viewset-save">
           <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Naam van de view"
             onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); save(); } }} />
@@ -83,7 +85,7 @@ export default function Frame3DVisibilityDialog({
               : combinationOptions.find((item) => item.id === viewSet.combinationId)?.name ?? `combinatie ${viewSet.combinationId}`;
             return <div key={viewSet.id} className="frame3d-viewset-row">
               <button type="button" className="frame3d-viewset-apply" onClick={() => onApplyViewSet?.(viewSet)}>
-                <strong>{viewSet.name}</strong><span>{viewSet.view} · {combination}</span>
+                <strong>{viewSet.name}</strong><span>{viewSet.view} · {viewSet.mode === "model" ? "model" : viewSet.mode === "results" ? "resultaten" : viewSet.mode === "loadCase" ? "belastinggeval" : "huidige tabstand"} · {combination}</span>
               </button>
               <button type="button" aria-label={`${viewSet.name} verwijderen`} title="Verwijderen"
                 onClick={() => onViewSetsChange?.(viewSets.filter((item) => item.id !== viewSet.id))}>×</button>

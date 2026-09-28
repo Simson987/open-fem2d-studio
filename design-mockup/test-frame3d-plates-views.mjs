@@ -88,20 +88,24 @@ const view = {
   combinationId: 12,
 };
 assert.deepEqual(parseFrame3DViewSets([view]), [view]);
+assert.deepEqual(parseFrame3DViewSets([{ ...view, mode: "model" }])[0].mode, "model");
+assert.throws(() => parseFrame3DViewSets([{ ...view, mode: "unknown" }]), /ongeldige tabstand/);
 assert.throws(() => parseFrame3DViewSets([view, view]), /dubbele id/);
 const geometrySelection = toggleFrame3DSelection({ type: "node", id: 1 }, { type: "plate", id: 1 }, true);
 assert.deepEqual(geometrySelection, { type: "multi", nodeIds: [1], beamIds: [], plateIds: [1] });
 assert.deepEqual(toggleFrame3DSelection(geometrySelection, { type: "plate", id: 1 }, true), { type: "node", id: 1 });
 assert.deepEqual(toggleFrame3DSelection(geometrySelection, { type: "surfaceLoad", id: 1 }, true), { type: "surfaceLoad", id: 1 });
 
+const modernView = { ...view, mode: "results" };
 const projectText = serializeProject({
   nodes: [], beams: [], supports: [], plates: [], loads: [], loadCases: [{ id: 1, name: "Permanent", type: "permanent" }],
   activeLoadCaseId: 1, selfWeightEnabled: false, nonlinearEnabled: true,
-  modelDimension: "3d", model3d: loaded, frame3dViewSets: [view],
+  modelDimension: "3d", model3d: loaded, frame3dViewSets: [modernView],
 });
 const reopened = deserializeProject(projectText);
 assert.equal(reopened.model3d.plates[0].cornerRadiusM, 0.35);
 assert.equal(reopened.model3d.surfaceLoads[0].qz, -5);
 assert.equal(reopened.frame3dViewSets[0].name, "UGT momentbeeld");
+assert.equal(reopened.frame3dViewSets[0].mode, "results", "de resultaat-tabstand overleeft projectopslag");
 
 console.log("3D-platen, openingen, ronde randen, oppervlaktebelasting en opgeslagen views: geslaagd");
