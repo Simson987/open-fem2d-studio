@@ -461,16 +461,14 @@ export default function HomeTab({
               label={t("home.loadCases")}
               size="small"
               onClick={onOpenLoadCases ?? stub("Load cases dialog (no handler)")}
-              disabled={is3D}
-              title={is3D ? unsupported3D : undefined}
+              disabled={!onOpenLoadCases}
             />
             <RibbonButton
               icon={loadCombinationsIcon}
               label={t("home.combinations")}
               size="small"
               onClick={onOpenLoadCombinations ?? stub("Load combinations dialog (no handler)")}
-              disabled={is3D}
-              title={is3D ? unsupported3D : undefined}
+              disabled={!onOpenLoadCombinations}
             />
             {/* Windbelastinggenerator — EN 1991-1-4 + Nederlandse NB. */}
             <RibbonButton
