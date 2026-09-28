@@ -257,6 +257,8 @@ function fittedCameraDistance(
   camera: THREE.PerspectiveCamera,
   box: THREE.Box3,
   centerToCamera: THREE.Vector3,
+  viewportWidthPx: number,
+  viewportHeightPx: number,
 ): number {
   if (box.isEmpty()) return 4;
   const center = box.getCenter(new THREE.Vector3());
@@ -278,9 +280,14 @@ function fittedCameraDistance(
   }
   const verticalFov = THREE.MathUtils.degToRad(camera.fov);
   const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * Math.max(camera.aspect, 0.05));
+  // Het canvas bevat bovenaan de titel en de knop Passend beeld, en onderaan
+  // statusinformatie. Reserveer hun ruimte ook voor een klein model: de vaste
+  // minimumafstand van 2 m alleen liet een plaat net onder de kopregel vallen.
+  const usableHeight = Math.max(0.55, 1 - 88 / Math.max(viewportHeightPx, 1));
+  const usableWidth = Math.max(0.7, 1 - 48 / Math.max(viewportWidthPx, 1));
   const projectedDistance = Math.max(
-    halfHeight / Math.max(Math.tan(verticalFov / 2), 1e-6),
-    halfWidth / Math.max(Math.tan(horizontalFov / 2), 1e-6),
+    halfHeight / Math.max(Math.tan(verticalFov / 2) * usableHeight, 1e-6),
+    halfWidth / Math.max(Math.tan(horizontalFov / 2) * usableWidth, 1e-6),
   );
   return Math.max(2, (halfDepth + projectedDistance) * 1.08);
 }
@@ -3417,7 +3424,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       : new THREE.Vector3(1.4, 1.4, 1);
     if (view === "top") state.camera.up.set(0, 1, 0);
     else state.camera.up.set(0, 0, 1);
-    const distance = hasGeometry ? fittedCameraDistance(state.camera, box, direction) : 4;
+    const distance = hasGeometry ? fittedCameraDistance(
+      state.camera, box, direction,
+      state.renderer.domElement.clientWidth, state.renderer.domElement.clientHeight,
+    ) : 4;
     state.controls.target.copy(center);
     state.camera.position.copy(center).add(direction.normalize().multiplyScalar(distance));
     state.camera.near = Math.max(0.001, distance / 10_000);

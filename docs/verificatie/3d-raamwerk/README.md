@@ -33,6 +33,7 @@ waarbij een belasting volledig op een geblokkeerde vrijheidsgraad staat.
 | [`revolute-x-request.json`](revolute-x-request.json) | revolute X, torsiestijfheid, vrije rotatie en reactiekoppel via API/MCP | gesloten oplossing `θ = TL/GJ` |
 | [`pdelta-nultoestand-request.json`](pdelta-nultoestand-request.json) | tweede orde bij exact nul vrije verplaatsing; reactie, convergentie en `B2=1` | direct evenwicht op de geblokkeerde vrijheidsgraad |
 | [`groot-vierlaags-raam.ifcfem2d`](groot-vierlaags-raam.ifcfem2d) en [verificatie](groot-vierlaags-raam-verificatie.md) | 100 knopen, 235 staven, vier ruimtelijke belastinggevallen, volledige lineaire superpositie en GUI | onafhankelijke globale kracht- en momentbalans |
+| [3D-tekenbediening en camerafit](tekenbediening-en-camerafit.md) | knoopsnap bij twee getekende staven, selectie, passend beeld en behoud van camerapositie | GUI-proef met gemeten bedieningstijden |
 
 Alle afmetingen, materiaalwaarden, lasten, opleggingen en verwachte knoopresultaten staan in de JSON-bestanden. `cases.json` gebruikt SI-eenheden: m, N, N·m, Pa en rad. Z blijft de verticale as van het bestaande 2D-model; Y is de extra horizontale richting. De TU Delft-referentie gebruikt kN·m voor momenten en kN·m/rad voor rotatiestijfheid.
 
