@@ -85,4 +85,14 @@ er **geen overlap** met die schermdelen; de indeling duurde 5,9 ms. Na
 berekenen gaf de daklast opnieuw `umax = 0,09559 mm`. Met resultaat- en
 toetslabels aan bleef de overlap ook na `Passend beeld` en een wissel naar
 dwarskracht Vy nul. In die zwaardere resultaatstand duurde de labelindeling
-13,2 tot 16,3 ms; dit blijft een aandachtspunt voor nog grotere modellen.
+13,2 tot 16,3 ms. Deze meting kwam uit een tussentijds vernieuwde
+ontwikkelviewer waarin 359 label-elementen aanwezig waren. Na een volledige
+herlaadbeurt had hetzelfde berekende model 140 label-elementen. Een
+vervolgproef met die schone viewer liet de verborgen labels tijdens de
+indeling ongemoeid en wijzigde hun CSS-status alleen waar nodig. Vier
+opeenvolgende in- en uitzoomacties duurden voor de labelindeling 3,1–7,0 ms;
+telkens bleef de overlap nul en kwamen labels bij inzoomen weer terug.
+Voor- en isometrisch aanzicht (4,1 en 5,6 ms) en wisselen tussen wind en
+daklast (6,9 en 5,6 ms) bleven eveneens zonder overlap. Bij de wissel van
+belastinggeval bleef de camerapositie gelijk. Deze tijden zijn diagnostisch
+en afhankelijk van de zichtbaarheidsinstellingen.

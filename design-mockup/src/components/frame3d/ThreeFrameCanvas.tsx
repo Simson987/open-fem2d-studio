@@ -345,9 +345,8 @@ function renderFrame3DLabels(state: SceneState, container: HTMLElement | null) {
     return;
   }
   const startedAt = performance.now();
-  // Verborgen labels behouden hun afmetingen. Zet ze eerst allemaal terug,
-  // zodat een gewijzigde camerastand opnieuw eerlijk kan worden ingedeeld.
-  labels.forEach((label) => { label.style.visibility = ""; });
+  // visibility:hidden behoudt de DOMRect van een label. Meet ook verborgen
+  // labels en pas hun zichtbaarheid na de collision-indeling aan.
   const viewport = layer.getBoundingClientRect();
   // De vaste titel, fitknop, status en eventuele bedienpanelen liggen boven
   // het WebGL-canvas. Behandel hun rechthoeken als bezet schermgebied, zodat
@@ -377,12 +376,13 @@ function renderFrame3DLabels(state: SceneState, container: HTMLElement | null) {
   for (const { label, box } of candidates) {
     const outside = box.right <= viewport.left || box.left >= viewport.right
       || box.bottom <= viewport.top || box.top >= viewport.bottom;
-    const collision = reserved.some((other) => overlaps(box, other))
-      || accepted.some((other) => overlaps(box, other));
+    const collision = !outside && (reserved.some((other) => overlaps(box, other))
+      || accepted.some((other) => overlaps(box, other)));
     if (outside || collision) {
-      label.style.visibility = "hidden";
+      if (label.style.visibility !== "hidden") label.style.visibility = "hidden";
       hidden += 1;
     } else {
+      if (label.style.visibility) label.style.visibility = "";
       accepted.push(box);
     }
   }
