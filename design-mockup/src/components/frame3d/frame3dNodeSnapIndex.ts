@@ -79,6 +79,7 @@ export function findFrame3DNodeScreenSnap(
   xPx: number,
   yPx: number,
   radiusPx = 14,
+  excludedNodeId?: number,
 ): Frame3DNodeScreenSnap | null {
   const radius = Math.max(0, radiusPx);
   const minCellX = Math.floor((xPx - radius) / index.cellSizePx);
@@ -94,6 +95,7 @@ export function findFrame3DNodeScreenSnap(
       if (!bucket) continue;
       candidateCount += bucket.length;
       for (const point of bucket) {
+        if (point.id === excludedNodeId) continue;
         const dx = point.xPx - xPx;
         const dy = point.yPx - yPx;
         const distanceSq = dx * dx + dy * dy;

@@ -331,6 +331,12 @@ const centerSnap = findFrame3DNodeScreenSnap(snapIndex, 500, 500);
 assert.equal(centerSnap?.point.id, 10_151, "schermindex vindt de middelste knoop van 20.301 knopen");
 assert.ok((centerSnap?.candidateCount ?? Number.POSITIVE_INFINITY) < 250,
   "knoopsnap bekijkt alleen lokale schermcellen en niet het hele grote model");
+const withoutArcControl = findFrame3DNodeScreenSnap(snapIndex, 500, 500, 14, 10_151);
+assert.notEqual(withoutArcControl?.point.id, 10_151,
+  "het stuurpunt van een onafgemaakte boog mag zijn eindpunt niet op zichzelf vastzetten");
+const onlyArcControl = buildFrame3DNodeSnapScreenIndex([snapNodes[10_150]], snapCamera, 1000, 1000);
+assert.equal(findFrame3DNodeScreenSnap(onlyArcControl, 500, 500, 14, 10_151), null,
+  "zonder andere knopen kan het boogeindpunt weer op raster of werkvlak vallen");
 const hidden = new THREE.Group();
 addFrame3DConditionMarkers(hidden, withConditions, { supports: false, loads: false });
 assert.equal(hidden.children.length, 0);

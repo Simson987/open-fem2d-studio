@@ -1209,7 +1209,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         const index = ensureNodeSnapScreenIndex();
         const xPx = (pointer.x + 1) * index.width / 2;
         const yPx = (1 - pointer.y) * index.height / 2;
-        const nodeHit = findFrame3DNodeScreenSnap(index, xPx, yPx);
+        // Het stuurpunt van een nog te voltooien boog is geen geldig
+        // eindpunt. Anders blijft een klik vlak ernaast zonder zichtbaar
+        // resultaat op hetzelfde stuurpunt snappen.
+        const draft = isOpeningTool(toolRef.current) ? openingDraftRef.current : plateDraftRef.current;
+        const excludedNodeId = isArcBoundaryTool(toolRef.current)
+          ? draft.arcControlNodeId ?? undefined : undefined;
+        const nodeHit = findFrame3DNodeScreenSnap(index, xPx, yPx, 14, excludedNodeId);
         container.dataset.frame3dNodeSnapCandidates = String(nodeHit?.candidateCount ?? 0);
         if (nodeHit) {
           const node = nodeByIdRef.current!.get(nodeHit.point.id);
