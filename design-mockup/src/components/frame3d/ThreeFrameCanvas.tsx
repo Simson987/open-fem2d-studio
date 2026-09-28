@@ -1655,6 +1655,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           ? { historyGroup: historyGroupRef.current } : undefined);
       };
       const ensureDrawingNode = (): number | null => {
+        const snapped = drawingSnap();
+        // De zichtbare knoopsnapzone wint van een staafhit op hetzelfde
+        // schermpunt. Een profielraycast op het staafeinde kan anders een
+        // bestaande knoop onbedoeld vervangen door een splitsing vlak ernaast.
+        if (snapped?.nodeId !== undefined) return snapped.nodeId;
         if (activeTool === "addBeam" && type === "beam" && typeof id === "number" && intersection) {
           const beam = beamByIdRef.current!.get(id);
           const start = beam && nodeByIdRef.current!.get(beam.startNodeId);
@@ -1670,9 +1675,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
             return split.nodeId;
           }
         }
-        const snapped = drawingSnap();
         if (!snapped) return null;
-        if (snapped.nodeId !== undefined) return snapped.nodeId;
         const position = snapped.position.set(
           cleanDrawingCoordinate(snapped.position.x),
           cleanDrawingCoordinate(snapped.position.y),

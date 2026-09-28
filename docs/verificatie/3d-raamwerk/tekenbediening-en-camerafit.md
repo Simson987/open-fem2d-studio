@@ -50,3 +50,19 @@ zoomen bleef de zichtbare tekst vrij van overlap. Een nieuwe indeling van de
 labels nam in deze proef 0,3 tot 1,9 ms in beslag. Minder dringende labels
 worden alleen op het scherm verborgen; de resultaten en profielgegevens
 blijven via selectie beschikbaar.
+
+## Verborgen knopen tijdens staaftekenen
+
+Met **Knopen** uitgeschakeld in **Weergave** en het staafgereedschap actief,
+werd in het standaardmodel (negen knopen, zes staven) van knoop 3 naar de
+positie van knoop 5 getekend. Vóór de correctie won de profielhit van de
+knoopsnap: de bestaande staaf werd vlak bij het uiteinde gesplitst en er
+ontstond een vrijwel samenvallende extra knoop (tien knopen, acht staven).
+Na de correctie bleef het model op **negen knopen** en kwam er precies **één
+staaf** bij. De nieuwe staaf eindigde op knoop 5; de toevoeging duurde in
+deze GUI-proef 8,0 ms.
+
+Daarna is op het midden van een bestaande staaf geklikt. Zonder knoop in de
+snapzone werd die staaf nog steeds gesplitst en een aansluitende staaf
+getekend: tien knopen en negen staven. De knoopsnap krijgt dus alleen
+voorrang waar daadwerkelijk een bestaande knoop onder de cursor ligt.
