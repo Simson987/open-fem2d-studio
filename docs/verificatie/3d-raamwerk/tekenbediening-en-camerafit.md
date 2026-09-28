@@ -42,6 +42,16 @@ Een batch met 235 profielvolumes werd in de zelfstandige geometrieproef in
 4,2 ms binnen een volledig kader geselecteerd; dit is een diagnostische
 meting op de testmachine, geen ontwerplimiet.
 
+Bij een gedraaide ronde doorsnede kon de conservatieve boundingbox groter
+zijn dan het werkelijk getekende profiel. Daardoor werd een volledig zichtbaar
+omkaderde ligger soms toch niet geselecteerd. De snelle boundingbox blijft
+voor de meeste liggers volstaan; in grensgevallen controleert de selectie nu
+de echte profielvertices. De regressieproef dekt zowel een losse ligger als
+een GPU-batch. In de GUI bleef een gedeeltelijk kader over de IPE-ligger leeg;
+een kader dat de zichtbare stalen liggers volledig omsloot selecteerde beide
+liggers (en drie omkaderde knopen) in 0,7 ms. De batchproef met 235 staven
+duurde na opwarming 4,3 ms.
+
 In een berekend 3D-model overlapten vooraf 17 paren van 19 resultaat- en
 toetslabels. De bijgewerkte weergave liet zeven resultaat- en toetslabels
 zonder onderlinge overlap zien; samen met assen en profielnamen waren tien
@@ -96,3 +106,26 @@ Voor- en isometrisch aanzicht (4,1 en 5,6 ms) en wisselen tussen wind en
 daklast (6,9 en 5,6 ms) bleven eveneens zonder overlap. Bij de wissel van
 belastinggeval bleef de camerapositie gelijk. Deze tijden zijn diagnostisch
 en afhankelijk van de zichtbaarheidsinstellingen.
+
+## Plaat met lijn- en boogranden
+
+In het 3D-bovenaanzicht is een plaat getekend met drie rechte randsegmenten
+en één boog via een afzonderlijk stuurpunt. Na sluiting toonde de GUI één
+selecteerbare plaat met vier segmenten, één boog en een dikte van 0,2 m.
+De toevoeging duurde 10,5 ms, waarvan 1,3 ms voor de plaatgeometrie.
+Daarna is in hetzelfde vlak een opening met drie lijnen en één boog
+getekend. De opening verscheen als echt gat; het bijwerken van de plaat
+duurde 4,9 ms, waarvan 1,6 ms voor de geometrie. Een klik in het gat
+selecteerde niets, een klik op het resterende plaatvlak selecteerde de
+plaat in 0,3 ms.
+
+Bij het toevoegen van een oppervlaktebelasting bleek het lastteken in de
+opening te liggen: de oude positie was het gemiddelde van de buitenste
+contourknopen en hoeft geen plaatmateriaal te zijn. De positie komt nu uit
+een driehoek van het werkelijk gemeshte plaatvlak. In een schoon geladen
+proefmodel met een gebogen buitenrand en opening stond de lastpijl zichtbaar
+op het materiaal en was hij afzonderlijk selecteerbaar (1,4 ms hit-test).
+De geometrieproef in
+[`test-frame3d-plates-views.mjs`](../../../design-mockup/test-frame3d-plates-views.mjs)
+controleert met raycasting dat de lastpositie ook bij een gebogen opening
+op de plaat ligt.

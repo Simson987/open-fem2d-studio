@@ -10,7 +10,7 @@ function projectedPoint(point: THREE.Vector3, camera: THREE.Camera, width: numbe
   return { x: (ndc.x + 1) * width / 2, y: (1 - ndc.y) * height / 2 };
 }
 
-/** Schermgrenzen van het werkelijk getekende profiel, inclusief de doorsnede. */
+/** Snelle, conservatieve schermgrenzen van de profiel-boundingbox. */
 export function frame3DMeshScreenBounds(
   mesh: THREE.Mesh,
   camera: THREE.Camera,
@@ -51,6 +51,54 @@ export function frame3DBoxContainsBounds(box: Frame3DScreenBox, bounds: Frame3DS
     && bounds.top >= box.top && bounds.bottom <= box.bottom;
 }
 
+function frame3DBoxIntersectsBounds(box: Frame3DScreenBox, bounds: Frame3DScreenBox) {
+  return bounds.left <= box.right && bounds.right >= box.left
+    && bounds.top <= box.bottom && bounds.bottom >= box.top;
+}
+
+/** De volledige getekende mesh past in het kader, ook bij een ronde of gedraaide doorsnede. */
+function frame3DBoxContainsMeshVertices(
+  box: Frame3DScreenBox,
+  mesh: THREE.Mesh,
+  camera: THREE.Camera,
+  width: number,
+  height: number,
+  instanceIndex?: number,
+) {
+  const positions = mesh.geometry.getAttribute("position");
+  if (!positions?.count) return false;
+  const transform = mesh.matrixWorld.clone();
+  if (mesh instanceof THREE.InstancedMesh) {
+    if (instanceIndex === undefined || instanceIndex >= mesh.count) return false;
+    const instance = new THREE.Matrix4();
+    mesh.getMatrixAt(instanceIndex, instance);
+    transform.multiply(instance);
+  }
+  const point = new THREE.Vector3();
+  for (let index = 0; index < positions.count; index += 1) {
+    point.fromBufferAttribute(positions, index).applyMatrix4(transform).project(camera);
+    if (point.z < -1 || point.z > 1) return false;
+    const x = (point.x + 1) * width / 2;
+    const y = (1 - point.y) * height / 2;
+    if (x < box.left || x > box.right || y < box.top || y > box.bottom) return false;
+  }
+  return true;
+}
+
+function frame3DBoxContainsMesh(
+  box: Frame3DScreenBox,
+  mesh: THREE.Mesh,
+  camera: THREE.Camera,
+  width: number,
+  height: number,
+  instanceIndex?: number,
+) {
+  const coarse = frame3DMeshScreenBounds(mesh, camera, width, height, instanceIndex);
+  if (coarse && frame3DBoxContainsBounds(box, coarse)) return true;
+  if (coarse && !frame3DBoxIntersectsBounds(box, coarse)) return false;
+  return frame3DBoxContainsMeshVertices(box, mesh, camera, width, height, instanceIndex);
+}
+
 export function selectFrame3DInScreenBox(
   model: Frame3DModel,
   meshes: readonly THREE.Object3D[],
@@ -84,12 +132,10 @@ export function selectFrame3DInScreenBox(
       const ids = object.userData.instanceIds as number[] | undefined;
       if (!ids) continue;
       for (let index = 0; index < object.count; index += 1) {
-        const bounds = frame3DMeshScreenBounds(object, camera, width, height, index);
-        if (bounds && frame3DBoxContainsBounds(box, bounds)) target.add(ids[index]);
+        if (frame3DBoxContainsMesh(box, object, camera, width, height, index)) target.add(ids[index]);
       }
     } else if (typeof object.userData.id === "number") {
-      const bounds = frame3DMeshScreenBounds(object, camera, width, height);
-      if (bounds && frame3DBoxContainsBounds(box, bounds)) target.add(object.userData.id);
+      if (frame3DBoxContainsMesh(box, object, camera, width, height)) target.add(object.userData.id);
     }
   }
   if (additive) {

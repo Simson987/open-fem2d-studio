@@ -44,6 +44,9 @@ assert.equal(new Raycaster(new Vector3(3, 2, 2), new Vector3(0, 0, -1)).intersec
   "een opening laat in de gemeshte plaat werkelijk een leeg vlak achter");
 assert.ok(new Raycaster(new Vector3(1, 2, 2), new Vector3(0, 0, -1)).intersectObject(plateMesh).length > 0,
   "naast de opening blijft de plaat gesloten");
+assert.ok(new Raycaster(rendered.surfaceAnchor.clone().add(new Vector3(0, 0, 2)), new Vector3(0, 0, -1))
+  .intersectObject(plateMesh).length > 0,
+"het lastteken moet op plaatmateriaal staan en niet in de opening");
 assert.throws(() => addFrame3DPlateOpening(withPlate, 1, [1, 5, 6]), /binnen.*buitenrand/,
   "een opening die de plaatrand raakt mag geen schijnbare uitsparing worden");
 assert.throws(() => parseFrame3DModel({ ...withOpening,
@@ -61,8 +64,16 @@ const curvedOpening = addFrame3DPlateOpening(rounded, 1, [5, 10, 6, 7, 8], {
 });
 assert.equal(curvedOpening.plates[0].openings[0].boundary[0].kind, "arc",
   "een getekende boogrand van een opening blijft modeldata");
-assert.ok(createFrame3DPlateGeometry(curvedOpening, curvedOpening.plates[0])?.geometry.attributes.position.count > 0,
+const curvedOpeningGeometry = createFrame3DPlateGeometry(curvedOpening, curvedOpening.plates[0]);
+assert.ok(curvedOpeningGeometry?.geometry.attributes.position.count > 0,
   "een opening met lijn- en boogranden krijgt een echte plaatuitsparing");
+const curvedOpeningMesh = new Mesh(curvedOpeningGeometry.geometry, new MeshBasicMaterial({ side: DoubleSide }));
+curvedOpeningMesh.position.copy(curvedOpeningGeometry.position);
+curvedOpeningMesh.quaternion.copy(curvedOpeningGeometry.quaternion);
+curvedOpeningMesh.updateMatrixWorld(true);
+assert.ok(new Raycaster(curvedOpeningGeometry.surfaceAnchor.clone().add(new Vector3(0, 0, 2)), new Vector3(0, 0, -1))
+  .intersectObject(curvedOpeningMesh).length > 0,
+"ook bij een gebogen opening staat het lastteken op plaatmateriaal");
 assert.deepEqual(
   parseFrame3DModel(JSON.parse(JSON.stringify(curvedOpening))).plates[0].openings[0].boundary,
   curvedOpening.plates[0].openings[0].boundary,

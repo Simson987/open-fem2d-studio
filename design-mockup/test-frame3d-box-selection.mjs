@@ -36,6 +36,38 @@ assert.deepEqual(selectFrame3DInScreenBox(model, [steelBeam], camera, 800, 600,
 assert.deepEqual(selectFrame3DInScreenBox(model, [steelBeam], camera, 800, 600,
   completeBox, null, false, false), { type: "beam", id: 1 });
 
+// Een gedraaid profiel past zichtbaar in het kader, terwijl de acht hoeken
+// van zijn lokale bounding box er deels buiten vallen. Selectie moet op de
+// werkelijk getekende profielvertices berusten.
+const roundProfile = new THREE.CylinderGeometry(0.12, 0.12, 4, 12);
+const rotatedBeam = new THREE.Mesh(roundProfile, new THREE.MeshBasicMaterial());
+rotatedBeam.rotation.x = Math.PI / 4;
+rotatedBeam.rotation.z = Math.PI / 5;
+rotatedBeam.userData = { type: "beam", id: 2 };
+rotatedBeam.updateMatrixWorld();
+const vertices = roundProfile.getAttribute("position");
+const actualPoints = Array.from({ length: vertices.count }, (_, index) => {
+  const ndc = new THREE.Vector3().fromBufferAttribute(vertices, index)
+    .applyMatrix4(rotatedBeam.matrixWorld).project(camera);
+  return { x: (ndc.x + 1) * 400, y: (1 - ndc.y) * 300 };
+});
+const silhouetteBox = {
+  left: Math.min(...actualPoints.map((point) => point.x)) - 1,
+  right: Math.max(...actualPoints.map((point) => point.x)) + 1,
+  top: Math.min(...actualPoints.map((point) => point.y)) - 1,
+  bottom: Math.max(...actualPoints.map((point) => point.y)) + 1,
+};
+assert.equal(frame3DBoxContainsBounds(silhouetteBox,
+  frame3DMeshScreenBounds(rotatedBeam, camera, 800, 600)), false);
+assert.deepEqual(selectFrame3DInScreenBox(model, [rotatedBeam], camera, 800, 600,
+  silhouetteBox, null, false, false), { type: "beam", id: 2 });
+const rotatedBatch = new THREE.InstancedMesh(roundProfile, new THREE.MeshBasicMaterial(), 1);
+rotatedBatch.setMatrixAt(0, rotatedBeam.matrixWorld);
+rotatedBatch.userData = { type: "beam", instanceIds: [13] };
+rotatedBatch.updateMatrixWorld();
+assert.deepEqual(selectFrame3DInScreenBox(model, [rotatedBatch], camera, 800, 600,
+  silhouetteBox, null, false, false), { type: "beam", id: 13 });
+
 // Hetzelfde selectiecriterium geldt voor de GPU-batch van grote raamwerken.
 const instanced = new THREE.InstancedMesh(profile, new THREE.MeshBasicMaterial(), 2);
 instanced.setMatrixAt(0, new THREE.Matrix4().makeTranslation(-2, 0, 0));

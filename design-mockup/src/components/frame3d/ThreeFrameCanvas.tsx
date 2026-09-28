@@ -3314,14 +3314,14 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         if (magnitude <= 1e-12) continue;
         const direction = vector.normalize();
         const length = 0.7;
-        const arrow = new THREE.ArrowHelper(direction, built.centroid.clone().addScaledVector(direction, -length), length, 0x0284c7, 0.22, 0.12);
+        const arrow = new THREE.ArrowHelper(direction, built.surfaceAnchor.clone().addScaledVector(direction, -length), length, 0x0284c7, 0.22, 0.12);
         arrow.traverse((child) => { child.userData = { type: "surfaceLoad", id: load.id }; });
         geometry.add(arrow);
         if (loadIndex % surfaceLoadLabelStride === 0) {
           geometry.add(makeLabel(
             `q = ${resultValue(magnitude)} kN/m²`,
             "frame3d-result-label frame3d-surface-load-label",
-            built.centroid.clone().addScaledVector(built.normal, 0.12),
+            built.surfaceAnchor.clone().addScaledVector(built.normal, 0.12),
           ));
         }
       }

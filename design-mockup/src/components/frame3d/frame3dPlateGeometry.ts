@@ -7,7 +7,7 @@ export interface Frame3DPlateGeometry {
   position: THREE.Vector3;
   quaternion: THREE.Quaternion;
   normal: THREE.Vector3;
-  centroid: THREE.Vector3;
+  surfaceAnchor: THREE.Vector3;
 }
 
 function roundedPath(points: THREE.Vector2[], radius: number, shape: boolean): THREE.Shape | THREE.Path {
@@ -114,6 +114,22 @@ export function createFrame3DPlateGeometry(
   geometry.translate(0, 0, -plate.thicknessM / 2);
   geometry.computeVertexNormals();
   const quaternion = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(u, v, normal));
-  const centroid = nodes.reduce((sum, node) => sum.add(point(node)), new THREE.Vector3()).multiplyScalar(1 / nodes.length);
-  return { geometry, position, quaternion, normal, centroid };
+  // Het gemiddelde van de contourknopen kan in een opening vallen. Kies het
+  // zwaartepunt van een echte kapdriehoek: die ligt altijd op het plaatvlak.
+  const cap = geometry.groups.find((group) => group.materialIndex === 0);
+  const vertices = geometry.getAttribute("position");
+  let anchor = new THREE.Vector3();
+  let largestArea = 0;
+  if (cap) for (let index = cap.start; index + 2 < cap.start + cap.count; index += 3) {
+    const ax = vertices.getX(index), ay = vertices.getY(index);
+    const bx = vertices.getX(index + 1), by = vertices.getY(index + 1);
+    const cx = vertices.getX(index + 2), cy = vertices.getY(index + 2);
+    const area = Math.abs((bx - ax) * (cy - ay) - (by - ay) * (cx - ax));
+    if (area > largestArea) {
+      largestArea = area;
+      anchor = new THREE.Vector3((ax + bx + cx) / 3, (ay + by + cy) / 3, 0);
+    }
+  }
+  const surfaceAnchor = anchor.applyQuaternion(quaternion).add(position);
+  return { geometry, position, quaternion, normal, surfaceAnchor };
 }
