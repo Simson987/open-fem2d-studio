@@ -2397,7 +2397,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     const interactivePlateNodeAppend = Boolean(incrementalNodeOnly)
       && (toolRef.current === "addPlate" || toolRef.current === "addPlateArc" || isOpeningTool(toolRef.current));
     if (previousModel && unchangedCollections
-      && (previousModel.nodes.length >= 250 || interactivePlateNodeAppend)
+      && (previousModel.nodes.length >= 250 || interactivePlateNodeAppend || incrementalBeam)
       && (incrementalNodeOnly || incrementalBeam)) {
       const node = appendedNode ? model.nodes[model.nodes.length - 1]! : undefined;
       const previousBounds = lastBuiltNodeBoundsRef.current;
@@ -2425,12 +2425,15 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       const beamMesh = profileKey
         ? geometry.children.find((child) => child.userData.frame3dBeamBatchKey === profileKey)
         : undefined;
+      const standaloneBeamAppend = Boolean(beam)
+        && model.beams.length < 100
+        && model.nodes.length < 250;
       const beamStart = beam ? nodeByIdRef.current!.get(beam.startNodeId) : undefined;
       const beamEnd = beam ? nodeByIdRef.current!.get(beam.endNodeId) : undefined;
       const beamEndpointsValid = !beam || (beamStart !== undefined && beamEnd !== undefined
         && Math.hypot(beamEnd.x - beamStart.x, beamEnd.y - beamStart.y, beamEnd.z - beamStart.z) > 1e-12);
-      const beamCapacityAvailable = !beam || (beamMesh instanceof THREE.InstancedMesh
-        && beamMesh.count + 1 <= beamMesh.instanceMatrix.count);
+      const beamCapacityAvailable = !beam || !visibility.beams || standaloneBeamAppend
+        || (beamMesh instanceof THREE.InstancedMesh && beamMesh.count + 1 <= beamMesh.instanceMatrix.count);
       const previousConditionModel = lastBuiltConditionModelRef.current;
       const conditionLoadsStable = !beam || !visibility.loads
         || (previousConditionModel !== undefined
@@ -2531,6 +2534,60 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
               .add(new THREE.Vector3(end.x, end.y, end.z)).multiplyScalar(0.5)
               .addScaledVector(memberAxes(delta, beam.rollAngleRad ?? 0).ey, 0.3);
             geometry.add(makeLabel(`(${beam.id})`, "frame3d-beam-number", midpoint));
+            addedLabels += 1;
+          }
+        } else if (beam && standaloneBeamAppend && visibility.beams) {
+          const start = beamStart!;
+          const end = beamEnd!;
+          const a = new THREE.Vector3(start.x, start.y, start.z);
+          const b = new THREE.Vector3(end.x, end.y, end.z);
+          const delta = b.clone().sub(a);
+          const length = delta.length();
+          const profileGeometry = visibility.profiles && beam.profileName
+            ? createFrame3DProfileGeometry(beam.profileName, length)
+            : null;
+          const radius = visibility.profiles ? PROFILE_BEAM_RADIUS_M : ANALYTICAL_BEAM_RADIUS_M;
+          const beamGeometry = profileGeometry
+            ?? new THREE.CylinderGeometry(radius, radius, length, visibility.profiles ? 24 : 12);
+          const rotation = profileGeometry
+            ? memberRotation(delta, beam.rollAngleRad ?? 0)
+            : new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.clone().normalize());
+          const utilization = visibility.utilization
+            ? utilizations.find((value) => value.beamId === beam.id)
+            : undefined;
+          const utilizationClass = utilization ? frame3DUtilizationClass(utilization) : undefined;
+          const color = utilizationClass ? FRAME_3D_UTILIZATION_COLORS[utilizationClass] : 0x2563eb;
+          const mesh = new THREE.Mesh(
+            beamGeometry,
+            new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.04 }),
+          );
+          mesh.position.copy(a).add(b).multiplyScalar(0.5);
+          mesh.quaternion.copy(rotation);
+          mesh.userData = { type: "beam", id: beam.id };
+          if (profileGeometry) {
+            const edges = new THREE.LineSegments(
+              new THREE.EdgesGeometry(profileGeometry, 28),
+              new THREE.LineBasicMaterial({ color: 0x1e293b, transparent: true, opacity: 0.42 }),
+            );
+            edges.userData = { type: "beam", id: beam.id, pickable: false };
+            mesh.add(edges);
+          }
+          geometry.add(mesh);
+          selectionPickTargetsRef.current.push(mesh);
+          nonNodePickTargetsRef.current.push(mesh);
+          const axes = memberAxes(delta, beam.rollAngleRad ?? 0);
+          if (visibility.beamNumbers && (model.beams.length - 1) % beamLabelStride === 0) {
+            geometry.add(makeLabel(
+              `(${beam.id})`, "frame3d-beam-number",
+              mesh.position.clone().addScaledVector(axes.ey, 0.3),
+            ));
+            addedLabels += 1;
+          }
+          if (visibility.profiles && beam.profileName) {
+            geometry.add(makeLabel(
+              beam.profileName, "frame3d-profile-label",
+              mesh.position.clone().addScaledVector(axes.ez, -0.3),
+            ));
             addedLabels += 1;
           }
         }
