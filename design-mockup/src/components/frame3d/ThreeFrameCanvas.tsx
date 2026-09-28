@@ -756,6 +756,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
     model: Frame3DModel;
     node?: Frame3DModel["nodes"][number];
     beam?: Frame3DModel["beams"][number];
+    plate?: NonNullable<Frame3DModel["plates"]>[number];
+    replacedPlateId?: number;
   } | null>(null);
   const modelRef = useRef(model);
   const nodeByIdRef = useRef<Map<number, Frame3DModel["nodes"][number]> | null>(null);
@@ -1408,14 +1410,25 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       const commitModel = (next: Frame3DModel, appended?: {
         node?: Frame3DModel["nodes"][number];
         beam?: Frame3DModel["beams"][number];
+        plate?: NonNullable<Frame3DModel["plates"]>[number];
+        replacedPlateId?: number;
       }) => {
         const priorAppend = pendingAppendRef.current?.model === current
           ? pendingAppendRef.current
           : null;
         const appendedNode = appended?.node ?? priorAppend?.node;
         const appendedBeam = appended?.beam ?? priorAppend?.beam;
-        pendingAppendRef.current = appendedNode || appendedBeam
-          ? { baseModel: priorAppend?.baseModel ?? current, model: next, node: appendedNode, beam: appendedBeam }
+        const appendedPlate = appended?.plate ?? priorAppend?.plate;
+        const replacedPlateId = appended?.replacedPlateId ?? priorAppend?.replacedPlateId;
+        pendingAppendRef.current = appendedNode || appendedBeam || appendedPlate
+          ? {
+              baseModel: priorAppend?.baseModel ?? current,
+              model: next,
+              node: appendedNode,
+              beam: appendedBeam,
+              plate: appendedPlate,
+              replacedPlateId,
+            }
           : null;
         if (current.nodes !== next.nodes) {
           nodeSnapScreenIndexDirtyRef.current = true;
@@ -1553,9 +1566,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
                   material: "C30/37",
                   boundary: segments,
                 });
-                commitModel(next);
-                committed = true;
                 const addedPlate = next.plates?.[next.plates.length - 1];
+                commitModel(next, { plate: addedPlate });
+                committed = true;
                 if (addedPlate) selectRef.current({ type: "plate", id: addedPlate.id });
               } finally {
                 plateDraftRef.current = emptyPlateSketch();
@@ -1607,7 +1620,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
               let committed = false;
               try {
                 const next = addFrame3DPlateOpening(current, openingPlateId, nodeIds, { boundary: segments });
-                commitModel(next);
+                const updatedPlate = next.plates?.find((plate) => plate.id === openingPlateId);
+                commitModel(next, { plate: updatedPlate, replacedPlateId: openingPlateId });
                 committed = true;
                 selectRef.current({ type: "plate", id: openingPlateId });
               } finally {
@@ -1812,29 +1826,51 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
       && result === previousPresentation.result
       && utilizations === previousPresentation.utilizations
       && activeLoadCaseId === previousPresentation.activeLoadCaseId;
+    const hintedPlate = pendingAppend?.plate;
+    const hintedPlateIsCurrent = hintedPlate !== undefined
+      && plateByIdRef.current?.get(hintedPlate.id) === hintedPlate;
+    const hintedAppendedPlate = previousModel !== null
+      && hintedPlate !== undefined
+      && hintedPlateIsCurrent
+      && pendingAppend?.replacedPlateId === undefined
+      && nextPlates.length === previousPlates.length + 1
+      && nextPlates[nextPlates.length - 1] === hintedPlate
+      ? hintedPlate
+      : undefined;
+    const hintedReplacedPlate = previousModel !== null
+      && hintedPlate !== undefined
+      && hintedPlateIsCurrent
+      && pendingAppend?.replacedPlateId === hintedPlate.id
+      && nextPlates.length === previousPlates.length
+      ? hintedPlate
+      : undefined;
+    const hasValidatedPlateHint = hintedAppendedPlate !== undefined || hintedReplacedPlate !== undefined;
     const nonPlateCollectionsUnchanged = previousModel !== null
-      && sameFrame3DNodes(model.nodes, previousModel.nodes)
-      && sameFrame3DEntities(model.beams, previousModel.beams)
-      && sameFrame3DEntities(model.supports, previousModel.supports)
-      && sameFrame3DEntities(model.loads, previousModel.loads)
-      && sameFrame3DEntities(model.memberLoads, previousModel.memberLoads)
-      && sameFrame3DEntities(model.memberPointLoads, previousModel.memberPointLoads)
-      && sameFrame3DEntities(model.thermalLoads, previousModel.thermalLoads)
-      && sameFrame3DEntities(model.surfaceLoads, previousModel.surfaceLoads);
-    const appendedPlate = previousModel !== null
+      && (hasValidatedPlateHint || (
+        sameFrame3DNodes(model.nodes, previousModel.nodes)
+        && sameFrame3DEntities(model.beams, previousModel.beams)
+        && sameFrame3DEntities(model.supports, previousModel.supports)
+        && sameFrame3DEntities(model.loads, previousModel.loads)
+        && sameFrame3DEntities(model.memberLoads, previousModel.memberLoads)
+        && sameFrame3DEntities(model.memberPointLoads, previousModel.memberPointLoads)
+        && sameFrame3DEntities(model.thermalLoads, previousModel.thermalLoads)
+        && sameFrame3DEntities(model.surfaceLoads, previousModel.surfaceLoads)
+      ));
+    const appendedPlate = hintedAppendedPlate ?? (previousModel !== null
+      && !hasValidatedPlateHint
       && nonPlateCollectionsUnchanged
       && nextPlates.length === previousPlates.length + 1
       && nextPlates.length < 100
       && previousPlates.every((plate, index) => sameFrame3DEntities([plate], [nextPlates[index]]))
       ? nextPlates[nextPlates.length - 1]
-      : undefined;
-    const replacedPlateIndices = previousModel !== null && nonPlateCollectionsUnchanged
+      : undefined);
+    const replacedPlateIndices = previousModel !== null && !hasValidatedPlateHint && nonPlateCollectionsUnchanged
       && nextPlates.length === previousPlates.length && nextPlates.length < 100
       ? nextPlates.flatMap((plate, index) => sameFrame3DEntities([plate], [previousPlates[index]]) ? [] : [index])
       : [];
-    const replacedPlate = replacedPlateIndices.length === 1
+    const replacedPlate = hintedReplacedPlate ?? (replacedPlateIndices.length === 1
       ? nextPlates[replacedPlateIndices[0]]
-      : undefined;
+      : undefined);
     const changedPlate = appendedPlate ?? replacedPlate;
     if (containerRef.current && previousModel !== null && model.plates !== previousModel.plates) {
       containerRef.current.dataset.frame3dPlateIncrementalFallback = [
