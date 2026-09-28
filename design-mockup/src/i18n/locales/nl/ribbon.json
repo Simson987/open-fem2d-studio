@@ -50,7 +50,7 @@
     "beamCount_one": "{{count}} staaf",
     "beamCount_other": "{{count}} staven",
     "noCalculation": "Nog niet berekend",
-    "readyToCalculate": "Gereed voor directe tweede orde",
+    "readyToCalculate": "Gereed om te berekenen",
     "solving": "3D-model wordt berekend…",
     "solved": "{{engine}} · umax {{value}} mm",
     "instructions": "Coördinaten in meters. Klik op een knoop of staaf om die te bewerken.",

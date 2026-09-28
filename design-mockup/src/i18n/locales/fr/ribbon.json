@@ -50,7 +50,7 @@
     "beamCount_one": "{{count}} barre",
     "beamCount_other": "{{count}} barres",
     "noCalculation": "Pas encore calculé",
-    "readyToCalculate": "Prêt pour l'analyse directe du second ordre",
+    "readyToCalculate": "Prêt pour le calcul",
     "solving": "Calcul du modèle 3D…",
     "solved": "{{engine}} · umax {{value}} mm",
     "instructions": "Coordonnées en mètres. Cliquez sur un nœud ou une barre pour le modifier.",

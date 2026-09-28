@@ -535,12 +535,15 @@ export function addFrame3DConditionMarkers(
   visibility: Frame3DConditionVisibility = { supports: true, loads: true },
   activeLoadCaseId?: number,
 ): void {
-  const markerCount = (model.supports?.length ?? 0)
-    + (model.loads?.length ?? 0)
-    + (model.memberLoads?.length ?? 0)
-    + (model.memberPointLoads?.length ?? 0)
-    + (model.thermalLoads?.length ?? 0);
-  const batcher = markerCount >= 200 ? createMarkerBatcher(group) : undefined;
+  const visibleLoadCount = visibility.loads
+    ? [model.loads, model.memberLoads, model.memberPointLoads, model.thermalLoads]
+      .reduce((count, loads) => count + (loads ?? []).filter((load) =>
+        activeLoadCaseId === undefined || frame3DLoadCaseId(load) === activeLoadCaseId).length, 0)
+    : 0;
+  const visibleMarkerCount = (visibility.supports ? model.supports?.length ?? 0 : 0) + visibleLoadCount;
+  // Een lijnlast bevat meerdere pijlen. Al bij vier zichtbare markeringen
+  // bespaart instancing daarom tientallen afzonderlijke tekenaanroepen.
+  const batcher = visibleMarkerCount >= 4 ? createMarkerBatcher(group) : undefined;
   if (batcher) group.userData[MARKER_BATCHER_KEY] = batcher;
   const byId = new Map<number, Frame3DNode>();
   for (const node of model.nodes) byId.set(node.id, node);

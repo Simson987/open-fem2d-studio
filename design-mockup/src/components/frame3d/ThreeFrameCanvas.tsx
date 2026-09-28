@@ -355,6 +355,20 @@ function sameFrame3DEntities<T>(a: readonly T[] | undefined, b: readonly T[] | u
     value === right[index] || JSON.stringify(value) === JSON.stringify(right[index]));
 }
 
+function sameVisibleConditionLoads(
+  current: Frame3DModel | undefined,
+  previous: Frame3DModel | undefined,
+  activeLoadCaseId: number | undefined,
+): boolean {
+  if (!current || !previous) return false;
+  const visible = <T extends { caseId?: number }>(loads: readonly T[] | undefined) =>
+    activeLoadCaseId === undefined ? loads : loads?.filter((load) => frame3DLoadCaseId(load) === activeLoadCaseId);
+  return sameFrame3DEntities(visible(current.loads), visible(previous.loads))
+    && sameFrame3DEntities(visible(current.memberLoads), visible(previous.memberLoads))
+    && sameFrame3DEntities(visible(current.memberPointLoads), visible(previous.memberPointLoads))
+    && sameFrame3DEntities(visible(current.thermalLoads), visible(previous.thermalLoads));
+}
+
 interface PlateSketch {
   nodeIds: number[];
   segments: Frame3DPlateBoundarySegment[];
@@ -559,6 +573,9 @@ function addResultDiagram(
   batch?: ResultDiagramBatch,
 ) {
   if (!(maximum > 1e-12) || samples.length < 2) return;
+  // Waarden die in de gekozen weergave overal als 0,000 verschijnen leveren
+  // alleen overlappende labels en loze vlakgeometrie op.
+  if (samples.every((sample) => Math.abs(sample.value) < 5e-4)) return;
   const scale = height / maximum;
   const basePoints: THREE.Vector3[] = [];
   const diagramPoints: THREE.Vector3[] = [];
@@ -2523,11 +2540,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, tool
         || (beamMesh instanceof THREE.InstancedMesh && beamMesh.count + 1 <= beamMesh.instanceMatrix.count);
       const previousConditionModel = lastBuiltConditionModelRef.current;
       const conditionLoadsStable = !beam || !visibility.loads
-        || (previousConditionModel !== undefined
-          && conditionModel?.loads === previousConditionModel.loads
-          && conditionModel?.memberLoads === previousConditionModel.memberLoads
-          && conditionModel?.memberPointLoads === previousConditionModel.memberPointLoads
-          && conditionModel?.thermalLoads === previousConditionModel.thermalLoads);
+        || sameVisibleConditionLoads(conditionModel ?? model, previousConditionModel, activeLoadCaseId);
       // Tijdens het tekenen van een plaat is iedere klik eerst een losse
       // conceptknoop. Ook wanneer die de bestaande modelbegrenzing vergroot,
       // kunnen we de al aanwezige knoopbatches veilig hergebruiken. De

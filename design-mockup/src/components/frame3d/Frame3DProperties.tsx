@@ -167,7 +167,7 @@ export default function Frame3DProperties({
       {beam && <button className={`fem-prop-tab${tab === "norm" ? " active" : ""}`} onClick={() => setTab("norm")}>{beamIsConcrete ? "EN 1992" : "EN 1993"}</button>}
     </div>
 
-    <div className="fem-prop-body">
+    <div className="fem-prop-body" key={`${selection.type}:${selection.id}:${tab}`}>
       {tab === "general" && node && <>
         <Section title={t("frame3d.geometry", "Geometrie")}>
           <Row label="ID"><code>{node.id}</code></Row>

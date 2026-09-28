@@ -50,7 +50,7 @@
     "beamCount_one": "{{count}} Stab",
     "beamCount_other": "{{count}} Stäbe",
     "noCalculation": "Noch nicht berechnet",
-    "readyToCalculate": "Bereit für direkte Theorie II. Ordnung",
+    "readyToCalculate": "Bereit zur Berechnung",
     "solving": "3D-Modell wird berechnet…",
     "solved": "{{engine}} · umax {{value}} mm",
     "instructions": "Koordinaten in Metern. Klicken Sie auf einen Knoten oder Stab zum Bearbeiten.",

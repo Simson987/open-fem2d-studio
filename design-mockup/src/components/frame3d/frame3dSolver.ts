@@ -98,7 +98,7 @@ export interface Frame3DSolveResult {
 
 /** Controleer de globale statica ook wanneer de P-Delta-kern geen eigen evenwichtsobject levert. */
 export function frame3DGlobalForceBalance(
-  input: ReturnType<typeof buildFrame3DSolveRequest>,
+  input: Omit<ReturnType<typeof buildFrame3DSolveRequest>, "bucklingModes">,
   result: Pick<Frame3DSolveResult, "reactions">,
 ): NonNullable<Frame3DSolveResult["forceBalance"]> {
   const applied: [number, number, number] = [0, 0, 0];
@@ -397,8 +397,13 @@ export function buildFrame3DSolveRequest(
   } as const;
 }
 
-export async function solveFrame3D(model: Frame3DModel, activeLoadCaseId?: number): Promise<Frame3DSolveResult> {
-  const input = buildFrame3DSolveRequest(model, "p-delta", activeLoadCaseId);
+export async function solveFrame3D(
+  model: Frame3DModel,
+  activeLoadCaseId?: number,
+  analysis: Frame3DAnalysisKind = "p-delta",
+): Promise<Frame3DSolveResult> {
+  const request = buildFrame3DSolveRequest(model, analysis, activeLoadCaseId);
+  const input = analysis === "linear" ? { ...request, bucklingModes: 0 } : request;
   return callFrame3DSolver(input);
 }
 
@@ -406,12 +411,18 @@ export async function solveFrame3D(model: Frame3DModel, activeLoadCaseId?: numbe
 export async function solveFrame3DCombination(
   model: Frame3DModel,
   factors: ReadonlyMap<number, number>,
+  analysis: Frame3DAnalysisKind = "p-delta",
 ): Promise<Frame3DSolveResult> {
-  const input = buildFrame3DSolveRequest(model, "p-delta", factors);
+  const request = buildFrame3DSolveRequest(model, analysis, factors);
+  const input = analysis === "linear" ? { ...request, bucklingModes: 0 } : request;
   return callFrame3DSolver(input);
 }
 
-async function callFrame3DSolver(input: ReturnType<typeof buildFrame3DSolveRequest>): Promise<Frame3DSolveResult> {
+type Frame3DSolveRequest = Omit<ReturnType<typeof buildFrame3DSolveRequest>, "bucklingModes"> & {
+  readonly bucklingModes: number;
+};
+
+async function callFrame3DSolver(input: Frame3DSolveRequest): Promise<Frame3DSolveResult> {
   const checked = (result: Frame3DSolveResult): Frame3DSolveResult => ({
     ...result,
     forceBalance: frame3DGlobalForceBalance(input, result),

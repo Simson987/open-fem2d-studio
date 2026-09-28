@@ -676,7 +676,17 @@ fn buckling_summary(input: &SolverInput3D, modes: usize) -> BucklingSummary {
     if modes == 0 {
         return BucklingSummary::NotApplicable { reason: "knikanalyse is uitgeschakeld".into() };
     }
-    match solve_buckling_3d(input, modes) {
+    // The pinned upstream sparse Cholesky implementation can panic when a
+    // later numeric matrix has a different sparsity pattern from its symbolic
+    // factorization. A failed eigenvalue analysis must not kill the entire
+    // frame calculation; report it explicitly so no buckling factor is used.
+    let solved = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| solve_buckling_3d(input, modes))) {
+        Ok(solved) => solved,
+        Err(_) => return BucklingSummary::Failed {
+            reason: "de externe knikoplosser kon deze matrix niet betrouwbaar factoriseren; geen knikfactor beschikbaar".into(),
+        },
+    };
+    match solved {
         Ok(result) => {
             // The sparse generalized eigensolver can return a numerical zero
             // mode (typically about 1e-14) before the first physical buckling
@@ -901,6 +911,11 @@ pub fn solve(request: SolveRequest3D) -> Result<SolveResult3D, String> {
             Ok(convert_result(&request, results, None, buckling))
         }
         AnalysisKind::PDelta => {
+            if let Some(BucklingSummary::Failed { reason }) = &stability_buckling {
+                return Err(format!(
+                    "tweede-orde 3D-berekening is geblokkeerd omdat de stabiliteitscontrole faalde: {reason}"
+                ));
+            }
             if let Some(BucklingSummary::Available { modes, .. }) = &stability_buckling {
                 if let Some(mode) = modes.first() {
                     if mode.load_factor <= 1.0 + 1e-6 {

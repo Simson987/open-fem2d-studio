@@ -88,10 +88,30 @@ export default function Frame3DMemberLoads({
     requestAnimationFrame(() => firstThermalInput.current?.focus());
   };
 
-  useEffect(() => { beginNew(); beginNewPoint(); beginNewThermal(); }, [beamId, activeLoadCaseId]);
-  useEffect(() => { if (editorRequest !== undefined) beginNew(); }, [editorRequest]);
-  useEffect(() => { if (pointEditorRequest !== undefined) beginNewPoint(); }, [pointEditorRequest]);
-  useEffect(() => { if (thermalEditorRequest !== undefined) beginNewThermal(); }, [thermalEditorRequest]);
+  useEffect(() => {
+    setEditingId(null);
+    setValues(emptyValues(lengthM));
+    setPointEditingId(null);
+    setPointValues({ py: "0", pz: "-10", positionM: String(lengthM / 2) });
+    setThermalEditingId(null);
+    setThermalValues({ deltaTUniformK: "20", deltaTGradientYK: "0", deltaTGradientZK: "0" });
+    setError("");
+  }, [beamId, activeLoadCaseId]);
+  const previousEditorRequest = useRef(editorRequest);
+  const previousPointEditorRequest = useRef(pointEditorRequest);
+  const previousThermalEditorRequest = useRef(thermalEditorRequest);
+  useEffect(() => {
+    if (editorRequest !== previousEditorRequest.current) beginNew();
+    previousEditorRequest.current = editorRequest;
+  }, [editorRequest]);
+  useEffect(() => {
+    if (pointEditorRequest !== previousPointEditorRequest.current) beginNewPoint();
+    previousPointEditorRequest.current = pointEditorRequest;
+  }, [pointEditorRequest]);
+  useEffect(() => {
+    if (thermalEditorRequest !== previousThermalEditorRequest.current) beginNewThermal();
+    previousThermalEditorRequest.current = thermalEditorRequest;
+  }, [thermalEditorRequest]);
 
   const select = (load: Frame3DMemberLoad) => {
     setEditingId(load.id);

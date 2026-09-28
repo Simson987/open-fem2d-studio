@@ -32,6 +32,7 @@ waarbij een belasting volledig op een geblokkeerde vrijheidsgraad staat.
 | [`tu-delft-torsion-frame.json`](tu-delft-torsion-frame.json) | samengestelde stijfheidsmatrix van een 3D-raamwerk met buiging en torsie | TU Delft, uitgewerkt 3D-raamwerk |
 | [`revolute-x-request.json`](revolute-x-request.json) | revolute X, torsiestijfheid, vrije rotatie en reactiekoppel via API/MCP | gesloten oplossing `θ = TL/GJ` |
 | [`pdelta-nultoestand-request.json`](pdelta-nultoestand-request.json) | tweede orde bij exact nul vrije verplaatsing; reactie, convergentie en `B2=1` | direct evenwicht op de geblokkeerde vrijheidsgraad |
+| [`groot-vierlaags-raam.ifcfem2d`](groot-vierlaags-raam.ifcfem2d) en [verificatie](groot-vierlaags-raam-verificatie.md) | 100 knopen, 235 staven, vier ruimtelijke belastinggevallen, volledige lineaire superpositie en GUI | onafhankelijke globale kracht- en momentbalans |
 
 Alle afmetingen, materiaalwaarden, lasten, opleggingen en verwachte knoopresultaten staan in de JSON-bestanden. `cases.json` gebruikt SI-eenheden: m, N, N·m, Pa en rad. Z blijft de verticale as van het bestaande 2D-model; Y is de extra horizontale richting. De TU Delft-referentie gebruikt kN·m voor momenten en kN·m/rad voor rotatiestijfheid.
 

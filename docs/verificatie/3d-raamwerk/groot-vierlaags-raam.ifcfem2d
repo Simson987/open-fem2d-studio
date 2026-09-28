@@ -1,0 +1,3315 @@
+{
+  "format": "open-fem2d-studio-v2",
+  "version": 3,
+  "savedAt": "2026-09-28T18:07:57.518Z",
+  "nodes": [],
+  "beams": [],
+  "supports": [],
+  "plates": [],
+  "loads": [],
+  "loadCases": [
+    {
+      "id": 1,
+      "name": "Daklast",
+      "type": "dead"
+    },
+    {
+      "id": 2,
+      "name": "Wind Y",
+      "type": "wind"
+    },
+    {
+      "id": 3,
+      "name": "Dakliggerlast",
+      "type": "live"
+    },
+    {
+      "id": 4,
+      "name": "Excentrische last",
+      "type": "wind"
+    }
+  ],
+  "activeLoadCaseId": 1,
+  "selfWeightEnabled": false,
+  "nonlinearEnabled": false,
+  "analysetype": "eersteOrde",
+  "modelDimension": "3d",
+  "model3d": {
+    "nodes": [
+      {
+        "id": 1,
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 2,
+        "x": 4,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 3,
+        "x": 8,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 4,
+        "x": 12,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 5,
+        "x": 16,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 6,
+        "x": 0,
+        "y": 4,
+        "z": 0
+      },
+      {
+        "id": 7,
+        "x": 4,
+        "y": 4,
+        "z": 0
+      },
+      {
+        "id": 8,
+        "x": 8,
+        "y": 4,
+        "z": 0
+      },
+      {
+        "id": 9,
+        "x": 12,
+        "y": 4,
+        "z": 0
+      },
+      {
+        "id": 10,
+        "x": 16,
+        "y": 4,
+        "z": 0
+      },
+      {
+        "id": 11,
+        "x": 0,
+        "y": 8,
+        "z": 0
+      },
+      {
+        "id": 12,
+        "x": 4,
+        "y": 8,
+        "z": 0
+      },
+      {
+        "id": 13,
+        "x": 8,
+        "y": 8,
+        "z": 0
+      },
+      {
+        "id": 14,
+        "x": 12,
+        "y": 8,
+        "z": 0
+      },
+      {
+        "id": 15,
+        "x": 16,
+        "y": 8,
+        "z": 0
+      },
+      {
+        "id": 16,
+        "x": 0,
+        "y": 12,
+        "z": 0
+      },
+      {
+        "id": 17,
+        "x": 4,
+        "y": 12,
+        "z": 0
+      },
+      {
+        "id": 18,
+        "x": 8,
+        "y": 12,
+        "z": 0
+      },
+      {
+        "id": 19,
+        "x": 12,
+        "y": 12,
+        "z": 0
+      },
+      {
+        "id": 20,
+        "x": 16,
+        "y": 12,
+        "z": 0
+      },
+      {
+        "id": 21,
+        "x": 0,
+        "y": 16,
+        "z": 0
+      },
+      {
+        "id": 22,
+        "x": 4,
+        "y": 16,
+        "z": 0
+      },
+      {
+        "id": 23,
+        "x": 8,
+        "y": 16,
+        "z": 0
+      },
+      {
+        "id": 24,
+        "x": 12,
+        "y": 16,
+        "z": 0
+      },
+      {
+        "id": 25,
+        "x": 16,
+        "y": 16,
+        "z": 0
+      },
+      {
+        "id": 26,
+        "x": 0,
+        "y": 0,
+        "z": 3
+      },
+      {
+        "id": 27,
+        "x": 4,
+        "y": 0,
+        "z": 3
+      },
+      {
+        "id": 28,
+        "x": 8,
+        "y": 0,
+        "z": 3
+      },
+      {
+        "id": 29,
+        "x": 12,
+        "y": 0,
+        "z": 3
+      },
+      {
+        "id": 30,
+        "x": 16,
+        "y": 0,
+        "z": 3
+      },
+      {
+        "id": 31,
+        "x": 0,
+        "y": 4,
+        "z": 3
+      },
+      {
+        "id": 32,
+        "x": 4,
+        "y": 4,
+        "z": 3
+      },
+      {
+        "id": 33,
+        "x": 8,
+        "y": 4,
+        "z": 3
+      },
+      {
+        "id": 34,
+        "x": 12,
+        "y": 4,
+        "z": 3
+      },
+      {
+        "id": 35,
+        "x": 16,
+        "y": 4,
+        "z": 3
+      },
+      {
+        "id": 36,
+        "x": 0,
+        "y": 8,
+        "z": 3
+      },
+      {
+        "id": 37,
+        "x": 4,
+        "y": 8,
+        "z": 3
+      },
+      {
+        "id": 38,
+        "x": 8,
+        "y": 8,
+        "z": 3
+      },
+      {
+        "id": 39,
+        "x": 12,
+        "y": 8,
+        "z": 3
+      },
+      {
+        "id": 40,
+        "x": 16,
+        "y": 8,
+        "z": 3
+      },
+      {
+        "id": 41,
+        "x": 0,
+        "y": 12,
+        "z": 3
+      },
+      {
+        "id": 42,
+        "x": 4,
+        "y": 12,
+        "z": 3
+      },
+      {
+        "id": 43,
+        "x": 8,
+        "y": 12,
+        "z": 3
+      },
+      {
+        "id": 44,
+        "x": 12,
+        "y": 12,
+        "z": 3
+      },
+      {
+        "id": 45,
+        "x": 16,
+        "y": 12,
+        "z": 3
+      },
+      {
+        "id": 46,
+        "x": 0,
+        "y": 16,
+        "z": 3
+      },
+      {
+        "id": 47,
+        "x": 4,
+        "y": 16,
+        "z": 3
+      },
+      {
+        "id": 48,
+        "x": 8,
+        "y": 16,
+        "z": 3
+      },
+      {
+        "id": 49,
+        "x": 12,
+        "y": 16,
+        "z": 3
+      },
+      {
+        "id": 50,
+        "x": 16,
+        "y": 16,
+        "z": 3
+      },
+      {
+        "id": 51,
+        "x": 0,
+        "y": 0,
+        "z": 6
+      },
+      {
+        "id": 52,
+        "x": 4,
+        "y": 0,
+        "z": 6
+      },
+      {
+        "id": 53,
+        "x": 8,
+        "y": 0,
+        "z": 6
+      },
+      {
+        "id": 54,
+        "x": 12,
+        "y": 0,
+        "z": 6
+      },
+      {
+        "id": 55,
+        "x": 16,
+        "y": 0,
+        "z": 6
+      },
+      {
+        "id": 56,
+        "x": 0,
+        "y": 4,
+        "z": 6
+      },
+      {
+        "id": 57,
+        "x": 4,
+        "y": 4,
+        "z": 6
+      },
+      {
+        "id": 58,
+        "x": 8,
+        "y": 4,
+        "z": 6
+      },
+      {
+        "id": 59,
+        "x": 12,
+        "y": 4,
+        "z": 6
+      },
+      {
+        "id": 60,
+        "x": 16,
+        "y": 4,
+        "z": 6
+      },
+      {
+        "id": 61,
+        "x": 0,
+        "y": 8,
+        "z": 6
+      },
+      {
+        "id": 62,
+        "x": 4,
+        "y": 8,
+        "z": 6
+      },
+      {
+        "id": 63,
+        "x": 8,
+        "y": 8,
+        "z": 6
+      },
+      {
+        "id": 64,
+        "x": 12,
+        "y": 8,
+        "z": 6
+      },
+      {
+        "id": 65,
+        "x": 16,
+        "y": 8,
+        "z": 6
+      },
+      {
+        "id": 66,
+        "x": 0,
+        "y": 12,
+        "z": 6
+      },
+      {
+        "id": 67,
+        "x": 4,
+        "y": 12,
+        "z": 6
+      },
+      {
+        "id": 68,
+        "x": 8,
+        "y": 12,
+        "z": 6
+      },
+      {
+        "id": 69,
+        "x": 12,
+        "y": 12,
+        "z": 6
+      },
+      {
+        "id": 70,
+        "x": 16,
+        "y": 12,
+        "z": 6
+      },
+      {
+        "id": 71,
+        "x": 0,
+        "y": 16,
+        "z": 6
+      },
+      {
+        "id": 72,
+        "x": 4,
+        "y": 16,
+        "z": 6
+      },
+      {
+        "id": 73,
+        "x": 8,
+        "y": 16,
+        "z": 6
+      },
+      {
+        "id": 74,
+        "x": 12,
+        "y": 16,
+        "z": 6
+      },
+      {
+        "id": 75,
+        "x": 16,
+        "y": 16,
+        "z": 6
+      },
+      {
+        "id": 76,
+        "x": 0,
+        "y": 0,
+        "z": 9
+      },
+      {
+        "id": 77,
+        "x": 4,
+        "y": 0,
+        "z": 9
+      },
+      {
+        "id": 78,
+        "x": 8,
+        "y": 0,
+        "z": 9
+      },
+      {
+        "id": 79,
+        "x": 12,
+        "y": 0,
+        "z": 9
+      },
+      {
+        "id": 80,
+        "x": 16,
+        "y": 0,
+        "z": 9
+      },
+      {
+        "id": 81,
+        "x": 0,
+        "y": 4,
+        "z": 9
+      },
+      {
+        "id": 82,
+        "x": 4,
+        "y": 4,
+        "z": 9
+      },
+      {
+        "id": 83,
+        "x": 8,
+        "y": 4,
+        "z": 9
+      },
+      {
+        "id": 84,
+        "x": 12,
+        "y": 4,
+        "z": 9
+      },
+      {
+        "id": 85,
+        "x": 16,
+        "y": 4,
+        "z": 9
+      },
+      {
+        "id": 86,
+        "x": 0,
+        "y": 8,
+        "z": 9
+      },
+      {
+        "id": 87,
+        "x": 4,
+        "y": 8,
+        "z": 9
+      },
+      {
+        "id": 88,
+        "x": 8,
+        "y": 8,
+        "z": 9
+      },
+      {
+        "id": 89,
+        "x": 12,
+        "y": 8,
+        "z": 9
+      },
+      {
+        "id": 90,
+        "x": 16,
+        "y": 8,
+        "z": 9
+      },
+      {
+        "id": 91,
+        "x": 0,
+        "y": 12,
+        "z": 9
+      },
+      {
+        "id": 92,
+        "x": 4,
+        "y": 12,
+        "z": 9
+      },
+      {
+        "id": 93,
+        "x": 8,
+        "y": 12,
+        "z": 9
+      },
+      {
+        "id": 94,
+        "x": 12,
+        "y": 12,
+        "z": 9
+      },
+      {
+        "id": 95,
+        "x": 16,
+        "y": 12,
+        "z": 9
+      },
+      {
+        "id": 96,
+        "x": 0,
+        "y": 16,
+        "z": 9
+      },
+      {
+        "id": 97,
+        "x": 4,
+        "y": 16,
+        "z": 9
+      },
+      {
+        "id": 98,
+        "x": 8,
+        "y": 16,
+        "z": 9
+      },
+      {
+        "id": 99,
+        "x": 12,
+        "y": 16,
+        "z": 9
+      },
+      {
+        "id": 100,
+        "x": 16,
+        "y": 16,
+        "z": 9
+      }
+    ],
+    "beams": [
+      {
+        "id": 1,
+        "startNodeId": 1,
+        "endNodeId": 26,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 2,
+        "startNodeId": 2,
+        "endNodeId": 27,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 3,
+        "startNodeId": 3,
+        "endNodeId": 28,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 4,
+        "startNodeId": 4,
+        "endNodeId": 29,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 5,
+        "startNodeId": 5,
+        "endNodeId": 30,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 6,
+        "startNodeId": 6,
+        "endNodeId": 31,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 7,
+        "startNodeId": 7,
+        "endNodeId": 32,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 8,
+        "startNodeId": 8,
+        "endNodeId": 33,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 9,
+        "startNodeId": 9,
+        "endNodeId": 34,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 10,
+        "startNodeId": 10,
+        "endNodeId": 35,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 11,
+        "startNodeId": 11,
+        "endNodeId": 36,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 12,
+        "startNodeId": 12,
+        "endNodeId": 37,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 13,
+        "startNodeId": 13,
+        "endNodeId": 38,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 14,
+        "startNodeId": 14,
+        "endNodeId": 39,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 15,
+        "startNodeId": 15,
+        "endNodeId": 40,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 16,
+        "startNodeId": 16,
+        "endNodeId": 41,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 17,
+        "startNodeId": 17,
+        "endNodeId": 42,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 18,
+        "startNodeId": 18,
+        "endNodeId": 43,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 19,
+        "startNodeId": 19,
+        "endNodeId": 44,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 20,
+        "startNodeId": 20,
+        "endNodeId": 45,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 21,
+        "startNodeId": 21,
+        "endNodeId": 46,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 22,
+        "startNodeId": 22,
+        "endNodeId": 47,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 23,
+        "startNodeId": 23,
+        "endNodeId": 48,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 24,
+        "startNodeId": 24,
+        "endNodeId": 49,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 25,
+        "startNodeId": 25,
+        "endNodeId": 50,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 26,
+        "startNodeId": 26,
+        "endNodeId": 51,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 27,
+        "startNodeId": 27,
+        "endNodeId": 52,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 28,
+        "startNodeId": 28,
+        "endNodeId": 53,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 29,
+        "startNodeId": 29,
+        "endNodeId": 54,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 30,
+        "startNodeId": 30,
+        "endNodeId": 55,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 31,
+        "startNodeId": 31,
+        "endNodeId": 56,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 32,
+        "startNodeId": 32,
+        "endNodeId": 57,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 33,
+        "startNodeId": 33,
+        "endNodeId": 58,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 34,
+        "startNodeId": 34,
+        "endNodeId": 59,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 35,
+        "startNodeId": 35,
+        "endNodeId": 60,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 36,
+        "startNodeId": 36,
+        "endNodeId": 61,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 37,
+        "startNodeId": 37,
+        "endNodeId": 62,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 38,
+        "startNodeId": 38,
+        "endNodeId": 63,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 39,
+        "startNodeId": 39,
+        "endNodeId": 64,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 40,
+        "startNodeId": 40,
+        "endNodeId": 65,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 41,
+        "startNodeId": 41,
+        "endNodeId": 66,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 42,
+        "startNodeId": 42,
+        "endNodeId": 67,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 43,
+        "startNodeId": 43,
+        "endNodeId": 68,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 44,
+        "startNodeId": 44,
+        "endNodeId": 69,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 45,
+        "startNodeId": 45,
+        "endNodeId": 70,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 46,
+        "startNodeId": 46,
+        "endNodeId": 71,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 47,
+        "startNodeId": 47,
+        "endNodeId": 72,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 48,
+        "startNodeId": 48,
+        "endNodeId": 73,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 49,
+        "startNodeId": 49,
+        "endNodeId": 74,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 50,
+        "startNodeId": 50,
+        "endNodeId": 75,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 51,
+        "startNodeId": 51,
+        "endNodeId": 76,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 52,
+        "startNodeId": 52,
+        "endNodeId": 77,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 53,
+        "startNodeId": 53,
+        "endNodeId": 78,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 54,
+        "startNodeId": 54,
+        "endNodeId": 79,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 55,
+        "startNodeId": 55,
+        "endNodeId": 80,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 56,
+        "startNodeId": 56,
+        "endNodeId": 81,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 57,
+        "startNodeId": 57,
+        "endNodeId": 82,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 58,
+        "startNodeId": 58,
+        "endNodeId": 83,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 59,
+        "startNodeId": 59,
+        "endNodeId": 84,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 60,
+        "startNodeId": 60,
+        "endNodeId": 85,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 61,
+        "startNodeId": 61,
+        "endNodeId": 86,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 62,
+        "startNodeId": 62,
+        "endNodeId": 87,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 63,
+        "startNodeId": 63,
+        "endNodeId": 88,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 64,
+        "startNodeId": 64,
+        "endNodeId": 89,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 65,
+        "startNodeId": 65,
+        "endNodeId": 90,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 66,
+        "startNodeId": 66,
+        "endNodeId": 91,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 67,
+        "startNodeId": 67,
+        "endNodeId": 92,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 68,
+        "startNodeId": 68,
+        "endNodeId": 93,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 69,
+        "startNodeId": 69,
+        "endNodeId": 94,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 70,
+        "startNodeId": 70,
+        "endNodeId": 95,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 71,
+        "startNodeId": 71,
+        "endNodeId": 96,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 72,
+        "startNodeId": 72,
+        "endNodeId": 97,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 73,
+        "startNodeId": 73,
+        "endNodeId": 98,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 74,
+        "startNodeId": 74,
+        "endNodeId": 99,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 75,
+        "startNodeId": 75,
+        "endNodeId": 100,
+        "profileName": "HEA 200",
+        "material": "S235"
+      },
+      {
+        "id": 76,
+        "startNodeId": 1,
+        "endNodeId": 2,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 77,
+        "startNodeId": 1,
+        "endNodeId": 6,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 78,
+        "startNodeId": 2,
+        "endNodeId": 3,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 79,
+        "startNodeId": 2,
+        "endNodeId": 7,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 80,
+        "startNodeId": 3,
+        "endNodeId": 4,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 81,
+        "startNodeId": 3,
+        "endNodeId": 8,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 82,
+        "startNodeId": 4,
+        "endNodeId": 5,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 83,
+        "startNodeId": 4,
+        "endNodeId": 9,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 84,
+        "startNodeId": 5,
+        "endNodeId": 10,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 85,
+        "startNodeId": 6,
+        "endNodeId": 7,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 86,
+        "startNodeId": 6,
+        "endNodeId": 11,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 87,
+        "startNodeId": 7,
+        "endNodeId": 8,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 88,
+        "startNodeId": 7,
+        "endNodeId": 12,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 89,
+        "startNodeId": 8,
+        "endNodeId": 9,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 90,
+        "startNodeId": 8,
+        "endNodeId": 13,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 91,
+        "startNodeId": 9,
+        "endNodeId": 10,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 92,
+        "startNodeId": 9,
+        "endNodeId": 14,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 93,
+        "startNodeId": 10,
+        "endNodeId": 15,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 94,
+        "startNodeId": 11,
+        "endNodeId": 12,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 95,
+        "startNodeId": 11,
+        "endNodeId": 16,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 96,
+        "startNodeId": 12,
+        "endNodeId": 13,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 97,
+        "startNodeId": 12,
+        "endNodeId": 17,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 98,
+        "startNodeId": 13,
+        "endNodeId": 14,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 99,
+        "startNodeId": 13,
+        "endNodeId": 18,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 100,
+        "startNodeId": 14,
+        "endNodeId": 15,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 101,
+        "startNodeId": 14,
+        "endNodeId": 19,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 102,
+        "startNodeId": 15,
+        "endNodeId": 20,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 103,
+        "startNodeId": 16,
+        "endNodeId": 17,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 104,
+        "startNodeId": 16,
+        "endNodeId": 21,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 105,
+        "startNodeId": 17,
+        "endNodeId": 18,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 106,
+        "startNodeId": 17,
+        "endNodeId": 22,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 107,
+        "startNodeId": 18,
+        "endNodeId": 19,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 108,
+        "startNodeId": 18,
+        "endNodeId": 23,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 109,
+        "startNodeId": 19,
+        "endNodeId": 20,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 110,
+        "startNodeId": 19,
+        "endNodeId": 24,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 111,
+        "startNodeId": 20,
+        "endNodeId": 25,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 112,
+        "startNodeId": 21,
+        "endNodeId": 22,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 113,
+        "startNodeId": 22,
+        "endNodeId": 23,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 114,
+        "startNodeId": 23,
+        "endNodeId": 24,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 115,
+        "startNodeId": 24,
+        "endNodeId": 25,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 116,
+        "startNodeId": 26,
+        "endNodeId": 27,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 117,
+        "startNodeId": 26,
+        "endNodeId": 31,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 118,
+        "startNodeId": 27,
+        "endNodeId": 28,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 119,
+        "startNodeId": 27,
+        "endNodeId": 32,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 120,
+        "startNodeId": 28,
+        "endNodeId": 29,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 121,
+        "startNodeId": 28,
+        "endNodeId": 33,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 122,
+        "startNodeId": 29,
+        "endNodeId": 30,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 123,
+        "startNodeId": 29,
+        "endNodeId": 34,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 124,
+        "startNodeId": 30,
+        "endNodeId": 35,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 125,
+        "startNodeId": 31,
+        "endNodeId": 32,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 126,
+        "startNodeId": 31,
+        "endNodeId": 36,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 127,
+        "startNodeId": 32,
+        "endNodeId": 33,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 128,
+        "startNodeId": 32,
+        "endNodeId": 37,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 129,
+        "startNodeId": 33,
+        "endNodeId": 34,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 130,
+        "startNodeId": 33,
+        "endNodeId": 38,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 131,
+        "startNodeId": 34,
+        "endNodeId": 35,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 132,
+        "startNodeId": 34,
+        "endNodeId": 39,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 133,
+        "startNodeId": 35,
+        "endNodeId": 40,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 134,
+        "startNodeId": 36,
+        "endNodeId": 37,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 135,
+        "startNodeId": 36,
+        "endNodeId": 41,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 136,
+        "startNodeId": 37,
+        "endNodeId": 38,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 137,
+        "startNodeId": 37,
+        "endNodeId": 42,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 138,
+        "startNodeId": 38,
+        "endNodeId": 39,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 139,
+        "startNodeId": 38,
+        "endNodeId": 43,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 140,
+        "startNodeId": 39,
+        "endNodeId": 40,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 141,
+        "startNodeId": 39,
+        "endNodeId": 44,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 142,
+        "startNodeId": 40,
+        "endNodeId": 45,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 143,
+        "startNodeId": 41,
+        "endNodeId": 42,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 144,
+        "startNodeId": 41,
+        "endNodeId": 46,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 145,
+        "startNodeId": 42,
+        "endNodeId": 43,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 146,
+        "startNodeId": 42,
+        "endNodeId": 47,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 147,
+        "startNodeId": 43,
+        "endNodeId": 44,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 148,
+        "startNodeId": 43,
+        "endNodeId": 48,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 149,
+        "startNodeId": 44,
+        "endNodeId": 45,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 150,
+        "startNodeId": 44,
+        "endNodeId": 49,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 151,
+        "startNodeId": 45,
+        "endNodeId": 50,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 152,
+        "startNodeId": 46,
+        "endNodeId": 47,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 153,
+        "startNodeId": 47,
+        "endNodeId": 48,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 154,
+        "startNodeId": 48,
+        "endNodeId": 49,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 155,
+        "startNodeId": 49,
+        "endNodeId": 50,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 156,
+        "startNodeId": 51,
+        "endNodeId": 52,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 157,
+        "startNodeId": 51,
+        "endNodeId": 56,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 158,
+        "startNodeId": 52,
+        "endNodeId": 53,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 159,
+        "startNodeId": 52,
+        "endNodeId": 57,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 160,
+        "startNodeId": 53,
+        "endNodeId": 54,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 161,
+        "startNodeId": 53,
+        "endNodeId": 58,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 162,
+        "startNodeId": 54,
+        "endNodeId": 55,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 163,
+        "startNodeId": 54,
+        "endNodeId": 59,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 164,
+        "startNodeId": 55,
+        "endNodeId": 60,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 165,
+        "startNodeId": 56,
+        "endNodeId": 57,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 166,
+        "startNodeId": 56,
+        "endNodeId": 61,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 167,
+        "startNodeId": 57,
+        "endNodeId": 58,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 168,
+        "startNodeId": 57,
+        "endNodeId": 62,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 169,
+        "startNodeId": 58,
+        "endNodeId": 59,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 170,
+        "startNodeId": 58,
+        "endNodeId": 63,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 171,
+        "startNodeId": 59,
+        "endNodeId": 60,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 172,
+        "startNodeId": 59,
+        "endNodeId": 64,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 173,
+        "startNodeId": 60,
+        "endNodeId": 65,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 174,
+        "startNodeId": 61,
+        "endNodeId": 62,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 175,
+        "startNodeId": 61,
+        "endNodeId": 66,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 176,
+        "startNodeId": 62,
+        "endNodeId": 63,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 177,
+        "startNodeId": 62,
+        "endNodeId": 67,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 178,
+        "startNodeId": 63,
+        "endNodeId": 64,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 179,
+        "startNodeId": 63,
+        "endNodeId": 68,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 180,
+        "startNodeId": 64,
+        "endNodeId": 65,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 181,
+        "startNodeId": 64,
+        "endNodeId": 69,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 182,
+        "startNodeId": 65,
+        "endNodeId": 70,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 183,
+        "startNodeId": 66,
+        "endNodeId": 67,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 184,
+        "startNodeId": 66,
+        "endNodeId": 71,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 185,
+        "startNodeId": 67,
+        "endNodeId": 68,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 186,
+        "startNodeId": 67,
+        "endNodeId": 72,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 187,
+        "startNodeId": 68,
+        "endNodeId": 69,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 188,
+        "startNodeId": 68,
+        "endNodeId": 73,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 189,
+        "startNodeId": 69,
+        "endNodeId": 70,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 190,
+        "startNodeId": 69,
+        "endNodeId": 74,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 191,
+        "startNodeId": 70,
+        "endNodeId": 75,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 192,
+        "startNodeId": 71,
+        "endNodeId": 72,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 193,
+        "startNodeId": 72,
+        "endNodeId": 73,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 194,
+        "startNodeId": 73,
+        "endNodeId": 74,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 195,
+        "startNodeId": 74,
+        "endNodeId": 75,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 196,
+        "startNodeId": 76,
+        "endNodeId": 77,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 197,
+        "startNodeId": 76,
+        "endNodeId": 81,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 198,
+        "startNodeId": 77,
+        "endNodeId": 78,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 199,
+        "startNodeId": 77,
+        "endNodeId": 82,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 200,
+        "startNodeId": 78,
+        "endNodeId": 79,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 201,
+        "startNodeId": 78,
+        "endNodeId": 83,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 202,
+        "startNodeId": 79,
+        "endNodeId": 80,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 203,
+        "startNodeId": 79,
+        "endNodeId": 84,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 204,
+        "startNodeId": 80,
+        "endNodeId": 85,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 205,
+        "startNodeId": 81,
+        "endNodeId": 82,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 206,
+        "startNodeId": 81,
+        "endNodeId": 86,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 207,
+        "startNodeId": 82,
+        "endNodeId": 83,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 208,
+        "startNodeId": 82,
+        "endNodeId": 87,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 209,
+        "startNodeId": 83,
+        "endNodeId": 84,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 210,
+        "startNodeId": 83,
+        "endNodeId": 88,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 211,
+        "startNodeId": 84,
+        "endNodeId": 85,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 212,
+        "startNodeId": 84,
+        "endNodeId": 89,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 213,
+        "startNodeId": 85,
+        "endNodeId": 90,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 214,
+        "startNodeId": 86,
+        "endNodeId": 87,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 215,
+        "startNodeId": 86,
+        "endNodeId": 91,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 216,
+        "startNodeId": 87,
+        "endNodeId": 88,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 217,
+        "startNodeId": 87,
+        "endNodeId": 92,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 218,
+        "startNodeId": 88,
+        "endNodeId": 89,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 219,
+        "startNodeId": 88,
+        "endNodeId": 93,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 220,
+        "startNodeId": 89,
+        "endNodeId": 90,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 221,
+        "startNodeId": 89,
+        "endNodeId": 94,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 222,
+        "startNodeId": 90,
+        "endNodeId": 95,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 223,
+        "startNodeId": 91,
+        "endNodeId": 92,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 224,
+        "startNodeId": 91,
+        "endNodeId": 96,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 225,
+        "startNodeId": 92,
+        "endNodeId": 93,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 226,
+        "startNodeId": 92,
+        "endNodeId": 97,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 227,
+        "startNodeId": 93,
+        "endNodeId": 94,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 228,
+        "startNodeId": 93,
+        "endNodeId": 98,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 229,
+        "startNodeId": 94,
+        "endNodeId": 95,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 230,
+        "startNodeId": 94,
+        "endNodeId": 99,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 231,
+        "startNodeId": 95,
+        "endNodeId": 100,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 232,
+        "startNodeId": 96,
+        "endNodeId": 97,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 233,
+        "startNodeId": 97,
+        "endNodeId": 98,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 234,
+        "startNodeId": 98,
+        "endNodeId": 99,
+        "profileName": "IPE 200",
+        "material": "S235"
+      },
+      {
+        "id": 235,
+        "startNodeId": 99,
+        "endNodeId": 100,
+        "profileName": "IPE 200",
+        "material": "S235"
+      }
+    ],
+    "supports": [
+      {
+        "nodeId": 1,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 2,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 3,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 4,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 5,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 6,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 7,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 8,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 9,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 10,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 11,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 12,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 13,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 14,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 15,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 16,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 17,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 18,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 19,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 20,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 21,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 22,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 23,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 24,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 25,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      }
+    ],
+    "loads": [
+      {
+        "id": 1,
+        "nodeId": 76,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 2,
+        "nodeId": 76,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 3,
+        "nodeId": 77,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 4,
+        "nodeId": 77,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 5,
+        "nodeId": 78,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 6,
+        "nodeId": 78,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 7,
+        "nodeId": 79,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 8,
+        "nodeId": 79,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 9,
+        "nodeId": 80,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 10,
+        "nodeId": 80,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 11,
+        "nodeId": 81,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 12,
+        "nodeId": 81,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 13,
+        "nodeId": 82,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 14,
+        "nodeId": 82,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 15,
+        "nodeId": 83,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 16,
+        "nodeId": 83,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 17,
+        "nodeId": 84,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 18,
+        "nodeId": 84,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 19,
+        "nodeId": 85,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 20,
+        "nodeId": 85,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 21,
+        "nodeId": 86,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 22,
+        "nodeId": 86,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 23,
+        "nodeId": 87,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 24,
+        "nodeId": 87,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 25,
+        "nodeId": 88,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 26,
+        "nodeId": 88,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 27,
+        "nodeId": 89,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 28,
+        "nodeId": 89,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 29,
+        "nodeId": 90,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 30,
+        "nodeId": 90,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 31,
+        "nodeId": 91,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 32,
+        "nodeId": 91,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 33,
+        "nodeId": 92,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 34,
+        "nodeId": 92,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 35,
+        "nodeId": 93,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 36,
+        "nodeId": 93,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 37,
+        "nodeId": 94,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 38,
+        "nodeId": 94,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 39,
+        "nodeId": 95,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 40,
+        "nodeId": 95,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 41,
+        "nodeId": 96,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 42,
+        "nodeId": 96,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 43,
+        "nodeId": 97,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 44,
+        "nodeId": 97,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 45,
+        "nodeId": 98,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 46,
+        "nodeId": 98,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 47,
+        "nodeId": 99,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 48,
+        "nodeId": 99,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 49,
+        "nodeId": 100,
+        "fx": 0,
+        "fy": 0,
+        "fz": -12,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 50,
+        "nodeId": 100,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 51,
+        "nodeId": 100,
+        "fx": 15,
+        "fy": 0,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 30,
+        "caseId": 4
+      }
+    ],
+    "memberLoads": [
+      {
+        "id": 1,
+        "beamId": 196,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 2,
+        "beamId": 198,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 3,
+        "beamId": 200,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 4,
+        "beamId": 202,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 5,
+        "beamId": 205,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 6,
+        "beamId": 207,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 7,
+        "beamId": 209,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 8,
+        "beamId": 211,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 9,
+        "beamId": 214,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 10,
+        "beamId": 216,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 11,
+        "beamId": 218,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 12,
+        "beamId": 220,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 13,
+        "beamId": 223,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 14,
+        "beamId": 225,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 15,
+        "beamId": 227,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 16,
+        "beamId": 229,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 17,
+        "beamId": 232,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 18,
+        "beamId": 233,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 19,
+        "beamId": 234,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 20,
+        "beamId": 235,
+        "caseId": 3,
+        "qyStart": 0,
+        "qyEnd": 0,
+        "qzStart": -3,
+        "qzEnd": -3,
+        "startPositionM": 0,
+        "endPositionM": 4
+      }
+    ],
+    "memberPointLoads": [
+      {
+        "id": 1,
+        "beamId": 196,
+        "caseId": 4,
+        "py": 0,
+        "pz": -10,
+        "positionM": 2
+      }
+    ]
+  },
+  "projectInfo": {
+    "name": "Verificatie vierlaags 3D raam",
+    "projectNumber": "VF-3D-GROOT-02"
+  },
+  "frame3dViewSets": []
+}

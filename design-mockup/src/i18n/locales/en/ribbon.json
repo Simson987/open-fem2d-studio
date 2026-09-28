@@ -50,7 +50,7 @@
     "beamCount_one": "{{count}} member",
     "beamCount_other": "{{count}} members",
     "noCalculation": "Not calculated yet",
-    "readyToCalculate": "Ready for direct second-order analysis",
+    "readyToCalculate": "Ready to calculate",
     "solving": "Calculating 3D model…",
     "solved": "{{engine}} · umax {{value}} mm",
     "instructions": "Coordinates in metres. Click a node or member to edit it.",

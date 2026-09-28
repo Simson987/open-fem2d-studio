@@ -2115,17 +2115,21 @@ function App() {
           loadedCaseIds.add(fem.activeLoadCaseId);
         }
         if (loadedCaseIds.size === 0) throw new Error("Voeg minstens één 3D-belasting of opgelegde verplaatsing toe.");
+        if (fem.analysetype === "tweedeOrdeFysisch") {
+          throw new Error("Fysisch niet-lineaire 3D-analyse is nog niet beschikbaar. Kies eerste orde of tweede orde (P-Δ).");
+        }
+        const frame3dAnalysis = fem.analysetype === "eersteOrde" ? "linear" : "p-delta";
         const combinations = fem.combinations.filter((combination) =>
           [...loadedCaseIds].some((caseId) => (combination.factors.get(caseId) ?? 0) !== 0));
 
         // Elk geval blijft afzonderlijk beschikbaar voor invoercontrole. Iedere
-        // combinatie gaat daarnaast als één volledige lastvector door dezelfde
-        // P-Delta-kern; tweede-orde-uitkomsten worden dus nooit gesuperponeerd.
+        // combinatie gaat als één volledige lastvector door de gekozen kern;
+        // tweede-orde-uitkomsten worden dus nooit gesuperponeerd.
         const [casePairs, combinationPairs] = await Promise.all([
           Promise.all([...loadedCaseIds].map(async (caseId) =>
-            [caseId, await solveFrame3D(frame3dCalculationModel, caseId)] as const)),
+            [caseId, await solveFrame3D(frame3dCalculationModel, caseId, frame3dAnalysis)] as const)),
           Promise.all(combinations.map(async (combination) =>
-            [combination.id, await solveFrame3DCombination(frame3dCalculationModel, combination.factors)] as const)),
+            [combination.id, await solveFrame3DCombination(frame3dCalculationModel, combination.factors, frame3dAnalysis)] as const)),
         ]);
         if (generation !== frame3dSolveGenerationRef.current) {
           const message = `De 3D-berekening is vervallen doordat model of rekeninstellingen tijdens de berekening wijzigden (generatie ${generation} → ${frame3dSolveGenerationRef.current}).`;

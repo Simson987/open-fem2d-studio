@@ -316,6 +316,15 @@ assert.ok(memberLoadInstances.every((child) => child.userData.type === "memberLo
   "gebatchte lastpijlen blijven als staafbelasting selecteerbaar");
 assert.ok(memberLoadInstances.every((child) => child.userData.instanceIds.includes(1)
   && child.userData.instanceIds.includes(240)), "iedere last-id blijft in de selectiebatch aanwezig");
+const mediumMemberLoadMarkers = new THREE.Group();
+addFrame3DConditionMarkers(mediumMemberLoadMarkers, {
+  ...largeMemberLoadModel, memberLoads: largeMemberLoadModel.memberLoads.slice(0, 4),
+}, { supports: false, loads: true });
+assert.equal(mediumMemberLoadMarkers.children.length, 3,
+  "vier lijnlasten delen al twee pijlbatches en één hulplijnbatch");
+assert.ok(mediumMemberLoadMarkers.children.filter((child) => child instanceof THREE.InstancedMesh)
+  .every((child) => child.userData.instanceIds.includes(4)),
+"ook de vierde last blijft apart selecteerbaar");
 const snapCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
 snapCamera.position.set(0, 0, 80);
 snapCamera.lookAt(0, 0, 0);
