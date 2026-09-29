@@ -34,6 +34,8 @@ voor andere apparaten.
 | Zelfde plaat weer zichtbaar en staafstart binnen het plaatvlak | Plaatwerkvlak (normaal 0,1,0), nieuwe knoop op Y = 0 m, 0,20 ms snapverwerking; dubbele plaat-raycast bij klikken verwijderd |
 | Isometrisch aanzicht, zoom op lege canvasruimte links van het model, vóór correctie | Eén zoomstap schoof vrijwel het hele raamwerk buiten het canvas |
 | Zelfde zoom in een vers geladen build na correctie | Raamwerk bleef zichtbaar; anker `bounds-center`, 7,2 ms wielverwerking. Terugzoomen gebruikte hetzelfde anker; zoom op zichtbare geometrie gebruikte `geometry` (10,9 ms) |
+| Voorbeeldmodel met 9 knopen en 6 staven: vanaf K3 een 3D-staaf naar een leeg punt tekenen | K10 op (0, 6, 5) m en staaf 7 (K3–K10) verschenen; 0,5 ms snapverwerking en 22,5 ms incrementele opbouw (`append-node-beam`) |
+| De zojuist getekende profielstaaf in het canvas selecteren | Staaf 7 als geheel geselecteerd; 1,1 ms pick. Een eerste klik net boven het profiel selecteerde niets, zoals verwacht bij selectie op het profielvolume. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
