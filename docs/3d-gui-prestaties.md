@@ -36,6 +36,9 @@ voor andere apparaten.
 | Zelfde zoom in een vers geladen build na correctie | Raamwerk bleef zichtbaar; anker `bounds-center`, 7,2 ms wielverwerking. Terugzoomen gebruikte hetzelfde anker; zoom op zichtbare geometrie gebruikte `geometry` (10,9 ms) |
 | Voorbeeldmodel met 9 knopen en 6 staven: vanaf K3 een 3D-staaf naar een leeg punt tekenen | K10 op (0, 6, 5) m en staaf 7 (K3–K10) verschenen; 0,5 ms snapverwerking en 22,5 ms incrementele opbouw (`append-node-beam`) |
 | De zojuist getekende profielstaaf in het canvas selecteren | Staaf 7 als geheel geselecteerd; 1,1 ms pick. Een eerste klik net boven het profiel selecteerde niets, zoals verwacht bij selectie op het profielvolume. |
+| Vooraanzicht XZ: plaat met rechte randen en een boog maken in bestaand raamwerk | Plaat 1 gesloten op Y = 3 m, met vier randsegmenten waarvan één boog; 3,5 ms geometrie en 15,0 ms incrementele opbouw (`append-plate`). |
+| In dezelfde plaat een opening met rechte randen en een boog tekenen | Opening 1 werd zichtbaar; klik in de uitsparing selecteerde niets (0,6 ms), klik op de aangrenzende plaat selecteerde plaat 1 (0,7 ms). |
+| Na omschakelen naar isometrisch aanzicht profielvolumes en platen uit/aan zetten | Camerapositie `51,955772;36,955772;30,254123` m en doel `18;3;6` m bleven exact gelijk; platen verversen duurde 3,6 en 4,2 ms. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
