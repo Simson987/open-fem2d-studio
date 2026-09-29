@@ -61,6 +61,7 @@ voor andere apparaten.
 | 28 platen en 261 knopen: staaf tussen bestaande K254 en K253 tekenen | Staaf 8 zonder nieuwe knopen; 9,4 ms incrementele staafopbouw. Het zichtbare profiel was daarna in 0,6 ms selecteerbaar. |
 | Zelfde model ingezoomd op plaat 28, alle snaps uit: staaf vanaf twee vrije punten in de plaat tekenen | K262 op (19,974; 135; 10,250) m en K263 op (17,142; 135; 9,930) m; beide liggen op het plaatvlak Y = 135 m. Staaf 9 verscheen met `append-node-beam` in 6,8 ms; snapverwerking 0,2 ms. De actieve tekenvlakbron was `beam-plate` met normaal (0,1,0). Na de controle zijn alle snaps weer aangezet. |
 | 28 platen, 263 knopen en 9 staven: op plaat 28 bij de cursor in- en uitzoomen | Zoomanker `geometry`; 22,0 ms voor de eerste ingezoomde stap en 5,3 ms voor terugzoomen. Camera `(25,626232; 137,107863; 13,549842)` m en doel `(18,795589; 130,277220; 8,670811)` m kwamen exact terug; labels waren na iedere stap weer zichtbaar. |
+| Zelfde model: view “Groot model plaat 28” opslaan, naar vooraanzicht wisselen, knoopnummers verbergen en view herstellen | De oorspronkelijke isometrische camera en doel kwamen exact terug; knoopnummers stonden weer aan. De view bleef in de lijst met opgeslagen 3D-weergaven. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
