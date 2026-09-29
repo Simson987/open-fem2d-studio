@@ -975,6 +975,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
   const visualNodeRadiusRef = useRef(0.035);
   const plateDraftRef = useRef<PlateSketch>(emptyPlateSketch());
   const openingDraftRef = useRef<PlateSketch>(emptyPlateSketch());
+  const redrawDraftContourRef = useRef<((sketch: PlateSketch | null, opening?: boolean) => void) | null>(null);
   const plateDraftCreatedNodesRef = useRef<Set<number>>(new Set());
   const openingDraftCreatedNodesRef = useRef<Set<number>>(new Set());
   const plateHistoryGroupRef = useRef<string | null>(null);
@@ -1017,9 +1018,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       visibility, structuralGrid, result, utilizations, activeLoadCaseId,
     };
   };
-  const discardDraftNodes = (createdNodeIds: Set<number>, historyGroupRef: { current: string | null }) => {
+  const discardDraftNodes = (
+    createdNodeIds: Set<number>, historyGroupRef: { current: string | null }, preserveHistoryGroup = false,
+  ) => {
     const historyGroup = historyGroupRef.current;
-    historyGroupRef.current = null;
+    if (!preserveHistoryGroup) historyGroupRef.current = null;
     if (createdNodeIds.size === 0) return;
     const current = modelRef.current;
     const referenced = new Set<number>();
@@ -1042,14 +1045,37 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     nodePositionIndexRef.current = buildNodePositionIndex(next.nodes);
     nextNodeIdRef.current = nextNumericId(next.nodes);
     modelRef.current = next;
-    changeRef.current(next, { historyGroup: historyGroup ?? undefined, cancelHistoryGroup: true });
+    changeRef.current(next, { historyGroup: historyGroup ?? undefined, cancelHistoryGroup: !preserveHistoryGroup });
     selectRef.current(null);
+  };
+  const cancelPendingArcControl = (
+    sketchRef: { current: PlateSketch }, createdNodeIds: Set<number>,
+    historyGroupRef: { current: string | null }, opening: boolean,
+  ) => {
+    const controlId = sketchRef.current.arcControlNodeId;
+    if (controlId === null) return;
+    sketchRef.current = {
+      ...sketchRef.current,
+      nodeIds: sketchRef.current.nodeIds.filter((id) => id !== controlId),
+      arcControlNodeId: null,
+    };
+    if (createdNodeIds.delete(controlId)) {
+      discardDraftNodes(new Set([controlId]), historyGroupRef, true);
+    }
+    redrawDraftContourRef.current?.(sketchRef.current, opening);
+    selectRef.current({ type: "multi", nodeIds: [...sketchRef.current.nodeIds], beamIds: [] });
   };
   const previousToolRef = useRef(tool);
   useEffect(() => {
     const previousTool = previousToolRef.current;
     const plateTools: Frame3DTool[] = ["addPlate", "addPlateArc"];
     const openingTools: Frame3DTool[] = ["addOpening", "addOpeningArc"];
+    if (previousTool === "addPlateArc" && tool === "addPlate") {
+      cancelPendingArcControl(plateDraftRef, plateDraftCreatedNodesRef.current, plateHistoryGroupRef, false);
+    }
+    if (previousTool === "addOpeningArc" && tool === "addOpening") {
+      cancelPendingArcControl(openingDraftRef, openingDraftCreatedNodesRef.current, openingHistoryGroupRef, true);
+    }
     if (!(plateTools.includes(previousTool) && plateTools.includes(tool))) {
       discardDraftNodes(plateDraftCreatedNodesRef.current, plateHistoryGroupRef);
       plateDraftRef.current = emptyPlateSketch();
@@ -1632,6 +1658,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       container.dataset.frame3dDraftSegments = String(sketch?.segments.length ?? 0);
       container.dataset.frame3dDraftVertices = String(vertices.length);
     };
+    redrawDraftContourRef.current = drawDraftContour;
     let previewFrame = 0;
     let latestPointerEvent: PointerEvent | null = null;
     const drawPointerPreview = () => {
@@ -2188,6 +2215,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       if (cameraRenderFrame) cancelAnimationFrame(cameraRenderFrame);
       if (nodeSnapPrewarmFrameRef.current) cancelAnimationFrame(nodeSnapPrewarmFrameRef.current);
       nodeSnapPrewarmRef.current = null;
+      redrawDraftContourRef.current = null;
       controls.dispose();
       disposeGroup(geometry);
       disposeGroup(preview);
