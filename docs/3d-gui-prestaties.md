@@ -58,6 +58,8 @@ voor andere apparaten.
 | 28 platen met boogopening: van G naar Q wisselen vóór laagverversing | 142,6 ms volledige scène-opbouw; de 28 plaatlastlabels werden opnieuw opgebouwd. |
 | Zelfde model na laagverversing: tussen G, Q en Model wisselen | G↔Q gebruikte `conditions` (53,4–77,9 ms), naar Model 18,2 ms; camera bleef exact gelijk. Geselecteerde G-plaatlast 55 werd bij Q losgelaten en Q-plaatlast 56 verscheen. |
 | Zelfde model: lasten via Weergave verbergen en terugzetten | 25,7 en 70,8 ms voor de conditielaag; 0 en opnieuw 28 zichtbare plaatlastlabels, zonder verplaatsing van de camera. |
+| 28 platen en 261 knopen: staaf tussen bestaande K254 en K253 tekenen | Staaf 8 zonder nieuwe knopen; 9,4 ms incrementele staafopbouw. Het zichtbare profiel was daarna in 0,6 ms selecteerbaar. |
+| Zelfde model ingezoomd op plaat 28, alle snaps uit: staaf vanaf twee vrije punten in de plaat tekenen | K262 op (19,974; 135; 10,250) m en K263 op (17,142; 135; 9,930) m; beide liggen op het plaatvlak Y = 135 m. Staaf 9 verscheen met `append-node-beam` in 6,8 ms; snapverwerking 0,2 ms. De actieve tekenvlakbron was `beam-plate` met normaal (0,1,0). Na de controle zijn alle snaps weer aangezet. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
