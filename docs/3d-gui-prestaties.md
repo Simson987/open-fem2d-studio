@@ -21,6 +21,9 @@ voor andere apparaten.
 | Plaat met gebogen opening: staaf tekenen tussen twee bestaande contourknopen in isometrisch aanzicht | Staaf 7 verbindt K11 en K10 exact; geen extra knopen; 6,2 ms incrementele staafopbouw en 0,1 ms knoopsnap |
 | De nieuwe staaf met profielvolume op de zichtbare hartlijn aanklikken | Staaf 7 geselecteerd in 0,6 ms; een klik in het naastliggende plaatvlak selecteert de plaat |
 | Op staaf 7 een lijnlast toevoegen en één lastpijl aanklikken | Last 8 over 10,5 m aangemaakt; één pijl selecteerde de volledige last in 1,7 ms |
+| Schuin 3D-aanzicht, alle snaps uit: staaf vlak naast twee knopen van een verticale plaat tekenen, vóór correctie | Twee nieuwe knopen op circa Y = −10,5 m, hoewel de zichtbare plaat op Y = 0 m stond |
+| Zelfde handeling na correctie | Twee afzonderlijke nieuwe knopen op Y = 0 m; het actieve tekenvlak was de plaat (normaal 0,1,0); 17,5 ms incrementele opbouw |
+| Zelfde schuine aanzicht met knoopsnap weer aan | Staaf tussen K12 en K13 zonder extra knopen; 14,8 ms incrementele opbouw |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
