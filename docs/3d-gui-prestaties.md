@@ -71,6 +71,7 @@ voor andere apparaten.
 | Op de opening van plaat 29 een staaf tussen bestaande K271 en K272 tekenen | Staaf 11 (IPE 200) werd met knoopsnap op beide openingsknopen geplaatst zonder nieuwe knopen; `append-beam` duurde 6,1 ms. Het zichtbare profiel was daarna met één klik op het plaatvlak selecteerbaar. |
 | Staaf 11 een lokale z-lijnlast in geval Q geven | Het snelle veld toonde −2,5 kN/m maar sloeg vóór de correctie ten onrechte de standaardwaarde −5 kN/m op: de veldnamen misten de `q`. Na correctie werd `qz = −2,5→−2,5 kN/m` opgeslagen; omzetten naar lokale y en terug, en een tijdelijk variabel eind van −4 kN/m, gaven telkens de ingevoerde waarden. |
 | Dezelfde lijnlast toevoegen, wijzigen en verwijderen in het model met 30 platen | Vóór gerichte verversing veroorzaakte een wijziging volledige opbouwen van circa 80–130 ms. Daarna ververste alleen de conditielaag: 21,8–24,4 ms voor wijzigen, 22,3 ms voor toevoegen en 22,6 ms voor verwijderen. De camera bleef op dezelfde positie. De tijdelijke tweede lijnlast is na de test verwijderd. |
+| Bij de belaste staaf 11 op plaat 29 één stap in- en uitzoomen rond de cursor | Beide wielacties ankerden op `geometry` en duurden 5,8 en 6,8 ms. De camera keerde exact terug naar positie `(12,275089; 131,421150; 10,740528)` m en doel `(9,459784; 128,605845; 8,729595)` m; de last bleef zichtbaar. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
