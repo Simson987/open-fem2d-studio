@@ -52,6 +52,9 @@ assert.ok(new Raycaster(new Vector3(1, 2, 2), new Vector3(0, 0, -1)).intersectOb
 assert.ok(new Raycaster(rendered.surfaceAnchor.clone().add(new Vector3(0, 0, 2)), new Vector3(0, 0, -1))
   .intersectObject(plateMesh).length > 0,
 "het lastteken moet op plaatmateriaal staan en niet in de opening");
+assert.equal(new Raycaster(rendered.surfaceLabelAnchor.clone().add(new Vector3(0, 0, 2)), new Vector3(0, 0, -1))
+  .intersectObject(plateMesh).length, 0,
+  "het lastlabel krijgt een anker buiten de buitencontour, zodat een brede tekst niet in de opening valt");
 assert.throws(() => addFrame3DPlateOpening(withPlate, 1, [1, 5, 6]), /binnen.*buitenrand/,
   "een opening die de plaatrand raakt mag geen schijnbare uitsparing worden");
 assert.throws(() => parseFrame3DModel({ ...withOpening,

@@ -3900,7 +3900,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           const label = makeLabel(
             `q = ${resultValue(magnitude)} kN/m²`,
             "frame3d-result-label frame3d-surface-load-label",
-            built.surfaceAnchor.clone().addScaledVector(built.normal, 0.12),
+            built.surfaceLabelAnchor.clone().addScaledVector(built.normal, 0.12),
           );
           // In bovenaanzicht projecteert de verticale lastpijl vrijwel op
           // één pixel. Het zichtbare label moet daarom zelf selecteerbaar

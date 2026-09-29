@@ -8,6 +8,7 @@ export interface Frame3DPlateGeometry {
   quaternion: THREE.Quaternion;
   normal: THREE.Vector3;
   surfaceAnchor: THREE.Vector3;
+  surfaceLabelAnchor: THREE.Vector3;
 }
 
 function roundedPath(points: THREE.Vector2[], radius: number, shape: boolean): THREE.Shape | THREE.Path {
@@ -131,5 +132,15 @@ export function createFrame3DPlateGeometry(
     }
   }
   const surfaceAnchor = anchor.applyQuaternion(quaternion).add(position);
-  return { geometry, position, quaternion, normal, surfaceAnchor };
+  // A label can be wider than the remaining material around an opening.
+  // Keep its anchor just beyond the outer contour; the load arrow remains on
+  // the actual plate surface at surfaceAnchor.
+  const outlineBounds = new THREE.Box2().setFromPoints(shape.getPoints(24));
+  const labelOffset = Math.max(0.05, outlineBounds.getSize(new THREE.Vector2()).y * 0.035);
+  const surfaceLabelAnchor = new THREE.Vector3(
+    (outlineBounds.min.x + outlineBounds.max.x) / 2,
+    outlineBounds.max.y + labelOffset,
+    0,
+  ).applyQuaternion(quaternion).add(position);
+  return { geometry, position, quaternion, normal, surfaceAnchor, surfaceLabelAnchor };
 }
