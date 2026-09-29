@@ -1230,7 +1230,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
 
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
-    const setPointer = (event: PointerEvent) => {
+    const setPointer = (event: { clientX: number; clientY: number }) => {
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1,
                   -((event.clientY - rect.top) / rect.height) * 2 + 1);
@@ -1242,6 +1242,48 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / Math.max(rect.height, 1);
       raycaster.params.Line.threshold = Math.max(0.02, worldPerPixel * 5);
     };
+    const onWheelAnchor = (event: WheelEvent) => {
+      if (!controls.enabled || !controls.enableZoom || event.deltaY === 0) return;
+      // OrbitControls zoomToCursor uses the plane through controls.target.
+      // On a long frame that plane can be hundreds of metres behind the
+      // member under the pointer, so a fast zoom throws that member offscreen.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const startedAt = performance.now();
+      setPointer(event);
+      const visibleTargets = [...nodePickTargetsRef.current, ...nonNodePickTargetsRef.current]
+        .filter((target) => target.userData.pickable !== false);
+      const hit = raycaster.intersectObjects(visibleTargets, false)[0];
+      const anchor = hit?.point.clone() ?? new THREE.Vector3();
+      let anchorSource = hit ? "geometry" : "bounds";
+      if (!hit) {
+        const bounds = frame3DNodeBounds(modelRef.current);
+        if (bounds.isEmpty() || !raycaster.ray.intersectBox(bounds, anchor)) {
+          anchorSource = "camera";
+          const viewNormal = camera.getWorldDirection(new THREE.Vector3());
+          raycaster.ray.intersectPlane(
+            new THREE.Plane().setFromNormalAndCoplanarPoint(viewNormal, controls.target), anchor,
+          );
+        }
+      }
+      const modeScale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 100 : 1;
+      const delta = event.deltaY * modeScale * (event.ctrlKey ? 10 : 1);
+      const step = Math.pow(0.95, controls.zoomSpeed * Math.abs(delta * 0.01));
+      const distance = camera.position.distanceTo(controls.target);
+      const nextDistance = THREE.MathUtils.clamp(
+        distance * (delta < 0 ? step : 1 / step),
+        Math.max(controls.minDistance, 0.1), controls.maxDistance,
+      );
+      const scale = nextDistance / distance;
+      startCameraInteraction();
+      camera.position.sub(anchor).multiplyScalar(scale).add(anchor);
+      controls.target.sub(anchor).multiplyScalar(scale).add(anchor);
+      controls.update();
+      endCameraInteraction();
+      container.dataset.frame3dWheelAnchor = anchorSource;
+      container.dataset.frame3dWheelMs = (performance.now() - startedAt).toFixed(2);
+    };
+    renderer.domElement.addEventListener("wheel", onWheelAnchor, { capture: true, passive: false });
     const drawingAnchor = () => {
       const sketch = isOpeningTool(toolRef.current) ? openingDraftRef.current : plateDraftRef.current;
       const nodeId = toolRef.current === "addBeam" ? beamStartRef.current : sketch.firstNodeId;
@@ -1989,6 +2031,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       renderer.domElement.removeEventListener("pointerleave", onPointerLeave);
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
       renderer.domElement.removeEventListener("pointercancel", onPointerCancel);
+      renderer.domElement.removeEventListener("wheel", onWheelAnchor, true);
       selectionBox.remove();
       window.removeEventListener("keydown", onKeyDown);
       controls.removeEventListener("start", startCameraInteraction);
