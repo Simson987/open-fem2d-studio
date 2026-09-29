@@ -2252,8 +2252,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         arrow.traverse((child) => { child.userData = { type: "surfaceLoad", id: load.id }; });
         group.add(arrow);
         if (loadIndex % stride !== 0) continue;
+        const components = (["x", "y", "z"] as const)
+          .filter((axis) => Math.abs(load[`q${axis}`]) > 1e-12)
+          .map((axis) => `q${axis}=${resultValue(load[`q${axis}`])}`);
         const label = makeLabel(
-          `q = ${resultValue(magnitude)} kN/m²`,
+          `${components.join(" · ")} kN/m²`,
           "frame3d-result-label frame3d-surface-load-label",
           built.surfaceLabelAnchor.clone().addScaledVector(built.normal, 0.12),
         );

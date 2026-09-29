@@ -87,6 +87,7 @@ voor andere apparaten.
 | View “Boogopening groot model” herstellen na vooraanzicht en verborgen platen | De isometrische camerapositie `(9,374530; 36,884563; 18,132524)` m, het doel `(3,747610; 31,257643; 14,113295)` m en zichtbaarheid van platen werden exact hersteld. De gebogen opening bleef zichtbaar. |
 | Op plaat 1 met boogopening een oppervlaktebelasting maken vanuit de Model-tab | Vóór correctie werd de last wel toegevoegd, maar direct verborgen en de selectie gewist. Na correctie schakelde de GUI naar Permanent (G), bleef oppervlaktebelasting 2 geselecteerd en toonde de eigenschappen `qz = −5 kN/m²`. Wisselen van Model naar G ververste de conditielaag in 47,7 ms; ongedaan maken van de dubbele testlast ververste alleen `surface-loads` in 10,5 ms. |
 | Plaatbelasting op plaat 1 meetellen in de belastinggevaltab | De tab Permanent (G) toonde vóór correctie 128 ondanks een extra oppervlaktebelasting; na correctie 129. De belasting bleef via het label in het canvas selecteerbaar. |
+| Lastlabel op plaat 1 met gebogen opening: qz = −5 en daarna qx = 2 kN/m² | Vóór correctie stond alleen de positieve grootte `q = 5.000` in het canvas. Na correctie toonde het label `qz=-5.000` en bij twee componenten `qx=2.000 · qz=-5.000 kN/m²`; via het label bleef de last selecteerbaar. De wijziging ververste alleen `surface-loads` in 11,6 ms en terugzetten naar qx = 0 in 8,6 ms, met ongewijzigde camera. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
