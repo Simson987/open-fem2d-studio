@@ -51,6 +51,10 @@ voor andere apparaten.
 | In hetzelfde aanzicht profiel en selectiekader proberen | Klik midden op het zichtbare profiel selecteerde staaf 7; kader om het hele profiel selecteerde staaf 7 en beide eindknopen (0,7 ms). Een onvolledig kader selecteerde niets, overeenkomstig de huidige volledige-insluitingsregel. |
 | Op plaat 1, boven staaf 7, een opening met drie rechte randen en één boog tekenen | K14–K18 lagen alle op Y = 0 m; de boog gebruikte K16 als stuurpunt. Opening 1 sloot in 6,8 ms (`update-plate`), waarvan 1,6 ms plaatgeometrie. |
 | De nieuwe opening in vooraanzicht selecteren en naar isometrisch aanzicht wisselen | Klik in de uitsparing gaf geen selectie (0,2 ms), klik op plaat ernaast selecteerde plaat 1 (0,3 ms); de gebogen uitsparing bleef in het 3D-aanzicht zichtbaar. |
+| Zeven platen met boogopening in 3D kopiëren, daarna de groep van zeven nogmaals | 28 platen, 261 knopen en 56 oppervlaktebelastingen (28 per belastinggeval); alle uitsparingen bleven zichtbaar. Bij 14 platen 132,1 ms volledige opbouw (77,2 ms WebGL-render); bij 28 platen 90,8 ms (42,6 ms WebGL-render). Dit zijn losse metingen, met variatie door de renderfase. |
+| Passend beeld op het model met 28 platen | 4,6 ms cameratekening bij 74 draw calls; de volledige rij platen bleef in het canvas. Zoom op de laatste plaat duurde 7,6–9,7 ms per stap. |
+| In de klein geprojecteerde boogopening van plaat 28 klikken, vóór selectiecorrectie | De 14px-selectiezone van een randknoop koos K258/K261 terwijl de klik op de witte uitsparing lag. |
+| Dezelfde handeling na een 7px-selectiezone, met behoud van 14px tekensnap | Midden in de uitsparing gaf geen selectie; zichtbare K254 werd op 0,31 px afstand wel geselecteerd. Staaf tekenen vanaf circa 10 px naast K254 gebruikte nog steeds K254 als begin, zonder nieuwe knoop. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de

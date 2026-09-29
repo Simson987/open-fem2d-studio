@@ -1742,6 +1742,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
             nodeIndex,
             (pointer.x + 1) * nodeIndex.width / 2,
             (1 - pointer.y) * nodeIndex.height / 2,
+            // Selectie volgt de zichtbare knoop; tekenen houdt de ruimere
+            // 14px-snapzone. Anders steelt een knoop naast een kleine opening
+            // de klik op de uitsparing of het plaatvlak.
+            7,
           )
         : null;
       const beamScreenStartedAt = performance.now();
@@ -1770,6 +1774,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       container.dataset.frame3dPickType = String(type ?? "none");
       container.dataset.frame3dPickId = String(id ?? "none");
       container.dataset.frame3dPickNodeCandidates = String(nodeHit?.candidateCount ?? 0);
+      container.dataset.frame3dPickNodeDistancePx = nodeHit?.distancePx.toFixed(2) ?? "none";
       container.dataset.frame3dPickBeamScreen = beamScreenHit
         ? `${beamScreenHit.beamId}@${beamScreenHit.distancePx.toFixed(1)}px` : "none";
       container.dataset.frame3dPickBeamScreenMs = (performance.now() - beamScreenStartedAt).toFixed(2);
