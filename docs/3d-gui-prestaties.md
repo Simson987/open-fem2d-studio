@@ -18,6 +18,9 @@ voor andere apparaten.
 | 18 knopen, 6 staven, 1 plaat met boogopening en oppervlaktebelasting: lasten verbergen vóór optimalisatie | 77,1 ms volledige scène-opbouw, 18 draw calls |
 | Zelfde model na optimalisatie: lasten verbergen en terugzetten | 23,6 ms en 22,7 ms voor alleen de conditielaag; 0 en weer 9 selecteerbare lastobjecten |
 | Zelfde model: oppervlaktebelasting na terugzetten via label selecteren | Belasting 1 geselecteerd; label bleef buiten de plaatopening |
+| Plaat met gebogen opening: staaf tekenen tussen twee bestaande contourknopen in isometrisch aanzicht | Staaf 7 verbindt K11 en K10 exact; geen extra knopen; 6,2 ms incrementele staafopbouw en 0,1 ms knoopsnap |
+| De nieuwe staaf met profielvolume op de zichtbare hartlijn aanklikken | Staaf 7 geselecteerd in 0,6 ms; een klik in het naastliggende plaatvlak selecteert de plaat |
+| Op staaf 7 een lijnlast toevoegen en één lastpijl aanklikken | Last 8 over 10,5 m aangemaakt; één pijl selecteerde de volledige last in 1,7 ms |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
