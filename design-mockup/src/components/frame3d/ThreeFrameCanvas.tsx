@@ -1730,6 +1730,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       // klik opnieuw doorzocht te worden.
       const pickStartedAt = performance.now();
       const intersections = raycaster.intersectObjects(nonNodePickTargetsRef.current, false);
+      container.dataset.frame3dPickCandidates = intersections.slice(0, 6).map((candidate) =>
+        `${String(candidate.object.userData.type ?? "unknown")}@${candidate.distance.toFixed(3)}`,
+      ).join(",");
       // Lastpijlen eindigen bewust op de constructie en liggen daardoor vaak
       // exact voor een staaf of knoop. Wanneer dezelfde klik beide raakt,
       // krijgt het zichtbare lastteken voorrang; anders was een belasting op
@@ -1758,9 +1761,26 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
             (1 - pointer.y) * nodeIndex.height / 2,
           )
         : null;
+      // Een profiel dat vlak achter een halftransparante plaat ligt, blijft
+      // zichtbaar. De voorzijde van de plaat wint anders altijd de raycast,
+      // zodat de gebruiker de getekende staaf niet kan aanklikken.
+      const frontPlateHit = intersections[0]?.object.userData.type === "plate"
+        ? intersections[0] : undefined;
+      const frontPlateIds = frontPlateHit?.object.userData.instanceIds as number[] | undefined;
+      const frontPlateId = frontPlateIds && frontPlateHit?.instanceId !== undefined
+        ? frontPlateIds[frontPlateHit.instanceId]
+        : frontPlateHit?.object.userData.id as number | undefined;
+      const frontPlate = frontPlateId === undefined ? undefined : plateByIdRef.current?.get(frontPlateId);
+      const frontPlatePlane = frontPlate && visibilityRef.current.profiles ? platePlane(frontPlate) : null;
+      const beamThroughPlate = frontPlateHit && frontPlate && frontPlatePlane
+        ? intersections.find((candidate) => candidate.object.userData.type === "beam"
+          && candidate.distance - frontPlateHit.distance <= 1
+          && Math.abs(frontPlatePlane.distanceToPoint(candidate.point))
+            <= frontPlate.thicknessM / 2 + 0.25)
+        : undefined;
       // Een last wint altijd. Binnen de knoopsnapzone wint daarna de knoop,
       // zodat het staafeinde net zo direct selecteerbaar is als in 2D.
-      const intersection = loadIntersection ?? (nodeHit ? undefined : intersections[0]);
+      const intersection = loadIntersection ?? (nodeHit ? undefined : beamThroughPlate ?? intersections[0]);
       let hit: THREE.Object3D | undefined = intersection?.object;
       while (hit && hit !== geometry && typeof hit.userData.type !== "string") hit = hit.parent ?? undefined;
       const type = nodeHit && !loadIntersection ? "node" : beamScreenHit ? "beam" : hit?.userData.type;
@@ -1777,6 +1797,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       container.dataset.frame3dPickNodeDistancePx = nodeHit?.distancePx.toFixed(2) ?? "none";
       container.dataset.frame3dPickBeamScreen = beamScreenHit
         ? `${beamScreenHit.beamId}@${beamScreenHit.distancePx.toFixed(1)}px` : "none";
+      container.dataset.frame3dPickThroughPlate = beamThroughPlate ? String(frontPlateId) : "none";
       container.dataset.frame3dPickBeamScreenMs = (performance.now() - beamScreenStartedAt).toFixed(2);
       const activeTool = toolRef.current;
       let current = modelRef.current;
