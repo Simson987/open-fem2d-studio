@@ -158,12 +158,20 @@ export default function Frame3DExplorer(props: Props) {
         } />
         <Branch label="Platen" count={(props.model.plates ?? []).length}
           showNextLabel={(count) => t("tree.showNext", { count })}>
-          {(props.model.plates ?? []).map((plate) => <Leaf key={plate.id} label={`Plaat ${plate.id}`}
-            value={plate.boundary
-              ? `${plate.boundary.length} segmenten · ${plate.boundary.filter((segment) => segment.kind === "arc").length} boog · ${plate.thicknessM} m · ${plate.openings?.length ?? 0} openingen`
-              : `${plate.nodeIds.length} hoeken · ${plate.thicknessM} m · ${plate.openings?.length ?? 0} openingen`}
-            active={frame3DSelectionContains(props.selection, "plate", plate.id)}
-            onClick={(event) => select(event, { type: "plate", id: plate.id })} />)}
+          {(props.model.plates ?? []).map((plate) => {
+            const outerArcs = plate.boundary?.filter((segment) => segment.kind === "arc").length ?? 0;
+            const openingArcs = (plate.openings ?? []).reduce((count, opening) =>
+              count + (opening.boundary?.filter((segment) => segment.kind === "arc").length ?? 0), 0);
+            const openings = plate.openings?.length ?? 0;
+            const outer = plate.boundary
+              ? `${plate.boundary.length} randsegmenten${outerArcs ? ` (${outerArcs} boog)` : ""}`
+              : `${plate.nodeIds.length} hoeken`;
+            const holes = `${openings} ${openings === 1 ? "opening" : "openingen"}${openingArcs ? ` (${openingArcs} boog)` : ""}`;
+            return <Leaf key={plate.id} label={`Plaat ${plate.id}`}
+              value={`${outer} · ${holes} · ${plate.thicknessM} m`}
+              active={frame3DSelectionContains(props.selection, "plate", plate.id)}
+              onClick={(event) => select(event, { type: "plate", id: plate.id })} />;
+          })}
         </Branch>
         <Branch label={t("tree.supports")} count={(props.model.supports ?? []).length}
           showNextLabel={(count) => t("tree.showNext", { count })}>

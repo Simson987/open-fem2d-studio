@@ -2987,6 +2987,7 @@ function App() {
           if (frame3dSelection?.type !== "plate") return;
           const next = addFrame3DSurfaceLoad(frame3d, frame3dSelection.id, { qx: 0, qy: 0, qz: -5 }, fem.activeLoadCaseId);
           setFrame3d(next);
+          setFrame3dShowLoadCase(true);
           const load = next.surfaceLoads?.[Math.max(0, (next.surfaceLoads?.length ?? 1) - 1)];
           if (load) setFrame3dSelection({ type: "surfaceLoad", id: load.id });
           setRightPanelOpen(true);
@@ -3303,6 +3304,7 @@ function App() {
             ...(frame3dCalculationModel.memberLoads ?? []).map((load) => ({ id: load.id, type: "lineLoad" as const, caseId: load.caseId ?? 1 })),
             ...(frame3dCalculationModel.memberPointLoads ?? []).map((load) => ({ id: load.id, type: "pointForce" as const, caseId: load.caseId ?? 1 })),
             ...(frame3dCalculationModel.thermalLoads ?? []).map((load) => ({ id: load.id, type: "thermal" as const, caseId: load.caseId ?? 1 })),
+            ...(frame3dCalculationModel.surfaceLoads ?? []).map((load) => ({ caseId: load.caseId ?? 1 })),
           ]}
           showLoads={frame3dShowLoadCase}
           setShowLoads={(showLoadCase) => {

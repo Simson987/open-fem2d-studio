@@ -45,7 +45,7 @@ interface Props {
   setActiveLoadCaseId: (id: number) => void;
   addLoadCase: (name: string) => void;
   /** All loads — used to show count badges per tab. */
-  loads: Load[];
+  loads: Pick<Load, "caseId">[];
   /** Solver toggles — surfaced on the right side of the bar. */
   selfWeightEnabled?: boolean;
   setSelfWeightEnabled?: (v: boolean) => void;
