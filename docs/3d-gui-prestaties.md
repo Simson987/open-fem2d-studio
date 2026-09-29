@@ -41,6 +41,9 @@ voor andere apparaten.
 | Na omschakelen naar isometrisch aanzicht profielvolumes en platen uit/aan zetten | Camerapositie `51,955772;36,955772;30,254123` m en doel `18;3;6` m bleven exact gelijk; platen verversen duurde 3,6 en 4,2 ms. |
 | In hetzelfde aanzicht met het wiel op de gebogen plaat in- en uitzoomen | Zoomanker `geometry`; 15,4 ms en 6,2 ms wielverwerking. Camera en doel kwamen na terugzoomen exact op hun beginwaarden terug. |
 | Plaat en knopen verbergen en op de oude plaatpositie klikken | Geen selectie (0,1 ms pick); na herstellen bleven camera en doel onveranderd. |
+| Voorbeeldmodel met 13 knopen, 6 staven en 1 plaat: oppervlaktebelasting toevoegen | 7,1 ms voor alleen de oppervlaktebelasting; 9 selecteerbare lastobjecten. |
+| Dezelfde belasting wijzigen van qz = −5 naar −7 kN/m² | 5,5 ms voor alleen de oppervlaktebelasting; label en eigenschappen tonen −7. |
+| Belastingen verbergen en terugzetten | 19,9 en 29,0 ms voor de conditielaag; 0 en daarna weer 9 selecteerbare lastobjecten. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de

@@ -2186,8 +2186,60 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         allowedKeys.includes(key) && visibility[key] !== previousPresentation.visibility[key])
       && (Object.keys(visibility) as (keyof Frame3DVisibility)[]).every((key) =>
         allowedKeys.includes(key) || visibility[key] === previousPresentation.visibility[key]);
-    // Oppervlaktebelastingen gebruiken de tijdens de volledige plaatopbouw
-    // berekende driehoeksmesh en worden daarom niet los ververst.
+    const addSurfaceLoadMarkers = (
+      group: THREE.Group,
+      plateGeometry: (plate: NonNullable<Frame3DModel["plates"]>[number]) =>
+        ReturnType<typeof createFrame3DPlateGeometry>,
+    ) => {
+      if (!visibility.loads) return;
+      const visibleLoads = (model.surfaceLoads ?? []).filter((load) =>
+        activeLoadCaseId === undefined || frame3DLoadCaseId(load) === activeLoadCaseId);
+      const stride = visibleLoads.length <= 200 ? 1 : Math.ceil(visibleLoads.length / 24);
+      for (const [loadIndex, load] of visibleLoads.entries()) {
+        const plate = plateByIdRef.current!.get(load.plateId);
+        const built = plate && plateGeometry(plate);
+        if (!built) continue;
+        const vector = new THREE.Vector3(load.qx, load.qy, load.qz);
+        const magnitude = vector.length();
+        if (magnitude <= 1e-12) continue;
+        const direction = vector.normalize();
+        const length = 0.7;
+        const arrow = new THREE.ArrowHelper(direction,
+          built.surfaceAnchor.clone().addScaledVector(direction, -length), length, 0x0284c7, 0.22, 0.12);
+        arrow.traverse((child) => { child.userData = { type: "surfaceLoad", id: load.id }; });
+        group.add(arrow);
+        if (loadIndex % stride !== 0) continue;
+        const label = makeLabel(
+          `q = ${resultValue(magnitude)} kN/m²`,
+          "frame3d-result-label frame3d-surface-load-label",
+          built.surfaceLabelAnchor.clone().addScaledVector(built.normal, 0.12),
+        );
+        label.element.setAttribute("role", "button");
+        label.element.setAttribute("tabindex", "0");
+        label.element.setAttribute("title", `Selecteer oppervlaktebelasting ${load.id}`);
+        label.element.style.pointerEvents = "auto";
+        label.element.addEventListener("pointerdown", (event) => event.stopPropagation());
+        label.element.addEventListener("click", (event) => {
+          event.stopPropagation();
+          selectRef.current(toggleFrame3DSelection(
+            selectionRef.current, { type: "surfaceLoad", id: load.id },
+            event.shiftKey || event.ctrlKey || event.metaKey,
+          ));
+        });
+        label.element.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          event.stopPropagation();
+          selectRef.current(toggleFrame3DSelection(
+            selectionRef.current, { type: "surfaceLoad", id: load.id },
+            event.shiftKey || event.ctrlKey || event.metaKey,
+          ));
+        });
+        group.add(label);
+      }
+    };
+    // De conditielaag kan alleen los worden ververst wanneer de verzameling
+    // oppervlaktebelastingen gelijk blijft; wijzigingen krijgen hun eigen pad.
     const noSurfaceLoadsInEitherModel =
       (conditionModel?.surfaceLoads?.length ?? model.surfaceLoads?.length ?? 0) === 0
       && (lastBuiltConditionModelRef.current?.surfaceLoads?.length
@@ -2628,6 +2680,80 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           nonNodePickTargetsRef.current.filter((target) => LOAD_SELECTION_TYPES.has(
             target.userData.type as Frame3DSelectionType)).length);
         containerRef.current.dataset.frame3dLabels = String(visibleLabelCount);
+      }
+      return;
+    }
+    const surfaceLoadsOnly = previousModel !== null && previousPresentation !== null
+      && model !== previousModel && model.surfaceLoads !== previousModel.surfaceLoads
+      && sameFrame3DNodes(model.nodes, previousModel.nodes)
+      && sameFrame3DEntities(model.beams, previousModel.beams)
+      && sameFrame3DEntities(model.plates, previousModel.plates)
+      && sameFrame3DEntities(model.supports, previousModel.supports)
+      && sameFrame3DEntities(model.loads, previousModel.loads)
+      && sameFrame3DEntities(model.memberLoads, previousModel.memberLoads)
+      && sameFrame3DEntities(model.memberPointLoads, previousModel.memberPointLoads)
+      && sameFrame3DEntities(model.thermalLoads, previousModel.thermalLoads)
+      && sameFrame3DVisibility(visibility, previousPresentation.visibility)
+      && structuralGrid === previousPresentation.structuralGrid
+      && result === null && previousPresentation.result === null
+      && utilizations.length === 0 && previousPresentation.utilizations.length === 0
+      && activeLoadCaseId === previousPresentation.activeLoadCaseId
+      && sameVisibleConditionLoads(conditionModel ?? model,
+        lastBuiltConditionModelRef.current ?? previousModel, activeLoadCaseId);
+    const oldSurfaceLoads = surfaceLoadsOnly
+      ? geometry.children.find((child) => child.userData.frame3dSurfaceLoads === true)
+      : undefined;
+    if (surfaceLoadsOnly && oldSurfaceLoads instanceof THREE.Group) {
+      const oldTargets = new Set<THREE.Object3D>();
+      let oldLabels = 0;
+      oldSurfaceLoads.traverse((object) => {
+        oldTargets.add(object);
+        if (object instanceof CSS2DObject) oldLabels += 1;
+      });
+      selectionPickTargetsRef.current = selectionPickTargetsRef.current
+        .filter((target) => !oldTargets.has(target));
+      nonNodePickTargetsRef.current = nonNodePickTargetsRef.current
+        .filter((target) => !oldTargets.has(target));
+      geometry.remove(oldSurfaceLoads);
+      disposeGroup(oldSurfaceLoads);
+
+      const nextSurfaceLoads = new THREE.Group();
+      nextSurfaceLoads.userData.frame3dSurfaceLoads = true;
+      const temporaryGeometries: THREE.BufferGeometry[] = [];
+      addSurfaceLoadMarkers(nextSurfaceLoads, (plate) => {
+        const built = createFrame3DPlateGeometry(model, plate, nodeByIdRef.current ?? undefined);
+        if (built) temporaryGeometries.push(built.geometry);
+        return built;
+      });
+      temporaryGeometries.forEach((plateGeometry) => plateGeometry.dispose());
+      geometry.add(nextSurfaceLoads);
+      let nextLabels = 0;
+      nextSurfaceLoads.traverse((object) => {
+        if (object instanceof CSS2DObject) nextLabels += 1;
+        const type = object.userData.type as Frame3DSelectionType | undefined;
+        if (type === "surfaceLoad" && object.userData.pickable !== false
+          && typeof (object as { raycast?: unknown }).raycast === "function") {
+          selectionPickTargetsRef.current.push(object);
+          nonNodePickTargetsRef.current.push(object);
+        }
+      });
+      applySelectionHighlight(nextSurfaceLoads, selectionRef.current);
+      state.renderer.render(state.scene, state.camera);
+      renderFrame3DLabels(state, containerRef.current);
+      lastBuiltModelRef.current = model;
+      rememberBuiltPresentation();
+      if (containerRef.current) {
+        const previousLabelCount = Number(containerRef.current.dataset.frame3dLabels ?? 0);
+        writeBuildMode(containerRef.current, "surface-loads");
+        containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+        containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
+        containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
+        containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);
+        containerRef.current.dataset.frame3dNonNodeLoadPickTargets = String(
+          nonNodePickTargetsRef.current.filter((target) => LOAD_SELECTION_TYPES.has(
+            target.userData.type as Frame3DSelectionType)).length);
+        containerRef.current.dataset.frame3dLabels = String(
+          Math.max(0, previousLabelCount - oldLabels + nextLabels));
       }
       return;
     }
@@ -3993,56 +4119,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     const surfaceLoadGroup = new THREE.Group();
     surfaceLoadGroup.userData.frame3dSurfaceLoads = true;
     geometry.add(surfaceLoadGroup);
-    if (visibility.loads) {
-      const visibleSurfaceLoads = (model.surfaceLoads ?? []).filter((load) =>
-        activeLoadCaseId === undefined || frame3DLoadCaseId(load) === activeLoadCaseId);
-      const surfaceLoadLabelStride = labelStride(visibleSurfaceLoads.length);
-      for (const [loadIndex, load] of visibleSurfaceLoads.entries()) {
-        const plate = plateByIdRef.current!.get(load.plateId);
-        const built = plate && plateGeometryFor(plate);
-        if (!built) continue;
-        const vector = new THREE.Vector3(load.qx, load.qy, load.qz);
-        const magnitude = vector.length();
-        if (magnitude <= 1e-12) continue;
-        const direction = vector.normalize();
-        const length = 0.7;
-        const arrow = new THREE.ArrowHelper(direction, built.surfaceAnchor.clone().addScaledVector(direction, -length), length, 0x0284c7, 0.22, 0.12);
-        arrow.traverse((child) => { child.userData = { type: "surfaceLoad", id: load.id }; });
-        surfaceLoadGroup.add(arrow);
-        if (loadIndex % surfaceLoadLabelStride === 0) {
-          const label = makeLabel(
-            `q = ${resultValue(magnitude)} kN/m²`,
-            "frame3d-result-label frame3d-surface-load-label",
-            built.surfaceLabelAnchor.clone().addScaledVector(built.normal, 0.12),
-          );
-          // In bovenaanzicht projecteert de verticale lastpijl vrijwel op
-          // één pixel. Het zichtbare label moet daarom zelf selecteerbaar
-          // zijn, ook wanneer de plaat een opening rond zijn zwaartepunt heeft.
-          label.element.setAttribute("role", "button");
-          label.element.setAttribute("tabindex", "0");
-          label.element.setAttribute("title", `Selecteer oppervlaktebelasting ${load.id}`);
-          label.element.style.pointerEvents = "auto";
-          label.element.addEventListener("pointerdown", (event) => event.stopPropagation());
-          label.element.addEventListener("click", (event) => {
-            event.stopPropagation();
-            selectRef.current(toggleFrame3DSelection(
-              selectionRef.current, { type: "surfaceLoad", id: load.id },
-              event.shiftKey || event.ctrlKey || event.metaKey,
-            ));
-          });
-          label.element.addEventListener("keydown", (event) => {
-            if (event.key !== "Enter" && event.key !== " ") return;
-            event.preventDefault();
-            event.stopPropagation();
-            selectRef.current(toggleFrame3DSelection(
-              selectionRef.current, { type: "surfaceLoad", id: load.id },
-              event.shiftKey || event.ctrlKey || event.metaKey,
-            ));
-          });
-          surfaceLoadGroup.add(label);
-        }
-      }
-    }
+    addSurfaceLoadMarkers(surfaceLoadGroup, plateGeometryFor);
 
     if (result && visibility.deformation) {
       const scale = resultScale(model, result);
