@@ -26,6 +26,10 @@ voor andere apparaten.
 | Zelfde schuine aanzicht met knoopsnap weer aan | Staaf tussen K12 en K13 zonder extra knopen; 14,8 ms incrementele opbouw |
 | Schuin 3D-aanzicht, snaps uit: twee klikken midden op een verticale plaat, vóór correctie | Nieuwe knopen op Y = −4,50 en −2,71 m; de zichtbare plaat lag op Y = 0 m |
 | Zelfde handeling na correctie | K14 en K15 beide op Y = 0 m en staaf 7 tussen beide; tekenvlaknormaal (0,1,0), snapverwerking 0,10 en 0,20 ms |
+| Isometrisch aanzicht, snaps uit: opening met twee rechte randen en één boog in verticale plaat | Opening 1 gesloten; K16–K20 alle op Y = 0 m; uitsparing zichtbaar in de plaat |
+| Selectie in en naast de gebogen opening | Klik in uitsparing selecteerde niets (0,7 ms); klik op aangrenzende plaat selecteerde plaat 1 (0,9 ms) |
+| Profielvolume uit en weer aan bij dezelfde plaat | Camera en doel bleven exact gelijk; weergaveverversing 24,8 en 33,0 ms |
+| View “Boogopening iso” herstellen na vooraanzicht en verborgen knoopnummers | Oorspronkelijke cameracoördinaten en knoopnummers hersteld |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
