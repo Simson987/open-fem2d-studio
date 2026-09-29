@@ -46,6 +46,9 @@ voor andere apparaten.
 | Belastingen verbergen en terugzetten | 19,9 en 29,0 ms voor de conditielaag; 0 en daarna weer 9 selecteerbare lastobjecten. |
 | Tweede oppervlaktebelasting op dezelfde plaat in belastinggeval Q toevoegen | 10,9 ms voor alleen de oppervlaktebelasting; camera bleef op `18;-27,596945;2,5` m. Bij terugschakelen naar G verscheen alleen de G-belasting. |
 | Geselecteerde Q-oppervlaktebelasting verbergen door naar G te wisselen, en G-belasting verbergen via Model-weergave | De verborgen belasting werd uit de selectie verwijderd; het eigenschappenpaneel toonde weer de neutrale selectietekst. |
+| Model-weergave: op een plaat bij de cursor in- en weer uitzoomen | Zoomanker `geometry`, 6,7 en 6,0 ms; camera `18;-27,596945;2,5` m en doel `18;0;2,5` m kwamen exact terug. |
+| In ingezoomd vooraanzicht een staaf van plaatknoop K13 naar K12 tekenen | Staaf 7 (K13–K12) verscheen zonder nieuwe knopen; 20,2 ms incrementele opbouw (`append-beam`). |
+| In hetzelfde aanzicht profiel en selectiekader proberen | Klik midden op het zichtbare profiel selecteerde staaf 7; kader om het hele profiel selecteerde staaf 7 en beide eindknopen (0,7 ms). Een onvolledig kader selecteerde niets, overeenkomstig de huidige volledige-insluitingsregel. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
