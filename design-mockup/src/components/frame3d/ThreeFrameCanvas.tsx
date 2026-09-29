@@ -981,6 +981,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
   const openingHistoryGroupRef = useRef<string | null>(null);
   const beamStartRef = useRef<number | null>(null);
   const beamPlaneRef = useRef<THREE.Plane | null>(null);
+  const platePlaneRef = useRef<THREE.Plane | null>(null);
   const openingPlateRef = useRef<number | null>(null);
   useEffect(() => {
     // Ongedaan maken kan plaatsvinden terwijl een contour nog open is.
@@ -1003,6 +1004,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       if (sceneRef.current) sceneRef.current.draftLine.visible = false;
     };
     resetMissingSketch(plateDraftRef, plateDraftCreatedNodesRef, plateHistoryGroupRef);
+    if (plateDraftRef.current.firstNodeId === null) platePlaneRef.current = null;
     resetMissingSketch(openingDraftRef, openingDraftCreatedNodesRef, openingHistoryGroupRef);
   }, [model.nodes]);
   const cameraChangeRef = useRef(onCameraChange);
@@ -1051,6 +1053,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     if (!(plateTools.includes(previousTool) && plateTools.includes(tool))) {
       discardDraftNodes(plateDraftCreatedNodesRef.current, plateHistoryGroupRef);
       plateDraftRef.current = emptyPlateSketch();
+      platePlaneRef.current = null;
     }
     if (!(openingTools.includes(previousTool) && openingTools.includes(tool))) {
       discardDraftNodes(openingDraftCreatedNodesRef.current, openingHistoryGroupRef);
@@ -1360,16 +1363,18 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       const cameraView = frame3DViewFromCamera(camera.position, controls.target);
       let view = cameraView;
       // Boven gebruikt XY, voor gebruikt XZ en zij gebruikt YZ. Een vrije
-      // 3D-staaf nabij een plaatknoop volgt het plaatvlak, ook met snaps uit;
+      // 3D-staaf of plaat vanaf een plaatknoop volgt het plaatvlak;
       // anders gebruiken we een horizontaal XY-werkvlak op de cameradoelhoogte.
       let normal = cameraView === "front" ? new THREE.Vector3(0, 1, 0)
         : cameraView === "side" ? new THREE.Vector3(1, 0, 0)
         : new THREE.Vector3(0, 0, 1);
-      const beamPlane = toolRef.current === "addBeam" && cameraView === "iso"
-        ? beamPlaneRef.current ?? platePlaneForNode(anchor?.id ?? nearNodeId) ?? pointedPlatePlane
+      const plateSketchTool = toolRef.current === "addPlate" || toolRef.current === "addPlateArc";
+      const surfacePlane = cameraView === "iso" && (toolRef.current === "addBeam" || plateSketchTool)
+        ? (plateSketchTool ? platePlaneRef.current : beamPlaneRef.current)
+          ?? platePlaneForNode(anchor?.id ?? nearNodeId) ?? pointedPlatePlane
         : null;
-      if (beamPlane) {
-        normal = beamPlane.normal.clone();
+      if (surfacePlane) {
+        normal = surfacePlane.normal.clone();
         const ax = Math.abs(normal.x), ay = Math.abs(normal.y), az = Math.abs(normal.z);
         view = ax > ay && ax > az ? "side" : ay > az ? "front" : "top";
       }
@@ -1392,6 +1397,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
               .cross(new THREE.Vector3(p2.x, p2.y, p2.z).sub(plateOrigin));
             if (candidate.lengthSq() > 1e-16) {
               normal = candidate.normalize();
+              const ax = Math.abs(normal.x), ay = Math.abs(normal.y), az = Math.abs(normal.z);
+              view = ax > ay && ax > az ? "side" : ay > az ? "front" : "top";
               break;
             }
           }
@@ -1399,11 +1406,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       }
       const origin = anchor
         ? new THREE.Vector3(anchor.x, anchor.y, anchor.z)
-        : plateOrigin ?? (beamPlane ? beamPlane.coplanarPoint(new THREE.Vector3()) : controls.target.clone());
-      container.dataset.frame3dDrawingPlaneSource = beamPlane ? "beam-plate" : anchor ? "anchor" : plateOrigin ? "plate" : "camera";
+        : plateOrigin ?? (surfacePlane ? surfacePlane.coplanarPoint(new THREE.Vector3()) : controls.target.clone());
+      container.dataset.frame3dDrawingPlaneSource = surfacePlane
+        ? plateSketchTool ? "sketch-plate" : "beam-plate"
+        : anchor ? "anchor" : plateOrigin ? "plate" : "camera";
       container.dataset.frame3dDrawingPlaneZ = origin.z.toFixed(6);
       container.dataset.frame3dDrawingPlaneNormal = `${normal.x.toFixed(4)},${normal.y.toFixed(4)},${normal.z.toFixed(4)}`;
-      return { anchor, view, origin, beamPlate: !!beamPlane,
+      return { anchor, view, origin, surfaceConstrained: !!surfacePlane,
         plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, origin) };
     };
     type DrawingSnap = { position: THREE.Vector3; nodeId?: number; kind?: SnapSoort; plane?: THREE.Plane };
@@ -1452,15 +1461,17 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         const draft = isOpeningTool(toolRef.current) ? openingDraftRef.current : plateDraftRef.current;
         const excludedNodeId = isArcBoundaryTool(toolRef.current)
           ? draft.arcControlNodeId ?? undefined : undefined;
-        // Een knoop op een ander niveau kan in bovenaanzicht precies boven de
-        // opening liggen. Zo'n snap zou de opening niet-coplanair maken.
-        const acceptsOpeningNode = openingPlane ? (id: number) => {
+        // Projecties van knopen buiten het vastgelegde contourvlak kunnen
+        // samenvallen met de zichtbare contour en mogen die niet kromtrekken.
+        const contourPlane = openingPlane?.plane
+          ?? ((toolRef.current === "addPlate" || toolRef.current === "addPlateArc") ? platePlaneRef.current : null);
+        const acceptsContourNode = contourPlane ? (id: number) => {
           const node = nodeByIdRef.current!.get(id);
-          const plane = openingPlane.plane;
+          const plane = contourPlane;
           return !!node && Math.abs(plane.normal.x * node.x + plane.normal.y * node.y
             + plane.normal.z * node.z + plane.constant) <= 1e-5;
         } : undefined;
-        const nodeHit = findFrame3DNodeScreenSnap(index, xPx, yPx, 14, excludedNodeId, acceptsOpeningNode);
+        const nodeHit = findFrame3DNodeScreenSnap(index, xPx, yPx, 14, excludedNodeId, acceptsContourNode);
         container.dataset.frame3dNodeSnapCandidates = String(nodeHit?.candidateCount ?? 0);
         if (nodeHit) {
           const node = nodeByIdRef.current!.get(nodeHit.point.id);
@@ -1475,20 +1486,23 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           )?.point.id
         : undefined;
       let pointedPlatePlane = platePlaneFromHit(knownPlateHit);
-      if (!pointedPlatePlane && !plateHitsAlreadyChecked && toolRef.current === "addBeam" && !beamPlaneRef.current
+      const plateSketchTool = toolRef.current === "addPlate" || toolRef.current === "addPlateArc";
+      if (!pointedPlatePlane && !plateHitsAlreadyChecked
+        && ((toolRef.current === "addBeam" && !beamPlaneRef.current)
+          || (plateSketchTool && !platePlaneRef.current))
         && frame3DViewFromCamera(camera.position, controls.target) === "iso") {
         const plateTargets = selectionPickTargetsRef.current.filter((target) =>
           target.userData.type === "plate" && target.visible);
         pointedPlatePlane = platePlaneFromHit(raycaster.intersectObjects(plateTargets, false)[0]);
       }
-      const { view, origin, plane, beamPlate } = openingPlane ?? drawingPlane(nearPlateNodeId, pointedPlatePlane);
+      const { view, origin, plane, surfaceConstrained } = openingPlane ?? drawingPlane(nearPlateNodeId, pointedPlatePlane);
       const position = new THREE.Vector3();
       if (!raycaster.ray.intersectPlane(plane, position)) return finish(null);
       const raw = position.clone();
       const onDrawingPlane = (candidate: THREE.Vector3) => {
-        if (!openingPlane && !beamPlate) return candidate;
+        if (!openingPlane && !surfaceConstrained) return candidate;
         // Raster- en stramiensnap wijzigen coördinaten na de ray-plane
-        // doorsnijding. Houd een opening of staaf op een schuine plaat toch
+        // doorsnijding. Houd een opening, plaat of staaf op een schuine plaat toch
         // in het actieve plaatvlak door de diepte-as opnieuw op te lossen.
         const normal = plane.normal;
         const dependentAxis = view === "front" ? "y" : view === "side" ? "x" : "z";
@@ -1881,11 +1895,15 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           ? { historyGroup: historyGroupRef.current } : undefined);
       };
       const ensureDrawingNode = (): number | null => {
-        const snapped = drawingSnap(
-          intersections.find((candidate) => candidate.object.userData.type === "plate"), true,
-        );
+        const plateHit = intersections.find((candidate) => candidate.object.userData.type === "plate");
+        const snapped = drawingSnap(plateHit, true);
         if (activeTool === "addBeam" && beamStartRef.current === null && snapped) {
           beamPlaneRef.current = snapped.plane ?? platePlaneForNode(snapped.nodeId);
+        }
+        if ((activeTool === "addPlate" || activeTool === "addPlateArc")
+          && plateDraftRef.current.firstNodeId === null && snapped) {
+          platePlaneRef.current = platePlaneFromHit(plateHit)
+            ?? platePlaneForNode(snapped.nodeId) ?? snapped.plane ?? null;
         }
         // De zichtbare knoopsnapzone wint van een staafhit op hetzelfde
         // schermpunt. Een profielraycast op het staafeinde kan anders een
@@ -2005,6 +2023,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
                 drawErrorRef.current?.(error instanceof Error ? error.message : String(error));
               } finally {
                 plateDraftRef.current = emptyPlateSketch();
+                platePlaneRef.current = null;
                 if (committed) {
                   plateDraftCreatedNodesRef.current.clear();
                   plateHistoryGroupRef.current = null;
@@ -2133,6 +2152,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       discardDraftNodes(plateDraftCreatedNodesRef.current, plateHistoryGroupRef);
       discardDraftNodes(openingDraftCreatedNodesRef.current, openingHistoryGroupRef);
       plateDraftRef.current = emptyPlateSketch();
+      platePlaneRef.current = null;
       openingDraftRef.current = emptyPlateSketch();
       beamStartRef.current = null;
       beamPlaneRef.current = null;
