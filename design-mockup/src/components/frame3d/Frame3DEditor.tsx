@@ -5,6 +5,7 @@ import Frame3DVisibilityDialog from "./Frame3DVisibilityDialog";
 import { readFrame3DVisibility, saveFrame3DVisibility, type Frame3DVisibility } from "./frame3dVisibility";
 import type { Frame3DTool, Frame3DView } from "./frame3dCommands";
 import {
+  frame3DLoadCaseId,
   removeFrame3DBeam,
   removeFrame3DMemberLoad,
   removeFrame3DMemberPointLoad,
@@ -114,6 +115,8 @@ export default function Frame3DEditor({
   useEffect(() => { saveFrame3DVisibility(visibility); }, [visibility]);
   useEffect(() => {
     if (!selection) return;
+    const loadInActiveCase = (load: { caseId?: number }) =>
+      showLoadCase && (activeLoadCaseId === undefined || frame3DLoadCaseId(load) === activeLoadCaseId);
     if (selection.type === "multi") {
       const nodeIds = selection.nodeIds.filter((id) => model.nodes.some((node) => node.id === id));
       const beamIds = selection.beamIds.filter((id) => model.beams.some((beam) => beam.id === id));
@@ -128,14 +131,14 @@ export default function Frame3DEditor({
     }
     const exists = selection.type === "node" ? model.nodes.some((node) => node.id === selection.id)
       : selection.type === "beam" ? model.beams.some((beam) => beam.id === selection.id)
-      : selection.type === "nodalLoad" ? (model.loads ?? []).some((load) => load.id === selection.id)
-      : selection.type === "memberLoad" ? (model.memberLoads ?? []).some((load) => load.id === selection.id)
-      : selection.type === "memberPointLoad" ? (model.memberPointLoads ?? []).some((load) => load.id === selection.id)
-      : selection.type === "thermalLoad" ? (model.thermalLoads ?? []).some((load) => load.id === selection.id)
+      : selection.type === "nodalLoad" ? (model.loads ?? []).some((load) => load.id === selection.id && loadInActiveCase(load))
+      : selection.type === "memberLoad" ? (model.memberLoads ?? []).some((load) => load.id === selection.id && loadInActiveCase(load))
+      : selection.type === "memberPointLoad" ? (model.memberPointLoads ?? []).some((load) => load.id === selection.id && loadInActiveCase(load))
+      : selection.type === "thermalLoad" ? (model.thermalLoads ?? []).some((load) => load.id === selection.id && loadInActiveCase(load))
       : selection.type === "plate" ? (model.plates ?? []).some((plate) => plate.id === selection.id)
-      : (model.surfaceLoads ?? []).some((load) => load.id === selection.id);
+      : (model.surfaceLoads ?? []).some((load) => load.id === selection.id && loadInActiveCase(load));
     if (!exists) setSelection(null);
-  }, [model.nodes, model.beams, model.plates, model.loads, model.memberLoads, model.memberPointLoads, model.thermalLoads, model.surfaceLoads, selection]);
+  }, [model.nodes, model.beams, model.plates, model.loads, model.memberLoads, model.memberPointLoads, model.thermalLoads, model.surfaceLoads, selection, showLoadCase, activeLoadCaseId]);
 
   useEffect(() => {
     if (deleteToken === lastDeleteToken.current) return;

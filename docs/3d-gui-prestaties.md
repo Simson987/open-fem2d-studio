@@ -44,6 +44,8 @@ voor andere apparaten.
 | Voorbeeldmodel met 13 knopen, 6 staven en 1 plaat: oppervlaktebelasting toevoegen | 7,1 ms voor alleen de oppervlaktebelasting; 9 selecteerbare lastobjecten. |
 | Dezelfde belasting wijzigen van qz = −5 naar −7 kN/m² | 5,5 ms voor alleen de oppervlaktebelasting; label en eigenschappen tonen −7. |
 | Belastingen verbergen en terugzetten | 19,9 en 29,0 ms voor de conditielaag; 0 en daarna weer 9 selecteerbare lastobjecten. |
+| Tweede oppervlaktebelasting op dezelfde plaat in belastinggeval Q toevoegen | 10,9 ms voor alleen de oppervlaktebelasting; camera bleef op `18;-27,596945;2,5` m. Bij terugschakelen naar G verscheen alleen de G-belasting. |
+| Geselecteerde Q-oppervlaktebelasting verbergen door naar G te wisselen, en G-belasting verbergen via Model-weergave | De verborgen belasting werd uit de selectie verwijderd; het eigenschappenpaneel toonde weer de neutrale selectietekst. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
