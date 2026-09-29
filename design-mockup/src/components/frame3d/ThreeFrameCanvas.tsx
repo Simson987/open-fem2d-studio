@@ -1266,12 +1266,18 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       let anchorSource = hit ? "geometry" : "bounds";
       if (!hit) {
         const bounds = frame3DNodeBounds(modelRef.current);
-        if (bounds.isEmpty() || !raycaster.ray.intersectBox(bounds, anchor)) {
+        if (bounds.isEmpty()) {
           anchorSource = "camera";
           const viewNormal = camera.getWorldDirection(new THREE.Vector3());
           raycaster.ray.intersectPlane(
             new THREE.Plane().setFromNormalAndCoplanarPoint(viewNormal, controls.target), anchor,
           );
+        } else if (!raycaster.ray.intersectBox(bounds, anchor)) {
+          // Buiten de zichtbare constructie ligt er geen modelpunt onder de
+          // cursor. Zoomen rond een ver weg gelegen cameravlak zou het hele
+          // raamwerk uit het canvas duwen; houd daarom het model in beeld.
+          anchorSource = "bounds-center";
+          bounds.getCenter(anchor);
         }
       }
       const modeScale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 100 : 1;

@@ -32,6 +32,8 @@ voor andere apparaten.
 | View “Boogopening iso” herstellen na vooraanzicht en verborgen knoopnummers | Oorspronkelijke cameracoördinaten en knoopnummers hersteld |
 | Staafstart op de plek van een verborgen plaat, snaps uit | Camerawerkvlak (normaal 0,0,1); plaatvlak werd niet gebruikt, 0,10 ms snapverwerking |
 | Zelfde plaat weer zichtbaar en staafstart binnen het plaatvlak | Plaatwerkvlak (normaal 0,1,0), nieuwe knoop op Y = 0 m, 0,20 ms snapverwerking; dubbele plaat-raycast bij klikken verwijderd |
+| Isometrisch aanzicht, zoom op lege canvasruimte links van het model, vóór correctie | Eén zoomstap schoof vrijwel het hele raamwerk buiten het canvas |
+| Zelfde zoom in een vers geladen build na correctie | Raamwerk bleef zichtbaar; anker `bounds-center`, 7,2 ms wielverwerking. Terugzoomen gebruikte hetzelfde anker; zoom op zichtbare geometrie gebruikte `geometry` (10,9 ms) |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
