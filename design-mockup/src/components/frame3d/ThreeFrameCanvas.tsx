@@ -1068,6 +1068,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
   const previousToolRef = useRef(tool);
   useEffect(() => {
     const previousTool = previousToolRef.current;
+    if (previousTool !== tool) drawErrorRef.current?.(null);
     const plateTools: Frame3DTool[] = ["addPlate", "addPlateArc"];
     const openingTools: Frame3DTool[] = ["addOpening", "addOpeningArc"];
     if (previousTool === "addPlateArc" && tool === "addPlate") {
@@ -2011,6 +2012,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       } else if (activeTool === "addPlate" || activeTool === "addPlateArc") {
         const nodeId = ensureDrawingNode();
         if (nodeId !== null) {
+          drawErrorRef.current?.(null);
           const sketch = plateDraftRef.current;
           if (sketch.firstNodeId === null) {
             plateDraftRef.current = { ...emptyPlateSketch(), nodeIds: [nodeId], firstNodeId: nodeId, lastNodeId: nodeId };
@@ -2021,10 +2023,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
                 nodeIds: [...sketch.nodeIds, nodeId],
                 arcControlNodeId: nodeId,
               };
+            } else {
+              drawErrorRef.current?.("Het boogstuurpunt valt samen met een contourknoop. Klik verder weg of zet Raster-snap uit.");
             }
           } else if (sketch.lastNodeId !== null && nodeId !== sketch.lastNodeId) {
             const closes = nodeId === sketch.firstNodeId;
             if (!closes && sketch.nodeIds.includes(nodeId)) {
+              drawErrorRef.current?.("Het eindpunt valt samen met een bestaande contourknoop. Klik verder weg of zet Raster-snap uit.");
               down = null;
               return;
             }
@@ -2065,6 +2070,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
                 arcControlNodeId: null,
               };
             }
+          } else if (sketch.lastNodeId !== null) {
+            drawErrorRef.current?.("Het eindpunt valt samen met het vorige punt. Klik verder weg of zet Raster-snap uit.");
           }
           const draft = plateDraftRef.current;
           if (draft.firstNodeId !== null) {
@@ -2075,6 +2082,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         const nodeId = ensureDrawingNode();
         const openingPlateId = openingPlateRef.current;
         if (nodeId !== null && openingPlateId !== null) {
+          drawErrorRef.current?.(null);
           const sketch = openingDraftRef.current;
           if (sketch.firstNodeId === null) {
             openingDraftRef.current = { ...emptyPlateSketch(), nodeIds: [nodeId], firstNodeId: nodeId, lastNodeId: nodeId };
@@ -2085,10 +2093,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
                 nodeIds: [...sketch.nodeIds, nodeId],
                 arcControlNodeId: nodeId,
               };
+            } else {
+              drawErrorRef.current?.("Het boogstuurpunt valt samen met een contourknoop. Klik verder weg of zet Raster-snap uit.");
             }
           } else if (sketch.lastNodeId !== null && nodeId !== sketch.lastNodeId) {
             const closes = nodeId === sketch.firstNodeId;
             if (!closes && sketch.nodeIds.includes(nodeId)) {
+              drawErrorRef.current?.("Het eindpunt valt samen met een bestaande contourknoop. Klik verder weg of zet Raster-snap uit.");
               down = null;
               return;
             }
@@ -2124,6 +2135,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
                 arcControlNodeId: null,
               };
             }
+          } else if (sketch.lastNodeId !== null) {
+            drawErrorRef.current?.("Het eindpunt valt samen met het vorige punt. Klik verder weg of zet Raster-snap uit.");
           }
           const draft = openingDraftRef.current;
           if (draft.firstNodeId !== null) {
@@ -2174,6 +2187,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      drawErrorRef.current?.(null);
       down = null;
       selectionBox.hidden = true;
       discardDraftNodes(plateDraftCreatedNodesRef.current, plateHistoryGroupRef);
