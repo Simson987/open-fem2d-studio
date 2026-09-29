@@ -3435,7 +3435,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         || (previousBounds !== null && previousBounds.containsPoint(new THREE.Vector3(node.x, node.y, node.z)))
         || outsideBoundsScaleStable;
       const fastPathReady = nodeCapacityAvailable && beamCapacityAvailable && beamEndpointsValid
-        && conditionLoadsStable && nodeLabelSamplingStable && beamLabelSamplingStable
+        && conditionLoadsStable && beamLabelSamplingStable
         && memberAxesReady && nodeInsideBounds;
       // Binnen de bestaande begrenzing blijven knoopstraal, opleggingsgrootte
       // en stramienbereik gelijk. Voeg de knoop dan rechtstreeks aan de al
@@ -3472,7 +3472,29 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           }
         }
         let addedLabels = 0;
-        if (node && (visibility.nodeNumbers || visibility.nodeCoordinates)
+        if (node && !nodeLabelSamplingStable && (visibility.nodeNumbers || visibility.nodeCoordinates)) {
+          // Een extra knoop kan de labelstap wijzigen (bijvoorbeeld 264 -> 265).
+          // Ververs alleen knooplabels; de bestaande plaat- en profielgeometrie
+          // hoeft daarvoor niet opnieuw te worden opgebouwd.
+          const oldLabels = geometry.children.filter((child) => child instanceof CSS2DObject
+            && child.element.classList.contains("frame3d-node-label"));
+          for (const label of oldLabels) geometry.remove(label);
+          addedLabels -= oldLabels.length;
+          for (let index = 0; index < model.nodes.length; index += nodeLabelStride) {
+            const labeledNode = model.nodes[index];
+            const parts = [
+              visibility.nodeNumbers ? String(labeledNode.id) : "",
+              visibility.nodeCoordinates
+                ? `(${labeledNode.x}, ${labeledNode.y}, ${labeledNode.z}) m` : "",
+            ].filter(Boolean);
+            geometry.add(makeLabel(
+              parts.join(" · "), "frame3d-node-label",
+              new THREE.Vector3(labeledNode.x, labeledNode.y, labeledNode.z),
+              { type: "node", id: labeledNode.id },
+            ));
+            addedLabels += 1;
+          }
+        } else if (node && (visibility.nodeNumbers || visibility.nodeCoordinates)
           && (model.nodes.length - 1) % nodeLabelStride === 0) {
           const parts = [
             visibility.nodeNumbers ? String(node.id) : "",
@@ -3630,9 +3652,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
           containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);
           containerRef.current.dataset.frame3dNodeSnapTargets = String(nodePickTargetsRef.current.length);
-          if (addedLabels > 0) {
+          if (addedLabels !== 0) {
             containerRef.current.dataset.frame3dLabels = String(
-              Number(containerRef.current.dataset.frame3dLabels ?? 0) + addedLabels,
+              Math.max(0, Number(containerRef.current.dataset.frame3dLabels ?? 0) + addedLabels),
             );
           }
         }
