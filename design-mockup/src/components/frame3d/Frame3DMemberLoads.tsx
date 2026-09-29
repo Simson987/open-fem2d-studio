@@ -133,7 +133,21 @@ export default function Frame3DMemberLoads({
 
   const save = (event: FormEvent) => {
     event.preventDefault();
-    const parsed = Object.fromEntries(Object.entries(values).map(([key, value]) => [key, Number(value)])) as
+    const submitted = { ...values };
+    const fields = new FormData(event.currentTarget as HTMLFormElement);
+    if (showLineDetails) {
+      for (const key of Object.keys(submitted) as (keyof Values)[]) {
+        const value = fields.get(key);
+        if (typeof value === "string") submitted[key] = value;
+      }
+    } else {
+      const q = fields.get("uniformQ");
+      if (typeof q === "string") {
+        submitted[`q${lineDirection}Start`] = q;
+        submitted[`q${lineDirection}End`] = q;
+      }
+    }
+    const parsed = Object.fromEntries(Object.entries(submitted).map(([key, value]) => [key, Number(value)])) as
       unknown as Omit<Frame3DMemberLoad, "id" | "beamId" | "caseId">;
     try {
       const updated = editingId === null
@@ -236,7 +250,7 @@ export default function Frame3DMemberLoads({
   }, [selectedLoad?.kind, selectedLoad?.id, beamId, activeLoadCaseId]);
 
   const field = (name: keyof Values, label: string, ref = false) => <label><span>{label}</span>
-    <input ref={ref ? firstInput : undefined} type="number" step="any" required value={values[name]}
+    <input ref={ref ? firstInput : undefined} name={name} type="number" step="any" required value={values[name]}
       onChange={(event) => setValues({ ...values, [name]: event.target.value })} />
   </label>;
 
@@ -260,17 +274,17 @@ export default function Frame3DMemberLoads({
         <div className="frame3d-load-quick">
           <label><span>Richting</span><select value={lineDirection} onChange={(event) => {
             const direction = event.target.value as "y" | "z";
-            const q = values[`${lineDirection}Start` as keyof Values];
+            const q = values[`q${lineDirection}Start`];
             setLineDirection(direction);
             setValues({ ...values,
               qyStart: direction === "y" ? q : "0", qyEnd: direction === "y" ? q : "0",
               qzStart: direction === "z" ? q : "0", qzEnd: direction === "z" ? q : "0" });
           }}><option value="z">Lokaal z</option><option value="y">Lokaal y</option></select></label>
-          <label><span>q (kN/m)</span><input ref={firstInput} type="number" step="any" required
-            value={values[`${lineDirection}Start` as keyof Values]}
+          <label><span>q (kN/m)</span><input ref={firstInput} name="uniformQ" type="number" step="any" required
+            value={values[`q${lineDirection}Start`]}
             onChange={(event) => setValues({ ...values,
-              [`${lineDirection}Start`]: event.target.value,
-              [`${lineDirection}End`]: event.target.value,
+              [`q${lineDirection}Start`]: event.target.value,
+              [`q${lineDirection}End`]: event.target.value,
             })} /></label>
         </div>
         <button className="frame3d-load-more" type="button" aria-expanded={showLineDetails}

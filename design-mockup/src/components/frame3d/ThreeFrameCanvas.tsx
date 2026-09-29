@@ -2621,7 +2621,16 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       && utilizations === previousPresentation?.utilizations
       && activeLoadCaseId === previousPresentation?.activeLoadCaseId
       && conditionModel === lastBuiltConditionModelRef.current;
-    const conditionLayerOnly = previousModel === model
+    const changedConditionLoadsOnly = previousModel !== null && previousModel !== model
+      && model.nodes === previousModel.nodes
+      && model.beams === previousModel.beams
+      && model.plates === previousModel.plates
+      && model.supports === previousModel.supports
+      && model.surfaceLoads === previousModel.surfaceLoads
+      && (model.loads !== previousModel.loads || model.memberLoads !== previousModel.memberLoads
+        || model.memberPointLoads !== previousModel.memberPointLoads
+        || model.thermalLoads !== previousModel.thermalLoads);
+    const conditionLayerOnly = (previousModel === model || changedConditionLoadsOnly)
       && previousPresentation !== null
       && (sameFrame3DVisibility(visibility, previousPresentation.visibility)
         || supportVisibilityOnly || loadVisibilityOnly)
@@ -2705,6 +2714,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       applySelectionHighlight(nextConditions, selectionRef.current);
       state.renderer.render(state.scene, state.camera);
       renderFrame3DLabels(state, containerRef.current);
+      lastBuiltModelRef.current = model;
+      selectionRenderedWithModelRef.current = selectionRef.current;
       rememberBuiltPresentation();
       if (containerRef.current) {
         const previousLabelCount = Number(containerRef.current.dataset.frame3dLabels ?? 0);
