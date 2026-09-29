@@ -52,6 +52,8 @@ interface Props {
   fitRequest?: number;
   viewRequest?: { kind: Frame3DView; token: number };
   onCameraViewChange?: (view: Frame3DView) => void;
+  initialCamera?: Frame3DCameraState | null;
+  onCameraStateChange?: (state: Frame3DCameraState) => void;
   selection?: Frame3DSelection;
   onSelectionChange?: (selection: Frame3DSelection) => void;
   onOpenCheckForBeam?: (beamId: number) => void;
@@ -80,6 +82,7 @@ interface Props {
 export default function Frame3DEditor({
   model, calculationModel, onChange, visibilityOpen = false, onVisibilityOpen, onVisibilityClose,
   tool = "select", onToolChange, deleteToken = 0, fitRequest = 0, viewRequest, onCameraViewChange,
+  initialCamera, onCameraStateChange,
   selection: controlledSelection, onSelectionChange, onOpenCheckForBeam,
   visibility: visibilityProp, onVisibilityChange, showLoadCase = true, resultsActive = false, structuralGrid, gridSpacingM,
   result = null, checks = null, concreteChecks = null,
@@ -97,10 +100,12 @@ export default function Frame3DEditor({
   const [fitToken, setFitToken] = useState(0);
   const [drawError, setDrawError] = useState<string | null>(null);
   const [internalVisibility, setInternalVisibility] = useState(readFrame3DVisibility);
-  const [cameraState, setCameraState] = useState<Frame3DCameraState>({
+  const [cameraState, setCameraState] = useState<Frame3DCameraState>(initialCamera ?? {
     position: [8, 8, 6], target: [0, 0, 0], up: [0, 0, 1],
   });
-  const [cameraRequest, setCameraRequest] = useState<{ state: Frame3DCameraState; token: number }>();
+  const [cameraRequest, setCameraRequest] = useState<{ state: Frame3DCameraState; token: number } | undefined>(
+    initialCamera ? { state: initialCamera, token: 1 } : undefined,
+  );
   const visibility = visibilityProp ?? internalVisibility;
   const canvasVisibility = useMemo(
     () => showLoadCase ? visibility : { ...visibility, loads: false },
@@ -203,7 +208,10 @@ export default function Frame3DEditor({
           utilizations={utilizations}
           activeLoadCaseId={activeLoadCaseId}
           cameraRequest={cameraRequest}
-          onCameraChange={setCameraState}
+          onCameraChange={(state) => {
+            setCameraState(state);
+            onCameraStateChange?.(state);
+          }}
           onCameraViewChange={onCameraViewChange}
         />
         <div className="frame3d-stage-header">

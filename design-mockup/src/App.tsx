@@ -29,7 +29,7 @@ import { FRAME3D_SUPPORT_PRESETS, addFrame3DSurfaceLoad, setFrame3DSupport, with
 import { frame3dHistoryReducer, type Frame3DEditMeta } from "./components/frame3d/frame3dHistory";
 import type { Frame3DTool, Frame3DView } from "./components/frame3d/frame3dCommands";
 import type { Frame3DSelection } from "./components/frame3d/frame3dSelection";
-import type { Frame3DViewSet } from "./components/frame3d/frame3dViewSets";
+import type { Frame3DCameraState, Frame3DViewSet } from "./components/frame3d/frame3dViewSets";
 import { readFrame3DVisibility, saveFrame3DVisibility } from "./components/frame3d/frame3dVisibility";
 import { convert2DTo3D } from "./components/frame3d/convert2DTo3D";
 import { solveFrame3D, solveFrame3DCombination, type Frame3DSolveResult } from "./components/frame3d/frame3dSolver";
@@ -340,6 +340,9 @@ function App() {
   const [frame3dDeleteToken, setFrame3dDeleteToken] = useState(0);
   const [frame3dFitToken, setFrame3dFitToken] = useState(0);
   const [frame3dViewRequest, setFrame3dViewRequest] = useState<{ kind: Frame3DView; token: number }>({ kind: "iso", token: 0 });
+  const [frame3dCameraSnapshot, setFrame3dCameraSnapshot] = useState<{
+    state: Frame3DCameraState; viewToken: number; fitToken: number;
+  } | null>(null);
   const [frame3dLoadEditorRequest, setFrame3dLoadEditorRequest] = useState<{ kind: "force" | "moment"; serial: number } | null>(null);
   const [frame3dSpringEditorRequest, setFrame3dSpringEditorRequest] = useState<{
     axis: "kx" | "ky" | "kz" | "krx" | "kry" | "krz"; serial: number;
@@ -872,6 +875,7 @@ function App() {
       // Vóór het model: de staven verwijzen naar deze doorsneden.
       const overschreven = voegBibliothekenSamen(parsed);
       dispatchFrame3D({ type: "replace", model: parsed.model3d ?? { nodes: [], beams: [] } });
+      setFrame3dCameraSnapshot(null);
       setFrame3dViewSets(parsed.frame3dViewSets ?? []);
       setFrame3dSelection(null);
       const volgendeDimensie = parsed.modelDimension === "3d" ? "3d" : "2d";
@@ -1059,6 +1063,7 @@ function App() {
     if (!(await confirmUnsavedAction())) return;
     baselineResetRef.current = true;
     dispatchFrame3D({ type: "replace", model: { nodes: [], beams: [] } });
+    setFrame3dCameraSnapshot(null);
     setFrame3dSelection(null);
     setModelDimension("2d");
     setFrame3dViewSets([]);
@@ -1336,6 +1341,7 @@ function App() {
       loads: fem.loads,
     });
     dispatchFrame3D({ type: "replace", model: converted.model });
+    setFrame3dCameraSnapshot(null);
     setFrame3dSelection(null);
     setModelDimension("3d");
     setActiveView("frame3d");
@@ -2613,6 +2619,11 @@ function App() {
               deleteToken={frame3dDeleteToken}
               fitRequest={frame3dFitToken}
               viewRequest={frame3dViewRequest}
+              initialCamera={frame3dCameraSnapshot?.viewToken === frame3dViewRequest.token
+                && frame3dCameraSnapshot.fitToken === frame3dFitToken ? frame3dCameraSnapshot.state : null}
+              onCameraStateChange={(state) => setFrame3dCameraSnapshot({
+                state, viewToken: frame3dViewRequest.token, fitToken: frame3dFitToken,
+              })}
               onCameraViewChange={(kind) => setFrame3dViewRequest((previous) =>
                 previous.kind === kind ? previous : { ...previous, kind })}
               selection={frame3dSelection}
@@ -2855,6 +2866,7 @@ function App() {
       structuralGrid: fem.structuralGrid,
       replaceModel: (model) => {
         dispatchFrame3D({ type: "replace", model });
+        setFrame3dCameraSnapshot(null);
         setFrame3dSelection(null);
         setModelDimension("3d");
         setActiveView("frame3d");
