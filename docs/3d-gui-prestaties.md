@@ -75,6 +75,8 @@ voor andere apparaten.
 | Belastingpijl 8 selecteren, naar Model schakelen en op dezelfde plaats klikken, daarna Q herstellen | De zichtbare pijlpunt koos staafbelasting 8. Model maakte de last onzichtbaar, wiste de lastselectie en bracht het aantal aanklikbare lastobjecten op nul in 8,4 ms; dezelfde klik koos alleen plaat 29. Na terugschakelen naar Q koos de klik opnieuw staafbelasting 8. |
 | Met links een selectiekader rond de opening van plaat 29 slepen | De groep bevatte vier knopen en staaf 11. De plaat viel buiten het getrokken kader en werd terecht niet opgenomen. Camera en doel bleven exact ongewijzigd; de linkermuisactie draaide het beeld niet. |
 | Staaf 11 met beide openingsknopen 0,5 m in X verplaatsen en ongedaan maken | K271/K272 veranderden van X = 6,5/5,5 naar 7,0/6,0 m. Opening en staaf bleven zichtbaar en geldig. Ongedaan maken herstelde beide coördinaten exact. Verplaatsen en herstellen vroegen nog een volledige scène-opbouw van 90,3 en 72,1 ms; dit is een overgebleven optimalisatiepunt voor gedeelde plaat- en staafknopen. |
+| Nieuw model met 320 knopen, 192 staven en 8 platen: plaatknoop K37 0,5 m verplaatsen en terugzetten | Voor de gerichte plaatverversing duurde de volledige scène-opbouw 113,2 en 109,0 ms. Daarna gebruikte dezelfde GUI-actie `move-nodes`: 15,8 ms voor verplaatsen en 14,6 ms voor ongedaan maken. Plaat 1 bleef aanwezig en was na inzoomen opnieuw via het canvas selecteerbaar. De knoopcoördinaten keerden exact terug en de camera bleef op positie `(210,241262; 349,991262; 147,279473)` m met doel `(15,25; 155; 8)` m. |
+| Zelfde model: staafknoop K3 met zichtbare staafnummers 0,5 m verplaatsen en terugzetten | Met lokale staafassen tijdelijk verborgen werkte de incrementele route in 9,7 en 7,9 ms. De schermposities van de betrokken staafnummers veranderden mee; K3 keerde terug naar `(0; 0; 5)` m. Daarna zijn de lokale staafassen weer aangezet, zonder cameraverplaatsing. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
@@ -85,6 +87,8 @@ gebogen plaat bleef het aangewezen punt onder de cursor.
 
 Nog te meten: continue framesnelheid tijdens pannen/roteren, modellen met
 duizenden zichtbare profielen en platen, en vergelijking op andere GPU's.
+Bij het verplaatsen van een staafknoop terwijl lokale staafassen zichtbaar zijn,
+blijft de volledige hertekening voorlopig nodig om die assen correct bij te werken.
 De eerste keer tonen van lasten na het openen van een model waarin ze al
 verborgen waren, blijft een volledige opbouw (89,1 ms in dit testmodel);
 daarna blijven de plaatmesh en lastsymbolen bij zichtbaarheidsschakels bestaan.

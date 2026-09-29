@@ -2969,7 +2969,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     const affectedBeamIds = new Set(affectedBeams.map((beam) => beam.id));
     const affectedPlates = (model.plates ?? []).filter((plate) =>
       plate.nodeIds.some((id) => movedNodeIds.has(id))
-      || (plate.openings ?? []).some((opening) => opening.nodeIds.some((id) => movedNodeIds.has(id))));
+      || (plate.boundary ?? []).some((segment) => segment.kind === "arc" && movedNodeIds.has(segment.controlNodeId))
+      || (plate.openings ?? []).some((opening) =>
+        opening.nodeIds.some((id) => movedNodeIds.has(id))
+        || (opening.boundary ?? []).some((segment) => segment.kind === "arc" && movedNodeIds.has(segment.controlNodeId))));
     const affectedPlateIds = new Set(affectedPlates.map((plate) => plate.id));
     const markerModel = conditionModel ?? model;
     const conditionGeometryStable = (!visibility.supports
@@ -3001,9 +3004,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       && movedNodes.length <= 512
       && previousModel.nodes.length >= 250
       && movedNodeRadiusStable
-      && (!visibility.plates || affectedPlates.length === 0)
-      && !visibility.beamNumbers
-      && !visibility.memberAxes
+      && (!visibility.plates || (model.plates ?? []).length < 100 && affectedPlates.length <= 8)
+      && (!visibility.memberAxes || affectedBeams.length === 0)
       && conditionGeometryStable
       && resultGeometryStable
       && utilizationGeometryStable;
@@ -3017,8 +3019,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         movedNodes.length > 512 ? "selection-size" : "",
         previousModel.nodes.length < 250 ? "small-model" : "",
         !movedNodeRadiusStable ? "node-radius" : "",
-        visibility.plates && affectedPlates.length > 0 ? "plates" : "",
-        visibility.beamNumbers ? "beam-labels" : "",
+        visibility.plates && ((model.plates ?? []).length >= 100 || affectedPlates.length > 8) ? "plates" : "",
+        visibility.memberAxes && affectedBeams.length > 0 ? "member-axes" : "",
         !conditionGeometryStable ? "conditions" : "",
         !resultGeometryStable ? "results" : "",
         !utilizationGeometryStable ? "utilization" : "",
@@ -3030,6 +3032,19 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       const nodeMeshes = [visibleNodes, hitNodes].filter((child): child is THREE.InstancedMesh =>
         child instanceof THREE.InstancedMesh);
       let fastPathReady = nodeMeshes.length > 0;
+      const movedPlateMeshes: Array<{ mesh: THREE.Mesh; built: NonNullable<ReturnType<typeof createFrame3DPlateGeometry>> }> = [];
+      if (fastPathReady && visibility.plates) {
+        for (const plate of affectedPlates) {
+          const mesh = geometry.children.find((child) => child.userData.type === "plate" && child.userData.id === plate.id);
+          const built = createFrame3DPlateGeometry(model, plate, nodeByIdRef.current ?? undefined);
+          if (!(mesh instanceof THREE.Mesh) || !built) {
+            built?.geometry.dispose();
+            fastPathReady = false;
+            break;
+          }
+          movedPlateMeshes.push({ mesh, built });
+        }
+      }
       const matrix = new THREE.Matrix4();
       for (const node of movedNodes) {
         matrix.makeTranslation(node.x, node.y, node.z);
@@ -3083,6 +3098,18 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         }
       }
       if (fastPathReady) {
+        for (const { mesh, built } of movedPlateMeshes) {
+          const oldGeometry = mesh.geometry;
+          mesh.geometry = built.geometry;
+          mesh.position.copy(built.position);
+          mesh.quaternion.copy(built.quaternion);
+          oldGeometry.dispose();
+          const edges = mesh.children.find((child): child is THREE.LineSegments => child instanceof THREE.LineSegments);
+          if (edges) {
+            edges.geometry.dispose();
+            edges.geometry = new THREE.EdgesGeometry(built.geometry, 22);
+          }
+        }
         if (!movedInsideBounds) {
           nodeMeshes.forEach((mesh) => {
             mesh.computeBoundingBox();
@@ -3109,14 +3136,25 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         geometry.traverse((object) => {
           if (!(object instanceof CSS2DObject)) return;
           const follow = object.userData.frame3dFollow as { type: "node" | "beam"; id: number } | undefined;
-          if (follow?.type !== "node" || !movedNodeIds.has(follow.id)) return;
-          const node = nodeByIdRef.current!.get(follow.id);
-          if (!node) return;
-          object.position.set(node.x, node.y, node.z);
-          object.element.textContent = [
-            visibility.nodeNumbers ? String(node.id) : "",
-            visibility.nodeCoordinates ? `(${node.x}, ${node.y}, ${node.z}) m` : "",
-          ].filter(Boolean).join(" · ");
+          if (follow?.type === "node" && movedNodeIds.has(follow.id)) {
+            const node = nodeByIdRef.current!.get(follow.id);
+            if (!node) return;
+            object.position.set(node.x, node.y, node.z);
+            object.element.textContent = [
+              visibility.nodeNumbers ? String(node.id) : "",
+              visibility.nodeCoordinates ? `(${node.x}, ${node.y}, ${node.z}) m` : "",
+            ].filter(Boolean).join(" · ");
+          } else if (follow?.type === "beam" && affectedBeamIds.has(follow.id)
+            && object.element.classList.contains("frame3d-beam-number")) {
+            const beam = beamByIdRef.current!.get(follow.id);
+            const start = beam && nodeByIdRef.current!.get(beam.startNodeId);
+            const end = beam && nodeByIdRef.current!.get(beam.endNodeId);
+            if (!beam || !start || !end) return;
+            const a = new THREE.Vector3(start.x, start.y, start.z);
+            const b = new THREE.Vector3(end.x, end.y, end.z);
+            const axes = memberAxes(b.clone().sub(a), beam.rollAngleRad ?? 0);
+            object.position.copy(a.add(b).multiplyScalar(0.5).addScaledVector(axes.ey, 0.3));
+          }
         });
         applySelectionHighlight(geometry, selectionRef.current);
         state.renderer.render(state.scene, state.camera);
@@ -3134,6 +3172,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         }
         return;
       }
+      movedPlateMeshes.forEach(({ built }) => built.geometry.dispose());
       if (containerRef.current) containerRef.current.dataset.frame3dMoveFallback = "gpu-target";
     }
     const unhintedNodeCount = previousModel && pendingAppend === null
@@ -3930,7 +3969,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       }
       if (visibility.beamNumbers && beamIndex % beamLabelStride === 0) {
         const midpoint = a.clone().add(b).multiplyScalar(0.5).addScaledVector(axes.ey, 0.3);
-        geometry.add(makeLabel(`(${beam.id})`, "frame3d-beam-number", midpoint));
+        geometry.add(makeLabel(`(${beam.id})`, "frame3d-beam-number", midpoint, { type: "beam", id: beam.id }));
       }
       if (visibility.profiles && beam.profileName && !useBeamInstancing) {
         const midpoint = a.clone().add(b).multiplyScalar(0.5).addScaledVector(axes.ez, -0.3);
