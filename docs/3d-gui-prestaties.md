@@ -55,6 +55,9 @@ voor andere apparaten.
 | Passend beeld op het model met 28 platen | 4,6 ms cameratekening bij 74 draw calls; de volledige rij platen bleef in het canvas. Zoom op de laatste plaat duurde 7,6–9,7 ms per stap. |
 | In de klein geprojecteerde boogopening van plaat 28 klikken, vóór selectiecorrectie | De 14px-selectiezone van een randknoop koos K258/K261 terwijl de klik op de witte uitsparing lag. |
 | Dezelfde handeling na een 7px-selectiezone, met behoud van 14px tekensnap | Midden in de uitsparing gaf geen selectie; zichtbare K254 werd op 0,31 px afstand wel geselecteerd. Staaf tekenen vanaf circa 10 px naast K254 gebruikte nog steeds K254 als begin, zonder nieuwe knoop. |
+| 28 platen met boogopening: van G naar Q wisselen vóór laagverversing | 142,6 ms volledige scène-opbouw; de 28 plaatlastlabels werden opnieuw opgebouwd. |
+| Zelfde model na laagverversing: tussen G, Q en Model wisselen | G↔Q gebruikte `conditions` (53,4–77,9 ms), naar Model 18,2 ms; camera bleef exact gelijk. Geselecteerde G-plaatlast 55 werd bij Q losgelaten en Q-plaatlast 56 verscheen. |
+| Zelfde model: lasten via Weergave verbergen en terugzetten | 25,7 en 70,8 ms voor de conditielaag; 0 en opnieuw 28 zichtbare plaatlastlabels, zonder verplaatsing van de camera. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de

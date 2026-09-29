@@ -2600,12 +2600,6 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       && utilizations === previousPresentation?.utilizations
       && activeLoadCaseId === previousPresentation?.activeLoadCaseId
       && conditionModel === lastBuiltConditionModelRef.current;
-    const existingSurfaceLoads = loadVisibilityOnly
-      ? geometry.children.find((child) => child.userData.frame3dSurfaceLoads === true)
-      : undefined;
-    const surfaceLoadToggleReady = !loadVisibilityOnly || !visibility.loads
-      || noSurfaceLoadsInEitherModel
-      || (existingSurfaceLoads instanceof THREE.Group && existingSurfaceLoads.children.length > 0);
     const conditionLayerOnly = previousModel === model
       && previousPresentation !== null
       && (sameFrame3DVisibility(visibility, previousPresentation.visibility)
@@ -2613,12 +2607,49 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       && structuralGrid === previousPresentation.structuralGrid
       && result === previousPresentation.result
       && utilizations === previousPresentation.utilizations
-      && (supportVisibilityOnly || loadVisibilityOnly || conditionLayerHasNoSurfaceLoads)
-      && surfaceLoadToggleReady
       && (supportVisibilityOnly || loadVisibilityOnly
         || conditionModel !== lastBuiltConditionModelRef.current
         || activeLoadCaseId !== previousPresentation.activeLoadCaseId);
     if (conditionLayerOnly) {
+      const refreshSurfaceLoads = loadVisibilityOnly
+        || activeLoadCaseId !== previousPresentation.activeLoadCaseId;
+      let removedSurfaceLabelCount = 0;
+      let addedSurfaceLabelCount = 0;
+      if (refreshSurfaceLoads) {
+        const oldSurfaceLoads = geometry.children.find((child) => child.userData.frame3dSurfaceLoads === true);
+        const oldSurfaceTargets = new Set<THREE.Object3D>();
+        if (oldSurfaceLoads instanceof THREE.Group) {
+          oldSurfaceLoads.traverse((object) => {
+            oldSurfaceTargets.add(object);
+            if (oldSurfaceLoads.visible && object instanceof CSS2DObject) removedSurfaceLabelCount += 1;
+          });
+          geometry.remove(oldSurfaceLoads);
+          disposeGroup(oldSurfaceLoads);
+        }
+        selectionPickTargetsRef.current = selectionPickTargetsRef.current
+          .filter((target) => !oldSurfaceTargets.has(target));
+        nonNodePickTargetsRef.current = nonNodePickTargetsRef.current
+          .filter((target) => !oldSurfaceTargets.has(target));
+        const nextSurfaceLoads = new THREE.Group();
+        nextSurfaceLoads.userData.frame3dSurfaceLoads = true;
+        const temporaryGeometries: THREE.BufferGeometry[] = [];
+        addSurfaceLoadMarkers(nextSurfaceLoads, (plate) => {
+          const built = createFrame3DPlateGeometry(model, plate, nodeByIdRef.current ?? undefined);
+          if (built) temporaryGeometries.push(built.geometry);
+          return built;
+        });
+        temporaryGeometries.forEach((plateGeometry) => plateGeometry.dispose());
+        geometry.add(nextSurfaceLoads);
+        nextSurfaceLoads.traverse((object) => {
+          if (object instanceof CSS2DObject) addedSurfaceLabelCount += 1;
+          if (object.userData.type === "surfaceLoad" && object.userData.pickable !== false
+            && typeof (object as { raycast?: unknown }).raycast === "function") {
+            selectionPickTargetsRef.current.push(object);
+            nonNodePickTargetsRef.current.push(object);
+          }
+        });
+        applySelectionHighlight(nextSurfaceLoads, selectionRef.current);
+      }
       const oldConditions = geometry.children.find((child) => child.userData.frame3dConditions === true);
       const removedConditionObjects = new Set<THREE.Object3D>();
       let removedLabelCount = 0;
@@ -2650,32 +2681,15 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           if (type !== "node") nonNodePickTargetsRef.current.push(object);
         }
       });
-      if (loadVisibilityOnly && existingSurfaceLoads instanceof THREE.Group) {
-        existingSurfaceLoads.visible = visibility.loads;
-        const surfaceTargets = new Set<THREE.Object3D>();
-        let surfaceLabelCount = 0;
-        existingSurfaceLoads.traverse((object) => {
-          if (object instanceof CSS2DObject) surfaceLabelCount += 1;
-          if (object.userData.type === "surfaceLoad"
-            && typeof (object as { raycast?: unknown }).raycast === "function") surfaceTargets.add(object);
-        });
-        selectionPickTargetsRef.current = selectionPickTargetsRef.current
-          .filter((target) => !surfaceTargets.has(target));
-        nonNodePickTargetsRef.current = nonNodePickTargetsRef.current
-          .filter((target) => !surfaceTargets.has(target));
-        if (visibility.loads) {
-          selectionPickTargetsRef.current.push(...surfaceTargets);
-          nonNodePickTargetsRef.current.push(...surfaceTargets);
-        }
-        addedLabelCount += visibility.loads ? surfaceLabelCount : -surfaceLabelCount;
-      }
       applySelectionHighlight(nextConditions, selectionRef.current);
       state.renderer.render(state.scene, state.camera);
       renderFrame3DLabels(state, containerRef.current);
       rememberBuiltPresentation();
       if (containerRef.current) {
         const previousLabelCount = Number(containerRef.current.dataset.frame3dLabels ?? 0);
-        const visibleLabelCount = Math.max(0, previousLabelCount - removedLabelCount + addedLabelCount);
+        const visibleLabelCount = Math.max(0,
+          previousLabelCount - removedLabelCount + addedLabelCount
+          - removedSurfaceLabelCount + addedSurfaceLabelCount);
         writeBuildMode(containerRef.current, "conditions");
         containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
         containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
