@@ -74,6 +74,7 @@ voor andere apparaten.
 | Bij de belaste staaf 11 op plaat 29 één stap in- en uitzoomen rond de cursor | Beide wielacties ankerden op `geometry` en duurden 5,8 en 6,8 ms. De camera keerde exact terug naar positie `(12,275089; 131,421150; 10,740528)` m en doel `(9,459784; 128,605845; 8,729595)` m; de last bleef zichtbaar. |
 | Belastingpijl 8 selecteren, naar Model schakelen en op dezelfde plaats klikken, daarna Q herstellen | De zichtbare pijlpunt koos staafbelasting 8. Model maakte de last onzichtbaar, wiste de lastselectie en bracht het aantal aanklikbare lastobjecten op nul in 8,4 ms; dezelfde klik koos alleen plaat 29. Na terugschakelen naar Q koos de klik opnieuw staafbelasting 8. |
 | Met links een selectiekader rond de opening van plaat 29 slepen | De groep bevatte vier knopen en staaf 11. De plaat viel buiten het getrokken kader en werd terecht niet opgenomen. Camera en doel bleven exact ongewijzigd; de linkermuisactie draaide het beeld niet. |
+| Staaf 11 met beide openingsknopen 0,5 m in X verplaatsen en ongedaan maken | K271/K272 veranderden van X = 6,5/5,5 naar 7,0/6,0 m. Opening en staaf bleven zichtbaar en geldig. Ongedaan maken herstelde beide coördinaten exact. Verplaatsen en herstellen vroegen nog een volledige scène-opbouw van 90,3 en 72,1 ms; dit is een overgebleven optimalisatiepunt voor gedeelde plaat- en staafknopen. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
