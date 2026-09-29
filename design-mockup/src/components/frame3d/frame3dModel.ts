@@ -464,6 +464,39 @@ function readPlateNodeLoop(value: unknown, nodeIds: Set<number>, label: string):
   return result;
 }
 
+/** Older copies kept the source plate's drawn contour while remapping its node loop. */
+function repairCopiedBoundary(
+  value: unknown, loop: number[], templates: Map<string, number[]>,
+): unknown {
+  if (!Array.isArray(value) || !value.length) return value;
+  const segmentIds = value.flatMap((segment: unknown) => {
+    if (!segment || typeof segment !== "object" || Array.isArray(segment)) return [];
+    const part = segment as Record<string, unknown>;
+    return [part.startNodeId, part.endNodeId, ...(part.kind === "arc" ? [part.controlNodeId] : [])];
+  });
+  const key = JSON.stringify(value);
+  if (segmentIds.every((id) => loop.includes(Number(id)))) {
+    templates.set(key, loop);
+    return value;
+  }
+  const sourceLoop = templates.get(key);
+  if (!sourceLoop || sourceLoop.length !== loop.length) return value;
+  const idMap = new Map(sourceLoop.map((id, index) => [id, loop[index]]));
+  if (!segmentIds.every((id) => idMap.has(Number(id)))) return value;
+  return value.map((segment: Frame3DPlateBoundarySegment) => segment.kind === "arc"
+    ? { ...segment, startNodeId: idMap.get(segment.startNodeId)!, controlNodeId: idMap.get(segment.controlNodeId)!, endNodeId: idMap.get(segment.endNodeId)! }
+    : { ...segment, startNodeId: idMap.get(segment.startNodeId)!, endNodeId: idMap.get(segment.endNodeId)! });
+}
+
+function hasCopiedBoundaryReference(value: unknown, loop: number[]): boolean {
+  return Array.isArray(value) && value.some((segment: unknown) => {
+    if (!segment || typeof segment !== "object" || Array.isArray(segment)) return false;
+    const part = segment as Record<string, unknown>;
+    return !loop.includes(Number(part.startNodeId)) || !loop.includes(Number(part.endNodeId)) ||
+      (part.kind === "arc" && !loop.includes(Number(part.controlNodeId)));
+  });
+}
+
 function readPlateBoundary(
   value: unknown, loop: number[], nodeIds: Set<number>, nodes: ReadonlyMap<number, Frame3DNode>, label: string,
 ): Frame3DPlateBoundarySegment[] | undefined {
@@ -657,6 +690,7 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
   }
   const plates: Frame3DPlate[] = [];
   const plateIds = new Set<number>();
+  const boundaryTemplates = new Map<string, number[]>();
   if (raw.plates !== undefined && !Array.isArray(raw.plates)) throw new Error("Het 3D-model bevat geen geldige lijst plates.");
   for (const item of (raw.plates ?? []) as unknown[]) {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Het 3D-model bevat een ongeldige plaat.");
@@ -665,7 +699,7 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
     if (!Number.isSafeInteger(plate.id) || id <= 0 || plateIds.has(id)) throw new Error("Het 3D-model bevat een plaat met een ongeldige of dubbele id.");
     const loop = readPlateNodeLoop(plate.nodeIds, nodeIds, `3D-plaat ${id}`);
     validatePlatePlane(nodes, loop, `3D-plaat ${id}`);
-    const boundary = readPlateBoundary(plate.boundary, loop, nodeIds, nodeIndex, `3D-plaat ${id}`);
+    const boundary = readPlateBoundary(repairCopiedBoundary(plate.boundary, loop, boundaryTemplates), loop, nodeIds, nodeIndex, `3D-plaat ${id}`);
     const thicknessM = Number(plate.thicknessM ?? 0.2);
     const cornerRadiusM = Number(plate.cornerRadiusM ?? 0);
     if (!(thicknessM > 0) || !Number.isFinite(thicknessM) || cornerRadiusM < 0 || !Number.isFinite(cornerRadiusM)) {
@@ -681,7 +715,7 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
       if (!Number.isSafeInteger(opening.id) || openingId <= 0 || openingIds.has(openingId)) throw new Error(`3D-plaat ${id} bevat een opening met ongeldige of dubbele id.`);
       const openingLoop = readPlateNodeLoop(opening.nodeIds, nodeIds, `Opening ${openingId} van 3D-plaat ${id}`);
       validatePlatePlane(nodes, openingLoop, `Opening ${openingId} van 3D-plaat ${id}`);
-      const openingBoundary = readPlateBoundary(opening.boundary, openingLoop, nodeIds, nodeIndex, `Opening ${openingId} van 3D-plaat ${id}`);
+      const openingBoundary = readPlateBoundary(repairCopiedBoundary(opening.boundary, openingLoop, boundaryTemplates), openingLoop, nodeIds, nodeIndex, `Opening ${openingId} van 3D-plaat ${id}`);
       validateOpeningInsidePlate(nodeIndex, loop, boundary, openingLoop, openingBoundary,
         `Opening ${openingId} van 3D-plaat ${id}`);
       const openingRadius = Number(opening.cornerRadiusM ?? 0);
@@ -1242,7 +1276,10 @@ export function addFrame3DPlate(
   // objectreferenties en neem alleen de nieuwe, gevalideerde plaat over. De
   // 3D-viewer kan de plaat dan toevoegen zonder knopen, labels en staven
   // opnieuw op te bouwen.
-  return { ...model, plates: [...(model.plates ?? []), addedPlate] };
+  const legacyCopies = (model.plates ?? []).some((plate) =>
+    hasCopiedBoundaryReference(plate.boundary, plate.nodeIds) ||
+    (plate.openings ?? []).some((opening) => hasCopiedBoundaryReference(opening.boundary, opening.nodeIds)));
+  return legacyCopies ? parsed : { ...model, plates: [...(model.plates ?? []), addedPlate] };
 }
 
 export function updateFrame3DPlate(

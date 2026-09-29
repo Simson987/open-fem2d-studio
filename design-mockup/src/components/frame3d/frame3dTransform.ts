@@ -1,4 +1,4 @@
-import type { Frame3DModel } from "./frame3dModel";
+import type { Frame3DModel, Frame3DPlateBoundarySegment } from "./frame3dModel";
 import type { Frame3DMultiSelection, Frame3DSingleSelection } from "./frame3dSelection";
 
 export type Frame3DTransformSelection =
@@ -38,6 +38,24 @@ function nextId(items: ReadonlyArray<{ id: number }>): number {
   let maximum = 0;
   for (const item of items) if (item.id > maximum) maximum = item.id;
   return maximum + 1;
+}
+
+function remapPlateBoundary(
+  boundary: Frame3DPlateBoundarySegment[] | undefined,
+  idMap: ReadonlyMap<number, number>,
+): Frame3DPlateBoundarySegment[] | undefined {
+  return boundary?.map((segment) => segment.kind === "arc"
+    ? {
+        ...segment,
+        startNodeId: idMap.get(segment.startNodeId)!,
+        controlNodeId: idMap.get(segment.controlNodeId)!,
+        endNodeId: idMap.get(segment.endNodeId)!,
+      }
+    : {
+        ...segment,
+        startNodeId: idMap.get(segment.startNodeId)!,
+        endNodeId: idMap.get(segment.endNodeId)!,
+      });
 }
 
 function selectedNodeIds(index: Frame3DTransformIndex, selection: Frame3DTransformSelection): number[] {
@@ -174,7 +192,12 @@ export function transformFrame3D(
       return {
         ...plate, id,
         nodeIds: plate.nodeIds.map((nodeId) => idMap.get(nodeId)!),
-        openings: plate.openings?.map((opening) => ({ ...opening, nodeIds: opening.nodeIds.map((nodeId) => idMap.get(nodeId)!) })),
+        ...(plate.boundary ? { boundary: remapPlateBoundary(plate.boundary, idMap) } : {}),
+        openings: plate.openings?.map((opening) => ({
+          ...opening,
+          nodeIds: opening.nodeIds.map((nodeId) => idMap.get(nodeId)!),
+          ...(opening.boundary ? { boundary: remapPlateBoundary(opening.boundary, idMap) } : {}),
+        })),
       };
     });
     let nextSurfaceLoad = nextId(model.surfaceLoads ?? []);

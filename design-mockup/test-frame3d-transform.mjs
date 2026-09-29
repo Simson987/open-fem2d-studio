@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { transformFrame3D } from "./src/components/frame3d/frame3dTransform.ts";
+import { addFrame3DPlate, parseFrame3DModel } from "./src/components/frame3d/frame3dModel.ts";
 
 const model = {
   nodes: [
@@ -82,6 +83,50 @@ const copiedPlate = transformFrame3D(model, { type: "plate", id: 1 }, { kind: "c
 assert.deepEqual(copiedPlate.selection, { type: "plate", id: 2 });
 assert.deepEqual(copiedPlate.model.plates.at(-1).nodeIds, [4, 5, 6]);
 assert.equal(copiedPlate.model.surfaceLoads.at(-1).plateId, 2, "oppervlaktebelasting reist mee met een gekopieerde plaat");
+
+const curved = parseFrame3DModel({
+  nodes: [
+    [1, 0, 0], [2, 6, 0], [3, 6, 4], [4, 0, 4], [5, 3, -1],
+    [6, 2, 1], [7, 4, 1], [8, 4, 3], [9, 2, 3], [10, 3, 0.5],
+  ].map(([id, x, y]) => ({ id, x, y, z: 0 })),
+  beams: [],
+  plates: [{
+    id: 1, nodeIds: [1, 5, 2, 3, 4], thicknessM: 0.2,
+    boundary: [
+      { kind: "arc", startNodeId: 1, controlNodeId: 5, endNodeId: 2 },
+      { kind: "line", startNodeId: 2, endNodeId: 3 },
+      { kind: "line", startNodeId: 3, endNodeId: 4 },
+      { kind: "line", startNodeId: 4, endNodeId: 1 },
+    ],
+    openings: [{
+      id: 1, nodeIds: [6, 10, 7, 8, 9],
+      boundary: [
+        { kind: "arc", startNodeId: 6, controlNodeId: 10, endNodeId: 7 },
+        { kind: "line", startNodeId: 7, endNodeId: 8 },
+        { kind: "line", startNodeId: 8, endNodeId: 9 },
+        { kind: "line", startNodeId: 9, endNodeId: 6 },
+      ],
+    }],
+  }],
+});
+const copiedCurved = transformFrame3D(curved, { type: "plate", id: 1 }, { kind: "copy", dx: 0, dy: 6, dz: 0 }).model;
+assert.equal(parseFrame3DModel(copiedCurved).plates.length, 2, "gekopieerde boogcontour en opening blijven geldig");
+const copiedLoop = copiedCurved.plates[1].nodeIds;
+assert.deepEqual(copiedCurved.plates[1].boundary[0], {
+  kind: "arc", startNodeId: copiedLoop[0], controlNodeId: copiedLoop[1], endNodeId: copiedLoop[2],
+});
+const copiedOpeningLoop = copiedCurved.plates[1].openings[0].nodeIds;
+assert.deepEqual(copiedCurved.plates[1].openings[0].boundary[0], {
+  kind: "arc", startNodeId: copiedOpeningLoop[0], controlNodeId: copiedOpeningLoop[1], endNodeId: copiedOpeningLoop[2],
+});
+
+const legacyCopy = structuredClone(copiedCurved);
+legacyCopy.plates[1].boundary = curved.plates[0].boundary;
+legacyCopy.plates[1].openings[0].boundary = curved.plates[0].openings[0].boundary;
+const repairedCopy = parseFrame3DModel(legacyCopy);
+assert.deepEqual(repairedCopy.plates[1], parseFrame3DModel(copiedCurved).plates[1], "oude kopieën worden bij het laden hersteld");
+assert.deepEqual(addFrame3DPlate(legacyCopy, [1, 2, 3, 4]).plates[1], repairedCopy.plates[1],
+  "een nieuwe plaat maakt ook bestaande gekopieerde contouren geldig");
 
 assert.throws(
   () => transformFrame3D(model, { type: "node", id: 99 }, { kind: "move", dx: 0, dy: 0, dz: 0 }),
