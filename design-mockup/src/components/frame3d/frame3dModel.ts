@@ -466,7 +466,7 @@ function readPlateNodeLoop(value: unknown, nodeIds: Set<number>, label: string):
 
 /** Older copies kept the source plate's drawn contour while remapping its node loop. */
 function repairCopiedBoundary(
-  value: unknown, loop: number[], templates: Map<string, number[]>,
+  value: unknown, loop: number[], templates: Map<string, number[]>, nodes: ReadonlyMap<number, Frame3DNode>,
 ): unknown {
   if (!Array.isArray(value) || !value.length) return value;
   const segmentIds = value.flatMap((segment: unknown) => {
@@ -481,6 +481,14 @@ function repairCopiedBoundary(
   }
   const sourceLoop = templates.get(key);
   if (!sourceLoop || sourceLoop.length !== loop.length) return value;
+  const source = nodes.get(sourceLoop[0]), target = nodes.get(loop[0]);
+  if (!source || !target) return value;
+  const delta = [target.x - source.x, target.y - source.y, target.z - source.z];
+  if (!sourceLoop.every((id, index) => {
+    const from = nodes.get(id), to = nodes.get(loop[index]);
+    return from && to && Math.abs(to.x - from.x - delta[0]) < 1e-8 &&
+      Math.abs(to.y - from.y - delta[1]) < 1e-8 && Math.abs(to.z - from.z - delta[2]) < 1e-8;
+  })) return value;
   const idMap = new Map(sourceLoop.map((id, index) => [id, loop[index]]));
   if (!segmentIds.every((id) => idMap.has(Number(id)))) return value;
   return value.map((segment: Frame3DPlateBoundarySegment) => segment.kind === "arc"
@@ -699,7 +707,7 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
     if (!Number.isSafeInteger(plate.id) || id <= 0 || plateIds.has(id)) throw new Error("Het 3D-model bevat een plaat met een ongeldige of dubbele id.");
     const loop = readPlateNodeLoop(plate.nodeIds, nodeIds, `3D-plaat ${id}`);
     validatePlatePlane(nodes, loop, `3D-plaat ${id}`);
-    const boundary = readPlateBoundary(repairCopiedBoundary(plate.boundary, loop, boundaryTemplates), loop, nodeIds, nodeIndex, `3D-plaat ${id}`);
+    const boundary = readPlateBoundary(repairCopiedBoundary(plate.boundary, loop, boundaryTemplates, nodeIndex), loop, nodeIds, nodeIndex, `3D-plaat ${id}`);
     const thicknessM = Number(plate.thicknessM ?? 0.2);
     const cornerRadiusM = Number(plate.cornerRadiusM ?? 0);
     if (!(thicknessM > 0) || !Number.isFinite(thicknessM) || cornerRadiusM < 0 || !Number.isFinite(cornerRadiusM)) {
@@ -715,7 +723,7 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
       if (!Number.isSafeInteger(opening.id) || openingId <= 0 || openingIds.has(openingId)) throw new Error(`3D-plaat ${id} bevat een opening met ongeldige of dubbele id.`);
       const openingLoop = readPlateNodeLoop(opening.nodeIds, nodeIds, `Opening ${openingId} van 3D-plaat ${id}`);
       validatePlatePlane(nodes, openingLoop, `Opening ${openingId} van 3D-plaat ${id}`);
-      const openingBoundary = readPlateBoundary(repairCopiedBoundary(opening.boundary, openingLoop, boundaryTemplates), openingLoop, nodeIds, nodeIndex, `Opening ${openingId} van 3D-plaat ${id}`);
+      const openingBoundary = readPlateBoundary(repairCopiedBoundary(opening.boundary, openingLoop, boundaryTemplates, nodeIndex), openingLoop, nodeIds, nodeIndex, `Opening ${openingId} van 3D-plaat ${id}`);
       validateOpeningInsidePlate(nodeIndex, loop, boundary, openingLoop, openingBoundary,
         `Opening ${openingId} van 3D-plaat ${id}`);
       const openingRadius = Number(opening.cornerRadiusM ?? 0);

@@ -127,6 +127,10 @@ const repairedCopy = parseFrame3DModel(legacyCopy);
 assert.deepEqual(repairedCopy.plates[1], parseFrame3DModel(copiedCurved).plates[1], "oude kopieën worden bij het laden hersteld");
 assert.deepEqual(addFrame3DPlate(legacyCopy, [1, 2, 3, 4]).plates[1], repairedCopy.plates[1],
   "een nieuwe plaat maakt ook bestaande gekopieerde contouren geldig");
+const unrelatedBadBoundary = structuredClone(legacyCopy);
+unrelatedBadBoundary.nodes.find((node) => node.id === copiedLoop[1]).x += 0.25;
+assert.throws(() => parseFrame3DModel(unrelatedBadBoundary), /ongeldige knoopverwijzing/,
+  "alleen zuiver verschoven kopieën mogen automatisch hersteld worden");
 
 assert.throws(
   () => transformFrame3D(model, { type: "node", id: 99 }, { kind: "move", dx: 0, dy: 0, dz: 0 }),
