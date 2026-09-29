@@ -1297,26 +1297,39 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       const nodeId = toolRef.current === "addBeam" ? beamStartRef.current : sketch.firstNodeId;
       return nodeId === null ? undefined : nodeByIdRef.current!.get(nodeId);
     };
+    const platePlane = (plate: NonNullable<Frame3DModel["plates"]>[number]): THREE.Plane | null => {
+      const nodes = plate.nodeIds.map((id) => nodeByIdRef.current!.get(id)).filter(Boolean);
+      if (nodes.length < 3) return null;
+      const a = new THREE.Vector3(nodes[0]!.x, nodes[0]!.y, nodes[0]!.z);
+      const b = new THREE.Vector3(nodes[1]!.x, nodes[1]!.y, nodes[1]!.z);
+      for (let index = 2; index < nodes.length; index += 1) {
+        const node = nodes[index]!;
+        const c = new THREE.Vector3(node.x, node.y, node.z);
+        if (new THREE.Vector3().crossVectors(b.clone().sub(a), c.clone().sub(a)).lengthSq() > 1e-16) {
+          return new THREE.Plane().setFromCoplanarPoints(a, b, c);
+        }
+      }
+      return null;
+    };
     const platePlaneForNode = (nodeId: number | undefined): THREE.Plane | null => {
       if (nodeId === undefined) return null;
       for (const plate of plateByIdRef.current!.values()) {
         if (!plate.nodeIds.includes(nodeId)
           && !plate.openings?.some((opening) => opening.nodeIds.includes(nodeId))) continue;
-        const nodes = plate.nodeIds.map((id) => nodeByIdRef.current!.get(id)).filter(Boolean);
-        if (nodes.length < 3) continue;
-        const a = new THREE.Vector3(nodes[0]!.x, nodes[0]!.y, nodes[0]!.z);
-        const b = new THREE.Vector3(nodes[1]!.x, nodes[1]!.y, nodes[1]!.z);
-        for (let index = 2; index < nodes.length; index += 1) {
-          const node = nodes[index]!;
-          const c = new THREE.Vector3(node.x, node.y, node.z);
-          if (new THREE.Vector3().crossVectors(b.clone().sub(a), c.clone().sub(a)).lengthSq() > 1e-16) {
-            return new THREE.Plane().setFromCoplanarPoints(a, b, c);
-          }
-        }
+        const plane = platePlane(plate);
+        if (plane) return plane;
       }
       return null;
     };
-    const drawingPlane = (nearNodeId?: number) => {
+    const platePlaneFromHit = (hit: THREE.Intersection<THREE.Object3D> | undefined): THREE.Plane | null => {
+      if (!hit || hit.object.userData.type !== "plate") return null;
+      const instanceIds = hit.object.userData.instanceIds as number[] | undefined;
+      const id = instanceIds && hit.instanceId !== undefined
+        ? instanceIds[hit.instanceId] : hit.object.userData.id as number | undefined;
+      const plate = id === undefined ? undefined : plateByIdRef.current!.get(id);
+      return plate ? platePlane(plate) : null;
+    };
+    const drawingPlane = (nearNodeId?: number, pointedPlatePlane?: THREE.Plane | null) => {
       const anchor = drawingAnchor();
       // De echte camerastand bepaalt het tekenvlak. Een opgeslagen vooraanzicht
       // kan immers later schuin zijn gedraaid; de oude aanzichtsnaam mag dan
@@ -1330,7 +1343,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         : cameraView === "side" ? new THREE.Vector3(1, 0, 0)
         : new THREE.Vector3(0, 0, 1);
       const beamPlane = toolRef.current === "addBeam" && cameraView === "iso"
-        ? beamPlaneRef.current ?? platePlaneForNode(anchor?.id ?? nearNodeId)
+        ? beamPlaneRef.current ?? platePlaneForNode(anchor?.id ?? nearNodeId) ?? pointedPlatePlane
         : null;
       if (beamPlane) {
         normal = beamPlane.normal.clone();
@@ -1394,7 +1407,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         ensureNodeSnapScreenIndex();
       });
     };
-    const drawingSnap = (): DrawingSnap | null => {
+    const drawingSnap = (knownPlateHit?: THREE.Intersection<THREE.Object3D>): DrawingSnap | null => {
       const snapStartedAt = performance.now();
       const finish = (value: DrawingSnap | null) => {
         container.dataset.frame3dSnapMs = (performance.now() - snapStartedAt).toFixed(2);
@@ -1435,7 +1448,14 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
             (1 - pointer.y) * renderer.domElement.clientHeight / 2,
           )?.point.id
         : undefined;
-      const { view, origin, plane, beamPlate } = openingPlane ?? drawingPlane(nearPlateNodeId);
+      let pointedPlatePlane = platePlaneFromHit(knownPlateHit);
+      if (!pointedPlatePlane && toolRef.current === "addBeam" && !beamPlaneRef.current
+        && frame3DViewFromCamera(camera.position, controls.target) === "iso") {
+        const plateTargets = selectionPickTargetsRef.current.filter((target) =>
+          target.userData.type === "plate" && target.visible);
+        pointedPlatePlane = platePlaneFromHit(raycaster.intersectObjects(plateTargets, false)[0]);
+      }
+      const { view, origin, plane, beamPlate } = openingPlane ?? drawingPlane(nearPlateNodeId, pointedPlatePlane);
       const position = new THREE.Vector3();
       if (!raycaster.ray.intersectPlane(plane, position)) return finish(null);
       const raw = position.clone();
@@ -1809,7 +1829,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           ? { historyGroup: historyGroupRef.current } : undefined);
       };
       const ensureDrawingNode = (): number | null => {
-        const snapped = drawingSnap();
+        const snapped = drawingSnap(intersections.find((candidate) => candidate.object.userData.type === "plate"));
         if (activeTool === "addBeam" && beamStartRef.current === null && snapped) {
           beamPlaneRef.current = snapped.plane ?? platePlaneForNode(snapped.nodeId);
         }

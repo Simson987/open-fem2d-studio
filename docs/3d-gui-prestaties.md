@@ -24,6 +24,8 @@ voor andere apparaten.
 | Schuin 3D-aanzicht, alle snaps uit: staaf vlak naast twee knopen van een verticale plaat tekenen, vóór correctie | Twee nieuwe knopen op circa Y = −10,5 m, hoewel de zichtbare plaat op Y = 0 m stond |
 | Zelfde handeling na correctie | Twee afzonderlijke nieuwe knopen op Y = 0 m; het actieve tekenvlak was de plaat (normaal 0,1,0); 17,5 ms incrementele opbouw |
 | Zelfde schuine aanzicht met knoopsnap weer aan | Staaf tussen K12 en K13 zonder extra knopen; 14,8 ms incrementele opbouw |
+| Schuin 3D-aanzicht, snaps uit: twee klikken midden op een verticale plaat, vóór correctie | Nieuwe knopen op Y = −4,50 en −2,71 m; de zichtbare plaat lag op Y = 0 m |
+| Zelfde handeling na correctie | K14 en K15 beide op Y = 0 m en staaf 7 tussen beide; tekenvlaknormaal (0,1,0), snapverwerking 0,10 en 0,20 ms |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
