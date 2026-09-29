@@ -15,6 +15,9 @@ voor andere apparaten.
 | Zelfde model: tweemaal inzoomen bij een eindknoop | Knoop bleef binnen circa 2 px op dezelfde schermplek; de camera herstelde exact na terugzoomen |
 | 3D-plaat met rechte randen en één boog tekenen | Plaat 2 gesloten; 5,2 ms opbouw en 0,5 ms plaatgeometrie |
 | Die plaat opnieuw selecteren via het canvas | Hele plaat geselecteerd; 0,4 ms pick |
+| 18 knopen, 6 staven, 1 plaat met boogopening en oppervlaktebelasting: lasten verbergen vóór optimalisatie | 77,1 ms volledige scène-opbouw, 18 draw calls |
+| Zelfde model na optimalisatie: lasten verbergen en terugzetten | 23,6 ms en 22,7 ms voor alleen de conditielaag; 0 en weer 9 selecteerbare lastobjecten |
+| Zelfde model: oppervlaktebelasting na terugzetten via label selecteren | Belasting 1 geselecteerd; label bleef buiten de plaatopening |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
@@ -25,3 +28,6 @@ gebogen plaat bleef het aangewezen punt onder de cursor.
 
 Nog te meten: continue framesnelheid tijdens pannen/roteren, modellen met
 duizenden zichtbare profielen en platen, en vergelijking op andere GPU's.
+De eerste keer tonen van lasten na het openen van een model waarin ze al
+verborgen waren, blijft een volledige opbouw (89,1 ms in dit testmodel);
+daarna blijven de plaatmesh en lastsymbolen bij zichtbaarheidsschakels bestaan.

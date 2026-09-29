@@ -2453,12 +2453,17 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       && conditionModel === lastBuiltConditionModelRef.current;
     const loadVisibilityOnly = previousModel === model
       && visibilityChangedOnly("loads")
-      && noSurfaceLoadsInEitherModel
       && structuralGrid === previousPresentation?.structuralGrid
       && result === previousPresentation?.result
       && utilizations === previousPresentation?.utilizations
       && activeLoadCaseId === previousPresentation?.activeLoadCaseId
       && conditionModel === lastBuiltConditionModelRef.current;
+    const existingSurfaceLoads = loadVisibilityOnly
+      ? geometry.children.find((child) => child.userData.frame3dSurfaceLoads === true)
+      : undefined;
+    const surfaceLoadToggleReady = !loadVisibilityOnly || !visibility.loads
+      || noSurfaceLoadsInEitherModel
+      || (existingSurfaceLoads instanceof THREE.Group && existingSurfaceLoads.children.length > 0);
     const conditionLayerOnly = previousModel === model
       && previousPresentation !== null
       && (sameFrame3DVisibility(visibility, previousPresentation.visibility)
@@ -2467,6 +2472,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       && result === previousPresentation.result
       && utilizations === previousPresentation.utilizations
       && (supportVisibilityOnly || loadVisibilityOnly || conditionLayerHasNoSurfaceLoads)
+      && surfaceLoadToggleReady
       && (supportVisibilityOnly || loadVisibilityOnly
         || conditionModel !== lastBuiltConditionModelRef.current
         || activeLoadCaseId !== previousPresentation.activeLoadCaseId);
@@ -2502,6 +2508,25 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           if (type !== "node") nonNodePickTargetsRef.current.push(object);
         }
       });
+      if (loadVisibilityOnly && existingSurfaceLoads instanceof THREE.Group) {
+        existingSurfaceLoads.visible = visibility.loads;
+        const surfaceTargets = new Set<THREE.Object3D>();
+        let surfaceLabelCount = 0;
+        existingSurfaceLoads.traverse((object) => {
+          if (object instanceof CSS2DObject) surfaceLabelCount += 1;
+          if (object.userData.type === "surfaceLoad"
+            && typeof (object as { raycast?: unknown }).raycast === "function") surfaceTargets.add(object);
+        });
+        selectionPickTargetsRef.current = selectionPickTargetsRef.current
+          .filter((target) => !surfaceTargets.has(target));
+        nonNodePickTargetsRef.current = nonNodePickTargetsRef.current
+          .filter((target) => !surfaceTargets.has(target));
+        if (visibility.loads) {
+          selectionPickTargetsRef.current.push(...surfaceTargets);
+          nonNodePickTargetsRef.current.push(...surfaceTargets);
+        }
+        addedLabelCount += visibility.loads ? surfaceLabelCount : -surfaceLabelCount;
+      }
       applySelectionHighlight(nextConditions, selectionRef.current);
       state.renderer.render(state.scene, state.camera);
       renderFrame3DLabels(state, containerRef.current);
@@ -3880,6 +3905,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     addFrame3DConditionMarkers(conditionGroup, conditionModel ?? model, visibility, activeLoadCaseId);
     geometry.add(conditionGroup);
 
+    const surfaceLoadGroup = new THREE.Group();
+    surfaceLoadGroup.userData.frame3dSurfaceLoads = true;
+    geometry.add(surfaceLoadGroup);
     if (visibility.loads) {
       const visibleSurfaceLoads = (model.surfaceLoads ?? []).filter((load) =>
         activeLoadCaseId === undefined || frame3DLoadCaseId(load) === activeLoadCaseId);
@@ -3895,7 +3923,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         const length = 0.7;
         const arrow = new THREE.ArrowHelper(direction, built.surfaceAnchor.clone().addScaledVector(direction, -length), length, 0x0284c7, 0.22, 0.12);
         arrow.traverse((child) => { child.userData = { type: "surfaceLoad", id: load.id }; });
-        geometry.add(arrow);
+        surfaceLoadGroup.add(arrow);
         if (loadIndex % surfaceLoadLabelStride === 0) {
           const label = makeLabel(
             `q = ${resultValue(magnitude)} kN/m²`,
@@ -3926,7 +3954,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
               event.shiftKey || event.ctrlKey || event.metaKey,
             ));
           });
-          geometry.add(label);
+          surfaceLoadGroup.add(label);
         }
       }
     }
