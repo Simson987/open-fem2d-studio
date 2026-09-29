@@ -77,6 +77,9 @@ voor andere apparaten.
 | Staaf 11 met beide openingsknopen 0,5 m in X verplaatsen en ongedaan maken | K271/K272 veranderden van X = 6,5/5,5 naar 7,0/6,0 m. Opening en staaf bleven zichtbaar en geldig. Ongedaan maken herstelde beide coördinaten exact. Verplaatsen en herstellen vroegen nog een volledige scène-opbouw van 90,3 en 72,1 ms; dit is een overgebleven optimalisatiepunt voor gedeelde plaat- en staafknopen. |
 | Nieuw model met 320 knopen, 192 staven en 8 platen: plaatknoop K37 0,5 m verplaatsen en terugzetten | Voor de gerichte plaatverversing duurde de volledige scène-opbouw 113,2 en 109,0 ms. Daarna gebruikte dezelfde GUI-actie `move-nodes`: 15,8 ms voor verplaatsen en 14,6 ms voor ongedaan maken. Plaat 1 bleef aanwezig en was na inzoomen opnieuw via het canvas selecteerbaar. De knoopcoördinaten keerden exact terug en de camera bleef op positie `(210,241262; 349,991262; 147,279473)` m met doel `(15,25; 155; 8)` m. |
 | Zelfde model: staafknoop K3 met zichtbare staafnummers 0,5 m verplaatsen en terugzetten | Met lokale staafassen tijdelijk verborgen werkte de incrementele route in 9,7 en 7,9 ms. De schermposities van de betrokken staafnummers veranderden mee; K3 keerde terug naar `(0; 0; 5)` m. Daarna zijn de lokale staafassen weer aangezet, zonder cameraverplaatsing. |
+| Zelfde model: staafknoop K3 met zichtbare lokale staafassen verplaatsen en terugzetten | De drie lokale aslijnen werden bij de betrokken staven bijgewerkt via `move-nodes` in 11,0 en 11,7 ms. K3 keerde terug naar `(0; 0; 5)` m; de camera bleef gelijk. |
+| Zelfde model na tekenen van staaf 193 tussen bestaande plaatknopen K38 en K37 | Het model had 320 knopen, 193 staven en 8 platen. Verplaatsen van gedeelde knoop K37 met 0,5 m in X en ongedaan maken gebruikte `move-nodes` in 6,3 en 7,3 ms, met lokale assen aan. Plaat en staaf bleven zichtbaar; K37 keerde terug naar `(-5,5; 15; 16)` m en de ingezoomde camera bleef op `(24,461721; 67,954864; 25,191545)` m met doel `(10,809388; 54,302532; 15,439879)` m. |
+| Zelfde model: staafnummers via Weergave uit- en weer aanzetten, daarna K3 verplaatsen | Het terugzetten van de nummers ververste alleen `beam-labels` in 11,4 ms. Na verplaatsen van K3 veranderden de schermposities van nummers (1) en (3) mee via `move-nodes` in 6,3 ms; ongedaan maken duurde 6,6 ms. K3 keerde terug naar `(0; 0; 5)` m. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
@@ -87,8 +90,6 @@ gebogen plaat bleef het aangewezen punt onder de cursor.
 
 Nog te meten: continue framesnelheid tijdens pannen/roteren, modellen met
 duizenden zichtbare profielen en platen, en vergelijking op andere GPU's.
-Bij het verplaatsen van een staafknoop terwijl lokale staafassen zichtbaar zijn,
-blijft de volledige hertekening voorlopig nodig om die assen correct bij te werken.
 De eerste keer tonen van lasten na het openen van een model waarin ze al
 verborgen waren, blijft een volledige opbouw (89,1 ms in dit testmodel);
 daarna blijven de plaatmesh en lastsymbolen bij zichtbaarheidsschakels bestaan.

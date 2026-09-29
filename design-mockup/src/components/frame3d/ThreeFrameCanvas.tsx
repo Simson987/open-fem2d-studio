@@ -221,6 +221,23 @@ function memberAxes(delta: THREE.Vector3, rollAngleRad = 0) {
   return { ex, ey, ez };
 }
 
+function memberAxisArrowPoints(
+  origin: THREE.Vector3,
+  direction: THREE.Vector3,
+  axes: ReturnType<typeof memberAxes>,
+  axisIndex: number,
+  axisLength: number,
+): THREE.Vector3[] {
+  const tip = origin.clone().addScaledVector(direction, axisLength);
+  const side = new THREE.Vector3().crossVectors(direction, axisIndex === 2 ? axes.ex : axes.ez).normalize();
+  const wing = Math.min(axisLength * 0.28, 0.09);
+  return [
+    origin, tip, tip,
+    tip.clone().addScaledVector(direction, -wing).addScaledVector(side, -wing * 0.45),
+    tip, tip.clone().addScaledVector(direction, -wing).addScaledVector(side, wing * 0.45),
+  ];
+}
+
 function memberRotation(delta: THREE.Vector3, rollAngleRad = 0): THREE.Quaternion {
   const { ex, ey, ez } = memberAxes(delta, rollAngleRad);
   // ExtrudeGeometry: contour-x → lokale y, contour-y → lokale z,
@@ -2385,7 +2402,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           if (delta.lengthSq() <= 1e-16) return;
           const axes = memberAxes(delta, beam.rollAngleRad ?? 0);
           const midpoint = a.add(b).multiplyScalar(0.5).addScaledVector(axes.ey, 0.3);
-          geometry.add(makeLabel(`(${beam.id})`, "frame3d-beam-number", midpoint));
+          geometry.add(makeLabel(`(${beam.id})`, "frame3d-beam-number", midpoint, { type: "beam", id: beam.id }));
           addedLabels += 1;
         });
       }
@@ -3005,7 +3022,6 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       && previousModel.nodes.length >= 250
       && movedNodeRadiusStable
       && (!visibility.plates || (model.plates ?? []).length < 100 && affectedPlates.length <= 8)
-      && (!visibility.memberAxes || affectedBeams.length === 0)
       && conditionGeometryStable
       && resultGeometryStable
       && utilizationGeometryStable;
@@ -3020,7 +3036,6 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         previousModel.nodes.length < 250 ? "small-model" : "",
         !movedNodeRadiusStable ? "node-radius" : "",
         visibility.plates && ((model.plates ?? []).length >= 100 || affectedPlates.length > 8) ? "plates" : "",
-        visibility.memberAxes && affectedBeams.length > 0 ? "member-axes" : "",
         !conditionGeometryStable ? "conditions" : "",
         !resultGeometryStable ? "results" : "",
         !utilizationGeometryStable ? "utilization" : "",
@@ -3032,6 +3047,20 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       const nodeMeshes = [visibleNodes, hitNodes].filter((child): child is THREE.InstancedMesh =>
         child instanceof THREE.InstancedMesh);
       let fastPathReady = nodeMeshes.length > 0;
+      const movedMemberAxisLines: THREE.LineSegments[] = [];
+      if (fastPathReady && visibility.memberAxes && affectedBeams.length > 0) {
+        const axesGroup = geometry.children.find((child) => child.userData.frame3dMemberAxes === true);
+        for (let axisIndex = 0; axisIndex < 3; axisIndex += 1) {
+          const lines = axesGroup?.children.find((child) => child.userData.frame3dAxisIndex === axisIndex);
+          const offsets = lines?.userData.frame3dAxisVertexByBeamId as Map<number, number> | undefined;
+          if (!(lines instanceof THREE.LineSegments) || !offsets
+            || affectedBeams.some((beam) => !offsets.has(beam.id))) {
+            fastPathReady = false;
+            break;
+          }
+          movedMemberAxisLines.push(lines);
+        }
+      }
       const movedPlateMeshes: Array<{ mesh: THREE.Mesh; built: NonNullable<ReturnType<typeof createFrame3DPlateGeometry>> }> = [];
       if (fastPathReady && visibility.plates) {
         for (const plate of affectedPlates) {
@@ -3098,6 +3127,26 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         }
       }
       if (fastPathReady) {
+        for (const beam of affectedBeams) {
+          if (movedMemberAxisLines.length === 0) break;
+          const start = nodeByIdRef.current!.get(beam.startNodeId)!;
+          const end = nodeByIdRef.current!.get(beam.endNodeId)!;
+          const a = new THREE.Vector3(start.x, start.y, start.z);
+          const b = new THREE.Vector3(end.x, end.y, end.z);
+          const delta = b.clone().sub(a);
+          const axes = memberAxes(delta, beam.rollAngleRad ?? 0);
+          const origin = a.add(b).multiplyScalar(0.5);
+          const axisLength = Math.min(0.5, Math.max(0.12, delta.length() * 0.16));
+          ([axes.ex, axes.ey, axes.ez] as const).forEach((direction, axisIndex) => {
+            const lines = movedMemberAxisLines[axisIndex];
+            const offset = (lines.userData.frame3dAxisVertexByBeamId as Map<number, number>).get(beam.id)!;
+            const positions = lines.geometry.getAttribute("position") as THREE.BufferAttribute;
+            memberAxisArrowPoints(origin, direction, axes, axisIndex, axisLength)
+              .forEach((point, index) => positions.setXYZ(offset + index, point.x, point.y, point.z));
+            positions.needsUpdate = true;
+          });
+        }
+        movedMemberAxisLines.forEach((lines) => lines.geometry.computeBoundingSphere());
         for (const { mesh, built } of movedPlateMeshes) {
           const oldGeometry = mesh.geometry;
           mesh.geometry = built.geometry;
@@ -3154,6 +3203,20 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
             const b = new THREE.Vector3(end.x, end.y, end.z);
             const axes = memberAxes(b.clone().sub(a), beam.rollAngleRad ?? 0);
             object.position.copy(a.add(b).multiplyScalar(0.5).addScaledVector(axes.ey, 0.3));
+          } else if (follow?.type === "beam" && affectedBeamIds.has(follow.id)
+            && object.element.classList.contains("frame3d-local-axis-label")) {
+            const beam = beamByIdRef.current!.get(follow.id);
+            const start = beam && nodeByIdRef.current!.get(beam.startNodeId);
+            const end = beam && nodeByIdRef.current!.get(beam.endNodeId);
+            if (!beam || !start || !end) return;
+            const a = new THREE.Vector3(start.x, start.y, start.z);
+            const b = new THREE.Vector3(end.x, end.y, end.z);
+            const delta = b.clone().sub(a);
+            const axes = memberAxes(delta, beam.rollAngleRad ?? 0);
+            const axisIndex = object.userData.frame3dAxisIndex as number;
+            const direction = [axes.ex, axes.ey, axes.ez][axisIndex];
+            const axisLength = Math.min(0.5, Math.max(0.12, delta.length() * 0.16));
+            object.position.copy(a.add(b).multiplyScalar(0.5).addScaledVector(direction, axisLength));
           }
         });
         applySelectionHighlight(geometry, selectionRef.current);
@@ -3851,6 +3914,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     const nodeHitGeometry = new THREE.SphereGeometry(nodeRadius * 2.6, 12, 8);
     const utilizationByMember = new Map(utilizations.map((value) => [value.beamId, value]));
     const localAxisSegments: number[][] = [[], [], []];
+    const memberAxisVertexByBeamId = new Map<number, number>();
     const memberAxesGroup = new THREE.Group();
     memberAxesGroup.userData.frame3dMemberAxes = true;
     for (const [beamIndex, beam] of model.beams.entries()) {
@@ -3866,17 +3930,14 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       if (visibility.memberAxes) {
         const origin = a.clone().lerp(b, 0.5);
         const axisLength = Math.min(0.5, Math.max(0.12, length * 0.16));
+        memberAxisVertexByBeamId.set(beam.id, localAxisSegments[0].length / 3);
         ([axes.ex, axes.ey, axes.ez] as const).forEach((direction, axisIndex) => {
-          const tip = origin.clone().addScaledVector(direction, axisLength);
-          localAxisSegments[axisIndex].push(origin.x, origin.y, origin.z, tip.x, tip.y, tip.z);
-          const side = new THREE.Vector3().crossVectors(direction, axisIndex === 2 ? axes.ex : axes.ez).normalize();
-          const wing = Math.min(axisLength * 0.28, 0.09);
-          for (const sign of [-1, 1]) {
-            const shoulder = tip.clone().addScaledVector(direction, -wing).addScaledVector(side, sign * wing * 0.45);
-            localAxisSegments[axisIndex].push(tip.x, tip.y, tip.z, shoulder.x, shoulder.y, shoulder.z);
-          }
+          const points = memberAxisArrowPoints(origin, direction, axes, axisIndex, axisLength);
+          points.forEach((point) => localAxisSegments[axisIndex].push(point.x, point.y, point.z));
           if (model.beams.length <= 12 || selectionRef.current?.type === "beam" && selectionRef.current.id === beam.id) {
-            memberAxesGroup.add(makeLabel(["x", "y", "z"][axisIndex], "frame3d-local-axis-label", tip));
+            const label = makeLabel(["x", "y", "z"][axisIndex], "frame3d-local-axis-label", points[1], { type: "beam", id: beam.id });
+            label.userData.frame3dAxisIndex = axisIndex;
+            memberAxesGroup.add(label);
           }
         });
       }
@@ -3986,6 +4047,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         lines.renderOrder = 20;
         lines.userData.pickable = false;
         lines.userData.frame3dAxisIndex = axisIndex;
+        lines.userData.frame3dAxisVertexByBeamId = memberAxisVertexByBeamId;
         memberAxesGroup.add(lines);
       });
       geometry.add(memberAxesGroup);
