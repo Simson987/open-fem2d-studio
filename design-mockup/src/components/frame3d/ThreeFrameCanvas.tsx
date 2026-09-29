@@ -1407,7 +1407,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         ensureNodeSnapScreenIndex();
       });
     };
-    const drawingSnap = (knownPlateHit?: THREE.Intersection<THREE.Object3D>): DrawingSnap | null => {
+    const drawingSnap = (
+      knownPlateHit?: THREE.Intersection<THREE.Object3D>,
+      plateHitsAlreadyChecked = false,
+    ): DrawingSnap | null => {
       const snapStartedAt = performance.now();
       const finish = (value: DrawingSnap | null) => {
         container.dataset.frame3dSnapMs = (performance.now() - snapStartedAt).toFixed(2);
@@ -1449,7 +1452,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           )?.point.id
         : undefined;
       let pointedPlatePlane = platePlaneFromHit(knownPlateHit);
-      if (!pointedPlatePlane && toolRef.current === "addBeam" && !beamPlaneRef.current
+      if (!pointedPlatePlane && !plateHitsAlreadyChecked && toolRef.current === "addBeam" && !beamPlaneRef.current
         && frame3DViewFromCamera(camera.position, controls.target) === "iso") {
         const plateTargets = selectionPickTargetsRef.current.filter((target) =>
           target.userData.type === "plate" && target.visible);
@@ -1829,7 +1832,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           ? { historyGroup: historyGroupRef.current } : undefined);
       };
       const ensureDrawingNode = (): number | null => {
-        const snapped = drawingSnap(intersections.find((candidate) => candidate.object.userData.type === "plate"));
+        const snapped = drawingSnap(
+          intersections.find((candidate) => candidate.object.userData.type === "plate"), true,
+        );
         if (activeTool === "addBeam" && beamStartRef.current === null && snapped) {
           beamPlaneRef.current = snapped.plane ?? platePlaneForNode(snapped.nodeId);
         }

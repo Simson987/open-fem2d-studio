@@ -30,6 +30,8 @@ voor andere apparaten.
 | Selectie in en naast de gebogen opening | Klik in uitsparing selecteerde niets (0,7 ms); klik op aangrenzende plaat selecteerde plaat 1 (0,9 ms) |
 | Profielvolume uit en weer aan bij dezelfde plaat | Camera en doel bleven exact gelijk; weergaveverversing 24,8 en 33,0 ms |
 | View “Boogopening iso” herstellen na vooraanzicht en verborgen knoopnummers | Oorspronkelijke cameracoördinaten en knoopnummers hersteld |
+| Staafstart op de plek van een verborgen plaat, snaps uit | Camerawerkvlak (normaal 0,0,1); plaatvlak werd niet gebruikt, 0,10 ms snapverwerking |
+| Zelfde plaat weer zichtbaar en staafstart binnen het plaatvlak | Plaatwerkvlak (normaal 0,1,0), nieuwe knoop op Y = 0 m, 0,20 ms snapverwerking; dubbele plaat-raycast bij klikken verwijderd |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
