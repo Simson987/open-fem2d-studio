@@ -49,6 +49,8 @@ voor andere apparaten.
 | Model-weergave: op een plaat bij de cursor in- en weer uitzoomen | Zoomanker `geometry`, 6,7 en 6,0 ms; camera `18;-27,596945;2,5` m en doel `18;0;2,5` m kwamen exact terug. |
 | In ingezoomd vooraanzicht een staaf van plaatknoop K13 naar K12 tekenen | Staaf 7 (K13–K12) verscheen zonder nieuwe knopen; 20,2 ms incrementele opbouw (`append-beam`). |
 | In hetzelfde aanzicht profiel en selectiekader proberen | Klik midden op het zichtbare profiel selecteerde staaf 7; kader om het hele profiel selecteerde staaf 7 en beide eindknopen (0,7 ms). Een onvolledig kader selecteerde niets, overeenkomstig de huidige volledige-insluitingsregel. |
+| Op plaat 1, boven staaf 7, een opening met drie rechte randen en één boog tekenen | K14–K18 lagen alle op Y = 0 m; de boog gebruikte K16 als stuurpunt. Opening 1 sloot in 6,8 ms (`update-plate`), waarvan 1,6 ms plaatgeometrie. |
+| De nieuwe opening in vooraanzicht selecteren en naar isometrisch aanzicht wisselen | Klik in de uitsparing gaf geen selectie (0,2 ms), klik op plaat ernaast selecteerde plaat 1 (0,3 ms); de gebogen uitsparing bleef in het 3D-aanzicht zichtbaar. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
