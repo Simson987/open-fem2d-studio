@@ -212,6 +212,7 @@ const FRAME_3D_ICONS: Record<keyof Frame3DVisibility, string> = {
   grid: gridIcon,
   structuralGrid: tableIcon,
   axes: arrowIcon,
+  memberAxes: arrowIcon,
   deformation: viewerWireframeIcon,
   reactions: loadPointIcon,
   utilization: sectionsIcon,

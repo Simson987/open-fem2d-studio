@@ -6,7 +6,7 @@ import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { addFrame3DPlate, addFrame3DPlateOpening, frame3DLoadCaseId, splitFrame3DBeam, type Frame3DModel, type Frame3DPlateBoundarySegment } from "./frame3dModel";
 import type { Frame3DVisibility } from "./frame3dVisibility";
 import type { Frame3DView } from "./frame3dCommands";
-import { addFrame3DConditionMarkers } from "./frame3dMarkers";
+import { addFrame3DConditionMarkers, frame3DConditionMarkerSize } from "./frame3dMarkers";
 import type { StructuralGrid } from "../fem/femTypes";
 import type {
   Frame3DDiagramPoint,
@@ -31,6 +31,7 @@ import { frame3DViewFromCamera, type Frame3DCameraState } from "./frame3dViewSet
 import { createFrame3DPlateGeometry } from "./frame3dPlateGeometry";
 import { sampleCircularArc3D } from "./frame3dCircularArc";
 import { selectFrame3DInScreenBox } from "./frame3dBoxSelection";
+import { findFrame3DBeamNearScreenPoint } from "./frame3dBeamScreenPick";
 import type { Frame3DEditMeta } from "./frame3dHistory";
 import { useSnapInstellingen, type SnapInstellingen, type SnapSoort } from "../../hooks/useSnapInstellingen";
 import { frame3DGridLayout } from "./frame3dGrid";
@@ -302,6 +303,7 @@ interface Props {
   tool: Frame3DTool;
   selection: Frame3DSelection;
   onSelect: (selection: Frame3DSelection) => void;
+  onOpenCheckForBeam?: (beamId: number) => void;
   fitToken: number;
   visibility: Frame3DVisibility;
   structuralGrid?: StructuralGrid;
@@ -335,7 +337,7 @@ function renderFrame3DLabels(state: SceneState, container: HTMLElement | null) {
   state.labelRenderer.render(state.scene, state.camera);
   const layer = state.labelRenderer.domElement;
   const labels = Array.from(layer.querySelectorAll<HTMLElement>(
-    ".frame3d-result-label, .frame3d-utilization-label, .frame3d-profile-label, "
+    ".frame3d-result-label, .frame3d-utilization-label, .frame3d-profile-label, .frame3d-local-axis-label, "
     + ".frame3d-axis-label, .frame3d-node-label, .frame3d-beam-number, .frame3d-grid-label",
   ));
   if (labels.length === 0) {
@@ -626,6 +628,11 @@ function resultValue(value: number): string {
       : cleaned.toFixed(3);
 }
 
+function signedDiagramValue(value: number): string {
+  const formatted = resultValue(value);
+  return value >= 5e-10 ? `+${formatted}` : formatted;
+}
+
 interface ResultDiagramBatch {
   color: number;
   fillPositions: number[];
@@ -703,8 +710,8 @@ function addResultDiagram(
   const labelClass = `frame3d-result-label frame3d-diagram-label frame3d-diagram-${style.symbol.toLowerCase()}`;
   const last = samples.length - 1;
   const inset = Math.min(last, Math.max(1, Math.round(last * 0.18)));
-  group.add(makeLabel(`${style.symbol} ${resultValue(samples[0].value)} ${style.unit}`, labelClass, diagramPoints[inset]));
-  group.add(makeLabel(`${style.symbol} ${resultValue(samples[last].value)} ${style.unit}`, labelClass, diagramPoints[Math.max(0, last - inset)]));
+  group.add(makeLabel(`${style.symbol} ${signedDiagramValue(samples[0].value)} ${style.unit}`, labelClass, diagramPoints[inset]));
+  group.add(makeLabel(`${style.symbol} ${signedDiagramValue(samples[last].value)} ${style.unit}`, labelClass, diagramPoints[Math.max(0, last - inset)]));
 
   // Toon ook een maatgevende binnenwaarde. Dit maakt bijvoorbeeld het
   // parabolische veldmoment van een gelijkmatig belaste ligger direct leesbaar.
@@ -714,7 +721,7 @@ function addResultDiagram(
   }
   if (peakIndex > 1 && peakIndex < last - 1) {
     group.add(makeLabel(
-      `${style.symbol} ${resultValue(samples[peakIndex].value)} ${style.unit}`,
+      `${style.symbol} ${signedDiagramValue(samples[peakIndex].value)} ${style.unit}`,
       `${labelClass} frame3d-diagram-peak-label`,
       diagramPoints[peakIndex],
     ));
@@ -841,7 +848,7 @@ function resultScale(model: Frame3DModel, result: Frame3DSolveResult): number {
   return maxDisplacement > 1e-15 ? Math.min(10_000, modelSize * 0.12 / maxDisplacement) : 1;
 }
 
-export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDrawError, tool, selection, onSelect, fitToken, visibility, viewRequest, currentView = "iso", structuralGrid, gridSpacingM = 0.5, result, utilizations = [], activeLoadCaseId, cameraRequest, onCameraChange, onCameraViewChange }: Props) {
+export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDrawError, tool, selection, onSelect, onOpenCheckForBeam, fitToken, visibility, viewRequest, currentView = "iso", structuralGrid, gridSpacingM = 0.5, result, utilizations = [], activeLoadCaseId, cameraRequest, onCameraChange, onCameraViewChange }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneState | null>(null);
   const selectRef = useRef(onSelect);
@@ -1228,6 +1235,12 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1,
                   -((event.clientY - rect.top) / rect.height) * 2 + 1);
       raycaster.setFromCamera(pointer, camera);
+      // Three.js gebruikt anders een vaste wereldafstand van 1 m voor lijnen.
+      // Dat selecteert op een uitgezoomd raamwerk een last ver naast de cursor
+      // en kan een naburige staaf overstemmen. Houd circa vijf schermpixels aan.
+      const worldPerPixel = 2 * camera.position.distanceTo(controls.target)
+        * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / Math.max(rect.height, 1);
+      raycaster.params.Line.threshold = Math.max(0.02, worldPerPixel * 5);
     };
     const drawingAnchor = () => {
       const sketch = isOpeningTool(toolRef.current) ? openingDraftRef.current : plateDraftRef.current;
@@ -1247,8 +1260,15 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         : view === "side" ? new THREE.Vector3(1, 0, 0)
         : new THREE.Vector3(0, 0, 1);
       let plateOrigin: THREE.Vector3 | undefined;
-      if (isOpeningTool(toolRef.current) && openingPlateRef.current !== null) {
-        const plate = plateByIdRef.current!.get(openingPlateRef.current);
+      const openingPlateId = isOpeningTool(toolRef.current)
+        ? openingPlateRef.current ?? (selectionRef.current?.type === "plate" ? selectionRef.current.id : null)
+        : null;
+      if (openingPlateId !== null) {
+        // De ribbon kan het gereedschap al activeren voordat het effect de
+        // geselecteerde plaat vastlegt. Gebruik die selectie meteen, zodat de
+        // eerste openingsknoop nooit op de camerahoogte terechtkomt.
+        openingPlateRef.current = openingPlateId;
+        const plate = plateByIdRef.current!.get(openingPlateId);
         const boundaryNodes = plate?.nodeIds.map((id) => nodeByIdRef.current!.get(id)).filter(Boolean);
         if (boundaryNodes && boundaryNodes.length >= 3) {
           plateOrigin = new THREE.Vector3(boundaryNodes[0]!.x, boundaryNodes[0]!.y, boundaryNodes[0]!.z);
@@ -1266,7 +1286,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       const origin = anchor
         ? new THREE.Vector3(anchor.x, anchor.y, anchor.z)
         : plateOrigin ?? controls.target.clone();
-      return { anchor, view, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, origin) };
+      container.dataset.frame3dDrawingPlaneSource = anchor ? "anchor" : plateOrigin ? "plate" : "camera";
+      container.dataset.frame3dDrawingPlaneZ = origin.z.toFixed(6);
+      container.dataset.frame3dDrawingPlaneNormal = `${normal.x.toFixed(4)},${normal.y.toFixed(4)},${normal.z.toFixed(4)}`;
+      return { anchor, view, origin, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, origin) };
     };
     type DrawingSnap = { position: THREE.Vector3; nodeId?: number; kind?: SnapSoort };
     const ensureNodeSnapScreenIndex = () => {
@@ -1300,6 +1323,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       };
       delete container.dataset.frame3dSnapCandidates;
       const settings = snapsRef.current;
+      const openingPlane = isOpeningTool(toolRef.current) ? drawingPlane() : null;
       if (settings.knoop) {
         const index = ensureNodeSnapScreenIndex();
         const xPx = (pointer.x + 1) * index.width / 2;
@@ -1310,17 +1334,38 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         const draft = isOpeningTool(toolRef.current) ? openingDraftRef.current : plateDraftRef.current;
         const excludedNodeId = isArcBoundaryTool(toolRef.current)
           ? draft.arcControlNodeId ?? undefined : undefined;
-        const nodeHit = findFrame3DNodeScreenSnap(index, xPx, yPx, 14, excludedNodeId);
+        // Een knoop op een ander niveau kan in bovenaanzicht precies boven de
+        // opening liggen. Zo'n snap zou de opening niet-coplanair maken.
+        const acceptsOpeningNode = openingPlane ? (id: number) => {
+          const node = nodeByIdRef.current!.get(id);
+          const plane = openingPlane.plane;
+          return !!node && Math.abs(plane.normal.x * node.x + plane.normal.y * node.y
+            + plane.normal.z * node.z + plane.constant) <= 1e-5;
+        } : undefined;
+        const nodeHit = findFrame3DNodeScreenSnap(index, xPx, yPx, 14, excludedNodeId, acceptsOpeningNode);
         container.dataset.frame3dNodeSnapCandidates = String(nodeHit?.candidateCount ?? 0);
         if (nodeHit) {
           const node = nodeByIdRef.current!.get(nodeHit.point.id);
           if (node) return finish({ position: new THREE.Vector3(node.x, node.y, node.z), nodeId: node.id, kind: "knoop" });
         }
       }
-      const { anchor, view, plane } = drawingPlane();
+      const { view, origin, plane } = openingPlane ?? drawingPlane();
       const position = new THREE.Vector3();
       if (!raycaster.ray.intersectPlane(plane, position)) return finish(null);
       const raw = position.clone();
+      const onOpeningPlane = (candidate: THREE.Vector3) => {
+        if (!openingPlane) return candidate;
+        // Raster- en stramiensnap wijzigen coördinaten na de ray-plane
+        // doorsnijding. Bij een schuine plaat zou de openingsrand daardoor
+        // uit het plaatvlak springen. Los de diepte-as opnieuw op.
+        const normal = plane.normal;
+        const dependentAxis = view === "front" ? "y" : view === "side" ? "x" : "z";
+        const axis = Math.abs(normal[dependentAxis]) > 1e-8 ? dependentAxis
+          : (["x", "y", "z"] as const).reduce((best, current) =>
+              Math.abs(normal[current]) > Math.abs(normal[best]) ? current : best);
+        candidate[axis] -= plane.distanceToPoint(candidate) / normal[axis];
+        return candidate;
+      };
       if (settings.stramien && structuralGridRef.current?.enabled) {
         const structuralAxes = structuralSnapAxesRef.current;
         const candidates: Array<{
@@ -1347,15 +1392,15 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         if (view === "front") {
           const nearX = addSingleAxes("x", structuralAxes.x), nearZ = addSingleAxes("z", structuralAxes.z);
           nearX.forEach((x) => nearZ.forEach((z) =>
-              candidates.push({ point: new THREE.Vector3(x, anchor?.y ?? controls.target.y, z), axes: ["x", "z"] })));
+              candidates.push({ point: new THREE.Vector3(x, origin.y, z), axes: ["x", "z"] })));
         } else if (view === "side") {
           const nearY = addSingleAxes("y", structuralAxes.y), nearZ = addSingleAxes("z", structuralAxes.z);
           nearY.forEach((y) => nearZ.forEach((z) =>
-              candidates.push({ point: new THREE.Vector3(anchor?.x ?? controls.target.x, y, z), axes: ["y", "z"] })));
+              candidates.push({ point: new THREE.Vector3(origin.x, y, z), axes: ["y", "z"] })));
         } else {
           const nearX = addSingleAxes("x", structuralAxes.x), nearY = addSingleAxes("y", structuralAxes.y);
           nearX.forEach((x) => nearY.forEach((y) =>
-              candidates.push({ point: new THREE.Vector3(x, y, anchor?.z ?? controls.target.z), axes: ["x", "y"] })));
+              candidates.push({ point: new THREE.Vector3(x, y, origin.z), axes: ["x", "y"] })));
         }
         container.dataset.frame3dSnapCandidates = String(candidates.length);
         const nearest = candidates.reduce<{ point: THREE.Vector3; axes: readonly ("x" | "y" | "z")[]; distance: number } | null>((best, candidate) => {
@@ -1377,16 +1422,16 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
               if (!nearest.axes.includes(axis)) nearest.point[axis] = round(raw[axis]);
             });
           }
-          return finish({ position: nearest.point, kind: "stramien" });
+          return finish({ position: onOpeningPlane(nearest.point), kind: "stramien" });
         }
       }
       if (settings.raster) {
         const spacing = Math.max(0.001, gridSpacingRef.current);
         const round = (value: number) => Math.round(value / spacing) * spacing;
-        if (view === "front") position.set(round(raw.x), anchor?.y ?? controls.target.y, round(raw.z));
-        else if (view === "side") position.set(anchor?.x ?? controls.target.x, round(raw.y), round(raw.z));
-        else position.set(round(raw.x), round(raw.y), anchor?.z ?? controls.target.z);
-        return finish({ position, kind: "raster" });
+        if (view === "front") position.set(round(raw.x), origin.y, round(raw.z));
+        else if (view === "side") position.set(origin.x, round(raw.y), round(raw.z));
+        else position.set(round(raw.x), round(raw.y), origin.z);
+        return finish({ position: onOpeningPlane(position), kind: "raster" });
       }
       return finish({ position: raw });
     };
@@ -1582,19 +1627,35 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
             (1 - pointer.y) * nodeIndex.height / 2,
           )
         : null;
+      const beamScreenStartedAt = performance.now();
+      const beamScreenHit = toolRef.current !== "addBeam" && !loadIntersection && !nodeHit && intersections.length === 0
+        && visibilityRef.current.beams && !visibilityRef.current.profiles
+        ? findFrame3DBeamNearScreenPoint(
+            modelRef.current.beams, nodeByIdRef.current!,
+            camera, nodeIndex.width, nodeIndex.height,
+            (pointer.x + 1) * nodeIndex.width / 2,
+            (1 - pointer.y) * nodeIndex.height / 2,
+          )
+        : null;
       // Een last wint altijd. Binnen de knoopsnapzone wint daarna de knoop,
       // zodat het staafeinde net zo direct selecteerbaar is als in 2D.
       const intersection = loadIntersection ?? (nodeHit ? undefined : intersections[0]);
       let hit: THREE.Object3D | undefined = intersection?.object;
       while (hit && hit !== geometry && typeof hit.userData.type !== "string") hit = hit.parent ?? undefined;
-      const type = nodeHit && !loadIntersection ? "node" : hit?.userData.type;
+      const type = nodeHit && !loadIntersection ? "node" : beamScreenHit ? "beam" : hit?.userData.type;
       const instanceIds = hit?.userData.instanceIds as number[] | undefined;
       const id = nodeHit && !loadIntersection ? nodeHit.point.id
+        : beamScreenHit ? beamScreenHit.beamId
         : instanceIds && intersection?.instanceId !== undefined
         ? instanceIds[intersection.instanceId]
         : hit?.userData.id;
       container.dataset.frame3dPickMs = (performance.now() - pickStartedAt).toFixed(2);
+      container.dataset.frame3dPickType = String(type ?? "none");
+      container.dataset.frame3dPickId = String(id ?? "none");
       container.dataset.frame3dPickNodeCandidates = String(nodeHit?.candidateCount ?? 0);
+      container.dataset.frame3dPickBeamScreen = beamScreenHit
+        ? `${beamScreenHit.beamId}@${beamScreenHit.distancePx.toFixed(1)}px` : "none";
+      container.dataset.frame3dPickBeamScreenMs = (performance.now() - beamScreenStartedAt).toFixed(2);
       const activeTool = toolRef.current;
       let current = modelRef.current;
       const commitModel = (next: Frame3DModel, appended?: {
@@ -1872,6 +1933,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
             }
           }
         }
+      } else if (activeTool === "addMemberLoad") {
+        if (type === "beam" && typeof id === "number") {
+          selectRef.current({ type: "beam", id });
+        }
       } else {
         const selectable = (["node", "beam", "plate", "nodalLoad", "memberLoad", "memberPointLoad", "thermalLoad", "surfaceLoad"] as const)
           .includes(type) && typeof id === "number"
@@ -1975,7 +2040,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       containerRef.current.dataset.frame3dGridSpacingM = String(layout.visibleSpacingM);
       containerRef.current.dataset.frame3dGridDivisions = String(layout.divisions);
     }
-    state.renderer.render(state.scene, state.camera);
+    // Een modelwijziging rendert direct hierna in de scène-effect opnieuw.
+    // Teken alleen apart wanneer uitsluitend de rasterafstand wijzigt.
+    if (lastBuiltModelRef.current === model) state.renderer.render(state.scene, state.camera);
   }, [model.nodes, gridSpacingM]);
 
   useEffect(() => {
@@ -1985,21 +2052,380 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     const { geometry } = state;
     const previousModel = lastBuiltModelRef.current;
     const previousPresentation = lastBuiltPresentationRef.current;
+    const visibilityChangedOnly = (...allowedKeys: (keyof Frame3DVisibility)[]) =>
+      previousPresentation !== null
+      && (Object.keys(visibility) as (keyof Frame3DVisibility)[]).some((key) =>
+        allowedKeys.includes(key) && visibility[key] !== previousPresentation.visibility[key])
+      && (Object.keys(visibility) as (keyof Frame3DVisibility)[]).every((key) =>
+        allowedKeys.includes(key) || visibility[key] === previousPresentation.visibility[key]);
     // Oppervlaktebelastingen gebruiken de tijdens de volledige plaatopbouw
     // berekende driehoeksmesh en worden daarom niet los ververst.
-    const conditionLayerHasNoSurfaceLoads = !visibility.loads || (
+    const noSurfaceLoadsInEitherModel =
       (conditionModel?.surfaceLoads?.length ?? model.surfaceLoads?.length ?? 0) === 0
       && (lastBuiltConditionModelRef.current?.surfaceLoads?.length
-        ?? previousModel?.surfaceLoads?.length ?? 0) === 0
-    );
-    const conditionLayerOnly = previousModel === model
+        ?? previousModel?.surfaceLoads?.length ?? 0) === 0;
+    const conditionLayerHasNoSurfaceLoads = !visibility.loads || noSurfaceLoadsInEitherModel;
+    const sceneGuidesOnly = previousModel === model
+      && visibilityChangedOnly("grid", "axes")
+      && structuralGrid === previousPresentation?.structuralGrid
+      && result === previousPresentation?.result
+      && utilizations === previousPresentation?.utilizations
+      && activeLoadCaseId === previousPresentation?.activeLoadCaseId
+      && conditionModel === lastBuiltConditionModelRef.current;
+    if (sceneGuidesOnly) {
+      state.grid.visible = visibility.grid;
+      state.axes.visible = visibility.axes;
+      state.axisLabels.forEach((label) => { label.visible = visibility.axes; });
+      state.renderer.render(state.scene, state.camera);
+      renderFrame3DLabels(state, containerRef.current);
+      rememberBuiltPresentation();
+      if (containerRef.current) {
+        writeBuildMode(containerRef.current, "scene-guides");
+        containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+        containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
+      }
+      return;
+    }
+    const structuralGridVisibilityOnly = previousModel === model
+      && visibilityChangedOnly("structuralGrid")
+      && structuralGrid === previousPresentation?.structuralGrid
+      && result === previousPresentation?.result
+      && utilizations === previousPresentation?.utilizations
+      && activeLoadCaseId === previousPresentation?.activeLoadCaseId
+      && conditionModel === lastBuiltConditionModelRef.current;
+    const existingStructuralGrid = structuralGridVisibilityOnly
+      ? geometry.children.find((child) => child.userData.frame3dStructuralGrid === true)
+      : undefined;
+    if (structuralGridVisibilityOnly && existingStructuralGrid && structuralGrid?.enabled
+      && structuralGridLayoutKey(model, structuralGrid) === lastBuiltStructuralGridLayoutRef.current) {
+      existingStructuralGrid.visible = visibility.structuralGrid;
+      state.renderer.render(state.scene, state.camera);
+      renderFrame3DLabels(state, containerRef.current);
+      rememberBuiltPresentation();
+      if (containerRef.current) {
+        writeBuildMode(containerRef.current, "structural-grid-visibility");
+        containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+        containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
+      }
+      return;
+    }
+    const memberAxesVisibilityOnly = previousModel === model
+      && visibilityChangedOnly("memberAxes")
+      && structuralGrid === previousPresentation?.structuralGrid
+      && result === previousPresentation?.result
+      && utilizations === previousPresentation?.utilizations
+      && activeLoadCaseId === previousPresentation?.activeLoadCaseId
+      && conditionModel === lastBuiltConditionModelRef.current;
+    const existingMemberAxes = memberAxesVisibilityOnly
+      ? geometry.children.find((child) => child.userData.frame3dMemberAxes === true)
+      : undefined;
+    if (memberAxesVisibilityOnly && existingMemberAxes) {
+      existingMemberAxes.visible = visibility.memberAxes;
+      state.renderer.render(state.scene, state.camera);
+      renderFrame3DLabels(state, containerRef.current);
+      rememberBuiltPresentation();
+      if (containerRef.current) {
+        writeBuildMode(containerRef.current, "member-axes-visibility");
+        containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+        containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
+      }
+      return;
+    }
+    const nodeLabelsChanged = previousPresentation !== null
+      && (visibility.nodeNumbers !== previousPresentation.visibility.nodeNumbers
+        || visibility.nodeCoordinates !== previousPresentation.visibility.nodeCoordinates);
+    const beamLabelsChanged = previousPresentation !== null
+      && visibility.beamNumbers !== previousPresentation.visibility.beamNumbers;
+    const annotationLabelsOnly = previousModel === model
       && previousPresentation !== null
-      && sameFrame3DVisibility(visibility, previousPresentation.visibility)
+      && (nodeLabelsChanged || beamLabelsChanged)
+      && (Object.keys(visibility) as (keyof Frame3DVisibility)[]).every((key) =>
+        key === "nodeNumbers" || key === "nodeCoordinates" || key === "beamNumbers"
+          || visibility[key] === previousPresentation.visibility[key])
       && structuralGrid === previousPresentation.structuralGrid
       && result === previousPresentation.result
       && utilizations === previousPresentation.utilizations
-      && conditionLayerHasNoSurfaceLoads
-      && (conditionModel !== lastBuiltConditionModelRef.current
+      && activeLoadCaseId === previousPresentation.activeLoadCaseId
+      && conditionModel === lastBuiltConditionModelRef.current;
+    if (annotationLabelsOnly) {
+      const oldLabels = geometry.children.filter((child) => child instanceof CSS2DObject
+        && (nodeLabelsChanged && child.element.classList.contains("frame3d-node-label")
+          || beamLabelsChanged && child.element.classList.contains("frame3d-beam-number")));
+      oldLabels.forEach((label) => geometry.remove(label));
+      let addedLabels = 0;
+      if (nodeLabelsChanged && (visibility.nodeNumbers || visibility.nodeCoordinates)) {
+        const stride = model.nodes.length <= 200 ? 1 : Math.ceil(model.nodes.length / 24);
+        model.nodes.forEach((node, index) => {
+          if (index % stride !== 0) return;
+          const parts = [
+            visibility.nodeNumbers ? String(node.id) : "",
+            visibility.nodeCoordinates ? `(${node.x}, ${node.y}, ${node.z}) m` : "",
+          ].filter(Boolean);
+          geometry.add(makeLabel(parts.join(" · "), "frame3d-node-label",
+            new THREE.Vector3(node.x, node.y, node.z), { type: "node", id: node.id }));
+          addedLabels += 1;
+        });
+      }
+      if (beamLabelsChanged && visibility.beamNumbers) {
+        const stride = model.beams.length <= 200 ? 1 : Math.ceil(model.beams.length / 24);
+        model.beams.forEach((beam, index) => {
+          if (index % stride !== 0) return;
+          const start = nodeByIdRef.current!.get(beam.startNodeId);
+          const end = nodeByIdRef.current!.get(beam.endNodeId);
+          if (!start || !end) return;
+          const a = new THREE.Vector3(start.x, start.y, start.z);
+          const b = new THREE.Vector3(end.x, end.y, end.z);
+          const delta = b.clone().sub(a);
+          if (delta.lengthSq() <= 1e-16) return;
+          const axes = memberAxes(delta, beam.rollAngleRad ?? 0);
+          const midpoint = a.add(b).multiplyScalar(0.5).addScaledVector(axes.ey, 0.3);
+          geometry.add(makeLabel(`(${beam.id})`, "frame3d-beam-number", midpoint));
+          addedLabels += 1;
+        });
+      }
+      renderFrame3DLabels(state, containerRef.current);
+      rememberBuiltPresentation();
+      if (containerRef.current) {
+        const oldCount = Number(containerRef.current.dataset.frame3dLabels ?? 0);
+        containerRef.current.dataset.frame3dLabels = String(Math.max(0, oldCount - oldLabels.length + addedLabels));
+        containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
+        writeBuildMode(containerRef.current, nodeLabelsChanged && beamLabelsChanged ? "labels"
+          : nodeLabelsChanged ? "node-labels" : "beam-labels");
+        containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+      }
+      return;
+    }
+    const nodeVisibilityOnly = previousModel === model
+      && previousPresentation !== null
+      && visibility.nodes !== previousPresentation.visibility.nodes
+      && (Object.keys(visibility) as (keyof Frame3DVisibility)[]).every((key) =>
+        key === "nodes" || visibility[key] === previousPresentation.visibility[key])
+      && structuralGrid === previousPresentation.structuralGrid
+      && result === previousPresentation.result
+      && utilizations === previousPresentation.utilizations
+      && activeLoadCaseId === previousPresentation.activeLoadCaseId
+      && conditionModel === lastBuiltConditionModelRef.current;
+    const nodeVisual = nodeVisibilityOnly
+      ? geometry.children.find((child) => child.userData.frame3dNodeVisual === true)
+      : undefined;
+    if (nodeVisibilityOnly && nodeVisual) {
+      nodeVisual.visible = visibility.nodes;
+      nodePickTargetsRef.current.forEach((target) => { target.userData.pickable = visibility.nodes; });
+      state.renderer.render(state.scene, state.camera);
+      renderFrame3DLabels(state, containerRef.current);
+      rememberBuiltPresentation();
+      if (containerRef.current) {
+        writeBuildMode(containerRef.current, "node-visibility");
+        containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+        containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
+      }
+      return;
+    }
+    const beamVisibilityOnly = previousModel === model
+      && previousPresentation !== null
+      && visibility.beams !== previousPresentation.visibility.beams
+      && (Object.keys(visibility) as (keyof Frame3DVisibility)[]).every((key) =>
+        key === "beams" || visibility[key] === previousPresentation.visibility[key])
+      && structuralGrid === previousPresentation.structuralGrid
+      && result === previousPresentation.result
+      && utilizations === previousPresentation.utilizations
+      && activeLoadCaseId === previousPresentation.activeLoadCaseId
+      && conditionModel === lastBuiltConditionModelRef.current;
+    const existingBeamMeshes = beamVisibilityOnly
+      ? geometry.children.filter((child) => child.userData.type === "beam" && child instanceof THREE.Mesh)
+      : [];
+    if (beamVisibilityOnly && (!visibility.beams || model.beams.length === 0 || existingBeamMeshes.length > 0)) {
+      for (const mesh of existingBeamMeshes) mesh.visible = visibility.beams;
+      for (const child of geometry.children) {
+        if (child instanceof CSS2DObject && child.element.classList.contains("frame3d-utilization-label")) {
+          child.visible = visibility.beams;
+        }
+      }
+      const beamSet = new Set(existingBeamMeshes);
+      selectionPickTargetsRef.current = selectionPickTargetsRef.current.filter((target) => !beamSet.has(target));
+      nonNodePickTargetsRef.current = nonNodePickTargetsRef.current.filter((target) => !beamSet.has(target));
+      if (visibility.beams) {
+        selectionPickTargetsRef.current.push(...existingBeamMeshes);
+        nonNodePickTargetsRef.current.push(...existingBeamMeshes);
+      }
+      state.renderer.render(state.scene, state.camera);
+      renderFrame3DLabels(state, containerRef.current);
+      rememberBuiltPresentation();
+      if (containerRef.current) {
+        writeBuildMode(containerRef.current, "beam-visibility");
+        containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+        containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
+        containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);
+        containerRef.current.dataset.frame3dNonNodeLoadPickTargets = String(
+          nonNodePickTargetsRef.current.filter((target) => LOAD_SELECTION_TYPES.has(
+            target.userData.type as Frame3DSelectionType)).length);
+      }
+      return;
+    }
+    // Een wissel tussen hartlijnen en profielvolumes verandert alleen de
+    // staven. Laat platen, opleggingen, lasten en alle andere GPU-buffers staan;
+    // een volledige scène-opbouw uploadde die anders telkens opnieuw.
+    const profileVisibilityOnly = previousModel === model
+      && previousPresentation !== null
+      && visibility.profiles !== previousPresentation.visibility.profiles
+      && (Object.keys(visibility) as (keyof Frame3DVisibility)[]).every((key) =>
+        key === "profiles" || visibility[key] === previousPresentation.visibility[key])
+      && structuralGrid === previousPresentation.structuralGrid
+      && result === null && previousPresentation.result === null
+      && utilizations.length === 0 && previousPresentation.utilizations.length === 0
+      && activeLoadCaseId === previousPresentation.activeLoadCaseId
+      && conditionModel === lastBuiltConditionModelRef.current
+      && visibility.beams && model.beams.length < 100 && model.nodes.length < 250;
+    const oldProfileBeamMeshes = profileVisibilityOnly
+      ? geometry.children.filter((child) => child.userData.type === "beam" && child instanceof THREE.Mesh)
+      : [];
+    if (profileVisibilityOnly && oldProfileBeamMeshes.length === model.beams.length) {
+      const oldBeamSet = new Set(oldProfileBeamMeshes);
+      selectionPickTargetsRef.current = selectionPickTargetsRef.current.filter((target) => !oldBeamSet.has(target));
+      nonNodePickTargetsRef.current = nonNodePickTargetsRef.current.filter((target) => !oldBeamSet.has(target));
+      for (const mesh of oldProfileBeamMeshes) {
+        geometry.remove(mesh);
+        disposeObject3D(mesh);
+      }
+      for (const label of geometry.children.filter((child) => child instanceof CSS2DObject
+        && child.element.classList.contains("frame3d-profile-label"))) geometry.remove(label);
+      const byId = nodeByIdRef.current!;
+      const profileGeometries = new Map<string, THREE.BufferGeometry | null>();
+      const analyticalGeometries = new Map<string, THREE.CylinderGeometry>();
+      const profileEdges = new Map<THREE.BufferGeometry, THREE.EdgesGeometry>();
+      for (const beam of model.beams) {
+        const start = byId.get(beam.startNodeId);
+        const end = byId.get(beam.endNodeId);
+        if (!start || !end) continue;
+        const a = new THREE.Vector3(start.x, start.y, start.z);
+        const b = new THREE.Vector3(end.x, end.y, end.z);
+        const delta = b.clone().sub(a);
+        const length = delta.length();
+        if (length <= 1e-12) continue;
+        const key = `${beam.profileName ?? ""}\u0000${length.toFixed(9)}`;
+        if (visibility.profiles && beam.profileName && !profileGeometries.has(key)) {
+          profileGeometries.set(key, createFrame3DProfileGeometry(beam.profileName, length));
+        }
+        const profileGeometry = visibility.profiles ? profileGeometries.get(key) ?? null : null;
+        const radius = visibility.profiles ? PROFILE_BEAM_RADIUS_M : ANALYTICAL_BEAM_RADIUS_M;
+        const analyticalKey = `${radius}:${length.toFixed(9)}:${visibility.profiles ? 24 : 12}`;
+        if (!profileGeometry && !analyticalGeometries.has(analyticalKey)) {
+          analyticalGeometries.set(analyticalKey,
+            new THREE.CylinderGeometry(radius, radius, length, visibility.profiles ? 24 : 12));
+        }
+        const mesh = new THREE.Mesh(
+          profileGeometry ?? analyticalGeometries.get(analyticalKey)!,
+          new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.62, metalness: 0.04 }),
+        );
+        mesh.position.copy(a).add(b).multiplyScalar(0.5);
+        mesh.quaternion.copy(profileGeometry
+          ? memberRotation(delta, beam.rollAngleRad ?? 0)
+          : new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.normalize()));
+        mesh.userData = { type: "beam", id: beam.id };
+        if (profileGeometry) {
+          let edges = profileEdges.get(profileGeometry);
+          if (!edges) {
+            edges = new THREE.EdgesGeometry(profileGeometry, 28);
+            profileEdges.set(profileGeometry, edges);
+          }
+          const outline = new THREE.LineSegments(edges,
+            new THREE.LineBasicMaterial({ color: 0x1e293b, transparent: true, opacity: 0.42 }));
+          outline.userData = { type: "beam", id: beam.id, selectionColor: 0x7c2d12, pickable: false };
+          mesh.add(outline);
+          const axes = memberAxes(b.clone().sub(a), beam.rollAngleRad ?? 0);
+          geometry.add(makeLabel(beam.profileName!, "frame3d-profile-label",
+            a.clone().add(b).multiplyScalar(0.5).addScaledVector(axes.ez, -0.3)));
+        }
+        geometry.add(mesh);
+        selectionPickTargetsRef.current.push(mesh);
+        nonNodePickTargetsRef.current.push(mesh);
+      }
+      applySelectionHighlight(geometry, selectionRef.current);
+      const renderStartedAt = performance.now();
+      state.renderer.render(state.scene, state.camera);
+      const webglRenderMs = performance.now() - renderStartedAt;
+      renderFrame3DLabels(state, containerRef.current);
+      selectionRenderedWithModelRef.current = selectionRef.current;
+      rememberBuiltPresentation();
+      if (containerRef.current) {
+        writeBuildMode(containerRef.current, "beam-profiles");
+        containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+        containerRef.current.dataset.frame3dFullRenderMs = (performance.now() - renderStartedAt).toFixed(2);
+        containerRef.current.dataset.frame3dWebglRenderMs = webglRenderMs.toFixed(2);
+        containerRef.current.dataset.frame3dLabelRenderMs =
+          (performance.now() - renderStartedAt - webglRenderMs).toFixed(2);
+        containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
+        containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
+        containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);
+      }
+      return;
+    }
+    // Verbergen/tonen van bestaande platen hoeft hun triangulatie niet opnieuw
+    // te bouwen. Houd ook de pick-lijsten gelijk aan wat werkelijk zichtbaar is.
+    const plateVisibilityOnly = previousModel === model
+      && previousPresentation !== null
+      && visibility.plates !== previousPresentation.visibility.plates
+      && (Object.keys(visibility) as (keyof Frame3DVisibility)[]).every((key) =>
+        key === "plates" || visibility[key] === previousPresentation.visibility[key])
+      && structuralGrid === previousPresentation.structuralGrid
+      && result === previousPresentation.result
+      && utilizations === previousPresentation.utilizations
+      && activeLoadCaseId === previousPresentation.activeLoadCaseId
+      && conditionModel === lastBuiltConditionModelRef.current
+      && conditionLayerHasNoSurfaceLoads;
+    const existingPlateMeshes = plateVisibilityOnly
+      ? geometry.children.filter((child) => child.userData.type === "plate" && child instanceof THREE.Mesh)
+      : [];
+    if (plateVisibilityOnly && (!visibility.plates || model.plates?.length === 0 || existingPlateMeshes.length > 0)) {
+      for (const mesh of existingPlateMeshes) mesh.visible = visibility.plates;
+      // Bij grote modellen zijn plaatranden één losse, gebatchte lijnlaag.
+      // Die moet met de meshes verdwijnen en terugkomen.
+      for (const child of geometry.children) {
+        if (child.userData.frame3dPlateEdges === true) child.visible = visibility.plates;
+      }
+      const plateSet = new Set(existingPlateMeshes);
+      selectionPickTargetsRef.current = selectionPickTargetsRef.current.filter((target) => !plateSet.has(target));
+      nonNodePickTargetsRef.current = nonNodePickTargetsRef.current.filter((target) => !plateSet.has(target));
+      if (visibility.plates) {
+        selectionPickTargetsRef.current.push(...existingPlateMeshes);
+        nonNodePickTargetsRef.current.push(...existingPlateMeshes);
+      }
+      state.renderer.render(state.scene, state.camera);
+      renderFrame3DLabels(state, containerRef.current);
+      rememberBuiltPresentation();
+      if (containerRef.current) {
+        writeBuildMode(containerRef.current, "plate-visibility");
+        containerRef.current.dataset.frame3dBuildMs = (performance.now() - rebuildStartedAt).toFixed(2);
+        containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
+        containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);
+      }
+      return;
+    }
+    const supportVisibilityOnly = previousModel === model
+      && visibilityChangedOnly("supports")
+      && structuralGrid === previousPresentation?.structuralGrid
+      && result === previousPresentation?.result
+      && utilizations === previousPresentation?.utilizations
+      && activeLoadCaseId === previousPresentation?.activeLoadCaseId
+      && conditionModel === lastBuiltConditionModelRef.current;
+    const loadVisibilityOnly = previousModel === model
+      && visibilityChangedOnly("loads")
+      && noSurfaceLoadsInEitherModel
+      && structuralGrid === previousPresentation?.structuralGrid
+      && result === previousPresentation?.result
+      && utilizations === previousPresentation?.utilizations
+      && activeLoadCaseId === previousPresentation?.activeLoadCaseId
+      && conditionModel === lastBuiltConditionModelRef.current;
+    const conditionLayerOnly = previousModel === model
+      && previousPresentation !== null
+      && (sameFrame3DVisibility(visibility, previousPresentation.visibility)
+        || supportVisibilityOnly || loadVisibilityOnly)
+      && structuralGrid === previousPresentation.structuralGrid
+      && result === previousPresentation.result
+      && utilizations === previousPresentation.utilizations
+      && (supportVisibilityOnly || loadVisibilityOnly || conditionLayerHasNoSurfaceLoads)
+      && (supportVisibilityOnly || loadVisibilityOnly
+        || conditionModel !== lastBuiltConditionModelRef.current
         || activeLoadCaseId !== previousPresentation.activeLoadCaseId);
     if (conditionLayerOnly) {
       const oldConditions = geometry.children.find((child) => child.userData.frame3dConditions === true);
@@ -2015,6 +2441,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       }
       selectionPickTargetsRef.current = selectionPickTargetsRef.current
         .filter((target) => !removedConditionObjects.has(target));
+      // De gewone klik gebruikt een tweede raycast-lijst. Oude lastpijlen
+      // daarin zouden na omschakelen naar Model onzichtbaar selecteerbaar blijven.
+      nonNodePickTargetsRef.current = nonNodePickTargetsRef.current
+        .filter((target) => !removedConditionObjects.has(target));
       const nextConditions = new THREE.Group();
       nextConditions.userData.frame3dConditions = true;
       addFrame3DConditionMarkers(nextConditions, conditionModel ?? model, visibility, activeLoadCaseId);
@@ -2026,6 +2456,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         if (type && object.userData.pickable !== false && SELECTABLE_TYPES.has(type)
           && typeof (object as { raycast?: unknown }).raycast === "function") {
           selectionPickTargetsRef.current.push(object);
+          if (type !== "node") nonNodePickTargetsRef.current.push(object);
         }
       });
       applySelectionHighlight(nextConditions, selectionRef.current);
@@ -2040,6 +2471,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
         containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
         containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);
+        containerRef.current.dataset.frame3dNonNodeLoadPickTargets = String(
+          nonNodePickTargetsRef.current.filter((target) => LOAD_SELECTION_TYPES.has(
+            target.userData.type as Frame3DSelectionType)).length);
         containerRef.current.dataset.frame3dLabels = String(visibleLabelCount);
       }
       return;
@@ -2239,6 +2673,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       && movedNodeRadiusStable
       && (!visibility.plates || affectedPlates.length === 0)
       && !visibility.beamNumbers
+      && !visibility.memberAxes
       && conditionGeometryStable
       && resultGeometryStable
       && utilizationGeometryStable;
@@ -2412,6 +2847,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       && (!(visibility.nodeNumbers || visibility.nodeCoordinates)
         || previousNodeLabelStride === nextNodeLabelStride)
       && !visibility.beamNumbers
+      && !visibility.memberAxes
       && appendConditionGeometryStable
       && !result
       && (!visibility.utilization || utilizations.length === 0);
@@ -2548,6 +2984,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       && unchangedCollections
       && (!(visibility.nodeNumbers || visibility.nodeCoordinates) || removalNodeLabelStrideStable)
       && !visibility.beamNumbers
+      && !visibility.memberAxes
       && appendConditionGeometryStable
       && !result
       && (!visibility.utilization || utilizations.length === 0);
@@ -2652,6 +3089,15 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       const nodeLabelSamplingStable = !(visibility.nodeNumbers || visibility.nodeCoordinates)
         || previousNodeLabelStride === nodeLabelStride;
       const beam = appendedBeam ? model.beams[model.beams.length - 1]! : undefined;
+      const memberAxesGroup = visibility.memberAxes
+        ? geometry.children.find((child) => child.userData.frame3dMemberAxes === true)
+        : undefined;
+      const memberAxesReady = !visibility.memberAxes || !beam || (
+        memberAxesGroup instanceof THREE.Group
+        && (previousModel.beams.length <= 12) === (model.beams.length <= 12)
+        && [0, 1, 2].every((axisIndex) => memberAxesGroup.children.some((child) =>
+          child.userData.frame3dAxisIndex === axisIndex && child instanceof THREE.LineSegments))
+      );
       const previousBeamLabelStride = previousModel.beams.length <= 200
         ? 1 : Math.ceil(previousModel.beams.length / 24);
       const beamLabelStride = model.beams.length <= 200 ? 1 : Math.ceil(model.beams.length / 24);
@@ -2681,10 +3127,18 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       // kunnen we de al aanwezige knoopbatches veilig hergebruiken. De
       // definitieve plaatopbouw ververst daarna de overige begrenzingsafhankelijke
       // geometrie in één keer.
+      // Een gewone staaf mag eveneens buiten de oude grens eindigen zolang
+      // de schaal van bestaande knoop- en oplegsymbolen gelijk blijft. Raster
+      // en camerabereik worden onafhankelijk van deze snelle toevoeging bijgewerkt.
+      const outsideBoundsScaleStable = Math.abs(visualNodeRadius(model) - visualNodeRadiusRef.current) < 1e-12
+        && Math.abs(frame3DConditionMarkerSize((conditionModel ?? model).nodes)
+          - frame3DConditionMarkerSize((previousConditionModel ?? previousModel).nodes)) < 1e-12;
       const nodeInsideBounds = !node || interactivePlateNodeAppend
-        || (previousBounds !== null && previousBounds.containsPoint(new THREE.Vector3(node.x, node.y, node.z)));
+        || (previousBounds !== null && previousBounds.containsPoint(new THREE.Vector3(node.x, node.y, node.z)))
+        || outsideBoundsScaleStable;
       const fastPathReady = nodeCapacityAvailable && beamCapacityAvailable && beamEndpointsValid
-        && conditionLoadsStable && nodeLabelSamplingStable && beamLabelSamplingStable && nodeInsideBounds;
+        && conditionLoadsStable && nodeLabelSamplingStable && beamLabelSamplingStable
+        && memberAxesReady && nodeInsideBounds;
       // Binnen de bestaande begrenzing blijven knoopstraal, opleggingsgrootte
       // en stramienbereik gelijk. Voeg de knoop dan rechtstreeks aan de al
       // aanwezige GPU-batches toe; alle onveranderde geometrie blijft staan.
@@ -2826,6 +3280,40 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
             addedLabels += 1;
           }
         }
+        if (beam && visibility.memberAxes && memberAxesGroup instanceof THREE.Group) {
+          const start = beamStart!;
+          const end = beamEnd!;
+          const a = new THREE.Vector3(start.x, start.y, start.z);
+          const b = new THREE.Vector3(end.x, end.y, end.z);
+          const delta = b.clone().sub(a);
+          const axes = memberAxes(delta, beam.rollAngleRad ?? 0);
+          const origin = a.clone().lerp(b, 0.5);
+          const axisLength = Math.min(0.5, Math.max(0.12, delta.length() * 0.16));
+          ([axes.ex, axes.ey, axes.ez] as const).forEach((direction, axisIndex) => {
+            const tip = origin.clone().addScaledVector(direction, axisLength);
+            const side = new THREE.Vector3().crossVectors(direction, axisIndex === 2 ? axes.ex : axes.ez).normalize();
+            const wing = Math.min(axisLength * 0.28, 0.09);
+            const positions = [origin.x, origin.y, origin.z, tip.x, tip.y, tip.z];
+            for (const sign of [-1, 1]) {
+              const shoulder = tip.clone().addScaledVector(direction, -wing).addScaledVector(side, sign * wing * 0.45);
+              positions.push(tip.x, tip.y, tip.z, shoulder.x, shoulder.y, shoulder.z);
+            }
+            const line = memberAxesGroup.children.find((child) =>
+              child.userData.frame3dAxisIndex === axisIndex) as THREE.LineSegments;
+            const previousPositions = line.geometry.getAttribute("position").array as Float32Array;
+            const combined = new Float32Array(previousPositions.length + positions.length);
+            combined.set(previousPositions);
+            combined.set(positions, previousPositions.length);
+            line.geometry.dispose();
+            line.geometry = new THREE.BufferGeometry();
+            line.geometry.setAttribute("position", new THREE.BufferAttribute(combined, 3));
+            line.geometry.computeBoundingSphere();
+            if (model.beams.length <= 12 || selectionRef.current?.type === "beam" && selectionRef.current.id === beam.id) {
+              memberAxesGroup.add(makeLabel(["x", "y", "z"][axisIndex], "frame3d-local-axis-label", tip));
+              addedLabels += 1;
+            }
+          });
+        }
         applySelectionHighlight(geometry, selectionRef.current);
         state.renderer.render(state.scene, state.camera);
         renderFrame3DLabels(state, containerRef.current);
@@ -2860,6 +3348,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           !conditionLoadsStable ? "condition-loads" : "",
           !nodeLabelSamplingStable ? "node-labels" : "",
           !beamLabelSamplingStable ? "beam-labels" : "",
+          !memberAxesReady ? "member-axes" : "",
           !nodeInsideBounds ? "bounds" : "",
         ].filter(Boolean).join(",");
       }
@@ -2965,11 +3454,14 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       return (selected?.type === "beam" && selected.id === beamId)
         || (selected?.type === "multi" && selected.beamIds.includes(beamId));
     };
-    const nodeGeometry = visibility.nodes ? new THREE.SphereGeometry(nodeRadius, 24, 16) : null;
+    const nodeGeometry = new THREE.SphereGeometry(nodeRadius, 24, 16);
     // Snapzones blijven bestaan wanneer de knoopbollen verborgen zijn. Zo is
     // Weergave onafhankelijk van de actieve Knoop-snap, zoals in de 2D-editor.
     const nodeHitGeometry = new THREE.SphereGeometry(nodeRadius * 2.6, 12, 8);
     const utilizationByMember = new Map(utilizations.map((value) => [value.beamId, value]));
+    const localAxisSegments: number[][] = [[], [], []];
+    const memberAxesGroup = new THREE.Group();
+    memberAxesGroup.userData.frame3dMemberAxes = true;
     for (const [beamIndex, beam] of model.beams.entries()) {
       const start = byId.get(beam.startNodeId);
       const end = byId.get(beam.endNodeId);
@@ -2980,6 +3472,23 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       const length = delta.length();
       if (length === 0) continue;
       const axes = memberAxes(delta, beam.rollAngleRad ?? 0);
+      if (visibility.memberAxes) {
+        const origin = a.clone().lerp(b, 0.5);
+        const axisLength = Math.min(0.5, Math.max(0.12, length * 0.16));
+        ([axes.ex, axes.ey, axes.ez] as const).forEach((direction, axisIndex) => {
+          const tip = origin.clone().addScaledVector(direction, axisLength);
+          localAxisSegments[axisIndex].push(origin.x, origin.y, origin.z, tip.x, tip.y, tip.z);
+          const side = new THREE.Vector3().crossVectors(direction, axisIndex === 2 ? axes.ex : axes.ez).normalize();
+          const wing = Math.min(axisLength * 0.28, 0.09);
+          for (const sign of [-1, 1]) {
+            const shoulder = tip.clone().addScaledVector(direction, -wing).addScaledVector(side, sign * wing * 0.45);
+            localAxisSegments[axisIndex].push(tip.x, tip.y, tip.z, shoulder.x, shoulder.y, shoulder.z);
+          }
+          if (model.beams.length <= 12 || selectionRef.current?.type === "beam" && selectionRef.current.id === beam.id) {
+            memberAxesGroup.add(makeLabel(["x", "y", "z"][axisIndex], "frame3d-local-axis-label", tip));
+          }
+        });
+      }
       if (visibility.beams) {
         const utilization = visibility.utilization ? utilizationByMember.get(beam.id) : undefined;
         const utilizationClass = utilization ? frame3DUtilizationClass(utilization) : undefined;
@@ -3041,13 +3550,30 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           const midpoint = a.clone().add(b).multiplyScalar(0.5)
             .addScaledVector(axes.ez, 0.42)
             .addScaledVector(axes.ey, 0.12);
-          geometry.add(makeLabel(
+          const label = makeLabel(
             utilization.status === "NotApplicable"
               ? `${utilization.standard} · n.v.t.`
               : `${utilization.standard} · UC ${utilization.uc.toFixed(2)}`,
             `frame3d-utilization-label frame3d-utilization-${utilizationClass}`,
             midpoint,
-          ));
+          );
+          label.element.setAttribute("role", "button");
+          label.element.setAttribute("tabindex", "0");
+          label.element.setAttribute("title", `Staaf ${beam.id}: open normtoetsing`);
+          label.element.style.pointerEvents = "auto";
+          const openCheck = (event: Event) => {
+            event.stopPropagation();
+            onOpenCheckForBeam?.(beam.id);
+          };
+          label.element.addEventListener("pointerdown", (event) => event.stopPropagation());
+          label.element.addEventListener("click", openCheck);
+          label.element.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              openCheck(event);
+            }
+          });
+          geometry.add(label);
         }
       }
       if (visibility.beamNumbers && beamIndex % beamLabelStride === 0) {
@@ -3058,6 +3584,20 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         const midpoint = a.clone().add(b).multiplyScalar(0.5).addScaledVector(axes.ez, -0.3);
         geometry.add(makeLabel(beam.profileName, "frame3d-profile-label", midpoint));
       }
+    }
+    if (visibility.memberAxes) {
+      [0xdc2626, 0x16a34a, 0x2563eb].forEach((color, axisIndex) => {
+        const positions = localAxisSegments[axisIndex];
+        if (positions.length === 0) return;
+        const axisGeometry = new THREE.BufferGeometry();
+        axisGeometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+        const lines = new THREE.LineSegments(axisGeometry, new THREE.LineBasicMaterial({ color, depthTest: false }));
+        lines.renderOrder = 20;
+        lines.userData.pickable = false;
+        lines.userData.frame3dAxisIndex = axisIndex;
+        memberAxesGroup.add(lines);
+      });
+      geometry.add(memberAxesGroup);
     }
     for (const [batchKey, batch] of beamInstanceBatches) {
       const instanceCapacity = 2 ** Math.ceil(Math.log2(Math.max(8, batch.instances.length + 1)));
@@ -3196,9 +3736,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       // Reserveer in machten van twee ruimte voor interactief bijtekenen. Een
       // enkele nieuwe knoop past dan meestal in de bestaande GPU-buffer.
       const instanceCapacity = 2 ** Math.ceil(Math.log2(Math.max(256, model.nodes.length + 1)));
-      const visibleNodes = visibility.nodes ? new THREE.InstancedMesh(
-        nodeGeometry!, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.06 }), instanceCapacity,
-      ) : null;
+      const visibleNodes = new THREE.InstancedMesh(
+        nodeGeometry, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.06 }), instanceCapacity,
+      );
+      visibleNodes.visible = visibility.nodes;
       const hitNodes = new THREE.InstancedMesh(
         nodeHitGeometry,
         new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
@@ -3313,11 +3854,36 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         arrow.traverse((child) => { child.userData = { type: "surfaceLoad", id: load.id }; });
         geometry.add(arrow);
         if (loadIndex % surfaceLoadLabelStride === 0) {
-          geometry.add(makeLabel(
+          const label = makeLabel(
             `q = ${resultValue(magnitude)} kN/m²`,
             "frame3d-result-label frame3d-surface-load-label",
             built.surfaceAnchor.clone().addScaledVector(built.normal, 0.12),
-          ));
+          );
+          // In bovenaanzicht projecteert de verticale lastpijl vrijwel op
+          // één pixel. Het zichtbare label moet daarom zelf selecteerbaar
+          // zijn, ook wanneer de plaat een opening rond zijn zwaartepunt heeft.
+          label.element.setAttribute("role", "button");
+          label.element.setAttribute("tabindex", "0");
+          label.element.setAttribute("title", `Selecteer oppervlaktebelasting ${load.id}`);
+          label.element.style.pointerEvents = "auto";
+          label.element.addEventListener("pointerdown", (event) => event.stopPropagation());
+          label.element.addEventListener("click", (event) => {
+            event.stopPropagation();
+            selectRef.current(toggleFrame3DSelection(
+              selectionRef.current, { type: "surfaceLoad", id: load.id },
+              event.shiftKey || event.ctrlKey || event.metaKey,
+            ));
+          });
+          label.element.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            event.stopPropagation();
+            selectRef.current(toggleFrame3DSelection(
+              selectionRef.current, { type: "surfaceLoad", id: load.id },
+              event.shiftKey || event.ctrlKey || event.metaKey,
+            ));
+          });
+          geometry.add(label);
         }
       }
     }
@@ -3489,6 +4055,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     applySelectionHighlight(geometry, selectionRef.current);
     const renderStartedAt = performance.now();
     state.renderer.render(state.scene, state.camera);
+    const webglRenderMs = performance.now() - renderStartedAt;
     renderFrame3DLabels(state, containerRef.current);
     const renderMs = performance.now() - renderStartedAt;
     selectionRenderedWithModelRef.current = selectionRef.current;
@@ -3499,6 +4066,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       containerRef.current.dataset.frame3dPlateGeometryMs = plateGeometryMs.toFixed(2);
       containerRef.current.dataset.frame3dPlateLayerMs = plateLayerMs.toFixed(2);
       containerRef.current.dataset.frame3dFullRenderMs = renderMs.toFixed(2);
+      containerRef.current.dataset.frame3dWebglRenderMs = webglRenderMs.toFixed(2);
+      containerRef.current.dataset.frame3dLabelRenderMs = (renderMs - webglRenderMs).toFixed(2);
       containerRef.current.dataset.frame3dDrawCalls = String(state.renderer.info.render.calls);
       containerRef.current.dataset.frame3dSceneObjects = String(geometry.children.length);
       containerRef.current.dataset.frame3dPickTargets = String(selectionPickTargetsRef.current.length);
@@ -3590,7 +4159,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
   }, [cameraRequest?.token]);
 
   return <div
-    className={`frame3d-canvas frame3d-tool-${tool} ${tool.startsWith("support:") ? "frame3d-tool-support" : ""}`}
+    className={`frame3d-canvas frame3d-tool-${tool} ${tool.startsWith("support:") || tool === "addMemberLoad" ? "frame3d-tool-support" : ""}`}
     ref={containerRef}
     aria-label={`3D raamwerk · ${viewRequest?.kind ?? currentView}`}
   />;

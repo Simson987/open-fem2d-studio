@@ -6,13 +6,41 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FRONTEND="$ROOT/design-mockup"
 URL="http://127.0.0.1:1440"
 
-for program in node cargo pkg-config curl; do
+# Codex kan de toolchains per sessie buiten de gewone PATH plaatsen.
+if ! command -v node >/dev/null 2>&1 && [[ -x "$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node" ]]; then
+  export PATH="$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH"
+fi
+if ! command -v cargo >/dev/null 2>&1 && [[ -x /tmp/open-fem-cargo/bin/cargo ]]; then
+  export PATH="/tmp/open-fem-cargo/bin:$PATH"
+  export CARGO_HOME="${CARGO_HOME:-/tmp/open-fem-cargo}"
+  export RUSTUP_HOME="${RUSTUP_HOME:-/tmp/open-fem-rustup}"
+fi
+
+for program in node cargo pkg-config curl pgrep flock; do
   if ! command -v "$program" >/dev/null 2>&1; then
     echo "Ontbrekend programma: $program" >&2
     exit 1
   fi
 done
 
+if pgrep -f '^target/debug/open-fem2d-studio$' >/dev/null 2>&1; then
+  echo "Open FEM Studio draait al. Het bestaande venster blijft gekoppeld aan $URL."
+  exit 0
+fi
+exec 9>"/tmp/open-fem-desktop-dev-${UID}.lock"
+if ! flock -n 9; then
+  echo "De ontwikkelapp wordt al gestart; er komt geen tweede venster."
+  exit 0
+fi
+
+if ! pkg-config --exists cairo gtk+-3.0 webkit2gtk-4.1; then
+  LOCAL_SYSROOT="${OPEN_FEM_DEV_SYSROOT:-/tmp/open-fem-builddeps/root}"
+  if [[ -d "$LOCAL_SYSROOT/usr/lib/x86_64-linux-gnu/pkgconfig" ]]; then
+    export PKG_CONFIG_PATH="$LOCAL_SYSROOT/usr/lib/x86_64-linux-gnu/pkgconfig:$LOCAL_SYSROOT/usr/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+    export PKG_CONFIG_SYSROOT_DIR="$LOCAL_SYSROOT"
+    export LIBRARY_PATH="$LOCAL_SYSROOT/usr/lib/x86_64-linux-gnu${LIBRARY_PATH:+:$LIBRARY_PATH}"
+  fi
+fi
 if ! pkg-config --exists cairo gtk+-3.0 webkit2gtk-4.1; then
   echo "Ontbrekende Linux-bouwbibliotheken: cairo, GTK 3 of WebKitGTK 4.1." >&2
   echo "Installeer de ontwikkelpakketten voordat Tauri kan bouwen." >&2

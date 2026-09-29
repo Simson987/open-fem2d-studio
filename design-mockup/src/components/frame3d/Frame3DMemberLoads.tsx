@@ -33,7 +33,7 @@ type PointValues = Record<"py" | "pz" | "positionM", string>;
 type ThermalValues = Record<"deltaTUniformK" | "deltaTGradientYK" | "deltaTGradientZK", string>;
 
 function emptyValues(lengthM: number): Values {
-  return { qyStart: "0", qyEnd: "0", qzStart: "0", qzEnd: "0", startPositionM: "0", endPositionM: String(lengthM) };
+  return { qyStart: "0", qyEnd: "0", qzStart: "-5", qzEnd: "-5", startPositionM: "0", endPositionM: String(lengthM) };
 }
 
 function loadValues(load: Frame3DMemberLoad): Values {
@@ -54,6 +54,9 @@ export default function Frame3DMemberLoads({
     load.beamId === beamId && (load.caseId ?? 1) === activeLoadCaseId);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [values, setValues] = useState<Values>(() => emptyValues(lengthM));
+  const [activeEditor, setActiveEditor] = useState<"line" | "point" | "thermal">("line");
+  const [lineDirection, setLineDirection] = useState<"y" | "z">("z");
+  const [showLineDetails, setShowLineDetails] = useState(false);
   const [error, setError] = useState("");
   const firstInput = useRef<HTMLInputElement>(null);
   const pointLoads = (model.memberPointLoads ?? []).filter((load) =>
@@ -70,18 +73,23 @@ export default function Frame3DMemberLoads({
   const firstThermalInput = useRef<HTMLInputElement>(null);
 
   const beginNew = () => {
+    setActiveEditor("line");
     setEditingId(null);
     setValues(emptyValues(lengthM));
+    setLineDirection("z");
+    setShowLineDetails(false);
     setError("");
     requestAnimationFrame(() => firstInput.current?.focus());
   };
   const beginNewPoint = () => {
+    setActiveEditor("point");
     setPointEditingId(null);
     setPointValues({ py: "0", pz: "-10", positionM: String(lengthM / 2) });
     setError("");
     requestAnimationFrame(() => firstPointInput.current?.focus());
   };
   const beginNewThermal = () => {
+    setActiveEditor("thermal");
     setThermalEditingId(null);
     setThermalValues({ deltaTUniformK: "20", deltaTGradientYK: "0", deltaTGradientZK: "0" });
     setError("");
@@ -114,8 +122,12 @@ export default function Frame3DMemberLoads({
   }, [thermalEditorRequest]);
 
   const select = (load: Frame3DMemberLoad) => {
+    setActiveEditor("line");
     setEditingId(load.id);
     setValues(loadValues(load));
+    setLineDirection(Math.abs(load.qyStart) + Math.abs(load.qyEnd) > Math.abs(load.qzStart) + Math.abs(load.qzEnd) ? "y" : "z");
+    setShowLineDetails(load.qyStart !== load.qyEnd || load.qzStart !== load.qzEnd ||
+      (load.qyStart !== 0 && load.qzStart !== 0) || load.startPositionM !== 0 || load.endPositionM !== lengthM);
     setError("");
   };
 
@@ -144,6 +156,7 @@ export default function Frame3DMemberLoads({
   };
 
   const selectPoint = (load: Frame3DMemberPointLoad) => {
+    setActiveEditor("point");
     setPointEditingId(load.id);
     setPointValues({ py: String(load.py), pz: String(load.pz), positionM: String(load.positionM) });
     setError("");
@@ -174,6 +187,7 @@ export default function Frame3DMemberLoads({
   };
 
   const selectThermal = (load: Frame3DThermalLoad) => {
+    setActiveEditor("thermal");
     setThermalEditingId(load.id);
     setThermalValues({
       deltaTUniformK: String(load.deltaTUniformK),
@@ -226,36 +240,63 @@ export default function Frame3DMemberLoads({
       onChange={(event) => setValues({ ...values, [name]: event.target.value })} />
   </label>;
 
-  return <div className="frame3d-conditions">
-    <section>
-      <h3>Staafbelasting · lokale assen</h3>
-      <p className="fem-prop-hint">qy en qz in kN/m. Negatieve qz wijst bij horizontale staven omlaag.</p>
+  return <div className="frame3d-conditions frame3d-member-loads">
+    <div className="frame3d-load-tabs" role="tablist" aria-label="Belasting op staaf">
+      <button type="button" role="tab" aria-selected={activeEditor === "line"} onClick={() => setActiveEditor("line")}>Lijnlast</button>
+      <button type="button" role="tab" aria-selected={activeEditor === "point"} onClick={() => setActiveEditor("point")}>Puntlast</button>
+      <button type="button" role="tab" aria-selected={activeEditor === "thermal"} onClick={() => setActiveEditor("thermal")}>Temperatuur</button>
+    </div>
+    {activeEditor === "line" && <section>
+      <h3>Lijnlast op staaf</h3>
+      <p className="fem-prop-hint">Lokale richting · kN/m · staaflengte {lengthM.toFixed(2)} m</p>
       {loads.length > 0 && <div className="frame3d-condition-load-list">
         {loads.map((load) => <div key={load.id} className={editingId === load.id ? "selected" : ""}>
           <button type="button" onClick={() => select(load)}><strong>#{load.id}</strong> {describe(load)}</button>
           <button type="button" onClick={() => remove(load.id)} aria-label={`Verwijder staafbelasting ${load.id}`}>×</button>
         </div>)}
       </div>}
-      <button className="frame3d-condition-new" type="button" onClick={beginNew}>Nieuwe staafbelasting</button>
+      <button className="frame3d-condition-new" type="button" onClick={beginNew}>+ Nieuwe lijnlast</button>
       <form onSubmit={save}>
-        <fieldset>
-          <legend>Intensiteit begin / eind (kN/m)</legend>
-          <div className="frame3d-condition-values frame3d-member-load-values">
-            {field("qyStart", "qy begin")}{field("qyEnd", "qy eind")}
-            {field("qzStart", "qz begin", true)}{field("qzEnd", "qz eind")}
-          </div>
-        </fieldset>
-        <fieldset>
-          <legend>Belast bereik vanaf staafbegin (m)</legend>
-          <div className="frame3d-condition-values frame3d-member-load-values">
-            {field("startPositionM", "Begin")}{field("endPositionM", "Eind")}
-          </div>
-        </fieldset>
-        <button type="submit">{editingId === null ? "Toevoegen" : "Opslaan"}</button>
+        <div className="frame3d-load-quick">
+          <label><span>Richting</span><select value={lineDirection} onChange={(event) => {
+            const direction = event.target.value as "y" | "z";
+            const q = values[`${lineDirection}Start` as keyof Values];
+            setLineDirection(direction);
+            setValues({ ...values,
+              qyStart: direction === "y" ? q : "0", qyEnd: direction === "y" ? q : "0",
+              qzStart: direction === "z" ? q : "0", qzEnd: direction === "z" ? q : "0" });
+          }}><option value="z">Lokaal z</option><option value="y">Lokaal y</option></select></label>
+          <label><span>q (kN/m)</span><input ref={firstInput} type="number" step="any" required
+            value={values[`${lineDirection}Start` as keyof Values]}
+            onChange={(event) => setValues({ ...values,
+              [`${lineDirection}Start`]: event.target.value,
+              [`${lineDirection}End`]: event.target.value,
+            })} /></label>
+        </div>
+        <button className="frame3d-load-more" type="button" aria-expanded={showLineDetails}
+          onClick={() => setShowLineDetails((open) => !open)}>
+          {showLineDetails ? "▾ Minder opties" : "▸ Variabele of gedeeltelijke lijnlast"}
+        </button>
+        {showLineDetails && <div className="frame3d-load-details">
+          <fieldset>
+            <legend>Intensiteit begin / eind (kN/m)</legend>
+            <div className="frame3d-condition-values frame3d-member-load-values">
+              {field("qyStart", "qy begin")}{field("qyEnd", "qy eind")}
+              {field("qzStart", "qz begin")}{field("qzEnd", "qz eind")}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Belast bereik vanaf staafbegin (m)</legend>
+            <div className="frame3d-condition-values frame3d-member-load-values">
+              {field("startPositionM", "Begin")}{field("endPositionM", "Eind")}
+            </div>
+          </fieldset>
+        </div>}
+        <button className="frame3d-load-submit" type="submit">{editingId === null ? "Lijnlast toevoegen" : "Lijnlast opslaan"}</button>
       </form>
       {error && <p className="frame3d-error" role="alert">{error}</p>}
-    </section>
-    <section>
+    </section>}
+    {activeEditor === "point" && <section>
       <h3>Puntlast op staaf · lokale assen</h3>
       <p className="fem-prop-hint">Py en Pz in kN; positie gemeten vanaf het staafbegin.</p>
       {pointLoads.length > 0 && <div className="frame3d-condition-load-list">
@@ -282,8 +323,8 @@ export default function Frame3DMemberLoads({
         <button type="submit">{pointEditingId === null ? "Toevoegen" : "Opslaan"}</button>
       </form>
       {error && <p className="frame3d-error" role="alert">{error}</p>}
-    </section>
-    <section>
+    </section>}
+    {activeEditor === "thermal" && <section>
       <h3>Temperatuurbelasting</h3>
       <p className="fem-prop-hint">Uniforme ΔT en verschillen over de lokale y/z-richting, alle in K.</p>
       {thermalLoads.length > 0 && <div className="frame3d-condition-load-list">
@@ -313,6 +354,6 @@ export default function Frame3DMemberLoads({
         <button type="submit">{thermalEditingId === null ? "Toevoegen" : "Opslaan"}</button>
       </form>
       {error && <p className="frame3d-error" role="alert">{error}</p>}
-    </section>
+    </section>}
   </div>;
 }

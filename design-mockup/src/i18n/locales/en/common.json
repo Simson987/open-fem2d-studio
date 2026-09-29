@@ -77,6 +77,7 @@
     "grid": "Grid",
     "structuralGrid": "Structural grid",
     "axes": "X/Y/Z axes",
+    "memberAxes": "Local member axes",
     "results": "Results",
     "deformation": "Deformed shape",
     "reactions": "Support reactions",
@@ -87,7 +88,7 @@
     "torsion": "Torsion T",
     "momentY": "Moment My",
     "momentZ": "Moment Mz",
-    "remembered": "This view is remembered on this device."
+    "remembered": "Visibility is remembered on this device; saved views are stored with the project."
   },
   "infoTip": {
     "label": "Explanation"

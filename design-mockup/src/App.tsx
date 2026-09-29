@@ -56,6 +56,8 @@ import type { TableDataset, TableViewApi } from "./components/table/tableTypes";
 import LoadCaseTabBar from "./components/fem/LoadCaseTabBar";
 import LoadCasesDialog from "./components/fem/LoadCasesDialog";
 import WindGeneratorDialog from "./lib/wind/WindGeneratorDialog";
+import WaterAccumulation2DDialog from "./components/fem/WaterAccumulation2DDialog";
+import { resolveSection } from "./lib/sectionResolver";
 import { windUitgangspunten } from "./lib/wind/windGenerator";
 import { useWindGenerator } from "./stores/windStore";
 import { pasRapportSnapshotToe, rapportSnapshot, useReportStore } from "./stores/reportStore";
@@ -320,8 +322,16 @@ function App() {
     dispatchFrame3D({ type: "edit", model, ...meta }), []);
   const [frame3dTool, setFrame3dTool] = useState<Frame3DTool>("select");
   const [frame3dSelection, setFrame3dSelection] = useState<Frame3DSelection>(null);
+  const [frame3dNormFocus, setFrame3dNormFocus] = useState<{ beamId: number; serial: number } | null>(null);
   const handleFrame3DSelectionChange = (next: Frame3DSelection) => {
     setFrame3dSelection(next);
+    if (frame3dTool === "addMemberLoad") {
+      if (next?.type === "beam" && frame3d.beams.some((beam) => beam.id === next.id)) {
+        setRightPanelOpen(true);
+        setFrame3dMemberLoadEditorRequest((serial) => serial + 1);
+      }
+      return;
+    }
     if (!frame3dTool.startsWith("support:") || next?.type !== "node") return;
     if (!frame3d.nodes.some((node) => node.id === next.id)) return;
     const preset = frame3dTool.slice("support:".length) as Frame3DSupportPreset;
@@ -1338,6 +1348,24 @@ function App() {
   // Windbelastinggenerator — de hook draait de generator mee met wijzigingen
   // in de constructie (idempotent, zie windStore.ts).
   const [windGeneratorOpen, setWindGeneratorOpen] = useState(false);
+  const [waterAccumulationOpen, setWaterAccumulationOpen] = useState(false);
+  const selectedWaterBeam = useMemo(() => {
+    const selection = fem.selection;
+    if (selection?.type !== "beam") return null;
+    const beam = fem.beams.find((item) => item.id === selection.id);
+    if (!beam) return null;
+    const start = fem.nodes.find((node) => node.id === beam.from);
+    const end = fem.nodes.find((node) => node.id === beam.to);
+    if (!start || !end) return null;
+    // De eerste module rekent een horizontale dakstrook. Een schuine of
+    // verticale modelstaaf vraagt expliciete dakgeometrie en wordt niet
+    // stilzwijgend als horizontaal dak overgenomen.
+    if (Math.abs(end.z - start.z) > 1 || Math.abs(end.x - start.x) < 1) return null;
+    const section = resolveSection(beam.material, beam.profile);
+    if (section.bron === "default") return null;
+    return { id: beam.id, spanM: Math.hypot(end.x - start.x, end.z - start.z) / 1000,
+      eiKnm2: section.E * section.I / 1e9 };
+  }, [fem.selection, fem.beams, fem.nodes]);
   // UC-badge op het canvas geklikt → toetsingspaneel openen gefocust op die
   // staaf. Elke klik maakt een nieuw object zodat een herhaalde klik op
   // dezelfde badge opnieuw scrollt (identiteit als trigger).
@@ -2589,7 +2617,14 @@ function App() {
                 previous.kind === kind ? previous : { ...previous, kind })}
               selection={frame3dSelection}
               onSelectionChange={handleFrame3DSelectionChange}
+              onOpenCheckForBeam={(beamId) => {
+                setFrame3dTool("select");
+                setFrame3dSelection({ type: "beam", id: beamId });
+                setRightPanelOpen(true);
+                setFrame3dNormFocus((previous) => ({ beamId, serial: (previous?.serial ?? 0) + 1 }));
+              }}
               visibilityOpen={visibility3DOpen}
+              onVisibilityOpen={() => setVisibility3DOpen(true)}
               onVisibilityClose={() => setVisibility3DOpen(false)}
               visibility={frame3dVisibility}
               onVisibilityChange={setFrame3dVisibility}
@@ -2607,10 +2642,14 @@ function App() {
               currentView={frame3dViewRequest.kind}
               currentCombinationId={frame3dActiveCombinationId}
               combinationOptions={fem.combinations.map((combination) => ({ id: combination.id, name: combination.name }))}
+              loadCaseOptions={fem.loadCases.map((loadCase) => ({ id: loadCase.id, name: loadCase.name }))}
               onViewSetsChange={setFrame3dViewSets}
               onApplyViewSet={(viewSet) => {
                 setFrame3dVisibility({ ...viewSet.visibility });
                 setFrame3dViewRequest((previous) => ({ kind: viewSet.view, token: previous.token + 1 }));
+                if (viewSet.loadCaseId && fem.loadCases.some((loadCase) => loadCase.id === viewSet.loadCaseId)) {
+                  fem.setActiveLoadCaseId(viewSet.loadCaseId);
+                }
                 if (viewSet.mode) {
                   setFrame3dShowLoadCase(viewSet.mode !== "model");
                   setResultsTabActive(viewSet.mode === "results");
@@ -2618,7 +2657,7 @@ function App() {
                 }
                 if (viewSet.combinationId === null) {
                   setFrame3dActiveCombinationId(null);
-                  setFrame3dResult(frame3dCaseResults.get(fem.activeLoadCaseId) ?? null);
+                  setFrame3dResult(frame3dCaseResults.get(viewSet.loadCaseId ?? fem.activeLoadCaseId) ?? null);
                 } else {
                   setFrame3dActiveCombinationId(viewSet.combinationId);
                   setFrame3dResult(frame3dCombinationResults.get(viewSet.combinationId) ?? null);
@@ -2930,8 +2969,11 @@ function App() {
           setFrame3dLoadEditorRequest((request) => ({ kind, serial: (request?.serial ?? 0) + 1 }));
         }}
         onFrame3DRequestMemberLoad={() => {
-          setRightPanelOpen(true);
-          setFrame3dMemberLoadEditorRequest((serial) => serial + 1);
+          setFrame3dTool("addMemberLoad");
+          if (frame3dSelection?.type === "beam") {
+            setRightPanelOpen(true);
+            setFrame3dMemberLoadEditorRequest((serial) => serial + 1);
+          }
         }}
         onFrame3DRequestMemberPointLoad={() => {
           setRightPanelOpen(true);
@@ -2960,6 +3002,7 @@ function App() {
         onOpenLoadCases={() => { setLoadCasesTab("cases"); setLoadCasesOpen(true); }}
         onOpenLoadCombinations={() => { setLoadCasesTab("combos"); setLoadCasesOpen(true); }}
         onOpenWindGenerator={() => setWindGeneratorOpen(true)}
+        onOpenWaterAccumulation={() => setWaterAccumulationOpen(true)}
         onExportHtml={handleExportHtmlReport}
         // De Rapport-tab zet met deze tekst het hoofdstuk Uitgangspunten in de
         // PDF-uitdraai. Dezelfde tekst gaat via `reportData` naar het live
@@ -3155,6 +3198,7 @@ function App() {
                     memberPointLoadEditorRequest={frame3dMemberPointLoadEditorRequest}
                     thermalLoadEditorRequest={frame3dThermalLoadEditorRequest}
                     activeLoadCaseId={fem.activeLoadCaseId}
+                    normFocus={frame3dNormFocus}
                   /> : <>{/* In de tab Model (geen lasten, geen resultaten) hoort de toetsing
                       niet in beeld; bij de belastinggevallen en Resultaten wel. */}
                   {fem.showLoads && (
@@ -3426,6 +3470,8 @@ function App() {
         onClose={() => setWindGeneratorOpen(false)}
         wind={windGenerator}
       />
+      <WaterAccumulation2DDialog open={waterAccumulationOpen}
+        onClose={() => setWaterAccumulationOpen(false)} selectedBeam={selectedWaterBeam} />
       {welcomeOpen && (
         <WelcomeScreen
           onClose={() => setWelcomeOpen(false)}

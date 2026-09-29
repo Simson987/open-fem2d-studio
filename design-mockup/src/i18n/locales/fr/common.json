@@ -77,6 +77,7 @@
     "grid": "Grille",
     "structuralGrid": "Trame structurelle",
     "axes": "Axes X/Y/Z",
+    "memberAxes": "Axes locales des barres",
     "results": "Résultats",
     "deformation": "Forme déformée",
     "reactions": "Réactions d'appui",
@@ -87,7 +88,7 @@
     "torsion": "Torsion T",
     "momentY": "Moment My",
     "momentZ": "Moment Mz",
-    "remembered": "Cet affichage est mémorisé sur cet appareil."
+    "remembered": "La visibilité est mémorisée sur cet appareil ; les vues enregistrées font partie du projet."
   },
   "infoTip": {
     "label": "Explication"

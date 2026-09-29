@@ -310,6 +310,8 @@ export async function voerUit(
     case "status": {
       const f = a().fem;
       return {
+        frontendDevMode: import.meta.env.DEV,
+        frontendModuleUrl: import.meta.url,
         weergave: a().activeView,
         selectie: a().selection,
         aantalKnopen: f.nodes.length,

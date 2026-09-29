@@ -35,6 +35,7 @@ const DRAW_HELP_KEYS: Partial<Record<Frame3DTool, string>> = {
   addPlateArc: "frame3d.plateArcHelp",
   addOpening: "frame3d.openingHelp",
   addOpeningArc: "frame3d.openingArcHelp",
+  addMemberLoad: "frame3d.memberLoadPlacementHelp",
 };
 
 interface Props {
@@ -42,6 +43,7 @@ interface Props {
   calculationModel?: Frame3DModel;
   onChange: (model: Frame3DModel, meta?: Frame3DEditMeta) => void;
   visibilityOpen?: boolean;
+  onVisibilityOpen?: () => void;
   onVisibilityClose?: () => void;
   tool?: Frame3DTool;
   onToolChange?: (tool: Frame3DTool) => void;
@@ -51,6 +53,7 @@ interface Props {
   onCameraViewChange?: (view: Frame3DView) => void;
   selection?: Frame3DSelection;
   onSelectionChange?: (selection: Frame3DSelection) => void;
+  onOpenCheckForBeam?: (beamId: number) => void;
   visibility?: Frame3DVisibility;
   onVisibilityChange?: (visibility: Frame3DVisibility) => void;
   showLoadCase?: boolean;
@@ -67,19 +70,20 @@ interface Props {
   currentView?: Frame3DView;
   currentCombinationId?: number | null;
   combinationOptions?: { id: number; name: string }[];
+  loadCaseOptions?: { id: number; name: string }[];
   onViewSetsChange?: (viewSets: Frame3DViewSet[]) => void;
   onApplyViewSet?: (viewSet: Frame3DViewSet) => void;
 }
 
 /** Canvas only: 3D uses the shared ribbon, Explorer and Properties panels. */
 export default function Frame3DEditor({
-  model, calculationModel, onChange, visibilityOpen = false, onVisibilityClose,
+  model, calculationModel, onChange, visibilityOpen = false, onVisibilityOpen, onVisibilityClose,
   tool = "select", onToolChange, deleteToken = 0, fitRequest = 0, viewRequest, onCameraViewChange,
-  selection: controlledSelection, onSelectionChange,
+  selection: controlledSelection, onSelectionChange, onOpenCheckForBeam,
   visibility: visibilityProp, onVisibilityChange, showLoadCase = true, resultsActive = false, structuralGrid, gridSpacingM,
   result = null, checks = null, concreteChecks = null,
   solving = false, solveError = null, activeLoadCaseId,
-  viewSets = [], currentView = "iso", currentCombinationId = null, combinationOptions = [],
+  viewSets = [], currentView = "iso", currentCombinationId = null, combinationOptions = [], loadCaseOptions = [],
   onViewSetsChange, onApplyViewSet,
 }: Props) {
   const { t } = useTranslation("ribbon");
@@ -185,6 +189,7 @@ export default function Frame3DEditor({
           tool={tool}
           selection={selection}
           onSelect={setSelection}
+          onOpenCheckForBeam={onOpenCheckForBeam}
           fitToken={fitToken + fitRequest}
           viewRequest={viewRequest}
           currentView={currentView}
@@ -201,6 +206,7 @@ export default function Frame3DEditor({
         <div className="frame3d-stage-header">
           <strong>{t("frame3d.title")}</strong>
           <span>{t(tool.startsWith("support:") ? "frame3d.supportPlacementHelp" : DRAW_HELP_KEYS[tool] ?? "frame3d.axisHelp", { defaultValue: t("frame3d.axisHelp") })}</span>
+          <button type="button" className="frame3d-views-button" onClick={onVisibilityOpen}>Views ({viewSets.length})</button>
         </div>
         {drawError && <div className="frame3d-draw-error" role="alert">
           <span>{drawError}</span>
@@ -251,8 +257,10 @@ export default function Frame3DEditor({
         currentView={currentView}
         currentCamera={cameraState}
         currentCombinationId={currentCombinationId}
+        currentLoadCaseId={activeLoadCaseId ?? 1}
         currentMode={!showLoadCase ? "model" : resultsActive ? "results" : "loadCase"}
         combinationOptions={combinationOptions}
+        loadCaseOptions={loadCaseOptions}
         onViewSetsChange={onViewSetsChange}
         onApplyViewSet={(viewSet) => {
           setCameraRequest((previous) => ({ state: viewSet.camera, token: (previous?.token ?? 0) + 1 }));

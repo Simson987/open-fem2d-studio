@@ -61,6 +61,11 @@
   border-radius:3px; background:#fffbebf2; color:#92400e; font:700 10px/1.25 "Inter",system-ui,sans-serif;
   white-space:nowrap; box-shadow:0 1px 3px #0f172a1f;
 }
+.frame3d-surface-load-label { cursor:pointer; }
+.frame3d-surface-load-label:hover,.frame3d-surface-load-label:focus-visible {
+  background:#e0f2fe; border-color:#0284c7; color:#075985;
+  outline:2px solid #0284c7; outline-offset:2px;
+}
 .frame3d-diagram-label { margin: -8px 0 0 7px; background: #fffffff2; }
 .frame3d-diagram-vy { margin-top: -38px; border-color: #0284c7; color: #075985; }
 .frame3d-diagram-vz { margin-top: -18px; border-color: #7c3aed; color: #5b21b6; }
@@ -70,6 +75,14 @@
   display:inline-block; margin:18px 0 0 7px; padding:2px 5px; border:1px solid currentColor;
   border-radius:3px; background:#fffffff2; font:700 10px/1.25 "Inter",system-ui,sans-serif;
   white-space:nowrap; box-shadow:0 1px 3px #0f172a1f;
+  cursor:pointer;
+}
+.frame3d-utilization-label:hover,.frame3d-utilization-label:focus-visible {
+  background:#eff6ff; outline:2px solid #2563eb; outline-offset:2px;
+}
+.frame3d-local-axis-label {
+  color:#334155; background:#ffffffd9; border:1px solid #cbd5e1;
+  border-radius:2px; padding:0 2px; font:700 10px/1.1 system-ui,sans-serif;
 }
 .frame3d-utilization-low { color:#15803d; }
 .frame3d-utilization-medium { color:#4d7c0f; }
@@ -128,6 +141,12 @@
 .frame3d-stage-header { top: 14px; }
 .frame3d-stage-header strong { font-size: 15px; }
 .frame3d-stage-header span { color: #64748b; }
+.frame3d-views-button {
+  margin-left:auto; margin-right:100px; pointer-events:auto;
+  padding:5px 9px; border:1px solid #cbd5e1; border-radius:4px;
+  background:#fff; color:#1e40af; cursor:pointer; font:600 11px system-ui,sans-serif;
+}
+.frame3d-views-button:hover { background:#eff6ff; }
 .frame3d-draw-error {
   position: absolute;
   z-index: 9;

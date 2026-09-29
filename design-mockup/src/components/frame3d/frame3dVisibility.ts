@@ -12,6 +12,8 @@ export interface Frame3DVisibility {
   loads: boolean;
   grid: boolean;
   axes: boolean;
+  /** Local x/y/z directions on each member. */
+  memberAxes: boolean;
   structuralGrid: boolean;
   deformation: boolean;
   reactions: boolean;
@@ -37,6 +39,7 @@ export const DEFAULT_FRAME_3D_VISIBILITY: Frame3DVisibility = {
   loads: true,
   grid: true,
   axes: true,
+  memberAxes: false,
   structuralGrid: true,
   deformation: true,
   reactions: true,

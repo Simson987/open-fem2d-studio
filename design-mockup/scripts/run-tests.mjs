@@ -382,7 +382,7 @@ const ALLEEN_BRON = new Map([
   // De 3D-proeven raken React/Three, de projectadapter of de aparte Rust-kern.
   // Deze modules zitten niet in de 2D-sidecarbundel.
   ...[
-    "frame3d-concrete-check", "frame3d-conditions", "frame3d-conversion",
+    "frame3d-beam-screen-pick", "frame3d-concrete-check", "frame3d-conditions", "frame3d-conversion",
     "frame3d-current", "frame3d-displacement", "frame3d-force-stations",
     "frame3d-history", "frame3d-large-frame", "frame3d-member-load",
     "frame3d-plates-views", "frame3d-profile-geometry", "frame3d-report-views",

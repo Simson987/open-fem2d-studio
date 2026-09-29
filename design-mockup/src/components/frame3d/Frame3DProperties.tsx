@@ -33,6 +33,7 @@ interface Props {
   memberPointLoadEditorRequest?: number;
   thermalLoadEditorRequest?: number;
   activeLoadCaseId?: number;
+  normFocus?: { beamId: number; serial: number } | null;
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -48,7 +49,7 @@ const value = (number: number, digits = 3) => Number.isFinite(number) ? number.t
 export default function Frame3DProperties({
   model, selection, onChange, result, checks, concreteChecks, checksRunning, checksError,
   loadEditorRequest, springEditorRequest, memberLoadEditorRequest, memberPointLoadEditorRequest,
-  thermalLoadEditorRequest, activeLoadCaseId = 1,
+  thermalLoadEditorRequest, activeLoadCaseId = 1, normFocus,
 }: Props) {
   const { t } = useTranslation("ribbon");
   const [tab, setTab] = useState<"general" | "results" | "norm">("general");
@@ -79,6 +80,9 @@ export default function Frame3DProperties({
   }, [beam?.id, beam?.rollAngleRad]);
   const selectionId = selection && selection.type !== "multi" ? selection.id : undefined;
   useEffect(() => { setTab("general"); }, [selection?.type, selectionId]);
+  useEffect(() => {
+    if (normFocus && selection?.type === "beam" && selection.id === normFocus.beamId) setTab("norm");
+  }, [normFocus?.serial, selection?.type, selectionId]);
 
   const memberForces = beam ? result?.memberForces.find((item) => item.memberId === beam.id) : undefined;
   const buckling = beam && result?.buckling.status === "available"
@@ -145,6 +149,27 @@ export default function Frame3DProperties({
       return;
     }
     updateBeam({ rollAngleRad: degrees * Math.PI / 180 });
+  };
+
+  const flipLocalAxes = () => {
+    if (!beam) return;
+    const beamId = beam.id;
+    onChange({
+      ...model,
+      beams: model.beams.map((item) => item.id === beamId
+        ? { ...item, rollAngleRad: ((item.rollAngleRad ?? 0) + Math.PI) % (2 * Math.PI) }
+        : item),
+      // De lokale belastingcomponenten draaien mee, zodat hun richting in het
+      // wereldstelsel bij het omkeren van beide dwarsassen behouden blijft.
+      memberLoads: model.memberLoads?.map((load) => load.beamId === beamId
+        ? { ...load, qyStart: -load.qyStart, qyEnd: -load.qyEnd, qzStart: -load.qzStart, qzEnd: -load.qzEnd }
+        : load),
+      memberPointLoads: model.memberPointLoads?.map((load) => load.beamId === beamId
+        ? { ...load, py: -load.py, pz: -load.pz } : load),
+      thermalLoads: model.thermalLoads?.map((load) => load.beamId === beamId
+        ? { ...load, deltaTGradientYK: -load.deltaTGradientYK, deltaTGradientZK: -load.deltaTGradientZK }
+        : load),
+    });
   };
 
   const selectionLabel = selection.type === "nodalLoad" ? `Knoopbelasting ${selection.id}`
@@ -241,6 +266,7 @@ export default function Frame3DProperties({
               value={rollDegrees} onChange={(event) => setRollDegrees(event.target.value)}
               onBlur={applyRoll} onKeyDown={(event) => { if (event.key === "Enter") { applyRoll(); event.currentTarget.blur(); } }} /> °</span>
           </Row>
+          <div className="fem-prop-kiezer-row"><button type="button" className="fem-prop-kiezer-btn" onClick={flipLocalAxes}>Keer lokale y/z-assen 180° om</button></div>
           <p className="fem-prop-hint">Scharnieren geven het moment om de lokale as aan dat het staafeinde niet overdraagt.</p>
           <div className="frame3d-release-grid">
             {([

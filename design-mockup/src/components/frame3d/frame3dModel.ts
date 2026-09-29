@@ -632,8 +632,8 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
         !nodeIds.has(startNodeId) || !nodeIds.has(endNodeId) || startNodeId === endNodeId) {
       throw new Error("Het 3D-model bevat een staaf met ongeldige id of knoopverwijzing.");
     }
-    const start = nodes.find((node) => node.id === startNodeId)!;
-    const end = nodes.find((node) => node.id === endNodeId)!;
+    const start = nodeIndex.get(startNodeId)!;
+    const end = nodeIndex.get(endNodeId)!;
     if (start.x === end.x && start.y === end.y && start.z === end.z) {
       throw new Error("Het 3D-model bevat een staaf zonder lengte.");
     }

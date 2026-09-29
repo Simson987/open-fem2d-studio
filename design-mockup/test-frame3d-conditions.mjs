@@ -320,8 +320,11 @@ const mediumMemberLoadMarkers = new THREE.Group();
 addFrame3DConditionMarkers(mediumMemberLoadMarkers, {
   ...largeMemberLoadModel, memberLoads: largeMemberLoadModel.memberLoads.slice(0, 4),
 }, { supports: false, loads: true });
-assert.equal(mediumMemberLoadMarkers.children.length, 3,
-  "vier lijnlasten delen al twee pijlbatches en één hulplijnbatch");
+assert.equal(mediumMemberLoadMarkers.children.filter((child) => child.visible).length, 3,
+  "vier lijnlasten delen al twee zichtbare pijlbatches en één hulplijnbatch");
+assert.equal(mediumMemberLoadMarkers.children.filter((child) =>
+  child instanceof THREE.Line && !child.visible && child.userData.type === "memberLoad").length, 4,
+"de vier samengevoegde hulplijnen behouden afzonderlijke selectiedoelen");
 assert.ok(mediumMemberLoadMarkers.children.filter((child) => child instanceof THREE.InstancedMesh)
   .every((child) => child.userData.instanceIds.includes(4)),
 "ook de vierde last blijft apart selecteerbaar");

@@ -47,6 +47,7 @@ interface RibbonProps {
   onOpenLoadCombinations?: () => void;
   /** Opens the wind load generator (EN 1991-1-4 + NL NB). */
   onOpenWindGenerator?: () => void;
+  onOpenWaterAccumulation?: () => void;
   /** Show a specific Insights sub-view (element-K / system-K / dof / logs / errors). */
   onShowInsightsMode?: (mode: "element" | "system" | "dof" | "logs" | "errors") => void;
   /** Export all stiffness matrices as CSV. */
@@ -131,7 +132,7 @@ export default function Ribbon({
   theme, onThemeSelect, onOpenLibrary,
   femTool, onFemToolChange, onSolve, hasResults,
   onDelete, onUndo, onRedo, canUndo, canRedo, onOpenGrids,
-  onOpenLoadCases, onOpenLoadCombinations, onOpenWindGenerator, onNewProject, onOpenProject,
+  onOpenLoadCases, onOpenLoadCombinations, onOpenWindGenerator, onOpenWaterAccumulation, onNewProject, onOpenProject,
   onSaveProject, onSaveProjectAs,
   frame3dTool, availableFrame3DTools, onFrame3DToolChange, canFrame3DDelete,
   onFrame3DFit, onFrame3DViewChange, frame3dView,
@@ -257,6 +258,7 @@ export default function Ribbon({
           onOpenLoadCases={onOpenLoadCases}
           onOpenLoadCombinations={onOpenLoadCombinations}
           onOpenWindGenerator={onOpenWindGenerator}
+          onOpenWaterAccumulation={onOpenWaterAccumulation}
           onFilterSelection={onFilterSelection}
           onNewProject={onNewProject}
           onOpenProject={onOpenProject}

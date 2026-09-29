@@ -30,6 +30,7 @@ import {
   loadCasesIcon,
   loadCombinationsIcon,
   windGeneratorIcon,
+  waterAccumulationIcon,
   moveIcon,
   rotateIcon,
   undoIcon,
@@ -59,6 +60,7 @@ interface HomeTabProps {
   onOpenLoadCombinations?: () => void;
   /** Opens the wind load generator (EN 1991-1-4 + NL NB). */
   onOpenWindGenerator?: () => void;
+  onOpenWaterAccumulation?: () => void;
   /** Quick filter: reduce current selection to one type only. */
   onFilterSelection?: () => void;
   /** Wired file-menu actions. */
@@ -113,7 +115,7 @@ export default function HomeTab({
   onFemToolChange,
   onDelete, onUndo, onRedo, canUndo, canRedo, onOpenGrids,
   onSolve, hasResults,
-  onOpenLoadCases, onOpenLoadCombinations, onOpenWindGenerator, onNewProject, onOpenProject,
+  onOpenLoadCases, onOpenLoadCombinations, onOpenWindGenerator, onOpenWaterAccumulation, onNewProject, onOpenProject,
   onSaveProject, onSaveProjectAs,
   onFilterSelection,
   modelDimension = "2d", onConvertTo3D,
@@ -424,10 +426,10 @@ export default function HomeTab({
             icon={loadLineIcon}
             label={t("home.lineLoad")}
             size="large"
-            active={!is3D && toolActive("addLineLoad")}
+            active={is3D ? frame3dTool === "addMemberLoad" : toolActive("addLineLoad")}
             onClick={() => is3D ? onFrame3DRequestMemberLoad?.() : setTool("addLineLoad")}
-            disabled={is3D && (!hasFrame3DBeamSelection || !onFrame3DRequestMemberLoad)}
-            title={is3D ? beamConditionTitle : undefined}
+            disabled={is3D && !onFrame3DRequestMemberLoad}
+            title={is3D ? t("frame3d.memberLoadPlacementHelp") : undefined}
           />
           <RibbonButtonStack>
             <RibbonButton
@@ -481,6 +483,14 @@ export default function HomeTab({
               onClick={onOpenWindGenerator ?? stub("Wind generator dialog (no handler)")}
               disabled={is3D}
               title={is3D ? unsupported3D : undefined}
+            />
+            <RibbonButton
+              icon={waterAccumulationIcon}
+              label="Wateraccumulatie"
+              size="small"
+              onClick={onOpenWaterAccumulation ?? stub("Wateraccumulatie 2D")}
+              disabled={is3D || !onOpenWaterAccumulation}
+              title={is3D ? "Eerst beschikbaar voor 2D-dakliggers" : undefined}
             />
           </RibbonButtonStack>
         </RibbonGroup>

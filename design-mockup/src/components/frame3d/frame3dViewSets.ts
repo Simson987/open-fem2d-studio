@@ -32,6 +32,8 @@ export interface Frame3DViewSet {
   visibility: Frame3DVisibility;
   /** null = het actieve belastinggeval; anders de id van een combinatie. */
   combinationId: number | null;
+  /** Belastinggeval dat bij deze weergave actief was. */
+  loadCaseId?: number;
   /** Ontbreekt in oudere projectbestanden; die behouden de huidige tab bij toepassen. */
   mode?: "model" | "loadCase" | "results";
 }
@@ -70,12 +72,17 @@ export function parseFrame3DViewSets(value: unknown): Frame3DViewSet[] {
       : Number.isSafeInteger(raw.combinationId) && Number(raw.combinationId) > 0
         ? Number(raw.combinationId)
         : (() => { throw new Error("Een opgeslagen 3D-weergave verwijst naar een ongeldige resultaatcombinatie."); })();
+    const loadCaseId = raw.loadCaseId === undefined ? undefined
+      : Number.isSafeInteger(raw.loadCaseId) && Number(raw.loadCaseId) > 0
+        ? Number(raw.loadCaseId)
+        : (() => { throw new Error("Een opgeslagen 3D-weergave verwijst naar een ongeldig belastinggeval."); })();
     const mode = raw.mode;
     if (mode !== undefined && mode !== "model" && mode !== "loadCase" && mode !== "results") {
       throw new Error("Een opgeslagen 3D-weergave heeft een ongeldige tabstand.");
     }
     ids.add(id);
     return { id, name, view, camera: { position, target, up }, visibility, combinationId,
+      ...(loadCaseId === undefined ? {} : { loadCaseId }),
       ...(mode === undefined ? {} : { mode }) };
   });
 }

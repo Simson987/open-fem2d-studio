@@ -15,8 +15,10 @@ interface Props {
   currentView: Frame3DView;
   currentCamera: Frame3DCameraState;
   currentCombinationId: number | null;
+  currentLoadCaseId: number;
   currentMode: "model" | "loadCase" | "results";
   combinationOptions: { id: number; name: string }[];
+  loadCaseOptions: { id: number; name: string }[];
   onViewSetsChange?: (viewSets: Frame3DViewSet[]) => void;
   onApplyViewSet?: (viewSet: Frame3DViewSet) => void;
 }
@@ -24,13 +26,14 @@ interface Props {
 const GROUPS: { title: string; keys: (keyof Frame3DVisibility)[] }[] = [
   { title: "geometry", keys: ["nodes", "beams", "plates", "profiles", "supports", "loads"] },
   { title: "labels", keys: ["nodeNumbers", "beamNumbers", "nodeCoordinates"] },
-  { title: "workspace", keys: ["grid", "structuralGrid", "axes"] },
+  { title: "workspace", keys: ["grid", "structuralGrid", "axes", "memberAxes"] },
   { title: "results", keys: ["deformation", "reactions", "utilization", "axialForce", "shearY", "shearZ", "torsion", "momentY", "momentZ"] },
 ];
 
 export default function Frame3DVisibilityDialog({
   open, onClose, visibility, onChange, viewSets, currentView, currentCamera,
-  currentCombinationId, currentMode, combinationOptions, onViewSetsChange, onApplyViewSet,
+  currentCombinationId, currentLoadCaseId, currentMode, combinationOptions, loadCaseOptions,
+  onViewSetsChange, onApplyViewSet,
 }: Props) {
   const { t } = useTranslation("common");
   const [name, setName] = useState("");
@@ -48,6 +51,7 @@ export default function Frame3DVisibilityDialog({
       },
       visibility: { ...visibility },
       combinationId: currentCombinationId,
+      loadCaseId: currentLoadCaseId,
       mode: currentMode,
     };
     onViewSetsChange(existing
@@ -81,7 +85,7 @@ export default function Frame3DVisibilityDialog({
         {viewSets.length === 0 ? <p className="frame3d-viewset-empty">Nog geen views opgeslagen.</p> :
           <div className="frame3d-viewset-list">{viewSets.map((viewSet) => {
             const combination = viewSet.combinationId === null
-              ? "actief belastinggeval"
+              ? loadCaseOptions.find((item) => item.id === viewSet.loadCaseId)?.name ?? "actief belastinggeval"
               : combinationOptions.find((item) => item.id === viewSet.combinationId)?.name ?? `combinatie ${viewSet.combinationId}`;
             return <div key={viewSet.id} className="frame3d-viewset-row">
               <button type="button" className="frame3d-viewset-apply" onClick={() => onApplyViewSet?.(viewSet)}>

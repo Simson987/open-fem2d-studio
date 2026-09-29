@@ -7,6 +7,15 @@ export interface Frame3DConditionVisibility {
   loads: boolean;
 }
 
+/** World-space size shared by all support and load markers in one model. */
+export function frame3DConditionMarkerSize(nodes: readonly Frame3DNode[]): number {
+  if (nodes.length === 0) return 0.3;
+  const bounds = new THREE.Box3();
+  const point = new THREE.Vector3();
+  for (const node of nodes) bounds.expandByPoint(point.set(node.x, node.y, node.z));
+  return Math.max(0.25, Math.min(0.8, bounds.getSize(new THREE.Vector3()).length() * 0.045));
+}
+
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const GLOBAL_AXES = {
@@ -451,7 +460,19 @@ function addMemberLoad(
   }
   if (tails.length >= 2) {
     const batcher = group.userData[MARKER_BATCHER_KEY] as MarkerBatcher | undefined;
-    if (batcher) batcher.addPolyline(0xef4444, tails);
+    if (batcher) {
+      batcher.addPolyline(0xef4444, tails);
+      // De getekende verbindingslijnen worden samengevoegd. Behoud daarnaast
+      // per lijnlast een onzichtbaar raycast-doel, zodat één klik op de lijn
+      // dezelfde belasting selecteert als een klik op een van de pijlen.
+      const pickLine = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(tails),
+        new THREE.LineBasicMaterial({ color: 0xef4444 }),
+      );
+      pickLine.visible = false;
+      pickLine.userData = { type: "memberLoad", id: load.id };
+      group.add(pickLine);
+    }
     else {
       const line = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints(tails),
@@ -548,12 +569,7 @@ export function addFrame3DConditionMarkers(
   const byId = new Map<number, Frame3DNode>();
   for (const node of model.nodes) byId.set(node.id, node);
   const beamById = new Map(model.beams.map((beam) => [beam.id, beam]));
-  const bounds = new THREE.Box3();
-  const boundsPoint = new THREE.Vector3();
-  for (const node of model.nodes) bounds.expandByPoint(boundsPoint.set(node.x, node.y, node.z));
-  const size = model.nodes.length > 0
-    ? Math.max(0.25, Math.min(0.8, bounds.getSize(new THREE.Vector3()).length() * 0.045))
-    : 0.3;
+  const size = frame3DConditionMarkerSize(model.nodes);
   if (visibility.supports) {
     for (const support of model.supports ?? []) {
       const node = byId.get(support.nodeId);
