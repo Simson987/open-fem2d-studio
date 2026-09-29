@@ -73,6 +73,7 @@ voor andere apparaten.
 | Dezelfde lijnlast toevoegen, wijzigen en verwijderen in het model met 30 platen | Vóór gerichte verversing veroorzaakte een wijziging volledige opbouwen van circa 80–130 ms. Daarna ververste alleen de conditielaag: 21,8–24,4 ms voor wijzigen, 22,3 ms voor toevoegen en 22,6 ms voor verwijderen. De camera bleef op dezelfde positie. De tijdelijke tweede lijnlast is na de test verwijderd. |
 | Bij de belaste staaf 11 op plaat 29 één stap in- en uitzoomen rond de cursor | Beide wielacties ankerden op `geometry` en duurden 5,8 en 6,8 ms. De camera keerde exact terug naar positie `(12,275089; 131,421150; 10,740528)` m en doel `(9,459784; 128,605845; 8,729595)` m; de last bleef zichtbaar. |
 | Belastingpijl 8 selecteren, naar Model schakelen en op dezelfde plaats klikken, daarna Q herstellen | De zichtbare pijlpunt koos staafbelasting 8. Model maakte de last onzichtbaar, wiste de lastselectie en bracht het aantal aanklikbare lastobjecten op nul in 8,4 ms; dezelfde klik koos alleen plaat 29. Na terugschakelen naar Q koos de klik opnieuw staafbelasting 8. |
+| Met links een selectiekader rond de opening van plaat 29 slepen | De groep bevatte vier knopen en staaf 11. De plaat viel buiten het getrokken kader en werd terecht niet opgenomen. Camera en doel bleven exact ongewijzigd; de linkermuisactie draaide het beeld niet. |
 
 De lange constructie liet vóór de wijziging in commit `169ca9d5` bij snel
 inzoomen nabij het uiteinde soms een leeg canvas zien. De zoom gebruikte de
