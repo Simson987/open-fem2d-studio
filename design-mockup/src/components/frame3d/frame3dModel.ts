@@ -19,11 +19,17 @@ export interface Frame3DBeam {
   material?: string;
   /** Dezelfde materiaal- en norminstellingen als bij een 2D-staaf. */
   checkConfig?: BeamCheckConfig;
+  /** Expliciete parameters voor de experimentele fysisch niet-lineaire Rust-analyse. */
+  nonlinearLaw?: Frame3DNonlinearLaw;
   /** Rotatie van de lokale y/z-assen om de staafas, in radialen. */
   rollAngleRad?: number;
   /** Moment- en torsiescharnieren aan de staafeinden, in lokale assen. */
   releases?: Frame3DEndReleases;
 }
+
+export type Frame3DNonlinearLaw =
+  | { kind: "steelBilinear"; yieldMpa: number; hardeningRatio: number }
+  | { kind: "concreteCracking"; tensileMpa: number; residualRatio: number };
 
 export interface Frame3DEndReleases {
   myStart: boolean;
@@ -232,6 +238,23 @@ function readEndReleases(value: unknown): Frame3DEndReleases | undefined {
     throw new Error("Een 3D-staaf bevat een ongeldig eindscharnier.");
   }
   return Object.fromEntries(RELEASE_DOF.map((axis) => [axis, releases[axis] === true])) as unknown as Frame3DEndReleases;
+}
+
+function readNonlinearLaw(value: unknown): Frame3DNonlinearLaw | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Een 3D-staaf bevat een ongeldige FNL-materiaalwet.");
+  }
+  const law = value as Record<string, unknown>;
+  const positive = (number: unknown) => typeof number === "number" && Number.isFinite(number) && number > 0;
+  const ratio = (number: unknown) => typeof number === "number" && Number.isFinite(number) && number >= 0 && number <= 1;
+  if (law.kind === "steelBilinear" && positive(law.yieldMpa) && ratio(law.hardeningRatio)) {
+    return { kind: "steelBilinear", yieldMpa: law.yieldMpa as number, hardeningRatio: law.hardeningRatio as number };
+  }
+  if (law.kind === "concreteCracking" && positive(law.tensileMpa) && ratio(law.residualRatio)) {
+    return { kind: "concreteCracking", tensileMpa: law.tensileMpa as number, residualRatio: law.residualRatio as number };
+  }
+  throw new Error("Een 3D-staaf heeft ongeldige FNL-parameters: sterkte > 0 MPa en stijfheidsverhouding 0…1 vereist.");
 }
 
 type Vector3 = [number, number, number];
@@ -687,6 +710,7 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
       ...(beam.checkConfig && typeof beam.checkConfig === "object" && !Array.isArray(beam.checkConfig)
         ? { checkConfig: beam.checkConfig as BeamCheckConfig }
         : {}),
+      ...(beam.nonlinearLaw !== undefined ? { nonlinearLaw: readNonlinearLaw(beam.nonlinearLaw)! } : {}),
       ...(beam.rollAngleRad !== undefined
         ? typeof beam.rollAngleRad === "number" && Number.isFinite(beam.rollAngleRad)
           ? { rollAngleRad: beam.rollAngleRad }

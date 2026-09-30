@@ -233,7 +233,8 @@ export default function Frame3DExplorer(props: Props) {
       {tab === "results" && <div className="fem-results-tab" data-frame3d-results-tab>
         <div className="fem-results-section-title">{t("tree.resultsTab")}</div>
         {props.result ? <div className="fem-results-hint">
-          {props.result.analysis === "p-delta" ? "2e orde (P-Δ)" : "1e orde"} · Δmax {(maxDisplacement * 1000).toFixed(3)} mm · αcr {alphaCr?.toFixed(2) ?? "—"}
+          {props.result.analysis === "p-delta" ? "2e orde (P-Δ)"
+            : props.result.analysis === "material" ? "Fysisch niet-lineair" : "1e orde"} · Δmax {(maxDisplacement * 1000).toFixed(3)} mm · αcr {alphaCr?.toFixed(2) ?? "—"}
           {maxSteelUc !== undefined && <> · UC staal {maxSteelUc.toFixed(2)}</>}
           {maxConcreteUc !== undefined && <> · UC UGT beton {maxConcreteUc.toFixed(2)}</>}
           {props.checksRunning && <> · normtoetsing…</>}

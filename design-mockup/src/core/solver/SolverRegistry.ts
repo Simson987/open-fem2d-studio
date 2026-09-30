@@ -27,6 +27,8 @@ export interface SolverDescriptor {
   license: string;
   available: boolean;
   priority: number;
+  /** Experimental engines can require an explicit user choice. */
+  automaticEligible?: boolean;
   capabilities: SolverCapabilities;
 }
 
@@ -78,9 +80,10 @@ export const SOLVER_REGISTRY: readonly SolverDescriptor[] = Object.freeze([
     license: "AGPL-3.0-or-later",
     available: true,
     priority: 150,
+    automaticEligible: false,
     capabilities: {
       dimensions: ["3d"],
-      analyses: ["linear", "p-delta"],
+      analyses: ["linear", "p-delta", "material-nonlinear"],
       elementFamilies: ["frame"],
     },
   },
@@ -120,10 +123,15 @@ export function resolveSolver(
   }
 
   const resolved = SOLVER_REGISTRY
-    .filter((solver) => supportsRequest(solver, request))
+    .filter((solver) => solver.automaticEligible !== false && supportsRequest(solver, request))
     .sort((a, b) => b.priority - a.priority)[0];
 
   if (!resolved) {
+    const manual = SOLVER_REGISTRY.find((solver) => solver.automaticEligible === false
+      && supportsRequest(solver, request));
+    if (manual) {
+      throw new SolverResolutionError(`Kies in Instellingen → Berekening expliciet ${manual.name} voor deze analyse.`);
+    }
     throw new SolverResolutionError("No installed solver supports this analysis request.");
   }
   return resolved;

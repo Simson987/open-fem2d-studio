@@ -52,18 +52,35 @@ automatisch Tauri of de ontwikkelbrug. Een drie-wegen-test vergelijkt de
 gehele JSON-uitvoer voor een mesh en een Q4-trekproef.
 
 In **Instellingen → Berekening** kan de gebruiker nu `Open FEM Rust
-(experimenteel)` kiezen voor een eerste-orde of P-Δ 3D-raamwerk. De bestaande
-analyseknop gebruikt dan dezelfde app-invoer en vertaalt de Rust-uitvoer naar
+(experimenteel)` kiezen voor een eerste-orde, P-Δ of fysisch niet-lineair
+3D-raamwerk. Voor FNL stelt de gebruiker per staaf in de eigenschappen expliciet
+een vloeigrens en verhardingsverhouding (staal) of treksterkte en
+reststijfheidsverhouding (beton) in. Staven zonder FNL-wet blijven elastisch;
+minstens één staaf moet een wet hebben. De automatische solverkeuze schakelt
+de experimentele FNL-route niet zelf in. Thermische lasten en eindscharnieren
+zijn voor deze FNL-route nog uitgesloten. De wet is een monotone secant-E-
+benadering zonder plastische of scheurgeschiedenis.
+
+De bestaande analyseknop gebruikt dezelfde app-invoer en vertaalt de Rust-uitvoer naar
 knoopverplaatsingen, reacties, staafkrachten, bemonsterde snedekrachtlijnen, evenwicht,
 resultaatweergave en rapport. De automatische keuze blijft bij de bestaande
 solver. Staaflijn-, staafpunt- en thermische lasten zijn ook gekoppeld en de
 diagramstations zijn tegen de bestaande solver vergeleken. Voor P-Δ geeft de
 app iteraties, convergentie, verplaatsingsversterking en eigenknikfactoren weer.
+Voor FNL toont de app de effectieve E-modulus per staaf. Een axiale
+trekproef voor beide wetten is tegen de gesloten formule
+`ε = f_grens/E₀ + (σ − f_grens)/(r·E₀)` getoetst.
+
+| Axiale proef (A = 0,01 m², L = 2 m) | E₀ | Grens | r | Spanning | Analytische verlenging |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Staal, 1500 kN trek | 210 000 MPa | 100 MPa | 0,5 | 150 MPa | 1,905 mm |
+| Beton, 60 kN trek | 33 000 MPa | 3 MPa | 0,2 | 6 MPa | 1,091 mm |
+
 De eigenknikoplosser heeft maximaal 120 vrije en 600 totale vrijheidsgraden;
 daarboven meldt de app een mislukte knikberekening zonder de statische analyse
 te verwerpen. Een uitkraging is tegen Euler en de bestaande knikoplosser
-gevalideerd. De onafhankelijke momentensom
-over de onvervormde geometrie is bij P-Δ niet altijd nul.
+gevalideerd. De onafhankelijke momentensom over de onvervormde geometrie is
+bij P-Δ niet altijd nul.
 De andere native elementresultaten zijn nog niet op alle weergave-, combinatie-
 en rapporttypen aangesloten. Onbekende `kind`- en invoervelden worden door de
 Rust-typen geweigerd.

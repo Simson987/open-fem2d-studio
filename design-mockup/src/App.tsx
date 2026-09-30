@@ -2159,10 +2159,8 @@ function App() {
           loadedCaseIds.add(fem.activeLoadCaseId);
         }
         if (loadedCaseIds.size === 0) throw new Error("Voeg minstens één 3D-belasting of opgelegde verplaatsing toe.");
-        if (fem.analysetype === "tweedeOrdeFysisch") {
-          throw new Error("Fysisch niet-lineaire 3D-analyse is nog niet beschikbaar. Kies eerste orde of tweede orde (P-Δ).");
-        }
-        const frame3dAnalysis = fem.analysetype === "eersteOrde" ? "linear" : "p-delta";
+        const frame3dAnalysis = fem.analysetype === "eersteOrde" ? "linear"
+          : fem.analysetype === "tweedeOrdeFysisch" ? "material" : "p-delta";
         const combinations = fem.combinations.filter((combination) =>
           [...loadedCaseIds].some((caseId) => (combination.factors.get(caseId) ?? 0) !== 0));
 

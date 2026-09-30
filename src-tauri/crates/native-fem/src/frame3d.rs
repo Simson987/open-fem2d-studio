@@ -1720,6 +1720,43 @@ mod tests {
         assert!(concrete.nodes[1].displacement[1] > steel.nodes[1].displacement[1]);
     }
     #[test]
+    fn axial_steel_and_concrete_secant_laws_match_closed_form() {
+        for (law, elastic_e_mpa, load_kn, strength_mpa, post_ratio) in [
+            (
+                MaterialLaw::SteelBilinear {
+                    yield_mpa: 100.0,
+                    hardening_ratio: 0.5,
+                },
+                210_000.0,
+                1500.0,
+                100.0,
+                0.5,
+            ),
+            (
+                MaterialLaw::ConcreteCracking {
+                    tensile_mpa: 3.0,
+                    residual_ratio: 0.2,
+                },
+                33_000.0,
+                60.0,
+                3.0,
+                0.2,
+            ),
+        ] {
+            let mut model = cantilever(Analysis::Material, law, 0.0);
+            model.materials[0].e_mpa = elastic_e_mpa;
+            model.nodal_loads[0].fx = load_kn;
+            let result = solve(&model).unwrap();
+            let stress_mpa = load_kn / (1000.0 * model.sections[0].area_m2);
+            let expected_strain = strength_mpa / elastic_e_mpa
+                + (stress_mpa - strength_mpa) / (post_ratio * elastic_e_mpa);
+            let expected_elongation = expected_strain * 2.0;
+            assert!((result.nodes[1].displacement[0] - expected_elongation).abs() < 1e-7);
+            assert!(result.members[0].effective_e_mpa < elastic_e_mpa);
+            assert!(result.equilibrium_residual < 1e-7);
+        }
+    }
+    #[test]
     fn compression_past_stability_limit_is_rejected() {
         let mut model = cantilever(Analysis::PDelta, MaterialLaw::Elastic, 10.0);
         model.nodal_loads[0].fx = -5000.0;

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import ProfielKiezer from "../fem/ProfielKiezer";
 import Frame3DNodeConditions, { type Frame3DLoadEditorRequest, type Frame3DSpringEditorRequest } from "./Frame3DNodeConditions";
 import Frame3DMemberLoads from "./Frame3DMemberLoads";
+import Frame3DNonlinearLawEditor from "./Frame3DNonlinearLawEditor";
 import type { Frame3DSelection } from "./frame3dSelection";
 import { removeFrame3DSurfaceLoad, setFrame3DBeamNodes, updateFrame3DPlate, updateFrame3DSurfaceLoad, type Frame3DModel } from "./frame3dModel";
 import type { Frame3DSolveResult } from "./frame3dSolver";
@@ -259,6 +260,9 @@ export default function Frame3DProperties({
               setProfileOpen(false);
             }}
           />}
+          <Frame3DNonlinearLawEditor key={beam.id} law={beam.nonlinearLaw}
+            onApply={(law) => onChange({ ...model, beams: model.beams.map((item) => item.id === beam.id
+              ? { ...item, nonlinearLaw: law } : item) })} />
         </Section>
         <Section title={t("frame3d.localAxesAndReleases", "Lokale assen en eindscharnieren")}>
           <Row label={t("frame3d.rollAngle", "Profielrotatie")}>
@@ -344,6 +348,8 @@ export default function Frame3DProperties({
           <Row label="Mx"><code>{value(reaction.mx)} kNm</code></Row><Row label="My"><code>{value(reaction.my)} kNm</code></Row><Row label="Mz"><code>{value(reaction.mz)} kNm</code></Row>
         </Section>}
         {beam && memberForces && <Section title={t("frame3d.memberForces", "Staafkrachten begin / eind")}>
+          {result?.analysis === "material" && memberForces.effectiveEMpa !== undefined
+            && <Row label="E effectief"><code>{value(memberForces.effectiveEMpa, 0)} MPa</code></Row>}
           <Row label="N"><code>{value(memberForces.nStartKn)} / {value(memberForces.nEndKn)} kN</code></Row>
           <Row label="Vy"><code>{value(memberForces.vyStartKn)} / {value(memberForces.vyEndKn)} kN</code></Row>
           <Row label="Vz"><code>{value(memberForces.vzStartKn)} / {value(memberForces.vzEndKn)} kN</code></Row>

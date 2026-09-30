@@ -161,7 +161,8 @@ export default function Frame3DReport({
           <section>
             <h2>Samenvatting</h2>
             <div className="frame3d-report-cards">
-              <div><span>Analyse</span><strong>{result.analysis === "p-delta" ? "2e orde (P-Δ)" : "1e orde"}</strong></div>
+              <div><span>Analyse</span><strong>{result.analysis === "p-delta" ? "2e orde (P-Δ)"
+                : result.analysis === "material" ? "Fysisch niet-lineair" : "1e orde"}</strong></div>
               <div><span>Rekentoestand</span><strong>{activeCombinationName || activeLoadCaseName || `Geval ${activeLoadCaseId}`}</strong></div>
               <div><span>Max. verplaatsing</span><strong>{number(maxDisplacement * 1000)} mm</strong></div>
               <div><span>Convergentie</span><strong>{result.secondOrder ? `${result.secondOrder.iterations} iteratie${result.secondOrder.iterations === 1 ? "" : "s"}` : "direct"}</strong></div>
@@ -306,7 +307,7 @@ export default function Frame3DReport({
               <tr><th>Rekenkern</th><td>{result.engine.name}</td></tr>
               <tr><th>Vastgezette revisie</th><td><code>{result.engine.revision.slice(0, 12)}</code></td></tr>
               <tr><th>Licentie</th><td>{result.engine.license}</td></tr>
-              <tr><th>Tweede orde</th><td>{result.secondOrder ? `${result.secondOrder.converged ? "geconvergeerd" : "niet geconvergeerd"}; ${result.secondOrder.stable ? "stabiel" : "instabiel"}` : "niet uitgevoerd"}</td></tr>
+              <tr><th>{result.analysis === "material" ? "FNL-iteratie" : "Tweede orde"}</th><td>{result.secondOrder ? `${result.secondOrder.converged ? "geconvergeerd" : "niet geconvergeerd"}; ${result.secondOrder.stable ? "stabiel" : "instabiel"}` : "niet uitgevoerd"}</td></tr>
               <tr><th>Relatief evenwichtsresidu</th><td>{equilibrium ? number(equilibrium.relativeResidual, 8) : "niet beschikbaar"}</td></tr>
               <tr><th>Max. onbalans</th><td>{equilibrium ? `${number(equilibrium.maxImbalanceKn, 8)} kN` : "niet beschikbaar"}</td></tr>
               {result.forceBalance && <tr><th>Onafhankelijke krachtensom X/Y/Z</th><td>{result.forceBalance.imbalanceKn.map((value) => number(value, 5)).join(" / ")} kN (grens {number(result.forceBalance.toleranceKn, 5)} kN)</td></tr>}
@@ -420,10 +421,12 @@ export default function Frame3DReport({
           <section>
             <h2>Staafkrachten</h2>
             <table className="frame3d-report-wide"><thead><tr>
-              <th>Staaf</th><th>L (m)</th><th>|N|max (kN)</th><th>|Vy|max (kN)</th><th>|Vz|max (kN)</th><th>|T|max (kNm)</th><th>|My|max (kNm)</th><th>|Mz|max (kNm)</th>
+              <th>Staaf</th><th>L (m)</th>{result.analysis === "material" && <th>E effectief (MPa)</th>}
+              <th>|N|max (kN)</th><th>|Vy|max (kN)</th><th>|Vz|max (kN)</th><th>|T|max (kNm)</th><th>|My|max (kNm)</th><th>|Mz|max (kNm)</th>
             </tr></thead><tbody>
               {result.memberForces.map((member) => <tr key={member.memberId}>
                 <td>{member.memberId}</td><td>{number(member.lengthM)}</td>
+                {result.analysis === "material" && <td>{member.effectiveEMpa === undefined ? "—" : number(member.effectiveEMpa, 0)}</td>}
                 <td>{number(diagramMaximum(result, "axial", member.memberId, Math.max(Math.abs(member.nStartKn), Math.abs(member.nEndKn))))}</td>
                 <td>{number(diagramMaximum(result, "shearY", member.memberId, Math.max(Math.abs(member.vyStartKn), Math.abs(member.vyEndKn))))}</td>
                 <td>{number(diagramMaximum(result, "shearZ", member.memberId, Math.max(Math.abs(member.vzStartKn), Math.abs(member.vzEndKn))))}</td>

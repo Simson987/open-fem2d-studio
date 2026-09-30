@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { solveFrame3D, solveFrame3DCombination } from "./src/components/frame3d/frame3dSolver.ts";
+import { buildFrame3DSolveRequest, solveFrame3D, solveFrame3DCombination } from "./src/components/frame3d/frame3dSolver.ts";
 import { resolveSolver } from "./src/core/solver/SolverRegistry.ts";
 import { deserializeProject } from "./src/io/projectFile.ts";
+import { parseFrame3DModel } from "./src/components/frame3d/frame3dModel.ts";
 
 const executable = (name) => fileURLToPath(new URL(`../src-tauri/target/debug/${name}`, import.meta.url));
 const invoke = (binary, input) => new Promise((resolve, reject) => {
@@ -48,6 +49,10 @@ try {
   assert.equal(resolveSolver("automatic", request).id, "dedaliano");
   assert.equal(resolveSolver("openaec-native-fem", { ...request, analysis: "p-delta" }).id,
     "openaec-native-fem");
+  assert.equal(resolveSolver("openaec-native-fem", { ...request, analysis: "material-nonlinear" }).id,
+    "openaec-native-fem");
+  assert.throws(() => resolveSolver("automatic", { ...request, analysis: "material-nonlinear" }),
+    /Kies.*Open FEM Rust/);
   const cases = [
     ["stalen-ligger-3d.ifcfem2d", 1],
     ["stalen-ruimteportaal.ifcfem2d", 1],
@@ -152,9 +157,55 @@ try {
       }
     }
   }
-  assert.equal(nativeCalls, 7);
+  await assert.rejects(solveFrame3D(model, 1, "material", "openaec-native-fem"), /expliciete FNL-materiaalwet/);
+  const nonlinearCases = [
+    ["staal", "S235", "IPE200", { kind: "steelBilinear", yieldMpa: 235, hardeningRatio: 0.05 }],
+    ["beton", "C30/37", "300x500", { kind: "concreteCracking", tensileMpa: 2.9, residualRatio: 0.05 }],
+  ];
+  for (const [label, material, profileName, nonlinearLaw] of nonlinearCases) {
+    const caseModel = parseFrame3DModel({ ...model,
+      beams: model.beams.map((member) => ({ ...member, material, profileName, nonlinearLaw })),
+      loads: model.loads.map((load) => ({ ...load, fz: load.fz * 10 })),
+    });
+    assert.deepEqual(caseModel.beams[0].nonlinearLaw, nonlinearLaw, `${label} projectinvoer`);
+    if (label === "staal") {
+      const differentLaw = { ...caseModel, beams: [caseModel.beams[0], {
+        ...caseModel.beams[1], nonlinearLaw: { kind: "steelBilinear", yieldMpa: 300, hardeningRatio: 0.1 },
+      }] };
+      assert.equal(buildFrame3DSolveRequest(differentLaw, "material", 1).materials.length, 2,
+        "verschillende FNL-wetten voor dezelfde staalsoort blijven gescheiden");
+    }
+    const linear = await solveFrame3D(caseModel, 1, "linear", "openaec-native-fem");
+    const nonlinear = await solveFrame3D(caseModel, 1, "material", "openaec-native-fem");
+    assert.equal(nonlinear.analysis, "material");
+    assert.equal(nonlinear.secondOrder.converged, true);
+    assert.equal(nonlinear.forceBalance.ok, true);
+    const elasticDeflection = Math.abs(linear.displacements.find((node) => node.nodeId === 2).uz);
+    const nonlinearDeflection = Math.abs(nonlinear.displacements.find((node) => node.nodeId === 2).uz);
+    assert.ok(nonlinearDeflection > elasticDeflection, `${label} verzacht niet`);
+    assert.ok(nonlinear.memberForces.some((member) => member.effectiveEMpa < linear.memberForces[0].effectiveEMpa),
+      `${label} E-modulus neemt niet af`);
+    if (label === "staal") {
+      const halfCombination = await solveFrame3DCombination(caseModel, new Map([[1, 0.5]]),
+        "material", "openaec-native-fem");
+      const halfDeflection = Math.abs(halfCombination.displacements.find((node) => node.nodeId === 2).uz);
+      assert.ok(nonlinearDeflection > 2 * halfDeflection,
+        "FNL-combinatie moet na vloeien sterker dan lineair schalen");
+    }
+    await assert.rejects(solveFrame3D({ ...caseModel, thermalLoads: thermal.thermalLoads }, 1,
+      "material", "openaec-native-fem"), /niet gevalideerd voor temperatuur/);
+  }
+  assert.throws(() => parseFrame3DModel({ ...model,
+    beams: [{ ...model.beams[0], nonlinearLaw: { kind: "steelBilinear", yieldMpa: -1, hardeningRatio: 0.1 } }, model.beams[1]],
+  }), /ongeldige FNL-parameters/);
+  await assert.rejects(solveFrame3D({ ...model,
+    beams: model.beams.map((member) => ({ ...member, nonlinearLaw: {
+      kind: "concreteCracking", tensileMpa: 2.9, residualRatio: 0.05,
+    } })),
+  }, 1, "material", "openaec-native-fem"), /past niet bij materiaal/);
+  assert.equal(nativeCalls, 12);
   assert.equal(referenceCalls, 7);
-  console.log("Native 3D-app-route: 3 staalgevallen, 3 staaflastgevallen en P-Δ geslaagd.");
+  console.log("Native 3D-app-route: staal, beton, FNL, P-Δ en staaflasten geslaagd.");
 } finally {
   globalThis.fetch = fetchBefore;
 }

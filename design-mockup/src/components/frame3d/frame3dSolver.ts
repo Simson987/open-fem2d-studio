@@ -13,7 +13,7 @@ import { STEEL_SECTION_DIMS } from "../../lib/steelSectionDims.generated";
 import { thermalAlphaForMaterial } from "../../lib/thermalAlpha";
 import { frame3DLoadCaseId, frame3DMemberAxes, type Frame3DModel } from "./frame3dModel";
 
-export type Frame3DAnalysisKind = "linear" | "p-delta";
+export type Frame3DAnalysisKind = "linear" | "p-delta" | "material";
 
 export interface Frame3DDisplacement {
   nodeId: number;
@@ -30,6 +30,7 @@ export interface Frame3DReaction {
 export interface Frame3DMemberForces {
   memberId: number;
   lengthM: number;
+  effectiveEMpa?: number;
   nStartKn: number; nEndKn: number;
   vyStartKn: number; vyEndKn: number;
   vzStartKn: number; vzEndKn: number;
@@ -286,11 +287,21 @@ export function buildFrame3DSolveRequest(
         : "De geselecteerde combinatie bevat geen 3D-belastingen met een niet-nulfactor.");
   }
 
-  const materials: { id: number; name: string; eMpa: number; nu: number; alphaPerK: number }[] = [];
+  type NativeLaw = { kind: "steelBilinear"; yield_mpa: number; hardening_ratio: number }
+    | { kind: "concreteCracking"; tensile_mpa: number; residual_ratio: number };
+  const materials: { id: number; name: string; eMpa: number; nu: number; alphaPerK: number; law?: NativeLaw }[] = [];
   const sections: { id: number; name: string; areaM2: number; iyM4: number; izM4: number; torsionJM4: number }[] = [];
   const materialIds = new Map<string, number>();
   const sectionIds = new Map<string, number>();
 
+  if (analysis === "material") {
+    if (!model.beams.some((beam) => beam.nonlinearLaw)) {
+      throw new Error("Stel bij minstens één 3D-staaf een expliciete FNL-materiaalwet in.");
+    }
+    if (thermalLoads.length || model.beams.some((beam) => Object.values(beam.releases ?? {}).some(Boolean))) {
+      throw new Error("De experimentele 3D-FNL-kern is nog niet gevalideerd voor temperatuur of staafeindscharnieren.");
+    }
+  }
   const members = model.beams.map((beam) => {
     const material = beam.material?.trim();
     const profile = beam.profileName?.trim();
@@ -299,14 +310,28 @@ export function buildFrame3DSolveRequest(
     }
     const resolved = resolveSection(material, profile);
     if (resolved.bron === "default") throw new Error(`Staaf ${beam.id}: ${resolved.reden ?? "doorsnede onbekend"}.`);
+    if (analysis === "material" && beam.nonlinearLaw) {
+      if (beam.nonlinearLaw.kind === "steelBilinear" && material in CONCRETE_E_CM
+          || beam.nonlinearLaw.kind === "concreteCracking" && STEEL_GRADES.includes(material.toUpperCase())) {
+        throw new Error(`Staaf ${beam.id}: de FNL-materiaalwet past niet bij materiaal ${material}.`);
+      }
+    }
 
-    let materialId = materialIds.get(material);
+    const law: NativeLaw | undefined = analysis !== "material" || !beam.nonlinearLaw ? undefined
+      : beam.nonlinearLaw.kind === "steelBilinear"
+        ? { kind: "steelBilinear", yield_mpa: beam.nonlinearLaw.yieldMpa,
+          hardening_ratio: beam.nonlinearLaw.hardeningRatio }
+        : { kind: "concreteCracking", tensile_mpa: beam.nonlinearLaw.tensileMpa,
+          residual_ratio: beam.nonlinearLaw.residualRatio };
+    const materialKey = `${material}\u0000${JSON.stringify(law ?? null)}`;
+    let materialId = materialIds.get(materialKey);
     if (!materialId) {
       materialId = materials.length + 1;
-      materialIds.set(material, materialId);
+      materialIds.set(materialKey, materialId);
       materials.push({
         id: materialId, name: material, eMpa: resolved.E, nu: poisson(material),
         alphaPerK: thermalAlphaForMaterial(material),
+        ...(law ? { law } : {}),
       });
     }
 
@@ -406,7 +431,7 @@ export async function solveFrame3D(
   engine: SolverEngineId = "dedaliano",
 ): Promise<Frame3DSolveResult> {
   const request = buildFrame3DSolveRequest(model, analysis, activeLoadCaseId);
-  const input = analysis === "linear" ? { ...request, bucklingModes: 0 } : request;
+  const input = analysis === "p-delta" ? request : { ...request, bucklingModes: 0 };
   return callFrame3DSolver(input, engine);
 }
 
@@ -418,7 +443,7 @@ export async function solveFrame3DCombination(
   engine: SolverEngineId = "dedaliano",
 ): Promise<Frame3DSolveResult> {
   const request = buildFrame3DSolveRequest(model, analysis, factors);
-  const input = analysis === "linear" ? { ...request, bucklingModes: 0 } : request;
+  const input = analysis === "p-delta" ? request : { ...request, bucklingModes: 0 };
   return callFrame3DSolver(input, engine);
 }
 
@@ -471,7 +496,8 @@ function adaptNativeFrame3DResult(
     const source = memberById.get(member.memberId);
     const start = source && nodeById.get(source.startNodeId);
     const end = source && nodeById.get(source.endNodeId);
-    if (!start || !end || member.localEndForces.length !== 12
+    if (!start || !end || !Number.isFinite(member.effectiveEMpa) || member.effectiveEMpa <= 0
+        || member.localEndForces.length !== 12
         || member.localEndForces.some((value) => !Number.isFinite(value))) {
       throw new Error("De eigen Rust-raamwerkkern leverde ongeldige staafeindkrachten.");
     }
@@ -479,6 +505,7 @@ function adaptNativeFrame3DResult(
     return {
       memberId: member.memberId,
       lengthM: Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z),
+      effectiveEMpa: member.effectiveEMpa,
       nStartKn: -f[0], vyStartKn: f[1], vzStartKn: f[2],
       torsionStartKnm: f[3], myStartKnm: f[4], mzStartKnm: f[5],
       nEndKn: f[6], vyEndKn: -f[7], vzEndKn: -f[8],
@@ -511,7 +538,7 @@ function adaptNativeFrame3DResult(
     engine: { id: "openaec-native-fem", name: "Open FEM Rust", revision: "0.1.0", license: "AGPL-3.0-or-later" },
     analysis: input.analysis,
     displacements, reactions, memberForces, diagrams,
-    ...(input.analysis === "p-delta" ? { secondOrder: {
+    ...(input.analysis !== "linear" ? { secondOrder: {
       iterations: native.iterations, converged: true, stable: true,
       maxAmplification: native.maxAmplification,
     } } : {}),
@@ -522,6 +549,8 @@ function adaptNativeFrame3DResult(
     solverPath: "native-rust",
     diagnostics: [
       "Eigen Rust-raamwerkkern: 3D-raamwerk.",
+      ...(input.analysis === "material"
+        ? ["FNL gebruikt een monotone secant-E per staaf; plastische en scheurgeschiedenis ontbreken nog."] : []),
       ...(buckling.status === "failed" ? [`Eigenknik: ${buckling.reason}`] : []),
       ...(input.analysis === "p-delta" && !balance.ok
         ? ["De onafhankelijke momentensom gebruikt de onvervormde geometrie; bij P-Δ kan daardoor een momentrest ontstaan."]
@@ -538,6 +567,9 @@ async function callFrame3DSolver(input: Frame3DSolveRequest, engine: SolverEngin
   if (engine === "openaec-native-fem") {
     return checked(adaptNativeFrame3DResult(input,
       await solveNativeFem<NativeFrame3DResult>("frame3d", input)));
+  }
+  if (input.analysis === "material") {
+    throw new Error("Fysisch niet-lineaire 3D-analyse is alleen beschikbaar met Open FEM Rust (experimenteel).");
   }
   const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
   const usesLegacyCompatibleLoads = input.memberLoads.length === 0
