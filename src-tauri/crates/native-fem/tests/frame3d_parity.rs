@@ -73,6 +73,39 @@ fn compare(model: Value) {
             );
         }
     }
+    for member in &native.members {
+        let existing = reference
+            .member_forces
+            .iter()
+            .find(|value| value.member_id == member.member_id)
+            .unwrap();
+        let expected = [
+            existing.n_start_kn,
+            existing.vy_start_kn,
+            existing.vz_start_kn,
+            existing.torsion_start_knm,
+            existing.my_start_knm,
+            existing.mz_start_knm,
+            existing.n_end_kn,
+            existing.vy_end_kn,
+            existing.vz_end_kn,
+            existing.torsion_end_knm,
+            existing.my_end_knm,
+            existing.mz_end_knm,
+        ];
+        let signs = [
+            -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0, -1.0,
+        ];
+        for (axis, value) in expected.into_iter().enumerate() {
+            let tolerance = 1e-5_f64.max(value.abs() * 1e-6);
+            assert!(
+                (signs[axis] * member.local_end_forces[axis] - value).abs() < tolerance,
+                "member {} axis {axis}: native={} reference={value}",
+                member.member_id,
+                member.local_end_forces[axis]
+            );
+        }
+    }
 }
 
 #[test]

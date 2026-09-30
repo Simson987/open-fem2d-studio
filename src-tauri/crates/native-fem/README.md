@@ -51,10 +51,16 @@ gereedschap. `design-mockup/src/lib/nativeFemClient.ts` kiest vanuit de app
 automatisch Tauri of de ontwikkelbrug. Een drie-wegen-test vergelijkt de
 gehele JSON-uitvoer voor een mesh en een Q4-trekproef.
 
-Deze route is nog optioneel: de bestaande analyseknoppen gebruiken de huidige
-solver. De resultaten van alle native elementtypen zijn nog niet vertaald naar
-de weergave-, combinatie- en rapporttypen van FEM Studio. Onbekende `kind`- en
-invoervelden worden door de Rust-typen geweigerd.
+In **Instellingen → Berekening** kan de gebruiker nu `Open FEM Rust
+(experimenteel)` kiezen voor een eerste-orde 3D-raamwerk. De bestaande
+analyseknop gebruikt dan dezelfde app-invoer en vertaalt de Rust-uitvoer naar
+knoopverplaatsingen, reacties, staafkrachten, eindstationdiagrammen, evenwicht,
+resultaatweergave en rapport. De automatische keuze blijft bij de bestaande
+solver. De app weigert voor de native route P-Δ, staaflijn-, staafpunt- en
+thermische lasten zolang eigenknik en volledige snedekrachtlijnen ontbreken.
+De andere native elementresultaten zijn nog niet op alle weergave-, combinatie-
+en rapporttypen aangesloten. Onbekende `kind`- en invoervelden worden door de
+Rust-typen geweigerd.
 
 ```bash
 cd src-tauri
@@ -63,6 +69,7 @@ cargo test -p openaec-native-fem --test frame3d_parity
 cargo build -p openaec-native-fem --bins
 cd ../design-mockup
 node --import tsx test-native-frame3d-comparison.mjs
+node --import tsx test-native-frame3d-app-route.mjs
 node --import tsx test-native-plate2d-comparison.mjs
 node --import tsx test-native-plate-bending-comparison.mjs
 node --import tsx test-native-quad2d-comparison.mjs

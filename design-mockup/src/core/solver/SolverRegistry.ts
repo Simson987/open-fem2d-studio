@@ -8,7 +8,7 @@
 
 export const SOLVER_PREFERENCE_KEY = "solverPreference";
 
-export type SolverEngineId = "open-fem-2d" | "dedaliano";
+export type SolverEngineId = "open-fem-2d" | "dedaliano" | "openaec-native-fem";
 export type SolverPreference = "automatic" | SolverEngineId;
 export type SolverDimension = "2d" | "3d";
 export type SolverAnalysisKind = "linear" | "p-delta" | "material-nonlinear";
@@ -68,6 +68,19 @@ export const SOLVER_REGISTRY: readonly SolverDescriptor[] = Object.freeze([
     capabilities: {
       dimensions: ["3d"],
       analyses: ["linear", "p-delta"],
+      elementFamilies: ["frame"],
+    },
+  },
+  {
+    id: "openaec-native-fem",
+    name: "Open FEM Rust (experimenteel)",
+    version: "0.1.0",
+    license: "AGPL-3.0-or-later",
+    available: true,
+    priority: 150,
+    capabilities: {
+      dimensions: ["3d"],
+      analyses: ["linear"],
       elementFamilies: ["frame"],
     },
   },

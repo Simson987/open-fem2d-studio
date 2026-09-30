@@ -49,6 +49,7 @@ import {
   normaliseSolverPreference,
   resolveSolver,
   type SolverAnalysisKind,
+  type SolverDescriptor,
 } from "./core/solver/SolverRegistry";
 import LibraryDialog, { type LibraryTab } from "./components/settings/LibraryDialog";
 import TableView from "./components/table/TableView";
@@ -2109,17 +2110,19 @@ function App() {
 
   const handleSolve = useCallback(async () => {
     const analysis: SolverAnalysisKind = modelDimension === "3d"
-      ? "p-delta"
+      ? fem.analysetype === "eersteOrde" ? "linear"
+        : fem.analysetype === "tweedeOrdeFysisch" ? "material-nonlinear" : "p-delta"
       : fem.analysetype === "eersteOrde"
         ? "linear"
         : fem.analysetype === "tweedeOrdeFysisch"
           ? "material-nonlinear"
           : "p-delta";
+    let selectedSolver: SolverDescriptor;
     try {
       const preference = normaliseSolverPreference(
         await getSetting<unknown>(SOLVER_PREFERENCE_KEY, "automatic"),
       );
-      resolveSolver(preference, {
+      selectedSolver = resolveSolver(preference, {
         schemaVersion: 1,
         dimension: modelDimension,
         analysis,
@@ -2168,9 +2171,9 @@ function App() {
         // tweede-orde-uitkomsten worden dus nooit gesuperponeerd.
         const [casePairs, combinationPairs] = await Promise.all([
           Promise.all([...loadedCaseIds].map(async (caseId) =>
-            [caseId, await solveFrame3D(frame3dCalculationModel, caseId, frame3dAnalysis)] as const)),
+            [caseId, await solveFrame3D(frame3dCalculationModel, caseId, frame3dAnalysis, selectedSolver.id)] as const)),
           Promise.all(combinations.map(async (combination) =>
-            [combination.id, await solveFrame3DCombination(frame3dCalculationModel, combination.factors, frame3dAnalysis)] as const)),
+            [combination.id, await solveFrame3DCombination(frame3dCalculationModel, combination.factors, frame3dAnalysis, selectedSolver.id)] as const)),
         ]);
         if (generation !== frame3dSolveGenerationRef.current) {
           const message = `De 3D-berekening is vervallen doordat model of rekeninstellingen tijdens de berekening wijzigden (generatie ${generation} → ${frame3dSolveGenerationRef.current}).`;

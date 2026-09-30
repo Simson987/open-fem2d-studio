@@ -1,4 +1,6 @@
 import { isTauriApp } from "../../lib/tauri";
+import { solveNativeFem } from "../../lib/nativeFemClient";
+import type { SolverEngineId } from "../../core/solver/SolverRegistry";
 import {
   CONCRETE_E_CM,
   NU_BETON,
@@ -401,10 +403,11 @@ export async function solveFrame3D(
   model: Frame3DModel,
   activeLoadCaseId?: number,
   analysis: Frame3DAnalysisKind = "p-delta",
+  engine: SolverEngineId = "dedaliano",
 ): Promise<Frame3DSolveResult> {
   const request = buildFrame3DSolveRequest(model, analysis, activeLoadCaseId);
   const input = analysis === "linear" ? { ...request, bucklingModes: 0 } : request;
-  return callFrame3DSolver(input);
+  return callFrame3DSolver(input, engine);
 }
 
 /** Los één belastingcombinatie rechtstreeks als tweede-ordeprobleem op. */
@@ -412,21 +415,115 @@ export async function solveFrame3DCombination(
   model: Frame3DModel,
   factors: ReadonlyMap<number, number>,
   analysis: Frame3DAnalysisKind = "p-delta",
+  engine: SolverEngineId = "dedaliano",
 ): Promise<Frame3DSolveResult> {
   const request = buildFrame3DSolveRequest(model, analysis, factors);
   const input = analysis === "linear" ? { ...request, bucklingModes: 0 } : request;
-  return callFrame3DSolver(input);
+  return callFrame3DSolver(input, engine);
 }
 
 type Frame3DSolveRequest = Omit<ReturnType<typeof buildFrame3DSolveRequest>, "bucklingModes"> & {
   readonly bucklingModes: number;
 };
 
-async function callFrame3DSolver(input: Frame3DSolveRequest): Promise<Frame3DSolveResult> {
+interface NativeFrame3DResult {
+  nodes: Array<{ nodeId: number; displacement: number[]; reaction: number[] }>;
+  members: Array<{ memberId: number; localEndForces: number[]; effectiveEMpa: number }>;
+  iterations: number;
+  relativeChange: number;
+  equilibriumResidual: number;
+}
+
+/** Keep the native element's local nodal forces separate from the app's
+ * internal-section sign convention. This mapping is checked against the
+ * existing solver for axial force, both shears, torsion and both moments. */
+function adaptNativeFrame3DResult(
+  input: Frame3DSolveRequest,
+  native: NativeFrame3DResult,
+): Frame3DSolveResult {
+  if (native.nodes?.length !== input.nodes.length || native.members?.length !== input.members.length
+      || !Number.isFinite(native.equilibriumResidual) || native.equilibriumResidual > 1e-7) {
+    throw new Error("De eigen Rust-raamwerkkern leverde geen volledig of evenwichtig resultaat.");
+  }
+  const nodeById = new Map(input.nodes.map((node) => [node.id, node]));
+  const memberById = new Map(input.members.map((member) => [member.id, member]));
+  const displacements: Frame3DDisplacement[] = native.nodes.map((node) => {
+    if (!nodeById.has(node.nodeId) || node.displacement.length !== 6
+        || node.displacement.some((value) => !Number.isFinite(value))) {
+      throw new Error("De eigen Rust-raamwerkkern leverde een ongeldige knoopverplaatsing.");
+    }
+    const [ux, uy, uz, rx, ry, rz] = node.displacement;
+    return { nodeId: node.nodeId, ux, uy, uz, rx, ry, rz };
+  });
+  const reactions: Frame3DReaction[] = native.nodes.map((node) => {
+    if (node.reaction.length !== 6 || node.reaction.some((value) => !Number.isFinite(value))) {
+      throw new Error("De eigen Rust-raamwerkkern leverde een ongeldige oplegreactie.");
+    }
+    const [fx, fy, fz, mx, my, mz] = node.reaction;
+    return { nodeId: node.nodeId, fx, fy, fz, mx, my, mz };
+  });
+  const memberForces: Frame3DMemberForces[] = native.members.map((member) => {
+    const source = memberById.get(member.memberId);
+    const start = source && nodeById.get(source.startNodeId);
+    const end = source && nodeById.get(source.endNodeId);
+    if (!start || !end || member.localEndForces.length !== 12
+        || member.localEndForces.some((value) => !Number.isFinite(value))) {
+      throw new Error("De eigen Rust-raamwerkkern leverde ongeldige staafeindkrachten.");
+    }
+    const f = member.localEndForces;
+    return {
+      memberId: member.memberId,
+      lengthM: Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z),
+      nStartKn: -f[0], vyStartKn: f[1], vzStartKn: f[2],
+      torsionStartKnm: f[3], myStartKnm: f[4], mzStartKnm: f[5],
+      nEndKn: f[6], vyEndKn: -f[7], vzEndKn: -f[8],
+      torsionEndKnm: -f[9], myEndKnm: -f[10], mzEndKnm: -f[11],
+    };
+  });
+  const diagram = (start: number, end: number, memberId: number): Frame3DMemberDiagram => ({
+    memberId, points: [{ t: 0, value: start }, { t: 1, value: end }],
+    maxValue: Math.max(start, end), minValue: Math.min(start, end),
+    maxAbsValue: Math.max(Math.abs(start), Math.abs(end)),
+  });
+  const diagrams: Frame3DDiagrams = {
+    momentY: memberForces.map((member) => diagram(member.myStartKnm, member.myEndKnm, member.memberId)),
+    momentZ: memberForces.map((member) => diagram(member.mzStartKnm, member.mzEndKnm, member.memberId)),
+    shearY: memberForces.map((member) => diagram(member.vyStartKn, member.vyEndKn, member.memberId)),
+    shearZ: memberForces.map((member) => diagram(member.vzStartKn, member.vzEndKn, member.memberId)),
+    axial: memberForces.map((member) => diagram(member.nStartKn, member.nEndKn, member.memberId)),
+    torsion: memberForces.map((member) => diagram(member.torsionStartKnm, member.torsionEndKnm, member.memberId)),
+  };
+  const balance = frame3DGlobalForceBalance(input, { reactions });
+  const residualOk = native.equilibriumResidual <= 1e-8;
+  return {
+    schemaVersion: 1,
+    engine: { id: "openaec-native-fem", name: "Open FEM Rust", revision: "0.1.0", license: "AGPL-3.0-or-later" },
+    analysis: input.analysis,
+    displacements, reactions, memberForces, diagrams,
+    buckling: { status: "notApplicable", reason: "Eigenwaarde-knik is nog niet beschikbaar in de eigen Rust-kern." },
+    equilibrium: { relativeResidual: native.equilibriumResidual,
+      residualOk, maxImbalanceKn: balance.maxImbalanceKn,
+      equilibriumOk: residualOk && balance.ok },
+    solverPath: "native-rust",
+    diagnostics: ["Eigen Rust-raamwerkkern: lineaire 3D-analyse; eigenwaarde-knik ontbreekt nog."],
+  };
+}
+
+async function callFrame3DSolver(input: Frame3DSolveRequest, engine: SolverEngineId): Promise<Frame3DSolveResult> {
   const checked = (result: Frame3DSolveResult): Frame3DSolveResult => ({
     ...result,
     forceBalance: frame3DGlobalForceBalance(input, result),
   });
+  if (engine === "openaec-native-fem") {
+    if (input.analysis !== "linear" || input.bucklingModes !== 0) {
+      throw new Error("De eigen Rust-raamwerkkern ondersteunt via de app nu alleen eerste orde.");
+    }
+    if (input.memberLoads.length || input.memberPointLoads.length || input.thermalLoads.length) {
+      throw new Error("Staaf- en temperatuurlasten wachten in de app nog op gevalideerde native snedekrachtlijnen.");
+    }
+    return checked(adaptNativeFrame3DResult(input,
+      await solveNativeFem<NativeFrame3DResult>("frame3d", input)));
+  }
   const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
   const usesLegacyCompatibleLoads = input.memberLoads.length === 0
     && input.memberPointLoads.length === 0
