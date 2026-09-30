@@ -76,6 +76,7 @@ struct Rij {
 /// hier op één regel staan is de enige plek waar de koppeling wordt
 /// vastgelegd.
 const KRUISTABEL: &[Rij] = &[
+    Rij { tauri: Some("solve_native_fem"), toetsbrug: Some("solve_native_fem"), mcp: Some("solve_native_fem"), reden: "" },
     Rij { tauri: Some("list_steel_profiles"), toetsbrug: Some("list_steel_profiles"), mcp: Some("list_steel_profiles"), reden: "" },
     Rij { tauri: Some("list_steel_grades"), toetsbrug: Some("list_steel_grades"), mcp: Some("list_steel_grades"), reden: "" },
     // VOETANGEL: meervoud tegen enkelvoud. Het command en de opdracht nemen

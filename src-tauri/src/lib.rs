@@ -11,6 +11,7 @@ use nen_en_1992_1_1::{
 // crate is toegestaan en houdt de wijzigingen uit elkaars vaarwater.
 use concrete_check::{ConcreteColumnCheckRequest, ConcreteColumnCheckResponse};
 use frame3d_solver::{EngineInfo as Frame3DEngineInfo, SolveRequest3D, SolveResult3D};
+use openaec_native_fem::dispatch::{NativeFemRequest, NativeFemResult};
 // Bijlage B — de kruipcoëfficiënt. Eigen `use`-regel om dezelfde reden.
 use nen_en_1992_1_1::{CreepCoefficientRequest, CreepCoefficientResponse};
 use nen_en_1993_1_1_section::{S235, S275, S355, S420, S460, SteelGrade};
@@ -350,6 +351,12 @@ async fn solve_frame3d(input: SolveRequest3D) -> Result<SolveResult3D, String> {
     frame3d_solver::solve(input)
 }
 
+/// Experimentele eigen Rust-FEM-kern, met één contract voor alle elementtypen.
+#[tauri::command]
+async fn solve_native_fem(inputs: NativeFemRequest) -> Result<NativeFemResult, String> {
+    openaec_native_fem::dispatch::solve_native_fem(inputs)
+}
+
 // ── Het bedieningskanaal ────────────────────────────────────────────────────
 // Twee commands, dun: de logica staat in `gui_control`. Ze staan hier als
 // functie omdat elke naam in `generate_handler!` een functie in dít bestand
@@ -407,6 +414,7 @@ pub fn run() {
             generate_steel_report_pdf,
             frame3d_engine_info,
             solve_frame3d,
+            solve_native_fem,
             gui_control_actief,
             gui_control_antwoord,
         ])

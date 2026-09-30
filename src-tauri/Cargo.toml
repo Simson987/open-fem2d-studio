@@ -55,6 +55,7 @@ report = { path = "crates/report" }
 # Ruimtelijke raamwerken: neutraal Open FEM-contract met een vastgezette
 # Dedaliano/Stabileo-adapter (lineair, directe tweede orde en eigenknik).
 frame3d-solver = { path = "crates/frame3d-solver" }
+openaec-native-fem = { path = "crates/native-fem" }
 # ── GUI-bediening (module `gui_control`, alleen actief met OPENAEC_GUI_CONTROL=1) ──
 # tiny_http: synchrone localhost-luisteraar; de app-crate heeft geen tokio.
 # rand/png/raw-window-handle staan al in de lock via Tauri — zelfde versies,

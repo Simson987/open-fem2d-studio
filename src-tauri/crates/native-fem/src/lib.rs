@@ -1,6 +1,7 @@
 //! Independent finite-element kernels. The input uses metres, kN and MPa.
 //! These kernels are opt-in until their reference suite covers production use.
 
+pub mod dispatch;
 pub mod frame3d;
 pub mod hybrid_plate;
 pub mod material2d;

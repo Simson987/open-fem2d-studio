@@ -31,6 +31,31 @@ eenheden expliciet. `buildNativePlate2DRequest` en
 om naar de betreffende kern en weigert onder meer gemengde elementtypes,
 gekoppelde balken, orthotropie en veren.
 
+## Gedeelde aanroep uit de app
+
+`dispatch::solve_native_fem` accepteert één getypeerd verzoek:
+
+```json
+{
+  "kind": "squareMesh",
+  "input": {"originX":0,"originY":0,"widthM":2,"heightM":2,"cellSizeM":1,"materialId":1,"thicknessM":0.1}
+}
+```
+
+Andere `kind`-waarden zijn `frame3d`, `plate2d`, `plateBending`, `quad2d`,
+`hybridPlate` en `prestressedBeam`. Het antwoord heeft dezelfde `kind` en een
+`result` met het bestaande resultaatcontract van die kern. De desktop roept
+dit aan met Tauri-command `solve_native_fem({ inputs })`, de ontwikkelbrowser
+met toetsbrug-opdracht `solve_native_fem`, en MCP met het gelijknamige
+gereedschap. `design-mockup/src/lib/nativeFemClient.ts` kiest vanuit de app
+automatisch Tauri of de ontwikkelbrug. Een drie-wegen-test vergelijkt de
+gehele JSON-uitvoer voor een mesh en een Q4-trekproef.
+
+Deze route is nog optioneel: de bestaande analyseknoppen gebruiken de huidige
+solver. De resultaten van alle native elementtypen zijn nog niet vertaald naar
+de weergave-, combinatie- en rapporttypen van FEM Studio. Onbekende `kind`- en
+invoervelden worden door de Rust-typen geweigerd.
+
 ```bash
 cd src-tauri
 cargo test -p openaec-native-fem

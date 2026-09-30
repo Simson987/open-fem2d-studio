@@ -75,6 +75,7 @@ plaat-check = { path = "../plaat-check" }
 # Ruimtelijke raamwerken: exact dezelfde neutrale adapter en vastgezette
 # Dedaliano-kern als het Tauri-command `solve_frame3d`.
 frame3d-solver = { path = "../frame3d-solver" }
+openaec-native-fem = { path = "../native-fem" }
 
 [dev-dependencies]
 # De toetsbrug als bibliotheek: de drie-wegen-verificatie roept zijn werkelijke

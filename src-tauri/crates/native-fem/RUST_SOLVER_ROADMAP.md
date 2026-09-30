@@ -13,7 +13,7 @@ nog geen vervanging van de app-solver.
 | 2D-buigplaat | DKT en 4-knoops hybride Kirchhoff, E(rek) | GNL-buiging, gescheurde betonstijfheid, niet-uniforme lasten, orthotropie en betrouwbare dwarskrachtherleiding aan alle randen. |
 | Wapeningscontrole | Verticale dwarskrachtwapening, huidtrek en EC2-scheurwijdte als aparte UGT/BGT-postprocessen | Nationale bijlage, belastingscombinaties, detaillering, scheurhistorie en toetsing van gecombineerde membraan- en plaatkrachten. |
 | Lineaire algebra | Dicht tot 600 DOF; ijle Jacobi-PCG tot 20.000 DOF voor symmetrisch positieve grote 2D-matrices | Robuuste factorisatie/inertiecontrole, preconditioner voor slecht geconditioneerde modellen en benchmark op grote productiemodellen. |
-| App-koppeling | TypeScript-invoeradapters en aparte Rust-CLI's | Eén gedeeld modelcontract en daadwerkelijke aanroep vanuit de app; gelijkwaardige resultaattypen, foutmeldingen en rapportage. |
+| App-koppeling | Eén getypeerde dispatcher via Tauri, toetsbrug en MCP; TypeScript-client en invoeradapters | De bestaande analyseknoppen aan deze route koppelen, alle modelopties vertalen en de resultaattypen voor weergave, combinaties en rapportage gelijk maken. |
 
 ## Volgorde en acceptatie
 

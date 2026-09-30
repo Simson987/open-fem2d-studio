@@ -37,6 +37,7 @@ use concrete_check::ConcreteColumnCheckRequest;
 use nen_en_1992_1_1::{ConcreteCoverRequest, CreepCoefficientRequest, EffectiveFlangeWidthRequest};
 use nen_en_1993_1_1_section::{S235, S275, S355, S420, S460};
 use nen_en_1993_1_8_las::LasInput;
+use openaec_native_fem::dispatch::NativeFemRequest;
 use plaat_check::PlateCheckInput;
 use serde::Deserialize;
 use serde_json::Value;
@@ -57,6 +58,13 @@ pub struct Verzoek {
 
 pub fn behandel(v: Verzoek) -> Result<Value, String> {
     match v.opdracht.as_str() {
+        "solve_native_fem" => {
+            let inputs = v.inputs.ok_or("solve_native_fem vraagt om `inputs`")?;
+            let request: NativeFemRequest =
+                serde_json::from_value(inputs).map_err(|e| format!("native FEM-invoer: {e}"))?;
+            serde_json::to_value(openaec_native_fem::dispatch::solve_native_fem(request)?)
+                .map_err(|e| e.to_string())
+        }
         "list_steel_profiles" => {
             serde_json::to_value(steel_profiles::db().all()).map_err(|e| e.to_string())
         }
@@ -250,5 +258,25 @@ pub fn behandel(v: Verzoek) -> Result<Value, String> {
                 .map_err(|e| e.to_string())
         }
         andere => Err(format!("onbekende opdracht: {andere}")),
+    }
+}
+
+#[cfg(test)]
+mod native_fem_tests {
+    use super::*;
+
+    #[test]
+    fn native_square_mesh_uses_the_shared_dispatcher_contract() {
+        let value = serde_json::json!({
+            "opdracht": "solve_native_fem",
+            "inputs": { "kind": "squareMesh", "input": {
+                "originX": 0, "originY": 0, "widthM": 2, "heightM": 2,
+                "cellSizeM": 1, "materialId": 1, "thicknessM": 0.1
+            }}
+        });
+        let request: Verzoek = serde_json::from_value(value).unwrap();
+        let answer = behandel(request).unwrap();
+        assert_eq!(answer["kind"], "squareMesh");
+        assert_eq!(answer["result"]["nodes"].as_array().unwrap().len(), 9);
     }
 }

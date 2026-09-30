@@ -30,6 +30,7 @@ mod fem_tools;
 
 /// Ruimtelijke raamwerken: dezelfde versievaste Rust-adapter als de app.
 mod frame3d_tools;
+mod native_fem_tools;
 
 /// De acht betontools (NEN-EN 1992-1-1). Ze roepen dezelfde `concrete_check`
 /// aan als het Tauri-command en de toetsbrug — de derde weg naar één
@@ -470,6 +471,7 @@ fn tool_definitions() -> Value {
         .expect("de tooldefinities zijn een array");
     lijst.extend(fem_tools::tool_definitions());
     lijst.extend(frame3d_tools::tool_definitions());
+    lijst.extend(native_fem_tools::tool_definitions());
     lijst.extend(concrete_tools::tool_definitions());
     lijst.extend(timber_tools::tool_definitions());
     lijst.extend(plate_tools::tool_definitions());
@@ -536,6 +538,9 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
         fem if fem_tools::is_fem_tool(fem) => fem_tools::dispatch(fem, args).await,
         frame3d if frame3d_tools::is_frame3d_tool(frame3d) => {
             frame3d_tools::dispatch(frame3d, args).await
+        }
+        native if native_fem_tools::is_native_fem_tool(native) => {
+            native_fem_tools::dispatch(native, args).await
         }
         // De betontools. Ze roepen `concrete_check` aan — dezelfde functies die
         // `src-tauri/src/lib.rs` en `crates/toetsbrug` aanroepen. Zie
