@@ -11,6 +11,7 @@ use crate::math::{constrained_solve, Matrix};
 use crate::plate_bending::{Load, Material, Node, NodeResult, Support};
 use crate::positive;
 use crate::quad2d::{ModulusCurve, Quad};
+use crate::reinforced_plate::{self, ReinforcementEnvelope, ReinforcementSpec};
 
 const NGAUSS: usize = 4;
 const ROOTS: [f64; NGAUSS] = [
@@ -41,6 +42,8 @@ pub struct Request {
     #[serde(default)]
     pub modulus_curves: Vec<ModulusCurve>,
     #[serde(default)]
+    pub reinforcement: Option<ReinforcementSpec>,
+    #[serde(default)]
     pub load_path: Vec<f64>,
     #[serde(default = "default_tolerance")]
     pub tolerance: f64,
@@ -65,6 +68,8 @@ pub struct ElementResult {
     pub shear_kn_per_m: [f64; 2],
     pub effective_e_mpa: f64,
     pub max_fibre_strain: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reinforcement: Option<ReinforcementEnvelope>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -241,6 +246,7 @@ fn element(
     let mut g = [[0.0; 12]; 17];
     let mut area = 0.0;
     let mut sample_points: Vec<[f64; 2]> = nodes.iter().map(|n| [n.x, n.y]).collect();
+    sample_points.push(centre);
     let d = 1000.0 * quad.thickness_m.powi(3) / (12.0 * (1.0 - material.nu * material.nu)); // E=1 MPa
     for i in 0..NGAUSS {
         for j in 0..NGAUSS {
@@ -345,6 +351,68 @@ fn moment(
     (m, v)
 }
 
+/// Patch recovery of a linear shear field from neighbouring element centres.
+/// Pressure is applied as nodal loads, so the homogeneous hybrid moment
+/// field lacks the pressure-induced shear gradient within an element.
+fn recovered_shear_gradient(
+    index: usize,
+    elements: &[HybridElement],
+    results: &[ElementResult],
+) -> [[f64; 2]; 2] {
+    let centre = elements[index].centre;
+    let base = results[index].shear_kn_per_m;
+    let radius2 = (1.6 * elements[index].scale).powi(2);
+    let (mut sxx, mut sxy, mut syy) = (0.0, 0.0, 0.0);
+    let mut rhs = [[0.0; 2]; 2];
+    for (j, other) in elements.iter().enumerate() {
+        if j == index {
+            continue;
+        }
+        let dx = other.centre[0] - centre[0];
+        let dy = other.centre[1] - centre[1];
+        let d2 = dx * dx + dy * dy;
+        if d2 < 1e-16 || d2 > radius2 {
+            continue;
+        }
+        let w = 1.0 / d2;
+        sxx += w * dx * dx;
+        sxy += w * dx * dy;
+        syy += w * dy * dy;
+        for component in 0..2 {
+            let delta = results[j].shear_kn_per_m[component] - base[component];
+            rhs[component][0] += w * dx * delta;
+            rhs[component][1] += w * dy * delta;
+        }
+    }
+    let determinant = sxx * syy - sxy * sxy;
+    if determinant > (sxx + syy).powi(2) * 1e-10 {
+        return std::array::from_fn(|component| {
+            [
+                (syy * rhs[component][0] - sxy * rhs[component][1]) / determinant,
+                (sxx * rhs[component][1] - sxy * rhs[component][0]) / determinant,
+            ]
+        });
+    }
+    let trace = sxx + syy;
+    if trace <= 1e-12 {
+        return [[0.0; 2]; 2];
+    }
+    let lambda = 0.5 * (trace + ((sxx - syy).powi(2) + 4.0 * sxy * sxy).sqrt());
+    let mut axis = if sxy.abs() > 1e-12 {
+        [lambda - syy, sxy]
+    } else if sxx >= syy {
+        [1.0, 0.0]
+    } else {
+        [0.0, 1.0]
+    };
+    let norm = axis[0].hypot(axis[1]);
+    axis = [axis[0] / norm, axis[1] / norm];
+    std::array::from_fn(|component| {
+        let projection = (rhs[component][0] * axis[0] + rhs[component][1] * axis[1]) / lambda;
+        [projection * axis[0], projection * axis[1]]
+    })
+}
+
 fn max_fibre_strain(element: &HybridElement, local: &[f64; 12], e_mpa: f64) -> f64 {
     let mut maximum = 0.0_f64;
     let d = e_mpa * 1000.0 * element.thickness.powi(3) / (12.0 * (1.0 - element.nu * element.nu));
@@ -425,6 +493,9 @@ pub fn solve(request: &Request) -> Result<ResultBending, String> {
     for quad in &request.quads {
         if !ids.insert(quad.id) {
             return Err("duplicate hybrid quad id".into());
+        }
+        if let Some(spec) = &request.reinforcement {
+            spec.validate(quad.thickness_m)?;
         }
         let indices = quad.node_ids.map(|id| {
             node_index
@@ -591,12 +662,12 @@ pub fn solve(request: &Request) -> Result<ResultBending, String> {
             },
         })
         .collect();
-    let elements = elements
+    let mut element_results = elements
         .iter()
         .enumerate()
         .map(|(i, element)| {
             let local = element.dofs.map(|j| u[j]);
-            let (moment, shear) = moment(
+            let (centre_moment, centre_shear) = moment(
                 element,
                 &local,
                 e_current[i],
@@ -605,16 +676,44 @@ pub fn solve(request: &Request) -> Result<ResultBending, String> {
             );
             ElementResult {
                 quad_id: element.id,
-                moment_knm_per_m: moment,
-                shear_kn_per_m: shear,
+                moment_knm_per_m: centre_moment,
+                shear_kn_per_m: centre_shear,
                 effective_e_mpa: e_current[i],
                 max_fibre_strain: peak[i],
+                reinforcement: None,
             }
         })
-        .collect();
+        .collect::<Vec<_>>();
+    if let Some(spec) = &request.reinforcement {
+        for (i, element) in elements.iter().enumerate() {
+            let local = element.dofs.map(|j| u[j]);
+            let gradient = recovered_shear_gradient(i, &elements, &element_results);
+            let centre_shear = element_results[i].shear_kn_per_m;
+            let samples: Vec<_> = element
+                .sample_points
+                .iter()
+                .map(|point| {
+                    let (m, _) = moment(element, &local, e_current[i], point[0], point[1]);
+                    let offset = [point[0] - element.centre[0], point[1] - element.centre[1]];
+                    let v = std::array::from_fn(|component| {
+                        centre_shear[component]
+                            + gradient[component][0] * offset[0]
+                            + gradient[component][1] * offset[1]
+                    });
+                    (*point, m, v)
+                })
+                .collect();
+            element_results[i].reinforcement = Some(reinforced_plate::envelope(
+                spec,
+                element.thickness,
+                element.base_e,
+                &samples,
+            )?);
+        }
+    }
     Ok(ResultBending {
         nodes,
-        elements,
+        elements: element_results,
         iterations,
         relative_residual,
     })
@@ -768,6 +867,7 @@ mod tests {
             } else {
                 vec![]
             },
+            reinforcement: None,
             load_path: vec![],
             tolerance: 1e-8,
             max_iterations: 40,
@@ -834,6 +934,7 @@ mod tests {
             loads: vec![],
             pressure_kn_m2: -1.0,
             modulus_curves: vec![],
+            reinforcement: None,
             load_path: vec![],
             tolerance: 1e-8,
             max_iterations: 40,
@@ -865,5 +966,32 @@ mod tests {
             "{centre_w} vs {navier}"
         );
         assert!(result.relative_residual < 1e-8);
+    }
+    #[test]
+    fn recovered_shear_approximates_cantilever_support_value() {
+        let mut request = cantilever_request(false);
+        request.reinforcement = Some(
+            serde_json::from_value(serde_json::json!({
+                "limitState":"ultimate", "fckMpa":20.0, "fctmMpa":2.2,
+                "gammaC":1.5, "fydMpa":435.0, "fywdMpa":435.0,
+                "esMpa":200000.0, "coverMm":20.0, "barDiameterMm":12.0,
+                "topXMm2PerM":1000.0, "topYMm2PerM":1000.0,
+                "bottomXMm2PerM":1000.0, "bottomYMm2PerM":1000.0
+            }))
+            .unwrap(),
+        );
+        let result = solve(&request).unwrap();
+        let governing = result.elements[0]
+            .reinforcement
+            .as_ref()
+            .unwrap()
+            .shear
+            .as_ref()
+            .unwrap();
+        assert!((governing.position_m[0]).abs() < 1e-12);
+        // The lumped pressure and patch recovery are approximate on two cells.
+        // The continuum shear is qL = 2 kN/m at the fixed edge.
+        assert!((governing.check.demand_kn_per_m - 2.0).abs() / 2.0 < 0.1);
+        assert!(governing.check.demand_kn_per_m > result.elements[0].shear_kn_per_m[0]);
     }
 }

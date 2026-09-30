@@ -9,6 +9,28 @@ export interface NativeModulusCurve {
   materialId: number;
   points: { strain: number; eMpa: number }[];
 }
+export interface NativeReinforcementSpec {
+  limitState: 'ultimate' | 'service';
+  fckMpa: number;
+  fctmMpa: number;
+  gammaC: number;
+  fydMpa: number;
+  fywdMpa: number;
+  esMpa: number;
+  coverMm: number;
+  barDiameterMm: number;
+  leverArmMm?: number;
+  topXMm2PerM: number;
+  topYMm2PerM: number;
+  bottomXMm2PerM: number;
+  bottomYMm2PerM: number;
+  shearMm2PerM2?: number;
+  tanTheta?: number;
+  alphaCc?: number;
+  cRdc?: number;
+  longTerm?: boolean;
+  crackLimitMm?: number;
+}
 
 /** Invoercontract van openaec-native-fem/native-plate2d: m, kN en MPa. */
 export function buildNativePlate2DRequest(
@@ -190,6 +212,7 @@ export function buildNativeHybridPlateRequest(
   pressureKnM2 = 0,
   modulusCurves: readonly NativeModulusCurve[] = [],
   loadPath: readonly number[] = [],
+  reinforcement?: NativeReinforcementSpec,
 ) {
   if (mesh.beamElements.size > 0) {
     throw new Error('De hybride plaatkern ondersteunt geen gekoppelde staaf-plaatmodellen.');
@@ -241,5 +264,6 @@ export function buildNativeHybridPlateRequest(
       points: curve.points.map(point => ({ strain: point.strain, eMpa: point.eMpa })),
     })),
     loadPath: [...loadPath],
+    reinforcement,
   };
 }

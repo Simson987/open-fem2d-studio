@@ -9,6 +9,7 @@ pub mod plate2d;
 pub mod plate_bending;
 pub mod prestressed_beam;
 pub mod quad2d;
+pub mod reinforced_plate;
 
 use serde::{Deserialize, Serialize};
 

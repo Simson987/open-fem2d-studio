@@ -124,4 +124,18 @@ const bending = await invoke(hybridBinary, bendingRequest);
 assert.ok(bending.nodes.find(node => node.nodeId === 5).wM < 0);
 close(bending.nodes.reduce((sum, node) => sum + node.reactionFzKn, 0), 4, 1e-7, "hybride plaat reacties");
 assert.ok(bending.relativeResidual < 1e-8);
+const reinforcement = {
+  limitState: "service", fckMpa: 20, fctmMpa: 2.2, gammaC: 1.5,
+  fydMpa: 435, fywdMpa: 435, esMpa: 200000,
+  coverMm: 20, barDiameterMm: 12,
+  topXMm2PerM: 1000, topYMm2PerM: 1000,
+  bottomXMm2PerM: 1000, bottomYMm2PerM: 1000,
+  crackLimitMm: 0.3,
+};
+const service = await invoke(hybridBinary,
+  buildNativeHybridPlateRequest(bendingMesh, -1, [], [], reinforcement));
+assert.equal(service.elements[0].reinforcement.limitState, "service");
+assert.equal(service.elements[0].reinforcement.checkedPoints, 21);
+assert.equal(service.elements[0].reinforcement.crack.length, 4);
+assert.equal(service.elements[0].reinforcement.shear, undefined);
 console.log("Native vierkantsmesh, Quad4 en hybride buigplaat: adapter en vergelijkingen slagen.");

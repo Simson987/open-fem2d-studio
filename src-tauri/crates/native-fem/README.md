@@ -16,7 +16,7 @@ die expliciet.
 | `native-plate-bending` | 3-knoops DKT-plaatbuiging, 3 DOF/knoop | nog niet | nog niet | dwarsknoopkrachten, knoopmomenten en vaste w/rotatie-DOF |
 | `native-square-mesh` | exact vierkant Q4-rooster met randknoop-ID's | n.v.t. | n.v.t. | `widthM`, `heightM`, `cellSizeM` |
 | `native-quad2d` | 4-knoops Q4-schijfelement, 2 DOF/knoop | Green-Lagrange | J2-staal en betonschade per Gauss-punt; afnemende E(rek)-curve | vlakke knoopkrachten en x/y-opleggingen |
-| `native-hybrid-plate` | 4-knoops hybride Kirchhoff-buiging, 12 DOF en 17 momentparameters | nog niet | afnemende secant-E per element en belastingpad | dwarsknoopkrachten, momenten, uniforme druk en w/rotatie-opleggingen |
+| `native-hybrid-plate` | 4-knoops hybride Kirchhoff-buiging, 12 DOF en 17 momentparameters | nog niet | afnemende secant-E per element en belastingpad | dwarsknoopkrachten, momenten, uniforme druk en w/rotatie-opleggingen; optionele UGT-wapenings- en BGT-scheurcontrole |
 | `native-prestressed-beam` | vrij opgelegde elastische ligger met rechte of parabolische kabel | n.v.t. | opgegeven voorspanverlies | uniforme last en fases overdracht/gebruiksfase |
 
 De invoer gebruikt **m, kN en MPa**. Voor 3D volgt het JSON-schema de
@@ -82,6 +82,12 @@ equivalente plastische rek en de trekschade. De materiaaltoestand leeft binnen
   roosters met de bestaande TypeScript-kern vergeleken. De hybride
   buigplaat doorstaat starre modes, een constante-krommingspatch en een
   Navier-plaatbenchmark (4,1% middenzakkingverschil op 6×6 vierhoeken).
+- De optionele plaatwapeningscontrole toetst de dwarskracht en de benodigde
+  verticale en langsgerichte wapening in een UGT-verzoek. Een apart
+  BGT-verzoek rapporteert scheurwijdten in vier wapeningsrichtingen. De
+  scheurformule is ook tegen een gepubliceerd EC2-brugvoorbeeld getoetst;
+  de Cement-uitkraging geeft aan de steun 240 kN/m. Zie de
+  [plaatvoorbeelden](PLATE_EXAMPLES.md) voor invoer, uitkomsten en aannames.
 - **Beperkingen FNL:** de 3D-raamwerkkern gebruikt nog een monotone
   effectieve-E-envelop zonder doorsnedeplastificatie of scheurgeschiedenis.
   De 2D-betonschade gebruikt één scalair per element zonder scheurband- of
@@ -94,6 +100,11 @@ equivalente plastische rek en de trekschade. De materiaaltoestand leeft binnen
   orthotropie en gekoppelde staaf-plaatmodellen zijn nog niet
   geïmplementeerd. De 3D-kern weigert verdeelde/staafpunt/thermische lasten,
   veren, opgelegde verplaatsingen, scharnieren en eigenwaarde-knik.
+- De plaatwapeningsuitvoer gebruikt herleide dwarskracht, aangenomen
+  eerste-generatie EC2-formules en een elastische momentverdeling. Er is
+  geen gescheurde plaatstijfheid, automatische nationale bijlage of
+  constructieve detaillering. De uitvoer is daarom een controlevoorbeeld
+  en geen vrijgave voor constructief ontwerp.
 - De FEM-kernen gebruiken een dichte solver met een harde grens van 600 DOF.
   Een ijle solver, bredere referentieset en 3D-materiaalhistorie zijn nodig
   voordat de app deze kern als standaard kan gebruiken.
