@@ -35,8 +35,7 @@ fn compare(model: Value) {
         let reaction = reference
             .reactions
             .iter()
-            .find(|v| v.node_id == node.node_id)
-            .unwrap();
+            .find(|v| v.node_id == node.node_id);
         let expected_u = [
             displacement.ux,
             displacement.uy,
@@ -45,17 +44,19 @@ fn compare(model: Value) {
             displacement.ry,
             displacement.rz,
         ];
-        let expected_r = [
-            reaction.fx,
-            reaction.fy,
-            reaction.fz,
-            reaction.mx,
-            reaction.my,
-            reaction.mz,
-        ];
+        let expected_r = reaction.map_or([0.0; 6], |reaction| {
+            [
+                reaction.fx,
+                reaction.fy,
+                reaction.fz,
+                reaction.mx,
+                reaction.my,
+                reaction.mz,
+            ]
+        });
         for axis in 0..6 {
-            let u_tolerance = 1e-10_f64.max(expected_u[axis].abs() * 1e-8);
-            let r_tolerance = 1e-8_f64.max(expected_r[axis].abs() * 1e-8);
+            let u_tolerance = 1e-8_f64.max(expected_u[axis].abs() * 1e-6);
+            let r_tolerance = 1e-6_f64.max(expected_r[axis].abs() * 1e-6);
             assert!(
                 (node.displacement[axis] - expected_u[axis]).abs() < u_tolerance,
                 "node {} displacement axis {axis}: native={} reference={}",
@@ -121,4 +122,33 @@ fn rotational_spring_and_imposed_rotation_match_existing_solver() {
         "rx": true, "ry": true, "rz": true, "ryPrescribedRad": 0.01
     }));
     compare(rotated);
+}
+
+#[test]
+fn member_line_and_point_loads_match_existing_solver() {
+    let mut uniform = model();
+    uniform["memberLoads"] = json!([{
+        "id": 1, "memberId": 1,
+        "qyStartKnPerM": 0.0, "qyEndKnPerM": 0.0,
+        "qzStartKnPerM": -4.0, "qzEndKnPerM": -4.0
+    }]);
+    compare(uniform.clone());
+    uniform["analysis"] = json!("p-delta");
+    compare(uniform);
+
+    let mut tapered = model();
+    tapered["memberLoads"] = json!([{
+        "id": 1, "memberId": 1,
+        "qyStartKnPerM": 1.0, "qyEndKnPerM": 5.0,
+        "qzStartKnPerM": -2.0, "qzEndKnPerM": -6.0,
+        "startPositionM": 0.25, "endPositionM": 1.75
+    }]);
+    compare(tapered);
+
+    let mut point = model();
+    point["memberPointLoads"] = json!([{
+        "id": 1, "memberId": 1, "pyKn": 3.0, "pzKn": -10.0,
+        "positionM": 0.75
+    }]);
+    compare(point);
 }

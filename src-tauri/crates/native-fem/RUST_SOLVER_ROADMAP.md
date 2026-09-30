@@ -8,7 +8,7 @@ nog geen vervanging van de app-solver.
 
 | Deel | Rust-kern | Nog open voor vervanging van de app-solver |
 | --- | --- | --- |
-| 3D-raamwerk | 12-DOF-staven, lineair/P-Δ, eenvoudige FNL, globale veren en opgelegde verplaatsingen/rotaties | Verdeelde, staafpunt- en thermische lasten, scharnieren, eigenknik, materiaalhistorie en schaalbare stabiliteitstoets. |
+| 3D-raamwerk | 12-DOF-staven, lineair/P-Δ, eenvoudige FNL, lokale lijn- en staafpuntlasten, globale veren en opgelegde verplaatsingen/rotaties | Thermische lasten, scharnieren, eigenknik, materiaalhistorie en schaalbare stabiliteitstoets. |
 | 2D-schijf | CST en Q4, Green-Lagrange GNL, staal-J2, betonschade, E(rek) | Alle bestaande combinaties van elementen/randvoorwaarden, gekoppelde staven en externe validatie van de FNL-wetten. |
 | 2D-buigplaat | DKT en 4-knoops hybride Kirchhoff, E(rek) | GNL-buiging, gescheurde betonstijfheid, niet-uniforme lasten, orthotropie en betrouwbare dwarskrachtherleiding aan alle randen. |
 | Wapeningscontrole | Verticale dwarskrachtwapening, huidtrek en EC2-scheurwijdte als aparte UGT/BGT-postprocessen | Nationale bijlage, belastingscombinaties, detaillering, scheurhistorie en toetsing van gecombineerde membraan- en plaatkrachten. |

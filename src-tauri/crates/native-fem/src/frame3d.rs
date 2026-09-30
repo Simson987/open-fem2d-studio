@@ -124,6 +124,29 @@ pub struct NodalLoad {
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MemberLoad {
+    pub id: usize,
+    pub member_id: usize,
+    pub qy_start_kn_per_m: f64,
+    pub qy_end_kn_per_m: f64,
+    pub qz_start_kn_per_m: f64,
+    pub qz_end_kn_per_m: f64,
+    #[serde(default)]
+    pub start_position_m: Option<f64>,
+    #[serde(default)]
+    pub end_position_m: Option<f64>,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MemberPointLoad {
+    pub id: usize,
+    pub member_id: usize,
+    pub py_kn: f64,
+    pub pz_kn: f64,
+    pub position_m: f64,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Request {
     #[serde(default = "default_schema")]
     pub schema_version: u32,
@@ -138,9 +161,9 @@ pub struct Request {
     #[serde(default)]
     pub nodal_loads: Vec<NodalLoad>,
     #[serde(default)]
-    pub member_loads: Vec<serde_json::Value>,
+    pub member_loads: Vec<MemberLoad>,
     #[serde(default)]
-    pub member_point_loads: Vec<serde_json::Value>,
+    pub member_point_loads: Vec<MemberPointLoad>,
     #[serde(default)]
     pub thermal_loads: Vec<serde_json::Value>,
     #[serde(default)]
@@ -323,6 +346,24 @@ fn local_displacement(element: &Element<'_>, u: &[f64]) -> [f64; 12] {
     let global = element.dofs.map(|dof| u[dof]);
     mat_vec(&t, &global)
 }
+fn hermite(length: f64, x: f64) -> [f64; 4] {
+    let t = x / length;
+    [
+        1.0 - 3.0 * t * t + 2.0 * t * t * t,
+        length * (t - 2.0 * t * t + t * t * t),
+        3.0 * t * t - 2.0 * t * t * t,
+        length * (-t * t + t * t * t),
+    ]
+}
+fn add_transverse_load(local: &mut [f64; 12], length: f64, x: f64, py: f64, pz: f64) {
+    let shape = hermite(length, x);
+    for (index, dof) in [1, 5, 7, 11].into_iter().enumerate() {
+        local[dof] += py * shape[index];
+    }
+    for (index, dof) in [2, 4, 8, 10].into_iter().enumerate() {
+        local[dof] += pz * shape[index] * if index % 2 == 0 { 1.0 } else { -1.0 };
+    }
+}
 fn effective_e(element: &Element<'_>, local: &[f64; 12], nonlinear: bool) -> f64 {
     let e = element.material.e_mpa;
     if !nonlinear {
@@ -395,11 +436,8 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
     if request.nodes.len() > 100 {
         return Err("3D frame stability verification is limited to 600 DOF".into());
     }
-    if !request.member_loads.is_empty()
-        || !request.member_point_loads.is_empty()
-        || !request.thermal_loads.is_empty()
-    {
-        return Err("native frame currently accepts nodal loads only; member and thermal loads are not ignored".into());
+    if !request.thermal_loads.is_empty() {
+        return Err("native frame thermal loads are not implemented".into());
     }
     positive(request.tolerance, "tolerance")?;
     if request.max_iterations == 0 || request.max_iterations > 200 {
@@ -496,6 +534,81 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
                 .ok_or("unknown member section")?,
         });
     }
+    let element_index: HashMap<usize, usize> = elements
+        .iter()
+        .enumerate()
+        .map(|(i, element)| (element.id, i))
+        .collect();
+    let mut local_loads = vec![[0.0; 12]; elements.len()];
+    for load in &request.member_loads {
+        let index = *element_index
+            .get(&load.member_id)
+            .ok_or("unknown loaded frame member")?;
+        let length = elements[index].length;
+        let start = load.start_position_m.unwrap_or(0.0);
+        let end = load.end_position_m.unwrap_or(length);
+        if ![
+            load.qy_start_kn_per_m,
+            load.qy_end_kn_per_m,
+            load.qz_start_kn_per_m,
+            load.qz_end_kn_per_m,
+            start,
+            end,
+        ]
+        .iter()
+        .all(|value| value.is_finite())
+            || start < 0.0
+            || end <= start
+            || end > length + 1e-9
+        {
+            return Err("invalid frame member load or span".into());
+        }
+        if [
+            load.qy_start_kn_per_m,
+            load.qy_end_kn_per_m,
+            load.qz_start_kn_per_m,
+            load.qz_end_kn_per_m,
+        ]
+        .iter()
+        .all(|value| *value == 0.0)
+        {
+            return Err("zero frame member load".into());
+        }
+        // Three-point Gauss integration is exact for Hermite shape functions
+        // multiplied by a linearly varying intensity over this load segment.
+        let abscissae = [-0.7745966692414834, 0.0, 0.7745966692414834];
+        let weights = [5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0];
+        for (abscissa, weight) in abscissae.into_iter().zip(weights) {
+            let x = (start + end) / 2.0 + (end - start) * abscissa / 2.0;
+            let t = (x - start) / (end - start);
+            let scale = weight * (end - start) / 2.0;
+            let py = ((1.0 - t) * load.qy_start_kn_per_m + t * load.qy_end_kn_per_m) * scale;
+            let pz = ((1.0 - t) * load.qz_start_kn_per_m + t * load.qz_end_kn_per_m) * scale;
+            add_transverse_load(&mut local_loads[index], length, x, py, pz);
+        }
+    }
+    for load in &request.member_point_loads {
+        let index = *element_index
+            .get(&load.member_id)
+            .ok_or("unknown point-loaded frame member")?;
+        let length = elements[index].length;
+        if ![load.py_kn, load.pz_kn, load.position_m]
+            .iter()
+            .all(|value| value.is_finite())
+            || (load.py_kn == 0.0 && load.pz_kn == 0.0)
+            || load.position_m < 0.0
+            || load.position_m > length + 1e-9
+        {
+            return Err("invalid frame member point load".into());
+        }
+        add_transverse_load(
+            &mut local_loads[index],
+            length,
+            load.position_m.min(length),
+            load.py_kn,
+            load.pz_kn,
+        );
+    }
     let dofs = request.nodes.len() * 6;
     let mut prescribed = vec![None; dofs];
     let mut springs = vec![0.0; dofs];
@@ -559,6 +672,15 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
             .enumerate()
         {
             f[6 * index + axis] += value;
+        }
+    }
+    for (element, local_load) in elements.iter().zip(&local_loads) {
+        let t = transform(element.rotation);
+        for global_axis in 0..12 {
+            let equivalent: f64 = (0..12)
+                .map(|local_axis| t[local_axis][global_axis] * local_load[local_axis])
+                .sum();
+            f[element.dofs[global_axis]] += equivalent;
         }
     }
     let mut u = vec![0.0; dofs];
@@ -655,14 +777,18 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
     let members = elements
         .iter()
         .zip(stiffnesses)
-        .map(|(element, e)| {
+        .zip(&local_loads)
+        .map(|((element, e), local_load)| {
             let local = local_displacement(element, &u);
             let axial =
                 e * 1000.0 * element.section.area_m2 * (local[6] - local[0]) / element.length;
-            let forces = mat_vec(
+            let mut forces = mat_vec(
                 &local_stiffness(element, e, axial, request.analysis.geometric()),
                 &local,
             );
+            for axis in 0..12 {
+                forces[axis] -= local_load[axis];
+            }
             MemberResult {
                 member_id: element.id,
                 local_end_forces: forces,
@@ -775,7 +901,7 @@ mod tests {
         assert!((result.nodes[0].reaction[5] + 20.0).abs() < 1e-9);
     }
     #[test]
-    fn sprung_cantilever_matches_series_equilibrium() {
+    fn sprung_cantilever_matches_parallel_equilibrium() {
         let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 0.0);
         model.nodal_loads[0].fz = -10.0;
         let mut end_support = model.supports[0].clone();
@@ -820,6 +946,70 @@ mod tests {
         assert!(solve(&model).unwrap_err().contains("requires a fixed DOF"));
     }
     #[test]
+    fn uniform_member_load_matches_cantilever_solution() {
+        let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 0.0);
+        model.member_loads.push(MemberLoad {
+            id: 1,
+            member_id: 1,
+            qy_start_kn_per_m: 0.0,
+            qy_end_kn_per_m: 0.0,
+            qz_start_kn_per_m: -4.0,
+            qz_end_kn_per_m: -4.0,
+            start_position_m: None,
+            end_position_m: None,
+        });
+        let result = solve(&model).unwrap();
+        let expected = -4.0 * 2.0_f64.powi(4) / (8.0 * 210_000_000.0 * 1e-5);
+        assert!((result.nodes[1].displacement[2] - expected).abs() < 1e-12);
+        assert!((result.nodes[0].reaction[2] - 8.0).abs() < 1e-10);
+        assert!((result.nodes[0].reaction[4] + 8.0).abs() < 1e-10);
+        assert!(result.equilibrium_residual < 1e-10);
+    }
+    #[test]
+    fn midspan_member_point_load_matches_cantilever_solution() {
+        let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 0.0);
+        model.member_point_loads.push(MemberPointLoad {
+            id: 1,
+            member_id: 1,
+            py_kn: 0.0,
+            pz_kn: -10.0,
+            position_m: 1.0,
+        });
+        let result = solve(&model).unwrap();
+        let expected = -10.0 * 1.0_f64.powi(2) * (3.0 * 2.0 - 1.0) / (6.0 * 210_000_000.0 * 1e-5);
+        assert!((result.nodes[1].displacement[2] - expected).abs() < 1e-12);
+        assert!((result.nodes[0].reaction[2] - 10.0).abs() < 1e-10);
+        assert!((result.nodes[0].reaction[4] + 10.0).abs() < 1e-10);
+    }
+    #[test]
+    fn invalid_member_loads_are_rejected() {
+        let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 0.0);
+        model.member_loads.push(MemberLoad {
+            id: 1,
+            member_id: 1,
+            qy_start_kn_per_m: 0.0,
+            qy_end_kn_per_m: 0.0,
+            qz_start_kn_per_m: -4.0,
+            qz_end_kn_per_m: -4.0,
+            start_position_m: Some(1.5),
+            end_position_m: Some(1.0),
+        });
+        assert!(solve(&model)
+            .unwrap_err()
+            .contains("invalid frame member load"));
+        model.member_loads.clear();
+        model.member_point_loads.push(MemberPointLoad {
+            id: 1,
+            member_id: 1,
+            py_kn: 1.0,
+            pz_kn: 0.0,
+            position_m: 3.0,
+        });
+        assert!(solve(&model)
+            .unwrap_err()
+            .contains("invalid frame member point load"));
+    }
+    #[test]
     fn compression_amplifies_lateral_displacement() {
         let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 10.0);
         model.nodal_loads[0].fx = -100.0;
@@ -859,13 +1049,11 @@ mod tests {
         assert!(solve(&model).unwrap_err().contains("stiffness"));
     }
     #[test]
-    fn unsupported_member_load_and_buckling_are_rejected() {
+    fn unsupported_thermal_load_and_buckling_are_rejected() {
         let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 10.0);
-        model
-            .member_loads
-            .push(serde_json::json!({"memberId": 1, "qy": 3.0}));
-        assert!(solve(&model).unwrap_err().contains("nodal loads only"));
-        model.member_loads.clear();
+        model.thermal_loads.push(serde_json::json!({"memberId": 1}));
+        assert!(solve(&model).unwrap_err().contains("thermal loads"));
+        model.thermal_loads.clear();
         model.buckling_modes = 1;
         assert!(solve(&model).unwrap_err().contains("buckling"));
     }
