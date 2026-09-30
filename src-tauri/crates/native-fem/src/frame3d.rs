@@ -392,6 +392,9 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
     if request.nodes.len() < 2 || request.members.is_empty() {
         return Err("frame requires nodes and members".into());
     }
+    if request.nodes.len() > 100 {
+        return Err("3D frame stability verification is limited to 600 DOF".into());
+    }
     if !request.member_loads.is_empty()
         || !request.member_point_loads.is_empty()
         || !request.thermal_loads.is_empty()

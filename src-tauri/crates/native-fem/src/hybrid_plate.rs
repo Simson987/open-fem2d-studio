@@ -445,8 +445,11 @@ pub fn solve(request: &Request) -> Result<ResultBending, String> {
         .enumerate()
         .map(|(i, n)| (n.id, i))
         .collect();
-    if node_index.len() != request.nodes.len() || request.nodes.len() * 3 > 600 {
-        return Err("duplicate nodes or 600-DOF hybrid limit exceeded".into());
+    if node_index.len() != request.nodes.len() {
+        return Err("duplicate hybrid node id".into());
+    }
+    if request.nodes.len() > 20_000 / 3 {
+        return Err("hybrid plate exceeds the 20,000-DOF solver limit".into());
     }
     if request
         .nodes
@@ -993,5 +996,75 @@ mod tests {
         // The continuum shear is qL = 2 kN/m at the fixed edge.
         assert!((governing.check.demand_kn_per_m - 2.0).abs() / 2.0 < 0.1);
         assert!(governing.check.demand_kn_per_m > result.elements[0].shear_kn_per_m[0]);
+    }
+    #[test]
+    fn sparse_hybrid_plate_above_600_dof_matches_navier_deflection() {
+        let n = 14;
+        let mesh = crate::quad2d::mesh_squares(&crate::quad2d::SquareGrid {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            width_m: 2.0,
+            height_m: 2.0,
+            cell_size_m: 2.0 / n as f64,
+            material_id: 1,
+            thickness_m: 0.1,
+        })
+        .unwrap();
+        assert!(3 * mesh.nodes.len() > 600);
+        let nodes: Vec<Node> = mesh
+            .nodes
+            .into_iter()
+            .map(|node| Node {
+                id: node.id,
+                x: node.x,
+                y: node.y,
+            })
+            .collect();
+        let supports = nodes
+            .iter()
+            .filter(|node| {
+                node.x == 0.0
+                    || node.y == 0.0
+                    || (node.x - 2.0).abs() < 1e-12
+                    || (node.y - 2.0).abs() < 1e-12
+            })
+            .map(|node| Support {
+                node_id: node.id,
+                w: true,
+                theta_x: false,
+                theta_y: false,
+            })
+            .collect();
+        let result = solve(&Request {
+            nodes,
+            quads: mesh.quads,
+            materials: vec![Material {
+                id: 1,
+                e_mpa: 30_000.0,
+                nu: 0.2,
+            }],
+            supports,
+            loads: vec![],
+            pressure_kn_m2: -1.0,
+            modulus_curves: vec![],
+            reinforcement: None,
+            load_path: vec![],
+            tolerance: 1e-8,
+            max_iterations: 40,
+        })
+        .unwrap();
+        let centre_id = 1 + (n / 2) * (n + 1) + n / 2;
+        let centre_w = result.nodes[centre_id - 1].w_m;
+        let rigidity = 30_000.0 * 1000.0 * 0.1_f64.powi(3) / (12.0 * (1.0 - 0.2_f64.powi(2)));
+        let navier = -0.00406 * 2.0_f64.powi(4) / rigidity;
+        assert!(
+            ((centre_w - navier) / navier).abs() < 0.03,
+            "{centre_w} vs {navier}"
+        );
+        assert!(
+            result.relative_residual < 1e-8,
+            "{}",
+            result.relative_residual
+        );
     }
 }

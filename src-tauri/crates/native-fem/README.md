@@ -105,9 +105,20 @@ equivalente plastische rek en de trekschade. De materiaaltoestand leeft binnen
   geen gescheurde plaatstijfheid, automatische nationale bijlage of
   constructieve detaillering. De uitvoer is daarom een controlevoorbeeld
   en geen vrijgave voor constructief ontwerp.
-- De FEM-kernen gebruiken een dichte solver met een harde grens van 600 DOF.
-  Een ijle solver, bredere referentieset en 3D-materiaalhistorie zijn nodig
-  voordat de app deze kern als standaard kan gebruiken.
+- Tot 600 DOF gebruikt de kern dichte eliminatie. Grotere Q4-, CST-, DKT- en
+  hybride plaatmatrices gebruiken nu een ijle symmetrische Jacobi-PCG-oplosser
+  met een grens van 20.000 DOF. Een Q4-rekproef met 882 DOF en een hybride
+  Navier-plaat met 675 DOF staan in de Rust-tests. De ijle oplosser weigert
+  asymmetrische matrices en niet-positieve kromming tijdens de iteratie, maar
+  voert nog geen volledige traagheids- of eigenwaardecontrole uit. Vooral bij
+  een nulbelasting bewijst een nuloplossing dus geen stabiliteit. Het 3D-raamwerk
+  blijft voorlopig begrensd op 600 DOF voor zijn expliciete stabiliteitstoets.
+  Een bredere referentieset, betrouwbare stabiliteitsdetectie voor grote
+  modellen en 3D-materiaalhistorie zijn nodig voordat de app deze kern als
+  standaard kan gebruiken.
+
+De [migratie- en verificatielijst](RUST_SOLVER_ROADMAP.md) volgt de nog open
+onderdelen van het doorlopende doel om de volledige solver naar Rust te brengen.
 
 De [plaatvoorbeelden](PLATE_EXAMPLES.md) geven reproduceerbare invoer en
 controlecijfers, inclusief de uitkragende plaat uit Cement 2021/8 van Braam

@@ -151,8 +151,8 @@ pub fn mesh_squares(grid: &SquareGrid) -> Result<SquareMesh, String> {
     {
         return Err("square grid dimensions must be exact multiples of cellSizeM".into());
     }
-    if (nx + 1.0) * (ny + 1.0) > 300.0 {
-        return Err("square grid exceeds the 600-DOF dense solver limit".into());
+    if (nx + 1.0) * (ny + 1.0) > 10_000.0 {
+        return Err("square grid exceeds the 20,000-DOF solver limit".into());
     }
     let (nx, ny) = (nx as usize, ny as usize);
     let id = |i: usize, j: usize| 1 + j * (nx + 1) + i;
@@ -748,6 +748,67 @@ mod tests {
             assert!(node.uy_m.abs() < 1e-10);
         }
         assert!(result.relative_residual < 1e-8);
+    }
+    #[test]
+    fn square_patch_above_600_dof_matches_uniform_extension() {
+        let mesh = mesh_squares(&SquareGrid {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            width_m: 2.0,
+            height_m: 2.0,
+            cell_size_m: 0.1,
+            material_id: 1,
+            thickness_m: 0.1,
+        })
+        .unwrap();
+        assert!(2 * mesh.nodes.len() > 600);
+        let supports = mesh
+            .nodes
+            .iter()
+            .filter(|node| node.x == 0.0 || node.y == 0.0)
+            .map(|node| Support {
+                node_id: node.id,
+                ux: node.x == 0.0,
+                uy: node.y == 0.0,
+            })
+            .collect();
+        let loads = mesh
+            .right_node_ids
+            .iter()
+            .enumerate()
+            .map(|(i, &node_id)| Load {
+                node_id,
+                fx: if i == 0 || i == 20 { 5.0 } else { 10.0 },
+                fy: 0.0,
+            })
+            .collect();
+        let result = solve(&Request {
+            analysis: Analysis::Linear,
+            nodes: mesh.nodes,
+            quads: mesh.quads,
+            materials: vec![Material {
+                id: 1,
+                e_mpa: 1000.0,
+                nu: 0.0,
+                law: MaterialLaw::Elastic,
+            }],
+            modulus_curves: vec![],
+            supports,
+            loads,
+            load_path: vec![],
+            tolerance: 1e-8,
+            max_iterations: 40,
+        })
+        .unwrap();
+        let tip = result.nodes.iter().find(|node| node.node_id == 21).unwrap();
+        assert!((tip.ux_m - 0.002).abs() < 1e-7, "{}", tip.ux_m);
+        assert!(
+            result.relative_residual < 1e-8,
+            "{}",
+            result.relative_residual
+        );
+        let reaction: f64 = result.nodes.iter().map(|node| node.rx_kn).sum();
+        assert!((reaction + 200.0).abs() < 1e-5, "{reaction}");
     }
     #[test]
     fn quad_gauss_points_retain_steel_plasticity_on_unloading() {
