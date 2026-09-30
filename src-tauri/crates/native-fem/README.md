@@ -11,7 +11,7 @@ die expliciet.
 
 | Kern | Element | GNL | FNL | Lasten en opleggingen |
 | --- | --- | --- | --- | --- |
-| `native-frame3d` | 12-DOF Euler-Bernoulli raamwerk, 6 DOF/knoop | iteratieve P-Δ-stijfheid met stabiliteitscontrole | monotone effectieve-E-envelop voor staal en beton | knoop-, lijn-, staafpunt- en thermische lasten; vaste DOF, globale veren en opgelegde verplaatsingen/rotaties |
+| `native-frame3d` | 12-DOF Euler-Bernoulli raamwerk, 6 DOF/knoop | iteratieve P-Δ-stijfheid met stabiliteitscontrole | monotone effectieve-E-envelop voor staal en beton | knoop-, lijn-, staafpunt- en thermische lasten; vaste DOF, globale veren, opgelegde verplaatsingen/rotaties en staafeindscharnieren |
 | `native-plate2d` | 3-knoops CST-vlakspanning/membraan, 2 DOF/knoop | Green-Lagrange-rek met Newton-iteratie | J2-staalplastificatie met isotrope verharding en onomkeerbare betonschade per element | knoopkrachten en vaste x/y-DOF |
 | `native-plate-bending` | 3-knoops DKT-plaatbuiging, 3 DOF/knoop | nog niet | nog niet | dwarsknoopkrachten, knoopmomenten en vaste w/rotatie-DOF |
 | `native-square-mesh` | exact vierkant Q4-rooster met randknoop-ID's | n.v.t. | n.v.t. | `widthM`, `heightM`, `cellSizeM` |
@@ -108,6 +108,12 @@ equivalente plastische rek en de trekschade. De materiaaltoestand leeft binnen
   absolute of relatieve afwijking voor reacties. Vrije en verhinderde
   thermische uitzetting zijn tegen de analytische staafoplossing getoetst;
   uniforme en tweerichtingsgradiënten zijn met de bestaande solver vergeleken.
+  My-, Mz- en torsiescharnieren zijn met statische condensatie ingevoerd en
+  tegen de bestaande solver en een opgelegde liggerformule gecontroleerd.
+  Vrije rotaties zonder aangesloten stijfheid krijgen een nulwaarde als
+  rekentechnische referentie; een momentlast op zo'n vrijheidsgraad wordt
+  geweigerd. De bestaande solver meldt het geteste tweezijdig losgelaten
+  liggergeval als singulier, terwijl de reacties analytisch volgen.
 - De 2D lineaire knoopverplaatsingen, reacties en spanningen van twee
   CST-elementen zijn vergeleken met de huidige TypeScript-kern. Tests dekken
   ook elementoriëntatie, GNL-verstijving, plastische restvervorming na ontlasten,
@@ -135,8 +141,8 @@ equivalente plastische rek en de trekschade. De materiaaltoestand leeft binnen
   gebruikt een secant-E-omhulling per element; dat is geen geregelde
   beton-scheurwet of doorsnedeplastificatie. Vlakvervorming,
   orthotropie en gekoppelde staaf-plaatmodellen zijn nog niet
-  geïmplementeerd. Thermische lasten samen met materiaalniet-lineariteit,
-  scharnieren en eigenwaarde-knik worden in de 3D-kern geweigerd.
+  geïmplementeerd. Thermische lasten of staafeindscharnieren samen met
+  materiaalniet-lineariteit, en eigenwaarde-knik worden in de 3D-kern geweigerd.
 - De plaatwapeningsuitvoer gebruikt herleide dwarskracht, aangenomen
   eerste-generatie EC2-formules en een elastische momentverdeling. Er is
   geen gescheurde plaatstijfheid, automatische nationale bijlage of

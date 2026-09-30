@@ -172,3 +172,64 @@ fn uniform_and_gradient_thermal_loads_match_existing_solver() {
     }]);
     compare(gradient);
 }
+
+#[test]
+fn released_member_end_matches_existing_solver() {
+    let mut input = model();
+    input["members"][0]["releases"] = json!({"myEnd": true});
+    input["supports"].as_array_mut().unwrap().push(json!({
+        "nodeId": 2, "ux": true, "uy": true, "uz": true,
+        "rx": true, "ry": true, "rz": true
+    }));
+    input["memberLoads"] = json!([{
+        "id": 1, "memberId": 1,
+        "qyStartKnPerM": 0.0, "qyEndKnPerM": 0.0,
+        "qzStartKnPerM": -4.0, "qzEndKnPerM": -4.0
+    }]);
+    compare(input.clone());
+    input["analysis"] = json!("p-delta");
+    compare(input);
+}
+
+#[test]
+fn both_bending_end_releases_and_point_load_match_existing_solver() {
+    let mut input = model();
+    input["members"][0]["releases"] = json!({"myStart": true, "myEnd": true});
+    input["supports"].as_array_mut().unwrap().push(json!({
+        "nodeId": 2, "ux": true, "uy": true, "uz": true,
+        "rx": true, "ry": true, "rz": true
+    }));
+    input["memberPointLoads"] = json!([{
+        "id": 1, "memberId": 1, "pyKn": 0.0, "pzKn": -10.0,
+        "positionM": 0.75
+    }]);
+    compare(input);
+}
+
+#[test]
+fn released_mz_and_torsion_match_existing_solver() {
+    let mut bending = model();
+    bending["members"][0]["releases"] = json!({"mzEnd": true});
+    bending["supports"].as_array_mut().unwrap().push(json!({
+        "nodeId": 2, "ux": true, "uy": true, "uz": true,
+        "rx": true, "ry": true, "rz": true
+    }));
+    bending["memberLoads"] = json!([{
+        "id": 1, "memberId": 1,
+        "qyStartKnPerM": 4.0, "qyEndKnPerM": 4.0,
+        "qzStartKnPerM": 0.0, "qzEndKnPerM": 0.0
+    }]);
+    compare(bending);
+
+    let mut torsion = model();
+    torsion["members"][0]["releases"] = json!({"torsionEnd": true});
+    torsion["supports"].as_array_mut().unwrap().push(json!({
+        "nodeId": 2, "ux": true, "uy": true, "uz": true,
+        "rx": true, "ry": true, "rz": true
+    }));
+    torsion["nodalLoads"] = json!([{
+        "id": 1, "nodeId": 2, "fx": 0.0, "fy": 0.0, "fz": 0.0,
+        "mx": 10.0, "my": 0.0, "mz": 0.0
+    }]);
+    compare(torsion);
+}

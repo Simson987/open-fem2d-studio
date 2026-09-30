@@ -72,7 +72,33 @@ pub struct Member {
     #[serde(default)]
     pub roll_angle_rad: f64,
     #[serde(default)]
-    pub releases: HashMap<String, bool>,
+    pub releases: EndReleases,
+}
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EndReleases {
+    #[serde(default)]
+    pub my_start: bool,
+    #[serde(default)]
+    pub my_end: bool,
+    #[serde(default)]
+    pub mz_start: bool,
+    #[serde(default)]
+    pub mz_end: bool,
+    #[serde(default)]
+    pub torsion_start: bool,
+    #[serde(default)]
+    pub torsion_end: bool,
+}
+impl EndReleases {
+    fn any(self) -> bool {
+        self.my_start
+            || self.my_end
+            || self.mz_start
+            || self.mz_end
+            || self.torsion_start
+            || self.torsion_end
+    }
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -225,6 +251,7 @@ struct Element<'a> {
     rotation: [[f64; 3]; 3],
     material: &'a Material,
     section: &'a Section,
+    releases: EndReleases,
 }
 fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
     (0..3).map(|i| a[i] * b[i]).sum()
@@ -407,21 +434,114 @@ fn effective_e(element: &Element<'_>, local: &[f64; 12], nonlinear: bool) -> f64
         e * (limit / strain + hardening * (1.0 - limit / strain))
     }
 }
+fn condense_releases(
+    mut stiffness: [[f64; 12]; 12],
+    mut load: [f64; 12],
+    releases: EndReleases,
+) -> Result<([[f64; 12]; 12], [f64; 12]), String> {
+    // A torsion release at either end removes the member's torsion path.
+    if releases.torsion_start || releases.torsion_end {
+        for axis in [3, 9] {
+            for other in 0..12 {
+                stiffness[axis][other] = 0.0;
+                stiffness[other][axis] = 0.0;
+            }
+            load[axis] = 0.0;
+        }
+    }
+    for (axis, released) in [
+        (4, releases.my_start),
+        (10, releases.my_end),
+        (5, releases.mz_start),
+        (11, releases.mz_end),
+    ] {
+        if !released {
+            continue;
+        }
+        let pivot = stiffness[axis][axis];
+        if !pivot.is_finite() || pivot <= 0.0 {
+            return Err("invalid frame release condensation pivot".into());
+        }
+        let column = std::array::from_fn::<_, 12, _>(|i| stiffness[i][axis]);
+        let released_load = load[axis];
+        for i in 0..12 {
+            if i == axis {
+                continue;
+            }
+            load[i] -= column[i] * released_load / pivot;
+            for j in 0..12 {
+                if j != axis {
+                    stiffness[i][j] -= column[i] * column[j] / pivot;
+                }
+            }
+        }
+        for other in 0..12 {
+            stiffness[axis][other] = 0.0;
+            stiffness[other][axis] = 0.0;
+        }
+        load[axis] = 0.0;
+    }
+    Ok((stiffness, load))
+}
+
+struct Assembly {
+    stiffness: Matrix,
+    effective_e: Vec<f64>,
+    member_load: Vec<f64>,
+    local_stiffness: Vec<[[f64; 12]; 12]>,
+    local_load: Vec<[f64; 12]>,
+}
+fn constraints_with_inactive_dofs(
+    stiffness: &Matrix,
+    load: &[f64],
+    prescribed: &[Option<f64>],
+    released_rotations: &[bool],
+) -> Result<Vec<Option<f64>>, String> {
+    let mut constraints = prescribed.to_vec();
+    for axis in 0..stiffness.n {
+        if !released_rotations[axis]
+            || constraints[axis].is_some()
+            || stiffness.get(axis, axis) != 0.0
+        {
+            continue;
+        }
+        if (0..stiffness.n)
+            .any(|other| stiffness.get(axis, other) != 0.0 || stiffness.get(other, axis) != 0.0)
+        {
+            continue;
+        }
+        if load[axis] != 0.0 {
+            return Err("load on a disconnected frame DOF".into());
+        }
+        // A released rotation without any attached stiffness has no unique
+        // nodal value. Zero is a gauge choice; it is not a physical support.
+        constraints[axis] = Some(0.0);
+    }
+    Ok(constraints)
+}
 fn assemble(
     elements: &[Element<'_>],
     u: &[f64],
     thermal_axial: &[f64],
+    local_loads: &[[f64; 12]],
     nonlinear_material: bool,
     nonlinear_geometry: bool,
-) -> Result<(Matrix, Vec<f64>), String> {
+) -> Result<Assembly, String> {
     let mut k = Matrix::zeros(u.len())?;
     let mut stiffnesses = Vec::with_capacity(elements.len());
+    let mut member_force = vec![0.0; u.len()];
+    let mut local_stiffnesses = Vec::with_capacity(elements.len());
+    let mut condensed_loads = Vec::with_capacity(elements.len());
     for (index, element) in elements.iter().enumerate() {
         let local = local_displacement(element, u);
         let e = effective_e(element, &local, nonlinear_material);
         let axial = e * 1000.0 * element.section.area_m2 * (local[6] - local[0]) / element.length
             - thermal_axial[index];
-        let kl = local_stiffness(element, e, axial, nonlinear_geometry);
+        let (kl, local_load) = condense_releases(
+            local_stiffness(element, e, axial, nonlinear_geometry),
+            local_loads[index],
+            element.releases,
+        )?;
         let t = transform(element.rotation);
         for i in 0..12 {
             for j in 0..12 {
@@ -430,10 +550,22 @@ fn assemble(
                     .sum();
                 k.add(element.dofs[i], element.dofs[j], value);
             }
+            let equivalent: f64 = (0..12)
+                .map(|local_axis| t[local_axis][i] * local_load[local_axis])
+                .sum();
+            member_force[element.dofs[i]] += equivalent;
         }
         stiffnesses.push(e);
+        local_stiffnesses.push(kl);
+        condensed_loads.push(local_load);
     }
-    Ok((k, stiffnesses))
+    Ok(Assembly {
+        stiffness: k,
+        effective_e: stiffnesses,
+        member_load: member_force,
+        local_stiffness: local_stiffnesses,
+        local_load: condensed_loads,
+    })
 }
 
 pub fn solve(request: &Request) -> Result<Result3D, String> {
@@ -517,8 +649,8 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         if !used_ids.insert(member.id) {
             return Err("duplicate frame member id".into());
         }
-        if member.releases.values().any(|&value| value) {
-            return Err("native frame does not yet support end releases".into());
+        if member.releases.any() && request.analysis.material() {
+            return Err("frame end releases with material nonlinearity are not implemented".into());
         }
         let start = *node_index
             .get(&member.start_node_id)
@@ -542,6 +674,7 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
             section: *section_index
                 .get(&member.section_id)
                 .ok_or("unknown member section")?,
+            releases: member.releases,
         });
     }
     let element_index: HashMap<usize, usize> = elements
@@ -660,6 +793,20 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         thermal_axial[index] += axial;
     }
     let dofs = request.nodes.len() * 6;
+    let mut released_rotations = vec![false; dofs];
+    for element in &elements {
+        if element.releases.my_start || element.releases.mz_start || element.releases.torsion_start
+        {
+            for local_axis in 3..6 {
+                released_rotations[element.dofs[local_axis]] = true;
+            }
+        }
+        if element.releases.my_end || element.releases.mz_end || element.releases.torsion_end {
+            for local_axis in 9..12 {
+                released_rotations[element.dofs[local_axis]] = true;
+            }
+        }
+    }
     let mut prescribed = vec![None; dofs];
     let mut springs = vec![0.0; dofs];
     let mut supported_nodes = HashSet::new();
@@ -714,23 +861,14 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
             return Err("support has no fixed or sprung DOF".into());
         }
     }
-    let mut f = vec![0.0; dofs];
+    let mut nodal_f = vec![0.0; dofs];
     for load in &request.nodal_loads {
         let index = *node_index.get(&load.node_id).ok_or("unknown load node")?;
         for (axis, value) in [load.fx, load.fy, load.fz, load.mx, load.my, load.mz]
             .iter()
             .enumerate()
         {
-            f[6 * index + axis] += value;
-        }
-    }
-    for (element, local_load) in elements.iter().zip(&local_loads) {
-        let t = transform(element.rotation);
-        for global_axis in 0..12 {
-            let equivalent: f64 = (0..12)
-                .map(|local_axis| t[local_axis][global_axis] * local_load[local_axis])
-                .sum();
-            f[element.dofs[global_axis]] += equivalent;
+            nodal_f[6 * index + axis] += value;
         }
     }
     let mut u = vec![0.0; dofs];
@@ -739,22 +877,34 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
     let mut converged = false;
     for _ in 0..request.max_iterations {
         iterations += 1;
-        let (mut k, _) = assemble(
+        let mut assembly = assemble(
             &elements,
             &u,
             &thermal_axial,
+            &local_loads,
             request.analysis.material(),
             request.analysis.geometric(),
         )?;
         for (dof, spring) in springs.iter().enumerate() {
             if *spring > 0.0 {
-                k.add(dof, dof, *spring);
+                assembly.stiffness.add(dof, dof, *spring);
             }
         }
+        let f: Vec<f64> = nodal_f
+            .iter()
+            .zip(&assembly.member_load)
+            .map(|(nodal, member)| nodal + member)
+            .collect();
+        let solve_constraints = constraints_with_inactive_dofs(
+            &assembly.stiffness,
+            &f,
+            &prescribed,
+            &released_rotations,
+        )?;
         if request.analysis.geometric() {
-            free_positive_definite(&k, &prescribed)?;
+            free_positive_definite(&assembly.stiffness, &solve_constraints)?;
         }
-        let (candidate, _) = constrained_solve(&k, &f, &prescribed)?;
+        let (candidate, _) = constrained_solve(&assembly.stiffness, &f, &solve_constraints)?;
         let change = candidate
             .iter()
             .zip(&u)
@@ -780,22 +930,31 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
             request.max_iterations
         ));
     }
-    let (mut k, stiffnesses) = assemble(
+    let mut assembly = assemble(
         &elements,
         &u,
         &thermal_axial,
+        &local_loads,
         request.analysis.material(),
         request.analysis.geometric(),
     )?;
     for (dof, spring) in springs.iter().enumerate() {
         if *spring > 0.0 {
-            k.add(dof, dof, *spring);
+            assembly.stiffness.add(dof, dof, *spring);
         }
     }
+    let f: Vec<f64> = nodal_f
+        .iter()
+        .zip(&assembly.member_load)
+        .map(|(nodal, member)| nodal + member)
+        .collect();
+    let solve_constraints =
+        constraints_with_inactive_dofs(&assembly.stiffness, &f, &prescribed, &released_rotations)?;
     if request.analysis.geometric() {
-        free_positive_definite(&k, &prescribed)?;
+        free_positive_definite(&assembly.stiffness, &solve_constraints)?;
     }
-    let reaction: Vec<f64> = k
+    let reaction: Vec<f64> = assembly
+        .stiffness
         .mul(&u)
         .iter()
         .zip(&f)
@@ -828,25 +987,19 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         .collect();
     let members = elements
         .iter()
-        .zip(stiffnesses)
-        .zip(&local_loads)
-        .zip(&thermal_axial)
-        .map(|(((element, e), local_load), thermal_axial)| {
+        .zip(&assembly.effective_e)
+        .zip(&assembly.local_stiffness)
+        .zip(&assembly.local_load)
+        .map(|(((element, e), local_k), local_load)| {
             let local = local_displacement(element, &u);
-            let axial = e * 1000.0 * element.section.area_m2 * (local[6] - local[0])
-                / element.length
-                - thermal_axial;
-            let mut forces = mat_vec(
-                &local_stiffness(element, e, axial, request.analysis.geometric()),
-                &local,
-            );
+            let mut forces = mat_vec(local_k, &local);
             for axis in 0..12 {
                 forces[axis] -= local_load[axis];
             }
             MemberResult {
                 member_id: element.id,
                 local_end_forces: forces,
-                effective_e_mpa: e,
+                effective_e_mpa: *e,
             }
         })
         .collect();
@@ -904,7 +1057,7 @@ mod tests {
                 material_id: 1,
                 section_id: 1,
                 roll_angle_rad: 0.0,
-                releases: HashMap::new(),
+                releases: EndReleases::default(),
             }],
             supports: vec![Support {
                 node_id: 1,
@@ -1018,6 +1171,93 @@ mod tests {
         assert!((result.nodes[0].reaction[2] - 8.0).abs() < 1e-10);
         assert!((result.nodes[0].reaction[4] + 8.0).abs() < 1e-10);
         assert!(result.equilibrium_residual < 1e-10);
+    }
+    #[test]
+    fn released_end_moment_matches_propped_cantilever_solution() {
+        let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 0.0);
+        model.members[0].releases.my_end = true;
+        let mut end_support = model.supports[0].clone();
+        end_support.node_id = 2;
+        model.supports.push(end_support);
+        model.member_loads.push(MemberLoad {
+            id: 1,
+            member_id: 1,
+            qy_start_kn_per_m: 0.0,
+            qy_end_kn_per_m: 0.0,
+            qz_start_kn_per_m: -4.0,
+            qz_end_kn_per_m: -4.0,
+            start_position_m: None,
+            end_position_m: None,
+        });
+        let result = solve(&model).unwrap();
+        assert!((result.nodes[0].reaction[2] - 5.0).abs() < 1e-10);
+        assert!((result.nodes[1].reaction[2] - 3.0).abs() < 1e-10);
+        assert!((result.nodes[0].reaction[4].abs() - 2.0).abs() < 1e-10);
+        assert!(result.nodes[1].reaction[4].abs() < 1e-10);
+        assert!(result.members[0].local_end_forces[10].abs() < 1e-10);
+    }
+    #[test]
+    fn released_rotations_without_stiffness_do_not_make_a_loaded_beam_singular() {
+        let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 0.0);
+        model.members[0].releases.my_start = true;
+        model.members[0].releases.my_end = true;
+        model.supports[0].ry = false;
+        let mut end_support = model.supports[0].clone();
+        end_support.node_id = 2;
+        model.supports.push(end_support);
+        model.member_loads.push(MemberLoad {
+            id: 1,
+            member_id: 1,
+            qy_start_kn_per_m: 0.0,
+            qy_end_kn_per_m: 0.0,
+            qz_start_kn_per_m: -4.0,
+            qz_end_kn_per_m: -4.0,
+            start_position_m: None,
+            end_position_m: None,
+        });
+        let result = solve(&model).unwrap();
+        assert!((result.nodes[0].reaction[2] - 4.0).abs() < 1e-10);
+        assert!((result.nodes[1].reaction[2] - 4.0).abs() < 1e-10);
+        assert!(result.members[0].local_end_forces[4].abs() < 1e-10);
+        assert!(result.members[0].local_end_forces[10].abs() < 1e-10);
+        model.nodal_loads[0].my = 1.0;
+        assert!(solve(&model)
+            .unwrap_err()
+            .contains("load on a disconnected frame DOF"));
+    }
+    #[test]
+    fn compression_amplifies_released_cantilever_deflection() {
+        let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 0.0);
+        model.members[0].releases.my_end = true;
+        model.nodal_loads[0].fx = -100.0;
+        model.nodal_loads[0].fz = -10.0;
+        let linear = solve(&model).unwrap();
+        model.analysis = Analysis::PDelta;
+        let nonlinear = solve(&model).unwrap();
+        assert!(nonlinear.nodes[1].displacement[2].abs() > linear.nodes[1].displacement[2].abs());
+        assert!(nonlinear.members[0].local_end_forces[10].abs() < 1e-9);
+        model.analysis = Analysis::Material;
+        assert!(solve(&model)
+            .unwrap_err()
+            .contains("end releases with material nonlinearity"));
+    }
+    #[test]
+    fn orphan_node_is_not_silently_constrained_as_a_release() {
+        let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 10.0);
+        model.nodes.push(Node {
+            id: 3,
+            x: 5.0,
+            y: 0.0,
+            z: 0.0,
+        });
+        assert!(solve(&model).is_err());
+    }
+    #[test]
+    fn unknown_release_axis_is_rejected_at_the_json_boundary() {
+        let mut input =
+            serde_json::to_value(cantilever(Analysis::Linear, MaterialLaw::Elastic, 10.0)).unwrap();
+        input["members"][0]["releases"]["unknownAxis"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<Request>(input).is_err());
     }
     #[test]
     fn midspan_member_point_load_matches_cantilever_solution() {
