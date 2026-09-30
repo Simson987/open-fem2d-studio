@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { solveFrame3D } from "./src/components/frame3d/frame3dSolver.ts";
+import { solveFrame3D, solveFrame3DCombination } from "./src/components/frame3d/frame3dSolver.ts";
 import { resolveSolver } from "./src/core/solver/SolverRegistry.ts";
 import { deserializeProject } from "./src/io/projectFile.ts";
 
@@ -46,8 +46,8 @@ try {
   const request = { schemaVersion: 1, dimension: "3d", analysis: "linear", elementFamilies: ["frame"] };
   assert.equal(resolveSolver("openaec-native-fem", request).id, "openaec-native-fem");
   assert.equal(resolveSolver("automatic", request).id, "dedaliano");
-  assert.throws(() => resolveSolver("openaec-native-fem", { ...request, analysis: "p-delta" }),
-    /does not support/);
+  assert.equal(resolveSolver("openaec-native-fem", { ...request, analysis: "p-delta" }).id,
+    "openaec-native-fem");
   const cases = [
     ["stalen-ligger-3d.ifcfem2d", 1],
     ["stalen-ruimteportaal.ifcfem2d", 1],
@@ -96,7 +96,31 @@ try {
   assert.equal(referenceCalls, 3);
   const fixture = fileURLToPath(new URL("../docs/verificatie/3d-raamwerk/stalen-ligger-3d.ifcfem2d", import.meta.url));
   const model = deserializeProject(readFileSync(fixture, "utf8")).model3d;
-  await assert.rejects(solveFrame3D(model, 1, "p-delta", "openaec-native-fem"), /alleen eerste orde/);
+  const portalFixture = fileURLToPath(new URL("../docs/verificatie/3d-raamwerk/stalen-ruimteportaal.ifcfem2d", import.meta.url));
+  const portal = deserializeProject(readFileSync(portalFixture, "utf8")).model3d;
+  const pDeltaFactors = new Map([[1, 1], [2, 1]]);
+  const nativePDelta = await solveFrame3DCombination(portal, pDeltaFactors, "p-delta", "openaec-native-fem");
+  const referencePDelta = await solveFrame3DCombination(portal, pDeltaFactors, "p-delta", "dedaliano");
+  assert.equal(nativePDelta.analysis, "p-delta");
+  assert.equal(nativePDelta.secondOrder.converged, true);
+  assert.equal(nativePDelta.secondOrder.stable, true);
+  assert.ok(nativePDelta.secondOrder.iterations > 1);
+  assert.ok(nativePDelta.secondOrder.maxAmplification > 1, "portaal onder druk versterkt de zijdelingse verplaatsing");
+  assert.ok(nativePDelta.forceBalance.maxImbalanceKn < 1e-6,
+    "P-Δ-krachten zijn globaal in evenwicht; de momenten worden over de onvervormde geometrie getoetst");
+  for (const node of nativePDelta.displacements) {
+    const expected = referencePDelta.displacements.find((value) => value.nodeId === node.nodeId);
+    assert.ok(expected);
+    for (const axis of ["ux", "uy", "uz", "rx", "ry", "rz"])
+      close(node[axis], expected[axis], 1e-5, `P-Δ knoop ${node.nodeId} ${axis}`);
+  }
+  for (const member of nativePDelta.memberForces) {
+    const expected = referencePDelta.memberForces.find((value) => value.memberId === member.memberId);
+    assert.ok(expected);
+    for (const axis of ["nStartKn", "nEndKn", "vyStartKn", "vyEndKn", "vzStartKn", "vzEndKn",
+      "torsionStartKnm", "torsionEndKnm", "myStartKnm", "myEndKnm", "mzStartKnm", "mzEndKnm"])
+      close(member[axis], expected[axis], 1e-2, `P-Δ staaf ${member.memberId} ${axis}`);
+  }
   const beam = model.beams[0];
   const start = model.nodes.find((node) => node.id === beam.startNodeId);
   const end = model.nodes.find((node) => node.id === beam.endNodeId);
@@ -123,9 +147,9 @@ try {
       }
     }
   }
-  assert.equal(nativeCalls, 6);
-  assert.equal(referenceCalls, 6);
-  console.log("Native 3D-app-route: 3 staalgevallen en 3 staaflastgevallen met snedekrachtlijnen geslaagd.");
+  assert.equal(nativeCalls, 7);
+  assert.equal(referenceCalls, 7);
+  console.log("Native 3D-app-route: 3 staalgevallen, 3 staaflastgevallen en P-Δ geslaagd.");
 } finally {
   globalThis.fetch = fetchBefore;
 }

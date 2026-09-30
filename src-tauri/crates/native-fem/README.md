@@ -52,13 +52,15 @@ automatisch Tauri of de ontwikkelbrug. Een drie-wegen-test vergelijkt de
 gehele JSON-uitvoer voor een mesh en een Q4-trekproef.
 
 In **Instellingen → Berekening** kan de gebruiker nu `Open FEM Rust
-(experimenteel)` kiezen voor een eerste-orde 3D-raamwerk. De bestaande
+(experimenteel)` kiezen voor een eerste-orde of P-Δ 3D-raamwerk. De bestaande
 analyseknop gebruikt dan dezelfde app-invoer en vertaalt de Rust-uitvoer naar
 knoopverplaatsingen, reacties, staafkrachten, bemonsterde snedekrachtlijnen, evenwicht,
 resultaatweergave en rapport. De automatische keuze blijft bij de bestaande
 solver. Staaflijn-, staafpunt- en thermische lasten zijn ook gekoppeld en de
-diagramstations zijn tegen de bestaande solver vergeleken. De app weigert voor
-de native route nog P-Δ zolang eigenknik in de app ontbreekt.
+diagramstations zijn tegen de bestaande solver vergeleken. Voor P-Δ geeft de
+app iteraties, convergentie en een verplaatsingsversterking weer. Eigenwaarde-
+knik blijft als niet beschikbaar gemarkeerd; de onafhankelijke momentensom
+over de onvervormde geometrie is bij P-Δ niet altijd nul.
 De andere native elementresultaten zijn nog niet op alle weergave-, combinatie-
 en rapporttypen aangesloten. Onbekende `kind`- en invoervelden worden door de
 Rust-typen geweigerd.

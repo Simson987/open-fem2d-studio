@@ -267,6 +267,7 @@ pub struct Result3D {
     pub diagrams: Diagrams3D,
     pub iterations: usize,
     pub relative_change: f64,
+    pub max_amplification: f64,
     pub equilibrium_residual: f64,
 }
 
@@ -607,7 +608,10 @@ fn member_diagram(
     let transverse = matches!(kind, "momentY" | "momentZ" | "shearY" | "shearZ");
     if transverse {
         for load in line_loads {
-            for x in [load.start_position_m.unwrap_or(0.0), load.end_position_m.unwrap_or(length)] {
+            for x in [
+                load.start_position_m.unwrap_or(0.0),
+                load.end_position_m.unwrap_or(length),
+            ] {
                 positions.insert(((x / length) * 1e12).round() as i64);
             }
         }
@@ -645,7 +649,9 @@ fn member_diagram(
         for load in line_loads {
             let a = load.start_position_m.unwrap_or(0.0);
             let b = load.end_position_m.unwrap_or(length);
-            if x <= a || b - a <= 1e-12 { continue; }
+            if x <= a || b - a <= 1e-12 {
+                continue;
+            }
             let span = b - a;
             let s = x.min(b) - a;
             let (qi, qj) = if matches!(kind, "momentY" | "shearZ") {
@@ -665,8 +671,14 @@ fn member_diagram(
             };
         }
         for load in point_loads {
-            if load.position_m >= x - 1e-10 { continue; }
-            let p = if matches!(kind, "momentY" | "shearZ") { load.pz_kn } else { load.py_kn };
+            if load.position_m >= x - 1e-10 {
+                continue;
+            }
+            let p = if matches!(kind, "momentY" | "shearZ") {
+                load.pz_kn
+            } else {
+                load.py_kn
+            };
             value += match kind {
                 "shearY" | "shearZ" => p,
                 "momentY" => p * (x - load.position_m),
@@ -679,17 +691,42 @@ fn member_diagram(
         max_abs_value = max_abs_value.max(value.abs());
         points.push(DiagramPoint { t, value });
     }
-    MemberDiagram { member_id, points, max_value, min_value, max_abs_value }
+    MemberDiagram {
+        member_id,
+        points,
+        max_value,
+        min_value,
+        max_abs_value,
+    }
 }
 
-fn member_diagrams(request: &Request, elements: &[Element<'_>], members: &[MemberResult]) -> Diagrams3D {
+fn member_diagrams(
+    request: &Request,
+    elements: &[Element<'_>],
+    members: &[MemberResult],
+) -> Diagrams3D {
     let mut diagrams = Diagrams3D::default();
     for (element, member) in elements.iter().zip(members) {
-        let line_loads: Vec<_> = request.member_loads.iter().filter(|load| load.member_id == element.id).collect();
-        let point_loads: Vec<_> = request.member_point_loads.iter().filter(|load| load.member_id == element.id).collect();
-        let compute = |kind| member_diagram(
-            element.id, element.length, &member.local_end_forces, &line_loads, &point_loads, kind,
-        );
+        let line_loads: Vec<_> = request
+            .member_loads
+            .iter()
+            .filter(|load| load.member_id == element.id)
+            .collect();
+        let point_loads: Vec<_> = request
+            .member_point_loads
+            .iter()
+            .filter(|load| load.member_id == element.id)
+            .collect();
+        let compute = |kind| {
+            member_diagram(
+                element.id,
+                element.length,
+                &member.local_end_forces,
+                &line_loads,
+                &point_loads,
+                kind,
+            )
+        };
         diagrams.moment_y.push(compute("momentY"));
         diagrams.moment_z.push(compute("momentZ"));
         diagrams.shear_y.push(compute("shearY"));
@@ -1006,6 +1043,7 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
     let mut u = vec![0.0; dofs];
     let mut iterations = 0;
     let mut relative_change = 0.0;
+    let mut first_translation_max: f64 = 0.0;
     let mut converged = false;
     for _ in 0..request.max_iterations {
         iterations += 1;
@@ -1037,6 +1075,13 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
             free_positive_definite(&assembly.stiffness, &solve_constraints)?;
         }
         let (candidate, _) = constrained_solve(&assembly.stiffness, &f, &solve_constraints)?;
+        if iterations == 1 {
+            first_translation_max = candidate
+                .chunks_exact(6)
+                .flat_map(|node| node[..3].iter())
+                .map(|value| value.abs())
+                .fold(0.0, f64::max);
+        }
         let change = candidate
             .iter()
             .zip(&u)
@@ -1136,12 +1181,23 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         })
         .collect();
     let diagrams = member_diagrams(request, &elements, &members);
+    let final_translation_max = u
+        .chunks_exact(6)
+        .flat_map(|node| node[..3].iter())
+        .map(|value| value.abs())
+        .fold(0.0, f64::max);
+    let max_amplification = if first_translation_max > 1e-12 {
+        (final_translation_max / first_translation_max).max(1.0)
+    } else {
+        1.0
+    };
     Ok(Result3D {
         nodes,
         members,
         diagrams,
         iterations,
         relative_change,
+        max_amplification,
         equilibrium_residual,
     })
 }
@@ -1474,6 +1530,9 @@ mod tests {
         model.analysis = Analysis::PDelta;
         let nonlinear = solve(&model).unwrap();
         assert!(nonlinear.nodes[1].displacement[1] > linear.nodes[1].displacement[1]);
+        assert_eq!(linear.max_amplification, 1.0);
+        assert!(nonlinear.max_amplification > 1.0);
+        assert!(nonlinear.iterations > 1);
     }
     #[test]
     fn steel_and_concrete_material_softening() {

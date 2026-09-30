@@ -432,6 +432,7 @@ interface NativeFrame3DResult {
   diagrams: Frame3DDiagrams;
   iterations: number;
   relativeChange: number;
+  maxAmplification: number;
   equilibriumResidual: number;
 }
 
@@ -443,7 +444,9 @@ function adaptNativeFrame3DResult(
   native: NativeFrame3DResult,
 ): Frame3DSolveResult {
   if (native.nodes?.length !== input.nodes.length || native.members?.length !== input.members.length
-      || !Number.isFinite(native.equilibriumResidual) || native.equilibriumResidual > 1e-7) {
+      || !Number.isFinite(native.equilibriumResidual) || native.equilibriumResidual > 1e-7
+      || !Number.isFinite(native.relativeChange) || !Number.isFinite(native.maxAmplification)
+      || native.iterations < 1) {
     throw new Error("De eigen Rust-raamwerkkern leverde geen volledig of evenwichtig resultaat.");
   }
   const nodeById = new Map(input.nodes.map((node) => [node.id, node]));
@@ -498,12 +501,21 @@ function adaptNativeFrame3DResult(
     engine: { id: "openaec-native-fem", name: "Open FEM Rust", revision: "0.1.0", license: "AGPL-3.0-or-later" },
     analysis: input.analysis,
     displacements, reactions, memberForces, diagrams,
+    ...(input.analysis === "p-delta" ? { secondOrder: {
+      iterations: native.iterations, converged: true, stable: true,
+      maxAmplification: native.maxAmplification,
+    } } : {}),
     buckling: { status: "notApplicable", reason: "Eigenwaarde-knik is nog niet beschikbaar in de eigen Rust-kern." },
     equilibrium: { relativeResidual: native.equilibriumResidual,
       residualOk, maxImbalanceKn: balance.maxImbalanceKn,
       equilibriumOk: residualOk && balance.ok },
     solverPath: "native-rust",
-    diagnostics: ["Eigen Rust-raamwerkkern: lineaire 3D-analyse; eigenwaarde-knik ontbreekt nog."],
+    diagnostics: [
+      "Eigen Rust-raamwerkkern: 3D-raamwerk; eigenwaarde-knik ontbreekt nog.",
+      ...(input.analysis === "p-delta" && !balance.ok
+        ? ["De onafhankelijke momentensom gebruikt de onvervormde geometrie; bij P-Δ kan daardoor een momentrest ontstaan."]
+        : []),
+    ],
   };
 }
 
@@ -513,11 +525,8 @@ async function callFrame3DSolver(input: Frame3DSolveRequest, engine: SolverEngin
     forceBalance: frame3DGlobalForceBalance(input, result),
   });
   if (engine === "openaec-native-fem") {
-    if (input.analysis !== "linear" || input.bucklingModes !== 0) {
-      throw new Error("De eigen Rust-raamwerkkern ondersteunt via de app nu alleen eerste orde.");
-    }
     return checked(adaptNativeFrame3DResult(input,
-      await solveNativeFem<NativeFrame3DResult>("frame3d", input)));
+      await solveNativeFem<NativeFrame3DResult>("frame3d", { ...input, bucklingModes: 0 })));
   }
   const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
   const usesLegacyCompatibleLoads = input.memberLoads.length === 0

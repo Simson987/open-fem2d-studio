@@ -107,22 +107,58 @@ fn compare(model: Value) {
         }
     }
     for (kind, native_curves, reference_curves) in [
-        ("momentY", &native.diagrams.moment_y, &reference.diagrams.moment_y),
-        ("momentZ", &native.diagrams.moment_z, &reference.diagrams.moment_z),
-        ("shearY", &native.diagrams.shear_y, &reference.diagrams.shear_y),
-        ("shearZ", &native.diagrams.shear_z, &reference.diagrams.shear_z),
+        (
+            "momentY",
+            &native.diagrams.moment_y,
+            &reference.diagrams.moment_y,
+        ),
+        (
+            "momentZ",
+            &native.diagrams.moment_z,
+            &reference.diagrams.moment_z,
+        ),
+        (
+            "shearY",
+            &native.diagrams.shear_y,
+            &reference.diagrams.shear_y,
+        ),
+        (
+            "shearZ",
+            &native.diagrams.shear_z,
+            &reference.diagrams.shear_z,
+        ),
         ("axial", &native.diagrams.axial, &reference.diagrams.axial),
-        ("torsion", &native.diagrams.torsion, &reference.diagrams.torsion),
+        (
+            "torsion",
+            &native.diagrams.torsion,
+            &reference.diagrams.torsion,
+        ),
     ] {
         for curve in native_curves {
-            let existing = reference_curves.iter().find(|v| v.member_id == curve.member_id).unwrap();
+            let existing = reference_curves
+                .iter()
+                .find(|v| v.member_id == curve.member_id)
+                .unwrap();
             for expected in &existing.points {
-                let actual = curve.points.iter().find(|v| (v.t - expected.t).abs() < 1e-9)
-                    .unwrap_or_else(|| panic!("{kind} member {} missing station {}", curve.member_id, expected.t));
+                let actual = curve
+                    .points
+                    .iter()
+                    .find(|v| (v.t - expected.t).abs() < 1e-9)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "{kind} member {} missing station {}",
+                            curve.member_id, expected.t
+                        )
+                    });
                 let tolerance = 1e-5_f64.max(expected.value.abs() * 1e-6);
-                assert!((actual.value - expected.value).abs() < tolerance,
+                assert!(
+                    (actual.value - expected.value).abs() < tolerance,
                     "{kind} member {} at {}: native={} reference={}",
-                    curve.member_id, expected.t, actual.value, expected.value);
+                    curve.member_id,
+                    expected.t,
+                    actual.value,
+                    expected.value
+                );
             }
         }
     }

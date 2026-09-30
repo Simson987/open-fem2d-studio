@@ -80,7 +80,7 @@ export const SOLVER_REGISTRY: readonly SolverDescriptor[] = Object.freeze([
     priority: 150,
     capabilities: {
       dimensions: ["3d"],
-      analyses: ["linear"],
+      analyses: ["linear", "p-delta"],
       elementFamilies: ["frame"],
     },
   },
