@@ -2,8 +2,10 @@
 //! These kernels are opt-in until their reference suite covers production use.
 
 pub mod frame3d;
+pub mod material2d;
 pub mod math;
 pub mod plate2d;
+pub mod plate_bending;
 
 use serde::{Deserialize, Serialize};
 
@@ -26,8 +28,9 @@ impl Analysis {
     }
 }
 
-/// Monotonic stress envelopes. These are exploratory material nonlinear laws:
-/// no plastic strain, crack history or unloading path is stored between solves.
+/// Material laws shared by the experimental kernels. The 2D membrane kernel
+/// stores plastic strain and tensile damage along one request's load path;
+/// the 3D frame kernel still uses a monotonic effective-E envelope.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum MaterialLaw {

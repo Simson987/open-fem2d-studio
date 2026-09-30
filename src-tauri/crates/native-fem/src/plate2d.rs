@@ -1,7 +1,8 @@
 //! Three-node constant-strain membrane in plane stress. Geometry is in metres;
 //! E and strengths are MPa; loads/reactions are kN. The nonlinear response is
-//! monotonic total-strain based, so cyclic unloading is deliberately unsupported.
+//! material response stores state between load steps within one request.
 
+use crate::material2d::{self, State};
 use crate::math::{constrained_solve, Matrix};
 use crate::{positive, Analysis, MaterialLaw};
 use serde::{Deserialize, Serialize};
@@ -62,6 +63,9 @@ pub struct Request {
     pub supports: Vec<Support>,
     #[serde(default)]
     pub loads: Vec<Load>,
+    /// Successive load factors. Each segment is subdivided for material updates.
+    #[serde(default)]
+    pub load_path: Vec<f64>,
     #[serde(default = "default_tolerance")]
     pub tolerance: f64,
     #[serde(default = "default_iterations")]
@@ -90,6 +94,8 @@ pub struct ElementResult {
     pub triangle_id: usize,
     pub strain: [f64; 3],
     pub stress_mpa: [f64; 3],
+    pub equivalent_plastic_strain: f64,
+    pub tensile_damage: f64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -166,78 +172,12 @@ fn build_elements<'a>(
         .collect()
 }
 
-fn elastic_stress(material: &Material, strain: [f64; 3]) -> [f64; 3] {
-    let e = material.e_mpa * 1000.0;
-    let factor = e / (1.0 - material.nu * material.nu);
-    [
-        factor * (strain[0] + material.nu * strain[1]),
-        factor * (material.nu * strain[0] + strain[1]),
-        e / (2.0 * (1.0 + material.nu)) * strain[2],
-    ]
-}
-
-fn stress(material: &Material, strain: [f64; 3], material_nonlinear: bool) -> [f64; 3] {
-    let trial = elastic_stress(material, strain);
-    if !material_nonlinear {
-        return trial;
-    }
-    match material.law {
-        MaterialLaw::Elastic => trial,
-        MaterialLaw::SteelBilinear {
-            yield_mpa,
-            hardening_ratio,
-        } => {
-            let equivalent = (trial[0].powi(2) - trial[0] * trial[1]
-                + trial[1].powi(2)
-                + 3.0 * trial[2].powi(2))
-            .sqrt();
-            let yield_kn_m2 = yield_mpa * 1000.0;
-            if equivalent <= yield_kn_m2 {
-                return trial;
-            }
-            let target = yield_kn_m2 + hardening_ratio * (equivalent - yield_kn_m2);
-            trial.map(|value| value * target / equivalent)
-        }
-        MaterialLaw::ConcreteCracking {
-            tensile_mpa,
-            residual_ratio,
-        } => {
-            let centre = (trial[0] + trial[1]) / 2.0;
-            let radius = (((trial[0] - trial[1]) / 2.0).powi(2) + trial[2].powi(2)).sqrt();
-            if radius <= 1e-20 {
-                let limit = tensile_mpa * 1000.0;
-                let principal = if centre > limit {
-                    limit + residual_ratio * (centre - limit)
-                } else {
-                    centre
-                };
-                return [principal, principal, 0.0];
-            }
-            let principal = [centre + radius, centre - radius];
-            let limit = tensile_mpa * 1000.0;
-            let clipped = principal.map(|value| {
-                if value > limit {
-                    limit + residual_ratio * (value - limit)
-                } else {
-                    value
-                }
-            });
-            let theta = 0.5 * (2.0 * trial[2]).atan2(trial[0] - trial[1]);
-            let (s, c) = theta.sin_cos();
-            [
-                clipped[0] * c * c + clipped[1] * s * s,
-                clipped[0] * s * s + clipped[1] * c * c,
-                (clipped[0] - clipped[1]) * s * c,
-            ]
-        }
-    }
-}
-
 fn element_response(
     element: &Element<'_>,
     displacement: &[f64; 6],
     analysis: Analysis,
-) -> ([f64; 6], [f64; 3], [f64; 3]) {
+    previous: State,
+) -> Result<([f64; 6], [f64; 3], [f64; 3], State), String> {
     let mut gradient = [[0.0; 2]; 2];
     for i in 0..3 {
         for direction in 0..2 {
@@ -256,7 +196,19 @@ fn element_response(
     } else {
         [ux, vy, uy + vx]
     };
-    let stress = stress(element.material, strain, analysis.material());
+    let law = if analysis.material() {
+        element.material.law
+    } else {
+        MaterialLaw::Elastic
+    };
+    let response = material2d::update(
+        element.material.e_mpa,
+        element.material.nu,
+        law,
+        strain,
+        previous,
+    )?;
+    let stress = response.stress;
     let mut force = [0.0; 6];
     for i in 0..3 {
         let [nx, ny] = element.gradients[i];
@@ -273,20 +225,21 @@ fn element_response(
         force[2 * i + 1] =
             element.area * element.thickness * (0..3).map(|j| by[j] * stress[j]).sum::<f64>();
     }
-    (force, strain, stress)
+    Ok((force, strain, stress, response.state))
 }
 
 fn assemble(
     elements: &[Element<'_>],
     u: &[f64],
     analysis: Analysis,
+    states: &[State],
     tangent: bool,
 ) -> Result<(Vec<f64>, Matrix), String> {
     let mut internal = vec![0.0; u.len()];
     let mut k = Matrix::zeros(u.len())?;
-    for element in elements {
+    for (index, element) in elements.iter().enumerate() {
         let local = element.dofs.map(|dof| u[dof]);
-        let (force, _, _) = element_response(element, &local, analysis);
+        let (force, _, _, _) = element_response(element, &local, analysis, states[index])?;
         for i in 0..6 {
             internal[element.dofs[i]] += force[i];
         }
@@ -297,8 +250,9 @@ fn assemble(
                 plus[j] += step;
                 let mut minus = local;
                 minus[j] -= step;
-                let (f_plus, _, _) = element_response(element, &plus, analysis);
-                let (f_minus, _, _) = element_response(element, &minus, analysis);
+                let (f_plus, _, _, _) = element_response(element, &plus, analysis, states[index])?;
+                let (f_minus, _, _, _) =
+                    element_response(element, &minus, analysis, states[index])?;
                 for i in 0..6 {
                     k.add(
                         element.dofs[i],
@@ -391,56 +345,79 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
         load[2 * index + 1] += force.fy;
     }
     let scale = load.iter().map(|f| f * f).sum::<f64>().sqrt().max(1.0);
-    let steps = if request.analysis == Analysis::Linear {
+    let substeps = if request.analysis == Analysis::Linear {
         1
     } else {
         10
     };
-    let mut u = vec![0.0; dofs];
-    let mut iterations = 0;
-    for step in 1..=steps {
-        let target = step as f64 / steps as f64;
-        let mut converged = false;
-        for _ in 0..request.max_iterations {
-            iterations += 1;
-            let (internal, k) = assemble(&elements, &u, request.analysis, true)?;
-            let residual: Vec<f64> = load
-                .iter()
-                .zip(internal)
-                .map(|(f, p)| target * f - p)
-                .collect();
-            let free_norm = residual
-                .iter()
-                .enumerate()
-                .filter(|(i, _)| prescribed[*i].is_none())
-                .map(|(_, r)| r * r)
-                .sum::<f64>()
-                .sqrt();
-            if free_norm / scale <= request.tolerance {
-                converged = true;
-                break;
-            }
-            let (increment, _) = constrained_solve(&k, &residual, &prescribed)?;
-            if !increment.iter().all(|value| value.is_finite()) {
-                return Err("non-finite plate increment".into());
-            }
-            for i in 0..dofs {
-                u[i] += increment[i];
-            }
-        }
-        if !converged {
-            return Err(format!(
-                "plate {} analysis did not converge at load step {step}",
-                if request.analysis.material() {
-                    "material/geometric"
-                } else {
-                    "geometric"
-                }
-            ));
-        }
+    let path = if request.load_path.is_empty() {
+        vec![1.0]
+    } else {
+        request.load_path.clone()
+    };
+    if path.iter().any(|factor| !factor.is_finite()) {
+        return Err("non-finite plate load path factor".into());
     }
-    let (internal, _) = assemble(&elements, &u, request.analysis, false)?;
-    let residual: Vec<f64> = internal.iter().zip(&load).map(|(a, b)| a - b).collect();
+    let mut u = vec![0.0; dofs];
+    let mut states = vec![State::default(); elements.len()];
+    let mut iterations = 0;
+    let mut segment_start = 0.0;
+    for (segment, &segment_end) in path.iter().enumerate() {
+        for step in 1..=substeps {
+            let target =
+                segment_start + (segment_end - segment_start) * step as f64 / substeps as f64;
+            let mut converged = false;
+            for _ in 0..request.max_iterations {
+                iterations += 1;
+                let (internal, k) = assemble(&elements, &u, request.analysis, &states, true)?;
+                let residual: Vec<f64> = load
+                    .iter()
+                    .zip(internal)
+                    .map(|(f, p)| target * f - p)
+                    .collect();
+                let free_norm = residual
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| prescribed[*i].is_none())
+                    .map(|(_, r)| r * r)
+                    .sum::<f64>()
+                    .sqrt();
+                if free_norm / scale <= request.tolerance {
+                    converged = true;
+                    break;
+                }
+                let (increment, _) = constrained_solve(&k, &residual, &prescribed)?;
+                if !increment.iter().all(|value| value.is_finite()) {
+                    return Err("non-finite plate increment".into());
+                }
+                for i in 0..dofs {
+                    u[i] += increment[i];
+                }
+            }
+            if !converged {
+                return Err(format!(
+                    "plate nonlinear analysis did not converge at path segment {} step {step}",
+                    segment + 1
+                ));
+            }
+            if request.analysis.material() {
+                for (index, element) in elements.iter().enumerate() {
+                    let local = element.dofs.map(|dof| u[dof]);
+                    let (_, _, _, state) =
+                        element_response(element, &local, request.analysis, states[index])?;
+                    states[index] = state;
+                }
+            }
+        }
+        segment_start = segment_end;
+    }
+    let (internal, _) = assemble(&elements, &u, request.analysis, &states, false)?;
+    let final_factor = *path.last().unwrap();
+    let residual: Vec<f64> = internal
+        .iter()
+        .zip(&load)
+        .map(|(a, b)| a - final_factor * b)
+        .collect();
     let relative_residual = residual
         .iter()
         .enumerate()
@@ -471,16 +448,20 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
         .collect();
     let elements = elements
         .iter()
-        .map(|element| {
+        .enumerate()
+        .map(|(index, element)| {
             let local = element.dofs.map(|dof| u[dof]);
-            let (_, strain, stress) = element_response(element, &local, request.analysis);
-            ElementResult {
+            let (_, strain, stress, _) =
+                element_response(element, &local, request.analysis, states[index])?;
+            Ok(ElementResult {
                 triangle_id: element.id,
                 strain,
                 stress_mpa: stress.map(|value| value / 1000.0),
-            }
+                equivalent_plastic_strain: states[index].equivalent_plastic_strain,
+                tensile_damage: states[index].tensile_damage,
+            })
         })
-        .collect();
+        .collect::<Result<_, String>>()?;
     Ok(Result2D {
         nodes,
         elements,
@@ -553,6 +534,7 @@ mod tests {
                     fy: load,
                 },
             ],
+            load_path: vec![],
             tolerance: 1e-8,
             max_iterations: 40,
         }
@@ -599,6 +581,37 @@ mod tests {
         .unwrap();
         assert!(steel.nodes[1].ux_m > elastic.nodes[1].ux_m);
         assert!(concrete.nodes[1].ux_m > steel.nodes[1].ux_m);
+    }
+    #[test]
+    fn steel_load_unload_path_keeps_plastic_deformation() {
+        let mut model = coupon(
+            MaterialLaw::SteelBilinear {
+                yield_mpa: 235.0,
+                hardening_ratio: 0.02,
+            },
+            Analysis::Material,
+            20_000.0,
+        );
+        model.load_path = vec![1.0, 0.0];
+        let result = solve(&model).unwrap();
+        assert!(result.elements[0].equivalent_plastic_strain > 0.0);
+        assert!(result.nodes[1].ux_m > 0.0);
+        assert!(result.relative_residual < 1e-8);
+    }
+    #[test]
+    fn concrete_load_unload_path_keeps_damage() {
+        let mut model = coupon(
+            MaterialLaw::ConcreteCracking {
+                tensile_mpa: 3.0,
+                residual_ratio: 0.02,
+            },
+            Analysis::Material,
+            500.0,
+        );
+        model.load_path = vec![1.0, 0.0];
+        let result = solve(&model).unwrap();
+        assert!(result.elements[0].tensile_damage > 0.0);
+        assert!(result.relative_residual < 1e-8);
     }
     #[test]
     fn reversed_triangle_order_has_same_response() {

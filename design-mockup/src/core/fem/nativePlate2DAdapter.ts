@@ -63,3 +63,59 @@ export function buildNativePlate2DRequest(
     })),
   };
 }
+
+/** Zet een bestaand driehoeksrooster om naar de lineaire Rust DKT-kern. */
+export function buildNativePlateBendingRequest(mesh: Mesh) {
+  if (mesh.beamElements.size > 0) {
+    throw new Error('De native DKT-kern ondersteunt geen gekoppelde staaf-plaatmodellen.');
+  }
+  const triangles = [...mesh.elements.values()].map(element => {
+    if (element.nodeIds.length !== 3) {
+      throw new Error(`Element ${element.id}: de native DKT-kern ondersteunt alleen driehoeken.`);
+    }
+    return {
+      id: element.id, nodeIds: element.nodeIds as [number, number, number],
+      materialId: element.materialId, thicknessM: element.thickness,
+    };
+  });
+  if (triangles.length === 0) throw new Error('De native DKT-kern heeft minstens één driehoek nodig.');
+  const usedNodes = new Set(triangles.flatMap(triangle => triangle.nodeIds));
+  const nodes = [...mesh.nodes.values()].filter(node => usedNodes.has(node.id));
+  const materials = [...new Set(triangles.map(triangle => triangle.materialId))].map(id => {
+    const material = mesh.materials.get(id);
+    if (!material) throw new Error(`Onbekend plaatmateriaal ${id}.`);
+    if (material.orthotroop) throw new Error(`Materiaal ${id}: orthotropie is nog niet ondersteund door de native DKT-kern.`);
+    return { id, eMpa: material.E / 1e6, nu: material.nu };
+  });
+  for (const node of mesh.nodes.values()) {
+    if (!usedNodes.has(node.id)) {
+      if (node.constraints.y || node.constraints.rotation || node.loads.fz || node.loads.fy) {
+        throw new Error(`Knoop ${node.id} heeft een dwarslast of oplegging buiten het DKT-rooster.`);
+      }
+      continue;
+    }
+    if (node.constraints.springX != null || node.constraints.springY != null || node.constraints.springRot != null) {
+      throw new Error(`Knoop ${node.id}: veren zijn nog niet ondersteund door de native DKT-kern.`);
+    }
+    if (node.loads.fx || node.loads.moment) {
+      throw new Error(`Knoop ${node.id}: vlaklasten en éénassige momenten zijn geen DKT-invoer.`);
+    }
+  }
+  return {
+    nodes: nodes.map(node => ({ id: node.id, x: node.x, y: node.y })),
+    materials,
+    triangles,
+    supports: nodes.filter(node => node.constraints.y || node.constraints.rotation).map(node => ({
+      nodeId: node.id,
+      w: node.constraints.y,
+      thetaX: node.constraints.rotation,
+      thetaY: node.constraints.rotation,
+    })),
+    loads: nodes.filter(node => (node.loads.fz ?? node.loads.fy) !== 0).map(node => ({
+      nodeId: node.id,
+      fz: (node.loads.fz ?? node.loads.fy) / 1000,
+      mx: 0,
+      my: 0,
+    })),
+  };
+}
