@@ -1,0 +1,98 @@
+{
+  "format": "open-fem2d-studio-v2",
+  "version": 3,
+  "savedAt": "2026-09-30T00:00:00.000Z",
+  "nodes": [],
+  "beams": [],
+  "supports": [],
+  "plates": [],
+  "loads": [],
+  "loadCases": [
+    {
+      "id": 1,
+      "name": "Middenlast 10 kN",
+      "type": "live"
+    }
+  ],
+  "activeLoadCaseId": 1,
+  "selfWeightEnabled": false,
+  "nonlinearEnabled": false,
+  "analysetype": "eersteOrde",
+  "modelDimension": "3d",
+  "model3d": {
+    "nodes": [
+      {
+        "id": 1,
+        "x": 0,
+        "y": 0,
+        "z": 4
+      },
+      {
+        "id": 2,
+        "x": 2,
+        "y": 0,
+        "z": 4
+      },
+      {
+        "id": 3,
+        "x": 4,
+        "y": 0,
+        "z": 4
+      }
+    ],
+    "beams": [
+      {
+        "id": 1,
+        "startNodeId": 1,
+        "endNodeId": 2,
+        "profileName": "IPE200",
+        "material": "S235"
+      },
+      {
+        "id": 2,
+        "startNodeId": 2,
+        "endNodeId": 3,
+        "profileName": "IPE200",
+        "material": "S235"
+      }
+    ],
+    "supports": [
+      {
+        "nodeId": 1,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 3,
+        "ux": false,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      }
+    ],
+    "loads": [
+      {
+        "id": 1,
+        "nodeId": 2,
+        "fx": 0,
+        "fy": 0,
+        "fz": -10,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      }
+    ]
+  },
+  "projectInfo": {
+    "name": "Controle 3D-stalen ligger — middenlast",
+    "projectNumber": "VF-3D-STAAL-01"
+  },
+  "frame3dViewSets": []
+}

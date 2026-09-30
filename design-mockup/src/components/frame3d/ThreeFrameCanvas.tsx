@@ -3116,7 +3116,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       if (fastPathReady && visibility.memberAxes && affectedBeams.length > 0) {
         const axesGroup = geometry.children.find((child) => child.userData.frame3dMemberAxes === true);
         for (let axisIndex = 0; axisIndex < 3; axisIndex += 1) {
-          const lines = axesGroup?.children.find((child) => child.userData.frame3dAxisIndex === axisIndex);
+          const lines = axesGroup?.children.find((child) =>
+            child instanceof THREE.LineSegments && child.userData.frame3dAxisIndex === axisIndex);
           const offsets = lines?.userData.frame3dAxisVertexByBeamId as Map<number, number> | undefined;
           if (!(lines instanceof THREE.LineSegments) || !offsets
             || affectedBeams.some((beam) => !offsets.has(beam.id))) {
@@ -3817,8 +3818,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
               const shoulder = tip.clone().addScaledVector(direction, -wing).addScaledVector(side, sign * wing * 0.45);
               positions.push(tip.x, tip.y, tip.z, shoulder.x, shoulder.y, shoulder.z);
             }
-            const line = memberAxesGroup.children.find((child) =>
-              child.userData.frame3dAxisIndex === axisIndex) as THREE.LineSegments;
+            const line = memberAxesGroup.children.find((child): child is THREE.LineSegments =>
+              child instanceof THREE.LineSegments && child.userData.frame3dAxisIndex === axisIndex);
+            if (!line) return;
             const previousPositions = line.geometry.getAttribute("position").array as Float32Array;
             const combined = new Float32Array(previousPositions.length + positions.length);
             combined.set(previousPositions);

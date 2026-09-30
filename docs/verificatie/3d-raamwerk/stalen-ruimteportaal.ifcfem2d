@@ -1,0 +1,270 @@
+{
+  "format": "open-fem2d-studio-v2",
+  "version": 3,
+  "savedAt": "2026-09-30T00:00:00.000Z",
+  "nodes": [],
+  "beams": [],
+  "supports": [],
+  "plates": [],
+  "loads": [],
+  "loadCases": [
+    {
+      "id": 1,
+      "name": "Daklast 4 × 10 kN",
+      "type": "dead"
+    },
+    {
+      "id": 2,
+      "name": "Wind X/Y 4 × (2/1) kN",
+      "type": "wind"
+    }
+  ],
+  "activeLoadCaseId": 1,
+  "selfWeightEnabled": false,
+  "nonlinearEnabled": false,
+  "analysetype": "eersteOrde",
+  "modelDimension": "3d",
+  "model3d": {
+    "nodes": [
+      {
+        "id": 1,
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 2,
+        "x": 6,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 3,
+        "x": 0,
+        "y": 4,
+        "z": 0
+      },
+      {
+        "id": 4,
+        "x": 6,
+        "y": 4,
+        "z": 0
+      },
+      {
+        "id": 5,
+        "x": 0,
+        "y": 0,
+        "z": 3.5
+      },
+      {
+        "id": 6,
+        "x": 6,
+        "y": 0,
+        "z": 3.5
+      },
+      {
+        "id": 7,
+        "x": 0,
+        "y": 4,
+        "z": 3.5
+      },
+      {
+        "id": 8,
+        "x": 6,
+        "y": 4,
+        "z": 3.5
+      }
+    ],
+    "beams": [
+      {
+        "id": 1,
+        "startNodeId": 1,
+        "endNodeId": 5,
+        "profileName": "HEA200",
+        "material": "S235"
+      },
+      {
+        "id": 2,
+        "startNodeId": 2,
+        "endNodeId": 6,
+        "profileName": "HEA200",
+        "material": "S235"
+      },
+      {
+        "id": 3,
+        "startNodeId": 3,
+        "endNodeId": 7,
+        "profileName": "HEA200",
+        "material": "S235"
+      },
+      {
+        "id": 4,
+        "startNodeId": 4,
+        "endNodeId": 8,
+        "profileName": "HEA200",
+        "material": "S235"
+      },
+      {
+        "id": 5,
+        "startNodeId": 5,
+        "endNodeId": 6,
+        "profileName": "IPE200",
+        "material": "S235"
+      },
+      {
+        "id": 6,
+        "startNodeId": 7,
+        "endNodeId": 8,
+        "profileName": "IPE200",
+        "material": "S235"
+      },
+      {
+        "id": 7,
+        "startNodeId": 5,
+        "endNodeId": 7,
+        "profileName": "IPE200",
+        "material": "S235"
+      },
+      {
+        "id": 8,
+        "startNodeId": 6,
+        "endNodeId": 8,
+        "profileName": "IPE200",
+        "material": "S235"
+      }
+    ],
+    "supports": [
+      {
+        "nodeId": 1,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 2,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 3,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 4,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      }
+    ],
+    "loads": [
+      {
+        "id": 1,
+        "nodeId": 5,
+        "fx": 0,
+        "fy": 0,
+        "fz": -10,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 2,
+        "nodeId": 5,
+        "fx": 2,
+        "fy": 1,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 3,
+        "nodeId": 6,
+        "fx": 0,
+        "fy": 0,
+        "fz": -10,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 4,
+        "nodeId": 6,
+        "fx": 2,
+        "fy": 1,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 5,
+        "nodeId": 7,
+        "fx": 0,
+        "fy": 0,
+        "fz": -10,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 6,
+        "nodeId": 7,
+        "fx": 2,
+        "fy": 1,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      },
+      {
+        "id": 7,
+        "nodeId": 8,
+        "fx": 0,
+        "fy": 0,
+        "fz": -10,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      },
+      {
+        "id": 8,
+        "nodeId": 8,
+        "fx": 2,
+        "fy": 1,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 2
+      }
+    ]
+  },
+  "projectInfo": {
+    "name": "Controle 3D-stalen ruimteportaal",
+    "projectNumber": "VF-3D-STAAL-02"
+  },
+  "frame3dViewSets": []
+}

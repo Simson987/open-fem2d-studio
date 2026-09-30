@@ -9,6 +9,22 @@ revolute opleggingen om elke globale as. De set bewaakt ook oplegveren, opgelegd
 rotaties, de kritieke-lastgrens en de geldige P-Delta-nultoestand
 waarbij een belasting volledig op een geblokkeerde vrijheidsgraad staat.
 
+## Openbare 3D-staalmodellen
+
+| Projectbestand | Model en belastingen | Controle |
+| --- | --- | --- |
+| [`stalen-ligger-3d.ifcfem2d`](stalen-ligger-3d.ifcfem2d) | IPE200-ligger van 4 m, twee elementen, middenlast 10 kN | Beide verticale reacties 5 kN; middendoorbuiging `PL³/(48EI)`; EN 1993 bij UGT 1,5Q |
+| [`stalen-ruimteportaal.ifcfem2d`](stalen-ruimteportaal.ifcfem2d) | 6 × 4 × 3,5 m, vier HEA200-kolommen en vier IPE200-dakliggers; daklast en wind in X/Y | Vier symmetrische dakreacties van 10 kN; windreacties −8/−4 kN; EN 1993 bij UGT 1,35G + 1,5W |
+
+Beide bestanden worden met de projectparser opnieuw geopend. De controle
+[`test-frame3d-steel-models.mjs`](../../../design-mockup/test-frame3d-steel-models.mjs)
+rekent de modellen met de 3D-solver door, toetst het globale kracht- en
+momentenevenwicht en voert de staaltoets via `toetsbrug` uit. Op 30 september
+2026 gaf de debug-kern `Ok` voor alle staven; de hoogste UC was 0,308 voor de
+ligger en 0,093 voor het portaal. Draai de controle vanuit `design-mockup/` met
+`node --import tsx test-frame3d-steel-models.mjs`. Zonder lokaal gebouwde
+Rust-binaries blijft de controle beperkt tot de projectbestanden.
+
 ## Bestanden en dekking
 
 | Bestand / geval | Controleert | Referentie |

@@ -1,0 +1,622 @@
+//! Three-node constant-strain membrane in plane stress. Geometry is in metres;
+//! E and strengths are MPa; loads/reactions are kN. The nonlinear response is
+//! monotonic total-strain based, so cyclic unloading is deliberately unsupported.
+
+use crate::math::{constrained_solve, Matrix};
+use crate::{positive, Analysis, MaterialLaw};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Node {
+    pub id: usize,
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Material {
+    pub id: usize,
+    pub e_mpa: f64,
+    pub nu: f64,
+    #[serde(default)]
+    pub law: MaterialLaw,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Triangle {
+    pub id: usize,
+    pub node_ids: [usize; 3],
+    pub material_id: usize,
+    pub thickness_m: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Support {
+    pub node_id: usize,
+    pub ux: bool,
+    pub uy: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Load {
+    pub node_id: usize,
+    pub fx: f64,
+    pub fy: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Request {
+    #[serde(default)]
+    pub analysis: Analysis,
+    pub nodes: Vec<Node>,
+    pub materials: Vec<Material>,
+    pub triangles: Vec<Triangle>,
+    #[serde(default)]
+    pub supports: Vec<Support>,
+    #[serde(default)]
+    pub loads: Vec<Load>,
+    #[serde(default = "default_tolerance")]
+    pub tolerance: f64,
+    #[serde(default = "default_iterations")]
+    pub max_iterations: usize,
+}
+fn default_tolerance() -> f64 {
+    1e-8
+}
+fn default_iterations() -> usize {
+    40
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeResult {
+    pub node_id: usize,
+    pub ux_m: f64,
+    pub uy_m: f64,
+    pub rx_kn: f64,
+    pub ry_kn: f64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementResult {
+    pub triangle_id: usize,
+    pub strain: [f64; 3],
+    pub stress_mpa: [f64; 3],
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Result2D {
+    pub nodes: Vec<NodeResult>,
+    pub elements: Vec<ElementResult>,
+    pub iterations: usize,
+    pub relative_residual: f64,
+}
+
+struct Element<'a> {
+    id: usize,
+    dofs: [usize; 6],
+    gradients: [[f64; 2]; 3],
+    area: f64,
+    thickness: f64,
+    material: &'a Material,
+}
+
+fn build_elements<'a>(
+    request: &'a Request,
+    node_index: &HashMap<usize, usize>,
+) -> Result<Vec<Element<'a>>, String> {
+    let materials: HashMap<usize, &Material> =
+        request.materials.iter().map(|m| (m.id, m)).collect();
+    request
+        .triangles
+        .iter()
+        .map(|triangle| {
+            positive(triangle.thickness_m, "plate thickness")?;
+            let material = *materials
+                .get(&triangle.material_id)
+                .ok_or_else(|| format!("triangle {} has unknown material", triangle.id))?;
+            let ids: Vec<usize> = triangle
+                .node_ids
+                .iter()
+                .map(|id| {
+                    node_index
+                        .get(id)
+                        .copied()
+                        .ok_or_else(|| format!("triangle {} has unknown node {id}", triangle.id))
+                })
+                .collect::<Result<_, _>>()?;
+            if ids[0] == ids[1] || ids[1] == ids[2] || ids[2] == ids[0] {
+                return Err(format!("triangle {} repeats a node", triangle.id));
+            }
+            let [a, b, c] = [ids[0], ids[1], ids[2]].map(|i| &request.nodes[i]);
+            let twice_area = (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y);
+            if !twice_area.is_finite() || twice_area.abs() < 1e-12 {
+                return Err(format!("triangle {} has zero area", triangle.id));
+            }
+            let gradients = [
+                [(b.y - c.y) / twice_area, (c.x - b.x) / twice_area],
+                [(c.y - a.y) / twice_area, (a.x - c.x) / twice_area],
+                [(a.y - b.y) / twice_area, (b.x - a.x) / twice_area],
+            ];
+            Ok(Element {
+                id: triangle.id,
+                dofs: [
+                    2 * ids[0],
+                    2 * ids[0] + 1,
+                    2 * ids[1],
+                    2 * ids[1] + 1,
+                    2 * ids[2],
+                    2 * ids[2] + 1,
+                ],
+                gradients,
+                area: twice_area.abs() / 2.0,
+                thickness: triangle.thickness_m,
+                material,
+            })
+        })
+        .collect()
+}
+
+fn elastic_stress(material: &Material, strain: [f64; 3]) -> [f64; 3] {
+    let e = material.e_mpa * 1000.0;
+    let factor = e / (1.0 - material.nu * material.nu);
+    [
+        factor * (strain[0] + material.nu * strain[1]),
+        factor * (material.nu * strain[0] + strain[1]),
+        e / (2.0 * (1.0 + material.nu)) * strain[2],
+    ]
+}
+
+fn stress(material: &Material, strain: [f64; 3], material_nonlinear: bool) -> [f64; 3] {
+    let trial = elastic_stress(material, strain);
+    if !material_nonlinear {
+        return trial;
+    }
+    match material.law {
+        MaterialLaw::Elastic => trial,
+        MaterialLaw::SteelBilinear {
+            yield_mpa,
+            hardening_ratio,
+        } => {
+            let equivalent = (trial[0].powi(2) - trial[0] * trial[1]
+                + trial[1].powi(2)
+                + 3.0 * trial[2].powi(2))
+            .sqrt();
+            let yield_kn_m2 = yield_mpa * 1000.0;
+            if equivalent <= yield_kn_m2 {
+                return trial;
+            }
+            let target = yield_kn_m2 + hardening_ratio * (equivalent - yield_kn_m2);
+            trial.map(|value| value * target / equivalent)
+        }
+        MaterialLaw::ConcreteCracking {
+            tensile_mpa,
+            residual_ratio,
+        } => {
+            let centre = (trial[0] + trial[1]) / 2.0;
+            let radius = (((trial[0] - trial[1]) / 2.0).powi(2) + trial[2].powi(2)).sqrt();
+            if radius <= 1e-20 {
+                let limit = tensile_mpa * 1000.0;
+                let principal = if centre > limit {
+                    limit + residual_ratio * (centre - limit)
+                } else {
+                    centre
+                };
+                return [principal, principal, 0.0];
+            }
+            let principal = [centre + radius, centre - radius];
+            let limit = tensile_mpa * 1000.0;
+            let clipped = principal.map(|value| {
+                if value > limit {
+                    limit + residual_ratio * (value - limit)
+                } else {
+                    value
+                }
+            });
+            let theta = 0.5 * (2.0 * trial[2]).atan2(trial[0] - trial[1]);
+            let (s, c) = theta.sin_cos();
+            [
+                clipped[0] * c * c + clipped[1] * s * s,
+                clipped[0] * s * s + clipped[1] * c * c,
+                (clipped[0] - clipped[1]) * s * c,
+            ]
+        }
+    }
+}
+
+fn element_response(
+    element: &Element<'_>,
+    displacement: &[f64; 6],
+    analysis: Analysis,
+) -> ([f64; 6], [f64; 3], [f64; 3]) {
+    let mut gradient = [[0.0; 2]; 2];
+    for i in 0..3 {
+        for direction in 0..2 {
+            gradient[0][direction] += displacement[2 * i] * element.gradients[i][direction];
+            gradient[1][direction] += displacement[2 * i + 1] * element.gradients[i][direction];
+        }
+    }
+    let [ux, uy] = gradient[0];
+    let [vx, vy] = gradient[1];
+    let strain = if analysis.geometric() {
+        [
+            ux + 0.5 * (ux * ux + vx * vx),
+            vy + 0.5 * (uy * uy + vy * vy),
+            uy + vx + ux * uy + vx * vy,
+        ]
+    } else {
+        [ux, vy, uy + vx]
+    };
+    let stress = stress(element.material, strain, analysis.material());
+    let mut force = [0.0; 6];
+    for i in 0..3 {
+        let [nx, ny] = element.gradients[i];
+        let (bx, by) = if analysis.geometric() {
+            (
+                [nx * (1.0 + ux), ny * uy, ny * (1.0 + ux) + nx * uy],
+                [nx * vx, ny * (1.0 + vy), ny * vx + nx * (1.0 + vy)],
+            )
+        } else {
+            ([nx, 0.0, ny], [0.0, ny, nx])
+        };
+        force[2 * i] =
+            element.area * element.thickness * (0..3).map(|j| bx[j] * stress[j]).sum::<f64>();
+        force[2 * i + 1] =
+            element.area * element.thickness * (0..3).map(|j| by[j] * stress[j]).sum::<f64>();
+    }
+    (force, strain, stress)
+}
+
+fn assemble(
+    elements: &[Element<'_>],
+    u: &[f64],
+    analysis: Analysis,
+    tangent: bool,
+) -> Result<(Vec<f64>, Matrix), String> {
+    let mut internal = vec![0.0; u.len()];
+    let mut k = Matrix::zeros(u.len())?;
+    for element in elements {
+        let local = element.dofs.map(|dof| u[dof]);
+        let (force, _, _) = element_response(element, &local, analysis);
+        for i in 0..6 {
+            internal[element.dofs[i]] += force[i];
+        }
+        if tangent {
+            for j in 0..6 {
+                let step = 1e-7_f64.max(local[j].abs() * 1e-5);
+                let mut plus = local;
+                plus[j] += step;
+                let mut minus = local;
+                minus[j] -= step;
+                let (f_plus, _, _) = element_response(element, &plus, analysis);
+                let (f_minus, _, _) = element_response(element, &minus, analysis);
+                for i in 0..6 {
+                    k.add(
+                        element.dofs[i],
+                        element.dofs[j],
+                        (f_plus[i] - f_minus[i]) / (2.0 * step),
+                    );
+                }
+            }
+        }
+    }
+    Ok((internal, k))
+}
+
+pub fn solve(request: &Request) -> Result<Result2D, String> {
+    if request.nodes.len() < 3 || request.triangles.is_empty() {
+        return Err("plate requires nodes and triangles".into());
+    }
+    positive(request.tolerance, "tolerance")?;
+    if request.max_iterations == 0 || request.max_iterations > 200 {
+        return Err("invalid iteration limit".into());
+    }
+    let ids: HashSet<usize> = request.nodes.iter().map(|n| n.id).collect();
+    if ids.len() != request.nodes.len() {
+        return Err("duplicate plate node id".into());
+    }
+    for node in &request.nodes {
+        if !node.x.is_finite() || !node.y.is_finite() {
+            return Err("non-finite plate coordinate".into());
+        }
+    }
+    for material in &request.materials {
+        positive(material.e_mpa, "E")?;
+        if !material.nu.is_finite() || material.nu <= -1.0 || material.nu >= 0.5 {
+            return Err("invalid plane-stress Poisson ratio".into());
+        }
+        match material.law {
+            MaterialLaw::Elastic => {}
+            MaterialLaw::SteelBilinear {
+                yield_mpa,
+                hardening_ratio,
+            } => {
+                positive(yield_mpa, "steel yield stress")?;
+                if !(0.0..=1.0).contains(&hardening_ratio) {
+                    return Err("invalid hardening ratio".into());
+                }
+            }
+            MaterialLaw::ConcreteCracking {
+                tensile_mpa,
+                residual_ratio,
+            } => {
+                positive(tensile_mpa, "concrete tensile strength")?;
+                if !(0.0..=1.0).contains(&residual_ratio) {
+                    return Err("invalid residual ratio".into());
+                }
+            }
+        }
+    }
+    let material_ids: HashSet<usize> = request.materials.iter().map(|m| m.id).collect();
+    if material_ids.len() != request.materials.len() {
+        return Err("duplicate plate material id".into());
+    }
+    let triangle_ids: HashSet<usize> = request.triangles.iter().map(|t| t.id).collect();
+    if triangle_ids.len() != request.triangles.len() {
+        return Err("duplicate plate triangle id".into());
+    }
+    let node_index: HashMap<usize, usize> = request
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.id, i))
+        .collect();
+    let elements = build_elements(request, &node_index)?;
+    let dofs = 2 * request.nodes.len();
+    let mut prescribed = vec![None; dofs];
+    for support in &request.supports {
+        let index = *node_index
+            .get(&support.node_id)
+            .ok_or("unknown support node")?;
+        if support.ux {
+            prescribed[2 * index] = Some(0.0);
+        }
+        if support.uy {
+            prescribed[2 * index + 1] = Some(0.0);
+        }
+    }
+    let mut load = vec![0.0; dofs];
+    for force in &request.loads {
+        let index = *node_index.get(&force.node_id).ok_or("unknown load node")?;
+        load[2 * index] += force.fx;
+        load[2 * index + 1] += force.fy;
+    }
+    let scale = load.iter().map(|f| f * f).sum::<f64>().sqrt().max(1.0);
+    let steps = if request.analysis == Analysis::Linear {
+        1
+    } else {
+        10
+    };
+    let mut u = vec![0.0; dofs];
+    let mut iterations = 0;
+    for step in 1..=steps {
+        let target = step as f64 / steps as f64;
+        let mut converged = false;
+        for _ in 0..request.max_iterations {
+            iterations += 1;
+            let (internal, k) = assemble(&elements, &u, request.analysis, true)?;
+            let residual: Vec<f64> = load
+                .iter()
+                .zip(internal)
+                .map(|(f, p)| target * f - p)
+                .collect();
+            let free_norm = residual
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| prescribed[*i].is_none())
+                .map(|(_, r)| r * r)
+                .sum::<f64>()
+                .sqrt();
+            if free_norm / scale <= request.tolerance {
+                converged = true;
+                break;
+            }
+            let (increment, _) = constrained_solve(&k, &residual, &prescribed)?;
+            if !increment.iter().all(|value| value.is_finite()) {
+                return Err("non-finite plate increment".into());
+            }
+            for i in 0..dofs {
+                u[i] += increment[i];
+            }
+        }
+        if !converged {
+            return Err(format!(
+                "plate {} analysis did not converge at load step {step}",
+                if request.analysis.material() {
+                    "material/geometric"
+                } else {
+                    "geometric"
+                }
+            ));
+        }
+    }
+    let (internal, _) = assemble(&elements, &u, request.analysis, false)?;
+    let residual: Vec<f64> = internal.iter().zip(&load).map(|(a, b)| a - b).collect();
+    let relative_residual = residual
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| prescribed[*i].is_none())
+        .map(|(_, r)| r * r)
+        .sum::<f64>()
+        .sqrt()
+        / scale;
+    let nodes = request
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(i, node)| NodeResult {
+            node_id: node.id,
+            ux_m: u[2 * i],
+            uy_m: u[2 * i + 1],
+            rx_kn: if prescribed[2 * i].is_some() {
+                residual[2 * i]
+            } else {
+                0.0
+            },
+            ry_kn: if prescribed[2 * i + 1].is_some() {
+                residual[2 * i + 1]
+            } else {
+                0.0
+            },
+        })
+        .collect();
+    let elements = elements
+        .iter()
+        .map(|element| {
+            let local = element.dofs.map(|dof| u[dof]);
+            let (_, strain, stress) = element_response(element, &local, request.analysis);
+            ElementResult {
+                triangle_id: element.id,
+                strain,
+                stress_mpa: stress.map(|value| value / 1000.0),
+            }
+        })
+        .collect();
+    Ok(Result2D {
+        nodes,
+        elements,
+        iterations,
+        relative_residual,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn coupon(law: MaterialLaw, analysis: Analysis, load: f64) -> Request {
+        Request {
+            analysis,
+            nodes: vec![
+                Node {
+                    id: 1,
+                    x: 0.0,
+                    y: 0.0,
+                },
+                Node {
+                    id: 2,
+                    x: 1.0,
+                    y: 0.0,
+                },
+                Node {
+                    id: 3,
+                    x: 0.0,
+                    y: 1.0,
+                },
+            ],
+            materials: vec![Material {
+                id: 1,
+                e_mpa: 210_000.0,
+                nu: 0.0,
+                law,
+            }],
+            triangles: vec![Triangle {
+                id: 1,
+                node_ids: [1, 2, 3],
+                material_id: 1,
+                thickness_m: 0.1,
+            }],
+            supports: vec![
+                Support {
+                    node_id: 1,
+                    ux: true,
+                    uy: true,
+                },
+                Support {
+                    node_id: 2,
+                    ux: false,
+                    uy: true,
+                },
+                Support {
+                    node_id: 3,
+                    ux: true,
+                    uy: false,
+                },
+            ],
+            loads: vec![
+                Load {
+                    node_id: 2,
+                    fx: load,
+                    fy: 0.0,
+                },
+                Load {
+                    node_id: 3,
+                    fx: 0.0,
+                    fy: load,
+                },
+            ],
+            tolerance: 1e-8,
+            max_iterations: 40,
+        }
+    }
+    #[test]
+    fn linear_coupon_matches_constant_strain_solution() {
+        let result = solve(&coupon(MaterialLaw::Elastic, Analysis::Linear, 10.0)).unwrap();
+        let expected = 10.0 / (0.05 * 210_000_000.0);
+        assert!((result.nodes[1].ux_m - expected).abs() < 1e-11);
+        assert!((result.nodes[2].uy_m - expected).abs() < 1e-11);
+        assert!(result.relative_residual < 1e-8);
+    }
+    #[test]
+    fn geometric_stiffening_changes_large_displacement() {
+        let linear = solve(&coupon(MaterialLaw::Elastic, Analysis::Linear, 200_000.0)).unwrap();
+        let geometric = solve(&coupon(
+            MaterialLaw::Elastic,
+            Analysis::Geometric,
+            200_000.0,
+        ))
+        .unwrap();
+        assert!(geometric.nodes[1].ux_m < linear.nodes[1].ux_m);
+    }
+    #[test]
+    fn steel_yield_and_concrete_crack_increase_displacement() {
+        let elastic = solve(&coupon(MaterialLaw::Elastic, Analysis::Linear, 20_000.0)).unwrap();
+        let steel = solve(&coupon(
+            MaterialLaw::SteelBilinear {
+                yield_mpa: 235.0,
+                hardening_ratio: 0.02,
+            },
+            Analysis::Material,
+            20_000.0,
+        ))
+        .unwrap();
+        let concrete = solve(&coupon(
+            MaterialLaw::ConcreteCracking {
+                tensile_mpa: 3.0,
+                residual_ratio: 0.02,
+            },
+            Analysis::Material,
+            20_000.0,
+        ))
+        .unwrap();
+        assert!(steel.nodes[1].ux_m > elastic.nodes[1].ux_m);
+        assert!(concrete.nodes[1].ux_m > steel.nodes[1].ux_m);
+    }
+    #[test]
+    fn reversed_triangle_order_has_same_response() {
+        let model = coupon(MaterialLaw::Elastic, Analysis::Linear, 10.0);
+        let reference = solve(&model).unwrap();
+        let mut reversed = model;
+        reversed.triangles[0].node_ids.swap(1, 2);
+        let actual = solve(&reversed).unwrap();
+        for (a, b) in actual.nodes.iter().zip(reference.nodes.iter()) {
+            assert!((a.ux_m - b.ux_m).abs() < 1e-12);
+            assert!((a.uy_m - b.uy_m).abs() < 1e-12);
+        }
+    }
+    #[test]
+    fn unknown_input_field_is_rejected() {
+        let mut value =
+            serde_json::to_value(coupon(MaterialLaw::Elastic, Analysis::Linear, 10.0)).unwrap();
+        value["planeStrain"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<Request>(value).is_err());
+    }
+}
