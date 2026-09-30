@@ -54,10 +54,11 @@ gehele JSON-uitvoer voor een mesh en een Q4-trekproef.
 In **Instellingen → Berekening** kan de gebruiker nu `Open FEM Rust
 (experimenteel)` kiezen voor een eerste-orde 3D-raamwerk. De bestaande
 analyseknop gebruikt dan dezelfde app-invoer en vertaalt de Rust-uitvoer naar
-knoopverplaatsingen, reacties, staafkrachten, eindstationdiagrammen, evenwicht,
+knoopverplaatsingen, reacties, staafkrachten, bemonsterde snedekrachtlijnen, evenwicht,
 resultaatweergave en rapport. De automatische keuze blijft bij de bestaande
-solver. De app weigert voor de native route P-Δ, staaflijn-, staafpunt- en
-thermische lasten zolang eigenknik en volledige snedekrachtlijnen ontbreken.
+solver. Staaflijn-, staafpunt- en thermische lasten zijn ook gekoppeld en de
+diagramstations zijn tegen de bestaande solver vergeleken. De app weigert voor
+de native route nog P-Δ zolang eigenknik in de app ontbreekt.
 De andere native elementresultaten zijn nog niet op alle weergave-, combinatie-
 en rapporttypen aangesloten. Onbekende `kind`- en invoervelden worden door de
 Rust-typen geweigerd.

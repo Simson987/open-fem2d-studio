@@ -103,9 +103,29 @@ try {
   const length = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
   const loaded = { ...model, memberLoads: [{ id: 99, beamId: beam.id, caseId: 1,
     qyStart: 0, qyEnd: 0, qzStart: -1, qzEnd: -1, startPositionM: 0, endPositionM: length }] };
-  await assert.rejects(solveFrame3D(loaded, 1, "linear", "openaec-native-fem"), /snedekrachtlijnen/);
-  assert.equal(nativeCalls, 3);
-  console.log("Native 3D-app-route: 3 staalgevallen met verplaatsingen, staafkrachten en evenwicht geslaagd.");
+  const pointLoaded = { ...model, memberPointLoads: [{ id: 100, beamId: beam.id, caseId: 1,
+    py: 2, pz: -4, positionM: length / 2 }] };
+  const thermal = { ...model, thermalLoads: [{ id: 101, beamId: beam.id, caseId: 1,
+    deltaTUniformK: 20, deltaTGradientYK: 8, deltaTGradientZK: -5 }] };
+  for (const [label, caseModel] of [["lijnlast", loaded], ["puntlast", pointLoaded], ["temperatuur", thermal]]) {
+    const native = await solveFrame3D(caseModel, 1, "linear", "openaec-native-fem");
+    const existing = await solveFrame3D(caseModel, 1, "linear", "dedaliano");
+    assert.equal(native.forceBalance.ok, true, label);
+    for (const key of ["momentY", "momentZ", "shearY", "shearZ", "axial", "torsion"]) {
+      for (const curve of native.diagrams[key]) {
+        const reference = existing.diagrams[key].find((value) => value.memberId === curve.memberId);
+        assert.ok(reference, `${label} ${key}`);
+        for (const station of reference.points) {
+          const actual = curve.points.find((value) => Math.abs(value.t - station.t) < 1e-9);
+          assert.ok(actual, `${label} ${key} station ${station.t}`);
+          close(actual.value, station.value, 1e-4, `${label} ${key} station ${station.t}`);
+        }
+      }
+    }
+  }
+  assert.equal(nativeCalls, 6);
+  assert.equal(referenceCalls, 6);
+  console.log("Native 3D-app-route: 3 staalgevallen en 3 staaflastgevallen met snedekrachtlijnen geslaagd.");
 } finally {
   globalThis.fetch = fetchBefore;
 }

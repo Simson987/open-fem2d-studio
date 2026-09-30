@@ -429,6 +429,7 @@ type Frame3DSolveRequest = Omit<ReturnType<typeof buildFrame3DSolveRequest>, "bu
 interface NativeFrame3DResult {
   nodes: Array<{ nodeId: number; displacement: number[]; reaction: number[] }>;
   members: Array<{ memberId: number; localEndForces: number[]; effectiveEMpa: number }>;
+  diagrams: Frame3DDiagrams;
   iterations: number;
   relativeChange: number;
   equilibriumResidual: number;
@@ -480,19 +481,16 @@ function adaptNativeFrame3DResult(
       torsionEndKnm: -f[9], myEndKnm: -f[10], mzEndKnm: -f[11],
     };
   });
-  const diagram = (start: number, end: number, memberId: number): Frame3DMemberDiagram => ({
-    memberId, points: [{ t: 0, value: start }, { t: 1, value: end }],
-    maxValue: Math.max(start, end), minValue: Math.min(start, end),
-    maxAbsValue: Math.max(Math.abs(start), Math.abs(end)),
-  });
-  const diagrams: Frame3DDiagrams = {
-    momentY: memberForces.map((member) => diagram(member.myStartKnm, member.myEndKnm, member.memberId)),
-    momentZ: memberForces.map((member) => diagram(member.mzStartKnm, member.mzEndKnm, member.memberId)),
-    shearY: memberForces.map((member) => diagram(member.vyStartKn, member.vyEndKn, member.memberId)),
-    shearZ: memberForces.map((member) => diagram(member.vzStartKn, member.vzEndKn, member.memberId)),
-    axial: memberForces.map((member) => diagram(member.nStartKn, member.nEndKn, member.memberId)),
-    torsion: memberForces.map((member) => diagram(member.torsionStartKnm, member.torsionEndKnm, member.memberId)),
-  };
+  const diagrams = native.diagrams;
+  for (const key of ["momentY", "momentZ", "shearY", "shearZ", "axial", "torsion"] as const) {
+    const curves = diagrams?.[key];
+    if (!Array.isArray(curves) || curves.length !== memberForces.length ||
+        curves.some((curve) => !memberById.has(curve.memberId) || curve.points?.length < 2 ||
+          curve.points.some((point) => !Number.isFinite(point.t) || !Number.isFinite(point.value)) ||
+          !Number.isFinite(curve.maxValue) || !Number.isFinite(curve.minValue) || !Number.isFinite(curve.maxAbsValue))) {
+      throw new Error("De eigen Rust-raamwerkkern leverde ongeldige snedekrachtlijnen.");
+    }
+  }
   const balance = frame3DGlobalForceBalance(input, { reactions });
   const residualOk = native.equilibriumResidual <= 1e-8;
   return {
@@ -517,9 +515,6 @@ async function callFrame3DSolver(input: Frame3DSolveRequest, engine: SolverEngin
   if (engine === "openaec-native-fem") {
     if (input.analysis !== "linear" || input.bucklingModes !== 0) {
       throw new Error("De eigen Rust-raamwerkkern ondersteunt via de app nu alleen eerste orde.");
-    }
-    if (input.memberLoads.length || input.memberPointLoads.length || input.thermalLoads.length) {
-      throw new Error("Staaf- en temperatuurlasten wachten in de app nog op gevalideerde native snedekrachtlijnen.");
     }
     return checked(adaptNativeFrame3DResult(input,
       await solveNativeFem<NativeFrame3DResult>("frame3d", input)));

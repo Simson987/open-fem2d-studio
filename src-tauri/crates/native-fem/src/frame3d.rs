@@ -236,9 +236,35 @@ pub struct MemberResult {
 }
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DiagramPoint {
+    pub t: f64,
+    pub value: f64,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberDiagram {
+    pub member_id: usize,
+    pub points: Vec<DiagramPoint>,
+    pub max_value: f64,
+    pub min_value: f64,
+    pub max_abs_value: f64,
+}
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Diagrams3D {
+    pub moment_y: Vec<MemberDiagram>,
+    pub moment_z: Vec<MemberDiagram>,
+    pub shear_y: Vec<MemberDiagram>,
+    pub shear_z: Vec<MemberDiagram>,
+    pub axial: Vec<MemberDiagram>,
+    pub torsion: Vec<MemberDiagram>,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Result3D {
     pub nodes: Vec<NodeResult>,
     pub members: Vec<MemberResult>,
+    pub diagrams: Diagrams3D,
     pub iterations: usize,
     pub relative_change: f64,
     pub equilibrium_residual: f64,
@@ -566,6 +592,112 @@ fn assemble(
         local_stiffness: local_stiffnesses,
         local_load: condensed_loads,
     })
+}
+
+fn member_diagram(
+    member_id: usize,
+    length: f64,
+    forces: &[f64; 12],
+    line_loads: &[&MemberLoad],
+    point_loads: &[&MemberPointLoad],
+    kind: &str,
+) -> MemberDiagram {
+    use std::collections::BTreeSet;
+    let mut positions: BTreeSet<i64> = (0..=20).map(|i| i * 50_000_000_000).collect();
+    let transverse = matches!(kind, "momentY" | "momentZ" | "shearY" | "shearZ");
+    if transverse {
+        for load in line_loads {
+            for x in [load.start_position_m.unwrap_or(0.0), load.end_position_m.unwrap_or(length)] {
+                positions.insert(((x / length) * 1e12).round() as i64);
+            }
+        }
+        for load in point_loads {
+            let t = load.position_m / length;
+            for shifted in [t - 1e-6, t, t + 1e-6] {
+                if (0.0..=1.0).contains(&shifted) {
+                    positions.insert((shifted * 1e12).round() as i64);
+                }
+            }
+        }
+    }
+    let mut points = Vec::with_capacity(positions.len());
+    let mut max_value = f64::NEG_INFINITY;
+    let mut min_value = f64::INFINITY;
+    let mut max_abs_value: f64 = 0.0;
+    for key in positions {
+        let t = key as f64 / 1e12;
+        let x = t * length;
+        let (start, end) = match kind {
+            "axial" => (-forces[0], forces[6]),
+            "shearY" => (forces[1], -forces[7]),
+            "shearZ" => (forces[2], -forces[8]),
+            "torsion" => (forces[3], -forces[9]),
+            "momentY" => (forces[4], -forces[10]),
+            "momentZ" => (forces[5], -forces[11]),
+            _ => unreachable!(),
+        };
+        let mut value = match kind {
+            "momentY" => start + forces[2] * x,
+            "momentZ" => start - forces[1] * x,
+            "shearY" | "shearZ" => start,
+            _ => start + t * (end - start),
+        };
+        for load in line_loads {
+            let a = load.start_position_m.unwrap_or(0.0);
+            let b = load.end_position_m.unwrap_or(length);
+            if x <= a || b - a <= 1e-12 { continue; }
+            let span = b - a;
+            let s = x.min(b) - a;
+            let (qi, qj) = if matches!(kind, "momentY" | "shearZ") {
+                (load.qz_start_kn_per_m, load.qz_end_kn_per_m)
+            } else {
+                (load.qy_start_kn_per_m, load.qy_end_kn_per_m)
+            };
+            let dq = qj - qi;
+            let integrated_force = qi * s + dq * s * s / (2.0 * span);
+            let integrated_moment = qi * (s * (x - a) - s * s / 2.0)
+                + dq / span * (s * s * (x - a) / 2.0 - s * s * s / 3.0);
+            value += match kind {
+                "shearY" | "shearZ" => integrated_force,
+                "momentY" => integrated_moment,
+                "momentZ" => -integrated_moment,
+                _ => 0.0,
+            };
+        }
+        for load in point_loads {
+            if load.position_m >= x - 1e-10 { continue; }
+            let p = if matches!(kind, "momentY" | "shearZ") { load.pz_kn } else { load.py_kn };
+            value += match kind {
+                "shearY" | "shearZ" => p,
+                "momentY" => p * (x - load.position_m),
+                "momentZ" => -p * (x - load.position_m),
+                _ => 0.0,
+            };
+        }
+        max_value = max_value.max(value);
+        min_value = min_value.min(value);
+        max_abs_value = max_abs_value.max(value.abs());
+        points.push(DiagramPoint { t, value });
+    }
+    MemberDiagram { member_id, points, max_value, min_value, max_abs_value }
+}
+
+fn member_diagrams(request: &Request, elements: &[Element<'_>], members: &[MemberResult]) -> Diagrams3D {
+    let mut diagrams = Diagrams3D::default();
+    for (element, member) in elements.iter().zip(members) {
+        let line_loads: Vec<_> = request.member_loads.iter().filter(|load| load.member_id == element.id).collect();
+        let point_loads: Vec<_> = request.member_point_loads.iter().filter(|load| load.member_id == element.id).collect();
+        let compute = |kind| member_diagram(
+            element.id, element.length, &member.local_end_forces, &line_loads, &point_loads, kind,
+        );
+        diagrams.moment_y.push(compute("momentY"));
+        diagrams.moment_z.push(compute("momentZ"));
+        diagrams.shear_y.push(compute("shearY"));
+        diagrams.shear_z.push(compute("shearZ"));
+        diagrams.axial.push(compute("axial"));
+        diagrams.torsion.push(compute("torsion"));
+    }
+    diagrams
 }
 
 pub fn solve(request: &Request) -> Result<Result3D, String> {
@@ -985,7 +1117,7 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
             }),
         })
         .collect();
-    let members = elements
+    let members: Vec<MemberResult> = elements
         .iter()
         .zip(&assembly.effective_e)
         .zip(&assembly.local_stiffness)
@@ -1003,9 +1135,11 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
             }
         })
         .collect();
+    let diagrams = member_diagrams(request, &elements, &members);
     Ok(Result3D {
         nodes,
         members,
+        diagrams,
         iterations,
         relative_change,
         equilibrium_residual,
