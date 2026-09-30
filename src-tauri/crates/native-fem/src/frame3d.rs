@@ -147,6 +147,17 @@ pub struct MemberPointLoad {
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ThermalLoad {
+    pub id: usize,
+    pub member_id: usize,
+    pub delta_t_uniform_k: f64,
+    #[serde(default)]
+    pub delta_t_gradient_y_k: f64,
+    #[serde(default)]
+    pub delta_t_gradient_z_k: f64,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Request {
     #[serde(default = "default_schema")]
     pub schema_version: u32,
@@ -165,7 +176,7 @@ pub struct Request {
     #[serde(default)]
     pub member_point_loads: Vec<MemberPointLoad>,
     #[serde(default)]
-    pub thermal_loads: Vec<serde_json::Value>,
+    pub thermal_loads: Vec<ThermalLoad>,
     #[serde(default)]
     pub buckling_modes: usize,
     #[serde(default = "default_iterations")]
@@ -399,15 +410,17 @@ fn effective_e(element: &Element<'_>, local: &[f64; 12], nonlinear: bool) -> f64
 fn assemble(
     elements: &[Element<'_>],
     u: &[f64],
+    thermal_axial: &[f64],
     nonlinear_material: bool,
     nonlinear_geometry: bool,
 ) -> Result<(Matrix, Vec<f64>), String> {
     let mut k = Matrix::zeros(u.len())?;
     let mut stiffnesses = Vec::with_capacity(elements.len());
-    for element in elements {
+    for (index, element) in elements.iter().enumerate() {
         let local = local_displacement(element, u);
         let e = effective_e(element, &local, nonlinear_material);
-        let axial = e * 1000.0 * element.section.area_m2 * (local[6] - local[0]) / element.length;
+        let axial = e * 1000.0 * element.section.area_m2 * (local[6] - local[0]) / element.length
+            - thermal_axial[index];
         let kl = local_stiffness(element, e, axial, nonlinear_geometry);
         let t = transform(element.rotation);
         for i in 0..12 {
@@ -435,9 +448,6 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
     }
     if request.nodes.len() > 100 {
         return Err("3D frame stability verification is limited to 600 DOF".into());
-    }
-    if !request.thermal_loads.is_empty() {
-        return Err("native frame thermal loads are not implemented".into());
     }
     positive(request.tolerance, "tolerance")?;
     if request.max_iterations == 0 || request.max_iterations > 200 {
@@ -540,6 +550,7 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         .map(|(i, element)| (element.id, i))
         .collect();
     let mut local_loads = vec![[0.0; 12]; elements.len()];
+    let mut thermal_axial = vec![0.0; elements.len()];
     for load in &request.member_loads {
         let index = *element_index
             .get(&load.member_id)
@@ -608,6 +619,45 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
             load.py_kn,
             load.pz_kn,
         );
+    }
+    for load in &request.thermal_loads {
+        let index = *element_index
+            .get(&load.member_id)
+            .ok_or("unknown thermally loaded frame member")?;
+        let values = [
+            load.delta_t_uniform_k,
+            load.delta_t_gradient_y_k,
+            load.delta_t_gradient_z_k,
+        ];
+        if values.iter().any(|value| !value.is_finite()) || values.iter().all(|value| *value == 0.0)
+        {
+            return Err("invalid frame thermal load".into());
+        }
+        if request.analysis.material() {
+            return Err(
+                "frame thermal loads with material nonlinearity are not implemented".into(),
+            );
+        }
+        let element = &elements[index];
+        let alpha = element.material.alpha_per_k.unwrap_or(12e-6);
+        if !alpha.is_finite() || alpha <= 0.0 {
+            return Err("invalid frame thermal expansion coefficient".into());
+        }
+        let e = element.material.e_mpa * 1000.0;
+        let area = element.section.area_m2;
+        let hy = (12.0 * element.section.iz_m4 / area).sqrt();
+        let hz = (12.0 * element.section.iy_m4 / area).sqrt();
+        let axial = e * area * alpha * load.delta_t_uniform_k;
+        let moment_y = e * element.section.iy_m4 * alpha * load.delta_t_gradient_z_k / hz;
+        let moment_z = e * element.section.iz_m4 * alpha * load.delta_t_gradient_y_k / hy;
+        let local = &mut local_loads[index];
+        local[0] -= axial;
+        local[6] += axial;
+        local[4] -= moment_y;
+        local[10] += moment_y;
+        local[5] -= moment_z;
+        local[11] += moment_z;
+        thermal_axial[index] += axial;
     }
     let dofs = request.nodes.len() * 6;
     let mut prescribed = vec![None; dofs];
@@ -692,6 +742,7 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         let (mut k, _) = assemble(
             &elements,
             &u,
+            &thermal_axial,
             request.analysis.material(),
             request.analysis.geometric(),
         )?;
@@ -732,6 +783,7 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
     let (mut k, stiffnesses) = assemble(
         &elements,
         &u,
+        &thermal_axial,
         request.analysis.material(),
         request.analysis.geometric(),
     )?;
@@ -778,10 +830,12 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         .iter()
         .zip(stiffnesses)
         .zip(&local_loads)
-        .map(|((element, e), local_load)| {
+        .zip(&thermal_axial)
+        .map(|(((element, e), local_load), thermal_axial)| {
             let local = local_displacement(element, &u);
-            let axial =
-                e * 1000.0 * element.section.area_m2 * (local[6] - local[0]) / element.length;
+            let axial = e * 1000.0 * element.section.area_m2 * (local[6] - local[0])
+                / element.length
+                - thermal_axial;
             let mut forces = mat_vec(
                 &local_stiffness(element, e, axial, request.analysis.geometric()),
                 &local,
@@ -1010,6 +1064,35 @@ mod tests {
             .contains("invalid frame member point load"));
     }
     #[test]
+    fn free_and_restrained_thermal_expansion_match_axial_solution() {
+        let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 0.0);
+        model.materials[0].alpha_per_k = Some(10e-6);
+        model.thermal_loads.push(ThermalLoad {
+            id: 1,
+            member_id: 1,
+            delta_t_uniform_k: 30.0,
+            delta_t_gradient_y_k: 0.0,
+            delta_t_gradient_z_k: 0.0,
+        });
+        let free = solve(&model).unwrap();
+        assert!((free.nodes[1].displacement[0] - 0.0006).abs() < 1e-12);
+        assert!(free.nodes[0].reaction[0].abs() < 1e-8);
+        assert!(free.members[0].local_end_forces[0].abs() < 1e-8);
+
+        model.analysis = Analysis::PDelta;
+        let second_order = solve(&model).unwrap();
+        assert!((second_order.nodes[1].displacement[0] - 0.0006).abs() < 1e-12);
+        assert!(second_order.nodes[0].reaction[0].abs() < 1e-8);
+
+        model.analysis = Analysis::Linear;
+        let mut end_support = model.supports[0].clone();
+        end_support.node_id = 2;
+        model.supports.push(end_support);
+        let restrained = solve(&model).unwrap();
+        assert!((restrained.nodes[0].reaction[0] - 630.0).abs() < 1e-8);
+        assert!((restrained.nodes[1].reaction[0] + 630.0).abs() < 1e-8);
+    }
+    #[test]
     fn compression_amplifies_lateral_displacement() {
         let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 10.0);
         model.nodal_loads[0].fx = -100.0;
@@ -1049,10 +1132,23 @@ mod tests {
         assert!(solve(&model).unwrap_err().contains("stiffness"));
     }
     #[test]
-    fn unsupported_thermal_load_and_buckling_are_rejected() {
+    fn invalid_thermal_load_and_buckling_are_rejected() {
         let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 10.0);
-        model.thermal_loads.push(serde_json::json!({"memberId": 1}));
-        assert!(solve(&model).unwrap_err().contains("thermal loads"));
+        model.thermal_loads.push(ThermalLoad {
+            id: 1,
+            member_id: 1,
+            delta_t_uniform_k: 0.0,
+            delta_t_gradient_y_k: 0.0,
+            delta_t_gradient_z_k: 0.0,
+        });
+        assert!(solve(&model)
+            .unwrap_err()
+            .contains("invalid frame thermal load"));
+        model.thermal_loads[0].delta_t_uniform_k = 30.0;
+        model.analysis = Analysis::Material;
+        assert!(solve(&model)
+            .unwrap_err()
+            .contains("with material nonlinearity"));
         model.thermal_loads.clear();
         model.buckling_modes = 1;
         assert!(solve(&model).unwrap_err().contains("buckling"));

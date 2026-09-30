@@ -152,3 +152,23 @@ fn member_line_and_point_loads_match_existing_solver() {
     }]);
     compare(point);
 }
+
+#[test]
+fn uniform_and_gradient_thermal_loads_match_existing_solver() {
+    let mut free = model();
+    free["materials"][0]["alphaPerK"] = json!(10e-6);
+    free["thermalLoads"] = json!([{
+        "id": 1, "memberId": 1, "deltaTUniformK": 30.0,
+        "deltaTGradientYK": 0.0, "deltaTGradientZK": 0.0
+    }]);
+    compare(free.clone());
+    free["analysis"] = json!("p-delta");
+    compare(free);
+
+    let mut gradient = model();
+    gradient["thermalLoads"] = json!([{
+        "id": 1, "memberId": 1, "deltaTUniformK": 0.0,
+        "deltaTGradientYK": 10.0, "deltaTGradientZK": -20.0
+    }]);
+    compare(gradient);
+}
