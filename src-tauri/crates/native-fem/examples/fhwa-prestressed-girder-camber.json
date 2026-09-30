@@ -1,0 +1,18 @@
+{
+  "spanM": 33.2232,
+  "section": {
+    "areaM2": 0.6999986,
+    "inertiaM4": 0.3052308290209919,
+    "topFibreM": 0.904717699630853,
+    "bottomFibreM": 0.9240625093019794,
+    "eMpa": 28957.9806313056
+  },
+  "tendon": {
+    "kind": "straight",
+    "eccentricityM": 0.787527
+  },
+  "initialForceKn": 4111.9360611468055,
+  "lossFraction": 0,
+  "transferUniformDownwardKnPerM": 0,
+  "serviceUniformDownwardKnPerM": 0
+}

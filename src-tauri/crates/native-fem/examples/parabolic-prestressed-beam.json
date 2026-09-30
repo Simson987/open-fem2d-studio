@@ -1,0 +1,19 @@
+{
+  "spanM": 10,
+  "section": {
+    "areaM2": 0.5,
+    "inertiaM4": 0.02,
+    "topFibreM": 0.3,
+    "bottomFibreM": 0.3,
+    "eMpa": 30000
+  },
+  "tendon": {
+    "kind": "parabolic",
+    "endEccentricityM": 0,
+    "midEccentricityM": 0.2
+  },
+  "initialForceKn": 1000,
+  "lossFraction": 0.2,
+  "transferUniformDownwardKnPerM": 0,
+  "serviceUniformDownwardKnPerM": 16
+}

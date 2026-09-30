@@ -10,6 +10,7 @@ pub struct State {
     pub plastic_strain: [f64; 4],
     pub equivalent_plastic_strain: f64,
     pub tensile_damage: f64,
+    pub max_equivalent_strain: f64,
 }
 
 #[derive(Clone, Copy, Debug)]

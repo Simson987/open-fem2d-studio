@@ -2,10 +2,13 @@
 //! These kernels are opt-in until their reference suite covers production use.
 
 pub mod frame3d;
+pub mod hybrid_plate;
 pub mod material2d;
 pub mod math;
 pub mod plate2d;
 pub mod plate_bending;
+pub mod prestressed_beam;
+pub mod quad2d;
 
 use serde::{Deserialize, Serialize};
 

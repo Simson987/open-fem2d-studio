@@ -2,7 +2,7 @@
 
 Deze crate is een zelfstandige rekenkern op de branch
 `codex/native-rust-3d-plate-gnl-fnl`. De bestaande solver blijft de standaard in
-de app. De drie CLI-programma's lezen één JSON-verzoek van stdin en schrijven
+de app. De CLI-programma's lezen één JSON-verzoek van stdin en schrijven
 één JSON-resultaat naar stdout; fouten krijgen een niet-nul exitcode en een
 `{"error":"..."}`-resultaat. Een solver die invoer niet ondersteunt, weigert
 die expliciet.
@@ -14,6 +14,10 @@ die expliciet.
 | `native-frame3d` | 12-DOF Euler-Bernoulli raamwerk, 6 DOF/knoop | iteratieve P-Δ-stijfheid met stabiliteitscontrole | monotone effectieve-E-envelop voor staal en beton | knoopkrachten en volledig/partieel vaste DOF |
 | `native-plate2d` | 3-knoops CST-vlakspanning/membraan, 2 DOF/knoop | Green-Lagrange-rek met Newton-iteratie | J2-staalplastificatie met isotrope verharding en onomkeerbare betonschade per element | knoopkrachten en vaste x/y-DOF |
 | `native-plate-bending` | 3-knoops DKT-plaatbuiging, 3 DOF/knoop | nog niet | nog niet | dwarsknoopkrachten, knoopmomenten en vaste w/rotatie-DOF |
+| `native-square-mesh` | exact vierkant Q4-rooster met randknoop-ID's | n.v.t. | n.v.t. | `widthM`, `heightM`, `cellSizeM` |
+| `native-quad2d` | 4-knoops Q4-schijfelement, 2 DOF/knoop | Green-Lagrange | J2-staal en betonschade per Gauss-punt; afnemende E(rek)-curve | vlakke knoopkrachten en x/y-opleggingen |
+| `native-hybrid-plate` | 4-knoops hybride Kirchhoff-buiging, 12 DOF en 17 momentparameters | nog niet | afnemende secant-E per element en belastingpad | dwarsknoopkrachten, momenten, uniforme druk en w/rotatie-opleggingen |
+| `native-prestressed-beam` | vrij opgelegde elastische ligger met rechte of parabolische kabel | n.v.t. | opgegeven voorspanverlies | uniforme last en fases overdracht/gebruiksfase |
 
 De invoer gebruikt **m, kN en MPa**. Voor 3D volgt het JSON-schema de
 veldnamen van `frame3d-solver` (`schemaVersion: 1`); een materiaal kan een
@@ -21,9 +25,11 @@ extra `law` krijgen. Voor 2D is de invoer een apart, beperkt roostercontract
 met `nodes`, `materials`, `triangles`, `supports` en `loads`. De bestaande
 TypeScript-plaat gebruikt Pa en N; de vergelijkingstest converteert die
 eenheden expliciet. `buildNativePlate2DRequest` en
-`buildNativePlateBendingRequest` in
+`buildNativePlateBendingRequest`, `buildNativeQuad2DRequest` en
+`buildNativeHybridPlateRequest` in
 `design-mockup/src/core/fem/nativePlate2DAdapter.ts` zet een bestaand `Mesh`
-om en weigert onder meer vierhoeken, balken, orthotropie en veren.
+om naar de betreffende kern en weigert onder meer gemengde elementtypes,
+gekoppelde balken, orthotropie en veren.
 
 ```bash
 cd src-tauri
@@ -33,6 +39,7 @@ cd ../design-mockup
 node --import tsx test-native-frame3d-comparison.mjs
 node --import tsx test-native-plate2d-comparison.mjs
 node --import tsx test-native-plate-bending-comparison.mjs
+node --import tsx test-native-quad2d-comparison.mjs
 ```
 
 Voorbeeld van een 2D-vlakspanning-verzoek:
@@ -71,16 +78,27 @@ equivalente plastische rek en de trekschade. De materiaaltoestand leeft binnen
 - De DKT-plaatbuiging is voor acht driehoeken met de bestaande TypeScript-kern
   vergeleken op verplaatsingen, reacties en momenten. Starre modes en een
   constante-krommingspatch zijn apart getest.
+- Q4-schijfverplaatsingen, reacties en spanningen zijn voor rechte en vervormde
+  roosters met de bestaande TypeScript-kern vergeleken. De hybride
+  buigplaat doorstaat starre modes, een constante-krommingspatch en een
+  Navier-plaatbenchmark (4,1% middenzakkingverschil op 6×6 vierhoeken).
 - **Beperkingen FNL:** de 3D-raamwerkkern gebruikt nog een monotone
   effectieve-E-envelop zonder doorsnedeplastificatie of scheurgeschiedenis.
   De 2D-betonschade gebruikt één scalair per element zonder scheurband- of
   breukenergie-regularisatie; het resultaat kan daarom van de mesh afhangen.
   Ook de 2D-staalwet en het betonmodel zijn nog niet extern gevalideerd voor
   ontwerpbeslissingen.
-- De DKT-kern rekent alleen lineaire plaatbuiging. Vlakvervorming,
-  vierhoeken, orthotropie en gekoppelde staaf-plaatmodellen zijn nog niet
+- De DKT-kern rekent alleen lineaire plaatbuiging. De hybride buigplaat
+  gebruikt een secant-E-omhulling per element; dat is geen geregelde
+  beton-scheurwet of doorsnedeplastificatie. Vlakvervorming,
+  orthotropie en gekoppelde staaf-plaatmodellen zijn nog niet
   geïmplementeerd. De 3D-kern weigert verdeelde/staafpunt/thermische lasten,
   veren, opgelegde verplaatsingen, scharnieren en eigenwaarde-knik.
-- Alle drie kernen gebruiken een dichte solver met een harde grens van 600 DOF.
+- De FEM-kernen gebruiken een dichte solver met een harde grens van 600 DOF.
   Een ijle solver, bredere referentieset en 3D-materiaalhistorie zijn nodig
   voordat de app deze kern als standaard kan gebruiken.
+
+De [plaatvoorbeelden](PLATE_EXAMPLES.md) geven reproduceerbare invoer en
+controlecijfers, inclusief de uitkragende plaat uit Cement 2021/8 van Braam
+en Blaauwendraad. De [voorspanvoorbeelden](PRESTRESSED_BEAM.md) bevatten een
+FHWA-controleberekening en een parabolische kabel.
