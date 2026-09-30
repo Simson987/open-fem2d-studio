@@ -110,6 +110,7 @@ equivalente plastische rek en de trekschade. De materiaaltoestand leeft binnen
   uniforme en tweerichtingsgradiënten zijn met de bestaande solver vergeleken.
   My-, Mz- en torsiescharnieren zijn met statische condensatie ingevoerd en
   tegen de bestaande solver en een opgelegde liggerformule gecontroleerd.
+  Een schuine tweestaafsknoop met lokale staafrotatie is ook vergeleken.
   Vrije rotaties zonder aangesloten stijfheid krijgen een nulwaarde als
   rekentechnische referentie; een momentlast op zo'n vrijheidsgraad wordt
   geweigerd. De bestaande solver meldt het geteste tweezijdig losgelaten

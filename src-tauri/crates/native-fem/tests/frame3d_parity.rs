@@ -233,3 +233,25 @@ fn released_mz_and_torsion_match_existing_solver() {
     }]);
     compare(torsion);
 }
+
+#[test]
+fn oblique_two_member_joint_with_release_matches_existing_solver() {
+    let mut input = model();
+    input["nodes"].as_array_mut().unwrap().push(json!({
+        "id": 3, "x": 2.0, "y": 2.0, "z": 1.0
+    }));
+    input["members"][0]["releases"] = json!({"myEnd": true});
+    input["members"].as_array_mut().unwrap().push(json!({
+        "id": 2, "startNodeId": 2, "endNodeId": 3,
+        "materialId": 1, "sectionId": 1, "rollAngleRad": 0.2
+    }));
+    input["supports"].as_array_mut().unwrap().push(json!({
+        "nodeId": 3, "ux": true, "uy": true, "uz": true,
+        "rx": true, "ry": true, "rz": true
+    }));
+    input["nodalLoads"] = json!([{
+        "id": 1, "nodeId": 2, "fx": 0.0, "fy": 4.0, "fz": -10.0,
+        "mx": 0.0, "my": 0.0, "mz": 0.0
+    }]);
+    compare(input);
+}
