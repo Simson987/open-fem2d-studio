@@ -8,3 +8,6 @@ description = "Independent Rust finite-element kernels for Open FEM Studio"
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+[dev-dependencies]
+frame3d-solver = { path = "../frame3d-solver" }

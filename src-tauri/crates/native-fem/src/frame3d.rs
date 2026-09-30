@@ -498,43 +498,57 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
     }
     let dofs = request.nodes.len() * 6;
     let mut prescribed = vec![None; dofs];
+    let mut springs = vec![0.0; dofs];
+    let mut supported_nodes = HashSet::new();
     for support in &request.supports {
         let index = *node_index
             .get(&support.node_id)
             .ok_or("unknown support node")?;
-        if [
+        if !supported_nodes.insert(support.node_id) {
+            return Err("duplicate frame support node".into());
+        }
+        let spring_values = [
             support.kx_kn_per_m,
             support.ky_kn_per_m,
             support.kz_kn_per_m,
             support.krx_knm_per_rad,
             support.kry_knm_per_rad,
             support.krz_knm_per_rad,
-        ]
-        .iter()
-        .any(Option::is_some)
-        {
-            return Err("native frame support springs are not implemented".into());
-        }
-        if [
+        ];
+        let prescribed_values = [
             support.ux_prescribed_m,
             support.uy_prescribed_m,
             support.uz_prescribed_m,
             support.rx_prescribed_rad,
             support.ry_prescribed_rad,
             support.rz_prescribed_rad,
-        ]
-        .iter()
-        .any(Option::is_some)
-        {
-            return Err("native frame prescribed displacements are not implemented".into());
-        }
+        ];
         let fixed = [
             support.ux, support.uy, support.uz, support.rx, support.ry, support.rz,
         ];
         for axis in 0..6 {
-            if fixed[axis] {
-                prescribed[6 * index + axis] = Some(0.0);
+            let dof = 6 * index + axis;
+            if let Some(value) = spring_values[axis] {
+                positive(value, "support spring stiffness")?;
+                if fixed[axis] {
+                    return Err("support DOF cannot be both fixed and sprung".into());
+                }
+                springs[dof] = value;
             }
+            if let Some(value) = prescribed_values[axis] {
+                if !value.is_finite() {
+                    return Err("non-finite prescribed displacement".into());
+                }
+                if !fixed[axis] {
+                    return Err("prescribed displacement requires a fixed DOF".into());
+                }
+            }
+            if fixed[axis] {
+                prescribed[dof] = Some(prescribed_values[axis].unwrap_or(0.0));
+            }
+        }
+        if !fixed.iter().any(|value| *value) && !spring_values.iter().any(Option::is_some) {
+            return Err("support has no fixed or sprung DOF".into());
         }
     }
     let mut f = vec![0.0; dofs];
@@ -553,12 +567,17 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
     let mut converged = false;
     for _ in 0..request.max_iterations {
         iterations += 1;
-        let (k, _) = assemble(
+        let (mut k, _) = assemble(
             &elements,
             &u,
             request.analysis.material(),
             request.analysis.geometric(),
         )?;
+        for (dof, spring) in springs.iter().enumerate() {
+            if *spring > 0.0 {
+                k.add(dof, dof, *spring);
+            }
+        }
         if request.analysis.geometric() {
             free_positive_definite(&k, &prescribed)?;
         }
@@ -588,12 +607,17 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
             request.max_iterations
         ));
     }
-    let (k, stiffnesses) = assemble(
+    let (mut k, stiffnesses) = assemble(
         &elements,
         &u,
         request.analysis.material(),
         request.analysis.geometric(),
     )?;
+    for (dof, spring) in springs.iter().enumerate() {
+        if *spring > 0.0 {
+            k.add(dof, dof, *spring);
+        }
+    }
     if request.analysis.geometric() {
         free_positive_definite(&k, &prescribed)?;
     }
@@ -619,10 +643,11 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
             node_id: node.id,
             displacement: std::array::from_fn(|axis| u[6 * index + axis]),
             reaction: std::array::from_fn(|axis| {
-                if prescribed[6 * index + axis].is_some() {
-                    reaction[6 * index + axis]
+                let dof = 6 * index + axis;
+                if prescribed[dof].is_some() {
+                    reaction[dof]
                 } else {
-                    0.0
+                    -springs[dof] * u[dof]
                 }
             }),
         })
@@ -748,6 +773,51 @@ mod tests {
         assert!((result.nodes[1].displacement[1] - expected).abs() < 1e-10);
         assert!((result.nodes[0].reaction[1] + 10.0).abs() < 1e-9);
         assert!((result.nodes[0].reaction[5] + 20.0).abs() < 1e-9);
+    }
+    #[test]
+    fn sprung_cantilever_matches_series_equilibrium() {
+        let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 0.0);
+        model.nodal_loads[0].fz = -10.0;
+        let mut end_support = model.supports[0].clone();
+        end_support.node_id = 2;
+        end_support.ux = false;
+        end_support.uy = false;
+        end_support.uz = false;
+        end_support.rx = false;
+        end_support.ry = false;
+        end_support.rz = false;
+        end_support.kz_kn_per_m = Some(212.5);
+        model.supports.push(end_support);
+        // 3 E Iy / L³ = 787.5 kN/m, in parallel with the 212.5 kN/m spring.
+        let result = solve(&model).unwrap();
+        assert!((result.nodes[1].displacement[2] + 0.01).abs() < 1e-12);
+        assert!((result.nodes[1].reaction[2] - 2.125).abs() < 1e-9);
+        assert!((result.nodes[0].reaction[2] - 7.875).abs() < 1e-9);
+        assert!(result.equilibrium_residual < 1e-10);
+
+        model.analysis = Analysis::PDelta;
+        let nonlinear = solve(&model).unwrap();
+        assert!((nonlinear.nodes[1].displacement[2] + 0.01).abs() < 1e-10);
+        assert!((nonlinear.nodes[1].reaction[2] - 2.125).abs() < 1e-9);
+
+        model.supports[1].uz = true;
+        assert!(solve(&model).unwrap_err().contains("both fixed and sprung"));
+    }
+    #[test]
+    fn prescribed_axial_movement_matches_ea_over_l() {
+        let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 0.0);
+        let mut end_support = model.supports[0].clone();
+        end_support.node_id = 2;
+        end_support.ux_prescribed_m = Some(0.001);
+        model.supports.push(end_support);
+        let result = solve(&model).unwrap();
+        assert!((result.nodes[1].displacement[0] - 0.001).abs() < 1e-14);
+        assert!((result.nodes[0].reaction[0] + 1050.0).abs() < 1e-8);
+        assert!((result.nodes[1].reaction[0] - 1050.0).abs() < 1e-8);
+        assert!(result.equilibrium_residual < 1e-12);
+
+        model.supports[1].ux = false;
+        assert!(solve(&model).unwrap_err().contains("requires a fixed DOF"));
     }
     #[test]
     fn compression_amplifies_lateral_displacement() {

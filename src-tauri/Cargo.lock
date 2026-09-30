@@ -3130,6 +3130,7 @@ dependencies = [
 name = "openaec-native-fem"
 version = "0.1.0"
 dependencies = [
+ "frame3d-solver",
  "serde",
  "serde_json",
 ]
