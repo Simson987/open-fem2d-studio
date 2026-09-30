@@ -302,6 +302,126 @@ fn gaussian(a: &mut [f64], b: &mut [f64], n: usize) -> Result<Vec<f64>, String> 
     Ok(x)
 }
 
+/// Positive load factors for (K + factor * Kg) phi = 0. The geometric
+/// stiffness is negative for compression. This dense reference eigensolve is
+/// deliberately bounded; large frames need a sparse shift-invert solver.
+pub fn buckling_factors(
+    k: &Matrix,
+    kg: &Matrix,
+    free: &[usize],
+    modes: usize,
+) -> Result<Vec<f64>, String> {
+    let n = free.len();
+    if k.n != kg.n || n == 0 || n > 120 {
+        return Err(format!(
+            "buckling eigenproblem supports 1..120 free DOF, got {n}"
+        ));
+    }
+    let mut lower = vec![0.0; n * n];
+    for i in 0..n {
+        for j in 0..=i {
+            let mut value = k.get(free[i], free[j]);
+            for p in 0..j {
+                value -= lower[i * n + p] * lower[j * n + p];
+            }
+            if i == j {
+                if !value.is_finite() || value <= k.get(free[i], free[i]) * 1e-12 {
+                    return Err("buckling base stiffness is not positive definite".into());
+                }
+                lower[i * n + j] = value.sqrt();
+            } else {
+                lower[i * n + j] = value / lower[j * n + j];
+            }
+        }
+    }
+    // W = L^-1. C = W (-Kg) W^T is symmetric and has eigenvalues 1/factor.
+    let mut inverse = vec![0.0; n * n];
+    for column in 0..n {
+        for row in column..n {
+            let mut value = if row == column { 1.0 } else { 0.0 };
+            for p in column..row {
+                value -= lower[row * n + p] * inverse[p * n + column];
+            }
+            inverse[row * n + column] = value / lower[row * n + row];
+        }
+    }
+    let mut product = vec![0.0; n * n];
+    for i in 0..n {
+        for p in 0..=i {
+            let weight = inverse[i * n + p];
+            for j in 0..n {
+                product[i * n + j] -= weight * kg.get(free[p], free[j]);
+            }
+        }
+    }
+    let mut c = vec![0.0; n * n];
+    for i in 0..n {
+        for j in 0..n {
+            for p in 0..=j {
+                c[i * n + j] += product[i * n + p] * inverse[j * n + p];
+            }
+        }
+    }
+    for i in 0..n {
+        for j in 0..i {
+            let symmetric = 0.5 * (c[i * n + j] + c[j * n + i]);
+            c[i * n + j] = symmetric;
+            c[j * n + i] = symmetric;
+        }
+    }
+    let mut converged = false;
+    for _ in 0..40 {
+        let scale = (0..n).map(|i| c[i * n + i].abs()).fold(1e-30, f64::max);
+        let mut max_off: f64 = 0.0;
+        for p in 0..n {
+            for q in (p + 1)..n {
+                let apq = c[p * n + q];
+                max_off = max_off.max(apq.abs());
+                if apq.abs() <= scale * 1e-12 {
+                    continue;
+                }
+                let tau = (c[q * n + q] - c[p * n + p]) / (2.0 * apq);
+                let t =
+                    (if tau >= 0.0 { 1.0 } else { -1.0 }) / (tau.abs() + (1.0 + tau * tau).sqrt());
+                let cosine = 1.0 / (1.0 + t * t).sqrt();
+                let sine = t * cosine;
+                let app = c[p * n + p];
+                let aqq = c[q * n + q];
+                c[p * n + p] = app - t * apq;
+                c[q * n + q] = aqq + t * apq;
+                c[p * n + q] = 0.0;
+                c[q * n + p] = 0.0;
+                for row in 0..n {
+                    if row == p || row == q {
+                        continue;
+                    }
+                    let arp = c[row * n + p];
+                    let arq = c[row * n + q];
+                    c[row * n + p] = cosine * arp - sine * arq;
+                    c[p * n + row] = c[row * n + p];
+                    c[row * n + q] = sine * arp + cosine * arq;
+                    c[q * n + row] = c[row * n + q];
+                }
+            }
+        }
+        if max_off <= scale * 1e-10 {
+            converged = true;
+            break;
+        }
+    }
+    if !converged {
+        return Err("buckling eigensolver did not converge".into());
+    }
+    let mut factors: Vec<f64> = (0..n)
+        .map(|i| c[i * n + i])
+        .filter(|eigen| eigen.is_finite() && *eigen > 1e-12)
+        .map(|eigen| 1.0 / eigen)
+        .collect();
+    factors.sort_by(f64::total_cmp);
+    factors.truncate(modes);
+    Ok(factors)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -333,6 +453,18 @@ mod tests {
         k.add(0, 0, 10.0);
         k.add(1, 1, -1.0);
         assert!(free_positive_definite(&k, &[Some(0.0), None]).is_err());
+    }
+    #[test]
+    fn generalized_buckling_factors_match_diagonal_reference() {
+        let mut k = Matrix::zeros(2).unwrap();
+        let mut kg = Matrix::zeros(2).unwrap();
+        k.add(0, 0, 2.0);
+        k.add(1, 1, 8.0);
+        kg.add(0, 0, -1.0);
+        kg.add(1, 1, -2.0);
+        let factors = buckling_factors(&k, &kg, &[0, 1], 2).unwrap();
+        assert!((factors[0] - 2.0).abs() < 1e-12);
+        assert!((factors[1] - 4.0).abs() < 1e-12);
     }
     #[test]
     fn sparse_chain_over_dense_limit_has_exact_tip_displacement_and_reaction() {

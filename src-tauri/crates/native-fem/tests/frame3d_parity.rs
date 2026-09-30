@@ -1,5 +1,9 @@
-use frame3d_solver::{solve as solve_reference, SolveRequest3D};
-use openaec_native_fem::frame3d::{solve as solve_native, Request};
+use frame3d_solver::{
+    solve as solve_reference, BucklingSummary as ReferenceBuckling, SolveRequest3D,
+};
+use openaec_native_fem::frame3d::{
+    solve as solve_native, BucklingSummary as NativeBuckling, Request,
+};
 use serde_json::{json, Value};
 
 fn model() -> Value {
@@ -162,6 +166,39 @@ fn compare(model: Value) {
             }
         }
     }
+}
+
+#[test]
+fn compressed_cantilever_buckling_matches_existing_solver() {
+    let mut input = model();
+    input["bucklingModes"] = json!(1);
+    input["nodalLoads"] = json!([{
+        "id": 1, "nodeId": 2, "fx": -100.0, "fy": 10.0, "fz": 0.0,
+        "mx": 0.0, "my": 0.0, "mz": 0.0
+    }]);
+    let native = solve_native(&serde_json::from_value::<Request>(input.clone()).unwrap()).unwrap();
+    let reference =
+        solve_reference(serde_json::from_value::<SolveRequest3D>(input).unwrap()).unwrap();
+    let NativeBuckling::Available {
+        modes: native_modes,
+        ..
+    } = native.buckling
+    else {
+        panic!("native buckling mode missing")
+    };
+    let ReferenceBuckling::Available {
+        modes: reference_modes,
+        ..
+    } = reference.buckling
+    else {
+        panic!("reference buckling mode missing")
+    };
+    let native_factor = native_modes[0].load_factor;
+    let reference_factor = reference_modes[0].load_factor;
+    assert!(
+        (native_factor - reference_factor).abs() / reference_factor < 0.05,
+        "native factor {native_factor}, reference {reference_factor}"
+    );
 }
 
 #[test]

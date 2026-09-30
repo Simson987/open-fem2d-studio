@@ -11,7 +11,7 @@ die expliciet.
 
 | Kern | Element | GNL | FNL | Lasten en opleggingen |
 | --- | --- | --- | --- | --- |
-| `native-frame3d` | 12-DOF Euler-Bernoulli raamwerk, 6 DOF/knoop | iteratieve P-Δ-stijfheid met stabiliteitscontrole | monotone effectieve-E-envelop voor staal en beton | knoop-, lijn-, staafpunt- en thermische lasten; vaste DOF, globale veren, opgelegde verplaatsingen/rotaties en staafeindscharnieren |
+| `native-frame3d` | 12-DOF Euler-Bernoulli raamwerk, 6 DOF/knoop | iteratieve P-Δ-stijfheid, stabiliteitscontrole en eigenknik tot 120 vrije DOF | monotone effectieve-E-envelop voor staal en beton | knoop-, lijn-, staafpunt- en thermische lasten; vaste DOF, globale veren, opgelegde verplaatsingen/rotaties en staafeindscharnieren |
 | `native-plate2d` | 3-knoops CST-vlakspanning/membraan, 2 DOF/knoop | Green-Lagrange-rek met Newton-iteratie | J2-staalplastificatie met isotrope verharding en onomkeerbare betonschade per element | knoopkrachten en vaste x/y-DOF |
 | `native-plate-bending` | 3-knoops DKT-plaatbuiging, 3 DOF/knoop | nog niet | nog niet | dwarsknoopkrachten, knoopmomenten en vaste w/rotatie-DOF |
 | `native-square-mesh` | exact vierkant Q4-rooster met randknoop-ID's | n.v.t. | n.v.t. | `widthM`, `heightM`, `cellSizeM` |
@@ -58,8 +58,11 @@ knoopverplaatsingen, reacties, staafkrachten, bemonsterde snedekrachtlijnen, eve
 resultaatweergave en rapport. De automatische keuze blijft bij de bestaande
 solver. Staaflijn-, staafpunt- en thermische lasten zijn ook gekoppeld en de
 diagramstations zijn tegen de bestaande solver vergeleken. Voor P-Δ geeft de
-app iteraties, convergentie en een verplaatsingsversterking weer. Eigenwaarde-
-knik blijft als niet beschikbaar gemarkeerd; de onafhankelijke momentensom
+app iteraties, convergentie, verplaatsingsversterking en eigenknikfactoren weer.
+De eigenknikoplosser heeft maximaal 120 vrije en 600 totale vrijheidsgraden;
+daarboven meldt de app een mislukte knikberekening zonder de statische analyse
+te verwerpen. Een uitkraging is tegen Euler en de bestaande knikoplosser
+gevalideerd. De onafhankelijke momentensom
 over de onvervormde geometrie is bij P-Δ niet altijd nul.
 De andere native elementresultaten zijn nog niet op alle weergave-, combinatie-
 en rapporttypen aangesloten. Onbekende `kind`- en invoervelden worden door de

@@ -2,7 +2,7 @@
 //! field names and units as `frame3d-solver`, but no upstream solver code.
 //! GNL is a tangent P-Delta iteration; FNL is a monotonic secant law.
 
-use crate::math::{constrained_solve, free_positive_definite, Matrix};
+use crate::math::{buckling_factors, constrained_solve, free_positive_definite, Matrix};
 use crate::{positive, MaterialLaw};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -261,10 +261,43 @@ pub struct Diagrams3D {
 }
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BucklingMode {
+    pub mode: usize,
+    pub load_factor: f64,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BucklingMember {
+    pub member_id: usize,
+    pub axial_force_kn: f64,
+    pub critical_force_kn: f64,
+    pub effective_length_factor: f64,
+    pub effective_length_m: f64,
+    pub length_m: f64,
+    pub slenderness_y: f64,
+    pub slenderness_z: f64,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum BucklingSummary {
+    Available {
+        modes: Vec<BucklingMode>,
+        members: Vec<BucklingMember>,
+    },
+    NotApplicable {
+        reason: String,
+    },
+    Failed {
+        reason: String,
+    },
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Result3D {
     pub nodes: Vec<NodeResult>,
     pub members: Vec<MemberResult>,
     pub diagrams: Diagrams3D,
+    pub buckling: BucklingSummary,
     pub iterations: usize,
     pub relative_change: f64,
     pub max_amplification: f64,
@@ -737,12 +770,129 @@ fn member_diagrams(
     diagrams
 }
 
+fn buckling_summary(
+    request: &Request,
+    elements: &[Element<'_>],
+    members: &[MemberResult],
+    u: &[f64],
+    thermal_axial: &[f64],
+    local_loads: &[[f64; 12]],
+    springs: &[f64],
+    constraints: &[Option<f64>],
+) -> BucklingSummary {
+    if request.buckling_modes == 0 {
+        return BucklingSummary::NotApplicable {
+            reason: "Eigenknik niet aangevraagd.".into(),
+        };
+    }
+    if !members
+        .iter()
+        .any(|member| member.local_end_forces[6] < -1e-8)
+    {
+        return BucklingSummary::NotApplicable {
+            reason: "Geen drukstaaf aanwezig.".into(),
+        };
+    }
+    let free: Vec<usize> = (0..u.len())
+        .filter(|&dof| constraints[dof].is_none())
+        .collect();
+    if free.is_empty() {
+        return BucklingSummary::NotApplicable {
+            reason: "Alle vrijheidsgraden zijn voorgeschreven.".into(),
+        };
+    }
+    if free.len() > 120 || u.len() > 600 {
+        return BucklingSummary::Failed { reason: format!(
+            "Eigenknik is beperkt tot 120 vrije en 600 totale vrijheidsgraden ({} vrij, {} totaal).",
+            free.len(), u.len(),
+        ) };
+    }
+    let calculate = || -> Result<BucklingSummary, String> {
+        let mut elastic = assemble(
+            elements,
+            u,
+            thermal_axial,
+            local_loads,
+            request.analysis.material(),
+            false,
+        )?;
+        let geometric = assemble(
+            elements,
+            u,
+            thermal_axial,
+            local_loads,
+            request.analysis.material(),
+            true,
+        )?;
+        for (dof, spring) in springs.iter().enumerate() {
+            if *spring > 0.0 {
+                elastic.stiffness.add(dof, dof, *spring);
+            }
+        }
+        let mut kg = Matrix::zeros(u.len())?;
+        for i in 0..u.len() {
+            for j in 0..u.len() {
+                let difference = geometric.stiffness.get(i, j) - elastic.stiffness.get(i, j)
+                    + if i == j { springs[i] } else { 0.0 };
+                if difference != 0.0 {
+                    kg.add(i, j, difference);
+                }
+            }
+        }
+        let factors = buckling_factors(&elastic.stiffness, &kg, &free, request.buckling_modes)?;
+        if factors.is_empty() {
+            return Ok(BucklingSummary::NotApplicable {
+                reason: "Geen positieve fysieke knikmodus gevonden.".into(),
+            });
+        }
+        let first_factor = factors[0];
+        let modes = factors
+            .into_iter()
+            .enumerate()
+            .map(|(index, load_factor)| BucklingMode {
+                mode: index + 1,
+                load_factor,
+            })
+            .collect();
+        let member_data = elements
+            .iter()
+            .zip(members)
+            .map(|(element, member)| {
+                let axial_force_kn = member.local_end_forces[6];
+                let critical_force_kn = first_factor * axial_force_kn.abs();
+                let radius_y = (element.section.iy_m4 / element.section.area_m2).sqrt();
+                let radius_z = (element.section.iz_m4 / element.section.area_m2).sqrt();
+                let ei_min = member.effective_e_mpa
+                    * 1000.0
+                    * element.section.iy_m4.min(element.section.iz_m4);
+                let effective_length_m = if critical_force_kn > 1e-8 {
+                    std::f64::consts::PI * (ei_min / critical_force_kn).sqrt()
+                } else {
+                    element.length
+                };
+                BucklingMember {
+                    member_id: element.id,
+                    axial_force_kn,
+                    critical_force_kn,
+                    effective_length_factor: effective_length_m / element.length,
+                    effective_length_m,
+                    length_m: element.length,
+                    slenderness_y: effective_length_m / radius_y,
+                    slenderness_z: effective_length_m / radius_z,
+                }
+            })
+            .collect();
+        Ok(BucklingSummary::Available {
+            modes,
+            members: member_data,
+        })
+    };
+    calculate().unwrap_or_else(|reason| BucklingSummary::Failed { reason })
+}
+
 pub fn solve(request: &Request) -> Result<Result3D, String> {
     if request.schema_version != 1 {
         return Err("unsupported 3D schema version".into());
-    }
-    if request.buckling_modes > 0 {
-        return Err("native frame eigenvalue buckling is not implemented".into());
     }
     if request.nodes.len() < 2 || request.members.is_empty() {
         return Err("frame requires nodes and members".into());
@@ -1181,6 +1331,16 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         })
         .collect();
     let diagrams = member_diagrams(request, &elements, &members);
+    let buckling = buckling_summary(
+        request,
+        &elements,
+        &members,
+        &u,
+        &thermal_axial,
+        &local_loads,
+        &springs,
+        &solve_constraints,
+    );
     let final_translation_max = u
         .chunks_exact(6)
         .flat_map(|node| node[..3].iter())
@@ -1195,6 +1355,7 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         nodes,
         members,
         diagrams,
+        buckling,
         iterations,
         relative_change,
         max_amplification,
@@ -1565,7 +1726,7 @@ mod tests {
         assert!(solve(&model).unwrap_err().contains("stiffness"));
     }
     #[test]
-    fn invalid_thermal_load_and_buckling_are_rejected() {
+    fn invalid_thermal_load_is_rejected_and_euler_buckling_is_available() {
         let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 10.0);
         model.thermal_loads.push(ThermalLoad {
             id: 1,
@@ -1583,7 +1744,19 @@ mod tests {
             .unwrap_err()
             .contains("with material nonlinearity"));
         model.thermal_loads.clear();
+        model.analysis = Analysis::Linear;
         model.buckling_modes = 1;
-        assert!(solve(&model).unwrap_err().contains("buckling"));
+        assert!(matches!(
+            solve(&model).unwrap().buckling,
+            BucklingSummary::NotApplicable { .. }
+        ));
+        model.nodal_loads[0].fx = -100.0;
+        let result = solve(&model).unwrap();
+        let BucklingSummary::Available { modes, members } = result.buckling else {
+            panic!("compressed cantilever must have a buckling mode")
+        };
+        let euler = std::f64::consts::PI.powi(2) * 2100.0 / (4.0 * 2.0_f64.powi(2));
+        assert!((modes[0].load_factor * 100.0 - euler).abs() / euler < 0.03);
+        assert!((members[0].critical_force_kn - euler).abs() / euler < 0.03);
     }
 }

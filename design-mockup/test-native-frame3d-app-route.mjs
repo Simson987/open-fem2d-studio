@@ -102,6 +102,11 @@ try {
   const nativePDelta = await solveFrame3DCombination(portal, pDeltaFactors, "p-delta", "openaec-native-fem");
   const referencePDelta = await solveFrame3DCombination(portal, pDeltaFactors, "p-delta", "dedaliano");
   assert.equal(nativePDelta.analysis, "p-delta");
+  assert.equal(nativePDelta.buckling.status, "available");
+  assert.equal(referencePDelta.buckling.status, "available");
+  assert.ok(Math.abs(nativePDelta.buckling.modes[0].loadFactor
+    - referencePDelta.buckling.modes[0].loadFactor) / referencePDelta.buckling.modes[0].loadFactor < 0.05,
+  "P-Δ eerste knikfactor wijkt meer dan 5% af");
   assert.equal(nativePDelta.secondOrder.converged, true);
   assert.equal(nativePDelta.secondOrder.stable, true);
   assert.ok(nativePDelta.secondOrder.iterations > 1);

@@ -430,6 +430,7 @@ interface NativeFrame3DResult {
   nodes: Array<{ nodeId: number; displacement: number[]; reaction: number[] }>;
   members: Array<{ memberId: number; localEndForces: number[]; effectiveEMpa: number }>;
   diagrams: Frame3DDiagrams;
+  buckling: Frame3DBuckling;
   iterations: number;
   relativeChange: number;
   maxAmplification: number;
@@ -496,6 +497,15 @@ function adaptNativeFrame3DResult(
   }
   const balance = frame3DGlobalForceBalance(input, { reactions });
   const residualOk = native.equilibriumResidual <= 1e-8;
+  const buckling = native.buckling;
+  if (!buckling || !["available", "notApplicable", "failed"].includes(buckling.status)
+      || (buckling.status === "available" && (
+        buckling.modes.length === 0 || buckling.modes.some((mode) => !Number.isFinite(mode.loadFactor) || mode.loadFactor <= 0)
+        || buckling.members.length !== memberForces.length
+        || buckling.members.some((member) => !memberById.has(member.memberId)
+          || !Number.isFinite(member.criticalForceKn) || !Number.isFinite(member.effectiveLengthM))))) {
+    throw new Error("De eigen Rust-raamwerkkern leverde een ongeldige eigenknikuitkomst.");
+  }
   return {
     schemaVersion: 1,
     engine: { id: "openaec-native-fem", name: "Open FEM Rust", revision: "0.1.0", license: "AGPL-3.0-or-later" },
@@ -505,13 +515,14 @@ function adaptNativeFrame3DResult(
       iterations: native.iterations, converged: true, stable: true,
       maxAmplification: native.maxAmplification,
     } } : {}),
-    buckling: { status: "notApplicable", reason: "Eigenwaarde-knik is nog niet beschikbaar in de eigen Rust-kern." },
+    buckling,
     equilibrium: { relativeResidual: native.equilibriumResidual,
       residualOk, maxImbalanceKn: balance.maxImbalanceKn,
       equilibriumOk: residualOk && balance.ok },
     solverPath: "native-rust",
     diagnostics: [
-      "Eigen Rust-raamwerkkern: 3D-raamwerk; eigenwaarde-knik ontbreekt nog.",
+      "Eigen Rust-raamwerkkern: 3D-raamwerk.",
+      ...(buckling.status === "failed" ? [`Eigenknik: ${buckling.reason}`] : []),
       ...(input.analysis === "p-delta" && !balance.ok
         ? ["De onafhankelijke momentensom gebruikt de onvervormde geometrie; bij P-Δ kan daardoor een momentrest ontstaan."]
         : []),
@@ -526,7 +537,7 @@ async function callFrame3DSolver(input: Frame3DSolveRequest, engine: SolverEngin
   });
   if (engine === "openaec-native-fem") {
     return checked(adaptNativeFrame3DResult(input,
-      await solveNativeFem<NativeFrame3DResult>("frame3d", { ...input, bucklingModes: 0 })));
+      await solveNativeFem<NativeFrame3DResult>("frame3d", input)));
   }
   const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
   const usesLegacyCompatibleLoads = input.memberLoads.length === 0
