@@ -1268,6 +1268,7 @@ function BeamProperties({ beam, nFrom, nTo, nodes, beams, loads, updateBeam, res
               <code>
                 {l.q !== undefined && `q = ${l.q} kN/m`}
                 {l.deltaT !== undefined && `ΔT = ${l.deltaT} K`}
+                {l.deltaTGradient !== undefined && ` · ΔTg = ${l.deltaTGradient} K / ${l.thermalDepthMm ?? "?"} mm`}
               </code>
             </Row>
           ))}
@@ -1346,6 +1347,8 @@ function LoadProperties({
   const [fzStr, setFzStr] = useState(String(load.fz ?? ""));
   const [myStr, setMyStr] = useState(String(load.my ?? ""));
   const [dtStr, setDtStr] = useState(String(load.deltaT ?? ""));
+  const [dtGradientStr, setDtGradientStr] = useState(String(load.deltaTGradient ?? ""));
+  const [thermalDepthStr, setThermalDepthStr] = useState(String(load.thermalDepthMm ?? ""));
   // Omschrijving: vrije tekst, zelfde commit-op-blur/Enter-patroon als de
   // getalvelden. Apart gehouden van `commitNumber` omdat er niets te parsen
   // valt — leeg (of alleen spaties) wist het veld in plaats van er een lege
@@ -1359,8 +1362,11 @@ function LoadProperties({
     setFzStr(String(load.fz ?? ""));
     setMyStr(String(load.my ?? ""));
     setDtStr(String(load.deltaT ?? ""));
+    setDtGradientStr(String(load.deltaTGradient ?? ""));
+    setThermalDepthStr(String(load.thermalDepthMm ?? ""));
     setOmschrijvingStr(load.omschrijving ?? "");
   }, [load.id, load.q, load.qStart, load.qEnd, load.fx, load.fz, load.my, load.deltaT,
+      load.deltaTGradient, load.thermalDepthMm,
       load.omschrijving]);
 
   // Trapezium detection: load is trapezium if qStart or qEnd set (regardless of q).
@@ -1814,6 +1820,25 @@ function LoadProperties({
               />
             </Row>
             <Row label="α"><code>{t("props.load.alphaSteel")}</code></Row>
+            <Row label="ΔT₊−ΔT₋ (K)">
+              <input type="number" step="1" className="fem-prop-input fem-prop-input-mono"
+                value={dtGradientStr}
+                onChange={e => setDtGradientStr(e.target.value)}
+                onBlur={() => commitNumber(dtGradientStr, "deltaTGradient")}
+                onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+            </Row>
+            <Row label="h (mm)">
+              <input type="number" min="0.001" step="1" className="fem-prop-input fem-prop-input-mono"
+                value={thermalDepthStr}
+                onChange={e => setThermalDepthStr(e.target.value)}
+                onBlur={() => {
+                  const value = Number(thermalDepthStr);
+                  if (Number.isFinite(value) && value > 0) updateLoad?.(load.id, { thermalDepthMm: value });
+                  else setThermalDepthStr(String(load.thermalDepthMm ?? ""));
+                }}
+                onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+            </Row>
+            <div className="fem-prop-hint">{t("props.load.thermalGradientHint")}</div>
           </Section>
         )}
 

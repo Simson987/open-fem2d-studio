@@ -530,6 +530,18 @@ export function deserializeProject(text: string): ProjectFile {
       throw new ProjectBestandFout([`Staaf ${beam?.id ?? "?"}: ongeldige axiale Rust-FNL-materiaalwet.`]);
     }
   }
+  for (const load of parsed.loads) {
+    if (load?.type !== "thermal") continue;
+    const gradient = load.deltaTGradient;
+    const depth = load.thermalDepthMm;
+    if (gradient !== undefined && (typeof gradient !== "number" || !Number.isFinite(gradient))
+        || depth !== undefined && (typeof depth !== "number" || !Number.isFinite(depth) || depth <= 0)
+        || gradient !== undefined && gradient !== 0 && depth === undefined) {
+      throw new ProjectBestandFout([
+        `Temperatuurlast ${load?.id ?? "?"}: de gradiënt vereist een eindige waarde en een positieve afstand h in mm.`,
+      ]);
+    }
+  }
   if (parsed.model3d !== undefined) {
     try {
       parsed.model3d = parseFrame3DModel(parsed.model3d);

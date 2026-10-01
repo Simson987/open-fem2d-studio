@@ -1299,6 +1299,7 @@
       "pointForce": "Force ponctuelle",
       "pointMoment": "Moment ponctuel",
       "thermal": "Température",
+      "thermalGradientHint": "ΔT est la variation moyenne de température. ΔT₊−ΔT₋ est la température de la face transversale locale positive moins celle de la face négative. Indiquez leur distance h pour un gradient. Le solveur de portique 2D Rust est requis.",
       "alphaSteel": "1,2·10⁻⁵ /K (acier)",
       "actions": "Actions",
       "pressBefore": "Appuyez sur ",

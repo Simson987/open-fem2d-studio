@@ -181,6 +181,15 @@ log("\n4. De poort bij het OPENEN: wat ontbreekt of niet te lezen is (basisaudit
     (o) => { o.beams = [{ id: 1, axialMaterialLaw: {
       kind: "steelBilinear", yieldMpa: 100, hardeningRatio: 2 } }]; },
     "ongeldige axiale Rust-FNL-materiaalwet");
+  const thermiek = deserializeProject(serializeProject({ ...model,
+    loads: [{ id: 3, type: "thermal", caseId: 1, beamId: 7,
+      deltaT: 0, deltaTGradient: 40, thermalDepthMm: 500 }],
+  }));
+  ok(thermiek.loads[0].deltaTGradient === 40 && thermiek.loads[0].thermalDepthMm === 500,
+    "thermische gradiënt en doorsnedehoogte overleven opslaan en openen");
+  weigert("een thermische gradiënt zonder hoogte wordt bij openen geweigerd",
+    (o) => { o.loads = [{ id: 3, type: "thermal", caseId: 1, beamId: 7,
+      deltaT: 0, deltaTGradient: 40 }]; }, "gradiënt vereist");
 
   // ruw 29 - combinatietype en factoren
   weigert("een onbekend combinatietype wordt geweigerd, niet stil UGT",

@@ -117,6 +117,12 @@ pub struct ThermalLoad {
     pub member_id: usize,
     pub delta_t_k: f64,
     pub alpha_per_k: f64,
+    /// Temperature at local +Y minus temperature at local -Y, in kelvin.
+    #[serde(default)]
+    pub delta_t_gradient_k: f64,
+    /// Distance between the two temperature faces, required for a gradient.
+    #[serde(default)]
+    pub depth_m: Option<f64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -207,6 +213,7 @@ struct Element {
     ei_knm2: f64,
     area_m2: f64,
     thermal_strain: f64,
+    thermal_curvature: f64,
     material: Material,
     releases: EndReleases,
     raw_stiffness: Option<[[f64; 6]; 6]>,
@@ -818,6 +825,7 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
             ei_knm2: material.e_mpa * 1000.0 * section.inertia_m4,
             area_m2: section.area_m2,
             thermal_strain: 0.0,
+            thermal_curvature: 0.0,
             material: (*material).clone(),
             releases: member.releases,
             raw_stiffness: None,
@@ -865,22 +873,43 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
         let element = elements
             .get_mut(&load.member_id)
             .ok_or("unknown thermally loaded 2D frame member")?;
-        if !load.delta_t_k.is_finite() || !load.alpha_per_k.is_finite() || load.alpha_per_k < 0.0 {
+        if !load.delta_t_k.is_finite()
+            || !load.delta_t_gradient_k.is_finite()
+            || !load.alpha_per_k.is_finite()
+            || load.alpha_per_k < 0.0
+            || load.delta_t_gradient_k != 0.0
+                && !load
+                    .depth_m
+                    .is_some_and(|depth| depth.is_finite() && depth > 0.0)
+            || load
+                .depth_m
+                .is_some_and(|depth| !depth.is_finite() || depth <= 0.0)
+        {
             return Err("invalid 2D frame thermal load".into());
         }
         let strain = load.alpha_per_k * load.delta_t_k;
-        if !strain.is_finite() {
-            return Err("invalid 2D frame thermal strain".into());
+        // Positive local curvature shortens the +Y face; a hotter +Y face
+        // therefore imposes negative curvature.
+        let curvature = -load.alpha_per_k * load.delta_t_gradient_k / load.depth_m.unwrap_or(1.0);
+        if !strain.is_finite() || !curvature.is_finite() {
+            return Err("invalid 2D frame thermal strain or curvature".into());
         }
         element.thermal_strain += strain;
-        if !element.thermal_strain.is_finite() {
-            return Err("invalid combined 2D frame thermal strain".into());
+        element.thermal_curvature += curvature;
+        if !element.thermal_strain.is_finite() || !element.thermal_curvature.is_finite() {
+            return Err("invalid combined 2D frame thermal strain or curvature".into());
         }
     }
     for element in elements.values_mut() {
         let force = element.ea_kn * element.thermal_strain;
+        let moment = element.ei_knm2 * element.thermal_curvature;
+        if !force.is_finite() || !moment.is_finite() {
+            return Err("non-finite 2D frame thermal equivalent load".into());
+        }
         element.local_load[0] -= force;
         element.local_load[3] += force;
+        element.local_load[2] -= moment;
+        element.local_load[5] += moment;
     }
     for element in elements.values_mut() {
         condense_releases(element)?;
@@ -1261,6 +1290,7 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
                 });
                 rotation_rad.push(
                     local_displacement[2]
+                        + final_factor * element.thermal_curvature * x
                         + (-elastic_end_forces[2] * x
                             + elastic_end_forces[1] * x * x / 2.0
                             + integral(false, 2)
@@ -1269,6 +1299,7 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
                 );
                 let deflection = local_displacement[1]
                     + local_displacement[2] * x
+                    + final_factor * element.thermal_curvature * x * x / 2.0
                     + (-elastic_end_forces[2] * x * x / 2.0
                         + elastic_end_forces[1] * x.powi(3) / 6.0
                         + integral(false, 3)
@@ -1380,6 +1411,8 @@ mod tests {
             member_id: 1,
             delta_t_k: 40.0,
             alpha_per_k: 12e-6,
+            delta_t_gradient_k: 0.0,
+            depth_m: None,
         });
         let free = solve(&input).unwrap();
         assert!((free.nodes[1].displacement[0] - 0.00144).abs() < 1e-12);
@@ -1420,6 +1453,89 @@ mod tests {
     }
 
     #[test]
+    fn thermal_gradient_matches_free_curvature_and_fixed_end_moments() {
+        let mut input = cantilever();
+        input.thermal_loads.push(ThermalLoad {
+            member_id: 1,
+            delta_t_k: 0.0,
+            alpha_per_k: 12e-6,
+            delta_t_gradient_k: 40.0,
+            depth_m: Some(0.2),
+        });
+        let curvature = -12e-6 * 40.0 / 0.2;
+        input.supports[0].rz = false;
+        input.supports.push(Support {
+            node_id: 2,
+            ux: false,
+            uy: true,
+            rz: false,
+            ..input.supports[0].clone()
+        });
+        let free = solve(&input).unwrap();
+        assert!((free.members[0].deflection_m[10] + curvature * 3.0 * 3.0 / 8.0).abs() < 1e-11);
+        assert!((free.members[0].rotation_rad[0] + curvature * 3.0 / 2.0).abs() < 1e-11);
+        assert!(free.members[0]
+            .bending_moment_knm
+            .iter()
+            .all(|m| m.abs() < 1e-9));
+        assert!(free.nodes.iter().all(|node| node.reaction[1].abs() < 1e-9));
+
+        input.supports[0].rz = true;
+        input.supports[1].rz = true;
+        let fixed = solve(&input).unwrap();
+        let thermal_moment = 210_000.0 * 1000.0 * 8e-6 * curvature;
+        assert!(fixed.members[0]
+            .deflection_m
+            .iter()
+            .all(|v| v.abs() < 1e-11));
+        assert!(fixed.members[0]
+            .bending_moment_knm
+            .iter()
+            .all(|m| (m + thermal_moment).abs() < 1e-8));
+        assert!((fixed.members[0].local_end_forces[2] - thermal_moment).abs() < 1e-8);
+        assert!((fixed.members[0].local_end_forces[5] + thermal_moment).abs() < 1e-8);
+
+        input.analysis = Analysis::Combined;
+        input.materials[0].law = MaterialLaw::SteelBilinear {
+            yield_mpa: 100.0,
+            hardening_ratio: 0.2,
+        };
+        input.supports[1].ux = true;
+        input.thermal_loads[0].delta_t_k = 100.0;
+        input.load_path = vec![1.0];
+        let combined = solve(&input).unwrap();
+        assert!((combined.members[0].bending_moment_knm[10] + thermal_moment).abs() < 1e-8);
+        assert!(
+            combined.members[0]
+                .axial_history
+                .as_ref()
+                .unwrap()
+                .plastic_strain
+                < 0.0
+        );
+
+        input.analysis = Analysis::Linear;
+        input.load_path.clear();
+        input.materials[0].law = MaterialLaw::Elastic;
+        input.thermal_loads[0].delta_t_k = 0.0;
+        input.members[0].releases = EndReleases {
+            rz_start: true,
+            rz_end: true,
+        };
+        let hinged = solve(&input).unwrap();
+        assert!((hinged.members[0].deflection_m[10] + curvature * 3.0 * 3.0 / 8.0).abs() < 1e-11);
+        assert!(hinged.members[0]
+            .bending_moment_knm
+            .iter()
+            .all(|m| m.abs() < 1e-9));
+
+        input.thermal_loads[0].depth_m = None;
+        assert!(solve(&input).unwrap_err().contains("thermal load"));
+        input.thermal_loads[0].depth_m = Some(-0.2);
+        assert!(solve(&input).unwrap_err().contains("thermal load"));
+    }
+
+    #[test]
     fn thermal_steel_path_uses_mechanical_strain_and_retains_plasticity() {
         let mut input = cantilever();
         input.analysis = Analysis::Material;
@@ -1431,6 +1547,8 @@ mod tests {
             member_id: 1,
             delta_t_k: 100.0,
             alpha_per_k: 1e-5,
+            delta_t_gradient_k: 0.0,
+            depth_m: None,
         });
         let free = solve(&input).unwrap();
         assert!((free.nodes[1].displacement[0] - 0.003).abs() < 1e-10);
@@ -1506,6 +1624,8 @@ mod tests {
             member_id: 1,
             delta_t_k: -30.0,
             alpha_per_k: 1e-5,
+            delta_t_gradient_k: 0.0,
+            depth_m: None,
         });
         input.load_path = vec![1.0, 0.0, 0.5];
         let result = solve(&input).unwrap();
@@ -1546,6 +1666,8 @@ mod tests {
             member_id: 1,
             delta_t_k: 10.0,
             alpha_per_k: 1.2e-5,
+            delta_t_gradient_k: 0.0,
+            depth_m: None,
         });
         let heated = solve(&input).unwrap();
         assert!(heated.nodes[1].displacement[1] < baseline.nodes[1].displacement[1]);

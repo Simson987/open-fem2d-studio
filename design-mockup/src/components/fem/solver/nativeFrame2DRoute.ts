@@ -160,9 +160,18 @@ export function buildNativeFrame2DRequest(
     const scale = finite(factor(load.caseId), `Belastinggeval ${load.caseId}`);
     if (!beamById.has(load.beamId)) throw new Error(`Temperatuurlast verwijst naar onbekende staaf ${load.beamId}.`);
     const deltaTK = finite(load.deltaT, `Staaf ${load.beamId} temperatuur`) * scale;
+    const deltaTGradientK = finite(load.deltaTGradient ?? 0,
+      `Staaf ${load.beamId} temperatuurgradiënt`) * scale;
     const alphaPerK = finite(load.alpha ?? 1.2e-5, `Staaf ${load.beamId} uitzettingscoëfficiënt`);
     if (alphaPerK < 0) throw new Error(`Staaf ${load.beamId}: uitzettingscoëfficiënt mag niet negatief zijn.`);
-    return deltaTK === 0 ? [] : [{ memberId: load.beamId, deltaTK, alphaPerK }];
+    let depthM: number | undefined;
+    if (deltaTGradientK !== 0) {
+      depthM = finite(load.thermalDepthMm ?? NaN, `Staaf ${load.beamId} gradiënthoogte`) / 1000;
+      if (!(depthM > 0)) throw new Error(`Staaf ${load.beamId}: gradiënthoogte moet positief zijn.`);
+    }
+    return deltaTK === 0 && deltaTGradientK === 0 ? []
+      : [{ memberId: load.beamId, deltaTK, alphaPerK,
+        ...(depthM !== undefined ? { deltaTGradientK, depthM } : {}) }];
   });
   const loadPath = isMaterialAnalysis(analysis) ? input.axialMaterialLoadPath ?? [1] : [];
   if (isMaterialAnalysis(analysis) && (!Array.isArray(loadPath) || loadPath.length === 0

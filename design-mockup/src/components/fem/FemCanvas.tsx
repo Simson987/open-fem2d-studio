@@ -3139,7 +3139,9 @@ export default function FemCanvas(props: FemCanvasProps) {
         <g key={`load${l.id}`}>
           {omschrijvingTitel}
           <circle cx={p.x} cy={p.y} r={6} className="fem-load-thermal" />
-          <text x={p.x + 10} y={p.y + 4} className="fem-load-text">ΔT={l.deltaT}°</text>
+          <text x={p.x + 10} y={p.y + 4} className="fem-load-text">
+            ΔT={l.deltaT ?? 0}°{l.deltaTGradient ? ` · ΔTg=${l.deltaTGradient}°` : ""}
+          </text>
         </g>
       );
     }

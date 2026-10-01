@@ -340,6 +340,8 @@ export interface SolverEdgePointLoadInput {
 export interface SolverThermalLoadInput {
   beamId: number;
   deltaT: number;        // K
+  deltaTGradient?: number; // K: lokale +dwarszijde minus -dwarszijde
+  thermalDepthMm?: number; // mm tussen beide zijden
   /** Linear expansion coefficient (1/K). Default α = 1.2e-5 (steel). */
   alpha?: number;
 }

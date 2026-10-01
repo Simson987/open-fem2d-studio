@@ -1299,6 +1299,7 @@
       "pointForce": "Einzelkraft",
       "pointMoment": "Einzelmoment",
       "thermal": "Temperatur",
+      "thermalGradientHint": "ΔT ist die mittlere Temperaturänderung. ΔT₊−ΔT₋ ist die Temperatur an der lokalen positiven Querseite minus der negativen Seite. Bei einem Gradienten ist ihr Abstand h anzugeben. Dafür ist der Rust-2D-Rahmenlöser erforderlich.",
       "alphaSteel": "1,2·10⁻⁵ /K (Stahl)",
       "actions": "Aktionen",
       "pressBefore": "Drücken Sie ",

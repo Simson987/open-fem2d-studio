@@ -1299,6 +1299,7 @@
       "pointForce": "Point force",
       "pointMoment": "Point moment",
       "thermal": "Temperature",
+      "thermalGradientHint": "ΔT is the mean temperature change. ΔT₊−ΔT₋ is the temperature at the local positive transverse face minus the negative face. Specify their spacing h for a gradient. This requires the Rust 2D frame solver.",
       "alphaSteel": "1.2·10⁻⁵ /K (steel)",
       "actions": "Actions",
       "pressBefore": "Press ",

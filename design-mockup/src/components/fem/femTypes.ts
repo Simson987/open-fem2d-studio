@@ -1581,6 +1581,10 @@ export interface Load {
   /** Deellast: einde van het belaste deel als fractie 0..1. Default 1. */
   endFrac?: number;
   deltaT?: number; // K
+  /** Temperatuurverschil lokaal +dwars minus -dwars, in K. */
+  deltaTGradient?: number;
+  /** Afstand tussen beide temperatuurvlakken, in mm. */
+  thermalDepthMm?: number;
   /**
    * De plaat van een plaatlast: de randlast (`edgeLoad`) of de puntlast op een
    * plaatrand (`pointForce` met `plateId`). Aanwezig ⇒ ook een randadres.

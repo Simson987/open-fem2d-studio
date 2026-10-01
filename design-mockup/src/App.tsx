@@ -1538,6 +1538,9 @@ function App() {
       if (fem.analysetype === "axiaalFysischRust") {
         throw new Error("Kies Open FEM Rust in Instellingen → Berekening voor axiale FNL.");
       }
+      if (fem.loads.some(load => load.type === "thermal" && load.deltaTGradient)) {
+        throw new Error("Kies Open FEM Rust in Instellingen → Berekening voor temperatuurgradiënten.");
+      }
       // DE MODELCONTROLE OOK OP DIT PAD. Alleen het canvas deed hem; een staaf
       // van lengte nul of een kolomvoet die op een ligger ligt gaf daar "Model
       // niet doorgerekend", terwijl dit pad doorrekende en de toetsing op die

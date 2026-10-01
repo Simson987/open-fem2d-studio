@@ -148,6 +148,22 @@ try {
     [{ id: 98, name: "halve temperatuur", factors: new Map([[1, 0.5]]) }])).get(98);
   close(halfThermal.displacements.get(2).ux, 1.44, 1e-8,
     "gefactoreerde thermische uitzetting bij P-Delta");
+  const gradientInput = { ...thermalInput,
+    thermalLoads: [{ beamId: 1, caseId: 1, deltaT: 0, deltaTGradient: 40,
+      thermalDepthMm: 200, alpha: 12e-6 }],
+  };
+  const gradientRequest = buildNativeFrame2DRequest(gradientInput, () => 0.5);
+  assert.deepEqual(gradientRequest.thermalLoads, [{ memberId: 1, deltaTK: 0,
+    alphaPerK: 12e-6, deltaTGradientK: 20, depthM: 0.2 }]);
+  assert.throws(() => buildNativeFrame2DRequest({ ...gradientInput,
+    thermalLoads: [{ beamId: 1, caseId: 1, deltaT: 0, deltaTGradient: 40 }] }, () => 1),
+  /gradiënthoogte/);
+  assert.throws(() => solveAllCases(gradientInput), /temperatuurgradiënt vereist/);
+  const gradientResult = (await solveAllCasesNativeFrame2D(gradientInput)).get(1);
+  close(gradientResult.elements.get(1).deflection[10], 10.8, 1e-7,
+    "vrije kromming door temperatuurgradiënt analytisch");
+  close(gradientResult.elements.get(1).bendingMoment[10], 0, 1e-5,
+    "vrij opgelegde thermische gradiënt zonder mechanisch moment");
   const steelFnlInput = { ...thermalInput,
     beams: [{ ...thermalInput.beams[0], axialMaterialLaw: {
       kind: "steelBilinear", yieldMpa: 100, hardeningRatio: 0.5 } }],

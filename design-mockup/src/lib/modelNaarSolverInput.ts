@@ -559,14 +559,17 @@ export function bouwMultiInput(model: FemModelInvoer): MultiInput {
         my: (l.my ?? 0) * 1e6,
         caseId: l.caseId,
       });
-    } else if (l.type === "thermal" && l.beamId !== undefined && l.deltaT !== undefined) {
+    } else if (l.type === "thermal" && l.beamId !== undefined
+        && (l.deltaT !== undefined || l.deltaTGradient !== undefined)) {
       // α per staafmateriaal (staal 1,2e-5 /K, hout 5,0e-6 /K = α∥
       // bovengrens, conservatief) — zonder dit rekende hout met staal-α,
       // een factor ~2,5–4 te hoog. Zie thermalAlpha.ts.
       const beam = model.beams.find(b => b.id === l.beamId);
       multiInput.thermalLoads!.push({
         beamId: l.beamId,
-        deltaT: l.deltaT,
+        deltaT: l.deltaT ?? 0,
+        ...(l.deltaTGradient !== undefined ? { deltaTGradient: l.deltaTGradient } : {}),
+        ...(l.thermalDepthMm !== undefined ? { thermalDepthMm: l.thermalDepthMm } : {}),
         alpha: thermalAlphaForMaterial(beam?.material),
         caseId: l.caseId,
       });

@@ -1820,6 +1820,9 @@ export function buildMesh(input: SolverInput | MultiInput, loadFactor?: (caseId?
   if (tls) {
     for (const tl of tls) {
       const f = loadFactor ? loadFactor(tl.caseId) : 1;
+      if (f !== 0 && tl.deltaTGradient) {
+        throw new Error(`Staaf ${tl.beamId}: temperatuurgradiënt vereist de Rust 2D-raamwerkkern.`);
+      }
       if (f === 0 || !tl.deltaT) continue;
       const beamMeshId = beamIdMap.get(tl.beamId);
       if (beamMeshId === undefined) continue;

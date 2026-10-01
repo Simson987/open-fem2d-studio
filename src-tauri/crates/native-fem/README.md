@@ -89,6 +89,19 @@ plastificatie. De Rust-proeven dekken daarnaast verhinderde betonafkoeling en
 gelijktijdige GNL/FNL-thermiek af; de 2D-app-test vergelijkt lineaire
 thermische gevallen met de bestaande solver.
 
+[`examples/frame2d-thermal-gradient.json`](examples/frame2d-thermal-gradient.json)
+geeft een temperatuurverschil van `40 K` over `h=0,2 m` in een vrij
+opgelegde staaf van `3 m`. `deltaTGradientK` betekent de temperatuur aan
+lokale `+Y` minus die aan lokale `−Y`; `deltaTK` is de gemiddelde
+temperatuurverandering. De opgelegde kromming is
+`κ = −α·deltaTGradientK/h = −0,0024 m⁻¹`; het midden wijkt volgens
+`−κL²/8 = +2,7 mm` uit zonder mechanisch buigmoment. Bij beide uiteinden
+ingeklemd blijft de vervorming nul en ontstaat een constant moment
+`−EIκ = +4,032 kNm`. De kern test beide randvoorwaarden en een analyseverzoek
+met axiale staalplastificatie. In de app staan temperatuurverschil en afstand bij de
+temperatuurlast. Zonder opgegeven positieve afstand wordt de gradiënt
+geweigerd; de bestaande TypeScript-solver verwerkt dit veld niet.
+
 [`examples/frame2d-released-cantilever.json`](examples/frame2d-released-cantilever.json)
 laat een uitkraging met een buigscharnier bij de tip zien. De knooprotatie is
 vastgezet, maar de herstelde staafeindrotatie is `−PL²/(2EI)` en het

@@ -1299,6 +1299,7 @@
       "pointForce": "Puntkracht",
       "pointMoment": "Puntmoment",
       "thermal": "Temperatuur",
+      "thermalGradientHint": "ΔT is de gemiddelde temperatuurverandering. ΔT₊−ΔT₋ is de temperatuur aan de lokale +dwarszijde min die aan de −dwarszijde. Geef bij een gradiënt de afstand h tussen beide zijden op. Alleen de Rust 2D-raamwerkkern rekent dit door.",
       "alphaSteel": "1.2·10⁻⁵ /K (staal)",
       "actions": "Acties",
       "pressBefore": "Druk ",

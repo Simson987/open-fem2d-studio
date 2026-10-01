@@ -1,0 +1,21 @@
+{
+  "analysis": "linear",
+  "nodes": [
+    { "id": 1, "x": 0, "y": 0 },
+    { "id": 2, "x": 3, "y": 0 }
+  ],
+  "materials": [{ "id": 1, "eMpa": 210000 }],
+  "sections": [{ "id": 1, "areaM2": 0.01, "inertiaM4": 0.000008 }],
+  "members": [{
+    "id": 1, "startNodeId": 1, "endNodeId": 2,
+    "materialId": 1, "sectionId": 1
+  }],
+  "supports": [
+    { "nodeId": 1, "ux": true, "uy": true, "rz": false },
+    { "nodeId": 2, "ux": false, "uy": true, "rz": false }
+  ],
+  "thermalLoads": [{
+    "memberId": 1, "deltaTK": 0, "deltaTGradientK": 40,
+    "depthM": 0.2, "alphaPerK": 0.000012
+  }]
+}
