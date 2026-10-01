@@ -8,7 +8,7 @@ nog geen vervanging van de app-solver.
 
 | Deel | Rust-kern | Nog open voor vervanging van de app-solver |
 | --- | --- | --- |
-| 3D-raamwerk | 12-DOF-staven, lineair/P-Δ, eenvoudige FNL, eigenknik tot 120 vrije DOF, lokale lijn-, staafpunt- en thermische lasten, globale veren, opgelegde verplaatsingen/rotaties en My/Mz/torsiescharnieren | Thermische lasten en scharnieren samen met FNL, materiaalhistorie en schaalbare knik- en stabiliteitstoets. |
+| 3D-raamwerk | 12-DOF-staven, lineair/P-Δ, eenvoudige FNL met optioneel axiaal staal-/betonlastpad, eigenknik tot 120 vrije DOF, lokale lijn-, staafpunt- en thermische lasten, globale veren, opgelegde verplaatsingen/rotaties en My/Mz/torsiescharnieren | Thermische lasten en scharnieren samen met FNL, historische vezel-/buigrespons, gecombineerd GNL/FNL-lastpad en schaalbare knik- en stabiliteitstoets. |
 | 2D-schijf | CST en Q4, Green-Lagrange GNL, staal-J2, betonschade, E(rek) | Alle bestaande combinaties van elementen/randvoorwaarden, gekoppelde staven en externe validatie van de FNL-wetten. |
 | 2D-buigplaat | DKT en 4-knoops hybride Kirchhoff, E(rek), per vierhoek bilineaire plaatdruk | GNL-buiging, gescheurde betonstijfheid, hogere-orde of lijnlasten, orthotropie en betrouwbare dwarskrachtherleiding aan alle randen. |
 | Wapeningscontrole | Verticale dwarskrachtwapening, huidtrek en EC2-scheurwijdte als aparte UGT/BGT-postprocessen | Nationale bijlage, belastingscombinaties, detaillering, scheurhistorie en toetsing van gecombineerde membraan- en plaatkrachten. |

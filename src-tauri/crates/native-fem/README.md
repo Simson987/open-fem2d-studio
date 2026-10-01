@@ -11,7 +11,7 @@ die expliciet.
 
 | Kern | Element | GNL | FNL | Lasten en opleggingen |
 | --- | --- | --- | --- | --- |
-| `native-frame3d` | 12-DOF Euler-Bernoulli raamwerk, 6 DOF/knoop | iteratieve P-Δ-stijfheid, stabiliteitscontrole en eigenknik tot 120 vrije DOF | monotone effectieve-E-envelop voor staal en beton | knoop-, lijn-, staafpunt- en thermische lasten; vaste DOF, globale veren, opgelegde verplaatsingen/rotaties en staafeindscharnieren |
+| `native-frame3d` | 12-DOF Euler-Bernoulli raamwerk, 6 DOF/knoop | iteratieve P-Δ-stijfheid, stabiliteitscontrole en eigenknik tot 120 vrije DOF | monotone effectieve-E-envelop; met expliciet `loadPath` axiale staalplastificatie en blijvende betontrekschade | knoop-, lijn-, staafpunt- en thermische lasten; vaste DOF, globale veren, opgelegde verplaatsingen/rotaties en staafeindscharnieren |
 | `native-plate2d` | 3-knoops CST-vlakspanning/membraan, 2 DOF/knoop | Green-Lagrange-rek met Newton-iteratie | J2-staalplastificatie met isotrope verharding en onomkeerbare betonschade per element | knoopkrachten en vaste x/y-DOF |
 | `native-plate-bending` | 3-knoops DKT-plaatbuiging, 3 DOF/knoop | nog niet | nog niet | dwarsknoopkrachten, knoopmomenten en vaste w/rotatie-DOF |
 | `native-square-mesh` | exact vierkant Q4-rooster met randknoop-ID's | n.v.t. | n.v.t. | `widthM`, `heightM`, `cellSizeM` |
@@ -58,8 +58,35 @@ een vloeigrens en verhardingsverhouding (staal) of treksterkte en
 reststijfheidsverhouding (beton) in. Staven zonder FNL-wet blijven elastisch;
 minstens één staaf moet een wet hebben. De automatische solverkeuze schakelt
 de experimentele FNL-route niet zelf in. Thermische lasten en eindscharnieren
-zijn voor deze FNL-route nog uitgesloten. De wet is een monotone secant-E-
-benadering zonder plastische of scheurgeschiedenis.
+zijn voor deze FNL-route nog uitgesloten. De app geeft op dit moment geen
+`loadPath` door; de gewone app-analyse gebruikt daarom nog de monotone
+secant-E-benadering zonder materiaalgeschiedenis.
+
+Voor een rechtstreeks Rust- of dispatcher-verzoek met `analysis: "material"`
+kan `loadPath` de absolute lastfactoren per stap bevatten, bijvoorbeeld
+`[1, 0]` voor belasten en ontlasten. De axiale staalwet gebruikt een
+éénassige retourprojectie met isotrope verharding: plastische rek blijft na
+ontlasten bestaan. De axiale betontrekschade blijft na ontlasten bestaan en
+verlaagt de herbelastingsstijfheid; druk blijft elastisch. Het antwoord geeft
+per staaf `axialHistory` met plastische rek, equivalente plastische rek,
+trekschade en actuele axiale tangentmodulus. Buiging gebruikt in deze route
+nog de bestaande secante staafbenadering. `loadPath` wordt niet met P-Δ,
+eigenknik, thermische lasten of eindscharnieren gecombineerd.
+
+```bash
+src-tauri/target/debug/native-frame3d \
+  < src-tauri/crates/native-fem/examples/frame-steel-axial-unload.json
+src-tauri/target/debug/native-frame3d \
+  < src-tauri/crates/native-fem/examples/frame-concrete-axial-reload.json
+```
+
+In het staalvoorbeeld (L=2 m, A=0,01 m², E=210 GPa, f_y=100 MPa,
+E_t/E=0,5) geeft 1500 kN trek een piekspanning van 150 MPa. De gesloten
+éénassige formule geeft na ontlasten 0,238095‰ plastische rek en 0,476190 mm
+blijvende verlenging. In het betonvoorbeeld (E=33 GPa, f_t=3 MPa,
+E_t/E=0,2) geeft 60 kN trek eerst 6 MPa spanning en schade 2/3; na ontlasten
+en herbelasten tot 30 kN is de tangentmodulus 11 GPa en de verlenging
+0,545455 mm. Beide voorbeelden worden ook in Rust-tests getoetst.
 
 De bestaande analyseknop gebruikt dezelfde app-invoer en vertaalt de Rust-uitvoer naar
 knoopverplaatsingen, reacties, staafkrachten, bemonsterde snedekrachtlijnen, evenwicht,
@@ -162,8 +189,10 @@ equivalente plastische rek en de trekschade. De materiaaltoestand leeft binnen
   scheurformule is ook tegen een gepubliceerd EC2-brugvoorbeeld getoetst;
   de Cement-uitkraging geeft aan de steun 240 kN/m. Zie de
   [plaatvoorbeelden](PLATE_EXAMPLES.md) voor invoer, uitkomsten en aannames.
-- **Beperkingen FNL:** de 3D-raamwerkkern gebruikt nog een monotone
-  effectieve-E-envelop zonder doorsnedeplastificatie of scheurgeschiedenis.
+- **Beperkingen FNL:** de 3D-raamwerkkern gebruikt zonder `loadPath` een monotone
+  effectieve-E-envelop. Met `loadPath` heeft alleen de axiale spanning
+  plastische of schadegeschiedenis; vezelspanningen en buiging hebben nog geen
+  historische doorsnedetoestand.
   De 2D-betonschade gebruikt één scalair per element zonder scheurband- of
   breukenergie-regularisatie; het resultaat kan daarom van de mesh afhangen.
   Ook de 2D-staalwet en het betonmodel zijn nog niet extern gevalideerd voor

@@ -34,8 +34,9 @@ impl Analysis {
 }
 
 /// Material laws shared by the experimental kernels. The 2D membrane kernel
-/// stores plastic strain and tensile damage along one request's load path;
-/// the 3D frame kernel still uses a monotonic effective-E envelope.
+/// stores plastic strain and tensile damage along one request's load path.
+/// The 3D frame kernel retains axial history when `loadPath` is supplied;
+/// its bending response remains a member-level secant approximation.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum MaterialLaw {

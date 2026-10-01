@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "analysis": "material",
+  "nodes": [
+    {"id": 1, "x": 0, "y": 0, "z": 0},
+    {"id": 2, "x": 2, "y": 0, "z": 0}
+  ],
+  "materials": [{
+    "id": 1, "eMpa": 210000, "nu": 0.3,
+    "law": {"kind": "steelBilinear", "yield_mpa": 100, "hardening_ratio": 0.5}
+  }],
+  "sections": [{"id": 1, "areaM2": 0.01, "iyM4": 0.00001, "izM4": 0.00002, "torsionJM4": 0.000001}],
+  "members": [{"id": 1, "startNodeId": 1, "endNodeId": 2, "materialId": 1, "sectionId": 1}],
+  "supports": [{"nodeId": 1, "ux": true, "uy": true, "uz": true, "rx": true, "ry": true, "rz": true}],
+  "nodalLoads": [{"nodeId": 2, "fx": 1500, "fy": 0, "fz": 0, "mx": 0, "my": 0, "mz": 0}],
+  "loadPath": [1, 0]
+}
