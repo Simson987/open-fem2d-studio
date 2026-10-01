@@ -64,8 +64,21 @@ close(inclinedSwayRequest.memberPointLoads[0].pxKn, -2.98, 1e-12,
   "scheefstand op schuine staafpuntlast");
 assert.equal(buildNativeFrame2DRequest({ ...input,
   beams: [{ ...input.beams[0], startConnection: "hinge" }] }, () => 1).members[0].releases.rzStart, true);
+assert.equal(buildNativeFrame2DRequest({ ...input,
+  beams: [{ ...input.beams[0], releases: { startTx: true } }] }, () => 1).members[0].releases.uxStart, true);
+assert.equal(buildNativeFrame2DRequest({ ...input,
+  beams: [{ ...input.beams[0], releases: { endTz: true } }] }, () => 1).members[0].releases.uyEnd, true);
+const splitReleaseMembers = buildNativeFrame2DRequest({ ...input,
+  beams: [{ ...input.beams[0], extraSneden: [0.5],
+    releases: { startTx: true, endTz: true } }] }, () => 1).members;
+assert.equal(splitReleaseMembers.length, 2);
+assert.equal(splitReleaseMembers[0].releases.uxStart, true);
+assert.equal(splitReleaseMembers[0].releases.uyEnd, false);
+assert.equal(splitReleaseMembers[1].releases.uxStart, false);
+assert.equal(splitReleaseMembers[1].releases.uyEnd, true);
 assert.throws(() => buildNativeFrame2DRequest({ ...input,
-  beams: [{ ...input.beams[0], releases: { startTx: true } }] }, () => 1), /translatiehulzen/);
+  beams: [{ ...input.beams[0], releases: { startTx: true, endTx: true },
+    axialMaterialLaw: { kind: "steelBilinear", yieldMpa: 355, hardeningRatio: 0.01 } }] }, () => 1, "material"), /axiale translatiehulzen met FNL/);
 assert.equal(buildNativeFrame2DRequest({ ...input,
   beams: [{ ...input.beams[0], endConnection: "hinge" }] }, () => 1, "geometric").members[0].releases.rzEnd, true);
 assert.throws(() => buildNativeFrame2DRequest({ ...input, plates: [{ id: 1 }] }, () => 1), /uitsluitend staven/);
@@ -611,7 +624,63 @@ try {
   assert.ok(nativeSecondOrder.displacements.get(2).uz <
     combineResults(secondOrderCombo, solveAllCases(columnInput).perCase).displacements.get(2).uz,
     "druk vergroot de tweede-orde tipverplaatsing");
+  const releaseBase = {
+    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 3000, z: 0 }, { id: 3, x: 6000, z: 0 }],
+    beams: [{ id: 1, from: 1, to: 2, E: 210_000, A: 3877, I: 1.673e7 },
+      { id: 2, from: 2, to: 3, E: 210_000, A: 3877, I: 1.673e7 }],
+    supports: [{ nodeId: 1, type: "fixed" }, { nodeId: 3, type: "fixed" }],
+    cases: [{ id: 1, name: "vrijgave" }], loads: [], pointLoads: [],
+  };
+  for (const [release, pointLoad] of [
+    ["startTx", { fx: 10_000 }], ["startTz", { fz: -10_000 }],
+  ]) {
+    const example = { ...releaseBase,
+      beams: [releaseBase.beams[0], { ...releaseBase.beams[1], releases: { [release]: true } }],
+      pointLoads: [{ nodeId: 2, caseId: 1, ...pointLoad }],
+    };
+    const own = (await solveAllCasesNativeFrame2D(example)).get(1);
+    const reference = solveAllCases(example).perCase.get(1);
+    for (const nodeId of [1, 3]) {
+      close(own.reactions.get(nodeId).fx, reference.reactions.get(nodeId).fx, 1e-5,
+        `${release} reactie ${nodeId} fx`);
+      close(own.reactions.get(nodeId).fz, reference.reactions.get(nodeId).fz, 1e-5,
+        `${release} reactie ${nodeId} fz`);
+    }
+    close(own.elements.get(2).N, reference.elements.get(2).N, 1e-5, `${release} normaalkracht`);
+    close(own.elements.get(2).V, reference.elements.get(2).V, 1e-5, `${release} dwarskracht`);
+  }
+  const releasedLine = { ...releaseBase,
+    beams: [releaseBase.beams[0], { ...releaseBase.beams[1], releases: { startTz: true } }],
+    loads: [{ beamId: 1, caseId: 1, q: -10 }, { beamId: 2, caseId: 1, q: -10 }],
+  };
+  const lineOwn = (await solveAllCasesNativeFrame2D(releasedLine)).get(1);
+  const lineReference = solveAllCases(releasedLine).perCase.get(1);
+  for (const nodeId of [1, 3]) {
+    close(lineOwn.reactions.get(nodeId).fz, lineReference.reactions.get(nodeId).fz, 1e-4,
+      `dwarskrachthuls met lijnlast reactie ${nodeId}`);
+  }
+  close(lineOwn.elements.get(2).shearForce[0], 0, 1e-6,
+    "dwarskrachthuls met lijnlast nul dwarskracht aan het begin");
+  const doubleAxial = { ...releaseBase,
+    beams: [releaseBase.beams[0], { ...releaseBase.beams[1],
+      releases: { startTx: true, endTx: true } }],
+    pointLoads: [{ nodeId: 2, caseId: 1, fx: 10_000 }],
+  };
+  const doubleResult = (await solveAllCasesNativeFrame2D(doubleAxial)).get(1);
+  close(doubleResult.elements.get(2).N, 0, 1e-6, "dubbele axiale vrijgave N");
+  await assert.rejects(() => solveAllCasesNativeFrame2D({ ...doubleAxial,
+    supports: [{ nodeId: 1, type: "fixed" }, { nodeId: 3, type: "zRoller" }],
+  }), /stiffness|singular|mechanism/i);
+  const thermalRelease = { ...releaseBase,
+    nodes: [releaseBase.nodes[0], releaseBase.nodes[2]],
+    beams: [{ ...releaseBase.beams[0], to: 3, releases: { startTx: true } }],
+    thermalLoads: [{ beamId: 1, caseId: 1, deltaT: 30, alpha: 12e-6 }],
+  };
+  const thermalOwn = (await solveAllCasesNativeFrame2D(thermalRelease)).get(1);
+  close(thermalOwn.elements.get(1).N, 0, 1e-6, "thermische huls N");
+  close(thermalOwn.elements.get(1).axialDisp[0], -2.16, 1e-8,
+    "thermische huls vrije uitzetting in mm");
 } finally {
   globalThis.fetch = previousFetch;
 }
-console.log("Native 2D-app-route: lineair/P-Delta, sparse bedding, segmenten, scheefstand, thermiek en axiale staal-/beton-FNL slagen.");
+console.log("Native 2D-app-route: lineair/P-Delta, bedding, segmenten, translatiehulzen, thermiek en axiale staal-/beton-FNL slagen.");

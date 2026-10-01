@@ -106,9 +106,8 @@ export function buildNativeFrame2DRequest(
     if (beam.veren) {
       throw new Error(`Staaf ${beam.id}: eindveren zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.`);
     }
-    if (beam.releases?.startTx || beam.releases?.startTz
-        || beam.releases?.endTx || beam.releases?.endTz) {
-      throw new Error(`Staaf ${beam.id}: translatiehulzen zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.`);
+    if (isMaterialAnalysis(analysis) && (beam.releases?.startTx || beam.releases?.endTx)) {
+      throw new Error(`Staaf ${beam.id}: axiale translatiehulzen met FNL zijn nog niet gekoppeld aan de Rust 2D-raamwerkkern.`);
     }
     const rzStart = !!beam.releases?.startRy || beam.startConnection === "hinge";
     const rzEnd = !!beam.releases?.endRy || beam.endConnection === "hinge";
@@ -187,7 +186,11 @@ export function buildNativeFrame2DRequest(
     return segments.map((segment, index) => ({ id: segment.id,
       startNodeId: segment.startNodeId, endNodeId: segment.endNodeId,
       materialId: beam.id, sectionId: segment.id,
-      releases: { rzStart: index === 0 && rzStart,
+      releases: { uxStart: index === 0 && !!beam.releases?.startTx,
+        uyStart: index === 0 && !!beam.releases?.startTz,
+        rzStart: index === 0 && rzStart,
+        uxEnd: index === segments.length - 1 && !!beam.releases?.endTx,
+        uyEnd: index === segments.length - 1 && !!beam.releases?.endTz,
         rzEnd: index === segments.length - 1 && rzEnd },
       ...(kLijn === undefined ? {} : { foundationKnPerM2: kLijn * 1000 }),
     }));

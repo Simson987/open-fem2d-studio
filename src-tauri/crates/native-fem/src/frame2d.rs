@@ -51,14 +51,33 @@ pub struct Member {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EndReleases {
     #[serde(default)]
+    pub ux_start: bool,
+    #[serde(default)]
+    pub uy_start: bool,
+    #[serde(default)]
     pub rz_start: bool,
+    #[serde(default)]
+    pub ux_end: bool,
+    #[serde(default)]
+    pub uy_end: bool,
     #[serde(default)]
     pub rz_end: bool,
 }
 
 impl EndReleases {
     fn any(self) -> bool {
-        self.rz_start || self.rz_end
+        self.axes().iter().any(|(_, released)| *released)
+    }
+
+    fn axes(self) -> [(usize, bool); 6] {
+        [
+            (0, self.ux_start),
+            (1, self.uy_start),
+            (2, self.rz_start),
+            (3, self.ux_end),
+            (4, self.uy_end),
+            (5, self.rz_end),
+        ]
     }
 }
 
@@ -323,13 +342,28 @@ fn condense_releases(element: &mut Element) -> Result<(), String> {
     }
     element.raw_stiffness = Some(element.local_stiffness);
     element.raw_load = Some(element.local_load);
-    for (axis, released) in [(2, element.releases.rz_start), (5, element.releases.rz_end)] {
+    for (axis, released) in element.releases.axes() {
         if !released {
             continue;
         }
         let pivot = element.local_stiffness[axis][axis];
-        if !pivot.is_finite() || pivot <= 0.0 {
+        let axis_scale = element.raw_stiffness.unwrap()[axis][axis].abs();
+        if !pivot.is_finite() || pivot < -axis_scale * 1e-12 {
             return Err("invalid 2D frame release condensation pivot".into());
+        }
+        if pivot <= axis_scale * 1e-12 {
+            // A second release can remove the remaining rigid-body stiffness.
+            // It is valid only when the member load is also self-equilibrated.
+            if element.local_stiffness[axis]
+                .iter()
+                .any(|v| v.abs() > axis_scale * 1e-10)
+                || element.local_load[axis].abs() > 1e-9
+            {
+                return Err("unbalanced load on disconnected 2D frame release".into());
+            }
+            element.local_stiffness[axis] = [0.0; 6];
+            element.local_load[axis] = 0.0;
+            continue;
         }
         let column = std::array::from_fn::<_, 6, _>(|i| element.local_stiffness[i][axis]);
         let load = element.local_load[axis];
@@ -353,7 +387,7 @@ fn condense_releases(element: &mut Element) -> Result<(), String> {
     Ok(())
 }
 
-/// Recover the physical member-end rotation eliminated from the global solve.
+/// Recover the physical member-end displacement eliminated from the global solve.
 fn released_local_displacement(
     element: &Element,
     mut d: [f64; 6],
@@ -376,26 +410,53 @@ fn released_local_displacement(
         }
     }
     let f = element.raw_load.unwrap().map(|value| value * load_factor);
-    let released: Vec<usize> = [(2, element.releases.rz_start), (5, element.releases.rz_end)]
+    let released: Vec<usize> = element
+        .releases
+        .axes()
         .into_iter()
         .filter_map(|(axis, yes)| yes.then_some(axis))
         .collect();
-    let rhs = |axis: usize| {
-        f[axis]
+    // Row reduction preserves a nodal displacement as the gauge for a free
+    // rigid-body motion when both ends of one local direction are released.
+    let n = released.len();
+    let mut a = [[0.0; 7]; 6];
+    for (row, &axis) in released.iter().enumerate() {
+        for (column, &other) in released.iter().enumerate() {
+            a[row][column] = k[axis][other];
+        }
+        a[row][n] = f[axis]
             - (0..6)
                 .filter(|j| !released.contains(j))
                 .map(|j| k[axis][j] * d[j])
-                .sum::<f64>()
-    };
-    if released.len() == 1 {
-        let a = released[0];
-        d[a] = rhs(a) / k[a][a];
-    } else {
-        let (a, b) = (released[0], released[1]);
-        let (ra, rb) = (rhs(a), rhs(b));
-        let determinant = k[a][a] * k[b][b] - k[a][b] * k[b][a];
-        d[a] = (ra * k[b][b] - rb * k[a][b]) / determinant;
-        d[b] = (rb * k[a][a] - ra * k[b][a]) / determinant;
+                .sum::<f64>();
+    }
+    let mut pivots = Vec::new();
+    let mut rank = 0;
+    for column in 0..n {
+        let best = (rank..n)
+            .max_by(|&i, &j| a[i][column].abs().total_cmp(&a[j][column].abs()))
+            .unwrap();
+        let magnitude = a[best][column].abs();
+        let scale = (0..n).map(|row| a[row][row].abs()).fold(0.0_f64, f64::max);
+        if magnitude <= scale * 1e-12 {
+            continue;
+        }
+        a.swap(rank, best);
+        for row in (rank + 1)..n {
+            let factor = a[row][column] / a[rank][column];
+            for col in column..=n {
+                a[row][col] -= factor * a[rank][col];
+            }
+        }
+        pivots.push(column);
+        rank += 1;
+    }
+    for row in (0..rank).rev() {
+        let column = pivots[row];
+        let remainder = ((column + 1)..n)
+            .map(|j| a[row][j] * d[released[j]])
+            .sum::<f64>();
+        d[released[column]] = (a[row][n] - remainder) / a[row][column];
     }
     d
 }
@@ -673,6 +734,16 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
     }
     if request.nodes.len() < 2 || request.members.is_empty() {
         return Err("2D frame requires nodes and members".into());
+    }
+    if request.analysis.material()
+        && request
+            .members
+            .iter()
+            .any(|member| member.releases.ux_start || member.releases.ux_end)
+    {
+        return Err(
+            "2D frame axial translation releases with material nonlinearity are unsupported".into(),
+        );
     }
     if !request.load_path.is_empty() {
         if !request.analysis.material()
@@ -1437,6 +1508,81 @@ mod tests {
         }
     }
 
+    fn fixed_end(input: &mut Request) {
+        let mut support = input.supports[0].clone();
+        support.node_id = 2;
+        input.supports.push(support);
+    }
+
+    #[test]
+    fn axial_translation_release_allows_free_thermal_expansion() {
+        let mut input = cantilever();
+        fixed_end(&mut input);
+        input.members[0].releases.ux_start = true;
+        input.thermal_loads.push(ThermalLoad {
+            member_id: 1,
+            delta_t_k: 30.0,
+            alpha_per_k: 12e-6,
+            delta_t_gradient_k: 0.0,
+            depth_m: None,
+        });
+        let result = solve(&input).unwrap();
+        assert!(result.members[0]
+            .normal_force_kn
+            .iter()
+            .all(|n| n.abs() < 1e-9));
+        assert!((result.members[0].axial_disp_m[0] + 0.00108).abs() < 1e-12);
+        assert!(result
+            .nodes
+            .iter()
+            .all(|node| node.reaction[0].abs() < 1e-9));
+    }
+
+    #[test]
+    fn transverse_translation_release_transfers_member_load_to_other_end() {
+        let mut input = cantilever();
+        fixed_end(&mut input);
+        input.members[0].releases.uy_start = true;
+        input.member_loads.push(MemberLoad {
+            member_id: 1,
+            qx_start_kn_per_m: 0.0,
+            qx_end_kn_per_m: 0.0,
+            qy_start_kn_per_m: -10.0,
+            qy_end_kn_per_m: -10.0,
+            start_position_m: None,
+            end_position_m: None,
+        });
+        let result = solve(&input).unwrap();
+        assert!(result.members[0].local_end_forces[1].abs() < 1e-8);
+        assert!((result.nodes[1].reaction[1] - 30.0).abs() < 1e-8);
+        assert!(result.nodes[0].reaction[1].abs() < 1e-8);
+        assert!(result.equilibrium_residual < 1e-9);
+    }
+
+    #[test]
+    fn two_axial_end_releases_are_valid_only_with_external_axial_restraint() {
+        let mut input = cantilever();
+        fixed_end(&mut input);
+        input.members[0].releases.ux_start = true;
+        input.members[0].releases.ux_end = true;
+        assert!(solve(&input).unwrap().members[0]
+            .normal_force_kn
+            .iter()
+            .all(|n| n.abs() < 1e-9));
+        input.supports[1].ux = false;
+        assert!(solve(&input).unwrap_err().contains("singular"));
+    }
+
+    #[test]
+    fn material_analysis_rejects_axial_translation_release_until_section_law_is_condensed() {
+        let mut input = cantilever();
+        input.analysis = Analysis::Material;
+        input.members[0].releases.ux_start = true;
+        assert!(solve(&input)
+            .unwrap_err()
+            .contains("axial translation releases"));
+    }
+
     #[test]
     fn foundation_adds_tributary_stiffness_without_reporting_soil_as_support() {
         let mut input = cantilever();
@@ -1624,6 +1770,7 @@ mod tests {
         input.members[0].releases = EndReleases {
             rz_start: true,
             rz_end: true,
+            ..EndReleases::default()
         };
         let hinged = solve(&input).unwrap();
         assert!((hinged.members[0].deflection_m[10] + curvature * 3.0 * 3.0 / 8.0).abs() < 1e-11);
@@ -1909,6 +2056,7 @@ mod tests {
         input.members[0].releases = EndReleases {
             rz_start: true,
             rz_end: true,
+            ..EndReleases::default()
         };
         input.member_loads.push(MemberLoad {
             member_id: 1,
