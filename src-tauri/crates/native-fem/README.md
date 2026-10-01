@@ -78,6 +78,7 @@ src-tauri/target/debug/native-frame2d \
 | `native-plate2d` | 3-knoops CST-vlakspanning/membraan, 2 DOF/knoop | Green-Lagrange-rek met Newton-iteratie | J2-staalplastificatie met isotrope verharding en onomkeerbare betonschade per element | knoopkrachten en vaste x/y-DOF |
 | `native-plate-bending` | 3-knoops DKT-plaatbuiging, 3 DOF/knoop | nog niet | nog niet | dwarsknoopkrachten, knoopmomenten en vaste w/rotatie-DOF |
 | `native-square-mesh` | exact vierkant Q4-rooster met randknoop-ID's | n.v.t. | n.v.t. | `widthM`, `heightM`, `cellSizeM` |
+| `native-quad-mesh` | gestructureerd Q4-rooster voor willekeurige rechthoekmaten, met randknoop-ID's | n.v.t. | n.v.t. | `widthM`, `heightM`, `maxCellSizeM` |
 | `native-quad2d` | 4-knoops Q4-schijfelement, 2 DOF/knoop | Green-Lagrange | J2-staal en betonschade per Gauss-punt; afnemende E(rek)-curve | vlakke knoopkrachten en x/y-opleggingen |
 | `native-hybrid-plate` | 4-knoops hybride Kirchhoff-buiging, 12 DOF en 17 momentparameters | nog niet | afnemende secant-E per element en belastingpad | dwarsknoopkrachten, momenten, uniforme en per vierhoek bilineaire druk, w/rotatie-opleggingen; optionele UGT-wapenings- en BGT-scheurcontrole |
 | `native-prestressed-beam` | vrij opgelegde elastische ligger met rechte of parabolische kabel | n.v.t. | opgegeven voorspanverlies | uniforme last en fases overdracht/gebruiksfase |
@@ -106,7 +107,7 @@ gekoppelde balken, orthotropie en veren.
 ```
 
 Andere `kind`-waarden zijn `frame2d`, `frame3d`, `plate2d`, `plateBending`, `quad2d`,
-`hybridPlate` en `prestressedBeam`. Het antwoord heeft dezelfde `kind` en een
+`quadMesh`, `hybridPlate` en `prestressedBeam`. Het antwoord heeft dezelfde `kind` en een
 `result` met het bestaande resultaatcontract van die kern. De desktop roept
 dit aan met Tauri-command `solve_native_fem({ inputs })`, de ontwikkelbrowser
 met toetsbrug-opdracht `solve_native_fem`, en MCP met het gelijknamige

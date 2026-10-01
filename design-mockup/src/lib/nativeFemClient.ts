@@ -18,6 +18,7 @@ export type NativeFemKind =
   | "quad2d"
   | "hybridPlate"
   | "squareMesh"
+  | "quadMesh"
   | "prestressedBeam";
 
 export async function solveNativeFem<T>(kind: NativeFemKind, input: unknown): Promise<T> {

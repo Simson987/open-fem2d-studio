@@ -15,6 +15,7 @@ pub enum NativeFemRequest {
     Quad2d(quad2d::Request),
     HybridPlate(hybrid_plate::Request),
     SquareMesh(quad2d::SquareGrid),
+    QuadMesh(quad2d::QuadGrid),
     PrestressedBeam(prestressed_beam::Request),
 }
 
@@ -28,6 +29,7 @@ pub enum NativeFemResult {
     Quad2d(quad2d::Result2D),
     HybridPlate(hybrid_plate::ResultBending),
     SquareMesh(quad2d::SquareMesh),
+    QuadMesh(quad2d::QuadMesh),
     PrestressedBeam(prestressed_beam::ResultBeam),
 }
 
@@ -46,6 +48,7 @@ pub fn solve_native_fem(request: NativeFemRequest) -> Result<NativeFemResult, St
         NativeFemRequest::SquareMesh(input) => {
             NativeFemResult::SquareMesh(quad2d::mesh_squares(&input)?)
         }
+        NativeFemRequest::QuadMesh(input) => NativeFemResult::QuadMesh(quad2d::mesh_quads(&input)?),
         NativeFemRequest::PrestressedBeam(input) => {
             NativeFemResult::PrestressedBeam(prestressed_beam::solve(&input)?)
         }
@@ -68,6 +71,21 @@ mod tests {
         let value = serde_json::to_value(result).unwrap();
         assert_eq!(value["kind"], "squareMesh");
         assert_eq!(value["result"]["quads"].as_array().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn rectangular_quad_mesh_is_dispatched_without_truncating_edges() {
+        let request: NativeFemRequest = serde_json::from_value(serde_json::json!({
+            "kind": "quadMesh",
+            "input": { "originX": 0, "originY": 0, "widthM": 2.1, "heightM": 1.5,
+                "maxCellSizeM": 1, "materialId": 1, "thicknessM": 0.2 }
+        }))
+        .unwrap();
+        let value = serde_json::to_value(solve_native_fem(request).unwrap()).unwrap();
+        assert_eq!(value["kind"], "quadMesh");
+        assert_eq!(value["result"]["quads"].as_array().unwrap().len(), 6);
+        assert_eq!(value["result"]["nodes"][11]["x"], 2.1);
+        assert_eq!(value["result"]["nodes"][11]["y"], 1.5);
     }
 
     #[test]

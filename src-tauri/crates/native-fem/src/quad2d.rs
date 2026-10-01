@@ -115,6 +115,21 @@ pub struct SquareGrid {
     pub thickness_m: f64,
 }
 
+/// Structured Q4 grid for dimensions that need not be exact multiples of a
+/// cell size. Each direction is divided independently; cell edges do not
+/// exceed `max_cell_size_m` and all quads remain conforming rectangles.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct QuadGrid {
+    pub origin_x: f64,
+    pub origin_y: f64,
+    pub width_m: f64,
+    pub height_m: f64,
+    pub max_cell_size_m: f64,
+    pub material_id: usize,
+    pub thickness_m: f64,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SquareMesh {
@@ -124,6 +139,91 @@ pub struct SquareMesh {
     pub right_node_ids: Vec<usize>,
     pub bottom_node_ids: Vec<usize>,
     pub top_node_ids: Vec<usize>,
+}
+
+pub type QuadMesh = SquareMesh;
+
+fn structured_mesh(
+    origin_x: f64,
+    origin_y: f64,
+    width_m: f64,
+    height_m: f64,
+    nx: usize,
+    ny: usize,
+    material_id: usize,
+    thickness_m: f64,
+) -> Result<QuadMesh, String> {
+    if (nx as f64 + 1.0) * (ny as f64 + 1.0) > 10_000.0 {
+        return Err("quad grid exceeds the 20,000-DOF solver limit".into());
+    }
+    let id = |i: usize, j: usize| 1 + j * (nx + 1) + i;
+    let mut nodes = Vec::with_capacity((nx + 1) * (ny + 1));
+    for j in 0..=ny {
+        for i in 0..=nx {
+            nodes.push(Node {
+                id: id(i, j),
+                x: origin_x + width_m * (i as f64 / nx as f64),
+                y: origin_y + height_m * (j as f64 / ny as f64),
+            });
+        }
+    }
+    let mut quads = Vec::with_capacity(nx * ny);
+    for j in 0..ny {
+        for i in 0..nx {
+            quads.push(Quad {
+                id: 1 + quads.len(),
+                node_ids: [id(i, j), id(i + 1, j), id(i + 1, j + 1), id(i, j + 1)],
+                material_id,
+                thickness_m,
+            });
+        }
+    }
+    Ok(SquareMesh {
+        nodes,
+        quads,
+        left_node_ids: (0..=ny).map(|j| id(0, j)).collect(),
+        right_node_ids: (0..=ny).map(|j| id(nx, j)).collect(),
+        bottom_node_ids: (0..=nx).map(|i| id(i, 0)).collect(),
+        top_node_ids: (0..=nx).map(|i| id(i, ny)).collect(),
+    })
+}
+
+pub fn mesh_quads(grid: &QuadGrid) -> Result<QuadMesh, String> {
+    for (name, value) in [
+        ("width", grid.width_m),
+        ("height", grid.height_m),
+        ("maximum cell size", grid.max_cell_size_m),
+        ("thickness", grid.thickness_m),
+    ] {
+        positive(value, name)?;
+    }
+    if !grid.origin_x.is_finite()
+        || !grid.origin_y.is_finite()
+        || !(grid.origin_x + grid.width_m).is_finite()
+        || !(grid.origin_y + grid.height_m).is_finite()
+    {
+        return Err("non-finite quad mesh coordinates".into());
+    }
+    let nx = (grid.width_m / grid.max_cell_size_m).ceil().max(1.0);
+    let ny = (grid.height_m / grid.max_cell_size_m).ceil().max(1.0);
+    if !nx.is_finite()
+        || !ny.is_finite()
+        || nx < 1.0
+        || ny < 1.0
+        || (nx + 1.0) * (ny + 1.0) > 10_000.0
+    {
+        return Err("quad grid exceeds the 20,000-DOF solver limit".into());
+    }
+    structured_mesh(
+        grid.origin_x,
+        grid.origin_y,
+        grid.width_m,
+        grid.height_m,
+        nx as usize,
+        ny as usize,
+        grid.material_id,
+        grid.thickness_m,
+    )
 }
 
 /// Exact square cells; non-divisible dimensions are rejected rather than
@@ -151,40 +251,23 @@ pub fn mesh_squares(grid: &SquareGrid) -> Result<SquareMesh, String> {
     {
         return Err("square grid dimensions must be exact multiples of cellSizeM".into());
     }
-    if (nx + 1.0) * (ny + 1.0) > 10_000.0 {
-        return Err("square grid exceeds the 20,000-DOF solver limit".into());
+    if !grid.origin_x.is_finite()
+        || !grid.origin_y.is_finite()
+        || !(grid.origin_x + grid.width_m).is_finite()
+        || !(grid.origin_y + grid.height_m).is_finite()
+    {
+        return Err("non-finite square mesh coordinates".into());
     }
-    let (nx, ny) = (nx as usize, ny as usize);
-    let id = |i: usize, j: usize| 1 + j * (nx + 1) + i;
-    let mut nodes = Vec::with_capacity((nx + 1) * (ny + 1));
-    for j in 0..=ny {
-        for i in 0..=nx {
-            nodes.push(Node {
-                id: id(i, j),
-                x: grid.origin_x + i as f64 * grid.cell_size_m,
-                y: grid.origin_y + j as f64 * grid.cell_size_m,
-            });
-        }
-    }
-    let mut quads = Vec::with_capacity(nx * ny);
-    for j in 0..ny {
-        for i in 0..nx {
-            quads.push(Quad {
-                id: 1 + quads.len(),
-                node_ids: [id(i, j), id(i + 1, j), id(i + 1, j + 1), id(i, j + 1)],
-                material_id: grid.material_id,
-                thickness_m: grid.thickness_m,
-            });
-        }
-    }
-    Ok(SquareMesh {
-        nodes,
-        quads,
-        left_node_ids: (0..=ny).map(|j| id(0, j)).collect(),
-        right_node_ids: (0..=ny).map(|j| id(nx, j)).collect(),
-        bottom_node_ids: (0..=nx).map(|i| id(i, 0)).collect(),
-        top_node_ids: (0..=nx).map(|i| id(i, ny)).collect(),
-    })
+    structured_mesh(
+        grid.origin_x,
+        grid.origin_y,
+        grid.width_m,
+        grid.height_m,
+        nx as usize,
+        ny as usize,
+        grid.material_id,
+        grid.thickness_m,
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -685,6 +768,105 @@ mod tests {
             }
         })
         .is_err());
+    }
+    #[test]
+    fn quad_mesh_fills_non_divisible_rectangle_with_conforming_cells() {
+        let grid = QuadGrid {
+            origin_x: -1.25,
+            origin_y: 0.5,
+            width_m: 2.1,
+            height_m: 1.5,
+            max_cell_size_m: 1.0,
+            material_id: 7,
+            thickness_m: 0.2,
+        };
+        let mesh = mesh_quads(&grid).unwrap();
+        assert_eq!(mesh.nodes.len(), 12);
+        assert_eq!(mesh.quads.len(), 6);
+        assert_eq!(mesh.quads[0].node_ids, [1, 2, 6, 5]);
+        assert_eq!(mesh.left_node_ids, vec![1, 5, 9]);
+        assert_eq!(mesh.right_node_ids, vec![4, 8, 12]);
+        assert_eq!(mesh.nodes.last().unwrap().x, grid.origin_x + grid.width_m);
+        assert_eq!(mesh.nodes.last().unwrap().y, grid.origin_y + grid.height_m);
+        let index: HashMap<usize, &Node> = mesh.nodes.iter().map(|node| (node.id, node)).collect();
+        let mut area = 0.0;
+        for quad in &mesh.quads {
+            let a = index[&quad.node_ids[0]];
+            let b = index[&quad.node_ids[1]];
+            let d = index[&quad.node_ids[3]];
+            let dx = b.x - a.x;
+            let dy = d.y - a.y;
+            assert!(dx > 0.0 && dx <= grid.max_cell_size_m);
+            assert!(dy > 0.0 && dy <= grid.max_cell_size_m);
+            assert!((dx / dy - 0.7 / 0.75).abs() < 1e-12);
+            area += dx * dy;
+        }
+        assert!((area - grid.width_m * grid.height_m).abs() < 1e-12);
+        assert!(mesh_quads(&QuadGrid {
+            max_cell_size_m: 0.001,
+            ..grid
+        })
+        .is_err());
+    }
+    #[test]
+    fn rectangular_quad_mesh_matches_uniform_tension_solution() {
+        let mesh = mesh_quads(&QuadGrid {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            width_m: 2.1,
+            height_m: 1.5,
+            max_cell_size_m: 1.0,
+            material_id: 1,
+            thickness_m: 0.1,
+        })
+        .unwrap();
+        let supports = mesh
+            .nodes
+            .iter()
+            .filter(|node| node.x == 0.0 || node.y == 0.0)
+            .map(|node| Support {
+                node_id: node.id,
+                ux: node.x == 0.0,
+                uy: node.y == 0.0,
+            })
+            .collect();
+        let loads = mesh
+            .right_node_ids
+            .iter()
+            .enumerate()
+            .map(|(i, &node_id)| Load {
+                node_id,
+                fx: if i == 1 { 75.0 } else { 37.5 },
+                fy: 0.0,
+            })
+            .collect();
+        let result = solve(&Request {
+            analysis: Analysis::Linear,
+            nodes: mesh.nodes,
+            materials: vec![Material {
+                id: 1,
+                e_mpa: 1000.0,
+                nu: 0.0,
+                law: MaterialLaw::Elastic,
+            }],
+            modulus_curves: vec![],
+            quads: mesh.quads,
+            supports,
+            loads,
+            load_path: vec![],
+            tolerance: 1e-9,
+            max_iterations: 40,
+        })
+        .unwrap();
+        for node in &result.nodes {
+            let x = 0.7 * ((node.node_id - 1) % 4) as f64;
+            assert!((node.ux_m - x * 0.001).abs() < 1e-10);
+        }
+        assert!(result
+            .quads
+            .iter()
+            .all(|quad| (quad.average_stress_mpa[0] - 1.0).abs() < 1e-9));
+        assert!(result.relative_residual < 1e-9);
     }
     #[test]
     fn square_patch_matches_constant_strain() {

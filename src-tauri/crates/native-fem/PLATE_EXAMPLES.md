@@ -13,6 +13,20 @@ De uitvoer bevat vier exacte vierkanten, negen knopen en de ID's van de
 vier buitenranden. Afmetingen die geen geheel aantal cellen vormen worden
 afgewezen.
 
+Voor een rechthoek waarvan de maten geen veelvoud van één celgrootte zijn,
+geeft `native-quad-mesh` een conform Q4-rooster. `maxCellSizeM` is een
+bovengrens voor beide celzijden; de laatste strook wordt niet afgesneden.
+
+```bash
+echo '{"originX":0,"originY":0,"widthM":2.1,"heightM":1.5,"maxCellSizeM":1,"materialId":1,"thicknessM":0.2}' |
+  src-tauri/target/debug/native-quad-mesh
+```
+
+Dit voorbeeld heeft 3×2 vierhoeken van 0,70×0,75 m, twaalf knopen,
+een totaal oppervlak van 3,15 m² en dezelfde vier randknoop-ID-lijsten als
+de exacte vierkantsmesher. Een Rust-test voert dit rooster rechtstreeks aan
+de hybride buigplaat; onder 1 kN/m² druk tellen de reacties op tot 3,15 kN.
+
 ```bash
 python3 src-tauri/crates/native-fem/examples/plate_cases.py quad_patch |
   src-tauri/target/debug/native-quad2d

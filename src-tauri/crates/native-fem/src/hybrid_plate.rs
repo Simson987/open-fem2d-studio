@@ -1060,6 +1060,63 @@ mod tests {
         assert!(result.relative_residual < 1e-8);
     }
     #[test]
+    fn rectangular_quad_mesh_feeds_hybrid_plate_and_balances_pressure() {
+        let mesh = crate::quad2d::mesh_quads(&crate::quad2d::QuadGrid {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            width_m: 2.1,
+            height_m: 1.5,
+            max_cell_size_m: 1.0,
+            material_id: 1,
+            thickness_m: 0.2,
+        })
+        .unwrap();
+        let request = Request {
+            nodes: mesh
+                .nodes
+                .into_iter()
+                .map(|node| Node {
+                    id: node.id,
+                    x: node.x,
+                    y: node.y,
+                })
+                .collect(),
+            materials: vec![Material {
+                id: 1,
+                e_mpa: 30_000.0,
+                nu: 0.2,
+            }],
+            quads: mesh.quads,
+            supports: mesh
+                .left_node_ids
+                .into_iter()
+                .map(|node_id| Support {
+                    node_id,
+                    w: true,
+                    theta_x: true,
+                    theta_y: true,
+                })
+                .collect(),
+            loads: vec![],
+            pressure_kn_m2: -1.0,
+            quad_pressures: vec![],
+            modulus_curves: vec![],
+            reinforcement: None,
+            load_path: vec![],
+            tolerance: 1e-8,
+            max_iterations: 40,
+        };
+        let result = solve(&request).unwrap();
+        let reaction: f64 = result.nodes.iter().map(|node| node.reaction_fz_kn).sum();
+        assert!((reaction - 2.1 * 1.5).abs() < 1e-8);
+        assert!(result.nodes.iter().any(|node| node.w_m < 0.0));
+        assert!(result
+            .elements
+            .iter()
+            .all(|element| element.max_fibre_strain > 0.0));
+        assert!(result.relative_residual < 1e-8);
+    }
+    #[test]
     fn graded_quad_pressure_reaches_solver_and_rejects_unknown_quad() {
         let mut request = cantilever_request(false);
         request.pressure_kn_m2 = 0.0;
