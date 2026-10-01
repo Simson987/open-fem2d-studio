@@ -476,13 +476,18 @@ fn add_transverse_load(local: &mut [f64; 12], length: f64, x: f64, py: f64, pz: 
         local[dof] += pz * shape[index] * if index % 2 == 0 { 1.0 } else { -1.0 };
     }
 }
-fn effective_e(element: &Element<'_>, local: &[f64; 12], nonlinear: bool) -> f64 {
+fn effective_e(
+    element: &Element<'_>,
+    local: &[f64; 12],
+    nonlinear: bool,
+    thermal_strain: f64,
+) -> f64 {
     let e = element.material.e_mpa;
     if !nonlinear {
         return e;
     }
     let l = element.length;
-    let axial = (local[6] - local[0]) / l;
+    let axial = (local[6] - local[0]) / l - thermal_strain;
     let curvature_y =
         (local[10] - local[4]).abs() / l + 2.0 * (local[8] - local[2]).abs() / (l * l);
     let curvature_z =
@@ -749,17 +754,18 @@ fn assemble(
     let mut condensed_loads = Vec::with_capacity(elements.len());
     for (index, element) in elements.iter().enumerate() {
         let local = local_displacement(element, u);
-        let mut e = effective_e(element, &local, nonlinear_material);
+        let area = element.section.area_m2;
+        let thermal_strain = thermal_axial[index] / (element.material.e_mpa * 1000.0 * area);
+        let mut e = effective_e(element, &local, nonlinear_material, thermal_strain);
         let strain = (local[6] - local[0]) / element.length;
-        let history_response =
-            axial_states.map(|states| axial_response(element.material, strain, states[index]));
+        let history_response = axial_states
+            .map(|states| axial_response(element.material, strain - thermal_strain, states[index]));
         if nonlinear_material && element.releases.any() {
             for _ in 0..8 {
-                let axial = history_response
-                    .map_or(e * 1000.0 * element.section.area_m2 * strain, |response| {
-                        response.stress_mpa * 1000.0 * element.section.area_m2
-                    })
-                    - thermal_axial[index];
+                let axial = history_response.map_or(
+                    e * 1000.0 * area * strain - thermal_axial[index],
+                    |response| response.stress_mpa * 1000.0 * area,
+                );
                 let trial_k = local_stiffness(element, e, axial, nonlinear_geometry);
                 let recovered = recovered_bending_rotations(
                     local,
@@ -767,7 +773,7 @@ fn assemble(
                     &local_loads[index],
                     element.releases,
                 )?;
-                let next_e = effective_e(element, &recovered, true);
+                let next_e = effective_e(element, &recovered, true, thermal_strain);
                 let change = (next_e - e).abs() / e;
                 e = next_e;
                 if change < 1e-10 {
@@ -775,21 +781,24 @@ fn assemble(
                 }
             }
         }
-        let axial =
-            history_response.map_or(e * 1000.0 * element.section.area_m2 * strain, |response| {
-                response.stress_mpa * 1000.0 * element.section.area_m2
-            }) - thermal_axial[index];
+        let axial = history_response.map_or(
+            e * 1000.0 * area * strain - thermal_axial[index],
+            |response| response.stress_mpa * 1000.0 * area,
+        );
         let mut stiffness = local_stiffness(element, e, axial, nonlinear_geometry);
         let mut applied_load = local_loads[index];
         if let Some(response) = history_response {
-            let area = element.section.area_m2;
             add_pair(
                 &mut stiffness,
                 0,
                 6,
                 (response.tangent_e_mpa - e) * 1000.0 * area / element.length,
             );
-            let offset = (response.stress_mpa - response.tangent_e_mpa * strain) * 1000.0 * area;
+            // The thermal equivalent nodal load is already in local_loads.
+            // Cancel it here: the return mapping uses mechanical strain, and
+            // the tangent equation must recover sigma(strain - thermal_strain).
+            let offset = (response.stress_mpa - response.tangent_e_mpa * strain) * 1000.0 * area
+                + thermal_axial[index];
             applied_load[0] += offset;
             applied_load[6] -= offset;
         }
@@ -1336,9 +1345,11 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         {
             return Err("invalid frame thermal load".into());
         }
-        if request.analysis.material() {
+        if request.analysis.material()
+            && (load.delta_t_gradient_y_k != 0.0 || load.delta_t_gradient_z_k != 0.0)
+        {
             return Err(
-                "frame thermal loads with material nonlinearity are not implemented".into(),
+                "thermal gradients with frame material nonlinearity are not implemented".into(),
             );
         }
         let element = &elements[index];
@@ -1441,8 +1452,12 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
             nodal_f[6 * index + axis] += value;
         }
     }
-    let history_enabled = !request.load_path.is_empty();
-    let path = if history_enabled {
+    let history_enabled = !request.load_path.is_empty()
+        || (request.analysis.material() && !request.thermal_loads.is_empty());
+    if history_enabled && request.buckling_modes > 0 {
+        return Err("eigenbuckling with 3D material history is not implemented".into());
+    }
+    let path = if !request.load_path.is_empty() {
         request.load_path.clone()
     } else {
         vec![1.0]
@@ -1458,6 +1473,8 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
     let mut final_prescribed = prescribed.clone();
     for factor in path {
         let step_nodal_f: Vec<f64> = nodal_f.iter().map(|value| factor * value).collect();
+        let step_thermal_axial: Vec<f64> =
+            thermal_axial.iter().map(|value| factor * value).collect();
         let step_local_loads: Vec<[f64; 12]> = local_loads
             .iter()
             .map(|load| load.map(|value| factor * value))
@@ -1472,7 +1489,7 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
             let mut assembly = assemble(
                 &elements,
                 &u,
-                &thermal_axial,
+                &step_thermal_axial,
                 &step_local_loads,
                 request.analysis.material(),
                 request.analysis.geometric(),
@@ -1534,7 +1551,7 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
             let committed = assemble(
                 &elements,
                 &u,
-                &thermal_axial,
+                &step_thermal_axial,
                 &step_local_loads,
                 true,
                 false,
@@ -1550,10 +1567,14 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         final_local_loads = step_local_loads;
         final_prescribed = step_prescribed;
     }
+    let final_thermal_axial: Vec<f64> = thermal_axial
+        .iter()
+        .map(|value| final_factor * value)
+        .collect();
     let mut assembly = assemble(
         &elements,
         &u,
-        &thermal_axial,
+        &final_thermal_axial,
         &final_local_loads,
         request.analysis.material(),
         request.analysis.geometric(),
@@ -1651,7 +1672,7 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         &elements,
         &members,
         &u,
-        &thermal_axial,
+        &final_thermal_axial,
         &local_loads,
         &springs,
         &solve_constraints,
@@ -2027,6 +2048,148 @@ mod tests {
         assert!((restrained.nodes[1].reaction[0] + 630.0).abs() < 1e-8);
     }
     #[test]
+    fn uniform_thermal_steel_history_uses_mechanical_strain_and_retains_plasticity() {
+        let mut model = cantilever(
+            Analysis::Material,
+            MaterialLaw::SteelBilinear {
+                yield_mpa: 100.0,
+                hardening_ratio: 0.5,
+            },
+            0.0,
+        );
+        model.materials[0].alpha_per_k = Some(10e-6);
+        model.thermal_loads.push(ThermalLoad {
+            id: 1,
+            member_id: 1,
+            delta_t_uniform_k: 100.0,
+            delta_t_gradient_y_k: 0.0,
+            delta_t_gradient_z_k: 0.0,
+        });
+        let free = solve(&model).unwrap();
+        assert!((free.nodes[1].displacement[0] - 0.002).abs() < 1e-10);
+        assert!(free.nodes[0].reaction[0].abs() < 1e-8);
+        assert!(
+            free.members[0]
+                .axial_history
+                .as_ref()
+                .unwrap()
+                .equivalent_plastic_strain
+                < 1e-12
+        );
+        assert!((free.members[0].effective_e_mpa - 210_000.0).abs() < 1e-6);
+
+        let mut end_support = model.supports[0].clone();
+        end_support.node_id = 2;
+        model.supports.push(end_support);
+        let heated = solve(&model).unwrap();
+        assert!((heated.nodes[0].reaction[0] - 1550.0).abs() < 1e-6);
+        assert!((heated.nodes[1].reaction[0] + 1550.0).abs() < 1e-6);
+
+        model.load_path = vec![1.0, 0.0];
+        let cooled = solve(&model).unwrap();
+        let plastic = (210.0 - 100.0) / 420_000.0;
+        assert!(
+            (cooled.members[0]
+                .axial_history
+                .as_ref()
+                .unwrap()
+                .plastic_strain
+                + plastic)
+                .abs()
+                < 1e-10
+        );
+        assert!((cooled.nodes[0].reaction[0] + 210_000.0 * 1000.0 * 0.01 * plastic).abs() < 1e-6);
+        assert!((cooled.nodes[1].reaction[0] - 210_000.0 * 1000.0 * 0.01 * plastic).abs() < 1e-6);
+        assert!(cooled.equilibrium_residual < 1e-8);
+        let example: Request = serde_json::from_str(include_str!(
+            "../examples/frame3d-thermal-steel-unload.json"
+        ))
+        .unwrap();
+        let example_result = solve(&example).unwrap();
+        assert!((example_result.nodes[0].reaction[0] - cooled.nodes[0].reaction[0]).abs() < 1e-8);
+
+        model.thermal_loads[0].delta_t_gradient_y_k = 1.0;
+        assert!(solve(&model).unwrap_err().contains("thermal gradients"));
+    }
+    #[test]
+    fn thermal_compression_amplifies_combined_geometric_material_sway() {
+        let mut model = cantilever(Analysis::Material, MaterialLaw::Elastic, 10.0);
+        model.materials[0].alpha_per_k = Some(10e-6);
+        model.thermal_loads.push(ThermalLoad {
+            id: 1,
+            member_id: 1,
+            delta_t_uniform_k: 30.0,
+            delta_t_gradient_y_k: 0.0,
+            delta_t_gradient_z_k: 0.0,
+        });
+        let mut axial_support = model.supports[0].clone();
+        axial_support.node_id = 2;
+        axial_support.uy = false;
+        axial_support.uz = false;
+        axial_support.rx = false;
+        axial_support.ry = false;
+        axial_support.rz = false;
+        model.supports.push(axial_support);
+        let first_order = solve(&model).unwrap();
+        assert!((first_order.members[0].local_end_forces[6] + 630.0).abs() < 1e-6);
+        model.analysis = Analysis::Combined;
+        let combined = solve(&model).unwrap();
+        assert!(combined.nodes[1].displacement[1] > first_order.nodes[1].displacement[1]);
+        assert!(combined.equilibrium_residual < 1e-8);
+    }
+    #[test]
+    fn restrained_cooling_retains_concrete_tensile_damage_on_reloading() {
+        let mut model = cantilever(
+            Analysis::Material,
+            MaterialLaw::ConcreteCracking {
+                tensile_mpa: 3.0,
+                residual_ratio: 0.2,
+            },
+            0.0,
+        );
+        model.materials[0].e_mpa = 33_000.0;
+        model.materials[0].alpha_per_k = Some(10e-6);
+        model.thermal_loads.push(ThermalLoad {
+            id: 1,
+            member_id: 1,
+            delta_t_uniform_k: -30.0,
+            delta_t_gradient_y_k: 0.0,
+            delta_t_gradient_z_k: 0.0,
+        });
+        let mut end_support = model.supports[0].clone();
+        end_support.node_id = 2;
+        model.supports.push(end_support);
+        let cold = solve(&model).unwrap();
+        assert!((cold.nodes[0].reaction[0] + 43.8).abs() < 1e-7);
+        let damage = 1.0 - 4.38 / 9.9;
+        assert!(
+            (cold.members[0]
+                .axial_history
+                .as_ref()
+                .unwrap()
+                .tensile_damage
+                - damage)
+                .abs()
+                < 1e-10
+        );
+
+        model.load_path = vec![1.0, 0.0, 0.5];
+        let reloaded = solve(&model).unwrap();
+        assert!(
+            (reloaded.members[0]
+                .axial_history
+                .as_ref()
+                .unwrap()
+                .tensile_damage
+                - damage)
+                .abs()
+                < 1e-10
+        );
+        assert!((reloaded.nodes[0].reaction[0] + 21.9).abs() < 1e-7);
+        assert!((reloaded.nodes[1].reaction[0] - 21.9).abs() < 1e-7);
+        assert!(reloaded.equilibrium_residual < 1e-8);
+    }
+    #[test]
     fn compression_amplifies_lateral_displacement() {
         let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 10.0);
         model.nodal_loads[0].fx = -100.0;
@@ -2351,9 +2514,9 @@ mod tests {
             .contains("invalid frame thermal load"));
         model.thermal_loads[0].delta_t_uniform_k = 30.0;
         model.analysis = Analysis::Material;
-        assert!(solve(&model)
-            .unwrap_err()
-            .contains("with material nonlinearity"));
+        assert!((solve(&model).unwrap().nodes[1].displacement[0] - 0.00072).abs() < 1e-10);
+        model.thermal_loads[0].delta_t_gradient_y_k = 1.0;
+        assert!(solve(&model).unwrap_err().contains("thermal gradients"));
         model.thermal_loads.clear();
         model.analysis = Analysis::Linear;
         model.buckling_modes = 1;

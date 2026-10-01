@@ -146,7 +146,8 @@ gecondenseerd. In de 3D-eigenschappen zonder
 selectie kan de gebruiker een FNL-lastpad invoeren, bijvoorbeeld `1, 0, 0.5`.
 De app bewaart het pad in het project, stuurt het als `loadPath` naar Rust en
 toont de axiale materiaaltoestand per staaf. Zonder lastpad gebruikt de
-app nog de monotone secant-E-benadering zonder materiaalgeschiedenis. Voor
+app meestal de monotone secant-E-benadering; bij uniforme temperatuur met
+FNL wordt één impliciete laststap met axiale materiaalgeschiedenis gebruikt. Voor
 een vrijgegeven eindmoment herstelt de kern de interne staafrotatie voordat
 zij de vezelrek en secante E schat. Bij P-Δ bevat de momentlijn de bijdrage
 van de axiale kracht over de vervormde staaflijn; haar eindwaarde sluit aan
@@ -162,8 +163,11 @@ ontlasten bestaan. De axiale betontrekschade blijft na ontlasten bestaan en
 verlaagt de herbelastingsstijfheid; druk blijft elastisch. Het antwoord geeft
 per staaf `axialHistory` met plastische rek, equivalente plastische rek,
 trekschade en actuele axiale tangentmodulus. Buiging gebruikt in deze route
-nog de bestaande secante staafbenadering. `loadPath` wordt in de app nog niet
-met P-Δ, eigenknik of thermische lasten gecombineerd.
+nog de bestaande secante staafbenadering. Een uniforme temperatuurbelasting
+kan met de axiale FNL-geschiedenis worden gecombineerd: per laststap gebruikt
+de retourprojectie totale rek minus thermische rek. Ook gelijktijdige P-Δ is
+voor een axiaal verhinderde, verwarmde staaf getest. Temperatuurgradiënten
+met FNL en eigenknik met materiaalgeschiedenis blijven buiten dit contract.
 
 [`examples/frame3d-released-steel-history.json`](examples/frame3d-released-steel-history.json)
 is een 2 m uitkraging met een vrijgegeven eindmoment Mz, 1500 kN axiale
@@ -172,6 +176,19 @@ trek en 10 kN dwarslast. Het pad `[1, 0, 0.5]` geeft analytisch
 laatste stap. Het Rust-resultaat heeft nul eindmoment, 1,190476 mm verlenging
 en een evenwichtsresidu van 2,3·10⁻¹². Een tweede test herhaalt deze
 scharnierproef met blijvende betontrekschade.
+
+[`examples/frame3d-thermal-steel-unload.json`](examples/frame3d-thermal-steel-unload.json)
+is een aan beide uiteinden axiaal vastgehouden stalen staaf van 2 m. Bij
+100 K opwarming is de thermische rek 1‰. Met E=210 GPa, A=0,01 m²,
+f_y=100 MPa en E_t/E=0,5 bereikt de drukkracht 1550 kN. Na afkoeling
+langs `[1, 0]` blijft 0,261905‰ drukplastische rek en 550 kN trekreactie
+over. De Rust-test vergelijkt de reacties en geschiedenis met deze gesloten
+éénassige waarden; de app-test controleert een vrij uitzettende staaf en
+ontlasten via de gewone 3D-invoerroute.
+Een afzonderlijke betonproef met E=33 GPa, A=0,01 m², f_t=3 MPa,
+residuverhouding 0,2 en verhinderde afkoeling van 30 K geeft 43,8 kN
+trekreactie en schade `1 − 4,38/9,9 = 0,557576`. Na het lastpad
+`[1, 0, 0.5]` blijft die schade behouden en is de trekreactie 21,9 kN.
 
 ```bash
 src-tauri/target/debug/native-frame3d \

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "analysis": "material",
+  "nodes": [
+    { "id": 1, "x": 0, "y": 0, "z": 0 },
+    { "id": 2, "x": 2, "y": 0, "z": 0 }
+  ],
+  "materials": [{
+    "id": 1, "eMpa": 210000, "nu": 0.3, "alphaPerK": 0.00001,
+    "law": { "kind": "steelBilinear", "yield_mpa": 100, "hardening_ratio": 0.5 }
+  }],
+  "sections": [{
+    "id": 1, "areaM2": 0.01, "iyM4": 0.00001,
+    "izM4": 0.00002, "torsionJM4": 0.000001
+  }],
+  "members": [{ "id": 1, "startNodeId": 1, "endNodeId": 2,
+    "materialId": 1, "sectionId": 1 }],
+  "supports": [
+    { "nodeId": 1, "ux": true, "uy": true, "uz": true,
+      "rx": true, "ry": true, "rz": true },
+    { "nodeId": 2, "ux": true, "uy": true, "uz": true,
+      "rx": true, "ry": true, "rz": true }
+  ],
+  "thermalLoads": [{ "id": 1, "memberId": 1,
+    "deltaTUniformK": 100, "deltaTGradientYK": 0, "deltaTGradientZK": 0 }],
+  "loadPath": [1, 0],
+  "bucklingModes": 0,
+  "maxIterations": 80,
+  "tolerance": 1e-8
+}

@@ -193,7 +193,7 @@ try {
         "FNL-combinatie moet na vloeien sterker dan lineair schalen");
     }
     await assert.rejects(solveFrame3D({ ...caseModel, thermalLoads: thermal.thermalLoads }, 1,
-      "material", "openaec-native-fem"), /niet gevalideerd voor temperatuur/);
+      "material", "openaec-native-fem"), /temperatuurgradiënt/);
   }
   const historyModel = parseFrame3DModel({
     nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 2, y: 0, z: 0 }],
@@ -217,6 +217,25 @@ try {
   assert.ok(history.memberForces[0].axialHistory.plasticStrain > 0);
   assert.ok(history.memberForces[0].axialHistory.equivalentPlasticStrain > 0);
   assert.equal(history.memberForces[0].axialHistory.tensileDamage, 0);
+  const thermalHistoryModel = parseFrame3DModel({ ...historyModel,
+    loads: [], materialLoadPath: undefined,
+    thermalLoads: [{ id: 201, beamId: 1, caseId: 1,
+      deltaTUniformK: 30, deltaTGradientYK: 0, deltaTGradientZK: 0 }],
+  });
+  const thermallyExpanded = await solveFrame3D(thermalHistoryModel, 1, "material", "openaec-native-fem");
+  assert.equal(thermallyExpanded.forceBalance.ok, true);
+  assert.deepEqual(thermallyExpanded.materialLoadPath, [1]);
+  assert.ok(Math.abs(thermallyExpanded.displacements.find((node) => node.nodeId === 2).ux - 0.00072) < 1e-9);
+  assert.ok(thermallyExpanded.memberForces[0].axialHistory.equivalentPlasticStrain < 1e-12,
+    "vrije thermische rek mag staal niet plastificeren");
+  const halfThermal = await solveFrame3DCombination(thermalHistoryModel, new Map([[1, 0.5]]),
+    "material", "openaec-native-fem");
+  assert.equal(halfThermal.forceBalance.ok, true);
+  assert.ok(Math.abs(halfThermal.displacements.find((node) => node.nodeId === 2).ux - 0.00036) < 1e-9);
+  const thermallyUnloaded = await solveFrame3D({ ...thermalHistoryModel, materialLoadPath: [1, 0] },
+    1, "material", "openaec-native-fem");
+  assert.equal(thermallyUnloaded.forceBalance.ok, true);
+  assert.ok(Math.abs(thermallyUnloaded.displacements.find((node) => node.nodeId === 2).ux) < 1e-9);
   const releasedHistoryModel = parseFrame3DModel({ ...historyModel,
     beams: [{ ...historyModel.beams[0], releases: { myEnd: true } }],
     supports: [...historyModel.supports, { nodeId: 2, ux: false, uy: false, uz: false,
@@ -241,6 +260,19 @@ try {
   assert.equal(concreteHistory.memberForces[0].axialHistory.plasticStrain, 0);
   assert.ok(concreteHistory.memberForces[0].axialHistory.tangentEMpa <
     buildFrame3DSolveRequest(concreteHistoryModel, "linear", 1).materials[0].eMpa);
+  const concreteThermalModel = parseFrame3DModel({ ...concreteHistoryModel,
+    loads: [],
+    supports: [...concreteHistoryModel.supports,
+      { nodeId: 2, ux: true, uy: true, uz: true, rx: true, ry: true, rz: true }],
+    thermalLoads: [{ id: 202, beamId: 1, caseId: 1,
+      deltaTUniformK: -30, deltaTGradientYK: 0, deltaTGradientZK: 0 }],
+  });
+  const concreteThermal = await solveFrame3D(concreteThermalModel, 1, "material", "openaec-native-fem");
+  assert.equal(concreteThermal.forceBalance.ok, true);
+  assert.ok(concreteThermal.memberForces[0].axialHistory.tensileDamage > 0,
+    "verhinderde afkoeling moet blijvende betontrekschade veroorzaken");
+  assert.ok(Math.abs(concreteThermal.reactions.find((node) => node.nodeId === 1).fx) > 1,
+    "herbelasting na afkoelen houdt een axiale reactie over");
   assert.throws(() => parseFrame3DModel({ ...historyModel, materialLoadPath: [1, "x"] }), /ongeldig FNL-lastpad/);
   assert.throws(() => parseFrame3DModel({ ...model,
     beams: [{ ...model.beams[0], nonlinearLaw: { kind: "steelBilinear", yieldMpa: -1, hardeningRatio: 0.1 } }, model.beams[1]],
@@ -250,7 +282,7 @@ try {
       kind: "concreteCracking", tensileMpa: 2.9, residualRatio: 0.05,
     } })),
   }, 1, "material", "openaec-native-fem"), /past niet bij materiaal/);
-  assert.equal(nativeCalls, 15);
+  assert.equal(nativeCalls, 19);
   assert.equal(referenceCalls, 7);
   console.log("Native 3D-app-route: staal, beton, FNL, P-Δ en staaflasten geslaagd.");
 } finally {

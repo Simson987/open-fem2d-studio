@@ -329,8 +329,8 @@ export function buildFrame3DSolveRequest(
     if (!model.beams.some((beam) => beam.nonlinearLaw)) {
       throw new Error("Stel bij minstens één 3D-staaf een expliciete FNL-materiaalwet in.");
     }
-    if (thermalLoads.length) {
-      throw new Error("De experimentele 3D-FNL-kern is nog niet gevalideerd voor temperatuur.");
+    if (thermalLoads.some((load) => load.deltaTGradientYK !== 0 || load.deltaTGradientZK !== 0)) {
+      throw new Error("De experimentele 3D-FNL-kern ondersteunt nog geen temperatuurgradiënt over de doorsnede.");
     }
   }
   const members = model.beams.map((beam) => {
@@ -579,6 +579,8 @@ function adaptNativeFrame3DResult(
   }
   const balance = frame3DGlobalForceBalance(input, { reactions });
   const residualOk = native.equilibriumResidual <= 1e-8;
+  const implicitThermalHistory = input.analysis === "material" && input.thermalLoads.length > 0
+    && !input.loadPath;
   const buckling = native.buckling;
   if (!buckling || !["available", "notApplicable", "failed"].includes(buckling.status)
       || (buckling.status === "available" && (
@@ -593,7 +595,8 @@ function adaptNativeFrame3DResult(
     engine: { id: "openaec-native-fem", name: "Open FEM Rust", revision: "0.1.0", license: "AGPL-3.0-or-later" },
     analysis: input.analysis,
     displacements, reactions, memberForces, diagrams,
-    ...(input.loadPath ? { materialLoadPath: [...input.loadPath] } : {}),
+    ...(input.loadPath ? { materialLoadPath: [...input.loadPath] }
+      : implicitThermalHistory ? { materialLoadPath: [1] } : {}),
     ...(input.analysis !== "linear" ? { secondOrder: {
       iterations: native.iterations, converged: true, stable: true,
       maxAmplification: native.maxAmplification,
@@ -606,8 +609,8 @@ function adaptNativeFrame3DResult(
     diagnostics: [
       "Eigen Rust-raamwerkkern: 3D-raamwerk.",
       ...(input.analysis === "material"
-        ? input.loadPath
-          ? ["FNL-lastpad bewaart alleen axiale plastische rek en betonschade per staaf; buiging gebruikt nog een secant-E zonder doorsnedegeschiedenis."]
+        ? input.loadPath || implicitThermalHistory
+          ? ["FNL-lastpad bewaart axiale plastische rek en betonschade per staaf; uniforme temperatuur werkt via mechanische rek. Buiging gebruikt nog een secant-E zonder doorsnedegeschiedenis."]
           : ["FNL gebruikt een monotone secant-E per staaf; plastische en scheurgeschiedenis ontbreken nog."] : []),
       ...(buckling.status === "failed" ? [`Eigenknik: ${buckling.reason}`] : []),
       ...(input.analysis === "p-delta" && !balance.ok
