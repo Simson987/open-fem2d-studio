@@ -124,6 +124,16 @@ const bending = await invoke(hybridBinary, bendingRequest);
 assert.ok(bending.nodes.find(node => node.nodeId === 5).wM < 0);
 close(bending.nodes.reduce((sum, node) => sum + node.reactionFzKn, 0), 4, 1e-7, "hybride plaat reacties");
 assert.ok(bending.relativeResidual < 1e-8);
+const graded = await invoke(hybridBinary, buildNativeHybridPlateRequest(
+  bendingMesh, 0, [], [], undefined,
+  [...bendingMesh.elements.values()].map(element => ({
+    quadId: element.id,
+    nodalPressureKnM2: element.nodeIds.map(id => -bendingMesh.getNode(id).x),
+  })),
+));
+close(graded.nodes.reduce((sum, node) => sum + node.reactionFzKn, 0), 4, 1e-7,
+  "hybride plaat variabele druk reacties");
+assert.ok(graded.relativeResidual < 1e-8);
 const reinforcement = {
   limitState: "service", fckMpa: 20, fctmMpa: 2.2, gammaC: 1.5,
   fydMpa: 435, fywdMpa: 435, esMpa: 200000,

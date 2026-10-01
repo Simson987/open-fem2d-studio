@@ -61,6 +61,17 @@ def case(name):
                     {"strain": 0.0, "eMpa": 30000.0},
                     {"strain": 0.00001, "eMpa": 25000.0}]}],
                 "loadPath": [1.0, 0.0]}
+    if name == "hybrid_linear_pressure":
+        nodes, quads = square_mesh(2.0, 1.0, 1.0, 0.2)
+        supports = [{"nodeId": n["id"], "w": True, "thetaX": True, "thetaY": True}
+                    for n in nodes if n["x"] == 0]
+        return {"nodes": nodes, "quads": quads,
+                "materials": [{"id": 1, "eMpa": 30000.0, "nu": 0.2}],
+                "supports": supports, "pressureKnM2": 0.0,
+                "quadPressures": [{"quadId": quad["id"],
+                                   "nodalPressureKnM2": [-nodes[node_id - 1]["x"]
+                                                         for node_id in quad["nodeIds"]]}
+                                  for quad in quads]}
     if name in ("cement_2021_cantilever", "cement_2021_shear_uls", "cement_2021_crack_sls"):
         nodes, quads = square_mesh(10.0, 8.0, 2.0, 0.6)
         supports = [{"nodeId": n["id"], "w": n["y"] == 0,
@@ -91,7 +102,8 @@ def case(name):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("case", choices=["quad_patch", "quad_variable_e", "hybrid_navier",
-                                         "hybrid_fnl_cantilever", "cement_2021_cantilever",
+                                         "hybrid_fnl_cantilever", "hybrid_linear_pressure",
+                                         "cement_2021_cantilever",
                                          "cement_2021_shear_uls", "cement_2021_crack_sls"])
     args = parser.parse_args()
     print(json.dumps(case(args.case), separators=(",", ":")))

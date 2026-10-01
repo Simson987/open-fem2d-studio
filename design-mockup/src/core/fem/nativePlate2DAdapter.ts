@@ -9,6 +9,11 @@ export interface NativeModulusCurve {
   materialId: number;
   points: { strain: number; eMpa: number }[];
 }
+export interface NativeQuadPressure {
+  quadId: number;
+  /** Additional pressure at the four corners in the quad's node order, kN/m². */
+  nodalPressureKnM2: [number, number, number, number];
+}
 export interface NativeReinforcementSpec {
   limitState: 'ultimate' | 'service';
   fckMpa: number;
@@ -220,6 +225,7 @@ export function buildNativeHybridPlateRequest(
   modulusCurves: readonly NativeModulusCurve[] = [],
   loadPath: readonly number[] = [],
   reinforcement?: NativeReinforcementSpec,
+  quadPressures: readonly NativeQuadPressure[] = [],
 ) {
   if (mesh.beamElements.size > 0) {
     throw new Error('De hybride plaatkern ondersteunt geen gekoppelde staaf-plaatmodellen.');
@@ -232,6 +238,17 @@ export function buildNativeHybridPlateRequest(
       materialId: element.materialId, thicknessM: element.thickness };
   });
   if (quads.length === 0) throw new Error('De hybride plaatkern heeft minstens één vierhoek nodig.');
+  const quadIds = new Set(quads.map(quad => quad.id));
+  const pressureIds = new Set<number>();
+  for (const pressure of quadPressures) {
+    if (!quadIds.has(pressure.quadId) || pressureIds.has(pressure.quadId)
+      || !Array.isArray(pressure.nodalPressureKnM2)
+      || pressure.nodalPressureKnM2.length !== 4
+      || pressure.nodalPressureKnM2.some(value => !Number.isFinite(value))) {
+      throw new Error(`Vierhoek ${pressure.quadId}: ongeldige of dubbele variabele plaatdruk.`);
+    }
+    pressureIds.add(pressure.quadId);
+  }
   const usedNodes = new Set(quads.flatMap(quad => quad.nodeIds));
   const nodes = [...mesh.nodes.values()].filter(node => usedNodes.has(node.id));
   for (const node of mesh.nodes.values()) {
@@ -266,6 +283,10 @@ export function buildNativeHybridPlateRequest(
       nodeId: node.id, fz: (node.loads.fz ?? node.loads.fy) / 1000, mx: 0, my: 0,
     })),
     pressureKnM2,
+    quadPressures: quadPressures.map(pressure => ({
+      quadId: pressure.quadId,
+      nodalPressureKnM2: [...pressure.nodalPressureKnM2],
+    })),
     modulusCurves: modulusCurves.map(curve => ({
       materialId: curve.materialId,
       points: curve.points.map(point => ({ strain: point.strain, eMpa: point.eMpa })),

@@ -16,7 +16,7 @@ die expliciet.
 | `native-plate-bending` | 3-knoops DKT-plaatbuiging, 3 DOF/knoop | nog niet | nog niet | dwarsknoopkrachten, knoopmomenten en vaste w/rotatie-DOF |
 | `native-square-mesh` | exact vierkant Q4-rooster met randknoop-ID's | n.v.t. | n.v.t. | `widthM`, `heightM`, `cellSizeM` |
 | `native-quad2d` | 4-knoops Q4-schijfelement, 2 DOF/knoop | Green-Lagrange | J2-staal en betonschade per Gauss-punt; afnemende E(rek)-curve | vlakke knoopkrachten en x/y-opleggingen |
-| `native-hybrid-plate` | 4-knoops hybride Kirchhoff-buiging, 12 DOF en 17 momentparameters | nog niet | afnemende secant-E per element en belastingpad | dwarsknoopkrachten, momenten, uniforme druk en w/rotatie-opleggingen; optionele UGT-wapenings- en BGT-scheurcontrole |
+| `native-hybrid-plate` | 4-knoops hybride Kirchhoff-buiging, 12 DOF en 17 momentparameters | nog niet | afnemende secant-E per element en belastingpad | dwarsknoopkrachten, momenten, uniforme en per vierhoek bilineaire druk, w/rotatie-opleggingen; optionele UGT-wapenings- en BGT-scheurcontrole |
 | `native-prestressed-beam` | vrij opgelegde elastische ligger met rechte of parabolische kabel | n.v.t. | opgegeven voorspanverlies | uniforme last en fases overdracht/gebruiksfase |
 
 De invoer gebruikt **m, kN en MPa**. Voor 3D volgt het JSON-schema de

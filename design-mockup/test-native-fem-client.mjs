@@ -54,11 +54,14 @@ try {
       nodes: [], elements: [], iterations: 1, relativeResidual: 0,
     } }), { status: 200, headers: { "content-type": "application/json" } });
   };
-  await solveNativeHybridPlate(bending, -10, [], [], steel);
+  await solveNativeHybridPlate(bending, -10, [], [], steel,
+    [{ quadId: 1, nodalPressureKnM2: [0, -1, -1, 0] }]);
   const hybridRequest = JSON.parse(request.options.body);
   assert.equal(hybridRequest.inputs.kind, "hybridPlate");
   assert.equal(hybridRequest.inputs.input.pressureKnM2, -10);
   assert.equal(hybridRequest.inputs.input.reinforcement.limitState, "service");
+  assert.deepEqual(hybridRequest.inputs.input.quadPressures,
+    [{ quadId: 1, nodalPressureKnM2: [0, -1, -1, 0] }]);
   globalThis.fetch = async () => new Response(JSON.stringify({ kind: "quad2d", result: {} }), {
     status: 200, headers: { "content-type": "application/json" },
   });

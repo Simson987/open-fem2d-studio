@@ -40,6 +40,8 @@ pub struct Request {
     #[serde(default)]
     pub pressure_kn_m2: f64,
     #[serde(default)]
+    pub quad_pressures: Vec<QuadPressure>,
+    #[serde(default)]
     pub modulus_curves: Vec<ModulusCurve>,
     #[serde(default)]
     pub reinforcement: Option<ReinforcementSpec>,
@@ -49,6 +51,15 @@ pub struct Request {
     pub tolerance: f64,
     #[serde(default = "default_iterations")]
     pub max_iterations: usize,
+}
+
+/// Extra pressure at the four quad corners, in the order of `Quad::node_ids`.
+/// The bilinear pressure field is added to the uniform `pressure_kn_m2`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct QuadPressure {
+    pub quad_id: usize,
+    pub nodal_pressure_kn_m2: [f64; 4],
 }
 
 fn default_tolerance() -> f64 {
@@ -213,8 +224,8 @@ struct HybridElement {
     beta: [[f64; 12]; 17],
     centre: [f64; 2],
     scale: f64,
-    /// Unit-pressure nodal forces from a bilinear interior surrogate.
-    pressure_weights: [f64; 4],
+    /// P_ab = integral N_a N_b dA for a bilinear pressure and displacement surrogate.
+    pressure_matrix: [[f64; 4]; 4],
     sample_points: Vec<[f64; 2]>,
     thickness: f64,
     material_id: usize,
@@ -245,7 +256,7 @@ fn element(
     positive(scale, "hybrid plate size")?;
     let mut h = Matrix::zeros(17)?;
     let mut g = [[0.0; 12]; 17];
-    let mut pressure_weights = [0.0; 4];
+    let mut pressure_matrix = [[0.0; 4]; 4];
     let mut sample_points: Vec<[f64; 2]> = nodes.iter().map(|n| [n.x, n.y]).collect();
     sample_points.push(centre);
     let d = 1000.0 * quad.thickness_m.powi(3) / (12.0 * (1.0 - material.nu * material.nu)); // E=1 MPa
@@ -256,7 +267,9 @@ fn element(
             let weight = WEIGHTS[i] * WEIGHTS[j] * jac;
             let (shape_values, _, _) = shape(ROOTS[i], ROOTS[j]);
             for a in 0..4 {
-                pressure_weights[a] += weight * shape_values[a];
+                for b in 0..4 {
+                    pressure_matrix[a][b] += weight * shape_values[a] * shape_values[b];
+                }
             }
             let fs = fields((x - centre[0]) / scale, (y - centre[1]) / scale, scale);
             for a in 0..17 {
@@ -320,7 +333,7 @@ fn element(
         beta,
         centre,
         scale,
-        pressure_weights,
+        pressure_matrix,
         sample_points,
         thickness: quad.thickness_m,
         material_id: quad.material_id,
@@ -439,6 +452,19 @@ pub fn solve(request: &Request) -> Result<ResultBending, String> {
     if !request.pressure_kn_m2.is_finite() {
         return Err("non-finite plate pressure".into());
     }
+    let mut quad_pressures = HashMap::new();
+    for pressure in &request.quad_pressures {
+        if !pressure
+            .nodal_pressure_kn_m2
+            .iter()
+            .all(|value| value.is_finite())
+        {
+            return Err("non-finite hybrid quad pressure".into());
+        }
+        if quad_pressures.insert(pressure.quad_id, pressure).is_some() {
+            return Err("duplicate hybrid quad pressure".into());
+        }
+    }
     positive(request.tolerance, "hybrid tolerance")?;
     if request.max_iterations == 0 || request.max_iterations > 200 {
         return Err("invalid hybrid iteration limit".into());
@@ -524,6 +550,9 @@ pub fn solve(request: &Request) -> Result<ResultBending, String> {
             material,
         )?);
     }
+    if quad_pressures.keys().any(|id| !ids.contains(id)) {
+        return Err("unknown hybrid pressure quad".into());
+    }
     let dofs = 3 * request.nodes.len();
     let mut prescribed = vec![None; dofs];
     for support in &request.supports {
@@ -549,8 +578,13 @@ pub fn solve(request: &Request) -> Result<ResultBending, String> {
         load[3 * i + 2] += node_load.my;
     }
     for element in &elements {
+        let extra = quad_pressures
+            .get(&element.id)
+            .map_or([0.0; 4], |pressure| pressure.nodal_pressure_kn_m2);
         for j in 0..4 {
-            load[element.dofs[3 * j]] += request.pressure_kn_m2 * element.pressure_weights[j];
+            load[element.dofs[3 * j]] += (0..4)
+                .map(|a| element.pressure_matrix[j][a] * (request.pressure_kn_m2 + extra[a]))
+                .sum::<f64>();
         }
     }
     let scale = load.iter().map(|f| f * f).sum::<f64>().sqrt().max(1.0);
@@ -847,17 +881,84 @@ mod tests {
             cx_numerator / (3.0 * area_twice),
             cy_numerator / (3.0 * area_twice),
         ];
-        let force: f64 = element.pressure_weights.iter().sum();
-        let first_x: f64 = (0..4)
-            .map(|i| element.pressure_weights[i] * nodes[i].x)
-            .sum();
-        let first_y: f64 = (0..4)
-            .map(|i| element.pressure_weights[i] * nodes[i].y)
-            .sum();
+        let weights: [f64; 4] = std::array::from_fn(|a| element.pressure_matrix[a].iter().sum());
+        let force: f64 = weights.iter().sum();
+        let first_x: f64 = (0..4).map(|i| weights[i] * nodes[i].x).sum();
+        let first_y: f64 = (0..4).map(|i| weights[i] * nodes[i].y).sum();
         assert!((force - area).abs() < 1e-12);
         assert!((first_x / force - centroid[0]).abs() < 1e-12);
         assert!((first_y / force - centroid[1]).abs() < 1e-12);
-        assert!((element.pressure_weights[0] - element.pressure_weights[2]).abs() > 1e-3);
+        assert!((weights[0] - weights[2]).abs() > 1e-3);
+        // On this trapezoid x runs from 0 to 2-y/2. For q=x the three
+        // integrals are ∫q dA=37/24, ∫xq dA=175/96 and ∫yq dA=67/96.
+        let graded: [f64; 4] = std::array::from_fn(|a| {
+            (0..4)
+                .map(|b| element.pressure_matrix[a][b] * nodes[b].x)
+                .sum()
+        });
+        assert!((graded.iter().sum::<f64>() - 37.0 / 24.0).abs() < 1e-12);
+        assert!(((0..4).map(|i| graded[i] * nodes[i].x).sum::<f64>() - 175.0 / 96.0).abs() < 1e-12);
+        assert!(((0..4).map(|i| graded[i] * nodes[i].y).sum::<f64>() - 67.0 / 96.0).abs() < 1e-12);
+    }
+    #[test]
+    fn linear_pressure_on_rectangle_has_exact_force_and_first_moments() {
+        let nodes = [
+            Node {
+                id: 1,
+                x: 0.0,
+                y: 0.0,
+            },
+            Node {
+                id: 2,
+                x: 2.0,
+                y: 0.0,
+            },
+            Node {
+                id: 3,
+                x: 2.0,
+                y: 1.0,
+            },
+            Node {
+                id: 4,
+                x: 0.0,
+                y: 1.0,
+            },
+        ];
+        let quad = Quad {
+            id: 1,
+            node_ids: [1, 2, 3, 4],
+            material_id: 1,
+            thickness_m: 0.1,
+        };
+        let material = Material {
+            id: 1,
+            e_mpa: 30_000.0,
+            nu: 0.2,
+        };
+        let element = element(
+            &quad,
+            [&nodes[0], &nodes[1], &nodes[2], &nodes[3]],
+            std::array::from_fn(|i| i),
+            &material,
+        )
+        .unwrap();
+        // q(x,y)=x kN/m²; exact equivalent nodal forces are [1/3, 2/3, 2/3, 1/3] kN.
+        let pressure = [0.0, 2.0, 2.0, 0.0];
+        let nodal: [f64; 4] = std::array::from_fn(|a| {
+            (0..4)
+                .map(|b| element.pressure_matrix[a][b] * pressure[b])
+                .sum()
+        });
+        for (actual, expected) in
+            nodal
+                .into_iter()
+                .zip([1.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0, 1.0 / 3.0])
+        {
+            assert!((actual - expected).abs() < 1e-12);
+        }
+        assert!((nodal.iter().sum::<f64>() - 2.0).abs() < 1e-12);
+        assert!(((0..4).map(|i| nodal[i] * nodes[i].x).sum::<f64>() - 8.0 / 3.0).abs() < 1e-12);
+        assert!(((0..4).map(|i| nodal[i] * nodes[i].y).sum::<f64>() - 1.0).abs() < 1e-12);
     }
     #[test]
     fn constant_curvature_recovers_plate_constitutive_moments() {
@@ -927,6 +1028,7 @@ mod tests {
                 .collect(),
             loads: vec![],
             pressure_kn_m2: -1.0,
+            quad_pressures: vec![],
             modulus_curves: if curve {
                 vec![ModulusCurve {
                     material_id: 1,
@@ -957,6 +1059,33 @@ mod tests {
         let reactions: f64 = result.nodes.iter().map(|n| n.reaction_fz_kn).sum();
         assert!((reactions - 2.0).abs() < 1e-8);
         assert!(result.relative_residual < 1e-8);
+    }
+    #[test]
+    fn graded_quad_pressure_reaches_solver_and_rejects_unknown_quad() {
+        let mut request = cantilever_request(false);
+        request.pressure_kn_m2 = 0.0;
+        request.quad_pressures = vec![
+            QuadPressure {
+                quad_id: 1,
+                nodal_pressure_kn_m2: [0.0, -1.0, -1.0, 0.0],
+            },
+            QuadPressure {
+                quad_id: 2,
+                nodal_pressure_kn_m2: [-1.0, -2.0, -2.0, -1.0],
+            },
+        ];
+        let result = solve(&request).unwrap();
+        let reactions: f64 = result.nodes.iter().map(|node| node.reaction_fz_kn).sum();
+        assert!((reactions - 2.0).abs() < 1e-8);
+        assert!(result.nodes[2].w_m < 0.0);
+        request.pressure_kn_m2 = -1.0;
+        let combined = solve(&request).unwrap();
+        let combined_reactions: f64 = combined.nodes.iter().map(|node| node.reaction_fz_kn).sum();
+        assert!((combined_reactions - 4.0).abs() < 1e-8);
+        request.quad_pressures[1].quad_id = 999;
+        assert!(solve(&request)
+            .unwrap_err()
+            .contains("unknown hybrid pressure quad"));
     }
     #[test]
     fn cement_cantilever_recovers_section_shear_and_total_reaction() {
@@ -1000,6 +1129,7 @@ mod tests {
             supports,
             loads: vec![],
             pressure_kn_m2: -30.0,
+            quad_pressures: vec![],
             modulus_curves: vec![],
             reinforcement: None,
             load_path: vec![],
@@ -1065,6 +1195,7 @@ mod tests {
             supports: vec![],
             loads: vec![],
             pressure_kn_m2: -1.0,
+            quad_pressures: vec![],
             modulus_curves: vec![],
             reinforcement: None,
             load_path: vec![],
@@ -1175,6 +1306,7 @@ mod tests {
             supports,
             loads: vec![],
             pressure_kn_m2: -1.0,
+            quad_pressures: vec![],
             modulus_curves: vec![],
             reinforcement: None,
             load_path: vec![],

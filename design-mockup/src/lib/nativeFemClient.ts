@@ -6,7 +6,7 @@ import { roepKern } from "../stores/checkStore";
 import type { Mesh } from "../core/fem/Mesh";
 import {
   buildNativeHybridPlateRequest, buildNativePlate2DRequest, buildNativeQuad2DRequest,
-  type NativeModulusCurve, type NativeReinforcementSpec,
+  type NativeModulusCurve, type NativeQuadPressure, type NativeReinforcementSpec,
   type NativeMaterialLaw,
 } from "../core/fem/nativePlate2DAdapter";
 
@@ -103,7 +103,8 @@ export function solveNativeHybridPlate(
   modulusCurves: readonly NativeModulusCurve[] = [],
   loadPath: readonly number[] = [],
   reinforcement?: NativeReinforcementSpec,
+  quadPressures: readonly NativeQuadPressure[] = [],
 ): Promise<NativeHybridPlateResult> {
   return solveNativeFem('hybridPlate',
-    buildNativeHybridPlateRequest(mesh, pressureKnM2, modulusCurves, loadPath, reinforcement));
+    buildNativeHybridPlateRequest(mesh, pressureKnM2, modulusCurves, loadPath, reinforcement, quadPressures));
 }

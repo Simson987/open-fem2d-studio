@@ -1,6 +1,6 @@
 # Vierkantsmesh en plaatvoorbeelden
 
-De Python-generator `examples/plate_cases.py` maakt zeven herhaalbare verzoeken.
+De Python-generator `examples/plate_cases.py` maakt acht herhaalbare verzoeken.
 Alle grootheden zijn **m, kN en MPa**. Voer de Rust-binaries uit vanuit de
 repositoryroot, na `cargo build -p openaec-native-fem --bins` in `src-tauri`:
 
@@ -22,6 +22,8 @@ python3 src-tauri/crates/native-fem/examples/plate_cases.py hybrid_navier |
   src-tauri/target/debug/native-hybrid-plate
 python3 src-tauri/crates/native-fem/examples/plate_cases.py hybrid_fnl_cantilever |
   src-tauri/target/debug/native-hybrid-plate
+python3 src-tauri/crates/native-fem/examples/plate_cases.py hybrid_linear_pressure |
+  src-tauri/target/debug/native-hybrid-plate
 python3 src-tauri/crates/native-fem/examples/plate_cases.py cement_2021_cantilever |
   src-tauri/target/debug/native-hybrid-plate
 python3 src-tauri/crates/native-fem/examples/plate_cases.py cement_2021_shear_uls |
@@ -36,6 +38,7 @@ python3 src-tauri/crates/native-fem/examples/plate_cases.py cement_2021_crack_sl
 | `quad_variable_e` | Dezelfde trekproef, nu E(0)=1000 MPa en E(0,002)=800 MPa. Bij piekbelasting volgt uit F/t=E(rek)×rek de rek 0,0011270 en E=887,30 MPa. Na ontlasten is de verplaatsing circa nul, terwijl de lagere modulus bewaard blijft. |
 | `hybrid_navier` | Vierzijdig vrij opgelegde vierkante buigplaat: a=2 m, t=0,1 m, E=30 GPa, ν=0,2, q=1 kN/m². De klassieke middenzakking 0,00406qa⁴/D is 2,49446×10⁻⁵ m. Het 6×6 rooster geeft 2,39106×10⁻⁵ m (4,1% verschil). |
 | `hybrid_fnl_cantilever` | Twee vierhoekige buigelementen met een afnemende E(vezelrek)-curve en een belast/ontlast-pad. De maximale vezelrek en de effectieve E blijven na ontlasten per element bewaard; de uitkraging keert bij deze secantwet elastisch terug naar nulverplaatsing. |
+| `hybrid_linear_pressure` | Uitkraging van 2×1 m met een per vierhoek bilineair opgegeven druk q(x)=−x kN/m². De analytische totale druk is −2 kN en de integraal van x·q over de plaat is −8/3 kNm; de verticale oplegreacties tellen op tot +2 kN. |
 | `cement_2021_cantilever` | Gebaseerd op figuur 14 van Braam en Blaauwendraad: 10 m breed, 8 m uitkraging, t=0,6 m, q=30 kN/m² en ν=0,2. In dit voorbeeld is **E=30 GPa aangenomen**. Het 2 m rooster geeft bij het eerste elementcentrum (1 m vanaf inklemming) v_y=210 kN/m, gelijk aan q×(8−1). |
 | `cement_2021_shear_uls` | Dezelfde plaat met illustratieve C20/25, z=500 mm, 2.000 mm²/m langs- en 1.200 mm²/m verticale dwarskrachtwapening, tanθ=1. Aan de steun vindt de herleiding v=240 kN/m=q×8; de eerste-generatie EC2-benadering geeft V_Rd,c=205,34 kN/m, benodigde dwarskrachtwapening 1.103,45 mm²/m², en σ_c=0,96 MPa < 7,36 MPa. De maatgevende benodigde bovenwapening in y is 4.689,66 mm²/m en overschrijdt de opgegeven 2.000 mm²/m. |
 | `cement_2021_crack_sls` | Dezelfde geometrie en illustratieve wapening, met **apart aangenomen** BGT-druk q=10 kN/m². De maatgevende scheurwijdte in de bovenste y-wapening is 0,347 mm; bij een opgegeven limiet van 0,30 mm meldt de code een overschrijding. Dit is geen uit het Cement-artikel overgenomen BGT-belasting of scheurresultaat. |
@@ -65,10 +68,13 @@ De hybride buigplaat heeft een **secantmodulus-omhulling**: de invoer
 De hoogste absolute vezelrek per element blijft gedurende `loadPath` bewaard.
 Dat is een eigen FNL-uitbreiding van de elastische hybride plaat, geen
 scheurmodel of plastische doorsnedewet van Blaauwendraad. Opgegeven
-`pressureKnM2` wordt via een 4×4 Gauss-integratie van bilineaire
-vlakvormfuncties naar de vier knopen verdeeld. Daardoor kloppen de totale
-dwarslast en haar eerste momenten ook bij een scheve vierhoek; bij een
-rechthoek zijn de vier aandelen gelijk. Omdat het hybride element alleen
+`pressureKnM2` en optionele `quadPressures` worden via een 4×4
+Gauss-integratie van bilineaire vlakvormfuncties naar de vier knopen verdeeld.
+Per `quadId` geven `nodalPressureKnM2` de vier extra drukwaarden in de
+volgorde van `nodeIds`; deze worden bij de uniforme druk opgeteld. Daardoor
+kloppen de totale dwarslast en haar eerste momenten ook bij een scheve
+vierhoek; bij uniforme druk op een rechthoek zijn de vier aandelen gelijk.
+Omdat het hybride element alleen
 langs de rand een verplaatsingsaanname doet, blijft dit een benadering van
 de exacte drukbelasting op de hybride vervormingsruimte. De
 elementdwarskracht voor wapening wordt lineair uit buurelementen herleid.
