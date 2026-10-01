@@ -7,10 +7,12 @@ de app. De CLI-programma's lezen één JSON-verzoek van stdin en schrijven
 `{"error":"..."}`-resultaat. Een solver die invoer niet ondersteunt, weigert
 die expliciet.
 
-De lineaire `frame2d`-route is nu ook vanuit de app te kiezen voor een model
+De `frame2d`-route is nu ook vanuit de app te kiezen voor een model
 met uitsluitend staven. Zij vertaalt bestaande knopen, doorsneden, opleggingen
 en belastingen en geeft staafdiagrammen in het bestaande resultaatformaat
-terug. GNL/FNL, bedding, scharnieren, thermische lasten en gekoppelde
+terug. De geometrische analyse lost elke combinatie apart op met iteratieve
+P-Δ-stijfheid en controleert of de vrije stijfheid positief is. FNL, bedding,
+scharnieren, thermische lasten en gekoppelde
 staaf-plaatmodellen worden in deze route nog expliciet geweigerd. De app
 behoudt de bestaande solver als automatische keuze.
 
@@ -23,6 +25,15 @@ omlaag. De Euler-Bernoulli-formules geven `EI=1680 kNm²`,
 bestaande TypeScript-solver controleren dit voorbeeld, vijf andere
 liggergevallen en een tweestaafs portaal.
 
+[`examples/frame2d-p-delta-cantilever.json`](examples/frame2d-p-delta-cantilever.json)
+voegt `100 kN` druk en `10 kN` dwarslast toe. Voor deze uitkraging is de
+Euler-kniklast `π²EI/(4L²) ≈ 460,6 kN`. De exacte elastische balkkolomformule
+geeft bij `100 kN` druk `u_y = -H[tan(kL)-kL]/(Pk) ≈ -0,0682304 m`, met
+`k = √(P/EI)`. De Rust-uitkomst met één element wijkt minder dan `0,1%` af;
+een last van `600 kN` druk wordt als instabiel afgewezen. De geometrische
+stijfheid gebruikt de gemiddelde staafnormaalkracht; bij een sterk variërende
+normaalkracht moet de staaf worden onderverdeeld.
+
 ```bash
 src-tauri/target/debug/native-frame2d \
   < src-tauri/crates/native-fem/examples/frame2d-cantilever.json
@@ -32,7 +43,7 @@ src-tauri/target/debug/native-frame2d \
 
 | Kern | Element | GNL | FNL | Lasten en opleggingen |
 | --- | --- | --- | --- | --- |
-| `native-frame2d` | 6-DOF Euler-Bernoulli raamwerk, 3 DOF/knoop | nog niet | nog niet | knoop-, verdeelde en staafpuntlasten; vaste DOF, globale veren en opgelegde verplaatsingen/rotaties |
+| `native-frame2d` | 6-DOF Euler-Bernoulli raamwerk, 3 DOF/knoop | iteratieve P-Δ, stabiliteitscontrole tot 600 DOF | nog niet | knoop-, verdeelde en staafpuntlasten; vaste DOF, globale veren en opgelegde verplaatsingen/rotaties |
 | `native-frame3d` | 12-DOF Euler-Bernoulli raamwerk, 6 DOF/knoop | iteratieve P-Δ-stijfheid, stabiliteitscontrole en eigenknik tot 120 vrije DOF | monotone effectieve-E-envelop; met expliciet `loadPath` axiale staalplastificatie en blijvende betontrekschade | knoop-, lijn-, staafpunt- en thermische lasten; vaste DOF, globale veren, opgelegde verplaatsingen/rotaties en staafeindscharnieren |
 | `native-plate2d` | 3-knoops CST-vlakspanning/membraan, 2 DOF/knoop | Green-Lagrange-rek met Newton-iteratie | J2-staalplastificatie met isotrope verharding en onomkeerbare betonschade per element | knoopkrachten en vaste x/y-DOF |
 | `native-plate-bending` | 3-knoops DKT-plaatbuiging, 3 DOF/knoop | nog niet | nog niet | dwarsknoopkrachten, knoopmomenten en vaste w/rotatie-DOF |

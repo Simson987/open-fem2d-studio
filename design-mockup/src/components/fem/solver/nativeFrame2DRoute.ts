@@ -1,6 +1,9 @@
 import { solveNativeFem } from "../../../lib/nativeFemClient";
 import { grootsteVerplaatsing } from "./grootsteVerplaatsing";
+import type { LoadCombination } from "./combinations";
 import type { ElementForces, MultiInput, SolverResult } from "./types";
+
+type FrameAnalysis = "linear" | "geometric";
 
 interface NativeFrame2DResult {
   nodes: Array<{ nodeId: number; displacement: [number, number, number]; reaction: [number, number, number] }>;
@@ -18,7 +21,9 @@ function finite(value: number, label: string): number {
 }
 
 /** App plane X/Z in mm, N, Nmm -> Rust plane X/Y in m, kN, kNm. */
-export function buildNativeFrame2DRequest(input: MultiInput, factor: (caseId: number) => number) {
+export function buildNativeFrame2DRequest(
+  input: MultiInput, factor: (caseId: number) => number, analysis: FrameAnalysis = "linear",
+) {
   if (input.plates?.length || !input.beams.length) {
     throw new Error("De Rust 2D-raamwerkroute vereist uitsluitend staven, zonder gekoppelde platen.");
   }
@@ -119,7 +124,7 @@ export function buildNativeFrame2DRequest(input: MultiInput, factor: (caseId: nu
       pyKn: -axes.s * fx + axes.c * fz,
       positionM: position * axes.lengthM }];
   });
-  return { analysis: "linear" as const, nodes, materials, sections, members, supports,
+  return { analysis, nodes, materials, sections, members, supports,
     nodalLoads, memberLoads, memberPointLoads };
 }
 
@@ -177,14 +182,33 @@ export function nativeFrame2DResultToSolverResult(
     maxDisplacement: grootsteVerplaatsing(displacements.values(), elements.values()) };
 }
 
-export async function solveAllCasesNativeFrame2D(input: MultiInput): Promise<Map<number, SolverResult>> {
+export async function solveAllCasesNativeFrame2D(
+  input: MultiInput, analysis: FrameAnalysis = "linear",
+): Promise<Map<number, SolverResult>> {
   const perCase = new Map<number, SolverResult>();
   for (const loadCase of input.cases) {
-    const request = buildNativeFrame2DRequest(input, caseId => caseId === loadCase.id ? 1 : 0);
+    const request = buildNativeFrame2DRequest(input, caseId => caseId === loadCase.id ? 1 : 0, analysis);
     if (!request.nodalLoads.length && !request.memberLoads.length
         && !request.memberPointLoads.some(load => load.pxKn !== 0 || load.pyKn !== 0)) continue;
     const result = await solveNativeFem<NativeFrame2DResult>("frame2d", request);
     perCase.set(loadCase.id, nativeFrame2DResultToSolverResult(request, result));
   }
   return perCase;
+}
+
+/** Each second-order combination is solved at its full factored load. */
+export async function solveAllCombinationsNativeFrame2D(
+  input: MultiInput, combinations: readonly LoadCombination[],
+): Promise<Map<number, SolverResult>> {
+  const results = new Map<number, SolverResult>();
+  for (const combination of combinations) {
+    if (combination.eindtoestand !== undefined) {
+      throw new Error(`Combinatie ${combination.name}: eindstijfheidvariant is niet ondersteund door de Rust 2D-raamwerkroute.`);
+    }
+    const request = buildNativeFrame2DRequest(input,
+      caseId => combination.factors.get(caseId) ?? 0, "geometric");
+    const result = await solveNativeFem<NativeFrame2DResult>("frame2d", request);
+    results.set(combination.id, nativeFrame2DResultToSolverResult(request, result));
+  }
+  return results;
 }

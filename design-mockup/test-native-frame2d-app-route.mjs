@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { solveAllCases } from "./src/components/fem/solver/engine.ts";
+import { solveAllCases, solveCombinationSecondOrder } from "./src/components/fem/solver/engine.ts";
 import { combineResults } from "./src/components/fem/solver/combinations.ts";
-import { buildNativeFrame2DRequest, solveAllCasesNativeFrame2D } from "./src/components/fem/solver/nativeFrame2DRoute.ts";
+import { buildNativeFrame2DRequest, solveAllCasesNativeFrame2D, solveAllCombinationsNativeFrame2D } from "./src/components/fem/solver/nativeFrame2DRoute.ts";
 import { resolveSolver } from "./src/core/solver/SolverRegistry.ts";
 
 const binary = fileURLToPath(new URL(`../src-tauri/target/debug/native-frame2d${process.platform === "win32" ? ".exe" : ""}`, import.meta.url));
@@ -26,7 +26,8 @@ const close = (actual, expected, tolerance, label) => assert.ok(
 
 const request = { schemaVersion: 1, dimension: "2d", analysis: "linear", elementFamilies: ["frame"] };
 assert.equal(resolveSolver("openaec-native-fem", request).id, "openaec-native-fem");
-assert.throws(() => resolveSolver("openaec-native-fem", { ...request, analysis: "p-delta" }), /does not support/);
+assert.equal(resolveSolver("openaec-native-fem", { ...request, analysis: "p-delta" }).id, "openaec-native-fem");
+assert.throws(() => resolveSolver("openaec-native-fem", { ...request, analysis: "material-nonlinear" }), /does not support/);
 
 const input = {
   nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 6000, z: 0 }],
@@ -159,6 +160,21 @@ try {
     "staafeindpuntlast verplaatsing");
   close(endpointNative.reactions.get(1).fz, endpointExisting.reactions.get(1).fz, 1e-4,
     "staafeindpuntlast reactie");
+  const columnInput = { nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 3000, z: 0 }],
+    beams: [{ id: 1, from: 1, to: 2, E: 210_000, A: 10_000, I: 8e6 }],
+    supports: [{ nodeId: 1, type: "fixed" }], loads: [],
+    pointLoads: [{ nodeId: 2, caseId: 1, fx: -100_000 }, { nodeId: 2, caseId: 2, fz: -10_000 }],
+    cases: [{ id: 1, name: "druk" }, { id: 2, name: "dwars" }] };
+  const secondOrderCombo = { id: 20, name: "druk plus dwars", type: "uls", formula: "1.2 G + 1.5 Q",
+    factors: new Map([[1, 1.2], [2, 1.5]]) };
+  const nativeSecondOrder = (await solveAllCombinationsNativeFrame2D(columnInput, [secondOrderCombo])).get(20);
+  const referenceSecondOrder = solveCombinationSecondOrder(columnInput, secondOrderCombo);
+  assert.ok(nativeSecondOrder && referenceSecondOrder);
+  close(nativeSecondOrder.displacements.get(2).uz, referenceSecondOrder.displacements.get(2).uz,
+    0.15, "P-Delta combinatie tipverplaatsing");
+  assert.ok(nativeSecondOrder.displacements.get(2).uz <
+    combineResults(secondOrderCombo, solveAllCases(columnInput).perCase).displacements.get(2).uz,
+    "druk vergroot de tweede-orde tipverplaatsing");
 } finally {
   globalThis.fetch = previousFetch;
 }

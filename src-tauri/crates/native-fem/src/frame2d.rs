@@ -1,7 +1,7 @@
-//! Linear plane-frame elements in m, kN and MPa. The plane is X/Y;
+//! Plane-frame elements in m, kN and MPa. The plane is X/Y;
 //! the 2D app maps its vertical Z coordinate and R_y rotation here explicitly.
 
-use crate::math::{constrained_solve, Matrix};
+use crate::math::{constrained_solve, free_positive_definite, Matrix};
 use crate::{positive, Analysis};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -109,6 +109,17 @@ pub struct Request {
     pub member_loads: Vec<MemberLoad>,
     #[serde(default)]
     pub member_point_loads: Vec<MemberPointLoad>,
+    #[serde(default = "default_iterations")]
+    pub max_iterations: usize,
+    #[serde(default = "default_tolerance")]
+    pub tolerance: f64,
+}
+
+fn default_iterations() -> usize {
+    50
+}
+fn default_tolerance() -> f64 {
+    1e-8
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -140,6 +151,7 @@ pub struct Result2D {
     pub nodes: Vec<NodeResult>,
     pub members: Vec<MemberResult>,
     pub equilibrium_residual: f64,
+    pub iterations: usize,
 }
 
 #[derive(Clone)]
@@ -238,9 +250,81 @@ fn integrated_load(load: &MemberLoad, length: f64, x: f64, axial: bool, power: u
         .sum()
 }
 
+fn local_displacement(element: &Element, u: &[f64]) -> [f64; 6] {
+    std::array::from_fn(|i| {
+        (0..6)
+            .map(|j| element.transform[i][j] * u[element.dofs[j]])
+            .sum()
+    })
+}
+
+fn axial_force(element: &Element, d: &[f64; 6]) -> f64 {
+    // Average elastic axial force, tension positive.
+    let left = (0..6)
+        .map(|j| element.local_stiffness[0][j] * d[j])
+        .sum::<f64>()
+        - element.local_load[0];
+    let right = (0..6)
+        .map(|j| element.local_stiffness[3][j] * d[j])
+        .sum::<f64>()
+        - element.local_load[3];
+    (right - left) / 2.0
+}
+
+fn geometric_local(element: &Element, axial: f64) -> [[f64; 6]; 6] {
+    let l = element.length;
+    let geometric = [
+        [36.0, 3.0 * l, -36.0, 3.0 * l],
+        [3.0 * l, 4.0 * l * l, -3.0 * l, -l * l],
+        [-36.0, -3.0 * l, 36.0, -3.0 * l],
+        [3.0 * l, -l * l, -3.0 * l, 4.0 * l * l],
+    ];
+    let axes = [1, 2, 4, 5];
+    let mut kg = [[0.0; 6]; 6];
+    for (a, &i) in axes.iter().enumerate() {
+        for (b, &j) in axes.iter().enumerate() {
+            kg[i][j] = axial * geometric[a][b] / (30.0 * l);
+        }
+    }
+    kg
+}
+
+fn geometric_stiffness(elastic: &Matrix, elements: &HashMap<usize, Element>, u: &[f64]) -> Matrix {
+    let mut k = elastic.clone();
+    for element in elements.values() {
+        let d = local_displacement(element, u);
+        let kg = geometric_local(element, axial_force(element, &d));
+        for i in 0..6 {
+            for j in 0..6 {
+                let scale = kg[i][j];
+                if scale == 0.0 {
+                    continue;
+                }
+                for p in 0..6 {
+                    for q in 0..6 {
+                        k.add(
+                            element.dofs[p],
+                            element.dofs[q],
+                            element.transform[i][p] * scale * element.transform[j][q],
+                        );
+                    }
+                }
+            }
+        }
+    }
+    k
+}
+
 pub fn solve(request: &Request) -> Result<Result2D, String> {
-    if request.analysis != Analysis::Linear {
-        return Err("2D frame currently supports linear analysis only".into());
+    if !matches!(request.analysis, Analysis::Linear | Analysis::Geometric) {
+        return Err("2D frame currently supports linear and geometric analysis only".into());
+    }
+    if request.max_iterations == 0
+        || request.max_iterations > 1000
+        || !request.tolerance.is_finite()
+        || !(0.0..1.0).contains(&request.tolerance)
+    {
+        return Err("invalid 2D frame iteration limit or tolerance".into());
     }
     if request.nodes.len() < 2 || request.members.is_empty() {
         return Err("2D frame requires nodes and members".into());
@@ -444,7 +528,48 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
             }
         }
     }
-    let (u, reactions) = constrained_solve(&k, &f, &prescribed)?;
+    let (mut u, _) = constrained_solve(&k, &f, &prescribed)?;
+    let mut iterations = 1;
+    if request.analysis.geometric() {
+        let mut converged = false;
+        for iteration in 2..=request.max_iterations {
+            let candidate_k = geometric_stiffness(&k, &elements, &u);
+            free_positive_definite(&candidate_k, &prescribed)?;
+            let (candidate, _) = constrained_solve(&candidate_k, &f, &prescribed)?;
+            let change = candidate
+                .iter()
+                .zip(&u)
+                .map(|(a, b)| (a - b).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            let magnitude = candidate
+                .iter()
+                .map(|v| v * v)
+                .sum::<f64>()
+                .sqrt()
+                .max(1e-12);
+            u = candidate;
+            iterations = iteration;
+            if change / magnitude <= request.tolerance {
+                converged = true;
+                break;
+            }
+        }
+        if !converged {
+            return Err(format!(
+                "2D frame P-Delta did not converge in {} iterations",
+                request.max_iterations
+            ));
+        }
+        k = geometric_stiffness(&k, &elements, &u);
+        free_positive_definite(&k, &prescribed)?;
+    }
+    let reactions: Vec<f64> = k
+        .mul(&u)
+        .iter()
+        .zip(&f)
+        .map(|(ku, load)| ku - load)
+        .collect();
     let max_load = f
         .iter()
         .fold(1.0_f64, |maximum, &value| maximum.max(value.abs()));
@@ -473,18 +598,23 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
         .iter()
         .map(|member| {
             let element = &elements[&member.id];
-            let mut local_displacement = [0.0; 6];
-            for (i, value) in local_displacement.iter_mut().enumerate() {
-                for j in 0..6 {
-                    *value += element.transform[i][j] * u[element.dofs[j]];
-                }
-            }
-            let mut local_end_forces = [0.0; 6];
+            let local_displacement = local_displacement(element, &u);
+            let mut elastic_end_forces = [0.0; 6];
             for i in 0..6 {
-                local_end_forces[i] = (0..6)
+                elastic_end_forces[i] = (0..6)
                     .map(|j| element.local_stiffness[i][j] * local_displacement[j])
                     .sum::<f64>()
                     - element.local_load[i];
+            }
+            let axial = axial_force(element, &local_displacement);
+            let mut local_end_forces = elastic_end_forces;
+            if request.analysis.geometric() {
+                let kg = geometric_local(element, axial);
+                for i in 0..6 {
+                    local_end_forces[i] += (0..6)
+                        .map(|j| kg[i][j] * local_displacement[j])
+                        .sum::<f64>();
+                }
             }
             let line_loads: Vec<&MemberLoad> = request
                 .member_loads
@@ -542,33 +672,37 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
                 stations_m.push(x);
                 normal_force_kn.push(-local_end_forces[0] - integral(true, 0) - point(true, 0));
                 shear_force_kn.push(local_end_forces[1] + integral(false, 0) + point(false, 0));
-                bending_moment_knm.push(
-                    -local_end_forces[2]
-                        + local_end_forces[1] * x
-                        + integral(false, 1)
-                        + point(false, 1),
-                );
                 axial_disp_m.push(
                     local_displacement[0]
-                        + (-local_end_forces[0] * x - integral(true, 1) - point(true, 1))
+                        + (-elastic_end_forces[0] * x - integral(true, 1) - point(true, 1))
                             / element.ea_kn,
                 );
                 rotation_rad.push(
                     local_displacement[2]
-                        + (-local_end_forces[2] * x
-                            + local_end_forces[1] * x * x / 2.0
+                        + (-elastic_end_forces[2] * x
+                            + elastic_end_forces[1] * x * x / 2.0
                             + integral(false, 2)
                             + point(false, 2))
                             / element.ei_knm2,
                 );
-                deflection_m.push(
-                    local_displacement[1]
-                        + local_displacement[2] * x
-                        + (-local_end_forces[2] * x * x / 2.0
-                            + local_end_forces[1] * x.powi(3) / 6.0
-                            + integral(false, 3)
-                            + point(false, 3))
-                            / element.ei_knm2,
+                let deflection = local_displacement[1]
+                    + local_displacement[2] * x
+                    + (-elastic_end_forces[2] * x * x / 2.0
+                        + elastic_end_forces[1] * x.powi(3) / 6.0
+                        + integral(false, 3)
+                        + point(false, 3))
+                        / element.ei_knm2;
+                deflection_m.push(deflection);
+                bending_moment_knm.push(
+                    -local_end_forces[2]
+                        + local_end_forces[1] * x
+                        + integral(false, 1)
+                        + point(false, 1)
+                        + if request.analysis.geometric() {
+                            axial * (deflection - local_displacement[1])
+                        } else {
+                            0.0
+                        },
                 );
             }
             MemberResult {
@@ -588,6 +722,7 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
         nodes,
         members,
         equilibrium_residual,
+        iterations,
     })
 }
 
@@ -641,6 +776,8 @@ mod tests {
             nodal_loads: vec![],
             member_loads: vec![],
             member_point_loads: vec![],
+            max_iterations: default_iterations(),
+            tolerance: default_tolerance(),
         }
     }
 
@@ -670,6 +807,59 @@ mod tests {
             (result.members[0].rotation_rad[20] - result.nodes[1].displacement[2]).abs() < 1e-12
         );
         assert!(result.equilibrium_residual < 1e-10);
+    }
+
+    #[test]
+    fn p_delta_compression_amplifies_and_tension_reduces_tip_sway() {
+        let mut input = cantilever();
+        input.analysis = Analysis::Geometric;
+        input.nodal_loads.push(NodalLoad {
+            node_id: 2,
+            fx: -100.0,
+            fy: -10.0,
+            mz: 0.0,
+        });
+        let compression = solve(&input).unwrap();
+        input.nodal_loads[0].fx = 100.0;
+        let tension = solve(&input).unwrap();
+        input.analysis = Analysis::Linear;
+        let linear = solve(&input).unwrap();
+        assert!(compression.nodes[1].displacement[1] < linear.nodes[1].displacement[1]);
+        assert!(tension.nodes[1].displacement[1] > linear.nodes[1].displacement[1]);
+        let wave = (100.0_f64 / (210_000.0 * 1000.0 * 8e-6)).sqrt();
+        let exact = -10.0 / (100.0 * wave) * ((3.0 * wave).tan() - 3.0 * wave);
+        assert!((compression.nodes[1].displacement[1] / exact - 1.0).abs() < 0.001);
+        assert!(compression.iterations >= 2);
+        assert!(compression.equilibrium_residual < 1e-8);
+        assert!((compression.nodes[0].reaction[0] - 100.0).abs() < 1e-8);
+        assert!(
+            (compression.nodes[0].reaction[2]
+                - (30.0 - 100.0 * compression.nodes[1].displacement[1]))
+                .abs()
+                < 1e-8
+        );
+        assert!(
+            compression.members[0]
+                .bending_moment_knm
+                .last()
+                .unwrap()
+                .abs()
+                < 1e-8
+        );
+    }
+
+    #[test]
+    fn p_delta_rejects_compression_above_euler_cantilever_load() {
+        let mut input = cantilever();
+        input.analysis = Analysis::Geometric;
+        // Pcr = pi² EI/(4 L²) = 460.6 kN for this one-element column.
+        input.nodal_loads.push(NodalLoad {
+            node_id: 2,
+            fx: -600.0,
+            fy: -1.0,
+            mz: 0.0,
+        });
+        assert!(solve(&input).unwrap_err().contains("buckling"));
     }
 
     #[test]
