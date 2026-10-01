@@ -57,8 +57,12 @@ Bij P-Δ wordt de scharniercondensatie met elke bijgewerkte normaalkracht
 opnieuw uitgevoerd. Voor dezelfde staaf met `100 kN` druk volgt de
 balkkolomverplaatsing binnen `0,1%`; bij `600 kN` druk faalt de
 stabiliteitscontrole. Axiale FNL met een buigscharnier werkt ook, inclusief
-lastpad. De gecombineerde materiaal- en geometrische niet-lineariteit met
-scharnieren wordt nog expliciet geweigerd.
+lastpad. Ook de combinatie FNL + P-Δ herbouwt per iteratie de gecondenseerde
+stijfheid en equivalente last. Het voorbeeld
+[`frame2d-combined-released-steel.json`](examples/frame2d-combined-released-steel.json)
+belast, ontlast en herbelast een staaf met staalplastificatie en een vrij
+buigmoment aan de tip. De axiale kracht in de laatste stap is `1500 kN`;
+de P-Δ-zijverplaatsing wordt met die actuele kracht berekend.
 
 ```bash
 src-tauri/target/debug/native-frame2d \
