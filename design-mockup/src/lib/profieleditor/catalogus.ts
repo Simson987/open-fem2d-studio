@@ -54,6 +54,13 @@ export const REEKSEN: Array<{ id: string; label: string; oud?: boolean; match: (
   // voor de bron van de maten.
   { id: "L", label: "L gelijkbenig", match: (n) => hoeklijnBenen(n)?.gelijk === true },
   { id: "LO", label: "L ongelijkbenig", match: (n) => hoeklijnBenen(n)?.gelijk === false },
+  // Massief rond staal (EN 10060), "RD <d>": windverbanden en trekstangen.
+  // Zie scripts/genereer-rondstaal.mjs voor de reeks en de grootheden.
+  { id: "RD", label: "Rond staal, massief (RD, Ø)", match: (n) => /^RD\d+$/.test(n) },
+  // Platstaal (EN 10058), "Strip <b>x<t>": windverbanden van strip. Zie
+  // scripts/genereer-strip.mjs voor de reeks en de grootheden, en
+  // lib/strip.ts voor de stand (breedte langs z).
+  { id: "STRIP", label: "Platstaal, strip (FL)", match: (n) => /^STRIP\d+X\d+$/.test(n) },
 ];
 
 /**
@@ -71,6 +78,8 @@ const REEKS_TEKST: Record<string, VertaalbareTekst> = {
   CHS: vt("check:profilePicker.seriesLabel.circularHotFinished", "Buis warmvervaardigd (CHS, EN 10210)"),
   L: vt("check:profilePicker.seriesLabel.angleEqual", "L gelijkbenig"),
   LO: vt("check:profilePicker.seriesLabel.angleUnequal", "L ongelijkbenig"),
+  RD: vt("check:profilePicker.seriesLabel.roundBar", "Rond staal, massief (RD, Ø)"),
+  STRIP: vt("check:profilePicker.seriesLabel.flatBar", "Platstaal, strip (FL)"),
 };
 
 /** Het label van een reeks voor de interface: vertaalbaar, of de naam zelf. */
@@ -158,6 +167,12 @@ function motorSoort(naam: string, dims: SteelSectionDims): MotorSoort {
       return "Chs";
     case "Angle":
       return "Angle";
+    case "RoundBar":
+      return "RoundBar";
+    // Platstaal is voor de motor een massieve rechthoek: h = de breedte van
+    // de strip, b = de dikte (zie `lib/strip.ts` voor de stand).
+    case "FlatBar":
+      return "Rechthoek";
   }
 }
 

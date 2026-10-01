@@ -44,6 +44,7 @@ pub mod image_flowable;
 pub mod frame;
 pub mod page_template;
 pub mod doc_template;
+pub mod tekstruns;
 
 // Re-exports
 pub use types::{Pt, Mm, Size, Rect, Color, Alignment, Padding, A4, A3};

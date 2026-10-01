@@ -1118,7 +1118,7 @@ export const zh: Record<string, string> = {
   'backstage.preferences': '首选项',
   'backstage.preferencesDesc': '打开设置对话框（主题、语言）。',
   'backstage.about': '关于',
-  'backstage.aboutDesc': '关于 Open FEM2D Studio 的信息。',
+  'backstage.aboutDesc': '关于 Open FEM Studio 的信息。',
   'backstage.exit': '退出',
   'backstage.exitDesc': '关闭应用程序。',
 
@@ -1133,7 +1133,7 @@ export const zh: Record<string, string> = {
   'settings.theme.openaec': 'OpenAEC',
 
   // 关于对话框
-  'about.title': '关于 Open FEM2D Studio',
+  'about.title': '关于 Open FEM Studio',
   'about.builtOn': '构建于 OpenAEC 平台之上',
 
   // 检查选项卡

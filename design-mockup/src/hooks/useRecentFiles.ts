@@ -15,7 +15,7 @@ const MAX_RECENT = 10;
 function inferType(path: string): RecentFile["type"] {
   const ext = path.split(".").pop()?.toLowerCase() ?? "";
   if (ext === "ifc" || ext === "ifcx") return "ifc";
-  if (ext === "ifcfem2d") return "project";
+  if (ext === "ifcfem" || ext === "ifcfem2d") return "project";
   if (ext === "json") return "report";
   return "unknown";
 }

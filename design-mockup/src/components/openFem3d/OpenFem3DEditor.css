@@ -1,0 +1,508 @@
+.open-fem3d-editor {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--theme-bg);
+  color: var(--theme-text);
+}
+
+.open-fem3d-stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  background: #fff;
+  color: #1e293b;
+  /* Het podium is in elk thema wit (ook de WebGL-scène): het selectiekader
+     gebruikt hier de kleuren voor een licht tekenvlak (themes.css). */
+  --theme-select-window-stroke: var(--theme-select-window-stroke-light);
+  --theme-select-window-fill: var(--theme-select-window-fill-light);
+  --theme-select-crossing-stroke: var(--theme-select-crossing-stroke-light);
+  --theme-select-crossing-fill: var(--theme-select-crossing-fill-light);
+}
+
+.open-fem3d-canvas,
+.open-fem3d-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.open-fem3d-canvas { position: relative; }
+.open-fem3d-canvas .open-fem3d-label-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+/* CAD: venster (van links naar rechts) doorgetrokken; crossing (van rechts
+   naar links) gestippeld met een lichtere vulling. */
+.open-fem3d-selection-box {
+  position: absolute;
+  z-index: 4;
+  box-sizing: border-box;
+  border: 1px solid var(--theme-select-window-stroke);
+  background: var(--theme-select-window-fill);
+  pointer-events: none;
+}
+.open-fem3d-selection-box[data-modus="crossing"] {
+  border-style: dashed;
+  border-color: var(--theme-select-crossing-stroke);
+  background: var(--theme-select-crossing-fill);
+}
+.open-fem3d-selection-box[hidden] { display: none; }
+.open-fem3d-node-label,
+.open-fem3d-beam-number,
+.open-fem3d-axis-label,
+.open-fem3d-profile-label {
+  display: inline-block;
+  padding: 1px 4px;
+  border-radius: 3px;
+  border: 1px solid #cbd5e1;
+  background: #fffffff0;
+  color: #1e293b;
+  font: 600 11px/1.25 "Inter", system-ui, sans-serif;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px #0f172a1f;
+}
+.open-fem3d-result-label {
+  display:inline-block; margin:-18px 0 0 8px; padding:2px 5px; border:1px solid #f59e0b;
+  border-radius:3px; background:#fffbebf2; color:#92400e; font:700 10px/1.25 "Inter",system-ui,sans-serif;
+  white-space:nowrap; box-shadow:0 1px 3px #0f172a1f;
+}
+.open-fem3d-surface-load-label { cursor:pointer; }
+.open-fem3d-surface-load-label:hover,.open-fem3d-surface-load-label:focus-visible {
+  background:#e0f2fe; border-color:#0284c7; color:#075985;
+  outline:2px solid #0284c7; outline-offset:2px;
+}
+.open-fem3d-diagram-label { margin: -8px 0 0 7px; background: #fffffff2; }
+.open-fem3d-diagram-vy { margin-top: -38px; border-color: #0284c7; color: #075985; }
+.open-fem3d-diagram-vz { margin-top: -18px; border-color: #7c3aed; color: #5b21b6; }
+.open-fem3d-diagram-my { margin-top: 2px; border-color: #dc2626; color: #991b1b; }
+.open-fem3d-diagram-mz { margin-top: 22px; border-color: #d97706; color: #92400e; }
+.open-fem3d-utilization-label {
+  display:inline-block; margin:18px 0 0 7px; padding:2px 5px; border:1px solid currentColor;
+  border-radius:3px; background:#fffffff2; font:700 10px/1.25 "Inter",system-ui,sans-serif;
+  white-space:nowrap; box-shadow:0 1px 3px #0f172a1f;
+  cursor:pointer;
+}
+.open-fem3d-utilization-label:hover,.open-fem3d-utilization-label:focus-visible {
+  background:#eff6ff; outline:2px solid #2563eb; outline-offset:2px;
+}
+.open-fem3d-local-axis-label {
+  color:#334155; background:#ffffffd9; border:1px solid #cbd5e1;
+  border-radius:2px; padding:0 2px; font:700 10px/1.1 system-ui,sans-serif;
+}
+.open-fem3d-utilization-low { color:#15803d; }
+.open-fem3d-utilization-medium { color:#4d7c0f; }
+.open-fem3d-utilization-high { color:#b45309; }
+.open-fem3d-utilization-fail { color:#b91c1c; }
+.open-fem3d-utilization-not-applicable { color:#64748b; }
+.open-fem3d-tool-addNode,.open-fem3d-tool-addBeam,.open-fem3d-tool-addPlate,.open-fem3d-tool-addPlateArc,.open-fem3d-tool-addOpening,.open-fem3d-tool-addOpeningArc { cursor:crosshair; }
+.open-fem3d-tool-support { cursor:crosshair; }
+.open-fem3d-snap-label,
+.open-fem3d-snap-hint {
+  padding: 2px 5px;
+  border: 1px solid #f59e0b;
+  border-radius: 3px;
+  background: rgba(255,255,255,.94);
+  color: #92400e;
+  font: 600 10px/1.2 system-ui,sans-serif;
+  pointer-events: none;
+  transform: translate(9px,-9px);
+}
+.open-fem3d-snap-hint { position:absolute; z-index:4; }
+.open-fem3d-node-label { margin: 0 0 7px 9px; }
+.open-fem3d-beam-number { margin-bottom: 7px; color: #1d4ed8; }
+.open-fem3d-profile-label { margin: 17px 0 0 7px; color: #475569; font-size: 10px; }
+.open-fem3d-axis-label { margin: 0 0 3px 4px; font-weight: 700; }
+.open-fem3d-axis-x { color: #dc2626; }
+.open-fem3d-axis-y { color: #15803d; }
+.open-fem3d-axis-z { color: #1d4ed8; }
+.open-fem3d-grid-label {
+  display: grid;
+  place-items: center;
+  min-width: 21px;
+  height: 21px;
+  margin: 10px 0 0 -10px;
+  border: 2px solid #64748b;
+  border-radius: 50%;
+  background: #fff;
+  color: #334155;
+  font: 700 10px/1 "Inter", system-ui, sans-serif;
+  box-shadow: 0 1px 3px #0f172a24;
+}
+/* Een level draagt vaak een naam ("1e verdieping"): een pil in plaats van een cirkel. */
+.open-fem3d-level-label { border-color: #2563eb; color: #1d4ed8; border-radius: 11px; padding: 0 6px; white-space: nowrap; }
+
+.open-fem3d-stage-header,
+.open-fem3d-stage-footer {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
+  font-size: 12px;
+  text-shadow: none;
+}
+
+.open-fem3d-stage-header { top: 14px; }
+.open-fem3d-stage-header strong { font-size: 15px; }
+.open-fem3d-stage-header span { color: #64748b; }
+.open-fem3d-views-button {
+  margin-left:auto; margin-right:100px; pointer-events:auto;
+  padding:5px 9px; border:1px solid #cbd5e1; border-radius:4px;
+  background:#fff; color:#1e40af; cursor:pointer; font:600 11px system-ui,sans-serif;
+}
+.open-fem3d-views-button:hover { background:#eff6ff; }
+/* Werkvlak voor tekenen (actief level) in de kopregel van het 3D-tekenvlak. */
+.open-fem3d-workplane {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+  padding: 3px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffffe6;
+  color: #1e293b;
+  font: 600 11px system-ui, sans-serif;
+}
+.open-fem3d-stage-header .open-fem3d-workplane span { color: #334155; }
+.open-fem3d-workplane select {
+  max-width: 220px;
+  padding: 1px 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  background: #fff;
+  color: #1e293b;
+  font: 500 11px system-ui, sans-serif;
+}
+.open-fem3d-workplane em { font-style: normal; font-weight: 500; color: #64748b; }
+.open-fem3d-draw-error {
+  position: absolute;
+  z-index: 9;
+  top: 48px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid #fca5a5;
+  border-radius: 5px;
+  background: #fff1f2;
+  color: #991b1b;
+  font-size: 12px;
+  box-shadow: 0 2px 8px #7f1d1d1a;
+}
+.open-fem3d-draw-error button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 18px; }
+.open-fem3d-stage-footer {
+  bottom: 14px;
+  justify-content: space-between;
+  color: #64748b;
+}
+.open-fem3d-stage-footer [data-open-fem-3d-status="warning"] { color: #b91c1c; font-weight: 700; }
+
+.open-fem3d-fit {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 5px 9px;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+}
+
+.open-fem3d-fit:hover { background: #f1f5f9; }
+
+.open-fem3d-viewsets { margin-bottom:14px; padding:10px; border:1px solid var(--theme-border); border-radius:5px; background:var(--theme-bg-lighter); }
+.open-fem3d-viewsets h3 { margin:0 0 3px; font-size:13px; }
+.open-fem3d-viewsets > p { margin:0 0 8px; color:var(--theme-text-muted); font-size:11px; }
+.open-fem3d-viewset-save { display:flex; gap:6px; }
+.open-fem3d-viewset-save input { flex:1; min-width:0; border:1px solid var(--theme-border); border-radius:3px; padding:6px; color:var(--theme-text); background:var(--theme-bg); }
+.open-fem3d-viewset-save button,.open-fem3d-viewset-row button { border:1px solid var(--theme-border); border-radius:3px; padding:5px 8px; color:var(--theme-text); background:var(--theme-bg); cursor:pointer; }
+.open-fem3d-viewset-list { display:grid; gap:4px; margin-top:8px; max-height:160px; overflow:auto; }
+.open-fem3d-viewset-row { display:flex; gap:4px; }
+.open-fem3d-viewset-row .open-fem3d-viewset-apply { display:flex; flex:1; min-width:0; flex-direction:column; align-items:flex-start; text-align:left; }
+.open-fem3d-viewset-apply strong,.open-fem3d-viewset-apply span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.open-fem3d-viewset-apply span,.open-fem3d-viewset-empty { color:var(--theme-text-muted); font-size:10px; }
+
+.open-fem3d-transform-panel {
+  position: absolute;
+  top: 48px;
+  right: 12px;
+  z-index: 4;
+  width: 280px;
+  padding: 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  background: #fffffff5;
+  box-shadow: 0 5px 18px #0f172a26;
+  color: #1e293b;
+  font: 500 11px/1.35 "Inter", system-ui, sans-serif;
+}
+.open-fem3d-transform-title { display:flex; align-items:center; justify-content:space-between; margin-bottom:5px; }
+.open-fem3d-transform-title strong { font-size: 13px; }
+.open-fem3d-transform-title button { border:0; background:transparent; cursor:pointer; color:#64748b; font-size:18px; }
+.open-fem3d-transform-panel p { margin: 3px 0 9px; color:#64748b; }
+.open-fem3d-transform-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+.open-fem3d-transform-panel label { display:grid; gap:3px; color:#475569; }
+.open-fem3d-transform-panel input,.open-fem3d-transform-panel select { width:100%; min-width:0; border:1px solid #cbd5e1; border-radius:3px; padding:5px; background:#fff; color:#1e293b; font:inherit; }
+.open-fem3d-transform-field { margin-top:7px; }
+.open-fem3d-transform-error { color:#b91c1c !important; }
+.open-fem3d-transform-actions { display:flex; justify-content:flex-end; gap:6px; margin-top:10px; }
+.open-fem3d-transform-actions button { border:1px solid #cbd5e1; border-radius:3px; padding:5px 9px; background:#fff; color:#334155; cursor:pointer; }
+.open-fem3d-transform-actions button.primary { border-color:#d97706; background:#d97706; color:#fff; }
+
+.open-fem3d-uc-legend {
+  position:absolute; right:12px; top:50px; z-index:2; display:grid; gap:4px;
+  padding:8px 10px; border:1px solid #cbd5e1; border-radius:4px;
+  background:#fffffff2; color:#334155; font:600 10px/1.2 "Inter",system-ui,sans-serif;
+  box-shadow:0 2px 8px #0f172a1a; pointer-events:none;
+}
+.open-fem3d-uc-legend strong { margin-bottom:2px; font-size:11px; }
+.open-fem3d-uc-legend span { display:flex; align-items:center; gap:6px; white-space:nowrap; }
+.open-fem3d-uc-legend i { width:10px; height:10px; border-radius:2px; background:#64748b; }
+.open-fem3d-uc-legend i[data-uc="low"] { background:#16a34a; }
+.open-fem3d-uc-legend i[data-uc="medium"] { background:#84cc16; }
+.open-fem3d-uc-legend i[data-uc="high"] { background:#f59e0b; }
+.open-fem3d-uc-legend i[data-uc="fail"] { background:#dc2626; }
+/* Trek-alleen: staven die in de getoonde uitkomst op druk stonden en niet
+   meededen, gestippeld en grijs in het canvas; de legenda staat linksonder. */
+.open-fem3d-inactive-legend {
+  position:absolute; left:12px; bottom:40px; z-index:2; display:flex; align-items:center; gap:8px;
+  padding:6px 10px; border:1px solid #cbd5e1; border-radius:4px;
+  background:#fffffff2; color:#334155; font:600 10px/1.2 "Inter",system-ui,sans-serif;
+  box-shadow:0 2px 8px #0f172a1a; pointer-events:none;
+}
+.open-fem3d-inactive-legend i { width:24px; height:0; border-top:2px dashed #6b7280; }
+.open-fem3d-result-label.open-fem3d-inactive-label {
+  border-color:#9ca3af; background:#f9fafbf2; color:#4b5563; font-style:italic;
+}
+.open-fem3d-diaphragm-leaf { display:flex; align-items:stretch; }
+.open-fem3d-diaphragm-leaf > .fem-tree-leaf { flex:1; min-width:0; }
+.open-fem3d-diaphragm-delete {
+  border:0; background:transparent; color:#94a3b8; cursor:pointer; padding:0 8px; font-size:14px; line-height:1;
+}
+.open-fem3d-diaphragm-delete:hover { color:#dc2626; }
+/* Profielen in kleur: rechtsonder, boven de statusregel; de UC-legenda staat
+   rechtsboven en is nooit tegelijk in beeld (de UC-kleuring gaat voor). */
+.open-fem3d-profiel-legenda {
+  position: absolute; right: 12px; bottom: 40px; z-index: 2;
+  max-height: calc(100% - 150px);
+}
+
+.open-fem3d-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(330px, 70%);
+  padding: 18px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fffffff0;
+  color: #334155;
+  line-height: 1.5;
+  text-align: center;
+  pointer-events: none;
+}
+
+.open-fem3d-sidebar {
+  width: 315px;
+  min-width: 260px;
+  max-width: 42%;
+  overflow-y: auto;
+  border-left: 1px solid var(--theme-border);
+  padding: 15px;
+  background: var(--theme-bg);
+}
+
+.open-fem3d-sidebar h2 { font-size: 15px; margin-bottom: 4px; }
+.open-fem3d-sidebar h3 { font-size: 12px; margin-bottom: 8px; }
+.open-fem3d-help { color: var(--theme-text-muted); font-size: 11px; margin-bottom: 14px; }
+.open-fem3d-sidebar section {
+  border-top: 1px solid var(--theme-border);
+  padding: 13px 0;
+}
+
+.open-fem3d-sidebar label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.open-fem3d-sidebar label span { color: var(--theme-text-muted); font-size: 11px; }
+.open-fem3d-sidebar input,
+.open-fem3d-sidebar select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--theme-border);
+  border-radius: 3px;
+  padding: 5px;
+  color: var(--theme-text);
+  background: var(--theme-bg-lighter);
+  font: inherit;
+}
+
+.open-fem3d-coordinate-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.open-fem3d-endpoints { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.open-fem3d-sidebar form > button,
+.open-fem3d-delete {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--theme-accent);
+  border-radius: 4px;
+  padding: 6px;
+  color: var(--theme-accent);
+  background: var(--theme-accent-soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.open-fem3d-sidebar button:disabled { opacity: .45; cursor: not-allowed; }
+.open-fem3d-sidebar button:not(:disabled):hover { filter: brightness(1.12); }
+.open-fem3d-delete { border-color: #aa4c48; color: #d45d56; background: transparent; }
+.open-fem3d-error { margin: 4px 0 8px; color: #ce4949; font-size: 11px; }
+.open-fem3d-list { display: flex; flex-direction: column; gap: 3px; max-height: 160px; overflow: auto; }
+.open-fem3d-list > p { font-size: 11px; color: var(--theme-text-muted); }
+.open-fem3d-list button {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 5px 7px;
+  color: var(--theme-text);
+  background: var(--theme-bg-lighter);
+  cursor: pointer;
+  text-align: left;
+  font-size: 11px;
+}
+.open-fem3d-list button.selected { border-color: var(--theme-accent); color: var(--theme-accent); }
+.open-fem3d-list button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.open-fem3d-results dl {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+.open-fem3d-results dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--theme-border);
+}
+.open-fem3d-results dt { color: var(--theme-text-muted); }
+.open-fem3d-results dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.open-fem3d-member-results { margin-top: 9px !important; }
+
+.open-fem3d-visibility-groups {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow-y: auto;
+}
+.open-fem3d-visibility-groups section {
+  min-width: 0;
+  padding: 10px 12px 12px;
+  border-right: 1px solid var(--theme-border);
+}
+.open-fem3d-visibility-groups section:last-child { border-right: 0; }
+.open-fem3d-visibility-groups h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--theme-text-muted);
+}
+.open-fem3d-visibility-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  width: 100%;
+  min-height: 30px;
+  border: 0;
+  border-radius: 3px;
+  padding: 5px 6px;
+  background: transparent;
+  color: var(--theme-text);
+  font: 500 11px/1.25 "Inter", system-ui, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+.open-fem3d-visibility-row:hover { background: var(--theme-hover); }
+.open-fem3d-visibility-row:focus-visible { outline: 2px solid var(--theme-accent); outline-offset: -2px; }
+.open-fem3d-visibility-switch {
+  position: relative;
+  flex: 0 0 28px;
+  height: 15px;
+  border-radius: 8px;
+  background: #758395;
+  transition: background .12s;
+}
+.open-fem3d-visibility-switch::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform .12s;
+}
+.open-fem3d-visibility-switch.on { background: var(--theme-accent); }
+.open-fem3d-visibility-switch.on::before { transform: translateX(13px); }
+.open-fem3d-visibility-dialog .modal-footer button {
+  min-width: 72px;
+  padding: 5px 12px;
+  border: 1px solid var(--theme-dialog-input-border);
+  background: var(--theme-btn-secondary-bg);
+  color: var(--theme-btn-secondary-text);
+  font: 500 11px/1.2 "Inter", system-ui, sans-serif;
+  cursor: pointer;
+}
+.open-fem3d-visibility-dialog .modal-footer button:hover { background: var(--theme-btn-secondary-hover-bg); }
+.open-fem3d-visibility-dialog .modal-footer button.primary {
+  border-color: var(--theme-btn-primary-border);
+  background: var(--theme-btn-primary-bg);
+  color: var(--theme-btn-primary-text);
+}
+.open-fem3d-visibility-note { margin-right: auto; color: var(--theme-text-muted); font-size: 10px; }
+
+@media (max-width: 700px) {
+  .open-fem3d-editor { flex-direction: column; }
+  .open-fem3d-stage { min-height: 40%; }
+  .open-fem3d-sidebar { width: 100%; max-width: none; max-height: 60%; border-left: 0; border-top: 1px solid var(--theme-border); }
+  .open-fem3d-stage-footer { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .open-fem3d-visibility-dialog { max-width: calc(100vw - 24px); }
+  .open-fem3d-visibility-groups { grid-template-columns: 1fr; }
+  .open-fem3d-visibility-groups section { border-right: 0; border-bottom: 1px solid var(--theme-border); }
+  .open-fem3d-visibility-note { display: none; }
+}
+
+/* Plaatcontour: legenda linksonder, in dezelfde stijl als de UC-legenda. */
+.open-fem3d-plate-legend {
+  position:absolute; left:12px; bottom:40px; z-index:2; display:grid; gap:4px;
+  width:min(280px, calc(100% - 24px)); padding:8px 10px; border:1px solid #cbd5e1; border-radius:4px;
+  background:#fffffff2; color:#334155; font:600 10px/1.3 "Inter",system-ui,sans-serif;
+  box-shadow:0 2px 8px #0f172a1a; pointer-events:none;
+}
+.open-fem3d-plate-legend strong { font-size:11px; }
+.open-fem3d-plate-legend-bar { display:block; height:10px; border-radius:2px; }
+.open-fem3d-plate-legend-values { display:flex; justify-content:space-between; font-variant-numeric:tabular-nums; }
+.open-fem3d-plate-legend small { color:#475569; font-weight:500; }
+.open-fem3d-plate-mesh-message {
+  position:absolute; left:12px; bottom:40px; z-index:2; padding:4px 8px; border:1px solid #cbd5e1;
+  border-radius:4px; background:#fffffff2; color:#334155; font:500 11px/1.3 "Inter",system-ui,sans-serif;
+}

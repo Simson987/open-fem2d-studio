@@ -12,6 +12,15 @@
 //!   `h/t` en `(b+h)/(2t)` en kennen daar **alleen een klasse-3-regel**;
 //!   ronde buizen krijgen grenzen op d/t in plaats van c/t.
 //!
+//! Massief rond staal staat op geen van de drie bladen, en dat is geen gat in
+//! de tabel: tabel 5.2 classificeert PLAATdelen op hun slankheid c/t, en een
+//! massieve ronde doorsnede heeft geen plaatdeel dat plaatselijk kan
+//! plooien. Zie [`SectionShape::SolidRound`].
+//!
+//! Platstaal (strip) staat er evenmin op: een massieve rechthoek heeft geen
+//! gesteunde rand. Zie [`SectionShape::FlatBar`] voor de klasse die hier dan
+//! wordt aangehouden.
+//!
 //! Tot sept 2026 werden de I-profielregels (blad 1 voor het lijf + blad 2 voor
 //! de flens) op élk profiel losgelaten, dus ook op kokers en ronde buizen. Een
 //! kokerwand werd daardoor als uitkraging getoetst (grens 9ε/10ε/14ε in plaats
@@ -54,6 +63,12 @@ pub enum SectionShape {
     /// Hoeklijn: blad 3, en dat blad kent voor hoekprofielen **alleen een
     /// klasse-3-regel**. Zie [`classify_section`] voor wat daaruit volgt.
     Angle,
+    /// Massief rond staal (reeks "RD"): altijd klasse 1. Zie
+    /// [`classify_section`] voor de onderbouwing.
+    SolidRound,
+    /// Platstaal (reeks "Strip"): klasse 1 zonder druk, met druk de klasse van
+    /// de volle breedte als uitkragend deel. Zie [`classify_section`].
+    FlatBar,
 }
 
 pub fn epsilon(grade: &SteelGrade) -> f64 {
@@ -100,13 +115,56 @@ pub fn classify_section(
     let eps = epsilon(grade);
 
     // Grove schakelaar tussen "zuivere buiging" en "gedrukt". Bij meer dan 5%
-    // van de plastische normaalkrachtcapaciteit wordt het lijf als volledig
-    // gedrukt getoetst; dat is veilig-zijdig ten opzichte van de exacte
-    // α/ψ-formules van tabel 5.2.
-    let n_ratio = forces.n_ed.abs() * 1000.0 / (p.area_mm2 * grade.fy_mpa);
+    // van de plastische normaalkrachtcapaciteit aan DRUK wordt het lijf als
+    // volledig gedrukt getoetst; dat is veilig-zijdig ten opzichte van de
+    // exacte α/ψ-formules van tabel 5.2.
+    //
+    // Alleen druk telt (N is trek-positief). Trek verkleint het gedrukte deel
+    // van het lijf (α < 0,5), en dan liggen de grenzen van tabel 5.2 boven die
+    // van zuivere buiging: de buigingsgrenzen 72ε/83ε/124ε zijn dan de veilige
+    // kant. Tot oktober 2026 telde hier |N|, en werd een lijf onder trek als
+    // volledig GEDRUKT ingedeeld.
+    let n_ratio = (-forces.n_ed).max(0.0) * 1000.0 / (p.area_mm2 * grade.fy_mpa);
     let zuivere_buiging = n_ratio < 0.05;
 
     match shape {
+        SectionShape::SolidRound => {
+            // Klasse 1, onafhankelijk van staalsoort en belasting. §5.5.2(1)
+            // koppelt de klasse aan het plaatselijk plooien van gedrukte
+            // doorsnededelen, en tabel 5.2 geeft daarvoor grenzen op de
+            // slankheid c/t (of d/t) van een PLAATdeel of een buiswand. Een
+            // massieve cirkel heeft zo'n deel niet: er is geen dunne wand die
+            // kan plooien vóór de doorsnede volledig plastisch is. Het
+            // plastisch scharnier met rotatiecapaciteit uit §5.5.2(1) is dus
+            // bereikbaar, en dat is de definitie van klasse 1. De limiet van
+            // blad 3 voor een ronde buis wijst dezelfde kant op: d/t van een
+            // "buis" met t = d/2 is 2, ver onder 50ε².
+            CrossSectionClass::Class1
+        }
+
+        SectionShape::FlatBar => {
+            // Platstaal: een massieve rechthoek met breedte b (`h_mm`, langs
+            // de z-as) en dikte t (`t_w`). Tabel 5.2 kent haar niet: de strip
+            // heeft geen rand die door een ander plaatdeel gesteund wordt, en
+            // haar enige plooivorm is de knik van de hele staaf — die toetst
+            // 6.3.1, met de werkelijke lengte.
+            //
+            // Zonder drukkracht is er geen gedrukt plaatdeel om te
+            // classificeren: klasse 1, plastisch buigen. Met druk is als
+            // veilige aanvulling de klasse van een uitkragend deel onder
+            // gelijkmatige druk aangehouden (blad 2) met c = b, de volle
+            // breedte: c/t = b/t tegen 9ε / 10ε / 14ε. Een strip die daarbij
+            // klasse 4 wordt, wordt — zoals elke klasse-4-doorsnede — niet
+            // getoetst.
+            if forces.n_ed < 0.0 {
+                let t = p.tw_mm.max(1e-9);
+                let (f1, f2, f3) = grenzen_uitkraging(eps);
+                klasse_uit(p.h_mm / t, f1, f2, f3)
+            } else {
+                CrossSectionClass::Class1
+            }
+        }
+
         SectionShape::CircularHollow => {
             // Blad 3: klasse 1 bij d/t ≤ 50ε², klasse 2 ≤ 70ε², klasse 3 ≤ 90ε².
             // h_mm is bij een ronde buis de uitwendige diameter d.
@@ -778,7 +836,7 @@ fn polygoon_oppervlak(poly: &[(f64, f64)]) -> f64 {
 mod tests {
     use super::*;
     use section_properties::i_section::i_section_props;
-    use crate::{S235, S355};
+    use crate::{S235, S355, S460};
 
     /// Doorsnede-eigenschappen waarbij alleen de maten voor de classificatie
     /// ertoe doen. area_mm2 wordt gebruikt voor de n_ratio-schakelaar.
@@ -1008,6 +1066,52 @@ mod tests {
         );
     }
 
+    // ── Massief rond: geen plaatdeel, dus klasse 1 ───────────────────────────
+
+    /// RD 24 en RD 64, zuivere buiging en volle druk, S235 en S460: altijd
+    /// klasse 1. Er is geen c/t om aan te toetsen, en juist daarom mag de
+    /// uitkomst niet van ε of van de belasting afhangen.
+    #[test]
+    fn massief_rond_is_altijd_klasse1() {
+        for naam in ["RD 24", "RD 64"] {
+            let p = steel_profiles::db().find(naam).expect(naam).properties;
+            for grade in [S235, S460] {
+                for krachten in [buiging(), druk(1.0e4)] {
+                    assert_eq!(
+                        classify_section(&p, &grade, &krachten, SectionShape::SolidRound),
+                        CrossSectionClass::Class1,
+                        "{naam} {}",
+                        grade.name
+                    );
+                }
+            }
+        }
+    }
+
+    /// Platstaal zonder druk: klasse 1. Met druk de grenzen van een
+    /// uitkragend deel (blad 2) op c/t = b/t:
+    ///   Strip 80x10, S235 (ε = 1):  b/t = 8   ≤ 9   → klasse 1
+    ///   Strip 80x8,  S235:          b/t = 10  ≤ 10  → klasse 2
+    ///   Strip 120x10, S235:         b/t = 12  ≤ 14  → klasse 3
+    ///   Strip 100x5, S235:          b/t = 20  > 14  → klasse 4
+    ///   Strip 80x10, S355 (ε = 0,8136): 9ε = 7,32 < 8 ≤ 10ε = 8,14 → klasse 2
+    #[test]
+    fn platstaal_klasse_uit_b_t_alleen_bij_druk() {
+        let klasse = |naam: &str, grade: SteelGrade, f: &InternalForces| {
+            let p = steel_profiles::db().find(naam).expect(naam).properties;
+            classify_section(&p, &grade, f, SectionShape::FlatBar)
+        };
+        let trek = InternalForces { n_ed: 50.0, my_ed: 1.0, ..Default::default() };
+        assert_eq!(klasse("Strip 100x5", S235, &trek), CrossSectionClass::Class1);
+        assert_eq!(klasse("Strip 100x5", S235, &buiging()), CrossSectionClass::Class1);
+        let d = druk(1.0);
+        assert_eq!(klasse("Strip 80x10", S235, &d), CrossSectionClass::Class1);
+        assert_eq!(klasse("Strip 80x8", S235, &d), CrossSectionClass::Class2);
+        assert_eq!(klasse("Strip 120x10", S235, &d), CrossSectionClass::Class3);
+        assert_eq!(klasse("Strip 100x5", S235, &d), CrossSectionClass::Class4);
+        assert_eq!(klasse("Strip 80x10", S355, &d), CrossSectionClass::Class2);
+    }
+
     // ── Regressie op de echte catalogus ──────────────────────────────────────
 
     /// De profielen die vóór de correctie ten onrechte klasse 3 werden.
@@ -1024,6 +1128,8 @@ mod tests {
                 steel_profiles::ProfileKind::Channel => SectionShape::Channel,
                 steel_profiles::ProfileKind::ISection => SectionShape::ISection,
                 steel_profiles::ProfileKind::Angle => SectionShape::Angle,
+                steel_profiles::ProfileKind::RoundBar => SectionShape::SolidRound,
+                steel_profiles::ProfileKind::FlatBar => SectionShape::FlatBar,
             };
             assert_eq!(
                 classify_section(&prof.properties, &S235, &buiging(), shape),

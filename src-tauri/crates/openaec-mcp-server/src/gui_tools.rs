@@ -23,14 +23,21 @@ use std::time::Duration;
 
 use crate::RpcError;
 
-/// De vijftien tools. Eén lijst, gebruikt door `is_gui_tool`, de schema's en de
+/// De tweeëntwintig tools. Eén lijst, gebruikt door `is_gui_tool`, de schema's en de
 /// dispatch — zodat een tool niet in de lijst kan staan zonder afhandeling.
-pub const GUI_TOOLS: [&str; 15] = [
+pub const GUI_TOOLS: [&str; 22] = [
     "gui_quit",
     "gui_status",
     "gui_load_model",
     "gui_build_model",
+    "gui_build_3d_model",
+    "gui_build_3d_steel_hall",
+    "gui_import_ifc_analysis_model",
+    "gui_configure_3d_view",
+    "gui_select_3d_combination",
     "gui_select_member",
+    "gui_select_3d_plate",
+    "gui_split_3d_member",
     "gui_set_cage",
     "gui_set_analysis",
     "gui_solve",
@@ -71,7 +78,7 @@ fn vindbestand_pad() -> Result<std::path::PathBuf, RpcError> {
 
 fn niet_bereikbaar(reden: impl std::fmt::Display) -> RpcError {
     RpcError::tool_exec(format!(
-        "De app draait niet met bediening aan ({reden}). Start Open FEM2D Studio met de \
+        "De app draait niet met bediening aan ({reden}). Start Open FEM Studio met de \
          omgevingsvariabele OPENAEC_GUI_CONTROL=1; hij schrijft dan gui-control.json in zijn \
          app-datamap en deze tools vinden hem daar."
     ))
@@ -157,6 +164,24 @@ struct MetPad { path: String }
 struct MetId { id: u64 }
 #[derive(Deserialize)]
 struct MetBeamId { beam_id: u64 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Splits3DStaaf { beam_id: u64, ratio: f64 }
+/// `gui_build_3d_steel_hall`: de halparameters gaan ongewijzigd naar de
+/// pagina; de generator in de app leest ze met zijn eigen strikte poort.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Staalhal { #[serde(default)] hal: Option<Value> }
+/// `gui_import_ifc_analysis_model`: de app leest het bestand via Rust
+/// (`gui_control.rs`) en importeert het met dezelfde functie als de knop
+/// "Rekenmodel importeren".
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IfcImport {
+    path: String,
+    #[serde(default)]
+    analysis_model: Option<Value>,
+}
 #[derive(Deserialize)]
 struct Korf { beam_id: u64, cage: Value }
 #[derive(Deserialize)]
@@ -328,9 +353,50 @@ fn dispatch_sync(naam: &str, args: Value) -> Result<Value, RpcError> {
             roep("model_laden", json!({ "pad": a.path }), 60)
         }
         "gui_build_model" => roep("model_bouwen", args, 60),
+        "gui_build_3d_model" => roep("model_3d_bouwen", args, 60),
+        "gui_build_3d_steel_hall" => {
+            let a: Staalhal = lees(naam, args)?;
+            roep("staalhal_maken", json!({ "hal": a.hal.unwrap_or_else(|| json!({})) }), 60)
+        }
+        "gui_import_ifc_analysis_model" => {
+            let a: IfcImport = lees(naam, args)?;
+            let mut opdracht = json!({ "pad": a.path });
+            if let Some(keuze) = a.analysis_model {
+                let geldig = keuze.as_str().is_some_and(|s| !s.trim().is_empty()) || keuze.as_u64().is_some_and(|n| n >= 1);
+                if !geldig {
+                    return Err(RpcError::invalid_params(
+                        "gui_import_ifc_analysis_model: `analysis_model` is the model name or its 1-based number",
+                    ));
+                }
+                opdracht["analysemodel"] = keuze;
+            }
+            roep("ifc_analysemodel_importeren", opdracht, 120)
+        }
+        "gui_configure_3d_view" => roep("weergave_3d_configureren", args, 30),
+        "gui_select_3d_combination" => {
+            let a: MetId = lees(naam, args)?;
+            roep("resultaat_3d_kiezen", json!({ "id": a.id }), 30)
+        }
         "gui_select_member" => {
             let a: MetId = lees(naam, args)?;
             roep("staaf_selecteren", json!({ "id": a.id }), 30)
+        }
+        "gui_select_3d_plate" => {
+            let a: MetId = lees(naam, args)?;
+            roep("plaat_3d_selecteren", json!({ "id": a.id }), 30)
+        }
+        "gui_split_3d_member" => {
+            let a: Splits3DStaaf = lees(naam, args)?;
+            if !a.ratio.is_finite() || a.ratio <= 1e-6 || a.ratio >= 1.0 - 1e-6 {
+                return Err(RpcError::invalid_params(
+                    "gui_split_3d_member: `ratio` must lie strictly between 0 and 1",
+                ));
+            }
+            roep(
+                "staaf_3d_splitsen",
+                json!({ "beamId": a.beam_id, "ratio": a.ratio }),
+                30,
+            )
         }
         "gui_set_cage" => {
             let a: Korf = lees(naam, args)?;
@@ -388,7 +454,7 @@ fn leeg_schema() -> Value {
 }
 
 pub fn tool_definitions() -> Vec<Value> {
-    let vooraf = "Drives the RUNNING Open FEM2D Studio desktop app through its control channel \
+    let vooraf = "Drives the RUNNING Open FEM Studio desktop app through its control channel \
                   (the app must be started with OPENAEC_GUI_CONTROL=1). ";
     vec![
         json!({
@@ -398,7 +464,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "gui_load_model",
-            "description": format!("{vooraf}Loads a project file (.femp / .ifcfem2d) into the app. The file is read by the app process itself, so any path the app can read works."),
+            "description": format!("{vooraf}Loads a project file (.femp / .ifcfem / .ifcfem2d) into the app. The file is read by the app process itself, so any path the app can read works."),
             "inputSchema": { "type": "object", "additionalProperties": false, "required": ["path"],
                 "properties": { "path": { "type": "string", "description": "Absolute path to the project file." } } }
         }),
@@ -415,10 +481,146 @@ pub fn tool_definitions() -> Vec<Value> {
                 } }
         }),
         json!({
+            "name": "gui_build_3d_model",
+            "description": format!("{vooraf}Replaces the active project with a 3D frame model and opens its 3D workspace. Coordinates are metres; from/to/node are 1-based indices into nodes. Member profile_name, material, roll_angle_deg, local end releases, tension_only and optional check_config are retained and feed the 3D view, solver, IFC and EN 1992/EN 1993 checks. Optional diaphragms couple X, Y and the rotation about Z of nodes at one height as a rigid horizontal plane. The model settings tension_only_fit_after_permanent (tension-only members fitted after the permanent load) and tension_only_cross_rule (of two crossing tension-only members one always stays active) go with the model. For concrete, check_config uses the same BeamCheckConfig fields as the properties panel (including betonKorf and optional betonKolom). Optional levels (horizontal structural-grid axes: label and height in metres) replace the levels of the structural grid; a node or plate with `level` (1-based index into levels) is linked to that level, so it moves along when the level height changes in the app. A linked node's z must equal the level height; a linked plate lies horizontally on the level with all its nodes. Optional load_panels carry a surface load (kN/m²) without stiffness to the beams in their plane; the app converts them into member and nodal loads before the frame kernel and reports per panel which members carry and any warning."),
+            "inputSchema": { "type": "object", "additionalProperties": false,
+                "properties": {
+                    "levels": { "type": "array", "description": "Levels: horizontal structural-grid axes with a label and a height in metres (e.g. Ground 0, First floor 3). A label that already exists in the app keeps its identity.",
+                        "items": { "type": "object", "additionalProperties": false,
+                        "properties": { "label": {"type":"string"}, "position_m": {"type":"number"} }, "required": ["label","position_m"] } },
+                    "nodes": { "type": "array", "items": { "type": "object", "additionalProperties": false,
+                        "properties": { "x": {"type":"number"}, "y": {"type":"number"}, "z": {"type":"number"},
+                            "level": {"type":"integer","minimum":1,"description":"1-based index into levels: the node is linked to that level; z must equal its height."} }, "required": ["x","y","z"] } },
+                    "beams": { "type": "array", "items": { "type": "object", "additionalProperties": false,
+                        "properties": { "from": {"type":"integer","minimum":1}, "to": {"type":"integer","minimum":1}, "profile_name": {"type":"string"}, "material": {"type":"string"},
+                            "roll_angle_deg": {"type":"number","description":"Rotation of local y/z axes around the member axis, degrees."},
+                            "releases": {"type":"object","additionalProperties":false,"description":"Released local end moments/torsion.",
+                                "properties":{"my_start":{"type":"boolean"},"my_end":{"type":"boolean"},"mz_start":{"type":"boolean"},"mz_end":{"type":"boolean"},"torsion_start":{"type":"boolean"},"torsion_end":{"type":"boolean"}}},
+                            "tension_only": {"type":"boolean","description":"Tension-only member (e.g. a round-bar wind brace): it drops out of a load case or combination in which it would be in compression (axial force 0)."},
+                            "check_config": {"type":"object","additionalProperties":true} }, "required": ["from","to"] } },
+                    "supports": { "type": "array", "description":"A support needs a rigid preset, one or more global springs, or both on different DOFs. Springs are kN/m or kNm/rad. Prescribed translations are m and rotations rad and need a matching rigid preset DOF.",
+                        "items": { "type": "object", "additionalProperties": false,
+                        "properties": { "node": {"type":"integer","minimum":1}, "type": {"type":"string","enum":["fixed","pinned","xRoller","yRoller","zRoller","revoluteX","revoluteY","revoluteZ"]},
+                            "springs":{"type":"object","additionalProperties":false,"properties":{
+                                "kx_kn_per_m":{"type":"number","exclusiveMinimum":0},"ky_kn_per_m":{"type":"number","exclusiveMinimum":0},"kz_kn_per_m":{"type":"number","exclusiveMinimum":0},
+                                "krx_knm_per_rad":{"type":"number","exclusiveMinimum":0},"kry_knm_per_rad":{"type":"number","exclusiveMinimum":0},"krz_knm_per_rad":{"type":"number","exclusiveMinimum":0}
+                            }},
+                            "prescribed":{"type":"object","additionalProperties":false,"properties":{
+                                "ux_m":{"type":"number"},"uy_m":{"type":"number"},"uz_m":{"type":"number"},
+                                "rx_rad":{"type":"number"},"ry_rad":{"type":"number"},"rz_rad":{"type":"number"}
+                            }} }, "required": ["node"] } },
+                    "loads": { "type": "array", "items": { "type": "object", "additionalProperties": false,
+                        "properties": { "node": {"type":"integer","minimum":1}, "case_id": {"type":"integer","minimum":1}, "fx": {"type":"number"}, "fy": {"type":"number"}, "fz": {"type":"number"}, "mx": {"type":"number"}, "my": {"type":"number"}, "mz": {"type":"number"} }, "required": ["node"] } }
+                    ,"member_loads": { "type": "array", "description": "Trapezoidal loads in local member y/z axes, kN/m; positions are metres from member start. case_id selects the shared project load case (default 1).",
+                        "items": { "type": "object", "additionalProperties": false,
+                        "properties": { "beam": {"type":"integer","minimum":1}, "case_id": {"type":"integer","minimum":1}, "qy_start": {"type":"number"}, "qy_end": {"type":"number"}, "qz_start": {"type":"number"}, "qz_end": {"type":"number"}, "start_m": {"type":"number","minimum":0}, "end_m": {"type":"number","exclusiveMinimum":0} }, "required": ["beam"] } }
+                    ,"member_point_loads": { "type": "array", "description": "Concentrated loads in local member y/z axes, kN; position_m is metres from member start. case_id selects the shared project load case (default 1).",
+                        "items": { "type": "object", "additionalProperties": false,
+                        "properties": { "beam": {"type":"integer","minimum":1}, "case_id": {"type":"integer","minimum":1}, "py": {"type":"number"}, "pz": {"type":"number"}, "position_m": {"type":"number","minimum":0} }, "required": ["beam","position_m"] } }
+                    ,"thermal_loads": { "type": "array", "description": "Member temperature loads in K. The optional gradients act over the local y/z section directions.",
+                        "items": { "type": "object", "additionalProperties": false,
+                        "properties": { "beam": {"type":"integer","minimum":1}, "case_id": {"type":"integer","minimum":1}, "delta_t_uniform_k": {"type":"number"}, "delta_t_gradient_y_k": {"type":"number"}, "delta_t_gradient_z_k": {"type":"number"} }, "required": ["beam"] } }
+                    ,"plates": { "type": "array", "description": "Polygonal plates. nodes contains the ordered 1-based node indices; openings use the same format. Thickness and corner radii are metres.",
+                        "items": { "type": "object", "additionalProperties": false,
+                        "properties": { "nodes": {"type":"array","minItems":3,"items":{"type":"integer","minimum":1}}, "thickness_m":{"type":"number","exclusiveMinimum":0}, "material":{"type":"string"}, "corner_radius_m":{"type":"number","minimum":0},
+                            "level":{"type":"integer","minimum":1,"description":"1-based index into levels: the plate lies horizontally on that level together with all its nodes (also those of its openings)."},
+                            "openings":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"nodes":{"type":"array","minItems":3,"items":{"type":"integer","minimum":1}},"corner_radius_m":{"type":"number","minimum":0}},"required":["nodes"]}} }, "required": ["nodes"] } }
+                    ,"surface_loads": { "type": "array", "description": "Global plate surface loads in kN/m².",
+                        "items": { "type": "object", "additionalProperties": false,
+                        "properties": { "plate":{"type":"integer","minimum":1}, "case_id":{"type":"integer","minimum":1}, "qx":{"type":"number"}, "qy":{"type":"number"}, "qz":{"type":"number"} }, "required": ["plate"] } }
+                    ,"diaphragms": { "type": "array", "description": "Rigid horizontal diaphragms (e.g. a hollow-core floor with a structural topping): X, Y and the rotation about Z of the nodes move as one rigid body; Z and the rotations about X and Y stay free per node. nodes are 1-based node indices (at least 2) at one height within 1 mm; a node belongs to at most one diaphragm, and at most one of its nodes may hold the diaphragm in its plane (a support in X, Y or rotation about Z).",
+                        "items": { "type": "object", "additionalProperties": false,
+                        "properties": { "nodes": {"type":"array","minItems":2,"items":{"type":"integer","minimum":1}}, "name": {"type":"string"} }, "required": ["nodes"] } }
+                    ,"tension_only_fit_after_permanent": { "type": "boolean", "default": false,
+                        "description": "Model setting: tension-only members are fitted after the permanent load. Their stress-free length follows the deformation under the permanent load cases (type dead, factor 1.0, including self-weight and load panels), so under that load alone they carry nothing; the result lists the fitting elongation per member." }
+                    ,"tension_only_cross_rule": { "type": "boolean", "default": false,
+                        "description": "Model setting (cross rule): of two tension-only members that cross each other in their interiors (axes within 1 mm, no shared end node), the one with the largest axial force always stays active, even with a small compressive force. Three or more members through one point do not count." }
+                    ,"load_panels": { "type": "array", "description": "Load panels: a plane polygon over existing nodes without stiffness that transfers its load to the beams in that plane. nodes are the ordered 1-based corner node indices (at least 3, in one plane). q is kN/m² and non-zero. direction gravity acts in global -Z per m² HORIZONTAL PROJECTION (snow, floors, finishes); direction normal acts perpendicular to the panel per m² panel along a fixed normal that points down (for a vertical panel -Y, for a panel parallel to YZ -X), a negative q reverses it (suction). distribution oneWay sends every point along span_direction (a global vector, projected onto the panel; required for oneWay) to the nearest beam transverse to the span (at most 10 degrees off): half the distance to the neighbours as loaded width, edge beams half a strip; beams along the span and skewed members such as bracing get nothing. distribution twoWay sends every point to the nearest beam in the panel: 45-degree lines, triangles and trapezoids on four edge beams. A beam counts when both end nodes lie on the edge or inside the panel (1 mm). An edge without a beam sends its load to the nearest beam with a warning; a panel without any beam blocks the calculation. excluded_beams are 1-based member indices that get no load. case_id selects the shared project load case (default 1).",
+                        "items": { "type": "object", "additionalProperties": false,
+                        "properties": {
+                            "nodes": {"type":"array","minItems":3,"items":{"type":"integer","minimum":1}},
+                            "case_id": {"type":"integer","minimum":1},
+                            "q": {"type":"number","description":"kN/m², non-zero."},
+                            "direction": {"type":"string","enum":["gravity","normal"]},
+                            "distribution": {"type":"string","enum":["oneWay","twoWay"]},
+                            "span_direction": {"type":"object","additionalProperties":false,"required":["x","y","z"],
+                                "description":"Global span direction; projected onto the panel. Required for oneWay.",
+                                "properties":{"x":{"type":"number"},"y":{"type":"number"},"z":{"type":"number"}}},
+                            "excluded_beams": {"type":"array","items":{"type":"integer","minimum":1}}
+                        }, "required": ["nodes","q","direction","distribution"] } }
+                } }
+        }),
+        json!({
+            "name": "gui_build_3d_steel_hall",
+            "description": format!("{vooraf}Builds a steel hall in the app with the same generator as the \"Stalen hal…\" wizard (and the MCP tool open_fem_3d_staalhal_maken): frames, purlins, eaves beams, roof and wall bracing, loads G/S/W and self-weight, optionally on a concrete beam grid on piles. Replaces the 3D model as ONE undo step, adds the hall's load cases to the project where missing (existing cases are kept and reused by name), sets the structural grid and opens the 3D workspace fitted to the model. Returns the counts, the project load-case ids and the member ids per group."),
+            "inputSchema": { "type": "object", "additionalProperties": false,
+                "properties": { "hal": crate::staalhal_tools::hal_schema() } }
+        }),
+        json!({
+            "name": "gui_import_ifc_analysis_model",
+            "description": format!("{vooraf}Imports an IFC4 structural analysis model (Structural Analysis View) as a NEW 3D project, exactly as the button \"Rekenmodel importeren\" on the IFC ribbon tab does (and the MCP tool open_fem_3d_ifc_importeren, which works without the app): nodes, supports and springs, members with profile, material, roll and end releases, tension-only members, rigid diaphragms, load panels, member and nodal loads, load cases, combinations and levels. The app reads the file itself. Unsaved work in the app is replaced without asking. Returns the report: counts, tension-only members, diaphragms, explanations, warnings and everything that was not imported. With several analysis models in the file, `analysis_model` (name or 1-based number) is required; without it the error lists the models."),
+            "inputSchema": { "type": "object", "additionalProperties": false, "required": ["path"],
+                "properties": {
+                    "path": { "type": "string", "minLength": 1, "description": "Absolute path to the .ifc file (IFC4, STEP)." },
+                    "analysis_model": crate::ifc_import_tools::analysemodel_schema()
+                } }
+        }),
+        json!({
+            "name": "gui_configure_3d_view",
+            "description": format!("{vooraf}Configures the current 3D workspace: camera, visible objects, profile volumes and structural grid (grid axes and levels). Structural-grid positions are metres. z_levels are the levels: a level whose label already exists keeps its identity, so nodes and plates linked to it move to its new height; the app refuses a change that would leave a member without length or a plate out of plane, and then nothing changes."),
+            "inputSchema": { "type": "object", "additionalProperties": false,
+                "properties": {
+                    "view": { "type": "string", "enum": ["iso","top","front","side"] },
+                    "visibility": { "type": "object", "additionalProperties": false,
+                        "properties": {
+                            "nodes":{"type":"boolean"}, "beams":{"type":"boolean"}, "plates":{"type":"boolean"}, "profiles":{"type":"boolean"},
+                            "nodeNumbers":{"type":"boolean"}, "beamNumbers":{"type":"boolean"}, "nodeCoordinates":{"type":"boolean"},
+                            "supports":{"type":"boolean"}, "loads":{"type":"boolean"}, "loadPanels":{"type":"boolean"}, "grid":{"type":"boolean"},
+                            "axes":{"type":"boolean"}, "structuralGrid":{"type":"boolean"},
+                            "deformation":{"type":"boolean"}, "reactions":{"type":"boolean"},
+                            "utilization":{"type":"boolean"}, "axialForce":{"type":"boolean"},
+                            "shearY":{"type":"boolean"}, "shearZ":{"type":"boolean"},
+                            "torsion":{"type":"boolean"}, "momentY":{"type":"boolean"}, "momentZ":{"type":"boolean"}
+                        } },
+                    "structural_grid": { "type": "object", "additionalProperties": false,
+                        "properties": {
+                            "enabled":{"type":"boolean"},
+                            "x_axes":{"$ref":"#/$defs/axisList"},
+                            "y_axes":{"$ref":"#/$defs/axisList"},
+                            "z_levels":{"$ref":"#/$defs/axisList"}
+                        } }
+                },
+                "$defs": { "axisList": { "type":"array", "items": { "type":"object", "additionalProperties":false,
+                    "properties": { "label":{"type":"string"}, "position_m":{"type":"number"} }, "required":["label","position_m"] } } }
+            }
+        }),
+        json!({
             "name": "gui_select_member",
             "description": format!("{vooraf}Selects one member (beam) in the app, as if clicked on the canvas."),
             "inputSchema": { "type": "object", "additionalProperties": false, "required": ["id"],
                 "properties": { "id": { "type": "integer" } } }
+        }),
+        json!({
+            "name": "gui_select_3d_plate",
+            "description": format!("{vooraf}Selects one 3D plate in the app, enabling plate properties, openings and surface-load commands."),
+            "inputSchema": { "type": "object", "additionalProperties": false, "required": ["id"],
+                "properties": { "id": { "type": "integer", "minimum": 1 } } }
+        }),
+        json!({
+            "name": "gui_split_3d_member",
+            "description": format!("{vooraf}Splits one 3D frame member at a relative position measured from its start node. The new internal node is rigid; section, material, roll and check settings are retained. Distributed, point and thermal member loads are transferred exactly, and only the original outside end releases remain."),
+            "inputSchema": { "type": "object", "additionalProperties": false, "required": ["beam_id", "ratio"],
+                "properties": {
+                    "beam_id": { "type": "integer", "minimum": 1 },
+                    "ratio": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1,
+                        "description": "Relative split position from the member start, for example 0.5 for midspan." }
+                } }
+        }),
+        json!({
+            "name": "gui_select_3d_combination",
+            "description": format!("{vooraf}Selects one already calculated 3D UGT/BGT combination in the Results explorer and on the 3D canvas. Call gui_solve first; its combinationResultaten list contains the available ids."),
+            "inputSchema": { "type": "object", "additionalProperties": false, "required": ["id"],
+                "properties": { "id": { "type": "integer", "minimum": 1 } } }
         }),
         json!({
             "name": "gui_set_cage",
@@ -434,12 +636,12 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "gui_solve",
-            "description": format!("{vooraf}Runs the full calculation exactly as the Bereken button does: all load cases and combinations, the physically non-linear concrete round when the analysis type is tweedeOrdeFysisch, and the code checks. Returns only when all of that is done (a recalculation that was already scheduled after a model change runs first). Returns per combination the extreme M, V, N and deflection, which non-linear round ran, and a summary of the checks."),
+            "description": format!("{vooraf}Runs the full calculation exactly as the Bereken button does and returns only when analysis and checks are finished. For 2D this covers all load cases/combinations and the physically non-linear concrete round when selected. For 3D it runs the P-Delta frame analysis, eigenvalue buckling, all six local member-force components, reactions, and EN 1992/EN 1993 checks. A 3D answer contains the complete result plus steel/concrete results and explicit skipped reasons."),
             "inputSchema": leeg_schema()
         }),
         json!({
             "name": "gui_run_checks",
-            "description": format!("{vooraf}Runs the code checks (steel, timber, concrete) as the Toetsing button does, waits until the check store reports done, and returns the results per member — or the app's error text."),
+            "description": format!("{vooraf}Runs the current model and its code checks as the Toetsing button does, waits until everything is done, and returns the results per member — or the app's error text. In 3D this returns the P-Delta/buckling result together with EN 1993 steel and EN 1992 concrete checks."),
             "inputSchema": leeg_schema()
         }),
         json!({
@@ -461,7 +663,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "gui_read_checks",
-            "description": format!("{vooraf}Reads the current check results from the app without re-running them."),
+            "description": format!("{vooraf}Reads the current check results without re-running them. For a 3D project the answer includes the full 3D solve result, steel checks, concrete checks, running state and any solve/check error."),
             "inputSchema": leeg_schema()
         }),
         json!({
@@ -574,5 +776,122 @@ mod tests {
         assert_eq!(s["required"], json!(["path"]));
         assert_eq!(s["properties"]["project"]["additionalProperties"], json!(false));
         assert_eq!(s["properties"]["report_type"]["enum"], json!(["volledig", "beperkt"]));
+    }
+
+    #[test]
+    fn het_3d_schema_draagt_toetsing_revolutes_en_resultaatlagen() {
+        let defs = tool_definitions();
+        let bouw = defs.iter().find(|d| d["name"] == "gui_build_3d_model").unwrap();
+        let beam = &bouw["inputSchema"]["properties"]["beams"]["items"]["properties"];
+        assert_eq!(beam["check_config"]["type"], json!("object"));
+        assert_eq!(beam["roll_angle_deg"]["type"], json!("number"));
+        assert_eq!(beam["releases"]["additionalProperties"], json!(false));
+        assert_eq!(beam["releases"]["properties"]["torsion_end"]["type"], json!("boolean"));
+        let member_load = &bouw["inputSchema"]["properties"]["member_loads"]["items"];
+        assert_eq!(member_load["additionalProperties"], json!(false));
+        assert_eq!(member_load["properties"]["qz_start"]["type"], json!("number"));
+        assert_eq!(member_load["properties"]["case_id"]["minimum"], json!(1));
+        let point_load = &bouw["inputSchema"]["properties"]["member_point_loads"]["items"];
+        assert_eq!(point_load["additionalProperties"], json!(false));
+        assert_eq!(point_load["properties"]["position_m"]["minimum"], json!(0));
+        assert_eq!(point_load["required"], json!(["beam", "position_m"]));
+        let thermal = &bouw["inputSchema"]["properties"]["thermal_loads"]["items"];
+        assert_eq!(thermal["additionalProperties"], json!(false));
+        assert_eq!(thermal["properties"]["delta_t_gradient_z_k"]["type"], json!("number"));
+        assert_eq!(bouw["inputSchema"]["properties"]["loads"]["items"]["properties"]["case_id"]["type"], json!("integer"));
+        let plate = &bouw["inputSchema"]["properties"]["plates"]["items"];
+        assert_eq!(plate["properties"]["nodes"]["minItems"], json!(3));
+        assert_eq!(plate["properties"]["openings"]["items"]["additionalProperties"], json!(false));
+        let surface = &bouw["inputSchema"]["properties"]["surface_loads"]["items"];
+        assert_eq!(surface["properties"]["qz"]["type"], json!("number"));
+        let support_types = bouw["inputSchema"]["properties"]["supports"]["items"]
+            ["properties"]["type"]["enum"].as_array().unwrap();
+        for kind in ["xRoller", "yRoller", "zRoller", "revoluteX", "revoluteY", "revoluteZ"] {
+            assert!(support_types.contains(&json!(kind)), "{kind} ontbreekt");
+        }
+        let springs = &bouw["inputSchema"]["properties"]["supports"]["items"]["properties"]["springs"];
+        assert_eq!(springs["additionalProperties"], json!(false));
+        assert_eq!(springs["properties"]["kz_kn_per_m"]["exclusiveMinimum"], json!(0));
+        assert_eq!(springs["properties"]["kry_knm_per_rad"]["type"], json!("number"));
+        let prescribed = &bouw["inputSchema"]["properties"]["supports"]["items"]["properties"]["prescribed"];
+        assert_eq!(prescribed["additionalProperties"], json!(false));
+        assert_eq!(prescribed["properties"]["ux_m"]["type"], json!("number"));
+        assert_eq!(prescribed["properties"]["rz_rad"]["type"], json!("number"));
+
+        let levels = &bouw["inputSchema"]["properties"]["levels"]["items"];
+        assert_eq!(levels["additionalProperties"], json!(false));
+        assert_eq!(levels["required"], json!(["label", "position_m"]));
+        let node = &bouw["inputSchema"]["properties"]["nodes"]["items"];
+        assert_eq!(node["properties"]["level"]["minimum"], json!(1));
+        assert_eq!(node["required"], json!(["x", "y", "z"]), "level blijft optioneel");
+        assert_eq!(plate["properties"]["level"]["type"], json!("integer"));
+
+        let view = defs.iter().find(|d| d["name"] == "gui_configure_3d_view").unwrap();
+        let visibility = &view["inputSchema"]["properties"]["visibility"]["properties"];
+        for layer in [
+            "plates", "deformation", "reactions", "utilization", "axialForce", "shearY",
+            "shearZ", "torsion", "momentY", "momentZ",
+        ] {
+            assert_eq!(visibility[layer]["type"], json!("boolean"), "{layer} ontbreekt");
+        }
+        let select = defs.iter().find(|d| d["name"] == "gui_select_3d_combination").unwrap();
+        assert_eq!(select["inputSchema"]["properties"]["id"]["minimum"], json!(1));
+        let split = defs.iter().find(|d| d["name"] == "gui_split_3d_member").unwrap();
+        assert_eq!(split["inputSchema"]["required"], json!(["beam_id", "ratio"]));
+        assert_eq!(split["inputSchema"]["properties"]["ratio"]["exclusiveMaximum"], json!(1));
+    }
+
+    /// Belastingvlakken in `gui_build_3d_model`: strikt op elk niveau, met de
+    /// twee keuzes als vaste lijst. Een tikfout in `direction` of een
+    /// onbekend veld mag niet stil een standaardlastrichting opleveren.
+    #[test]
+    fn het_3d_schema_draagt_belastingvlakken_strikt() {
+        let defs = tool_definitions();
+        let bouw = defs.iter().find(|d| d["name"] == "gui_build_3d_model").unwrap();
+        let panel = &bouw["inputSchema"]["properties"]["load_panels"]["items"];
+        assert_eq!(panel["additionalProperties"], json!(false));
+        assert_eq!(panel["required"], json!(["nodes", "q", "direction", "distribution"]));
+        assert_eq!(panel["properties"]["nodes"]["minItems"], json!(3));
+        assert_eq!(panel["properties"]["nodes"]["items"]["minimum"], json!(1));
+        assert_eq!(panel["properties"]["case_id"]["minimum"], json!(1));
+        assert_eq!(panel["properties"]["direction"]["enum"], json!(["gravity", "normal"]));
+        assert_eq!(panel["properties"]["distribution"]["enum"], json!(["oneWay", "twoWay"]));
+        let span = &panel["properties"]["span_direction"];
+        assert_eq!(span["additionalProperties"], json!(false));
+        assert_eq!(span["required"], json!(["x", "y", "z"]));
+        assert_eq!(panel["properties"]["excluded_beams"]["items"]["minimum"], json!(1));
+        let view = defs.iter().find(|d| d["name"] == "gui_configure_3d_view").unwrap();
+        assert_eq!(view["inputSchema"]["properties"]["visibility"]["properties"]["loadPanels"]["type"], json!("boolean"));
+    }
+
+    /// Trek-alleen per staaf en starre schijven in `gui_build_3d_model`:
+    /// strikt, met de knopen als 1-gebaseerde indices zoals bij platen.
+    #[test]
+    fn het_3d_schema_draagt_trek_alleen_en_schijven_strikt() {
+        let defs = tool_definitions();
+        let bouw = defs.iter().find(|d| d["name"] == "gui_build_3d_model").unwrap();
+        let beam = &bouw["inputSchema"]["properties"]["beams"]["items"];
+        assert_eq!(beam["additionalProperties"], json!(false));
+        assert_eq!(beam["properties"]["tension_only"]["type"], json!("boolean"));
+        let diaphragm = &bouw["inputSchema"]["properties"]["diaphragms"]["items"];
+        assert_eq!(diaphragm["additionalProperties"], json!(false));
+        assert_eq!(diaphragm["required"], json!(["nodes"]));
+        assert_eq!(diaphragm["properties"]["nodes"]["minItems"], json!(2));
+        assert_eq!(diaphragm["properties"]["nodes"]["items"]["minimum"], json!(1));
+        assert_eq!(diaphragm["properties"]["name"]["type"], json!("string"));
+    }
+
+    /// De modelinstellingen voor trek-alleen staven in `gui_build_3d_model`:
+    /// twee booleans op modelniveau, standaard uit.
+    #[test]
+    fn het_3d_schema_kent_montage_en_kruisregel() {
+        let defs = tool_definitions();
+        let bouw = defs.iter().find(|d| d["name"] == "gui_build_3d_model").unwrap();
+        assert_eq!(bouw["inputSchema"]["additionalProperties"], json!(false));
+        for veld in ["tension_only_fit_after_permanent", "tension_only_cross_rule"] {
+            let instelling = &bouw["inputSchema"]["properties"][veld];
+            assert_eq!(instelling["type"], json!("boolean"), "{veld}");
+            assert_eq!(instelling["default"], json!(false), "{veld}");
+        }
     }
 }

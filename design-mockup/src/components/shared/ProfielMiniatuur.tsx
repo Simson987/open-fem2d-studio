@@ -154,7 +154,7 @@ export default function ProfielMiniatuur({
   const y0 = MARGE_BOVEN + (tekenH - h) / 2;
 
   const pad = shapePath(shape, s, x0, y0);
-  const bLabel = shape.type === "tube" ? `d ${maat(bMm)}` : `b ${maat(bMm)}`;
+  const bLabel = shape.type === "tube" || shape.type === "rond" ? `d ${maat(bMm)}` : `b ${maat(bMm)}`;
   const hLabel = `h ${maat(hMm)}`;
 
   const yMaatB = y0 - 9;

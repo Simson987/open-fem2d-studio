@@ -20,19 +20,24 @@ function callback(name) {
     .replaceAll('import("./io/notify")', 'notifyImport()');
 }
 const deferred = () => { let resolve, reject; const promise = new Promise((a,b) => { resolve=a; reject=b; }); return {promise,resolve,reject}; };
-test('Berekenen vanuit Model maakt de resultaten zichtbaar', () => {
+test('Berekenen vanuit Model maakt de resultaten zichtbaar', async () => {
   const state = { view: 'report', tree: 'project', results: false, showLoads: false,
     flags: { M: false, V: false, N: false, deflection: false, reactions: false, uc: false, schaalM: 2 },
     selection: { type: 'beam', id: 6 }, runs: 0 };
   const context = vm.createContext({
+    modelDimension: '2d',
+    normaliseSolverPreference: value => value,
+    getSetting: async (_key, fallback) => fallback,
+    SOLVER_PREFERENCE_KEY: 'solverPreference',
+    resolveSolver: () => ({}),
     setActiveView: value => { state.view = value; },
     setTreeTab: value => { state.tree = value; },
     setResultsTabActive: value => { state.results = value; },
     setDisplayFlags: update => { state.flags = update(state.flags); },
-    fem: { setShowLoads: value => { state.showLoads = value; }, setSelection: value => { state.selection = value; } },
+    fem: { analysetype: 'eersteOrde', plates: [], setShowLoads: value => { state.showLoads = value; }, setSelection: value => { state.selection = value; } },
     rekenDoor: async () => { state.runs++; },
   });
-  vm.runInContext(callback('handleSolve'), context)();
+  await vm.runInContext(callback('handleSolve'), context)();
   assert.equal(state.showLoads, true, 'de algemene zichtbaarheid moet na de Model-tab weer aan');
   assert.equal(state.view, 'default');
   assert.equal(state.tree, 'results');
@@ -72,6 +77,7 @@ function fixture(seam, fails) {
   const outputs = () => ({ perCase:new Map(), combinationResults:new Map(), envelope:{} });
   const c = {
     console:{warn(){}}, Map, Set, Date, Error, Promise,
+    modelDimension:'2d',
     rekenGeneratieRef:ref(0), lopendeRekengangenRef:ref(0), volledigeRekengangRef:ref(null),
     liveRekenenRef:ref(false), rekenFoutRef:ref(null), laatsteMultiInputRef:ref({snapshot:true}),
     herberekeningGeplandRef:ref(false), herberekenTimerRef:ref(null), rapportRekenPogingRef:ref(false),

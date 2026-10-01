@@ -16,7 +16,7 @@ export function AboutDialog({ isOpen, onClose, t }: AboutDialogProps) {
     <Modal open={isOpen} onClose={onClose} title={t('about.title')} width={360}>
       <div className="about-content">
         <Box className="about-logo" strokeWidth={1.5} size={80} />
-        <div className="about-name">Open FEM2D Studio</div>
+        <div className="about-name">Open FEM Studio</div>
         <div className="about-version">v{APP_VERSION}</div>
         <div className="about-tagline">"Build free. Build together."</div>
         <div className="about-meta">

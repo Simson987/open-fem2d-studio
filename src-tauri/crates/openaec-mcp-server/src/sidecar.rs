@@ -763,7 +763,7 @@ fn remedie_bij(code: &str) -> String {
              geweigerd en niet genegeerd: een genegeerd veld levert een geslaagde \
              berekening op die bij een ánder model hoort."
             .to_owned(),
-        "BESTAND_ONLEESBAAR" => "Controleer of het pad naar een .ifcfem2d-bestand wijst dat met \
+        "BESTAND_ONLEESBAAR" => "Controleer of het pad naar een .ifcfem-bestand (of ouder .ifcfem2d) wijst dat met \
              deze versie is opgeslagen."
             .to_owned(),
         // Een INVOERfout, geen storing: de melding noemt per staaf wat er

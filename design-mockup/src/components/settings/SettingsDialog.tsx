@@ -2,6 +2,12 @@ import { useState, useEffect, useRef, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { LANGUAGES, changeLanguage } from "../../i18n/config";
 import { getSetting, setSetting } from "../../store";
+import {
+  SOLVER_PREFERENCE_KEY,
+  SOLVER_REGISTRY,
+  normaliseSolverPreference,
+  type SolverPreference,
+} from "../../core/solver/SolverRegistry";
 import Modal from "../Modal";
 import ThemedSelect from "../ThemedSelect";
 import "../ThemedSelect.css";
@@ -22,7 +28,7 @@ const THEME_OPTIONS = [
    Voorbeeld met domein-tab:
      const TAB_IDS = ["general", "appearance", "calculation", "about"] as const;
    ─────────────────────────────────────────────────────────── */
-const TAB_IDS = ["general", "appearance", "about"] as const;
+const TAB_IDS = ["general", "appearance", "calculation", "about"] as const;
 
 export function applyTheme(theme?: string) {
   document.documentElement.setAttribute("data-theme", theme || "light");
@@ -48,11 +54,13 @@ export default function SettingsDialog({
   // Draft state — only committed on Save
   const [draftTheme, setDraftTheme] = useState(theme);
   const [draftLang, setDraftLang] = useState("auto");
+  const [draftSolver, setDraftSolver] = useState<SolverPreference>("automatic");
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
 
   // Snapshot of original values when dialog opens, for reverting on Cancel
   const originalTheme = useRef(theme);
   const originalLang = useRef("");
+  const originalSolver = useRef<SolverPreference>("automatic");
 
   // Reset draft to current values when dialog opens
   useEffect(() => {
@@ -62,6 +70,11 @@ export default function SettingsDialog({
       getSetting("language", "auto").then((lang) => {
         originalLang.current = lang;
         setDraftLang(lang);
+      });
+      getSetting<unknown>(SOLVER_PREFERENCE_KEY, "automatic").then((stored) => {
+        const solver = normaliseSolverPreference(stored);
+        originalSolver.current = solver;
+        setDraftSolver(solver);
       });
     }
   }, [open, theme]);
@@ -85,6 +98,7 @@ export default function SettingsDialog({
     applyTheme(originalTheme.current);
     setDraftLang(originalLang.current);
     changeLanguage(originalLang.current);
+    setDraftSolver(originalSolver.current);
     onClose();
   };
 
@@ -96,6 +110,8 @@ export default function SettingsDialog({
 
     setSetting("language", draftLang);
     changeLanguage(draftLang);
+
+    setSetting(SOLVER_PREFERENCE_KEY, draftSolver);
 
     onClose();
   };
@@ -110,6 +126,7 @@ export default function SettingsDialog({
     applyTheme("light");
     setDraftLang("auto");
     changeLanguage("auto");
+    setDraftSolver("automatic");
     setConfirmResetOpen(false);
   };
 
@@ -152,6 +169,9 @@ export default function SettingsDialog({
           {activeTab === "appearance" && (
             <AppearanceTabContent theme={draftTheme} onThemeSelect={handleThemePreview} />
           )}
+          {activeTab === "calculation" && (
+            <CalculationTabContent solver={draftSolver} onSolverChange={setDraftSolver} />
+          )}
           {activeTab === "about" && <AboutTabContent />}
         </div>
       </div>
@@ -176,6 +196,70 @@ export default function SettingsDialog({
       <div style={{ padding: 12, fontSize: 12 }}>{t("resetConfirm")}</div>
     </Modal>
     </>
+  );
+}
+
+function CalculationTabContent({
+  solver,
+  onSolverChange,
+}: {
+  solver: SolverPreference;
+  onSolverChange: (solver: SolverPreference) => void;
+}) {
+  const { t } = useTranslation("settings");
+  const selected = solver === "automatic"
+    ? null
+    : SOLVER_REGISTRY.find((entry) => entry.id === solver) ?? null;
+
+  return (
+    <div className="settings-section">
+      <h3>{t("calculation.engine")}</h3>
+      <div className="settings-row settings-row-stacked">
+        <label className="settings-label" htmlFor="settings-solver-select">
+          {t("calculation.solver")}
+        </label>
+        <select
+          id="settings-solver-select"
+          className="settings-select settings-solver-select"
+          value={solver}
+          onChange={(event) => onSolverChange(event.target.value as SolverPreference)}
+        >
+          <option value="automatic">{t("calculation.automatic")}</option>
+          {SOLVER_REGISTRY.map((entry) => (
+            <option key={entry.id} value={entry.id} disabled={!entry.available}>
+              {entry.name}{entry.available ? "" : ` — ${t("calculation.unavailable")}`}
+            </option>
+          ))}
+        </select>
+      </div>
+      <p className="settings-description settings-solver-explanation">
+        {solver === "automatic"
+          ? t("calculation.automaticDescription")
+          : t("calculation.manualDescription", { solver: selected?.name ?? solver })}
+      </p>
+
+      <div className="settings-solver-list">
+        {SOLVER_REGISTRY.map((entry) => (
+          <div key={entry.id} className={`settings-solver-card${entry.available ? "" : " unavailable"}`}>
+            <div className="settings-solver-card-title">
+              <strong>{entry.name}</strong>
+              <span className={`settings-solver-status ${entry.available ? "available" : "unavailable"}`}>
+                {t(entry.available ? "calculation.available" : "calculation.unavailable")}
+              </span>
+            </div>
+            <div className="settings-solver-meta">
+              {t("calculation.license")}: {entry.license} · {t("calculation.version")}: {entry.version}
+            </div>
+            <div className="settings-solver-meta">
+              {t("calculation.supports")}: {entry.capabilities.dimensions.join(", ")} · {entry.capabilities.analyses.map((kind) => t(`calculation.analysis.${kind}`)).join(", ")} · {entry.capabilities.elementFamilies.map((family) => t(`calculation.elements.${family}`)).join(", ")}
+            </div>
+            {!entry.available && (
+              <div className="settings-solver-note">{t("calculation.adapterPending")}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

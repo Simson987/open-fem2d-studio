@@ -25,25 +25,67 @@ import CheckPanel, { CheckPanelToggle } from "./components/panels/CheckPanel";
 import FemProjectTree from "./components/fem/FemProjectTree";
 import FemProperties from "./components/fem/FemProperties";
 import FemCanvas from "./components/fem/FemCanvas";
+import { addOpenFem3DSurfaceLoad, withOpenFem3DSelfWeight, type OpenFem3DModel } from "./components/openFem3d/openFem3dModel";
+import { setOpenFem3DTensionOnlySetting } from "./components/openFem3d/openFem3dTrekSchijf";
+import {
+  openFem3DNodeConditionOfTool, placeOpenFem3DNodeCondition, readOpenFem3DSpringStiffness, type OpenFem3DNodeTarget,
+} from "./components/openFem3d/openFem3dNodeTools";
+import { readOpenFem3DDeformationDisplay, saveOpenFem3DDeformationDisplay } from "./components/openFem3d/openFem3dDeformationDisplay";
+import { openFem3dHistoryReducer, openFem3DHistoryLevelPatch, type OpenFem3DAction, type OpenFem3DEditMeta, type OpenFem3DHistory } from "./components/openFem3d/openFem3dHistory";
+import { applyOpenFem3DLevels, openFem3DLevelRefusalText, openFem3DLevelTransition, withOpenFem3DLevelPatch, withoutUnknownOpenFem3DLevelLinks } from "./components/openFem3d/openFem3dLevels";
+import {
+  convertOpenFem3DPlateToLoadPanels,
+  openFem3DSpanFromNodes,
+  updateOpenFem3DLoadPanel,
+} from "./components/openFem3d/openFem3dLoadPanels";
+import type { OpenFem3DSpringAxis, OpenFem3DTool, OpenFem3DView } from "./components/openFem3d/openFem3dCommands";
+import type { OpenFem3DSelection } from "./components/openFem3d/openFem3dSelection";
+import type { OpenFem3DCameraState, OpenFem3DStandaardViewId, OpenFem3DViewSet } from "./components/openFem3d/openFem3dViewSets";
+import { openFem3DMaatgevendeCombinatie, openFem3DViewSetToepassing, type OpenFem3DViewToepassing } from "./components/openFem3d/openFem3dStandaardViews";
+import { readOpenFem3DVisibility, saveOpenFem3DVisibility } from "./components/openFem3d/openFem3dVisibility";
+import { readOpenFem3DPlateQuantity, saveOpenFem3DPlateQuantity } from "./components/openFem3d/openFem3dPlateResults";
+import { convert2DTo3D } from "./components/openFem3d/convert2DTo3D";
+import { solveOpenFem3D, solveOpenFem3DCombination, type OpenFem3DSolveResult } from "./components/openFem3d/openFem3dSolver";
+import OpenFem3DReport from "./components/openFem3d/OpenFem3DReport";
+import OpenFem3DExplorer from "./components/openFem3d/OpenFem3DExplorer";
+import OpenFem3DProperties from "./components/openFem3d/OpenFem3DProperties";
+import {
+  runOpenFem3DSteelChecks,
+  type OpenFem3DSteelChecks,
+} from "./components/openFem3d/openFem3dSteelCheck";
+import {
+  runOpenFem3DConcreteChecks,
+  type OpenFem3DConcreteChecks,
+} from "./components/openFem3d/openFem3dConcreteCheck";
+import {
+  SOLVER_PREFERENCE_KEY,
+  normaliseSolverPreference,
+  resolveSolver,
+  type SolverAnalysisKind,
+} from "./core/solver/SolverRegistry";
 import LibraryDialog, { type LibraryTab } from "./components/settings/LibraryDialog";
 import TableView from "./components/table/TableView";
 import type { TableDataset, TableViewApi } from "./components/table/tableTypes";
 import LoadCaseTabBar from "./components/fem/LoadCaseTabBar";
 import LoadCasesDialog from "./components/fem/LoadCasesDialog";
 import WindGeneratorDialog from "./lib/wind/WindGeneratorDialog";
+import StaalhalWizard from "./components/openFem3d/wizards/StaalhalWizard";
+import { metBelastinggevalIds, STAALHAL_GEVAL, type StaalhalResultaat } from "./components/openFem3d/wizards/staalhal";
+import WaterAccumulation2DDialog from "./components/fem/WaterAccumulation2DDialog";
+import { resolveSection } from "./lib/sectionResolver";
 import { windUitgangspunten } from "./lib/wind/windGenerator";
 import { useWindGenerator } from "./stores/windStore";
 import { pasRapportSnapshotToe, rapportSnapshot, useReportStore } from "./stores/reportStore";
 import { snoeiCheckFocus } from "./lib/verdwenenStaven";
-import { setSetting as zetInstelling } from "./store";
 import Sheet from "./components/openaec/Sheet";
 import { getDetachedParams, useWindowManager } from "./hooks/useWindowManager";
 // Het bedieningskanaal (OPENAEC_GUI_CONTROL=1): dezelfde closures als de knoppen,
 // aangesproken van buiten. Doet niets zolang Rust zegt dat het kanaal uit staat.
 import { useBediening, type RekengangUitkomst } from "./bediening/bediening";
 import { useFemStore } from "./hooks/useFemStore";
-import type { GridSettings, Tool } from "./components/fem/femTypes";
-import { DEFAULT_GRID, nonlinearVoorBestand } from "./components/fem/femTypes";
+import type { GridAxisLine, GridSettings, StructuralGrid, Tool } from "./components/fem/femTypes";
+import { DEFAULT_GRID, DEFAULT_STRUCTURAL_GRID, nonlinearVoorBestand } from "./components/fem/femTypes";
+import LengthInput from "./components/LengthInput";
 import type { SolverResult } from "./components/fem/solver/types";
 import { solveAllCases, solveAllCasesNonlinear } from "./components/fem/solver/solver";
 import {
@@ -86,7 +128,7 @@ import { WEERGAVE_VOORKEUREN_SLEUTEL, metVoorkeuren, voorkeurenVan } from "./lib
 import { bouwMultiInput } from "./lib/modelNaarSolverInput";
 import {
   EIGEN_GEWICHT_STANDAARD_AAN, STANDAARD_ACTIEF_GEVAL_ID, eigenGewichtAanbodVanToepassing,
-  standaardBelastinggevallen,
+  standaardBelastinggevallen, eigenGewichtGeval,
 } from "./lib/eigenGewicht";
 import { eigenGewichtOverzicht } from "./lib/eigenGewichtOverzicht";
 import { controleerVoorRekenen, leesbareRekenfout } from "./lib/rekenPoort";
@@ -100,6 +142,13 @@ import {
   scheefstandToelichtingVertaald,
   toepasselijkeScheefstandNormen,
 } from "./lib/scheefstandNorm";
+import {
+  leidScheefstandGeometrieAf3D,
+  metScheefstandRichtingen3D,
+  scheefstandVanCombinatie,
+  toepasselijkeScheefstandNormen3D,
+} from "./components/openFem3d/openFem3dScheefstand";
+import type { LoadCombination } from "./components/fem/solver/combinations";
 import { useCheckStore, anyCheckableBeams, anyCheckablePlates, roepKern } from "./stores/checkStore";
 import { useMaatgevendMarkeringStore } from "./stores/maatgevendMarkeringStore";
 // Het venster onderin bij een betonstaaf: de aanzicht met de dekkingslijnen,
@@ -111,7 +160,9 @@ import {
   useBetonStijfheidStore,
   type StijfheidCombinatie,
 } from "./stores/betonStijfheidStore";
-import { combinationsToFile, combinationsFromFile, onbekendeTopVelden } from "./io/projectFile";
+import { combinationsToFile, combinationsFromFile, onbekendeTopVelden, deserializeProject, serializeProject } from "./io/projectFile";
+import { ifcAnalyseProject, type IfcAnalyseImport } from "./io/ifcAnalyseImport";
+import { useIfcImportStroom } from "./components/ifcImport/useIfcImportStroom";
 import {
   exporteer as exporteerEigenDoorsneden,
   importeer as importeerEigenDoorsneden,
@@ -127,6 +178,7 @@ import "./App.css";
 import { bijlageUitBestand, type NationaleBijlageCode } from "./lib/normAanduidingen";
 
 const ThreeViewer = lazy(() => import("./components/panels/ThreeViewer"));
+const OpenFem3DEditor = lazy(() => import("./components/openFem3d/OpenFem3DEditor"));
 
 /**
  * Rust tussen de laatste modelwijziging en de live-herberekening. Lang genoeg
@@ -177,7 +229,7 @@ function DetachedApp({ view, title }: { view: string; title: string }) {
   useEffect(() => {
     getSetting("theme", "light").then((saved) => applyTheme(saved));
     // Browservenster (window.open-fallback): venstertitel zelf zetten.
-    document.title = `${title} — Open FEM2D Studio`;
+    document.title = `${title} — Open FEM Studio`;
     import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
       getCurrentWindow().show();
     }).catch(() => {});
@@ -285,6 +337,161 @@ function App() {
     void setSetting("theme", value);
   }, []);
   const [activeView, setActiveView] = useState("default");
+  // Eén gezaghebbende modeldimensie. Omzetten naar 3D is bewust eenrichtingsverkeer.
+  const [modelDimension, setModelDimension] = useState<"2d" | "3d">("2d");
+  // De 3D-historie loopt via een ref, zodat undo/redo vóór het dispatchen de
+  // levelstand van die stap kan lezen (een levelhoogte en de knopen die
+  // meeschuiven zijn één stap, maar de levels staan in het stramien van de
+  // raamwerkstore). useReducer rekent pas bij de volgende render.
+  const [openFem3dHistory, setOpenFem3dHistoryState] = useState<OpenFem3DHistory>({
+    model: { nodes: [], beams: [] }, past: [], future: [],
+  });
+  const openFem3dHistoryRef = useRef(openFem3dHistory);
+  const dispatchOpenFem3D = useCallback((action: OpenFem3DAction) => {
+    const next = openFem3dHistoryReducer(openFem3dHistoryRef.current, action);
+    if (next === openFem3dHistoryRef.current) return;
+    openFem3dHistoryRef.current = next;
+    setOpenFem3dHistoryState(next);
+  }, []);
+  const openFem3d = openFem3dHistory.model;
+  const setOpenFem3d = useCallback((model: OpenFem3DModel, meta?: OpenFem3DEditMeta) =>
+    dispatchOpenFem3D({ type: "edit", model, ...meta }), []);
+  const [openFem3dTool, setOpenFem3dTool] = useState<OpenFem3DTool>("select");
+  const [openFem3dSelection, setOpenFem3dSelection] = useState<OpenFem3DSelection>(null);
+  const [openFem3dNormFocus, setOpenFem3dNormFocus] = useState<{ beamId: number; serial: number } | null>(null);
+  // Overspanning van een belastingvlak kiezen: twee knopen (van → naar) of één staaf.
+  const [openFem3dSpanPick, setOpenFem3dSpanPick] = useState<{ panelId: number; firstNodeId: number | null } | null>(null);
+  const meldLoadPanelFout = (cause: unknown) => {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    void import("./io/notify").then(({ notifyWarning }) =>
+      notifyWarning(i18next.t("ribbon:openFem3d.loadPanel.failed"), message)).catch(() => {});
+  };
+  const handleOpenFem3DToolChange = (next: OpenFem3DTool) => {
+    setOpenFem3dTool(next);
+    if (next !== "loadPanelSpan") setOpenFem3dSpanPick(null);
+    if (next === "addLoadPanel") {
+      // Wat je tekent, moet je ook zien: lasten en belastingvlakken in beeld.
+      setOpenFem3dShowLoadCase(true);
+      setOpenFem3dVisibility((value) => value.loads && value.loadPanels ? value : { ...value, loads: true, loadPanels: true });
+    }
+  };
+  const handleOpenFem3DSelectionChange = (next: OpenFem3DSelection) => {
+    if (openFem3dTool === "loadPanelSpan" && openFem3dSpanPick) {
+      // Het vlak blijft geselecteerd; de klikken leveren alleen de richting.
+      const { panelId, firstNodeId } = openFem3dSpanPick;
+      const finish = (from?: number, to?: number) => {
+        if (from !== undefined && to !== undefined) {
+          try {
+            setOpenFem3d(updateOpenFem3DLoadPanel(openFem3d, panelId, {
+              distribution: "oneWay", spanDirection: openFem3DSpanFromNodes(openFem3d, from, to),
+            }));
+          } catch (cause) {
+            meldLoadPanelFout(cause);
+          }
+        }
+        setOpenFem3dSpanPick(null);
+        setOpenFem3dTool("select");
+        setOpenFem3dSelection({ type: "loadPanel", id: panelId });
+      };
+      if (next === null) finish();
+      else if (next.type === "beam") {
+        const beam = openFem3d.beams.find((candidate) => candidate.id === next.id);
+        if (beam) finish(beam.startNodeId, beam.endNodeId);
+      } else if (next.type === "node") {
+        if (firstNodeId === null || firstNodeId === next.id) setOpenFem3dSpanPick({ panelId, firstNodeId: next.id });
+        else finish(firstNodeId, next.id);
+      }
+      return;
+    }
+    setOpenFem3dSelection(next);
+    if (openFem3dTool === "addMemberLoad") {
+      if (next?.type === "beam" && openFem3d.beams.some((beam) => beam.id === next.id)) {
+        setRightPanelOpen(true);
+        setOpenFem3dMemberLoadEditorRequest((serial) => serial + 1);
+      }
+      return;
+    }
+    // Een knoop gekozen in de verkenner terwijl een oplegging- of
+    // veergereedschap actief is: die knoop krijgt de voorwaarde.
+    if (next?.type === "node" && openFem3DNodeConditionOfTool(openFem3dTool)) applyOpenFem3DNodeTool({ nodeId: next.id });
+  };
+  /**
+   * Oplegging- of veergereedschap (openFem3dNodeTools): de klik landde op een
+   * knoop of op het werkvlak (leeg canvas, dan komt er een nieuwe knoop). Knoop
+   * en voorwaarde zijn één modelwijziging, dus één stap ongedaan maken. Bij een
+   * veer gaat de cursor naar het veerveld, met de laatst gebruikte stijfheid.
+   */
+  const applyOpenFem3DNodeTool = (target: OpenFem3DNodeTarget, tool: OpenFem3DTool = openFem3dTool) => {
+    const condition = openFem3DNodeConditionOfTool(tool);
+    if (!condition) return;
+    const current = openFem3dHistoryRef.current.model;
+    if ("nodeId" in target && !current.nodes.some((node) => node.id === target.nodeId)) return;
+    const stiffness = condition.kind === "spring" ? readOpenFem3DSpringStiffness(condition.axis) : 0;
+    const placed = placeOpenFem3DNodeCondition(current, target, condition, stiffness);
+    setOpenFem3d(placed.model);
+    setOpenFem3dSelection({ type: "node", id: placed.nodeId });
+    if (condition.kind === "spring") {
+      setRightPanelOpen(true);
+      setOpenFem3dSpringEditorRequest((request) => ({ axis: condition.axis, serial: (request?.serial ?? 0) + 1 }));
+    }
+  };
+  const [openFem3dDeleteToken, setOpenFem3dDeleteToken] = useState(0);
+  const [openFem3dFitToken, setOpenFem3dFitToken] = useState(0);
+  const [openFem3dViewRequest, setOpenFem3dViewRequest] = useState<{ kind: OpenFem3DView; token: number }>({ kind: "iso", token: 0 });
+  const [openFem3dCameraSnapshot, setOpenFem3dCameraSnapshot] = useState<{
+    state: OpenFem3DCameraState; viewToken: number; fitToken: number;
+  } | null>(null);
+  const [openFem3dLoadEditorRequest, setOpenFem3dLoadEditorRequest] = useState<{ kind: "force" | "moment"; serial: number } | null>(null);
+  const [openFem3dSpringEditorRequest, setOpenFem3dSpringEditorRequest] = useState<{
+    axis: OpenFem3DSpringAxis; serial: number;
+  } | null>(null);
+  const [openFem3dMemberLoadEditorRequest, setOpenFem3dMemberLoadEditorRequest] = useState(0);
+  const [openFem3dMemberPointLoadEditorRequest, setOpenFem3dMemberPointLoadEditorRequest] = useState(0);
+  const [openFem3dThermalLoadEditorRequest, setOpenFem3dThermalLoadEditorRequest] = useState(0);
+  const [openFem3dResult, setOpenFem3dResult] = useState<OpenFem3DSolveResult | null>(null);
+  const [openFem3dCaseResults, setOpenFem3dCaseResults] = useState<Map<number, OpenFem3DSolveResult>>(new Map());
+  const [openFem3dCombinationResults, setOpenFem3dCombinationResults] = useState<Map<number, OpenFem3DSolveResult>>(new Map());
+  const [openFem3dActiveCombinationId, setOpenFem3dActiveCombinationId] = useState<number | null>(null);
+  // De combinaties zoals ze gerekend zijn: met scheefstand ontvouwt elke UGT-
+  // combinatie in +X, −X, +Y en −Y. Leeg = nog niet gerekend.
+  const [openFem3dSolvedCombinations, setOpenFem3dSolvedCombinations] = useState<LoadCombination[]>([]);
+  const [openFem3dSolveError, setOpenFem3dSolveError] = useState<string | null>(null);
+  const [openFem3dChecks, setOpenFem3dChecks] = useState<OpenFem3DSteelChecks | null>(null);
+  const [openFem3dConcreteChecks, setOpenFem3dConcreteChecks] = useState<OpenFem3DConcreteChecks | null>(null);
+  const [openFem3dChecksRunning, setOpenFem3dChecksRunning] = useState(false);
+  const [openFem3dChecksError, setOpenFem3dChecksError] = useState<string | null>(null);
+  const openFem3dSolveGenerationRef = useRef(0);
+  const [visibility3DOpen, setVisibility3DOpen] = useState(false);
+  const [openFem3dVisibility, setOpenFem3dVisibility] = useState(readOpenFem3DVisibility);
+  // Vergroting van de vervormde vorm en "Origineel tonen": een weergavevoorkeur.
+  const [openFem3dDeformationDisplay, setOpenFem3dDeformationDisplay] = useState(readOpenFem3DDeformationDisplay);
+  useEffect(() => saveOpenFem3DDeformationDisplay(openFem3dDeformationDisplay), [openFem3dDeformationDisplay]);
+  // De Model-tab is een weergavestand; het tonen van lastsymbolen is een
+  // afzonderlijke keuze in Weergave en mag deze tabselectie niet veranderen.
+  const [openFem3dShowLoadCase, setOpenFem3dShowLoadCase] = useState(true);
+  const [openFem3dViewSets, setOpenFem3dViewSets] = useState<OpenFem3DViewSet[]>([]);
+  // Tab Views van de 3D-verkenner: de standaardviews buiten het rapport (in het
+  // project bewaard), de laatst toegepaste view en de camera van een eigen view.
+  const [openFem3dStandaardViewsUitRapport, setOpenFem3dStandaardViewsUitRapport] = useState<OpenFem3DStandaardViewId[]>([]);
+  const [openFem3dActieveView, setOpenFem3dActieveView] = useState<string | null>(null);
+  const [openFem3dCameraVerzoek, setOpenFem3dCameraVerzoek] = useState<{ state: OpenFem3DCameraState; token: number }>();
+  useEffect(() => saveOpenFem3DVisibility(openFem3dVisibility), [openFem3dVisibility]);
+  const [openFem3dPlateQuantity, setOpenFem3dPlateQuantity] = useState(readOpenFem3DPlateQuantity);
+  useEffect(() => saveOpenFem3DPlateQuantity(openFem3dPlateQuantity), [openFem3dPlateQuantity]);
+  useEffect(() => {
+    openFem3dSolveGenerationRef.current += 1;
+    setOpenFem3dResult(null);
+    setOpenFem3dCaseResults(new Map());
+    setOpenFem3dCombinationResults(new Map());
+    setOpenFem3dSolvedCombinations([]);
+    setOpenFem3dActiveCombinationId(null);
+    setOpenFem3dSolveError(null);
+    setOpenFem3dChecks(null);
+    setOpenFem3dConcreteChecks(null);
+    setOpenFem3dChecksRunning(false);
+    setOpenFem3dChecksError(null);
+    if (modelDimension === "3d") setSolverStatus({ kind: "ready" });
+  }, [openFem3d, modelDimension]);
   // FEM tool state — shared between Ribbon (active highlight) + FemCanvas (action)
   const [femTool, setFemTool] = useState<Tool>("select");
   // Projectgegevens uit de projectinstellingen — voeden onder meer de
@@ -304,6 +511,35 @@ function App() {
     // toetsing (normnaad); een wijziging laat de resultaten vervallen.
     nationaleBijlage: projectInfo.uitgangspunten?.nationaleBijlage ?? null,
   });
+  useEffect(() => {
+    if (modelDimension !== "3d") return;
+    setOpenFem3dActiveCombinationId(null);
+    const result = openFem3dCaseResults.get(fem.activeLoadCaseId) ?? null;
+    setOpenFem3dResult(result);
+    // Een mislukte rekengang maakt de resultaatmap leeg en zet daarna de
+    // concrete solverfout. Die lege map mag de fout niet in dezelfde commit
+    // weer wissen. Alleen een werkelijk gevulde, geldige resultatenset mag de
+    // oude foutstatus vervangen wanneer de gebruiker van belastinggeval wisselt.
+    if (openFem3dCaseResults.size > 0) {
+      setOpenFem3dSolveError(null);
+      setSolverStatus(result ? { kind: "solved", at: Date.now() } : { kind: "ready" });
+    }
+  }, [fem.activeLoadCaseId, modelDimension, openFem3dCaseResults]);
+  useEffect(() => {
+    if (modelDimension !== "3d") return;
+    openFem3dSolveGenerationRef.current += 1;
+    setOpenFem3dResult(null);
+    setOpenFem3dCaseResults(new Map());
+    setOpenFem3dCombinationResults(new Map());
+    setOpenFem3dSolvedCombinations([]);
+    setOpenFem3dActiveCombinationId(null);
+    setOpenFem3dSolveError(null);
+    setOpenFem3dChecks(null);
+    setOpenFem3dConcreteChecks(null);
+    setOpenFem3dChecksRunning(false);
+    setOpenFem3dChecksError(null);
+    setSolverStatus({ kind: "ready" });
+  }, [fem.rekenInstellingenVersie, modelDimension]);
   // Altijd de verse store, ook vanuit een meldingsknop die in een eerder event
   // is gemaakt (het aanbod "Eigen gewicht naar een eigen geval" bij het openen).
   const femRef = useRef(fem);
@@ -315,6 +551,30 @@ function App() {
     nodes: fem.nodes, beams: fem.beams, plates: fem.plates,
     loadCases: fem.loadCases, selfWeightEnabled: fem.selfWeightEnabled,
   }), [fem.nodes, fem.beams, fem.plates, fem.loadCases, fem.selfWeightEnabled]);
+  const openFem3dCalculation = useMemo((): {
+    model: OpenFem3DModel; selfWeightError: string | null; selfWeightCaseId?: number;
+  } => {
+    if (modelDimension !== "3d") return { model: openFem3d, selfWeightError: null };
+    const eigenGewichtCase = eigenGewichtGeval(fem.loadCases, fem.selfWeightEnabled);
+    if (!eigenGewichtCase) return { model: openFem3d, selfWeightError: null };
+    try {
+      return {
+        model: withOpenFem3DSelfWeight(openFem3d, eigenGewichtCase.id), selfWeightError: null,
+        selfWeightCaseId: eigenGewichtCase.id,
+      };
+    } catch (cause) {
+      return {
+        model: openFem3d,
+        selfWeightError: cause instanceof Error ? cause.message : String(cause),
+      };
+    }
+  }, [openFem3d, modelDimension, fem.loadCases, fem.selfWeightEnabled]);
+  const openFem3dCalculationModel = openFem3dCalculation.model;
+  // De kleur van een lastvlak volgt de soort van zijn belastinggeval (tabbalk).
+  const openFem3dLoadCaseTypes = useMemo(
+    () => new Map(fem.loadCases.map((loadCase) => [loadCase.id, loadCase.type] as const)),
+    [fem.loadCases],
+  );
   const biedEigenGewichtGevalAan = eigenGewichtAanbodVanToepassing({
     loadCases: fem.loadCases, selfWeightEnabled: fem.selfWeightEnabled,
   });
@@ -349,6 +609,56 @@ function App() {
   // R5 — losgekoppeld rapportvenster ("Naast je scherm").
   const { createDetachedWindow } = useWindowManager();
   const { t: tRibbon } = useTranslation("ribbon");
+
+  // ── Levels in 3D ────────────────────────────────────────────────────────
+  // Een level is een horizontale stramienas (zAxes). In 3D hangen knopen en
+  // platen eraan (`levelId`) en schuiven ze mee als de hoogte verandert. De
+  // levels staan in het stramien van de raamwerkstore, het model in de
+  // 3D-historie; hoogte en meeschuivende knopen zijn toch één stap: undo/redo
+  // zetten de levelstand van die stap terug in het stramien.
+  const setStructuralGridState = fem.setStructuralGrid;
+  const undoRedoOpenFem3D = useCallback((kind: "undo" | "redo") => {
+    const patch = openFem3DHistoryLevelPatch(openFem3dHistoryRef.current, kind);
+    dispatchOpenFem3D({ type: kind });
+    if (patch) setStructuralGridState((grid) => withOpenFem3DLevelPatch(grid, patch));
+  }, [dispatchOpenFem3D, setStructuralGridState]);
+  /**
+   * Nieuwe levels (zAxes) doorvoeren. In 3D gaan de gekoppelde knopen en
+   * platen mee, als één stap ongedaan maken; weigert de geometrie dat (een
+   * staaf zonder lengte, een plaat die scheef trekt), dan blijft alles staan
+   * en komt de vertaalde reden terug. In 2D alleen het stramien, zoals altijd.
+   */
+  const commitLevels = useCallback((nextLevels: GridAxisLine[]): string | null => {
+    const structural = fem.structuralGrid;
+    if (modelDimension !== "3d") {
+      setStructuralGridState({ ...structural, zAxes: nextLevels });
+      return null;
+    }
+    const model = openFem3dHistoryRef.current.model;
+    const result = applyOpenFem3DLevels(model, nextLevels);
+    if (!result.ok) {
+      const { key, values } = openFem3DLevelRefusalText(result.refusal, structural.zAxes);
+      return tRibbon(key, values);
+    }
+    const levels = openFem3DLevelTransition(structural.zAxes, nextLevels);
+    if (levels || result.model !== model) dispatchOpenFem3D({ type: "edit", model: result.model, levels });
+    setStructuralGridState((current) => ({ ...current, zAxes: nextLevels }));
+    return null;
+  }, [fem.structuralGrid, modelDimension, dispatchOpenFem3D, setStructuralGridState, tRibbon]);
+  /** Het stramien van buitenaf (bedieningskanaal): levels via `commitLevels`. */
+  const setStructuralGrid3D = useCallback((next: StructuralGrid) => {
+    const error = commitLevels(next.zAxes);
+    if (error) throw new Error(error);
+    setStructuralGridState((current) => ({ ...next, zAxes: current.zAxes }));
+  }, [commitLevels, setStructuralGridState]);
+  const [gridLevelError, setGridLevelError] = useState<string | null>(null);
+  // Na een geweigerde hoogte toont het veld weer de opgeslagen waarde.
+  const [gridLevelRevision, setGridLevelRevision] = useState(0);
+  const changeGridLevels = (nextLevels: GridAxisLine[]) => {
+    const error = commitLevels(nextLevels);
+    setGridLevelError(error === null ? null : t("app.grid.levelRefused", { reason: error }));
+    if (error !== null) setGridLevelRevision((revision) => revision + 1);
+  };
 
   // ── Tabel-editor (ribbon-tab "Tabel") ──────────────────────────────────
   // De ribbon-knoppen kiezen de dataset; de hoofdweergave "table" toont hem.
@@ -416,6 +726,40 @@ function App() {
     ),
     [fem.scheefstandBron, fem.scheefstandNoemer, fem.scheefstandHoogteM,
      fem.scheefstandAantalElementen, scheefstandGeometrie, fem.beams]);
+
+  /**
+   * Dezelfde keuze (bron, noemer, handmatige h en m) voor het 3D-model: h en m
+   * komen uit de 3D-geometrie, φ uit dezelfde normfunctie. Alleen in 3D.
+   */
+  const openFem3dScheefstandGeometrie = useMemo(
+    () => (modelDimension === "3d" ? leidScheefstandGeometrieAf3D(openFem3d) : null),
+    [modelDimension, openFem3d]);
+  const openFem3dScheefstandUitkomst = useMemo(
+    () => (openFem3dScheefstandGeometrie
+      ? bepaalScheefstand(
+          {
+            bron: fem.scheefstandBron,
+            noemer: fem.scheefstandNoemer,
+            hoogteM: fem.scheefstandHoogteM,
+            aantalElementen: fem.scheefstandAantalElementen,
+          },
+          openFem3dScheefstandGeometrie,
+          toepasselijkeScheefstandNormen3D(openFem3d),
+        )
+      : null),
+    [fem.scheefstandBron, fem.scheefstandNoemer, fem.scheefstandHoogteM,
+     fem.scheefstandAantalElementen, openFem3dScheefstandGeometrie, openFem3d]);
+  const openFem3dScheefstandTekst = useMemo(
+    () => (fem.scheefstandEnabled && openFem3dScheefstandUitkomst && openFem3dScheefstandGeometrie
+      ? scheefstandToelichting(openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie, "3d")
+      : ""),
+    [fem.scheefstandEnabled, openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie]);
+  /** Wat de balk onder het canvas toont: in 3D de 3D-afleiding, anders die van 2D. */
+  const scheefstandBalk = modelDimension === "3d" && openFem3dScheefstandUitkomst && openFem3dScheefstandGeometrie
+    ? { uitkomst: openFem3dScheefstandUitkomst, geometrie: openFem3dScheefstandGeometrie, richtingen: "3d" as const }
+    : { uitkomst: scheefstandUitkomst, geometrie: scheefstandGeometrie, richtingen: "2d" as const };
+  /** De combinaties voor de 3D-weergave: zoals gerekend, of anders die van het project. */
+  const openFem3dCombinaties = openFem3dSolvedCombinations.length > 0 ? openFem3dSolvedCombinations : fem.combinations;
 
   /**
    * Diezelfde afleiding als tekstblok, voor de drie plaatsen die hem tonen:
@@ -595,7 +939,10 @@ function App() {
     projectInfo: projectInfo as unknown as Record<string, unknown>,
     windInstellingen: windGenerator.instellingen as unknown as Record<string, unknown>,
     rapport: rapportSnapshot() as unknown as Record<string, unknown>,
-  }), [fem, projectInfo, windGenerator.instellingen]);
+    modelDimension,
+    ...(modelDimension === "3d" ? { model3d: openFem3d } : {}),
+    ...(modelDimension === "3d" ? { openFem3dViewSets, openFem3dStandaardViewsUitRapport } : {}),
+  }), [fem, openFem3d, openFem3dViewSets, openFem3dStandaardViewsUitRapport, modelDimension, projectInfo, windGenerator.instellingen]);
 
   /**
    * De JSON waarop de dirty-vlag rust: het MODEL, zonder projectgegevens,
@@ -622,15 +969,18 @@ function App() {
   // deze vlag vraagt de dirty-check-effect om de eerstvolgende run als nieuwe
   // baseline te nemen.
   const baselineResetRef = useRef(false);
+  // Een tweede actie tijdens een open dialoog mag geen tweede, identieke
+  // bevestiging starten (bijvoorbeeld twee sluitverzoeken achter elkaar).
+  const unsavedConfirmationPendingRef = useRef(false);
 
   /** Opslaan als — retourneert true als er daadwerkelijk is opgeslagen. */
   const handleSaveProjectAs = useCallback(async (): Promise<boolean> => {
-    const { serializeProject, saveProjectAs } = await import("./io/projectFile");
+    const { serializeProject, saveProjectAs, voorgesteldeProjectnaam } = await import("./io/projectFile");
     const { notifySuccess, notifyWarning } = await import("./io/notify");
     try {
       const snap = buildProjectSnapshot();
       const text = serializeProject(snap);
-      const suggested = projectPath || "project.ifcfem2d";
+      const suggested = voorgesteldeProjectnaam(projectPath);
       const newPath = await saveProjectAs(text, suggested);
       if (newPath) {
         setProjectPath(newPath);
@@ -679,35 +1029,37 @@ function App() {
    */
   const confirmUnsavedAction = useCallback(async (): Promise<boolean> => {
     if (!isDirtyRef.current) return true;
-    if (isTauriApp()) {
-      // Faalt de native dialoog (bv. een JS-plugin die een commando aanroept
-      // dat de Rust-plugin niet kent), dan mag dat de gebruiker niet in de app
-      // opsluiten: zonder vangnet breekt onCloseRequested af vóór destroy() en
-      // doet het kruisje niets. Dan vragen we het met de webview-dialoog.
-      try {
-        const { ask, confirm } = await import("@tauri-apps/plugin-dialog");
-        const wantsSave = await ask(t("unsaved.askSave"), {
-          title: t("unsaved.title"),
-          kind: "warning",
-          okLabel: t("unsaved.saveBtn"),
-          cancelLabel: t("unsaved.dontSaveBtn"),
-        });
-        if (wantsSave) return handleSaveProject();
-        // "Niet opslaan" → één extra bevestiging zodat Esc of een misklik geen
-        // werk weggooit.
-        return await confirm(t("unsaved.confirmDiscard"), {
-          title: t("unsaved.title"),
-          kind: "warning",
-          okLabel: t("unsaved.proceedBtn"),
-          cancelLabel: t("unsaved.cancelBtn"),
-        });
-      } catch (error) {
-        console.error("native dialoog voor niet-opgeslagen werk faalde", error);
-        return window.confirm(t("unsaved.confirmDiscard"));
+    if (unsavedConfirmationPendingRef.current) return false;
+    unsavedConfirmationPendingRef.current = true;
+    try {
+      if (isTauriApp()) {
+        // Faalt de native dialoog (bv. een JS-plugin die een commando aanroept
+        // dat de Rust-plugin niet kent), dan mag dat de gebruiker niet in de app
+        // opsluiten: zonder vangnet breekt onCloseRequested af vóór destroy() en
+        // doet het kruisje niets. Dan vragen we het met de webview-dialoog.
+        try {
+          // Eén vraag met drie knoppen. De plugin geeft het label van de
+          // gekozen knop terug; Esc en het kruisje van de vraag gelden als
+          // Annuleren, zodat een misklik geen werk weggooit.
+          const { message } = await import("@tauri-apps/plugin-dialog");
+          const knoppen = { yes: t("unsaved.saveBtn"), no: t("unsaved.dontSaveBtn"), cancel: t("unsaved.cancelBtn") };
+          const keuze = await message(t("unsaved.askSave"), {
+            title: t("unsaved.title"),
+            kind: "warning",
+            buttons: knoppen,
+          });
+          if (keuze === knoppen.yes || keuze === "Yes") return handleSaveProject();
+          return keuze === knoppen.no || keuze === "No";
+        } catch (error) {
+          console.error("native dialoog voor niet-opgeslagen werk faalde", error);
+          return window.confirm(t("unsaved.confirmDiscard"));
+        }
       }
+      // Browser-fallback: window.confirm kent maar twee knoppen.
+      return window.confirm(t("unsaved.confirmDiscard"));
+    } finally {
+      unsavedConfirmationPendingRef.current = false;
     }
-    // Browser-fallback: window.confirm kent maar twee knoppen.
-    return window.confirm(t("unsaved.confirmDiscard"));
   }, [handleSaveProject, t]);
 
   /**
@@ -725,6 +1077,20 @@ function App() {
       baselineResetRef.current = true;
       // Vóór het model: de staven verwijzen naar deze doorsneden.
       const overschreven = voegBibliothekenSamen(parsed);
+      // Een koppeling naar een level dat het stramien van het bestand niet
+      // kent, valt weg; de opgeslagen geometrie blijft precies zoals ze is.
+      dispatchOpenFem3D({ type: "replace", model: withoutUnknownOpenFem3DLevelLinks(
+        parsed.model3d ?? { nodes: [], beams: [] },
+        (parsed.structuralGrid ?? DEFAULT_STRUCTURAL_GRID).zAxes,
+      ) });
+      setOpenFem3dCameraSnapshot(null);
+      setOpenFem3dViewSets(parsed.openFem3dViewSets ?? []);
+      setOpenFem3dStandaardViewsUitRapport(parsed.openFem3dStandaardViewsUitRapport ?? []);
+      setOpenFem3dActieveView(null);
+      setOpenFem3dSelection(null);
+      const volgendeDimensie = parsed.modelDimension === "3d" ? "3d" : "2d";
+      setModelDimension(volgendeDimensie);
+      setActiveView(volgendeDimensie === "3d" ? "openFem3d" : "default");
       // De gevolgklasse van het BESTAND, vóór het laden: de standaardcombinaties
       // die bij het openen ontstaan horen bij de klasse van dit project, niet
       // bij die van het vorige.
@@ -813,12 +1179,12 @@ function App() {
         const basis = (parsed.projectInfo && typeof parsed.projectInfo === "object"
           ? parsed.projectInfo
           : projectInfo) as typeof projectInfo;
-        void zetInstelling("projectInfo", {
+        void setSetting("projectInfo", {
           ...basis,
           uitgangspunten: { ...(basis.uitgangspunten ?? DEFAULT_UITGANGSPUNTEN), gevolgklasse: geopendeKlasse },
         });
       } else if (parsed.projectInfo && typeof parsed.projectInfo === "object") {
-        void zetInstelling("projectInfo", parsed.projectInfo);
+        void setSetting("projectInfo", parsed.projectInfo);
       }
       if (parsed.windInstellingen && typeof parsed.windInstellingen === "object") {
         windGenerator.setInstellingen(parsed.windInstellingen as Partial<typeof windGenerator.instellingen>);
@@ -906,6 +1272,13 @@ function App() {
   const handleNewProject = useCallback(async () => {
     if (!(await confirmUnsavedAction())) return;
     baselineResetRef.current = true;
+    dispatchOpenFem3D({ type: "replace", model: { nodes: [], beams: [] } });
+    setOpenFem3dCameraSnapshot(null);
+    setOpenFem3dSelection(null);
+    setModelDimension("2d");
+    setOpenFem3dViewSets([]);
+    setOpenFem3dStandaardViewsUitRapport([]);
+    setOpenFem3dActieveView(null);
     fem.loadProjectState({
       nodes: [], beams: [], supports: [], plates: [], loads: [],
       // Zelfde bron als het startmodel (lib/eigenGewicht): het geval "Eigen
@@ -1003,12 +1376,16 @@ function App() {
       locatie: projectInfo.location,
       omschrijving: projectInfo.description,
     },
-    nodes: fem.nodes,
-    beams: fem.beams,
-    supports: fem.supports,
-    loads: fem.loads,
+    // Een project heeft precies één actief modeltype. Na de eenmalige
+    // omzetting mag de IFC-route de oude 2D-compatibiliteitsvelden niet als
+    // tweede constructie exporteren.
+    nodes: modelDimension === "2d" ? fem.nodes : [],
+    beams: modelDimension === "2d" ? fem.beams : [],
+    supports: modelDimension === "2d" ? fem.supports : [],
+    loads: modelDimension === "2d" ? fem.loads : [],
     loadCases: fem.loadCases,
-    plates: fem.plates,
+    model3d: modelDimension === "3d" ? openFem3dCalculationModel : undefined,
+    plates: modelDimension === "2d" ? fem.plates : [],
     eigenGewicht: fem.selfWeightEnabled,
     aantalCombinaties: fem.combinations.length,
     combinations: fem.combinations,
@@ -1032,8 +1409,8 @@ function App() {
     // leeg en meldt `verzamelIfcBeperkingen` dat er geen uitslag in staat.
     toetsresultaten: checkResults,
   }), [
-    projectPath, projectInfo,
-    fem.nodes, fem.beams, fem.supports, fem.loads, fem.loadCases,
+    projectPath, projectInfo, modelDimension,
+    fem.nodes, fem.beams, fem.supports, fem.loads, fem.loadCases, openFem3dCalculationModel,
     fem.plates, fem.selfWeightEnabled, fem.combinations, checkResults,
     // De rekeninstellingen stonden hier niet, terwijl ze wel in de set
     // OpenFEM2D_Analyse belanden: een gewijzigde scheefstand of een ander
@@ -1163,7 +1540,78 @@ function App() {
   const [resultsTabActive, setResultsTabActive] = useState(false);
   // Tab in the project-tree (verkenner) — controlled door App zodat Berekenen
   // automatisch naar "results" springt.
-  const [treeTab, setTreeTab] = useState<"project" | "results">("project");
+  const [treeTab, setTreeTab] = useState<"project" | "view" | "results">("project");
+  useEffect(() => {
+    if (modelDimension === "3d") setTreeTab("project");
+  }, [modelDimension]);
+  const handleConvertTo3D = useCallback(() => {
+    if (modelDimension === "3d") return;
+    const converted = convert2DTo3D({
+      nodes: fem.nodes,
+      beams: fem.beams,
+      supports: fem.supports,
+      loads: fem.loads,
+    });
+    dispatchOpenFem3D({ type: "replace", model: converted.model });
+    setOpenFem3dCameraSnapshot(null);
+    setOpenFem3dSelection(null);
+    setModelDimension("3d");
+    setActiveView("openFem3d");
+    setTreeTab("view");
+  }, [modelDimension, fem.nodes, fem.beams, fem.supports, fem.loads]);
+  // De wizard "Stalen hal" en de bedieningsopdracht `staalhal_maken`: de hal
+  // vervangt het 3D-model als ÉÉN undo-stap (Ctrl+Z zet het oude model terug).
+  // De gevallen van de hal worden aan die van het project gekoppeld: bestaande
+  // gevallen blijven staan en worden op naam en type hergebruikt, zodat een
+  // ongedaan gemaakt model nog naar zijn eigen gevallen verwijst.
+  const [staalhalOpen, setStaalhalOpen] = useState(false);
+  const pasStaalhalToe = useCallback((hal: StaalhalResultaat) => {
+    const store = femRef.current;
+    const ids = store.zorgVoorBelastinggevallen(hal.loadCases);
+    const caseIds: Record<number, number> = Object.fromEntries(hal.loadCases.map((c, i) => [c.id, ids[i]]));
+    const model = metBelastinggevalIds(hal.model, (id) => caseIds[id] ?? id);
+    if (store.selfWeightEnabled !== hal.selfWeightEnabled) store.setSelfWeightEnabled(hal.selfWeightEnabled);
+    store.setStructuralGrid(hal.stramien);
+    const actief = caseIds[STAALHAL_GEVAL.permanent];
+    if (actief !== undefined) store.setActiveLoadCaseId(actief);
+    dispatchOpenFem3D({ type: "edit", model });
+    setOpenFem3dCameraSnapshot(null);
+    setOpenFem3dSelection(null);
+    setModelDimension("3d");
+    setActiveView("openFem3d");
+    setTreeTab("view");
+    setOpenFem3dFitToken((token) => token + 1);
+    return { caseIds };
+  }, []);
+  const handleStaalhalMaken = useCallback(async (hal: StaalhalResultaat) => {
+    if (!(await confirmUnsavedAction())) return;
+    pasStaalhalToe(hal);
+    setStaalhalOpen(false);
+  }, [confirmUnsavedAction, pasStaalhalToe]);
+
+  // "Rekenmodel importeren" (IFC-tab en Bestand → Openen) en de
+  // bedieningsopdracht `ifc_analysemodel_importeren`: een geïmporteerd
+  // IFC4-analysemodel wordt een NIEUW 3D-project, langs dezelfde weg als een
+  // geopend projectbestand (`pasProjectToe`). Anders dan bij Openen heeft het
+  // project nog geen pad en is het gewijzigd: Opslaan vraagt om een bestand en
+  // afsluiten vraagt of het bewaard moet worden.
+  const pasIfcImportToe = useCallback((imp: IfcAnalyseImport) => {
+    const project = ifcAnalyseProject(imp, projectInfo as unknown as Record<string, unknown>);
+    pasProjectToe(deserializeProject(serializeProject(project)));
+    setProjectPath("");
+    baselineResetRef.current = false;
+    lastSavedRef.current = "";
+    setOpenFem3dFitToken((token) => token + 1);
+  }, [pasProjectToe, projectInfo]);
+  const meldIfcFout = useCallback((titel: string, tekst: string) => {
+    void import("./io/notify").then(({ notifyWarning }) => notifyWarning(titel, tekst));
+  }, []);
+  const ifcImportStroom = useIfcImportStroom({
+    bevestig: confirmUnsavedAction,
+    pasToe: pasIfcImportToe,
+    meldFout: meldIfcFout,
+  });
+  const handleImportIfcAnalyse = ifcImportStroom.start;
   // Grid settings (mutated by Grids dialog)
   const [grid, setGrid] = useState<GridSettings>(DEFAULT_GRID);
   const [gridsOpen, setGridsOpen] = useState(false);
@@ -1171,6 +1619,24 @@ function App() {
   // Windbelastinggenerator — de hook draait de generator mee met wijzigingen
   // in de constructie (idempotent, zie windStore.ts).
   const [windGeneratorOpen, setWindGeneratorOpen] = useState(false);
+  const [waterAccumulationOpen, setWaterAccumulationOpen] = useState(false);
+  const selectedWaterBeam = useMemo(() => {
+    const selection = fem.selection;
+    if (selection?.type !== "beam") return null;
+    const beam = fem.beams.find((item) => item.id === selection.id);
+    if (!beam) return null;
+    const start = fem.nodes.find((node) => node.id === beam.from);
+    const end = fem.nodes.find((node) => node.id === beam.to);
+    if (!start || !end) return null;
+    // De eerste module rekent een horizontale dakstrook. Een schuine of
+    // verticale modelstaaf vraagt expliciete dakgeometrie en wordt niet
+    // stilzwijgend als horizontaal dak overgenomen.
+    if (Math.abs(end.z - start.z) > 1 || Math.abs(end.x - start.x) < 1) return null;
+    const section = resolveSection(beam.material, beam.profile);
+    if (section.bron === "default") return null;
+    return { id: beam.id, spanM: Math.hypot(end.x - start.x, end.z - start.z) / 1000,
+      eiKnm2: section.E * section.I / 1e9 };
+  }, [fem.selection, fem.beams, fem.nodes]);
   // UC-badge op het canvas geklikt → toetsingspaneel openen gefocust op die
   // staaf. Elke klik maakt een nieuw object zodat een herhaalde klik op
   // dezelfde badge opnieuw scrollt (identiteit als trigger).
@@ -1895,13 +2361,165 @@ function App() {
   // uit de rekengang zelf.
   useEffect(() => {
     if (activeView !== "report") return;
+    // Het 3D-rapport gebruikt de eigen 3D-rekenuitkomst. Zonder deze guard
+    // startte het openen van een 3D-rapport op de achtergrond óók de 2D-kern,
+    // waardoor de statusbalk bleef rekenen en een misleidende 2D-fout kon
+    // verschijnen naast een geldig 3D-resultaat.
+    if (modelDimension === "3d") return;
     if (fem.combinationResults || rapportRekenPogingRef.current) return;
     if (herberekeningGeplandRef.current || lopendeRekengangenRef.current > 0) return;
     void rekenDoorRef.current();
-  }, [activeView, fem.combinationResults, fem.nodes, fem.beams, fem.supports,
+  }, [activeView, modelDimension, fem.combinationResults, fem.nodes, fem.beams, fem.supports,
     fem.loads, fem.plates, fem.rekenInstellingenVersie]);
 
-  const handleSolve = useCallback(() => {
+  const handleSolve = useCallback(async () => {
+    const analysis: SolverAnalysisKind = modelDimension === "3d"
+      ? "p-delta"
+      : fem.analysetype === "eersteOrde"
+        ? "linear"
+        : fem.analysetype === "tweedeOrdeFysisch"
+          ? "material-nonlinear"
+          : "p-delta";
+    try {
+      const preference = normaliseSolverPreference(
+        await getSetting<unknown>(SOLVER_PREFERENCE_KEY, "automatic"),
+      );
+      resolveSolver(preference, {
+        schemaVersion: 1,
+        dimension: modelDimension,
+        analysis,
+        elementFamilies: modelDimension === "3d"
+          ? (openFem3d.plates?.length ?? 0) > 0 ? ["frame", "plate"] : ["frame"]
+          : fem.plates.length > 0 ? ["frame", "plate"] : ["frame"],
+      });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setSolverStatus({ kind: "error" });
+      setSolverErrorText(message);
+      if (modelDimension === "3d") setOpenFem3dSolveError(message);
+      void import("./io/notify").then(({ notifyWarning }) =>
+        notifyWarning(i18next.t("common:app.solve.failed"), message)).catch(() => {});
+      return;
+    }
+    if (modelDimension === "3d") {
+      setActiveView("openFem3d");
+      setSolverStatus({ kind: "rekenen" });
+      setOpenFem3dSolveError(null);
+      const generation = ++openFem3dSolveGenerationRef.current;
+      try {
+        if (openFem3dCalculation.selfWeightError) throw new Error(openFem3dCalculation.selfWeightError);
+        const loadedCaseIds = new Set<number>([
+          ...(openFem3dCalculationModel.loads ?? []).map((load) => load.caseId ?? 1),
+          ...(openFem3dCalculationModel.memberLoads ?? []).map((load) => load.caseId ?? 1),
+          ...(openFem3dCalculationModel.memberPointLoads ?? []).map((load) => load.caseId ?? 1),
+          ...(openFem3dCalculationModel.thermalLoads ?? []).map((load) => load.caseId ?? 1),
+          ...(openFem3dCalculationModel.surfaceLoads ?? []).map((load) => load.caseId ?? 1),
+          ...(openFem3dCalculationModel.loadPanels ?? []).map((panel) => panel.caseId ?? 1),
+        ]);
+        if ((openFem3dCalculationModel.supports ?? []).some((support) =>
+          Object.keys(support.prescribed ?? {}).length > 0)) {
+          // Opgelegde verplaatsingen zijn een modelrandvoorwaarde en werken in
+          // ieder rekenspoor. Bewaar daarom altijd ook een resultaat onder het
+          // actieve geval, zelfs wanneer eigen gewicht een ander geval vult.
+          loadedCaseIds.add(fem.activeLoadCaseId);
+        }
+        if (loadedCaseIds.size === 0) throw new Error("Voeg minstens één 3D-belasting of opgelegde verplaatsing toe.");
+        if (fem.analysetype === "tweedeOrdeFysisch") {
+          throw new Error("Fysisch niet-lineaire 3D-analyse is nog niet beschikbaar. Kies eerste orde of tweede orde (P-Δ).");
+        }
+        const openFem3dAnalysis = fem.analysetype === "eersteOrde" ? "linear" : "p-delta";
+        // De blijvende gevallen (type "dead") zijn de montagelasten van
+        // trek-alleen staven als het model ze na de permanente belasting
+        // monteert; het eigen-gewichtgeval laat de uitkomst de kabelwerking melden.
+        const openFem3dOptions = {
+          permanentCaseIds: fem.loadCases.filter((loadCase) => loadCase.type === "dead").map((loadCase) => loadCase.id),
+          ...(openFem3dCalculation.selfWeightCaseId !== undefined
+            ? { selfWeightCaseId: openFem3dCalculation.selfWeightCaseId } : {}),
+        };
+        // Initiële scheefstand (EN 1993-1-1 §5.3.2): elke UGT-combinatie in +X,
+        // −X, +Y en −Y, met φ·V op elke verticale last. Uit = φ 0, geen varianten.
+        const scheefstandPhi = fem.scheefstandEnabled ? openFem3dScheefstandUitkomst?.phi ?? 0 : 0;
+        const combinations = metScheefstandRichtingen3D(fem.combinations.filter((combination) =>
+          [...loadedCaseIds].some((caseId) => (combination.factors.get(caseId) ?? 0) !== 0)), scheefstandPhi > 0);
+
+        // Elk geval blijft afzonderlijk beschikbaar voor invoercontrole. Iedere
+        // combinatie gaat als één volledige lastvector door de gekozen kern;
+        // tweede-orde-uitkomsten worden dus nooit gesuperponeerd.
+        const [casePairs, combinationPairs] = await Promise.all([
+          Promise.all([...loadedCaseIds].map(async (caseId) =>
+            [caseId, await solveOpenFem3D(openFem3dCalculationModel, caseId, openFem3dAnalysis, openFem3dOptions)] as const)),
+          Promise.all(combinations.map(async (combination) =>
+            [combination.id, await solveOpenFem3DCombination(
+              openFem3dCalculationModel, combination.factors, openFem3dAnalysis,
+              scheefstandVanCombinatie(combination, scheefstandPhi), openFem3dOptions)] as const)),
+        ]);
+        if (generation !== openFem3dSolveGenerationRef.current) {
+          const message = `De 3D-berekening is vervallen doordat model of rekeninstellingen tijdens de berekening wijzigden (generatie ${generation} → ${openFem3dSolveGenerationRef.current}).`;
+          setOpenFem3dSolveError(message);
+          setSolverErrorText(message);
+          setSolverStatus({ kind: "error" });
+          return;
+        }
+        const caseResults = new Map(casePairs);
+        const combinationResults = new Map(combinationPairs);
+        const result = caseResults.get(fem.activeLoadCaseId) ?? casePairs[0]?.[1] ?? combinationPairs[0]?.[1];
+        if (!result) throw new Error("De 3D-rekenkern leverde geen resultaat voor de aanwezige belastingen.");
+        setOpenFem3dCaseResults(caseResults);
+        setOpenFem3dCombinationResults(combinationResults);
+        setOpenFem3dSolvedCombinations(combinations);
+        setOpenFem3dActiveCombinationId(null);
+        setOpenFem3dResult(result);
+        setSolverErrorText(null);
+        setSolverStatus({ kind: "solved", at: Date.now() });
+        setTreeTab("results");
+        const unbalanced = [...casePairs, ...combinationPairs]
+          .map(([, value]) => value.forceBalance)
+          .filter((balance): balance is NonNullable<OpenFem3DSolveResult["forceBalance"]> => balance?.ok === false);
+        if (unbalanced.length > 0) {
+          const maximumForce = Math.max(...unbalanced.map((balance) => balance.maxImbalanceKn));
+          const maximumMoment = Math.max(...unbalanced.map((balance) => balance.maxMomentImbalanceKnm ?? 0));
+          setOpenFem3dChecks(null);
+          setOpenFem3dConcreteChecks(null);
+          setOpenFem3dChecksError(
+            `geblokkeerd — globaal evenwicht in ${unbalanced.length} resultaten wijkt af: ` +
+            `kracht maximaal ${maximumForce.toFixed(3)} kN, moment maximaal ${maximumMoment.toFixed(3)} kNm.`,
+          );
+          return;
+        }
+        setOpenFem3dChecksRunning(true);
+        setOpenFem3dChecksError(null);
+        const combinationSet = {
+          combinations, results: combinationResults, loadCases: fem.loadCases,
+          ...(fem.gevolgklasse ? { consequenceClass: fem.gevolgklasse } : {}),
+        };
+        const [steel, concrete] = await Promise.allSettled([
+          runOpenFem3DSteelChecks(openFem3d, result, combinationSet),
+          runOpenFem3DConcreteChecks(openFem3d, result, combinationSet),
+        ]);
+        if (generation !== openFem3dSolveGenerationRef.current) return;
+        setOpenFem3dChecks(steel.status === "fulfilled" ? steel.value : null);
+        setOpenFem3dConcreteChecks(concrete.status === "fulfilled" ? concrete.value : null);
+        const errors = [steel, concrete]
+          .filter((item): item is PromiseRejectedResult => item.status === "rejected")
+          .map((item) => item.reason instanceof Error ? item.reason.message : String(item.reason));
+        setOpenFem3dChecksError(errors.length > 0 ? errors.join("; ") : null);
+      } catch (cause) {
+        if (generation !== openFem3dSolveGenerationRef.current) return;
+        const message = cause instanceof Error ? cause.message : String(cause);
+        setOpenFem3dResult(null);
+        setOpenFem3dCaseResults(new Map());
+        setOpenFem3dCombinationResults(new Map());
+        setOpenFem3dActiveCombinationId(null);
+        setOpenFem3dSolveError(message);
+        setSolverErrorText(message);
+        setSolverStatus({ kind: "error" });
+        void import("./io/notify").then(({ notifyWarning }) =>
+          notifyWarning(i18next.t("common:app.solve.failed"), message)).catch(() => {});
+      } finally {
+        if (generation === openFem3dSolveGenerationRef.current) setOpenFem3dChecksRunning(false);
+      }
+      return;
+    }
     // Make sure the user is looking at the canvas (not the report/IFC view).
     setActiveView("default");
     // Spring direct naar de Resultaten-tab in BEIDE plekken:
@@ -1922,7 +2540,7 @@ function App() {
     fem.setSelection(null);
     // Rekenen + toetsen; vanaf nu blijft het model live.
     void rekenDoor();
-  }, [fem, rekenDoor]);
+  }, [fem, openFem3d, openFem3dCalculation, openFem3dCalculationModel, modelDimension, rekenDoor]);
 
   // Keyboard: Ctrl+Z / Ctrl+Y for undo/redo. In vrije-tekstvelden blijft het de
   // tekst-undo van de browser; in getalvelden, keuzelijsten e.d. gaat het naar
@@ -1940,7 +2558,10 @@ function App() {
       const t = e.target as HTMLElement | null;
       if (undoRoute(t as HTMLInputElement | null) === "veld") return;
       e.preventDefault();
-      const voerUit = () => (isUndo ? undoRedoRef.current.undo() : undoRedoRef.current.redo());
+      const voerUit = () => {
+        if (activeView === "openFem3d") undoRedoOpenFem3D(isUndo ? "undo" : "redo");
+        else (isUndo ? undoRedoRef.current.undo() : undoRedoRef.current.redo());
+      };
       if (moetEerstVastleggen(t)) {
         // Eerst vastleggen: een half ingetypte waarde wordt een historiestap en
         // gaat dan mee terug. Een tik wachten, zodat undo de stap van de blur kent.
@@ -1952,7 +2573,7 @@ function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [activeView]);
 
   // C1: Ctrl+S / Cmd+S = Opslaan, Ctrl+Shift+S = Opslaan als. Altijd
   // preventDefault zodat de browser-save-dialoog nooit verschijnt; opslaan
@@ -1991,11 +2612,13 @@ function App() {
       // De normkeuze staat óók in de snapshot; zonder deze drie zou een
       // gewijzigde scheefstandbron het bestand niet als "gewijzigd" markeren
       // en stil verloren gaan bij het afsluiten.
-      fem.scheefstandBron, fem.scheefstandHoogteM, fem.scheefstandAantalElementen]);
+      fem.scheefstandBron, fem.scheefstandHoogteM, fem.scheefstandAantalElementen,
+      openFem3d]);
 
   // C2: sluitbeveiliging. Tauri: onCloseRequested + native dialoog (dekt de
   // titelbalk-sluitknop, Bestand → Afsluiten en Alt+F4). Browser: beforeunload.
   const confirmUnsavedRef = useRef(confirmUnsavedAction);
+  const closeRequestPendingRef = useRef(false);
   useEffect(() => { confirmUnsavedRef.current = confirmUnsavedAction; });
   useEffect(() => {
     if (isTauriApp()) {
@@ -2004,9 +2627,22 @@ function App() {
       import("@tauri-apps/api/window")
         .then(({ getCurrentWindow }) =>
           getCurrentWindow().onCloseRequested(async (event) => {
+            if (closeRequestPendingRef.current) {
+              event.preventDefault();
+              return;
+            }
             if (!isDirtyRef.current) return;
-            const proceed = await confirmUnsavedRef.current();
-            if (!proceed) event.preventDefault();
+            closeRequestPendingRef.current = true;
+            let proceed = false;
+            try {
+              proceed = await confirmUnsavedRef.current();
+            } catch (error) {
+              console.error("sluitbeveiliging faalde", error);
+            }
+            if (!proceed) {
+              event.preventDefault();
+              closeRequestPendingRef.current = false;
+            }
           })
         )
         .then((u) => { if (disposed) u(); else unlisten = u; })
@@ -2027,7 +2663,7 @@ function App() {
   // zodat venstertitel en documenttab nooit verschillende namen tonen.
   useEffect(() => {
     const name = projectPath ? projectPath.split(/[\\/]/).pop() : i18next.t("ribbon:report.unnamedProject");
-    document.title = `${isDirty ? "● " : ""}${name} — Open FEM2D Studio`;
+    document.title = `${isDirty ? "● " : ""}${name} — Open FEM Studio`;
   }, [isDirty, projectPath]);
 
   // Startvenster verwijderd op verzoek: de app opent direct in het model.
@@ -2217,7 +2853,7 @@ function App() {
   // NIET bij: klikken op een UC-badge moet de toetsing van díé staaf NAAST het
   // model tonen, niet in de plaats daarvan. Zo blijft het model in beeld
   // terwijl je de afleiding leest, en zie je welke staaf je voor je hebt.
-  const isFullWidthView = activeView === "viewer" || activeView === "ifc" || activeView === "report" || activeView === "insights";
+  const isFullWidthView = activeView === "openFem3d" || activeView === "viewer" || activeView === "ifc" || activeView === "report" || activeView === "insights";
 
   /**
    * De geselecteerde BETONstaaf, of `null`.
@@ -2254,11 +2890,122 @@ function App() {
     setBottomPanelOpen(true);
   }, [geselecteerdeBetonStaaf]);
 
+  /**
+   * Een 3D-view toepassen: een eigen view uit het venster Views of uit de
+   * verkenner (tab Views), of een standaardview. Zichtbaarheid, aanzicht,
+   * belastinggeval of combinatie en tab; een eigen view uit de verkenner krijgt
+   * daarna zijn exacte camera (het venster doet dat zelf). Vanuit de verkenner
+   * blijft de verkennertab staan.
+   */
+  const pasOpenFem3dViewToe = (w: OpenFem3DViewToepassing, vanuitVerkenner = false) => {
+    setOpenFem3dVisibility({ ...w.visibility });
+    setOpenFem3dViewRequest((previous) => ({ kind: w.view, token: previous.token + 1 }));
+    if (vanuitVerkenner && w.camera) {
+      const camera = w.camera;
+      setOpenFem3dCameraVerzoek((previous) => ({ state: camera, token: (previous?.token ?? 0) + 1 }));
+    }
+    if (w.loadCaseId && fem.loadCases.some((loadCase) => loadCase.id === w.loadCaseId)) {
+      fem.setActiveLoadCaseId(w.loadCaseId);
+    }
+    if (w.mode) {
+      setOpenFem3dShowLoadCase(w.mode !== "model");
+      setResultsTabActive(w.mode === "results");
+      if (!vanuitVerkenner) setTreeTab(w.mode === "results" ? "results" : "project");
+    }
+    if (w.combinationId === null) {
+      setOpenFem3dActiveCombinationId(null);
+      setOpenFem3dResult(openFem3dCaseResults.get(w.loadCaseId ?? fem.activeLoadCaseId) ?? null);
+    } else {
+      setOpenFem3dActiveCombinationId(w.combinationId);
+      setOpenFem3dResult(openFem3dCombinationResults.get(w.combinationId) ?? null);
+    }
+    setOpenFem3dActieveView(w.sleutel);
+  };
+
   const renderMainContent = () => {
     switch (activeView) {
+      case "openFem3d":
+        return (
+          <Suspense fallback={<div className="placeholder"><p>{t("app.view.loading3d")}</p></div>}>
+            <OpenFem3DEditor
+              model={openFem3d}
+              calculationModel={openFem3dCalculationModel}
+              onChange={setOpenFem3d}
+              tool={openFem3dTool}
+              onToolChange={handleOpenFem3DToolChange}
+              onPlaceNodeCondition={(target) => applyOpenFem3DNodeTool(target)}
+              deformationDisplay={openFem3dDeformationDisplay}
+              deleteToken={openFem3dDeleteToken}
+              fitRequest={openFem3dFitToken}
+              viewRequest={openFem3dViewRequest}
+              initialCamera={openFem3dCameraSnapshot?.viewToken === openFem3dViewRequest.token
+                && openFem3dCameraSnapshot.fitToken === openFem3dFitToken ? openFem3dCameraSnapshot.state : null}
+              onCameraStateChange={(state) => setOpenFem3dCameraSnapshot({
+                state, viewToken: openFem3dViewRequest.token, fitToken: openFem3dFitToken,
+              })}
+              onCameraViewChange={(kind) => setOpenFem3dViewRequest((previous) =>
+                previous.kind === kind ? previous : { ...previous, kind })}
+              selection={openFem3dSelection}
+              onSelectionChange={handleOpenFem3DSelectionChange}
+              onOpenCheckForBeam={(beamId) => {
+                setOpenFem3dTool("select");
+                setOpenFem3dSelection({ type: "beam", id: beamId });
+                setRightPanelOpen(true);
+                setOpenFem3dNormFocus((previous) => ({ beamId, serial: (previous?.serial ?? 0) + 1 }));
+              }}
+              visibilityOpen={visibility3DOpen}
+              onVisibilityOpen={() => setVisibility3DOpen(true)}
+              onVisibilityClose={() => setVisibility3DOpen(false)}
+              visibility={openFem3dVisibility}
+              onVisibilityChange={setOpenFem3dVisibility}
+              showLoadCase={openFem3dShowLoadCase}
+              resultsActive={resultsTabActive}
+              structuralGrid={fem.structuralGrid}
+              gridSpacingM={grid.spacingMm / 1000}
+              result={openFem3dShowLoadCase ? openFem3dResult : null}
+              plateQuantity={openFem3dPlateQuantity}
+              checks={openFem3dShowLoadCase ? openFem3dChecks : null}
+              concreteChecks={openFem3dShowLoadCase ? openFem3dConcreteChecks : null}
+              solving={solverStatus.kind === "rekenen"}
+              solveError={openFem3dSolveError}
+              activeLoadCaseId={fem.activeLoadCaseId}
+              viewSets={openFem3dViewSets}
+              currentView={openFem3dViewRequest.kind}
+              currentCombinationId={openFem3dActiveCombinationId}
+              combinationOptions={openFem3dCombinaties.map((combination) => ({ id: combination.id, name: combination.name }))}
+              loadCaseOptions={fem.loadCases.map((loadCase) => ({ id: loadCase.id, name: loadCase.name }))}
+              loadCaseTypes={openFem3dLoadCaseTypes}
+              onViewSetsChange={setOpenFem3dViewSets}
+              onApplyViewSet={(viewSet) => pasOpenFem3dViewToe(openFem3DViewSetToepassing(viewSet))}
+              cameraVerzoek={openFem3dCameraVerzoek}
+            />
+          </Suspense>
+        );
       case "ifc":
         return <IfcViewerPanel model={ifcModel} />;
       case "report":
+        if (modelDimension === "3d") {
+          return <OpenFem3DReport
+            model={openFem3dCalculationModel}
+            result={openFem3dResult}
+            checks={openFem3dChecks}
+            concreteChecks={openFem3dConcreteChecks}
+            checksRunning={openFem3dChecksRunning}
+            checksError={openFem3dChecksError}
+            projectName={projectPath ? projectPath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "") : projectInfo.name}
+            activeLoadCaseId={fem.activeLoadCaseId}
+            activeLoadCaseName={fem.loadCases.find((loadCase) => loadCase.id === fem.activeLoadCaseId)?.name}
+            activeCombinationName={openFem3dCombinaties.find((combination) => combination.id === openFem3dActiveCombinationId)?.name}
+            activeCombinationFactors={openFem3dCombinaties.find((combination) => combination.id === openFem3dActiveCombinationId)?.factors}
+            combinations={openFem3dCombinaties}
+            combinationResults={openFem3dCombinationResults}
+            scheefstandTekst={openFem3dScheefstandTekst}
+            caseResults={openFem3dCaseResults}
+            activeCombinationId={openFem3dActiveCombinationId}
+            viewSets={openFem3dViewSets}
+            standaardViewsUitRapport={openFem3dStandaardViewsUitRapport}
+          />;
+        }
         // Doorgeef-regels naar het live rapport (ReportDataContext) — de
         // secties lezen deze modelstate en volgen elke wijziging direct.
         return <ReportPreview data={reportData} onDetach={handleDetachReport} />;
@@ -2271,7 +3018,7 @@ function App() {
           </Suspense>
         );
       default: {
-        // FEM canvas (Start-tab). In de Tabel-weergave wordt dit een
+        // FEM canvas (2D-tab). In de Tabel-weergave wordt dit een
         // split-view: canvas links, tabel rechts, met een versleepbare
         // scheidingsbalk — het model blijft zichtbaar terwijl je in de
         // tabel werkt en rij-selectie licht direct op in het canvas.
@@ -2421,6 +3168,58 @@ function App() {
   // luistert alleen als Rust zegt dat OPENAEC_GUI_CONTROL=1 gezet was.
   const bedieningActief = useBediening({
     fem,
+    modelDimension,
+    openFem3d: {
+      model: openFem3d,
+      visibility: openFem3dVisibility,
+      structuralGrid: fem.structuralGrid,
+      replaceModel: (model, levels) => {
+        // Een nieuw model met eigen levels: eerst de levels, want de knopen
+        // en platen verwijzen ernaar. Vervangen is geen stap ongedaan maken.
+        if (levels) setStructuralGridState((current) => ({ ...current, zAxes: levels }));
+        dispatchOpenFem3D({ type: "replace", model });
+        setOpenFem3dCameraSnapshot(null);
+        setOpenFem3dSelection(null);
+        setModelDimension("3d");
+        setActiveView("openFem3d");
+        setTreeTab("view");
+      },
+      applySteelHall: pasStaalhalToe,
+      setVisibility: setOpenFem3dVisibility,
+      // Levels via dezelfde weg als het venster: gekoppelde knopen gaan mee.
+      setStructuralGrid: setStructuralGrid3D,
+      setView: (kind) => {
+        setActiveView("openFem3d");
+        setOpenFem3dViewRequest((previous) => ({ kind, token: previous.token + 1 }));
+      },
+      setSelection: setOpenFem3dSelection,
+      selectCombination: (id) => {
+        const result = openFem3dCombinationResults.get(id);
+        if (!result) return;
+        setOpenFem3dActiveCombinationId(id);
+        setOpenFem3dResult(result);
+        setActiveView("openFem3d");
+        setResultsTabActive(true);
+        setTreeTab("results");
+        setOpenFem3dVisibility((value) => ({ ...value, loads: false }));
+      },
+      updateBeam: (id, updates) => setOpenFem3d({
+        ...openFem3d,
+        beams: openFem3d.beams.map((beam) => beam.id === id ? { ...beam, ...updates } : beam),
+      }),
+      solve: handleSolve,
+      result: openFem3dResult,
+      caseResults: openFem3dCaseResults,
+      combinationResults: openFem3dCombinationResults,
+      activeCombinationId: openFem3dActiveCombinationId,
+      solveError: openFem3dSolveError,
+      checks: openFem3dChecks,
+      concreteChecks: openFem3dConcreteChecks,
+      generation: () => openFem3dSolveGenerationRef.current,
+      solving: solverStatus.kind === "rekenen",
+      checksRunning: openFem3dChecksRunning,
+      checksError: openFem3dChecksError,
+    },
     activeView,
     selection: fem.selection,
     setSelection: fem.setSelection,
@@ -2437,6 +3236,7 @@ function App() {
     laatsteRekenfout: () => rekenFoutRef.current,
     createDetachedWindow,
     laadProjectTekst,
+    importeerIfcProject: pasIfcImportToe,
   });
 
   return (
@@ -2445,10 +3245,10 @@ function App() {
         onSettingsClick={() => setSettingsOpen(true)}
         onFeedbackClick={() => setFeedbackOpen(true)}
         onSaveClick={() => { void handleSaveProject(); }}
-        onUndoClick={fem.undo}
-        onRedoClick={fem.redo}
-        canUndo={fem.canUndo}
-        canRedo={fem.canRedo}
+        onUndoClick={modelDimension === "3d" ? () => undoRedoOpenFem3D("undo") : fem.undo}
+        onRedoClick={modelDimension === "3d" ? () => undoRedoOpenFem3D("redo") : fem.redo}
+        canUndo={modelDimension === "3d" ? openFem3dHistory.past.length > 0 : fem.canUndo}
+        canRedo={modelDimension === "3d" ? openFem3dHistory.future.length > 0 : fem.canRedo}
         onPrintClick={() => setActiveView("report")}
       />
       <ToastHost />
@@ -2466,19 +3266,90 @@ function App() {
         onOpenLibrary={(tab) => { setLibraryTab(tab); setLibraryOpen(true); }}
         activeView={activeView}
         onViewChange={setActiveView}
+        modelDimension={modelDimension}
+        onConvertTo3D={handleConvertTo3D}
+        onOpenSteelHall={() => setStaalhalOpen(true)}
         femTool={femTool}
         onFemToolChange={setFemTool}
+        openFem3dTool={openFem3dTool}
+        onOpenFem3DToolChange={handleOpenFem3DToolChange}
+        canOpenFem3DDelete={openFem3dSelection !== null}
+        onOpenFem3DFit={() => setOpenFem3dFitToken((token) => token + 1)}
+        onOpenFem3DViewChange={(kind) => setOpenFem3dViewRequest((previous) => ({ kind, token: previous.token + 1 }))}
+        openFem3dView={openFem3dViewRequest.kind}
+        onToggle3DVisibility={() => setVisibility3DOpen((open) => !open)}
+        visibility3DOpen={visibility3DOpen}
+        hasOpenFem3DNodeSelection={openFem3dSelection?.type === "node" && openFem3d.nodes.some((node) => node.id === openFem3dSelection.id)}
+        hasOpenFem3DBeamSelection={openFem3dSelection?.type === "beam" && openFem3d.beams.some((beam) => beam.id === openFem3dSelection.id)}
+        hasOpenFem3DPlateSelection={openFem3dSelection?.type === "plate" && (openFem3d.plates ?? []).some((plate) => plate.id === openFem3dSelection.id)}
+        onOpenFem3DSupportPreset={(preset) => {
+          setOpenFem3dTool(`support:${preset}`);
+          if (openFem3dSelection?.type === "node") applyOpenFem3DNodeTool({ nodeId: openFem3dSelection.id }, `support:${preset}`);
+        }}
+        onOpenFem3DSpringTool={(axis) => {
+          // Een gereedschap zoals de opleggingen; een geselecteerde knoop krijgt
+          // de veer meteen.
+          setOpenFem3dTool(`spring:${axis}`);
+          if (openFem3dSelection?.type === "node") applyOpenFem3DNodeTool({ nodeId: openFem3dSelection.id }, `spring:${axis}`);
+        }}
+        onOpenFem3DRequestNodalLoad={(kind) => {
+          setRightPanelOpen(true);
+          setOpenFem3dLoadEditorRequest((request) => ({ kind, serial: (request?.serial ?? 0) + 1 }));
+        }}
+        onOpenFem3DRequestMemberLoad={() => {
+          setOpenFem3dTool("addMemberLoad");
+          if (openFem3dSelection?.type === "beam") {
+            setRightPanelOpen(true);
+            setOpenFem3dMemberLoadEditorRequest((serial) => serial + 1);
+          }
+        }}
+        onOpenFem3DRequestMemberPointLoad={() => {
+          setRightPanelOpen(true);
+          setOpenFem3dMemberPointLoadEditorRequest((serial) => serial + 1);
+        }}
+        onOpenFem3DRequestThermalLoad={() => {
+          setRightPanelOpen(true);
+          setOpenFem3dThermalLoadEditorRequest((serial) => serial + 1);
+        }}
+        onOpenFem3DConvertPlateToLoadPanel={() => {
+          if (openFem3dSelection?.type !== "plate") return;
+          try {
+            const converted = convertOpenFem3DPlateToLoadPanels(openFem3d, openFem3dSelection.id, { caseId: fem.activeLoadCaseId });
+            setOpenFem3d(converted.model);
+            setOpenFem3dShowLoadCase(true);
+            setOpenFem3dVisibility((value) => value.loads && value.loadPanels ? value : { ...value, loads: true, loadPanels: true });
+            // Een oppervlaktelast in een ander geval wordt een vlak in dat geval:
+            // toon dan dat geval, anders valt de selectie meteen weg.
+            const panels = (converted.model.loadPanels ?? []).filter((panel) => converted.panelIds.includes(panel.id));
+            const shown = panels.find((panel) => (panel.caseId ?? 1) === fem.activeLoadCaseId) ?? panels[0];
+            if (shown && (shown.caseId ?? 1) !== fem.activeLoadCaseId) fem.setActiveLoadCaseId(shown.caseId ?? 1);
+            setOpenFem3dSelection(shown ? { type: "loadPanel", id: shown.id } : null);
+            setRightPanelOpen(true);
+          } catch (cause) {
+            meldLoadPanelFout(cause);
+          }
+        }}
+        onOpenFem3DRequestSurfaceLoad={() => {
+          if (openFem3dSelection?.type !== "plate") return;
+          const next = addOpenFem3DSurfaceLoad(openFem3d, openFem3dSelection.id, { qx: 0, qy: 0, qz: -5 }, fem.activeLoadCaseId);
+          setOpenFem3d(next);
+          setOpenFem3dShowLoadCase(true);
+          const load = next.surfaceLoads?.[Math.max(0, (next.surfaceLoads?.length ?? 1) - 1)];
+          if (load) setOpenFem3dSelection({ type: "surfaceLoad", id: load.id });
+          setRightPanelOpen(true);
+        }}
         onSolve={handleSolve}
-        hasResults={solverResult !== null || fem.envelope !== null}
-        onDelete={fem.deleteSelected}
-        onUndo={fem.undo}
-        onRedo={fem.redo}
-        canUndo={fem.canUndo}
-        canRedo={fem.canRedo}
+        hasResults={modelDimension === "3d" ? openFem3dResult !== null : solverResult !== null || fem.envelope !== null}
+        onDelete={modelDimension === "3d" ? () => setOpenFem3dDeleteToken((token) => token + 1) : fem.deleteSelected}
+        onUndo={modelDimension === "3d" ? () => undoRedoOpenFem3D("undo") : fem.undo}
+        onRedo={modelDimension === "3d" ? () => undoRedoOpenFem3D("redo") : fem.redo}
+        canUndo={modelDimension === "3d" ? openFem3dHistory.past.length > 0 : fem.canUndo}
+        canRedo={modelDimension === "3d" ? openFem3dHistory.future.length > 0 : fem.canRedo}
         onOpenGrids={() => setGridsOpen(true)}
         onOpenLoadCases={() => { setLoadCasesTab("cases"); setLoadCasesOpen(true); }}
         onOpenLoadCombinations={() => { setLoadCasesTab("combos"); setLoadCasesOpen(true); }}
         onOpenWindGenerator={() => setWindGeneratorOpen(true)}
+        onOpenWaterAccumulation={() => setWaterAccumulationOpen(true)}
         onExportHtml={handleExportHtmlReport}
         // De Rapport-tab zet met deze tekst het hoofdstuk Uitgangspunten in de
         // PDF-uitdraai. Dezelfde tekst gaat via `reportData` naar het live
@@ -2490,6 +3361,7 @@ function App() {
         onExportIfcStructural={() => { void handleExportIfc(true); }}
         onValidateIfc={() => { void handleValidateIfc(); }}
         onOpenIfcView={() => setActiveView("ifc")}
+        onImportIfcAnalysisModel={() => { void handleImportIfcAnalyse(); }}
         onFilterSelection={() => {
           // Filter current selection: if multi-selection, keep only the first
           // type (nodes / beams / plates) — quickest visible effect for now.
@@ -2524,7 +3396,7 @@ function App() {
       />
       <div className="content">
         {/* Left panel — Explorer (hidden in full-width views) */}
-        {!isFullWidthView && (
+        {(!isFullWidthView || activeView === "openFem3d") && (
           <aside className={`left-panel${leftPanelOpen ? "" : " collapsed"}${isResizing ? " no-transition" : ""}`} style={{ width: leftPanelOpen ? leftPanelWidth : 28 }}>
             {leftPanelOpen ? (
               <>
@@ -2535,7 +3407,70 @@ function App() {
                   </button>
                 </div>
                 <div className="left-panel-body">
-                  <FemProjectTree
+                  {modelDimension === "3d" ? <OpenFem3DExplorer
+                    model={openFem3d}
+                    onChange={setOpenFem3d}
+                    calculationModel={openFem3dCalculationModel}
+                    selection={openFem3dSelection}
+                    setSelection={handleOpenFem3DSelectionChange}
+                    result={openFem3dShowLoadCase ? openFem3dResult : null}
+                    checks={openFem3dShowLoadCase ? openFem3dChecks : null}
+                    concreteChecks={openFem3dShowLoadCase ? openFem3dConcreteChecks : null}
+                    checksRunning={openFem3dChecksRunning}
+                    checksError={openFem3dChecksError}
+                    activeTab={treeTab}
+                    setActiveTab={setTreeTab}
+                    visibility={openFem3dVisibility}
+                    setVisibility={setOpenFem3dVisibility}
+                    deformationDisplay={openFem3dDeformationDisplay}
+                    setDeformationDisplay={setOpenFem3dDeformationDisplay}
+                    plateQuantity={openFem3dPlateQuantity}
+                    setPlateQuantity={setOpenFem3dPlateQuantity}
+                    displayFlags={displayFlags}
+                    setDisplayFlags={setDisplayFlags}
+                    gridShow={grid.show}
+                    setGridShow={(show) => setGrid((current) => ({ ...current, show }))}
+                    structuralGrid={fem.structuralGrid}
+                    setStructuralGridEnabled={(enabled) => fem.setStructuralGrid((current) => ({ ...current, enabled }))}
+                    activeLoadCaseId={fem.activeLoadCaseId}
+                    combinations={openFem3dCombinaties}
+                    combinationResults={openFem3dCombinationResults}
+                    activeCombinationId={openFem3dActiveCombinationId}
+                    setActiveCombinationId={(id) => {
+                      const result = openFem3dCombinationResults.get(id);
+                      if (!result) return;
+                      setOpenFem3dActiveCombinationId(id);
+                      setOpenFem3dResult(result);
+                      setResultsTabActive(true);
+                      setTreeTab("results");
+                      setOpenFem3dVisibility((value) => ({ ...value, loads: false }));
+                    }}
+                    views={{
+                      viewSets: openFem3dViewSets,
+                      onViewSetsChange: setOpenFem3dViewSets,
+                      standaardUitRapport: openFem3dStandaardViewsUitRapport,
+                      onStandaardUitRapportChange: setOpenFem3dStandaardViewsUitRapport,
+                      status: {
+                        heeftResultaat: openFem3dCaseResults.size > 0 || openFem3dCombinationResults.size > 0,
+                        heeftCombinaties: openFem3dCombinationResults.size > 0,
+                        heeftToetsing: (openFem3dChecks?.results.length ?? 0) + (openFem3dConcreteChecks?.results.length ?? 0) > 0,
+                      },
+                      visibility: openFem3dVisibility,
+                      actieveSleutel: openFem3dActieveView,
+                      activeCombinationId: openFem3dActiveCombinationId,
+                      activeLoadCaseId: fem.activeLoadCaseId,
+                      maatgevendeCombinatie: () => openFem3DMaatgevendeCombinatie(openFem3dCalculationModel, openFem3dCombinaties, openFem3dCombinationResults),
+                      huidig: () => ({
+                        view: openFem3dViewRequest.kind,
+                        camera: openFem3dCameraSnapshot?.state ?? { position: [8, 8, 6], target: [0, 0, 0], up: [0, 0, 1] },
+                        visibility: openFem3dVisibility,
+                        combinationId: openFem3dActiveCombinationId,
+                        loadCaseId: fem.activeLoadCaseId,
+                        mode: !openFem3dShowLoadCase ? "model" : resultsTabActive ? "results" : "loadCase",
+                      }),
+                      onToepassen: (w) => pasOpenFem3dViewToe(w, true),
+                    }}
+                  /> : <FemProjectTree
                     nodes={fem.nodes}
                     beams={fem.beams}
                     supports={fem.supports}
@@ -2587,11 +3522,18 @@ function App() {
                     envelope={fem.envelope}
                     displayFlags={displayFlags}
                     setDisplayFlags={setDisplayFlags}
-                    onOpenZichtbaarheid={() => setZichtbaarheidOpen(true)}
                     hasResults={solverResult !== null || fem.envelope !== null}
                     activeTab={treeTab}
                     setActiveTab={setTreeTab}
-                  />
+                    workspace={modelDimension}
+                    gridShow={grid.show}
+                    setGridShow={(show) => setGrid((current) => ({ ...current, show }))}
+                    stramienAan={fem.structuralGrid.enabled}
+                    setStramienAan={(enabled) => fem.setStructuralGrid((current) => ({ ...current, enabled }))}
+                    openFem3dVisibility={openFem3dVisibility}
+                    setOpenFem3DVisibility={setOpenFem3dVisibility}
+                    onOpenZichtbaarheid={() => setZichtbaarheidOpen(true)}
+                  />}
                 </div>
                 <div className="left-panel-resize" onMouseDown={handleLeftResizeMouseDown} />
               </>
@@ -2608,7 +3550,7 @@ function App() {
         </main>
 
         {/* Right panel — Properties (hidden in full-width views) */}
-        {!isFullWidthView && (
+        {(!isFullWidthView || activeView === "openFem3d") && (
           <aside className={`right-panel${rightPanelOpen ? "" : " collapsed"}${isResizing ? " no-transition" : ""}`} style={{ width: rightPanelOpen ? rightPanelWidth : 28 }}>
             {rightPanelOpen ? (
               <>
@@ -2620,7 +3562,31 @@ function App() {
                   </button>
                 </div>
                 <div className="right-panel-body">
-                  {/* In de tab Model (geen lasten, geen resultaten) hoort de toetsing
+                  {modelDimension === "3d" ? <OpenFem3DProperties
+                    model={openFem3d}
+                    selection={openFem3dSelection}
+                    onChange={setOpenFem3d}
+                    result={openFem3dShowLoadCase ? openFem3dResult : null}
+                    checks={openFem3dShowLoadCase ? openFem3dChecks : null}
+                    concreteChecks={openFem3dShowLoadCase ? openFem3dConcreteChecks : null}
+                    checksRunning={openFem3dChecksRunning}
+                    checksError={openFem3dChecksError}
+                    loadEditorRequest={openFem3dLoadEditorRequest}
+                    springEditorRequest={openFem3dSpringEditorRequest}
+                    memberLoadEditorRequest={openFem3dMemberLoadEditorRequest}
+                    memberPointLoadEditorRequest={openFem3dMemberPointLoadEditorRequest}
+                    thermalLoadEditorRequest={openFem3dThermalLoadEditorRequest}
+                    activeLoadCaseId={fem.activeLoadCaseId}
+                    normFocus={openFem3dNormFocus}
+                    onPickLoadPanelSpan={(panelId) => {
+                      setOpenFem3dSpanPick({ panelId, firstNodeId: null });
+                      setOpenFem3dTool("loadPanelSpan");
+                    }}
+                    loadPanelSpanPickActive={openFem3dTool === "loadPanelSpan"}
+                    loadCaseOptions={fem.loadCases.filter((loadCase) => loadCase.eigenGewicht !== true)
+                      .map((loadCase) => ({ id: loadCase.id, name: loadCase.name }))}
+                    levels={fem.structuralGrid.zAxes}
+                  /> : <>{/* In de tab Model (geen lasten, geen resultaten) hoort de toetsing
                       niet in beeld; bij de belastinggevallen en Resultaten wel. */}
                   {fem.showLoads && (
                     <CheckPanelToggle open={activeView === "check"} onToggle={() => {
@@ -2645,7 +3611,7 @@ function App() {
                     pendingLoadFocus={fem.pendingLoadFocus}
                     clearPendingLoadFocus={() => fem.setPendingLoadFocus(null)}
                     results={solverResult}
-                  />
+                  /></>}
                 </div>
               </>
             ) : (
@@ -2705,8 +3671,77 @@ function App() {
         </aside>
       )}
 
-      {/* Load case tab strip — hidden on full-width IFC/Report views. */}
-      {!isFullWidthView && (
+      {/* In 3D blijft dezelfde belastinggevallenstrook zichtbaar, met het
+          analysetype en de scheefstand. De 2D-specifieke opties voor eigen
+          gewicht en de betonparameters worden daar niet getoond. */}
+      {(!isFullWidthView || activeView === "openFem3d") && (modelDimension === "3d" ? (
+        <LoadCaseTabBar
+          loadCases={fem.loadCases}
+          activeLoadCaseId={fem.activeLoadCaseId}
+          setActiveLoadCaseId={(id) => {
+            fem.setActiveLoadCaseId(id);
+            setOpenFem3dShowLoadCase(true);
+            setResultsTabActive(false);
+            setTreeTab("project");
+          }}
+          addLoadCase={fem.addLoadCase}
+          loads={[
+            ...(openFem3dCalculationModel.loads ?? []).map((load) => ({ id: load.id, type: "pointForce" as const, caseId: load.caseId ?? 1 })),
+            ...(openFem3dCalculationModel.memberLoads ?? []).map((load) => ({ id: load.id, type: "lineLoad" as const, caseId: load.caseId ?? 1 })),
+            ...(openFem3dCalculationModel.memberPointLoads ?? []).map((load) => ({ id: load.id, type: "pointForce" as const, caseId: load.caseId ?? 1 })),
+            ...(openFem3dCalculationModel.thermalLoads ?? []).map((load) => ({ id: load.id, type: "thermal" as const, caseId: load.caseId ?? 1 })),
+            ...(openFem3dCalculationModel.surfaceLoads ?? []).map((load) => ({ caseId: load.caseId ?? 1 })),
+            // Een belastingvlak is een last in zijn geval, ook al wordt hij pas
+            // bij het rekenen omgezet: anders meldt de tab "0 belastingen".
+            ...(openFem3dCalculationModel.loadPanels ?? []).map((panel) => ({ caseId: panel.caseId ?? 1 })),
+          ]}
+          showLoads={openFem3dShowLoadCase}
+          setShowLoads={(showLoadCase) => {
+            setOpenFem3dShowLoadCase(showLoadCase);
+            if (!showLoadCase) {
+              setResultsTabActive(false);
+              setTreeTab("project");
+            }
+          }}
+          hasResults={openFem3dResult !== null}
+          resultsActive={resultsTabActive}
+          onShowResults={() => {
+            setResultsTabActive(true);
+            setTreeTab("results");
+            setOpenFem3dShowLoadCase(true);
+          }}
+          // 1e of 2e orde (P-Δ) en de initiële scheefstand werken ook in 3D. De
+          // primaire richting van 2D ontbreekt bewust: 3D rekent ±X en ±Y.
+          analysetype={fem.analysetype}
+          setAnalysetype={fem.setAnalysetype}
+          scheefstandEnabled={fem.scheefstandEnabled}
+          setScheefstandEnabled={fem.setScheefstandEnabled}
+          scheefstandNoemer={fem.scheefstandNoemer}
+          setScheefstandNoemer={fem.setScheefstandNoemer}
+          scheefstandBron={fem.scheefstandBron}
+          setScheefstandBron={fem.setScheefstandBron}
+          scheefstandHoogteM={fem.scheefstandHoogteM}
+          setScheefstandHoogteM={fem.setScheefstandHoogteM}
+          scheefstandAantalElementen={fem.scheefstandAantalElementen}
+          setScheefstandAantalElementen={fem.setScheefstandAantalElementen}
+          scheefstandPhiNoemer={scheefstandBalk.uitkomst.noemer}
+          scheefstandAfgeleideHoogteM={scheefstandBalk.geometrie.hoogteM}
+          scheefstandAfgeleidAantal={scheefstandBalk.geometrie.aantalElementen}
+          scheefstandToelichting={scheefstandToelichtingVertaald(scheefstandBalk.uitkomst, scheefstandBalk.geometrie, t, scheefstandBalk.richtingen)}
+          scheefstandWaarschuwingen={scheefstandBalk.uitkomst.waarschuwingen}
+          scheefstandIn3D
+          // Trek-alleen staven: montage na de permanente belasting en de
+          // kruisregel zijn modelinstellingen van het 3D-model (ongedaan te maken).
+          {...(openFem3d.beams.some((beam) => beam.tensionOnly) ? {
+            trekAlleenMontage: openFem3d.tensionOnlyFitAfterPermanent === true,
+            setTrekAlleenMontage: (on: boolean) =>
+              setOpenFem3d(setOpenFem3DTensionOnlySetting(openFem3d, "tensionOnlyFitAfterPermanent", on)),
+            kruisregel: openFem3d.tensionOnlyCrossRule === true,
+            setKruisregel: (on: boolean) =>
+              setOpenFem3d(setOpenFem3DTensionOnlySetting(openFem3d, "tensionOnlyCrossRule", on)),
+          } : {})}
+        />
+      ) : (
         <LoadCaseTabBar
           loadCases={fem.loadCases}
           activeLoadCaseId={fem.activeLoadCaseId}
@@ -2743,18 +3778,18 @@ function App() {
           // De uitkomst en de afleiding gaan als GEGEVEN mee naar de balk: de
           // balk toont wat er is gerekend en rekent niets zelf, zodat er geen
           // tweede plek is waar φ kan ontstaan.
-          scheefstandPhiNoemer={scheefstandUitkomst.noemer}
-          scheefstandAfgeleideHoogteM={scheefstandGeometrie.hoogteM}
-          scheefstandAfgeleidAantal={scheefstandGeometrie.aantalElementen}
+          scheefstandPhiNoemer={scheefstandBalk.uitkomst.noemer}
+          scheefstandAfgeleideHoogteM={scheefstandBalk.geometrie.hoogteM}
+          scheefstandAfgeleidAantal={scheefstandBalk.geometrie.aantalElementen}
           // De balk toont de afleiding ook wanneer de schakelaar uit staat —
           // daar is zij een vooruitblik op wat aanzetten zou opleveren. Het
           // rapport krijgt `scheefstandTekst`, die dan juist leeg is.
           scheefstandToelichting={
             // In de taal van de interface; het rapport krijgt de Nederlandse
             // `scheefstandTekst` (issue #33).
-            scheefstandToelichtingVertaald(scheefstandUitkomst, scheefstandGeometrie, t)
+            scheefstandToelichtingVertaald(scheefstandBalk.uitkomst, scheefstandBalk.geometrie, t, scheefstandBalk.richtingen)
           }
-          scheefstandWaarschuwingen={scheefstandUitkomst.waarschuwingen}
+          scheefstandWaarschuwingen={scheefstandBalk.uitkomst.waarschuwingen}
           showLoads={fem.showLoads}
           setShowLoads={(v) => {
             fem.setShowLoads(v);
@@ -2787,16 +3822,21 @@ function App() {
             }));
           }}
         />
-      )}
+      ))}
       <StatusBar
-        nodeCount={fem.nodes.length}
-        beamCount={fem.beams.length}
-        loadCount={fem.loads.length}
+        nodeCount={modelDimension === "3d" ? openFem3d.nodes.length : fem.nodes.length}
+        beamCount={modelDimension === "3d" ? openFem3d.beams.length : fem.beams.length}
+        loadCount={modelDimension === "3d"
+          ? (openFem3d.loads ?? []).length + (openFem3d.memberLoads ?? []).length +
+            (openFem3d.memberPointLoads ?? []).length + (openFem3d.thermalLoads ?? []).length +
+            (openFem3d.loadPanels ?? []).length +
+            (openFem3d.supports ?? []).filter((support) => Object.keys(support.prescribed ?? {}).length > 0).length
+          : fem.loads.length}
         zoomPct={activeView === "default" ? zoomPct : undefined}
         solverStatus={solverStatus}
         // Snapknopjes horen bij de tekenweergave; in de rapport-/IFC-weergave
         // valt er niets te snappen.
-        toonSnap={!isFullWidthView}
+        toonSnap={!isFullWidthView && (modelDimension === "2d" || activeView === "openFem3d")}
         bedieningActief={bedieningActief}
       />
       <Backstage
@@ -2808,6 +3848,7 @@ function App() {
         onOpen={() => { void handleOpenProject(); }}
         onSave={() => { void handleSaveProject(); }}
         onSaveAs={() => { void handleSaveProjectAs(); }}
+        onImportIfcAnalysisModel={() => { void handleImportIfcAnalyse(); }}
       />
       <LoadCasesDialog
         open={loadCasesOpen}
@@ -2852,29 +3893,38 @@ function App() {
         onClose={() => setWindGeneratorOpen(false)}
         wind={windGenerator}
       />
+      <WaterAccumulation2DDialog open={waterAccumulationOpen}
+        onClose={() => setWaterAccumulationOpen(false)} selectedBeam={selectedWaterBeam} />
       {welcomeOpen && (
         <WelcomeScreen
           onClose={() => setWelcomeOpen(false)}
           onNewProject={() => { void handleNewProject(); }}
           onOpenProject={() => { void handleOpenProject(); }}
           onOpenFile={(path) => { void handleOpenFilePath(path); }}
+          onSteelHall={() => setStaalhalOpen(true)}
         />
       )}
-      {/* Grids dialog — right-docked sheet, controls grid show/hide/spacing + stramien */}
-      {!isFullWidthView && (
-        <Sheet open={gridsOpen} title={tRibbon("home.grids")} onClose={() => setGridsOpen(false)}>
+      <StaalhalWizard open={staalhalOpen} onClose={() => setStaalhalOpen(false)} onMaken={handleStaalhalMaken} />
+      {ifcImportStroom.dialogen}
+      {/* Venster "Stramienen en levels" — rechts gedockt: achtergrondraster, stramienassen en levels */}
+      {(!isFullWidthView || modelDimension === "3d") && (
+        <Sheet open={gridsOpen} title={tRibbon("home.grids")} onClose={() => { setGridsOpen(false); setGridLevelError(null); }}>
           <div className="oa-grid-form">
             <div className="oa-grid-section-title">{t("app.grid.backgroundGrid")}</div>
             <label className="oa-grid-row">
               <span>{t("app.grid.showGrid")}</span>
-              <input type="checkbox" checked={grid.show}
-                onChange={e => setGrid(g => ({ ...g, show: e.target.checked }))} />
+              <input type="checkbox" checked={modelDimension === "3d" ? openFem3dVisibility.grid : grid.show}
+                onChange={e => modelDimension === "3d"
+                  ? setOpenFem3dVisibility(v => ({ ...v, grid: e.target.checked }))
+                  : setGrid(g => ({ ...g, show: e.target.checked }))} />
             </label>
-            <label className="oa-grid-row">
-              <span>{t("app.grid.showGridLines")}</span>
-              <input type="checkbox" checked={grid.showLines}
-                onChange={e => setGrid(g => ({ ...g, showLines: e.target.checked }))} />
-            </label>
+            {modelDimension === "2d" && (
+              <label className="oa-grid-row">
+                <span>{t("app.grid.showGridLines")}</span>
+                <input type="checkbox" checked={grid.showLines}
+                  onChange={e => setGrid(g => ({ ...g, showLines: e.target.checked }))} />
+              </label>
+            )}
             <label className="oa-grid-row">
               <span>{t("app.grid.spacing")}</span>
               <input type="number" step="50" min="50" value={grid.spacingMm}
@@ -2891,6 +3941,9 @@ function App() {
                 onChange={e => fem.setStructuralGrid(prev => ({ ...prev, enabled: e.target.checked }))} />
             </label>
 
+            {/* Stramienassen: X, en in 3D ook Y. Posities in mm, bevestigen met
+                Enter of door het veld te verlaten. */}
+            <div className="oa-grid-subtitle oa-grid-group-title">{t("app.grid.axesTitle")}</div>
             <div className="oa-grid-subtitle">{t("app.grid.xAxis")}</div>
             <table className="oa-grid-table">
               <thead><tr><th>{t("app.grid.label")}</th><th>X (mm)</th><th></th></tr></thead>
@@ -2899,8 +3952,8 @@ function App() {
                   <tr key={ax.id}>
                     <td><input type="text" value={ax.label}
                       onChange={e => fem.setStructuralGrid(p => ({ ...p, xAxes: p.xAxes.map((a, j) => j === i ? { ...a, label: e.target.value } : a) }))} /></td>
-                    <td><input type="number" step="100" value={ax.position}
-                      onChange={e => fem.setStructuralGrid(p => ({ ...p, xAxes: p.xAxes.map((a, j) => j === i ? { ...a, position: Number(e.target.value) || 0 } : a) }))} /></td>
+                    <td><LengthInput required min={-Infinity} value={ax.position}
+                      onChange={mm => { if (mm !== undefined) fem.setStructuralGrid(p => ({ ...p, xAxes: p.xAxes.map((a, j) => j === i ? { ...a, position: mm } : a) })); }} /></td>
                     <td><button className="oa-grid-x-btn"
                       onClick={() => fem.setStructuralGrid(p => ({ ...p, xAxes: p.xAxes.filter((_, j) => j !== i) }))}
                       title={t("delete")}>×</button></td>
@@ -2921,35 +3974,75 @@ function App() {
               })}
             >{t("app.grid.add")}</button>
 
-            <div className="oa-grid-subtitle">{t("app.grid.zAxis")}</div>
-            <table className="oa-grid-table">
-              <thead><tr><th>{t("app.grid.label")}</th><th>Z (mm)</th><th></th></tr></thead>
+            {modelDimension === "3d" && <>
+              <div className="oa-grid-subtitle">{t("app.grid.yAxis")}</div>
+              <table className="oa-grid-table">
+                <thead><tr><th>{t("app.grid.label")}</th><th>Y (mm)</th><th></th></tr></thead>
+                <tbody>
+                  {(fem.structuralGrid.yAxes ?? []).map((ax, i) => (
+                    <tr key={ax.id}>
+                      <td><input type="text" value={ax.label}
+                        onChange={e => fem.setStructuralGrid(p => ({ ...p, yAxes: (p.yAxes ?? []).map((a, j) => j === i ? { ...a, label: e.target.value } : a) }))} /></td>
+                      <td><LengthInput required min={-Infinity} value={ax.position}
+                        onChange={mm => { if (mm !== undefined) fem.setStructuralGrid(p => ({ ...p, yAxes: (p.yAxes ?? []).map((a, j) => j === i ? { ...a, position: mm } : a) })); }} /></td>
+                      <td><button className="oa-grid-x-btn"
+                        onClick={() => fem.setStructuralGrid(p => ({ ...p, yAxes: (p.yAxes ?? []).filter((_, j) => j !== i) }))}
+                        title={t("delete")}>×</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button className="oa-grid-add-btn"
+                onClick={() => fem.setStructuralGrid(p => {
+                  const axes = p.yAxes ?? [];
+                  const used = new Set(axes.map(a => a.label));
+                  let lbl = "";
+                  for (let k = 1; k <= 99; k++) if (!used.has(String(k))) { lbl = String(k); break; }
+                  const maxPos = axes.length ? Math.max(...axes.map(a => a.position)) : 0;
+                  return { ...p, yAxes: [...axes, { id: `y-${Date.now()}`, label: lbl || `Y${axes.length + 1}`, position: maxPos + 3000 }] };
+                })}
+              >{t("app.grid.add")}</button>
+            </>}
+
+            {/* Levels: de horizontale stramienassen, elk met een naam en een
+                hoogte in mm (Peil 0 = 0, 1e verdieping = 3000). In 3D nemen
+                hoogte, toevoegen en verwijderen de gekoppelde knopen en platen
+                mee als één stap ongedaan maken (commitLevels); een naam wijzigen
+                is net als bij de stramienassen geen stap. */}
+            <div className="oa-grid-subtitle oa-grid-group-title">{t("app.grid.levels")}</div>
+            <p className="oa-grid-hint">{t("app.grid.levelsHint")}</p>
+            <table className="oa-grid-table" data-grid-levels="">
+              <thead><tr><th>{t("app.grid.levelName")}</th><th>{t("app.grid.levelHeight")}</th><th></th></tr></thead>
               <tbody>
                 {fem.structuralGrid.zAxes.map((ax, i) => (
                   <tr key={ax.id}>
                     <td><input type="text" value={ax.label}
                       onChange={e => fem.setStructuralGrid(p => ({ ...p, zAxes: p.zAxes.map((a, j) => j === i ? { ...a, label: e.target.value } : a) }))} /></td>
-                    <td><input type="number" step="100" value={ax.position}
-                      onChange={e => fem.setStructuralGrid(p => ({ ...p, zAxes: p.zAxes.map((a, j) => j === i ? { ...a, position: Number(e.target.value) || 0 } : a) }))} /></td>
+                    <td><LengthInput key={`${ax.id}:${gridLevelRevision}`} required min={-Infinity} value={ax.position}
+                      onChange={mm => {
+                        if (mm !== undefined) changeGridLevels(fem.structuralGrid.zAxes.map((a, j) => j === i ? { ...a, position: mm } : a));
+                      }} /></td>
                     <td><button className="oa-grid-x-btn"
-                      onClick={() => fem.setStructuralGrid(p => ({ ...p, zAxes: p.zAxes.filter((_, j) => j !== i) }))}
+                      onClick={() => changeGridLevels(fem.structuralGrid.zAxes.filter((_, j) => j !== i))}
                       title={t("delete")}>×</button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
             <button className="oa-grid-add-btn"
-              onClick={() => fem.setStructuralGrid(p => {
-                const used = new Set(p.zAxes.map(a => a.label));
+              onClick={() => {
+                const levels = fem.structuralGrid.zAxes;
+                const used = new Set(levels.map(a => a.label));
                 let lbl = "";
                 for (let k = 1; k <= 99; k++) {
                   const l = String(k);
                   if (!used.has(l)) { lbl = l; break; }
                 }
-                const maxPos = p.zAxes.length ? Math.max(...p.zAxes.map(a => a.position)) : 0;
-                return { ...p, zAxes: [...p.zAxes, { id: `z-${Date.now()}`, label: lbl || `Z${p.zAxes.length + 1}`, position: maxPos + 3000 }] };
-              })}
-            >{t("app.grid.add")}</button>
+                const maxPos = levels.length ? Math.max(...levels.map(a => a.position)) : 0;
+                changeGridLevels([...levels, { id: `z-${Date.now()}`, label: lbl || `Z${levels.length + 1}`, position: maxPos + 3000 }]);
+              }}
+            >{t("app.grid.addLevel")}</button>
+            {gridLevelError && <p className="oa-grid-error" role="alert">{gridLevelError}</p>}
 
             {/* Afronden — het paneel blijft anders openstaan zolang je het
                 niet met het kruisje of Escape wegklikt, en dat leest als "de
@@ -2961,7 +4054,7 @@ function App() {
               </span>
               <button
                 className="oa-grid-done-btn"
-                onClick={() => setGridsOpen(false)}
+                onClick={() => { setGridsOpen(false); setGridLevelError(null); }}
                 title={t("app.grid.finishTitle")}
               >{t("app.grid.finish")}</button>
             </div>

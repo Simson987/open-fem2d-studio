@@ -26,6 +26,7 @@ const {
   serializeProject, deserializeProject,
   combinationsToFile, combinationsFromFile,
   PROJECT_FORMAT_VERSION,
+  PROJECT_FORMAT_VERSION_MAX,
 } = await import("./src/io/projectFile.ts");
 
 let passed = 0, failed = 0;
@@ -333,8 +334,9 @@ log("\n[6] v1-migratie: bestaand v1-bestand laadt zonder fouten");
   checkTrue("beams zonder checkConfig blijven geldig",
     Array.isArray(parsed?.beams) && parsed.beams.every((b) => b.checkConfig === undefined));
 
-  // Nieuwere versie dan de app kent → duidelijke fout (bestaand gedrag).
-  const future = JSON.stringify({ ...JSON.parse(text), version: PROJECT_FORMAT_VERSION + 1 });
+  // Nieuwere versie dan de app kent → duidelijke fout (bestaand gedrag). De
+  // hoogste leesbare versie is sinds de belastingvlakken 4, niet meer 3.
+  const future = JSON.stringify({ ...JSON.parse(text), version: PROJECT_FORMAT_VERSION_MAX + 1 });
   let futureErr = null;
   try { deserializeProject(future); } catch (e) { futureErr = e; }
   checkTrue("toekomstige versie geeft nette fout", futureErr instanceof Error);

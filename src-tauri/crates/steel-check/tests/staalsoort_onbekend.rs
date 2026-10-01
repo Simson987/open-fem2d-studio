@@ -71,6 +71,8 @@ fn invoer(staalsoort: &str) -> BeamCheckInput {
         staaf_notities: None,
         profile_end: None,
         custom_section_end: None,
+        tension_only: None,
+        a_net_mm2: None,
     }
 }
 

@@ -1,5 +1,5 @@
 /**
- * Open FEM2D Studio — Ribbon (OpenAEC big-bang rewrite).
+ * Open FEM Studio — Ribbon (OpenAEC big-bang rewrite).
  *
  * This file is a from-scratch fresh-JSX rewrite. The OLD Ribbon.tsx (in the
  * keen-ptolemy worktree) served only as an inventory of buttons + handlers.

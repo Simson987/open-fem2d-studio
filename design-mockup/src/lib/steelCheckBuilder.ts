@@ -46,7 +46,9 @@ import {
 import { bepaalStaafeinden, voegDoorgaandeLijnenSamen } from "./doorgaandeLijn";
 import { alphaCrStaafNotitie, type StabiliteitVoorToets } from "../components/fem/solver/alphaCr";
 import { STEEL_SECTIONS } from "./steelSections.generated";
+import { profielAliasSleutel } from "./strip";
 import { bepaalVerloop } from "./sectionResolver";
+import { STEEL_GRADES } from "./steelGrades";
 import { STANDAARD_BIJLAGE, type NationaleBijlageCode } from "./normAanduidingen";
 import { blijvendeZakking } from "./blijvendeZakking";
 import { kipsteunenVanStaaf } from "./kipsteunen";
@@ -81,7 +83,7 @@ export { sanitizeRestraintFractions } from "./kipsteunen";
  * de staafdialoog deze lijst nodig hebben; er stond een tweede exemplaar in
  * `BarPropertiesDialog.tsx`, en twee lijsten lopen vroeg of laat uiteen.
  */
-export const STEEL_GRADES = ["S235", "S275", "S355", "S420", "S460"];
+export { STEEL_GRADES } from "./steelGrades";
 
 /**
  * Is dit een staalprofiel dat de EN 1993-kern kan toetsen?
@@ -111,10 +113,13 @@ export function isSteelProfile(profileName: string | undefined): boolean {
 /**
  * Zoeksleutel voor profielnamen — spiegel van `lookup_key` in de Rust
  * steel-profiles crate: spaties/koppeltekens/punten eruit, hoofdletters.
- * Zo matcht "HEA160" uit dit model op "HEA 160" in de database.
+ * Zo matcht "HEA160" uit dit model op "HEA 160" in de database. Massief rond
+ * geschreven als "Ø24" of "ROND 24" krijgt de sleutel van "RD 24" (zie
+ * `lib/rondStaal.ts`), en platstaal als "FL 80x10" of "Platstaal 80x10" die
+ * van "Strip 80x10" (zie `lib/strip.ts`), net als in de kern.
  */
 export function profileLookupKey(name: string): string {
-  return name.replace(/[\s\-.]/g, "").toUpperCase();
+  return profielAliasSleutel(name.replace(/[\s\-.]/g, "").toUpperCase());
 }
 
 // ── Doorgeknipte staven ────────────────────────────────────────────────────

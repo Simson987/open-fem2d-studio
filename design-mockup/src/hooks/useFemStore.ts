@@ -41,6 +41,7 @@ import {
   vervangDoorStandaard, vervangVerouderdeCombinaties, verwijderBelastinggeval, verwijderCombinatie,
   voegBelastinggevalToe, voegCombinatieToe, volgendVrijId, wijzigBelastinggeval, wijzigCombinatie,
   zetBijlage, zetGevolgklasse, bijlageUitKenmerk, verplaatsEigenGewichtNaarEigenGeval,
+  zorgVoorBelastinggevallen as zorgVoorGevallenInStaat,
   type CombinatieAfwijking, type CombinatieStaat, type CombinatieVervanging, type GevalMelding,
 } from "../lib/combinatieBeheer";
 import { BIJLAGEN_GEVULD, STANDAARD_BIJLAGE, type NationaleBijlageCode } from "../lib/normAanduidingen";
@@ -1670,6 +1671,13 @@ export interface FemStore {
    * het nieuwe geval, of null als er niets te verplaatsen viel.
    */
   verplaatsEigenGewicht: () => number | null;
+  /**
+   * Zorg dat deze gevallen bestaan (hergebruik op naam en type, het
+   * gekenmerkte eigen-gewichtgeval op zijn kenmerk) en geef hun id's in
+   * dezelfde volgorde. Voor generatoren die een heel model maken, zoals de
+   * wizard "Stalen hal". Zie `zorgVoorBelastinggevallen` in combinatieBeheer.
+   */
+  zorgVoorBelastinggevallen: (gevallen: readonly Pick<LoadCase, "name" | "type" | "eigenGewicht">[]) => number[];
 
   /**
    * Vervang in ÉÉN stap alles wat een generator (vandaag: de windbelasting-
@@ -2730,6 +2738,13 @@ export function useFemStore(opties?: {
     return r.id;
   }, [pasCombiStaatToe, pushHistory]);
 
+  const zorgVoorBelastinggevallen = useCallback(
+    (gevallen: readonly Pick<LoadCase, "name" | "type" | "eigenGewicht">[]): number[] => {
+      const r = zorgVoorGevallenInStaat(combiRef.current, gevallen);
+      pasCombiStaatToe(r.staat);
+      return r.ids;
+    }, [pasCombiStaatToe]);
+
   /**
    * Zie de documentatie bij FemStore.vervangGegenereerdeBelasting. Één
    * snapshot, één loads-identiteit — bewust GEEN lus over addLoad, want dat
@@ -2941,7 +2956,7 @@ export function useFemStore(opties?: {
     setPlateMeshCache,
     addSupport, removeSupport, addLoad, updateLoad,
     removeNode, removeBeam, removeLoad, removePlate,
-    deleteSelected, splitBeamAt, addLoadCase, verplaatsEigenGewicht, vervangGegenereerdeBelasting,
+    deleteSelected, splitBeamAt, addLoadCase, verplaatsEigenGewicht, zorgVoorBelastinggevallen, vervangGegenereerdeBelasting,
     addNodeMetSplitsing, verbindKnoopMetStaaf, voegKnopenSamen, herstelModel,
     translateSelection, copySelection, rotateSelection, mirrorSelection,
     plakLasten,

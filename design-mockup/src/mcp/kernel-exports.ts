@@ -91,11 +91,32 @@ export * from "../components/fem/femTypes";
 export * from "../core/fem/PlaatMesher";
 export * from "../lib/wind/windGenerator";
 export * from "../lib/wind/windEurocode";
+// De stalen hal (MCP-tool `open_fem_3d_staalhal_maken`): de generator van de
+// wizard en de sidecarbewerkingen erachter. De 3D-rekenverzoeken en de
+// toetsinvoer komen uit dezelfde modules als in de app; die worden hier
+// BENOEMD doorgegeven, zodat hun Tauri-glue (de rekenaanroep, de toetsstore)
+// buiten de bundel blijft — het bundelscript zou hem anders afkeuren.
+export * from "../components/openFem3d/wizards/staalhal";
+export * from "./staalhalSidecar";
+// De import van een IFC4-analysemodel (MCP-tool `open_fem_3d_ifc_importeren`):
+// dezelfde pure import als de knop "Rekenmodel importeren" in de app, de
+// STEP-lezer eronder en de sidecarbewerkingen. Tekstverwerking en modelbouw,
+// geen DOM en geen Tauri.
+export * from "../io/stepLezer";
+export * from "../io/ifcAnalyseImport";
+export * from "./ifcImportSidecar";
+export { buildOpenFem3DSolveRequest, openFem3DGlobalForceBalance } from "../components/openFem3d/openFem3dSolver";
+export { buildOpenFem3DSteelCheckInputs } from "../components/openFem3d/openFem3dSteelCheck";
+export { parseOpenFem3DModel, withOpenFem3DSelfWeight } from "../components/openFem3d/openFem3dModel";
 
 // Benoemd, NIET `export *`: dat trekt de Tauri- en DOM-glue mee (gemeten:
 // 4x window., 4x document.createElement). Zo is het exact 0.
 export {
   PROJECT_FORMAT_VERSION,
+  // De hoogste leesbare versie (4: belastingvlakken in het 3D-model). Zonder
+  // deze export rekent de bundelstand van test-checkconfig met `undefined`.
+  PROJECT_FORMAT_VERSION_3D,
+  PROJECT_FORMAT_VERSION_MAX,
   PROJECT_FILE_EXT,
   serializeProject,
   deserializeProject,

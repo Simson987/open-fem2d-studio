@@ -1,0 +1,130 @@
+.open-fem3d-conditions { margin-top: 12px; }
+.open-fem3d-conditions section { border-top: 1px solid var(--theme-border); padding: 12px 0; }
+.open-fem3d-conditions h3 { margin: 0 0 8px; }
+.open-fem3d-condition-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.open-fem3d-condition-presets button,
+.open-fem3d-condition-new { border: 1px solid var(--theme-border); border-radius: 4px; padding: 5px; color: var(--theme-text); background: var(--theme-bg-lighter); cursor: pointer; font: inherit; font-size: 11px; }
+.open-fem3d-support-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; margin-top: 9px; }
+.open-fem3d-support-grid label { flex-direction: row !important; align-items: center; gap: 5px; padding: 4px; border: 1px solid var(--theme-border); border-radius: 3px; }
+.open-fem3d-support-grid input { width: auto !important; }
+.open-fem3d-condition-load-list { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.open-fem3d-condition-load-list > div { display: flex; align-items: stretch; border: 1px solid var(--theme-border); border-radius: 3px; }
+.open-fem3d-condition-load-list > div.selected { border-color: var(--theme-accent); }
+.open-fem3d-condition-load-list button { border: 0; padding: 4px 5px; color: var(--theme-text); background: transparent; cursor: pointer; font: inherit; font-size: 11px; }
+.open-fem3d-condition-load-list button:first-child { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.open-fem3d-condition-load-list button:last-child { color: #d45d56; }
+.open-fem3d-condition-new { width: 100%; margin-bottom: 8px; }
+.open-fem3d-conditions fieldset { min-width: 0; margin: 5px 0; padding: 4px 0; border: 0; }
+.open-fem3d-conditions legend { padding: 0; color: var(--theme-text-muted); font-size: 11px; }
+.open-fem3d-condition-values { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.open-fem3d-condition-values label { min-width: 0; }
+.open-fem3d-condition-values input { width: 100%; min-width: 0; box-sizing: border-box; }
+.open-fem3d-condition-values.open-fem3d-member-load-values { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.open-fem3d-member-loads { margin-top: 14px; }
+.open-fem3d-member-loads > section { border: 1px solid var(--theme-border); border-radius: 7px; padding: 11px; background: var(--theme-bg-lighter); }
+.open-fem3d-member-loads h3 { font-size: 13px; margin-bottom: 3px; }
+.open-fem3d-member-loads .fem-prop-hint { margin: 0 0 10px; font-size: 11px; }
+.open-fem3d-load-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; margin-bottom: 8px; padding: 3px; border-radius: 7px; background: var(--theme-bg-lighter); }
+.open-fem3d-load-tabs button { padding: 6px 2px; border: 0; border-radius: 5px; background: transparent; color: var(--theme-text-muted); font: inherit; font-size: 11px; cursor: pointer; }
+.open-fem3d-load-tabs button[aria-selected="true"] { background: var(--theme-bg); color: var(--theme-text); box-shadow: 0 1px 4px rgb(0 0 0 / 12%); font-weight: 600; }
+.open-fem3d-load-quick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
+.open-fem3d-load-quick label { min-width: 0; }
+.open-fem3d-load-quick input, .open-fem3d-load-quick select { width: 100%; box-sizing: border-box; }
+.open-fem3d-load-more { display: block; width: 100%; margin: 3px 0 9px; padding: 6px 0; border: 0; background: transparent; color: var(--theme-accent); text-align: left; font: inherit; font-size: 11px; cursor: pointer; }
+.open-fem3d-load-details { padding: 8px; margin-bottom: 9px; border: 1px solid var(--theme-border); border-radius: 5px; background: var(--theme-bg); }
+.open-fem3d-member-loads .open-fem3d-condition-new { margin-bottom: 8px; text-align: left; padding-left: 8px; }
+.open-fem3d-member-loads .open-fem3d-load-submit { width: 100%; margin-top: 4px; padding: 7px 8px; border: 0; border-radius: 5px; background: var(--theme-accent); color: #fff; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+
+/* ── Knooppaneel: oplegging, veren, opgelegde verplaatsing, knooplast ──────
+   Zelfde vormtaal als het 2D-eigenschappenpaneel (FemProperties.css): kop
+   als band, compacte velden van 22 px, labels links, eenheid één keer per rij. */
+.open-fem3d-conditions > .fem-prop-section { border-top: 0; padding: 0 0 8px; }
+.open-fem3d-nc-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  margin: 6px 10px 8px;
+}
+.open-fem3d-nc-presets button {
+  min-height: 24px;
+  min-width: 0;
+  padding: 3px 4px;
+  line-height: 1.15;
+  border: 1px solid var(--theme-border);
+  border-radius: 3px;
+  background: var(--theme-bg-lighter);
+  color: var(--theme-text);
+  font: 500 11px/1.15 "Inter", system-ui, sans-serif;
+  white-space: normal;
+  /* Afbreken tussen woorden, nooit midden in een woord ("Inklemmin-g"). */
+  overflow-wrap: normal;
+  word-break: normal;
+  cursor: pointer;
+}
+.open-fem3d-nc-presets button:hover { border-color: var(--theme-accent); }
+.open-fem3d-nc-presets button.active {
+  border-color: var(--theme-accent);
+  background: var(--theme-accent-soft, var(--theme-hover));
+  color: var(--theme-accent);
+  font-weight: 600;
+}
+.open-fem3d-nc-presets button:focus-visible,
+.open-fem3d-nc-primary:focus-visible,
+.open-fem3d-nc-secondary:focus-visible { outline: 2px solid var(--theme-accent); outline-offset: 1px; }
+
+/* Raster: rijlabel | X | Y | Z. */
+.open-fem3d-nc-grid {
+  display: grid;
+  grid-template-columns: 78px repeat(3, minmax(0, 1fr));
+  gap: 3px 4px;
+  align-items: center;
+  margin: 0 10px;
+}
+.open-fem3d-nc-head {
+  text-align: center;
+  font: 600 10px/1 "Inter", system-ui, sans-serif;
+  color: var(--theme-text-muted);
+  letter-spacing: 0.04em;
+}
+.open-fem3d-nc-label {
+  font: 400 11px/1.2 "Inter", system-ui, sans-serif;
+  color: var(--theme-text-secondary);
+  white-space: nowrap;
+}
+.open-fem3d-nc-label small { margin-left: 3px; color: var(--theme-text-muted); font-size: 10px; }
+.open-fem3d-nc-input { min-width: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.open-fem3d-nc-input::placeholder { color: var(--theme-text-faint, var(--theme-text-muted)); text-align: right; }
+.open-fem3d-nc-dof {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 22px;
+  border: 1px solid var(--theme-border);
+  border-radius: 3px;
+  background: var(--theme-bg-lighter);
+  cursor: pointer;
+}
+.open-fem3d-nc-dof.on { border-color: var(--theme-accent); background: var(--theme-accent-soft, var(--theme-hover)); }
+.open-fem3d-nc-dofs { margin-bottom: 4px; }
+.open-fem3d-nc-subtitle {
+  margin: 10px 10px 4px;
+  font: 600 11px/1.2 "Inter", system-ui, sans-serif;
+  color: var(--theme-text);
+}
+.open-fem3d-nc-subtitle span { font-weight: 400; color: var(--theme-text-muted); }
+.open-fem3d-conditions > .fem-prop-section .open-fem3d-condition-load-list { margin: 6px 10px 8px; }
+.open-fem3d-conditions > .fem-prop-section form { margin: 6px 0 0; }
+.open-fem3d-nc-actions { display: flex; justify-content: flex-end; gap: 4px; margin: 8px 10px 0; }
+.open-fem3d-nc-primary,
+.open-fem3d-nc-secondary {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 3px;
+  font: 600 11px/1 "Inter", system-ui, sans-serif;
+  cursor: pointer;
+}
+.open-fem3d-nc-primary { border: 1px solid var(--theme-accent); background: var(--theme-accent); color: var(--theme-accent-text, #fff); }
+.open-fem3d-nc-primary:hover { filter: brightness(1.06); }
+.open-fem3d-nc-secondary { border: 1px solid var(--theme-border); background: var(--theme-bg-lighter); color: var(--theme-accent); }
+.open-fem3d-nc-secondary:hover { border-color: var(--theme-accent); }
+.open-fem3d-conditions > .fem-prop-section .open-fem3d-error { margin: 6px 10px 0; }

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
@@ -166,9 +166,58 @@ function doorsnedemotor(): Plugin {
   };
 }
 
+/** Dezelfde 3D-Rustadapter als de desktop-app, bereikbaar in de devbrowser. */
+function openFem3dSolver(): Plugin {
+  // Tijdens ontwikkeling kan de debug-kern recenter zijn dan een bestaande
+  // release-kern. Gebruik het nieuwste contract; anders vallen nieuwe
+  // staafbelastingen in de browser stil terug op een verouderde binary.
+  // @ts-expect-error process is a nodejs global
+  const binary = process.platform === "win32" ? "open-fem-3d.exe" : "open-fem-3d";
+  const release = resolve(hier, "../src-tauri/target/release", binary);
+  const debug = resolve(hier, "../src-tauri/target/debug", binary);
+  const exe = existsSync(debug) && (!existsSync(release) || statSync(debug).mtimeMs > statSync(release).mtimeMs)
+    ? debug : release;
+  return {
+    name: "open-fem-3d-solver",
+    configureServer(server) {
+      server.middlewares.use("/api/openFem3d/solve", (req, res) => {
+        res.setHeader("content-type", "application/json");
+        if (req.method !== "POST") {
+          res.statusCode = 405;
+          res.end(JSON.stringify({ fout: "alleen POST" }));
+          return;
+        }
+        if (!existsSync(exe)) {
+          res.statusCode = 503;
+          res.end(JSON.stringify({ fout: "De 3D-rekenkern is nog niet gebouwd." }));
+          return;
+        }
+        let body = "";
+        req.on("data", (chunk) => (body += chunk));
+        req.on("end", () => {
+          const child = spawn(exe, [], { stdio: ["pipe", "pipe", "pipe"] });
+          let output = "";
+          let error = "";
+          child.stdout.on("data", (data) => (output += data));
+          child.stderr.on("data", (data) => (error += data));
+          child.on("error", (cause) => {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ fout: `3D-rekenkern start niet: ${cause.message}` }));
+          });
+          child.on("close", (code) => {
+            res.statusCode = code === 0 && output ? 200 : code === 1 ? 400 : 500;
+            res.end(output || JSON.stringify({ fout: error.trim() || `3D-rekenkern stopte met code ${code}` }));
+          });
+          child.stdin.end(body);
+        });
+      });
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react(), toetsbrug(), doorsnedemotor()],
+  plugins: [react(), toetsbrug(), doorsnedemotor(), openFem3dSolver()],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
@@ -187,6 +236,10 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
+      // De desktop-app en de editor kunnen in verschillende mount namespaces draaien;
+      // polling pikt ook wijzigingen op die geen inotify-event doorgeven.
+      usePolling: true,
+      interval: 300,
       // 3. tell Vite to ignore watching `src-tauri`
       // 4. ignore the ts-rs generated types — `cargo test` rewrites them on
       //    every run, which would otherwise cause an HMR flicker storm.

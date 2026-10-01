@@ -293,7 +293,10 @@
 .fem-hud-tr { top: 10px; right: 10px; }
 .fem-hud-bl { bottom: 10px; left: 10px; }
 .fem-hud-br { bottom: 10px; right: 10px; }
-.fem-hud-tc { top: 10px; left: 50%; transform: translateX(-50%); }
+/* Gecentreerde meldingen blijven binnen het canvas, ook bij een smal venster
+   of bredere terugvalletters: nooit breder dan het canvas min 2 × 8 px. */
+.fem-hud-tc { top: 10px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 16px); }
+.fem-hud-tc .fem-hud-card { flex-wrap: wrap; }
 .fem-hud-bc-results {
   bottom: 12px;
   left: 50%;
@@ -692,10 +695,16 @@
 }
 
 /* ── Box-select rubber-band ─────────────────────────────────────────── */
+/* CAD: venster (van links naar rechts) doorgetrokken; crossing (van rechts
+   naar links) gestippeld met een lichtere vulling. Kleuren per thema. */
 .fem-box-select {
-  fill: rgba(255, 176, 0, 0.10);
-  stroke: #ffb000;
+  fill: var(--theme-select-window-fill);
+  stroke: var(--theme-select-window-stroke);
   stroke-width: 1;
+}
+.fem-box-select.crossing {
+  fill: var(--theme-select-crossing-fill);
+  stroke: var(--theme-select-crossing-stroke);
   stroke-dasharray: 5 3;
 }
 
@@ -1004,3 +1013,25 @@
 /* "Belastingwaarden" uit: de pijlen blijven, de getallen niet. */
 .fem-loads-layer.zonder-waarden .fem-load-text,
 .fem-loads-layer.zonder-waarden .fem-load-text-static { display: none; }
+
+/* ── Profielen in kleur (lib/profielKleur.ts) ─────────────────────────────
+   De profielkleur vervangt de accentkleur van de staaflijn; voorbij acht
+   profielen komt de lijnsoort erbij (streep, stip). De selectie en de
+   snap-markering gaan voor, en met het aanzicht aan houdt de systeemlijn haar
+   eigen streep-stippellijn. */
+.fem-member.profielkleur { stroke: var(--fem-profielkleur); }
+.fem-member.profielkleur:not(.systeemlijn) { stroke-dasharray: var(--fem-profielstreep, none); }
+.fem-member.profielkleur.selected { stroke: var(--theme-accent-hover); }
+.fem-member.profielkleur.snap { stroke: var(--theme-accent-hover, var(--theme-accent)); }
+
+/* Rechtsonder één kolom: legenda boven, modelcontrole onder. Nooit hoger dan
+   het tekenvlak min de kaarten rechtsboven (aantallen, zoom). */
+.fem-hud-kolom {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-height: calc(100% - 96px);
+}
+.fem-hud-kolom > .profiel-legenda { flex: 0 1 auto; }
+.fem-hud-kolom > .fem-controle-kaart { flex: 0 0 auto; }

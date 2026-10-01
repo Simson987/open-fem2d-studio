@@ -28,7 +28,8 @@
 use approx::assert_relative_eq;
 use mechanics::{ForceStateSnapshot, InternalForces};
 use nen_en_1993_1_1_ltb::{
-    en_general, m_b_rd_monosymmetrisch, nb_annex, Kipprofiel, Kipveld, Monosymmetrieinvoer,
+    en_general, m_b_rd_monosymmetrisch, nb_annex, KipWeerstandsmoment, Kipprofiel, Kipveld,
+    Monosymmetrieinvoer,
 };
 use nen_en_1993_1_1_section::{CheckStatus, S235};
 use nen_en_1993_1_1_stability::StabilityCalc;
@@ -125,7 +126,10 @@ fn toets_velden(
     z_a_mm: f64,
 ) -> StabilityCalc {
     m_b_rd_monosymmetrisch(
-        p, &S235, L_MM, velden,
+        // Deze tests gaan over M_cr, en daar doet W_y niet aan mee; W_pl,y
+        // houdt de rest van de keten zoals hij was. De klasse-3-tak (W_el,y)
+        // staat in `tests/kip_klasse3.rs` van de staaltoets.
+        p, &S235, KipWeerstandsmoment::Plastisch, L_MM, velden,
         // q = 0: de momentenlijn komt volledig uit het middenmoment, en B*
         // blijft nul omdat de eindmomenten nul zijn.
         0.0,
@@ -656,7 +660,7 @@ fn een_onbepaalde_monosymmetrie_wordt_geweigerd_en_niet_als_symmetrisch_gerappor
     // procenten te hoog kon zijn.
     let (p, _) = t_profiel(true);
     let s = m_b_rd_monosymmetrisch(
-        &p, &S235, L_MM, &veld(-120.0), 0.0, 47.5,
+        &p, &S235, KipWeerstandsmoment::Plastisch, L_MM, &veld(-120.0), 0.0, 47.5,
         &Monosymmetrieinvoer { z_j_geometrisch_mm: 0.0, bepaald: false, psi_f: None },
         Kipprofiel::Overig,
         krachten(-120.0),

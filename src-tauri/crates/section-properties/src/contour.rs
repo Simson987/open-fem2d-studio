@@ -1537,6 +1537,15 @@ pub fn rechthoek(h: f64, b: f64) -> Doorsnede {
     Doorsnede::nieuw().met(Contour::rechthoek(0.0, 0.0, b, h))
 }
 
+/// Massief rond staal met diameter `d`: één cirkel, middelpunt op `(d/2, d/2)`
+/// zodat de omhullende rechthoek net als bij elke andere contour in deze module
+/// linksonder op de oorsprong ligt. De cirkel bestaat uit vier exacte
+/// kwartbogen, dus A, I, W en W_pl komen op de gesloten formules uit.
+pub fn rond_staal(d: f64) -> Doorsnede {
+    let r = d / 2.0;
+    Doorsnede::nieuw().met(Contour::cirkel((r, r), r))
+}
+
 /// Hoeklijn (gelijk- of ongelijkbenig), gewalst volgens de maatvoering van
 /// EN 10056-1: hiel op de oorsprong, één walsuitronding in de holle hoek en
 /// één teenafronding aan het eind van elk been.

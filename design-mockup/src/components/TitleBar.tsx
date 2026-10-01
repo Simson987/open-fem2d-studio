@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { fetchAppVersion } from "../lib/appVersion";
+import { fetchAppVersion, toonVersie } from "../lib/appVersion";
 import { isTauriApp } from "../lib/tauri";
 import { notifyInfo, notifyWarning } from "../io/notify";
 import type { Window as TauriWindow } from "@tauri-apps/api/window";
@@ -89,7 +89,7 @@ function TitleBar({
       <div className="titlebar-drag" data-tauri-drag-region />
 
       <div className="titlebar-left">
-        <div className="titlebar-icon" title="Open FEM2D Studio">
+        <div className="titlebar-icon" title="Open FEM Studio">
           {/* Logo — gestyleerd portaal-frame met scharnier-opleggingen, FE-knopen
               en een doorbuigingscurve. Accent-tile + wit lijnwerk. */}
           <svg
@@ -98,7 +98,7 @@ function TitleBar({
             viewBox="0 0 64 64"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
-            aria-label="Open FEM2D Studio"
+            aria-label="Open FEM Studio"
           >
             <rect x="0" y="0" width="64" height="64" rx="12" fill="var(--theme-accent)" />
             {/* Portaal-frame: kolommen + bovenligger */}
@@ -203,7 +203,7 @@ function TitleBar({
 
       <span className="titlebar-title" data-tauri-drag-region>
         {t("appName")}
-        {appVersion && <span className="titlebar-version">v{appVersion}</span>}
+        {appVersion && <span className="titlebar-version">{toonVersie(appVersion)}</span>}
       </span>
 
       <div className="titlebar-controls">

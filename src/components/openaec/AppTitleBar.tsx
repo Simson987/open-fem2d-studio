@@ -68,7 +68,7 @@ export function AppTitleBar({ onSave }: AppTitleBarProps) {
 
   return (
     <ShellTitleBar
-      appName={`${projectName} — Open FEM2D Studio`}
+      appName={`${projectName} — Open FEM Studio`}
       appVersion={pkg.version}
       appIcon={OPENAEC_MARK}
       actions={actions}

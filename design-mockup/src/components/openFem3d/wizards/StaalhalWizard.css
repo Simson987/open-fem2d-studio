@@ -1,0 +1,75 @@
+/* Wizard "Stalen hal" — alleen thematokens, zodat licht en donker vanzelf kloppen. */
+.shw-modal .modal-body { overflow: hidden; }
+.shw-inhoud { display: flex; flex-direction: column; min-height: 0; height: min(620px, calc(90vh - 90px)); }
+.shw-stappen {
+  display: flex; gap: 2px; padding: 8px 10px 0; flex-wrap: wrap;
+  border-bottom: 1px solid var(--theme-dialog-border);
+}
+.shw-stap {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border: 1px solid transparent; border-bottom: none;
+  background: transparent; color: var(--theme-dialog-content-text); cursor: pointer; font-size: 12px;
+}
+.shw-stap:hover { background: var(--theme-ribbon-btn-hover); }
+.shw-stap.actief { border-color: var(--theme-dialog-border); background: var(--theme-dialog-content-bg); font-weight: 600; }
+.shw-stapnummer {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 17px; height: 17px; border-radius: 50%; font-size: 10px;
+  background: var(--theme-accent); color: var(--theme-accent-text, #fff);
+}
+.shw-kolommen { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 14px; padding: 12px; min-height: 0; flex: 1; overflow: auto; }
+.shw-formulier { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.shw-veld { display: grid; grid-template-columns: minmax(150px, 44%) 1fr; align-items: center; gap: 8px; font-size: 12px; }
+.shw-veld-label { color: var(--theme-dialog-content-text); }
+.shw-veld-invoer { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.shw-veld-invoer input, .shw-veld-invoer select {
+  flex: 1; min-width: 0; padding: 3px 6px; font-size: 12px;
+  background: var(--theme-input-bg, var(--theme-dialog-bg)); color: var(--theme-dialog-content-text);
+  border: 1px solid var(--theme-dialog-border);
+}
+.shw-eenheid { color: var(--theme-text-secondary, var(--theme-dialog-content-text)); opacity: 0.8; min-width: 36px; font-size: 11px; }
+.shw-profielknop {
+  flex: 1; text-align: left; padding: 3px 8px; font-size: 12px; cursor: pointer;
+  background: var(--theme-input-bg, var(--theme-dialog-bg)); color: var(--theme-dialog-content-text);
+  border: 1px solid var(--theme-dialog-border);
+}
+.shw-profielknop:hover { border-color: var(--theme-accent); }
+.shw-vink { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.shw-hint { margin: 6px 0 0; font-size: 11px; line-height: 1.45; opacity: 0.8; }
+.shw-kop {
+  margin-top: 6px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--theme-text-secondary, var(--theme-dialog-content-text));
+}
+.shw-lijst { margin: 2px 0 0; padding-left: 16px; font-size: 12px; line-height: 1.5; }
+.shw-waarschuwing li { color: var(--theme-warning, #b45309); }
+.shw-tabel { border-collapse: collapse; font-size: 12px; }
+.shw-tabel td { padding: 2px 10px 2px 0; }
+.shw-tabel td:last-child { font-variant-numeric: tabular-nums; }
+.shw-zijkant { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.shw-voorbeeld { display: flex; flex-direction: column; gap: 2px; }
+.shw-voorbeeld-kop { font-size: 11px; opacity: 0.8; }
+.shw-svg { width: 100%; height: auto; background: var(--theme-dialog-bg); border: 1px solid var(--theme-dialog-border); }
+.shw-svg .shw-staal { stroke: var(--theme-accent); stroke-width: 1.6; fill: none; }
+.shw-svg .shw-beton { stroke: var(--theme-text-secondary, #6b7280); stroke-width: 3; fill: none; }
+.shw-svg .shw-rand { stroke: var(--theme-dialog-content-text); stroke-width: 1; }
+.shw-svg .shw-peil { stroke: var(--theme-dialog-border); stroke-width: 1; stroke-dasharray: 4 3; }
+.shw-svg .shw-rooster { fill: none; stroke: var(--theme-text-secondary, #6b7280); stroke-width: 1; stroke-dasharray: 5 3; }
+.shw-svg .shw-verband line { stroke: var(--theme-dialog-content-text); stroke-width: 0.8; opacity: 0.7; }
+.shw-svg .shw-gording { fill: var(--theme-dialog-content-text); }
+.shw-svg .shw-paal { fill: var(--theme-text-secondary, #6b7280); }
+.shw-svg .shw-oplegging { fill: var(--theme-dialog-content-text); }
+.shw-svg .shw-maat { fill: var(--theme-dialog-content-text); font-size: 9px; }
+.shw-aantallen { display: grid; grid-template-columns: 1fr auto; gap: 1px 10px; margin: 0; font-size: 12px; }
+.shw-aantallen dt { opacity: 0.85; }
+.shw-aantallen dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.shw-problemen { border-left: 3px solid var(--theme-error, #dc2626); padding: 4px 8px; background: var(--theme-dialog-bg); }
+.shw-voet { display: flex; align-items: center; gap: 6px; width: 100%; }
+.shw-ruimte { flex: 1; }
+.shw-knop {
+  padding: 4px 12px; font-size: 12px; cursor: pointer;
+  background: var(--theme-dialog-bg); color: var(--theme-dialog-content-text); border: 1px solid var(--theme-dialog-border);
+}
+.shw-knop:hover:not(:disabled) { border-color: var(--theme-accent); }
+.shw-knop:disabled { opacity: 0.5; cursor: not-allowed; }
+.shw-knop.primair { background: var(--theme-accent); border-color: var(--theme-accent); color: var(--theme-accent-text, #fff); }
+@media (max-width: 760px) { .shw-kolommen { grid-template-columns: 1fr; } }

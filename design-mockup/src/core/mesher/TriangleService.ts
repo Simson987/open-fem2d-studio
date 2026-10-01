@@ -21,10 +21,28 @@ async function ensureInit(): Promise<void> {
     try {
       const lib = await import('triangle-wasm');
       const mod = lib.default ?? lib;
-      // The WASM file is served from public/
-      const wasmPath = new URL('/triangle.out.wasm', window.location.origin).href;
-      console.log('[TriangleService] Loading WASM from:', wasmPath);
-      await mod.init(wasmPath);
+      // In de app komt het WASM-bestand uit public/. Buiten een browser (de
+      // Node-tests van het 3D-plaatnet) laadt de module het zelf naast
+      // triangle.out.js in het pakket.
+      const wasmPath = typeof window !== 'undefined' && window.location?.origin
+        ? new URL('/triangle.out.wasm', window.location.origin).href
+        : undefined;
+      console.log('[TriangleService] Loading WASM from:', wasmPath ?? '(pakketmap)');
+      if (wasmPath) {
+        await mod.init(wasmPath);
+      } else {
+        // Node heeft een globale fetch; de Emscripten-lader zou daarmee een
+        // bestandspad als URL proberen op te halen. Zonder fetch leest hij het
+        // WASM-bestand met fs uit de pakketmap.
+        const scope = globalThis as { fetch?: unknown };
+        const savedFetch = scope.fetch;
+        scope.fetch = undefined;
+        try {
+          await mod.init(undefined);
+        } finally {
+          scope.fetch = savedFetch;
+        }
+      }
       triangleLib = mod;
       console.log('[TriangleService] WASM module initialized successfully');
     } catch (err) {
@@ -291,6 +309,57 @@ function pointInPolygonLocal(px: number, py: number, polygon: { x: number; y: nu
     }
   }
   return inside;
+}
+
+/** Een vrije PSLG: punten, lijnstukken (indexparen) en gaten (een punt per gat). */
+export interface TriangulatePslgInput {
+  points: { x: number; y: number }[];
+  segments: [number, number][];
+  holes?: { x: number; y: number }[];
+  /** Grootste driehoeksoppervlak. */
+  maxArea: number;
+  /** Kleinste hoek in graden (kwaliteitsmesh). */
+  minAngle?: number;
+}
+
+/**
+ * Trianguleer een vrije PSLG zonder extra punten op de lijnstukken (schakelaar
+ * YY): de knopen op randen en inwendige lijnen blijven precies de opgegeven
+ * knopen, zodat aangrenzende platen en staven dezelfde knopen delen. Binnen
+ * het gebied voegt Triangle wel punten toe voor de kwaliteit en het oppervlak.
+ */
+export async function triangulatePslg(input: TriangulatePslgInput): Promise<TriangulateResult> {
+  await ensureInit();
+  const pointlist = input.points.flatMap((p) => [p.x, p.y]);
+  const segmentlist = input.segments.flatMap(([a, b]) => [a, b]);
+  const holelist = (input.holes ?? []).flatMap((p) => [p.x, p.y]);
+  const inputIO = triangleLib.makeIO({
+    pointlist: new Float64Array(pointlist),
+    segmentlist: new Int32Array(segmentlist),
+    ...(holelist.length > 0 ? { holelist: new Float64Array(holelist) } : {}),
+  });
+  const outputIO = triangleLib.makeIO({});
+  const minAngle = input.minAngle ?? 25;
+  // p: PSLG, z: nulgebaseerd, Q: stil, YY: geen Steinerpunten op lijnstukken,
+  // q: kleinste hoek, a: grootste oppervlak.
+  const switches = `pzQYYq${minAngle}a${input.maxArea.toPrecision(8)}`;
+  try {
+    triangleLib.triangulate(switches, inputIO, outputIO);
+    const points: { x: number; y: number }[] = [];
+    const outPoints = outputIO.pointlist;
+    if (outPoints) for (let i = 0; i < outPoints.length; i += 2) points.push({ x: outPoints[i], y: outPoints[i + 1] });
+    const triangles: [number, number, number][] = [];
+    const outTriangles = outputIO.trianglelist;
+    if (outTriangles) {
+      for (let i = 0; i < outTriangles.length; i += 3) {
+        triangles.push([outTriangles[i], outTriangles[i + 1], outTriangles[i + 2]]);
+      }
+    }
+    return { points, triangles, segments: [] };
+  } finally {
+    triangleLib.freeIO(inputIO, true);
+    triangleLib.freeIO(outputIO);
+  }
 }
 
 /**

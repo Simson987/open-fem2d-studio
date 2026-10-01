@@ -14,9 +14,9 @@
 // secansoplossing met 2% tolerantie (4-elementen-discretisatie + consistente
 // KG), en tegen de benadering 2.0 met 5% (documentatie-eis).
 //
-// Stijl: test-veldzakking.mjs. Draaien met: npx tsx test-tweede-orde.mjs
+// Stijl: test-veldzakking.mjs. Draaien met: node --import tsx test-tweede-orde.mjs
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 const { solveAllCases, solveAllCasesNonlinear } =
   await import("./src/components/fem/solver/engine.ts");
@@ -434,7 +434,8 @@ log("\n[7] Kg vóór de scharniercondensatie: pendelkolom, scharnierplaats, steu
 log("\n[6] Regressie: bestaande testsuites");
 for (const f of ["test-v2-stations.mjs", "test-sectie-doorvoer.mjs", "test-veldzakking.mjs"]) {
   try {
-    const out = execSync(`npx tsx ${f}`, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    const out = execFileSync(process.execPath, ["--import", "tsx", f],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     const tail = out.trim().split("\n").slice(-2).join(" | ");
     checkTrue(`${f} groen`, true, tail);
   } catch (e) {

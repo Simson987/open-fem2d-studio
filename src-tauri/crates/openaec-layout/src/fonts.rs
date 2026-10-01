@@ -23,6 +23,8 @@ struct FontEntry {
     descender: f32,
     /// Glyph advance widths cache (char → advance in font units).
     advances: HashMap<char, f32>,
+    /// Of het lettertype een teken heeft (cache).
+    glieven: HashMap<char, bool>,
 }
 
 impl FontEntry {
@@ -49,7 +51,24 @@ impl FontEntry {
             ascender,
             descender,
             advances,
+            glieven: HashMap::new(),
         })
+    }
+
+    /// Heeft het lettertype een glief voor `ch`?
+    fn heeft(&mut self, ch: char) -> bool {
+        if ch.is_ascii() && !ch.is_ascii_control() {
+            return true;
+        }
+        if let Some(&h) = self.glieven.get(&ch) {
+            return h;
+        }
+        let h = ttf_parser::Face::parse(&self.data, 0)
+            .ok()
+            .and_then(|face| face.glyph_index(ch))
+            .is_some();
+        self.glieven.insert(ch, h);
+        h
     }
 
     fn char_advance(&mut self, ch: char, data: &[u8]) -> f32 {
@@ -127,8 +146,39 @@ impl FontRegistry {
         &self.fonts[id.0].data
     }
 
-    /// Measure the width of a text string at a given font size.
+    /// Heeft het lettertype `id` een glief voor `ch`?
+    pub fn heeft_glief(&mut self, id: FontId, ch: char) -> bool {
+        self.fonts[id.0].heeft(ch)
+    }
+
+    /// De stukken waarin `text` met dit lettertype gezet wordt — zie
+    /// [`crate::tekstruns`]: super- en subschrift dat het lettertype mist,
+    /// wordt kleiner en verhoogd of verlaagd gezet.
+    pub fn tekstruns(&mut self, id: FontId, text: &str) -> Vec<(crate::tekstruns::Positie, String)> {
+        let entry = &mut self.fonts[id.0];
+        crate::tekstruns::tekstruns(text, |c| entry.heeft(c))
+    }
+
+    /// Measure the width of a text string at a given font size — zoals hij
+    /// gezet wordt, dus met de stukken van [`Self::tekstruns`].
     pub fn text_width(&mut self, id: FontId, text: &str, size: Pt) -> Pt {
+        if text.is_ascii() {
+            return self.gewone_breedte(id, text, size);
+        }
+        let runs = self.tekstruns(id, text);
+        let mut totaal = 0.0_f32;
+        for (positie, stuk) in runs {
+            let b = self.gewone_breedte(id, &stuk, size).0;
+            totaal += match positie {
+                crate::tekstruns::Positie::Gewoon => b,
+                _ => b * crate::tekstruns::SCHAAL,
+            };
+        }
+        Pt(totaal)
+    }
+
+    /// De breedte van `text` teken voor teken, zonder opdeling.
+    fn gewone_breedte(&mut self, id: FontId, text: &str, size: Pt) -> Pt {
         let entry = &self.fonts[id.0];
         let upem = entry.units_per_em;
         let data_clone = entry.data.clone();

@@ -1,6 +1,6 @@
 ---
 source: crates/steel-check/tests/calc2_beam3.rs
-assertion_line: 211
+assertion_line: 262
 expression: run()
 ---
 {
@@ -9,6 +9,56 @@ expression: run()
   "steel_grade": "S235",
   "classification": "Class1",
   "checks": [
+    {
+      "id": "6.2.3_tension",
+      "kind": {
+        "type": "Resistance",
+        "data": {
+          "id": "6.2.3_tension",
+          "title": "Trek",
+          "article": "art. 6.2.3 (6.6)",
+          "force_state": {
+            "combination_id": 2,
+            "position_mm": 2402.0,
+            "forces": {
+              "n_ed": -48.228,
+              "vy_ed": 0.0,
+              "vz_ed": 0.0,
+              "mt_ed": 0.0,
+              "my_ed": 187.327,
+              "mz_ed": 0.0
+            }
+          },
+          "formula_latex": "N_{t,Rd} = N_{pl,Rd} = \\frac{A \\cdot f_y}{\\gamma_{M0}}",
+          "variables": [
+            {
+              "symbol": "A",
+              "value": 11501.3,
+              "unit": "mm²"
+            },
+            {
+              "symbol": "f_y",
+              "value": 235.0,
+              "unit": "MPa"
+            },
+            {
+              "symbol": "\\gamma_{M0}",
+              "value": 1.0,
+              "unit": "-"
+            }
+          ],
+          "deelstappen": [],
+          "value": 2702.8055,
+          "unit": "kN",
+          "uc": null,
+          "status": "NotApplicable",
+          "notes": [
+            "Niet van toepassing: de omhullende bevat geen trekkracht (grootste N_Ed = -48,23 kN, combinatie 2, x = 2402 mm; N is trek-positief). De weerstand staat er ter informatie.",
+            "Geen nettodoorsnede opgegeven: N_t,Rd = N_pl,Rd = A·f_y/γ_M0 (6.6). Heeft de staaf gaten of een andere verzwakking, geef dan A_net op; dan geldt ook N_u,Rd = 0,9·A_net·f_u/γ_M2 (6.7) en is de kleinste van beide maatgevend (§6.2.3(2))."
+          ]
+        }
+      }
+    },
     {
       "id": "6.2.4_compression",
       "kind": {
@@ -299,7 +349,7 @@ expression: run()
               "mz_ed": 0.0
             }
           },
-          "formula_latex": "M_{y,V,Rd} = M_{y,c,Rd} \\text{ if } V_{z,Ed} \\leq V_{z,pl,Rd}/2",
+          "formula_latex": "M_{y,V,Rd} = (1 - \\rho) \\cdot M_{y,c,Rd}",
           "variables": [
             {
               "symbol": "V_{z,Ed}",
@@ -315,9 +365,68 @@ expression: run()
               "symbol": "M_{y,c,Rd}",
               "value": 184.58592,
               "unit": "kNm"
+            },
+            {
+              "symbol": "\\rho",
+              "value": 0.0,
+              "unit": "-"
+            },
+            {
+              "symbol": "M_{y,Ed}",
+              "value": 187.327,
+              "unit": "kNm"
             }
           ],
-          "deelstappen": [],
+          "deelstappen": [
+            {
+              "id": "rho",
+              "titel": "Invloed van de dwarskracht",
+              "symbol": "\\rho",
+              "article": "art. 6.2.8(2)",
+              "formula_latex": "\\rho = \\left( \\frac{2 V_{z,Ed}}{V_{z,pl,Rd}} - 1 \\right)^2 \\quad (V_{z,Ed} > V_{z,pl,Rd}/2)",
+              "ingevuld_latex": "",
+              "variables": [
+                {
+                  "symbol": "V_{z,Ed}",
+                  "value": 0.0,
+                  "unit": "kN"
+                },
+                {
+                  "symbol": "V_{z,pl,Rd}",
+                  "value": 780.2327414961004,
+                  "unit": "kN"
+                }
+              ],
+              "value": 0.0,
+              "unit": "-",
+              "notes": [
+                "V_z,Ed ≤ V_z,pl,Rd/2: ρ = 0 (6.2.8(2))."
+              ]
+            },
+            {
+              "id": "m_v_rd",
+              "titel": "Momentweerstand met dwarskracht",
+              "symbol": "M_{y,V,Rd}",
+              "article": "art. 6.2.8(3)",
+              "formula_latex": "M_{y,V,Rd} = (1 - \\rho) \\cdot M_{y,c,Rd}",
+              "ingevuld_latex": "M_{y,V,Rd} = (1 - 0) \\cdot 184{,}586",
+              "variables": [
+                {
+                  "symbol": "\\rho",
+                  "value": 0.0,
+                  "unit": "-"
+                },
+                {
+                  "symbol": "M_{y,c,Rd}",
+                  "value": 184.58592,
+                  "unit": "kNm"
+                }
+              ],
+              "value": 184.58592,
+              "unit": "kNm",
+              "notes": []
+            }
+          ],
           "value": 184.58592,
           "unit": "kNm",
           "uc": {
@@ -328,7 +437,8 @@ expression: run()
           },
           "status": "NotOk",
           "notes": [
-            "V_z,Ed = 0.000 kN < V_z,pl,Rd / 2 = 390.116 kN — The effect of shear on the moment resistance can be neglected."
+            "Getoetst op alle 3 punten van de omhullende, telkens met V_z,Ed en M_y,Ed van dat punt; maatgevend is combinatie 2 op x = 2402 mm.",
+            "V_z,Ed = 0,000 kN ≤ V_pl,z,Rd/2 = 390,116 kN: de dwarskracht vermindert de momentweerstand niet (6.2.8(2)), ρ = 0 en M_y,V,Rd = M_y,c,Rd = 184,586 kNm."
           ]
         }
       }
@@ -340,7 +450,7 @@ expression: run()
         "data": {
           "id": "6.2.9_combined_mn",
           "title": "Buiging en normaalkracht",
-          "article": "art. 6.2.9",
+          "article": "art. 6.2.9.1 (6.39)/(6.40)",
           "force_state": {
             "combination_id": 2,
             "position_mm": 2402.0,
@@ -353,7 +463,7 @@ expression: run()
               "mz_ed": 0.0
             }
           },
-          "formula_latex": "M_{N,y,Rd} = M_{pl,y,Rd} \\cdot (1-n)/(1-0.5a)",
+          "formula_latex": "M_{y,Ed} \\leq M_{N,y,Rd}, \\quad M_{N,y,Rd} = M_{pl,y,Rd} \\cdot \\frac{1 - n}{1 - 0{,}5 a_w} \\leq M_{pl,y,Rd}",
           "variables": [
             {
               "symbol": "N_{Ed}",
@@ -366,23 +476,139 @@ expression: run()
               "unit": "kN"
             },
             {
+              "symbol": "a_w",
+              "value": 0.4435411649117925,
+              "unit": "-"
+            },
+            {
+              "symbol": "a_f",
+              "value": 0.4435411649117925,
+              "unit": "-"
+            },
+            {
+              "symbol": "M_{y,Ed}",
+              "value": 187.327,
+              "unit": "kNm"
+            },
+            {
               "symbol": "M_{pl,y,Rd}",
               "value": 184.58592,
               "unit": "kNm"
             }
           ],
-          "deelstappen": [],
+          "deelstappen": [
+            {
+              "id": "n",
+              "titel": "Relatieve normaalkracht",
+              "symbol": "n",
+              "article": "art. 6.2.9.1(5)",
+              "formula_latex": "n = \\frac{N_{Ed}}{N_{pl,Rd}}",
+              "ingevuld_latex": "n = \\frac{48{,}228}{2702{,}805}",
+              "variables": [
+                {
+                  "symbol": "N_{Ed}",
+                  "value": 48.228,
+                  "unit": "kN"
+                },
+                {
+                  "symbol": "N_{pl,Rd}",
+                  "value": 2702.8055,
+                  "unit": "kN"
+                }
+              ],
+              "value": 0.017843681315581162,
+              "unit": "-",
+              "notes": [
+                "N_Ed als absolute waarde: trek en druk verminderen de momentweerstand van de doorsnede even veel."
+              ]
+            },
+            {
+              "id": "a_w_a_f",
+              "titel": "Aandeel van lijven en flenzen",
+              "symbol": "a_w",
+              "article": "art. 6.2.9.1(5)",
+              "formula_latex": "a_w = \\frac{A - 2 b t}{A} \\leq 0{,}5, \\quad a_f = \\frac{A - 2 h t}{A} \\leq 0{,}5",
+              "ingevuld_latex": "",
+              "variables": [
+                {
+                  "symbol": "A",
+                  "value": 11501.3,
+                  "unit": "mm²"
+                },
+                {
+                  "symbol": "h",
+                  "value": 200.0,
+                  "unit": "mm"
+                },
+                {
+                  "symbol": "b",
+                  "value": 200.0,
+                  "unit": "mm"
+                },
+                {
+                  "symbol": "t",
+                  "value": 16.0,
+                  "unit": "mm"
+                }
+              ],
+              "value": 0.4435411649117925,
+              "unit": "-",
+              "notes": [
+                "a_w = 0,444 en a_f = 0,444."
+              ]
+            },
+            {
+              "id": "m_n_y_rd",
+              "titel": "Gereduceerde momentweerstand om de y-as",
+              "symbol": "M_{N,y,Rd}",
+              "article": "art. 6.2.9.1(5) (6.39)",
+              "formula_latex": "M_{N,y,Rd} = M_{pl,y,Rd} \\cdot \\frac{1 - n}{1 - 0{,}5 a_w} \\leq M_{pl,y,Rd}",
+              "ingevuld_latex": "M_{N,y,Rd} = 184{,}586 \\cdot \\frac{1 - 0{,}0178}{1 - 0{,}5 \\cdot 0{,}4435}",
+              "variables": [
+                {
+                  "symbol": "M_{pl,y,Rd}",
+                  "value": 184.58592,
+                  "unit": "kNm"
+                },
+                {
+                  "symbol": "n",
+                  "value": 0.017843681315581162,
+                  "unit": "-"
+                }
+              ],
+              "value": 184.58592,
+              "unit": "kNm",
+              "notes": [
+                "(1 − n)/(1 − 0,5·a) ≥ 1: de bovengrens M_pl,y,Rd van de formule geldt, er is (nog) geen reductie."
+              ]
+            },
+            {
+              "id": "uc",
+              "titel": "Unity check",
+              "symbol": "UC",
+              "article": "art. 6.2.9",
+              "formula_latex": "1/\\lambda",
+              "ingevuld_latex": "",
+              "variables": [],
+              "value": 1.0148498867085851,
+              "unit": "-",
+              "notes": [
+                "Het criterium voldoet niet. De unity check is de EVENREDIGE overschrijding: alle snedekrachten (N, V en M) moeten samen door 1,015 worden gedeeld om op de interactiegrens uit te komen. Dat getal is eindig, is precies 1,0 op de grens en is nooit kleiner dan n; M_Ed/M_N,Rd zou bij n → 1 naar oneindig lopen en bij n > 1 betekenisloos worden."
+              ]
+            }
+          ],
           "value": 184.58592,
           "unit": "kNm",
           "uc": {
-            "ed": 187.327,
-            "rd": 184.58592,
-            "uc": 1.0148498867085853,
-            "formula_latex": "M_{y,Ed} / M_{N,y,Rd}"
+            "ed": 1.0148498867085851,
+            "rd": 1.0,
+            "uc": 1.0148498867085851,
+            "formula_latex": "1/\\lambda"
           },
           "status": "NotOk",
           "notes": [
-            "n = 0.018 <= a = 0.444 -> M_N,y,Rd = M_pl,y,Rd (no reduction)"
+            "Getoetst op alle 3 punten van de omhullende, telkens met N, M_y en M_z van dat punt; maatgevend is combinatie 2 op x = 2402 mm.",
+            "Het criterium voldoet niet. De unity check is de EVENREDIGE overschrijding: alle snedekrachten (N, V en M) moeten samen door 1,015 worden gedeeld om op de interactiegrens uit te komen. Dat getal is eindig, is precies 1,0 op de grens en is nooit kleiner dan n; M_Ed/M_N,Rd zou bij n → 1 naar oneindig lopen en bij n > 1 betekenisloos worden."
           ]
         }
       }
@@ -393,7 +619,7 @@ expression: run()
         "type": "Resistance",
         "data": {
           "id": "6.2.10_combined_mnv",
-          "title": "Bending, axial, shear (no shear effect)",
+          "title": "Buiging, normaal- en dwarskracht",
           "article": "art. 6.2.10",
           "force_state": {
             "combination_id": 2,
@@ -407,7 +633,7 @@ expression: run()
               "mz_ed": 0.0
             }
           },
-          "formula_latex": "M_{N,y,Rd} = M_{pl,y,Rd} \\cdot (1-n)/(1-0.5a)",
+          "formula_latex": "M_{y,Ed} \\leq M_{N,y,Rd}, \\quad M_{N,y,Rd} = M_{pl,y,Rd} \\cdot \\frac{1 - n}{1 - 0{,}5 a_w} \\leq M_{pl,y,Rd}",
           "variables": [
             {
               "symbol": "N_{Ed}",
@@ -420,23 +646,163 @@ expression: run()
               "unit": "kN"
             },
             {
+              "symbol": "a_w",
+              "value": 0.4435411649117925,
+              "unit": "-"
+            },
+            {
+              "symbol": "a_f",
+              "value": 0.4435411649117925,
+              "unit": "-"
+            },
+            {
+              "symbol": "M_{y,Ed}",
+              "value": 187.327,
+              "unit": "kNm"
+            },
+            {
               "symbol": "M_{pl,y,Rd}",
               "value": 184.58592,
               "unit": "kNm"
             }
           ],
-          "deelstappen": [],
+          "deelstappen": [
+            {
+              "id": "rho",
+              "titel": "Invloed van de dwarskracht",
+              "symbol": "\\rho",
+              "article": "art. 6.2.10(3)",
+              "formula_latex": "\\rho = \\left( \\frac{2 V_{Ed}}{V_{pl,Rd}} - 1 \\right)^2 \\quad (V_{Ed} > V_{pl,Rd}/2)",
+              "ingevuld_latex": "",
+              "variables": [
+                {
+                  "symbol": "V_{Ed}",
+                  "value": 0.0,
+                  "unit": "kN"
+                },
+                {
+                  "symbol": "V_{pl,Rd}",
+                  "value": 780.2327414961004,
+                  "unit": "kN"
+                }
+              ],
+              "value": 0.0,
+              "unit": "-",
+              "notes": []
+            },
+            {
+              "id": "n",
+              "titel": "Relatieve normaalkracht",
+              "symbol": "n",
+              "article": "art. 6.2.9.1(5)",
+              "formula_latex": "n = \\frac{N_{Ed}}{N_{pl,Rd}}",
+              "ingevuld_latex": "n = \\frac{48{,}228}{2702{,}805}",
+              "variables": [
+                {
+                  "symbol": "N_{Ed}",
+                  "value": 48.228,
+                  "unit": "kN"
+                },
+                {
+                  "symbol": "N_{pl,Rd}",
+                  "value": 2702.8055,
+                  "unit": "kN"
+                }
+              ],
+              "value": 0.017843681315581162,
+              "unit": "-",
+              "notes": [
+                "N_Ed als absolute waarde: trek en druk verminderen de momentweerstand van de doorsnede even veel."
+              ]
+            },
+            {
+              "id": "a_w_a_f",
+              "titel": "Aandeel van lijven en flenzen",
+              "symbol": "a_w",
+              "article": "art. 6.2.9.1(5)",
+              "formula_latex": "a_w = \\frac{A - 2 b t}{A} \\leq 0{,}5, \\quad a_f = \\frac{A - 2 h t}{A} \\leq 0{,}5",
+              "ingevuld_latex": "",
+              "variables": [
+                {
+                  "symbol": "A",
+                  "value": 11501.3,
+                  "unit": "mm²"
+                },
+                {
+                  "symbol": "h",
+                  "value": 200.0,
+                  "unit": "mm"
+                },
+                {
+                  "symbol": "b",
+                  "value": 200.0,
+                  "unit": "mm"
+                },
+                {
+                  "symbol": "t",
+                  "value": 16.0,
+                  "unit": "mm"
+                }
+              ],
+              "value": 0.4435411649117925,
+              "unit": "-",
+              "notes": [
+                "a_w = 0,444 en a_f = 0,444."
+              ]
+            },
+            {
+              "id": "m_n_y_rd",
+              "titel": "Gereduceerde momentweerstand om de y-as",
+              "symbol": "M_{N,y,Rd}",
+              "article": "art. 6.2.9.1(5) (6.39)",
+              "formula_latex": "M_{N,y,Rd} = M_{pl,y,Rd} \\cdot \\frac{1 - n}{1 - 0{,}5 a_w} \\leq M_{pl,y,Rd}",
+              "ingevuld_latex": "M_{N,y,Rd} = 184{,}586 \\cdot \\frac{1 - 0{,}0178}{1 - 0{,}5 \\cdot 0{,}4435}",
+              "variables": [
+                {
+                  "symbol": "M_{pl,y,Rd}",
+                  "value": 184.58592,
+                  "unit": "kNm"
+                },
+                {
+                  "symbol": "n",
+                  "value": 0.017843681315581162,
+                  "unit": "-"
+                }
+              ],
+              "value": 184.58592,
+              "unit": "kNm",
+              "notes": [
+                "(1 − n)/(1 − 0,5·a) ≥ 1: de bovengrens M_pl,y,Rd van de formule geldt, er is (nog) geen reductie."
+              ]
+            },
+            {
+              "id": "uc",
+              "titel": "Unity check",
+              "symbol": "UC",
+              "article": "art. 6.2.10",
+              "formula_latex": "1/\\lambda",
+              "ingevuld_latex": "",
+              "variables": [],
+              "value": 1.0148498867085851,
+              "unit": "-",
+              "notes": [
+                "Het criterium voldoet niet. De unity check is de EVENREDIGE overschrijding: alle snedekrachten (N, V en M) moeten samen door 1,015 worden gedeeld om op de interactiegrens uit te komen. Dat getal is eindig, is precies 1,0 op de grens en is nooit kleiner dan n; M_Ed/M_N,Rd zou bij n → 1 naar oneindig lopen en bij n > 1 betekenisloos worden."
+              ]
+            }
+          ],
           "value": 184.58592,
           "unit": "kNm",
           "uc": {
-            "ed": 187.327,
-            "rd": 184.58592,
-            "uc": 1.0148498867085853,
-            "formula_latex": "M_{y,Ed} / M_{N,y,Rd}"
+            "ed": 1.0148498867085851,
+            "rd": 1.0,
+            "uc": 1.0148498867085851,
+            "formula_latex": "1/\\lambda"
           },
           "status": "NotOk",
           "notes": [
-            "n = 0.018 <= a = 0.444 -> M_N,y,Rd = M_pl,y,Rd (no reduction)"
+            "Getoetst op alle 3 punten van de omhullende, telkens met N, V_y, V_z, M_y en M_z van dat punt; maatgevend is combinatie 2 op x = 2402 mm.",
+            "V_y,Ed = 0,000 kN en V_z,Ed = 0,000 kN, V_pl,y,Rd = 780,233 kN en V_pl,z,Rd = 780,233 kN: de dwarskracht blijft onder V_pl,Rd/2, dus de weerstanden van 6.2.9 gelden onverminderd (6.2.10(2)), ρ = 0.",
+            "Het criterium voldoet niet. De unity check is de EVENREDIGE overschrijding: alle snedekrachten (N, V en M) moeten samen door 1,015 worden gedeeld om op de interactiegrens uit te komen. Dat getal is eindig, is precies 1,0 op de grens en is nooit kleiner dan n; M_Ed/M_N,Rd zou bij n → 1 naar oneindig lopen en bij n > 1 betekenisloos worden."
           ]
         }
       }
@@ -1650,7 +2016,7 @@ expression: run()
             "combination_id": 2,
             "position_mm": 2402.0,
             "forces": {
-              "n_ed": -48.228,
+              "n_ed": -48.329,
               "vy_ed": 0.0,
               "vz_ed": 0.0,
               "mt_ed": 0.0,
@@ -1662,12 +2028,12 @@ expression: run()
           "variables": [
             {
               "symbol": "k_{yy}",
-              "value": 0.4051249608342647,
+              "value": 0.40513569362526286,
               "unit": "-"
             },
             {
               "symbol": "k_{yz}",
-              "value": 0.5986469254935263,
+              "value": 0.5986440918590161,
               "unit": "-"
             },
             {
@@ -1679,17 +2045,37 @@ expression: run()
               "symbol": "C_{mz}",
               "value": 1.0,
               "unit": "-"
+            },
+            {
+              "symbol": "N_{Rk}",
+              "value": 2702.8055,
+              "unit": "kN"
+            },
+            {
+              "symbol": "M_{y,Rk}",
+              "value": 184.58592,
+              "unit": "kNm"
+            },
+            {
+              "symbol": "M_{z,Rk}",
+              "value": 184.58592,
+              "unit": "kNm"
+            },
+            {
+              "symbol": "\\chi_{LT}",
+              "value": 1.0,
+              "unit": "-"
             }
           ],
           "intermediate_values": [
             {
               "symbol": "term_N",
-              "value": 0.02492294265043769,
+              "value": 0.024975136753607928,
               "unit": "-"
             },
             {
               "symbol": "term_{M_y}",
-              "value": 0.41114102060547364,
+              "value": 0.4111519127772022,
               "unit": "-"
             },
             {
@@ -1699,19 +2085,21 @@ expression: run()
             }
           ],
           "deelstappen": [],
-          "value": 0.43606396325591135,
+          "value": 0.4361270495308101,
           "unit": "-",
           "uc": {
-            "ed": 0.43606396325591135,
+            "ed": 0.4361270495308101,
             "rd": 1.0,
-            "uc": 0.43606396325591135,
+            "uc": 0.4361270495308101,
             "formula_latex": "Sum of terms"
           },
           "status": "Ok",
           "notes": [
             "C_my tabel B.3: de momentenlijn loopt monotoon van 187,33 naar -126,67 kNm maar wijkt van de rechte lijn af (grootste afwijking 3,28 kNm); zo'n verloop heeft geen eigen rij. Aangehouden is de grootste van rij 1 (ψ = -0,676, C_m = 0,400) en rij 2 met het gemiddelde moment over het veld als veldmoment (M_s = 31,97 kNm, α_s = 0,171, gelijkmatig verdeelde belasting, C_m = 0,400): C_m = 0,400.",
             "C_mz tabel B.3: geen buigend moment over dit veld, C_m = 1,0 aangehouden (rekent niet mee omdat de momentterm nul is).",
-            "k_ij volgens tabel B.1 (staaf niet gevoelig voor vervormingen door torsie): k_zy = 0,6·k_yy = 0,243."
+            "k_ij volgens tabel B.1 (staaf niet gevoelig voor vervormingen door torsie): k_zy = 0,6·k_yy = 0,243.",
+            "Art. 6.3.3(4), combinatie 2: N_Ed = 48,329 kN (druk, x = 2431 mm), M_y,Ed = 187,327 kNm (x = 2402 mm) en M_z,Ed = 0,000 kNm (x = 2431 mm) — de grootste druk en de grootste momenten langs de staaf binnen deze combinatie; ze hoeven niet op dezelfde plaats op te treden.",
+            "Tabel 6.7, klasse 1: N_Rk = A·f_y = 2702,805 kN, M_y,Rk = W_pl,y·f_y = 184,586 kNm en M_z,Rk = W_pl,z·f_y = 184,586 kNm."
           ]
         }
       }
@@ -1728,7 +2116,7 @@ expression: run()
             "combination_id": 2,
             "position_mm": 2402.0,
             "forces": {
-              "n_ed": -48.228,
+              "n_ed": -48.329,
               "vy_ed": 0.0,
               "vz_ed": 0.0,
               "mt_ed": 0.0,
@@ -1740,12 +2128,12 @@ expression: run()
           "variables": [
             {
               "symbol": "k_{zy}",
-              "value": 0.24307497650055881,
+              "value": 0.24308141617515772,
               "unit": "-"
             },
             {
               "symbol": "k_{zz}",
-              "value": 0.9977448758225438,
+              "value": 0.9977401530983603,
               "unit": "-"
             },
             {
@@ -1762,17 +2150,37 @@ expression: run()
               "symbol": "C_{mLT}",
               "value": 0.655250600714259,
               "unit": "-"
+            },
+            {
+              "symbol": "N_{Rk}",
+              "value": 2702.8055,
+              "unit": "kN"
+            },
+            {
+              "symbol": "M_{y,Rk}",
+              "value": 184.58592,
+              "unit": "kNm"
+            },
+            {
+              "symbol": "M_{z,Rk}",
+              "value": 184.58592,
+              "unit": "kNm"
+            },
+            {
+              "symbol": "\\chi_{LT}",
+              "value": 1.0,
+              "unit": "-"
             }
           ],
           "intermediate_values": [
             {
               "symbol": "term_N",
-              "value": 0.018195770297914,
+              "value": 0.0182338762280809,
               "unit": "-"
             },
             {
               "symbol": "term_{M_y}",
-              "value": 0.24668461236328415,
+              "value": 0.24669114766632133,
               "unit": "-"
             },
             {
@@ -1782,19 +2190,21 @@ expression: run()
             }
           ],
           "deelstappen": [],
-          "value": 0.2648803826611982,
+          "value": 0.26492502389440226,
           "unit": "-",
           "uc": {
-            "ed": 0.2648803826611982,
+            "ed": 0.26492502389440226,
             "rd": 1.0,
-            "uc": 0.2648803826611982,
+            "uc": 0.26492502389440226,
             "formula_latex": "Sum of terms"
           },
           "status": "Ok",
           "notes": [
             "C_my tabel B.3: de momentenlijn loopt monotoon van 187,33 naar -126,67 kNm maar wijkt van de rechte lijn af (grootste afwijking 3,28 kNm); zo'n verloop heeft geen eigen rij. Aangehouden is de grootste van rij 1 (ψ = -0,676, C_m = 0,400) en rij 2 met het gemiddelde moment over het veld als veldmoment (M_s = 31,97 kNm, α_s = 0,171, gelijkmatig verdeelde belasting, C_m = 0,400): C_m = 0,400.",
             "C_mz tabel B.3: geen buigend moment over dit veld, C_m = 1,0 aangehouden (rekent niet mee omdat de momentterm nul is).",
-            "k_ij volgens tabel B.1 (staaf niet gevoelig voor vervormingen door torsie): k_zy = 0,6·k_yy = 0,243."
+            "k_ij volgens tabel B.1 (staaf niet gevoelig voor vervormingen door torsie): k_zy = 0,6·k_yy = 0,243.",
+            "Art. 6.3.3(4), combinatie 2: N_Ed = 48,329 kN (druk, x = 2431 mm), M_y,Ed = 187,327 kNm (x = 2402 mm) en M_z,Ed = 0,000 kNm (x = 2431 mm) — de grootste druk en de grootste momenten langs de staaf binnen deze combinatie; ze hoeven niet op dezelfde plaats op te treden.",
+            "Tabel 6.7, klasse 1: N_Rk = A·f_y = 2702,805 kN, M_y,Rk = W_pl,y·f_y = 184,586 kNm en M_z,Rk = W_pl,z·f_y = 184,586 kNm."
           ]
         }
       }

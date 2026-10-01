@@ -496,11 +496,19 @@ log("\n[i] Echte rekenkern: het stalen portaal komt door de toetsing");
         uc >= BAND.min && uc <= BAND.max, `uc_max = ${uc.toFixed(3)}`);
       // Eén NotOk-deeltoets tussen twintig Ok's zou in uc_max verdwijnen als
       // de kern die toets niet meetelt; daarom ook per toets.
-      const notOk = (r.checks ?? [])
-        .map((c) => ({ id: c.id, status: (c.kind?.data ?? c).status }))
-        .filter((c) => c.status !== "Ok");
+      //
+      // NotApplicable is hier géén fout, net als bij de betonbalk hieronder:
+      // sinds oktober 2026 staat de trektoets 6.2.3 bij elke staaf, en een
+      // staaf zonder trek heeft haar als "n.v.t." (een ligger zonder druk
+      // evenzo 6.2.4, 6.3.1 en 6.3.3). Wel moet elke n.v.t.-toets haar reden
+      // dragen.
+      const checks = (r.checks ?? []).map((c) => ({ id: c.id, data: c.kind?.data ?? c }));
+      const notOk = checks.filter((c) => c.data.status === "NotOk");
       ok(`staaf ${r.beam_id}: geen enkele deeltoets NotOk`, notOk.length === 0,
         notOk.map((c) => c.id).join(", ") || "—");
+      const zonderReden = checks.filter((c) => c.data.status === "NotApplicable" && !(c.data.notes?.length > 0));
+      ok(`staaf ${r.beam_id}: elke n.v.t.-toets met reden`, zonderReden.length === 0,
+        zonderReden.map((c) => c.id).join(", ") || "—");
     }
 
     // De kolommen worden door kip begrensd en de regel door de doorbuiging.

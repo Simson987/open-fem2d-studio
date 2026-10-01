@@ -1,9 +1,9 @@
 [package]
 name = "open-fem2d-studio"
-version = "0.3.15"
-description = "Open FEM2D Studio — 2D FEM solver"
+version = "2026.39.0"
+description = "Open FEM Studio — 2D FEM solver"
 authors = ["OpenAEC Foundation"]
-license = "CC-BY-SA-4.0"
+license = "AGPL-3.0-or-later"
 edition = "2021"
 
 [lib]
@@ -32,6 +32,8 @@ tauri = { version = "2", features = [] }
 tauri-plugin-store = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+tauri-plugin-opener = "=2.5.3"
+tauri-plugin-os = "=2.3.2"
 serde = { version = "1", features = ["derive"] }
 # float_roundtrip: getallen die de pagina naar Rust stuurt (elk command, en het
 # bedieningskanaal) komen anders 1 ULP verschoven aan — 52,2 wordt 52,199999999999996.
@@ -50,6 +52,9 @@ spanning-check = { path = "crates/spanning-check" }
 plaat-check = { path = "crates/plaat-check" }
 nen-en-1993-1-8-las = { path = "crates/nen-en-1993-1-8-las" }
 report = { path = "crates/report" }
+# Ruimtelijke raamwerken: neutraal Open FEM-contract met een vastgezette
+# adapter voor een externe 3D-rekenkern (lineair, directe tweede orde en eigenknik).
+open-fem-3d = { path = "crates/open-fem-3d" }
 # ── GUI-bediening (module `gui_control`, alleen actief met OPENAEC_GUI_CONTROL=1) ──
 # tiny_http: synchrone localhost-luisteraar; de app-crate heeft geen tokio.
 # rand/png/raw-window-handle staan al in de lock via Tauri — zelfde versies,

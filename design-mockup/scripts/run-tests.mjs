@@ -86,6 +86,15 @@ const BUNDEL_TESTS = new Set([
   // en juist de sidecar gebruikt deze afleiding voor zijn standaardset — dus
   // hoort hij ook tegen de bundel te bewijzen dat die dezelfde factoren geeft.
   "belastingcombinaties",
+  // De stalen hal langs de MCP-weg: `staalhal_maken` en `staalhal_uitwerken`
+  // in de sidecar, met de 3D-kern ertussen. Importeert alleen de barrel en
+  // hoort juist tegen de bundel: die voert de MCP-server uit.
+  "staalhal-sidecar",
+  // De import van een IFC4-analysemodel langs de MCP-weg: `ifc_importeren` en
+  // `ifc_uitwerken` in de sidecar, met de 3D-kern ertussen. Importeert alleen
+  // de barrel; tegen de bundel bewijst hij dat de MCP-server hetzelfde model
+  // inleest als de knop "Rekenmodel importeren" in de app.
+  "ifc-analyse-sidecar",
   // w₁, de zakking onder alleen de blijvende belasting (NEN-EN 1990:2002/NB:2019
   // A1.4.3(2), figuur NB.1), voor hout en staal: de bouwers vullen
   // `deflection_permanent_mm` uit de BGT-combinatie met alleen G, melden het
@@ -379,14 +388,51 @@ const BUNDEL_TESTS = new Set([
  * vergeten regel.
  */
 const ALLEEN_BRON = new Map([
+  // De 3D-proeven raken React/Three, de projectadapter of de aparte Rust-kern.
+  // Deze modules zitten niet in de 2D-sidecarbundel.
+  ...[
+    "open-fem3d-analysis-mode", "open-fem3d-wheel-anchor", "open-fem3d-staalhal", "open-fem3d-staalhal-generator", "open-fem3d-knooppaneel", "open-fem3d-meldingen", "open-fem3d-modelvelden", "open-fem3d-scheefstand", "open-fem3d-kipsteunen", "open-fem3d-rapportsamenvatting", "open-fem3d-beam-screen-pick", "open-fem3d-box-selection", "open-fem3d-campus-frame", "open-fem3d-trek-schijf",
+    // Belastingvlakken: afdracht en vlakmeetkunde, en de browsertest (tekenen
+    // op het werkvlak, doorzichtig vlak, klikken door het vlak heen).
+    "open-fem3d-belastingvlak", "open-fem3d-belastingvlak-ui",
+    "open-fem3d-concrete-check", "open-fem3d-conditions", "open-fem3d-conversion",
+    "open-fem3d-current", "open-fem3d-displacement", "open-fem3d-force-stations",
+    "open-fem3d-history", "open-fem3d-knoopgereedschap", "open-fem3d-large-frame", "open-fem3d-levels", "open-fem3d-member-load", "open-fem3d-mm-invoer",
+    "open-fem3d-plates-views", "open-fem3d-platen", "open-fem3d-profile-geometry", "open-fem3d-report-views",
+    "open-fem3d-selectie", "open-fem3d-selectie-ui",
+    // Trek-alleen en schijven in de echte onderdelen (headless browser).
+    "open-fem3d-trek-schijf-ui",
+    // Montage van trek-alleen staven na de permanente belasting, kruisregel en
+    // kabelwerking van hun eigen gewicht (verzoekopbouw, Rust-kern, bediening).
+    "open-fem3d-montage",
+    "open-fem3d-steel-check", "open-fem3d-transform", "open-fem3d-utilization", "open-fem3d-vervormd",
+    // De tab Views (standaard- en eigen views, rapportbeelden) en zijn browsertest.
+    "open-fem3d-views", "open-fem3d-views-ui",
+  ].map((name) => [name, "3D-app, Three-weergave of aparte Rust-kern; geen module van de 2D-sidecarbundel."]),
+  ["aluminium-materiaal", "Materiaalbibliotheek en doorsnedeadapter buiten de sidecarbarrel."],
+  ["aluminium-solver-verificatie", "Bouwt het model met modelNaarSolverInput, buiten de sidecarbarrel."],
+  ["aluminium-voorspanning-verificatie", "Aluminium- en voorspancontrole buiten de sidecarbarrel."],
+  ["drie-lagen-beton-verificatie", "Specifieke betontoets buiten de sidecarbarrel."],
+  ["ifc-3d", "3D-projectopslag en IFC-export buiten de sidecarbarrel."],
+  [
+    "ifc-analyse-import",
+    "de import van een IFC4-analysemodel tegen de BRON: de STEP-lezer, de vertaling naar het 3D-model (knopen, staven, scharnieren, schijven, belastingvlakken, gevallen, combinaties, levels), de afdracht van de belastingvlakken, het projectbestand en de 3D-kern als apart proces. Hij leest daarnaast de generator van de testbestanden in docs/verificatie. De MCP-weg van dezelfde import staat tegen de bundel in `ifc-analyse-sidecar`",
+  ],
+  ["toets-resultaat-3d", "3D-toetsresultaatcontract buiten de 2D-sidecarbarrel."],
   ["beton-bediening-ui", "React-interactie voor wapeningsselectie, sleepvoorbeelden en doorsnedebediening in Chromium; geen sidecarcode."],
   ["reken-ui", "React-interactie voor resultaatselectie, meldingen en het toetsingspaneel; geen sidecarcode."],
+  ["staalhal-wizard-ui", "React-interactie van de wizard Stalen hal in Chromium (stappen, mm-invoer, voorbeeld, meldingen); de generator zelf draait ook in de bundel via staalhal-sidecar."],
+  ["ifc-import-ui", "React-interactie van \"Rekenmodel importeren\" in Chromium (knop op het IFC-tabblad, keuzevenster, vraag bij niet-opgeslagen werk, verslag, foutmelding); de import zelf draait ook in de bundel via ifc-analyse-sidecar."],
   ["rekengang-generatie", "Asynchrone rekenregie van de app met afgeschermde React- en native IO-grenzen; niet beschikbaar in de sidecarbundel."],
+  ["beton-tooltips", "Leest KorfVelden.tsx en ProfielKiezer.tsx als bron: waar de uitleg staat (tooltip of tekst); geen solvercode en niet in de sidecarbundel."],
+  ["lijnlast-pijlen", "Pijlafstand van lijnlasten op het 2D-tekenvlak en de bron van FemCanvas; geen solvercode en niet in de sidecarbundel."],
   ["fs-scope", "Leest de Tauri-capability en de bestandsroutes van de app; geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["staaf-dialoog-config", "Configuratielogica van de staafdialoog; geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["aansluiting-standaard", "Aansluitingskeuze van een staafeinde (React-component en i18n); geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["toon-mm", "Weergave van lengtes in het windvenster; geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["commando-reeks", "Toetsreeksen van het tekenvlak (MV, CO) en de kopieerregel voor lasten; geen solvercode en niet beschikbaar in de sidecarbundel."],
+  ["kader-selectie", "Kaderselectie (venster/crossing) en de Escape-regel van het 2D- en 3D-tekenvlak (lib/kaderSelectie, lib/escapeToets), plus bronteksttoetsen op tekenvlakken en thematokens; weergavelogica buiten de barrel, de sidecar selecteert niets."],
+  ["kaderselectie-ui", "Het echte 2D-tekenvlak (FemCanvas) met de echte modelstore in een lokale headless browser: crossing- en vensterkader, Escape uit het gereedschap en Delete op een plaat met ongedaan maken. React, DOM en CSS bestaan in de sidecarbundel niet; geen server en geen rekenkern."],
   ["klik-op-last", "Klikgedrag van het tekenvlak op lasten; geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["weergave-model", "Weergavelogica van de tabbalk (Model sluit de resultaten); geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["undo-route", "Sneltoetsgedrag van de app (Ctrl+Z vanuit een invoerveld); geen solvercode en niet beschikbaar in de sidecarbundel."],
@@ -450,6 +496,14 @@ const ALLEEN_BRON = new Map([
   [
     "hoeklijnen",
     "houdt de hoeklijnreeksen (L-profielen) in profiles.json en in de gegenereerde TS-tabellen tegen de gedrukte profieltabel, en controleert de as-afspraak van NEN-EN 1993-1-1 1.7(2) (lang been langs z, hoofdassen u-u/v-v) plus de tekenvorm. Hij leest profiles.json rechtstreeks als bronbestand en importeert de tekenmodule; de solver en de barrel komen er niet aan te pas",
+  ],
+  [
+    "rond-staal",
+    "massief rond staal (reeks RD) over de hele keten: de aliassen (`lib/rondStaal.ts`, de spiegel van de Rust-lookup), resolveSection, de 3D-rekenroute (`openFem3dSolver`, I_z en J) en de 3D-staaltoets (`openFem3dSteelCheck`), de profielkiezer (`profieleditor/catalogus`, `profielZoeken`), de tekenvorm (`profielVorm`) en de IFC-export, plus de toetsbrug als apart proces voor de toets op het draadeind. De 3D-modules, de kiezer, de tekening en de IFC-export staan niet in de 2D-sidecarbundel; de bundelkant van de herkenning bewaakt `staalherkenning`, die elke catalogussleutel — ook RD — door isSteelProfile en de staalbouwer haalt",
+  ],
+  [
+    "strip",
+    "platstaal (reeks Strip) over de hele keten: de aliassen (`lib/strip.ts`, de spiegel van de Rust-lookup), resolveSection, de 3D-rekenroute (`openFem3dSolver`, I_z en J) en de 3D-staaltoets (`openFem3dSteelCheck`), de profielkiezer (`profieleditor/catalogus`, `profielZoeken`), de tekenvorm (`profielVorm`) en de IFC-export, plus de toetsbrug als apart proces voor de trektoets. De 3D-modules, de kiezer, de tekening en de IFC-export staan niet in de 2D-sidecarbundel; de bundelkant van de herkenning bewaakt `staalherkenning`, die elke catalogussleutel — ook de strips — door isSteelProfile en de staalbouwer haalt",
   ],
   [
     "csp-wasm",
@@ -744,6 +798,14 @@ const ALLEEN_BRON = new Map([
   [
     "zichtbaarheid-ui",
     "issue #47: het echte venster Zichtbaarheid, de echte weergavelijst en het echte tekenvlak op dezelfde displayFlags in een lokale headless browser — elke schakelaar zet dezelfde vlag als de verkenner, het tekenvlak volgt (knoop- en staafnummers, lagen, profielbreedte), Standaard, tandwiel, lintknop en thema. React, DOM en CSS bestaan in de sidecarbundel niet; geen server en geen rekenkern",
+  ],
+  [
+    "profielkleur",
+    "\"Profielen in kleur\": het vaste palet (contrast in beide thema's, kleurenblindheid, geen accentkleur) en de toekenning per profiel in `lib/profielKleur.ts` (stabiel, uniek, volgorde- en taalonafhankelijk, materiaal, zonder profiel, uitbreiding), de 3D-voorrang van de UC-kleuring, de weergavevlaggen en de teksten. Een weergavemodule buiten de barrel; de sidecar tekent niets",
+  ],
+  [
+    "profielkleur-ui",
+    "\"Profielen in kleur\" op het echte 2D-tekenvlak (verkenner, venster Zichtbaarheid, legenda, selectie, aanzicht, thema) en in de echte 3D-werkruimte (WebGL-pixels, snel en volledig opbouwpad, voorrang van de UC-kleuring) in een lokale headless browser. React, DOM, CSS en WebGL bestaan in de sidecarbundel niet; geen server en geen rekenkern",
   ],
   [
     "projectgegevens-ui",

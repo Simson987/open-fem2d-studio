@@ -230,4 +230,32 @@ profile_end?: string,
  * te ontlenen zijn. Zou de kern ze uit de naam moeten raden, dan zou zij
  * rekenen met iets wat niemand heeft opgegeven.
  */
-custom_section_end?: CustomSection, };
+custom_section_end?: CustomSection, 
+/**
+ * Nettodoorsnede A_net (mm²) voor de trektoets §6.2.3: de doorsnede ter
+ * plaatse van gaten of een andere verzwakking. Met A_net is
+ * N_t,Rd = min(A·f_y/γ_M0; 0,9·A_net·f_u/γ_M2), (6.6) en (6.7); zonder is
+ * N_t,Rd = A·f_y/γ_M0 en zegt de toets dat er geen A_net is opgegeven.
+ *
+ * `None`, weglaten of `0` = niet opgegeven. Een negatieve of niet-eindige
+ * waarde, of een A_net groter dan A, is een invoerfout: dan wordt de staaf
+ * met reden geweigerd, net als bij een ongeldige doorbuigingsnoemer — een
+ * tikfout mag niet stil een andere trekweerstand opleveren.
+ */
+a_net_mm2?: number, 
+/**
+ * Trek-alleen staaf (een windverband van strip of rond staal, of een
+ * trekstang): de staaf doet in de berekening alleen mee zolang zij op trek
+ * staat. Dan wordt alleen trek getoetst (6.2.3, en bij massief rond het
+ * draadeind). Druk (6.2.4), buiging, dwarskracht en hun combinaties
+ * (6.2.5–6.2.10), knik (6.3.1), kip (6.3.2), 6.3.3 en de doorbuiging
+ * vallen weg.
+ *
+ * Een drukkracht in de omhullende is bij zo'n staaf speling of
+ * voorspanning (de kruisregel laat één diagonaal per kruis een kleine
+ * druk houden), geen druksterkte; zij wordt niet getoetst, maar wel met de
+ * grootste waarde in een eigen regel van het resultaat gemeld.
+ *
+ * `None` of `false` = een gewone staaf, het gedrag van vóór dit veld.
+ */
+tension_only?: boolean, };

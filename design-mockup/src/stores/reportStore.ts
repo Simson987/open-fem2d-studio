@@ -159,7 +159,7 @@ interface ReportState extends ReportOpmaak {
   resultCombo: number | 'envelope' | null;
   /**
    * Diepte van de inhoudsopgave-SECTIE in het document: 1 = alleen
-   * hoofdstukken, 2 = ook de subsecties (x.1), ingesprongen. Standaard 2;
+   * hoofdstukken, 2 = ook de subsecties (x.1), ingesprongen. Standaard 1;
    * bij een rapport met veel staven wordt die lijst lang, vandaar de keuze.
    */
   inhoudsopgaveDiepte: 1 | 2;
@@ -230,12 +230,26 @@ export const useReportStore = create<ReportState>((set) => ({
   pageSize: 'A4',
   orientation: 'portrait',
   zoom: 1,
-  hiddenSections: {},
-  rapportType: 'volledig',
-  toetsingDetail: 'gedetailleerd',
+  // De beknopte voorinstelling is de standaard. Deze id's zijn de secties met
+  // inBeperkt=false in reportSections.ts; die registry kan hier niet worden
+  // geïmporteerd zonder een store → sectie → store-importlus.
+  hiddenSections: {
+    nodes: true,
+    beams: true,
+    plates: true,
+    materials: true,
+    combinations: true,
+    plateStresses: true,
+    checkDetail: true,
+    clt: true,
+    betonStijfheid: true,
+    spanning: true,
+  },
+  rapportType: 'beperkt',
+  toetsingDetail: 'beknopt',
   verborgenToetsStaven: {},
   resultCombo: null,
-  inhoudsopgaveDiepte: 2,
+  inhoudsopgaveDiepte: 1,
   actieveSectie: null,
   ...STANDAARD_OPMAAK,
 

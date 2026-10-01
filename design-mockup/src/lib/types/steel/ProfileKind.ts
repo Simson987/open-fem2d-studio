@@ -9,5 +9,23 @@
  * (blad 3 van 3), par. 1.7(2) legt de assen anders, en de y-y- en z-z-as zijn
  * geen hoofdassen. Wie hem als I-profiel zou meenemen, rekent stilzwijgend
  * met de verkeerde regels.
+ *
+ * `RoundBar` is massief rond staal, de reeks "RD <d>" met `d` de diameter in
+ * mm (EN 10060). Ook deze soort staat apart, want er geldt niets van de
+ * plaatregels op: tabel 5.2 classificeert plaatdelen, en een massieve ronde
+ * doorsnede heeft er geen. Ze is rotatiesymmetrisch (I_y = I_z, W om elke as
+ * gelijk), heeft knikkromme c (tabel 6.2, "massieve doorsneden") en kipt
+ * niet. De grootheden zijn gesloten formules van `d`; zie
+ * `scripts/genereer-rondstaal.mjs`.
+ *
+ * `FlatBar` is platstaal (strip), de reeks "Strip <b>x<t>" met `b` de
+ * breedte en `t` de dikte in mm, b ≥ 2t. Een massieve rechthoek, dus ook hier
+ * geen plaatdelen met een gesteunde rand. De STAND ligt vast: de breedte b
+ * loopt langs de lokale z-as en de dikte t langs de lokale y-as, zodat
+ * I_y = t·b³/12 de sterke as is — net als bij elk ander catalogusprofiel, en
+ * net als een rechthoek "t×b" (breedte × hoogte) in de rest van de app. In de
+ * maten staat daarom h = b (de breedte van de strip) en b = t_w = t_f = t (de
+ * dikte); de dikte is de maat voor tabel 3.1. Knikkromme c om beide assen
+ * (tabel 6.2, massieve doorsneden). Zie `scripts/genereer-strip.mjs`.
  */
-export type ProfileKind = "ISection" | "Channel" | "Rhs" | "Shs" | "Chs" | "Angle";
+export type ProfileKind = "ISection" | "Channel" | "Rhs" | "Shs" | "Chs" | "Angle" | "RoundBar" | "FlatBar";

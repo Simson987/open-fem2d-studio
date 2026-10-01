@@ -257,7 +257,9 @@
       "hollowHotFinished": "Koker warmvervaardigd (SHS/RHS, EN 10210)",
       "circularHotFinished": "Buis warmvervaardigd (CHS, EN 10210)",
       "angleEqual": "L gelijkbenig",
-      "angleUnequal": "L ongelijkbenig"
+      "angleUnequal": "L ongelijkbenig",
+      "roundBar": "Rond staal, massief (RD, Ø)",
+      "flatBar": "Platstaal, strip (FL)"
     }
   },
   "connection": {
@@ -987,6 +989,8 @@
       "sameAsPlane": "— gelijk aan in het vlak —",
       "l0zCustom": "l₀,z zelf opgeven…",
       "m0EdzExternal": "M₀Ed,z extern",
+      "zAxisHeader3d": "Om de lokale z-as — art. 5.8.9",
+      "zAxisHint3d": "De 3D-raamwerkoplosser levert zowel M_y als M_z. De kern gebruikt M_z uit de lokale 3D-staafkrachten rechtstreeks; M₀Ed,z extern wordt daar alleen als extra constant eerste-orde-moment bij opgeteld. De imperfectie van art. 5.2 en het normatieve tweede-orde-effect om deze as worden daarna bepaald en aan M_Rd,z getoetst. Art. 5.8.9 bepaalt vervolgens of beide richtingen apart mogen worden getoetst ((5.38a) en (5.38b)) of dat interactie (5.39) nodig is. Schoring en kniklengte zijn per lokale as eigen invoer; leeg neemt de keuze van de eerste as over en meldt dat in het rapport.",
       "zAxisHint": "De raamwerkoplosser rekent in één vlak en levert M_z = 0, maar een kolom knikt ook om de z-as: de imperfectie van art. 5.2 (θ₀ = 1/300, nationale bijlage) en het tweede-orde-effect in die richting hangen niet van het model af. De kern rekent daarom altijd M_Ed,z = M₀Ed,z + N_Ed·(e_i + e₂) uit, toetst hem aan M_Rd,z met de staven op hun plaats over de breedte, en gaat dan art. 5.8.9 na: mogen de richtingen apart ((5.38a) en (5.38b)), en zo niet, dan de interactie (5.39). De schoring en de kniklengte om z zijn EIGEN gegevens — een kolom kan in het vlak geschoord zijn en er loodrecht op niet; leeg = de keuze van het vlak wordt overgenomen, met die melding in het rapport. M₀Ed,z extern is een eerste-orde-moment om z uit een ruimtelijk model of een handberekening; 0 = geen.",
       "stirrupZone": "Beugelzone",
       "stirrupZoneNotGiven": "— niet opgegeven, s_cl,tmax wordt niet getoetst —",

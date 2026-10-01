@@ -18,7 +18,9 @@ import ribbon from "../src/i18n/locales/nl/ribbon.json";
 import "../src/themes.css";
 import "../src/components/report/report.css";
 import FemCanvas from "../src/components/fem/FemCanvas";
-import { ResultatenTab } from "../src/components/fem/FemProjectTree";
+// De modellagen staan in de verkenner in de tab Weergave.
+import ExplorerViewTab from "../src/components/fem/ExplorerViewTab";
+import { DEFAULT_OPEN_FEM_3D_VISIBILITY } from "../src/components/openFem3d/openFem3dVisibility";
 import { DEFAULT_DISPLAY_FLAGS, type DisplayFlags } from "../src/components/fem/FemResultsOverlay";
 import { DEFAULT_GRID, type Selection } from "../src/components/fem/femTypes";
 import SchemaSection from "../src/components/report/sections/SchemaSection";
@@ -238,9 +240,10 @@ async function run() {
       const [f, setF] = React.useState(DEFAULT_DISPLAY_FLAGS);
       flags = f;
       return (
-        <ResultatenTab
-          loadCases={[]} combinations={[]} activeLoadCaseId={1} activeCombinationId={null} envelopeView={false}
-          hasResults={false} displayFlags={f} setDisplayFlags={setF}
+        <ExplorerViewTab
+          displayFlags={f} setDisplayFlags={setF} workspace="2d"
+          gridShow={false} setGridShow={noop} stramienAan={false} setStramienAan={noop}
+          openFem3dVisibility={DEFAULT_OPEN_FEM_3D_VISIBILITY} setOpenFem3DVisibility={noop}
         />
       );
     };

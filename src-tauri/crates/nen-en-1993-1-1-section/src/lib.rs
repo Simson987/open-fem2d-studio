@@ -20,8 +20,15 @@ pub mod compression;
 pub mod bending;
 pub mod shear;
 pub mod combined_mv;
-pub mod combined_mn;
-pub mod combined_mnv;
+/// §6.2.9 en §6.2.10 — buiging met normaalkracht (en dwarskracht) voor elke
+/// doorsnedevorm, met de vrijstellingen en benaderingen van §6.2.9.1.
+pub mod interactie;
+/// §6.2.3 — trek voor elke doorsnede (met of zonder nettodoorsnede), en het
+/// draadeind van een trekstaaf van rond staal.
+pub mod trek;
+/// Massief rond staal: buiging met normaal- en dwarskracht (§6.2.8–6.2.10).
+pub mod rond;
+mod opmaak;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../../design-mockup/src/lib/types/steel/")]

@@ -1871,3 +1871,52 @@ export function beoordeelCombinatiesBijOpenen(p: {
 
   return { weesFactoren, blijvend, samenvatting: samenvatting.trim() };
 }
+
+/**
+ * Zorg dat deze belastinggevallen in het project bestaan en geef hun id's, in
+ * dezelfde volgorde. Voor een generator die een heel model maakt (de wizard
+ * "Stalen hal"): zijn lasten moeten in gevallen van het PROJECT landen.
+ *  - Een bestaand geval met dezelfde naam en hetzelfde type wordt hergebruikt.
+ *  - Het geval met het kenmerk `eigenGewicht` is het gekenmerkte geval van het
+ *    project. Is er geen, dan verhuist het eigen gewicht uit het eerste
+ *    blijvende geval naar een nieuw gekenmerkt geval (dezelfde stap als het
+ *    aanbod van issue #42, met de factoren van eigen combinaties); is er ook
+ *    geen blijvend geval, dan komt er een nieuw gekenmerkt geval vooraan.
+ *  - Een ontbrekend geval komt erbij met een id van de teller; de
+ *    standaardcombinaties volgen.
+ * Bestaande gevallen, hun lasten en eigen combinaties blijven ongemoeid: een
+ * ongedaan gemaakt model verwijst daarna nog naar dezelfde gevallen.
+ */
+export function zorgVoorBelastinggevallen(
+  staat: CombinatieStaat,
+  gevraagd: readonly Pick<LoadCase, "name" | "type" | "eigenGewicht">[],
+): { staat: CombinatieStaat; ids: number[] } {
+  let volgend = staat;
+  const ids: number[] = [];
+  for (const geval of gevraagd) {
+    if (isEigenGewichtGeval(geval)) {
+      const bestaand = volgend.loadCases.find((c) => isEigenGewichtGeval(c));
+      if (bestaand) { ids.push(bestaand.id); continue; }
+      const verhuisd = verplaatsEigenGewichtNaarEigenGeval(volgend);
+      if (verhuisd.id !== null) { volgend = verhuisd.staat; ids.push(verhuisd.id); continue; }
+      const nieuw = voegBelastinggevalToe(volgend, geval.name, "dead");
+      const gekenmerkt = wijzigBelastinggeval(nieuw.staat, nieuw.id, { eigenGewicht: true });
+      volgend = {
+        ...gekenmerkt,
+        loadCases: [
+          ...gekenmerkt.loadCases.filter((c) => c.id === nieuw.id),
+          ...gekenmerkt.loadCases.filter((c) => c.id !== nieuw.id),
+        ],
+      };
+      ids.push(nieuw.id);
+      continue;
+    }
+    const bestaand = volgend.loadCases.find((c) =>
+      !isEigenGewichtGeval(c) && c.name === geval.name && c.type === geval.type);
+    if (bestaand) { ids.push(bestaand.id); continue; }
+    const nieuw = voegBelastinggevalToe(volgend, geval.name, geval.type);
+    volgend = nieuw.staat;
+    ids.push(nieuw.id);
+  }
+  return { staat: volgend, ids };
+}

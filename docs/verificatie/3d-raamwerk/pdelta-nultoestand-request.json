@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "analysis": "p-delta",
+  "nodes": [
+    { "id": 1, "x": 0.0, "y": 0.0, "z": 0.0 },
+    { "id": 2, "x": 3.0, "y": 0.0, "z": 0.0 }
+  ],
+  "materials": [
+    { "id": 1, "name": "S235", "eMpa": 210000.0, "nu": 0.3 }
+  ],
+  "sections": [
+    {
+      "id": 1,
+      "name": "nultoestand-test",
+      "areaM2": 0.01,
+      "iyM4": 0.0001,
+      "izM4": 0.00005,
+      "torsionJM4": 0.00001
+    }
+  ],
+  "members": [
+    {
+      "id": 1,
+      "startNodeId": 1,
+      "endNodeId": 2,
+      "materialId": 1,
+      "sectionId": 1,
+      "releases": {}
+    }
+  ],
+  "supports": [
+    { "nodeId": 1, "ux": true, "uy": true, "uz": true, "rx": true, "ry": true, "rz": true },
+    { "nodeId": 2, "ux": false, "uy": false, "uz": true, "rx": false, "ry": false, "rz": false }
+  ],
+  "nodalLoads": [
+    { "id": 1, "nodeId": 2, "fx": 0.0, "fy": 0.0, "fz": -10.0, "mx": 0.0, "my": 0.0, "mz": 0.0 }
+  ],
+  "maxIterations": 50,
+  "tolerance": 1e-10,
+  "bucklingModes": 0
+}

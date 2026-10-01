@@ -173,7 +173,7 @@ async function run() {
     ok(rijen.length === 3, `drie rijen, niet ${rijen.length}`);
     ok(rijen[0].includes("Kipstabiliteit") && rijen[0].includes("comb. 3") && rijen[0].includes("x = 3.000 mm"), rijen[0]);
     ok(rijen[1].includes("Doorbuiging") && !rijen[1].includes("comb.") && !rijen[1].includes("x ="), rijen[1]);
-    ok(rapportHost.textContent!.includes("tellen niet mee als maatgevend"), "toelichting ontbreekt");
+    ok(rapportHost.textContent!.includes("Toetsen zonder unity check tellen niet mee"), "toelichting ontbreekt");
   });
   flushSync(() => rapportRoot.unmount());
 

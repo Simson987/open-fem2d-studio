@@ -42,6 +42,94 @@
   padding: 4px 0;
 }
 
+.explorer-view-tab {
+  padding: 2px 0 12px;
+}
+
+.explorer-view-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 6px 8px 8px;
+  padding: 0 8px;
+  height: 28px;
+  border: 1px solid var(--theme-border);
+  border-radius: 4px;
+  background: var(--theme-bg-lighter);
+  color: var(--theme-text-faint);
+}
+
+.explorer-view-search:focus-within {
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 2px var(--theme-accent-soft, transparent);
+  color: var(--theme-accent);
+}
+
+.explorer-view-search svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.explorer-view-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--theme-text);
+  font: 400 11.5px/1.2 "Inter", system-ui, sans-serif;
+}
+
+.explorer-view-search input::placeholder {
+  color: var(--theme-text-faint);
+}
+
+.explorer-view-section {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--theme-border);
+  margin-bottom: 8px;
+}
+
+.explorer-view-section:last-child {
+  border-bottom: 0;
+}
+
+.explorer-view-subtitle {
+  padding: 7px 10px 3px;
+  color: var(--theme-text-faint);
+  font: 600 10px/1.2 "Inter", system-ui, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.45px;
+}
+
+.explorer-view-toggle.sub {
+  padding-left: 24px;
+}
+
+.explorer-view-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--theme-text-faint);
+}
+
+.explorer-view-toggle-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.explorer-view-toggle.active .explorer-view-toggle-icon {
+  color: var(--theme-accent);
+}
+
 /* Tree rows */
 .fem-tree-node { display: block; }
 .fem-tree-row {
@@ -106,8 +194,12 @@
 
 .fem-tree-leaf {
   display: flex;
+  width: 100%;
   align-items: center;
   justify-content: space-between;
+  border: 0;
+  background: transparent;
+  text-align: left;
   padding: 2px 8px 2px 16px;
   font: 400 11.5px/1.3 "Inter", system-ui, sans-serif;
   color: var(--theme-text-secondary);

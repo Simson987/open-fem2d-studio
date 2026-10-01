@@ -22,6 +22,12 @@ import {
 
 /** Per-result display toggles — multi-active diagram picker. */
 export interface DisplayFlags {
+  /** Hoofdgeometrie van het 2D-canvas. */
+  knopen: boolean;
+  staven: boolean;
+  platen: boolean;
+  belastingen: boolean;
+  assenstelsel: boolean;
   deflection: boolean;
   N: boolean;
   V: boolean;
@@ -66,7 +72,11 @@ export interface DisplayFlags {
   plaatContour: boolean;
   /** Gekozen contourcomponent (von Mises default) — zie PLAAT_COMPONENTEN in FemCanvas. */
   plaatComponent: "vonMises" | "sigmaX" | "sigmaY" | "tauXY" | "nx" | "ny" | "nxy";
-  /** Elementranden (mesh-lijnen) tonen in de contourlaag. */
+  /**
+   * Elementranden (het rekennet) van de platen tonen: in de modelweergave en
+   * in de contourlaag. Een modelweergave (venster Zichtbaarheid, onthouden);
+   * standaard uit.
+   */
   plaatMesh: boolean;
   /**
    * Profielnaam klein langs elke staaf op het canvas. Dit is een MODEL-
@@ -118,9 +128,15 @@ export interface DisplayFlags {
   opleggingen: boolean;
   /** Scharnieren en veren aan de staafeinden. */
   scharnieren: boolean;
+  /**
+   * "Profielen in kleur": elk profiel een eigen kleur, met een legenda op het
+   * tekenvlak (lib/profielKleur.ts). Een modelweergave; de selectie gaat voor.
+   */
+  profielKleur: boolean;
 }
 
 export const DEFAULT_DISPLAY_FLAGS: DisplayFlags = {
+  knopen: true, staven: true, platen: true, belastingen: true, assenstelsel: true,
   deflection: true, N: false, V: false, M: true, reactions: true,
   // Uit by default: het zijn extra standen naast N/V/M, en EI heeft alleen
   // inhoud bij een fysisch niet-lineaire betonberekening.
@@ -135,7 +151,7 @@ export const DEFAULT_DISPLAY_FLAGS: DisplayFlags = {
   snedeTekens: true,
   uc: false,
   scaleN: 1, scaleV: 1, scaleM: 1, scaleU: 1, scaleR: 1, scaleEI: 1,
-  plaatContour: true, plaatComponent: "vonMises", plaatMesh: true,
+  plaatContour: true, plaatComponent: "vonMises", plaatMesh: false,
   // Aan: de gebruiker wil bij het tekenen kunnen zien welk profiel een staaf
   // heeft zonder hem eerst aan te klikken.
   profielLabels: true,
@@ -153,6 +169,9 @@ export const DEFAULT_DISPLAY_FLAGS: DisplayFlags = {
   maatlijnen: true,
   opleggingen: true,
   scharnieren: true,
+  // Uit: het tekenvlak houdt de vertrouwde accentkleur tot de gebruiker de
+  // profielen wil onderscheiden.
+  profielKleur: false,
 };
 
 interface Props {

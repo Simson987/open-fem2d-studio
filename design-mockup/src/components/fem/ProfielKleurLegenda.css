@@ -1,0 +1,60 @@
+/* Legenda van "Profielen in kleur" (ProfielKleurLegenda.tsx).
+   Tekst in de tekstkleuren van het thema, nooit in de profielkleur: het
+   kleurvlak ernaast draagt de kleur. Een lange lijst scrolt binnen de kaart. */
+.profiel-legenda {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-height: 0;
+  max-width: 260px;
+  padding: 6px 8px;
+}
+/* De 2D-kaart leent de HUD-kaart (fem-hud-card), maar als kolom. */
+.profiel-legenda.fem-hud-card {
+  display: flex;
+  align-items: stretch;
+  padding: 6px 8px;
+}
+.profiel-legenda-titel {
+  font: 600 11px/1.2 "Inter", system-ui, sans-serif;
+}
+.profiel-legenda-lijst {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-height: 0;
+  overflow-y: auto;
+}
+.profiel-legenda-regel {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 6px;
+  font: 500 10.5px/1.25 "Inter", system-ui, sans-serif;
+  white-space: nowrap;
+}
+.profiel-legenda-staal { display: block; }
+.profiel-legenda-naam {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.profiel-legenda-aantal {
+  color: var(--theme-text-secondary);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+}
+.profiel-legenda-regel.zonder-profiel .profiel-legenda-naam { font-style: italic; }
+
+/* 3D: het 3D-vlak is altijd licht, dus een lichte kaart zoals de UC-legenda. */
+.profiel-legenda-3d {
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #fffffff2;
+  color: #334155;
+  box-shadow: 0 2px 8px #0f172a1a;
+}
+.profiel-legenda-3d .profiel-legenda-aantal { color: #64748b; }

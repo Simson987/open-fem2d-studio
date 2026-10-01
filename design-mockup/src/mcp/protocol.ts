@@ -28,7 +28,7 @@
  * `BeamCheckInput`), meldingen en commentaar Nederlands.
  *
  * MODELVORM — het `model` in een payload is de STORE-EIGEN vorm: exact de
- * velden die `bouwMultiInput` leest en die ook in een `.ifcfem2d`-projectbestand
+ * velden die `bouwMultiInput` leest en die ook in een `.ifcfem`-projectbestand (of oudere `.ifcfem2d`)
  * staan (nodes, beams, supports, plates, loads, loadCases + de vlaggen).
  * Bewust geen eigen, vereenvoudigd modelvocabulaire: dat zou een tweede,
  * handgeschreven vertaling van model naar solver-invoer betekenen, en juist
@@ -46,6 +46,17 @@ export const SIDECAR_OPS = [
   "solve",
   "check",
   "load_project",
+  // De stalen hal (MCP-tool `open_fem_3d_staalhal_maken`): de generator van
+  // de wizard, en de uitwerking van de 3D-rekenresultaten die Rust ertussen
+  // berekent. Zie staalhalSidecar.ts.
+  "staalhal_maken",
+  "staalhal_uitwerken",
+  // De import van een IFC4-analysemodel (MCP-tool `open_fem_3d_ifc_importeren`):
+  // dezelfde import als de knop "Rekenmodel importeren" in de app, en de
+  // uitwerking van de 3D-rekenresultaten die Rust ertussen berekent. Zie
+  // ifcImportSidecar.ts.
+  "ifc_importeren",
+  "ifc_uitwerken",
 ] as const;
 
 export type SidecarOp = (typeof SIDECAR_OPS)[number];

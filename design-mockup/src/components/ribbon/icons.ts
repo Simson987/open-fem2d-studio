@@ -5,6 +5,7 @@
 export const settingsIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>`;
 
 export const helpIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
+export const waterAccumulationIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8h18M3 8c3 0 3 2 6 2s3-2 6-2 3 2 6 2M4 14c3 0 4 5 8 5s5-5 8-5M4 14h16"/></svg>`;
 
 export const infoIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
 
@@ -120,6 +121,8 @@ export const loadPointHIcon = `<svg viewBox="0 0 24 24"><line x1="2" y1="12" x2=
 //   3× shafts: kort verticaal segment
 //   3× solid pijlpunten naar onder
 export const loadLineIcon = `<svg viewBox="0 0 24 24"><rect x="1.5" y="1.5" width="21" height="21" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.45"/><line x1="3" y1="5" x2="21" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="6" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polygon points="3,13 9,13 6,19" fill="currentColor" stroke="currentColor" stroke-width="0.8" stroke-linejoin="round"/><line x1="12" y1="6" x2="12" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polygon points="9,13 15,13 12,19" fill="currentColor" stroke="currentColor" stroke-width="0.8" stroke-linejoin="round"/><line x1="18" y1="6" x2="18" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polygon points="15,13 21,13 18,19" fill="currentColor" stroke="currentColor" stroke-width="0.8" stroke-linejoin="round"/></svg>`;
+/** Belastingvlak: gearceerd vlak met lastpijlen erop, voor het 3D-gereedschap. */
+export const loadPanelIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 21l4-8h14l-4 8z" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 21l3-6M13 21l3-6" stroke-width="1" opacity="0.6"/><path d="M8 3v7M14 3v7M20 3v7" stroke-width="1.8" stroke-linecap="round"/><path d="M6 8l2 3 2-3M12 8l2 3 2-3M18 8l2 3 2-3" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 // MOMENT: 3/4 cirkel met solid driehoek-pijlpunt aan het einde (tangentieel).
 //   arc: M5,12 a7,7 0 1,1 9.9,4.95  (270° draaiing rond (12,12))
@@ -178,6 +181,8 @@ export const checkPanelIcon = `<svg fill="none" stroke="currentColor" stroke-wid
 export const checkRulesIcon = `<svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>`;
 
 // --- IFC tab (FEM ↔ IFC integration — import, structural model, validate, export) ---
+/** Een hal met een pijl naar binnen: een rekenmodel uit een IFC-bestand halen. */
+export const ifcAnalysisImportIcon = `<svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 21V9l9-6 9 6v12"/><path d="M3 21h18"/><path d="M12 9v8m-3.5-3.5L12 17l3.5-3.5"/></svg>`;
 export const ifcStructuralIcon = `<svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 21V8l9-6 9 6v13"/><path d="M9 21V12h6v9"/></svg>`;
 export const ifcMaterialMapIcon = `<svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`;
 

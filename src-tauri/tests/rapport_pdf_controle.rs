@@ -50,6 +50,13 @@ fn controle_eist_pdf_kop_en_een_pagina_per_vel() {
 }
 
 #[test]
+fn dynamisch_3d_rapport_gebruikt_werkelijk_paginatal() {
+    assert_eq!(controleer_pdf_met_verwacht_aantal(&pdf_met(7, " "), None), Ok(7));
+    let geen_pdf = controleer_pdf_met_verwacht_aantal(b"geen pdf", None).unwrap_err();
+    assert!(geen_pdf.contains("%PDF-"), "{geen_pdf}");
+}
+
+#[test]
 fn doelpad_moet_absoluut_zijn_en_op_pdf_eindigen() {
     assert!(doelpad(&json!({})).is_err());
     assert!(doelpad(&json!({ "pad": "rapport.pdf" })).unwrap_err().contains("absoluut"));

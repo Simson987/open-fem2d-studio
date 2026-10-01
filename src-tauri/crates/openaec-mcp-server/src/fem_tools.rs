@@ -20,7 +20,7 @@
 //!
 //! DE MODELVORM IS DIE VAN HET PROJECTBESTAND
 //! Het `model`-object in de schema's hieronder is exact de vorm die in een
-//! `.ifcfem2d`-bestand staat en die `bouwMultiInput` leest — dezelfde velden,
+//! `.ifcfem`-bestand staat en die `bouwMultiInput` leest — dezelfde velden,
 //! dezelfde namen, dezelfde enum-waarden. Bewust geen eigen, vereenvoudigd
 //! vocabulaire aan de buitenkant: dat zou hier een handgeschreven vertaling
 //! vergen (welke veer bij `type: "spring"` hoort, een lastpositie in mm naar
@@ -95,7 +95,7 @@ fn fout(code: &str, melding: impl Into<String>, remedie: impl Into<String>) -> R
 /// Fout uit de sidecar-aansturing → `RpcError`, met code, melding, remedie en
 /// detail onaangetast. Er wordt hier niets samengevat: `detail` bevat het veld
 /// dat de sidecar aanwees, en dat is bij een invoerfout het enige bruikbare.
-fn van_sidecar(f: SidecarFout) -> RpcError {
+pub(crate) fn van_sidecar(f: SidecarFout) -> RpcError {
     let remedie = f.remedie.clone().unwrap_or_default();
     RpcError {
         // Een fout in wat de aanroeper aanleverde — de payload zelf of een staaf
@@ -250,7 +250,7 @@ fn model_payload(
                      doorgerekend zou worden is dan niet af te lezen aan de aanroep."
                 ),
                 "Geef precies één van beide: `model` voor een model in het verzoek, \
-                 `project_path` voor een opgeslagen .ifcfem2d-bestand.",
+                 `project_path` voor een opgeslagen .ifcfem-bestand (of ouder .ifcfem2d).",
             ));
         }
         (None, None) => {
@@ -258,7 +258,7 @@ fn model_payload(
                 ARGUMENT_ONGELDIG,
                 format!("`{tool}` kreeg geen model: `model` en `project_path` ontbreken beide."),
                 "Geef `model` (het model zelf) of `project_path` (een absoluut pad naar \
-                 een .ifcfem2d-bestand).",
+                 een .ifcfem-bestand).",
             ));
         }
     }
@@ -277,7 +277,7 @@ fn lees_projectbestand(pad: &str) -> Result<String, RpcError> {
         fout(
             BESTAND_ONLEESBAAR,
             format!("Het projectbestand `{pad}` kon niet worden gelezen ({e})."),
-            "Geef een absoluut pad naar een .ifcfem2d-bestand dat met deze versie is \
+            "Geef een absoluut pad naar een .ifcfem-bestand (of ouder .ifcfem2d) dat met deze versie is \
              opgeslagen, en controleer de leesrechten.",
         )
     })
@@ -1199,12 +1199,12 @@ fn schema_loads() -> Value {
     })
 }
 
-/// Het model, in exact de vorm van een `.ifcfem2d`-projectbestand.
+/// Het model, in exact de vorm van een `.ifcfem`-projectbestand.
 fn schema_fem_model() -> Value {
     json!({
         "type": "object",
         "additionalProperties": false,
-        "description": "Het rekenmodel in de vorm van een .ifcfem2d-projectbestand. Geometrie in mm met z positief omhoog; krachten in kN, koppels in kNm, lijnlasten in kN/m staaflengte. Onbekende velden worden GEWEIGERD, niet genegeerd.",
+        "description": "Het rekenmodel in de vorm van een .ifcfem-projectbestand. Geometrie in mm met z positief omhoog; krachten in kN, koppels in kNm, lijnlasten in kN/m staaflengte. Onbekende velden worden GEWEIGERD, niet genegeerd.",
         "required": ["nodes", "beams", "supports", "loadCases"],
         "properties": {
             "nodes": schema_nodes(),
@@ -1264,7 +1264,7 @@ fn schema_gevolgklasse() -> Value {
 fn schema_project_path() -> Value {
     json!({
         "type": "string",
-        "description": "Absoluut pad naar een .ifcfem2d-bestand. Alleen-lezen; de server schrijft nooit naar de schijf."
+        "description": "Absoluut pad naar een .ifcfem-bestand (of ouder .ifcfem2d). Alleen-lezen; de server schrijft nooit naar de schijf."
     })
 }
 
@@ -1292,7 +1292,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "load_fem_project",
-            "description": "Leest een opgeslagen .ifcfem2d-projectbestand en geeft het model, de combinaties en tellingen terug — zodat een constructeur op zijn eigen model kan laten rekenen in plaats van het over te typen. De combinaties zijn die waarmee `solve_fem_model` met `project_path` zou rekenen: ze gaan door dezelfde functie als het openen in de app, dus de standaardset van versie 0.3.11 en ouder, standaardcombinaties van een andere gevolgklasse en verouderde windgeneratorcombinaties komen vervangen terug, en een bestand zonder combinaties geeft de standaardset (`combinations_source` = \"bestand\" of \"standaard\"). `gevolgklasse` is de klasse waarvoor ze zijn opgesteld: uit de projectgegevens, anders uit het kenmerk van de standaardcombinaties in het bestand, anders CC2. Wat er vervangen is, een aangenomen klasse en elke FOUT in de combinatieset staan in `warnings`. Geef de combinaties ongewijzigd terug aan `solve_fem_model`, samen met die `gevolgklasse`. Alleen-lezen: er is geen tool die naar de schijf schrijft.",
+            "description": "Leest een opgeslagen .ifcfem-projectbestand (of ouder .ifcfem2d) en geeft het model, de combinaties en tellingen terug — zodat een constructeur op zijn eigen model kan laten rekenen in plaats van het over te typen. De combinaties zijn die waarmee `solve_fem_model` met `project_path` zou rekenen: ze gaan door dezelfde functie als het openen in de app, dus de standaardset van versie 0.3.11 en ouder, standaardcombinaties van een andere gevolgklasse en verouderde windgeneratorcombinaties komen vervangen terug, en een bestand zonder combinaties geeft de standaardset (`combinations_source` = \"bestand\" of \"standaard\"). `gevolgklasse` is de klasse waarvoor ze zijn opgesteld: uit de projectgegevens, anders uit het kenmerk van de standaardcombinaties in het bestand, anders CC2. Wat er vervangen is, een aangenomen klasse en elke FOUT in de combinatieset staan in `warnings`. Geef de combinaties ongewijzigd terug aan `solve_fem_model`, samen met die `gevolgklasse`. Alleen-lezen: er is geen tool die naar de schijf schrijft.",
             "inputSchema": {
                 "type": "object",
                 "additionalProperties": false,

@@ -124,6 +124,14 @@
   --theme-btn-secondary-text: #36363E;
   --theme-btn-secondary-hover-bg: rgba(217, 119, 6, 0.10);
   --theme-btn-secondary-hover-border: rgba(217, 119, 6, 0.30);
+
+  /* ─── Selectiekader (CAD) ─── venster (van links naar rechts) met een
+     doorgetrokken rand; crossing (van rechts naar links) gestippeld, met een
+     lichtere vulling. Zelfde waarden als op het altijd witte 3D-podium. */
+  --theme-select-window-stroke: var(--theme-select-window-stroke-light);
+  --theme-select-window-fill: var(--theme-select-window-fill-light);
+  --theme-select-crossing-stroke: var(--theme-select-crossing-stroke-light);
+  --theme-select-crossing-fill: var(--theme-select-crossing-fill-light);
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -220,6 +228,11 @@
   --theme-btn-secondary-text: #FAFAF9;
   --theme-btn-secondary-hover-bg: rgba(217, 119, 6, 0.2);
   --theme-btn-secondary-hover-border: rgba(217, 119, 6, 0.3);
+
+  --theme-select-window-stroke: #60A5FA;
+  --theme-select-window-fill: rgba(96, 165, 250, 0.16);
+  --theme-select-crossing-stroke: #4ADE80;
+  --theme-select-crossing-fill: rgba(74, 222, 128, 0.08);
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -315,6 +328,11 @@
   --theme-btn-secondary-text: #FAFAF9;
   --theme-btn-secondary-hover-bg: rgba(217, 119, 6, 0.2);
   --theme-btn-secondary-hover-border: rgba(217, 119, 6, 0.3);
+
+  --theme-select-window-stroke: #60A5FA;
+  --theme-select-window-fill: rgba(96, 165, 250, 0.16);
+  --theme-select-crossing-stroke: #4ADE80;
+  --theme-select-crossing-fill: rgba(74, 222, 128, 0.08);
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -410,6 +428,11 @@
   --theme-btn-secondary-text: #E0E7FF;
   --theme-btn-secondary-hover-bg: rgba(96, 165, 250, 0.20);
   --theme-btn-secondary-hover-border: rgba(96, 165, 250, 0.30);
+
+  --theme-select-window-stroke: #93C5FD;
+  --theme-select-window-fill: rgba(147, 197, 253, 0.16);
+  --theme-select-crossing-stroke: #4ADE80;
+  --theme-select-crossing-fill: rgba(74, 222, 128, 0.08);
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -505,6 +528,11 @@
   --theme-btn-secondary-text: #FFFFFF;
   --theme-btn-secondary-hover-bg: rgba(255, 215, 0, 0.25);
   --theme-btn-secondary-hover-border: #FFD700;
+
+  --theme-select-window-stroke: #00E5FF;
+  --theme-select-window-fill: rgba(0, 229, 255, 0.18);
+  --theme-select-crossing-stroke: #7CFC00;
+  --theme-select-crossing-fill: rgba(124, 252, 0, 0.10);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -532,4 +560,11 @@
      ook deze twee zijn materiaalkleuren en geen themakleuren. */
   --theme-materiaal-lijn: #2A2A30;
   --theme-materiaal-beugel: #55555E;
+
+  /* Selectiekader op een wit tekenvlak: het lichte thema, en het 3D-podium,
+     dat in élk thema wit is (de WebGL-scène heeft een witte achtergrond). */
+  --theme-select-window-stroke-light: #2563EB;
+  --theme-select-window-fill-light: rgba(37, 99, 235, 0.12);
+  --theme-select-crossing-stroke-light: #16A34A;
+  --theme-select-crossing-fill-light: rgba(22, 163, 74, 0.07);
 }

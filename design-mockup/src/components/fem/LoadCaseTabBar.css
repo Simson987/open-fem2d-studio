@@ -33,6 +33,10 @@
   scrollbar-width: none;
   touch-action: pan-x;
   overscroll-behavior-x: contain;
+  /* De scrollbreedte is een hele pixel, de tabs niet altijd (andere letters
+     op Linux): zonder deze marge blijft er van de laatste tab soms een pixel
+     buiten beeld, ook helemaal rechts. */
+  padding-inline-end: 2px;
 }
 .lc-tab-cases::-webkit-scrollbar { display: none; }
 /* Lange namen (windgenerator) afgekort; de volledige naam staat in `title`. */

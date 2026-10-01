@@ -1,0 +1,12 @@
+[package]
+name = "open-fem-3d"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "Open FEM Studio adapter for the pinned external 3D frame engine"
+
+[dependencies]
+# Externe rekenkern (AGPL-3.0), vastgezet op één revisie; bron en licentie: zie UPSTREAM.md.
+rekenkern = { git = "https://github.com/lambdaclass/stabileo.git", rev = "7d87e551b765c88956df95b375e0ef0befda53f7", package = "dedaliano-engine", default-features = false }
+serde = { workspace = true }
+serde_json = { workspace = true }

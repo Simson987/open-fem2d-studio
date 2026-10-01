@@ -27,6 +27,10 @@
  * van belastinggeval selecteert bestaande resultaten en rekent nooit opnieuw.
  */
 import { verwerkToets } from "../../lib/commandoReeks";
+import { lijnlastPijlIntervallen } from "../../lib/lijnlastPijlen";
+import { verborgenLijnlastLabels } from "../../lib/lijnlastLabels";
+import { kaderModus, selecteerInKader, type SchermPunt } from "../../lib/kaderSelectie";
+import { escapeActie, isInvoerVeld, volgDialoogBijToets } from "../../lib/escapeToets";
 import { lastIdVanKlik } from "../../lib/klikOpLast";
 import { laatVeldLos } from "../../lib/undoRoute";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
@@ -46,6 +50,8 @@ import { useResultaatInfoStore } from "../../stores/resultaatInfoStore";
 // Doorsnedenaam en begin-/eindmaten van een verlopende staaf: dezelfde
 // keuring als de solver en de rekenkern gebruiken; zie lib/verloopKeuze.
 import { doorsnedeNaamVertaald, verloopMaten } from "../../lib/verloopKeuze";
+import { profielKleuring2d } from "../../lib/profielKleur";
+import ProfielKleurLegenda from "./ProfielKleurLegenda";
 import { kipsteunBeelden } from "../../lib/kipsteunBeeld";
 import KipsteunLaag from "./KipsteunLaag";
 import { modelAanzicht } from "../../lib/aanzichtGeometrie";
@@ -602,6 +608,20 @@ export default function FemCanvas(props: FemCanvasProps) {
   void props.updateNode;
 
   const svgRef = useRef<SVGSVGElement>(null);
+  /**
+   * Pointer-events kunnen veel sneller binnenkomen dan het scherm tekent.
+   * Een gewone hover of pan zette voorheen bij ieder event React-state, waarna
+   * het volledige SVG-model opnieuw werd opgebouwd. Op een snelle muis liep
+   * dat op tot honderden renders per seconde. Bewaar alleen de nieuwste
+   * positie en verwerk die maximaal één keer per animatieframe.
+   */
+  const hoverFrameRef = useRef(0);
+  const pendingHoverRef = useRef<{ sx: number; sy: number } | null>(null);
+  const panFrameRef = useRef(0);
+  const pendingPanRef = useRef<{
+    sx: number; sy: number;
+    startSX: number; startSY: number; startOX: number; startOY: number;
+  } | null>(null);
   const [size, setSize] = useState({ w: 1000, h: 600 });
   const [hoverModel, setHoverModel] = useState<{ x: number; z: number } | null>(null);
   const [snapNode, setSnapNode] = useState<number | null>(null);
@@ -614,6 +634,10 @@ export default function FemCanvas(props: FemCanvasProps) {
    */
   const [beamDoorgaan, setBeamDoorgaan] = useState(false);
   const [plateCorners, setPlateCorners] = useState<number[]>([]);
+  const [selectedPlateElement, setSelectedPlateElement] = useState<{
+    plateId: number;
+    elementId: number;
+  } | null>(null);
   // Openinggereedschap (stap 2): rechthoek slepen binnen een plaat. Start en
   // eind in modelcoördinaten (mm, gesnapt), de plaat waarin gestart is.
   const [openingDrag, setOpeningDrag] = useState<{
@@ -640,10 +664,23 @@ export default function FemCanvas(props: FemCanvasProps) {
   // model afhankelijk, dus niet opnieuw bij pannen, zoomen of hover.
   const toonKipsteunen = displayFlags.kipsteunen !== false;
   // Weergavevlaggen van het venster Zichtbaarheid (issue #47).
+  const toonKnopen = vlagAan(displayFlags, "knopen");
+  const toonStaven = vlagAan(displayFlags, "staven");
+  const toonPlaten = vlagAan(displayFlags, "platen");
+  const toonBelastingen = vlagAan(displayFlags, "belastingen");
+  const toonAssenstelsel = vlagAan(displayFlags, "assenstelsel");
   const toonKnoopnummers = vlagAan(displayFlags, "knoopnummers");
   const toonStaafnummers = vlagAan(displayFlags, "staafnummers");
   const toonPeilmaten = vlagAan(displayFlags, "peilmaten");
   const toonMaatlijnen = vlagAan(displayFlags, "maatlijnen");
+  // Profielen in kleur (lib/profielKleur.ts): per uniek profiel een kleur uit
+  // het vaste palet, gesorteerd op de taalonafhankelijke naam; de legenda
+  // rechtsonder toont dezelfde regels. Alleen van model en taal afhankelijk.
+  const toonProfielKleur = toonStaven && vlagAan(displayFlags, "profielKleur");
+  const profielKleuren = useMemo(
+    () => (toonProfielKleur ? profielKleuring2d(beams, tCommon) : null),
+    [toonProfielKleur, beams, tCommon],
+  );
   const kipBeelden = useMemo(
     () => (toonKipsteunen ? kipsteunBeelden({ nodes, beams, supports, plates }) : []),
     [toonKipsteunen, nodes, beams, supports, plates],
@@ -875,6 +912,11 @@ export default function FemCanvas(props: FemCanvasProps) {
     return () => ro.disconnect();
   }, []);
 
+  useEffect(() => () => {
+    if (hoverFrameRef.current) cancelAnimationFrame(hoverFrameRef.current);
+    if (panFrameRef.current) cancelAnimationFrame(panFrameRef.current);
+  }, []);
+
   // ── Coordinate transforms (view-aware) ─────────────────────────────────
   const worldToScreen = useCallback((mx: number, mz: number) => ({
     x: ORIGIN_X + view.offsetX + mx * view.scale,
@@ -885,6 +927,10 @@ export default function FemCanvas(props: FemCanvasProps) {
     x: (sx - ORIGIN_X - view.offsetX) / view.scale,
     z: (size.h - ORIGIN_Y_FROM_BOTTOM + view.offsetY - sy) / view.scale,
   }), [size.h, view]);
+
+  // De cursor en het tekenwerk raadplegen deze verbindingen op ieder frame.
+  // Een Map voorkomt een volledige knopenscan voor elk staafeind.
+  const nodesById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
 
   // Snap per soort aan/uit — de knopjes staan in de statusbalk onderin
   // (StatusBar). Alles uit = vrij tekenen/slepen op de exacte muispositie.
@@ -993,8 +1039,8 @@ export default function FemCanvas(props: FemCanvasProps) {
     const RADIUS_PX = 8;
     let best: { beamId: number; d: number; px: number; py: number } | null = null;
     for (const b of beams) {
-      const nA = nodes.find(n => n.id === b.from);
-      const nB = nodes.find(n => n.id === b.to);
+      const nA = nodesById.get(b.from);
+      const nB = nodesById.get(b.to);
       if (!nA || !nB) continue;
       const a = worldToScreen(nA.x, nA.z);
       const c = worldToScreen(nB.x, nB.z);
@@ -1011,7 +1057,7 @@ export default function FemCanvas(props: FemCanvasProps) {
     if (!best) return null;
     const w = screenToWorld(best.px, best.py);
     return { beamId: best.beamId, x: snap(w.x), z: snap(w.z) };
-  }, [beams, nodes, worldToScreen, screenToWorld, snap]);
+  }, [beams, nodesById, worldToScreen, screenToWorld, snap]);
 
   /**
    * Positie op een staaf als FRACTIE 0..1 vanaf de startknoop, voor een punt
@@ -1234,19 +1280,83 @@ export default function FemCanvas(props: FemCanvasProps) {
   const cancelRotate = useCallback(() => setRotateMode(null), []);
 
   // ── Mouse handlers ──────────────────────────────────────────────────────
+  const updatePointerHover = (sx: number, sy: number) => {
+    const startedAt = performance.now();
+    const world = screenToWorld(sx, sy);
+    const snapped = snapPunt(world.x, world.z);
+    // Bij raster-snap vallen meerdere pointer-events vaak op exact hetzelfde
+    // modelpunt. Houd dan hetzelfde object vast zodat React de update overslaat.
+    setHoverModel((previous) => previous?.x === snapped.x && previous.z === snapped.z
+      ? previous
+      : { x: snapped.x, z: snapped.z });
+    // Hover halo (Select tool only)
+    if (tool === "select" && !boxSelect && !dragState && !grabMode && !rotateMode) {
+      setSnapNode(findSnapNode(sx, sy));
+      const sb = findSnapBeam(sx, sy);
+      setSnapBeam(sb?.beamId ?? null);
+    } else {
+      // Beam-targeting tools snap to BEAMS, not nodes. Showing a node-halo
+      // while placing a line load is misleading ("puntje aan je cursor").
+      const isBeamTool = tool === "addLineLoad" || tool === "addThermal";
+      const hoverNode = isBeamTool ? null : findSnapNode(sx, sy);
+      setSnapNode(hoverNode);
+      // Het puntlast-gereedschap snapt zowel op een KNOOP (voorrang) als op
+      // een vrije positie op een STAAF; de staaf-halo verschijnt daarom pas
+      // wanneer er geen knoop onder de muis ligt.
+      const isPuntlastTool = tool === "addPointLoad" || tool === "addPointLoadH";
+      const beamSnapTools = tool === "addSubNode" || isBeamTool
+        || (isPuntlastTool && hoverNode === null);
+      setSnapBeam(beamSnapTools ? (findSnapBeam(sx, sy)?.beamId ?? null) : null);
+    }
+    if (svgRef.current) {
+      svgRef.current.dataset.femPointerUpdateMs = (performance.now() - startedAt).toFixed(2);
+      svgRef.current.dataset.femPointerUpdateMode = "frame";
+    }
+    return { world, snapped };
+  };
+
+  const schedulePointerHover = (sx: number, sy: number) => {
+    pendingHoverRef.current = { sx, sy };
+    if (hoverFrameRef.current) return;
+    hoverFrameRef.current = requestAnimationFrame(() => {
+      hoverFrameRef.current = 0;
+      const pending = pendingHoverRef.current;
+      pendingHoverRef.current = null;
+      if (pending) updatePointerHover(pending.sx, pending.sy);
+    });
+  };
+
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = svgRef.current!.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
 
     if (panRef.current.active) {
-      const dx = sx - panRef.current.startSX;
-      const dy = sy - panRef.current.startSY;
-      setView(v => ({
-        ...v,
-        offsetX: panRef.current.startOX + dx,
-        offsetY: panRef.current.startOY + dy,
-      }));
+      pendingPanRef.current = {
+        sx, sy,
+        startSX: panRef.current.startSX,
+        startSY: panRef.current.startSY,
+        startOX: panRef.current.startOX,
+        startOY: panRef.current.startOY,
+      };
+      if (!panFrameRef.current) {
+        panFrameRef.current = requestAnimationFrame(() => {
+          panFrameRef.current = 0;
+          const pending = pendingPanRef.current;
+          pendingPanRef.current = null;
+          if (!pending) return;
+          const dx = pending.sx - pending.startSX;
+          const dy = pending.sy - pending.startSY;
+          setView(v => {
+            const offsetX = pending.startOX + dx;
+            const offsetY = pending.startOY + dy;
+            return v.offsetX === offsetX && v.offsetY === offsetY
+              ? v
+              : { ...v, offsetX, offsetY };
+          });
+          if (svgRef.current) svgRef.current.dataset.femPanUpdateMode = "frame";
+        });
+      }
       return;
     }
 
@@ -1283,28 +1393,16 @@ export default function FemCanvas(props: FemCanvasProps) {
       return;
     }
 
-    // Snap to stramien intersection if close, else to grid spacing.
-    const snapped = snapPunt(world.x, world.z);
-    setHoverModel({ x: snapped.x, z: snapped.z });
-    // Hover halo (Select tool only)
-    if (tool === "select" && !boxSelect && !dragState && !grabMode && !rotateMode) {
-      setSnapNode(findSnapNode(sx, sy));
-      const sb = findSnapBeam(sx, sy);
-      setSnapBeam(sb?.beamId ?? null);
-    } else {
-      // Beam-targeting tools snap to BEAMS, not nodes. Showing a node-halo
-      // while placing a line load is misleading ("puntje aan je cursor").
-      const isBeamTool = tool === "addLineLoad" || tool === "addThermal";
-      const hoverNode = isBeamTool ? null : findSnapNode(sx, sy);
-      setSnapNode(hoverNode);
-      // Het puntlast-gereedschap snapt zowel op een KNOOP (voorrang) als op
-      // een vrije positie op een STAAF; de staaf-halo verschijnt daarom pas
-      // wanneer er geen knoop onder de muis ligt.
-      const isPuntlastTool = tool === "addPointLoad" || tool === "addPointLoadH";
-      const beamSnapTools = tool === "addSubNode" || isBeamTool
-        || (isPuntlastTool && hoverNode === null);
-      setSnapBeam(beamSnapTools ? (findSnapBeam(sx, sy)?.beamId ?? null) : null);
+    // Zonder actieve sleep is dit alleen hover/preview. Bundel de events tot
+    // één update per beeldframe; actieve gereedschappen hieronder houden hun
+    // directe positie voor een nauwkeurige commit bij mouse-up.
+    if (!dragState && !boxSelect && !openingDrag && !grabMode && !rotateMode) {
+      schedulePointerHover(sx, sy);
+      return;
     }
+
+    // Snap to stramien intersection if close, else to grid spacing.
+    const { snapped } = updatePointerHover(sx, sy);
 
     // Drag-to-move: update ghost preview delta in mm (snapped) — maar pas
     // zodra de muis echt bewogen is; tot die tijd is het een klik.
@@ -1353,6 +1451,9 @@ export default function FemCanvas(props: FemCanvasProps) {
   };
 
   const handleMouseLeave = () => {
+    if (hoverFrameRef.current) cancelAnimationFrame(hoverFrameRef.current);
+    hoverFrameRef.current = 0;
+    pendingHoverRef.current = null;
     setHoverModel(null);
     setSnapNode(null);
     setSnapBeam(null);
@@ -1545,29 +1646,31 @@ export default function FemCanvas(props: FemCanvasProps) {
         setBoxSelect(null);
         return;
       }
-      // Collect nodes inside box (in screen coords).
-      const pickedNodes: number[] = [];
-      for (const n of nodes) {
-        const p = worldToScreen(n.x, n.z);
-        if (p.x >= minSX && p.x <= maxSX && p.y >= minSY && p.y <= maxSY) {
-          pickedNodes.push(n.id);
-        }
-      }
-      // Beams: both endpoints must be inside the box.
-      const pickedNodeSet = new Set(pickedNodes);
-      const pickedBeams: number[] = [];
-      for (const b of beams) {
-        if (pickedNodeSet.has(b.from) && pickedNodeSet.has(b.to)) {
-          pickedBeams.push(b.id);
-        }
-      }
-      // Plates: all corner nodes must be inside the box.
-      const pickedPlates: number[] = [];
-      for (const p of plates) {
-        if (p.nodeIds.every(id => pickedNodeSet.has(id))) {
-          pickedPlates.push(p.id);
-        }
-      }
+      // CAD-conventie (lib/kaderSelectie): van links naar rechts gesleept is
+      // een venster — knopen binnen, staven met beide einden binnen, platen
+      // met alle hoeken binnen. Van rechts naar links is een crossing — ook
+      // een staaf die door het kader loopt en een plaat die het overlapt.
+      const modus = kaderModus(boxSelect.startSX, boxSelect.endSX);
+      const scherm = new Map(nodes.map((n) => [n.id, worldToScreen(n.x, n.z)]));
+      const gekozen = selecteerInKader({
+        knopen: nodes.map((n) => ({ id: n.id, p: scherm.get(n.id)! })),
+        staven: beams.flatMap((b) => {
+          const a = scherm.get(b.from), c = scherm.get(b.to);
+          return a && c ? [{ id: b.id, a, b: c }] : [];
+        }),
+        platen: plates.flatMap((p) => {
+          const rand = p.nodeIds.map((id) => scherm.get(id));
+          if (rand.some((q) => !q)) return [];
+          return [{
+            id: p.id,
+            rand: rand as SchermPunt[],
+            gaten: (p.openingen ?? []).map((o) => o.punten.map((q) => worldToScreen(q.x, q.z))),
+          }];
+        }),
+      }, { left: minSX, right: maxSX, top: minSY, bottom: maxSY }, modus);
+      const pickedNodes = gekozen.knoopIds;
+      const pickedBeams = gekozen.staafIds;
+      const pickedPlates = gekozen.plaatIds;
       let nextSel: Selection;
       if (pickedNodes.length === 0 && pickedBeams.length === 0 && pickedPlates.length === 0) {
         nextSel = boxSelect.additive ? selection : null;
@@ -1935,15 +2038,16 @@ export default function FemCanvas(props: FemCanvasProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Ignore when typing in an input
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
+      if (isInvoerVeld(e.target)) return;
 
       // Staat er een dialoog open, dan zijn de sneltoetsen van het canvas niet
       // aan de beurt. Escape sloot hieronder namelijk óók de selectie weg,
       // waarmee het eigenschappenpaneel en de dialoog die eruit geopend was
       // verdwenen: één druk op Escape klapte de profieleditor én de
-      // profielkiezer weg in plaats van alleen het bovenste venster.
-      if (erIsEenDialoogOpen()) return;
+      // profielkiezer weg in plaats van alleen het bovenste venster. De stand
+      // van vóór de toets telt (lib/escapeToets): de dialoog die Escape zelf
+      // sluit, is hier anders al weg.
+      if (dialoog.open()) return;
 
       // ── Active modal: grab/rotate ────────────────────────────────────
       // Numeric / X / Z / Enter / Esc handled here before generic Escape.
@@ -2159,9 +2263,12 @@ export default function FemCanvas(props: FemCanvasProps) {
         setBoxSelect(null);
         setDragState(null);
         setContextMenu(null);
-        setSelection(null);
-        // ESC verlaat ook de actieve tool en valt terug naar Selecteren.
-        if (tool !== "select") onToolChange?.("select");
+        // Escape verlaat het lopende gereedschap en valt terug naar
+        // Selecteren; de selectie blijft dan staan. Een tweede Escape in
+        // Selecteren heft de selectie op (lib/escapeToets, gelijk aan 3D).
+        const actie = escapeActie(tool, selection !== null);
+        if (actie === "naarSelecteren") onToolChange?.("select");
+        else if (actie === "selectieOpheffen") setSelection(null);
         return;
       }
       if (e.key === "Delete" || e.key === "Backspace") {
@@ -2203,11 +2310,13 @@ export default function FemCanvas(props: FemCanvasProps) {
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === " ") setSpaceHeld(false);
     };
+    const dialoog = volgDialoogBijToets(erIsEenDialoogOpen);
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKeyUp);
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKeyUp);
+      dialoog.stop();
     };
   }, [selection, deleteSelected, setSelection, nodes, size, hoverModel,
       grabMode, rotateMode, cancelGrab, commitGrab, cancelRotate, commitRotate,
@@ -2226,7 +2335,7 @@ export default function FemCanvas(props: FemCanvasProps) {
       const rect = svg.getBoundingClientRect();
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
-      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      const factor = e.deltaY < 0 ? 1.35 : 1 / 1.35;
       setView(v => {
         const nextScale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, v.scale * factor));
         if (nextScale === v.scale) return v;
@@ -2277,44 +2386,39 @@ export default function FemCanvas(props: FemCanvasProps) {
   }, [nodes.length, size.w, size.h, fitView]);
 
   // ── Render helpers ──────────────────────────────────────────────────────
-  const renderGrid = () => {
+  const gridLayer = useMemo(() => {
     if (!grid.show || !grid.showLines) return null;
-    const lines: React.ReactNode[] = [];
     const minor = grid.spacingMm * view.scale;
-    // Skip rendering if the minor step would render thousands of lines
+    // Het raster tekende voorheen een apart SVG-element per lijn. Die hele
+    // lijst werd bij iedere hover opnieuw gemaakt en vergeleken door React.
+    // Eén herhalend SVG-patroon behoudt dezelfde wereld-oorsprong en zoom.
     if (minor < 4 || minor > 400) return null;
     const major = minor * 5;
-    // X grid lines (vertical lines in screen) — start at origin offset
     const baseX = ORIGIN_X + view.offsetX;
-    const xStart = baseX - Math.ceil(baseX / minor) * minor;
-    for (let x = xStart; x < size.w; x += minor) {
-      if (x < 0) continue;
-      const rel = (x - baseX);
-      const isMajor = Math.abs(rel % major) < 0.5 || Math.abs((rel % major) - major) < 0.5;
-      lines.push(<line key={`vx${x.toFixed(1)}`} x1={x} y1={0} x2={x} y2={size.h}
-        className={isMajor ? "fem-grid-major" : "fem-grid-minor"} />);
-    }
-    // Y grid lines
     const baseY = size.h - ORIGIN_Y_FROM_BOTTOM + view.offsetY;
-    const yStart = baseY - Math.ceil(baseY / minor) * minor;
-    for (let y = yStart; y < size.h; y += minor) {
-      if (y < 0) continue;
-      const rel = y - baseY;
-      const isMajor = Math.abs(rel % major) < 0.5 || Math.abs((rel % major) - major) < 0.5;
-      lines.push(<line key={`hy${y.toFixed(1)}`} x1={0} y1={y} x2={size.w} y2={y}
-        className={isMajor ? "fem-grid-major" : "fem-grid-minor"} />);
-    }
-    return lines;
-  };
+    const minorLines = [1, 2, 3, 4].map((index) => {
+      const position = index * minor;
+      return `M ${position} 0 V ${major} M 0 ${position} H ${major}`;
+    }).join(" ");
+    return <>
+      <defs>
+        <pattern id="fem-grid-pattern" x={baseX} y={baseY}
+          width={major} height={major} patternUnits="userSpaceOnUse">
+          <path d={minorLines} className="fem-grid-minor" fill="none" />
+          <path d={`M 0 0 V ${major} M 0 0 H ${major}`}
+            className="fem-grid-major" fill="none" />
+        </pattern>
+      </defs>
+      <rect width={size.w} height={size.h} fill="url(#fem-grid-pattern)" />
+    </>;
+  }, [grid.show, grid.showLines, grid.spacingMm, view.scale, view.offsetX, view.offsetY, size.w, size.h]);
 
-  const beamsWithCoords = beams.map(b => {
-    const n1 = nodes.find(n => n.id === b.from);
-    const n2 = nodes.find(n => n.id === b.to);
-    if (!n1 || !n2) return null;
-    const p1 = worldToScreen(n1.x, n1.z);
-    const p2 = worldToScreen(n2.x, n2.z);
-    return { b, p1, p2 };
-  }).filter(Boolean) as { b: Beam; p1: { x: number; y: number }; p2: { x: number; y: number } }[];
+  const beamsWithCoords = useMemo(() => beams.flatMap((b) => {
+    const n1 = nodesById.get(b.from);
+    const n2 = nodesById.get(b.to);
+    if (!n1 || !n2) return [];
+    return [{ b, p1: worldToScreen(n1.x, n1.z), p2: worldToScreen(n2.x, n2.z) }];
+  }), [beams, nodesById, worldToScreen]);
 
   const renderSupport = (s: Support) => {
     const n = nodes.find(nn => nn.id === s.nodeId);
@@ -2581,6 +2685,18 @@ export default function FemCanvas(props: FemCanvasProps) {
       }
     }
   }
+  // Lastlabels: in een rechte keten van staven met dezelfde volle lijnlast
+  // krijgt alleen de middelste staaf het label "q=… kN/m" (lib/lijnlastLabels).
+  const verborgenLabels = verborgenLijnlastLabels(
+    activeLoads.flatMap((l) => l.type === "lineLoad" && l.beamId !== undefined ? [{
+      id: l.id, beamId: l.beamId, caseId: l.caseId, q: l.q,
+      trapezium: l.qStart !== undefined || l.qEnd !== undefined,
+      qDir: l.qDir ?? "z", qCoord: l.qCoord ?? "global",
+      startFrac: l.startFrac ?? 0, endFrac: l.endFrac ?? 1,
+      stapelOffset: qStapel.get(l.id)?.offset ?? 0,
+    }] : []),
+    beams, nodes,
+  );
 
   /**
    * Hoogte (px) van de gestapelde q-banden op fractie `t` van staaf `beamId`,
@@ -2797,9 +2913,9 @@ export default function FemCanvas(props: FemCanvasProps) {
       const lenA = Math.min(LINE_LOAD_MAX_PX, Math.max(LINE_LOAD_MIN_PX, Math.abs(qa) * lineLoadPxPerKnm || LINE_LOAD_MIN_PX));
       const lenB = Math.min(LINE_LOAD_MAX_PX, Math.max(LINE_LOAD_MIN_PX, Math.abs(qb) * lineLoadPxPerKnm || LINE_LOAD_MIN_PX));
       const arrows: React.ReactNode[] = [];
-      // Pijldichtheid gelijk houden: volle lengte → 8 tussenstappen,
-      // deellast naar rato (minimaal 2).
-      const N = Math.max(2, Math.round(8 * (bF - aF)));
+      // Pijlen op een vaste h.o.h.-afstand op het scherm (lib/lijnlastPijlen):
+      // een korte staaf loopt niet vol, een lange blijft niet leeg.
+      const N = lijnlastPijlIntervallen(Math.hypot(sdx, sdy));
       // Build the polyline along the arrow tails so we can draw a connecting
       // "load envelope" (silhouette) + clickable hit-region.
       const tailPts: { x: number; y: number }[] = [];
@@ -2851,7 +2967,7 @@ export default function FemCanvas(props: FemCanvasProps) {
           {/* Visible top line connecting all arrow tails */}
           <polyline className="fem-lineload-tip" points={tailPts.map(p => `${p.x},${p.y}`).join(" ")} />
           {arrows}
-          {isTrap ? (
+          {verborgenLabels.has(l.id) ? null : isTrap ? (
             // Trapezium: split label into qa / qb so each value clicks into its own input
             <>
               <text x={labelX} y={labelY} className="fem-load-text-static">q=</text>
@@ -2973,8 +3089,8 @@ export default function FemCanvas(props: FemCanvasProps) {
       const lenA = lenVan(qa), lenB = lenVan(qb);
       const dirA = qa < 0 ? 1 : -1;   // zelfde flip-conventie als de lijnlast
       const dirB = qb < 0 ? 1 : -1;
-      // Pijldichtheid gelijk houden: volle rand → 8 tussenstappen, deel naar rato.
-      const N = Math.max(2, Math.round(8 * (bF - aF)));
+      // Dezelfde h.o.h.-afstand op het scherm als de lijnlast op een staaf.
+      const N = lijnlastPijlIntervallen(Math.hypot(sdx, sdy));
       const arrows: React.ReactNode[] = [];
       const tailPts: { x: number; y: number }[] = [];
       for (let i = 0; i <= N; i++) {
@@ -3273,9 +3389,10 @@ export default function FemCanvas(props: FemCanvasProps) {
     // engine (alleen getoond als de plaat openingen heeft — dáár moet je
     // zien dat het net het gat volgt), het CDT-pad uit de actuele cache
     // (zelfde signatuurcheck als de engine). Driehoeken én vierhoeken.
+    // Alleen met de weergave "Mesh" aan (Zichtbaarheid, standaard uit).
     let meshPreview: React.ReactNode = null;
     const toonRaster = openingen.length > 0 || !plaatRekentAlsRaster(punten, openingen.map((o) => o.punten));
-    const mesh = toonRaster ? plaatPreviewMesh(pl, punten, verwezenKnoopPunten) : null;
+    const mesh = displayFlags.plaatMesh === true && toonRaster ? plaatPreviewMesh(pl, punten, verwezenKnoopPunten) : null;
     if (mesh) {
       const schermPunt = mesh.points.map(p2 => worldToScreen(p2.x, p2.z));
       const vlak = (ids: readonly number[]) => ids.map(pi => `${schermPunt[pi].x.toFixed(2)},${schermPunt[pi].y.toFixed(2)}`).join(" ");
@@ -3299,7 +3416,11 @@ export default function FemCanvas(props: FemCanvasProps) {
           d={pad}
           fillRule="evenodd"
           className={`fem-plate${isSel ? " selected" : ""}`}
-          onClick={(e) => { if (tool === "select") { e.stopPropagation(); setSelection({ type: "plate", id: pl.id }); } }}
+          onClick={(e) => { if (tool === "select") {
+            e.stopPropagation();
+            setSelectedPlateElement(null);
+            setSelection({ type: "plate", id: pl.id });
+          } }}
         />
         {openingen.map((o) => (
           <path key={`po${pl.id}-${o.id}`} d={lus(o.punten)} className="fem-plate-opening" pointerEvents="none" />
@@ -3388,13 +3509,39 @@ export default function FemCanvas(props: FemCanvasProps) {
     const platenRes = overlayResult?.plateElements;
     if (!platenRes || platenRes.length === 0) return null;
     let min = Infinity, max = -Infinity;
+    // Elementspanningen zijn constant per element. Voor een leesbaar continu
+    // contourbeeld middelen we ze eerst in elke gedeelde meshknoop. Elk
+    // element gebruikt daarna dezelfde hoekwaarden als zijn buren, zodat de
+    // kleur aan een elementrand niet verspringt.
+    const somPerKnoop = new Map<string, { som: number; aantal: number }>();
+    const sleutel = (x: number, z: number) => `${x.toFixed(6)}:${z.toFixed(6)}`;
     for (const pr of platenRes) {
       const r = pr.ranges[plaatComponent];
       if (r) { min = Math.min(min, r.min); max = Math.max(max, r.max); }
+      for (const element of pr.elements) {
+        const waarde = element[plaatComponent];
+        for (const hoek of element.corners) {
+          const key = sleutel(hoek.x, hoek.z);
+          const huidig = somPerKnoop.get(key) ?? { som: 0, aantal: 0 };
+          huidig.som += waarde;
+          huidig.aantal += 1;
+          somPerKnoop.set(key, huidig);
+        }
+      }
     }
     if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
-    return { platenRes, min, max };
+    const waardePerKnoop = new Map(Array.from(somPerKnoop, ([key, waarde]) =>
+      [key, waarde.som / waarde.aantal] as const));
+    return { platenRes, min, max, waardePerKnoop, sleutel };
   }, [overlayResult, plaatComponent, displayFlags.plaatContour, showLoads]);
+
+  const geselecteerdPlaatElement = useMemo(() => {
+    if (!plaatContourData || !selectedPlateElement ||
+        selection?.type !== "plate" || selection.id !== selectedPlateElement.plateId) return null;
+    const plaat = plaatContourData.platenRes.find((item) => item.plateId === selectedPlateElement.plateId);
+    const element = plaat?.elements.find((item) => item.elementId === selectedPlateElement.elementId);
+    return element ? { ...selectedPlateElement, waarde: element[plaatComponent] } : null;
+  }, [plaatContourData, selectedPlateElement, selection, plaatComponent]);
 
   // ── Plaattoets op het canvas (issue #15) ────────────────────────────────
   // Per getoetst element de omhullende UC als kleur, en per plaat een badge
@@ -3644,7 +3791,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         </defs>
 
         {/* Grid */}
-        <g className="fem-grid-layer">{renderGrid()}</g>
+        <g className="fem-grid-layer">{gridLayer}</g>
 
         {/* Structural grid (stramien) — amber axis lines bounded by the model
             extents (with padding) + dimension chains between consecutive axes.
@@ -3978,7 +4125,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         })()}
 
         {/* Plates BELOW beams (so beam lines render on top) */}
-        <g className="fem-plates-layer">
+        {toonPlaten && <g className="fem-plates-layer">
           {plates.map(renderPlate)}
           {/* Spanningscontouren (P3.2): elementvlakken op de gekozen
               component, in dezelfde laag boven de basis-plaatpolygonen maar
@@ -3986,37 +4133,60 @@ export default function FemCanvas(props: FemCanvasProps) {
               staafdiagrammen blijven dus onaangetast. pointerEvents none:
               kliks vallen door naar de plaatpolygoon (selectie werkt). */}
           {plaatContourData && (
-            <g pointerEvents="none">
+            <g pointerEvents={tool === "select" ? "visiblePainted" : "none"}>
               {plaatContourData.platenRes.flatMap(pr =>
                 pr.elements.map(el => {
-                  const pts = el.corners.map(c => {
-                    const p = worldToScreen(c.x, c.z);
-                    return `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
-                  }).join(" ");
+                  const screenCorners = el.corners.map(c => worldToScreen(c.x, c.z));
+                  const pts = screenCorners.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
                   const span = plaatContourData.max - plaatContourData.min;
-                  const t = span > 1e-12
-                    ? (el[plaatComponent] - plaatContourData.min) / span
-                    : 0.5; // uniform veld → middenkleur
-                  const toonMesh = displayFlags.plaatMesh !== false;
+                  const hoekwaarden = el.corners.map((corner) =>
+                    plaatContourData.waardePerKnoop.get(plaatContourData.sleutel(corner.x, corner.z)) ?? el[plaatComponent]);
+                  let minIndex = 0, maxIndex = 0;
+                  hoekwaarden.forEach((waarde, index) => {
+                    if (waarde < hoekwaarden[minIndex]) minIndex = index;
+                    if (waarde > hoekwaarden[maxIndex]) maxIndex = index;
+                  });
+                  const tMin = span > 1e-12 ? (hoekwaarden[minIndex] - plaatContourData.min) / span : 0.5;
+                  const tMax = span > 1e-12 ? (hoekwaarden[maxIndex] - plaatContourData.min) / span : 0.5;
+                  const gradientId = `plaat-gradient-${pr.plateId}-${el.elementId}`;
+                  const toonMesh = displayFlags.plaatMesh === true;
+                  const geselecteerd = geselecteerdPlaatElement?.plateId === pr.plateId &&
+                    geselecteerdPlaatElement.elementId === el.elementId;
                   return (
-                    <polygon
-                      key={`pc${pr.plateId}-${el.elementId}`}
-                      points={pts}
-                      fill={contourKleur(t)}
-                      fillOpacity={0.85}
-                      stroke={toonMesh ? "rgba(15, 23, 42, 0.35)" : "none"}
-                      strokeWidth={toonMesh ? 0.6 : 0}
-                    />
+                    <g key={`pc${pr.plateId}-${el.elementId}`}>
+                      {minIndex !== maxIndex && <defs>
+                        <linearGradient id={gradientId} gradientUnits="userSpaceOnUse"
+                          x1={screenCorners[minIndex].x} y1={screenCorners[minIndex].y}
+                          x2={screenCorners[maxIndex].x} y2={screenCorners[maxIndex].y}>
+                          <stop offset="0%" stopColor={contourKleur(tMin)} />
+                          <stop offset="100%" stopColor={contourKleur(tMax)} />
+                        </linearGradient>
+                      </defs>}
+                      <polygon
+                        points={pts}
+                        fill={minIndex === maxIndex ? contourKleur(tMin) : `url(#${gradientId})`}
+                        fillOpacity={0.88}
+                        stroke={geselecteerd ? "#111827" : toonMesh ? "rgba(15, 23, 42, 0.35)" : "none"}
+                        strokeWidth={geselecteerd ? 2.2 : toonMesh ? 0.6 : 0}
+                        role={tool === "select" ? "button" : undefined}
+                        aria-label={tool === "select" ? `Plaatelement ${el.elementId}` : undefined}
+                        onClick={tool === "select" ? (event) => {
+                          event.stopPropagation();
+                          setSelection({ type: "plate", id: pr.plateId });
+                          setSelectedPlateElement({ plateId: pr.plateId, elementId: el.elementId });
+                        } : undefined}
+                      />
+                    </g>
                   );
                 })
               )}
             </g>
           )}
-        </g>
+        </g>}
 
         {/* Plaattoets: elementen gekleurd naar hun omhullende UC, boven de
             spanningscontouren en onder de staven. */}
-        {plaatUcData && (
+        {toonPlaten && plaatUcData && (
           <g className="fem-plaat-uc" pointerEvents="none">
             {plaatUcData.flatMap((p) =>
               p.elementen.map((el) => (
@@ -4042,7 +4212,7 @@ export default function FemCanvas(props: FemCanvasProps) {
 
         {/* Aanzicht op ware grootte (issue #45): ONDER de systeemlijnen, zodat
             die zichtbaar en aanklikbaar blijven; de laag zelf vangt geen muis. */}
-        {toonAanzicht && aanzichten.length > 0 && (
+        {toonStaven && toonAanzicht && aanzichten.length > 0 && (
           <AanzichtLaag
             aanzichten={aanzichten}
             naarScherm={worldToScreen}
@@ -4052,7 +4222,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         )}
 
         {/* Beams */}
-        {beamsWithCoords.map(({ b, p1, p2 }) => {
+        {toonStaven && beamsWithCoords.map(({ b, p1, p2 }) => {
           const isSel = isBeamInSelection(b.id, selection);
           const isSnap = snapBeam === b.id;
           const selectBeam = (e: React.MouseEvent) => {
@@ -4067,11 +4237,14 @@ export default function FemCanvas(props: FemCanvasProps) {
             }
           };
           const openBeamProps = (e: React.MouseEvent) => { e.stopPropagation(); setEditingBeamId(b.id); };
+          // Profielkleur via CSS-variabelen: selectie en snap winnen in de CSS.
+          const pk = profielKleuren?.perStaaf.get(b.id);
           return (
             <g key={`beam${b.id}`}>
               <line
                 x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-                className={`fem-member${isSel ? " selected" : ""}${isSnap ? " snap" : ""}${aanzichtHalf.has(b.id) ? " systeemlijn" : ""}`}
+                className={`fem-member${isSel ? " selected" : ""}${isSnap ? " snap" : ""}${aanzichtHalf.has(b.id) ? " systeemlijn" : ""}${pk ? " profielkleur" : ""}`}
+                style={pk ? ({ "--fem-profielkleur": pk.kleur, "--fem-profielstreep": pk.streep || "none" } as React.CSSProperties) : undefined}
                 onClick={selectBeam}
                 onDoubleClick={openBeamProps}
               />
@@ -4097,7 +4270,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         {/* Kipsteunen: symbolen langs de staaf, en van de geselecteerde of
             aangewezen staaf de kipveldlengtes in mm. Boven de staven, zodat
             een symbool niet achter de staaflijn verdwijnt. */}
-        {toonKipsteunen && kipBeelden.length > 0 && (
+        {toonStaven && toonKipsteunen && kipBeelden.length > 0 && (
           <KipsteunLaag
             beelden={kipBeelden}
             naarScherm={worldToScreen}
@@ -4191,10 +4364,10 @@ export default function FemCanvas(props: FemCanvasProps) {
         {/* Zonder "Belastingwaarden" (issue #47) blijven de pijlen staan en
             verdwijnen alleen de getallen (CSS: .zonder-waarden). */}
         <g className={`fem-loads-layer${vlagAan(displayFlags, "lastWaarden") ? "" : " zonder-waarden"}`}>
-          {activeLoads.map(renderLoad)}
+          {toonBelastingen && activeLoads.map(renderLoad)}
         </g>
         {/* Automatisch eigen gewicht (issue #42) — alleen-lezen, eigen component. */}
-        {showLoads && !resultsMode && eigenGewicht && eigenGewicht.caseId === activeLoadCaseId && (
+        {toonBelastingen && showLoads && !resultsMode && eigenGewicht && eigenGewicht.caseId === activeLoadCaseId && (
           <EigenGewichtLaag overzicht={eigenGewicht} nodes={nodes} beams={beams} plates={plates}
             worldToScreen={worldToScreen} autoLabel={tCommon("eigenGewicht.auto")} />
         )}
@@ -4203,7 +4376,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         {vlagAan(displayFlags, "opleggingen") && supports.map(renderSupport)}
 
         {/* Nodes */}
-        {nodes.map(n => {
+        {toonKnopen && nodes.map(n => {
           const p = worldToScreen(n.x, n.z);
           const isSnap = snapNode === n.id;
           const isSel = isNodeInSelection(n.id, selection);
@@ -4393,8 +4566,11 @@ export default function FemCanvas(props: FemCanvasProps) {
           const y = Math.min(boxSelect.startSY, boxSelect.endSY);
           const w = Math.abs(boxSelect.endSX - boxSelect.startSX);
           const h = Math.abs(boxSelect.endSY - boxSelect.startSY);
+          // Venster doorgetrokken, crossing (naar links gesleept) gestippeld.
+          const modus = kaderModus(boxSelect.startSX, boxSelect.endSX);
           return (
-            <rect x={x} y={y} width={w} height={h} className="fem-box-select" pointerEvents="none" />
+            <rect x={x} y={y} width={w} height={h} data-modus={modus}
+              className={`fem-box-select${modus === "crossing" ? " crossing" : ""}`} pointerEvents="none" />
           );
         })()}
 
@@ -4682,7 +4858,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         {/* Assenstelsel-widget: +X (rechts), +Z (omhoog) en een boogpijl om de
             y-as die de positieve My-richting toont — zelfde draairichting als
             een positief puntmoment op het canvas (sweep 1). */}
-        <div
+        {toonAssenstelsel && <div
           className="fem-hud-card fem-coord-widget"
           style={{ marginTop: 6, padding: 6 }}
           title={tCommon("canvas.hud.axesTitle")}
@@ -4720,7 +4896,7 @@ export default function FemCanvas(props: FemCanvasProps) {
             {/* Oorsprong */}
             <circle cx={26} cy={41} r={2.5} fill="var(--theme-accent)" />
           </svg>
-        </div>
+        </div>}
       </div>
       <div className="fem-hud fem-hud-tr">
         <div className="fem-hud-card fem-hud-mono">
@@ -4741,12 +4917,18 @@ export default function FemCanvas(props: FemCanvasProps) {
             : <span>(——, ——) m</span>}
         </div>
       </div>
-      {/* Modelcontrole — zie `lib/modelControle.ts`. Alleen zichtbaar wanneer
-          er iets te melden is; klappen open/dicht met een klik. De snapknopjes
-          die hier eerder stonden zijn verhuisd naar de statusbalk onderin,
-          waar ze per soort aan en uit te zetten zijn. */}
-      {bevindingen.length > 0 && (
-        <div className="fem-hud fem-hud-br">
+      {/* Rechtsonder, als één kolom (dus nooit over elkaar): de legenda van
+          "Profielen in kleur" en daaronder de modelcontrole. */}
+      {((profielKleuren && profielKleuren.regels.length > 0) || bevindingen.length > 0) && (
+        <div className="fem-hud fem-hud-br fem-hud-kolom">
+          {profielKleuren && (
+            <ProfielKleurLegenda regels={profielKleuren.regels} variant="2d" className="fem-hud-card" />
+          )}
+          {/* Modelcontrole — zie `lib/modelControle.ts`. Alleen zichtbaar wanneer
+              er iets te melden is; klappen open/dicht met een klik. De snapknopjes
+              die hier eerder stonden zijn verhuisd naar de statusbalk onderin,
+              waar ze per soort aan en uit te zetten zijn. */}
+          {bevindingen.length > 0 && (
           <div className={`fem-hud-card fem-controle-kaart${aantalFouten > 0 ? " fout" : ""}`}>
             <button
               className="fem-controle-kop"
@@ -4796,6 +4978,7 @@ export default function FemCanvas(props: FemCanvasProps) {
               </div>
             )}
           </div>
+          )}
         </div>
       )}
 
@@ -4827,6 +5010,17 @@ export default function FemCanvas(props: FemCanvasProps) {
             </div>
             <span style={{ fontSize: 10, opacity: 0.7 }}>
               {PLAAT_COMPONENTEN[plaatComponent].eenheid}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {geselecteerdPlaatElement && (
+        <div className="fem-hud" style={{ left: 12, bottom: 54 }}>
+          <div className="fem-hud-card" style={{ padding: "7px 10px", fontSize: 11 }}>
+            <strong>Plaatelement {geselecteerdPlaatElement.elementId}</strong>
+            <span className="fem-hud-mono" style={{ marginLeft: 8 }}>
+              {PLAAT_COMPONENTEN[plaatComponent].label} = {fmtLegenda(geselecteerdPlaatElement.waarde)} {PLAAT_COMPONENTEN[plaatComponent].eenheid}
             </span>
           </div>
         </div>

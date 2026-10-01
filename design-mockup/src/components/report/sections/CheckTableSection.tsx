@@ -282,7 +282,7 @@ export default function CheckTableSection() {
           <p className="rpt-note rpt-maatgevend-toelichting">
             {t(
               "report.maatgevendToelichting",
-              "Per staaf staat de maatgevende toets met de combinatie en de positie x langs de staaf (mm vanaf het begin) waarop de kern haar rekende. Staat er geen combinatie of positie, dan levert de kern die bij deze toets niet (bijvoorbeeld bij de doorbuiging). Toetsen met de status n.v.t. of zonder unity check tellen niet mee als maatgevend.",
+              "Combinatie en x (mm vanaf staafbegin) tonen het maatgevende rekenpunt. Toetsen zonder unity check tellen niet mee.",
             )}
           </p>
 

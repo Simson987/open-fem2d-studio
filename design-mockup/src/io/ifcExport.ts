@@ -3,7 +3,7 @@
  * MÉT het bouwkundige model dat ernaast hoort.
  *
  * Schrijft een geldig STEP Physical File (ISO 10303-21, "SPF") zonder externe
- * dependencies. Er staan TWEE modellen in het bestand, aan elkaar geknoopt:
+ * dependencies. Standaard staan twee modellen in het bestand, aan elkaar geknoopt:
  *
  *  1. het ANALYTISCHE model — knopen, staven, profielen, materialen,
  *     opleggingen en lasten (IfcStructuralAnalysisModel en wat daaronder
@@ -16,6 +16,10 @@
  * naar het bouwkundige element dat hij voorstelt. Dat is de weg die IFC4
  * daarvoor heeft; zonder die relatie zijn het twee losse modellen in één
  * bestand en moet de lezer maar raden welke staaf bij welke ligger hoort.
+ * Een aanwezig 3D-raamwerk met staven krijgt daarnaast een zelfstandig
+ * IfcStructuralAnalysisModel (LOADING_3D) met 3D-topologie, zes opleg-DOF's
+ * en globale knoopkrachten en -momenten. Er worden geen 3D-profielen of
+ * solverresultaten afgeleid.
  *
  * Waarom het bouwkundige model erbij hoort: een bestand met alleen het
  * rekenmodel laat de constructie mét haar lasten zien, maar niet WAARMEE ze
@@ -172,6 +176,7 @@ import {
   STEEL_SECTION_DIMS,
   type SteelSectionDims, type SteelSectionProps,
 } from "../lib/steelSectionDims.generated";
+import { profielAliasSleutel } from "../lib/strip";
 import type { MemberCheckResult } from "../lib/checkTypes";
 import { isEigenProfiel, zoekEigenDoorsnede } from "../lib/profieleditor/eigenDoorsnedenStore";
 import type { EigenDoorsnede } from "../lib/profieleditor/types";
@@ -180,6 +185,7 @@ import {
   isSteelCheckResult, isConcreteCheckResult,
 } from "../lib/checkTypes";
 import type { ReinforcementCage } from "../lib/types/concrete/ReinforcementCage";
+import { openFem3DLoadCaseId, openFem3DMemberAxes, parseOpenFem3DModel, type OpenFem3DModel, type OpenFem3DPlateBoundarySegment } from "../components/openFem3d/openFem3dModel";
 
 // ── Invoertype ──────────────────────────────────────────────────────────────
 
@@ -211,6 +217,8 @@ export interface IfcRekenmodelInput {
   supports: Support[];
   loads: Load[];
   loadCases: LoadCase[];
+  /** Separate 3D frame in metres; exported as its own IFC4 analysis model. */
+  model3d?: OpenFem3DModel;
   /**
    * Platen in het model. Een plaat mét hoekknopen (`nodeIds`, minstens
    * drie) wordt een IfcStructuralSurfaceMember (SHELL) met zijn dikte,
@@ -326,9 +334,14 @@ export interface IfcExportOpties {
 // bibliotheek, waardoor gangbare profielen — bijvoorbeeld SHS 60x60x4 —
 // zonder doorsnede in het IFC-bestand terechtkwamen.
 
-/** Zelfde normalisatie als de sleutels van STEEL_SECTION_DIMS. */
+/**
+ * Zelfde normalisatie als de sleutels van STEEL_SECTION_DIMS; massief rond
+ * geschreven als "Ø24" of "ROND 24" wordt "RD24" (`lib/rondStaal.ts`), en
+ * platstaal als "FL 80x10" of "Platstaal 80x10" wordt "STRIP80X10"
+ * (`lib/strip.ts`).
+ */
 function normaliseerProfielnaam(naam: string): string {
-  return naam.replace(/[\s\-.]/g, "").toUpperCase();
+  return profielAliasSleutel(naam.replace(/[\s\-.]/g, "").toUpperCase());
 }
 
 /** Afmetingen van een catalogusprofiel, of undefined als het onbekend is. */
@@ -933,6 +946,20 @@ export function bouwIfcRekenmodel(
       lijst(leden), "$", ref(analyseModel));
   }
 
+  // Het 3D-raamwerk is een zelfstandig analysemodel. De node- en staaf-id's
+  // mogen gelijk zijn aan de 2D-id's; alle IFC-GUID-seeds en #id-maps hieronder
+  // hebben een eigen 3d:-naamruimte. Oude 2D-projecten schrijven geen extra
+  // entiteiten en houden daardoor exact dezelfde export.
+  if (model.model3d !== undefined) {
+    const openFem3d = parseOpenFem3DModel(model.model3d);
+    if (openFem3d.beams.length > 0 || (openFem3d.plates?.length ?? 0) > 0) {
+      schrijf3DRekenmodel(w, openFem3d, {
+        context, gebouw, richtingY, richtingZ, projectNaam, zonderLasten,
+        loadCases: model.loadCases,
+      });
+    }
+  }
+
   // ── Omlijsting (ISO 10303-21) ────────────────────────────────────────────
   const bestandsnaam = opties.bestandsnaam ?? `${projectNaam}.ifc`;
   const tijdstempel = opties.tijdstempel ?? "";
@@ -958,7 +985,7 @@ export function bouwIfcRekenmodel(
     `FILE_DESCRIPTION((${beschrijving}),'2;1');`,
     `FILE_NAME(${stepString(bestandsnaam)},${stepString(tijdstempel)},` +
       `(${auteur}),(${organisatie}),` +
-      "'Open FEM2D Studio','Open FEM2D Studio','');",
+      "'Open FEM Studio','Open FEM Studio','');",
     "FILE_SCHEMA(('IFC4'));",
     "ENDSEC;",
     "DATA;",
@@ -996,6 +1023,442 @@ function schrijfOplegging(w: SpfSchrijver, steun: Support): number {
   }
   return w.ent("IFCBOUNDARYNODECONDITION",
     stepString(naam), dx, "$", dz, "$", ry, "$");
+}
+
+/**
+ * IFC4 Structural Analysis Domain: LOADING_3D has no OrientationOf2DPlane;
+ * each node/beam uses Vertex/Edge topology. See buildingSMART IFC4 entities
+ * IfcStructuralAnalysisModel, IfcStructuralPointConnection and
+ * IfcStructuralCurveMember. An IfcStructuralPointConnection requires at least
+ * one connecting member, so isolated editor nodes cannot be written as IFC
+ * structural connections. 3D coordinates already use metres.
+ */
+function gekoppelde3DKnopen(openFem3d: OpenFem3DModel): Set<number> {
+  return new Set([
+    ...openFem3d.beams.flatMap((staaf) => [staaf.startNodeId, staaf.endNodeId]),
+    ...(openFem3d.plates ?? []).flatMap((plaat) => [
+      ...plaat.nodeIds,
+      ...(plaat.openings ?? []).flatMap((opening) => opening.nodeIds),
+    ]),
+  ]);
+}
+
+type Punt3D = readonly [number, number, number];
+
+/** Dezelfde afgeronde hoekconstructie als de viewer, als IFC-polygoonbenadering. */
+function bemonsterAfgeronde3DLus(punten: Punt3D[], straal: number, segmenten = 10): Punt3D[] {
+  if (punten.length < 3 || straal <= 0) return punten;
+  const verschil = (a: Punt3D, b: Punt3D): Punt3D => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const lengte = (a: Punt3D) => Math.hypot(a[0], a[1], a[2]);
+  const schaal = (a: Punt3D, factor: number): Punt3D => [a[0] * factor, a[1] * factor, a[2] * factor];
+  const plus = (a: Punt3D, b: Punt3D): Punt3D => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const hoeken = punten.map((hoek, index) => {
+    const inkomend = verschil(punten[(index + punten.length - 1) % punten.length], hoek);
+    const uitgaand = verschil(punten[(index + 1) % punten.length], hoek);
+    const lengteIn = lengte(inkomend), lengteUit = lengte(uitgaand);
+    if (lengteIn <= 1e-12 || lengteUit <= 1e-12) return { start: hoek, hoek, einde: hoek };
+    const beperkt = Math.min(Math.max(0, straal), lengteIn * 0.45, lengteUit * 0.45);
+    return {
+      start: plus(hoek, schaal(inkomend, beperkt / lengteIn)),
+      hoek,
+      einde: plus(hoek, schaal(uitgaand, beperkt / lengteUit)),
+    };
+  });
+  const resultaat: Punt3D[] = [];
+  for (let index = 0; index < hoeken.length; index += 1) {
+    const huidige = hoeken[index];
+    resultaat.push(huidige.start);
+    for (let stap = 1; stap <= segmenten; stap += 1) {
+      const t = stap / segmenten, s = 1 - t;
+      resultaat.push([
+        s * s * huidige.start[0] + 2 * s * t * huidige.hoek[0] + t * t * huidige.einde[0],
+        s * s * huidige.start[1] + 2 * s * t * huidige.hoek[1] + t * t * huidige.einde[1],
+        s * s * huidige.start[2] + 2 * s * t * huidige.hoek[2] + t * t * huidige.einde[2],
+      ]);
+    }
+  }
+  return resultaat;
+}
+
+/** IFC PolyLoop kent alleen rechte zijden; sample de exact getekende bogen daarom beheerst. */
+function bemonsterGetekende3DLus(
+  grens: readonly OpenFem3DPlateBoundarySegment[],
+  knoopPerId: Map<number, { x: number; y: number; z: number }>,
+  segmenten = 12,
+): Punt3D[] {
+  const punt = (id: number): Punt3D => {
+    const knoop = knoopPerId.get(id)!;
+    return [knoop.x, knoop.y, knoop.z];
+  };
+  const resultaat: Punt3D[] = [punt(grens[0].startNodeId)];
+  for (const rand of grens) {
+    const einde = punt(rand.endNodeId);
+    if (rand.kind === "line") {
+      resultaat.push(einde);
+      continue;
+    }
+    const begin = punt(rand.startNodeId), stuur = punt(rand.controlNodeId);
+    for (let stap = 1; stap <= segmenten; stap += 1) {
+      const t = stap / segmenten, s = 1 - t;
+      resultaat.push([
+        s * s * begin[0] + 2 * s * t * stuur[0] + t * t * einde[0],
+        s * s * begin[1] + 2 * s * t * stuur[1] + t * t * einde[1],
+        s * s * begin[2] + 2 * s * t * stuur[2] + t * t * einde[2],
+      ]);
+    }
+  }
+  // Het sluitpunt is impliciet in IfcPolyLoop en mag niet dubbel voorkomen.
+  if (resultaat.length > 1) resultaat.pop();
+  return resultaat;
+}
+
+function schrijf3DRekenmodel(
+  w: SpfSchrijver,
+  openFem3d: OpenFem3DModel,
+  env: {
+    context: number;
+    gebouw: number;
+    richtingY: number;
+    richtingZ: number;
+    projectNaam: string;
+    zonderLasten: boolean;
+    loadCases: LoadCase[];
+  },
+): void {
+  const gekoppeld = gekoppelde3DKnopen(openFem3d);
+  const knoopLasten = env.zonderLasten
+    ? []
+    : (openFem3d.loads ?? []).filter((last) => gekoppeld.has(last.nodeId));
+  const staafLasten = env.zonderLasten ? [] : (openFem3d.memberLoads ?? []);
+  const staafPuntLasten = env.zonderLasten ? [] : (openFem3d.memberPointLoads ?? []);
+  const temperatuurLasten = env.zonderLasten ? [] : (openFem3d.thermalLoads ?? []);
+  const oppervlakteLasten = env.zonderLasten ? [] : (openFem3d.surfaceLoads ?? []);
+  const opgelegdeVerplaatsingen = env.zonderLasten ? [] : (openFem3d.supports ?? []).filter((steun) =>
+    Object.keys(steun.prescribed ?? {}).length > 0);
+  const opgelegdeVerplaatsingenGeval = 0;
+  const caseIds = [...new Set([
+    ...knoopLasten.map(openFem3DLoadCaseId),
+    ...staafLasten.map(openFem3DLoadCaseId),
+    ...staafPuntLasten.map(openFem3DLoadCaseId),
+    ...temperatuurLasten.map(openFem3DLoadCaseId),
+    ...oppervlakteLasten.map(openFem3DLoadCaseId),
+    ...(opgelegdeVerplaatsingen.length > 0 ? [opgelegdeVerplaatsingenGeval] : []),
+  ])].sort((a, b) => a - b);
+  const loadGroepen = new Map(caseIds.map((caseId) => {
+    const naam = caseId === opgelegdeVerplaatsingenGeval
+      ? "Opgelegde verplaatsingen"
+      : env.loadCases.find((loadCase) => loadCase.id === caseId)?.name ?? `Belastinggeval ${caseId}`;
+    return [caseId, w.ent("IFCSTRUCTURALLOADGROUP",
+      w.guid(`3d:lastgroep:${caseId}`), "$", stepString(naam), "$", "$",
+      ".LOAD_CASE.", ".NOTDEFINED.", ".NOTDEFINED.", "$", "$")] as const;
+  }));
+  const analyse3d = w.ent("IFCSTRUCTURALANALYSISMODEL",
+    w.guid("3d:analysemodel"), "$", stepString(`3D-rekenmodel ${env.projectNaam}`), "$", "$",
+    ".LOADING_3D.", "$", loadGroepen.size > 0 ? lijst([...loadGroepen.values()]) : "$", "$", "$");
+  w.ent("IFCRELSERVICESBUILDINGS",
+    w.guid("3d:dienst:model-gebouw"), "$", "$", "$", ref(analyse3d), lijst([env.gebouw]));
+
+  const steunPerKnoop = new Map((openFem3d.supports ?? []).map((steun) => [steun.nodeId, steun]));
+  const connectiePerKnoop = new Map<number, number>();
+  const puntPerKnoop = new Map<number, number>();
+  const vertexPerKnoop = new Map<number, number>();
+  const memberPerStaaf = new Map<number, number>();
+  const memberPerPlaat = new Map<number, number>();
+  const leden: number[] = [];
+  for (const knoop of openFem3d.nodes.filter((node) => gekoppeld.has(node.id))) {
+    const punt = w.ent("IFCCARTESIANPOINT",
+      `(${reeel(knoop.x)},${reeel(knoop.y)},${reeel(knoop.z)})`);
+    puntPerKnoop.set(knoop.id, punt);
+    const vertex = w.ent("IFCVERTEXPOINT", ref(punt));
+    vertexPerKnoop.set(knoop.id, vertex);
+    const topo = w.ent("IFCTOPOLOGYREPRESENTATION",
+      ref(env.context), "'Reference'", "'Vertex'", lijst([vertex]));
+    const vorm = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([topo]));
+    const steun = steunPerKnoop.get(knoop.id);
+    const conditie = steun !== undefined
+      ? w.ent("IFCBOUNDARYNODECONDITION",
+        stepString(`3D-oplegging knoop ${knoop.id}`),
+        ...([
+          [steun.ux, steun.springs?.kxKnPerM, "linear"],
+          [steun.uy, steun.springs?.kyKnPerM, "linear"],
+          [steun.uz, steun.springs?.kzKnPerM, "linear"],
+          [steun.rx, steun.springs?.krxKnmPerRad, "rotational"],
+          [steun.ry, steun.springs?.kryKnmPerRad, "rotational"],
+          [steun.rz, steun.springs?.krzKnmPerRad, "rotational"],
+        ] as const).map(([vast, veerwaarde, soort]) => vast
+          ? "IFCBOOLEAN(.T.)"
+          : veerwaarde !== undefined
+            ? `${soort === "linear" ? "IFCLINEARSTIFFNESSMEASURE" : "IFCROTATIONALSTIFFNESSMEASURE"}(${reeel(veerwaarde * 1000)})`
+            : "IFCBOOLEAN(.F.)"))
+      : undefined;
+    const connectie = w.ent("IFCSTRUCTURALPOINTCONNECTION",
+      w.guid(`3d:knoop:${knoop.id}`), "$", stepString(`3D-knoop ${knoop.id}`), "$", "$",
+      "$", ref(vorm), conditie !== undefined ? ref(conditie) : "$", "$");
+    connectiePerKnoop.set(knoop.id, connectie);
+    leden.push(connectie);
+  }
+
+  const knoopPerId = new Map(openFem3d.nodes.map((knoop) => [knoop.id, knoop]));
+  for (const staaf of openFem3d.beams) {
+    const van = knoopPerId.get(staaf.startNodeId)!;
+    const naar = knoopPerId.get(staaf.endNodeId)!;
+    const rand = w.ent("IFCEDGE", ref(vertexPerKnoop.get(van.id)!), ref(vertexPerKnoop.get(naar.id)!));
+    const topo = w.ent("IFCTOPOLOGYREPRESENTATION",
+      ref(env.context), "'Reference'", "'Edge'", lijst([rand]));
+    const vorm = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([topo]));
+    // IfcStructuralCurveMember.Axis defines local z. Schrijf de werkelijk
+    // gebruikte Z-up-as inclusief profielrotatie, zodat IFC, weergave,
+    // lokale staaflasten en solver dezelfde y/z-richting delen.
+    const lokaleAssen = openFem3DMemberAxes(van, naar, staaf.rollAngleRad ?? 0);
+    const dwarsrichting = w.ent("IFCDIRECTION",
+      "(" + reeel(lokaleAssen.ez[0]) + "," + reeel(lokaleAssen.ez[1]) + "," + reeel(lokaleAssen.ez[2]) + ")");
+    const rel = staaf.releases;
+    const beideEindenScharnier = !!rel && rel.myStart && rel.mzStart && rel.myEnd && rel.mzEnd;
+    const member = w.ent("IFCSTRUCTURALCURVEMEMBER",
+      w.guid(`3d:staaf:${staaf.id}`), "$", stepString(`3D-staaf ${staaf.id}`), "$", "$",
+      "$", ref(vorm), beideEindenScharnier ? ".PIN_JOINED_MEMBER." : ".RIGID_JOINED_MEMBER.", ref(dwarsrichting));
+    memberPerStaaf.set(staaf.id, member);
+    leden.push(member);
+    for (const [kant, nodeId] of [["start", staaf.startNodeId], ["eind", staaf.endNodeId]] as const) {
+      const my = kant === "start" ? rel?.myStart : rel?.myEnd;
+      const mz = kant === "start" ? rel?.mzStart : rel?.mzEnd;
+      const torsion = kant === "start" ? rel?.torsionStart : rel?.torsionEnd;
+      const conditie = my || mz || torsion
+        ? w.ent("IFCBOUNDARYNODECONDITION", stepString("3D-staafscharnier " + staaf.id + " " + kant),
+          "IFCBOOLEAN(.T.)", "IFCBOOLEAN(.T.)", "IFCBOOLEAN(.T.)",
+          "IFCBOOLEAN(" + (torsion ? ".F." : ".T.") + ")",
+          "IFCBOOLEAN(" + (my ? ".F." : ".T.") + ")",
+          "IFCBOOLEAN(" + (mz ? ".F." : ".T.") + ")")
+        : undefined;
+      w.ent("IFCRELCONNECTSSTRUCTURALMEMBER",
+        w.guid(`3d:staafrel:${staaf.id}:${kant}`), "$", "$", "$",
+        ref(member), ref(connectiePerKnoop.get(nodeId)!), conditie !== undefined ? ref(conditie) : "$", "$", "$", "$");
+    }
+  }
+  for (const plaat of openFem3d.plates ?? []) {
+    const buitenKnopen = plaat.nodeIds.map((id) => knoopPerId.get(id)!);
+    const buitenPunten = buitenKnopen.map((knoop) => [knoop.x, knoop.y, knoop.z] as const);
+    const oorsprong = buitenPunten[0];
+    const eerste = buitenPunten[1];
+    const ux = eerste[0] - oorsprong[0], uy = eerste[1] - oorsprong[1], uz = eerste[2] - oorsprong[2];
+    const uLengte = Math.hypot(ux, uy, uz);
+    const u: Punt3D = [ux / uLengte, uy / uLengte, uz / uLengte];
+    let normaal: Punt3D | null = null;
+    for (let index = 2; index < buitenPunten.length && normaal === null; index += 1) {
+      const q = buitenPunten[index];
+      const vx = q[0] - oorsprong[0], vy = q[1] - oorsprong[1], vz = q[2] - oorsprong[2];
+      const nx = u[1] * vz - u[2] * vy;
+      const ny = u[2] * vx - u[0] * vz;
+      const nz = u[0] * vy - u[1] * vx;
+      const nLengte = Math.hypot(nx, ny, nz);
+      if (nLengte > 1e-12) normaal = [nx / nLengte, ny / nLengte, nz / nLengte];
+    }
+    if (normaal === null) continue;
+    const schrijfPunt = (punt: Punt3D) => w.ent("IFCCARTESIANPOINT",
+      `(${reeel(punt[0])},${reeel(punt[1])},${reeel(punt[2])})`);
+    const buitenLusPunten = plaat.boundary
+      ? bemonsterGetekende3DLus(plaat.boundary, knoopPerId)
+      : bemonsterAfgeronde3DLus(buitenPunten, plaat.cornerRadiusM ?? 0);
+    const buitenLus = w.ent("IFCPOLYLOOP", lijst(buitenLusPunten.map(schrijfPunt)));
+    const buitenRand = w.ent("IFCFACEOUTERBOUND", ref(buitenLus), ".T.");
+    const binnenRanden = (plaat.openings ?? []).map((opening) => {
+      const openingPunten = opening.nodeIds.map((id) => {
+        const knoop = knoopPerId.get(id)!;
+        return [knoop.x, knoop.y, knoop.z] as const;
+      });
+      const lusPunten = opening.boundary
+        ? bemonsterGetekende3DLus(opening.boundary, knoopPerId)
+        : bemonsterAfgeronde3DLus(openingPunten, opening.cornerRadiusM ?? 0);
+      const lus = w.ent("IFCPOLYLOOP", lijst(lusPunten.map(schrijfPunt)));
+      return w.ent("IFCFACEBOUND", ref(lus), ".T.");
+    });
+    const normaalRichting = w.ent("IFCDIRECTION",
+      `(${reeel(normaal[0])},${reeel(normaal[1])},${reeel(normaal[2])})`);
+    const referentieRichting = w.ent("IFCDIRECTION",
+      `(${reeel(u[0])},${reeel(u[1])},${reeel(u[2])})`);
+    const assen = w.ent("IFCAXIS2PLACEMENT3D", ref(puntPerKnoop.get(plaat.nodeIds[0])!),
+      ref(normaalRichting), ref(referentieRichting));
+    const vlak = w.ent("IFCPLANE", ref(assen));
+    const vlakStuk = w.ent("IFCFACESURFACE", lijst([buitenRand, ...binnenRanden]), ref(vlak), ".T.");
+    const topo = w.ent("IFCTOPOLOGYREPRESENTATION",
+      ref(env.context), "'Reference'", "'Face'", lijst([vlakStuk]));
+    const vorm = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([topo]));
+    const member = w.ent("IFCSTRUCTURALSURFACEMEMBER",
+      w.guid(`3d:plaat:${plaat.id}`), "$", stepString(`3D-plaat ${plaat.id}`),
+      stepString(`${plaat.material ?? "geen materiaal"}; ${plaat.openings?.length ?? 0} opening(en); r=${nl(plaat.cornerRadiusM ?? 0)} m`),
+      "$", "$", ref(vorm), ".SHELL.", `IFCPOSITIVELENGTHMEASURE(${reeel(plaat.thicknessM)})`);
+    memberPerPlaat.set(plaat.id, member);
+    leden.push(member);
+    const gekoppeldePlaatknopen = [...new Set([
+      ...plaat.nodeIds,
+      ...(plaat.openings ?? []).flatMap((opening) => opening.nodeIds),
+    ])];
+    for (const nodeId of gekoppeldePlaatknopen) {
+      w.ent("IFCRELCONNECTSSTRUCTURALMEMBER",
+        w.guid(`3d:plaatrel:${plaat.id}:${nodeId}`), "$", "$", "$",
+        ref(member), ref(connectiePerKnoop.get(nodeId)!), "$", "$", "$", "$");
+    }
+    schrijfEigenschappen(w, "OpenFEM3D_Plaat", `3d:plaat:${plaat.id}`, [
+      eGeheel("Plaatnummer", plaat.id),
+      eMaat("Dikte", "IFCPOSITIVELENGTHMEASURE", plaat.thicknessM),
+      eMaat("Randstraal", "IFCPOSITIVELENGTHMEASURE", plaat.cornerRadiusM ?? 0),
+      eLabel("Materiaal", plaat.material ?? ""),
+      eLabel("Randsegmenten", plaat.boundary?.map((rand) => rand.kind === "arc"
+        ? `boog ${rand.startNodeId}-${rand.controlNodeId}-${rand.endNodeId}`
+        : `lijn ${rand.startNodeId}-${rand.endNodeId}`).join("; ") ?? "hoekpunten"),
+      eLabel("Hoekknopen", plaat.nodeIds.join(", ")),
+      eLabel("Openingen", (plaat.openings ?? []).map((opening) =>
+        `${opening.id}: ${opening.nodeIds.join(", ")} (r=${nl(opening.cornerRadiusM ?? 0)} m)`).join("; ") || "geen"),
+    ], [member]);
+  }
+  if (leden.length > 0) {
+    w.ent("IFCRELASSIGNSTOGROUP",
+      w.guid("3d:toekenning:model"), "$", "$", "$", lijst(leden), "$", ref(analyse3d));
+  }
+
+  if (loadGroepen.size > 0) {
+    const actiesPerGeval = new Map<number, number[]>(caseIds.map((caseId) => [caseId, []]));
+    for (const last of knoopLasten) {
+      const kracht = w.ent("IFCSTRUCTURALLOADSINGLEFORCE",
+        stepString(`3D-last ${last.id}`),
+        ...([last.fx, last.fy, last.fz]
+          .map((f) => `IFCFORCEMEASURE(${reeel(f * 1e3)})`)),
+        ...([last.mx, last.my, last.mz]
+          .map((m) => `IFCTORQUEMEASURE(${reeel(m * 1e3)})`)));
+      // For a point connection the action inherits its topology; IFC4's
+      // standard case requires ObjectPlacement and Representation to be $.
+      const actie = w.ent("IFCSTRUCTURALPOINTACTION",
+        w.guid(`3d:last:${last.id}`), "$", stepString(`3D-knooplast ${last.id}`), "$", "$",
+        "$", "$", ref(kracht), ".GLOBAL_COORDS.", "$");
+      w.ent("IFCRELCONNECTSSTRUCTURALACTIVITY",
+        w.guid(`3d:lastrel:${last.id}`), "$", "$", "$",
+        ref(connectiePerKnoop.get(last.nodeId)!), ref(actie));
+      actiesPerGeval.get(openFem3DLoadCaseId(last))!.push(actie);
+    }
+    for (const steun of opgelegdeVerplaatsingen) {
+      const waarde = steun.prescribed!;
+      const maat = w.ent("IFCSTRUCTURALLOADSINGLEDISPLACEMENT",
+        stepString(`3D-opgelegde verplaatsing knoop ${steun.nodeId}`),
+        ...([waarde.uxM, waarde.uyM, waarde.uzM]
+          .map((v) => v === undefined ? "$" : `IFCLENGTHMEASURE(${reeel(v)})`)),
+        ...([waarde.rxRad, waarde.ryRad, waarde.rzRad]
+          .map((v) => v === undefined ? "$" : `IFCPLANEANGLEMEASURE(${reeel(v)})`)));
+      const actie = w.ent("IFCSTRUCTURALPOINTACTION",
+        w.guid(`3d:opgelegde-verplaatsing:${steun.nodeId}`), "$",
+        stepString(`3D-opgelegde verplaatsing knoop ${steun.nodeId}`), "$", "$",
+        "$", "$", ref(maat), ".GLOBAL_COORDS.", "$");
+      w.ent("IFCRELCONNECTSSTRUCTURALACTIVITY",
+        w.guid(`3d:opgelegde-verplaatsing-rel:${steun.nodeId}`), "$", "$", "$",
+        ref(connectiePerKnoop.get(steun.nodeId)!), ref(actie));
+      actiesPerGeval.get(opgelegdeVerplaatsingenGeval)!.push(actie);
+    }
+    for (const last of staafLasten) {
+      const member = memberPerStaaf.get(last.beamId);
+      const staaf = openFem3d.beams.find((item) => item.id === last.beamId);
+      if (member === undefined || !staaf) continue;
+      const van = knoopPerId.get(staaf.startNodeId)!;
+      const naar = knoopPerId.get(staaf.endNodeId)!;
+      const lengte = Math.hypot(naar.x - van.x, naar.y - van.y, naar.z - van.z);
+      const lijnkracht = (qy: number, qz: number, naam: string) => w.ent(
+        "IFCSTRUCTURALLOADLINEARFORCE", stepString(naam), "$",
+        `IFCLINEARFORCEMEASURE(${reeel(qy * 1e3)})`,
+        `IFCLINEARFORCEMEASURE(${reeel(qz * 1e3)})`, "$", "$", "$",
+      );
+      const volledig = last.startPositionM <= 1e-12 && Math.abs(last.endPositionM - lengte) <= 1e-9;
+      const uniform = last.qyStart === last.qyEnd && last.qzStart === last.qzEnd;
+      let actie: number;
+      if (volledig && uniform) {
+        const kracht = lijnkracht(last.qyStart, last.qzStart, `3D q ${last.id}`);
+        actie = w.ent("IFCSTRUCTURALLINEARACTION",
+          w.guid(`3d:staaflast:${last.id}`), "$", stepString(`3D-staaflast ${last.id}`), "$", "$",
+          "$", "$", ref(kracht), ".LOCAL_COORDS.", "$", ".TRUE_LENGTH.", ".CONST.");
+      } else {
+        const waarden: number[] = [];
+        const posities: string[] = [];
+        if (last.startPositionM > 1e-12) {
+          waarden.push(lijnkracht(0, 0, `3D q ${last.id} nul`));
+          posities.push(reeel(0));
+        }
+        waarden.push(lijnkracht(last.qyStart, last.qzStart, `3D q ${last.id} begin`));
+        posities.push(reeel(last.startPositionM));
+        waarden.push(lijnkracht(last.qyEnd, last.qzEnd, `3D q ${last.id} eind`));
+        posities.push(reeel(last.endPositionM));
+        if (last.endPositionM < lengte - 1e-9) {
+          waarden.push(lijnkracht(0, 0, `3D q ${last.id} nul`));
+          posities.push(reeel(lengte));
+        }
+        const config = w.ent("IFCSTRUCTURALLOADCONFIGURATION",
+          stepString(`3D q ${last.id}`), lijst(waarden),
+          `(${posities.map((positie) => `(${positie})`).join(",")})`);
+        actie = w.ent("IFCSTRUCTURALCURVEACTION",
+          w.guid(`3d:staaflast:${last.id}`), "$", stepString(`3D-staaflast ${last.id}`), "$", "$",
+          "$", "$", ref(config), ".LOCAL_COORDS.", "$", ".TRUE_LENGTH.",
+          volledig ? ".LINEAR." : ".POLYGONAL.");
+      }
+      w.ent("IFCRELCONNECTSSTRUCTURALACTIVITY",
+        w.guid(`3d:staaflastrel:${last.id}`), "$", "$", "$", ref(member), ref(actie));
+      actiesPerGeval.get(openFem3DLoadCaseId(last))!.push(actie);
+    }
+    for (const last of staafPuntLasten) {
+      const member = memberPerStaaf.get(last.beamId);
+      const staaf = openFem3d.beams.find((item) => item.id === last.beamId);
+      if (member === undefined || !staaf) continue;
+      const van = knoopPerId.get(staaf.startNodeId)!;
+      const naar = knoopPerId.get(staaf.endNodeId)!;
+      const lengte = Math.hypot(naar.x - van.x, naar.y - van.y, naar.z - van.z);
+      const fractie = lengte > 0 ? last.positionM / lengte : 0;
+      const punt = w.ent("IFCCARTESIANPOINT", `(${reeel(van.x + (naar.x - van.x) * fractie)},${reeel(van.y + (naar.y - van.y) * fractie)},${reeel(van.z + (naar.z - van.z) * fractie)})`);
+      const as = w.ent("IFCAXIS2PLACEMENT3D", ref(punt), "$", "$");
+      const plaatsing = w.ent("IFCLOCALPLACEMENT", "$", ref(as));
+      const kracht = w.ent("IFCSTRUCTURALLOADSINGLEFORCE",
+        stepString(`3D-staafpuntlast ${last.id}`),
+        "IFCFORCEMEASURE(0)", `IFCFORCEMEASURE(${reeel(last.py * 1e3)})`,
+        `IFCFORCEMEASURE(${reeel(last.pz * 1e3)})`,
+        "IFCTORQUEMEASURE(0)", "IFCTORQUEMEASURE(0)", "IFCTORQUEMEASURE(0)");
+      const actie = w.ent("IFCSTRUCTURALPOINTACTION",
+        w.guid(`3d:staafpuntlast:${last.id}`), "$", stepString(`3D-staafpuntlast ${last.id}`), "$", "$",
+        ref(plaatsing), "$", ref(kracht), ".LOCAL_COORDS.", "$");
+      w.ent("IFCRELCONNECTSSTRUCTURALACTIVITY",
+        w.guid(`3d:staafpuntlastrel:${last.id}`), "$", "$", "$", ref(member), ref(actie));
+      actiesPerGeval.get(openFem3DLoadCaseId(last))!.push(actie);
+    }
+    for (const last of temperatuurLasten) {
+      const member = memberPerStaaf.get(last.beamId);
+      if (member === undefined) continue;
+      const temperatuur = w.ent("IFCSTRUCTURALLOADTEMPERATURE",
+        stepString(`3D ΔT ${last.id}`),
+        `IFCTHERMODYNAMICTEMPERATUREMEASURE(${reeel(last.deltaTUniformK)})`,
+        `IFCTHERMODYNAMICTEMPERATUREMEASURE(${reeel(last.deltaTGradientYK)})`,
+        `IFCTHERMODYNAMICTEMPERATUREMEASURE(${reeel(last.deltaTGradientZK)})`);
+      const actie = w.ent("IFCSTRUCTURALLINEARACTION",
+        w.guid(`3d:temperatuur:${last.id}`), "$", stepString(`3D-temperatuur ${last.id}`), "$", "$",
+        "$", "$", ref(temperatuur), ".LOCAL_COORDS.", "$", "$", ".CONST.");
+      w.ent("IFCRELCONNECTSSTRUCTURALACTIVITY",
+        w.guid(`3d:temperatuurrel:${last.id}`), "$", "$", "$", ref(member), ref(actie));
+      actiesPerGeval.get(openFem3DLoadCaseId(last))!.push(actie);
+    }
+    for (const last of oppervlakteLasten) {
+      const member = memberPerPlaat.get(last.plateId);
+      if (member === undefined) continue;
+      const belasting = w.ent("IFCSTRUCTURALLOADPLANARFORCE",
+        stepString(`3D-oppervlaktelast ${last.id}`),
+        `IFCPLANARFORCEMEASURE(${reeel(last.qx * 1e3)})`,
+        `IFCPLANARFORCEMEASURE(${reeel(last.qy * 1e3)})`,
+        `IFCPLANARFORCEMEASURE(${reeel(last.qz * 1e3)})`);
+      const actie = w.ent("IFCSTRUCTURALSURFACEACTION",
+        w.guid(`3d:oppervlaktelast:${last.id}`), "$", stepString(`3D-oppervlaktelast ${last.id}`), "$", "$",
+        "$", "$", ref(belasting), ".GLOBAL_COORDS.", "$", ".TRUE_LENGTH.", ".CONST.");
+      w.ent("IFCRELCONNECTSSTRUCTURALACTIVITY",
+        w.guid(`3d:oppervlaktelastrel:${last.id}`), "$", "$", "$", ref(member), ref(actie));
+      actiesPerGeval.get(openFem3DLoadCaseId(last))!.push(actie);
+    }
+    for (const [caseId, acties] of actiesPerGeval) {
+      if (acties.length === 0) continue;
+      w.ent("IFCRELASSIGNSTOGROUP",
+        w.guid(`3d:toekenning:groep:${caseId}`), "$", "$", "$",
+        lijst(acties), "$", ref(loadGroepen.get(caseId)!));
+    }
+  }
 }
 
 // ── Materialen en profielen ─────────────────────────────────────────────────
@@ -2214,6 +2677,61 @@ export function verzamelIfcBeperkingen(
     }
   }
 
+  if (model.model3d !== undefined) {
+    const openFem3d = parseOpenFem3DModel(model.model3d);
+    const gekoppeld = gekoppelde3DKnopen(openFem3d);
+    const heeft3DElementen = openFem3d.beams.length > 0 || (openFem3d.plates?.length ?? 0) > 0;
+    if (openFem3d.beams.length > 0) {
+      regels.push(
+        "3D-staven staan als analytische lijnen in het IFC-bestand. Het 3D-model " +
+        "heeft nog geen materiaal, doorsnede of berekeningsresultaten; er zijn " +
+        "daarom geen bouwkundige 3D-liggers of 3D-resultaten geëxporteerd.",
+      );
+    }
+    if ((openFem3d.plates?.length ?? 0) > 0) {
+      regels.push(
+        "3D-platen staan als analytische vlakken met dikte en openingen in het " +
+        "IFC-bestand; afgeronde randen zijn als een tiensegmenten-polygoon per " +
+        "hoek benaderd. Plaatmesh en plaatresultaten ontbreken nog.",
+      );
+    }
+    const aantalVlakken = openFem3d.loadPanels?.length ?? 0;
+    if (aantalVlakken > 0 && opties.zonderLasten !== true) {
+      regels.push(
+        `${aantalVlakken} 3D-belastingvla${aantalVlakken === 1 ? "k staat" : "kken staan"} niet in het ` +
+        "IFC-bestand: een belastingvlak heeft geen stijfheid en wordt pas bij het rekenen omgezet in " +
+        "staaf- en knooplasten. Zie het 3D-rapport voor die afgeleide lasten.",
+      );
+    }
+    if (!heeft3DElementen && openFem3d.nodes.length > 0) {
+      regels.push(
+        "Het 3D-model heeft geen staven of platen. IFC4 vereist voor een structurele " +
+        "knoopverbinding minstens één aangesloten element; daarom is het " +
+        "3D-model niet geëxporteerd.",
+      );
+    }
+    const losseKnopen = openFem3d.nodes.filter((node) => !gekoppeld.has(node.id));
+    if (losseKnopen.length > 0 && heeft3DElementen) {
+      const losseSteunen = (openFem3d.supports ?? []).filter((s) => !gekoppeld.has(s.nodeId)).length;
+      const losseLasten = (openFem3d.loads ?? []).filter((l) => !gekoppeld.has(l.nodeId)).length;
+      regels.push(
+        `${losseKnopen.length} losse 3D-${losseKnopen.length === 1 ? "knoop" : "knopen"}` +
+        ` (${losseKnopen.map((node) => node.id).join(", ")}) zonder aangesloten element` +
+        `, met ${losseSteunen} oplegging(en) en ${losseLasten} knoopbelasting(en), ` +
+        "zijn vanwege die IFC4-regel weggelaten.",
+      );
+    }
+    const uitvoerbareLasten = (openFem3d.loads ?? []).filter((last) => gekoppeld.has(last.nodeId)).length +
+      (openFem3d.memberLoads ?? []).length + (openFem3d.memberPointLoads ?? []).length + (openFem3d.thermalLoads ?? []).length +
+      (openFem3d.surfaceLoads ?? []).length +
+      (openFem3d.supports ?? []).filter((steun) => gekoppeld.has(steun.nodeId) && Object.keys(steun.prescribed ?? {}).length > 0).length;
+    if (opties.zonderLasten === true && uitvoerbareLasten > 0) {
+      regels.push(
+        `Structurele export: ${uitvoerbareLasten} 3D-belasting(en) zijn bewust weggelaten.`,
+      );
+    }
+  }
+
   return regels;
 }
 
@@ -2330,6 +2848,108 @@ export function bouwIfcBoom(
     naam: `Rekenmodel ${projectNaam}`,
     kinderen: kinderenModel,
   }];
+  if (model.model3d !== undefined) {
+    const openFem3d = parseOpenFem3DModel(model.model3d);
+    if (openFem3d.beams.length > 0 || (openFem3d.plates?.length ?? 0) > 0) {
+      const gekoppeld = gekoppelde3DKnopen(openFem3d);
+      const knopen3d = openFem3d.nodes.filter((node) => gekoppeld.has(node.id));
+      const steunen3d = (openFem3d.supports ?? []).filter((steun) => gekoppeld.has(steun.nodeId));
+      const lasten3d = (openFem3d.loads ?? []).filter((last) => gekoppeld.has(last.nodeId));
+      const staaflasten3d = openFem3d.memberLoads ?? [];
+      const staafpuntlasten3d = openFem3d.memberPointLoads ?? [];
+      const temperatuurlasten3d = openFem3d.thermalLoads ?? [];
+      const oppervlakteLasten3d = openFem3d.surfaceLoads ?? [];
+      const onderdelen3d: IfcBoomKnoop[] = [
+        {
+          type: "IfcStructuralPointConnection",
+          naam: "3D-knopen",
+          aantal: knopen3d.length,
+          kinderen: knopen3d.map((n) => ({
+            type: "IfcVertexPoint",
+            naam: `3D-knoop ${n.id} — x ${nl(n.x)} m, y ${nl(n.y)} m, z ${nl(n.z)} m`,
+          })),
+        },
+        {
+          type: "IfcStructuralCurveMember",
+          naam: "3D-staven",
+          aantal: openFem3d.beams.length,
+          kinderen: openFem3d.beams.map((b) => ({
+            type: "IfcEdge",
+            naam: `3D-staaf ${b.id} — knoop ${b.startNodeId} → ${b.endNodeId}`,
+          })),
+        },
+        ...((openFem3d.plates?.length ?? 0) > 0 ? [{
+          type: "IfcStructuralSurfaceMember",
+          naam: "3D-platen",
+          aantal: openFem3d.plates!.length,
+          kinderen: openFem3d.plates!.map((plaat) => ({
+            type: "IfcFaceSurface",
+            naam: `3D-plaat ${plaat.id} — t ${nl(plaat.thicknessM)} m · ${plaat.material ?? "—"} · ${plaat.openings?.length ?? 0} opening(en)`,
+          })),
+        }] : []),
+        {
+          type: "IfcBoundaryNodeCondition",
+          naam: "3D-opleggingen",
+          aantal: steunen3d.length,
+          kinderen: steunen3d.map((s) => ({
+            type: "IfcBoundaryNodeCondition",
+            naam: `Knoop ${s.nodeId} — ${(["ux", "uy", "uz", "rx", "ry", "rz"] as const)
+              .filter((dof) => s[dof]).join(", ")} vast${Object.keys(s.prescribed ?? {}).length > 0
+                ? ` · opgelegd ${Object.entries(s.prescribed!).map(([dof, value]) => `${dof}=${value}`).join(", ")}`
+                : ""}`,
+          })),
+        },
+      ];
+      if (opties.zonderLasten !== true && lasten3d.length > 0) {
+        onderdelen3d.push({
+          type: "IfcStructuralLoadGroup",
+          naam: "3D-knooplasten",
+          aantal: lasten3d.length,
+          kinderen: lasten3d.map((l) => ({
+            type: "IfcStructuralPointAction",
+            naam: `Knoop ${l.nodeId} — F (${l.fx}, ${l.fy}, ${l.fz}) kN; M (${l.mx}, ${l.my}, ${l.mz}) kNm`,
+          })),
+        });
+      }
+      if (opties.zonderLasten !== true && (staaflasten3d.length > 0 || staafpuntlasten3d.length > 0 || temperatuurlasten3d.length > 0)) {
+        onderdelen3d.push({
+          type: "IfcStructuralLoadGroup",
+          naam: "3D-staaflasten",
+          aantal: staaflasten3d.length + staafpuntlasten3d.length + temperatuurlasten3d.length,
+          kinderen: [
+            ...staaflasten3d.map((l) => ({
+              type: "IfcStructuralCurveAction",
+              naam: `Staaf ${l.beamId} — qy ${l.qyStart}→${l.qyEnd}; qz ${l.qzStart}→${l.qzEnd} kN/m`,
+            })),
+            ...staafpuntlasten3d.map((l) => ({
+              type: "IfcStructuralPointAction",
+              naam: `Staaf ${l.beamId} — Py ${l.py}; Pz ${l.pz} kN op ${l.positionM} m`,
+            })),
+            ...temperatuurlasten3d.map((l) => ({
+              type: "IfcStructuralLinearAction",
+              naam: `Staaf ${l.beamId} — ΔT ${l.deltaTUniformK} K; ΔTy ${l.deltaTGradientYK} K; ΔTz ${l.deltaTGradientZK} K`,
+            })),
+          ],
+        });
+      }
+      if (opties.zonderLasten !== true && oppervlakteLasten3d.length > 0) {
+        onderdelen3d.push({
+          type: "IfcStructuralLoadGroup",
+          naam: "3D-oppervlaktebelastingen",
+          aantal: oppervlakteLasten3d.length,
+          kinderen: oppervlakteLasten3d.map((last) => ({
+            type: "IfcStructuralSurfaceAction",
+            naam: `Plaat ${last.plateId} — q (${last.qx}, ${last.qy}, ${last.qz}) kN/m²`,
+          })),
+        });
+      }
+      kinderenGebouw.push({
+        type: "IfcStructuralAnalysisModel",
+        naam: `3D-rekenmodel ${projectNaam}`,
+        kinderen: onderdelen3d,
+      });
+    }
+  }
   if (opties.zonderBouwkundig !== true) {
     const uitslagPerStaaf = new Map(
       (model.toetsresultaten ?? []).map(r => [r.beam_id, r]));
@@ -2876,6 +3496,25 @@ function parametrischProfiel(
           ".AREA.", naam, positie, meter(dims.h), meter(dims.b),
           meter(dims.tw), meter(dims.r),
           dims.r2 ? meter(dims.r2) : "$", "$"),
+      };
+    case "RoundBar":
+      // Massief rond staal: IfcCircleProfileDef (IFC4) met alleen de straal.
+      // Een IfcCircleHollowProfileDef zou een wand vragen die er niet is.
+      return {
+        vorm: "massief rond",
+        profielDef: w.ent("IFCCIRCLEPROFILEDEF",
+          ".AREA.", naam, positie, meter(dims.h / 2)),
+      };
+    case "FlatBar":
+      // Platstaal: IfcRectangleProfileDef (IFC4) met XDim = de dikte (b in de
+      // maattabel) en YDim = de breedte van de strip (h), dezelfde verdeling
+      // als de koker hierboven: de strip staat op zijn kant, zoals hij
+      // gerekend wordt. De ProfileName is de catalogusnaam ("Strip 80x10"),
+      // en dat is precies de naam die de IFC-import weer herkent.
+      return {
+        vorm: "platstaal",
+        profielDef: w.ent("IFCRECTANGLEPROFILEDEF",
+          ".AREA.", naam, positie, meter(dims.b), meter(dims.h)),
       };
   }
   return undefined;

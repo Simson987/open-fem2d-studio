@@ -99,6 +99,9 @@ export function stelVormVoor(o: DoorsnedeOntwerp): CustomDoorsnedevorm {
       case "Channel":
       case "ChannelSchuin":
       case "Rechthoek":
+      // Massief rond met een gat heeft geen vormaanduiding in
+      // `CustomDoorsnedevorm`; de toetsing weigert hem dan met reden.
+      case "RoundBar":
         return "Onbekend";
       // Een hoekprofiel mét gaten heeft geen vormaanduiding die de toetsing
       // kent: `CustomDoorsnedevorm` heeft geen rij voor blad 3 van tabel 5.2,

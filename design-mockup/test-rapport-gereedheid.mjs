@@ -292,7 +292,7 @@ log("\n[7] Bronteksten — kanaal en knop zijn één weg");
   check("App.tsx: rekenDoor geeft een belofte (Promise<RekengangUitkomst>)",
     /const rekenDoor = useCallback\(\(\): Promise<RekengangUitkomst> =>/.test(app));
   check("App.tsx: de bediening krijgt rekenDoor en de rekentoestand",
-    /useBediening\(\{[\s\S]{0,400}?rekenDoor,[\s\S]{0,200}?rekenToestand:/.test(app));
+    /useBediening\(\{[\s\S]{0,3000}?rekenDoor,[\s\S]{0,200}?rekenToestand:/.test(app));
   check("App.tsx: de geplande herberekening is leesbaar (herberekeningGeplandRef)",
     /herberekeningGeplandRef\.current = true;[\s\S]{0,200}?window\.setTimeout/.test(app));
   check("zijbalk en export delen pasRapportTypeToe",

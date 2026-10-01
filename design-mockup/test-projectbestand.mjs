@@ -7,8 +7,8 @@
 // Uitvoeren: npx tsx test-projectbestand.mjs
 
 const {
-  serializeProject, deserializeProject, PROJECT_FORMAT_VERSION,
-  combinationsFromFile, onbekendeTopVelden,
+  serializeProject, deserializeProject, PROJECT_FORMAT_VERSION, PROJECT_FORMAT_VERSION_3D,
+  PROJECT_FORMAT_VERSION_MAX, combinationsFromFile, onbekendeTopVelden,
 } = await import("./src/io/projectFile.ts");
 const { rapportSnapshot, pasRapportSnapshotToe, useReportStore } =
   await import("./src/stores/reportStore.ts");
@@ -93,7 +93,7 @@ log("\n2. Een bestand van vóór deze velden laadt gewoon");
     "de drie velden ontbreken zonder fout");
   ok(terug.beams[0].veren?.endRy === 5000, "het model is compleet");
   let fout = null;
-  try { deserializeProject(JSON.stringify({ ...oud, format: "open-fem2d-studio-v2", version: PROJECT_FORMAT_VERSION + 1 })); }
+  try { deserializeProject(JSON.stringify({ ...oud, format: "open-fem2d-studio-v2", version: PROJECT_FORMAT_VERSION_MAX + 1 })); }
   catch (e) { fout = e; }
   ok(fout !== null && /nieuwere versie/.test(fout.message), "een nieuwer bestand wordt eerlijk geweigerd");
 }
@@ -197,6 +197,7 @@ log("\n4. De poort bij het OPENEN: wat ontbreekt of niet te lezen is (basisaudit
     "een onbekend top-level veld wordt herkend en genoemd");
   ok(onbekendeTopVelden(kaal).length === 0, "een gewoon bestand meldt niets");
   ok(onbekendeTopVelden({ ...kaal, projectInfo: {}, rapport: {}, windInstellingen: {},
+      modelDimension: "3d", model3d: { nodes: [], beams: [] },
       eigenDoorsneden: [], eigenCltOpbouwen: [], idTellers: { belastinggeval: 1, combinatie: 1 },
       structuralGrid: {}, combinatiesVervangenBijOpenen: "x", betonSegmentLengteMm: 400,
       scheefstandBron: "vast", scheefstandHoogteM: null, scheefstandAantalElementen: null,
@@ -207,6 +208,69 @@ log("\n4. De poort bij het OPENEN: wat ontbreekt of niet te lezen is (basisaudit
   ok(deserializeProject(JSON.stringify({ ...kaal, toelichting: "x" })).format
       === "open-fem2d-studio-v2",
     "een onbekend veld blokkeert het openen niet");
+}
+
+log("\n5. Eén gezaghebbende modeldimensie: een 3D-model kan niet terug naar 2D");
+{
+  const model3d = {
+    nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 4, y: 2, z: 3 }],
+    beams: [{ id: 1, startNodeId: 1, endNodeId: 2 }],
+  };
+  const tekst = serializeProject({ ...model, modelDimension: "3d", model3d });
+  const terug = deserializeProject(tekst);
+  ok(terug.version === PROJECT_FORMAT_VERSION_3D, "een project met 3D-geometrie gebruikt bestandsversie 3");
+  ok(terug.modelDimension === "3d", "de modeldimensie blijft expliciet 3D");
+  ok(JSON.stringify(terug.model3d) === JSON.stringify({ ...model3d, supports: [], loads: [] }),
+    "3D-knopen en staven overleven opslaan en openen; oudere bestanden krijgen lege randvoorwaarden");
+  ok(JSON.stringify(terug.nodes) === JSON.stringify(model.nodes) &&
+     JSON.stringify(terug.beams) === JSON.stringify(model.beams),
+    "de inactieve 2D-brongegevens blijven als controlespoor intact");
+  const leeg3d = deserializeProject(serializeProject({ ...model, modelDimension: "3d", model3d: { nodes: [], beams: [] } }));
+  ok(leeg3d.version === PROJECT_FORMAT_VERSION_3D && leeg3d.modelDimension === "3d",
+    "ook een leeg expliciet 3D-project blijft 3D");
+  const leeg2d = deserializeProject(serializeProject({ ...model, modelDimension: "2d" }));
+  ok(leeg2d.version === PROJECT_FORMAT_VERSION && leeg2d.modelDimension === "2d" && leeg2d.model3d === undefined,
+    "een zuiver 2D-project blijft versie 2 en bevat geen 3D-model");
+  let fout = null;
+  try {
+    deserializeProject(JSON.stringify({ ...terug, model3d: { ...model3d, beams: [{ id: 1, startNodeId: 1, endNodeId: 9 }] } }));
+  } catch (e) { fout = e; }
+  ok(fout !== null && fout.message.includes("knoopverwijzing"), "een 3D-staaf met ontbrekende knoop wordt geweigerd");
+
+  const metRandvoorwaarden = {
+    ...model3d,
+    supports: [{ nodeId: 1, ux: true, uy: true, uz: true, rx: false, ry: false, rz: false,
+      prescribed: { uxM: 0.001, uzM: -0.002 } }],
+    loads: [{ id: 1, nodeId: 2, fx: 3, fy: 0, fz: -10, mx: 0, my: 0, mz: 2 }],
+  };
+  const metRandvoorwaardenTerug = deserializeProject(serializeProject({ ...model, modelDimension: "3d", model3d: metRandvoorwaarden }));
+  ok(JSON.stringify(metRandvoorwaardenTerug.model3d) === JSON.stringify(metRandvoorwaarden),
+    "3D-oplegging, opgelegde verplaatsing en knoopbelasting overleven opslaan en openen");
+  ok(JSON.stringify(metRandvoorwaardenTerug.supports) === JSON.stringify(model.supports) &&
+     JSON.stringify(metRandvoorwaardenTerug.loads) === JSON.stringify(model.loads),
+    "3D-randvoorwaarden wijzigen het inactieve 2D-controlespoor niet");
+  let dubbeleDimensie = null;
+  try {
+    deserializeProject(JSON.stringify({ ...terug, modelDimension: "2d" }));
+  } catch (e) { dubbeleDimensie = e; }
+  ok(dubbeleDimensie?.message.includes("geen tweede 3D-model"),
+    "een bestand kan niet tegelijk expliciet 2D en 3D zijn");
+  let ongeldigeOplegging = null;
+  try {
+    deserializeProject(JSON.stringify({ ...metRandvoorwaardenTerug, model3d: {
+      ...metRandvoorwaarden, supports: [{ ...metRandvoorwaarden.supports[0], nodeId: 9 }],
+    } }));
+  } catch (e) { ongeldigeOplegging = e; }
+  ok(ongeldigeOplegging?.message.includes("knoopverwijzing"),
+    "3D-oplegging op ontbrekende knoop wordt bij openen geweigerd");
+  let ongeldigeBelasting = null;
+  try {
+    deserializeProject(JSON.stringify({ ...metRandvoorwaardenTerug, model3d: {
+      ...metRandvoorwaarden, loads: [{ ...metRandvoorwaarden.loads[0], fx: null }],
+    } }));
+  } catch (e) { ongeldigeBelasting = e; }
+  ok(ongeldigeBelasting?.message.includes("eindige componenten"),
+    "3D-knoopbelasting zonder eindige component wordt bij openen geweigerd");
 }
 
 log("");

@@ -7,6 +7,8 @@ import SettingsTab from "./SettingsTab";
 import InsightsTab from "./InsightsTab";
 import IfcTab from "./IfcTab";
 import ReportTab from "./ReportTab";
+import type { OpenFem3DSpringAxis, OpenFem3DTool, OpenFem3DView } from "../openFem3d/openFem3dCommands";
+import type { OpenFem3DSupportPreset } from "../openFem3d/openFem3dModel";
 import "./Ribbon.css";
 
 interface RibbonProps {
@@ -21,10 +23,14 @@ interface RibbonProps {
   onOpenLibrary?: (tab: "sections" | "materials") => void;
   activeView: string;
   onViewChange: (view: string) => void;
+  modelDimension?: "2d" | "3d";
+  onConvertTo3D?: () => void;
+  /** Opent de wizard "Stalen hal…" (een complete hal als 3D-model). */
+  onOpenSteelHall?: () => void;
   /** Active FEM canvas tool. Routed into HomeTab so draw buttons can highlight + dispatch. */
   femTool?: import("../fem/femTypes").Tool;
   onFemToolChange?: (t: import("../fem/femTypes").Tool) => void;
-  /** Start de volledige berekening vanaf de Start-tab. */
+  /** Start de volledige 2D-berekening vanaf de 2D-tab. */
   onSolve?: () => void;
   /** True when any solver result is available; lights up the Berekenen button on Home. */
   hasResults?: boolean;
@@ -43,6 +49,7 @@ interface RibbonProps {
   onOpenLoadCombinations?: () => void;
   /** Opens the wind load generator (EN 1991-1-4 + NL NB). */
   onOpenWindGenerator?: () => void;
+  onOpenWaterAccumulation?: () => void;
   /** Show a specific Insights sub-view (element-K / system-K / dof / logs / errors). */
   onShowInsightsMode?: (mode: "element" | "system" | "dof" | "logs" | "errors") => void;
   /** Export all stiffness matrices as CSV. */
@@ -72,11 +79,35 @@ interface RibbonProps {
   onValidateIfc?: () => void;
   /** Schakelt naar het IFC-tabblad (boomstructuur / STEP / statistieken). */
   onOpenIfcView?: () => void;
+  /** Importeert een IFC4-analysemodel als nieuw 3D-project. */
+  onImportIfcAnalysisModel?: () => void;
   /** File-menu actions (Home tab + Backstage). */
   onNewProject?: () => void;
   onOpenProject?: () => void;
   onSaveProject?: () => void;
   onSaveProjectAs?: () => void;
+  /** 3D-gereedschap voor hetzelfde modellint wanneer het project 3D is. */
+  openFem3dTool?: OpenFem3DTool;
+  availableOpenFem3DTools?: readonly OpenFem3DTool[];
+  onOpenFem3DToolChange?: (tool: OpenFem3DTool) => void;
+  canOpenFem3DDelete?: boolean;
+  onOpenFem3DFit?: () => void;
+  onOpenFem3DViewChange?: (view: OpenFem3DView) => void;
+  openFem3dView?: OpenFem3DView;
+  onToggle3DVisibility?: () => void;
+  visibility3DOpen?: boolean;
+  hasOpenFem3DNodeSelection?: boolean;
+  hasOpenFem3DBeamSelection?: boolean;
+  hasOpenFem3DPlateSelection?: boolean;
+  onOpenFem3DSupportPreset?: (preset: OpenFem3DSupportPreset) => void;
+  /** 3D: veergereedschap in deze richting (een geselecteerde knoop krijgt de veer meteen). */
+  onOpenFem3DSpringTool?: (axis: OpenFem3DSpringAxis) => void;
+  onOpenFem3DRequestNodalLoad?: (kind: "force" | "moment") => void;
+  onOpenFem3DRequestMemberLoad?: () => void;
+  onOpenFem3DRequestMemberPointLoad?: () => void;
+  onOpenFem3DRequestThermalLoad?: () => void;
+  onOpenFem3DRequestSurfaceLoad?: () => void;
+  onOpenFem3DConvertPlateToLoadPanel?: () => void;
   /** @deprecated — read from useReportStore in the Report tab/preview. Kept for prop-compat. */
   pageSize?: "A4" | "A3";
   /** @deprecated */
@@ -103,15 +134,22 @@ type TabId = (typeof TABS)[number];
 
 export default function Ribbon({
   onFileTabClick, onSettingsClick, onProjectSettingsClick, activeView, onViewChange,
+  modelDimension = "2d", onConvertTo3D, onOpenSteelHall,
   theme, onThemeSelect, onOpenLibrary,
   femTool, onFemToolChange, onSolve, hasResults,
   onDelete, onUndo, onRedo, canUndo, canRedo, onOpenGrids,
-  onOpenLoadCases, onOpenLoadCombinations, onOpenWindGenerator, onNewProject, onOpenProject,
+  onOpenLoadCases, onOpenLoadCombinations, onOpenWindGenerator, onOpenWaterAccumulation, onNewProject, onOpenProject,
   onSaveProject, onSaveProjectAs,
+  openFem3dTool, availableOpenFem3DTools, onOpenFem3DToolChange, canOpenFem3DDelete,
+  onOpenFem3DFit, onOpenFem3DViewChange, openFem3dView,
+  onToggle3DVisibility, visibility3DOpen, hasOpenFem3DNodeSelection, hasOpenFem3DBeamSelection, hasOpenFem3DPlateSelection,
+  onOpenFem3DSupportPreset, onOpenFem3DSpringTool, onOpenFem3DRequestNodalLoad, onOpenFem3DRequestMemberLoad,
+  onOpenFem3DRequestMemberPointLoad, onOpenFem3DRequestThermalLoad, onOpenFem3DRequestSurfaceLoad,
+  onOpenFem3DConvertPlateToLoadPanel,
   onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid,
   onFilterSelection,
   onExportHtml, scheefstandToelichting, analyseToelichting, windToelichting,
-  onExportIfc, onExportIfcStructural, onValidateIfc, onOpenIfcView,
+  onExportIfc, onExportIfcStructural, onValidateIfc, onOpenIfcView, onImportIfcAnalysisModel,
   tableDataset, onTableDataset, onTableExportCsv, onTableCopy, onTableFocusFilter,
 }: RibbonProps) {
   const { t, i18n } = useTranslation("ribbon");
@@ -168,21 +206,23 @@ export default function Ribbon({
     else if (newTab === "report") onViewChange("report");
     else if (newTab === "insights") onViewChange("insights");
     else if (newTab === "table") onViewChange("table");
-    else onViewChange("default");
-  }, [activeTab, onViewChange]);
+    else onViewChange(modelDimension === "3d" ? "openFem3d" : "default");
+  }, [activeTab, modelDimension, onViewChange]);
 
   // Houd de ribbon-tab in sync wanneer App de hoofdview programmatisch
   // wisselt (bv. TitleBar-Afdrukken → rapportweergave). Alleen voor views
   // die 1-op-1 bij een tab horen; "default" hoort bij meerdere tabs
-  // (Start/Tabel/Instellingen) en blijft daarom ongemoeid.
+  // (2D/Tabel/Instellingen) en blijft daarom ongemoeid, behalve wanneer een
+  // programma-actie de 3D-weergave verlaat (bv. Nieuw project/Berekenen).
   useEffect(() => {
     if (
-      (activeView === "report" || activeView === "ifc" ||
-       activeView === "insights" ||
+      (activeView === "report" || activeView === "ifc" || activeView === "insights" ||
        activeView === "table") &&
       activeTab !== activeView
     ) {
       switchTab(activeView as TabId);
+    } else if (activeView === "openFem3d" && activeTab !== "home") {
+      switchTab("home");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView]);
@@ -225,11 +265,35 @@ export default function Ribbon({
           onOpenLoadCases={onOpenLoadCases}
           onOpenLoadCombinations={onOpenLoadCombinations}
           onOpenWindGenerator={onOpenWindGenerator}
+          onOpenWaterAccumulation={onOpenWaterAccumulation}
           onFilterSelection={onFilterSelection}
           onNewProject={onNewProject}
           onOpenProject={onOpenProject}
           onSaveProject={onSaveProject}
           onSaveProjectAs={onSaveProjectAs}
+          modelDimension={modelDimension}
+          onConvertTo3D={onConvertTo3D}
+          onOpenSteelHall={onOpenSteelHall}
+          openFem3dTool={openFem3dTool}
+          availableOpenFem3DTools={availableOpenFem3DTools}
+          onOpenFem3DToolChange={onOpenFem3DToolChange}
+          canOpenFem3DDelete={canOpenFem3DDelete}
+          onOpenFem3DFit={onOpenFem3DFit}
+          onOpenFem3DViewChange={onOpenFem3DViewChange}
+          openFem3dView={openFem3dView}
+          onToggle3DVisibility={onToggle3DVisibility}
+          visibility3DOpen={visibility3DOpen}
+          hasOpenFem3DNodeSelection={hasOpenFem3DNodeSelection}
+          hasOpenFem3DBeamSelection={hasOpenFem3DBeamSelection}
+          hasOpenFem3DPlateSelection={hasOpenFem3DPlateSelection}
+          onOpenFem3DSupportPreset={onOpenFem3DSupportPreset}
+          onOpenFem3DSpringTool={onOpenFem3DSpringTool}
+          onOpenFem3DRequestNodalLoad={onOpenFem3DRequestNodalLoad}
+          onOpenFem3DRequestMemberLoad={onOpenFem3DRequestMemberLoad}
+          onOpenFem3DRequestMemberPointLoad={onOpenFem3DRequestMemberPointLoad}
+          onOpenFem3DRequestThermalLoad={onOpenFem3DRequestThermalLoad}
+          onOpenFem3DRequestSurfaceLoad={onOpenFem3DRequestSurfaceLoad}
+          onOpenFem3DConvertPlateToLoadPanel={onOpenFem3DConvertPlateToLoadPanel}
         />;
       case "table":
         return <TableTab
@@ -255,6 +319,7 @@ export default function Ribbon({
           onExportIfcStructural={onExportIfcStructural}
           onValidateIfc={onValidateIfc}
           onOpenIfcView={onOpenIfcView}
+          onImportAnalysisModel={onImportIfcAnalysisModel}
         />;
       case "report":
         return <ReportTab
@@ -273,7 +338,7 @@ export default function Ribbon({
         {TABS.map((tab) => (
           <RibbonTab
             key={tab}
-            label={t(`tabs.${tab}`)}
+            label={tab === "home" ? modelDimension.toUpperCase() : t(`tabs.${tab}`)}
             isActive={activeTab === tab}
             onClick={() => switchTab(tab)}
           />

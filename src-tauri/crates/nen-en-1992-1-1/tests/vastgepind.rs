@@ -232,13 +232,20 @@ fn secante_stijfheid_is_bit_identiek() {
     #[rustfmt::skip]
     let bgt: &[(f64, f64, f64, f64, f64, f64, f64, f64)] = &[
         //  N       M      κ                        EI                   M₀                  M_cr                ζ                   κ uit kappa_from_nm
-        (   0.0,  30.0, 0.0002620257951261688, 114492.54446706141,  0.0,                 36.25,              0.0,                0.0002620257951258494),
-        (   0.0,  90.0, 0.004230901585046632,   21272.061803112832, 0.0,                 36.25,              0.8384363850676866, 0.004890027153973537),
-        (-800.0, 100.0, 0.0009571983416619928, 106938.97341657535, -2.361808013381848,  102.91666666666666,  0.0,                0.0009571983416309292),
+        (   0.0,  30.0, 0.0002620257951261688, 114492.54446706141,  0.0,                 36.25,              0.0,                0.000262025795125849),
+        (   0.0,  90.0, 0.004230901585046632,   21272.061803112832, 0.0,                 36.25,              0.8384363850676866, 0.0048900271539735266),
+        (-800.0, 100.0, 0.0009571983416619928, 106938.97341657535, -2.361808013381848,  102.91666666666666,  0.0,                0.0009571983416309275),
     ];
+    // De laatste kolom (κ uit kappa_from_nm) is per platform op het laatste bit
+    // verschillend: die iteratie loopt via f64::powf, en de C-wiskundebibliotheek
+    // van het platform rondt daar niet overal gelijk af. Hierboven de waarden van
+    // Linux; op Windows wijken ze 8, 12 en 16 ULP af. Beide staan vast, geen
+    // tolerantie: alle andere kolommen zijn op beide platforms bit-gelijk.
+    let kappa_los_windows = [0.0002620257951258494, 0.004890027153973537, 0.0009571983416309292];
     let m_bgt = stijfheidsmateriaal(NonlinearBasis::MeanValues);
     assert_eq!(m0_knm(&s, &lagen, &m_bgt, -800.0, 1.0, &o).unwrap(), -2.361808013381848);
-    for &(n, mm, kappa, ei, m0, m_cr, zeta, kappa_los) in bgt {
+    for (i, &(n, mm, kappa, ei, m0, m_cr, zeta, kappa_los_linux)) in bgt.iter().enumerate() {
+        let kappa_los = if cfg!(windows) { kappa_los_windows[i] } else { kappa_los_linux };
         let r = ei_secant(&s, &lagen, &m_bgt, n, mm, &so).unwrap();
         assert_eq!(r.kappa_per_m, kappa, "κ BGT bij N = {n}, M = {mm}");
         assert_eq!(r.ei_knm2, ei, "EI BGT bij N = {n}, M = {mm}");

@@ -28,6 +28,18 @@ use tokio::sync::Mutex;
 /// letterlijk dezelfde solver als de app. Zie `fem_tools.rs`.
 mod fem_tools;
 
+/// Ruimtelijke raamwerken: dezelfde versievaste Rust-adapter als de app.
+mod open_fem_3d_tools;
+
+/// De stalen hal (`open_fem_3d_staalhal_maken`): de generator van de wizard in
+/// de sidecar, rekenen met de 3D-kern hierboven en toetsen met `steel_check`.
+mod staalhal_tools;
+
+/// De import van een IFC4-analysemodel (`open_fem_3d_ifc_importeren`): de
+/// import van de app in de sidecar, rekenen met de 3D-kern en toetsen met
+/// `steel_check`, langs dezelfde keten als de stalen hal.
+mod ifc_import_tools;
+
 /// De acht betontools (NEN-EN 1992-1-1). Ze roepen dezelfde `concrete_check`
 /// aan als het Tauri-command en de toetsbrug — de derde weg naar één
 /// rekengang. Zie `concrete_tools.rs`.
@@ -402,7 +414,11 @@ fn tool_definitions() -> Value {
                     "staaf_notities": { "type": "array", "items": { "type": "string" }, "default": [],
                         "description": "Toelichtingen bij de staaf als geheel; rekenen nergens mee en komen letterlijk in de 'notes' van de kniktoets (6.3.1), de kiptoets (6.3.2) en de eindzakking. `check_fem_model` en de app zetten hier dat een door tussenknopen geknipte staaf als één doorgaande lijn is getoetst, over welke lengte, en welke tussenknopen niet als steun tellen. Weglaten = niets te melden." },
                     "profile_end": { "type": "string",
-                        "description": "Profiel aan het EIND van de staaf (x = L) van een VERLOPENDE staaf; 'profile_name' is dan het profiel aan het begin (x = 0). De maten h, b, t_w en t_f verlopen lineair en de doorsnede telt over de hele staaf als GELAST I-profiel zonder afrondingsstraal (knikkromme tabel 6.2 en kipkromme tabel 6.5 voor gelaste profielen). De kern toetst elke doorsnedetoets (6.2.x) op elk rekenpunt met de plaatselijke doorsnede en rekent de stabiliteitstoetsen (6.3.x) met de kleinste doorsnede in het veld; het resultaat krijgt dan een veld 'verloop' met de zes toetsdoorsneden en het maatgevende punt. Beide profielen moeten I/H-profielen uit de catalogus zijn; een koker, buis, hoeklijn, U-profiel, een I-profiel met toelopende flenzen of een eigen doorsnede wordt geweigerd met reden. Weglaten, leeg of gelijk aan 'profile_name' = prismatisch." }
+                        "description": "Profiel aan het EIND van de staaf (x = L) van een VERLOPENDE staaf; 'profile_name' is dan het profiel aan het begin (x = 0). De maten h, b, t_w en t_f verlopen lineair en de doorsnede telt over de hele staaf als GELAST I-profiel zonder afrondingsstraal (knikkromme tabel 6.2 en kipkromme tabel 6.5 voor gelaste profielen). De kern toetst elke doorsnedetoets (6.2.x) op elk rekenpunt met de plaatselijke doorsnede en rekent de stabiliteitstoetsen (6.3.x) met de kleinste doorsnede in het veld; het resultaat krijgt dan een veld 'verloop' met de zes toetsdoorsneden en het maatgevende punt. Beide profielen moeten I/H-profielen uit de catalogus zijn; een koker, buis, hoeklijn, U-profiel, een I-profiel met toelopende flenzen of een eigen doorsnede wordt geweigerd met reden. Weglaten, leeg of gelijk aan 'profile_name' = prismatisch." },
+                    "a_net_mm2": { "type": "number", "minimum": 0,
+                        "description": "Nettodoorsnede A_net (mm²) voor de trektoets 6.2.3: de doorsnede ter plaatse van gaten of een andere verzwakking. Met A_net is N_t,Rd = min(A·f_y/γ_M0; 0,9·A_net·f_u/γ_M2), vergelijking (6.6) en (6.7); zonder rekent de kern N_t,Rd = A·f_y/γ_M0 en zegt de toets dat er geen A_net is opgegeven. Weglaten of 0 = niet opgegeven; een A_net groter dan A is een invoerfout en de staaf wordt dan met reden geweigerd." },
+                    "tension_only": { "type": "boolean", "default": false,
+                        "description": "Trek-alleen staaf (windverband van strip of rond staal, trekstang): de staaf doet in de berekening alleen mee zolang zij op trek staat. Dan toetst de kern alleen trek (6.2.3, en bij massief rond het draadeind); druk, buiging, dwarskracht en hun combinaties, knik, kip, 6.3.3 en de doorbuiging vallen weg. Een drukkracht in de omhullende geldt als speling of voorspanning en wordt niet getoetst; de grootste staat als informatieve regel ('trek_alleen') in het resultaat. Weglaten of false = een gewone staaf." }
                 },
                 "required": [
                     "beam_id", "profile_name", "steel_grade", "length_m",
@@ -466,6 +482,9 @@ fn tool_definitions() -> Value {
         .as_array_mut()
         .expect("de tooldefinities zijn een array");
     lijst.extend(fem_tools::tool_definitions());
+    lijst.extend(open_fem_3d_tools::tool_definitions());
+    lijst.extend(staalhal_tools::tool_definitions());
+    lijst.extend(ifc_import_tools::tool_definitions());
     lijst.extend(concrete_tools::tool_definitions());
     lijst.extend(timber_tools::tool_definitions());
     lijst.extend(plate_tools::tool_definitions());
@@ -530,6 +549,11 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
         // `check_fem_model` roept daarna `steel_check::check_all_beams` aan —
         // dezelfde functie die `src-tauri/src/lib.rs` voor de app aanroept.
         fem if fem_tools::is_fem_tool(fem) => fem_tools::dispatch(fem, args).await,
+        open_fem_3d if open_fem_3d_tools::is_open_fem_3d_tool(open_fem_3d) => {
+            open_fem_3d_tools::dispatch(open_fem_3d, args).await
+        }
+        hal if staalhal_tools::is_staalhal_tool(hal) => staalhal_tools::dispatch(hal, args).await,
+        ifc if ifc_import_tools::is_ifc_import_tool(ifc) => ifc_import_tools::dispatch(ifc, args).await,
         // De betontools. Ze roepen `concrete_check` aan — dezelfde functies die
         // `src-tauri/src/lib.rs` en `crates/toetsbrug` aanroepen. Zie
         // `concrete_tools.rs` en `tests/drie_wegen_beton.rs`.
@@ -574,6 +598,13 @@ fn compute_section_props(profile_name: &str) -> Result<section_properties::opdra
         ProfileKind::Shs => "Shs",
         ProfileKind::Chs => "Chs",
         ProfileKind::Angle => "Angle",
+        // Massief rond staal: de motor rekent dezelfde cirkel als de
+        // catalogus (exacte kwartbogen; I_t numeriek).
+        ProfileKind::RoundBar => "RoundBar",
+        // Platstaal: een massieve rechthoek met h = de breedte b van de strip
+        // (langs z) en b = de dikte t. De motor geeft daarbij ook de kleine
+        // welvingsconstante van een rechthoek; de catalogus zet I_w op 0.
+        ProfileKind::FlatBar => "Rechthoek",
     };
     let invoer: section_properties::opdracht::Invoer = serde_json::from_value(json!({
         "naam": profile.name,

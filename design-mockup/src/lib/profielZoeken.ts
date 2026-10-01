@@ -86,13 +86,19 @@ export interface ZoekUitslag {
 /**
  * Tekst platslaan om te vergelijken: hoofdletters, spaties, koppeltekens en
  * de schrijfwijze van het maalteken en de decimaal mogen geen verschil maken.
+ * Het diameterteken ("Ø24", "⌀24") leest als "rd": massief rond heet in de
+ * catalogus "RD 24", en wie "Ø24" typt bedoelt dat profiel. Op dezelfde
+ * manier leest "FL80x10" of "platstaal80x10" als "strip80x10": platstaal heet
+ * in de catalogus "Strip 80x10" (`lib/strip.ts`).
  */
 export function normaliseerZoektekst(tekst: string): string {
   return tekst
     .toLowerCase()
     .replace(/[×*]/g, "x")
     .replace(/,/g, ".")
-    .replace(/[\s\-_]+/g, "");
+    .replace(/[ø⌀]/g, "rd")
+    .replace(/[\s\-_]+/g, "")
+    .replace(/^(fl|platstaal)(?=\d)/, "strip");
 }
 
 /** De losse woorden van een term, elk al platgeslagen; lege woorden vallen weg. */

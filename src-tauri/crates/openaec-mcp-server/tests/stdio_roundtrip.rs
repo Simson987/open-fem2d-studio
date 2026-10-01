@@ -100,9 +100,12 @@ async fn stdio_roundtrip_initialize_list_call() {
     // iemand hem hier noemt, hoort op te vallen. De namenlijst hieronder is
     // niet uitputtend, dus zonder deze telling zou zo'n tool ongemerkt
     // meeliften.
-    // 26 rekenkern-/FEM-tools + 15 gui_*-tools (het bedieningskanaal van de
-    // desktop-app, zie gui_tools.rs) = 41.
-    assert_eq!(tools.len(), 41, "expected 41 tools, got {}", tools.len());
+    // 29 rekenkern-/FEM-tools (inclusief solve_open_fem_3d,
+    // open_fem_3d_staalhal_maken en open_fem_3d_ifc_importeren) + 22
+    // gui_*-tools (het bedieningskanaal van de desktop-app, zie gui_tools.rs;
+    // sinds de staalhal ook gui_build_3d_steel_hall, sinds de IFC-import ook
+    // gui_import_ifc_analysis_model) = 51.
+    assert_eq!(tools.len(), 51, "expected 51 tools, got {}", tools.len());
     let names: Vec<&str> = tools
         .iter()
         .map(|t| t["name"].as_str().unwrap())
@@ -110,6 +113,10 @@ async fn stdio_roundtrip_initialize_list_call() {
     for expected in [
         "list_steel_profiles",
         "gui_status",
+        "gui_build_3d_model",
+        "gui_select_3d_plate",
+        "gui_split_3d_member",
+        "gui_configure_3d_view",
         "gui_screenshot",
         "gui_quit",
         "list_steel_grades",
@@ -124,6 +131,16 @@ async fn stdio_roundtrip_initialize_list_call() {
         "load_fem_project",
         "solve_fem_model",
         "check_fem_model",
+        // Ruimtelijke raamwerken: dezelfde Rust-adapter als het Tauri-command.
+        "solve_open_fem_3d",
+        // De stalen hal: generator van de wizard, 3D-kern en staaltoets; zie
+        // `tests/staalhal_mcp.rs`.
+        "open_fem_3d_staalhal_maken",
+        "gui_build_3d_steel_hall",
+        // De import van een IFC4-analysemodel: de import van de app in de
+        // sidecar, 3D-kern en staaltoets; zie `tests/ifc_import_mcp.rs`.
+        "open_fem_3d_ifc_importeren",
+        "gui_import_ifc_analysis_model",
         // De betontools (NEN-EN 1992-1-1). Dezelfde rekengang als het
         // Tauri-command en de toetsbrug; zie `tests/drie_wegen_beton.rs`,
         // `tests/drie_wegen_beff.rs` en `tests/drie_wegen_dekking.rs`.
@@ -267,6 +284,115 @@ async fn stdio_roundtrip_initialize_list_call() {
         tekst.contains("project_path") && tekst.contains("model"),
         "de melding moet beide uitwegen noemen: {tekst}"
     );
+
+    // ── 7. tools/call solve_open_fem_3d ─────────────────────────────────────
+    // Volledige protocolroute: dezelfde uitkraging als de adaptertest, nu via
+    // stdin/stdout en de MCP-contentverpakking. Hiermee bewijzen we dat de tool
+    // niet alleen in tools/list staat maar ook daadwerkelijk rekent.
+    let call = json!({
+        "jsonrpc": "2.0",
+        "id": 6,
+        "method": "tools/call",
+        "params": {
+            "name": "solve_open_fem_3d",
+            "arguments": {
+                "schemaVersion": 1,
+                "analysis": "p-delta",
+                "nodes": [
+                    { "id": 1, "x": 0.0, "y": 0.0, "z": 0.0 },
+                    { "id": 2, "x": 3.0, "y": 0.0, "z": 0.0 }
+                ],
+                "materials": [{ "id": 1, "name": "S235", "eMpa": 210000.0, "nu": 0.3 }],
+                "sections": [{
+                    "id": 1, "name": "test", "areaM2": 0.01,
+                    "iyM4": 0.0001, "izM4": 0.00005, "torsionJM4": 0.00001
+                }],
+                "members": [{
+                    "id": 1, "startNodeId": 1, "endNodeId": 2,
+                    "materialId": 1, "sectionId": 1, "releases": {}
+                }],
+                "supports": [{
+                    "nodeId": 1, "ux": true, "uy": true, "uz": true,
+                    "rx": true, "ry": true, "rz": true
+                }],
+                "memberLoads": [{
+                    "id": 1, "memberId": 1,
+                    "qyStartKnPerM": 0.0, "qyEndKnPerM": 0.0,
+                    "qzStartKnPerM": -4.0, "qzEndKnPerM": -4.0,
+                    "startPositionM": 0.0, "endPositionM": 3.0
+                }]
+            }
+        }
+    });
+    let mut req = serde_json::to_string(&call).unwrap();
+    req.push('\n');
+    stdin.write_all(req.as_bytes()).await.unwrap();
+    stdin.flush().await.unwrap();
+
+    let resp = read_message(&mut reader).await;
+    assert_eq!(resp["id"], 6);
+    assert_eq!(resp["result"]["isError"], false, "resp: {resp:?}");
+    let solved = &resp["result"]["structuredContent"];
+    assert_eq!(solved["engine"]["id"], "open-fem-3d");
+    assert_eq!(solved["analysis"], "p-delta");
+    let uz = solved["displacements"][1]["uz"].as_f64().expect("uz");
+    assert!((uz + 0.0019285714285714286).abs() < 1e-12, "uz={uz}");
+    let fz = solved["reactions"][0]["fz"].as_f64().expect("reactie fz");
+    assert!((fz - 12.0).abs() < 1e-10, "fz={fz}");
+
+    // ── 8. revolute X door de volledige MCP/API-route ───────────────────
+    // `rx=false` met alle translaties en de twee andere rotaties vast is een
+    // revolute oplegging om globale X. Het koppel loopt daardoor naar de
+    // afzonderlijke Rx-blokkering op knoop 2; op knoop 1 ontstaat rotatie.
+    let call = json!({
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "tools/call",
+        "params": {
+            "name": "solve_open_fem_3d",
+            "arguments": {
+                "schemaVersion": 1,
+                "analysis": "linear",
+                "nodes": [
+                    { "id": 1, "x": 0.0, "y": 0.0, "z": 0.0 },
+                    { "id": 2, "x": 3.0, "y": 0.0, "z": 0.0 }
+                ],
+                "materials": [{ "id": 1, "name": "S235", "eMpa": 210000.0, "nu": 0.3 }],
+                "sections": [{
+                    "id": 1, "name": "test", "areaM2": 0.01,
+                    "iyM4": 0.0001, "izM4": 0.00005, "torsionJM4": 0.00001
+                }],
+                "members": [{
+                    "id": 1, "startNodeId": 1, "endNodeId": 2,
+                    "materialId": 1, "sectionId": 1, "releases": {}
+                }],
+                "supports": [
+                    { "nodeId": 1, "ux": true, "uy": true, "uz": true, "rx": false, "ry": true, "rz": true },
+                    { "nodeId": 2, "ux": false, "uy": false, "uz": false, "rx": true, "ry": false, "rz": false }
+                ],
+                "nodalLoads": [{
+                    "id": 1, "nodeId": 1, "fx": 0.0, "fy": 0.0, "fz": 0.0,
+                    "mx": 5.0, "my": 0.0, "mz": 0.0
+                }],
+                "bucklingModes": 0
+            }
+        }
+    });
+    let mut req = serde_json::to_string(&call).unwrap();
+    req.push('\n');
+    stdin.write_all(req.as_bytes()).await.unwrap();
+    stdin.flush().await.unwrap();
+
+    let resp = read_message(&mut reader).await;
+    assert_eq!(resp["id"], 7);
+    assert_eq!(resp["result"]["isError"], false, "resp: {resp:?}");
+    let solved = &resp["result"]["structuredContent"];
+    let rx = solved["displacements"].as_array().unwrap().iter()
+        .find(|value| value["nodeId"] == 1).unwrap()["rx"].as_f64().unwrap();
+    assert!((rx - 0.018571428571428572).abs() < 1e-10, "rx={rx}");
+    let mx = solved["reactions"].as_array().unwrap().iter()
+        .find(|value| value["nodeId"] == 2).unwrap()["mx"].as_f64().unwrap();
+    assert!((mx.abs() - 5.0).abs() < 1e-10, "mx={mx}");
 
     // Cleanup: drop stdin → server sees EOF → exits.
     drop(stdin);

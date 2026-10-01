@@ -1,12 +1,12 @@
 # openaec-mcp-server
 
-Model Context Protocol (MCP) server that exposes the **Open FEM2D Studio** /
+Model Context Protocol (MCP) server that exposes the **Open FEM Studio** /
 **OpenAEC** check engines and the 2D FEM solver to MCP clients (Claude Desktop,
 Claude Code, etc.). It speaks JSON-RPC 2.0 over stdio and wraps the same
 Rust crates the Tauri desktop app uses, so a tool call from Claude returns
 byte-identical results to clicking through the UI.
 
-The 41 tools, in seven groups (the exact roster is pinned by
+The 51 tools, in ten groups (the exact roster is pinned by
 `tests/stdio_roundtrip.rs` and `tests/drie_wegen_kruistabel.rs`):
 
 | group | tools |
@@ -16,8 +16,11 @@ The 41 tools, in seven groups (the exact roster is pinned by
 | concrete — EN 1992-1-1 | `list_concrete_classes`, `list_reinforcement_grades`, `list_exposure_classes`, `check_concrete_beam`, `concrete_column_check`, `concrete_mn_kappa`, `concrete_segment_stiffness`, `concrete_dekkingslijn`, `concrete_effective_flange_width`, `concrete_cover_check`, `concrete_creep_coefficient` |
 | plates (wall plates loaded in their plane) | `check_plates` |
 | 2D FEM solver | `fem_solver_status`, `validate_fem_model`, `load_fem_project`, `solve_fem_model`, `check_fem_model` |
+| 3D frame and plate solver | `solve_open_fem_3d` |
+| 3D steel hall (generator, optionally solved and checked) | `open_fem_3d_staalhal_maken` |
+| IFC4 structural analysis model import (optionally solved and checked) | `open_fem_3d_ifc_importeren` |
 | reporting | `generate_steel_report_pdf` |
-| driving the running app | fifteen `gui_*` tools, see the last section |
+| driving the running app | twenty-two `gui_*` tools, see the last section |
 
 `generate_steel_report_pdf` sits in its own group on purpose: the name is
 historical, but the report carries steel, timber, cross-laminated timber,
@@ -48,8 +51,8 @@ server next to the app, so no Rust toolchain is needed:
 
 | platform | path |
 |---|---|
-| Windows | `%LOCALAPPDATA%\Open FEM2D Studio\openaec-mcp-server.exe` |
-| macOS | `/Applications/Open FEM2D Studio.app/Contents/MacOS/openaec-mcp-server` |
+| Windows | `%LOCALAPPDATA%\Open FEM Studio\openaec-mcp-server.exe` |
+| macOS | `/Applications/Open FEM Studio.app/Contents/MacOS/openaec-mcp-server` |
 | Linux (.deb) | `/usr/bin/openaec-mcp-server` |
 
 It is wired in through `bundle.externalBin` in `src-tauri/tauri.bundel.conf.json`,
@@ -90,7 +93,7 @@ Add an entry to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "openaec-fem": {
-      "command": "C:\\Users\\you\\AppData\\Local\\Open FEM2D Studio\\openaec-mcp-server.exe"
+      "command": "C:\\Users\\you\\AppData\\Local\\Open FEM Studio\\openaec-mcp-server.exe"
     }
   }
 }
@@ -101,11 +104,11 @@ The config file lives at:
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
-Restart Claude Desktop after editing. All 41 tools should appear in the tools
+Restart Claude Desktop after editing. All 51 tools should appear in the tools
 picker. For Claude Code:
 
 ```bash
-claude mcp add openaec-fem -- "C:\Users\you\AppData\Local\Open FEM2D Studio\openaec-mcp-server.exe"
+claude mcp add openaec-fem -- "C:\Users\you\AppData\Local\Open FEM Studio\openaec-mcp-server.exe"
 ```
 
 To raise the log level (logs go to **stderr** so they never collide with
@@ -485,6 +488,273 @@ Two things to know before reading a line:
   z = 0,9·d only "for reinforced concrete without axial force"; silently
   filling it in would make the required tensile force too low.
 
+## 3D-raamwerk (`solve_open_fem_3d`)
+
+Dezelfde functie `open_fem_3d::solve` als het Tauri-command en de
+ontwikkelbrowser: een ruimtelijk raamwerk, lineair of in directe tweede orde
+(`analysis: "p-delta"`, de standaard). Eenheden m, kN, kNm en MPa; het schema
+is op elk niveau strikt en het contract weigert onbekende velden.
+
+**Tweede orde.** De adapter itereert zelf: (K + K_G(N))·u = F met een verse
+factorisatie per iteratie, tot de relatieve verplaatsingswijziging onder
+`tolerance` ligt. Een tangent die niet positief definiet is, geeft een melding
+"instabiliteit". De reacties zijn ((K + K_G)·u − F), zodat de krachtensom exact
+sluit; de momentensom om de oorsprong in de onvervormde stand wijkt precies af
+met het tweede-ordemoment Σ N·(e_x × Δu). Vooraf bepaalt de adapter de eerste
+knikfactor α_cr (`buckling.modes[0].loadFactor`) uit dezelfde K en K_G; bij
+α_cr ≤ 1 weigert de berekening. EN 1993-1-1, 5.2.1 vraagt α_cr ≥ 10 voor een
+eerste-ordeberekening. K_G houdt rekening met vrijgegeven staafeinden.
+
+**Trek-alleen.** `members[].tensionOnly: true` maakt een staaf trek-alleen
+(bijvoorbeeld een windverband van rond staal). Per berekening valt een
+trek-alleen staaf weg zolang zij op druk zou staan; bij tweede orde convergeert
+die set eerst lineair en daarna in tweede orde. Het resultaat noemt de
+inactieve staven (`inactiveMembers`, met nul-krachten en nul-lijnen in de
+uitvoer) en het aantal statusrondes (`tensionOnlyRounds`). Staaflasten op een
+inactieve staaf gaan als statisch gelijkwaardige knooplasten naar de
+eindknopen. Een staaf die een knoop los laat hangen of een set die blijft
+wisselen, geeft een melding met staafnummers.
+
+**Starre schijven.** `diaphragms: [{ id, nodeIds }]` koppelt X, Y en de
+rotatie om Z van de knopen als één star horizontaal vlak. Voorwaarden: minstens
+twee bestaande knopen, alle binnen 1 mm op dezelfde hoogte, een knoop in
+hoogstens één schijf, en hoogstens één knoop die de schijf in haar vlak
+vasthoudt (oplegging in X, Y of rotatie om Z); die knoop wordt de meester.
+Liggen alle knopen in X en Y vast, dan valt de schijf met een melding weg.
+
+**Montage van trek-alleen staven.** `tensionOnlyFit: { nodalLoads,
+memberLoads, memberPointLoads, thermalLoads, surfaceLoads }` zijn de lasten die
+al op het frame staan wanneer de verbanden gemonteerd worden, bijvoorbeeld de
+permanente belasting met factor 1. Zelfde vorm en keuring als de gewone lasten;
+opgelegde verplaatsingen horen bij het rekengeval en doen niet mee. Elke
+trek-alleen staaf krijgt de spanningsloze lengte L + Δ0, met Δ0 de verlenging
+van haar koorde (u_j − u_i)·e_x onder de montagelasten (min de vrije
+temperatuurverlenging van de staaf zelf). Δ0 werkt als gelijkwaardige uniforme
+temperatuur ΔT = Δ0/(α·L) met de α van het materiaal (anders 12·10⁻⁶/K), in
+elke statusronde en in de tweede orde. De eerste montageberekening is lineair
+met alle staven actief, zodat het frame lood staat; omdat het verband daarin
+zelf meedraagt, past de adapter opnieuw op de nieuwe koorde tot de
+verbandkrachten niet meer veranderen (hoogstens 12 berekeningen). Onder alleen
+de montagelasten dragen de verbanden dan niets, behalve een kracht die het
+frame zonder verbanden niet kan dragen (een scheefstand die alleen de
+verbanden tegenhouden): die blijft, en voor dat deel houdt het verband zijn
+lengte uit de lode stand. Het resultaat geeft Δ0 per staaf
+(`tensionOnlyFit: [{ memberId, deltaMm }]`) en een melding met het aantal
+aangepaste staven, de grootste |Δ0| en het aantal montageberekeningen.
+Ontbreekt het veld, dan rekent alles als voorheen.
+
+**Kruisregel.** `tensionOnlyCrossRule: true`: twee trek-alleen staven die
+elkaar in hun inwendige snijden (kleinste afstand tussen de assen < 1 mm, het
+snijpunt meer dan 1 mm van de einden, geen gedeelde eindknoop) vormen een
+kruis; drie of meer staven door één punt tellen niet. Zou in een kruis geen
+diagonaal meedoen, dan blijft die met de grootste normaalkracht actief (voor
+een inactieve staaf de normaalkracht uit haar verlenging), ook met een kleine
+drukkracht. Het resultaat noemt die staven (`crossRuleMembers`); de melding
+geeft het aantal kruisen waarin de regel nodig was en de grootste drukkracht in
+een actieve trek-alleen staaf.
+
+`gui_build_3d_model` kent dezelfde velden in de app: `beams[].tension_only`,
+`diaphragms: [{ nodes, name? }]` met 1-gebaseerde knoopindices, en de
+modelinstellingen `tension_only_fit_after_permanent` (montagelasten zijn de
+blijvende belastinggevallen met factor 1, inclusief eigen gewicht en
+belastingvlakken) en `tension_only_cross_rule`. In de app werkt het eigen
+gewicht van een trek-alleen staaf als twee gelijke knooplasten op haar einden
+(kabelwerking), niet als verdeelde last.
+
+## Stalen hal (`open_fem_3d_staalhal_maken`)
+
+Een complete stalen hal als 3D-raamwerk met één aanroep: spanten (kolommen en
+spantliggers), gordingen, randliggers, dak- en wandverbanden, de lasten G, S,
+wind dwars en wind langs, het vaste geval "Eigen gewicht", en desgewenst een
+betonnen **balkrooster op palen** als fundering. Dezelfde generator zit achter
+de wizard **Stalen hal…** in de app (lint, groep Project, en het
+welkomstscherm) en achter de bedieningsopdracht `staalhal_maken`
+(`gui_build_3d_steel_hall`): wie een hal via de API maakt, krijgt knoop voor
+knoop hetzelfde model als in de wizard.
+
+**De keten.** De hal wordt in de solverbundel gebouwd
+(`design-mockup/src/components/openFem3d/wizards/staalhal.ts`, sidecar
+`staalhal_maken`). Met `reken: true` rekent `open_fem_3d::solve` — dezelfde
+kern als `solve_open_fem_3d` — elk belast geval en elke standaardcombinatie; de
+sidecar (`staalhal_uitwerken`) werkt de resultaten uit en bouwt de
+EN 1993-toetsinvoer met dezelfde functie als de app, en
+`steel_check::check_all_beams` toetst. Er wordt hier niets nagerekend of
+geschat: de UC per groep is het maximum van de `uc_max` die de staaltoets zelf
+geeft.
+
+### Argumenten
+
+| veld | standaard | betekenis |
+|---|---|---|
+| `hal` | `{}` | de parameters van de hal, zie hieronder |
+| `reken` | `false` | meteen doorrekenen met de 3D-kern |
+| `analyse` | `"linear"` | `"linear"` (eerste orde, zoals het projectbestand) of `"p-delta"` |
+| `gevolgklasse` | `"CC2"` | factoren van de standaardcombinaties (NEN-EN 1990 NB) |
+| `toetsen` | `true` | met `reken`: ook EN 1993 toetsen |
+| `stramien` | `true` | stramien en levels van de hal in het projectbestand |
+| `detail` | `"samenvatting"` | `"volledig"`: ook alle reacties en verplaatsingen per geval en de toetsuitkomst per staaf |
+| `timeout_s` | — | tijdslimiet per sidecar-aanroep |
+
+**`hal`** — alle lengtes in **mm**. Ontbrekende velden krijgen de standaardwaarde;
+samen is dat de voorbeeldhal van `docs/verificatie/3d-raamwerk/staalhal-60x30.ifcfem`.
+Een onbekend veld, een verkeerd type of een onzinnige combinatie wordt
+GEWEIGERD (`INVOER_ONGELDIG`), met in `detail.problemen` per probleem een code,
+het veld en een Nederlandse melding — nooit een stille standaardwaarde.
+
+| veld | standaard | betekenis |
+|---|---|---|
+| `lengteMm` | 60000 | lengte (x) |
+| `breedteMm` | 30000 | overspanning (y) |
+| `spantafstandMm` | 6000 | GROOTSTE h.o.h.-afstand; aantal vakken = ⌈lengte/spantafstand⌉, gelijk verdeeld. Niet samen met `aantalVakken` |
+| `aantalVakken` | — | aantal vakken (spanten = vakken + 1), in plaats van `spantafstandMm` |
+| `goothoogteMm` | 8000 | goothoogte (lage zijde bij een lessenaarsdak) |
+| `dak.type` | `"zadeldak"` | `"zadeldak"`, `"lessenaarsdak"` of `"platdak"` |
+| `dak.nokhoogteMm` / `dak.hellingGraden` | helling 1 : 10 | nokhoogte (lessenaarsdak: hoge zijde) óf helling; niet allebei |
+| `gordingafstandMm` | 2500 | GROOTSTE gordingafstand, horizontaal; bij een zadeldak valt de nok op een gording |
+| `profielen.{kolom,spantligger,gording,randligger,verband}` | HEA 450, IPE 600, IPE 160, HEA 160, CHS 88.9x4 | `{ profiel, materiaal }`, catalogusprofiel en S235–S460 |
+| `kolomvoet` | `"ingeklemd"` | of `"scharnierend"` (dan is wandverband verplicht) |
+| `verbanden.vakken` | `"kopvakken"` | `"kopvakken"`, `"alle"`, `"geen"` of vaknummers (1 = eerste vak) |
+| `verbanden.dak` / `verbanden.wanden` | `true` / `true` | kruis in elk gordingveld / in beide langsgevels |
+| `fundering.type` | `"opleggingen"` | of `"balkrooster"` |
+| `fundering.balkBreedteMm` × `balkHoogteMm`, `betonklasse` | 400 × 600, C20/25 | funderingsbalken |
+| `fundering.dwarsbalken` | `"elkSpant"` | of `"kopspanten"`; langsbalken liggen altijd onder beide kolomlijnen |
+| `fundering.diepteMm` | 800 | systeemlijn (hart balk) onder peil; > 0: een betonnen poer verbindt kolomvoet en rooster |
+| `fundering.paalKzKnPerMm` | 100 | verticale veer per paal |
+| `fundering.paalHorizontaal` | `"veren"` | veer per paal (`paalKhKnPerMm`, 5) of `"statischBepaald"` (u_x+u_y in de eerste paal, u_y in de laatste van kolomlijn y = 0) |
+| `fundering.paalAfstandMm` | 6000 | grootste paalafstand langs een balk; onder elke kolom staat een paal |
+| `lasten.dakafwerkingKnM2` / `sneeuwKnM2` | 0,3 / 0,56 | kN/m² horizontale projectie, als lijnlast op de gordingen |
+| `lasten.wind.bron` | `"handmatig"` | `"handmatig"` (`drukKnM2` 0,64, `zuigingKnM2` 0,40, `dakZuigingKnM2` 0,48) of `"stuwdruk"`: q_p(z = nok) uit NEN-EN 1991-1-4 (`windgebied` II, `terreincategorie` III), c_pe,10 zones D/E van tabel 7.1 en `cDak` (0,6) op het hele dak |
+| `eigenGewicht` | `true` | geval "Eigen gewicht" (id 5), ρ·A·g per staaf, ook rooster en poeren |
+| `projectnaam` | `""` | leeg: "Staalhal L × B m" |
+
+Belastinggevallen van de hal: 1 Permanent (G), 2 Sneeuw (S), 3 Wind dwars (W,
++Y: kolommen loef druk en lij zuiging, dak opwaarts), 4 Wind langs (W, +X: de
+helft van de kopgevel op de dakrand van het eerste spant), 5 Eigen gewicht. De
+app koppelt ze bij "Maken" aan de gevallen van het project (op naam en type;
+ontbrekende komen erbij).
+
+### Uitvoer
+
+- `project` — de inhoud van een projectbestand (op te slaan als `.ifcfem2d`, te
+  openen in de app of met `gui_load_model`);
+- `parameters` — de genormaliseerde parameters (weer als `hal` te gebruiken);
+- `samenvatting` — `aantallen`, `maten` (werkelijke spant- en gordingafstand,
+  helling, verbandvakken), `groepen` (staafnummers per rol: kolom, spantligger,
+  gording, randligger, dakverband, wandverband, funderingsbalk, poer),
+  `paalknopen`, de lasten (bij stuwdruk met afleiding), `belastingsom` per geval
+  en `eigenGewichtKn` (staal/beton);
+- `waarschuwingen` — aandachtspunten, bijv. lasten per m² projectie bij een
+  helling boven 10°, of de statisch bepaalde horizontale oplegging;
+- met `reken`: `berekening.gevallen[]` en `berekening.combinaties[]` met
+  `reactiesomKn`, `belastingsomKn`, `evenwicht` (kern én onafhankelijke
+  krachten- en momentensom), `maxVerplaatsingMm`, `maxGootverplaatsingMm` en
+  (balkrooster) `paalreacties`; `grenzen_ter_vergelijking` (L/250, h/150) en —
+  met `toetsen` — `berekening.toetsing` met `uc_max`, de maatgevende staaf,
+  `per_groep`, `status_telling`, `niet_getoetst` (beton, met reden) en de
+  `notities` van de toetsinvoer.
+
+### Voorbeeld
+
+```json
+{ "name": "open_fem_3d_staalhal_maken", "arguments": {
+    "hal": {
+      "lengteMm": 48000, "breedteMm": 24000, "spantafstandMm": 6000, "goothoogteMm": 7000,
+      "dak": { "type": "zadeldak", "hellingGraden": 6 },
+      "profielen": { "kolom": { "profiel": "HEA 400", "materiaal": "S355" } },
+      "kolomvoet": "scharnierend",
+      "verbanden": { "vakken": [1, 8], "dak": true, "wanden": true },
+      "fundering": { "type": "balkrooster", "dwarsbalken": "kopspanten", "paalAfstandMm": 4000 },
+      "lasten": { "wind": { "bron": "stuwdruk", "windgebied": "II", "terreincategorie": "III" } }
+    },
+    "reken": true } }
+```
+
+Verkort antwoord van de voorbeeldhal (`{ "reken": true }`, release-build):
+
+```json
+{ "samenvatting": { "aantallen": { "knopen": 165, "staven": 340, "opleggingen": 22, "palen": 0 } },
+  "berekening": { "aantal_berekeningen": 19,
+    "gevallen": [ { "id": 1, "naam": "Permanent (G)", "reactiesomKn": { "fx": 0, "fy": 0, "fz": 540 },
+                    "evenwicht": { "kern": true, "onafhankelijk": true }, "maxVerplaatsingMm": 31.9, "maxGootverplaatsingMm": 2.4 } ],
+    "toetsing": { "uc_max": 1.77, "maatgevend": { "groep": "wandverband", "profiel": "CHS 88.9x4" },
+                  "per_groep": { "kolom": { "uc_max": 0.78 }, "spantligger": { "uc_max": 0.68 }, "gording": { "uc_max": 1.59 } } } } }
+```
+
+De voorbeeldhal is een rekenvoorbeeld, geen ontwerp: met de veilige
+aannames van de 3D-toetsinvoer (kniklengte = staaflengte, geen kipsteunen)
+en beide diagonalen van de kruisen meewerkend halen de gordingen en de
+wanddiagonalen de toets niet. Kies zwaardere profielen of meer verbandvakken.
+
+**In de draaiende app** (bedieningskanaal, `OPENAEC_GUI_CONTROL=1`):
+`gui_build_3d_steel_hall { "hal": { … } }` — paginaopdracht `staalhal_maken`.
+Het 3D-model wordt vervangen als één undo-stap, de gevallen van de hal worden
+aan die van het project gekoppeld, het stramien en het eigen gewicht worden
+gezet en het 3D-werkblad opent passend in beeld; het antwoord noemt de
+aantallen, de staafnummers per groep en per geval van de hal het geval van het
+project. Een fout in de parameters komt terug met alle problemen, zonder dat
+er iets verandert.
+
+## IFC-analysemodel importeren (`open_fem_3d_ifc_importeren`)
+
+Een IFC4-analysemodel (Structural Analysis View: `IfcStructuralAnalysisModel`
+met knopen, staven, vlakken, belastinggevallen en combinaties) als 3D-project.
+Dezelfde import zit achter de knop **Rekenmodel importeren** op het IFC-tabblad
+van het lint (en Bestand → Openen) en achter de bedieningsopdracht
+`ifc_analysemodel_importeren` (`gui_import_ifc_analysis_model`): wie een bestand
+via de API importeert, krijgt knoop voor knoop hetzelfde project als in de app.
+
+**De keten.** De server leest het bestand (UTF-8, anders ISO 8859-1); de import
+zelf draait in de solverbundel (`design-mockup/src/io/ifcAnalyseImport.ts`,
+sidecar `ifc_importeren`). Met `reken: true` rekent `open_fem_3d::solve` elk
+belast geval en elke combinatie uit het bestand (heeft het bestand er geen: de
+standaardset van de app voor `gevolgklasse`), werkt de sidecar
+(`ifc_uitwerken`) de resultaten uit en toetst `steel_check::check_all_beams` de
+staven met een catalogusprofiel van staal, per onderdeel. Kent de 3D-kern een
+onderdeel nog niet (trek-alleen staven, starre schijven) of mist een staaf een
+profiel, dan is `berekening.uitgevoerd` false met de reden; er wordt niets
+weggelaten om toch te rekenen.
+
+### Argumenten
+
+| veld | standaard | betekenis |
+|---|---|---|
+| `pad` | — (verplicht) | absoluut pad naar het `.ifc`-bestand (IFC4, STEP-vorm) |
+| `analysemodel` | — | naam (hoofdletterongevoelig) of volgnummer vanaf 1; verplicht als het bestand meer dan één analysemodel heeft, anders komt er een fout met de lijst |
+| `reken` | `false` | meteen doorrekenen met de 3D-kern |
+| `analyse` | `"linear"` | `"linear"` of `"p-delta"` |
+| `gevolgklasse` | `"CC2"` | alleen voor de standaardset, als het bestand geen combinaties heeft |
+| `toetsen` | `true` | met `reken`: ook EN 1993 toetsen |
+| `detail` | `"samenvatting"` | `"volledig"`: ook reacties en verplaatsingen per geval en de toetsuitkomst per staaf |
+| `timeout_s` | — | tijdslimiet per sidecar-aanroep |
+
+### Wat er wordt ingelezen
+
+- eenheden uit `IfcUnitAssignment` (ook mm en kN; een `IfcDerivedUnit` gaat voor, de vlaklast valt anders terug op `PRESSUREUNIT`), omgerekend naar m, kN, kN/m, kN/m² en kNm;
+- plaatsing via de `IfcLocalPlacement`-keten en de `SharedPlacement` van het model;
+- knopen (`IfcStructuralPointConnection`) met opleggingen en veren; staven (`IfcStructuralCurveMember`) met profiel (I, U, kokers, buizen, massief rond als `RD <d>`, een stalen rechthoek als `Strip <b>x<t>`; op naam of op afmetingen), staalsoort, rolhoek uit `Axis` en eindscharnieren (`IfcRelConnectsStructuralMember`); een staaf die ook tussen haar eindpunten aan een knoop hangt (een doorgaande ligger over een kolom of tussensteunpunt), wordt daar geknipt: de lasten gaan over de delen, de tussenknopen zijn star;
+- trek-alleen: `TENSION_MEMBER`, `CABLE` en een `PIN_JOINED_MEMBER` van massief rond staal of van een platte strip (dikte ≤ ¼ breedte); een pendelstaaf met een ander profiel (ook een gedrongen strip) blijft een staaf die ook druk opneemt;
+- vlakken: horizontale membraanvlakken die knopen delen worden per hoogte één starre schijf; vlakken zonder stijfheid dragen belastingvlakken (overspanningsrichting uit een eigenschap "Overspanningsrichting"/"SpanDirection" met X of Y, anders twee richtingen);
+- belastinggevallen (type uit ActionType en ActionSource; `SelfWeightCoefficients` (0, 0, −1) = het automatische eigen gewicht; `SYSTEM_IMPERFECTION` = "overig", en de scheefstand van het project staat dan uit), vlak-, lijn- en puntlasten (een vlaklast met een eigen face die samenvalt met de rand van het vlak geldt voor het hele vlak; een kleinere face wordt gemeld en niet ingelezen), eigen combinaties (factoren uit `IfcRelAssignsToGroupByFactor`, type uit Purpose of naam) en levels uit `IfcBuildingStorey`.
+
+### Uitvoer
+
+- `project` — de inhoud van een projectbestand (`.ifcfem`), te openen in de app of met `gui_load_model`;
+- `modellen` — de analysemodellen in het bestand (nummer, naam, beschrijving, aantallen) en `analysemodel` — het gekozen model;
+- `verslag` — `aantallen`, `trekAlleen`, `schijven`, en in Nederlandse zinnen `toelichting`, `waarschuwingen` (benaderd of aangenomen) en `nietOndersteund` (niet ingelezen), gelijke meldingen samen met een telling;
+- met `reken`: `berekening` met `uitgevoerd` (en anders `reden`), `gevallen[]` en `combinaties[]` met `reactiesomKn`, `belastingsomKn`, `evenwicht` en `maxVerplaatsingMm`, en met `toetsen` de `toetsing` per onderdeel (zoals bij de stalen hal).
+
+### Voorbeeld
+
+```json
+{ "name": "open_fem_3d_ifc_importeren", "arguments": {
+    "pad": "C:/projecten/hal/analysemodel.ifc", "analysemodel": "Hal", "reken": true } }
+```
+
+**In de draaiende app** (bedieningskanaal, `OPENAEC_GUI_CONTROL=1`):
+`gui_import_ifc_analysis_model { "path": "…", "analysis_model": "Hal" }` —
+de app leest het bestand, zet het als nieuw 3D-project neer (zonder te vragen
+naar niet-opgeslagen werk) en geeft het verslag terug.
+
 ## Architecture
 
 - **Transport**: newline-delimited JSON-RPC 2.0 on stdin/stdout. One message
@@ -518,6 +788,8 @@ cargo test -p openaec-mcp-server
 | `beton_in_check_fem_model.rs` | a concrete beam in a mixed model is reported in `skipped_beams` instead of vanishing; `beam_ids` is respected; a model carrying a reinforcement cage is refused by the field gate |
 | `hout_in_check_fem_model.rs` | the same for a timber beam, including `beam_ids: [timber beam]`; and catalogue profiles outside the old prefix list (INP, DIN, L) are checked, not dropped |
 | `fem_golden.rs`, `sidecar.rs`, `fout_paden.rs` | the FEM chain: golden values, the Node sidecar, and the error paths |
+| `ifc_import_mcp.rs` | `open_fem_3d_ifc_importeren` end to end on the synthetic files of `docs/verificatie/ifc-analyse`: without a model choice the error lists both analysis models; the canopy model is imported, solved and checked with ΣR per load case equal to hand values and equilibrium everywhere; the hall comes back with its report and an honest calculation status; the mm/kN file gives exactly the same model; a missing file is reported (needs Node ≥ 20) |
+| `staalhal_mcp.rs` | `open_fem_3d_staalhal_maken` end to end: the default hall equals the example project file node for node, every schema default equals the generator's, ΣR per load case and Σ pile reactions match hand values, equilibrium in every case and combination, a UC for every steel member, and parameter errors come back with code and field (needs Node ≥ 20) |
 
 `beton_in_check_fem_model.rs` and the FEM tests need Node ≥ 20, because the
 solve runs in the Node sidecar; they fail with that message rather than skipping
@@ -568,7 +840,7 @@ silently. The steel and concrete check tools run entirely in Rust, so
 
 ## GUI tools: driving the running desktop app (`gui_*`)
 
-Fifteen tools operate the **running** Open FEM2D Studio desktop app through
+Twenty-two tools operate the **running** Open FEM Studio desktop app through
 its control channel. They are not engine calls and are therefore outside the
 three-ways rule — they *are* the way to the GUI.
 
@@ -576,7 +848,7 @@ Start the app with the channel enabled:
 
 ```
 set OPENAEC_GUI_CONTROL=1
-"%LOCALAPPDATA%\Open FEM2D Studio\open-fem2d-studio.exe"
+"%LOCALAPPDATA%\Open FEM Studio\open-fem2d-studio.exe"
 ```
 
 The app then listens on `127.0.0.1:<free port>` with a per-session token and
@@ -592,6 +864,8 @@ on exit (`gui_quit` exits through the app's own path so that happens).
 | `gui_status` | reachable? pid, port, version, active view, selection, member count |
 | `gui_load_model {path}` | loads a `.femp`/`.ifcfem2d` (read by the app process) |
 | `gui_build_model {...}` | builds nodes/beams/supports/loads through the store actions |
+| `gui_build_3d_model {...}` | builds a 3D frame in metres, with supports, nodal loads, optional member profiles, tension-only members, rigid diaphragms and optional levels (nodes and plates linked to a level) |
+| `gui_configure_3d_view {...}` | sets the 3D camera, visibility, profile volumes and the structural grid (X/Y grid axes and levels; linked nodes follow a level) |
 | `gui_select_member {id}` | selects a member as if clicked |
 | `gui_set_cage {beam_id, cage}` | sets `checkConfig.betonKorf` (same `ReinforcementCage` as `check_concrete_beam`) |
 | `gui_set_analysis {analysis_type}` | `eersteOrde` / `tweedeOrdeGeometrisch` / `tweedeOrdeFysisch` |
@@ -603,6 +877,8 @@ on exit (`gui_quit` exits through the app's own path so that happens).
 | `gui_read_checks` | reads the current check results |
 | `gui_screenshot {window, path, dom?}` | real pixels via `PrintWindow` (or `dom: true` → html2canvas) |
 | `gui_export_report_pdf {path, report_type?, page_size?, orientation?, project?}` | the standard live report (volledig/beperkt) as PDF via WebView2 `PrintToPdf`; refuses with a reason without a current calculation and check; settings apply to this export only; returns `{path, bytes, pages, sheets, report_type, pdf_base64}` — Windows only |
+| `gui_build_3d_steel_hall {hal}` | builds a steel hall with the wizard's generator (same `hal` as `open_fem_3d_staalhal_maken`): one undo step, project load cases coupled, structural grid set |
+| `gui_import_ifc_analysis_model {path, analysis_model?}` | imports an IFC4 structural analysis model as a new 3D project with the same import as the ribbon button "Rekenmodel importeren" and `open_fem_3d_ifc_importeren`; the app reads the file; returns the report |
 | `gui_quit` | closes the app gracefully |
 
 Every action returns only once the app *is* in the new state (store

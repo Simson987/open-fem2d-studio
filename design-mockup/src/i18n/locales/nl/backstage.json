@@ -22,7 +22,7 @@
     "github": "GitHub",
     "license": "Licentie",
     "stichting": "Stichting OpenAEC Foundation (NL)",
-    "copyright": "© 2026 OpenAEC Foundation. Code: MIT. Inhoud: CC BY-SA 4.0."
+    "copyright": "© 2026 OpenAEC Foundation. Code: AGPL-3.0-or-later; normtoetsingen: LGPL-3.0-or-later. Inhoud: CC BY-SA 4.0."
   },
   "importPanel": {
     "title": "Importeren",
@@ -59,7 +59,9 @@
     "hoursAgo_one": "{{count}} uur geleden",
     "hoursAgo_other": "{{count}} uur geleden",
     "daysAgo_one": "{{count}} dag geleden",
-    "daysAgo_other": "{{count}} dagen geleden"
+    "daysAgo_other": "{{count}} dagen geleden",
+    "importIfc": "IFC-rekenmodel importeren...",
+    "importIfcHint": "Een IFC4-analysemodel (Structural Analysis View) inlezen als nieuw 3D-project."
   },
   "extensionManager": {
     "desc": {

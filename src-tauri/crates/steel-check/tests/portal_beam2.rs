@@ -89,6 +89,8 @@ fn run() -> &'static BeamCheckResult {
             staaf_notities: None,
             profile_end: None,
             custom_section_end: None,
+            tension_only: None,
+            a_net_mm2: None,
         };
         check_beam(input)
     })
@@ -216,6 +218,30 @@ fn portal_beam2_governing_ok() {
 ///   6.62 = 0,2427 + 0,9787·66,04/80,544 = 1,0451 (was 0,5490).
 /// Zie `portal_beam2_governing_ok` voor waarom de referentie (0,79) hier niet
 /// gehaald wordt: de fixture draagt het momentenverloop niet.
+/// Oktober 2026 — trek, druk alleen bij druk, (6.36) vanaf 0,5·a en 6.3 per
+/// combinatie. Per veld nagelopen; uc_max blijft 1,04704 op vgl. 6.61.
+///  * 6.2.3 (trek): n.v.t., zonder unity check — nergens trek.
+///  * 6.2.9 en 6.2.10: n = 232,435/1276,05 = 0,18215 ligt tussen 0,5·a =
+///    0,11694 en a = 0,23389, waar de oude regel nog niet reduceerde. (6.36):
+///    M_N,y,Rd = 83,19·(1 − 0,18215)/(1 − 0,11694) = 77,047 kNm, UC =
+///    66,036/77,047 = 0,85709 (was 66,036/83,19 = 0,79380).
+///  * 6.3.2 en 6.3.3: getallen ongewijzigd; per combinatie getoetst, de
+///    kanttekeningen zeggen welke.
+/// Oktober 2026 (b) — kip en 6.3.3 bij klasse 3 (art. 6.3.2.1(3), tabel 6.7).
+/// Deze staaf (HEB160, S235) is klasse 1: W_y = W_pl,y blijft, en geen enkel
+/// getal verandert. 6.61 en 6.62 tonen nu de karakteristieke weerstanden van
+/// tabel 6.7 als variabelen, met χ_LT van de maatgevende combinatie erbij:
+///   N_Rk = A·f_y = 5430·235 = 1276,050 kN
+///   M_y,Rk = W_pl,y·f_y = 354 000·235 = 83,190 kNm
+///   M_z,Rk = W_pl,z·f_y = 170 000·235 = 39,950 kNm
+/// en de regel "Tabel 6.7, klasse 1: …" in de kanttekeningen.
+/// Oktober 2026 (c) — 6.2.8 op elk station van de omhullende in plaats van
+/// alleen op het buigpunt. Alle 3 punten getoetst; de grootste dwarskracht
+/// is 19,817 kN, onder V_pl,z,Rd/2 = 119,667 kN, dus ρ = 0 op elk punt en is de
+/// maatgevende plaats het punt met het grootste moment (combinatie 21 op x = 0 mm): UC = 66,036/83,19 = 0,793797,
+/// ongewijzigd. Wat verandert is de weergave: formule M_y,V,Rd = (1 − ρ)·
+/// M_y,c,Rd, de variabelen ρ en M_y,Ed erbij, de afleidingsstappen ρ en
+/// M_y,V,Rd, en Nederlandse kanttekeningen met de plaats.
 #[test]
 fn portal_beam2_snapshot() {
     insta::assert_json_snapshot!("portal_beam2", run());

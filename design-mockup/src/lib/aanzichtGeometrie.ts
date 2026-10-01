@@ -152,10 +152,16 @@ function catalogusDelen(
       ];
     case "Chs":
       return [{ soort: "ring", y: h / 2, z: h / 2, R: h / 2, r: Math.max(0, h / 2 - tw) }];
+    case "RoundBar":
+      // Massief rond: een ring zonder gat.
+      return [{ soort: "ring", y: h / 2, z: h / 2, R: h / 2, r: 0 }];
     case "Angle":
       // Hiel linksonder, het lange been staand (zie `SectionShape` "angle").
       return [rechthoek(0, 0, tw, h), rechthoek(tw, 0, b, tw)];
     case "Rechthoek":
+    case "FlatBar":
+      // Platstaal: een massieve rechthoek, de breedte van de strip (h) langs
+      // z en de dikte (b) langs y — dezelfde stand als in de catalogus.
       return [rechthoek(0, 0, b, h)];
   }
 }
@@ -370,9 +376,11 @@ export function aanzichtDoorsnede(material: string | undefined, profile: string 
       return { delen, zc, naden: [] };
     }
     case "staal-db":
-    case "vrij": {
+    case "vrij":
+    case "aluminium-bxh":
+    case "aluminium-catalogus": {
       const rect = parseRechthoek(profile);
-      if (sec.bron === "vrij" && rect) return rechthoekDoorsnede(rect.b, rect.h);
+      if ((sec.bron === "vrij" || sec.bron === "aluminium-bxh") && rect) return rechthoekDoorsnede(rect.b, rect.h);
       const d = STEEL_SECTION_DIMS[profileLookupKey(profile ?? "")];
       if (!d) return null;
       const delen = catalogusDelen(d.kind, d.h, d.b, d.tw, d.tf);

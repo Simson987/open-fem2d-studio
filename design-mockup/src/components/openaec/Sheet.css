@@ -160,3 +160,19 @@
   cursor: pointer;
 }
 .oa-grid-done-btn:hover { filter: brightness(1.08); }
+
+/* Stramienen en levels: de twee groepen en hun uitleg/melding. */
+.oa-grid-group-title {
+  font-weight: 600;
+  margin-top: 12px;
+}
+.oa-grid-hint {
+  margin: 0;
+  font: 400 11px/1.4 "Inter", system-ui, sans-serif;
+  color: var(--theme-text-secondary);
+}
+.oa-grid-error {
+  margin: 4px 0 0;
+  font: 500 11px/1.4 "Inter", system-ui, sans-serif;
+  color: var(--theme-danger-color, #dc2626);
+}

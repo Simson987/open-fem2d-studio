@@ -101,6 +101,10 @@ import { ANALYSETYPEN } from "../components/fem/femTypes";
 import type { SteelProfile } from "../lib/types/steel/SteelProfile";
 import { version as PAKKET_VERSIE } from "../../package.json";
 import { beeldKernfoutAf } from "./fouten";
+import { opStaalhalMaken, opStaalhalUitwerken } from "./staalhalSidecar";
+import { StaalhalFout } from "../components/openFem3d/wizards/staalhal";
+import { IfcSidecarInvoerFout, opIfcImporteren, opIfcUitwerken } from "./ifcImportSidecar";
+import { IfcImportFout } from "../io/ifcAnalyseImport";
 import { controleerVelden, keurCheckConfig, valideerModel } from "./valideerModel";
 import { bijlageUitBestand, STANDAARD_BIJLAGE, type NationaleBijlageCode } from "../lib/normAanduidingen";
 import {
@@ -415,7 +419,7 @@ function leesAnalysetype(waarde: unknown): Analysetype | null {
 
 /**
  * Model uit een payload: ofwel `model` (store-eigen vorm), ofwel `project`
- * (de INHOUD van een `.ifcfem2d`-bestand). De sidecar leest zelf nooit van
+ * (de INHOUD van een `.ifcfem`-bestand). De sidecar leest zelf nooit van
  * schijf: Rust levert de bytes aan. Zo blijft alle bestandstoegang aan één
  * kant, zijn de FEM-tools aantoonbaar alleen-lezen, en heeft de bundel geen
  * `node:fs` nodig — wat hij ook niet mag hebben, want de bundel moet nul
@@ -427,7 +431,7 @@ function leesModel(payload: Record<string, unknown>): GelezenModel {
   if (heeftModel === heeftProject) {
     throw new InvoerFout(
       "Geef precies één van `model` (het model zelf) of `project` " +
-        "(de inhoud van een .ifcfem2d-bestand).",
+        "(de inhoud van een .ifcfem-bestand).",
     );
   }
 
@@ -1474,8 +1478,34 @@ export function verwerkVerzoek(verzoek: SidecarVerzoek): SidecarAntwoord {
         // geslaagd, het antwoord luidt alleen `ok: false`. Daarom `maakOk` —
         // wie een lijst bevindingen vraagt en er een krijgt, kreeg antwoord.
         return maakOk(verzoek.id, opValidate(verzoek.payload));
+      case "staalhal_maken":
+        return maakOk(verzoek.id, opStaalhalMaken(verzoek.payload));
+      case "staalhal_uitwerken":
+        return maakOk(verzoek.id, opStaalhalUitwerken(verzoek.payload));
+      case "ifc_importeren":
+        return maakOk(verzoek.id, opIfcImporteren(verzoek.payload));
+      case "ifc_uitwerken":
+        return maakOk(verzoek.id, opIfcUitwerken(verzoek.payload));
     }
   } catch (err) {
+    if (err instanceof StaalhalFout) {
+      // De invoerpoort van de hal meldt ALLE problemen, elk met code en veld;
+      // die gaan ongeschonden mee in `detail`.
+      return maakFout(verzoek.id, "INVOER_ONGELDIG", err.message, { problemen: err.problemen });
+    }
+    if (err instanceof IfcImportFout) {
+      // Een bestand dat niet te lezen is (of geen IFC4-analysemodel bevat) is
+      // BESTAND_ONLEESBAAR; een ontbrekende of onbekende modelkeuze is invoer,
+      // met de lijst analysemodellen erbij.
+      const bestand = err.code === "leesfout" || err.code === "geenIfc4" || err.code === "geenAnalysemodel";
+      return maakFout(verzoek.id, bestand ? "BESTAND_ONLEESBAAR" : "INVOER_ONGELDIG", err.message, {
+        reden: err.code,
+        ...(err.modellen.length > 0 ? { modellen: err.modellen } : {}),
+      });
+    }
+    if (err instanceof IfcSidecarInvoerFout) {
+      return maakFout(verzoek.id, "INVOER_ONGELDIG", err.message, { veld: err.veld });
+    }
     if (err instanceof InvoerFout) {
       return maakFout(verzoek.id, "INVOER_ONGELDIG", err.message, err.detail);
     }

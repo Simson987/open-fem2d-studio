@@ -5,6 +5,7 @@
   "tabs": {
     "general": "Général",
     "appearance": "Apparence",
+    "calculation": "Calcul",
     "editor": "Éditeur",
     "files": "Fichiers",
     "shortcuts": "Raccourcis",
@@ -30,6 +31,29 @@
     "contrast": "Contraste élevé",
     "font": "Police",
     "uiFontSize": "Taille de police de l'interface"
+  },
+  "calculation": {
+    "engine": "Moteur de calcul",
+    "solver": "Solveur",
+    "automatic": "Automatique (recommandé)",
+    "automaticDescription": "Open FEM sélectionne automatiquement un solveur disponible qui prend en charge l'analyse complète.",
+    "manualDescription": "{{solver}} est utilisé lorsqu'il prend en charge l'analyse demandée.",
+    "available": "Disponible",
+    "unavailable": "Pas encore inclus",
+    "license": "Licence",
+    "version": "Version",
+    "supports": "Prend en charge",
+    "adapterPending": "L'adaptateur Rust est enregistré et devient sélectionnable lorsqu'il est livré avec l'application.",
+    "analysis": {
+      "linear": "linéaire",
+      "p-delta": "second ordre P-Δ",
+      "material-nonlinear": "matériel non linéaire"
+    },
+    "elements": {
+      "frame": "ossature",
+      "plate": "plaque",
+      "solid": "volume"
+    }
   },
   "editor": {
     "general": "Général",
@@ -77,7 +101,7 @@
     "timberGroup": "Classes de résistance du bois (EN 338 / EN 14080)"
   },
   "about": {
-    "appName": "Open FEM2D Studio",
+    "appName": "Open FEM Studio",
     "version": "Version",
     "framework": "Framework",
     "license": "Licence",

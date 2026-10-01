@@ -14,6 +14,10 @@ const STIL = [
   "--disable-background-networking", "--disable-component-update", "--disable-extensions",
   "--disable-sync", "--disable-default-apps", "--no-pings", "--metrics-recording-only",
 ];
+// De Ubuntu-runners van CI staan geen gebruikersnamespaces toe; Chromium stopt
+// daar met "No usable sandbox". Alleen daar zonder sandbox: de pagina is een
+// eigen testbestand, geen website.
+const ZONDER_SANDBOX = process.platform === "linux" && process.env.CI ? ["--no-sandbox"] : [];
 export const KLOK_PER_POGING_MS = 90_000;
 const POGINGEN = 3;
 
@@ -23,7 +27,7 @@ export function startBrowser(browser, args, opties = {}) {
   for (let poging = 1; poging <= POGINGEN; poging++) {
     // Een vers profiel per herkansing: een half geschreven profiel kan de volgende start ook laten hangen.
     const a = args.map((x) => (poging > 1 && x.startsWith("--user-data-dir=") ? `${x}-poging${poging}` : x));
-    laatste = spawnSync(browser, [...STIL, ...a], { ...opties, timeout: KLOK_PER_POGING_MS });
+    laatste = spawnSync(browser, [...STIL, ...ZONDER_SANDBOX, ...a], { ...opties, timeout: KLOK_PER_POGING_MS });
     const verlopen = laatste.error?.code === "ETIMEDOUT" || (laatste.signal && laatste.status === null);
     if (!verlopen) return laatste;
     process.stderr.write(`[headless] poging ${poging} bleef hangen na ${KLOK_PER_POGING_MS / 1000} s; opnieuw\n`);

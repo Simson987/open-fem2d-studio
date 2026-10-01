@@ -55,7 +55,8 @@ use crate::result::{
 
 /// De volgorde waarin de toetsen in het resultaat staan — dezelfde als bij een
 /// prismatische staaf, zodat het rapport niets hoeft te weten van het verschil.
-const VOLGORDE: [&str; 14] = [
+const VOLGORDE: [&str; 16] = [
+    "6.2.3_tension",
     "6.2.4_compression",
     "6.2.5_bending_y",
     "6.2.5_bending_z",
@@ -70,10 +71,13 @@ const VOLGORDE: [&str; 14] = [
     "6.3.3_eq_6_62",
     "deflection_w_fin",
     "deflection_w_add",
+    // Alleen bij een trek-alleen staaf: de grootste drukkracht, niet getoetst.
+    crate::input::TOETS_TREK_ALLEEN,
 ];
 
-/// De acht toetsen die per REKENPUNT met de plaatselijke doorsnede gaan.
-const DOORSNEDETOETSEN: [&str; 8] = [
+/// De negen toetsen die per REKENPUNT met de plaatselijke doorsnede gaan.
+const DOORSNEDETOETSEN: [&str; 9] = [
+    "6.2.3_tension",
     "6.2.4_compression",
     "6.2.5_bending_y",
     "6.2.5_bending_z",
@@ -521,10 +525,11 @@ pub fn check_beam_verlopend(input: BeamCheckInput, v: Verloop) -> BeamCheckResul
                 reden,
             });
             checks.push(c);
-        } else if DOORBUIGING.contains(&id) {
+        } else if DOORBUIGING.contains(&id) || id == crate::input::TOETS_TREK_ALLEEN {
             // Hangt niet van de doorsnede af: de zakking komt uit de solver,
-            // die al met het verloop rekende. Elke deelvraag geeft hier
-            // hetzelfde; de eerste volstaat.
+            // die al met het verloop rekende, en de drukregel van een
+            // trek-alleen staaf uit de hele omhullende. Elke deelvraag op een
+            // veldgrens krijgt die hele omhullende; de eerste volstaat.
             if let Some(c) = per_grens.first().and_then(|d| d.toets(id)) {
                 checks.push(c.clone());
             }

@@ -1,0 +1,36 @@
+/* "Rekenmodel importeren" — alleen thematokens, zodat licht en donker vanzelf kloppen. */
+.ifci-modal .modal-body { overflow: hidden; }
+.ifci-inhoud { display: flex; flex-direction: column; gap: 6px; padding: 12px; overflow: auto; max-height: min(640px, calc(90vh - 90px)); font-size: 12px; }
+.ifci-intro { margin: 0 0 4px; line-height: 1.45; }
+.ifci-modellen { display: flex; flex-direction: column; gap: 4px; }
+.ifci-model {
+  display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; cursor: pointer;
+  border: 1px solid var(--theme-dialog-border); background: var(--theme-dialog-bg);
+}
+.ifci-model:hover { border-color: var(--theme-accent); }
+.ifci-model.gekozen { border-color: var(--theme-accent); box-shadow: inset 3px 0 0 var(--theme-accent); }
+.ifci-model input { margin-top: 2px; }
+.ifci-model-tekst { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ifci-model-naam { font-weight: 600; }
+.ifci-model-beschrijving { opacity: 0.85; }
+.ifci-model-aantallen { font-size: 11px; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.ifci-aantallen { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 16px; margin: 4px 0; }
+.ifci-telling { display: flex; justify-content: space-between; gap: 8px; }
+.ifci-telling dt { opacity: 0.85; }
+.ifci-telling dd { margin: 0; font-variant-numeric: tabular-nums; }
+.ifci-kop {
+  margin-top: 8px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--theme-text-secondary, var(--theme-dialog-content-text));
+}
+.ifci-lijst { margin: 2px 0 0; padding-left: 18px; line-height: 1.5; user-select: text; }
+.ifci-lijst.waarschuwing li { color: var(--theme-warning, #b45309); }
+.ifci-lijst.fout li { color: var(--theme-error, #dc2626); }
+.ifci-geen { margin: 2px 0 0; opacity: 0.7; }
+.ifci-voet { display: flex; align-items: center; gap: 6px; width: 100%; }
+.ifci-ruimte { flex: 1; }
+.ifci-knop {
+  padding: 4px 12px; font-size: 12px; cursor: pointer;
+  background: var(--theme-dialog-bg); color: var(--theme-dialog-content-text); border: 1px solid var(--theme-dialog-border);
+}
+.ifci-knop:hover { border-color: var(--theme-accent); }
+.ifci-knop.primair { background: var(--theme-accent); border-color: var(--theme-accent); color: var(--theme-accent-text, #fff); }

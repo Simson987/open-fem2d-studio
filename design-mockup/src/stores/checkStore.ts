@@ -64,6 +64,7 @@ import { buildSpanningCheckInputs } from "../lib/spanningCheckBuilder";
 import { buildPlaatCheckInputs, type PlaatSkip } from "../lib/plaatCheckBuilder";
 import type { PlateCheckResult } from "../lib/types/plaat/PlateCheckResult";
 import { isVrijMateriaal } from "../lib/vrijMateriaal";
+import { isAluminiumMateriaal } from "../lib/aluminiumMateriaal";
 import type { NationaleBijlageCode } from "../lib/normAanduidingen";
 import {
   bepaalKruipPerStaaf,
@@ -442,7 +443,7 @@ export const useCheckStore = create<CheckState>((set) => ({
       // weggefilterd.
       const steel = buildSteelCheckInputs({
         ...data,
-        beams: data.beams.filter((b) => !isVrijMateriaal(b.material)),
+        beams: data.beams.filter((b) => !isVrijMateriaal(b.material) && !isAluminiumMateriaal(b.material)),
         alleBeams: data.beams,
         profileDb,
       });
@@ -509,7 +510,9 @@ export const useCheckStore = create<CheckState>((set) => ({
         if (!covered.has(b.id)) {
           skipped.push({
             beamId: b.id,
-            reason: `niet herkend als staal, hout, kruislaaghout, beton of vrij materiaal (materiaal "${b.material ?? "—"}", profiel "${b.profile ?? "—"}") — geen toetsing mogelijk`,
+            reason: isAluminiumMateriaal(b.material)
+              ? `aluminiumstaaf ${b.material}: alleen 2D-stijfheid is beschikbaar; EN 1999-toetsing vergt een expliciete lasstatus, profielclassificatie en normeditie`
+              : `niet herkend als staal, hout, kruislaaghout, beton of vrij materiaal (materiaal "${b.material ?? "—"}", profiel "${b.profile ?? "—"}") — geen toetsing mogelijk`,
           });
         }
       }
@@ -631,6 +634,7 @@ export function anyCheckableBeams(beams: Beam[]): boolean {
   return beams.some(
     (b) =>
       isVrijMateriaal(b.material) ||
+      isAluminiumMateriaal(b.material) ||
       isSteelProfile(b.profile) ||
       isCltProfiel(b.profile) ||
       matchSupportedTimberGrade(b.material) !== null ||

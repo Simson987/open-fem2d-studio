@@ -93,6 +93,8 @@ fn run() -> &'static BeamCheckResult {
             staaf_notities: None,
             profile_end: None,
             custom_section_end: None,
+            tension_only: None,
+            a_net_mm2: None,
         };
         check_beam(input)
     })
@@ -236,6 +238,32 @@ fn calc2_beam3_governing_not_ok() {
 ///   6.61 = 0,0249 + 0,4051·187,33/184,59 = 0,4361 (was 0,6416); 6.62 = 0,2649.
 ///   uc_max blijft 1,0148 op 6.2.5. Bij 6.3.1 komt de notitie dat de koker
 ///   als warmvervaardigd (EN 10210, kromme a) is aangenomen (nr 36).
+/// Oktober 2026 — trek, druk alleen bij druk, (6.36) vanaf 0,5·a en 6.3 per
+/// combinatie. Per veld nagelopen; uc_max blijft 1,01485 op 6.2.5.
+///  * 6.2.3 (trek): n.v.t., zonder unity check — nergens trek.
+///  * 6.2.9 en 6.2.10 volgen (6.39) voor de koker: a_w = (11 501,3 −
+///    2·200·16)/11 501,3 = 0,44354; n = 48,228/2702,81 = 0,01784 < 0,5·a_w,
+///    dus geen reductie. De UC blijft 1,01485; omdat zij boven 1 ligt is het
+///    de evenredige overschrijding, en die is hier gelijk aan m.
+///  * 6.3.3 per combinatie, met N_Ed de GROOTSTE druk langs de staaf (art.
+///    6.3.3(4)): 48,329 kN op x = 2431 mm in plaats van de 48,228 kN op het
+///    punt van het grootste moment. 6.61 0,436064 → 0,436127 en 6.62
+///    0,264880 → 0,264925.
+/// Oktober 2026 (b) — kip en 6.3.3 bij klasse 3 (art. 6.3.2.1(3), tabel 6.7).
+/// Deze staaf (HFRHS200X200X16, S235) is klasse 1: W_y = W_pl,y blijft, en geen enkel
+/// getal verandert. 6.61 en 6.62 tonen nu de karakteristieke weerstanden van
+/// tabel 6.7 als variabelen, met χ_LT van de maatgevende combinatie erbij:
+///   N_Rk = A·f_y = 11 501,3·235 = 2702,8055 kN (in de kanttekening afgerond 2702,805)
+///   M_y,Rk = W_pl,y·f_y = 785 472·235 = 184,586 kNm
+///   M_z,Rk = W_pl,z·f_y = 785 472·235 = 184,586 kNm
+/// en de regel "Tabel 6.7, klasse 1: …" in de kanttekeningen.
+/// Oktober 2026 (c) — 6.2.8 op elk station van de omhullende in plaats van
+/// alleen op het buigpunt. Alle 3 punten getoetst; de grootste dwarskracht
+/// is 241,739 kN, onder V_pl,z,Rd/2 = 390,116 kN, dus ρ = 0 op elk punt en is de
+/// maatgevende plaats het punt met het grootste moment (combinatie 2 op x = 2402 mm): UC = 187,327/184,586 = 1,014850,
+/// ongewijzigd. Wat verandert is de weergave: formule M_y,V,Rd = (1 − ρ)·
+/// M_y,c,Rd, de variabelen ρ en M_y,Ed erbij, de afleidingsstappen ρ en
+/// M_y,V,Rd, en Nederlandse kanttekeningen met de plaats.
 #[test]
 fn calc2_beam3_snapshot() {
     insta::assert_json_snapshot!("calc2_beam3", run());

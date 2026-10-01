@@ -22,6 +22,8 @@ import { STEEL_GRADES } from "./BarPropertiesDialog";
 import { SUPPORTED_TIMBER_GRADES } from "../../lib/timberCheckBuilder";
 import { useCheckStore } from "../../stores/checkStore";
 import { useResultaatInfoStore } from "../../stores/resultaatInfoStore";
+import ExplorerViewTab from "./ExplorerViewTab";
+import type { OpenFem3DVisibility } from "../openFem3d/openFem3dVisibility";
 
 interface TreeNodeProps {
   label: string;
@@ -78,7 +80,6 @@ function ResultsTab({
   envelopeView = false,
   hasPlates = false,
   onSelectScope,
-  onOpenZichtbaarheid,
 }: {
   displayFlags?: DisplayFlags;
   setDisplayFlags?: React.Dispatch<React.SetStateAction<DisplayFlags>>;
@@ -90,8 +91,6 @@ function ResultsTab({
   envelopeView?: boolean;
   /** True zodra het model platen bevat — toont de contour-rij (P3.2). */
   hasPlates?: boolean;
-  /** Opent het venster Zichtbaarheid (issue #47): het tandwiel bij de titel. */
-  onOpenZichtbaarheid?: () => void;
   /** Called when user picks a scope. Encodes which one was chosen so App
    * can set the right state (single LC / combination / envelope). */
   onSelectScope?: (scope:
@@ -157,11 +156,6 @@ function ResultsTab({
         ? undefined
         : t("tree.rowEIDisabled"),
     },
-    // Modelweergave (geen resultaat), maar hij hoort in dezelfde lijst — dit
-    // is de ene plek waar canvas-weergave aan en uit gaat.
-    { key: "profielLabels", label: t("tree.rowProfileName"), hint: t("tree.rowProfileNameHint"), swatch: "var(--theme-text)" },
-    { key: "kipsteunen", label: t("tree.rowKipsteunen"), hint: t("tree.rowKipsteunenHint"), swatch: "var(--theme-accent)" },
-    { key: "aanzicht", label: t("tree.rowAanzicht"), hint: t("tree.rowAanzichtHint"), swatch: "var(--theme-text-secondary)" },
   ];
   // Contour-rij alleen wanneer het model platen bevat (P3.2).
   if (hasPlates) {
@@ -214,27 +208,6 @@ function ResultsTab({
         </optgroup>
       </select>
 
-      {/* Tandwiel: het venster Zichtbaarheid met alle weergave-instellingen
-          bij elkaar (issue #47). Zelfde vlaggen als de schakelaars hieronder. */}
-      <div className="fem-results-section-title fem-results-section-title-met-knop">
-        <span>{t("tree.canvasDisplay")}</span>
-        {onOpenZichtbaarheid && (
-          <button
-            type="button"
-            className="fem-results-title-knop"
-            onClick={onOpenZichtbaarheid}
-            title={t("tree.openZichtbaarheid")}
-            aria-label={t("tree.openZichtbaarheid")}
-            data-actie="zichtbaarheid"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-          </button>
-        )}
-      </div>
       <div className="fem-results-toggle-list">
         {ROWS.map(row => {
           const uitgegrijsd = row.disabledReden !== undefined;
@@ -358,7 +331,7 @@ function ResultsTab({
                   <label className="fem-results-subcheck">
                     <input
                       type="checkbox"
-                      checked={displayFlags.plaatMesh !== false}
+                      checked={displayFlags.plaatMesh === true}
                       onChange={(e) => setDisplayFlags(f => ({ ...f, plaatMesh: e.target.checked }))}
                     />
                     <span>{t("tree.mesh")}</span>
@@ -494,11 +467,18 @@ interface FemProjectTreeProps {
   setDisplayFlags?: React.Dispatch<React.SetStateAction<DisplayFlags>>;
   /** True when any solver result is available — gates the toggle hint. */
   hasResults?: boolean;
-  /** Opent het venster Zichtbaarheid (tandwiel bij "Weergave op canvas", issue #47). */
-  onOpenZichtbaarheid?: () => void;
   /** Optional controlled tab — when supplied, App.tsx drives which tab is open. */
-  activeTab?: "project" | "results";
-  setActiveTab?: (t: "project" | "results") => void;
+  activeTab?: "project" | "view" | "results";
+  setActiveTab?: (t: "project" | "view" | "results") => void;
+  workspace?: "2d" | "3d";
+  gridShow: boolean;
+  setGridShow: (show: boolean) => void;
+  stramienAan: boolean;
+  setStramienAan: (show: boolean) => void;
+  openFem3dVisibility: OpenFem3DVisibility;
+  setOpenFem3DVisibility: (visibility: OpenFem3DVisibility) => void;
+  /** Opent het venster Zichtbaarheid (issue #47): het tandwiel in de tab Weergave. */
+  onOpenZichtbaarheid?: () => void;
 }
 
 export default function FemProjectTree(props: FemProjectTreeProps) {
@@ -510,8 +490,10 @@ export default function FemProjectTree(props: FemProjectTreeProps) {
     belastingMeldingen = [], combinatieAfwijking = null, combinatieVervanging = null, onOpenCombinaties,
     activeCombinationId, setActiveCombinationId,
     envelopeView, setEnvelopeView, envelope,
-    displayFlags, setDisplayFlags, hasResults, onOpenZichtbaarheid,
+    displayFlags, setDisplayFlags, hasResults,
     activeTab, setActiveTab,
+    workspace = "2d", gridShow, setGridShow, stramienAan, setStramienAan,
+    openFem3dVisibility, setOpenFem3DVisibility, onOpenZichtbaarheid,
   } = props;
   const { t } = useTranslation("common");
   /** Reden per overgeslagen combinatie-id; leeg = alles wordt doorgerekend. */
@@ -520,7 +502,7 @@ export default function FemProjectTree(props: FemProjectTreeProps) {
   );
   /** De combinaties waar wél resultaten voor zijn — voor de resultaatkiezer. */
   const actieveCombinaties = combinations.filter((c) => !overgeslagenReden.has(c.id));
-  const [internalTab, setInternalTab] = useState<"project" | "results">("project");
+  const [internalTab, setInternalTab] = useState<"project" | "view" | "results">("project");
   // If controlled (activeTab supplied), use it; otherwise fall back to local.
   const tab    = activeTab    ?? internalTab;
   const setTab = setActiveTab ?? setInternalTab;
@@ -580,13 +562,29 @@ export default function FemProjectTree(props: FemProjectTreeProps) {
     <div className="fem-project-tree">
       {/* Tabs */}
       <div className="fem-tree-tabs">
-        <button className={`fem-tree-tab${tab === "project" ? " active" : ""}`} onClick={() => setTab("project")}>{t("tree.projectTab")}</button>
-        <button className={`fem-tree-tab${tab === "results" ? " active" : ""}`} onClick={() => setTab("results")}>{t("tree.resultsTab")}</button>
+        {workspace === "2d" && <button className={`fem-tree-tab${tab === "project" ? " active" : ""}`} onClick={() => setTab("project")}>{t("tree.projectTab")}</button>}
+        <button className={`fem-tree-tab${tab === "view" ? " active" : ""}`} onClick={() => setTab("view")}>{t("tree.viewTab")}</button>
+        {workspace === "2d" && <button className={`fem-tree-tab${tab === "results" ? " active" : ""}`} onClick={() => setTab("results")}>{t("tree.resultsTab")}</button>}
       </div>
 
       {/* Tree */}
       <div className="fem-tree-body">
-        {tab === "project" ? (
+        {tab === "view" ? (
+          displayFlags && setDisplayFlags ? (
+            <ExplorerViewTab
+              displayFlags={displayFlags}
+              setDisplayFlags={setDisplayFlags}
+              gridShow={gridShow}
+              setGridShow={setGridShow}
+              stramienAan={stramienAan}
+              setStramienAan={setStramienAan}
+              openFem3dVisibility={openFem3dVisibility}
+              setOpenFem3DVisibility={setOpenFem3DVisibility}
+              workspace={workspace}
+              onOpenZichtbaarheid={onOpenZichtbaarheid}
+            />
+          ) : null
+        ) : tab === "project" ? (
           <>
             <TreeNode label={t("tree.model")} defaultOpen icon={<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12v12H2z" opacity="0.2"/><path d="M2 2h12v12H2zM2 8h12M8 2v12" fill="none" stroke="currentColor" strokeWidth="1"/></svg>}>
               <TreeNode label={t("tree.nodes")} count={nodes.length} defaultOpen icon={<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="5" cy="5" r="2.5" /></svg>}>
@@ -830,7 +828,6 @@ export default function FemProjectTree(props: FemProjectTreeProps) {
             setDisplayFlags={setDisplayFlags}
             hasResults={hasResults ?? false}
             hasPlates={plates.length > 0}
-            onOpenZichtbaarheid={onOpenZichtbaarheid}
             loadCases={loadCases}
             activeLoadCaseId={activeLoadCaseId}
             combinations={actieveCombinaties}

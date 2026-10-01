@@ -139,6 +139,8 @@ fn invoer(
         staaf_notities: None,
         profile_end: None,
         custom_section_end: None,
+        tension_only: None,
+        a_net_mm2: None,
     }
 }
 
@@ -383,18 +385,23 @@ fn databasepad_blijft_ongewijzigd() {
     assert_eq!(r.status, CheckStatus::Ok);
     assert_eq!(r.classification, CrossSectionClass::Class1);
 
-    // De checklijst is onveranderd: twaalf toetsen plus twee doorbuigingen,
-    // in deze volgorde, en geen enkele D4.3-weigering ertussen.
+    // De checklijst: de trektoets 6.2.3 — sinds oktober 2026 voor elke
+    // doorsnede; hier n.v.t., want er is geen trek — dan de twaalf toetsen
+    // plus twee doorbuigingen, in deze volgorde, en geen enkele
+    // D4.3-weigering ertussen.
     let ids: Vec<&str> = r.checks.iter().map(|c| c.id.as_str()).collect();
-    let verwacht: Vec<&str> = TOETSEN
-        .iter()
-        .copied()
+    let verwacht: Vec<&str> = ["6.2.3_tension"]
+        .into_iter()
+        .chain(TOETSEN.iter().copied())
         .chain(["deflection_w_fin", "deflection_w_add"])
         .collect();
     assert_eq!(ids, verwacht);
     for id in TOETSEN {
         assert!(uc_van(check(&r, id)).is_some(), "{id} zou een UC moeten hebben");
     }
+    let trek = check(&r, "6.2.3_tension");
+    assert_eq!(status_van(trek), CheckStatus::NotApplicable);
+    assert!(uc_van(trek).is_none(), "geen trek, dus geen unity check");
 
     // N_c,Rd = A·f_y/γ_M0 en UC = |N_Ed|/N_c,Rd, uit de catalogusgegevens.
     let n_c_rd = p.area_mm2 * 235.0 / 1.0 * 1e-3;
@@ -504,16 +511,24 @@ fn gelaste_i_levert_handrekenbare_uc_voor_n_v_en_m() {
     // 6.2.5 om de z-as: W_pl,z = 310 000 mm³ → M_z,Rd = 72,85 kNm.
     assert_relative_eq!(waarde_van(check(&r, "6.2.5_bending_z")), 72.85, max_relative = 1e-3);
 
-    // 6.2.9  a = (A − 2·b·t_f)/A = (10 000 − 6000)/10 000 = 0,40 en
-    //        n = 0,2128 ≤ a, dus géén reductie: UC gelijk aan 6.2.5.
+    // 6.2.9  a = (A − 2·b·t_f)/A = (10 000 − 6000)/10 000 = 0,40, dus de
+    //        reductie van (6.36) begint bij n > 0,5·a = 0,20. Hier is
+    //        n = 500/2350 = 0,212766 > 0,20, en de vrijstelling van
+    //        6.2.9.1(4) geldt niet: (6.34) N_Ed ≤ 0,5·h_w·t_w·f_y/γ_M0 =
+    //        0,5·400·10·235 = 470 kN < 500 kN. Dus
+    //        M_N,y,Rd = 386,575·(1 − 0,212766)/(1 − 0,5·0,40) = 380,406 kNm
+    //        UC = 200/380,406 = 0,525754.
+    //        Tot oktober 2026 stond hier 0,517364 (gelijk aan 6.2.5): de oude
+    //        regel reduceerde pas boven n = a, en was daarmee tussen 0,5·a en a
+    //        te gunstig — hier 1,6 %.
     let mn = check(&r, "6.2.9_combined_mn");
     assert_eq!(status_van(mn), CheckStatus::Ok);
-    assert_relative_eq!(uc_van(mn).unwrap(), 0.517364, max_relative = 1e-5);
-    assert!(
-        notities_van(mn).iter().any(|s| s.contains("a = 0.400")),
-        "6.2.9 hoort a = 0,400 te melden; notities: {:?}",
-        notities_van(mn)
-    );
+    assert_relative_eq!(waarde_van(mn), 380.406, max_relative = 1e-5);
+    assert_relative_eq!(uc_van(mn).unwrap(), 0.525754, max_relative = 1e-5);
+    let CheckKind::Resistance(mn_calc) = &mn.kind else { unreachable!() };
+    let a = mn_calc.deelstappen.iter().find(|d| d.id == "a").expect("deelstap a");
+    assert_relative_eq!(a.value.unwrap(), 0.40, max_relative = 1e-12);
+    assert!(a.notes[0].contains("a = 0,400"), "6.2.9 hoort a = 0,400 te melden: {:?}", a.notes);
 
     // 6.2.8  V_Ed = 150 kN < 0,5·V_pl,Rd = 325,6 kN, dus geen momentreductie.
     assert_relative_eq!(
@@ -645,9 +660,17 @@ fn gelaste_i_krijgt_kip_want_dubbelsymmetrisch() {
     // vast stond, en ook niet de 0,49 die bij h/b ≤ 2 zou gelden.
     assert_relative_eq!(tussenwaarde(kip, r"\alpha_{LT}"), 0.76, max_relative = 1e-12);
 
-    // Met kip is 6.3.3 gewoon te rekenen.
+    // Deze ligger heeft geen druk (N = 0): 6.3.3 geldt voor buiging met DRUK
+    // en is dan niet van toepassing — mét die reden, en niet om de kip.
     for id in ["6.3.3_eq_6_61", "6.3.3_eq_6_62"] {
-        assert!(uc_van(check(&r, id)).is_some(), "{id} hoort hier een UC te hebben");
+        let c = check(&r, id);
+        assert_eq!(status_van(c), CheckStatus::NotApplicable, "{id}");
+        assert!(notities_van(c)[0].starts_with("Niet van toepassing"), "{id}: {:?}", notities_van(c));
+    }
+    // Met kip én druk is 6.3.3 gewoon te rekenen.
+    let met_druk = check_beam(invoer("", Some(doorsnede_d41()), -50.0, 0.0, 200.0));
+    for id in ["6.3.3_eq_6_61", "6.3.3_eq_6_62"] {
+        assert!(uc_van(check(&met_druk, id)).is_some(), "{id} hoort hier een UC te hebben");
     }
 }
 

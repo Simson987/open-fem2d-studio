@@ -1,5 +1,5 @@
 <p align="center">
-  <strong>Open FEM2D Studio</strong>
+  <strong>Open FEM Studio</strong>
 </p>
 
 <p align="center">
@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-CC--BY--SA--4.0-D97706?style=flat-square" alt="License"></a>
+  <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-AGPL--3.0-D97706?style=flat-square" alt="License"></a>
   <img src="https://img.shields.io/badge/contributions-welcome-D97706?style=flat-square" alt="Contributions welcome">
 </p>
 
@@ -17,6 +17,7 @@
 ## Wat het programma doet
 
 - Staven en platen (wandschijven, belast in het vlak) in 2D: lineair, tweede orde en fysisch niet-lineair
+- 3D-tab voor het modelleren van knopen en staven; 3D-berekening is nog niet beschikbaar
 - Belastinggevallen, belastingcombinaties en omhullenden
 - Normtoetsing per staaf: staal (NEN-EN 1993-1-1, langslassen NEN-EN 1993-1-8), hout en kruislaaghout
   (NEN-EN 1995-1-1), gewapend beton (NEN-EN 1992-1-1), plus een vrije spanningstoets
@@ -114,6 +115,13 @@ npm run tauri:dev     # desktop-app in ontwikkelstand (devserver op poort 1440)
 npm run tauri:build   # installer; bouwt de frontend, de solverbundel en de MCP-server zelf
 ```
 
+Op Linux start `bash scripts/dev-desktop.sh` dezelfde actuele frontend en de Tauri-app
+als één ontwikkelsessie. Het script gebruikt een al draaiende Vite-server op poort 1440
+of start er zelf één, en sluit de eigen server weer af wanneer de app stopt. Start niet
+rechtstreeks `src-tauri/target/debug/open-fem2d-studio`: dat is een eerdere build met
+ingebouwde, mogelijk verouderde frontend. Voor een Linux-build zijn onder andere de
+ontwikkelpakketten voor Cairo, GTK 3 en WebKitGTK 4.1 nodig.
+
 De installer levert de MCP-server mee als `openaec-mcp-server` naast de app (`scripts/mcp-sidecar.mjs`,
 `src-tauri/tauri.bundel.conf.json`); koppelen aan een MCP-client staat in
 [`src-tauri/crates/openaec-mcp-server/README.md`](src-tauri/crates/openaec-mcp-server/README.md).
@@ -164,7 +172,17 @@ hoort niet bij deze reeks.
 
 ## Licentie
 
-CC BY-SA 4.0 — zie [LICENSE.md](LICENSE.md)
+| Onderdeel | Licentie |
+|---|---|
+| Open FEM Studio als geheel: de app (`design-mockup/`, `src-tauri/`), toetsbrug, MCP-server, rapportage en de 3D-kernadapter | **AGPL-3.0-or-later** — zie [LICENSE.md](LICENSE.md) |
+| Normtoetsingsbibliotheken in `src-tauri/crates/`: `nen-en-*`, `*-check`, `section-properties`, `steel-profiles`, `nationale-bijlage`, `mechanics` | **LGPL-3.0-or-later** — zie [LICENSES/LGPL-3.0-or-later.md](LICENSES/LGPL-3.0-or-later.md) |
+| `openaec-layout` | MIT (zie de crate) |
+| Documentatie en afbeeldingen | CC BY-SA 4.0 |
+
+De app is AGPL omdat de 3D-raamwerkberekening een externe rekenkern onder AGPL-3.0 meelinkt (bron en vaste
+revisie: `src-tauri/crates/open-fem-3d/Cargo.toml`). Wie de app aanpast en aanbiedt, ook als netwerkdienst,
+moet de broncode van die versie beschikbaar stellen. De normtoetsingen blijven los bruikbaar als bibliotheek
+onder LGPL-3.0-or-later.
 
 ## Over de OpenAEC Foundation
 

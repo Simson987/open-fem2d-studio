@@ -1,4 +1,4 @@
-// Tweelettercommando's op het tekenvlak: MV = verplaatsen, CO = kopiëren.
+// Toetscommando's op het tekenvlak: M (of MV) = verplaatsen, CO = kopiëren.
 // En: kopiëren neemt een puntlast op een vrije positie op een staaf mee.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -14,11 +14,14 @@ const reeks = (toetsen, dt = 100) => { let p = null, t = 1000, laatste; for (con
 log("[1] verwerkToets");
 check("C dan O → kopiëren", reeks(["c", "o"]).tool === "copy");
 check("hoofdletters werken ook", reeks(["C", "O"]).tool === "copy");
-check("M dan V → verplaatsen (bestaand)", reeks(["m", "v"]).tool === "move");
+check("M alleen → meteen verplaatsen", reeks(["m"]).tool === "move" && reeks(["m"]).verbruikt);
+check("hoofdletter M ook", reeks(["M"]).tool === "move");
+check("M dan V → verplaatsen (bestaand), de V wordt verbruikt", reeks(["m", "v"]).tool === "move" && reeks(["m", "v"]).verbruikt);
+check("V zonder M ervoor blijft vrij", !reeks(["v"]).verbruikt);
 check("C alleen zet een prefix en wordt verbruikt", reeks(["c"]).prefix?.key === "c" && reeks(["c"]).verbruikt && !reeks(["c"]).tool);
 check("te laat (na het venster) → geen commando", reeks(["c", "o"], VENSTER_MS + 1).tool === undefined);
 check("C dan X → geen commando, X niet verbruikt", reeks(["c", "x"]).tool === undefined && !reeks(["c", "x"]).verbruikt);
-check("C dan M → nieuw prefix M", reeks(["c", "m"]).prefix?.key === "m");
+check("C dan M → verplaatsen, met prefix M", reeks(["c", "m"]).prefix?.key === "m" && reeks(["c", "m"]).tool === "move");
 check("C dan M dan V → verplaatsen", reeks(["c", "m", "v"]).tool === "move");
 check("een gewone letter zonder prefix wordt niet verbruikt", !reeks(["g"]).verbruikt);
 
@@ -44,6 +47,11 @@ check("last op een niet-geselecteerde staaf gaat niet mee", !nieuwe.some((l) => 
 log("\n[3] FemCanvas gebruikt de reeksen");
 const c = readFileSync(join(HIER, "src", "components", "fem", "FemCanvas.tsx"), "utf8").replace(/\r\n/g, "\n");
 check("de toetsafhandeling roept verwerkToets aan en zet het gereedschap", /verwerkToets\(keySeqRef\.current, e\.key, Date\.now\(\)\)[\s\S]{0,200}onToolChange\?\.\(r\.tool\)/.test(c));
+
+const e3 = readFileSync(join(HIER, "src", "components", "openFem3d", "OpenFem3DEditor.tsx"), "utf8").replace(/\r\n/g, "\n");
+check("de 3D-editor gebruikt dezelfde toetscommando's",
+  /verwerkToets\(toetsPrefixRef\.current, event\.key, Date\.now\(\)\)[\s\S]{0,200}onToolChangeRef\.current\?\.\(r\.tool\)/.test(e3));
+check("… maar niet in invoervelden", /INPUT\|TEXTAREA\|SELECT/.test(e3));
 
 log(`\n${geslaagd} geslaagd, ${gefaald} gefaald`);
 process.exit(gefaald > 0 ? 1 : 0);

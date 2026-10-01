@@ -237,11 +237,21 @@ export default function LoadsSection() {
                       <p className="rpt-note" style={{ marginTop: "1.5mm" }}>
                         {t(
                           "report.selfWeightIncluded",
-                          "Eigen gewicht van alle staven wordt in dit geval automatisch meegenomen (q = ρ·A·g per staaf).",
+                          "Eigen gewicht van staven met een herkend materiaal en profiel wordt in dit geval automatisch meegenomen (q = ρ·A·g per staaf).",
                         )}
                         {" "}
                         {t("report.selfWeightG", "g = {{g}} m/s².", { g: fmtNum(eigenGewicht.g, 2) })}
                       </p>
+                      {(eigenGewicht.overgeslagen?.length ?? 0) > 0 && (
+                        <div className="rpt-note" role="alert">
+                          <strong>{t("report.selfWeightSkipped", "Eigen gewicht niet bepaald voor:")}</strong>
+                          <ul>
+                            {eigenGewicht.overgeslagen!.map((item) => (
+                              <li key={item.beamId}>{t("report.beamWord", "Staaf")} {item.beamId}: {item.reden}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                       {eigenGewicht.staven.some((s) => s.delen.length > 0) && (
                         <table className="rpt-table" data-testid="rpt-eigen-gewicht">
                           <thead>

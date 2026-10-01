@@ -1123,7 +1123,7 @@ export const fr: Record<string, string> = {
   'backstage.preferences': 'Préférences',
   'backstage.preferencesDesc': 'Ouvrir la boîte de dialogue des paramètres (thème, langue).',
   'backstage.about': 'À propos',
-  'backstage.aboutDesc': 'Informations sur Open FEM2D Studio.',
+  'backstage.aboutDesc': 'Informations sur Open FEM Studio.',
   'backstage.exit': 'Quitter',
   'backstage.exitDesc': "Fermer l'application.",
 
@@ -1138,7 +1138,7 @@ export const fr: Record<string, string> = {
   'settings.theme.openaec': 'OpenAEC',
 
   // Boîte de dialogue À propos
-  'about.title': "À propos d'Open FEM2D Studio",
+  'about.title': "À propos d'Open FEM Studio",
   'about.builtOn': 'Construit sur la plateforme OpenAEC',
 
   // Onglet Vérification

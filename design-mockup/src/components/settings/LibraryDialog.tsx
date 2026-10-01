@@ -121,7 +121,11 @@ export default function LibraryDialog({ open, onClose, initialTab = "sections" }
                       <td className="num">{fmt(r.A)}</td>
                       <td className="num">{fmt(r.Iy / 1e6, 2)}</td>
                       <td className="mono dims">
-                        {r.dims
+                        {r.dims?.kind === "RoundBar"
+                          ? `Ø ${fmt(r.dims.h)}`
+                          : r.dims?.kind === "FlatBar"
+                          ? `${fmt(r.dims.h)} × ${fmt(r.dims.b)}`
+                          : r.dims
                           ? `${fmt(r.dims.h)} × ${fmt(r.dims.b)} × ${fmt(r.dims.tw, r.dims.tw % 1 ? 1 : 0)} × ${fmt(r.dims.tf, r.dims.tf % 1 ? 1 : 0)}`
                           : "—"}
                       </td>

@@ -38,7 +38,28 @@ import { useReportStore } from "../stores/reportStore";
 import { leesRapportKopOverschrijving } from "../components/report/useProjectInfo";
 import { leesPagineerToestand } from "../components/report/rapportGereedheid";
 import { tocToestand } from "../components/report/toc";
-import type { Beam, Selection, SupportType, Load, Analysetype } from "../components/fem/femTypes";
+import type { Beam, Selection, SupportType, Load, Analysetype, StructuralGrid } from "../components/fem/femTypes";
+import {
+  OPEN_FEM_3D_SUPPORT_PRESETS,
+  parseOpenFem3DModel,
+  splitOpenFem3DBeam,
+  type OpenFem3DModel,
+} from "../components/openFem3d/openFem3dModel";
+import type { OpenFem3DVisibility } from "../components/openFem3d/openFem3dVisibility";
+import { analyseOpenFem3DLoadPanels } from "../components/openFem3d/openFem3dLoadPanels";
+import {
+  applyOpenFem3DLevels,
+  openFem3DLevelLinkError,
+  openFem3DLevelsFromMetres,
+} from "../components/openFem3d/openFem3dLevels";
+import type { OpenFem3DView } from "../components/openFem3d/openFem3dCommands";
+import type { OpenFem3DSolveResult } from "../components/openFem3d/openFem3dSolver";
+import type { OpenFem3DSteelChecks } from "../components/openFem3d/openFem3dSteelCheck";
+import type { OpenFem3DConcreteChecks } from "../components/openFem3d/openFem3dConcreteCheck";
+import type { OpenFem3DSelection } from "../components/openFem3d/openFem3dSelection";
+import { openFem3DMaximumDisplacementM } from "../components/openFem3d/openFem3dDisplacement";
+import { maakStaalhal, type StaalhalResultaat } from "../components/openFem3d/wizards/staalhal";
+import { importeerIfcAnalyseModel, type IfcAnalyseImport } from "../io/ifcAnalyseImport";
 import type { SolverResult } from "../components/fem/solver/types";
 import type { ReinforcementCage } from "../lib/types/concrete/ReinforcementCage";
 import { isEigenGewichtGeval } from "../lib/eigenGewicht";
@@ -96,6 +117,44 @@ export interface BedieningActies {
     addLoadCase: (name: string) => void;
     setAnalysetype: (v: Analysetype) => void;
   };
+  modelDimension: "2d" | "3d";
+  openFem3d: {
+    model: OpenFem3DModel;
+    visibility: OpenFem3DVisibility;
+    structuralGrid: StructuralGrid;
+    /** Vervang het 3D-model; met `levels` ook de levels (zAxes) van het stramien. */
+    replaceModel: (model: OpenFem3DModel, levels?: StructuralGrid["zAxes"]) => void;
+    /**
+     * Een stalen hal van de generator in het project zetten: het 3D-model als
+     * één undo-stap, de gevallen van de hal gekoppeld aan die van het project
+     * (hal-id → project-id), stramien en eigen gewicht zoals de hal. Dezelfde
+     * functie als "Maken" in de wizard.
+     */
+    applySteelHall: (hal: StaalhalResultaat) => { caseIds: Record<number, number> };
+    setVisibility: (visibility: OpenFem3DVisibility) => void;
+    /**
+     * Het stramien. Gewijzigde levels nemen de gekoppelde 3D-knopen en -platen
+     * mee; weigert de geometrie dat, dan gooit dit een fout en blijft alles staan.
+     */
+    setStructuralGrid: (grid: StructuralGrid) => void;
+    setView: (view: OpenFem3DView) => void;
+    setSelection: (selection: OpenFem3DSelection) => void;
+    selectCombination: (id: number) => void;
+    updateBeam: (id: number, updates: Partial<OpenFem3DModel["beams"][number]>) => void;
+    solve: () => Promise<void>;
+    result: OpenFem3DSolveResult | null;
+    caseResults: ReadonlyMap<number, OpenFem3DSolveResult>;
+    combinationResults: ReadonlyMap<number, OpenFem3DSolveResult>;
+    activeCombinationId: number | null;
+    solveError: string | null;
+    checks: OpenFem3DSteelChecks | null;
+    concreteChecks: OpenFem3DConcreteChecks | null;
+    /** Hoogt op bij iedere 3D-modelwijziging en iedere 3D-rekengang. */
+    generation: () => number;
+    solving: boolean;
+    checksRunning: boolean;
+    checksError: string | null;
+  };
   activeView: string;
   selection: Selection;
   setSelection: (s: Selection) => void;
@@ -122,6 +181,12 @@ export interface BedieningActies {
   createDetachedWindow: (opts: { view: string; title: string; width?: number; height?: number }) => Promise<string>;
   /** Het pad van "Openen…": tekst → project in de store, mét bibliotheken. */
   laadProjectTekst: (tekst: string, pad?: string) => Promise<void>;
+  /**
+   * Een geïmporteerd IFC-analysemodel als NIEUW 3D-project in de app zetten:
+   * dezelfde toepassing als de knop "Rekenmodel importeren" na de modelkeuze.
+   * Het kanaal vraagt niet naar niet-opgeslagen werk, net als `model_laden`.
+   */
+  importeerIfcProject: (imp: IfcAnalyseImport) => void;
 }
 
 interface Opdracht {
@@ -150,6 +215,24 @@ function wachtOpStore<S>(
       if (voldoet(s)) { window.clearTimeout(timer); af(); los(s); }
     });
   });
+}
+
+/**
+ * `handleSolve` wacht zelf al op solver én normtoetsen. React kan de laatste
+ * statusupdates echter over twee commits verdelen, waardoor het eerste
+ * API-antwoord soms nog de vorige `checksRunning=true`-render bevatte. Forceer
+ * enkele verse commits en antwoord pas vanuit de aantoonbaar rustige render.
+ */
+async function wachtOpOpenFem3DRender(
+  acties: () => BedieningActies,
+  verseRender: () => Promise<void>,
+): Promise<void> {
+  for (let poging = 0; poging < 8; poging += 1) {
+    await verseRender();
+    const state = acties().openFem3d;
+    if (!state.solving && !state.checksRunning) return;
+  }
+  throw new Error("de 3D-rekengang is afgerond, maar de gebruikersinterface meldt nog steeds dat de toetsing loopt");
 }
 
 // ── De hook ─────────────────────────────────────────────────────────────────
@@ -253,6 +336,8 @@ export async function voerUit(
     case "status": {
       const f = a().fem;
       return {
+        frontendDevMode: import.meta.env.DEV,
+        frontendModuleUrl: import.meta.url,
         weergave: a().activeView,
         selectie: a().selection,
         aantalKnopen: f.nodes.length,
@@ -293,6 +378,27 @@ export async function voerUit(
           profileName: (b as { profileName?: string }).profileName ?? null,
           heeftKorf: b.checkConfig?.betonKorf != null,
         })),
+        modelDimension: a().modelDimension,
+        model3d: {
+          aantalKnopen: a().openFem3d.model.nodes.length,
+          aantalStaven: a().openFem3d.model.beams.length,
+          aantalPlaten: a().openFem3d.model.plates?.length ?? 0,
+          aantalOpleggingen: a().openFem3d.model.supports?.length ?? 0,
+          aantalLasten: (a().openFem3d.model.loads?.length ?? 0) + (a().openFem3d.model.memberLoads?.length ?? 0) +
+            (a().openFem3d.model.memberPointLoads?.length ?? 0) + (a().openFem3d.model.thermalLoads?.length ?? 0) +
+            (a().openFem3d.model.surfaceLoads?.length ?? 0) +
+            (a().openFem3d.model.supports ?? []).filter((support) => Object.keys(support.prescribed ?? {}).length > 0).length,
+          aantalOpgelegdeVerplaatsingen: (a().openFem3d.model.supports ?? []).reduce((count, support) =>
+            count + Object.keys(support.prescribed ?? {}).length, 0),
+          aantalBelastingvlakken: a().openFem3d.model.loadPanels?.length ?? 0,
+          trekAlleenGemonteerdNaPermanent: a().openFem3d.model.tensionOnlyFitAfterPermanent === true,
+          kruisregel: a().openFem3d.model.tensionOnlyCrossRule === true,
+          generatie: a().openFem3d.generation(),
+          heeftResultaat: a().openFem3d.result !== null,
+          rekenfout: a().openFem3d.solveError,
+          zichtbaarheid: a().openFem3d.visibility,
+          stramien: a().openFem3d.structuralGrid,
+        },
       };
     }
 
@@ -354,19 +460,488 @@ export async function voerUit(
       };
     }
 
+    case "model_3d_bouwen": {
+      const rawNodes = Array.isArray(args.nodes) ? args.nodes : [];
+      const rawBeams = Array.isArray(args.beams) ? args.beams : [];
+      const rawSupports = Array.isArray(args.supports) ? args.supports : [];
+      const rawLoads = Array.isArray(args.loads) ? args.loads : [];
+      const rawMemberLoads = Array.isArray(args.member_loads) ? args.member_loads : [];
+      const rawMemberPointLoads = Array.isArray(args.member_point_loads) ? args.member_point_loads : [];
+      const rawThermalLoads = Array.isArray(args.thermal_loads) ? args.thermal_loads : [];
+      const rawPlates = Array.isArray(args.plates) ? args.plates : [];
+      const rawSurfaceLoads = Array.isArray(args.surface_loads) ? args.surface_loads : [];
+      const rawLoadPanels = Array.isArray(args.load_panels) ? args.load_panels : [];
+      const rawDiaphragms = Array.isArray(args.diaphragms) ? args.diaphragms : [];
+      // Levels (optioneel): label en hoogte in m. Ze vervangen de levels van
+      // het stramien; `level` bij een knoop of plaat is een index (vanaf 1).
+      const levels = args.levels === undefined
+        ? undefined
+        : openFem3DLevelsFromMetres(args.levels, a().openFem3d.structuralGrid.zAxes, "levels");
+      const levelIdVan = (waarde: unknown, wat: string): string | undefined => {
+        if (waarde === undefined) return undefined;
+        if (!levels) throw new Error(`${wat}: level verwijst naar levels, maar levels ontbreekt`);
+        if (!Number.isSafeInteger(waarde) || Number(waarde) < 1 || Number(waarde) > levels.length) {
+          throw new Error(`${wat}: level moet een index van 1 tot en met ${levels.length} in levels zijn`);
+        }
+        return levels[Number(waarde) - 1].id;
+      };
+      const nodes: Array<{ id: number; x: unknown; y: unknown; z: unknown; levelId?: string }> = rawNodes.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-knoop ${index + 1} is ongeldig`);
+        const node = value as Record<string, unknown>;
+        const levelId = levelIdVan(node.level, `3D-knoop ${index + 1}`);
+        return { id: index + 1, x: node.x, y: node.y, z: node.z, ...(levelId ? { levelId } : {}) };
+      });
+      const beams = rawBeams.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-staaf ${index + 1} is ongeldig`);
+        const beam = value as Record<string, unknown>;
+        if (!Number.isSafeInteger(beam.from) || !Number.isSafeInteger(beam.to)) {
+          throw new Error(`3D-staaf ${index + 1}: from/to moeten knoopindices zijn`);
+        }
+        return {
+          id: index + 1,
+          startNodeId: Number(beam.from),
+          endNodeId: Number(beam.to),
+          ...(typeof beam.profile_name === "string" ? { profileName: beam.profile_name } : {}),
+          ...(typeof beam.material === "string" ? { material: beam.material } : {}),
+          ...(beam.roll_angle_deg !== undefined
+            ? { rollAngleRad: typeof beam.roll_angle_deg === "number" ? beam.roll_angle_deg * Math.PI / 180 : beam.roll_angle_deg }
+            : {}),
+          ...(beam.releases && typeof beam.releases === "object" && !Array.isArray(beam.releases)
+            ? { releases: {
+                myStart: (beam.releases as Record<string, unknown>).my_start,
+                myEnd: (beam.releases as Record<string, unknown>).my_end,
+                mzStart: (beam.releases as Record<string, unknown>).mz_start,
+                mzEnd: (beam.releases as Record<string, unknown>).mz_end,
+                torsionStart: (beam.releases as Record<string, unknown>).torsion_start,
+                torsionEnd: (beam.releases as Record<string, unknown>).torsion_end,
+              } }
+            : beam.releases === undefined ? {} : { releases: beam.releases }),
+          ...(beam.check_config && typeof beam.check_config === "object" && !Array.isArray(beam.check_config)
+            ? { checkConfig: beam.check_config }
+            : {}),
+          // Trek-alleen: alleen `true` zet het aan; de modelkeuring weigert een niet-boolean.
+          ...(beam.tension_only !== undefined ? { tensionOnly: beam.tension_only } : {}),
+        };
+      });
+      const supports = rawSupports.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-oplegging ${index + 1} is ongeldig`);
+        const support = value as Record<string, unknown>;
+        const preset = support.type;
+        if ((preset !== undefined && (typeof preset !== "string" || !(preset in OPEN_FEM_3D_SUPPORT_PRESETS))) ||
+            !Number.isSafeInteger(support.node)) {
+          throw new Error(`3D-oplegging ${index + 1}: gebruik node en optioneel type ${Object.keys(OPEN_FEM_3D_SUPPORT_PRESETS).join(", ")}`);
+        }
+        const rawSprings = support.springs;
+        if (rawSprings !== undefined && (!rawSprings || typeof rawSprings !== "object" || Array.isArray(rawSprings))) {
+          throw new Error(`3D-oplegging ${index + 1}: springs moet een object zijn`);
+        }
+        const springs = rawSprings as Record<string, unknown> | undefined;
+        const rawPrescribed = support.prescribed;
+        if (rawPrescribed !== undefined && (!rawPrescribed || typeof rawPrescribed !== "object" || Array.isArray(rawPrescribed))) {
+          throw new Error(`3D-oplegging ${index + 1}: prescribed moet een object zijn`);
+        }
+        const prescribed = rawPrescribed as Record<string, unknown> | undefined;
+        return {
+          nodeId: Number(support.node),
+          ...(preset === undefined
+            ? { ux: false, uy: false, uz: false, rx: false, ry: false, rz: false }
+            : OPEN_FEM_3D_SUPPORT_PRESETS[preset as keyof typeof OPEN_FEM_3D_SUPPORT_PRESETS]),
+          ...(springs ? { springs: {
+            ...(springs.kx_kn_per_m !== undefined ? { kxKnPerM: springs.kx_kn_per_m } : {}),
+            ...(springs.ky_kn_per_m !== undefined ? { kyKnPerM: springs.ky_kn_per_m } : {}),
+            ...(springs.kz_kn_per_m !== undefined ? { kzKnPerM: springs.kz_kn_per_m } : {}),
+            ...(springs.krx_knm_per_rad !== undefined ? { krxKnmPerRad: springs.krx_knm_per_rad } : {}),
+            ...(springs.kry_knm_per_rad !== undefined ? { kryKnmPerRad: springs.kry_knm_per_rad } : {}),
+            ...(springs.krz_knm_per_rad !== undefined ? { krzKnmPerRad: springs.krz_knm_per_rad } : {}),
+          } } : {}),
+          ...(prescribed ? { prescribed: {
+            ...(prescribed.ux_m !== undefined ? { uxM: prescribed.ux_m } : {}),
+            ...(prescribed.uy_m !== undefined ? { uyM: prescribed.uy_m } : {}),
+            ...(prescribed.uz_m !== undefined ? { uzM: prescribed.uz_m } : {}),
+            ...(prescribed.rx_rad !== undefined ? { rxRad: prescribed.rx_rad } : {}),
+            ...(prescribed.ry_rad !== undefined ? { ryRad: prescribed.ry_rad } : {}),
+            ...(prescribed.rz_rad !== undefined ? { rzRad: prescribed.rz_rad } : {}),
+          } } : {}),
+        };
+      });
+      const loads = rawLoads.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-knoopbelasting ${index + 1} is ongeldig`);
+        const load = value as Record<string, unknown>;
+        return {
+          id: index + 1,
+          nodeId: load.node,
+          ...(load.case_id !== undefined ? { caseId: load.case_id } : {}),
+          fx: load.fx ?? 0, fy: load.fy ?? 0, fz: load.fz ?? 0,
+          mx: load.mx ?? 0, my: load.my ?? 0, mz: load.mz ?? 0,
+        };
+      });
+      const memberLoads = rawMemberLoads.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-staafbelasting ${index + 1} is ongeldig`);
+        const load = value as Record<string, unknown>;
+        const beamId = Number(load.beam);
+        if (!Number.isSafeInteger(load.beam) || !beams.some((beam) => beam.id === beamId)) {
+          throw new Error(`3D-staafbelasting ${index + 1}: beam verwijst niet naar een bestaande staaf`);
+        }
+        const beam = beams.find((item) => item.id === beamId)!;
+        const start = nodes.find((node) => node.id === beam.startNodeId)!;
+        const end = nodes.find((node) => node.id === beam.endNodeId)!;
+        const length = Math.hypot(Number(end.x) - Number(start.x), Number(end.y) - Number(start.y), Number(end.z) - Number(start.z));
+        return {
+          id: index + 1,
+          beamId,
+          ...(load.case_id !== undefined ? { caseId: load.case_id } : {}),
+          qyStart: load.qy_start ?? 0,
+          qyEnd: load.qy_end ?? load.qy_start ?? 0,
+          qzStart: load.qz_start ?? 0,
+          qzEnd: load.qz_end ?? load.qz_start ?? 0,
+          startPositionM: load.start_m ?? 0,
+          endPositionM: load.end_m ?? length,
+        };
+      });
+      const memberPointLoads = rawMemberPointLoads.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-staafpuntlast ${index + 1} is ongeldig`);
+        const load = value as Record<string, unknown>;
+        const beamId = Number(load.beam);
+        if (!Number.isSafeInteger(load.beam) || !beams.some((beam) => beam.id === beamId)) {
+          throw new Error(`3D-staafpuntlast ${index + 1}: beam verwijst niet naar een bestaande staaf`);
+        }
+        return {
+          id: index + 1,
+          beamId,
+          ...(load.case_id !== undefined ? { caseId: load.case_id } : {}),
+          py: load.py ?? 0,
+          pz: load.pz ?? 0,
+          positionM: load.position_m,
+        };
+      });
+      const thermalLoads = rawThermalLoads.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-temperatuurbelasting ${index + 1} is ongeldig`);
+        const load = value as Record<string, unknown>;
+        const beamId = Number(load.beam);
+        if (!Number.isSafeInteger(load.beam) || !beams.some((beam) => beam.id === beamId)) {
+          throw new Error(`3D-temperatuurbelasting ${index + 1}: beam verwijst niet naar een bestaande staaf`);
+        }
+        return {
+          id: index + 1,
+          beamId,
+          ...(load.case_id !== undefined ? { caseId: load.case_id } : {}),
+          deltaTUniformK: load.delta_t_uniform_k ?? 0,
+          deltaTGradientYK: load.delta_t_gradient_y_k ?? 0,
+          deltaTGradientZK: load.delta_t_gradient_z_k ?? 0,
+        };
+      });
+      const plates = rawPlates.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-plaat ${index + 1} is ongeldig`);
+        const plate = value as Record<string, unknown>;
+        if (!Array.isArray(plate.nodes)) throw new Error(`3D-plaat ${index + 1}: nodes moet een lijst met knoopindices zijn`);
+        const openings = Array.isArray(plate.openings) ? plate.openings.map((rawOpening, openingIndex) => {
+          if (!rawOpening || typeof rawOpening !== "object" || Array.isArray(rawOpening)) throw new Error(`Opening ${openingIndex + 1} van 3D-plaat ${index + 1} is ongeldig`);
+          const opening = rawOpening as Record<string, unknown>;
+          return { id: openingIndex + 1, nodeIds: opening.nodes,
+            ...(opening.corner_radius_m !== undefined ? { cornerRadiusM: opening.corner_radius_m } : {}) };
+        }) : plate.openings;
+        const levelId = levelIdVan(plate.level, `3D-plaat ${index + 1}`);
+        return { id: index + 1, nodeIds: plate.nodes, thicknessM: plate.thickness_m ?? 0.2,
+          ...(typeof plate.material === "string" ? { material: plate.material } : {}),
+          ...(plate.corner_radius_m !== undefined ? { cornerRadiusM: plate.corner_radius_m } : {}),
+          ...(openings !== undefined ? { openings } : {}),
+          ...(levelId ? { levelId } : {}) };
+      });
+      // Een plaat op een level neemt al haar knopen mee (ook die van de
+      // openingen); een knoop die zelf aan een ander level hangt, is strijdig.
+      for (const plate of plates) {
+        if (!plate.levelId) continue;
+        const openingen: unknown[] = Array.isArray(plate.openings) ? plate.openings : [];
+        const lussen = [plate.nodeIds, ...openingen.map((opening) => (opening as { nodeIds?: unknown }).nodeIds)];
+        const plaatKnopen = new Set(lussen.filter(Array.isArray).flat().map(Number));
+        for (const nodeId of plaatKnopen) {
+          const knoop = nodes.find((item) => item.id === nodeId);
+          if (!knoop) continue; // de modelpoort hieronder meldt de ontbrekende knoop
+          if (knoop.levelId && knoop.levelId !== plate.levelId) {
+            throw new Error(`3D-plaat ${plate.id}: knoop ${nodeId} hangt aan een ander level dan de plaat`);
+          }
+          knoop.levelId = plate.levelId;
+        }
+      }
+      const surfaceLoads = rawSurfaceLoads.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-oppervlaktebelasting ${index + 1} is ongeldig`);
+        const load = value as Record<string, unknown>;
+        return { id: index + 1, plateId: load.plate,
+          ...(load.case_id !== undefined ? { caseId: load.case_id } : {}),
+          qx: load.qx ?? 0, qy: load.qy ?? 0, qz: load.qz ?? 0 };
+      });
+      // Belastingvlakken: hoekknopen als 1-gebaseerde knoopindices, net als platen.
+      // Geen stille standaardwaarden: q, lastrichting en afdracht komen van de
+      // aanroeper en de modelkeuring weigert wat ontbreekt.
+      const loadPanels = rawLoadPanels.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-belastingvlak ${index + 1} is ongeldig`);
+        const panel = value as Record<string, unknown>;
+        if (!Array.isArray(panel.nodes)) throw new Error(`3D-belastingvlak ${index + 1}: nodes moet een lijst met knoopindices zijn`);
+        return {
+          id: index + 1,
+          nodeIds: panel.nodes,
+          ...(panel.case_id !== undefined ? { caseId: panel.case_id } : {}),
+          q: panel.q,
+          direction: panel.direction,
+          distribution: panel.distribution,
+          ...(panel.span_direction !== undefined ? { spanDirection: panel.span_direction } : {}),
+          ...(panel.excluded_beams !== undefined ? { excludedBeamIds: panel.excluded_beams } : {}),
+        };
+      });
+      // Starre schijven: knopen als 1-gebaseerde knoopindices, net als platen.
+      // De modelkeuring weigert ontbrekende knopen en een knoop in twee schijven;
+      // de rekenkern keurt de hoogte (binnen 1 mm) en de opleggingen.
+      const diaphragms = rawDiaphragms.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-schijf ${index + 1} is ongeldig`);
+        const diaphragm = value as Record<string, unknown>;
+        if (!Array.isArray(diaphragm.nodes)) throw new Error(`3D-schijf ${index + 1}: nodes moet een lijst met knoopindices zijn`);
+        return {
+          id: index + 1,
+          nodeIds: diaphragm.nodes,
+          ...(diaphragm.name !== undefined ? { name: diaphragm.name } : {}),
+        };
+      });
+      const gelezen = parseOpenFem3DModel({
+        nodes, beams, plates, supports, loads, memberLoads, memberPointLoads, thermalLoads, surfaceLoads,
+        ...(loadPanels.length > 0 ? { loadPanels } : {}),
+        ...(diaphragms.length > 0 ? { diaphragms } : {}),
+        // Modelinstellingen voor trek-alleen staven; de modelkeuring weigert
+        // een niet-boolean.
+        ...(args.tension_only_fit_after_permanent !== undefined
+          ? { tensionOnlyFitAfterPermanent: args.tension_only_fit_after_permanent } : {}),
+        ...(args.tension_only_cross_rule !== undefined ? { tensionOnlyCrossRule: args.tension_only_cross_rule } : {}),
+      });
+      let model = gelezen;
+      if (levels) {
+        // Een gekoppelde knoop moet op de hoogte van zijn level liggen; daarna
+        // komt hij er exact op (binnen 1 µm was de invoer al goed).
+        const fout = openFem3DLevelLinkError(gelezen, levels);
+        if (fout) throw new Error(fout);
+        const opHoogte = applyOpenFem3DLevels(gelezen, levels);
+        if (!opHoogte.ok) throw new Error(`levels: het model klopt niet op de levelhoogtes (${opHoogte.refusal.kind})`);
+        model = opHoogte.model;
+      }
+      a().openFem3d.replaceModel(model, levels);
+      await verseRender();
+      return {
+        modelDimension: a().modelDimension,
+        levelIds: levels?.map((level) => level.id) ?? null,
+        aantalGekoppeldeKnopen: model.nodes.filter((node) => node.levelId !== undefined).length,
+        nodeIds: model.nodes.map((node) => node.id),
+        plateIds: (model.plates ?? []).map((plate) => plate.id),
+        beamIds: model.beams.map((beam) => beam.id),
+        aantalOpleggingen: model.supports?.length ?? 0,
+        aantalOplegveren: (model.supports ?? []).reduce((count, support) => count + Object.keys(support.springs ?? {}).length, 0),
+        aantalOpgelegdeVerplaatsingen: (model.supports ?? []).reduce((count, support) => count + Object.keys(support.prescribed ?? {}).length, 0),
+        aantalLasten: model.loads?.length ?? 0,
+        aantalStaaflasten: model.memberLoads?.length ?? 0,
+        aantalStaafpuntlasten: model.memberPointLoads?.length ?? 0,
+        aantalTemperatuurlasten: model.thermalLoads?.length ?? 0,
+        aantalOppervlaktelasten: model.surfaceLoads?.length ?? 0,
+        loadPanelIds: (model.loadPanels ?? []).map((panel) => panel.id),
+        diaphragmIds: (model.diaphragms ?? []).map((diaphragm) => diaphragm.id),
+        aantalTrekAlleen: model.beams.filter((beam) => beam.tensionOnly).length,
+        trekAlleenGemonteerdNaPermanent: model.tensionOnlyFitAfterPermanent === true,
+        kruisregel: model.tensionOnlyCrossRule === true,
+        // De afdracht per vlak meteen terug, zodat een fout (geen ligger,
+        // niet vlak) niet pas bij het rekenen opvalt.
+        belastingvlakken: analyseOpenFem3DLoadPanels(model).map((analysis) => ({
+          id: analysis.panel.id,
+          ...(analysis.error !== undefined ? { fout: analysis.error } : {
+            dragendeStaven: analysis.result!.receiverBeamIds,
+            meldingen: analysis.result!.warnings,
+          }),
+        })),
+      };
+    }
+
+    case "staalhal_maken": {
+      // Dezelfde generator en dezelfde toepassing als de wizard "Stalen hal…".
+      // Parameters die niet deugen komen met ALLE problemen terug (de melding
+      // van StaalhalFout); er verandert dan niets in het project.
+      const onbekend = Object.keys(args).filter((k) => k !== "hal");
+      if (onbekend.length > 0) throw new Error(`onbekend veld ${onbekend.map((k) => `\`${k}\``).join(", ")}; staalhal_maken kent alleen \`hal\``);
+      const hal = maakStaalhal(args.hal ?? {});
+      const { caseIds } = a().openFem3d.applySteelHall(hal);
+      await verseRender();
+      return {
+        modelDimension: a().modelDimension,
+        aantallen: hal.samenvatting.aantallen,
+        maten: hal.samenvatting.maten,
+        groepen: hal.samenvatting.groepen,
+        belastinggevallen: hal.loadCases.map((c) => ({ halId: c.id, projectId: caseIds[c.id], naam: c.name })),
+        waarschuwingen: hal.waarschuwingen,
+        generatie: a().openFem3d.generation(),
+      };
+    }
+
+    case "ifc_analysemodel_importeren": {
+      // Dezelfde import als de knop "Rekenmodel importeren"; Rust las het
+      // bestand (`gui_control.rs`), want de pagina mag niet elk pad lezen. Een
+      // bestand dat niet deugt of een ontbrekende modelkeuze komt terug met
+      // de melding van de import (bij meer modellen: de lijst), en dan
+      // verandert er niets in de app.
+      const onbekend = Object.keys(args).filter((k) => !["tekst", "pad", "analysemodel"].includes(k));
+      if (onbekend.length > 0) {
+        throw new Error(`onbekend veld ${onbekend.map((k) => `\`${k}\``).join(", ")}; ifc_analysemodel_importeren kent tekst, pad en analysemodel`);
+      }
+      if (typeof args.tekst !== "string") throw new Error("`tekst` ontbreekt");
+      const keuze = args.analysemodel;
+      if (keuze !== undefined && !(typeof keuze === "string" && keuze.trim()) &&
+          !(typeof keuze === "number" && Number.isInteger(keuze) && keuze >= 1)) {
+        throw new Error("`analysemodel` is de naam van het analysemodel of zijn volgnummer (vanaf 1)");
+      }
+      const imp = importeerIfcAnalyseModel(args.tekst, { model: keuze as string | number | undefined });
+      a().importeerIfcProject(imp);
+      await verseRender();
+      return {
+        modelDimension: a().modelDimension,
+        pad: typeof args.pad === "string" ? args.pad : null,
+        projectnaam: imp.projectnaam,
+        verslag: imp.verslag,
+        belastinggevallen: imp.loadCases.map((c) => ({
+          id: c.id, naam: c.name, type: c.type, ...(c.eigenGewicht ? { eigenGewicht: true } : {}),
+        })),
+        combinaties: imp.combinations.map((c) => ({ id: c.id, naam: c.name, type: c.type, formule: c.formula })),
+        levels: imp.levels.map((l) => ({ id: l.id, label: l.label, hoogteM: l.position / 1000 })),
+        aantalKnopen: a().openFem3d.model.nodes.length,
+        aantalStaven: a().openFem3d.model.beams.length,
+        generatie: a().openFem3d.generation(),
+      };
+    }
+
+    case "weergave_3d_configureren": {
+      if (a().modelDimension !== "3d") throw new Error("de actieve projectdimensie is 2D; bouw of converteer eerst een 3D-model");
+      if (args.visibility !== undefined) {
+        if (!args.visibility || typeof args.visibility !== "object" || Array.isArray(args.visibility)) {
+          throw new Error("`visibility` moet een object zijn");
+        }
+        const current = a().openFem3d.visibility;
+        const next = { ...current };
+        for (const [key, value] of Object.entries(args.visibility as Record<string, unknown>)) {
+          if (!(key in current) || typeof value !== "boolean") throw new Error(`ongeldige 3D-zichtbaarheidsoptie ${key}`);
+          next[key as keyof OpenFem3DVisibility] = value;
+        }
+        a().openFem3d.setVisibility(next);
+      }
+      if (args.structural_grid !== undefined) {
+        if (!args.structural_grid || typeof args.structural_grid !== "object" || Array.isArray(args.structural_grid)) {
+          throw new Error("`structural_grid` moet een object zijn");
+        }
+        const raw = args.structural_grid as Record<string, unknown>;
+        const axisList = (key: string, prefix: string) => {
+          const value = raw[key];
+          if (value === undefined) return undefined;
+          if (!Array.isArray(value)) throw new Error(`structural_grid.${key} moet een lijst zijn`);
+          return value.map((axis, index) => {
+            if (!axis || typeof axis !== "object" || Array.isArray(axis)) throw new Error(`structural_grid.${key}[${index}] is ongeldig`);
+            const item = axis as Record<string, unknown>;
+            if (typeof item.label !== "string" || typeof item.position_m !== "number" || !Number.isFinite(item.position_m)) {
+              throw new Error(`structural_grid.${key}[${index}] vereist label en position_m`);
+            }
+            return { id: `${prefix}-${index + 1}`, label: item.label, position: item.position_m * 1000 };
+          });
+        };
+        if (raw.enabled !== undefined && typeof raw.enabled !== "boolean") throw new Error("structural_grid.enabled moet boolean zijn");
+        const current = a().openFem3d.structuralGrid;
+        // Levels houden hun id als hun label al bestond: gekoppelde knopen en
+        // platen schuiven dan mee naar de nieuwe hoogte. Weigert de app dat
+        // (staaf zonder lengte, plaat scheef), dan komt die fout hier terug.
+        a().openFem3d.setStructuralGrid({
+          ...current,
+          ...(raw.enabled === undefined ? {} : { enabled: raw.enabled }),
+          ...(axisList("x_axes", "x") ? { xAxes: axisList("x_axes", "x")! } : {}),
+          ...(axisList("y_axes", "y") ? { yAxes: axisList("y_axes", "y")! } : {}),
+          ...(raw.z_levels !== undefined
+            ? { zAxes: openFem3DLevelsFromMetres(raw.z_levels, current.zAxes, "structural_grid.z_levels") }
+            : {}),
+        });
+      }
+      if (args.view !== undefined) {
+        if (args.view !== "iso" && args.view !== "top" && args.view !== "front" && args.view !== "side") {
+          throw new Error("`view` moet iso, top, front of side zijn");
+        }
+        a().openFem3d.setView(args.view);
+      }
+      await verseRender();
+      return { zichtbaarheid: a().openFem3d.visibility, stramien: a().openFem3d.structuralGrid, view: args.view ?? null };
+    }
+
+    case "resultaat_3d_kiezen": {
+      if (a().modelDimension !== "3d") throw new Error("de actieve projectdimensie is 2D");
+      const id = getal("id");
+      if (!a().openFem3d.combinationResults.has(id)) {
+        throw new Error(`3D-combinatie ${id} heeft geen berekend resultaat; voer eerst rekenen uit`);
+      }
+      a().openFem3d.selectCombination(id);
+      await verseRender();
+      return openFem3dUitlezen(a());
+    }
+
     case "staaf_selecteren": {
       const id = getal("id");
+      if (a().modelDimension === "3d") {
+        const beam = a().openFem3d.model.beams.find((candidate) => candidate.id === id);
+        if (!beam) throw new Error(`3D-staaf ${id} bestaat niet`);
+        a().openFem3d.setSelection({ type: "beam", id });
+        a().setActiveView("openFem3d");
+        await verseRender();
+        return beam;
+      }
       staaf(id);
       a().setSelection({ type: "beam", id });
       await verseRender();
       return staaf(id);
     }
 
+    case "plaat_3d_selecteren": {
+      if (a().modelDimension !== "3d") throw new Error("de actieve projectdimensie is 2D");
+      const id = getal("id");
+      const plate = (a().openFem3d.model.plates ?? []).find((candidate) => candidate.id === id);
+      if (!plate) throw new Error(`3D-plaat ${id} bestaat niet`);
+      a().openFem3d.setSelection({ type: "plate", id });
+      a().setActiveView("openFem3d");
+      await verseRender();
+      return plate;
+    }
+
+    case "staaf_3d_splitsen": {
+      if (a().modelDimension !== "3d") throw new Error("de actieve projectdimensie is 2D; bouw of converteer eerst een 3D-model");
+      const beamId = getal("beamId");
+      const ratio = getal("ratio");
+      const split = splitOpenFem3DBeam(a().openFem3d.model, beamId, ratio);
+      a().openFem3d.replaceModel(split.model);
+      a().openFem3d.setSelection({ type: "node", id: split.nodeId });
+      a().setActiveView("openFem3d");
+      await verseRender();
+      return {
+        nodeId: split.nodeId,
+        firstBeamId: split.firstBeamId,
+        secondBeamId: split.secondBeamId,
+        nodes: split.model.nodes,
+        beams: split.model.beams,
+        memberLoads: split.model.memberLoads ?? [],
+        memberPointLoads: split.model.memberPointLoads ?? [],
+        thermalLoads: split.model.thermalLoads ?? [],
+      };
+    }
+
     case "korf_zetten": {
       const id = getal("beamId");
-      staaf(id);
       const korf = args.korf as ReinforcementCage | undefined;
       if (!korf || typeof korf !== "object") throw new Error("`korf` ontbreekt");
+      if (a().modelDimension === "3d") {
+        const beam = a().openFem3d.model.beams.find((candidate) => candidate.id === id);
+        if (!beam) throw new Error(`3D-staaf ${id} bestaat niet`);
+        a().openFem3d.updateBeam(id, {
+          checkConfig: { ...(beam.checkConfig ?? {}), betonKorf: korf },
+        });
+        await verseRender();
+        return a().openFem3d.model.beams.find((candidate) => candidate.id === id) ?? {
+          ...beam, checkConfig: { ...(beam.checkConfig ?? {}), betonKorf: korf },
+        };
+      }
+      staaf(id);
       // De korf hangt aan `checkConfig.betonKorf`, niet aan de staaf zelf —
       // dezelfde plek waar het startmodel en de eigenschappendialoog hem
       // zetten. De rest van checkConfig blijft staan.
@@ -387,6 +962,15 @@ export async function voerUit(
     }
 
     case "rekenen": {
+      if (a().modelDimension === "3d") {
+        await a().openFem3d.solve();
+        await wachtOpOpenFem3DRender(a, verseRender);
+        const state = a().openFem3d;
+        if (!state.result || state.solveError) {
+          throw new Error(`3D doorrekenen mislukt: ${state.solveError ?? "de rekengang leverde geen resultaat"}`);
+        }
+        return openFem3dUitlezen(a());
+      }
       // Dezelfde rekengang als de knop Berekenen, en pas terug als hij HELEMAAL
       // klaar is: doorrekenen, bij tweedeOrdeFysisch de fysisch niet-lineaire
       // ronde, en de toetsing. Stond er na een modelwijziging al een
@@ -421,13 +1005,22 @@ export async function voerUit(
     }
 
     case "toetsen": {
+      if (a().modelDimension === "3d") {
+        await a().openFem3d.solve();
+        await wachtOpOpenFem3DRender(a, verseRender);
+        const state = a().openFem3d;
+        if (!state.result || state.solveError) {
+          throw new Error(`3D doorrekenen mislukt: ${state.solveError ?? "de rekengang leverde geen resultaat"}`);
+        }
+        return openFem3dUitlezen(a());
+      }
       await a().handleRunMemberChecks({ openPanel: false });
       await wachtOpStore(useCheckStore, (s) => !s.isRunning, 300_000, "de toetsing");
       return toetsenUitlezen();
     }
 
     case "toetsen_uitlezen":
-      return toetsenUitlezen();
+      return a().modelDimension === "3d" ? openFem3dUitlezen(a()) : toetsenUitlezen();
 
     case "dekkingslijn_openen": {
       const id = getal("beamId");
@@ -474,7 +1067,40 @@ export async function voerUit(
 
     case "screenshot_dom": {
       const { default: html2canvas } = await import("html2canvas");
-      const canvas = await html2canvas(document.body, { useCORS: true, logging: false });
+      const compatibeleKleur = (waarde: string) => waarde.replace(
+        /color\(\s*(?:srgb|display-p3)\s+([^)]*)\)/gi,
+        (_volledig, inhoud: string) => {
+          const [kanalen, alfaTekst] = inhoud.split("/").map((deel) => deel.trim());
+          const getallen = kanalen.split(/\s+/).map((deel) =>
+            deel.endsWith("%") ? Number.parseFloat(deel) / 100 : Number.parseFloat(deel));
+          if (getallen.length < 3 || getallen.some((getal) => !Number.isFinite(getal))) return "rgba(0,0,0,0)";
+          const alfa = alfaTekst === undefined
+            ? 1
+            : alfaTekst.endsWith("%") ? Number.parseFloat(alfaTekst) / 100 : Number.parseFloat(alfaTekst);
+          const kleur = getallen.slice(0, 3).map((getal) => Math.round(Math.max(0, Math.min(1, getal)) * 255));
+          return `rgba(${kleur[0]},${kleur[1]},${kleur[2]},${Number.isFinite(alfa) ? Math.max(0, Math.min(1, alfa)) : 1})`;
+        },
+      );
+      const kleurEigenschappen = [
+        "color", "background-color", "border-top-color", "border-right-color",
+        "border-bottom-color", "border-left-color", "outline-color",
+        "text-decoration-color", "fill", "stroke", "box-shadow", "text-shadow",
+      ] as const;
+      const canvas = await html2canvas(document.body, {
+        useCORS: true,
+        logging: false,
+        onclone: (kopie) => {
+          const bron = [document.documentElement, ...document.querySelectorAll<HTMLElement | SVGElement>("*")];
+          const doel = [kopie.documentElement, ...kopie.querySelectorAll<HTMLElement | SVGElement>("*")];
+          for (let index = 0; index < Math.min(bron.length, doel.length); index += 1) {
+            const berekend = getComputedStyle(bron[index]);
+            for (const eigenschap of kleurEigenschappen) {
+              const waarde = berekend.getPropertyValue(eigenschap);
+              if (waarde.includes("color(")) doel[index].style.setProperty(eigenschap, compatibeleKleur(waarde));
+            }
+          }
+        },
+      });
       return { dataUrl: canvas.toDataURL("image/png") };
     }
 
@@ -506,6 +1132,32 @@ function toetsenUitlezen() {
     error: s.error,
     lastRunAt: s.lastRunAt,
     inputs: s.lastRunInputs,
+  };
+}
+
+/** Volledige 3D-kernuitvoer plus dezelfde EN 1992/EN 1993-resultaten als de GUI. */
+function openFem3dUitlezen(a: BedieningActies) {
+  return {
+    dimension: "3d",
+    result: a.openFem3d.result,
+    maxVerplaatsingMm: a.openFem3d.result
+      ? openFem3DMaximumDisplacementM(a.openFem3d.model, a.openFem3d.result) * 1000
+      : null,
+    belastinggevallenBerekend: a.openFem3d.caseResults.size,
+    combinatiesBerekend: a.openFem3d.combinationResults.size,
+    actieveCombinatie: a.openFem3d.activeCombinationId,
+    combinatieResultaten: [...a.openFem3d.combinationResults].map(([id, result]) => ({
+      id,
+      maxVerplaatsingMm: openFem3DMaximumDisplacementM(a.openFem3d.model, result) * 1000,
+      alphaCr: result.buckling.status === "available" ? result.buckling.modes[0]?.loadFactor ?? null : null,
+      convergent: result.secondOrder?.converged ?? true,
+      stabiel: result.secondOrder?.stable ?? result.buckling.status !== "failed",
+    })),
+    steel: a.openFem3d.checks,
+    concrete: a.openFem3d.concreteChecks,
+    checksRunning: a.openFem3d.checksRunning,
+    solveError: a.openFem3d.solveError,
+    checksError: a.openFem3d.checksError,
   };
 }
 

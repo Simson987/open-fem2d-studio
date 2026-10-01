@@ -3,7 +3,7 @@ name = "plaat-check"
 version = "0.1.0"
 edition = "2021"
 description = "Normtoetsing van platen (wandschijven, belast in het vlak) per element"
-license = "CC-BY-SA-4.0"
+license = "LGPL-3.0-or-later"
 
 [lib]
 crate-type = ["lib"]

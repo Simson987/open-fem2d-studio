@@ -89,14 +89,17 @@ writeFileSync(doelSections, secties, "utf8");
 let dims = kop(
   `Staalprofiel-hoofdafmetingen voor de doorsnede-tekening in het rapport
  * (h, b, tw, tf, r in mm; bij buisprofielen geldt tw = tf = wanddikte t,
- * bij CHS is h = b = uitwendige diameter en r = 0), plus de aanvullende
+ * bij CHS is h = b = uitwendige diameter en r = 0; bij massief rond staal
+ * (RoundBar, "RD <d>") is h = b = tw = tf = d en r = 0; bij platstaal
+ * (FlatBar, "Strip <b>x<t>") is h = de breedte b van de strip, langs z, en
+ * b = tw = tf = de dikte t), plus de aanvullende
  * doorsnedegrootheden (props) voor de eigenschappentabel.
  *
  * Bij profielen met een toelopende flens staat er ook een flensHelling:
  * 0,08 voor de UNP-reeks, 0,14 voor de INP-reeks; 0 voor de UPE-reeks
  * (evenwijdige flenzen), weggelaten bij de overige I-profielen.`,
 );
-dims += `export type SteelSectionKind = "ISection" | "Channel" | "Shs" | "Rhs" | "Chs" | "Angle";
+dims += `export type SteelSectionKind = "ISection" | "Channel" | "Shs" | "Rhs" | "Chs" | "Angle" | "RoundBar" | "FlatBar";
 
 /** Aanvullende doorsnedegrootheden voor de eigenschappentabel in het rapport. */
 export interface SteelSectionProps {
@@ -131,13 +134,13 @@ export interface SteelSectionDims {
    * een maat 425. Wie de gebruiker een profiel laat kiezen, toont dit veld.
    */
   naam: string;
-  /** Hoogte in mm (CHS: uitwendige diameter). */
+  /** Hoogte in mm (CHS: uitwendige diameter; massief rond: diameter d; platstaal: de breedte b). */
   h: number;
-  /** Breedte in mm (CHS: uitwendige diameter). */
+  /** Breedte in mm (CHS: uitwendige diameter; massief rond: diameter d; platstaal: de dikte t). */
   b: number;
-  /** Lijfdikte in mm (buisprofielen: wanddikte t). */
+  /** Lijfdikte in mm (buisprofielen: wanddikte t; massief rond: d; platstaal: t). */
   tw: number;
-  /** Flensdikte in mm (buisprofielen: wanddikte t). */
+  /** Flensdikte in mm (buisprofielen: wanddikte t; massief rond: d; platstaal: t). */
   tf: number;
   /** Afrondingsstraal in mm (walsuitronding; SHS/RHS: hoekstraal; CHS: 0). */
   r: number;

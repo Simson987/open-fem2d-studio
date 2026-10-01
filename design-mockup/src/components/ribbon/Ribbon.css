@@ -170,6 +170,21 @@
   border-right: none;
 }
 
+.ribbon-open-fem3d-note {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  max-width: 280px;
+  padding: 3px 8px;
+  color: var(--theme-text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.ribbon-open-fem3d-note strong { color: var(--theme-text); }
+.ribbon-open-fem3d-unavailable { max-width: 190px; }
+
 .ribbon-group-content {
   display: flex;
   gap: 1px;

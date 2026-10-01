@@ -24,7 +24,8 @@ check("de tab Model zet de resultaten uit", /if \(!v\) \{[\s\S]*setDisplayFlags\
 check("de tab Model zet de verkenner terug op Project", /if \(!v\) \{[\s\S]*setTreeTab\("project"\)/.test(model));
 check("de tab Model sluit het toetsingspaneel naast het tekenvlak", /if \(!v\) \{[\s\S]*if \(activeView === "check"\) setActiveView\("default"\)/.test(model));
 check("het blok Toetsing rechts staat er alleen buiten de tab Model", /\{fem\.showLoads && \(\s*<CheckPanelToggle/.test(app));
-const res = /onShowResults=\{\(\) => \{[\s\S]{0,700}?\}\}/.exec(app)?.[0] ?? "";
+// Het 2D-model; de 3D-portaalweergave heeft een eigen onShowResults zonder 2D-lagen.
+const res = [...app.matchAll(/onShowResults=\{\(\) => \{[\s\S]{0,700}?\}\}/g)].map((m) => m[0]).find((x) => x.includes("setDisplayFlags")) ?? "";
 check("de tab Resultaten zet M, V, N, doorbuiging, reacties en UC weer aan", ["M: true", "V: true", "N: true", "deflection: true", "reactions: true", "uc: true"].every((x) => res.includes(x)), res.slice(0, 80));
 check("de tab Resultaten zet de verkenner op Resultaten", /setTreeTab\("results"\)/.test(res));
 

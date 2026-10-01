@@ -34,7 +34,7 @@
 import { useTranslation } from "react-i18next";
 import "katex/dist/katex.min.css";
 import { useCheckStore } from "../../../stores/checkStore";
-import { isToetsStaafZichtbaar, useReportStore } from "../../../stores/reportStore";
+import { isSectionEnabled, isToetsStaafZichtbaar, useReportStore } from "../../../stores/reportStore";
 import {
   gradeLabel,
   isConcreteCheckResult,
@@ -451,6 +451,7 @@ export default function CheckDetailSection() {
   const lastRunAt = useCheckStore((s) => s.lastRunAt);
   const gedetailleerd = useReportStore((s) => s.toetsingDetail === "gedetailleerd");
   const verborgenToetsStaven = useReportStore((s) => s.verborgenToetsStaven);
+  const overzichtAan = useReportStore((s) => isSectionEnabled(s.hiddenSections, "checkTable"));
 
   const checkedTime = fmtCheckedAt(lastRunAt);
   // De toetsbasis noemt de uitgaven van de bijlage van HET PROJECT (normnaad).
@@ -475,22 +476,24 @@ export default function CheckDetailSection() {
         </p>
       ) : (
         <>
-          <p className="rpt-note">
-            {checkedTime && `${t("report.checkedAt", "Toetsing uitgevoerd op")} ${checkedTime}. `}
-            {!gedetailleerd &&
-              `${t(
-                "report.detailBeknoptNoot",
-                "Beknopt niveau: per staaf is alleen de maatgevende toets uitgeschreven.",
-              )} `}
-            {weggelaten > 0 &&
-              `${t("report.staafKeuzeNoot", {
-                defaultValue:
-                  "Van {{aantal}} van de {{totaal}} getoetste staven is de uitgebreide uitvoer op verzoek weggelaten; die staven staan wel in het toetsingsoverzicht.",
-                aantal: weggelaten,
-                totaal: results.length,
-              })} `}
-            {basis ?? ""}
-          </p>
+          {(!overzichtAan || !gedetailleerd || weggelaten > 0) && (
+            <p className="rpt-note">
+              {!overzichtAan && checkedTime && `${t("report.checkedAt", "Toetsing uitgevoerd op")} ${checkedTime}. `}
+              {!gedetailleerd &&
+                `${t(
+                  "report.detailBeknoptNoot",
+                  "Beknopt niveau: per staaf is alleen de maatgevende toets uitgeschreven.",
+                )} `}
+              {weggelaten > 0 &&
+                `${t("report.staafKeuzeNoot", {
+                  defaultValue:
+                    "Van {{aantal}} van de {{totaal}} getoetste staven is de uitgebreide uitvoer op verzoek weggelaten; die staven staan wel in het toetsingsoverzicht.",
+                  aantal: weggelaten,
+                  totaal: results.length,
+                })} `}
+              {!overzichtAan && (basis ?? "")}
+            </p>
+          )}
 
           {getoond.length === 0 && (
             <p className="rpt-empty-note">

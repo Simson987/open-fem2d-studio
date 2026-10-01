@@ -42,22 +42,24 @@ const paren = Object.keys({ ...pakket.dependencies, ...pakket.devDependencies })
   .map((n) => [n, "tauri-" + n.slice("@tauri-apps/".length)]);
 paren.push(["@tauri-apps/api", "tauri"]);
 
-// JS-plugins zonder geregistreerde Rust-kant. De aanroepen hebben een terugval
-// (window.open / navigator.platform) en blokkeren niets; zie issue #38.
-const ZONDER_RUST_KANT = new Set(["@tauri-apps/plugin-opener", "@tauri-apps/plugin-os"]);
-
 check("er zijn Tauri-plugins gevonden om te vergelijken", paren.length >= 2, `${paren.length}`);
 for (const [js, crate] of paren) {
   const j = jsVersie(js);
   const r = rustVersie(crate);
-  if (!r && ZONDER_RUST_KANT.has(js)) {
-    log(`  · bekende afwijking (#38): ${js} ${j} heeft geen Rust-kant`);
-    continue;
-  }
-  check(`${js}: staat niet onnodig op de lijst zonder Rust-kant`, !ZONDER_RUST_KANT.has(js));
   check(`${js} ${j} naast ${crate} ${r}: zelfde hoofd- en subversie`,
     Boolean(j) && Boolean(r) && hoofdSub(j) === hoofdSub(r),
     !j ? "niet in package-lock.json" : !r ? "niet in Cargo.lock" : "werk de achterlopende kant bij");
+}
+
+// De pakketten alleen opnemen is niet genoeg: Tauri moet de plugins ook
+// initialiseren en de gebruikte JS-functies toegang geven.
+const rustApp = lees("..", "src-tauri", "src", "lib.rs");
+const capabilities = JSON.parse(lees("..", "src-tauri", "capabilities", "default.json"));
+for (const plugin of ["opener", "os"]) {
+  check(`${plugin}: Rust-plugin geregistreerd`, rustApp.includes(`.plugin(tauri_plugin_${plugin}::init())`));
+}
+for (const permission of ["opener:allow-open-url", "opener:allow-default-urls", "os:allow-arch", "os:allow-os-type", "os:allow-version"]) {
+  check(`${permission}: toegestaan`, capabilities.permissions.includes(permission));
 }
 
 // ── [2] commando's van de dialoogplugin ─────────────────────────────────────
@@ -91,6 +93,12 @@ const blok = /const confirmUnsavedAction = useCallback\([\s\S]*?\n  \}, \[handle
 check("confirmUnsavedAction is in de bron gevonden", blok.length > 200, `lengte ${blok.length}`);
 check("de native dialoog staat in een try/catch", /try \{[\s\S]*plugin-dialog[\s\S]*\} catch/.test(blok));
 check("bij een fout valt hij terug op de webview-dialoog", /catch[\s\S]*window\.confirm\(/.test(blok));
+check("één vraag met drie knoppen: Opslaan, Niet opslaan, Annuleren",
+  /yes: t\("unsaved\.saveBtn"\), no: t\("unsaved\.dontSaveBtn"\), cancel: t\("unsaved\.cancelBtn"\)/.test(blok)
+  && /message\(t\("unsaved\.askSave"\), \{[\s\S]{0,120}buttons: knoppen/.test(blok));
+check("geen tweede bevestiging na Niet opslaan", !/await (ask|confirm)\(/.test(blok));
+check("alleen Opslaan of Niet opslaan laat de actie doorgaan; Esc en het kruisje annuleren",
+  /if \(keuze === knoppen\.yes \|\| keuze === "Yes"\) return handleSaveProject\(\);\s*return keuze === knoppen\.no \|\| keuze === "No";/.test(blok));
 
 log(`\n${geslaagd} geslaagd, ${gefaald} gefaald`);
 process.exit(gefaald > 0 ? 1 : 0);

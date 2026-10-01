@@ -79,6 +79,13 @@ export interface LoadCombination {
    */
   scheefstandRichting?: 1 | -1;
   /**
+   * Alleen in 3D: de globale as van de scheefstand (`scheefstandRichting`
+   * geeft het teken). Gezet door `metScheefstandRichtingen3D`, dat een
+   * UGT-combinatie in +X, −X, +Y en −Y ontvouwt; ontbreekt = x. Wordt niet
+   * opgeslagen.
+   */
+  scheefstandAs?: "x" | "y";
+  /**
    * Aanwezig = een EINDTOESTANDVARIANT van een UGT-combinatie: dezelfde
    * factoren, maar doorgerekend met de eindstijfheid van het hout
    * E_mean,fin = E_mean/(1 + ψ₂·k_def) (NEN-EN 1995-1-1 2.3.2.2(2)). Gezet door

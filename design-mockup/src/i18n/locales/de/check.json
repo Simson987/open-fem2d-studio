@@ -257,7 +257,9 @@
       "hollowHotFinished": "Hohlprofil, warmgefertigt (SHS/RHS, EN 10210)",
       "circularHotFinished": "Rundrohr, warmgefertigt (CHS, EN 10210)",
       "angleEqual": "L gleichschenklig",
-      "angleUnequal": "L ungleichschenklig"
+      "angleUnequal": "L ungleichschenklig",
+      "roundBar": "Rundstahl, massiv (RD, Ø)",
+      "flatBar": "Flachstahl (FL)"
     }
   },
   "connection": {
@@ -987,6 +989,8 @@
       "sameAsPlane": "— wie in der Ebene —",
       "l0zCustom": "l₀,z selbst angeben…",
       "m0EdzExternal": "M₀Ed,z extern",
+      "zAxisHeader3d": "Um die lokale z-Achse — Abs. 5.8.9",
+      "zAxisHint3d": "Der 3D-Rahmenlöser liefert sowohl M_y als auch M_z. Der Kern verwendet M_z aus den lokalen 3D-Stabkräften direkt; M₀Ed,z extern wird nur als zusätzliches konstantes Moment nach Theorie I. Ordnung addiert. Danach werden die Imperfektion nach Abs. 5.2 und der normative Effekt nach Theorie II. Ordnung um diese Achse bestimmt und gegen M_Rd,z geprüft. Abs. 5.8.9 entscheidet anschließend, ob beide Richtungen getrennt geprüft werden dürfen ((5.38a) und (5.38b)) oder Interaktion (5.39) erforderlich ist. Aussteifung und Knicklänge sind je lokaler Achse eigene Eingaben; leer übernimmt die Wahl der ersten Achse und vermerkt dies im Bericht.",
       "zAxisHint": "Der Rahmenlöser rechnet in einer Ebene und liefert M_z = 0, aber eine Stütze knickt auch um die z-Achse: Die Imperfektion nach Abs. 5.2 (θ₀ = 1/300, Nationaler Anhang) und der Effekt nach Theorie II. Ordnung in dieser Richtung hängen nicht vom Modell ab. Der Kern rechnet daher immer M_Ed,z = M₀Ed,z + N_Ed·(e_i + e₂), weist es gegen M_Rd,z mit den Stäben an ihrer Lage über die Breite nach und prüft dann Abs. 5.8.9: Dürfen die Richtungen getrennt betrachtet werden ((5.38a) und (5.38b)), und falls nicht, die Interaktion (5.39). Aussteifung und Knicklänge um z sind EIGENE Angaben — eine Stütze kann in der Ebene ausgesteift sein und senkrecht dazu nicht; leer = die Wahl der Ebene wird übernommen, mit diesem Hinweis im Bericht. M₀Ed,z extern ist ein Moment nach Theorie I. Ordnung um z aus einem räumlichen Modell oder einer Handrechnung; 0 = keines.",
       "stirrupZone": "Bügelbereich",
       "stirrupZoneNotGiven": "— nicht angegeben, s_cl,tmax wird nicht nachgewiesen —",

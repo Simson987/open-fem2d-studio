@@ -64,6 +64,13 @@ pub enum Profielvorm {
     /// met u-u en v-v. Wie deze vorm doorrekent krijgt `iu_mm4`, `iv_mm4` en
     /// `alpha_hoofdas_rad` mee en hoort ze te gebruiken.
     Hoeklijn { h: f64, b: f64, t: f64, r1: f64, r2: f64 },
+    /// Massief rond staal met diameter `d` (EN 10060), de catalogusreeks
+    /// "RD <d>". Elke contourgrootheid heeft een gesloten vorm — A = πd²/4,
+    /// I = πd⁴/64, W_el = πd³/32, W_pl = d³/6 — en de torsieconstante ook:
+    /// I_t = πd⁴/32 (het polair traagheidsmoment; een cirkel welft niet, dus
+    /// I_w = 0). De catalogus schrijft die gesloten vormen weg; de motor rekent
+    /// dezelfde vorm na als controle, zie `scripts/genereer-rondstaal.mjs`.
+    RondStaal { d: f64 },
 }
 
 impl Profielvorm {
@@ -173,6 +180,7 @@ impl Profielvorm {
                 }
                 Ok(())
             }
+            Profielvorm::RondStaal { d } => positief("d", d),
         }
     }
 
@@ -187,6 +195,7 @@ impl Profielvorm {
             Profielvorm::Buis { d, t } => contour::buis(d, t),
             Profielvorm::Rechthoek { h, b } => contour::rechthoek(h, b),
             Profielvorm::Hoeklijn { h, b, t, r1, r2 } => contour::hoeklijn(h, b, t, r1, r2),
+            Profielvorm::RondStaal { d } => contour::rond_staal(d),
         }
     }
 
@@ -209,6 +218,10 @@ impl Profielvorm {
             // hoort bij de GEOMETRIE (`ProfileGeometry.r2` in de catalogus),
             // niet bij de doorsnedegrootheden.
             Profielvorm::Hoeklijn { h, b, t, r1, .. } => (h, b, t, t, r1),
+            // Massief, dus net als bij de rechthoek is de "plaatdikte" de
+            // volle maat: t_w = t_f = d. Die dikte gaat in tabel 3.1 (f_y per
+            // dikteklasse): voor een massieve staaf is dat de diameter.
+            Profielvorm::RondStaal { d } => (d, d, d, d, 0.0),
         }
     }
 
@@ -262,6 +275,20 @@ impl Profielvorm {
             // Deze keuze is een normkeuze en geen meetkunde, en hoort daarom
             // BIJ DE TOETS te worden gemeld; `steel-check` doet dat.
             Profielvorm::Hoeklijn { h, b, t, .. } => (b * t, h * t),
+            // Massief rond: §6.2.6(3) heeft ook hier GEEN rij — (d) gaat over
+            // de ronde BUIS. A_v valt dus onder §6.2.6(2) en is zelf bepaald,
+            // met dezelfde redenering als de massieve rechthoek hierboven: de
+            // elastische schuifspanning mag nergens f_y/√3 overschrijden. Voor
+            // een cirkel is die spanning het grootst op de neutrale lijn,
+            // τ_max = 4V/(3A) (Jourawski over de koorde), dus
+            // V = τ·(3/4)·A en A_v = 0,75·A.
+            //
+            // Conservatief: een volledig plastische schuifverdeling zou A_v = A
+            // toelaten, en de buisregel 2A/π = 0,64·A is voor een massieve
+            // doorsnede niet afgeleid. Voor een windverband (vrijwel geen
+            // dwarskracht) maakt de keuze in de praktijk niets uit; zij staat
+            // bij de toets vermeld.
+            Profielvorm::RondStaal { .. } => (0.75 * a, 0.75 * a),
         }
     }
 
@@ -326,6 +353,12 @@ pub fn bereken_uitgebreid(vorm: &Profielvorm, opties: Option<TorsieOpties>) -> M
         // Een gesloten doorsnede wringt via St.-Venant; de welvingsstijfheid is
         // verwaarloosbaar en wordt in EN 1993-1-1 niet gebruikt. Nul zetten is
         // hier dus geen gebrek maar de juiste modelkeuze — en conservatief.
+        r.props.iw_mm6 = 0.0;
+    }
+    if let Profielvorm::RondStaal { .. } = vorm {
+        // Een massieve cirkel welft niet: de welvingsfunctie is overal nul,
+        // dus I_w = 0 exact. De numerieke oplossing geeft er ruis omheen; de
+        // exacte waarde is hier bekend en gaat voor.
         r.props.iw_mm6 = 0.0;
     }
     r
@@ -439,6 +472,40 @@ mod tests {
         // Dubbelsymmetrisch: schuifmiddelpunt = zwaartepunt.
         assert!((p.y_s_mm - p.y_c_mm).abs() < 1e-6 * d);
         assert!((p.z_s_mm - p.z_c_mm).abs() < 1e-6 * d);
+    }
+
+    /// Massief rond staal RD 24: elke grootheid heeft een gesloten vorm, en de
+    /// motor hoort er met de exacte kwartbogen op uit te komen. Met de hand:
+    ///   A    = π·24²/4  = 452,389 mm²
+    ///   I    = π·24⁴/64 = 16 286,0 mm⁴  (I_y = I_z)
+    ///   W_el = π·24³/32 = 1 357,17 mm³
+    ///   W_pl = 24³/6    = 2 304 mm³     (twee halve cirkels, arm 4r/3π)
+    ///   i    = d/4      = 6 mm
+    ///   I_t  = π·24⁴/32 = 32 572,0 mm⁴  (polair; numeriek, dus 0,5 %)
+    ///   A_v  = 0,75·A   = 339,292 mm²   (§6.2.6(2), elastische τ_max)
+    #[test]
+    fn rond_staal_reproduceert_alle_gesloten_vormen() {
+        let d = 24.0;
+        let p = bereken(&Profielvorm::RondStaal { d });
+        let a = PI * d * d / 4.0;
+        let i = PI * d.powi(4) / 64.0;
+        assert!(rel(p.area_mm2, 452.389_342) < 1e-8, "A = {}", p.area_mm2);
+        assert!(rel(p.area_mm2, a) < 1e-9);
+        assert!(rel(p.iy_mm4, 16_286.016_3) < 1e-8, "I_y = {}", p.iy_mm4);
+        assert!(rel(p.iz_mm4, i) < 1e-9);
+        assert!(rel(p.wel_y_mm3, 1_357.168_03) < 1e-8, "W_el = {}", p.wel_y_mm3);
+        assert!(rel(p.wel_z_mm3, PI * d.powi(3) / 32.0) < 1e-9);
+        assert!(rel(p.wpl_y_mm3, 2_304.0) < 1e-9, "W_pl,y = {}", p.wpl_y_mm3);
+        assert!(rel(p.wpl_z_mm3, 2_304.0) < 1e-9, "W_pl,z = {}", p.wpl_z_mm3);
+        assert!(rel(p.iy_radius_mm, 6.0) < 1e-9);
+        assert!(rel(p.iz_radius_mm, 6.0) < 1e-9);
+        let f = rel(p.it_mm4, 32_572.032_6);
+        assert!(f < 5e-3, "I_t wijkt {:.3} % af van πd⁴/32", f * 100.0);
+        assert_eq!(p.iw_mm6, 0.0, "een cirkel welft niet");
+        assert!(rel(p.av_z_mm2, 0.75 * a) < 1e-12 && rel(p.av_y_mm2, 0.75 * a) < 1e-12);
+        // De maatvelden: de volle maat, want massief (tabel 3.1 leest t = d).
+        assert_eq!((p.h_mm, p.b_mm, p.tw_mm, p.tf_mm, p.r_mm), (d, d, d, d, 0.0));
+        assert!(Profielvorm::RondStaal { d: 0.0 }.controleer_maten().is_err());
     }
 
     /// De EN 10210-2-koker moet de gepubliceerde waarde van de seed

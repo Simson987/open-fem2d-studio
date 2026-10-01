@@ -1838,7 +1838,13 @@ export interface StructuralGrid {
   enabled: boolean;
   /** vertical lines, varying x */
   xAxes: GridAxisLine[];
-  /** horizontal lines, varying z */
+  /** 3D-plan axes, varying y; optional in older and purely 2D projects. */
+  yAxes?: GridAxisLine[];
+  /**
+   * horizontal lines, varying z: de LEVELS (peilen), elk een naam en een
+   * hoogte in mm. In 3D kunnen knopen en platen eraan gekoppeld zijn
+   * (`levelId` = id van de as; zie openFem3d/openFem3dLevels.ts).
+   */
   zAxes: GridAxisLine[];
 }
 
@@ -1847,6 +1853,10 @@ export const DEFAULT_STRUCTURAL_GRID: StructuralGrid = {
   xAxes: [
     { id: "A", label: "A", position: 0 },
     { id: "B", label: "B", position: 12000 },
+  ],
+  yAxes: [
+    { id: "Y-A", label: "1", position: 0 },
+    { id: "Y-B", label: "2", position: 6000 },
   ],
   zAxes: [
     { id: "1", label: "1", position: 0 },

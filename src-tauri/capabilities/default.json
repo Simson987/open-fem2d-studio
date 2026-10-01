@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default permissions for Open FEM2D Studio",
+  "description": "Default permissions for Open FEM Studio",
   "windows": ["main", "detached-*"],
   "permissions": [
     "core:default",
@@ -22,12 +22,17 @@
     "fs:default",
     {
       "identifier": "fs:allow-read-text-file",
-      "allow": [{ "path": "**/*.ifcfem2d" }]
+      "allow": [{ "path": "**/*.ifcfem" }, { "path": "**/*.ifcfem2d" }]
     },
     {
       "identifier": "fs:allow-write-text-file",
-      "allow": [{ "path": "**/*.ifcfem2d" }]
+      "allow": [{ "path": "**/*.ifcfem" }, { "path": "**/*.ifcfem2d" }]
     },
-    "fs:allow-write-file"
+    "fs:allow-write-file",
+    "opener:allow-open-url",
+    "opener:allow-default-urls",
+    "os:allow-arch",
+    "os:allow-os-type",
+    "os:allow-version"
   ]
 }

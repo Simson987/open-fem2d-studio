@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Open FEM2D Studio",
-  "version": "0.3.15",
+  "productName": "Open FEM Studio",
+  "version": "2026.39.0",
   "identifier": "org.openaec.fem2d-studio",
   "build": {
     "frontendDist": "../design-mockup/dist",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Open FEM2D Studio",
+        "title": "Open FEM Studio",
         "label": "main",
         "width": 1400,
         "height": 900,
@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: https://*.tile.openstreetmap.org; font-src 'self' https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self' https://nominatim.openstreetmap.org http://localhost:* ipc: http://ipc.localhost"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: https://*.tile.openstreetmap.org; font-src 'self' https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self' https://nominatim.openstreetmap.org http://localhost:* ws://localhost:1440 ws://127.0.0.1:1440 ipc: http://ipc.localhost"
     }
   },
   "bundle": {
@@ -39,6 +39,9 @@
       "dmg"
     ],
     "windows": {
+      "wix": {
+        "version": "26.39.0"
+      },
       "webviewInstallMode": {
         "type": "embedBootstrapper",
         "silent": true
@@ -55,10 +58,10 @@
       "icons/icon.ico"
     ],
     "publisher": "OpenAEC Foundation",
-    "copyright": "© 2026 OpenAEC Foundation. CC BY-SA 4.0",
+    "copyright": "© 2026 OpenAEC Foundation. AGPL-3.0-or-later",
     "category": "Productivity",
     "shortDescription": "2D Finite Element Method solver",
-    "longDescription": "Open FEM2D Studio — open-source 2D Finite Element Method solver for structural analysis. Part of the OpenAEC Foundation portfolio."
+    "longDescription": "Open FEM Studio — open-source 2D Finite Element Method solver for structural analysis. Part of the OpenAEC Foundation portfolio."
   },
   "plugins": {}
 }

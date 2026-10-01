@@ -760,8 +760,9 @@ export function bepaalScheefstand(
 export function scheefstandToelichting(
   uitkomst: ScheefstandUitkomst,
   geometrie: ScheefstandGeometrie,
+  richtingen: ScheefstandRichtingen = "2d",
 ): string {
-  return toelichtingRegels(uitkomst, geometrie).map(nederlands).join("\n");
+  return toelichtingRegels(uitkomst, geometrie, richtingen).map(nederlands).join("\n");
 }
 
 /**
@@ -773,14 +774,22 @@ export function scheefstandToelichtingVertaald(
   uitkomst: ScheefstandUitkomst,
   geometrie: ScheefstandGeometrie,
   t: Vertaalfunctie,
+  richtingen: ScheefstandRichtingen = "2d",
 ): string {
-  return toelichtingRegels(uitkomst, geometrie).map((r) => vertaalWaarde(t, r)).join("\n");
+  return toelichtingRegels(uitkomst, geometrie, richtingen).map((r) => vertaalWaarde(t, r)).join("\n");
 }
+
+/**
+ * Welke richtingen de berekening doorloopt: in 2D +x en −x, in 3D om de beurt
+ * +X, −X, +Y en −Y (zie components/openFem3d/openFem3dScheefstand.ts).
+ */
+export type ScheefstandRichtingen = "2d" | "3d";
 
 /** De regels van de toelichting, elk als tekst of vertaalbare tekst. */
 function toelichtingRegels(
   uitkomst: ScheefstandUitkomst,
   geometrie: ScheefstandGeometrie,
+  richtingen: ScheefstandRichtingen = "2d",
 ): TekstWaarde[] {
   const regels: TekstWaarde[] = [];
   regels.push(
@@ -811,7 +820,12 @@ function toelichtingRegels(
     for (const r of geometrie.afleidingTeksten.slice(2)) regels.push(r);
   }
   regels.push("");
-  regels.push(vt(`${S}directionBoth`,
+  if (richtingen === "3d") regels.push(vt(`${S}directions3d`,
+    "In 3D werkt de scheefstand per UGT-combinatie in vier richtingen, één tegelijk: " +
+      "+X, −X, +Y en −Y (EN 1993-1-1 §5.3.2(8)). Elke verticale last V krijgt op zijn " +
+      "eigen aangrijpingspunt een horizontale last φ·V (§5.3.2(7)). BGT-combinaties " +
+      "rekenen zonder scheefstand."));
+  else regels.push(vt(`${S}directionBoth`,
     "Richting: beide. Elke belastingcombinatie is doorgerekend met de scheefstand in +x " +
       "én in −x, als twee varianten met de richting in de naam; de omhullende en de " +
       "toetsing nemen per staaf de ongunstigste van de twee (EN 1993-1-1 5.3.2(2): de " +

@@ -56,8 +56,11 @@ pub struct ConcreteBeamCheckResult {
     /// staafstatus, de UC op het canvas en de samenvattingstabel in het rapport
     /// zeiden "Ok" — en dát is wat een lezer overneemt.
     ///
-    /// Staat hier iets in wat GEEN detailleringseis is, dan is `status`
-    /// [`CheckStatus::NotApplicable`] in plaats van `Ok` (zie de aggregatie in
+    /// Ontbreekt één van de drie dragende UGT-controles (§6.1 spanningsblok,
+    /// §6.1 M-N-κ of §6.2 dwarskracht), dan is `status`
+    /// [`CheckStatus::NotApplicable`] in plaats van `Ok`. Andere open punten,
+    /// zoals niet gevraagde BGT-controles en detailleringseisen, blijven hier
+    /// zichtbaar zonder de UGT-status te overschrijven (zie de aggregatie in
     /// `orchestrator.rs`). `#[serde(default)]`: een antwoord van vóór dit veld
     /// blijft leesbaar.
     #[serde(default)]

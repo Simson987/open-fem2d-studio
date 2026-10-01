@@ -10,6 +10,7 @@ use nen_en_1992_1_1::{
 // meer dan één spoor tegelijk wordt bewerkt; twee `use`-regels naar dezelfde
 // crate is toegestaan en houdt de wijzigingen uit elkaars vaarwater.
 use concrete_check::{ConcreteColumnCheckRequest, ConcreteColumnCheckResponse};
+use open_fem_3d::{EngineInfo as OpenFem3DEngineInfo, SolveRequest3D, SolveResult3D};
 // Bijlage B — de kruipcoëfficiënt. Eigen `use`-regel om dezelfde reden.
 use nen_en_1992_1_1::{CreepCoefficientRequest, CreepCoefficientResponse};
 use nen_en_1993_1_1_section::{S235, S275, S355, S420, S460, SteelGrade};
@@ -333,6 +334,22 @@ async fn generate_steel_report_pdf(input: ReportInput) -> Result<Vec<u8>, String
     Ok(generate_report_pdf(input))
 }
 
+/// Beschikbare productie-engine voor ruimtelijke raamwerken. De descriptor
+/// komt uit dezelfde adapter als de berekening, zodat versie en capaciteiten
+/// in de instellingen niet los van de werkelijk meegebouwde kern kunnen raken.
+#[tauri::command]
+fn open_fem_3d_engine_info() -> OpenFem3DEngineInfo {
+    open_fem_3d::engine_info()
+}
+
+/// 3D-raamwerk: geversioneerde, strikte grens naar de externe 3D-kern.
+/// De standaardanalyse in het verzoek is directe tweede orde (P-Delta); de
+/// adapter levert daarbij ook eigenknikresultaten als er drukstaven zijn.
+#[tauri::command]
+async fn solve_open_fem_3d(input: SolveRequest3D) -> Result<SolveResult3D, String> {
+    open_fem_3d::solve(input)
+}
+
 // ── Het bedieningskanaal ────────────────────────────────────────────────────
 // Twee commands, dun: de logica staat in `gui_control`. Ze staan hier als
 // functie omdat elke naam in `generate_handler!` een functie in dít bestand
@@ -362,6 +379,8 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_os::init())
         .invoke_handler(tauri::generate_handler![
             list_steel_profiles,
             list_steel_grades,
@@ -386,6 +405,8 @@ pub fn run() {
             check_fillet_welds,
             bereken_doorsneden,
             generate_steel_report_pdf,
+            open_fem_3d_engine_info,
+            solve_open_fem_3d,
             gui_control_actief,
             gui_control_antwoord,
         ])

@@ -5,6 +5,7 @@ import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
 import common from "../src/i18n/locales/nl/common.json";
 import check from "../src/i18n/locales/nl/check.json";
+import ribbon from "../src/i18n/locales/nl/ribbon.json";
 import FemCanvas, { DimEditForm, PopoverLineLoadForm, PopoverEdgeLoadForm, PopoverPointLoadForm } from "../src/components/fem/FemCanvas";
 import { DEFAULT_GRID } from "../src/components/fem/femTypes";
 import FemProperties from "../src/components/fem/FemProperties";
@@ -14,6 +15,12 @@ import LoadCaseTabBar from "../src/components/fem/LoadCaseTabBar";
 import LengthInput from "../src/components/LengthInput";
 import WindGeneratorDialog from "../src/lib/wind/WindGeneratorDialog";
 import { genereerWindbelasting, STANDAARD_WIND_INSTELLINGEN } from "../src/lib/wind/windGenerator";
+import OpenFem3DTransformPanel from "../src/components/openFem3d/OpenFem3DTransformPanel";
+import OpenFem3DProperties from "../src/components/openFem3d/OpenFem3DProperties";
+import OpenFem3DMemberLoads from "../src/components/openFem3d/OpenFem3DMemberLoads";
+import { transformOpenFem3D } from "../src/components/openFem3d/openFem3dTransform";
+import WaterAccumulation2DDialog from "../src/components/fem/WaterAccumulation2DDialog";
+import { calculateWaterAccumulation2D } from "../src/lib/waterAccumulation2d";
 
 const tests: string[] = [];
 const container = document.getElementById("root")!;
@@ -59,8 +66,14 @@ const plate = { id: 1, nodeIds: [1, 2, 3, 4] };
 const noop = () => {};
 const propsBase = { nodes, beams: [beam], plates: [plate], supports: [], loads: [], updateNode: noop, addSupport: noop, removeSupport: noop, results: null };
 
+// Headless met virtuele tijd maakt geen beeldframes, terwijl het tekenvlak de
+// hover (en daarmee de richting van een staaf in aanbouw) één keer per frame
+// bijwerkt. Laat een frame hier daarom een gewone timertaak zijn.
+window.requestAnimationFrame = (cb) => window.setTimeout(() => cb(performance.now()), 0);
+window.cancelAnimationFrame = (id) => window.clearTimeout(id);
+
 async function run() {
-  await i18next.use(initReactI18next).init({ lng: "nl", resources: { nl: { common, check } }, defaultNS: "common", initImmediate: false });
+  await i18next.use(initReactI18next).init({ lng: "nl", resources: { nl: { common, check, ribbon } }, defaultNS: "common", initImmediate: false });
   for (const enter of [false, true]) {
     let calls = 0;
     mount(<LengthInput required value={3} storedUnit="m" onChange={() => calls++} />);
@@ -90,6 +103,9 @@ async function run() {
     flushSync(() => svg.dispatchEvent(new MouseEvent("mousemove", { clientX: x, clientY: y, bubbles: true })));
     flushSync(() => svg.dispatchEvent(new MouseEvent("click", { clientX: x, clientY: y, bubbles: true })));
     flushSync(() => svg.dispatchEvent(new MouseEvent("mousemove", { clientX: x + 500, clientY: y, bubbles: true })));
+    // Het tekenvlak werkt de hover (en daarmee de richting van de staaf) één
+    // keer per beeldframe bij; een mens typt nooit binnen hetzelfde frame.
+    await new Promise(resolve => setTimeout(resolve, 50));
     for (const c of raw) key(c);
     ok(container.textContent!.includes("mm"), "HUD maat in mm");
     key("Enter");
@@ -257,6 +273,116 @@ async function run() {
       type(column, "350,5", true); equal(saved.kolomBreedte_mm, 350.5, "Kolombreedte blijft mm");
     }
     tests.push("Wind " + vorm + ": alle bouwmaten, oude waarden, negatieve invoer en bestaande mm");
+  }
+
+  // ── 3D: invoer in mm, het 3D-model blijft in meters ──────────────────
+  const portaal = {
+    nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 0, y: 0, z: 3 }, { id: 3, x: 6, y: 0, z: 3 }, { id: 4, x: 6, y: 0, z: 0 }],
+    beams: [{ id: 1, startNodeId: 1, endNodeId: 2 }, { id: 2, startNodeId: 2, endNodeId: 3 }, { id: 3, startNodeId: 3, endNodeId: 4 }],
+  };
+  {
+    let command: any;
+    mount(<OpenFem3DTransformPanel tool="copy" selectionLabel="Portaal" onApply={c => command = c} onCancel={noop} />);
+    ok(["ΔX (mm)", "ΔY (mm)", "ΔZ (mm)"].every(label => container.textContent!.includes(label)), "ΔX/ΔY/ΔZ in mm");
+    const [dx, dy] = [...container.querySelectorAll<HTMLInputElement>(".open-fem3d-transform-grid input")];
+    type(dx, "3000"); click(".open-fem3d-transform-actions .primary");
+    equal(command, { kind: "copy", dx: 3, dy: 0, dz: 0 }, "ΔX 3000 mm is 3 m");
+    const kopie = transformOpenFem3D(portaal, { type: "multi", nodeIds: [], beamIds: [1, 2, 3] }, command).model;
+    equal(kopie.nodes.slice(4).map(n => n.x), [3, 3, 9, 9], "Kopie van het portaal 3 m verderop");
+    type(dx, "3000,5"); type(dy, "-250"); click(".open-fem3d-transform-actions .primary");
+    equal(command, { kind: "copy", dx: 3.0005, dy: -0.25, dz: 0 }, "Komma en negatieve ΔY");
+    for (const invalid of ["abc", "12mm"]) {
+      command = undefined; type(dx, invalid); click(".open-fem3d-transform-actions .primary");
+      equal(command, undefined, "Ongeldige ΔX past niets toe");
+      equal(container.querySelector(".open-fem3d-transform-error")?.textContent, "ΔX is geen geldig getal.", "Melding bij ongeldige ΔX");
+    }
+    mount(<OpenFem3DTransformPanel tool="mirror" selectionLabel="Portaal" onApply={c => command = c} onCancel={noop} />);
+    ok(container.textContent!.includes("Spiegelvlak op (mm)"), "Spiegelvlak in mm");
+    type(input('.open-fem3d-transform-field input[inputmode="decimal"]'), "1500"); click(".open-fem3d-transform-actions .primary");
+    equal(command, { kind: "mirror", axis: "z", offset: 1.5 }, "Spiegelvlak 1500 mm is 1,5 m");
+    tests.push("3D kopiëren/spiegelen: 3000 mm = 3 m, komma, negatief, ongeldige invoer met melding");
+  }
+  {
+    let changed: any;
+    const model = { nodes: [{ id: 1, x: 12, y: 0, z: 5 }, { id: 2, x: 18, y: 0, z: 5 }], beams: [{ id: 1, startNodeId: 1, endNodeId: 2 }] };
+    mount(<OpenFem3DProperties model={model} selection={{ type: "node", id: 1 }} onChange={m => changed = m} result={null} />);
+    equal(["X (mm)", "Y (mm)", "Z (mm)"].map(label => rowInput(label).value), ["12000", "0", "5000"], "Opgeslagen meters als mm");
+    type(rowInput("X (mm)"), "15000,5", true);
+    equal(changed?.nodes[0], { id: 1, x: 15.0005, y: 0, z: 5 }, "15000,5 mm is 15,0005 m");
+    for (const invalid of ["abc", "12mm"]) {
+      changed = undefined; type(rowInput("Y (mm)"), invalid, true);
+      equal(changed, undefined, "Ongeldige coördinaat schrijft niets");
+      equal(rowInput("Y (mm)").value, "0", "Veld herstelt de opgeslagen coördinaat");
+    }
+    changed = undefined; type(rowInput("X (mm)"), "18000", true);
+    equal(changed, undefined, "Knoop op knoop 2: staaf zonder lengte geweigerd");
+    equal(rowInput("X (mm)").value, "12000", "Geweigerde coördinaat: veld toont weer de opgeslagen waarde");
+    tests.push("3D knoop: 12 m getoond als 12000 mm, komma naar m, ongeldig en nulstaaf geweigerd");
+  }
+  {
+    let changed: any;
+    const model = {
+      nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 4, y: 0, z: 0 }, { id: 3, x: 4, y: 3, z: 0 }, { id: 4, x: 0, y: 3, z: 0 }],
+      beams: [], plates: [{ id: 1, nodeIds: [1, 2, 3, 4], thicknessM: 0.2, cornerRadiusM: 0.1 }],
+    };
+    mount(<OpenFem3DProperties model={model} selection={{ type: "plate", id: 1 }} onChange={m => changed = m} result={null} />);
+    equal([rowInput("Dikte (mm)").value, rowInput("Randstraal (mm)").value], ["200", "100"], "Dikte en randstraal in mm");
+    type(rowInput("Dikte (mm)"), "250", true);
+    equal(changed?.plates[0].thicknessM, 0.25, "Dikte 250 mm is 0,25 m");
+    for (const invalid of ["abc", "12mm", "0", "-5"]) {
+      changed = undefined; type(rowInput("Dikte (mm)"), invalid, true);
+      equal(changed, undefined, "Ongeldige dikte schrijft niets: " + invalid);
+    }
+    type(rowInput("Randstraal (mm)"), "50,5", true);
+    equal(changed?.plates[0].cornerRadiusM, 0.0505, "Randstraal 50,5 mm is 0,0505 m");
+    type(rowInput("Randstraal (mm)"), "", true);
+    equal(changed?.plates[0].cornerRadiusM ?? 0, 0, "Lege randstraal is geen afronding");
+    tests.push("3D plaat: dikte en randstraal in mm, ongeldige en niet-positieve dikte geweigerd");
+  }
+  {
+    let changed: any;
+    const model = { nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 6, y: 0, z: 0 }], beams: [{ id: 1, startNodeId: 1, endNodeId: 2 }] };
+    mount(<OpenFem3DMemberLoads model={model} beamId={1} lengthM={6} onChange={m => changed = m} />);
+    ok(container.textContent!.includes("staaflengte 6000 mm"), "Staaflengte in mm");
+    click(".open-fem3d-load-more");
+    ok(container.textContent!.includes("Belast bereik vanaf staafbegin (mm)"), "Bereik in mm");
+    equal([input('input[name="startMm"]').value, input('input[name="endMm"]').value], ["0", "6000"], "Volle staaf in mm");
+    type(input('input[name="startMm"]'), "1500"); type(input('input[name="endMm"]'), "4500,5");
+    click(".open-fem3d-load-submit");
+    const last = changed?.memberLoads?.[0];
+    equal([last?.startPositionM, last?.endPositionM], [1.5, 4.5005], "Bereik 1500 tot 4500,5 mm is 1,5 tot 4,5005 m");
+    for (const invalid of ["abc", "12mm", "6001"]) {
+      changed = undefined; type(input('input[name="endMm"]'), invalid); click(".open-fem3d-load-submit");
+      equal(changed, undefined, "Ongeldig bereik schrijft niets: " + invalid);
+      equal(container.querySelector('[role="alert"]')?.textContent, "Ongeldig bereik: 0 ≤ begin < einde ≤ 6000 mm", "Melding in mm");
+    }
+    click(".open-fem3d-load-tabs button:nth-child(2)");
+    ok(container.textContent!.includes("Positie (mm)"), "Puntlastpositie in mm");
+    const positie = () => input('.open-fem3d-member-loads input[inputmode="decimal"]');
+    equal(positie().value, "3000", "Standaardpositie midden van 6 m in mm");
+    type(positie(), "2500"); click('.open-fem3d-member-loads form button[type="submit"]');
+    equal(changed?.memberPointLoads?.[0].positionM, 2.5, "Puntlast op 2500 mm is 2,5 m");
+    changed = undefined; type(positie(), "12mm"); click('.open-fem3d-member-loads form button[type="submit"]');
+    equal(changed, undefined, "Ongeldige puntlastpositie schrijft niets");
+    equal(container.querySelector('[role="alert"]')?.textContent, "Ongeldige positie: 0 ≤ positie ≤ 6000 mm", "Melding positie in mm");
+    tests.push("3D staafbelasting: bereik en puntlastpositie in mm naar m, meldingen in mm");
+  }
+  {
+    mount(<WaterAccumulation2DDialog open onClose={noop} selectedBeam={{ id: 1, spanM: 7.2, eiKnm2: 10000 }} />);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const velden = () => [...document.querySelectorAll<HTMLInputElement>(".water2d-field input")];
+    equal([velden()[0].value, velden()[1].value], ["7200", "3000"], "Overspanning van de staaf en dakbreedte in mm");
+    equal([...document.querySelectorAll(".water2d-field small")].slice(0, 2).map(el => el.textContent), ["mm", "mm"], "Eenheid mm");
+    const bereken = () => flushSync(() => document.querySelector<HTMLButtonElement>(".modal-footer .primary")!.click());
+    const n = (spanM: number) => calculateWaterAccumulation2D({ spanM, tributaryWidthM: 3, eiKnm2: 10000,
+      waterLevelAboveLeftM: 0.1, slopePercent: 0, camberMm: 0, initialSagMm: 0, stiffnessModelFactor: 1 }).stiffnessRatio.toFixed(2);
+    bereken();
+    ok(document.querySelector(".water2d-metrics")?.textContent?.includes(n(7.2)), "Stijfheidgetal met L = 7,2 m: " + n(7.2));
+    type(velden()[0], "6000,5"); bereken();
+    ok(document.querySelector(".water2d-metrics")?.textContent?.includes(n(6.0005)), "Overspanning 6000,5 mm is 6,0005 m");
+    type(velden()[0], "abc"); bereken();
+    ok(!document.querySelector(".water2d-metrics") && !!document.querySelector('.water2d-dialog [role="alert"]'), "Ongeldige overspanning geeft een melding");
+    tests.push("Wateraccumulatie: overspanning en dakbreedte in mm naar de rekenkern in m");
   }
 }
 

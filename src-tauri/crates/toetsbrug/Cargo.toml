@@ -3,7 +3,7 @@ name = "toetsbrug"
 version = "0.1.0"
 edition = "2021"
 description = "Normtoetsing als JSON-in/JSON-uit, zodat de browser dezelfde rekenkern bereikt als de desktop-app"
-license = "CC-BY-SA-4.0"
+license = "AGPL-3.0-or-later"
 
 # Bewust een eigen crate en geen binary in het Tauri-pakket: daar zou hij als
 # tweede uitvoerbaar bestand naast de app staan, en de bundler pakte hem dan

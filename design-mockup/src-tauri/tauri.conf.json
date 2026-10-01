@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Open FEM2D Studio",
+  "productName": "Open FEM Studio",
   "version": "0.1.0",
   "identifier": "com.impertio.open-fem2d-studio",
   "build": {
@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Open FEM2D Studio",
+        "title": "Open FEM Studio",
         "width": 1500,
         "height": 950,
         "minWidth": 800,

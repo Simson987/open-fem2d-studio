@@ -36,9 +36,13 @@ test("drie groepen in de volgorde Labels, Geometrie, Resultaten", () => {
 test("Labels: knoopnummers, staafnummers, profielnaam, belastingwaarden, peilmaten, maatlijnen", () => {
   assert.deepEqual(rijen("labels"), ["knoopnummers", "staafnummers", "profielLabels", "lastWaarden", "peilmaten", "maatlijnen"]);
 });
-test("Geometrie: aanzicht, profielbreedte (onder het aanzicht), kipsteunen, opleggingen, scharnieren, stramien", () => {
-  assert.deepEqual(rijen("geometrie"), ["aanzicht", "aanzichtBreedte", "kipsteunen", "opleggingen", "scharnieren", "stramien"]);
-  assert.equal(Z.ZICHTBAARHEID.geometrie[1].onder, "aanzicht");
+// "Profielen in kleur" (lib/profielKleur.ts) staat direct onder de staven: het
+// kleurt de staaflijnen. Zie test-profielkleur.mjs voor de toekenning zelf.
+test("Geometrie: knopen, staven, profielen in kleur, platen, mesh, belastingen, assenstelsel, aanzicht, profielbreedte (onder het aanzicht), kipsteunen, opleggingen, scharnieren, stramien", () => {
+  assert.deepEqual(rijen("geometrie"), ["knopen", "staven", "profielKleur", "platen", "plaatMesh", "belastingen", "assenstelsel", "aanzicht", "aanzichtBreedte", "kipsteunen", "opleggingen", "scharnieren", "stramien"]);
+  assert.equal(Z.ZICHTBAARHEID.geometrie.find((r) => r.sleutel === "aanzichtBreedte").onder, "aanzicht");
+  // Het rekennet van de platen: een modelweergave, standaard uit.
+  assert.equal(DEFAULT_DISPLAY_FLAGS.plaatMesh, false);
 });
 test("Resultaten: de bestaande vlaggen van de verkenner", () => {
   const verkenner = readFileSync(new URL("./src/components/fem/FemProjectTree.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n");
@@ -81,6 +85,7 @@ console.log("\n[3] onthouden per gebruiker");
 test("onthouden: Labels en Geometrie (zonder het stramien), geen resultaatlagen", () => {
   assert.deepEqual(Z.WEERGAVE_VOORKEUREN, [
     "knoopnummers", "staafnummers", "profielLabels", "lastWaarden", "peilmaten", "maatlijnen",
+    "knopen", "staven", "profielKleur", "platen", "plaatMesh", "belastingen", "assenstelsel",
     "aanzicht", "aanzichtBreedte", "kipsteunen", "opleggingen", "scharnieren",
   ]);
   for (const k of ["M", "V", "N", "deflection", "reactions", "uc"]) assert.ok(!Z.WEERGAVE_VOORKEUREN.includes(k), k);
@@ -88,7 +93,8 @@ test("onthouden: Labels en Geometrie (zonder het stramien), geen resultaatlagen"
 test("voorkeurenVan → metVoorkeuren: dezelfde keuze terug", () => {
   const f = { ...DEFAULT_DISPLAY_FLAGS, knoopnummers: false, staafnummers: true, aanzicht: true, M: false };
   const bewaard = JSON.parse(JSON.stringify(Z.voorkeurenVan(f)));
-  assert.equal(Object.keys(bewaard).length, 11);
+  // 16 model-lagen + "Profielen in kleur" + "Mesh" (onthouden zoals de rest).
+  assert.equal(Object.keys(bewaard).length, 18);
   assert.equal("M" in bewaard, false, "geen resultaatlaag in de voorkeur");
   const terug = Z.metVoorkeuren({ ...DEFAULT_DISPLAY_FLAGS, M: true }, bewaard);
   assert.deepEqual([terug.knoopnummers, terug.staafnummers, terug.aanzicht, terug.M], [false, true, true, true]);

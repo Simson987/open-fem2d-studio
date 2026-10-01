@@ -25,6 +25,7 @@
 //! * **`model_laden`** — leest het bestand in Rust en geeft de TEKST door aan
 //!   de pagina. De pagina zelf mag namelijk niet elk pad lezen: de
 //!   fs-scope van Tauri kent alleen paden die via een dialoog zijn gekozen.
+//!   **`ifc_analysemodel_importeren`** doet hetzelfde voor een .ifc-bestand.
 //! * **`rapport_pdf`** — het standaardrapport (het live rapport, volledig of
 //!   beperkt) als PDF: de pagina bereidt voor (`rapport_voorbereiden`,
 //!   weigert met reden als er niets vers te printen valt), Rust print het
@@ -309,6 +310,21 @@ fn voer_uit(app: &AppHandle, control: &Arc<GuiControl>, o: Opdracht) -> Result<V
                 tijdslimiet,
             )
         }
+        // Net als `model_laden`: Rust leest het bestand, de pagina importeert
+        // het met dezelfde functie als de knop "Rekenmodel importeren".
+        "ifc_analysemodel_importeren" => {
+            let pad = o
+                .args
+                .get("pad")
+                .and_then(Value::as_str)
+                .ok_or("ifc_analysemodel_importeren vraagt om `pad`")?;
+            let bytes = fs::read(pad).map_err(|e| format!("{pad}: {e}"))?;
+            let mut args = json!({ "tekst": stap_tekst(bytes), "pad": pad });
+            if let Some(keuze) = o.args.get("analysemodel") {
+                args["analysemodel"] = keuze.clone();
+            }
+            naar_pagina(app, control, "ifc_analysemodel_importeren", args, tijdslimiet)
+        }
         "rapport_pdf" => rapport::naar_pdf(app, control, &o.args, tijdslimiet),
         naam => naar_pagina(app, control, naam, o.args, tijdslimiet),
     }
@@ -350,6 +366,16 @@ fn naar_pagina(
         }
         let (k, _) = wekker.wait_timeout(kamer, deadline - nu).unwrap();
         kamer = k;
+    }
+}
+
+/// De bytes van een STEP-bestand (IFC) als tekst: UTF-8, en anders elk byte
+/// als één teken van ISO 8859-1. STEP hoort 7-bits te zijn, maar een schrijver
+/// die toch Latijn-1 gebruikt, mag het lezen niet laten mislukken.
+fn stap_tekst(bytes: Vec<u8>) -> String {
+    match String::from_utf8(bytes) {
+        Ok(tekst) => tekst,
+        Err(fout) => fout.into_bytes().into_iter().map(char::from).collect(),
     }
 }
 
@@ -655,7 +681,11 @@ pub mod rapport {
             .ok_or("rapport_voorbereiden gaf geen exportId terug")?;
 
         let tijdelijk = tijdelijk_pad(doel);
-        let vellen = voor.get("aantalVellen").and_then(Value::as_u64).map(|n| n as usize);
+        let opgegeven_vellen = voor.get("aantalVellen").and_then(Value::as_u64).map(|n| n as usize);
+        // Het 3D-rapport wordt door de browser zelf over pagina's verdeeld en
+        // heeft daarom vóór het afdrukken nog geen betrouwbaar vel-aantal. Bij
+        // 2D blijven de vaste rapportvellen leidend en eisen we exacte gelijkheid.
+        let dynamisch_3d_rapport = voor.get("rapportDimensie").and_then(Value::as_str) == Some("3d");
         let print = papier_uit_antwoord(&voor).and_then(|papier| {
             let rest = tijdslimiet
                 .saturating_sub(begin.elapsed())
@@ -696,9 +726,10 @@ pub mod rapport {
                 .unwrap_or("de pagina bevestigde niet dat alles bleef staan");
             return Err(format!("de PDF is weggegooid: {reden}"));
         }
-        let vellen = match vellen {
-            Some(n) => n,
-            None => {
+        let verwacht_vellen = match (dynamisch_3d_rapport, opgegeven_vellen) {
+            (true, _) => None,
+            (false, Some(n)) => Some(n),
+            (false, None) => {
                 weg();
                 return Err("rapport_voorbereiden gaf geen aantalVellen terug".into());
             }
@@ -710,13 +741,14 @@ pub mod rapport {
                 return Err(format!("de geprinte PDF is niet te lezen ({}): {e}", tijdelijk.display()));
             }
         };
-        let paginas = match controleer_pdf(&bytes, vellen) {
+        let paginas = match controleer_pdf_met_verwacht_aantal(&bytes, verwacht_vellen) {
             Ok(n) => n,
             Err(e) => {
                 weg();
                 return Err(e);
             }
         };
+        let vellen = verwacht_vellen.unwrap_or(paginas);
         if let Err(e) = fs::rename(&tijdelijk, doel) {
             weg();
             return Err(format!(
@@ -824,7 +856,9 @@ pub mod rapport {
         })
     }
 
-    /// De controle achteraf: een PDF-kop, en precies één pagina per vel.
+    /// De controle achteraf: een PDF-kop, en voor vaste rapportvellen precies
+    /// één pagina per vel. Een dynamisch rapport geeft `None` mee en gebruikt
+    /// het werkelijk gevonden paginatal.
     ///
     /// Eén vel = één printpagina is de bedoeling van de print-CSS (`break-after:
     /// page` per vel), maar geen wet: een element dat hoger is dan een heel vel
@@ -832,21 +866,31 @@ pub mod rapport {
     /// die van de `@page`-regel afwijken, verschuiven de breuken. In beide gevallen
     /// kloppen de paginanummers en de inhoudsopgave niet meer met wat er gedrukt
     /// is. Liever geen PDF dan zo'n PDF.
-    pub fn controleer_pdf(bytes: &[u8], vellen: usize) -> Result<usize, String> {
+    pub fn controleer_pdf_met_verwacht_aantal(
+        bytes: &[u8],
+        verwacht_vellen: Option<usize>,
+    ) -> Result<usize, String> {
         if !bytes.starts_with(b"%PDF-") {
             return Err("de afdruk is geen PDF (het bestand begint niet met %PDF-)".into());
         }
         let n = tel_paginas(bytes).ok_or(
             "het aantal pagina's is uit de PDF niet af te lezen (geen /Type /Page-objecten gevonden)",
         )?;
-        if n != vellen {
-            return Err(format!(
-                "de PDF heeft {n} pagina's maar het rapport {vellen} vellen — een vel liep over meer \
-                 dan één printpagina (bijvoorbeeld een figuur die hoger is dan een vel) of de \
-                 printinstellingen weken af van de opmaak; de PDF is weggegooid"
-            ));
+        if let Some(vellen) = verwacht_vellen {
+            if n != vellen {
+                return Err(format!(
+                    "de PDF heeft {n} pagina's maar het rapport {vellen} vellen — een vel liep over meer \
+                     dan één printpagina (bijvoorbeeld een figuur die hoger is dan een vel) of de \
+                     printinstellingen weken af van de opmaak; de PDF is weggegooid"
+                ));
+            }
         }
         Ok(n)
+    }
+
+    /// Compatibele helper voor de vaste 2D-rapportvellen.
+    pub fn controleer_pdf(bytes: &[u8], vellen: usize) -> Result<usize, String> {
+        controleer_pdf_met_verwacht_aantal(bytes, Some(vellen))
     }
 
     /// Tel de paginaobjecten: `/Type /Page`, niet `/Type /Pages` (de boom).
