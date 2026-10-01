@@ -99,13 +99,14 @@ export function normaliseSolverPreference(value: unknown): SolverPreference {
 
 export function supportsRequest(solver: SolverDescriptor, request: AnalysisRequest): boolean {
   const capabilities = solver.capabilities;
-  // The native 2D app route covers pure CST or Quad4 membrane plates.
+  // The native 2D app routes cover pure membranes and linear pure frames.
   if (solver.id === "openaec-native-fem" && request.dimension === "2d") {
     return solver.available
       && capabilities.dimensions.includes("2d")
       && capabilities.analyses.includes(request.analysis)
       && request.elementFamilies.length === 1
-      && request.elementFamilies[0] === "plate";
+      && (request.elementFamilies[0] === "plate"
+        || request.elementFamilies[0] === "frame" && request.analysis === "linear");
   }
   return solver.available
     && capabilities.dimensions.includes(request.dimension)

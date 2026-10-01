@@ -3,11 +3,12 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{frame3d, hybrid_plate, plate2d, plate_bending, prestressed_beam, quad2d};
+use crate::{frame2d, frame3d, hybrid_plate, plate2d, plate_bending, prestressed_beam, quad2d};
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "kind", content = "input", rename_all = "camelCase")]
 pub enum NativeFemRequest {
+    Frame2d(frame2d::Request),
     Frame3d(frame3d::Request),
     Plate2d(plate2d::Request),
     PlateBending(plate_bending::Request),
@@ -20,6 +21,7 @@ pub enum NativeFemRequest {
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "kind", content = "result", rename_all = "camelCase")]
 pub enum NativeFemResult {
+    Frame2d(frame2d::Result2D),
     Frame3d(frame3d::Result3D),
     Plate2d(plate2d::Result2D),
     PlateBending(plate_bending::ResultBending),
@@ -31,6 +33,7 @@ pub enum NativeFemResult {
 
 pub fn solve_native_fem(request: NativeFemRequest) -> Result<NativeFemResult, String> {
     Ok(match request {
+        NativeFemRequest::Frame2d(input) => NativeFemResult::Frame2d(frame2d::solve(&input)?),
         NativeFemRequest::Frame3d(input) => NativeFemResult::Frame3d(frame3d::solve(&input)?),
         NativeFemRequest::Plate2d(input) => NativeFemResult::Plate2d(plate2d::solve(&input)?),
         NativeFemRequest::PlateBending(input) => {
@@ -65,6 +68,20 @@ mod tests {
         let value = serde_json::to_value(result).unwrap();
         assert_eq!(value["kind"], "squareMesh");
         assert_eq!(value["result"]["quads"].as_array().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn plane_frame_example_is_dispatched_with_typed_output() {
+        let input: serde_json::Value =
+            serde_json::from_str(include_str!("../examples/frame2d-cantilever.json")).unwrap();
+        let request: NativeFemRequest = serde_json::from_value(serde_json::json!({
+            "kind": "frame2d", "input": input
+        }))
+        .unwrap();
+        let value = serde_json::to_value(solve_native_fem(request).unwrap()).unwrap();
+        assert_eq!(value["kind"], "frame2d");
+        assert_eq!(value["result"]["members"][0]["memberId"], 1);
+        assert_eq!(value["result"]["nodes"].as_array().unwrap().len(), 2);
     }
 
     #[test]

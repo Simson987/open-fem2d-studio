@@ -7,10 +7,32 @@ de app. De CLI-programma's lezen één JSON-verzoek van stdin en schrijven
 `{"error":"..."}`-resultaat. Een solver die invoer niet ondersteunt, weigert
 die expliciet.
 
+De lineaire `frame2d`-route is nu ook vanuit de app te kiezen voor een model
+met uitsluitend staven. Zij vertaalt bestaande knopen, doorsneden, opleggingen
+en belastingen en geeft staafdiagrammen in het bestaande resultaatformaat
+terug. GNL/FNL, bedding, scharnieren, thermische lasten en gekoppelde
+staaf-plaatmodellen worden in deze route nog expliciet geweigerd. De app
+behoudt de bestaande solver als automatische keuze.
+
+Een controleerbaar voorbeeld staat in
+[`examples/frame2d-cantilever.json`](examples/frame2d-cantilever.json):
+een uitkraging met `L=3 m`, `E=210 000 MPa`, `I=8·10⁻⁶ m⁴` en `P=10 kN`
+omlaag. De Euler-Bernoulli-formules geven `EI=1680 kNm²`,
+`u_y=-PL³/(3EI)=-0,0535714 m`, `θ=-PL²/(2EI)=-0,0267857 rad`,
+`R_y=+10 kN` en `M_z=+30 kNm`. De Rust-test en de vergelijking met de
+bestaande TypeScript-solver controleren dit voorbeeld, vijf andere
+liggergevallen en een tweestaafs portaal.
+
+```bash
+src-tauri/target/debug/native-frame2d \
+  < src-tauri/crates/native-fem/examples/frame2d-cantilever.json
+```
+
 ## Rekengebied
 
 | Kern | Element | GNL | FNL | Lasten en opleggingen |
 | --- | --- | --- | --- | --- |
+| `native-frame2d` | 6-DOF Euler-Bernoulli raamwerk, 3 DOF/knoop | nog niet | nog niet | knoop-, verdeelde en staafpuntlasten; vaste DOF, globale veren en opgelegde verplaatsingen/rotaties |
 | `native-frame3d` | 12-DOF Euler-Bernoulli raamwerk, 6 DOF/knoop | iteratieve P-Δ-stijfheid, stabiliteitscontrole en eigenknik tot 120 vrije DOF | monotone effectieve-E-envelop; met expliciet `loadPath` axiale staalplastificatie en blijvende betontrekschade | knoop-, lijn-, staafpunt- en thermische lasten; vaste DOF, globale veren, opgelegde verplaatsingen/rotaties en staafeindscharnieren |
 | `native-plate2d` | 3-knoops CST-vlakspanning/membraan, 2 DOF/knoop | Green-Lagrange-rek met Newton-iteratie | J2-staalplastificatie met isotrope verharding en onomkeerbare betonschade per element | knoopkrachten en vaste x/y-DOF |
 | `native-plate-bending` | 3-knoops DKT-plaatbuiging, 3 DOF/knoop | nog niet | nog niet | dwarsknoopkrachten, knoopmomenten en vaste w/rotatie-DOF |
@@ -42,7 +64,7 @@ gekoppelde balken, orthotropie en veren.
 }
 ```
 
-Andere `kind`-waarden zijn `frame3d`, `plate2d`, `plateBending`, `quad2d`,
+Andere `kind`-waarden zijn `frame2d`, `frame3d`, `plate2d`, `plateBending`, `quad2d`,
 `hybridPlate` en `prestressedBeam`. Het antwoord heeft dezelfde `kind` en een
 `result` met het bestaande resultaatcontract van die kern. De desktop roept
 dit aan met Tauri-command `solve_native_fem({ inputs })`, de ontwikkelbrowser
@@ -123,6 +145,8 @@ cargo test -p openaec-native-fem
 cargo test -p openaec-native-fem --test frame3d_parity
 cargo build -p openaec-native-fem --bins
 cd ../design-mockup
+node --import tsx test-native-frame2d-comparison.mjs
+node --import tsx test-native-frame2d-app-route.mjs
 node --import tsx test-native-frame3d-comparison.mjs
 node --import tsx test-native-frame3d-app-route.mjs
 node --import tsx test-native-plate2d-comparison.mjs

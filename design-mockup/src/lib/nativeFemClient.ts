@@ -11,6 +11,7 @@ import {
 } from "../core/fem/nativePlate2DAdapter";
 
 export type NativeFemKind =
+  | "frame2d"
   | "frame3d"
   | "plate2d"
   | "plateBending"

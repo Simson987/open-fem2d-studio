@@ -2,6 +2,7 @@
 //! These kernels are opt-in until their reference suite covers production use.
 
 pub mod dispatch;
+pub mod frame2d;
 pub mod frame3d;
 pub mod hybrid_plate;
 pub mod material2d;

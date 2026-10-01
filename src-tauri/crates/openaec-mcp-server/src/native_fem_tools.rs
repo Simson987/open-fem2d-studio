@@ -15,7 +15,7 @@ pub(super) fn is_native_fem_tool(name: &str) -> bool {
 pub(super) fn tool_definitions() -> Vec<Value> {
     vec![json!({
         "name": TOOL,
-        "description": "Experimental independent Rust FEM solver. Select frame3d, plate2d (CST membrane), plateBending (DKT), quad2d (Q4 membrane), hybridPlate (Q4 Kirchhoff bending), squareMesh or prestressedBeam. Units: m, kN, MPa. The model is validated by the selected Rust kernel; unsupported loads and conditions are errors. Not a certified design analysis.",
+        "description": "Experimental independent Rust FEM solver. Select frame2d (linear plane frame), frame3d, plate2d (CST membrane), plateBending (DKT), quad2d (Q4 membrane), hybridPlate (Q4 Kirchhoff bending), squareMesh or prestressedBeam. Units: m, kN, MPa. The model is validated by the selected Rust kernel; unsupported loads and conditions are errors. Not a certified design analysis.",
         "inputSchema": {
             "type": "object", "additionalProperties": false,
             "required": ["inputs"],
@@ -25,7 +25,7 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                     "required": ["kind", "input"],
                     "properties": {
                         "kind": { "type": "string", "enum": [
-                            "frame3d", "plate2d", "plateBending", "quad2d",
+                            "frame2d", "frame3d", "plate2d", "plateBending", "quad2d",
                             "hybridPlate", "squareMesh", "prestressedBeam"
                         ]},
                         "input": { "type": "object", "description": "Typed model for the selected native-fem kernel; see native-fem/README.md for the per-kernel contract." }

@@ -75,6 +75,7 @@ import { DEFAULT_GRID, nonlinearVoorBestand } from "./components/fem/femTypes";
 import type { SolverResult } from "./components/fem/solver/types";
 import { solveAllCases, solveAllCasesNonlinear } from "./components/fem/solver/solver";
 import { solveAllCasesNativeMembrane2D, solveAllCombinationsNativeMembrane2D } from "./components/fem/solver/nativeMembraneRoute";
+import { solveAllCasesNativeFrame2D } from "./components/fem/solver/nativeFrame2DRoute";
 import {
   eersteOrdeCombinatieResultaat,
   getSecondOrderInput,
@@ -1642,7 +1643,13 @@ function App() {
     });
     const analysis = fem.analysetype === "eersteOrde" ? "linear"
       : fem.analysetype === "tweedeOrdeFysisch" ? "combined" : "geometric";
-    const perCase = await solveAllCasesNativeMembrane2D(multiInput, analysis);
+    const nativeFrame = fem.plates.length === 0 && fem.beams.length > 0;
+    if (nativeFrame && analysis !== "linear") {
+      throw new Error("De Rust 2D-raamwerkroute ondersteunt in de app momenteel alleen eerste-ordeanalyse.");
+    }
+    const perCase = nativeFrame
+      ? await solveAllCasesNativeFrame2D(multiInput)
+      : await solveAllCasesNativeMembrane2D(multiInput, analysis);
     if (generatie !== rekenGeneratieRef.current) return null;
     const combinationResults = analysis === "linear"
       ? new Map(fem.actieveCombinaties.map(combination =>
