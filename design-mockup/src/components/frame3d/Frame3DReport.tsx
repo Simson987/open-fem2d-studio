@@ -163,6 +163,7 @@ export default function Frame3DReport({
             <div className="frame3d-report-cards">
               <div><span>Analyse</span><strong>{result.analysis === "p-delta" ? "2e orde (P-Δ)"
                 : result.analysis === "material" ? "Fysisch niet-lineair" : "1e orde"}</strong></div>
+              {result.materialLoadPath && <div><span>FNL-lastpad</span><strong>{result.materialLoadPath.join(" → ")}</strong></div>}
               <div><span>Rekentoestand</span><strong>{activeCombinationName || activeLoadCaseName || `Geval ${activeLoadCaseId}`}</strong></div>
               <div><span>Max. verplaatsing</span><strong>{number(maxDisplacement * 1000)} mm</strong></div>
               <div><span>Convergentie</span><strong>{result.secondOrder ? `${result.secondOrder.iterations} iteratie${result.secondOrder.iterations === 1 ? "" : "s"}` : "direct"}</strong></div>
@@ -307,6 +308,7 @@ export default function Frame3DReport({
               <tr><th>Rekenkern</th><td>{result.engine.name}</td></tr>
               <tr><th>Vastgezette revisie</th><td><code>{result.engine.revision.slice(0, 12)}</code></td></tr>
               <tr><th>Licentie</th><td>{result.engine.license}</td></tr>
+              {result.materialLoadPath && <tr><th>Laatste lastfactor</th><td>{number(result.materialLoadPath[result.materialLoadPath.length - 1], 4)}</td></tr>}
               <tr><th>{result.analysis === "material" ? "FNL-iteratie" : "Tweede orde"}</th><td>{result.secondOrder ? `${result.secondOrder.converged ? "geconvergeerd" : "niet geconvergeerd"}; ${result.secondOrder.stable ? "stabiel" : "instabiel"}` : "niet uitgevoerd"}</td></tr>
               <tr><th>Relatief evenwichtsresidu</th><td>{equilibrium ? number(equilibrium.relativeResidual, 8) : "niet beschikbaar"}</td></tr>
               <tr><th>Max. onbalans</th><td>{equilibrium ? `${number(equilibrium.maxImbalanceKn, 8)} kN` : "niet beschikbaar"}</td></tr>
@@ -436,6 +438,20 @@ export default function Frame3DReport({
               </tr>)}
             </tbody></table>
           </section>
+
+          {result.memberForces.some((member) => member.axialHistory) && <section>
+            <h2>Axiale materiaalgeschiedenis</h2>
+            <table className="frame3d-report-wide"><thead><tr>
+              <th>Staaf</th><th>Plastische rek</th><th>Equiv. plastische rek</th><th>Trekschade</th><th>E tangent axiaal (MPa)</th>
+            </tr></thead><tbody>
+              {result.memberForces.filter((member) => member.axialHistory).map((member) => <tr key={member.memberId}>
+                <td>{member.memberId}</td><td>{number(member.axialHistory!.plasticStrain, 6)}</td>
+                <td>{number(member.axialHistory!.equivalentPlasticStrain, 6)}</td>
+                <td>{number(member.axialHistory!.tensileDamage, 4)}</td><td>{number(member.axialHistory!.tangentEMpa, 0)}</td>
+              </tr>)}
+            </tbody></table>
+            <p className="frame3d-report-note">Alleen de axiale respons bewaart materiaalgeschiedenis; buiging gebruikt nog een secant-E.</p>
+          </section>}
 
           <section>
             <h2>Oplegreacties</h2>

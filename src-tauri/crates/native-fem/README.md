@@ -58,11 +58,15 @@ een vloeigrens en verhardingsverhouding (staal) of treksterkte en
 reststijfheidsverhouding (beton) in. Staven zonder FNL-wet blijven elastisch;
 minstens één staaf moet een wet hebben. De automatische solverkeuze schakelt
 de experimentele FNL-route niet zelf in. Thermische lasten en eindscharnieren
-zijn voor deze FNL-route nog uitgesloten. De app geeft op dit moment geen
-`loadPath` door; de gewone app-analyse gebruikt daarom nog de monotone
-secant-E-benadering zonder materiaalgeschiedenis.
+zijn voor deze FNL-route nog uitgesloten. In de 3D-eigenschappen zonder
+selectie kan de gebruiker een FNL-lastpad invoeren, bijvoorbeeld `1, 0, 0.5`.
+De app bewaart het pad in het project, stuurt het als `loadPath` naar Rust en
+toont de axiale materiaaltoestand per staaf. Zonder lastpad gebruikt de
+app nog de monotone secant-E-benadering zonder materiaalgeschiedenis.
+EN 1992/1993-toetsing wordt bij een FNL-lastpad geblokkeerd, omdat alleen de
+axiale materiaalgeschiedenis is gevalideerd.
 
-Voor een rechtstreeks Rust- of dispatcher-verzoek met `analysis: "material"`
+Voor een Rust-, dispatcher- of app-verzoek met `analysis: "material"`
 kan `loadPath` de absolute lastfactoren per stap bevatten, bijvoorbeeld
 `[1, 0]` voor belasten en ontlasten. De axiale staalwet gebruikt een
 éénassige retourprojectie met isotrope verharding: plastische rek blijft na
@@ -94,7 +98,8 @@ resultaatweergave en rapport. De automatische keuze blijft bij de bestaande
 solver. Staaflijn-, staafpunt- en thermische lasten zijn ook gekoppeld en de
 diagramstations zijn tegen de bestaande solver vergeleken. Voor P-Δ geeft de
 app iteraties, convergentie, verplaatsingsversterking en eigenknikfactoren weer.
-Voor FNL toont de app de effectieve E-modulus per staaf. Een axiale
+Voor FNL toont de app de effectieve E-modulus per staaf; met lastpad ook
+plastische rek, betonschade en de actuele axiale tangentmodulus. Een axiale
 trekproef voor beide wetten is tegen de gesloten formule
 `ε = f_grens/E₀ + (σ − f_grens)/(r·E₀)` getoetst.
 

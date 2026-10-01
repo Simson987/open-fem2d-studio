@@ -31,6 +31,7 @@ export interface Frame3DMemberForces {
   memberId: number;
   lengthM: number;
   effectiveEMpa?: number;
+  axialHistory?: { plasticStrain: number; equivalentPlasticStrain: number; tensileDamage: number; tangentEMpa: number };
   nStartKn: number; nEndKn: number;
   vyStartKn: number; vyEndKn: number;
   vzStartKn: number; vzEndKn: number;
@@ -84,6 +85,7 @@ export interface Frame3DSolveResult {
   displacements: Frame3DDisplacement[];
   reactions: Frame3DReaction[];
   memberForces: Frame3DMemberForces[];
+  materialLoadPath?: number[];
   /** Sinds contract 1.1: door de solver bemonsterde snedekrachtlijnen. */
   diagrams?: Frame3DDiagrams;
   secondOrder?: { iterations: number; converged: boolean; stable: boolean; maxAmplification: number };
@@ -160,6 +162,11 @@ export function frame3DGlobalForceBalance(
     add(appliedMoment, cross(ex as Vector3, localVector(ey, ez, sy, sz)));
   }
   for (const load of input.memberPointLoads) addLocalMemberForce(load.memberId, load.pyKn, load.pzKn, load.positionM);
+  const finalFactor = input.loadPath ? input.loadPath[input.loadPath.length - 1] : 1;
+  for (let axis = 0; axis < 3; axis++) {
+    applied[axis] *= finalFactor;
+    appliedMoment[axis] *= finalFactor;
+  }
   const imbalanceKn: [number, number, number] = [...applied];
   const momentImbalanceKnm: [number, number, number] = [...appliedMoment];
   for (const reaction of result.reactions) {
@@ -233,6 +240,11 @@ export function buildFrame3DSolveRequest(
   analysis: Frame3DAnalysisKind = "p-delta",
   loadSelection?: Frame3DLoadSelection,
 ) {
+  if (model.materialLoadPath !== undefined && (!Array.isArray(model.materialLoadPath)
+      || model.materialLoadPath.length === 0 || model.materialLoadPath.length > 100
+      || model.materialLoadPath.some((factor) => !Number.isFinite(factor)))) {
+    throw new Error("Het FNL-lastpad moet 1–100 eindige lastfactoren bevatten.");
+  }
   if ((model.plates?.length ?? 0) > 0 || (model.surfaceLoads?.length ?? 0) > 0) {
     throw new Error(
       "Het model bevat 3D-platen of oppervlaktebelastingen. De geverifieerde " +
@@ -418,6 +430,7 @@ export function buildFrame3DSolveRequest(
       deltaTGradientYK: load.deltaTGradientYK,
       deltaTGradientZK: load.deltaTGradientZK,
     })),
+    ...(analysis === "material" && model.materialLoadPath ? { loadPath: model.materialLoadPath } : {}),
     maxIterations: 50,
     tolerance: 1e-8,
     bucklingModes: 3,
@@ -453,7 +466,8 @@ type Frame3DSolveRequest = Omit<ReturnType<typeof buildFrame3DSolveRequest>, "bu
 
 interface NativeFrame3DResult {
   nodes: Array<{ nodeId: number; displacement: number[]; reaction: number[] }>;
-  members: Array<{ memberId: number; localEndForces: number[]; effectiveEMpa: number }>;
+  members: Array<{ memberId: number; localEndForces: number[]; effectiveEMpa: number;
+    axialHistory?: Frame3DMemberForces["axialHistory"] }>;
   diagrams: Frame3DDiagrams;
   buckling: Frame3DBuckling;
   iterations: number;
@@ -501,11 +515,19 @@ function adaptNativeFrame3DResult(
         || member.localEndForces.some((value) => !Number.isFinite(value))) {
       throw new Error("De eigen Rust-raamwerkkern leverde ongeldige staafeindkrachten.");
     }
+    const history = member.axialHistory;
+    if (input.loadPath && (!history || !Number.isFinite(history.plasticStrain)
+        || !Number.isFinite(history.equivalentPlasticStrain) || history.equivalentPlasticStrain < 0
+        || !Number.isFinite(history.tensileDamage) || history.tensileDamage < 0 || history.tensileDamage > 1
+        || !Number.isFinite(history.tangentEMpa) || history.tangentEMpa < 0)) {
+      throw new Error("De eigen Rust-raamwerkkern leverde een ongeldige axiale materiaaltoestand.");
+    }
     const f = member.localEndForces;
     return {
       memberId: member.memberId,
       lengthM: Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z),
       effectiveEMpa: member.effectiveEMpa,
+      ...(history ? { axialHistory: history } : {}),
       nStartKn: -f[0], vyStartKn: f[1], vzStartKn: f[2],
       torsionStartKnm: f[3], myStartKnm: f[4], mzStartKnm: f[5],
       nEndKn: f[6], vyEndKn: -f[7], vzEndKn: -f[8],
@@ -538,6 +560,7 @@ function adaptNativeFrame3DResult(
     engine: { id: "openaec-native-fem", name: "Open FEM Rust", revision: "0.1.0", license: "AGPL-3.0-or-later" },
     analysis: input.analysis,
     displacements, reactions, memberForces, diagrams,
+    ...(input.loadPath ? { materialLoadPath: [...input.loadPath] } : {}),
     ...(input.analysis !== "linear" ? { secondOrder: {
       iterations: native.iterations, converged: true, stable: true,
       maxAmplification: native.maxAmplification,
@@ -550,7 +573,9 @@ function adaptNativeFrame3DResult(
     diagnostics: [
       "Eigen Rust-raamwerkkern: 3D-raamwerk.",
       ...(input.analysis === "material"
-        ? ["FNL gebruikt een monotone secant-E per staaf; plastische en scheurgeschiedenis ontbreken nog."] : []),
+        ? input.loadPath
+          ? ["FNL-lastpad bewaart alleen axiale plastische rek en betonschade per staaf; buiging gebruikt nog een secant-E zonder doorsnedegeschiedenis."]
+          : ["FNL gebruikt een monotone secant-E per staaf; plastische en scheurgeschiedenis ontbreken nog."] : []),
       ...(buckling.status === "failed" ? [`Eigenknik: ${buckling.reason}`] : []),
       ...(input.analysis === "p-delta" && !balance.ok
         ? ["De onafhankelijke momentensom gebruikt de onvervormde geometrie; bij P-Δ kan daardoor een momentrest ontstaan."]

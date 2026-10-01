@@ -6,7 +6,7 @@ import Frame3DMemberLoads from "./Frame3DMemberLoads";
 import Frame3DNonlinearLawEditor from "./Frame3DNonlinearLawEditor";
 import type { Frame3DSelection } from "./frame3dSelection";
 import { removeFrame3DSurfaceLoad, setFrame3DBeamNodes, updateFrame3DPlate, updateFrame3DSurfaceLoad, type Frame3DModel } from "./frame3dModel";
-import type { Frame3DSolveResult } from "./frame3dSolver";
+import type { Frame3DAnalysisKind, Frame3DSolveResult } from "./frame3dSolver";
 import {
   checkUc,
   frame3DGoverningUlsCheck,
@@ -21,6 +21,7 @@ import "./Frame3DProperties.css";
 
 interface Props {
   model: Frame3DModel;
+  analysis: Frame3DAnalysisKind;
   selection: Frame3DSelection;
   onChange: (model: Frame3DModel) => void;
   result: Frame3DSolveResult | null;
@@ -48,7 +49,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 const value = (number: number, digits = 3) => Number.isFinite(number) ? number.toFixed(digits) : "—";
 
 export default function Frame3DProperties({
-  model, selection, onChange, result, checks, concreteChecks, checksRunning, checksError,
+  model, analysis, selection, onChange, result, checks, concreteChecks, checksRunning, checksError,
   loadEditorRequest, springEditorRequest, memberLoadEditorRequest, memberPointLoadEditorRequest,
   thermalLoadEditorRequest, activeLoadCaseId = 1, normFocus,
 }: Props) {
@@ -72,6 +73,13 @@ export default function Frame3DProperties({
     : surfaceLoad ? model.plates?.find((item) => item.id === surfaceLoad.plateId) : undefined;
   const [coordinates, setCoordinates] = useState({ x: "", y: "", z: "" });
   const [rollDegrees, setRollDegrees] = useState("0");
+  const [loadPathText, setLoadPathText] = useState("");
+  const [loadPathError, setLoadPathError] = useState("");
+
+  useEffect(() => {
+    setLoadPathText(model.materialLoadPath?.join(", ") ?? "");
+    setLoadPathError("");
+  }, [model.materialLoadPath]);
 
   useEffect(() => {
     if (node) setCoordinates({ x: String(node.x), y: String(node.y), z: String(node.z) });
@@ -122,7 +130,28 @@ export default function Frame3DProperties({
   }
 
   if (!selection || (!node && !beam && !plate)) {
-    return <div className="fem-properties fem-properties-empty"><p>{t("frame3d.selectForProperties", "Selecteer een 3D-knoop, staaf, plaat of belasting om de eigenschappen te bekijken.")}</p></div>;
+    const applyLoadPath = () => {
+      const pieces = loadPathText.trim().split(/[;,\s]+/);
+      const factors = pieces.map(Number);
+      if (!loadPathText.trim() || factors.length > 100 || factors.some((factor) => !Number.isFinite(factor))) {
+        setLoadPathError("Voer 1–100 eindige getallen in, gescheiden door komma's. Voorbeeld: 1, 0, 0.5");
+        return;
+      }
+      setLoadPathError("");
+      onChange({ ...model, materialLoadPath: factors });
+    };
+    return <div className="fem-properties"><div className="fem-prop-body">
+      <p className="fem-prop-hint">{t("frame3d.selectForProperties", "Selecteer een 3D-knoop, staaf, plaat of belasting om de eigenschappen te bekijken.")}</p>
+      <Section title="FNL-lastpad · Rust 3D">
+        <p className="fem-prop-hint">Absolute lastfactoren voor belastingen en opgelegde verplaatsingen. Het resultaat hoort bij de laatste factor. Gebruik een punt als decimaalteken. Alleen axiale materiaalgeschiedenis wordt bewaard.</p>
+        <Row label="Factoren"><input className="fem-prop-input" type="text" aria-label="FNL-lastfactoren" placeholder="1, 0, 0.5"
+          value={loadPathText} onChange={(event) => setLoadPathText(event.target.value)} /></Row>
+        <div className="fem-prop-kiezer-row"><button className="fem-prop-kiezer-btn" type="button" onClick={applyLoadPath}>Lastpad toepassen</button></div>
+        <div className="fem-prop-kiezer-row"><button className="fem-prop-kiezer-btn" type="button" onClick={() => { setLoadPathText(""); setLoadPathError(""); onChange({ ...model, materialLoadPath: undefined }); }}>Lastpad wissen</button></div>
+        {loadPathError && <p className="frame3d-check-not-ok" role="alert">{loadPathError}</p>}
+        {analysis !== "material" && <p className="fem-prop-hint">Kies FNL-analyse om dit lastpad te gebruiken.</p>}
+      </Section>
+    </div></div>;
   }
 
   const applyCoordinates = () => {
@@ -350,6 +379,12 @@ export default function Frame3DProperties({
         {beam && memberForces && <Section title={t("frame3d.memberForces", "Staafkrachten begin / eind")}>
           {result?.analysis === "material" && memberForces.effectiveEMpa !== undefined
             && <Row label="E effectief"><code>{value(memberForces.effectiveEMpa, 0)} MPa</code></Row>}
+          {memberForces.axialHistory && <>
+            <Row label="Plastische rek"><code>{value(memberForces.axialHistory.plasticStrain, 6)}</code></Row>
+            <Row label="Equiv. plastische rek"><code>{value(memberForces.axialHistory.equivalentPlasticStrain, 6)}</code></Row>
+            <Row label="Trekschade"><code>{value(memberForces.axialHistory.tensileDamage, 4)}</code></Row>
+            <Row label="E tangent axiaal"><code>{value(memberForces.axialHistory.tangentEMpa, 0)} MPa</code></Row>
+          </>}
           <Row label="N"><code>{value(memberForces.nStartKn)} / {value(memberForces.nEndKn)} kN</code></Row>
           <Row label="Vy"><code>{value(memberForces.vyStartKn)} / {value(memberForces.vyEndKn)} kN</code></Row>
           <Row label="Vz"><code>{value(memberForces.vzStartKn)} / {value(memberForces.vzEndKn)} kN</code></Row>

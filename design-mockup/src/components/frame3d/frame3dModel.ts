@@ -169,6 +169,8 @@ export interface Frame3DSurfaceLoad {
 export interface Frame3DModel {
   nodes: Frame3DNode[];
   beams: Frame3DBeam[];
+  /** Absolute lastfactoren voor de axiale materiaalgeschiedenis van de Rust 3D-FNL-kern. */
+  materialLoadPath?: number[];
   /** Optional so models made before nodal conditions remain readable. */
   supports?: Frame3DSupport[];
   loads?: Frame3DNodalLoad[];
@@ -665,6 +667,11 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
   if (value === undefined) return { nodes: [], beams: [] };
   if (!value || typeof value !== "object") throw new Error("Het 3D-model is geen object.");
   const raw = value as Record<string, unknown>;
+  if (raw.materialLoadPath !== undefined && (!Array.isArray(raw.materialLoadPath)
+      || raw.materialLoadPath.length === 0 || raw.materialLoadPath.length > 100
+      || raw.materialLoadPath.some((factor: unknown) => typeof factor !== "number" || !Number.isFinite(factor)))) {
+    throw new Error("Het 3D-model bevat een ongeldig FNL-lastpad (1–100 eindige getallen vereist).");
+  }
   if (!Array.isArray(raw.nodes) || !Array.isArray(raw.beams)) {
     throw new Error("Het 3D-model mist de lijsten nodes en beams.");
   }
@@ -817,6 +824,7 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
   }
   const model: Frame3DModel = {
     nodes, beams, ...(raw.plates !== undefined ? { plates } : {}), supports, loads,
+    ...(raw.materialLoadPath !== undefined ? { materialLoadPath: [...raw.materialLoadPath as number[]] } : {}),
     ...(raw.memberLoads !== undefined ? { memberLoads: [] } : {}),
     ...(raw.memberPointLoads !== undefined ? { memberPointLoads: [] } : {}),
     ...(raw.thermalLoads !== undefined ? { thermalLoads: [] } : {}),

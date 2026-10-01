@@ -2252,6 +2252,12 @@ function App() {
           );
           return;
         }
+        if (result.materialLoadPath) {
+          setFrame3dChecks(null);
+          setFrame3dConcreteChecks(null);
+          setFrame3dChecksError("geblokkeerd — de FNL-lastpadkern bewaart alleen axiale materiaalgeschiedenis; EN 1992/1993-toetsing met dit resultaat is nog niet gevalideerd.");
+          return;
+        }
         setFrame3dChecksRunning(true);
         setFrame3dChecksError(null);
         const combinationSet = { combinations, results: combinationResults, loadCases: fem.loadCases };
@@ -3246,6 +3252,8 @@ function App() {
                 <div className="right-panel-body">
                   {modelDimension === "3d" ? <Frame3DProperties
                     model={frame3d}
+                    analysis={fem.analysetype === "eersteOrde" ? "linear"
+                      : fem.analysetype === "tweedeOrdeFysisch" ? "material" : "p-delta"}
                     selection={frame3dSelection}
                     onChange={setFrame3d}
                     result={frame3dShowLoadCase ? frame3dResult : null}

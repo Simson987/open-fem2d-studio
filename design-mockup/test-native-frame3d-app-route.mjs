@@ -195,6 +195,41 @@ try {
     await assert.rejects(solveFrame3D({ ...caseModel, thermalLoads: thermal.thermalLoads }, 1,
       "material", "openaec-native-fem"), /niet gevalideerd voor temperatuur/);
   }
+  const historyModel = parseFrame3DModel({
+    nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 2, y: 0, z: 0 }],
+    beams: [{ id: 1, startNodeId: 1, endNodeId: 2, material: "S235", profileName: "IPE 200",
+      nonlinearLaw: { kind: "steelBilinear", yieldMpa: 235, hardeningRatio: 0.05 } }],
+    supports: [{ nodeId: 1, ux: true, uy: true, uz: true, rx: true, ry: true, rz: true }],
+    loads: [{ id: 1, nodeId: 2, caseId: 1, fx: 1000, fy: 0, fz: 0, mx: 0, my: 0, mz: 0 }],
+    materialLoadPath: [1, 0],
+  });
+  assert.deepEqual(historyModel.materialLoadPath, [1, 0]);
+  const savedHistoryProject = JSON.parse(readFileSync(fixture, "utf8"));
+  savedHistoryProject.model3d = historyModel;
+  assert.deepEqual(deserializeProject(JSON.stringify(savedHistoryProject)).model3d.materialLoadPath, [1, 0],
+    "FNL-lastpad overleeft openen van een 3D-project");
+  assert.deepEqual(buildFrame3DSolveRequest(historyModel, "material", 1).loadPath, [1, 0]);
+  assert.equal(buildFrame3DSolveRequest(historyModel, "linear", 1).loadPath, undefined);
+  const history = await solveFrame3D(historyModel, 1, "material", "openaec-native-fem");
+  assert.deepEqual(history.materialLoadPath, [1, 0]);
+  assert.equal(history.forceBalance.ok, true, "evenwicht bij ontladen naar lastfactor nul");
+  assert.ok(history.displacements.find((node) => node.nodeId === 2).ux > 0, "blijvende staalverlenging");
+  assert.ok(history.memberForces[0].axialHistory.plasticStrain > 0);
+  assert.ok(history.memberForces[0].axialHistory.equivalentPlasticStrain > 0);
+  assert.equal(history.memberForces[0].axialHistory.tensileDamage, 0);
+  const concreteHistoryModel = parseFrame3DModel({ ...historyModel,
+    beams: [{ ...historyModel.beams[0], material: "C30/37", profileName: "300x500",
+      nonlinearLaw: { kind: "concreteCracking", tensileMpa: 2.9, residualRatio: 0.2 } }],
+    loads: [{ ...historyModel.loads[0], fx: 600 }],
+    materialLoadPath: [1, 0, 0.5],
+  });
+  const concreteHistory = await solveFrame3D(concreteHistoryModel, 1, "material", "openaec-native-fem");
+  assert.equal(concreteHistory.forceBalance.ok, true, "evenwicht na gedeeltelijke herbelasting");
+  assert.ok(concreteHistory.memberForces[0].axialHistory.tensileDamage > 0, "blijvende betontrekschade");
+  assert.equal(concreteHistory.memberForces[0].axialHistory.plasticStrain, 0);
+  assert.ok(concreteHistory.memberForces[0].axialHistory.tangentEMpa <
+    buildFrame3DSolveRequest(concreteHistoryModel, "linear", 1).materials[0].eMpa);
+  assert.throws(() => parseFrame3DModel({ ...historyModel, materialLoadPath: [1, "x"] }), /ongeldig FNL-lastpad/);
   assert.throws(() => parseFrame3DModel({ ...model,
     beams: [{ ...model.beams[0], nonlinearLaw: { kind: "steelBilinear", yieldMpa: -1, hardeningRatio: 0.1 } }, model.beams[1]],
   }), /ongeldige FNL-parameters/);
@@ -203,7 +238,7 @@ try {
       kind: "concreteCracking", tensileMpa: 2.9, residualRatio: 0.05,
     } })),
   }, 1, "material", "openaec-native-fem"), /past niet bij materiaal/);
-  assert.equal(nativeCalls, 12);
+  assert.equal(nativeCalls, 14);
   assert.equal(referenceCalls, 7);
   console.log("Native 3D-app-route: staal, beton, FNL, P-Δ en staaflasten geslaagd.");
 } finally {
