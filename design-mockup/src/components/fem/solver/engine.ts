@@ -2341,6 +2341,13 @@ export function getScheefstandRichtingen(
   return (perCase as any)[SCHEEFSTAND_KEY];
 }
 
+/** Koppel dezelfde richtingsmetadata aan een per-geval-Map uit een andere solver. */
+export function registreerScheefstandRichtingen(
+  perCase: Map<number, SolverResult>, primair: 1 | -1,
+): void {
+  (perCase as any)[SCHEEFSTAND_KEY] = { primair, offset: SCHEEFSTAND_ID_OFFSET } satisfies ScheefstandRichtingen;
+}
+
 /**
  * Alleen de resultaten onder de gewone geval-id's — voor wie de Map per
  * belastinggeval toont of wegschrijft. De tegengestelde richting hoort daar
@@ -2393,8 +2400,7 @@ export function solveAllCases(input: MultiInput): MultiLcResult {
       scheefstand: { ...input.scheefstand, richting: (-input.scheefstand.richting) as 1 | -1 },
     };
     losGevallenOp(tegen, perCase, SCHEEFSTAND_ID_OFFSET);
-    const sr: ScheefstandRichtingen = { primair: input.scheefstand.richting, offset: SCHEEFSTAND_ID_OFFSET };
-    (perCase as any)[SCHEEFSTAND_KEY] = sr;
+    registreerScheefstandRichtingen(perCase, input.scheefstand.richting);
   }
   return { perCase };
 }

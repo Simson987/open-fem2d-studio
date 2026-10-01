@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { solveAllCases, solveCombinationSecondOrder } from "./src/components/fem/solver/engine.ts";
+import { getScheefstandRichtingen, SCHEEFSTAND_ID_OFFSET } from "./src/components/fem/solver/engine.ts";
 import { combineResults } from "./src/components/fem/solver/combinations.ts";
 import { buildNativeFrame2DRequest, solveAllCasesNativeFrame2D, solveAllCombinationsNativeFrame2D } from "./src/components/fem/solver/nativeFrame2DRoute.ts";
 import { resolveSolver } from "./src/core/solver/SolverRegistry.ts";
@@ -53,6 +54,14 @@ close(inclinedRequest.memberLoads[0].qxStartKnPerM, -1.8, 1e-12, "globale last n
 close(inclinedRequest.memberLoads[0].qyStartKnPerM, -2.4, 1e-12, "globale last naar lokale qy");
 close(inclinedRequest.memberPointLoads[0].pxKn, -3, 1e-12, "staafpuntlast naar lokale Px");
 close(inclinedRequest.memberPointLoads[0].pyKn, -4, 1e-12, "staafpuntlast naar lokale Py");
+const inclinedSwayRequest = buildNativeFrame2DRequest({ ...inclinedInput,
+  scheefstand: { phi: 0.005, richting: 1 } }, () => 1);
+close(inclinedSwayRequest.memberLoads[0].qxStartKnPerM, -1.788, 1e-12,
+  "scheefstand op verticale component van schuine lijnlast");
+close(inclinedSwayRequest.memberLoads[0].qyStartKnPerM, -2.409, 1e-12,
+  "scheefstand terug naar lokale dwarsrichting");
+close(inclinedSwayRequest.memberPointLoads[0].pxKn, -2.98, 1e-12,
+  "scheefstand op schuine staafpuntlast");
 assert.equal(buildNativeFrame2DRequest({ ...input,
   beams: [{ ...input.beams[0], startConnection: "hinge" }] }, () => 1).members[0].releases.rzStart, true);
 assert.throws(() => buildNativeFrame2DRequest({ ...input,
@@ -164,6 +173,55 @@ try {
     "vrije kromming door temperatuurgradiënt analytisch");
   close(gradientResult.elements.get(1).bendingMoment[10], 0, 1e-5,
     "vrij opgelegde thermische gradiënt zonder mechanisch moment");
+  const swayInput = { ...input,
+    supports: [{ nodeId: 1, type: "fixed" }], loads: [],
+    pointLoads: [{ nodeId: 2, caseId: 1, fz: -100_000 }],
+    cases: [{ id: 1, name: "kolomlast" }],
+    scheefstand: { phi: 0.005, richting: 1 },
+  };
+  const swayRequest = buildNativeFrame2DRequest(swayInput, () => 1);
+  close(swayRequest.nodalLoads[0].fx, 0.5, 1e-12,
+    "scheefstand H = φV als horizontale knooplast");
+  const nativeSwayCases = await solveAllCasesNativeFrame2D(swayInput);
+  const oldSwayCases = solveAllCases(swayInput).perCase;
+  assert.deepEqual(getScheefstandRichtingen(nativeSwayCases),
+    { primair: 1, offset: SCHEEFSTAND_ID_OFFSET });
+  for (const caseId of [1, 1 + SCHEEFSTAND_ID_OFFSET]) {
+    const current = nativeSwayCases.get(caseId), previous = oldSwayCases.get(caseId);
+    close(current.displacements.get(2).ux, previous.displacements.get(2).ux, 1e-6,
+      `scheefstand geval ${caseId} horizontale uitwijking`);
+    close(current.reactions.get(1).fx, previous.reactions.get(1).fx, 1e-5,
+      `scheefstand geval ${caseId} horizontale reactie`);
+  }
+  const swayLineInput = { ...input,
+    loads: [{ beamId: 1, caseId: 1, q: -10, qDir: "z" }], pointLoads: [],
+    cases: [{ id: 1, name: "lijnlast met scheefstand" }],
+    scheefstand: { phi: 0.005, richting: 1 },
+  };
+  const nativeSwayLine = await solveAllCasesNativeFrame2D(swayLineInput);
+  const oldSwayLine = solveAllCases(swayLineInput).perCase;
+  for (const caseId of [1, 1 + SCHEEFSTAND_ID_OFFSET]) {
+    close(nativeSwayLine.get(caseId).reactions.get(1).fx,
+      oldSwayLine.get(caseId).reactions.get(1).fx, 1e-4,
+      `scheefstand lijnlast geval ${caseId} horizontale reactie`);
+    close(nativeSwayLine.get(caseId).elements.get(1).bendingMoment[10],
+      oldSwayLine.get(caseId).elements.get(1).bendingMoment[10], 1e-3,
+      `scheefstand lijnlast geval ${caseId} veldmoment`);
+  }
+  const swayCombos = [
+    { id: 90, name: "scheefstand +x", factors: new Map([[1, 1]]), scheefstandRichting: 1 },
+    { id: 91, name: "scheefstand -x", factors: new Map([[1, 1]]), scheefstandRichting: -1 },
+  ];
+  close(combineResults(swayCombos[1], nativeSwayCases).displacements.get(2).ux,
+    combineResults(swayCombos[1], oldSwayCases).displacements.get(2).ux, 1e-6,
+    "lineaire scheefstandcombinatie leest tegengestelde gevalset");
+  const nativeSwayCombos = await solveAllCombinationsNativeFrame2D(swayInput, swayCombos, "geometric");
+  for (const combo of swayCombos) {
+    const previous = solveCombinationSecondOrder(swayInput, combo);
+    close(nativeSwayCombos.get(combo.id).displacements.get(2).ux,
+      previous.displacements.get(2).ux, 1e-5,
+      `P-Delta scheefstand ${combo.scheefstandRichting} uitwijking`);
+  }
   const steelFnlInput = { ...thermalInput,
     beams: [{ ...thermalInput.beams[0], axialMaterialLaw: {
       kind: "steelBilinear", yieldMpa: 100, hardeningRatio: 0.5 } }],
@@ -314,4 +372,4 @@ try {
 } finally {
   globalThis.fetch = previousFetch;
 }
-console.log("Native 2D-app-route: lineair/P-Delta stemmen overeen; thermiek en axiale staal-/beton-FNL slagen.");
+console.log("Native 2D-app-route: lineair/P-Delta, scheefstand, thermiek en axiale staal-/beton-FNL slagen.");

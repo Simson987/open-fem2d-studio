@@ -1,4 +1,5 @@
 import { solveNativeFem } from "../../../lib/nativeFemClient";
+import { registreerScheefstandRichtingen, SCHEEFSTAND_ID_OFFSET } from "./engine";
 import { grootsteVerplaatsing } from "./grootsteVerplaatsing";
 import type { LoadCombination } from "./combinations";
 import type { ElementForces, MultiInput, SolverResult } from "./types";
@@ -36,9 +37,15 @@ export function buildNativeFrame2DRequest(
   if (input.plates?.length || !input.beams.length) {
     throw new Error("De Rust 2D-raamwerkroute vereist uitsluitend staven, zonder gekoppelde platen.");
   }
-  if (input.scheefstand || input.edgeLoads?.length || input.edgePointLoads?.length) {
-    throw new Error("Scheefstand en plaatrandlasten zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.");
+  if (input.edgeLoads?.length || input.edgePointLoads?.length) {
+    throw new Error("Plaatrandlasten zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.");
   }
+  if (input.scheefstand && (!(finite(input.scheefstand.phi, "Scheefstand φ") >= 0)
+      || input.scheefstand.richting !== 1 && input.scheefstand.richting !== -1)) {
+    throw new Error("Ongeldige scheefstand voor de Rust 2D-raamwerkroute.");
+  }
+  const schFactor = input.scheefstand
+    ? input.scheefstand.phi * input.scheefstand.richting : 0;
   const nodes = input.nodes.map(node => ({ id: node.id,
     x: finite(node.x, `Knoop ${node.id} X`) / 1000,
     y: finite(node.z, `Knoop ${node.id} Z`) / 1000 }));
@@ -112,9 +119,10 @@ export function buildNativeFrame2DRequest(
   const nodalLoads = (input.pointLoads ?? []).flatMap(load => {
     const scale = finite(factor(load.caseId), `Belastinggeval ${load.caseId}`);
     if (scale === 0) return [];
+    const fz = finite(load.fz ?? 0, "Knooplast Fz");
     const values = { nodeId: load.nodeId,
-      fx: finite(load.fx ?? 0, "Knooplast Fx") * scale / 1000,
-      fy: finite(load.fz ?? 0, "Knooplast Fz") * scale / 1000,
+      fx: (finite(load.fx ?? 0, "Knooplast Fx") - schFactor * fz) * scale / 1000,
+      fy: fz * scale / 1000,
       mz: finite(load.my ?? 0, "Knoopmoment My") * scale / 1e6 };
     return values.fx || values.fy || values.mz ? [values] : [];
   });
@@ -125,8 +133,13 @@ export function buildNativeFrame2DRequest(
     if (!axes) throw new Error(`Lijnlast verwijst naar onbekende staaf ${load.beamId}.`);
     const project = (value: number) => {
       const q = finite(value, `Staaf ${load.beamId} lijnlast`) * scale;
-      if (load.qCoord === "local") return load.qDir === "x" ? [q, 0] : [0, q];
-      return load.qDir === "x" ? [axes.c * q, -axes.s * q] : [axes.s * q, axes.c * q];
+      const [qx, qy] = load.qCoord === "local"
+        ? load.qDir === "x" ? [q, 0] : [0, q]
+        : load.qDir === "x" ? [axes.c * q, -axes.s * q] : [axes.s * q, axes.c * q];
+      if (!schFactor) return [qx, qy];
+      const globalVertical = axes.s * qx + axes.c * qy;
+      return [qx - schFactor * axes.c * globalVertical,
+        qy + schFactor * axes.s * globalVertical];
     };
     const [qxStartKnPerM, qyStartKnPerM] = project(load.qStart ?? load.q);
     const [qxEndKnPerM, qyEndKnPerM] = project(load.qEnd ?? load.q);
@@ -141,8 +154,10 @@ export function buildNativeFrame2DRequest(
     const axes = geometry.get(load.beamId);
     const beam = beamById.get(load.beamId);
     if (!axes || !beam) throw new Error(`Puntlast verwijst naar onbekende staaf ${load.beamId}.`);
-    const fx = finite(load.fx ?? 0, "Staafpuntlast Fx") * scale / 1000;
-    const fz = finite(load.fz ?? 0, "Staafpuntlast Fz") * scale / 1000;
+    const fxInput = finite(load.fx ?? 0, "Staafpuntlast Fx");
+    const fzInput = finite(load.fz ?? 0, "Staafpuntlast Fz");
+    const fx = (fxInput - schFactor * fzInput) * scale / 1000;
+    const fz = fzInput * scale / 1000;
     const mz = finite(load.my ?? 0, "Staafpuntmoment My") * scale / 1e6;
     const position = finite(load.posFrac, "Staafpuntlast positie");
     if (position === 0 || position === 1) {
@@ -249,13 +264,26 @@ export async function solveAllCasesNativeFrame2D(
   input: MultiInput, analysis: FrameAnalysis = "linear",
 ): Promise<Map<number, SolverResult>> {
   const perCase = new Map<number, SolverResult>();
-  for (const loadCase of input.cases) {
-    const request = buildNativeFrame2DRequest(input, caseId => caseId === loadCase.id ? 1 : 0, analysis);
-    if (!request.nodalLoads.length && !request.memberLoads.length
-        && !request.memberPointLoads.some(load => load.pxKn !== 0 || load.pyKn !== 0)
-        && !request.thermalLoads.length) continue;
-    const result = await solveNativeFem<NativeFrame2DResult>("frame2d", request);
-    perCase.set(loadCase.id, nativeFrame2DResultToSolverResult(request, result));
+  if (input.scheefstand && input.cases.some(loadCase => loadCase.id >= SCHEEFSTAND_ID_OFFSET)) {
+    throw new Error("Belastinggeval-id botst met de scheefstandvarianten van de Rust 2D-raamwerkroute.");
+  }
+  const solveDirection = async (richting: 1 | -1 | undefined, offset: number) => {
+    const directionalInput = richting === undefined ? input
+      : { ...input, scheefstand: { ...input.scheefstand!, richting } };
+    for (const loadCase of input.cases) {
+      const request = buildNativeFrame2DRequest(directionalInput,
+        caseId => caseId === loadCase.id ? 1 : 0, analysis);
+      if (!request.nodalLoads.length && !request.memberLoads.length
+          && !request.memberPointLoads.some(load => load.pxKn !== 0 || load.pyKn !== 0)
+          && !request.thermalLoads.length) continue;
+      const result = await solveNativeFem<NativeFrame2DResult>("frame2d", request);
+      perCase.set(loadCase.id + offset, nativeFrame2DResultToSolverResult(request, result));
+    }
+  };
+  await solveDirection(input.scheefstand?.richting, 0);
+  if (input.scheefstand) {
+    await solveDirection((-input.scheefstand.richting) as 1 | -1, SCHEEFSTAND_ID_OFFSET);
+    registreerScheefstandRichtingen(perCase, input.scheefstand.richting);
   }
   return perCase;
 }
@@ -270,7 +298,10 @@ export async function solveAllCombinationsNativeFrame2D(
     if (combination.eindtoestand !== undefined) {
       throw new Error(`Combinatie ${combination.name}: eindstijfheidvariant is niet ondersteund door de Rust 2D-raamwerkroute.`);
     }
-    const request = buildNativeFrame2DRequest(input,
+    const directionalInput = input.scheefstand && combination.scheefstandRichting !== undefined
+      ? { ...input, scheefstand: { ...input.scheefstand, richting: combination.scheefstandRichting } }
+      : input;
+    const request = buildNativeFrame2DRequest(directionalInput,
       caseId => combination.factors.get(caseId) ?? 0, analysis);
     const result = await solveNativeFem<NativeFrame2DResult>("frame2d", request);
     results.set(combination.id, nativeFrame2DResultToSolverResult(request, result));

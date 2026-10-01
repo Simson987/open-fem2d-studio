@@ -16,6 +16,9 @@ Rust-kern berekent daarnaast axiale staalplastificatie en betontrekschade per
 belastingpad. In de 2D-eigenschappen kan per staal- of betonstaaf een axiale
 materiaalwet worden gekozen. De afzonderlijke analysekeuze „Rust 2e orde +
 axiale FNL” bewaart het belastingpad in het project en gebruikt deze wetten.
+De 2D-adapter zet scheefstand om in `H = φ·(−V)` op de verticale component
+van knoop-, staafpunt- en lijnlasten. Hij lost de positieve en negatieve
+richting afzonderlijk op, zodat combinaties en omhullenden beide meenemen.
 De bestaande fysisch niet-lineaire stand voor gescheurde betonbuiging wordt
 in de Rust-raamwerkroute nog geweigerd.
 Buigscharnieren aan staafeinden zijn gekoppeld voor lineaire, P-Δ- en axiale FNL-analyse;
