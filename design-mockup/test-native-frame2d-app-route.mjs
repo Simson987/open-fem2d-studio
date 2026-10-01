@@ -173,6 +173,62 @@ try {
     "vrije kromming door temperatuurgradiënt analytisch");
   close(gradientResult.elements.get(1).bendingMoment[10], 0, 1e-5,
     "vrij opgelegde thermische gradiënt zonder mechanisch moment");
+  const beddingE = 210_000, beddingI = 1e8, beddingK = 1;
+  const beddingLambda = Math.pow(beddingK / (4 * beddingE * beddingI), 0.25);
+  const beddingLength = 20 / beddingLambda;
+  const beddingLoad = 100_000;
+  const beddingInput = {
+    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: beddingLength, z: 0 }],
+    beams: [{ id: 1, from: 1, to: 2, E: beddingE, I: beddingI, A: 5000,
+      bedding: { kLijn: beddingK } }],
+    supports: [{ nodeId: 1, type: "xRoller" }],
+    loads: [], pointLoads: [],
+    beamPointLoads: [{ beamId: 1, caseId: 1, posFrac: 0.5, fz: -beddingLoad }],
+    cases: [{ id: 1, name: "puntlast op bedding" }],
+  };
+  const beddingRequest = buildNativeFrame2DRequest(beddingInput, () => 1);
+  assert.ok(beddingRequest.members.length >= 134, "bedding wordt fijn genoeg verdeeld");
+  assert.equal(beddingRequest.members.length + 1, beddingRequest.nodes.length);
+  assert.ok(beddingRequest.members.every(member => member.foundationKnPerM2 === 1000));
+  const beddingNative = (await solveAllCasesNativeFrame2D(beddingInput)).get(1);
+  const beddingOld = solveAllCases(beddingInput).perCase.get(1);
+  const beddingElement = beddingNative.elements.get(1);
+  assert.equal(beddingNative.displacements.size, 2, "virtuele meshknopen blijven uit de app-uitvoer");
+  assert.equal(beddingNative.elements.size, 1, "meshelementen worden één app-staaf");
+  const beddingDeflection = Math.max(...beddingElement.deflection.map(Math.abs));
+  const beddingMoment = Math.max(...beddingElement.bendingMoment.map(Math.abs));
+  close(beddingDeflection, beddingLoad * beddingLambda / (2 * beddingK),
+    beddingLoad * beddingLambda / (2 * beddingK) * 0.015,
+    "beddingzakking tegen gesloten oplossing");
+  close(beddingMoment, beddingLoad / (4 * beddingLambda),
+    beddingLoad / (4 * beddingLambda) * 0.015,
+    "beddingmoment tegen gesloten oplossing");
+  close(beddingDeflection, Math.max(...beddingOld.elements.get(1).deflection.map(Math.abs)),
+    beddingDeflection * 0.005, "beddingzakking tegen bestaande solver");
+  close(beddingNative.reactions.get(1).fz, 0, 1e-4,
+    "beddingreactie wordt niet als oplegreactie getoond");
+  const beddingLineInput = { ...beddingInput,
+    beamPointLoads: [],
+    loads: [{ beamId: 1, caseId: 1, qStart: -2, qEnd: -5,
+      startFrac: 0.2, endFrac: 0.8, qDir: "z" }],
+  };
+  const beddingLine = (await solveAllCasesNativeFrame2D(beddingLineInput)).get(1);
+  const beddingLineOld = solveAllCases(beddingLineInput).perCase.get(1);
+  close(beddingLine.elements.get(1).deflection[Math.floor(beddingLine.elements.get(1).deflection.length / 2)],
+    beddingLineOld.elements.get(1).deflection[Math.floor(beddingLineOld.elements.get(1).deflection.length / 2)],
+    0.1, "deellast op bedding tegen bestaande solver");
+  const beddingGeometricInput = { ...beddingInput,
+    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 6000, z: 0 }],
+    supports: [{ nodeId: 1, type: "fixed" }], beamPointLoads: [],
+    pointLoads: [{ nodeId: 2, caseId: 1, fx: -100_000, fz: -10_000 }],
+  };
+  const beddingCombination = { id: 97, name: "bedding P-Delta", factors: new Map([[1, 1]]) };
+  const beddingGeometric = (await solveAllCombinationsNativeFrame2D(beddingGeometricInput,
+    [beddingCombination], "geometric")).get(97);
+  const beddingGeometricOld = solveCombinationSecondOrder(beddingGeometricInput, beddingCombination);
+  close(beddingGeometric.displacements.get(2).uz,
+    beddingGeometricOld.displacements.get(2).uz, 1e-3,
+    "P-Delta op bedding tegen bestaande solver");
   const swayInput = { ...input,
     supports: [{ nodeId: 1, type: "fixed" }], loads: [],
     pointLoads: [{ nodeId: 2, caseId: 1, fz: -100_000 }],

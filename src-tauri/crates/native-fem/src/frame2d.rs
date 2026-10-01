@@ -41,6 +41,10 @@ pub struct Member {
     pub section_id: usize,
     #[serde(default)]
     pub releases: EndReleases,
+    /// Winkler line stiffness in kN/m². Each end receives k*L/2 as a
+    /// tributary global-Y spring, matching the existing FEM Studio solver.
+    #[serde(default)]
+    pub foundation_kn_per_m2: Option<f64>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
@@ -747,6 +751,12 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
         if member.id == 0 || !member_ids.insert(member.id) {
             return Err("invalid or duplicate 2D frame member".into());
         }
+        if member
+            .foundation_kn_per_m2
+            .is_some_and(|value| !value.is_finite() || value <= 0.0)
+        {
+            return Err("invalid 2D frame foundation line stiffness".into());
+        }
         let start = *node_index
             .get(&member.start_node_id)
             .ok_or("unknown start node")?;
@@ -932,6 +942,27 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
     }
     let mut prescribed = vec![None; k.n];
     let mut spring_stiffness = vec![0.0; k.n];
+    let mut support_stiffness = vec![0.0; k.n];
+    for member in &request.members {
+        if let Some(line_stiffness) = member.foundation_kn_per_m2 {
+            let element = &elements[&member.id];
+            let tributary = line_stiffness * element.length / 2.0;
+            if !tributary.is_finite() {
+                return Err("invalid 2D frame foundation tributary stiffness".into());
+            }
+            for end in [0, 3] {
+                // The legacy solver also assigns 0.1% horizontal soil
+                // friction. Keep the same global-axis convention here.
+                spring_stiffness[element.dofs[end]] += 0.001 * tributary;
+                spring_stiffness[element.dofs[end + 1]] += tributary;
+            }
+        }
+    }
+    for (dof, &stiffness) in spring_stiffness.iter().enumerate() {
+        if stiffness > 0.0 {
+            k.add(dof, dof, stiffness);
+        }
+    }
     let mut supported = HashSet::new();
     for support in &request.supports {
         let node = *node_index
@@ -963,7 +994,8 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
                     return Err("2D support cannot fix and spring the same DOF".into());
                 }
                 k.add(3 * node + axis, 3 * node + axis, stiffness);
-                spring_stiffness[3 * node + axis] = stiffness;
+                spring_stiffness[3 * node + axis] += stiffness;
+                support_stiffness[3 * node + axis] += stiffness;
             }
             if fixed[axis] {
                 prescribed[3 * node + axis] = Some(values[axis].unwrap_or(0.0));
@@ -1160,9 +1192,9 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
             node_id: node.id,
             displacement: [u[3 * index], u[3 * index + 1], u[3 * index + 2]],
             reaction: [
-                reactions[3 * index] - spring_stiffness[3 * index] * u[3 * index],
-                reactions[3 * index + 1] - spring_stiffness[3 * index + 1] * u[3 * index + 1],
-                reactions[3 * index + 2] - spring_stiffness[3 * index + 2] * u[3 * index + 2],
+                reactions[3 * index] - support_stiffness[3 * index] * u[3 * index],
+                reactions[3 * index + 1] - support_stiffness[3 * index + 1] * u[3 * index + 1],
+                reactions[3 * index + 2] - support_stiffness[3 * index + 2] * u[3 * index + 2],
             ],
         })
         .collect();
@@ -1381,6 +1413,7 @@ mod tests {
                 material_id: 1,
                 section_id: 1,
                 releases: EndReleases::default(),
+                foundation_kn_per_m2: None,
             }],
             supports: vec![Support {
                 node_id: 1,
@@ -1401,6 +1434,35 @@ mod tests {
             load_path: vec![],
             max_iterations: default_iterations(),
             tolerance: default_tolerance(),
+        }
+    }
+
+    #[test]
+    fn foundation_adds_tributary_stiffness_without_reporting_soil_as_support() {
+        let mut input = cantilever();
+        input.members[0].foundation_kn_per_m2 = Some(100.0);
+        input.nodal_loads.push(NodalLoad {
+            node_id: 2,
+            fx: 0.0,
+            fy: -10.0,
+            mz: 0.0,
+        });
+        let result = solve(&input).unwrap();
+        let beam_tip_stiffness = 3.0 * 210_000.0 * 1000.0 * 8e-6 / 3.0_f64.powi(3);
+        let soil_tip_stiffness = 100.0 * 3.0 / 2.0;
+        let expected = -10.0 / (beam_tip_stiffness + soil_tip_stiffness);
+        assert!((result.nodes[1].displacement[1] - expected).abs() < 1e-12);
+        assert!(result.nodes[1].reaction[1].abs() < 1e-9);
+        assert!((result.nodes[0].reaction[1] - 10.0 - soil_tip_stiffness * expected).abs() < 1e-9);
+        assert!(result.equilibrium_residual < 1e-9);
+    }
+
+    #[test]
+    fn foundation_rejects_nonpositive_or_nonfinite_stiffness() {
+        for invalid in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            let mut input = cantilever();
+            input.members[0].foundation_kn_per_m2 = Some(invalid);
+            assert!(solve(&input).unwrap_err().contains("foundation"));
         }
     }
 

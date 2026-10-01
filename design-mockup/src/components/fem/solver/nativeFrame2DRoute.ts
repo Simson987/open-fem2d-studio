@@ -1,5 +1,5 @@
 import { solveNativeFem } from "../../../lib/nativeFemClient";
-import { registreerScheefstandRichtingen, SCHEEFSTAND_ID_OFFSET } from "./engine";
+import { beddingSplitsFracties, registreerScheefstandRichtingen, SCHEEFSTAND_ID_OFFSET } from "./engine";
 import { grootsteVerplaatsing } from "./grootsteVerplaatsing";
 import type { LoadCombination } from "./combinations";
 import type { ElementForces, MultiInput, SolverResult } from "./types";
@@ -24,6 +24,22 @@ interface NativeFrame2DResult {
   }>;
   equilibriumResidual: number;
 }
+
+interface FrameSegment {
+  id: number;
+  t0: number;
+  t1: number;
+  startNodeId: number;
+  endNodeId: number;
+}
+
+interface FrameMesh {
+  originalNodeIds: Set<number>;
+  segmentsByBeam: Map<number, FrameSegment[]>;
+}
+
+// Metadata stays on the client side; the Rust request schema rejects unknown fields.
+const frameMeshes = new WeakMap<object, FrameMesh>();
 
 function finite(value: number, label: string): number {
   if (!Number.isFinite(value)) throw new Error(`${label} moet eindig zijn voor de Rust 2D-raamwerkkern.`);
@@ -81,9 +97,12 @@ export function buildNativeFrame2DRequest(
   const sections = input.beams.map(beam => ({ id: beam.id,
     areaM2: finite(beam.A ?? 3877, `Staaf ${beam.id} A`) * 1e-6,
     inertiaM4: finite(beam.I ?? 1.673e7, `Staaf ${beam.id} I`) * 1e-12 }));
-  const members = input.beams.map(beam => {
-    if (beam.bedding || beam.segmenten?.length || beam.extraSneden?.length || beam.veren) {
-      throw new Error(`Staaf ${beam.id}: bedding, segmenten, extra sneden en eindveren zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.`);
+  let nextNodeId = Math.max(0, ...input.nodes.map(node => node.id)) + 1;
+  let nextMemberId = Math.max(0, ...input.beams.map(beam => beam.id)) + 1;
+  const segmentsByBeam = new Map<number, FrameSegment[]>();
+  const members = input.beams.flatMap(beam => {
+    if (beam.segmenten?.length || beam.extraSneden?.length || beam.veren) {
+      throw new Error(`Staaf ${beam.id}: segmenten, extra sneden en eindveren zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.`);
     }
     if (beam.releases?.startTx || beam.releases?.startTz
         || beam.releases?.endTx || beam.releases?.endTz) {
@@ -91,9 +110,46 @@ export function buildNativeFrame2DRequest(
     }
     const rzStart = !!beam.releases?.startRy || beam.startConnection === "hinge";
     const rzEnd = !!beam.releases?.endRy || beam.endConnection === "hinge";
-    return { id: beam.id, startNodeId: beam.from, endNodeId: beam.to,
+    const axes = geometry.get(beam.id)!;
+    const kLijn = beam.bedding?.kLijn;
+    if (kLijn !== undefined && !(finite(kLijn, `Staaf ${beam.id} bedding`) > 0)) {
+      throw new Error(`Staaf ${beam.id}: beddingstijfheid moet positief zijn.`);
+    }
+    const cuts = kLijn === undefined ? []
+      : beddingSplitsFracties(axes.lengthM * 1000, beam.E ?? 210000,
+        beam.I ?? 1.673e7, kLijn);
+    if (kLijn !== undefined) {
+      for (const load of input.loads) {
+        if (load.beamId !== beam.id) continue;
+        for (const t of [load.startFrac ?? 0, load.endFrac ?? 1]) {
+          if (t > 0 && t < 1) cuts.push(t);
+        }
+      }
+      for (const load of input.beamPointLoads ?? []) {
+        if (load.beamId === beam.id && load.posFrac > 0 && load.posFrac < 1) cuts.push(load.posFrac);
+      }
+    }
+    const fractions = [0, ...cuts.sort((a, b) => a - b).filter((t, i, sorted) =>
+      i === 0 || t - sorted[i - 1] > 1e-10), 1];
+    const start = byId.get(beam.from)!, end = byId.get(beam.to)!;
+    const segmentNodes = [beam.from, ...fractions.slice(1, -1).map(t => {
+      const id = nextNodeId++;
+      nodes.push({ id, x: (start.x + t * (end.x - start.x)) / 1000,
+        y: (start.z + t * (end.z - start.z)) / 1000 });
+      return id;
+    }), beam.to];
+    const segments = fractions.slice(0, -1).map((t0, index) => ({
+      id: index === 0 ? beam.id : nextMemberId++, t0, t1: fractions[index + 1],
+      startNodeId: segmentNodes[index], endNodeId: segmentNodes[index + 1],
+    }));
+    segmentsByBeam.set(beam.id, segments);
+    return segments.map((segment, index) => ({ id: segment.id,
+      startNodeId: segment.startNodeId, endNodeId: segment.endNodeId,
       materialId: beam.id, sectionId: beam.id,
-      releases: { rzStart, rzEnd } };
+      releases: { rzStart: index === 0 && rzStart,
+        rzEnd: index === segments.length - 1 && rzEnd },
+      ...(kLijn === undefined ? {} : { foundationKnPerM2: kLijn * 1000 }),
+    }));
   });
   type Support = { nodeId: number; ux: boolean; uy: boolean; rz: boolean;
     kxKnPerM?: number; kyKnPerM?: number; krzKnmPerRad?: number };
@@ -144,10 +200,24 @@ export function buildNativeFrame2DRequest(
     const [qxStartKnPerM, qyStartKnPerM] = project(load.qStart ?? load.q);
     const [qxEndKnPerM, qyEndKnPerM] = project(load.qEnd ?? load.q);
     if (![qxStartKnPerM, qyStartKnPerM, qxEndKnPerM, qyEndKnPerM].some(value => value !== 0)) return [];
-    return [{ memberId: load.beamId, qxStartKnPerM, qxEndKnPerM,
-      qyStartKnPerM, qyEndKnPerM,
-      startPositionM: finite(load.startFrac ?? 0, "Deellast begin") * axes.lengthM,
-      endPositionM: finite(load.endFrac ?? 1, "Deellast eind") * axes.lengthM }];
+    const startFrac = finite(load.startFrac ?? 0, "Deellast begin");
+    const endFrac = finite(load.endFrac ?? 1, "Deellast eind");
+    if (!(startFrac >= 0 && endFrac <= 1 && endFrac > startFrac)) {
+      throw new Error(`Staaf ${load.beamId}: ongeldige grenzen voor de deellast.`);
+    }
+    return segmentsByBeam.get(load.beamId)!.flatMap(segment => {
+      const a = Math.max(startFrac, segment.t0), b = Math.min(endFrac, segment.t1);
+      if (b - a <= 1e-12) return [];
+      const interpolate = (first: number, last: number, t: number) =>
+        first + (last - first) * (t - startFrac) / (endFrac - startFrac);
+      return [{ memberId: segment.id,
+        qxStartKnPerM: interpolate(qxStartKnPerM, qxEndKnPerM, a),
+        qxEndKnPerM: interpolate(qxStartKnPerM, qxEndKnPerM, b),
+        qyStartKnPerM: interpolate(qyStartKnPerM, qyEndKnPerM, a),
+        qyEndKnPerM: interpolate(qyStartKnPerM, qyEndKnPerM, b),
+        startPositionM: (a - segment.t0) * axes.lengthM,
+        endPositionM: (b - segment.t0) * axes.lengthM }];
+    });
   });
   const memberPointLoads = (input.beamPointLoads ?? []).flatMap(load => {
     const scale = finite(factor(load.caseId), `Belastinggeval ${load.caseId}`);
@@ -167,9 +237,17 @@ export function buildNativeFrame2DRequest(
     if (mz) throw new Error(`Staaf ${load.beamId}: een puntmoment binnen de staaf is nog niet gekoppeld aan Rust.`);
     // Ook bij factor nul blijft dit station bestaan. Alle belastinggevallen
     // moeten hetzelfde raster hebben voordat combineResults ze superponeert.
-    return [{ memberId: load.beamId, pxKn: axes.c * fx + axes.s * fz,
+    const segment = segmentsByBeam.get(load.beamId)?.find(item =>
+      position >= item.t0 - 1e-12 && position <= item.t1 + 1e-12);
+    if (!segment) throw new Error(`Staaf ${load.beamId}: puntlast ligt buiten de staaf.`);
+    if (position === segment.t0 || position === segment.t1) {
+      if (fx || fz || mz) nodalLoads.push({ nodeId: position === segment.t0
+        ? segment.startNodeId : segment.endNodeId, fx, fy: fz, mz });
+      return [];
+    }
+    return [{ memberId: segment.id, pxKn: axes.c * fx + axes.s * fz,
       pyKn: -axes.s * fx + axes.c * fz,
-      positionM: position * axes.lengthM }];
+      positionM: (position - segment.t0) * axes.lengthM }];
   });
   const thermalLoads = (input.thermalLoads ?? []).flatMap(load => {
     const scale = finite(factor(load.caseId), `Belastinggeval ${load.caseId}`);
@@ -185,17 +263,20 @@ export function buildNativeFrame2DRequest(
       if (!(depthM > 0)) throw new Error(`Staaf ${load.beamId}: gradiënthoogte moet positief zijn.`);
     }
     return deltaTK === 0 && deltaTGradientK === 0 ? []
-      : [{ memberId: load.beamId, deltaTK, alphaPerK,
-        ...(depthM !== undefined ? { deltaTGradientK, depthM } : {}) }];
+      : segmentsByBeam.get(load.beamId)!.map(segment => ({ memberId: segment.id,
+        deltaTK, alphaPerK,
+        ...(depthM !== undefined ? { deltaTGradientK, depthM } : {}) }));
   });
   const loadPath = isMaterialAnalysis(analysis) ? input.axialMaterialLoadPath ?? [1] : [];
   if (isMaterialAnalysis(analysis) && (!Array.isArray(loadPath) || loadPath.length === 0
       || loadPath.length > 100 || loadPath.some(value => !Number.isFinite(value)))) {
     throw new Error("Ongeldig axiaal FNL-lastpad voor de Rust 2D-raamwerkroute.");
   }
-  return { analysis, nodes, materials, sections, members, supports,
+  const request = { analysis, nodes, materials, sections, members, supports,
     nodalLoads, memberLoads, memberPointLoads, thermalLoads,
     ...(isMaterialAnalysis(analysis) ? { loadPath } : {}) };
+  frameMeshes.set(request, { originalNodeIds: new Set(input.nodes.map(node => node.id)), segmentsByBeam });
+  return request;
 }
 
 export function nativeFrame2DResultToSolverResult(
@@ -207,27 +288,32 @@ export function nativeFrame2DResultToSolverResult(
   }
   const nodeIds = new Set(request.nodes.map(node => node.id));
   const memberIds = new Set(request.members.map(member => member.id));
+  const mesh = frameMeshes.get(request);
+  if (!mesh) throw new Error("De Rust 2D-raamwerkroute mist de bijbehorende staafindeling.");
   const supported = new Set(request.supports.map(support => support.nodeId));
   const displacements = new Map<number, { ux: number; uz: number; ry: number }>();
   const reactions = new Map<number, { fx: number; fz: number; my: number }>();
+  const seenNodes = new Set<number>();
   for (const node of native.nodes) {
-    if (!nodeIds.has(node.nodeId) || displacements.has(node.nodeId)
+    if (!nodeIds.has(node.nodeId) || seenNodes.has(node.nodeId)
         || node.displacement?.length !== 3 || node.reaction?.length !== 3
         || [...node.displacement, ...node.reaction].some(value => !Number.isFinite(value))) {
       throw new Error("De Rust 2D-raamwerkkern leverde ongeldige knoopwaarden.");
     }
+    seenNodes.add(node.nodeId);
+    if (!mesh.originalNodeIds.has(node.nodeId)) continue;
     displacements.set(node.nodeId, { ux: node.displacement[0] * 1000,
       uz: node.displacement[1] * 1000, ry: node.displacement[2] });
     if (supported.has(node.nodeId)) reactions.set(node.nodeId, {
       fx: node.reaction[0] * 1000, fz: node.reaction[1] * 1000, my: node.reaction[2] * 1e6,
     });
   }
-  const elements = new Map<number, ElementForces>();
+  const segmentElements = new Map<number, ElementForces>();
   for (const member of native.members) {
     const arrays = [member.stationsM, member.normalForceKn, member.shearForceKn,
       member.bendingMomentKnm, member.deflectionM, member.axialDispM, member.rotationRad];
     const count = member.stationsM?.length ?? 0;
-    if (!memberIds.has(member.memberId) || elements.has(member.memberId)
+    if (!memberIds.has(member.memberId) || segmentElements.has(member.memberId)
         || member.localEndForces?.length !== 6 || count < 2
         || arrays.some(array => !Array.isArray(array) || array.length !== count
           || array.some(value => !Number.isFinite(value)))
@@ -241,7 +327,7 @@ export function nativeFrame2DResultToSolverResult(
         throw new Error("De Rust 2D-raamwerkkern leverde geen geldige axiale materiaaltoestand.");
       }
     }
-    elements.set(member.memberId, {
+    segmentElements.set(member.memberId, {
       N: member.normalForceKn[0] * 1000, V: member.shearForceKn[0] * 1000,
       ...(member.axialHistory ? { axialHistory: { ...member.axialHistory } } : {}),
       M_start: member.bendingMomentKnm[0] * 1e6,
@@ -255,6 +341,28 @@ export function nativeFrame2DResultToSolverResult(
       axialDisp: member.axialDispM.map(value => value * 1000),
       rotation: [...member.rotationRad],
     });
+  }
+  const elements = new Map<number, ElementForces>();
+  const diagramKeys = ["stations_mm", "normalForce", "shearForce", "bendingMoment",
+    "deflection", "axialDisp"] as const;
+  for (const [beamId, segments] of mesh.segmentsByBeam) {
+    const first = segmentElements.get(segments[0].id)!;
+    const last = segmentElements.get(segments[segments.length - 1].id)!;
+    const merged: ElementForces = { ...first, M_end: last.M_end,
+      L_mm: segments.reduce((sum, segment) => sum + segmentElements.get(segment.id)!.L_mm, 0),
+      stations_mm: [], normalForce: [], shearForce: [], bendingMoment: [],
+      deflection: [], axialDisp: [], rotation: [] };
+    let offsetMm = 0;
+    for (const segment of segments) {
+      const part = segmentElements.get(segment.id)!;
+      for (const key of diagramKeys) {
+        if (key === "stations_mm") merged.stations_mm.push(...part.stations_mm.map(x => x + offsetMm));
+        else merged[key].push(...part[key]);
+      }
+      merged.rotation!.push(...part.rotation!);
+      offsetMm += part.L_mm;
+    }
+    elements.set(beamId, merged);
   }
   return { displacements, reactions, elements,
     maxDisplacement: grootsteVerplaatsing(displacements.values(), elements.values()) };

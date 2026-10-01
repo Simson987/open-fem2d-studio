@@ -21,9 +21,14 @@ van knoop-, staafpunt- en lijnlasten. Hij lost de positieve en negatieve
 richting afzonderlijk op, zodat combinaties en omhullenden beide meenemen.
 De bestaande fysisch niet-lineaire stand voor gescheurde betonbuiging wordt
 in de Rust-raamwerkroute nog geweigerd.
-Buigscharnieren aan staafeinden zijn gekoppeld voor lineaire, P-Δ- en axiale FNL-analyse;
-bedding, translatiehulzen,
-eindveren en gekoppelde
+Buigscharnieren aan staafeinden zijn gekoppeld voor lineaire, P-Δ- en axiale FNL-analyse.
+Een staaf op Winkler-bedding wordt met dezelfde karakteristieke lengte als de
+bestaande solver in maximaal 200 Rust-elementen verdeeld. De kern voegt per
+elementuiteinde de tributaire verticale veer en 0,1% horizontale
+bodemweerstand toe; de app voegt de diagrammen weer samen. In de Rust-invoer
+is `foundationKnPerM2` de lijnstijfheid in kN/m². De app-invoer
+`bedding.kLijn` in N/mm² wordt hiervoor met 1000 vermenigvuldigd.
+Translatiehulzen, eindveren en gekoppelde
 staaf-plaatmodellen worden in deze route nog expliciet geweigerd. De app
 behoudt de bestaande solver als automatische keuze.
 Uniforme temperatuurbelasting per staaf loopt wel via Rust, met een
@@ -34,6 +39,14 @@ neemt hiervoor per staaf `axialMaterialLaw` en een modelbreed
 resultaat. De 2D-werkbalk toont bij axiale FNL het lastpad, bijvoorbeeld
 `1, 0, 0.5` voor belasten, ontlasten en herbelasten. Buiging blijft elastisch;
 EN 1992/1993-toetsen worden voor deze gedeeltelijke FNL-uitkomst niet uitgevoerd.
+
+Voor een ligger op bedding controleert de app-route een puntlast in het midden
+van een ligger van `20/λ` tegen de gesloten oplossing voor een oneindig lange
+ligger: `λ=(k/(4EI))^(1/4)`, `w₀=Pλ/(2k)` en `M₀=P/(4λ)`. Zij vergelijkt ook
+een gedeeltelijke trapeziumlast en een korte P-Δ-ligger met de bestaande
+solver. De P-Δ-stabiliteitscontrole is momenteel begrensd op 600 DOF; een
+langere beddingstaaf kan daardoor in de geometrisch niet-lineaire stand
+worden geweigerd.
 
 Een afzonderlijke lineaire of FNL 3D-plaatroute kan in de app met expliciete keuze
 voor Open FEM Rust worden berekend. Zij accepteert één vlakke rechthoek in
@@ -130,7 +143,7 @@ src-tauri/target/debug/native-frame2d \
 
 | Kern | Element | GNL | FNL | Lasten en opleggingen |
 | --- | --- | --- | --- | --- |
-| `native-frame2d` | 6-DOF Euler-Bernoulli raamwerk, 3 DOF/knoop | iteratieve P-Δ, stabiliteitscontrole tot 600 DOF | axiale staalplastificatie en betontrekschade met belastingpad; elastische buiging | knoop-, verdeelde, staafpunt- en uniforme thermische lasten; vaste DOF, globale veren, opgelegde verplaatsingen/rotaties en lineaire buigscharnieren |
+| `native-frame2d` | 6-DOF Euler-Bernoulli raamwerk, 3 DOF/knoop | iteratieve P-Δ, stabiliteitscontrole tot 600 DOF | axiale staalplastificatie en betontrekschade met belastingpad; elastische buiging | knoop-, verdeelde, staafpunt- en uniforme thermische lasten; vaste DOF, globale veren, Winkler-bedding, opgelegde verplaatsingen/rotaties en lineaire buigscharnieren |
 | `native-frame3d` | 12-DOF Euler-Bernoulli raamwerk, 6 DOF/knoop | iteratieve P-Δ-stijfheid, stabiliteitscontrole en eigenknik tot 120 vrije DOF | monotone effectieve-E-envelop; met expliciet `loadPath` axiale staalplastificatie en blijvende betontrekschade | knoop-, lijn-, staafpunt- en thermische lasten; vaste DOF, globale veren, opgelegde verplaatsingen/rotaties en staafeindscharnieren |
 | `native-plate2d` | 3-knoops CST-vlakspanning/membraan, 2 DOF/knoop | Green-Lagrange-rek met Newton-iteratie | J2-staalplastificatie met isotrope verharding en onomkeerbare betonschade per element | knoopkrachten en vaste x/y-DOF |
 | `native-plate-bending` | 3-knoops DKT-plaatbuiging, 3 DOF/knoop | nog niet | nog niet | dwarsknoopkrachten, knoopmomenten en vaste w/rotatie-DOF |
