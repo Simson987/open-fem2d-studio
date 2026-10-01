@@ -1147,9 +1147,6 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
     if request.nodes.len() < 2 || request.members.is_empty() {
         return Err("frame requires nodes and members".into());
     }
-    if request.nodes.len() > 100 {
-        return Err("3D frame stability verification is limited to 600 DOF".into());
-    }
     positive(request.tolerance, "tolerance")?;
     if request.max_iterations == 0 || request.max_iterations > 200 {
         return Err("invalid iteration limit".into());
@@ -1794,6 +1791,46 @@ mod tests {
         assert!((result.nodes[1].displacement[1] - expected).abs() < 1e-10);
         assert!((result.nodes[0].reaction[1] + 10.0).abs() < 1e-9);
         assert!((result.nodes[0].reaction[5] + 20.0).abs() < 1e-9);
+    }
+    #[test]
+    fn frame_over_600_dof_matches_axial_chain_solution_with_p_delta() {
+        let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 0.0);
+        model.nodes = (0..=100)
+            .map(|index| Node {
+                id: index + 1,
+                x: index as f64,
+                y: 0.0,
+                z: 0.0,
+            })
+            .collect();
+        model.members = (0..100)
+            .map(|index| Member {
+                id: index + 1,
+                start_node_id: index + 1,
+                end_node_id: index + 2,
+                material_id: 1,
+                section_id: 1,
+                roll_angle_rad: 0.0,
+                releases: EndReleases::default(),
+            })
+            .collect();
+        model.supports = (0..=100)
+            .map(|index| {
+                let mut support = model.supports[0].clone();
+                support.node_id = index + 1;
+                support.ux = index == 0;
+                support
+            })
+            .collect();
+        model.nodal_loads[0].node_id = 101;
+        model.nodal_loads[0].fx = 100.0;
+        let expected = 100.0 * 100.0 / (210_000.0 * 1000.0 * 0.01);
+        let linear = solve(&model).unwrap();
+        assert!((linear.nodes[100].displacement[0] - expected).abs() < 1e-10);
+        model.analysis = Analysis::PDelta;
+        let geometric = solve(&model).unwrap();
+        assert!((geometric.nodes[100].displacement[0] - expected).abs() < 1e-10);
+        assert!(geometric.equilibrium_residual < 1e-8);
     }
     #[test]
     fn sprung_cantilever_matches_parallel_equilibrium() {

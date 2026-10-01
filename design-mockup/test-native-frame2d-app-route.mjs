@@ -229,6 +229,19 @@ try {
   close(beddingGeometric.displacements.get(2).uz,
     beddingGeometricOld.displacements.get(2).uz, 1e-3,
     "P-Delta op bedding tegen bestaande solver");
+  const beddingSparseInput = { ...beddingInput,
+    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 40 / beddingLambda, z: 0 }],
+    supports: [{ nodeId: 1, type: "fixed" }], beamPointLoads: [],
+    pointLoads: [{ nodeId: 2, caseId: 1, fz: -1000 }],
+  };
+  assert.equal(buildNativeFrame2DRequest(beddingSparseInput, () => 1).nodes.length, 201,
+    "lang beddingmodel heeft 603 DOF en raakt de sparse route");
+  const beddingSparseLinear = (await solveAllCasesNativeFrame2D(beddingSparseInput)).get(1);
+  const beddingSparseGeometric = (await solveAllCombinationsNativeFrame2D(beddingSparseInput,
+    [beddingCombination], "geometric")).get(97);
+  close(beddingSparseGeometric.displacements.get(2).uz,
+    beddingSparseLinear.displacements.get(2).uz, 1e-5,
+    "P-Delta met 603 DOF zonder normaalkracht is gelijk aan lineair");
   const swayInput = { ...input,
     supports: [{ nodeId: 1, type: "fixed" }], loads: [],
     pointLoads: [{ nodeId: 2, caseId: 1, fz: -100_000 }],
@@ -428,4 +441,4 @@ try {
 } finally {
   globalThis.fetch = previousFetch;
 }
-console.log("Native 2D-app-route: lineair/P-Delta, scheefstand, thermiek en axiale staal-/beton-FNL slagen.");
+console.log("Native 2D-app-route: lineair/P-Delta (ook sparse bedding), scheefstand, thermiek en axiale staal-/beton-FNL slagen.");

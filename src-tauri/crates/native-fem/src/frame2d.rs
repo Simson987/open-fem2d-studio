@@ -1467,6 +1467,47 @@ mod tests {
     }
 
     #[test]
+    fn geometric_foundation_frame_uses_sparse_stability_check() {
+        let mut input = cantilever();
+        input.nodes = (0..=200)
+            .map(|index| Node {
+                id: index + 1,
+                x: index as f64,
+                y: 0.0,
+            })
+            .collect();
+        input.materials[0].e_mpa = 1000.0;
+        input.sections[0].area_m2 = 1.0;
+        input.sections[0].inertia_m4 = 0.001;
+        input.members = (0..200)
+            .map(|index| Member {
+                id: index + 1,
+                start_node_id: index + 1,
+                end_node_id: index + 2,
+                material_id: 1,
+                section_id: 1,
+                releases: EndReleases::default(),
+                foundation_kn_per_m2: Some(1000.0),
+            })
+            .collect();
+        input.nodal_loads.push(NodalLoad {
+            node_id: 201,
+            fx: 0.0,
+            fy: -10.0,
+            mz: 0.0,
+        });
+        let linear = solve(&input).unwrap();
+        input.analysis = Analysis::Geometric;
+        let geometric = solve(&input).unwrap();
+        assert!(
+            (linear.nodes[200].displacement[1] - geometric.nodes[200].displacement[1]).abs()
+                < 1e-10
+        );
+        assert!(geometric.equilibrium_residual < 1e-8);
+        assert!(geometric.iterations >= 2);
+    }
+
+    #[test]
     fn uniform_temperature_matches_free_and_restrained_axial_solutions() {
         let mut input = cantilever();
         input.thermal_loads.push(ThermalLoad {

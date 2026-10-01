@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 const DENSE_LIMIT: usize = 600;
 const MAX_DOFS: usize = 20_000;
+const MAX_INERTIA_FACTOR_ENTRIES: usize = 2_000_000;
 
 #[derive(Clone, Debug)]
 pub struct Matrix {
@@ -63,10 +64,10 @@ pub fn free_positive_definite(k: &Matrix, prescribed: &[Option<f64>]) -> Result<
     if prescribed.len() != k.n {
         return Err("matrix/constraint size mismatch".into());
     }
-    if k.sparse.is_some() {
-        return Err("frame stability inertia check is limited to 600 DOF".into());
-    }
     let free: Vec<usize> = (0..k.n).filter(|&i| prescribed[i].is_none()).collect();
+    if let Some(rows) = &k.sparse {
+        return sparse_positive_definite(rows, &free, k.n);
+    }
     let n = free.len();
     let mut lower = vec![0.0; n * n];
     for row in 0..n {
@@ -90,6 +91,94 @@ pub fn free_positive_definite(k: &Matrix, prescribed: &[Option<f64>]) -> Result<
                 lower[row * n + col] = value / lower[col * n + col];
             }
         }
+    }
+    Ok(())
+}
+
+/// Sparse symmetric LDLᵀ elimination. A non-positive pivot is an inertia
+/// certificate, including for an unloaded buckling mode that PCG may miss.
+/// Only fill created by the free stiffness graph is stored.
+fn sparse_positive_definite(
+    rows: &[BTreeMap<usize, f64>],
+    free: &[usize],
+    all_dofs: usize,
+) -> Result<(), String> {
+    let mut position = vec![None; all_dofs];
+    for (index, &dof) in free.iter().enumerate() {
+        position[dof] = Some(index);
+    }
+    let mut upper = vec![BTreeMap::<usize, f64>::new(); free.len()];
+    let mut stored_entries = 0;
+    for (index, &dof) in free.iter().enumerate() {
+        for (&column, &value) in &rows[dof] {
+            let Some(other) = position[column] else {
+                continue;
+            };
+            if !value.is_finite() {
+                return Err("non-finite free stiffness".into());
+            }
+            if other == index {
+                upper[index].insert(index, value);
+                stored_entries += 1;
+                continue;
+            }
+            let reverse = *rows[column].get(&dof).unwrap_or(&0.0);
+            let scale = value.abs().max(reverse.abs()).max(1.0);
+            if !reverse.is_finite() || (value - reverse).abs() > 1e-10 * scale {
+                return Err(format!(
+                    "asymmetric sparse stiffness at DOFs {dof}, {column}"
+                ));
+            }
+            if other < index {
+                continue;
+            }
+            let symmetric = (value + reverse) / 2.0;
+            if symmetric != 0.0 {
+                upper[index].insert(other, symmetric);
+                stored_entries += 1;
+            }
+        }
+        if stored_entries > MAX_INERTIA_FACTOR_ENTRIES {
+            return Err("sparse stability factor exceeded memory limit".into());
+        }
+    }
+    for pivot_index in 0..free.len() {
+        let diagonal = *upper[pivot_index].get(&pivot_index).unwrap_or(&0.0);
+        let original = *rows[free[pivot_index]]
+            .get(&free[pivot_index])
+            .unwrap_or(&0.0);
+        if !diagonal.is_finite()
+            || !original.is_finite()
+            || original <= 0.0
+            || diagonal <= original * 1e-12
+        {
+            return Err(
+                "non-positive free stiffness; compression may have reached buckling".into(),
+            );
+        }
+        let neighbors: Vec<(usize, f64)> = upper[pivot_index]
+            .iter()
+            .filter(|(column, _)| **column > pivot_index)
+            .map(|(&column, &value)| (column, value))
+            .collect();
+        for (a, &(row, value_row)) in neighbors.iter().enumerate() {
+            for &(column, value_column) in &neighbors[a..] {
+                let current = upper[row].get(&column).copied();
+                let next = current.unwrap_or(0.0) - value_row * value_column / diagonal;
+                if !next.is_finite() {
+                    return Err("non-finite sparse stiffness factor".into());
+                }
+                if current.is_none() {
+                    stored_entries += 1;
+                    if stored_entries > MAX_INERTIA_FACTOR_ENTRIES {
+                        return Err("sparse stability factor exceeded memory limit".into());
+                    }
+                }
+                upper[row].insert(column, next);
+            }
+        }
+        stored_entries -= upper[pivot_index].len();
+        upper[pivot_index].clear();
     }
     Ok(())
 }
@@ -496,6 +585,44 @@ mod tests {
         let (u_shifted, r_shifted) = constrained_solve(&k, &f, &fixed).unwrap();
         assert!((u_shifted[n - 1] - 75.01).abs() < 1e-6);
         assert!((r_shifted[0] + 1.0).abs() < 1e-8);
+    }
+    #[test]
+    fn sparse_inertia_detects_buckling_after_dense_limit() {
+        let n = 751;
+        let mut k = Matrix::zeros(n).unwrap();
+        for i in 0..n - 1 {
+            k.add(i, i, 10.0);
+            k.add(i, i + 1, -10.0);
+            k.add(i + 1, i, -10.0);
+            k.add(i + 1, i + 1, 10.0);
+        }
+        let mut fixed = vec![None; n];
+        fixed[0] = Some(0.0);
+        free_positive_definite(&k, &fixed).unwrap();
+        // A negative tip tangent of 0.02 exceeds the chain's 10/750
+        // elastic stiffness, while every diagonal remains positive.
+        k.add(n - 1, n - 1, -0.02);
+        assert!(free_positive_definite(&k, &fixed)
+            .unwrap_err()
+            .contains("non-positive"));
+    }
+
+    #[test]
+    fn sparse_inertia_rejects_asymmetry_and_unloaded_mechanism() {
+        let mut k = Matrix::zeros(601).unwrap();
+        for i in 0..601 {
+            k.add(i, i, 1.0);
+        }
+        k.add(1, 0, 0.1);
+        assert!(free_positive_definite(&k, &vec![None; 601])
+            .unwrap_err()
+            .contains("asymmetric"));
+        k.add(1, 0, -0.1);
+        k.add(0, 1, -1.0);
+        k.add(1, 0, -1.0);
+        assert!(free_positive_definite(&k, &vec![None; 601])
+            .unwrap_err()
+            .contains("non-positive"));
     }
     #[test]
     fn sparse_solver_rejects_asymmetric_free_stiffness() {

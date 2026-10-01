@@ -44,9 +44,10 @@ Voor een ligger op bedding controleert de app-route een puntlast in het midden
 van een ligger van `20/λ` tegen de gesloten oplossing voor een oneindig lange
 ligger: `λ=(k/(4EI))^(1/4)`, `w₀=Pλ/(2k)` en `M₀=P/(4λ)`. Zij vergelijkt ook
 een gedeeltelijke trapeziumlast en een korte P-Δ-ligger met de bestaande
-solver. De P-Δ-stabiliteitscontrole is momenteel begrensd op 600 DOF; een
-langere beddingstaaf kan daardoor in de geometrisch niet-lineaire stand
-worden geweigerd.
+solver. Ook voor sparse raamwerkmatrices boven 600 DOF controleert een
+LDLᵀ-factorisatie de vrije stijfheid op niet-positieve pivots. De eigenknik-
+analyse van 3D-ramen blijft afzonderlijk begrensd op 120 vrije en 600 totale
+DOF.
 
 Een afzonderlijke lineaire of FNL 3D-plaatroute kan in de app met expliciete keuze
 voor Open FEM Rust worden berekend. Zij accepteert één vlakke rechthoek in
@@ -143,8 +144,8 @@ src-tauri/target/debug/native-frame2d \
 
 | Kern | Element | GNL | FNL | Lasten en opleggingen |
 | --- | --- | --- | --- | --- |
-| `native-frame2d` | 6-DOF Euler-Bernoulli raamwerk, 3 DOF/knoop | iteratieve P-Δ, stabiliteitscontrole tot 600 DOF | axiale staalplastificatie en betontrekschade met belastingpad; elastische buiging | knoop-, verdeelde, staafpunt- en uniforme thermische lasten; vaste DOF, globale veren, Winkler-bedding, opgelegde verplaatsingen/rotaties en lineaire buigscharnieren |
-| `native-frame3d` | 12-DOF Euler-Bernoulli raamwerk, 6 DOF/knoop | iteratieve P-Δ-stijfheid, stabiliteitscontrole en eigenknik tot 120 vrije DOF | monotone effectieve-E-envelop; met expliciet `loadPath` axiale staalplastificatie en blijvende betontrekschade | knoop-, lijn-, staafpunt- en thermische lasten; vaste DOF, globale veren, opgelegde verplaatsingen/rotaties en staafeindscharnieren |
+| `native-frame2d` | 6-DOF Euler-Bernoulli raamwerk, 3 DOF/knoop | iteratieve P-Δ, dichte of sparse LDLᵀ-stabiliteitscontrole | axiale staalplastificatie en betontrekschade met belastingpad; elastische buiging | knoop-, verdeelde, staafpunt- en uniforme thermische lasten; vaste DOF, globale veren, Winkler-bedding, opgelegde verplaatsingen/rotaties en lineaire buigscharnieren |
+| `native-frame3d` | 12-DOF Euler-Bernoulli raamwerk, 6 DOF/knoop | iteratieve P-Δ-stijfheid en sparse stabiliteitscontrole; eigenknik tot 120 vrije/600 totale DOF | monotone effectieve-E-envelop; met expliciet `loadPath` axiale staalplastificatie en blijvende betontrekschade | knoop-, lijn-, staafpunt- en thermische lasten; vaste DOF, globale veren, opgelegde verplaatsingen/rotaties en staafeindscharnieren |
 | `native-plate2d` | 3-knoops CST-vlakspanning/membraan, 2 DOF/knoop | Green-Lagrange-rek met Newton-iteratie | J2-staalplastificatie met isotrope verharding en onomkeerbare betonschade per element | knoopkrachten en vaste x/y-DOF |
 | `native-plate-bending` | 3-knoops DKT-plaatbuiging, 3 DOF/knoop | nog niet | nog niet | dwarsknoopkrachten, knoopmomenten en vaste w/rotatie-DOF |
 | `native-square-mesh` | exact vierkant Q4-rooster met randknoop-ID's | n.v.t. | n.v.t. | `widthM`, `heightM`, `cellSizeM` |
@@ -388,9 +389,14 @@ equivalente plastische rek en de trekschade. De materiaaltoestand leeft binnen
   nulbelasting wordt de vrije stijfheid ook met een niet-nul proeflast
   aangesproken, zodat een onbelast mechanisme niet zonder meer als nuloplossing
   slaagt. Dit is geen volledige traagheids- of eigenwaardecontrole; een
-  mechanisme dat orthogonaal is aan de proeflast kan onopgemerkt blijven. Het
-  3D-raamwerk blijft voorlopig begrensd op 600 DOF voor zijn expliciete
-  stabiliteitstoets.
+  mechanisme dat orthogonaal is aan de proeflast kan onopgemerkt blijven. De
+  2D- en 3D-raamwerken gebruiken nu daarnaast sparse LDLᵀ-eliminatie als
+  expliciete stabiliteitstoets; een 2D-beddingraam met 603 DOF en een
+  3D-axiale keten met 606 DOF zijn getest. De 3D-eigenknik blijft beperkt
+  tot 120 vrije en 600 totale DOF. De sparse stabiliteitsfactor heeft een
+  expliciete geheugenlimiet van twee miljoen opgeslagen factorwaarden. Sterk
+  gevulde sparse factoren en slecht
+  geconditioneerde grote raamwerken vragen nog schaal- en prestatietests.
   Een bredere referentieset, betrouwbare stabiliteitsdetectie voor grote
   modellen en 3D-materiaalhistorie zijn nodig voordat de app deze kern als
   standaard kan gebruiken.
