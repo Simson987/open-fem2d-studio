@@ -1,5 +1,4 @@
 import { solveNativeFem, type NativeHybridPlateResult } from "../../lib/nativeFemClient";
-import { genereerRasterMesh, PLAAT_OPENING_MIN_AFSTAND_MM } from "../../core/fem/PlaatMesher";
 import { CONCRETE_E_CM, NU_BETON, NU_STAAL, eVanMateriaal } from "../../lib/sectionResolver";
 import { frame3DLoadCaseId, type Frame3DModel, type Frame3DNode } from "./frame3dModel";
 import type { Frame3DAnalysisKind, Frame3DLoadSelection, Frame3DPlateBendingResult, Frame3DSolveResult } from "./frame3dSolver";
@@ -63,7 +62,7 @@ function rectangle(model: Frame3DModel) {
   const ex = scale(firstEdge, 1 / width), ey = scale(secondEdge, 1 / height);
   const crossProduct = cross(ex, ey);
   const normal = scale(crossProduct, 1 / norm(crossProduct));
-  const minClearance = PLAAT_OPENING_MIN_AFSTAND_MM / 1000;
+  const minClearance = 0.010;
   const openingRects = (plate.openings ?? []).map((opening) => {
     if (opening.nodeIds.length !== 4 || (opening.cornerRadiusM ?? 0) !== 0
         || opening.boundary?.some((edge) => edge.kind !== "line")) {
@@ -117,42 +116,27 @@ function rectangle(model: Frame3DModel) {
 async function meshForPlate(geometry: ReturnType<typeof rectangle>): Promise<QuadMesh> {
   const { plate, openingRects, width, height, area } = geometry;
   const maxCellSizeM = plate.maxCellSizeM ?? Math.min(width, height) / 4;
-  if (openingRects.length === 0) {
-    return solveNativeFem<QuadMesh>("quadMesh", {
-      originX: 0, originY: 0, widthM: width, heightM: height,
-      maxCellSizeM, materialId: 1, thicknessM: plate.thicknessM,
-    });
+  const mesh = await solveNativeFem<QuadMesh>("quadMesh", {
+    originX: 0, originY: 0, widthM: width, heightM: height,
+    maxCellSizeM, materialId: 1, thicknessM: plate.thicknessM,
+    ...(openingRects.length ? { openings: openingRects.map((opening) => ({
+      xM: opening.minU, yM: opening.minV,
+      widthM: opening.maxU - opening.minU, heightM: opening.maxV - opening.minV,
+    })) } : {}),
+  });
+  if (mesh.nodes.length > 20_000 / 3 || mesh.quads.length === 0) {
+    throw new Error("Het Q4-plaatrooster is leeg of overschrijdt de Rust-grens van 20.000 vrijheidsgraden.");
   }
-  const input = { minX: 0, maxX: width * 1000, minZ: 0, maxZ: height * 1000,
-    openingen: openingRects.map((opening) => opening.points.map((point) =>
-      ({ x: point.u * 1000, z: point.v * 1000 }))),
-    meshSize: maxCellSizeM * 1000, meshType: "vierhoeken" as const };
-  let raster = genereerRasterMesh(input);
-  const tooLarge = (lines: number[]) => lines.some((value, index) => index > 0
-    && value - lines[index - 1] > maxCellSizeM * 1000 * (1 + 1e-10));
-  // The existing 2D raster mesher rounds the cell count. Refine once where
-  // needed so the 3D maxCellSizeM contract remains an actual upper bound.
-  if (tooLarge(raster.xs) || tooLarge(raster.zs)) {
-    raster = genereerRasterMesh({ ...input, meshSize: maxCellSizeM * 500 });
-  }
-  const nodes = raster.points.map((point, index) => ({ id: index + 1, x: point.x / 1000, y: point.z / 1000 }));
-  if (nodes.length > 20_000 / 3 || raster.quads.length === 0) {
-    throw new Error("Het geperforeerde Q4-plaatrooster is leeg of overschrijdt de Rust-grens van 20.000 vrijheidsgraden.");
-  }
-  const quads: QuadMesh["quads"] = raster.quads.map((ids, index) => ({ id: index + 1,
-    nodeIds: ids.map((id) => id + 1) as [number, number, number, number],
-    materialId: 1, thicknessM: plate.thicknessM }));
+  const nodes = mesh.nodes;
+  const quads = mesh.quads;
   const actualArea = quads.reduce((sum, quad) => {
     const a = nodes[quad.nodeIds[0] - 1], b = nodes[quad.nodeIds[1] - 1], d = nodes[quad.nodeIds[3] - 1];
     return sum + (b.x - a.x) * (d.y - a.y);
   }, 0);
   if (Math.abs(actualArea - area) > 1e-8 * Math.max(1, area)) {
-    throw new Error(`Het geperforeerde plaatrooster heeft oppervlak ${actualArea} m² in plaats van ${area} m².`);
+    throw new Error(`Het plaatrooster heeft oppervlak ${actualArea} m² in plaats van ${area} m².`);
   }
-  const ids = (points: number[]) => points.map((id) => id + 1);
-  return { nodes, quads,
-    bottomNodeIds: ids(raster.randen.bottom), rightNodeIds: ids(raster.randen.right),
-    topNodeIds: ids(raster.randen.top), leftNodeIds: ids(raster.randen.left) };
+  return mesh;
 }
 
 function localSupport(
@@ -392,7 +376,7 @@ export async function solveFrame3DPlate(
       maxImbalanceKn: forceBalance.maxImbalanceKn, equilibriumOk: forceBalance.ok },
     forceBalance, solverPath: "native-rust-hybrid-plate",
     diagnostics: ["Rust hybride Q4-buigplaat in een 3D-vlak.",
-      ...(geometry.openingRects.length > 0 ? ["Het Q4-rooster met rechthoekige openingen komt voorlopig uit de bestaande 2D-rastermesher; de plaatoplossing is Rust."] : []),
+      ...(geometry.openingRects.length > 0 ? ["Ook het Q4-rooster met rechthoekige openingen komt uit de Rust-mesher."] : []),
       "Buiten- en openingshoekopleggingen komen uit het 3D-model; opgegeven plaatrandopleggingen gelden voor alle randroosterknopen.",
       ...(analysis === "material" ? ["FNL gebruikt een niet-toenemende secant-E op maximale vezelrek per element; dit is geen scheur- of plastisch doorsnedemodel."] : []),
       ...(plate.reinforcement ? ["Plaatwapening en scheurwijdte zijn per element op steekpunten getoetst; extremen tussen punten en normcombinaties zijn niet afgedekt."]

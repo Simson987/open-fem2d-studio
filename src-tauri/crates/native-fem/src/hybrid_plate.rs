@@ -1069,6 +1069,7 @@ mod tests {
             max_cell_size_m: 1.0,
             material_id: 1,
             thickness_m: 0.2,
+            openings: vec![],
         })
         .unwrap();
         let request = Request {
@@ -1114,6 +1115,75 @@ mod tests {
             .elements
             .iter()
             .all(|element| element.max_fibre_strain > 0.0));
+        assert!(result.relative_residual < 1e-8);
+    }
+    #[test]
+    fn perforated_rust_mesh_feeds_hybrid_plate_and_balances_net_pressure() {
+        let mesh = crate::quad2d::mesh_quads(&crate::quad2d::QuadGrid {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            width_m: 2.0,
+            height_m: 2.0,
+            max_cell_size_m: 0.25,
+            material_id: 1,
+            thickness_m: 0.2,
+            openings: vec![crate::quad2d::RectOpening {
+                x_m: 0.75,
+                y_m: 0.75,
+                width_m: 0.5,
+                height_m: 0.5,
+            }],
+        })
+        .unwrap();
+        let mut edge_ids = HashSet::new();
+        for id in mesh
+            .bottom_node_ids
+            .iter()
+            .chain(&mesh.right_node_ids)
+            .chain(&mesh.top_node_ids)
+            .chain(&mesh.left_node_ids)
+        {
+            edge_ids.insert(*id);
+        }
+        let request = Request {
+            nodes: mesh
+                .nodes
+                .into_iter()
+                .map(|node| Node {
+                    id: node.id,
+                    x: node.x,
+                    y: node.y,
+                })
+                .collect(),
+            quads: mesh.quads,
+            materials: vec![Material {
+                id: 1,
+                e_mpa: 30_000.0,
+                nu: 0.2,
+            }],
+            supports: edge_ids
+                .into_iter()
+                .map(|node_id| Support {
+                    node_id,
+                    w: true,
+                    theta_x: false,
+                    theta_y: false,
+                })
+                .collect(),
+            loads: vec![],
+            pressure_kn_m2: -1.0,
+            quad_pressures: vec![],
+            modulus_curves: vec![],
+            reinforcement: None,
+            load_path: vec![],
+            tolerance: 1e-8,
+            max_iterations: 40,
+        };
+        let result = solve(&request).unwrap();
+        assert_eq!(result.elements.len(), 60);
+        assert!(result.nodes.iter().any(|node| node.w_m < -1e-6));
+        let reaction: f64 = result.nodes.iter().map(|node| node.reaction_fz_kn).sum();
+        assert!((reaction - 3.75).abs() < 1e-8);
         assert!(result.relative_residual < 1e-8);
     }
     #[test]

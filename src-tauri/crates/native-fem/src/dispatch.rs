@@ -89,6 +89,21 @@ mod tests {
     }
 
     #[test]
+    fn perforated_quad_mesh_is_dispatched_with_opening_geometry() {
+        let request: NativeFemRequest = serde_json::from_value(serde_json::json!({
+            "kind": "quadMesh",
+            "input": { "originX": 0, "originY": 0, "widthM": 2, "heightM": 2,
+                "maxCellSizeM": 0.25, "materialId": 1, "thicknessM": 0.2,
+                "openings": [{ "xM": 0.75, "yM": 0.75, "widthM": 0.5, "heightM": 0.5 }] }
+        }))
+        .unwrap();
+        let value = serde_json::to_value(solve_native_fem(request).unwrap()).unwrap();
+        assert_eq!(value["kind"], "quadMesh");
+        assert_eq!(value["result"]["nodes"].as_array().unwrap().len(), 80);
+        assert_eq!(value["result"]["quads"].as_array().unwrap().len(), 60);
+    }
+
+    #[test]
     fn plane_frame_example_is_dispatched_with_typed_output() {
         let input: serde_json::Value =
             serde_json::from_str(include_str!("../examples/frame2d-cantilever.json")).unwrap();

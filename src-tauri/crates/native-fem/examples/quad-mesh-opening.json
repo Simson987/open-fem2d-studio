@@ -1,0 +1,12 @@
+{
+  "originX": 0,
+  "originY": 0,
+  "widthM": 2,
+  "heightM": 2,
+  "maxCellSizeM": 0.25,
+  "materialId": 1,
+  "thicknessM": 0.2,
+  "openings": [
+    { "xM": 0.75, "yM": 0.75, "widthM": 0.5, "heightM": 0.5 }
+  ]
+}

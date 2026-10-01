@@ -9,6 +9,7 @@ import { parseFrame3DModel, withFrame3DSelfWeight } from "./src/components/frame
 import { frame3DMaximumDisplacementM } from "./src/components/frame3d/frame3dDisplacement.ts";
 import { resolveSolver } from "./src/core/solver/SolverRegistry.ts";
 import { CONCRETE_E_CM, NU_BETON } from "./src/lib/sectionResolver.ts";
+import { genereerRasterMesh } from "./src/core/fem/PlaatMesher.ts";
 import Frame3DReportViews from "./src/components/frame3d/Frame3DReportViews.tsx";
 
 registerHooks({ load(url, context, nextLoad) {
@@ -134,9 +135,25 @@ try {
       edgeSupports: ["simplySupported", "simplySupported", "simplySupported", "simplySupported"],
       maxCellSizeM: 0.25 }] });
   const perforated = await solveFrame3D(openingModel, 1, "linear", "openaec-native-fem");
+  assert.deepEqual(calls.slice(-2).map((call) => call.kind), ["quadMesh", "hybridPlate"]);
+  assert.deepEqual(calls.at(-2).input.openings,
+    [{ xM: 0.75, yM: 0.75, widthM: 0.5, heightM: 0.5 }]);
   assert.equal(calls.at(-1).kind, "hybridPlate");
   assert.equal(perforated.plateBending.quads.length, 60);
   assert.equal(perforated.plateBending.nodes.length, 80);
+  const oldRaster = genereerRasterMesh({ minX: 0, maxX: 2000, minZ: 0, maxZ: 2000,
+    openingen: [[{ x: 750, z: 750 }, { x: 1250, z: 750 },
+      { x: 1250, z: 1250 }, { x: 750, z: 1250 }]],
+    meshSize: 250, meshType: "vierhoeken" });
+  assert.equal(oldRaster.points.length, perforated.plateBending.nodes.length);
+  assert.deepEqual(oldRaster.quads.map((quad) => quad.map((id) => id + 1)),
+    perforated.plateBending.quads.map((quad) => quad.nodeIds),
+    "het Rust-raster moet voor het exacte voorbeeld dezelfde connectiviteit als de bestaande rastermesher geven");
+  for (let index = 0; index < oldRaster.points.length; index++) {
+    const old = oldRaster.points[index], current = perforated.plateBending.nodes[index];
+    assert.ok(Math.abs(old.x / 1000 - current.x) < 1e-12
+      && Math.abs(old.z / 1000 - current.y) < 1e-12);
+  }
   assert.equal(perforated.plateBending.reactions.length, 32);
   assert.equal(perforated.displacements.length, 8);
   assert.equal(perforated.forceBalance.ok, true);
@@ -153,6 +170,20 @@ try {
   }, 1, "linear", "openaec-native-fem");
   assert.equal(openingPointLoad.forceBalance.ok, true);
   assert.ok(Math.abs(openingPointLoad.plateBending.reactions.reduce((sum, reaction) => sum + reaction.fz, 0) - 4.25) < 1e-8);
+  const secondOpeningNodes = [
+    { id: 99, x: 1.5, y: 0.5, z: 3 }, { id: 100, x: 1.75, y: 0.5, z: 3 },
+    { id: 101, x: 1.75, y: 0.75, z: 3 }, { id: 102, x: 1.5, y: 0.75, z: 3 },
+  ];
+  const twoOpenings = await solveFrame3D({ ...openingModel,
+    nodes: [...openingModel.nodes, ...secondOpeningNodes],
+    plates: [{ ...openingModel.plates[0], openings: [
+      ...openingModel.plates[0].openings, { id: 2, nodeIds: [99, 100, 101, 102] },
+    ] }],
+  }, 1, "linear", "openaec-native-fem");
+  assert.equal(twoOpenings.forceBalance.ok, true);
+  assert.equal(twoOpenings.plateBending.quads.length, 59);
+  assert.ok(Math.abs(twoOpenings.plateBending.reactions.reduce((sum, reaction) => sum + reaction.fz, 0)
+    - 3.6875) < 1e-8);
   const offsetOpening = { ...openingModel,
     nodes: openingModel.nodes.map((node) => node.id >= 55 ? { ...node, x: node.x - 0.25 } : node) };
   const offsetResult = await solveFrame3D(offsetOpening, 1, "linear", "openaec-native-fem");
@@ -164,6 +195,7 @@ try {
     plates: [{ ...openingModel.plates[0], maxCellSizeM: 0.4 }] },
   1, "linear", "openaec-native-fem");
   assert.equal(coarserOpening.forceBalance.ok, true);
+  assert.equal(calls.at(-2).input.maxCellSizeM, 0.4);
   const inputMesh = calls.at(-1).input;
   const localNodes = new Map(inputMesh.nodes.map((node) => [node.id, node]));
   assert.ok(inputMesh.quads.every((quad) => {

@@ -129,6 +129,18 @@ pub struct QuadGrid {
     pub max_cell_size_m: f64,
     pub material_id: usize,
     pub thickness_m: f64,
+    #[serde(default)]
+    pub openings: Vec<RectOpening>,
+}
+
+/// Axis-aligned void in the grid's XY plane, in metres.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RectOpening {
+    pub x_m: f64,
+    pub y_m: f64,
+    pub width_m: f64,
+    pub height_m: f64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -205,6 +217,9 @@ pub fn mesh_quads(grid: &QuadGrid) -> Result<QuadMesh, String> {
     {
         return Err("non-finite quad mesh coordinates".into());
     }
+    if !grid.openings.is_empty() {
+        return mesh_quads_with_openings(grid);
+    }
     let count = |length: f64| {
         let ratio = length / grid.max_cell_size_m;
         let nearest = ratio.round();
@@ -236,6 +251,158 @@ pub fn mesh_quads(grid: &QuadGrid) -> Result<QuadMesh, String> {
         grid.material_id,
         grid.thickness_m,
     )
+}
+
+fn mesh_quads_with_openings(grid: &QuadGrid) -> Result<QuadMesh, String> {
+    const MIN_CLEARANCE_M: f64 = 0.010;
+    let max_x = grid.origin_x + grid.width_m;
+    let max_y = grid.origin_y + grid.height_m;
+    for (index, opening) in grid.openings.iter().enumerate() {
+        positive(opening.width_m, "opening width")?;
+        positive(opening.height_m, "opening height")?;
+        let x1 = opening.x_m + opening.width_m;
+        let y1 = opening.y_m + opening.height_m;
+        if !opening.x_m.is_finite()
+            || !opening.y_m.is_finite()
+            || !x1.is_finite()
+            || !y1.is_finite()
+            || opening.x_m <= grid.origin_x + MIN_CLEARANCE_M
+            || opening.y_m <= grid.origin_y + MIN_CLEARANCE_M
+            || x1 >= max_x - MIN_CLEARANCE_M
+            || y1 >= max_y - MIN_CLEARANCE_M
+        {
+            return Err(format!(
+                "opening {} must be fully inside the plate with at least 10 mm clearance",
+                index + 1
+            ));
+        }
+        for earlier in &grid.openings[..index] {
+            let earlier_x1 = earlier.x_m + earlier.width_m;
+            let earlier_y1 = earlier.y_m + earlier.height_m;
+            if opening.x_m <= earlier_x1 + MIN_CLEARANCE_M
+                && earlier.x_m <= x1 + MIN_CLEARANCE_M
+                && opening.y_m <= earlier_y1 + MIN_CLEARANCE_M
+                && earlier.y_m <= y1 + MIN_CLEARANCE_M
+            {
+                return Err("quad grid openings touch, overlap, or are closer than 10 mm".into());
+            }
+        }
+    }
+    let xs = grid_lines(
+        grid.origin_x,
+        max_x,
+        grid.max_cell_size_m,
+        grid.openings
+            .iter()
+            .flat_map(|opening| [opening.x_m, opening.x_m + opening.width_m]),
+    )?;
+    let ys = grid_lines(
+        grid.origin_y,
+        max_y,
+        grid.max_cell_size_m,
+        grid.openings
+            .iter()
+            .flat_map(|opening| [opening.y_m, opening.y_m + opening.height_m]),
+    )?;
+    let nx = xs.len() - 1;
+    let ny = ys.len() - 1;
+    if (nx + 1) * (ny + 1) > 10_000 {
+        return Err("quad grid exceeds the 20,000-DOF solver limit".into());
+    }
+    let flat = |i: usize, j: usize| j * (nx + 1) + i;
+    let mut used = vec![false; (nx + 1) * (ny + 1)];
+    let mut active = vec![false; nx * ny];
+    for j in 0..ny {
+        for i in 0..nx {
+            let x = 0.5 * (xs[i] + xs[i + 1]);
+            let y = 0.5 * (ys[j] + ys[j + 1]);
+            if grid.openings.iter().any(|opening| {
+                x > opening.x_m
+                    && x < opening.x_m + opening.width_m
+                    && y > opening.y_m
+                    && y < opening.y_m + opening.height_m
+            }) {
+                continue;
+            }
+            active[j * nx + i] = true;
+            for (ii, jj) in [(i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)] {
+                used[flat(ii, jj)] = true;
+            }
+        }
+    }
+    let mut ids = vec![0; used.len()];
+    let mut nodes = Vec::new();
+    for j in 0..=ny {
+        for i in 0..=nx {
+            if used[flat(i, j)] {
+                let id = nodes.len() + 1;
+                ids[flat(i, j)] = id;
+                nodes.push(Node {
+                    id,
+                    x: xs[i],
+                    y: ys[j],
+                });
+            }
+        }
+    }
+    let mut quads = Vec::new();
+    for j in 0..ny {
+        for i in 0..nx {
+            if active[j * nx + i] {
+                quads.push(Quad {
+                    id: quads.len() + 1,
+                    node_ids: [
+                        ids[flat(i, j)],
+                        ids[flat(i + 1, j)],
+                        ids[flat(i + 1, j + 1)],
+                        ids[flat(i, j + 1)],
+                    ],
+                    material_id: grid.material_id,
+                    thickness_m: grid.thickness_m,
+                });
+            }
+        }
+    }
+    Ok(QuadMesh {
+        nodes,
+        quads,
+        left_node_ids: (0..=ny).map(|j| ids[flat(0, j)]).collect(),
+        right_node_ids: (0..=ny).map(|j| ids[flat(nx, j)]).collect(),
+        bottom_node_ids: (0..=nx).map(|i| ids[flat(i, 0)]).collect(),
+        top_node_ids: (0..=nx).map(|i| ids[flat(i, ny)]).collect(),
+    })
+}
+
+fn grid_lines(
+    min: f64,
+    max: f64,
+    max_cell_size: f64,
+    mandatory: impl Iterator<Item = f64>,
+) -> Result<Vec<f64>, String> {
+    let mut stops = vec![min, max];
+    stops.extend(mandatory);
+    stops.sort_by(f64::total_cmp);
+    let tolerance = 1e-12 * (max - min).max(1.0);
+    stops.dedup_by(|a, b| (*a - *b).abs() <= tolerance);
+    let mut lines = Vec::new();
+    for pair in stops.windows(2) {
+        let ratio = (pair[1] - pair[0]) / max_cell_size;
+        let nearest = ratio.round();
+        let count = if ratio > nearest && ratio - nearest <= 1e-12 * ratio.max(1.0) {
+            nearest.max(1.0)
+        } else {
+            ratio.ceil().max(1.0)
+        };
+        if !count.is_finite() || count > 10_000.0 || lines.len() + count as usize > 10_000 {
+            return Err("quad grid exceeds the 20,000-DOF solver limit".into());
+        }
+        let n = count as usize;
+        for i in 0..n {
+            lines.push(pair[0] + (pair[1] - pair[0]) * (i as f64 / n as f64));
+        }
+    }
+    lines.push(max);
+    Ok(lines)
 }
 
 /// Exact square cells; non-divisible dimensions are rejected rather than
@@ -791,6 +958,7 @@ mod tests {
             max_cell_size_m: 0.5,
             material_id: 1,
             thickness_m: 0.2,
+            openings: vec![],
         })
         .unwrap();
         assert_eq!(mesh.nodes.len(), 25);
@@ -807,6 +975,7 @@ mod tests {
                 max_cell_size_m: 0.5,
                 material_id: 1,
                 thickness_m: 0.2,
+                openings: vec![],
             }
         })
         .unwrap();
@@ -823,6 +992,7 @@ mod tests {
             max_cell_size_m: 1.0,
             material_id: 7,
             thickness_m: 0.2,
+            openings: vec![],
         };
         let mesh = mesh_quads(&grid).unwrap();
         assert_eq!(mesh.nodes.len(), 12);
@@ -853,6 +1023,122 @@ mod tests {
         .is_err());
     }
     #[test]
+    fn rectangular_opening_has_conforming_quads_and_exact_resultants() {
+        let grid = QuadGrid {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            width_m: 2.0,
+            height_m: 2.0,
+            max_cell_size_m: 0.25,
+            material_id: 1,
+            thickness_m: 0.2,
+            openings: vec![RectOpening {
+                x_m: 0.75,
+                y_m: 0.75,
+                width_m: 0.5,
+                height_m: 0.5,
+            }],
+        };
+        let mesh = mesh_quads(&grid).unwrap();
+        assert_eq!(mesh.nodes.len(), 80);
+        assert_eq!(mesh.quads.len(), 60);
+        assert_eq!(mesh.bottom_node_ids.len(), 9);
+        assert_eq!(mesh.right_node_ids.len(), 9);
+        let mut area = 0.0;
+        for quad in &mesh.quads {
+            let a = &mesh.nodes[quad.node_ids[0] - 1];
+            let b = &mesh.nodes[quad.node_ids[1] - 1];
+            let d = &mesh.nodes[quad.node_ids[3] - 1];
+            let dx = b.x - a.x;
+            let dy = d.y - a.y;
+            assert!(dx > 0.0 && dx <= grid.max_cell_size_m + 1e-12);
+            assert!(dy > 0.0 && dy <= grid.max_cell_size_m + 1e-12);
+            let cx = a.x + dx / 2.0;
+            let cy = a.y + dy / 2.0;
+            assert!(!(cx > 0.75 && cx < 1.25 && cy > 0.75 && cy < 1.25));
+            area += dx * dy;
+        }
+        assert!((area - 3.75).abs() < 1e-12);
+        let rotated_roundoff = QuadGrid {
+            openings: vec![RectOpening {
+                x_m: 0.75 + 2.0 * f64::EPSILON,
+                y_m: 0.75 + 2.0 * f64::EPSILON,
+                width_m: 0.5,
+                height_m: 0.5,
+            }],
+            ..grid.clone()
+        };
+        assert_eq!(mesh_quads(&rotated_roundoff).unwrap().quads.len(), 60);
+        let offset = QuadGrid {
+            openings: vec![RectOpening {
+                x_m: 0.5,
+                ..grid.openings[0].clone()
+            }],
+            ..grid.clone()
+        };
+        let offset_mesh = mesh_quads(&offset).unwrap();
+        let (area, first_x) = offset_mesh
+            .quads
+            .iter()
+            .fold((0.0, 0.0), |(area, first_x), quad| {
+                let a = &offset_mesh.nodes[quad.node_ids[0] - 1];
+                let b = &offset_mesh.nodes[quad.node_ids[1] - 1];
+                let d = &offset_mesh.nodes[quad.node_ids[3] - 1];
+                let cell_area = (b.x - a.x) * (d.y - a.y);
+                (area + cell_area, first_x + cell_area * (a.x + b.x) / 2.0)
+            });
+        assert!((area - 3.75).abs() < 1e-12);
+        assert!((first_x - (4.0 - 0.25 * 0.75)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn quad_openings_reject_thin_strips_overlap_and_excessive_mesh() {
+        let grid = QuadGrid {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            width_m: 2.0,
+            height_m: 2.0,
+            max_cell_size_m: 0.25,
+            material_id: 1,
+            thickness_m: 0.2,
+            openings: vec![RectOpening {
+                x_m: 0.75,
+                y_m: 0.75,
+                width_m: 0.5,
+                height_m: 0.5,
+            }],
+        };
+        assert!(mesh_quads(&QuadGrid {
+            openings: vec![RectOpening {
+                x_m: 0.005,
+                ..grid.openings[0].clone()
+            }],
+            ..grid.clone()
+        })
+        .unwrap_err()
+        .contains("10 mm clearance"));
+        assert!(mesh_quads(&QuadGrid {
+            openings: vec![
+                grid.openings[0].clone(),
+                RectOpening {
+                    x_m: 1.255,
+                    y_m: 0.75,
+                    width_m: 0.2,
+                    height_m: 0.2
+                }
+            ],
+            ..grid.clone()
+        })
+        .unwrap_err()
+        .contains("touch"));
+        assert!(mesh_quads(&QuadGrid {
+            max_cell_size_m: 0.001,
+            ..grid
+        })
+        .unwrap_err()
+        .contains("limit"));
+    }
+    #[test]
     fn rectangular_quad_mesh_matches_uniform_tension_solution() {
         let mesh = mesh_quads(&QuadGrid {
             origin_x: 0.0,
@@ -862,6 +1148,7 @@ mod tests {
             max_cell_size_m: 1.0,
             material_id: 1,
             thickness_m: 0.1,
+            openings: vec![],
         })
         .unwrap();
         let supports = mesh

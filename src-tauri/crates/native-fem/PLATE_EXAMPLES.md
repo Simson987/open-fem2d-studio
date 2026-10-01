@@ -170,9 +170,8 @@ op *alle* randroosterknopen en telt ze mee in de globale kracht- en
 momentensom. Een geroteerde plaat met dezelfde randvoorwaarden behoudt zijn
 lokale zakking en geroteerde reacties.
 
-Een rechthoekige opening in dezelfde plaat loopt nu via het bestaande
-TypeScript-raster uit `PlaatMesher.ts` naar de Rust `native-hybrid-plate`-kern.
-Het meshen van openingen zelf is dus nog geen Rust-onderdeel. In de app-proef
+Een rechthoekige opening in dezelfde plaat loopt via de Rust `quadMesh`-mesher
+naar de Rust `native-hybrid-plate`-kern. In de app-proef
 heeft een 2×2 m plaat een centrale opening van 0,5×0,5 m: het 0,25 m raster
 bevat 60 Q4-elementen en 80 knopen, geen elementen in de opening, en bij
 `qz = −1 kN/m²` tellen de randreacties op tot `+3,75 kN`. Een last van
@@ -181,6 +180,13 @@ excentrische opening controleert apart de globale momentensom. Ook de
 geroteerde plaat behoudt de lokale zakking. Het rooster begrenst de
 celmaat, houdt minimaal 10 mm materiaal tussen opening en buitenrand of
 andere opening, en wijst niet-assengelijnde en uitwendige openingen af.
+Voor dit exacte raster vergelijkt de app-proef ook alle knoopcoördinaten en
+Q4-connectiviteit met de bestaande TypeScript-rastermesher; een aparte
+Rust-proef sluit de drukresultante direct op de Rust-mesh/solver-keten.
+Een tweede opening van 0,25×0,25 m verlaagt de netto drukresultante verder
+tot `3,6875 kN`; ook die app-routeproef sluit de globale krachten en momenten.
+Het invoervoorbeeld `examples/quad-mesh-opening.json` is direct met
+`native-quad-mesh` uit te voeren en levert het gebruikte 80-knoops rooster.
 
 De app-FNL-proef geeft `C30/37` een expliciete curve met `E(0) = E_cm` en
 `E(10⁻¹⁰) = E_cm/2`. Bij voldoende hoge belasting bereikt elk element de
