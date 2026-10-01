@@ -478,6 +478,7 @@ export function combineResults(
     let bendingMoment: number[] = [];
     let deflection: number[] = [];
     let axialDisp: number[] = [];
+    let segmentGeometry: ElementForces["segmenten"];
     // θ(x) = dw/dx is lineair in de belasting — de afgeleide van een
     // superponeerbare w superponeert met dezelfde factoren.
     let rotation: number[] = [];
@@ -487,6 +488,7 @@ export function combineResults(
       if (!r) continue;
       const ef = r.elements.get(bid);
       if (!ef) continue;
+      segmentGeometry ??= ef.segmenten;
       N  += factor * ef.N;
       V  += factor * ef.V;
       Ms += factor * ef.M_start;
@@ -518,10 +520,40 @@ export function combineResults(
         rotation[i]      += factor * (ef.rotation?.[i]    ?? 0);
       }
     }
+    let stationCursor = 0;
+    const segmenten: ElementForces["segmenten"] = segmentGeometry?.map(segment => {
+      // Each calculation element has its own 21 (or point-load enriched)
+      // stations. A shared boundary is present twice: use the first copy
+      // for the element on its left, then continue at the second copy.
+      const start = stationCursor;
+      if (Math.abs((stations_mm[start] ?? NaN) - segment.xStart) > 1e-6) {
+        throw new Error(`Combinatie ${combo.name}: segmentstations van staaf ${bid} sluiten niet aan.`);
+      }
+      const end = stations_mm.findIndex((x, index) => index >= start
+        && Math.abs(x - segment.xEnd) <= 1e-6);
+      if (end < start || end < 0) {
+        throw new Error(`Combinatie ${combo.name}: segmentstations van staaf ${bid} sluiten niet aan.`);
+      }
+      let maximum = start;
+      for (let index = start + 1; index <= end; index++) {
+        if (Math.abs(bendingMoment[index]) > Math.abs(bendingMoment[maximum])) maximum = index;
+      }
+      stationCursor = end + 1;
+      return { xStart: segment.xStart, xEnd: segment.xEnd, I: segment.I,
+        ...(segment.A !== undefined ? { A: segment.A } : {}),
+        segmentIndex: segment.segmentIndex,
+        N_start: normalForce[start], N_end: normalForce[end],
+        M_start: bendingMoment[start], M_end: bendingMoment[end],
+        M_max: bendingMoment[maximum], N_bij_M_max: normalForce[maximum] };
+    });
+    if (segmenten && stationCursor !== stations_mm.length) {
+      throw new Error(`Combinatie ${combo.name}: segmentstations van staaf ${bid} zijn onvolledig.`);
+    }
     elements.set(bid, {
       N, V, M_start: Ms, M_end: Me,
       L_mm, stations_mm, normalForce, shearForce, bendingMoment,
       deflection, axialDisp, rotation,
+      ...(segmenten ? { segmenten } : {}),
     });
   }
 

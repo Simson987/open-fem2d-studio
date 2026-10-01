@@ -242,6 +242,179 @@ try {
   close(beddingSparseGeometric.displacements.get(2).uz,
     beddingSparseLinear.displacements.get(2).uz, 1e-5,
     "P-Delta met 603 DOF zonder normaalkracht is gelijk aan lineair");
+  const stepE = 210_000, stepI = 1.673e7, stepL = 6000, stepQ = 10;
+  const steppedInput = { ...input,
+    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: stepL, z: 0 }],
+    beams: [{ id: 1, from: 1, to: 2, E: stepE, A: 3877, I: stepI,
+      segmenten: [{ tStart: 0, tEnd: 0.5, I: stepI },
+        { tStart: 0.5, tEnd: 1, I: 3 * stepI }] }],
+    supports: [{ nodeId: 1, type: "pinned" }, { nodeId: 2, type: "zRoller" }],
+    loads: [{ beamId: 1, caseId: 1, q: -stepQ }], pointLoads: [],
+    cases: [{ id: 1, name: "traptrede" }],
+  };
+  const steppedRequest = buildNativeFrame2DRequest(steppedInput, () => 1);
+  assert.equal(steppedRequest.members.length, 2);
+  assert.equal(steppedRequest.sections[1].inertiaM4, 3 * stepI * 1e-12);
+  const steppedNative = (await solveAllCasesNativeFrame2D(steppedInput)).get(1);
+  const steppedOld = solveAllCases(steppedInput).perCase.get(1);
+  const steppedElement = steppedNative.elements.get(1);
+  const middle = steppedElement.stations_mm.findIndex(x => Math.abs(x - stepL / 2) < 1e-6);
+  const handDeflection = -(5 * stepQ * stepL ** 4 / 768)
+    * (1 / (stepE * stepI) + 1 / (stepE * 3 * stepI));
+  close(steppedElement.deflection[middle], handDeflection, 1e-7,
+    "traptrede-ligger: analytische middenzakking");
+  close(steppedElement.deflection[middle], steppedOld.elements.get(1).deflection[middle], 1e-6,
+    "traptrede-ligger: bestaande solver");
+  close(steppedElement.bendingMoment[middle], stepQ * stepL ** 2 / 8, 1e-3,
+    "traptrede-ligger: analytisch middenmoment");
+  assert.deepEqual(steppedElement.segmenten.map(segment => segment.I), [stepI, 3 * stepI]);
+  assert.deepEqual(steppedElement.segmenten.map(segment => segment.segmentIndex), [0, 1]);
+  close(steppedElement.segmenten[0].xEnd, 3000, 1e-8, "segmentuitvoer x-grens");
+  const steppedCasesInput = { ...steppedInput,
+    pointLoads: [{ nodeId: 2, caseId: 2, fx: 10_000 }],
+    cases: [...steppedInput.cases, { id: 2, name: "trek" }],
+  };
+  const steppedCases = await solveAllCasesNativeFrame2D(steppedCasesInput);
+  const steppedCombination = combineResults({ id: 96, name: "traptredecombinatie",
+    factors: new Map([[1, 1.5], [2, 0.5]]) }, steppedCases).elements.get(1);
+  assert.equal(steppedCombination.segmenten.length, 2,
+    "lineaire combinatie behoudt de segmentuitvoer");
+  close(steppedCombination.segmenten[0].N_start, 5000, 1e-5,
+    "lineaire combinatie: segmentnormaalkracht");
+  close(steppedCombination.segmenten[0].M_max, 1.5 * stepQ * stepL ** 2 / 8, 1e-3,
+    "lineaire combinatie: maatgevend segmentmoment");
+  const jointAtSegmentInput = { ...steppedInput,
+    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 6000, z: 0 },
+      { id: 3, x: 3000, z: 0 }, { id: 4, x: 3000, z: 3000 }],
+    beams: [...steppedInput.beams,
+      { id: 2, from: 3, to: 4, E: stepE, A: 3877, I: stepI }],
+    loads: [], pointLoads: [{ nodeId: 4, caseId: 1, fx: 10_000 }],
+  };
+  const jointRequest = buildNativeFrame2DRequest(jointAtSegmentInput, () => 1);
+  assert.equal(jointRequest.members[0].endNodeId, 3,
+    "segmentgrens hergebruikt de bestaande knoop van de aansluitende staaf");
+  assert.equal(jointRequest.members[1].startNodeId, 3);
+  const jointNative = (await solveAllCasesNativeFrame2D(jointAtSegmentInput)).get(1);
+  const jointOld = solveAllCases(jointAtSegmentInput).perCase.get(1);
+  close(jointNative.displacements.get(4).ux, jointOld.displacements.get(4).ux, 1e-5,
+    "aansluitende staaf op segmentgrens: horizontale tipverplaatsing");
+  close(jointNative.reactions.get(1).fx, jointOld.reactions.get(1).fx, 1e-4,
+    "aansluitende staaf op segmentgrens: horizontale reactie");
+  const partialSteppedInput = { ...steppedInput,
+    loads: [{ beamId: 1, caseId: 1, q: -stepQ, startFrac: 0.25, endFrac: 0.75 }],
+  };
+  const partialNative = (await solveAllCasesNativeFrame2D(partialSteppedInput)).get(1);
+  const partialOld = solveAllCases(partialSteppedInput).perCase.get(1);
+  assert.equal(partialNative.elements.get(1).segmenten.length, 4,
+    "deellastgrenzen maken extra rekenstukken binnen bronsegmenten");
+  assert.deepEqual(partialNative.elements.get(1).segmenten.map(segment => segment.segmentIndex),
+    [0, 0, 1, 1]);
+  for (const nodeId of [1, 2]) {
+    close(partialNative.displacements.get(nodeId).uz, partialOld.displacements.get(nodeId).uz,
+      1e-6, `deellast op segmenten: knoop ${nodeId} uz`);
+    close(partialNative.reactions.get(nodeId).fz, partialOld.reactions.get(nodeId).fz,
+      1e-4, `deellast op segmenten: knoop ${nodeId} Rz`);
+  }
+  const partialN = partialNative.elements.get(1), partialO = partialOld.elements.get(1);
+  assert.equal(partialN.stations_mm.length, partialO.stations_mm.length);
+  for (const x of [0, 1500, 3000, 4500, 6000]) {
+    const index = partialN.stations_mm.findIndex(station => Math.abs(station - x) < 1e-6);
+    close(partialN.bendingMoment[index], partialO.bendingMoment[index], 1e-3,
+      `deellast op segmenten: M(${x})`);
+    close(partialN.deflection[index], partialO.deflection[index], 1e-5,
+      `deellast op segmenten: w(${x})`);
+  }
+  const plainPartialInput = { ...partialSteppedInput,
+    beams: [{ id: 1, from: 1, to: 2, E: stepE, A: 3877, I: stepI }],
+  };
+  assert.equal(buildNativeFrame2DRequest(plainPartialInput, () => 1).members.length, 3,
+    "deellastgrenzen worden ook zonder variabele doorsnede rekenstations");
+  const plainPartialNative = (await solveAllCasesNativeFrame2D(plainPartialInput)).get(1);
+  const plainPartialOld = solveAllCases(plainPartialInput).perCase.get(1);
+  assert.equal(plainPartialNative.elements.get(1).stations_mm.length,
+    plainPartialOld.elements.get(1).stations_mm.length);
+  close(plainPartialNative.elements.get(1).bendingMoment[30],
+    plainPartialOld.elements.get(1).bendingMoment[30], 1e-3,
+    "deellast op gewone staaf: momentlijn tegen bestaande solver");
+  const boundaryPointInput = { ...steppedInput, loads: [],
+    beamPointLoads: [{ beamId: 1, caseId: 1, posFrac: 0.5, fz: -50_000 }],
+  };
+  const boundaryNative = (await solveAllCasesNativeFrame2D(boundaryPointInput)).get(1);
+  const boundaryOld = solveAllCases(boundaryPointInput).perCase.get(1);
+  close(boundaryNative.elements.get(1).deflection[20],
+    boundaryOld.elements.get(1).deflection[20], 1e-6,
+    "puntlast op segmentgrens: middenzakking");
+  close(boundaryNative.reactions.get(1).fz, boundaryOld.reactions.get(1).fz, 1e-4,
+    "puntlast op segmentgrens: oplegreactie");
+  const variableAreaInput = { ...steppedInput,
+    beams: [{ ...steppedInput.beams[0], segmenten: [
+      { tStart: 0, tEnd: 0.5, I: stepI, A: 1000 },
+      { tStart: 0.5, tEnd: 1, I: stepI, A: 2000 },
+    ] }],
+    loads: [], pointLoads: [{ nodeId: 2, caseId: 1, fx: 100_000 }],
+  };
+  const variableArea = (await solveAllCasesNativeFrame2D(variableAreaInput)).get(1);
+  const variableOld = solveAllCases(variableAreaInput).perCase.get(1);
+  const handExtension = 100_000 * 3000 / (stepE * 1000)
+    + 100_000 * 3000 / (stepE * 2000);
+  close(variableArea.displacements.get(2).ux, handExtension, 1e-8,
+    "verlopende A: analytische rekverlenging");
+  close(variableArea.displacements.get(2).ux, variableOld.displacements.get(2).ux, 1e-6,
+    "verlopende A: bestaande solver");
+  assert.deepEqual(variableArea.elements.get(1).segmenten.map(segment => segment.A), [1000, 2000]);
+  const segmentedFnlInput = { ...variableAreaInput,
+    beams: [{ ...variableAreaInput.beams[0], segmenten: [
+      { tStart: 0, tEnd: 0.5, I: stepI, A: 2000 },
+      { tStart: 0.5, tEnd: 1, I: stepI, A: 1000 },
+    ], axialMaterialLaw: { kind: "steelBilinear", yieldMpa: 100, hardeningRatio: 0.1 } }],
+    pointLoads: [{ nodeId: 2, caseId: 1, fx: 150_000 }],
+    axialMaterialLoadPath: [1],
+  };
+  const segmentedFnl = (await solveAllCombinationsNativeFrame2D(segmentedFnlInput,
+    [{ id: 95, name: "gesegmenteerd staal", factors: new Map([[1, 1]]) }], "material")).get(95);
+  const handPlasticExtension = 3000 * (75 / stepE)
+    + 3000 * (100 / stepE + 50 / (0.1 * stepE));
+  close(segmentedFnl.displacements.get(2).ux, handPlasticExtension, 1e-5,
+    "gesegmenteerde staal-FNL: analytische verlenging");
+  assert.ok(segmentedFnl.elements.get(1).axialHistory.equivalentPlasticStrain > 0,
+    "staafhistorie kiest het geplastificeerde segment");
+  const steppedColumnInput = { ...steppedInput,
+    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 0, z: 3000 }],
+    beams: [{ id: 1, from: 1, to: 2, E: stepE, A: 3877, I: stepI,
+      segmenten: Array.from({ length: 4 }, (_, i) => ({
+        tStart: i / 4, tEnd: (i + 1) / 4, I: stepI })) }],
+    supports: [{ nodeId: 1, type: "fixed" }], loads: [],
+    pointLoads: [{ nodeId: 2, caseId: 1, fx: 2000, fz: -100_000 }],
+  };
+  const steppedColumnCombination = { id: 94, name: "traptrede P-Delta", factors: new Map([[1, 1]]) };
+  const steppedColumn = (await solveAllCombinationsNativeFrame2D(steppedColumnInput,
+    [steppedColumnCombination], "geometric")).get(94);
+  const steppedColumnOld = solveCombinationSecondOrder(steppedColumnInput, steppedColumnCombination);
+  close(steppedColumn.displacements.get(2).ux, steppedColumnOld.displacements.get(2).ux, 1e-3,
+    "gesegmenteerde kolom: P-Delta-uitwijking tegen bestaande solver");
+  assert.equal(steppedColumn.elements.get(1).segmenten.length, 4);
+  const cutsInput = { ...steppedInput,
+    beams: [{ id: 1, from: 1, to: 2, E: stepE, A: 3877, I: stepI,
+      extraSneden: [0.25, 0.75] }],
+  };
+  const cutsNative = (await solveAllCasesNativeFrame2D(cutsInput)).get(1);
+  const cutsOld = solveAllCases(cutsInput).perCase.get(1);
+  assert.equal(cutsNative.elements.get(1).segmenten, undefined);
+  assert.equal(cutsNative.elements.get(1).stations_mm.filter(x => Math.abs(x - 1500) < 1e-6).length, 2);
+  assert.equal(cutsNative.elements.get(1).stations_mm.filter(x => Math.abs(x - 4500) < 1e-6).length, 2);
+  close(cutsNative.reactions.get(1).fz, cutsOld.reactions.get(1).fz, 1e-5,
+    "extra sneden houden oplegreactie gelijk");
+  assert.throws(() => buildNativeFrame2DRequest({ ...steppedInput,
+    beams: [{ ...steppedInput.beams[0], segmenten: [
+      { tStart: 0, tEnd: 0.4, I: stepI }, { tStart: 0.6, tEnd: 1, I: stepI },
+    ] }] }, () => 1), /aaneensluiten/);
+  assert.equal(buildNativeFrame2DRequest({ ...steppedInput,
+    beams: [{ ...steppedInput.beams[0], segmenten: [
+      { tStart: 0, tEnd: 0.5, I: stepI },
+      { tStart: 0.5, tEnd: 0.5 + 10 / stepL, I: 2 * stepI },
+      { tStart: 0.5 + 10 / stepL, tEnd: 1, I: stepI },
+    ] }] }, () => 1).members.length, 3,
+  "twee nabije opgegeven segmentgrenzen blijven behouden");
   const swayInput = { ...input,
     supports: [{ nodeId: 1, type: "fixed" }], loads: [],
     pointLoads: [{ nodeId: 2, caseId: 1, fz: -100_000 }],
@@ -441,4 +614,4 @@ try {
 } finally {
   globalThis.fetch = previousFetch;
 }
-console.log("Native 2D-app-route: lineair/P-Delta (ook sparse bedding), scheefstand, thermiek en axiale staal-/beton-FNL slagen.");
+console.log("Native 2D-app-route: lineair/P-Delta, sparse bedding, segmenten, scheefstand, thermiek en axiale staal-/beton-FNL slagen.");

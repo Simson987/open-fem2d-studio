@@ -1,5 +1,6 @@
 import { solveNativeFem } from "../../../lib/nativeFemClient";
-import { beddingSplitsFracties, registreerScheefstandRichtingen, SCHEEFSTAND_ID_OFFSET } from "./engine";
+import { beddingSplitsFracties, MIN_SEGMENT_MM, normaliseerSegmenten,
+  registreerScheefstandRichtingen, SCHEEFSTAND_ID_OFFSET } from "./engine";
 import { grootsteVerplaatsing } from "./grootsteVerplaatsing";
 import type { LoadCombination } from "./combinations";
 import type { ElementForces, MultiInput, SolverResult } from "./types";
@@ -31,6 +32,9 @@ interface FrameSegment {
   t1: number;
   startNodeId: number;
   endNodeId: number;
+  sourceSegmentIndex?: number;
+  inertiaMm4?: number;
+  areaMm2?: number;
 }
 
 interface FrameMesh {
@@ -94,15 +98,13 @@ export function buildNativeFrame2DRequest(
     }
     return { id: beam.id, eMpa: finite(beam.E ?? 210000, `Staaf ${beam.id} E`), ...(law ? { law } : {}) };
   });
-  const sections = input.beams.map(beam => ({ id: beam.id,
-    areaM2: finite(beam.A ?? 3877, `Staaf ${beam.id} A`) * 1e-6,
-    inertiaM4: finite(beam.I ?? 1.673e7, `Staaf ${beam.id} I`) * 1e-12 }));
+  const sections: Array<{ id: number; areaM2: number; inertiaM4: number }> = [];
   let nextNodeId = Math.max(0, ...input.nodes.map(node => node.id)) + 1;
   let nextMemberId = Math.max(0, ...input.beams.map(beam => beam.id)) + 1;
   const segmentsByBeam = new Map<number, FrameSegment[]>();
   const members = input.beams.flatMap(beam => {
-    if (beam.segmenten?.length || beam.extraSneden?.length || beam.veren) {
-      throw new Error(`Staaf ${beam.id}: segmenten, extra sneden en eindveren zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.`);
+    if (beam.veren) {
+      throw new Error(`Staaf ${beam.id}: eindveren zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.`);
     }
     if (beam.releases?.startTx || beam.releases?.startTz
         || beam.releases?.endTx || beam.releases?.endTz) {
@@ -111,41 +113,80 @@ export function buildNativeFrame2DRequest(
     const rzStart = !!beam.releases?.startRy || beam.startConnection === "hinge";
     const rzEnd = !!beam.releases?.endRy || beam.endConnection === "hinge";
     const axes = geometry.get(beam.id)!;
+    const lengthMm = axes.lengthM * 1000;
+    const definitions = normaliseerSegmenten(beam.id, beam.segmenten, lengthMm);
     const kLijn = beam.bedding?.kLijn;
     if (kLijn !== undefined && !(finite(kLijn, `Staaf ${beam.id} bedding`) > 0)) {
       throw new Error(`Staaf ${beam.id}: beddingstijfheid moet positief zijn.`);
     }
-    const cuts = kLijn === undefined ? []
-      : beddingSplitsFracties(axes.lengthM * 1000, beam.E ?? 210000,
-        beam.I ?? 1.673e7, kLijn);
-    if (kLijn !== undefined) {
-      for (const load of input.loads) {
-        if (load.beamId !== beam.id) continue;
-        for (const t of [load.startFrac ?? 0, load.endFrac ?? 1]) {
-          if (t > 0 && t < 1) cuts.push(t);
-        }
-      }
-      for (const load of input.beamPointLoads ?? []) {
-        if (load.beamId === beam.id && load.posFrac > 0 && load.posFrac < 1) cuts.push(load.posFrac);
+    const partialLoad = input.loads.some(load => load.beamId === beam.id
+      && ((load.qStart ?? load.q) !== 0 || (load.qEnd ?? load.q) !== 0)
+      && ((load.startFrac ?? 0) > 0 || (load.endFrac ?? 1) < 1));
+    const meshNeeded = kLijn !== undefined || definitions !== undefined
+      || !!beam.extraSneden?.length || partialLoad;
+    const forced = meshNeeded ? (input.beamPointLoads ?? [])
+      .filter(load => load.beamId === beam.id && Number.isFinite(load.posFrac)
+        && load.posFrac > 1e-6 && load.posFrac < 1 - 1e-6)
+      .map(load => load.posFrac) : [];
+    const cuts = forced.sort((a, b) => a - b).filter((t, i, sorted) =>
+      i === 0 || t - sorted[i - 1] > 1e-9);
+    const minFraction = MIN_SEGMENT_MM / lengthMm;
+    const mandatory = [0, ...cuts, 1];
+    for (const definition of definitions?.slice(1) ?? []) {
+      if (mandatory.some(t => Math.abs(t - definition.t0) < minFraction)) continue;
+      cuts.push(definition.t0);
+    }
+    if (meshNeeded) {
+      const candidates = [...(beam.extraSneden ?? []),
+        ...input.loads.filter(load => load.beamId === beam.id
+          && ((load.qStart ?? load.q) !== 0 || (load.qEnd ?? load.q) !== 0))
+          .flatMap(load => [load.startFrac ?? 0, load.endFrac ?? 1]),
+        ...(kLijn === undefined ? [] : beddingSplitsFracties(lengthMm,
+          beam.E ?? 210000, beam.I ?? 1.673e7, kLijn))];
+      const start = byId.get(beam.from)!, end = byId.get(beam.to)!;
+      for (const t of candidates.sort((a, b) => a - b)) {
+        if (!Number.isFinite(t) || t <= minFraction || t >= 1 - minFraction
+            || cuts.some(existing => Math.abs(existing - t) < minFraction)) continue;
+        const x = start.x + t * (end.x - start.x);
+        const z = start.z + t * (end.z - start.z);
+        if (nodes.some(node => Math.hypot(node.x * 1000 - x, node.y * 1000 - z) < 1)) continue;
+        cuts.push(t);
       }
     }
-    const fractions = [0, ...cuts.sort((a, b) => a - b).filter((t, i, sorted) =>
-      i === 0 || t - sorted[i - 1] > 1e-10), 1];
     const start = byId.get(beam.from)!, end = byId.get(beam.to)!;
-    const segmentNodes = [beam.from, ...fractions.slice(1, -1).map(t => {
-      const id = nextNodeId++;
-      nodes.push({ id, x: (start.x + t * (end.x - start.x)) / 1000,
-        y: (start.z + t * (end.z - start.z)) / 1000 });
-      return id;
-    }), beam.to];
-    const segments = fractions.slice(0, -1).map((t0, index) => ({
-      id: index === 0 ? beam.id : nextMemberId++, t0, t1: fractions[index + 1],
-      startNodeId: segmentNodes[index], endNodeId: segmentNodes[index + 1],
-    }));
+    const segmentNodes = [beam.from], fractions = [0];
+    for (const t of cuts.sort((a, b) => a - b)) {
+      const x = (start.x + t * (end.x - start.x)) / 1000;
+      const y = (start.z + t * (end.z - start.z)) / 1000;
+      const existing = nodes.find(node => Math.hypot(node.x - x, node.y - y) < 0.001);
+      const id = existing?.id ?? nextNodeId++;
+      if (id === segmentNodes[segmentNodes.length - 1] || id === beam.to) continue;
+      if (!existing) nodes.push({ id, x, y });
+      segmentNodes.push(id);
+      fractions.push(t);
+    }
+    segmentNodes.push(beam.to);
+    fractions.push(1);
+    const segments: FrameSegment[] = fractions.slice(0, -1).map((t0, index) => {
+      const t1 = fractions[index + 1];
+      const source = definitions?.find(definition => (t0 + t1) / 2 >= definition.t0
+        && (t0 + t1) / 2 < definition.t1) ?? definitions?.[definitions.length - 1];
+      const id = index === 0 ? beam.id : nextMemberId++;
+      const areaMm2 = source?.A_mm2 ?? beam.A ?? 3877;
+      const inertiaMm4 = source?.I_mm4 ?? beam.I ?? 1.673e7;
+      sections.push({ id,
+        areaM2: finite(areaMm2, `Staaf ${beam.id} doorsnede A`) * 1e-6,
+        inertiaM4: finite(inertiaMm4, `Staaf ${beam.id} doorsnede I`) * 1e-12 });
+      return { id, t0, t1,
+        startNodeId: segmentNodes[index], endNodeId: segmentNodes[index + 1],
+        ...(source ? { sourceSegmentIndex: source.index, inertiaMm4: source.I_mm4,
+          ...(source.A_mm2 !== undefined ? { areaMm2: source.A_mm2 } : {}) } : {}),
+      };
+    });
     segmentsByBeam.set(beam.id, segments);
     return segments.map((segment, index) => ({ id: segment.id,
       startNodeId: segment.startNodeId, endNodeId: segment.endNodeId,
-      materialId: beam.id, sectionId: beam.id,
+      materialId: beam.id, sectionId: segment.id,
       releases: { rzStart: index === 0 && rzStart,
         rzEnd: index === segments.length - 1 && rzEnd },
       ...(kLijn === undefined ? {} : { foundationKnPerM2: kLijn * 1000 }),
@@ -352,6 +393,7 @@ export function nativeFrame2DResultToSolverResult(
       L_mm: segments.reduce((sum, segment) => sum + segmentElements.get(segment.id)!.L_mm, 0),
       stations_mm: [], normalForce: [], shearForce: [], bendingMoment: [],
       deflection: [], axialDisp: [], rotation: [] };
+    const segmentOutput: NonNullable<ElementForces["segmenten"]> = [];
     let offsetMm = 0;
     for (const segment of segments) {
       const part = segmentElements.get(segment.id)!;
@@ -360,7 +402,31 @@ export function nativeFrame2DResultToSolverResult(
         else merged[key].push(...part[key]);
       }
       merged.rotation!.push(...part.rotation!);
+      if (segment.sourceSegmentIndex !== undefined) {
+        let maximum = 0;
+        for (let index = 1; index < part.bendingMoment.length; index++) {
+          if (Math.abs(part.bendingMoment[index]) > Math.abs(part.bendingMoment[maximum])) maximum = index;
+        }
+        segmentOutput.push({ xStart: offsetMm, xEnd: offsetMm + part.L_mm,
+          I: segment.inertiaMm4!,
+          ...(segment.areaMm2 !== undefined ? { A: segment.areaMm2 } : {}),
+          segmentIndex: segment.sourceSegmentIndex,
+          N_start: part.normalForce[0], N_end: part.normalForce[part.normalForce.length - 1],
+          M_start: part.bendingMoment[0], M_end: part.bendingMoment[part.bendingMoment.length - 1],
+          M_max: part.bendingMoment[maximum], N_bij_M_max: part.normalForce[maximum] });
+      }
       offsetMm += part.L_mm;
+    }
+    if (segmentOutput.length) merged.segmenten = segmentOutput;
+    if (isMaterialAnalysis(request.analysis)) {
+      // The app exposes one history per UI beam. For a beam with multiple
+      // Rust elements, report the most advanced plastic or damage state.
+      const histories = segments.map(segment => segmentElements.get(segment.id)!.axialHistory!);
+      merged.axialHistory = { ...histories.reduce((worst, current) =>
+        current.tensileDamage > worst.tensileDamage
+          || current.tensileDamage === worst.tensileDamage
+            && current.equivalentPlasticStrain > worst.equivalentPlasticStrain
+          ? current : worst) };
     }
     elements.set(beamId, merged);
   }

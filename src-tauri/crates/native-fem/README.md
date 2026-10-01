@@ -28,6 +28,16 @@ elementuiteinde de tributaire verticale veer en 0,1% horizontale
 bodemweerstand toe; de app voegt de diagrammen weer samen. In de Rust-invoer
 is `foundationKnPerM2` de lijnstijfheid in kN/m². De app-invoer
 `bedding.kLijn` in N/mm² wordt hiervoor met 1000 vermenigvuldigd.
+Staven met `segmenten` krijgen per stuk hun opgegeven A en I; extra sneden,
+deellastgrenzen (ook bij een gewone staaf) en puntlasten maken zo nodig extra
+rekenstukken. De app
+hergebruikt een bestaande knoop op een segmentgrens en geeft per rekenstuk
+`segmenten` met x-grenzen, N en M terug. Ook lineaire combinaties houden dit
+veld en bepalen het maatgevende moment uit de gecombineerde stationsreeks.
+Bij axiale FNL toont de staafhistorie het stuk met de meeste trekschade of
+plastische rek. Een traptrede-ligger is tegen de analytische doorbuiging en
+de bestaande solver gecontroleerd; ook wisselende A, P-Delta en FNL zijn
+getest.
 Translatiehulzen, eindveren en gekoppelde
 staaf-plaatmodellen worden in deze route nog expliciet geweigerd. De app
 behoudt de bestaande solver als automatische keuze.

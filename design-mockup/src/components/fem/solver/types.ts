@@ -575,7 +575,11 @@ export interface BeamSegmentForces {
  */
 export interface ElementForces {
   N: number;        // N   (axial, tension +ve at end A)
-  /** Axiale materiaaltoestand na het laatste Rust-FNL-lastpad. */
+  /**
+   * Axiale materiaaltoestand na het laatste Rust-FNL-lastpad. Bij een
+   * gesegmenteerde UI-staaf is dit het rekenstuk met de meeste trekschade,
+   * of bij gelijke schade de grootste equivalente plastische rek.
+   */
   axialHistory?: {
     plasticStrain: number; equivalentPlasticStrain: number;
     tensileDamage: number; tangentEMpa: number;

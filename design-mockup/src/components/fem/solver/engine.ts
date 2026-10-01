@@ -176,7 +176,7 @@ export const MIN_SEGMENT_MM = 25;
  * [0, 1] vormen. Retourneert `undefined` wanneer de staaf geen segmenten heeft
  * (het bestaande, ongewijzigde pad).
  */
-function normaliseerSegmenten(
+export function normaliseerSegmenten(
   beamId: number, segmenten: SolverBeamSegmentInput[] | undefined, L_mm: number,
 ): { t0: number; t1: number; I_mm4: number; A_mm2?: number; index: number }[] | undefined {
   if (segmenten === undefined) return undefined;
