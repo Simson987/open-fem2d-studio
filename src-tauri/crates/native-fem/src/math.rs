@@ -203,6 +203,15 @@ fn sparse_pcg(
     let norm_b = b.iter().map(|v| v * v).sum::<f64>().sqrt();
     let target = 1e-10 * norm_b.max(1e-20);
     if norm_b == 0.0 {
+        // A zero load has a zero residual even for a mechanism. Exercise the
+        // free stiffness with a nonzero right-hand side before accepting it.
+        // This detects mechanisms visible to this probe; it is not an inertia
+        // certificate for an arbitrary large sparse matrix.
+        let probe: Vec<f64> = free
+            .iter()
+            .map(|&dof| 1.0 + (dof % 31) as f64 / 31.0)
+            .collect();
+        sparse_pcg(rows, free, free_position, &probe)?;
         return Ok(x);
     }
     let max_iterations = 10 * n.max(1);
@@ -524,5 +533,29 @@ mod tests {
         f[1] = 1.0;
         let error = constrained_solve(&k, &f, &vec![None; 601]).unwrap_err();
         assert!(error.contains("non-positive"), "{error}");
+    }
+    #[test]
+    fn sparse_solver_rejects_unloaded_mechanism() {
+        let mut k = Matrix::zeros(601).unwrap();
+        for i in 0..601 {
+            k.add(i, i, 1.0);
+        }
+        k.add(0, 1, -1.0);
+        k.add(1, 0, -1.0);
+        let error = constrained_solve(&k, &vec![0.0; 601], &vec![None; 601]).unwrap_err();
+        assert!(
+            error.contains("non-positive") || error.contains("did not converge"),
+            "{error}"
+        );
+    }
+    #[test]
+    fn sparse_solver_accepts_stable_unloaded_system() {
+        let mut k = Matrix::zeros(601).unwrap();
+        for i in 0..601 {
+            k.add(i, i, 1.0 + i as f64 / 601.0);
+        }
+        let (u, reaction) = constrained_solve(&k, &vec![0.0; 601], &vec![None; 601]).unwrap();
+        assert!(u.iter().all(|value| *value == 0.0));
+        assert!(reaction.iter().all(|value| *value == 0.0));
     }
 }

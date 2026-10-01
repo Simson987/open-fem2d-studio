@@ -183,10 +183,13 @@ equivalente plastische rek en de trekschade. De materiaaltoestand leeft binnen
   hybride plaatmatrices gebruiken nu een ijle symmetrische Jacobi-PCG-oplosser
   met een grens van 20.000 DOF. Een Q4-rekproef met 882 DOF en een hybride
   Navier-plaat met 675 DOF staan in de Rust-tests. De ijle oplosser weigert
-  asymmetrische matrices en niet-positieve kromming tijdens de iteratie, maar
-  voert nog geen volledige traagheids- of eigenwaardecontrole uit. Vooral bij
-  een nulbelasting bewijst een nuloplossing dus geen stabiliteit. Het 3D-raamwerk
-  blijft voorlopig begrensd op 600 DOF voor zijn expliciete stabiliteitstoets.
+  asymmetrische matrices en niet-positieve kromming tijdens de iteratie. Bij
+  nulbelasting wordt de vrije stijfheid ook met een niet-nul proeflast
+  aangesproken, zodat een onbelast mechanisme niet zonder meer als nuloplossing
+  slaagt. Dit is geen volledige traagheids- of eigenwaardecontrole; een
+  mechanisme dat orthogonaal is aan de proeflast kan onopgemerkt blijven. Het
+  3D-raamwerk blijft voorlopig begrensd op 600 DOF voor zijn expliciete
+  stabiliteitstoets.
   Een bredere referentieset, betrouwbare stabiliteitsdetectie voor grote
   modellen en 3D-materiaalhistorie zijn nodig voordat de app deze kern als
   standaard kan gebruiken.
