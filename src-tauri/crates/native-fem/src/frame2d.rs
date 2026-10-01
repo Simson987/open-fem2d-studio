@@ -2,7 +2,7 @@
 //! the 2D app maps its vertical Z coordinate and R_y rotation here explicitly.
 
 use crate::math::{constrained_solve, free_positive_definite, Matrix};
-use crate::{positive, Analysis};
+use crate::{positive, Analysis, MaterialLaw};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -19,6 +19,8 @@ pub struct Node {
 pub struct Material {
     pub id: usize,
     pub e_mpa: f64,
+    #[serde(default)]
+    pub law: MaterialLaw,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -109,6 +111,8 @@ pub struct Request {
     pub member_loads: Vec<MemberLoad>,
     #[serde(default)]
     pub member_point_loads: Vec<MemberPointLoad>,
+    #[serde(default)]
+    pub load_path: Vec<f64>,
     #[serde(default = "default_iterations")]
     pub max_iterations: usize,
     #[serde(default = "default_tolerance")]
@@ -143,6 +147,17 @@ pub struct MemberResult {
     pub deflection_m: Vec<f64>,
     pub axial_disp_m: Vec<f64>,
     pub rotation_rad: Vec<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub axial_history: Option<AxialHistory>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AxialHistory {
+    pub plastic_strain: f64,
+    pub equivalent_plastic_strain: f64,
+    pub tensile_damage: f64,
+    pub tangent_e_mpa: f64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -163,6 +178,8 @@ struct Element {
     local_load: [f64; 6],
     ea_kn: f64,
     ei_knm2: f64,
+    area_m2: f64,
+    material: Material,
 }
 
 fn shape(length: f64, position: f64) -> ([f64; 6], [f64; 6]) {
@@ -315,19 +332,200 @@ fn geometric_stiffness(elastic: &Matrix, elements: &HashMap<usize, Element>, u: 
     k
 }
 
-pub fn solve(request: &Request) -> Result<Result2D, String> {
-    if !matches!(request.analysis, Analysis::Linear | Analysis::Geometric) {
-        return Err("2D frame currently supports linear and geometric analysis only".into());
+#[derive(Clone, Copy, Default)]
+struct AxialState {
+    plastic_strain: f64,
+    equivalent_plastic_strain: f64,
+    tensile_damage: f64,
+}
+
+#[derive(Clone, Copy)]
+struct AxialResponse {
+    stress_mpa: f64,
+    tangent_e_mpa: f64,
+    state: AxialState,
+}
+
+fn axial_response(material: &Material, strain: f64, previous: AxialState) -> AxialResponse {
+    let e = material.e_mpa;
+    match material.law {
+        MaterialLaw::Elastic => AxialResponse {
+            stress_mpa: e * strain,
+            tangent_e_mpa: e,
+            state: previous,
+        },
+        MaterialLaw::SteelBilinear {
+            yield_mpa,
+            hardening_ratio,
+        } => {
+            let trial = e * (strain - previous.plastic_strain);
+            if hardening_ratio == 1.0 {
+                return AxialResponse {
+                    stress_mpa: trial,
+                    tangent_e_mpa: e,
+                    state: previous,
+                };
+            }
+            let hardening = e * hardening_ratio / (1.0 - hardening_ratio);
+            let excess = trial.abs() - yield_mpa - hardening * previous.equivalent_plastic_strain;
+            if excess <= 0.0 {
+                return AxialResponse {
+                    stress_mpa: trial,
+                    tangent_e_mpa: e,
+                    state: previous,
+                };
+            }
+            let increment = excess / (e + hardening);
+            let sign = trial.signum();
+            AxialResponse {
+                stress_mpa: trial - sign * e * increment,
+                tangent_e_mpa: hardening_ratio * e,
+                state: AxialState {
+                    plastic_strain: previous.plastic_strain + sign * increment,
+                    equivalent_plastic_strain: previous.equivalent_plastic_strain + increment,
+                    ..previous
+                },
+            }
+        }
+        MaterialLaw::ConcreteCracking {
+            tensile_mpa,
+            residual_ratio,
+        } => {
+            if strain <= 0.0 {
+                return AxialResponse {
+                    stress_mpa: e * strain,
+                    tangent_e_mpa: e,
+                    state: previous,
+                };
+            }
+            let elastic = e * strain;
+            let candidate = if elastic > tensile_mpa {
+                1.0 - (tensile_mpa + residual_ratio * (elastic - tensile_mpa)) / elastic
+            } else {
+                0.0
+            };
+            let damage = previous.tensile_damage.max(candidate).clamp(0.0, 1.0);
+            let growing = candidate > previous.tensile_damage + 1e-12;
+            AxialResponse {
+                stress_mpa: (1.0 - damage) * elastic,
+                tangent_e_mpa: if growing {
+                    residual_ratio * e
+                } else {
+                    (1.0 - damage) * e
+                },
+                state: AxialState {
+                    tensile_damage: damage,
+                    ..previous
+                },
+            }
+        }
     }
+}
+
+fn axial_strain(element: &Element, d: &[f64; 6]) -> f64 {
+    (d[3] - d[0]) / element.length
+}
+
+/// Return tangent K and internal force for a trial displacement. Material
+/// state is only committed after a load increment reaches equilibrium.
+fn material_system(
+    elastic: &Matrix,
+    elements: &HashMap<usize, Element>,
+    u: &[f64],
+    states: &HashMap<usize, AxialState>,
+    geometric: bool,
+) -> (Matrix, Vec<f64>) {
+    let mut tangent = elastic.clone();
+    let mut internal = elastic.mul(u);
+    for (&id, element) in elements {
+        let d = local_displacement(element, u);
+        let response = axial_response(&element.material, axial_strain(element, &d), states[&id]);
+        let n = response.stress_mpa * 1000.0 * element.area_m2;
+        let elastic_n = element.ea_kn * axial_strain(element, &d);
+        let correction = n - elastic_n;
+        for (axis, sign) in [(0, -1.0), (3, 1.0)] {
+            for i in 0..6 {
+                internal[element.dofs[i]] += sign * correction * element.transform[axis][i];
+            }
+        }
+        let delta_axial = (response.tangent_e_mpa / element.material.e_mpa - 1.0) * element.ea_kn
+            / element.length;
+        for (row, row_sign) in [(0, 1.0), (3, -1.0)] {
+            for (col, col_sign) in [(0, 1.0), (3, -1.0)] {
+                let value = row_sign * col_sign * delta_axial;
+                for i in 0..6 {
+                    for j in 0..6 {
+                        tangent.add(
+                            element.dofs[i],
+                            element.dofs[j],
+                            element.transform[row][i] * value * element.transform[col][j],
+                        );
+                    }
+                }
+            }
+        }
+        if geometric {
+            let kg = geometric_local(element, n);
+            for row in 0..6 {
+                let geometric_force = (0..6).map(|col| kg[row][col] * d[col]).sum::<f64>();
+                for i in 0..6 {
+                    internal[element.dofs[i]] += element.transform[row][i] * geometric_force;
+                }
+                for col in 0..6 {
+                    if kg[row][col] == 0.0 {
+                        continue;
+                    }
+                    for i in 0..6 {
+                        for j in 0..6 {
+                            tangent.add(
+                                element.dofs[i],
+                                element.dofs[j],
+                                element.transform[row][i]
+                                    * kg[row][col]
+                                    * element.transform[col][j],
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    (tangent, internal)
+}
+
+pub fn solve(request: &Request) -> Result<Result2D, String> {
     if request.max_iterations == 0
         || request.max_iterations > 1000
         || !request.tolerance.is_finite()
-        || !(0.0..1.0).contains(&request.tolerance)
+        || request.tolerance <= 0.0
+        || request.tolerance >= 1.0
     {
         return Err("invalid 2D frame iteration limit or tolerance".into());
     }
     if request.nodes.len() < 2 || request.members.is_empty() {
         return Err("2D frame requires nodes and members".into());
+    }
+    if !request.load_path.is_empty() {
+        if !request.analysis.material()
+            || request.load_path.len() > 100
+            || request.load_path.iter().any(|factor| !factor.is_finite())
+        {
+            return Err("invalid 2D frame material load path".into());
+        }
+    }
+    if request.analysis.material()
+        && (request
+            .member_loads
+            .iter()
+            .any(|load| load.qx_start_kn_per_m != 0.0 || load.qx_end_kn_per_m != 0.0)
+            || request
+                .member_point_loads
+                .iter()
+                .any(|load| load.px_kn != 0.0))
+    {
+        return Err(
+            "2D frame axial material history does not yet support member axial loads".into(),
+        );
     }
     let mut node_index = HashMap::new();
     for (index, node) in request.nodes.iter().enumerate() {
@@ -342,6 +540,27 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
     let mut materials = HashMap::new();
     for material in &request.materials {
         positive(material.e_mpa, "E")?;
+        match material.law {
+            MaterialLaw::Elastic => {}
+            MaterialLaw::SteelBilinear {
+                yield_mpa,
+                hardening_ratio,
+            } => {
+                positive(yield_mpa, "steel yield")?;
+                if !hardening_ratio.is_finite() || !(0.0..=1.0).contains(&hardening_ratio) {
+                    return Err("invalid steel hardening ratio".into());
+                }
+            }
+            MaterialLaw::ConcreteCracking {
+                tensile_mpa,
+                residual_ratio,
+            } => {
+                positive(tensile_mpa, "concrete tensile strength")?;
+                if !residual_ratio.is_finite() || !(0.0..=1.0).contains(&residual_ratio) {
+                    return Err("invalid concrete residual ratio".into());
+                }
+            }
+        }
         if material.id == 0 || materials.insert(material.id, material).is_some() {
             return Err("invalid or duplicate 2D frame material".into());
         }
@@ -432,6 +651,8 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
             local_load: [0.0; 6],
             ea_kn: material.e_mpa * 1000.0 * section.area_m2,
             ei_knm2: material.e_mpa * 1000.0 * section.inertia_m4,
+            area_m2: section.area_m2,
+            material: (*material).clone(),
         };
         for i in 0..6 {
             for j in 0..6 {
@@ -528,51 +749,148 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
             }
         }
     }
-    let (mut u, _) = constrained_solve(&k, &f, &prescribed)?;
-    let mut iterations = 1;
-    if request.analysis.geometric() {
-        let mut converged = false;
-        for iteration in 2..=request.max_iterations {
-            let candidate_k = geometric_stiffness(&k, &elements, &u);
-            free_positive_definite(&candidate_k, &prescribed)?;
-            let (candidate, _) = constrained_solve(&candidate_k, &f, &prescribed)?;
-            let change = candidate
-                .iter()
-                .zip(&u)
-                .map(|(a, b)| (a - b).powi(2))
-                .sum::<f64>()
-                .sqrt();
-            let magnitude = candidate
-                .iter()
-                .map(|v| v * v)
-                .sum::<f64>()
-                .sqrt()
-                .max(1e-12);
-            u = candidate;
-            iterations = iteration;
-            if change / magnitude <= request.tolerance {
-                converged = true;
-                break;
-            }
-        }
-        if !converged {
-            return Err(format!(
-                "2D frame P-Delta did not converge in {} iterations",
-                request.max_iterations
-            ));
-        }
-        k = geometric_stiffness(&k, &elements, &u);
-        free_positive_definite(&k, &prescribed)?;
-    }
-    let reactions: Vec<f64> = k
-        .mul(&u)
-        .iter()
-        .zip(&f)
-        .map(|(ku, load)| ku - load)
+    let mut states: HashMap<usize, AxialState> = elements
+        .keys()
+        .map(|&id| (id, AxialState::default()))
         .collect();
-    let max_load = f
-        .iter()
-        .fold(1.0_f64, |maximum, &value| maximum.max(value.abs()));
+    let mut final_factor = 1.0;
+    let mut iterations = 0;
+    let (u, reactions) = if request.analysis.material() {
+        let mut u = vec![0.0; k.n];
+        let path = if request.load_path.is_empty() {
+            vec![1.0]
+        } else {
+            request.load_path.clone()
+        };
+        let steps = if request
+            .materials
+            .iter()
+            .any(|m| !matches!(m.law, MaterialLaw::Elastic))
+        {
+            10
+        } else {
+            1
+        };
+        let mut start = 0.0;
+        for &end in &path {
+            for step in 1..=steps {
+                let factor = start + (end - start) * step as f64 / steps as f64;
+                let target: Vec<f64> = f.iter().map(|value| factor * value).collect();
+                let constraints: Vec<Option<f64>> = prescribed
+                    .iter()
+                    .map(|value| value.map(|v| factor * v))
+                    .collect();
+                let mut converged = false;
+                for _ in 0..request.max_iterations {
+                    iterations += 1;
+                    let (tangent, internal) =
+                        material_system(&k, &elements, &u, &states, request.analysis.geometric());
+                    if request.analysis.geometric() {
+                        free_positive_definite(&tangent, &constraints)?;
+                    }
+                    let ku = tangent.mul(&u);
+                    let rhs: Vec<f64> = target
+                        .iter()
+                        .zip(&internal)
+                        .zip(&ku)
+                        .map(|((load, force), ku)| load - force + ku)
+                        .collect();
+                    let (candidate, _) = constrained_solve(&tangent, &rhs, &constraints)?;
+                    let change = candidate
+                        .iter()
+                        .zip(&u)
+                        .map(|(a, b)| (a - b).powi(2))
+                        .sum::<f64>()
+                        .sqrt();
+                    let magnitude = candidate
+                        .iter()
+                        .map(|v| v * v)
+                        .sum::<f64>()
+                        .sqrt()
+                        .max(1e-12);
+                    u = candidate;
+                    if change / magnitude <= request.tolerance {
+                        converged = true;
+                        break;
+                    }
+                }
+                if !converged {
+                    return Err(format!(
+                        "2D frame material iteration did not converge at load factor {factor}"
+                    ));
+                }
+                states = elements
+                    .iter()
+                    .map(|(&id, element)| {
+                        let d = local_displacement(element, &u);
+                        let response = axial_response(
+                            &element.material,
+                            axial_strain(element, &d),
+                            states[&id],
+                        );
+                        (id, response.state)
+                    })
+                    .collect();
+            }
+            start = end;
+        }
+        final_factor = *path.last().unwrap();
+        let (_, internal) =
+            material_system(&k, &elements, &u, &states, request.analysis.geometric());
+        let reactions = internal
+            .iter()
+            .zip(&f)
+            .map(|(force, load)| force - final_factor * load)
+            .collect();
+        (u, reactions)
+    } else {
+        let (mut u, _) = constrained_solve(&k, &f, &prescribed)?;
+        iterations = 1;
+        if request.analysis.geometric() {
+            let mut converged = false;
+            for iteration in 2..=request.max_iterations {
+                let candidate_k = geometric_stiffness(&k, &elements, &u);
+                free_positive_definite(&candidate_k, &prescribed)?;
+                let (candidate, _) = constrained_solve(&candidate_k, &f, &prescribed)?;
+                let change = candidate
+                    .iter()
+                    .zip(&u)
+                    .map(|(a, b)| (a - b).powi(2))
+                    .sum::<f64>()
+                    .sqrt();
+                let magnitude = candidate
+                    .iter()
+                    .map(|v| v * v)
+                    .sum::<f64>()
+                    .sqrt()
+                    .max(1e-12);
+                u = candidate;
+                iterations = iteration;
+                if change / magnitude <= request.tolerance {
+                    converged = true;
+                    break;
+                }
+            }
+            if !converged {
+                return Err(format!(
+                    "2D frame P-Delta did not converge in {} iterations",
+                    request.max_iterations
+                ));
+            }
+            k = geometric_stiffness(&k, &elements, &u);
+            free_positive_definite(&k, &prescribed)?;
+        }
+        let reactions: Vec<f64> = k
+            .mul(&u)
+            .iter()
+            .zip(&f)
+            .map(|(ku, load)| ku - load)
+            .collect();
+        (u, reactions)
+    };
+    let max_load = f.iter().fold(1.0_f64, |maximum, &value| {
+        maximum.max((final_factor * value).abs())
+    });
     let equilibrium_residual = reactions
         .iter()
         .enumerate()
@@ -604,10 +922,26 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
                 elastic_end_forces[i] = (0..6)
                     .map(|j| element.local_stiffness[i][j] * local_displacement[j])
                     .sum::<f64>()
-                    - element.local_load[i];
+                    - final_factor * element.local_load[i];
             }
-            let axial = axial_force(element, &local_displacement);
+            let response = request.analysis.material().then(|| {
+                axial_response(
+                    &element.material,
+                    axial_strain(element, &local_displacement),
+                    states[&member.id],
+                )
+            });
+            let axial = if let Some(response) = response {
+                response.stress_mpa * 1000.0 * element.area_m2
+            } else {
+                axial_force(element, &local_displacement)
+            };
             let mut local_end_forces = elastic_end_forces;
+            if request.analysis.material() {
+                let correction = axial - element.ea_kn * axial_strain(element, &local_displacement);
+                local_end_forces[0] -= correction;
+                local_end_forces[3] += correction;
+            }
             if request.analysis.geometric() {
                 let kg = geometric_local(element, axial);
                 for i in 0..6 {
@@ -648,6 +982,7 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
                         .iter()
                         .map(|load| integrated_load(load, element.length, x, axial, power))
                         .sum::<f64>()
+                        * final_factor
                 };
                 let point = |axial, power| {
                     point_loads
@@ -668,15 +1003,19 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
                             force * distance.powi(power as i32) / factorial
                         })
                         .sum::<f64>()
+                        * final_factor
                 };
                 stations_m.push(x);
                 normal_force_kn.push(-local_end_forces[0] - integral(true, 0) - point(true, 0));
                 shear_force_kn.push(local_end_forces[1] + integral(false, 0) + point(false, 0));
-                axial_disp_m.push(
+                axial_disp_m.push(if request.analysis.material() {
+                    local_displacement[0]
+                        + (local_displacement[3] - local_displacement[0]) * x / element.length
+                } else {
                     local_displacement[0]
                         + (-elastic_end_forces[0] * x - integral(true, 1) - point(true, 1))
-                            / element.ea_kn,
-                );
+                            / element.ea_kn
+                });
                 rotation_rad.push(
                     local_displacement[2]
                         + (-elastic_end_forces[2] * x
@@ -715,6 +1054,12 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
                 deflection_m,
                 axial_disp_m,
                 rotation_rad,
+                axial_history: response.map(|response| AxialHistory {
+                    plastic_strain: response.state.plastic_strain,
+                    equivalent_plastic_strain: response.state.equivalent_plastic_strain,
+                    tensile_damage: response.state.tensile_damage,
+                    tangent_e_mpa: response.tangent_e_mpa,
+                }),
             }
         })
         .collect();
@@ -748,6 +1093,7 @@ mod tests {
             materials: vec![Material {
                 id: 1,
                 e_mpa: 210_000.0,
+                law: MaterialLaw::Elastic,
             }],
             sections: vec![Section {
                 id: 1,
@@ -776,6 +1122,7 @@ mod tests {
             nodal_loads: vec![],
             member_loads: vec![],
             member_point_loads: vec![],
+            load_path: vec![],
             max_iterations: default_iterations(),
             tolerance: default_tolerance(),
         }
@@ -1010,11 +1357,20 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_analysis_and_unknown_member_load_are_rejected() {
+    fn material_axial_member_load_and_unknown_member_load_are_rejected() {
         let mut input = cantilever();
-        input.analysis = Analysis::Combined;
-        assert!(solve(&input).unwrap_err().contains("linear"));
+        input.analysis = Analysis::Material;
+        input.member_point_loads.push(MemberPointLoad {
+            member_id: 1,
+            px_kn: 1.0,
+            py_kn: 0.0,
+            position_m: 1.0,
+        });
+        assert!(solve(&input)
+            .unwrap_err()
+            .contains("axial material history"));
         input.analysis = Analysis::Linear;
+        input.member_point_loads.clear();
         input.member_point_loads.push(MemberPointLoad {
             member_id: 99,
             px_kn: 0.0,
@@ -1024,5 +1380,102 @@ mod tests {
         assert!(solve(&input)
             .unwrap_err()
             .contains("unknown point-loaded member"));
+    }
+
+    #[test]
+    fn steel_axial_load_path_retains_closed_form_plastic_extension() {
+        let mut input = cantilever();
+        input.analysis = Analysis::Material;
+        input.materials[0].law = MaterialLaw::SteelBilinear {
+            yield_mpa: 250.0,
+            hardening_ratio: 0.02,
+        };
+        input.nodal_loads.push(NodalLoad {
+            node_id: 2,
+            fx: 3000.0,
+            fy: 0.0,
+            mz: 0.0,
+        });
+        let loaded = solve(&input).unwrap();
+        let expected_strain = 250.0 / 210_000.0 + (300.0 - 250.0) / (0.02 * 210_000.0);
+        assert!((loaded.nodes[1].displacement[0] - 3.0 * expected_strain).abs() < 1e-9);
+        assert!((loaded.members[0].normal_force_kn[0] - 3000.0).abs() < 1e-6);
+        input.load_path = vec![1.0, 0.0];
+        let unloaded = solve(&input).unwrap();
+        let expected_plastic = expected_strain - 300.0 / 210_000.0;
+        assert!((unloaded.nodes[1].displacement[0] - 3.0 * expected_plastic).abs() < 1e-8);
+        assert!(
+            (unloaded.members[0]
+                .axial_history
+                .as_ref()
+                .unwrap()
+                .plastic_strain
+                - expected_plastic)
+                .abs()
+                < 1e-8
+        );
+        assert!(unloaded.members[0].normal_force_kn[0].abs() < 1e-6);
+        assert!(unloaded.equilibrium_residual < 1e-6);
+    }
+
+    #[test]
+    fn documented_steel_unload_example_matches_closed_form() {
+        let input: Request =
+            serde_json::from_str(include_str!("../examples/frame2d-steel-unload.json")).unwrap();
+        let result = solve(&input).unwrap();
+        assert!((result.nodes[1].displacement[0] - 0.035).abs() < 1e-8);
+        assert!(result.members[0].normal_force_kn[0].abs() < 1e-6);
+    }
+
+    #[test]
+    fn concrete_axial_damage_persists_after_unloading() {
+        let mut input = cantilever();
+        input.analysis = Analysis::Material;
+        input.materials[0].e_mpa = 30_000.0;
+        input.materials[0].law = MaterialLaw::ConcreteCracking {
+            tensile_mpa: 3.0,
+            residual_ratio: 0.2,
+        };
+        input.nodal_loads.push(NodalLoad {
+            node_id: 2,
+            fx: 60.0,
+            fy: 0.0,
+            mz: 0.0,
+        });
+        input.load_path = vec![1.0, 0.0];
+        let unloaded = solve(&input).unwrap();
+        let history = unloaded.members[0].axial_history.as_ref().unwrap();
+        assert!(history.tensile_damage > 0.0);
+        assert!(unloaded.nodes[1].displacement[0].abs() < 1e-8);
+        assert!(unloaded.equilibrium_residual < 1e-6);
+        input.load_path.push(0.5);
+        let reloaded = solve(&input).unwrap();
+        let reloaded_history = reloaded.members[0].axial_history.as_ref().unwrap();
+        assert!((reloaded_history.tensile_damage - 2.0 / 3.0).abs() < 1e-8);
+        assert!((reloaded_history.tangent_e_mpa - 10_000.0).abs() < 1e-7);
+        assert!((reloaded.nodes[1].displacement[0] - 0.0009).abs() < 1e-9);
+    }
+
+    #[test]
+    fn combined_material_and_geometry_uses_current_axial_force() {
+        let mut input = cantilever();
+        input.analysis = Analysis::Material;
+        input.materials[0].law = MaterialLaw::SteelBilinear {
+            yield_mpa: 250.0,
+            hardening_ratio: 0.02,
+        };
+        input.nodal_loads.push(NodalLoad {
+            node_id: 2,
+            fx: 3000.0,
+            fy: -10.0,
+            mz: 0.0,
+        });
+        let material = solve(&input).unwrap();
+        input.analysis = Analysis::Combined;
+        let combined = solve(&input).unwrap();
+        assert!(combined.nodes[1].displacement[1] > material.nodes[1].displacement[1]);
+        assert!((combined.members[0].normal_force_kn[0] - 3000.0).abs() < 1e-5);
+        assert!(combined.members[0].bending_moment_knm.last().unwrap().abs() < 1e-6);
+        assert!(combined.equilibrium_residual < 1e-7);
     }
 }
