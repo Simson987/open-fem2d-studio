@@ -149,3 +149,10 @@ in-vlaklasten, gekoppelde staven, veren en GNL/FNL-buiging.
 Een asymmetrisch ingeklemde hoek controleert de tekenomzetting van de lokale
 plaatrotaties en reactiemomenten naar globale 3D Rx/Ry; ook een afzonderlijk
 globaal My-puntmoment sluit de onafhankelijke momentensom.
+Dezelfde plaat wordt als extra objectiviteitstest om globale Y en Z geroteerd.
+De normale belasting, lokale zakking, globale reacties en het kracht- en
+momentenevenwicht blijven dan gelijk na de bijbehorende coördinatenrotatie.
+De mesher rondt een quotiënt als `4,000000000000001` nu tot vier cellen af;
+een echt grotere maat krijgt nog steeds een extra cel. Een schuine plaat met
+alleen verticaal eigen gewicht wordt geweigerd omdat daarvoor ook
+schijfwerking nodig is.

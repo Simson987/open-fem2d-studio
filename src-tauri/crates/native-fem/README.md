@@ -22,14 +22,18 @@ staaf-plaatmodellen worden in deze route nog expliciet geweigerd. De app
 behoudt de bestaande solver als automatische keuze.
 
 Een afzonderlijke lineaire 3D-plaatroute kan in de app met expliciete keuze
-voor Open FEM Rust worden berekend. Zij accepteert één horizontale,
-asparallelle rechthoek zonder staven, bogen of openingen. De Rust-mesher
-maakt een conform Q4-rooster; de hybride Kirchhoff-kern berekent verticale
-zakking, rotaties, reacties, momenten en dwarskrachten. Oppervlaktelasten,
-puntlasten en eigen gewicht gaan mee per belastinggeval of combinatie.
+voor Open FEM Rust worden berekend. Zij accepteert één vlakke rechthoek in
+een willekeurig 3D-vlak zonder staven, bogen of openingen. De Rust-mesher
+maakt een conform Q4-rooster; de hybride Kirchhoff-kern berekent uitwijking
+normaal op de plaat, rotaties, reacties, momenten en dwarskrachten.
+Oppervlaktelasten en puntlasten gaan mee per belastinggeval of combinatie;
+eigen gewicht werkt voor horizontale platen. Bij een schuine plaat heeft
+zwaartekracht ook een niet-ondersteunde component in het plaatvlak.
 Opleggingen zitten op de vier plaat-hoekknopen; de tussenliggende randen zijn
-vrij. Het rapport toont roosteruitvoer en de 3D-weergave toont de vervormde
-plaat. Schijfwerking, gekoppelde staven, plaatveren, opgelegde verplaatsingen,
+vrij. Alleen normaalgerichte belastingen en eenduidig naar lokale buigvrijheden
+te vertalen globale opleggingen zijn toegestaan. Het rapport toont
+roosteruitvoer en de 3D-weergave toont de vervormde plaat. Schijfwerking,
+gekoppelde staven, plaatveren, opgelegde verplaatsingen,
 GNL en FNL worden in deze route expliciet geweigerd.
 
 Een controleerbaar voorbeeld staat in

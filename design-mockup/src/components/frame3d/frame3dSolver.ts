@@ -29,8 +29,10 @@ export interface Frame3DReaction {
 
 export interface Frame3DPlateBendingResult {
   plateId: number;
+  /** Orthogonale lokale plaatassen, uitgedrukt in globale XYZ. */
+  basis: { ex: [number, number, number]; ey: [number, number, number]; normal: [number, number, number] };
   quads: Array<{ id: number; nodeIds: [number, number, number, number] }>;
-  /** Rotaties zijn naar globale 3D Rx/Ry vertaald, net als displacements. */
+  /** Rotaties om de lokale ex/ey-assen met het fysieke 3D-teken. */
   nodes: Array<{ meshNodeId: number; x: number; y: number; z: number;
     wM: number; thetaXRad: number; thetaYRad: number }>;
   elements: Array<{ quadId: number; momentKnmPerM: [number, number, number];

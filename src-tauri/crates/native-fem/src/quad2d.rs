@@ -117,7 +117,8 @@ pub struct SquareGrid {
 
 /// Structured Q4 grid for dimensions that need not be exact multiples of a
 /// cell size. Each direction is divided independently; cell edges do not
-/// exceed `max_cell_size_m` and all quads remain conforming rectangles.
+/// exceed `max_cell_size_m` except for machine-scale coordinate roundoff,
+/// and all quads remain conforming rectangles.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct QuadGrid {
@@ -204,8 +205,19 @@ pub fn mesh_quads(grid: &QuadGrid) -> Result<QuadMesh, String> {
     {
         return Err("non-finite quad mesh coordinates".into());
     }
-    let nx = (grid.width_m / grid.max_cell_size_m).ceil().max(1.0);
-    let ny = (grid.height_m / grid.max_cell_size_m).ceil().max(1.0);
+    let count = |length: f64| {
+        let ratio = length / grid.max_cell_size_m;
+        let nearest = ratio.round();
+        // A rigid rotation can turn an exact 4.0 ratio into 4.000000000000001.
+        // Adding a whole mesh strip would change the numerical model.
+        if ratio > nearest && ratio - nearest <= 1e-12 * ratio.max(1.0) {
+            nearest.max(1.0)
+        } else {
+            ratio.ceil().max(1.0)
+        }
+    };
+    let nx = count(grid.width_m);
+    let ny = count(grid.height_m);
     if !nx.is_finite()
         || !ny.is_finite()
         || nx < 1.0
@@ -768,6 +780,38 @@ mod tests {
             }
         })
         .is_err());
+    }
+    #[test]
+    fn quad_mesh_ignores_roundoff_at_an_integer_subdivision_boundary() {
+        let mesh = mesh_quads(&QuadGrid {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            width_m: 2.0 + 4.0 * f64::EPSILON,
+            height_m: 2.0,
+            max_cell_size_m: 0.5,
+            material_id: 1,
+            thickness_m: 0.2,
+        })
+        .unwrap();
+        assert_eq!(mesh.nodes.len(), 25);
+        assert_eq!(mesh.quads.len(), 16);
+        assert_eq!(mesh.nodes.last().unwrap().x, 2.0 + 4.0 * f64::EPSILON);
+
+        let larger = mesh_quads(&QuadGrid {
+            width_m: 2.0 + 1e-8,
+            ..QuadGrid {
+                origin_x: 0.0,
+                origin_y: 0.0,
+                width_m: 2.0,
+                height_m: 2.0,
+                max_cell_size_m: 0.5,
+                material_id: 1,
+                thickness_m: 0.2,
+            }
+        })
+        .unwrap();
+        assert_eq!(larger.nodes.len(), 30);
+        assert_eq!(larger.quads.len(), 20);
     }
     #[test]
     fn quad_mesh_fills_non_divisible_rectangle_with_conforming_cells() {

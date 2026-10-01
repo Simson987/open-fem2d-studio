@@ -100,6 +100,77 @@ try {
   const meshCorner = withMoment.plateBending.nodes.find((node) => node.x === 2 && node.y === 0);
   assert.ok(Math.abs(meshCorner.thetaYRad - withMoment.displacements.find((node) => node.nodeId === 22).ry) < 1e-12);
 
+  // Rotate the complete structural problem around Y and then Z. A bending
+  // plate must give the same local w, moments and scalar reactions regardless
+  // of its orientation in global XYZ.
+  const theta = Math.PI / 6, psi = Math.PI / 7;
+  const rotate = ([x, y, z]) => {
+    const x1 = Math.cos(theta) * x + Math.sin(theta) * z;
+    const z1 = -Math.sin(theta) * x + Math.cos(theta) * z;
+    return [Math.cos(psi) * x1 - Math.sin(psi) * y,
+      Math.sin(psi) * x1 + Math.cos(psi) * y, z1];
+  };
+  const tilted = {
+    ...model,
+    nodes: model.nodes.map((node) => {
+      const [x, y, z] = rotate([node.x, node.y, node.z]);
+      return { ...node, x, y, z };
+    }),
+    surfaceLoads: model.surfaceLoads.map((load) => {
+      const [qx, qy, qz] = rotate([0, 0, load.qz]);
+      return { ...load, qx, qy, qz };
+    }),
+  };
+  const tiltedResult = await solveFrame3D(parseFrame3DModel(tilted), 1, "linear", "openaec-native-fem");
+  assert.equal(tiltedResult.forceBalance.ok, true);
+  assert.ok(tiltedResult.forceBalance.maxImbalanceKn < 1e-8);
+  assert.ok(tiltedResult.forceBalance.maxMomentImbalanceKnm < 1e-8);
+  for (let index = 0; index < first.plateBending.nodes.length; index++) {
+    const baseNode = first.plateBending.nodes[index], tiltedNode = tiltedResult.plateBending.nodes[index];
+    assert.ok(Math.abs(baseNode.wM - tiltedNode.wM) < 1e-10,
+      `node ${index}: ${baseNode.wM} vs ${tiltedNode.wM}`);
+    const expected = rotate([baseNode.x, baseNode.y, baseNode.z]);
+    assert.ok(Math.hypot(tiltedNode.x - expected[0], tiltedNode.y - expected[1], tiltedNode.z - expected[2]) < 1e-9);
+  }
+  for (let index = 0; index < first.reactions.length; index++) {
+    const expected = rotate([first.reactions[index].fx, first.reactions[index].fy, first.reactions[index].fz]);
+    const actual = tiltedResult.reactions[index];
+    assert.ok(Math.hypot(actual.fx - expected[0], actual.fy - expected[1], actual.fz - expected[2]) < 1e-8);
+    const baseDisplacement = first.displacements[index], tiltedDisplacement = tiltedResult.displacements[index];
+    const expectedDisplacement = rotate([baseDisplacement.ux, baseDisplacement.uy, baseDisplacement.uz]);
+    assert.ok(Math.hypot(tiltedDisplacement.ux - expectedDisplacement[0],
+      tiltedDisplacement.uy - expectedDisplacement[1], tiltedDisplacement.uz - expectedDisplacement[2]) < 1e-10);
+  }
+  const reversed = { ...model, plates: [{ ...model.plates[0], nodeIds: [11, 44, 33, 22] }] };
+  const reversedResult = await solveFrame3D(reversed, 1, "linear", "openaec-native-fem");
+  assert.equal(reversedResult.forceBalance.ok, true);
+  for (const node of first.displacements) {
+    const actual = reversedResult.displacements.find((value) => value.nodeId === node.nodeId);
+    assert.ok(Math.abs(actual.uz - node.uz) < 1e-10, "omgekeerde contourvolgorde mag de globale zakking niet wijzigen");
+  }
+  assert.ok(reversedResult.plateBending.basis.normal[2] < -0.999);
+  const rotatedFixed = {
+    ...tilted,
+    supports: tilted.supports.map((support) => support.nodeId === 11
+      ? { ...support, rx: true, ry: true, rz: true } : support),
+    loads: pointMoment.loads.map((load) => {
+      const [mx, my, mz] = rotate([load.mx, load.my, load.mz]);
+      return { ...load, mx, my, mz };
+    }),
+  };
+  const tiltedMoment = await solveFrame3D(rotatedFixed, 1, "linear", "openaec-native-fem");
+  assert.equal(tiltedMoment.forceBalance.ok, true);
+  assert.ok(Math.abs(tiltedMoment.plateBending.nodes[12].wM - withMoment.plateBending.nodes[12].wM) < 1e-10);
+  await assert.rejects(solveFrame3D({ ...tilted,
+    surfaceLoads: [{ ...tilted.surfaceLoads[0], qx: tilted.surfaceLoads[0].qx + 0.25 }],
+  }, 1, "linear", "openaec-native-fem"), /oppervlaktebelasting normaal/);
+  await assert.rejects(solveFrame3D({ ...tilted,
+    supports: tilted.supports.map((support) => support.nodeId === 11 ? { ...support, ux: false, uy: false } : support),
+  }, 1, "linear", "openaec-native-fem"), /alle drie globale translatie-assen/);
+  await assert.rejects(solveFrame3D(withFrame3DSelfWeight(tilted, 3),
+    3, "linear", "openaec-native-fem"), /oppervlaktebelasting normaal/,
+  "zwaartekracht op een schuine plaat heeft ook niet-ondersteunde schijfwerking");
+
   const weighted = withFrame3DSelfWeight(model, 3);
   const ownWeight = weighted.surfaceLoads.at(-1);
   assert.equal(ownWeight.plateId, 7);
@@ -112,9 +183,9 @@ try {
   await assert.rejects(solveFrame3D({ ...model, plates: [{ ...model.plates[0], openings: [{ id: 1, nodeIds: [11, 22, 33] }] }] },
     1, "linear", "openaec-native-fem"), /zonder bogen.*openingen/);
   await assert.rejects(solveFrame3D({ ...model, surfaceLoads: [{ ...model.surfaceLoads[0], qx: 1 }] },
-    1, "linear", "openaec-native-fem"), /alleen een verticale/);
+    1, "linear", "openaec-native-fem"), /alleen een oppervlaktebelasting normaal/);
   await assert.rejects(solveFrame3D(model, 1, "p-delta", "openaec-native-fem"), /lineaire Open FEM Rust-plaatroute/);
-  console.log("3D-plaatroute via Rust-mesher en hybride buigplaat: evenwicht, combinaties, eigen gewicht en afwijzingen geslaagd.");
+  console.log("3D-plaatroute via Rust: evenwicht, combinaties, 3D-rotaties, eigen gewicht en afwijzingen geslaagd.");
 } finally {
   globalThis.fetch = originalFetch;
 }

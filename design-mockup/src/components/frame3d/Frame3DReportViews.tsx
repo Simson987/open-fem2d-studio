@@ -100,8 +100,14 @@ function View({
   }));
   const deformed = [...deformedBeams.values()].flat().map((node) => project(node, projection));
   const plateNodes = result.plateBending?.nodes ?? [];
+  const plateNormal = result.plateBending?.basis.normal ?? [0, 0, 1];
   const undeformedPlate = plateNodes.map((node) => project(node, projection));
-  const deformedPlate = plateNodes.map((node) => project({ ...node, z: node.z + magnification * node.wM }, projection));
+  const displacedPlateNode = (node: typeof plateNodes[number]) => ({
+    x: node.x + plateNormal[0] * magnification * node.wM,
+    y: node.y + plateNormal[1] * magnification * node.wM,
+    z: node.z + plateNormal[2] * magnification * node.wM,
+  });
+  const deformedPlate = plateNodes.map((node) => project(displacedPlateNode(node), projection));
   const toCanvas = fit([...undeformed, ...deformed, ...undeformedPlate, ...deformedPlate]);
   const plateById = new Map(plateNodes.map((node) => [node.meshNodeId, node]));
 
@@ -113,7 +119,7 @@ function View({
         const corners = quad.nodeIds.map((id) => plateById.get(id));
         if (corners.some((node) => !node)) return null;
         const polygon = (displaced: boolean) => corners.map((node) => {
-          const point = toCanvas(project({ ...node!, z: node!.z + (displaced ? magnification * node!.wM : 0) }, projection));
+          const point = toCanvas(project(displaced ? displacedPlateNode(node!) : node!, projection));
           return `${point.x},${point.y}`;
         }).join(" ");
         return <g key={`plate-quad-${quad.id}`}>

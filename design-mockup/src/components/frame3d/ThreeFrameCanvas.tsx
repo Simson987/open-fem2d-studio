@@ -4366,9 +4366,12 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       const scale = resultScale(model, result);
       if (result.plateBending) {
         const plateNodes = result.plateBending.nodes;
+        const plateNormal = result.plateBending.basis.normal;
         const indexById = new Map(plateNodes.map((node, index) => [node.meshNodeId, index]));
         const positions = new Float32Array(plateNodes.flatMap((node) =>
-          [node.x, node.y, node.z + scale * node.wM]));
+          [node.x + plateNormal[0] * scale * node.wM,
+            node.y + plateNormal[1] * scale * node.wM,
+            node.z + plateNormal[2] * scale * node.wM]));
         const triangles: number[] = [];
         const edges: THREE.Vector3[] = [];
         for (const quad of result.plateBending.quads) {
