@@ -23,6 +23,7 @@ import {
   type VoorspeldeKniklengte,
 } from "../../lib/kniklengte";
 import "./FemProperties.css";
+import PlateNonlinearEditor from "./PlateNonlinearEditor";
 import type {
   Node, Beam, Plate, Support, Load, Selection, SupportType, BeamCheckConfig,
   BeamLoadRole,
@@ -2185,6 +2186,10 @@ function PlateProperties({ plate, nodes, updatePlate }: {
             </div>
           )}
         </Section>
+        {updatePlate && <Section title="Fysisch niet-lineair (Rust Quad4)">
+          <PlateNonlinearEditor plate={plate} baseEMpa={stijfheid?.E1}
+            onApply={patch => updatePlate(plate.id, patch)} />
+        </Section>}
         <Section title={t("props.plate.meshTitle")}>
           <Row label={t("props.plate.meshSize")}>
             <input

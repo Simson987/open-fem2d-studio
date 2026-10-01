@@ -46,6 +46,7 @@ log("\n[round-trip] serializeProject → deserializeProject behoudt de rekenveld
     nu: 0.2,
     rho: 2500,
     meshSize: 250,
+    modulusCurve: [{ strain: 0.001, eMpa: 8000 }, { strain: 0.004, eMpa: 4000 }],
   };
   const text = serializeProject({
     nodes: [
@@ -72,6 +73,7 @@ log("\n[round-trip] serializeProject → deserializeProject behoudt de rekenveld
   check("nu 0,2", p.nu, 0.2);
   check("rho 2500", p.rho, 2500);
   check("meshSize 250", p.meshSize, 250);
+  check("FNL E-curve blijft behouden", JSON.stringify(p.modulusCurve), JSON.stringify(plaat.modulusCurve));
 }
 
 // ─────────────────────────────────────────────────────────────────────────

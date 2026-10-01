@@ -74,7 +74,7 @@ import type { GridSettings, Tool } from "./components/fem/femTypes";
 import { DEFAULT_GRID, nonlinearVoorBestand } from "./components/fem/femTypes";
 import type { SolverResult } from "./components/fem/solver/types";
 import { solveAllCases, solveAllCasesNonlinear } from "./components/fem/solver/solver";
-import { solveAllCasesNativeQuad2D } from "./components/fem/solver/nativeQuadRoute";
+import { solveAllCasesNativeQuad2D, solveAllCombinationsNativeQuad2D } from "./components/fem/solver/nativeQuadRoute";
 import {
   eersteOrdeCombinatieResultaat,
   getSecondOrderInput,
@@ -1629,9 +1629,6 @@ function App() {
       nodes: fem.nodes, beams: fem.beams, supports: fem.supports, plates: fem.plates,
       loads: fem.loads, loadCases: fem.loadCases,
     });
-    if (fem.analysetype !== "eersteOrde") {
-      throw new Error("De Rust Quad4-route in de app ondersteunt momenteel alleen eerste-orde plaatanalyse.");
-    }
     if (fem.actieveCombinaties.some(combination => combination.eindtoestand !== undefined)) {
       throw new Error("Eindstijfheidvarianten zijn nog niet ondersteund door de Rust Quad4-route.");
     }
@@ -1643,12 +1640,17 @@ function App() {
       scheefstandNoemer: scheefstandUitkomst.noemer,
       scheefstandRichting: fem.scheefstandRichting,
     });
-    const perCase = await solveAllCasesNativeQuad2D(multiInput);
+    const analysis = fem.analysetype === "eersteOrde" ? "linear"
+      : fem.analysetype === "tweedeOrdeFysisch" ? "combined" : "geometric";
+    const perCase = await solveAllCasesNativeQuad2D(multiInput, analysis);
     if (generatie !== rekenGeneratieRef.current) return null;
-    const combinationResults = new Map(
-      fem.actieveCombinaties.map(combination => [combination.id, combineResults(combination, perCase)]),
-    );
-    const envelope = computeEnvelope(fem.actieveCombinaties, perCase);
+    const combinationResults = analysis === "linear"
+      ? new Map(fem.actieveCombinaties.map(combination =>
+        [combination.id, combineResults(combination, perCase)]))
+      : await solveAllCombinationsNativeQuad2D(multiInput, fem.actieveCombinaties, analysis);
+    if (generatie !== rekenGeneratieRef.current) return null;
+    const envelope = computeEnvelope(fem.actieveCombinaties, perCase,
+      analysis === "linear" ? undefined : combinationResults);
     laatsteMultiInputRef.current = multiInput;
     const stabiliteit = bepaalStabiliteit(multiInput, combinationResults);
     const outputs = { perCase, combinationResults, envelope, stabiliteit };
@@ -2059,7 +2061,7 @@ function App() {
         return { gelukt: false, fysisch: "nvt" };
       }
       liveRekenenRef.current = true;
-      if (fem.analysetype === "tweedeOrdeFysisch") {
+      if (fem.analysetype === "tweedeOrdeFysisch" && preference !== "openaec-native-fem") {
         // De toetsing wacht op de fysisch niet-lineaire ronde: hij hoort op de
         // gescheurde krachtsverdeling te draaien, niet op de ongescheurde
         // ertussenin.

@@ -706,6 +706,7 @@ function staafExtremen(ef: ElementForces): {
 export function computeEnvelope(
   combinations: LoadCombination[],
   perCase: Map<number, SolverResult>,
+  directCombinationResults?: ReadonlyMap<number, SolverResult>,
 ): Envelope {
   // Een aanroeper die de lijst niet zelf heeft ontvouwd, krijgt hier alsnog
   // beide scheefstandrichtingen in de omhullende — zo kan de omhullende nooit
@@ -723,7 +724,13 @@ export function computeEnvelope(
   // once for reactions) and the maps are small.
   const combined: { combo: LoadCombination; res: SolverResult }[] = combinations.map(c => ({
     combo: c,
-    res: combineResults(c, perCase),
+    res: directCombinationResults
+      ? (() => {
+        const result = directCombinationResults.get(c.id);
+        if (!result) throw new Error(`Combinatie ${c.name} ontbreekt in de directe solverresultaten.`);
+        return result;
+      })()
+      : combineResults(c, perCase),
   }));
 
   for (const { combo, res } of combined) {

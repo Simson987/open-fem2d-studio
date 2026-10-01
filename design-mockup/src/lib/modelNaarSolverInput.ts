@@ -313,6 +313,8 @@ export function plaatNaarSolverInput(p: Plate): NonNullable<MultiInput["plates"]
   const d = withPlateDefaults(p);
   return {
     id: d.id, nodeIds: d.nodeIds,
+    ...(d.nonlinearLaw ? { nonlinearLaw: d.nonlinearLaw } : {}),
+    ...(d.modulusCurve?.length ? { modulusCurve: d.modulusCurve } : {}),
     thickness: d.thickness!,
     // E, ν en ρ gaan alleen mee als de plaat ze DRAAGT. Zonder materiaal vult
     // `withPlateDefaults` ze met de staaldefaults, dus dan staan ze er alle

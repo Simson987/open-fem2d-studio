@@ -367,6 +367,8 @@ export interface ScheefstandInput {
  */
 export interface SolverPlateInput {
   id: number;
+  nonlinearLaw?: import("../femTypes").PlateNonlinearLaw;
+  modulusCurve?: import("../femTypes").PlateModulusPoint[];
   /**
    * De hoekknopen (UI-node-ids, klikvolgorde): 4 asgelijnde hoeken =
    * rechthoekpad (grid), anders polygonpad (CDT-cache vereist).
@@ -673,6 +675,14 @@ export interface PlateElementStress {
   nx: number;        // kN/m — membraankracht = σx·t
   ny: number;        // kN/m
   nxy: number;       // kN/m
+  /** Rust Quad4 FNL: gemiddelde effectieve E over de vier Gauss-punten (MPa). */
+  effectiveEMpa?: number;
+  /** Grootste bereikte absolute hoofdrek in het element. */
+  maxEquivalentStrain?: number;
+  /** Grootste equivalente plastische rek in het element. */
+  equivalentPlasticStrain?: number;
+  /** Grootste trek-schadevariabele in het element (0…1). */
+  tensileDamage?: number;
   /**
    * Dezelfde spanning in de MATERIAALASSEN (N/mm²): σ₁ langs hoofdrichting 1
    * (de vezel, bij kruislaaghout de lengtelagen), σ₂ loodrecht daarop en τ₁₂.

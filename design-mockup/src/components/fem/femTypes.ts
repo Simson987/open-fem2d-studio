@@ -614,6 +614,10 @@ export interface Plate {
    * `effectiefPlaatMeshType`.
    */
   meshType?: PlaatMeshType;
+  /** Expliciete constitutieve wet voor de experimentele Rust Quad4 FNL-analyse. */
+  nonlinearLaw?: PlateNonlinearLaw;
+  /** Extra secant-E punten bij oplopende absolute hoofdrek; (0, E₀) volgt uit het plaatmateriaal. */
+  modulusCurve?: PlateModulusPoint[];
   /** Openingen in de plaat (stap 2). Ontbreekt of leeg = geen openingen. */
   openingen?: PlaatOpening[];
   /**
@@ -686,6 +690,12 @@ export interface Plate {
    */
   wapening?: PlaatWapeningInvoer;
 }
+
+export type PlateNonlinearLaw =
+  | { kind: "steelBilinear"; yieldMpa: number; hardeningRatio: number }
+  | { kind: "concreteCracking"; tensileMpa: number; residualRatio: number };
+
+export interface PlateModulusPoint { strain: number; eMpa: number }
 
 /** De elementkeuzes die een plaat kan dragen — ook de poort en het MCP-schema lezen deze lijst. */
 export const PLAAT_MESH_TYPEN: readonly PlaatMeshType[] = ["driehoeken", "vierhoeken"];

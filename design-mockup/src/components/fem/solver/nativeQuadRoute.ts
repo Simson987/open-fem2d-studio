@@ -1,6 +1,9 @@
 import { buildMesh } from "./engine";
+import type { LoadCombination } from "./combinations";
 import type { MultiInput, PlateElementStress, PlateResult, SolverResult } from "./types";
 import { solveNativeQuad2D, type NativeQuad2DResult } from "../../../lib/nativeFemClient";
+import type { NativeMaterialLaw, NativeModulusCurve, NativePlateAnalysis } from "../../../core/fem/nativePlate2DAdapter";
+import { plaatMateriaalSoort } from "../../../lib/plaatMateriaal";
 
 /** Translate the Rust membrane result to the same units and IDs as the 2D UI. */
 export function nativeQuadResultToSolverResult(
@@ -47,6 +50,10 @@ export function nativeQuadResultToSolverResult(
         nx: sigmaX * thicknessM * 1000,
         ny: sigmaY * thicknessM * 1000,
         nxy: tauXY * thicknessM * 1000,
+        effectiveEMpa: quad.gaussPoints.reduce((sum, point) => sum + point.effectiveEMpa, 0) / 4,
+        maxEquivalentStrain: Math.max(...quad.gaussPoints.map(point => point.maxEquivalentStrain)),
+        equivalentPlasticStrain: Math.max(...quad.gaussPoints.map(point => point.equivalentPlasticStrain)),
+        tensileDamage: Math.max(...quad.gaussPoints.map(point => point.tensileDamage)),
       };
     });
     const range = (key: "sigmaX" | "sigmaY" | "tauXY" | "vonMises" | "nx" | "ny" | "nxy") => ({
@@ -66,26 +73,108 @@ export function nativeQuadResultToSolverResult(
   return { displacements, reactions, elements: new Map(), maxDisplacement, plateElements };
 }
 
-/** Solve load cases separately so existing linear combination/envelope logic remains valid. */
-export async function solveAllCasesNativeQuad2D(input: MultiInput): Promise<Map<number, SolverResult>> {
+function materialOptions(input: MultiInput, built: ReturnType<typeof buildMesh>, analysis: NativePlateAnalysis) {
+  const laws = new Map<number, NativeMaterialLaw>();
+  const curves: NativeModulusCurve[] = [];
+  let nonlinearCount = 0;
+  for (const info of built.plateInfo) {
+    const plate = input.plates?.find(item => item.id === info.plateId);
+    if (!plate) throw new Error(`Plaat ${info.plateId} ontbreekt in de solverinvoer.`);
+    if (plate.nonlinearLaw && plate.modulusCurve?.length) {
+      throw new Error(`Plaat ${plate.id}: kies een FNL-materiaalwet of een E-curve, niet beide.`);
+    }
+    const materialId = info.region.materialId;
+    const baseEMpa = built.mesh.materials.get(materialId)?.E / 1e6;
+    if (!(baseEMpa > 0)) throw new Error(`Plaat ${plate.id}: ongeldige elastische E-modulus.`);
+    if (plate.nonlinearLaw) {
+      const kind = plaatMateriaalSoort(plate.materiaal);
+      if (kind === "staal" && plate.nonlinearLaw.kind !== "steelBilinear"
+        || kind === "beton" && plate.nonlinearLaw.kind !== "concreteCracking") {
+        throw new Error(`Plaat ${plate.id}: FNL-wet past niet bij het gekozen materiaal.`);
+      }
+      const law = plate.nonlinearLaw;
+      const strength = law.kind === "steelBilinear" ? law.yieldMpa : law.tensileMpa;
+      const ratio = law.kind === "steelBilinear" ? law.hardeningRatio : law.residualRatio;
+      if (!Number.isFinite(strength) || strength <= 0 || !Number.isFinite(ratio) || ratio < 0 || ratio > 1) {
+        throw new Error(`Plaat ${plate.id}: FNL-sterkte en stijfheidsverhouding zijn ongeldig.`);
+      }
+      laws.set(materialId, law.kind === "steelBilinear"
+        ? { kind: "steelBilinear", yield_mpa: law.yieldMpa, hardening_ratio: law.hardeningRatio }
+        : { kind: "concreteCracking", tensile_mpa: law.tensileMpa, residual_ratio: law.residualRatio });
+      nonlinearCount++;
+    }
+    if (plate.modulusCurve?.length) {
+      let previousStrain = 0;
+      let previousE = baseEMpa;
+      for (const point of plate.modulusCurve) {
+        if (!Number.isFinite(point.strain) || point.strain <= previousStrain
+          || !Number.isFinite(point.eMpa) || point.eMpa <= 0 || point.eMpa > previousE) {
+          throw new Error(`Plaat ${plate.id}: E-curve vereist stijgende positieve rek en niet-stijgende positieve E.`);
+        }
+        previousStrain = point.strain;
+        previousE = point.eMpa;
+      }
+      curves.push({ materialId, points: [{ strain: 0, eMpa: baseEMpa }, ...plate.modulusCurve] });
+      nonlinearCount++;
+    }
+  }
+  if ((analysis === "material" || analysis === "combined") && nonlinearCount === 0) {
+    throw new Error("Geef minstens één plaat een FNL-materiaalwet of een afnemende E-curve.");
+  }
+  return { laws, curves };
+}
+
+async function solveNativeQuadMesh(
+  input: MultiInput,
+  built: ReturnType<typeof buildMesh>,
+  analysis: NativePlateAnalysis,
+): Promise<SolverResult> {
   if (input.beams.length > 0 || !input.plates?.length) {
     throw new Error("De Rust Quad4-route vereist uitsluitend platen, zonder gekoppelde staven.");
   }
   if (input.scheefstand) throw new Error("Scheefstand is nog niet gevalideerd voor de Rust Quad4-route.");
+  if (built.randKoppelingen.length > 0) {
+    throw new Error("Randkoppelingen zijn nog niet ondersteund door de Rust Quad4-route.");
+  }
+  const { laws, curves } = materialOptions(input, built, analysis);
+  const native = await solveNativeQuad2D(built.mesh, analysis, laws, [], curves);
+  // The Rust point-state commit can change the final free-DOF residual slightly
+  // after the converged Newton step; still require a tight 1e-5 force ratio.
+  if (!Number.isFinite(native.relativeResidual) || native.relativeResidual > 1e-5) {
+    throw new Error("Rust Quad4 berekening heeft geen voldoende klein residu.");
+  }
+  return nativeQuadResultToSolverResult(built, native, input.supports);
+}
+
+/** Solve cases separately; linear cases can be superposed, nonlinear cases are for inspection only. */
+export async function solveAllCasesNativeQuad2D(
+  input: MultiInput,
+  analysis: NativePlateAnalysis = "linear",
+): Promise<Map<number, SolverResult>> {
   const perCase = new Map<number, SolverResult>();
   for (const loadCase of input.cases) {
     const built = buildMesh(input, caseId => caseId === loadCase.id ? 1 : 0);
-    if (built.randKoppelingen.length > 0) {
-      throw new Error("Randkoppelingen zijn nog niet ondersteund door de Rust Quad4-route.");
-    }
     // Empty default cases have no effect and are omitted by the existing solver too.
     const hasLoads = [...built.mesh.nodes.values()].some(node => node.loads.fx || node.loads.fy);
     if (!hasLoads) continue;
-    const native = await solveNativeQuad2D(built.mesh);
-    if (!Number.isFinite(native.relativeResidual) || native.relativeResidual > 1e-6) {
-      throw new Error(`Rust Quad4 berekening van ${loadCase.name} heeft geen voldoende klein residu.`);
-    }
-    perCase.set(loadCase.id, nativeQuadResultToSolverResult(built, native, input.supports));
+    perCase.set(loadCase.id, await solveNativeQuadMesh(input, built, analysis));
   }
   return perCase;
+}
+
+/** Nonlinear combinations each keep their own Gauss-point history through the full load path. */
+export async function solveAllCombinationsNativeQuad2D(
+  input: MultiInput,
+  combinations: readonly LoadCombination[],
+  analysis: Exclude<NativePlateAnalysis, "linear">,
+): Promise<Map<number, SolverResult>> {
+  const results = new Map<number, SolverResult>();
+  for (const combination of combinations) {
+    if (combination.eindtoestand !== undefined) {
+      throw new Error(`Combinatie ${combination.name}: eindstijfheidvariant is niet ondersteund door Rust Quad4.`);
+    }
+    const built = buildMesh(input, caseId => combination.factors.get(caseId ?? -1) ?? 0);
+    results.set(combination.id, await solveNativeQuadMesh(input, built, analysis));
+  }
+  return results;
 }
