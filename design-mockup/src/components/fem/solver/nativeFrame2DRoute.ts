@@ -27,8 +27,8 @@ export function buildNativeFrame2DRequest(
   if (input.plates?.length || !input.beams.length) {
     throw new Error("De Rust 2D-raamwerkroute vereist uitsluitend staven, zonder gekoppelde platen.");
   }
-  if (input.scheefstand || input.thermalLoads?.length || input.edgeLoads?.length || input.edgePointLoads?.length) {
-    throw new Error("Scheefstand, temperatuur en plaatrandlasten zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.");
+  if (input.scheefstand || input.edgeLoads?.length || input.edgePointLoads?.length) {
+    throw new Error("Scheefstand en plaatrandlasten zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.");
   }
   const nodes = input.nodes.map(node => ({ id: node.id,
     x: finite(node.x, `Knoop ${node.id} X`) / 1000,
@@ -129,8 +129,16 @@ export function buildNativeFrame2DRequest(
       pyKn: -axes.s * fx + axes.c * fz,
       positionM: position * axes.lengthM }];
   });
+  const thermalLoads = (input.thermalLoads ?? []).flatMap(load => {
+    const scale = finite(factor(load.caseId), `Belastinggeval ${load.caseId}`);
+    if (!beamById.has(load.beamId)) throw new Error(`Temperatuurlast verwijst naar onbekende staaf ${load.beamId}.`);
+    const deltaTK = finite(load.deltaT, `Staaf ${load.beamId} temperatuur`) * scale;
+    const alphaPerK = finite(load.alpha ?? 1.2e-5, `Staaf ${load.beamId} uitzettingscoëfficiënt`);
+    if (alphaPerK < 0) throw new Error(`Staaf ${load.beamId}: uitzettingscoëfficiënt mag niet negatief zijn.`);
+    return deltaTK === 0 ? [] : [{ memberId: load.beamId, deltaTK, alphaPerK }];
+  });
   return { analysis, nodes, materials, sections, members, supports,
-    nodalLoads, memberLoads, memberPointLoads };
+    nodalLoads, memberLoads, memberPointLoads, thermalLoads };
 }
 
 export function nativeFrame2DResultToSolverResult(
@@ -194,7 +202,8 @@ export async function solveAllCasesNativeFrame2D(
   for (const loadCase of input.cases) {
     const request = buildNativeFrame2DRequest(input, caseId => caseId === loadCase.id ? 1 : 0, analysis);
     if (!request.nodalLoads.length && !request.memberLoads.length
-        && !request.memberPointLoads.some(load => load.pxKn !== 0 || load.pyKn !== 0)) continue;
+        && !request.memberPointLoads.some(load => load.pxKn !== 0 || load.pyKn !== 0)
+        && !request.thermalLoads.length) continue;
     const result = await solveNativeFem<NativeFrame2DResult>("frame2d", request);
     perCase.set(loadCase.id, nativeFrame2DResultToSolverResult(request, result));
   }

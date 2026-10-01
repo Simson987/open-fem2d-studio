@@ -17,20 +17,25 @@ belastingpad. De app koppelt deze materiaalwetten nog niet aan staven; haar
 fysisch niet-lineaire raamwerkroute wordt daarom nog geweigerd.
 Buigscharnieren aan staafeinden zijn gekoppeld voor lineaire en P-Δ-analyse;
 bedding, translatiehulzen,
-eindveren, thermische lasten en gekoppelde
+eindveren en gekoppelde
 staaf-plaatmodellen worden in deze route nog expliciet geweigerd. De app
 behoudt de bestaande solver als automatische keuze.
+Uniforme temperatuurbelasting per staaf loopt wel via Rust, met een
+lastspecifieke uitzettingscoëfficiënt. De kern kan die belasting ook combineren
+met axiale staalplastificatie, betontrekschade en P-Δ; de gewone 2D-app-route
+gebruikt vooralsnog alleen lineaire en geometrische analyse.
 
 Een afzonderlijke lineaire of FNL 3D-plaatroute kan in de app met expliciete keuze
 voor Open FEM Rust worden berekend. Zij accepteert één vlakke rechthoek in
-een willekeurig 3D-vlak zonder staven, bogen of openingen. De Rust-mesher
+een willekeurig 3D-vlak zonder staven of bogen, met optionele rechthoekige
+openingen. De Rust-mesher
 maakt een conform Q4-rooster; de hybride Kirchhoff-kern berekent uitwijking
 normaal op de plaat, rotaties, reacties, momenten en dwarskrachten.
 Oppervlaktelasten en puntlasten gaan mee per belastinggeval of combinatie;
 eigen gewicht werkt voor horizontale platen. Bij een schuine plaat heeft
 zwaartekracht ook een niet-ondersteunde component in het plaatvlak.
-Opleggingen zitten op de vier plaat-hoekknopen; de tussenliggende randen zijn
-vrij. Alleen normaalgerichte belastingen en eenduidig naar lokale buigvrijheden
+Opleggingen kunnen op plaat- en openingshoekknopen en langs de buitenranden
+zitten. Alleen normaalgerichte belastingen en eenduidig naar lokale buigvrijheden
 te vertalen globale opleggingen zijn toegestaan. Het rapport toont
 roosteruitvoer en de 3D-weergave toont de vervormde plaat. Schijfwerking,
 gekoppelde staven, plaatveren, opgelegde verplaatsingen,
@@ -67,6 +72,16 @@ rek na ontlasten is `0,0116667`, dus de blijvende verlenging over `3 m` is
 De materiaalwet verandert hier de **axiale** stijfheid; buiging blijft elastisch.
 Axiale lijn- en staafpuntlasten zijn voor deze materiaalroute nog niet geldig.
 
+[`examples/frame2d-thermal-steel-unload.json`](examples/frame2d-thermal-steel-unload.json)
+verwarmt een aan beide uiteinden vastgehouden staaf met 100 K. Voor
+`E=210 GPa`, `A=0,01 m²`, `α=10⁻⁵/K`, `f_y=100 MPa` en
+`E_t/E=0,5` is de drukkracht bij de piek 1550 kN. Na afkoelen via
+`loadPath: [1, 0]` blijven 0,261905‰ plastische drukrek en 550 kN
+trekreactie over. Een vrije staaf met dezelfde opwarming verlengt 3 mm zonder
+plastificatie. De Rust-proeven dekken daarnaast verhinderde betonafkoeling en
+gelijktijdige GNL/FNL-thermiek af; de 2D-app-test vergelijkt lineaire
+thermische gevallen met de bestaande solver.
+
 [`examples/frame2d-released-cantilever.json`](examples/frame2d-released-cantilever.json)
 laat een uitkraging met een buigscharnier bij de tip zien. De knooprotatie is
 vastgezet, maar de herstelde staafeindrotatie is `−PL²/(2EI)` en het
@@ -92,7 +107,7 @@ src-tauri/target/debug/native-frame2d \
 
 | Kern | Element | GNL | FNL | Lasten en opleggingen |
 | --- | --- | --- | --- | --- |
-| `native-frame2d` | 6-DOF Euler-Bernoulli raamwerk, 3 DOF/knoop | iteratieve P-Δ, stabiliteitscontrole tot 600 DOF | axiale staalplastificatie en betontrekschade met belastingpad; elastische buiging | knoop-, verdeelde en staafpuntlasten; vaste DOF, globale veren, opgelegde verplaatsingen/rotaties en lineaire buigscharnieren |
+| `native-frame2d` | 6-DOF Euler-Bernoulli raamwerk, 3 DOF/knoop | iteratieve P-Δ, stabiliteitscontrole tot 600 DOF | axiale staalplastificatie en betontrekschade met belastingpad; elastische buiging | knoop-, verdeelde, staafpunt- en uniforme thermische lasten; vaste DOF, globale veren, opgelegde verplaatsingen/rotaties en lineaire buigscharnieren |
 | `native-frame3d` | 12-DOF Euler-Bernoulli raamwerk, 6 DOF/knoop | iteratieve P-Δ-stijfheid, stabiliteitscontrole en eigenknik tot 120 vrije DOF | monotone effectieve-E-envelop; met expliciet `loadPath` axiale staalplastificatie en blijvende betontrekschade | knoop-, lijn-, staafpunt- en thermische lasten; vaste DOF, globale veren, opgelegde verplaatsingen/rotaties en staafeindscharnieren |
 | `native-plate2d` | 3-knoops CST-vlakspanning/membraan, 2 DOF/knoop | Green-Lagrange-rek met Newton-iteratie | J2-staalplastificatie met isotrope verharding en onomkeerbare betonschade per element | knoopkrachten en vaste x/y-DOF |
 | `native-plate-bending` | 3-knoops DKT-plaatbuiging, 3 DOF/knoop | nog niet | nog niet | dwarsknoopkrachten, knoopmomenten en vaste w/rotatie-DOF |
@@ -140,8 +155,9 @@ In **Instellingen → Berekening** kan de gebruiker nu `Open FEM Rust
 een vloeigrens en verhardingsverhouding (staal) of treksterkte en
 reststijfheidsverhouding (beton) in. Staven zonder FNL-wet blijven elastisch;
 minstens één staaf moet een wet hebben. De automatische solverkeuze schakelt
-de experimentele FNL-route niet zelf in. Thermische lasten zijn voor deze
-FNL-route nog uitgesloten. Eindscharnieren worden ook bij FNL per iteratie
+de experimentele FNL-route niet zelf in. Uniforme thermische lasten kunnen met
+axiale FNL worden gecombineerd; thermische gradiënten nog niet.
+Eindscharnieren worden ook bij FNL per iteratie
 gecondenseerd. In de 3D-eigenschappen zonder
 selectie kan de gebruiker een FNL-lastpad invoeren, bijvoorbeeld `1, 0, 0.5`.
 De app bewaart het pad in het project, stuurt het als `loadPath` naar Rust en

@@ -119,6 +119,32 @@ try {
   const springExisting = solveAllCases(springInput).perCase.get(1);
   close(springNative.reactions.get(2).fx, springExisting.reactions.get(2).fx, 1e-4,
     "veerreactie via app-route");
+  const thermalInput = { ...input, loads: [], pointLoads: [],
+    thermalLoads: [{ beamId: 1, caseId: 1, deltaT: 40, alpha: 12e-6 }],
+    cases: [{ id: 1, name: "opwarming" }] };
+  const thermalRequest = buildNativeFrame2DRequest(thermalInput, () => 0.5);
+  assert.deepEqual(thermalRequest.thermalLoads, [{ memberId: 1, deltaTK: 20, alphaPerK: 12e-6 }]);
+  assert.throws(() => buildNativeFrame2DRequest({ ...thermalInput,
+    thermalLoads: [{ beamId: 99, caseId: 1, deltaT: 40 }] }, () => 1), /onbekende staaf/);
+  const freeThermal = (await solveAllCasesNativeFrame2D(thermalInput)).get(1);
+  const freeThermalReference = solveAllCases(thermalInput).perCase.get(1);
+  close(freeThermal.displacements.get(2).ux, 2.88, 1e-8, "vrije thermische uitzetting analytisch");
+  close(freeThermal.displacements.get(2).ux, freeThermalReference.displacements.get(2).ux,
+    1e-6, "vrije thermische uitzetting bestaande solver");
+  close(freeThermal.elements.get(1).axialDisp[10], 1.44, 1e-8,
+    "thermische verplaatsing midden staaf");
+  const restrainedThermalInput = { ...thermalInput,
+    supports: [{ nodeId: 1, type: "pinned" }, { nodeId: 2, type: "pinned" }] };
+  const restrainedThermal = (await solveAllCasesNativeFrame2D(restrainedThermalInput)).get(1);
+  const restrainedReference = solveAllCases(restrainedThermalInput).perCase.get(1);
+  close(restrainedThermal.reactions.get(1).fx, 1_008_000, 1e-4,
+    "verhinderde thermische reactie analytisch");
+  close(restrainedThermal.reactions.get(1).fx, restrainedReference.reactions.get(1).fx,
+    1e-4, "verhinderde thermische reactie bestaande solver");
+  const halfThermal = (await solveAllCombinationsNativeFrame2D(thermalInput,
+    [{ id: 98, name: "halve temperatuur", factors: new Map([[1, 0.5]]) }])).get(98);
+  close(halfThermal.displacements.get(2).ux, 1.44, 1e-8,
+    "gefactoreerde thermische uitzetting bij P-Delta");
   const pointInput = { ...input, loads: [], pointLoads: [],
     beamPointLoads: [
       { beamId: 1, caseId: 1, posFrac: 0.25, fz: -8000 },
