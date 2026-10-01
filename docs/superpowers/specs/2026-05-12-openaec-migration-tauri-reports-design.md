@@ -419,7 +419,7 @@ User installs **Rust toolchain** (rustup-init.exe). Document in README. Tauri v2
 {
   "productName": "Open FEM Studio",
   "version": "1.0.0",
-  "identifier": "org.openaec.fem2d-studio",
+  "identifier": "org.openaec.fem-studio",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",

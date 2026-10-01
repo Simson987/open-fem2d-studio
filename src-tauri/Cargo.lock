@@ -72,6 +72,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
+name = "appdata-migratie"
+version = "0.1.0"
+dependencies = [
+ "dirs",
+ "serde_json",
+]
+
+[[package]]
 name = "approx"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3052,8 +3060,9 @@ dependencies = [
 
 [[package]]
 name = "open-fem-studio"
-version = "2026.39.1"
+version = "2026.39.2"
 dependencies = [
+ "appdata-migratie",
  "concrete-check",
  "embed-resource",
  "nen-en-1992-1-1",

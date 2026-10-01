@@ -117,6 +117,11 @@ export {
   // deze export rekent de bundelstand van test-checkconfig met `undefined`.
   PROJECT_FORMAT_VERSION_3D,
   PROJECT_FORMAT_VERSION_MAX,
+  // Het formaat-id dat geschreven wordt en de oudere id's die de lezer nog
+  // accepteert; de bundeltests controleren er beide richtingen mee.
+  PROJECT_FORMAT_ID,
+  LEGACY_PROJECT_FORMAT_IDS,
+  isProjectFormatId,
   PROJECT_FILE_EXT,
   serializeProject,
   deserializeProject,

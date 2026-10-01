@@ -708,12 +708,18 @@ async fn run_stdio() -> std::io::Result<()> {
     let stdout = Arc::new(Mutex::new(stdout));
 
     let mut reader = BufReader::new(stdin).lines();
+    // Elk verzoek draait als eigen taak. Sluit de client stdin direct na zijn
+    // verzoeken (een pijp, een script), dan maakt de server die taken eerst af:
+    // anders eindigt main en vallen de antwoorden weg.
+    let mut lopend = tokio::task::JoinSet::new();
     while let Some(line) = reader.next_line().await? {
         let line = line.trim().to_string();
         if line.is_empty() { continue; }
+        // Afgeronde taken opruimen, zodat de set in een lange sessie niet groeit.
+        while lopend.try_join_next().is_some() {}
 
         let stdout = stdout.clone();
-        tokio::spawn(async move {
+        lopend.spawn(async move {
             let resp = match serde_json::from_str::<Request>(&line) {
                 Ok(req) => handle_request(req).await,
                 Err(e) => {
@@ -742,6 +748,7 @@ async fn run_stdio() -> std::io::Result<()> {
             }
         });
     }
+    while lopend.join_next().await.is_some() {}
     Ok(())
 }
 

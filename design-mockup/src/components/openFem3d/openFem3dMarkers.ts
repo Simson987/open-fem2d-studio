@@ -265,9 +265,21 @@ function addSupport(group: THREE.Group, node: OpenFem3DNode, support: OpenFem3DS
   const rollerNormal = roller && fixedTranslations.length === 1
     ? GLOBAL_AXES[fixedTranslations[0]!]
     : Z_AXIS;
+  const allTranslationsFixed = support.ux && support.uy && support.uz;
+  // Combinaties zonder eigen standaardteken: verend (een paal), of star maar
+  // geen inklemming, scharnier, rol of scharnier met één vrije draaias.
+  const custom = !allFixed && !revoluteAxis && !pinned && !roller;
   const color = 0xd97706;
   const baseColor = 0x475569;
   const horizontal = new THREE.Quaternion().setFromUnitVectors(Y_AXIS, Z_AXIS);
+  // Een plaatje loodrecht op `axis`, `distance` aan de min-kant van de knoop:
+  // het eind van een veer of de voet van een kegeltje.
+  const addEndPlate = (axis: THREE.Vector3, distance: number, sideOffset = new THREE.Vector3()) => {
+    addMesh(group, markerGeometry(group, `support-end-plate:${size}`, () =>
+      new THREE.CylinderGeometry(size * 0.34, size * 0.34, size * 0.06, 24)), baseColor, node.id,
+      p.clone().addScaledVector(axis, -distance).add(sideOffset),
+      new THREE.Quaternion().setFromUnitVectors(Y_AXIS, axis));
+  };
   if (allFixed) {
     addMesh(group, markerGeometry(group, `support-fixed:${size}`, () =>
       new THREE.CylinderGeometry(size * 0.76, size * 0.76, size * 0.36, 32)), color, node.id,
@@ -294,7 +306,9 @@ function addSupport(group: THREE.Group, node: OpenFem3DNode, support: OpenFem3DS
     addMesh(group, markerGeometry(group, `support-revolute-axis:${size}`, () =>
       new THREE.CylinderGeometry(size * 0.07, size * 0.07, size * 1.65, 10)), baseColor, node.id,
       p.clone(), new THREE.Quaternion().setFromUnitVectors(Y_AXIS, axis));
-  } else if (pinned) {
+  } else if (pinned || custom && allTranslationsFixed) {
+    // Een scharnier; ook met een of twee vaste rotaties (bijv. torsievast),
+    // die er hieronder als ring bij komen.
     addMesh(group, markerGeometry(group, `support-cone:${size}`, () =>
       new THREE.ConeGeometry(size * 0.7, size, 32)), color, node.id,
       p.clone().add(new THREE.Vector3(0, 0, -size * 0.55)),
@@ -305,9 +319,26 @@ function addSupport(group: THREE.Group, node: OpenFem3DNode, support: OpenFem3DS
       p.clone().addScaledVector(rollerNormal, -size * 0.55),
       new THREE.Quaternion().setFromUnitVectors(Y_AXIS, rollerNormal));
   } else {
-    addMesh(group, markerGeometry(group, `support-sphere:${size}`, () =>
-      new THREE.SphereGeometry(size * 0.62, 24, 16)), color, node.id,
-      p.clone().add(new THREE.Vector3(0, 0, -size * 0.5)));
+    // Per vaste translatie een klein kegeltje met de punt naar de knoop en een
+    // plaatje erachter. Een veer in een vrije richting tekent hieronder zijn
+    // eigen spoel met plaatje; een grote bol zou die verbergen.
+    for (const axisName of fixedTranslations) {
+      const axis = GLOBAL_AXES[axisName];
+      addMesh(group, markerGeometry(group, `support-small-cone:${size}`, () =>
+        new THREE.ConeGeometry(size * 0.28, size * 0.5, 24)), color, node.id,
+        p.clone().addScaledVector(axis, -size * 0.25), new THREE.Quaternion().setFromUnitVectors(Y_AXIS, axis));
+      addEndPlate(axis, size * 0.53);
+    }
+  }
+  if (custom) {
+    // Per vaste rotatie een donkere, gesloten ring om die as. De oranje ring
+    // met asstaaf van een scharnier betekent het omgekeerde: die as is vrij.
+    for (const [axisName, fixed] of [["x", support.rx], ["y", support.ry], ["z", support.rz]] as const) {
+      if (!fixed) continue;
+      addMesh(group, markerGeometry(group, `support-fixed-rotation:${size}`, () =>
+        new THREE.TorusGeometry(size * 0.42, size * 0.06, 10, 40)), baseColor, node.id,
+        p.clone(), new THREE.Quaternion().setFromUnitVectors(Z_AXIS, GLOBAL_AXES[axisName]));
+    }
   }
   if (roller) {
     // Twee echte rollen in het vlak loodrecht op de geblokkeerde globale as.
@@ -329,7 +360,7 @@ function addSupport(group: THREE.Group, node: OpenFem3DNode, support: OpenFem3DS
       new THREE.CylinderGeometry(size * 0.9, size * 0.9, size * 0.09, 40)), baseColor, node.id,
       p.clone().addScaledVector(rollerNormal, -size * 1.32),
       new THREE.Quaternion().setFromUnitVectors(Y_AXIS, rollerNormal));
-  } else {
+  } else if (!custom || allTranslationsFixed) {
     const baseZ = allFixed || revoluteAxis ? -size * 0.48 : -size * 1.08;
     addMesh(group, markerGeometry(group, `support-base:${size}`, () =>
       new THREE.CylinderGeometry(size * 0.9, size * 0.9, size * 0.09, 40)), baseColor, node.id,
@@ -358,6 +389,7 @@ function addSupport(group: THREE.Group, node: OpenFem3DNode, support: OpenFem3DS
     );
     spring.userData = { type: "node", id: node.id };
     group.add(spring);
+    addEndPlate(axis, size * 1.48, side.clone().multiplyScalar(offsetIndex * size * 0.08));
   };
   const translational = [
     [support.springs?.kxKnPerM, GLOBAL_AXES.x],

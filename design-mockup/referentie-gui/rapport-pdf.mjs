@@ -49,7 +49,7 @@ const MCP = join(REPO, "src-tauri", "target", "release", "openaec-mcp-server.exe
 const PROJECT = join(HIER, "..", "referentie-projecten", "P04.femp");
 const UIT = join(tmpdir(), `openfem-rapport-pdf-${process.pid}`);
 const VIND = join(UIT, "gui-control.json");
-const STANDAARD_VIND = join(process.env.LOCALAPPDATA ?? "", "org.openaec.fem2d-studio", "gui-control.json");
+const STANDAARD_VIND = join(process.env.LOCALAPPDATA ?? "", "org.openaec.fem-studio", "gui-control.json");
 
 let passed = 0, failed = 0;
 const log = (s) => process.stdout.write(s + "\n");

@@ -391,7 +391,7 @@ const ALLEEN_BRON = new Map([
   // De 3D-proeven raken React/Three, de projectadapter of de aparte Rust-kern.
   // Deze modules zitten niet in de 2D-sidecarbundel.
   ...[
-    "open-fem3d-analysis-mode", "open-fem3d-wheel-anchor", "open-fem3d-staalhal", "open-fem3d-staalhal-generator", "open-fem3d-knooppaneel", "open-fem3d-meldingen", "open-fem3d-modelvelden", "open-fem3d-scheefstand", "open-fem3d-kipsteunen", "open-fem3d-rapportsamenvatting", "open-fem3d-staalgewicht", "open-fem3d-beam-screen-pick", "open-fem3d-box-selection", "open-fem3d-campus-frame", "open-fem3d-trek-schijf",
+    "open-fem3d-analysis-mode", "open-fem3d-wheel-anchor", "open-fem3d-staalhal", "open-fem3d-staalhal-generator", "open-fem3d-knooppaneel", "open-fem3d-meldingen", "open-fem3d-modelvelden", "open-fem3d-scheefstand", "open-fem3d-kipsteunen", "open-fem3d-rapportsamenvatting", "open-fem3d-staalgewicht", "open-fem3d-opleggingsteken", "open-fem3d-beam-screen-pick", "open-fem3d-box-selection", "open-fem3d-campus-frame", "open-fem3d-trek-schijf",
     // Belastingvlakken: afdracht en vlakmeetkunde, en de browsertest (tekenen
     // op het werkvlak, doorzichtig vlak, klikken door het vlak heen).
     "open-fem3d-belastingvlak", "open-fem3d-belastingvlak-ui",

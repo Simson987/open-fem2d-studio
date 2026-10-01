@@ -7,11 +7,13 @@
 //! `POST http://127.0.0.1:<poort>/opdracht` met een sessietoken.
 //!
 //! De app wordt gevonden via `gui-control.json` in haar app-datamap
-//! (`%LOCALAPPDATA%\org.openaec.fem2d-studio\`), te overschrijven met
-//! `OPENAEC_GUI_CONTROL_FILE`. Ontbreekt het bestand of luistert er niets, dan
-//! komt er één duidelijke fout: start de app met `OPENAEC_GUI_CONTROL=1`. Deze
-//! server start de app niet zelf — dat hoort bij een testscript, niet bij een
-//! tool die ook door een assistent wordt aangeroepen.
+//! (`%LOCALAPPDATA%\org.openaec.fem-studio\`), te overschrijven met
+//! `OPENAEC_GUI_CONTROL_FILE`. Staat het daar niet, maar wel onder de vorige
+//! identifier, dan draait een app tot en met 2026.39.1 en geldt dat bestand.
+//! Ontbreekt het bestand of luistert er niets, dan komt er één duidelijke
+//! fout: start de app met `OPENAEC_GUI_CONTROL=1`. Deze server start de app
+//! niet zelf — dat hoort bij een testscript, niet bij een tool die ook door
+//! een assistent wordt aangeroepen.
 //!
 //! Antwoorden gaan ongewijzigd door: `structuredContent` is precies wat de
 //! actie teruggaf, en een toolfout draagt de tekst van de app.
@@ -65,15 +67,37 @@ struct Vindbestand {
     versie: String,
 }
 
+/// De identifier van de app; haar app-datamap heet zo. Gelijk aan
+/// `identifier` in `src-tauri/tauri.conf.json` (zie de test onderaan).
+const APP_IDENTIFIER: &str = "org.openaec.fem-studio";
+
+/// De identifier tot en met uitgave 2026.39.1. Een app van die versie schrijft
+/// haar vindbestand nog onder deze map.
+const OUDE_APP_IDENTIFIER: &str = "org.openaec.fem2d-studio";
+
 fn vindbestand_pad() -> Result<std::path::PathBuf, RpcError> {
     if let Ok(p) = std::env::var("OPENAEC_GUI_CONTROL_FILE") {
         return Ok(p.into());
     }
     let basis = std::env::var("LOCALAPPDATA")
         .map_err(|_| niet_bereikbaar("LOCALAPPDATA is niet gezet; zet OPENAEC_GUI_CONTROL_FILE"))?;
-    Ok(std::path::Path::new(&basis)
-        .join("org.openaec.fem2d-studio")
-        .join("gui-control.json"))
+    Ok(kies_vindbestand(std::path::Path::new(&basis)))
+}
+
+/// Het vindbestand onder de identifier van deze versie. Bestaat dat niet,
+/// maar dat onder de vorige identifier wel, dan dat (een oudere app). Bestaat
+/// geen van beide, dan het nieuwe pad, voor de foutmelding.
+fn kies_vindbestand(basis: &std::path::Path) -> std::path::PathBuf {
+    let nieuw = basis.join(APP_IDENTIFIER).join("gui-control.json");
+    if nieuw.exists() {
+        return nieuw;
+    }
+    let oud = basis.join(OUDE_APP_IDENTIFIER).join("gui-control.json");
+    if oud.exists() {
+        oud
+    } else {
+        nieuw
+    }
 }
 
 fn niet_bereikbaar(reden: impl std::fmt::Display) -> RpcError {
@@ -707,6 +731,48 @@ pub fn tool_definitions() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Een lege werkmap voor de vindbestandtest.
+    fn lege_map(naam: &str) -> std::path::PathBuf {
+        let pad = std::env::temp_dir().join(format!("gui-tools-{naam}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&pad);
+        std::fs::create_dir_all(&pad).unwrap();
+        pad
+    }
+
+    fn leg_vindbestand(basis: &std::path::Path, identifier: &str) -> std::path::PathBuf {
+        let map = basis.join(identifier);
+        std::fs::create_dir_all(&map).unwrap();
+        let pad = map.join("gui-control.json");
+        std::fs::write(&pad, r#"{"pid":1,"poort":1,"token":"x"}"#).unwrap();
+        pad
+    }
+
+    #[test]
+    fn vindbestand_eerst_onder_de_nieuwe_identifier_dan_de_oude() {
+        let basis = lege_map("vind");
+        let nieuw = basis.join(APP_IDENTIFIER).join("gui-control.json");
+        // Geen van beide: het nieuwe pad, zodat de melding daarnaar wijst.
+        assert_eq!(kies_vindbestand(&basis), nieuw);
+        // Alleen een app tot en met 2026.39.1: diens bestand.
+        let oud = leg_vindbestand(&basis, OUDE_APP_IDENTIFIER);
+        assert_eq!(kies_vindbestand(&basis), oud);
+        // Beide: de nieuwe gaat voor.
+        assert_eq!(leg_vindbestand(&basis, APP_IDENTIFIER), nieuw);
+        assert_eq!(kies_vindbestand(&basis), nieuw);
+        std::fs::remove_dir_all(&basis).unwrap();
+    }
+
+    #[test]
+    fn identifier_is_die_van_tauri_conf() {
+        let pad = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("tauri.conf.json");
+        let conf: Value = serde_json::from_str(&std::fs::read_to_string(pad).unwrap()).unwrap();
+        assert_eq!(conf["identifier"], APP_IDENTIFIER);
+        assert_ne!(APP_IDENTIFIER, OUDE_APP_IDENTIFIER);
+    }
 
     #[test]
     fn elke_tool_heeft_een_schema_en_andersom() {

@@ -1,6 +1,6 @@
 [package]
 name = "open-fem-studio"
-version = "2026.39.1"
+version = "2026.39.2"
 description = "Open FEM Studio — eindige-elementenprogramma voor constructies (2D en 3D)"
 authors = ["OpenAEC Foundation"]
 license = "AGPL-3.0-or-later"
@@ -55,6 +55,9 @@ report = { path = "crates/report" }
 # Ruimtelijke raamwerken: neutraal Open FEM-contract met een vastgezette
 # adapter voor een externe 3D-rekenkern (lineair, directe tweede orde en eigenknik).
 open-fem-3d = { path = "crates/open-fem-3d" }
+# Neemt bij de eerste start de app-datamappen van de vorige identifier over
+# (main.rs, vóór run()).
+appdata-migratie = { path = "crates/appdata-migratie" }
 # ── GUI-bediening (module `gui_control`, alleen actief met OPENAEC_GUI_CONTROL=1) ──
 # tiny_http: synchrone localhost-luisteraar; de app-crate heeft geen tokio.
 # rand/png/raw-window-handle staan al in de lock via Tauri — zelfde versies,

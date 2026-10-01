@@ -84,6 +84,10 @@ const resultaat = await build({
   format: "esm",
   target: "node20",
   write: false,
+  // Een worktree met een junction naar node_modules: zonder deze optie komt
+  // het opgeloste pad achter de junction in de padcommentaren van de bundel,
+  // en verschilt de bundel van die uit een gewone checkout.
+  preserveSymlinks: true,
   banner: {
     js: [
       "// GEGENEREERD BESTAND — niet met de hand aanpassen.",

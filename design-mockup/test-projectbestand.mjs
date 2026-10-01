@@ -1,4 +1,4 @@
-// Het projectbestand (.ifcfem2d) bewaart ALLES wat bij het project hoort:
+// Het projectbestand (.ifcfem) bewaart ALLES wat bij het project hoort:
 // het model met al zijn staafvelden (aansluitingen, veren, bedding, korf,
 // zones, milieuklasse, belastingtype), en daarnaast de projectgegevens, de
 // windinstellingen en de rapportinstellingen. Die laatste drie stonden
@@ -9,6 +9,7 @@
 const {
   serializeProject, deserializeProject, PROJECT_FORMAT_VERSION, PROJECT_FORMAT_VERSION_3D,
   PROJECT_FORMAT_VERSION_MAX, combinationsFromFile, onbekendeTopVelden,
+  PROJECT_FORMAT_ID, LEGACY_PROJECT_FORMAT_IDS, isProjectFormatId,
 } = await import("./src/io/projectFile.ts");
 const { rapportSnapshot, pasRapportSnapshotToe, useReportStore } =
   await import("./src/stores/reportStore.ts");
@@ -68,7 +69,7 @@ log("\n1. Alles wat erin gaat komt er ongewijzigd uit");
 {
   const tekst = serializeProject(model);
   const terug = deserializeProject(tekst);
-  ok(terug.version === PROJECT_FORMAT_VERSION && terug.format === "open-fem2d-studio-v2", "formaat en versie");
+  ok(terug.version === PROJECT_FORMAT_VERSION && terug.format === PROJECT_FORMAT_ID, "formaat en versie");
   const b = terug.beams[0];
   ok(JSON.stringify(b.veren) === JSON.stringify(staaf.veren), "veren van de staaf");
   ok(JSON.stringify(b.bedding) === JSON.stringify(staaf.bedding), "bedding van de staaf");
@@ -271,6 +272,40 @@ log("\n5. Eén gezaghebbende modeldimensie: een 3D-model kan niet terug naar 2D"
   } catch (e) { ongeldigeBelasting = e; }
   ok(ongeldigeBelasting?.message.includes("eindige componenten"),
     "3D-knoopbelasting zonder eindige component wordt bij openen geweigerd");
+}
+
+log("\n6. Het formaat-id: de schrijver schrijft het nieuwe, de lezer accepteert ook het oude");
+{
+  // Tot en met uitgave 2026.39.1 schreef de app "open-fem2d-studio-v2"; nu
+  // "open-fem-studio-v2". Oude bestanden moeten blijven openen, en wel
+  // ongewijzigd: de lezer zet het id niet om, de schrijver schrijft altijd
+  // het nieuwe. Andersom weigert 2026.39.1 een bestand met het nieuwe id.
+  ok(PROJECT_FORMAT_ID === "open-fem-studio-v2", "het id dat geschreven wordt");
+  ok(JSON.stringify(LEGACY_PROJECT_FORMAT_IDS) === JSON.stringify(["open-fem2d-studio-v2"]),
+    "het oude id staat in de lijst die de lezer accepteert");
+  const tekst = serializeProject(model);
+  ok(tekst.includes('"format": "open-fem-studio-v2"') && !tekst.includes("open-fem2d-studio-v2"),
+    "een nieuw bestand draagt alleen het nieuwe id");
+  const basis = {
+    version: 2, savedAt: "2026-10-01T00:00:00Z",
+    nodes: [], beams: [], supports: [], plates: [], loads: [], loadCases: [],
+    activeLoadCaseId: 1, selfWeightEnabled: false, nonlinearEnabled: false,
+  };
+  for (const id of ["open-fem-studio-v2", "open-fem2d-studio-v2"]) {
+    ok(isProjectFormatId(id), `isProjectFormatId("${id}")`);
+    ok(deserializeProject(JSON.stringify({ format: id, ...basis })).format === id,
+      `een bestand met "${id}" opent, en het id blijft zoals het in het bestand stond`);
+  }
+  // Een oud bestand opnieuw opslaan geeft het nieuwe id.
+  const heropgeslagen = serializeProject(deserializeProject(JSON.stringify({ format: "open-fem2d-studio-v2", ...basis })));
+  ok(JSON.parse(heropgeslagen).format === "open-fem-studio-v2", "een oud bestand opnieuw opgeslagen krijgt het nieuwe id");
+  for (const [naam, format] of [["een onbekend id", "open-fem3d-studio-v2"], ["geen id", undefined], ["een getal", 2]]) {
+    ok(!isProjectFormatId(format), `isProjectFormatId weigert ${naam}`);
+    let fout = null;
+    try { deserializeProject(JSON.stringify({ format, ...basis })); } catch (e) { fout = e; }
+    ok(fout !== null && /Onbekend bestandsformaat/.test(fout.message), `${naam} wordt geweigerd`,
+      fout === null ? "GEEN MELDING" : fout.message);
+  }
 }
 
 log("");

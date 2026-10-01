@@ -24830,6 +24830,11 @@ function parseOpenFem3DViewSets(value) {
 var PROJECT_FILE_EXT = "ifcfem";
 var LEGACY_PROJECT_FILE_EXTS = ["ifcfem2d"];
 var PROJECT_FILE_EXTS = [PROJECT_FILE_EXT, ...LEGACY_PROJECT_FILE_EXTS];
+var PROJECT_FORMAT_ID = "open-fem-studio-v2";
+var LEGACY_PROJECT_FORMAT_IDS = ["open-fem2d-studio-v2"];
+function isProjectFormatId(waarde) {
+  return waarde === PROJECT_FORMAT_ID || LEGACY_PROJECT_FORMAT_IDS.includes(waarde);
+}
 var PROJECT_FORMAT_VERSION = 2;
 var PROJECT_FORMAT_VERSION_3D = 3;
 var PROJECT_FORMAT_VERSION_3D_LOAD_PANELS = 4;
@@ -24907,7 +24912,7 @@ function serializeProject(state) {
   const modelDimension = state.modelDimension ?? (state.model3d !== void 0 ? "3d" : "2d");
   const model3d = modelDimension === "3d" ? parseOpenFem3DModel(state.model3d) : void 0;
   const file = {
-    format: "open-fem2d-studio-v2",
+    format: PROJECT_FORMAT_ID,
     version: modelDimension !== "3d" ? PROJECT_FORMAT_VERSION : (model3d?.loadPanels?.length ?? 0) > 0 ? PROJECT_FORMAT_VERSION_3D_LOAD_PANELS : PROJECT_FORMAT_VERSION_3D,
     savedAt: (/* @__PURE__ */ new Date()).toISOString(),
     ...state,
@@ -24916,6 +24921,7 @@ function serializeProject(state) {
     openFem3dViewSets: modelDimension === "3d" ? parseOpenFem3DViewSets(state.openFem3dViewSets) : void 0,
     openFem3dStandaardViewsUitRapport: modelDimension === "3d" && state.openFem3dStandaardViewsUitRapport !== void 0 ? parseOpenFem3DStandaardViewsUitRapport(state.openFem3dStandaardViewsUitRapport) : void 0
   };
+  file.format = PROJECT_FORMAT_ID;
   return JSON.stringify(file, null, 2);
 }
 var VERPLICHTE_LIJSTEN = [
@@ -24960,7 +24966,7 @@ var BEKENDE_TOPVELDEN = [
 ];
 function deserializeProject(text) {
   const parsed = JSON.parse(text);
-  if (parsed.format !== "open-fem2d-studio-v2") {
+  if (!isProjectFormatId(parsed.format)) {
     throw new Error(`Onbekend bestandsformaat: ${parsed.format ?? "(geen format-tag)"}`);
   }
   if (typeof parsed.version !== "number") {
@@ -25013,7 +25019,7 @@ function deserializeProject(text) {
 init_femTypes();
 
 // package.json
-var version = "2026.39.1";
+var version = "2026.39.2";
 
 // src/mcp/fouten.ts
 var AFBEELDINGEN = [
@@ -33579,6 +33585,7 @@ export {
   K_I,
   LABEL_ZUIVER_STAAL,
   LABEL_ZUIVER_STAAL_TEKST,
+  LEGACY_PROJECT_FORMAT_IDS,
   LOAD_SOORT_MEERVOUD,
   MAX_VRIJE_GEVALLEN,
   MELDING_ZONE_I,
@@ -33595,6 +33602,7 @@ export {
   PLAAT_RAND_NAAM_NL,
   PLATE_DEFAULTS,
   PROJECT_FILE_EXT,
+  PROJECT_FORMAT_ID,
   PROJECT_FORMAT_VERSION,
   PROJECT_FORMAT_VERSION_3D,
   PROJECT_FORMAT_VERSION_MAX,
@@ -33777,6 +33785,7 @@ export {
   isEigenGewichtGeval,
   isOudeStandaardcombinatie,
   isOverwegendVerticaal,
+  isProjectFormatId,
   isSteelProfile,
   isWindgeneratorCombinatie,
   isZuivereStaalconstructie,

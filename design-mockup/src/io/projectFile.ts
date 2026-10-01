@@ -171,7 +171,32 @@ export function voorgesteldeProjectnaam(pad: string | null | undefined): string 
  * velden krijgen bij het laden de bestaande defaults (defaultCombinations()
  * en DEFAULT_STRUCTURAL_GRID in useFemStore.loadProjectState).
  */
-/** Versie van zuivere 2D-bestanden (blijft leesbaar door eerdere uitgaven). */
+/**
+ * Het formaat-id dat deze uitgave in elk bestand schrijft (`format`).
+ *
+ * Tot en met uitgave 2026.39.1 schreef de app een ander id, zie
+ * `LEGACY_PROJECT_FORMAT_IDS`. De lezer accepteert beide, dus elk ouder
+ * bestand blijft openen. Andersom niet: 2026.39.1 en ouder kennen dit id niet
+ * en weigeren een bestand van deze uitgave met "Onbekend bestandsformaat",
+ * ook een zuiver 2D-bestand met versie 2.
+ */
+export const PROJECT_FORMAT_ID = "open-fem-studio-v2";
+/** Formaat-id's van eerdere uitgaven die de lezer blijft accepteren. */
+export const LEGACY_PROJECT_FORMAT_IDS = ["open-fem2d-studio-v2"] as const;
+/** Elk formaat-id dat deze uitgave kan lezen. */
+export type ProjectFormatId = typeof PROJECT_FORMAT_ID | (typeof LEGACY_PROJECT_FORMAT_IDS)[number];
+
+/** Kan deze uitgave een bestand met dit formaat-id lezen? */
+export function isProjectFormatId(waarde: unknown): waarde is ProjectFormatId {
+  return waarde === PROJECT_FORMAT_ID
+    || (LEGACY_PROJECT_FORMAT_IDS as readonly unknown[]).includes(waarde);
+}
+
+/**
+ * Versie van zuivere 2D-bestanden. Binnen dezelfde formaat-id las een eerdere
+ * uitgave zo'n bestand; sinds het nieuwe formaat-id (hierboven) geldt dat niet
+ * meer voor 2026.39.1 en ouder.
+ */
 export const PROJECT_FORMAT_VERSION = 2;
 /** 3D-data vereist een versie die eerdere uitgaven weigeren. */
 export const PROJECT_FORMAT_VERSION_3D = 3;
@@ -312,7 +337,12 @@ export function combinationsFromFile(
 }
 
 export interface ProjectFile {
-  format: "open-fem2d-studio-v2";
+  /**
+   * Formaat-id. `serializeProject` schrijft altijd `PROJECT_FORMAT_ID`;
+   * `deserializeProject` laat staan wat er in het bestand stond (ook het id
+   * van een eerdere uitgave).
+   */
+  format: ProjectFormatId;
   version: number;
   savedAt: string;          // ISO timestamp
   /** Eén gezaghebbende modeldimensie. Ontbreekt alleen in oudere bestanden. */
@@ -461,7 +491,7 @@ export function serializeProject(state: Omit<ProjectFile, "format" | "version" |
   // 2D-lijsten blijven bij 3D alleen als controle- en compatibiliteitsspoor.
   const model3d = modelDimension === "3d" ? parseOpenFem3DModel(state.model3d) : undefined;
   const file: ProjectFile = {
-    format: "open-fem2d-studio-v2",
+    format: PROJECT_FORMAT_ID,
     version: modelDimension !== "3d" ? PROJECT_FORMAT_VERSION
       : (model3d?.loadPanels?.length ?? 0) > 0 ? PROJECT_FORMAT_VERSION_3D_LOAD_PANELS : PROJECT_FORMAT_VERSION_3D,
     savedAt: new Date().toISOString(),
@@ -472,6 +502,11 @@ export function serializeProject(state: Omit<ProjectFile, "format" | "version" |
     openFem3dStandaardViewsUitRapport: modelDimension === "3d" && state.openFem3dStandaardViewsUitRapport !== undefined
       ? parseOpenFem3DStandaardViewsUitRapport(state.openFem3dStandaardViewsUitRapport) : undefined,
   };
+  // Een aanroeper van buiten (MCP, tests) kan een volledig geopend bestand
+  // meegeven, met het id van een eerdere uitgave erin; `...state` zou dat
+  // hierboven terugzetten. Geschreven wordt altijd het huidige id (de sleutel
+  // blijft vooraan staan).
+  file.format = PROJECT_FORMAT_ID;
   return JSON.stringify(file, null, 2);
 }
 
@@ -520,7 +555,7 @@ export function onbekendeTopVelden(parsed: unknown): string[] {
 
 export function deserializeProject(text: string): ProjectFile {
   const parsed = JSON.parse(text);
-  if (parsed.format !== "open-fem2d-studio-v2") {
+  if (!isProjectFormatId(parsed.format)) {
     throw new Error(`Onbekend bestandsformaat: ${parsed.format ?? "(geen format-tag)"}`);
   }
   if (typeof parsed.version !== "number") {

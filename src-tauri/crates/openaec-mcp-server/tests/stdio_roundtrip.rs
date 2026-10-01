@@ -398,3 +398,57 @@ async fn stdio_roundtrip_initialize_list_call() {
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }
+
+/// Een client die zijn verzoeken in één keer stuurt en daarna stdin sluit
+/// (een pijp, een script) krijgt toch op elk verzoek antwoord: de server
+/// maakt lopende verzoeken af voordat hij stopt.
+#[tokio::test]
+async fn stdin_dicht_na_verzoeken_beantwoordt_alles() {
+    let mut child = Command::new(BIN_PATH)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn server");
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let berichten = [
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": { "name": "pijp", "version": "0" } } }),
+        json!({ "jsonrpc": "2.0", "method": "notifications/initialized", "params": {} }),
+        json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {} }),
+        json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+            "params": { "name": "list_steel_grades", "arguments": {} } }),
+    ];
+    let mut tekst = String::new();
+    for bericht in &berichten {
+        tekst.push_str(&serde_json::to_string(bericht).unwrap());
+        tekst.push('\n');
+    }
+    stdin.write_all(tekst.as_bytes()).await.unwrap();
+    drop(stdin); // invoer dicht, direct na de verzoeken
+
+    let mut reader = BufReader::new(stdout);
+    let mut ids = Vec::new();
+    loop {
+        let mut line = String::new();
+        let n = timeout(Duration::from_secs(30), reader.read_line(&mut line))
+            .await
+            .expect("timeout waiting for response")
+            .expect("read_line failed");
+        if n == 0 {
+            break;
+        }
+        let bericht: Value = serde_json::from_str(line.trim()).expect("geldige JSON-RPC");
+        assert!(bericht["error"].is_null(), "fout op {line}");
+        ids.push(bericht["id"].as_i64().expect("antwoord met id"));
+    }
+    ids.sort_unstable();
+    assert_eq!(ids, vec![1, 2, 3], "elk verzoek beantwoord, ook na het sluiten van stdin");
+    let status = timeout(Duration::from_secs(30), child.wait())
+        .await
+        .expect("timeout waiting for exit")
+        .expect("wait failed");
+    assert!(status.success(), "server stopt netjes: {status}");
+}

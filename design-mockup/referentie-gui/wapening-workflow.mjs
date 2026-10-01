@@ -54,7 +54,7 @@ const DOCS = join(REPO, "docs", "verificatie", "gui");
 const WERK = join(tmpdir(), `openfem-wapening-workflow-${process.pid}`);
 const UIT = join(WERK, "screenshots");
 const VINDBESTAND = join(WERK, "gui-control.json");
-const STANDAARD_VIND = join(process.env.LOCALAPPDATA ?? "", "org.openaec.fem2d-studio", "gui-control.json");
+const STANDAARD_VIND = join(process.env.LOCALAPPDATA ?? "", "org.openaec.fem-studio", "gui-control.json");
 
 let passed = 0, failed = 0;
 const log = (s) => process.stdout.write(s + "\n");

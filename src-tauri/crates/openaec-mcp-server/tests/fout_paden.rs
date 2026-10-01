@@ -182,7 +182,7 @@ fn model_zonder_opleggingen() -> Value {
 fn projectbestand_met_analysetype(analysetype: &str, nonlinear: bool) -> std::path::PathBuf {
     let model = model_zonder_opleggingen();
     let bestand = json!({
-        "format": "open-fem2d-studio-v2",
+        "format": "open-fem-studio-v2",
         "version": 2,
         "savedAt": "2026-09-16T00:00:00Z",
         "nodes": model["nodes"],
@@ -202,7 +202,7 @@ fn projectbestand_met_analysetype(analysetype: &str, nonlinear: bool) -> std::pa
         "nonlinearEnabled": nonlinear,
         "analysetype": analysetype,
     });
-    let pad = std::env::temp_dir().join(format!("openaec-analysetype-{analysetype}.ifcfem2d"));
+    let pad = std::env::temp_dir().join(format!("openaec-analysetype-{analysetype}.ifcfem"));
     std::fs::write(&pad, serde_json::to_string(&bestand).unwrap()).expect("proefbestand schrijven");
     pad
 }

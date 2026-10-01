@@ -19,7 +19,7 @@ Doelapp is de **geïnstalleerde Tauri-app**, niet de browser/dev-modus.
   `OPENAEC_GUI_CONTROL=1` bij het starten. Bindt `127.0.0.1:0`, maakt een
   sessietoken (32 willekeurige bytes, hex), schrijft `gui-control.json`
   (`{pid, poort, token, versie}`) in Tauri's `app_local_data_dir` —
-  `%LOCALAPPDATA%\org.openaec.fem2d-studio\` (de identifier-map, níét de
+  `%LOCALAPPDATA%\org.openaec.fem-studio\` (de identifier-map, níét de
   installatiemap); het bestand verdwijnt bij afsluiten.
   Empirisch geverifieerd vóór de bouw: `PrintWindow` met
   `PW_RENDERFULLCONTENT` levert op de geïnstalleerde 0.3.6 een echte,

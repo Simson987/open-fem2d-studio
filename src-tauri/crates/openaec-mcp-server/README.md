@@ -853,8 +853,9 @@ set OPENAEC_GUI_CONTROL=1
 
 The app then listens on `127.0.0.1:<free port>` with a per-session token and
 writes `gui-control.json` (`{pid, poort, token, versie}`) to
-`%LOCALAPPDATA%\org.openaec.fem2d-studio\`. The tools find it there
-(override with `OPENAEC_GUI_CONTROL_FILE`). While the channel is active the
+`%LOCALAPPDATA%\org.openaec.fem-studio\`. The tools find it there
+(override with `OPENAEC_GUI_CONTROL_FILE`); an app up to 2026.39.1 uses
+`%LOCALAPPDATA%\org.openaec.fem2d-studio\`, which the tools fall back to. While the channel is active the
 status bar shows *bediening op afstand actief*. Nothing listens without the
 variable, nothing accepts a call without the token, and the file is removed
 on exit (`gui_quit` exits through the app's own path so that happens).

@@ -29,14 +29,30 @@
 ;     die nog naar open-fem2d-studio.exe wijst om naar het nieuwe bestand:
 ;     bureaublad, startmenu en taakbalk.
 ;
+; DE IDENTIFIER (vanaf de uitgave na 2026.39.1): org.openaec.fem2d-studio werd
+; org.openaec.fem-studio. De installer geeft elke snelkoppeling die hij maakt
+; de identifier als AppUserModelID mee, maar een snelkoppeling die hij alleen
+; omzet of laat staan houdt de oude. POSTINSTALL zet die daarom op elke
+; snelkoppeling van het product die naar het programma wijst, zodat de
+; taakbalk vastgemaakte en gestarte vensters onder één knop houdt. De
+; app-datamappen zelf neemt de app bij de eerste start over (kopie, zie
+; src-tauri/crates/appdata-migratie). Kiest de gebruiker bij het verwijderen
+; "ook de app-gegevens verwijderen", dan gaan in POSTUNINSTALL ook de mappen
+; onder de oude identifier weg; het sjabloon kent alleen de nieuwe.
+;
 ; Deze macro's worden binnen de secties van installer.nsi ingevoegd; de
-; variabelen ($PassiveMode, $AppStartMenuFolder) en macro's (IsShortcutTarget,
-; SetShortcutTarget) komen uit dat sjabloon en zijn daar dan bekend.
+; variabelen ($PassiveMode, $UpdateMode, $AppStartMenuFolder,
+; $DeleteAppDataCheckboxState) en macro's (IsShortcutTarget,
+; SetShortcutTarget, SetLnkAppUserModelId) komen uit dat sjabloon en zijn
+; daar dan bekend.
 
 !define OPENFEM_OUDE_BINARY "open-fem2d-studio.exe"
+!define OPENFEM_OUDE_IDENTIFIER "org.openaec.fem2d-studio"
 
 ; Wijst de snelkoppeling `lnk` naar het oude programmabestand, dan wijst hij
-; daarna naar het nieuwe. Gebruikt $0-$3 (via IsShortcutTarget).
+; daarna naar het nieuwe. Wijst hij (dan) naar het programma, dan krijgt hij
+; de huidige identifier als AppUserModelID. Gebruikt $0-$5 (via de macro's
+; van het sjabloon).
 !macro OpenFemZetSnelkoppelingOm lnk
   ${If} ${FileExists} "${lnk}"
     !insertmacro IsShortcutTarget "${lnk}" "$INSTDIR\${OPENFEM_OUDE_BINARY}"
@@ -44,6 +60,11 @@
     ${If} $0 = 1
       !insertmacro SetShortcutTarget "${lnk}" "$INSTDIR\${MAINBINARYNAME}.exe"
       DetailPrint "Snelkoppeling omgezet naar ${MAINBINARYNAME}.exe: ${lnk}"
+    ${EndIf}
+    !insertmacro IsShortcutTarget "${lnk}" "$INSTDIR\${MAINBINARYNAME}.exe"
+    Pop $0
+    ${If} $0 = 1
+      !insertmacro SetLnkAppUserModelId "${lnk}"
     ${EndIf}
   ${EndIf}
 !macroend
@@ -111,4 +132,13 @@
   ; de installatiemap in stand.
   Delete "$INSTDIR\${OPENFEM_OUDE_BINARY}"
   RMDir "$INSTDIR"
+
+  ; "Ook de app-gegevens verwijderen": dan ook die onder de oude identifier
+  ; (dezelfde voorwaarden als het sjabloon voor de mappen van de nieuwe).
+  ${If} $DeleteAppDataCheckboxState = 1
+  ${AndIf} $UpdateMode <> 1
+    SetShellVarContext current
+    RmDir /r "$APPDATA\${OPENFEM_OUDE_IDENTIFIER}"
+    RmDir /r "$LOCALAPPDATA\${OPENFEM_OUDE_IDENTIFIER}"
+  ${EndIf}
 !macroend

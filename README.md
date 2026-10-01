@@ -98,6 +98,7 @@ en past zich aan een smal venster aan.
 | `report` | Het PDF-rekenrapport, gebouwd op `openaec-layout` |
 | `toetsbrug` | Normtoetsing als JSON-in/JSON-uit (stdin/stdout) |
 | `openaec-mcp-server` | MCP-server (JSON-RPC over stdio) voor de toetskernen, de solver en de bediening van de app |
+| `appdata-migratie` | Neemt bij de eerste start de app-datamappen van de vorige identifier over (aangeroepen in `src-tauri/src/main.rs`) |
 
 ## Drie wegen naar de rekenkern
 
@@ -181,6 +182,11 @@ hoort niet bij deze reeks.
 Het programmabestand heet `open-fem-studio.exe` (tot en met 2026.39.0: `open-fem2d-studio.exe`). De NSIS-installer
 ruimt bij een upgrade het oude bestand op en zet snelkoppelingen om; wat de Tauri-installer daarvoor zelf doet en
 wat de haken in `src-tauri/windows/installer-hooks.nsh` aanvullen, staat in de kop van dat bestand.
+
+De identifier is `org.openaec.fem-studio` (tot en met 2026.39.1: `org.openaec.fem2d-studio`). Bij de eerste start
+kopieert de app de app-datamappen van de oude identifier naar de nieuwe (instellingen, recente bestanden,
+localStorage), zie `src-tauri/crates/appdata-migratie`. Projectbestanden dragen het formaat-id `open-fem-studio-v2`;
+oudere bestanden openen gewoon, maar een bestand van deze versie opent niet in 2026.39.1 en ouder.
 
 ## Licentie
 

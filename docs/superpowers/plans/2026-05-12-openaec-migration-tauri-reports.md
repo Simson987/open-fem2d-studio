@@ -3106,7 +3106,7 @@ in next tasks (frameless window, plugins, OpenAEC branding)."
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Open FEM Studio",
   "version": "1.0.0",
-  "identifier": "org.openaec.fem2d-studio",
+  "identifier": "org.openaec.fem-studio",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -3169,7 +3169,7 @@ Expected: `OK`
 git add src-tauri/tauri.conf.json
 git commit -m "feat(tauri): configure OpenAEC branding and frameless window
 
-Identifier org.openaec.fem2d-studio, frameless (decorations:false),
+Identifier org.openaec.fem-studio, frameless (decorations:false),
 1400x900 default with 1024x600 minimum, MSI + NSIS bundles,
 publisher OpenAEC Foundation, CC BY-SA 4.0. CSP allows
 OSM tiles, Google Fonts, Nominatim. Plugins: store, dialog, fs."
@@ -3336,7 +3336,7 @@ Used by TitleBar window control buttons (min/max/close)."
 ```ts
 /**
  * Persistent settings store via Tauri plugin-store.
- * Settings persist to ~/.local/share/org.openaec.fem2d-studio/settings.json
+ * Settings persist to ~/.local/share/org.openaec.fem-studio/settings.json
  * (or platform equivalent).
  */
 import { Store } from '@tauri-apps/plugin-store';
