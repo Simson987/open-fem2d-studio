@@ -125,6 +125,58 @@ try {
   assert.ok(edgeCantilever.plateBending.reactions.every((reaction) => Math.abs(reaction.x) < 1e-12));
   assert.ok(edgeCantilever.plateBending.reactions.some((reaction) => Math.abs(reaction.my) > 0.1));
 
+  const openingNodes = [
+    { id: 55, x: 0.75, y: 0.75, z: 3 }, { id: 66, x: 1.25, y: 0.75, z: 3 },
+    { id: 77, x: 1.25, y: 1.25, z: 3 }, { id: 88, x: 0.75, y: 1.25, z: 3 },
+  ];
+  const openingModel = parseFrame3DModel({ ...model, nodes: [...model.nodes, ...openingNodes], supports: [],
+    plates: [{ ...model.plates[0], openings: [{ id: 1, nodeIds: [55, 66, 77, 88] }],
+      edgeSupports: ["simplySupported", "simplySupported", "simplySupported", "simplySupported"],
+      maxCellSizeM: 0.25 }] });
+  const perforated = await solveFrame3D(openingModel, 1, "linear", "openaec-native-fem");
+  assert.equal(calls.at(-1).kind, "hybridPlate");
+  assert.equal(perforated.plateBending.quads.length, 60);
+  assert.equal(perforated.plateBending.nodes.length, 80);
+  assert.equal(perforated.plateBending.reactions.length, 32);
+  assert.equal(perforated.displacements.length, 8);
+  assert.equal(perforated.forceBalance.ok, true);
+  assert.ok(Math.abs(perforated.plateBending.reactions.reduce((sum, reaction) => sum + reaction.fz, 0) - 3.75) < 1e-8);
+  const perforatedNodes = new Map(perforated.plateBending.nodes.map((node) => [node.meshNodeId, node]));
+  assert.ok(perforated.plateBending.quads.every((quad) => {
+    const corners = quad.nodeIds.map((id) => perforatedNodes.get(id));
+    const x = corners.reduce((sum, node) => sum + node.x, 0) / 4;
+    const y = corners.reduce((sum, node) => sum + node.y, 0) / 4;
+    return !(x > 0.75 && x < 1.25 && y > 0.75 && y < 1.25);
+  }), "het Q4-mesh mag geen materiaal in de opening bevatten");
+  const openingPointLoad = await solveFrame3D({ ...openingModel,
+    loads: [{ id: 30, nodeId: 55, caseId: 1, fx: 0, fy: 0, fz: -0.5, mx: 0, my: 0, mz: 0 }],
+  }, 1, "linear", "openaec-native-fem");
+  assert.equal(openingPointLoad.forceBalance.ok, true);
+  assert.ok(Math.abs(openingPointLoad.plateBending.reactions.reduce((sum, reaction) => sum + reaction.fz, 0) - 4.25) < 1e-8);
+  const offsetOpening = { ...openingModel,
+    nodes: openingModel.nodes.map((node) => node.id >= 55 ? { ...node, x: node.x - 0.25 } : node) };
+  const offsetResult = await solveFrame3D(offsetOpening, 1, "linear", "openaec-native-fem");
+  assert.equal(offsetResult.forceBalance.ok, true,
+    "een excentrische opening moet ook het globale momentenevenwicht sluiten");
+  assert.ok(offsetResult.forceBalance.maxMomentImbalanceKnm < 1e-8);
+  assert.ok(Math.abs(offsetResult.plateBending.reactions.reduce((sum, reaction) => sum + reaction.fz, 0) - 3.75) < 1e-8);
+  const coarserOpening = await solveFrame3D({ ...openingModel,
+    plates: [{ ...openingModel.plates[0], maxCellSizeM: 0.4 }] },
+  1, "linear", "openaec-native-fem");
+  assert.equal(coarserOpening.forceBalance.ok, true);
+  const inputMesh = calls.at(-1).input;
+  const localNodes = new Map(inputMesh.nodes.map((node) => [node.id, node]));
+  assert.ok(inputMesh.quads.every((quad) => {
+    const a = localNodes.get(quad.nodeIds[0]), b = localNodes.get(quad.nodeIds[1]);
+    const c = localNodes.get(quad.nodeIds[2]);
+    return Math.hypot(b.x - a.x, b.y - a.y) <= 0.4 + 1e-10
+      && Math.hypot(c.x - b.x, c.y - b.y) <= 0.4 + 1e-10;
+  }), "ook met door openingen opgelegde gridlijnen moet maxCellSizeM gelden");
+  const openingViews = renderToStaticMarkup(React.createElement(Frame3DReportViews,
+    { model: openingModel, result: perforated }));
+  assert.ok((openingViews.match(/<polygon/g) ?? []).length >= 120,
+    "het rapport moet de uitgespaarde plaat als Q4-rooster tekenen");
+
   const combined = await solveFrame3DCombination(model, new Map([[1, 1], [2, 0.5]]), "linear", "openaec-native-fem");
   assert.ok(Math.abs(combined.reactions.reduce((sum, reaction) => sum + reaction.fz, 0) - 8) < 1e-8);
   assert.ok(Math.abs(frame3DMaximumDisplacementM(model, combined) / frame3DMaximumDisplacementM(model, first) - 2) < 1e-8);
@@ -205,6 +257,23 @@ try {
     const expected = rotate([baseReaction.fx, baseReaction.fy, baseReaction.fz]);
     const actual = tiltedEdges.plateBending.reactions[index];
     assert.ok(Math.hypot(actual.fx - expected[0], actual.fy - expected[1], actual.fz - expected[2]) < 1e-8);
+  }
+  const tiltedOpening = { ...openingModel,
+    nodes: openingModel.nodes.map((node) => {
+      const [x, y, z] = rotate([node.x, node.y, node.z]);
+      return { ...node, x, y, z };
+    }),
+    surfaceLoads: openingModel.surfaceLoads.map((load) => {
+      const [qx, qy, qz] = rotate([load.qx, load.qy, load.qz]);
+      return { ...load, qx, qy, qz };
+    }),
+  };
+  const tiltedPerforated = await solveFrame3D(tiltedOpening, 1, "linear", "openaec-native-fem");
+  assert.equal(tiltedPerforated.forceBalance.ok, true);
+  assert.equal(tiltedPerforated.plateBending.quads.length, perforated.plateBending.quads.length);
+  for (let index = 0; index < perforated.plateBending.nodes.length; index++) {
+    assert.ok(Math.abs(tiltedPerforated.plateBending.nodes[index].wM
+      - perforated.plateBending.nodes[index].wM) < 1e-10);
   }
   const tiltedClamped = await solveFrame3D({ ...tilted, supports: [],
     plates: [{ ...tilted.plates[0], edgeSupports: ["clamped", "clamped", "clamped", "clamped"],
@@ -290,6 +359,20 @@ try {
   assert.ok(frame3DMaximumDisplacementM(model, unloadedEdges) < 1e-9);
   assert.ok(unloadedEdges.plateBending.elements.every((element) =>
     Math.abs(element.effectiveEMpa - initialE / 2) < 1e-8));
+  const openingMaterialModel = { ...openingModel,
+    plates: [{ ...openingModel.plates[0], modulusCurve: softeningCurve }], materialLoadPath: [1] };
+  const softenedOpening = await solveFrame3D(openingMaterialModel, 1, "material", "openaec-native-fem");
+  assert.equal(softenedOpening.forceBalance.ok, true);
+  assert.ok(softenedOpening.plateBending.elements.every((element) =>
+    Math.abs(element.effectiveEMpa - initialE / 2) < 1e-8));
+  assert.ok(Math.abs(frame3DMaximumDisplacementM(openingModel, softenedOpening)
+    / frame3DMaximumDisplacementM(openingModel, perforated) - 2) < 1e-7);
+  const unloadedOpening = await solveFrame3D({ ...openingMaterialModel, materialLoadPath: [1, 0] },
+    1, "material", "openaec-native-fem");
+  assert.equal(unloadedOpening.forceBalance.ok, true);
+  assert.ok(frame3DMaximumDisplacementM(openingModel, unloadedOpening) < 1e-9);
+  assert.ok(unloadedOpening.plateBending.elements.every((element) =>
+    Math.abs(element.effectiveEMpa - initialE / 2) < 1e-8 && element.maxFibreStrain > 1e-10));
   await assert.rejects(solveFrame3D(model, 1, "material", "openaec-native-fem"), /expliciete E-rekcurve/);
   await assert.rejects(solveFrame3D({ ...materialModel,
     plates: [{ ...materialModel.plates[0], modulusCurve: [{ strain: 0, eMpa: initialE * 1.1 }, softeningCurve[1]] }],
@@ -340,7 +423,17 @@ try {
     reinforcement: { ...reinforcement, fckMpa: 35 } }] }), /dezelfde fck/);
 
   await assert.rejects(solveFrame3D({ ...model, plates: [{ ...model.plates[0], openings: [{ id: 1, nodeIds: [11, 22, 33] }] }] },
-    1, "linear", "openaec-native-fem"), /zonder bogen.*openingen/);
+    1, "linear", "openaec-native-fem"), /3D-opening 1.*rechthoek/);
+  await assert.rejects(solveFrame3D({ ...openingModel,
+    nodes: openingModel.nodes.map((node) => node.id === 55 ? { ...node, x: 0 } : node) },
+  1, "linear", "openaec-native-fem"), /volledig binnenliggende/);
+  await assert.rejects(solveFrame3D({ ...openingModel,
+    nodes: openingModel.nodes.map((node) => node.id >= 55 ? { ...node, x: node.x - 0.745 } : node) },
+  1, "linear", "openaec-native-fem"), /volledig binnenliggende/,
+  "een strook van 5 mm tussen opening en plaatrand is te smal voor het raster");
+  await assert.rejects(solveFrame3D({ ...openingModel,
+    nodes: openingModel.nodes.map((node) => node.id === 55 ? { ...node, x: 0.8 } : node) },
+  1, "linear", "openaec-native-fem"), /lokaal assenrechte/);
   await assert.rejects(solveFrame3D({ ...model, surfaceLoads: [{ ...model.surfaceLoads[0], qx: 1 }] },
     1, "linear", "openaec-native-fem"), /alleen een oppervlaktebelasting normaal/);
   await assert.rejects(solveFrame3D(model, 1, "p-delta", "openaec-native-fem"), /lineaire of FNL Open FEM Rust-plaatroute/);

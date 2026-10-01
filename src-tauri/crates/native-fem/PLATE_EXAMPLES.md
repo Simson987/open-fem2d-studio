@@ -145,8 +145,8 @@ oorsprong, 25 roosterknopen, 16 elementen en een negatieve binnenzakking.
 Een combinatie met lastfactoren 1 en 0,5 op respectievelijk `−1` en `−2
 kN/m²` verdubbelt last, reacties en elastische zakking. Voor automatisch eigen
 gewicht levert `ρ = 2500 kg/m³` een extra `qz = −4,905 kN/m²` en een
-reactiesom van `+19,62 kN`. De route weigert momenteel openingen, bogen,
-in-vlaklasten, gekoppelde staven, veren en GNL-buiging.
+reactiesom van `+19,62 kN`. De route weigert momenteel bogen, afgeronde
+openingen, in-vlaklasten, gekoppelde staven, veren en GNL-buiging.
 Een asymmetrisch ingeklemde hoek controleert de tekenomzetting van de lokale
 plaatrotaties en reactiemomenten naar globale 3D Rx/Ry; ook een afzonderlijk
 globaal My-puntmoment sluit de onafhankelijke momentensom.
@@ -170,12 +170,28 @@ op *alle* randroosterknopen en telt ze mee in de globale kracht- en
 momentensom. Een geroteerde plaat met dezelfde randvoorwaarden behoudt zijn
 lokale zakking en geroteerde reacties.
 
+Een rechthoekige opening in dezelfde plaat loopt nu via het bestaande
+TypeScript-raster uit `PlaatMesher.ts` naar de Rust `native-hybrid-plate`-kern.
+Het meshen van openingen zelf is dus nog geen Rust-onderdeel. In de app-proef
+heeft een 2×2 m plaat een centrale opening van 0,5×0,5 m: het 0,25 m raster
+bevat 60 Q4-elementen en 80 knopen, geen elementen in de opening, en bij
+`qz = −1 kN/m²` tellen de randreacties op tot `+3,75 kN`. Een last van
+`−0,5 kN` op een openingshoek verhoogt die som tot `+4,25 kN`. Een
+excentrische opening controleert apart de globale momentensom. Ook de
+geroteerde plaat behoudt de lokale zakking. Het rooster begrenst de
+celmaat, houdt minimaal 10 mm materiaal tussen opening en buitenrand of
+andere opening, en wijst niet-assengelijnde en uitwendige openingen af.
+
 De app-FNL-proef geeft `C30/37` een expliciete curve met `E(0) = E_cm` en
 `E(10⁻¹⁰) = E_cm/2`. Bij voldoende hoge belasting bereikt elk element de
 lagere E; de zakking wordt tweemaal de lineaire waarde. Een lastpad `[1, 0]`
 ontlast weer tot vrijwel nul zakking, terwijl de effectieve E en maximale
 vezelrek als geschiedenis behouden blijven. De test controleert ook dat een
 curve met verkeerd begin-E of stijgende E wordt geweigerd.
+Hetzelfde E(rek)- en ontlastpad is met de rechthoekige opening getest:
+halvering van de effectieve E verdubbelt de maximale zakking, en na het
+lastpad `[1, 0]` is de zakking vrijwel nul terwijl E en de maximale
+vezelrek behouden blijven.
 
 Dezelfde 3D-app-route kan nu per betonplaat een expliciete
 `reinforcement`-specificatie bewaren en aan Rust doorgeven. De gebruiker kiest

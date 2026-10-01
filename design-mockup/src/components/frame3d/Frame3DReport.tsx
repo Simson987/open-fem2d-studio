@@ -132,7 +132,7 @@ export default function Frame3DReport({
           <section className="frame3d-report-empty">
             <h2>Nog niet berekend</h2>
             <p>De modelinvoer hieronder kan worden afgedrukt. Tweede-orde-, knik- en staafresultaten ontbreken nog.</p>
-            {(model.plates?.length ?? 0) > 0 && <p>Voor één losse vlakke rechthoekige plaat is een lineaire of FNL Open FEM Rust-berekening beschikbaar. FNL vereist een opgegeven E-rekcurve; andere 3D-plaatmodellen worden expliciet geweigerd.</p>}
+            {(model.plates?.length ?? 0) > 0 && <p>Voor één losse vlakke rechthoekige plaat, eventueel met rechthoekige openingen, is een lineaire of FNL Open FEM Rust-berekening beschikbaar. FNL vereist een opgegeven E-rekcurve; andere 3D-plaatmodellen worden expliciet geweigerd.</p>}
           </section>
           {(model.plates?.length ?? 0) > 0 && <section>
             <h2>Platen en openingen</h2>
