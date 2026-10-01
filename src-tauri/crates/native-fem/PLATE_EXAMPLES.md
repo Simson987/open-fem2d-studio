@@ -22,6 +22,8 @@ python3 src-tauri/crates/native-fem/examples/plate_cases.py hybrid_navier |
   src-tauri/target/debug/native-hybrid-plate
 python3 src-tauri/crates/native-fem/examples/plate_cases.py hybrid_fnl_cantilever |
   src-tauri/target/debug/native-hybrid-plate
+src-tauri/target/debug/native-hybrid-plate \
+  < src-tauri/crates/native-fem/examples/hybrid-plate-square-fnl.json
 python3 src-tauri/crates/native-fem/examples/plate_cases.py hybrid_linear_pressure |
   src-tauri/target/debug/native-hybrid-plate
 python3 src-tauri/crates/native-fem/examples/plate_cases.py cement_2021_cantilever |
@@ -38,6 +40,7 @@ python3 src-tauri/crates/native-fem/examples/plate_cases.py cement_2021_crack_sl
 | `quad_variable_e` | Dezelfde trekproef, nu E(0)=1000 MPa en E(0,002)=800 MPa. Bij piekbelasting volgt uit F/t=E(rek)×rek de rek 0,0011270 en E=887,30 MPa. Na ontlasten is de verplaatsing circa nul, terwijl de lagere modulus bewaard blijft. |
 | `hybrid_navier` | Vierzijdig vrij opgelegde vierkante buigplaat: a=2 m, t=0,1 m, E=30 GPa, ν=0,2, q=1 kN/m². De klassieke middenzakking 0,00406qa⁴/D is 2,49446×10⁻⁵ m. Het 6×6 rooster geeft 2,39106×10⁻⁵ m (4,1% verschil). |
 | `hybrid_fnl_cantilever` | Twee vierhoekige buigelementen met een afnemende E(vezelrek)-curve en een belast/ontlast-pad. De maximale vezelrek en de effectieve E blijven na ontlasten per element bewaard; de uitkraging keert bij deze secantwet elastisch terug naar nulverplaatsing. |
+| `hybrid-plate-square-fnl.json` | Twee vierkanten van 1×1 m vormen een ingeklemde plaat van 2×1 m. Bij een vezelrek boven 10⁻¹⁰ daalt E van 30 naar 15 GPa. Het pad `[1, 0, 0.5]` geeft in de laatste stap E=15 GPa in beide elementen, een vrije hoekzakking van −0,108681 mm en een vrije-DOF-restkracht van minder dan 10⁻¹² relatief. De maximale vezelrek blijft van de eerste volle belastingstap bewaard. Bij volledige belasting is de zakking precies tweemaal die van dezelfde lineair-elastische plaat, omdat de eindmodulus is gehalveerd. |
 | `hybrid_linear_pressure` | Uitkraging van 2×1 m met een per vierhoek bilineair opgegeven druk q(x)=−x kN/m². De analytische totale druk is −2 kN en de integraal van x·q over de plaat is −8/3 kNm; de verticale oplegreacties tellen op tot +2 kN. |
 | `cement_2021_cantilever` | Gebaseerd op figuur 14 van Braam en Blaauwendraad: 10 m breed, 8 m uitkraging, t=0,6 m, q=30 kN/m² en ν=0,2. In dit voorbeeld is **E=30 GPa aangenomen**. Het 2 m rooster geeft bij het eerste elementcentrum (1 m vanaf inklemming) v_y=210 kN/m, gelijk aan q×(8−1). |
 | `cement_2021_shear_uls` | Dezelfde plaat met illustratieve C20/25, z=500 mm, 2.000 mm²/m langs- en 1.200 mm²/m verticale dwarskrachtwapening, tanθ=1. Aan de steun vindt de herleiding v=240 kN/m=q×8; de eerste-generatie EC2-benadering geeft V_Rd,c=205,34 kN/m, benodigde dwarskrachtwapening 1.103,45 mm²/m², en σ_c=0,96 MPa < 7,36 MPa. De maatgevende benodigde bovenwapening in y is 4.689,66 mm²/m en overschrijdt de opgegeven 2.000 mm²/m. |
@@ -67,7 +70,9 @@ De hybride buigplaat heeft een **secantmodulus-omhulling**: de invoer
 `modulusCurves` koppelt hoofdvezelrek aan een positieve, niet-toenemende E.
 De hoogste absolute vezelrek per element blijft gedurende `loadPath` bewaard.
 Dat is een eigen FNL-uitbreiding van de elastische hybride plaat, geen
-scheurmodel of plastische doorsnedewet van Blaauwendraad. Opgegeven
+scheurmodel of plastische doorsnedewet van Blaauwendraad. Ook zonder E-curve
+rapporteert `maxFibreStrain` de werkelijk bereikte vezelrek; bij ontlasten
+blijft het maximum van het lastpad zichtbaar. Opgegeven
 `pressureKnM2` en optionele `quadPressures` worden via een 4×4
 Gauss-integratie van bilineaire vlakvormfuncties naar de vier knopen verdeeld.
 Per `quadId` geven `nodalPressureKnM2` de vier extra drukwaarden in de

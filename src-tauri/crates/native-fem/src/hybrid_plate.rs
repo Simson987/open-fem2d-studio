@@ -646,11 +646,8 @@ pub fn solve(request: &Request) -> Result<ResultBending, String> {
                 return Err("hybrid material iteration did not converge".into());
             }
             for (index, element) in elements.iter().enumerate() {
-                if curves.contains_key(&element.material_id) {
-                    let local = element.dofs.map(|j| u[j]);
-                    peak[index] =
-                        peak[index].max(max_fibre_strain(element, &local, e_current[index]));
-                }
+                let local = element.dofs.map(|j| u[j]);
+                peak[index] = peak[index].max(max_fibre_strain(element, &local, e_current[index]));
             }
         }
         start = end;
@@ -987,6 +984,7 @@ mod tests {
         assert!((moment[1] - d * 0.2 * kappa).abs() < d * kappa * 1e-8);
         assert!(moment[2].abs() < 1e-8);
         assert!(shear.iter().all(|v| v.abs() < 1e-8), "{shear:?}");
+        assert!((max_fibre_strain(&e, &u, 30_000.0) - kappa * 0.1 / 2.0).abs() < 1e-12);
     }
 
     fn cantilever_request(curve: bool) -> Request {
@@ -1056,6 +1054,7 @@ mod tests {
     fn cantilever_pressure_balances_reactions() {
         let result = solve(&cantilever_request(false)).unwrap();
         assert!(result.nodes[2].w_m < 0.0);
+        assert!(result.elements.iter().all(|e| e.max_fibre_strain > 0.0));
         let reactions: f64 = result.nodes.iter().map(|n| n.reaction_fz_kn).sum();
         assert!((reactions - 2.0).abs() < 1e-8);
         assert!(result.relative_residual < 1e-8);
@@ -1161,6 +1160,36 @@ mod tests {
             .iter()
             .all(|e| e.effective_e_mpa < 30_000.0));
         assert!(unloaded.relative_residual < 1e-8);
+    }
+    #[test]
+    fn saturated_secant_modulus_scales_plate_deflection_and_preserves_peak_strain() {
+        let linear = solve(&cantilever_request(false)).unwrap();
+        let mut request = cantilever_request(false);
+        request.modulus_curves = vec![ModulusCurve {
+            material_id: 1,
+            points: vec![
+                crate::quad2d::ModulusPoint {
+                    strain: 0.0,
+                    e_mpa: 30_000.0,
+                },
+                crate::quad2d::ModulusPoint {
+                    strain: 1e-10,
+                    e_mpa: 15_000.0,
+                },
+            ],
+        }];
+        let softened = solve(&request).unwrap();
+        assert!((softened.nodes[2].w_m / linear.nodes[2].w_m - 2.0).abs() < 1e-8);
+        assert!(softened.elements.iter().all(|e| {
+            (e.effective_e_mpa - 15_000.0).abs() < 1e-8 && e.max_fibre_strain > 1e-10
+        }));
+        request.load_path = vec![1.0, 0.0];
+        let unloaded = solve(&request).unwrap();
+        assert!(unloaded.nodes[2].w_m.abs() < 1e-9);
+        for (peak, now) in softened.elements.iter().zip(&unloaded.elements) {
+            assert!((peak.max_fibre_strain - now.max_fibre_strain).abs() < 1e-12);
+            assert!((now.effective_e_mpa - 15_000.0).abs() < 1e-8);
+        }
     }
 
     #[test]

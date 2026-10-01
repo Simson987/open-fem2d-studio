@@ -1,0 +1,28 @@
+{
+  "nodes": [
+    { "id": 1, "x": 0, "y": 0 },
+    { "id": 2, "x": 1, "y": 0 },
+    { "id": 3, "x": 2, "y": 0 },
+    { "id": 4, "x": 0, "y": 1 },
+    { "id": 5, "x": 1, "y": 1 },
+    { "id": 6, "x": 2, "y": 1 }
+  ],
+  "materials": [{ "id": 1, "eMpa": 30000, "nu": 0 }],
+  "quads": [
+    { "id": 1, "nodeIds": [1, 2, 5, 4], "materialId": 1, "thicknessM": 0.2 },
+    { "id": 2, "nodeIds": [2, 3, 6, 5], "materialId": 1, "thicknessM": 0.2 }
+  ],
+  "supports": [
+    { "nodeId": 1, "w": true, "thetaX": true, "thetaY": true },
+    { "nodeId": 4, "w": true, "thetaX": true, "thetaY": true }
+  ],
+  "pressureKnM2": -1,
+  "modulusCurves": [{
+    "materialId": 1,
+    "points": [
+      { "strain": 0, "eMpa": 30000 },
+      { "strain": 1e-10, "eMpa": 15000 }
+    ]
+  }],
+  "loadPath": [1, 0, 0.5]
+}
