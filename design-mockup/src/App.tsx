@@ -50,6 +50,7 @@ import {
   resolveSolver,
   type SolverAnalysisKind,
   type SolverDescriptor,
+  type SolverEngineId,
 } from "./core/solver/SolverRegistry";
 import LibraryDialog, { type LibraryTab } from "./components/settings/LibraryDialog";
 import TableView from "./components/table/TableView";
@@ -73,6 +74,7 @@ import type { GridSettings, Tool } from "./components/fem/femTypes";
 import { DEFAULT_GRID, nonlinearVoorBestand } from "./components/fem/femTypes";
 import type { SolverResult } from "./components/fem/solver/types";
 import { solveAllCases, solveAllCasesNonlinear } from "./components/fem/solver/solver";
+import { solveAllCasesNativeQuad2D } from "./components/fem/solver/nativeQuadRoute";
 import {
   eersteOrdeCombinatieResultaat,
   getSecondOrderInput,
@@ -1622,6 +1624,41 @@ function App() {
     }
   }, [fem, scheefstandUitkomst.noemer, bepaalStabiliteit]);
 
+  const computeAndStoreNativePlateOutputs = useCallback(async (generatie: number) => {
+    controleerVoorRekenen({
+      nodes: fem.nodes, beams: fem.beams, supports: fem.supports, plates: fem.plates,
+      loads: fem.loads, loadCases: fem.loadCases,
+    });
+    if (fem.analysetype !== "eersteOrde") {
+      throw new Error("De Rust Quad4-route in de app ondersteunt momenteel alleen eerste-orde plaatanalyse.");
+    }
+    if (fem.actieveCombinaties.some(combination => combination.eindtoestand !== undefined)) {
+      throw new Error("Eindstijfheidvarianten zijn nog niet ondersteund door de Rust Quad4-route.");
+    }
+    const multiInput = bouwMultiInput({
+      nodes: fem.nodes, beams: fem.beams, supports: fem.supports, plates: fem.plates,
+      loadCases: fem.loadCases, loads: fem.loads,
+      selfWeightEnabled: fem.selfWeightEnabled,
+      scheefstandEnabled: fem.scheefstandEnabled,
+      scheefstandNoemer: scheefstandUitkomst.noemer,
+      scheefstandRichting: fem.scheefstandRichting,
+    });
+    const perCase = await solveAllCasesNativeQuad2D(multiInput);
+    if (generatie !== rekenGeneratieRef.current) return null;
+    const combinationResults = new Map(
+      fem.actieveCombinaties.map(combination => [combination.id, combineResults(combination, perCase)]),
+    );
+    const envelope = computeEnvelope(fem.actieveCombinaties, perCase);
+    laatsteMultiInputRef.current = multiInput;
+    const stabiliteit = bepaalStabiliteit(multiInput, combinationResults);
+    const outputs = { perCase, combinationResults, envelope, stabiliteit };
+    fem.setSolverOutputs(outputs);
+    rekenFoutRef.current = null;
+    gemeldeRekenfoutRef.current = null;
+    setSolverErrorText(null);
+    return outputs;
+  }, [fem, scheefstandUitkomst.noemer, bepaalStabiliteit]);
+
   /**
    * De fysisch niet-lineaire ronde over de zojuist berekende uitkomsten.
    *
@@ -1995,7 +2032,7 @@ function App() {
    * `lopendeRekengangenRef` zolang hij loopt. Het begin (doorrekenen, status)
    * blijft synchroon: een async functie loopt tot haar eerste `await` meteen.
    */
-  const rekenDoor = useCallback((): Promise<RekengangUitkomst> => {
+  const rekenDoor = useCallback((selectedEngine?: SolverEngineId): Promise<RekengangUitkomst> => {
     const generatie = ++rekenGeneratieRef.current;
     const actueel = () => generatie === rekenGeneratieRef.current;
     const verouderd = (): RekengangUitkomst => ({ gelukt: false, fysisch: "verouderd" });
@@ -2009,7 +2046,14 @@ function App() {
     rapportRekenPogingRef.current = true;
     const gang = (async (): Promise<RekengangUitkomst> => {
       setSolverStatus({ kind: "rekenen" });
-      const outputs = computeAndStoreSolverOutputs();
+      const preference = selectedEngine ?? normaliseSolverPreference(
+        await getSetting<unknown>(SOLVER_PREFERENCE_KEY, "automatic"),
+      );
+      if (!actueel()) return verouderd();
+      const outputs = preference === "openaec-native-fem"
+        ? await computeAndStoreNativePlateOutputs(generatie)
+        : computeAndStoreSolverOutputs();
+      if (!actueel()) return verouderd();
       if (!outputs) {
         setSolverStatus({ kind: "error" });
         return { gelukt: false, fysisch: "nvt" };
@@ -2072,7 +2116,7 @@ function App() {
         if (actueel()) lopendeRekengangenRef.current = 0;
       });
   }, [
-    fem.analysetype, computeAndStoreSolverOutputs, handleRunMemberChecks,
+    fem.analysetype, computeAndStoreSolverOutputs, computeAndStoreNativePlateOutputs, handleRunMemberChecks,
     rekenFysischNietlineair, stijfheidClear, checkClear,
   ]);
 
@@ -2126,7 +2170,8 @@ function App() {
         schemaVersion: 1,
         dimension: modelDimension,
         analysis,
-        elementFamilies: modelDimension === "3d" ? ["frame"] : fem.plates.length > 0 ? ["frame", "plate"] : ["frame"],
+        elementFamilies: modelDimension === "3d" ? ["frame"]
+          : fem.plates.length > 0 ? fem.beams.length > 0 ? ["frame", "plate"] : ["plate"] : ["frame"],
       });
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
@@ -2255,7 +2300,7 @@ function App() {
     // selection-halos. User wants a clean view after computing.
     fem.setSelection(null);
     // Rekenen + toetsen; vanaf nu blijft het model live.
-    void rekenDoor();
+    void rekenDoor(selectedSolver.id);
   }, [fem, frame3d, frame3dCalculation, frame3dCalculationModel, modelDimension, rekenDoor]);
 
   // Keyboard: Ctrl+Z / Ctrl+Y for undo/redo. In vrije-tekstvelden blijft het de
