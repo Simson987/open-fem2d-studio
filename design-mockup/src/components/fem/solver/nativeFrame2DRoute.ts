@@ -48,13 +48,21 @@ export function buildNativeFrame2DRequest(
     areaM2: finite(beam.A ?? 3877, `Staaf ${beam.id} A`) * 1e-6,
     inertiaM4: finite(beam.I ?? 1.673e7, `Staaf ${beam.id} I`) * 1e-12 }));
   const members = input.beams.map(beam => {
-    if (beam.bedding || beam.segmenten?.length || beam.extraSneden?.length || beam.veren
-        || Object.values(beam.releases ?? {}).some(Boolean)
-        || beam.startConnection === "hinge" || beam.endConnection === "hinge") {
-      throw new Error(`Staaf ${beam.id}: bedding, segmenten, extra sneden, eindveren en scharnieren zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.`);
+    if (beam.bedding || beam.segmenten?.length || beam.extraSneden?.length || beam.veren) {
+      throw new Error(`Staaf ${beam.id}: bedding, segmenten, extra sneden en eindveren zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.`);
+    }
+    if (beam.releases?.startTx || beam.releases?.startTz
+        || beam.releases?.endTx || beam.releases?.endTz) {
+      throw new Error(`Staaf ${beam.id}: translatiehulzen zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.`);
+    }
+    const rzStart = !!beam.releases?.startRy || beam.startConnection === "hinge";
+    const rzEnd = !!beam.releases?.endRy || beam.endConnection === "hinge";
+    if (analysis !== "linear" && (rzStart || rzEnd)) {
+      throw new Error(`Staaf ${beam.id}: buigscharnieren vragen nog een lineaire Rust-analyse.`);
     }
     return { id: beam.id, startNodeId: beam.from, endNodeId: beam.to,
-      materialId: beam.id, sectionId: beam.id };
+      materialId: beam.id, sectionId: beam.id,
+      releases: { rzStart, rzEnd } };
   });
   type Support = { nodeId: number; ux: boolean; uy: boolean; rz: boolean;
     kxKnPerM?: number; kyKnPerM?: number; krzKnmPerRad?: number };

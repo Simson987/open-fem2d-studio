@@ -1,0 +1,18 @@
+{
+  "analysis": "linear",
+  "nodes": [
+    { "id": 1, "x": 0, "y": 0 },
+    { "id": 2, "x": 3, "y": 0 }
+  ],
+  "materials": [{ "id": 1, "eMpa": 210000 }],
+  "sections": [{ "id": 1, "areaM2": 0.01, "inertiaM4": 0.000008 }],
+  "members": [{ "id": 1, "startNodeId": 1, "endNodeId": 2,
+    "materialId": 1, "sectionId": 1,
+    "releases": { "rzEnd": true }
+  }],
+  "supports": [
+    { "nodeId": 1, "ux": true, "uy": true, "rz": true },
+    { "nodeId": 2, "ux": false, "uy": false, "rz": true }
+  ],
+  "nodalLoads": [{ "nodeId": 2, "fx": 0, "fy": -10, "mz": 0 }]
+}

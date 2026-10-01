@@ -39,6 +39,23 @@ pub struct Member {
     pub end_node_id: usize,
     pub material_id: usize,
     pub section_id: usize,
+    #[serde(default)]
+    pub releases: EndReleases,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EndReleases {
+    #[serde(default)]
+    pub rz_start: bool,
+    #[serde(default)]
+    pub rz_end: bool,
+}
+
+impl EndReleases {
+    fn any(self) -> bool {
+        self.rz_start || self.rz_end
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -180,6 +197,9 @@ struct Element {
     ei_knm2: f64,
     area_m2: f64,
     material: Material,
+    releases: EndReleases,
+    raw_stiffness: Option<[[f64; 6]; 6]>,
+    raw_load: Option<[f64; 6]>,
 }
 
 fn shape(length: f64, position: f64) -> ([f64; 6], [f64; 6]) {
@@ -273,6 +293,72 @@ fn local_displacement(element: &Element, u: &[f64]) -> [f64; 6] {
             .map(|j| element.transform[i][j] * u[element.dofs[j]])
             .sum()
     })
+}
+
+fn condense_releases(element: &mut Element) -> Result<(), String> {
+    if !element.releases.any() {
+        return Ok(());
+    }
+    element.raw_stiffness = Some(element.local_stiffness);
+    element.raw_load = Some(element.local_load);
+    for (axis, released) in [(2, element.releases.rz_start), (5, element.releases.rz_end)] {
+        if !released {
+            continue;
+        }
+        let pivot = element.local_stiffness[axis][axis];
+        if !pivot.is_finite() || pivot <= 0.0 {
+            return Err("invalid 2D frame release condensation pivot".into());
+        }
+        let column = std::array::from_fn::<_, 6, _>(|i| element.local_stiffness[i][axis]);
+        let load = element.local_load[axis];
+        for i in 0..6 {
+            if i == axis {
+                continue;
+            }
+            element.local_load[i] -= column[i] * load / pivot;
+            for j in 0..6 {
+                if j != axis {
+                    element.local_stiffness[i][j] -= column[i] * column[j] / pivot;
+                }
+            }
+        }
+        for other in 0..6 {
+            element.local_stiffness[axis][other] = 0.0;
+            element.local_stiffness[other][axis] = 0.0;
+        }
+        element.local_load[axis] = 0.0;
+    }
+    Ok(())
+}
+
+/// Recover the physical member-end rotation eliminated from the global solve.
+fn released_local_displacement(element: &Element, mut d: [f64; 6]) -> [f64; 6] {
+    let Some(k) = element.raw_stiffness else {
+        return d;
+    };
+    let f = element.raw_load.unwrap();
+    let released: Vec<usize> = [(2, element.releases.rz_start), (5, element.releases.rz_end)]
+        .into_iter()
+        .filter_map(|(axis, yes)| yes.then_some(axis))
+        .collect();
+    let rhs = |axis: usize| {
+        f[axis]
+            - (0..6)
+                .filter(|j| !released.contains(j))
+                .map(|j| k[axis][j] * d[j])
+                .sum::<f64>()
+    };
+    if released.len() == 1 {
+        let a = released[0];
+        d[a] = rhs(a) / k[a][a];
+    } else {
+        let (a, b) = (released[0], released[1]);
+        let (ra, rb) = (rhs(a), rhs(b));
+        let determinant = k[a][a] * k[b][b] - k[a][b] * k[b][a];
+        d[a] = (ra * k[b][b] - rb * k[a][b]) / determinant;
+        d[b] = (rb * k[a][a] - ra * k[b][a]) / determinant;
+    }
+    d
 }
 
 fn axial_force(element: &Element, d: &[f64; 6]) -> f64 {
@@ -577,6 +663,7 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
     let mut f = vec![0.0; k.n];
     let mut elements = HashMap::new();
     let mut member_ids = HashSet::new();
+    let mut released_rotations = vec![false; k.n];
     for member in &request.members {
         if member.id == 0 || !member_ids.insert(member.id) {
             return Err("invalid or duplicate 2D frame member".into());
@@ -643,6 +730,15 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
             3 * end + 1,
             3 * end + 2,
         ];
+        if member.releases.any() && request.analysis != Analysis::Linear {
+            return Err("2D frame end releases currently require linear analysis".into());
+        }
+        if member.releases.rz_start {
+            released_rotations[dofs[2]] = true;
+        }
+        if member.releases.rz_end {
+            released_rotations[dofs[5]] = true;
+        }
         let element = Element {
             dofs,
             length,
@@ -653,18 +749,10 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
             ei_knm2: material.e_mpa * 1000.0 * section.inertia_m4,
             area_m2: section.area_m2,
             material: (*material).clone(),
+            releases: member.releases,
+            raw_stiffness: None,
+            raw_load: None,
         };
-        for i in 0..6 {
-            for j in 0..6 {
-                let mut value = 0.0;
-                for a in 0..6 {
-                    for b in 0..6 {
-                        value += transform[a][i] * local_stiffness[a][b] * transform[b][j];
-                    }
-                }
-                k.add(dofs[i], dofs[j], value);
-            }
-        }
         elements.insert(member.id, element);
     }
     for load in &request.nodal_loads {
@@ -702,8 +790,20 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
             element.local_load[i] += axial[i] * load.px_kn + transverse[i] * load.py_kn;
         }
     }
-    for element in elements.values() {
+    for element in elements.values_mut() {
+        condense_releases(element)?;
         for i in 0..6 {
+            for j in 0..6 {
+                let mut value = 0.0;
+                for a in 0..6 {
+                    for b in 0..6 {
+                        value += element.transform[a][i]
+                            * element.local_stiffness[a][b]
+                            * element.transform[b][j];
+                    }
+                }
+                k.add(element.dofs[i], element.dofs[j], value);
+            }
             for j in 0..6 {
                 f[element.dofs[i]] += element.transform[j][i] * element.local_load[j];
             }
@@ -748,6 +848,18 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
                 prescribed[3 * node + axis] = Some(values[axis].unwrap_or(0.0));
             }
         }
+    }
+    for dof in 0..k.n {
+        if !released_rotations[dof] || prescribed[dof].is_some() || k.get(dof, dof) != 0.0 {
+            continue;
+        }
+        if (0..k.n).any(|other| k.get(dof, other) != 0.0 || k.get(other, dof) != 0.0) {
+            continue;
+        }
+        if f[dof] != 0.0 {
+            return Err("load on a disconnected 2D frame rotation".into());
+        }
+        prescribed[dof] = Some(0.0);
     }
     let mut states: HashMap<usize, AxialState> = elements
         .keys()
@@ -916,13 +1028,19 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
         .iter()
         .map(|member| {
             let element = &elements[&member.id];
-            let local_displacement = local_displacement(element, &u);
+            let local_displacement =
+                released_local_displacement(element, local_displacement(element, &u));
+            let stiffness = element
+                .raw_stiffness
+                .as_ref()
+                .unwrap_or(&element.local_stiffness);
+            let applied_load = element.raw_load.as_ref().unwrap_or(&element.local_load);
             let mut elastic_end_forces = [0.0; 6];
             for i in 0..6 {
                 elastic_end_forces[i] = (0..6)
-                    .map(|j| element.local_stiffness[i][j] * local_displacement[j])
+                    .map(|j| stiffness[i][j] * local_displacement[j])
                     .sum::<f64>()
-                    - final_factor * element.local_load[i];
+                    - final_factor * applied_load[i];
             }
             let response = request.analysis.material().then(|| {
                 axial_response(
@@ -1106,6 +1224,7 @@ mod tests {
                 end_node_id: 2,
                 material_id: 1,
                 section_id: 1,
+                releases: EndReleases::default(),
             }],
             supports: vec![Support {
                 node_id: 1,
@@ -1219,6 +1338,64 @@ mod tests {
         assert!((result.nodes[1].displacement[2] + 10.0 * 9.0 / (2.0 * ei)).abs() < 1e-12);
         assert!((result.nodes[0].reaction[1] - 10.0).abs() < 1e-10);
         assert!((result.nodes[0].reaction[2] - 30.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn released_tip_rotation_recovers_cantilever_response_despite_fixed_joint_rotation() {
+        let input: Request =
+            serde_json::from_str(include_str!("../examples/frame2d-released-cantilever.json"))
+                .unwrap();
+        let result = solve(&input).unwrap();
+        let ei = 210_000.0 * 1000.0 * 8e-6;
+        assert!((result.nodes[1].displacement[1] + 10.0 * 27.0 / (3.0 * ei)).abs() < 1e-11);
+        assert_eq!(result.nodes[1].displacement[2], 0.0);
+        assert!(
+            (result.members[0].rotation_rad.last().unwrap() + 10.0 * 9.0 / (2.0 * ei)).abs()
+                < 1e-11
+        );
+        assert!(result.members[0].local_end_forces[5].abs() < 1e-9);
+        assert!(result.members[0].bending_moment_knm.last().unwrap().abs() < 1e-9);
+    }
+
+    #[test]
+    fn two_end_releases_condense_distributed_load_and_inactive_rotations() {
+        let mut input = cantilever();
+        input.supports[0].rz = false;
+        input.supports.push(Support {
+            node_id: 2,
+            ux: false,
+            uy: true,
+            rz: false,
+            kx_kn_per_m: None,
+            ky_kn_per_m: None,
+            krz_knm_per_rad: None,
+            ux_prescribed_m: None,
+            uy_prescribed_m: None,
+            rz_prescribed_rad: None,
+        });
+        input.members[0].releases = EndReleases {
+            rz_start: true,
+            rz_end: true,
+        };
+        input.member_loads.push(MemberLoad {
+            member_id: 1,
+            qx_start_kn_per_m: 0.0,
+            qx_end_kn_per_m: 0.0,
+            qy_start_kn_per_m: -5.0,
+            qy_end_kn_per_m: -5.0,
+            start_position_m: None,
+            end_position_m: None,
+        });
+        let result = solve(&input).unwrap();
+        assert!((result.nodes[0].reaction[1] - 7.5).abs() < 1e-9);
+        assert!((result.nodes[1].reaction[1] - 7.5).abs() < 1e-9);
+        assert!(result.members[0].local_end_forces[2].abs() < 1e-9);
+        assert!(result.members[0].local_end_forces[5].abs() < 1e-9);
+        assert!((result.members[0].bending_moment_knm[10] - 5.0 * 9.0 / 8.0).abs() < 1e-9);
+        input.analysis = Analysis::Geometric;
+        assert!(solve(&input)
+            .unwrap_err()
+            .contains("releases currently require linear"));
     }
 
     #[test]

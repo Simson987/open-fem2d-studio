@@ -50,8 +50,12 @@ close(inclinedRequest.memberLoads[0].qxStartKnPerM, -1.8, 1e-12, "globale last n
 close(inclinedRequest.memberLoads[0].qyStartKnPerM, -2.4, 1e-12, "globale last naar lokale qy");
 close(inclinedRequest.memberPointLoads[0].pxKn, -3, 1e-12, "staafpuntlast naar lokale Px");
 close(inclinedRequest.memberPointLoads[0].pyKn, -4, 1e-12, "staafpuntlast naar lokale Py");
+assert.equal(buildNativeFrame2DRequest({ ...input,
+  beams: [{ ...input.beams[0], startConnection: "hinge" }] }, () => 1).members[0].releases.rzStart, true);
 assert.throws(() => buildNativeFrame2DRequest({ ...input,
-  beams: [{ ...input.beams[0], startConnection: "hinge" }] }, () => 1), /scharnieren/);
+  beams: [{ ...input.beams[0], releases: { startTx: true } }] }, () => 1), /translatiehulzen/);
+assert.throws(() => buildNativeFrame2DRequest({ ...input,
+  beams: [{ ...input.beams[0], endConnection: "hinge" }] }, () => 1, "geometric"), /lineaire Rust-analyse/);
 assert.throws(() => buildNativeFrame2DRequest({ ...input, plates: [{ id: 1 }] }, () => 1), /uitsluitend staven/);
 
 const previousFetch = globalThis.fetch;
@@ -160,6 +164,19 @@ try {
     "staafeindpuntlast verplaatsing");
   close(endpointNative.reactions.get(1).fz, endpointExisting.reactions.get(1).fz, 1e-4,
     "staafeindpuntlast reactie");
+  const hingeInput = { nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 3000, z: 0 }],
+    beams: [{ id: 1, from: 1, to: 2, E: 210_000, A: 10_000, I: 8e6,
+      endConnection: "hinge" }],
+    supports: [{ nodeId: 1, type: "fixed" }, { nodeId: 2, type: "rotSpring", k: 0 }],
+    loads: [], pointLoads: [{ nodeId: 2, caseId: 1, fz: -10_000 }],
+    cases: [{ id: 1, name: "scharnier" }] };
+  const hingeNative = (await solveAllCasesNativeFrame2D(hingeInput)).get(1);
+  const hingeExisting = solveAllCases(hingeInput).perCase.get(1);
+  close(hingeNative.displacements.get(2).uz, hingeExisting.displacements.get(2).uz,
+    1e-6, "scharnierende uitkraging tipverplaatsing");
+  close(hingeNative.reactions.get(1).my, hingeExisting.reactions.get(1).my,
+    1e-3, "scharnierende uitkraging inklemmoment");
+  close(hingeNative.elements.get(1).M_end, 0, 1e-5, "vrij scharnierend eindmoment");
   const columnInput = { nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 3000, z: 0 }],
     beams: [{ id: 1, from: 1, to: 2, E: 210_000, A: 10_000, I: 8e6 }],
     supports: [{ nodeId: 1, type: "fixed" }], loads: [],
