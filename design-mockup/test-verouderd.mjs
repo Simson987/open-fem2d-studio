@@ -64,6 +64,7 @@ log("\n[1] Elke rekeninstelling verandert de versie");
     combinations: defaultCombinations().map((c) => ({ ...c, factors: new Map(c.factors) })),
     selfWeightEnabled: false,
     analysetype: "eersteOrde",
+    axialMaterialLoadPath: [1],
     betonSegmentLengteMm: 400,
     betonKruipcoefficient: null,
     betonKruipInvoer: null,
@@ -100,6 +101,7 @@ log("\n[1] Elke rekeninstelling verandert de versie");
     },
     selfWeightEnabled: (m) => { m.selfWeightEnabled = true; },
     analysetype: (m) => { m.analysetype = "tweedeOrdeGeometrisch"; },
+    axialMaterialLoadPath: (m) => { m.axialMaterialLoadPath = [1, 0]; },
     betonSegmentLengteMm: (m) => { m.betonSegmentLengteMm = 200; },
     // φ(∞,t₀) bepaalt via (7.20) de effectieve elasticiteitsmodulus en dus
     // elke betonstijfheid: van "niet opgegeven" naar 2,0 moet een nieuwe

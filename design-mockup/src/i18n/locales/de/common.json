@@ -793,13 +793,18 @@
     "analysisType": {
       "eersteOrde": "Theorie I. Ordnung",
       "tweedeOrdeGeometrisch": "Theorie II. Ordnung (P-Δ)",
-      "tweedeOrdeFysisch": "Theorie II. Ordnung, physikalisch nichtlinear"
+      "tweedeOrdeFysisch": "Theorie II. Ordnung, physikalisch nichtlinear",
+      "axiaalFysischRust": "Rust: Theorie II. Ordnung + axiale FNL"
     },
     "analysisDescription": {
       "eersteOrde": "Theorie I. Ordnung, linear: jede Kombination ist die gewichtete Summe der Lastfälle.",
       "tweedeOrdeGeometrisch": "Theorie II. Ordnung, geometrisch nichtlinear (P-Δ): jede Kombination wird mit Bemessungslasten und geometrischer Steifigkeit einzeln gelöst.",
-      "tweedeOrdeFysisch": "Theorie II. Ordnung, geometrisch und physikalisch nichtlinear: wie P-Δ, jedoch erhalten die Betonstäbe je Segment die Sekanten-EI aus dem Rechenkern (NEN-EN 1992-1-1 5.8.6). Ohne Betonstäbe mit Bewehrungskorb entspricht das Ergebnis Theorie II. Ordnung (P-Δ)."
+      "tweedeOrdeFysisch": "Theorie II. Ordnung, geometrisch und physikalisch nichtlinear: wie P-Δ, jedoch erhalten die Betonstäbe je Segment die Sekanten-EI aus dem Rechenkern (NEN-EN 1992-1-1 5.8.6). Ohne Betonstäbe mit Bewehrungskorb entspricht das Ergebnis Theorie II. Ordnung (P-Δ).",
+      "axiaalFysischRust": "Experimentelle Rust-Berechnung: P-Δ mit axialer Stahlplastizität oder Betonzugschädigung entlang eines Lastpfads. Biegung bleibt elastisch; Normnachweise werden nicht durchgeführt."
     },
+    "axialPath": "FNL-Lastpfad",
+    "axialPathHint": "Absolute Lastfaktoren, zum Beispiel 1, 0, 0.5 für Belasten, Entlasten und Wiederbelasten.",
+    "axialPathError": "1 bis 100 endliche, durch Kommas getrennte Lastfaktoren eingeben.",
     "segmentTitle": "Gewünschte Segmentlänge in mm. Jeder Betonstab wird in gleich lange Segmente geteilt, die jeweils ihre eigene Sekanten-EI erhalten (5.8.6(6)). Kürzer = genauer und langsamer; die Anwendung vergröbert nicht von selbst.",
     "segment": "Segment",
     "creepTitle": "Endwert der Kriechzahl φ(∞,t₀) nach Abs. 3.1.4, für jeden Betonstab ohne eigenen Wert bei den §5.8-Angaben. Der Kern verarbeitet sie nach 5.8.6(4) — alle Bemessungswerte mal (1 + φ_ef) — was für die Anfangssteigung E_c,eff = E_cm/(1 + φ) nach (7.20) entspricht. LEER = nicht angegeben: dann wird OHNE Kriechen gerechnet, die Durchbiegung fällt zu klein aus, und das liegt auf der unsicheren Seite. Mit dem Kästchen daneben wird φ(∞,t₀) nach Anhang B berechnet; ein hier angegebener Wert hat Vorrang.",

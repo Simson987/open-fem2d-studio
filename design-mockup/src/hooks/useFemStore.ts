@@ -1716,6 +1716,8 @@ export interface FemStore {
    */
   analysetype: Analysetype;
   setAnalysetype: (v: Analysetype) => void;
+  axialMaterialLoadPath: number[];
+  setAxialMaterialLoadPath: (v: number[]) => void;
   /**
    * Gewenste segmentlengte in mm voor de fysisch niet-lineaire berekening —
    * besluit B3: instelbaar, 400 mm als beginwaarde, geen automatische
@@ -1848,6 +1850,7 @@ export interface FemStore {
     nonlinearEnabled?: boolean;
     /** v2: analysetype; ontbreekt → afgeleid uit `nonlinearEnabled`. */
     analysetype?: string;
+    axialMaterialLoadPath?: number[];
     /** v2: gewenste segmentlengte in mm; ontbreekt → 400 (besluit B3). */
     betonSegmentLengteMm?: number;
     /** φ(∞,t₀) van het project (art. 3.1.4); ontbreekt → niet opgegeven. */
@@ -2011,6 +2014,7 @@ export function useFemStore(opties?: {
   const selfWeightRef = useRef(selfWeightEnabled);
   selfWeightRef.current = selfWeightEnabled;
   const [analysetype, setAnalysetype]             = useState<Analysetype>("eersteOrde");
+  const [axialMaterialLoadPath, setAxialMaterialLoadPath] = useState<number[]>([1]);
   const [betonSegmentLengteMm, setBetonSegmentLengteMm] =
     useState<number>(STANDAARD_SEGMENTLENGTE_MM);
   // Geen beginwaarde: de norm kent voor φ(∞,t₀) geen aanbevolen getal, en een
@@ -2114,14 +2118,14 @@ export function useFemStore(opties?: {
   }, [projectBijlage, setCombinatieBijlage]);
   const rekenInstellingenVersie = useMemo(
     () => bepaalRekenInstellingenVersie({
-      loadCases, combinations, selfWeightEnabled, analysetype, betonSegmentLengteMm,
+      loadCases, combinations, selfWeightEnabled, analysetype, axialMaterialLoadPath, betonSegmentLengteMm,
       betonKruipcoefficient, betonKruipInvoer,
       scheefstandEnabled, scheefstandNoemer, scheefstandRichting, scheefstandBron,
       scheefstandHoogteM, scheefstandAantalElementen, gevolgklasse,
       nationaleBijlage: projectBijlage,
     }),
     [
-      loadCases, combinations, selfWeightEnabled, analysetype, betonSegmentLengteMm,
+      loadCases, combinations, selfWeightEnabled, analysetype, axialMaterialLoadPath, betonSegmentLengteMm,
       betonKruipcoefficient, betonKruipInvoer,
       scheefstandEnabled, scheefstandNoemer, scheefstandRichting, scheefstandBron,
       scheefstandHoogteM, scheefstandAantalElementen, gevolgklasse, projectBijlage,
@@ -2948,7 +2952,7 @@ export function useFemStore(opties?: {
     translateNodes,
     structuralGrid, setStructuralGrid, verplaatsStramienAs,
     selfWeightEnabled, setSelfWeightEnabled,
-    analysetype, setAnalysetype,
+    analysetype, setAnalysetype, axialMaterialLoadPath, setAxialMaterialLoadPath,
     betonSegmentLengteMm, setBetonSegmentLengteMm,
     betonKruipcoefficient, setBetonKruipcoefficient,
     betonKruipInvoer, setBetonKruipInvoer,
@@ -3028,6 +3032,7 @@ export function useFemStore(opties?: {
     nonlinearEnabled?: boolean;
     /** v2: analysetype; ontbreekt → afgeleid uit `nonlinearEnabled`. */
     analysetype?: string;
+    axialMaterialLoadPath?: number[];
     /** v2: gewenste segmentlengte in mm; ontbreekt → 400 (besluit B3). */
     betonSegmentLengteMm?: number;
     /** φ(∞,t₀) van het project (art. 3.1.4); ontbreekt → niet opgegeven. */
@@ -3104,6 +3109,7 @@ export function useFemStore(opties?: {
       // oude booleaan — true wordt de geometrische tweede orde, false de
       // eerste orde. Zie `analysetypeUitBestand` in femTypes.
       setAnalysetype(analysetypeUitBestand(p.analysetype, p.nonlinearEnabled));
+      setAxialMaterialLoadPath(p.axialMaterialLoadPath ?? [1]);
       setBetonSegmentLengteMm(
         typeof p.betonSegmentLengteMm === "number" && p.betonSegmentLengteMm > 0
           ? p.betonSegmentLengteMm

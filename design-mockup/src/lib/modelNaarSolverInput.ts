@@ -54,6 +54,7 @@ import {
   type VerlopendeDoorsnede,
 } from "./sectionResolver";
 import { thermalAlphaForMaterial } from "./thermalAlpha";
+import { matchSupportedConcreteClass } from "./betonCheckBuilder";
 import { zoneSnedenUitStaven } from "./betonZoneSneden";
 import { eigenGewichtGeval } from "./eigenGewicht";
 
@@ -81,6 +82,7 @@ export interface FemModelInvoer {
   scheefstandNoemer: number;
   /** Richting van de equivalente horizontale krachten: +1 = +x, −1 = −x. */
   scheefstandRichting: 1 | -1;
+  axialMaterialLoadPath?: number[];
 }
 
 /**
@@ -432,6 +434,14 @@ export function bouwMultiInput(model: FemModelInvoer): MultiInput {
   const multiInput: MultiInput = {
     nodes: model.nodes.map(n => ({ id: n.id, x: n.x, z: n.z })),
     beams: model.beams.map(b => {
+      if (b.axialMaterialLaw
+          && (b.axialMaterialLaw.kind === "concreteCracking")
+            !== (matchSupportedConcreteClass(b.material ?? "S235") !== null)) {
+        throw new Error(`Staaf ${b.id}: de axiale FNL-wet past niet bij materiaal ${b.material ?? "S235"}.`);
+      }
+      if (b.axialMaterialLaw?.kind === "steelBilinear" && !/^S\d+$/.test(b.material ?? "S235")) {
+        throw new Error(`Staaf ${b.id}: de axiale staalwet vereist een staalmateriaal.`);
+      }
       // Stijfheid uit materiaal + profiel — zelfde route als het canvas-pad
       // (FemCanvas → resolveSection). Zonder dit rekende het multi-LC-pad
       // (combinaties/envelope/toetsing) élke staaf met de solver-default
@@ -444,6 +454,7 @@ export function bouwMultiInput(model: FemModelInvoer): MultiInput {
       const sneden = zoneSneden.get(b.id);
       return {
         id: b.id, from: b.from, to: b.to,
+        ...(b.axialMaterialLaw ? { axialMaterialLaw: { ...b.axialMaterialLaw } } : {}),
         ...doorsnedeVeldenVoorSolver(b, staafLengteMm(b, model.nodes)),
         // Releases naar de engine: buigscharnieren via het legacy paar,
         // en het volledige object (mét Tx/Tz-hulzen in lokale assen)
@@ -476,6 +487,7 @@ export function bouwMultiInput(model: FemModelInvoer): MultiInput {
     scheefstand: model.scheefstandEnabled
       ? { phi: 1 / model.scheefstandNoemer, richting: model.scheefstandRichting }
       : undefined,
+    ...(model.axialMaterialLoadPath ? { axialMaterialLoadPath: [...model.axialMaterialLoadPath] } : {}),
   };
   // Optioneel: eigen gewicht als extra verdeelde lasten. Per staaf →
   // q = -ρ·A·g (omlaag in +Z). WELK geval ze krijgt beslist `eigenGewichtGeval`

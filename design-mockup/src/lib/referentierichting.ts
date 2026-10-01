@@ -575,6 +575,7 @@ export const SPIEGELREGELS_STAAF: { [K in keyof Required<Beam>]: string } = {
   from: "wordt de eindknoop",
   to: "wordt de beginknoop",
   material: "gelijk",
+  axialMaterialLaw: "gelijk: de axiale materiaalwet hangt niet aan de tekenrichting",
   profile: "wordt het eindprofiel als er een verloop is (profileEnd); anders gelijk",
   profileEnd: "wordt het beginprofiel: begin en eind van het verloop verwisseld",
   releases: "begin en eind verwisseld",

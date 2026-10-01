@@ -39,6 +39,7 @@ export interface RekenInstellingen {
   combinations: readonly LoadCombination[];
   selfWeightEnabled: boolean;
   analysetype: Analysetype;
+  axialMaterialLoadPath?: readonly number[];
   /** Segmentlengte van de fysisch niet-lineaire betonberekening. */
   betonSegmentLengteMm: number;
   /**
@@ -86,6 +87,7 @@ const VELDEN: Record<keyof RekenInstellingen, true> = {
   combinations: true,
   selfWeightEnabled: true,
   analysetype: true,
+  axialMaterialLoadPath: true,
   betonSegmentLengteMm: true,
   betonKruipcoefficient: true,
   betonKruipInvoer: true,

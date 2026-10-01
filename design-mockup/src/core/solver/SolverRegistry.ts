@@ -99,15 +99,14 @@ export function normaliseSolverPreference(value: unknown): SolverPreference {
 
 export function supportsRequest(solver: SolverDescriptor, request: AnalysisRequest): boolean {
   const capabilities = solver.capabilities;
-  // The native 2D app routes cover pure membranes and elastic pure frames.
+  // The native 2D app routes cover pure membranes and pure frames. Frame
+  // material analysis requires an explicit axial law and a separate UI mode.
   if (solver.id === "openaec-native-fem" && request.dimension === "2d") {
     return solver.available
       && capabilities.dimensions.includes("2d")
       && capabilities.analyses.includes(request.analysis)
       && request.elementFamilies.length === 1
-      && (request.elementFamilies[0] === "plate"
-        || request.elementFamilies[0] === "frame"
-          && (request.analysis === "linear" || request.analysis === "p-delta"));
+      && (request.elementFamilies[0] === "plate" || request.elementFamilies[0] === "frame");
   }
   if (solver.id === "openaec-native-fem" && request.dimension === "3d"
       && request.elementFamilies.includes("plate")) {

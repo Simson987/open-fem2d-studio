@@ -13,9 +13,12 @@ en belastingen en geeft staafdiagrammen in het bestaande resultaatformaat
 terug. De geometrische analyse lost elke combinatie apart op met iteratieve
 P-Δ-stijfheid en controleert of de vrije stijfheid positief is. De zelfstandige
 Rust-kern berekent daarnaast axiale staalplastificatie en betontrekschade per
-belastingpad. De app koppelt deze materiaalwetten nog niet aan staven; haar
-fysisch niet-lineaire raamwerkroute wordt daarom nog geweigerd.
-Buigscharnieren aan staafeinden zijn gekoppeld voor lineaire en P-Δ-analyse;
+belastingpad. In de 2D-eigenschappen kan per staal- of betonstaaf een axiale
+materiaalwet worden gekozen. De afzonderlijke analysekeuze „Rust 2e orde +
+axiale FNL” bewaart het belastingpad in het project en gebruikt deze wetten.
+De bestaande fysisch niet-lineaire stand voor gescheurde betonbuiging wordt
+in de Rust-raamwerkroute nog geweigerd.
+Buigscharnieren aan staafeinden zijn gekoppeld voor lineaire, P-Δ- en axiale FNL-analyse;
 bedding, translatiehulzen,
 eindveren en gekoppelde
 staaf-plaatmodellen worden in deze route nog expliciet geweigerd. De app
@@ -25,9 +28,9 @@ lastspecifieke uitzettingscoëfficiënt. De kern kan die belasting ook combinere
 met axiale staalplastificatie, betontrekschade en P-Δ. De getypeerde 2D-adapter
 neemt hiervoor per staaf `axialMaterialLaw` en een modelbreed
 `axialMaterialLoadPath` aan en bewaart de axiale materiaaltoestand in het
-resultaat. De gewone 2D-werkbalk biedt deze afzonderlijke axiale FNL-analyse
-nog niet aan: de bestaande stand „fysisch niet-lineair” berekent gescheurde
-buigdoorsneden van gewapend beton en heeft dus een andere betekenis.
+resultaat. De 2D-werkbalk toont bij axiale FNL het lastpad, bijvoorbeeld
+`1, 0, 0.5` voor belasten, ontlasten en herbelasten. Buiging blijft elastisch;
+EN 1992/1993-toetsen worden voor deze gedeeltelijke FNL-uitkomst niet uitgevoerd.
 
 Een afzonderlijke lineaire of FNL 3D-plaatroute kan in de app met expliciete keuze
 voor Open FEM Rust worden berekend. Zij accepteert één vlakke rechthoek in

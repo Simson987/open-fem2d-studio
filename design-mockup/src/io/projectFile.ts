@@ -312,6 +312,8 @@ export interface ProjectFile {
    * laden omvalt — `analysetypeUitBestand` valt dan terug op de booleaan.
    */
   analysetype?: string;
+  /** Absolute lastfactoren voor de afzonderlijke axiale Rust-FNL-analyse. */
+  axialMaterialLoadPath?: number[];
   /** Gewenste segmentlengte in mm (v2, optioneel — ontbreekt = 400, besluit B3). */
   betonSegmentLengteMm?: number;
   /**
@@ -457,7 +459,7 @@ const VERPLICHTE_LIJSTEN = [
 const BEKENDE_TOPVELDEN: readonly string[] = [
   "format", "version", "savedAt",
   ...VERPLICHTE_LIJSTEN,
-  "activeLoadCaseId", "selfWeightEnabled", "nonlinearEnabled", "analysetype",
+  "activeLoadCaseId", "selfWeightEnabled", "nonlinearEnabled", "analysetype", "axialMaterialLoadPath",
   "betonSegmentLengteMm", "betonKruipcoefficient", "betonKruipInvoer", "combinations", "idTellers",
   "combinatiesVervangenBijOpenen", "structuralGrid",
   "scheefstandEnabled", "scheefstandNoemer", "scheefstandRichting",
@@ -511,6 +513,23 @@ export function deserializeProject(text: string): ProjectFile {
   // De weigering hoort hier te vallen, bij het openen, en niet halverwege het
   // laden in de store.
   analysetypeUitBestand(parsed.analysetype, parsed.nonlinearEnabled);
+  if (parsed.axialMaterialLoadPath !== undefined && (!Array.isArray(parsed.axialMaterialLoadPath)
+      || parsed.axialMaterialLoadPath.length === 0 || parsed.axialMaterialLoadPath.length > 100
+      || parsed.axialMaterialLoadPath.some((factor: unknown) => typeof factor !== "number" || !Number.isFinite(factor)))) {
+    throw new ProjectBestandFout(["Ongeldig axiaal Rust-FNL-lastpad: geef 1 tot 100 eindige lastfactoren op."]);
+  }
+  for (const beam of parsed.beams) {
+    const law = beam?.axialMaterialLaw;
+    if (law === undefined) continue;
+    const strength = law?.kind === "steelBilinear" ? law.yieldMpa
+      : law?.kind === "concreteCracking" ? law.tensileMpa : undefined;
+    const ratio = law?.kind === "steelBilinear" ? law.hardeningRatio
+      : law?.kind === "concreteCracking" ? law.residualRatio : undefined;
+    if (typeof strength !== "number" || !Number.isFinite(strength) || strength <= 0
+        || typeof ratio !== "number" || !Number.isFinite(ratio) || ratio < 0 || ratio > 1) {
+      throw new ProjectBestandFout([`Staaf ${beam?.id ?? "?"}: ongeldige axiale Rust-FNL-materiaalwet.`]);
+    }
+  }
   if (parsed.model3d !== undefined) {
     try {
       parsed.model3d = parseFrame3DModel(parsed.model3d);

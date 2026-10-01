@@ -60,9 +60,11 @@ interface Props {
    * van toepassing is (eigen gewicht aan, nog in het eerste blijvende geval).
    */
   onVerplaatsEigenGewicht?: () => void;
-  /** Analysetype: 1e orde, 2e orde (P-Δ) of 2e orde + fysisch niet-lineair. */
+  /** Analysetype: lineair, P-Δ, gescheurde buiging of Rust axiale FNL. */
   analysetype?: Analysetype;
   setAnalysetype?: (v: Analysetype) => void;
+  axialMaterialLoadPath?: number[];
+  setAxialMaterialLoadPath?: (v: number[]) => void;
   /** Gewenste segmentlengte in mm (besluit B3) — alleen zichtbaar bij fysisch. */
   betonSegmentLengteMm?: number;
   setBetonSegmentLengteMm?: (v: number) => void;
@@ -160,6 +162,7 @@ export default function LoadCaseTabBar({
   loadCases, activeLoadCaseId, setActiveLoadCaseId, addLoadCase, loads,
   selfWeightEnabled, setSelfWeightEnabled, eigenGewicht, onVerplaatsEigenGewicht,
   analysetype = "eersteOrde", setAnalysetype,
+  axialMaterialLoadPath = [1], setAxialMaterialLoadPath,
   betonSegmentLengteMm = 400, setBetonSegmentLengteMm,
   betonKruipcoefficient = null, setBetonKruipcoefficient, heeftBetonstaaf = false,
   betonKruipInvoer = null, setBetonKruipInvoer,
@@ -177,6 +180,21 @@ export default function LoadCaseTabBar({
   hasResults = false, resultsActive = false, onShowResults,
 }: Props) {
   const { t } = useTranslation("common");
+  const [axialPathText, setAxialPathText] = useState(axialMaterialLoadPath.join(", "));
+  const [axialPathError, setAxialPathError] = useState("");
+  useEffect(() => { setAxialPathText(axialMaterialLoadPath.join(", ")); }, [axialMaterialLoadPath]);
+  const commitAxialPath = () => {
+    const factors = axialPathText.split(",").map(part => Number(part.trim()));
+    if (!axialPathText.trim() || factors.length > 100
+        || axialPathText.split(",").some(part => !part.trim())
+        || factors.some(value => !Number.isFinite(value))) {
+      setAxialPathError(t("loadCases.axialPathError"));
+      setAxialPathText(axialMaterialLoadPath.join(", "));
+      return;
+    }
+    setAxialPathError("");
+    setAxialMaterialLoadPath?.(factors);
+  };
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
 
@@ -598,6 +616,18 @@ export default function LoadCaseTabBar({
               <option key={a} value={a}>{t(`loadCases.analysisType.${a}`)}</option>
             ))}
           </select>
+        </span>
+      )}
+
+      {setAnalysetype && analysetype === "axiaalFysischRust" && (
+        <span className="lc-tab-phi" title={t("loadCases.axialPathHint")}>
+          <span className="lc-tab-phi-label">{t("loadCases.axialPath")}</span>
+          <input className="lc-tab-phi-input" type="text" value={axialPathText}
+            onChange={(event) => { setAxialPathText(event.target.value); setAxialPathError(""); }}
+            onBlur={commitAxialPath}
+            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+            aria-invalid={!!axialPathError} />
+          {axialPathError && <span className="lc-tab-phi-label" role="alert">{axialPathError}</span>}
         </span>
       )}
 

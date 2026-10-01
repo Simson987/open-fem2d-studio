@@ -160,13 +160,27 @@ log("\n4. De poort bij het OPENEN: wat ontbreekt of niet te lezen is (basisaudit
   weigert("een analysetype dat deze versie niet kent wordt geweigerd",
     (o) => { o.analysetype = "tweedeOrdeToekomst"; o.nonlinearEnabled = true; },
     "tweedeOrdeToekomst");
-  for (const t of ["eersteOrde", "tweedeOrdeGeometrisch", "tweedeOrdeFysisch"]) {
+  for (const t of ["eersteOrde", "tweedeOrdeGeometrisch", "tweedeOrdeFysisch", "axiaalFysischRust"]) {
     const o = { ...kaal, analysetype: t };
     ok(deserializeProject(JSON.stringify(o)).analysetype === t,
       `analysetype "${t}" gaat gewoon door de poort`);
   }
   ok(deserializeProject(JSON.stringify({ ...kaal, nonlinearEnabled: true })).analysetype === undefined,
     "een bestand van vóór het veld blijft leesbaar (de booleaan telt dan)");
+  const fnl = deserializeProject(serializeProject({ ...model,
+    analysetype: "axiaalFysischRust", axialMaterialLoadPath: [1, 0, 0.5],
+    beams: [{ ...staaf, axialMaterialLaw: {
+      kind: "concreteCracking", tensileMpa: 3, residualRatio: 0.2 } }],
+  }));
+  ok(JSON.stringify(fnl.axialMaterialLoadPath) === "[1,0,0.5]"
+    && fnl.beams[0].axialMaterialLaw?.kind === "concreteCracking",
+  "axiale Rust-FNL-wet en lastpad overleven opslaan en openen");
+  weigert("een ongeldig axiaal FNL-lastpad wordt bij openen geweigerd",
+    (o) => { o.axialMaterialLoadPath = [1, "x"]; }, "Ongeldig axiaal Rust-FNL-lastpad");
+  weigert("een ongeldige axiale materiaalwet wordt bij openen geweigerd",
+    (o) => { o.beams = [{ id: 1, axialMaterialLaw: {
+      kind: "steelBilinear", yieldMpa: 100, hardeningRatio: 2 } }]; },
+    "ongeldige axiale Rust-FNL-materiaalwet");
 
   // ruw 29 - combinatietype en factoren
   weigert("een onbekend combinatietype wordt geweigerd, niet stil UGT",

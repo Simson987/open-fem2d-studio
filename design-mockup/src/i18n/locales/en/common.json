@@ -793,13 +793,18 @@
     "analysisType": {
       "eersteOrde": "1st order",
       "tweedeOrdeGeometrisch": "2nd order (P-Δ)",
-      "tweedeOrdeFysisch": "2nd order + non-linear material"
+      "tweedeOrdeFysisch": "2nd order + non-linear material",
+      "axiaalFysischRust": "Rust 2nd order + axial material"
     },
     "analysisDescription": {
       "eersteOrde": "First order, linear: each combination is the weighted sum of the load cases.",
       "tweedeOrdeGeometrisch": "Second order, geometrically non-linear (P-Δ): each combination is solved separately with factored loads and geometric stiffness.",
-      "tweedeOrdeFysisch": "Second order, geometrically and materially non-linear: as P-Δ, but the concrete members get the secant EI per segment from the calculation engine (NEN-EN 1992-1-1 5.8.6). Without concrete members with a reinforcement cage the result equals 2nd order (P-Δ)."
+      "tweedeOrdeFysisch": "Second order, geometrically and materially non-linear: as P-Δ, but the concrete members get the secant EI per segment from the calculation engine (NEN-EN 1992-1-1 5.8.6). Without concrete members with a reinforcement cage the result equals 2nd order (P-Δ).",
+      "axiaalFysischRust": "Experimental Rust analysis: P-Δ with axial steel plasticity or concrete tensile damage over a load path. Bending stays elastic; code checks are not run."
     },
+    "axialPath": "Material path",
+    "axialPathHint": "Absolute load factors, for example 1, 0, 0.5 for loading, unloading and reloading.",
+    "axialPathError": "Enter 1 to 100 finite load factors separated by commas.",
     "segmentTitle": "Target segment length in mm. Each concrete member is split into segments of equal length, each with its own secant EI (5.8.6(6)). Shorter = more accurate and slower; the application does not coarsen on its own.",
     "segment": "segment",
     "creepTitle": "Final value of the creep coefficient φ(∞,t₀) according to art. 3.1.4, for every concrete member without its own value in the §5.8 data. The engine applies it according to 5.8.6(4) — all design values times (1 + φ_ef) — which for the initial slope amounts to E_c,eff = E_cm/(1 + φ) of (7.20). EMPTY = not specified: the analysis then runs WITHOUT creep, the deflection comes out too small and that is the unsafe side. Tick the box next to it to have φ(∞,t₀) calculated according to annex B; a value specified here takes precedence.",

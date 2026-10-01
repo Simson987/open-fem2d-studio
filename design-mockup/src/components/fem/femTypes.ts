@@ -409,6 +409,10 @@ export interface Beam {
   material?: string;
   /** Profile name (default: "HEA160"). */
   profile?: string;
+  /** Expliciete axiale materiaalwet voor de experimentele Rust-FNL-route. */
+  axialMaterialLaw?:
+    | { kind: "steelBilinear"; yieldMpa: number; hardeningRatio: number }
+    | { kind: "concreteCracking"; tensileMpa: number; residualRatio: number };
   /**
    * Profiel aan het EINDE van de staaf (knoop `to`), voor een verlopend
    * profiel; `profile` is dan het profiel aan het begin (knoop `from`). De
@@ -1704,7 +1708,7 @@ export interface LoadCase {
  * Het analysetype: wat de solver met de combinaties doet.
  *
  * Dit veld vervangt de booleaan `nonlinearEnabled`. Die kende twee standen, en
- * zodra de fysisch niet-lineaire variant erbij komt zijn dat er drie — een
+ * zodra de fysisch niet-lineaire varianten erbij komen zijn er meer standen — een
  * derde stand in een booleaan persen (bijvoorbeeld "true met een tweede
  * vlaggetje ernaast") maakt onleesbaar welke berekening er gedraaid heeft.
  * Zie besluit B4 in het plandocument.
@@ -1718,17 +1722,21 @@ export interface LoadCase {
  *    combinatie apart draait (zie `lib/betonStijfheid.ts`). Alleen zinvol met
  *    betonstaven mét wapeningskorf in het model; staat er geen enkele, dan is
  *    de uitkomst gelijk aan `tweedeOrdeGeometrisch` en zegt de interface dat.
+ *  - `axiaalFysischRust` — experimentele Rust-route met P-Δ en axiale
+ *    materiaalgeschiedenis. Buiging blijft elastisch en normtoetsen zijn uit.
  */
 export type Analysetype =
   | "eersteOrde"
   | "tweedeOrdeGeometrisch"
-  | "tweedeOrdeFysisch";
+  | "tweedeOrdeFysisch"
+  | "axiaalFysischRust";
 
 /** Alle analysetypen in de volgorde waarin ze in de interface staan. */
 export const ANALYSETYPEN: readonly Analysetype[] = [
   "eersteOrde",
   "tweedeOrdeGeometrisch",
   "tweedeOrdeFysisch",
+  "axiaalFysischRust",
 ] as const;
 
 /** Korte naam voor de keuzelijst. */
@@ -1736,6 +1744,7 @@ export const ANALYSETYPE_LABEL: Record<Analysetype, string> = {
   eersteOrde: "1e orde",
   tweedeOrdeGeometrisch: "2e orde (P-Δ)",
   tweedeOrdeFysisch: "2e orde + fysisch",
+  axiaalFysischRust: "Rust 2e orde + axiale FNL",
 };
 
 /** Volledige omschrijving voor tooltip en rapport. */
@@ -1750,6 +1759,9 @@ export const ANALYSETYPE_OMSCHRIJVING: Record<Analysetype, string> = {
     "betonstaven krijgen per segment de secans-EI uit de rekenkern " +
     "(NEN-EN 1992-1-1 5.8.6). Zonder betonstaven mét wapeningskorf is de " +
     "uitkomst gelijk aan 2e orde (P-Δ).",
+  axiaalFysischRust:
+    "Experimentele Rust-berekening van P-Δ met axiale staalplastificatie of betontrekschade " +
+    "per laststap. Buiging blijft elastisch; normtoetsen worden niet uitgevoerd.",
 };
 
 /**
@@ -1762,7 +1774,7 @@ export class AnalysetypeOnbekendFout extends Error {
     super(
       `Het bestand noemt analysetype "${gelezen}"; deze versie kent ` +
         ANALYSETYPEN.map((a) => `"${a}"`).join(", ") +
-        ". Er wordt niet geraden welke van de drie bedoeld is: dat zou een " +
+        ". Er wordt niet geraden welke stand bedoeld is: dat zou een " +
         "andere berekening opleveren dan er bewaard is, met het etiket van " +
         "een berekening die niet gedraaid heeft.",
     );

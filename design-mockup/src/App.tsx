@@ -701,6 +701,7 @@ function App() {
     // bestand nog kan lezen — beide tweede-orde-standen zijn daar "aan".
     nonlinearEnabled: nonlinearVoorBestand(fem.analysetype),
     analysetype: fem.analysetype,
+    axialMaterialLoadPath: fem.axialMaterialLoadPath,
     betonSegmentLengteMm: fem.betonSegmentLengteMm,
     betonKruipcoefficient: fem.betonKruipcoefficient,
     betonKruipInvoer: fem.betonKruipInvoer,
@@ -904,6 +905,7 @@ function App() {
         // vóór de drie standen), dan bepaalt de oude booleaan de stand.
         nonlinearEnabled: parsed.nonlinearEnabled,
         analysetype: parsed.analysetype,
+        axialMaterialLoadPath: parsed.axialMaterialLoadPath,
         betonSegmentLengteMm: parsed.betonSegmentLengteMm,
         betonKruipcoefficient: parsed.betonKruipcoefficient,
         betonKruipInvoer: parsed.betonKruipInvoer,
@@ -1080,6 +1082,7 @@ function App() {
       activeLoadCaseId: STANDAARD_ACTIEF_GEVAL_ID,
       selfWeightEnabled: EIGEN_GEWICHT_STANDAARD_AAN,
       analysetype: "eersteOrde",
+      axialMaterialLoadPath: [1],
     });
     setProjectPath("");
     setActiveView("default");
@@ -1532,6 +1535,9 @@ function App() {
   const computeAndStoreSolverOutputs = useCallback(() => {
     const generatie = rekenGeneratieRef.current;
     try {
+      if (fem.analysetype === "axiaalFysischRust") {
+        throw new Error("Kies Open FEM Rust in Instellingen → Berekening voor axiale FNL.");
+      }
       // DE MODELCONTROLE OOK OP DIT PAD. Alleen het canvas deed hem; een staaf
       // van lengte nul of een kolomvoet die op een ligger ligt gaf daar "Model
       // niet doorgerekend", terwijl dit pad doorrekende en de toetsing op die
@@ -1640,22 +1646,30 @@ function App() {
       scheefstandEnabled: fem.scheefstandEnabled,
       scheefstandNoemer: scheefstandUitkomst.noemer,
       scheefstandRichting: fem.scheefstandRichting,
+      axialMaterialLoadPath: fem.axialMaterialLoadPath,
     });
     const analysis = fem.analysetype === "eersteOrde" ? "linear"
-      : fem.analysetype === "tweedeOrdeFysisch" ? "combined" : "geometric";
+      : fem.analysetype === "tweedeOrdeFysisch" || fem.analysetype === "axiaalFysischRust"
+        ? "combined" : "geometric";
     const nativeFrame = fem.plates.length === 0 && fem.beams.length > 0;
-    if (nativeFrame && analysis === "combined") {
-      throw new Error("De Rust 2D-raamwerkroute ondersteunt nog geen fysisch niet-lineaire analyse.");
+    if (nativeFrame && fem.analysetype === "tweedeOrdeFysisch") {
+      throw new Error("Gescheurde buigdoorsneden van beton zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.");
     }
+    if (!nativeFrame && fem.analysetype === "axiaalFysischRust")
+      throw new Error("Axiale Rust-FNL vereist een zuiver 2D-raamwerk zonder platen.");
+    if (nativeFrame && fem.analysetype === "axiaalFysischRust"
+        && !fem.beams.some(beam => beam.axialMaterialLaw))
+      throw new Error("Kies bij ten minste één staaf een axiale staal- of betonwet voor Rust-FNL.");
     const perCase = nativeFrame
-      ? await solveAllCasesNativeFrame2D(multiInput, analysis === "geometric" ? "geometric" : "linear")
+      ? await solveAllCasesNativeFrame2D(multiInput, analysis)
       : await solveAllCasesNativeMembrane2D(multiInput, analysis);
     if (generatie !== rekenGeneratieRef.current) return null;
     const combinationResults = analysis === "linear"
       ? new Map(fem.actieveCombinaties.map(combination =>
         [combination.id, combineResults(combination, perCase)]))
       : nativeFrame
-        ? await solveAllCombinationsNativeFrame2D(multiInput, fem.actieveCombinaties)
+        ? await solveAllCombinationsNativeFrame2D(multiInput, fem.actieveCombinaties,
+          analysis === "combined" ? "combined" : "geometric")
         : await solveAllCombinationsNativeMembrane2D(multiInput, fem.actieveCombinaties, analysis);
     if (generatie !== rekenGeneratieRef.current) return null;
     const envelope = computeEnvelope(fem.actieveCombinaties, perCase,
@@ -2070,6 +2084,16 @@ function App() {
         return { gelukt: false, fysisch: "nvt" };
       }
       liveRekenenRef.current = true;
+      if (fem.analysetype === "axiaalFysischRust") {
+        // De axiale materiaalgeschiedenis is gevalideerd, de buigdoorsnede
+        // blijft elastisch. Normtoetsen op deze gedeeltelijke FNL-uitkomst
+        // zouden een vollediger materiaalmodel suggereren dan er is.
+        checkClear();
+        stijfheidClear();
+        volledigeRekengangRef.current = outputs.combinationResults;
+        setSolverStatus({ kind: "solved", at: Date.now() });
+        return { gelukt: true, fysisch: "gedraaid" };
+      }
       if (fem.analysetype === "tweedeOrdeFysisch" && preference !== "openaec-native-fem") {
         // De toetsing wacht op de fysisch niet-lineaire ronde: hij hoort op de
         // gescheurde krachtsverdeling te draaien, niet op de ongescheurde
@@ -2169,7 +2193,7 @@ function App() {
         : fem.analysetype === "tweedeOrdeFysisch" ? "material-nonlinear" : "p-delta"
       : fem.analysetype === "eersteOrde"
         ? "linear"
-        : fem.analysetype === "tweedeOrdeFysisch"
+        : fem.analysetype === "tweedeOrdeFysisch" || fem.analysetype === "axiaalFysischRust"
           ? "material-nonlinear"
           : "p-delta";
     let selectedSolver: SolverDescriptor;
@@ -2177,6 +2201,11 @@ function App() {
       const preference = normaliseSolverPreference(
         await getSetting<unknown>(SOLVER_PREFERENCE_KEY, "automatic"),
       );
+      if (fem.analysetype === "axiaalFysischRust") {
+        if (modelDimension === "3d") throw new Error("Axiale Rust-FNL is alleen voor 2D-raamwerken beschikbaar.");
+        if (preference !== "openaec-native-fem")
+          throw new Error("Kies Open FEM Rust in Instellingen → Berekening voor axiale FNL.");
+      }
       selectedSolver = resolveSolver(preference, {
         schemaVersion: 1,
         dimension: modelDimension,
@@ -3421,6 +3450,8 @@ function App() {
           onVerplaatsEigenGewicht={biedEigenGewichtGevalAan ? handleVerplaatsEigenGewicht : undefined}
           analysetype={fem.analysetype}
           setAnalysetype={fem.setAnalysetype}
+          axialMaterialLoadPath={fem.axialMaterialLoadPath}
+          setAxialMaterialLoadPath={fem.setAxialMaterialLoadPath}
           betonSegmentLengteMm={fem.betonSegmentLengteMm}
           betonKruipcoefficient={fem.betonKruipcoefficient}
           setBetonKruipcoefficient={fem.setBetonKruipcoefficient}

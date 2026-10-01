@@ -793,13 +793,18 @@
     "analysisType": {
       "eersteOrde": "1e orde",
       "tweedeOrdeGeometrisch": "2e orde (P-Δ)",
-      "tweedeOrdeFysisch": "2e orde + fysisch"
+      "tweedeOrdeFysisch": "2e orde + fysisch",
+      "axiaalFysischRust": "Rust 2e orde + axiale FNL"
     },
     "analysisDescription": {
       "eersteOrde": "Eerste orde, lineair: elke combinatie is de gewogen som van de belastinggevallen.",
       "tweedeOrdeGeometrisch": "Tweede orde, geometrisch niet-lineair (P-Δ): elke combinatie wordt met gefactoreerde lasten en geometrische stijfheid apart opgelost.",
-      "tweedeOrdeFysisch": "Tweede orde, geometrisch én fysisch niet-lineair: als P-Δ, maar de betonstaven krijgen per segment de secans-EI uit de rekenkern (NEN-EN 1992-1-1 5.8.6). Zonder betonstaven mét wapeningskorf is de uitkomst gelijk aan 2e orde (P-Δ)."
+      "tweedeOrdeFysisch": "Tweede orde, geometrisch én fysisch niet-lineair: als P-Δ, maar de betonstaven krijgen per segment de secans-EI uit de rekenkern (NEN-EN 1992-1-1 5.8.6). Zonder betonstaven mét wapeningskorf is de uitkomst gelijk aan 2e orde (P-Δ).",
+      "axiaalFysischRust": "Experimentele Rust-berekening: P-Δ en axiale staalplastificatie of betontrekschade per laststap. Buiging blijft elastisch; normtoetsen worden niet uitgevoerd."
     },
+    "axialPath": "FNL-pad",
+    "axialPathHint": "Absolute lastfactoren, bijvoorbeeld 1, 0, 0.5 voor belasten, ontlasten en herbelasten.",
+    "axialPathError": "Geef 1 tot 100 eindige lastfactoren op, gescheiden door komma's.",
     "segmentTitle": "Gewenste segmentlengte in mm. Elke betonstaaf wordt in even lange segmenten geknipt die elk hun eigen secans-EI krijgen (5.8.6(6)). Korter = nauwkeuriger en trager; de applicatie vergroft niet uit zichzelf.",
     "segment": "segment",
     "creepTitle": "Eindwaarde van de kruipcoëfficiënt φ(∞,t₀) volgens art. 3.1.4, voor elke betonstaaf zonder eigen waarde bij de §5.8-gegevens. De kern verwerkt hem volgens 5.8.6(4) — alle rekwaarden maal (1 + φ_ef) — wat voor de beginhelling neerkomt op E_c,eff = E_cm/(1 + φ) van (7.20). LEEG = niet opgegeven: er wordt dan ZONDER kruip gerekend, de zakking komt te klein uit en dat is de onveilige kant. Laat φ(∞,t₀) volgens bijlage B berekenen met het vinkje ernaast; een hier opgegeven waarde gaat voor.",

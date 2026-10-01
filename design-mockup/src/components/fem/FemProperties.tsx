@@ -178,7 +178,8 @@ export default function FemProperties(props: FemPropertiesProps) {
     }
     const nFrom = nodes.find(n => n.id === b.from);
     const nTo = nodes.find(n => n.id === b.to);
-    return <BeamProperties beam={b} nFrom={nFrom} nTo={nTo} nodes={nodes} beams={beams} loads={loads} updateBeam={updateBeam} />;
+    return <BeamProperties beam={b} nFrom={nFrom} nTo={nTo} nodes={nodes} beams={beams} loads={loads}
+      updateBeam={updateBeam} results={results} />;
   }
 
   if (selection.type === "plate") {
@@ -461,18 +462,20 @@ function NodeProperties({ node, supports, updateNode, addSupport, removeSupport,
 }
 
 // ── Beam properties ──────────────────────────────────────────────────────
-function BeamProperties({ beam, nFrom, nTo, nodes, beams, loads, updateBeam }: {
+function BeamProperties({ beam, nFrom, nTo, nodes, beams, loads, updateBeam, results }: {
   beam: Beam; nFrom?: Node; nTo?: Node; nodes: Node[];
   /** Alle staven, om te kunnen tonen welke profielen al in het project staan. */
   beams: Beam[];
   loads: Load[];
   updateBeam?: (id: number, updates: Partial<Beam>) => void;
+  results: SolverResult | null;
 }) {
   const dx = nTo && nFrom ? nTo.x - nFrom.x : 0;
   const dz = nTo && nFrom ? nTo.z - nFrom.z : 0;
   const L = Math.hypot(dx, dz);
   const angDeg = (Math.atan2(dz, dx) * 180 / Math.PI);
   const beamLoads = loads.filter(l => l.beamId === beam.id);
+  const axialHistory = results?.elements.get(beam.id)?.axialHistory;
 
   const material = beam.material ?? "S235";
   const profile = beam.profile ?? "HEA160";
@@ -1171,6 +1174,12 @@ function BeamProperties({ beam, nFrom, nTo, nodes, beams, loads, updateBeam }: {
               onApply={({ beton, ...keuze }) =>
                 updateBeam?.(beam.id, {
                   ...keuze,
+                  axialMaterialLaw: beam.axialMaterialLaw
+                    && ((matchSupportedConcreteClass(keuze.material) !== null
+                        && beam.axialMaterialLaw.kind === "concreteCracking")
+                      || (/^S\d+$/.test(keuze.material)
+                        && beam.axialMaterialLaw.kind === "steelBilinear"))
+                    ? beam.axialMaterialLaw : undefined,
                   ...(beton
                     ? {
                         checkConfig: opgeschoond({
@@ -1187,6 +1196,55 @@ function BeamProperties({ beam, nFrom, nTo, nodes, beams, loads, updateBeam }: {
             />
           )}
         </Section>
+
+        {(isBeton || !!fyStaal) && <Section title={t("props.beam.axialFnlTitle")} defaultOpen={!!beam.axialMaterialLaw}>
+          <Row label={t("props.beam.axialFnlLaw")}>
+            <select className="fem-prop-select" value={beam.axialMaterialLaw?.kind ?? "elastic"}
+              onChange={(event) => {
+                const kind = event.target.value;
+                updateBeam?.(beam.id, { axialMaterialLaw: kind === "elastic" ? undefined
+                  : kind === "steelBilinear"
+                    ? { kind, yieldMpa: Number(fyStaal) || 235, hardeningRatio: 0.02 }
+                    : { kind: "concreteCracking", tensileMpa: 3, residualRatio: 0.2 } });
+              }}>
+              <option value="elastic">{t("props.beam.axialFnlElastic")}</option>
+              {!isBeton && <option value="steelBilinear">{t("props.beam.axialFnlSteel")}</option>}
+              {isBeton && <option value="concreteCracking">{t("props.beam.axialFnlConcrete")}</option>}
+            </select>
+          </Row>
+          {beam.axialMaterialLaw && <>
+            <Row label={beam.axialMaterialLaw.kind === "steelBilinear" ? "fᵧ (MPa)" : "fₜ (MPa)"}>
+              <input className="fem-prop-input" type="number" min="0.001" step="1"
+                value={beam.axialMaterialLaw.kind === "steelBilinear"
+                  ? beam.axialMaterialLaw.yieldMpa : beam.axialMaterialLaw.tensileMpa}
+                onChange={(event) => {
+                  const value = Number(event.target.value);
+                  if (!(value > 0) || !Number.isFinite(value)) return;
+                  updateBeam?.(beam.id, { axialMaterialLaw: beam.axialMaterialLaw!.kind === "steelBilinear"
+                    ? { ...beam.axialMaterialLaw!, yieldMpa: value }
+                    : { ...beam.axialMaterialLaw!, tensileMpa: value } });
+                }} />
+            </Row>
+            <Row label={t("props.beam.axialFnlRatio")}>
+              <input className="fem-prop-input" type="number" min="0" max="1" step="0.01"
+                value={beam.axialMaterialLaw.kind === "steelBilinear"
+                  ? beam.axialMaterialLaw.hardeningRatio : beam.axialMaterialLaw.residualRatio}
+                onChange={(event) => {
+                  const value = Number(event.target.value);
+                  if (!Number.isFinite(value) || value < 0 || value > 1) return;
+                  updateBeam?.(beam.id, { axialMaterialLaw: beam.axialMaterialLaw!.kind === "steelBilinear"
+                    ? { ...beam.axialMaterialLaw!, hardeningRatio: value }
+                    : { ...beam.axialMaterialLaw!, residualRatio: value } });
+                }} />
+            </Row>
+          </>}
+          <div className="fem-prop-hint">{t("props.beam.axialFnlHint")}</div>
+          {axialHistory && <>
+            <Row label={t("props.beam.axialFnlPlasticStrain")}><code>{axialHistory.plasticStrain.toExponential(4)}</code></Row>
+            <Row label={t("props.beam.axialFnlDamage")}><code>{axialHistory.tensileDamage.toFixed(4)}</code></Row>
+            <Row label={t("props.beam.axialFnlTangent")}><code>{axialHistory.tangentEMpa.toFixed(0)} MPa</code></Row>
+          </>}
+        </Section>}
 
         <Section title={t("props.beam.boundaryConditions")} defaultOpen={false}>
           <Row label={t("props.beam.connectionStart")}>

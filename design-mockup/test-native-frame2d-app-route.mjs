@@ -6,6 +6,7 @@ import { combineResults } from "./src/components/fem/solver/combinations.ts";
 import { buildNativeFrame2DRequest, solveAllCasesNativeFrame2D, solveAllCombinationsNativeFrame2D } from "./src/components/fem/solver/nativeFrame2DRoute.ts";
 import { resolveSolver } from "./src/core/solver/SolverRegistry.ts";
 import { spiegelElementKrachten } from "./src/lib/referentierichting.ts";
+import { bouwMultiInput } from "./src/lib/modelNaarSolverInput.ts";
 
 const binary = fileURLToPath(new URL(`../src-tauri/target/debug/native-frame2d${process.platform === "win32" ? ".exe" : ""}`, import.meta.url));
 const invoke = (request) => new Promise((resolve, reject) => {
@@ -28,7 +29,8 @@ const close = (actual, expected, tolerance, label) => assert.ok(
 const request = { schemaVersion: 1, dimension: "2d", analysis: "linear", elementFamilies: ["frame"] };
 assert.equal(resolveSolver("openaec-native-fem", request).id, "openaec-native-fem");
 assert.equal(resolveSolver("openaec-native-fem", { ...request, analysis: "p-delta" }).id, "openaec-native-fem");
-assert.throws(() => resolveSolver("openaec-native-fem", { ...request, analysis: "material-nonlinear" }), /does not support/);
+assert.equal(resolveSolver("openaec-native-fem", { ...request, analysis: "material-nonlinear" }).id,
+  "openaec-native-fem");
 
 const input = {
   nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 6000, z: 0 }],
@@ -174,6 +176,24 @@ try {
   assert.deepEqual(spiegelElementKrachten(steelFnl.elements.get(1)).axialHistory,
     steelFnl.elements.get(1).axialHistory,
     "axiale materiaalgeschiedenis blijft gelijk als de staafrichting omkeert");
+  const fromProject = bouwMultiInput({
+    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 3000, z: 0 }],
+    beams: [{ id: 1, from: 1, to: 2, material: "S235", profile: "HEA160",
+      axialMaterialLaw: { kind: "steelBilinear", yieldMpa: 100, hardeningRatio: 0.5 } }],
+    supports: [{ nodeId: 1, type: "fixed" }, { nodeId: 2, type: "fixed" }],
+    plates: [],
+    loads: [{ id: 1, type: "thermal", beamId: 1, caseId: 1, deltaT: 100 }],
+    loadCases: [{ id: 1, name: "opwarming", type: "dead" }],
+    selfWeightEnabled: false, scheefstandEnabled: false, scheefstandNoemer: 200,
+    scheefstandRichting: 1, axialMaterialLoadPath: [1, 0],
+  });
+  assert.deepEqual(fromProject.beams[0].axialMaterialLaw,
+    { kind: "steelBilinear", yieldMpa: 100, hardeningRatio: 0.5 });
+  assert.deepEqual(fromProject.axialMaterialLoadPath, [1, 0]);
+  const projectFnl = (await solveAllCombinationsNativeFrame2D(fromProject,
+    [{ id: 102, name: "projectstaal", factors: new Map([[1, 1]]) }], "combined")).get(102);
+  close(projectFnl.reactions.get(1).fx, -76 * fromProject.beams[0].A, 1e-3,
+    "projectmodel door 2D Rust-FNL-route");
   const concreteFnlInput = { ...steelFnlInput,
     beams: [{ ...steelFnlInput.beams[0], E: 33_000,
       axialMaterialLaw: { kind: "concreteCracking", tensileMpa: 3, residualRatio: 0.2 } }],
