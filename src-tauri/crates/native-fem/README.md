@@ -14,8 +14,9 @@ terug. De geometrische analyse lost elke combinatie apart op met iteratieve
 P-Δ-stijfheid en controleert of de vrije stijfheid positief is. De zelfstandige
 Rust-kern berekent daarnaast axiale staalplastificatie en betontrekschade per
 belastingpad. De app koppelt deze materiaalwetten nog niet aan staven; haar
-fysisch niet-lineaire raamwerkroute wordt daarom nog geweigerd. Lineaire
-buigscharnieren aan staafeinden zijn gekoppeld; bedding, translatiehulzen,
+fysisch niet-lineaire raamwerkroute wordt daarom nog geweigerd.
+Buigscharnieren aan staafeinden zijn gekoppeld voor lineaire en P-Δ-analyse;
+bedding, translatiehulzen,
 eindveren, thermische lasten en gekoppelde
 staaf-plaatmodellen worden in deze route nog expliciet geweigerd. De app
 behoudt de bestaande solver als automatische keuze.
@@ -52,7 +53,12 @@ laat een uitkraging met een buigscharnier bij de tip zien. De knooprotatie is
 vastgezet, maar de herstelde staafeindrotatie is `−PL²/(2EI)` en het
 staafeindmoment is nul. De puntverplaatsing is `−PL³/(3EI)`. De app-route
 vertaalt `startRy`/`endRy` en de legacy `hinge`-velden naar dezelfde releases.
-Bij P-Δ en FNL met eindscharnieren weigert de 2D-kern de invoer nog expliciet.
+Bij P-Δ wordt de scharniercondensatie met elke bijgewerkte normaalkracht
+opnieuw uitgevoerd. Voor dezelfde staaf met `100 kN` druk volgt de
+balkkolomverplaatsing binnen `0,1%`; bij `600 kN` druk faalt de
+stabiliteitscontrole. Axiale FNL met een buigscharnier werkt ook, inclusief
+lastpad. De gecombineerde materiaal- en geometrische niet-lineariteit met
+scharnieren wordt nog expliciet geweigerd.
 
 ```bash
 src-tauri/target/debug/native-frame2d \

@@ -332,11 +332,24 @@ fn condense_releases(element: &mut Element) -> Result<(), String> {
 }
 
 /// Recover the physical member-end rotation eliminated from the global solve.
-fn released_local_displacement(element: &Element, mut d: [f64; 6]) -> [f64; 6] {
-    let Some(k) = element.raw_stiffness else {
+fn released_local_displacement(
+    element: &Element,
+    mut d: [f64; 6],
+    load_factor: f64,
+    geometric: bool,
+) -> [f64; 6] {
+    let Some(mut k) = element.raw_stiffness else {
         return d;
     };
-    let f = element.raw_load.unwrap();
+    if geometric {
+        let kg = geometric_local(element, axial_force(element, &d));
+        for i in 0..6 {
+            for j in 0..6 {
+                k[i][j] += kg[i][j];
+            }
+        }
+    }
+    let f = element.raw_load.unwrap().map(|value| value * load_factor);
     let released: Vec<usize> = [(2, element.releases.rz_start), (5, element.releases.rz_end)]
         .into_iter()
         .filter_map(|(axis, yes)| yes.then_some(axis))
@@ -392,30 +405,49 @@ fn geometric_local(element: &Element, axial: f64) -> [[f64; 6]; 6] {
     kg
 }
 
-fn geometric_stiffness(elastic: &Matrix, elements: &HashMap<usize, Element>, u: &[f64]) -> Matrix {
-    let mut k = elastic.clone();
+fn geometric_assembly(
+    elements: &HashMap<usize, Element>,
+    nodal_f: &[f64],
+    springs: &[f64],
+    u: &[f64],
+) -> Result<(Matrix, Vec<f64>), String> {
+    let mut k = Matrix::zeros(u.len())?;
+    let mut f = nodal_f.to_vec();
     for element in elements.values() {
         let d = local_displacement(element, u);
         let kg = geometric_local(element, axial_force(element, &d));
+        let mut assembled = element.clone();
+        assembled.local_stiffness = element.raw_stiffness.unwrap_or(element.local_stiffness);
+        assembled.local_load = element.raw_load.unwrap_or(element.local_load);
         for i in 0..6 {
             for j in 0..6 {
-                let scale = kg[i][j];
-                if scale == 0.0 {
-                    continue;
-                }
-                for p in 0..6 {
-                    for q in 0..6 {
-                        k.add(
-                            element.dofs[p],
-                            element.dofs[q],
-                            element.transform[i][p] * scale * element.transform[j][q],
-                        );
+                assembled.local_stiffness[i][j] += kg[i][j];
+            }
+        }
+        condense_releases(&mut assembled)?;
+        for i in 0..6 {
+            for j in 0..6 {
+                let mut value = 0.0;
+                for a in 0..6 {
+                    for b in 0..6 {
+                        value += element.transform[a][i]
+                            * assembled.local_stiffness[a][b]
+                            * element.transform[b][j];
                     }
                 }
+                k.add(element.dofs[i], element.dofs[j], value);
+            }
+            for j in 0..6 {
+                f[element.dofs[i]] += element.transform[j][i] * assembled.local_load[j];
             }
         }
     }
-    k
+    for (dof, &spring) in springs.iter().enumerate() {
+        if spring > 0.0 {
+            k.add(dof, dof, spring);
+        }
+    }
+    Ok((k, f))
 }
 
 #[derive(Clone, Copy, Default)]
@@ -730,8 +762,8 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
             3 * end + 1,
             3 * end + 2,
         ];
-        if member.releases.any() && request.analysis != Analysis::Linear {
-            return Err("2D frame end releases currently require linear analysis".into());
+        if member.releases.any() && request.analysis == Analysis::Combined {
+            return Err("2D frame end releases with combined material and geometric analysis are not implemented".into());
         }
         if member.releases.rz_start {
             released_rotations[dofs[2]] = true;
@@ -767,6 +799,7 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
             f[3 * index + axis] += value;
         }
     }
+    let nodal_f = f.clone();
     for load in &request.member_loads {
         let element = elements
             .get_mut(&load.member_id)
@@ -961,9 +994,10 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
         if request.analysis.geometric() {
             let mut converged = false;
             for iteration in 2..=request.max_iterations {
-                let candidate_k = geometric_stiffness(&k, &elements, &u);
+                let (candidate_k, candidate_f) =
+                    geometric_assembly(&elements, &nodal_f, &spring_stiffness, &u)?;
                 free_positive_definite(&candidate_k, &prescribed)?;
-                let (candidate, _) = constrained_solve(&candidate_k, &f, &prescribed)?;
+                let (candidate, _) = constrained_solve(&candidate_k, &candidate_f, &prescribed)?;
                 let change = candidate
                     .iter()
                     .zip(&u)
@@ -989,7 +1023,7 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
                     request.max_iterations
                 ));
             }
-            k = geometric_stiffness(&k, &elements, &u);
+            (k, f) = geometric_assembly(&elements, &nodal_f, &spring_stiffness, &u)?;
             free_positive_definite(&k, &prescribed)?;
         }
         let reactions: Vec<f64> = k
@@ -1028,8 +1062,12 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
         .iter()
         .map(|member| {
             let element = &elements[&member.id];
-            let local_displacement =
-                released_local_displacement(element, local_displacement(element, &u));
+            let local_displacement = released_local_displacement(
+                element,
+                local_displacement(element, &u),
+                final_factor,
+                request.analysis.geometric(),
+            );
             let stiffness = element
                 .raw_stiffness
                 .as_ref()
@@ -1325,7 +1363,9 @@ mod tests {
             fy: -1.0,
             mz: 0.0,
         });
-        assert!(solve(&input).unwrap_err().contains("buckling"));
+        assert!(solve(&input)
+            .unwrap_err()
+            .contains("non-positive free stiffness"));
     }
 
     #[test]
@@ -1393,9 +1433,67 @@ mod tests {
         assert!(result.members[0].local_end_forces[5].abs() < 1e-9);
         assert!((result.members[0].bending_moment_knm[10] - 5.0 * 9.0 / 8.0).abs() < 1e-9);
         input.analysis = Analysis::Geometric;
+        let geometric = solve(&input).unwrap();
+        assert!((geometric.members[0].bending_moment_knm[10] - 5.0 * 9.0 / 8.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn p_delta_with_released_tip_recovers_beam_column_solution() {
+        let mut input: Request =
+            serde_json::from_str(include_str!("../examples/frame2d-released-cantilever.json"))
+                .unwrap();
+        input.analysis = Analysis::Geometric;
+        input.nodal_loads[0].fx = -100.0;
+        let result = solve(&input).unwrap();
+        let wave = (100.0_f64 / (210_000.0 * 1000.0 * 8e-6)).sqrt();
+        let exact = -10.0 / (100.0 * wave) * ((3.0 * wave).tan() - 3.0 * wave);
+        assert!((result.nodes[1].displacement[1] / exact - 1.0).abs() < 0.001);
+        assert!(result.members[0].local_end_forces[5].abs() < 1e-8);
+        assert!(result.members[0].bending_moment_knm.last().unwrap().abs() < 1e-8);
+        assert!(result.equilibrium_residual < 1e-8);
+        input.nodal_loads[0].fx = -600.0;
         assert!(solve(&input)
             .unwrap_err()
-            .contains("releases currently require linear"));
+            .contains("non-positive free stiffness"));
+    }
+
+    #[test]
+    fn material_path_with_release_scales_member_load_and_recovers_rotation() {
+        let mut input: Request =
+            serde_json::from_str(include_str!("../examples/frame2d-released-cantilever.json"))
+                .unwrap();
+        input.analysis = Analysis::Material;
+        input.load_path = vec![0.5];
+        input.member_loads.push(MemberLoad {
+            member_id: 1,
+            qx_start_kn_per_m: 0.0,
+            qx_end_kn_per_m: 0.0,
+            qy_start_kn_per_m: -5.0,
+            qy_end_kn_per_m: -5.0,
+            start_position_m: None,
+            end_position_m: None,
+        });
+        let material = solve(&input).unwrap();
+        input.analysis = Analysis::Linear;
+        input.load_path.clear();
+        input.nodal_loads[0].fy *= 0.5;
+        input.member_loads[0].qy_start_kn_per_m *= 0.5;
+        input.member_loads[0].qy_end_kn_per_m *= 0.5;
+        let reference = solve(&input).unwrap();
+        assert!(
+            (material.nodes[1].displacement[1] - reference.nodes[1].displacement[1]).abs() < 1e-10
+        );
+        assert!(
+            (material.members[0].rotation_rad.last().unwrap()
+                - reference.members[0].rotation_rad.last().unwrap())
+            .abs()
+                < 1e-10
+        );
+        assert!(material.members[0].local_end_forces[5].abs() < 1e-9);
+        input.analysis = Analysis::Combined;
+        assert!(solve(&input)
+            .unwrap_err()
+            .contains("combined material and geometric"));
     }
 
     #[test]

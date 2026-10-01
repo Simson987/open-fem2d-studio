@@ -57,9 +57,6 @@ export function buildNativeFrame2DRequest(
     }
     const rzStart = !!beam.releases?.startRy || beam.startConnection === "hinge";
     const rzEnd = !!beam.releases?.endRy || beam.endConnection === "hinge";
-    if (analysis !== "linear" && (rzStart || rzEnd)) {
-      throw new Error(`Staaf ${beam.id}: buigscharnieren vragen nog een lineaire Rust-analyse.`);
-    }
     return { id: beam.id, startNodeId: beam.from, endNodeId: beam.to,
       materialId: beam.id, sectionId: beam.id,
       releases: { rzStart, rzEnd } };

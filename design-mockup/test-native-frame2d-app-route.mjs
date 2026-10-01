@@ -54,8 +54,8 @@ assert.equal(buildNativeFrame2DRequest({ ...input,
   beams: [{ ...input.beams[0], startConnection: "hinge" }] }, () => 1).members[0].releases.rzStart, true);
 assert.throws(() => buildNativeFrame2DRequest({ ...input,
   beams: [{ ...input.beams[0], releases: { startTx: true } }] }, () => 1), /translatiehulzen/);
-assert.throws(() => buildNativeFrame2DRequest({ ...input,
-  beams: [{ ...input.beams[0], endConnection: "hinge" }] }, () => 1, "geometric"), /lineaire Rust-analyse/);
+assert.equal(buildNativeFrame2DRequest({ ...input,
+  beams: [{ ...input.beams[0], endConnection: "hinge" }] }, () => 1, "geometric").members[0].releases.rzEnd, true);
 assert.throws(() => buildNativeFrame2DRequest({ ...input, plates: [{ id: 1 }] }, () => 1), /uitsluitend staven/);
 
 const previousFetch = globalThis.fetch;
@@ -177,6 +177,18 @@ try {
   close(hingeNative.reactions.get(1).my, hingeExisting.reactions.get(1).my,
     1e-3, "scharnierende uitkraging inklemmoment");
   close(hingeNative.elements.get(1).M_end, 0, 1e-5, "vrij scharnierend eindmoment");
+  const hingeSecondInput = { ...hingeInput,
+    pointLoads: [...hingeInput.pointLoads, { nodeId: 2, caseId: 2, fx: -100_000 }],
+    cases: [...hingeInput.cases, { id: 2, name: "druk" }] };
+  const hingeCombo = { id: 21, name: "scharnier met druk", type: "uls", formula: "G + Q",
+    factors: new Map([[1, 1], [2, 1]]) };
+  const hingeSecondNative = (await solveAllCombinationsNativeFrame2D(hingeSecondInput, [hingeCombo])).get(21);
+  const hingeSecondExisting = solveCombinationSecondOrder(hingeSecondInput, hingeCombo);
+  assert.ok(hingeSecondNative && hingeSecondExisting);
+  close(hingeSecondNative.displacements.get(2).uz, hingeSecondExisting.displacements.get(2).uz,
+    0.15, "scharnier P-Delta tipverplaatsing");
+  close(hingeSecondNative.elements.get(1).M_end, 0, 1e-5,
+    "scharnier P-Delta eindmoment");
   const columnInput = { nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 3000, z: 0 }],
     beams: [{ id: 1, from: 1, to: 2, E: 210_000, A: 10_000, I: 8e6 }],
     supports: [{ nodeId: 1, type: "fixed" }], loads: [],
