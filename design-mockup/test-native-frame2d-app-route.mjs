@@ -84,11 +84,15 @@ assert.equal(springMembers[0].springs.rzEndKnmPerRad, undefined);
 assert.equal(springMembers[1].springs.uxStartKnPerM, undefined);
 assert.equal(springMembers[1].springs.rzEndKnmPerRad, 3500);
 assert.equal(buildNativeFrame2DRequest({ ...input,
+  beams: [{ ...input.beams[0], veren: { startTx: 200_000 },
+    axialMaterialLaw: { kind: "steelBilinear", yieldMpa: 250, hardeningRatio: 0.02 } }] },
+() => 1, "material").members[0].springs.uxStartKnPerM, 200_000);
+assert.equal(buildNativeFrame2DRequest({ ...input,
   beams: [{ ...input.beams[0], releases: { endRy: true },
     veren: { endRy: 3.5e9 } }] }, () => 1).members[0].springs.rzEndKnmPerRad, undefined);
 assert.throws(() => buildNativeFrame2DRequest({ ...input,
   beams: [{ ...input.beams[0], releases: { startTx: true, endTx: true },
-    axialMaterialLaw: { kind: "steelBilinear", yieldMpa: 355, hardeningRatio: 0.01 } }] }, () => 1, "material"), /axiale translatiehulzen met FNL/);
+    axialMaterialLaw: { kind: "steelBilinear", yieldMpa: 355, hardeningRatio: 0.01 } }] }, () => 1, "material"), /axiale translatievrijgave met FNL/);
 assert.equal(buildNativeFrame2DRequest({ ...input,
   beams: [{ ...input.beams[0], endConnection: "hinge" }] }, () => 1, "geometric").members[0].releases.rzEnd, true);
 assert.throws(() => buildNativeFrame2DRequest({ ...input, plates: [{ id: 1 }] }, () => 1), /uitsluitend staven/);
@@ -734,6 +738,20 @@ try {
   close(axialOwn.displacements.get(2).ux, axialReference.displacements.get(2).ux, 1e-6,
     "axiale eindveer verlenging");
   close(axialOwn.elements.get(1).N, 50_000, 1e-5, "axiale eindveer normaalkracht");
+  const axialSpringFnl = { ...springBase,
+    beams: [{ ...springBase.beams[0], veren: { startTx: 200_000 },
+      axialMaterialLaw: { kind: "steelBilinear", yieldMpa: 250, hardeningRatio: 0.02 } }],
+    pointLoads: [{ nodeId: 2, caseId: 1, fx: 1_200_000 }] };
+  const axialSpringFnlResult = (await solveAllCombinationsNativeFrame2D(axialSpringFnl,
+    [{ id: 53, name: "axiale FNL-veer", factors: new Map([[1, 1]]) }], "material")).get(53);
+  const fnlStress = 1_200_000 / 3877;
+  const fnlStrain = 250 / 210_000 + (fnlStress - 250) / (0.02 * 210_000);
+  // This direct nonlinear route is checked against the material law and the
+  // spring's independent series extension.
+  close(axialSpringFnlResult.displacements.get(2).ux,
+    4000 * fnlStrain + 1_200_000 / 200_000, 0.01, "axiale staal-FNL-veerverlenging");
+  close(axialSpringFnlResult.elements.get(1).N, 1_200_000, 1e-3,
+    "axiale staal-FNL-veerkracht");
   const distributedSpring = { ...springBase,
     beams: [{ ...springBase.beams[0], veren: { endRy: 4 * 210_000 * 1.673e7 / 4000 } }],
     supports: [{ nodeId: 1, type: "fixed" }, { nodeId: 2, type: "fixed" }],

@@ -103,9 +103,6 @@ export function buildNativeFrame2DRequest(
   let nextMemberId = Math.max(0, ...input.beams.map(beam => beam.id)) + 1;
   const segmentsByBeam = new Map<number, FrameSegment[]>();
   const members = input.beams.flatMap(beam => {
-    if (isMaterialAnalysis(analysis) && (beam.releases?.startTx || beam.releases?.endTx)) {
-      throw new Error(`Staaf ${beam.id}: axiale translatiehulzen met FNL zijn nog niet gekoppeld aan de Rust 2D-raamwerkkern.`);
-    }
     const rzStart = !!beam.releases?.startRy || beam.startConnection === "hinge";
     const rzEnd = !!beam.releases?.endRy || beam.endConnection === "hinge";
     const spring = (value: number | undefined, label: string, released: boolean, rotation = false) => {
@@ -119,8 +116,10 @@ export function buildNativeFrame2DRequest(
     const kETx = spring(beam.veren?.endTx, "endTx-veer", !!beam.releases?.endTx);
     const kETz = spring(beam.veren?.endTz, "endTz-veer", !!beam.releases?.endTz);
     const kERy = spring(beam.veren?.endRy, "endRy-veer", rzEnd, true);
-    if (isMaterialAnalysis(analysis) && (kSTx !== undefined || kETx !== undefined)) {
-      throw new Error(`Staaf ${beam.id}: axiale eindveren met FNL zijn nog niet gekoppeld aan de Rust 2D-raamwerkkern.`);
+    if (isMaterialAnalysis(analysis)
+        && ((beam.releases?.startTx && kSTx === undefined)
+          || (beam.releases?.endTx && kETx === undefined))) {
+      throw new Error(`Staaf ${beam.id}: axiale translatievrijgave met FNL is nog niet gekoppeld aan de Rust 2D-raamwerkkern.`);
     }
     const axes = geometry.get(beam.id)!;
     const lengthMm = axes.lengthM * 1000;

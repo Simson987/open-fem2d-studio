@@ -374,6 +374,10 @@ fn local_displacement(element: &Element, u: &[f64]) -> [f64; 6] {
     })
 }
 
+fn axial_strain(element: &Element, d: &[f64; 6]) -> f64 {
+    (d[3] - d[0]) / element.length
+}
+
 fn condense_connections(element: &mut Element) -> Result<(), String> {
     if !element.releases.any() && !element.springs.any() {
         return Ok(());
@@ -448,6 +452,7 @@ fn connected_local_displacement(
     geometric: bool,
     axial_override: Option<f64>,
 ) -> [f64; 6] {
+    let nodal_displacement = d;
     let Some(mut k) = element.raw_stiffness else {
         return d;
     };
@@ -518,6 +523,18 @@ fn connected_local_displacement(
             .map(|j| a[row][j] * d[released[j]])
             .sum::<f64>();
         d[released[column]] = (a[row][n] - remainder) / a[row][column];
+    }
+    if let Some(force) = axial_override {
+        if !element.releases.ux_start {
+            if let Some(spring) = element.springs.ux_start_kn_per_m {
+                d[0] = nodal_displacement[0] + force / spring;
+            }
+        }
+        if !element.releases.ux_end {
+            if let Some(spring) = element.springs.ux_end_kn_per_m {
+                d[3] = nodal_displacement[3] - force / spring;
+            }
+        }
     }
     d
 }
@@ -688,8 +705,82 @@ fn axial_response(material: &Material, strain: f64, previous: AxialState) -> Axi
     }
 }
 
-fn axial_strain(element: &Element, d: &[f64; 6]) -> f64 {
-    (d[3] - d[0]) / element.length
+fn axial_spring_compliance(element: &Element) -> f64 {
+    let start = if element.releases.ux_start {
+        0.0
+    } else {
+        element.springs.ux_start_kn_per_m.map_or(0.0, |k| 1.0 / k)
+    };
+    let end = if element.releases.ux_end {
+        0.0
+    } else {
+        element.springs.ux_end_kn_per_m.map_or(0.0, |k| 1.0 / k)
+    };
+    start + end
+}
+
+/// Material response at a nodal extension with axial end springs in series.
+/// The returned stress and state belong to the member material strain; spring
+/// extension is removed from the imposed nodal extension by local equilibrium.
+fn effective_axial_response(
+    element: &Element,
+    nodal_extension: f64,
+    load_factor: f64,
+    previous: AxialState,
+) -> Result<AxialResponse, String> {
+    let target = nodal_extension - load_factor * element.thermal_strain * element.length;
+    let compliance = axial_spring_compliance(element);
+    let initial = target / element.length;
+    if compliance == 0.0 {
+        return Ok(axial_response(&element.material, initial, previous));
+    }
+    let residual = |strain: f64| {
+        let response = axial_response(&element.material, strain, previous);
+        strain * element.length + response.stress_mpa * 1000.0 * element.area_m2 * compliance
+            - target
+    };
+    let mut span = initial.abs().max(1e-9);
+    let (mut low, mut high) = (initial - span, initial + span);
+    let mut bracketed = residual(low) <= 0.0 && residual(high) >= 0.0;
+    for _ in 0..80 {
+        if bracketed {
+            break;
+        }
+        span *= 2.0;
+        low = initial - span;
+        high = initial + span;
+        bracketed = residual(low) <= 0.0 && residual(high) >= 0.0;
+    }
+    if !bracketed {
+        return Err("could not bracket axial material-spring equilibrium".into());
+    }
+    let tolerance = 1e-12 * element.length.max(target.abs()).max(1e-12);
+    for _ in 0..100 {
+        let strain = (low + high) / 2.0;
+        let value = residual(strain);
+        if value.abs() <= tolerance {
+            return Ok(axial_response(&element.material, strain, previous));
+        }
+        if value < 0.0 {
+            low = strain;
+        } else {
+            high = strain;
+        }
+    }
+    Ok(axial_response(
+        &element.material,
+        (low + high) / 2.0,
+        previous,
+    ))
+}
+
+fn axial_tangent_with_springs(element: &Element, tangent_e_mpa: f64) -> f64 {
+    let material_ea = tangent_e_mpa * 1000.0 * element.area_m2;
+    let compliance = axial_spring_compliance(element);
+    if material_ea <= 0.0 {
+        return 0.0;
+    }
+    1.0 / (element.length / material_ea + compliance)
 }
 
 /// Return tangent K and internal force for a trial displacement. Material
@@ -708,11 +799,7 @@ fn material_system(
     let mut tangent_corrections = Vec::with_capacity(elements.len());
     for (&id, element) in elements {
         let d = local_displacement(element, u);
-        let response = axial_response(
-            &element.material,
-            axial_strain(element, &d) - load_factor * element.thermal_strain,
-            states[&id],
-        );
+        let response = effective_axial_response(element, d[3] - d[0], load_factor, states[&id])?;
         let n = response.stress_mpa * 1000.0 * element.area_m2;
         let mut assembled = element.clone();
         assembled.local_stiffness = element.raw_stiffness.unwrap_or(element.local_stiffness);
@@ -742,18 +829,16 @@ fn material_system(
                 member_load[element.dofs[i]] += element.transform[j][i] * assembled.local_load[j];
             }
         }
-        let elastic_n = element.ea_kn * axial_strain(element, &d);
-        // The elastic thermal equivalent load is included in local_load.
-        // Restore it here so the residual uses the material stress at
-        // mechanical strain rather than subtracting thermal strain twice.
-        let correction = n - elastic_n + load_factor * element.ea_kn * element.thermal_strain;
+        let elastic_k = axial_tangent_with_springs(element, element.material.e_mpa);
+        let elastic_n =
+            elastic_k * (d[3] - d[0] - load_factor * element.thermal_strain * element.length);
+        let correction = n - elastic_n;
         for (axis, sign) in [(0, -1.0), (3, 1.0)] {
             for i in 0..6 {
                 axial_correction[element.dofs[i]] += sign * correction * element.transform[axis][i];
             }
         }
-        let delta_axial = (response.tangent_e_mpa / element.material.e_mpa - 1.0) * element.ea_kn
-            / element.length;
+        let delta_axial = axial_tangent_with_springs(element, response.tangent_e_mpa) - elastic_k;
         tangent_corrections.push((element, delta_axial));
     }
     for (dof, &spring) in springs.iter().enumerate() {
@@ -804,16 +889,6 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
     {
         return Err(
             "2D frame axial translation releases with material nonlinearity are unsupported".into(),
-        );
-    }
-    if request.analysis.material()
-        && request.members.iter().any(|member| {
-            (member.springs.ux_start_kn_per_m.is_some() && !member.releases.ux_start)
-                || (member.springs.ux_end_kn_per_m.is_some() && !member.releases.ux_end)
-        })
-    {
-        return Err(
-            "2D frame axial connection springs with material nonlinearity are unsupported".into(),
         );
     }
     if !request.load_path.is_empty() {
@@ -1246,18 +1321,14 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
                         "2D frame material iteration did not converge at load factor {factor}"
                     ));
                 }
-                states = elements
-                    .iter()
-                    .map(|(&id, element)| {
-                        let d = local_displacement(element, &u);
-                        let response = axial_response(
-                            &element.material,
-                            axial_strain(element, &d) - factor * element.thermal_strain,
-                            states[&id],
-                        );
-                        (id, response.state)
-                    })
-                    .collect();
+                let mut updated_states = HashMap::with_capacity(elements.len());
+                for (&id, element) in &elements {
+                    let d = local_displacement(element, &u);
+                    let response =
+                        effective_axial_response(element, d[3] - d[0], factor, states[&id])?;
+                    updated_states.insert(id, response.state);
+                }
+                states = updated_states;
             }
             start = end;
         }
@@ -1350,19 +1421,29 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
             ],
         })
         .collect();
+    let mut material_responses = HashMap::new();
+    if request.analysis.material() {
+        for member in &request.members {
+            let element = &elements[&member.id];
+            let nodal = local_displacement(element, &u);
+            material_responses.insert(
+                member.id,
+                effective_axial_response(
+                    element,
+                    nodal[3] - nodal[0],
+                    final_factor,
+                    states[&member.id],
+                )?,
+            );
+        }
+    }
     let members = request
         .members
         .iter()
         .map(|member| {
             let element = &elements[&member.id];
             let unrecovered = local_displacement(element, &u);
-            let material_response = request.analysis.material().then(|| {
-                axial_response(
-                    &element.material,
-                    axial_strain(element, &unrecovered) - final_factor * element.thermal_strain,
-                    states[&member.id],
-                )
-            });
+            let material_response = material_responses.get(&member.id).copied();
             let axial_override =
                 material_response.map(|response| response.stress_mpa * 1000.0 * element.area_m2);
             let local_displacement = connected_local_displacement(
@@ -1392,8 +1473,10 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
             };
             let mut local_end_forces = elastic_end_forces;
             if request.analysis.material() {
-                let correction = axial - element.ea_kn * axial_strain(element, &local_displacement)
-                    + final_factor * element.ea_kn * element.thermal_strain;
+                let elastic_n = element.ea_kn
+                    * (axial_strain(element, &local_displacement)
+                        - final_factor * element.thermal_strain);
+                let correction = axial - elastic_n;
                 local_end_forces[0] -= correction;
                 local_end_forces[3] += correction;
             }
@@ -1693,9 +1776,9 @@ mod tests {
         assert!((result.nodes[1].displacement[1] - bending).abs() < 1e-9);
         assert!((result.members[0].local_end_forces[2] - 30.0).abs() < 1e-7);
         input.members[0].springs.ux_start_kn_per_m = Some(1000.0);
-        assert!(solve(&input)
-            .unwrap_err()
-            .contains("axial connection springs"));
+        let axial_spring = solve(&input).unwrap();
+        assert!((axial_spring.members[0].normal_force_kn[10] - 3000.0).abs() < 1e-6);
+        assert!(axial_spring.nodes[1].displacement[0] > 3.0);
     }
 
     #[test]
@@ -2650,6 +2733,124 @@ mod tests {
         );
         assert!(unloaded.members[0].normal_force_kn[0].abs() < 1e-6);
         assert!(unloaded.equilibrium_residual < 1e-6);
+    }
+
+    #[test]
+    fn steel_plasticity_and_unloading_include_both_axial_end_springs() {
+        let mut input = cantilever();
+        input.analysis = Analysis::Material;
+        input.materials[0].law = MaterialLaw::SteelBilinear {
+            yield_mpa: 250.0,
+            hardening_ratio: 0.02,
+        };
+        input.members[0].springs.ux_start_kn_per_m = Some(200_000.0);
+        input.members[0].springs.ux_end_kn_per_m = Some(100_000.0);
+        input.nodal_loads.push(NodalLoad {
+            node_id: 2,
+            fx: 3000.0,
+            fy: 0.0,
+            mz: 0.0,
+        });
+        let loaded = solve(&input).unwrap();
+        let material_strain = 250.0 / 210_000.0 + 50.0 / (0.02 * 210_000.0);
+        let start_spring_extension = 3000.0 / 200_000.0;
+        let end_spring_extension = 3000.0 / 100_000.0;
+        assert!(
+            (loaded.nodes[1].displacement[0]
+                - 3.0 * material_strain
+                - start_spring_extension
+                - end_spring_extension)
+                .abs()
+                < 1e-8
+        );
+        assert!((loaded.members[0].axial_disp_m[0] - start_spring_extension).abs() < 1e-8);
+        assert!(
+            (loaded.members[0].axial_disp_m[20]
+                - (loaded.nodes[1].displacement[0] - end_spring_extension))
+                .abs()
+                < 1e-8
+        );
+        assert!((loaded.members[0].normal_force_kn[0] - 3000.0).abs() < 1e-6);
+        assert!(
+            (loaded.members[0]
+                .axial_history
+                .as_ref()
+                .unwrap()
+                .plastic_strain
+                - (material_strain - 300.0 / 210_000.0))
+                .abs()
+                < 1e-8
+        );
+        input.load_path = vec![1.0, 0.0];
+        let unloaded = solve(&input).unwrap();
+        let permanent_strain = material_strain - 300.0 / 210_000.0;
+        assert!((unloaded.nodes[1].displacement[0] - 3.0 * permanent_strain).abs() < 1e-8);
+        assert!(unloaded.members[0].normal_force_kn[0].abs() < 1e-6);
+        assert!(unloaded.members[0].axial_disp_m[0].abs() < 1e-8);
+        assert!(unloaded.equilibrium_residual < 1e-6);
+    }
+
+    #[test]
+    fn concrete_cracking_response_includes_axial_end_spring_extension() {
+        let mut input = cantilever();
+        input.analysis = Analysis::Material;
+        input.materials[0].e_mpa = 30_000.0;
+        input.materials[0].law = MaterialLaw::ConcreteCracking {
+            tensile_mpa: 3.0,
+            residual_ratio: 0.05,
+        };
+        input.members[0].springs.ux_start_kn_per_m = Some(200_000.0);
+        input.nodal_loads.push(NodalLoad {
+            node_id: 2,
+            fx: 100.0,
+            fy: 0.0,
+            mz: 0.0,
+        });
+        let result = solve(&input).unwrap();
+        let stress = 100.0 / 10.0;
+        let strain = 3.0 / 30_000.0 + (stress - 3.0) / (0.05 * 30_000.0);
+        let expected = 3.0 * strain + 100.0 / 200_000.0;
+        assert!((result.nodes[1].displacement[0] - expected).abs() < 1e-8);
+        assert!((result.members[0].normal_force_kn[10] - 100.0).abs() < 1e-6);
+        let elastic_stress = 30_000.0 * strain;
+        assert!(
+            (result.members[0]
+                .axial_history
+                .as_ref()
+                .unwrap()
+                .tensile_damage
+                - (1.0 - stress / elastic_stress))
+                .abs()
+                < 1e-10
+        );
+    }
+
+    #[test]
+    fn thermal_expansion_with_axial_end_spring_uses_series_restraint() {
+        let mut input = cantilever();
+        input.analysis = Analysis::Material;
+        input.materials[0].law = MaterialLaw::SteelBilinear {
+            yield_mpa: 250.0,
+            hardening_ratio: 0.02,
+        };
+        fixed_end(&mut input);
+        input.members[0].springs.ux_start_kn_per_m = Some(200_000.0);
+        let delta_t = 40.0;
+        let alpha = 12e-6;
+        input.thermal_loads.push(ThermalLoad {
+            member_id: 1,
+            delta_t_k: delta_t,
+            alpha_per_k: alpha,
+            delta_t_gradient_k: 0.0,
+            depth_m: None,
+        });
+        let result = solve(&input).unwrap();
+        let ea = 210_000.0 * 1000.0 * 0.01;
+        let expected_force = -alpha * delta_t * 3.0 / (3.0 / ea + 1.0 / 200_000.0);
+        assert!((result.members[0].normal_force_kn[10] - expected_force).abs() < 1e-6);
+        assert!((result.nodes[0].reaction[0] + expected_force).abs() < 1e-6);
+        assert!((result.nodes[1].reaction[0] - expected_force).abs() < 1e-6);
+        assert!(result.equilibrium_residual < 1e-10);
     }
 
     #[test]
