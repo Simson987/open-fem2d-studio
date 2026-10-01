@@ -103,14 +103,25 @@ export function buildNativeFrame2DRequest(
   let nextMemberId = Math.max(0, ...input.beams.map(beam => beam.id)) + 1;
   const segmentsByBeam = new Map<number, FrameSegment[]>();
   const members = input.beams.flatMap(beam => {
-    if (beam.veren) {
-      throw new Error(`Staaf ${beam.id}: eindveren zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.`);
-    }
     if (isMaterialAnalysis(analysis) && (beam.releases?.startTx || beam.releases?.endTx)) {
       throw new Error(`Staaf ${beam.id}: axiale translatiehulzen met FNL zijn nog niet gekoppeld aan de Rust 2D-raamwerkkern.`);
     }
     const rzStart = !!beam.releases?.startRy || beam.startConnection === "hinge";
     const rzEnd = !!beam.releases?.endRy || beam.endConnection === "hinge";
+    const spring = (value: number | undefined, label: string, released: boolean, rotation = false) => {
+      if (value === undefined || released || value <= 0) return undefined;
+      const k = finite(value, `Staaf ${beam.id} ${label}`);
+      return rotation ? k / 1e6 : k; // Nmm/rad → kNm/rad; N/mm = kN/m.
+    };
+    const kSTx = spring(beam.veren?.startTx, "startTx-veer", !!beam.releases?.startTx);
+    const kSTz = spring(beam.veren?.startTz, "startTz-veer", !!beam.releases?.startTz);
+    const kSRy = spring(beam.veren?.startRy, "startRy-veer", rzStart, true);
+    const kETx = spring(beam.veren?.endTx, "endTx-veer", !!beam.releases?.endTx);
+    const kETz = spring(beam.veren?.endTz, "endTz-veer", !!beam.releases?.endTz);
+    const kERy = spring(beam.veren?.endRy, "endRy-veer", rzEnd, true);
+    if (isMaterialAnalysis(analysis) && (kSTx !== undefined || kETx !== undefined)) {
+      throw new Error(`Staaf ${beam.id}: axiale eindveren met FNL zijn nog niet gekoppeld aan de Rust 2D-raamwerkkern.`);
+    }
     const axes = geometry.get(beam.id)!;
     const lengthMm = axes.lengthM * 1000;
     const definitions = normaliseerSegmenten(beam.id, beam.segmenten, lengthMm);
@@ -192,6 +203,14 @@ export function buildNativeFrame2DRequest(
         uxEnd: index === segments.length - 1 && !!beam.releases?.endTx,
         uyEnd: index === segments.length - 1 && !!beam.releases?.endTz,
         rzEnd: index === segments.length - 1 && rzEnd },
+      springs: {
+        ...(index === 0 && kSTx !== undefined ? { uxStartKnPerM: kSTx } : {}),
+        ...(index === 0 && kSTz !== undefined ? { uyStartKnPerM: kSTz } : {}),
+        ...(index === 0 && kSRy !== undefined ? { rzStartKnmPerRad: kSRy } : {}),
+        ...(index === segments.length - 1 && kETx !== undefined ? { uxEndKnPerM: kETx } : {}),
+        ...(index === segments.length - 1 && kETz !== undefined ? { uyEndKnPerM: kETz } : {}),
+        ...(index === segments.length - 1 && kERy !== undefined ? { rzEndKnmPerRad: kERy } : {}),
+      },
       ...(kLijn === undefined ? {} : { foundationKnPerM2: kLijn * 1000 }),
     }));
   });

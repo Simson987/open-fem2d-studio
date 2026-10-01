@@ -41,6 +41,8 @@ pub struct Member {
     pub section_id: usize,
     #[serde(default)]
     pub releases: EndReleases,
+    #[serde(default)]
+    pub springs: EndSprings,
     /// Winkler line stiffness in kN/m². Each end receives k*L/2 as a
     /// tributary global-Y spring, matching the existing FEM Studio solver.
     #[serde(default)]
@@ -78,6 +80,41 @@ impl EndReleases {
             (4, self.uy_end),
             (5, self.rz_end),
         ]
+    }
+}
+
+/// Local connection stiffnesses between a member end and its structural node.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EndSprings {
+    #[serde(default)]
+    pub ux_start_kn_per_m: Option<f64>,
+    #[serde(default)]
+    pub uy_start_kn_per_m: Option<f64>,
+    #[serde(default)]
+    pub rz_start_knm_per_rad: Option<f64>,
+    #[serde(default)]
+    pub ux_end_kn_per_m: Option<f64>,
+    #[serde(default)]
+    pub uy_end_kn_per_m: Option<f64>,
+    #[serde(default)]
+    pub rz_end_knm_per_rad: Option<f64>,
+}
+
+impl EndSprings {
+    fn axes(self) -> [Option<f64>; 6] {
+        [
+            self.ux_start_kn_per_m,
+            self.uy_start_kn_per_m,
+            self.rz_start_knm_per_rad,
+            self.ux_end_kn_per_m,
+            self.uy_end_kn_per_m,
+            self.rz_end_knm_per_rad,
+        ]
+    }
+
+    fn any(self) -> bool {
+        self.axes().iter().any(Option::is_some)
     }
 }
 
@@ -239,6 +276,7 @@ struct Element {
     thermal_curvature: f64,
     material: Material,
     releases: EndReleases,
+    springs: EndSprings,
     raw_stiffness: Option<[[f64; 6]; 6]>,
     raw_load: Option<[f64; 6]>,
 }
@@ -336,17 +374,25 @@ fn local_displacement(element: &Element, u: &[f64]) -> [f64; 6] {
     })
 }
 
-fn condense_releases(element: &mut Element) -> Result<(), String> {
-    if !element.releases.any() {
+fn condense_connections(element: &mut Element) -> Result<(), String> {
+    if !element.releases.any() && !element.springs.any() {
         return Ok(());
     }
     element.raw_stiffness = Some(element.local_stiffness);
     element.raw_load = Some(element.local_load);
-    for (axis, released) in element.releases.axes() {
-        if !released {
+    for ((axis, released), spring) in element
+        .releases
+        .axes()
+        .into_iter()
+        .zip(element.springs.axes())
+    {
+        let spring = if released { None } else { spring };
+        if !released && spring.is_none() {
             continue;
         }
-        let pivot = element.local_stiffness[axis][axis];
+        let k_spring = spring.unwrap_or(0.0);
+        let member_stiffness = element.local_stiffness[axis][axis];
+        let pivot = member_stiffness + k_spring;
         let axis_scale = element.raw_stiffness.unwrap()[axis][axis].abs();
         if !pivot.is_finite() || pivot < -axis_scale * 1e-12 {
             return Err("invalid 2D frame release condensation pivot".into());
@@ -362,6 +408,9 @@ fn condense_releases(element: &mut Element) -> Result<(), String> {
                 return Err("unbalanced load on disconnected 2D frame release".into());
             }
             element.local_stiffness[axis] = [0.0; 6];
+            for row in 0..6 {
+                element.local_stiffness[row][axis] = 0.0;
+            }
             element.local_load[axis] = 0.0;
             continue;
         }
@@ -379,16 +428,20 @@ fn condense_releases(element: &mut Element) -> Result<(), String> {
             }
         }
         for other in 0..6 {
-            element.local_stiffness[axis][other] = 0.0;
-            element.local_stiffness[other][axis] = 0.0;
+            if other == axis {
+                continue;
+            }
+            element.local_stiffness[axis][other] = k_spring * column[other] / pivot;
+            element.local_stiffness[other][axis] = element.local_stiffness[axis][other];
         }
-        element.local_load[axis] = 0.0;
+        element.local_stiffness[axis][axis] = k_spring * member_stiffness / pivot;
+        element.local_load[axis] = k_spring * load / pivot;
     }
     Ok(())
 }
 
-/// Recover the physical member-end displacement eliminated from the global solve.
-fn released_local_displacement(
+/// Recover the physical member-end displacement behind releases and springs.
+fn connected_local_displacement(
     element: &Element,
     mut d: [f64; 6],
     load_factor: f64,
@@ -410,12 +463,17 @@ fn released_local_displacement(
         }
     }
     let f = element.raw_load.unwrap().map(|value| value * load_factor);
-    let released: Vec<usize> = element
+    let connected: Vec<(usize, f64)> = element
         .releases
         .axes()
         .into_iter()
-        .filter_map(|(axis, yes)| yes.then_some(axis))
+        .zip(element.springs.axes())
+        .filter_map(|((axis, release), spring)| {
+            (release || spring.is_some())
+                .then_some((axis, if release { 0.0 } else { spring.unwrap_or(0.0) }))
+        })
         .collect();
+    let released: Vec<usize> = connected.iter().map(|(axis, _)| *axis).collect();
     // Row reduction preserves a nodal displacement as the gauge for a free
     // rigid-body motion when both ends of one local direction are released.
     let n = released.len();
@@ -424,11 +482,14 @@ fn released_local_displacement(
         for (column, &other) in released.iter().enumerate() {
             a[row][column] = k[axis][other];
         }
+        let spring = connected[row].1;
+        a[row][row] += spring;
         a[row][n] = f[axis]
             - (0..6)
                 .filter(|j| !released.contains(j))
                 .map(|j| k[axis][j] * d[j])
-                .sum::<f64>();
+                .sum::<f64>()
+            + spring * d[axis];
     }
     let mut pivots = Vec::new();
     let mut rank = 0;
@@ -511,7 +572,7 @@ fn geometric_assembly(
                 assembled.local_stiffness[i][j] += kg[i][j];
             }
         }
-        condense_releases(&mut assembled)?;
+        condense_connections(&mut assembled)?;
         for i in 0..6 {
             for j in 0..6 {
                 let mut value = 0.0;
@@ -664,7 +725,7 @@ fn material_system(
                 }
             }
         }
-        condense_releases(&mut assembled)?;
+        condense_connections(&mut assembled)?;
         for i in 0..6 {
             for j in 0..6 {
                 let mut value = 0.0;
@@ -743,6 +804,16 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
     {
         return Err(
             "2D frame axial translation releases with material nonlinearity are unsupported".into(),
+        );
+    }
+    if request.analysis.material()
+        && request.members.iter().any(|member| {
+            (member.springs.ux_start_kn_per_m.is_some() && !member.releases.ux_start)
+                || (member.springs.ux_end_kn_per_m.is_some() && !member.releases.ux_end)
+        })
+    {
+        return Err(
+            "2D frame axial connection springs with material nonlinearity are unsupported".into(),
         );
     }
     if !request.load_path.is_empty() {
@@ -828,6 +899,15 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
         {
             return Err("invalid 2D frame foundation line stiffness".into());
         }
+        if member
+            .springs
+            .axes()
+            .iter()
+            .flatten()
+            .any(|value| !value.is_finite() || *value <= 0.0)
+        {
+            return Err("invalid 2D frame connection spring stiffness".into());
+        }
         let start = *node_index
             .get(&member.start_node_id)
             .ok_or("unknown start node")?;
@@ -909,6 +989,7 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
             thermal_curvature: 0.0,
             material: (*material).clone(),
             releases: member.releases,
+            springs: member.springs,
             raw_stiffness: None,
             raw_load: None,
         };
@@ -993,7 +1074,7 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
         element.local_load[5] += moment;
     }
     for element in elements.values_mut() {
-        condense_releases(element)?;
+        condense_connections(element)?;
         for i in 0..6 {
             for j in 0..6 {
                 let mut value = 0.0;
@@ -1284,7 +1365,7 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
             });
             let axial_override =
                 material_response.map(|response| response.stress_mpa * 1000.0 * element.area_m2);
-            let local_displacement = released_local_displacement(
+            let local_displacement = connected_local_displacement(
                 element,
                 unrecovered,
                 final_factor,
@@ -1484,6 +1565,7 @@ mod tests {
                 material_id: 1,
                 section_id: 1,
                 releases: EndReleases::default(),
+                springs: EndSprings::default(),
                 foundation_kn_per_m2: None,
             }],
             supports: vec![Support {
@@ -1512,6 +1594,185 @@ mod tests {
         let mut support = input.supports[0].clone();
         support.node_id = 2;
         input.supports.push(support);
+    }
+
+    #[test]
+    fn rotational_start_spring_adds_closed_form_cantilever_tip_rotation() {
+        let mut input = cantilever();
+        let k = 3500.0;
+        input.members[0].springs.rz_start_knm_per_rad = Some(k);
+        input.nodal_loads.push(NodalLoad {
+            node_id: 2,
+            fx: 0.0,
+            fy: -10.0,
+            mz: 0.0,
+        });
+        let result = solve(&input).unwrap();
+        let ei = 210_000.0 * 1000.0 * 8e-6;
+        let expected = -10.0 * 3.0_f64.powi(3) / (3.0 * ei) - 10.0 * 3.0_f64.powi(2) / k;
+        assert!((result.nodes[1].displacement[1] - expected).abs() < 1e-11);
+        assert!((result.nodes[0].reaction[2] - 30.0).abs() < 1e-9);
+        assert!((result.members[0].local_end_forces[2] - 30.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn axial_start_spring_adds_series_extension() {
+        let mut input = cantilever();
+        input.members[0].springs.ux_start_kn_per_m = Some(200_000.0);
+        input.nodal_loads.push(NodalLoad {
+            node_id: 2,
+            fx: 50.0,
+            fy: 0.0,
+            mz: 0.0,
+        });
+        let result = solve(&input).unwrap();
+        let ea = 210_000.0 * 1000.0 * 0.01;
+        let expected = 50.0 * 3.0 / ea + 50.0 / 200_000.0;
+        assert!((result.nodes[1].displacement[0] - expected).abs() < 1e-12);
+        assert!((result.members[0].normal_force_kn[10] - 50.0).abs() < 1e-9);
+        assert!((result.nodes[0].reaction[0] + 50.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn two_axial_end_springs_sum_their_series_compliance() {
+        let mut input = cantilever();
+        input.members[0].springs.ux_start_kn_per_m = Some(200_000.0);
+        input.members[0].springs.ux_end_kn_per_m = Some(100_000.0);
+        input.nodal_loads.push(NodalLoad {
+            node_id: 2,
+            fx: 50.0,
+            fy: 0.0,
+            mz: 0.0,
+        });
+        let result = solve(&input).unwrap();
+        let ea = 210_000.0 * 1000.0 * 0.01;
+        let expected = 50.0 * (3.0 / ea + 1.0 / 200_000.0 + 1.0 / 100_000.0);
+        assert!((result.nodes[1].displacement[0] - expected).abs() < 1e-12);
+        assert!((result.members[0].axial_disp_m[0] - 50.0 / 200_000.0).abs() < 1e-12);
+        assert!((result.members[0].normal_force_kn[10] - 50.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn transverse_start_spring_adds_shear_extension() {
+        let mut input = cantilever();
+        input.members[0].springs.uy_start_kn_per_m = Some(1000.0);
+        input.nodal_loads.push(NodalLoad {
+            node_id: 2,
+            fx: 0.0,
+            fy: -10.0,
+            mz: 0.0,
+        });
+        let result = solve(&input).unwrap();
+        let ei = 210_000.0 * 1000.0 * 8e-6;
+        let expected = -10.0 * 3.0_f64.powi(3) / (3.0 * ei) - 10.0 / 1000.0;
+        assert!((result.nodes[1].displacement[1] - expected).abs() < 1e-11);
+        assert!((result.members[0].deflection_m[0] + 0.01).abs() < 1e-11);
+        assert!((result.members[0].local_end_forces[1] - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rotational_spring_coexists_with_steel_axial_plasticity() {
+        let mut input = cantilever();
+        input.analysis = Analysis::Material;
+        input.materials[0].law = MaterialLaw::SteelBilinear {
+            yield_mpa: 250.0,
+            hardening_ratio: 0.02,
+        };
+        input.members[0].springs.rz_start_knm_per_rad = Some(3500.0);
+        input.nodal_loads.push(NodalLoad {
+            node_id: 2,
+            fx: 3000.0,
+            fy: -10.0,
+            mz: 0.0,
+        });
+        let result = solve(&input).unwrap();
+        let plastic_strain = 250.0 / 210_000.0 + 50.0 / (0.02 * 210_000.0);
+        let ei = 210_000.0 * 1000.0 * 8e-6;
+        let bending = -10.0 * 3.0_f64.powi(3) / (3.0 * ei) - 10.0 * 3.0_f64.powi(2) / 3500.0;
+        assert!((result.nodes[1].displacement[0] - 3.0 * plastic_strain).abs() < 1e-8);
+        assert!((result.nodes[1].displacement[1] - bending).abs() < 1e-9);
+        assert!((result.members[0].local_end_forces[2] - 30.0).abs() < 1e-7);
+        input.members[0].springs.ux_start_kn_per_m = Some(1000.0);
+        assert!(solve(&input)
+            .unwrap_err()
+            .contains("axial connection springs"));
+    }
+
+    #[test]
+    fn transverse_spring_coexists_with_concrete_tension_damage() {
+        let mut input = cantilever();
+        input.analysis = Analysis::Material;
+        input.materials[0].e_mpa = 30_000.0;
+        input.materials[0].law = MaterialLaw::ConcreteCracking {
+            tensile_mpa: 3.0,
+            residual_ratio: 0.05,
+        };
+        input.members[0].springs.uy_start_kn_per_m = Some(1000.0);
+        input.nodal_loads.push(NodalLoad {
+            node_id: 2,
+            fx: 100.0,
+            fy: -10.0,
+            mz: 0.0,
+        });
+        let result = solve(&input).unwrap();
+        let ei = 30_000.0 * 1000.0 * 8e-6;
+        let expected = -10.0 * 3.0_f64.powi(3) / (3.0 * ei) - 10.0 / 1000.0;
+        assert!((result.nodes[1].displacement[1] - expected).abs() < 1e-9);
+        assert!(
+            result.members[0]
+                .axial_history
+                .as_ref()
+                .unwrap()
+                .tensile_damage
+                > 0.0
+        );
+        assert!((result.members[0].normal_force_kn[10] - 100.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn rotational_end_spring_under_udl_matches_slope_deflection() {
+        let mut input = cantilever();
+        fixed_end(&mut input);
+        let ei = 210_000.0 * 1000.0 * 8e-6;
+        let k = 4.0 * ei / 3.0;
+        input.members[0].springs.rz_end_knm_per_rad = Some(k);
+        input.member_loads.push(MemberLoad {
+            member_id: 1,
+            qx_start_kn_per_m: 0.0,
+            qx_end_kn_per_m: 0.0,
+            qy_start_kn_per_m: -10.0,
+            qy_end_kn_per_m: -10.0,
+            start_position_m: None,
+            end_position_m: None,
+        });
+        let result = solve(&input).unwrap();
+        let theta = (10.0 * 3.0_f64.powi(2) / 12.0) / (4.0 * ei / 3.0 + k);
+        let m_end = k * theta;
+        let m_start = 10.0 * 3.0_f64.powi(2) / 12.0 + 2.0 * ei / 3.0 * theta;
+        assert!((result.members[0].local_end_forces[5].abs() - m_end).abs() < 1e-9);
+        assert!((result.members[0].local_end_forces[2].abs() - m_start).abs() < 1e-9);
+        assert!((result.nodes[0].reaction[1] + result.nodes[1].reaction[1] - 30.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn release_overrides_parallel_end_spring_and_invalid_springs_are_rejected() {
+        let mut input = cantilever();
+        fixed_end(&mut input);
+        input.members[0].releases.rz_end = true;
+        input.members[0].springs.rz_end_knm_per_rad = Some(1e6);
+        input.member_loads.push(MemberLoad {
+            member_id: 1,
+            qx_start_kn_per_m: 0.0,
+            qx_end_kn_per_m: 0.0,
+            qy_start_kn_per_m: -10.0,
+            qy_end_kn_per_m: -10.0,
+            start_position_m: None,
+            end_position_m: None,
+        });
+        let result = solve(&input).unwrap();
+        assert!(result.members[0].local_end_forces[5].abs() < 1e-9);
+        input.members[0].springs.ux_start_kn_per_m = Some(f64::NAN);
+        assert!(solve(&input).unwrap_err().contains("connection spring"));
     }
 
     #[test]
@@ -1633,6 +1894,7 @@ mod tests {
                 material_id: 1,
                 section_id: 1,
                 releases: EndReleases::default(),
+                springs: EndSprings::default(),
                 foundation_kn_per_m2: Some(1000.0),
             })
             .collect();

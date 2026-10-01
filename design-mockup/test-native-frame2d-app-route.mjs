@@ -76,6 +76,16 @@ assert.equal(splitReleaseMembers[0].releases.uxStart, true);
 assert.equal(splitReleaseMembers[0].releases.uyEnd, false);
 assert.equal(splitReleaseMembers[1].releases.uxStart, false);
 assert.equal(splitReleaseMembers[1].releases.uyEnd, true);
+const springMembers = buildNativeFrame2DRequest({ ...input,
+  beams: [{ ...input.beams[0], extraSneden: [0.5],
+    veren: { startTx: 200_000, endRy: 3.5e9 } }] }, () => 1).members;
+assert.equal(springMembers[0].springs.uxStartKnPerM, 200_000);
+assert.equal(springMembers[0].springs.rzEndKnmPerRad, undefined);
+assert.equal(springMembers[1].springs.uxStartKnPerM, undefined);
+assert.equal(springMembers[1].springs.rzEndKnmPerRad, 3500);
+assert.equal(buildNativeFrame2DRequest({ ...input,
+  beams: [{ ...input.beams[0], releases: { endRy: true },
+    veren: { endRy: 3.5e9 } }] }, () => 1).members[0].springs.rzEndKnmPerRad, undefined);
 assert.throws(() => buildNativeFrame2DRequest({ ...input,
   beams: [{ ...input.beams[0], releases: { startTx: true, endTx: true },
     axialMaterialLaw: { kind: "steelBilinear", yieldMpa: 355, hardeningRatio: 0.01 } }] }, () => 1, "material"), /axiale translatiehulzen met FNL/);
@@ -680,7 +690,61 @@ try {
   close(thermalOwn.elements.get(1).N, 0, 1e-6, "thermische huls N");
   close(thermalOwn.elements.get(1).axialDisp[0], -2.16, 1e-8,
     "thermische huls vrije uitzetting in mm");
+  const springBase = { nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 4000, z: 0 }],
+    beams: [{ id: 1, from: 1, to: 2, E: 210_000, A: 3877, I: 1.673e7 }],
+    supports: [{ nodeId: 1, type: "fixed" }], cases: [{ id: 1, name: "veer" }],
+    loads: [], pointLoads: [] };
+  const momentSpring = { ...springBase,
+    beams: [{ ...springBase.beams[0], veren: { startRy: 3.5e9 } }],
+    pointLoads: [{ nodeId: 2, caseId: 1, fz: -10_000 }] };
+  const momentOwn = (await solveAllCasesNativeFrame2D(momentSpring)).get(1);
+  const momentReference = solveAllCases(momentSpring).perCase.get(1);
+  close(momentOwn.displacements.get(2).uz, momentReference.displacements.get(2).uz, 1e-6,
+    "momentveer console tipverplaatsing");
+  close(momentOwn.reactions.get(1).my, momentReference.reactions.get(1).my, 1e-4,
+    "momentveer console inklemmoment");
+  const springSecond = { ...momentSpring,
+    cases: [...momentSpring.cases, { id: 2, name: "druk" }],
+    pointLoads: [...momentSpring.pointLoads, { nodeId: 2, caseId: 2, fx: -50_000 }] };
+  const springCombo = { id: 51, name: "momentveer met druk", type: "uls", formula: "G + Q",
+    factors: new Map([[1, 1], [2, 1]]) };
+  const springSecondOwn = (await solveAllCombinationsNativeFrame2D(springSecond, [springCombo])).get(51);
+  const springSecondReference = solveCombinationSecondOrder(springSecond, springCombo);
+  close(springSecondOwn.displacements.get(2).uz, springSecondReference.displacements.get(2).uz,
+    0.1, "momentveer P-Delta tipverplaatsing");
+  const plasticSpring = { ...momentSpring,
+    beams: [{ ...momentSpring.beams[0], axialMaterialLaw: {
+      kind: "steelBilinear", yieldMpa: 250, hardeningRatio: 0.02 } }],
+    pointLoads: [{ nodeId: 2, caseId: 1, fx: 1_200_000, fz: -10_000 }] };
+  const plasticSpringCombo = { id: 52, name: "plastische staaf met momentveer",
+    factors: new Map([[1, 1]]) };
+  const plasticSpringResult = (await solveAllCombinationsNativeFrame2D(
+    plasticSpring, [plasticSpringCombo], "material")).get(52);
+  const stress = 1_200_000 / 3877;
+  const plasticStrain = 250 / 210_000 + (stress - 250) / (0.02 * 210_000);
+  close(plasticSpringResult.displacements.get(2).ux, 4000 * plasticStrain, 1e-5,
+    "staal-FNL met momentveer axiale verlenging");
+  close(plasticSpringResult.displacements.get(2).uz, momentOwn.displacements.get(2).uz, 1e-6,
+    "staal-FNL met momentveer dwarsverplaatsing");
+  const axialSpring = { ...springBase,
+    beams: [{ ...springBase.beams[0], veren: { startTx: 200_000 } }],
+    pointLoads: [{ nodeId: 2, caseId: 1, fx: 50_000 }] };
+  const axialOwn = (await solveAllCasesNativeFrame2D(axialSpring)).get(1);
+  const axialReference = solveAllCases(axialSpring).perCase.get(1);
+  close(axialOwn.displacements.get(2).ux, axialReference.displacements.get(2).ux, 1e-6,
+    "axiale eindveer verlenging");
+  close(axialOwn.elements.get(1).N, 50_000, 1e-5, "axiale eindveer normaalkracht");
+  const distributedSpring = { ...springBase,
+    beams: [{ ...springBase.beams[0], veren: { endRy: 4 * 210_000 * 1.673e7 / 4000 } }],
+    supports: [{ nodeId: 1, type: "fixed" }, { nodeId: 2, type: "fixed" }],
+    loads: [{ beamId: 1, caseId: 1, q: -10 }] };
+  const distributedOwn = (await solveAllCasesNativeFrame2D(distributedSpring)).get(1);
+  const distributedReference = solveAllCases(distributedSpring).perCase.get(1);
+  close(distributedOwn.elements.get(1).M_start, distributedReference.elements.get(1).M_start,
+    1e-3, "momentveer lijnlast startmoment");
+  close(distributedOwn.elements.get(1).M_end, distributedReference.elements.get(1).M_end,
+    1e-3, "momentveer lijnlast eindmoment");
 } finally {
   globalThis.fetch = previousFetch;
 }
-console.log("Native 2D-app-route: lineair/P-Delta, bedding, segmenten, translatiehulzen, thermiek en axiale staal-/beton-FNL slagen.");
+console.log("Native 2D-app-route: lineair/P-Delta, bedding, segmenten, translatiehulzen, eindveren, thermiek en axiale staal-/beton-FNL slagen.");
