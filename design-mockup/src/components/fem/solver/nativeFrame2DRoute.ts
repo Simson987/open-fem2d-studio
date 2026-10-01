@@ -3,7 +3,14 @@ import { grootsteVerplaatsing } from "./grootsteVerplaatsing";
 import type { LoadCombination } from "./combinations";
 import type { ElementForces, MultiInput, SolverResult } from "./types";
 
-type FrameAnalysis = "linear" | "geometric";
+type FrameAnalysis = "linear" | "geometric" | "material" | "combined";
+type NativeAxialLaw =
+  | { kind: "steelBilinear"; yield_mpa: number; hardening_ratio: number }
+  | { kind: "concreteCracking"; tensile_mpa: number; residual_ratio: number };
+
+function isMaterialAnalysis(analysis: FrameAnalysis): boolean {
+  return analysis === "material" || analysis === "combined";
+}
 
 interface NativeFrame2DResult {
   nodes: Array<{ nodeId: number; displacement: [number, number, number]; reaction: [number, number, number] }>;
@@ -11,6 +18,8 @@ interface NativeFrame2DResult {
     memberId: number; localEndForces: number[]; stationsM: number[];
     normalForceKn: number[]; shearForceKn: number[]; bendingMomentKnm: number[];
     deflectionM: number[]; axialDispM: number[]; rotationRad: number[];
+    axialHistory?: { plasticStrain: number; equivalentPlasticStrain: number;
+      tensileDamage: number; tangentEMpa: number };
   }>;
   equilibriumResidual: number;
 }
@@ -43,7 +52,25 @@ export function buildNativeFrame2DRequest(
     return [beam.id, { lengthM: lengthMm / 1000,
       c: (end.x - start.x) / lengthMm, s: (end.z - start.z) / lengthMm }] as const;
   }));
-  const materials = input.beams.map(beam => ({ id: beam.id, eMpa: finite(beam.E ?? 210000, `Staaf ${beam.id} E`) }));
+  if (isMaterialAnalysis(analysis) && !input.beams.some(beam => beam.axialMaterialLaw)) {
+    throw new Error("Geef minstens één staaf een axiale FNL-materiaalwet voor de Rust 2D-raamwerkroute.");
+  }
+  const materials = input.beams.map(beam => {
+    let law: NativeAxialLaw | undefined;
+    if (isMaterialAnalysis(analysis) && beam.axialMaterialLaw) {
+      const source = beam.axialMaterialLaw;
+      const strength = source.kind === "steelBilinear" ? source.yieldMpa : source.tensileMpa;
+      const ratio = source.kind === "steelBilinear" ? source.hardeningRatio : source.residualRatio;
+      if (!(finite(strength, `Staaf ${beam.id} FNL-sterkte`) > 0)
+          || !(finite(ratio, `Staaf ${beam.id} FNL-stijfheidsverhouding`) >= 0 && ratio <= 1)) {
+        throw new Error(`Staaf ${beam.id}: ongeldige axiale FNL-materiaalwet.`);
+      }
+      law = source.kind === "steelBilinear"
+        ? { kind: "steelBilinear", yield_mpa: source.yieldMpa, hardening_ratio: source.hardeningRatio }
+        : { kind: "concreteCracking", tensile_mpa: source.tensileMpa, residual_ratio: source.residualRatio };
+    }
+    return { id: beam.id, eMpa: finite(beam.E ?? 210000, `Staaf ${beam.id} E`), ...(law ? { law } : {}) };
+  });
   const sections = input.beams.map(beam => ({ id: beam.id,
     areaM2: finite(beam.A ?? 3877, `Staaf ${beam.id} A`) * 1e-6,
     inertiaM4: finite(beam.I ?? 1.673e7, `Staaf ${beam.id} I`) * 1e-12 }));
@@ -137,8 +164,14 @@ export function buildNativeFrame2DRequest(
     if (alphaPerK < 0) throw new Error(`Staaf ${load.beamId}: uitzettingscoëfficiënt mag niet negatief zijn.`);
     return deltaTK === 0 ? [] : [{ memberId: load.beamId, deltaTK, alphaPerK }];
   });
+  const loadPath = isMaterialAnalysis(analysis) ? input.axialMaterialLoadPath ?? [1] : [];
+  if (isMaterialAnalysis(analysis) && (!Array.isArray(loadPath) || loadPath.length === 0
+      || loadPath.length > 100 || loadPath.some(value => !Number.isFinite(value)))) {
+    throw new Error("Ongeldig axiaal FNL-lastpad voor de Rust 2D-raamwerkroute.");
+  }
   return { analysis, nodes, materials, sections, members, supports,
-    nodalLoads, memberLoads, memberPointLoads, thermalLoads };
+    nodalLoads, memberLoads, memberPointLoads, thermalLoads,
+    ...(isMaterialAnalysis(analysis) ? { loadPath } : {}) };
 }
 
 export function nativeFrame2DResultToSolverResult(
@@ -177,8 +210,16 @@ export function nativeFrame2DResultToSolverResult(
         || member.localEndForces.some(value => !Number.isFinite(value))) {
       throw new Error("De Rust 2D-raamwerkkern leverde ongeldige staafdiagrammen.");
     }
+    if (isMaterialAnalysis(request.analysis)) {
+      const history = member.axialHistory;
+      if (!history || [history.plasticStrain, history.equivalentPlasticStrain,
+        history.tensileDamage, history.tangentEMpa].some(value => !Number.isFinite(value))) {
+        throw new Error("De Rust 2D-raamwerkkern leverde geen geldige axiale materiaaltoestand.");
+      }
+    }
     elements.set(member.memberId, {
       N: member.normalForceKn[0] * 1000, V: member.shearForceKn[0] * 1000,
+      ...(member.axialHistory ? { axialHistory: { ...member.axialHistory } } : {}),
       M_start: member.bendingMomentKnm[0] * 1e6,
       M_end: member.bendingMomentKnm[count - 1] * 1e6,
       L_mm: member.stationsM[count - 1] * 1000,
@@ -213,6 +254,7 @@ export async function solveAllCasesNativeFrame2D(
 /** Each second-order combination is solved at its full factored load. */
 export async function solveAllCombinationsNativeFrame2D(
   input: MultiInput, combinations: readonly LoadCombination[],
+  analysis: "geometric" | "material" | "combined" = "geometric",
 ): Promise<Map<number, SolverResult>> {
   const results = new Map<number, SolverResult>();
   for (const combination of combinations) {
@@ -220,7 +262,7 @@ export async function solveAllCombinationsNativeFrame2D(
       throw new Error(`Combinatie ${combination.name}: eindstijfheidvariant is niet ondersteund door de Rust 2D-raamwerkroute.`);
     }
     const request = buildNativeFrame2DRequest(input,
-      caseId => combination.factors.get(caseId) ?? 0, "geometric");
+      caseId => combination.factors.get(caseId) ?? 0, analysis);
     const result = await solveNativeFem<NativeFrame2DResult>("frame2d", request);
     results.set(combination.id, nativeFrame2DResultToSolverResult(request, result));
   }

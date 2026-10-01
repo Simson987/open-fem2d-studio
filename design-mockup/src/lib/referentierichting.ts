@@ -215,6 +215,7 @@ export function spiegelElementKrachten(ef: ElementForces): ElementForces {
     axialDisp: omgekeerd(ef.axialDisp).map(tegen),
   };
   if (ef.rotation) uit.rotation = omgekeerd(ef.rotation);
+  if (ef.axialHistory) uit.axialHistory = { ...ef.axialHistory };
   if (ef.segmenten) uit.segmenten = omgekeerd(ef.segmenten).map((s) => spiegelSegment(s, L));
   return uit;
 }
@@ -553,6 +554,7 @@ export function zeegNotities(beam: Beam, nodes: Node[]): string[] {
 /** Wat spiegelen met een veld van de solveruitvoer doet. Geïmplementeerd in `spiegelElementKrachten`. */
 export const SPIEGELREGELS_ELEMENTKRACHTEN: { [K in keyof Required<ElementForces>]: string } = {
   N: "de normaalkracht aan het nieuwe begin (het oude eind); trek blijft trek",
+  axialHistory: "axiale rek, plastische rek en schade blijven gelijk bij omkering van de staafrichting",
   V: "de dwarskracht aan het nieuwe begin; V = dM/dx en x én M klappen om, dus geen tekenwissel",
   M_start: "−M_end: het moment aan het oude eind, met omgekeerd teken",
   M_end: "−M_start",

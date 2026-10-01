@@ -22,8 +22,12 @@ staaf-plaatmodellen worden in deze route nog expliciet geweigerd. De app
 behoudt de bestaande solver als automatische keuze.
 Uniforme temperatuurbelasting per staaf loopt wel via Rust, met een
 lastspecifieke uitzettingscoëfficiënt. De kern kan die belasting ook combineren
-met axiale staalplastificatie, betontrekschade en P-Δ; de gewone 2D-app-route
-gebruikt vooralsnog alleen lineaire en geometrische analyse.
+met axiale staalplastificatie, betontrekschade en P-Δ. De getypeerde 2D-adapter
+neemt hiervoor per staaf `axialMaterialLaw` en een modelbreed
+`axialMaterialLoadPath` aan en bewaart de axiale materiaaltoestand in het
+resultaat. De gewone 2D-werkbalk biedt deze afzonderlijke axiale FNL-analyse
+nog niet aan: de bestaande stand „fysisch niet-lineair” berekent gescheurde
+buigdoorsneden van gewapend beton en heeft dus een andere betekenis.
 
 Een afzonderlijke lineaire of FNL 3D-plaatroute kan in de app met expliciete keuze
 voor Open FEM Rust worden berekend. Zij accepteert één vlakke rechthoek in

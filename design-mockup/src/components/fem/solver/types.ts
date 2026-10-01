@@ -72,6 +72,10 @@ export interface SolverBeamInput {
   E?: number;            // N/mm²   default 210000
   A?: number;            // mm²     default 3877  (HEA 160)
   I?: number;            // mm⁴     default 1.673e7 (HEA 160 Iy)
+  /** Expliciete axiale FNL-wet voor de experimentele Rust-raamwerkroute. */
+  axialMaterialLaw?:
+    | { kind: "steelBilinear"; yieldMpa: number; hardeningRatio: number }
+    | { kind: "concreteCracking"; tensileMpa: number; residualRatio: number };
   /**
    * Staaf op bedding: lijnstijfheid k·b in N/mm² (N per mm zakking, per mm
    * staaflengte). De adapter knipt de staaf op 1/λ en zet op elk mesh-element
@@ -484,6 +488,8 @@ export interface MultiInput {
   cases: { id: number; name: string }[];
   /** Optionele scheefstand — zie ScheefstandInput. */
   scheefstand?: ScheefstandInput;
+  /** Absolute factoren per stap voor de axiale Rust-FNL-route, bijvoorbeeld [1, 0, 0.5]. */
+  axialMaterialLoadPath?: number[];
 }
 
 export interface MultiLcResult {
@@ -567,6 +573,11 @@ export interface BeamSegmentForces {
  */
 export interface ElementForces {
   N: number;        // N   (axial, tension +ve at end A)
+  /** Axiale materiaaltoestand na het laatste Rust-FNL-lastpad. */
+  axialHistory?: {
+    plasticStrain: number; equivalentPlasticStrain: number;
+    tensileDamage: number; tangentEMpa: number;
+  };
   V: number;        // N   (shear, end-A local convention)
   M_start: number;  // N·mm at node "from"
   M_end: number;    // N·mm at node "to"

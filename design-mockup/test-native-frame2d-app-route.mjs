@@ -5,6 +5,7 @@ import { solveAllCases, solveCombinationSecondOrder } from "./src/components/fem
 import { combineResults } from "./src/components/fem/solver/combinations.ts";
 import { buildNativeFrame2DRequest, solveAllCasesNativeFrame2D, solveAllCombinationsNativeFrame2D } from "./src/components/fem/solver/nativeFrame2DRoute.ts";
 import { resolveSolver } from "./src/core/solver/SolverRegistry.ts";
+import { spiegelElementKrachten } from "./src/lib/referentierichting.ts";
 
 const binary = fileURLToPath(new URL(`../src-tauri/target/debug/native-frame2d${process.platform === "win32" ? ".exe" : ""}`, import.meta.url));
 const invoke = (request) => new Promise((resolve, reject) => {
@@ -145,6 +146,50 @@ try {
     [{ id: 98, name: "halve temperatuur", factors: new Map([[1, 0.5]]) }])).get(98);
   close(halfThermal.displacements.get(2).ux, 1.44, 1e-8,
     "gefactoreerde thermische uitzetting bij P-Delta");
+  const steelFnlInput = { ...thermalInput,
+    beams: [{ ...thermalInput.beams[0], axialMaterialLaw: {
+      kind: "steelBilinear", yieldMpa: 100, hardeningRatio: 0.5 } }],
+    supports: [{ nodeId: 1, type: "fixed" }, { nodeId: 2, type: "fixed" }],
+    thermalLoads: [{ beamId: 1, caseId: 1, deltaT: 100, alpha: 1e-5 }],
+    axialMaterialLoadPath: [1, 0],
+  };
+  const steelRequest = buildNativeFrame2DRequest(steelFnlInput, () => 1, "material");
+  assert.deepEqual(steelRequest.loadPath, [1, 0]);
+  assert.deepEqual(steelRequest.materials[0].law,
+    { kind: "steelBilinear", yield_mpa: 100, hardening_ratio: 0.5 });
+  assert.throws(() => buildNativeFrame2DRequest({ ...steelFnlInput,
+    axialMaterialLoadPath: [1, Number.NaN] }, () => 1, "material"), /lastpad/);
+  assert.throws(() => buildNativeFrame2DRequest({ ...steelFnlInput,
+    beams: [{ ...steelFnlInput.beams[0], axialMaterialLaw: undefined }] }, () => 1, "material"),
+  /minstens één staaf/);
+  assert.throws(() => buildNativeFrame2DRequest({ ...steelFnlInput,
+    beams: [{ ...steelFnlInput.beams[0], axialMaterialLaw: {
+      kind: "steelBilinear", yieldMpa: 100, hardeningRatio: 1.2 } }] }, () => 1, "material"),
+  /ongeldige axiale FNL/);
+  const steelFnl = (await solveAllCombinationsNativeFrame2D(steelFnlInput,
+    [{ id: 99, name: "staal afkoelen", factors: new Map([[1, 1]]) }], "material")).get(99);
+  close(steelFnl.reactions.get(1).fx, -550_000, 1e-3, "axiale staal-FNL-restreactie via app-route");
+  close(steelFnl.elements.get(1).axialHistory.plasticStrain, -0.0002619047619047619, 1e-12,
+    "axiale staal-FNL-plastische rek via app-route");
+  assert.deepEqual(spiegelElementKrachten(steelFnl.elements.get(1)).axialHistory,
+    steelFnl.elements.get(1).axialHistory,
+    "axiale materiaalgeschiedenis blijft gelijk als de staafrichting omkeert");
+  const concreteFnlInput = { ...steelFnlInput,
+    beams: [{ ...steelFnlInput.beams[0], E: 33_000,
+      axialMaterialLaw: { kind: "concreteCracking", tensileMpa: 3, residualRatio: 0.2 } }],
+    thermalLoads: [{ beamId: 1, caseId: 1, deltaT: -30, alpha: 1e-5 }],
+    axialMaterialLoadPath: [1, 0, 0.5],
+  };
+  const concreteFnl = (await solveAllCombinationsNativeFrame2D(concreteFnlInput,
+    [{ id: 100, name: "beton herbelasten", factors: new Map([[1, 1]]) }], "combined")).get(100);
+  close(concreteFnl.reactions.get(1).fx, -21_900, 1e-3,
+    "axiale beton-FNL-reactie via app-route");
+  close(concreteFnl.elements.get(1).axialHistory.tensileDamage, 1 - 4.38 / 9.9, 1e-10,
+    "axiale beton-FNL-schade via app-route");
+  await assert.rejects(() => solveAllCombinationsNativeFrame2D({ ...steelFnlInput,
+    loads: [{ beamId: 1, caseId: 1, q: 1, qDir: "x", qCoord: "local" }] },
+    [{ id: 101, name: "axiale lijnlast", factors: new Map([[1, 1]]) }], "material"),
+  /axial material history does not yet support member axial loads/);
   const pointInput = { ...input, loads: [], pointLoads: [],
     beamPointLoads: [
       { beamId: 1, caseId: 1, posFrac: 0.25, fz: -8000 },
@@ -233,4 +278,4 @@ try {
 } finally {
   globalThis.fetch = previousFetch;
 }
-console.log("Native 2D-app-route: gevallen, staafdiagrammen en combinatie stemmen overeen met de bestaande solver.");
+console.log("Native 2D-app-route: lineair/P-Delta stemmen overeen; thermiek en axiale staal-/beton-FNL slagen.");
