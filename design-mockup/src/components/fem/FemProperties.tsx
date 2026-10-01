@@ -2186,7 +2186,7 @@ function PlateProperties({ plate, nodes, updatePlate }: {
             </div>
           )}
         </Section>
-        {updatePlate && <Section title="Fysisch niet-lineair (Rust Quad4)">
+        {updatePlate && <Section title="Fysisch niet-lineair (Rust 2D-plaat)">
           <PlateNonlinearEditor plate={plate} baseEMpa={stijfheid?.E1}
             onApply={patch => updatePlate(plate.id, patch)} />
         </Section>}

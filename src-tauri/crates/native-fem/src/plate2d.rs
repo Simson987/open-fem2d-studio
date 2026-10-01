@@ -4,6 +4,7 @@
 
 use crate::material2d::{self, State};
 use crate::math::{constrained_solve, Matrix};
+use crate::quad2d::ModulusCurve;
 use crate::{positive, Analysis, MaterialLaw};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -58,6 +59,8 @@ pub struct Request {
     pub analysis: Analysis,
     pub nodes: Vec<Node>,
     pub materials: Vec<Material>,
+    #[serde(default)]
+    pub modulus_curves: Vec<ModulusCurve>,
     pub triangles: Vec<Triangle>,
     #[serde(default)]
     pub supports: Vec<Support>,
@@ -96,6 +99,8 @@ pub struct ElementResult {
     pub stress_mpa: [f64; 3],
     pub equivalent_plastic_strain: f64,
     pub tensile_damage: f64,
+    pub effective_e_mpa: f64,
+    pub max_equivalent_strain: f64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -114,6 +119,7 @@ struct Element<'a> {
     area: f64,
     thickness: f64,
     material: &'a Material,
+    modulus_curve: Option<&'a ModulusCurve>,
 }
 
 fn build_elements<'a>(
@@ -122,6 +128,11 @@ fn build_elements<'a>(
 ) -> Result<Vec<Element<'a>>, String> {
     let materials: HashMap<usize, &Material> =
         request.materials.iter().map(|m| (m.id, m)).collect();
+    let curves: HashMap<usize, &ModulusCurve> = request
+        .modulus_curves
+        .iter()
+        .map(|curve| (curve.material_id, curve))
+        .collect();
     request
         .triangles
         .iter()
@@ -167,6 +178,7 @@ fn build_elements<'a>(
                 area: twice_area.abs() / 2.0,
                 thickness: triangle.thickness_m,
                 material,
+                modulus_curve: curves.get(&triangle.material_id).copied(),
             })
         })
         .collect()
@@ -201,13 +213,21 @@ fn element_response(
     } else {
         MaterialLaw::Elastic
     };
-    let response = material2d::update(
-        element.material.e_mpa,
-        element.material.nu,
-        law,
-        strain,
-        previous,
-    )?;
+    let centre = 0.5 * (strain[0] + strain[1]);
+    let radius = ((0.5 * (strain[0] - strain[1])).powi(2) + (0.5 * strain[2]).powi(2)).sqrt();
+    let equivalent = (centre + radius).abs().max((centre - radius).abs());
+    let maximum = previous.max_equivalent_strain.max(equivalent);
+    let effective_e = if analysis.material() {
+        element
+            .modulus_curve
+            .map_or(element.material.e_mpa, |curve| curve.e_at(maximum))
+    } else {
+        element.material.e_mpa
+    };
+    let mut response = material2d::update(effective_e, element.material.nu, law, strain, previous)?;
+    if analysis.material() && element.modulus_curve.is_some() {
+        response.state.max_equivalent_strain = maximum;
+    }
     let stress = response.stress;
     let mut force = [0.0; 6];
     for i in 0..3 {
@@ -313,6 +333,39 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
     let material_ids: HashSet<usize> = request.materials.iter().map(|m| m.id).collect();
     if material_ids.len() != request.materials.len() {
         return Err("duplicate plate material id".into());
+    }
+    let mut curve_ids = HashSet::new();
+    for curve in &request.modulus_curves {
+        if !curve_ids.insert(curve.material_id) {
+            return Err("duplicate plate modulus curve material id".into());
+        }
+        let material = request
+            .materials
+            .iter()
+            .find(|m| m.id == curve.material_id)
+            .ok_or("unknown plate modulus curve material")?;
+        if !matches!(material.law, MaterialLaw::Elastic) {
+            return Err("plate modulus curve requires elastic material law".into());
+        }
+        if curve.points.len() < 2
+            || curve.points[0].strain != 0.0
+            || (curve.points[0].e_mpa - material.e_mpa).abs() > material.e_mpa * 1e-10
+        {
+            return Err("plate modulus curve must start at zero strain with material E".into());
+        }
+        for point in &curve.points {
+            positive(point.e_mpa, "plate curve E")?;
+            if !point.strain.is_finite() || point.strain < 0.0 {
+                return Err("invalid plate modulus curve strain".into());
+            }
+        }
+        if curve
+            .points
+            .windows(2)
+            .any(|pair| pair[1].strain <= pair[0].strain || pair[1].e_mpa > pair[0].e_mpa)
+        {
+            return Err("plate modulus curve strains must increase and E must not increase".into());
+        }
     }
     let triangle_ids: HashSet<usize> = request.triangles.iter().map(|t| t.id).collect();
     if triangle_ids.len() != request.triangles.len() {
@@ -459,6 +512,16 @@ pub fn solve(request: &Request) -> Result<Result2D, String> {
                 stress_mpa: stress.map(|value| value / 1000.0),
                 equivalent_plastic_strain: states[index].equivalent_plastic_strain,
                 tensile_damage: states[index].tensile_damage,
+                effective_e_mpa: if request.analysis.material() {
+                    element
+                        .modulus_curve
+                        .map_or(element.material.e_mpa, |curve| {
+                            curve.e_at(states[index].max_equivalent_strain)
+                        })
+                } else {
+                    element.material.e_mpa
+                },
+                max_equivalent_strain: states[index].max_equivalent_strain,
             })
         })
         .collect::<Result<_, String>>()?;
@@ -499,6 +562,7 @@ mod tests {
                 nu: 0.0,
                 law,
             }],
+            modulus_curves: vec![],
             triangles: vec![Triangle {
                 id: 1,
                 node_ids: [1, 2, 3],
@@ -546,6 +610,36 @@ mod tests {
         assert!((result.nodes[1].ux_m - expected).abs() < 1e-11);
         assert!((result.nodes[2].uy_m - expected).abs() < 1e-11);
         assert!(result.relative_residual < 1e-8);
+    }
+    #[test]
+    fn secant_curve_softens_and_retains_peak_strain_on_unloading() {
+        let mut model = coupon(MaterialLaw::Elastic, Analysis::Material, 2_000.0);
+        model.modulus_curves = vec![ModulusCurve {
+            material_id: 1,
+            points: vec![
+                crate::quad2d::ModulusPoint {
+                    strain: 0.0,
+                    e_mpa: 210_000.0,
+                },
+                crate::quad2d::ModulusPoint {
+                    strain: 0.0005,
+                    e_mpa: 100_000.0,
+                },
+            ],
+        }];
+        let elastic = solve(&coupon(MaterialLaw::Elastic, Analysis::Linear, 2_000.0)).unwrap();
+        let loaded = solve(&model).unwrap();
+        assert!(loaded.nodes[1].ux_m > elastic.nodes[1].ux_m);
+        assert!(loaded.elements[0].effective_e_mpa < 210_000.0);
+        assert!(loaded.elements[0].max_equivalent_strain > 0.0);
+        model.load_path = vec![1.0, 0.0];
+        let unloaded = solve(&model).unwrap();
+        assert!(unloaded.elements[0].effective_e_mpa < 210_000.0);
+        assert!(
+            unloaded.elements[0].max_equivalent_strain >= loaded.elements[0].max_equivalent_strain
+        );
+        assert!(unloaded.nodes[1].ux_m.abs() < 1e-9);
+        assert!(unloaded.relative_residual < 1e-7);
     }
     #[test]
     fn geometric_stiffening_changes_large_displacement() {

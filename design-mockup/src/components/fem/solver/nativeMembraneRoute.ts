@@ -1,18 +1,29 @@
 import { buildMesh } from "./engine";
 import type { LoadCombination } from "./combinations";
 import type { MultiInput, PlateElementStress, PlateResult, SolverResult } from "./types";
-import { solveNativeQuad2D, type NativeQuad2DResult } from "../../../lib/nativeFemClient";
+import { solveNativeQuad2D, solveNativeTriangle2D,
+  type NativeQuad2DResult, type NativeTriangle2DResult } from "../../../lib/nativeFemClient";
 import type { NativeMaterialLaw, NativeModulusCurve, NativePlateAnalysis } from "../../../core/fem/nativePlate2DAdapter";
 import { plaatMateriaalSoort } from "../../../lib/plaatMateriaal";
 
-/** Translate the Rust membrane result to the same units and IDs as the 2D UI. */
-export function nativeQuadResultToSolverResult(
+type NativeElementStress = {
+  elementId: number;
+  stressMpa: [number, number, number];
+  effectiveEMpa: number;
+  maxEquivalentStrain: number;
+  equivalentPlasticStrain: number;
+  tensileDamage: number;
+};
+
+/** Translate either Rust membrane element to the same units and IDs as the 2D UI. */
+function nativeMembraneResultToSolverResult(
   built: ReturnType<typeof buildMesh>,
-  result: NativeQuad2DResult,
+  result: { nodes: NativeQuad2DResult["nodes"] },
+  elementResults: readonly NativeElementStress[],
   supports: MultiInput["supports"],
 ): SolverResult {
   const nodes = new Map(result.nodes.map(node => [node.nodeId, node]));
-  const quads = new Map(result.quads.map(quad => [quad.quadId, quad]));
+  const stresses = new Map(elementResults.map(element => [element.elementId, element]));
   const displacements = new Map<number, { ux: number; uz: number; ry: number }>();
   const reactions = new Map<number, { fx: number; fz: number; my: number }>();
   let maxDisplacement = 0;
@@ -29,10 +40,10 @@ export function nativeQuadResultToSolverResult(
   }
   const plateElements: PlateResult[] = built.plateInfo.map(info => {
     const elements: PlateElementStress[] = info.region.elementIds.map(elementId => {
-      const quad = quads.get(elementId);
+      const stressResult = stresses.get(elementId);
       const element = built.mesh.getElement(elementId);
-      if (!quad || !element) throw new Error(`Plaat ${info.plateId}: geen Rust-spanning voor element ${elementId}.`);
-      const [sigmaX, sigmaY, tauXY] = quad.averageStressMpa;
+      if (!stressResult || !element) throw new Error(`Plaat ${info.plateId}: geen Rust-spanning voor element ${elementId}.`);
+      const [sigmaX, sigmaY, tauXY] = stressResult.stressMpa;
       const mean = (sigmaX + sigmaY) / 2;
       const radius = Math.hypot((sigmaX - sigmaY) / 2, tauXY);
       const thicknessM: number = element.thickness;
@@ -50,10 +61,10 @@ export function nativeQuadResultToSolverResult(
         nx: sigmaX * thicknessM * 1000,
         ny: sigmaY * thicknessM * 1000,
         nxy: tauXY * thicknessM * 1000,
-        effectiveEMpa: quad.gaussPoints.reduce((sum, point) => sum + point.effectiveEMpa, 0) / 4,
-        maxEquivalentStrain: Math.max(...quad.gaussPoints.map(point => point.maxEquivalentStrain)),
-        equivalentPlasticStrain: Math.max(...quad.gaussPoints.map(point => point.equivalentPlasticStrain)),
-        tensileDamage: Math.max(...quad.gaussPoints.map(point => point.tensileDamage)),
+        effectiveEMpa: stressResult.effectiveEMpa,
+        maxEquivalentStrain: stressResult.maxEquivalentStrain,
+        equivalentPlasticStrain: stressResult.equivalentPlasticStrain,
+        tensileDamage: stressResult.tensileDamage,
       };
     });
     const range = (key: "sigmaX" | "sigmaY" | "tauXY" | "vonMises" | "nx" | "ny" | "nxy") => ({
@@ -71,6 +82,32 @@ export function nativeQuadResultToSolverResult(
     };
   });
   return { displacements, reactions, elements: new Map(), maxDisplacement, plateElements };
+}
+
+export function nativeQuadResultToSolverResult(
+  built: ReturnType<typeof buildMesh>, result: NativeQuad2DResult, supports: MultiInput["supports"],
+): SolverResult {
+  return nativeMembraneResultToSolverResult(built, result, result.quads.map(quad => ({
+    elementId: quad.quadId,
+    stressMpa: quad.averageStressMpa,
+    effectiveEMpa: quad.gaussPoints.reduce((sum, point) => sum + point.effectiveEMpa, 0) / 4,
+    maxEquivalentStrain: Math.max(...quad.gaussPoints.map(point => point.maxEquivalentStrain)),
+    equivalentPlasticStrain: Math.max(...quad.gaussPoints.map(point => point.equivalentPlasticStrain)),
+    tensileDamage: Math.max(...quad.gaussPoints.map(point => point.tensileDamage)),
+  })), supports);
+}
+
+export function nativeTriangleResultToSolverResult(
+  built: ReturnType<typeof buildMesh>, result: NativeTriangle2DResult, supports: MultiInput["supports"],
+): SolverResult {
+  return nativeMembraneResultToSolverResult(built, result, result.elements.map(element => ({
+    elementId: element.triangleId,
+    stressMpa: element.stressMpa,
+    effectiveEMpa: element.effectiveEMpa,
+    maxEquivalentStrain: element.maxEquivalentStrain,
+    equivalentPlasticStrain: element.equivalentPlasticStrain,
+    tensileDamage: element.tensileDamage,
+  })), supports);
 }
 
 function materialOptions(input: MultiInput, built: ReturnType<typeof buildMesh>, analysis: NativePlateAnalysis) {
@@ -124,30 +161,39 @@ function materialOptions(input: MultiInput, built: ReturnType<typeof buildMesh>,
   return { laws, curves };
 }
 
-async function solveNativeQuadMesh(
+async function solveNativeMembraneMesh(
   input: MultiInput,
   built: ReturnType<typeof buildMesh>,
   analysis: NativePlateAnalysis,
 ): Promise<SolverResult> {
   if (input.beams.length > 0 || !input.plates?.length) {
-    throw new Error("De Rust Quad4-route vereist uitsluitend platen, zonder gekoppelde staven.");
+    throw new Error("De Rust 2D-plaatroute vereist uitsluitend platen, zonder gekoppelde staven.");
   }
-  if (input.scheefstand) throw new Error("Scheefstand is nog niet gevalideerd voor de Rust Quad4-route.");
+  if (input.scheefstand) throw new Error("Scheefstand is nog niet gevalideerd voor de Rust 2D-plaatroute.");
   if (built.randKoppelingen.length > 0) {
-    throw new Error("Randkoppelingen zijn nog niet ondersteund door de Rust Quad4-route.");
+    throw new Error("Randkoppelingen zijn nog niet ondersteund door de Rust 2D-plaatroute.");
   }
   const { laws, curves } = materialOptions(input, built, analysis);
-  const native = await solveNativeQuad2D(built.mesh, analysis, laws, [], curves);
+  const sideCounts = new Set([...built.mesh.elements.values()].map(element => element.nodeIds.length));
+  if (sideCounts.size !== 1 || ![3, 4].includes([...sideCounts][0])) {
+    throw new Error("De Rust 2D-plaatroute vereist een zuiver driehoeks- of vierhoeksmesh; gemengde meshes zijn nog niet gekoppeld.");
+  }
+  const triangles = sideCounts.has(3);
+  const native = triangles
+    ? await solveNativeTriangle2D(built.mesh, analysis, laws, [], curves)
+    : await solveNativeQuad2D(built.mesh, analysis, laws, [], curves);
   // The Rust point-state commit can change the final free-DOF residual slightly
   // after the converged Newton step; still require a tight 1e-5 force ratio.
   if (!Number.isFinite(native.relativeResidual) || native.relativeResidual > 1e-5) {
-    throw new Error("Rust Quad4 berekening heeft geen voldoende klein residu.");
+    throw new Error("Rust 2D-plaatberekening heeft geen voldoende klein residu.");
   }
-  return nativeQuadResultToSolverResult(built, native, input.supports);
+  return triangles
+    ? nativeTriangleResultToSolverResult(built, native as NativeTriangle2DResult, input.supports)
+    : nativeQuadResultToSolverResult(built, native as NativeQuad2DResult, input.supports);
 }
 
 /** Solve cases separately; linear cases can be superposed, nonlinear cases are for inspection only. */
-export async function solveAllCasesNativeQuad2D(
+export async function solveAllCasesNativeMembrane2D(
   input: MultiInput,
   analysis: NativePlateAnalysis = "linear",
 ): Promise<Map<number, SolverResult>> {
@@ -157,13 +203,13 @@ export async function solveAllCasesNativeQuad2D(
     // Empty default cases have no effect and are omitted by the existing solver too.
     const hasLoads = [...built.mesh.nodes.values()].some(node => node.loads.fx || node.loads.fy);
     if (!hasLoads) continue;
-    perCase.set(loadCase.id, await solveNativeQuadMesh(input, built, analysis));
+    perCase.set(loadCase.id, await solveNativeMembraneMesh(input, built, analysis));
   }
   return perCase;
 }
 
 /** Nonlinear combinations each keep their own Gauss-point history through the full load path. */
-export async function solveAllCombinationsNativeQuad2D(
+export async function solveAllCombinationsNativeMembrane2D(
   input: MultiInput,
   combinations: readonly LoadCombination[],
   analysis: Exclude<NativePlateAnalysis, "linear">,
@@ -171,10 +217,10 @@ export async function solveAllCombinationsNativeQuad2D(
   const results = new Map<number, SolverResult>();
   for (const combination of combinations) {
     if (combination.eindtoestand !== undefined) {
-      throw new Error(`Combinatie ${combination.name}: eindstijfheidvariant is niet ondersteund door Rust Quad4.`);
+      throw new Error(`Combinatie ${combination.name}: eindstijfheidvariant is niet ondersteund door de Rust 2D-plaatroute.`);
     }
     const built = buildMesh(input, caseId => combination.factors.get(caseId ?? -1) ?? 0);
-    results.set(combination.id, await solveNativeQuadMesh(input, built, analysis));
+    results.set(combination.id, await solveNativeMembraneMesh(input, built, analysis));
   }
   return results;
 }

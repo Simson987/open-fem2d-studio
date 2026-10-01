@@ -100,6 +100,6 @@ export default function PlateNonlinearEditor({ plate, baseEMpa, onApply }: {
     </>}
     <div className="fem-prop-kiezer-row"><button type="button" className="fem-prop-kiezer-btn" onClick={apply}>FNL-invoer toepassen</button></div>
     {error && <p className="fem-prop-hint" role="alert">{error}</p>}
-    <p className="fem-prop-hint">Experimentele Rust Quad4-kern. De E-curve volgt de grootste bereikte absolute hoofdrek.</p>
+    <p className="fem-prop-hint">Experimentele Rust CST-/Quad4-kern. De E-curve volgt de grootste bereikte absolute hoofdrek.</p>
   </>;
 }

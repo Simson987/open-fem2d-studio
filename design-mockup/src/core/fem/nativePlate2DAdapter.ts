@@ -37,6 +37,8 @@ export function buildNativePlate2DRequest(
   mesh: Mesh,
   analysis: NativePlateAnalysis = 'linear',
   laws: ReadonlyMap<number, NativeMaterialLaw> = new Map(),
+  loadPath: readonly number[] = [],
+  modulusCurves: readonly NativeModulusCurve[] = [],
 ) {
   if (mesh.beamElements.size > 0) {
     throw new Error('De native 2D-plaatkern ondersteunt nog geen gekoppelde staaf-plaatmodellen.');
@@ -80,6 +82,10 @@ export function buildNativePlate2DRequest(
     analysis,
     nodes: nodes.map(node => ({ id: node.id, x: node.x, y: node.y })),
     materials,
+    modulusCurves: modulusCurves.map(curve => ({
+      materialId: curve.materialId,
+      points: curve.points.map(point => ({ strain: point.strain, eMpa: point.eMpa })),
+    })),
     triangles,
     supports: nodes.filter(node => node.constraints.x || node.constraints.y).map(node => ({
       nodeId: node.id, ux: node.constraints.x, uy: node.constraints.y,
@@ -87,6 +93,7 @@ export function buildNativePlate2DRequest(
     loads: nodes.filter(node => node.loads.fx || node.loads.fy).map(node => ({
       nodeId: node.id, fx: node.loads.fx / 1000, fy: node.loads.fy / 1000,
     })),
+    loadPath: [...loadPath],
   };
 }
 

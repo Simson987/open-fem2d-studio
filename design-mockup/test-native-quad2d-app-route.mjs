@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { buildMesh, solveAllCases } from "./src/components/fem/solver/engine.ts";
-import { solveAllCasesNativeQuad2D, solveAllCombinationsNativeQuad2D } from "./src/components/fem/solver/nativeQuadRoute.ts";
+import { solveAllCasesNativeMembrane2D as solveAllCasesNativeQuad2D,
+  solveAllCombinationsNativeMembrane2D as solveAllCombinationsNativeQuad2D } from "./src/components/fem/solver/nativeMembraneRoute.ts";
 import { combineResults, computeEnvelope } from "./src/components/fem/solver/combinations.ts";
 import { resolveSolver } from "./src/core/solver/SolverRegistry.ts";
 

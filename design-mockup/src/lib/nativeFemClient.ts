@@ -5,7 +5,7 @@
 import { roepKern } from "../stores/checkStore";
 import type { Mesh } from "../core/fem/Mesh";
 import {
-  buildNativeHybridPlateRequest, buildNativeQuad2DRequest,
+  buildNativeHybridPlateRequest, buildNativePlate2DRequest, buildNativeQuad2DRequest,
   type NativeModulusCurve, type NativeReinforcementSpec,
   type NativeMaterialLaw,
 } from "../core/fem/nativePlate2DAdapter";
@@ -44,6 +44,21 @@ export interface NativeQuad2DResult {
   relativeResidual: number;
 }
 
+export interface NativeTriangle2DResult {
+  nodes: NativeQuad2DResult["nodes"];
+  elements: Array<{
+    triangleId: number;
+    strain: [number, number, number];
+    stressMpa: [number, number, number];
+    equivalentPlasticStrain: number;
+    tensileDamage: number;
+    effectiveEMpa: number;
+    maxEquivalentStrain: number;
+  }>;
+  iterations: number;
+  relativeResidual: number;
+}
+
 export interface NativeHybridPlateResult {
   nodes: Array<{
     nodeId: number; wM: number; thetaXRad: number; thetaYRad: number;
@@ -68,6 +83,17 @@ export function solveNativeQuad2D(
 ): Promise<NativeQuad2DResult> {
   return solveNativeFem('quad2d',
     buildNativeQuad2DRequest(mesh, analysis, laws, loadPath, modulusCurves));
+}
+
+export function solveNativeTriangle2D(
+  mesh: Mesh,
+  analysis: 'linear' | 'geometric' | 'material' | 'combined' = 'linear',
+  laws: ReadonlyMap<number, NativeMaterialLaw> = new Map(),
+  loadPath: readonly number[] = [],
+  modulusCurves: readonly NativeModulusCurve[] = [],
+): Promise<NativeTriangle2DResult> {
+  return solveNativeFem('plate2d',
+    buildNativePlate2DRequest(mesh, analysis, laws, loadPath, modulusCurves));
 }
 
 /** Existing Mesh -> strict Rust hybrid bending input -> browser or desktop transport. */

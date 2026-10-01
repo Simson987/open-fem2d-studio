@@ -74,7 +74,7 @@ import type { GridSettings, Tool } from "./components/fem/femTypes";
 import { DEFAULT_GRID, nonlinearVoorBestand } from "./components/fem/femTypes";
 import type { SolverResult } from "./components/fem/solver/types";
 import { solveAllCases, solveAllCasesNonlinear } from "./components/fem/solver/solver";
-import { solveAllCasesNativeQuad2D, solveAllCombinationsNativeQuad2D } from "./components/fem/solver/nativeQuadRoute";
+import { solveAllCasesNativeMembrane2D, solveAllCombinationsNativeMembrane2D } from "./components/fem/solver/nativeMembraneRoute";
 import {
   eersteOrdeCombinatieResultaat,
   getSecondOrderInput,
@@ -1630,7 +1630,7 @@ function App() {
       loads: fem.loads, loadCases: fem.loadCases,
     });
     if (fem.actieveCombinaties.some(combination => combination.eindtoestand !== undefined)) {
-      throw new Error("Eindstijfheidvarianten zijn nog niet ondersteund door de Rust Quad4-route.");
+      throw new Error("Eindstijfheidvarianten zijn nog niet ondersteund door de Rust 2D-plaatroute.");
     }
     const multiInput = bouwMultiInput({
       nodes: fem.nodes, beams: fem.beams, supports: fem.supports, plates: fem.plates,
@@ -1642,12 +1642,12 @@ function App() {
     });
     const analysis = fem.analysetype === "eersteOrde" ? "linear"
       : fem.analysetype === "tweedeOrdeFysisch" ? "combined" : "geometric";
-    const perCase = await solveAllCasesNativeQuad2D(multiInput, analysis);
+    const perCase = await solveAllCasesNativeMembrane2D(multiInput, analysis);
     if (generatie !== rekenGeneratieRef.current) return null;
     const combinationResults = analysis === "linear"
       ? new Map(fem.actieveCombinaties.map(combination =>
         [combination.id, combineResults(combination, perCase)]))
-      : await solveAllCombinationsNativeQuad2D(multiInput, fem.actieveCombinaties, analysis);
+      : await solveAllCombinationsNativeMembrane2D(multiInput, fem.actieveCombinaties, analysis);
     if (generatie !== rekenGeneratieRef.current) return null;
     const envelope = computeEnvelope(fem.actieveCombinaties, perCase,
       analysis === "linear" ? undefined : combinationResults);
