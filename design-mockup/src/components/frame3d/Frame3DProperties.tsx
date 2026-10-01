@@ -360,6 +360,23 @@ export default function Frame3DProperties({
             onBlur={(event) => onChange(updateFrame3DPlate(model, plate.id, { material: event.currentTarget.value.trim() || "C30/37" }))} /></Row>
           <Row label="Openingen"><code>{plate.openings?.length ?? 0}</code></Row>
         </Section>
+        {plate.nodeIds.length === 4 && <Section title="Plaat­randen · Rust Q4">
+          <p className="fem-prop-hint">Voor de rechthoekige Rust-plaatroute: rand 1–4 volgt de contourknopen. Scharnierend zet de zakking op nul; ingeklemd zet ook beide plaatrotaties vast. De oplegging geldt voor alle roosterknopen langs die rand.</p>
+          <Row label="Max. celmaat (m)"><input className="fem-prop-input" type="number" min="0.001" step="0.05"
+            aria-label="Maximale plaatcelmaat" placeholder="automatisch"
+            defaultValue={plate.maxCellSizeM ?? ""} key={`cell-${plate.id}-${plate.maxCellSizeM ?? "auto"}`}
+            onBlur={(event) => { const text = event.currentTarget.value.trim(); const next = text ? Number(text) : undefined;
+              if (next === undefined || next > 0) onChange(updateFrame3DPlate(model, plate.id, { maxCellSizeM: next })); }} /></Row>
+          {plate.nodeIds.map((startId, index) => <Row key={`${plate.id}-edge-${index}`} label={`Rand ${index + 1}: K${startId}–K${plate.nodeIds[(index + 1) % 4]}`}>
+            <select className="fem-prop-input" aria-label={`Plaat rand ${index + 1} oplegging`}
+              value={plate.edgeSupports?.[index] ?? "free"} onChange={(event) => {
+                const next = [...(plate.edgeSupports ?? ["free", "free", "free", "free"])] as NonNullable<typeof plate.edgeSupports>;
+                next[index] = event.target.value as typeof next[number];
+                onChange(updateFrame3DPlate(model, plate.id, { edgeSupports: next }));
+              }}>
+              <option value="free">Vrij</option><option value="simplySupported">Scharnierend</option><option value="clamped">Ingeklemd</option>
+            </select></Row>)}
+        </Section>}
         <Section title="FNL-plaat · secant-E(rek)">
           <p className="fem-prop-hint">Geef 2–100 punten als rek:E(MPa), gescheiden door puntkomma's. Begin bij 0 met de E van het materiaal
             {Number.isFinite(eVanMateriaal(plate.material ?? "").E) ? ` (${eVanMateriaal(plate.material ?? "").E} MPa)` : ""}; rek moet stijgen en E mag niet stijgen. Deze omhulling bewaart de grootste vezelrek en modelleert geen plastische doorsnede of expliciete scheurwet.</p>
@@ -406,6 +423,10 @@ export default function Frame3DProperties({
         {!result && <p className="fem-prop-hint">{t("frame3d.readyToCalculate")}</p>}
         {plateResult && <Section title={`Buigplaat ${plateResult.plateId}`}>
           <Row label="Rooster"><code>{plateResult.nodes.length} knopen · {plateResult.elements.length} Q4-elementen</code></Row>
+          <Row label="Reactieknooppunten"><code>{plateResult.reactions.length}</code></Row>
+          <Row label="ΣR normaal"><code>{value(plateResult.reactions.reduce((sum, reaction) => sum
+            + reaction.fx * plateResult.basis.normal[0] + reaction.fy * plateResult.basis.normal[1]
+            + reaction.fz * plateResult.basis.normal[2], 0))} kN</code></Row>
           <Row label="Max. |w|"><code>{value(Math.max(...plateResult.nodes.map((node) => Math.abs(node.wM))) * 1000, 5)} mm</code></Row>
           <Row label="Max. |M|"><code>{value(Math.max(...plateResult.elements.flatMap((element) => element.momentKnmPerM.map(Math.abs))))} kNm/m</code></Row>
           <Row label="Max. |V|"><code>{value(Math.max(...plateResult.elements.flatMap((element) => element.shearKnPerM.map(Math.abs))))} kN/m</code></Row>

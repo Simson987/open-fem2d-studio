@@ -248,6 +248,18 @@ assert.ok(supportOnly.children.length > 0);
 assert.ok(supportOnly.children.every((child) => child instanceof THREE.Mesh && child.userData.type === "node"));
 assert.ok(supportOnly.children.some((child) => child.geometry.type === "TorusGeometry"),
   "revolute support has a visible rotation ring");
+const edgeModel = parseFrame3DModel({ nodes: [
+  { id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 2, y: 0, z: 0 },
+  { id: 3, x: 2, y: 2, z: 0 }, { id: 4, x: 0, y: 2, z: 0 },
+], beams: [], plates: [{ id: 1, nodeIds: [1, 2, 3, 4], thicknessM: 0.2,
+  edgeSupports: ["simplySupported", "clamped", "free", "free"] }] });
+const edgeMarkers = new THREE.Group();
+addFrame3DConditionMarkers(edgeMarkers, edgeModel, { supports: true, loads: false });
+assert.deepEqual(edgeMarkers.children.map((child) => child.userData.frame3dPlateEdgeSupport),
+  ["simplySupported", "clamped"]);
+const hiddenEdges = new THREE.Group();
+addFrame3DConditionMarkers(hiddenEdges, edgeModel, { supports: false, loads: false });
+assert.equal(hiddenEdges.children.length, 0);
 const rollerOnly = new THREE.Group();
 const rollerModel = {
   nodes: [

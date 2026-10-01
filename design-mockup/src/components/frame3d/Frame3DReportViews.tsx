@@ -127,6 +127,17 @@ function View({
           {projection !== "top" && <polygon points={polygon(true)} fill="none" stroke="#dc2626" strokeWidth="1" strokeDasharray="3 2" />}
         </g>;
       })}
+      {(model.plates ?? []).flatMap((plate) => (plate.edgeSupports ?? []).map((kind, index) => {
+        if (kind === "free") return null;
+        const start = nodeById.get(plate.nodeIds[index]);
+        const end = nodeById.get(plate.nodeIds[(index + 1) % plate.nodeIds.length]);
+        if (!start || !end) return null;
+        const a = toCanvas(project(start, projection)), b = toCanvas(project(end, projection));
+        return <line key={`edge-support-${plate.id}-${index}`} data-edge-support={kind}
+          x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+          stroke={kind === "clamped" ? "#1e3a8a" : "#16a34a"} strokeWidth={kind === "clamped" ? 4 : 2.5}
+          strokeDasharray={kind === "clamped" ? undefined : "5 3"} />;
+      }))}
       {model.beams.map((beam) => {
         const start = nodeById.get(beam.startNodeId), end = nodeById.get(beam.endNodeId);
         if (!start || !end) return null;
@@ -179,7 +190,7 @@ export default function Frame3DReportViews(props: Props) {
     <View {...props} projection="front" title="Vooraanzicht X/Z" />
     <View {...props} projection="top" title="Bovenaanzicht X/Y" />
     <p className="frame3d-report-view-legend">
-      {props.result.plateBending ? "Blauw: onvervormd plaatrooster. Rood gestreept: berekende doorbuiging"
+      {props.result.plateBending ? "Blauw: onvervormd plaatrooster. Rood gestreept: berekende doorbuiging. Groene streep: scharnierende rand; donkerblauw: ingeklemde rand"
         : "Staafkleur: UGT-unity check volgens EN 1992 of EN 1993 indien beschikbaar. Rood gestreept: vervormde vorm"},
       automatisch vergroot ×{numberForLegend(deformationScale(props.model, props.result))}.
     </p>

@@ -137,7 +137,8 @@ Deze experimentele controle is geen gecertificeerde constructieberekening.
 `design-mockup/test-native-frame3d-plate-app-route.mjs` stuurt één 2×2 m
 betonplaat (`C30/37`, dikte 0,20 m) via dezelfde `solveFrame3D`-functie als de
 app naar `native-quad-mesh` en `native-hybrid-plate`. Vier hoekknopen zijn
-verticaal gesteund; de overige randen zijn vrij. Bij `qz = −1 kN/m²` is de
+verticaal gesteund; zonder expliciete randinvoer blijven de overige randen
+vrij. Bij `qz = −1 kN/m²` is de
 onafhankelijke totale belasting `−4 kN`, dus moeten de verticale reacties
 `+4 kN` optellen. De test controleert ook de globale momenten rond de
 oorsprong, 25 roosterknopen, 16 elementen en een negatieve binnenzakking.
@@ -156,6 +157,18 @@ De mesher rondt een quotiënt als `4,000000000000001` nu tot vier cellen af;
 een echt grotere maat krijgt nog steeds een extra cel. Een schuine plaat met
 alleen verticaal eigen gewicht wordt geweigerd omdat daarvoor ook
 schijfwerking nodig is.
+
+`edgeSupports` kan per zijde van de rechthoek `free`, `simplySupported` of
+`clamped` zijn. De app legt dan alle Rust-roosterknopen op die zijde op:
+scharnierend fixeert `w`, ingeklemd fixeert `w`, `thetaX` en `thetaY`.
+`maxCellSizeM` begrenst de Q4-celmaat. Een 2×2 m C30/37-plaat met 0,20 m
+dikte, een 6×6 rooster en vier scharnierende randen heeft onder
+`qz = −1 kN/m²` een middenzakking binnen 4,15% van de Navier-referentie
+`0,00406 qa⁴/D`. Vier ingeklemde randen leveren een kleinere zakking; één
+ingeklemde rand geeft de verwachte steunmomenten. De 3D-app toont de reacties
+op *alle* randroosterknopen en telt ze mee in de globale kracht- en
+momentensom. Een geroteerde plaat met dezelfde randvoorwaarden behoudt zijn
+lokale zakking en geroteerde reacties.
 
 De app-FNL-proef geeft `C30/37` een expliciete curve met `E(0) = E_cm` en
 `E(10⁻¹⁰) = E_cm/2`. Bij voldoende hoge belasting bereikt elk element de

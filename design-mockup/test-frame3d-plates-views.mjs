@@ -158,7 +158,9 @@ const reinforcement = { limitState: "service", fckMpa: 35, fctmMpa: 3.2,
   coverMm: 30, barDiameterMm: 12, topXMm2PerM: 800, topYMm2PerM: 800,
   bottomXMm2PerM: 800, bottomYMm2PerM: 800, shearMm2PerM2: 0,
   tanTheta: 1, alphaCc: 1, longTerm: false, crackLimitMm: 0.3 };
-const loadedWithCurve = updateFrame3DPlate(loaded, 1, { modulusCurve, reinforcement });
+const edgeSupports = ["simplySupported", "clamped", "free", "simplySupported"];
+const loadedWithCurve = updateFrame3DPlate(loaded, 1, { modulusCurve, reinforcement,
+  edgeSupports, maxCellSizeM: 0.4 });
 const projectText = serializeProject({
   nodes: [], beams: [], supports: [], plates: [], loads: [], loadCases: [{ id: 1, name: "Permanent", type: "permanent" }],
   activeLoadCaseId: 1, selfWeightEnabled: false, nonlinearEnabled: true,
@@ -171,6 +173,11 @@ assert.deepEqual(reopened.model3d.plates[0].modulusCurve, modulusCurve,
   "de ingevoerde E-rekcurve blijft in het 3D-projectbestand behouden");
 assert.deepEqual(reopened.model3d.plates[0].reinforcement, reinforcement,
   "de ingevoerde plaatwapening en scheurgrens blijven in het projectbestand behouden");
+assert.deepEqual(reopened.model3d.plates[0].edgeSupports, edgeSupports,
+  "de plaatrandopleggingen blijven in het projectbestand behouden");
+assert.equal(reopened.model3d.plates[0].maxCellSizeM, 0.4);
+assert.throws(() => updateFrame3DPlate(withPlate, 1, { edgeSupports: ["free", "clamped"] }), /vier plaatranden/);
+assert.throws(() => updateFrame3DPlate(withPlate, 1, { maxCellSizeM: 0 }), /maximale roostermaat/);
 assert.equal(reopened.frame3dViewSets[0].name, "UGT momentbeeld");
 assert.equal(reopened.frame3dViewSets[0].mode, "results", "de resultaat-tabstand overleeft projectopslag");
 

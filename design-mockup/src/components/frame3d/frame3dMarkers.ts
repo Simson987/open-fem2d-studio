@@ -575,6 +575,21 @@ export function addFrame3DConditionMarkers(
       const node = byId.get(support.nodeId);
       if (node) addSupport(group, node, support, size);
     }
+    for (const plate of model.plates ?? []) {
+      for (let edge = 0; edge < (plate.edgeSupports?.length ?? 0); edge++) {
+        const kind = plate.edgeSupports?.[edge];
+        if (!kind || kind === "free") continue;
+        const start = byId.get(plate.nodeIds[edge]);
+        const end = byId.get(plate.nodeIds[(edge + 1) % plate.nodeIds.length]);
+        if (!start || !end) continue;
+        const line = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints([nodePoint(start), nodePoint(end)]),
+          new THREE.LineBasicMaterial({ color: kind === "clamped" ? 0x1e3a8a : 0x16a34a }),
+        );
+        line.userData = { type: "plate", id: plate.id, frame3dPlateEdgeSupport: kind, edgeIndex: edge };
+        group.add(line);
+      }
+    }
   }
   if (visibility.loads) {
     for (const load of model.loads ?? []) {

@@ -36,6 +36,9 @@ export interface Frame3DPlateBendingResult {
   /** Rotaties om de lokale ex/ey-assen met het fysieke 3D-teken. */
   nodes: Array<{ meshNodeId: number; x: number; y: number; z: number;
     wM: number; thetaXRad: number; thetaYRad: number }>;
+  /** Alle globale reacties op vastgezette hoek- en randroosterknopen. */
+  reactions: Array<{ meshNodeId: number; x: number; y: number; z: number;
+    fx: number; fy: number; fz: number; mx: number; my: number; mz: number }>;
   elements: Array<{ quadId: number; momentKnmPerM: [number, number, number];
     shearKnPerM: [number, number]; effectiveEMpa: number; maxFibreStrain: number;
     reinforcement?: NativePlateReinforcementEnvelope }>;

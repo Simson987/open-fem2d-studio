@@ -8,7 +8,7 @@ import { solveFrame3D, solveFrame3DCombination } from "./src/components/frame3d/
 import { parseFrame3DModel, withFrame3DSelfWeight } from "./src/components/frame3d/frame3dModel.ts";
 import { frame3DMaximumDisplacementM } from "./src/components/frame3d/frame3dDisplacement.ts";
 import { resolveSolver } from "./src/core/solver/SolverRegistry.ts";
-import { CONCRETE_E_CM } from "./src/lib/sectionResolver.ts";
+import { CONCRETE_E_CM, NU_BETON } from "./src/lib/sectionResolver.ts";
 import Frame3DReportViews from "./src/components/frame3d/Frame3DReportViews.tsx";
 
 registerHooks({ load(url, context, nextLoad) {
@@ -86,14 +86,53 @@ try {
   assert.ok((reportViews.match(/<polygon/g) ?? []).length >= 32,
     "de drie rapportaanzichten moeten het onvervormde en het vervormde plaatrooster tekenen");
 
+  const simplySupportedModel = parseFrame3DModel({ ...model,
+    supports: [], plates: [{ ...model.plates[0], maxCellSizeM: 2 / 6,
+      edgeSupports: ["simplySupported", "simplySupported", "simplySupported", "simplySupported"] }] });
+  const simplySupported = await solveFrame3D(simplySupportedModel, 1, "linear", "openaec-native-fem");
+  assert.equal(simplySupported.plateBending.nodes.length, 49);
+  assert.equal(simplySupported.plateBending.reactions.length, 24);
+  assert.equal(calls.at(-1).input.supports.length, 24);
+  assert.ok(calls.at(-1).input.supports.every((support) => support.w && !support.thetaX && !support.thetaY));
+  assert.equal(simplySupported.forceBalance.ok, true);
+  assert.ok(Math.abs(simplySupported.plateBending.reactions.reduce((sum, reaction) => sum + reaction.fz, 0) - 4) < 1e-8);
+  const centre = simplySupported.plateBending.nodes.find((node) => Math.abs(node.x - 1) < 1e-12
+    && Math.abs(node.y - 1) < 1e-12);
+  assert.ok(centre);
+  const rigidity = CONCRETE_E_CM["C30/37"] * 1000 * 0.2 ** 3 / (12 * (1 - NU_BETON ** 2));
+  const navier = -0.00406 * 2 ** 4 / rigidity;
+  assert.ok(Math.abs((centre.wM - navier) / navier) < 0.05,
+    `vierzijdig opgelegde 3D-plaat: w=${centre.wM}, Navier=${navier}`);
+  const edgeViews = renderToStaticMarkup(React.createElement(Frame3DReportViews,
+    { model: simplySupportedModel, result: simplySupported }));
+  assert.equal((edgeViews.match(/data-edge-support=/g) ?? []).length, 12,
+    "alle vier oplegranden moeten in elk van de drie rapportaanzichten zichtbaar zijn");
+  const edgeReport = renderToStaticMarkup(React.createElement(Frame3DReport,
+    { model: simplySupportedModel, result: simplySupported }));
+  assert.match(edgeReport, /Reacties op vastgezette roosterknopen/);
+  assert.match(edgeReport, /Randopleggingen/);
+  const clamped = await solveFrame3D({ ...simplySupportedModel,
+    plates: [{ ...simplySupportedModel.plates[0], edgeSupports: ["clamped", "clamped", "clamped", "clamped"] }],
+  }, 1, "linear", "openaec-native-fem");
+  assert.equal(clamped.forceBalance.ok, true);
+  assert.ok(calls.at(-1).input.supports.every((support) => support.w && support.thetaX && support.thetaY));
+  assert.ok(frame3DMaximumDisplacementM(model, clamped) < frame3DMaximumDisplacementM(model, simplySupported));
+  assert.ok(clamped.plateBending.reactions.some((reaction) => Math.abs(reaction.mx) + Math.abs(reaction.my) > 0.01));
+  const edgeCantilever = await solveFrame3D({ ...simplySupportedModel,
+    plates: [{ ...simplySupportedModel.plates[0], edgeSupports: ["free", "free", "free", "clamped"] }],
+  }, 1, "linear", "openaec-native-fem");
+  assert.equal(edgeCantilever.forceBalance.ok, true);
+  assert.ok(edgeCantilever.plateBending.reactions.every((reaction) => Math.abs(reaction.x) < 1e-12));
+  assert.ok(edgeCantilever.plateBending.reactions.some((reaction) => Math.abs(reaction.my) > 0.1));
+
   const combined = await solveFrame3DCombination(model, new Map([[1, 1], [2, 0.5]]), "linear", "openaec-native-fem");
   assert.ok(Math.abs(combined.reactions.reduce((sum, reaction) => sum + reaction.fz, 0) - 8) < 1e-8);
   assert.ok(Math.abs(frame3DMaximumDisplacementM(model, combined) / frame3DMaximumDisplacementM(model, first) - 2) < 1e-8);
   assert.equal(combined.forceBalance.ok, true);
-  assert.deepEqual(calls.map((call) => call.kind), ["quadMesh", "hybridPlate", "quadMesh", "hybridPlate"]);
+  assert.deepEqual(calls.slice(-2).map((call) => call.kind), ["quadMesh", "hybridPlate"]);
   assert.equal(calls[0].input.maxCellSizeM, 0.5);
   assert.equal(calls[1].input.pressureKnM2, -1);
-  assert.equal(calls[3].input.pressureKnM2, -2);
+  assert.equal(calls.at(-1).input.pressureKnM2, -2);
 
   const asymmetric = { ...model, supports: model.supports.map((support) => support.nodeId === 11
     ? { ...support, rx: true, ry: true } : support) };
@@ -151,6 +190,32 @@ try {
     const expectedDisplacement = rotate([baseDisplacement.ux, baseDisplacement.uy, baseDisplacement.uz]);
     assert.ok(Math.hypot(tiltedDisplacement.ux - expectedDisplacement[0],
       tiltedDisplacement.uy - expectedDisplacement[1], tiltedDisplacement.uz - expectedDisplacement[2]) < 1e-10);
+  }
+  const tiltedEdges = await solveFrame3D(parseFrame3DModel({ ...tilted, supports: [],
+    plates: [{ ...tilted.plates[0], edgeSupports: simplySupportedModel.plates[0].edgeSupports,
+      maxCellSizeM: 2 / 6 }],
+  }), 1, "linear", "openaec-native-fem");
+  assert.equal(tiltedEdges.forceBalance.ok, true);
+  for (let index = 0; index < simplySupported.plateBending.nodes.length; index++) {
+    assert.ok(Math.abs(tiltedEdges.plateBending.nodes[index].wM
+      - simplySupported.plateBending.nodes[index].wM) < 1e-10);
+  }
+  for (let index = 0; index < simplySupported.plateBending.reactions.length; index++) {
+    const baseReaction = simplySupported.plateBending.reactions[index];
+    const expected = rotate([baseReaction.fx, baseReaction.fy, baseReaction.fz]);
+    const actual = tiltedEdges.plateBending.reactions[index];
+    assert.ok(Math.hypot(actual.fx - expected[0], actual.fy - expected[1], actual.fz - expected[2]) < 1e-8);
+  }
+  const tiltedClamped = await solveFrame3D({ ...tilted, supports: [],
+    plates: [{ ...tilted.plates[0], edgeSupports: ["clamped", "clamped", "clamped", "clamped"],
+      maxCellSizeM: 2 / 6 }],
+  }, 1, "linear", "openaec-native-fem");
+  assert.equal(tiltedClamped.forceBalance.ok, true);
+  for (let index = 0; index < clamped.plateBending.reactions.length; index++) {
+    const baseMoment = clamped.plateBending.reactions[index];
+    const expected = rotate([baseMoment.mx, baseMoment.my, baseMoment.mz]);
+    const actual = tiltedClamped.plateBending.reactions[index];
+    assert.ok(Math.hypot(actual.mx - expected[0], actual.my - expected[1], actual.mz - expected[2]) < 1e-8);
   }
   const reversed = { ...model, plates: [{ ...model.plates[0], nodeIds: [11, 44, 33, 22] }] };
   const reversedResult = await solveFrame3D(reversed, 1, "linear", "openaec-native-fem");
@@ -218,6 +283,13 @@ try {
   assert.ok(frame3DMaximumDisplacementM(model, unloaded) < 1e-9);
   assert.ok(unloaded.plateBending.elements.every((element) =>
     Math.abs(element.effectiveEMpa - initialE / 2) < 1e-8 && element.maxFibreStrain > 1e-10));
+  const unloadedEdges = await solveFrame3D({ ...simplySupportedModel,
+    plates: [{ ...simplySupportedModel.plates[0], modulusCurve: softeningCurve }], materialLoadPath: [1, 0],
+  }, 1, "material", "openaec-native-fem");
+  assert.equal(unloadedEdges.forceBalance.ok, true);
+  assert.ok(frame3DMaximumDisplacementM(model, unloadedEdges) < 1e-9);
+  assert.ok(unloadedEdges.plateBending.elements.every((element) =>
+    Math.abs(element.effectiveEMpa - initialE / 2) < 1e-8));
   await assert.rejects(solveFrame3D(model, 1, "material", "openaec-native-fem"), /expliciete E-rekcurve/);
   await assert.rejects(solveFrame3D({ ...materialModel,
     plates: [{ ...materialModel.plates[0], modulusCurve: [{ strain: 0, eMpa: initialE * 1.1 }, softeningCurve[1]] }],
@@ -272,7 +344,7 @@ try {
   await assert.rejects(solveFrame3D({ ...model, surfaceLoads: [{ ...model.surfaceLoads[0], qx: 1 }] },
     1, "linear", "openaec-native-fem"), /alleen een oppervlaktebelasting normaal/);
   await assert.rejects(solveFrame3D(model, 1, "p-delta", "openaec-native-fem"), /lineaire of FNL Open FEM Rust-plaatroute/);
-  console.log("3D-plaatroute via Rust: evenwicht, combinaties, rotaties, FNL-E(rek), ontlasten en afwijzingen geslaagd.");
+  console.log(`3D-plaatroute via Rust: randopleggingen, Navier (${(100 * Math.abs((centre.wM - navier) / navier)).toFixed(2)}% afwijking), evenwicht, combinaties, rotaties, FNL en ontlasten geslaagd.`);
 } finally {
   globalThis.fetch = originalFetch;
 }

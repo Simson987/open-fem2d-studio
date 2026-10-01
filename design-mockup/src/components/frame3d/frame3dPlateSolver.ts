@@ -6,6 +6,7 @@ import type { Frame3DAnalysisKind, Frame3DLoadSelection, Frame3DPlateBendingResu
 interface QuadMesh {
   nodes: { id: number; x: number; y: number }[];
   quads: { id: number; nodeIds: [number, number, number, number]; materialId: number; thicknessM: number }[];
+  bottomNodeIds: number[]; rightNodeIds: number[]; topNodeIds: number[]; leftNodeIds: number[];
 }
 
 type Vector3 = [number, number, number];
@@ -102,16 +103,14 @@ function localSupport(
 }
 
 function balance(
-  corners: Frame3DNode[], pressure: Vector3, area: number, center: Vector3,
-  loads: Array<{ nodeId: number; force: Vector3; moment: Vector3 }>,
-  reactions: Frame3DSolveResult["reactions"],
+  pressure: Vector3, area: number, center: Vector3,
+  loads: Array<{ point: Vector3; force: Vector3; moment: Vector3 }>,
+  reactions: Array<{ point: Vector3; force: Vector3; moment: Vector3 }>,
 ): NonNullable<Frame3DSolveResult["forceBalance"]> {
-  const corner = new Map(corners.map((node) => [node.id, node]));
   const applied = scale(pressure, area);
   const appliedMoment = cross(center, applied);
   for (const load of loads) {
-    const node = corner.get(load.nodeId)!;
-    const lever = cross(position(node), load.force);
+    const lever = cross(load.point, load.force);
     for (let axis = 0; axis < 3; axis++) {
       applied[axis] += load.force[axis];
       appliedMoment[axis] += lever[axis] + load.moment[axis];
@@ -122,13 +121,10 @@ function balance(
   const imbalanceKn: Vector3 = [...applied];
   const momentImbalanceKnm: Vector3 = [...appliedMoment];
   for (const reaction of reactions) {
-    const node = corner.get(reaction.nodeId)!;
-    const force: Vector3 = [reaction.fx, reaction.fy, reaction.fz];
-    const lever = cross(position(node), force);
-    const moment: Vector3 = [reaction.mx, reaction.my, reaction.mz];
+    const lever = cross(reaction.point, reaction.force);
     for (let axis = 0; axis < 3; axis++) {
-      imbalanceKn[axis] += force[axis];
-      momentImbalanceKnm[axis] += lever[axis] + moment[axis];
+      imbalanceKn[axis] += reaction.force[axis];
+      momentImbalanceKnm[axis] += lever[axis] + reaction.moment[axis];
     }
   }
   const maxImbalanceKn = Math.max(...imbalanceKn.map(Math.abs));
@@ -203,9 +199,11 @@ export async function solveFrame3DPlate(
   }
   const mesh = await solveNativeFem<QuadMesh>("quadMesh", {
     originX: 0, originY: 0, widthM: width, heightM: height,
-    maxCellSizeM: Math.min(width, height) / 4, materialId: 1, thicknessM: plate.thicknessM,
+    maxCellSizeM: plate.maxCellSizeM ?? Math.min(width, height) / 4,
+    materialId: 1, thicknessM: plate.thicknessM,
   });
   if (mesh.nodes.length < 4 || mesh.quads.length < 1) throw new Error("De Rust-plaatmesher gaf een leeg rooster terug.");
+  const meshNodeById = new Map(mesh.nodes.map((node) => [node.id, node]));
   const cornerMeshId = new Map(nodes.map((corner) => {
     const relative = subtract(position(corner), origin);
     const u = dot(relative, ex), v = dot(relative, ey);
@@ -214,10 +212,29 @@ export async function solveFrame3DPlate(
     if (!found) throw new Error(`Plaat-hoekknoop ${corner.id} ontbreekt in het Rust-rooster.`);
     return [corner.id, found.id] as const;
   }));
+  const supportByMeshId = new Map<number, { nodeId: number; w: boolean; thetaX: boolean; thetaY: boolean }>();
+  const mergeSupport = (nodeId: number, w: boolean, thetaX: boolean, thetaY: boolean) => {
+    if (!meshNodeById.has(nodeId)) throw new Error(`Plaat-randroosterknoop ${nodeId} ontbreekt.`);
+    if (!(w || thetaX || thetaY)) return;
+    const current = supportByMeshId.get(nodeId);
+    supportByMeshId.set(nodeId, { nodeId, w: w || (current?.w ?? false),
+      thetaX: thetaX || (current?.thetaX ?? false), thetaY: thetaY || (current?.thetaY ?? false) });
+  };
+  for (const support of localSupports) mergeSupport(cornerMeshId.get(support.nodeId)!,
+    support.w, support.thetaX, support.thetaY);
+  const edgeNodeIds = [mesh.bottomNodeIds, mesh.rightNodeIds, mesh.topNodeIds, mesh.leftNodeIds];
+  if (edgeNodeIds.some((ids) => !Array.isArray(ids) || ids.length < 2)) {
+    throw new Error("De Rust-plaatmesher gaf geen volledige vier randknoopreeksen terug.");
+  }
+  for (let edge = 0; edge < 4; edge++) {
+    const kind = plate.edgeSupports?.[edge] ?? "free";
+    if (kind === "free") continue;
+    for (const nodeId of edgeNodeIds[edge]) mergeSupport(nodeId, true,
+      kind === "clamped", kind === "clamped");
+  }
   const native = await solveNativeFem<NativeHybridPlateResult>("hybridPlate", {
     nodes: mesh.nodes, quads: mesh.quads, materials: [{ id: 1, eMpa, nu }],
-    supports: localSupports.map((support) => ({ nodeId: cornerMeshId.get(support.nodeId),
-      w: support.w, thetaX: support.thetaX, thetaY: support.thetaY })),
+    supports: [...supportByMeshId.values()],
     loads: nodalLoads.map((load) => ({ nodeId: cornerMeshId.get(load.nodeId),
       // The plate's thetaX=-dw/dy and thetaY=dw/dx are the negatives of
       // physical 3D rotations about the local plate X and Y axes.
@@ -242,6 +259,14 @@ export async function solveFrame3DPlate(
   const globalPoint = (u: number, v: number): Vector3 => add(origin, add(scale(ex, u), scale(ey, v)));
   const globalRotation = (thetaX: number, thetaY: number): Vector3 =>
     add(scale(ex, -thetaX), scale(ey, -thetaY));
+  const meshReactions = [...supportByMeshId.keys()].map((meshNodeId) => {
+    const meshNode = meshNodeById.get(meshNodeId)!;
+    const value = nodeResult.get(meshNodeId)!;
+    const [x, y, z] = globalPoint(meshNode.x, meshNode.y);
+    const [fx, fy, fz] = scale(normal, value.reactionFzKn);
+    const [mx, my, mz] = globalRotation(value.reactionMxKnm, value.reactionMyKnm);
+    return { meshNodeId, x, y, z, fx, fy, fz, mx, my, mz };
+  });
   const plateBending: Frame3DPlateBendingResult = {
     plateId: plate.id,
     basis: { ex, ey, normal },
@@ -253,6 +278,7 @@ export async function solveFrame3DPlate(
       return { meshNodeId: node.id, x, y, z,
         wM: value.wM, thetaXRad: -value.thetaXRad, thetaYRad: -value.thetaYRad };
     }),
+    reactions: meshReactions,
     elements: native.elements,
   };
   const displacements = nodes.map((corner) => {
@@ -268,9 +294,12 @@ export async function solveFrame3DPlate(
     return { nodeId: corner.id, fx, fy, fz, mx, my, mz };
   });
   const finalFactor = loadPath.length ? loadPath[loadPath.length - 1] : 1;
-  const forceBalance = balance(nodes, scale(normal, finalFactor * surfaceLoads.reduce((sum, q) => sum + q, 0)),
-    width * height, center, nodalLoads.map((load) => ({ nodeId: load.nodeId,
-      force: scale(load.force, finalFactor), moment: scale(load.moment, finalFactor) })), reactions);
+  const cornerById = new Map(nodes.map((node) => [node.id, node]));
+  const forceBalance = balance(scale(normal, finalFactor * surfaceLoads.reduce((sum, q) => sum + q, 0)),
+    width * height, center, nodalLoads.map((load) => ({ point: position(cornerById.get(load.nodeId)!),
+      force: scale(load.force, finalFactor), moment: scale(load.moment, finalFactor) })),
+    meshReactions.map((reaction) => ({ point: [reaction.x, reaction.y, reaction.z],
+      force: [reaction.fx, reaction.fy, reaction.fz], moment: [reaction.mx, reaction.my, reaction.mz] })));
   return {
     schemaVersion: 1,
     engine: { id: "openaec-native-fem", name: "Open FEM Rust", revision: "0.1.0", license: "AGPL-3.0-or-later" },
@@ -281,7 +310,7 @@ export async function solveFrame3DPlate(
       maxImbalanceKn: forceBalance.maxImbalanceKn, equilibriumOk: forceBalance.ok },
     forceBalance, solverPath: "native-rust-hybrid-plate",
     diagnostics: ["Rust hybride Q4-buigplaat; lokaal rechthoekig rooster in een 3D-vlak.",
-      "Opleggingen gelden op de vier plaat-hoekknopen; langs de overige rand is de plaat vrij.",
+      "Hoekopleggingen komen uit het 3D-model; opgegeven plaatrandopleggingen gelden voor alle randroosterknopen.",
       ...(analysis === "material" ? ["FNL gebruikt een niet-toenemende secant-E op maximale vezelrek per element; dit is geen scheur- of plastisch doorsnedemodel."] : []),
       ...(plate.reinforcement ? ["Plaatwapening en scheurwijdte zijn per element op steekpunten getoetst; extremen tussen punten en normcombinaties zijn niet afgedekt."]
         : ["Plaatwapening en scheurwijdte zijn niet getoetst: geef daarvoor een wapeningsspecificatie op."])],

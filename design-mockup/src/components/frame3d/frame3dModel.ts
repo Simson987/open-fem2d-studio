@@ -144,6 +144,8 @@ export type Frame3DPlateBoundarySegment =
   | { kind: "line"; startNodeId: number; endNodeId: number }
   | { kind: "arc"; startNodeId: number; controlNodeId: number; endNodeId: number };
 
+export type Frame3DPlateEdgeSupport = "free" | "simplySupported" | "clamped";
+
 export interface Frame3DPlate {
   id: number;
   /** Knoopvolgorde rond de buitenrand, minimaal drie. */
@@ -154,6 +156,10 @@ export interface Frame3DPlate {
   material?: string;
   /** FNL: niet-toenemende secant-E als functie van maximale absolute vezelrek. */
   modulusCurve?: { strain: number; eMpa: number }[];
+  /** Rand 1–4 volgt de vier hoekknopen. De Rust-route verdeelt dit over alle randroosterknopen. */
+  edgeSupports?: [Frame3DPlateEdgeSupport, Frame3DPlateEdgeSupport, Frame3DPlateEdgeSupport, Frame3DPlateEdgeSupport];
+  /** Maximale Q4-celmaat in meter; standaard min(breedte, hoogte)/4. */
+  maxCellSizeM?: number;
   /** Expliciete UGT- of BGT-toetsinvoer voor de Rust-buigplaat. */
   reinforcement?: NativeReinforcementSpec;
   /** Werkelijke afrondingsstraal van de plaatrand. */
@@ -813,6 +819,24 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
     if (!(thicknessM > 0) || !Number.isFinite(thicknessM) || cornerRadiusM < 0 || !Number.isFinite(cornerRadiusM)) {
       throw new Error(`3D-plaat ${id} heeft een ongeldige dikte of randstraal.`);
     }
+    const maxCellSizeM = plate.maxCellSizeM;
+    if (maxCellSizeM !== undefined && (typeof maxCellSizeM !== "number"
+        || !Number.isFinite(maxCellSizeM) || maxCellSizeM <= 0)) {
+      throw new Error(`3D-plaat ${id}: de maximale roostermaat moet positief en eindig zijn.`);
+    }
+    let edgeSupports: Frame3DPlate["edgeSupports"];
+    const rawEdgeSupports = plate.edgeSupports;
+    if (rawEdgeSupports !== undefined) {
+      if (loop.length !== 4) {
+        throw new Error(`3D-plaat ${id}: vier randopleggingen vereisen vier buitenste hoekknopen.`);
+      }
+      if (!Array.isArray(rawEdgeSupports) || rawEdgeSupports.length !== 4
+          || Array.from({ length: 4 }, (_, index) => rawEdgeSupports[index]).some((kind) =>
+            !["free", "simplySupported", "clamped"].includes(kind))) {
+        throw new Error(`3D-plaat ${id}: geef voor de vier plaatranden een vrije, scharnierende of ingeklemde oplegging op.`);
+      }
+      edgeSupports = [...rawEdgeSupports] as Frame3DPlate["edgeSupports"];
+    }
     let modulusCurve: Frame3DPlate["modulusCurve"];
     if (plate.modulusCurve !== undefined) {
       if (!Array.isArray(plate.modulusCurve) || plate.modulusCurve.length < 2 || plate.modulusCurve.length > 100) {
@@ -872,7 +896,8 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
       ...(boundary ? { boundary } : {}),
       ...(typeof plate.material === "string" && plate.material.trim() ? { material: plate.material.trim() } : {}),
       ...(cornerRadiusM > 0 ? { cornerRadiusM } : {}), ...(openings.length ? { openings } : {}),
-      ...(modulusCurve ? { modulusCurve } : {}), ...(reinforcement ? { reinforcement } : {}) });
+      ...(modulusCurve ? { modulusCurve } : {}), ...(reinforcement ? { reinforcement } : {}),
+      ...(edgeSupports ? { edgeSupports } : {}), ...(maxCellSizeM ? { maxCellSizeM } : {}) });
     plateIds.add(id);
   }
   const supports: Frame3DSupport[] = [];
@@ -1429,7 +1454,7 @@ export function addFrame3DPlate(
 
 export function updateFrame3DPlate(
   model: Frame3DModel, plateId: number,
-  patch: Partial<Pick<Frame3DPlate, "thicknessM" | "material" | "cornerRadiusM" | "modulusCurve" | "reinforcement">>,
+  patch: Partial<Pick<Frame3DPlate, "thicknessM" | "material" | "cornerRadiusM" | "modulusCurve" | "reinforcement" | "edgeSupports" | "maxCellSizeM">>,
 ): Frame3DModel {
   if (!(model.plates ?? []).some((plate) => plate.id === plateId)) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
   const parsed = parseFrame3DModel({

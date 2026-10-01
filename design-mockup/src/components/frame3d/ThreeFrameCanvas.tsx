@@ -4457,18 +4457,23 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     }
 
     if (result && visibility.reactions) {
-      const maxForce = result.reactions.reduce((maximum, value) =>
+      const reactionMarkers = result.plateBending
+        ? result.plateBending.reactions
+        : result.reactions.flatMap((reaction) => {
+          const node = byId.get(reaction.nodeId);
+          return node ? [{ ...reaction, x: node.x, y: node.y, z: node.z }] : [];
+        });
+      const maxForce = reactionMarkers.reduce((maximum, value) =>
         Math.max(maximum, Math.hypot(value.fx, value.fy, value.fz)), 0);
       const batchedReactionLines: THREE.Vector3[] = [];
       const batchedReactionHeads: THREE.Matrix4[] = [];
-      const batchReactions = result.reactions.length >= 200;
-      for (const reaction of result.reactions) {
-        const node = byId.get(reaction.nodeId);
+      const batchReactions = reactionMarkers.length >= 200;
+      for (const reaction of reactionMarkers) {
         const magnitude = Math.hypot(reaction.fx, reaction.fy, reaction.fz);
-        if (!node || magnitude <= 1e-12 || maxForce <= 0) continue;
+        if (magnitude <= 1e-12 || maxForce <= 0) continue;
         const direction = new THREE.Vector3(reaction.fx, reaction.fy, reaction.fz).normalize();
         const length = 0.45 + 1.1 * magnitude / maxForce;
-        const origin = new THREE.Vector3(node.x, node.y, node.z).addScaledVector(direction, -length);
+        const origin = new THREE.Vector3(reaction.x, reaction.y, reaction.z).addScaledVector(direction, -length);
         const headLength = Math.min(0.28, length * 0.28);
         const headWidth = Math.min(0.16, length * 0.16);
         if (batchReactions) {
