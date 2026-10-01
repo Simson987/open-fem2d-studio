@@ -5,7 +5,7 @@ Status: ontwerp, besluiten genomen (zie §2); wacht op beoordeling van dit docum
 
 ## 1. Doel
 
-Een staaf in Open FEM2D Studio kan een **profiel aan het begin en een profiel aan het
+Een staaf in Open FEM Studio kan een **profiel aan het begin en een profiel aan het
 eind** hebben. Tussen die twee verlopen de maten lineair. De stijfheid, het eigen
 gewicht, de snedekrachten, de zakking, de toetsing (staal en hout) en het rapport
 rekenen met de doorsnede die op elke plek werkelijk aanwezig is.
@@ -13,7 +13,7 @@ rekenen met de doorsnede die op elke plek werkelijk aanwezig is.
 Aanleiding: houten balklagen die voor afschot schuin worden afgezaagd (de rekenhoogte
 verloopt over de overspanning), en stalen liggers met een verlopende hoogte.
 
-Open FEM2D is hiervoor de enige rekenbasis. Hulptools (tabellenpagina's,
+Open FEM Studio is hiervoor de enige rekenbasis. Hulptools (tabellenpagina's,
 variantservers) rekenen zelf niets: zij geven een model op, roepen de rekenkern aan en
 kiezen een uitkomst.
 
@@ -145,7 +145,7 @@ getoetst door de kern. Het afschot en welk einde hoog ligt, legt de constructeur
 - Verificatievolgorde: `npm run build:sidecar`, `cargo build --release -p toetsbrug -p
   openaec-mcp-server`, `npx tsc --noEmit`, `node scripts/run-tests.mjs`,
   `node scripts/run-tests.mjs --bundel`, `cargo test --workspace --exclude
-  open-fem2d-studio`.
+  open-fem-studio`.
 
 ## 9. Buiten scope
 

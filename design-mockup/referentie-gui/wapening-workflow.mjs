@@ -48,10 +48,10 @@ import { inflateSync } from "node:zlib";
 const HIER = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HIER, "..", "..");
 const APP = process.env.OPENAEC_APP
-  ?? join(REPO, "src-tauri", "target", "release", "open-fem2d-studio.exe");
+  ?? join(REPO, "src-tauri", "target", "release", "open-fem-studio.exe");
 const MCP = join(REPO, "src-tauri", "target", "release", "openaec-mcp-server.exe");
 const DOCS = join(REPO, "docs", "verificatie", "gui");
-const WERK = join(tmpdir(), `openfem2d-wapening-workflow-${process.pid}`);
+const WERK = join(tmpdir(), `openfem-wapening-workflow-${process.pid}`);
 const UIT = join(WERK, "screenshots");
 const VINDBESTAND = join(WERK, "gui-control.json");
 const STANDAARD_VIND = join(process.env.LOCALAPPDATA ?? "", "org.openaec.fem2d-studio", "gui-control.json");

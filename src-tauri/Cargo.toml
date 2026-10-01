@@ -1,13 +1,13 @@
 [package]
-name = "open-fem2d-studio"
-version = "2026.39.0"
-description = "Open FEM Studio — 2D FEM solver"
+name = "open-fem-studio"
+version = "2026.39.1"
+description = "Open FEM Studio — eindige-elementenprogramma voor constructies (2D en 3D)"
 authors = ["OpenAEC Foundation"]
 license = "AGPL-3.0-or-later"
 edition = "2021"
 
 [lib]
-name = "open_fem2d_studio_lib"
+name = "open_fem_studio_lib"
 # Desktop-only Windows build: use "lib" (rlib) only.
 # Tauri's default scaffold suggests cdylib + staticlib for mobile (iOS/Android),
 # but on Windows cdylib re-exports every transitive crate symbol (~95k) which

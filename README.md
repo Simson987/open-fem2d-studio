@@ -3,27 +3,35 @@
 </p>
 
 <p align="center">
-  Open-source 2D-eindige-elementenprogramma voor constructieve berekeningen en normtoetsing.<br>
+  Open-source eindige-elementenprogramma (2D en 3D) voor constructieve berekeningen en normtoetsing.<br>
   Onderdeel van het portfolio van de <a href="https://github.com/OpenAEC-Foundation">OpenAEC Foundation</a>.
 </p>
 
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-AGPL--3.0-D97706?style=flat-square" alt="License"></a>
   <img src="https://img.shields.io/badge/contributions-welcome-D97706?style=flat-square" alt="Contributions welcome">
+  <img src="https://img.shields.io/badge/status-alpha-B91C1C?style=flat-square" alt="Status: alpha">
 </p>
+
+> [!WARNING]
+> **Alpha-versie — niet geschikt voor productieberekeningen.**
+> Open FEM Studio is in volle ontwikkeling. Rekenkern, normtoetsing en rapport kunnen fouten bevatten en
+> kunnen per versie veranderen. Gebruik de uitkomsten niet als grondslag voor constructieve berekeningen in
+> projecten, en controleer ze altijd met een onafhankelijke berekening.
 
 ---
 
 ## Wat het programma doet
 
 - Staven en platen (wandschijven, belast in het vlak) in 2D: lineair, tweede orde en fysisch niet-lineair
-- 3D-tab voor het modelleren van knopen en staven; 3D-berekening is nog niet beschikbaar
+- 3D-raamwerken (Open FEM 3D): staven, platen, belastingvlakken, trek-alleen staven en starre schijven, lineair
+  en tweede orde, met normtoetsing en rapport; import van IFC4-analysemodellen
 - Belastinggevallen, belastingcombinaties en omhullenden
 - Normtoetsing per staaf: staal (NEN-EN 1993-1-1, langslassen NEN-EN 1993-1-8), hout en kruislaaghout
   (NEN-EN 1995-1-1), gewapend beton (NEN-EN 1992-1-1), plus een vrije spanningstoets
 - Toetsing van platen per element
 - Rekenrapport als PDF
-- IFC-export; projectbestanden met de extensie `.ifcfem2d`
+- IFC-export; projectbestanden met de extensie `.ifcfem` (oudere `.ifcfem2d`-bestanden openen ook)
 - Gebruikersinterface in het Nederlands, Engels, Duits en Frans
 
 ## Schermafbeeldingen
@@ -118,7 +126,7 @@ npm run tauri:build   # installer; bouwt de frontend, de solverbundel en de MCP-
 Op Linux start `bash scripts/dev-desktop.sh` dezelfde actuele frontend en de Tauri-app
 als één ontwikkelsessie. Het script gebruikt een al draaiende Vite-server op poort 1440
 of start er zelf één, en sluit de eigen server weer af wanneer de app stopt. Start niet
-rechtstreeks `src-tauri/target/debug/open-fem2d-studio`: dat is een eerdere build met
+rechtstreeks `src-tauri/target/debug/open-fem-studio`: dat is een eerdere build met
 ingebouwde, mogelijk verouderde frontend. Voor een Linux-build zijn onder andere de
 ontwikkelpakketten voor Cairo, GTK 3 en WebKitGTK 4.1 nodig.
 
@@ -156,7 +164,7 @@ node scripts/run-tests.mjs            # alle test-*.mjs tegen de bron
 node scripts/run-tests.mjs --bundel   # de adaptertests tegen de sidecarbundel
 
 cd ../src-tauri
-cargo test --workspace --exclude open-fem2d-studio
+cargo test --workspace --exclude open-fem-studio
 ```
 
 Een deel van de `test-*.mjs`-batterij roept `toetsbrug` en `openaec-mcp-server` uit `src-tauri/target/release/` aan;
@@ -169,6 +177,10 @@ Het versienummer staat in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` (e
 `design-mockup/package.json`. Een tag `v*` start `.github/workflows/release.yml`, die de installers bouwt en een
 conceptrelease publiceert. De root-`package.json` levert alleen de Tauri-CLI en de v1-scripts; zijn versienummer
 hoort niet bij deze reeks.
+
+Het programmabestand heet `open-fem-studio.exe` (tot en met 2026.39.0: `open-fem2d-studio.exe`). De NSIS-installer
+ruimt bij een upgrade het oude bestand op en zet snelkoppelingen om; wat de Tauri-installer daarvoor zelf doet en
+wat de haken in `src-tauri/windows/installer-hooks.nsh` aanvullen, staat in de kop van dat bestand.
 
 ## Licentie
 

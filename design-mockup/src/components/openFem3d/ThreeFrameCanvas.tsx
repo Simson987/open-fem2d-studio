@@ -15,7 +15,7 @@ import {
 } from "./openFem3dLoadSurfaces";
 import type { OpenFem3DVisibility } from "./openFem3dVisibility";
 import type { OpenFem3DView } from "./openFem3dCommands";
-import { addOpenFem3DConditionMarkers, openFem3DConditionMarkerSize } from "./openFem3dMarkers";
+import { addOpenFem3DConditionMarkers, openFem3DConditionMarkerSize, openFem3DLoadPickSegments } from "./openFem3dMarkers";
 import type { StructuralGrid } from "../fem/femTypes";
 import type {
   OpenFem3DDiagramPoint,
@@ -30,7 +30,7 @@ import {
   type OpenFem3DUtilization,
 } from "./openFem3dUtilization";
 import { createOpenFem3DProfileGeometry, openFem3DProfileInstanceScale, openFem3DProfileSection } from "./openFem3dProfileGeometry";
-import { openFem3DMemberDisplacementStations } from "./openFem3dDisplacement";
+import { openFem3DMaximumDisplacement, openFem3DMemberDisplacementStations } from "./openFem3dDisplacement";
 import {
   DEFAULT_OPEN_FEM_3D_DEFORMATION_DISPLAY,
   openFem3DAutoDeformationScale,
@@ -50,7 +50,7 @@ import type { OpenFem3DPlateMesh } from "./openFem3dPlateMesh";
 import type { OpenFem3DPlateQuantity } from "./openFem3dPlateResults";
 import { sampleCircularArc3D } from "./openFem3dCircularArc";
 import { selectOpenFem3DInScreenBox } from "./openFem3dBoxSelection";
-import { findOpenFem3DBeamNearScreenPoint } from "./openFem3dBeamScreenPick";
+import { findOpenFem3DBeamNearScreenPoint, findOpenFem3DSegmentNearScreenPoint } from "./openFem3dBeamScreenPick";
 import { chooseOpenFem3DPick, type OpenFem3DLoadSelectionType } from "./openFem3dPick";
 import { openFem3DOrbitPivotShift, openFem3DSelectionPivot } from "./openFem3dOrbitPivot";
 import { openFem3DNodeConditionOfTool, type OpenFem3DNodeTarget } from "./openFem3dNodeTools";
@@ -79,6 +79,9 @@ const PROFILE_BEAM_RADIUS_M = 0.12;
 // Eén klik tot zoveel pixels naast de systeemlijn selecteert de staaf, ook een
 // dun buisverband of een profiel van één pixel breed.
 const BEAM_PICK_RADIUS_PX = 6;
+// Idem voor een lastpijl en de staartlijn van een lijnlast: de pijlsteel is
+// uitgezoomd dunner dan een pixel.
+const LOAD_PICK_RADIUS_PX = 5;
 // Een knoop wint alleen als de klik echt op zijn getekende bol valt; een
 // kleine bol krijgt minstens deze straal. De vaste 7 px van vroeger ving in
 // een uitgezoomd groot model de klik op de staaf tussen twee knopen.
@@ -439,7 +442,8 @@ function renderOpenFem3DLabels(state: SceneState, container: HTMLElement | null)
   ) ?? []).map((element) => element.getBoundingClientRect())
     .filter((box) => box.width > 0 && box.height > 0);
   const priority = (label: HTMLElement) => label.classList.contains("open-fem3d-utilization-fail") ? 0
-    : label.classList.contains("open-fem3d-diagram-peak-label") ? 1
+    : label.classList.contains("open-fem3d-diagram-peak-label")
+      || label.classList.contains("open-fem3d-displacement-label") ? 1
       : label.classList.contains("open-fem3d-diagram-label") ? 2
         : label.classList.contains("open-fem3d-result-label") ? 3
           : label.classList.contains("open-fem3d-axis-label") ? 4
@@ -2027,10 +2031,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         };
         const startedAt = performance.now();
         const mode = kaderModus(down.x, event.clientX);
+        // Zonder knoop, staaf of plaat in het kader kiest het kader de last die het raakt.
+        const boxConditions = geometry.children.find((child) => child.userData.openFem3dConditions === true);
         selectRef.current(selectOpenFem3DInScreenBox(
           modelRef.current, selectionPickTargetsRef.current, camera,
           rect.width, rect.height, box, selectionRef.current, down.additive,
           visibilityRef.current.nodes, mode,
+          boxConditions ? openFem3DLoadPickSegments(boxConditions) : [],
         ));
         container.dataset.openFem3dBoxSelectMode = mode;
         container.dataset.openFem3dBoxSelectMs = (performance.now() - startedAt).toFixed(2);
@@ -2095,6 +2102,33 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       const nodeIndex = ensureNodeSnapScreenIndex();
       const xPx = (pointer.x + 1) * nodeIndex.width / 2;
       const yPx = (1 - pointer.y) * nodeIndex.height / 2;
+      const conditionGroup = geometry.children.find((child) => child.userData.openFem3dConditions === true);
+      // Een lastpijl of staartlijn binnen enkele pixels, als de straal geen
+      // lastteken raakte: de pijlsteel zelf is vaak dunner dan een pixel.
+      const loadScreenHit = !loadHit && conditionGroup
+        ? findOpenFem3DSegmentNearScreenPoint(openFem3DLoadPickSegments(conditionGroup), camera,
+            nodeIndex.width, nodeIndex.height, xPx, yPx, LOAD_PICK_RADIUS_PX)
+        : null;
+      if (loadScreenHit && LOAD_SELECTION_TYPES.has(loadScreenHit.item.selection.type)
+        && loadScreenHit.distance <= throughLimitM) {
+        loadHit = {
+          type: loadScreenHit.item.selection.type as OpenFem3DLoadSelectionType,
+          id: loadScreenHit.item.selection.id, distance: loadScreenHit.distance,
+        };
+      }
+      // Een opleggingsteken hoort bij zijn knoop. Het is veel groter dan de
+      // knoopbol, en een klik erop moet die knoop kiezen.
+      const supportTargets: THREE.Object3D[] = [];
+      conditionGroup?.traverse((object) => {
+        if (object.userData.type === "node" && object.userData.pickable !== false
+          && typeof (object as { raycast?: unknown }).raycast === "function") supportTargets.push(object);
+      });
+      const supportIntersection = supportTargets.length > 0
+        ? raycaster.intersectObjects(supportTargets, false).find((candidate) => candidate.distance <= throughLimitM)
+        : undefined;
+      const supportFound = supportIntersection ? identity(supportIntersection) : null;
+      const supportHit = supportIntersection && supportFound?.type === "node"
+        ? { nodeId: supportFound.id, distance: supportIntersection.distance } : null;
       // Een knoop telt alleen als de klik op zijn getekende bol valt (met een
       // minimum van enkele pixels); zo steelt een knoop in een uitgezoomd
       // model niet de klik op de staaf ernaast. Opleggingen plaatsen en
@@ -2139,6 +2173,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           distance: camera.position.distanceTo(new THREE.Vector3(hitNode.x, hitNode.y, hitNode.z)),
           radiusM: nodeRadiusM,
         } : null,
+        support: supportHit,
         rayBeam: rayBeamHit ? { ...rayBeamHit, halfSizeM: beamHalfSize(rayBeamHit.id) } : null,
         lineBeam: beamScreenHit && beamScreenHit.distance <= throughLimitM ? {
           id: beamScreenHit.beamId, distance: beamScreenHit.distance,
@@ -4878,6 +4913,36 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         heads.computeBoundingSphere();
         geometry.add(heads);
       }
+      // De waarden bij de opleggingen, voorbij de staart van de pijl. Bij veel
+      // opleggingen alleen de grootste 24; de rest blijft in het rapport.
+      const reactieGrootte = (reaction: (typeof result.reactions)[number]) =>
+        Math.hypot(reaction.fx, reaction.fy, reaction.fz);
+      const reactiesMetWaarde = result.reactions.filter((reaction) =>
+        reactieGrootte(reaction) > 1e-9 || Math.hypot(reaction.mx, reaction.my, reaction.mz) > 1e-9);
+      const reactiesMetLabel = reactiesMetWaarde.length <= 40 ? reactiesMetWaarde
+        : [...reactiesMetWaarde].sort((p, q) => reactieGrootte(q) - reactieGrootte(p)).slice(0, 24);
+      for (const reaction of reactiesMetLabel) {
+        const node = byId.get(reaction.nodeId);
+        if (!node) continue;
+        // Compact: één decimaal, de eenheid één keer per groep.
+        const groep = (waarden: readonly (readonly [string, number])[], eenheid: string) => {
+          const delen = waarden.filter(([, value]) => Math.abs(value) >= 0.05)
+            .map(([naam, value]) => `${naam} ${value.toFixed(1)}`);
+          return delen.length > 0 ? `${delen.join(" · ")} ${eenheid}` : "";
+        };
+        const delen = [
+          groep([["Rx", reaction.fx], ["Ry", reaction.fy], ["Rz", reaction.fz]], "kN"),
+          groep([["Mx", reaction.mx], ["My", reaction.my], ["Mz", reaction.mz]], "kNm"),
+        ].filter(Boolean);
+        if (delen.length === 0) continue;
+        const magnitude = reactieGrootte(reaction);
+        const plaats = new THREE.Vector3(node.x, node.y, node.z);
+        if (magnitude > 1e-9 && maxForce > 0) {
+          const richting = new THREE.Vector3(reaction.fx, reaction.fy, reaction.fz).normalize();
+          plaats.addScaledVector(richting, -(0.45 + 1.1 * magnitude / maxForce) - 0.15);
+        }
+        geometry.add(makeLabel(delen.join(" · "), "open-fem3d-result-label open-fem3d-reaction-label", plaats));
+      }
     }
 
     if (result && (visibility.axialForce || visibility.shearY || visibility.shearZ ||
@@ -5002,6 +5067,18 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       }
       if (shown) {
         const built = buildDeformedLayer(model, shown, visibility.profiles, scale);
+        // De grootste verplaatsing (knoop of veld, dezelfde maat als de
+        // statusregel) als label op de vervormde plek.
+        const grootste = openFem3DMaximumDisplacement(model, shown);
+        if (grootste && grootste.valueM > 0) {
+          const [x, y, z] = grootste.point;
+          const [ux, uy, uz] = grootste.displacement;
+          built.group.add(makeLabel(
+            `u max ${resultValue(grootste.valueM * 1000)} mm`,
+            "open-fem3d-result-label open-fem3d-displacement-label",
+            new THREE.Vector3(x + ux * scale, y + uy * scale, z + uz * scale),
+          ));
+        }
         geometry.add(built.group);
         deformedLayerRef.current = { group: built.group, model, result: shown, profiles: visibility.profiles, scale };
         changed = true;
@@ -5014,7 +5091,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       containerRef.current.dataset.openFem3dDeformationScale = shown ? scale.toPrecision(6) : "none";
       containerRef.current.dataset.openFem3dOriginal = mode;
     }
-    if (changed) state.renderer.render(state.scene, state.camera);
+    if (changed) {
+      state.renderer.render(state.scene, state.camera);
+      // De laag draagt het label "u max": ook de labels opnieuw plaatsen.
+      renderOpenFem3DLabels(state, containerRef.current);
+    }
   }, [model, conditionModel, visibility, structuralGrid, result, utilizations, activeLoadCaseId, deformationDisplay]);
 
   // Platen: rekennet ("Mesh") en resultaatcontour in een eigen laag. Deze

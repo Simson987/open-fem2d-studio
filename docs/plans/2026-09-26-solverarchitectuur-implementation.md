@@ -4,7 +4,7 @@
 
 - Voeg neutrale TypeScript-typen toe voor voorkeuren, capaciteiten, descriptors en requests.
 - Implementeer een deterministisch solverregister en capability-router.
-- Registreer de bestaande Open FEM 2D-engine en een descriptor voor de externe 3D-kern met gecontroleerde beschikbaarheid.
+- Registreer de bestaande Open FEM-engine (2D) en een descriptor voor de externe 3D-kern met gecontroleerde beschikbaarheid.
 - Test automatische selectie, handmatige selectie en foutmeldingen bij ongeschikte engines.
 
 ## Stap 2 — bewaarde instelling

@@ -46,8 +46,10 @@ export class SolverResolutionError extends Error {
 
 export const SOLVER_REGISTRY: readonly SolverDescriptor[] = Object.freeze([
   {
+    // Het id blijft "open-fem-2d": het staat als `solverPreference` in de
+    // opgeslagen instellingen. Alleen de getoonde naam is veranderd.
     id: "open-fem-2d",
-    name: "Open FEM 2D",
+    name: "Open FEM",
     version: "built-in",
     license: "project license",
     available: true,

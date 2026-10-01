@@ -8,7 +8,7 @@ import "./FeedbackDialog.css";
 // Issues worden geopend in de browser met een vooringevulde titel + body.
 // Doelrepo = deze app zelf (niet langer het style-book/template-repo).
 const GITHUB_OWNER = "OpenAEC-Foundation";
-const GITHUB_REPO = "Open-FEM2D-Studio";
+const GITHUB_REPO = "open-fem-studio";
 
 async function getAppVersion(): Promise<string> {
   try {

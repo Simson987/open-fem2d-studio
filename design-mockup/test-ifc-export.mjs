@@ -391,7 +391,7 @@ checkTrue("de 'Body'-subcontext staat er",
 
 log("  — (b) eigenschappensets");
 for (const set of [
-  "OpenFEM2D_Doorsnede", "OpenFEM2D_Staaf", "OpenFEM2D_Toetsing",
+  "OpenFEM_Doorsnede", "OpenFEM_Staaf", "OpenFEM_Toetsing",
   "Pset_BeamCommon", "Pset_ColumnCommon",
 ]) {
   checkTrue(`set ${set} aanwezig`, ifcB.includes(`IFCPROPERTYSET('`) && ifcB.includes(`,'${set}',`));
@@ -402,7 +402,7 @@ checkTrue("IPE400: A = 8450 mm² → 0,00845 m²",
   ifcB.includes("IFCPROPERTYSINGLEVALUE('Oppervlakte',$,IFCAREAMEASURE(0.00845),$)"));
 checkTrue("staal: E = 210000 N/mm² → 2,1E11 Pa",
   ifcB.includes("IFCMODULUSOFELASTICITYMEASURE(210000000000.)"));
-checkTrue("ligger heet 'Ligger', kolom 'Kolom' in OpenFEM2D_Staaf",
+checkTrue("ligger heet 'Ligger', kolom 'Kolom' in OpenFEM_Staaf",
   ifcB.includes("IFCPROPERTYSINGLEVALUE('Onderdeel',$,IFCLABEL('Ligger'),$)") &&
   ifcB.includes("IFCPROPERTYSINGLEVALUE('Onderdeel',$,IFCLABEL('Kolom'),$)"));
 checkTrue("kolom staat loodrecht: helling π/2 rad",
@@ -422,8 +422,8 @@ checkTrue("voldoet = waar",
 checkTrue("doorsnedeklasse 1",
   ifcB.includes("IFCPROPERTYSINGLEVALUE('Doorsnedeklasse',$,IFCLABEL('klasse 1'),$)"));
 // De staaf zónder uitslag mag er geen krijgen: één set per getoetste staaf.
-checkEq("één OpenFEM2D_Toetsing (alleen de getoetste staaf)",
-  (ifcB.match(/'OpenFEM2D_Toetsing'/g) ?? []).length, 1);
+checkEq("één OpenFEM_Toetsing (alleen de getoetste staaf)",
+  (ifcB.match(/'OpenFEM_Toetsing'/g) ?? []).length, 1);
 
 log("  — (d) hoeveelheden");
 checkEq("2× IfcElementQuantity", tel(ifcB, "IFCELEMENTQUANTITY"), 2);
@@ -457,8 +457,8 @@ checkEq("geen hoeveelheden", tel(alleenReken, "IFCELEMENTQUANTITY"), 0);
 checkEq("geen extrusies", tel(alleenReken, "IFCEXTRUDEDAREASOLID"), 0);
 checkEq("rekenstaven blijven", tel(alleenReken, "IFCSTRUCTURALCURVEMEMBER"), 2);
 checkTrue("de eigenschappensets blijven op de rekenstaaf",
-  alleenReken.includes("'OpenFEM2D_Doorsnede'") &&
-  alleenReken.includes("'OpenFEM2D_Toetsing'"));
+  alleenReken.includes("'OpenFEM_Doorsnede'") &&
+  alleenReken.includes("'OpenFEM_Toetsing'"));
 checkEq("validatie: geen fouten", valideerIfc(alleenReken).fouten.length, 0);
 checkEq("STEP-syntaxis: geen klachten", syntaxKlachten(alleenReken).length, 0);
 
@@ -533,11 +533,11 @@ checkTrue("beugel als gesloten rechthoek binnen de dekking (±0,116 / ±0,216 m)
 checkEq("6× IfcSweptDiskSolid (elke staaf heeft een lichaam)",
   tel(ifcC, "IFCSWEPTDISKSOLID"), 6);
 checkTrue("de beugelset noemt aantal en hart-op-hart",
-  ifcC.includes("'OpenFEM2D_Beugels'") &&
+  ifcC.includes("'OpenFEM_Beugels'") &&
   ifcC.includes("IFCPROPERTYSINGLEVALUE('HartOpHart',$,IFCPOSITIVELENGTHMEASURE(0.2),$)") &&
   ifcC.includes("IFCPROPERTYSINGLEVALUE('Aantal',$,IFCINTEGER(31),$)"));
 checkTrue("de korfsamenvatting staat op het element",
-  ifcC.includes("'OpenFEM2D_Wapeningskorf'") &&
+  ifcC.includes("'OpenFEM_Wapeningskorf'") &&
   ifcC.includes("IFCPROPERTYSINGLEVALUE('Onderwapening',$,IFCLABEL('3\\X2\\00D8\\X0\\16'),$)"));
 checkTrue("de wapening zit IN het element (IfcRelAggregates)",
   /IFCRELAGGREGATES\('[^']+',\$,\$,\$,#\d+,\(#\d+,#\d+,#\d+,#\d+,#\d+,#\d+\)\)/.test(ifcC));
@@ -613,7 +613,7 @@ log("\n[8] Combinaties, verende aansluitingen en bedding");
   checkTrue("scharnier wint van de veer: staaf 2 begin is .F., geen stijfheidsmaat 9999",
     /IFCBOUNDARYNODECONDITION\('Scharnier',IFCBOOLEAN\(\.T\.\),\$,IFCBOOLEAN\(\.T\.\),\$,IFCBOOLEAN\(\.F\.\),\$\)/.test(ifc)
     && !ifc.includes("9999000"));
-  checkTrue("VeerMEind en VeerNBegin in OpenFEM2D_Staaf", ifc.includes("'VeerMEind'") && ifc.includes("'VeerNBegin'"));
+  checkTrue("VeerMEind en VeerNBegin in OpenFEM_Staaf", ifc.includes("'VeerMEind'") && ifc.includes("'VeerNBegin'"));
   // Bedding
   checkTrue("BeddingK 50000 kN/m³ = 5e7 N/m³", /'BeddingK',\$,IFCMODULUSOFSUBGRADEREACTIONMEASURE\(50000000\.?\d*\)/.test(ifc));
   checkTrue("BeddingBreedte 300 mm = 0,3 m", /'BeddingBreedte',\$,IFCPOSITIVELENGTHMEASURE\(0\.3\)/.test(ifc));
@@ -669,8 +669,8 @@ log("\n[9] Platen als IfcStructuralSurfaceMember, met randlasten");
   checkEq("één vlak met vier hoekpunten in de polyloop", tel(ifc, "IFCFACESURFACE"), 1);
   checkTrue("de polyloop heeft vier punten", /IFCPOLYLOOP\(\(#\d+,#\d+,#\d+,#\d+\)\)/.test(ifc));
   checkEq("vier verbindingen plaat–hoekknoop (plus twee van de staaf)", tel(ifc, "IFCRELCONNECTSSTRUCTURALMEMBER"), 6);
-  checkTrue("OpenFEM2D_Plaat met E = 33 GPa, ν, ρ en meshgrootte",
-    ifc.includes("'OpenFEM2D_Plaat'")
+  checkTrue("OpenFEM_Plaat met E = 33 GPa, ν, ρ en meshgrootte",
+    ifc.includes("'OpenFEM_Plaat'")
     && /'Elasticiteitsmodulus',\$,IFCMODULUSOFELASTICITYMEASURE\(33000000000\.?\d*\)/.test(ifc)
     && /'Dwarscontractiecoefficient',\$,IFCRATIOMEASURE\(0\.2\)/.test(ifc)
     && /'Dichtheid',\$,IFCMASSDENSITYMEASURE\(2500\.?\d*\)/.test(ifc)
@@ -760,8 +760,8 @@ log("\n[10] Stramien als IfcGrid en rekeninstellingen op het analysemodel");
     /IFCGRID\([^)]*\$,\$,\(#\d+,#\d+\),\(#\d+,#\d+\),\$,\.RECTANGULAR\.\)/.test(ifc));
   checkTrue("het stramien hangt in het gebouw", /IFCRELCONTAINEDINSPATIALSTRUCTURE\('[^']+',\$,\$,\$,\(#\d+\),#\d+\);/.test(ifc));
   checkTrue("as A loopt verticaal op x = 0 (twee punten met dezelfde x)", /IFCCARTESIANPOINT\(\(0\.,0\.,-1\.\)\)/.test(ifc) && /IFCCARTESIANPOINT\(\(0\.,0\.,6\.\)\)/.test(ifc));
-  checkTrue("OpenFEM2D_Analyse met analysetype en scheefstand",
-    ifc.includes("'OpenFEM2D_Analyse'") && /'Analysetype',\$,IFCLABEL\('tweede-orde'\)/.test(ifc)
+  checkTrue("OpenFEM_Analyse met analysetype en scheefstand",
+    ifc.includes("'OpenFEM_Analyse'") && /'Analysetype',\$,IFCLABEL\('tweede-orde'\)/.test(ifc)
     && /'ScheefstandRichting',\$,IFCLABEL\('-x'\)/.test(ifc)
     && /'ScheefstandBron',\$,IFCLABEL\('NEN-EN 1993-1-1 5\.3\.2'\)/.test(ifc));
   // ruw 26: de GEREKENDE noemer staat erin, niet afgerond op een geheel getal,
@@ -831,7 +831,7 @@ log("\n[11] Eigen doorsneden uit de profieleditor als IFC-profiel");
   checkTrue("de spiegeling staat in het label van de samenstelling", /IFCCOMPOSITEPROFILEDEF\(\.AREA\.,'EIGEN:gelaste ligger ifc',\([^)]*\),'[^']*UNP200 \(gespiegeld\)'\)/.test(ifc));
   checkTrue("het profiel met gat blijft het IPE-basisprofiel, met de gaten in de vorm", /IFCISHAPEPROFILEDEF\(\.AREA\.,'EIGEN:IPE300 met gat ifc',\$,0\.15,0\.3/.test(ifc)
     && /'Doorsnedevorm',\$,IFCLABEL\('I-profiel met 1 gat \(niet in het profiel\)'\)/.test(ifc));
-  checkTrue("h en b uit de motoruitkomst in OpenFEM2D_Doorsnede", /'Hoogte',\$,IFCPOSITIVELENGTHMEASURE\(0\.4\)/.test(ifc) && /'Breedte',\$,IFCPOSITIVELENGTHMEASURE\(0\.2\)/.test(ifc));
+  checkTrue("h en b uit de motoruitkomst in OpenFEM_Doorsnede", /'Hoogte',\$,IFCPOSITIVELENGTHMEASURE\(0\.4\)/.test(ifc) && /'Breedte',\$,IFCPOSITIVELENGTHMEASURE\(0\.2\)/.test(ifc));
   const beperkingen = verzamelIfcBeperkingen(model).join("\n");
   checkTrue("alleen de onbekende eigen doorsnede staat in de beperkingen", /bestaat niet/.test(beperkingen) && !/gelaste ligger ifc/.test(beperkingen));
   checkEq("determinisme", bouwIfcRekenmodel(model), ifc);

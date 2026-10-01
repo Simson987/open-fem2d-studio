@@ -1,7 +1,7 @@
 {
-  "name": "open-fem2d-studio",
+  "name": "open-fem-studio",
   "private": true,
-  "version": "2026.39.0",
+  "version": "2026.39.1",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {

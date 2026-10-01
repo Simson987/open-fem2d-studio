@@ -635,7 +635,7 @@ ontbrekende komen erbij).
 
 ### Uitvoer
 
-- `project` — de inhoud van een projectbestand (op te slaan als `.ifcfem2d`, te
+- `project` — de inhoud van een projectbestand (op te slaan als `.ifcfem`, te
   openen in de app of met `gui_load_model`);
 - `parameters` — de genormaliseerde parameters (weer als `hal` te gebruiken);
 - `samenvatting` — `aantallen`, `maten` (werkelijke spant- en gordingafstand,
@@ -848,7 +848,7 @@ Start the app with the channel enabled:
 
 ```
 set OPENAEC_GUI_CONTROL=1
-"%LOCALAPPDATA%\Open FEM Studio\open-fem2d-studio.exe"
+"%LOCALAPPDATA%\Open FEM Studio\open-fem-studio.exe"
 ```
 
 The app then listens on `127.0.0.1:<free port>` with a per-session token and
@@ -862,7 +862,7 @@ on exit (`gui_quit` exits through the app's own path so that happens).
 | Tool | What it does in the app |
 |---|---|
 | `gui_status` | reachable? pid, port, version, active view, selection, member count |
-| `gui_load_model {path}` | loads a `.femp`/`.ifcfem2d` (read by the app process) |
+| `gui_load_model {path}` | loads a `.femp`/`.ifcfem`/`.ifcfem2d` (read by the app process) |
 | `gui_build_model {...}` | builds nodes/beams/supports/loads through the store actions |
 | `gui_build_3d_model {...}` | builds a 3D frame in metres, with supports, nodal loads, optional member profiles, tension-only members, rigid diaphragms and optional levels (nodes and plates linked to a level) |
 | `gui_configure_3d_view {...}` | sets the 3D camera, visibility, profile volumes and the structural grid (X/Y grid axes and levels; linked nodes follow a level) |

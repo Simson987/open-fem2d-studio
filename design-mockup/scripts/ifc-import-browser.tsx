@@ -33,7 +33,33 @@ async function wachtOp(voorwaarde: () => unknown, wat: string) {
   }
   throw Error("Wachten verliep: " + wat);
 }
-const knop = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find((el) => el.textContent?.trim() === label);
+/**
+ * Wacht tot de voorwaarde geldt en ga verder direct na de DOM-wijziging die
+ * haar waar maakt (een microtaak), dus nog vóór React de passieve effecten
+ * van die render uitvoert. Zo klikt de test op het vroegst mogelijke moment.
+ */
+function wachtOpDom(voorwaarde: () => unknown, wat: string): Promise<void> {
+  if (voorwaarde()) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const waarnemer = new MutationObserver(() => {
+      if (!voorwaarde()) return;
+      waarnemer.disconnect();
+      clearTimeout(klok);
+      resolve();
+    });
+    waarnemer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    const klok = setTimeout(() => { waarnemer.disconnect(); reject(Error("Wachten verliep: " + wat)); }, 2000);
+  });
+}
+// Een render die langer duurt dan een tijdsplak van de scheduler (5 ms): React
+// stelt de passieve effecten van die render dan uit tot een volgende taak.
+let traagMs = 0;
+function Traag() {
+  const tot = performance.now() + traagMs;
+  while (performance.now() < tot) { /* bewust bezig */ }
+  return null;
+}
+const knop =(label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find((el) => el.textContent?.trim() === label);
 const titel = () => document.querySelector(".modal-header h2")?.textContent ?? null;
 const telling = (label: string) => [...document.querySelectorAll(".ifci-telling")]
   .find((el) => el.querySelector("dt")?.textContent === label)?.querySelector("dd")?.textContent ?? null;
@@ -54,7 +80,7 @@ function Harnas() {
     pasToe: (imp) => { stand.toegepast.push(imp); },
     meldFout: (_titel, melding) => { stand.fouten.push(melding); },
   });
-  return <><IfcTab onImportAnalysisModel={() => { void stroom.start(); }} />{stroom.dialogen}</>;
+  return <><IfcTab onImportAnalysisModel={() => { void stroom.start(); }} />{stroom.dialogen}<Traag /></>;
 }
 
 async function run() {
@@ -64,10 +90,15 @@ async function run() {
   ok(importKnop() && !importKnop()!.disabled, "knop Rekenmodel importeren op het IFC-tabblad");
   tests.push("Het IFC-tabblad heeft de knop Rekenmodel importeren");
 
-  // Twee analysemodellen: het keuzevenster.
+  // Twee analysemodellen: het keuzevenster. Het venster opent in een trage
+  // render en de test kiest meteen daarna, nog vóór de passieve effecten van
+  // het openen: dat moment kwam eerder af en toe voor, en dan zette het
+  // openen de keuze terug op het eerste model.
   stand.bestand = { tekst, naam: "ifc-analyse-m-n.ifc" };
+  traagMs = 15;
   klik(importKnop(), "Rekenmodel importeren");
-  await wachtOp(() => titel() === "Analysemodel kiezen", "keuzevenster");
+  await wachtOpDom(() => titel() === "Analysemodel kiezen", "keuzevenster");
+  traagMs = 0;
   const modellen = [...document.querySelectorAll(".ifci-model")];
   equal(modellen.map((m) => m.querySelector(".ifci-model-naam")?.textContent), ["Hal", "Luifel"], "twee modellen");
   equal(modellen[0].querySelector(".ifci-model-aantallen")?.textContent,

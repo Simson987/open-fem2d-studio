@@ -30,7 +30,7 @@
 //
 // Draaien:  node referentie-gui/rapport-pdf.mjs   (vanuit design-mockup/)
 // Vereist:  de app uit DEZE boom:  npm run build  (design-mockup/), daarna in
-//           src-tauri/: cargo build --release -p open-fem2d-studio --features tauri/custom-protocol
+//           src-tauri/: cargo build --release -p open-fem-studio --features tauri/custom-protocol
 //           en cargo build --release -p openaec-mcp-server; pdftotext op PATH.
 // Uitvoer:  de PDF's in een tijdelijke map (het pad staat in de uitvoer).
 
@@ -44,10 +44,10 @@ import { inflateSync } from "node:zlib";
 const HIER = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HIER, "..", "..");
 const APP = process.env.OPENAEC_APP
-  ?? join(REPO, "src-tauri", "target", "release", "open-fem2d-studio.exe");
+  ?? join(REPO, "src-tauri", "target", "release", "open-fem-studio.exe");
 const MCP = join(REPO, "src-tauri", "target", "release", "openaec-mcp-server.exe");
 const PROJECT = join(HIER, "..", "referentie-projecten", "P04.femp");
-const UIT = join(tmpdir(), `openfem2d-rapport-pdf-${process.pid}`);
+const UIT = join(tmpdir(), `openfem-rapport-pdf-${process.pid}`);
 const VIND = join(UIT, "gui-control.json");
 const STANDAARD_VIND = join(process.env.LOCALAPPDATA ?? "", "org.openaec.fem2d-studio", "gui-control.json");
 

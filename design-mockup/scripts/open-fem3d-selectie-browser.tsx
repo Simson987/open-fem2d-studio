@@ -8,6 +8,8 @@
  *  - een knoop wint alleen als de klik op de knoop valt; een last alleen als
  *    hij niet ver achter de aangeklikte staaf ligt; een randstaaf wint vlak
  *    naast zich van de plaat;
+ *  - een lijnlast is ook op de dunne pijlsteel en de staartlijn aanklikbaar;
+ *    een klik op een opleggingsteken selecteert de knoop;
  *  - crossing (van rechts naar links) tegenover venster, met het getekende kader;
  *  - rechts slepen draait om het midden van de selectie;
  *  - Escape: uit het gereedschap, daarna selectie weg; Delete verwijdert een
@@ -28,6 +30,7 @@ import "../src/themes.css";
 import "../src/components/openFem3d/OpenFem3DEditor.css";
 import ThreeFrameCanvas from "../src/components/openFem3d/ThreeFrameCanvas";
 import OpenFem3DEditor from "../src/components/openFem3d/OpenFem3DEditor";
+import { openFem3DConditionMarkerSize } from "../src/components/openFem3d/openFem3dMarkers";
 import {
   addOpenFem3DPlate, addOpenFem3DPlateOpening, addOpenFem3DSurfaceLoad, parseOpenFem3DModel, type OpenFem3DModel,
 } from "../src/components/openFem3d/openFem3dModel";
@@ -333,6 +336,66 @@ async function grootModel() {
     ok(getest >= 5, `te weinig knopen getest (${getest})`);
   });
 
+  // Wind dwars (geval 3) op kolom 1 (knoop 1 → 3, 8 m): negen pijlen in +y naar
+  // de staafas, staarten op y = -L. Onder knoop 1 een inklemming.
+  const windZicht = { ...snel, profiles: true };
+  const windCamera: OpenFem3DCameraState = { position: [7, -7, 6], target: [0, 0, 3.5], up: [0, 0, 1] };
+  const tekenMaat = openFem3DConditionMarkerSize(staalhal.nodes);
+  await test("lijnlast: een klik op de dunne pijlsteel of op de staartlijn selecteert de last", async () => {
+    await toon(staalhal, windZicht, { activeLoadCaseId: 3, camera: windCamera });
+    const cam = camera();
+    const L = 1.8 * tekenMaat;
+    for (const z of [2, 4, 6]) {
+      selectie = null;
+      klik(scherm(cam, { x: 0, y: -0.55 * L, z }));
+      gelijk(selectie, { type: "memberLoad", id: 391 }, `midden van de pijlsteel op z = ${z}`);
+    }
+    selectie = null;
+    klik(scherm(cam, { x: 0, y: -L, z: 4.5 }));
+    gelijk(selectie, { type: "memberLoad", id: 391 }, "staartlijn tussen twee pijlen");
+  });
+
+  await test("lijnlast: een klein crossing-kader over de staartlijn, zonder geometrie erin, selecteert de last", async () => {
+    await toon(staalhal, windZicht, { activeLoadCaseId: 3, camera: windCamera });
+    const cam = camera();
+    const staart = scherm(cam, { x: 0, y: -1.8 * tekenMaat, z: 4.5 });
+    const rechtsBoven = { x: staart.x + 22, y: staart.y - 17 }, linksOnder = { x: staart.x - 3, y: staart.y };
+    selectie = null;
+    wijzer("pointerdown", rechtsBoven, 0, 1);
+    wijzer("pointermove", linksOnder, 0, 1);
+    gelijk(kaderEl().dataset.modus, "crossing", "van rechts naar links");
+    wijzer("pointerup", linksOnder, 0, 0);
+    gelijk(selectie, { type: "memberLoad", id: 391 }, "crossing over de staartlijn");
+  });
+
+  await test("lijnlast uitgezoomd: 3 px naast de pijlsteel (dunner dan een pixel) selecteert de last", async () => {
+    await toon(staalhal, windZicht, { activeLoadCaseId: 3, camera: { position: [21, -21, 14], target: [0, 0, 3.5], up: [0, 0, 1] } });
+    const cam = camera();
+    const L = 1.8 * tekenMaat;
+    for (const z of [3, 5]) {
+      const staart = scherm(cam, { x: 0, y: -L, z });
+      const punt = scherm(cam, { x: 0, y: 0, z });
+      const midden = scherm(cam, { x: 0, y: -0.55 * L, z });
+      const lengte = Math.hypot(punt.x - staart.x, punt.y - staart.y);
+      const naast = { x: midden.x - 3 * (punt.y - staart.y) / lengte, y: midden.y + 3 * (punt.x - staart.x) / lengte };
+      selectie = null;
+      klik(naast);
+      ok(!/memberLoad/.test(tekenvlakEl().dataset.openFem3dPickCandidates ?? ""), `z = ${z}: de straal raakt de pijl hier niet`);
+      gelijk(selectie, { type: "memberLoad", id: 391 }, `3 px naast de pijlsteel op z = ${z}`);
+    }
+  });
+
+  await test("oplegging: een klik op het opleggingsteken selecteert de knoop", async () => {
+    await toon(staalhal, windZicht, { activeLoadCaseId: 3, camera: windCamera });
+    const cam = camera();
+    // De zijkant van het inklemmingsblok (straal 0,76 · maat, onder de knoop).
+    for (const [x, y] of [[0.7, 0], [0.45, -0.45]]) {
+      selectie = null;
+      klik(scherm(cam, { x: x * tekenMaat, y: y * tekenMaat, z: -0.18 * tekenMaat }));
+      gelijk(selectie, { type: "node", id: 1 }, `teken op (${x}, ${y}) · maat`);
+      gelijk(tekenvlakEl().dataset.openFem3dPickReason, "support", "keuze");
+    }
+  });
 }
 
 async function kleineModellen() {

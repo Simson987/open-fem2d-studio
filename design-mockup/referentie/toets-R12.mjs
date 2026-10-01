@@ -10,7 +10,7 @@
 // zuivere buigingsvervorming (Bernoulli). Het is een bewust GEDRONGEN ligger
 // (h/L groot), zodat de afschuifbijdrage niet verwaarloosbaar is.
 //
-// AANNAME (zoals het dossier voorschrijft): Open FEM2D Studio rekent met
+// AANNAME (zoals het dossier voorschrijft): Open FEM Studio rekent met
 // EULER-BERNOULLI-staafelementen — zie src/core/fem/Beam.ts, functie
 // calculateBeamLocalStiffness: de 6x6-matrix bevat uitsluitend de klassieke
 // EA/L- en EI/L^n-termen, geen afschuifparameter Phi = 12·E·I/(G·A_s·L²).

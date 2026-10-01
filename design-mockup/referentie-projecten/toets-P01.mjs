@@ -4,7 +4,7 @@
  * Geval P01 uit de reeks projectvalidaties: een bestaande projectberekening
  * uit het eigen archief (uitdraai van het externe raamwerkprogramma,
  * NEN-EN 1993-1-1+C2+A1/NB:2016, gevolgklasse CC1, geometrisch niet-lineair)
- * wordt in Open FEM2D Studio nagebouwd en de gepubliceerde uitkomsten worden
+ * wordt in Open FEM Studio nagebouwd en de gepubliceerde uitkomsten worden
  * naast de onze gelegd. Alleen het technisch noodzakelijke is overgenomen:
  * geometrie, profiel, materiaal, opleggingen, belastingen, combinaties en de
  * gerapporteerde getallen. De referentiewaarden staan LETTERLIJK in `REF`

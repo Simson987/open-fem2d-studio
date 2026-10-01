@@ -8,7 +8,7 @@
  * het verslag zijn Nederlandse zinnen uit de import (zoals de meldingen van de
  * belastingvlakken en de stalen hal); de vaste teksten eromheen lopen via i18n.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Modal from "../Modal";
 import type { IfcAnalyseModelInfo, IfcImportVerslag } from "../../io/ifcAnalyseImport";
@@ -33,7 +33,10 @@ export function IfcModelKeuze({ open, bestandsnaam, modellen, onKies, onSluit }:
     gekozenRef.current = nummer;
     setGekozenState(nummer);
   };
-  useEffect(() => {
+  // Bij het openen terug naar het eerste model, synchroon met het tekenen van
+  // het venster. Als passief effect kon dat later lopen dan een snelle klik op
+  // een ander model, en dan zette het die keuze terug.
+  useLayoutEffect(() => {
     if (!open) return;
     gekozenRef.current = 1;
     setGekozenState(1);

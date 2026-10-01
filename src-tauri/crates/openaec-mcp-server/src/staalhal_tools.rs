@@ -181,7 +181,7 @@ pub(crate) fn hal_schema() -> Value {
 pub(crate) fn tool_definitions() -> Vec<Value> {
     vec![json!({
         "name": TOOL,
-        "description": "Maak een stalen hal als 3D-raamwerk (spanten, gordingen, randliggers, dak- en wandverbanden, lasten G/S/W dwars/W langs en eigen gewicht), eventueel op een betonnen balkrooster op palen. Geeft het projectbestand (.ifcfem2d-inhoud, te openen in Open FEM Studio of met gui_load_model), een samenvatting (aantallen, maten, staafnummers per groep) en waarschuwingen. Met `reken: true` rekent dezelfde 3D-kern als solve_open_fem_3d elk belastinggeval en elke standaardcombinatie, en komen per geval de reactiesommen, het evenwicht, de grootste verplaatsing, de zijverplaatsing van de goot en de paalreacties terug; met `toetsen` (standaard aan) ook de EN 1993-toetsing met UC per groep. Dezelfde generator als de wizard \"Stalen hal…\" in de app.",
+        "description": "Maak een stalen hal als 3D-raamwerk (spanten, gordingen, randliggers, dak- en wandverbanden, lasten G/S/W dwars/W langs en eigen gewicht), eventueel op een betonnen balkrooster op palen. Geeft het projectbestand (.ifcfem-inhoud, te openen in Open FEM Studio of met gui_load_model), een samenvatting (aantallen, maten, staafnummers per groep) en waarschuwingen. Met `reken: true` rekent dezelfde 3D-kern als solve_open_fem_3d elk belastinggeval en elke standaardcombinatie, en komen per geval de reactiesommen, het evenwicht, de grootste verplaatsing, de zijverplaatsing van de goot en de paalreacties terug; met `toetsen` (standaard aan) ook de EN 1993-toetsing met UC per groep. Dezelfde generator als de wizard \"Stalen hal…\" in de app.",
         "inputSchema": {
             "type": "object",
             "additionalProperties": false,

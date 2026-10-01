@@ -20,7 +20,7 @@ for program in node cargo pkg-config curl pgrep flock; do
   fi
 done
 
-if pgrep -f '^target/debug/open-fem2d-studio$' >/dev/null 2>&1; then
+if pgrep -f '^target/debug/open-fem-studio$' >/dev/null 2>&1; then
   echo "Open FEM Studio draait al. Het bestaande venster blijft gekoppeld aan $URL."
   exit 0
 fi

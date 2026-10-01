@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Open FEM Studio",
-  "version": "2026.39.0",
+  "version": "2026.39.1",
   "identifier": "org.openaec.fem2d-studio",
   "build": {
     "frontendDist": "../design-mockup/dist",
@@ -40,7 +40,10 @@
     ],
     "windows": {
       "wix": {
-        "version": "26.39.0"
+        "version": "26.39.1"
+      },
+      "nsis": {
+        "installerHooks": "./windows/installer-hooks.nsh"
       },
       "webviewInstallMode": {
         "type": "embedBootstrapper",
@@ -60,8 +63,8 @@
     "publisher": "OpenAEC Foundation",
     "copyright": "© 2026 OpenAEC Foundation. AGPL-3.0-or-later",
     "category": "Productivity",
-    "shortDescription": "2D Finite Element Method solver",
-    "longDescription": "Open FEM Studio — open-source 2D Finite Element Method solver for structural analysis. Part of the OpenAEC Foundation portfolio."
+    "shortDescription": "Eindige-elementenprogramma voor constructies (2D en 3D)",
+    "longDescription": "Open FEM Studio — open-source eindige-elementenprogramma (2D en 3D) voor constructieve berekeningen en normtoetsing. Onderdeel van het portfolio van de OpenAEC Foundation."
   },
   "plugins": {}
 }

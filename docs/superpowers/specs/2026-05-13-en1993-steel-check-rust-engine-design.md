@@ -178,7 +178,7 @@ pub fn check_all_beams(inputs: Vec<BeamCheckInput>) -> Vec<BeamCheckResult>;
 `src-tauri/Cargo.toml` becomes workspace root:
 ```toml
 [package]
-name = "open-fem2d-studio"
+name = "open-fem-studio"
 ... (existing main package)
 
 [workspace]

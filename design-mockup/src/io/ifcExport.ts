@@ -50,7 +50,7 @@
  *    Verende aansluitingen (Beam.veren) gaan dezelfde weg, als stijfheids-
  *    maat op het DOF (IfcLinearStiffnessMeasure N/m, IfcRotationalStiffness-
  *    Measure N·m/rad); bedding staat als BeddingK/BeddingBreedte in de set
- *    OpenFEM2D_Staaf, want IFC4 heeft daar geen eigen entiteit voor in dit
+ *    OpenFEM_Staaf, want IFC4 heeft daar geen eigen entiteit voor in dit
  *    domein.
  *  - Eigen doorsneden ("EIGEN:<naam>"): een samenstelling wordt een
  *    IfcCompositeProfileDef van rechthoeken (lamellen, elk op zijn plaats en
@@ -63,7 +63,7 @@
  *  - Platen (wandschijven): IfcStructuralSurfaceMember (SHELL) met de dikte
  *    op het lid, een IfcFaceSurface in het rekenvlak met de hoekknopen als
  *    IfcPolyLoop, IfcRelConnectsStructuralMember naar elke hoekknoop, en de
- *    set OpenFEM2D_Plaat (dikte, E, ν, ρ, meshgrootte). Randlasten op een
+ *    set OpenFEM_Plaat (dikte, E, ν, ρ, meshgrootte). Randlasten op een
  *    plaat: IfcStructuralLinearAction met de rand (IfcEdge van de twee
  *    hoekknopen) als eigen topologie, gekoppeld aan het vlaklid; een
  *    deel- of trapeziumrandlast als IfcStructuralCurveAction met een
@@ -75,7 +75,7 @@
  *    de z-assen als VAxes, elk een IfcGridAxis met het aslabel en een lijn
  *    over de omhullende van het model. Rekeninstellingen (analysetype,
  *    scheefstand met noemer, richting en bron) staan als set
- *    OpenFEM2D_Analyse op het IfcStructuralAnalysisModel.
+ *    OpenFEM_Analyse op het IfcStructuralAnalysisModel.
  *  - Profiel + materiaal: IfcRelAssociatesMaterial →
  *    IfcMaterialProfileSetUsage → IfcMaterialProfileSet → IfcMaterialProfile
  *    met IfcMaterial (naam = klasse, bv. S235/C24) en een parametrisch
@@ -119,13 +119,21 @@
  *    twee exports van hetzelfde model byte-identiek zijn.
  *  - IfcOwnerHistory wordt weggelaten ($) — optioneel in IFC4, en een
  *    tijdstempel daarin zou het determinisme breken.
- *  - EIGENSCHAPPENSETS. Elke staaf krijgt drie sets: `OpenFEM2D_Doorsnede`
- *    (profielnaam, materiaal, vorm, h/b, A, I, E), `OpenFEM2D_Staaf`
+ *  - EIGENSCHAPPENSETS. Elke staaf krijgt drie sets: `OpenFEM_Doorsnede`
+ *    (profielnaam, materiaal, vorm, h/b, A, I, E), `OpenFEM_Staaf`
  *    (staafnummer, staaftype, ligger/kolom, lengte, helling, scharnieren) en
- *    — zodra er een toetsuitslag is — `OpenFEM2D_Toetsing` (norm,
+ *    — zodra er een toetsuitslag is — `OpenFEM_Toetsing` (norm,
  *    maatgevende toets, normartikel, unity check, voldoet ja/nee). Dezelfde
  *    set hangt via één IfcRelDefinesByProperties aan zowel de rekenstaaf als
  *    het bouwkundige element.
+ *
+ *    OUDE NAMEN. Tot en met uitgave 2026.39.0 begonnen alle eigen sets met
+ *    `OpenFEM2D_` in plaats van `OpenFEM_`; de eigenschappen erin en de
+ *    GlobalId's (seed zonder setnaam) zijn gelijk gebleven. Wie de sets op
+ *    naam zoekt, hoort beide voorvoegsels te accepteren. De eigen import
+ *    (`ifcAnalyseImport.ts`) leest eigenschappen op eigenschapsnaam, los van
+ *    de setnaam, en leest een oud bestand dus hetzelfde
+ *    (test-ifc-spiegel.mjs).
  *
  *    WAAROM EIGEN NAMEN EN GEEN Pset_*: de Pset-namen van IFC4 zijn
  *    genormeerd en hun eigenschapsnamen ook. Voor "welke unity check haalt
@@ -151,7 +159,7 @@
  *    in de doorsnede, met diameter, oppervlakte en lengte. De beugels komen
  *    als één IfcReinforcingBar (.LIGATURE.) die de hele beugelreeks
  *    voorstelt, met aantal en hart-op-hart in de eigen set
- *    `OpenFEM2D_Beugels` — losse beugelstaven zouden bij s = 100 mm over een
+ *    `OpenFEM_Beugels` — losse beugelstaven zouden bij s = 100 mm over een
  *    lange ligger honderden entiteiten per staaf opleveren. Dat de beugels
  *    zo zijn samengevat staat in `verzamelIfcBeperkingen`. De staven hangen
  *    met IfcRelAggregates in het bouwkundige element.
@@ -223,7 +231,7 @@ export interface IfcRekenmodelInput {
    * Platen in het model. Een plaat mét hoekknopen (`nodeIds`, minstens
    * drie) wordt een IfcStructuralSurfaceMember (SHELL) met zijn dikte,
    * verbonden aan de puntconnecties van zijn hoeken, en met de set
-   * OpenFEM2D_Plaat (dikte, E, ν, ρ, meshgrootte). Een plaat zonder
+   * OpenFEM_Plaat (dikte, E, ν, ρ, meshgrootte). Een plaat zonder
    * hoekknopen kan niet getekend worden en wordt alleen geteld, zodat de
    * beperkingenlijst hem eerlijk meldt.
    */
@@ -269,7 +277,7 @@ export interface IfcRekenmodelInput {
    * en minstens één as heeft.
    */
   structuralGrid?: { enabled: boolean; xAxes: { id: string; label: string; position: number }[]; zAxes: { id: string; label: string; position: number }[] };
-  /** Rekeninstellingen voor de set OpenFEM2D_Analyse op het analysemodel. */
+  /** Rekeninstellingen voor de set OpenFEM_Analyse op het analysemodel. */
   analysetype?: string;
   /**
    * De scheefstand zoals hij in de berekening zit.
@@ -294,7 +302,7 @@ export interface IfcRekenmodelInput {
   /**
    * De uitslag van de normtoetsing per staaf (checkStore.results), als die er
    * is. ONTBREEKT het veld of is de lijst leeg — er is nog niet getoetst, of
-   * de aanroeper geeft ze niet mee — dan blijft de set `OpenFEM2D_Toetsing`
+   * de aanroeper geeft ze niet mee — dan blijft de set `OpenFEM_Toetsing`
    * eenvoudig weg en verandert er verder niets aan het bestand. Zo valt de
    * export nooit om op een model dat nog niet getoetst is.
    */
@@ -629,7 +637,7 @@ export function bouwIfcRekenmodel(
 
   // ── Rekeninstellingen op het analysemodel ──────────────────────────────
   // Analysetype en scheefstand horen bij het rekenmodel als geheel; ze
-  // staan als set OpenFEM2D_Analyse op het IfcStructuralAnalysisModel.
+  // staan als set OpenFEM_Analyse op het IfcStructuralAnalysisModel.
   {
     const eig: Eigenschap[] = [];
     if (model.analysetype) eig.push(eLabel("Analysetype", model.analysetype));
@@ -655,7 +663,7 @@ export function bouwIfcRekenmodel(
         }
       }
     }
-    schrijfEigenschappen(w, "OpenFEM2D_Analyse", "analyse", eig, [analyseModel]);
+    schrijfEigenschappen(w, "OpenFEM_Analyse", "analyse", eig, [analyseModel]);
   }
 
   // ── Stramien: IfcGrid in het gebouw ────────────────────────────────────
@@ -808,7 +816,7 @@ export function bouwIfcRekenmodel(
   // Topologie: één IfcFaceSurface in het rekenvlak met de hoekknopen als
   // IfcPolyLoop — dezelfde punten als de puntconnecties, zodat een lezer de
   // plaat aan de knopen kan hangen. De dikte staat op het lid zelf; E, ν, ρ
-  // en de meshgrootte in de set OpenFEM2D_Plaat, want een wandschijf zonder
+  // en de meshgrootte in de set OpenFEM_Plaat, want een wandschijf zonder
   // materiaalnaam heeft geen IfcMaterialProfile.
   const plaatInfo = new Map<number, PlaatInfo>();
   const knoopPerId = new Map<number, Node>(model.nodes.map((n) => [n.id, n]));
@@ -890,7 +898,7 @@ export function bouwIfcRekenmodel(
             `${o.id}: ${o.punten.map((q) => `(${nl(q.x, 0)}, ${nl(q.z, 0)})`).join(" ")}`).join("; "))]
         : []),
     ];
-    schrijfEigenschappen(w, "OpenFEM2D_Plaat", `plaat:${plaat.id}`, eig, [member]);
+    schrijfEigenschappen(w, "OpenFEM_Plaat", `plaat:${plaat.id}`, eig, [member]);
     plaatInfo.set(plaat.id, {
       member, nodeIds: ids, knopen: knoopPerId, vertexPerKnoop,
       openingen: openingen.map((o) => ({ id: o.id, punten: o.punten })),
@@ -1815,7 +1823,7 @@ function rijNotatie(aantal: number, diameterMm: number): string {
  *
  * De beugels worden NIET als losse staven geschreven maar als één
  * IfcReinforcingBar (.LIGATURE.) die de hele reeks voorstelt, met aantal en
- * hart-op-hart in de eigen set `OpenFEM2D_Beugels`. Bij s = 100 mm over een
+ * hart-op-hart in de eigen set `OpenFEM_Beugels`. Bij s = 100 mm over een
  * ligger van 12 m zou een staaf-per-beugel 121 entiteiten per ligger kosten,
  * en dat maal elke ligger in het model.
  *
@@ -1956,7 +1964,7 @@ function schrijfWapening(
     if (korf.stirrup_legs !== undefined && korf.stirrup_legs !== null) {
       eigenschappen.push(eGeheel("AantalBenen", korf.stirrup_legs));
     }
-    schrijfEigenschappen(w, "OpenFEM2D_Beugels",
+    schrijfEigenschappen(w, "OpenFEM_Beugels",
       `beugels:${s.staaf.id}`, eigenschappen, [beugel]);
   }
 
@@ -1986,7 +1994,7 @@ function schrijfWapening(
       samenvatting.push(eMaat("Beugeldiameter", "IFCPOSITIVELENGTHMEASURE",
         beugelMm / 1000));
     }
-    schrijfEigenschappen(w, "OpenFEM2D_Wapeningskorf",
+    schrijfEigenschappen(w, "OpenFEM_Wapeningskorf",
       `korf:${s.staaf.id}`, samenvatting, [element]);
   }
   return staven;
@@ -1995,9 +2003,9 @@ function schrijfWapening(
 // ── Eigenschappensets per staaf ─────────────────────────────────────────────
 
 /**
- * De drie sets die elke staaf draagt: `OpenFEM2D_Doorsnede`,
- * `OpenFEM2D_Staaf` en — alleen als er een toetsuitslag is —
- * `OpenFEM2D_Toetsing`. Elke set hangt via ÉÉN IfcRelDefinesByProperties aan
+ * De drie sets die elke staaf draagt: `OpenFEM_Doorsnede`,
+ * `OpenFEM_Staaf` en — alleen als er een toetsuitslag is —
+ * `OpenFEM_Toetsing`. Elke set hangt via ÉÉN IfcRelDefinesByProperties aan
  * zowel de rekenstaaf als het bouwkundige element: het is dezelfde staaf, en
  * twee kopieën van dezelfde eigenschappen zouden uit elkaar kunnen lopen.
  *
@@ -2053,7 +2061,7 @@ function schrijfStaafEigenschappen(
       dEig.push(eMaat("WeerstandsmomentPlastischY", "IFCSECTIONMODULUSMEASURE", props.wplY / 1e9));
       dEig.push(eMaat("Torsietraagheidsmoment", "IFCMOMENTOFINERTIAMEASURE", props.it / 1e12));
     }
-    schrijfEigenschappen(w, "OpenFEM2D_Doorsnede",
+    schrijfEigenschappen(w, "OpenFEM_Doorsnede",
       `doorsnede:${s.staaf.id}`, dEig, doelen);
 
     // ── Staaf ──────────────────────────────────────────────────────────────
@@ -2090,7 +2098,7 @@ function schrijfStaafEigenschappen(
       sEig.splice(3, 0,
         eMaat("Lengte", "IFCPOSITIVELENGTHMEASURE", s.lengteMm / 1000));
     }
-    schrijfEigenschappen(w, "OpenFEM2D_Staaf", `staaf:${s.staaf.id}`, sEig, doelen);
+    schrijfEigenschappen(w, "OpenFEM_Staaf", `staaf:${s.staaf.id}`, sEig, doelen);
 
     // ── Toetsing ───────────────────────────────────────────────────────────
     const uitslag = uitslagPerStaaf.get(s.staaf.id);
@@ -2121,7 +2129,7 @@ function schrijfStaafEigenschappen(
     if (isConcreteCheckResult(uitslag) && uitslag.reinforcement_summary) {
       tEig.push(eTekst("Wapening", uitslag.reinforcement_summary));
     }
-    schrijfEigenschappen(w, "OpenFEM2D_Toetsing",
+    schrijfEigenschappen(w, "OpenFEM_Toetsing",
       `toetsing:${s.staaf.id}`, tEig, doelen);
   }
 }
@@ -2652,7 +2660,7 @@ export function verzamelIfcBeperkingen(
       regels.push(
         `Beugels van ${metKorf} betonstaaf/staven: elke reeks staat als ÉÉN ` +
         "IfcReinforcingBar (.LIGATURE.) in het bestand, met aantal en " +
-        "hart-op-hart in de set OpenFEM2D_Beugels — niet als losse beugels.",
+        "hart-op-hart in de set OpenFEM_Beugels — niet als losse beugels.",
       );
     }
   }
@@ -2665,14 +2673,14 @@ export function verzamelIfcBeperkingen(
       regels.push(
         "Geen toetsresultaten in het bestand: er is niet getoetst, of de " +
         "uitslag is niet meegegeven. Draai de toetsing vóór de export, dan " +
-        "krijgt elke staaf de set OpenFEM2D_Toetsing met de maatgevende " +
+        "krijgt elke staaf de set OpenFEM_Toetsing met de maatgevende " +
         "toets, het normartikel en de unity check.",
       );
     } else if (zonder.length > 0) {
       regels.push(
         `${zonder.length} van de ${model.beams.length} staven hebben geen toetsuitslag ` +
         `(${zonder.map(b => b.id).join(", ")}): die dragen geen set ` +
-        "OpenFEM2D_Toetsing. Zie het toetsingspaneel voor de reden per staaf.",
+        "OpenFEM_Toetsing. Zie het toetsingspaneel voor de reden per staaf.",
       );
     }
   }
@@ -3537,7 +3545,7 @@ function parametrischProfiel(
  * staan in de Description en in de eigenschappenset.
  *
  * h, b en de doorsnedegrootheden komen uit de bewaarde motoruitkomst, zodat
- * de eigenschappenset OpenFEM2D_Doorsnede dezelfde getallen draagt als de
+ * de eigenschappenset OpenFEM_Doorsnede dezelfde getallen draagt als de
  * toetsing.
  */
 function schrijfEigenDoorsnede(w: SpfSchrijver, naam: string, d: EigenDoorsnede): DoorsnedeInfo {

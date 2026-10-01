@@ -91,7 +91,7 @@ van de app. In `drie_wegen_kruistabel.rs` krijgen `gui_*` een eigen rij-soort
 
 `design-mockup/referentie-gui/wapening-workflow.mjs`:
 
-1. Start de gebouwde app (`target/release/open-fem2d-studio.exe`, of het
+1. Start de gebouwde app (`target/release/open-fem-studio.exe`, of het
    pad uit `OPENAEC_APP`) met `OPENAEC_GUI_CONTROL=1`; wacht op
    `gui-control.json` en `GET /status` gereed.
 2. Loopt via de **MCP-server over stdio** (niet rechtstreeks HTTP — zo wordt

@@ -25,6 +25,31 @@ const GLOBAL_AXES = {
 } as const;
 
 const MARKER_BATCHER_KEY = "__open_fem_3dMarkerBatcher";
+const LOAD_PICK_SEGMENTS_KEY = "__open_fem_3dLoadPickSegments";
+
+/**
+ * Een getekend lijnstuk van een last: een pijl (staart → punt) of een stuk
+ * staartlijn. Een pijlsteel is dunner dan een pixel en dus met een raycast
+ * nauwelijks te raken; het tekenvlak zoekt deze lijnstukken daarom ook op
+ * schermafstand, zoals de systeemlijn van een staaf.
+ */
+export interface OpenFem3DLoadPickSegment {
+  selection: OpenFem3DSingleSelection;
+  a: THREE.Vector3;
+  b: THREE.Vector3;
+}
+
+function recordLoadPickSegment(
+  group: THREE.Group, selection: OpenFem3DSingleSelection, a: THREE.Vector3, b: THREE.Vector3,
+) {
+  const segments = (group.userData[LOAD_PICK_SEGMENTS_KEY] ??= []) as OpenFem3DLoadPickSegment[];
+  segments.push({ selection, a: a.clone(), b: b.clone() });
+}
+
+/** De aanklikbare lijnstukken van de lasten die {@link addOpenFem3DConditionMarkers} in `group` tekende. */
+export function openFem3DLoadPickSegments(group: THREE.Object3D): readonly OpenFem3DLoadPickSegment[] {
+  return (group.userData[LOAD_PICK_SEGMENTS_KEY] as OpenFem3DLoadPickSegment[] | undefined) ?? [];
+}
 
 type MarkerInstance = { id: number; matrix: THREE.Matrix4 };
 type MarkerBatch = {
@@ -186,6 +211,8 @@ function addSelectableArrow(
   headWidth: number,
   selection: OpenFem3DSingleSelection,
 ) {
+  recordLoadPickSegment(group, selection, origin,
+    origin.clone().addScaledVector(direction.clone().normalize(), length));
   const batcher = group.userData[MARKER_BATCHER_KEY] as MarkerBatcher | undefined;
   if (!batcher) {
     const arrow = new THREE.ArrowHelper(direction, origin, length, color, headLength, headWidth);
@@ -404,6 +431,11 @@ function addForceArrow(
   const headCenter = nodePoint(node).addScaledVector(direction, -size * 0.35);
   const stemCenter = headCenter.clone().addScaledVector(direction, -size * 0.78);
   const orientation = new THREE.Quaternion().setFromUnitVectors(Y_AXIS, direction);
+  // Een knooplast: van het begin van de steel tot de punt van de kegel.
+  if (selection) {
+    recordLoadPickSegment(group, selection, stemCenter.clone().addScaledVector(direction, -size * 0.45),
+      headCenter.clone().addScaledVector(direction, size * 0.21));
+  }
   addMesh(group, markerGeometry(group, `force-stem:${size}`, () =>
     new THREE.CylinderGeometry(size * 0.065, size * 0.065, size * 0.9, 8)),
     color, node.id, stemCenter, orientation, selection);
@@ -485,6 +517,9 @@ function addMemberLoad(
     );
   }
   if (tails.length >= 2) {
+    for (let index = 0; index < tails.length - 1; index += 1) {
+      recordLoadPickSegment(group, { type: "memberLoad", id: load.id }, tails[index], tails[index + 1]);
+    }
     const batcher = group.userData[MARKER_BATCHER_KEY] as MarkerBatcher | undefined;
     if (batcher) {
       batcher.addPolyline(0xef4444, tails);

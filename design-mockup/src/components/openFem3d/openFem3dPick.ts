@@ -4,22 +4,25 @@ import type { OpenFem3DSelectionType } from "./openFem3dSelection";
  * Wat één klik in het 3D-tekenvlak selecteert.
  *
  * Het tekenvlak verzamelt per klik de kandidaten (raycasttreffers op lasten,
- * staven en platen; de knoop onder de cursor; de staaf waarvan de
- * systeemlijn binnen de klikzone ligt) en laat de keuze aan deze functie.
+ * opleggingstekens, staven en platen; een pijl of staartlijn binnen enkele
+ * pixels; de knoop onder de cursor; de staaf waarvan de systeemlijn binnen
+ * de klikzone ligt) en laat de keuze aan deze functie.
  * Afstanden zijn in meters vanaf de camera, zoals een raycast ze geeft.
  *
  * Voorrang:
- *  1. Een lastteken dat echt geraakt wordt, wint — tenzij een getekende staaf
- *     het op die pixel afdekt, of het duidelijk achter de staaf of knoop ligt
- *     (een last van een ander element verderop in het model).
+ *  1. Een lastteken onder de cursor wint — tenzij een getekende staaf of een
+ *     opleggingsteken het op die pixel afdekt, of het duidelijk achter de
+ *     staaf of knoop ligt (een last van een ander element verderop).
  *  2. Een knoop waarvan de getekende bol onder de klik ligt — tenzij een
  *     profiel er ver voor ligt.
- *  3. De staaf: wat getekend onder de cursor ligt (profiel, analytische as,
+ *  3. Een opleggingsteken onder de cursor selecteert zijn knoop — tenzij een
+ *     profiel of (buiten de plaatband) een plaat ervoor ligt.
+ *  4. De staaf: wat getekend onder de cursor ligt (profiel, analytische as,
  *     diagram), of anders de staaf waarvan de systeemlijn binnen de klikzone
  *     ligt. Ligt die systeemlijn vóór het geraakte profiel, dan wint zij: een
  *     dun verband voor een zware ligger blijft zo aanklikbaar. Een staaf
  *     achter een halfdoorzichtige plaat wint alleen binnen de plaatband.
- *  4. De plaat.
+ *  5. De plaat.
  */
 
 export type OpenFem3DLoadSelectionType = "nodalLoad" | "memberLoad" | "memberPointLoad" | "thermalLoad" | "surfaceLoad";
@@ -35,6 +38,8 @@ export interface OpenFem3DPickCandidates {
   load?: { type: OpenFem3DLoadSelectionType; id: number; distance: number } | null;
   /** Knoop waarvan de klikzone (zichtbare bol, met een minimum in pixels) onder de klik ligt. */
   node?: { id: number; distance: number; radiusM: number } | null;
+  /** Eerste raycasttreffer op een opleggingsteken (blok, kegel, bol, voetplaat, veer) van knoop `nodeId`. */
+  support?: { nodeId: number; distance: number } | null;
   /** Eerste raycasttreffer op een getekende staaf. `halfSizeM`: halve doorsnede. */
   rayBeam?: { id: number; distance: number; halfSizeM: number; point: OpenFem3DPickPoint } | null;
   /** Staaf waarvan de systeemlijn binnen de klikzone ligt; `distance` tot het punt op die lijn. */
@@ -45,7 +50,7 @@ export interface OpenFem3DPickCandidates {
   loadDepthToleranceM: number;
 }
 
-export type OpenFem3DPickReason = "load" | "node" | "beam-ray" | "beam-line" | "plate";
+export type OpenFem3DPickReason = "load" | "node" | "support" | "beam-ray" | "beam-line" | "plate";
 
 export interface OpenFem3DPick {
   type: OpenFem3DSelectionType;
@@ -56,7 +61,7 @@ export interface OpenFem3DPick {
 }
 
 export function chooseOpenFem3DPick(candidates: OpenFem3DPickCandidates): OpenFem3DPick | null {
-  const { load, node, rayBeam, lineBeam, plate, loadDepthToleranceM } = candidates;
+  const { load, node, support, rayBeam, lineBeam, plate, loadDepthToleranceM } = candidates;
   // De staaf: het getekende profiel onder de cursor, of de systeemlijn
   // binnen de klikzone als die ervóór ligt.
   let beam: { id: number; front: number; point: OpenFem3DPickPoint; reason: "beam-ray" | "beam-line" } | null = null;
@@ -77,7 +82,9 @@ export function chooseOpenFem3DPick(candidates: OpenFem3DPickCandidates): OpenFe
     const beamLimit = !beam ? Infinity
       : beam.reason === "beam-ray" ? beam.front + 1e-9 : beam.front + loadDepthToleranceM;
     const nodeLimit = node ? nodeFront + loadDepthToleranceM : Infinity;
-    if (load.distance <= Math.min(beamLimit, nodeLimit)) {
+    // Een opleggingsteken is massief: een pijl erachter is op die pixel niet te zien.
+    const supportLimit = support ? support.distance + 1e-9 : Infinity;
+    if (load.distance <= Math.min(beamLimit, nodeLimit, supportLimit)) {
       return { type: load.type, id: load.id, reason: "load" };
     }
   }
@@ -88,6 +95,15 @@ export function chooseOpenFem3DPick(candidates: OpenFem3DPickCandidates): OpenFe
     const hidden = rayBeam !== null && rayBeam !== undefined
       && rayBeam.distance < nodeFront - Math.max(2 * rayBeam.halfSizeM, 0.1);
     if (!hidden) return { type: "node", id: node.id, reason: "node" };
+  }
+
+  if (support) {
+    // Het teken ligt onder de cursor. Alleen wat op die pixel ervoor getekend
+    // is, dekt het af: een profiel, of een plaat ruim (buiten de band) ervoor.
+    // Een systeemlijn naast de cursor niet.
+    const coveredByProfile = rayBeam !== null && rayBeam !== undefined && rayBeam.distance < support.distance;
+    const coveredByPlate = plate !== null && plate !== undefined && plate.distance + plate.bandM < support.distance;
+    if (!coveredByProfile && !coveredByPlate) return { type: "node", id: support.nodeId, reason: "support" };
   }
 
   if (beam && (!plate || beam.front <= plate.distance + plate.bandM)) {

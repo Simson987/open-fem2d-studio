@@ -3051,8 +3051,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "open-fem2d-studio"
-version = "2026.39.0"
+name = "open-fem-studio"
+version = "2026.39.1"
 dependencies = [
  "concrete-check",
  "embed-resource",

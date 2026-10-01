@@ -23,6 +23,7 @@ import { openFem3DMaximumDisplacementM } from "./openFem3dDisplacement";
 import type { OpenFem3DSteelChecks } from "./openFem3dSteelCheck";
 import type { OpenFem3DConcreteChecks } from "./openFem3dConcreteCheck";
 import { buildOpenFem3DUtilizations } from "./openFem3dUtilization";
+import { openFem3DStaalgewicht } from "./openFem3dStaalgewicht";
 import OpenFem3DTransformPanel from "./OpenFem3DTransformPanel";
 import { transformOpenFem3D, type OpenFem3DTransformCommand } from "./openFem3dTransform";
 import { openFem3DSelectionCount, type OpenFem3DSelection } from "./openFem3dSelection";
@@ -110,7 +111,7 @@ export default function OpenFem3DEditor({
   viewSets = [], currentView = "iso", currentCombinationId = null, combinationOptions = [], loadCaseOptions = [],
   onViewSetsChange, onApplyViewSet, cameraVerzoek, loadCaseTypes,
 }: Props) {
-  const { t } = useTranslation("ribbon");
+  const { t, i18n } = useTranslation("ribbon");
   const [internalSelection, setInternalSelection] = useState<OpenFem3DSelection>(null);
   const selection = controlledSelection === undefined ? internalSelection : controlledSelection;
   const setSelection = (next: OpenFem3DSelection) => {
@@ -132,10 +133,23 @@ export default function OpenFem3DEditor({
     initialCamera ? { state: initialCamera, token: 1 } : undefined,
   );
   const visibility = visibilityProp ?? internalVisibility;
+  // Model: geen belastingen. Resultaten: ook geen ingevoerde belastingen, net
+  // als in 2D; dan staan alleen de uitkomsten (vervorming, reacties, M/V/N, UC)
+  // in beeld. Belastinggeval: de belastingen met hun labels.
   const canvasVisibility = useMemo(
-    () => showLoadCase ? visibility : { ...visibility, loads: false },
-    [showLoadCase, visibility],
+    () => showLoadCase && !resultsActive ? visibility : { ...visibility, loads: false },
+    [showLoadCase, resultsActive, visibility],
   );
+  // Staalgewicht (ρ·A·L per stalen staaf) voor de onderrand van het venster.
+  const staalgewicht = useMemo(() => openFem3DStaalgewicht(model), [model.nodes, model.beams]);
+  const kgTekst = (kg: number) => new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 0 }).format(kg);
+  const staalTitel = [
+    t("openFem3d.steelWeightTitle"),
+    ...staalgewicht.perProfiel.slice(0, 12).map((p) =>
+      `${p.profiel} ${p.staalsoort}: ${p.aantal}× · ${p.lengteM.toLocaleString(i18n.language, { maximumFractionDigits: 1 })} m · ${kgTekst(p.kg)} kg`),
+    ...(staalgewicht.perProfiel.length > 12 ? ["…"] : []),
+    ...(staalgewicht.onbekend.length > 0 ? [t("openFem3d.steelWeightUnknown", { count: staalgewicht.onbekend.length })] : []),
+  ].join("\n");
   const lastDeleteToken = useRef(deleteToken);
   const setVisibility = (next: OpenFem3DVisibility) => {
     if (onVisibilityChange) onVisibilityChange(next);
@@ -390,7 +404,14 @@ export default function OpenFem3DEditor({
         )}
         {model.nodes.length === 0 && <div className="open-fem3d-empty">{t("openFem3d.empty")}</div>}
         <div className="open-fem3d-stage-footer">
-          <span>{t("openFem3d.nodeCount", { count: model.nodes.length })} · {t("openFem3d.beamCount", { count: model.beams.length })}</span>
+          <span>
+            {t("openFem3d.nodeCount", { count: model.nodes.length })} · {t("openFem3d.beamCount", { count: model.beams.length })}
+            {staalgewicht.aantalStaven > 0 && (
+              <span data-open-fem3d-staalgewicht={Math.round(staalgewicht.totaalKg)} title={staalTitel}>
+                {" · "}{t("openFem3d.steelWeight", { kg: kgTekst(staalgewicht.totaalKg) })}
+              </span>
+            )}
+          </span>
           <span data-open-fem-3d-status={solveError ? "error" : solving ? "solving" : result?.forceBalance?.ok === false ? "warning" : result ? "solved" : "ready"}>
             {solveError ? solveError
               : solving ? t("openFem3d.solving")

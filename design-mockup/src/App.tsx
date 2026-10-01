@@ -372,6 +372,7 @@ function App() {
     if (next === "addLoadPanel") {
       // Wat je tekent, moet je ook zien: lasten en belastingvlakken in beeld.
       setOpenFem3dShowLoadCase(true);
+      setResultsTabActive(false);
       setOpenFem3dVisibility((value) => value.loads && value.loadPanels ? value : { ...value, loads: true, loadPanels: true });
     }
   };
@@ -1404,7 +1405,7 @@ function App() {
       bron: fem.scheefstandBron,
     },
     // De toetsuitslag reist mee: elke getoetste staaf krijgt in het bestand
-    // de eigenschappenset OpenFEM2D_Toetsing met de maatgevende toets, het
+    // de eigenschappenset OpenFEM_Toetsing met de maatgevende toets, het
     // normartikel en de unity check. Is er niet getoetst, dan is de lijst
     // leeg en meldt `verzamelIfcBeperkingen` dat er geen uitslag in staat.
     toetsresultaten: checkResults,
@@ -1413,7 +1414,7 @@ function App() {
     fem.nodes, fem.beams, fem.supports, fem.loads, fem.loadCases, openFem3dCalculationModel,
     fem.plates, fem.selfWeightEnabled, fem.combinations, checkResults,
     // De rekeninstellingen stonden hier niet, terwijl ze wel in de set
-    // OpenFEM2D_Analyse belanden: een gewijzigde scheefstand of een ander
+    // OpenFEM_Analyse belanden: een gewijzigde scheefstand of een ander
     // analysetype kwam pas in het IFC zodra er toevallig iets aan het model
     // veranderde. Met de GEREKENDE noemer erbij (basisaudit ruw 26) is dat
     // geen schoonheidsfout meer: φ verandert ook zonder dat de gebruiker de
@@ -2472,6 +2473,15 @@ function App() {
         setSolverErrorText(null);
         setSolverStatus({ kind: "solved", at: Date.now() });
         setTreeTab("results");
+        // Zoals in 2D: na Berekenen de modus Resultaten, met vervorming,
+        // reacties, unity checks en (als er nog geen lijn aan staat) My.
+        setOpenFem3dShowLoadCase(true);
+        setResultsTabActive(true);
+        setOpenFem3dVisibility((value) => ({
+          ...value, deformation: true, reactions: true, utilization: true,
+          momentY: value.axialForce || value.shearY || value.shearZ || value.torsion || value.momentY || value.momentZ
+            ? value.momentY : true,
+        }));
         const unbalanced = [...casePairs, ...combinationPairs]
           .map(([, value]) => value.forceBalance)
           .filter((balance): balance is NonNullable<OpenFem3DSolveResult["forceBalance"]> => balance?.ok === false);

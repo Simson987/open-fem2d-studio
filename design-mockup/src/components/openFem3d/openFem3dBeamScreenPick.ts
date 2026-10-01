@@ -73,6 +73,72 @@ export function openFem3DProjectSegment(
   };
 }
 
+/** Een treffer van {@link findOpenFem3DSegmentNearScreenPoint}: het lijnstuk zelf plus de maten van de treffer. */
+export interface OpenFem3DSegmentScreenHit<T> {
+  item: T;
+  distancePx: number;
+  /** NDC-diepte van het dichtstbijzijnde punt: −1 bij het nabije vlak, 1 bij het verre. */
+  depth: number;
+  /** Punt op het lijnstuk onder de cursor (perspectief-correct), in meters. */
+  point: THREE.Vector3;
+  /** Afstand van de camera tot `point`; vergelijkbaar met de afstand van een raycasttreffer. */
+  distance: number;
+}
+
+/**
+ * Het 3D-lijnstuk dat op het scherm het dichtst bij het schermpunt ligt,
+ * binnen `radiusPx`. Bij gelijke schermafstand wint het voorste lijnstuk.
+ * Voor alles wat dunner getekend is dan een raycast betrouwbaar raakt: een
+ * systeemlijn, een pijlsteel van een last.
+ */
+export function findOpenFem3DSegmentNearScreenPoint<T extends { a: Punt; b: Punt }>(
+  segments: readonly T[],
+  camera: THREE.Camera,
+  width: number,
+  height: number,
+  xPx: number,
+  yPx: number,
+  radiusPx = 6,
+): OpenFem3DSegmentScreenHit<T> | null {
+  camera.updateMatrixWorld();
+  const matrix = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).elements;
+  let best: { item: T; segment: OpenFem3DScreenSegment; ratio: number; depth: number } | null = null;
+  let bestSquared = radiusPx * radiusPx;
+  for (const item of segments) {
+    const segment = openFem3DProjectSegment(matrix, item.a, item.b, width, height);
+    if (!segment) continue;
+    if (xPx < Math.min(segment.ax, segment.bx) - radiusPx || xPx > Math.max(segment.ax, segment.bx) + radiusPx
+      || yPx < Math.min(segment.ay, segment.by) - radiusPx || yPx > Math.max(segment.ay, segment.by) + radiusPx) continue;
+    const dx = segment.bx - segment.ax;
+    const dy = segment.by - segment.ay;
+    const lengthSquared = dx * dx + dy * dy;
+    const ratio = lengthSquared > 0
+      ? Math.max(0, Math.min(1, ((xPx - segment.ax) * dx + (yPx - segment.ay) * dy) / lengthSquared))
+      : 0;
+    const distanceSquared = (xPx - segment.ax - ratio * dx) ** 2 + (yPx - segment.ay - ratio * dy) ** 2;
+    const depth = segment.aDepth + ratio * (segment.bDepth - segment.aDepth);
+    if (distanceSquared > bestSquared || distanceSquared === bestSquared && best && depth >= best.depth) continue;
+    bestSquared = distanceSquared;
+    best = { item, segment, ratio, depth };
+  }
+  if (!best) return null;
+  const { item, segment, ratio, depth } = best;
+  // 1/w verloopt lineair over het scherm; daarmee wordt de schermfractie
+  // een perspectief-correcte parameter op het lijnstuk.
+  const sigma = ratio * segment.w0 / ((1 - ratio) * segment.w1 + ratio * segment.w0);
+  const s = segment.s0 + sigma * (segment.s1 - segment.s0);
+  const point = new THREE.Vector3(item.a.x, item.a.y, item.a.z)
+    .lerp(new THREE.Vector3(item.b.x, item.b.y, item.b.z), s);
+  const cameraPosition = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
+  return {
+    item,
+    distancePx: Math.sqrt(bestSquared),
+    depth,
+    point,
+    distance: point.distanceTo(cameraPosition),
+  };
+}
+
 /**
  * De staaf waarvan de systeemlijn het dichtst bij het schermpunt ligt, binnen
  * `radiusPx`. Zo is ook een dunne staaf (buisverband, analytische as, een
@@ -89,46 +155,14 @@ export function findOpenFem3DBeamNearScreenPoint(
   yPx: number,
   radiusPx = 6,
 ): OpenFem3DBeamScreenHit | null {
-  camera.updateMatrixWorld();
-  const matrix = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).elements;
-  let best: { beam: OpenFem3DBeam; segment: OpenFem3DScreenSegment; ratio: number; depth: number } | null = null;
-  let bestSquared = radiusPx * radiusPx;
+  const segments: { a: OpenFem3DNode; b: OpenFem3DNode; beamId: number }[] = [];
   for (const beam of beams) {
-    const startNode = nodes.get(beam.startNodeId);
-    const endNode = nodes.get(beam.endNodeId);
-    if (!startNode || !endNode) continue;
-    const segment = openFem3DProjectSegment(matrix, startNode, endNode, width, height);
-    if (!segment) continue;
-    if (xPx < Math.min(segment.ax, segment.bx) - radiusPx || xPx > Math.max(segment.ax, segment.bx) + radiusPx
-      || yPx < Math.min(segment.ay, segment.by) - radiusPx || yPx > Math.max(segment.ay, segment.by) + radiusPx) continue;
-    const dx = segment.bx - segment.ax;
-    const dy = segment.by - segment.ay;
-    const lengthSquared = dx * dx + dy * dy;
-    const ratio = lengthSquared > 0
-      ? Math.max(0, Math.min(1, ((xPx - segment.ax) * dx + (yPx - segment.ay) * dy) / lengthSquared))
-      : 0;
-    const distanceSquared = (xPx - segment.ax - ratio * dx) ** 2 + (yPx - segment.ay - ratio * dy) ** 2;
-    const depth = segment.aDepth + ratio * (segment.bDepth - segment.aDepth);
-    if (distanceSquared > bestSquared || distanceSquared === bestSquared && best && depth >= best.depth) continue;
-    bestSquared = distanceSquared;
-    best = { beam, segment, ratio, depth };
+    const a = nodes.get(beam.startNodeId);
+    const b = nodes.get(beam.endNodeId);
+    if (a && b) segments.push({ a, b, beamId: beam.id });
   }
-  if (!best) return null;
-  const { beam, segment, ratio, depth } = best;
-  // 1/w verloopt lineair over het scherm; daarmee wordt de schermfractie
-  // een perspectief-correcte parameter op de staafas.
-  const sigma = ratio * segment.w0 / ((1 - ratio) * segment.w1 + ratio * segment.w0);
-  const s = segment.s0 + sigma * (segment.s1 - segment.s0);
-  const start = nodes.get(beam.startNodeId)!;
-  const end = nodes.get(beam.endNodeId)!;
-  const point = new THREE.Vector3(start.x, start.y, start.z)
-    .lerp(new THREE.Vector3(end.x, end.y, end.z), s);
-  const cameraPosition = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
-  return {
-    beamId: beam.id,
-    distancePx: Math.sqrt(bestSquared),
-    depth,
-    point,
-    distance: point.distanceTo(cameraPosition),
-  };
+  const hit = findOpenFem3DSegmentNearScreenPoint(segments, camera, width, height, xPx, yPx, radiusPx);
+  return hit ? {
+    beamId: hit.item.beamId, distancePx: hit.distancePx, depth: hit.depth, point: hit.point, distance: hit.distance,
+  } : null;
 }

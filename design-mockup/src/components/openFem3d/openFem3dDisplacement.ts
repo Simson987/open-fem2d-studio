@@ -156,12 +156,39 @@ export function openFem3DMemberFieldDeflectionMm(
 
 /** Grootste werkelijke translatie in knopen of in het veld van een staaf. */
 export function openFem3DMaximumDisplacementM(model: OpenFem3DModel, result: OpenFem3DSolveResult): number {
-  let maximum = result.displacements.reduce((value, displacement) =>
-    Math.max(value, Math.hypot(displacement.ux, displacement.uy, displacement.uz)), 0);
-  for (const beam of model.beams) {
-    for (const station of openFem3DMemberDisplacementStations(model, beam, result)) {
-      maximum = Math.max(maximum, station.magnitude);
+  return openFem3DMaximumDisplacement(model, result)?.valueM ?? 0;
+}
+
+/**
+ * De grootste werkelijke translatie met haar plaats (onvervormd, m) en
+ * verplaatsing (m): in een knoop of in het veld van een staaf. Dezelfde maat
+ * als `openFem3DMaximumDisplacementM`, voor het label "u max" in het venster.
+ */
+export function openFem3DMaximumDisplacement(model: OpenFem3DModel, result: OpenFem3DSolveResult): {
+  valueM: number;
+  point: [number, number, number];
+  displacement: [number, number, number];
+} | null {
+  const knoop = new Map(model.nodes.map((node) => [node.id, node]));
+  let beste: { valueM: number; point: [number, number, number]; displacement: [number, number, number] } | null = null;
+  for (const d of result.displacements) {
+    const node = knoop.get(d.nodeId);
+    const valueM = Math.hypot(d.ux, d.uy, d.uz);
+    if (node && (!beste || valueM > beste.valueM)) {
+      beste = { valueM, point: [node.x, node.y, node.z], displacement: [d.ux, d.uy, d.uz] };
     }
   }
-  return maximum;
+  for (const beam of model.beams) {
+    const a = knoop.get(beam.startNodeId), b = knoop.get(beam.endNodeId);
+    if (!a || !b) continue;
+    for (const station of openFem3DMemberDisplacementStations(model, beam, result)) {
+      if (beste && station.magnitude <= beste.valueM) continue;
+      beste = {
+        valueM: station.magnitude,
+        point: [a.x + (b.x - a.x) * station.t, a.y + (b.y - a.y) * station.t, a.z + (b.z - a.z) * station.t],
+        displacement: [station.ux, station.uy, station.uz],
+      };
+    }
+  }
+  return beste;
 }

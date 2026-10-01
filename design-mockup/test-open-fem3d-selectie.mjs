@@ -5,10 +5,16 @@
 //   [3] voorrang bij één klik: last, knoop, staaf (onder of naast de cursor), plaat;
 //   [4] crossing-selectie (van rechts naar links) tegenover het venster;
 //   [5] draaien rond het midden van de selectie: het draaipunt blijft op zijn schermplek;
-//   [6] verwijderen van de selectie (ook platen met openingen) en ongedaan maken.
+//   [6] verwijderen van de selectie (ook platen met openingen) en ongedaan maken;
+//   [7] lasten en opleggingen: de dunne pijlsteel en het opleggingsteken zijn aanklikbaar.
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-const { openFem3DProjectSegment, findOpenFem3DBeamNearScreenPoint } = await import("./src/components/openFem3d/openFem3dBeamScreenPick.ts");
+const {
+  openFem3DProjectSegment, findOpenFem3DBeamNearScreenPoint, findOpenFem3DSegmentNearScreenPoint,
+} = await import("./src/components/openFem3d/openFem3dBeamScreenPick.ts");
+const {
+  addOpenFem3DConditionMarkers, openFem3DConditionMarkerSize, openFem3DLoadPickSegments,
+} = await import("./src/components/openFem3d/openFem3dMarkers.ts");
 const { chooseOpenFem3DPick } = await import("./src/components/openFem3d/openFem3dPick.ts");
 const { selectOpenFem3DInScreenBox } = await import("./src/components/openFem3d/openFem3dBoxSelection.ts");
 const { openFem3DSelectionPivot, openFem3DOrbitPivotShift } = await import("./src/components/openFem3d/openFem3dOrbitPivot.ts");
@@ -301,6 +307,111 @@ log("\n[6] verwijderen van de selectie en ongedaan maken");
     && historie.model.plates[0].openings.length === 1 && historie.model.surfaceLoads.length === 1);
   historie = openFem3dHistoryReducer(historie, { type: "redo" });
   check("opnieuw doen verwijdert haar weer", historie.model === zonderPlaat);
+}
+
+log("\n[7] lasten en opleggingen: pijlsteel, staartlijn en opleggingsteken");
+{
+  // Een kolom van 8 m met wind over de hele hoogte, zoals in de stalen hal:
+  // de pijlen wijzen in +y naar de staafas, de staarten liggen op y = -L.
+  const kolom = parseOpenFem3DModel({
+    nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 0, y: 0, z: 8 }, { id: 3, x: 6, y: 0, z: 0 }, { id: 4, x: 6, y: 0, z: 8 }],
+    beams: [
+      { id: 1, startNodeId: 1, endNodeId: 2, rollAngleRad: Math.PI / 2 },
+      { id: 2, startNodeId: 3, endNodeId: 4 }, { id: 3, startNodeId: 2, endNodeId: 4 },
+    ],
+    supports: [1, 3].map((nodeId) => ({ nodeId, ux: true, uy: true, uz: true, rx: true, ry: true, rz: true })),
+    memberLoads: [
+      { id: 391, beamId: 1, caseId: 3, qyStart: 0, qyEnd: 0, qzStart: 1.92, qzEnd: 1.92, startPositionM: 0, endPositionM: 8 },
+      { id: 392, beamId: 2, caseId: 2, qyStart: 0, qyEnd: 0, qzStart: -1, qzEnd: -1, startPositionM: 0, endPositionM: 8 },
+    ],
+  });
+  const maat = openFem3DConditionMarkerSize(kolom.nodes);
+  const L = 1.8 * maat;
+  const segmentenVan = (model, visibility, geval) => {
+    const groep = new THREE.Group();
+    addOpenFem3DConditionMarkers(groep, model, visibility, geval);
+    return openFem3DLoadPickSegments(groep);
+  };
+  const segmenten = segmentenVan(kolom, { supports: true, loads: true }, 3);
+  const vanLast = (lijst, id) => lijst.filter((s) => s.selection.type === "memberLoad" && s.selection.id === id);
+  // Negen pijlen (z = 0 … 8) en acht stukken staartlijn.
+  check("elke pijl en elk stuk staartlijn van de lijnlast is een aanklikbaar segment",
+    vanLast(segmenten, 391).length === 9 + 8, String(vanLast(segmenten, 391).length));
+  const pijl4 = vanLast(segmenten, 391).find((s) => Math.abs(s.a.z - 4) < 1e-9 && Math.abs(s.b.z - 4) < 1e-9);
+  check("… de pijl op z = 4 loopt van de staart (y = -L) tot de punt op de staafas",
+    pijl4 !== undefined && Math.abs(pijl4.a.y + L) < 1e-9 && Math.abs(pijl4.b.y) < 1e-9 && Math.abs(pijl4.a.x) < 1e-9,
+    pijl4 && `${pijl4.a.toArray()} → ${pijl4.b.toArray()}`);
+  check("alleen lasten van het actieve geval", vanLast(segmenten, 392).length === 0);
+  check("lasten verborgen → geen segmenten", segmentenVan(kolom, { supports: true, loads: false }, 3).length === 0);
+  check("ook zonder bundeling (minder dan vier tekens) staan de segmenten erin",
+    vanLast(segmentenVan({ ...kolom, supports: [] }, { supports: true, loads: true }, 3), 391).length === 17);
+
+  const cam = camera([7, -7, 6], [0, 0, 3.5]);
+  const steel = { x: 0, y: -0.55 * L, z: 4 };
+  const s = scherm(cam, steel);
+  const raak = findOpenFem3DSegmentNearScreenPoint(segmenten, cam, B, H, s.x, s.y, 5);
+  check("klik op het midden van de dunne pijlsteel → de lijnlast",
+    raak?.item.selection.type === "memberLoad" && raak.item.selection.id === 391, JSON.stringify(raak?.item.selection));
+  const steelPunt = new THREE.Vector3(steel.x, steel.y, steel.z);
+  check("… met het perspectief-correcte punt op de pijl en de afstand tot de camera",
+    raak !== null && raak.point.distanceTo(steelPunt) < 1e-6
+      && Math.abs(raak.distance - cam.position.distanceTo(steelPunt)) < 1e-6);
+  const staart = scherm(cam, { x: 0, y: -L, z: 4.5 });
+  check("klik op de staartlijn tussen twee pijlen → de lijnlast",
+    findOpenFem3DSegmentNearScreenPoint(segmenten, cam, B, H, staart.x, staart.y, 5)?.item.selection.id === 391);
+  const ver = findOpenFem3DSegmentNearScreenPoint(segmenten, cam, B, H, s.x + 40, s.y + 40, 5);
+  check("40 px ernaast → niets", ver === null, JSON.stringify(ver?.item.selection));
+
+  const kies = (k) => chooseOpenFem3DPick({ loadDepthToleranceM: 1.6, ...k });
+  const lijn = (id, distance, halfSizeM = 0.035) => ({ id, distance, halfSizeM, point: { x: 0, y: 0, z: 0 } });
+  const teken = { nodeId: 1, distance: 10 };
+  const alleen = kies({ support: teken });
+  check("klik op het opleggingsteken → de knoop van de oplegging",
+    alleen?.type === "node" && alleen.id === 1 && alleen.reason === "support", JSON.stringify(alleen));
+  check("het teken onder de cursor wint van een systeemlijn binnen de klikzone",
+    kies({ support: teken, lineBeam: lijn(4, 10.2, 0.3) })?.type === "node");
+  check("een profiel vóór het teken → het profiel",
+    kies({ support: teken, rayBeam: lijn(4, 9.5, 0.3) })?.type === "beam");
+  check("het teken vóór het profiel → de knoop",
+    kies({ support: teken, rayBeam: lijn(4, 10.4, 0.3) })?.type === "node");
+  check("een lastpijl achter het teken → de knoop",
+    kies({ support: teken, load: { type: "memberLoad", id: 391, distance: 10.3 } })?.type === "node");
+  check("een lastpijl vóór het teken → de last",
+    kies({ support: teken, load: { type: "memberLoad", id: 391, distance: 9.8 } })?.type === "memberLoad");
+  check("de knoopbol zelf → de knoop (reden knoop)",
+    kies({ support: teken, node: { id: 1, distance: 10.1, radiusM: 0.08 } })?.reason === "node");
+  check("een plaat ruim vóór het teken → de plaat",
+    kies({ support: teken, plate: { id: 5, distance: 8, bandM: 0.35 } })?.type === "plate");
+  check("een plaat vlak vóór het teken (binnen de band) → de knoop",
+    kies({ support: teken, plate: { id: 5, distance: 9.8, bandM: 0.35 } })?.type === "node");
+
+  // Een kader zonder knopen, staven of platen erin kiest de last die het raakt.
+  const kaderOm = (punten, marge) => ({
+    left: Math.min(...punten.map((p) => p.x)) - marge, right: Math.max(...punten.map((p) => p.x)) + marge,
+    top: Math.min(...punten.map((p) => p.y)) - marge, bottom: Math.max(...punten.map((p) => p.y)) + marge,
+  });
+  const kaderSel = (kader, modus, lasten = segmenten) =>
+    selectOpenFem3DInScreenBox(kolom, [], cam, B, H, kader, null, false, true, modus, lasten);
+  const als = (sel) => JSON.stringify(sel);
+  const last391 = als({ type: "memberLoad", id: 391 });
+  check("crossing-kader over de pijlsteel, zonder geometrie erin → de lijnlast",
+    als(kaderSel(kaderOm([s], 6), "crossing")) === last391, als(kaderSel(kaderOm([s], 6), "crossing")));
+  const heelPijl = kaderOm([scherm(cam, { x: 0, y: -L, z: 4 }), scherm(cam, { x: 0, y: 0, z: 4 })], 3);
+  check("venster om een hele pijl → de lijnlast", als(kaderSel(heelPijl, "venster")) === last391, als(kaderSel(heelPijl, "venster")));
+  check("venster om alleen het midden van de steel → niets (de pijl valt er niet geheel in)",
+    kaderSel(kaderOm([s], 6), "venster") === null);
+  const voet = kaderOm([scherm(cam, { x: 0, y: 0, z: 0 })], 12);
+  check("een knoop in het kader → de knoop, niet de pijl die er ook doorheen loopt",
+    als(kaderSel(voet, "crossing")) === als({ type: "node", id: 1 }), als(kaderSel(voet, "crossing")));
+  check("zonder lastsegmenten blijft een leeg kader leeg",
+    selectOpenFem3DInScreenBox(kolom, [], cam, B, H, kaderOm([s], 6), null, false, true, "crossing") === null);
+  // Twee lijnlasten in het kader: de last die het dichtst bij het midden ligt.
+  const beide = segmentenVan(kolom, { supports: true, loads: true }, undefined);
+  const p391 = s, p392 = scherm(cam, { x: 6 + 0.55 * L, y: 0, z: 4 });
+  const naar392 = { x: p392.x + (p392.x - p391.x) * 0.6, y: p392.y + (p392.y - p391.y) * 0.6 };
+  const twee = kaderOm([p391, p392, naar392], 4);
+  check("twee lasten in een crossing-kader → de last het dichtst bij het midden",
+    als(kaderSel(twee, "crossing", beide)) === als({ type: "memberLoad", id: 392 }), als(kaderSel(twee, "crossing", beide)));
 }
 
 log(`\n${geslaagd} geslaagd, ${gefaald} gefaald`);

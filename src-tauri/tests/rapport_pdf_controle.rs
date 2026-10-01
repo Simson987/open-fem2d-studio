@@ -7,7 +7,7 @@
 //! manifest, zie build.rs en testbinary_laadt.rs) en staat daarom uit
 //! (`[lib] test = false`). Integratietest-doelen krijgen het manifest wél.
 
-use open_fem2d_studio_lib::gui_control::rapport::*;
+use open_fem_studio_lib::gui_control::rapport::*;
 use serde_json::json;
 
 /// Een minimale PDF zoals Chromium hem schrijft: losse objecten, een

@@ -24,7 +24,7 @@
 // ── DE KERN VAN DIT GEVAL, VOORAF ───────────────────────────────────────────
 //
 // (1) DE APP REKENT EULER-BERNOULLI; DE BRON REKENT TIMOSHENKO.
-//     De bron geeft de ligger een dwarskrachtfactor SRY = 2,5. Open FEM2D
+//     De bron geeft de ligger een dwarskrachtfactor SRY = 2,5. Open FEM
 //     Studio kent geen afschuifoppervlak en geen Timoshenko-optie — zie
 //     src/core/fem/Beam.ts (calculateBeamLocalStiffness bevat uitsluitend de
 //     klassieke EA/L- en EI/L^n-termen) en de vaststelling bij R12. Het
@@ -164,7 +164,7 @@ const TOL_VD_PCT = 5.0;
 const regels = [];
 /**
  * Leg één vergelijking vast. `soort`:
- *  - "app-B"    : Open FEM2D Studio met de exacte bronwaarden (Bernoulli);
+ *  - "app-B"    : Open FEM Studio met de exacte bronwaarden (Bernoulli);
  *  - "bestand"  : dezelfde grootheid, maar via het opgeslagen R24.femp;
  *  - "eigen-B"  : eigen, los geprogrammeerde raamwerkmatrix ZONDER afschuiving;
  *  - "eigen-T"  : eigen raamwerkmatrix MÉT dwarskrachtvervorming (SRY = 2,5).

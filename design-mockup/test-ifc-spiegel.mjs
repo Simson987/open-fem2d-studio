@@ -347,11 +347,11 @@ checkEq("één geëxtrudeerd lichaam per element",
 checkEq("één hoeveelhedenset per element",
   tel(ifc, "IFCELEMENTQUANTITY"), model.beams.length);
 // Drie eigen sets per staaf (doorsnede, staaf) plus de gemeenschappelijke set
-// per element; er is niet getoetst, dus OpenFEM2D_Toetsing ontbreekt.
+// per element; er is niet getoetst, dus OpenFEM_Toetsing ontbreekt.
 checkEq("geen toetsingsset zonder toetsuitslag",
-  (ifc.match(/'OpenFEM2D_Toetsing'/g) ?? []).length, 0);
+  (ifc.match(/'OpenFEM_Toetsing'/g) ?? []).length, 0);
 checkEq("een doorsnedeset per staaf",
-  (ifc.match(/'OpenFEM2D_Doorsnede'/g) ?? []).length, model.beams.length);
+  (ifc.match(/'OpenFEM_Doorsnede'/g) ?? []).length, model.beams.length);
 
 log("  — de boom toont de bouwkundige staven ernaast");
 const platB = platteBoom(bouwIfcBoom(model));
@@ -399,6 +399,34 @@ checkEq("validatie: geen waarschuwingen", valideerIfc(betonIfc).waarschuwingen.l
 const betonRegels = verzamelIfcBeperkingen(betonModel).join("\n");
 checkTrue("de samengevatte beugelreeks wordt eerlijk gemeld",
   /Beugels van 1 betonstaaf/.test(betonRegels));
+
+log("\n[8] De eigen sets heten OpenFEM_*; een oudere export (OpenFEM2D_*) leest hetzelfde in");
+
+// Tot en met uitgave 2026.39.0 heetten de eigen sets OpenFEM2D_*. De import
+// van een IFC-analysemodel leest de eigenschappen op eigenschapsnaam, niet op
+// setnaam: het onderdeel (Kolom/Ligger) komt uit `Onderdeel` in de staafset.
+// Een bestand van een oudere uitgave moet daarom precies hetzelfde 3D-model
+// opleveren als een nieuw bestand.
+const { importeerIfcAnalyseModel } = await import("./src/io/ifcAnalyseImport.ts");
+const setnamen = [...new Set(ifc.match(/'OpenFEM[A-Za-z0-9]*_[A-Za-z]+'/g) ?? [])].sort();
+checkEq("de export schrijft alleen OpenFEM_-sets",
+  setnamen.join(" "), "'OpenFEM_Doorsnede' 'OpenFEM_Staaf'");
+const oudeExport = ifc.replaceAll("'OpenFEM_", "'OpenFEM2D_");
+checkEq("de nagebootste oudere export draagt alleen OpenFEM2D_-sets",
+  (oudeExport.match(/'OpenFEM_/g) ?? []).length, 0);
+const nieuwIn = importeerIfcAnalyseModel(ifc).model3d;
+const oudIn = importeerIfcAnalyseModel(oudeExport).model3d;
+checkEq("onderdelen uit de nieuwe sets",
+  nieuwIn.beams.map(b => b.group).join(","), "Kolom,Ligger,Ligger,Kolom,Ligger");
+checkEq("onderdelen uit de oude sets",
+  oudIn.beams.map(b => b.group).join(","), "Kolom,Ligger,Ligger,Kolom,Ligger");
+checkTrue("oud en nieuw geven hetzelfde 3D-model",
+  JSON.stringify(oudIn) === JSON.stringify(nieuwIn));
+// Tegenproef: zonder de eigenschap Onderdeel blijft de groep leeg, dus het
+// onderdeel kwam hierboven echt uit de set en niet uit de staaf zelf.
+checkEq("zonder Onderdeel geen groep",
+  importeerIfcAnalyseModel(ifc.replaceAll("'Onderdeel'", "'Iets'")).model3d.beams
+    .filter(b => b.group !== undefined).length, 0);
 
 log(`\n${failed === 0 ? "✅" : "❌"} ${passed} geslaagd, ${failed} gefaald\n`);
 process.exit(failed === 0 ? 0 : 1);

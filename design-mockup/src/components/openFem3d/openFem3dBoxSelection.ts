@@ -1,10 +1,59 @@
 import * as THREE from "three";
 import type { OpenFem3DModel } from "./openFem3dModel";
-import type { OpenFem3DSelection } from "./openFem3dSelection";
+import type { OpenFem3DSelection, OpenFem3DSingleSelection } from "./openFem3dSelection";
 import { openFem3DProjectSegment } from "./openFem3dBeamScreenPick";
 import { driehoekRaaktKader, lijnstukRaaktKader, type KaderModus } from "../../lib/kaderSelectie";
 
 export interface OpenFem3DScreenBox { left: number; top: number; right: number; bottom: number }
+
+/** Een getekend lijnstuk van een last: een pijl of een stuk staartlijn (zie `openFem3DLoadPickSegments`). */
+export interface OpenFem3DBoxLoadSegment {
+  selection: OpenFem3DSingleSelection;
+  a: { x: number; y: number; z: number };
+  b: { x: number; y: number; z: number };
+}
+
+/**
+ * De last in een kader zonder geometrie: in een venster een pijl of stuk
+ * staartlijn dat er geheel in valt, bij crossing een dat het kader raakt.
+ * Raken meer lasten het kader, dan wint de last waarvan een lijnstuk het
+ * dichtst bij het midden van het kader ligt.
+ */
+function loadInScreenBox(
+  segments: readonly OpenFem3DBoxLoadSegment[],
+  matrix: ArrayLike<number>,
+  width: number,
+  height: number,
+  box: OpenFem3DScreenBox,
+  crossing: boolean,
+): OpenFem3DSingleSelection | null {
+  const inside = (p: { x: number; y: number }) =>
+    p.x >= box.left && p.x <= box.right && p.y >= box.top && p.y <= box.bottom;
+  const cx = (box.left + box.right) / 2;
+  const cy = (box.top + box.bottom) / 2;
+  let best: OpenFem3DSingleSelection | null = null;
+  let bestDistance = Infinity;
+  for (const segment of segments) {
+    const projected = openFem3DProjectSegment(matrix, segment.a, segment.b, width, height);
+    if (!projected) continue;
+    const a = { x: projected.ax, y: projected.ay };
+    const b = { x: projected.bx, y: projected.by };
+    // Een venster bevat geen pijl die deels achter de camera ligt.
+    const hit = crossing ? lijnstukRaaktKader(a, b, box)
+      : projected.s0 === 0 && projected.s1 === 1 && inside(a) && inside(b);
+    if (!hit) continue;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lengthSquared = dx * dx + dy * dy;
+    const t = lengthSquared > 0 ? Math.max(0, Math.min(1, ((cx - a.x) * dx + (cy - a.y) * dy) / lengthSquared)) : 0;
+    const distance = Math.hypot(cx - a.x - t * dx, cy - a.y - t * dy);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = segment.selection;
+    }
+  }
+  return best;
+}
 
 function projectedPoint(point: THREE.Vector3, camera: THREE.Camera, width: number, height: number) {
   const ndc = point.project(camera);
@@ -163,6 +212,10 @@ export function openFem3DMeshTouchesBox(
  *    telt als geraakt als zijn geprojecteerde systeemlijn of het getekende
  *    profiel het kader snijdt; een plaat als haar getekende vlak het kader
  *    overlapt; een knoop als hij in het kader ligt.
+ *
+ * Valt er geen knoop, staaf of plaat in het kader, dan kiest het kader de
+ * last die het raakt (`loadSegments`, zie {@link loadInScreenBox}). Een last
+ * gaat niet samen met geometrie in één selectie.
  */
 export function selectOpenFem3DInScreenBox(
   model: OpenFem3DModel,
@@ -175,6 +228,7 @@ export function selectOpenFem3DInScreenBox(
   additive: boolean,
   selectNodes: boolean,
   mode: KaderModus = "venster",
+  loadSegments: readonly OpenFem3DBoxLoadSegment[] = [],
 ): OpenFem3DSelection {
   camera.updateMatrixWorld();
   const nodes = new Set<number>();
@@ -223,6 +277,12 @@ export function selectOpenFem3DInScreenBox(
     } else if (typeof object.userData.id === "number") {
       if (!target.has(object.userData.id) && selected(type, object.userData.id, object)) target.add(object.userData.id);
     }
+  }
+  if (nodes.size + beams.size + plates.size === 0 && loadSegments.length > 0) {
+    const load = loadInScreenBox(loadSegments,
+      matrix ?? new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).elements,
+      width, height, box, crossing);
+    if (load) return load;
   }
   if (additive) {
     if (current?.type === "node") nodes.add(current.id);

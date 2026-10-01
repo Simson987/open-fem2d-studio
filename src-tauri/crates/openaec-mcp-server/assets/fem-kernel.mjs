@@ -25013,7 +25013,7 @@ function deserializeProject(text) {
 init_femTypes();
 
 // package.json
-var version = "2026.39.0";
+var version = "2026.39.1";
 
 // src/mcp/fouten.ts
 var AFBEELDINGEN = [
@@ -26721,13 +26721,31 @@ function openFem3DMemberFieldDeflectionMm(model, beam, result) {
   }, 0);
 }
 function openFem3DMaximumDisplacementM(model, result) {
-  let maximum = result.displacements.reduce((value, displacement) => Math.max(value, Math.hypot(displacement.ux, displacement.uy, displacement.uz)), 0);
-  for (const beam of model.beams) {
-    for (const station of openFem3DMemberDisplacementStations(model, beam, result)) {
-      maximum = Math.max(maximum, station.magnitude);
+  return openFem3DMaximumDisplacement(model, result)?.valueM ?? 0;
+}
+function openFem3DMaximumDisplacement(model, result) {
+  const knoop = new Map(model.nodes.map((node) => [node.id, node]));
+  let beste = null;
+  for (const d of result.displacements) {
+    const node = knoop.get(d.nodeId);
+    const valueM = Math.hypot(d.ux, d.uy, d.uz);
+    if (node && (!beste || valueM > beste.valueM)) {
+      beste = { valueM, point: [node.x, node.y, node.z], displacement: [d.ux, d.uy, d.uz] };
     }
   }
-  return maximum;
+  for (const beam of model.beams) {
+    const a = knoop.get(beam.startNodeId), b = knoop.get(beam.endNodeId);
+    if (!a || !b) continue;
+    for (const station of openFem3DMemberDisplacementStations(model, beam, result)) {
+      if (beste && station.magnitude <= beste.valueM) continue;
+      beste = {
+        valueM: station.magnitude,
+        point: [a.x + (b.x - a.x) * station.t, a.y + (b.y - a.y) * station.t, a.z + (b.z - a.z) * station.t],
+        displacement: [station.ux, station.uy, station.uz]
+      };
+    }
+  }
+  return beste;
 }
 
 // src/components/openFem3d/openFem3dSteelCheck.ts

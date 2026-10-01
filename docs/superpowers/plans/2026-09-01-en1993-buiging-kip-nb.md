@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** De staaltoetsing van Open FEM2D Studio v2 reproduceert de referentie-uitdraai `2867-Galerij.pdf` exact voor buiging (6.2.5), dwarskracht (6.2.6), buiging+dwarskracht (6.2.8), kipstabiliteit volgens de Nederlandse nationale bijlage (6.3.2.1 + NB.NB.2/4/5/7/11/13) en doorbuiging.
+**Goal:** De staaltoetsing van Open FEM Studio v2 reproduceert de referentie-uitdraai `2867-Galerij.pdf` exact voor buiging (6.2.5), dwarskracht (6.2.6), buiging+dwarskracht (6.2.8), kipstabiliteit volgens de Nederlandse nationale bijlage (6.3.2.1 + NB.NB.2/4/5/7/11/13) en doorbuiging.
 
 **Architecture:** Uitbreiden van de bestaande Rust-crates in `src-tauri/crates/`. De kern van het werk zit in `nen-en-1993-1-1-ltb/src/nb_annex.rs` (NB-methode voor M_cr, nu deels fout/incompleet) en `steel-check/src/orchestrator.rs` (koppeling FEM-resultaat → toets). Elke formule krijgt een eigen functie met eigen unit-test tegen een referentiewaarde uit de PDF. Geen normaalkracht, geen knik (6.3.1) — die blijven ongewijzigd.
 

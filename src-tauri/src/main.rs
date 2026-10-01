@@ -3,5 +3,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    open_fem2d_studio_lib::run()
+    open_fem_studio_lib::run()
 }
