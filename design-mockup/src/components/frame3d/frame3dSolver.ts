@@ -27,6 +27,16 @@ export interface Frame3DReaction {
   mx: number; my: number; mz: number;
 }
 
+export interface Frame3DPlateBendingResult {
+  plateId: number;
+  quads: Array<{ id: number; nodeIds: [number, number, number, number] }>;
+  /** Rotaties zijn naar globale 3D Rx/Ry vertaald, net als displacements. */
+  nodes: Array<{ meshNodeId: number; x: number; y: number; z: number;
+    wM: number; thetaXRad: number; thetaYRad: number }>;
+  elements: Array<{ quadId: number; momentKnmPerM: [number, number, number];
+    shearKnPerM: [number, number]; effectiveEMpa: number; maxFibreStrain: number }>;
+}
+
 export interface Frame3DMemberForces {
   memberId: number;
   lengthM: number;
@@ -85,6 +95,7 @@ export interface Frame3DSolveResult {
   displacements: Frame3DDisplacement[];
   reactions: Frame3DReaction[];
   memberForces: Frame3DMemberForces[];
+  plateBending?: Frame3DPlateBendingResult;
   materialLoadPath?: number[];
   /** Sinds contract 1.1: door de solver bemonsterde snedekrachtlijnen. */
   diagrams?: Frame3DDiagrams;
@@ -247,9 +258,9 @@ export function buildFrame3DSolveRequest(
   }
   if ((model.plates?.length ?? 0) > 0 || (model.surfaceLoads?.length ?? 0) > 0) {
     throw new Error(
-      "Het model bevat 3D-platen of oppervlaktebelastingen. De geverifieerde " +
-      "plaatkernel en mesh zijn nog niet aangesloten; rekenen is geblokkeerd om " +
-      "te voorkomen dat platen of hun lasten stil worden genegeerd.",
+      "De raamwerkkern rekent 3D-platen en oppervlaktebelastingen niet mee. " +
+      "Gebruik de losse lineaire Rust-plaatroute voor een ondersteunde rechthoek; " +
+      "gekoppelde staaf-plaatmodellen zijn geblokkeerd om genegeerde plaatlasten te voorkomen.",
     );
   }
   if (model.nodes.length < 2 || model.beams.length === 0) {
@@ -443,6 +454,13 @@ export async function solveFrame3D(
   analysis: Frame3DAnalysisKind = "p-delta",
   engine: SolverEngineId = "dedaliano",
 ): Promise<Frame3DSolveResult> {
+  if ((model.plates?.length ?? 0) > 0) {
+    if (engine !== "openaec-native-fem" || analysis !== "linear") {
+      throw new Error("3D-platen vereisen de lineaire Open FEM Rust-plaatroute.");
+    }
+    const { solveFrame3DPlate } = await import("./frame3dPlateSolver");
+    return solveFrame3DPlate(model, activeLoadCaseId);
+  }
   const request = buildFrame3DSolveRequest(model, analysis, activeLoadCaseId);
   const input = analysis === "p-delta" ? request : { ...request, bucklingModes: 0 };
   return callFrame3DSolver(input, engine);
@@ -455,6 +473,13 @@ export async function solveFrame3DCombination(
   analysis: Frame3DAnalysisKind = "p-delta",
   engine: SolverEngineId = "dedaliano",
 ): Promise<Frame3DSolveResult> {
+  if ((model.plates?.length ?? 0) > 0) {
+    if (engine !== "openaec-native-fem" || analysis !== "linear") {
+      throw new Error("3D-platen vereisen de lineaire Open FEM Rust-plaatroute.");
+    }
+    const { solveFrame3DPlate } = await import("./frame3dPlateSolver");
+    return solveFrame3DPlate(model, factors);
+  }
   const request = buildFrame3DSolveRequest(model, analysis, factors);
   const input = analysis === "p-delta" ? request : { ...request, bucklingModes: 0 };
   return callFrame3DSolver(input, engine);

@@ -4364,6 +4364,42 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
 
     if (result && visibility.deformation) {
       const scale = resultScale(model, result);
+      if (result.plateBending) {
+        const plateNodes = result.plateBending.nodes;
+        const indexById = new Map(plateNodes.map((node, index) => [node.meshNodeId, index]));
+        const positions = new Float32Array(plateNodes.flatMap((node) =>
+          [node.x, node.y, node.z + scale * node.wM]));
+        const triangles: number[] = [];
+        const edges: THREE.Vector3[] = [];
+        for (const quad of result.plateBending.quads) {
+          const ids = quad.nodeIds.map((id) => indexById.get(id));
+          if (ids.some((id) => id === undefined)) continue;
+          const [a, b, c, d] = ids as number[];
+          triangles.push(a, b, c, a, c, d);
+          for (const [start, end] of [[a, b], [b, c], [c, d], [d, a]]) {
+            edges.push(
+              new THREE.Vector3(positions[3 * start], positions[3 * start + 1], positions[3 * start + 2]),
+              new THREE.Vector3(positions[3 * end], positions[3 * end + 1], positions[3 * end + 2]),
+            );
+          }
+        }
+        if (triangles.length > 0) {
+          const surface = new THREE.BufferGeometry();
+          surface.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+          surface.setIndex(triangles);
+          surface.computeVertexNormals();
+          const deformedPlate = new THREE.Mesh(surface, new THREE.MeshStandardMaterial({
+            color: 0xdc2626, side: THREE.DoubleSide, transparent: true,
+            opacity: 0.32, depthWrite: false, roughness: 0.72,
+          }));
+          deformedPlate.userData.frame3dPlateDeformation = true;
+          geometry.add(deformedPlate);
+          geometry.add(new THREE.LineSegments(
+            new THREE.BufferGeometry().setFromPoints(edges),
+            new THREE.LineBasicMaterial({ color: 0xb91c1c, transparent: true, opacity: 0.85 }),
+          ));
+        }
+      }
       const deformedProfileBatches = new Map<string, {
         geometry: THREE.BufferGeometry;
         matrices: THREE.Matrix4[];

@@ -154,6 +154,7 @@ export function frame3DMemberFieldDeflectionMm(
 export function frame3DMaximumDisplacementM(model: Frame3DModel, result: Frame3DSolveResult): number {
   let maximum = result.displacements.reduce((value, displacement) =>
     Math.max(value, Math.hypot(displacement.ux, displacement.uy, displacement.uz)), 0);
+  for (const node of result.plateBending?.nodes ?? []) maximum = Math.max(maximum, Math.abs(node.wM));
   for (const beam of model.beams) {
     for (const station of frame3DMemberDisplacementStations(model, beam, result)) {
       maximum = Math.max(maximum, station.magnitude);

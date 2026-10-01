@@ -117,7 +117,7 @@ export default function Frame3DReport({
         <header>
           <div>
             <p className="frame3d-report-kicker">Open FEM Studio</p>
-            <h1>3D raamwerkberekening</h1>
+            <h1>{result?.plateBending ? "3D-plaatberekening" : "3D raamwerkberekening"}</h1>
             <p>{projectName?.trim() || "Naamloos project"}</p>
           </div>
           <dl>
@@ -130,7 +130,7 @@ export default function Frame3DReport({
           <section className="frame3d-report-empty">
             <h2>Nog niet berekend</h2>
             <p>De modelinvoer hieronder kan worden afgedrukt. Tweede-orde-, knik- en staafresultaten ontbreken nog.</p>
-            {(model.plates?.length ?? 0) > 0 && <p>De plaatkernel en mesh zijn nog niet aangesloten; de app rekent dit model daarom bewust niet door.</p>}
+            {(model.plates?.length ?? 0) > 0 && <p>Voor één losse horizontale rechthoekige plaat is een lineaire Open FEM Rust-berekening beschikbaar. Andere 3D-plaatmodellen worden expliciet geweigerd.</p>}
           </section>
           {(model.plates?.length ?? 0) > 0 && <section>
             <h2>Platen en openingen</h2>
@@ -174,6 +174,31 @@ export default function Frame3DReport({
               <div><span>Max. versterking</span><strong>{result.secondOrder ? number(result.secondOrder.maxAmplification) : "1,000"}</strong></div>
             </div>
           </section>
+
+          {result.plateBending && <section>
+            <h2>Buigplaatresultaat · plaat {result.plateBending.plateId}</h2>
+            <p className="frame3d-report-note">Hybride Q4-buigplaat in het XY-vlak. Hoekopleggingen komen uit het 3D-model; tussenliggende plaatranden zijn vrij.</p>
+            <p className="frame3d-report-note">Dit overzicht bevat elastische snedekrachten; plaatwapening en scheurwijdte zijn voor dit 3D-model nog niet getoetst.</p>
+            <table className="frame3d-report-wide"><thead><tr>
+              <th>Element</th><th>Mx [kNm/m]</th><th>My [kNm/m]</th><th>Mxy [kNm/m]</th><th>Vx [kN/m]</th><th>Vy [kN/m]</th><th>Eeff [MPa]</th>
+            </tr></thead><tbody>
+              {result.plateBending.elements.map((element) => <tr key={element.quadId}>
+                <td>{element.quadId}</td>
+                {element.momentKnmPerM.map((value, index) => <td key={`m${index}`}>{signed(value)}</td>)}
+                {element.shearKnPerM.map((value, index) => <td key={`v${index}`}>{signed(value)}</td>)}
+                <td>{number(element.effectiveEMpa)}</td>
+              </tr>)}
+            </tbody></table>
+            <h3>Roosterknoopverplaatsingen</h3>
+            <table className="frame3d-report-wide"><thead><tr>
+              <th>Knoop</th><th>X [m]</th><th>Y [m]</th><th>w [mm]</th><th>θx [rad]</th><th>θy [rad]</th>
+            </tr></thead><tbody>
+              {result.plateBending.nodes.map((node) => <tr key={node.meshNodeId}>
+                <td>{node.meshNodeId}</td><td>{number(node.x)}</td><td>{number(node.y)}</td>
+                <td>{signed(node.wM * 1000, 5)}</td><td>{signed(node.thetaXRad, 6)}</td><td>{signed(node.thetaYRad, 6)}</td>
+              </tr>)}
+            </tbody></table>
+          </section>}
 
           <section>
             <h2>3D model- en resultaatweergaven</h2>

@@ -127,7 +127,7 @@ assert.deepEqual(loaded.surfaceLoads, [{ id: 1, plateId: 1, caseId: 2, qx: 1, qy
 const changed = updateFrame3DSurfaceLoad(loaded, 1, { qx: 0, qy: 2, qz: -7 });
 assert.equal(changed.surfaceLoads[0].qz, -7);
 assert.equal(removeFrame3DSurfaceLoad(changed, 1).surfaceLoads.length, 0);
-assert.throws(() => buildFrame3DSolveRequest(loaded), /plaatkernel.*geblokkeerd/i,
+assert.throws(() => buildFrame3DSolveRequest(loaded), /raamwerkkern.*plaatlasten.*voorkomen/i,
   "de staafsolver mag een plaat of oppervlaktebelasting niet stil negeren");
 assert.throws(() => parseFrame3DModel({
   ...withPlate,

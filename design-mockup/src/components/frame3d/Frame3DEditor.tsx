@@ -247,7 +247,7 @@ export default function Frame3DEditor({
         )}
         {model.nodes.length === 0 && <div className="frame3d-empty">{t("frame3d.empty")}</div>}
         <div className="frame3d-stage-footer">
-          <span>{t("frame3d.nodeCount", { count: model.nodes.length })} · {t("frame3d.beamCount", { count: model.beams.length })}</span>
+          <span>{t("frame3d.nodeCount", { count: model.nodes.length })} · {t("frame3d.beamCount", { count: model.beams.length })} · {model.plates?.length ?? 0} platen</span>
           <span data-frame3d-solver-status={solveError ? "error" : solving ? "solving" : result?.forceBalance?.ok === false ? "warning" : result ? "solved" : "ready"}>
             {solveError ? solveError
               : solving ? t("frame3d.solving")

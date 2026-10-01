@@ -282,7 +282,7 @@ type Materiaalsoort = "vrij" | "hout" | "beton" | "staal" | "aluminium" | "onbek
  * doorsnede alleen bij staal werd herkend. Materiaal en doorsnede staan nu
  * los van elkaar, en dus kan elke doorsnedevorm met elk materiaal.
  */
-function eVanMateriaal(material: string): { E: number; soort: Materiaalsoort } {
+export function eVanMateriaal(material: string): { E: number; soort: Materiaalsoort } {
   const vrij = parseVrijMateriaal(material);
   if (vrij) return { E: vrij.eMod, soort: "vrij" };
   const aluminium = parseAluminiumMateriaal(material);

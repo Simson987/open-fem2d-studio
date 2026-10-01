@@ -2181,7 +2181,10 @@ function App() {
         schemaVersion: 1,
         dimension: modelDimension,
         analysis,
-        elementFamilies: modelDimension === "3d" ? ["frame"]
+        elementFamilies: modelDimension === "3d"
+          ? (frame3dCalculationModel.plates?.length ?? 0) > 0
+            ? frame3dCalculationModel.beams.length > 0 ? ["frame", "plate"] : ["plate"]
+            : ["frame"]
           : fem.plates.length > 0 ? fem.beams.length > 0 ? ["frame", "plate"] : ["plate"] : ["frame"],
       });
     } catch (cause) {
@@ -3487,6 +3490,7 @@ function App() {
         loadCount={modelDimension === "3d"
           ? (frame3d.loads ?? []).length + (frame3d.memberLoads ?? []).length +
             (frame3d.memberPointLoads ?? []).length + (frame3d.thermalLoads ?? []).length +
+            (frame3d.surfaceLoads ?? []).length +
             (frame3d.supports ?? []).filter((support) => Object.keys(support.prescribed ?? {}).length > 0).length
           : fem.loads.length}
         zoomPct={activeView === "default" ? zoomPct : undefined}

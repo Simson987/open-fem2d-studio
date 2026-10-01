@@ -99,12 +99,28 @@ function View({
     }))];
   }));
   const deformed = [...deformedBeams.values()].flat().map((node) => project(node, projection));
-  const toCanvas = fit([...undeformed, ...deformed]);
+  const plateNodes = result.plateBending?.nodes ?? [];
+  const undeformedPlate = plateNodes.map((node) => project(node, projection));
+  const deformedPlate = plateNodes.map((node) => project({ ...node, z: node.z + magnification * node.wM }, projection));
+  const toCanvas = fit([...undeformed, ...deformed, ...undeformedPlate, ...deformedPlate]);
+  const plateById = new Map(plateNodes.map((node) => [node.meshNodeId, node]));
 
   return <figure className={`frame3d-report-projection frame3d-report-projection-${projection}`}>
     <figcaption>{title}</figcaption>
-    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={`${title} van het 3D-raamwerk`}>
+    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={`${title} van het 3D-model`}>
       <rect x="0" y="0" width={WIDTH} height={HEIGHT} fill="#fff" />
+      {result.plateBending?.quads.map((quad) => {
+        const corners = quad.nodeIds.map((id) => plateById.get(id));
+        if (corners.some((node) => !node)) return null;
+        const polygon = (displaced: boolean) => corners.map((node) => {
+          const point = toCanvas(project({ ...node!, z: node!.z + (displaced ? magnification * node!.wM : 0) }, projection));
+          return `${point.x},${point.y}`;
+        }).join(" ");
+        return <g key={`plate-quad-${quad.id}`}>
+          <polygon points={polygon(false)} fill="#dbeafe" fillOpacity="0.45" stroke="#64748b" strokeWidth="0.7" />
+          {projection !== "top" && <polygon points={polygon(true)} fill="none" stroke="#dc2626" strokeWidth="1" strokeDasharray="3 2" />}
+        </g>;
+      })}
       {model.beams.map((beam) => {
         const start = nodeById.get(beam.startNodeId), end = nodeById.get(beam.endNodeId);
         if (!start || !end) return null;
@@ -157,7 +173,8 @@ export default function Frame3DReportViews(props: Props) {
     <View {...props} projection="front" title="Vooraanzicht X/Z" />
     <View {...props} projection="top" title="Bovenaanzicht X/Y" />
     <p className="frame3d-report-view-legend">
-      Staafkleur: UGT-unity check volgens EN 1992 of EN 1993 indien beschikbaar. Rood gestreept: vervormde vorm,
+      {props.result.plateBending ? "Blauw: onvervormd plaatrooster. Rood gestreept: berekende doorbuiging"
+        : "Staafkleur: UGT-unity check volgens EN 1992 of EN 1993 indien beschikbaar. Rood gestreept: vervormde vorm"},
       automatisch vergroot ×{numberForLegend(deformationScale(props.model, props.result))}.
     </p>
   </div>;

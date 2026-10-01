@@ -131,3 +131,21 @@ de [ScadSoft verificatie van een vierzijdig opgelegde plaat](https://scadsoft.co
 Voor de Cement-plaat is de dwarskrachtlijn de controle; het artikel levert geen
 openbare knoopverplaatsingen om een volledige implementatievergelijking te doen.
 Deze experimentele controle is geen gecertificeerde constructieberekening.
+
+## 3D-app-route: losse horizontale buigplaat
+
+`design-mockup/test-native-frame3d-plate-app-route.mjs` stuurt één 2×2 m
+betonplaat (`C30/37`, dikte 0,20 m) via dezelfde `solveFrame3D`-functie als de
+app naar `native-quad-mesh` en `native-hybrid-plate`. Vier hoekknopen zijn
+verticaal gesteund; de overige randen zijn vrij. Bij `qz = −1 kN/m²` is de
+onafhankelijke totale belasting `−4 kN`, dus moeten de verticale reacties
+`+4 kN` optellen. De test controleert ook de globale momenten rond de
+oorsprong, 25 roosterknopen, 16 elementen en een negatieve binnenzakking.
+Een combinatie met lastfactoren 1 en 0,5 op respectievelijk `−1` en `−2
+kN/m²` verdubbelt last, reacties en elastische zakking. Voor automatisch eigen
+gewicht levert `ρ = 2500 kg/m³` een extra `qz = −4,905 kN/m²` en een
+reactiesom van `+19,62 kN`. De route weigert momenteel openingen, bogen,
+in-vlaklasten, gekoppelde staven, veren en GNL/FNL-buiging.
+Een asymmetrisch ingeklemde hoek controleert de tekenomzetting van de lokale
+plaatrotaties en reactiemomenten naar globale 3D Rx/Ry; ook een afzonderlijk
+globaal My-puntmoment sluit de onafhankelijke momentensom.

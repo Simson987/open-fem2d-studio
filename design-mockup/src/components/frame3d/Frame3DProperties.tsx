@@ -71,6 +71,7 @@ export default function Frame3DProperties({
   const plate = selection?.type === "plate"
     ? model.plates?.find((item) => item.id === selection.id)
     : surfaceLoad ? model.plates?.find((item) => item.id === surfaceLoad.plateId) : undefined;
+  const plateResult = plate && result?.plateBending?.plateId === plate.id ? result.plateBending : undefined;
   const [coordinates, setCoordinates] = useState({ x: "", y: "", z: "" });
   const [rollDegrees, setRollDegrees] = useState("0");
   const [loadPathText, setLoadPathText] = useState("");
@@ -368,6 +369,12 @@ export default function Frame3DProperties({
 
       {tab === "results" && <>
         {!result && <p className="fem-prop-hint">{t("frame3d.readyToCalculate")}</p>}
+        {plateResult && <Section title={`Buigplaat ${plateResult.plateId}`}>
+          <Row label="Rooster"><code>{plateResult.nodes.length} knopen · {plateResult.elements.length} Q4-elementen</code></Row>
+          <Row label="Max. |w|"><code>{value(Math.max(...plateResult.nodes.map((node) => Math.abs(node.wM))) * 1000, 5)} mm</code></Row>
+          <Row label="Max. |M|"><code>{value(Math.max(...plateResult.elements.flatMap((element) => element.momentKnmPerM.map(Math.abs))))} kNm/m</code></Row>
+          <Row label="Max. |V|"><code>{value(Math.max(...plateResult.elements.flatMap((element) => element.shearKnPerM.map(Math.abs))))} kN/m</code></Row>
+        </Section>}
         {node && displacement && <Section title={t("frame3d.displacements", "Knoopverplaatsingen")}>
           <Row label="Ux"><code>{value(displacement.ux * 1000)} mm</code></Row><Row label="Uy"><code>{value(displacement.uy * 1000)} mm</code></Row><Row label="Uz"><code>{value(displacement.uz * 1000)} mm</code></Row>
           <Row label="Rx"><code>{value(displacement.rx, 6)} rad</code></Row><Row label="Ry"><code>{value(displacement.ry, 6)} rad</code></Row><Row label="Rz"><code>{value(displacement.rz, 6)} rad</code></Row>

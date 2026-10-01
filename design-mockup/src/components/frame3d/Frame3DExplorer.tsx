@@ -117,6 +117,10 @@ export default function Frame3DExplorer(props: Props) {
   const tab = props.activeTab ?? internalTab;
   const setTab = props.setActiveTab ?? setInternalTab;
   const maxDisplacement = props.result ? frame3DMaximumDisplacementM(props.model, props.result) : 0;
+  const plateBending = props.result?.plateBending;
+  const maxPlateMoment = plateBending
+    ? Math.max(0, ...plateBending.elements.flatMap((element) => element.momentKnmPerM.map(Math.abs)))
+    : 0;
   const alphaCr = props.result?.buckling.status === "available" ? props.result.buckling.modes[0]?.loadFactor : undefined;
   const maxSteelUc = props.checks && props.checks.results.length > 0
     ? props.checks.results.reduce((maximum, check) => Math.max(maximum, frame3DUlsUc(check)), 0)
@@ -235,6 +239,7 @@ export default function Frame3DExplorer(props: Props) {
         {props.result ? <div className="fem-results-hint">
           {props.result.analysis === "p-delta" ? "2e orde (P-Δ)"
             : props.result.analysis === "material" ? "Fysisch niet-lineair" : "1e orde"} · Δmax {(maxDisplacement * 1000).toFixed(3)} mm · αcr {alphaCr?.toFixed(2) ?? "—"}
+          {plateBending && <> · plaat {plateBending.plateId} · |M|max {maxPlateMoment.toFixed(3)} kNm/m</>}
           {maxSteelUc !== undefined && <> · UC staal {maxSteelUc.toFixed(2)}</>}
           {maxConcreteUc !== undefined && <> · UC UGT beton {maxConcreteUc.toFixed(2)}</>}
           {props.checksRunning && <> · normtoetsing…</>}
@@ -258,7 +263,7 @@ export default function Frame3DExplorer(props: Props) {
           })}
         </Branch>}
         <div className="fem-results-toggle-list">
-          {RESULT_KEYS.map((key) => <button key={key} type="button"
+          {RESULT_KEYS.filter((key) => !plateBending || key === "deformation" || key === "reactions").map((key) => <button key={key} type="button"
             className={`fem-results-toggle${props.visibility[key] ? " active" : ""}`}
             onClick={() => props.setVisibility({ ...props.visibility, [key]: !props.visibility[key] })}>
             <span className="fem-results-toggle-swatch" style={{ background: key === "deformation" ? "#dc2626" : key === "reactions" ? "#16a34a" : key === "utilization" ? "linear-gradient(90deg,#16a34a 0 25%,#84cc16 25% 50%,#f59e0b 50% 75%,#dc2626 75%)" : "#d97706" }} />

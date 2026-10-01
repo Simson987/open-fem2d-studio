@@ -319,8 +319,10 @@ export function withFrame3DSelfWeight(model: Frame3DModel, caseId: number): Fram
   if (!Number.isSafeInteger(caseId) || caseId <= 0) throw new Error("Het belastinggeval voor 3D-eigen gewicht is ongeldig.");
   const loads = [...(model.loads ?? [])];
   const memberLoads = [...(model.memberLoads ?? [])];
+  const surfaceLoads = [...(model.surfaceLoads ?? [])];
   let nextLoadId = nextEntityId(loads);
   let nextMemberLoadId = nextEntityId(memberLoads);
+  let nextSurfaceLoadId = nextEntityId(surfaceLoads);
 
   for (const beam of model.beams) {
     const start = model.nodes.find((node) => node.id === beam.startNodeId)!;
@@ -358,7 +360,15 @@ export function withFrame3DSelfWeight(model: Frame3DModel, caseId: number): Fram
       }
     }
   }
-  return { ...model, loads, memberLoads };
+  for (const plate of model.plates ?? []) {
+    if (!plate.material) throw new Error(`Plaat ${plate.id}: eigen gewicht vereist een materiaal.`);
+    surfaceLoads.push({
+      id: nextSurfaceLoadId++, plateId: plate.id, caseId,
+      qx: 0, qy: 0,
+      qz: -(dichtheidVanMateriaal(plate.material) * plate.thicknessM * G) / 1000,
+    });
+  }
+  return { ...model, loads, memberLoads, surfaceLoads };
 }
 
 function readSupportRestraints(value: Record<string, unknown>): Frame3DSupportRestraints {

@@ -109,6 +109,13 @@ export function supportsRequest(solver: SolverDescriptor, request: AnalysisReque
         || request.elementFamilies[0] === "frame"
           && (request.analysis === "linear" || request.analysis === "p-delta"));
   }
+  if (solver.id === "openaec-native-fem" && request.dimension === "3d"
+      && request.elementFamilies.includes("plate")) {
+    // The current app adapter handles a separate linear bending plate only.
+    // Coupled frame/plate assembly and nonlinear plate analysis are pending.
+    return solver.available && request.analysis === "linear"
+      && request.elementFamilies.length === 1 && request.elementFamilies[0] === "plate";
+  }
   return solver.available
     && capabilities.dimensions.includes(request.dimension)
     && capabilities.analyses.includes(request.analysis)
