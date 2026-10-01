@@ -120,12 +120,17 @@ In **Instellingen → Berekening** kan de gebruiker nu `Open FEM Rust
 een vloeigrens en verhardingsverhouding (staal) of treksterkte en
 reststijfheidsverhouding (beton) in. Staven zonder FNL-wet blijven elastisch;
 minstens één staaf moet een wet hebben. De automatische solverkeuze schakelt
-de experimentele FNL-route niet zelf in. Thermische lasten en eindscharnieren
-zijn voor deze FNL-route nog uitgesloten. In de 3D-eigenschappen zonder
+de experimentele FNL-route niet zelf in. Thermische lasten zijn voor deze
+FNL-route nog uitgesloten. Eindscharnieren worden ook bij FNL per iteratie
+gecondenseerd. In de 3D-eigenschappen zonder
 selectie kan de gebruiker een FNL-lastpad invoeren, bijvoorbeeld `1, 0, 0.5`.
 De app bewaart het pad in het project, stuurt het als `loadPath` naar Rust en
 toont de axiale materiaaltoestand per staaf. Zonder lastpad gebruikt de
-app nog de monotone secant-E-benadering zonder materiaalgeschiedenis.
+app nog de monotone secant-E-benadering zonder materiaalgeschiedenis. Voor
+een vrijgegeven eindmoment herstelt de kern de interne staafrotatie voordat
+zij de vezelrek en secante E schat. Bij P-Δ bevat de momentlijn de bijdrage
+van de axiale kracht over de vervormde staaflijn; haar eindwaarde sluit aan
+op het berekende staafeindmoment.
 EN 1992/1993-toetsing wordt bij een FNL-lastpad geblokkeerd, omdat alleen de
 axiale materiaalgeschiedenis is gevalideerd.
 
@@ -137,8 +142,16 @@ ontlasten bestaan. De axiale betontrekschade blijft na ontlasten bestaan en
 verlaagt de herbelastingsstijfheid; druk blijft elastisch. Het antwoord geeft
 per staaf `axialHistory` met plastische rek, equivalente plastische rek,
 trekschade en actuele axiale tangentmodulus. Buiging gebruikt in deze route
-nog de bestaande secante staafbenadering. `loadPath` wordt niet met P-Δ,
-eigenknik, thermische lasten of eindscharnieren gecombineerd.
+nog de bestaande secante staafbenadering. `loadPath` wordt in de app nog niet
+met P-Δ, eigenknik of thermische lasten gecombineerd.
+
+[`examples/frame3d-released-steel-history.json`](examples/frame3d-released-steel-history.json)
+is een 2 m uitkraging met een vrijgegeven eindmoment Mz, 1500 kN axiale
+trek en 10 kN dwarslast. Het pad `[1, 0, 0.5]` geeft analytisch
+0,238095‰ blijvende plastische rek en 1,190476 mm eindverlenging bij de
+laatste stap. Het Rust-resultaat heeft nul eindmoment, 1,190476 mm verlenging
+en een evenwichtsresidu van 2,3·10⁻¹². Een tweede test herhaalt deze
+scharnierproef met blijvende betontrekschade.
 
 ```bash
 src-tauri/target/debug/native-frame3d \

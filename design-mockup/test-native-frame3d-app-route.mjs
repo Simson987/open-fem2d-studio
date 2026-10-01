@@ -217,6 +217,18 @@ try {
   assert.ok(history.memberForces[0].axialHistory.plasticStrain > 0);
   assert.ok(history.memberForces[0].axialHistory.equivalentPlasticStrain > 0);
   assert.equal(history.memberForces[0].axialHistory.tensileDamage, 0);
+  const releasedHistoryModel = parseFrame3DModel({ ...historyModel,
+    beams: [{ ...historyModel.beams[0], releases: { myEnd: true } }],
+    supports: [...historyModel.supports, { nodeId: 2, ux: false, uy: false, uz: false,
+      rx: false, ry: true, rz: false }],
+    loads: [{ ...historyModel.loads[0], fz: -10 }],
+    materialLoadPath: [1, 0, 0.5],
+  });
+  const releasedHistory = await solveFrame3D(releasedHistoryModel, 1, "material", "openaec-native-fem");
+  assert.equal(releasedHistory.forceBalance.ok, true, "FNL-evenwicht met eindscharnier");
+  assert.ok(releasedHistory.memberForces[0].axialHistory.plasticStrain > 0);
+  assert.ok(Math.abs(releasedHistory.memberForces[0].myEndKnm) < 1e-8,
+    "eindscharnier draagt geen My bij FNL");
   const concreteHistoryModel = parseFrame3DModel({ ...historyModel,
     beams: [{ ...historyModel.beams[0], material: "C30/37", profileName: "300x500",
       nonlinearLaw: { kind: "concreteCracking", tensileMpa: 2.9, residualRatio: 0.2 } }],
@@ -238,7 +250,7 @@ try {
       kind: "concreteCracking", tensileMpa: 2.9, residualRatio: 0.05,
     } })),
   }, 1, "material", "openaec-native-fem"), /past niet bij materiaal/);
-  assert.equal(nativeCalls, 14);
+  assert.equal(nativeCalls, 15);
   assert.equal(referenceCalls, 7);
   console.log("Native 3D-app-route: staal, beton, FNL, P-Δ en staaflasten geslaagd.");
 } finally {

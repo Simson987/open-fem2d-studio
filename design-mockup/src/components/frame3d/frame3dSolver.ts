@@ -310,8 +310,8 @@ export function buildFrame3DSolveRequest(
     if (!model.beams.some((beam) => beam.nonlinearLaw)) {
       throw new Error("Stel bij minstens één 3D-staaf een expliciete FNL-materiaalwet in.");
     }
-    if (thermalLoads.length || model.beams.some((beam) => Object.values(beam.releases ?? {}).some(Boolean))) {
-      throw new Error("De experimentele 3D-FNL-kern is nog niet gevalideerd voor temperatuur of staafeindscharnieren.");
+    if (thermalLoads.length) {
+      throw new Error("De experimentele 3D-FNL-kern is nog niet gevalideerd voor temperatuur.");
     }
   }
   const members = model.beams.map((beam) => {

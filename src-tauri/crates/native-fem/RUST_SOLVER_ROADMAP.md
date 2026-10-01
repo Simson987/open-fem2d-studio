@@ -8,12 +8,12 @@ nog geen vervanging van de app-solver.
 
 | Deel | Rust-kern | Nog open voor vervanging van de app-solver |
 | --- | --- | --- |
-| 3D-raamwerk | 12-DOF-staven, lineair/P-Δ, eenvoudige FNL met optioneel axiaal staal-/betonlastpad, eigenknik tot 120 vrije DOF, lokale lijn-, staafpunt- en thermische lasten, globale veren, opgelegde verplaatsingen/rotaties en My/Mz/torsiescharnieren | Thermische lasten en scharnieren samen met FNL, historische vezel-/buigrespons, gecombineerd GNL/FNL-lastpad en schaalbare knik- en stabiliteitstoets. |
+| 3D-raamwerk | 12-DOF-staven, lineair/P-Δ, eenvoudige FNL met optioneel axiaal staal-/betonlastpad, eigenknik tot 120 vrije DOF, lokale lijn-, staafpunt- en thermische lasten, globale veren, opgelegde verplaatsingen/rotaties en My/Mz/torsiescharnieren, ook met FNL | Thermische lasten samen met FNL, historische vezel-/buigrespons, volledig gevalideerd gecombineerd GNL/FNL-lastpad en schaalbare knik- en stabiliteitstoets. |
 | 2D-schijf | CST en Q4, Green-Lagrange GNL, staal-J2, betonschade, E(rek) | Alle bestaande combinaties van elementen/randvoorwaarden, gekoppelde staven en externe validatie van de FNL-wetten. |
 | 2D-buigplaat | DKT en 4-knoops hybride Kirchhoff, E(rek), per vierhoek bilineaire plaatdruk | GNL-buiging, gescheurde betonstijfheid, hogere-orde of lijnlasten, orthotropie en betrouwbare dwarskrachtherleiding aan alle randen. |
 | Wapeningscontrole | Verticale dwarskrachtwapening, huidtrek en EC2-scheurwijdte als aparte UGT/BGT-postprocessen | Nationale bijlage, belastingscombinaties, detaillering, scheurhistorie en toetsing van gecombineerde membraan- en plaatkrachten. |
 | Lineaire algebra | Dicht tot 600 DOF; ijle Jacobi-PCG tot 20.000 DOF voor symmetrisch positieve grote 2D-matrices | Robuuste factorisatie/inertiecontrole, preconditioner voor slecht geconditioneerde modellen en benchmark op grote productiemodellen. |
-| App-koppeling | Eén getypeerde dispatcher via Tauri, toetsbrug en MCP; TypeScript-client en invoeradapters; de 3D-analyseknop gebruikt de native kern bij expliciete eerste-orde-, P-Δ- of FNL-keuze met invoer voor staalverharding en betonscheuren, getoetste snedekrachtlijnen en knikfactoren | Alle 2D/3D-modelopties en resultaattypen gelijk maken; FNL met thermische lasten, scharnieren en materiaalgeschiedenis uitbreiden en valideren. |
+| App-koppeling | Eén getypeerde dispatcher via Tauri, toetsbrug en MCP; TypeScript-client en invoeradapters; de 3D-analyseknop gebruikt de native kern bij expliciete eerste-orde-, P-Δ- of FNL-keuze met invoer voor staalverharding en betonscheuren, FNL-eindscharnieren, getoetste snedekrachtlijnen en knikfactoren | Alle 2D/3D-modelopties en resultaattypen gelijk maken; FNL met thermische lasten en volledig historisch materiaalgedrag uitbreiden en valideren. |
 
 ## Volgorde en acceptatie
 
