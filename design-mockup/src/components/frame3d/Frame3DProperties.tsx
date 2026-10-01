@@ -4,6 +4,7 @@ import ProfielKiezer from "../fem/ProfielKiezer";
 import Frame3DNodeConditions, { type Frame3DLoadEditorRequest, type Frame3DSpringEditorRequest } from "./Frame3DNodeConditions";
 import Frame3DMemberLoads from "./Frame3DMemberLoads";
 import Frame3DNonlinearLawEditor from "./Frame3DNonlinearLawEditor";
+import Frame3DPlateReinforcementEditor from "./Frame3DPlateReinforcementEditor";
 import type { Frame3DSelection } from "./frame3dSelection";
 import { removeFrame3DSurfaceLoad, setFrame3DBeamNodes, updateFrame3DPlate, updateFrame3DSurfaceLoad, type Frame3DModel } from "./frame3dModel";
 import type { Frame3DAnalysisKind, Frame3DSolveResult } from "./frame3dSolver";
@@ -14,7 +15,7 @@ import {
   type Frame3DSteelChecks,
 } from "./frame3dSteelCheck";
 import { matchSupportedConcreteClass } from "../../lib/betonCheckBuilder";
-import { eVanMateriaal } from "../../lib/sectionResolver";
+import { CONCRETE_E_CM, eVanMateriaal } from "../../lib/sectionResolver";
 import type { Frame3DConcreteChecks } from "./frame3dConcreteCheck";
 import KolomVelden from "../beton/KolomVelden";
 import "../fem/FemProperties.css";
@@ -383,6 +384,8 @@ export default function Frame3DProperties({
           {plateCurveError && <p className="frame3d-check-not-ok" role="alert">{plateCurveError}</p>}
           {analysis !== "material" && <p className="fem-prop-hint">Kies FNL-analyse om de E-rekcurve te gebruiken.</p>}
         </Section>
+        {plate.material && plate.material in CONCRETE_E_CM
+          && <Frame3DPlateReinforcementEditor model={model} plate={plate} onChange={onChange} />}
         <Section title="Oppervlaktebelastingen">
           {(model.surfaceLoads ?? []).filter((load) => load.plateId === plate.id).length === 0 && <p className="fem-prop-hint">Selecteer de plaat en kies Oppervlaktelast in het lint.</p>}
           {surfaceLoad && <>
@@ -408,6 +411,10 @@ export default function Frame3DProperties({
           <Row label="Max. |V|"><code>{value(Math.max(...plateResult.elements.flatMap((element) => element.shearKnPerM.map(Math.abs))))} kN/m</code></Row>
           <Row label="Min. Eeff"><code>{value(Math.min(...plateResult.elements.map((element) => element.effectiveEMpa)))} MPa</code></Row>
           {result?.materialIterations !== undefined && <Row label="FNL-iteraties"><code>{result.materialIterations}</code></Row>}
+          {plateResult.elements.some((element) => element.reinforcement?.shear) && <Row label="Max. Asw,req"><code>{value(Math.max(...plateResult.elements.map((element) =>
+            element.reinforcement?.shear?.check.requiredShearMm2PerM2 ?? 0)), 1)} mm²/m²</code></Row>}
+          {plateResult.elements.some((element) => element.reinforcement?.crack) && <Row label="Max. wk"><code>{value(Math.max(...plateResult.elements.flatMap((element) =>
+            element.reinforcement?.crack?.map((entry) => entry.check.characteristicWidthMm ?? 0) ?? [])), 3)} mm</code></Row>}
         </Section>}
         {node && displacement && <Section title={t("frame3d.displacements", "Knoopverplaatsingen")}>
           <Row label="Ux"><code>{value(displacement.ux * 1000)} mm</code></Row><Row label="Uy"><code>{value(displacement.uy * 1000)} mm</code></Row><Row label="Uz"><code>{value(displacement.uz * 1000)} mm</code></Row>

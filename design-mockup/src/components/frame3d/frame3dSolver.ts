@@ -1,5 +1,6 @@
 import { isTauriApp } from "../../lib/tauri";
 import { solveNativeFem } from "../../lib/nativeFemClient";
+import type { NativePlateReinforcementEnvelope } from "../../lib/nativeFemClient";
 import type { SolverEngineId } from "../../core/solver/SolverRegistry";
 import {
   CONCRETE_E_CM,
@@ -36,7 +37,8 @@ export interface Frame3DPlateBendingResult {
   nodes: Array<{ meshNodeId: number; x: number; y: number; z: number;
     wM: number; thetaXRad: number; thetaYRad: number }>;
   elements: Array<{ quadId: number; momentKnmPerM: [number, number, number];
-    shearKnPerM: [number, number]; effectiveEMpa: number; maxFibreStrain: number }>;
+    shearKnPerM: [number, number]; effectiveEMpa: number; maxFibreStrain: number;
+    reinforcement?: NativePlateReinforcementEnvelope }>;
 }
 
 export interface Frame3DMemberForces {

@@ -146,6 +146,9 @@ export async function solveFrame3DPlate(
 ): Promise<Frame3DSolveResult> {
   const geometry = rectangle(model);
   const { plate, nodes, origin, ex, ey, normal, center, width, height, eMpa, nu, tolerance } = geometry;
+  if (plate.reinforcement && !(plate.material && plate.material in CONCRETE_E_CM)) {
+    throw new Error(`3D-plaat ${plate.id}: de wapenings- en scheurtoets vraagt een herkende betonklasse.`);
+  }
   if (model.materialLoadPath !== undefined && (!Array.isArray(model.materialLoadPath)
       || model.materialLoadPath.length === 0 || model.materialLoadPath.length > 100
       || model.materialLoadPath.some((value) => !Number.isFinite(value)))) {
@@ -220,6 +223,7 @@ export async function solveFrame3DPlate(
       // physical 3D rotations about the local plate X and Y axes.
       fz: load.normalForce, mx: load.localMx, my: load.localMy })),
     pressureKnM2: surfaceLoads.reduce((sum, pressure) => sum + pressure, 0),
+    ...(plate.reinforcement ? { reinforcement: plate.reinforcement } : {}),
     ...(analysis === "material" ? { modulusCurves: [{ materialId: 1, points: plate.modulusCurve }],
       loadPath, maxIterations: 50, tolerance: 1e-7 } : {}),
   });
@@ -227,6 +231,9 @@ export async function solveFrame3DPlate(
       || !Number.isFinite(native.relativeResidual) || native.relativeResidual > 1e-7
       || native.elements.some((element) => !Number.isFinite(element.effectiveEMpa) || element.effectiveEMpa <= 0
         || !Number.isFinite(element.maxFibreStrain) || element.maxFibreStrain < 0)
+      || (plate.reinforcement && native.elements.some((element) => !element.reinforcement
+        || element.reinforcement.limitState !== plate.reinforcement!.limitState
+        || !(element.reinforcement.checkedPoints > 0)))
       || native.nodes.some((node) => ![node.wM, node.thetaXRad, node.thetaYRad,
         node.reactionFzKn, node.reactionMxKnm, node.reactionMyKnm].every(Number.isFinite))) {
     throw new Error("De Rust-buigplaat leverde geen volledig, eindig resultaat met voldoende kleine restkracht.");
@@ -276,6 +283,7 @@ export async function solveFrame3DPlate(
     diagnostics: ["Rust hybride Q4-buigplaat; lokaal rechthoekig rooster in een 3D-vlak.",
       "Opleggingen gelden op de vier plaat-hoekknopen; langs de overige rand is de plaat vrij.",
       ...(analysis === "material" ? ["FNL gebruikt een niet-toenemende secant-E op maximale vezelrek per element; dit is geen scheur- of plastisch doorsnedemodel."] : []),
-      "Plaatwapening en scheurwijdte zijn in deze 3D-app-route nog niet aangesloten."],
+      ...(plate.reinforcement ? ["Plaatwapening en scheurwijdte zijn per element op steekpunten getoetst; extremen tussen punten en normcombinaties zijn niet afgedekt."]
+        : ["Plaatwapening en scheurwijdte zijn niet getoetst: geef daarvoor een wapeningsspecificatie op."])],
   };
 }

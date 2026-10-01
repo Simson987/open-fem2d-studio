@@ -132,7 +132,7 @@ Voor de Cement-plaat is de dwarskrachtlijn de controle; het artikel levert geen
 openbare knoopverplaatsingen om een volledige implementatievergelijking te doen.
 Deze experimentele controle is geen gecertificeerde constructieberekening.
 
-## 3D-app-route: losse horizontale buigplaat
+## 3D-app-route: losse rechthoekige buigplaat
 
 `design-mockup/test-native-frame3d-plate-app-route.mjs` stuurt één 2×2 m
 betonplaat (`C30/37`, dikte 0,20 m) via dezelfde `solveFrame3D`-functie als de
@@ -163,3 +163,18 @@ lagere E; de zakking wordt tweemaal de lineaire waarde. Een lastpad `[1, 0]`
 ontlast weer tot vrijwel nul zakking, terwijl de effectieve E en maximale
 vezelrek als geschiedenis behouden blijven. De test controleert ook dat een
 curve met verkeerd begin-E of stijgende E wordt geweigerd.
+
+Dezelfde 3D-app-route kan nu per betonplaat een expliciete
+`reinforcement`-specificatie bewaren en aan Rust doorgeven. De gebruiker kiest
+`ultimate` voor dwarskracht, betondrukstaaf en langswapening, of `service`
+voor scheurwijdte, en kiest zelf het bijbehorende belastinggeval of de
+combinatie. Het rapport toont per Q4-element de maatgevende steekpuntwaarde,
+het aantal onderzochte punten en de toetsstatus. De app controleert dat
+`fckMpa` past bij de gekozen betonklasse en dat dekking en staafdiameter in
+de plaatdikte passen. De app-routeproef controleert beide grenstoestanden,
+de doorgifte naar de Rust-kern en het rapport; de afzonderlijke Rust-proeven
+hierboven vergelijken de rekenformules met de Cement- en JRC-voorbeelden.
+Ook deze app-toets is een eerste-generatie postprocessor op de berekende
+elastische of secant-E-momenten; hij corrigeert de plaatstijfheid niet voor
+scheuren, zoekt geen extrema tussen steekpunten en stelt geen nationale
+bijlage of combinatiefactoren vast.

@@ -63,6 +63,8 @@ export default function Frame3DReport({
   combinations = [], combinationResults,
 }: Frame3DReportProps) {
   const maxDisplacement = result ? frame3DMaximumDisplacementM(model, result) : 0;
+  const plateReinforcement = result?.plateBending
+    ? model.plates?.find((plate) => plate.id === result.plateBending?.plateId)?.reinforcement : undefined;
   const firstMode = result?.buckling.status === "available" ? result.buckling.modes[0] : undefined;
   const equilibrium = result?.equilibrium;
   const factor = (caseId: number) => activeCombinationFactors
@@ -135,12 +137,13 @@ export default function Frame3DReport({
           {(model.plates?.length ?? 0) > 0 && <section>
             <h2>Platen en openingen</h2>
             <table className="frame3d-report-wide"><thead><tr>
-              <th>Plaat</th><th>Contourknopen</th><th>Rand</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>E-rekcurve [MPa]</th><th>Openingen</th>
+              <th>Plaat</th><th>Contourknopen</th><th>Rand</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>E-rekcurve [MPa]</th><th>Wapening</th><th>Openingen</th>
             </tr></thead><tbody>
               {(model.plates ?? []).map((plate) => <tr key={plate.id}>
                 <td>{plate.id}</td><td>{plate.nodeIds.join(" · ")}</td><td>{plate.boundary ? `${plate.boundary.length} segmenten (${plate.boundary.filter((segment) => segment.kind === "arc").length} boog)` : "hoekpunten"}</td><td>{number(plate.thicknessM)} m</td>
                 <td>{number(plate.cornerRadiusM ?? 0)} m</td><td>{plate.material || "—"}</td>
                 <td>{plate.modulusCurve?.map((point) => `${number(point.strain, 8)}:${number(point.eMpa, 1)}`).join(" → ") ?? "—"}</td>
+                <td>{plate.reinforcement ? `${plate.reinforcement.limitState === "ultimate" ? "UGT" : "BGT"}; As ${[plate.reinforcement.topXMm2PerM, plate.reinforcement.topYMm2PerM, plate.reinforcement.bottomXMm2PerM, plate.reinforcement.bottomYMm2PerM].map((area) => number(area, 0)).join("/")} mm²/m` : "—"}</td>
                 <td>{(plate.openings ?? []).length === 0 ? "—" : (plate.openings ?? []).map((opening) =>
                   `#${opening.id}: ${opening.nodeIds.join(" · ")} (r=${number(opening.cornerRadiusM ?? 0)} m)`).join("; ")}</td>
               </tr>)}
@@ -180,10 +183,23 @@ export default function Frame3DReport({
 
           {result.plateBending && <section>
             <h2>Buigplaatresultaat · plaat {result.plateBending.plateId}</h2>
+            {plateReinforcement && <table className="frame3d-report-wide"><tbody>
+              <tr><th>Toetsinvoer</th><td>{plateReinforcement.limitState === "ultimate" ? "UGT" : "BGT"}</td>
+                <th>Beton</th><td>fck {number(plateReinforcement.fckMpa)} MPa · fctm {number(plateReinforcement.fctmMpa)} MPa · γc {number(plateReinforcement.gammaC)}</td></tr>
+              <tr><th>Staal</th><td>fyd {number(plateReinforcement.fydMpa)} MPa · fywd {number(plateReinforcement.fywdMpa)} MPa · Es {number(plateReinforcement.esMpa, 0)} MPa</td>
+                <th>Doorsnede</th><td>dekking {number(plateReinforcement.coverMm)} mm · Ø {number(plateReinforcement.barDiameterMm)} mm · z {plateReinforcement.leverArmMm === undefined ? "automatisch" : `${number(plateReinforcement.leverArmMm)} mm`}</td></tr>
+              <tr><th>As boven X/Y</th><td>{number(plateReinforcement.topXMm2PerM, 0)} / {number(plateReinforcement.topYMm2PerM, 0)} mm²/m</td>
+                <th>As onder X/Y</th><td>{number(plateReinforcement.bottomXMm2PerM, 0)} / {number(plateReinforcement.bottomYMm2PerM, 0)} mm²/m</td></tr>
+              <tr><th>Dwarskracht</th><td>Asw {number(plateReinforcement.shearMm2PerM2 ?? 0, 0)} mm²/m² · tanθ {number(plateReinforcement.tanTheta ?? 1)} · αcc {number(plateReinforcement.alphaCc ?? 1)}</td>
+                <th>Scheurgrens</th><td>{plateReinforcement.crackLimitMm === undefined ? "niet opgegeven" : `${number(plateReinforcement.crackLimitMm)} mm`}{plateReinforcement.longTerm ? " · langdurend" : ""}</td></tr>
+              {plateReinforcement.cRdc !== undefined && <tr><th>C_Rd,c</th><td>{number(plateReinforcement.cRdc)}</td><td colSpan={2} /></tr>}
+            </tbody></table>}
             <p className="frame3d-report-note">Hybride Q4-buigplaat in lokale plaatassen. Hoekopleggingen komen uit het 3D-model; tussenliggende plaatranden zijn vrij. w is positief volgens de lokale plaatnormaal.</p>
             <p className="frame3d-report-note">{result.analysis === "material"
               ? "De elementen gebruiken een secant-E op de bereikte maximale vezelrek. Dit is geen expliciete scheur- of plastische doorsnedewet."
-              : "Dit overzicht bevat elastische snedekrachten."} Plaatwapening en scheurwijdte zijn voor dit 3D-model nog niet getoetst.</p>
+              : "Dit overzicht bevat elastische snedekrachten."} {result.plateBending.elements.some((element) => element.reinforcement)
+                ? "De wapeningscontrole gebruikt de snedekrachten in de laatste lasttoestand en is per element op hoek- en integratiepunten bepaald. Extremen ertussen, scheurhistorie en normcombinaties zijn niet automatisch afgedekt."
+                : "Plaatwapening en scheurwijdte zijn niet getoetst."}</p>
             <table className="frame3d-report-wide"><thead><tr>
               <th>Element</th><th>Mx [kNm/m]</th><th>My [kNm/m]</th><th>Mxy [kNm/m]</th><th>Vx [kN/m]</th><th>Vy [kN/m]</th><th>Eeff [MPa]</th>
             </tr></thead><tbody>
@@ -194,6 +210,40 @@ export default function Frame3DReport({
                 <td>{number(element.effectiveEMpa)}</td>
               </tr>)}
             </tbody></table>
+            {result.plateBending.elements.some((element) => element.reinforcement) && <>
+              <h3>Wapenings- en scheurtoets op de gekozen rekentoestand</h3>
+              <table className="frame3d-report-wide"><thead><tr>
+                <th>Element</th><th>Toestand</th><th>Steekpunten</th><th>As,req max [mm²/m]</th>
+                <th>V,req [mm²/m²]</th><th>V,aanw [mm²/m²]</th><th>Betondrukstaaf UC</th>
+                <th>wk,max [mm]</th><th>Toets</th>
+              </tr></thead><tbody>
+                {result.plateBending.elements.map((element) => {
+                  const check = element.reinforcement;
+                  if (!check) return null;
+                  const crackWidths = check.crack?.map((entry) => entry.check.characteristicWidthMm ?? 0) ?? [];
+                  const crackFailure = check.crack?.some((entry) => entry.check.unreinforcedTension
+                    || entry.check.passesLimit === false) ?? false;
+                  const crackLimitMissing = check.limitState === "service"
+                    && (check.crack?.some((entry) => entry.check.passesLimit === null) ?? true);
+                  const longitudinalFailure = check.longitudinal?.sufficient.some((ok) => !ok) ?? false;
+                  const shearFailure = (check.shear ? !check.shear.check.shearReinforcementSufficient
+                    || !check.shear.check.strutSufficient : false)
+                    || (check.maximumStrutUtilization ?? 0) > 1;
+                  return <tr key={element.quadId}><td>{element.quadId}</td>
+                    <td>{check.limitState === "ultimate" ? "UGT" : "BGT"}</td><td>{check.checkedPoints}</td>
+                    <td>{check.longitudinal ? number(Math.max(...check.longitudinal.requiredMm2PerM), 1) : "—"}</td>
+                    <td>{check.shear ? number(check.shear.check.requiredShearMm2PerM2, 1) : "—"}</td>
+                    <td>{check.shear ? number(check.shear.check.providedShearMm2PerM2, 1) : "—"}</td>
+                    <td>{check.maximumStrutUtilization === undefined ? "—" : number(check.maximumStrutUtilization, 3)}</td>
+                    <td>{crackWidths.length ? number(Math.max(...crackWidths), 3) : "—"}</td>
+                    <td className={crackFailure || longitudinalFailure || shearFailure ? "frame3d-report-bad"
+                      : crackLimitMissing ? "" : "frame3d-report-good"}>
+                      {crackFailure || longitudinalFailure || shearFailure ? "voldoet niet"
+                        : crackLimitMissing ? "scheurgrens ontbreekt" : "akkoord"}</td>
+                  </tr>;
+                })}
+              </tbody></table>
+            </>}
             <h3>Roosterknoopverplaatsingen</h3>
             <table className="frame3d-report-wide"><thead><tr>
               <th>Knoop</th><th>X [m]</th><th>Y [m]</th><th>Z [m]</th><th>w [mm]</th><th>θx lokaal [rad]</th><th>θy lokaal [rad]</th>
@@ -247,12 +297,13 @@ export default function Frame3DReport({
             {(model.plates?.length ?? 0) > 0 && <>
               <h3>Platen en openingen</h3>
               <table className="frame3d-report-wide"><thead><tr>
-                <th>Plaat</th><th>Contourknopen</th><th>Rand</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>E-rekcurve [MPa]</th><th>Openingen</th>
+                <th>Plaat</th><th>Contourknopen</th><th>Rand</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>E-rekcurve [MPa]</th><th>Wapening</th><th>Openingen</th>
               </tr></thead><tbody>
                 {(model.plates ?? []).map((plate) => <tr key={plate.id}>
                   <td>{plate.id}</td><td>{plate.nodeIds.join(" · ")}</td><td>{plate.boundary ? `${plate.boundary.length} segmenten (${plate.boundary.filter((segment) => segment.kind === "arc").length} boog)` : "hoekpunten"}</td><td>{number(plate.thicknessM)} m</td>
                   <td>{number(plate.cornerRadiusM ?? 0)} m</td><td>{plate.material || "—"}</td>
                   <td>{plate.modulusCurve?.map((point) => `${number(point.strain, 8)}:${number(point.eMpa, 1)}`).join(" → ") ?? "—"}</td>
+                  <td>{plate.reinforcement ? `${plate.reinforcement.limitState === "ultimate" ? "UGT" : "BGT"}; As ${[plate.reinforcement.topXMm2PerM, plate.reinforcement.topYMm2PerM, plate.reinforcement.bottomXMm2PerM, plate.reinforcement.bottomYMm2PerM].map((area) => number(area, 0)).join("/")} mm²/m` : "—"}</td>
                   <td>{(plate.openings ?? []).length === 0 ? "—" : (plate.openings ?? []).map((opening) =>
                     `#${opening.id}: ${opening.nodeIds.join(" · ")} (r=${number(opening.cornerRadiusM ?? 0)} m)`).join("; ")}</td>
                 </tr>)}

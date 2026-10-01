@@ -1,5 +1,6 @@
 import type { BeamCheckConfig } from "../fem/femTypes";
-import { dichtheidVanMateriaal, eVanMateriaal, G, resolveSection } from "../../lib/sectionResolver";
+import { CONCRETE_E_CM, dichtheidVanMateriaal, eVanMateriaal, G, resolveSection } from "../../lib/sectionResolver";
+import type { NativeReinforcementSpec } from "../../core/fem/nativePlate2DAdapter";
 import { sampleCircularArc3D, type ArcPoint3D } from "./frame3dCircularArc";
 
 /** Geometry for the 3D workspace. Coordinates are metres; Z is vertical, like 2D. */
@@ -153,9 +154,65 @@ export interface Frame3DPlate {
   material?: string;
   /** FNL: niet-toenemende secant-E als functie van maximale absolute vezelrek. */
   modulusCurve?: { strain: number; eMpa: number }[];
+  /** Expliciete UGT- of BGT-toetsinvoer voor de Rust-buigplaat. */
+  reinforcement?: NativeReinforcementSpec;
   /** Werkelijke afrondingsstraal van de plaatrand. */
   cornerRadiusM?: number;
   openings?: Frame3DPlateOpening[];
+}
+
+function readPlateReinforcement(value: unknown, plateId: number, thicknessM: number): NativeReinforcementSpec {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`3D-plaat ${plateId}: ongeldige wapeningsinvoer.`);
+  }
+  const raw = value as Record<string, unknown>;
+  if (raw.limitState !== "ultimate" && raw.limitState !== "service") {
+    throw new Error(`3D-plaat ${plateId}: kies UGT of BGT voor de wapeningscontrole.`);
+  }
+  const positive = ["fckMpa", "fctmMpa", "gammaC", "fydMpa", "fywdMpa", "esMpa", "barDiameterMm"] as const;
+  const nonnegative = ["coverMm", "topXMm2PerM", "topYMm2PerM", "bottomXMm2PerM", "bottomYMm2PerM"] as const;
+  for (const key of positive) {
+    if (typeof raw[key] !== "number" || !Number.isFinite(raw[key]) || raw[key] <= 0) {
+      throw new Error(`3D-plaat ${plateId}: ${key} moet een positief eindig getal zijn.`);
+    }
+  }
+  for (const key of nonnegative) {
+    if (typeof raw[key] !== "number" || !Number.isFinite(raw[key]) || raw[key] < 0) {
+      throw new Error(`3D-plaat ${plateId}: ${key} moet een niet-negatief eindig getal zijn.`);
+    }
+  }
+  const optionalPositive = ["leverArmMm", "cRdc", "crackLimitMm"] as const;
+  for (const key of optionalPositive) {
+    if (raw[key] !== undefined && (typeof raw[key] !== "number" || !Number.isFinite(raw[key]) || raw[key] <= 0)) {
+      throw new Error(`3D-plaat ${plateId}: ${key} moet een positief eindig getal zijn.`);
+    }
+  }
+  if (raw.shearMm2PerM2 !== undefined && (typeof raw.shearMm2PerM2 !== "number"
+      || !Number.isFinite(raw.shearMm2PerM2) || raw.shearMm2PerM2 < 0)) {
+    throw new Error(`3D-plaat ${plateId}: shearMm2PerM2 moet niet-negatief zijn.`);
+  }
+  const tanTheta = raw.tanTheta ?? 1, alphaCc = raw.alphaCc ?? 1;
+  if (typeof tanTheta !== "number" || !Number.isFinite(tanTheta) || tanTheta < 0.4 || tanTheta > 1
+      || typeof alphaCc !== "number" || !Number.isFinite(alphaCc) || alphaCc <= 0
+      || (raw.longTerm !== undefined && typeof raw.longTerm !== "boolean")
+      || (raw.fckMpa as number) >= 250
+      || thicknessM * 1000 <= 2 * (raw.coverMm as number) + (raw.barDiameterMm as number)
+      || (raw.leverArmMm !== undefined && (raw.leverArmMm as number) >= thicknessM * 1000)) {
+    throw new Error(`3D-plaat ${plateId}: ongeldige beton-/wapeningsparameters voor de plaatdikte.`);
+  }
+  return {
+    limitState: raw.limitState,
+    fckMpa: raw.fckMpa as number, fctmMpa: raw.fctmMpa as number,
+    gammaC: raw.gammaC as number, fydMpa: raw.fydMpa as number, fywdMpa: raw.fywdMpa as number,
+    esMpa: raw.esMpa as number, coverMm: raw.coverMm as number, barDiameterMm: raw.barDiameterMm as number,
+    topXMm2PerM: raw.topXMm2PerM as number, topYMm2PerM: raw.topYMm2PerM as number,
+    bottomXMm2PerM: raw.bottomXMm2PerM as number, bottomYMm2PerM: raw.bottomYMm2PerM as number,
+    ...(raw.shearMm2PerM2 !== undefined ? { shearMm2PerM2: raw.shearMm2PerM2 as number } : {}),
+    ...(raw.leverArmMm !== undefined ? { leverArmMm: raw.leverArmMm as number } : {}),
+    ...(raw.cRdc !== undefined ? { cRdc: raw.cRdc as number } : {}),
+    ...(raw.crackLimitMm !== undefined ? { crackLimitMm: raw.crackLimitMm as number } : {}),
+    tanTheta, alphaCc, longTerm: raw.longTerm === true,
+  };
 }
 
 /** Oppervlaktebelasting in globale assen, kN/m². */
@@ -782,6 +839,15 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
         throw new Error(`3D-plaat ${id}: de E-rekcurve moet bij rek 0 beginnen met materiaaleigen E = ${baseE} MPa.`);
       }
     }
+    const reinforcement = plate.reinforcement === undefined ? undefined
+      : readPlateReinforcement(plate.reinforcement, id, thicknessM);
+    if (reinforcement) {
+      const material = typeof plate.material === "string" ? plate.material.trim() : "";
+      const fck = Number(/^C(\d+)\//.exec(material)?.[1] ?? NaN);
+      if (!(material in CONCRETE_E_CM) || reinforcement.fckMpa !== fck) {
+        throw new Error(`3D-plaat ${id}: de wapeningscontrole vereist een herkende betonklasse en dezelfde fck als het plaatmateriaal.`);
+      }
+    }
     const openingIds = new Set<number>();
     const openings: Frame3DPlateOpening[] = [];
     if (plate.openings !== undefined && !Array.isArray(plate.openings)) throw new Error(`3D-plaat ${id} bevat geen geldige lijst openingen.`);
@@ -806,7 +872,7 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
       ...(boundary ? { boundary } : {}),
       ...(typeof plate.material === "string" && plate.material.trim() ? { material: plate.material.trim() } : {}),
       ...(cornerRadiusM > 0 ? { cornerRadiusM } : {}), ...(openings.length ? { openings } : {}),
-      ...(modulusCurve ? { modulusCurve } : {}) });
+      ...(modulusCurve ? { modulusCurve } : {}), ...(reinforcement ? { reinforcement } : {}) });
     plateIds.add(id);
   }
   const supports: Frame3DSupport[] = [];
@@ -1363,7 +1429,7 @@ export function addFrame3DPlate(
 
 export function updateFrame3DPlate(
   model: Frame3DModel, plateId: number,
-  patch: Partial<Pick<Frame3DPlate, "thicknessM" | "material" | "cornerRadiusM" | "modulusCurve">>,
+  patch: Partial<Pick<Frame3DPlate, "thicknessM" | "material" | "cornerRadiusM" | "modulusCurve" | "reinforcement">>,
 ): Frame3DModel {
   if (!(model.plates ?? []).some((plate) => plate.id === plateId)) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
   const parsed = parseFrame3DModel({

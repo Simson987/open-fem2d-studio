@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { registerHooks } from "node:module";
 import { fileURLToPath } from "node:url";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -9,6 +10,13 @@ import { frame3DMaximumDisplacementM } from "./src/components/frame3d/frame3dDis
 import { resolveSolver } from "./src/core/solver/SolverRegistry.ts";
 import { CONCRETE_E_CM } from "./src/lib/sectionResolver.ts";
 import Frame3DReportViews from "./src/components/frame3d/Frame3DReportViews.tsx";
+
+registerHooks({ load(url, context, nextLoad) {
+  if (url.endsWith(".css")) return { format: "module", source: "export {};", shortCircuit: true };
+  return nextLoad(url, context);
+} });
+const { default: Frame3DReport } = await import("./src/components/frame3d/Frame3DReport.tsx");
+const { default: Frame3DPlateReinforcementEditor } = await import("./src/components/frame3d/Frame3DPlateReinforcementEditor.tsx");
 
 const executable = (name) => fileURLToPath(new URL(`../src-tauri/target/debug/${name}`, import.meta.url));
 const invoke = (binary, input) => new Promise((resolve, reject) => {
@@ -221,6 +229,43 @@ try {
   assert.throws(() => parseFrame3DModel({ ...model,
     plates: [{ ...model.plates[0], modulusCurve: [{ strain: 0, eMpa: initialE }, { strain: 0.001, eMpa: initialE * 1.1 }] }],
   }), /niet-toenemende E/);
+
+  const reinforcement = { limitState: "ultimate", fckMpa: 30, fctmMpa: 2.9,
+    gammaC: 1.5, fydMpa: 435, fywdMpa: 435, esMpa: 200000,
+    coverMm: 30, barDiameterMm: 12, topXMm2PerM: 1000, topYMm2PerM: 1000,
+    bottomXMm2PerM: 1000, bottomYMm2PerM: 1000, shearMm2PerM2: 200,
+    tanTheta: 1, alphaCc: 1 };
+  const reinforcedModel = parseFrame3DModel({ ...model,
+    plates: [{ ...model.plates[0], reinforcement }] });
+  const editor = renderToStaticMarkup(React.createElement(Frame3DPlateReinforcementEditor,
+    { model: reinforcedModel, plate: reinforcedModel.plates[0], onChange: () => {} }));
+  assert.match(editor, /Plaatwapening/);
+  assert.match(editor, /Dwarskrachtwapening/);
+  const ultimate = await solveFrame3D(reinforcedModel, 1, "linear", "openaec-native-fem");
+  assert.equal(ultimate.forceBalance.ok, true);
+  assert.ok(ultimate.plateBending.elements.every((element) => element.reinforcement?.limitState === "ultimate"
+    && element.reinforcement.checkedPoints >= 4 && element.reinforcement.shear
+    && element.reinforcement.longitudinal && element.reinforcement.maximumStrutUtilization >= 0));
+  assert.equal(calls.at(-1).input.reinforcement.limitState, "ultimate");
+  const service = await solveFrame3D({ ...reinforcedModel,
+    plates: [{ ...reinforcedModel.plates[0], reinforcement: {
+      ...reinforcement, limitState: "service", crackLimitMm: 0.3 } }],
+  }, 1, "linear", "openaec-native-fem");
+  assert.ok(service.plateBending.elements.every((element) => element.reinforcement?.limitState === "service"
+    && element.reinforcement.crack?.length === 4));
+  const checkedReport = renderToStaticMarkup(React.createElement(Frame3DReport,
+    { model: reinforcedModel, result: ultimate }));
+  assert.match(checkedReport, /Wapenings- en scheurtoets/);
+  assert.match(checkedReport, /V,req/);
+  assert.match(checkedReport, /fck 30 MPa/);
+  const serviceReport = renderToStaticMarkup(React.createElement(Frame3DReport,
+    { model: { ...reinforcedModel, plates: [{ ...reinforcedModel.plates[0],
+      reinforcement: { ...reinforcement, limitState: "service", crackLimitMm: 0.3 } }] }, result: service }));
+  assert.match(serviceReport, /wk,max/);
+  assert.throws(() => parseFrame3DModel({ ...model, plates: [{ ...model.plates[0],
+    reinforcement: { ...reinforcement, coverMm: 100 } }] }), /ongeldige beton-\/wapeningsparameters/);
+  assert.throws(() => parseFrame3DModel({ ...model, plates: [{ ...model.plates[0],
+    reinforcement: { ...reinforcement, fckMpa: 35 } }] }), /dezelfde fck/);
 
   await assert.rejects(solveFrame3D({ ...model, plates: [{ ...model.plates[0], openings: [{ id: 1, nodeIds: [11, 22, 33] }] }] },
     1, "linear", "openaec-native-fem"), /zonder bogen.*openingen/);

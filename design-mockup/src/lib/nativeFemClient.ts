@@ -69,10 +69,28 @@ export interface NativeHybridPlateResult {
   elements: Array<{
     quadId: number; momentKnmPerM: [number, number, number];
     shearKnPerM: [number, number]; effectiveEMpa: number;
-    maxFibreStrain: number; reinforcement?: unknown;
+    maxFibreStrain: number; reinforcement?: NativePlateReinforcementEnvelope;
   }>;
   iterations: number;
   relativeResidual: number;
+}
+
+export interface NativePlateReinforcementEnvelope {
+  limitState: 'ultimate' | 'service';
+  checkedPoints: number;
+  shear?: { positionM: [number, number]; check: {
+    demandKnPerM: number; concreteResistanceKnPerM: number;
+    requiredShearMm2PerM2: number; providedShearMm2PerM2: number;
+    shearReinforcementSufficient: boolean; strutSufficient: boolean;
+  } };
+  maximumStrutUtilization?: number;
+  longitudinal?: { requiredMm2PerM: [number, number, number, number];
+    providedMm2PerM: [number, number, number, number]; sufficient: [boolean, boolean, boolean, boolean];
+    governingPositionsM: [[number, number], [number, number], [number, number], [number, number]] };
+  crack?: Array<{ positionM: [number, number]; check: {
+    cracked: boolean; unreinforcedTension: boolean; characteristicWidthMm: number | null;
+    passesLimit: boolean | null;
+  } }>;
 }
 
 /** Existing Mesh -> strict Rust Q4 input -> browser or desktop transport. */

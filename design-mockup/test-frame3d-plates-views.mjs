@@ -153,7 +153,12 @@ assert.deepEqual(toggleFrame3DSelection(geometrySelection, { type: "surfaceLoad"
 const modernView = { ...view, mode: "results" };
 const modulusCurve = [{ strain: 0, eMpa: CONCRETE_E_CM["C35/45"] },
   { strain: 0.0002, eMpa: CONCRETE_E_CM["C35/45"] / 2 }];
-const loadedWithCurve = updateFrame3DPlate(loaded, 1, { modulusCurve });
+const reinforcement = { limitState: "service", fckMpa: 35, fctmMpa: 3.2,
+  gammaC: 1.5, fydMpa: 435, fywdMpa: 435, esMpa: 200000,
+  coverMm: 30, barDiameterMm: 12, topXMm2PerM: 800, topYMm2PerM: 800,
+  bottomXMm2PerM: 800, bottomYMm2PerM: 800, shearMm2PerM2: 0,
+  tanTheta: 1, alphaCc: 1, longTerm: false, crackLimitMm: 0.3 };
+const loadedWithCurve = updateFrame3DPlate(loaded, 1, { modulusCurve, reinforcement });
 const projectText = serializeProject({
   nodes: [], beams: [], supports: [], plates: [], loads: [], loadCases: [{ id: 1, name: "Permanent", type: "permanent" }],
   activeLoadCaseId: 1, selfWeightEnabled: false, nonlinearEnabled: true,
@@ -164,6 +169,8 @@ assert.equal(reopened.model3d.plates[0].cornerRadiusM, 0.35);
 assert.equal(reopened.model3d.surfaceLoads[0].qz, -5);
 assert.deepEqual(reopened.model3d.plates[0].modulusCurve, modulusCurve,
   "de ingevoerde E-rekcurve blijft in het 3D-projectbestand behouden");
+assert.deepEqual(reopened.model3d.plates[0].reinforcement, reinforcement,
+  "de ingevoerde plaatwapening en scheurgrens blijven in het projectbestand behouden");
 assert.equal(reopened.frame3dViewSets[0].name, "UGT momentbeeld");
 assert.equal(reopened.frame3dViewSets[0].mode, "results", "de resultaat-tabstand overleeft projectopslag");
 
