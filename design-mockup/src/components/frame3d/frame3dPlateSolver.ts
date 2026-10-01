@@ -1,7 +1,7 @@
 import { solveNativeFem, type NativeHybridPlateResult } from "../../lib/nativeFemClient";
 import { CONCRETE_E_CM, NU_BETON, NU_STAAL, eVanMateriaal } from "../../lib/sectionResolver";
 import { frame3DLoadCaseId, type Frame3DModel, type Frame3DNode } from "./frame3dModel";
-import type { Frame3DLoadSelection, Frame3DPlateBendingResult, Frame3DSolveResult } from "./frame3dSolver";
+import type { Frame3DAnalysisKind, Frame3DLoadSelection, Frame3DPlateBendingResult, Frame3DSolveResult } from "./frame3dSolver";
 
 interface QuadMesh {
   nodes: { id: number; x: number; y: number }[];
@@ -142,12 +142,25 @@ function balance(
 /** First app route for the native Blaauwendraad-inspired hybrid Q4 bending element. */
 export async function solveFrame3DPlate(
   model: Frame3DModel, selection: Frame3DLoadSelection | undefined,
+  analysis: Extract<Frame3DAnalysisKind, "linear" | "material">,
 ): Promise<Frame3DSolveResult> {
   const geometry = rectangle(model);
   const { plate, nodes, origin, ex, ey, normal, center, width, height, eMpa, nu, tolerance } = geometry;
+  if (model.materialLoadPath !== undefined && (!Array.isArray(model.materialLoadPath)
+      || model.materialLoadPath.length === 0 || model.materialLoadPath.length > 100
+      || model.materialLoadPath.some((value) => !Number.isFinite(value)))) {
+    throw new Error("Het FNL-lastpad moet 1–100 eindige lastfactoren bevatten.");
+  }
+  if (analysis === "material" && (!plate.modulusCurve || plate.modulusCurve.length < 2)) {
+    throw new Error(`3D-plaat ${plate.id}: stel voor FNL een expliciete E-rekcurve in.`);
+  }
+  if (analysis === "material" && Math.abs(plate.modulusCurve![0].eMpa - eMpa) > eMpa * 1e-10) {
+    throw new Error(`3D-plaat ${plate.id}: de E-rekcurve moet bij rek 0 beginnen met de materiaaleigen E = ${eMpa} MPa.`);
+  }
+  const loadPath = analysis === "material" ? model.materialLoadPath ?? [1] : [];
   if ((model.memberLoads?.length ?? 0) || (model.memberPointLoads?.length ?? 0)
-      || (model.thermalLoads?.length ?? 0) || model.materialLoadPath) {
-    throw new Error("De losse 3D-plaatroute ondersteunt geen staaflasten, temperatuur of FNL-lastpad.");
+      || (model.thermalLoads?.length ?? 0)) {
+    throw new Error("De losse 3D-plaatroute ondersteunt geen staaflasten of temperatuur.");
   }
   for (const support of model.supports ?? []) {
     if (!nodes.some((node) => node.id === support.nodeId)
@@ -207,9 +220,13 @@ export async function solveFrame3DPlate(
       // physical 3D rotations about the local plate X and Y axes.
       fz: load.normalForce, mx: load.localMx, my: load.localMy })),
     pressureKnM2: surfaceLoads.reduce((sum, pressure) => sum + pressure, 0),
+    ...(analysis === "material" ? { modulusCurves: [{ materialId: 1, points: plate.modulusCurve }],
+      loadPath, maxIterations: 50, tolerance: 1e-7 } : {}),
   });
   if (native.nodes?.length !== mesh.nodes.length || native.elements?.length !== mesh.quads.length
       || !Number.isFinite(native.relativeResidual) || native.relativeResidual > 1e-7
+      || native.elements.some((element) => !Number.isFinite(element.effectiveEMpa) || element.effectiveEMpa <= 0
+        || !Number.isFinite(element.maxFibreStrain) || element.maxFibreStrain < 0)
       || native.nodes.some((node) => ![node.wM, node.thetaXRad, node.thetaYRad,
         node.reactionFzKn, node.reactionMxKnm, node.reactionMyKnm].every(Number.isFinite))) {
     throw new Error("De Rust-buigplaat leverde geen volledig, eindig resultaat met voldoende kleine restkracht.");
@@ -243,18 +260,22 @@ export async function solveFrame3DPlate(
     const [mx, my, mz] = globalRotation(value.reactionMxKnm, value.reactionMyKnm);
     return { nodeId: corner.id, fx, fy, fz, mx, my, mz };
   });
-  const forceBalance = balance(nodes, scale(normal, surfaceLoads.reduce((sum, q) => sum + q, 0)),
-    width * height, center, nodalLoads, reactions);
+  const finalFactor = loadPath.length ? loadPath[loadPath.length - 1] : 1;
+  const forceBalance = balance(nodes, scale(normal, finalFactor * surfaceLoads.reduce((sum, q) => sum + q, 0)),
+    width * height, center, nodalLoads.map((load) => ({ nodeId: load.nodeId,
+      force: scale(load.force, finalFactor), moment: scale(load.moment, finalFactor) })), reactions);
   return {
     schemaVersion: 1,
     engine: { id: "openaec-native-fem", name: "Open FEM Rust", revision: "0.1.0", license: "AGPL-3.0-or-later" },
-    analysis: "linear", displacements, reactions, memberForces: [], plateBending,
+    analysis, displacements, reactions, memberForces: [], plateBending,
+    ...(analysis === "material" ? { materialLoadPath: [...loadPath], materialIterations: native.iterations } : {}),
     buckling: { status: "notApplicable", reason: "Eigenknik voor een losse buigplaat is niet beschikbaar." },
     equilibrium: { relativeResidual: native.relativeResidual, residualOk: true,
       maxImbalanceKn: forceBalance.maxImbalanceKn, equilibriumOk: forceBalance.ok },
     forceBalance, solverPath: "native-rust-hybrid-plate",
-    diagnostics: ["Rust hybride Q4-buigplaat; lokaal rechthoekig rooster in een 3D-vlak, lineaire buiging.",
+    diagnostics: ["Rust hybride Q4-buigplaat; lokaal rechthoekig rooster in een 3D-vlak.",
       "Opleggingen gelden op de vier plaat-hoekknopen; langs de overige rand is de plaat vrij.",
+      ...(analysis === "material" ? ["FNL gebruikt een niet-toenemende secant-E op maximale vezelrek per element; dit is geen scheur- of plastisch doorsnedemodel."] : []),
       "Plaatwapening en scheurwijdte zijn in deze 3D-app-route nog niet aangesloten."],
   };
 }

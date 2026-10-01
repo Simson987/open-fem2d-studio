@@ -7,6 +7,7 @@ import { solveFrame3D, solveFrame3DCombination } from "./src/components/frame3d/
 import { parseFrame3DModel, withFrame3DSelfWeight } from "./src/components/frame3d/frame3dModel.ts";
 import { frame3DMaximumDisplacementM } from "./src/components/frame3d/frame3dDisplacement.ts";
 import { resolveSolver } from "./src/core/solver/SolverRegistry.ts";
+import { CONCRETE_E_CM } from "./src/lib/sectionResolver.ts";
 import Frame3DReportViews from "./src/components/frame3d/Frame3DReportViews.tsx";
 
 const executable = (name) => fileURLToPath(new URL(`../src-tauri/target/debug/${name}`, import.meta.url));
@@ -41,6 +42,8 @@ assert.equal(resolveSolver("openaec-native-fem", plateRequest).id, "openaec-nati
 assert.throws(() => resolveSolver("automatic", plateRequest), /Kies.*Open FEM Rust/);
 assert.throws(() => resolveSolver("openaec-native-fem", { ...plateRequest, elementFamilies: ["frame", "plate"] }), /does not support/);
 assert.throws(() => resolveSolver("openaec-native-fem", { ...plateRequest, analysis: "p-delta" }), /does not support/);
+assert.equal(resolveSolver("openaec-native-fem", { ...plateRequest, analysis: "material-nonlinear" }).id,
+  "openaec-native-fem");
 
 const originalFetch = globalThis.fetch;
 const calls = [];
@@ -180,12 +183,51 @@ try {
   assert.ok(Math.abs(weightResult.reactions.reduce((sum, reaction) => sum + reaction.fz, 0) - 19.62) < 1e-8);
   assert.equal(weightResult.forceBalance.ok, true);
 
+  const initialE = CONCRETE_E_CM["C30/37"];
+  const softeningCurve = [{ strain: 0, eMpa: initialE }, { strain: 1e-10, eMpa: initialE / 2 }];
+  const materialModel = parseFrame3DModel({ ...model,
+    plates: [{ ...model.plates[0], modulusCurve: softeningCurve }], materialLoadPath: [1] });
+  assert.deepEqual(materialModel.plates[0].modulusCurve, softeningCurve,
+    "de FNL-curve moet de projectmodelparser passeren");
+  const softened = await solveFrame3D(materialModel, 1, "material", "openaec-native-fem");
+  assert.equal(softened.analysis, "material");
+  assert.ok(softened.materialIterations > 1);
+  assert.equal(softened.forceBalance.ok, true);
+  assert.ok(softened.plateBending.elements.every((element) =>
+    Math.abs(element.effectiveEMpa - initialE / 2) < 1e-8 && element.maxFibreStrain > 1e-10));
+  assert.ok(Math.abs(frame3DMaximumDisplacementM(model, softened)
+    / frame3DMaximumDisplacementM(model, first) - 2) < 1e-7,
+  "halvering van E moet bij verzadigde secantcurve de elastische zakking verdubbelen");
+  const softenedCombination = await solveFrame3DCombination(materialModel,
+    new Map([[1, 1], [2, 0.5]]), "material", "openaec-native-fem");
+  assert.equal(softenedCombination.forceBalance.ok, true);
+  assert.ok(Math.abs(frame3DMaximumDisplacementM(model, softenedCombination)
+    / frame3DMaximumDisplacementM(model, softened) - 2) < 1e-7,
+  "de FNL-combinatie moet als verdubbelde volledige lastvector door de Rust-kern gaan");
+  const unloaded = await solveFrame3D({ ...materialModel, materialLoadPath: [1, 0] },
+    1, "material", "openaec-native-fem");
+  assert.equal(unloaded.forceBalance.ok, true);
+  assert.ok(frame3DMaximumDisplacementM(model, unloaded) < 1e-9);
+  assert.ok(unloaded.plateBending.elements.every((element) =>
+    Math.abs(element.effectiveEMpa - initialE / 2) < 1e-8 && element.maxFibreStrain > 1e-10));
+  await assert.rejects(solveFrame3D(model, 1, "material", "openaec-native-fem"), /expliciete E-rekcurve/);
+  await assert.rejects(solveFrame3D({ ...materialModel,
+    plates: [{ ...materialModel.plates[0], modulusCurve: [{ strain: 0, eMpa: initialE * 1.1 }, softeningCurve[1]] }],
+  },
+  1, "material", "openaec-native-fem"), /materiaaleigen E/);
+  assert.throws(() => parseFrame3DModel({ ...materialModel,
+    plates: [{ ...materialModel.plates[0], modulusCurve: [{ strain: 0, eMpa: initialE * 1.1 }, softeningCurve[1]] }],
+  }), /materiaaleigen E/, "ook de plaateditor moet een foutieve begin-E direct weigeren");
+  assert.throws(() => parseFrame3DModel({ ...model,
+    plates: [{ ...model.plates[0], modulusCurve: [{ strain: 0, eMpa: initialE }, { strain: 0.001, eMpa: initialE * 1.1 }] }],
+  }), /niet-toenemende E/);
+
   await assert.rejects(solveFrame3D({ ...model, plates: [{ ...model.plates[0], openings: [{ id: 1, nodeIds: [11, 22, 33] }] }] },
     1, "linear", "openaec-native-fem"), /zonder bogen.*openingen/);
   await assert.rejects(solveFrame3D({ ...model, surfaceLoads: [{ ...model.surfaceLoads[0], qx: 1 }] },
     1, "linear", "openaec-native-fem"), /alleen een oppervlaktebelasting normaal/);
-  await assert.rejects(solveFrame3D(model, 1, "p-delta", "openaec-native-fem"), /lineaire Open FEM Rust-plaatroute/);
-  console.log("3D-plaatroute via Rust: evenwicht, combinaties, 3D-rotaties, eigen gewicht en afwijzingen geslaagd.");
+  await assert.rejects(solveFrame3D(model, 1, "p-delta", "openaec-native-fem"), /lineaire of FNL Open FEM Rust-plaatroute/);
+  console.log("3D-plaatroute via Rust: evenwicht, combinaties, rotaties, FNL-E(rek), ontlasten en afwijzingen geslaagd.");
 } finally {
   globalThis.fetch = originalFetch;
 }

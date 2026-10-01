@@ -111,9 +111,9 @@ export function supportsRequest(solver: SolverDescriptor, request: AnalysisReque
   }
   if (solver.id === "openaec-native-fem" && request.dimension === "3d"
       && request.elementFamilies.includes("plate")) {
-    // The current app adapter handles a separate linear bending plate only.
-    // Coupled frame/plate assembly and nonlinear plate analysis are pending.
-    return solver.available && request.analysis === "linear"
+    // The app adapter handles a separate bending plate with an explicit
+    // secant-E curve for material analysis. Geometric and coupled analyses wait.
+    return solver.available && (request.analysis === "linear" || request.analysis === "material-nonlinear")
       && request.elementFamilies.length === 1 && request.elementFamilies[0] === "plate";
   }
   return solver.available

@@ -2264,6 +2264,12 @@ function App() {
           );
           return;
         }
+        if (result.plateBending) {
+          setFrame3dChecks(null);
+          setFrame3dConcreteChecks(null);
+          setFrame3dChecksError(null);
+          return;
+        }
         if (result.materialLoadPath) {
           setFrame3dChecks(null);
           setFrame3dConcreteChecks(null);

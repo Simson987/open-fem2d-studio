@@ -130,16 +130,17 @@ export default function Frame3DReport({
           <section className="frame3d-report-empty">
             <h2>Nog niet berekend</h2>
             <p>De modelinvoer hieronder kan worden afgedrukt. Tweede-orde-, knik- en staafresultaten ontbreken nog.</p>
-            {(model.plates?.length ?? 0) > 0 && <p>Voor één losse vlakke rechthoekige plaat is een lineaire Open FEM Rust-berekening beschikbaar. Andere 3D-plaatmodellen worden expliciet geweigerd.</p>}
+            {(model.plates?.length ?? 0) > 0 && <p>Voor één losse vlakke rechthoekige plaat is een lineaire of FNL Open FEM Rust-berekening beschikbaar. FNL vereist een opgegeven E-rekcurve; andere 3D-plaatmodellen worden expliciet geweigerd.</p>}
           </section>
           {(model.plates?.length ?? 0) > 0 && <section>
             <h2>Platen en openingen</h2>
             <table className="frame3d-report-wide"><thead><tr>
-              <th>Plaat</th><th>Contourknopen</th><th>Rand</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>Openingen</th>
+              <th>Plaat</th><th>Contourknopen</th><th>Rand</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>E-rekcurve [MPa]</th><th>Openingen</th>
             </tr></thead><tbody>
               {(model.plates ?? []).map((plate) => <tr key={plate.id}>
                 <td>{plate.id}</td><td>{plate.nodeIds.join(" · ")}</td><td>{plate.boundary ? `${plate.boundary.length} segmenten (${plate.boundary.filter((segment) => segment.kind === "arc").length} boog)` : "hoekpunten"}</td><td>{number(plate.thicknessM)} m</td>
                 <td>{number(plate.cornerRadiusM ?? 0)} m</td><td>{plate.material || "—"}</td>
+                <td>{plate.modulusCurve?.map((point) => `${number(point.strain, 8)}:${number(point.eMpa, 1)}`).join(" → ") ?? "—"}</td>
                 <td>{(plate.openings ?? []).length === 0 ? "—" : (plate.openings ?? []).map((opening) =>
                   `#${opening.id}: ${opening.nodeIds.join(" · ")} (r=${number(opening.cornerRadiusM ?? 0)} m)`).join("; ")}</td>
               </tr>)}
@@ -166,7 +167,9 @@ export default function Frame3DReport({
               {result.materialLoadPath && <div><span>FNL-lastpad</span><strong>{result.materialLoadPath.join(" → ")}</strong></div>}
               <div><span>Rekentoestand</span><strong>{activeCombinationName || activeLoadCaseName || `Geval ${activeLoadCaseId}`}</strong></div>
               <div><span>Max. verplaatsing</span><strong>{number(maxDisplacement * 1000)} mm</strong></div>
-              <div><span>Convergentie</span><strong>{result.secondOrder ? `${result.secondOrder.iterations} iteratie${result.secondOrder.iterations === 1 ? "" : "s"}` : "direct"}</strong></div>
+              <div><span>Convergentie</span><strong>{result.materialIterations !== undefined
+                ? `${result.materialIterations} materiaaliteraties`
+                : result.secondOrder ? `${result.secondOrder.iterations} iteratie${result.secondOrder.iterations === 1 ? "" : "s"}` : "direct"}</strong></div>
               <div><span>Eerste knikfactor αcr</span><strong>{firstMode ? number(firstMode.loadFactor) : "n.v.t."}</strong></div>
               <div><span>Evenwicht</span><strong className={equilibrium?.equilibriumOk === true && result.forceBalance?.ok !== false ? "frame3d-report-good" : "frame3d-report-bad"}>{equilibrium?.equilibriumOk === true && result.forceBalance?.ok !== false ? "akkoord" : equilibrium?.equilibriumOk === false || result.forceBalance?.ok === false ? "afwijking" : "niet geverifieerd"}</strong></div>
               {result.forceBalance && <div><span>Globale krachtensom</span><strong className={result.forceBalance.maxImbalanceKn <= result.forceBalance.toleranceKn ? "frame3d-report-good" : "frame3d-report-bad"}>{result.forceBalance.maxImbalanceKn <= result.forceBalance.toleranceKn ? "akkoord" : `${number(result.forceBalance.maxImbalanceKn, 4)} kN afwijking`}</strong></div>}
@@ -178,7 +181,9 @@ export default function Frame3DReport({
           {result.plateBending && <section>
             <h2>Buigplaatresultaat · plaat {result.plateBending.plateId}</h2>
             <p className="frame3d-report-note">Hybride Q4-buigplaat in lokale plaatassen. Hoekopleggingen komen uit het 3D-model; tussenliggende plaatranden zijn vrij. w is positief volgens de lokale plaatnormaal.</p>
-            <p className="frame3d-report-note">Dit overzicht bevat elastische snedekrachten; plaatwapening en scheurwijdte zijn voor dit 3D-model nog niet getoetst.</p>
+            <p className="frame3d-report-note">{result.analysis === "material"
+              ? "De elementen gebruiken een secant-E op de bereikte maximale vezelrek. Dit is geen expliciete scheur- of plastische doorsnedewet."
+              : "Dit overzicht bevat elastische snedekrachten."} Plaatwapening en scheurwijdte zijn voor dit 3D-model nog niet getoetst.</p>
             <table className="frame3d-report-wide"><thead><tr>
               <th>Element</th><th>Mx [kNm/m]</th><th>My [kNm/m]</th><th>Mxy [kNm/m]</th><th>Vx [kN/m]</th><th>Vy [kN/m]</th><th>Eeff [MPa]</th>
             </tr></thead><tbody>
@@ -242,11 +247,12 @@ export default function Frame3DReport({
             {(model.plates?.length ?? 0) > 0 && <>
               <h3>Platen en openingen</h3>
               <table className="frame3d-report-wide"><thead><tr>
-                <th>Plaat</th><th>Contourknopen</th><th>Rand</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>Openingen</th>
+                <th>Plaat</th><th>Contourknopen</th><th>Rand</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>E-rekcurve [MPa]</th><th>Openingen</th>
               </tr></thead><tbody>
                 {(model.plates ?? []).map((plate) => <tr key={plate.id}>
                   <td>{plate.id}</td><td>{plate.nodeIds.join(" · ")}</td><td>{plate.boundary ? `${plate.boundary.length} segmenten (${plate.boundary.filter((segment) => segment.kind === "arc").length} boog)` : "hoekpunten"}</td><td>{number(plate.thicknessM)} m</td>
                   <td>{number(plate.cornerRadiusM ?? 0)} m</td><td>{plate.material || "—"}</td>
+                  <td>{plate.modulusCurve?.map((point) => `${number(point.strain, 8)}:${number(point.eMpa, 1)}`).join(" → ") ?? "—"}</td>
                   <td>{(plate.openings ?? []).length === 0 ? "—" : (plate.openings ?? []).map((opening) =>
                     `#${opening.id}: ${opening.nodeIds.join(" · ")} (r=${number(opening.cornerRadiusM ?? 0)} m)`).join("; ")}</td>
                 </tr>)}
@@ -334,7 +340,9 @@ export default function Frame3DReport({
               <tr><th>Vastgezette revisie</th><td><code>{result.engine.revision.slice(0, 12)}</code></td></tr>
               <tr><th>Licentie</th><td>{result.engine.license}</td></tr>
               {result.materialLoadPath && <tr><th>Laatste lastfactor</th><td>{number(result.materialLoadPath[result.materialLoadPath.length - 1], 4)}</td></tr>}
-              <tr><th>{result.analysis === "material" ? "FNL-iteratie" : "Tweede orde"}</th><td>{result.secondOrder ? `${result.secondOrder.converged ? "geconvergeerd" : "niet geconvergeerd"}; ${result.secondOrder.stable ? "stabiel" : "instabiel"}` : "niet uitgevoerd"}</td></tr>
+              <tr><th>{result.analysis === "material" ? "FNL-iteratie" : "Tweede orde"}</th><td>{result.materialIterations !== undefined
+                ? `${result.materialIterations} iteraties; geconvergeerd`
+                : result.secondOrder ? `${result.secondOrder.converged ? "geconvergeerd" : "niet geconvergeerd"}; ${result.secondOrder.stable ? "stabiel" : "instabiel"}` : "niet uitgevoerd"}</td></tr>
               <tr><th>Relatief evenwichtsresidu</th><td>{equilibrium ? number(equilibrium.relativeResidual, 8) : "niet beschikbaar"}</td></tr>
               <tr><th>Max. onbalans</th><td>{equilibrium ? `${number(equilibrium.maxImbalanceKn, 8)} kN` : "niet beschikbaar"}</td></tr>
               {result.forceBalance && <tr><th>Onafhankelijke krachtensom X/Y/Z</th><td>{result.forceBalance.imbalanceKn.map((value) => number(value, 5)).join(" / ")} kN (grens {number(result.forceBalance.toleranceKn, 5)} kN)</td></tr>}

@@ -1,5 +1,5 @@
 import type { BeamCheckConfig } from "../fem/femTypes";
-import { dichtheidVanMateriaal, G, resolveSection } from "../../lib/sectionResolver";
+import { dichtheidVanMateriaal, eVanMateriaal, G, resolveSection } from "../../lib/sectionResolver";
 import { sampleCircularArc3D, type ArcPoint3D } from "./frame3dCircularArc";
 
 /** Geometry for the 3D workspace. Coordinates are metres; Z is vertical, like 2D. */
@@ -151,6 +151,8 @@ export interface Frame3DPlate {
   boundary?: Frame3DPlateBoundarySegment[];
   thicknessM: number;
   material?: string;
+  /** FNL: niet-toenemende secant-E als functie van maximale absolute vezelrek. */
+  modulusCurve?: { strain: number; eMpa: number }[];
   /** Werkelijke afrondingsstraal van de plaatrand. */
   cornerRadiusM?: number;
   openings?: Frame3DPlateOpening[];
@@ -169,7 +171,7 @@ export interface Frame3DSurfaceLoad {
 export interface Frame3DModel {
   nodes: Frame3DNode[];
   beams: Frame3DBeam[];
-  /** Absolute lastfactoren voor de axiale materiaalgeschiedenis van de Rust 3D-FNL-kern. */
+  /** Absolute lastfactoren voor de Rust 3D-FNL-kern, bij staven of platen. */
   materialLoadPath?: number[];
   /** Optional so models made before nodal conditions remain readable. */
   supports?: Frame3DSupport[];
@@ -754,6 +756,32 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
     if (!(thicknessM > 0) || !Number.isFinite(thicknessM) || cornerRadiusM < 0 || !Number.isFinite(cornerRadiusM)) {
       throw new Error(`3D-plaat ${id} heeft een ongeldige dikte of randstraal.`);
     }
+    let modulusCurve: Frame3DPlate["modulusCurve"];
+    if (plate.modulusCurve !== undefined) {
+      if (!Array.isArray(plate.modulusCurve) || plate.modulusCurve.length < 2 || plate.modulusCurve.length > 100) {
+        throw new Error(`3D-plaat ${id}: de E-rekcurve moet 2–100 punten bevatten.`);
+      }
+      modulusCurve = plate.modulusCurve.map((rawPoint, index) => {
+        if (!rawPoint || typeof rawPoint !== "object" || Array.isArray(rawPoint)) {
+          throw new Error(`3D-plaat ${id}: E-rekpunt ${index + 1} is ongeldig.`);
+        }
+        const point = rawPoint as Record<string, unknown>;
+        const strain = point.strain, eMpa = point.eMpa;
+        if (typeof strain !== "number" || !Number.isFinite(strain) || strain < 0
+            || typeof eMpa !== "number" || !Number.isFinite(eMpa) || eMpa <= 0) {
+          throw new Error(`3D-plaat ${id}: E-rekpunt ${index + 1} vereist eindige positieve E en niet-negatieve rek.`);
+        }
+        return { strain, eMpa };
+      });
+      if (modulusCurve[0].strain !== 0 || modulusCurve.some((point, index) => index > 0
+          && (point.strain <= modulusCurve![index - 1].strain || point.eMpa > modulusCurve![index - 1].eMpa))) {
+        throw new Error(`3D-plaat ${id}: de E-rekcurve begint bij rek 0, met stijgende rek en niet-toenemende E.`);
+      }
+      const baseE = eVanMateriaal(typeof plate.material === "string" ? plate.material.trim() : "").E;
+      if (Number.isFinite(baseE) && Math.abs(modulusCurve[0].eMpa - baseE) > baseE * 1e-10) {
+        throw new Error(`3D-plaat ${id}: de E-rekcurve moet bij rek 0 beginnen met materiaaleigen E = ${baseE} MPa.`);
+      }
+    }
     const openingIds = new Set<number>();
     const openings: Frame3DPlateOpening[] = [];
     if (plate.openings !== undefined && !Array.isArray(plate.openings)) throw new Error(`3D-plaat ${id} bevat geen geldige lijst openingen.`);
@@ -777,7 +805,8 @@ export function parseFrame3DModel(value: unknown): Frame3DModel {
     plates.push({ id, nodeIds: loop, thicknessM,
       ...(boundary ? { boundary } : {}),
       ...(typeof plate.material === "string" && plate.material.trim() ? { material: plate.material.trim() } : {}),
-      ...(cornerRadiusM > 0 ? { cornerRadiusM } : {}), ...(openings.length ? { openings } : {}) });
+      ...(cornerRadiusM > 0 ? { cornerRadiusM } : {}), ...(openings.length ? { openings } : {}),
+      ...(modulusCurve ? { modulusCurve } : {}) });
     plateIds.add(id);
   }
   const supports: Frame3DSupport[] = [];
@@ -1334,7 +1363,7 @@ export function addFrame3DPlate(
 
 export function updateFrame3DPlate(
   model: Frame3DModel, plateId: number,
-  patch: Partial<Pick<Frame3DPlate, "thicknessM" | "material" | "cornerRadiusM">>,
+  patch: Partial<Pick<Frame3DPlate, "thicknessM" | "material" | "cornerRadiusM" | "modulusCurve">>,
 ): Frame3DModel {
   if (!(model.plates ?? []).some((plate) => plate.id === plateId)) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
   const parsed = parseFrame3DModel({

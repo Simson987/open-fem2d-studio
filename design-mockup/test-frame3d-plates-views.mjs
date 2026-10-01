@@ -16,6 +16,7 @@ import { buildFrame3DSolveRequest } from "./src/components/frame3d/frame3dSolver
 import { DEFAULT_FRAME_3D_VISIBILITY } from "./src/components/frame3d/frame3dVisibility.ts";
 import { toggleFrame3DSelection } from "./src/components/frame3d/frame3dSelection.ts";
 import { deserializeProject, serializeProject } from "./src/io/projectFile.ts";
+import { CONCRETE_E_CM } from "./src/lib/sectionResolver.ts";
 
 assert.equal(frame3DViewFromCamera({ x: 0, y: -10, z: 2.5 }, { x: 0, y: 0, z: 2.5 }), "front");
 assert.equal(frame3DViewFromCamera({ x: 0, y: 0, z: 10 }, { x: 0, y: 0, z: 0 }), "top");
@@ -150,14 +151,19 @@ assert.deepEqual(toggleFrame3DSelection(geometrySelection, { type: "plate", id: 
 assert.deepEqual(toggleFrame3DSelection(geometrySelection, { type: "surfaceLoad", id: 1 }, true), { type: "surfaceLoad", id: 1 });
 
 const modernView = { ...view, mode: "results" };
+const modulusCurve = [{ strain: 0, eMpa: CONCRETE_E_CM["C35/45"] },
+  { strain: 0.0002, eMpa: CONCRETE_E_CM["C35/45"] / 2 }];
+const loadedWithCurve = updateFrame3DPlate(loaded, 1, { modulusCurve });
 const projectText = serializeProject({
   nodes: [], beams: [], supports: [], plates: [], loads: [], loadCases: [{ id: 1, name: "Permanent", type: "permanent" }],
   activeLoadCaseId: 1, selfWeightEnabled: false, nonlinearEnabled: true,
-  modelDimension: "3d", model3d: loaded, frame3dViewSets: [modernView],
+  modelDimension: "3d", model3d: loadedWithCurve, frame3dViewSets: [modernView],
 });
 const reopened = deserializeProject(projectText);
 assert.equal(reopened.model3d.plates[0].cornerRadiusM, 0.35);
 assert.equal(reopened.model3d.surfaceLoads[0].qz, -5);
+assert.deepEqual(reopened.model3d.plates[0].modulusCurve, modulusCurve,
+  "de ingevoerde E-rekcurve blijft in het 3D-projectbestand behouden");
 assert.equal(reopened.frame3dViewSets[0].name, "UGT momentbeeld");
 assert.equal(reopened.frame3dViewSets[0].mode, "results", "de resultaat-tabstand overleeft projectopslag");
 

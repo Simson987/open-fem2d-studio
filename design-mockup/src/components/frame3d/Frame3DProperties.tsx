@@ -14,6 +14,7 @@ import {
   type Frame3DSteelChecks,
 } from "./frame3dSteelCheck";
 import { matchSupportedConcreteClass } from "../../lib/betonCheckBuilder";
+import { eVanMateriaal } from "../../lib/sectionResolver";
 import type { Frame3DConcreteChecks } from "./frame3dConcreteCheck";
 import KolomVelden from "../beton/KolomVelden";
 import "../fem/FemProperties.css";
@@ -76,11 +77,18 @@ export default function Frame3DProperties({
   const [rollDegrees, setRollDegrees] = useState("0");
   const [loadPathText, setLoadPathText] = useState("");
   const [loadPathError, setLoadPathError] = useState("");
+  const [plateCurveText, setPlateCurveText] = useState("");
+  const [plateCurveError, setPlateCurveError] = useState("");
 
   useEffect(() => {
     setLoadPathText(model.materialLoadPath?.join(", ") ?? "");
     setLoadPathError("");
   }, [model.materialLoadPath]);
+
+  useEffect(() => {
+    setPlateCurveText(plate?.modulusCurve?.map((point) => `${point.strain}:${point.eMpa}`).join("; ") ?? "");
+    setPlateCurveError("");
+  }, [plate?.id, plate?.modulusCurve]);
 
   useEffect(() => {
     if (node) setCoordinates({ x: String(node.x), y: String(node.y), z: String(node.z) });
@@ -144,7 +152,7 @@ export default function Frame3DProperties({
     return <div className="fem-properties"><div className="fem-prop-body">
       <p className="fem-prop-hint">{t("frame3d.selectForProperties", "Selecteer een 3D-knoop, staaf, plaat of belasting om de eigenschappen te bekijken.")}</p>
       <Section title="FNL-lastpad · Rust 3D">
-        <p className="fem-prop-hint">Absolute lastfactoren voor belastingen en opgelegde verplaatsingen. Het resultaat hoort bij de laatste factor. Gebruik een punt als decimaalteken. Alleen axiale materiaalgeschiedenis wordt bewaard.</p>
+        <p className="fem-prop-hint">Absolute lastfactoren voor belastingen en opgelegde verplaatsingen. Het resultaat hoort bij de laatste factor. Gebruik een punt als decimaalteken. Staven bewaren axiale geschiedenis; platen bewaren maximale vezelrek per element.</p>
         <Row label="Factoren"><input className="fem-prop-input" type="text" aria-label="FNL-lastfactoren" placeholder="1, 0, 0.5"
           value={loadPathText} onChange={(event) => setLoadPathText(event.target.value)} /></Row>
         <div className="fem-prop-kiezer-row"><button className="fem-prop-kiezer-btn" type="button" onClick={applyLoadPath}>Lastpad toepassen</button></div>
@@ -351,6 +359,30 @@ export default function Frame3DProperties({
             onBlur={(event) => onChange(updateFrame3DPlate(model, plate.id, { material: event.currentTarget.value.trim() || "C30/37" }))} /></Row>
           <Row label="Openingen"><code>{plate.openings?.length ?? 0}</code></Row>
         </Section>
+        <Section title="FNL-plaat · secant-E(rek)">
+          <p className="fem-prop-hint">Geef 2–100 punten als rek:E(MPa), gescheiden door puntkomma's. Begin bij 0 met de E van het materiaal
+            {Number.isFinite(eVanMateriaal(plate.material ?? "").E) ? ` (${eVanMateriaal(plate.material ?? "").E} MPa)` : ""}; rek moet stijgen en E mag niet stijgen. Deze omhulling bewaart de grootste vezelrek en modelleert geen plastische doorsnede of expliciete scheurwet.</p>
+          <Row label="E-rekcurve"><textarea className="fem-prop-input" aria-label="FNL E-rekcurve plaat" rows={3}
+            placeholder="0:33000; 0.0001:20000; 0.0005:5000"
+            value={plateCurveText} onChange={(event) => setPlateCurveText(event.target.value)} /></Row>
+          <div className="fem-prop-kiezer-row"><button className="fem-prop-kiezer-btn" type="button" onClick={() => {
+            try {
+              const points = plateCurveText.trim().split(/[;\n]+/).map((piece) => {
+                const parts = piece.trim().split(":");
+                if (parts.length !== 2 || !parts[0].trim() || !parts[1].trim()) throw new Error("Gebruik per punt rek:E, bijvoorbeeld 0.0001:20000.");
+                return { strain: Number(parts[0].trim()), eMpa: Number(parts[1].trim()) };
+              });
+              onChange(updateFrame3DPlate(model, plate.id, { modulusCurve: points }));
+              setPlateCurveError("");
+            } catch (error) { setPlateCurveError(error instanceof Error ? error.message : String(error)); }
+          }}>E-rekcurve toepassen</button>
+            <button className="fem-prop-kiezer-btn" type="button" onClick={() => {
+              onChange(updateFrame3DPlate(model, plate.id, { modulusCurve: undefined }));
+              setPlateCurveText(""); setPlateCurveError("");
+            }}>Wissen</button></div>
+          {plateCurveError && <p className="frame3d-check-not-ok" role="alert">{plateCurveError}</p>}
+          {analysis !== "material" && <p className="fem-prop-hint">Kies FNL-analyse om de E-rekcurve te gebruiken.</p>}
+        </Section>
         <Section title="Oppervlaktebelastingen">
           {(model.surfaceLoads ?? []).filter((load) => load.plateId === plate.id).length === 0 && <p className="fem-prop-hint">Selecteer de plaat en kies Oppervlaktelast in het lint.</p>}
           {surfaceLoad && <>
@@ -374,6 +406,8 @@ export default function Frame3DProperties({
           <Row label="Max. |w|"><code>{value(Math.max(...plateResult.nodes.map((node) => Math.abs(node.wM))) * 1000, 5)} mm</code></Row>
           <Row label="Max. |M|"><code>{value(Math.max(...plateResult.elements.flatMap((element) => element.momentKnmPerM.map(Math.abs))))} kNm/m</code></Row>
           <Row label="Max. |V|"><code>{value(Math.max(...plateResult.elements.flatMap((element) => element.shearKnPerM.map(Math.abs))))} kN/m</code></Row>
+          <Row label="Min. Eeff"><code>{value(Math.min(...plateResult.elements.map((element) => element.effectiveEMpa)))} MPa</code></Row>
+          {result?.materialIterations !== undefined && <Row label="FNL-iteraties"><code>{result.materialIterations}</code></Row>}
         </Section>}
         {node && displacement && <Section title={t("frame3d.displacements", "Knoopverplaatsingen")}>
           <Row label="Ux"><code>{value(displacement.ux * 1000)} mm</code></Row><Row label="Uy"><code>{value(displacement.uy * 1000)} mm</code></Row><Row label="Uz"><code>{value(displacement.uz * 1000)} mm</code></Row>

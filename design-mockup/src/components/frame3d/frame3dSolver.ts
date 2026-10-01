@@ -98,6 +98,7 @@ export interface Frame3DSolveResult {
   reactions: Frame3DReaction[];
   memberForces: Frame3DMemberForces[];
   plateBending?: Frame3DPlateBendingResult;
+  materialIterations?: number;
   materialLoadPath?: number[];
   /** Sinds contract 1.1: door de solver bemonsterde snedekrachtlijnen. */
   diagrams?: Frame3DDiagrams;
@@ -457,11 +458,11 @@ export async function solveFrame3D(
   engine: SolverEngineId = "dedaliano",
 ): Promise<Frame3DSolveResult> {
   if ((model.plates?.length ?? 0) > 0) {
-    if (engine !== "openaec-native-fem" || analysis !== "linear") {
-      throw new Error("3D-platen vereisen de lineaire Open FEM Rust-plaatroute.");
+    if (engine !== "openaec-native-fem" || analysis === "p-delta") {
+      throw new Error("3D-platen vereisen de lineaire of FNL Open FEM Rust-plaatroute.");
     }
     const { solveFrame3DPlate } = await import("./frame3dPlateSolver");
-    return solveFrame3DPlate(model, activeLoadCaseId);
+    return solveFrame3DPlate(model, activeLoadCaseId, analysis);
   }
   const request = buildFrame3DSolveRequest(model, analysis, activeLoadCaseId);
   const input = analysis === "p-delta" ? request : { ...request, bucklingModes: 0 };
@@ -476,11 +477,11 @@ export async function solveFrame3DCombination(
   engine: SolverEngineId = "dedaliano",
 ): Promise<Frame3DSolveResult> {
   if ((model.plates?.length ?? 0) > 0) {
-    if (engine !== "openaec-native-fem" || analysis !== "linear") {
-      throw new Error("3D-platen vereisen de lineaire Open FEM Rust-plaatroute.");
+    if (engine !== "openaec-native-fem" || analysis === "p-delta") {
+      throw new Error("3D-platen vereisen de lineaire of FNL Open FEM Rust-plaatroute.");
     }
     const { solveFrame3DPlate } = await import("./frame3dPlateSolver");
-    return solveFrame3DPlate(model, factors);
+    return solveFrame3DPlate(model, factors, analysis);
   }
   const request = buildFrame3DSolveRequest(model, analysis, factors);
   const input = analysis === "p-delta" ? request : { ...request, bucklingModes: 0 };

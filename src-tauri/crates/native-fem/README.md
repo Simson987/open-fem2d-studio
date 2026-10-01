@@ -21,7 +21,7 @@ eindveren, thermische lasten en gekoppelde
 staaf-plaatmodellen worden in deze route nog expliciet geweigerd. De app
 behoudt de bestaande solver als automatische keuze.
 
-Een afzonderlijke lineaire 3D-plaatroute kan in de app met expliciete keuze
+Een afzonderlijke lineaire of FNL 3D-plaatroute kan in de app met expliciete keuze
 voor Open FEM Rust worden berekend. Zij accepteert één vlakke rechthoek in
 een willekeurig 3D-vlak zonder staven, bogen of openingen. De Rust-mesher
 maakt een conform Q4-rooster; de hybride Kirchhoff-kern berekent uitwijking
@@ -34,7 +34,11 @@ vrij. Alleen normaalgerichte belastingen en eenduidig naar lokale buigvrijheden
 te vertalen globale opleggingen zijn toegestaan. Het rapport toont
 roosteruitvoer en de 3D-weergave toont de vervormde plaat. Schijfwerking,
 gekoppelde staven, plaatveren, opgelegde verplaatsingen,
-GNL en FNL worden in deze route expliciet geweigerd.
+GNL en FNL zonder expliciete E-rekcurve worden in deze route expliciet geweigerd.
+De opgegeven E-rekcurve is een onomkeerbare secant-E-omhulling op maximale
+vezelrek per element. Het FNL-lastpad kan ook ontlasten; de daling van E blijft
+bewaard. Dit is geen expliciete beton-scheurwet of staalplastificatie van de
+plaatdoorsnede.
 
 Een controleerbaar voorbeeld staat in
 [`examples/frame2d-cantilever.json`](examples/frame2d-cantilever.json):

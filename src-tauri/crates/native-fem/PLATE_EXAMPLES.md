@@ -145,7 +145,7 @@ Een combinatie met lastfactoren 1 en 0,5 op respectievelijk `−1` en `−2
 kN/m²` verdubbelt last, reacties en elastische zakking. Voor automatisch eigen
 gewicht levert `ρ = 2500 kg/m³` een extra `qz = −4,905 kN/m²` en een
 reactiesom van `+19,62 kN`. De route weigert momenteel openingen, bogen,
-in-vlaklasten, gekoppelde staven, veren en GNL/FNL-buiging.
+in-vlaklasten, gekoppelde staven, veren en GNL-buiging.
 Een asymmetrisch ingeklemde hoek controleert de tekenomzetting van de lokale
 plaatrotaties en reactiemomenten naar globale 3D Rx/Ry; ook een afzonderlijk
 globaal My-puntmoment sluit de onafhankelijke momentensom.
@@ -156,3 +156,10 @@ De mesher rondt een quotiënt als `4,000000000000001` nu tot vier cellen af;
 een echt grotere maat krijgt nog steeds een extra cel. Een schuine plaat met
 alleen verticaal eigen gewicht wordt geweigerd omdat daarvoor ook
 schijfwerking nodig is.
+
+De app-FNL-proef geeft `C30/37` een expliciete curve met `E(0) = E_cm` en
+`E(10⁻¹⁰) = E_cm/2`. Bij voldoende hoge belasting bereikt elk element de
+lagere E; de zakking wordt tweemaal de lineaire waarde. Een lastpad `[1, 0]`
+ontlast weer tot vrijwel nul zakking, terwijl de effectieve E en maximale
+vezelrek als geschiedenis behouden blijven. De test controleert ook dat een
+curve met verkeerd begin-E of stijgende E wordt geweigerd.
