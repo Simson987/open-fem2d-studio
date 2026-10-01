@@ -213,7 +213,8 @@ struct HybridElement {
     beta: [[f64; 12]; 17],
     centre: [f64; 2],
     scale: f64,
-    area: f64,
+    /// Unit-pressure nodal forces from a bilinear interior surrogate.
+    pressure_weights: [f64; 4],
     sample_points: Vec<[f64; 2]>,
     thickness: f64,
     material_id: usize,
@@ -244,7 +245,7 @@ fn element(
     positive(scale, "hybrid plate size")?;
     let mut h = Matrix::zeros(17)?;
     let mut g = [[0.0; 12]; 17];
-    let mut area = 0.0;
+    let mut pressure_weights = [0.0; 4];
     let mut sample_points: Vec<[f64; 2]> = nodes.iter().map(|n| [n.x, n.y]).collect();
     sample_points.push(centre);
     let d = 1000.0 * quad.thickness_m.powi(3) / (12.0 * (1.0 - material.nu * material.nu)); // E=1 MPa
@@ -253,7 +254,10 @@ fn element(
             let (x, y, jac) = geometry(nodes, ROOTS[i], ROOTS[j])?;
             sample_points.push([x, y]);
             let weight = WEIGHTS[i] * WEIGHTS[j] * jac;
-            area += weight;
+            let (shape_values, _, _) = shape(ROOTS[i], ROOTS[j]);
+            for a in 0..4 {
+                pressure_weights[a] += weight * shape_values[a];
+            }
             let fs = fields((x - centre[0]) / scale, (y - centre[1]) / scale, scale);
             for a in 0..17 {
                 for b in 0..17 {
@@ -316,7 +320,7 @@ fn element(
         beta,
         centre,
         scale,
-        area,
+        pressure_weights,
         sample_points,
         thickness: quad.thickness_m,
         material_id: quad.material_id,
@@ -546,7 +550,7 @@ pub fn solve(request: &Request) -> Result<ResultBending, String> {
     }
     for element in &elements {
         for j in 0..4 {
-            load[element.dofs[3 * j]] += request.pressure_kn_m2 * element.area / 4.0;
+            load[element.dofs[3 * j]] += request.pressure_kn_m2 * element.pressure_weights[j];
         }
     }
     let scale = load.iter().map(|f| f * f).sum::<f64>().sqrt().max(1.0);
@@ -786,6 +790,76 @@ mod tests {
         }
     }
     #[test]
+    fn pressure_weights_preserve_resultant_and_centroid_on_tapered_quad() {
+        let nodes = [
+            Node {
+                id: 1,
+                x: 0.0,
+                y: 0.0,
+            },
+            Node {
+                id: 2,
+                x: 2.0,
+                y: 0.0,
+            },
+            Node {
+                id: 3,
+                x: 1.5,
+                y: 1.0,
+            },
+            Node {
+                id: 4,
+                x: 0.0,
+                y: 1.0,
+            },
+        ];
+        let quad = Quad {
+            id: 1,
+            node_ids: [1, 2, 3, 4],
+            material_id: 1,
+            thickness_m: 0.1,
+        };
+        let material = Material {
+            id: 1,
+            e_mpa: 30_000.0,
+            nu: 0.2,
+        };
+        let element = element(
+            &quad,
+            [&nodes[0], &nodes[1], &nodes[2], &nodes[3]],
+            std::array::from_fn(|i| i),
+            &material,
+        )
+        .unwrap();
+        let mut area_twice = 0.0;
+        let mut cx_numerator = 0.0;
+        let mut cy_numerator = 0.0;
+        for i in 0..4 {
+            let a = &nodes[i];
+            let b = &nodes[(i + 1) % 4];
+            let cross = a.x * b.y - b.x * a.y;
+            area_twice += cross;
+            cx_numerator += (a.x + b.x) * cross;
+            cy_numerator += (a.y + b.y) * cross;
+        }
+        let area = area_twice / 2.0;
+        let centroid = [
+            cx_numerator / (3.0 * area_twice),
+            cy_numerator / (3.0 * area_twice),
+        ];
+        let force: f64 = element.pressure_weights.iter().sum();
+        let first_x: f64 = (0..4)
+            .map(|i| element.pressure_weights[i] * nodes[i].x)
+            .sum();
+        let first_y: f64 = (0..4)
+            .map(|i| element.pressure_weights[i] * nodes[i].y)
+            .sum();
+        assert!((force - area).abs() < 1e-12);
+        assert!((first_x / force - centroid[0]).abs() < 1e-12);
+        assert!((first_y / force - centroid[1]).abs() < 1e-12);
+        assert!((element.pressure_weights[0] - element.pressure_weights[2]).abs() > 1e-3);
+    }
+    #[test]
     fn constant_curvature_recovers_plate_constitutive_moments() {
         let e = square_element();
         let kappa = 0.001;
@@ -882,6 +956,61 @@ mod tests {
         assert!(result.nodes[2].w_m < 0.0);
         let reactions: f64 = result.nodes.iter().map(|n| n.reaction_fz_kn).sum();
         assert!((reactions - 2.0).abs() < 1e-8);
+        assert!(result.relative_residual < 1e-8);
+    }
+    #[test]
+    fn cement_cantilever_recovers_section_shear_and_total_reaction() {
+        let mesh = crate::quad2d::mesh_squares(&crate::quad2d::SquareGrid {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            width_m: 10.0,
+            height_m: 8.0,
+            cell_size_m: 2.0,
+            material_id: 1,
+            thickness_m: 0.6,
+        })
+        .unwrap();
+        let nodes: Vec<Node> = mesh
+            .nodes
+            .into_iter()
+            .map(|node| Node {
+                id: node.id,
+                x: node.x,
+                y: node.y,
+            })
+            .collect();
+        let supports = nodes
+            .iter()
+            .filter(|node| node.y == 0.0 || node.x == 0.0 || node.x == 10.0)
+            .map(|node| Support {
+                node_id: node.id,
+                w: node.y == 0.0,
+                theta_x: node.y == 0.0,
+                theta_y: node.y == 0.0 || node.x == 0.0 || node.x == 10.0,
+            })
+            .collect();
+        let result = solve(&Request {
+            nodes,
+            quads: mesh.quads,
+            materials: vec![Material {
+                id: 1,
+                e_mpa: 30_000.0,
+                nu: 0.2,
+            }],
+            supports,
+            loads: vec![],
+            pressure_kn_m2: -30.0,
+            modulus_curves: vec![],
+            reinforcement: None,
+            load_path: vec![],
+            tolerance: 1e-8,
+            max_iterations: 40,
+        })
+        .unwrap();
+        // The first cell centre is one metre from the support: q(L-y)=30(8-1).
+        assert!((result.elements[0].shear_kn_per_m[1] - 210.0).abs() < 1e-7);
+        let total_reaction: f64 = result.nodes.iter().map(|node| node.reaction_fz_kn).sum();
+        assert!((total_reaction - 30.0 * 10.0 * 8.0).abs() < 1e-7);
         assert!(result.relative_residual < 1e-8);
     }
     #[test]

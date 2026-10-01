@@ -65,10 +65,14 @@ De hybride buigplaat heeft een **secantmodulus-omhulling**: de invoer
 De hoogste absolute vezelrek per element blijft gedurende `loadPath` bewaard.
 Dat is een eigen FNL-uitbreiding van de elastische hybride plaat, geen
 scheurmodel of plastische doorsnedewet van Blaauwendraad. Opgegeven
-`pressureKnM2` wordt voorlopig als gelijke knooplast per vierhoek aangebracht;
-dit convergeert bij roosterverfijning, maar is geen exacte consistente
-vlaklastvector. De elementdwarskracht voor wapening wordt lineair uit
-buurelementen herleid. Op een grof 2-cellen-uitkragingsrooster is de
+`pressureKnM2` wordt via een 4×4 Gauss-integratie van bilineaire
+vlakvormfuncties naar de vier knopen verdeeld. Daardoor kloppen de totale
+dwarslast en haar eerste momenten ook bij een scheve vierhoek; bij een
+rechthoek zijn de vier aandelen gelijk. Omdat het hybride element alleen
+langs de rand een verplaatsingsaanname doet, blijft dit een benadering van
+de exacte drukbelasting op de hybride vervormingsruimte. De
+elementdwarskracht voor wapening wordt lineair uit buurelementen herleid.
+Op een grof 2-cellen-uitkragingsrooster is de
 herstelde steundwarskracht 1,875 kN/m tegenover 2,0 kN/m uit evenwicht
 (6,25% verschil); op het 2 m Cement-rooster is 240 kN/m gevonden.
 
