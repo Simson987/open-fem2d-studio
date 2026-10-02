@@ -1369,7 +1369,7 @@ export function plaatRandTekst(
  *
  * ONDERGRENS: binnen 1 mm koppelt de engine een staafeinde aan de rand (de
  * knooptolerantie `TOL_MM` van het rekenmesh, dezelfde voor omtrek en
- * openingen, en `CONTROLE_TOL_MM` van de modelcontrole).
+ * openingen, en `PLAATRAND_TOL_MM` van de modelcontrole).
  *
  * BOVENGRENS 50 mm: de kleinste rasterstap die het canvas toelaat is 50 mm
  * (instelling "raster", min = 50). Een afstand tussen 1 en 50 mm tot een

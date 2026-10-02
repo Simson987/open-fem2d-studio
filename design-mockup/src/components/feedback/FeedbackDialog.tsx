@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, type ClipboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import html2canvas from "html2canvas";
+import { maakKleurenCompatibel } from "../../lib/html2canvasKleuren";
 import Modal from "../Modal";
 import "./FeedbackDialog.css";
 
@@ -167,6 +168,8 @@ export default function FeedbackDialog({
         backgroundColor: null,
         logging: false,
         scale: window.devicePixelRatio || 1,
+        // html2canvas kent color() (van color-mix) niet; zie lib/html2canvasKleuren (#100).
+        onclone: maakKleurenCompatibel,
       });
       const blob = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob((b) => resolve(b), "image/png")

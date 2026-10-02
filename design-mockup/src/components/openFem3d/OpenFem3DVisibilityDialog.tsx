@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Modal from "../Modal";
-import { DEFAULT_OPEN_FEM_3D_VISIBILITY, type OpenFem3DVisibility } from "./openFem3dVisibility";
+import { DEFAULT_OPEN_FEM_3D_VISIBILITY, OPEN_FEM_3D_RESULT_LAYERS, type OpenFem3DVisibility } from "./openFem3dVisibility";
 import "./OpenFem3DEditor.css";
 import { bewaarOpenFem3DViewSet, type OpenFem3DCameraState, type OpenFem3DViewSet } from "./openFem3dViewSets";
 import type { OpenFem3DView } from "./openFem3dCommands";
+import type { OpenFem3DDiagramLabels } from "./openFem3dDiagramLabels";
 
 interface Props {
   open: boolean;
@@ -17,22 +18,24 @@ interface Props {
   currentCombinationId: number | null;
   currentLoadCaseId: number;
   currentMode: "model" | "loadCase" | "results";
+  /** De getallen bij de snedekrachtlijnen; gaan mee in een opgeslagen view. */
+  currentDiagramLabels?: OpenFem3DDiagramLabels;
   combinationOptions: { id: number; name: string }[];
   loadCaseOptions: { id: number; name: string }[];
   onViewSetsChange?: (viewSets: OpenFem3DViewSet[]) => void;
   onApplyViewSet?: (viewSet: OpenFem3DViewSet) => void;
 }
 
-const GROUPS: { title: string; keys: (keyof OpenFem3DVisibility)[] }[] = [
+const GROUPS: { title: string; keys: readonly (keyof OpenFem3DVisibility)[] }[] = [
   { title: "geometry", keys: ["nodes", "beams", "plates", "mesh", "profiles", "profileColors", "supports", "loads", "loadPanels"] },
   { title: "labels", keys: ["nodeNumbers", "beamNumbers", "nodeCoordinates"] },
-  { title: "workspace", keys: ["grid", "structuralGrid", "axes", "memberAxes"] },
-  { title: "results", keys: ["deformation", "reactions", "utilization", "axialForce", "shearY", "shearZ", "torsion", "momentY", "momentZ"] },
+  { title: "workspace", keys: ["grid", "structuralGrid", "axes", "memberAxes", "viewCube", "perspective"] },
+  { title: "results", keys: OPEN_FEM_3D_RESULT_LAYERS },
 ];
 
 export default function OpenFem3DVisibilityDialog({
   open, onClose, visibility, onChange, viewSets, currentView, currentCamera,
-  currentCombinationId, currentLoadCaseId, currentMode, combinationOptions, loadCaseOptions,
+  currentCombinationId, currentLoadCaseId, currentMode, currentDiagramLabels, combinationOptions, loadCaseOptions,
   onViewSetsChange, onApplyViewSet,
 }: Props) {
   const { t } = useTranslation("common");
@@ -46,6 +49,7 @@ export default function OpenFem3DVisibilityDialog({
     onViewSetsChange(bewaarOpenFem3DViewSet(viewSets, trimmed, {
       view: currentView, camera: currentCamera, visibility,
       combinationId: currentCombinationId, loadCaseId: currentLoadCaseId, mode: currentMode,
+      ...(currentDiagramLabels === undefined ? {} : { diagramLabels: currentDiagramLabels }),
     }));
     setName(t("openFem3dVisibility.defaultViewName", { n: viewSets.length + (existing ? 0 : 2) }));
   };

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { addOpenFem3DPlate, addOpenFem3DPlateOpening } from "./src/components/openFem3d/openFem3dModel.ts";
-import { openFem3dHistoryReducer } from "./src/components/openFem3d/openFem3dHistory.ts";
+import { openFem3DHistoryExtern, openFem3dHistoryReducer } from "./src/components/openFem3d/openFem3dHistory.ts";
 
 const initial = { nodes: [
   { id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 4, y: 0, z: 0 },
@@ -41,3 +41,47 @@ assert.equal(state.model.beams.length, 0);
 assert.equal(state.model.plates[0].openings.length, 1);
 
 console.log("3D contourgeschiedenis: tekenen, annuleren en herstel zijn consistent");
+
+// Een stap die ook iets buiten het 3D-model wijzigt, bijvoorbeeld een
+// belastinggeval verwijderen (de gevallen staan in de raamwerkstore), is één
+// stap: undo geeft de terug-actie, redo de vooruit-actie (#91).
+{
+  const extern = { terug: () => "terug", vooruit: () => "vooruit" };
+  const zonderLasten = { ...beamModel, loads: [] };
+  let s = { model: beamModel, past: [], future: [] };
+  assert.equal(openFem3DHistoryExtern(s, "undo"), null, "geen stap, geen externe actie");
+  s = openFem3dHistoryReducer(s, { type: "edit", model: zonderLasten, extern });
+  assert.equal(s.past.length, 1);
+  assert.equal(openFem3DHistoryExtern(s, "undo"), extern.terug, "undo zet ook de gevallen terug");
+  s = openFem3dHistoryReducer(s, { type: "undo" });
+  assert.equal(s.model, beamModel);
+  assert.equal(openFem3DHistoryExtern(s, "undo"), null);
+  assert.equal(openFem3DHistoryExtern(s, "redo"), extern.vooruit, "redo voert de gevallenwijziging weer uit");
+  s = openFem3dHistoryReducer(s, { type: "redo" });
+  assert.equal(s.model, zonderLasten);
+  assert.equal(openFem3DHistoryExtern(s, "undo"), extern.terug);
+
+  // Zonder 3D-lasten van dat geval blijft het model gelijk, maar het is wel een stap.
+  const leeg = openFem3dHistoryReducer({ model: beamModel, past: [], future: [] }, { type: "edit", model: beamModel, extern });
+  assert.equal(leeg.past.length, 1, "alleen de gevallen veranderen: toch één stap");
+  assert.equal(openFem3DHistoryExtern(leeg, "undo"), extern.terug);
+
+  // Een gewone stap erna heeft geen externe actie; de oude blijft op zijn plek.
+  s = openFem3dHistoryReducer(s, { type: "edit", model: { ...zonderLasten, beams: [] } });
+  assert.equal(openFem3DHistoryExtern(s, "undo"), null, "een gewone stap erft de externe actie niet");
+  s = openFem3dHistoryReducer(s, { type: "undo" });
+  assert.equal(openFem3DHistoryExtern(s, "undo"), extern.terug, "na één undo is de stap met de gevallen weer de laatste");
+
+  // Een externe stap gaat nooit op in een tekengroep.
+  let g = { model: beamModel, past: [], future: [] };
+  g = openFem3dHistoryReducer(g, { type: "edit", model: { ...beamModel, loads: [] }, historyGroup: "schets" });
+  g = openFem3dHistoryReducer(g, { type: "edit", model: { ...beamModel, beams: [] }, historyGroup: "schets", extern });
+  assert.equal(g.past.length, 2, "de stap met de gevallen is een eigen stap");
+  assert.equal(openFem3DHistoryExtern(g, "undo"), extern.terug);
+
+  // Vervangen (nieuw project, openen) wist alles.
+  g = openFem3dHistoryReducer(g, { type: "replace", model: initial });
+  assert.equal(openFem3DHistoryExtern(g, "undo"), null);
+  assert.equal(openFem3DHistoryExtern(g, "redo"), null);
+}
+console.log("3D-geschiedenis: een stap met een externe wijziging (gevallen) is één stap, in beide richtingen");

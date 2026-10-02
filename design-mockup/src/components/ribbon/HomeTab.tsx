@@ -103,7 +103,6 @@ const stub = (label: string) => () => console.log(`TODO: ${label}`);
 const deleteIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>`;
 const subnodeIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12h18M12 8v8"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>`;
 const mirrorIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16M6 8l-3 4 3 4M18 8l3 4-3 4"/></svg>`;
-const plateArcIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19h16M4 19Q12 2 20 19"/><circle cx="4" cy="19" r="1.5" fill="currentColor" stroke="none"/><circle cx="20" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg>`;
 // Solve / "play" icon — used for the Berekenen button.
 const solveIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l14 9-14 9V3z"/></svg>`;
 const steelHallIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.8" stroke-linejoin="round" d="M3 20V10l9-6 9 6v10M3 10h18"/><path stroke-width="1.4" d="M7 20v-9.5M12 20V7M17 20v-9.5M3 20h18"/></svg>`;
@@ -287,17 +286,6 @@ export default function HomeTab({
               disabled={is3D && !frameToolAvailable("addPlate")}
               title={is3D ? t("home.plate3DHint") : undefined}
             />
-            {is3D && <RibbonButton
-              icon={plateArcIcon}
-              label={t("home.arcEdge")}
-              size="small"
-              active={openFem3dTool === "addPlateArc" || openFem3dTool === "addOpeningArc"}
-              onClick={() => onOpenFem3DToolChange?.(drawingOpening3D ? "addOpeningArc" : "addPlateArc")}
-              disabled={!availableOpenFem3DTools.includes(drawingOpening3D ? "addOpeningArc" : "addPlateArc")}
-              title={drawingOpening3D
-                ? t("home.arcEdgeOpeningHint")
-                : t("home.arcEdgePlateHint")}
-            />}
           </RibbonButtonStack>
           <RibbonButtonStack>
             <RibbonButton

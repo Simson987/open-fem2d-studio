@@ -313,6 +313,18 @@ export function openFem3DLevelLinkError(
 export function openFem3DLevelsFromMetres(
   input: unknown, current: readonly OpenFem3DLevel[], key = "levels",
 ): OpenFem3DLevel[] {
+  return openFem3DGridAxesFromMetres(input, current, "z", key);
+}
+
+/**
+ * Stramienassen uit invoer van buiten, zoals de levels hierboven: een label en
+ * een positie in METER; een as met een bestaand label houdt zijn id, een
+ * nieuwe as krijgt `<voorvoegsel>-n` met een n die nog niet in gebruik is.
+ * Voor de assen in X en Y (`x`, `y`) en de levels (`z`).
+ */
+export function openFem3DGridAxesFromMetres(
+  input: unknown, current: readonly OpenFem3DLevel[], voorvoegsel: string, key: string,
+): OpenFem3DLevel[] {
   if (!Array.isArray(input)) throw new Error(`${key} moet een lijst zijn`);
   const items = input.map((raw, index) => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${key}[${index}] is ongeldig`);
@@ -334,8 +346,8 @@ export function openFem3DLevelsFromMetres(
   return items.map((item, index) => {
     let id = ids[index];
     if (id === undefined) {
-      while (taken.has(`z-${counter}`)) counter += 1;
-      id = `z-${counter}`;
+      while (taken.has(`${voorvoegsel}-${counter}`)) counter += 1;
+      id = `${voorvoegsel}-${counter}`;
       taken.add(id);
     }
     return { id, label: item.label, position: item.position };

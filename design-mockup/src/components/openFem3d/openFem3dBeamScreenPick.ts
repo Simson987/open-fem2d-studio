@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { OpenFem3DBeam, OpenFem3DNode } from "./openFem3dModel";
+import { openFem3DCameraAfstand } from "./openFem3dProjectie";
 
 export interface OpenFem3DBeamScreenHit {
   beamId: number;
@@ -124,18 +125,19 @@ export function findOpenFem3DSegmentNearScreenPoint<T extends { a: Punt; b: Punt
   if (!best) return null;
   const { item, segment, ratio, depth } = best;
   // 1/w verloopt lineair over het scherm; daarmee wordt de schermfractie
-  // een perspectief-correcte parameter op het lijnstuk.
+  // een perspectief-correcte parameter op het lijnstuk. Parallel is w = 1 en
+  // is de schermfractie zelf de parameter.
   const sigma = ratio * segment.w0 / ((1 - ratio) * segment.w1 + ratio * segment.w0);
   const s = segment.s0 + sigma * (segment.s1 - segment.s0);
   const point = new THREE.Vector3(item.a.x, item.a.y, item.a.z)
     .lerp(new THREE.Vector3(item.b.x, item.b.y, item.b.z), s);
-  const cameraPosition = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
   return {
     item,
     distancePx: Math.sqrt(bestSquared),
     depth,
     point,
-    distance: point.distanceTo(cameraPosition),
+    // Zoals de raycast meet: perspectief vanaf het oogpunt, parallel langs de kijkrichting.
+    distance: openFem3DCameraAfstand(camera, point),
   };
 }
 

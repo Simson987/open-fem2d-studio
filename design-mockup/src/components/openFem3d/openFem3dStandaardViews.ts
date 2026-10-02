@@ -32,6 +32,7 @@ import type { OpenFem3DView } from "./openFem3dCommands";
 import type { OpenFem3DModel } from "./openFem3dModel";
 import type { OpenFem3DSolveResult } from "./openFem3dSolver";
 import { openFem3DMaximumDisplacementM } from "./openFem3dDisplacement";
+import { DEFAULT_OPEN_FEM_3D_DIAGRAM_LABELS, type OpenFem3DDiagramLabels } from "./openFem3dDiagramLabels";
 
 export { OPEN_FEM_3D_STANDAARD_VIEW_IDS, parseOpenFem3DStandaardViewsUitRapport, type OpenFem3DStandaardViewId } from "./openFem3dViewSets";
 export type OpenFem3DViewModus = "model" | "loadCase" | "results";
@@ -121,6 +122,11 @@ export interface OpenFem3DViewToepassing {
   combinationId: number | null;
   loadCaseId?: number;
   mode?: OpenFem3DViewModus;
+  /**
+   * De getallen bij de snedekrachtlijnen. Een eigen view zet ze altijd (een
+   * oudere view zonder veld: de standaard); een standaardview laat ze staan.
+   */
+  diagramLabels?: OpenFem3DDiagramLabels;
 }
 
 /** Een standaardview als toepassing, uitgaande van de huidige weergave. */
@@ -152,6 +158,7 @@ export function openFem3DViewSetToepassing(viewSet: OpenFem3DViewSet): OpenFem3D
     combinationId: viewSet.combinationId,
     ...(viewSet.loadCaseId === undefined ? {} : { loadCaseId: viewSet.loadCaseId }),
     ...(viewSet.mode === undefined ? {} : { mode: viewSet.mode }),
+    diagramLabels: { ...(viewSet.diagramLabels ?? DEFAULT_OPEN_FEM_3D_DIAGRAM_LABELS) },
   };
 }
 

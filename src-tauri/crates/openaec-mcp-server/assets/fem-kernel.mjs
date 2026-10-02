@@ -576,11 +576,11 @@ var init_Mesh = __esm({
         this.nodes.set(node.id, node);
         return node;
       }
-      removeNode(id) {
-        if (!this.nodes.has(id)) return false;
+      removeNode(id2) {
+        if (!this.nodes.has(id2)) return false;
         const platesToRemove = [];
         for (const [plateId, plate] of this.plateRegions) {
-          if (plate.nodeIds.includes(id)) {
+          if (plate.nodeIds.includes(id2)) {
             platesToRemove.push(plateId);
           }
         }
@@ -591,7 +591,7 @@ var init_Mesh = __esm({
               this.elements.delete(elemId);
             }
             for (const nodeId of plate.nodeIds) {
-              if (nodeId !== id) {
+              if (nodeId !== id2) {
                 let usedElsewhere = false;
                 for (const beam of this.beamElements.values()) {
                   if (beam.nodeIds.includes(nodeId)) {
@@ -624,31 +624,31 @@ var init_Mesh = __esm({
           }
         }
         for (const [elemId, element] of this.elements) {
-          if (element.nodeIds.includes(id)) {
+          if (element.nodeIds.includes(id2)) {
             this.elements.delete(elemId);
           }
         }
         for (const [beamId, beam] of this.beamElements) {
-          if (beam.nodeIds.includes(id)) {
+          if (beam.nodeIds.includes(id2)) {
             this.beamElements.delete(beamId);
           }
         }
         const subNodesToRemove = [];
         for (const [snId, sn] of this.subNodes) {
-          if (sn.nodeId === id || sn.originalBeamStart === id || sn.originalBeamEnd === id) {
+          if (sn.nodeId === id2 || sn.originalBeamStart === id2 || sn.originalBeamEnd === id2) {
             subNodesToRemove.push(snId);
           }
         }
         for (const snId of subNodesToRemove) {
           this.subNodes.delete(snId);
         }
-        return this.nodes.delete(id);
+        return this.nodes.delete(id2);
       }
-      updateNode(id, updates) {
-        const node = this.nodes.get(id);
+      updateNode(id2, updates) {
+        const node = this.nodes.get(id2);
         if (!node) return null;
-        const updated = { ...node, ...updates, id };
-        this.nodes.set(id, updated);
+        const updated = { ...node, ...updates, id: id2 };
+        this.nodes.set(id2, updated);
         return updated;
       }
       addTriangleElement(nodeIds, materialId = 1, thickness = 0.01) {
@@ -683,12 +683,12 @@ var init_Mesh = __esm({
         this.elements.set(element.id, element);
         return element;
       }
-      removeElement(id) {
-        if (this.elements.delete(id)) {
+      removeElement(id2) {
+        if (this.elements.delete(id2)) {
           this.removeOrphanNodes();
           return true;
         }
-        if (this.beamElements.delete(id)) {
+        if (this.beamElements.delete(id2)) {
           this.removeOrphanNodes();
           return true;
         }
@@ -746,14 +746,14 @@ var init_Mesh = __esm({
         this.beamElements.set(element.id, element);
         return element;
       }
-      getBeamElement(id) {
-        return this.beamElements.get(id);
+      getBeamElement(id2) {
+        return this.beamElements.get(id2);
       }
-      updateBeamElement(id, updates) {
-        const element = this.beamElements.get(id);
+      updateBeamElement(id2, updates) {
+        const element = this.beamElements.get(id2);
         if (!element) return null;
-        const updated = { ...element, ...updates, id };
-        this.beamElements.set(id, updated);
+        const updated = { ...element, ...updates, id: id2 };
+        this.beamElements.set(id2, updated);
         return updated;
       }
       getBeamElementNodes(element) {
@@ -765,11 +765,11 @@ var init_Mesh = __esm({
       getBeamCount() {
         return this.beamElements.size;
       }
-      updateElement(id, updates) {
-        const element = this.elements.get(id);
+      updateElement(id2, updates) {
+        const element = this.elements.get(id2);
         if (!element) return null;
-        const updated = { ...element, ...updates, id };
-        this.elements.set(id, updated);
+        const updated = { ...element, ...updates, id: id2 };
+        this.elements.set(id2, updated);
         return updated;
       }
       addMaterial(material) {
@@ -780,14 +780,14 @@ var init_Mesh = __esm({
         this.materials.set(newMaterial.id, newMaterial);
         return newMaterial;
       }
-      getNode(id) {
-        return this.nodes.get(id);
+      getNode(id2) {
+        return this.nodes.get(id2);
       }
-      getElement(id) {
-        return this.elements.get(id);
+      getElement(id2) {
+        return this.elements.get(id2);
       }
-      getMaterial(id) {
-        return this.materials.get(id);
+      getMaterial(id2) {
+        return this.materials.get(id2);
       }
       getNodeCount() {
         return this.nodes.size;
@@ -1002,8 +1002,8 @@ var init_Mesh = __esm({
         this.removeVerticesForPlate(plateId);
         return this.plateRegions.delete(plateId);
       }
-      getPlateRegion(id) {
-        return this.plateRegions.get(id);
+      getPlateRegion(id2) {
+        return this.plateRegions.get(id2);
       }
       getPlateForElement(elemId) {
         for (const plate of this.plateRegions.values()) {
@@ -1019,8 +1019,8 @@ var init_Mesh = __esm({
         this.edges.set(newEdge.id, newEdge);
         return newEdge;
       }
-      getEdge(id) {
-        return this.edges.get(id);
+      getEdge(id2) {
+        return this.edges.get(id2);
       }
       getEdgesForPlate(plateId) {
         const result = [];
@@ -1029,8 +1029,8 @@ var init_Mesh = __esm({
         }
         return result;
       }
-      removeEdge(id) {
-        return this.edges.delete(id);
+      removeEdge(id2) {
+        return this.edges.delete(id2);
       }
       removeEdgesForPlate(plateId) {
         for (const [edgeId, edge] of this.edges) {
@@ -1051,24 +1051,24 @@ var init_Mesh = __esm({
         this.layers.set(layer.id, layer);
         return layer;
       }
-      getLayer(id) {
-        return this.layers.get(id);
+      getLayer(id2) {
+        return this.layers.get(id2);
       }
-      updateLayer(id, updates) {
-        const layer = this.layers.get(id);
+      updateLayer(id2, updates) {
+        const layer = this.layers.get(id2);
         if (!layer) return null;
         const updated = { ...layer, ...updates };
-        this.layers.set(id, updated);
+        this.layers.set(id2, updated);
         return updated;
       }
-      removeLayer(id) {
-        if (id === 0) return false;
+      removeLayer(id2) {
+        if (id2 === 0) return false;
         for (const beam of this.beamElements.values()) {
-          if (beam.layerId === id) {
+          if (beam.layerId === id2) {
             beam.layerId = 0;
           }
         }
-        return this.layers.delete(id);
+        return this.layers.delete(id2);
       }
       isLayerVisible(layerId) {
         const lid = layerId ?? 0;
@@ -1092,18 +1092,18 @@ var init_Mesh = __esm({
         this.plateVertices.set(vertex.id, vertex);
         return vertex;
       }
-      getPlateVertex(id) {
-        return this.plateVertices.get(id);
+      getPlateVertex(id2) {
+        return this.plateVertices.get(id2);
       }
-      updatePlateVertex(id, updates) {
-        const vertex = this.plateVertices.get(id);
+      updatePlateVertex(id2, updates) {
+        const vertex = this.plateVertices.get(id2);
         if (!vertex) return null;
         const updated = { ...vertex, ...updates };
-        this.plateVertices.set(id, updated);
+        this.plateVertices.set(id2, updated);
         return updated;
       }
-      removePlateVertex(id) {
-        return this.plateVertices.delete(id);
+      removePlateVertex(id2) {
+        return this.plateVertices.delete(id2);
       }
       getVerticesForPlate(plateId) {
         const vertices = [];
@@ -1113,8 +1113,8 @@ var init_Mesh = __esm({
         return vertices.sort((a, b) => a.index - b.index);
       }
       removeVerticesForPlate(plateId) {
-        for (const [id, v] of this.plateVertices) {
-          if (v.plateId === plateId) this.plateVertices.delete(id);
+        for (const [id2, v] of this.plateVertices) {
+          if (v.plateId === plateId) this.plateVertices.delete(id2);
         }
       }
       /**
@@ -1154,7 +1154,7 @@ var init_Mesh = __esm({
         this.nextVertexId = 1;
       }
       getElementNodes(element) {
-        return element.nodeIds.map((id) => this.nodes.get(id)).filter((n2) => n2 !== void 0);
+        return element.nodeIds.map((id2) => this.nodes.get(id2)).filter((n2) => n2 !== void 0);
       }
       findNodeAt(x, y, tolerance = 0.1) {
         for (const node of this.nodes.values()) {
@@ -1302,7 +1302,7 @@ var init_Mesh = __esm({
         const allEdgeIds = (data.edges || []).map((e) => e.id);
         const plaatKnoopIds = /* @__PURE__ */ new Set();
         for (const p2 of data.plateRegions || []) {
-          for (const id of p2.nodeIds) if (id >= 1e3) plaatKnoopIds.add(id);
+          for (const id2 of p2.nodeIds) if (id2 >= 1e3) plaatKnoopIds.add(id2);
         }
         const regularNodeIds = data.nodes.filter((n2) => !plaatKnoopIds.has(n2.id)).map((n2) => n2.id);
         mesh.nextNodeId = Math.max(...regularNodeIds, 0) + 1;
@@ -1316,7 +1316,7 @@ var init_Mesh = __esm({
         const allVertexIds = (data.plateVertices || []).map((v) => v.id);
         mesh.nextVertexId = Math.max(...allVertexIds, 0) + 1;
         const plateNodeIds = data.nodes.filter((n2) => plaatKnoopIds.has(n2.id)).map((n2) => n2.id);
-        mesh.nextPlateNodeId = Math.max(1e3, mesh.nextNodeId, ...plateNodeIds.map((id) => id + 1));
+        mesh.nextPlateNodeId = Math.max(1e3, mesh.nextNodeId, ...plateNodeIds.map((id2) => id2 + 1));
         return mesh;
       }
     };
@@ -2082,14 +2082,14 @@ function assembleGlobalStiffnessMatrix(mesh, analysisType, axialReleasedBeamIds)
         if (axialReleasedBeamIds?.has(beam.id)) {
           for (const d of [0, 3]) if (!releasedLocalDofs.includes(d)) releasedLocalDofs.push(d);
         }
-        const veren = getSprungLocalDofs(beam);
+        const veren2 = getSprungLocalDofs(beam);
         let Ke;
-        if (releasedLocalDofs.length > 0 || veren.length > 0) {
+        if (releasedLocalDofs.length > 0 || veren2.length > 0) {
           const L = calculateBeamLength(n1, n2);
           const angle = calculateBeamAngle(n1, n2);
           if (L < 1e-10) throw new Error("Beam element has zero length");
           const Kl = calculateBeamLocalStiffness(L, material.E, beam.section.A, beam.section.I);
-          if (veren.length > 0) applyEndConnections(Kl, releasedLocalDofs, veren);
+          if (veren2.length > 0) applyEndConnections(Kl, releasedLocalDofs, veren2);
           else applyEndReleases(Kl, releasedLocalDofs);
           const T2 = createTransformationMatrix(angle);
           Ke = T2.transpose().multiply(Kl.multiply(T2));
@@ -2173,14 +2173,14 @@ function assembleGlobalStiffnessMatrix(mesh, analysisType, axialReleasedBeamIds)
         if (axialReleasedBeamIds?.has(beam.id)) {
           for (const d of [0, 3]) if (!releasedLocalDofs.includes(d)) releasedLocalDofs.push(d);
         }
-        const veren = getSprungLocalDofs(beam);
+        const veren2 = getSprungLocalDofs(beam);
         let Ke;
-        if (releasedLocalDofs.length > 0 || veren.length > 0) {
+        if (releasedLocalDofs.length > 0 || veren2.length > 0) {
           const L = calculateBeamLength(n1, n2);
           const angle = calculateBeamAngle(n1, n2);
           if (L < 1e-10) throw new Error("Beam element has zero length");
           const Kl = calculateBeamLocalStiffness(L, material.E, beam.section.A, beam.section.I);
-          if (veren.length > 0) applyEndConnections(Kl, releasedLocalDofs, veren);
+          if (veren2.length > 0) applyEndConnections(Kl, releasedLocalDofs, veren2);
           else applyEndReleases(Kl, releasedLocalDofs);
           const T2 = createTransformationMatrix(angle);
           Ke = T2.transpose().multiply(Kl.multiply(T2));
@@ -2401,12 +2401,12 @@ function assembleForceVector(mesh, analysisType = "plane_stress") {
         for (let i = 0; i < 6; i++) localForces[i] += fThermal[i];
       }
       const releasedLocalDofs = getReleasedLocalDofs(beam);
-      const veren = getSprungLocalDofs(beam);
-      if (releasedLocalDofs.length > 0 || veren.length > 0) {
+      const veren2 = getSprungLocalDofs(beam);
+      if (releasedLocalDofs.length > 0 || veren2.length > 0) {
         const material2 = mesh.getMaterial(beam.materialId);
         if (material2) {
           const Kl = calculateBeamLocalStiffness(L, material2.E, beam.section.A, beam.section.I);
-          if (veren.length > 0) applyEndConnections(Kl, releasedLocalDofs, veren, localForces);
+          if (veren2.length > 0) applyEndConnections(Kl, releasedLocalDofs, veren2, localForces);
           else applyEndReleases(Kl, releasedLocalDofs, localForces);
         }
       }
@@ -2647,10 +2647,10 @@ function calculateBeamInternalForces(element, n1, n2, material, globalDisplaceme
     equivalentNodalForces[i] += thermalLocal[i];
   }
   const releasedLocalDofs = getReleasedLocalDofs(element);
-  const veren = getSprungLocalDofs(element).filter((v) => !releasedLocalDofs.includes(v.dof));
+  const veren2 = getSprungLocalDofs(element).filter((v) => !releasedLocalDofs.includes(v.dof));
   const dLoc = localDisp.slice();
-  const losseDofs = [...releasedLocalDofs, ...veren.map((v) => v.dof)];
-  const kVan = (dof) => veren.find((v) => v.dof === dof)?.k ?? 0;
+  const losseDofs = [...releasedLocalDofs, ...veren2.map((v) => v.dof)];
+  const kVan = (dof) => veren2.find((v) => v.dof === dof)?.k ?? 0;
   if (losseDofs.length > 0) {
     const m = losseDofs.length;
     const A = [];
@@ -2669,8 +2669,8 @@ function calculateBeamInternalForces(element, n1, n2, material, globalDisplaceme
       for (let r = 0; r < m; r++) dLoc[losseDofs[r]] = sol[r];
     }
   }
-  if (veren.length > 0) {
-    applyEndConnections(Kl, releasedLocalDofs, veren, equivalentNodalForces);
+  if (veren2.length > 0) {
+    applyEndConnections(Kl, releasedLocalDofs, veren2, equivalentNodalForces);
   } else if (releasedLocalDofs.length > 0) {
     applyEndReleases(Kl, releasedLocalDofs, equivalentNodalForces);
   }
@@ -3290,8 +3290,8 @@ function vertaalSingulier(e, mesh, knoopVanIndex) {
   if (!treffer) return e;
   const kolom = Number(treffer[1]);
   const index = Math.floor(kolom / 3);
-  const knoopId = knoopVanIndex ? knoopVanIndex(index)?.id : [...mesh.nodes.values()][index]?.id;
-  const knoop = knoopId === void 0 ? void 0 : mesh.nodes.get(knoopId);
+  const knoopId3 = knoopVanIndex ? knoopVanIndex(index)?.id : [...mesh.nodes.values()][index]?.id;
+  const knoop = knoopId3 === void 0 ? void 0 : mesh.nodes.get(knoopId3);
   if (!knoop) return e;
   let losseKnoop = true;
   for (const beam of mesh.beamElements.values()) {
@@ -3401,9 +3401,9 @@ function assembleGlobalStiffnessWithGeometric(mesh, axialForces, includeGeometri
       telGeometrischeStijfheidOp(Kl, L, N);
     }
     const releasedLocalDofs = getReleasedLocalDofs(beam);
-    const veren = getSprungLocalDofs(beam);
-    if (veren.length > 0) {
-      applyEndConnections(Kl, releasedLocalDofs, veren);
+    const veren2 = getSprungLocalDofs(beam);
+    if (veren2.length > 0) {
+      applyEndConnections(Kl, releasedLocalDofs, veren2);
     } else if (releasedLocalDofs.length > 0) {
       applyEndReleases(Kl, releasedLocalDofs);
     }
@@ -3513,9 +3513,9 @@ function assembleGlobalStiffnessFNL(mesh, sectionStates, axialForces, includeGeo
       telGeometrischeStijfheidOp(Kl, L, N);
     }
     const releasedLocalDofs = getReleasedLocalDofs(beam);
-    const veren = getSprungLocalDofs(beam);
-    if (veren.length > 0) {
-      applyEndConnections(Kl, releasedLocalDofs, veren);
+    const veren2 = getSprungLocalDofs(beam);
+    if (veren2.length > 0) {
+      applyEndConnections(Kl, releasedLocalDofs, veren2);
     } else if (releasedLocalDofs.length > 0) {
       applyEndReleases(Kl, releasedLocalDofs);
     }
@@ -3641,10 +3641,10 @@ function assembleForceVector2(mesh) {
       for (let i = 0; i < 6; i++) fLocal[i] += fThermal[i];
     }
     const releasedLocalDofs = getReleasedLocalDofs(beam);
-    const veren = getSprungLocalDofs(beam);
-    if ((releasedLocalDofs.length > 0 || veren.length > 0) && material) {
+    const veren2 = getSprungLocalDofs(beam);
+    if ((releasedLocalDofs.length > 0 || veren2.length > 0) && material) {
       const Kl = calculateBeamLocalStiffness(L, material.E, beam.section.A, beam.section.I);
-      if (veren.length > 0) applyEndConnections(Kl, releasedLocalDofs, veren, fLocal);
+      if (veren2.length > 0) applyEndConnections(Kl, releasedLocalDofs, veren2, fLocal);
       else applyEndReleases(Kl, releasedLocalDofs, fLocal);
     }
     const T2 = createTransformationMatrix(angle);
@@ -4287,13 +4287,13 @@ function assembleGeometricStiffnessMixed(mesh, displacements, nodeIdToIndex, num
     const ul = T2.multiplyVector(ug);
     const N = material.E * beam.section.A / L * (ul[3] - ul[0]);
     const releasedLocalDofs = getReleasedLocalDofs(beam);
-    const veren = getSprungLocalDofs(beam);
+    const veren2 = getSprungLocalDofs(beam);
     let KgLokaal;
-    if (releasedLocalDofs.length === 0 && veren.length === 0) {
+    if (releasedLocalDofs.length === 0 && veren2.length === 0) {
       KgLokaal = calculateGeometricStiffness(L, N);
     } else {
       const condenseer = (M) => {
-        if (veren.length > 0) applyEndConnections(M, releasedLocalDofs, veren);
+        if (veren2.length > 0) applyEndConnections(M, releasedLocalDofs, veren2);
         else applyEndReleases(M, releasedLocalDofs);
         return M;
       };
@@ -4490,7 +4490,7 @@ function solveMixed(mesh, opts) {
     return herstel(solveLinearSystem2(Kmod, Fmod));
   };
   const knoopVanIndex = /* @__PURE__ */ new Map();
-  for (const [id, index] of nodeIdToIndex) knoopVanIndex.set(index, { id });
+  for (const [id2, index] of nodeIdToIndex) knoopVanIndex.set(index, { id: id2 });
   const numDofsMixed = K.rows;
   log({
     soort: "info",
@@ -5207,7 +5207,7 @@ var init_TriangleService = __esm({
 // src/core/fem/PlateRegion.ts
 function convertEdgeNodeIdsToNodalForces(mesh, nodeIds, px, py) {
   if (nodeIds.length < 2) return [];
-  const nodes = nodeIds.map((id) => mesh.getNode(id)).filter((n2) => n2 !== void 0);
+  const nodes = nodeIds.map((id2) => mesh.getNode(id2)).filter((n2) => n2 !== void 0);
   if (nodes.length < 2) return [];
   const cumDist = [0];
   for (let i = 1; i < nodes.length; i++) {
@@ -5319,7 +5319,7 @@ function verdeelRandlastConsistent(nodeIds, s, sA, sB, pxA, pyA, pxB, pyB) {
       w * (Nk(lo) * py(lo) + 4 * Nk(m) * py(m) + Nk(hi) * py(hi))
     );
   }
-  return nodeIds.filter((id) => perKnoop.has(id)).map((id) => ({ nodeId: id, ...perKnoop.get(id) }));
+  return nodeIds.filter((id2) => perKnoop.has(id2)).map((id2) => ({ nodeId: id2, ...perKnoop.get(id2) }));
 }
 function verdeelRandpuntlastConsistent(nodeIds, s, sP, fx, fy) {
   const n2 = nodeIds.length;
@@ -5361,8 +5361,8 @@ var init_PlateLoads = __esm({
 });
 
 // src/lib/vertaalbareTekst.ts
-function vt(sleutel, tekst, waarden) {
-  return waarden ? { sleutel, waarden, tekst } : { sleutel, tekst };
+function vt(sleutel, tekst2, waarden) {
+  return waarden ? { sleutel, waarden, tekst: tekst2 } : { sleutel, tekst: tekst2 };
 }
 function isVertaalbareTekst(w) {
   return typeof w === "object" && w !== null && typeof w.sleutel === "string";
@@ -5582,8 +5582,8 @@ function valideerPlaatOpeningen(omtrek, openingen, tolMm = 1) {
   }
   return null;
 }
-function randFout(sleutel, tekst, waarden) {
-  return { ok: false, reden: tekst, redenTekst: vt(`common:canvas.modelCheck.plateEdge.${sleutel}`, tekst, waarden) };
+function randFout(sleutel, tekst2, waarden) {
+  return { ok: false, reden: tekst2, redenTekst: vt(`common:canvas.modelCheck.plateEdge.${sleutel}`, tekst2, waarden) };
 }
 function bepaalPlaatRand(punten, adres, tolMm = 1) {
   const n2 = punten.length;
@@ -5693,20 +5693,20 @@ function bepaalPlaatlastRand(punten, openingen, adres, tolMm = 1) {
       { opening: String(adres.openingId) }
     );
   }
-  const lijst = openingen ?? [];
-  if (lijst.length === 0) {
+  const lijst2 = openingen ?? [];
+  if (lijst2.length === 0) {
     return randFout(
       "plateHasNoOpenings",
       `de last staat op opening ${adres.openingId}, maar deze plaat heeft geen openingen.`,
       { opening: adres.openingId }
     );
   }
-  const treffers = lijst.map((o, i2) => ({ o, i: i2 })).filter(({ o }) => o.id === adres.openingId);
+  const treffers = lijst2.map((o, i2) => ({ o, i: i2 })).filter(({ o }) => o.id === adres.openingId);
   if (treffers.length === 0) {
     return randFout(
       "openingMissing",
-      `opening ${adres.openingId} bestaat niet op deze plaat. Aanwezig: ${lijst.map((o) => o.id).join(", ")}.`,
-      { opening: adres.openingId, lijst: lijst.map((o) => o.id).join(", ") }
+      `opening ${adres.openingId} bestaat niet op deze plaat. Aanwezig: ${lijst2.map((o) => o.id).join(", ")}.`,
+      { opening: adres.openingId, lijst: lijst2.map((o) => o.id).join(", ") }
     );
   }
   if (treffers.length > 1) {
@@ -13714,8 +13714,8 @@ function partieleFactoren(gevolgklasse, bijlage = STANDAARD_BIJLAGE) {
 function kFi(gevolgklasse, bijlage = STANDAARD_BIJLAGE) {
   return rijVoorBijlage(K_FI, bijlage, "K_FI")[gevolgklasse];
 }
-function psiGebruik(categorie, bijlage = STANDAARD_BIJLAGE) {
-  return rijVoorBijlage(PSI_GEBRUIK, bijlage, "de \u03C8-factoren")[categorie];
+function psiGebruik(categorie2, bijlage = STANDAARD_BIJLAGE) {
+  return rijVoorBijlage(PSI_GEBRUIK, bijlage, "de \u03C8-factoren")[categorie2];
 }
 function psiKlimaat(soort, bijlage = STANDAARD_BIJLAGE) {
   return rijVoorBijlage(soort === "wind" ? PSI_WIND : PSI_SNEEUW, bijlage, "de \u03C8-factoren");
@@ -13776,7 +13776,7 @@ function verzamelActies(gevallen, bijlage) {
 function bouw(naam, type, termen, bron, herkomst) {
   const werkzaam = termen.filter((t) => t.factor !== 0 && t.ids.length > 0);
   const factors = /* @__PURE__ */ new Map();
-  for (const t of werkzaam) for (const id of t.ids) factors.set(id, t.factor);
+  for (const t of werkzaam) for (const id2 of t.ids) factors.set(id2, t.factor);
   const formule = werkzaam.map((t) => t.tekst).join(" + ") || "0";
   return {
     name: naam,
@@ -13836,7 +13836,7 @@ function ontdubbel(set) {
   const gezien = /* @__PURE__ */ new Set();
   return set.filter((c) => {
     if (c.factors.size === 0) return false;
-    const inhoud = [...c.factors].sort((a, b) => a[0] - b[0]).map(([id, x]) => `${id}:${x}`).join(",");
+    const inhoud = [...c.factors].sort((a, b) => a[0] - b[0]).map(([id2, x]) => `${id2}:${x}`).join(",");
     const k = `${c.type}|${c.standaard.soort}|${inhoud}`;
     if (gezien.has(k)) return false;
     gezien.add(k);
@@ -14144,9 +14144,9 @@ function combineResults(combo, perCase) {
   for (const [caseId] of combo.factors) {
     const r = perCase.get(idVan(caseId));
     if (!r) continue;
-    r.displacements.forEach((_, id) => nodeIds.add(id));
-    r.elements.forEach((_, id) => beamIds.add(id));
-    r.reactions.forEach((_, id) => reactionIds.add(id));
+    r.displacements.forEach((_, id2) => nodeIds.add(id2));
+    r.elements.forEach((_, id2) => beamIds.add(id2));
+    r.reactions.forEach((_, id2) => reactionIds.add(id2));
   }
   const displacements = /* @__PURE__ */ new Map();
   for (const nid of nodeIds) {
@@ -14250,7 +14250,7 @@ function combineResults(combo, perCase) {
       for (const [caseId, factor] of combo.factors) {
         if (factor === 0) continue;
         const bron = perCase.get(idVan(caseId))?.plateElements?.find((p2) => p2.plateId === pid);
-        if (!expectedIds || !bron || bron.expectedElementIds?.length !== expectedIds.length || bron.elements.length !== expectedIds.length || referentie.elements.length !== expectedIds.length || expectedIds.some((id, i) => bron.expectedElementIds?.[i] !== id || bron.elements[i]?.elementId !== id || referentie.elements[i]?.elementId !== id)) volledigeMesh = false;
+        if (!expectedIds || !bron || bron.expectedElementIds?.length !== expectedIds.length || bron.elements.length !== expectedIds.length || referentie.elements.length !== expectedIds.length || expectedIds.some((id2, i) => bron.expectedElementIds?.[i] !== id2 || bron.elements[i]?.elementId !== id2 || referentie.elements[i]?.elementId !== id2)) volledigeMesh = false;
       }
       const n2 = referentie.elements.length;
       const gecombineerd = referentie.elements.map((el) => ({
@@ -14497,14 +14497,14 @@ function duurklasseVanGeval(lc) {
 function leidAf(combinatie, gevallen, gevuld) {
   const dragend = [];
   const notities = [];
-  for (const [id, factor] of combinatie.factors) {
+  for (const [id2, factor] of combinatie.factors) {
     if (factor === 0) continue;
-    const lc = gevallen.get(id);
+    const lc = gevallen.get(id2);
     if (!lc) {
-      notities.push(`geval ${id} bestaat niet en telt niet mee`);
+      notities.push(`geval ${id2} bestaat niet en telt niet mee`);
       continue;
     }
-    if (gevuld && !gevuld(id)) {
+    if (gevuld && !gevuld(id2)) {
       notities.push(`${gevalNaam(lc)} heeft geen werkzame last en telt niet mee`);
       continue;
     }
@@ -14600,7 +14600,7 @@ function blijvendeBgtCombinaties(combinations, loadCases) {
     if (c.eindtoestand !== void 0) return false;
     const werkzaam = [...c.factors].filter(([, f]) => f !== 0);
     if (werkzaam.length !== blijvend.size) return false;
-    return werkzaam.every(([id, f]) => blijvend.has(id) && f === 1);
+    return werkzaam.every(([id2, f]) => blijvend.has(id2) && f === 1);
   });
 }
 function blijvendeZakking(opties) {
@@ -14760,8 +14760,8 @@ var init_eigenDoorsnedenStore = __esm({
         schrijf(items);
         set({ items });
       },
-      verwijder: (id) => {
-        const items = get().items.filter((x) => x.id !== id);
+      verwijder: (id2) => {
+        const items = get().items.filter((x) => x.id !== id2);
         schrijf(items);
         set({ items });
       },
@@ -14892,11 +14892,11 @@ function staafInReferentierichting(beam, nodes) {
 }
 function resultaatInReferentierichting(result, gespiegeld) {
   let elements = null;
-  for (const id of gespiegeld) {
-    const ef = result.elements.get(id);
+  for (const id2 of gespiegeld) {
+    const ef = result.elements.get(id2);
     if (!ef) continue;
     elements ??= new Map(result.elements);
-    elements.set(id, spiegelElementKrachten(ef));
+    elements.set(id2, spiegelElementKrachten(ef));
   }
   return elements ? { ...result, elements } : result;
 }
@@ -14906,7 +14906,7 @@ function toetsdataInReferentierichting(data) {
     if (referentieVanStaaf(b, data.nodes).gespiegeld) gespiegeld.add(b.id);
   }
   if (gespiegeld.size === 0) return data;
-  const spiegelMap = (m) => new Map([...m].map(([id, r]) => [id, resultaatInReferentierichting(r, gespiegeld)]));
+  const spiegelMap = (m) => new Map([...m].map(([id2, r]) => [id2, resultaatInReferentierichting(r, gespiegeld)]));
   return {
     ...data,
     beams: data.beams.map((b) => staafInReferentierichting(b, data.nodes)),
@@ -14928,12 +14928,12 @@ function richtingssprongNabij(beam, nodes) {
   const voet = a.z <= b.z ? a : b;
   const kop = voet === a ? b : a;
   if (!(kop.z > voet.z && kop.x < voet.x)) return null;
-  const afstand2 = Math.abs(helling - VERTICAAL_VANAF_GRADEN);
-  if (afstand2 > SPRONGBAND_GRADEN + 1e-9) return null;
+  const afstand3 = Math.abs(helling - VERTICAAL_VANAF_GRADEN);
+  if (afstand3 > SPRONGBAND_GRADEN + 1e-9) return null;
   return {
     hellingGraden: helling,
     staafstand: referentieVanStaaf(beam, nodes).staafstand,
-    afstandTotGrensGraden: afstand2
+    afstandTotGrensGraden: afstand3
   };
 }
 function gradenTekst(v) {
@@ -15069,19 +15069,19 @@ function vindDoorgaandeLijnen(beams, nodes, alleBeams, supports) {
     while (wachtrij.length > 0) {
       const b = wachtrij.pop();
       leden.push(b);
-      for (const id of collinearContinuations(b, nodes, alleBeams, supports)) {
-        if (gezien.has(id)) continue;
-        const other = perId.get(id);
+      for (const id2 of collinearContinuations(b, nodes, alleBeams, supports)) {
+        if (gezien.has(id2)) continue;
+        const other = perId.get(id2);
         if (!other) continue;
-        gezien.add(id);
+        gezien.add(id2);
         wachtrij.push(other);
       }
     }
     if (leden.length < 2) continue;
     const dir = richting(start, nodes);
     if (!dir) continue;
-    const proj = (id) => {
-      const n2 = nodes.find((k) => k.id === id);
+    const proj = (id2) => {
+      const n2 = nodes.find((k) => k.id === id2);
       return n2.x * dir.x + n2.z * dir.z;
     };
     const geordend = leden.map((beam) => {
@@ -15113,11 +15113,11 @@ function vindDoorgaandeLijnen(beams, nodes, alleBeams, supports) {
   }
   return lijnen;
 }
-function eindVelden(obj, van, naar) {
-  if (!obj) return void 0;
+function eindVelden(obj2, van, naar) {
+  if (!obj2) return void 0;
   const uit = {};
   let n2 = 0;
-  for (const [k, v] of Object.entries(obj)) {
+  for (const [k, v] of Object.entries(obj2)) {
     if (!k.startsWith(van) || v === void 0) continue;
     uit[`${naar}${k.slice(van.length)}`] = v;
     n2++;
@@ -15264,28 +15264,28 @@ function voegDoorgaandeLijnenSamen(invoer) {
     virtueel.push(beam);
     lijnPerId.set(lijn.id, lijn);
     const ids = lijn.delen.map((d) => d.beam.id);
-    for (const id of ids) {
-      vervangen.add(id);
-      if (id !== lijn.id && teToetsen.has(id)) {
+    for (const id2 of ids) {
+      vervangen.add(id2);
+      if (id2 !== lijn.id && teToetsen.has(id2)) {
         overgeslagen.push({
-          beamId: id,
+          beamId: id2,
           reason: `maakt deel uit van de doorgaande lijn die als staaf ${lijn.id} is getoetst (staven ${ids.join(", ")}, samen ${nl3(lijn.lengteMm / 1e3)} m); zie staaf ${lijn.id}`
         });
       }
     }
-    const tekst = [
+    const tekst2 = [
       `DOORGAANDE LIJN. Deze staaf is de doorgaande lijn van de staven ${ids.join(", ")} (${beam.profile ?? "\u2014"}, ${beam.material ?? "\u2014"}): zij liggen in elkaars verlengde, hebben dezelfde doorsnede en hetzelfde materiaal, en op de tussenknoop ${lijn.tussenknopen.join(", ")} staat geen oplegging. De toetsing beschouwt de lijn als \xC9\xC9N staaf van ${nl3(lijn.lengteMm / 1e3)} m: de terugval van de kniklengte, de kipvelden en de koorde van de doorbuiging gelden voor die hele lengte, en een tussenknoop telt niet als steun of als gaffel (basisaudit nr 29 en het kipgedrag bij een tussenknoop). Kipsteunen van de delen zijn omgerekend naar de lijn; een opgegeven kniklengte, kipsteunafstand, zeeg of klasse van een deel is voor de lijn overgenomen.`
     ];
     for (const knoop of lijn.tussenknopen) {
       const aangesloten = alleBeams.filter((b) => !vervangen.has(b.id) && !ids.includes(b.id) && (b.from === knoop || b.to === knoop)).map((b) => b.id);
       if (aangesloten.length > 0) {
-        tekst.push(
+        tekst2.push(
           `Op tussenknoop ${knoop} sluit staaf ${aangesloten.join(", ")} aan. Die aansluiting is NIET als steun of gaffel meegeteld: een vlak model zegt niet of zij de lijn zijdelings of tegen torsie vasthoudt. Doet zij dat werkelijk, geef dan op die plaats een kipsteun (aan beide flenzen) of een kniklengte op.`
         );
       }
     }
-    tekst.push(...configNotities);
-    notities.set(lijn.id, tekst);
+    tekst2.push(...configNotities);
+    notities.set(lijn.id, tekst2);
   }
   const beams = invoer.beams.filter((b) => !vervangen.has(b.id)).concat(virtueel);
   const combinationResults = /* @__PURE__ */ new Map();
@@ -15314,10 +15314,10 @@ function voegDoorgaandeLijnenSamen(invoer) {
 function bepaalStaafeinden(beam, nodes, alleBeams, supports, ledenVanLijn, plates) {
   if (!supports) return { begin: "Gaffel", eind: "Gaffel" };
   const dir = richting(beam, nodes);
-  const opgelegd = new Set(supports.map((s) => s.nodeId));
+  const opgelegd2 = new Set(supports.map((s) => s.nodeId));
   const inPlaat = new Set((plates ?? []).flatMap((p2) => p2.nodeIds));
   const eind = (knoop) => {
-    if (opgelegd.has(knoop) || inPlaat.has(knoop)) return "Gaffel";
+    if (opgelegd2.has(knoop) || inPlaat.has(knoop)) return "Gaffel";
     const anderen = alleBeams.filter(
       (b) => b.id !== beam.id && !ledenVanLijn.has(b.id) && (b.from === knoop || b.to === knoop)
     );
@@ -15405,7 +15405,7 @@ function bepaalAlphaCr(input, combinaties, combinationResults, opties = {}) {
     }
     const instabiel = (alpha) => {
       const geschaald = /* @__PURE__ */ new Map();
-      for (const [id, n2] of axiaal) geschaald.set(id, n2 * alpha);
+      for (const [id2, n2] of axiaal) geschaald.set(id2, n2 * alpha);
       const k = assembleGlobalStiffnessWithGeometric(mesh, geschaald, true);
       const { K } = applyBoundaryConditions(k, nul, mesh);
       return countNonPositivePivots(K) > 0;
@@ -15462,11 +15462,11 @@ function stabiliteitsMeldingen(uitkomsten, analysetype, scheefstandAan) {
   );
   if (teLaag.length > 0) {
     const laagste = teLaag.reduce((a, b) => (b.alphaCr ?? Infinity) < (a.alphaCr ?? Infinity) ? b : a);
-    const lijst = teLaag.map((u) => `${nl4(u.alphaCr ?? NaN)} ("${u.naam}")`).join(", ");
+    const lijst2 = teLaag.map((u) => `${nl4(u.alphaCr ?? NaN)} ("${u.naam}")`).join(", ");
     if (eersteOrde) {
       meldingen.push({
         niveau: "fout",
-        tekst: `EERSTE ORDE NIET TOEGESTAAN: \u03B1_cr = ${nl4(laagste.alphaCr ?? NaN)} in combinatie "${laagste.naam}" is kleiner dan ${ALPHA_CR_GRENS_EERSTE_ORDE}` + (teLaag.length > 1 ? ` (alle combinaties onder de grens: ${lijst})` : "") + ". NEN-EN 1993-1-1 5.2.1(3) staat een eerste-orde-berekening dan niet toe: de tweede-orde-effecten (P-\u0394) zijn niet verwaarloosbaar, en de terugval van de kniklengte op de systeemlengte in de staaftoets veronderstelt juist krachten uit een tweede-orde-berekening met imperfecties (5.2.2(7)b). De krachten en de unity checks van deze berekening zijn daarom NIET bruikbaar als toetsing. Kies het analysetype tweede orde (P-\u0394) met de scheefstand aan, of geef per op druk belaste staaf de kniklengte uit de zijdelingse knikvorm op (5.2.2(8))."
+        tekst: `EERSTE ORDE NIET TOEGESTAAN: \u03B1_cr = ${nl4(laagste.alphaCr ?? NaN)} in combinatie "${laagste.naam}" is kleiner dan ${ALPHA_CR_GRENS_EERSTE_ORDE}` + (teLaag.length > 1 ? ` (alle combinaties onder de grens: ${lijst2})` : "") + ". NEN-EN 1993-1-1 5.2.1(3) staat een eerste-orde-berekening dan niet toe: de tweede-orde-effecten (P-\u0394) zijn niet verwaarloosbaar, en de terugval van de kniklengte op de systeemlengte in de staaftoets veronderstelt juist krachten uit een tweede-orde-berekening met imperfecties (5.2.2(7)b). De krachten en de unity checks van deze berekening zijn daarom NIET bruikbaar als toetsing. Kies het analysetype tweede orde (P-\u0394) met de scheefstand aan, of geef per op druk belaste staaf de kniklengte uit de zijdelingse knikvorm op (5.2.2(8))."
       });
     } else if (!scheefstandAan) {
       meldingen.push({
@@ -15714,7 +15714,7 @@ function beamDirection(beam, nodes) {
 function collinearContinuations(beam, nodes, beams, supports) {
   const dir = beamDirection(beam, nodes);
   if (!dir) return [];
-  const opgelegd = new Set((supports ?? []).map((s) => s.nodeId));
+  const opgelegd2 = new Set((supports ?? []).map((s) => s.nodeId));
   const uit = [];
   for (const other of beams) {
     if (other.id === beam.id) continue;
@@ -15722,7 +15722,7 @@ function collinearContinuations(beam, nodes, beams, supports) {
       (n2) => n2 === other.from || n2 === other.to
     );
     if (gedeeld.length !== 1) continue;
-    if (opgelegd.has(gedeeld[0])) continue;
+    if (opgelegd2.has(gedeeld[0])) continue;
     if ((other.profile ?? "") !== (beam.profile ?? "")) continue;
     if ((other.material ?? "") !== (beam.material ?? "")) continue;
     if ((other.profileEnd ?? "") !== "" || (beam.profileEnd ?? "") !== "") continue;
@@ -15870,12 +15870,12 @@ function nooitLeidend(karakteristiek) {
   const begeleidend = /* @__PURE__ */ new Set();
   const leidend = /* @__PURE__ */ new Set();
   for (const c of karakteristiek) {
-    for (const [id, f] of c.factors) {
-      if (Math.abs(f) >= 1 - 1e-9) leidend.add(id);
-      else if (f !== 0) begeleidend.add(id);
+    for (const [id2, f] of c.factors) {
+      if (Math.abs(f) >= 1 - 1e-9) leidend.add(id2);
+      else if (f !== 0) begeleidend.add(id2);
     }
   }
-  return [...begeleidend].filter((id) => !leidend.has(id)).sort((a, b) => a - b);
+  return [...begeleidend].filter((id2) => !leidend.has(id2)).sort((a, b) => a - b);
 }
 function nl5(x, cijfers = 1) {
   return x.toFixed(cijfers).replace(".", ",");
@@ -16507,7 +16507,7 @@ function buildTimberCheckInputs(ruweData) {
   const grades = data.supportedGrades && data.supportedGrades.length > 0 ? data.supportedGrades : SUPPORTED_TIMBER_GRADES;
   const ulsCombos = data.combinations.filter((c) => c.type === "uls");
   const metLast = data.gevallenMetLast ? new Set(data.gevallenMetLast) : null;
-  const gevuld = metLast ? (id) => metLast.has(id) : void 0;
+  const gevuld = metLast ? (id2) => metLast.has(id2) : void 0;
   for (const beam of data.beams) {
     const materialName = beam.material?.trim() ?? "";
     const grade = matchSupportedTimberGrade(materialName, grades);
@@ -16889,7 +16889,7 @@ function buildCltCheckInputs(ruweData) {
   const grades = data.supportedGrades && data.supportedGrades.length > 0 ? data.supportedGrades : SUPPORTED_TIMBER_GRADES;
   const ulsCombos = data.combinations.filter((c) => c.type === "uls");
   const metLast = data.gevallenMetLast ? new Set(data.gevallenMetLast) : null;
-  const gevuld = metLast ? (id) => metLast.has(id) : void 0;
+  const gevuld = metLast ? (id2) => metLast.has(id2) : void 0;
   for (const beam of data.beams) {
     if (!isCltProfiel(beam.profile)) continue;
     const materialName = beam.material?.trim() ?? "";
@@ -17161,8 +17161,8 @@ var init_betonCheckBuilder = __esm({
 function isVrijMateriaal(material) {
   return /^\s*VRIJ:/i.test(material ?? "");
 }
-function getal2(tekst) {
-  return parseFloat(tekst.replace(",", "."));
+function getal2(tekst2) {
+  return parseFloat(tekst2.replace(",", "."));
 }
 function parseVrijMateriaal(material) {
   const m = PATROON.exec(material ?? "");
@@ -18236,7 +18236,7 @@ function buildMesh(input, loadFactor) {
           `Plaat ${p2.id}: verwacht minstens 3 hoekknopen, maar kreeg er ${p2.nodeIds?.length ?? 0}.`
         );
       }
-      const corners = p2.nodeIds.map((id) => nodeById.get(id));
+      const corners = p2.nodeIds.map((id2) => nodeById.get(id2));
       if (corners.some((c) => !c)) {
         throw new Error(`Plaat ${p2.id}: \xE9\xE9n of meer hoekknopen bestaan niet meer.`);
       }
@@ -18258,7 +18258,7 @@ function buildMesh(input, loadFactor) {
         const minX = Math.min(...xsH), maxX = Math.max(...xsH);
         const minZ = Math.min(...zsH), maxZ = Math.max(...zsH);
         const dwingend = openingen.length > 0 ? dwingendeLijnenUitKnopen(
-          [...verwezenKnopen].map((id) => nodeById.get(id)).filter((n2) => !!n2),
+          [...verwezenKnopen].map((id2) => nodeById.get(id2)).filter((n2) => !!n2),
           { minX, maxX, minZ, maxZ },
           TOL_MM
         ) : { x: [], z: [] };
@@ -18390,16 +18390,16 @@ function buildMesh(input, loadFactor) {
     for (const bpl of staafPuntlasten) {
       const t = Math.min(1, Math.max(0, bpl.posFrac ?? 0));
       if (t <= BPL_EPS || t >= 1 - BPL_EPS) continue;
-      const lijst = puntlastFracties.get(bpl.beamId) ?? [];
-      lijst.push(t);
-      puntlastFracties.set(bpl.beamId, lijst);
+      const lijst2 = puntlastFracties.get(bpl.beamId) ?? [];
+      lijst2.push(t);
+      puntlastFracties.set(bpl.beamId, lijst2);
     }
   }
   const extraSnedeFracties = /* @__PURE__ */ new Map();
   const voegSnedeToe = (beamId, t) => {
-    const lijst = extraSnedeFracties.get(beamId) ?? [];
-    lijst.push(t);
-    extraSnedeFracties.set(beamId, lijst);
+    const lijst2 = extraSnedeFracties.get(beamId) ?? [];
+    lijst2.push(t);
+    extraSnedeFracties.set(beamId, lijst2);
   };
   for (const ld of input.loads ?? []) {
     const qa = ld.qStart ?? ld.q ?? 0;
@@ -18525,9 +18525,9 @@ function buildMesh(input, loadFactor) {
         const mx = (nA.x + t * (nB.x - nA.x)) / 1e3;
         const my = (nA.z + t * (nB.z - nA.z)) / 1e3;
         const bestaand = mesh.findNodeAt(mx, my, 1e-3);
-        const knoopId = bestaand ? bestaand.id : mesh.addNode(mx, my).id;
-        if (knoopId === knoopIds[knoopIds.length - 1]) continue;
-        knoopIds.push(knoopId);
+        const knoopId3 = bestaand ? bestaand.id : mesh.addNode(mx, my).id;
+        if (knoopId3 === knoopIds[knoopIds.length - 1]) continue;
+        knoopIds.push(knoopId3);
         grens.push(t);
       }
       if (knoopIds.length > 1 && knoopIds[knoopIds.length - 1] === toId) {
@@ -18651,7 +18651,7 @@ function buildMesh(input, loadFactor) {
   if (plateRects.length > 0) {
     for (const { p: p2, raster, punten } of plateRects) {
       const k = zetPlatMeshInKern(p2, raster);
-      const naarIds = (lijst) => lijst.map((i) => k.knoopIdPerPunt[i]);
+      const naarIds = (lijst2) => lijst2.map((i) => k.knoopIdPerPunt[i]);
       const region = maakRegion(p2, raster, k, {
         bottom: naarIds(raster.randen.bottom),
         top: naarIds(raster.randen.top),
@@ -18711,13 +18711,13 @@ function buildMesh(input, loadFactor) {
     let kandidaten;
     if (rand.openingIndex !== void 0) {
       const randen = info2.openingEdgeNodeIds[rand.openingIndex];
-      const lijst = randen?.[rand.edgeIndex];
-      if (!lijst) {
+      const lijst2 = randen?.[rand.edgeIndex];
+      if (!lijst2) {
         throw new Error(
           `Plaat ${plateId}: ${wat} \u2014 rand ${rand.edgeIndex + 1} van opening ${rand.openingId} heeft geen rekenknopen in het rekenmesh. Wijzig de plaat zodat het mesh opnieuw wordt gemaakt.`
         );
       }
-      kandidaten = lijst;
+      kandidaten = lijst2;
     } else if (info2.edgeNodeIds) {
       const n2 = info2.hoeken.length;
       let k = rand.edgeIndex;
@@ -18774,15 +18774,15 @@ function buildMesh(input, loadFactor) {
         const n2 = o.punten.length;
         for (let j = 0; j < n2; j++) {
           const wat = `rand ${j + 1} van opening ${o.id}`;
-          const lijst = info2.openingEdgeNodeIds[oi]?.[j];
-          if (!lijst) {
+          const lijst2 = info2.openingEdgeNodeIds[oi]?.[j];
+          if (!lijst2) {
             throw new Error(
               `Plaat ${info2.plateId}: ${wat} heeft geen rekenknopen in het rekenmesh. Wijzig de plaat zodat het mesh opnieuw wordt gemaakt.`
             );
           }
           const van = o.punten[j], naar = o.punten[(j + 1) % n2];
           const lengte = Math.hypot(naar.x - van.x, naar.z - van.z);
-          rijen.push({ plateId: info2.plateId, nodeIds: ordenOpRand(info2.plateId, lijst, van, naar, lengte, wat).nodeIds });
+          rijen.push({ plateId: info2.plateId, nodeIds: ordenOpRand(info2.plateId, lijst2, van, naar, lengte, wat).nodeIds });
         }
       });
     }
@@ -19361,15 +19361,15 @@ function eisEindigeUitkomst(r, wat) {
     );
   };
   const eindig = (v) => v === void 0 || Number.isFinite(v);
-  for (const [id, d] of r.displacements) {
-    if (!eindig(d.ux) || !eindig(d.uz) || !eindig(d.ry)) stop(`de verplaatsing van knoop ${id}`);
+  for (const [id2, d] of r.displacements) {
+    if (!eindig(d.ux) || !eindig(d.uz) || !eindig(d.ry)) stop(`de verplaatsing van knoop ${id2}`);
   }
-  for (const [id, re] of r.reactions) {
-    if (!eindig(re.fx) || !eindig(re.fz) || !eindig(re.my)) stop(`de oplegreactie van knoop ${id}`);
+  for (const [id2, re] of r.reactions) {
+    if (!eindig(re.fx) || !eindig(re.fz) || !eindig(re.my)) stop(`de oplegreactie van knoop ${id2}`);
   }
-  for (const [id, ef] of r.elements) {
+  for (const [id2, ef] of r.elements) {
     if (!eindig(ef.N) || !eindig(ef.V) || !eindig(ef.M_start) || !eindig(ef.M_end)) {
-      stop(`de staafkrachten van staaf ${id}`);
+      stop(`de staafkrachten van staaf ${id2}`);
     }
     const lijnen = [
       ["de momentenlijn", ef.bendingMoment],
@@ -19378,7 +19378,7 @@ function eisEindigeUitkomst(r, wat) {
       ["de doorbuigingslijn", ef.deflection]
     ];
     for (const [naam, lijn] of lijnen) {
-      if (lijn?.some((v) => !Number.isFinite(v))) stop(`${naam} van staaf ${id}`);
+      if (lijn?.some((v) => !Number.isFinite(v))) stop(`${naam} van staaf ${id2}`);
     }
   }
   return r;
@@ -19408,7 +19408,7 @@ function getScheefstandRichtingen(perCase) {
 function gevalResultaten(perCase) {
   const sr = getScheefstandRichtingen(perCase);
   if (!sr) return perCase;
-  return new Map([...perCase].filter(([id]) => id < sr.offset));
+  return new Map([...perCase].filter(([id2]) => id2 < sr.offset));
 }
 function losGevallenOp(input, perCase, idOffset) {
   for (const c of input.cases) {
@@ -19669,7 +19669,7 @@ var init_engine = __esm({
 function plaatPlooiGeometrieFout(p2, nodes) {
   if (!p2.plooi) return void 0;
   if (p2.openingen?.length) return "openingen zijn niet ondersteund bij plaatplooi";
-  const punten = p2.nodeIds.map((id) => nodes?.find((n2) => n2.id === id));
+  const punten = p2.nodeIds.map((id2) => nodes?.find((n2) => n2.id === id2));
   if (punten.length !== 4 || punten.some((n2) => !n2 || !Number.isFinite(n2.x) || !Number.isFinite(n2.z))) {
     return "plaatplooi vraagt vier bekende hoekknopen van het volledige veld";
   }
@@ -19739,12 +19739,12 @@ function buildPlaatCheckInputs(data) {
       const pr = data.combinationResults.get(c.id)?.plateElements?.find((r) => r.plateId === plaat.id);
       if (soort === "Beton") {
         const ids = pr?.expectedElementIds;
-        if (!ids?.length || new Set(ids).size !== ids.length || ids.some((id) => !Number.isInteger(id) || id < 0 || id > 4294967295)) {
+        if (!ids?.length || new Set(ids).size !== ids.length || ids.some((id2) => !Number.isInteger(id2) || id2 < 0 || id2 > 4294967295)) {
           betonMeshFout ??= `Combinatie ${c.id}: onafhankelijke volledige meshset ontbreekt of is ongeldig; bereken opnieuw.`;
         } else {
           const gesorteerd = [...ids].sort((a, b) => a - b);
           const referentie = betonMeshIds;
-          if (referentie && (gesorteerd.length !== referentie.length || gesorteerd.some((id, i) => id !== referentie[i]))) {
+          if (referentie && (gesorteerd.length !== referentie.length || gesorteerd.some((id2, i) => id2 !== referentie[i]))) {
             betonMeshFout ??= `Onafhankelijke meshsets van combinaties ${betonMeshCombinatie} en ${c.id} verschillen (UGT/BGT).`;
           } else if (!betonMeshIds) {
             betonMeshIds = gesorteerd;
@@ -19776,7 +19776,7 @@ function buildPlaatCheckInputs(data) {
           const ids = data.combinationResults.get(c.id)?.plateElements?.find((r) => r.plateId === plaat.id)?.expectedElementIds;
           if (!ids?.length || new Set(ids).size !== ids.length) {
             dekkingFout = "onafhankelijke volledige mesh-elementset ontbreekt; bereken opnieuw met de actuele solver";
-          } else if (expectedElementIds && (expectedElementIds.length !== ids.length || expectedElementIds.some((id, i) => id !== ids[i]))) {
+          } else if (expectedElementIds && (expectedElementIds.length !== ids.length || expectedElementIds.some((id2, i) => id2 !== ids[i]))) {
             dekkingFout = "de onafhankelijke mesh-elementset verschilt tussen UGT-combinaties";
           } else {
             expectedElementIds = [...ids];
@@ -19808,7 +19808,7 @@ function buildPlaatCheckInputs(data) {
         load_duration_per_combination: data.loadCases ? belastingduurPerCombinatie({
           combinaties: ugt,
           loadCases: data.loadCases,
-          gevuld: gevuld ? (id) => gevuld.has(id) : void 0
+          gevuld: gevuld ? (id2) => gevuld.has(id2) : void 0
         }) : []
       };
     })() : {};
@@ -20072,9 +20072,9 @@ function berekenStuwdruk(gebied, terrein, ze_m) {
   const kr = 0.19 * Math.pow(t.z0 / Z0_II, 0.07);
   const zGebruikt = Math.max(ze_m, t.zmin);
   const cr = kr * Math.log(zGebruikt / t.z0);
-  const vm = cr * C_O * vb;
+  const vm2 = cr * C_O * vb;
   const iv = K_I / (C_O * Math.log(zGebruikt / t.z0));
-  const qp_Nm2 = (1 + 7 * iv) * 0.5 * RHO_LUCHT * vm * vm;
+  const qp_Nm2 = (1 + 7 * iv) * 0.5 * RHO_LUCHT * vm2 * vm2;
   return {
     qp_kNm2: qp_Nm2 / 1e3,
     ze_m,
@@ -20087,10 +20087,10 @@ function berekenStuwdruk(gebied, terrein, ze_m) {
       { symbool: "k_r", waarde: `0,19 \xB7 (${nl6(t.z0, 3)}/${nl6(Z0_II, 3)})^0,07 = ${nl6(kr, 4)}`, bron: "EN 1991-1-4 (4.5)" },
       { symbool: "c_r(z_e)", waarde: `${nl6(kr, 4)} \xB7 ln(${nl6(zGebruikt, 2)}/${nl6(t.z0, 3)}) = ${nl6(cr, 4)}`, bron: "EN 1991-1-4 (4.4)" },
       { symbool: "c_o(z_e)", waarde: `${nl6(C_O, 2)} (vlak terrein, orografie buiten beschouwing)`, bron: "EN 1991-1-4 \xA74.3.3" },
-      { symbool: "v_m(z_e)", waarde: `${nl6(cr, 4)} \xB7 ${nl6(C_O, 2)} \xB7 ${nl6(vb, 2)} = ${nl6(vm, 3)} m/s`, bron: "EN 1991-1-4 (4.3)" },
+      { symbool: "v_m(z_e)", waarde: `${nl6(cr, 4)} \xB7 ${nl6(C_O, 2)} \xB7 ${nl6(vb, 2)} = ${nl6(vm2, 3)} m/s`, bron: "EN 1991-1-4 (4.3)" },
       { symbool: "I_v(z_e)", waarde: `${nl6(K_I, 1)} / (${nl6(C_O, 2)} \xB7 ln(${nl6(zGebruikt, 2)}/${nl6(t.z0, 3)})) = ${nl6(iv, 4)}`, bron: "EN 1991-1-4 (4.7)" },
       { symbool: "\u03C1", waarde: `${nl6(RHO_LUCHT, 2)} kg/m\xB3`, bron: "EN 1991-1-4 \xA74.5(1) opm. 2" },
-      { symbool: "q_p(z_e)", waarde: `[1 + 7\xB7${nl6(iv, 4)}] \xB7 \xBD \xB7 ${nl6(RHO_LUCHT, 2)} \xB7 ${nl6(vm, 3)}\xB2 = ${nl6(qp_Nm2 / 1e3, 4)} kN/m\xB2`, bron: "EN 1991-1-4 (4.8)" }
+      { symbool: "q_p(z_e)", waarde: `[1 + 7\xB7${nl6(iv, 4)}] \xB7 \xBD \xB7 ${nl6(RHO_LUCHT, 2)} \xB7 ${nl6(vm2, 3)}\xB2 = ${nl6(qp_Nm2 / 1e3, 4)} kN/m\xB2`, bron: "EN 1991-1-4 (4.8)" }
     ]
   };
 }
@@ -20523,8 +20523,8 @@ var WIND_COMBI_PREFIX = "Wind-gen \xB7 ";
 function genereerWindbelasting(model, inst) {
   const meldingen = [];
   let geometrie = null;
-  const fout = (tekst) => {
-    meldingen.push({ niveau: "fout", tekst });
+  const fout = (tekst2) => {
+    meldingen.push({ niveau: "fout", tekst: tekst2 });
     return { ok: false, meldingen, gevallen: [], lasten: [], combinaties: [], samenvatting: null, geometrie };
   };
   if (model.nodes.length < 2 || model.beams.length === 0) {
@@ -21114,8 +21114,8 @@ function windUitgangspunten(loadCases, loads) {
 }
 function genereerVrijstaandDak(model, inst, geos, meldingen) {
   let geometrie = null;
-  const fout = (tekst) => {
-    meldingen.push({ niveau: "fout", tekst });
+  const fout = (tekst2) => {
+    meldingen.push({ niveau: "fout", tekst: tekst2 });
     return { ok: false, meldingen, gevallen: [], lasten: [], combinaties: [], samenvatting: null, geometrie };
   };
   const graden = (a) => `${nl7(a, 1).replace("-", "\u2212")}\xB0`;
@@ -21458,16 +21458,16 @@ function genereerVrijstaandDak(model, inst, geos, meldingen) {
       omschrijving: `${tabelTekst}: zone ${z.zone}, c_p,net = ${teken(c0, 2)}${mcTekst(soort, c0)}`
     };
   }));
-  const NAAM = "Wind vrijstaand dak";
-  maakGeval(`${VRIJSTAAND_SLEUTEL_PREFIX}cpnet:max`, `${NAAM} c_p,net neerwaarts`, "alle", zoneBelasting(false));
-  maakGeval(`${VRIJSTAAND_SLEUTEL_PREFIX}cpnet:min`, `${NAAM} c_p,net opwaarts`, "alle", zoneBelasting(true));
+  const NAAM2 = "Wind vrijstaand dak";
+  maakGeval(`${VRIJSTAAND_SLEUTEL_PREFIX}cpnet:max`, `${NAAM2} c_p,net neerwaarts`, "alle", zoneBelasting(false));
+  maakGeval(`${VRIJSTAAND_SLEUTEL_PREFIX}cpnet:min`, `${NAAM2} c_p,net opwaarts`, "alle", zoneBelasting(true));
   for (const [soort, c, woord] of [["max", cf.max, "neerwaarts"], ["min", cf.minPhi, "opwaarts"]]) {
     if (dakvorm === "lessenaar") {
       for (const richting2 of ["links", "rechts"]) {
         const [van, tot] = richting2 === "links" ? [Number.NEGATIVE_INFINITY, xL + d_mm / 2] : [xR - d_mm / 2, Number.POSITIVE_INFINITY];
         maakGeval(
           `${VRIJSTAAND_SLEUTEL_PREFIX}cf:${soort}:${richting2}`,
-          `${NAAM} c_f ${woord}, van ${richting2}`,
+          `${NAAM2} c_f ${woord}, van ${richting2}`,
           richting2,
           dak.map((g) => ({
             g,
@@ -21494,9 +21494,9 @@ function genereerVrijstaandDak(model, inst, geos, meldingen) {
         bron: `NEN-EN 1991-1-4 ${tabelTekst}, c_f ${soort === "max" ? "maximaal" : "minimaal"}; resultante in het midden van het dakvlak (\xA77.3(6), figuur 7.17)` + (mc ? `; \u03C8_mc ${nl7(psiMc(soort), 1)} (${GESCHAKELD_BRON})` : ""),
         omschrijving: `${tabelTekst}: c_f = ${teken(cf0, 2)}${mcTekst(soort, cf0)}, in het midden van het dakvlak (fig. 7.17)`
       }));
-      maakGeval(`${VRIJSTAAND_SLEUTEL_PREFIX}cf:${soort}:beide`, `${NAAM} c_f ${woord}, beide dakvlakken`, "alle", vlak("beide"));
-      maakGeval(`${VRIJSTAAND_SLEUTEL_PREFIX}cf:${soort}:links`, `${NAAM} c_f ${woord}, alleen linkerdakvlak`, "alle", vlak("links"));
-      maakGeval(`${VRIJSTAAND_SLEUTEL_PREFIX}cf:${soort}:rechts`, `${NAAM} c_f ${woord}, alleen rechterdakvlak`, "alle", vlak("rechts"));
+      maakGeval(`${VRIJSTAAND_SLEUTEL_PREFIX}cf:${soort}:beide`, `${NAAM2} c_f ${woord}, beide dakvlakken`, "alle", vlak("beide"));
+      maakGeval(`${VRIJSTAAND_SLEUTEL_PREFIX}cf:${soort}:links`, `${NAAM2} c_f ${woord}, alleen linkerdakvlak`, "alle", vlak("links"));
+      maakGeval(`${VRIJSTAAND_SLEUTEL_PREFIX}cf:${soort}:rechts`, `${NAAM2} c_f ${woord}, alleen rechterdakvlak`, "alle", vlak("rechts"));
     }
   }
   const cfr = ruwheid === "geen" ? null : TABEL_710_CFR[ruwheid];
@@ -21520,7 +21520,7 @@ function genereerVrijstaandDak(model, inst, geos, meldingen) {
     for (const [richting2, teken1] of [["links", 1], ["rechts", -1]]) {
       const sleutel = `${VRIJSTAAND_SLEUTEL_PREFIX}horizontaal:${richting2}`;
       const delen = [...cfr !== null ? ["wrijving"] : [], ...kolommen.length > 0 ? ["kolommen"] : []];
-      const naam = `${NAAM} ${delen.join(" + ")}, van ${richting2}`;
+      const naam = `${NAAM2} ${delen.join(" + ")}, van ${richting2}`;
       gevallen.push({ sleutel, naam, richting: richting2, cpi: 0 });
       const regels = [];
       if (cfr !== null) {
@@ -21741,7 +21741,7 @@ function genereerWindCombinaties(loadCases, windGevallen, gevolgklasse = STANDAA
             type: s.type,
             formule: `${s.formule}${zonder ? ` (zonder ${zonder})` : ""}   [${bron}]`,
             factorenPerCaseId: [
-              ...G2.map((id) => [id, s.g]),
+              ...G2.map((id2) => [id2, s.g]),
               ...o.factoren
             ],
             windSleutel: gv.sleutel,
@@ -21795,7 +21795,7 @@ function handtekeningVanGeneratie(gevallen, lasten, combinaties) {
   const r = (v) => Number(v.toPrecision(12)).toString();
   const g = gevallen.map((c2) => `${c2.sleutel}|${c2.naam}`).join(";");
   const l = lasten.map((x) => `${x.gevalSleutel}|${x.beamId}|${r(x.q)}|${x.startFrac !== void 0 ? r(x.startFrac) : "-"}|${x.endFrac !== void 0 ? r(x.endFrac) : "-"}${x.omschrijving !== void 0 ? `|${x.omschrijving}` : ""}${x.richting !== void 0 ? `|${x.richting}` : ""}`).join(";");
-  const c = combinaties.map((x) => `${x.naam}|${x.type}|${[x.windSleutel, ...x.windMeeSleutels ?? []].sort().join("+")}|${r(x.windFactor)}|${[...x.factorenPerCaseId].sort((p2, q) => p2[0] - q[0]).map(([id, f]) => `${id}:${r(f)}`).join(",")}`).join(";");
+  const c = combinaties.map((x) => `${x.naam}|${x.type}|${[x.windSleutel, ...x.windMeeSleutels ?? []].sort().join("+")}|${r(x.windFactor)}|${[...x.factorenPerCaseId].sort((p2, q) => p2[0] - q[0]).map(([id2, f]) => `${id2}:${r(f)}`).join(",")}`).join(";");
   return `G[${g}]L[${l}]C[${c}]`;
 }
 function handtekeningVanModel(loadCases, loads, combinaties) {
@@ -21819,7 +21819,7 @@ function handtekeningVanModel(loadCases, loads, combinaties) {
     ...l.qDir === "x" ? { richting: "axiaal" } : {}
   }));
   const gCombi = combinaties.filter((c) => c.name.startsWith(WIND_COMBI_PREFIX)).map((c) => {
-    const windEntries = [...c.factors.entries()].filter(([id]) => gegenereerdeIds.has(id));
+    const windEntries = [...c.factors.entries()].filter(([id2]) => gegenereerdeIds.has(id2));
     const windEntry = windEntries[0];
     return {
       naam: c.name,
@@ -21828,8 +21828,8 @@ function handtekeningVanModel(loadCases, loads, combinaties) {
       // Samengaande windgevallen hebben dezelfde factor; wijkt er een af,
       // dan klopt de handtekening bewust niet (NaN).
       windFactor: windEntry ? windEntries.every(([, f]) => f === windEntry[1]) ? windEntry[1] : Number.NaN : 0,
-      ...windEntries.length > 1 ? { windMeeSleutels: windEntries.slice(1).map(([id]) => sleutelVanId.get(id) ?? "?") } : {},
-      factorenPerCaseId: [...c.factors.entries()].filter(([id]) => !gegenereerdeIds.has(id))
+      ...windEntries.length > 1 ? { windMeeSleutels: windEntries.slice(1).map(([id2]) => sleutelVanId.get(id2) ?? "?") } : {},
+      factorenPerCaseId: [...c.factors.entries()].filter(([id2]) => !gegenereerdeIds.has(id2))
     };
   });
   return handtekeningVanGeneratie(gevallen.map((c) => ({ sleutel: c.sleutel, naam: c.naam })), gLasten, gCombi);
@@ -21897,7 +21897,7 @@ function isWindgeneratorCombinatie(c) {
 }
 function gelijkeFactoren(a, b) {
   if (a.size !== b.size) return false;
-  for (const [id, f] of a) if (b.get(id) !== f) return false;
+  for (const [id2, f] of a) if (b.get(id2) !== f) return false;
   return true;
 }
 function gelijkeInhoud(a, b) {
@@ -21910,8 +21910,8 @@ function gelijkeLijst(a, b) {
   return a.length === b.length && a.every((c, i) => c.id === b[i].id && gelijkeCombinatie(c, b[i]));
 }
 function zonderOnbekendeGevallen(c, ids) {
-  if ([...c.factors.keys()].every((id) => ids.has(id))) return c;
-  return { ...c, factors: new Map([...c.factors].filter(([id]) => ids.has(id))) };
+  if ([...c.factors.keys()].every((id2) => ids.has(id2))) return c;
+  return { ...c, factors: new Map([...c.factors].filter(([id2]) => ids.has(id2))) };
 }
 function perSleutel(set) {
   return new Map(set.map((c) => [c.standaard.sleutel, c]));
@@ -21922,14 +21922,14 @@ function nl8(x) {
 function gelijk(a, b) {
   return Math.abs(a - b) <= 1e-9;
 }
-function namenLijst(lijst, max = 8) {
-  return lijst.slice(0, max).map((x) => `"${x.naam}"`).join(", ") + (lijst.length > max ? ` en nog ${lijst.length - max}` : "");
+function namenLijst(lijst2, max = 8) {
+  return lijst2.slice(0, max).map((x) => `"${x.naam}"`).join(", ") + (lijst2.length > max ? ` en nog ${lijst2.length - max}` : "");
 }
 function verwijderWeesFactoren(combinations, loadCases) {
   const ids = new Set(loadCases.map((c) => c.id));
   const wees = [];
   const combinaties = combinations.map((c) => {
-    const onbekend2 = [...c.factors.keys()].filter((id) => !ids.has(id)).sort((a, b) => a - b);
+    const onbekend2 = [...c.factors.keys()].filter((id2) => !ids.has(id2)).sort((a, b) => a - b);
     if (onbekend2.length === 0) return c;
     wees.push({ combinatieId: c.id, naam: c.name, caseIds: onbekend2 });
     return zonderOnbekendeGevallen(c, ids);
@@ -21955,14 +21955,14 @@ function isOudeStandaardcombinatie(c, gevalIds) {
   if (c.standaard !== void 0 || isWindgeneratorCombinatie(c)) return false;
   const oud = OUDE_STANDAARDSET.find((o) => o.naam === c.name);
   if (!oud || oud.type !== c.type) return false;
-  for (const [id, f] of c.factors) {
-    if (!gevalIds.has(id)) continue;
-    if (!gelijk(f, oud.factoren[id] ?? 0)) return false;
+  for (const [id2, f] of c.factors) {
+    if (!gevalIds.has(id2)) continue;
+    if (!gelijk(f, oud.factoren[id2] ?? 0)) return false;
   }
   for (const [sleutel, f] of Object.entries(oud.factoren)) {
-    const id = Number(sleutel);
-    if (!gevalIds.has(id)) continue;
-    if (!gelijk(c.factors.get(id) ?? 0, f)) return false;
+    const id2 = Number(sleutel);
+    if (!gevalIds.has(id2)) continue;
+    if (!gelijk(c.factors.get(id2) ?? 0, f)) return false;
   }
   return true;
 }
@@ -22022,10 +22022,10 @@ function synchroniseerWindCombinaties(staat) {
   let volgendId = volgendVrijId(staat.combinations, staat.volgendCombinatieId);
   const gebruikt = /* @__PURE__ */ new Set();
   const nieuw = verwacht.map((c) => {
-    const id = idPerNaam.get(c.name);
-    if (id !== void 0 && !gebruikt.has(id)) {
-      gebruikt.add(id);
-      return { ...c, id };
+    const id2 = idPerNaam.get(c.name);
+    if (id2 !== void 0 && !gebruikt.has(id2)) {
+      gebruikt.add(id2);
+      return { ...c, id: id2 };
     }
     return { ...c, id: volgendId++ };
   });
@@ -22105,17 +22105,17 @@ function vervangVerouderdeCombinaties(staat) {
   const windVoor = staat.combinations.filter(isWindgeneratorCombinatie);
   const windNa = volgend.combinations.filter(isWindgeneratorCombinatie);
   const windAnders = windVoor.length !== windNa.length || windVoor.some((c, i) => !gelijkeInhoud(c, windNa[i]));
-  const lijst = (l) => l.map((c) => ({ id: c.id, naam: c.name }));
+  const lijst2 = (l) => l.map((c) => ({ id: c.id, naam: c.name }));
   if (oud.length === 0 && bijgewerkt.length === 0 && !windAnders) {
     return { staat: volgend, vervanging: null };
   }
   const kern = {
     gevolgklasse: staat.gevolgklasse,
     bijlage: staat.bijlage,
-    oudeStandaard: lijst(oud),
-    bijgewerkt: lijst(bijgewerkt),
-    wind: windAnders ? lijst(windVoor) : [],
-    eigen: lijst(volgend.combinations.filter((c) => c.standaard === void 0 && !isWindgeneratorCombinatie(c))),
+    oudeStandaard: lijst2(oud),
+    bijgewerkt: lijst2(bijgewerkt),
+    wind: windAnders ? lijst2(windVoor) : [],
+    eigen: lijst2(volgend.combinations.filter((c) => c.standaard === void 0 && !isWindgeneratorCombinatie(c))),
     aantalStandaard: naStandaard.size,
     aantalWind: windNa.length
   };
@@ -22152,7 +22152,7 @@ function openCombinatieStaat(p2) {
     };
   }
   const { combinaties, wees } = verwijderWeesFactoren(p2.combinations, p2.loadCases);
-  const hoogsteFactorSleutel = p2.combinations.flatMap((c) => [...c.factors.keys()]).filter((id) => Number.isFinite(id)).reduce((m, id) => Math.max(m, id), 0);
+  const hoogsteFactorSleutel = p2.combinations.flatMap((c) => [...c.factors.keys()]).filter((id2) => Number.isFinite(id2)).reduce((m, id2) => Math.max(m, id2), 0);
   const { staat, vervanging } = vervangVerouderdeCombinaties({
     loadCases: p2.loadCases,
     combinations: combinaties,
@@ -22220,21 +22220,21 @@ function synchroniseerStandaard(staat, vorig) {
   });
 }
 function voegBelastinggevalToe(staat, naam, type = "other") {
-  const id = volgendVrijId(staat.loadCases, staat.volgendGevalId);
+  const id2 = volgendVrijId(staat.loadCases, staat.volgendGevalId);
   const vorig = { loadCases: staat.loadCases, gevolgklasse: staat.gevolgklasse, bijlage: staat.bijlage };
   const volgend = {
     ...staat,
-    loadCases: [...staat.loadCases, { id, name: naam, type }],
-    volgendGevalId: id + 1
+    loadCases: [...staat.loadCases, { id: id2, name: naam, type }],
+    volgendGevalId: id2 + 1
   };
-  return { staat: synchroniseerStandaard(volgend, vorig), id };
+  return { staat: synchroniseerStandaard(volgend, vorig), id: id2 };
 }
-function wijzigBelastinggeval(staat, id, patch) {
-  if (!staat.loadCases.some((c) => c.id === id)) return staat;
+function wijzigBelastinggeval(staat, id2, patch) {
+  if (!staat.loadCases.some((c) => c.id === id2)) return staat;
   const vorig = { loadCases: staat.loadCases, gevolgklasse: staat.gevolgklasse, bijlage: staat.bijlage };
   const volgend = {
     ...staat,
-    loadCases: staat.loadCases.map((c) => c.id === id ? zonderLosKenmerk({ ...c, ...patch, id }) : c)
+    loadCases: staat.loadCases.map((c) => c.id === id2 ? zonderLosKenmerk({ ...c, ...patch, id: id2 }) : c)
   };
   return synchroniseerStandaard(volgend, vorig);
 }
@@ -22247,12 +22247,12 @@ function verplaatsEigenGewichtNaarEigenGeval(staat) {
   const doel = eigenGewichtDoel(staat.loadCases);
   if (doel.soort !== "eersteBlijvend") return { staat, id: null, vanId: null };
   const vanId = doel.geval.id;
-  const id = volgendVrijId(staat.loadCases, staat.volgendGevalId);
+  const id2 = volgendVrijId(staat.loadCases, staat.volgendGevalId);
   const vorig = { loadCases: staat.loadCases, gevolgklasse: staat.gevolgklasse, bijlage: staat.bijlage };
   const volgend = {
     ...staat,
     loadCases: [
-      { id, name: vrijeNaam(staat.loadCases, EIGEN_GEWICHT_NAAM), type: "dead", eigenGewicht: true },
+      { id: id2, name: vrijeNaam(staat.loadCases, EIGEN_GEWICHT_NAAM), type: "dead", eigenGewicht: true },
       ...staat.loadCases
     ],
     combinations: staat.combinations.map((c) => {
@@ -22260,28 +22260,28 @@ function verplaatsEigenGewichtNaarEigenGeval(staat) {
       const f = c.factors.get(vanId) ?? 0;
       if (f === 0) return c;
       const factors = new Map(c.factors);
-      factors.set(id, f);
+      factors.set(id2, f);
       return { ...c, factors };
     }),
-    volgendGevalId: id + 1
+    volgendGevalId: id2 + 1
   };
   const gesynchroniseerd = synchroniseerStandaard(volgend, vorig);
-  return { staat: gesynchroniseerd, id, vanId };
+  return { staat: gesynchroniseerd, id: id2, vanId };
 }
 function vrijeNaam(gevallen, naam) {
   const bezet = new Set(gevallen.map((c) => c.name));
   if (!bezet.has(naam)) return naam;
   for (let n2 = 2; ; n2++) if (!bezet.has(`${naam} (${n2})`)) return `${naam} (${n2})`;
 }
-function verwijderBelastinggeval(staat, id) {
-  if (!staat.loadCases.some((c) => c.id === id)) return staat;
+function verwijderBelastinggeval(staat, id2) {
+  if (!staat.loadCases.some((c) => c.id === id2)) return staat;
   if (staat.loadCases.length <= 1) return staat;
   const vorig = { loadCases: staat.loadCases, gevolgklasse: staat.gevolgklasse, bijlage: staat.bijlage };
   const volgend = {
     ...staat,
-    loadCases: staat.loadCases.filter((c) => c.id !== id),
+    loadCases: staat.loadCases.filter((c) => c.id !== id2),
     // De teller mag nooit onder het verwijderde id uitkomen.
-    volgendGevalId: Math.max(staat.volgendGevalId, id + 1)
+    volgendGevalId: Math.max(staat.volgendGevalId, id2 + 1)
   };
   return synchroniseerStandaard(volgend, vorig);
 }
@@ -22307,31 +22307,31 @@ function vervangDoorStandaard(staat) {
   });
 }
 function voegCombinatieToe(staat, combo) {
-  const id = volgendVrijId(staat.combinations, staat.volgendCombinatieId);
+  const id2 = volgendVrijId(staat.combinations, staat.volgendCombinatieId);
   const { standaard: _weg, ...rest } = combo;
   return {
     ...staat,
-    combinations: [...staat.combinations, { ...rest, id }],
-    volgendCombinatieId: id + 1
+    combinations: [...staat.combinations, { ...rest, id: id2 }],
+    volgendCombinatieId: id2 + 1
   };
 }
-function wijzigCombinatie(staat, id, patch) {
-  if (!staat.combinations.some((c) => c.id === id)) return staat;
+function wijzigCombinatie(staat, id2, patch) {
+  if (!staat.combinations.some((c) => c.id === id2)) return staat;
   return {
     ...staat,
     combinations: staat.combinations.map((c) => {
-      if (c.id !== id) return c;
+      if (c.id !== id2) return c;
       const { standaard: _weg, ...rest } = { ...c, ...patch };
-      return { ...rest, id };
+      return { ...rest, id: id2 };
     })
   };
 }
-function verwijderCombinatie(staat, id) {
-  if (!staat.combinations.some((c) => c.id === id)) return staat;
+function verwijderCombinatie(staat, id2) {
+  if (!staat.combinations.some((c) => c.id === id2)) return staat;
   return {
     ...staat,
-    combinations: staat.combinations.filter((c) => c.id !== id),
-    volgendCombinatieId: Math.max(staat.volgendCombinatieId, id + 1)
+    combinations: staat.combinations.filter((c) => c.id !== id2),
+    volgendCombinatieId: Math.max(staat.volgendCombinatieId, id2 + 1)
   };
 }
 var TYPE_TEKST = {
@@ -22347,7 +22347,7 @@ function isAfgeleidVanStandaard(c) {
 }
 function ontbrekendeStandaardcombinaties(p2) {
   const gevuld = p2.gevuld ?? (() => true);
-  const inhoud = (factors) => [...factors].filter(([id, f]) => f !== 0 && gevuld(id)).sort((a, b) => a[0] - b[0]).map(([id, f]) => `${id}:${Math.round(f * 1e9) / 1e9}`).join(",");
+  const inhoud = (factors) => [...factors].filter(([id2, f]) => f !== 0 && gevuld(id2)).sort((a, b) => a[0] - b[0]).map(([id2, f]) => `${id2}:${Math.round(f * 1e9) / 1e9}`).join(",");
   const soortDeel = (type, soort) => type === "sls" ? soort ?? "?" : "";
   const aanwezig = new Set(
     p2.combinations.map((c) => `${c.type}|${soortDeel(c.type, soortVanCombinatie(c))}|${inhoud(c.factors)}`)
@@ -22372,22 +22372,22 @@ function veranderlijkeFactorVerschillen(p2) {
     groepen2.set(cat, [...groepen2.get(cat) ?? [], c.id]);
   }
   const uit = [];
-  for (const [categorie, ids] of groepen2) {
+  for (const [categorie2, ids] of groepen2) {
     if (ids.length < 2) continue;
     const combinaties = [];
     for (const c of p2.combinations) {
-      const factoren = ids.map((id) => [id, c.factors.get(id) ?? 0]).filter(([, f]) => f !== 0);
-      if (new Set(factoren.map(([, f]) => Math.round(f * 1e9) / 1e9)).size > 1) {
-        combinaties.push({ combinatieId: c.id, naam: c.name, factoren });
+      const factoren2 = ids.map((id2) => [id2, c.factors.get(id2) ?? 0]).filter(([, f]) => f !== 0);
+      if (new Set(factoren2.map(([, f]) => Math.round(f * 1e9) / 1e9)).size > 1) {
+        combinaties.push({ combinatieId: c.id, naam: c.name, factoren: factoren2 });
       }
     }
-    if (combinaties.length > 0) uit.push({ categorie, caseIds: ids, combinaties });
+    if (combinaties.length > 0) uit.push({ categorie: categorie2, caseIds: ids, combinaties });
   }
   return uit;
 }
 function tekstVerschil(v, naamVan) {
   const MAX = 6;
-  const regels = v.combinaties.slice(0, MAX).map((c) => `"${c.naam}" ${c.factoren.map(([id, f]) => `${nl8(f)} voor geval ${id}`).join(" en ")}`).join("; ") + (v.combinaties.length > MAX ? `; en nog ${v.combinaties.length - MAX}` : "");
+  const regels = v.combinaties.slice(0, MAX).map((c) => `"${c.naam}" ${c.factoren.map(([id2, f]) => `${nl8(f)} voor geval ${id2}`).join(" en ")}`).join("; ") + (v.combinaties.length > MAX ? `; en nog ${v.combinaties.length - MAX}` : "");
   return `De veranderlijke belastinggevallen ${v.caseIds.map(naamVan).join(", ")} (gebruikscategorie ${v.categorie}) hebben in ${v.combinaties.length} combinatie(s) verschillende factoren: ${regels}. Gevallen van dezelfde gebruikscategorie zijn delen van \xE9\xE9n veranderlijke belasting \u2014 zo stelt de app de standaardcombinaties op \u2014 en in \xE9\xE9n combinatie is die belasting de overheersende (\u03B3_Q) of een samengaande (\u03B3_Q\xB7\u03C8\u2080), NEN-EN 1990 6.4.3.2(2); elk aanwezig deel draagt dan dezelfde factor. Een combinatie waarin het ene deel overheerst en het andere samengaat, telt de belasting te laag, en de combinatie waarin alle delen samen overheersen ontbreekt dan mogelijk. Dit ontstaat als een geval van type of categorie verandert terwijl de combinaties eigen combinaties zijn (hernoemd of aangepast): die volgen de gevallen niet. Kies "Vervang door standaardcombinaties" in Belastinggevallen & combinaties, of pas de factoren van deze combinaties aan.`;
 }
 var GAMMA_Q_MIN = Math.min(
@@ -22415,7 +22415,7 @@ function veranderlijkeBelastingenZonderLeiding(p2) {
     let hoogste = 0;
     let overheerst = false;
     for (const c of ugt) {
-      const f = a.caseIds.map((id) => c.factors.get(id) ?? 0).filter((x) => x !== 0);
+      const f = a.caseIds.map((id2) => c.factors.get(id2) ?? 0).filter((x) => x !== 0);
       if (f.length === 0) continue;
       hoogste = Math.max(hoogste, ...f.map(Math.abs));
       const eenFactor = new Set(f.map((x) => Math.round(x * 1e9) / 1e9)).size === 1;
@@ -22436,7 +22436,7 @@ function gelijkeRekeninhoudSet(a, b) {
   if (a.length !== b.length) return false;
   const vrij = [...b];
   for (const c of a) {
-    const i = vrij.findIndex((x) => x.type === c.type && x.factors.size === c.factors.size && [...c.factors].every(([id, f]) => gelijk(x.factors.get(id) ?? Number.NaN, f)));
+    const i = vrij.findIndex((x) => x.type === c.type && x.factors.size === c.factors.size && [...c.factors].every(([id2, f]) => gelijk(x.factors.get(id2) ?? Number.NaN, f)));
     if (i < 0) return false;
     vrij.splice(i, 1);
   }
@@ -22504,24 +22504,24 @@ function blijvendeFactorAfwijkingen(p2) {
 }
 function regelsEnHerkomst(a) {
   const MAX = 8;
-  const lijst = a.regels.slice(0, MAX).map((r) => r.tekst).join("; ") + (a.regels.length > MAX ? `; en nog ${a.regels.length - MAX}` : "");
+  const lijst2 = a.regels.slice(0, MAX).map((r) => r.tekst).join("; ") + (a.regels.length > MAX ? `; en nog ${a.regels.length - MAX}` : "");
   const herkomst = a.oudeKolom !== null ? `Het zijn precies de factoren die de standaardcombinaties van v\xF3\xF3r september 2026 aan belastinggeval ${a.oudeKolom} gaven, ${OUDE_GEVALLEN[a.oudeKolom]}. Zo'n geval heeft het id van een verwijderd geval gekregen (tot september 2026 erfde het dan diens factoren), of zijn type is later gewijzigd zonder dat de factoren meegingen.` : "Zo'n patroon ontstaat in een projectbestand van v\xF3\xF3r september 2026 wanneer een verwijderd geval zijn id aan een nieuw geval doorgaf, of wanneer het type later is gewijzigd zonder dat de factoren meegingen.";
-  return { lijst, herkomst };
+  return { lijst: lijst2, herkomst };
 }
 function tekstBlijvendeAfwijking(a) {
-  const { lijst, herkomst } = regelsEnHerkomst(a);
-  return `Belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren die niet bij een blijvende belasting passen: ${lijst}. Alle blijvende gevallen samen zijn \xE9\xE9n blijvende belasting G, met in elke combinatie dezelfde factor: \u03B3_G uit NEN-EN 1990 NB tabel NB.4/NB.5 in de UGT (0,9 waar zij gunstig werkt), 1,0 in de BGT (6.14b\u20136.16b). ${herkomst} De last van dit geval telt daardoor met de verkeerde factoren. Kies "Vervang door standaardcombinaties" in Belastinggevallen & combinaties, of corrigeer de factoren van dit geval.`;
+  const { lijst: lijst2, herkomst } = regelsEnHerkomst(a);
+  return `Belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren die niet bij een blijvende belasting passen: ${lijst2}. Alle blijvende gevallen samen zijn \xE9\xE9n blijvende belasting G, met in elke combinatie dezelfde factor: \u03B3_G uit NEN-EN 1990 NB tabel NB.4/NB.5 in de UGT (0,9 waar zij gunstig werkt), 1,0 in de BGT (6.14b\u20136.16b). ${herkomst} De last van dit geval telt daardoor met de verkeerde factoren. Kies "Vervang door standaardcombinaties" in Belastinggevallen & combinaties, of corrigeer de factoren van dit geval.`;
 }
 function meldingenBelastinggevallen(p2) {
   const meldingen = [];
   const egDoel = eigenGewichtDoel(p2.loadCases);
   const egGeval = eigenGewichtGeval(p2.loadCases, p2.selfWeightEnabled === true);
-  const gevuld = (id) => p2.loads === void 0 || p2.loads.some((l) => l.caseId === id) || egGeval?.id === id;
-  const heeftFactor = (id, type) => p2.combinations.some((c) => c.type === type && (c.factors.get(id) ?? 0) !== 0);
+  const gevuld = (id2) => p2.loads === void 0 || p2.loads.some((l) => l.caseId === id2) || egGeval?.id === id2;
+  const heeftFactor = (id2, type) => p2.combinations.some((c) => c.type === type && (c.factors.get(id2) ?? 0) !== 0);
   const heeftBgt = p2.combinations.some((c) => c.type === "sls");
-  const naamVan = (id) => {
-    const c = p2.loadCases.find((x) => x.id === id);
-    return c ? `${id} ("${c.name}")` : String(id);
+  const naamVan = (id2) => {
+    const c = p2.loadCases.find((x) => x.id === id2);
+    return c ? `${id2} ("${c.name}")` : String(id2);
   };
   if (p2.selfWeightEnabled && egDoel.soort === "geen") {
     meldingen.push({
@@ -22685,16 +22685,16 @@ function beoordeelCombinatiesBijOpenen(p2) {
   if (weesFactoren.length === 0 && blijvend.length === 0) return null;
   const weesIds = [...new Set(weesFactoren.flatMap((w) => w.caseIds))].sort((a, b) => a - b);
   const samenvatting = blijvend.map((a) => {
-    const { lijst, herkomst } = regelsEnHerkomst(a);
-    return `LET OP: belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren die niet bij een blijvende belasting passen: ${lijst}. Een blijvende belasting telt in de BGT met 1,0 en heeft in elke combinatie dezelfde factor als de andere blijvende gevallen. ${herkomst} Zolang dat zo is, telt de last van dit geval met de verkeerde factoren. Het zijn eigen combinaties, dus de app past ze niet aan: kies "Vervang door standaardcombinaties" in Belastinggevallen & combinaties, of corrigeer de factoren. `;
+    const { lijst: lijst2, herkomst } = regelsEnHerkomst(a);
+    return `LET OP: belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren die niet bij een blijvende belasting passen: ${lijst2}. Een blijvende belasting telt in de BGT met 1,0 en heeft in elke combinatie dezelfde factor als de andere blijvende gevallen. ${herkomst} Zolang dat zo is, telt de last van dit geval met de verkeerde factoren. Het zijn eigen combinaties, dus de app past ze niet aan: kies "Vervang door standaardcombinaties" in Belastinggevallen & combinaties, of corrigeer de factoren. `;
   }).join("") + (weesFactoren.length > 0 ? `In ${weesFactoren.length} belastingcombinatie(s) (${weesFactoren.map((w) => `"${w.naam}"`).join(", ")}) stonden factoren voor ` + (weesIds.length === 1 ? `belastinggeval ${weesIds[0]}, dat in dit project niet (meer) bestaat` : `belastinggevallen ${weesIds.join(", ")}, die in dit project niet (meer) bestaan`) + `: een rest van een verwijderd geval. Die factoren zijn bij het openen weggehaald. Ze vermenigvuldigden geen enkele last, dus geen uitkomst van dit project verandert; een nieuw belastinggeval krijgt een id boven ${weesIds[weesIds.length - 1]} en kan ze niet meer erven.` : "");
   return { weesFactoren, blijvend, samenvatting: samenvatting.trim() };
 }
 function zorgVoorBelastinggevallen(staat, gevraagd) {
   let volgend = staat;
   const ids = [];
-  for (const geval of gevraagd) {
-    if (isEigenGewichtGeval(geval)) {
+  for (const geval2 of gevraagd) {
+    if (isEigenGewichtGeval(geval2)) {
       const bestaand2 = volgend.loadCases.find((c) => isEigenGewichtGeval(c));
       if (bestaand2) {
         ids.push(bestaand2.id);
@@ -22706,7 +22706,7 @@ function zorgVoorBelastinggevallen(staat, gevraagd) {
         ids.push(verhuisd.id);
         continue;
       }
-      const nieuw2 = voegBelastinggevalToe(volgend, geval.name, "dead");
+      const nieuw2 = voegBelastinggevalToe(volgend, geval2.name, "dead");
       const gekenmerkt = wijzigBelastinggeval(nieuw2.staat, nieuw2.id, { eigenGewicht: true });
       volgend = {
         ...gekenmerkt,
@@ -22718,12 +22718,12 @@ function zorgVoorBelastinggevallen(staat, gevraagd) {
       ids.push(nieuw2.id);
       continue;
     }
-    const bestaand = volgend.loadCases.find((c) => !isEigenGewichtGeval(c) && c.name === geval.name && c.type === geval.type);
+    const bestaand = volgend.loadCases.find((c) => !isEigenGewichtGeval(c) && c.name === geval2.name && c.type === geval2.type);
     if (bestaand) {
       ids.push(bestaand.id);
       continue;
     }
-    const nieuw = voegBelastinggevalToe(volgend, geval.name, geval.type);
+    const nieuw = voegBelastinggevalToe(volgend, geval2.name, geval2.type);
     volgend = nieuw.staat;
     ids.push(nieuw.id);
   }
@@ -22802,11 +22802,11 @@ function liftSpringK(s) {
   return void 0;
 }
 function controleerDoorsneden(beams, opties = {}) {
-  const lijst = Array.from(beams);
-  const onbekend2 = onbekendeDoorsneden(lijst);
+  const lijst2 = Array.from(beams);
+  const onbekend2 = onbekendeDoorsneden(lijst2);
   if (onbekend2.length === 0) {
     if (!opties.heeftPlaten) return;
-    const verlopend = lijst.filter(
+    const verlopend = lijst2.filter(
       (b) => bepaalVerloop(b.material, b.profile, b.profileEnd).status === "verlopend"
     );
     if (verlopend.length === 0) return;
@@ -23297,12 +23297,12 @@ function bepaalEindstijfheidHout(model) {
     if (k.soort === "hout") metHout = true;
     groep(k).platen.push(i);
   });
-  const lijst = [...groepen2.values()];
-  if (!metHout) return { ...NVT_LEEG, groepen: lijst, reden: "Het model bevat geen hout." };
-  if (lijst.length <= 1) {
+  const lijst2 = [...groepen2.values()];
+  if (!metHout) return { ...NVT_LEEG, groepen: lijst2, reden: "Het model bevat geen hout." };
+  if (lijst2.length <= 1) {
     return {
       ...NVT_LEEG,
-      groepen: lijst,
+      groepen: lijst2,
       reden: "Alle delen hebben hetzelfde kruipgedrag; E_mean volstaat (EN 1995-1-1 2.2.2(1)P, 2.2.3(5))."
     };
   }
@@ -23310,17 +23310,17 @@ function bepaalEindstijfheidHout(model) {
   if (onb.statischBepaald) {
     return {
       ...NVT_LEEG,
-      groepen: lijst,
+      groepen: lijst2,
       onbepaaldheid: onb,
       reden: "De constructie is statisch bepaald: de krachtsverdeling hangt niet van de stijfheid af (EN 1995-1-1 2.2.2(1)P)."
     };
   }
-  const opsomming = lijst.map(groepTekst).join(" \u2014 ");
+  const opsomming = lijst2.map(groepTekst).join(" \u2014 ");
   const kop = `Hout in een statisch onbepaalde constructie met verschillend kruipgedrag (${opsomming}). ${onb.toelichting} De vereenvoudiging van EN 1995-1-1 2.2.3(5) geldt daarom niet: in de eindtoestand kruipt het hout weg en verschuift de krachtsverdeling naar de stijvere delen (2.2.2(1)P, tweede streepje).`;
   if (model.analysetype !== "eersteOrde") {
     return {
       status: "alleenMelding",
-      groepen: lijst,
+      groepen: lijst2,
       onbepaaldheid: onb,
       kDefPerStaaf: /* @__PURE__ */ new Map(),
       betonPhiPerStaaf: /* @__PURE__ */ new Map(),
@@ -23333,11 +23333,11 @@ function bepaalEindstijfheidHout(model) {
       }]
     };
   }
-  const zonderKdef = lijst.filter((g) => g.sleutel === "hout:onbekend" || g.sleutel === "verbinding:onbekend");
+  const zonderKdef = lijst2.filter((g) => g.sleutel === "hout:onbekend" || g.sleutel === "verbinding:onbekend");
   if (zonderKdef.length > 0) {
     return {
       status: "alleenMelding",
-      groepen: lijst,
+      groepen: lijst2,
       onbepaaldheid: onb,
       kDefPerStaaf: /* @__PURE__ */ new Map(),
       betonPhiPerStaaf: /* @__PURE__ */ new Map(),
@@ -23359,12 +23359,12 @@ function bepaalEindstijfheidHout(model) {
     else betonZonderPhi.push(b.id);
   }
   const bijzonder = [];
-  if (lijst.some((g) => g.sleutel === "beton")) {
+  if (lijst2.some((g) => g.sleutel === "beton")) {
     bijzonder.push(
       "Beton houdt in de eindtoestand E_cm: zijn eigen kruip (EN 1992-1-1 3.1.4) zit niet in deze variant."
     );
   }
-  if (lijst.some((g) => g.sleutel.startsWith("vrij:") || g.sleutel === "onbekend" || g.sleutel.startsWith("plaat-E:"))) {
+  if (lijst2.some((g) => g.sleutel.startsWith("vrij:") || g.sleutel === "onbekend" || g.sleutel.startsWith("plaat-E:"))) {
     bijzonder.push("Vrij of niet herkend materiaal houdt zijn opgegeven E; zijn kruip is onbekend.");
   }
   const metVeren = model.supports.some((s) => s.type === "zSpring" || s.type === "xSpring" || s.type === "rotSpring") || model.beams.some((b) => b.bedding && b.bedding.k > 0);
@@ -23374,7 +23374,7 @@ function bepaalEindstijfheidHout(model) {
   const bgtBijzonder = [];
   if (betonPhiPerStaaf.size > 0) {
     bgtBijzonder.push(
-      `Betonstaaf ${[...betonPhiPerStaaf.entries()].map(([id, phi]) => `${id} (\u03C6 = ${nl9(phi)})`).join(", ")} krijgt E_c,eff = E_cm/(1 + \u03C6(\u221E,t\u2080)) (EN 1992-1-1 7.4.3(5), uitdrukking 7.20), met de ongescheurde doorsnede.`
+      `Betonstaaf ${[...betonPhiPerStaaf.entries()].map(([id2, phi]) => `${id2} (\u03C6 = ${nl9(phi)})`).join(", ")} krijgt E_c,eff = E_cm/(1 + \u03C6(\u221E,t\u2080)) (EN 1992-1-1 7.4.3(5), uitdrukking 7.20), met de ongescheurde doorsnede.`
     );
   }
   if (betonZonderPhi.length > 0) {
@@ -23382,13 +23382,13 @@ function bepaalEindstijfheidHout(model) {
       `Betonstaaf ${betonZonderPhi.join(", ")} houdt E_cm: voor die staaf is geen \u03C6(\u221E,t\u2080) opgegeven (niet in het \xA75.8-blok en niet als projectwaarde; een waarde volgens bijlage B wordt pas in de toetsing berekend). Zijn kruip ontbreekt dan in de eindtoestand, het beton trekt te veel kracht naar zich toe en de zakking van het hout kan te klein zijn. Geef \u03C6(\u221E,t\u2080) op om dat te voorkomen.`
     );
   }
-  if (lijst.some((g) => g.sleutel.startsWith("vrij:") || g.sleutel === "onbekend" || g.sleutel.startsWith("plaat-E:"))) {
+  if (lijst2.some((g) => g.sleutel.startsWith("vrij:") || g.sleutel === "onbekend" || g.sleutel.startsWith("plaat-E:"))) {
     bgtBijzonder.push("Vrij of niet herkend materiaal houdt zijn opgegeven E; zijn kruip is onbekend.");
   }
   if (metVeren) bgtBijzonder.push("Verende opleggingen en bedding houden hun stijfheid.");
   return {
     status: "doorrekenen",
-    groepen: lijst,
+    groepen: lijst2,
     onbepaaldheid: onb,
     kDefPerStaaf,
     betonPhiPerStaaf,
@@ -23426,9 +23426,9 @@ function psi2VoorEindstijfheid(lc, bijlage = STANDAARD_BIJLAGE) {
 }
 function eindtoestandKandidaten(combo, loadCases, bijlage = STANDAARD_BIJLAGE) {
   const uit = /* @__PURE__ */ new Set();
-  for (const [id, f] of combo.factors) {
+  for (const [id2, f] of combo.factors) {
     if (f === 0) continue;
-    const lc = loadCases.find((c) => c.id === id);
+    const lc = loadCases.find((c) => c.id === id2);
     const psi = lc ? psi2VoorEindstijfheid(lc, bijlage) : 1;
     if (psi > 0) uit.add(psi);
   }
@@ -23482,10 +23482,10 @@ function eindstijfheidInvoer(input, uitkomst, sleutel) {
       }
       const fStaaf = 1 / (1 + psi2 * kDef);
       const fVerbinding = 1 / (1 + psi2 * 2 * kDef);
-      const veren = b.veren ? Object.fromEntries(
+      const veren2 = b.veren ? Object.fromEntries(
         Object.entries(b.veren).map(([k, v]) => [k, typeof v === "number" ? v * fVerbinding : v])
       ) : void 0;
-      return { ...b, E: b.E * fStaaf, ...veren ? { veren } : {} };
+      return { ...b, E: b.E * fStaaf, ...veren2 ? { veren: veren2 } : {} };
     })
   };
 }
@@ -23602,15 +23602,15 @@ function leidScheefstandGeometrieAf(model) {
   const perWortel = /* @__PURE__ */ new Map();
   for (const b of verticaal) {
     const r = wortel(b.from);
-    const lijst = perWortel.get(r);
-    if (lijst) lijst.push(b.id);
+    const lijst2 = perWortel.get(r);
+    if (lijst2) lijst2.push(b.id);
     else perWortel.set(r, [b.id]);
   }
   const kolomlijnen = [];
   for (const staafIds of perWortel.values()) {
     const knopen = /* @__PURE__ */ new Set();
-    for (const id of staafIds) {
-      const b = verticaal.find((v) => v.id === id);
+    for (const id2 of staafIds) {
+      const b = verticaal.find((v) => v.id === id2);
       knopen.add(b.from);
       knopen.add(b.to);
     }
@@ -23633,7 +23633,7 @@ function leidScheefstandGeometrieAf(model) {
       { graden: VERTICAAL_VANAF_GRADEN2 }
     ));
   } else {
-    const lijst = {
+    const lijst2 = {
       lijst: kolomlijnen.map((k, i) => vt(
         `${S}columnLine`,
         `(${i + 1}) x = ${getal3(k.voetXmm, 0)} mm, staaf ${k.staafIds.join("+")}`,
@@ -23643,8 +23643,8 @@ function leidScheefstandGeometrieAf(model) {
     };
     afleiding.push(vt(
       `${S}membersDerived`,
-      `m = ${aantalElementen} \u2014 ${aantalElementen} kolomlijn${aantalElementen === 1 ? "" : "en"}: ` + nederlands(lijst) + `. Een staaf telt als verticaal vanaf ${VERTICAAL_VANAF_GRADEN2}\xB0 met de horizontaal; staven die een knoop delen vormen samen \xE9\xE9n kolom, zodat een kolom door meerdere verdiepingen \xE9\xE9nmaal telt.`,
-      { count: aantalElementen, lijst, graden: VERTICAAL_VANAF_GRADEN2 }
+      `m = ${aantalElementen} \u2014 ${aantalElementen} kolomlijn${aantalElementen === 1 ? "" : "en"}: ` + nederlands(lijst2) + `. Een staaf telt als verticaal vanaf ${VERTICAAL_VANAF_GRADEN2}\xB0 met de horizontaal; staven die een knoop delen vormen samen \xE9\xE9n kolom, zodat een kolom door meerdere verdiepingen \xE9\xE9nmaal telt.`,
+      { count: aantalElementen, lijst: lijst2, graden: VERTICAAL_VANAF_GRADEN2 }
     ));
   }
   afleiding.push(vt(
@@ -23771,9 +23771,9 @@ function toepasselijkeScheefstandNormen(beams) {
   const vlaggen = normenInModel(beams);
   return SCHEEFSTAND_NORMEN.filter((n2) => vlaggen[n2]);
 }
-function bepaalScheefstand(keuze, geometrie, toepasselijk) {
-  const noemer = Number.isFinite(keuze.noemer) && keuze.noemer > 0 ? keuze.noemer : 200;
-  const bron = keuze.bron ?? "vast";
+function bepaalScheefstand(keuze2, geometrie, toepasselijk) {
+  const noemer = Number.isFinite(keuze2.noemer) && keuze2.noemer > 0 ? keuze2.noemer : 200;
+  const bron = keuze2.bron ?? "vast";
   const waarschuwingen = [];
   const vast = (extraWaarschuwing) => {
     if (extraWaarschuwing) waarschuwingen.push(extraWaarschuwing);
@@ -23803,10 +23803,10 @@ function bepaalScheefstand(keuze, geometrie, toepasselijk) {
     };
   };
   if (bron === "vast") return vast();
-  const hoogteHandmatig = typeof keuze.hoogteM === "number" && Number.isFinite(keuze.hoogteM) && keuze.hoogteM > 0;
-  const aantalHandmatig = typeof keuze.aantalElementen === "number" && Number.isFinite(keuze.aantalElementen) && keuze.aantalElementen >= 1;
-  const hoogteM = hoogteHandmatig ? keuze.hoogteM : geometrie.hoogteM;
-  const aantalElementen = aantalHandmatig ? Math.floor(keuze.aantalElementen) : geometrie.aantalElementen;
+  const hoogteHandmatig = typeof keuze2.hoogteM === "number" && Number.isFinite(keuze2.hoogteM) && keuze2.hoogteM > 0;
+  const aantalHandmatig = typeof keuze2.aantalElementen === "number" && Number.isFinite(keuze2.aantalElementen) && keuze2.aantalElementen >= 1;
+  const hoogteM = hoogteHandmatig ? keuze2.hoogteM : geometrie.hoogteM;
+  const aantalElementen = aantalHandmatig ? Math.floor(keuze2.aantalElementen) : geometrie.aantalElementen;
   if (!geometrie.afleidbaar && !(hoogteHandmatig && aantalHandmatig)) {
     waarschuwingen.push(vt(
       `${S}warn.notDerivable`,
@@ -23843,11 +23843,11 @@ function bepaalScheefstand(keuze, geometrie, toepasselijk) {
   const vergelijking = normen.map((n2) => phiVolgensNorm(n2, hoogteM, aantalElementen));
   const gekozen = vergelijking.reduce((a, b) => b.phi > a.phi ? b : a);
   if (bron === "ongunstigste" && vergelijking.length > 1) {
-    const lijst = vergelijking.map((v) => `${SCHEEFSTAND_BRON_LABEL[v.norm]} \u2192 1/${getal3(1 / v.phi, 0)}`).join(", ");
+    const lijst2 = vergelijking.map((v) => `${SCHEEFSTAND_BRON_LABEL[v.norm]} \u2192 1/${getal3(1 / v.phi, 0)}`).join(", ");
     waarschuwingen.push(vt(
       `${S}warn.governing`,
-      `Ongunstigste van ${lijst}. Gekozen: ${SCHEEFSTAND_BRON_LABEL[gekozen.norm]}.`,
-      { lijst, gekozen: SCHEEFSTAND_BRON_LABEL[gekozen.norm] }
+      `Ongunstigste van ${lijst2}. Gekozen: ${SCHEEFSTAND_BRON_LABEL[gekozen.norm]}.`,
+      { lijst: lijst2, gekozen: SCHEEFSTAND_BRON_LABEL[gekozen.norm] }
     ));
   }
   return {
@@ -23951,11 +23951,35 @@ function resolveOpenFem3DPlateMaterial(plate) {
 }
 
 // src/components/openFem3d/openFem3dModel.ts
+var EMPTY_OPEN_FEM_3D = {
+  nodes: [],
+  beams: [],
+  supports: [],
+  loads: [],
+  memberLoads: [],
+  memberPointLoads: [],
+  thermalLoads: [],
+  plates: [],
+  surfaceLoads: [],
+  loadPanels: []
+};
 function nextEntityId(items) {
   let maximum = 0;
   for (const item of items) if (item.id > maximum) maximum = item.id;
   return maximum + 1;
 }
+var OPEN_FEM_3D_SUPPORT_PRESETS = {
+  fixed: { ux: true, uy: true, uz: true, rx: true, ry: true, rz: true },
+  pinned: { ux: true, uy: true, uz: true, rx: false, ry: false, rz: false },
+  /** Ruimtelijke rolpresets blokkeren precies de genoemde globale translatie. */
+  xRoller: { ux: true, uy: false, uz: false, rx: false, ry: false, rz: false },
+  yRoller: { ux: false, uy: true, uz: false, rx: false, ry: false, rz: false },
+  zRoller: { ux: false, uy: false, uz: true, rx: false, ry: false, rz: false },
+  /** Translatievast; alleen rotatie om de gekozen globale as blijft vrij. */
+  revoluteX: { ux: true, uy: true, uz: true, rx: false, ry: true, rz: true },
+  revoluteY: { ux: true, uy: true, uz: true, rx: true, ry: false, rz: true },
+  revoluteZ: { ux: true, uy: true, uz: true, rx: true, ry: true, rz: false }
+};
 var SUPPORT_DOF = ["ux", "uy", "uz", "rx", "ry", "rz"];
 var SPRING_DOF = ["kxKnPerM", "kyKnPerM", "kzKnPerM", "krxKnmPerRad", "kryKnmPerRad", "krzKnmPerRad"];
 var PRESCRIBED_DOF = ["uxM", "uyM", "uzM", "rxRad", "ryRad", "rzRad"];
@@ -24136,6 +24160,11 @@ function readNodalLoadComponents(value) {
   }
   return Object.fromEntries(LOAD_DOF.map((axis) => [axis, value[axis]]));
 }
+function requireNode(model, nodeId) {
+  if (!model.nodes.some((node) => node.id === nodeId)) {
+    throw new Error(`3D-knoop ${nodeId} bestaat niet.`);
+  }
+}
 function beamLength(model, beamId) {
   const beam = model.beams.find((item) => item.id === beamId);
   if (!beam) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
@@ -24143,7 +24172,7 @@ function beamLength(model, beamId) {
   const end = model.nodes.find((node) => node.id === beam.endNodeId);
   return Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
 }
-function readMemberLoad(value, model, id, beamId) {
+function readMemberLoad(value, model, id2, beamId) {
   const components = ["qyStart", "qyEnd", "qzStart", "qzEnd"];
   if (components.some((name) => typeof value[name] !== "number" || !Number.isFinite(value[name])) || components.every((name) => value[name] === 0)) {
     throw new Error("Een 3D-staafbelasting moet vier eindige componenten en minstens \xE9\xE9n niet-nulwaarde hebben.");
@@ -24156,7 +24185,7 @@ function readMemberLoad(value, model, id, beamId) {
   }
   const caseId = readOptionalCaseId(value.caseId);
   return {
-    id,
+    id: id2,
     beamId,
     ...caseId !== void 0 ? { caseId } : {},
     qyStart: Number(value.qyStart),
@@ -24167,7 +24196,7 @@ function readMemberLoad(value, model, id, beamId) {
     endPositionM
   };
 }
-function readMemberPointLoad(value, model, id, beamId) {
+function readMemberPointLoad(value, model, id2, beamId) {
   const py = Number(value.py), pz = Number(value.pz), positionM = Number(value.positionM);
   if (![py, pz].every(Number.isFinite) || py === 0 && pz === 0) {
     throw new Error("Een 3D-staafpuntlast moet twee eindige componenten en minstens \xE9\xE9n niet-nulwaarde hebben.");
@@ -24177,9 +24206,9 @@ function readMemberPointLoad(value, model, id, beamId) {
     throw new Error(`Een 3D-staafpuntlast moet binnen de staaflengte van ${length} m liggen.`);
   }
   const caseId = readOptionalCaseId(value.caseId);
-  return { id, beamId, ...caseId !== void 0 ? { caseId } : {}, py, pz, positionM };
+  return { id: id2, beamId, ...caseId !== void 0 ? { caseId } : {}, py, pz, positionM };
 }
-function readThermalLoad(value, model, id, beamId) {
+function readThermalLoad(value, model, id2, beamId) {
   beamLength(model, beamId);
   const deltaTUniformK = Number(value.deltaTUniformK);
   const deltaTGradientYK = Number(value.deltaTGradientYK ?? 0);
@@ -24188,12 +24217,12 @@ function readThermalLoad(value, model, id, beamId) {
     throw new Error("Een 3D-temperatuurbelasting moet eindige waarden en minstens \xE9\xE9n niet-nulwaarde hebben.");
   }
   const caseId = readOptionalCaseId(value.caseId);
-  return { id, beamId, ...caseId !== void 0 ? { caseId } : {}, deltaTUniformK, deltaTGradientYK, deltaTGradientZK };
+  return { id: id2, beamId, ...caseId !== void 0 ? { caseId } : {}, deltaTUniformK, deltaTGradientYK, deltaTGradientZK };
 }
 function readPlateNodeLoop(value, nodeIds, label) {
   if (!Array.isArray(value) || value.length < 3) throw new Error(`${label} moet minstens drie hoekknopen hebben.`);
   const result = value.map(Number);
-  if (result.some((id, index) => !Number.isSafeInteger(id) || !nodeIds.has(id) || result.indexOf(id) !== index)) {
+  if (result.some((id2, index) => !Number.isSafeInteger(id2) || !nodeIds.has(id2) || result.indexOf(id2) !== index)) {
     throw new Error(`${label} bevat een ongeldige, ontbrekende of dubbele knoop.`);
   }
   return result;
@@ -24206,7 +24235,7 @@ function repairCopiedBoundary(value, loop, templates, nodes) {
     return [part.startNodeId, part.endNodeId, ...part.kind === "arc" ? [part.controlNodeId] : []];
   });
   const key = JSON.stringify(value);
-  if (segmentIds.every((id) => loop.includes(Number(id)))) {
+  if (segmentIds.every((id2) => loop.includes(Number(id2)))) {
     templates.set(key, loop);
     return value;
   }
@@ -24215,13 +24244,20 @@ function repairCopiedBoundary(value, loop, templates, nodes) {
   const source = nodes.get(sourceLoop[0]), target = nodes.get(loop[0]);
   if (!source || !target) return value;
   const delta = [target.x - source.x, target.y - source.y, target.z - source.z];
-  if (!sourceLoop.every((id, index) => {
-    const from = nodes.get(id), to = nodes.get(loop[index]);
+  if (!sourceLoop.every((id2, index) => {
+    const from = nodes.get(id2), to = nodes.get(loop[index]);
     return from && to && Math.abs(to.x - from.x - delta[0]) < 1e-8 && Math.abs(to.y - from.y - delta[1]) < 1e-8 && Math.abs(to.z - from.z - delta[2]) < 1e-8;
   })) return value;
-  const idMap = new Map(sourceLoop.map((id, index) => [id, loop[index]]));
-  if (!segmentIds.every((id) => idMap.has(Number(id)))) return value;
+  const idMap = new Map(sourceLoop.map((id2, index) => [id2, loop[index]]));
+  if (!segmentIds.every((id2) => idMap.has(Number(id2)))) return value;
   return value.map((segment) => segment.kind === "arc" ? { ...segment, startNodeId: idMap.get(segment.startNodeId), controlNodeId: idMap.get(segment.controlNodeId), endNodeId: idMap.get(segment.endNodeId) } : { ...segment, startNodeId: idMap.get(segment.startNodeId), endNodeId: idMap.get(segment.endNodeId) });
+}
+function hasCopiedBoundaryReference(value, loop) {
+  return Array.isArray(value) && value.some((segment) => {
+    if (!segment || typeof segment !== "object" || Array.isArray(segment)) return false;
+    const part = segment;
+    return !loop.includes(Number(part.startNodeId)) || !loop.includes(Number(part.endNodeId)) || part.kind === "arc" && !loop.includes(Number(part.controlNodeId));
+  });
 }
 function readPlateBoundary(value, loop, nodeIds, nodes, label) {
   if (value === void 0) return void 0;
@@ -24261,7 +24297,7 @@ function readPlateBoundary(value, loop, nodeIds, nodes, label) {
   return segments;
 }
 function validatePlatePlane(nodes, nodeIds, label) {
-  const points = nodeIds.map((id) => nodes.find((node) => node.id === id));
+  const points = nodeIds.map((id2) => nodes.find((node) => node.id === id2));
   const a = points[0];
   let normal = null;
   for (let index = 1; index < points.length - 1 && !normal; index += 1) {
@@ -24283,8 +24319,8 @@ function validatePlatePlane(nodes, nodeIds, label) {
   }
 }
 function validateOpeningInsidePlate(nodes, plateLoop, plateBoundary, openingLoop, openingBoundary, label) {
-  const contour = (loop, boundary) => {
-    if (!boundary) return loop.map((id) => nodes.get(id));
+  const contour2 = (loop, boundary) => {
+    if (!boundary) return loop.map((id2) => nodes.get(id2));
     const points = [nodes.get(boundary[0].startNodeId)];
     for (const segment of boundary) {
       if (segment.kind === "line") points.push(nodes.get(segment.endNodeId));
@@ -24302,8 +24338,8 @@ function validateOpeningInsidePlate(nodes, plateLoop, plateBoundary, openingLoop
     points.pop();
     return points;
   };
-  const outer = contour(plateLoop, plateBoundary);
-  const opening = contour(openingLoop, openingBoundary);
+  const outer = contour2(plateLoop, plateBoundary);
+  const opening = contour2(openingLoop, openingBoundary);
   const origin = nodes.get(plateLoop[0]);
   let normal = null;
   for (let index = 1; index < plateLoop.length - 1 && !normal; index += 1) {
@@ -24335,7 +24371,7 @@ function validateOpeningInsidePlate(nodes, plateLoop, plateBoundary, openingLoop
     }
     return contained;
   };
-  for (const point of [...opening, ...openingLoop.map((id) => nodes.get(id))]) {
+  for (const point of [...opening, ...openingLoop.map((id2) => nodes.get(id2))]) {
     const planeDistance = Math.abs(
       (point.x - origin.x) * normal[0] + (point.y - origin.y) * normal[1] + (point.z - origin.z) * normal[2]
     ) / norm4;
@@ -24359,18 +24395,18 @@ function parseOpenFem3DModel(value) {
     if (!Number.isSafeInteger(node.id) || Number(node.id) <= 0 || ![node.x, node.y, node.z].every((n2) => typeof n2 === "number" && Number.isFinite(n2)) || nodeIds.has(Number(node.id))) {
       throw new Error("Het 3D-model bevat een knoop met ongeldige of dubbele id/co\xF6rdinaten.");
     }
-    const id = Number(node.id);
-    const levelId = readOptionalLevelId(node.levelId, `3D-knoop ${id}`);
-    const name = readOptionalName(node.name, `3D-knoop ${id}`);
+    const id2 = Number(node.id);
+    const levelId = readOptionalLevelId(node.levelId, `3D-knoop ${id2}`);
+    const name = readOptionalName(node.name, `3D-knoop ${id2}`);
     nodes.push({
-      id,
+      id: id2,
       x: Number(node.x),
       y: Number(node.y),
       z: Number(node.z),
       ...levelId !== void 0 ? { levelId } : {},
       ...name !== void 0 ? { name } : {}
     });
-    nodeIds.add(id);
+    nodeIds.add(id2);
   }
   const nodeIndex = new Map(nodes.map((node) => [node.id, node]));
   const beams = [];
@@ -24378,10 +24414,10 @@ function parseOpenFem3DModel(value) {
   for (const item of raw.beams) {
     if (!item || typeof item !== "object") throw new Error("Het 3D-model bevat een ongeldige staaf.");
     const beam = item;
-    const id = Number(beam.id);
+    const id2 = Number(beam.id);
     const startNodeId = Number(beam.startNodeId);
     const endNodeId = Number(beam.endNodeId);
-    if (!Number.isSafeInteger(beam.id) || id <= 0 || beamIds.has(id) || !Number.isSafeInteger(beam.startNodeId) || !Number.isSafeInteger(beam.endNodeId) || !nodeIds.has(startNodeId) || !nodeIds.has(endNodeId) || startNodeId === endNodeId) {
+    if (!Number.isSafeInteger(beam.id) || id2 <= 0 || beamIds.has(id2) || !Number.isSafeInteger(beam.startNodeId) || !Number.isSafeInteger(beam.endNodeId) || !nodeIds.has(startNodeId) || !nodeIds.has(endNodeId) || startNodeId === endNodeId) {
       throw new Error("Het 3D-model bevat een staaf met ongeldige id of knoopverwijzing.");
     }
     const start = nodeIndex.get(startNodeId);
@@ -24390,7 +24426,7 @@ function parseOpenFem3DModel(value) {
       throw new Error("Het 3D-model bevat een staaf zonder lengte.");
     }
     beams.push({
-      id,
+      id: id2,
       startNodeId,
       endNodeId,
       ...typeof beam.profileName === "string" && beam.profileName.trim() ? { profileName: beam.profileName.trim() } : {},
@@ -24401,15 +24437,15 @@ function parseOpenFem3DModel(value) {
       })() : {},
       ...beam.releases !== void 0 ? { releases: readEndReleases(beam.releases) } : {},
       ...beam.tensionOnly !== void 0 ? typeof beam.tensionOnly === "boolean" ? beam.tensionOnly ? { tensionOnly: true } : {} : (() => {
-        throw new Error(`3D-staaf ${id} heeft een ongeldige waarde voor trek-alleen.`);
+        throw new Error(`3D-staaf ${id2} heeft een ongeldige waarde voor trek-alleen.`);
       })() : {},
       ...(() => {
-        const name = readOptionalName(beam.name, `3D-staaf ${id}`);
-        const group = readOptionalName(beam.group, `3D-staaf ${id}`);
+        const name = readOptionalName(beam.name, `3D-staaf ${id2}`);
+        const group = readOptionalName(beam.group, `3D-staaf ${id2}`);
         return { ...name !== void 0 ? { name } : {}, ...group !== void 0 ? { group } : {} };
       })()
     });
-    beamIds.add(id);
+    beamIds.add(id2);
   }
   const plates = [];
   const plateIds = /* @__PURE__ */ new Set();
@@ -24418,59 +24454,59 @@ function parseOpenFem3DModel(value) {
   for (const item of raw.plates ?? []) {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Het 3D-model bevat een ongeldige plaat.");
     const plate = item;
-    const id = Number(plate.id);
-    if (!Number.isSafeInteger(plate.id) || id <= 0 || plateIds.has(id)) throw new Error("Het 3D-model bevat een plaat met een ongeldige of dubbele id.");
-    const loop = readPlateNodeLoop(plate.nodeIds, nodeIds, `3D-plaat ${id}`);
-    validatePlatePlane(nodes, loop, `3D-plaat ${id}`);
-    const boundary = readPlateBoundary(repairCopiedBoundary(plate.boundary, loop, boundaryTemplates, nodeIndex), loop, nodeIds, nodeIndex, `3D-plaat ${id}`);
+    const id2 = Number(plate.id);
+    if (!Number.isSafeInteger(plate.id) || id2 <= 0 || plateIds.has(id2)) throw new Error("Het 3D-model bevat een plaat met een ongeldige of dubbele id.");
+    const loop = readPlateNodeLoop(plate.nodeIds, nodeIds, `3D-plaat ${id2}`);
+    validatePlatePlane(nodes, loop, `3D-plaat ${id2}`);
+    const boundary = readPlateBoundary(repairCopiedBoundary(plate.boundary, loop, boundaryTemplates, nodeIndex), loop, nodeIds, nodeIndex, `3D-plaat ${id2}`);
     const thicknessM = Number(plate.thicknessM ?? 0.2);
     const cornerRadiusM = Number(plate.cornerRadiusM ?? 0);
     if (!(thicknessM > 0) || !Number.isFinite(thicknessM) || cornerRadiusM < 0 || !Number.isFinite(cornerRadiusM)) {
-      throw new Error(`3D-plaat ${id} heeft een ongeldige dikte of randstraal.`);
+      throw new Error(`3D-plaat ${id2} heeft een ongeldige dikte of randstraal.`);
     }
     const meshSizeM = plate.meshSizeM === void 0 || plate.meshSizeM === null ? void 0 : Number(plate.meshSizeM);
     if (meshSizeM !== void 0 && !(Number.isFinite(meshSizeM) && meshSizeM >= 0.01)) {
-      throw new Error(`3D-plaat ${id} heeft een ongeldige elementgrootte (minimaal 10 mm).`);
+      throw new Error(`3D-plaat ${id2} heeft een ongeldige elementgrootte (minimaal 10 mm).`);
     }
     const edgeCount = boundary ? boundary.length : loop.length;
     if (plate.edgeSupports !== void 0 && !Array.isArray(plate.edgeSupports)) {
-      throw new Error(`3D-plaat ${id} bevat geen geldige lijst randopleggingen.`);
+      throw new Error(`3D-plaat ${id2} bevat geen geldige lijst randopleggingen.`);
     }
     const edgeSupports = [];
     for (const rawSupport of plate.edgeSupports ?? []) {
       if (!rawSupport || typeof rawSupport !== "object" || Array.isArray(rawSupport)) {
-        throw new Error(`3D-plaat ${id} bevat een ongeldige randoplegging.`);
+        throw new Error(`3D-plaat ${id2} bevat een ongeldige randoplegging.`);
       }
       const support = rawSupport;
       const edge = Number(support.edge);
       if (!Number.isSafeInteger(support.edge) || edge < 0 || edge >= edgeCount || edgeSupports.some((item2) => item2.edge === edge)) {
-        throw new Error(`3D-plaat ${id} bevat een randoplegging op een ongeldige of dubbele rand.`);
+        throw new Error(`3D-plaat ${id2} bevat een randoplegging op een ongeldige of dubbele rand.`);
       }
       const restraints = readSupportRestraints(support);
       if (!SUPPORT_DOF.some((axis) => restraints[axis])) {
-        throw new Error(`De randoplegging op rand ${edge + 1} van 3D-plaat ${id} blokkeert niets.`);
+        throw new Error(`De randoplegging op rand ${edge + 1} van 3D-plaat ${id2} blokkeert niets.`);
       }
       edgeSupports.push({ edge, ...restraints });
     }
     edgeSupports.sort((a, b) => a.edge - b.edge);
     const openingIds = /* @__PURE__ */ new Set();
     const openings = [];
-    if (plate.openings !== void 0 && !Array.isArray(plate.openings)) throw new Error(`3D-plaat ${id} bevat geen geldige lijst openingen.`);
+    if (plate.openings !== void 0 && !Array.isArray(plate.openings)) throw new Error(`3D-plaat ${id2} bevat geen geldige lijst openingen.`);
     for (const rawOpening of plate.openings ?? []) {
-      if (!rawOpening || typeof rawOpening !== "object" || Array.isArray(rawOpening)) throw new Error(`3D-plaat ${id} bevat een ongeldige opening.`);
+      if (!rawOpening || typeof rawOpening !== "object" || Array.isArray(rawOpening)) throw new Error(`3D-plaat ${id2} bevat een ongeldige opening.`);
       const opening = rawOpening;
       const openingId = Number(opening.id);
-      if (!Number.isSafeInteger(opening.id) || openingId <= 0 || openingIds.has(openingId)) throw new Error(`3D-plaat ${id} bevat een opening met ongeldige of dubbele id.`);
-      const openingLoop = readPlateNodeLoop(opening.nodeIds, nodeIds, `Opening ${openingId} van 3D-plaat ${id}`);
-      validatePlatePlane(nodes, openingLoop, `Opening ${openingId} van 3D-plaat ${id}`);
-      const openingBoundary = readPlateBoundary(repairCopiedBoundary(opening.boundary, openingLoop, boundaryTemplates, nodeIndex), openingLoop, nodeIds, nodeIndex, `Opening ${openingId} van 3D-plaat ${id}`);
+      if (!Number.isSafeInteger(opening.id) || openingId <= 0 || openingIds.has(openingId)) throw new Error(`3D-plaat ${id2} bevat een opening met ongeldige of dubbele id.`);
+      const openingLoop = readPlateNodeLoop(opening.nodeIds, nodeIds, `Opening ${openingId} van 3D-plaat ${id2}`);
+      validatePlatePlane(nodes, openingLoop, `Opening ${openingId} van 3D-plaat ${id2}`);
+      const openingBoundary = readPlateBoundary(repairCopiedBoundary(opening.boundary, openingLoop, boundaryTemplates, nodeIndex), openingLoop, nodeIds, nodeIndex, `Opening ${openingId} van 3D-plaat ${id2}`);
       validateOpeningInsidePlate(
         nodeIndex,
         loop,
         boundary,
         openingLoop,
         openingBoundary,
-        `Opening ${openingId} van 3D-plaat ${id}`
+        `Opening ${openingId} van 3D-plaat ${id2}`
       );
       const openingRadius = Number(opening.cornerRadiusM ?? 0);
       if (openingRadius < 0 || !Number.isFinite(openingRadius)) throw new Error(`Opening ${openingId} heeft een ongeldige randstraal.`);
@@ -24482,9 +24518,9 @@ function parseOpenFem3DModel(value) {
       });
       openingIds.add(openingId);
     }
-    const levelId = readOptionalLevelId(plate.levelId, `3D-plaat ${id}`);
+    const levelId = readOptionalLevelId(plate.levelId, `3D-plaat ${id2}`);
     plates.push({
-      id,
+      id: id2,
       nodeIds: loop,
       thicknessM,
       ...boundary ? { boundary } : {},
@@ -24495,7 +24531,7 @@ function parseOpenFem3DModel(value) {
       ...meshSizeM !== void 0 ? { meshSizeM } : {},
       ...edgeSupports.length ? { edgeSupports } : {}
     });
-    plateIds.add(id);
+    plateIds.add(id2);
   }
   for (let index = 0; index < plates.length; index += 1) {
     const plate = plates[index];
@@ -24546,14 +24582,14 @@ function parseOpenFem3DModel(value) {
       throw new Error("Het 3D-model bevat een ongeldige knoopbelasting.");
     }
     const load = item;
-    const id = Number(load.id);
+    const id2 = Number(load.id);
     const nodeId = Number(load.nodeId);
-    if (!Number.isSafeInteger(load.id) || id <= 0 || loadIds.has(id) || !Number.isSafeInteger(load.nodeId) || !nodeIds.has(nodeId)) {
+    if (!Number.isSafeInteger(load.id) || id2 <= 0 || loadIds.has(id2) || !Number.isSafeInteger(load.nodeId) || !nodeIds.has(nodeId)) {
       throw new Error("Het 3D-model bevat een knoopbelasting met ongeldige, dubbele of ontbrekende knoopverwijzing.");
     }
     const caseId = readOptionalCaseId(load.caseId);
-    loads.push({ id, nodeId, ...readNodalLoadComponents(load), ...caseId !== void 0 ? { caseId } : {} });
-    loadIds.add(id);
+    loads.push({ id: id2, nodeId, ...readNodalLoadComponents(load), ...caseId !== void 0 ? { caseId } : {} });
+    loadIds.add(id2);
   }
   const model = {
     nodes,
@@ -24580,13 +24616,13 @@ function parseOpenFem3DModel(value) {
       throw new Error("Het 3D-model bevat een ongeldige staafbelasting.");
     }
     const load = item;
-    const id = Number(load.id);
+    const id2 = Number(load.id);
     const beamId = Number(load.beamId);
-    if (!Number.isSafeInteger(load.id) || id <= 0 || memberLoadIds.has(id) || !Number.isSafeInteger(load.beamId) || !beamIds.has(beamId)) {
+    if (!Number.isSafeInteger(load.id) || id2 <= 0 || memberLoadIds.has(id2) || !Number.isSafeInteger(load.beamId) || !beamIds.has(beamId)) {
       throw new Error("Het 3D-model bevat een staafbelasting met ongeldige, dubbele of ontbrekende staafverwijzing.");
     }
-    model.memberLoads.push(readMemberLoad(load, model, id, beamId));
-    memberLoadIds.add(id);
+    model.memberLoads.push(readMemberLoad(load, model, id2, beamId));
+    memberLoadIds.add(id2);
   }
   const memberPointLoadIds = /* @__PURE__ */ new Set();
   if (raw.memberPointLoads !== void 0 && !Array.isArray(raw.memberPointLoads)) {
@@ -24597,12 +24633,12 @@ function parseOpenFem3DModel(value) {
       throw new Error("Het 3D-model bevat een ongeldige staafpuntlast.");
     }
     const load = item;
-    const id = Number(load.id), beamId = Number(load.beamId);
-    if (!Number.isSafeInteger(load.id) || id <= 0 || memberPointLoadIds.has(id) || !Number.isSafeInteger(load.beamId) || !beamIds.has(beamId)) {
+    const id2 = Number(load.id), beamId = Number(load.beamId);
+    if (!Number.isSafeInteger(load.id) || id2 <= 0 || memberPointLoadIds.has(id2) || !Number.isSafeInteger(load.beamId) || !beamIds.has(beamId)) {
       throw new Error("Het 3D-model bevat een staafpuntlast met ongeldige, dubbele of ontbrekende staafverwijzing.");
     }
-    model.memberPointLoads.push(readMemberPointLoad(load, model, id, beamId));
-    memberPointLoadIds.add(id);
+    model.memberPointLoads.push(readMemberPointLoad(load, model, id2, beamId));
+    memberPointLoadIds.add(id2);
   }
   const thermalLoadIds = /* @__PURE__ */ new Set();
   if (raw.thermalLoads !== void 0 && !Array.isArray(raw.thermalLoads)) {
@@ -24613,26 +24649,26 @@ function parseOpenFem3DModel(value) {
       throw new Error("Het 3D-model bevat een ongeldige temperatuurbelasting.");
     }
     const load = item;
-    const id = Number(load.id), beamId = Number(load.beamId);
-    if (!Number.isSafeInteger(load.id) || id <= 0 || thermalLoadIds.has(id) || !Number.isSafeInteger(load.beamId) || !beamIds.has(beamId)) {
+    const id2 = Number(load.id), beamId = Number(load.beamId);
+    if (!Number.isSafeInteger(load.id) || id2 <= 0 || thermalLoadIds.has(id2) || !Number.isSafeInteger(load.beamId) || !beamIds.has(beamId)) {
       throw new Error("Het 3D-model bevat een temperatuurbelasting met ongeldige, dubbele of ontbrekende staafverwijzing.");
     }
-    model.thermalLoads.push(readThermalLoad(load, model, id, beamId));
-    thermalLoadIds.add(id);
+    model.thermalLoads.push(readThermalLoad(load, model, id2, beamId));
+    thermalLoadIds.add(id2);
   }
   const surfaceLoadIds = /* @__PURE__ */ new Set();
   if (raw.surfaceLoads !== void 0 && !Array.isArray(raw.surfaceLoads)) throw new Error("Het 3D-model bevat geen geldige lijst surfaceLoads.");
   for (const item of raw.surfaceLoads ?? []) {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Het 3D-model bevat een ongeldige oppervlaktebelasting.");
     const load = item;
-    const id = Number(load.id), plateId = Number(load.plateId);
+    const id2 = Number(load.id), plateId = Number(load.plateId);
     const qx = Number(load.qx ?? 0), qy = Number(load.qy ?? 0), qz = Number(load.qz ?? 0);
-    if (!Number.isSafeInteger(load.id) || id <= 0 || surfaceLoadIds.has(id) || !Number.isSafeInteger(load.plateId) || !plateIds.has(plateId) || ![qx, qy, qz].every(Number.isFinite) || [qx, qy, qz].every((component) => component === 0)) {
+    if (!Number.isSafeInteger(load.id) || id2 <= 0 || surfaceLoadIds.has(id2) || !Number.isSafeInteger(load.plateId) || !plateIds.has(plateId) || ![qx, qy, qz].every(Number.isFinite) || [qx, qy, qz].every((component) => component === 0)) {
       throw new Error("Het 3D-model bevat een oppervlaktebelasting met ongeldige waarden of plaatverwijzing.");
     }
     const caseId = readOptionalCaseId(load.caseId);
-    model.surfaceLoads.push({ id, plateId, ...caseId !== void 0 ? { caseId } : {}, qx, qy, qz });
-    surfaceLoadIds.add(id);
+    model.surfaceLoads.push({ id: id2, plateId, ...caseId !== void 0 ? { caseId } : {}, qx, qy, qz });
+    surfaceLoadIds.add(id2);
   }
   if (raw.loadPanels !== void 0) {
     if (!Array.isArray(raw.loadPanels)) throw new Error("Het 3D-model bevat geen geldige lijst loadPanels.");
@@ -24657,9 +24693,9 @@ function readLoadPanel(value, nodeIds, beamIds) {
     throw new Error("Het 3D-model bevat een ongeldig belastingvlak.");
   }
   const raw = value;
-  const id = Number(raw.id);
-  if (!Number.isSafeInteger(raw.id) || id <= 0) throw new Error("Het 3D-model bevat een belastingvlak met een ongeldige id.");
-  const label = `3D-belastingvlak ${id}`;
+  const id2 = Number(raw.id);
+  if (!Number.isSafeInteger(raw.id) || id2 <= 0) throw new Error("Het 3D-model bevat een belastingvlak met een ongeldige id.");
+  const label = `3D-belastingvlak ${id2}`;
   const loop = readPlateNodeLoop(raw.nodeIds, nodeIds, label);
   const q = raw.q;
   if (typeof q !== "number" || !Number.isFinite(q) || q === 0) {
@@ -24673,11 +24709,11 @@ function readLoadPanel(value, nodeIds, beamIds) {
   }
   let spanDirection;
   if (raw.spanDirection !== void 0) {
-    const vector = raw.spanDirection;
-    if (!vector || typeof vector !== "object" || Array.isArray(vector) || !["x", "y", "z"].every((axis) => typeof vector[axis] === "number" && Number.isFinite(vector[axis])) || Math.hypot(Number(vector.x), Number(vector.y), Number(vector.z)) === 0) {
+    const vector2 = raw.spanDirection;
+    if (!vector2 || typeof vector2 !== "object" || Array.isArray(vector2) || !["x", "y", "z"].every((axis) => typeof vector2[axis] === "number" && Number.isFinite(vector2[axis])) || Math.hypot(Number(vector2.x), Number(vector2.y), Number(vector2.z)) === 0) {
       throw new Error(`${label} heeft een ongeldige overspanningsrichting; geef een vector {x, y, z} ongelijk aan nul.`);
     }
-    spanDirection = { x: Number(vector.x), y: Number(vector.y), z: Number(vector.z) };
+    spanDirection = { x: Number(vector2.x), y: Number(vector2.y), z: Number(vector2.z) };
   }
   if (raw.distribution === "oneWay" && !spanDirection) {
     throw new Error(`${label} draagt in \xE9\xE9n richting af maar mist de overspanningsrichting.`);
@@ -24693,7 +24729,7 @@ function readLoadPanel(value, nodeIds, beamIds) {
   }
   const caseId = readOptionalCaseId(raw.caseId);
   return {
-    id,
+    id: id2,
     nodeIds: loop,
     ...caseId !== void 0 ? { caseId } : {},
     q,
@@ -24715,21 +24751,593 @@ function readDiaphragms(items, nodeIds) {
   return items.map((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Het 3D-model bevat een ongeldige schijf.");
     const raw = item;
-    const id = Number(raw.id);
-    if (!Number.isSafeInteger(raw.id) || id <= 0 || ids.has(id)) throw new Error("Het 3D-model bevat een schijf met een ongeldige of dubbele id.");
-    ids.add(id);
-    if (!Array.isArray(raw.nodeIds) || raw.nodeIds.length < 2) throw new Error(`Schijf ${id} koppelt minder dan twee knopen.`);
+    const id2 = Number(raw.id);
+    if (!Number.isSafeInteger(raw.id) || id2 <= 0 || ids.has(id2)) throw new Error("Het 3D-model bevat een schijf met een ongeldige of dubbele id.");
+    ids.add(id2);
+    if (!Array.isArray(raw.nodeIds) || raw.nodeIds.length < 2) throw new Error(`Schijf ${id2} koppelt minder dan twee knopen.`);
     const nodes = raw.nodeIds.map(Number);
     for (const nodeId of nodes) {
-      if (!Number.isSafeInteger(nodeId) || !nodeIds.has(nodeId)) throw new Error(`Schijf ${id} verwijst naar een ontbrekende knoop.`);
+      if (!Number.isSafeInteger(nodeId) || !nodeIds.has(nodeId)) throw new Error(`Schijf ${id2} verwijst naar een ontbrekende knoop.`);
       const other = owner.get(nodeId);
-      if (other === id) throw new Error(`Schijf ${id} noemt knoop ${nodeId} twee keer.`);
-      if (other !== void 0) throw new Error(`Knoop ${nodeId} hoort bij schijf ${other} \xE9n schijf ${id}; een knoop hoort bij hoogstens \xE9\xE9n schijf.`);
-      owner.set(nodeId, id);
+      if (other === id2) throw new Error(`Schijf ${id2} noemt knoop ${nodeId} twee keer.`);
+      if (other !== void 0) throw new Error(`Knoop ${nodeId} hoort bij schijf ${other} \xE9n schijf ${id2}; een knoop hoort bij hoogstens \xE9\xE9n schijf.`);
+      owner.set(nodeId, id2);
     }
-    const name = readOptionalName(raw.name, `Schijf ${id}`);
-    return { id, nodeIds: nodes, ...name !== void 0 ? { name } : {} };
+    const name = readOptionalName(raw.name, `Schijf ${id2}`);
+    return { id: id2, nodeIds: nodes, ...name !== void 0 ? { name } : {} };
   });
+}
+function setOpenFem3DSupport(model, nodeId, restraints) {
+  requireNode(model, nodeId);
+  const previous = model.supports ?? [];
+  const existing = previous.find((item) => item.nodeId === nodeId);
+  const parsed = readSupportRestraints(restraints);
+  const springs = existing?.springs ? { ...existing.springs } : void 0;
+  const prescribed = existing?.prescribed ? { ...existing.prescribed } : void 0;
+  for (let index = 0; index < SUPPORT_DOF.length; index += 1) {
+    if (parsed[SUPPORT_DOF[index]]) {
+      if (springs) delete springs[SPRING_DOF[index]];
+    } else if (prescribed) {
+      delete prescribed[PRESCRIBED_DOF[index]];
+    }
+  }
+  const support = {
+    nodeId,
+    ...parsed,
+    ...springs && Object.keys(springs).length > 0 ? { springs } : {},
+    ...prescribed && Object.keys(prescribed).length > 0 ? { prescribed } : {}
+  };
+  return {
+    ...model,
+    supports: previous.some((item) => item.nodeId === nodeId) ? previous.map((item) => item.nodeId === nodeId ? support : item) : [...previous, support]
+  };
+}
+function setOpenFem3DSupportSprings(model, nodeId, springs) {
+  requireNode(model, nodeId);
+  const parsed = readSupportSprings(springs);
+  const previous = model.supports ?? [];
+  const existing = previous.find((item) => item.nodeId === nodeId);
+  const restraints = existing ? Object.fromEntries(SUPPORT_DOF.map((axis) => [axis, existing[axis]])) : { ux: false, uy: false, uz: false, rx: false, ry: false, rz: false };
+  const prescribed = existing?.prescribed ? { ...existing.prescribed } : void 0;
+  for (let index = 0; index < SUPPORT_DOF.length; index += 1) {
+    if (parsed?.[SPRING_DOF[index]] !== void 0) {
+      restraints[SUPPORT_DOF[index]] = false;
+      if (prescribed) delete prescribed[PRESCRIBED_DOF[index]];
+    }
+  }
+  if (!parsed && !SUPPORT_DOF.some((axis) => restraints[axis])) return removeOpenFem3DSupport(model, nodeId);
+  const support = {
+    nodeId,
+    ...restraints,
+    ...parsed ? { springs: parsed } : {},
+    ...prescribed && Object.keys(prescribed).length > 0 ? { prescribed } : {}
+  };
+  return {
+    ...model,
+    supports: existing ? previous.map((item) => item.nodeId === nodeId ? support : item) : [...previous, support]
+  };
+}
+function setOpenFem3DSupportPrescribed(model, nodeId, values) {
+  requireNode(model, nodeId);
+  const prescribed = readPrescribedDisplacements(values);
+  const previous = model.supports ?? [];
+  const existing = previous.find((item) => item.nodeId === nodeId);
+  if (!existing && !prescribed) return model;
+  const restraints = existing ? Object.fromEntries(SUPPORT_DOF.map((axis) => [axis, existing[axis]])) : { ux: false, uy: false, uz: false, rx: false, ry: false, rz: false };
+  const springs = existing?.springs ? { ...existing.springs } : void 0;
+  for (let index = 0; index < SUPPORT_DOF.length; index += 1) {
+    if (prescribed?.[PRESCRIBED_DOF[index]] !== void 0) {
+      restraints[SUPPORT_DOF[index]] = true;
+      if (springs) delete springs[SPRING_DOF[index]];
+    }
+  }
+  const support = {
+    nodeId,
+    ...restraints,
+    ...springs && Object.keys(springs).length > 0 ? { springs } : {},
+    ...prescribed ? { prescribed } : {}
+  };
+  return {
+    ...model,
+    supports: existing ? previous.map((item) => item.nodeId === nodeId ? support : item) : [...previous, support]
+  };
+}
+function removeOpenFem3DSupport(model, nodeId) {
+  return { ...model, supports: (model.supports ?? []).filter((item) => item.nodeId !== nodeId) };
+}
+function addOpenFem3DNodalLoad(model, nodeId, components, caseId) {
+  requireNode(model, nodeId);
+  const values = readNodalLoadComponents(components);
+  const validCaseId = readOptionalCaseId(caseId);
+  const previous = model.loads ?? [];
+  const id2 = nextEntityId(previous);
+  return { ...model, loads: [...previous, { id: id2, nodeId, ...values, ...validCaseId !== void 0 ? { caseId: validCaseId } : {} }] };
+}
+function updateOpenFem3DNodalLoad(model, loadId, components) {
+  const previous = model.loads ?? [];
+  if (!previous.some((load) => load.id === loadId)) throw new Error(`3D-knoopbelasting ${loadId} bestaat niet.`);
+  const values = readNodalLoadComponents(components);
+  return {
+    ...model,
+    loads: previous.map((load) => load.id === loadId ? { ...load, ...values } : load)
+  };
+}
+function removeOpenFem3DNodalLoad(model, loadId) {
+  return { ...model, loads: (model.loads ?? []).filter((load) => load.id !== loadId) };
+}
+function addOpenFem3DMemberLoad(model, beamId, values, caseId) {
+  const previous = model.memberLoads ?? [];
+  const id2 = nextEntityId(previous);
+  const load = readMemberLoad({ ...values, ...caseId !== void 0 ? { caseId } : {} }, model, id2, beamId);
+  return { ...model, memberLoads: [...previous, load] };
+}
+function updateOpenFem3DMemberLoad(model, loadId, values) {
+  const previous = model.memberLoads ?? [];
+  const old = previous.find((load2) => load2.id === loadId);
+  if (!old) throw new Error(`3D-staafbelasting ${loadId} bestaat niet.`);
+  const load = readMemberLoad({ ...values, ...old.caseId !== void 0 ? { caseId: old.caseId } : {} }, model, loadId, old.beamId);
+  return { ...model, memberLoads: previous.map((item) => item.id === loadId ? load : item) };
+}
+function removeOpenFem3DMemberLoad(model, loadId) {
+  return { ...model, memberLoads: (model.memberLoads ?? []).filter((load) => load.id !== loadId) };
+}
+function addOpenFem3DMemberPointLoad(model, beamId, values, caseId) {
+  const previous = model.memberPointLoads ?? [];
+  const id2 = nextEntityId(previous);
+  const load = readMemberPointLoad(
+    { ...values, ...caseId !== void 0 ? { caseId } : {} },
+    model,
+    id2,
+    beamId
+  );
+  return { ...model, memberPointLoads: [...previous, load] };
+}
+function updateOpenFem3DMemberPointLoad(model, loadId, values) {
+  const previous = model.memberPointLoads ?? [];
+  const old = previous.find((load2) => load2.id === loadId);
+  if (!old) throw new Error(`3D-staafpuntlast ${loadId} bestaat niet.`);
+  const load = readMemberPointLoad(
+    { ...values, ...old.caseId !== void 0 ? { caseId: old.caseId } : {} },
+    model,
+    loadId,
+    old.beamId
+  );
+  return { ...model, memberPointLoads: previous.map((item) => item.id === loadId ? load : item) };
+}
+function removeOpenFem3DMemberPointLoad(model, loadId) {
+  return { ...model, memberPointLoads: (model.memberPointLoads ?? []).filter((load) => load.id !== loadId) };
+}
+function addOpenFem3DThermalLoad(model, beamId, values, caseId) {
+  const previous = model.thermalLoads ?? [];
+  const id2 = nextEntityId(previous);
+  const load = readThermalLoad(
+    { ...values, ...caseId !== void 0 ? { caseId } : {} },
+    model,
+    id2,
+    beamId
+  );
+  return { ...model, thermalLoads: [...previous, load] };
+}
+function updateOpenFem3DThermalLoad(model, loadId, values) {
+  const previous = model.thermalLoads ?? [];
+  const old = previous.find((load2) => load2.id === loadId);
+  if (!old) throw new Error(`3D-temperatuurbelasting ${loadId} bestaat niet.`);
+  const load = readThermalLoad(
+    { ...values, ...old.caseId !== void 0 ? { caseId: old.caseId } : {} },
+    model,
+    loadId,
+    old.beamId
+  );
+  return { ...model, thermalLoads: previous.map((item) => item.id === loadId ? load : item) };
+}
+function removeOpenFem3DThermalLoad(model, loadId) {
+  return { ...model, thermalLoads: (model.thermalLoads ?? []).filter((load) => load.id !== loadId) };
+}
+var OPEN_FEM_3D_SAME_POSITION_M = 1e-6;
+var OPEN_FEM_3D_DEFAULT_BEAM = { material: "S235", profileName: "IPE 200" };
+function readCoordinate(value, label) {
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${label} moet een eindig getal zijn.`);
+  return value;
+}
+function nodeAtSamePosition(model, x, y, z, exceptId) {
+  return model.nodes.find((node) => node.id !== exceptId && Math.abs(node.x - x) <= OPEN_FEM_3D_SAME_POSITION_M && Math.abs(node.y - y) <= OPEN_FEM_3D_SAME_POSITION_M && Math.abs(node.z - z) <= OPEN_FEM_3D_SAME_POSITION_M);
+}
+function assertOpensAfterEdit(model) {
+  parseOpenFem3DModel(model);
+  return model;
+}
+function addOpenFem3DNode(model, input) {
+  const x = readCoordinate(input.x, "x"), y = readCoordinate(input.y, "y"), z = readCoordinate(input.z, "z");
+  const existing = nodeAtSamePosition(model, x, y, z);
+  if (existing) throw new Error(`Op (${x}; ${y}; ${z}) m ligt al 3D-knoop ${existing.id}.`);
+  const name = readOptionalName(input.name, "De 3D-knoop");
+  const node = { id: nextEntityId(model.nodes), x, y, z, ...name ? { name } : {} };
+  return { model: assertOpensAfterEdit({ ...model, nodes: [...model.nodes, node] }), node };
+}
+function updateOpenFem3DNode(model, nodeId, patch) {
+  const node = model.nodes.find((item) => item.id === nodeId);
+  if (!node) throw new Error(`3D-knoop ${nodeId} bestaat niet.`);
+  const x = patch.x === void 0 ? node.x : readCoordinate(patch.x, "x");
+  const y = patch.y === void 0 ? node.y : readCoordinate(patch.y, "y");
+  const z = patch.z === void 0 ? node.z : readCoordinate(patch.z, "z");
+  if (node.levelId !== void 0 && z !== node.z) {
+    throw new Error(`3D-knoop ${nodeId} hangt aan een level; z volgt dat level. Ontkoppel de knoop eerst of wijzig het level.`);
+  }
+  const existing = nodeAtSamePosition(model, x, y, z, nodeId);
+  if (existing) throw new Error(`Op (${x}; ${y}; ${z}) m ligt al 3D-knoop ${existing.id}.`);
+  const { name: _name, ...rest } = node;
+  const name = patch.name === void 0 ? node.name : readOptionalName(patch.name, `3D-knoop ${nodeId}`);
+  const next = { ...rest, x, y, z, ...name ? { name } : {} };
+  return assertOpensAfterEdit({ ...model, nodes: model.nodes.map((item) => item.id === nodeId ? next : item) });
+}
+function connectingBeam(model, a, b, exceptId) {
+  return model.beams.find((beam) => beam.id !== exceptId && (beam.startNodeId === a && beam.endNodeId === b || beam.startNodeId === b && beam.endNodeId === a));
+}
+function readRequiredText(value, label) {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`${label} mag niet leeg zijn.`);
+  return value.trim();
+}
+function withBeamFields(beam, patch) {
+  const label = `3D-staaf ${beam.id}`;
+  const next = { ...beam };
+  const set = (key, value) => {
+    if (value === void 0) delete next[key];
+    else next[key] = value;
+  };
+  if (patch.profileName !== void 0) set("profileName", patch.profileName === null ? void 0 : readRequiredText(patch.profileName, `Het profiel van ${label}`));
+  if (patch.material !== void 0) set("material", patch.material === null ? void 0 : readRequiredText(patch.material, `Het materiaal van ${label}`));
+  if (patch.rollAngleRad !== void 0) set("rollAngleRad", patch.rollAngleRad === null ? void 0 : readCoordinate(patch.rollAngleRad, `De rolhoek van ${label}`));
+  if (patch.releases !== void 0) set("releases", patch.releases === null ? void 0 : readEndReleases(patch.releases));
+  if (patch.tensionOnly !== void 0) set("tensionOnly", patch.tensionOnly ? true : void 0);
+  if (patch.name !== void 0) set("name", readOptionalName(patch.name, label));
+  if (patch.group !== void 0) set("group", readOptionalName(patch.group, label));
+  return next;
+}
+function addOpenFem3DBeam(model, input) {
+  const { startNodeId, endNodeId } = input;
+  requireNode(model, startNodeId);
+  requireNode(model, endNodeId);
+  if (startNodeId === endNodeId) throw new Error("Een 3D-staaf moet twee verschillende knopen verbinden.");
+  const existing = connectingBeam(model, startNodeId, endNodeId);
+  if (existing) throw new Error(`Tussen 3D-knoop ${startNodeId} en ${endNodeId} ligt al 3D-staaf ${existing.id}.`);
+  const base = { id: nextEntityId(model.beams), startNodeId, endNodeId, ...OPEN_FEM_3D_DEFAULT_BEAM };
+  const beam = withBeamFields(base, input);
+  setOpenFem3DBeamNodes({ ...model, beams: [...model.beams, beam] }, beam.id, startNodeId, endNodeId);
+  return { model: assertOpensAfterEdit({ ...model, beams: [...model.beams, beam] }), beam };
+}
+function updateOpenFem3DBeam(model, beamId, patch) {
+  const beam = model.beams.find((item) => item.id === beamId);
+  if (!beam) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
+  let next = model;
+  const startNodeId = patch.startNodeId ?? beam.startNodeId;
+  const endNodeId = patch.endNodeId ?? beam.endNodeId;
+  if (startNodeId !== beam.startNodeId || endNodeId !== beam.endNodeId) {
+    requireNode(model, startNodeId);
+    requireNode(model, endNodeId);
+    const existing = connectingBeam(model, startNodeId, endNodeId, beamId);
+    if (existing) throw new Error(`Tussen 3D-knoop ${startNodeId} en ${endNodeId} ligt al 3D-staaf ${existing.id}.`);
+    next = setOpenFem3DBeamNodes(model, beamId, startNodeId, endNodeId);
+  }
+  const updated = withBeamFields(next.beams.find((item) => item.id === beamId), patch);
+  return assertOpensAfterEdit({ ...next, beams: next.beams.map((item) => item.id === beamId ? updated : item) });
+}
+function setOpenFem3DBeamNodes(model, beamId, startNodeId, endNodeId) {
+  const beam = model.beams.find((item) => item.id === beamId);
+  if (!beam) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
+  const start = model.nodes.find((node) => node.id === startNodeId);
+  const end = model.nodes.find((node) => node.id === endNodeId);
+  if (!start || !end) throw new Error("Begin- en eindknoop moeten bestaande 3D-knopen zijn.");
+  if (startNodeId === endNodeId || start.x === end.x && start.y === end.y && start.z === end.z) {
+    throw new Error("Een 3D-staaf moet twee verschillende knopen met een niet-nulle lengte verbinden.");
+  }
+  return {
+    ...model,
+    beams: model.beams.map((item) => item.id === beamId ? { ...item, startNodeId, endNodeId } : item)
+  };
+}
+function flipOpenFem3DBeamLocalAxes(model, beamId) {
+  if (!model.beams.some((item) => item.id === beamId)) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
+  return {
+    ...model,
+    beams: model.beams.map((item) => item.id === beamId ? { ...item, rollAngleRad: ((item.rollAngleRad ?? 0) + Math.PI) % (2 * Math.PI) } : item),
+    memberLoads: model.memberLoads?.map((load) => load.beamId === beamId ? { ...load, qyStart: -load.qyStart, qyEnd: -load.qyEnd, qzStart: -load.qzStart, qzEnd: -load.qzEnd } : load),
+    memberPointLoads: model.memberPointLoads?.map((load) => load.beamId === beamId ? { ...load, py: -load.py, pz: -load.pz } : load),
+    thermalLoads: model.thermalLoads?.map((load) => load.beamId === beamId ? { ...load, deltaTGradientYK: -load.deltaTGradientYK, deltaTGradientZK: -load.deltaTGradientZK } : load)
+  };
+}
+var OPEN_FEM_3D_RELEASE_PRESETS = {
+  // Momentvast: beide einden dragen alle momenten over.
+  rigid: { myStart: false, myEnd: false, mzStart: false, mzEnd: false, torsionStart: false, torsionEnd: false },
+  // Scharnierend: geen buigend moment aan de einden. Torsie gaat wel over;
+  // los aan beide einden zou de staaf vrij om zijn eigen as laten draaien.
+  pinned: { myStart: true, myEnd: true, mzStart: true, mzEnd: true, torsionStart: false, torsionEnd: false }
+};
+function setOpenFem3DReleasePreset(model, beamIds, preset) {
+  const ids = new Set(beamIds);
+  for (const id2 of ids) {
+    if (!model.beams.some((item) => item.id === id2)) throw new Error(`3D-staaf ${id2} bestaat niet.`);
+  }
+  return {
+    ...model,
+    beams: model.beams.map((item) => {
+      if (!ids.has(item.id)) return item;
+      const { releases: _oud, ...rest } = item;
+      return preset === "rigid" ? rest : { ...rest, releases: { ...OPEN_FEM_3D_RELEASE_PRESETS.pinned } };
+    })
+  };
+}
+var RIGID_OPEN_FEM_3D_END = {
+  myStart: false,
+  myEnd: false,
+  mzStart: false,
+  mzEnd: false,
+  torsionStart: false,
+  torsionEnd: false
+};
+function splitOpenFem3DBeam(model, beamId, ratio) {
+  const beam = model.beams.find((item) => item.id === beamId);
+  if (!beam) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
+  if (!Number.isFinite(ratio) || ratio <= 1e-6 || ratio >= 1 - 1e-6) {
+    throw new Error("De subknoop moet binnen de 3D-staaf liggen.");
+  }
+  const start = model.nodes.find((node) => node.id === beam.startNodeId);
+  const end = model.nodes.find((node) => node.id === beam.endNodeId);
+  if (!start || !end) throw new Error("De 3D-staaf verwijst naar een ontbrekende knoop.");
+  const length = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
+  if (length <= 1e-12) throw new Error("Een 3D-staaf zonder lengte kan niet worden geknipt.");
+  const splitPoint = {
+    x: start.x + (end.x - start.x) * ratio,
+    y: start.y + (end.y - start.y) * ratio,
+    z: start.z + (end.z - start.z) * ratio
+  };
+  const existingNode = model.nodes.find((node) => node.id !== start.id && node.id !== end.id && Math.hypot(node.x - splitPoint.x, node.y - splitPoint.y, node.z - splitPoint.z) <= 1e-8);
+  const nodeId = existingNode?.id ?? nextEntityId(model.nodes);
+  const secondBeamId = nextEntityId(model.beams);
+  const duplicateSegment = model.beams.find((item) => item.id !== beamId && (item.startNodeId === beam.startNodeId && item.endNodeId === nodeId || item.startNodeId === nodeId && item.endNodeId === beam.startNodeId || item.startNodeId === nodeId && item.endNodeId === beam.endNodeId || item.startNodeId === beam.endNodeId && item.endNodeId === nodeId));
+  if (duplicateSegment) {
+    throw new Error(`Splitsen zou 3D-staaf ${duplicateSegment.id} verdubbelen.`);
+  }
+  const originalReleases = beam.releases;
+  const firstBeam = {
+    ...beam,
+    endNodeId: nodeId,
+    ...originalReleases ? {
+      releases: {
+        ...RIGID_OPEN_FEM_3D_END,
+        myStart: originalReleases.myStart,
+        mzStart: originalReleases.mzStart,
+        torsionStart: originalReleases.torsionStart
+      }
+    } : {}
+  };
+  const secondBeam = {
+    ...beam,
+    id: secondBeamId,
+    startNodeId: nodeId,
+    ...originalReleases ? {
+      releases: {
+        ...RIGID_OPEN_FEM_3D_END,
+        myEnd: originalReleases.myEnd,
+        mzEnd: originalReleases.mzEnd,
+        torsionEnd: originalReleases.torsionEnd
+      }
+    } : {}
+  };
+  const beams = model.beams.flatMap((item) => item.id === beamId ? [firstBeam, secondBeam] : [item]);
+  const splitDistance = ratio * length;
+  let nextMemberLoadId = nextEntityId(model.memberLoads ?? []);
+  const memberLoads = (model.memberLoads ?? []).flatMap((load) => {
+    if (load.beamId !== beamId) return [load];
+    if (load.endPositionM <= splitDistance) return [load];
+    if (load.startPositionM >= splitDistance) {
+      return [{
+        ...load,
+        beamId: secondBeamId,
+        startPositionM: load.startPositionM - splitDistance,
+        endPositionM: load.endPositionM - splitDistance
+      }];
+    }
+    const loadRatio = (splitDistance - load.startPositionM) / (load.endPositionM - load.startPositionM);
+    const qyAtSplit = load.qyStart + (load.qyEnd - load.qyStart) * loadRatio;
+    const qzAtSplit = load.qzStart + (load.qzEnd - load.qzStart) * loadRatio;
+    return [
+      { ...load, qyEnd: qyAtSplit, qzEnd: qzAtSplit, endPositionM: splitDistance },
+      {
+        ...load,
+        id: nextMemberLoadId++,
+        beamId: secondBeamId,
+        qyStart: qyAtSplit,
+        qzStart: qzAtSplit,
+        startPositionM: 0,
+        endPositionM: load.endPositionM - splitDistance
+      }
+    ];
+  });
+  const memberPointLoads = (model.memberPointLoads ?? []).map((load) => {
+    if (load.beamId !== beamId || load.positionM < splitDistance) return load;
+    return { ...load, beamId: secondBeamId, positionM: load.positionM - splitDistance };
+  });
+  let nextThermalLoadId = nextEntityId(model.thermalLoads ?? []);
+  const thermalLoads = (model.thermalLoads ?? []).flatMap((load) => load.beamId !== beamId ? [load] : [load, { ...load, id: nextThermalLoadId++, beamId: secondBeamId }]);
+  const loadPanels = model.loadPanels?.map((panel) => panel.excludedBeamIds?.includes(beamId) ? { ...panel, excludedBeamIds: [...panel.excludedBeamIds, secondBeamId] } : panel);
+  return {
+    model: {
+      ...model,
+      // Een staaf tussen twee knopen op hetzelfde level ligt op dat level; de
+      // nieuwe tussenknoop hangt er dan ook aan, anders knikt de staaf zodra
+      // de hoogte van het level verandert.
+      nodes: existingNode ? model.nodes : [...model.nodes, {
+        id: nodeId,
+        ...splitPoint,
+        ...start.levelId !== void 0 && start.levelId === end.levelId ? { levelId: start.levelId } : {}
+      }],
+      beams,
+      memberLoads,
+      memberPointLoads,
+      thermalLoads,
+      ...loadPanels ? { loadPanels } : {}
+    },
+    nodeId,
+    firstBeamId: beamId,
+    secondBeamId
+  };
+}
+function withoutExcludedBeams(panels, removedBeamIds) {
+  if (!panels || removedBeamIds.size === 0) return panels;
+  return panels.map((panel) => {
+    if (!panel.excludedBeamIds?.some((id2) => removedBeamIds.has(id2))) return panel;
+    const excludedBeamIds = panel.excludedBeamIds.filter((id2) => !removedBeamIds.has(id2));
+    const { excludedBeamIds: _removed, ...rest } = panel;
+    return excludedBeamIds.length > 0 ? { ...rest, excludedBeamIds } : rest;
+  });
+}
+function removeOpenFem3DBeam(model, beamId) {
+  const loadPanels = withoutExcludedBeams(model.loadPanels, /* @__PURE__ */ new Set([beamId]));
+  return {
+    ...model,
+    beams: model.beams.filter((beam) => beam.id !== beamId),
+    memberLoads: (model.memberLoads ?? []).filter((load) => load.beamId !== beamId),
+    memberPointLoads: (model.memberPointLoads ?? []).filter((load) => load.beamId !== beamId),
+    thermalLoads: (model.thermalLoads ?? []).filter((load) => load.beamId !== beamId),
+    ...loadPanels ? { loadPanels } : {}
+  };
+}
+function removeOpenFem3DLoadPanel(model, panelId) {
+  return { ...model, loadPanels: (model.loadPanels ?? []).filter((panel) => panel.id !== panelId) };
+}
+function addOpenFem3DPlate(model, nodeIds, options = {}) {
+  const id2 = nextEntityId(model.plates ?? []);
+  const parsed = parseOpenFem3DModel({
+    ...model,
+    plates: [...model.plates ?? [], {
+      id: id2,
+      nodeIds,
+      thicknessM: options.thicknessM ?? 0.2,
+      material: options.material ?? "C30/37",
+      ...options.boundary?.length ? { boundary: options.boundary } : {},
+      ...options.cornerRadiusM && options.cornerRadiusM > 0 ? { cornerRadiusM: options.cornerRadiusM } : {}
+    }]
+  });
+  const addedPlate = parsed.plates?.[parsed.plates.length - 1];
+  if (!addedPlate) throw new Error("De nieuwe 3D-plaat kon niet worden gevalideerd.");
+  const legacyCopies = (model.plates ?? []).some((plate) => hasCopiedBoundaryReference(plate.boundary, plate.nodeIds) || (plate.openings ?? []).some((opening) => hasCopiedBoundaryReference(opening.boundary, opening.nodeIds)));
+  return legacyCopies ? parsed : { ...model, plates: [...model.plates ?? [], addedPlate] };
+}
+function updateOpenFem3DPlate(model, plateId, patch) {
+  if (!(model.plates ?? []).some((plate) => plate.id === plateId)) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
+  const parsed = parseOpenFem3DModel({
+    ...model,
+    plates: (model.plates ?? []).map((plate) => {
+      if (plate.id !== plateId) return plate;
+      const next = { ...plate, ...patch };
+      if ("meshSizeM" in patch && patch.meshSizeM === void 0) delete next.meshSizeM;
+      if ("edgeSupports" in patch && !patch.edgeSupports?.length) delete next.edgeSupports;
+      return next;
+    })
+  });
+  const updatedPlate = parsed.plates?.find((plate) => plate.id === plateId);
+  if (!updatedPlate) throw new Error(`3D-plaat ${plateId} kon niet worden gevalideerd.`);
+  return {
+    ...model,
+    plates: (model.plates ?? []).map((plate) => plate.id === plateId ? updatedPlate : plate)
+  };
+}
+function addOpenFem3DPlateOpening(model, plateId, nodeIds, cornerRadiusOrOptions = 0) {
+  const plate = (model.plates ?? []).find((item) => item.id === plateId);
+  if (!plate) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
+  const options = typeof cornerRadiusOrOptions === "number" ? { cornerRadiusM: cornerRadiusOrOptions } : cornerRadiusOrOptions;
+  const id2 = nextEntityId(plate.openings ?? []);
+  const parsed = parseOpenFem3DModel({
+    ...model,
+    plates: (model.plates ?? []).map((item) => item.id === plateId ? {
+      ...item,
+      openings: [...item.openings ?? [], {
+        id: id2,
+        nodeIds,
+        ...options.boundary?.length ? { boundary: options.boundary } : {},
+        ...options.cornerRadiusM && options.cornerRadiusM > 0 ? { cornerRadiusM: options.cornerRadiusM } : {}
+      }]
+    } : item)
+  });
+  const updatedPlate = parsed.plates?.find((item) => item.id === plateId);
+  if (!updatedPlate) throw new Error(`De opening in 3D-plaat ${plateId} kon niet worden gevalideerd.`);
+  return {
+    ...model,
+    plates: (model.plates ?? []).map((item) => item.id === plateId ? updatedPlate : item)
+  };
+}
+function removeOpenFem3DPlate(model, plateId) {
+  return {
+    ...model,
+    plates: (model.plates ?? []).filter((plate) => plate.id !== plateId),
+    surfaceLoads: (model.surfaceLoads ?? []).filter((load) => load.plateId !== plateId)
+  };
+}
+function addOpenFem3DSurfaceLoad(model, plateId, values, caseId) {
+  const id2 = nextEntityId(model.surfaceLoads ?? []);
+  return parseOpenFem3DModel({ ...model, surfaceLoads: [...model.surfaceLoads ?? [], { id: id2, plateId, ...values, ...caseId ? { caseId } : {} }] });
+}
+function updateOpenFem3DSurfaceLoad(model, loadId, values) {
+  if (!(model.surfaceLoads ?? []).some((load) => load.id === loadId)) throw new Error(`3D-oppervlaktebelasting ${loadId} bestaat niet.`);
+  return parseOpenFem3DModel({ ...model, surfaceLoads: (model.surfaceLoads ?? []).map((load) => load.id === loadId ? { ...load, ...values } : load) });
+}
+function removeOpenFem3DSurfaceLoad(model, loadId) {
+  return { ...model, surfaceLoads: (model.surfaceLoads ?? []).filter((load) => load.id !== loadId) };
+}
+function removeOpenFem3DNode(model, nodeId) {
+  const removedBeamIds = new Set(model.beams.filter((beam) => beam.startNodeId === nodeId || beam.endNodeId === nodeId).map((beam) => beam.id));
+  const removedPlateIds = new Set((model.plates ?? []).filter((plate) => plate.nodeIds.includes(nodeId) || (plate.openings ?? []).some((opening) => opening.nodeIds.includes(nodeId))).map((plate) => plate.id));
+  const loadPanels = withoutExcludedBeams(
+    model.loadPanels?.filter((panel) => !panel.nodeIds.includes(nodeId)),
+    removedBeamIds
+  );
+  return {
+    ...model,
+    nodes: model.nodes.filter((node) => node.id !== nodeId),
+    beams: model.beams.filter((beam) => beam.startNodeId !== nodeId && beam.endNodeId !== nodeId),
+    supports: (model.supports ?? []).filter((support) => support.nodeId !== nodeId),
+    loads: (model.loads ?? []).filter((load) => load.nodeId !== nodeId),
+    memberLoads: (model.memberLoads ?? []).filter((load) => !removedBeamIds.has(load.beamId)),
+    memberPointLoads: (model.memberPointLoads ?? []).filter((load) => !removedBeamIds.has(load.beamId)),
+    thermalLoads: (model.thermalLoads ?? []).filter((load) => !removedBeamIds.has(load.beamId)),
+    plates: (model.plates ?? []).filter((plate) => !removedPlateIds.has(plate.id)),
+    surfaceLoads: (model.surfaceLoads ?? []).filter((load) => !removedPlateIds.has(load.plateId)),
+    ...loadPanels ? { loadPanels } : {},
+    // De knoop verlaat zijn schijf; een schijf met minder dan twee knopen koppelt niets meer.
+    ...model.diaphragms !== void 0 ? {
+      diaphragms: model.diaphragms.map((diaphragm) => ({ ...diaphragm, nodeIds: diaphragm.nodeIds.filter((id2) => id2 !== nodeId) })).filter((diaphragm) => diaphragm.nodeIds.length >= 2)
+    } : {}
+  };
+}
+function removeOpenFem3DSelection(model, selection) {
+  if (!selection) return model;
+  if (selection.type === "multi") {
+    let next = model;
+    for (const beamId of selection.beamIds) next = removeOpenFem3DBeam(next, beamId);
+    for (const plateId of selection.plateIds ?? []) next = removeOpenFem3DPlate(next, plateId);
+    for (const nodeId of selection.nodeIds) next = removeOpenFem3DNode(next, nodeId);
+    return next;
+  }
+  switch (selection.type) {
+    case "beam":
+      return removeOpenFem3DBeam(model, selection.id);
+    case "node":
+      return removeOpenFem3DNode(model, selection.id);
+    case "nodalLoad":
+      return removeOpenFem3DNodalLoad(model, selection.id);
+    case "memberLoad":
+      return removeOpenFem3DMemberLoad(model, selection.id);
+    case "memberPointLoad":
+      return removeOpenFem3DMemberPointLoad(model, selection.id);
+    case "thermalLoad":
+      return removeOpenFem3DThermalLoad(model, selection.id);
+    case "plate":
+      return removeOpenFem3DPlate(model, selection.id);
+    case "surfaceLoad":
+      return removeOpenFem3DSurfaceLoad(model, selection.id);
+    case "loadPanel":
+      return removeOpenFem3DLoadPanel(model, selection.id);
+  }
 }
 
 // src/components/openFem3d/openFem3dVisibility.ts
@@ -24749,6 +25357,8 @@ var DEFAULT_OPEN_FEM_3D_VISIBILITY = {
   grid: true,
   axes: true,
   memberAxes: false,
+  viewCube: true,
+  perspective: true,
   structuralGrid: true,
   deformation: true,
   reactions: true,
@@ -24761,6 +25371,16 @@ var DEFAULT_OPEN_FEM_3D_VISIBILITY = {
   momentZ: false
 };
 
+// src/components/openFem3d/openFem3dDiagramLabels.ts
+var DEFAULT_OPEN_FEM_3D_DIAGRAM_LABELS = { show: true, stand: 3 };
+function normalizeOpenFem3DDiagramLabels(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { ...DEFAULT_OPEN_FEM_3D_DIAGRAM_LABELS };
+  const raw = value;
+  const show = typeof raw.show === "boolean" ? raw.show : DEFAULT_OPEN_FEM_3D_DIAGRAM_LABELS.show;
+  const stand = typeof raw.stand === "number" && Number.isFinite(raw.stand) ? Math.min(5, Math.max(1, Math.round(raw.stand))) : DEFAULT_OPEN_FEM_3D_DIAGRAM_LABELS.stand;
+  return { show, stand };
+}
+
 // src/components/openFem3d/openFem3dViewSets.ts
 var OPEN_FEM_3D_STANDAARD_VIEW_IDS = [
   "geometrie",
@@ -24772,7 +25392,7 @@ var OPEN_FEM_3D_STANDAARD_VIEW_IDS = [
 ];
 function parseOpenFem3DStandaardViewsUitRapport(value) {
   if (!Array.isArray(value)) return [];
-  return OPEN_FEM_3D_STANDAARD_VIEW_IDS.filter((id) => value.includes(id));
+  return OPEN_FEM_3D_STANDAARD_VIEW_IDS.filter((id2) => value.includes(id2));
 }
 var VIEWS = ["iso", "top", "front", "side"];
 function vector3(value) {
@@ -24786,12 +25406,14 @@ function parseOpenFem3DViewSets(value) {
   return value.map((item, index) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Een opgeslagen 3D-weergave is ongeldig.");
     const raw = item;
-    const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : `view-${index + 1}`;
+    const id2 = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : `view-${index + 1}`;
     const name = typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : `Weergave ${index + 1}`;
     const view = VIEWS.includes(raw.view) ? raw.view : "iso";
     const cameraRaw = raw.camera;
     const position = vector3(cameraRaw?.position), target = vector3(cameraRaw?.target), up = vector3(cameraRaw?.up);
-    if (!position || !target || !up || ids.has(id)) throw new Error("Een opgeslagen 3D-weergave heeft een ongeldige camera of dubbele id.");
+    if (!position || !target || !up || ids.has(id2)) throw new Error("Een opgeslagen 3D-weergave heeft een ongeldige camera of dubbele id.");
+    const orthoRaw = cameraRaw?.orthoHalfHeight;
+    const orthoHalfHeight = typeof orthoRaw === "number" && Number.isFinite(orthoRaw) && orthoRaw > 0 ? orthoRaw : void 0;
     const savedVisibility = raw.visibility;
     if (!savedVisibility || typeof savedVisibility !== "object" || Array.isArray(savedVisibility)) {
       throw new Error("Een opgeslagen 3D-weergave mist de zichtbaarheidsinstellingen.");
@@ -24811,17 +25433,19 @@ function parseOpenFem3DViewSets(value) {
     if (mode !== void 0 && mode !== "model" && mode !== "loadCase" && mode !== "results") {
       throw new Error("Een opgeslagen 3D-weergave heeft een ongeldige tabstand.");
     }
-    ids.add(id);
+    ids.add(id2);
     return {
-      id,
+      id: id2,
       name,
       view,
-      camera: { position, target, up },
+      camera: { position, target, up, ...orthoHalfHeight === void 0 ? {} : { orthoHalfHeight } },
       visibility,
       combinationId,
       ...loadCaseId === void 0 ? {} : { loadCaseId },
       ...mode === void 0 ? {} : { mode },
-      ...typeof raw.inRapport === "boolean" ? { inRapport: raw.inRapport } : {}
+      ...typeof raw.inRapport === "boolean" ? { inRapport: raw.inRapport } : {},
+      // Optioneel; een ongeldige waarde wordt per veld de standaard.
+      ...raw.diagramLabels === void 0 ? {} : { diagramLabels: normalizeOpenFem3DDiagramLabels(raw.diagramLabels) }
     };
   });
 }
@@ -24887,14 +25511,14 @@ function combinationsFromFile(raw) {
     }
     const factors = /* @__PURE__ */ new Map();
     for (const [caseId, f] of Object.entries(c.factors ?? {})) {
-      const getal4 = typeof f === "number" ? f : Number(f);
-      if (!Number.isFinite(getal4)) {
+      const getal5 = typeof f === "number" ? f : Number(f);
+      if (!Number.isFinite(getal5)) {
         redenen.push(
           `In ${naam} is de factor van belastinggeval ${caseId} ${JSON.stringify(f)}; dat is geen getal. Een decimale KOMMA hoort een punt te zijn (1.5, niet 1,5); anders zou er met NaN gerekend worden en zou de hele combinatie leeg uitkomen.`
         );
         continue;
       }
-      factors.set(Number(caseId), getal4);
+      factors.set(Number(caseId), getal5);
     }
     return {
       id: c.id,
@@ -25213,9 +25837,9 @@ var AFBEELDINGEN = [
   }
 ];
 function beeldKernfoutAf(origineel) {
-  const tekst = origineel.trim();
+  const tekst2 = origineel.trim();
   for (const regel2 of AFBEELDINGEN) {
-    const treffer = regel2.patroon.exec(tekst);
+    const treffer = regel2.patroon.exec(tekst2);
     if (treffer) {
       return {
         code: regel2.code,
@@ -25250,6 +25874,7 @@ init_strip();
 // src/components/openFem3d/openFem3dLoadPanels.ts
 var OPEN_FEM_3D_LOAD_PANEL_TOLERANCE_M = 1e-3;
 var OPEN_FEM_3D_ONE_WAY_ANGLE_TOLERANCE_DEG = 10;
+var OPEN_FEM_3D_LOAD_PANEL_DEFAULT_Q = 1;
 var sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 var add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 var scale3 = (a, factor) => [a[0] * factor, a[1] * factor, a[2] * factor];
@@ -25333,9 +25958,9 @@ function openFem3DLoadPanelGeometry(model, panel, nodeById) {
   const tolerance = OPEN_FEM_3D_LOAD_PANEL_TOLERANCE_M;
   const byId = nodeById ?? new Map(model.nodes.map((node) => [node.id, node]));
   if (panel.nodeIds.length < 3) throw new Error(`${label} heeft minstens drie hoekknopen nodig.`);
-  const points = panel.nodeIds.map((id) => {
-    const node = byId.get(id);
-    if (!node) throw new Error(`${label}: hoekknoop ${id} bestaat niet.`);
+  const points = panel.nodeIds.map((id2) => {
+    const node = byId.get(id2);
+    if (!node) throw new Error(`${label}: hoekknoop ${id2} bestaat niet.`);
     return vec3(node);
   });
   for (let i = 0; i < points.length; i += 1) {
@@ -25580,13 +26205,13 @@ function distributeOneWay(geometry, receivers) {
   const trapezoidArea = (left, right, va, vb) => Math.max(0, (atV(right, va) - atV(left, va) + (atV(right, vb) - atV(left, vb))) / 2 * (vb - va));
   for (let level = 0; level + 1 < levels.length; level += 1) {
     const va = levels[level], vb = levels[level + 1];
-    const vm = (va + vb) / 2;
-    const crossings = edges.flatMap(([p2, q], edge) => Math.min(p2[1], q[1]) < vm && vm < Math.max(p2[1], q[1]) ? [{ f: throughUV(p2, q), edge }] : []).sort((x, y) => atV(x.f, vm) - atV(y.f, vm));
-    const crossingBeams = receivers.flatMap((receiver, index) => Math.min(receiver.a[1], receiver.b[1]) < vm && vm < Math.max(receiver.a[1], receiver.b[1]) ? [{ index, f: throughUV(receiver.a, receiver.b) }] : []);
+    const vm2 = (va + vb) / 2;
+    const crossings = edges.flatMap(([p2, q], edge) => Math.min(p2[1], q[1]) < vm2 && vm2 < Math.max(p2[1], q[1]) ? [{ f: throughUV(p2, q), edge }] : []).sort((x, y) => atV(x.f, vm2) - atV(y.f, vm2));
+    const crossingBeams = receivers.flatMap((receiver, index) => Math.min(receiver.a[1], receiver.b[1]) < vm2 && vm2 < Math.max(receiver.a[1], receiver.b[1]) ? [{ index, f: throughUV(receiver.a, receiver.b) }] : []);
     for (let c = 0; c + 1 < crossings.length; c += 2) {
       const left = crossings[c], right = crossings[c + 1];
-      const uLeft = atV(left.f, vm), uRight = atV(right.f, vm);
-      const inside = crossingBeams.filter((item) => atV(item.f, vm) >= uLeft - tolerance && atV(item.f, vm) <= uRight + tolerance).sort((x, y) => atV(x.f, vm) - atV(y.f, vm));
+      const uLeft = atV(left.f, vm2), uRight = atV(right.f, vm2);
+      const inside = crossingBeams.filter((item) => atV(item.f, vm2) >= uLeft - tolerance && atV(item.f, vm2) <= uRight + tolerance).sort((x, y) => atV(x.f, vm2) - atV(y.f, vm2));
       if (inside.length === 0) {
         const corners = [
           [atV(left.f, va), va],
@@ -25606,10 +26231,10 @@ function distributeOneWay(geometry, receivers) {
         if (wa + wb > 0) pieces[item.index].push({ va, vb, wa, wb });
       });
       const first = inside[0].f, last = inside[inside.length - 1].f;
-      if (atV(first, vm) - uLeft > tolerance) {
+      if (atV(first, vm2) - uLeft > tolerance) {
         overhangByEdge.set(left.edge, (overhangByEdge.get(left.edge) ?? 0) + trapezoidArea(left.f, first, va, vb));
       }
-      if (uRight - atV(last, vm) > tolerance) {
+      if (uRight - atV(last, vm2) > tolerance) {
         overhangByEdge.set(right.edge, (overhangByEdge.get(right.edge) ?? 0) + trapezoidArea(last, right.f, va, vb));
       }
     }
@@ -26102,10 +26727,10 @@ function withOpenFem3DLoadPanels(model) {
   const memberLoads = [...model.memberLoads ?? []];
   const memberPointLoads = [...model.memberPointLoads ?? []];
   const loads = [...model.loads ?? []];
-  const nextId = (items) => items.reduce((maximum, item) => Math.max(maximum, item.id), 0) + 1;
-  let nextMemberLoadId = nextId(memberLoads);
-  let nextPointLoadId = nextId(memberPointLoads);
-  let nextLoadId = nextId(loads);
+  const nextId2 = (items) => items.reduce((maximum, item) => Math.max(maximum, item.id), 0) + 1;
+  let nextMemberLoadId = nextId2(memberLoads);
+  let nextPointLoadId = nextId2(memberPointLoads);
+  let nextLoadId = nextId2(loads);
   const warnings = [];
   const small = 1e-12;
   for (const result of results) {
@@ -26177,6 +26802,107 @@ function withOpenFem3DLoadPanels(model) {
   conversionCache.set(model, conversion);
   return conversion;
 }
+function nextPanelId(model) {
+  return (model.loadPanels ?? []).reduce((maximum, panel) => Math.max(maximum, panel.id), 0) + 1;
+}
+function defaultOpenFem3DLoadPanelSpan(model, nodeIds) {
+  try {
+    const geometry = openFem3DLoadPanelGeometry(model, { id: 0, nodeIds, distribution: "twoWay" });
+    const n2 = geometry.normal;
+    const inPlaneX = Math.hypot(1 - n2[0] * n2[0], -n2[0] * n2[1], -n2[0] * n2[2]);
+    return inPlaneX > 0.5 ? { x: 1, y: 0, z: 0 } : { x: 0, y: 1, z: 0 };
+  } catch {
+    return { x: 1, y: 0, z: 0 };
+  }
+}
+function addOpenFem3DLoadPanel(model, nodeIds, options = {}) {
+  const distribution = options.distribution ?? "twoWay";
+  const panel = {
+    id: nextPanelId(model),
+    nodeIds: [...nodeIds],
+    ...options.caseId !== void 0 ? { caseId: options.caseId } : {},
+    q: options.q ?? OPEN_FEM_3D_LOAD_PANEL_DEFAULT_Q,
+    direction: options.direction ?? "gravity",
+    distribution,
+    ...options.spanDirection || distribution === "oneWay" ? { spanDirection: options.spanDirection ?? defaultOpenFem3DLoadPanelSpan(model, nodeIds) } : {},
+    ...options.excludedBeamIds?.length ? { excludedBeamIds: [...options.excludedBeamIds] } : {}
+  };
+  const parsed = parseOpenFem3DModel({ ...model, loadPanels: [...model.loadPanels ?? [], panel] });
+  const added = parsed.loadPanels[parsed.loadPanels.length - 1];
+  const geometry = openFem3DLoadPanelGeometry(parsed, added);
+  openFem3DLoadPanelForcePerArea(added, geometry);
+  return { ...model, loadPanels: [...model.loadPanels ?? [], added] };
+}
+function updateOpenFem3DLoadPanel(model, panelId, patch) {
+  const panels = model.loadPanels ?? [];
+  const old = panels.find((panel) => panel.id === panelId);
+  if (!old) throw new Error(`3D-belastingvlak ${panelId} bestaat niet.`);
+  const next = { ...old, ...patch };
+  if (next.distribution === "oneWay" && !next.spanDirection) {
+    next.spanDirection = defaultOpenFem3DLoadPanelSpan(model, next.nodeIds);
+  }
+  if (patch.excludedBeamIds !== void 0 && patch.excludedBeamIds.length === 0) delete next.excludedBeamIds;
+  const parsed = parseOpenFem3DModel({ ...model, loadPanels: panels.map((panel) => panel.id === panelId ? next : panel) });
+  const updated = parsed.loadPanels.find((panel) => panel.id === panelId);
+  return { ...model, loadPanels: panels.map((panel) => panel.id === panelId ? updated : panel) };
+}
+function duplicateOpenFem3DLoadPanel(model, panelId, caseId) {
+  const source = (model.loadPanels ?? []).find((panel) => panel.id === panelId);
+  if (!source) throw new Error(`3D-belastingvlak ${panelId} bestaat niet.`);
+  const id2 = nextPanelId(model);
+  const copy = {
+    ...source,
+    id: id2,
+    caseId,
+    nodeIds: [...source.nodeIds],
+    ...source.spanDirection ? { spanDirection: { ...source.spanDirection } } : {},
+    ...source.excludedBeamIds ? { excludedBeamIds: [...source.excludedBeamIds] } : {}
+  };
+  const parsed = parseOpenFem3DModel({ ...model, loadPanels: [...model.loadPanels ?? [], copy] });
+  return { model: { ...model, loadPanels: parsed.loadPanels }, panelId: id2 };
+}
+function convertOpenFem3DPlateToLoadPanels(model, plateId, options = {}) {
+  const plate = (model.plates ?? []).find((item) => item.id === plateId);
+  if (!plate) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
+  const label = `3D-plaat ${plateId}`;
+  if ((plate.openings?.length ?? 0) > 0) {
+    throw new Error(`${label} heeft openingen; een belastingvlak kent geen openingen. Verwijder de openingen of teken het vlak in delen.`);
+  }
+  if (plate.boundary?.some((segment) => segment.kind === "arc")) {
+    throw new Error(`${label} heeft een gebogen rand; een belastingvlak volgt alleen rechte randen tussen hoekknopen.`);
+  }
+  if ((plate.cornerRadiusM ?? 0) > 0) {
+    throw new Error(`${label} heeft afgeronde hoeken; zet de randstraal op 0 voordat je de plaat omzet.`);
+  }
+  const geometry = openFem3DLoadPanelGeometry(model, { id: plateId, nodeIds: plate.nodeIds, distribution: "twoWay" });
+  const n2 = geometry.normal;
+  const surfaceLoads = (model.surfaceLoads ?? []).filter((load) => load.plateId === plateId);
+  const specifications = surfaceLoads.length === 0 ? [{ caseId: options.caseId }] : surfaceLoads.map((load) => {
+    const vector2 = [load.qx, load.qy, load.qz];
+    const magnitude = norm3(vector2);
+    const alongNormal = dot3(vector2, n2);
+    if (Math.abs(load.qx) <= 1e-12 * magnitude && Math.abs(load.qy) <= 1e-12 * magnitude && Math.abs(n2[2]) >= 1e-6) {
+      return { caseId: load.caseId, q: -load.qz / Math.abs(n2[2]), direction: "gravity" };
+    }
+    if (Math.abs(Math.abs(alongNormal) - magnitude) <= 1e-9 * magnitude) {
+      return { caseId: load.caseId, q: alongNormal, direction: "normal" };
+    }
+    throw new Error(
+      `Oppervlaktebelasting ${load.id} op ${label} staat schuin op de plaat; een belastingvlak draagt alleen een verticale of loodrechte last af. Splits of verwijder die last eerst.`
+    );
+  });
+  let next = {
+    ...model,
+    plates: (model.plates ?? []).filter((item) => item.id !== plateId),
+    surfaceLoads: (model.surfaceLoads ?? []).filter((load) => load.plateId !== plateId)
+  };
+  const panelIds = [];
+  for (const specification of specifications) {
+    next = addOpenFem3DLoadPanel(next, plate.nodeIds, specification);
+    panelIds.push(next.loadPanels[next.loadPanels.length - 1].id);
+  }
+  return { model: next, panelIds };
+}
 
 // src/components/openFem3d/openFem3dScheefstand.ts
 init_combinations();
@@ -26184,6 +26910,54 @@ init_vertaalbareTekst();
 init_steelGrades();
 
 // src/components/openFem3d/openFem3dTrekSchijf.ts
+var OPEN_FEM_3D_DIAPHRAGM_HEIGHT_TOLERANCE_M = 1e-3;
+function setOpenFem3DTensionOnly(model, beamIds, on) {
+  const ids = new Set(beamIds);
+  return {
+    ...model,
+    beams: model.beams.map((beam) => {
+      if (!ids.has(beam.id)) return beam;
+      const { tensionOnly: _tensionOnly, ...rest } = beam;
+      return on ? { ...rest, tensionOnly: true } : rest;
+    })
+  };
+}
+function setOpenFem3DTensionOnlySetting(model, setting, on) {
+  const { [setting]: _previous, ...rest } = model;
+  return on ? { ...rest, [setting]: true } : rest;
+}
+function openFem3DDiaphragmOfNode(model, nodeId) {
+  return (model.diaphragms ?? []).find((diaphragm) => diaphragm.nodeIds.includes(nodeId));
+}
+function addOpenFem3DDiaphragm(model, nodeIds, name) {
+  const unique = [...new Set(nodeIds)];
+  if (unique.length < 2) return { ok: false, refusal: { kind: "tooFewNodes" } };
+  const byId = new Map(model.nodes.map((node) => [node.id, node]));
+  for (const nodeId of unique) {
+    if (!byId.has(nodeId)) return { ok: false, refusal: { kind: "missingNode", nodeId } };
+    const owner = openFem3DDiaphragmOfNode(model, nodeId);
+    if (owner) return { ok: false, refusal: { kind: "alreadyInDiaphragm", nodeId, diaphragmId: owner.id } };
+  }
+  const nodes = unique.map((id3) => byId.get(id3));
+  const low = nodes.reduce((best, node) => node.z < best.z ? node : best);
+  const high = nodes.reduce((best, node) => node.z > best.z ? node : best);
+  if (high.z - low.z > OPEN_FEM_3D_DIAPHRAGM_HEIGHT_TOLERANCE_M + 1e-9) {
+    return { ok: false, refusal: {
+      kind: "notLevel",
+      lowNodeId: low.id,
+      highNodeId: high.id,
+      differenceMm: (high.z - low.z) * 1e3
+    } };
+  }
+  const existing = model.diaphragms ?? [];
+  const id2 = existing.reduce((maximum, diaphragm2) => Math.max(maximum, diaphragm2.id), 0) + 1;
+  const trimmed = name?.trim();
+  const diaphragm = { id: id2, nodeIds: unique, ...trimmed ? { name: trimmed } : {} };
+  return { ok: true, model: { ...model, diaphragms: [...existing, diaphragm] }, id: id2 };
+}
+function removeOpenFem3DDiaphragm(model, id2) {
+  return { ...model, diaphragms: (model.diaphragms ?? []).filter((diaphragm) => diaphragm.id !== id2) };
+}
 function openFem3DSecondOrderMomentKnm(input, result) {
   const nodeById = new Map(input.nodes.map((node) => [node.id, node]));
   const displacementById = new Map(result.displacements.map((value) => [value.nodeId, value]));
@@ -26271,9 +27045,9 @@ function openFem3DGlobalForceBalance(input, result) {
   for (const element of input.shellElements ?? []) {
     const q = surfaceByPlate.get(element.plateId);
     if (!q) continue;
-    const corners = element.nodeIds.map((id) => {
-      const node = nodeById.get(id);
-      if (!node) throw new Error(`Knoop ${id} van plaatelement ${element.id} ontbreekt bij de krachtensom.`);
+    const corners = element.nodeIds.map((id2) => {
+      const node = nodeById.get(id2);
+      if (!node) throw new Error(`Knoop ${id2} van plaatelement ${element.id} ontbreekt bij de krachtensom.`);
       return [node.x, node.y, node.z];
     });
     for (const [a, b, c] of [[corners[0], corners[1], corners[2]], [corners[0], corners[2], corners[3]]]) {
@@ -26550,8 +27324,8 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
       referenced.add(beam.startNodeId);
       referenced.add(beam.endNodeId);
     }
-    for (const element of plateMesh.elements) for (const id of element.nodeIds) referenced.add(id);
-    for (const ids of plateMesh.beamIntermediateNodes.values()) for (const id of ids) referenced.add(id);
+    for (const element of plateMesh.elements) for (const id2 of element.nodeIds) referenced.add(id2);
+    for (const ids of plateMesh.beamIntermediateNodes.values()) for (const id2 of ids) referenced.add(id2);
     for (const support of model.supports ?? []) referenced.add(support.nodeId);
     for (const load of nodalLoads) referenced.add(load.nodeId);
     for (const load of fit?.nodalLoads ?? []) referenced.add(load.nodeId);
@@ -26594,7 +27368,7 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
     analysis,
     // Alleen de meetkunde: de kern weigert onbekende velden (deny_unknown_fields),
     // en een levelkoppeling (`levelId`) of naam is modelinvoer, geen rekeninvoer.
-    nodes: nodes.map(({ id, x, y, z }) => ({ id, x, y, z })),
+    nodes: nodes.map(({ id: id2, x, y, z }) => ({ id: id2, x, y, z })),
     materials,
     sections,
     members,
@@ -26614,7 +27388,7 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
     ...plateEntries.length > 0 ? { plates: plateEntries, shellElements, surfaceLoads } : {},
     // Starre schijven: alleen id en knopen; de naam is modelinvoer. Hoogte,
     // dubbele knopen en opleggingen keurt de kern met een duidelijke melding.
-    ...(model.diaphragms?.length ?? 0) > 0 ? { diaphragms: model.diaphragms.map(({ id, nodeIds }) => ({ id, nodeIds: [...nodeIds] })) } : {},
+    ...(model.diaphragms?.length ?? 0) > 0 ? { diaphragms: model.diaphragms.map(({ id: id2, nodeIds }) => ({ id: id2, nodeIds: [...nodeIds] })) } : {},
     // Alleen meesturen als het aan staat en er trek-alleen staven zijn: zonder
     // de velden rekent de kern precies als voorheen.
     ...fit ? { tensionOnlyFit: { ...contractLoads(fit), ...plateEntries.length > 0 ? { surfaceLoads: fit.surfaceLoads } : {} } } : {},
@@ -27048,8 +27822,8 @@ var StaalhalFout = class extends Error {
   }
 };
 var fmt = (waarde) => (Math.round(waarde * 1e3) / 1e3).toString().replace(".", ",");
-function probleem(lijst, code, veld, melding, waarden) {
-  lijst.push({ code, veld, melding, ...waarden ? { waarden } : {} });
+function probleem(lijst2, code, veld, melding, waarden) {
+  lijst2.push({ code, veld, melding, ...waarden ? { waarden } : {} });
 }
 function isObject(waarde) {
   return typeof waarde === "object" && waarde !== null && !Array.isArray(waarde);
@@ -27074,8 +27848,8 @@ function leesObject(waarde, veld, velden, p2) {
   }
   return waarde;
 }
-function leesGetal(obj, sleutel, veld, standaard, regels, p2) {
-  const waarde = obj[sleutel];
+function leesGetal(obj2, sleutel, veld, standaard, regels, p2) {
+  const waarde = obj2[sleutel];
   if (waarde === void 0) return standaard;
   if (typeof waarde !== "number" || !Number.isFinite(waarde)) {
     probleem(p2, "geenGetal", veld, `\`${veld}\` moet een eindig getal zijn.`);
@@ -27102,8 +27876,8 @@ function leesGetal(obj, sleutel, veld, standaard, regels, p2) {
   }
   return waarde;
 }
-function leesKeuze(obj, sleutel, veld, toegestaan, standaard, p2) {
-  const waarde = obj[sleutel];
+function leesKeuze(obj2, sleutel, veld, toegestaan, standaard, p2) {
+  const waarde = obj2[sleutel];
   if (waarde === void 0) return standaard;
   if (typeof waarde !== "string" || !toegestaan.includes(waarde)) {
     probleem(
@@ -27117,8 +27891,8 @@ function leesKeuze(obj, sleutel, veld, toegestaan, standaard, p2) {
   }
   return waarde;
 }
-function leesJaNee(obj, sleutel, veld, standaard, p2) {
-  const waarde = obj[sleutel];
+function leesJaNee(obj2, sleutel, veld, standaard, p2) {
+  const waarde = obj2[sleutel];
   if (waarde === void 0) return standaard;
   if (typeof waarde !== "boolean") {
     probleem(p2, "geenJaNee", veld, `\`${veld}\` moet true of false zijn.`);
@@ -27126,8 +27900,8 @@ function leesJaNee(obj, sleutel, veld, standaard, p2) {
   }
   return waarde;
 }
-function leesTekst(obj, sleutel, veld, standaard, p2) {
-  const waarde = obj[sleutel];
+function leesTekst(obj2, sleutel, veld, standaard, p2) {
+  const waarde = obj2[sleutel];
   if (waarde === void 0) return standaard;
   if (typeof waarde !== "string") {
     probleem(p2, "geenTekst", veld, `\`${veld}\` moet tekst zijn.`);
@@ -27560,13 +28334,13 @@ function maakStaalhal(invoer = {}) {
   const kolommen = [];
   for (let i = 0; i < nSpant; i++) {
     for (const [zijde, j] of [[0, 0], [1, nDak - 1]]) {
-      const id = staaf("kolom", k(`voet-${i}-${zijde}`), k(`dak-${i}-${j}`), pr.kolom.profiel, pr.kolom.materiaal, {
+      const id2 = staaf("kolom", k(`voet-${i}-${zijde}`), k(`dak-${i}-${j}`), pr.kolom.profiel, pr.kolom.materiaal, {
         rollAngleRad: Math.PI / 2,
         // Op het balkrooster is een scharnierende voet een eindscharnier van
         // de kolom zelf; op vaste opleggingen is het de oplegging.
         ...!opleggingen && voetScharnier ? { releases: { myStart: true, mzStart: true } } : {}
       });
-      kolommen.push({ id, i, zijde });
+      kolommen.push({ id: id2, i, zijde });
       if (opleggingen) {
         supports.push({
           nodeId: k(`voet-${i}-${zijde}`),
@@ -27587,16 +28361,16 @@ function maakStaalhal(invoer = {}) {
   for (let i = 0; i + 1 < nSpant; i++) {
     for (let j = 0; j < nDak; j++) {
       const rand = j === 0 || j === nDak - 1;
-      const keuze = rand ? pr.randligger : pr.gording;
-      const id = staaf(
+      const keuze2 = rand ? pr.randligger : pr.gording;
+      const id2 = staaf(
         rand ? "randligger" : "gording",
         k(`dak-${i}-${j}`),
         k(`dak-${i + 1}-${j}`),
-        keuze.profiel,
-        keuze.materiaal,
+        keuze2.profiel,
+        keuze2.materiaal,
         { releases: { ...SCHARNIEREN } }
       );
-      gordingen.push({ id, rand });
+      gordingen.push({ id: id2, rand });
     }
   }
   for (const vak of maten.verbandvakken) {
@@ -27740,7 +28514,7 @@ function maakStaalhal(invoer = {}) {
     }
   }
   const model = parseOpenFem3DModel({ nodes, beams, supports, loads, memberLoads, memberPointLoads: [] });
-  const stramien = {
+  const stramien3 = {
     enabled: true,
     xAxes: Array.from({ length: nSpant }, (_, i) => ({ id: `spant-${i + 1}`, label: String(i + 1), position: i * maten.spantafstandMm })),
     yAxes: [
@@ -27758,7 +28532,7 @@ function maakStaalhal(invoer = {}) {
   return {
     parameters: p2,
     model,
-    stramien,
+    stramien: stramien3,
     loadCases,
     selfWeightEnabled: p2.eigenGewicht,
     samenvatting: {
@@ -27897,7 +28671,7 @@ function rekenopzet(hal, reken) {
     ...(rekenmodel.loads ?? []).map(openFem3DLoadCaseId),
     ...(rekenmodel.memberLoads ?? []).map(openFem3DLoadCaseId)
   ]);
-  const combinaties = defaultCombinations(hal.loadCases, reken.gevolgklasse).filter((c) => [...belast].some((id) => (c.factors.get(id) ?? 0) !== 0));
+  const combinaties = defaultCombinations(hal.loadCases, reken.gevolgklasse).filter((c) => [...belast].some((id2) => (c.factors.get(id2) ?? 0) !== 0));
   const verzoek = (selectie) => ({ ...buildOpenFem3DSolveRequest(rekenmodel, reken.analyse, selectie), bucklingModes: 0 });
   const verzoeken = [
     ...hal.loadCases.filter((c) => belast.has(c.id)).map((c) => ({
@@ -27982,7 +28756,7 @@ function opStaalhalUitwerken(payload) {
   if (vreemd.length > 0) {
     throw invoerFout("resultaten", `Onbekende resultaatsleutels: ${vreemd.join(", ")}; verwacht: ${[...bekend].join(", ")}.`);
   }
-  const kolomkoppen = new Set(hal.samenvatting.groepen.kolom.map((id) => hal.model.beams.find((b) => b.id === id).endNodeId));
+  const kolomkoppen = new Set(hal.samenvatting.groepen.kolom.map((id2) => hal.model.beams.find((b) => b.id === id2).endNodeId));
   const palen = new Set(hal.samenvatting.paalknopen);
   const controle = (v, r) => {
     const reactiesom = somVan(r);
@@ -28063,8 +28837,8 @@ init_steelGrades();
 
 // src/io/stepLezer.ts
 var StepRef = class {
-  constructor(id) {
-    this.id = id;
+  constructor(id2) {
+    this.id = id2;
   }
 };
 var StepEnum = class {
@@ -28161,8 +28935,8 @@ function decodeerStepTekst(ruw) {
   return uit;
 }
 var Lezer = class {
-  constructor(tekst) {
-    this.tekst = tekst;
+  constructor(tekst2) {
+    this.tekst = tekst2;
   }
   pos = 0;
   regel(pos = this.pos) {
@@ -28329,8 +29103,8 @@ var Lezer = class {
     return { type, args: this.lijst() };
   }
 };
-function leesStep(tekst) {
-  const t = tekst.charCodeAt(0) === 65279 ? tekst.slice(1) : tekst;
+function leesStep(tekst2) {
+  const t = tekst2.charCodeAt(0) === 65279 ? tekst2.slice(1) : tekst2;
   const lezer = new Lezer(t);
   lezer.wit();
   if (t.startsWith("PK", lezer.pos)) {
@@ -28378,12 +29152,12 @@ function leesStep(tekst) {
           const begin = lezer.pos;
           while (isCijfer(t.charCodeAt(lezer.pos))) lezer.pos += 1;
           if (lezer.pos === begin) lezer.fout("recordnummer ontbreekt na #");
-          const id = Number(t.slice(begin, lezer.pos));
+          const id2 = Number(t.slice(begin, lezer.pos));
           lezer.eis("=");
           const inhoud = lezer.recordInhoud();
           lezer.eis(";");
-          if (records.has(id)) lezer.fout(`record #${id} staat twee keer in het bestand`, start);
-          records.set(id, { id, ...inhoud });
+          if (records.has(id2)) lezer.fout(`record #${id2} staat twee keer in het bestand`, start);
+          records.set(id2, { id: id2, ...inhoud });
           continue;
         }
         const woord = lezer.woord(true);
@@ -28485,8 +29259,8 @@ var IfcInhoud = class {
     this.records = bestand.records;
     this.schema = bestand.schemas[0] ?? "";
     for (const r of this.records.values()) {
-      const lijst = this.perType.get(r.type);
-      if (lijst) lijst.push(r);
+      const lijst2 = this.perType.get(r.type);
+      if (lijst2) lijst2.push(r);
       else this.perType.set(r.type, [r]);
     }
     for (const type of T.toewijzing) {
@@ -28494,9 +29268,9 @@ var IfcInhoud = class {
         const groep = refVan(arg(r, 6));
         if (groep === null) continue;
         const factor = type === "IFCRELASSIGNSTOGROUPBYFACTOR" ? getalVan(arg(r, 7)) : null;
-        const lijst = this.toewijzingen.get(groep) ?? [];
-        for (const obj of refsVan(arg(r, 4))) lijst.push({ obj, factor: factor ?? null });
-        this.toewijzingen.set(groep, lijst);
+        const lijst2 = this.toewijzingen.get(groep) ?? [];
+        for (const obj2 of refsVan(arg(r, 4))) lijst2.push({ obj: obj2, factor: factor ?? null });
+        this.toewijzingen.set(groep, lijst2);
       }
     }
     for (const r of this.vanType("IFCRELCONNECTSSTRUCTURALACTIVITY")) {
@@ -28507,15 +29281,15 @@ var IfcInhoud = class {
       for (const r of this.vanType(type)) {
         const lid = refVan(arg(r, 4));
         if (lid === null) continue;
-        const lijst = this.staafKoppelingen.get(lid) ?? [];
-        lijst.push(r);
-        this.staafKoppelingen.set(lid, lijst);
+        const lijst2 = this.staafKoppelingen.get(lid) ?? [];
+        lijst2.push(r);
+        this.staafKoppelingen.set(lid, lijst2);
       }
     }
     for (const r of this.vanType("IFCRELASSOCIATESMATERIAL")) {
       const materiaal = refVan(arg(r, 5));
       if (materiaal === null) continue;
-      for (const obj of refsVan(arg(r, 4))) if (!this.materiaalVan.has(obj)) this.materiaalVan.set(obj, materiaal);
+      for (const obj2 of refsVan(arg(r, 4))) if (!this.materiaalVan.has(obj2)) this.materiaalVan.set(obj2, materiaal);
     }
     for (const r of this.vanType("IFCRELDEFINESBYPROPERTIES")) {
       const waarden = [];
@@ -28523,30 +29297,30 @@ var IfcInhoud = class {
         const pset = this.get(psetId);
         if (!pset || pset.type !== "IFCPROPERTYSET") continue;
         const psetNaam = tekstVan(arg(pset, 2)) ?? "";
-        for (const id of refsVan(arg(pset, 4))) {
-          const p2 = this.get(id);
+        for (const id2 of refsVan(arg(pset, 4))) {
+          const p2 = this.get(id2);
           if (!p2) continue;
           const naam = tekstVan(arg(p2, 0)) ?? "";
           let ruw = null;
           if (p2.type === "IFCPROPERTYSINGLEVALUE") ruw = arg(p2, 2);
           else if (p2.type === "IFCPROPERTYENUMERATEDVALUE") {
-            const lijst = arg(p2, 2);
-            ruw = Array.isArray(lijst) ? lijst[0] ?? null : null;
+            const lijst2 = arg(p2, 2);
+            ruw = Array.isArray(lijst2) ? lijst2[0] ?? null : null;
           } else continue;
           const waarde = tekstVan(ruw) ?? getalVan(ruw) ?? janeeVan(ruw);
           if (waarde !== null) waarden.push({ pset: psetNaam, naam, waarde });
         }
       }
       if (waarden.length === 0) continue;
-      for (const obj of refsVan(arg(r, 4))) {
-        const lijst = this.eigenschappen.get(obj) ?? [];
-        lijst.push(...waarden);
-        this.eigenschappen.set(obj, lijst);
+      for (const obj2 of refsVan(arg(r, 4))) {
+        const lijst2 = this.eigenschappen.get(obj2) ?? [];
+        lijst2.push(...waarden);
+        this.eigenschappen.set(obj2, lijst2);
       }
     }
   }
-  get(id) {
-    return id === null || id === void 0 ? void 0 : this.records.get(id);
+  get(id2) {
+    return id2 === null || id2 === void 0 ? void 0 : this.records.get(id2);
   }
   vanType(type) {
     return this.perType.get(type) ?? [];
@@ -28555,10 +29329,10 @@ var IfcInhoud = class {
     return this.toewijzingen.get(groep) ?? [];
   }
 };
-function leesIfcAnalyseBestand(tekst) {
+function leesIfcAnalyseBestand(tekst2) {
   let bestand;
   try {
-    bestand = leesStep(tekst);
+    bestand = leesStep(tekst2);
   } catch (fout) {
     if (fout instanceof StepLeesFout) throw new IfcImportFout("leesfout", `Het IFC-bestand is niet te lezen. ${fout.message}`);
     throw fout;
@@ -28615,8 +29389,8 @@ var SI_NAAM = {
   SECOND: { macht: 1, factor: 1, symbool: "s" },
   KELVIN: { macht: 1, factor: 1, symbool: "K" }
 };
-function eenheidVan(ifc, id, bezocht = /* @__PURE__ */ new Set()) {
-  const r = ifc.get(id);
+function eenheidVan(ifc, id2, bezocht = /* @__PURE__ */ new Set()) {
+  const r = ifc.get(id2);
   if (!r || bezocht.has(r.id)) return null;
   bezocht.add(r.id);
   if (r.type === "IFCSIUNIT") {
@@ -28658,10 +29432,10 @@ function leesEenheden(ifc) {
   const toekenning = ifc.get(refVan(arg(project, 8))) ?? ifc.vanType("IFCUNITASSIGNMENT")[0];
   const benoemd = /* @__PURE__ */ new Map();
   const afgeleid = /* @__PURE__ */ new Map();
-  for (const id of refsVan(arg(toekenning, 0))) {
-    const r = ifc.get(id);
+  for (const id2 of refsVan(arg(toekenning, 0))) {
+    const r = ifc.get(id2);
     if (!r) continue;
-    const eenheid = eenheidVan(ifc, id);
+    const eenheid = eenheidVan(ifc, id2);
     if (!eenheid) continue;
     if (r.type === "IFCDERIVEDUNIT") {
       const soort = enumVan(arg(r, 1));
@@ -28737,16 +29511,16 @@ var Meetkunde = class {
     this.meld = meld;
   }
   wereldCache = /* @__PURE__ */ new Map();
-  punt(id) {
-    const r = this.ifc.get(id);
+  punt(id2) {
+    const r = this.ifc.get(id2);
     if (!r || r.type !== "IFCCARTESIANPOINT") return null;
     const c = arg(r, 0);
     if (!Array.isArray(c)) return null;
     const waarden = c.map((w) => getalVan(w) ?? 0);
     return [(waarden[0] ?? 0) * this.lengte, (waarden[1] ?? 0) * this.lengte, (waarden[2] ?? 0) * this.lengte];
   }
-  richting(id) {
-    const r = this.ifc.get(id);
+  richting(id2) {
+    const r = this.ifc.get(id2);
     if (!r || r.type !== "IFCDIRECTION") return null;
     const c = arg(r, 0);
     if (!Array.isArray(c)) return null;
@@ -28754,8 +29528,8 @@ var Meetkunde = class {
     return norm(v) > KLEIN ? unit(v) : null;
   }
   /** IfcAxis2Placement3D of 2D → transformatie (IfcBuildAxes / IfcFirstProjAxis). */
-  plaatsing(id) {
-    const r = this.ifc.get(id);
+  plaatsing(id2) {
+    const r = this.ifc.get(id2);
     if (!r) return IDENTITEIT;
     if (r.type === "IFCAXIS2PLACEMENT3D") {
       const o = this.punt(refVan(arg(r, 0))) ?? [0, 0, 0];
@@ -28774,13 +29548,13 @@ var Meetkunde = class {
     return IDENTITEIT;
   }
   /** IfcLocalPlacement-keten → wereldtransformatie. */
-  wereld(id, keten = /* @__PURE__ */ new Set()) {
-    if (id === null) return IDENTITEIT;
-    const bekend = this.wereldCache.get(id);
+  wereld(id2, keten = /* @__PURE__ */ new Set()) {
+    if (id2 === null) return IDENTITEIT;
+    const bekend = this.wereldCache.get(id2);
     if (bekend) return bekend;
-    const r = this.ifc.get(id);
-    if (!r || keten.has(id)) return IDENTITEIT;
-    keten.add(id);
+    const r = this.ifc.get(id2);
+    if (!r || keten.has(id2)) return IDENTITEIT;
+    keten.add(id2);
     let uit = IDENTITEIT;
     if (r.type === "IFCLOCALPLACEMENT") {
       const ouder = refVan(arg(r, 0));
@@ -28788,12 +29562,12 @@ var Meetkunde = class {
     } else {
       this.meld(`Plaatsing ${ifcNaam(r.type)} wordt niet ondersteund; als oorsprong ingelezen`);
     }
-    this.wereldCache.set(id, uit);
+    this.wereldCache.set(id2, uit);
     return uit;
   }
   /** Vertexpunt → coördinaten in het eigen stelsel van het item. */
-  vertex(id) {
-    const r = this.ifc.get(id);
+  vertex(id2) {
+    const r = this.ifc.get(id2);
     if (!r || r.type !== "IFCVERTEXPOINT") return null;
     return this.punt(refVan(arg(r, 0)));
   }
@@ -28832,11 +29606,11 @@ var Meetkunde = class {
 };
 var Meldingen = class {
   lijst = /* @__PURE__ */ new Map();
-  voeg(soort, tekst, detail) {
-    const sleutel = `${soort}|${tekst}`;
+  voeg(soort, tekst2, detail) {
+    const sleutel = `${soort}|${tekst2}`;
     let item = this.lijst.get(sleutel);
     if (!item) {
-      item = { soort, tekst, details: [] };
+      item = { soort, tekst: tekst2, details: [] };
       this.lijst.set(sleutel, item);
     }
     if (detail !== void 0 && !item.details.includes(detail)) item.details.push(detail);
@@ -28862,12 +29636,12 @@ function modelNaam(r, nummer) {
 function modellenVan(ifc) {
   const modellen = ifc.vanType(T.analyseModel).slice().sort((a, b) => a.id - b.id);
   const inLoadedBy = /* @__PURE__ */ new Set();
-  for (const m of modellen) for (const id of refsVan(arg(m, 7))) inLoadedBy.add(id);
+  for (const m of modellen) for (const id2 of refsVan(arg(m, 7))) inLoadedBy.add(id2);
   const uit = modellen.map((record, index) => {
     const leden = ifc.leden(record.id).map((t) => ifc.get(t.obj)).filter((r) => !!r);
     const gevallen = [], combinaties = [], groepen2 = [];
-    for (const id of refsVan(arg(record, 7))) {
-      const g = ifc.get(id);
+    for (const id2 of refsVan(arg(record, 7))) {
+      const g = ifc.get(id2);
       if (!g || !T.lastgroepen.has(g.type)) continue;
       const soort = enumVan(arg(g, 5));
       if (soort === "LOAD_COMBINATION") combinaties.push(g);
@@ -28913,35 +29687,35 @@ function info(m) {
 function ifcAnalyseModellen(invoer) {
   return modellenVan(bestandVan(invoer)).map(info);
 }
-function kiesModel(modellen, keuze) {
-  const lijst = modellen.map(info);
-  const opsomming = lijst.map((m) => `${m.nummer} "${m.naam}"`).join(", ");
+function kiesModel(modellen, keuze2) {
+  const lijst2 = modellen.map(info);
+  const opsomming = lijst2.map((m) => `${m.nummer} "${m.naam}"`).join(", ");
   if (modellen.length === 0) {
     throw new IfcImportFout(
       "geenAnalysemodel",
       "Dit IFC-bestand bevat geen analysemodel (IfcStructuralAnalysisModel). Het is waarschijnlijk een bouwkundig model; exporteer uit het rekenpakket het analysemodel (Structural Analysis View)."
     );
   }
-  if (keuze === void 0 || keuze === "") {
+  if (keuze2 === void 0 || keuze2 === "") {
     if (modellen.length === 1) return modellen[0];
     throw new IfcImportFout(
       "modelKeuzeNodig",
       `Het bestand bevat ${modellen.length} analysemodellen: ${opsomming}. Kies er \xE9\xE9n, op naam of nummer.`,
-      lijst
+      lijst2
     );
   }
-  if (typeof keuze === "number") {
-    const gevonden = modellen[keuze - 1];
-    if (Number.isInteger(keuze) && gevonden) return gevonden;
+  if (typeof keuze2 === "number") {
+    const gevonden = modellen[keuze2 - 1];
+    if (Number.isInteger(keuze2) && gevonden) return gevonden;
   } else {
-    const gezocht = keuze.trim().toLowerCase();
+    const gezocht = keuze2.trim().toLowerCase();
     const gevonden = modellen.find((m) => m.naam.trim().toLowerCase() === gezocht);
     if (gevonden) return gevonden;
   }
   throw new IfcImportFout(
     "modelOnbekend",
-    `Analysemodel ${typeof keuze === "number" ? keuze : `"${keuze}"`} staat niet in het bestand; kies uit ${opsomming}.`,
-    lijst
+    `Analysemodel ${typeof keuze2 === "number" ? keuze2 : `"${keuze2}"`} staat niet in het bestand; kies uit ${opsomming}.`,
+    lijst2
   );
 }
 var SERIE_VOORKEUR = ["IPE", "HEA", "HEB", "HEM", "UNP", "UPE", "SHS", "RHS", "CHS"];
@@ -29079,8 +29853,8 @@ function conditieVan(w, factor, leeg2) {
   if (enumVan(w) === "U") return { soort: leeg2 };
   return { soort: "ongeldig" };
 }
-function condities(ifc, id, eenheden, leeg2) {
-  const r = ifc.get(id);
+function condities(ifc, id2, eenheden, leeg2) {
+  const r = ifc.get(id2);
   if (!r || r.type !== "IFCBOUNDARYNODECONDITION" && r.type !== "IFCBOUNDARYNODECONDITIONWARPING") return null;
   return [1, 2, 3, 4, 5, 6].map((i) => conditieVan(arg(r, i), i <= 3 ? eenheden.veerTranslatie : eenheden.veerRotatie, leeg2));
 }
@@ -29119,8 +29893,8 @@ var KnoopZoeker = class _KnoopZoeker {
   }
   voeg(knoop) {
     const s = `${_KnoopZoeker.cel(knoop.x)},${_KnoopZoeker.cel(knoop.y)},${_KnoopZoeker.cel(knoop.z)}`;
-    const lijst = this.cellen.get(s);
-    if (lijst) lijst.push(knoop);
+    const lijst2 = this.cellen.get(s);
+    if (lijst2) lijst2.push(knoop);
     else this.cellen.set(s, [knoop]);
   }
   zoek(p2) {
@@ -29146,7 +29920,7 @@ var Importeur = class {
     this.model = model;
     this.eenheden = leesEenheden(ifc);
     this.meldingen.voeg("toelichting", this.eenheden.omschrijving.replace(/\.$/, ""));
-    this.meetkunde = new Meetkunde(ifc, this.eenheden.lengte, (tekst) => this.meldingen.voeg("nietOndersteund", tekst));
+    this.meetkunde = new Meetkunde(ifc, this.eenheden.lengte, (tekst2) => this.meldingen.voeg("nietOndersteund", tekst2));
     const gedeeld = refVan(arg(model.record, 9));
     const wereld = gedeeld === null ? IDENTITEIT : this.meetkunde.wereld(gedeeld);
     this.gedeeldInv = inverse(wereld);
@@ -29281,12 +30055,12 @@ var Importeur = class {
       this.meldingen.voeg("waarschuwing", "Twee opleggingen op dezelfde knoop; de eerste is aangehouden", label);
       return;
     }
-    const as = ["ux", "uy", "uz", "rx", "ry", "rz"];
+    const as3 = ["ux", "uy", "uz", "rx", "ry", "rz"];
     const veer = ["kxKnPerM", "kyKnPerM", "kzKnPerM", "krxKnmPerRad", "kryKnmPerRad", "krzKnmPerRad"];
     const support = { nodeId: knoop.id, ux: false, uy: false, uz: false, rx: false, ry: false, rz: false };
     const springs = {};
     c.forEach((x, i) => {
-      if (x.soort === "vast") support[as[i]] = true;
+      if (x.soort === "vast") support[as3[i]] = true;
       else if (x.soort === "veer") springs[veer[i]] = x.waarde;
     });
     if (Object.keys(springs).length > 0) support.springs = springs;
@@ -29379,7 +30153,7 @@ var Importeur = class {
         this.meetkunde,
         mat.profiel,
         material !== void 0,
-        (soort2, tekst) => this.meldingen.voeg(soort2, tekst, label)
+        (soort2, tekst2) => this.meldingen.voeg(soort2, tekst2, label)
       );
       roll += profiel.extraRol;
       if (mat.cardinalPoint !== null && mat.cardinalPoint !== 5 && mat.cardinalPoint !== 10) {
@@ -29450,9 +30224,9 @@ var Importeur = class {
     }
   }
   // ── Tussenknopen ──
-  connectieLabel(id) {
-    const naam = (tekstVan(arg(this.ifc.get(id), 2)) ?? "").trim();
-    return naam ? `knoop "${naam}"` : `knoop #${id}`;
+  connectieLabel(id2) {
+    const naam = (tekstVan(arg(this.ifc.get(id2), 2)) ?? "").trim();
+    return naam ? `knoop "${naam}"` : `knoop #${id2}`;
   }
   /**
    * Een staaf die via IfcRelConnectsStructuralMember ook tussen haar
@@ -29470,10 +30244,10 @@ var Importeur = class {
       const knippunten = /* @__PURE__ */ new Map();
       for (const koppeling of this.ifc.staafKoppelingen.get(info2.record.id) ?? []) {
         const connectieId = refVan(arg(koppeling, 5));
-        const knoopId = this.knoopVanConnectie.get(connectieId ?? -1);
-        if (connectieId === null || knoopId === void 0 || knoopId === a.id || knoopId === b.id) continue;
+        const knoopId3 = this.knoopVanConnectie.get(connectieId ?? -1);
+        if (connectieId === null || knoopId3 === void 0 || knoopId3 === a.id || knoopId3 === b.id) continue;
         const label = `${info2.label} bij ${this.connectieLabel(connectieId)}`;
-        const k = this.nodeById.get(knoopId);
+        const k = this.nodeById.get(knoopId3);
         const rel = sub([k.x, k.y, k.z], [a.x, a.y, a.z]);
         const s = dot4(rel, ex);
         if (norm(sub(rel, scale(ex, s))) > KNOOP_TOLERANTIE_M || s < -KNOOP_TOLERANTIE_M || s > info2.lengte + KNOOP_TOLERANTIE_M) {
@@ -29484,7 +30258,7 @@ var Importeur = class {
           this.meldingen.voeg("waarschuwing", "Aansluiting op een knoop binnen 1 mm van een staafeinde; genegeerd", label);
           continue;
         }
-        knippunten.set(knoopId, s);
+        knippunten.set(knoopId3, s);
         const c = condities(this.ifc, refVan(arg(koppeling, 6)), this.eenheden, "vast");
         if (c?.some((x) => x.soort === "vrij" || x.soort === "veer")) {
           this.meldingen.voeg(
@@ -29502,7 +30276,7 @@ var Importeur = class {
         continue;
       }
       const punten = [...knippunten].sort((p2, q) => p2[1] - q[1]);
-      const knopen = [a.id, ...punten.map(([id]) => id), b.id];
+      const knopen = [a.id, ...punten.map(([id2]) => id2), b.id];
       const posities = [0, ...punten.map(([, s]) => s), info2.lengte];
       for (let i = 0; i + 1 < knopen.length; i += 1) {
         const p2 = this.nodeById.get(knopen[i]), q = this.nodeById.get(knopen[i + 1]);
@@ -29569,9 +30343,9 @@ var Importeur = class {
         if (refVan(arg(koppeling, 7)) !== null) {
           this.meldingen.voeg("nietOndersteund", "Aanvullende aansluitvoorwaarden (AdditionalConditions) worden niet ondersteund; genegeerd", label);
         }
-        const knoopId = this.knoopVanConnectie.get(refVan(arg(koppeling, 5)) ?? -1);
-        if (knoopId === void 0) continue;
-        const kant = knoopId === startId ? "Start" : knoopId === eindId ? "End" : null;
+        const knoopId3 = this.knoopVanConnectie.get(refVan(arg(koppeling, 5)) ?? -1);
+        if (knoopId3 === void 0) continue;
+        const kant = knoopId3 === startId ? "Start" : knoopId3 === eindId ? "End" : null;
         if (!kant) continue;
         const c = condities(this.ifc, refVan(arg(koppeling, 6)), this.eenheden, "vast");
         if (!c) continue;
@@ -29594,7 +30368,7 @@ var Importeur = class {
         if (stelselId !== null) {
           const s = this.meetkunde.plaatsing(stelselId);
           voorwaardeAssen = [draai(trafo, s.x), draai(trafo, s.y), draai(trafo, s.z)];
-          const samen = voorwaardeAssen.every((as, i) => Math.abs(Math.abs(dot4(as, ifcAssen[i])) - 1) < 1e-6);
+          const samen = voorwaardeAssen.every((as3, i) => Math.abs(Math.abs(dot4(as3, ifcAssen[i])) - 1) < 1e-6);
           if (!samen) {
             this.meldingen.voeg(
               "waarschuwing",
@@ -29605,8 +30379,8 @@ var Importeur = class {
         }
         const vrij = voorwaardeAssen.filter((_, i) => c[3 + i].soort === "vrij");
         const velden = kant === "Start" ? ["torsionStart", "myStart", "mzStart"] : ["torsionEnd", "myEnd", "mzEnd"];
-        [assen.ex, assen.ey, assen.ez].forEach((as, i) => {
-          const aandeel = vrij.reduce((som, f) => som + dot4(as, f) ** 2, 0);
+        [assen.ex, assen.ey, assen.ez].forEach((as3, i) => {
+          const aandeel = vrij.reduce((som, f) => som + dot4(as3, f) ** 2, 0);
           if (aandeel > 1e-6 && aandeel < 1 - 1e-6) {
             this.meldingen.voeg(
               "waarschuwing",
@@ -29652,10 +30426,10 @@ var Importeur = class {
   /** De punten van een lus (in modelcoördinaten), zonder knopen te maken. */
   lusPunten(bound, trafo) {
     const lus = this.ifc.get(refVan(arg(bound, 0)));
-    const lokaal = lus?.type === "IFCEDGELOOP" ? refsVan(arg(lus, 0)).map((id) => {
-      const r = this.meetkunde.rand(this.ifc.get(id));
+    const lokaal = lus?.type === "IFCEDGELOOP" ? refsVan(arg(lus, 0)).map((id2) => {
+      const r = this.meetkunde.rand(this.ifc.get(id2));
       return r ? this.meetkunde.vertex(r.start) : null;
-    }) : lus?.type === "IFCPOLYLOOP" ? refsVan(arg(lus, 0)).map((id) => this.meetkunde.punt(id)) : [null];
+    }) : lus?.type === "IFCPOLYLOOP" ? refsVan(arg(lus, 0)).map((id2) => this.meetkunde.punt(id2)) : [null];
     if (lokaal.some((p2) => p2 === null)) return null;
     return lokaal.map((p2) => pas(trafo, p2));
   }
@@ -29664,15 +30438,15 @@ var Importeur = class {
     const lus = this.ifc.get(refVan(arg(bound, 0)));
     const knopen = [];
     if (lus?.type === "IFCEDGELOOP") {
-      for (const id of refsVan(arg(lus, 0))) {
-        const r = this.meetkunde.rand(this.ifc.get(id));
+      for (const id2 of refsVan(arg(lus, 0))) {
+        const r = this.meetkunde.rand(this.ifc.get(id2));
         const knoop = r ? this.knoopVoorVertex(r.start, trafo, "vlakhoeken") : null;
         if (!knoop) return null;
         knopen.push(knoop.id);
       }
     } else if (lus?.type === "IFCPOLYLOOP") {
-      for (const id of refsVan(arg(lus, 0))) {
-        const lokaal = this.meetkunde.punt(id);
+      for (const id2 of refsVan(arg(lus, 0))) {
+        const lokaal = this.meetkunde.punt(id2);
         if (!lokaal) return null;
         const p2 = pas(trafo, lokaal);
         let knoop = this.zoeker.zoek(p2);
@@ -29687,8 +30461,8 @@ var Importeur = class {
     if (schoon.length > 1 && schoon[0] === schoon[schoon.length - 1]) schoon.pop();
     if (janeeVan(arg(bound, 1)) === false) schoon.reverse();
     if (schoon.length < 3) return null;
-    return { knopen: schoon, punten: schoon.map((id) => {
-      const k = this.nodeById.get(id);
+    return { knopen: schoon, punten: schoon.map((id2) => {
+      const k = this.nodeById.get(id2);
       return [k.x, k.y, k.z];
     }) };
   }
@@ -29704,7 +30478,7 @@ var Importeur = class {
       }
       if (faces.length > 1) this.meldingen.voeg("waarschuwing", "Vlak met meer dan \xE9\xE9n face; alleen de eerste is ingelezen", label);
       const face = faces[0];
-      const randen = refsVan(arg(face, 0)).map((id) => this.ifc.get(id)).filter((r) => !!r);
+      const randen = refsVan(arg(face, 0)).map((id2) => this.ifc.get(id2)).filter((r) => !!r);
       const buiten = randen.find((r) => r.type === "IFCFACEOUTERBOUND") ?? randen.slice().sort((a, b) => {
         const opp = (r) => {
           const l = this.lusPunten(r, trafo);
@@ -29771,7 +30545,7 @@ var Importeur = class {
           );
         }
       }
-      const gekoppeld = (this.ifc.staafKoppelingen.get(vlak.id) ?? []).map((k) => this.knoopVanConnectie.get(refVan(arg(k, 5)) ?? -1)).filter((id) => id !== void 0);
+      const gekoppeld = (this.ifc.staafKoppelingen.get(vlak.id) ?? []).map((k) => this.knoopVanConnectie.get(refVan(arg(k, 5)) ?? -1)).filter((id2) => id2 !== void 0);
       const info2 = {
         record: vlak,
         naam,
@@ -29806,7 +30580,7 @@ var Importeur = class {
     if (schijfVlakken.length === 0) return;
     const sets = schijfVlakken.map((v) => {
       const set = /* @__PURE__ */ new Set([...v.knopen, ...v.gekoppeld]);
-      const veelhoek = v.knopen.map((id) => [this.nodeById.get(id).x, this.nodeById.get(id).y]);
+      const veelhoek = v.knopen.map((id2) => [this.nodeById.get(id2).x, this.nodeById.get(id2).y]);
       for (const knoop of this.nodes) {
         if (Math.abs(knoop.z - v.hoogte) <= KNOOP_TOLERANTIE_M && puntInVeelhoek([knoop.x, knoop.y], veelhoek, KNOOP_TOLERANTIE_M)) {
           set.add(knoop.id);
@@ -29819,7 +30593,7 @@ var Importeur = class {
     for (let i = 0; i < schijfVlakken.length; i += 1) {
       for (let j = i + 1; j < schijfVlakken.length; j += 1) {
         if (Math.abs(schijfVlakken[i].hoogte - schijfVlakken[j].hoogte) > KNOOP_TOLERANTIE_M) continue;
-        if ([...sets[i]].some((id) => sets[j].has(id))) ouder[wortel(i)] = wortel(j);
+        if ([...sets[i]].some((id2) => sets[j].has(id2))) ouder[wortel(i)] = wortel(j);
       }
     }
     const groepen2 = /* @__PURE__ */ new Map();
@@ -29833,13 +30607,13 @@ var Importeur = class {
       const hoogte = schijfVlakken[groep[0]].hoogte;
       const knopen = [...new Set(groep.flatMap((i) => [...sets[i]]))].sort((a, b) => a - b);
       if (knopen.length < 2) continue;
-      const tekst = hoogteTekst(hoogte);
-      const n2 = (volgnummer.get(tekst) ?? 0) + 1;
-      volgnummer.set(tekst, n2);
-      const naam = `Schijf ${tekst}${(perHoogte.get(tekst) ?? 1) > 1 ? ` (${n2})` : ""}`;
-      const id = this.diaphragms.length + 1;
-      this.diaphragms.push({ id, nodeIds: knopen, name: naam });
-      this.schijven.push({ id, naam, hoogteM: hoogte, knopen: knopen.length, vlakken: groep.map((i) => schijfVlakken[i].naam) });
+      const tekst2 = hoogteTekst(hoogte);
+      const n2 = (volgnummer.get(tekst2) ?? 0) + 1;
+      volgnummer.set(tekst2, n2);
+      const naam = `Schijf ${tekst2}${(perHoogte.get(tekst2) ?? 1) > 1 ? ` (${n2})` : ""}`;
+      const id2 = this.diaphragms.length + 1;
+      this.diaphragms.push({ id: id2, nodeIds: knopen, name: naam });
+      this.schijven.push({ id: id2, naam, hoogteM: hoogte, knopen: knopen.length, vlakken: groep.map((i) => schijfVlakken[i].naam) });
     }
     this.meldingen.voeg(
       "waarschuwing",
@@ -29849,12 +30623,12 @@ var Importeur = class {
   // ── Belastinggevallen ──
   gevallen() {
     for (const g of this.model.gevallen) {
-      const id = this.loadCases.length + 1;
-      const naam = (tekstVan(arg(g, 2)) ?? "").trim() || `Belastinggeval ${id}`;
+      const id2 = this.loadCases.length + 1;
+      const naam = (tekstVan(arg(g, 2)) ?? "").trim() || `Belastinggeval ${id2}`;
       const label = `geval "${naam}"`;
       const bron = enumVan(arg(g, 7));
       const type = gevalType(enumVan(arg(g, 6)), bron);
-      const geval = { id, name: naam, type };
+      const geval2 = { id: id2, name: naam, type };
       if (bron === "SYSTEM_IMPERFECTION") this.imperfectieGevallen += 1;
       else if (type === "other") {
         this.meldingen.voeg(
@@ -29875,8 +30649,8 @@ var Importeur = class {
         const c = [0, 1, 2].map((i) => getalVan(swc[i] ?? null) ?? 0);
         const gewicht = Math.abs(c[0]) < 1e-9 && Math.abs(c[1]) < 1e-9 && Math.abs(c[2] + 1) < 1e-9;
         if (gewicht && type === "dead" && this.selfWeightCaseId === void 0) {
-          geval.eigenGewicht = true;
-          this.selfWeightCaseId = id;
+          geval2.eigenGewicht = true;
+          this.selfWeightCaseId = id2;
         } else if (gewicht && this.selfWeightCaseId !== void 0) {
           this.meldingen.voeg(
             "waarschuwing",
@@ -29893,8 +30667,8 @@ var Importeur = class {
           );
         }
       }
-      this.loadCases.push(geval);
-      this.gevalVanRecord.set(g.id, id);
+      this.loadCases.push(geval2);
+      this.gevalVanRecord.set(g.id, id2);
     }
     if (this.imperfectieGevallen > 0) {
       this.meldingen.voeg(
@@ -30221,7 +30995,7 @@ var Importeur = class {
     if (faces.length === 0) return "onleesbaar";
     if (faces.length > 1) return "deel";
     const trafo = refVan(arg(actie, 5)) === null ? vlak.trafo : this.trafoVan(actie);
-    const randen = refsVan(arg(faces[0], 0)).map((id) => this.ifc.get(id)).filter((r) => !!r);
+    const randen = refsVan(arg(faces[0], 0)).map((id2) => this.ifc.get(id2)).filter((r) => !!r);
     const lussen = randen.map((r) => ({ buiten: r.type === "IFCFACEOUTERBOUND", punten: this.lusPunten(r, trafo) }));
     if (lussen.length === 0 || lussen.some((l) => l.punten === null)) return "onleesbaar";
     const buiten = lussen.find((l) => l.buiten) ?? lussen.slice().sort((a, b) => norm(newell(b.punten)) - norm(newell(a.punten)))[0];
@@ -30247,8 +31021,8 @@ var Importeur = class {
       };
       try {
         const g = openFem3DLoadPanelGeometry({ nodes: this.nodes }, panel, this.nodeById);
-        const inVlak = (id) => {
-          const k = this.nodeById.get(id);
+        const inVlak = (id2) => {
+          const k = this.nodeById.get(id2);
           const rel = sub([k.x, k.y, k.z], g.origin);
           return Math.abs(dot4(rel, g.normal)) <= KNOOP_TOLERANTIE_M && puntInVeelhoek([dot4(rel, g.axisU), dot4(rel, g.axisV)], g.polygon, KNOOP_TOLERANTIE_M);
         };
@@ -30307,8 +31081,8 @@ var Importeur = class {
       if (this.model.wezen.includes(c)) {
         this.meldingen.voeg("toelichting", "Combinatie buiten LoadedBy van het model, met gevallen van dit model; meegenomen", label);
       }
-      const formula = [...factors].map(([id, f], i) => {
-        const term = `${Math.abs(Math.abs(f) - 1) < 1e-12 && f > 0 ? "" : `${NL2(Math.abs(f))}\xB7`}${this.loadCases[id - 1].name}`;
+      const formula = [...factors].map(([id2, f], i) => {
+        const term = `${Math.abs(Math.abs(f) - 1) < 1e-12 && f > 0 ? "" : `${NL2(Math.abs(f))}\xB7`}${this.loadCases[id2 - 1].name}`;
         return i === 0 ? `${f < 0 ? "\u2212" : ""}${term}` : `${f < 0 ? " \u2212 " : " + "}${term}`;
       }).join("") || "0";
       this.combinations.push({ id: this.combinations.length + 1, name: naam, type, formula, factors });
@@ -30352,7 +31126,7 @@ var Importeur = class {
       gebruikt.add(s.beam.startNodeId);
       gebruikt.add(s.beam.endNodeId);
     }
-    for (const p2 of this.loadPanels) for (const id of p2.nodeIds) gebruikt.add(id);
+    for (const p2 of this.loadPanels) for (const id2 of p2.nodeIds) gebruikt.add(id2);
     for (const l of this.loads) gebruikt.add(l.nodeId);
     const los = this.nodes.filter((k) => !gebruikt.has(k.id));
     if (los.length === 0) return;
@@ -30375,9 +31149,9 @@ var Importeur = class {
     const opleggingen = this.supports.filter((s) => nieuw.has(s.nodeId)).map((s) => ({ ...s, nodeId: nieuw.get(s.nodeId) }));
     this.supports.splice(0, this.supports.length, ...opleggingen);
     for (const l of this.loads) l.nodeId = nieuw.get(l.nodeId);
-    for (const p2 of this.loadPanels) p2.nodeIds = p2.nodeIds.map((id) => nieuw.get(id));
+    for (const p2 of this.loadPanels) p2.nodeIds = p2.nodeIds.map((id2) => nieuw.get(id2));
     for (const [i, d] of this.diaphragms.entries()) {
-      d.nodeIds = d.nodeIds.filter((id) => nieuw.has(id)).map((id) => nieuw.get(id));
+      d.nodeIds = d.nodeIds.filter((id2) => nieuw.has(id2)).map((id2) => nieuw.get(id2));
       this.schijven[i].knopen = d.nodeIds.length;
     }
     const schijven = this.diaphragms.filter((d) => d.nodeIds.length >= 2);
@@ -30558,9 +31332,9 @@ function gevalType(actieType, bron) {
   }
   return "other";
 }
-function combinatieType(tekst) {
-  if (/(?:^|[^a-z])(uls|ugt)(?:[^a-z]|$)/i.test(tekst)) return "uls";
-  if (/(?:^|[^a-z])(sls|bgt)(?:[^a-z]|$)/i.test(tekst)) return "sls";
+function combinatieType(tekst2) {
+  if (/(?:^|[^a-z])(uls|ugt)(?:[^a-z]|$)/i.test(tekst2)) return "uls";
+  if (/(?:^|[^a-z])(sls|bgt)(?:[^a-z]|$)/i.test(tekst2)) return "sls";
   return null;
 }
 function ifcAnalyseProject(imp, projectInfo = {}) {
@@ -30590,7 +31364,7 @@ function ifcAnalyseProject(imp, projectInfo = {}) {
         name: c.name,
         type: c.type,
         formula: c.formula,
-        factors: Object.fromEntries([...c.factors].map(([id, f]) => [String(id), f]))
+        factors: Object.fromEntries([...c.factors].map(([id2, f]) => [String(id2), f]))
       }))
     } : {},
     structuralGrid: { enabled: imp.levels.length > 0, xAxes: [], yAxes: [], zAxes: imp.levels },
@@ -30622,10 +31396,10 @@ function leesInhoud(payload) {
   return payload.inhoud;
 }
 function leesModelKeuze(payload) {
-  const keuze = payload.analysemodel;
-  if (keuze === void 0 || keuze === null) return void 0;
-  if (typeof keuze === "string" && keuze.trim()) return keuze;
-  if (typeof keuze === "number" && Number.isInteger(keuze) && keuze >= 1) return keuze;
+  const keuze2 = payload.analysemodel;
+  if (keuze2 === void 0 || keuze2 === null) return void 0;
+  if (typeof keuze2 === "string" && keuze2.trim()) return keuze2;
+  if (typeof keuze2 === "number" && Number.isInteger(keuze2) && keuze2 >= 1) return keuze2;
   throw new IfcSidecarInvoerFout("analysemodel", "`analysemodel` is de naam van het analysemodel of zijn volgnummer (vanaf 1).");
 }
 function leesReken2(waarde) {
@@ -30655,7 +31429,7 @@ function rekenopzet2(imp, reken) {
       ...(rekenmodel.loadPanels ?? []).map(openFem3DLoadCaseId)
     ]);
     const bron = imp.combinations.length > 0 ? "bestand" : "standaard";
-    const combinaties = (bron === "bestand" ? imp.combinations : defaultCombinations(imp.loadCases, reken.gevolgklasse)).filter((c) => [...belast].some((id) => (c.factors.get(id) ?? 0) !== 0));
+    const combinaties = (bron === "bestand" ? imp.combinations : defaultCombinations(imp.loadCases, reken.gevolgklasse)).filter((c) => [...belast].some((id2) => (c.factors.get(id2) ?? 0) !== 0));
     const verzoek = (selectie) => ({ ...buildOpenFem3DSolveRequest(rekenmodel, reken.analyse, selectie), bucklingModes: 0 });
     const verzoeken = [
       ...imp.loadCases.filter((c) => belast.has(c.id)).map((c) => ({
@@ -30699,10 +31473,10 @@ function opIfcImporteren(payload) {
     throw new IfcSidecarInvoerFout("pad", "`pad` moet tekst zijn.");
   }
   const bestand = leesIfcAnalyseBestand(leesInhoud(payload));
-  const keuze = leesModelKeuze(payload);
+  const keuze2 = leesModelKeuze(payload);
   const reken = leesReken2(payload.reken);
   const modellen = ifcAnalyseModellen(bestand);
-  const imp = importeerIfcAnalyseModel(bestand, { model: keuze });
+  const imp = importeerIfcAnalyseModel(bestand, { model: keuze2 });
   const gekozen = modellen.find((m) => m.naam === imp.verslag.model) ?? modellen[0];
   const opzet = reken ? rekenopzet2(imp, reken) : null;
   return {
@@ -30810,6 +31584,1988 @@ function opIfcUitwerken(payload) {
   };
 }
 
+// src/api/schema.ts
+var isObject2 = (waarde) => typeof waarde === "object" && waarde !== null && !Array.isArray(waarde);
+function valideer(schema, waarde, pad = "") {
+  const problemen = [];
+  const meld = (melding, waar = pad) => problemen.push({ pad: waar, melding });
+  if ("oneOf" in schema) {
+    const passend = schema.oneOf.filter((variant) => valideer(variant, waarde, pad).length === 0).length;
+    if (passend === 0) meld("past bij geen van de toegestane vormen");
+    else if (passend > 1) meld("past bij meer dan \xE9\xE9n toegestane vorm");
+    return problemen;
+  }
+  if ("const" in schema) {
+    if (waarde !== schema.const) meld(`moet precies ${JSON.stringify(schema.const)} zijn`);
+    return problemen;
+  }
+  switch (schema.type) {
+    case "object": {
+      if (!isObject2(waarde)) {
+        meld("verwacht een object");
+        break;
+      }
+      for (const veld of schema.required ?? []) {
+        if (waarde[veld] === void 0) meld("verplicht veld ontbreekt", `${pad}.${veld}`);
+      }
+      for (const [veld, inhoud] of Object.entries(waarde)) {
+        if (inhoud === void 0) continue;
+        const sub4 = schema.properties[veld];
+        if (!sub4) {
+          meld(`onbekend veld; toegestaan: ${Object.keys(schema.properties).join(", ") || "(geen)"}`, `${pad}.${veld}`);
+          continue;
+        }
+        problemen.push(...valideer(sub4, inhoud, `${pad}.${veld}`));
+      }
+      break;
+    }
+    case "array": {
+      if (!Array.isArray(waarde)) {
+        meld("verwacht een lijst");
+        break;
+      }
+      if (schema.minItems !== void 0 && waarde.length < schema.minItems) {
+        meld(`moet minstens ${schema.minItems} elementen hebben`);
+      }
+      if (schema.maxItems !== void 0 && waarde.length > schema.maxItems) {
+        meld(`mag hoogstens ${schema.maxItems} elementen hebben`);
+      }
+      waarde.forEach((element, index) => problemen.push(...valideer(schema.items, element, `${pad}[${index}]`)));
+      break;
+    }
+    case "number":
+    case "integer": {
+      if (typeof waarde !== "number" || !Number.isFinite(waarde)) {
+        meld("verwacht een (eindig) getal");
+        break;
+      }
+      if (schema.type === "integer" && !Number.isInteger(waarde)) {
+        meld("verwacht een geheel getal");
+        break;
+      }
+      if (schema.minimum !== void 0 && waarde < schema.minimum) meld(`moet minstens ${schema.minimum} zijn`);
+      if (schema.maximum !== void 0 && waarde > schema.maximum) meld(`mag hoogstens ${schema.maximum} zijn`);
+      if (schema.exclusiveMinimum !== void 0 && waarde <= schema.exclusiveMinimum) {
+        meld(`moet groter zijn dan ${schema.exclusiveMinimum}`);
+      }
+      break;
+    }
+    case "string": {
+      if (typeof waarde !== "string") {
+        meld("verwacht tekst");
+        break;
+      }
+      if (schema.enum && !schema.enum.includes(waarde)) meld(`moet een van deze waarden zijn: ${schema.enum.join(", ")}`);
+      if (schema.minLength !== void 0 && waarde.length < schema.minLength) {
+        meld(`moet minstens ${schema.minLength} teken${schema.minLength === 1 ? "" : "s"} lang zijn`);
+      }
+      break;
+    }
+    case "boolean":
+      if (typeof waarde !== "boolean") meld("verwacht ja/nee (true of false)");
+      break;
+    case "null":
+      if (waarde !== null) meld("verwacht null");
+      break;
+  }
+  return problemen;
+}
+function isStrikt(schema, pad = "") {
+  if ("oneOf" in schema) return schema.oneOf.flatMap((variant) => isStrikt(variant, pad));
+  if ("const" in schema) return [];
+  if (schema.type === "array") return isStrikt(schema.items, `${pad}[]`);
+  if (schema.type !== "object") return [];
+  const eigen = schema.additionalProperties === false ? [] : [pad];
+  return [...eigen, ...Object.entries(schema.properties ?? {}).flatMap(([veld, sub4]) => isStrikt(sub4, `${pad}.${veld}`))];
+}
+
+// src/api/register.ts
+var ApiFout = class extends Error {
+  code;
+  detail;
+  constructor(code, melding, detail) {
+    super(melding);
+    this.name = "ApiFout";
+    this.code = code;
+    this.detail = detail;
+  }
+};
+var NAAM = /^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$/;
+function alsApiFout(fout) {
+  if (fout instanceof ApiFout) return fout;
+  return new ApiFout("GEWEIGERD", fout instanceof Error ? fout.message : String(fout));
+}
+function afstand(a, b) {
+  const vorige = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i += 1) {
+    let linksBoven = vorige[0];
+    vorige[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const boven = vorige[j];
+      vorige[j] = Math.min(boven + 1, vorige[j - 1] + 1, linksBoven + (a[i - 1] === b[j - 1] ? 0 : 1));
+      linksBoven = boven;
+    }
+  }
+  return vorige[b.length];
+}
+function suggesties(naam, namen) {
+  return namen.map((kandidaat) => ({ kandidaat, d: afstand(naam, kandidaat) })).filter(({ d }) => d <= Math.max(3, Math.floor(naam.length / 3))).sort((p2, q) => p2.d - q.d || (p2.kandidaat < q.kandidaat ? -1 : 1)).slice(0, 3).map(({ kandidaat }) => kandidaat);
+}
+function maakRegister(commandos) {
+  const perNaam = /* @__PURE__ */ new Map();
+  for (const commando of commandos) {
+    if (!NAAM.test(commando.naam)) {
+      throw new Error(`Ongeldige commandonaam "${commando.naam}": verwacht domein.object.actie, kleine beginletter.`);
+    }
+    if (perNaam.has(commando.naam)) throw new Error(`Dubbele commandonaam "${commando.naam}".`);
+    if (!("type" in commando.invoer) || commando.invoer.type !== "object") {
+      throw new Error(`De invoer van ${commando.naam} moet een objectschema zijn.`);
+    }
+    const los = isStrikt(commando.invoer);
+    if (los.length > 0) {
+      throw new Error(`Het invoerschema van ${commando.naam} is niet streng op: ${los.map((p2) => p2 || "(invoer)").join(", ")}.`);
+    }
+    perNaam.set(commando.naam, commando);
+  }
+  const namen = [...perNaam.keys()].sort();
+  return {
+    catalogus: () => namen.map((naam) => {
+      const { beschrijving, invoer, soort } = perNaam.get(naam);
+      return { naam, beschrijving, invoer, soort };
+    }),
+    heeft: (naam) => perNaam.has(naam),
+    voerUit(naam, invoer, context) {
+      const commando = perNaam.get(naam);
+      if (!commando) {
+        throw new ApiFout("ONBEKEND_COMMANDO", `Onbekend commando "${naam}".`, { suggesties: suggesties(naam, namen) });
+      }
+      const gegeven2 = invoer ?? {};
+      const problemen = valideer(commando.invoer, gegeven2);
+      if (problemen.length > 0) {
+        throw new ApiFout(
+          "INVOER_ONGELDIG",
+          `Ongeldige invoer voor ${naam}: ${problemen.map((p2) => `${p2.pad || "(invoer)"} ${p2.melding}`).join("; ")}.`,
+          { problemen }
+        );
+      }
+      if (commando.soort === "document" && !context.document) {
+        throw new ApiFout("GEEN_DOCUMENT", `${naam} werkt op een project, maar er is geen project meegegeven.`);
+      }
+      let uitkomst;
+      try {
+        uitkomst = commando.uitvoeren(gegeven2, context);
+      } catch (fout) {
+        throw alsApiFout(fout);
+      }
+      return uitkomst instanceof Promise ? uitkomst.catch((fout) => {
+        throw alsApiFout(fout);
+      }) : uitkomst;
+    }
+  };
+}
+
+// src/api/projectDocument.ts
+function documentUitTekst(tekst2) {
+  const { format: _format, version: _versie, savedAt: _opgeslagen, ...document2 } = deserializeProject(tekst2);
+  return document2;
+}
+function documentNaarTekst(document2) {
+  return serializeProject(document2);
+}
+function leegDocument() {
+  return {
+    modelDimension: "3d",
+    nodes: [],
+    beams: [],
+    supports: [],
+    plates: [],
+    loads: [],
+    loadCases: standaardBelastinggevallen(),
+    activeLoadCaseId: STANDAARD_ACTIEF_GEVAL_ID,
+    selfWeightEnabled: EIGEN_GEWICHT_STANDAARD_AAN,
+    nonlinearEnabled: false,
+    analysetype: "eersteOrde",
+    model3d: { ...EMPTY_OPEN_FEM_3D }
+  };
+}
+function model3dVan(document2) {
+  return document2.model3d ?? { ...EMPTY_OPEN_FEM_3D };
+}
+function metModel3d(document2, model) {
+  return { ...document2, model3d: model, modelDimension: "3d" };
+}
+
+// src/api/schemaBouw.ts
+var metBeschrijving = (schema, beschrijving) => beschrijving ? { ...schema, description: beschrijving } : schema;
+function obj(properties, required = [], beschrijving) {
+  return metBeschrijving({ type: "object", properties, ...required.length ? { required } : {}, additionalProperties: false }, beschrijving);
+}
+function getal4(beschrijving, grenzen = {}) {
+  return metBeschrijving({ type: "number", ...grenzen }, beschrijving);
+}
+function geheel(beschrijving, grenzen = {}) {
+  return metBeschrijving({ type: "integer", ...grenzen }, beschrijving);
+}
+function id(beschrijving) {
+  return geheel(beschrijving, { exclusiveMinimum: 0 });
+}
+function tekst(beschrijving, eisen = {}) {
+  return metBeschrijving({ type: "string", ...eisen }, beschrijving);
+}
+function keuze(waarden, beschrijving) {
+  return metBeschrijving({ type: "string", enum: waarden }, beschrijving);
+}
+function jaNee(beschrijving) {
+  return metBeschrijving({ type: "boolean" }, beschrijving);
+}
+function lijst(items, beschrijving, grenzen = {}) {
+  return metBeschrijving({ type: "array", items, ...grenzen }, beschrijving);
+}
+function ofNull(schema, beschrijving) {
+  const nul = { type: "null" };
+  return metBeschrijving({ oneOf: [schema, nul] }, beschrijving);
+}
+function eenVan(varianten, beschrijving) {
+  return metBeschrijving({ oneOf: varianten }, beschrijving);
+}
+
+// src/api/commandoHulp.ts
+function documentCommando(definitie) {
+  return {
+    naam: definitie.naam,
+    beschrijving: definitie.beschrijving,
+    invoer: definitie.invoer,
+    soort: "document",
+    uitvoeren: (invoer, context) => definitie.uitvoeren(invoer, context.document)
+  };
+}
+function nietGevonden(soort, id2, veld = "id") {
+  return new ApiFout("NIET_GEVONDEN", `${soort} ${id2} bestaat niet.`, { [veld]: id2 });
+}
+function verdwenenIds(voor = [], na2 = []) {
+  const over = new Set(na2.map((item) => item.id));
+  return voor.filter((item) => !over.has(item.id)).map((item) => item.id);
+}
+function nieuwElement(voor = [], na2 = []) {
+  const bestond = new Set(voor.map((item) => item.id));
+  const nieuw = na2.find((item) => !bestond.has(item.id));
+  if (!nieuw) throw new ApiFout("GEWEIGERD", "Er is niets toegevoegd.");
+  return nieuw;
+}
+
+// src/api/commands/model3dGeometrie.ts
+var RAD_PER_GRAAD = Math.PI / 180;
+function vindKnoop(model, nodeId) {
+  const node = model.nodes.find((item) => item.id === nodeId);
+  if (!node) throw nietGevonden("3D-knoop", nodeId);
+  return node;
+}
+function vindStaaf(model, beamId) {
+  const beam = model.beams.find((item) => item.id === beamId);
+  if (!beam) throw nietGevonden("3D-staaf", beamId);
+  return beam;
+}
+function vindPlaat(model, plateId) {
+  const plate = (model.plates ?? []).find((item) => item.id === plateId);
+  if (!plate) throw nietGevonden("3D-plaat", plateId);
+  return plate;
+}
+var coordinaat = (as3) => getal4(`${as3}-co\xF6rdinaat in m (globaal, z omhoog).`);
+var knoopId = id("Id van een bestaande 3D-knoop.");
+var scharnieren = obj({
+  myStart: jaNee("Momentscharnier om de lokale y-as aan het begin."),
+  myEnd: jaNee("Momentscharnier om de lokale y-as aan het eind."),
+  mzStart: jaNee("Momentscharnier om de lokale z-as aan het begin."),
+  mzEnd: jaNee("Momentscharnier om de lokale z-as aan het eind."),
+  torsionStart: jaNee("Torsiescharnier aan het begin."),
+  torsionEnd: jaNee("Torsiescharnier aan het eind.")
+}, [], "Eindscharnieren in lokale assen; een ontbrekende vrijheidsgraad is vast.");
+var staafVelden = {
+  profileName: tekst('Profielnaam uit de bibliotheek, bijv. "IPE 200", "HEA 300", "CHS 88.9x4", "Strip 80x10".', { minLength: 1 }),
+  material: tekst('Materiaal, bijv. "S235", "S355", "C24", "C30/37".', { minLength: 1 }),
+  rollAngleDeg: getal4("Rotatie van de lokale y/z-assen om de staafas, in graden."),
+  releases: scharnieren,
+  tensionOnly: jaNee("Trek-alleen staaf (bijv. een windverband): valt weg zolang hij op druk staat."),
+  name: tekst("Naam van de staaf (alleen weergave en rapport)."),
+  group: tekst('Groep, bijv. "kolom", "spantligger", "windverband".')
+};
+var randSegment = eenVan([
+  obj({ kind: { const: "line" }, startNodeId: knoopId, endNodeId: knoopId }, ["kind", "startNodeId", "endNodeId"], "Recht randstuk."),
+  obj(
+    { kind: { const: "arc" }, startNodeId: knoopId, controlNodeId: knoopId, endNodeId: knoopId },
+    ["kind", "startNodeId", "controlNodeId", "endNodeId"],
+    "Boog door begin-, stuur- en eindknoop."
+  )
+]);
+var contour = (wat) => lijst(knoopId, `Knoopvolgorde rond ${wat}; alle knopen in \xE9\xE9n vlak.`, { minItems: 3 });
+function naarPatch(invoer) {
+  const { rollAngleDeg, tensionOnly, ...rest } = invoer;
+  return {
+    ...rest,
+    ...rollAngleDeg !== void 0 ? { rollAngleRad: rollAngleDeg === null ? null : rollAngleDeg * RAD_PER_GRAAD } : {},
+    ...tensionOnly !== void 0 && tensionOnly !== null ? { tensionOnly } : {}
+  };
+}
+var modelLezen = documentCommando({
+  naam: "model3d.get",
+  beschrijving: "Het 3D-model lezen: knopen, staven, platen, opleggingen, lasten, belastingvlakken en schijven, met de aantallen.",
+  invoer: obj({}),
+  uitvoeren: (_invoer, document2) => {
+    const model = model3dVan(document2);
+    return {
+      uitkomst: {
+        counts: {
+          nodes: model.nodes.length,
+          beams: model.beams.length,
+          plates: (model.plates ?? []).length,
+          supports: (model.supports ?? []).length,
+          loads: (model.loads ?? []).length + (model.memberLoads ?? []).length + (model.memberPointLoads ?? []).length + (model.thermalLoads ?? []).length + (model.surfaceLoads ?? []).length,
+          loadPanels: (model.loadPanels ?? []).length,
+          diaphragms: (model.diaphragms ?? []).length
+        },
+        model
+      }
+    };
+  }
+});
+var knoopToevoegen = documentCommando({
+  naam: "model3d.node.add",
+  beschrijving: "Een 3D-knoop toevoegen. Op de plek van een bestaande knoop wordt geweigerd.",
+  invoer: obj({ x: coordinaat("x"), y: coordinaat("y"), z: coordinaat("z"), name: tekst("Naam van de knoop.") }, ["x", "y", "z"]),
+  uitvoeren: (invoer, document2) => {
+    const { model, node } = addOpenFem3DNode(model3dVan(document2), invoer);
+    return { uitkomst: { node }, document: metModel3d(document2, model) };
+  }
+});
+var knoopWijzigen = documentCommando({
+  naam: "model3d.node.update",
+  beschrijving: "Een 3D-knoop verplaatsen of hernoemen. Staven, platen, opleggingen en lasten blijven eraan hangen.",
+  invoer: obj({
+    id: knoopId,
+    x: coordinaat("x"),
+    y: coordinaat("y"),
+    z: coordinaat("z"),
+    name: ofNull(tekst(), "Nieuwe naam; null wist de naam.")
+  }, ["id"]),
+  uitvoeren: ({ id: nodeId, ...patch }, document2) => {
+    const huidig = model3dVan(document2);
+    vindKnoop(huidig, nodeId);
+    const model = updateOpenFem3DNode(huidig, nodeId, patch);
+    return { uitkomst: { node: vindKnoop(model, nodeId) }, document: metModel3d(document2, model) };
+  }
+});
+var knoopVerwijderen = documentCommando({
+  naam: "model3d.node.delete",
+  beschrijving: "Een 3D-knoop verwijderen, met de staven en platen die eraan hangen en hun lasten.",
+  invoer: obj({ id: knoopId }, ["id"]),
+  uitvoeren: ({ id: nodeId }, document2) => {
+    const huidig = model3dVan(document2);
+    vindKnoop(huidig, nodeId);
+    const model = removeOpenFem3DNode(huidig, nodeId);
+    return {
+      uitkomst: {
+        deletedNodeId: nodeId,
+        removedBeamIds: verdwenenIds(huidig.beams, model.beams),
+        removedPlateIds: verdwenenIds(huidig.plates, model.plates)
+      },
+      document: metModel3d(document2, model)
+    };
+  }
+});
+var staafToevoegen = documentCommando({
+  naam: "model3d.beam.add",
+  beschrijving: "Een 3D-staaf tussen twee bestaande knopen toevoegen. Zonder profiel en materiaal: IPE 200 in S235, net als het tekengereedschap.",
+  invoer: obj({ startNodeId: knoopId, endNodeId: knoopId, ...staafVelden }, ["startNodeId", "endNodeId"]),
+  uitvoeren: ({ rollAngleDeg, ...rest }, document2) => {
+    const { model, beam } = addOpenFem3DBeam(model3dVan(document2), {
+      ...rest,
+      ...rollAngleDeg !== void 0 ? { rollAngleRad: rollAngleDeg * RAD_PER_GRAAD } : {}
+    });
+    return { uitkomst: { beam }, document: metModel3d(document2, model) };
+  }
+});
+var staafWijzigen = documentCommando({
+  naam: "model3d.beam.update",
+  beschrijving: "Eigenschappen of knopen van een 3D-staaf wijzigen. null wist een optioneel veld; lasten en toetsinstellingen blijven.",
+  invoer: obj({
+    id: id("Id van de staaf."),
+    startNodeId: knoopId,
+    endNodeId: knoopId,
+    profileName: ofNull(staafVelden.profileName),
+    material: ofNull(staafVelden.material),
+    rollAngleDeg: ofNull(staafVelden.rollAngleDeg),
+    releases: ofNull(scharnieren),
+    tensionOnly: staafVelden.tensionOnly,
+    name: ofNull(staafVelden.name),
+    group: ofNull(staafVelden.group)
+  }, ["id"]),
+  uitvoeren: ({ id: beamId, ...rest }, document2) => {
+    const huidig = model3dVan(document2);
+    vindStaaf(huidig, beamId);
+    const model = updateOpenFem3DBeam(huidig, beamId, naarPatch(rest));
+    return { uitkomst: { beam: vindStaaf(model, beamId) }, document: metModel3d(document2, model) };
+  }
+});
+var staafVerwijderen = documentCommando({
+  naam: "model3d.beam.delete",
+  beschrijving: "Een 3D-staaf verwijderen, met zijn lasten. De knopen blijven.",
+  invoer: obj({ id: id("Id van de staaf.") }, ["id"]),
+  uitvoeren: ({ id: beamId }, document2) => {
+    const huidig = model3dVan(document2);
+    vindStaaf(huidig, beamId);
+    return { uitkomst: { deletedBeamId: beamId }, document: metModel3d(document2, removeOpenFem3DBeam(huidig, beamId)) };
+  }
+});
+var staafSplitsen = documentCommando({
+  naam: "model3d.beam.split",
+  beschrijving: "Een 3D-staaf in twee delen splitsen met een nieuwe tussenknoop. Geef fraction (0\u20131) \xF3f positionM (m vanaf het begin).",
+  invoer: obj({
+    id: id("Id van de staaf."),
+    fraction: getal4("Plaats als deel van de lengte, strikt tussen 0 en 1.", { exclusiveMinimum: 0, maximum: 1 }),
+    positionM: getal4("Plaats in m vanaf de beginknoop.", { exclusiveMinimum: 0 })
+  }, ["id"]),
+  uitvoeren: ({ id: beamId, fraction, positionM }, document2) => {
+    const huidig = model3dVan(document2);
+    const beam = vindStaaf(huidig, beamId);
+    if (fraction === void 0 === (positionM === void 0)) {
+      throw new ApiFout("INVOER_ONGELDIG", "Geef precies \xE9\xE9n van fraction en positionM.");
+    }
+    let ratio = fraction;
+    if (positionM !== void 0) {
+      const a = vindKnoop(huidig, beam.startNodeId), b = vindKnoop(huidig, beam.endNodeId);
+      const lengte = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+      ratio = positionM / lengte;
+      if (ratio >= 1) throw new ApiFout("GEWEIGERD", `De staaf is ${lengte.toFixed(3)} m lang; ${positionM} m ligt er niet binnen.`);
+    }
+    if (ratio >= 1) throw new ApiFout("GEWEIGERD", "fraction moet kleiner zijn dan 1.");
+    const resultaat = splitOpenFem3DBeam(huidig, beamId, ratio);
+    return {
+      uitkomst: { nodeId: resultaat.nodeId, firstBeamId: resultaat.firstBeamId, secondBeamId: resultaat.secondBeamId },
+      document: metModel3d(document2, resultaat.model)
+    };
+  }
+});
+var assenOmkeren = documentCommando({
+  naam: "model3d.beam.flipLocalAxes",
+  beschrijving: "De lokale dwarsassen van een 3D-staaf omkeren (profielrotatie + 180\xB0), zoals de knop in het eigenschappenpaneel. De lokale componenten van de staaf-, puntlasten en temperatuurgradi\xEBnten draaien mee, zodat hun richting in het wereldstelsel gelijk blijft.",
+  invoer: obj({ id: id("Id van de staaf.") }, ["id"]),
+  uitvoeren: ({ id: beamId }, document2) => {
+    const huidig = model3dVan(document2);
+    vindStaaf(huidig, beamId);
+    const model = flipOpenFem3DBeamLocalAxes(huidig, beamId);
+    return { uitkomst: { beam: model.beams.find((item) => item.id === beamId) }, document: metModel3d(document2, model) };
+  }
+});
+var scharnierSituatie = documentCommando({
+  naam: "model3d.beam.setReleasePreset",
+  beschrijving: "E\xE9n of meer 3D-staven een standaardsituatie voor hun eindscharnieren geven, zoals de knoppen Momentvast en Scharnierend in het eigenschappenpaneel. rigid (momentvast): geen scharnieren. pinned (scharnierend): My en Mz los aan beide einden; torsie gaat over, anders draait de staaf vrij om zijn as. Een losse combinatie zet je met model3d.beam.update (releases).",
+  invoer: obj({
+    beamIds: lijst(id("Id van een staaf."), "De staven.", { minItems: 1 }),
+    preset: keuze(["rigid", "pinned"], "rigid (momentvast) of pinned (scharnierend).")
+  }, ["beamIds", "preset"]),
+  uitvoeren: ({ beamIds, preset }, document2) => {
+    const huidig = model3dVan(document2);
+    const ids = [...new Set(beamIds)];
+    for (const beamId of ids) vindStaaf(huidig, beamId);
+    const model = setOpenFem3DReleasePreset(huidig, ids, preset);
+    return { uitkomst: { beamIds: ids, preset }, document: metModel3d(document2, model) };
+  }
+});
+var plaatToevoegen = documentCommando({
+  naam: "model3d.plate.add",
+  beschrijving: "Een vlakke 3D-plaat (schaalelementen) toevoegen op bestaande knopen in \xE9\xE9n vlak.",
+  invoer: obj({
+    nodeIds: contour("de plaat"),
+    thicknessM: getal4("Dikte in m.", { exclusiveMinimum: 0 }),
+    material: tekst('Materiaal, bijv. "C30/37".', { minLength: 1 }),
+    cornerRadiusM: getal4("Afrondingsstraal van de hoeken in m.", { minimum: 0 }),
+    boundary: lijst(randSegment, "Getekende contour met rechte stukken en bogen; ontbreekt = rechte randen tussen nodeIds.")
+  }, ["nodeIds", "thicknessM"]),
+  uitvoeren: ({ nodeIds, ...opties }, document2) => {
+    const huidig = model3dVan(document2);
+    const model = addOpenFem3DPlate(huidig, nodeIds, opties);
+    return { uitkomst: { plate: nieuwElement(huidig.plates, model.plates) }, document: metModel3d(document2, model) };
+  }
+});
+var plaatWijzigen = documentCommando({
+  naam: "model3d.plate.update",
+  beschrijving: "Dikte, materiaal, afronding, netgrootte of randopleggingen van een 3D-plaat wijzigen.",
+  invoer: obj({
+    id: id("Id van de plaat."),
+    thicknessM: getal4("Dikte in m.", { exclusiveMinimum: 0 }),
+    material: tekst("Materiaal.", { minLength: 1 }),
+    cornerRadiusM: getal4("Afrondingsstraal van de hoeken in m.", { minimum: 0 }),
+    meshSizeM: getal4("Gewenste elementgrootte in m.", { exclusiveMinimum: 0 }),
+    edgeSupports: lijst(
+      obj({
+        edge: geheel("Rand k: randstuk k van de contour (vanaf 0).", { minimum: 0 }),
+        ux: jaNee(),
+        uy: jaNee(),
+        uz: jaNee(),
+        rx: jaNee(),
+        ry: jaNee(),
+        rz: jaNee()
+      }, ["edge", "ux", "uy", "uz", "rx", "ry", "rz"], "Lijnoplegging langs \xE9\xE9n rand; true = verhinderd."),
+      "Randopleggingen; vervangt de bestaande lijst."
+    )
+  }, ["id"]),
+  uitvoeren: ({ id: plateId, ...patch }, document2) => {
+    const huidig = model3dVan(document2);
+    vindPlaat(huidig, plateId);
+    const model = updateOpenFem3DPlate(huidig, plateId, patch);
+    return { uitkomst: { plate: vindPlaat(model, plateId) }, document: metModel3d(document2, model) };
+  }
+});
+var plaatVerwijderen = documentCommando({
+  naam: "model3d.plate.delete",
+  beschrijving: "Een 3D-plaat verwijderen, met haar openingen en oppervlaktelasten. De knopen blijven.",
+  invoer: obj({ id: id("Id van de plaat.") }, ["id"]),
+  uitvoeren: ({ id: plateId }, document2) => {
+    const huidig = model3dVan(document2);
+    vindPlaat(huidig, plateId);
+    return { uitkomst: { deletedPlateId: plateId }, document: metModel3d(document2, removeOpenFem3DPlate(huidig, plateId)) };
+  }
+});
+var openingToevoegen = documentCommando({
+  naam: "model3d.plate.addOpening",
+  beschrijving: "Een opening in een 3D-plaat maken, op bestaande knopen binnen de plaat.",
+  invoer: obj({
+    plateId: id("Id van de plaat."),
+    nodeIds: contour("de opening"),
+    cornerRadiusM: getal4("Afrondingsstraal van de hoeken in m.", { minimum: 0 }),
+    boundary: lijst(randSegment, "Getekende contour van de opening; ontbreekt = rechte randen.")
+  }, ["plateId", "nodeIds"]),
+  uitvoeren: ({ plateId, nodeIds, ...opties }, document2) => {
+    const huidig = model3dVan(document2);
+    const voor = vindPlaat(huidig, plateId);
+    const model = addOpenFem3DPlateOpening(huidig, plateId, nodeIds, opties);
+    const na2 = vindPlaat(model, plateId);
+    return { uitkomst: { plateId, opening: nieuwElement(voor.openings, na2.openings) }, document: metModel3d(document2, model) };
+  }
+});
+var MODEL3D_GEOMETRIE_COMMANDOS = [
+  modelLezen,
+  knoopToevoegen,
+  knoopWijzigen,
+  knoopVerwijderen,
+  staafToevoegen,
+  staafWijzigen,
+  staafVerwijderen,
+  staafSplitsen,
+  assenOmkeren,
+  scharnierSituatie,
+  plaatToevoegen,
+  plaatWijzigen,
+  plaatVerwijderen,
+  openingToevoegen
+];
+
+// src/api/commands/model3dVoorwaarden.ts
+function vindKnoop2(model, nodeId) {
+  if (!model.nodes.some((node) => node.id === nodeId)) throw nietGevonden("3D-knoop", nodeId, "nodeId");
+}
+function vindStaaf2(model, beamId) {
+  const beam = model.beams.find((item) => item.id === beamId);
+  if (!beam) throw nietGevonden("3D-staaf", beamId, "beamId");
+  return beam;
+}
+function vindIn(lijstje, soort, itemId) {
+  const item = (lijstje ?? []).find((x) => x.id === itemId);
+  if (!item) throw nietGevonden(soort, itemId);
+  return item;
+}
+function geval(document2, caseId) {
+  const gekozen = caseId ?? document2.activeLoadCaseId;
+  if (!document2.loadCases.some((lc) => lc.id === gekozen)) throw nietGevonden("Belastinggeval", gekozen, "caseId");
+  return gekozen;
+}
+function staafLengte(model, beamId) {
+  const beam = vindStaaf2(model, beamId);
+  const a = model.nodes.find((n2) => n2.id === beam.startNodeId), b = model.nodes.find((n2) => n2.id === beam.endNodeId);
+  return Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+}
+var met = (document2, model) => metModel3d(document2, model);
+var knoopId2 = id("Id van een bestaande 3D-knoop.");
+var staafId = id("Id van een bestaande 3D-staaf.");
+var gevalId = id("Belastinggeval; ontbreekt = het actieve geval van het project.");
+var vrijheidsgraden = {
+  ux: jaNee("Verplaatsing in X verhinderd."),
+  uy: jaNee("Verplaatsing in Y verhinderd."),
+  uz: jaNee("Verplaatsing in Z verhinderd."),
+  rx: jaNee("Rotatie om X verhinderd."),
+  ry: jaNee("Rotatie om Y verhinderd."),
+  rz: jaNee("Rotatie om Z verhinderd.")
+};
+var veren = {
+  kxKnPerM: getal4("Veer in X, kN/m.", { exclusiveMinimum: 0 }),
+  kyKnPerM: getal4("Veer in Y, kN/m.", { exclusiveMinimum: 0 }),
+  kzKnPerM: getal4("Veer in Z, kN/m.", { exclusiveMinimum: 0 }),
+  krxKnmPerRad: getal4("Rotatieveer om X, kNm/rad.", { exclusiveMinimum: 0 }),
+  kryKnmPerRad: getal4("Rotatieveer om Y, kNm/rad.", { exclusiveMinimum: 0 }),
+  krzKnmPerRad: getal4("Rotatieveer om Z, kNm/rad.", { exclusiveMinimum: 0 })
+};
+var opgelegd = {
+  uxM: getal4("Opgelegde verplaatsing in X, m."),
+  uyM: getal4("Opgelegde verplaatsing in Y, m."),
+  uzM: getal4("Opgelegde verplaatsing in Z, m."),
+  rxRad: getal4("Opgelegde rotatie om X, rad."),
+  ryRad: getal4("Opgelegde rotatie om Y, rad."),
+  rzRad: getal4("Opgelegde rotatie om Z, rad.")
+};
+var knoopLastVelden = {
+  fx: getal4("Kracht in X, kN."),
+  fy: getal4("Kracht in Y, kN."),
+  fz: getal4("Kracht in Z, kN (negatief = omlaag)."),
+  mx: getal4("Moment om X, kNm."),
+  my: getal4("Moment om Y, kNm."),
+  mz: getal4("Moment om Z, kNm.")
+};
+var lijnLastVelden = {
+  qyStart: getal4("Lijnlast in lokale y aan het begin, kN/m."),
+  qyEnd: getal4("Lijnlast in lokale y aan het eind, kN/m."),
+  qzStart: getal4("Lijnlast in lokale z aan het begin, kN/m."),
+  qzEnd: getal4("Lijnlast in lokale z aan het eind, kN/m."),
+  startPositionM: getal4("Begin van de last in m vanaf de beginknoop; ontbreekt = 0.", { minimum: 0 }),
+  endPositionM: getal4("Eind van de last in m vanaf de beginknoop; ontbreekt = de staaflengte.", { exclusiveMinimum: 0 })
+};
+var puntLastVelden = {
+  py: getal4("Puntlast in lokale y, kN."),
+  pz: getal4("Puntlast in lokale z, kN."),
+  positionM: getal4("Plaats in m vanaf de beginknoop.", { minimum: 0 })
+};
+var temperatuurVelden = {
+  deltaTUniformK: getal4("Gelijkmatige temperatuurverandering, K."),
+  deltaTGradientYK: getal4("Temperatuurverschil over de hoogte in lokale y, K."),
+  deltaTGradientZK: getal4("Temperatuurverschil over de hoogte in lokale z, K.")
+};
+var vlakLastVelden = {
+  qx: getal4("Vlaklast in X, kN/m\xB2."),
+  qy: getal4("Vlaklast in Y, kN/m\xB2."),
+  qz: getal4("Vlaklast in Z, kN/m\xB2 (negatief = omlaag).")
+};
+var vector = obj({ x: getal4(), y: getal4(), z: getal4() }, ["x", "y", "z"], "Richting in globale assen.");
+var vlakVelden = {
+  q: getal4("Belasting op het vlak, kN/m\xB2."),
+  direction: keuze(["gravity", "normal"], "gravity = zwaartekracht per horizontale projectie; normal = loodrecht op het vlak."),
+  distribution: keuze(["oneWay", "twoWay"], "Afdracht: oneWay naar de liggers dwars op de overspanning, twoWay naar alle randliggers."),
+  spanDirection: vector,
+  excludedBeamIds: lijst(staafId, "Liggers in het vlak die geen last krijgen.")
+};
+var PRESETS = Object.keys(OPEN_FEM_3D_SUPPORT_PRESETS);
+var opleggingZetten = documentCommando({
+  naam: "model3d.support.set",
+  beschrijving: "Een oplegging op een knoop zetten of vervangen: een standaardtype (preset) \xF3f alle zes vrijheidsgraden.",
+  invoer: obj({
+    nodeId: knoopId2,
+    preset: keuze(PRESETS, "Standaardtype: fixed (inklemming), pinned (scharnier), x-/y-/zRoller, revoluteX/Y/Z (scharnier met \xE9\xE9n vrije draaias)."),
+    ...vrijheidsgraden
+  }, ["nodeId"]),
+  uitvoeren: ({ nodeId, preset, ...vrij }, document2) => {
+    const model = model3dVan(document2);
+    vindKnoop2(model, nodeId);
+    const gegeven2 = Object.keys(vrij);
+    if (preset !== void 0 && gegeven2.length > 0) throw new ApiFout("INVOER_ONGELDIG", "Geef een preset \xF3f de vrijheidsgraden, niet allebei.");
+    if (preset === void 0 && gegeven2.length !== 6) throw new ApiFout("INVOER_ONGELDIG", "Zonder preset zijn alle zes vrijheidsgraden (ux \u2026 rz) nodig.");
+    const restraints = preset ? OPEN_FEM_3D_SUPPORT_PRESETS[preset] : vrij;
+    const nieuw = setOpenFem3DSupport(model, nodeId, { ...restraints });
+    return { uitkomst: { support: nieuw.supports.find((s) => s.nodeId === nodeId) }, document: met(document2, nieuw) };
+  }
+});
+var opleggingenZetten = documentCommando({
+  naam: "model3d.support.setMany",
+  beschrijving: "Meerdere knopen in \xE9\xE9n keer hetzelfde standaardtype oplegging geven, bijvoorbeeld alle opleggingen scharnierend (allSupports + preset pinned). Zoals een lintknop: veren en opgelegde verplaatsingen in richtingen die vrij blijven, blijven staan.",
+  invoer: obj({
+    nodeIds: lijst(knoopId2, "De knopen; niet samen met allSupports."),
+    allSupports: jaNee("Alle knopen die nu een oplegging hebben."),
+    preset: keuze(PRESETS, "Standaardtype: fixed (inklemming), pinned (scharnier), x-/y-/zRoller, revoluteX/Y/Z.")
+  }, ["preset"]),
+  uitvoeren: ({ nodeIds, allSupports, preset }, document2) => {
+    const model = model3dVan(document2);
+    if (nodeIds !== void 0 === (allSupports === true)) {
+      throw new ApiFout("INVOER_ONGELDIG", "Geef nodeIds \xF3f allSupports: true.");
+    }
+    const ids = allSupports ? (model.supports ?? []).map((support) => support.nodeId) : [...new Set(nodeIds)];
+    for (const nodeId of ids) vindKnoop2(model, nodeId);
+    const nieuw = ids.reduce((volgend, nodeId) => setOpenFem3DSupport(volgend, nodeId, { ...OPEN_FEM_3D_SUPPORT_PRESETS[preset] }), model);
+    return { uitkomst: { nodeIds: ids, preset }, document: met(document2, nieuw) };
+  }
+});
+var verenZetten = documentCommando({
+  naam: "model3d.support.setSprings",
+  beschrijving: "Veren op een knoop zetten (vervangt de bestaande veren). Een veer maakt zijn richting vrij: op een verhinderde richting vervangt de veer de vaste oplegging, en een opgelegde waarde in die richting vervalt.",
+  invoer: obj({ nodeId: knoopId2, ...veren }, ["nodeId"]),
+  uitvoeren: ({ nodeId, ...springs }, document2) => {
+    const model = model3dVan(document2);
+    vindKnoop2(model, nodeId);
+    const nieuw = setOpenFem3DSupportSprings(model, nodeId, springs);
+    return { uitkomst: { support: nieuw.supports?.find((s) => s.nodeId === nodeId) ?? null }, document: met(document2, nieuw) };
+  }
+});
+var opgelegdZetten = documentCommando({
+  naam: "model3d.support.setPrescribed",
+  beschrijving: "Opgelegde verplaatsingen of rotaties op een knoop zetten (vervangt de bestaande). Een opgelegde waarde verhindert zijn richting automatisch.",
+  invoer: obj({ nodeId: knoopId2, ...opgelegd }, ["nodeId"]),
+  uitvoeren: ({ nodeId, ...values }, document2) => {
+    const model = model3dVan(document2);
+    vindKnoop2(model, nodeId);
+    const nieuw = setOpenFem3DSupportPrescribed(model, nodeId, values);
+    return { uitkomst: { support: nieuw.supports?.find((s) => s.nodeId === nodeId) ?? null }, document: met(document2, nieuw) };
+  }
+});
+var opleggingWeg = documentCommando({
+  naam: "model3d.support.remove",
+  beschrijving: "De oplegging van een knoop weghalen, met haar veren en opgelegde verplaatsingen. De knoop blijft.",
+  invoer: obj({ nodeId: knoopId2 }, ["nodeId"]),
+  uitvoeren: ({ nodeId }, document2) => {
+    const model = model3dVan(document2);
+    if (!(model.supports ?? []).some((s) => s.nodeId === nodeId)) {
+      throw new ApiFout("NIET_GEVONDEN", `3D-knoop ${nodeId} heeft geen oplegging.`, { nodeId });
+    }
+    return { uitkomst: { removedSupportNodeId: nodeId }, document: met(document2, removeOpenFem3DSupport(model, nodeId)) };
+  }
+});
+var knoopLastToevoegen = documentCommando({
+  naam: "model3d.load.nodal.add",
+  beschrijving: "Een knooplast (krachten en momenten in globale assen) toevoegen. Ontbrekende componenten zijn 0.",
+  invoer: obj({ nodeId: knoopId2, caseId: gevalId, ...knoopLastVelden }, ["nodeId"]),
+  uitvoeren: ({ nodeId, caseId, fx = 0, fy = 0, fz = 0, mx = 0, my = 0, mz = 0 }, document2) => {
+    const model = model3dVan(document2);
+    vindKnoop2(model, nodeId);
+    const nieuw = addOpenFem3DNodalLoad(model, nodeId, { fx, fy, fz, mx, my, mz }, geval(document2, caseId));
+    return { uitkomst: { load: nieuwElement(model.loads, nieuw.loads) }, document: met(document2, nieuw) };
+  }
+});
+var knoopLastWijzigen = documentCommando({
+  naam: "model3d.load.nodal.update",
+  beschrijving: "Componenten van een knooplast wijzigen; niet genoemde componenten blijven.",
+  invoer: obj({ id: id("Id van de knooplast."), ...knoopLastVelden }, ["id"]),
+  uitvoeren: ({ id: loadId, ...patch }, document2) => {
+    const model = model3dVan(document2);
+    const oud = vindIn(model.loads, "3D-knooplast", loadId);
+    const nieuw = updateOpenFem3DNodalLoad(model, loadId, {
+      fx: patch.fx ?? oud.fx,
+      fy: patch.fy ?? oud.fy,
+      fz: patch.fz ?? oud.fz,
+      mx: patch.mx ?? oud.mx,
+      my: patch.my ?? oud.my,
+      mz: patch.mz ?? oud.mz
+    });
+    return { uitkomst: { load: vindIn(nieuw.loads, "3D-knooplast", loadId) }, document: met(document2, nieuw) };
+  }
+});
+var staafLastToevoegen = documentCommando({
+  naam: "model3d.load.member.add",
+  beschrijving: "Een (trapeziumvormige) lijnlast op een staaf toevoegen, in lokale y/z. Zonder positie: over de hele staaf.",
+  invoer: obj({ beamId: staafId, caseId: gevalId, ...lijnLastVelden }, ["beamId"]),
+  uitvoeren: ({ beamId, caseId, qyStart = 0, qyEnd, qzStart = 0, qzEnd, startPositionM = 0, endPositionM }, document2) => {
+    const model = model3dVan(document2);
+    const lengte = staafLengte(model, beamId);
+    const nieuw = addOpenFem3DMemberLoad(model, beamId, {
+      qyStart,
+      qyEnd: qyEnd ?? qyStart,
+      qzStart,
+      qzEnd: qzEnd ?? qzStart,
+      startPositionM,
+      endPositionM: endPositionM ?? lengte
+    }, geval(document2, caseId));
+    return { uitkomst: { load: nieuwElement(model.memberLoads, nieuw.memberLoads) }, document: met(document2, nieuw) };
+  }
+});
+var staafLastWijzigen = documentCommando({
+  naam: "model3d.load.member.update",
+  beschrijving: "Waarden of positie van een lijnlast wijzigen; niet genoemde velden blijven.",
+  invoer: obj({ id: id("Id van de lijnlast."), ...lijnLastVelden }, ["id"]),
+  uitvoeren: ({ id: loadId, ...patch }, document2) => {
+    const model = model3dVan(document2);
+    const { id: _id, beamId: _beam, caseId: _case, ...oud } = vindIn(model.memberLoads, "3D-lijnlast", loadId);
+    const nieuw = updateOpenFem3DMemberLoad(model, loadId, { ...oud, ...patch });
+    return { uitkomst: { load: vindIn(nieuw.memberLoads, "3D-lijnlast", loadId) }, document: met(document2, nieuw) };
+  }
+});
+var puntLastToevoegen = documentCommando({
+  naam: "model3d.load.memberPoint.add",
+  beschrijving: "Een puntlast op een staaf toevoegen, in lokale y/z, op een plaats vanaf de beginknoop.",
+  invoer: obj({ beamId: staafId, caseId: gevalId, ...puntLastVelden }, ["beamId", "positionM"]),
+  uitvoeren: ({ beamId, caseId, py = 0, pz = 0, positionM }, document2) => {
+    const model = model3dVan(document2);
+    vindStaaf2(model, beamId);
+    const nieuw = addOpenFem3DMemberPointLoad(model, beamId, { py, pz, positionM }, geval(document2, caseId));
+    return { uitkomst: { load: nieuwElement(model.memberPointLoads, nieuw.memberPointLoads) }, document: met(document2, nieuw) };
+  }
+});
+var puntLastWijzigen = documentCommando({
+  naam: "model3d.load.memberPoint.update",
+  beschrijving: "Waarden of plaats van een puntlast op een staaf wijzigen; niet genoemde velden blijven.",
+  invoer: obj({ id: id("Id van de puntlast."), ...puntLastVelden }, ["id"]),
+  uitvoeren: ({ id: loadId, ...patch }, document2) => {
+    const model = model3dVan(document2);
+    const { id: _id, beamId: _beam, caseId: _case, ...oud } = vindIn(model.memberPointLoads, "3D-puntlast", loadId);
+    const nieuw = updateOpenFem3DMemberPointLoad(model, loadId, { ...oud, ...patch });
+    return { uitkomst: { load: vindIn(nieuw.memberPointLoads, "3D-puntlast", loadId) }, document: met(document2, nieuw) };
+  }
+});
+var temperatuurToevoegen = documentCommando({
+  naam: "model3d.load.thermal.add",
+  beschrijving: "Een temperatuurbelasting op een staaf toevoegen (gelijkmatig en/of gradi\xEBnt). Ontbrekende waarden zijn 0; niet alles 0.",
+  invoer: obj({ beamId: staafId, caseId: gevalId, ...temperatuurVelden }, ["beamId"]),
+  uitvoeren: ({ beamId, caseId, deltaTUniformK = 0, deltaTGradientYK = 0, deltaTGradientZK = 0 }, document2) => {
+    const model = model3dVan(document2);
+    vindStaaf2(model, beamId);
+    const nieuw = addOpenFem3DThermalLoad(model, beamId, { deltaTUniformK, deltaTGradientYK, deltaTGradientZK }, geval(document2, caseId));
+    return { uitkomst: { load: nieuwElement(model.thermalLoads, nieuw.thermalLoads) }, document: met(document2, nieuw) };
+  }
+});
+var temperatuurWijzigen = documentCommando({
+  naam: "model3d.load.thermal.update",
+  beschrijving: "Een temperatuurbelasting wijzigen; niet genoemde waarden blijven.",
+  invoer: obj({ id: id("Id van de temperatuurbelasting."), ...temperatuurVelden }, ["id"]),
+  uitvoeren: ({ id: loadId, ...patch }, document2) => {
+    const model = model3dVan(document2);
+    const { id: _id, beamId: _beam, caseId: _case, ...oud } = vindIn(model.thermalLoads, "3D-temperatuurbelasting", loadId);
+    const nieuw = updateOpenFem3DThermalLoad(model, loadId, { ...oud, ...patch });
+    return { uitkomst: { load: vindIn(nieuw.thermalLoads, "3D-temperatuurbelasting", loadId) }, document: met(document2, nieuw) };
+  }
+});
+var vlakLastToevoegen = documentCommando({
+  naam: "model3d.load.surface.add",
+  beschrijving: "Een oppervlaktebelasting op een plaat toevoegen, in globale assen. Ontbrekende componenten zijn 0.",
+  invoer: obj({ plateId: id("Id van een bestaande 3D-plaat."), caseId: gevalId, ...vlakLastVelden }, ["plateId"]),
+  uitvoeren: ({ plateId, caseId, qx = 0, qy = 0, qz = 0 }, document2) => {
+    const model = model3dVan(document2);
+    vindIn(model.plates, "3D-plaat", plateId);
+    const nieuw = addOpenFem3DSurfaceLoad(model, plateId, { qx, qy, qz }, geval(document2, caseId));
+    return { uitkomst: { load: nieuwElement(model.surfaceLoads, nieuw.surfaceLoads) }, document: met(document2, nieuw) };
+  }
+});
+var vlakLastWijzigen = documentCommando({
+  naam: "model3d.load.surface.update",
+  beschrijving: "Een oppervlaktebelasting wijzigen; niet genoemde componenten blijven.",
+  invoer: obj({ id: id("Id van de oppervlaktebelasting."), ...vlakLastVelden }, ["id"]),
+  uitvoeren: ({ id: loadId, ...patch }, document2) => {
+    const model = model3dVan(document2);
+    const oud = vindIn(model.surfaceLoads, "3D-oppervlaktebelasting", loadId);
+    const nieuw = updateOpenFem3DSurfaceLoad(model, loadId, { qx: patch.qx ?? oud.qx, qy: patch.qy ?? oud.qy, qz: patch.qz ?? oud.qz });
+    return { uitkomst: { load: vindIn(nieuw.surfaceLoads, "3D-oppervlaktebelasting", loadId) }, document: met(document2, nieuw) };
+  }
+});
+function lastVerwijderen(soort, sleutel, naam, verwijder) {
+  return documentCommando({
+    naam,
+    beschrijving: `Een ${soort} verwijderen.`,
+    invoer: obj({ id: id(`Id van de ${soort}.`) }, ["id"]),
+    uitvoeren: ({ id: loadId }, document2) => {
+      const model = model3dVan(document2);
+      vindIn(model[sleutel], `3D-${soort}`, loadId);
+      return { uitkomst: { deletedLoadId: loadId }, document: met(document2, verwijder(model, loadId)) };
+    }
+  });
+}
+var vlakToevoegen = documentCommando({
+  naam: "model3d.loadPanel.add",
+  beschrijving: "Een belastingvlak over bestaande knopen toevoegen: draagt zijn vlaklast af naar de liggers in het vlak (bijv. een dak of gevel). Standaard q = 1 kN/m\xB2, zwaartekracht, tweezijdig.",
+  invoer: obj({ nodeIds: lijst(id("Id van een hoekknoop."), "Hoekknopen in volgorde, in \xE9\xE9n vlak.", { minItems: 3 }), caseId: gevalId, ...vlakVelden }, ["nodeIds"]),
+  uitvoeren: ({ nodeIds, caseId, ...opties }, document2) => {
+    const model = model3dVan(document2);
+    const nieuw = addOpenFem3DLoadPanel(model, nodeIds, { ...opties, caseId: geval(document2, caseId) });
+    return { uitkomst: { loadPanel: nieuwElement(model.loadPanels, nieuw.loadPanels) }, document: met(document2, nieuw) };
+  }
+});
+var vlakWijzigen = documentCommando({
+  naam: "model3d.loadPanel.update",
+  beschrijving: "Een belastingvlak wijzigen: q, richting, afdracht, overspanning, uitgesloten liggers of belastinggeval.",
+  invoer: obj({
+    id: id("Id van het belastingvlak."),
+    caseId: id("Ander bestaand belastinggeval."),
+    q: vlakVelden.q,
+    direction: vlakVelden.direction,
+    distribution: vlakVelden.distribution,
+    spanDirection: ofNull(vector, "Overspanningsrichting; null = de standaard."),
+    excludedBeamIds: vlakVelden.excludedBeamIds
+  }, ["id"]),
+  uitvoeren: ({ id: panelId, caseId, spanDirection, ...rest }, document2) => {
+    const model = model3dVan(document2);
+    vindIn(model.loadPanels, "3D-belastingvlak", panelId);
+    const patch = {
+      ...rest,
+      ...caseId !== void 0 ? { caseId: geval(document2, caseId) } : {},
+      ...spanDirection !== void 0 ? { spanDirection: spanDirection ?? void 0 } : {}
+    };
+    const nieuw = updateOpenFem3DLoadPanel(model, panelId, patch);
+    return { uitkomst: { loadPanel: vindIn(nieuw.loadPanels, "3D-belastingvlak", panelId) }, document: met(document2, nieuw) };
+  }
+});
+var vlakWeg = documentCommando({
+  naam: "model3d.loadPanel.delete",
+  beschrijving: "Een belastingvlak verwijderen.",
+  invoer: obj({ id: id("Id van het belastingvlak.") }, ["id"]),
+  uitvoeren: ({ id: panelId }, document2) => {
+    const model = model3dVan(document2);
+    vindIn(model.loadPanels, "3D-belastingvlak", panelId);
+    return { uitkomst: { deletedLoadPanelId: panelId }, document: met(document2, removeOpenFem3DLoadPanel(model, panelId)) };
+  }
+});
+var vlakDupliceren = documentCommando({
+  naam: "model3d.loadPanel.duplicate",
+  beschrijving: "Een belastingvlak kopi\xEBren naar een ander belastinggeval (zelfde hoeken en instellingen).",
+  invoer: obj({ id: id("Id van het belastingvlak."), caseId: id("Bestaand belastinggeval van de kopie.") }, ["id", "caseId"]),
+  uitvoeren: ({ id: panelId, caseId }, document2) => {
+    const model = model3dVan(document2);
+    vindIn(model.loadPanels, "3D-belastingvlak", panelId);
+    const kopie = duplicateOpenFem3DLoadPanel(model, panelId, geval(document2, caseId));
+    return { uitkomst: { loadPanelId: kopie.panelId }, document: met(document2, kopie.model) };
+  }
+});
+var plaatNaarVlakken = documentCommando({
+  naam: "model3d.plate.toLoadPanels",
+  beschrijving: "Een plaat omzetten in belastingvlakken: de plaat verdwijnt, haar omtrek draagt alleen nog last af. Openingen, bogen of een schuine last worden geweigerd.",
+  invoer: obj({ plateId: id("Id van de plaat."), caseId: gevalId }, ["plateId"]),
+  uitvoeren: ({ plateId, caseId }, document2) => {
+    const model = model3dVan(document2);
+    vindIn(model.plates, "3D-plaat", plateId);
+    const omgezet = convertOpenFem3DPlateToLoadPanels(model, plateId, { caseId: geval(document2, caseId) });
+    return { uitkomst: { loadPanelIds: omgezet.panelIds }, document: met(document2, omgezet.model) };
+  }
+});
+function schijfWeigering(refusal) {
+  switch (refusal.kind) {
+    case "tooFewNodes":
+      return "Een schijf heeft minstens twee verschillende knopen nodig.";
+    case "missingNode":
+      return `3D-knoop ${refusal.nodeId} bestaat niet.`;
+    case "notLevel":
+      return `Knoop ${refusal.lowNodeId} en ${refusal.highNodeId} liggen ${refusal.differenceMm.toFixed(1)} mm uit elkaar in hoogte; een schijf ligt op \xE9\xE9n hoogte (binnen 1 mm).`;
+    case "alreadyInDiaphragm":
+      return `Knoop ${refusal.nodeId} zit al in schijf ${refusal.diaphragmId}.`;
+  }
+}
+var schijfToevoegen = documentCommando({
+  naam: "model3d.diaphragm.add",
+  beschrijving: "Een starre horizontale schijf (bijv. een vloer met druklaag) uit knopen op \xE9\xE9n hoogte: X, Y en rotatie om Z bewegen samen.",
+  invoer: obj({ nodeIds: lijst(knoopId2, "Knopen op \xE9\xE9n hoogte (binnen 1 mm).", { minItems: 2 }), name: tekst("Naam van de schijf.") }, ["nodeIds"]),
+  uitvoeren: ({ nodeIds, name }, document2) => {
+    const resultaat = addOpenFem3DDiaphragm(model3dVan(document2), nodeIds, name);
+    if (!resultaat.ok) throw new ApiFout("GEWEIGERD", schijfWeigering(resultaat.refusal), { refusal: resultaat.refusal });
+    return { uitkomst: { diaphragmId: resultaat.id }, document: met(document2, resultaat.model) };
+  }
+});
+var schijfWeg = documentCommando({
+  naam: "model3d.diaphragm.delete",
+  beschrijving: "Een starre schijf verwijderen; de knopen blijven.",
+  invoer: obj({ id: id("Id van de schijf.") }, ["id"]),
+  uitvoeren: ({ id: diaphragmId }, document2) => {
+    const model = model3dVan(document2);
+    vindIn(model.diaphragms, "Schijf", diaphragmId);
+    return { uitkomst: { deletedDiaphragmId: diaphragmId }, document: met(document2, removeOpenFem3DDiaphragm(model, diaphragmId)) };
+  }
+});
+var trekAlleen = documentCommando({
+  naam: "model3d.beam.setTensionOnly",
+  beschrijving: "Staven trek-alleen maken (on: true) of weer gewoon (on: false).",
+  invoer: obj({ beamIds: lijst(staafId, "De staven.", { minItems: 1 }), on: jaNee("true = trek-alleen.") }, ["beamIds", "on"]),
+  uitvoeren: ({ beamIds, on }, document2) => {
+    const model = model3dVan(document2);
+    for (const beamId of beamIds) vindStaaf2(model, beamId);
+    return { uitkomst: { beamIds, on }, document: met(document2, setOpenFem3DTensionOnly(model, beamIds, on)) };
+  }
+});
+var instellingen = documentCommando({
+  naam: "model3d.settings.update",
+  beschrijving: "Modelinstellingen voor trek-alleen staven: montage na de permanente belasting en de kruisregel.",
+  invoer: obj({
+    tensionOnlyFitAfterPermanent: jaNee("Trek-alleen staven gemonteerd na de permanente belasting (spanningsloos daaronder)."),
+    tensionOnlyCrossRule: jaNee("Kruisregel: van twee kruisende trek-alleen staven blijft de staaf met de grootste N actief.")
+  }),
+  uitvoeren: (invoer, document2) => {
+    let model = model3dVan(document2);
+    for (const [setting, on] of Object.entries(invoer)) {
+      model = setOpenFem3DTensionOnlySetting(model, setting, on);
+    }
+    return {
+      uitkomst: {
+        tensionOnlyFitAfterPermanent: model.tensionOnlyFitAfterPermanent === true,
+        tensionOnlyCrossRule: model.tensionOnlyCrossRule === true
+      },
+      document: met(document2, model)
+    };
+  }
+});
+var MODEL3D_VOORWAARDEN_COMMANDOS = [
+  opleggingZetten,
+  opleggingenZetten,
+  verenZetten,
+  opgelegdZetten,
+  opleggingWeg,
+  knoopLastToevoegen,
+  knoopLastWijzigen,
+  lastVerwijderen("knooplast", "loads", "model3d.load.nodal.delete", removeOpenFem3DNodalLoad),
+  staafLastToevoegen,
+  staafLastWijzigen,
+  lastVerwijderen("lijnlast", "memberLoads", "model3d.load.member.delete", removeOpenFem3DMemberLoad),
+  puntLastToevoegen,
+  puntLastWijzigen,
+  lastVerwijderen("puntlast", "memberPointLoads", "model3d.load.memberPoint.delete", removeOpenFem3DMemberPointLoad),
+  temperatuurToevoegen,
+  temperatuurWijzigen,
+  lastVerwijderen("temperatuurbelasting", "thermalLoads", "model3d.load.thermal.delete", removeOpenFem3DThermalLoad),
+  vlakLastToevoegen,
+  vlakLastWijzigen,
+  lastVerwijderen("oppervlaktebelasting", "surfaceLoads", "model3d.load.surface.delete", removeOpenFem3DSurfaceLoad),
+  vlakToevoegen,
+  vlakWijzigen,
+  vlakWeg,
+  vlakDupliceren,
+  plaatNaarVlakken,
+  schijfToevoegen,
+  schijfWeg,
+  trekAlleen,
+  instellingen
+];
+
+// src/lib/peilmaat.ts
+var PEILMAAT_FONT_PX = 12.5;
+var PEILMAAT_TEKEN_PX = PEILMAAT_FONT_PX * 0.6;
+function peilmaatTekst(positieMm) {
+  const m = positieMm / 1e3;
+  const teken = Math.abs(m) < 5e-3 ? "\xB1" : m > 0 ? "+" : "\u2212";
+  return `${teken}${Math.abs(m).toFixed(2).replace(".", ",")} m`;
+}
+
+// src/components/openFem3d/openFem3dLevels.ts
+var FULL_LENGTH_TOLERANCE_M = 1e-6;
+function openFem3DLevelHeightM(level) {
+  return level.position / 1e3;
+}
+function openFem3DLevelName(level) {
+  return level.label.trim() || peilmaatTekst(level.position);
+}
+function openFem3DPlateNodeIds(plate) {
+  return [.../* @__PURE__ */ new Set([...plate.nodeIds, ...(plate.openings ?? []).flatMap((opening) => opening.nodeIds)])];
+}
+function refuse(refusal) {
+  return { ok: false, refusal };
+}
+function withoutLevel(item) {
+  if (item.levelId === void 0) return item;
+  const { levelId: _levelId, ...rest } = item;
+  return rest;
+}
+function mapChanged(items, change) {
+  let result = null;
+  for (let index = 0; index < items.length; index += 1) {
+    const next = change(items[index]);
+    if (next !== items[index]) {
+      result ??= items.slice();
+      result[index] = next;
+    }
+  }
+  return result ?? items;
+}
+function beamLengthM(nodes, startNodeId, endNodeId) {
+  const start = nodes.get(startNodeId), end = nodes.get(endNodeId);
+  return start && end ? Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z) : Number.NaN;
+}
+function withFullLengthMemberLoads(before, after) {
+  if (!after.memberLoads?.length) return after;
+  const beforeNodes = new Map(before.nodes.map((node) => [node.id, node]));
+  const afterNodes = new Map(after.nodes.map((node) => [node.id, node]));
+  const lengths = /* @__PURE__ */ new Map();
+  for (const beam of after.beams) {
+    const from = beamLengthM(beforeNodes, beam.startNodeId, beam.endNodeId);
+    const to = beamLengthM(afterNodes, beam.startNodeId, beam.endNodeId);
+    if (Number.isFinite(from) && Number.isFinite(to) && from !== to) lengths.set(beam.id, { from, to });
+  }
+  if (lengths.size === 0) return after;
+  const memberLoads = mapChanged(after.memberLoads, (load) => {
+    const length = lengths.get(load.beamId);
+    if (!length) return load;
+    const fullLength = Math.abs(load.startPositionM) <= FULL_LENGTH_TOLERANCE_M && Math.abs(load.endPositionM - length.from) <= FULL_LENGTH_TOLERANCE_M;
+    return fullLength ? { ...load, endPositionM: length.to } : load;
+  });
+  return memberLoads === after.memberLoads ? after : { ...after, memberLoads };
+}
+function parseMessage(model) {
+  try {
+    parseOpenFem3DModel(model);
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+function finishGeometry(before, after) {
+  const adapted = withFullLengthMemberLoads(before, after);
+  const nodeById = new Map(adapted.nodes.map((node) => [node.id, node]));
+  for (const beam of adapted.beams) {
+    const start = nodeById.get(beam.startNodeId), end = nodeById.get(beam.endNodeId);
+    if (start && end && start.x === end.x && start.y === end.y && start.z === end.z) {
+      return refuse({ kind: "zeroLengthBeam", beamId: beam.id });
+    }
+  }
+  const message = parseMessage(adapted);
+  if (message !== null && message !== parseMessage(before)) return refuse({ kind: "invalidGeometry", message });
+  return { ok: true, model: adapted };
+}
+function linkOpenFem3DToLevel(model, target, levelId, levels) {
+  const nodeIds = new Set(model.nodes.map((node) => node.id));
+  const plates = model.plates ?? [];
+  const plateById = new Map(plates.map((plate) => [plate.id, plate]));
+  for (const id2 of target.nodeIds ?? []) if (!nodeIds.has(id2)) throw new Error(`3D-knoop ${id2} bestaat niet.`);
+  for (const id2 of target.plateIds ?? []) if (!plateById.has(id2)) throw new Error(`3D-plaat ${id2} bestaat niet.`);
+  const targetPlates = new Set(target.plateIds ?? []);
+  const explicitNodes = new Set(target.nodeIds ?? []);
+  const plateNodes = new Set([...targetPlates].flatMap((id2) => openFem3DPlateNodeIds(plateById.get(id2))));
+  const holders = /* @__PURE__ */ new Map();
+  for (const plate of plates) {
+    if (plate.levelId === void 0 || targetPlates.has(plate.id)) continue;
+    for (const nodeId of openFem3DPlateNodeIds(plate)) if (!holders.has(nodeId)) holders.set(nodeId, plate);
+  }
+  const withPlates = (nodes2, nextPlates2) => ({
+    ...model,
+    nodes: nodes2,
+    ...model.plates ? { plates: nextPlates2 } : {}
+  });
+  if (levelId === null) {
+    for (const nodeId of explicitNodes) {
+      const holder = holders.get(nodeId);
+      if (holder) return refuse({ kind: "heldByPlate", nodeId, plateId: holder.id, levelId: holder.levelId });
+    }
+    const released = /* @__PURE__ */ new Set([...explicitNodes, ...[...plateNodes].filter((id2) => !holders.has(id2))]);
+    const nodes2 = mapChanged(model.nodes, (node) => released.has(node.id) ? withoutLevel(node) : node);
+    const nextPlates2 = mapChanged(plates, (plate) => targetPlates.has(plate.id) ? withoutLevel(plate) : plate);
+    if (nodes2 === model.nodes && nextPlates2 === plates) return { ok: true, model };
+    return { ok: true, model: withPlates(nodes2, nextPlates2) };
+  }
+  const level = levels.find((item) => item.id === levelId);
+  if (!level) return refuse({ kind: "unknownLevel", levelId });
+  const z = openFem3DLevelHeightM(level);
+  const linked = /* @__PURE__ */ new Set([...explicitNodes, ...plateNodes]);
+  for (const nodeId of linked) {
+    const holder = holders.get(nodeId);
+    if (holder && holder.levelId !== levelId) {
+      return refuse({ kind: "heldByPlate", nodeId, plateId: holder.id, levelId: holder.levelId });
+    }
+  }
+  const nodes = mapChanged(model.nodes, (node) => linked.has(node.id) && (node.z !== z || node.levelId !== levelId) ? { ...node, z, levelId } : node);
+  const nextPlates = mapChanged(plates, (plate) => targetPlates.has(plate.id) && plate.levelId !== levelId ? { ...plate, levelId } : plate);
+  if (nodes === model.nodes && nextPlates === plates) return { ok: true, model };
+  return finishGeometry(model, withPlates(nodes, nextPlates));
+}
+function applyOpenFem3DLevels(model, levels) {
+  const byId = new Map(levels.map((level) => [level.id, level]));
+  const nodes = mapChanged(model.nodes, (node) => {
+    if (node.levelId === void 0) return node;
+    const level = byId.get(node.levelId);
+    if (!level) return withoutLevel(node);
+    const z = openFem3DLevelHeightM(level);
+    return node.z === z ? node : { ...node, z };
+  });
+  const plates = model.plates && mapChanged(model.plates, (plate) => plate.levelId !== void 0 && !byId.has(plate.levelId) ? withoutLevel(plate) : plate);
+  if (nodes === model.nodes && plates === model.plates) return { ok: true, model };
+  const next = { ...model, nodes, ...plates ? { plates } : {} };
+  const moved = nodes.some((node, index) => node.z !== model.nodes[index].z);
+  return moved ? finishGeometry(model, next) : { ok: true, model: next };
+}
+function withConsistentOpenFem3DPlateLevels(model) {
+  if (!model.plates?.some((plate) => plate.levelId !== void 0)) return model;
+  const nodeById = new Map(model.nodes.map((node) => [node.id, node]));
+  const plates = mapChanged(model.plates, (plate) => plate.levelId === void 0 || openFem3DPlateNodeIds(plate).every((id2) => nodeById.get(id2)?.levelId === plate.levelId) ? plate : withoutLevel(plate));
+  return plates === model.plates ? model : { ...model, plates };
+}
+function openFem3DLevelsFromMetres(input, current, key = "levels") {
+  return openFem3DGridAxesFromMetres(input, current, "z", key);
+}
+function openFem3DGridAxesFromMetres(input, current, voorvoegsel, key) {
+  if (!Array.isArray(input)) throw new Error(`${key} moet een lijst zijn`);
+  const items = input.map((raw, index) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${key}[${index}] is ongeldig`);
+    const item = raw;
+    if (typeof item.label !== "string" || typeof item.position_m !== "number" || !Number.isFinite(item.position_m)) {
+      throw new Error(`${key}[${index}] vereist label en position_m`);
+    }
+    return { label: item.label, position: Math.round(item.position_m * 1e9) / 1e6 };
+  });
+  const reused = /* @__PURE__ */ new Set();
+  const ids = items.map((item) => {
+    const existing = current.find((level) => level.label === item.label && !reused.has(level.id));
+    if (existing) reused.add(existing.id);
+    return existing?.id;
+  });
+  const taken = /* @__PURE__ */ new Set([...current.map((level) => level.id), ...reused]);
+  let counter = 1;
+  return items.map((item, index) => {
+    let id2 = ids[index];
+    if (id2 === void 0) {
+      while (taken.has(`${voorvoegsel}-${counter}`)) counter += 1;
+      id2 = `${voorvoegsel}-${counter}`;
+      taken.add(id2);
+    }
+    return { id: id2, label: item.label, position: item.position };
+  });
+}
+function openFem3DLevelRefusalText(refusal, levels) {
+  const name = (levelId) => {
+    const level = levels.find((item) => item.id === levelId);
+    return level ? openFem3DLevelName(level) : levelId;
+  };
+  switch (refusal.kind) {
+    case "unknownLevel":
+      return { key: "openFem3d.levels.refused.unknownLevel", values: { level: name(refusal.levelId) } };
+    case "heldByPlate":
+      return {
+        key: "openFem3d.levels.refused.heldByPlate",
+        values: { node: refusal.nodeId, plate: refusal.plateId, level: name(refusal.levelId) }
+      };
+    case "zeroLengthBeam":
+      return { key: "openFem3d.levels.refused.zeroLengthBeam", values: { beam: refusal.beamId } };
+    case "invalidGeometry":
+      return { key: "openFem3d.levels.refused.invalidGeometry", values: { detail: refusal.message } };
+  }
+}
+
+// src/components/openFem3d/openFem3dTransform.ts
+function buildTransformIndex(model) {
+  const nodeIndexById = /* @__PURE__ */ new Map();
+  for (let index = 0; index < model.nodes.length; index += 1) {
+    nodeIndexById.set(model.nodes[index].id, index);
+  }
+  return {
+    nodeIndexById,
+    beamById: new Map(model.beams.map((beam) => [beam.id, beam])),
+    plateById: new Map((model.plates ?? []).map((plate) => [plate.id, plate]))
+  };
+}
+function nextId(items) {
+  let maximum = 0;
+  for (const item of items) if (item.id > maximum) maximum = item.id;
+  return maximum + 1;
+}
+function remapPlateBoundary(boundary, idMap) {
+  return boundary?.map((segment) => segment.kind === "arc" ? {
+    ...segment,
+    startNodeId: idMap.get(segment.startNodeId),
+    controlNodeId: idMap.get(segment.controlNodeId),
+    endNodeId: idMap.get(segment.endNodeId)
+  } : {
+    ...segment,
+    startNodeId: idMap.get(segment.startNodeId),
+    endNodeId: idMap.get(segment.endNodeId)
+  });
+}
+function selectedNodeIds(index, selection) {
+  if (selection.type === "multi") {
+    for (const id2 of selection.nodeIds) {
+      if (!index.nodeIndexById.has(id2)) throw new Error(`3D-knoop ${id2} bestaat niet.`);
+    }
+    const ids = new Set(selection.nodeIds);
+    for (const beamId of selection.beamIds) {
+      const beam2 = index.beamById.get(beamId);
+      if (!beam2) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
+      ids.add(beam2.startNodeId);
+      ids.add(beam2.endNodeId);
+    }
+    for (const plateId of selection.plateIds ?? []) {
+      const plate = index.plateById.get(plateId);
+      if (!plate) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
+      plate.nodeIds.forEach((id2) => ids.add(id2));
+      plate.openings?.forEach((opening) => opening.nodeIds.forEach((id2) => ids.add(id2)));
+    }
+    if (ids.size === 0) throw new Error("De 3D-selectie bevat geen knopen of staven.");
+    return [...ids];
+  }
+  if (selection.type === "node") {
+    if (!index.nodeIndexById.has(selection.id)) throw new Error(`3D-knoop ${selection.id} bestaat niet.`);
+    return [selection.id];
+  }
+  if (selection.type === "plate") {
+    const plate = index.plateById.get(selection.id);
+    if (!plate) throw new Error(`3D-plaat ${selection.id} bestaat niet.`);
+    return [.../* @__PURE__ */ new Set([...plate.nodeIds, ...(plate.openings ?? []).flatMap((opening) => opening.nodeIds)])];
+  }
+  const beam = index.beamById.get(selection.id);
+  if (!beam) throw new Error(`3D-staaf ${selection.id} bestaat niet.`);
+  return [beam.startNodeId, beam.endNodeId];
+}
+function selectedBeamIds(index, selection) {
+  if (selection.type === "node" || selection.type === "plate") return [];
+  const ids = selection.type === "beam" ? [selection.id] : selection.beamIds;
+  for (const id2 of ids) {
+    if (!index.beamById.has(id2)) throw new Error(`3D-staaf ${id2} bestaat niet.`);
+  }
+  return ids;
+}
+function selectedPlateIds(index, selection) {
+  const ids = selection.type === "plate" ? [selection.id] : selection.type === "multi" ? selection.plateIds ?? [] : [];
+  for (const id2 of ids) if (!index.plateById.has(id2)) throw new Error(`3D-plaat ${id2} bestaat niet.`);
+  return ids;
+}
+function keepLevelLink(before, next) {
+  if (next.levelId === void 0 || next.z === before.z) return next;
+  const { levelId: _levelId, ...unlinked } = next;
+  return unlinked;
+}
+function finite(values) {
+  if (values.some((value) => !Number.isFinite(value))) throw new Error("Vul eindige getallen in voor de 3D-bewerking.");
+}
+function rotatePoint(point, center, axis, angleRad) {
+  const x = point.x - center.x, y = point.y - center.y, z = point.z - center.z;
+  const c = Math.cos(angleRad), s = Math.sin(angleRad);
+  if (axis === "x") return { x: point.x, y: center.y + c * y - s * z, z: center.z + s * y + c * z };
+  if (axis === "y") return { x: center.x + c * x + s * z, y: point.y, z: center.z - s * x + c * z };
+  return { x: center.x + c * x - s * y, y: center.y + s * x + c * y, z: point.z };
+}
+function transformOpenFem3D(model, selection, command) {
+  const index = buildTransformIndex(model);
+  const ids = selectedNodeIds(index, selection);
+  const idSet = new Set(ids);
+  if (command.kind === "move" || command.kind === "copy") finite([command.dx, command.dy, command.dz]);
+  if (command.kind === "rotate") finite([command.angleDeg]);
+  if (command.kind === "mirror") finite([command.offset]);
+  if (command.kind === "move" && command.dx === 0 && command.dy === 0 && command.dz === 0) {
+    return { model, selection };
+  }
+  if (command.kind === "rotate" && command.angleDeg % 360 === 0) {
+    return { model, selection };
+  }
+  if (command.kind === "copy") {
+    const nextNode = nextId(model.nodes);
+    const idMap = new Map(ids.map((id2, selectionIndex) => [id2, nextNode + selectionIndex]));
+    const copiedNodes = ids.map((sourceId) => model.nodes[index.nodeIndexById.get(sourceId)]).map((node) => keepLevelLink(node, {
+      ...node,
+      id: idMap.get(node.id),
+      x: node.x + command.dx,
+      y: node.y + command.dy,
+      z: node.z + command.dz
+    }));
+    const beamIds = selectedBeamIds(index, selection);
+    const beamIdSet = new Set(beamIds);
+    let nextBeam = nextId(model.beams);
+    const beamIdMap = /* @__PURE__ */ new Map();
+    const copiedBeams = beamIds.map((beamId) => index.beamById.get(beamId)).map((source) => {
+      const id2 = nextBeam++;
+      beamIdMap.set(source.id, id2);
+      return {
+        ...source,
+        id: id2,
+        startNodeId: idMap.get(source.startNodeId),
+        endNodeId: idMap.get(source.endNodeId)
+      };
+    });
+    const copiedSupports = (model.supports ?? []).filter((support) => idSet.has(support.nodeId)).map((support) => ({ ...support, nodeId: idMap.get(support.nodeId) }));
+    let nextLoad = nextId(model.loads ?? []);
+    const copiedLoads = (model.loads ?? []).filter((load) => idSet.has(load.nodeId)).map((load) => ({ ...load, id: nextLoad++, nodeId: idMap.get(load.nodeId) }));
+    let nextMemberLoad = nextId(model.memberLoads ?? []);
+    const copiedMemberLoads = (model.memberLoads ?? []).filter((load) => beamIdSet.has(load.beamId)).map((load) => ({ ...load, id: nextMemberLoad++, beamId: beamIdMap.get(load.beamId) }));
+    let nextMemberPointLoad = nextId(model.memberPointLoads ?? []);
+    const copiedMemberPointLoads = (model.memberPointLoads ?? []).filter((load) => beamIdSet.has(load.beamId)).map((load) => ({ ...load, id: nextMemberPointLoad++, beamId: beamIdMap.get(load.beamId) }));
+    let nextThermalLoad = nextId(model.thermalLoads ?? []);
+    const copiedThermalLoads = (model.thermalLoads ?? []).filter((load) => beamIdSet.has(load.beamId)).map((load) => ({ ...load, id: nextThermalLoad++, beamId: beamIdMap.get(load.beamId) }));
+    const plateIds = selectedPlateIds(index, selection);
+    const plateIdSet = new Set(plateIds);
+    let nextPlate = nextId(model.plates ?? []);
+    const plateIdMap = /* @__PURE__ */ new Map();
+    const copiedPlates = plateIds.map((plateId) => index.plateById.get(plateId)).map((plate) => {
+      const id2 = nextPlate++;
+      plateIdMap.set(plate.id, id2);
+      return {
+        ...plate,
+        id: id2,
+        nodeIds: plate.nodeIds.map((nodeId) => idMap.get(nodeId)),
+        ...plate.boundary ? { boundary: remapPlateBoundary(plate.boundary, idMap) } : {},
+        openings: plate.openings?.map((opening) => ({
+          ...opening,
+          nodeIds: opening.nodeIds.map((nodeId) => idMap.get(nodeId)),
+          ...opening.boundary ? { boundary: remapPlateBoundary(opening.boundary, idMap) } : {}
+        }))
+      };
+    });
+    let nextSurfaceLoad = nextId(model.surfaceLoads ?? []);
+    const copiedSurfaceLoads = (model.surfaceLoads ?? []).filter((load) => plateIdSet.has(load.plateId)).map((load) => ({ ...load, id: nextSurfaceLoad++, plateId: plateIdMap.get(load.plateId) }));
+    return {
+      // Een kopie op een andere hoogte verliest de levelkoppeling van haar
+      // knopen, en daarmee ook die van haar platen.
+      model: withConsistentOpenFem3DPlateLevels({
+        ...model,
+        nodes: [...model.nodes, ...copiedNodes],
+        beams: [...model.beams, ...copiedBeams],
+        supports: copiedSupports.length > 0 ? [...model.supports ?? [], ...copiedSupports] : model.supports,
+        loads: copiedLoads.length > 0 ? [...model.loads ?? [], ...copiedLoads] : model.loads,
+        memberLoads: copiedMemberLoads.length > 0 ? [...model.memberLoads ?? [], ...copiedMemberLoads] : model.memberLoads,
+        memberPointLoads: copiedMemberPointLoads.length > 0 ? [...model.memberPointLoads ?? [], ...copiedMemberPointLoads] : model.memberPointLoads,
+        thermalLoads: copiedThermalLoads.length > 0 ? [...model.thermalLoads ?? [], ...copiedThermalLoads] : model.thermalLoads,
+        plates: copiedPlates.length > 0 ? [...model.plates ?? [], ...copiedPlates] : model.plates,
+        surfaceLoads: copiedSurfaceLoads.length > 0 ? [...model.surfaceLoads ?? [], ...copiedSurfaceLoads] : model.surfaceLoads
+      }),
+      selection: selection.type === "multi" ? {
+        type: "multi",
+        nodeIds: selection.nodeIds.map((id2) => idMap.get(id2)),
+        beamIds: selection.beamIds.map((id2) => beamIdMap.get(id2)),
+        ...selection.plateIds?.length ? { plateIds: selection.plateIds.map((id2) => plateIdMap.get(id2)) } : {}
+      } : selection.type === "beam" ? { type: "beam", id: beamIdMap.get(selection.id) } : selection.type === "plate" ? { type: "plate", id: plateIdMap.get(selection.id) } : { type: "node", id: idMap.get(selection.id) }
+    };
+  }
+  const selectedNodes = ids.map((id2) => model.nodes[index.nodeIndexById.get(id2)]);
+  const center = selectedNodes.reduce((sum, node) => ({
+    x: sum.x + node.x / ids.length,
+    y: sum.y + node.y / ids.length,
+    z: sum.z + node.z / ids.length
+  }), { x: 0, y: 0, z: 0 });
+  const nodes = model.nodes.slice();
+  let changed = false;
+  for (const id2 of ids) {
+    const nodeIndex = index.nodeIndexById.get(id2);
+    const node = model.nodes[nodeIndex];
+    let next;
+    if (command.kind === "move") next = {
+      ...node,
+      x: node.x + command.dx,
+      y: node.y + command.dy,
+      z: node.z + command.dz
+    };
+    else if (command.kind === "rotate") next = {
+      ...node,
+      ...rotatePoint(node, center, command.axis, command.angleDeg * Math.PI / 180)
+    };
+    else {
+      const coordinate = node[command.axis];
+      next = { ...node, [command.axis]: 2 * command.offset - coordinate };
+    }
+    if (next.x !== node.x || next.y !== node.y || next.z !== node.z) changed = true;
+    nodes[nodeIndex] = keepLevelLink(node, next);
+  }
+  if (!changed) return { model, selection };
+  return { model: withConsistentOpenFem3DPlateLevels({ ...model, nodes }), selection };
+}
+
+// src/api/commands/model3dBewerken.ts
+init_femTypes();
+function controleerSelectie(model, { nodeIds = [], beamIds = [], plateIds = [] }) {
+  if (nodeIds.length + beamIds.length + plateIds.length === 0) {
+    throw new ApiFout("INVOER_ONGELDIG", "Kies minstens \xE9\xE9n knoop, staaf of plaat.");
+  }
+  for (const nodeId of nodeIds) if (!model.nodes.some((n2) => n2.id === nodeId)) throw nietGevonden("3D-knoop", nodeId);
+  for (const beamId of beamIds) if (!model.beams.some((b) => b.id === beamId)) throw nietGevonden("3D-staaf", beamId);
+  for (const plateId of plateIds) if (!(model.plates ?? []).some((p2) => p2.id === plateId)) throw nietGevonden("3D-plaat", plateId);
+  return { type: "multi", nodeIds, beamIds, plateIds };
+}
+function stramien(document2) {
+  return document2.structuralGrid ?? DEFAULT_STRUCTURAL_GRID;
+}
+function levelWeigering(refusal, levels) {
+  const { key, values } = openFem3DLevelRefusalText(refusal, levels);
+  switch (key.split(".").pop()) {
+    case "unknownLevel":
+      return `Level ${values.level} bestaat niet (meer).`;
+    case "heldByPlate":
+      return `Knoop ${values.node} hoort bij plaat ${values.plate} op level ${values.level}. Kies het level voor die plaat, of ontkoppel die plaat eerst.`;
+    case "zeroLengthBeam":
+      return `Staaf ${values.beam} zou geen lengte meer hebben.`;
+    default:
+      return `De geometrie klopt dan niet meer: ${values.detail}`;
+  }
+}
+var levelsUit = (levels) => levels.map((level) => ({ id: level.id, label: level.label, heightM: openFem3DLevelHeightM(level) }));
+var selectieVelden = {
+  nodeIds: lijst(id("Id van een 3D-knoop."), "Knopen."),
+  beamIds: lijst(id("Id van een 3D-staaf."), "Staven (hun knopen gaan mee)."),
+  plateIds: lijst(id("Id van een 3D-plaat."), "Platen (hun knopen en openingen gaan mee).")
+};
+var as = keuze(["x", "y", "z"], "Globale as.");
+var transformatie = eenVan([
+  obj({ kind: { const: "move" }, dx: getal4("m"), dy: getal4("m"), dz: getal4("m") }, ["kind", "dx", "dy", "dz"], "Verplaatsen."),
+  obj({ kind: { const: "copy" }, dx: getal4("m"), dy: getal4("m"), dz: getal4("m") }, ["kind", "dx", "dy", "dz"], "Kopi\xEBren met deze verschuiving."),
+  obj(
+    { kind: { const: "rotate" }, axis: as, angleDeg: getal4("Hoek in graden; positief volgens de rechterhandregel (tegen de klok in, gezien vanaf de positieve kant van de as).") },
+    ["kind", "axis", "angleDeg"],
+    "Roteren om een globale as door het gemiddelde van de geselecteerde knopen."
+  ),
+  obj(
+    { kind: { const: "mirror" }, axis: as, offset: getal4("Plaats van het spiegelvlak op die as, m.") },
+    ["kind", "axis", "offset"],
+    "Spiegelen in het vlak loodrecht op de as."
+  )
+], "De bewerking.");
+var transformeren = documentCommando({
+  naam: "model3d.transform",
+  beschrijving: "Een selectie verplaatsen, kopi\xEBren, roteren of spiegelen, zoals het transformatiepaneel. De uitkomst noemt de selectie erna (bij kopi\xEBren de nieuwe elementen).",
+  invoer: obj({ ...selectieVelden, command: transformatie }, ["command"]),
+  uitvoeren: ({ command, ...selectie }, document2) => {
+    const model = model3dVan(document2);
+    const resultaat = transformOpenFem3D(model, controleerSelectie(model, selectie), command);
+    return { uitkomst: { selection: resultaat.selection }, document: metModel3d(document2, resultaat.model) };
+  }
+});
+var selectieVerwijderen = documentCommando({
+  naam: "model3d.selection.delete",
+  beschrijving: "Knopen, staven en platen in \xE9\xE9n keer verwijderen, met alles wat eraan hangt (zoals Delete in de app).",
+  invoer: obj(selectieVelden),
+  uitvoeren: (selectie, document2) => {
+    const model = model3dVan(document2);
+    const nieuw = removeOpenFem3DSelection(model, controleerSelectie(model, selectie));
+    return {
+      uitkomst: {
+        removedNodeIds: verdwenenIds(model.nodes, nieuw.nodes),
+        removedBeamIds: verdwenenIds(model.beams, nieuw.beams),
+        removedPlateIds: verdwenenIds(model.plates, nieuw.plates)
+      },
+      document: metModel3d(document2, nieuw)
+    };
+  }
+});
+var levelsZetten = documentCommando({
+  naam: "model3d.levels.set",
+  beschrijving: "De levels (bouwlagen) zetten: elk een naam en een hoogte in m. Een level met een bestaande naam houdt zijn koppelingen; gekoppelde knopen en platen schuiven mee met de hoogte. Een level dat verdwijnt, laat zijn knopen los.",
+  invoer: obj({
+    levels: lijst(obj(
+      { label: tekst('Naam van het level, bijv. "vloer 1".', { minLength: 1 }), heightM: getal4("Hoogte in m.") },
+      ["label", "heightM"]
+    ), "Alle levels; vervangt de huidige lijst.")
+  }, ["levels"]),
+  uitvoeren: ({ levels }, document2) => {
+    const grid = stramien(document2);
+    let nieuweLevels;
+    try {
+      nieuweLevels = openFem3DLevelsFromMetres(levels.map((l) => ({ label: l.label, position_m: l.heightM })), grid.zAxes);
+    } catch (fout) {
+      throw new ApiFout("INVOER_ONGELDIG", fout instanceof Error ? fout.message : String(fout));
+    }
+    const resultaat = applyOpenFem3DLevels(model3dVan(document2), nieuweLevels);
+    if (!resultaat.ok) throw new ApiFout("GEWEIGERD", levelWeigering(resultaat.refusal, nieuweLevels), { refusal: resultaat.refusal });
+    return {
+      uitkomst: { levels: levelsUit(nieuweLevels) },
+      document: { ...metModel3d(document2, resultaat.model), structuralGrid: { ...grid, zAxes: nieuweLevels } }
+    };
+  }
+});
+var levelKoppelen = documentCommando({
+  naam: "model3d.node.linkLevel",
+  beschrijving: "Knopen en platen aan een level koppelen (ze gaan op die hoogte liggen en schuiven mee) of ontkoppelen (levelId null).",
+  invoer: obj({
+    nodeIds: selectieVelden.nodeIds,
+    plateIds: selectieVelden.plateIds,
+    levelId: ofNull(tekst("Id van een level (zie model3d.levels.set)."), "Level; null ontkoppelt.")
+  }, ["levelId"]),
+  uitvoeren: ({ nodeIds = [], plateIds = [], levelId }, document2) => {
+    const model = model3dVan(document2);
+    controleerSelectie(model, { nodeIds, plateIds });
+    const levels = stramien(document2).zAxes;
+    const resultaat = linkOpenFem3DToLevel(model, { nodeIds, plateIds }, levelId, levels);
+    if (!resultaat.ok) throw new ApiFout("GEWEIGERD", levelWeigering(resultaat.refusal, levels), { refusal: resultaat.refusal });
+    return { uitkomst: { nodeIds, plateIds, levelId }, document: metModel3d(document2, resultaat.model) };
+  }
+});
+var levelsLezen = documentCommando({
+  naam: "model3d.levels.get",
+  beschrijving: "De levels van het project lezen, met hun id, naam en hoogte in m.",
+  invoer: obj({}),
+  uitvoeren: (_invoer, document2) => ({ uitkomst: { levels: levelsUit(stramien(document2).zAxes) } })
+});
+var MODEL3D_BEWERKEN_COMMANDOS = [transformeren, selectieVerwijderen, levelsZetten, levelKoppelen, levelsLezen];
+
+// src/api/commands/project.ts
+init_normcombinaties();
+init_normAanduidingen();
+var GEVOLGKLASSEN2 = ["CC1", "CC2", "CC3"];
+var GEVALTYPEN = ["dead", "live", "snow", "wind", "other"];
+var CATEGORIEEN = ["A", "B", "C", "C-menigte", "D", "E", "F", "G", "H", "industrie-kort", "industrie-lang"];
+function combinatieStaatVan(document2) {
+  const combinaties = combinationsFromFile(document2.combinations);
+  const uitgangspunten = document2.projectInfo?.uitgangspunten;
+  const uitBestand = GEVOLGKLASSEN2.includes(uitgangspunten?.gevolgklasse) ? uitgangspunten.gevolgklasse : null;
+  const { klasse } = gevolgklasseBijOpenen({
+    bestand: uitBestand,
+    verzoek: null,
+    combinations: combinaties ?? null,
+    terugval: STANDAARD_GEVOLGKLASSE
+  });
+  let bijlage;
+  try {
+    bijlage = bijlageUitBestand(uitgangspunten?.nationaleBijlage) ?? STANDAARD_BIJLAGE;
+  } catch (fout) {
+    throw new ApiFout("GEWEIGERD", fout instanceof Error ? fout.message : String(fout));
+  }
+  const { staat, afwijking, vervanging } = openCombinatieStaat({
+    loadCases: document2.loadCases,
+    combinations: combinaties,
+    gevolgklasse: klasse,
+    bijlage,
+    idTellers: document2.idTellers
+  });
+  return {
+    staat,
+    meldingen: [vervanging?.samenvatting, afwijking?.samenvatting].filter((x) => typeof x === "string" && x !== "")
+  };
+}
+function metCombinatieStaat(document2, staat) {
+  return {
+    ...document2,
+    loadCases: staat.loadCases,
+    combinations: combinationsToFile(staat.combinations),
+    idTellers: { belastinggeval: staat.volgendGevalId, combinatie: staat.volgendCombinatieId }
+  };
+}
+function metEigenGewichtRegel(document2, voor, meldingen) {
+  const gevolg = eigenGewichtNaGevalWijziging({ voor, na: document2.loadCases, selfWeightEnabled: document2.selfWeightEnabled });
+  if (!gevolg) return document2;
+  meldingen.push(gevolg.reden === "verwijderd" ? `Het geval "${gevolg.geval.name}" met het eigen gewicht is verwijderd; het eigen gewicht staat uit.` : `Het geval "${gevolg.geval.name}" is niet meer blijvend; het eigen gewicht staat uit.`);
+  return { ...document2, selfWeightEnabled: false };
+}
+var combinatieUit = (combinatie) => combinationsToFile([combinatie])[0];
+function vindGeval(document2, caseId) {
+  const geval2 = document2.loadCases.find((lc) => lc.id === caseId);
+  if (!geval2) throw nietGevonden("Belastinggeval", caseId);
+  return geval2;
+}
+function factorenNaarMap(document2, factors) {
+  const map = /* @__PURE__ */ new Map();
+  for (const { caseId, factor } of factors) {
+    vindGeval(document2, caseId);
+    if (map.has(caseId)) throw new ApiFout("INVOER_ONGELDIG", `Belastinggeval ${caseId} staat twee keer in de factoren.`);
+    map.set(caseId, factor);
+  }
+  return map;
+}
+function formuleVoor(document2, factors) {
+  return [...factors].map(([caseId, factor]) => `${factor}\xB7${vindGeval(document2, caseId).name}`).join(" + ");
+}
+function zonder3DLastenVanGeval(model, caseId) {
+  let aantal2 = 0;
+  const filter = (items) => {
+    if (!items) return items;
+    const over = items.filter((item) => openFem3DLoadCaseId(item) !== caseId);
+    aantal2 += items.length - over.length;
+    return over;
+  };
+  return {
+    model: {
+      ...model,
+      loads: filter(model.loads),
+      memberLoads: filter(model.memberLoads),
+      memberPointLoads: filter(model.memberPointLoads),
+      thermalLoads: filter(model.thermalLoads),
+      surfaceLoads: filter(model.surfaceLoads),
+      loadPanels: filter(model.loadPanels)
+    },
+    aantal: aantal2
+  };
+}
+var gevalType2 = keuze(GEVALTYPEN, "dead = blijvend; live = gebruiksbelasting; snow; wind; other.");
+var categorie = keuze(CATEGORIEEN, "Gebruikscategorie (NB tabel NB.2\u2013A1.1), alleen bij type live; ontbreekt = A.");
+var factoren = lijst(
+  obj({ caseId: id("Bestaand belastinggeval."), factor: getal4("Factor.") }, ["caseId", "factor"]),
+  "Factor per belastinggeval; een niet genoemd geval telt niet mee.",
+  { minItems: 1 }
+);
+var projectLezen = documentCommando({
+  naam: "project.get",
+  beschrijving: "Het project in het kort: dimensie, analysetype, eigen gewicht, actief geval, de belastinggevallen en combinaties, en de aantallen.",
+  invoer: obj({}),
+  uitvoeren: (_invoer, document2) => {
+    const { staat, meldingen } = combinatieStaatVan(document2);
+    const model = model3dVan(document2);
+    return {
+      uitkomst: {
+        modelDimension: document2.modelDimension ?? (document2.model3d ? "3d" : "2d"),
+        analysetype: document2.analysetype ?? null,
+        selfWeightEnabled: document2.selfWeightEnabled,
+        activeLoadCaseId: document2.activeLoadCaseId,
+        loadCases: staat.loadCases,
+        combinations: combinationsToFile(staat.combinations),
+        counts2d: { nodes: document2.nodes.length, beams: document2.beams.length, plates: document2.plates.length, loads: document2.loads.length },
+        counts3d: { nodes: model.nodes.length, beams: model.beams.length, plates: (model.plates ?? []).length },
+        meldingen
+      }
+    };
+  }
+});
+var projectNieuw = documentCommando({
+  naam: "project.new",
+  beschrijving: "Een nieuw, leeg 3D-project met de standaardgevallen (zoals Bestand \u2192 Nieuw); vervangt het huidige project. In de app zonder bestand; heeft het huidige project daar niet-opgeslagen wijzigingen, dan weigert de app, tenzij discardChanges true is.",
+  invoer: obj({
+    discardChanges: jaNee("Alleen in de app: ook als het huidige project niet-opgeslagen wijzigingen heeft; die gaan verloren.")
+  }),
+  uitvoeren: () => {
+    const document2 = leegDocument();
+    return { uitkomst: { modelDimension: document2.modelDimension, loadCases: document2.loadCases }, document: document2, nieuwProject: true };
+  }
+});
+var gevalToevoegen = documentCommando({
+  naam: "project.loadCase.add",
+  beschrijving: "Een belastinggeval toevoegen. De standaardcombinaties nemen het meteen mee (blijvend met \u03B3_G, veranderlijk als leidende en begeleidende last).",
+  invoer: obj({ name: tekst('Naam, bijv. "Sneeuw (S)".', { minLength: 1 }), type: gevalType2, categorie }, ["name", "type"]),
+  uitvoeren: ({ name, type, categorie: cat }, document2) => {
+    const { staat, meldingen } = combinatieStaatVan(document2);
+    if (cat !== void 0 && type !== "live") throw new ApiFout("INVOER_ONGELDIG", "Een gebruikscategorie hoort alleen bij type live.");
+    let { staat: nieuw, id: caseId } = voegBelastinggevalToe(staat, name.trim(), type);
+    if (cat !== void 0) nieuw = wijzigBelastinggeval(nieuw, caseId, { categorie: cat });
+    return {
+      uitkomst: { loadCase: nieuw.loadCases.find((lc) => lc.id === caseId), combinationsCount: nieuw.combinations.length, meldingen },
+      document: metCombinatieStaat(document2, nieuw)
+    };
+  }
+});
+var gevalWijzigen = documentCommando({
+  naam: "project.loadCase.update",
+  beschrijving: "Naam, type of gebruikscategorie van een belastinggeval wijzigen; de standaardcombinaties volgen.",
+  invoer: obj({
+    id: id("Id van het belastinggeval."),
+    name: tekst("Nieuwe naam.", { minLength: 1 }),
+    type: gevalType2,
+    categorie: ofNull(categorie, "Gebruikscategorie; null = standaard (A).")
+  }, ["id"]),
+  uitvoeren: ({ id: caseId, categorie: cat, ...rest }, document2) => {
+    vindGeval(document2, caseId);
+    const { staat, meldingen } = combinatieStaatVan(document2);
+    const patch = {
+      ...rest.name !== void 0 ? { name: rest.name.trim() } : {},
+      ...rest.type !== void 0 ? { type: rest.type } : {},
+      ...cat !== void 0 ? { categorie: cat ?? void 0 } : {}
+    };
+    const nieuw = metEigenGewichtRegel(metCombinatieStaat(document2, wijzigBelastinggeval(staat, caseId, patch)), document2.loadCases, meldingen);
+    return { uitkomst: { loadCase: nieuw.loadCases.find((lc) => lc.id === caseId), selfWeightEnabled: nieuw.selfWeightEnabled, meldingen }, document: nieuw };
+  }
+});
+var gevalVerwijderen = documentCommando({
+  naam: "project.loadCase.delete",
+  beschrijving: "Een belastinggeval verwijderen, met al zijn 2D- en 3D-lasten en belastingvlakken; zijn factoren verdwijnen uit elke combinatie. Het laatste geval kan niet weg.",
+  invoer: obj({ id: id("Id van het belastinggeval.") }, ["id"]),
+  uitvoeren: ({ id: caseId }, document2) => {
+    vindGeval(document2, caseId);
+    const { staat, meldingen } = combinatieStaatVan(document2);
+    const na2 = verwijderBelastinggeval(staat, caseId);
+    if (na2 === staat) throw new ApiFout("GEWEIGERD", "Het laatste belastinggeval kan niet weg.");
+    const lasten2d = document2.loads.filter((load) => load.caseId !== caseId);
+    const zonder3d = zonder3DLastenVanGeval(model3dVan(document2), caseId);
+    let nieuw = {
+      ...metCombinatieStaat(document2, na2),
+      loads: lasten2d,
+      ...document2.model3d ? { model3d: zonder3d.model } : {},
+      activeLoadCaseId: document2.activeLoadCaseId === caseId ? na2.loadCases[0].id : document2.activeLoadCaseId
+    };
+    nieuw = metEigenGewichtRegel(nieuw, document2.loadCases, meldingen);
+    return {
+      uitkomst: {
+        deletedLoadCaseId: caseId,
+        removedLoads2d: document2.loads.length - lasten2d.length,
+        removedLoads3d: document2.model3d ? zonder3d.aantal : 0,
+        activeLoadCaseId: nieuw.activeLoadCaseId,
+        meldingen
+      },
+      document: nieuw
+    };
+  }
+});
+var combinatieToevoegen = documentCommando({
+  naam: "project.combination.add",
+  beschrijving: "Een eigen belastingcombinatie toevoegen (UGT of BGT) met een factor per geval. De app past een eigen combinatie niet meer aan.",
+  invoer: obj({
+    name: tekst("Naam.", { minLength: 1 }),
+    type: keuze(["uls", "sls"], "uls = UGT, sls = BGT."),
+    factors: factoren,
+    formula: tekst("Formule voor weergave; ontbreekt = uit de factoren.")
+  }, ["name", "type", "factors"]),
+  uitvoeren: ({ name, type, factors, formula }, document2) => {
+    const { staat, meldingen } = combinatieStaatVan(document2);
+    const map = factorenNaarMap(document2, factors);
+    const nieuw = voegCombinatieToe(staat, { name: name.trim(), type, formula: formula ?? formuleVoor(document2, map), factors: map });
+    const combinatie = nieuw.combinations[nieuw.combinations.length - 1];
+    return { uitkomst: { combination: combinatieUit(combinatie), meldingen }, document: metCombinatieStaat(document2, nieuw) };
+  }
+});
+var combinatieWijzigen = documentCommando({
+  naam: "project.combination.update",
+  beschrijving: "Een combinatie wijzigen. Daarmee wordt het een eigen combinatie: de app werkt haar niet meer bij als de gevallen veranderen.",
+  invoer: obj({
+    id: id("Id van de combinatie."),
+    name: tekst("Naam.", { minLength: 1 }),
+    type: keuze(["uls", "sls"]),
+    factors: factoren,
+    formula: tekst("Formule voor weergave.")
+  }, ["id"]),
+  uitvoeren: ({ id: combinationId, factors, ...rest }, document2) => {
+    const { staat, meldingen } = combinatieStaatVan(document2);
+    if (!staat.combinations.some((c) => c.id === combinationId)) throw nietGevonden("Combinatie", combinationId);
+    const map = factors ? factorenNaarMap(document2, factors) : void 0;
+    const patch = {
+      ...rest,
+      ...map ? { factors: map, formula: rest.formula ?? formuleVoor(document2, map) } : {}
+    };
+    const nieuw = wijzigCombinatie(staat, combinationId, patch);
+    return {
+      uitkomst: { combination: combinatieUit(nieuw.combinations.find((c) => c.id === combinationId)), meldingen },
+      document: metCombinatieStaat(document2, nieuw)
+    };
+  }
+});
+var combinatieVerwijderen = documentCommando({
+  naam: "project.combination.delete",
+  beschrijving: "Een combinatie verwijderen. Een standaardcombinatie komt terug bij Standaard herstellen.",
+  invoer: obj({ id: id("Id van de combinatie.") }, ["id"]),
+  uitvoeren: ({ id: combinationId }, document2) => {
+    const { staat, meldingen } = combinatieStaatVan(document2);
+    if (!staat.combinations.some((c) => c.id === combinationId)) throw nietGevonden("Combinatie", combinationId);
+    return { uitkomst: { deletedCombinationId: combinationId, meldingen }, document: metCombinatieStaat(document2, verwijderCombinatie(staat, combinationId)) };
+  }
+});
+var standaardHerstellen = documentCommando({
+  naam: "project.combinations.resetToStandard",
+  beschrijving: "Alle combinaties vervangen door de standaardset volgens de norm (gevolgklasse en nationale bijlage van het project).",
+  invoer: obj({}),
+  uitvoeren: (_invoer, document2) => {
+    const { staat, meldingen } = combinatieStaatVan(document2);
+    const nieuw = vervangDoorStandaard(staat);
+    return { uitkomst: { combinations: combinationsToFile(nieuw.combinations), meldingen }, document: metCombinatieStaat(document2, nieuw) };
+  }
+});
+var PROJECT_COMMANDOS = [
+  projectLezen,
+  projectNieuw,
+  gevalToevoegen,
+  gevalWijzigen,
+  gevalVerwijderen,
+  combinatieToevoegen,
+  combinatieWijzigen,
+  combinatieVerwijderen,
+  standaardHerstellen
+];
+
+// src/api/commands/stramien.ts
+init_femTypes();
+var stramien2 = (document2) => document2.structuralGrid ?? DEFAULT_STRUCTURAL_GRID;
+var assenUit = (assen = []) => assen.map((as3) => ({ id: as3.id, label: as3.label, positionM: openFem3DLevelHeightM(as3) }));
+var stramienUit = (grid) => ({
+  enabled: grid.enabled,
+  xAxes: assenUit(grid.xAxes),
+  yAxes: assenUit(grid.yAxes),
+  levels: grid.zAxes.map((level) => ({ id: level.id, label: level.label, heightM: openFem3DLevelHeightM(level) }))
+});
+var as2 = obj({
+  label: tekst('Naam van de as, bijv. "A" of "1".', { minLength: 1 }),
+  positionM: getal4("Positie in m.")
+}, ["label", "positionM"]);
+function assenNaarMm(assen, huidig, voorvoegsel, veld) {
+  try {
+    return openFem3DGridAxesFromMetres(assen.map((item) => ({ label: item.label, position_m: item.positionM })), huidig, voorvoegsel, veld);
+  } catch (fout) {
+    throw new ApiFout("INVOER_ONGELDIG", fout instanceof Error ? fout.message : String(fout));
+  }
+}
+var stramienLezen = documentCommando({
+  naam: "project.grid.get",
+  beschrijving: "Het stramien lezen: aan of uit, de assen in X en Y (naam en positie in m) en de levels (hoogte in m).",
+  invoer: obj({}),
+  uitvoeren: (_invoer, document2) => ({ uitkomst: stramienUit(stramien2(document2)) })
+});
+var stramienZetten = documentCommando({
+  naam: "project.grid.set",
+  beschrijving: "Het stramien zetten, zoals het venster Stramienen en levels: aan of uit, en de assen in X en/of Y. Een lijst vervangt de huidige; een as met een bestaande naam houdt zijn id. De levels zet model3d.levels.set.",
+  invoer: obj({
+    enabled: jaNee("Stramien aan (tonen en erop snappen) of uit."),
+    xAxes: lijst(as2, "Assen in X: lijnen met een vaste x (in 2D de verticale stramienlijnen)."),
+    yAxes: lijst(as2, "Assen in Y: lijnen met een vaste y (alleen in 3D).")
+  }),
+  uitvoeren: ({ enabled, xAxes, yAxes }, document2) => {
+    if (enabled === void 0 && xAxes === void 0 && yAxes === void 0) {
+      throw new ApiFout("INVOER_ONGELDIG", "Geef enabled, xAxes en/of yAxes.");
+    }
+    const grid = stramien2(document2);
+    const nieuw = {
+      ...grid,
+      ...enabled !== void 0 ? { enabled } : {},
+      ...xAxes ? { xAxes: assenNaarMm(xAxes, grid.xAxes, "x", "xAxes") } : {},
+      ...yAxes ? { yAxes: assenNaarMm(yAxes, grid.yAxes ?? [], "y", "yAxes") } : {}
+    };
+    return { uitkomst: stramienUit(nieuw), document: { ...document2, structuralGrid: nieuw } };
+  }
+});
+var STRAMIEN_COMMANDOS = [stramienLezen, stramienZetten];
+
+// src/api/standaardRegister.ts
+function alleenInApp(naam, beschrijving, invoer = obj({})) {
+  return {
+    naam,
+    beschrijving,
+    invoer,
+    soort: "app",
+    uitvoeren: () => {
+      throw new ApiFout("ALLEEN_IN_APP", `${naam} werkt alleen in de draaiende app (start haar met OPENAEC_GUI_CONTROL=1).`);
+    }
+  };
+}
+var APP_COMMANDOS = [
+  alleenInApp("app.undo", "De laatste modelwijziging ongedaan maken (zoals Ctrl+Z)."),
+  alleenInApp("app.redo", "De ongedaan gemaakte wijziging opnieuw doen (zoals Ctrl+Y)."),
+  alleenInApp(
+    "app.project.save",
+    "Het project opslaan (zoals Opslaan). Met path: opslaan als dat bestand, zonder dialoog.",
+    obj({ path: tekst("Absoluut pad naar een .ifcfem-bestand.", { minLength: 1 }) })
+  ),
+  alleenInApp(
+    "app.project.open",
+    "Een projectbestand openen in de app (zoals Openen). Heeft het huidige project niet-opgeslagen wijzigingen, dan weigert de app, tenzij discardChanges true is.",
+    obj({
+      path: tekst("Absoluut pad naar een .ifcfem- of .ifcfem2d-bestand.", { minLength: 1 }),
+      discardChanges: jaNee("Ook openen als het huidige project niet-opgeslagen wijzigingen heeft; die gaan verloren.")
+    }, ["path"])
+  )
+];
+function standaardCommandos() {
+  return [
+    ...PROJECT_COMMANDOS,
+    ...STRAMIEN_COMMANDOS,
+    ...MODEL3D_GEOMETRIE_COMMANDOS,
+    ...MODEL3D_VOORWAARDEN_COMMANDOS,
+    ...MODEL3D_BEWERKEN_COMMANDOS,
+    ...APP_COMMANDOS
+  ];
+}
+function standaardRegister() {
+  return maakRegister(standaardCommandos());
+}
+
+// src/mcp/apiSidecar.ts
+var register = null;
+var hetRegister = () => register ??= standaardRegister();
+function opApiCatalogus() {
+  return {
+    commands: hetRegister().catalogus().map((c) => ({
+      name: c.naam,
+      description: c.beschrijving,
+      inputSchema: c.invoer,
+      kind: c.soort
+    }))
+  };
+}
+function opApiUitvoeren(payload) {
+  const onbekend2 = Object.keys(payload).filter((veld) => !["name", "input", "project"].includes(veld));
+  if (onbekend2.length > 0) {
+    throw new ApiFout("INVOER_ONGELDIG", `Onbekende velden in api_uitvoeren: ${onbekend2.join(", ")}.`, { velden: onbekend2 });
+  }
+  if (typeof payload.name !== "string" || payload.name === "") {
+    throw new ApiFout("INVOER_ONGELDIG", "Veld `name` (de naam van het commando) ontbreekt.");
+  }
+  if (payload.project !== void 0 && typeof payload.project !== "string") {
+    throw new ApiFout("INVOER_ONGELDIG", "Veld `project` moet de tekst van een projectbestand zijn.");
+  }
+  let document2;
+  if (typeof payload.project === "string") {
+    try {
+      document2 = documentUitTekst(payload.project);
+    } catch (fout) {
+      throw new ApiFout("BESTAND_ONLEESBAAR", `Het projectbestand is niet te lezen: ${fout instanceof Error ? fout.message : String(fout)}`);
+    }
+  } else if (payload.name === "project.new") {
+    document2 = leegDocument();
+  }
+  const resultaat = hetRegister().voerUit(payload.name, payload.input, { document: document2 });
+  if (resultaat instanceof Promise) {
+    resultaat.catch(() => void 0);
+    throw new ApiFout("ALLEEN_IN_APP", `${payload.name} werkt alleen in de draaiende app.`);
+  }
+  return {
+    output: resultaat.uitkomst,
+    project: resultaat.document ? documentNaarTekst(resultaat.document) : null
+  };
+}
+
 // src/mcp/valideerModel.ts
 init_femTypes();
 init_PlaatMesher();
@@ -30841,7 +33597,14 @@ function dubbelzinnigMateriaalTekst(beamId, d, metKorf) {
 // src/lib/modelControle.ts
 init_plaatMateriaal();
 init_vertaalbareTekst();
-var CONTROLE_TOL_MM = 1;
+var CONTROLE_TOL_MM = 5;
+var PLAATRAND_TOL_MM = 1;
+function opZelfdePlek(a, b, tolMm) {
+  return Math.hypot(a.x - b.x, a.z - b.z) <= tolMm;
+}
+function mmTekst2(mm) {
+  return String(Math.round(mm * 10) / 10).replace(".", ",");
+}
 function knoopGraden(model) {
   const graad = /* @__PURE__ */ new Map();
   for (const n2 of model.nodes) graad.set(n2.id, 0);
@@ -30856,35 +33619,42 @@ function zoekDubbeleKnopen(model, tolMm = CONTROLE_TOL_MM) {
   for (const b of model.beams) {
     verbonden.add(b.from < b.to ? `${b.from}-${b.to}` : `${b.to}-${b.from}`);
   }
+  const plaathoek = /* @__PURE__ */ new Set();
+  for (const p2 of model.plates ?? []) for (const id2 of p2.nodeIds ?? []) plaathoek.add(id2);
+  const gesteund = new Set((model.supports ?? []).map((s) => s.nodeId));
+  const rang2 = (id2) => plaathoek.has(id2) ? 0 : gesteund.has(id2) ? 1 : 2;
   const uit = [];
   const { nodes } = model;
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
       const a = nodes[i];
       const b = nodes[j];
-      if (Math.abs(a.x - b.x) > tolMm || Math.abs(a.z - b.z) > tolMm) continue;
+      if (!opZelfdePlek(a, b, tolMm)) continue;
       const sleutel = a.id < b.id ? `${a.id}-${b.id}` : `${b.id}-${a.id}`;
       const zitVast = verbonden.has(sleutel);
+      const afstand3 = Math.hypot(a.x - b.x, a.z - b.z);
+      const opElkaar = Math.round(afstand3 * 10) === 0;
+      const plekken = `Knoop ${a.id} (${mmTekst2(a.x)}; ${mmTekst2(a.z)}) en knoop ${b.id} (${mmTekst2(b.x)}; ${mmTekst2(b.z)}) mm`;
+      const tolerantie = `de verbindingstolerantie van ${mmTekst2(tolMm)} mm (tab Weergave)`;
+      const bewaarA = rang2(a.id) < rang2(b.id) || rang2(a.id) === rang2(b.id) && a.id < b.id;
       uit.push({
         soort: "dubbeleKnoop",
         ernst: "fout",
         nodeIds: [a.id, b.id],
-        tekst: zitVast ? `Knoop ${a.id} en knoop ${b.id} liggen op dezelfde plek (${a.x}, ${a.z}) mm en zijn met een staaf van lengte nul verbonden; voeg ze samen.` : `Knoop ${a.id} en knoop ${b.id} liggen op dezelfde plek (${a.x}, ${a.z}) mm. Ze zijn NIET met elkaar verbonden; voeg ze samen of verplaats er \xE9\xE9n.`,
-        // De laagste id blijft bestaan: stabiel en voorspelbaar, ongeacht in
-        // welke volgorde de knopen zijn getekend.
+        tekst: opElkaar ? zitVast ? `Knoop ${a.id} en knoop ${b.id} liggen op dezelfde plek (${a.x}, ${a.z}) mm en zijn met een staaf van lengte nul verbonden; voeg ze samen.` : `Knoop ${a.id} en knoop ${b.id} liggen op dezelfde plek (${a.x}, ${a.z}) mm. Ze zijn NIET met elkaar verbonden; voeg ze samen of verplaats er \xE9\xE9n.` : zitVast ? `${plekken} zijn verbonden met een staaf van ${mmTekst2(afstand3)} mm, korter dan ${tolerantie}; voeg ze samen.` : `${plekken} liggen ${mmTekst2(afstand3)} mm uit elkaar, binnen ${tolerantie}, en gelden dus als dezelfde plek. Ze zijn NIET met elkaar verbonden; voeg ze samen of verplaats er \xE9\xE9n.`,
         herstel: {
           soort: "voegSamen",
-          bewaarId: Math.min(a.id, b.id),
-          verwijderId: Math.max(a.id, b.id)
+          bewaarId: bewaarA ? a.id : b.id,
+          verwijderId: bewaarA ? b.id : a.id
         }
       });
     }
   }
   return uit;
 }
-function zoekStaafeindenBijPlaatrand(model, tolMm = CONTROLE_TOL_MM) {
+function zoekStaafeindenBijPlaatrand(model, tolMm = PLAATRAND_TOL_MM) {
   const platen = (model.plates ?? []).flatMap((p2) => {
-    const hoeken = (p2.nodeIds ?? []).map((id) => model.nodes.find((k) => k.id === id));
+    const hoeken = (p2.nodeIds ?? []).map((id2) => model.nodes.find((k) => k.id === id2));
     if (hoeken.length < 3 || hoeken.some((h) => !h)) return [];
     const openingen = (Array.isArray(p2.openingen) ? p2.openingen : []).filter((o) => o && typeof o.id === "number" && Array.isArray(o.punten) && o.punten.length >= 3);
     return [{ id: p2.id, hoeken: hoeken.map((h) => ({ x: h.x, z: h.z })), openingen }];
@@ -30948,7 +33718,7 @@ var PLAAT_MILIEUKLASSEN = [
 var WAPENING_VELDEN = ["staalsoort", "horizontaal", "verticaal", "milieuklasse", "f_ct_eff_mpa", "langdurend", "hoge_aanhechting"];
 var RICHTING_VELDEN = ["zijde_1", "zijde_2"];
 var LAAG_VELDEN = ["diameter_mm", "hoh_mm", "as_mm2_per_m", "dekking_mm"];
-function isObject2(v) {
+function isObject3(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 function positief(v) {
@@ -30960,7 +33730,7 @@ function onbekend(o, toegestaan, pad, fouten) {
   }
 }
 function keurLaag(laag, pad, fouten) {
-  if (!isObject2(laag)) {
+  if (!isObject3(laag)) {
     fouten.push(`${pad}: object verwacht.`);
     return;
   }
@@ -30981,7 +33751,7 @@ function keurLaag(laag, pad, fouten) {
 }
 function keurPlaatWapening(w, pad, dikte) {
   const fouten = [];
-  if (!isObject2(w)) return [`${pad}: object verwacht.`];
+  if (!isObject3(w)) return [`${pad}: object verwacht.`];
   onbekend(w, WAPENING_VELDEN, pad, fouten);
   if (w.f_ct_eff_mpa !== void 0 && !positief(w.f_ct_eff_mpa)) fouten.push(`${pad}.f_ct_eff_mpa: positief eindig getal verwacht.`);
   for (const veld of ["langdurend", "hoge_aanhechting"]) {
@@ -30996,7 +33766,7 @@ function keurPlaatWapening(w, pad, dikte) {
   for (const richting2 of ["horizontaal", "verticaal"]) {
     const r = w[richting2];
     const rp = `${pad}.${richting2}`;
-    if (!isObject2(r)) {
+    if (!isObject3(r)) {
       fouten.push(`${rp}: object verwacht.`);
       continue;
     }
@@ -31290,11 +34060,11 @@ var VASTGEZET = {
   zSpring: ["z"],
   rotSpring: ["ry"]
 };
-var isObject3 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+var isObject4 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
 var isGetal = (v) => typeof v === "number" && Number.isFinite(v);
 var isGeheel = (v) => isGetal(v) && Number.isInteger(v);
 var isEindig = (v) => typeof v === "number" && Number.isFinite(v);
-function afstand(a, b) {
+function afstand2(a, b) {
   const rij = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
     let vorige = rij[0];
@@ -31315,7 +34085,7 @@ function dichtstbij(veld, bekend) {
   let beste = null;
   let besteAfstand = Number.POSITIVE_INFINITY;
   for (const kandidaat of bekend) {
-    const d = afstand(veld.toLowerCase(), kandidaat.toLowerCase());
+    const d = afstand2(veld.toLowerCase(), kandidaat.toLowerCase());
     if (d < besteAfstand) {
       besteAfstand = d;
       beste = kandidaat;
@@ -31324,8 +34094,8 @@ function dichtstbij(veld, bekend) {
   const drempel = Math.max(1, Math.floor(veld.length / 3));
   return beste !== null && besteAfstand <= drempel ? beste : null;
 }
-function keurVelden(obj, toegestaan, pad, fouten) {
-  for (const veld of Object.keys(obj)) {
+function keurVelden(obj2, toegestaan, pad, fouten) {
+  for (const veld of Object.keys(obj2)) {
     if (toegestaan.includes(veld)) continue;
     const hint = dichtstbij(veld, toegestaan);
     fouten.push(
@@ -31356,7 +34126,7 @@ function keurGetal(waarde, pad, fouten, { positief: positief2 = false, nietNegat
 }
 function keurVeren(waarde, pad, fouten) {
   if (waarde === void 0) return;
-  if (!isObject3(waarde)) {
+  if (!isObject4(waarde)) {
     fouten.push(`${pad}: moet een object met veerstijfheden per staafeinde zijn.`);
     return;
   }
@@ -31373,7 +34143,7 @@ function keurVeren(waarde, pad, fouten) {
 }
 function keurBedding(waarde, pad, fouten) {
   if (waarde === void 0) return;
-  if (!isObject3(waarde)) {
+  if (!isObject4(waarde)) {
     fouten.push(`${pad}: moet een object met \`k\` (kN/m\xB3) en \`b\` (mm) zijn.`);
     return;
   }
@@ -31390,24 +34160,24 @@ function keurBedding(waarde, pad, fouten) {
 }
 function keurZones(waarde, pad, fouten) {
   if (waarde === void 0) return;
-  if (!isObject3(waarde)) {
+  if (!isObject4(waarde)) {
     fouten.push(`${pad}: moet een object met \`longitudinal\` en \`stirrups\` zijn.`);
     return;
   }
   keurVelden(waarde, ["longitudinal", "stirrups"], pad, fouten);
-  for (const lijst of ["longitudinal", "stirrups"]) {
-    const zones = waarde[lijst];
+  for (const lijst2 of ["longitudinal", "stirrups"]) {
+    const zones = waarde[lijst2];
     if (zones === void 0) continue;
     if (!Array.isArray(zones)) {
-      fouten.push(`${pad}.${lijst}: moet een array zijn.`);
+      fouten.push(`${pad}.${lijst2}: moet een array zijn.`);
       continue;
     }
     zones.forEach((z, i) => {
-      const zpad = `${pad}.${lijst}[${i}]`;
-      if (!isObject3(z)) return void fouten.push(`${zpad}: moet een object zijn.`);
+      const zpad = `${pad}.${lijst2}[${i}]`;
+      if (!isObject4(z)) return void fouten.push(`${zpad}: moet een object zijn.`);
       keurVelden(
         z,
-        lijst === "longitudinal" ? ZONE_LANGS_VELDEN : ZONE_BEUGEL_VELDEN,
+        lijst2 === "longitudinal" ? ZONE_LANGS_VELDEN : ZONE_BEUGEL_VELDEN,
         zpad,
         fouten
       );
@@ -31423,7 +34193,7 @@ function keurZones(waarde, pad, fouten) {
           `${zpad}: de zone begint niet v\xF3\xF3r zijn einde (x_start_mm ${z.x_start_mm}, x_end_mm ${z.x_end_mm}). Een lege of omgekeerde zone is geen wapening.`
         );
       }
-      if (lijst === "longitudinal") {
+      if (lijst2 === "longitudinal") {
         keurEnum(z.side, ["Bottom", "Top"], `${zpad}.side`, fouten);
         keurEnum(z.bar_shape, ["Recht", "AndersDanRecht"], `${zpad}.bar_shape`, fouten);
         keurEnum(
@@ -31435,7 +34205,7 @@ function keurZones(waarde, pad, fouten) {
         const rij = z.row;
         if (rij === void 0) {
           fouten.push(`${zpad}.row ontbreekt; een langswapeningszone heeft aantal en diameter nodig.`);
-        } else if (!isObject3(rij)) {
+        } else if (!isObject4(rij)) {
           fouten.push(`${zpad}.row: moet een object met \`count\` en \`diameter_mm\` zijn.`);
         } else {
           keurVelden(rij, ["count", "diameter_mm"], `${zpad}.row`, fouten);
@@ -31456,7 +34226,7 @@ function keurZones(waarde, pad, fouten) {
 }
 function keurKorf(waarde, pad, fouten) {
   if (waarde === void 0) return;
-  if (!isObject3(waarde)) {
+  if (!isObject4(waarde)) {
     fouten.push(`${pad}: moet een object zijn (dekking, beugel, boven- en onderwapening).`);
     return;
   }
@@ -31485,7 +34255,7 @@ function keurKorf(waarde, pad, fouten) {
   for (const kant of ["top", "bottom"]) {
     const rij = waarde[kant];
     if (rij === void 0) continue;
-    if (!isObject3(rij)) {
+    if (!isObject4(rij)) {
       fouten.push(`${pad}.${kant}: moet een object met \`count\` en \`diameter_mm\` zijn.`);
       continue;
     }
@@ -31502,7 +34272,7 @@ function keurKorf(waarde, pad, fouten) {
 }
 function keurKolom(waarde, pad, fouten) {
   if (waarde === void 0) return;
-  if (!isObject3(waarde)) {
+  if (!isObject4(waarde)) {
     fouten.push(`${pad}: moet een object zijn (schoring, kniklengte en de \xA79.5-keuzen).`);
     return;
   }
@@ -31528,7 +34298,7 @@ function keurKolom(waarde, pad, fouten) {
   keurKniklengte(waarde.buckling_length, `${pad}.buckling_length`, fouten);
 }
 function keurKniklengte(kl, pad, fouten) {
-  if (!isObject3(kl)) {
+  if (!isObject4(kl)) {
     fouten.push(`${pad}: moet een object met \`soort\` zijn.`);
     return;
   }
@@ -31568,7 +34338,7 @@ function leesArray(model, veld, fouten) {
 }
 function keurCheckConfig(waarde, cpad) {
   const fouten = [];
-  if (!isObject3(waarde)) {
+  if (!isObject4(waarde)) {
     fouten.push(`${cpad}: moet een object zijn.`);
     return fouten;
   }
@@ -31603,9 +34373,9 @@ function keurCheckConfig(waarde, cpad) {
     fouten.push(`${cpad}.serviceClass: moet 1, 2 of 3 zijn.`);
   }
   for (const veld of ["lateralRestraints", "lateralRestraintsBottom"]) {
-    const lijst = cc[veld];
-    if (lijst === void 0) continue;
-    if (!Array.isArray(lijst) || !lijst.every(isGetal)) {
+    const lijst2 = cc[veld];
+    if (lijst2 === void 0) continue;
+    if (!Array.isArray(lijst2) || !lijst2.every(isGetal)) {
       fouten.push(`${cpad}.${veld}: moet een array van getallen (fracties 0..1) zijn.`);
     }
   }
@@ -31622,7 +34392,7 @@ function keurCheckConfig(waarde, cpad) {
 }
 function controleerVelden(rauw) {
   const fouten = [];
-  if (!isObject3(rauw)) {
+  if (!isObject4(rauw)) {
     return ["model: moet een JSON-object zijn."];
   }
   keurVelden(rauw, MODEL_VELDEN, "model", fouten);
@@ -31653,7 +34423,7 @@ function controleerVelden(rauw) {
   const nodes = leesArray(rauw, "nodes", fouten);
   nodes.forEach((n2, i) => {
     const pad = `model.nodes[${i}]`;
-    if (!isObject3(n2)) return void fouten.push(`${pad}: moet een object zijn.`);
+    if (!isObject4(n2)) return void fouten.push(`${pad}: moet een object zijn.`);
     keurVelden(n2, NODE_VELDEN, pad, fouten);
     eisGeheel(n2.id, `${pad}.id`, fouten);
     if (!isGetal(n2.x)) fouten.push(`${pad}.x: verplicht getal (mm).`);
@@ -31662,7 +34432,7 @@ function controleerVelden(rauw) {
   const beams = leesArray(rauw, "beams", fouten);
   beams.forEach((b, i) => {
     const pad = `model.beams[${i}]`;
-    if (!isObject3(b)) return void fouten.push(`${pad}: moet een object zijn.`);
+    if (!isObject4(b)) return void fouten.push(`${pad}: moet een object zijn.`);
     keurVelden(b, BEAM_VELDEN, pad, fouten);
     eisGeheel(b.id, `${pad}.id`, fouten);
     eisGeheel(b.from, `${pad}.from`, fouten);
@@ -31674,7 +34444,7 @@ function controleerVelden(rauw) {
     }
     keurEnum(b.loadRole, LOADROLLEN, `${pad}.loadRole`, fouten);
     if (b.releases !== void 0) {
-      if (!isObject3(b.releases)) {
+      if (!isObject4(b.releases)) {
         fouten.push(`${pad}.releases: moet een object zijn.`);
       } else {
         keurVelden(b.releases, RELEASE_VELDEN, `${pad}.releases`, fouten);
@@ -31694,7 +34464,7 @@ function controleerVelden(rauw) {
   const supports = leesArray(rauw, "supports", fouten);
   supports.forEach((s, i) => {
     const pad = `model.supports[${i}]`;
-    if (!isObject3(s)) return void fouten.push(`${pad}: moet een object zijn.`);
+    if (!isObject4(s)) return void fouten.push(`${pad}: moet een object zijn.`);
     keurVelden(s, SUPPORT_VELDEN, pad, fouten);
     eisGeheel(s.nodeId, `${pad}.nodeId`, fouten);
     if (s.type === void 0) {
@@ -31707,7 +34477,7 @@ function controleerVelden(rauw) {
   const plates = leesArray(rauw, "plates", fouten);
   plates.forEach((p2, i) => {
     const pad = `model.plates[${i}]`;
-    if (!isObject3(p2)) return void fouten.push(`${pad}: moet een object zijn.`);
+    if (!isObject4(p2)) return void fouten.push(`${pad}: moet een object zijn.`);
     keurVelden(p2, PLATE_VELDEN, pad, fouten);
     eisGeheel(p2.id, `${pad}.id`, fouten);
     if (!Array.isArray(p2.nodeIds) || !p2.nodeIds.every(isGeheel)) {
@@ -31750,7 +34520,7 @@ function controleerVelden(rauw) {
       }
     }
     if (p2.plooi !== void 0) {
-      if (!isObject3(p2.plooi)) {
+      if (!isObject4(p2.plooi)) {
         fouten.push(`${pad}.plooi: een object met expliciete veldmaten en randvoorwaarden is vereist.`);
       } else {
         const q = p2.plooi;
@@ -31765,7 +34535,7 @@ function controleerVelden(rauw) {
         }
         if (plaatMateriaalSoort(typeof p2.materiaal === "string" ? p2.materiaal : void 0) !== "staal") fouten.push(`${pad}.plooi: alleen ondersteund voor staal.`);
         if (Array.isArray(p2.nodeIds) && (p2.openingen === void 0 || Array.isArray(p2.openingen))) {
-          const reden = plaatPlooiGeometrieFout(p2, nodes.filter(isObject3));
+          const reden = plaatPlooiGeometrieFout(p2, nodes.filter(isObject4));
           if (reden) fouten.push(`${pad}.plooi: ${reden}`);
         }
       }
@@ -31787,17 +34557,17 @@ function controleerVelden(rauw) {
       } else {
         p2.openingen.forEach((o, k) => {
           const opad = `${pad}.openingen[${k}]`;
-          if (!isObject3(o)) return void fouten.push(`${opad}: moet een object zijn.`);
+          if (!isObject4(o)) return void fouten.push(`${opad}: moet een object zijn.`);
           keurVelden(o, OPENING_VELDEN, opad, fouten);
           eisGeheel(o.id, `${opad}.id`, fouten);
-          if (!Array.isArray(o.punten) || o.punten.length < 3 || !o.punten.every((q) => isObject3(q) && isEindig(q.x) && isEindig(q.z))) {
+          if (!Array.isArray(o.punten) || o.punten.length < 3 || !o.punten.every((q) => isObject4(q) && isEindig(q.x) && isEindig(q.z))) {
             fouten.push(`${opad}.punten: verplichte array van minstens drie punten {x, z} in mm.`);
           }
         });
       }
     }
     if (p2.meshCache !== void 0) {
-      if (!isObject3(p2.meshCache)) {
+      if (!isObject4(p2.meshCache)) {
         fouten.push(`${pad}.meshCache: moet een object zijn.`);
       } else {
         keurVelden(p2.meshCache, MESHCACHE_VELDEN, `${pad}.meshCache`, fouten);
@@ -31845,7 +34615,7 @@ function controleerVelden(rauw) {
   const loadCases = leesArray(rauw, "loadCases", fouten);
   loadCases.forEach((lc, i) => {
     const pad = `model.loadCases[${i}]`;
-    if (!isObject3(lc)) return void fouten.push(`${pad}: moet een object zijn.`);
+    if (!isObject4(lc)) return void fouten.push(`${pad}: moet een object zijn.`);
     keurVelden(lc, LOADCASE_VELDEN, pad, fouten);
     eisGeheel(lc.id, `${pad}.id`, fouten);
     if (typeof lc.name !== "string" || lc.name.length === 0) {
@@ -31865,19 +34635,19 @@ function controleerVelden(rauw) {
       }
     }
   });
-  const egGevallen = loadCases.map((lc, i) => ({ lc, i })).filter(({ lc }) => isObject3(lc) && lc.eigenGewicht === true);
+  const egGevallen = loadCases.map((lc, i) => ({ lc, i })).filter(({ lc }) => isObject4(lc) && lc.eigenGewicht === true);
   if (egGevallen.length > 1) {
     fouten.push(
       `model.loadCases: ${egGevallen.length} gevallen dragen eigenGewicht: true (${egGevallen.map(({ i }) => `[${i}]`).join(", ")}); hoogstens \xE9\xE9n geval mag het automatische eigen gewicht dragen.`
     );
   }
   const egGevalIds = new Set(
-    egGevallen.map(({ lc }) => isObject3(lc) ? lc.id : void 0).filter((id) => typeof id === "number")
+    egGevallen.map(({ lc }) => isObject4(lc) ? lc.id : void 0).filter((id2) => typeof id2 === "number")
   );
   const loads = leesArray(rauw, "loads", fouten);
   loads.forEach((l, i) => {
     const pad = `model.loads[${i}]`;
-    if (!isObject3(l)) return void fouten.push(`${pad}: moet een object zijn.`);
+    if (!isObject4(l)) return void fouten.push(`${pad}: moet een object zijn.`);
     keurVelden(l, LOAD_VELDEN, pad, fouten);
     eisGeheel(l.id, `${pad}.id`, fouten);
     eisGeheel(l.caseId, `${pad}.caseId`, fouten);
@@ -31921,14 +34691,14 @@ function controleerVelden(rauw) {
 function meldDubbeleIds(items, soort, fouten) {
   const gezien = /* @__PURE__ */ new Set();
   for (const item of items) {
-    const id = item.id;
-    if (typeof id !== "number") continue;
-    if (gezien.has(id)) {
+    const id2 = item.id;
+    if (typeof id2 !== "number") continue;
+    if (gezien.has(id2)) {
       fouten.push(
-        `Er zijn twee ${soort} met id ${id}. Id's moeten uniek zijn \u2014 anders is niet te zeggen op welke van beide een verwijzing slaat.`
+        `Er zijn twee ${soort} met id ${id2}. Id's moeten uniek zijn \u2014 anders is niet te zeggen op welke van beide een verwijzing slaat.`
       );
     }
-    gezien.add(id);
+    gezien.add(id2);
   }
 }
 function teltLastMee(last, loadCases) {
@@ -31979,7 +34749,7 @@ function gevallenMetLast(model) {
 }
 function samenhangendeDelen(knoopIds, verbindingen) {
   const ouder = /* @__PURE__ */ new Map();
-  for (const id of knoopIds) ouder.set(id, id);
+  for (const id2 of knoopIds) ouder.set(id2, id2);
   const zoek = (a) => {
     let wortel = a;
     while (ouder.get(wortel) !== wortel) wortel = ouder.get(wortel);
@@ -31992,7 +34762,7 @@ function samenhangendeDelen(knoopIds, verbindingen) {
     return wortel;
   };
   for (const groep of verbindingen) {
-    const aanwezig = groep.filter((id) => ouder.has(id));
+    const aanwezig = groep.filter((id2) => ouder.has(id2));
     for (let i = 1; i < aanwezig.length; i++) {
       const a = zoek(aanwezig[0]);
       const b = zoek(aanwezig[i]);
@@ -32000,11 +34770,11 @@ function samenhangendeDelen(knoopIds, verbindingen) {
     }
   }
   const perWortel = /* @__PURE__ */ new Map();
-  for (const id of knoopIds) {
-    const wortel = zoek(id);
-    const lijst = perWortel.get(wortel);
-    if (lijst) lijst.push(id);
-    else perWortel.set(wortel, [id]);
+  for (const id2 of knoopIds) {
+    const wortel = zoek(id2);
+    const lijst2 = perWortel.get(wortel);
+    if (lijst2) lijst2.push(id2);
+    else perWortel.set(wortel, [id2]);
   }
   return [...perWortel.values()];
 }
@@ -32085,9 +34855,9 @@ function valideerModel(rauw, opties = {}) {
     actief2.add(b.from);
     actief2.add(b.to);
   }
-  for (const p2 of plates) for (const id of p2.nodeIds ?? []) actief2.add(id);
+  for (const p2 of plates) for (const id2 of p2.nodeIds ?? []) actief2.add(id2);
   const plaatOmtrekken = plates.map((p2) => {
-    const h = (p2.nodeIds ?? []).map((id) => knoopById.get(id));
+    const h = (p2.nodeIds ?? []).map((id2) => knoopById.get(id2));
     return h.every((q) => q !== void 0) && h.length >= 3 ? h : void 0;
   });
   const opLus = (n2, lus) => lus.some((a, i) => afstandTotLijnstuk(n2, a, lus[(i + 1) % lus.length]) <= 1);
@@ -32172,7 +34942,7 @@ function valideerModel(rauw, opties = {}) {
       })
     ];
     for (const deel of samenhangendeDelen([...actief2], verbindingen)) {
-      if (!deel.some((id) => gesteund.has(id))) {
+      if (!deel.some((id2) => gesteund.has(id2))) {
         errors.push(
           `Het constructiedeel met knopen ${deel.slice(0, 6).join(", ")}${deel.length > 6 ? ", \u2026" : ""} heeft geen enkele oplegging en kan vrij bewegen (mechanisme).`
         );
@@ -32180,7 +34950,7 @@ function valideerModel(rauw, opties = {}) {
     }
   }
   for (const p2 of plates) {
-    const hoeken = (p2.nodeIds ?? []).map((id) => knoopById.get(id));
+    const hoeken = (p2.nodeIds ?? []).map((id2) => knoopById.get(id2));
     if (hoeken.some((h) => !h)) {
       errors.push(`Plaat ${p2.id}: \xE9\xE9n of meer hoekknopen bestaan niet.`);
       continue;
@@ -32216,17 +34986,17 @@ function valideerModel(rauw, opties = {}) {
     }
   }
   for (const l of loads) {
-    const id = l.id;
+    const id2 = l.id;
     if (!caseIds.has(l.caseId)) {
       errors.push(
-        `Last ${id} verwijst naar belastinggeval ${l.caseId}, dat niet bestaat.`
+        `Last ${id2} verwijst naar belastinggeval ${l.caseId}, dat niet bestaat.`
       );
     }
     if (l.beamId !== void 0 && !beamIds.has(l.beamId)) {
-      errors.push(`Last ${id} verwijst naar staaf ${l.beamId}, die niet bestaat.`);
+      errors.push(`Last ${id2} verwijst naar staaf ${l.beamId}, die niet bestaat.`);
     }
     if (l.plateId !== void 0 && !plateIds.has(l.plateId)) {
-      errors.push(`Last ${id} verwijst naar plaat ${l.plateId}, die niet bestaat.`);
+      errors.push(`Last ${id2} verwijst naar plaat ${l.plateId}, die niet bestaat.`);
     } else if (l.plateId !== void 0) {
       const plaat = plates.find((p2) => p2.id === l.plateId);
       const hoeken = (plaat?.nodeIds ?? []).map((nid) => knoopById.get(nid));
@@ -32242,38 +35012,38 @@ function valideerModel(rauw, opties = {}) {
           },
           1
         );
-        if (!rand.ok) errors.push(`Last ${id} op plaat ${l.plateId}: ${rand.reden}`);
+        if (!rand.ok) errors.push(`Last ${id2} op plaat ${l.plateId}: ${rand.reden}`);
       }
     }
     if (l.nodeId !== void 0) {
       if (!knoopById.has(l.nodeId)) {
-        errors.push(`Last ${id} verwijst naar knoop ${l.nodeId}, die niet bestaat.`);
+        errors.push(`Last ${id2} verwijst naar knoop ${l.nodeId}, die niet bestaat.`);
       } else if (!actief2.has(l.nodeId)) {
         errors.push(
-          `Last ${id} staat op knoop ${l.nodeId}, die aan geen enkele staaf of plaat hangt. Die last valt bij het rekenen weg zonder melding.`
+          `Last ${id2} staat op knoop ${l.nodeId}, die aan geen enkele staaf of plaat hangt. Die last valt bij het rekenen weg zonder melding.`
         );
       }
     }
     const heeftRandadres = l.edge !== void 0 || l.edgeIndex !== void 0 || l.openingId !== void 0;
     if (l.plateId !== void 0 && l.type !== "edgeLoad" && l.type !== "pointForce") {
       errors.push(
-        `Last ${id} (type "${String(l.type)}") noemt een plaat (\`plateId\`), maar op een plaat kan alleen een randlast (edgeLoad) of een puntlast op een plaatrand (pointForce) staan. Deze last wordt daar niet meegerekend.`
+        `Last ${id2} (type "${String(l.type)}") noemt een plaat (\`plateId\`), maar op een plaat kan alleen een randlast (edgeLoad) of een puntlast op een plaatrand (pointForce) staan. Deze last wordt daar niet meegerekend.`
       );
     }
     if (heeftRandadres && l.plateId === void 0) {
       errors.push(
-        `Last ${id} noemt een plaatrand (\`edge\`/\`edgeIndex\`/\`openingId\`) maar geen plaat (\`plateId\`); die rand hoort bij niets en wordt niet meegerekend.`
+        `Last ${id2} noemt een plaatrand (\`edge\`/\`edgeIndex\`/\`openingId\`) maar geen plaat (\`plateId\`); die rand hoort bij niets en wordt niet meegerekend.`
       );
     }
     if (l.type === "pointForce" && l.plateId !== void 0) {
       if (l.nodeId !== void 0 || l.beamId !== void 0) {
         errors.push(
-          `Last ${id} is een puntlast op plaat ${l.plateId} \xE9n noemt een ${l.nodeId !== void 0 ? "knoop" : "staaf"}. E\xE9n last hoort op \xE9\xE9n plek te staan: geef \xF3f \`plateId\` met een rand en \`posFrac\`, \xF3f een knoop of staaf.`
+          `Last ${id2} is een puntlast op plaat ${l.plateId} \xE9n noemt een ${l.nodeId !== void 0 ? "knoop" : "staaf"}. E\xE9n last hoort op \xE9\xE9n plek te staan: geef \xF3f \`plateId\` met een rand en \`posFrac\`, \xF3f een knoop of staaf.`
         );
       }
       if (l.posFrac === void 0) {
         errors.push(
-          `Last ${id} is een puntlast op plaat ${l.plateId} zonder positie (\`posFrac\`: fractie 0..1 langs de rand vanaf de beginhoek). Een ontbrekende positie wordt niet als 0 gelezen; de berekening weigert hem.`
+          `Last ${id2} is een puntlast op plaat ${l.plateId} zonder positie (\`posFrac\`: fractie 0..1 langs de rand vanaf de beginhoek). Een ontbrekende positie wordt niet als 0 gelezen; de berekening weigert hem.`
         );
       }
     }
@@ -32282,13 +35052,13 @@ function valideerModel(rauw, opties = {}) {
       const b = l.endFrac ?? 1;
       if (!(a < b)) {
         errors.push(
-          `Last ${id} (randlast): het belaste deel begint niet v\xF3\xF3r zijn einde (startFrac ${a}, endFrac ${b}). Een leeg of omgekeerd deel is geen last.`
+          `Last ${id2} (randlast): het belaste deel begint niet v\xF3\xF3r zijn einde (startFrac ${a}, endFrac ${b}). Een leeg of omgekeerd deel is geen last.`
         );
       }
     }
     if (!teltLastMee(l, loadCases)) {
       errors.push(
-        `Last ${id} (type "${String(l.type)}") levert geen invoer voor de solver op en telt dus niet mee. Controleer of alle velden voor dit lasttype ingevuld zijn (een lijnlast heeft \`beamId\` en \`q\` nodig, een puntlast \`nodeId\` of \`beamId\` \u2014 of op een plaatrand \`plateId\`, een rand en \`posFrac\` \u2014, een thermische last \`beamId\` en \`deltaT\`, een randlast \`plateId\`, een rand en \`q\`).`
+        `Last ${id2} (type "${String(l.type)}") levert geen invoer voor de solver op en telt dus niet mee. Controleer of alle velden voor dit lasttype ingevuld zijn (een lijnlast heeft \`beamId\` en \`q\` nodig, een puntlast \`nodeId\` of \`beamId\` \u2014 of op een plaatrand \`plateId\`, een rand en \`posFrac\` \u2014, een thermische last \`beamId\` en \`deltaT\`, een randlast \`plateId\`, een rand en \`q\`).`
       );
     }
   }
@@ -32352,13 +35122,31 @@ var SIDECAR_OPS = [
   // uitwerking van de 3D-rekenresultaten die Rust ertussen berekent. Zie
   // ifcImportSidecar.ts.
   "ifc_importeren",
-  "ifc_uitwerken"
+  "ifc_uitwerken",
+  // De API-commando's van de app (src/api/) zonder app, op de tekst van een
+  // projectbestand: de catalogus, en één commando uitvoeren. Zie apiSidecar.ts.
+  "api_catalogus",
+  "api_uitvoeren"
 ];
-function maakOk(id, result) {
-  return { v: SIDECAR_PROTOCOL, id, ok: true, result };
+var FOUTCODES = [
+  "PROTOCOL_MISMATCH",
+  "INVOER_ONGELDIG",
+  "BESTAND_ONLEESBAAR",
+  "MODEL_ONOPLOSBAAR",
+  "DOORSNEDE_ONBEKEND",
+  "TIJD_OVERSCHREDEN",
+  "INTERN",
+  "ONBEKEND_COMMANDO",
+  "NIET_GEVONDEN",
+  "GEWEIGERD",
+  "GEEN_DOCUMENT",
+  "ALLEEN_IN_APP"
+];
+function maakOk(id2, result) {
+  return { v: SIDECAR_PROTOCOL, id: id2, ok: true, result };
 }
-function maakFout(id, code, melding, detail) {
-  return detail === void 0 ? { v: SIDECAR_PROTOCOL, id, ok: false, error: { code, melding } } : { v: SIDECAR_PROTOCOL, id, ok: false, error: { code, melding, detail } };
+function maakFout(id2, code, melding, detail) {
+  return detail === void 0 ? { v: SIDECAR_PROTOCOL, id: id2, ok: false, error: { code, melding } } : { v: SIDECAR_PROTOCOL, id: id2, ok: false, error: { code, melding, detail } };
 }
 function ontleedVerzoek(regel2) {
   let rauw;
@@ -32385,9 +35173,9 @@ function ontleedVerzoek(regel2) {
       )
     };
   }
-  const obj = rauw;
-  const id = typeof obj.id === "number" && Number.isFinite(obj.id) ? obj.id : 0;
-  if (typeof obj.id !== "number" || !Number.isFinite(obj.id)) {
+  const obj2 = rauw;
+  const id2 = typeof obj2.id === "number" && Number.isFinite(obj2.id) ? obj2.id : 0;
+  if (typeof obj2.id !== "number" || !Number.isFinite(obj2.id)) {
     return {
       ok: false,
       antwoord: maakFout(
@@ -32397,34 +35185,34 @@ function ontleedVerzoek(regel2) {
       )
     };
   }
-  if (obj.v !== SIDECAR_PROTOCOL) {
+  if (obj2.v !== SIDECAR_PROTOCOL) {
     return {
       ok: false,
       antwoord: maakFout(
-        id,
+        id2,
         "PROTOCOL_MISMATCH",
-        `Deze sidecar spreekt protocolversie ${SIDECAR_PROTOCOL}; de aanroeper stuurde ${JSON.stringify(obj.v)}. Server en solverbundel horen bij elkaar \u2014 herbouw de MCP-server.`,
-        { verwacht: SIDECAR_PROTOCOL, ontvangen: obj.v ?? null }
+        `Deze sidecar spreekt protocolversie ${SIDECAR_PROTOCOL}; de aanroeper stuurde ${JSON.stringify(obj2.v)}. Server en solverbundel horen bij elkaar \u2014 herbouw de MCP-server.`,
+        { verwacht: SIDECAR_PROTOCOL, ontvangen: obj2.v ?? null }
       )
     };
   }
-  const op = obj.op;
+  const op = obj2.op;
   if (typeof op !== "string" || !SIDECAR_OPS.includes(op)) {
     return {
       ok: false,
       antwoord: maakFout(
-        id,
+        id2,
         "INVOER_ONGELDIG",
         `Onbekende bewerking ${JSON.stringify(op)}. Bekend zijn: ${SIDECAR_OPS.join(", ")}.`
       )
     };
   }
-  const payload = obj.payload ?? {};
+  const payload = obj2.payload ?? {};
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
     return {
       ok: false,
       antwoord: maakFout(
-        id,
+        id2,
         "INVOER_ONGELDIG",
         "Veld `payload` moet een JSON-object zijn (of ontbreken)."
       )
@@ -32434,7 +35222,7 @@ function ontleedVerzoek(regel2) {
     ok: true,
     verzoek: {
       v: SIDECAR_PROTOCOL,
-      id,
+      id: id2,
       op,
       payload
     }
@@ -32445,10 +35233,10 @@ function serialiseerAntwoord(antwoord) {
     return `${JSON.stringify(antwoord)}
 `;
   } catch (err) {
-    const id = antwoord.id;
+    const id2 = antwoord.id;
     return `${JSON.stringify(
       maakFout(
-        id,
+        id2,
         "INTERN",
         "Het antwoord kon niet als JSON worden weggeschreven.",
         { originele_melding: String(err) }
@@ -32555,13 +35343,13 @@ function leesScheefstand(rauw, model, opgegevenNoemer) {
       "`scheefstandAantalElementen` moet een geheel getal van minstens 1 zijn (aantal dragende verticale elementen m), of null om m uit het model af te leiden."
     );
   }
-  const keuze = {
+  const keuze2 = {
     scheefstandBron: bron,
     scheefstandHoogteM: typeof hoogte === "number" ? hoogte : null,
     scheefstandAantalElementen: typeof aantal2 === "number" ? aantal2 : null
   };
   if (rauw.scheefstandEnabled !== true || bron === "vast") {
-    return { noemer: opgegevenNoemer, meldingen: [], keuze };
+    return { noemer: opgegevenNoemer, meldingen: [], keuze: keuze2 };
   }
   const geometrie = leidScheefstandGeometrieAf({
     nodes: model.nodes,
@@ -32572,8 +35360,8 @@ function leesScheefstand(rauw, model, opgegevenNoemer) {
     {
       bron,
       noemer: opgegevenNoemer,
-      hoogteM: keuze.scheefstandHoogteM,
-      aantalElementen: keuze.scheefstandAantalElementen
+      hoogteM: keuze2.scheefstandHoogteM,
+      aantalElementen: keuze2.scheefstandAantalElementen
     },
     geometrie,
     toepasselijkeScheefstandNormen(model.beams)
@@ -32583,7 +35371,7 @@ function leesScheefstand(rauw, model, opgegevenNoemer) {
     `Scheefstand: \u03C6 = 1/${uit.noemer.toFixed(1)} volgens ${herkomst} \u2014 dezelfde afleiding als de app; de noemer ${opgegevenNoemer} uit het bestand telt bij deze normkeuze niet.`,
     ...uit.waarschuwingen.map((w) => `Scheefstand: ${w}`)
   ];
-  return { noemer: uit.noemer, meldingen, keuze };
+  return { noemer: uit.noemer, meldingen, keuze: keuze2 };
 }
 function alsGevolgklasse(x) {
   return GEVOLGKLASSEN.includes(x) ? x : null;
@@ -32791,11 +35579,11 @@ function leesProfielen(payload) {
 }
 function leesHoutklassen(payload) {
   if (payload.timber_grades === void 0) return null;
-  const lijst = eisArray(payload.timber_grades, "timber_grades");
-  if (!lijst.every((g) => typeof g === "string")) {
+  const lijst2 = eisArray(payload.timber_grades, "timber_grades");
+  if (!lijst2.every((g) => typeof g === "string")) {
     throw new InvoerFout("Elk item in `timber_grades` moet tekst zijn.");
   }
-  return lijst;
+  return lijst2;
 }
 function pasCheckConfigToe(beams, payload) {
   if (payload.check_config === void 0) return beams;
@@ -32995,13 +35783,13 @@ function rekenDoor(payload) {
   );
   const gevraagd = gelezen.model.loadCases.map((lc) => lc.id);
   const opgelost = [...gevalResultaten(perCase).keys()];
-  const legeGevallen = gevraagd.filter((id) => !perCase.has(id));
+  const legeGevallen = gevraagd.filter((id2) => !perCase.has(id2));
   const teToetsen = pasCheckConfigToe(gelezen.beams, payload);
   const gevraagdeIds = payload.beam_ids === void 0 ? [] : eisArray(payload.beam_ids, "beam_ids").map(Number);
   const beamIds = gevraagdeIds.length === 0 ? null : new Set(gevraagdeIds);
   const staafSelectie = beamIds === null ? teToetsen : teToetsen.filter((b) => beamIds.has(b.id));
   const inModel = new Set(gelezen.beams.map((b) => b.id));
-  const onbekendeIds = [...new Set(gevraagdeIds)].filter((id) => !inModel.has(id));
+  const onbekendeIds = [...new Set(gevraagdeIds)].filter((id2) => !inModel.has(id2));
   const staal = buildSteelCheckInputs({
     nodes: gelezen.model.nodes,
     beams: staafSelectie,
@@ -33127,13 +35915,13 @@ function rekenDoor(payload) {
     }
   };
 }
-function redenBestaatNiet(id) {
-  return `bestaat niet in het model \u2014 staaf ${id} is gevraagd in \`beam_ids\`, maar het model heeft geen staaf met dit nummer; er is niets getoetst`;
+function redenBestaatNiet(id2) {
+  return `bestaat niet in het model \u2014 staaf ${id2} is gevraagd in \`beam_ids\`, maar het model heeft geen staaf met dit nummer; er is niets getoetst`;
 }
-function eenmaalPerStaaf(lijst, getoetst) {
+function eenmaalPerStaaf(lijst2, getoetst) {
   const gezien = /* @__PURE__ */ new Set();
   const uit = [];
-  for (const s of lijst) {
+  for (const s of lijst2) {
     if (getoetst.has(s.beam_id) || gezien.has(s.beam_id)) continue;
     gezien.add(s.beam_id);
     uit.push(s);
@@ -33213,7 +36001,7 @@ function opCheck(payload) {
     // Elk gevraagd nummer staat in de toetsinvoer of hier — ook een nummer dat
     // geen staaf is — en elk maar één keer.
     skipped_beams: eenmaalPerStaaf(
-      [...d.staal.skipped, ...d.hout.skipped, ...d.clt.skipped].map((s) => ({ beam_id: s.beamId, reason: s.reason })).concat(d.onbekendeIds.map((id) => ({ beam_id: id, reason: redenBestaatNiet(id) }))),
+      [...d.staal.skipped, ...d.hout.skipped, ...d.clt.skipped].map((s) => ({ beam_id: s.beamId, reason: s.reason })).concat(d.onbekendeIds.map((id2) => ({ beam_id: id2, reason: redenBestaatNiet(id2) }))),
       new Set([...d.staal.inputs, ...d.hout.inputs, ...d.clt.inputs].map((i) => i.beam_id))
     ),
     // Platen: elke plaat staat in de toetsinvoer of hier, met reden. Het
@@ -33228,8 +36016,8 @@ function opValidate(payload) {
   const gelezen = leesModel(payload);
   const { klasse } = leesGevolgklasse(payload, gelezen);
   const bijlage = leesBijlageVoorRekening(payload, gelezen);
-  const { lijst, openMeldingen } = leesCombinaties(payload, gelezen, klasse, bijlage);
-  const actief2 = selecteerCombinaties(lijst, gelezen.beams, gelezen.model.plates, {
+  const { lijst: lijst2, openMeldingen } = leesCombinaties(payload, gelezen, klasse, bijlage);
+  const actief2 = selecteerCombinaties(lijst2, gelezen.beams, gelezen.model.plates, {
     loadCases: gelezen.model.loadCases,
     gevolgklasse: klasse,
     bijlage,
@@ -33237,7 +36025,7 @@ function opValidate(payload) {
   }).actief;
   const uitkomst = valideerModel(gelezen.rauw, {
     combinaties: actief2,
-    alleCombinaties: lijst,
+    alleCombinaties: lijst2,
     gevolgklasse: klasse,
     bijlage
   });
@@ -33262,11 +36050,11 @@ function opLoadProject(payload) {
   const m = gelezen.model;
   const klasse = leesGevolgklasse({}, gelezen);
   const bijlage = leesBijlageVoorRekening({}, gelezen);
-  const { lijst, bron, openMeldingen } = leesCombinaties({}, gelezen, klasse.klasse, bijlage);
+  const { lijst: lijst2, bron, openMeldingen } = leesCombinaties({}, gelezen, klasse.klasse, bijlage);
   const warnings = [];
   const klasseMelding = gevolgklasseWaarschuwing(
     klasse,
-    bron === "standaard" || lijst.some((c) => c.standaard),
+    bron === "standaard" || lijst2.some((c) => c.standaard),
     bijlage
   );
   if (klasseMelding) warnings.push(klasseMelding);
@@ -33274,8 +36062,8 @@ function opLoadProject(payload) {
   warnings.push(...gelezen.scheefstandMeldingen);
   for (const mld of meldingenBelastinggevallen({
     loadCases: m.loadCases,
-    combinations: lijst,
-    alleCombinaties: lijst,
+    combinations: lijst2,
+    alleCombinaties: lijst2,
     gevolgklasse: klasse.klasse,
     bijlage,
     loads: m.loads,
@@ -33292,7 +36080,7 @@ function opLoadProject(payload) {
     // keuze zelf gaat mee, zodat het model heen en weer kan zonder dat de
     // norm onderweg verdwijnt.
     model: { ...m, ...gelezen.scheefstandKeuze },
-    combinations: lijst.map((c) => ({
+    combinations: lijst2.map((c) => ({
       id: c.id,
       name: c.name,
       type: c.type,
@@ -33312,7 +36100,7 @@ function opLoadProject(payload) {
       plates: m.plates.length,
       loads: m.loads.length,
       load_cases: m.loadCases.length,
-      combinations: lijst.length
+      combinations: lijst2.length
     },
     warnings
   };
@@ -33338,8 +36126,17 @@ function verwerkVerzoek(verzoek) {
         return maakOk(verzoek.id, opIfcImporteren(verzoek.payload));
       case "ifc_uitwerken":
         return maakOk(verzoek.id, opIfcUitwerken(verzoek.payload));
+      case "api_catalogus":
+        return maakOk(verzoek.id, opApiCatalogus());
+      case "api_uitvoeren":
+        return maakOk(verzoek.id, opApiUitvoeren(verzoek.payload));
     }
   } catch (err) {
+    if (err instanceof ApiFout) {
+      const code = FOUTCODES.includes(err.code) ? err.code : "INTERN";
+      const detail = err.detail && typeof err.detail === "object" && !Array.isArray(err.detail) ? err.detail : err.detail === void 0 ? void 0 : { waarde: err.detail };
+      return maakFout(verzoek.id, code, err.message, code === "INTERN" ? { ...detail, code: err.code } : detail);
+    }
     if (err instanceof StaalhalFout) {
       return maakFout(verzoek.id, "INVOER_ONGELDIG", err.message, { problemen: err.problemen });
     }
@@ -33438,6 +36235,114 @@ if (process.argv.includes("--sidecar") || draaitAlsHoofdmodule()) {
   startSidecar();
 }
 
+// src/extensies/manifest.ts
+var MANIFEST_VELDEN = /* @__PURE__ */ new Set(["id", "name", "version", "apiVersion", "main", "description", "author", "category", "importers"]);
+var IMPORTEUR_VELDEN = /* @__PURE__ */ new Set(["id", "label", "fileExtensions", "dimension"]);
+var ID = /^[a-z0-9]+(\.[a-z0-9-]+)+$/;
+var SEMVER = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
+var BESTANDSTYPE = /^[a-z0-9]+$/;
+var IMPORTEUR_ID = /^[a-z0-9][a-z0-9-]*$/;
+var isObject5 = (waarde) => typeof waarde === "object" && waarde !== null && !Array.isArray(waarde);
+var isTekst = (waarde) => typeof waarde === "string" && waarde.trim().length > 0;
+function keurManifest(tekst2) {
+  let ruw;
+  try {
+    ruw = JSON.parse(tekst2);
+  } catch (fout) {
+    return { ok: false, fouten: [`extension.json is geen geldige JSON: ${fout instanceof Error ? fout.message : String(fout)}`] };
+  }
+  if (!isObject5(ruw)) return { ok: false, fouten: ["extension.json moet een object zijn."] };
+  const fouten = [];
+  for (const veld of Object.keys(ruw)) {
+    if (!MANIFEST_VELDEN.has(veld)) fouten.push(`Onbekend veld "${veld}" in extension.json.`);
+  }
+  if (!isTekst(ruw.id) || !ID.test(ruw.id)) fouten.push(`"id" moet een omgekeerde domeinnaam zijn, bijv. "nl.voorbeeld.importeur".`);
+  if (!isTekst(ruw.name)) fouten.push(`"name" ontbreekt.`);
+  if (!isTekst(ruw.version) || !SEMVER.test(ruw.version)) fouten.push(`"version" moet een versie zijn zoals "1.0.0".`);
+  if (ruw.apiVersion !== 1) fouten.push(`"apiVersion" moet 1 zijn; deze app kent alleen versie 1 van het contract.`);
+  if (!isTekst(ruw.main)) fouten.push(`"main" (het scriptbestand) ontbreekt.`);
+  else if (/^[\\/]|^[a-zA-Z]:|(^|[\\/])\.\.([\\/]|$)/.test(ruw.main)) fouten.push(`"main" moet een pad binnen de extensiemap zijn, zonder "..".`);
+  for (const veld of ["description", "author", "category"]) {
+    if (ruw[veld] !== void 0 && typeof ruw[veld] !== "string") fouten.push(`"${veld}" moet tekst zijn.`);
+  }
+  if (!Array.isArray(ruw.importers) || ruw.importers.length === 0) {
+    fouten.push(`"importers" moet een lijst met minstens \xE9\xE9n importeur zijn.`);
+  } else {
+    const ids = /* @__PURE__ */ new Set();
+    ruw.importers.forEach((importeur, index) => {
+      const waar = `importers[${index}]`;
+      if (!isObject5(importeur)) {
+        fouten.push(`${waar} moet een object zijn.`);
+        return;
+      }
+      for (const veld of Object.keys(importeur)) {
+        if (!IMPORTEUR_VELDEN.has(veld)) fouten.push(`Onbekend veld "${veld}" in ${waar}.`);
+      }
+      if (!isTekst(importeur.id) || !IMPORTEUR_ID.test(importeur.id)) fouten.push(`${waar}.id moet kleine letters, cijfers en streepjes zijn.`);
+      else if (ids.has(importeur.id)) fouten.push(`${waar}.id "${importeur.id}" komt twee keer voor.`);
+      else ids.add(importeur.id);
+      if (!isTekst(importeur.label)) fouten.push(`${waar}.label ontbreekt.`);
+      if (!Array.isArray(importeur.fileExtensions) || importeur.fileExtensions.length === 0) {
+        fouten.push(`${waar}.fileExtensions moet een lijst met minstens \xE9\xE9n bestandstype zijn.`);
+      } else if (!importeur.fileExtensions.every((ext) => typeof ext === "string" && BESTANDSTYPE.test(ext))) {
+        fouten.push(`${waar}.fileExtensions: kleine letters en cijfers, zonder punt (bijv. "demofem").`);
+      }
+      if (importeur.dimension !== "2d" && importeur.dimension !== "3d") fouten.push(`${waar}.dimension moet "2d" of "3d" zijn.`);
+    });
+  }
+  if (fouten.length > 0) return { ok: false, fouten };
+  return { ok: true, manifest: ruw };
+}
+function keurImportResultaat(waarde) {
+  if (!isObject5(waarde)) throw new Error("De importeur gaf geen object terug ({ project, messages }).");
+  if (!isObject5(waarde.project)) throw new Error("De importeur gaf geen project terug.");
+  const berichten = waarde.messages ?? [];
+  if (!Array.isArray(berichten)) throw new Error('"messages" van de importeur is geen lijst.');
+  const meldingen = berichten.map((bericht, index) => {
+    if (!isObject5(bericht) || bericht.level !== "info" && bericht.level !== "warning" || typeof bericht.text !== "string") {
+      throw new Error(`messages[${index}] moet { level: "info" | "warning", text } zijn.`);
+    }
+    return { level: bericht.level, text: bericht.text };
+  });
+  let project;
+  try {
+    project = deserializeProject(JSON.stringify(waarde.project));
+  } catch (fout) {
+    throw new Error(`Het project van de importeur is niet te lezen: ${fout instanceof Error ? fout.message : String(fout)}`);
+  }
+  const { format: _f, version: _v, savedAt: _s, ...inhoud } = project;
+  return { projectTekst: serializeProject(inhoud), meldingen };
+}
+function importeurVoorBestand(extensies, bestandsnaam, importerId) {
+  const punt = bestandsnaam.lastIndexOf(".");
+  const type = punt >= 0 ? bestandsnaam.slice(punt + 1).toLowerCase() : "";
+  return extensies.filter((extensie) => extensie.ingeschakeld).flatMap((extensie) => extensie.manifest.importers.filter((importeur) => importeur.fileExtensions.includes(type) && (importerId === void 0 || importeur.id === importerId)).map((importeur) => ({ extensie, importeur })));
+}
+
+// src/mcp/extensieSidecar.ts
+function vm() {
+  const haal = globalThis.process?.getBuiltinModule;
+  if (typeof haal !== "function") throw new Error("Extensies draaien zonder app alleen in Node 20.16 of nieuwer (process.getBuiltinModule).");
+  return haal("node:vm");
+}
+function laadExtensieScript(tekst2, bestandsnaam) {
+  const node = vm();
+  const context = node.createContext({ TextDecoder, TextEncoder, console: { log() {
+  }, warn() {
+  }, error() {
+  } } });
+  try {
+    node.runInContext(tekst2, context, { filename: bestandsnaam, timeout: 6e4 });
+  } catch (fout) {
+    throw new Error(`Het script ${bestandsnaam} gaf een fout bij het laden: ${fout instanceof Error ? fout.message : String(fout)}`);
+  }
+  const extensie = context.openFemExtension;
+  if (!extensie || typeof extensie.importFile !== "function") {
+    throw new Error(`Het script ${bestandsnaam} zet geen globalThis.openFemExtension met een functie importFile.`);
+  }
+  return extensie;
+}
+
 // src/mcp/kernel-exports.ts
 init_engine();
 init_combinations();
@@ -33457,7 +36362,7 @@ init_plaatMateriaal();
 init_sectionResolver();
 function eigenGewichtOverzicht(model) {
   const doel = eigenGewichtDoel(model.loadCases);
-  const geval = eigenGewichtGeval(model.loadCases, model.selfWeightEnabled);
+  const geval2 = eigenGewichtGeval(model.loadCases, model.selfWeightEnabled);
   const leeg2 = {
     doel,
     caseId: null,
@@ -33468,7 +36373,7 @@ function eigenGewichtOverzicht(model) {
     gewichtStavenKN: 0,
     overgeslagen: []
   };
-  if (!geval) return leeg2;
+  if (!geval2) return leeg2;
   const staven = [];
   const overgeslagen = [];
   for (const b of model.beams) {
@@ -33478,7 +36383,7 @@ function eigenGewichtOverzicht(model) {
       continue;
     }
     const lengteMm = staafLengteMm(b, model.nodes);
-    const lasten = eigenGewichtLasten(b, lengteMm, geval.id);
+    const lasten = eigenGewichtLasten(b, lengteMm, geval2.id);
     const verlopend = bepaalVerloop(b.material, b.profile, b.profileEnd).status === "verlopend";
     const rho = dichtheidVanMateriaal(b.material);
     const delen = lasten.map((l) => ({
@@ -33520,7 +36425,7 @@ function eigenGewichtOverzicht(model) {
   }
   return {
     doel,
-    caseId: geval.id,
+    caseId: geval2.id,
     g: G,
     staven,
     platen,
@@ -33540,7 +36445,9 @@ export {
   ANALYSETYPEN,
   ANALYSETYPE_LABEL,
   ANALYSETYPE_OMSCHRIJVING,
+  APP_COMMANDOS,
   AnalysetypeOnbekendFout,
+  ApiFout,
   BEAM_LOAD_ROLES,
   BEAM_LOAD_ROLE_LABEL,
   BEAM_LOAD_ROLE_SLEUTEL,
@@ -33590,6 +36497,9 @@ export {
   MAX_VRIJE_GEVALLEN,
   MELDING_ZONE_I,
   MIN_SEGMENT_MM,
+  MODEL3D_BEWERKEN_COMMANDOS,
+  MODEL3D_GEOMETRIE_COMMANDOS,
+  MODEL3D_VOORWAARDEN_COMMANDOS,
   NU_BETON,
   NU_STAAL,
   OUDE_STANDAARDSET,
@@ -33601,6 +36511,7 @@ export {
   PLAAT_OPENING_MIN_AFSTAND_MM,
   PLAAT_RAND_NAAM_NL,
   PLATE_DEFAULTS,
+  PROJECT_COMMANDOS,
   PROJECT_FILE_EXT,
   PROJECT_FORMAT_ID,
   PROJECT_FORMAT_VERSION,
@@ -33642,6 +36553,7 @@ export {
   STANDAARD_WIND_INSTELLINGEN,
   STEEL_GRADES,
   STEP_AFGELEID,
+  STRAMIEN_COMMANDOS,
   SUPPORTED_TIMBER_GRADES,
   StaalhalFout,
   StepEnum,
@@ -33729,6 +36641,8 @@ export {
   deserializeProject,
   dichtheidVanMateriaal,
   dichtstbijzijndePlaatrand,
+  documentNaarTekst,
+  documentUitTekst,
   doorsnedeOpPositie,
   doorsnedeVeldenVoorSolver,
   doorsnedeVoorSolver,
@@ -33779,6 +36693,7 @@ export {
   ifcAnalyseModellen,
   ifcAnalyseProject,
   importeerIfcAnalyseModel,
+  importeurVoorBestand,
   isAfgeleidVanStandaard,
   isAsgelijndeRechthoek,
   isBgtEindtoestand,
@@ -33787,11 +36702,14 @@ export {
   isOverwegendVerticaal,
   isProjectFormatId,
   isSteelProfile,
+  isStrikt,
   isWindgeneratorCombinatie,
   isZuivereStaalconstructie,
   kCrUitConfig,
   kFi,
   keurCheckConfig,
+  keurImportResultaat,
+  keurManifest,
   keurPlaatMateriaal,
   keurPlatMesh,
   keurRandKnopen,
@@ -33799,11 +36717,14 @@ export {
   koppelTotVierhoeken,
   kruipgedragVanPlaat,
   kruipgedragVanStaaf,
+  laadExtensieScript,
+  leegDocument,
   leesIfcAnalyseBestand,
   leesStaalhalInvoer,
   leesStep,
   liftSpringK,
   losEindtoestandOp,
+  maakRegister,
   maakStaalhal,
   mapDeflectionClass,
   mapLoadDuration,
@@ -33815,11 +36736,15 @@ export {
   meldingenBelastinggevallen,
   metBelastinggevalIds,
   metEindtoestandVarianten,
+  metModel3d,
   metScheefstandRichtingen,
+  model3dVan,
   nonlinearVoorBestand,
   onbekendeDoorsneden,
   ontbrekendeStandaardcombinaties,
   ontleedPlaatClt,
+  opApiCatalogus,
+  opApiUitvoeren,
   opIfcImporteren,
   opIfcUitwerken,
   opStaalhalMaken,
@@ -33885,11 +36810,14 @@ export {
   staalhalProjectnaam,
   stabiliteitsMeldingen,
   standaardBelastinggevallen,
+  standaardCommandos,
+  standaardRegister,
   startSidecar,
   synchroniseerStandaard,
   synchroniseerWindCombinaties,
   timberDeflectionNumerators,
   toetsdataInReferentierichting,
+  valideer,
   valideerModel,
   valideerPlaatOpeningen,
   valideerPlaatPolygoon,

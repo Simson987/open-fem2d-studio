@@ -105,11 +105,15 @@ import { opStaalhalMaken, opStaalhalUitwerken } from "./staalhalSidecar";
 import { StaalhalFout } from "../components/openFem3d/wizards/staalhal";
 import { IfcSidecarInvoerFout, opIfcImporteren, opIfcUitwerken } from "./ifcImportSidecar";
 import { IfcImportFout } from "../io/ifcAnalyseImport";
+import { opApiCatalogus, opApiUitvoeren } from "./apiSidecar";
+import { ApiFout } from "../api/register";
 import { controleerVelden, keurCheckConfig, valideerModel } from "./valideerModel";
 import { bijlageUitBestand, STANDAARD_BIJLAGE, type NationaleBijlageCode } from "../lib/normAanduidingen";
 import {
+  FOUTCODES,
   SIDECAR_OPS,
   SIDECAR_PROTOCOL,
+  type Foutcode,
   mapNaarObject,
   maakFout,
   maakOk,
@@ -1486,8 +1490,21 @@ export function verwerkVerzoek(verzoek: SidecarVerzoek): SidecarAntwoord {
         return maakOk(verzoek.id, opIfcImporteren(verzoek.payload));
       case "ifc_uitwerken":
         return maakOk(verzoek.id, opIfcUitwerken(verzoek.payload));
+      case "api_catalogus":
+        return maakOk(verzoek.id, opApiCatalogus());
+      case "api_uitvoeren":
+        return maakOk(verzoek.id, opApiUitvoeren(verzoek.payload));
     }
   } catch (err) {
+    if (err instanceof ApiFout) {
+      // De codes van de API staan in FOUTCODES; een ApiFout met een andere
+      // code (een programmeerfout) valt door naar INTERN.
+      const code = (FOUTCODES as readonly string[]).includes(err.code) ? (err.code as Foutcode) : "INTERN";
+      const detail = err.detail && typeof err.detail === "object" && !Array.isArray(err.detail)
+        ? err.detail as Record<string, unknown>
+        : err.detail === undefined ? undefined : { waarde: err.detail };
+      return maakFout(verzoek.id, code, err.message, code === "INTERN" ? { ...detail, code: err.code } : detail);
+    }
     if (err instanceof StaalhalFout) {
       // De invoerpoort van de hal meldt ALLE problemen, elk met code en veld;
       // die gaan ongeschonden mee in `detail`.

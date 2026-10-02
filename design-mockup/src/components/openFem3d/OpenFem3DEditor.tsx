@@ -28,9 +28,11 @@ import OpenFem3DTransformPanel from "./OpenFem3DTransformPanel";
 import { transformOpenFem3D, type OpenFem3DTransformCommand } from "./openFem3dTransform";
 import { openFem3DSelectionCount, type OpenFem3DSelection } from "./openFem3dSelection";
 import type { OpenFem3DCameraState, OpenFem3DViewSet } from "./openFem3dViewSets";
+import { openFem3DStartCamera } from "./openFem3dViewCube";
 import type { OpenFem3DEditMeta } from "./openFem3dHistory";
 import type { OpenFem3DNodeTarget } from "./openFem3dNodeTools";
 import type { OpenFem3DDeformationDisplay } from "./openFem3dDeformationDisplay";
+import type { OpenFem3DDiagramLabels } from "./openFem3dDiagramLabels";
 import { openFem3DWorkLevel, openFem3DWorkPlaneIsHorizontal, openFem3DWorkPlaneOptions } from "./openFem3dWorkPlane";
 import { openFem3DLevelName } from "./openFem3dLevels";
 import { toonMm } from "../../lib/lengthInput";
@@ -63,6 +65,8 @@ interface Props {
   onPlaceNodeCondition?: (target: OpenFem3DNodeTarget) => void;
   /** Vergroting van de vervormde vorm en het onvervormde model erachter. */
   deformationDisplay?: OpenFem3DDeformationDisplay;
+  /** Getallen bij de snedekrachtlijnen (Waarden, weinig … veel); ook mee in een view uit het venster Views. */
+  diagramLabels?: OpenFem3DDiagramLabels;
   deleteToken?: number;
   fitRequest?: number;
   viewRequest?: { kind: OpenFem3DView; token: number };
@@ -102,7 +106,7 @@ interface Props {
 /** Canvas only: 3D uses the shared ribbon, Explorer and Properties panels. */
 export default function OpenFem3DEditor({
   model, calculationModel, onChange, visibilityOpen = false, onVisibilityOpen, onVisibilityClose,
-  tool = "select", onToolChange, onPlaceNodeCondition, deformationDisplay, deleteToken = 0, fitRequest = 0, viewRequest, onCameraViewChange,
+  tool = "select", onToolChange, onPlaceNodeCondition, deformationDisplay, diagramLabels, deleteToken = 0, fitRequest = 0, viewRequest, onCameraViewChange,
   initialCamera, onCameraStateChange,
   selection: controlledSelection, onSelectionChange, onOpenCheckForBeam,
   visibility: visibilityProp, onVisibilityChange, showLoadCase = true, resultsActive = false, structuralGrid, gridSpacingM,
@@ -126,9 +130,7 @@ export default function OpenFem3DEditor({
   const workLevel = openFem3DWorkLevel(levels, workLevelId);
   const workPlaneOptions = openFem3DWorkPlaneOptions(levels);
   const [internalVisibility, setInternalVisibility] = useState(readOpenFem3DVisibility);
-  const [cameraState, setCameraState] = useState<OpenFem3DCameraState>(initialCamera ?? {
-    position: [8, 8, 6], target: [0, 0, 0], up: [0, 0, 1],
-  });
+  const [cameraState, setCameraState] = useState<OpenFem3DCameraState>(() => initialCamera ?? openFem3DStartCamera());
   const [cameraRequest, setCameraRequest] = useState<{ state: OpenFem3DCameraState; token: number } | undefined>(
     initialCamera ? { state: initialCamera, token: 1 } : undefined,
   );
@@ -324,6 +326,10 @@ export default function OpenFem3DEditor({
           onToolChange={onToolChange}
           onPlaceNodeCondition={onPlaceNodeCondition}
           deformationDisplay={deformationDisplay}
+          diagramLabels={diagramLabels}
+          // Menu-item Perspectief van de view cube: dezelfde zichtbaarheid als
+          // de schakelaar in Weergave en in het venster Zichtbaarheid.
+          onPerspectiveChange={(perspective) => setVisibility({ ...visibility, perspective })}
         />
         <div className="open-fem3d-stage-header">
           <strong>{t("openFem3d.title")}</strong>
@@ -346,14 +352,15 @@ export default function OpenFem3DEditor({
             {!openFem3DWorkPlaneIsHorizontal(currentView) && <em>{t("openFem3d.workPlane.vertical")}</em>}
           </label>
           <button type="button" className="open-fem3d-views-button" onClick={onVisibilityOpen}>{t("openFem3d.viewsButton", { n: viewSets.length })}</button>
+          {/* Passend beeld in dezelfde rij als Views: zo liggen ze nooit over elkaar, in geen enkele taal. */}
+          <button className="open-fem3d-fit" onClick={() => setFitToken((n) => n + 1)} type="button">
+            {t("openFem3d.fit")}
+          </button>
         </div>
         {drawError && <div className="open-fem3d-draw-error" role="alert">
           <span>{drawError}</span>
           <button type="button" aria-label={t("openFem3d.closeMessage")} onClick={() => setDrawError(null)}>×</button>
         </div>}
-        <button className="open-fem3d-fit" onClick={() => setFitToken((n) => n + 1)} type="button">
-          {t("openFem3d.fit")}
-        </button>
         {transformTool && transformSelection && <OpenFem3DTransformPanel
           tool={transformTool}
           selectionLabel={transformSelection.type === "multi"
@@ -434,6 +441,7 @@ export default function OpenFem3DEditor({
         currentCombinationId={currentCombinationId}
         currentLoadCaseId={activeLoadCaseId ?? 1}
         currentMode={!showLoadCase ? "model" : resultsActive ? "results" : "loadCase"}
+        currentDiagramLabels={diagramLabels}
         combinationOptions={combinationOptions}
         loadCaseOptions={loadCaseOptions}
         onViewSetsChange={onViewSetsChange}

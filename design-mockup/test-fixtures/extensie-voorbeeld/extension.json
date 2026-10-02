@@ -1,0 +1,13 @@
+{
+  "id": "org.openaec.voorbeeld",
+  "name": "Voorbeeldformaat",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "main": "index.js",
+  "description": "Testextensie: een verzonnen tekstformaat (.demofem) voor een 2D-raamwerk.",
+  "author": "OpenAEC",
+  "category": "Import/Export",
+  "importers": [
+    { "id": "demofem", "label": "Voorbeeldraamwerk", "fileExtensions": ["demofem"], "dimension": "2d" }
+  ]
+}

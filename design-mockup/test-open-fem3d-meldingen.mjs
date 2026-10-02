@@ -65,7 +65,9 @@ if (!existsSync(solverPath)) {
   });
   const ruw = result.diagnostics.filter((x) => /is nearly vertical/.test(x)).length;
   const gefilterd = openFem3DMeldingen(result.diagnostics, hal);
-  check(`de kern geeft onterechte meldingen voor staven langs Y (${ruw})`, ruw > 0);
+  // Sinds #61 filtert ook de adapter (crates/open-fem-3d, summarize_diagnostics)
+  // deze melding: de kern geeft hem via geen enkele weg meer (app, toetsbrug, MCP).
+  check(`de kern geeft geen onterechte meldingen meer voor staven langs Y (${ruw})`, ruw === 0);
   check("na het filter: geen enkele 'nearly vertical' meer", !gefilterd.kern.some((x) => /nearly vertical/.test(x)));
   check("en geen bijna verticale staven in de hal (de kolommen staan exact verticaal)", gefilterd.bijnaVerticaal.length === 0);
 }

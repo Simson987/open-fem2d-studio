@@ -6,6 +6,9 @@
 //   - alle translaties vast: de gewone scharnierkegel met voetplaat;
 //   - per vaste rotatie een donkere, gesloten ring om die as (de oranje ring
 //     met asstaaf blijft het teken van de vrije draaias van een scharnier).
+// De veer is een echte schroefveer (vijf windingen, een spoel van een halve
+// maat breed); een rol is kegel, voetplaat, twee rollen en de ondergrond met
+// arcering, zonder de grote donkere schijf van vroeger.
 import * as THREE from "three";
 const { addOpenFem3DConditionMarkers, openFem3DConditionMarkerSize } = await import("./src/components/openFem3d/openFem3dMarkers.ts");
 const { OPEN_FEM_3D_SUPPORT_PRESETS, parseOpenFem3DModel } = await import("./src/components/openFem3d/openFem3dModel.ts");
@@ -123,6 +126,47 @@ console.log("\n[6] de standaardtekens blijven zoals ze waren");
   const draai = teken(OPEN_FEM_3D_SUPPORT_PRESETS.revoluteZ);
   check("scharnier met vrije z-as: de oranje ring (niet de donkere)",
     soort(draai, "TorusGeometry").length === 1 && kleur(soort(draai, "TorusGeometry")[0]) === ORANJE);
+}
+
+console.log("\n[7] de veer is een echte schroefveer, geen draadje");
+{
+  const veer = soort(teken({ ...VRIJ, springs: { kzKnPerM: 100000 } }), "TubeGeometry")[0];
+  veer.geometry.computeBoundingBox();
+  const doos = veer.geometry.boundingBox;
+  check("de spoel is minstens 0,4 · maat breed (niet een dun lijntje)",
+    doos.max.x - doos.min.x >= 0.4 * s && doos.max.y - doos.min.y >= 0.4 * s,
+    `${((doos.max.x - doos.min.x) / s).toFixed(2)} × ${((doos.max.y - doos.min.y) / s).toFixed(2)} · maat`);
+  check("hij loopt van de knoop tot het plaatje (1,4–1,5 · maat)",
+    doos.max.z <= 0.05 * s && doos.min.z <= -1.4 * s && doos.min.z >= -1.55 * s, `${(doos.min.z / s).toFixed(2)} · maat`);
+  // Windingen tellen: hoe vaak de spoel van de ene naar de andere kant van de as gaat.
+  const buiten = veer.geometry.parameters.path.getPoints(400).filter((punt) => Math.abs(punt.x) > 0.05 * s);
+  let wissels = 0;
+  for (let i = 1; i < buiten.length; i++) if (Math.sign(buiten[i].x) !== Math.sign(buiten[i - 1].x)) wissels++;
+  check("vijf windingen", wissels >= 9 && wissels <= 11, String(wissels));
+}
+
+console.log("\n[8] een rol: kegel, voetplaat, twee rollen en de ondergrond met arcering");
+{
+  const m = teken(OPEN_FEM_3D_SUPPORT_PRESETS.yRoller);
+  check("geen bol en geen grote schijf meer", geenBol(m)
+    && !soort(m, "CylinderGeometry").some((c) => c.geometry.parameters.radiusTop >= 0.8 * s));
+  const kegels = soort(m, "ConeGeometry");
+  check("één kegel langs y, met de punt naar de knoop", kegels.length === 1 && lokaleY(kegels[0]).dot(AS.y) > 0.999
+    && kegels[0].position.dot(AS.y) < 0);
+  const rollen = soort(m, "CylinderGeometry").filter((c) => kleur(c) === DONKER);
+  check("twee donkere rollen, dwars op de vaste richting", rollen.length === 2
+    && rollen.every((r) => Math.abs(lokaleY(r).dot(AS.y)) < 1e-9), String(rollen.length));
+  const platenRol = soort(m, "BoxGeometry").filter((b) => b.geometry.parameters.width >= 1.4 * s);
+  check("voetplaat en ondergrond, loodrecht op y", platenRol.length === 2
+    && platenRol.every((b) => evenwijdig(lokaleY(b), AS.y)), String(platenRol.length));
+  const diepte = (mesh) => -mesh.position.dot(AS.y);
+  const [voet, grond] = [...platenRol].sort((a, b) => diepte(a) - diepte(b));
+  check("in de volgorde knoop – kegel – voetplaat – rollen – ondergrond",
+    platenRol.length === 2 && diepte(kegels[0]) < diepte(voet) && rollen.every((r) => diepte(r) > diepte(voet) && diepte(r) < diepte(grond)));
+  const arcering = soort(m, "BoxGeometry").filter((b) => b.geometry.parameters.width < 0.1 * s);
+  check("vier arceringsstreepjes achter de ondergrond", arcering.length === 4
+    && arcering.every((b) => diepte(b) > diepte(grond)), String(arcering.length));
+  check("alles hoort bij knoop 1", alleKnoop(m));
 }
 
 console.log(`\n${geslaagd} geslaagd, ${gefaald} gefaald`);

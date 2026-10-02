@@ -61,6 +61,11 @@ mod timber_tools;
 /// dezelfde `plaat_check::check_all_plates` aan als het Tauri-command en de
 /// toetsbrug. Zie `plate_tools.rs`.
 mod plate_tools;
+
+/// De API-commando's van de app (het commandoregister in `design-mockup/src/api/`):
+/// één tool per commando, uit de ingebakken catalogus. Met `project` zonder app op
+/// een bestand (via de sidecar), anders in de draaiende app. Zie `api_tools.rs`.
+mod api_tools;
 #[cfg(test)]
 mod report_tests;
 
@@ -489,6 +494,7 @@ fn tool_definitions() -> Value {
     lijst.extend(timber_tools::tool_definitions());
     lijst.extend(plate_tools::tool_definitions());
     lijst.extend(gui_tools::tool_definitions());
+    lijst.extend(api_tools::tool_definitions());
     tools
 }
 
@@ -573,6 +579,7 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
         // De GUI-tools: geen rekenwerk, maar opdrachten aan de draaiende app
         // over haar bedieningskanaal. Zie `gui_tools.rs`.
         gui if gui_tools::is_gui_tool(gui) => gui_tools::dispatch(gui, args).await,
+        api if api_tools::is_api_tool(api) => api_tools::dispatch(api, args).await,
         other => Err(RpcError::method_not_found(other)),
     }
 }

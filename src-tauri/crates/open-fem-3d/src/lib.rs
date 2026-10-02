@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 mod kruisregel;
 mod montage;
+mod opleggingen;
 mod schijven;
 mod shell;
 mod trek_alleen;
@@ -1085,177 +1086,21 @@ fn merge_diagrams(parts_of: &[MemberParts], diagrams: Vec<EngineElementDiagram3D
     merged
 }
 
-/// Controleer vóór het oplossen dat elk verbonden modeldeel met platen als
-/// star lichaam is vastgehouden. De kern zou een mechanisme pas na een dichte
-/// terugvaloplossing melden, en die is voor een fijn plaatnet onbetaalbaar.
-/// De kunstmatige draaiveer loodrecht op het plaatvlak telt hier niet mee.
-fn check_rigid_body_restraint(request: &SolveRequest3D) -> Result<(), String> {
-    let coordinates: HashMap<usize, [f64; 3]> = request.nodes.iter()
-        .map(|node| (node.id, [node.x, node.y, node.z])).collect();
-    let mut parent: HashMap<usize, usize> = coordinates.keys().map(|id| (*id, *id)).collect();
-    fn find(parent: &mut HashMap<usize, usize>, id: usize) -> usize {
-        let mut root = id;
-        while parent[&root] != root { root = parent[&root]; }
-        let mut current = id;
-        while parent[&current] != root {
-            let next = parent[&current];
-            parent.insert(current, root);
-            current = next;
-        }
-        root
-    }
-    let mut connected: HashSet<usize> = HashSet::new();
-    let mut union = |parent: &mut HashMap<usize, usize>, ids: &[usize]| {
-        for id in ids { connected.insert(*id); }
-        for pair in ids.windows(2) {
-            let a = find(parent, pair[0]);
-            let b = find(parent, pair[1]);
-            if a != b { parent.insert(a, b); }
-        }
-    };
-    for member in &request.members {
-        let mut chain = vec![member.start_node_id];
-        chain.extend(member.intermediate_node_ids.iter().copied());
-        chain.push(member.end_node_id);
-        union(&mut parent, &chain);
-    }
-    for element in &request.shell_elements { union(&mut parent, &element.node_ids); }
-
-    let mut components: std::collections::BTreeMap<usize, Vec<usize>> = std::collections::BTreeMap::new();
-    let mut ids: Vec<usize> = coordinates.keys().copied().collect();
-    ids.sort_unstable();
-    for id in ids {
-        let root = find(&mut parent, id);
-        components.entry(root).or_default().push(id);
-    }
-    let supports: HashMap<usize, &Support3D> = request.supports.iter().map(|s| (s.node_id, s)).collect();
-    const MODE_NAMES: [&str; 6] = [
-        "verschuiving in X", "verschuiving in Y", "verschuiving in Z",
-        "rotatie om X", "rotatie om Y", "rotatie om Z",
-    ];
-    for nodes in components.values() {
-        let first = nodes[0];
-        if nodes.len() == 1 && !connected.contains(&first) {
-            let support = supports.get(&first);
-            let full = support.is_some_and(|s| [s.ux, s.uy, s.uz, s.rx, s.ry, s.rz].iter().all(|v| *v));
-            if full { continue; }
-            return Err(format!(
-                "knoop {first} hangt aan geen enkele staaf of plaat; verwijder hem of verbind hem met de constructie",
-            ));
-        }
-        let centre = shell::scale(
-            nodes.iter().fold([0.0; 3], |sum, id| shell::add(sum, coordinates[id])),
-            1.0 / nodes.len() as f64,
-        );
-        let size = nodes.iter()
-            .map(|id| shell::norm(shell::sub(coordinates[id], centre)))
-            .fold(1.0_f64, f64::max);
-        let mut gram = [[0.0_f64; 6]; 6];
-        for id in nodes {
-            let Some(support) = supports.get(id) else { continue };
-            let restrained = [
-                support.ux || support.kx_kn_per_m.is_some(),
-                support.uy || support.ky_kn_per_m.is_some(),
-                support.uz || support.kz_kn_per_m.is_some(),
-                support.rx || support.krx_knm_per_rad.is_some(),
-                support.ry || support.kry_knm_per_rad.is_some(),
-                support.rz || support.krz_knm_per_rad.is_some(),
-            ];
-            let r = shell::sub(coordinates[id], centre);
-            for (dof, fixed) in restrained.iter().enumerate() {
-                if !fixed { continue; }
-                // Rij van deze blokkering over de zes starre-lichaamsvormen;
-                // rotaties zijn geschaald met 1/afmeting.
-                let mut row = [0.0; 6];
-                if dof < 3 {
-                    row[dof] = 1.0;
-                    for axis in 0..3 {
-                        let mut e = [0.0; 3];
-                        e[axis] = 1.0;
-                        row[3 + axis] = shell::cross(e, r)[dof] / size;
-                    }
-                } else {
-                    row[dof] = 1.0 / size;
-                }
-                for i in 0..6 { for j in 0..6 { gram[i][j] += row[i] * row[j]; } }
-            }
-        }
-        let (values, vectors) = symmetric_eigen6(gram);
-        let largest = values.iter().copied().fold(0.0_f64, f64::max);
-        let mut free = Vec::new();
-        for (index, value) in values.iter().enumerate() {
-            if *value <= 1e-9 * largest.max(1e-12) || largest == 0.0 {
-                let vector = vectors[index];
-                let magnitude = vector.iter().map(|v| v * v).sum::<f64>().sqrt();
-                for (mode, component) in vector.iter().enumerate() {
-                    if component.abs() > 0.3 * magnitude && !free.contains(&MODE_NAMES[mode]) {
-                        free.push(MODE_NAMES[mode]);
-                    }
-                }
-            }
-        }
-        if !free.is_empty() {
-            return Err(format!(
-                "het model is een mechanisme: het deel met knoop {first} is onvoldoende opgelegd en kan als \
-                 star lichaam bewegen ({}). Een plaat die alleen loodrecht op haar vlak is opgelegd heeft \
-                 ook steun in haar vlak nodig, bijvoorbeeld twee richtingen in één knoop en één richting \
-                 in een tweede knoop.",
-                free.join(", "),
-            ));
-        }
-    }
-    Ok(())
-}
-
-/// Eigenwaarden en -vectoren van een symmetrische 6×6-matrix (Jacobi).
-fn symmetric_eigen6(mut a: [[f64; 6]; 6]) -> ([f64; 6], [[f64; 6]; 6]) {
-    let mut v = [[0.0; 6]; 6];
-    for (i, row) in v.iter_mut().enumerate() { row[i] = 1.0; }
-    for _sweep in 0..100 {
-        let off: f64 = (0..6).flat_map(|i| (0..6).map(move |j| (i, j)))
-            .filter(|(i, j)| i != j).map(|(i, j)| a[i][j] * a[i][j]).sum();
-        if off < 1e-30 { break; }
-        for p in 0..6 {
-            for q in (p + 1)..6 {
-                if a[p][q].abs() < 1e-300 { continue; }
-                let theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
-                let t = theta.signum() / (theta.abs() + (theta * theta + 1.0).sqrt());
-                let t = if theta == 0.0 { 1.0 } else { t };
-                let c = 1.0 / (t * t + 1.0).sqrt();
-                let s = t * c;
-                for k in 0..6 {
-                    let akp = a[k][p];
-                    let akq = a[k][q];
-                    a[k][p] = c * akp - s * akq;
-                    a[k][q] = s * akp + c * akq;
-                }
-                for k in 0..6 {
-                    let apk = a[p][k];
-                    let aqk = a[q][k];
-                    a[p][k] = c * apk - s * aqk;
-                    a[q][k] = s * apk + c * aqk;
-                }
-                for k in 0..6 {
-                    let vkp = v[k][p];
-                    let vkq = v[k][q];
-                    v[k][p] = c * vkp - s * vkq;
-                    v[k][q] = s * vkp + c * vkq;
-                }
-            }
-        }
-    }
-    let values = std::array::from_fn(|i| a[i][i]);
-    // Kolom i van v is de eigenvector bij waarde i.
-    let vectors = std::array::from_fn(|i| std::array::from_fn(|k| v[k][i]));
-    (values, vectors)
-}
-
 /// Kwaliteitsmeldingen van de kern over plaatelementen, samengevat per soort:
 /// een fijn net geeft anders honderden losse regels.
 fn summarize_diagnostics(results: &AnalysisResults3D, shell_engine_ids: &HashSet<usize>) -> Vec<String> {
     let mut counts: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     let mut messages = Vec::new();
     for item in &results.structured_diagnostics {
+        // De kern toetst "nearly vertical" bij een staaf zonder oriëntatievector
+        // tegen globaal Y, terwijl haar lokale assen (en Open FEM 3D) Z omhoog
+        // gebruiken. Deze adapter geeft nooit een oriëntatievector mee, dus elke
+        // staaf langs Y kreeg die melding en een echt bijna verticale staaf niet
+        // (#61). Ze valt hier weg; het rapport toetst zelf met Z omhoog
+        // (design-mockup/src/components/openFem3d/openFem3dMeldingen.ts).
+        if format!("{:?}", item.code) == "SuspiciousLocalAxis" && item.message.contains("is nearly vertical") {
+            continue;
+        }
         let about_shells = !item.element_ids.is_empty()
             && item.element_ids.iter().all(|id| shell_engine_ids.contains(id));
         if about_shells {
@@ -1433,13 +1278,32 @@ fn max_dof_magnitude(results: &AnalysisResults3D) -> f64 {
         .fold(0.0, f64::max)
 }
 
+/// Algemene uitleg bij een mechanisme; staat ook achter de specifieke melding
+/// van `opleggingen` voor gevallen die die controle niet vangt.
+pub(crate) const MECHANISME_UITLEG: &str = "Controleer per verbonden modeldeel drie onafhankelijke translatie- en rotatieblokkeringen. Bij 3D-staven moet torsie om de staafas op minstens één plaats zijn geblokkeerd, bijvoorbeeld met een inklemming, passende revolute-oplegging of rotatieveer.";
+
+fn is_singular(detail: &str) -> bool {
+    let normalized = detail.to_ascii_lowercase();
+    normalized.contains("singular") || normalized.contains("mechanism")
+}
+
 fn solver_error(context: &str, error: impl std::fmt::Display) -> String {
     let detail = error.to_string();
-    let normalized = detail.to_ascii_lowercase();
-    if normalized.contains("singular") || normalized.contains("mechanism") {
+    if is_singular(&detail) {
         return format!(
-            "{context}: het model is een mechanisme of onvoldoende opgelegd (singuliere stijfheidsmatrix). Controleer per verbonden modeldeel drie onafhankelijke translatie- en rotatieblokkeringen. Bij 3D-staven moet torsie om de staafas op minstens één plaats zijn geblokkeerd, bijvoorbeeld met een inklemming, passende revolute-oplegging of rotatieveer. Engine: {detail}",
+            "{context}: het model is een mechanisme of onvoldoende opgelegd (singuliere stijfheidsmatrix). {MECHANISME_UITLEG} Engine: {detail}",
         );
+    }
+    format!("{context}: {detail}")
+}
+
+/// Fout van de kern bij het oplossen van `request`. Bij een singuliere
+/// stijfheidsmatrix zegt de controle op de opleggingen welk deel welke
+/// beweging vrij heeft (#64).
+fn engine_error(request: &SolveRequest3D, context: &str, error: impl std::fmt::Display) -> String {
+    let detail = error.to_string();
+    if is_singular(&detail) {
+        return opleggingen::singuliere_fout(request, context, &detail);
     }
     format!("{context}: {detail}")
 }
@@ -1472,6 +1336,11 @@ pub fn solve(request: SolveRequest3D) -> Result<SolveResult3D, String> {
     if let Some(montage) = montage::verzoek(&request) {
         validate(&montage).map_err(|fout| format!("tensionOnlyFit: {fout}"))?;
     }
+    // Kan een verbonden modeldeel als star lichaam bewegen (#64)? Bij platen
+    // is dat een fout vóór het oplossen: de kern zou een mechanisme pas na een
+    // dichte terugvaloplossing melden, en die is voor een fijn plaatnet
+    // onbetaalbaar. Anders volgt een melding als de kern toch een oplossing vindt.
+    let bevindingen = opleggingen::controleer(&request, &HashSet::new());
     if !request.shell_elements.is_empty() {
         if request.analysis == AnalysisKind::PDelta {
             return Err(
@@ -1479,9 +1348,14 @@ pub fn solve(request: SolveRequest3D) -> Result<SolveResult3D, String> {
                     .into(),
             );
         }
-        check_rigid_body_restraint(&request)?;
+        if bevindingen.iter().any(|bevinding| bevinding.tekort()) { return Err(opleggingen::plaatfout(&bevindingen)); }
     }
-    trek_alleen::los_op(&request, &plate_geometry)
+    let mut result = trek_alleen::los_op(&request, &plate_geometry)?;
+    // De eindtoestand telt: trek-alleen staven op druk doen niet mee.
+    let inactive: HashSet<usize> = result.inactive_members.iter().copied().collect();
+    let bevindingen = if inactive.is_empty() { bevindingen } else { opleggingen::controleer(&request, &inactive) };
+    if let Some(melding) = opleggingen::waarschuwing(&bevindingen) { result.diagnostics.insert(0, melding); }
+    Ok(result)
 }
 
 /// Eén berekening met een vaste set staven. De tweede orde en de
@@ -1495,21 +1369,24 @@ pub(crate) fn solve_fixed(
 ) -> Result<SolveResult3D, String> {
     let model = to_engine_input(request)?;
     let input = &model.input;
+    // Een fout die op een mechanisme kan wijzen, krijgt de bevindingen van de
+    // controle op de opleggingen erbij (alleen als die iets vindt).
+    let aanvullen = |fout: String| opleggingen::aanvullen(request, fout);
     let mut solved = match analysis {
         AnalysisKind::Linear => {
-            let mut results = solve_3d(input).map_err(|error| solver_error("lineaire 3D-berekening", error))?;
-            tweede_orde::herstel_residu(input, &mut results)?;
-            require_usable_solution("lineaire 3D-berekening", &results)?;
+            let mut results = solve_3d(input).map_err(|error| engine_error(request, "lineaire 3D-berekening", error))?;
+            tweede_orde::herstel_residu(input, &mut results).map_err(aanvullen)?;
+            require_usable_solution("lineaire 3D-berekening", &results).map_err(aanvullen)?;
             let buckling = buckling_per_member(&model, tweede_orde::knik_bij_eerste_orde(input, &results, buckling_modes));
             convert_result(request, &model, plate_geometry, results, None, buckling)
         }
         AnalysisKind::PDelta => {
-            let mut linear = solve_3d(input).map_err(|error| solver_error("tweede-orde 3D-berekening", error))?;
-            tweede_orde::herstel_residu(input, &mut linear)?;
-            require_usable_solution("tweede-orde 3D-berekening", &linear)?;
+            let mut linear = solve_3d(input).map_err(|error| engine_error(request, "tweede-orde 3D-berekening", error))?;
+            tweede_orde::herstel_residu(input, &mut linear).map_err(aanvullen)?;
+            require_usable_solution("tweede-orde 3D-berekening", &linear).map_err(aanvullen)?;
             let second_order = tweede_orde::los_op(
                 input, linear, request.max_iterations, request.tolerance, buckling_modes,
-            )?;
+            ).map_err(aanvullen)?;
             let buckling = buckling_per_member(&model, second_order.buckling);
             let mut solved = convert_result(
                 request, &model, plate_geometry, second_order.results, Some(second_order.summary), buckling,

@@ -6,8 +6,9 @@ Claude Code, etc.). It speaks JSON-RPC 2.0 over stdio and wraps the same
 Rust crates the Tauri desktop app uses, so a tool call from Claude returns
 byte-identical results to clicking through the UI.
 
-The 51 tools, in ten groups (the exact roster is pinned by
-`tests/stdio_roundtrip.rs` and `tests/drie_wegen_kruistabel.rs`):
+The 51 fixed tools, in ten groups (the exact roster is pinned by
+`tests/stdio_roundtrip.rs` and `tests/drie_wegen_kruistabel.rs`), plus one tool
+per command of the app's command register — see *Commando's uit de app*:
 
 | group | tools |
 |---|---|
@@ -21,16 +22,19 @@ The 51 tools, in ten groups (the exact roster is pinned by
 | IFC4 structural analysis model import (optionally solved and checked) | `open_fem_3d_ifc_importeren` |
 | reporting | `generate_steel_report_pdf` |
 | driving the running app | twenty-two `gui_*` tools, see the last section |
+| the app's command register: 3D model, project, undo | one tool per command (`model3d_*`, `project_*`, `app_*`), generated from the app's catalogue — see *Commando's uit de app* |
 
 `generate_steel_report_pdf` sits in its own group on purpose: the name is
 historical, but the report carries steel, timber, cross-laminated timber,
 concrete, plates and the norm-independent stress check. Filing it under steel
 would suggest it only renders EN 1993-1-1.
 
-**Belastingen.** Er is geen losse tool "last toevoegen": lasten horen bij het
-model. `solve_fem_model` en `check_fem_model` nemen `loadCases`, `loads` en
-(optioneel) `combinations` mee in het verzoek; `gui_build_model` bouwt ze in de
-draaiende app op. Een last erbij betekent het model opnieuw sturen.
+**Belastingen.** In het 3D-model heeft elke soort last een eigen tool
+(`model3d_load_nodal_add`, `model3d_load_member_add`, …; zie *Commando's uit de
+app*). In het 2D-model nog niet: `solve_fem_model` en `check_fem_model` nemen
+`loadCases`, `loads` en (optioneel) `combinations` mee in het verzoek;
+`gui_build_model` bouwt ze in de draaiende app op. Een 2D-last erbij betekent
+het model opnieuw sturen.
 
 **De drie wegen.** Elke rekenkern in dit project hoort langs drie wegen
 bereikbaar te zijn: een Tauri-command (de desktop-app), een opdracht in
@@ -755,6 +759,63 @@ weggelaten om toch te rekenen.
 de app leest het bestand, zet het als nieuw 3D-project neer (zonder te vragen
 naar niet-opgeslagen werk) en geeft het verslag terug.
 
+## Commando's uit de app (`model3d_*`, `project_*`, `app_*`)
+
+De app heeft een commandoregister (`design-mockup/src/api/`): elke
+modelfunctie is daar een commando met een naam, een Nederlandse beschrijving
+en een streng invoerschema. Deze server maakt van elk commando een tool. De
+lijst komt uit `assets/api-catalogus.json`, die `npm run build:sidecar` uit
+de app schrijft; een nieuw commando in de app is na het bouwen dus vanzelf
+een tool. Het register dekt nu het 3D-model, de gevallen en combinaties, het
+stramien, ongedaan maken en opslaan; het 2D-model, rekenen en toetsen, en
+weergave en rapport volgen.
+
+- **Naam**: de commandonaam met `_` voor `.`, dus `model3d.node.add` wordt
+  `model3d_node_add`.
+- **Documentcommando's** (`model3d_*`, `project_*`) werken op een project.
+  - Met `project` (pad naar een `.ifcfem` of `.ifcfem2d`) is er geen app
+    nodig: de server leest het bestand, voert het commando uit in de
+    solverbundel en schrijft het resultaat terug (eerst naast het bestand,
+    dan in één keer vervangen). `save: false` laat het bestand staan.
+    Antwoord: `{output, saved, project}`.
+  - Zonder `project` gaat het commando naar de draaiende app (gestart met
+    `OPENAEC_GUI_CONTROL=1`, zie de laatste sectie), als één stap die
+    `app_undo` of Ctrl+Z ongedaan maakt. Antwoord: `{output, via: "app"}`.
+- **App-commando's** (`app_undo`, `app_redo`, `app_project_save`,
+  `app_project_open`) werken alleen in de draaiende app.
+- **Niet-opgeslagen werk**: in de app weigeren `project_new` en
+  `app_project_open` als het project niet-opgeslagen wijzigingen heeft, tenzij
+  `discardChanges: true`. Dit kanaal stelt de gebruiker geen vragen.
+- **Fouten** komen met een vaste code in `structuredContent.error_code`, met
+  een remedie: `ONBEKEND_COMMANDO` (met suggesties), `INVOER_ONGELDIG` (met de
+  problemen per veld), `GEEN_DOCUMENT`, `NIET_GEVONDEN`, `GEWEIGERD` (een
+  modelregel weigert; de reden staat erbij), `ALLEEN_IN_APP`,
+  `BESTAND_ONLEESBAAR` en `INTERN`. Een verkeerd argument van de tool zelf
+  (`project` bij een app-commando, een ander bestandstype) geeft
+  `ARGUMENT_ONGELDIG`.
+- **Eenheden**: m, kN, kN/m, kN/m², kNm; de profielrotatie in graden
+  (`rollAngleDeg`). `model3d_get` geeft het model zoals het project het
+  bewaart (de rolhoek dan in radialen).
+
+Voorbeeld: een kolom op een bestand, zonder app.
+
+```json
+{"name": "project_new", "arguments": {"project": "C:/werk/kolom.ifcfem"}}
+{"name": "model3d_node_add", "arguments": {"project": "C:/werk/kolom.ifcfem", "x": 0, "y": 0, "z": 0}}
+{"name": "model3d_node_add", "arguments": {"project": "C:/werk/kolom.ifcfem", "x": 0, "y": 0, "z": 4}}
+{"name": "model3d_beam_add", "arguments": {"project": "C:/werk/kolom.ifcfem", "startNodeId": 1, "endNodeId": 2, "profileName": "HEA 200"}}
+{"name": "model3d_support_set", "arguments": {"project": "C:/werk/kolom.ifcfem", "nodeId": 1, "preset": "fixed"}}
+{"name": "model3d_load_nodal_add", "arguments": {"project": "C:/werk/kolom.ifcfem", "nodeId": 2, "fx": 5, "fz": -100}}
+```
+
+Hetzelfde in de draaiende app: laat `project` weg.
+
+Welke functie van de 3D-bediening bij welk commando hoort, en wat in een
+latere fase komt, staat in `design-mockup/src/api/dekking.ts`;
+`design-mockup/test-api-dekking.mjs` faalt zodra de 3D-bediening een functie
+krijgt zonder commando. Eind-tot-eind door de echte app, via deze server:
+`node design-mockup/referentie-gui/api-app.mjs`.
+
 ## Architecture
 
 - **Transport**: newline-delimited JSON-RPC 2.0 on stdin/stdout. One message
@@ -789,6 +850,7 @@ cargo test -p openaec-mcp-server
 | `hout_in_check_fem_model.rs` | the same for a timber beam, including `beam_ids: [timber beam]`; and catalogue profiles outside the old prefix list (INP, DIN, L) are checked, not dropped |
 | `fem_golden.rs`, `sidecar.rs`, `fout_paden.rs` | the FEM chain: golden values, the Node sidecar, and the error paths |
 | `ifc_import_mcp.rs` | `open_fem_3d_ifc_importeren` end to end on the synthetic files of `docs/verificatie/ifc-analyse`: without a model choice the error lists both analysis models; the canopy model is imported, solved and checked with ΣR per load case equal to hand values and equilibrium everywhere; the hall comes back with its report and an honest calculation status; the mm/kN file gives exactly the same model; a missing file is reported (needs Node ≥ 20) |
+| `api_tools.rs` | the tools generated from the app's command catalogue: a chain of commands on a temporary project file (headless, through the Node sidecar), `save: false`, and the error codes — `NIET_GEVONDEN`, `INVOER_ONGELDIG`, `BESTAND_ONLEESBAAR`, and `ARGUMENT_ONGELDIG` for another file type or `project` on an app command (needs Node ≥ 20) |
 | `staalhal_mcp.rs` | `open_fem_3d_staalhal_maken` end to end: the default hall equals the example project file node for node, every schema default equals the generator's, ΣR per load case and Σ pile reactions match hand values, equilibrium in every case and combination, a UC for every steel member, and parameter errors come back with code and field (needs Node ≥ 20) |
 
 `beton_in_check_fem_model.rs` and the FEM tests need Node ≥ 20, because the

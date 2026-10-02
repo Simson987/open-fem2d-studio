@@ -3,13 +3,19 @@ import { useState, type Dispatch, type SetStateAction } from "react";
 import type { DisplayFlags } from "./FemResultsOverlay";
 import { vlagAan, zetVlag, type AanUitVlag } from "../../lib/zichtbaarheid";
 import {
+  SNAP_SCHAKELAARS,
   SNAP_SOORTEN,
   useSnapInstellingen,
   zetAlleSnaps,
+  zetHoekExtra,
+  zetHoekTolerantie,
   zetSnap,
+  zetVerbindingsTolerantie,
   type SnapSoort,
 } from "../../hooks/useSnapInstellingen";
-import type { OpenFem3DVisibility } from "../openFem3d/openFem3dVisibility";
+import { leesHoekTolerantie } from "../../lib/tekenhulp";
+import { leesVerbindingstolerantie } from "../../lib/modelControle";
+import { OPEN_FEM_3D_RESULT_LAYERS, type OpenFem3DVisibility } from "../openFem3d/openFem3dVisibility";
 import {
   arrowIcon,
   barIcon,
@@ -27,6 +33,8 @@ import {
   tableIcon,
   tableNodesIcon,
   viewerMeasureIcon,
+  viewerOrbitIcon,
+  viewerPerspectiveIcon,
   viewerSectionIcon,
   viewerWireframeIcon,
 } from "../ribbon/icons";
@@ -77,6 +85,96 @@ function ToggleRow({
   );
 }
 
+/**
+ * Invoer van een tolerantie, komma of punt. Pas bij Enter of het verlaten van
+ * het veld vastgelegd; ongeldige invoer zet het veld terug op de bewaarde
+ * waarde, Escape breekt af. Gedeeld door de hoeksnap (#53) en de
+ * verbindingstolerantie (#55): `lees` begrenst, `zet` bewaart.
+ */
+function TolerantieInvoer({ waarde, label, lees, zet }: {
+  waarde: number;
+  label: string;
+  lees: (tekst: string) => number | null;
+  zet: (waarde: number) => void;
+}) {
+  const { i18n } = useTranslation("common");
+  const decimaal = i18n.language?.startsWith("en") ? "." : ",";
+  const toon = (v: number) => String(Math.round(v * 100) / 100).replace(".", decimaal);
+  // Tijdens het typen de getypte tekst; anders de bewaarde waarde.
+  const [bewerk, setBewerk] = useState<string | null>(null);
+  const legVast = () => {
+    if (bewerk === null) return;
+    const gelezen = lees(bewerk);
+    if (gelezen !== null) zet(gelezen);
+    setBewerk(null);
+  };
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={bewerk ?? toon(waarde)}
+      aria-label={label}
+      onChange={(e) => setBewerk(e.target.value)}
+      onBlur={legVast}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") { e.preventDefault(); legVast(); }
+        if (e.key === "Escape") { e.preventDefault(); setBewerk(null); }
+      }}
+    />
+  );
+}
+
+/**
+ * Opties van de hoeksnap (#53), als sub-rij onder de rij Hoek: de tolerantie
+ * in graden (komma of punt, 0,1–15) en of ook 30°, 45° en 60° vangen.
+ */
+function HoekSnapOpties({ tolerantie, extra, actief }: { tolerantie: number; extra: boolean; actief: boolean }) {
+  const { t } = useTranslation("common");
+  return (
+    <div className={`explorer-view-hoek-opties${actief ? "" : " uit"}`} data-snap-opties="hoek">
+      <label className="explorer-view-hoek-veld" title={t("zichtbaarheid.hoekTolerantieHint")}>
+        <span>{t("zichtbaarheid.hoekTolerantie")}</span>
+        <TolerantieInvoer waarde={tolerantie} label={t("zichtbaarheid.hoekTolerantie")}
+          lees={leesHoekTolerantie} zet={zetHoekTolerantie} />
+      </label>
+      <label className="explorer-view-hoek-vink" title={t("zichtbaarheid.hoekExtraHint")}>
+        <input type="checkbox" checked={extra} onChange={(e) => zetHoekExtra(e.target.checked)} />
+        <span>{t("zichtbaarheid.hoekExtra")}</span>
+      </label>
+    </div>
+  );
+}
+
+/**
+ * De verbindingstolerantie van het 2D-model (#55), als rij bij de snaps:
+ * binnen deze afstand (mm, 0,1–25, komma of punt) geldt een knoop als "op de
+ * staaf" of "op dezelfde plek". De uitleg staat in de tooltip. Bewaard met de
+ * snapinstellingen; een andere waarde verplaatst niets.
+ *
+ * De eenheid staat als vaste tekst direct achter het veld, niet in het label:
+ * bij de standaardbreedte van het paneel (240 px) paste "… (mm)" in geen van
+ * de vier talen, en het afgekapte label liet juist de eenheid weg. Past label
+ * plus veld niet op één regel, dan schuift het veld naar een tweede regel
+ * (zie `.explorer-view-invoer-rij` in FemProjectTree.css); het label wordt
+ * niet afgekapt.
+ */
+function VerbindingsTolerantieRij({ waarde }: { waarde: number }) {
+  const { t } = useTranslation("common");
+  const label = t("zichtbaarheid.verbindingsTolerantie");
+  return (
+    <label className="explorer-view-invoer-rij" data-snap-opties="verbinding"
+      title={t("zichtbaarheid.verbindingsTolerantieHint")}>
+      <span className="explorer-view-toggle-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: linkIcon }} />
+      <span className="explorer-view-invoer-label">{label}</span>
+      <span className="explorer-view-invoer-veld">
+        <TolerantieInvoer waarde={waarde} label={`${label} (mm)`}
+          lees={leesVerbindingstolerantie} zet={zetVerbindingsTolerantie} />
+        <span className="explorer-view-invoer-eenheid" aria-hidden="true">mm</span>
+      </span>
+    </label>
+  );
+}
+
 export default function ExplorerViewTab({
   displayFlags,
   setDisplayFlags,
@@ -92,7 +190,10 @@ export default function ExplorerViewTab({
   const { t } = useTranslation("common");
   const [query, setQuery] = useState("");
   const snaps = useSnapInstellingen();
-  const allSnaps = SNAP_SOORTEN.every((key) => snaps[key]);
+  // De hoeksnap bestaat alleen op het 2D-tekenvlak; in 3D gaat "alle" over
+  // de drie puntsnaps.
+  const snapSchakelaars = workspace === "2d" ? SNAP_SCHAKELAARS : SNAP_SOORTEN;
+  const allSnaps = snapSchakelaars.every((key) => snaps[key]);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matches = (label: string) => !normalizedQuery || label.toLocaleLowerCase().includes(normalizedQuery);
   const matchesSnapGroup = Boolean(normalizedQuery)
@@ -171,7 +272,9 @@ export default function ExplorerViewTab({
         {t("zichtbaarheid.view3d")}{workspace === "3d" ? ` · ${t("zichtbaarheid.activeWorkspace")}` : ""}
       </div>
       <div className="fem-results-toggle-list">
-        {(Object.keys(openFem3dVisibility) as (keyof OpenFem3DVisibility)[]).filter((key) => matches(t(`openFem3dVisibility.${key}`))).map((key) => (
+        {/* Alleen de modellagen; de resultaatlagen staan onder Resultaten. */}
+        {(Object.keys(openFem3dVisibility) as (keyof OpenFem3DVisibility)[])
+          .filter((key) => !OPEN_FEM_3D_RESULT_LAYERS.includes(key) && matches(t(`openFem3dVisibility.${key}`))).map((key) => (
           <ToggleRow
             key={key}
             label={t(`openFem3dVisibility.${key}`)}
@@ -188,7 +291,7 @@ export default function ExplorerViewTab({
     <section className="explorer-view-section">
       <div className="fem-results-section-title">{t("zichtbaarheid.snap")}</div>
       <div className="fem-results-toggle-list">
-        {matchesSnap(t("zichtbaarheid.snapAll")) && <ToggleRow icon={selectIcon} label={t("zichtbaarheid.snapAll")} value={allSnaps} onChange={zetAlleSnaps} />}
+        {matchesSnap(t("zichtbaarheid.snapAll")) && <ToggleRow icon={selectIcon} label={t("zichtbaarheid.snapAll")} value={allSnaps} onChange={(value) => zetAlleSnaps(value, snapSchakelaars)} />}
         {SNAP_SOORTEN.filter((key: SnapSoort) => matchesSnap(t(`snap.${key}`))).map((key: SnapSoort) => (
           <ToggleRow
             key={key}
@@ -199,6 +302,24 @@ export default function ExplorerViewTab({
             sub
           />
         ))}
+        {/* Hoeksnap bij het tekenen van een staaf (#53), alleen in 2D. */}
+        {workspace === "2d" && matchesSnap(t("snap.hoek")) && (
+          <>
+            <ToggleRow
+              label={t("snap.hoek")}
+              hint={t("zichtbaarheid.hoekHint")}
+              icon={HOEK_ICON}
+              value={snaps.hoek}
+              onChange={(value) => zetSnap("hoek", value)}
+              sub
+            />
+            <HoekSnapOpties tolerantie={snaps.hoekTolerantie} extra={snaps.hoekExtra} actief={snaps.hoek} />
+          </>
+        )}
+        {/* Verbindingstolerantie van het 2D-model (#55), alleen in 2D. */}
+        {workspace === "2d" && matchesSnap(t("zichtbaarheid.verbindingsTolerantie")) && (
+          <VerbindingsTolerantieRij waarde={snaps.verbindingsTolerantie} />
+        )}
       </div>
     </section>
   );
@@ -240,6 +361,8 @@ const OPEN_FEM_3D_ICONS: Record<keyof OpenFem3DVisibility, string> = {
   structuralGrid: tableIcon,
   axes: arrowIcon,
   memberAxes: arrowIcon,
+  viewCube: viewerOrbitIcon,
+  perspective: viewerPerspectiveIcon,
   deformation: viewerWireframeIcon,
   reactions: loadPointIcon,
   utilization: sectionsIcon,
@@ -250,6 +373,9 @@ const OPEN_FEM_3D_ICONS: Record<keyof OpenFem3DVisibility, string> = {
   momentY: arrowIcon,
   momentZ: arrowIcon,
 };
+
+/** Een hoek tussen twee benen met een boogje — voor de hoeksnap. */
+const HOEK_ICON = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19h16M4 19 15 6"/><path stroke-linecap="round" stroke-width="2" d="M11 19a7 7 0 0 0-1.6-4.5"/></svg>`;
 
 const SNAP_ICONS: Record<SnapSoort, string> = {
   knoop: nodeIcon,

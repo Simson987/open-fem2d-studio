@@ -37,6 +37,13 @@
     "rasterHint": "Das Hintergrundraster der Zeichenfläche anzeigen.",
     "snap": "Fang",
     "snapAll": "Alle Fangarten",
+    "hoekHint": "Winkelfang beim Zeichnen eines Stabes: Liegt die Richtung innerhalb der Toleranz von 0° oder 90°, wird sie genau darauf gesetzt; die Länge bleibt gleich. Ein Knoten oder eine Rasterachse hat Vorrang.",
+    "hoekTolerantie": "Toleranz (°)",
+    "hoekTolerantieHint": "Um wie viel Grad die Richtung abweichen darf: 0,1 bis 15. Komma oder Punkt erlaubt.",
+    "hoekExtra": "Auch 30°, 45° und 60°",
+    "hoekExtraHint": "Der Winkelfang greift dann auch bei 30°, 45° und 60° und ihren Spiegelungen.",
+    "verbindingsTolerantie": "Verbindungstoleranz",
+    "verbindingsTolerantieHint": "Innerhalb dieses Abstands gilt ein Knoten als „auf dem Stab“ oder „an derselben Stelle“ wie ein anderer Knoten: Die Modellprüfung meldet das, und ein neuer Knoten wird angeschlossen oder wiederverwendet. 0,1 bis 25 mm, Standard 5. Komma oder Punkt erlaubt. Bestehende Knoten werden nicht verschoben; ein neuer Knoten auf einem Stab wird auf die Stabachse gesetzt.",
     "groepLabels": "Beschriftungen",
     "groepGeometrie": "Geometrie",
     "groepResultaten": "Ergebnisse",
@@ -106,6 +113,8 @@
     "structuralGrid": "Achsraster und Ebenen",
     "axes": "X/Y/Z-Achsen",
     "memberAxes": "Lokale Stabachsen",
+    "viewCube": "Ansichtswürfel",
+    "perspective": "Perspektive",
     "results": "Ergebnisse",
     "deformation": "Verformte Form",
     "reactions": "Auflagerreaktionen",
@@ -138,6 +147,16 @@
     "scaleHint": "Überhöhungsfaktor der Verschiebungen, logarithmisch von 1× bis 1000×. Automatisch: die größte Verschiebung wird 12 % der Modellgröße.",
     "showOriginal": "Original anzeigen",
     "showOriginalHint": "Die unverformten Stäbe und Platten als blasser Schatten hinter der verformten Figur; aus: nur die verformte Figur."
+  },
+  "openFem3dDiagramLabels": {
+    "values": "Werte",
+    "valuesAria": "Werte an den Schnittgrößenlinien anzeigen",
+    "valuesHint": "Zahlen an den Schnittgrößenlinien sowie N und T in Stabmitte; aus: nur die Linien.",
+    "few": "Wenig",
+    "many": "Viel",
+    "density": "Anzahl der Werte",
+    "densityHint": "Wenig: nur der maßgebende Wert je Linie. Mitte: wie bisher. Viel: Anfang, Ende, Extremwert und Viertelspunkte an allen Stäben. Ausgewählte Stäbe zeigen ihre Werte immer.",
+    "densityValue": "Stufe {{n}} von {{max}}"
   },
   "openFem3dViews": {
     "tab": "Ansichten",
@@ -226,7 +245,8 @@
   "snap": {
     "knoop": "Knoten",
     "stramien": "Achsraster",
-    "raster": "Raster"
+    "raster": "Raster",
+    "hoek": "Winkel"
   },
   "section": "Abschnitt {{number}}",
   "contentPlaceholder": "Inhalt hier",
@@ -584,6 +604,15 @@
     "windExplainNationalAnnex": "aus der Geländetabelle des Nationalen Anhangs. Wenn Sie diese Tabelle verwenden, geben Sie den Böengeschwindigkeitsdruck im Windlastgenerator manuell ein."
   },
   "canvas": {
+    "qEdit": {
+      "aria": "q-Wert (kN/m)",
+      "sign": {
+        "globalZ": "Negativ = nach unten (Schwerkraft)",
+        "globalX": "Negativ = nach links (−X)",
+        "localZ": "Negativ = entgegen der lokalen z-Achse",
+        "localX": "Negativ = axial, entgegen der Stabrichtung"
+      }
+    },
     "plate": {
       "needsFourCorners": "Eine Platte benötigt genau vier Ecken.",
       "cornersCollinear": "Die Ecken fallen zusammen oder liegen (nahezu) auf einer Linie — zeichnen Sie ein echtes Rechteck.",
@@ -710,7 +739,13 @@
       "counts": "{{knopen}} Knoten · {{staven}} Stäbe",
       "countsWithPlates": "{{knopen}} Knoten · {{staven}} Stäbe · {{platen}} Platten",
       "resetZoomTitle": "Zoom zurücksetzen (F = einpassen)",
-      "resetZoom": "Zurücksetzen"
+      "resetZoom": "Zurücksetzen",
+      "snapOff": "Fang vorübergehend aus (Alt)",
+      "ortho": "Ortho (Umschalt)"
+    },
+    "subNode": {
+      "atEndTitle": "Kein Unterknoten",
+      "atEnd": "Dieser Punkt liegt innerhalb der Verbindungstoleranz von {{mm}} mm von Knoten {{knoop}}, einem Ende von Stab {{staaf}}. Dort ist bereits ein Knoten; der Stab wurde nicht geteilt."
     },
     "modelCheck": {
       "toggleTitle": "Modellprüfung — klicken Sie, um die Befunde ein- oder auszublenden",
@@ -727,6 +762,11 @@
       "repaired": "Modell repariert",
       "repairAllTitle": "Alle behebbaren Befunde ausführen — ein Schritt im Verlauf",
       "repairAll": "Alle beheben ({{n}})",
+      "splitTitle_one": "Stab geteilt",
+      "splitTitle_other": "Stäbe geteilt",
+      "splitLine": "Knoten {{knoop}} mit Stab {{staaf}} verbunden: Dieser wurde in Stab {{deel1}} und Stab {{deel2}} geteilt.",
+      "splitLineOffset": "Knoten {{knoop}} mit Stab {{staaf}} verbunden: Dieser wurde in Stab {{deel1}} und Stab {{deel2}} geteilt. Der Knoten lag {{mm}} mm neben der Stabachse; dort hat der Stab jetzt einen Knick.",
+      "mergeLine": "Knoten {{verwijderd}} mit Knoten {{bewaard}} zusammengeführt.",
       "plateEdge": {
         "openingOnPerimeterRoute": "die Last liegt am Rand einer Öffnung (`openingId`), wird hier aber über einen Weg gelesen, der nur den Umfang der Platte kennt. Bitte melden Sie das: Die Adresse wird bewusst abgelehnt, statt stillschweigend auf den Umfang gelegt zu werden.",
         "nameAndIndex": "die Last nennt sowohl einen benannten Rand (`edge`) als auch einen Randindex (`edgeIndex`). Geben Sie nur einen an: Bei zwei Adressen ist nicht zu sagen, welcher Rand gemeint ist und von welcher Ecke aus die Positionen zählen.",
@@ -944,6 +984,7 @@
     "deleteCaseTitle": "Lastfall löschen, samt aller Lasten und seines Faktors in jeder Kombination",
     "atLeastOneCase": "Mindestens ein Lastfall ist erforderlich.",
     "deleteCaseConfirm": "\"{{naam}}\" löschen? Alle Lasten dieses Lastfalls werden ebenfalls gelöscht, und sein Faktor verschwindet aus jeder Kombination.",
+    "deleteCaseFailed": "Lastfall nicht gelöscht",
     "newCasePlaceholder": "Neuer Lastfall (z. B. \"{{voorbeeld}}\")",
     "add": "Hinzufügen",
     "casesHintBeforeGamma": "Ein neuer Lastfall hat den Typ „Sonstige“ und zählt erst, wenn Sie ihm einen Typ geben: dann ergänzen ihn die Standardkombinationen (ständig → γ",
@@ -1033,6 +1074,7 @@
     "swayDirectionTitle3d": "Die Schiefstellung wirkt in jeder GZT-Kombination nacheinander in +X, −X, +Y und −Y (EN 1993-1-1 §5.3.2(8)); GZG-Kombinationen werden ohne sie berechnet."
   },
   "tree": {
+    "selectAll": "Alle auswählen",
     "showNext": "Nächste {{count}} anzeigen",
     "runToSeeResults": "Führen Sie \"Berechnen\" aus, um Ergebnisse zu sehen.",
     "rowDeflection": "Verschiebung",

@@ -558,7 +558,7 @@ fn shells_reject_p_delta_and_mechanisms_with_clear_messages() {
     }
     input.surface_loads.push(SurfaceLoad3D { id: 1, plate_id: 1, qx_kn_per_m2: 0.0, qy_kn_per_m2: 0.0, qz_kn_per_m2: -5.0 });
     let error = solve(input.clone()).unwrap_err();
-    assert!(error.contains("mechanisme") && error.contains("verschuiving in X"), "{error}");
+    assert!(error.contains("mechanisme") && error.contains("verschuiven in X"), "{error}");
 
     let mut p_delta = input.clone();
     p_delta.analysis = AnalysisKind::PDelta;

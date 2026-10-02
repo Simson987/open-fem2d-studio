@@ -1,6 +1,16 @@
 import type { OpenFem3DModel } from "./openFem3dModel";
 import type { OpenFem3DLevelPatch, OpenFem3DLevelTransition } from "./openFem3dLevels";
 
+/**
+ * Een wijziging buiten het 3D-model die bij dezelfde stap hoort, zoals de
+ * belastinggevallen in de raamwerkstore bij het verwijderen van een geval
+ * (#91). `terug` hoort bij undo, `vooruit` bij redo.
+ */
+export interface OpenFem3DExternStap {
+  terug: () => void;
+  vooruit: () => void;
+}
+
 export interface OpenFem3DHistory {
   model: OpenFem3DModel;
   past: OpenFem3DModel[];
@@ -19,6 +29,13 @@ export interface OpenFem3DHistory {
    */
   pastLevels?: (OpenFem3DLevelTransition | null)[];
   futureLevels?: (OpenFem3DLevelTransition | null)[];
+  /**
+   * De externe wijziging per stap, op dezelfde manier uitgelijnd als de
+   * levels. De aanroeper leest vóór undo/redo met `openFem3DHistoryExtern`
+   * welke actie erbij hoort en voert die uit.
+   */
+  pastExtern?: (OpenFem3DExternStap | null)[];
+  futureExtern?: (OpenFem3DExternStap | null)[];
 }
 
 export interface OpenFem3DEditMeta {
@@ -26,6 +43,8 @@ export interface OpenFem3DEditMeta {
   historyGroup?: string;
   /** A discarded sketch can remove its now empty undo step. */
   cancelHistoryGroup?: boolean;
+  /** Een wijziging buiten het model die bij deze stap hoort; nooit samen met een tekengroep. */
+  extern?: OpenFem3DExternStap | null;
 }
 
 export type OpenFem3DAction =
@@ -48,17 +67,22 @@ function sameModelContents(a: OpenFem3DModel, b: OpenFem3DModel): boolean {
   });
 }
 
-/** De levelstappen van `past`, even lang als `past` (ook bij een oude toestand zonder). */
-function pastLevelsOf(state: OpenFem3DHistory): (OpenFem3DLevelTransition | null)[] {
-  const levels = state.pastLevels ?? [];
-  const missing = state.past.length - levels.length;
-  return missing > 0 ? [...Array<null>(missing).fill(null), ...levels] : levels.slice(-state.past.length || levels.length);
+/** Een lijst per stap van `past`, even lang als `past` (ook bij een oude toestand zonder). */
+function uitgelijndPast<T>(state: OpenFem3DHistory, lijst: (T | null)[] | undefined): (T | null)[] {
+  const items = lijst ?? [];
+  const missing = state.past.length - items.length;
+  return missing > 0 ? [...Array<null>(missing).fill(null), ...items] : items.slice(-state.past.length || items.length);
 }
 
-function futureLevelsOf(state: OpenFem3DHistory): (OpenFem3DLevelTransition | null)[] {
-  const levels = state.futureLevels ?? [];
-  return state.future.map((_, index) => levels[index] ?? null);
+function uitgelijndFuture<T>(state: OpenFem3DHistory, lijst: (T | null)[] | undefined): (T | null)[] {
+  const items = lijst ?? [];
+  return state.future.map((_, index) => items[index] ?? null);
 }
+
+const pastLevelsOf = (state: OpenFem3DHistory) => uitgelijndPast(state, state.pastLevels);
+const futureLevelsOf = (state: OpenFem3DHistory) => uitgelijndFuture(state, state.futureLevels);
+const pastExternOf = (state: OpenFem3DHistory) => uitgelijndPast(state, state.pastExtern);
+const futureExternOf = (state: OpenFem3DHistory) => uitgelijndFuture(state, state.futureExtern);
 
 /**
  * De levelstand die bij de volgende undo (`before` van de laatste stap) of redo
@@ -73,54 +97,75 @@ export function openFem3DHistoryLevelPatch(state: OpenFem3DHistory, kind: "undo"
   return futureLevelsOf(state)[0]?.after ?? null;
 }
 
+/** De externe actie die bij de volgende undo (`terug`) of redo (`vooruit`) hoort, of null. */
+export function openFem3DHistoryExtern(state: OpenFem3DHistory, kind: "undo" | "redo"): (() => void) | null {
+  if (kind === "undo") {
+    if (state.past.length === 0) return null;
+    return pastExternOf(state)[state.past.length - 1]?.terug ?? null;
+  }
+  if (state.future.length === 0) return null;
+  return futureExternOf(state)[0]?.vooruit ?? null;
+}
+
 export function openFem3dHistoryReducer(state: OpenFem3DHistory, action: OpenFem3DAction): OpenFem3DHistory {
   if (action.type === "replace") return { model: action.model, past: [], future: [] };
   if (action.type === "edit") {
     const levels = action.levels ?? null;
-    // Een levelwijziging zonder gekoppelde knopen laat het model gelijk, maar
-    // is wel een stap: undo zet dan alleen de levelhoogte terug.
-    if (action.model === state.model && !levels) return state;
+    const extern = action.extern ?? null;
+    // Een levelwijziging zonder gekoppelde knopen, of een gevallenwijziging
+    // zonder 3D-lasten, laat het model gelijk, maar is wel een stap.
+    if (action.model === state.model && !levels && !extern) return state;
     const pastLevels = pastLevelsOf(state);
-    const sameGroup = !levels && Boolean(action.historyGroup && action.historyGroup === state.activeGroup);
+    const pastExtern = pastExternOf(state);
+    const sameGroup = !levels && !extern && Boolean(action.historyGroup && action.historyGroup === state.activeGroup);
     if (sameGroup && action.cancelHistoryGroup) {
       const beforeSketch = state.past[state.past.length - 1];
       if (beforeSketch && sameModelContents(beforeSketch, action.model)) {
         return {
           model: beforeSketch, past: state.past.slice(0, -1), future: [], activeGroup: undefined,
           pastLevels: pastLevels.slice(0, -1), futureLevels: [],
+          pastExtern: pastExtern.slice(0, -1), futureExtern: [],
         };
       }
     }
-    if (sameGroup) return { ...state, model: action.model, future: [], futureLevels: [] };
+    if (sameGroup) return { ...state, model: action.model, future: [], futureLevels: [], futureExtern: [] };
     return {
       model: action.model,
       past: [...state.past.slice(-99), state.model],
       future: [],
-      activeGroup: levels ? undefined : action.historyGroup,
+      activeGroup: levels || extern ? undefined : action.historyGroup,
       pastLevels: [...pastLevels.slice(-99), levels],
       futureLevels: [],
+      pastExtern: [...pastExtern.slice(-99), extern],
+      futureExtern: [],
     };
   }
   if (action.type === "undo") {
     const previous = state.past[state.past.length - 1];
     if (!previous) return state;
     const pastLevels = pastLevelsOf(state);
+    const pastExtern = pastExternOf(state);
     return {
       model: previous,
       past: state.past.slice(0, -1),
       future: [state.model, ...state.future],
       pastLevels: pastLevels.slice(0, -1),
       futureLevels: [pastLevels[pastLevels.length - 1] ?? null, ...futureLevelsOf(state)],
+      pastExtern: pastExtern.slice(0, -1),
+      futureExtern: [pastExtern[pastExtern.length - 1] ?? null, ...futureExternOf(state)],
     };
   }
   const next = state.future[0];
   if (!next) return state;
   const futureLevels = futureLevelsOf(state);
+  const futureExtern = futureExternOf(state);
   return {
     model: next,
     past: [...state.past, state.model],
     future: state.future.slice(1),
     pastLevels: [...pastLevelsOf(state), futureLevels[0] ?? null],
     futureLevels: futureLevels.slice(1),
+    pastExtern: [...pastExternOf(state), futureExtern[0] ?? null],
+    futureExtern: futureExtern.slice(1),
   };
 }

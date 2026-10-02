@@ -312,6 +312,39 @@ const memberLoadInstances = largeMemberLoadMarkers.children.filter((child) => ch
 assert.equal(memberLoadInstances.length, 2, "verdeelde lasten delen één staaf- en één pijlpuntbatch");
 assert.equal(largeMemberLoadMarkers.children.filter((child) => child instanceof THREE.LineSegments).length, 1,
   "alle hulplijnen van verdeelde lasten delen één tekenaanroep");
+// De gedeelde staartlijn kent per lijnstuk zijn last, zodat selecteren de
+// staartlijn van één last meekleurt (#81): lijnstuk i loopt van punt 2i naar
+// 2i + 1, met een kleur per punt.
+const staartlijn = largeMemberLoadMarkers.children.find((child) => child instanceof THREE.LineSegments);
+assert.equal(staartlijn.userData.type, "memberLoad", "de gedeelde staartlijn hoort bij de lijnlasten (selectiekleur)");
+assert.equal(staartlijn.userData.pickable, false, "… maar is geen raycast-doel; elke last houdt zijn eigen kieslijn");
+const staartPunten = staartlijn.geometry.getAttribute("position");
+const staartKleuren = staartlijn.geometry.getAttribute("color");
+assert.equal(staartPunten.count, 2 * staartlijn.userData.segmentIds.length, "twee punten per lijnstuk");
+assert.equal(staartKleuren.count, staartPunten.count, "een kleur per punt");
+assert.equal(staartlijn.userData.segmentBaseColors.length, staartlijn.userData.segmentIds.length, "een basiskleur per lijnstuk");
+const kleurVan = new THREE.Color();
+assert.ok(Array.from({ length: staartKleuren.count }, (_, index) => kleurVan.fromBufferAttribute(staartKleuren, index).getHex())
+  .every((hex) => hex === 0xef4444) && staartlijn.userData.segmentBaseColors.every((hex) => hex === 0xef4444),
+"ongeselecteerd is de staartlijn in de lastkleur");
+// Elk lijnstuk ligt op de (onzichtbare) kieslijn van zijn eigen last: negen
+// pijlen over 12 m, dus acht lijnstukken per last, in volgorde.
+const kieslijnen = new Map(largeMemberLoadMarkers.children
+  .filter((child) => child instanceof THREE.Line && !child.visible).map((child) => [child.userData.id, child]));
+assert.equal(kieslijnen.size, 240, "elke lijnlast een eigen kieslijn");
+const volgende = new Map();
+const verkeerd = [];
+staartlijn.userData.segmentIds.forEach((id, segment) => {
+  const k = volgende.get(id) ?? 0;
+  volgende.set(id, k + 1);
+  const kieslijn = kieslijnen.get(id)?.geometry.getAttribute("position");
+  const zelfde = (punt, index) => kieslijn && index < kieslijn.count
+    && Math.hypot(staartPunten.getX(punt) - kieslijn.getX(index), staartPunten.getY(punt) - kieslijn.getY(index),
+      staartPunten.getZ(punt) - kieslijn.getZ(index)) < 1e-6;
+  if (!zelfde(2 * segment, k) || !zelfde(2 * segment + 1, k + 1)) verkeerd.push(`lijnstuk ${segment} (last ${id})`);
+});
+assert.deepEqual(verkeerd, [], "elk lijnstuk ligt op de staartlijn van de last die erbij staat");
+assert.ok([...volgende.values()].every((aantal) => aantal === 8) && volgende.size === 240, "acht lijnstukken per last");
 assert.ok(memberLoadInstances.every((child) => child.userData.type === "memberLoad"),
   "gebatchte lastpijlen blijven als staafbelasting selecteerbaar");
 assert.ok(memberLoadInstances.every((child) => child.userData.instanceIds.includes(1)
@@ -378,5 +411,21 @@ for (const group of [
     child.geometry?.dispose();
     child.material?.dispose();
   }
+}
+// Een lintknop met meerdere geselecteerde knopen (bijv. "Alle selecteren" bij
+// Opleggingen): dezelfde voorwaarde op elke bestaande knoop, één nieuw model.
+{
+  const { applyOpenFem3DNodeConditionToNodes } = await import("./src/components/openFem3d/openFem3dNodeTools.ts");
+  const meerdere = parseOpenFem3DModel({
+    nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 4, y: 0, z: 0 }, { id: 3, x: 8, y: 0, z: 0 }],
+    beams: [],
+    supports: [{ nodeId: 1, ...OPEN_FEM_3D_SUPPORT_PRESETS.fixed }, { nodeId: 2, ...OPEN_FEM_3D_SUPPORT_PRESETS.xRoller }],
+  });
+  const na = applyOpenFem3DNodeConditionToNodes(meerdere, [1, 2, 99], { kind: "support", preset: "pinned" }, 0);
+  assert.equal(na.supports.length, 2, "een onbekende knoop wordt overgeslagen");
+  assert.ok(na.supports.every((support) => support.ux && support.uy && support.uz && !support.rx && !support.ry && !support.rz),
+    "alle geselecteerde opleggingen zijn scharnieren");
+  assert.equal(applyOpenFem3DNodeConditionToNodes(meerdere, [], { kind: "support", preset: "pinned" }, 0), meerdere,
+    "zonder knopen hetzelfde model (geen lege stap ongedaan maken)");
 }
 console.log("3D-opleggingen, knoopbelastingen en zichtbare symbolen: geslaagd");

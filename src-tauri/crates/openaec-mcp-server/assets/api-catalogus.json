@@ -1,0 +1,2454 @@
+{
+  "commands": [
+    {
+      "name": "app.project.open",
+      "description": "Een projectbestand openen in de app (zoals Openen). Heeft het huidige project niet-opgeslagen wijzigingen, dan weigert de app, tenzij discardChanges true is.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Absoluut pad naar een .ifcfem- of .ifcfem2d-bestand."
+          },
+          "discardChanges": {
+            "type": "boolean",
+            "description": "Ook openen als het huidige project niet-opgeslagen wijzigingen heeft; die gaan verloren."
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "app"
+    },
+    {
+      "name": "app.project.save",
+      "description": "Het project opslaan (zoals Opslaan). Met path: opslaan als dat bestand, zonder dialoog.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Absoluut pad naar een .ifcfem-bestand."
+          }
+        },
+        "additionalProperties": false
+      },
+      "kind": "app"
+    },
+    {
+      "name": "app.redo",
+      "description": "De ongedaan gemaakte wijziging opnieuw doen (zoals Ctrl+Y).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "kind": "app"
+    },
+    {
+      "name": "app.undo",
+      "description": "De laatste modelwijziging ongedaan maken (zoals Ctrl+Z).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "kind": "app"
+    },
+    {
+      "name": "model3d.beam.add",
+      "description": "Een 3D-staaf tussen twee bestaande knopen toevoegen. Zonder profiel en materiaal: IPE 200 in S235, net als het tekengereedschap.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "startNodeId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van een bestaande 3D-knoop."
+          },
+          "endNodeId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van een bestaande 3D-knoop."
+          },
+          "profileName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Profielnaam uit de bibliotheek, bijv. \"IPE 200\", \"HEA 300\", \"CHS 88.9x4\", \"Strip 80x10\"."
+          },
+          "material": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Materiaal, bijv. \"S235\", \"S355\", \"C24\", \"C30/37\"."
+          },
+          "rollAngleDeg": {
+            "type": "number",
+            "description": "Rotatie van de lokale y/z-assen om de staafas, in graden."
+          },
+          "releases": {
+            "type": "object",
+            "properties": {
+              "myStart": {
+                "type": "boolean",
+                "description": "Momentscharnier om de lokale y-as aan het begin."
+              },
+              "myEnd": {
+                "type": "boolean",
+                "description": "Momentscharnier om de lokale y-as aan het eind."
+              },
+              "mzStart": {
+                "type": "boolean",
+                "description": "Momentscharnier om de lokale z-as aan het begin."
+              },
+              "mzEnd": {
+                "type": "boolean",
+                "description": "Momentscharnier om de lokale z-as aan het eind."
+              },
+              "torsionStart": {
+                "type": "boolean",
+                "description": "Torsiescharnier aan het begin."
+              },
+              "torsionEnd": {
+                "type": "boolean",
+                "description": "Torsiescharnier aan het eind."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Eindscharnieren in lokale assen; een ontbrekende vrijheidsgraad is vast."
+          },
+          "tensionOnly": {
+            "type": "boolean",
+            "description": "Trek-alleen staaf (bijv. een windverband): valt weg zolang hij op druk staat."
+          },
+          "name": {
+            "type": "string",
+            "description": "Naam van de staaf (alleen weergave en rapport)."
+          },
+          "group": {
+            "type": "string",
+            "description": "Groep, bijv. \"kolom\", \"spantligger\", \"windverband\"."
+          }
+        },
+        "required": [
+          "startNodeId",
+          "endNodeId"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.beam.delete",
+      "description": "Een 3D-staaf verwijderen, met zijn lasten. De knopen blijven.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de staaf."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.beam.flipLocalAxes",
+      "description": "De lokale dwarsassen van een 3D-staaf omkeren (profielrotatie + 180°), zoals de knop in het eigenschappenpaneel. De lokale componenten van de staaf-, puntlasten en temperatuurgradiënten draaien mee, zodat hun richting in het wereldstelsel gelijk blijft.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de staaf."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.beam.setReleasePreset",
+      "description": "Eén of meer 3D-staven een standaardsituatie voor hun eindscharnieren geven, zoals de knoppen Momentvast en Scharnierend in het eigenschappenpaneel. rigid (momentvast): geen scharnieren. pinned (scharnierend): My en Mz los aan beide einden; torsie gaat over, anders draait de staaf vrij om zijn as. Een losse combinatie zet je met model3d.beam.update (releases).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "beamIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een staaf."
+            },
+            "minItems": 1,
+            "description": "De staven."
+          },
+          "preset": {
+            "type": "string",
+            "enum": [
+              "rigid",
+              "pinned"
+            ],
+            "description": "rigid (momentvast) of pinned (scharnierend)."
+          }
+        },
+        "required": [
+          "beamIds",
+          "preset"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.beam.setTensionOnly",
+      "description": "Staven trek-alleen maken (on: true) of weer gewoon (on: false).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "beamIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een bestaande 3D-staaf."
+            },
+            "minItems": 1,
+            "description": "De staven."
+          },
+          "on": {
+            "type": "boolean",
+            "description": "true = trek-alleen."
+          }
+        },
+        "required": [
+          "beamIds",
+          "on"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.beam.split",
+      "description": "Een 3D-staaf in twee delen splitsen met een nieuwe tussenknoop. Geef fraction (0–1) óf positionM (m vanaf het begin).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de staaf."
+          },
+          "fraction": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "description": "Plaats als deel van de lengte, strikt tussen 0 en 1."
+          },
+          "positionM": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Plaats in m vanaf de beginknoop."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.beam.update",
+      "description": "Eigenschappen of knopen van een 3D-staaf wijzigen. null wist een optioneel veld; lasten en toetsinstellingen blijven.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de staaf."
+          },
+          "startNodeId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van een bestaande 3D-knoop."
+          },
+          "endNodeId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van een bestaande 3D-knoop."
+          },
+          "profileName": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "description": "Profielnaam uit de bibliotheek, bijv. \"IPE 200\", \"HEA 300\", \"CHS 88.9x4\", \"Strip 80x10\"."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "material": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "description": "Materiaal, bijv. \"S235\", \"S355\", \"C24\", \"C30/37\"."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rollAngleDeg": {
+            "oneOf": [
+              {
+                "type": "number",
+                "description": "Rotatie van de lokale y/z-assen om de staafas, in graden."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "releases": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "myStart": {
+                    "type": "boolean",
+                    "description": "Momentscharnier om de lokale y-as aan het begin."
+                  },
+                  "myEnd": {
+                    "type": "boolean",
+                    "description": "Momentscharnier om de lokale y-as aan het eind."
+                  },
+                  "mzStart": {
+                    "type": "boolean",
+                    "description": "Momentscharnier om de lokale z-as aan het begin."
+                  },
+                  "mzEnd": {
+                    "type": "boolean",
+                    "description": "Momentscharnier om de lokale z-as aan het eind."
+                  },
+                  "torsionStart": {
+                    "type": "boolean",
+                    "description": "Torsiescharnier aan het begin."
+                  },
+                  "torsionEnd": {
+                    "type": "boolean",
+                    "description": "Torsiescharnier aan het eind."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "Eindscharnieren in lokale assen; een ontbrekende vrijheidsgraad is vast."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tensionOnly": {
+            "type": "boolean",
+            "description": "Trek-alleen staaf (bijv. een windverband): valt weg zolang hij op druk staat."
+          },
+          "name": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Naam van de staaf (alleen weergave en rapport)."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "group": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Groep, bijv. \"kolom\", \"spantligger\", \"windverband\"."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.diaphragm.add",
+      "description": "Een starre horizontale schijf (bijv. een vloer met druklaag) uit knopen op één hoogte: X, Y en rotatie om Z bewegen samen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een bestaande 3D-knoop."
+            },
+            "minItems": 2,
+            "description": "Knopen op één hoogte (binnen 1 mm)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Naam van de schijf."
+          }
+        },
+        "required": [
+          "nodeIds"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.diaphragm.delete",
+      "description": "Een starre schijf verwijderen; de knopen blijven.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de schijf."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.get",
+      "description": "Het 3D-model lezen: knopen, staven, platen, opleggingen, lasten, belastingvlakken en schijven, met de aantallen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.levels.get",
+      "description": "De levels van het project lezen, met hun id, naam en hoogte in m.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.levels.set",
+      "description": "De levels (bouwlagen) zetten: elk een naam en een hoogte in m. Een level met een bestaande naam houdt zijn koppelingen; gekoppelde knopen en platen schuiven mee met de hoogte. Een level dat verdwijnt, laat zijn knopen los.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "levels": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Naam van het level, bijv. \"vloer 1\"."
+                },
+                "heightM": {
+                  "type": "number",
+                  "description": "Hoogte in m."
+                }
+              },
+              "required": [
+                "label",
+                "heightM"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Alle levels; vervangt de huidige lijst."
+          }
+        },
+        "required": [
+          "levels"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.member.add",
+      "description": "Een (trapeziumvormige) lijnlast op een staaf toevoegen, in lokale y/z. Zonder positie: over de hele staaf.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "beamId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van een bestaande 3D-staaf."
+          },
+          "caseId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Belastinggeval; ontbreekt = het actieve geval van het project."
+          },
+          "qyStart": {
+            "type": "number",
+            "description": "Lijnlast in lokale y aan het begin, kN/m."
+          },
+          "qyEnd": {
+            "type": "number",
+            "description": "Lijnlast in lokale y aan het eind, kN/m."
+          },
+          "qzStart": {
+            "type": "number",
+            "description": "Lijnlast in lokale z aan het begin, kN/m."
+          },
+          "qzEnd": {
+            "type": "number",
+            "description": "Lijnlast in lokale z aan het eind, kN/m."
+          },
+          "startPositionM": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Begin van de last in m vanaf de beginknoop; ontbreekt = 0."
+          },
+          "endPositionM": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Eind van de last in m vanaf de beginknoop; ontbreekt = de staaflengte."
+          }
+        },
+        "required": [
+          "beamId"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.member.delete",
+      "description": "Een lijnlast verwijderen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de lijnlast."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.member.update",
+      "description": "Waarden of positie van een lijnlast wijzigen; niet genoemde velden blijven.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de lijnlast."
+          },
+          "qyStart": {
+            "type": "number",
+            "description": "Lijnlast in lokale y aan het begin, kN/m."
+          },
+          "qyEnd": {
+            "type": "number",
+            "description": "Lijnlast in lokale y aan het eind, kN/m."
+          },
+          "qzStart": {
+            "type": "number",
+            "description": "Lijnlast in lokale z aan het begin, kN/m."
+          },
+          "qzEnd": {
+            "type": "number",
+            "description": "Lijnlast in lokale z aan het eind, kN/m."
+          },
+          "startPositionM": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Begin van de last in m vanaf de beginknoop; ontbreekt = 0."
+          },
+          "endPositionM": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Eind van de last in m vanaf de beginknoop; ontbreekt = de staaflengte."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.memberPoint.add",
+      "description": "Een puntlast op een staaf toevoegen, in lokale y/z, op een plaats vanaf de beginknoop.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "beamId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van een bestaande 3D-staaf."
+          },
+          "caseId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Belastinggeval; ontbreekt = het actieve geval van het project."
+          },
+          "py": {
+            "type": "number",
+            "description": "Puntlast in lokale y, kN."
+          },
+          "pz": {
+            "type": "number",
+            "description": "Puntlast in lokale z, kN."
+          },
+          "positionM": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Plaats in m vanaf de beginknoop."
+          }
+        },
+        "required": [
+          "beamId",
+          "positionM"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.memberPoint.delete",
+      "description": "Een puntlast verwijderen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de puntlast."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.memberPoint.update",
+      "description": "Waarden of plaats van een puntlast op een staaf wijzigen; niet genoemde velden blijven.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de puntlast."
+          },
+          "py": {
+            "type": "number",
+            "description": "Puntlast in lokale y, kN."
+          },
+          "pz": {
+            "type": "number",
+            "description": "Puntlast in lokale z, kN."
+          },
+          "positionM": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Plaats in m vanaf de beginknoop."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.nodal.add",
+      "description": "Een knooplast (krachten en momenten in globale assen) toevoegen. Ontbrekende componenten zijn 0.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van een bestaande 3D-knoop."
+          },
+          "caseId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Belastinggeval; ontbreekt = het actieve geval van het project."
+          },
+          "fx": {
+            "type": "number",
+            "description": "Kracht in X, kN."
+          },
+          "fy": {
+            "type": "number",
+            "description": "Kracht in Y, kN."
+          },
+          "fz": {
+            "type": "number",
+            "description": "Kracht in Z, kN (negatief = omlaag)."
+          },
+          "mx": {
+            "type": "number",
+            "description": "Moment om X, kNm."
+          },
+          "my": {
+            "type": "number",
+            "description": "Moment om Y, kNm."
+          },
+          "mz": {
+            "type": "number",
+            "description": "Moment om Z, kNm."
+          }
+        },
+        "required": [
+          "nodeId"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.nodal.delete",
+      "description": "Een knooplast verwijderen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de knooplast."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.nodal.update",
+      "description": "Componenten van een knooplast wijzigen; niet genoemde componenten blijven.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de knooplast."
+          },
+          "fx": {
+            "type": "number",
+            "description": "Kracht in X, kN."
+          },
+          "fy": {
+            "type": "number",
+            "description": "Kracht in Y, kN."
+          },
+          "fz": {
+            "type": "number",
+            "description": "Kracht in Z, kN (negatief = omlaag)."
+          },
+          "mx": {
+            "type": "number",
+            "description": "Moment om X, kNm."
+          },
+          "my": {
+            "type": "number",
+            "description": "Moment om Y, kNm."
+          },
+          "mz": {
+            "type": "number",
+            "description": "Moment om Z, kNm."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.surface.add",
+      "description": "Een oppervlaktebelasting op een plaat toevoegen, in globale assen. Ontbrekende componenten zijn 0.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "plateId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van een bestaande 3D-plaat."
+          },
+          "caseId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Belastinggeval; ontbreekt = het actieve geval van het project."
+          },
+          "qx": {
+            "type": "number",
+            "description": "Vlaklast in X, kN/m²."
+          },
+          "qy": {
+            "type": "number",
+            "description": "Vlaklast in Y, kN/m²."
+          },
+          "qz": {
+            "type": "number",
+            "description": "Vlaklast in Z, kN/m² (negatief = omlaag)."
+          }
+        },
+        "required": [
+          "plateId"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.surface.delete",
+      "description": "Een oppervlaktebelasting verwijderen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de oppervlaktebelasting."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.surface.update",
+      "description": "Een oppervlaktebelasting wijzigen; niet genoemde componenten blijven.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de oppervlaktebelasting."
+          },
+          "qx": {
+            "type": "number",
+            "description": "Vlaklast in X, kN/m²."
+          },
+          "qy": {
+            "type": "number",
+            "description": "Vlaklast in Y, kN/m²."
+          },
+          "qz": {
+            "type": "number",
+            "description": "Vlaklast in Z, kN/m² (negatief = omlaag)."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.thermal.add",
+      "description": "Een temperatuurbelasting op een staaf toevoegen (gelijkmatig en/of gradiënt). Ontbrekende waarden zijn 0; niet alles 0.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "beamId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van een bestaande 3D-staaf."
+          },
+          "caseId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Belastinggeval; ontbreekt = het actieve geval van het project."
+          },
+          "deltaTUniformK": {
+            "type": "number",
+            "description": "Gelijkmatige temperatuurverandering, K."
+          },
+          "deltaTGradientYK": {
+            "type": "number",
+            "description": "Temperatuurverschil over de hoogte in lokale y, K."
+          },
+          "deltaTGradientZK": {
+            "type": "number",
+            "description": "Temperatuurverschil over de hoogte in lokale z, K."
+          }
+        },
+        "required": [
+          "beamId"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.thermal.delete",
+      "description": "Een temperatuurbelasting verwijderen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de temperatuurbelasting."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.thermal.update",
+      "description": "Een temperatuurbelasting wijzigen; niet genoemde waarden blijven.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de temperatuurbelasting."
+          },
+          "deltaTUniformK": {
+            "type": "number",
+            "description": "Gelijkmatige temperatuurverandering, K."
+          },
+          "deltaTGradientYK": {
+            "type": "number",
+            "description": "Temperatuurverschil over de hoogte in lokale y, K."
+          },
+          "deltaTGradientZK": {
+            "type": "number",
+            "description": "Temperatuurverschil over de hoogte in lokale z, K."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.loadPanel.add",
+      "description": "Een belastingvlak over bestaande knopen toevoegen: draagt zijn vlaklast af naar de liggers in het vlak (bijv. een dak of gevel). Standaard q = 1 kN/m², zwaartekracht, tweezijdig.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een hoekknoop."
+            },
+            "minItems": 3,
+            "description": "Hoekknopen in volgorde, in één vlak."
+          },
+          "caseId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Belastinggeval; ontbreekt = het actieve geval van het project."
+          },
+          "q": {
+            "type": "number",
+            "description": "Belasting op het vlak, kN/m²."
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "gravity",
+              "normal"
+            ],
+            "description": "gravity = zwaartekracht per horizontale projectie; normal = loodrecht op het vlak."
+          },
+          "distribution": {
+            "type": "string",
+            "enum": [
+              "oneWay",
+              "twoWay"
+            ],
+            "description": "Afdracht: oneWay naar de liggers dwars op de overspanning, twoWay naar alle randliggers."
+          },
+          "spanDirection": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "additionalProperties": false,
+            "description": "Richting in globale assen."
+          },
+          "excludedBeamIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een bestaande 3D-staaf."
+            },
+            "description": "Liggers in het vlak die geen last krijgen."
+          }
+        },
+        "required": [
+          "nodeIds"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.loadPanel.delete",
+      "description": "Een belastingvlak verwijderen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van het belastingvlak."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.loadPanel.duplicate",
+      "description": "Een belastingvlak kopiëren naar een ander belastinggeval (zelfde hoeken en instellingen).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van het belastingvlak."
+          },
+          "caseId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Bestaand belastinggeval van de kopie."
+          }
+        },
+        "required": [
+          "id",
+          "caseId"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.loadPanel.update",
+      "description": "Een belastingvlak wijzigen: q, richting, afdracht, overspanning, uitgesloten liggers of belastinggeval.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van het belastingvlak."
+          },
+          "caseId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Ander bestaand belastinggeval."
+          },
+          "q": {
+            "type": "number",
+            "description": "Belasting op het vlak, kN/m²."
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "gravity",
+              "normal"
+            ],
+            "description": "gravity = zwaartekracht per horizontale projectie; normal = loodrecht op het vlak."
+          },
+          "distribution": {
+            "type": "string",
+            "enum": [
+              "oneWay",
+              "twoWay"
+            ],
+            "description": "Afdracht: oneWay naar de liggers dwars op de overspanning, twoWay naar alle randliggers."
+          },
+          "spanDirection": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false,
+                "description": "Richting in globale assen."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Overspanningsrichting; null = de standaard."
+          },
+          "excludedBeamIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een bestaande 3D-staaf."
+            },
+            "description": "Liggers in het vlak die geen last krijgen."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.node.add",
+      "description": "Een 3D-knoop toevoegen. Op de plek van een bestaande knoop wordt geweigerd.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "description": "x-coördinaat in m (globaal, z omhoog)."
+          },
+          "y": {
+            "type": "number",
+            "description": "y-coördinaat in m (globaal, z omhoog)."
+          },
+          "z": {
+            "type": "number",
+            "description": "z-coördinaat in m (globaal, z omhoog)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Naam van de knoop."
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "z"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.node.delete",
+      "description": "Een 3D-knoop verwijderen, met de staven en platen die eraan hangen en hun lasten.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van een bestaande 3D-knoop."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.node.linkLevel",
+      "description": "Knopen en platen aan een level koppelen (ze gaan op die hoogte liggen en schuiven mee) of ontkoppelen (levelId null).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een 3D-knoop."
+            },
+            "description": "Knopen."
+          },
+          "plateIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een 3D-plaat."
+            },
+            "description": "Platen (hun knopen en openingen gaan mee)."
+          },
+          "levelId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Id van een level (zie model3d.levels.set)."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Level; null ontkoppelt."
+          }
+        },
+        "required": [
+          "levelId"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.node.update",
+      "description": "Een 3D-knoop verplaatsen of hernoemen. Staven, platen, opleggingen en lasten blijven eraan hangen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van een bestaande 3D-knoop."
+          },
+          "x": {
+            "type": "number",
+            "description": "x-coördinaat in m (globaal, z omhoog)."
+          },
+          "y": {
+            "type": "number",
+            "description": "y-coördinaat in m (globaal, z omhoog)."
+          },
+          "z": {
+            "type": "number",
+            "description": "z-coördinaat in m (globaal, z omhoog)."
+          },
+          "name": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nieuwe naam; null wist de naam."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.plate.add",
+      "description": "Een vlakke 3D-plaat (schaalelementen) toevoegen op bestaande knopen in één vlak.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een bestaande 3D-knoop."
+            },
+            "minItems": 3,
+            "description": "Knoopvolgorde rond de plaat; alle knopen in één vlak."
+          },
+          "thicknessM": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Dikte in m."
+          },
+          "material": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Materiaal, bijv. \"C30/37\"."
+          },
+          "cornerRadiusM": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Afrondingsstraal van de hoeken in m."
+          },
+          "boundary": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "line"
+                    },
+                    "startNodeId": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "description": "Id van een bestaande 3D-knoop."
+                    },
+                    "endNodeId": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "description": "Id van een bestaande 3D-knoop."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "startNodeId",
+                    "endNodeId"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Recht randstuk."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "arc"
+                    },
+                    "startNodeId": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "description": "Id van een bestaande 3D-knoop."
+                    },
+                    "controlNodeId": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "description": "Id van een bestaande 3D-knoop."
+                    },
+                    "endNodeId": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "description": "Id van een bestaande 3D-knoop."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "startNodeId",
+                    "controlNodeId",
+                    "endNodeId"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Boog door begin-, stuur- en eindknoop."
+                }
+              ]
+            },
+            "description": "Getekende contour met rechte stukken en bogen; ontbreekt = rechte randen tussen nodeIds."
+          }
+        },
+        "required": [
+          "nodeIds",
+          "thicknessM"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.plate.addOpening",
+      "description": "Een opening in een 3D-plaat maken, op bestaande knopen binnen de plaat.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "plateId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de plaat."
+          },
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een bestaande 3D-knoop."
+            },
+            "minItems": 3,
+            "description": "Knoopvolgorde rond de opening; alle knopen in één vlak."
+          },
+          "cornerRadiusM": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Afrondingsstraal van de hoeken in m."
+          },
+          "boundary": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "line"
+                    },
+                    "startNodeId": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "description": "Id van een bestaande 3D-knoop."
+                    },
+                    "endNodeId": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "description": "Id van een bestaande 3D-knoop."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "startNodeId",
+                    "endNodeId"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Recht randstuk."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "arc"
+                    },
+                    "startNodeId": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "description": "Id van een bestaande 3D-knoop."
+                    },
+                    "controlNodeId": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "description": "Id van een bestaande 3D-knoop."
+                    },
+                    "endNodeId": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "description": "Id van een bestaande 3D-knoop."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "startNodeId",
+                    "controlNodeId",
+                    "endNodeId"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Boog door begin-, stuur- en eindknoop."
+                }
+              ]
+            },
+            "description": "Getekende contour van de opening; ontbreekt = rechte randen."
+          }
+        },
+        "required": [
+          "plateId",
+          "nodeIds"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.plate.delete",
+      "description": "Een 3D-plaat verwijderen, met haar openingen en oppervlaktelasten. De knopen blijven.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de plaat."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.plate.toLoadPanels",
+      "description": "Een plaat omzetten in belastingvlakken: de plaat verdwijnt, haar omtrek draagt alleen nog last af. Openingen, bogen of een schuine last worden geweigerd.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "plateId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de plaat."
+          },
+          "caseId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Belastinggeval; ontbreekt = het actieve geval van het project."
+          }
+        },
+        "required": [
+          "plateId"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.plate.update",
+      "description": "Dikte, materiaal, afronding, netgrootte of randopleggingen van een 3D-plaat wijzigen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de plaat."
+          },
+          "thicknessM": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Dikte in m."
+          },
+          "material": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Materiaal."
+          },
+          "cornerRadiusM": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Afrondingsstraal van de hoeken in m."
+          },
+          "meshSizeM": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Gewenste elementgrootte in m."
+          },
+          "edgeSupports": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "edge": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Rand k: randstuk k van de contour (vanaf 0)."
+                },
+                "ux": {
+                  "type": "boolean"
+                },
+                "uy": {
+                  "type": "boolean"
+                },
+                "uz": {
+                  "type": "boolean"
+                },
+                "rx": {
+                  "type": "boolean"
+                },
+                "ry": {
+                  "type": "boolean"
+                },
+                "rz": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "edge",
+                "ux",
+                "uy",
+                "uz",
+                "rx",
+                "ry",
+                "rz"
+              ],
+              "additionalProperties": false,
+              "description": "Lijnoplegging langs één rand; true = verhinderd."
+            },
+            "description": "Randopleggingen; vervangt de bestaande lijst."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.selection.delete",
+      "description": "Knopen, staven en platen in één keer verwijderen, met alles wat eraan hangt (zoals Delete in de app).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een 3D-knoop."
+            },
+            "description": "Knopen."
+          },
+          "beamIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een 3D-staaf."
+            },
+            "description": "Staven (hun knopen gaan mee)."
+          },
+          "plateIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een 3D-plaat."
+            },
+            "description": "Platen (hun knopen en openingen gaan mee)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.settings.update",
+      "description": "Modelinstellingen voor trek-alleen staven: montage na de permanente belasting en de kruisregel.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tensionOnlyFitAfterPermanent": {
+            "type": "boolean",
+            "description": "Trek-alleen staven gemonteerd na de permanente belasting (spanningsloos daaronder)."
+          },
+          "tensionOnlyCrossRule": {
+            "type": "boolean",
+            "description": "Kruisregel: van twee kruisende trek-alleen staven blijft de staaf met de grootste N actief."
+          }
+        },
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.support.remove",
+      "description": "De oplegging van een knoop weghalen, met haar veren en opgelegde verplaatsingen. De knoop blijft.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van een bestaande 3D-knoop."
+          }
+        },
+        "required": [
+          "nodeId"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.support.set",
+      "description": "Een oplegging op een knoop zetten of vervangen: een standaardtype (preset) óf alle zes vrijheidsgraden.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van een bestaande 3D-knoop."
+          },
+          "preset": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "pinned",
+              "xRoller",
+              "yRoller",
+              "zRoller",
+              "revoluteX",
+              "revoluteY",
+              "revoluteZ"
+            ],
+            "description": "Standaardtype: fixed (inklemming), pinned (scharnier), x-/y-/zRoller, revoluteX/Y/Z (scharnier met één vrije draaias)."
+          },
+          "ux": {
+            "type": "boolean",
+            "description": "Verplaatsing in X verhinderd."
+          },
+          "uy": {
+            "type": "boolean",
+            "description": "Verplaatsing in Y verhinderd."
+          },
+          "uz": {
+            "type": "boolean",
+            "description": "Verplaatsing in Z verhinderd."
+          },
+          "rx": {
+            "type": "boolean",
+            "description": "Rotatie om X verhinderd."
+          },
+          "ry": {
+            "type": "boolean",
+            "description": "Rotatie om Y verhinderd."
+          },
+          "rz": {
+            "type": "boolean",
+            "description": "Rotatie om Z verhinderd."
+          }
+        },
+        "required": [
+          "nodeId"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.support.setMany",
+      "description": "Meerdere knopen in één keer hetzelfde standaardtype oplegging geven, bijvoorbeeld alle opleggingen scharnierend (allSupports + preset pinned). Zoals een lintknop: veren en opgelegde verplaatsingen in richtingen die vrij blijven, blijven staan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een bestaande 3D-knoop."
+            },
+            "description": "De knopen; niet samen met allSupports."
+          },
+          "allSupports": {
+            "type": "boolean",
+            "description": "Alle knopen die nu een oplegging hebben."
+          },
+          "preset": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "pinned",
+              "xRoller",
+              "yRoller",
+              "zRoller",
+              "revoluteX",
+              "revoluteY",
+              "revoluteZ"
+            ],
+            "description": "Standaardtype: fixed (inklemming), pinned (scharnier), x-/y-/zRoller, revoluteX/Y/Z."
+          }
+        },
+        "required": [
+          "preset"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.support.setPrescribed",
+      "description": "Opgelegde verplaatsingen of rotaties op een knoop zetten (vervangt de bestaande). Een opgelegde waarde verhindert zijn richting automatisch.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van een bestaande 3D-knoop."
+          },
+          "uxM": {
+            "type": "number",
+            "description": "Opgelegde verplaatsing in X, m."
+          },
+          "uyM": {
+            "type": "number",
+            "description": "Opgelegde verplaatsing in Y, m."
+          },
+          "uzM": {
+            "type": "number",
+            "description": "Opgelegde verplaatsing in Z, m."
+          },
+          "rxRad": {
+            "type": "number",
+            "description": "Opgelegde rotatie om X, rad."
+          },
+          "ryRad": {
+            "type": "number",
+            "description": "Opgelegde rotatie om Y, rad."
+          },
+          "rzRad": {
+            "type": "number",
+            "description": "Opgelegde rotatie om Z, rad."
+          }
+        },
+        "required": [
+          "nodeId"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.support.setSprings",
+      "description": "Veren op een knoop zetten (vervangt de bestaande veren). Een veer maakt zijn richting vrij: op een verhinderde richting vervangt de veer de vaste oplegging, en een opgelegde waarde in die richting vervalt.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van een bestaande 3D-knoop."
+          },
+          "kxKnPerM": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Veer in X, kN/m."
+          },
+          "kyKnPerM": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Veer in Y, kN/m."
+          },
+          "kzKnPerM": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Veer in Z, kN/m."
+          },
+          "krxKnmPerRad": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Rotatieveer om X, kNm/rad."
+          },
+          "kryKnmPerRad": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Rotatieveer om Y, kNm/rad."
+          },
+          "krzKnmPerRad": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Rotatieveer om Z, kNm/rad."
+          }
+        },
+        "required": [
+          "nodeId"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.transform",
+      "description": "Een selectie verplaatsen, kopiëren, roteren of spiegelen, zoals het transformatiepaneel. De uitkomst noemt de selectie erna (bij kopiëren de nieuwe elementen).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een 3D-knoop."
+            },
+            "description": "Knopen."
+          },
+          "beamIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een 3D-staaf."
+            },
+            "description": "Staven (hun knopen gaan mee)."
+          },
+          "plateIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een 3D-plaat."
+            },
+            "description": "Platen (hun knopen en openingen gaan mee)."
+          },
+          "command": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "move"
+                  },
+                  "dx": {
+                    "type": "number",
+                    "description": "m"
+                  },
+                  "dy": {
+                    "type": "number",
+                    "description": "m"
+                  },
+                  "dz": {
+                    "type": "number",
+                    "description": "m"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "dx",
+                  "dy",
+                  "dz"
+                ],
+                "additionalProperties": false,
+                "description": "Verplaatsen."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "copy"
+                  },
+                  "dx": {
+                    "type": "number",
+                    "description": "m"
+                  },
+                  "dy": {
+                    "type": "number",
+                    "description": "m"
+                  },
+                  "dz": {
+                    "type": "number",
+                    "description": "m"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "dx",
+                  "dy",
+                  "dz"
+                ],
+                "additionalProperties": false,
+                "description": "Kopiëren met deze verschuiving."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "rotate"
+                  },
+                  "axis": {
+                    "type": "string",
+                    "enum": [
+                      "x",
+                      "y",
+                      "z"
+                    ],
+                    "description": "Globale as."
+                  },
+                  "angleDeg": {
+                    "type": "number",
+                    "description": "Hoek in graden; positief volgens de rechterhandregel (tegen de klok in, gezien vanaf de positieve kant van de as)."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "axis",
+                  "angleDeg"
+                ],
+                "additionalProperties": false,
+                "description": "Roteren om een globale as door het gemiddelde van de geselecteerde knopen."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "mirror"
+                  },
+                  "axis": {
+                    "type": "string",
+                    "enum": [
+                      "x",
+                      "y",
+                      "z"
+                    ],
+                    "description": "Globale as."
+                  },
+                  "offset": {
+                    "type": "number",
+                    "description": "Plaats van het spiegelvlak op die as, m."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "axis",
+                  "offset"
+                ],
+                "additionalProperties": false,
+                "description": "Spiegelen in het vlak loodrecht op de as."
+              }
+            ],
+            "description": "De bewerking."
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.combination.add",
+      "description": "Een eigen belastingcombinatie toevoegen (UGT of BGT) met een factor per geval. De app past een eigen combinatie niet meer aan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Naam."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "uls",
+              "sls"
+            ],
+            "description": "uls = UGT, sls = BGT."
+          },
+          "factors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "caseId": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "description": "Bestaand belastinggeval."
+                },
+                "factor": {
+                  "type": "number",
+                  "description": "Factor."
+                }
+              },
+              "required": [
+                "caseId",
+                "factor"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "description": "Factor per belastinggeval; een niet genoemd geval telt niet mee."
+          },
+          "formula": {
+            "type": "string",
+            "description": "Formule voor weergave; ontbreekt = uit de factoren."
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "factors"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.combination.delete",
+      "description": "Een combinatie verwijderen. Een standaardcombinatie komt terug bij Standaard herstellen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de combinatie."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.combination.update",
+      "description": "Een combinatie wijzigen. Daarmee wordt het een eigen combinatie: de app werkt haar niet meer bij als de gevallen veranderen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de combinatie."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Naam."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "uls",
+              "sls"
+            ]
+          },
+          "factors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "caseId": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "description": "Bestaand belastinggeval."
+                },
+                "factor": {
+                  "type": "number",
+                  "description": "Factor."
+                }
+              },
+              "required": [
+                "caseId",
+                "factor"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "description": "Factor per belastinggeval; een niet genoemd geval telt niet mee."
+          },
+          "formula": {
+            "type": "string",
+            "description": "Formule voor weergave."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.combinations.resetToStandard",
+      "description": "Alle combinaties vervangen door de standaardset volgens de norm (gevolgklasse en nationale bijlage van het project).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.get",
+      "description": "Het project in het kort: dimensie, analysetype, eigen gewicht, actief geval, de belastinggevallen en combinaties, en de aantallen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.grid.get",
+      "description": "Het stramien lezen: aan of uit, de assen in X en Y (naam en positie in m) en de levels (hoogte in m).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.grid.set",
+      "description": "Het stramien zetten, zoals het venster Stramienen en levels: aan of uit, en de assen in X en/of Y. Een lijst vervangt de huidige; een as met een bestaande naam houdt zijn id. De levels zet model3d.levels.set.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Stramien aan (tonen en erop snappen) of uit."
+          },
+          "xAxes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Naam van de as, bijv. \"A\" of \"1\"."
+                },
+                "positionM": {
+                  "type": "number",
+                  "description": "Positie in m."
+                }
+              },
+              "required": [
+                "label",
+                "positionM"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Assen in X: lijnen met een vaste x (in 2D de verticale stramienlijnen)."
+          },
+          "yAxes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Naam van de as, bijv. \"A\" of \"1\"."
+                },
+                "positionM": {
+                  "type": "number",
+                  "description": "Positie in m."
+                }
+              },
+              "required": [
+                "label",
+                "positionM"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Assen in Y: lijnen met een vaste y (alleen in 3D)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.loadCase.add",
+      "description": "Een belastinggeval toevoegen. De standaardcombinaties nemen het meteen mee (blijvend met γ_G, veranderlijk als leidende en begeleidende last).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Naam, bijv. \"Sneeuw (S)\"."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "dead",
+              "live",
+              "snow",
+              "wind",
+              "other"
+            ],
+            "description": "dead = blijvend; live = gebruiksbelasting; snow; wind; other."
+          },
+          "categorie": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "C-menigte",
+              "D",
+              "E",
+              "F",
+              "G",
+              "H",
+              "industrie-kort",
+              "industrie-lang"
+            ],
+            "description": "Gebruikscategorie (NB tabel NB.2–A1.1), alleen bij type live; ontbreekt = A."
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.loadCase.delete",
+      "description": "Een belastinggeval verwijderen, met al zijn 2D- en 3D-lasten en belastingvlakken; zijn factoren verdwijnen uit elke combinatie. Het laatste geval kan niet weg.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van het belastinggeval."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.loadCase.update",
+      "description": "Naam, type of gebruikscategorie van een belastinggeval wijzigen; de standaardcombinaties volgen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van het belastinggeval."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Nieuwe naam."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "dead",
+              "live",
+              "snow",
+              "wind",
+              "other"
+            ],
+            "description": "dead = blijvend; live = gebruiksbelasting; snow; wind; other."
+          },
+          "categorie": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "A",
+                  "B",
+                  "C",
+                  "C-menigte",
+                  "D",
+                  "E",
+                  "F",
+                  "G",
+                  "H",
+                  "industrie-kort",
+                  "industrie-lang"
+                ],
+                "description": "Gebruikscategorie (NB tabel NB.2–A1.1), alleen bij type live; ontbreekt = A."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Gebruikscategorie; null = standaard (A)."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.new",
+      "description": "Een nieuw, leeg 3D-project met de standaardgevallen (zoals Bestand → Nieuw); vervangt het huidige project. In de app zonder bestand; heeft het huidige project daar niet-opgeslagen wijzigingen, dan weigert de app, tenzij discardChanges true is.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "discardChanges": {
+            "type": "boolean",
+            "description": "Alleen in de app: ook als het huidige project niet-opgeslagen wijzigingen heeft; die gaan verloren."
+          }
+        },
+        "additionalProperties": false
+      },
+      "kind": "document"
+    }
+  ]
+}

@@ -1,6 +1,11 @@
 // Het echte 3D-tekenvlak (ThreeFrameCanvas, WebGL) in een lokale headless
 // browser: één klik op of vlak naast een staaf selecteert die staaf, ook in
-// de staalhal van 60 × 30 m met dunne buisverbanden.
+// de staalhal van 60 × 30 m met dunne buisverbanden; de view cube (groep
+// "kubus"), perspectief of parallel (groep "parallel") en de waarden bij de
+// snedekrachtlijnen (groep "waarden", issue #95), een lijnlast kiezen en
+// markeren (groep "lijnlast", issue #81), zie
+// scripts/open-fem3d-selectie-browser.tsx. De groep "strikt" draait in een
+// ontwikkelbundel: alleen daar voert React StrictMode effecten tweemaal uit.
 //
 // Met OPEN_FEM3D_SELECTIE_DIAG=1 schrijft de test alleen de telling per
 // scenario (hoe vaak één klik de staaf selecteert) en toetst niets.
@@ -22,25 +27,34 @@ assert.ok(browser, "Chromium-browser vereist; stel eventueel OPENAEC_BROWSER in"
 const diag = process.env.OPEN_FEM3D_SELECTIE_DIAG === "1";
 const folder = mkdtempSync(join(tmpdir(), "open-fem3d-selectie-ui-"));
 try {
-  const bundle = await build({
-    absWorkingDir: dirname(fileURLToPath(import.meta.url)),
-    entryPoints: ["scripts/open-fem3d-selectie-browser.tsx"], bundle: true, write: false,
-    outfile: join(folder, "test.js"), format: "iife", platform: "browser", jsx: "automatic",
-    external: ["fs", "path"],
-    loader: { ".ifcfem": "text", ".svg": "dataurl", ".png": "dataurl", ".woff": "dataurl", ".woff2": "dataurl", ".ttf": "dataurl" },
-    define: { "process.env.NODE_ENV": '"production"' },
-  });
-  for (const file of bundle.outputFiles) writeFileSync(file.path, file.contents);
-  const html = join(folder, "test.html");
-  writeFileSync(html, '<!doctype html><html><head><meta charset="utf-8">' +
-    '<link rel="stylesheet" href="test.css"></head><body style="margin:0"><div id="root"></div>' +
-    '<pre id="uitslag"></pre><script src="test.js"></script></body></html>');
+  /** Bundel en pagina; `modus` is "production" (de groepen) of "development" (StrictMode). */
+  const bouw = async (naam, modus) => {
+    const bundle = await build({
+      absWorkingDir: dirname(fileURLToPath(import.meta.url)),
+      entryPoints: ["scripts/open-fem3d-selectie-browser.tsx"], bundle: true, write: false,
+      outfile: join(folder, `${naam}.js`), format: "iife", platform: "browser", jsx: "automatic",
+      external: ["fs", "path"],
+      loader: { ".ifcfem": "text", ".svg": "dataurl", ".png": "dataurl", ".woff": "dataurl", ".woff2": "dataurl", ".ttf": "dataurl" },
+      define: { "process.env.NODE_ENV": JSON.stringify(modus) },
+    });
+    for (const file of bundle.outputFiles) writeFileSync(file.path, file.contents);
+    // De stijl staat in de pagina zelf: een stylesheet van een file://-adres is
+    // voor de pagina niet leesbaar (cssRules), en de kubusproeven lezen de
+    // regels (bijv. @media print).
+    const css = bundle.outputFiles.find((file) => file.path.endsWith(".css"))?.text ?? "";
+    const pagina = join(folder, `${naam}.html`);
+    writeFileSync(pagina, '<!doctype html><html><head><meta charset="utf-8">' +
+      `<style>${css}</style></head><body style="margin:0"><div id="root"></div>` +
+      `<pre id="uitslag"></pre><script src="${naam}.js"></script></body></html>`);
+    return pagina;
+  };
+  const html = await bouw("test", "production");
   // WebGL via SwiftShader is traag; elke groep krijgt een eigen browserproces
   // (en daarmee een eigen klok in scripts/headlessBrowser.mjs).
-  const draai = (hash, profiel) => {
+  const draai = (hash, profiel, pagina = html) => {
     const result = startBrowser(browser, ["--headless=new", "--disable-gpu", "--enable-unsafe-swiftshader", "--no-first-run",
       "--no-default-browser-check", `--user-data-dir=${join(folder, profiel)}`, "--window-size=1100,800",
-      "--virtual-time-budget=60000", "--dump-dom", `${pathToFileURL(html).href}#${hash}`,
+      "--virtual-time-budget=60000", "--dump-dom", `${pathToFileURL(pagina).href}#${hash}`,
     ], { encoding: "utf8", timeout: 90_000, maxBuffer: 32 * 1024 * 1024 });
     const match = /<pre id="uitslag">([^<]*)<\/pre>/.exec(result.stdout ?? "");
     assert.ok(match?.[1], result.error?.message ?? result.stderr?.slice(0, 1500) ?? "Geen browserresultaat");
@@ -52,25 +66,37 @@ try {
     assert.equal(report.error, null, report.error);
   } else {
     let totaal = 0;
-    for (const groep of ["groot", "klein"]) {
-      const report = draai(`groep=${groep}`, `profiel-${groep}`);
+    // OPEN_FEM3D_SELECTIE_GROEP=kubus (of groot, klein, parallel, waarden, lijnlast, strikt) draait één groep.
+    const groepen = ["groot", "klein", "kubus", "parallel", "waarden", "lijnlast", "strikt"].filter((g) => !process.env.OPEN_FEM3D_SELECTIE_GROEP || g === process.env.OPEN_FEM3D_SELECTIE_GROEP);
+    for (const groep of groepen) {
+      const pagina = groep === "strikt" ? await bouw("test-dev", "development") : html;
+      const report = draai(`groep=${groep}`, `profiel-${groep}`, pagina);
       for (const item of report.tests) console.log(`  ${item.error ? "FAIL" : "ok"} ${item.name}${item.error ? ": " + item.error : ""}`);
       assert.equal(report.error, null, report.error);
       assert.equal(report.tests.filter((t) => t.error).length, 0, "3D-selectie-UI regressies");
       totaal += report.tests.length;
     }
-    // Schermafbeelding van de vervormde vorm: zet OPEN_FEM3D_SCHERMAFBEELDINGEN
-    // op een bestaande map; zonder die variabele wordt er niets gemaakt.
+    // Schermafbeeldingen (de vervormde vorm en de view cube, driemaal
+    // vergroot): zet OPEN_FEM3D_SCHERMAFBEELDINGEN op een bestaande map;
+    // zonder die variabele wordt er niets gemaakt.
     const map = process.env.OPEN_FEM3D_SCHERMAFBEELDINGEN;
     if (map) {
       assert.ok(existsSync(map), `map voor schermafbeeldingen bestaat niet: ${map}`);
-      const pad = join(map, "vervormde-vorm.png");
-      startBrowser(browser, ["--headless=new", "--disable-gpu", "--enable-unsafe-swiftshader", "--no-first-run",
-        "--no-default-browser-check", `--user-data-dir=${join(folder, "profiel-beeld")}`, "--window-size=1000,700",
-        "--hide-scrollbars", "--virtual-time-budget=10000", `--screenshot=${pad}`, `${pathToFileURL(html).href}#beeld=vervormd`,
-      ], { encoding: "utf8", timeout: 90_000 });
-      assert.ok(existsSync(pad), `schermafbeelding niet gemaakt: ${pad}`);
-      console.log(`  schermafbeelding: ${pad}`);
+      // De kubusbeelden in een breder venster: de knop ▾ ligt 20 px van de
+      // rechterrand van het 1000 px brede tekenvlak, en het zichtbare deel van
+      // een venster van 1000 px is in headless Edge net smaller.
+      for (const [bestand, beeld, venster] of [
+        ["vervormde-vorm.png", "vervormd", "1000,700"], ["view-cube-start.png", "kubus-start", "1100,720"],
+        ["view-cube-onder.png", "kubus-onder", "1100,720"], ["view-cube-menu.png", "kubus-menu", "1100,720"],
+      ]) {
+        const pad = join(map, bestand);
+        startBrowser(browser, ["--headless=new", "--disable-gpu", "--enable-unsafe-swiftshader", "--no-first-run",
+          "--no-default-browser-check", `--user-data-dir=${join(folder, `profiel-${beeld}`)}`, `--window-size=${venster}`,
+          "--hide-scrollbars", "--virtual-time-budget=10000", `--screenshot=${pad}`, `${pathToFileURL(html).href}#beeld=${beeld}`,
+        ], { encoding: "utf8", timeout: 90_000 });
+        assert.ok(existsSync(pad), `schermafbeelding niet gemaakt: ${pad}`);
+        console.log(`  schermafbeelding: ${pad}`);
+      }
     }
     console.log(`${totaal} geslaagd, 0 gefaald (${basename(browser)})`);
   }

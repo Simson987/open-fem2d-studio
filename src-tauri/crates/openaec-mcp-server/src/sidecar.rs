@@ -752,6 +752,12 @@ fn ontleed_antwoord(regel: &str, id: i64, op: &str, log: &str) -> Result<Value, 
     })
 }
 
+/// De remedie bij een foutcode, ook voor fouten die niet uit de sidecar komen
+/// maar dezelfde codes dragen (de API-commando's in de draaiende app).
+pub fn remedie_voor_code(code: &str) -> String {
+    remedie_bij(code)
+}
+
 /// Nederlandse remedie per foutcode van de sidecar.
 ///
 /// De sidecar levert de melding (wát er mis is); hier staat wat de gebruiker
@@ -759,6 +765,22 @@ fn ontleed_antwoord(regel: &str, id: i64, op: &str, log: &str) -> Result<Value, 
 /// code uit meerdere bewerkingen komt.
 fn remedie_bij(code: &str) -> String {
     match code {
+        // De API-commando's van de app (src/api/ in design-mockup).
+        "ONBEKEND_COMMANDO" => "Kies een tool uit `tools/list`; `detail.suggesties` noemt de \
+             namen die erop lijken."
+            .to_owned(),
+        "NIET_GEVONDEN" => "Lees eerst het model (model3d_get of project_get) en gebruik een id \
+             dat erin voorkomt."
+            .to_owned(),
+        "GEWEIGERD" => "De melding zegt welke modelregel weigert; pas de invoer of het model \
+             daarop aan. Er is niets gewijzigd."
+            .to_owned(),
+        "GEEN_DOCUMENT" => "Geef `project` (pad naar een .ifcfem-bestand) mee, of start de app \
+             met OPENAEC_GUI_CONTROL=1 en laat `project` weg."
+            .to_owned(),
+        "ALLEEN_IN_APP" => "Start de app met OPENAEC_GUI_CONTROL=1 en roep de tool aan zonder \
+             `project`."
+            .to_owned(),
         "INVOER_ONGELDIG" => "Kijk in `detail` welk veld wordt genoemd. Onbekende velden worden \
              geweigerd en niet genegeerd: een genegeerd veld levert een geslaagde \
              berekening op die bij een ánder model hoort."

@@ -6,16 +6,17 @@
  * geprojecteerd langs de kijkrichting van de view. Deterministisch, dus goed
  * af te drukken en na te rekenen in een test.
  *
- * Kijkrichting en "omhoog" zijn die van de werkruimte: iso (1,4; 1,4; 1),
- * boven (0; 0; 1), voor (0; −1; 0), zij (1; 0; 0), Z omhoog (boven: Y); een
- * eigen view gebruikt zijn opgeslagen camera. Schaal van de vervorming en
- * hoogte van de snedekrachtlijnen zoals in de werkruimte.
+ * Kijkrichting en "omhoog" zijn die van de werkruimte (openFem3DAanzichtRichting):
+ * iso (1,4; −1,4; 1), boven (0; 0; 1), voor (0; −1; 0), zij (1; 0; 0), Z
+ * omhoog (boven: Y); een eigen view gebruikt zijn opgeslagen camera. Schaal
+ * van de vervorming en hoogte van de snedekrachtlijnen zoals in de werkruimte.
  */
 import { openFem3DLoadCaseId, openFem3DMemberAxes, type OpenFem3DModel, type OpenFem3DNode } from "./openFem3dModel";
 import type { OpenFem3DDiagramPoint, OpenFem3DDiagrams, OpenFem3DMemberForces, OpenFem3DSolveResult } from "./openFem3dSolver";
 import type { OpenFem3DVisibility } from "./openFem3dVisibility";
 import type { OpenFem3DCameraState } from "./openFem3dViewSets";
 import type { OpenFem3DView } from "./openFem3dCommands";
+import { openFem3DAanzichtRichting } from "./openFem3dViewCube";
 import { OPEN_FEM_3D_UTILIZATION_COLORS, openFem3DUtilizationClass, type OpenFem3DUtilization } from "./openFem3dUtilization";
 import { openFem3DMaximumDisplacementM, openFem3DMemberDisplacementStations } from "./openFem3dDisplacement";
 import { openFem3DProfielKleuring } from "../../lib/profielKleur";
@@ -47,8 +48,10 @@ export function openFem3DKijkAssen(view: OpenFem3DView, camera: OpenFem3DCameraS
     richting = norm([camera.position[0] - camera.target[0], camera.position[1] - camera.target[1], camera.position[2] - camera.target[2]]);
     omhoog = norm(camera.up);
   } else {
-    richting = view === "top" ? [0, 0, 1] : view === "front" ? [0, -1, 0] : view === "side" ? [1, 0, 0] : norm([1.4, 1.4, 1]);
-    omhoog = view === "top" ? [0, 1, 0] : [0, 0, 1];
+    // Dezelfde richting en up als het lint en de view cube (één iso-constante).
+    const aanzicht = openFem3DAanzichtRichting(view);
+    richting = [...aanzicht.richting];
+    omhoog = [...aanzicht.up];
   }
   let rechts = norm(cross(omhoog, richting));
   if (Math.hypot(...rechts) < 0.5) rechts = norm(cross(Math.abs(richting[2]) > 0.9 ? [0, 1, 0] : [0, 0, 1], richting));

@@ -23,6 +23,17 @@ export interface OpenFem3DVisibility {
   axes: boolean;
   /** Local x/y/z directions on each member. */
   memberAxes: boolean;
+  /**
+   * De view cube (aanzichtkubus) rechtsboven, met zijn menu. Uit: geen kubus,
+   * geen menu en geen voor labels gereserveerde plek.
+   */
+  viewCube: boolean;
+  /**
+   * Perspectief (aan) of parallelle projectie (uit). Uit wisselt het tekenvlak
+   * naar een orthografische camera met hetzelfde doel, dezelfde kijkrichting
+   * en dezelfde zichtbare grootte (openFem3dProjectie.ts).
+   */
+  perspective: boolean;
   structuralGrid: boolean;
   deformation: boolean;
   reactions: boolean;
@@ -52,6 +63,8 @@ export const DEFAULT_OPEN_FEM_3D_VISIBILITY: OpenFem3DVisibility = {
   grid: true,
   axes: true,
   memberAxes: false,
+  viewCube: true,
+  perspective: true,
   structuralGrid: true,
   deformation: true,
   reactions: true,
@@ -63,6 +76,14 @@ export const DEFAULT_OPEN_FEM_3D_VISIBILITY: OpenFem3DVisibility = {
   momentY: false,
   momentZ: false,
 };
+
+/**
+ * De resultaatlagen. Ze staan in de verkenner onder Resultaten, niet onder
+ * Weergave; de overige lagen zijn modellagen (zoals in 2D, issue #47).
+ */
+export const OPEN_FEM_3D_RESULT_LAYERS: readonly (keyof OpenFem3DVisibility)[] = [
+  "deformation", "reactions", "utilization", "axialForce", "shearY", "shearZ", "torsion", "momentY", "momentZ",
+];
 
 const STORAGE_KEY = "open-fem-studio.openFem3d.visibility";
 

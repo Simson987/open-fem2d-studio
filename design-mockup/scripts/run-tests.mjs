@@ -79,6 +79,14 @@ const TIJDSLIMIET_MS = 300_000;
  * ontsluit.
  */
 const BUNDEL_TESTS = new Set([
+  // De API-commando's (src/api/) en hun weg door de sidecar (`api_catalogus`,
+  // `api_uitvoeren`): de MCP-server voert ze zonder app uit via de bundel, dus
+  // alles hoort ook daartegen te slagen.
+  "api-schema", "api-document", "api-register", "api-model3d", "api-model3d-voorwaarden",
+  "api-model3d-bewerken", "api-project", "api-stramien", "api-sidecar",
+  // Het contract van extensies (manifest, importresultaat) en het draaien van
+  // een extensiescript in Node: de MCP-server importeert zonder app via de bundel.
+  "extensie-contract",
   // Belastinggevallen en combinaties tegen de NB-tabellen en de hand: de
   // afleiding van de standaardset (`normcombinaties`), het bijhouden bij
   // toevoegen/wijzigen/verwijderen (`combinatieBeheer`), de zijdelingse toets
@@ -391,15 +399,17 @@ const ALLEEN_BRON = new Map([
   // De 3D-proeven raken React/Three, de projectadapter of de aparte Rust-kern.
   // Deze modules zitten niet in de 2D-sidecarbundel.
   ...[
-    "open-fem3d-analysis-mode", "open-fem3d-wheel-anchor", "open-fem3d-staalhal", "open-fem3d-staalhal-generator", "open-fem3d-knooppaneel", "open-fem3d-meldingen", "open-fem3d-modelvelden", "open-fem3d-scheefstand", "open-fem3d-kipsteunen", "open-fem3d-rapportsamenvatting", "open-fem3d-staalgewicht", "open-fem3d-opleggingsteken", "open-fem3d-beam-screen-pick", "open-fem3d-box-selection", "open-fem3d-campus-frame", "open-fem3d-trek-schijf",
+    "open-fem3d-analysis-mode", "open-fem3d-wheel-anchor", "open-fem3d-staalhal", "open-fem3d-staalhal-generator", "open-fem3d-knooppaneel", "open-fem3d-meldingen", "open-fem3d-modelvelden", "open-fem3d-scheefstand", "open-fem3d-kipsteunen", "open-fem3d-rapportsamenvatting", "open-fem3d-staalgewicht", "open-fem3d-opleggingsteken", "open-fem3d-model-api", "open-fem3d-beam-screen-pick", "open-fem3d-box-selection", "open-fem3d-campus-frame", "open-fem3d-trek-schijf",
     // Belastingvlakken: afdracht en vlakmeetkunde, en de browsertest (tekenen
     // op het werkvlak, doorzichtig vlak, klikken door het vlak heen).
     "open-fem3d-belastingvlak", "open-fem3d-belastingvlak-ui",
     "open-fem3d-concrete-check", "open-fem3d-conditions", "open-fem3d-conversion",
+    // Momentvast en Scharnierend voor de eindscharnieren van een staaf.
+    "open-fem3d-eindscharnieren",
     "open-fem3d-current", "open-fem3d-displacement", "open-fem3d-force-stations",
     "open-fem3d-history", "open-fem3d-knoopgereedschap", "open-fem3d-large-frame", "open-fem3d-levels", "open-fem3d-member-load", "open-fem3d-mm-invoer",
     "open-fem3d-plates-views", "open-fem3d-platen", "open-fem3d-profile-geometry", "open-fem3d-report-views",
-    "open-fem3d-selectie", "open-fem3d-selectie-ui",
+    "open-fem3d-selectie", "open-fem3d-selectie-ui", "open-fem3d-momentlijn",
     // Trek-alleen en schijven in de echte onderdelen (headless browser).
     "open-fem3d-trek-schijf-ui",
     // Montage van trek-alleen staven na de permanente belasting, kruisregel en
@@ -408,6 +418,14 @@ const ALLEEN_BRON = new Map([
     "open-fem3d-steel-check", "open-fem3d-transform", "open-fem3d-utilization", "open-fem3d-vervormd",
     // De tab Views (standaard- en eigen views, rapportbeelden) en zijn browsertest.
     "open-fem3d-views", "open-fem3d-views-ui",
+    // De view cube: doelen, lintconventie, CSS-matrix en slepen (issue #85).
+    "open-fem3d-view-cube",
+    // Perspectief of parallel (issue #85, deel B): omrekening, schaal, raycastafstand, wielstap, pannen,
+    // knopen achter elkaar (de voorste wint) en de muisstraal op het werkvlak.
+    "open-fem3d-projectie",
+    // Waarden bij de snedekrachtlijnen (issue #95): de standen weinig … veel, stand 3 = de oude regel,
+    // monotoon, selectie, Waarden uit, views en de bedrading (de browserproef zit in open-fem3d-selectie-ui).
+    "open-fem3d-diagram-labels",
   ].map((name) => [name, "3D-app, Three-weergave of aparte Rust-kern; geen module van de 2D-sidecarbundel."]),
   ["aluminium-materiaal", "Materiaalbibliotheek en doorsnedeadapter buiten de sidecarbarrel."],
   ["aluminium-solver-verificatie", "Bouwt het model met modelNaarSolverInput, buiten de sidecarbarrel."],
@@ -426,6 +444,9 @@ const ALLEEN_BRON = new Map([
   ["rekengang-generatie", "Asynchrone rekenregie van de app met afgeschermde React- en native IO-grenzen; niet beschikbaar in de sidecarbundel."],
   ["beton-tooltips", "Leest KorfVelden.tsx en ProfielKiezer.tsx als bron: waar de uitleg staat (tooltip of tekst); geen solvercode en niet in de sidecarbundel."],
   ["lijnlast-pijlen", "Pijlafstand van lijnlasten op het 2D-tekenvlak en de bron van FemCanvas; geen solvercode en niet in de sidecarbundel."],
+  ["html2canvas-ui", "DOM-schermafbeelding met html2canvas en color-mix in Chromium (bedieningskanaal en feedback); geen solvercode en niet in de sidecarbundel."],
+  ["tekenhulp", "Tekenhulpen van het 2D-tekenvlak (#53): ortho, hoeksnap en de bewaarde snapinstellingen, plus de bron van FemCanvas en de tab Weergave; geen solvercode en niet in de sidecarbundel."],
+  ["last-waarde", "Een lastwaarde intypen (komma, punt, min-teken, eenheid) voor het q-veld op het tekenvlak en het paneel; geen solvercode en niet in de sidecarbundel."],
   ["fs-scope", "Leest de Tauri-capability en de bestandsroutes van de app; geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["staaf-dialoog-config", "Configuratielogica van de staafdialoog; geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["aansluiting-standaard", "Aansluitingskeuze van een staafeinde (React-component en i18n); geen solvercode en niet beschikbaar in de sidecarbundel."],
@@ -436,6 +457,8 @@ const ALLEEN_BRON = new Map([
   ["klik-op-last", "Klikgedrag van het tekenvlak op lasten; geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["weergave-model", "Weergavelogica van de tabbalk (Model sluit de resultaten); geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["undo-route", "Sneltoetsgedrag van de app (Ctrl+Z vanuit een invoerveld); geen solvercode en niet beschikbaar in de sidecarbundel."],
+  ["api-dekking", "Legt de dekking van de 3D-bediening door de API (src/api/dekking.ts) tegen de bediening zelf: tekent het 3D-lint (React, i18n in cimode) en leest de knoppen van het eigenschappenpaneel en de sneltoetsen uit de bron. React-onderdelen en bronbestanden zitten niet in de sidecarbundel; de commando's zelf draaien daar wel, in test-api-*."],
+  ["api-adapter", "De API-commando's in de draaiende app (src/bediening/apiAdapter.ts): welk commando welke app-actie aanroept (3D-bewerking als één stap, gevallen via de store, Openen voor de rest, ongedaan maken en opslaan). De app-adapter zit niet in de sidecarbundel; de commando's zelf draaien daar wel, in test-api-*."],
   ["selecteer-bij-focus", "Invoergedrag van de app (focus selecteert de waarde); geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["tauri-plugin-versies", "Vergelijkt package-lock.json met Cargo.lock en leest App.tsx; geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["eigen-gewicht-ui", "Echte tabbalk en tekenvlak (React, CSS, thema's) in Chromium met het geval \"Eigen gewicht\" (issue #42); geen solvercode en niet in de sidecarbundel. De rekenkant bewaakt test-eigen-gewicht-geval in beide standen."],
@@ -488,6 +511,10 @@ const ALLEEN_BRON = new Map([
   [
     "modelcontrole",
     "test de modelcontrole en de herstelbewerkingen in de store; de acceptatieproef gebruikt de solver alleen als eindcontrole",
+  ],
+  [
+    "verbindingstolerantie",
+    "de instelbare verbindingstolerantie van het 2D-model (#55): modelcontrole (lib/modelControle), rekenpoort, plaatsen en herstellen in de zustand-store, de snapinstellingen, i18n en de bron van FemCanvas, App.tsx en de tab Weergave. Geen van die modules hoort in de barrel; de MCP-poort houdt zijn eigen exacte drempel",
   ],
   ["ifc-export", "staat los van de solver (IFC-export)"],
   ["ifc-spiegel", "staat los van de solver (IFC-export spiegelt het model)"],

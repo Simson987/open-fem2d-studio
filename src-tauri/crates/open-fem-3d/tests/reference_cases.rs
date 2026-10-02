@@ -1,5 +1,5 @@
 use open_fem_3d::{
-    solve, AnalysisKind, BucklingSummary, Material3D, Member3D, MemberLoad3D, MemberPointLoad3D,
+    solve, AnalysisKind, BucklingSummary, Diaphragm3D, Material3D, Member3D, MemberLoad3D, MemberPointLoad3D,
     NodalLoad3D, Node3D, ThermalLoad3D,
     Section3D, SolveRequest3D, Support3D,
 };
@@ -657,4 +657,180 @@ fn torsion_mechanism_has_actionable_diagnostics() {
     assert!(error.contains("mechanisme"), "{error}");
     assert!(error.contains("torsie om de staafas"), "{error}");
     assert!(error.contains("revolute-oplegging") && error.contains("rotatieveer"), "{error}");
+}
+
+#[test]
+fn no_spurious_nearly_vertical_warning_for_members_along_y() {
+    // De externe kern toetst "nearly vertical" tegen globaal Y, terwijl de
+    // lokale assen (en Open FEM 3D) Z omhoog gebruiken. Een ligger langs Y
+    // kreeg die melding onterecht (#61); een kolom langs Z hoort hem ook niet
+    // te krijgen. Echte meldingen blijven staan.
+    let input = request(
+        vec![
+            Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 }, Node3D { id: 2, x: 0.0, y: 0.0, z: 4.0 },
+            Node3D { id: 3, x: 0.0, y: 6.0, z: 4.0 }, Node3D { id: 4, x: 0.0, y: 6.0, z: 0.0 },
+        ],
+        vec![member(1, 1, 2), member(2, 2, 3), member(3, 4, 3)],
+        vec![fixed(1), fixed(4)],
+        vec![NodalLoad3D { id: 1, node_id: 2, fx: 0.0, fy: 1.0, fz: -10.0, mx: 0.0, my: 0.0, mz: 0.0 }],
+    );
+    let result = solve(input).unwrap();
+    assert!(
+        !result.diagnostics.iter().any(|message| message.contains("nearly vertical")),
+        "onterechte melding: {:?}", result.diagnostics,
+    );
+    assert!(!result.diagnostics.is_empty(), "de overige meldingen van de kern blijven staan");
+}
+
+/// Horizontaal raam in het XY-vlak (knoop 1, 2, 3), alleen verticaal opgelegd.
+fn vertical_supports_only() -> SolveRequest3D {
+    let roller = |node_id| Support3D { node_id, uz: true, ..Default::default() };
+    request(
+        vec![
+            Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 }, Node3D { id: 2, x: 4.0, y: 0.0, z: 0.0 },
+            Node3D { id: 3, x: 4.0, y: 3.0, z: 0.0 },
+        ],
+        vec![member(1, 1, 2), member(2, 2, 3)],
+        vec![roller(1), roller(2), roller(3)],
+        vec![NodalLoad3D { id: 1, node_id: 2, fx: 0.0, fy: 0.0, fz: -10.0, mx: 0.0, my: 0.0, mz: 0.0 }],
+    )
+}
+
+#[test]
+fn mechanism_error_names_the_part_the_free_motions_and_a_remedy() {
+    // #64: de kern meldt een singuliere matrix; de fout zegt nu welk deel,
+    // welke bewegingen vrij zijn en wat te doen, met de algemene uitleg erachter.
+    let error = solve(vertical_supports_only()).unwrap_err();
+    assert!(error.contains("mechanisme") && error.contains("singuliere stijfheidsmatrix"), "{error}");
+    assert!(error.contains("Het deel met knopen 1–3 en staven 1–2 is onvoldoende opgelegd"), "{error}");
+    assert!(error.contains("vrij: verschuiven in X, verschuiven in Y en draaien om Z"), "{error}");
+    assert!(error.contains("voeg horizontale opleggingen in X en Y toe") && error.contains("blokkeer de rotatie om Z"), "{error}");
+    assert!(error.contains("Controleer per verbonden modeldeel"), "de algemene uitleg blijft staan: {error}");
+    assert!(error.contains("Engine: Singular"), "{error}");
+
+    // Tweede orde: dezelfde melding, met de eigen context.
+    let mut second_order = vertical_supports_only();
+    second_order.analysis = AnalysisKind::PDelta;
+    let error = solve(second_order).unwrap_err();
+    assert!(error.starts_with("tweede-orde 3D-berekening: het model is een mechanisme"), "{error}");
+    assert!(error.contains("Het deel met knopen 1–3 en staven 1–2 is onvoldoende opgelegd"), "{error}");
+    assert!(error.contains("vrij: verschuiven in X, verschuiven in Y en draaien om Z"), "{error}");
+}
+
+#[test]
+fn internal_mechanism_is_reported_as_such_when_supports_are_sufficient() {
+    // Twee ingeklemde einden, maar in knoop 2 zijn beide staafeinden voor
+    // buiging vrijgegeven: knoop 2 kan vrij draaien om Y en Z. De opleggingen
+    // houden het deel vast; de melding zegt dat het een intern mechanisme is.
+    let mut first = member(1, 1, 2);
+    first.releases.my_end = true;
+    first.releases.mz_end = true;
+    let mut second = member(2, 2, 3);
+    second.releases.my_start = true;
+    second.releases.mz_start = true;
+    let error = solve(request(
+        vec![
+            Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 }, Node3D { id: 2, x: 4.0, y: 0.0, z: 0.0 },
+            Node3D { id: 3, x: 8.0, y: 0.0, z: 0.0 },
+        ],
+        vec![first, second], vec![fixed(1), fixed(3)],
+        vec![NodalLoad3D { id: 1, node_id: 2, fx: 0.0, fy: 0.0, fz: -10.0, mx: 0.0, my: 0.0, mz: 0.0 }],
+    )).unwrap_err();
+    assert!(error.contains("singuliere stijfheidsmatrix"), "{error}");
+    assert!(error.contains("De opleggingen houden elk verbonden modeldeel als geheel vast") && error.contains("intern mechanisme"), "{error}");
+    assert!(!error.contains("onvoldoende opgelegd;"), "{error}");
+}
+
+#[test]
+fn a_solved_model_with_insufficient_supports_gets_a_warning_and_a_good_one_does_not() {
+    // Portaal met ruimtelijke scharnieren: het kan om de lijn door beide voeten
+    // buiten zijn vlak omvallen. Onder een last in zijn vlak lost de kern het
+    // toch op; de uitkomst krijgt dan een melding vooraan.
+    let portal = |foot: fn(usize) -> Support3D| request(
+        vec![
+            Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 }, Node3D { id: 2, x: 12.0, y: 0.0, z: 0.0 },
+            Node3D { id: 3, x: 0.0, y: 0.0, z: 5.0 }, Node3D { id: 4, x: 12.0, y: 0.0, z: 5.0 },
+        ],
+        vec![member(1, 1, 3), member(2, 2, 4), member(3, 3, 4)],
+        vec![foot(1), foot(2)],
+        vec![NodalLoad3D { id: 1, node_id: 3, fx: 1.0, fy: 0.0, fz: -10.0, mx: 0.0, my: 0.0, mz: 0.0 }],
+    );
+    let result = solve(portal(pinned)).unwrap();
+    let first = &result.diagnostics[0];
+    assert!(first.starts_with("Opleggingen: Het deel met knopen 1–4 en staven 1–3 is onvoldoende opgelegd"), "{first}");
+    assert!(first.contains("vrij: draaien om X (as door knoop 1 en 2)"), "{first}");
+    assert!(first.contains("toch een oplossing"), "{first}");
+
+    // Een last die de beweging aanstoot: dezelfde bevinding staat in de fout.
+    let mut sideways = portal(pinned);
+    sideways.nodal_loads[0].fy = 1.0;
+    let error = solve(sideways).unwrap_err();
+    assert!(error.contains("Opleggingen: Het deel met knopen 1–4") && error.contains("draaien om X (as door knoop 1 en 2)"), "{error}");
+
+    // Goed opgelegd: geen melding over de opleggingen.
+    let good = solve(portal(fixed)).unwrap();
+    assert!(!good.diagnostics.iter().any(|message| message.contains("Opleggingen")), "{:?}", good.diagnostics);
+}
+
+#[test]
+fn a_tension_only_member_that_drops_out_is_left_out_of_the_support_check() {
+    // Portaal 1–4 met ruimtelijke scharnieren in de voeten (kan buiten zijn
+    // vlak omvallen) en een ingeklemde kolom 6–5 ernaast. Trek-alleen staaf 5
+    // (5–3) koppelt ze; zolang die meedoet, houdt de inklemming alles vast.
+    // De last fx op knoop 5 drukt staaf 5 in; zonder staaf 5 lost de kern het
+    // model nog op (de last op het portaal ligt in zijn vlak), maar het portaal
+    // kan dan omvallen: de melding noemt dat deel.
+    let mut tie = member(5, 5, 3);
+    tie.tension_only = true;
+    let input = request(
+        vec![
+            Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 }, Node3D { id: 2, x: 12.0, y: 0.0, z: 0.0 },
+            Node3D { id: 3, x: 0.0, y: 0.0, z: 5.0 }, Node3D { id: 4, x: 12.0, y: 0.0, z: 5.0 },
+            Node3D { id: 5, x: -3.0, y: 0.0, z: 5.0 }, Node3D { id: 6, x: -3.0, y: 0.0, z: 0.0 },
+        ],
+        vec![member(1, 1, 3), member(2, 2, 4), member(3, 3, 4), member(4, 6, 5), tie],
+        vec![pinned(1), pinned(2), fixed(6)],
+        vec![
+            NodalLoad3D { id: 1, node_id: 5, fx: 10.0, fy: 0.0, fz: 0.0, mx: 0.0, my: 0.0, mz: 0.0 },
+            NodalLoad3D { id: 2, node_id: 4, fx: 0.0, fy: 0.0, fz: -10.0, mx: 0.0, my: 0.0, mz: 0.0 },
+        ],
+    );
+    let result = solve(input).unwrap();
+    assert_eq!(result.inactive_members, vec![5], "{:?}", result.diagnostics);
+    let first = &result.diagnostics[0];
+    assert!(first.starts_with("Opleggingen: Het deel met knopen 1–4 en staven 1–3 is onvoldoende opgelegd"), "{first}");
+    assert!(first.contains("vrij: draaien om X (as door knoop 1 en 2)"), "{first}");
+    assert!(!first.contains("knopen 1–6"), "met staaf 5 erbij was alles vast: {first}");
+}
+
+#[test]
+fn pendulum_columns_under_a_diaphragm_name_the_sway_of_the_diaphragm() {
+    // Vier kolommen met een scharnierende voet, de koppen in één starre schijf,
+    // zonder verband: de vloer kan zwaaien in X en Y en draaien om Z.
+    let columns = |loads: Vec<NodalLoad3D>| {
+        let mut nodes = Vec::new();
+        let mut members = Vec::new();
+        let mut supports = Vec::new();
+        for (i, (x, y)) in [(0.0, 0.0), (6.0, 0.0), (0.0, 6.0), (6.0, 6.0)].into_iter().enumerate() {
+            nodes.push(Node3D { id: 2 * i + 1, x, y, z: 0.0 });
+            nodes.push(Node3D { id: 2 * i + 2, x, y, z: 4.0 });
+            members.push(member(i + 1, 2 * i + 1, 2 * i + 2));
+            supports.push(pinned(2 * i + 1));
+        }
+        let mut input = request(nodes, members, supports, loads);
+        input.diaphragms.push(Diaphragm3D { id: 1, node_ids: vec![2, 4, 6, 8] });
+        input
+    };
+    let load = |id: usize, node_id: usize, fx: f64, fz: f64| NodalLoad3D { id, node_id, fx, fy: 0.0, fz, mx: 0.0, my: 0.0, mz: 0.0 };
+    let sway = "Schijf 1 kan met de delen die eraan hangen (knopen 1–8 en staven 1–4) als geheel bewegen; vrij: verschuiven in X, verschuiven in Y en draaien om Z.";
+
+    // Een horizontale last: geen oplossing; de fout noemt de schijf en wat te doen.
+    let error = solve(columns(vec![load(1, 2, 1.0, -10.0)])).unwrap_err();
+    assert!(error.contains(sway), "{error}");
+    assert!(error.contains("toe die schijf 1 in X en Y en tegen draaien om Z vasthouden"), "{error}");
+    assert!(!error.contains("kunnen samen nog bewegen"), "{error}");
+
+    // Alleen verticale lasten: de kern lost het op, met de melding vooraan.
+    let result = solve(columns((0..4).map(|i| load(i + 1, 2 * i + 2, 0.0, -10.0)).collect())).unwrap();
+    assert!(result.diagnostics[0].starts_with(&format!("Opleggingen: {sway}")), "{:?}", result.diagnostics);
 }

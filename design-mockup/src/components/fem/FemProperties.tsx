@@ -13,6 +13,7 @@ import { useState, useEffect, useRef, useId, isValidElement, cloneElement } from
 import { useTranslation } from "react-i18next";
 import i18next from "i18next";
 import { parseLength, formatLength, mmToMeters } from "../../lib/lengthInput";
+import { leesLastWaarde } from "../../lib/lastWaarde";
 import LengthInput from "../LengthInput";
 import InfoTip from "../InfoTip";
 import { CONCRETE_E_CM, resolveSection } from "../../lib/sectionResolver";
@@ -1320,7 +1321,8 @@ function LoadProperties({
   };
 
   const commitNumber = (raw: string, field: keyof Load) => {
-    const v = Number(raw);
+    // Komma of punt (#52); wat Number() al las, blijft hetzelfde.
+    const v = leesLastWaarde(raw) ?? Number(raw);
     if (Number.isFinite(v) && updateLoad) updateLoad(load.id, { [field]: v });
   };
 
@@ -1510,7 +1512,7 @@ function LoadProperties({
               <Row label="q (kN/m)">
                 <input
                   ref={qRef}
-                  type="number" step="0.1" className="fem-prop-input fem-prop-input-mono"
+                  type="text" inputMode="decimal" className="fem-prop-input fem-prop-input-mono"
                   value={qStr}
                   onChange={e => setQStr(e.target.value)}
                   onBlur={() => commitNumber(qStr, "q")}
@@ -1522,7 +1524,7 @@ function LoadProperties({
                 <Row label="q_start (kN/m)">
                   <input
                     ref={qStartRef}
-                    type="number" step="0.1" className="fem-prop-input fem-prop-input-mono"
+                    type="text" inputMode="decimal" className="fem-prop-input fem-prop-input-mono"
                     value={qStartStr}
                     onChange={e => setQStartStr(e.target.value)}
                     onBlur={() => commitNumber(qStartStr, "qStart")}
@@ -1532,7 +1534,7 @@ function LoadProperties({
                 <Row label="q_end (kN/m)">
                   <input
                     ref={qEndRef}
-                    type="number" step="0.1" className="fem-prop-input fem-prop-input-mono"
+                    type="text" inputMode="decimal" className="fem-prop-input fem-prop-input-mono"
                     value={qEndStr}
                     onChange={e => setQEndStr(e.target.value)}
                     onBlur={() => commitNumber(qEndStr, "qEnd")}
@@ -1621,7 +1623,7 @@ function LoadProperties({
               <Row label="p (kN/m)">
                 <input
                   ref={qRef}
-                  type="number" step="0.1" className="fem-prop-input fem-prop-input-mono"
+                  type="text" inputMode="decimal" className="fem-prop-input fem-prop-input-mono"
                   value={qStr}
                   onChange={e => setQStr(e.target.value)}
                   onBlur={() => commitNumber(qStr, "q")}
@@ -1633,7 +1635,7 @@ function LoadProperties({
                 <Row label="p_start (kN/m)">
                   <input
                     ref={qStartRef}
-                    type="number" step="0.1" className="fem-prop-input fem-prop-input-mono"
+                    type="text" inputMode="decimal" className="fem-prop-input fem-prop-input-mono"
                     value={qStartStr}
                     onChange={e => setQStartStr(e.target.value)}
                     onBlur={() => commitNumber(qStartStr, "qStart")}
@@ -1643,7 +1645,7 @@ function LoadProperties({
                 <Row label="p_end (kN/m)">
                   <input
                     ref={qEndRef}
-                    type="number" step="0.1" className="fem-prop-input fem-prop-input-mono"
+                    type="text" inputMode="decimal" className="fem-prop-input fem-prop-input-mono"
                     value={qEndStr}
                     onChange={e => setQEndStr(e.target.value)}
                     onBlur={() => commitNumber(qEndStr, "qEnd")}

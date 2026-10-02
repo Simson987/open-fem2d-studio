@@ -576,7 +576,10 @@ const vloer = (() => {
   ok(/const throughPick = !pick && throughHit \? identity\(throughHit\) : null;/.test(canvas)
     && /const type = pick\?\.type \?\? throughPick\?\.type;/.test(canvas),
     "het lastvlak zelf alleen als er verder niets onder de muis ligt");
-  ok(/node: nodeHit && hitNode\s*&& camera\.position\.distanceTo\([^)]*\)\) <= throughLimitM/.test(canvas)
+  // De afstand van de knoop meet zoals de raycast (perspectief: vanaf het
+  // oogpunt; parallel: langs de kijkrichting), zie openFem3dProjectie.ts.
+  ok(/const hitNodeDistance = hitNode \? openFem3DCameraAfstand\(camera, hitNode\) : Number\.POSITIVE_INFINITY;/.test(canvas)
+    && /node: nodeHit && hitNode\s*&& hitNodeDistance <= throughLimitM/.test(canvas)
     && /lineBeam: beamScreenHit && beamScreenHit\.distance <= throughLimitM/.test(canvas),
     "ook een knoop of systeemlijn ver achter het lastvlak steelt de klik niet");
   ok(/if \(!visibility\.loads \|\| !visibility\.loadPanels\) return;/.test(canvas), "belastingvlakken alleen met lasten zichtbaar");

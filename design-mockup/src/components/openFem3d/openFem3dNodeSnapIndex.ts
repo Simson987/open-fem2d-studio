@@ -6,7 +6,7 @@ export interface OpenFem3DNodeScreenPoint {
   xPx: number;
   yPx: number;
   depth: number;
-  /** Clip-w van de knoop: bij een perspectiefcamera de diepte langs de kijkrichting. */
+  /** Clip-w van de knoop: bij een perspectiefcamera de diepte langs de kijkrichting, bij een parallelle camera 1. */
   viewDepth: number;
 }
 
@@ -76,7 +76,62 @@ export function buildOpenFem3DNodeSnapScreenIndex(
   return { width: safeWidth, height: safeHeight, cellSizePx: safeCellSize, nodeCount: nodes.length, buckets };
 }
 
-/** Zoekt de dichtstbijzijnde zichtbare knoop binnen de opgegeven snapzone. */
+/**
+ * Schermafstanden die minder dan dit verschillen, gelden als gelijk; dan wint
+ * de voorste knoop. In parallelle projectie vallen knopen die precies achter
+ * elkaar liggen op hetzelfde schermpunt, en verschillen hun afstanden tot de
+ * muis alleen door afronding. Zonder deze marge won daar willekeurig een
+ * achterliggende knoop (een klik of tekensnap op de knoop erachter).
+ */
+export const OPEN_FEM_3D_NODE_SNAP_GELIJK_PX = 1e-3;
+
+/**
+ * De knoop met de kleinste schermafstand tot (xPx, yPx) binnen `zoekStraal`;
+ * `afstand` geeft per knoop zijn afstand, of null als hij niet meedoet.
+ * Knopen binnen OPEN_FEM_3D_NODE_SNAP_GELIJK_PX van de kleinste afstand
+ * gelden als gelijk; daarvan wint de voorste (kleinste diepte). Twee rondes,
+ * zodat de uitkomst niet van de volgorde in de cellen afhangt.
+ */
+function kiesKnoop(
+  index: OpenFem3DNodeSnapScreenIndex,
+  xPx: number,
+  yPx: number,
+  zoekStraal: number,
+  afstand: (point: OpenFem3DNodeScreenPoint) => number | null,
+): OpenFem3DNodeScreenSnap | null {
+  const radius = Math.max(0, zoekStraal);
+  const minCellX = Math.floor((xPx - radius) / index.cellSizePx);
+  const maxCellX = Math.floor((xPx + radius) / index.cellSizePx);
+  const minCellY = Math.floor((yPx - radius) / index.cellSizePx);
+  const maxCellY = Math.floor((yPx + radius) / index.cellSizePx);
+  let candidateCount = 0;
+  const kandidaten: { point: OpenFem3DNodeScreenPoint; distance: number }[] = [];
+  let kleinste = Infinity;
+  for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
+    for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
+      const bucket = index.buckets.get(bucketKey(cellX, cellY));
+      if (!bucket) continue;
+      candidateCount += bucket.length;
+      for (const point of bucket) {
+        const distance = afstand(point);
+        if (distance === null || !(distance <= radius)) continue;
+        kandidaten.push({ point, distance });
+        if (distance < kleinste) kleinste = distance;
+      }
+    }
+  }
+  let beste: { point: OpenFem3DNodeScreenPoint; distance: number } | null = null;
+  for (const kandidaat of kandidaten) {
+    if (kandidaat.distance > kleinste + OPEN_FEM_3D_NODE_SNAP_GELIJK_PX) continue;
+    if (!beste || kandidaat.point.depth < beste.point.depth
+      || (kandidaat.point.depth === beste.point.depth && kandidaat.distance < beste.distance)) {
+      beste = kandidaat;
+    }
+  }
+  return beste ? { point: beste.point, distancePx: beste.distance, candidateCount } : null;
+}
+
+/** Zoekt de dichtstbijzijnde zichtbare knoop binnen de opgegeven snapzone (bij gelijke afstand de voorste). */
 export function findOpenFem3DNodeScreenSnap(
   index: OpenFem3DNodeSnapScreenIndex,
   xPx: number,
@@ -85,34 +140,10 @@ export function findOpenFem3DNodeScreenSnap(
   excludedNodeId?: number,
   acceptsNodeId?: (id: number) => boolean,
 ): OpenFem3DNodeScreenSnap | null {
-  const radius = Math.max(0, radiusPx);
-  const minCellX = Math.floor((xPx - radius) / index.cellSizePx);
-  const maxCellX = Math.floor((xPx + radius) / index.cellSizePx);
-  const minCellY = Math.floor((yPx - radius) / index.cellSizePx);
-  const maxCellY = Math.floor((yPx + radius) / index.cellSizePx);
-  let candidateCount = 0;
-  let bestPoint: OpenFem3DNodeScreenPoint | null = null;
-  let bestDistanceSq = radius * radius;
-  for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
-    for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
-      const bucket = index.buckets.get(bucketKey(cellX, cellY));
-      if (!bucket) continue;
-      candidateCount += bucket.length;
-      for (const point of bucket) {
-        if (point.id === excludedNodeId || (acceptsNodeId && !acceptsNodeId(point.id))) continue;
-        const dx = point.xPx - xPx;
-        const dy = point.yPx - yPx;
-        const distanceSq = dx * dx + dy * dy;
-        if (distanceSq > bestDistanceSq) continue;
-        if (distanceSq === bestDistanceSq && bestPoint && point.depth >= bestPoint.depth) continue;
-        bestPoint = point;
-        bestDistanceSq = distanceSq;
-      }
-    }
-  }
-  return bestPoint
-    ? { point: bestPoint, distancePx: Math.sqrt(bestDistanceSq), candidateCount }
-    : null;
+  return kiesKnoop(index, xPx, yPx, radiusPx, (point) => {
+    if (point.id === excludedNodeId || (acceptsNodeId && !acceptsNodeId(point.id))) return null;
+    return Math.hypot(point.xPx - xPx, point.yPx - yPx);
+  });
 }
 
 /**
@@ -121,7 +152,8 @@ export function findOpenFem3DNodeScreenSnap(
  * minimum); `maxRadiusPx` begrenst alleen het zoekgebied. Anders dan de
  * tekensnap hierboven wint een knoop hier niet van alles binnen een vaste
  * zone: in een uitgezoomd groot model ligt om de paar pixels een knoop op
- * een staaf, en die stal dan de klik op de staaf.
+ * een staaf, en die stal dan de klik op de staaf. Bij gelijke afstand (knopen
+ * achter elkaar) wint de voorste.
  */
 export function findOpenFem3DNodeAtScreenPoint(
   index: OpenFem3DNodeSnapScreenIndex,
@@ -131,26 +163,8 @@ export function findOpenFem3DNodeAtScreenPoint(
   maxRadiusPx: number,
 ): OpenFem3DNodeScreenSnap | null {
   const radius = Math.max(0, maxRadiusPx);
-  const minCellX = Math.floor((xPx - radius) / index.cellSizePx);
-  const maxCellX = Math.floor((xPx + radius) / index.cellSizePx);
-  const minCellY = Math.floor((yPx - radius) / index.cellSizePx);
-  const maxCellY = Math.floor((yPx + radius) / index.cellSizePx);
-  let candidateCount = 0;
-  let bestPoint: OpenFem3DNodeScreenPoint | null = null;
-  let bestDistance = Infinity;
-  for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
-    for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
-      const bucket = index.buckets.get(bucketKey(cellX, cellY));
-      if (!bucket) continue;
-      candidateCount += bucket.length;
-      for (const point of bucket) {
-        const distance = Math.hypot(point.xPx - xPx, point.yPx - yPx);
-        if (distance > Math.min(radius, radiusPx(point))) continue;
-        if (distance > bestDistance || distance === bestDistance && bestPoint && point.depth >= bestPoint.depth) continue;
-        bestPoint = point;
-        bestDistance = distance;
-      }
-    }
-  }
-  return bestPoint ? { point: bestPoint, distancePx: bestDistance, candidateCount } : null;
+  return kiesKnoop(index, xPx, yPx, radius, (point) => {
+    const distance = Math.hypot(point.xPx - xPx, point.yPx - yPx);
+    return distance > Math.min(radius, radiusPx(point)) ? null : distance;
+  });
 }

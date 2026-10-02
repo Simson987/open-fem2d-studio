@@ -75,3 +75,10 @@
 .open-fem3d-plate-extremes th, .open-fem3d-plate-extremes td { padding:2px 4px; text-align:right; border-bottom:1px solid var(--border-subtle, #e2e8f0); }
 .open-fem3d-plate-extremes th:first-child { text-align:left; font-weight:600; }
 .open-fem3d-plate-extremes td:last-child { text-align:left; color:var(--text-muted, #64748b); }
+
+/* Momentvast en Scharnierend boven de losse scharniervinkjes: twee knoppen
+   in de stijl van de opleggingskeuze (OpenFem3DNodeConditions.css). */
+.open-fem3d-nc-presets.open-fem3d-release-presets {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 0;
+}

@@ -37,6 +37,13 @@
     "rasterHint": "Show the canvas background grid.",
     "snap": "Snap",
     "snapAll": "All snap types",
+    "hoekHint": "Angle snap while drawing a member: if the direction is within the tolerance of 0° or 90°, it is set exactly to that angle; the length stays the same. A node or grid line takes precedence.",
+    "hoekTolerantie": "Tolerance (°)",
+    "hoekTolerantieHint": "How many degrees the direction may deviate: 0.1 to 15. Comma or point allowed.",
+    "hoekExtra": "Also 30°, 45° and 60°",
+    "hoekExtraHint": "The angle snap then also catches 30°, 45° and 60° and their mirror images.",
+    "verbindingsTolerantie": "Connection tolerance",
+    "verbindingsTolerantieHint": "Within this distance a node counts as “on the member” or “at the same place” as another node: the model check reports it, and a new node is connected or reused. 0.1 to 25 mm, default 5. Comma or point allowed. Existing nodes are not moved; a new node on a member is placed on the member axis.",
     "groepLabels": "Labels",
     "groepGeometrie": "Geometry",
     "groepResultaten": "Results",
@@ -106,6 +113,8 @@
     "structuralGrid": "Grids and levels",
     "axes": "X/Y/Z axes",
     "memberAxes": "Local member axes",
+    "viewCube": "View cube",
+    "perspective": "Perspective",
     "results": "Results",
     "deformation": "Deformed shape",
     "reactions": "Support reactions",
@@ -138,6 +147,16 @@
     "scaleHint": "Magnification of the displacements, logarithmic from 1× to 1000×. Automatic: the largest displacement becomes 12 % of the model size.",
     "showOriginal": "Show original",
     "showOriginalHint": "The undeformed members and plates as a faint ghost behind the deformed shape; off: the deformed shape only."
+  },
+  "openFem3dDiagramLabels": {
+    "values": "Values",
+    "valuesAria": "Show values on the internal force diagrams",
+    "valuesHint": "Numbers on the internal force diagrams, and N and T at the member midpoint; off: the diagrams only.",
+    "few": "Few",
+    "many": "Many",
+    "density": "Number of values",
+    "densityHint": "Few: only the governing value per diagram. Middle: as before. Many: start, end, extreme and quarter points on all members. Selected members always show their values.",
+    "densityValue": "Level {{n}} of {{max}}"
   },
   "openFem3dViews": {
     "tab": "Views",
@@ -226,7 +245,8 @@
   "snap": {
     "knoop": "Node",
     "stramien": "Grid line",
-    "raster": "Grid"
+    "raster": "Grid",
+    "hoek": "Angle"
   },
   "section": "Section {{number}}",
   "contentPlaceholder": "Content here",
@@ -584,6 +604,15 @@
     "windExplainNationalAnnex": "from the terrain type table of the national annex. If you use that table, enter the peak velocity pressure manually in the wind load generator."
   },
   "canvas": {
+    "qEdit": {
+      "aria": "q value (kN/m)",
+      "sign": {
+        "globalZ": "Negative = downward (gravity)",
+        "globalX": "Negative = to the left (−X)",
+        "localZ": "Negative = against the local z axis",
+        "localX": "Negative = axial, against the member direction"
+      }
+    },
     "plate": {
       "needsFourCorners": "A plate needs exactly four corners.",
       "cornersCollinear": "The corners coincide or lie (almost) on one line — draw a proper rectangle.",
@@ -710,7 +739,13 @@
       "counts": "{{knopen}} nodes · {{staven}} members",
       "countsWithPlates": "{{knopen}} nodes · {{staven}} members · {{platen}} plates",
       "resetZoomTitle": "Reset zoom (F = fit)",
-      "resetZoom": "Reset"
+      "resetZoom": "Reset",
+      "snapOff": "Snap temporarily off (Alt)",
+      "ortho": "Ortho (Shift)"
+    },
+    "subNode": {
+      "atEndTitle": "No sub-node",
+      "atEnd": "This point is within the connection tolerance of {{mm}} mm of node {{knoop}}, an end of member {{staaf}}. There is already a node there; the member has not been split."
     },
     "modelCheck": {
       "toggleTitle": "Model check — click to show or hide the findings",
@@ -727,6 +762,11 @@
       "repaired": "Model repaired",
       "repairAllTitle": "Apply all repairable findings — one step in the history",
       "repairAll": "Repair all ({{n}})",
+      "splitTitle_one": "Member split",
+      "splitTitle_other": "Members split",
+      "splitLine": "Node {{knoop}} connected to member {{staaf}}: it has been split into member {{deel1}} and member {{deel2}}.",
+      "splitLineOffset": "Node {{knoop}} connected to member {{staaf}}: it has been split into member {{deel1}} and member {{deel2}}. The node was {{mm}} mm off the member axis; the member now has a kink there.",
+      "mergeLine": "Node {{verwijderd}} merged with node {{bewaard}}.",
       "plateEdge": {
         "openingOnPerimeterRoute": "the load is on the edge of an opening (`openingId`), but it is read here by a route that only knows the perimeter of the plate. Please report this: the address is deliberately rejected rather than silently placed on the perimeter.",
         "nameAndIndex": "the load specifies both a named edge (`edge`) and an edge index (`edgeIndex`). Give only one: with two addresses it cannot be said which edge is meant and from which corner the positions are measured.",
@@ -944,6 +984,7 @@
     "deleteCaseTitle": "Delete load case, all its loads and its factor in every combination",
     "atLeastOneCase": "At least one load case is required.",
     "deleteCaseConfirm": "Delete \"{{naam}}\"? All loads in this case will also be deleted, and its factor disappears from every combination.",
+    "deleteCaseFailed": "Load case not deleted",
     "newCasePlaceholder": "New case (e.g. \"{{voorbeeld}}\")",
     "add": "Add",
     "casesHintBeforeGamma": "A new case has type “Other” and only counts once you give it a type: the standard combinations then include it (permanent → γ",
@@ -1033,6 +1074,7 @@
     "swayDirectionTitle3d": "The sway imperfection acts in every ULS combination in turn in +X, −X, +Y and −Y (EN 1993-1-1 §5.3.2(8)); SLS combinations are calculated without it."
   },
   "tree": {
+    "selectAll": "Select all",
     "showNext": "Show next {{count}}",
     "runToSeeResults": "Run \"Solve\" to see results.",
     "rowDeflection": "Displacement",

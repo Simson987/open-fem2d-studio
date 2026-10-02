@@ -7,8 +7,9 @@ import OpenFem3DLoadPanelProperties from "./OpenFem3DLoadPanelProperties";
 import { OpenFem3DDiaphragmFromSelection, OpenFem3DNodeDiaphragmRow, OpenFem3DTensionOnlyField } from "./OpenFem3DTrekSchijfVelden";
 import type { OpenFem3DSelection } from "./openFem3dSelection";
 import {
-  openFem3DSupportPresetOf, removeOpenFem3DSurfaceLoad, setOpenFem3DBeamNodes, updateOpenFem3DPlate,
-  updateOpenFem3DSurfaceLoad, type OpenFem3DModel, type OpenFem3DSupportPreset,
+  flipOpenFem3DBeamLocalAxes, openFem3DReleasePresetOf, openFem3DSupportPresetOf, removeOpenFem3DSurfaceLoad, setOpenFem3DBeamNodes,
+  setOpenFem3DReleasePreset, updateOpenFem3DPlate, updateOpenFem3DSurfaceLoad, type OpenFem3DModel, type OpenFem3DReleasePreset,
+  type OpenFem3DSupportPreset,
 } from "./openFem3dModel";
 import {
   linkOpenFem3DToLevel, openFem3DLevelName, openFem3DLevelRefusalText, openFem3DLevelsByHeight,
@@ -61,6 +62,33 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return <section className="fem-prop-section"><div className="fem-prop-section-title">{title}</div>{children}</section>;
+}
+
+/**
+ * Momentvast en Scharnierend voor één staaf of een selectie. De knop van de
+ * situatie die alle gekozen staven hebben, staat aan.
+ */
+function ReleasePresetButtons({ model, beamIds, onChange }: {
+  model: OpenFem3DModel;
+  beamIds: readonly number[];
+  onChange: (model: OpenFem3DModel) => void;
+}) {
+  const { t } = useTranslation("ribbon");
+  const chosen = model.beams.filter((beam) => beamIds.includes(beam.id));
+  if (chosen.length === 0) return null;
+  const situaties = chosen.map((beam) => openFem3DReleasePresetOf(beam.releases));
+  const actief = situaties.every((situatie) => situatie === situaties[0]) ? situaties[0] : null;
+  const toepassen = (preset: OpenFem3DReleasePreset) =>
+    onChange(setOpenFem3DReleasePreset(model, chosen.map((beam) => beam.id), preset));
+  return <div className="open-fem3d-nc-presets open-fem3d-release-presets" role="group"
+    aria-label={t("openFem3d.props.releasePresets")}>
+    <button type="button" data-open-fem3d-release-preset="rigid" aria-pressed={actief === "rigid"}
+      className={actief === "rigid" ? "active" : undefined}
+      onClick={() => toepassen("rigid")}>{t("openFem3d.props.presetRigid")}</button>
+    <button type="button" data-open-fem3d-release-preset="pinned" aria-pressed={actief === "pinned"}
+      className={actief === "pinned" ? "active" : undefined}
+      onClick={() => toepassen("pinned")}>{t("openFem3d.props.presetPinned")}</button>
+  </div>;
 }
 
 /** Dezelfde namen als de knoopopleggingen. */
@@ -225,6 +253,10 @@ export default function OpenFem3DProperties({
       {noLevelsHint}
       {levelErrorLine}
     </Section>}
+    {selection.beamIds.length > 0 && <Section title={t("openFem3d.props.releasesTitle")}>
+      <ReleasePresetButtons model={model} beamIds={selection.beamIds} onChange={onChange} />
+      <p className="fem-prop-hint">{t("openFem3d.props.releasePresetsMulti", { count: selection.beamIds.length })}</p>
+    </Section>}
     <OpenFem3DTensionOnlyField model={model} beamIds={selection.beamIds} onChange={onChange} />
     <OpenFem3DDiaphragmFromSelection model={model} nodeIds={selection.nodeIds} onChange={onChange} />
     </div></div>;
@@ -277,23 +309,7 @@ export default function OpenFem3DProperties({
 
   const flipLocalAxes = () => {
     if (!beam) return;
-    const beamId = beam.id;
-    onChange({
-      ...model,
-      beams: model.beams.map((item) => item.id === beamId
-        ? { ...item, rollAngleRad: ((item.rollAngleRad ?? 0) + Math.PI) % (2 * Math.PI) }
-        : item),
-      // De lokale belastingcomponenten draaien mee, zodat hun richting in het
-      // wereldstelsel bij het omkeren van beide dwarsassen behouden blijft.
-      memberLoads: model.memberLoads?.map((load) => load.beamId === beamId
-        ? { ...load, qyStart: -load.qyStart, qyEnd: -load.qyEnd, qzStart: -load.qzStart, qzEnd: -load.qzEnd }
-        : load),
-      memberPointLoads: model.memberPointLoads?.map((load) => load.beamId === beamId
-        ? { ...load, py: -load.py, pz: -load.pz } : load),
-      thermalLoads: model.thermalLoads?.map((load) => load.beamId === beamId
-        ? { ...load, deltaTGradientYK: -load.deltaTGradientYK, deltaTGradientZK: -load.deltaTGradientZK }
-        : load),
-    });
+    onChange(flipOpenFem3DBeamLocalAxes(model, beam.id));
   };
 
   const selectionLabel = selection.type === "nodalLoad" ? t("openFem3d.props.nodalLoadLabel", { id: selection.id })
@@ -404,6 +420,7 @@ export default function OpenFem3DProperties({
           </Row>
           <div className="fem-prop-kiezer-row"><button type="button" className="fem-prop-kiezer-btn" onClick={flipLocalAxes}>{t("openFem3d.props.flipAxes")}</button></div>
           <p className="fem-prop-hint">{t("openFem3d.props.releasesHint")}</p>
+          <ReleasePresetButtons model={model} beamIds={[beam.id]} onChange={onChange} />
           <div className="open-fem3d-release-grid">
             {([
               "myStart", "myEnd", "mzStart", "mzEnd", "torsionStart", "torsionEnd",

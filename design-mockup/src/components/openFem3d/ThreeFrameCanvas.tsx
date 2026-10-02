@@ -20,6 +20,7 @@ import type { StructuralGrid } from "../fem/femTypes";
 import type {
   OpenFem3DDiagramPoint,
   OpenFem3DDiagrams,
+  OpenFem3DMemberDiagram,
   OpenFem3DMemberForces,
   OpenFem3DSolveResult,
 } from "./openFem3dSolver";
@@ -38,11 +39,55 @@ import {
   type OpenFem3DDeformationDisplay,
 } from "./openFem3dDeformationDisplay";
 import {
+  DEFAULT_OPEN_FEM_3D_DIAGRAM_LABELS,
+  OPEN_FEM_3D_FORCE_LAYERS,
+  OPEN_FEM_3D_MID_FORCES,
+  openFem3DDiagramDrawn,
+  openFem3DDiagramLabelSelection,
+  openFem3DDiagramValueAt,
+  openFem3DResultLabelStride,
+  planOpenFem3DDiagramLabels,
+  sameOpenFem3DDiagramLabels,
+  type OpenFem3DDiagramLabelBeam,
+  type OpenFem3DDiagramLabels,
+} from "./openFem3dDiagramLabels";
+import { placeOpenFem3DLabels, type OpenFem3DLabelCandidate, type OpenFem3DLabelRect } from "./openFem3dLabelLayout";
+import {
   openFem3DSelectionContains,
   toggleOpenFem3DSelection,
   type OpenFem3DSelection, type OpenFem3DSelectionType, type OpenFem3DSingleSelection,
 } from "./openFem3dSelection";
 import { openFem3DViewFromCamera, type OpenFem3DCameraState } from "./openFem3dViewSets";
+import {
+  OPEN_FEM_3D_FOV_GRADEN,
+  isOpenFem3DOrtho,
+  openFem3DCameraAfstand,
+  openFem3DOrthoAfstand,
+  openFem3DOrthoHalveHoogte,
+  openFem3DOrthoHalveHoogteVan,
+  openFem3DOrthoPassendeHalveHoogte,
+  openFem3DOrthoWielStap,
+  openFem3DPerspectiefAfstand,
+  openFem3DStraalOpVlak,
+  openFem3DWereldmaatPerPixel,
+  openFem3DZetOrthoFrustum,
+  type OpenFem3DCamera,
+} from "./openFem3dProjectie";
+import {
+  openFem3DAanzichtRichting,
+  openFem3DStartCamera,
+  openFem3DViewCubeDraai,
+  openFem3DViewCubeMatrix,
+  openFem3DViewCubeSleepHoeken,
+  openFem3DViewCubeUp,
+  type Vec3,
+} from "./openFem3dViewCube";
+import {
+  createOpenFem3DViewCube,
+  type OpenFem3DViewCubeDom,
+  type OpenFem3DViewCubeMenuItem,
+  type OpenFem3DViewCubeTeksten,
+} from "./openFem3dViewCubeDom";
 import { openFem3DWorkPlaneOrigin } from "./openFem3dWorkPlane";
 import { createOpenFem3DPlateGeometry } from "./openFem3dPlateGeometry";
 import { buildOpenFem3DPlateOverlay } from "./openFem3dPlateOverlay";
@@ -59,6 +104,7 @@ import type { OpenFem3DEditMeta } from "./openFem3dHistory";
 import { useSnapInstellingen, type SnapInstellingen, type SnapSoort } from "../../hooks/useSnapInstellingen";
 import { openFem3DGridLayout } from "./openFem3dGrid";
 import { wheelAnchor } from "./openFem3dWheelAnchor";
+import { openFem3DDiagramDirection, type OpenFem3DDiagramComponent } from "./openFem3dDiagramSide";
 import { kleurGetal, openFem3DProfielKleuring, profielKleurenActief3d } from "../../lib/profielKleur";
 import {
   buildOpenFem3DNodeSnapScreenIndex,
@@ -310,23 +356,17 @@ function sceneBounds(
 }
 
 /**
- * Benodigde camerafstand voor de geprojecteerde begrenzing van het model.
- * Een omgeschreven bol is bij een lang, laag raamwerk veel te ruim: de straal
- * wordt dan door de lengte bepaald en laat boven en onder onnodig veel leegte.
- * Door alle acht hoeken op het cameravlak te projecteren benut het model de
+ * Halve maten van de begrenzing rond haar midden: op het cameravlak (breedte
+ * en hoogte, met `up`) en langs de kijkrichting (diepte). Een omgeschreven
+ * bol is bij een lang, laag raamwerk veel te ruim: de straal wordt dan door
+ * de lengte bepaald en laat boven en onder onnodig veel leegte. Door alle
+ * acht hoeken op het cameravlak te projecteren benut het model de
  * beschikbare breedte én hoogte, ook in isometrisch aanzicht.
  */
-function fittedCameraDistance(
-  camera: THREE.PerspectiveCamera,
-  box: THREE.Box3,
-  centerToCamera: THREE.Vector3,
-  viewportWidthPx: number,
-  viewportHeightPx: number,
-): number {
-  if (box.isEmpty()) return 4;
+function projectedHalfExtents(up: THREE.Vector3, box: THREE.Box3, centerToCamera: THREE.Vector3) {
   const center = box.getCenter(new THREE.Vector3());
   const direction = centerToCamera.clone().normalize();
-  const right = new THREE.Vector3().crossVectors(camera.up, direction).normalize();
+  const right = new THREE.Vector3().crossVectors(up, direction).normalize();
   const vertical = new THREE.Vector3().crossVectors(direction, right).normalize();
   let halfWidth = 0;
   let halfHeight = 0;
@@ -341,18 +381,218 @@ function fittedCameraDistance(
       }
     }
   }
+  return { halfWidth, halfHeight, halfDepth };
+}
+
+/**
+ * Het deel van het beeld (als fractie) dat passend beeld mag vullen. Het
+ * canvas bevat bovenaan de titel en de knop Passend beeld, en onderaan
+ * statusinformatie. Reserveer hun ruimte ook voor een klein model: de vaste
+ * minimumafstand van 2 m alleen liet een plaat net onder de kopregel vallen.
+ * Dezelfde marge in perspectief en in parallelle projectie.
+ */
+function usableViewport(viewportWidthPx: number, viewportHeightPx: number) {
+  return {
+    breedte: Math.max(0.7, 1 - 48 / Math.max(viewportWidthPx, 1)),
+    hoogte: Math.max(0.55, 1 - 88 / Math.max(viewportHeightPx, 1)),
+  };
+}
+
+/** Benodigde camerafstand (perspectief) voor de geprojecteerde begrenzing van het model. */
+function fittedCameraDistance(
+  camera: THREE.PerspectiveCamera,
+  box: THREE.Box3,
+  centerToCamera: THREE.Vector3,
+  viewportWidthPx: number,
+  viewportHeightPx: number,
+): number {
+  if (box.isEmpty()) return 4;
+  const { halfWidth, halfHeight, halfDepth } = projectedHalfExtents(camera.up, box, centerToCamera);
   const verticalFov = THREE.MathUtils.degToRad(camera.fov);
   const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * Math.max(camera.aspect, 0.05));
-  // Het canvas bevat bovenaan de titel en de knop Passend beeld, en onderaan
-  // statusinformatie. Reserveer hun ruimte ook voor een klein model: de vaste
-  // minimumafstand van 2 m alleen liet een plaat net onder de kopregel vallen.
-  const usableHeight = Math.max(0.55, 1 - 88 / Math.max(viewportHeightPx, 1));
-  const usableWidth = Math.max(0.7, 1 - 48 / Math.max(viewportWidthPx, 1));
+  const usable = usableViewport(viewportWidthPx, viewportHeightPx);
   const projectedDistance = Math.max(
-    halfHeight / Math.max(Math.tan(verticalFov / 2) * usableHeight, 1e-6),
-    halfWidth / Math.max(Math.tan(horizontalFov / 2) * usableWidth, 1e-6),
+    halfHeight / Math.max(Math.tan(verticalFov / 2) * usable.hoogte, 1e-6),
+    halfWidth / Math.max(Math.tan(horizontalFov / 2) * usable.breedte, 1e-6),
   );
   return Math.max(2, (halfDepth + projectedDistance) * 1.08);
+}
+
+/**
+ * Passend beeld in parallelle projectie: de halve hoogte van het frustum
+ * waarbij het model met dezelfde marge past als in perspectief.
+ */
+function fittedOrthoHalfHeight(
+  camera: THREE.OrthographicCamera,
+  aspect: number,
+  box: THREE.Box3,
+  centerToCamera: THREE.Vector3,
+  viewportWidthPx: number,
+  viewportHeightPx: number,
+): number {
+  if (box.isEmpty()) return openFem3DOrthoHalveHoogte(4);
+  return openFem3DOrthoPassendeHalveHoogte(
+    projectedHalfExtents(camera.up, box, centerToCamera), aspect, usableViewport(viewportWidthPx, viewportHeightPx),
+  );
+}
+
+/**
+ * Zet de parallelle camera op zijn plek: in de huidige kijkrichting, ver
+ * genoeg van het doel dat model, raster en assen vóór de camera liggen
+ * (openFem3DOrthoAfstand), met ruime near/far. Het beeld verandert er niet
+ * door: alleen de diepte. In perspectief doet dit niets.
+ */
+function plaatsOrthoCamera(state: SceneState) {
+  const camera = state.camera;
+  if (!isOpenFem3DOrtho(camera)) return;
+  const offset = camera.position.clone().sub(state.controls.target);
+  const richting = offset.lengthSq() > 1e-18
+    ? offset.normalize() : new THREE.Vector3(...openFem3DAanzichtRichting("iso").richting);
+  const { afstand, near, far } = openFem3DOrthoAfstand(
+    openFem3DOrthoHalveHoogteVan(camera), state.controls.target, state.orthoBol(),
+  );
+  camera.position.copy(state.controls.target).addScaledVector(richting, afstand);
+  if (camera.near !== near || camera.far !== far) {
+    camera.near = near;
+    camera.far = far;
+    camera.updateProjectionMatrix();
+  }
+  camera.updateMatrixWorld();
+}
+
+/**
+ * Wissel tussen perspectief en parallel (zichtbaarheid `perspective`). Doel,
+ * kijkrichting en up blijven; de zichtbare grootte bij het doel ook:
+ * h = d · tan(fov/2) heen, d = h / tan(fov/2) terug (openFem3dProjectie.ts).
+ * Geeft false als de gevraagde camera al actief is.
+ */
+function zetOpenFem3DProjectie(state: SceneState, perspectief: boolean): boolean {
+  const huidig = state.camera;
+  const volgende = perspectief ? state.perspectiveCamera : state.orthographicCamera;
+  if (huidig === volgende) return false;
+  const doel = state.controls.target;
+  const offset = huidig.position.clone().sub(doel);
+  const richting = offset.lengthSq() > 1e-18
+    ? offset.clone().normalize() : new THREE.Vector3(...openFem3DAanzichtRichting("iso").richting);
+  volgende.up.copy(huidig.up);
+  const aspect = state.perspectiveCamera.aspect;
+  state.camera = volgende;
+  if (isOpenFem3DOrtho(volgende)) {
+    openFem3DZetOrthoFrustum(volgende, openFem3DOrthoHalveHoogte(offset.length(), state.perspectiveCamera.fov), aspect);
+    volgende.position.copy(doel).add(richting);
+    plaatsOrthoCamera(state);
+  } else {
+    const afstand = openFem3DPerspectiefAfstand(
+      openFem3DOrthoHalveHoogteVan(huidig as THREE.OrthographicCamera), volgende.fov,
+    );
+    volgende.position.copy(doel).addScaledVector(richting, afstand);
+    volgende.near = Math.max(0.001, afstand / 10_000);
+    volgende.far = Math.max(1_000, afstand * 100);
+    volgende.updateProjectionMatrix();
+  }
+  volgende.lookAt(doel);
+  volgende.updateMatrixWorld();
+  state.controls.object = volgende;
+  state.controls.update();
+  return true;
+}
+
+/**
+ * De camera zoals hij bewaard wordt (views, laatste camera). De positie is
+ * in beide standen die van de perspectiefcamera met dezelfde zichtbare
+ * grootte; in parallelle projectie komt de halve hoogte er exact bij
+ * (`orthoHalfHeight`), zodat een view met perspective=false dezelfde schaal
+ * terugkrijgt.
+ */
+function openFem3DCameraStateVan(state: SceneState): OpenFem3DCameraState {
+  const camera = state.camera;
+  const target = state.controls.target;
+  const up = camera.up.toArray() as [number, number, number];
+  if (!isOpenFem3DOrtho(camera)) {
+    return { position: camera.position.toArray() as [number, number, number], target: target.toArray() as [number, number, number], up };
+  }
+  const orthoHalfHeight = openFem3DOrthoHalveHoogteVan(camera);
+  const richting = camera.position.clone().sub(target).normalize();
+  const position = target.clone().addScaledVector(richting, openFem3DPerspectiefAfstand(orthoHalfHeight, state.perspectiveCamera.fov));
+  return {
+    position: position.toArray() as [number, number, number], target: target.toArray() as [number, number, number], up,
+    orthoHalfHeight,
+  };
+}
+
+/**
+ * Een bewaarde camera toepassen (view, laatste camera). In parallelle
+ * projectie geeft `orthoHalfHeight` de schaal; ontbreekt die (een oude view),
+ * dan de schaal die bij de afstand positie–doel hoort, zoals in perspectief.
+ */
+function pasOpenFem3DCameraStateToe(state: SceneState, cameraState: OpenFem3DCameraState) {
+  const camera = state.camera;
+  state.controls.target.fromArray(cameraState.target);
+  camera.up.fromArray(cameraState.up);
+  camera.position.fromArray(cameraState.position);
+  if (isOpenFem3DOrtho(camera)) {
+    const afstand = camera.position.distanceTo(state.controls.target);
+    const halveHoogte = cameraState.orthoHalfHeight !== undefined && cameraState.orthoHalfHeight > 0
+      ? cameraState.orthoHalfHeight : openFem3DOrthoHalveHoogte(afstand, state.perspectiveCamera.fov);
+    openFem3DZetOrthoFrustum(camera, halveHoogte, state.perspectiveCamera.aspect);
+    plaatsOrthoCamera(state);
+  } else {
+    camera.updateProjectionMatrix();
+  }
+  state.controls.update();
+}
+
+/**
+ * Camera in kijkrichting `richting` (van het modelmidden naar de camera) met
+ * `up`, rond het midden van het model op de passende afstand (perspectief) of
+ * met de passende halve hoogte (parallel). Eén weg voor de lintaanzichten
+ * (viewRequest) en de view cube, zodat vlak Boven precies hetzelfde beeld
+ * geeft als de lintknop Boven.
+ */
+function aimOpenFem3DCamera(
+  state: SceneState,
+  model: OpenFem3DModel,
+  visibility: OpenFem3DVisibility,
+  richting: Vec3,
+  up: Vec3,
+) {
+  const box = sceneBounds(model, visibility);
+  const hasGeometry = !box.isEmpty();
+  const center = hasGeometry ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3();
+  const direction = new THREE.Vector3(...richting).normalize();
+  const camera = state.camera;
+  camera.up.set(...up);
+  state.controls.target.copy(center);
+  const width = state.renderer.domElement.clientWidth, height = state.renderer.domElement.clientHeight;
+  if (isOpenFem3DOrtho(camera)) {
+    const aspect = state.perspectiveCamera.aspect;
+    openFem3DZetOrthoFrustum(camera, fittedOrthoHalfHeight(camera, aspect, box, direction, width, height), aspect);
+    camera.position.copy(center).add(direction);
+    plaatsOrthoCamera(state);
+  } else {
+    const distance = hasGeometry ? fittedCameraDistance(camera, box, direction, width, height) : 4;
+    camera.position.copy(center).addScaledVector(direction, distance);
+    camera.near = Math.max(0.001, distance / 10_000);
+    camera.far = Math.max(1_000, distance * 100);
+    camera.updateProjectionMatrix();
+  }
+  state.controls.update();
+}
+
+/**
+ * Passend beeld: de huidige kijkrichting en up blijven, alleen midden en
+ * afstand passen zich aan het model aan. Eén weg voor de knop Passend beeld,
+ * het lint en het menu van de view cube; na een klik op Achter of een hoek
+ * van de kubus draait het beeld dus niet weg.
+ */
+function fitOpenFem3DCamera(state: SceneState, model: OpenFem3DModel, visibility: OpenFem3DVisibility) {
+  const offset = state.camera.position.clone().sub(state.controls.target);
+  const richting: Vec3 = offset.lengthSq() > 0 ? [offset.x, offset.y, offset.z] : openFem3DAanzichtRichting("iso").richting;
+  let up: Vec3 = [state.camera.up.x, state.camera.up.y, state.camera.up.z];
+  // Up langs de kijkrichting (alleen bij een vreemde opgeslagen camera): de up-regel van de kubus.
+  const kijk = new THREE.Vector3(...richting).normalize();
+  if (new THREE.Vector3(...up).normalize().cross(kijk).lengthSq() < 1e-12) up = openFem3DViewCubeUp(richting);
+  aimOpenFem3DCamera(state, model, visibility, richting, up);
 }
 
 interface Props {
@@ -398,11 +638,26 @@ interface Props {
   onPlaceNodeCondition?: (target: OpenFem3DNodeTarget) => void;
   /** Vergroting van de vervormde vorm en het onvervormde model erachter (weergavevoorkeur). */
   deformationDisplay?: OpenFem3DDeformationDisplay;
+  /** Getallen bij de snedekrachtlijnen: Waarden aan/uit en de stand 1 … 5 (weergavevoorkeur, issue #95). */
+  diagramLabels?: OpenFem3DDiagramLabels;
+  /**
+   * Het menu-item Perspectief van de view cube: zet de zichtbaarheid
+   * `perspective` om (de aanroeper bewaart haar met de rest van de weergave).
+   */
+  onPerspectiveChange?: (perspective: boolean) => void;
 }
 
 interface SceneState {
   scene: THREE.Scene;
-  camera: THREE.PerspectiveCamera;
+  /** De actieve camera: `perspectiveCamera` of `orthographicCamera` (zichtbaarheid `perspective`). */
+  camera: OpenFem3DCamera;
+  perspectiveCamera: THREE.PerspectiveCamera;
+  orthographicCamera: THREE.OrthographicCamera;
+  /**
+   * Een bol om model, raster en assen: de parallelle camera staat daarbuiten
+   * (openFem3DOrthoAfstand), zodat niets achter de camera of het nabije vlak valt.
+   */
+  orthoBol: () => { middelpunt: THREE.Vector3; straal: number };
   renderer: THREE.WebGLRenderer;
   labelRenderer: CSS2DRenderer;
   controls: OrbitControls;
@@ -413,9 +668,61 @@ interface SceneState {
   grid: THREE.GridHelper;
   axes: THREE.AxesHelper;
   axisLabels: CSS2DObject[];
+  /** De view cube rechtsboven; volgt de camera in writeCameraDiagnostics. */
+  viewCube: OpenFem3DViewCubeDom | null;
+  /**
+   * Vlak vóór elke labelindeling (renderOpenFem3DLabels): een grote laag met
+   * snedekrachtwaarden zet dan alleen de labels die in deze camerastand een
+   * plek kunnen krijgen als element neer (zie thinDiagramLabelLayer).
+   */
+  beforeLabels?: (state: SceneState, container: HTMLElement | null) => void;
+}
+
+/** Prioriteit in de botsingsregel: lager wint (placeOpenFem3DLabels). */
+function openFem3DLabelPriority(classList: { contains: (token: string) => boolean }): number {
+  return classList.contains("open-fem3d-utilization-fail") ? 0
+    : classList.contains("open-fem3d-diagram-peak-label")
+      || classList.contains("open-fem3d-displacement-label") ? 1
+      : classList.contains("open-fem3d-diagram-label") ? 2
+        : classList.contains("open-fem3d-result-label") ? 3
+          : classList.contains("open-fem3d-axis-label") ? 4
+            : classList.contains("open-fem3d-utilization-label") ? 5
+              : classList.contains("open-fem3d-node-label")
+                || classList.contains("open-fem3d-beam-number") ? 6 : 7;
+}
+
+/**
+ * Uitwijkplaatsen: alleen de kwartpuntlabels van stand 5 (issue #95). Hun
+ * plek ligt vlak naast het begin- of eindlabel (dat iets binnen de staaf
+ * staat); bezet, dan een regel omlaag of omhoog.
+ */
+function openFem3DLabelShifts(classList: { contains: (token: string) => boolean }, height: number): number[] | undefined {
+  if (!classList.contains("open-fem3d-diagram-quarter-label")) return undefined;
+  const step = Math.ceil(height) + 3;
+  return [step, -step];
+}
+
+/** De verschuiving (px) die de indeling een label gaf: de gemeten rechthoek is daarmee verschoven. */
+const openFem3DLabelShift = new WeakMap<HTMLElement, number>();
+
+/**
+ * De gereserveerde rechthoeken: de vaste titel, fitknop, status en eventuele
+ * bedienpanelen liggen boven het WebGL-canvas. Hun rechthoeken zijn bezet
+ * schermgebied, zodat knoop- en resultaatlabels deze bediening niet
+ * overdrukken bij zoomen. Een verborgen view cube (of een gesloten menu) heeft
+ * geen rechthoek en reserveert dus niets.
+ */
+function openFem3DReservedLabelRects(container: HTMLElement | null): DOMRect[] {
+  return Array.from(container?.parentElement?.querySelectorAll<HTMLElement>(
+    ".open-fem3d-stage-header, .open-fem3d-stage-footer, .open-fem3d-fit, "
+    + ".open-fem3d-draw-error, .open-fem3d-transform-panel, .open-fem3d-uc-legend, .open-fem3d-profiel-legenda, "
+    + ".open-fem3d-view-cube, .open-fem3d-view-cube-menu",
+  ) ?? []).map((element) => element.getBoundingClientRect())
+    .filter((box) => box.width > 0 && box.height > 0);
 }
 
 function renderOpenFem3DLabels(state: SceneState, container: HTMLElement | null) {
+  state.beforeLabels?.(state, container);
   state.labelRenderer.render(state.scene, state.camera);
   const layer = state.labelRenderer.domElement;
   const labels = Array.from(layer.querySelectorAll<HTMLElement>(
@@ -426,65 +733,78 @@ function renderOpenFem3DLabels(state: SceneState, container: HTMLElement | null)
     if (container) {
       container.dataset.openFem3dOverlayLabelsShown = "0";
       container.dataset.openFem3dOverlayLabelsHidden = "0";
+      container.dataset.openFem3dOverlayLabelsShifted = "0";
     }
     return;
   }
   const startedAt = performance.now();
   // visibility:hidden behoudt de DOMRect van een label. Meet ook verborgen
-  // labels en pas hun zichtbaarheid na de collision-indeling aan.
+  // labels en pas hun zichtbaarheid na de collision-indeling aan. Een eerder
+  // uitgeweken label wordt teruggerekend naar zijn eigen plek.
   const viewport = layer.getBoundingClientRect();
-  // De vaste titel, fitknop, status en eventuele bedienpanelen liggen boven
-  // het WebGL-canvas. Behandel hun rechthoeken als bezet schermgebied, zodat
-  // knoop- en resultaatlabels deze bediening niet overdrukken bij zoomen.
-  const reserved = Array.from(container?.parentElement?.querySelectorAll<HTMLElement>(
-    ".open-fem3d-stage-header, .open-fem3d-stage-footer, .open-fem3d-fit, "
-    + ".open-fem3d-draw-error, .open-fem3d-transform-panel, .open-fem3d-uc-legend, .open-fem3d-profiel-legenda",
-  ) ?? []).map((element) => element.getBoundingClientRect())
-    .filter((box) => box.width > 0 && box.height > 0);
-  const priority = (label: HTMLElement) => label.classList.contains("open-fem3d-utilization-fail") ? 0
-    : label.classList.contains("open-fem3d-diagram-peak-label")
-      || label.classList.contains("open-fem3d-displacement-label") ? 1
-      : label.classList.contains("open-fem3d-diagram-label") ? 2
-        : label.classList.contains("open-fem3d-result-label") ? 3
-          : label.classList.contains("open-fem3d-axis-label") ? 4
-            : label.classList.contains("open-fem3d-utilization-label") ? 5
-              : label.classList.contains("open-fem3d-node-label")
-                || label.classList.contains("open-fem3d-beam-number") ? 6 : 7;
-  const candidates = labels.map((label, index) => ({
-    label, index, priority: priority(label), box: label.getBoundingClientRect(),
-  })).filter(({ box }) => box.width > 0 && box.height > 0);
-  candidates.sort((a, b) => a.priority - b.priority || a.index - b.index);
-  const accepted: DOMRect[] = [];
-  const overlaps = (box: DOMRect, other: DOMRect) => box.left < other.right + 2
-    && box.right > other.left - 2 && box.top < other.bottom + 2
-    && box.bottom > other.top - 2;
-  let hidden = 0;
-  for (const { label, box } of candidates) {
-    const outside = box.right <= viewport.left || box.left >= viewport.right
-      || box.bottom <= viewport.top || box.top >= viewport.bottom;
-    const collision = !outside && (reserved.some((other) => overlaps(box, other))
-      || accepted.some((other) => overlaps(box, other)));
-    if (outside || collision) {
+  const reserved = openFem3DReservedLabelRects(container);
+  const candidates = labels.map((label) => {
+    const box = label.getBoundingClientRect();
+    const previous = openFem3DLabelShift.get(label) ?? 0;
+    const rect: OpenFem3DLabelRect = { left: box.left, right: box.right, top: box.top - previous, bottom: box.bottom - previous };
+    return { label, rect, width: box.width, height: box.height, previous };
+  }).filter(({ width, height }) => width > 0 && height > 0);
+  const placements = placeOpenFem3DLabels(candidates.map(({ label, rect, height }) => ({
+    rect, priority: openFem3DLabelPriority(label.classList), shifts: openFem3DLabelShifts(label.classList, height),
+  })), reserved, viewport);
+  let shown = 0, hidden = 0, shiftedCount = 0;
+  candidates.forEach(({ label, previous }, index) => {
+    const placement = placements[index];
+    if (placement.shown) {
+      if (label.style.visibility) label.style.visibility = "";
+      shown += 1;
+    } else {
       if (label.style.visibility !== "hidden") label.style.visibility = "hidden";
       hidden += 1;
-    } else {
-      if (label.style.visibility) label.style.visibility = "";
-      accepted.push(box);
     }
-  }
+    const shift = placement.shown ? placement.shift : 0;
+    if (shift !== 0) shiftedCount += 1;
+    if (shift !== previous) {
+      // `translate` naast de `transform` van de CSS2DRenderer (die hem elke render overschrijft).
+      label.style.translate = shift ? `0 ${shift}px` : "";
+      if (shift) openFem3DLabelShift.set(label, shift); else openFem3DLabelShift.delete(label);
+    }
+  });
   if (container) {
-    container.dataset.openFem3dOverlayLabelsShown = String(accepted.length);
+    container.dataset.openFem3dOverlayLabelsShown = String(shown);
     container.dataset.openFem3dOverlayLabelsHidden = String(hidden);
+    container.dataset.openFem3dOverlayLabelsShifted = String(shiftedCount);
     container.dataset.openFem3dOverlayLayoutMs = (performance.now() - startedAt).toFixed(2);
   }
 }
 
+const viewCubeRotation = new THREE.Matrix4();
+
 function writeCameraDiagnostics(container: HTMLElement | null, state: SceneState) {
+  // De view cube draait mee: alleen een transform, en alleen als de camera
+  // werkelijk anders staat (zie openFem3dViewCubeDom.ts).
+  if (state.viewCube) {
+    const e = viewCubeRotation.makeRotationFromQuaternion(state.camera.quaternion).elements;
+    state.viewCube.volg(openFem3DViewCubeMatrix({
+      rechts: [e[0], e[1], e[2]], boven: [e[4], e[5], e[6]], achter: [e[8], e[9], e[10]],
+    }));
+  }
   if (!container) return;
   const value = (vector: THREE.Vector3) => vector.toArray().map((component) => component.toFixed(6)).join(",");
   container.dataset.openFem3dCameraPosition = value(state.camera.position);
   container.dataset.openFem3dCameraTarget = value(state.controls.target);
   container.dataset.openFem3dCameraUp = value(state.camera.up);
+  // Perspectief of parallel, met de schaal: de halve hoogte van het frustum
+  // (alleen parallel) en de wereldmaat per pixel bij het doel (beide standen).
+  container.dataset.openFem3dProjection = isOpenFem3DOrtho(state.camera) ? "orthographic" : "perspective";
+  if (isOpenFem3DOrtho(state.camera)) {
+    container.dataset.openFem3dOrthoHalfHeight = openFem3DOrthoHalveHoogteVan(state.camera).toPrecision(12);
+  } else {
+    delete container.dataset.openFem3dOrthoHalfHeight;
+  }
+  container.dataset.openFem3dWorldPerPixel = openFem3DWereldmaatPerPixel(
+    state.camera, state.controls.target, state.renderer.domElement.clientHeight,
+  ).toPrecision(12);
 }
 
 function writeBuildMode(container: HTMLElement, mode: string) {
@@ -598,6 +918,80 @@ function selectedIdsForType(selection: OpenFem3DSelection, type: OpenFem3DSelect
   return [];
 }
 
+/**
+ * De instanties van `id` in een GPU-batch. Knopen, staven en platen hebben één
+ * instantie per id en houden `instanceIndexById` zelf bij, ook bij toevoegen
+ * en verwijderen. Een batch markeringen tekent per last of knoop meerdere
+ * instanties (alle pijlen van een lijnlast, steel en punt van een knooplast,
+ * de delen van een oplegging) en verandert na het samenvoegen niet meer; die
+ * indices worden eenmaal per batch verzameld (#81).
+ */
+function instanceIndicesOf(object: THREE.InstancedMesh, id: number): readonly number[] {
+  const unique = object.userData.instanceIndexById as Map<number, number> | undefined;
+  if (unique) {
+    const index = unique.get(id);
+    return index === undefined ? [] : [index];
+  }
+  const indicesById = (object.userData.instanceIndicesById ??= groupIndicesById(
+    object.userData.instanceIds as number[])) as Map<number, number[]>;
+  return indicesById.get(id) ?? [];
+}
+
+/** Per id de posities waarop die id in `ids` staat. */
+function groupIndicesById(ids: readonly number[]): Map<number, number[]> {
+  const grouped = new Map<number, number[]>();
+  ids.forEach((id, index) => {
+    const indices = grouped.get(id);
+    if (indices) indices.push(index);
+    else grouped.set(id, [index]);
+  });
+  return grouped;
+}
+
+/**
+ * Een gedeelde lijn met een kleur per lijnstuk: de staartlijnen van alle
+ * lijnlasten in één tekenaanroep (openFem3dMarkers.ts, met GPU-batches).
+ * Kleurt de lijnstukken van de geselecteerde lasten en zet de vorige terug,
+ * zoals de instanties van een batch (#81).
+ */
+function applySegmentSelectionHighlight(object: THREE.LineSegments, selectedIds: readonly number[]) {
+  const ids = object.userData.segmentIds as number[];
+  const baseColors = object.userData.segmentBaseColors as number[] | undefined;
+  const colors = object.geometry.getAttribute("color") as THREE.BufferAttribute | undefined;
+  if (!baseColors || baseColors.length !== ids.length || !colors || colors.count !== 2 * ids.length) return;
+  const indicesById = (object.userData.segmentIndicesById ??= groupIndicesById(ids)) as Map<number, number[]>;
+  const previous = object.userData.selectedSegmentIndices as Set<number> | undefined ?? new Set<number>();
+  const next = new Set<number>();
+  selectedIds.forEach((id) => {
+    for (const index of indicesById.get(id) ?? []) next.add(index);
+  });
+  const color = new THREE.Color();
+  let changed = false;
+  new Set<number>([...previous, ...next]).forEach((index) => {
+    const selected = next.has(index);
+    if (selected === previous.has(index)) return;
+    color.setHex(selected ? (object.userData.selectionColor ?? 0xffa31a) : baseColors[index]);
+    // Beide eindpunten van het lijnstuk.
+    colors.setXYZ(2 * index, color.r, color.g, color.b);
+    colors.setXYZ(2 * index + 1, color.r, color.g, color.b);
+    colors.addUpdateRange(2 * index * 3, 6);
+    changed = true;
+  });
+  object.userData.selectedSegmentIndices = next;
+  if (changed) colors.needsUpdate = true;
+}
+
+/**
+ * Per getekend object: of het als geselecteerd gekleurd is en zijn eigen
+ * basiskleur per materiaal. Niet in `userData`, want dat object delen de
+ * delen van één teken soms (steel en punt van een lastpijl, ring, pijlen en
+ * gradiëntring van een temperatuurlast): dan zette het eerste deel de vlag en
+ * sloegen de andere delen de markering over (#81).
+ */
+const selectionHighlightStates = new WeakMap<THREE.Object3D, {
+  selected?: boolean; baseColors: Array<number | undefined>;
+}>();
+
 /** Werk alleen de materiaalkleur bij; selecteren mag de zware profielgeometrie niet opnieuw bouwen. */
 function applySelectionHighlight(group: THREE.Group, selection: OpenFem3DSelection) {
   group.traverse((object) => {
@@ -608,14 +1002,10 @@ function applySelectionHighlight(group: THREE.Group, selection: OpenFem3DSelecti
       const ids = object.userData.instanceIds as number[];
       const baseColors = object.userData.instanceBaseColors as number[] | undefined;
       if (!baseColors || baseColors.length !== ids.length) return;
-      const indexById = object.userData.instanceIndexById as Map<number, number> | undefined
-        ?? new Map(ids.map((id, index) => [id, index]));
-      object.userData.instanceIndexById = indexById;
       const previous = object.userData.selectedInstanceIndices as Set<number> | undefined ?? new Set<number>();
       const next = new Set<number>();
       selectedIdsForType(selection, type).forEach((id) => {
-        const index = indexById.get(id);
-        if (index !== undefined) next.add(index);
+        for (const index of instanceIndicesOf(object, id)) next.add(index);
       });
       const changed = new Set<number>([...previous, ...next]);
       changed.forEach((index) => {
@@ -630,19 +1020,28 @@ function applySelectionHighlight(group: THREE.Group, selection: OpenFem3DSelecti
       if (changed.size > 0 && object.instanceColor) object.instanceColor.needsUpdate = true;
       return;
     }
+    if (object instanceof THREE.LineSegments && Array.isArray(object.userData.segmentIds)) {
+      applySegmentSelectionHighlight(object, selectedIdsForType(selection, type));
+      return;
+    }
     const id = object.userData.id;
     if (typeof id !== "number") return;
     const drawable = object as THREE.Object3D & { material?: THREE.Material | THREE.Material[] };
     if (!drawable.material) return;
     const materials = Array.isArray(drawable.material) ? drawable.material : [drawable.material];
-    const baseColors = (object.userData.selectionBaseColors ??= []) as Array<number | undefined>;
+    let state = selectionHighlightStates.get(object);
+    if (!state) {
+      state = { baseColors: [] };
+      selectionHighlightStates.set(object, state);
+    }
+    const baseColors = state.baseColors;
     const selected = openFem3DSelectionContains(selection, type, id);
     materials.forEach((material, index) => {
       const colored = material as THREE.Material & { color?: THREE.Color };
       if (!colored.color) return;
       if (baseColors[index] === undefined) baseColors[index] = colored.color.getHex();
     });
-    if (object.userData.openFem3dSelected === selected) return;
+    if (state.selected === selected) return;
     materials.forEach((material, index) => {
       const colored = material as THREE.Material & { color?: THREE.Color };
       if (!colored.color || baseColors[index] === undefined) return;
@@ -655,6 +1054,10 @@ function applySelectionHighlight(group: THREE.Group, selection: OpenFem3DSelecti
         if (material.opacity !== opacity) material.opacity = opacity;
       });
     }
+    state.selected = selected;
+    // Gelezen door de schim- en contourweergave (doorzichtigheid). Delen die
+    // hun userData delen, horen bij dezelfde last en zijn dus allemaal wel
+    // of allemaal niet geselecteerd.
     object.userData.openFem3dSelected = selected;
   });
 }
@@ -675,7 +1078,7 @@ function makeLabel(
   return label;
 }
 
-type DiagramComponent = "shearY" | "shearZ" | "momentY" | "momentZ";
+type DiagramComponent = OpenFem3DDiagramComponent;
 
 const DIAGRAM_STYLE: Record<DiagramComponent, {
   symbol: string;
@@ -686,14 +1089,22 @@ const DIAGRAM_STYLE: Record<DiagramComponent, {
   direction: (axes: ReturnType<typeof memberAxes>) => THREE.Vector3;
 }> = {
   shearY: { symbol: "Vy", unit: "kN", color: 0x0284c7,
-    resultKey: "shearY", fallbackValues: (f) => [f.vyStartKn, f.vyEndKn], direction: ({ ey }) => ey },
+    resultKey: "shearY", fallbackValues: (f) => [f.vyStartKn, f.vyEndKn], direction: (axes) => openFem3DDiagramDirection("shearY", axes) },
   shearZ: { symbol: "Vz", unit: "kN", color: 0x7c3aed,
-    resultKey: "shearZ", fallbackValues: (f) => [f.vzStartKn, f.vzEndKn], direction: ({ ez }) => ez },
+    resultKey: "shearZ", fallbackValues: (f) => [f.vzStartKn, f.vzEndKn], direction: (axes) => openFem3DDiagramDirection("shearZ", axes) },
+  // Momentenlijnen aan de trekzijde; zie openFem3dDiagramSide.ts.
   momentY: { symbol: "My", unit: "kNm", color: 0xdc2626,
-    resultKey: "momentY", fallbackValues: (f) => [f.myStartKnm, f.myEndKnm], direction: ({ ez }) => ez },
+    resultKey: "momentY", fallbackValues: (f) => [f.myStartKnm, f.myEndKnm], direction: (axes) => openFem3DDiagramDirection("momentY", axes) },
   momentZ: { symbol: "Mz", unit: "kNm", color: 0xd97706,
-    resultKey: "momentZ", fallbackValues: (f) => [f.mzStartKnm, f.mzEndKnm], direction: ({ ey }) => ey },
+    resultKey: "momentZ", fallbackValues: (f) => [f.mzStartKnm, f.mzEndKnm], direction: (axes) => openFem3DDiagramDirection("momentZ", axes) },
 };
+
+/**
+ * Per lijst lijnen van de rekenkern de punten per staaf. Zonder deze index
+ * zocht elke staaf de hele lijst door: kwadratisch in het aantal staven, en
+ * de labellaag (issue #95) doet dat bij elke andere selectie of stand.
+ */
+const diagramPointsByMember = new WeakMap<readonly OpenFem3DMemberDiagram[], Map<number, OpenFem3DDiagramPoint[]>>();
 
 function diagramPoints(
   result: OpenFem3DSolveResult,
@@ -701,8 +1112,15 @@ function diagramPoints(
   force: OpenFem3DMemberForces,
 ): OpenFem3DDiagramPoint[] {
   const style = DIAGRAM_STYLE[component];
-  const calculated = result.diagrams?.[style.resultKey]
-    .find((diagram) => diagram.memberId === force.memberId)?.points;
+  const list = result.diagrams?.[style.resultKey];
+  let byMember = list ? diagramPointsByMember.get(list) : undefined;
+  if (list && !byMember) {
+    byMember = new Map();
+    // De eerste lijn per staaf, zoals het zoeken met find deed.
+    for (const diagram of list) if (!byMember.has(diagram.memberId)) byMember.set(diagram.memberId, diagram.points);
+    diagramPointsByMember.set(list, byMember);
+  }
+  const calculated = byMember?.get(force.memberId);
   if (calculated && calculated.length >= 2) return calculated;
   const [start, end] = style.fallbackValues(force);
   return [{ t: 0, value: start }, { t: 1, value: end }];
@@ -727,6 +1145,16 @@ interface ResultDiagramBatch {
   curvePoints: THREE.Vector3[];
 }
 
+/** Het punt van de lijn op t (0 … 1) met waarde `value`, bij de schaal `scale` (m per eenheid). */
+function diagramPoint(start: THREE.Vector3, end: THREE.Vector3, direction: THREE.Vector3, t: number, value: number, scale: number) {
+  return start.clone().lerp(end, THREE.MathUtils.clamp(t, 0, 1)).addScaledVector(direction, value * scale);
+}
+
+/**
+ * Teken één snedekrachtlijn (vlak, nullijn en kromme). De getallen erbij komen
+ * uit een eigen laag (buildDiagramLabelLayer), zodat Waarden en de stand de
+ * scène niet opnieuw opbouwen. Geeft terug of er iets getekend is.
+ */
 function addResultDiagram(
   group: THREE.Group,
   beamId: number,
@@ -737,13 +1165,11 @@ function addResultDiagram(
   maximum: number,
   height: number,
   style: { symbol: string; unit: string; color: number },
-  showLabels = true,
   batch?: ResultDiagramBatch,
-) {
-  if (!(maximum > 1e-12) || samples.length < 2) return;
+): boolean {
   // Waarden die in de gekozen weergave overal als 0,000 verschijnen leveren
   // alleen overlappende labels en loze vlakgeometrie op.
-  if (samples.every((sample) => Math.abs(sample.value) < 5e-4)) return;
+  if (!(maximum > 1e-12) || !openFem3DDiagramDrawn(samples)) return false;
   const scale = height / maximum;
   const basePoints: THREE.Vector3[] = [];
   const diagramPoints: THREE.Vector3[] = [];
@@ -789,29 +1215,231 @@ function addResultDiagram(
     curve.userData = { type: "beam", id: beamId, openFem3dResult: true };
     group.add(curve);
   }
+  return true;
+}
 
-  // De tekst toont de echte eindwaarden, maar staat iets binnen de staaf. Op
-  // een gedeelde knoop zouden alle staafeindlabels anders exact over elkaar
-  // vallen. De diagramlijn zelf blijft gewoon tot beide knopen doorlopen.
-  if (!showLabels) return;
-  const labelClass = `open-fem3d-result-label open-fem3d-diagram-label open-fem3d-diagram-${style.symbol.toLowerCase()}`;
-  const last = samples.length - 1;
-  const inset = Math.min(last, Math.max(1, Math.round(last * 0.18)));
-  group.add(makeLabel(`${style.symbol} ${signedDiagramValue(samples[0].value)} ${style.unit}`, labelClass, diagramPoints[inset]));
-  group.add(makeLabel(`${style.symbol} ${signedDiagramValue(samples[last].value)} ${style.unit}`, labelClass, diagramPoints[Math.max(0, last - inset)]));
+/**
+ * De schaal van de snedekrachtlijnen: per lijn het grootste |waarde| over alle
+ * staven, en de hoogte die daarbij hoort. Gedeeld door de lijnen en hun labels.
+ */
+function diagramScale(model: OpenFem3DModel, result: OpenFem3DSolveResult, components: readonly DiagramComponent[]) {
+  const maxima = new Map(components.map((component) => [
+    component,
+    result.memberForces.reduce((maximum, force) =>
+      Math.max(maximum, ...diagramPoints(result, component, force).map((point) => Math.abs(point.value))), 0),
+  ]));
+  const modelBox = openFem3DNodeBounds(model);
+  const height = Math.max(0.35, Math.min(3, modelBox.getSize(new THREE.Vector3()).length() * 0.085));
+  return { maxima, height };
+}
 
-  // Toon ook een maatgevende binnenwaarde. Dit maakt bijvoorbeeld het
-  // parabolische veldmoment van een gelijkmatig belaste ligger direct leesbaar.
-  let peakIndex = 0;
-  for (let index = 1; index < samples.length; index += 1) {
-    if (Math.abs(samples[index].value) > Math.abs(samples[peakIndex].value)) peakIndex = index;
+/**
+ * Boven dit aantal labels zet de laag niet elk label als element neer, maar
+ * alleen wat in de huidige camerastand een plek kan krijgen (zie
+ * thinDiagramLabelLayer). Duizenden elementen waarvan er hooguit een paar
+ * honderd in beeld passen, maakten elke klik en elke stand traag. Tot dit
+ * aantal (elke stand van een gewoon model) staan alle labels er als element.
+ */
+const DIAGRAM_LABEL_DOM_LIMIT = 400;
+
+/**
+ * Geschatte maat van een resultaatlabel (OpenFem3DEditor.css: 700 10px/1.25,
+ * padding 2px 5px, rand 1px) en zijn ligging ten opzichte van het ankerpunt
+ * (de marges per lijn). Alleen voor het uitdunnen; de echte indeling meet de
+ * elementen zelf (renderOpenFem3DLabels).
+ */
+const RESULT_LABEL_HEIGHT_PX = 19;
+const resultLabelWidthPx = (text: string) => 12 + 6.2 * text.length;
+const DIAGRAM_LABEL_MARGIN_TOP_PX: Record<DiagramComponent, number> = { shearY: -38, shearZ: -18, momentY: 2, momentZ: 22 };
+
+/** Eén getal van de labellaag; `object` is het element zodra het er staat. */
+interface DiagramLabelSpec {
+  text: string;
+  className: string;
+  position: THREE.Vector3;
+  beamId: number;
+  /** Een geselecteerde staaf of de maatgevende waarde: altijd een element, ook uitgedund. */
+  always: boolean;
+  /** Voor het uitdunnen: prioriteit, uitwijken (kwartpunten) en de geschatte rechthoek t.o.v. het ankerpunt. */
+  priority: number;
+  quarter: boolean;
+  dx: number;
+  dy: number;
+  width: number;
+  object: CSS2DObject | null;
+}
+
+interface DiagramLabelLayer {
+  group: THREE.Group;
+  specs: DiagramLabelSpec[];
+  /** Meer labels dan DIAGRAM_LABEL_DOM_LIMIT: alleen wat in beeld past wordt een element. */
+  thinned: boolean;
+  /** Camera, beeld en bediening van de laatste uitdunning: gelijk gebleven, dan niets te doen. */
+  thinKey: string;
+}
+
+function materializeDiagramLabel(group: THREE.Group, spec: DiagramLabelSpec) {
+  const label = makeLabel(spec.text, spec.className, spec.position);
+  label.element.dataset.openFem3dBeam = String(spec.beamId);
+  spec.object = label;
+  group.add(label);
+}
+
+const diagramLabelElements = (layer: DiagramLabelLayer) =>
+  layer.specs.reduce((count, spec) => count + (spec.object ? 1 : 0), 0);
+
+/**
+ * De getallen bij de snedekrachtlijnen en de N/T-labels op het staafmidden,
+ * als eigen laag (issue #95). Welke staaf welke labels krijgt, bepaalt het
+ * plan (openFem3dDiagramLabels.ts) uit Waarden, de stand en de selectie; hier
+ * alleen de plek en de tekst. De eindwaarden staan iets binnen de staaf: op
+ * een gedeelde knoop zouden alle staafeindlabels anders exact over elkaar
+ * vallen. De diagramlijn zelf loopt gewoon tot beide knopen door. Een groot
+ * plan wordt uitgedund (thinDiagramLabelLayer); anders staat elk label er
+ * meteen, in de volgorde van het plan.
+ */
+function buildDiagramLabelLayer(
+  model: OpenFem3DModel,
+  result: OpenFem3DSolveResult,
+  visibility: OpenFem3DVisibility,
+  labels: OpenFem3DDiagramLabels,
+  selectedBeamIds: readonly number[],
+): DiagramLabelLayer {
+  const group = new THREE.Group();
+  group.userData.openFem3dDiagramLabels = true;
+  const layer: DiagramLabelLayer = { group, specs: [], thinned: false, thinKey: "" };
+  const components = (Object.keys(DIAGRAM_STYLE) as DiagramComponent[]).filter((component) => visibility[component]);
+  const mids = OPEN_FEM_3D_MID_FORCES.filter((component) => visibility[component]);
+  if (!labels.show || (components.length === 0 && mids.length === 0)) return layer;
+  const byId = new Map(model.nodes.map((node) => [node.id, node]));
+  const forceByMember = new Map(result.memberForces.map((force) => [force.memberId, force]));
+  const { maxima, height } = diagramScale(model, result, components);
+  const geometryByBeam = new Map<number, { a: THREE.Vector3; b: THREE.Vector3; axes: ReturnType<typeof memberAxes> }>();
+  const input: OpenFem3DDiagramLabelBeam[] = [];
+  for (const [index, beam] of model.beams.entries()) {
+    const start = byId.get(beam.startNodeId), end = byId.get(beam.endNodeId);
+    const force = forceByMember.get(beam.id);
+    if (!start || !end || !force) continue;
+    const a = new THREE.Vector3(start.x, start.y, start.z);
+    const b = new THREE.Vector3(end.x, end.y, end.z);
+    geometryByBeam.set(beam.id, { a, b, axes: memberAxes(b.clone().sub(a), beam.rollAngleRad ?? 0) });
+    input.push({
+      beamId: beam.id, index,
+      // Alleen lijnen die ook getekend worden (zonder schaal geen lijn).
+      diagrams: Object.fromEntries(components.filter((component) => (maxima.get(component) ?? 0) > 1e-12)
+        .map((component) => [component, diagramPoints(result, component, force)])),
+      mid: Object.fromEntries(mids.map((component) => [component, component === "axialForce"
+        ? Math.max(Math.abs(force.nStartKn), Math.abs(force.nEndKn))
+        : Math.max(Math.abs(force.torsionStartKnm), Math.abs(force.torsionEndKnm))])),
+    });
   }
-  if (peakIndex > 1 && peakIndex < last - 1) {
-    group.add(makeLabel(
-      `${style.symbol} ${signedDiagramValue(samples[peakIndex].value)} ${style.unit}`,
-      `${labelClass} open-fem3d-diagram-peak-label`,
-      diagramPoints[peakIndex],
-    ));
+  const plan = planOpenFem3DDiagramLabels(input, { beamCount: model.beams.length, labels, selectedBeamIds });
+  const selected = new Set(selectedBeamIds);
+  const inputByBeam = new Map(input.map((beam) => [beam.beamId, beam]));
+  const priorityOf = (className: string) => {
+    const classes = className.split(" ");
+    return openFem3DLabelPriority({ contains: (token) => classes.includes(token) });
+  };
+  for (const planned of plan.beams) {
+    const geometry = geometryByBeam.get(planned.beamId)!;
+    for (const { component, labels: beamLabels } of planned.diagrams) {
+      const style = DIAGRAM_STYLE[component];
+      const samples = inputByBeam.get(planned.beamId)!.diagrams[component]!;
+      const scale = height / (maxima.get(component) ?? 1);
+      const direction = style.direction(geometry.axes);
+      const labelClass = `open-fem3d-result-label open-fem3d-diagram-label open-fem3d-diagram-${style.symbol.toLowerCase()}`;
+      const always = selected.has(planned.beamId) || plan.governingBeamIds[component] === planned.beamId;
+      for (const label of beamLabels) {
+        const position = label.sample !== undefined
+          ? diagramPoint(geometry.a, geometry.b, direction, samples[label.sample].t, samples[label.sample].value, scale)
+          : diagramPoint(geometry.a, geometry.b, direction, label.t ?? 0.5, openFem3DDiagramValueAt(samples, label.t ?? 0.5), scale);
+        // Het uiterste gaat bij een botsing voor (renderOpenFem3DLabels).
+        const kindClass = label.kind === "peak" || label.kind === "extreme" ? " open-fem3d-diagram-peak-label"
+          : label.kind === "quarter" ? " open-fem3d-diagram-quarter-label" : "";
+        const text = `${style.symbol} ${signedDiagramValue(label.value)} ${style.unit}`;
+        const className = labelClass + kindClass;
+        layer.specs.push({
+          text, className, position, beamId: planned.beamId, always,
+          priority: priorityOf(className), quarter: label.kind === "quarter",
+          dx: 7, dy: DIAGRAM_LABEL_MARGIN_TOP_PX[component], width: resultLabelWidthPx(text), object: null,
+        });
+      }
+    }
+    if (planned.mid.length > 0) {
+      const text = planned.mid.map(({ component, value }) => component === "axialForce"
+        ? `N ${value.toFixed(2)} kN` : `T ${value.toFixed(2)} kNm`).join(" · ");
+      const className = "open-fem3d-result-label open-fem3d-member-force-label";
+      layer.specs.push({
+        text, className, position: geometry.a.clone().add(geometry.b).multiplyScalar(0.5), beamId: planned.beamId,
+        always: selected.has(planned.beamId)
+          || planned.mid.some(({ component }) => plan.governingBeamIds[component] === planned.beamId),
+        priority: priorityOf(className), quarter: false, dx: 8, dy: -18, width: resultLabelWidthPx(text), object: null,
+      });
+    }
+  }
+  layer.thinned = layer.specs.length > DIAGRAM_LABEL_DOM_LIMIT;
+  if (!layer.thinned) layer.specs.forEach((spec) => materializeDiagramLabel(group, spec));
+  return layer;
+}
+
+/**
+ * Een uitgedunde labellaag, vlak vóór de labelindeling (SceneState.beforeLabels):
+ * projecteer elk label van het plan, schat zijn rechthoek en deel ze in met
+ * dezelfde botsingsregel als de echte indeling (placeOpenFem3DLabels, met de
+ * bediening als gereserveerd gebied). Alleen wat daarbij een plek krijgt, plus
+ * de geselecteerde staven en de maatgevende waarden, wordt een element; de
+ * rest gaat uit de DOM. Het aantal elementen hangt zo af van de grootte van
+ * het beeld, niet van het model. Zelfde camera, beeld en bediening als de
+ * vorige keer: niets te doen.
+ */
+function thinDiagramLabelLayer(state: SceneState, container: HTMLElement | null, layer: DiagramLabelLayer) {
+  if (!layer.thinned || !layer.group.parent) return;
+  const startedAt = performance.now();
+  const box = state.labelRenderer.domElement.getBoundingClientRect();
+  const reserved = openFem3DReservedLabelRects(container);
+  state.camera.updateMatrixWorld();
+  layer.group.updateWorldMatrix(true, false);
+  const toClip = new THREE.Matrix4()
+    .multiplyMatrices(state.camera.projectionMatrix, state.camera.matrixWorldInverse)
+    .multiply(layer.group.matrixWorld);
+  const key = [...toClip.elements, box.left, box.top, box.width, box.height,
+    ...reserved.flatMap((rect) => [rect.left, rect.top, rect.right, rect.bottom])]
+    .map((value) => value.toPrecision(10)).join(",");
+  if (key === layer.thinKey) return;
+  layer.thinKey = key;
+  const point = new THREE.Vector3();
+  const candidates: OpenFem3DLabelCandidate[] = [];
+  const indices: number[] = [];
+  const step = RESULT_LABEL_HEIGHT_PX + 3;
+  layer.specs.forEach((spec, index) => {
+    point.copy(spec.position).applyMatrix4(toClip);
+    // Achter de camera of voorbij het verre vlak: de CSS2DRenderer toont het niet.
+    if (!(point.z >= -1 && point.z <= 1)) return;
+    const left = box.left + (point.x + 1) / 2 * box.width + spec.dx;
+    const bottom = box.top + (1 - point.y) / 2 * box.height + spec.dy;
+    candidates.push({
+      rect: { left, right: left + spec.width, top: bottom - RESULT_LABEL_HEIGHT_PX, bottom },
+      priority: spec.priority, shifts: spec.quarter ? [step, -step] : undefined,
+    });
+    indices.push(index);
+  });
+  const wanted = new Set<number>();
+  placeOpenFem3DLabels(candidates, reserved, box).forEach((placement, k) => {
+    if (placement.shown) wanted.add(indices[k]);
+  });
+  layer.specs.forEach((spec, index) => {
+    const keep = spec.always || wanted.has(index);
+    if (keep && !spec.object) {
+      materializeDiagramLabel(layer.group, spec);
+    } else if (!keep && spec.object) {
+      spec.object.removeFromParent();
+      spec.object.element.remove();
+      spec.object = null;
+    }
+  });
+  if (container) {
+    container.dataset.openFem3dDiagramLabelElements = String(diagramLabelElements(layer));
+    container.dataset.openFem3dDiagramLabelThinMs = (performance.now() - startedAt).toFixed(2);
   }
 }
 
@@ -1057,13 +1685,45 @@ function applyOriginalPresentation(root: THREE.Group, mode: OriginalPresentation
   return changed;
 }
 
-export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDrawError, tool, selection, onSelect, onOpenCheckForBeam, fitToken, visibility, viewRequest, currentView = "iso", structuralGrid, gridSpacingM = 0.5, workPlaneZ = 0, result, utilizations = [], activeLoadCaseId, cameraRequest, onCameraChange, onCameraViewChange, loadCaseTypes, onToolChange, onPlaceNodeCondition, deformationDisplay, plateMesh = null, plateQuantity = null }: Props) {
+export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDrawError, tool, selection, onSelect, onOpenCheckForBeam, fitToken, visibility, viewRequest, currentView = "iso", structuralGrid, gridSpacingM = 0.5, workPlaneZ = 0, result, utilizations = [], activeLoadCaseId, cameraRequest, onCameraChange, onCameraViewChange, loadCaseTypes, onToolChange, onPlaceNodeCondition, deformationDisplay, diagramLabels, plateMesh = null, plateQuantity = null, onPerspectiveChange }: Props) {
   const { t } = useTranslation("ribbon");
   const containerRef = useRef<HTMLDivElement>(null);
+  const viewCubeTeksten = useMemo<OpenFem3DViewCubeTeksten & { start: string; passend: string; perspectief: string }>(() => ({
+    kubus: t("openFem3d.viewCube.label"),
+    vlak: {
+      boven: t("openFem3d.viewCube.vlak.boven"), onder: t("openFem3d.viewCube.vlak.onder"),
+      voor: t("openFem3d.viewCube.vlak.voor"), achter: t("openFem3d.viewCube.vlak.achter"),
+      links: t("openFem3d.viewCube.vlak.links"), rechts: t("openFem3d.viewCube.vlak.rechts"),
+    },
+    aanzicht: {
+      boven: t("openFem3d.viewCube.aanzicht.boven"), onder: t("openFem3d.viewCube.aanzicht.onder"),
+      voor: t("openFem3d.viewCube.aanzicht.voor"), achter: t("openFem3d.viewCube.aanzicht.achter"),
+      links: t("openFem3d.viewCube.aanzicht.links"), rechts: t("openFem3d.viewCube.aanzicht.rechts"),
+    },
+    ribbe: (namen) => t("openFem3d.viewCube.ribbe", { namen, interpolation: { escapeValue: false } }),
+    hoek: (namen) => t("openFem3d.viewCube.hoek", { namen, interpolation: { escapeValue: false } }),
+    menu: t("openFem3d.viewCube.menu"),
+    // Menu ▾: Startaanzicht, Passend beeld (dezelfde tekst als de knop) en
+    // Perspectief (dezelfde tekst als de schakelaar in de zichtbaarheid).
+    start: t("openFem3d.viewCube.start"),
+    passend: t("openFem3d.fit"),
+    perspectief: t("openFem3dVisibility.perspective", { ns: "common" }),
+  }), [t]);
+  const viewCubeTekstenRef = useRef(viewCubeTeksten);
+  viewCubeTekstenRef.current = viewCubeTeksten;
+  /** De regels van het menu ▾ bij de kubus; gezet in het opbouweffect (daar staan de camera-acties). */
+  const viewCubeMenuRef = useRef<((teksten: typeof viewCubeTeksten) => OpenFem3DViewCubeMenuItem[]) | null>(null);
+  const perspectiveChangeRef = useRef(onPerspectiveChange);
+  perspectiveChangeRef.current = onPerspectiveChange;
+  /** Wissel perspectief/parallel; gezet in het opbouweffect (daar staan camera, besturing en tekenen). */
+  const projectieRef = useRef<((perspectief: boolean) => void) | null>(null);
   // Een nieuw getekend belastingvlak hoort bij het geval dat nu in beeld is.
   const activeLoadCaseIdRef = useRef(activeLoadCaseId);
   activeLoadCaseIdRef.current = activeLoadCaseId;
   const sceneRef = useRef<SceneState | null>(null);
+  // Het verzoek (token) waarvoor de camera het laatst in een lintaanzicht is gezet;
+  // `false` = nog nooit in deze scène (het eerste beeld is altijd een lintaanzicht).
+  const aimedViewTokenRef = useRef<number | undefined | false>(false);
   const selectRef = useRef(onSelect);
   selectRef.current = onSelect;
   const toolChangeRef = useRef(onToolChange);
@@ -1332,11 +1992,23 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    // Een nieuwe scène heeft een nieuwe camera (op de iso-start): het
+    // aanzichteffect richt hem dus opnieuw op het lintaanzicht, ook als het
+    // token niet veranderde (React StrictMode bouwt de scène tweemaal op).
+    aimedViewTokenRef.current = false;
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xffffff);
-    const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100000);
-    camera.up.set(0, 0, 1);
-    camera.position.set(8, 8, 6);
+    const perspectiveCamera = new THREE.PerspectiveCamera(OPEN_FEM_3D_FOV_GRADEN, 1, 0.01, 100000);
+    perspectiveCamera.up.set(0, 0, 1);
+    perspectiveCamera.position.set(...openFem3DStartCamera().position);
+    // De parallelle camera (zichtbaarheid `perspective` uit). Hij neemt bij
+    // het wisselen doel, richting, up en zichtbare grootte over; zie
+    // zetOpenFem3DProjectie en openFem3dProjectie.ts.
+    const orthographicCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1000);
+    orthographicCamera.up.set(0, 0, 1);
+    // De actieve camera. Alle handlers hieronder lezen hem via deze variabele;
+    // alleen projectieRef (het wisselen) zet hem om, samen met sceneRef.
+    let camera: OpenFem3DCamera = perspectiveCamera;
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     // 1,5 is op hoge-dpi schermen scherp genoeg voor CAD-lijnen en voorkomt
     // dat elke 3D-frame viermaal zoveel pixels als CSS-pixels hoeft te vullen.
@@ -1433,7 +2105,35 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     selectionBox.hidden = true;
     container.appendChild(selectionBox);
     scene.add(preview);
-    sceneRef.current = { scene, camera, renderer, labelRenderer, controls, geometry, draftLine, preview, previewHint, grid, axes, axisLabels };
+    // De bol waarbuiten de parallelle camera staat: knopen, raster, stramienen
+    // en de X/Y/Z-assen, ruim vergroot voor profielen, lasten, diagrammen en
+    // labels. Alleen opnieuw bij een andere knopenlijst, raster of stramien.
+    let orthoBolBron: { nodes: unknown; rooster: unknown; assen: unknown } | null = null;
+    let orthoBolWaarde = { middelpunt: new THREE.Vector3(), straal: 1 };
+    const orthoBol = () => {
+      const nodes = modelRef.current.nodes;
+      const rooster = sceneRef.current?.grid ?? grid;
+      const assen = structuralSnapAxesRef.current;
+      if (orthoBolBron?.nodes === nodes && orthoBolBron.rooster === rooster && orthoBolBron.assen === assen) return orthoBolWaarde;
+      const box = openFem3DNodeBounds(modelRef.current);
+      box.union(new THREE.Box3().setFromObject(rooster));
+      box.expandByPoint(new THREE.Vector3(-0.5, -0.5, -0.5)).expandByPoint(new THREE.Vector3(2.5, 2.5, 2.5));
+      for (const as of ["x", "y", "z"] as const) {
+        const waarden = assen[as];
+        if (waarden.length === 0) continue;
+        box.min[as] = Math.min(box.min[as], waarden[0]);
+        box.max[as] = Math.max(box.max[as], waarden[waarden.length - 1]);
+      }
+      box.expandByScalar(Math.max(3, 0.25 * box.getSize(new THREE.Vector3()).length()));
+      const bol = box.getBoundingSphere(new THREE.Sphere());
+      orthoBolBron = { nodes, rooster, assen };
+      orthoBolWaarde = { middelpunt: bol.center, straal: bol.radius };
+      return orthoBolWaarde;
+    };
+    sceneRef.current = {
+      scene, camera, perspectiveCamera, orthographicCamera, orthoBol,
+      renderer, labelRenderer, controls, geometry, draftLine, preview, previewHint, grid, axes, axisLabels, viewCube: null,
+    };
 
     // Damping staat uit, dus continu renderen levert alleen CPU/GPU-belasting op.
     // Teken uitsluitend na camera-, formaat- of modelwijzigingen. Dat houdt ook
@@ -1466,11 +2166,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       });
     };
     const saveCamera = () => {
-      cameraChangeRef.current?.({
-        position: camera.position.toArray() as [number, number, number],
-        target: controls.target.toArray() as [number, number, number],
-        up: camera.up.toArray() as [number, number, number],
-      });
+      // In parallelle projectie met de exacte schaal (orthoHalfHeight).
+      cameraChangeRef.current?.(openFem3DCameraStateVan(sceneRef.current!));
     };
     // OrbitControls meldt bij élke losgelaten muisknop een einde, ook na een
     // gewone linkerklik zonder camerabeweging. Alleen een echte
@@ -1510,18 +2207,104 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       orbitPivot = null;
       endCameraInteraction();
     };
+    // Parallel: na elke draai- of panstap de camera weer ver genoeg terug
+    // (een draai om een ver weggeschoven doel kan het model anders achter de
+    // camera brengen). Het beeld verandert daar niet door.
+    const houdOrthoCameraVrij = () => {
+      if (sceneRef.current && isOpenFem3DOrtho(camera)) plaatsOrthoCamera(sceneRef.current);
+    };
     controls.addEventListener("start", startCameraInteraction);
     controls.addEventListener("change", followOrbitPivot);
+    controls.addEventListener("change", houdOrthoCameraVrij);
     controls.addEventListener("change", renderCameraInteraction);
     // Camera-instellingen gaan pas na de interactie naar React. Tijdens
     // pannen/roteren hoeft daardoor geen componentstate per muispixel mee.
     controls.addEventListener("end", endControlsInteraction);
 
+    // View cube (issue #85): een klik zet de camera in de richting van het
+    // vlak, de ribbe of de hoek, met dezelfde passende afstand als het lint;
+    // slepen draait om het doel. Daarna opslaan en het aanzicht melden zoals
+    // na een draai met de muis (endCameraInteraction).
+    const cameraViaKubus = (richt: (state: SceneState) => void, bron: string) => {
+      const state = sceneRef.current;
+      if (!state) return;
+      const withinInteraction = cameraInteractionActive;
+      startCameraInteraction();
+      richt(state);
+      if (!withinInteraction) endCameraInteraction();
+      container.dataset.openFem3dViewCubeDoel = bron;
+    };
+    const cameraNaarRichting = (richting: Vec3, up: Vec3, bron: string) => cameraViaKubus(
+      (state) => aimOpenFem3DCamera(state, modelRef.current, visibilityRef.current, richting, up), bron,
+    );
+    // Het menu ▾: Startaanzicht (iso met passend beeld), Passend beeld (de
+    // huidige richting, zoals de knop) en Perspectief: een schakelaar
+    // (menuitemcheckbox) op de zichtbaarheid `perspective`. De aanroeper zet
+    // de zichtbaarheid om; het effect op `visibility.perspective` wisselt de
+    // camera en zet het vinkje bij.
+    viewCubeMenuRef.current = (teksten) => [
+      {
+        id: "start", tekst: teksten.start,
+        kies: () => {
+          const { richting, up } = openFem3DAanzichtRichting("iso");
+          cameraNaarRichting(richting, up, "start");
+        },
+      },
+      {
+        id: "passend", tekst: teksten.passend,
+        kies: () => cameraViaKubus((state) => fitOpenFem3DCamera(state, modelRef.current, visibilityRef.current), "passend"),
+      },
+      {
+        id: "perspectief", tekst: teksten.perspectief, rol: "menuitemcheckbox", aan: visibilityRef.current.perspective,
+        kies: () => perspectiveChangeRef.current?.(!visibilityRef.current.perspective),
+      },
+    ];
+    const viewCube = createOpenFem3DViewCube(container, viewCubeTekstenRef.current, {
+      kies: (doel) => cameraNaarRichting(doel.richting, doel.up, doel.id),
+      sleepStart: startCameraInteraction,
+      sleep: (dxPx, dyPx) => {
+        // Zoals rechts slepen in het tekenvlak: azimut om wereld-Z en een
+        // begrensde elevatie, om het doel. Daarna staat Z weer omhoog.
+        const { dAzimut, dElevatie } = openFem3DViewCubeSleepHoeken(dxPx, dyPx, renderer.domElement.clientHeight);
+        const offset = camera.position.clone().sub(controls.target);
+        const boven = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+        const [x, y, z] = openFem3DViewCubeDraai(
+          [offset.x, offset.y, offset.z], [boven.x, boven.y, boven.z], dAzimut, dElevatie,
+        );
+        camera.up.set(0, 0, 1);
+        camera.position.set(controls.target.x + x, controls.target.y + y, controls.target.z + z);
+        controls.update();
+      },
+      sleepEinde: endCameraInteraction,
+      // Het open menu is gereserveerd gebied: labels eronder opnieuw indelen.
+      menuWissel: () => {
+        if (sceneRef.current && !cameraInteractionActive) renderOpenFem3DLabels(sceneRef.current, container);
+      },
+    }, viewCubeMenuRef.current(viewCubeTekstenRef.current));
+    viewCube.toon(visibilityRef.current.viewCube);
+    sceneRef.current.viewCube = viewCube;
+
+    // Perspectief of parallel (zichtbaarheid `perspective`): wissel de camera
+    // (doel, richting, up en zichtbare grootte blijven), teken en bewaar hem
+    // zoals na een camera-interactie. Het aanzicht verandert niet.
+    projectieRef.current = (perspectief) => {
+      const state = sceneRef.current;
+      if (!state || !zetOpenFem3DProjectie(state, perspectief)) return;
+      camera = state.camera;
+      orbitPivot = null;
+      nodeSnapScreenIndexDirtyRef.current = true;
+      renderScene();
+      saveCamera();
+      nodeSnapPrewarmRef.current?.();
+    };
+
     const resize = () => {
       const width = Math.max(1, container.clientWidth);
       const height = Math.max(1, container.clientHeight);
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
+      // Beide camera's: de niet-actieve neemt bij het wisselen deze verhouding over.
+      perspectiveCamera.aspect = width / height;
+      perspectiveCamera.updateProjectionMatrix();
+      openFem3DZetOrthoFrustum(orthographicCamera, openFem3DOrthoHalveHoogteVan(orthographicCamera), width / height);
       renderer.setSize(width, height);
       labelRenderer.setSize(width, height);
       nodeSnapScreenIndexDirtyRef.current = true;
@@ -1541,9 +2324,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       raycaster.setFromCamera(pointer, camera);
       // Three.js gebruikt anders een vaste wereldafstand van 1 m voor lijnen.
       // Dat selecteert op een uitgezoomd raamwerk een last ver naast de cursor
-      // en kan een naburige staaf overstemmen. Houd circa vijf schermpixels aan.
-      const worldPerPixel = 2 * camera.position.distanceTo(controls.target)
-        * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / Math.max(rect.height, 1);
+      // en kan een naburige staaf overstemmen. Houd circa vijf schermpixels aan
+      // (bij het doel; in perspectief en parallel dezelfde maat).
+      const worldPerPixel = openFem3DWereldmaatPerPixel(camera, controls.target, rect.height);
       raycaster.params.Line.threshold = Math.max(0.02, worldPerPixel * 5);
     };
     const onWheelAnchor = (event: WheelEvent) => {
@@ -1567,7 +2350,12 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       const modeScale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 100 : 1;
       const delta = event.deltaY * modeScale * (event.ctrlKey ? 10 : 1);
       const step = Math.pow(0.95, controls.zoomSpeed * Math.abs(delta * 0.01));
-      const distance = camera.position.distanceTo(controls.target);
+      // De zoommaat: in perspectief de afstand tot het doel, in parallel de
+      // perspectiefafstand die bij de halve hoogte hoort; dezelfde grenzen.
+      const ortho = isOpenFem3DOrtho(camera) ? camera : null;
+      const distance = ortho
+        ? openFem3DPerspectiefAfstand(openFem3DOrthoHalveHoogteVan(ortho), perspectiveCamera.fov)
+        : camera.position.distanceTo(controls.target);
       const nextDistance = THREE.MathUtils.clamp(
         distance * (delta < 0 ? step : 1 / step),
         Math.max(controls.minDistance, 0.1), controls.maxDistance,
@@ -1577,14 +2365,55 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       // zelf af bij het loslaten van de muisknop.
       const withinInteraction = cameraInteractionActive;
       startCameraInteraction();
-      camera.position.sub(anchor).multiplyScalar(scale).add(anchor);
-      controls.target.sub(anchor).multiplyScalar(scale).add(anchor);
+      if (ortho) {
+        // Parallel: de halve hoogte schaalt, het doel schuift naar het anker
+        // toe; de camera staat daarna weer op zijn plek achter het doel.
+        const stap = openFem3DOrthoWielStap(controls.target, anchor, openFem3DOrthoHalveHoogteVan(ortho), scale);
+        const verschuiving = stap.doel.clone().sub(controls.target);
+        controls.target.copy(stap.doel);
+        ortho.position.add(verschuiving);
+        openFem3DZetOrthoFrustum(ortho, stap.halveHoogte, perspectiveCamera.aspect);
+        plaatsOrthoCamera(sceneRef.current!);
+      } else {
+        camera.position.sub(anchor).multiplyScalar(scale).add(anchor);
+        controls.target.sub(anchor).multiplyScalar(scale).add(anchor);
+      }
       controls.update();
+      // Parallel met het anker precies op het doel verschuift er niets: dan
+      // meldt de besturing geen wijziging, maar het frustum is wel anders.
+      if (ortho) renderCameraInteraction();
       if (!withinInteraction) endCameraInteraction();
       container.dataset.openFem3dWheelAnchor = anchorSource;
       container.dataset.openFem3dWheelMs = (performance.now() - startedAt).toFixed(2);
     };
     renderer.domElement.addEventListener("wheel", onWheelAnchor, { capture: true, passive: false });
+    // Pannen met de scrollknop: het punt onder de cursor gaat één op één met
+    // de muis mee. OrbitControls pant in het vlak door zijn doel; lag dat
+    // dichter bij de camera dan het model, dan bleef het model achter de muis.
+    // Dezelfde diepte als het zoomanker, zodat zoomen en pannen gelijk voelen.
+    const onPanStart = (event: PointerEvent) => {
+      if (event.button !== 1 || !controls.enabled || !controls.enablePan) return;
+      if (isOpenFem3DOrtho(camera)) {
+        // Parallel: elk punt, op welke diepte ook, schuift evenveel als het
+        // vlak door het doel; OrbitControls pant al één op één met het frustum.
+        controls.panSpeed = 1;
+        container.dataset.openFem3dPanSpeed = controls.panSpeed.toFixed(3);
+        return;
+      }
+      setPointer(event);
+      const visibleTargets = [...nodePickTargetsRef.current, ...nonNodePickTargetsRef.current]
+        .filter((target) => target.userData.pickable !== false);
+      const hit = raycaster.intersectObjects(visibleTargets, false)[0];
+      const view = camera.getWorldDirection(new THREE.Vector3());
+      const { point } = wheelAnchor(
+        raycaster.ray, hit?.point ?? null, openFem3DNodeBounds(modelRef.current), view, controls.target,
+      );
+      const depth = point.clone().sub(camera.position).dot(view);
+      const targetDepth = controls.target.clone().sub(camera.position).dot(view);
+      controls.panSpeed = depth > 0 && targetDepth > 0 ? THREE.MathUtils.clamp(depth / targetDepth, 0.05, 50) : 1;
+      container.dataset.openFem3dPanSpeed = controls.panSpeed.toFixed(3);
+    };
+    renderer.domElement.addEventListener("pointerdown", onPanStart, { capture: true });
     const drawingAnchor = () => {
       const sketch = isOpeningTool(toolRef.current) ? openingDraftRef.current : plateDraftRef.current;
       const nodeId = toolRef.current === "addBeam" ? beamStartRef.current : sketch.firstNodeId;
@@ -1769,7 +2598,9 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       }
       const { view, origin, plane, surfaceConstrained } = openingPlane ?? drawingPlane(nearPlateNodeId, pointedPlatePlane);
       const position = new THREE.Vector3();
-      if (!raycaster.ray.intersectPlane(plane, position)) return finish(null);
+      // Parallel de hele lijn: een werkvlakpunt achter het cameravlak hoort
+      // gewoon bij deze pixel (openFem3DStraalOpVlak).
+      if (!openFem3DStraalOpVlak(camera, raycaster.ray, plane, position)) return finish(null);
       const raw = position.clone();
       const onDrawingPlane = (candidate: THREE.Vector3) => {
         if (!openingPlane && !surfaceConstrained) return candidate;
@@ -2135,6 +2966,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       // tussenknopen zetten houden de ruimere zone.
       const nodeCondition = openFem3DNodeConditionOfTool(activeTool);
       const nodeTool = nodeCondition !== null || activeTool === "addSubNode";
+      // Pixels per meter op diepte 1 (perspectief: 1/tan(fov/2), te delen door
+      // de diepte = clip-w van de knoop) of overal (parallel: 1/h, clip-w = 1).
       const pixelsPerMeter = camera.projectionMatrix.elements[5] * nodeIndex.height / 2;
       const nodeRadiusM = visualNodeRadiusRef.current;
       const nodeHit = nodePickTargetsRef.current.some((target) => target.userData.pickable !== false)
@@ -2162,15 +2995,17 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         return section ? Math.hypot(section.widthM, section.heightM) / 2 : PROFILE_BEAM_RADIUS_M;
       };
       const hitPlate = plateHit ? plateByIdRef.current?.get(plateHit.id) : undefined;
+      // Afstand van de knoop tot de camera zoals de raycast meet (perspectief:
+      // vanaf het oogpunt; parallel: langs de kijkrichting).
+      const hitNodeDistance = hitNode ? openFem3DCameraAfstand(camera, hitNode) : Number.POSITIVE_INFINITY;
       // Voorrang (zie openFem3dPick.ts): een echt geraakt lastteken, dan een
       // knoop onder de klik, dan de staaf onder of vlak naast de cursor, dan
       // de plaat. Diepte beslist tussen elementen achter elkaar.
       const pick = chooseOpenFem3DPick({
         load: loadHit,
-        node: nodeHit && hitNode
-          && camera.position.distanceTo(new THREE.Vector3(hitNode.x, hitNode.y, hitNode.z)) <= throughLimitM ? {
+        node: nodeHit && hitNode && hitNodeDistance <= throughLimitM ? {
           id: hitNode.id,
-          distance: camera.position.distanceTo(new THREE.Vector3(hitNode.x, hitNode.y, hitNode.z)),
+          distance: hitNodeDistance,
           radiusM: nodeRadiusM,
         } : null,
         support: supportHit,
@@ -2598,11 +3433,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
       renderer.domElement.removeEventListener("pointercancel", onPointerCancel);
       renderer.domElement.removeEventListener("wheel", onWheelAnchor, true);
+      renderer.domElement.removeEventListener("pointerdown", onPanStart, true);
       selectionBox.remove();
       window.removeEventListener("keydown", onKeyDown);
       dialog.stop();
       controls.removeEventListener("start", startCameraInteraction);
       controls.removeEventListener("change", followOrbitPivot);
+      controls.removeEventListener("change", houdOrthoCameraVrij);
       controls.removeEventListener("change", renderCameraInteraction);
       controls.removeEventListener("end", endControlsInteraction);
       if (cameraRenderFrame) cancelAnimationFrame(cameraRenderFrame);
@@ -2626,9 +3463,20 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       renderer.domElement.remove();
       labelRenderer.domElement.remove();
       previewHint.remove();
+      viewCube.verwijder();
+      projectieRef.current = null;
       sceneRef.current = null;
     };
   }, []);
+
+  // Perspectief of parallel (zichtbaarheid `perspective`): de camera wisselt
+  // en het vinkje van het menu-item Perspectief volgt. Vóór de effecten van
+  // lintaanzicht en camera hieronder, zodat die al in de juiste stand richten.
+  useEffect(() => {
+    projectieRef.current?.(visibility.perspective);
+    const viewCube = sceneRef.current?.viewCube;
+    if (viewCube && viewCubeMenuRef.current) viewCube.zetMenu(viewCubeMenuRef.current(viewCubeTekstenRef.current));
+  }, [visibility.perspective]);
 
   useEffect(() => {
     const state = sceneRef.current;
@@ -2652,10 +3500,21 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       containerRef.current.dataset.openFem3dGridSpacingM = String(layout.visibleSpacingM);
       containerRef.current.dataset.openFem3dGridDivisions = String(layout.divisions);
     }
+    // Parallel: het nieuwe raster kan buiten de bol om de vorige scène reiken.
+    if (isOpenFem3DOrtho(state.camera)) plaatsOrthoCamera(state);
     // Een modelwijziging rendert direct hierna in de scène-effect opnieuw.
     // Teken alleen apart wanneer uitsluitend de rasterafstand wijzigt.
     if (lastBuiltModelRef.current === model) state.renderer.render(state.scene, state.camera);
   }, [model.nodes, gridSpacingM]);
+
+  // Parallel: andere knopen, een ander raster of andere stramienen kunnen
+  // buiten de bol om de vorige scène reiken (openFem3DOrthoAfstand). Zet de
+  // camera dan weer ver genoeg terug, ook zonder camerabeweging; het beeld
+  // verandert er niet door (alleen de diepte). De modelopbouw hieronder tekent.
+  useEffect(() => {
+    const state = sceneRef.current;
+    if (state && isOpenFem3DOrtho(state.camera)) plaatsOrthoCamera(state);
+  }, [model.nodes, gridSpacingM, structuralGrid]);
 
   useEffect(() => {
     const state = sceneRef.current;
@@ -2785,6 +3644,22 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       && (lastBuiltConditionModelRef.current?.surfaceLoads?.length
         ?? previousModel?.surfaceLoads?.length ?? 0) === 0;
     const conditionLayerHasNoSurfaceLoads = !visibility.loads || noSurfaceLoadsInEitherModel;
+    // De view cube en de projectie zijn geen scène-inhoud: alleen een van
+    // beide omzetten bouwt niets op (hun eigen effecten tonen of verbergen de
+    // kubus, of wisselen de camera, en delen de labels opnieuw in).
+    const viewCubeOnly = previousModel === model
+      && visibilityChangedOnly("viewCube", "perspective")
+      && structuralGrid === previousPresentation?.structuralGrid
+      && result === previousPresentation?.result
+      && utilizations === previousPresentation?.utilizations
+      && activeLoadCaseId === previousPresentation?.activeLoadCaseId
+      && conditionModel === lastBuiltConditionModelRef.current;
+    if (viewCubeOnly) {
+      const projectie = visibility.perspective !== previousPresentation?.visibility.perspective;
+      rememberBuiltPresentation();
+      if (containerRef.current) writeBuildMode(containerRef.current, projectie ? "projection" : "view-cube");
+      return;
+    }
     const sceneGuidesOnly = previousModel === model
       && visibilityChangedOnly("grid", "axes")
       && structuralGrid === previousPresentation?.structuralGrid
@@ -4449,7 +5324,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     const nodeLabelStride = labelStride(model.nodes.length);
     // Bij een groter raamwerk maken tientallen badges zowel het model als de
     // bediening traag en onleesbaar. Details blijven per staaf selecteerbaar.
-    const resultLabelStride = model.beams.length <= 24 ? 1 : Math.ceil(model.beams.length / 16);
+    const resultLabelStride = openFem3DResultLabelStride(model.beams.length);
     const resultLabelVisible = (beamId: number, beamIndex: number) => {
       if (beamIndex % resultLabelStride === 0) return true;
       const selected = selectionRef.current;
@@ -4945,6 +5820,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       }
     }
 
+    let resultDiagramCount = 0;
     if (result && (visibility.axialForce || visibility.shearY || visibility.shearZ ||
       visibility.torsion || visibility.momentY || visibility.momentZ)) {
       const forceByMember = new Map(result.memberForces.map((force) => [force.memberId, force]));
@@ -4958,14 +5834,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           curvePoints: [],
         } satisfies ResultDiagramBatch]))
         : undefined;
-      const maxima = new Map(activeDiagrams.map((component) => [
-        component,
-        result.memberForces.reduce((maximum, force) =>
-          Math.max(maximum, ...diagramPoints(result, component, force).map((point) => Math.abs(point.value))), 0),
-      ]));
-      const modelBox = openFem3DNodeBounds(model);
-      const diagramHeight = Math.max(0.35, Math.min(3, modelBox.getSize(new THREE.Vector3()).length() * 0.085));
-      for (const [beamIndex, beam] of model.beams.entries()) {
+      const { maxima, height: diagramHeight } = diagramScale(model, result, activeDiagrams);
+      // Alleen de lijnen; hun getallen (en N en T op het staafmidden) staan in
+      // een eigen labellaag (buildDiagramLabelLayer), die Waarden, de stand en
+      // de selectie volgt zonder de scène opnieuw op te bouwen.
+      for (const beam of model.beams) {
         const start = byId.get(beam.startNodeId), end = byId.get(beam.endNodeId);
         const force = forceByMember.get(beam.id);
         if (!start || !end || !force) continue;
@@ -4974,26 +5847,17 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         const axes = memberAxes(b.clone().sub(a), beam.rollAngleRad ?? 0);
         for (const component of activeDiagrams) {
           const style = DIAGRAM_STYLE[component];
-          addResultDiagram(
+          if (addResultDiagram(
             geometry, beam.id, a, b, style.direction(axes), diagramPoints(result, component, force),
             maxima.get(component) ?? 0, diagramHeight,
             { symbol: style.symbol, unit: style.unit, color: style.color },
-            resultLabelVisible(beam.id, beamIndex),
             diagramBatches?.get(component),
-          );
-        }
-        const max = (a: number, b: number) => Math.max(Math.abs(a), Math.abs(b)).toFixed(2);
-        const parts = [
-          visibility.axialForce ? `N ${max(force.nStartKn, force.nEndKn)} kN` : "",
-          visibility.torsion ? `T ${max(force.torsionStartKnm, force.torsionEndKnm)} kNm` : "",
-        ].filter(Boolean);
-        if (parts.length > 0 && resultLabelVisible(beam.id, beamIndex)) {
-          const midpoint = a.clone().add(b).multiplyScalar(0.5);
-          geometry.add(makeLabel(parts.join(" · "), "open-fem3d-result-label", midpoint));
+          )) resultDiagramCount += 1;
         }
       }
       diagramBatches?.forEach((batch) => flushResultDiagramBatch(geometry, batch));
     }
+    if (containerRef.current) containerRef.current.dataset.openFem3dResultDiagrams = String(resultDiagramCount);
     let visibleLabelCount = 0;
     geometry.traverse((object) => {
       if (object instanceof CSS2DObject) visibleLabelCount += 1;
@@ -5038,6 +5902,61 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     if (pendingAppendRef.current?.model === model) pendingAppendRef.current = null;
     nodeSnapPrewarmRef.current?.();
   }, [model, conditionModel, visibility, structuralGrid, result, utilizations, activeLoadCaseId, loadCaseTypes]);
+
+  // De getallen bij de snedekrachtlijnen als eigen laag (issue #95), na de
+  // scène-opbouw hierboven: Waarden, de stand of een andere selectie bouwen
+  // alleen deze laag opnieuw. Na een volledige opbouw (die de laag weggooit)
+  // komt hij terug; anders blijft hij staan zolang model, resultaat, de zes
+  // lijnen, de instelling en de geselecteerde staven gelijk zijn. Een groot
+  // plan wordt vóór elke labelindeling uitgedund (thinDiagramLabelLayer).
+  // Diagnose: data-open-fem3d-diagram-labels = het aantal labels in het plan,
+  // data-open-fem3d-diagram-label-elements = het aantal elementen in de DOM.
+  const diagramLabelLayerRef = useRef<{
+    layer: DiagramLabelLayer; model: OpenFem3DModel; result: OpenFem3DSolveResult; layers: string;
+    labels: OpenFem3DDiagramLabels; selected: string;
+  } | null>(null);
+  useEffect(() => {
+    const state = sceneRef.current;
+    if (!state) return;
+    const { geometry } = state;
+    const labels = diagramLabels ?? DEFAULT_OPEN_FEM_3D_DIAGRAM_LABELS;
+    const layers = OPEN_FEM_3D_FORCE_LAYERS.filter((layer) => visibility[layer]).join(",");
+    const shown = result && layers && labels.show ? result : null;
+    const selectedBeamIds = shown ? openFem3DDiagramLabelSelection(selection) : [];
+    const selected = selectedBeamIds.join(",");
+    const current = diagramLabelLayerRef.current;
+    const reusable = shown !== null && current !== null && current.layer.group.parent === geometry && current.model === model
+      && current.result === shown && current.layers === layers && sameOpenFem3DDiagramLabels(current.labels, labels)
+      && current.selected === selected;
+    if (reusable) return;
+    let changed = false;
+    if (current) {
+      changed = current.layer.group.parent === geometry;
+      current.layer.group.removeFromParent();
+      disposeObject3D(current.layer.group);
+      diagramLabelLayerRef.current = null;
+    }
+    state.beforeLabels = undefined;
+    let layer: DiagramLabelLayer | null = null;
+    if (shown) {
+      const startedAt = performance.now();
+      layer = buildDiagramLabelLayer(model, shown, visibility, labels, selectedBeamIds);
+      geometry.add(layer.group);
+      diagramLabelLayerRef.current = { layer, model, result: shown, layers, labels, selected };
+      const thinned = layer;
+      if (thinned.thinned) state.beforeLabels = (scene, container) => thinDiagramLabelLayer(scene, container, thinned);
+      changed = true;
+      if (containerRef.current) containerRef.current.dataset.openFem3dDiagramLabelLayerMs = (performance.now() - startedAt).toFixed(2);
+    }
+    if (containerRef.current) {
+      containerRef.current.dataset.openFem3dDiagramLabels = String(layer?.specs.length ?? 0);
+      containerRef.current.dataset.openFem3dDiagramLabelsThinned = String(layer?.thinned ?? false);
+    }
+    // Alleen de labels: de laag bestaat uit CSS-labels en verandert niets aan
+    // het WebGL-beeld; een WebGL-render hier was bij elke klik en stand overbodig.
+    if (changed) renderOpenFem3DLabels(state, containerRef.current);
+    if (containerRef.current) containerRef.current.dataset.openFem3dDiagramLabelElements = String(layer ? diagramLabelElements(layer) : 0);
+  }, [model, conditionModel, visibility, structuralGrid, result, utilizations, activeLoadCaseId, loadCaseTypes, diagramLabels, selection]);
 
   // De vervormde vorm als eigen laag, na de scène-opbouw hierboven: een
   // andere vergroting of Origineel tonen bouwt alleen deze laag opnieuw, niet
@@ -5174,32 +6093,20 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     const state = sceneRef.current;
     if (!state) return;
     nodeSnapScreenIndexDirtyRef.current = true;
-    const current = modelRef.current;
-    const box = sceneBounds(current, visibility);
-    const hasGeometry = !box.isEmpty();
-    const center = hasGeometry ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3();
-    const view = viewRequest?.kind ?? "iso";
-    const direction = view === "top" ? new THREE.Vector3(0, 0, 1)
-      : view === "front" ? new THREE.Vector3(0, -1, 0)
-      : view === "side" ? new THREE.Vector3(1, 0, 0)
-      : new THREE.Vector3(1.4, 1.4, 1);
-    if (view === "top") state.camera.up.set(0, 1, 0);
-    else state.camera.up.set(0, 0, 1);
-    const distance = hasGeometry ? fittedCameraDistance(
-      state.camera, box, direction,
-      state.renderer.domElement.clientWidth, state.renderer.domElement.clientHeight,
-    ) : 4;
-    state.controls.target.copy(center);
-    state.camera.position.copy(center).add(direction.normalize().multiplyScalar(distance));
-    state.camera.near = Math.max(0.001, distance / 10_000);
-    state.camera.far = Math.max(1_000, distance * 100);
-    state.camera.updateProjectionMatrix();
-    state.controls.update();
-    cameraChangeRef.current?.({
-      position: state.camera.position.toArray() as [number, number, number],
-      target: state.controls.target.toArray() as [number, number, number],
-      up: state.camera.up.toArray() as [number, number, number],
-    });
+    if (aimedViewTokenRef.current === false || aimedViewTokenRef.current !== viewRequest?.token) {
+      // Een nieuw lintaanzicht (of het eerste beeld). Kijkrichting en up per
+      // lintaanzicht staan in openFem3dViewCube.ts; de view cube gebruikt
+      // dezelfde functie voor zijn vlakken.
+      aimedViewTokenRef.current = viewRequest?.token;
+      const { richting, up } = openFem3DAanzichtRichting(viewRequest?.kind ?? "iso");
+      aimOpenFem3DCamera(state, modelRef.current, visibility, richting, up);
+    } else {
+      // Alleen Passend beeld: de huidige kijkrichting en up blijven. Het
+      // gemelde aanzicht (viewRequest.kind) is na een draai of een klik op de
+      // kubus een benadering ("front" voor Achter) en geen richting.
+      fitOpenFem3DCamera(state, modelRef.current, visibility);
+    }
+    cameraChangeRef.current?.(openFem3DCameraStateVan(state));
     state.renderer.render(state.scene, state.camera);
     renderOpenFem3DLabels(state, containerRef.current);
     writeCameraDiagnostics(containerRef.current, state);
@@ -5213,22 +6120,32 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     const state = sceneRef.current;
     if (!state || !cameraRequest) return;
     nodeSnapScreenIndexDirtyRef.current = true;
-    state.camera.position.fromArray(cameraRequest.state.position);
-    state.camera.up.fromArray(cameraRequest.state.up);
-    state.controls.target.fromArray(cameraRequest.state.target);
-    state.camera.updateProjectionMatrix();
-    state.controls.update();
-    cameraChangeRef.current?.({
-      position: state.camera.position.toArray() as [number, number, number],
-      target: state.controls.target.toArray() as [number, number, number],
-      up: state.camera.up.toArray() as [number, number, number],
-    });
+    // Ook de schaal van een parallelle view (orthoHalfHeight), zie pasOpenFem3DCameraStateToe.
+    pasOpenFem3DCameraStateToe(state, cameraRequest.state);
+    cameraChangeRef.current?.(openFem3DCameraStateVan(state));
     cameraViewChangeRef.current?.(openFem3DViewFromCamera(state.camera.position, state.controls.target));
     state.renderer.render(state.scene, state.camera);
     renderOpenFem3DLabels(state, containerRef.current);
     writeCameraDiagnostics(containerRef.current, state);
     nodeSnapPrewarmRef.current?.();
   }, [cameraRequest?.token]);
+
+  // Vlaknamen, labels en menu van de view cube in de gekozen taal.
+  useEffect(() => {
+    const viewCube = sceneRef.current?.viewCube;
+    if (!viewCube) return;
+    viewCube.zetTeksten(viewCubeTeksten);
+    if (viewCubeMenuRef.current) viewCube.zetMenu(viewCubeMenuRef.current(viewCubeTeksten));
+  }, [viewCubeTeksten]);
+
+  // Zichtbaarheid `viewCube`: verborgen = geen kubus, geen menu en geen
+  // gereserveerde plek meer voor labels (die worden opnieuw ingedeeld).
+  useEffect(() => {
+    const state = sceneRef.current;
+    if (!state?.viewCube) return;
+    state.viewCube.toon(visibility.viewCube);
+    renderOpenFem3DLabels(state, containerRef.current);
+  }, [visibility.viewCube]);
 
   return <div
     className={`open-fem3d-canvas open-fem3d-tool-${tool} ${tool.startsWith("support:") || tool.startsWith("spring:") || tool === "addMemberLoad" || tool === "loadPanelSpan" ? "open-fem3d-tool-support" : ""}`}

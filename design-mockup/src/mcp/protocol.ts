@@ -57,6 +57,10 @@ export const SIDECAR_OPS = [
   // ifcImportSidecar.ts.
   "ifc_importeren",
   "ifc_uitwerken",
+  // De API-commando's van de app (src/api/) zonder app, op de tekst van een
+  // projectbestand: de catalogus, en één commando uitvoeren. Zie apiSidecar.ts.
+  "api_catalogus",
+  "api_uitvoeren",
 ] as const;
 
 export type SidecarOp = (typeof SIDECAR_OPS)[number];
@@ -78,6 +82,13 @@ export type SidecarOp = (typeof SIDECAR_OPS)[number];
  *  - TIJD_OVERSCHREDEN  gereserveerd voor de Rust-kant, die de klok bewaakt
  *  - INTERN             onverwachte fout; originele tekst gaat mee in `detail`
  *
+ * Van de API-commando's (api_uitvoeren, zie src/api/register.ts):
+ *  - ONBEKEND_COMMANDO  geen commando met die naam; `detail.suggesties`
+ *  - NIET_GEVONDEN      een genoemd element of geval bestaat niet
+ *  - GEWEIGERD          een modelregel weigert de bewerking (de melding zegt waarom)
+ *  - GEEN_DOCUMENT      een documentcommando zonder project
+ *  - ALLEEN_IN_APP      een app-commando (weergave, ongedaan maken …) zonder app
+ *
  * Een code TOEVOEGEN hoogt `SIDECAR_PROTOCOL` niet op: een Rust-kant die de code
  * niet kent, geeft er zijn algemene remedie bij en laat melding en `detail`
  * ongemoeid, dus er breekt niets. Een code weghalen of van betekenis veranderen
@@ -91,6 +102,11 @@ export const FOUTCODES = [
   "DOORSNEDE_ONBEKEND",
   "TIJD_OVERSCHREDEN",
   "INTERN",
+  "ONBEKEND_COMMANDO",
+  "NIET_GEVONDEN",
+  "GEWEIGERD",
+  "GEEN_DOCUMENT",
+  "ALLEEN_IN_APP",
 ] as const;
 
 export type Foutcode = (typeof FOUTCODES)[number];

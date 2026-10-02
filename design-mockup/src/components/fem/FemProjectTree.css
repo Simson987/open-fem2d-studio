@@ -111,6 +111,86 @@
   padding-left: 24px;
 }
 
+/* Opties van de hoeksnap (#53) onder de rij Hoek: tolerantie en extra hoeken. */
+.explorer-view-hoek-opties {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 2px 12px 6px 49px;
+  color: var(--theme-text-secondary);
+  font: 400 11px/1.3 "Inter", system-ui, sans-serif;
+}
+.explorer-view-hoek-opties.uit {
+  opacity: 0.5;
+}
+.explorer-view-hoek-veld,
+.explorer-view-hoek-vink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.explorer-view-hoek-veld input,
+.explorer-view-invoer-rij input {
+  width: 44px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--theme-border);
+  border-radius: 3px;
+  background: var(--theme-bg-lighter);
+  color: var(--theme-text);
+  font: 500 11px/1 "JetBrains Mono", monospace;
+  text-align: right;
+}
+.explorer-view-hoek-veld input:focus,
+.explorer-view-invoer-rij input:focus {
+  outline: none;
+  border-color: var(--theme-accent);
+}
+.explorer-view-hoek-vink input {
+  margin: 0;
+  accent-color: var(--theme-accent);
+}
+/* Rij met een invoerveld op de plek van de schakelaar (#55, verbindingstolerantie):
+   dezelfde maat en inspringing als een sub-schakelrij. Het label wordt NIET
+   afgekapt (geen ellipsis zoals bij de schakelrijen): past het niet naast het
+   veld, dan schuift het veld met zijn eenheid naar een tweede regel, rechts
+   uitgelijnd. In een breder paneel staat alles op één regel. */
+.explorer-view-invoer-rij {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 8px;
+  padding: 5px 12px 5px 24px;
+  color: var(--theme-text-secondary);
+  font: 400 11.5px/1.3 "Inter", system-ui, sans-serif;
+  cursor: text;
+}
+.explorer-view-invoer-rij:hover {
+  background: var(--theme-hover);
+  color: var(--theme-text);
+}
+.explorer-view-invoer-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.explorer-view-invoer-veld {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  margin-left: auto;
+}
+.explorer-view-invoer-rij input {
+  flex: none;
+}
+.explorer-view-invoer-eenheid {
+  color: var(--theme-text-faint);
+  font: 400 11px/1 "Inter", system-ui, sans-serif;
+}
+
 .explorer-view-toggle-icon {
   display: inline-flex;
   align-items: center;
@@ -147,6 +227,23 @@
   border-radius: 2px;
 }
 .fem-tree-row:hover { background: var(--theme-hover); }
+
+/* Een kop met een actieknop rechts (bijv. "Alle selecteren"). */
+.fem-tree-row-with-action { display: flex; align-items: center; }
+.fem-tree-row-with-action > .fem-tree-row { flex: 1; min-width: 0; }
+.fem-tree-row-action {
+  flex: none;
+  margin-right: 6px;
+  padding: 1px 6px;
+  background: transparent;
+  border: 1px solid var(--theme-border);
+  border-radius: 3px;
+  color: var(--theme-text-secondary);
+  font: 500 11px/1.3 "Inter", system-ui, sans-serif;
+  cursor: pointer;
+}
+.fem-tree-row-action:hover { color: var(--theme-accent); border-color: var(--theme-accent); }
+.fem-tree-row-action:focus-visible { outline: 2px solid var(--theme-accent); outline-offset: 1px; }
 
 .fem-tree-chevron {
   display: flex;
@@ -288,8 +385,11 @@
   background: var(--theme-bg-lighter);
   border-bottom: 1px solid var(--theme-border-subtle);
 }
+/* min-width: 0, anders houdt de regelaar zijn eigen breedte (±130 px) aan en
+   duwt hij in een smal paneel (240 px) de rest van de rij buiten beeld. */
 .fem-results-scale-slider {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   height: 14px;
   accent-color: var(--theme-accent);
   cursor: pointer;
@@ -299,6 +399,12 @@
   text-align: right;
   font: 500 10px/1 "JetBrains Mono", monospace;
   color: var(--theme-text-faint);
+}
+/* De woorden aan de uiteinden van een regelaar (bv. Weinig … Veel). */
+.fem-results-scale-end {
+  font-size: 10px;
+  color: var(--theme-text-faint);
+  white-space: nowrap;
 }
 .fem-results-toggle {
   display: flex;

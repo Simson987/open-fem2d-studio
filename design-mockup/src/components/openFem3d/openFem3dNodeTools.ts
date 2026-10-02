@@ -101,6 +101,22 @@ export function applyOpenFem3DNodeCondition(
 }
 
 /**
+ * Geef een reeks bestaande knopen dezelfde voorwaarde (bijvoorbeeld alle
+ * opleggingen scharnierend): één nieuw model, dus één stap ongedaan maken.
+ * Knopen die niet bestaan, worden overgeslagen.
+ */
+export function applyOpenFem3DNodeConditionToNodes(
+  model: OpenFem3DModel,
+  nodeIds: readonly number[],
+  condition: OpenFem3DNodeCondition,
+  springStiffness: number,
+): OpenFem3DModel {
+  const bestaand = new Set(model.nodes.map((node) => node.id));
+  return [...new Set(nodeIds)].filter((id) => bestaand.has(id))
+    .reduce((next, nodeId) => applyOpenFem3DNodeCondition(next, nodeId, condition, springStiffness), model);
+}
+
+/**
  * Plaats de voorwaarde op het doel: een bestaande knoop, of een punt van het
  * werkvlak. Ligt daar al een knoop (binnen 0,1 µm), dan krijgt die hem;
  * anders komt er een nieuwe knoop. Eén nieuw model, dus één stap ongedaan maken.

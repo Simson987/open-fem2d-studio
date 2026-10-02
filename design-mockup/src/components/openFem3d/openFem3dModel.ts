@@ -1424,6 +1424,168 @@ export function removeOpenFem3DThermalLoad(model: OpenFem3DModel, loadId: number
   return { ...model, thermalLoads: (model.thermalLoads ?? []).filter((load) => load.id !== loadId) };
 }
 
+// ── Knoop en staaf toevoegen en wijzigen (zuiver; de basis van de API) ────────
+
+/** Binnen deze afstand per richting liggen twee 3D-knopen op dezelfde plek (m). */
+const OPEN_FEM_3D_SAME_POSITION_M = 1e-6;
+
+/** Wat een nieuwe staaf krijgt als niets anders is opgegeven; gelijk aan het tekengereedschap. */
+export const OPEN_FEM_3D_DEFAULT_BEAM = { material: "S235", profileName: "IPE 200" } as const;
+
+export interface OpenFem3DNodeInput {
+  x: number;
+  y: number;
+  z: number;
+  name?: string;
+}
+
+/** Wijziging van een knoop; `null` wist de naam. */
+export interface OpenFem3DNodePatch {
+  x?: number;
+  y?: number;
+  z?: number;
+  name?: string | null;
+}
+
+export interface OpenFem3DBeamInput {
+  startNodeId: number;
+  endNodeId: number;
+  profileName?: string;
+  material?: string;
+  rollAngleRad?: number;
+  /** Ontbrekende vrijheidsgraden zijn vast (false). */
+  releases?: Partial<OpenFem3DEndReleases>;
+  tensionOnly?: boolean;
+  name?: string;
+  group?: string;
+}
+
+/** Wijziging van een staaf; `null` wist een optioneel veld, `tensionOnly: false` wist trek-alleen. */
+export interface OpenFem3DBeamPatch {
+  startNodeId?: number;
+  endNodeId?: number;
+  profileName?: string | null;
+  material?: string | null;
+  rollAngleRad?: number | null;
+  releases?: Partial<OpenFem3DEndReleases> | null;
+  tensionOnly?: boolean;
+  name?: string | null;
+  group?: string | null;
+}
+
+function readCoordinate(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${label} moet een eindig getal zijn.`);
+  return value;
+}
+
+function nodeAtSamePosition(
+  model: OpenFem3DModel, x: number, y: number, z: number, exceptId?: number,
+): OpenFem3DNode | undefined {
+  return model.nodes.find((node) => node.id !== exceptId
+    && Math.abs(node.x - x) <= OPEN_FEM_3D_SAME_POSITION_M
+    && Math.abs(node.y - y) <= OPEN_FEM_3D_SAME_POSITION_M
+    && Math.abs(node.z - z) <= OPEN_FEM_3D_SAME_POSITION_M);
+}
+
+/** Het model moet daarna gewoon openen; anders is de bewerking geweigerd. */
+function assertOpensAfterEdit(model: OpenFem3DModel): OpenFem3DModel {
+  parseOpenFem3DModel(model);
+  return model;
+}
+
+/** Een nieuwe 3D-knoop met het volgende vrije id. Een knoop op de plek van een bestaande wordt geweigerd. */
+export function addOpenFem3DNode(
+  model: OpenFem3DModel, input: OpenFem3DNodeInput,
+): { model: OpenFem3DModel; node: OpenFem3DNode } {
+  const x = readCoordinate(input.x, "x"), y = readCoordinate(input.y, "y"), z = readCoordinate(input.z, "z");
+  const existing = nodeAtSamePosition(model, x, y, z);
+  if (existing) throw new Error(`Op (${x}; ${y}; ${z}) m ligt al 3D-knoop ${existing.id}.`);
+  const name = readOptionalName(input.name, "De 3D-knoop");
+  const node: OpenFem3DNode = { id: nextEntityId(model.nodes), x, y, z, ...(name ? { name } : {}) };
+  return { model: assertOpensAfterEdit({ ...model, nodes: [...model.nodes, node] }), node };
+}
+
+/** Een knoop verplaatsen of hernoemen; staven, platen, opleggingen en lasten blijven eraan hangen. */
+export function updateOpenFem3DNode(model: OpenFem3DModel, nodeId: number, patch: OpenFem3DNodePatch): OpenFem3DModel {
+  const node = model.nodes.find((item) => item.id === nodeId);
+  if (!node) throw new Error(`3D-knoop ${nodeId} bestaat niet.`);
+  const x = patch.x === undefined ? node.x : readCoordinate(patch.x, "x");
+  const y = patch.y === undefined ? node.y : readCoordinate(patch.y, "y");
+  const z = patch.z === undefined ? node.z : readCoordinate(patch.z, "z");
+  if (node.levelId !== undefined && z !== node.z) {
+    throw new Error(`3D-knoop ${nodeId} hangt aan een level; z volgt dat level. Ontkoppel de knoop eerst of wijzig het level.`);
+  }
+  const existing = nodeAtSamePosition(model, x, y, z, nodeId);
+  if (existing) throw new Error(`Op (${x}; ${y}; ${z}) m ligt al 3D-knoop ${existing.id}.`);
+  const { name: _name, ...rest } = node;
+  const name = patch.name === undefined ? node.name : readOptionalName(patch.name, `3D-knoop ${nodeId}`);
+  const next: OpenFem3DNode = { ...rest, x, y, z, ...(name ? { name } : {}) };
+  return assertOpensAfterEdit({ ...model, nodes: model.nodes.map((item) => item.id === nodeId ? next : item) });
+}
+
+function connectingBeam(model: OpenFem3DModel, a: number, b: number, exceptId?: number): OpenFem3DBeam | undefined {
+  return model.beams.find((beam) => beam.id !== exceptId
+    && ((beam.startNodeId === a && beam.endNodeId === b) || (beam.startNodeId === b && beam.endNodeId === a)));
+}
+
+function readRequiredText(value: unknown, label: string): string {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`${label} mag niet leeg zijn.`);
+  return value.trim();
+}
+
+/** De optionele velden van een staaf uit `patch` op `beam` toepassen. */
+function withBeamFields(beam: OpenFem3DBeam, patch: OpenFem3DBeamPatch): OpenFem3DBeam {
+  const label = `3D-staaf ${beam.id}`;
+  const next: OpenFem3DBeam = { ...beam };
+  const set = <K extends keyof OpenFem3DBeam>(key: K, value: OpenFem3DBeam[K] | undefined) => {
+    if (value === undefined) delete next[key];
+    else next[key] = value;
+  };
+  if (patch.profileName !== undefined) set("profileName", patch.profileName === null ? undefined : readRequiredText(patch.profileName, `Het profiel van ${label}`));
+  if (patch.material !== undefined) set("material", patch.material === null ? undefined : readRequiredText(patch.material, `Het materiaal van ${label}`));
+  if (patch.rollAngleRad !== undefined) set("rollAngleRad", patch.rollAngleRad === null ? undefined : readCoordinate(patch.rollAngleRad, `De rolhoek van ${label}`));
+  if (patch.releases !== undefined) set("releases", patch.releases === null ? undefined : readEndReleases(patch.releases));
+  if (patch.tensionOnly !== undefined) set("tensionOnly", patch.tensionOnly ? true : undefined);
+  if (patch.name !== undefined) set("name", readOptionalName(patch.name, label));
+  if (patch.group !== undefined) set("group", readOptionalName(patch.group, label));
+  return next;
+}
+
+/** Een nieuwe staaf tussen twee bestaande knopen, met het volgende vrije id. */
+export function addOpenFem3DBeam(
+  model: OpenFem3DModel, input: OpenFem3DBeamInput,
+): { model: OpenFem3DModel; beam: OpenFem3DBeam } {
+  const { startNodeId, endNodeId } = input;
+  requireNode(model, startNodeId);
+  requireNode(model, endNodeId);
+  if (startNodeId === endNodeId) throw new Error("Een 3D-staaf moet twee verschillende knopen verbinden.");
+  const existing = connectingBeam(model, startNodeId, endNodeId);
+  if (existing) throw new Error(`Tussen 3D-knoop ${startNodeId} en ${endNodeId} ligt al 3D-staaf ${existing.id}.`);
+  const base: OpenFem3DBeam = { id: nextEntityId(model.beams), startNodeId, endNodeId, ...OPEN_FEM_3D_DEFAULT_BEAM };
+  const beam = withBeamFields(base, input);
+  // Lengte en verder dezelfde regels als bij omhangen.
+  setOpenFem3DBeamNodes({ ...model, beams: [...model.beams, beam] }, beam.id, startNodeId, endNodeId);
+  return { model: assertOpensAfterEdit({ ...model, beams: [...model.beams, beam] }), beam };
+}
+
+/** Eigenschappen of knopen van een staaf wijzigen; lasten, toetsinstellingen en scharnieren blijven. */
+export function updateOpenFem3DBeam(model: OpenFem3DModel, beamId: number, patch: OpenFem3DBeamPatch): OpenFem3DModel {
+  const beam = model.beams.find((item) => item.id === beamId);
+  if (!beam) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
+  let next = model;
+  const startNodeId = patch.startNodeId ?? beam.startNodeId;
+  const endNodeId = patch.endNodeId ?? beam.endNodeId;
+  if (startNodeId !== beam.startNodeId || endNodeId !== beam.endNodeId) {
+    requireNode(model, startNodeId);
+    requireNode(model, endNodeId);
+    const existing = connectingBeam(model, startNodeId, endNodeId, beamId);
+    if (existing) throw new Error(`Tussen 3D-knoop ${startNodeId} en ${endNodeId} ligt al 3D-staaf ${existing.id}.`);
+    next = setOpenFem3DBeamNodes(model, beamId, startNodeId, endNodeId);
+  }
+  const updated = withBeamFields(next.beams.find((item) => item.id === beamId)!, patch);
+  return assertOpensAfterEdit({ ...next, beams: next.beams.map((item) => item.id === beamId ? updated : item) });
+}
+
 /** Reconnect a member while preserving its loads, section, releases and checks. */
 export function setOpenFem3DBeamNodes(
   model: OpenFem3DModel,
@@ -1444,6 +1606,72 @@ export function setOpenFem3DBeamNodes(
     beams: model.beams.map((item) => item.id === beamId
       ? { ...item, startNodeId, endNodeId }
       : item),
+  };
+}
+
+/**
+ * De lokale dwarsassen van een staaf omkeren: de profielrotatie draait 180°.
+ * De lokale belastingcomponenten draaien mee, zodat hun richting in het
+ * wereldstelsel bij het omkeren van beide dwarsassen behouden blijft.
+ */
+export function flipOpenFem3DBeamLocalAxes(model: OpenFem3DModel, beamId: number): OpenFem3DModel {
+  if (!model.beams.some((item) => item.id === beamId)) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
+  return {
+    ...model,
+    beams: model.beams.map((item) => item.id === beamId
+      ? { ...item, rollAngleRad: ((item.rollAngleRad ?? 0) + Math.PI) % (2 * Math.PI) }
+      : item),
+    memberLoads: model.memberLoads?.map((load) => load.beamId === beamId
+      ? { ...load, qyStart: -load.qyStart, qyEnd: -load.qyEnd, qzStart: -load.qzStart, qzEnd: -load.qzEnd }
+      : load),
+    memberPointLoads: model.memberPointLoads?.map((load) => load.beamId === beamId
+      ? { ...load, py: -load.py, pz: -load.pz } : load),
+    thermalLoads: model.thermalLoads?.map((load) => load.beamId === beamId
+      ? { ...load, deltaTGradientYK: -load.deltaTGradientYK, deltaTGradientZK: -load.deltaTGradientZK }
+      : load),
+  };
+}
+
+/** Standaardsituaties voor de eindscharnieren: de knoppen Momentvast en Scharnierend. */
+export type OpenFem3DReleasePreset = "rigid" | "pinned";
+
+export const OPEN_FEM_3D_RELEASE_PRESETS: Readonly<Record<OpenFem3DReleasePreset, Readonly<OpenFem3DEndReleases>>> = {
+  // Momentvast: beide einden dragen alle momenten over.
+  rigid: { myStart: false, myEnd: false, mzStart: false, mzEnd: false, torsionStart: false, torsionEnd: false },
+  // Scharnierend: geen buigend moment aan de einden. Torsie gaat wel over;
+  // los aan beide einden zou de staaf vrij om zijn eigen as laten draaien.
+  pinned: { myStart: true, myEnd: true, mzStart: true, mzEnd: true, torsionStart: false, torsionEnd: false },
+};
+
+/** Welke standaardsituatie deze scharnieren zijn, of null als ze daar niet bij horen. */
+export function openFem3DReleasePresetOf(releases: OpenFem3DEndReleases | undefined): OpenFem3DReleasePreset | null {
+  const keys = Object.keys(OPEN_FEM_3D_RELEASE_PRESETS.rigid) as (keyof OpenFem3DEndReleases)[];
+  for (const preset of ["rigid", "pinned"] as const) {
+    if (keys.every((key) => (releases?.[key] ?? false) === OPEN_FEM_3D_RELEASE_PRESETS[preset][key])) return preset;
+  }
+  return null;
+}
+
+/**
+ * Geef staven een standaardsituatie voor hun eindscharnieren. Momentvast haalt
+ * het veld weg, zoals bij een staaf die nooit scharnieren had.
+ */
+export function setOpenFem3DReleasePreset(
+  model: OpenFem3DModel,
+  beamIds: readonly number[],
+  preset: OpenFem3DReleasePreset,
+): OpenFem3DModel {
+  const ids = new Set(beamIds);
+  for (const id of ids) {
+    if (!model.beams.some((item) => item.id === id)) throw new Error(`3D-staaf ${id} bestaat niet.`);
+  }
+  return {
+    ...model,
+    beams: model.beams.map((item) => {
+      if (!ids.has(item.id)) return item;
+      const { releases: _oud, ...rest } = item;
+      return preset === "rigid" ? rest : { ...rest, releases: { ...OPEN_FEM_3D_RELEASE_PRESETS.pinned } };
+    }),
   };
 }
 

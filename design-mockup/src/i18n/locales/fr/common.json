@@ -37,6 +37,13 @@
     "rasterHint": "Afficher la grille d’arrière-plan du canevas.",
     "snap": "Accrochage",
     "snapAll": "Tous les accrochages",
+    "hoekHint": "Accrochage angulaire lors du tracé d’une barre : si la direction est à moins de la tolérance de 0° ou 90°, elle est placée exactement sur cet angle ; la longueur reste la même. Un nœud ou un axe de trame est prioritaire.",
+    "hoekTolerantie": "Tolérance (°)",
+    "hoekTolerantieHint": "Écart admis de la direction, en degrés : 0,1 à 15. Virgule ou point accepté.",
+    "hoekExtra": "Aussi 30°, 45° et 60°",
+    "hoekExtraHint": "L’accrochage angulaire saisit alors aussi 30°, 45° et 60° et leurs symétriques.",
+    "verbindingsTolerantie": "Tolérance de connexion",
+    "verbindingsTolerantieHint": "En deçà de cette distance, un nœud est considéré « sur la barre » ou « au même endroit » qu’un autre nœud : le contrôle du modèle le signale, et un nouveau nœud est relié ou réutilisé. 0,1 à 25 mm, 5 par défaut. Virgule ou point accepté. Les nœuds existants ne sont pas déplacés ; un nouveau nœud sur une barre est placé sur l’axe de la barre.",
     "groepLabels": "Étiquettes",
     "groepGeometrie": "Géométrie",
     "groepResultaten": "Résultats",
@@ -106,6 +113,8 @@
     "structuralGrid": "Trames et niveaux",
     "axes": "Axes X/Y/Z",
     "memberAxes": "Axes locales des barres",
+    "viewCube": "Cube de vue",
+    "perspective": "Perspective",
     "results": "Résultats",
     "deformation": "Forme déformée",
     "reactions": "Réactions d'appui",
@@ -138,6 +147,16 @@
     "scaleHint": "Facteur d'amplification des déplacements, logarithmique de 1× à 1000×. Automatique : le plus grand déplacement vaut 12 % de la taille du modèle.",
     "showOriginal": "Afficher l'original",
     "showOriginalHint": "Les barres et plaques non déformées en ombre légère derrière la déformée ; désactivé : seulement la déformée."
+  },
+  "openFem3dDiagramLabels": {
+    "values": "Valeurs",
+    "valuesAria": "Afficher les valeurs sur les diagrammes des efforts internes",
+    "valuesHint": "Chiffres sur les diagrammes des efforts internes, et N et T au milieu de la barre ; désactivé : les diagrammes seuls.",
+    "few": "Peu",
+    "many": "Beaucoup",
+    "density": "Nombre de valeurs",
+    "densityHint": "Peu : seulement la valeur déterminante par diagramme. Milieu : comme avant. Beaucoup : début, fin, extremum et quarts de portée sur toutes les barres. Les barres sélectionnées affichent toujours leurs valeurs.",
+    "densityValue": "Niveau {{n}} sur {{max}}"
   },
   "openFem3dViews": {
     "tab": "Vues",
@@ -226,7 +245,8 @@
   "snap": {
     "knoop": "Nœud",
     "stramien": "Trame",
-    "raster": "Grille"
+    "raster": "Grille",
+    "hoek": "Angle"
   },
   "section": "Section {{number}}",
   "contentPlaceholder": "Contenu ici",
@@ -584,6 +604,15 @@
     "windExplainNationalAnnex": "selon le tableau des types de terrain de l'annexe nationale. Si vous utilisez ce tableau, saisissez manuellement la pression dynamique de pointe dans le générateur de charges de vent."
   },
   "canvas": {
+    "qEdit": {
+      "aria": "Valeur q (kN/m)",
+      "sign": {
+        "globalZ": "Négatif = vers le bas (gravité)",
+        "globalX": "Négatif = vers la gauche (−X)",
+        "localZ": "Négatif = contre l’axe z local",
+        "localX": "Négatif = axial, contre le sens de la barre"
+      }
+    },
     "plate": {
       "needsFourCorners": "Une plaque nécessite exactement quatre coins.",
       "cornersCollinear": "Les coins coïncident ou sont (presque) alignés — dessinez un vrai rectangle.",
@@ -710,7 +739,13 @@
       "counts": "{{knopen}} nœuds · {{staven}} barres",
       "countsWithPlates": "{{knopen}} nœuds · {{staven}} barres · {{platen}} plaques",
       "resetZoomTitle": "Réinitialiser le zoom (F = ajuster)",
-      "resetZoom": "Réinitialiser"
+      "resetZoom": "Réinitialiser",
+      "snapOff": "Accrochage désactivé temporairement (Alt)",
+      "ortho": "Ortho (Maj)"
+    },
+    "subNode": {
+      "atEndTitle": "Pas de sous-nœud",
+      "atEnd": "Ce point se trouve à moins de la tolérance de connexion de {{mm}} mm du nœud {{knoop}}, une extrémité de la barre {{staaf}}. Il y a déjà un nœud à cet endroit ; la barre n’a pas été scindée."
     },
     "modelCheck": {
       "toggleTitle": "Contrôle du modèle — cliquez pour afficher ou masquer les constats",
@@ -727,6 +762,11 @@
       "repaired": "Modèle réparé",
       "repairAllTitle": "Appliquer toutes les corrections possibles — une seule étape dans l'historique",
       "repairAll": "Tout corriger ({{n}})",
+      "splitTitle_one": "Barre scindée",
+      "splitTitle_other": "Barres scindées",
+      "splitLine": "Nœud {{knoop}} relié à la barre {{staaf}} : celle-ci a été scindée en barre {{deel1}} et barre {{deel2}}.",
+      "splitLineOffset": "Nœud {{knoop}} relié à la barre {{staaf}} : celle-ci a été scindée en barre {{deel1}} et barre {{deel2}}. Le nœud était à {{mm}} mm de l’axe de la barre ; la barre présente maintenant un coude à cet endroit.",
+      "mergeLine": "Nœud {{verwijderd}} fusionné avec le nœud {{bewaard}}.",
       "plateEdge": {
         "openingOnPerimeterRoute": "la charge se trouve sur le bord d'une ouverture (`openingId`), mais elle est lue ici par un chemin qui ne connaît que le contour de la plaque. Signalez-le : l'adresse est volontairement refusée plutôt que placée en silence sur le contour.",
         "nameAndIndex": "la charge indique à la fois un bord nommé (`edge`) et un indice de bord (`edgeIndex`). N'en indiquez qu'un : avec deux adresses, on ne peut pas savoir quel bord est visé ni à partir de quel coin les positions sont comptées.",
@@ -944,6 +984,7 @@
     "deleteCaseTitle": "Supprimer le cas de charge, toutes ses charges et son coefficient dans chaque combinaison",
     "atLeastOneCase": "Au moins un cas de charge est obligatoire.",
     "deleteCaseConfirm": "Supprimer « {{naam}} » ? Toutes les charges de ce cas seront également supprimées, et son coefficient disparaît de chaque combinaison.",
+    "deleteCaseFailed": "Cas de charge non supprimé",
     "newCasePlaceholder": "Nouveau cas (p. ex. « {{voorbeeld}} »)",
     "add": "Ajouter",
     "casesHintBeforeGamma": "Un nouveau cas a le type « Autre » et ne compte que lorsque vous lui donnez un type : les combinaisons standard l'intègrent alors (permanente → γ",
@@ -1033,6 +1074,7 @@
     "swayDirectionTitle3d": "L’imperfection d’aplomb agit dans chaque combinaison ELU tour à tour en +X, −X, +Y et −Y (EN 1993-1-1 §5.3.2(8)) ; les combinaisons ELS sont calculées sans."
   },
   "tree": {
+    "selectAll": "Tout sélectionner",
     "showNext": "Afficher les {{count}} suivants",
     "runToSeeResults": "Lancez « Calculer » pour voir les résultats.",
     "rowDeflection": "Déplacement",

@@ -1,10 +1,21 @@
 import type { OpenFem3DView } from "./openFem3dCommands";
 import { DEFAULT_OPEN_FEM_3D_VISIBILITY, type OpenFem3DVisibility } from "./openFem3dVisibility";
+import { normalizeOpenFem3DDiagramLabels, type OpenFem3DDiagramLabels } from "./openFem3dDiagramLabels";
 
 export interface OpenFem3DCameraState {
+  /**
+   * In parallelle projectie de positie van de perspectiefcamera met dezelfde
+   * zichtbare grootte bij het doel (d = h / tan(fov/2)); zie openFem3dProjectie.ts.
+   */
   position: [number, number, number];
   target: [number, number, number];
   up: [number, number, number];
+  /**
+   * Alleen in parallelle projectie (zichtbaarheid perspective = uit): de halve
+   * hoogte (m) van het zichtbare frustum. Ontbreekt in perspectief en in
+   * oudere views; dan volgt de schaal uit de afstand positie–doel.
+   */
+  orthoHalfHeight?: number;
 }
 
 /** Classificeer het zichtbare aanzicht uit de camera, niet uit de laatst gekozen knop. */
@@ -41,6 +52,11 @@ export interface OpenFem3DViewSet {
    * een eigen view maak je om hem te tonen, ook in oudere projectbestanden.
    */
   inRapport?: boolean;
+  /**
+   * De getallen bij de snedekrachtlijnen (Waarden, stand 1 … 5). Ontbreekt in
+   * oudere views; die tonen bij toepassen de standaard (aan, stand 3).
+   */
+  diagramLabels?: OpenFem3DDiagramLabels;
 }
 
 /**
@@ -75,6 +91,8 @@ export interface OpenFem3DHuidigeWeergave {
   combinationId: number | null;
   loadCaseId: number;
   mode: "model" | "loadCase" | "results";
+  /** De getallen bij de snedekrachtlijnen; zonder: de view krijgt geen veld (toepassen geeft de standaard). */
+  diagramLabels?: OpenFem3DDiagramLabels;
 }
 
 const zelfdeNaam = (a: string, b: string) => a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase();
@@ -94,12 +112,16 @@ export function bewaarOpenFem3DViewSet(
     id: bestaand?.id ?? newOpenFem3DViewSetId(viewSets),
     name: trimmed,
     view: huidig.view,
-    camera: { position: [...huidig.camera.position], target: [...huidig.camera.target], up: [...huidig.camera.up] },
+    camera: {
+      position: [...huidig.camera.position], target: [...huidig.camera.target], up: [...huidig.camera.up],
+      ...(huidig.camera.orthoHalfHeight === undefined ? {} : { orthoHalfHeight: huidig.camera.orthoHalfHeight }),
+    },
     visibility: { ...huidig.visibility },
     combinationId: huidig.combinationId,
     loadCaseId: huidig.loadCaseId,
     mode: huidig.mode,
     ...(bestaand?.inRapport === undefined ? {} : { inRapport: bestaand.inRapport }),
+    ...(huidig.diagramLabels === undefined ? {} : { diagramLabels: { ...huidig.diagramLabels } }),
   };
   return bestaand
     ? viewSets.map((item) => item.id === bestaand.id ? viewSet : item)
@@ -146,6 +168,10 @@ export function parseOpenFem3DViewSets(value: unknown): OpenFem3DViewSet[] {
     const cameraRaw = raw.camera as Record<string, unknown> | undefined;
     const position = vector3(cameraRaw?.position), target = vector3(cameraRaw?.target), up = vector3(cameraRaw?.up);
     if (!position || !target || !up || ids.has(id)) throw new Error("Een opgeslagen 3D-weergave heeft een ongeldige camera of dubbele id.");
+    // De schaal van een parallelle view; een ongeldige waarde valt weg (dan
+    // geldt de afstand positie–doel, zoals bij een oudere view).
+    const orthoRaw = cameraRaw?.orthoHalfHeight;
+    const orthoHalfHeight = typeof orthoRaw === "number" && Number.isFinite(orthoRaw) && orthoRaw > 0 ? orthoRaw : undefined;
     const savedVisibility = raw.visibility;
     if (!savedVisibility || typeof savedVisibility !== "object" || Array.isArray(savedVisibility)) {
       throw new Error("Een opgeslagen 3D-weergave mist de zichtbaarheidsinstellingen.");
@@ -169,10 +195,13 @@ export function parseOpenFem3DViewSets(value: unknown): OpenFem3DViewSet[] {
       throw new Error("Een opgeslagen 3D-weergave heeft een ongeldige tabstand.");
     }
     ids.add(id);
-    return { id, name, view, camera: { position, target, up }, visibility, combinationId,
+    return { id, name, view, camera: { position, target, up, ...(orthoHalfHeight === undefined ? {} : { orthoHalfHeight }) },
+      visibility, combinationId,
       ...(loadCaseId === undefined ? {} : { loadCaseId }),
       ...(mode === undefined ? {} : { mode }),
-      ...(typeof raw.inRapport === "boolean" ? { inRapport: raw.inRapport } : {}) };
+      ...(typeof raw.inRapport === "boolean" ? { inRapport: raw.inRapport } : {}),
+      // Optioneel; een ongeldige waarde wordt per veld de standaard.
+      ...(raw.diagramLabels === undefined ? {} : { diagramLabels: normalizeOpenFem3DDiagramLabels(raw.diagramLabels) }) };
   });
 }
 

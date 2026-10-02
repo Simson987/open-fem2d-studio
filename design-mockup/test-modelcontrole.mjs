@@ -44,7 +44,10 @@ log("\n[1] puntOpStaaf: strikt inwendig, met tekentolerantie");
   check("midden op de staaf", puntOpStaaf(nodes, b, 1000, 0) !== null);
   check("fractie klopt", bijna(puntOpStaaf(nodes, b, 1000, 0), 0.25, 1e-12));
   check("0,4 mm ernaast telt nog mee", puntOpStaaf(nodes, b, 1000, 0.4) !== null);
-  check("3 mm ernaast telt niet mee", puntOpStaaf(nodes, b, 1000, 3) === null);
+  // Sinds issue #55 is de tolerantie instelbaar (standaard 5 mm); de 1 mm van
+  // vroeger staat hier nu expliciet. De instelling zelf: test-verbindingstolerantie.
+  check("3 mm ernaast telt niet mee (bij 1 mm)", puntOpStaaf(nodes, b, 1000, 3, 1) === null);
+  check("6 mm ernaast telt niet mee (standaard 5 mm)", puntOpStaaf(nodes, b, 1000, 6) === null);
   check("op de startknoop telt niet", puntOpStaaf(nodes, b, 0, 0) === null);
   check("op de eindknoop telt niet", puntOpStaaf(nodes, b, 4000, 0) === null);
   check("voorbij de staaf telt niet", puntOpStaaf(nodes, b, 5000, 0) === null);
@@ -115,10 +118,14 @@ log("\n[3] Dubbele knopen: altijd gemeld, met samenvoeg-actie");
   check("verbonden paar wordt óók gemeld", bevNul.length === 1);
   check("tekst noemt lengte nul", bevNul[0]?.tekst.includes("lengte nul"), bevNul[0]?.tekst);
 
-  // Buiten de tolerantie: geen bevinding.
+  // Buiten de tolerantie: geen bevinding. Sinds issue #55 is de standaard
+  // 5 mm (grens inbegrepen); de 1 mm van vroeger staat hier nu expliciet.
   const uitElkaar = { ...model, nodes: model.nodes.map(
     n => n.id === 3 ? { ...n, x: 3005 } : n) };
-  check("5 mm uit elkaar is geen dubbele knoop", zoekDubbeleKnopen(uitElkaar).length === 0);
+  check("5 mm uit elkaar is geen dubbele knoop (bij 1 mm)", zoekDubbeleKnopen(uitElkaar, 1).length === 0);
+  const verderUitElkaar = { ...model, nodes: model.nodes.map(
+    n => n.id === 3 ? { ...n, x: 3006 } : n) };
+  check("6 mm uit elkaar is geen dubbele knoop (standaard 5 mm)", zoekDubbeleKnopen(verderUitElkaar).length === 0);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

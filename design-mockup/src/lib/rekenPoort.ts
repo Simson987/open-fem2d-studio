@@ -23,15 +23,18 @@
  */
 import type { SolverStatus } from "../components/StatusBar";
 import { beeldKernfoutAf } from "../mcp/fouten";
-import { controleerModel, type ControleModel } from "./modelControle";
+import { CONTROLE_TOL_MM, controleerModel, type ControleModel } from "./modelControle";
 
 /**
  * De modelcontrole van het canvas, nu ook als poort voor het multi-LC-pad.
  * Gooit bij blokkerende bevindingen, met de bevindingen zelf in de melding —
  * het multi-LC-pad heeft geen controlepaneel om naar te verwijzen.
+ *
+ * `tolMm` is de verbindingstolerantie (issue #55); de app geeft de instelling
+ * mee, zodat de poort precies blokkeert wat het canvas als fout toont.
  */
-export function controleerVoorRekenen(model: ControleModel): void {
-  const blokkerend = controleerModel(model).filter((b) => b.ernst === "fout");
+export function controleerVoorRekenen(model: ControleModel, tolMm: number = CONTROLE_TOL_MM): void {
+  const blokkerend = controleerModel(model, tolMm).filter((b) => b.ernst === "fout");
   if (blokkerend.length === 0) return;
   const eerste = blokkerend.slice(0, 3).map((b) => b.tekst);
   const rest = blokkerend.length - eerste.length;

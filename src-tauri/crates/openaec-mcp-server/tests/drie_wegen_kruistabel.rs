@@ -132,6 +132,30 @@ const BEDIENING_REDEN: &str =
      zou moeten kunnen; de app is de enige plek waar een korf gezet of een venster geopend \
      kan worden.";
 
+/// Waarom de API-tools (één per commando van het app-register) als groep buiten
+/// de koppeltabel staan. Het zijn geen rekenkern-opdrachten maar de commando's
+/// van de app zelf (`design-mockup/src/api/`): dezelfde zuivere modelfuncties als
+/// de GUI, zonder app uitgevoerd in de sidecar of in de draaiende app via het
+/// bedieningskanaal. Een Tauri-command of toetsbrugopdracht zou een tweede
+/// toegang tot dezelfde functie zijn. Hun namen komen uit de ingebakken
+/// catalogus (`assets/api-catalogus.json`), niet uit een lijst hier; daarom per
+/// groep en niet per rij.
+const API_REDEN: &str =
+    "Commando van het app-register (src/api/): geen rekenkern-opdracht en daarmee buiten de \
+     drie-wegen-regel; de catalogus is de bron.";
+
+/// De MCP-namen van de API-commando's, uit dezelfde catalogus als de server.
+fn api_tools_uit_de_catalogus() -> Vec<String> {
+    let catalogus: serde_json::Value = serde_json::from_str(include_str!("../assets/api-catalogus.json"))
+        .expect("assets/api-catalogus.json is geldige JSON");
+    catalogus["commands"]
+        .as_array()
+        .expect("commands")
+        .iter()
+        .map(|c| c["name"].as_str().expect("naam").replace('.', "_"))
+        .collect()
+}
+
 /// De reden voor de twee Tauri-commands van het kanaal zelf.
 const KANAAL_REDEN: &str =
     "Het bedieningskanaal zelf: hiermee vraagt de pagina aan Rust of het kanaal aanstaat, en \
@@ -448,7 +472,19 @@ fn vergelijk_kolom(
 async fn de_drie_namenlijsten_dekken_elkaar() {
     let commands = tauri_commands();
     let opdrachten = toetsbrug_opdrachten();
-    let gereedschappen = mcp_gereedschappen().await;
+    let alle_gereedschappen = mcp_gereedschappen().await;
+
+    // De API-tools als groep (zie API_REDEN): elk commando uit de catalogus
+    // staat in tools/list, en geen rij van de koppeltabel draagt zo'n naam.
+    let api = api_tools_uit_de_catalogus();
+    for naam in &api {
+        assert!(alle_gereedschappen.contains(naam), "API-tool `{naam}` uit de catalogus ontbreekt in tools/list");
+        assert!(
+            !alle_rijen().iter().any(|r| r.mcp == Some(naam.as_str())),
+            "`{naam}` is een API-tool uit de catalogus en hoort niet in de koppeltabel. {API_REDEN}"
+        );
+    }
+    let gereedschappen: Vec<String> = alle_gereedschappen.into_iter().filter(|n| !api.contains(n)).collect();
 
     vergelijk_kolom(
         "tauri",

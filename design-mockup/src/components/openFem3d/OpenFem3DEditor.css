@@ -152,11 +152,13 @@
   text-shadow: none;
 }
 
-.open-fem3d-stage-header { top: 14px; }
+/* Bovenaan uitgelijnd: loopt de uitleg op een smal podium over meer regels,
+   dan blijven werkvlak, Views en Passend beeld bovenin, boven de view cube. */
+.open-fem3d-stage-header { top: 14px; align-items: flex-start; }
 .open-fem3d-stage-header strong { font-size: 15px; }
 .open-fem3d-stage-header span { color: #64748b; }
 .open-fem3d-views-button {
-  margin-left:auto; margin-right:100px; pointer-events:auto;
+  margin-left:auto; flex-shrink:0; pointer-events:auto;
   padding:5px 9px; border:1px solid #cbd5e1; border-radius:4px;
   background:#fff; color:#1e40af; cursor:pointer; font:600 11px system-ui,sans-serif;
 }
@@ -205,6 +207,8 @@
   box-shadow: 0 2px 8px #7f1d1d1a;
 }
 .open-fem3d-draw-error button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 18px; }
+/* Met view cube: de melding houdt de kolom van de kubus (rechts 10 + 112 px) vrij. */
+.open-fem3d-stage:has(.open-fem3d-view-cube:not([hidden])) .open-fem3d-draw-error { right: 134px; }
 .open-fem3d-stage-footer {
   bottom: 14px;
   justify-content: space-between;
@@ -212,10 +216,12 @@
 }
 .open-fem3d-stage-footer [data-open-fem-3d-status="warning"] { color: #b91c1c; font-weight: 700; }
 
+/* Passend beeld: de laatste knop in de kopregel, rechts naast Views (de
+   kopregel laat 16 px vrij; −4 px houdt de knop op 12 px van de rand). */
 .open-fem3d-fit {
-  position: absolute;
-  top: 12px;
-  right: 12px;
+  flex-shrink: 0;
+  margin-right: -4px;
+  pointer-events: auto;
   border: 1px solid #cbd5e1;
   border-radius: 4px;
   padding: 5px 9px;
@@ -225,6 +231,200 @@
 }
 
 .open-fem3d-fit:hover { background: #f1f5f9; }
+
+/* View cube (issue #85): een gebouwtje rechtsboven onder de knop Passend
+   beeld, vaste grootte, los van zoom. Het vak zelf laat de muis door; alleen
+   de kubus (dak, gevels, vloer, met hun ribben en hoeken) en de knop ▾ met
+   zijn menu vangen klikken af. De kubus volgt de camera via één transform op
+   de scène (ThreeFrameCanvas). Boven de andere overlays (tekenfout,
+   paneel Verplaatsen, legenda's), zodat kubus en menu altijd bruikbaar zijn. */
+.open-fem3d-view-cube {
+  position: absolute;
+  top: 44px;
+  right: 10px;
+  z-index: 10;
+  width: 112px;
+  height: 112px;
+  pointer-events: none;
+  user-select: none;
+  touch-action: none;
+}
+.open-fem3d-view-cube[hidden] { display: none !important; }
+.open-fem3d-view-cube-kubus {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.open-fem3d-view-cube-kubus:focus-visible { outline: none; }
+.open-fem3d-view-cube-scene {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+/* Eén vlak: 54 px, in 3 × 3 cellen (12 px rand = ribbe of hoek, midden =
+   vlak). De cellen dekken het hele vlak; de hoeklijn is een binnenschaduw,
+   zodat er geen naad is waar een klik doorvalt naar het tekenvlak. Gevels in
+   de geveltint, het dak in de daktint, de vloer grijs. */
+.open-fem3d-view-cube-vlak {
+  position: absolute;
+  left: -27px;
+  top: -27px;
+  display: grid;
+  grid-template-columns: 12px 1fr 12px;
+  grid-template-rows: 12px 1fr 12px;
+  width: 54px;
+  height: 54px;
+  box-sizing: border-box;
+  background: var(--theme-view-cube-gevel);
+  box-shadow: inset 0 0 0 1.5px var(--theme-view-cube-hoeklijn);
+  transform-origin: 50% 50%;
+  backface-visibility: hidden;
+  pointer-events: auto;
+}
+.open-fem3d-view-cube-vlak[data-vlak="boven"] { background: var(--theme-view-cube-dak); }
+.open-fem3d-view-cube-vlak[data-vlak="onder"] { background: var(--theme-view-cube-vloer); }
+/* De naam; op dak en vloer gedraaid en langs de letterhoogte gerekt (inline
+   transform, openFem3DViewCubeNaamTransform), zodat hij daar in het
+   startaanzicht even hoog staat als op de gevels. */
+.open-fem3d-view-cube-naam {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-view-cube-tekst);
+  font: 600 10px/1 "Inter", system-ui, sans-serif;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* Deuromtrek onderaan de voorgevel: "voor" ook zonder tekst herkenbaar. */
+.open-fem3d-view-cube-deur {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 9px;
+  height: 13px;
+  margin-left: -4.5px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--theme-view-cube-hoeklijn);
+  border-bottom: 0;
+  border-radius: 1.5px 1.5px 0 0;
+  pointer-events: none;
+}
+/* Maaiveld: een gearceerde rand van 7 px om de voet, in het vlak van de
+   vloer; het midden is open (de vloer blijft van onderen zichtbaar), de
+   achterkant verborgen en het vangt geen klikken. De arcering loopt in het
+   vlak schuin (op 120° van wereld-X): ze kruist alle vier de stroken schuin,
+   en in het startaanzicht (vanaf Voor-Rechts) staat ze als ////. Het vlak
+   heeft de assen van het dak (lokaal x = wereld-X, y omlaag = wereld −Y),
+   dus de gradiënt loopt onder 60°. */
+.open-fem3d-view-cube-maaiveld {
+  position: absolute;
+  left: -34px;
+  top: -34px;
+  width: 68px;
+  height: 68px;
+  background: repeating-linear-gradient(60deg, var(--theme-view-cube-maaiveld) 0 1px, transparent 1px 4px);
+  clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0,
+    7px 7px, 7px calc(100% - 7px), calc(100% - 7px) calc(100% - 7px), calc(100% - 7px) 7px, 7px 7px);
+  transform-origin: 50% 50%;
+  backface-visibility: hidden;
+  pointer-events: none;
+}
+.open-fem3d-view-cube-cel {
+  min-width: 0;
+  min-height: 0;
+  cursor: pointer;
+  pointer-events: auto;
+}
+/* Ribben en hoeken een tikje donkerder dan het vlak. */
+.open-fem3d-view-cube-cel[data-soort="ribbe"],
+.open-fem3d-view-cube-cel[data-soort="hoek"] { background: var(--theme-view-cube-ribbe); }
+.open-fem3d-view-cube-cel:focus { outline: none; }
+.open-fem3d-view-cube-cel.is-hover {
+  background: var(--theme-view-cube-hover);
+  box-shadow: inset 0 0 0 2px var(--theme-view-cube-hover-rand);
+}
+.open-fem3d-view-cube-cel.is-focus { outline: 2px solid var(--theme-view-cube-focus); outline-offset: -2px; }
+.open-fem3d-view-cube[data-sleept] .open-fem3d-view-cube-cel { cursor: grabbing; }
+
+/* Knop ▾ rechtsonder vast aan de kubus, met het menu eronder (of erboven als
+   het tekenvlak daar te laag is). */
+.open-fem3d-view-cube-keuze {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+.open-fem3d-view-cube-menuknop {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--theme-view-cube-hoeklijn);
+  border-radius: 4px;
+  background: var(--theme-view-cube-knop);
+  color: var(--theme-view-cube-tekst);
+  font: 700 11px/1 system-ui, sans-serif;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.open-fem3d-view-cube-menuknop:hover,
+.open-fem3d-view-cube-menuknop[aria-expanded="true"] {
+  border-color: var(--theme-view-cube-hover-rand);
+  background: var(--theme-view-cube-menu-hover);
+  color: var(--theme-view-cube-hover-rand);
+}
+.open-fem3d-view-cube-menuknop:focus { outline: none; }
+.open-fem3d-view-cube-menuknop:focus-visible { outline: 2px solid var(--theme-view-cube-focus); outline-offset: 1px; }
+.open-fem3d-view-cube-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 1;
+  min-width: 150px;
+  padding: 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  background: var(--theme-view-cube-knop);
+  box-shadow: 0 6px 18px #0f172a29;
+  color: #1e293b;
+  font: 500 12px/1.3 "Inter", system-ui, sans-serif;
+  pointer-events: auto;
+}
+.open-fem3d-view-cube-keuze[data-omhoog] .open-fem3d-view-cube-menu { top: auto; bottom: calc(100% + 4px); }
+.open-fem3d-view-cube-menu[hidden] { display: none; }
+.open-fem3d-view-cube-menuitem {
+  padding: 6px 9px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.open-fem3d-view-cube-menuitem:hover { background: var(--theme-view-cube-menu-hover); }
+.open-fem3d-view-cube-menuitem:focus {
+  outline: 2px solid var(--theme-view-cube-focus);
+  outline-offset: -2px;
+  background: var(--theme-view-cube-menu-focus);
+}
+/* Een schakelaar in het menu (menuitemcheckbox): een vinkje als hij aan staat.
+   Staat er een in het menu, dan schuiven alle regels in, zodat de teksten
+   onder elkaar beginnen (de vinkjeskolom blijft leeg bij gewone regels). */
+.open-fem3d-view-cube-menuitem[role="menuitemcheckbox"] { position: relative; }
+.open-fem3d-view-cube-menu:has([role="menuitemcheckbox"]) .open-fem3d-view-cube-menuitem { padding-left: 24px; }
+.open-fem3d-view-cube-menuitem[aria-checked="true"]::before {
+  content: "✓";
+  position: absolute;
+  left: 9px;
+}
+@media print {
+  .open-fem3d-view-cube { display: none !important; }
+}
 
 .open-fem3d-viewsets { margin-bottom:14px; padding:10px; border:1px solid var(--theme-border); border-radius:5px; background:var(--theme-bg-lighter); }
 .open-fem3d-viewsets h3 { margin:0 0 3px; font-size:13px; }
@@ -238,11 +438,16 @@
 .open-fem3d-viewset-apply strong,.open-fem3d-viewset-apply span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .open-fem3d-viewset-apply span,.open-fem3d-viewset-empty { color:var(--theme-text-muted); font-size:10px; }
 
+/* Onder de view cube (top 44 px + 112 px). Bij een laag podium niet over de
+   statusregel (onder 14 px + ~16 px): de rand hoogstens tot 40 px boven de
+   onderrand (inhoud: 100% − 162 − 40 − 2 × 11 opvulling − 2 rand), dan scrollen. */
 .open-fem3d-transform-panel {
   position: absolute;
-  top: 48px;
+  top: 162px;
   right: 12px;
   z-index: 4;
+  max-height: calc(100% - 226px);
+  overflow-y: auto;
   width: 280px;
   padding: 11px;
   border: 1px solid #cbd5e1;
@@ -265,8 +470,9 @@
 .open-fem3d-transform-actions button { border:1px solid #cbd5e1; border-radius:3px; padding:5px 9px; background:#fff; color:#334155; cursor:pointer; }
 .open-fem3d-transform-actions button.primary { border-color:#d97706; background:#d97706; color:#fff; }
 
+/* Onder de view cube, net als het paneel Verplaatsen. */
 .open-fem3d-uc-legend {
-  position:absolute; right:12px; top:50px; z-index:2; display:grid; gap:4px;
+  position:absolute; right:12px; top:162px; z-index:2; display:grid; gap:4px;
   padding:8px 10px; border:1px solid #cbd5e1; border-radius:4px;
   background:#fffffff2; color:#334155; font:600 10px/1.2 "Inter",system-ui,sans-serif;
   box-shadow:0 2px 8px #0f172a1a; pointer-events:none;
@@ -297,10 +503,11 @@
 }
 .open-fem3d-diaphragm-delete:hover { color:#dc2626; }
 /* Profielen in kleur: rechtsonder, boven de statusregel; de UC-legenda staat
-   rechtsboven en is nooit tegelijk in beeld (de UC-kleuring gaat voor). */
+   rechtsboven en is nooit tegelijk in beeld (de UC-kleuring gaat voor). Hij
+   groeit niet verder omhoog dan tot onder de view cube. */
 .open-fem3d-profiel-legenda {
   position: absolute; right: 12px; bottom: 40px; z-index: 2;
-  max-height: calc(100% - 150px);
+  max-height: calc(100% - 202px);
 }
 
 .open-fem3d-empty {

@@ -1,0 +1,12 @@
+# Voorbeeldraamwerk: een portaal van 6 m breed en 4 m hoog
+knoop 1 0 0
+knoop 2 0 4000
+knoop 3 6000 4000
+knoop 4 6000 0
+staaf 1 1 2 HEA200 S235
+staaf 2 2 3 IPE300 S235
+staaf 3 3 4 HEA200 S235
+oplegging 1 inklemming
+oplegging 4 scharnier
+last 2 -25
+kleur rood

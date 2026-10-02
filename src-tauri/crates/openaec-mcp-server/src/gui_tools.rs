@@ -358,6 +358,36 @@ fn export_report_pdf(args: Value) -> Result<Value, RpcError> {
     }))
 }
 
+/// Een API-commando (src/api/ in de app) uitvoeren in de draaiende app, via de
+/// paginaopdracht `api_uitvoeren`. De pagina antwoordt altijd met
+/// `{ ok, output }` of `{ ok: false, error: { code, melding, detail } }`, zodat
+/// de foutcode van het register hier heel aankomt (het kanaal zelf kent alleen
+/// een fouttekst).
+pub(crate) fn roep_api(naam: &str, invoer: Value) -> Result<Value, RpcError> {
+    let uit = roep("api_uitvoeren", json!({ "name": naam, "input": invoer }), 60)?;
+    if uit.get("ok").and_then(Value::as_bool) == Some(true) {
+        return Ok(uit.get("output").cloned().unwrap_or(Value::Null));
+    }
+    let fout = uit.get("error").cloned().unwrap_or(Value::Null);
+    let code = fout.get("code").and_then(Value::as_str).unwrap_or("INTERN").to_owned();
+    let melding = fout
+        .get("melding")
+        .and_then(Value::as_str)
+        .unwrap_or("de app meldde een fout zonder tekst")
+        .to_owned();
+    let remedie = openaec_mcp_server::sidecar::remedie_voor_code(&code);
+    Err(RpcError {
+        code: if code == "INVOER_ONGELDIG" { -32602 } else { -32000 },
+        message: format!("[{code}] {melding} — {remedie}"),
+        data: Some(json!({
+            "error_code": code,
+            "melding": melding,
+            "remedie": remedie,
+            "detail": fout.get("detail").cloned().unwrap_or(Value::Null),
+        })),
+    })
+}
+
 pub async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError> {
     let naam = naam.to_string();
     // ureq is synchroon; buiten de stdio-lus houden.

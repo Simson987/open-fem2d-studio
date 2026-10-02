@@ -567,4 +567,26 @@
   --theme-select-window-fill-light: rgba(37, 99, 235, 0.12);
   --theme-select-crossing-stroke-light: #16A34A;
   --theme-select-crossing-fill-light: rgba(22, 163, 74, 0.07);
+
+  /* View cube (een gebouwtje) rechtsboven op het 3D-podium. Dat podium is in
+     élk thema wit, dus één set kleuren voor het lichte én de donkere thema's,
+     afgestemd op wit: gevels in een lichte steentint, het dak in een lichte
+     pannentint, de vloer grijs, de ribben als iets donkerder hoeklijnen
+     (≥ 3:1 op wit). Hover en toetsenbordfocus hebben elk een eigen donkere
+     rand, ≥ 3:1 tegen elk vlak, de hovertint en het podium: de themakleur
+     voor focus (geel in Contrast, lichtblauw in Blueprint) haalt dat op wit
+     niet. De naam (tekst) haalt op elk vlak ruim 4,5:1. */
+  --theme-view-cube-gevel: #F3EEE6;
+  --theme-view-cube-dak: #E9CFC2;
+  --theme-view-cube-vloer: #E2E8F0;
+  --theme-view-cube-hoeklijn: #8C7B6A;
+  --theme-view-cube-ribbe: rgba(120, 96, 72, 0.06);
+  --theme-view-cube-tekst: #334155;
+  --theme-view-cube-maaiveld: #A8A29E;
+  --theme-view-cube-hover: rgba(217, 119, 6, 0.16);
+  --theme-view-cube-hover-rand: #92400E;
+  --theme-view-cube-focus: #1D4ED8;
+  --theme-view-cube-knop: #FFFFFF;
+  --theme-view-cube-menu-hover: #FFF7ED;
+  --theme-view-cube-menu-focus: #EFF6FF;
 }

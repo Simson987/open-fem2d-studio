@@ -58,6 +58,8 @@ type MarkerBatch = {
   selectionType: OpenFem3DSingleSelection["type"];
   instances: MarkerInstance[];
 };
+/** Lijnstukken van één soort last: per lijnstuk twee punten, de last-id en de kleur. */
+type MarkerLineBatch = { points: THREE.Vector3[]; ids: number[]; colors: number[] };
 
 interface MarkerBatcher {
   geometryFor: (key: string, factory: () => THREE.BufferGeometry) => THREE.BufferGeometry;
@@ -70,7 +72,7 @@ interface MarkerBatcher {
     selectionType: OpenFem3DSingleSelection["type"],
     scale?: THREE.Vector3,
   ) => void;
-  addPolyline: (color: number, points: readonly THREE.Vector3[]) => void;
+  addPolyline: (color: number, points: readonly THREE.Vector3[], selection: OpenFem3DSingleSelection) => void;
   flush: () => void;
 }
 
@@ -85,7 +87,7 @@ function markerGeometrySignature(geometry: THREE.BufferGeometry): string {
 function createMarkerBatcher(group: THREE.Group): MarkerBatcher {
   const batches = new Map<string, MarkerBatch>();
   const geometries = new Map<string, THREE.BufferGeometry>();
-  const lineBatches = new Map<number, THREE.Vector3[]>();
+  const lineBatches = new Map<OpenFem3DSingleSelection["type"], MarkerLineBatch>();
   const identityScale = new THREE.Vector3(1, 1, 1);
   return {
     geometryFor(key, factory) {
@@ -114,15 +116,17 @@ function createMarkerBatcher(group: THREE.Group): MarkerBatcher {
         ),
       });
     },
-    addPolyline(color, points) {
+    addPolyline(color, points, selection) {
       if (points.length < 2) return;
-      let segments = lineBatches.get(color);
-      if (!segments) {
-        segments = [];
-        lineBatches.set(color, segments);
+      let batch = lineBatches.get(selection.type);
+      if (!batch) {
+        batch = { points: [], ids: [], colors: [] };
+        lineBatches.set(selection.type, batch);
       }
       for (let index = 0; index < points.length - 1; index += 1) {
-        segments.push(points[index], points[index + 1]);
+        batch.points.push(points[index], points[index + 1]);
+        batch.ids.push(selection.id);
+        batch.colors.push(color);
       }
     },
     flush() {
@@ -150,14 +154,29 @@ function createMarkerBatcher(group: THREE.Group): MarkerBatcher {
         mesh.computeBoundingSphere();
         group.add(mesh);
       }
-      for (const [color, points] of lineBatches) {
-        const lines = new THREE.LineSegments(
-          new THREE.BufferGeometry().setFromPoints(points),
-          new THREE.LineBasicMaterial({ color }),
-        );
-        // De pijlen blijven per last selecteerbaar. Deze verbindingslijn is
-        // alleen visuele context en hoeft dus niet als extra raycast-doel mee.
-        lines.userData = { pickable: false, openFem3dLoadGuide: true };
+      for (const [selectionType, batch] of lineBatches) {
+        // Alle staartlijnen in één tekenaanroep, met een kleur per lijnstuk:
+        // zo kleurt het tekenvlak bij selecteren alleen de lijnstukken van de
+        // gekozen last mee (`segmentIds`, #81), net als de losse staartlijn
+        // zonder batches.
+        const geometry = new THREE.BufferGeometry().setFromPoints(batch.points);
+        const colors = new Float32Array(batch.points.length * 3);
+        const color = new THREE.Color();
+        batch.colors.forEach((hex, segment) => {
+          color.setHex(hex);
+          color.toArray(colors, segment * 6);
+          color.toArray(colors, segment * 6 + 3);
+        });
+        const colorAttribute = new THREE.BufferAttribute(colors, 3);
+        colorAttribute.setUsage(THREE.DynamicDrawUsage);
+        geometry.setAttribute("color", colorAttribute);
+        const lines = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ vertexColors: true }));
+        // Geen raycast-doel: één klik selecteert één last, en daarvoor heeft
+        // elke last zijn eigen onzichtbare kieslijn en de pijlen.
+        lines.userData = {
+          type: selectionType, pickable: false, openFem3dLoadGuide: true,
+          segmentIds: batch.ids, segmentBaseColors: batch.colors,
+        };
         group.add(lines);
       }
       batches.clear();
@@ -271,6 +290,7 @@ function addSupport(group: THREE.Group, node: OpenFem3DNode, support: OpenFem3DS
   const custom = !allFixed && !revoluteAxis && !pinned && !roller;
   const color = 0xd97706;
   const baseColor = 0x475569;
+  const groundColor = 0x94a3b8;
   const horizontal = new THREE.Quaternion().setFromUnitVectors(Y_AXIS, Z_AXIS);
   // Een plaatje loodrecht op `axis`, `distance` aan de min-kant van de knoop:
   // het eind van een veer of de voet van een kegeltje.
@@ -314,10 +334,34 @@ function addSupport(group: THREE.Group, node: OpenFem3DNode, support: OpenFem3DS
       p.clone().add(new THREE.Vector3(0, 0, -size * 0.55)),
       new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));
   } else if (roller) {
+    // Een rol zoals op papier: de kegel met de punt naar de knoop, een
+    // voetplaat, twee rollen en de ondergrond met arcering, alles loodrecht op
+    // de vaste richting. De rollen liggen dwars op die richting, zodat X-, Y-
+    // en Z-rollen ook in een isometrisch beeld verschillen.
+    const n = rollerNormal;
+    const reference = Math.abs(n.z) < 0.9 ? Z_AXIS : new THREE.Vector3(1, 0, 0);
+    const rollerAxis = new THREE.Vector3().crossVectors(n, reference).normalize();
+    const offsetAxis = new THREE.Vector3().crossVectors(n, rollerAxis).normalize();
+    // Een plaat: lokale y langs de vaste richting, x dwars op de rollen, z langs de rollen.
+    const plate = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(offsetAxis, n, rollerAxis));
+    const hatch = plate.clone().multiply(new THREE.Quaternion().setFromAxisAngle(Z_AXIS, Math.PI / 4));
+    const at = (depth: number, side = 0) => p.clone().addScaledVector(n, -depth * size).addScaledVector(offsetAxis, side * size);
     addMesh(group, markerGeometry(group, `support-cone:${size}`, () =>
       new THREE.ConeGeometry(size * 0.7, size, 32)), color, node.id,
-      p.clone().addScaledVector(rollerNormal, -size * 0.55),
-      new THREE.Quaternion().setFromUnitVectors(Y_AXIS, rollerNormal));
+      at(0.55), new THREE.Quaternion().setFromUnitVectors(Y_AXIS, n));
+    addMesh(group, markerGeometry(group, `support-roller-shoe:${size}`, () =>
+      new THREE.BoxGeometry(size * 1.5, size * 0.06, size * 1.5)), color, node.id, at(1.08), plate);
+    for (const side of [-0.4, 0.4]) {
+      addMesh(group, markerGeometry(group, `support-roller:${size}`, () =>
+        new THREE.CylinderGeometry(size * 0.14, size * 0.14, size * 1.3, 24)), baseColor, node.id,
+        at(1.25, side), new THREE.Quaternion().setFromUnitVectors(Y_AXIS, rollerAxis));
+    }
+    addMesh(group, markerGeometry(group, `support-roller-ground:${size}`, () =>
+      new THREE.BoxGeometry(size * 1.8, size * 0.06, size * 1.8)), groundColor, node.id, at(1.42), plate);
+    for (const side of [-0.6, -0.2, 0.2, 0.6]) {
+      addMesh(group, markerGeometry(group, `support-roller-hatch:${size}`, () =>
+        new THREE.BoxGeometry(size * 0.06, size * 0.34, size * 0.06)), baseColor, node.id, at(1.58, side), hatch);
+    }
   } else {
     // Per vaste translatie een klein kegeltje met de punt naar de knoop en een
     // plaatje erachter. Een veer in een vrije richting tekent hieronder zijn
@@ -340,27 +384,7 @@ function addSupport(group: THREE.Group, node: OpenFem3DNode, support: OpenFem3DS
         p.clone(), new THREE.Quaternion().setFromUnitVectors(Z_AXIS, GLOBAL_AXES[axisName]));
     }
   }
-  if (roller) {
-    // Twee echte rollen in het vlak loodrecht op de geblokkeerde globale as.
-    // Daardoor zijn X-, Y- en Z-rollen ook in een isometrisch beeld verschillend.
-    const reference = Math.abs(rollerNormal.z) < 0.9 ? Z_AXIS : new THREE.Vector3(1, 0, 0);
-    const rollerAxis = new THREE.Vector3().crossVectors(rollerNormal, reference).normalize();
-    const offsetAxis = new THREE.Vector3().crossVectors(rollerNormal, rollerAxis).normalize();
-    const rollerRotation = new THREE.Quaternion().setFromUnitVectors(Y_AXIS, rollerAxis);
-    for (const offset of [-0.34, 0.34]) {
-      const position = p.clone().addScaledVector(rollerNormal, -size * 1.1)
-        .addScaledVector(offsetAxis, offset * size);
-      addMesh(group, markerGeometry(group, `support-roller:${size}`, () =>
-        new THREE.CylinderGeometry(size * 0.13, size * 0.13, size * 0.95, 24)),
-        baseColor, node.id, position, rollerRotation);
-    }
-  }
-  if (roller) {
-    addMesh(group, markerGeometry(group, `support-base:${size}`, () =>
-      new THREE.CylinderGeometry(size * 0.9, size * 0.9, size * 0.09, 40)), baseColor, node.id,
-      p.clone().addScaledVector(rollerNormal, -size * 1.32),
-      new THREE.Quaternion().setFromUnitVectors(Y_AXIS, rollerNormal));
-  } else if (!custom || allTranslationsFixed) {
+  if (!roller && (!custom || allTranslationsFixed)) {
     const baseZ = allFixed || revoluteAxis ? -size * 0.48 : -size * 1.08;
     addMesh(group, markerGeometry(group, `support-base:${size}`, () =>
       new THREE.CylinderGeometry(size * 0.9, size * 0.9, size * 0.09, 40)), baseColor, node.id,
@@ -369,27 +393,30 @@ function addSupport(group: THREE.Group, node: OpenFem3DNode, support: OpenFem3DS
 
   const springColor = 0x7c3aed;
   const addLinearSpring = (axis: THREE.Vector3, offsetIndex: number) => {
+    // Een schroefveer: vijf windingen met een vaste straal tussen twee korte
+    // rechte aansluitingen op de as, en een plaatje aan het eind.
     const normal = Math.abs(axis.z) < 0.9 ? Z_AXIS : new THREE.Vector3(1, 0, 0);
     const side = new THREE.Vector3().crossVectors(axis, normal).normalize();
     const secondSide = new THREE.Vector3().crossVectors(axis, side).normalize();
-    const points: THREE.Vector3[] = [];
-    const samples = 48;
-    for (let index = 0; index <= samples; index += 1) {
-      const t = index / samples;
-      const endTaper = Math.min(1, t * 8, (1 - t) * 8);
-      const angle = t * Math.PI * 10;
-      const radius = size * 0.14 * endTaper;
-      points.push(p.clone().addScaledVector(axis, -t * size * 1.45)
-        .addScaledVector(side, Math.cos(angle) * radius + offsetIndex * size * 0.08)
-        .addScaledVector(secondSide, Math.sin(angle) * radius));
+    const shift = side.clone().multiplyScalar(offsetIndex * size * 0.08);
+    const onAxis = (depth: number) => p.clone().add(shift).addScaledVector(axis, -depth * size);
+    const lead = 0.13, coil = 1.2, radius = 0.2, turns = 5, perTurn = 20;
+    const points: THREE.Vector3[] = [onAxis(0), onAxis(lead * 0.5)];
+    for (let index = 0; index <= turns * perTurn; index += 1) {
+      const t = index / (turns * perTurn);
+      const angle = t * Math.PI * 2 * turns;
+      points.push(onAxis(lead + t * coil)
+        .addScaledVector(side, Math.cos(angle) * radius * size)
+        .addScaledVector(secondSide, Math.sin(angle) * radius * size));
     }
+    points.push(onAxis(lead * 1.5 + coil), onAxis(lead * 2 + coil));
     const spring = new THREE.Mesh(
-      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), samples, size * 0.026, 8, false),
-      new THREE.MeshStandardMaterial({ color: springColor, roughness: 0.55, metalness: 0.08 }),
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), turns * perTurn * 2, size * 0.035, 10, false),
+      new THREE.MeshStandardMaterial({ color: springColor, roughness: 0.4, metalness: 0.15 }),
     );
     spring.userData = { type: "node", id: node.id };
     group.add(spring);
-    addEndPlate(axis, size * 1.48, side.clone().multiplyScalar(offsetIndex * size * 0.08));
+    addEndPlate(axis, size * 1.5, shift);
   };
   const translational = [
     [support.springs?.kxKnPerM, GLOBAL_AXES.x],
@@ -554,10 +581,11 @@ function addMemberLoad(
     }
     const batcher = group.userData[MARKER_BATCHER_KEY] as MarkerBatcher | undefined;
     if (batcher) {
-      batcher.addPolyline(0xef4444, tails);
-      // De getekende verbindingslijnen worden samengevoegd. Behoud daarnaast
-      // per lijnlast een onzichtbaar raycast-doel, zodat één klik op de lijn
-      // dezelfde belasting selecteert als een klik op een van de pijlen.
+      batcher.addPolyline(0xef4444, tails, { type: "memberLoad", id: load.id });
+      // De getekende verbindingslijnen worden samengevoegd (met de last-id per
+      // lijnstuk, voor de selectiekleur). Behoud daarnaast per lijnlast een
+      // onzichtbaar raycast-doel, zodat één klik op de lijn dezelfde
+      // belasting selecteert als een klik op een van de pijlen.
       const pickLine = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints(tails),
         new THREE.LineBasicMaterial({ color: 0xef4444 }),

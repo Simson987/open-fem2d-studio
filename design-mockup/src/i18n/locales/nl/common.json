@@ -37,6 +37,13 @@
     "rasterHint": "Toon het achtergrondraster van het tekenvlak.",
     "snap": "Snap",
     "snapAll": "Alle snapsoorten",
+    "hoekHint": "Hoeksnap bij het tekenen van een staaf: ligt de richting binnen de tolerantie van 0° of 90°, dan wordt hij daar exact op gezet; de lengte blijft gelijk. Een knoop of stramienas gaat voor.",
+    "hoekTolerantie": "Tolerantie (°)",
+    "hoekTolerantieHint": "Hoeveel graden de richting ernaast mag liggen: 0,1 tot 15. Komma of punt mag.",
+    "hoekExtra": "Ook 30°, 45° en 60°",
+    "hoekExtraHint": "De hoeksnap vangt dan ook op 30°, 45° en 60° en hun spiegelingen.",
+    "verbindingsTolerantie": "Verbindingstolerantie",
+    "verbindingsTolerantieHint": "Binnen deze afstand geldt een knoop als 'op de staaf' of 'op dezelfde plek' als een andere knoop: de modelcontrole meldt het, en een nieuwe knoop wordt aangesloten of hergebruikt. 0,1 tot 25 mm, standaard 5. Komma of punt mag. Bestaande knopen worden niet verplaatst; een nieuwe knoop op een staaf komt op de staafas.",
     "groepLabels": "Labels",
     "groepGeometrie": "Geometrie",
     "groepResultaten": "Resultaten",
@@ -106,6 +113,8 @@
     "structuralGrid": "Stramienen en levels",
     "axes": "X/Y/Z-assen",
     "memberAxes": "Lokale staafassen",
+    "viewCube": "Aanzichtkubus",
+    "perspective": "Perspectief",
     "results": "Resultaten",
     "deformation": "Vervormde vorm",
     "reactions": "Oplegreacties",
@@ -138,6 +147,16 @@
     "scaleHint": "Vergrotingsfactor van de verplaatsingen, logaritmisch van 1× tot 1000×. Automatisch: de grootste verplaatsing wordt 12 % van de modelmaat.",
     "showOriginal": "Origineel tonen",
     "showOriginalHint": "De onvervormde staven en platen als lichte schim achter de vervormde vorm; uit: alleen de vervormde vorm."
+  },
+  "openFem3dDiagramLabels": {
+    "values": "Waarden",
+    "valuesAria": "Waarden bij de snedekrachtlijnen tonen",
+    "valuesHint": "Getallen bij de snedekrachtlijnen en N en T op het staafmidden; uit: alleen de lijnen.",
+    "few": "Weinig",
+    "many": "Veel",
+    "density": "Aantal waarden",
+    "densityHint": "Weinig: alleen de maatgevende waarde per lijn. Midden: zoals altijd. Veel: begin, eind, uiterste en kwartpunten op alle staven. Geselecteerde staven tonen hun waarden altijd.",
+    "densityValue": "Stand {{n}} van {{max}}"
   },
   "openFem3dViews": {
     "tab": "Views",
@@ -226,7 +245,8 @@
   "snap": {
     "knoop": "Knoop",
     "stramien": "Stramien",
-    "raster": "Raster"
+    "raster": "Raster",
+    "hoek": "Hoek"
   },
   "section": "Sectie {{number}}",
   "contentPlaceholder": "Inhoud hier",
@@ -584,6 +604,15 @@
     "windExplainNationalAnnex": "uit de terreinsoortentabel van de nationale bijlage. Houdt u die tabel aan, voer de stuwdruk dan handmatig in bij de windbelastinggenerator."
   },
   "canvas": {
+    "qEdit": {
+      "aria": "q-waarde (kN/m)",
+      "sign": {
+        "globalZ": "Negatief = omlaag (zwaartekracht)",
+        "globalX": "Negatief = naar links (−X)",
+        "localZ": "Negatief = tegen de lokale z-as in",
+        "localX": "Negatief = axiaal, tegen de staafrichting in"
+      }
+    },
     "plate": {
       "needsFourCorners": "Een plaat heeft precies vier hoeken nodig.",
       "cornersCollinear": "De hoeken vallen samen of liggen (vrijwel) op één lijn — teken een echte rechthoek.",
@@ -710,7 +739,13 @@
       "counts": "{{knopen}} knopen · {{staven}} staven",
       "countsWithPlates": "{{knopen}} knopen · {{staven}} staven · {{platen}} platen",
       "resetZoomTitle": "Reset zoom (F = fit)",
-      "resetZoom": "Reset"
+      "resetZoom": "Reset",
+      "snapOff": "Snap tijdelijk uit (Alt)",
+      "ortho": "Ortho (Shift)"
+    },
+    "subNode": {
+      "atEndTitle": "Geen subknoop",
+      "atEnd": "Dit punt ligt binnen de verbindingstolerantie van {{mm}} mm van knoop {{knoop}}, een uiteinde van staaf {{staaf}}. Daar staat al een knoop; de staaf is niet gesplitst."
     },
     "modelCheck": {
       "toggleTitle": "Modelcontrole — klik om de bevindingen te tonen of te verbergen",
@@ -727,6 +762,11 @@
       "repaired": "Model hersteld",
       "repairAllTitle": "Voer alle herstelbare bevindingen uit — één stap in de historie",
       "repairAll": "Herstel alles ({{n}})",
+      "splitTitle_one": "Staaf gesplitst",
+      "splitTitle_other": "Staven gesplitst",
+      "splitLine": "Knoop {{knoop}} verbonden met staaf {{staaf}}: die is gesplitst in staaf {{deel1}} en staaf {{deel2}}.",
+      "splitLineOffset": "Knoop {{knoop}} verbonden met staaf {{staaf}}: die is gesplitst in staaf {{deel1}} en staaf {{deel2}}. De knoop lag {{mm}} mm naast de staafas; daar zit nu een knik.",
+      "mergeLine": "Knoop {{verwijderd}} samengevoegd met knoop {{bewaard}}.",
       "plateEdge": {
         "openingOnPerimeterRoute": "de last staat op de rand van een opening (`openingId`), maar hij wordt hier gelezen door een route die alleen de omtrek van de plaat kent. Meld dit: het adres wordt bewust geweigerd in plaats van stil op de omtrek gelegd.",
         "nameAndIndex": "de last noemt zowel een benoemde rand (`edge`) als een rand-index (`edgeIndex`). Geef er één: met twee adressen is niet te zeggen welke rand bedoeld is en vanaf welke hoek de posities tellen.",
@@ -944,6 +984,7 @@
     "deleteCaseTitle": "Verwijder belastinggeval, al zijn lasten en zijn factor in elke combinatie",
     "atLeastOneCase": "Minstens één belastinggeval is verplicht.",
     "deleteCaseConfirm": "Verwijder \"{{naam}}\"? Alle lasten in deze case worden ook verwijderd, en zijn factor verdwijnt uit elke combinatie.",
+    "deleteCaseFailed": "Belastinggeval niet verwijderd",
     "newCasePlaceholder": "Nieuw geval (bijv. \"{{voorbeeld}}\")",
     "add": "Toevoegen",
     "casesHintBeforeGamma": "Een nieuw geval heeft type “Overig” en telt pas mee als u het een type geeft: dan vullen de standaardcombinaties het aan (blijvend → γ",
@@ -1033,6 +1074,7 @@
     "swayDirectionTitle3d": "De scheefstand werkt in elke UGT-combinatie om de beurt in +X, −X, +Y en −Y (EN 1993-1-1 §5.3.2(8)); BGT-combinaties rekenen zonder."
   },
   "tree": {
+    "selectAll": "Alle selecteren",
     "showNext": "Toon volgende {{count}}",
     "runToSeeResults": "Voer \"Berekenen\" uit om resultaten te zien.",
     "rowDeflection": "Verplaatsing",

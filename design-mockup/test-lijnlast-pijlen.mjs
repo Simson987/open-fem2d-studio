@@ -1,6 +1,7 @@
-// Pijlen van een lijnlast op het 2D-tekenvlak: een vaste h.o.h.-afstand op het
-// scherm in plaats van een vast aantal per staaf. Een korte staaf liep vol met
-// pijlen en op een lange staaf vielen gaten.
+// Pijlen van een lijnlast op het 2D-tekenvlak: een vaste h.o.h.-afstand in
+// plaats van een vast aantal per staaf. Een korte staaf liep vol met pijlen en
+// op een lange staaf vielen gaten. De afstand wordt gemeten bij passend beeld,
+// zodat in- en uitzoomen het aantal pijlen niet verandert (#101).
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,10 +24,16 @@ check("een lange staaf krijgt pijlen naar rato (600 px → 25 intervallen)", lij
 check("een korte staaf houdt alleen zijn twee eindpijlen (10 px → 1 interval)", lijnlastPijlIntervallen(10) === 1);
 check("ongeldige invoer geeft één interval", [0, -5, NaN, Infinity].every((v) => lijnlastPijlIntervallen(v) === 1));
 
-log("\n[2] het tekenvlak gebruikt de vaste afstand");
+log("\n[2] het tekenvlak gebruikt de vaste afstand, gemeten bij passend beeld (#101)");
 const canvas = readFileSync(join(HIER, "src", "components", "fem", "FemCanvas.tsx"), "utf8");
-check("lijnlast op een staaf en randlast op een plaat rekenen het aantal pijlen met lijnlastPijlIntervallen",
-  (canvas.match(/const N = lijnlastPijlIntervallen\(Math\.hypot\(sdx, sdy\)\);/g) ?? []).length === 2);
+check("lijnlast op een staaf en randlast op een plaat rekenen het aantal pijlen in modelmaat × de schaal van passend beeld",
+  (canvas.match(/const N = lijnlastPijlIntervallen\(Math\.hypot\(sdx, sdy\) \* pijlSchaal\);/g) ?? []).length === 2,
+  "verwacht twee keer: lijnlastPijlIntervallen(Math.hypot(sdx, sdy) * pijlSchaal)");
+check("pijlSchaal = passend beeld / huidige zoom, met passendBeeldSchaal",
+  /const pijlSchaal = fitSchaal !== null \? fitSchaal \/ view\.scale : 1;/.test(canvas)
+  && /passendBeeldSchaal\(/.test(canvas));
+check("Passend beeld (knop en toets F) gebruikt dezelfde schaal",
+  (canvas.match(/passendBeeldSchaal\(/g) ?? []).length >= 3);
 check("het oude vaste aantal (8 per volle lengte) is weg", !/Math\.round\(8 \* \(bF - aF\)\)/.test(canvas));
 
 log("\n[3] één label per keten van gelijke lijnlasten");
@@ -50,6 +57,31 @@ check("een deellast, trapezium of gestapelde band houdt zijn eigen label",
 check("het tekenvlak slaat het label van de verborgen lasten over (alleen bij de lijnlast op een staaf)",
   (canvas.match(/\{verborgenLabels\.has\(l\.id\) \? null : isTrap \? \(/g) ?? []).length === 1
   && /const verborgenLabels = verborgenLijnlastLabels\(/.test(readFileSync(join(HIER, "src", "components", "fem", "FemCanvas.tsx"), "utf8")));
+
+log("\n[4] de schaal van passend beeld");
+const { passendBeeldSchaal } = await import("./src/lib/lijnlastPijlen.ts");
+const grenzen = { min: 1 / 200, max: 1 / 2 };
+const portaal = [{ x: 0, z: 0 }, { x: 6000, z: 0 }, { x: 6000, z: 4000 }, { x: 0, z: 4000 }];
+// 10% marge rondom: 1000 × 600 px bruikbaar → 800/6000 en 480/4000; de kleinste telt.
+check("het hele model met 10% marge, de krapste richting telt",
+  Math.abs(passendBeeldSchaal(portaal, { w: 1000, h: 600 }, grenzen) - 480 / 4000) < 1e-12,
+  String(passendBeeldSchaal(portaal, { w: 1000, h: 600 }, grenzen)));
+check("begrensd tot de zoomgrenzen",
+  passendBeeldSchaal([{ x: 0, z: 0 }, { x: 1e7, z: 0 }], { w: 1000, h: 600 }, grenzen) === grenzen.min
+  && passendBeeldSchaal([{ x: 0, z: 0 }, { x: 1, z: 0 }], { w: 1000, h: 600 }, grenzen) === grenzen.max);
+check("geen knopen of geen ruimte: null",
+  passendBeeldSchaal([], { w: 1000, h: 600 }, grenzen) === null
+  && passendBeeldSchaal(portaal, { w: 0, h: 600 }, grenzen) === null
+  && passendBeeldSchaal(portaal, { w: 1000, h: -5 }, grenzen) === null);
+// Het aantal pijlen hangt alleen van de modelmaat en passend beeld af: bij passend
+// beeld is het gelijk aan de oude schermregel, bij elke andere zoom ook.
+const fit = passendBeeldSchaal(portaal, { w: 1000, h: 600 }, grenzen);
+const aantal = (lengteMm, zoom) => lijnlastPijlIntervallen(lengteMm * zoom * (fit / zoom));
+check("een staaf van 6 m: zelfde aantal bij passend beeld, ingezoomd en uitgezoomd",
+  [fit, fit * 4, fit / 3].every((zoom) => aantal(6000, zoom) === lijnlastPijlIntervallen(6000 * fit)));
+check("korte en lange staven naar rato (1 m tegen 6 m)",
+  lijnlastPijlIntervallen(1000 * fit) < lijnlastPijlIntervallen(6000 * fit)
+  && Math.abs(lijnlastPijlIntervallen(6000 * fit) / lijnlastPijlIntervallen(1000 * fit) - 6) <= 2);
 
 log(`\n${geslaagd} geslaagd, ${gefaald} gefaald`);
 process.exit(gefaald > 0 ? 1 : 0);

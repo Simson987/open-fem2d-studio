@@ -104,12 +104,32 @@ async fn stdio_roundtrip_initialize_list_call() {
     // open_fem_3d_staalhal_maken en open_fem_3d_ifc_importeren) + 22
     // gui_*-tools (het bedieningskanaal van de desktop-app, zie gui_tools.rs;
     // sinds de staalhal ook gui_build_3d_steel_hall, sinds de IFC-import ook
-    // gui_import_ifc_analysis_model) = 51.
-    assert_eq!(tools.len(), 51, "expected 51 tools, got {}", tools.len());
+    // gui_import_ifc_analysis_model) = 51 vaste tools.
+    // Daarbij één tool per API-commando van de app, uit de ingebakken catalogus
+    // (assets/api-catalogus.json, geschreven door `npm run build:sidecar`).
+    // Ook die tellen exact: elk commando uit de catalogus, niets meer.
+    let catalogus: Value = serde_json::from_str(include_str!("../assets/api-catalogus.json"))
+        .expect("assets/api-catalogus.json");
+    let api_namen: Vec<String> = catalogus["commands"]
+        .as_array()
+        .expect("commands")
+        .iter()
+        .map(|c| c["name"].as_str().unwrap().replace('.', "_"))
+        .collect();
+    assert_eq!(
+        tools.len(),
+        51 + api_namen.len(),
+        "expected 51 + {} tools, got {}",
+        api_namen.len(),
+        tools.len()
+    );
     let names: Vec<&str> = tools
         .iter()
         .map(|t| t["name"].as_str().unwrap())
         .collect();
+    for api in &api_namen {
+        assert!(names.contains(&api.as_str()), "API-tool {api} ontbreekt in tools/list");
+    }
     for expected in [
         "list_steel_profiles",
         "gui_status",

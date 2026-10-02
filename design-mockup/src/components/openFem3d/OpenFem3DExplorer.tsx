@@ -11,7 +11,7 @@ import { removeOpenFem3DDiaphragm } from "./openFem3dTrekSchijf";
 import type { OpenFem3DSolveResult } from "./openFem3dSolver";
 import { openFem3DUlsUc, type OpenFem3DSteelChecks } from "./openFem3dSteelCheck";
 import type { OpenFem3DConcreteChecks } from "./openFem3dConcreteCheck";
-import type { OpenFem3DVisibility } from "./openFem3dVisibility";
+import { OPEN_FEM_3D_RESULT_LAYERS, type OpenFem3DVisibility } from "./openFem3dVisibility";
 import { OPEN_FEM_3D_PLATE_QUANTITIES, isOpenFem3DPlateQuantity, type OpenFem3DPlateQuantity } from "./openFem3dPlateResults";
 import { OPEN_FEM_3D_PLATES_LINEAR_NOTICE } from "./openFem3dSolver";
 import { openFem3DMaximumDisplacementM } from "./openFem3dDisplacement";
@@ -26,6 +26,13 @@ import {
   openFem3DDeformationSliderFromScale,
   type OpenFem3DDeformationDisplay,
 } from "./openFem3dDeformationDisplay";
+import {
+  DEFAULT_OPEN_FEM_3D_DIAGRAM_LABELS,
+  OPEN_FEM_3D_DIAGRAM_LABEL_STANDS,
+  normalizeOpenFem3DDiagramLabels,
+  openFem3DFirstActiveForceLayer,
+  type OpenFem3DDiagramLabels,
+} from "./openFem3dDiagramLabels";
 import "../fem/FemProjectTree.css";
 
 interface Props {
@@ -45,6 +52,9 @@ interface Props {
   /** Vergroting van de vervormde vorm en "Origineel tonen" (weergavevoorkeur). */
   deformationDisplay?: OpenFem3DDeformationDisplay;
   setDeformationDisplay?: (display: OpenFem3DDeformationDisplay) => void;
+  /** Getallen bij de snedekrachtlijnen: Waarden aan/uit en weinig … veel (weergavevoorkeur, issue #95). */
+  diagramLabels?: OpenFem3DDiagramLabels;
+  setDiagramLabels?: (labels: OpenFem3DDiagramLabels) => void;
   /** Grootheid van de plaatcontour; `null` = geen contour. */
   plateQuantity?: OpenFem3DPlateQuantity | null;
   setPlateQuantity?: (quantity: OpenFem3DPlateQuantity | null) => void;
@@ -68,20 +78,27 @@ interface Props {
 const GROTE_TAK_GRENS = 80;
 const TAK_PAGINA = 80;
 
-function Branch({ label, count, children, showNextLabel }: {
+function Branch({ label, count, children, showNextLabel, defaultOpen, action }: {
   label: string;
   count: number;
   children: React.ReactNode;
   showNextLabel: (count: number) => string;
+  /** Begint open of dicht; zonder: open tot GROTE_TAK_GRENS items. */
+  defaultOpen?: boolean;
+  /** Een knop rechts van de kop, bijvoorbeeld "Alle selecteren". */
+  action?: { label: string; onClick: () => void };
 }) {
-  const [open, setOpen] = useState(count <= GROTE_TAK_GRENS);
+  const [open, setOpen] = useState(defaultOpen ?? count <= GROTE_TAK_GRENS);
   const [limit, setLimit] = useState(TAK_PAGINA);
   const items = open ? Children.toArray(children) : [];
   return <div className="fem-tree-node">
-    <button className="fem-tree-row" onClick={() => setOpen(!open)}>
-      <span className={`fem-tree-chevron${open ? " open" : ""}`}><svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M3 2l4 3-4 3z" /></svg></span>
-      <span className="fem-tree-label">{label}</span><span className="fem-tree-count">{count}</span>
-    </button>
+    <div className="fem-tree-row-with-action">
+      <button className="fem-tree-row" onClick={() => setOpen(!open)}>
+        <span className={`fem-tree-chevron${open ? " open" : ""}`}><svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M3 2l4 3-4 3z" /></svg></span>
+        <span className="fem-tree-label">{label}</span><span className="fem-tree-count">{count}</span>
+      </button>
+      {action && count > 0 && <button type="button" className="fem-tree-row-action" onClick={action.onClick}>{action.label}</button>}
+    </div>
     {open && <div className="fem-tree-children">
       {items.slice(0, limit)}
       {limit < items.length && <button
@@ -175,9 +192,34 @@ function DeformationControls({ display, setDisplay, autoScale }: {
   </>;
 }
 
-const RESULT_KEYS: (keyof OpenFem3DVisibility)[] = [
-  "deformation", "reactions", "utilization", "axialForce", "shearY", "shearZ", "torsion", "momentY", "momentZ",
-];
+/**
+ * Onder de eerste aangevinkte snedekrachtlijn: Waarden aan/uit en een
+ * regelaar van weinig tot veel (5 standen), één instelling voor alle zes
+ * lijnen. Dezelfde subregel als de vergroting onder Vervormde vorm.
+ */
+function DiagramLabelControls({ labels, setLabels }: {
+  labels: OpenFem3DDiagramLabels;
+  setLabels: (labels: OpenFem3DDiagramLabels) => void;
+}) {
+  const { t } = useTranslation("common");
+  const stands = OPEN_FEM_3D_DIAGRAM_LABEL_STANDS;
+  return <div className="fem-results-scale-row" title={t("openFem3dDiagramLabels.densityHint")} data-open-fem3d-diagram-label-controls>
+    <label className="fem-results-subcheck" title={t("openFem3dDiagramLabels.valuesHint")}>
+      <input type="checkbox" checked={labels.show} aria-label={t("openFem3dDiagramLabels.valuesAria")}
+        onChange={(event) => setLabels({ ...labels, show: event.target.checked })} />
+      <span>{t("openFem3dDiagramLabels.values")}</span>
+    </label>
+    <span className="fem-results-scale-end" aria-hidden="true">{t("openFem3dDiagramLabels.few")}</span>
+    <input type="range" className="fem-results-scale-slider" aria-label={t("openFem3dDiagramLabels.density")}
+      min={OPEN_FEM_3D_DIAGRAM_LABEL_STANDS[0]} max={stands[stands.length - 1]} step={1}
+      value={labels.stand} disabled={!labels.show}
+      aria-valuetext={t("openFem3dDiagramLabels.densityValue", { n: labels.stand, max: stands[stands.length - 1] })}
+      onChange={(event) => setLabels(normalizeOpenFem3DDiagramLabels({ ...labels, stand: Number(event.target.value) }))} />
+    <span className="fem-results-scale-end" aria-hidden="true">{t("openFem3dDiagramLabels.many")}</span>
+  </div>;
+}
+
+const RESULT_KEYS = OPEN_FEM_3D_RESULT_LAYERS;
 
 export default function OpenFem3DExplorer(props: Props) {
   const { t } = useTranslation("common");
@@ -210,6 +252,8 @@ export default function OpenFem3DExplorer(props: Props) {
   const loadPanels = (props.model.loadPanels ?? []).filter((panel) => (panel.caseId ?? 1) === activeLoadCaseId);
   const select = (event: React.MouseEvent<HTMLButtonElement>, item: OpenFem3DSingleSelection) =>
     props.setSelection(toggleOpenFem3DSelection(props.selection, item, event.shiftKey || event.ctrlKey || event.metaKey));
+  // Het sub-blok Waarden staat onder de eerste aangevinkte snedekrachtlijn.
+  const firstForceLayer = openFem3DFirstActiveForceLayer(props.visibility);
 
   return <div className="fem-project-tree" data-open-fem3d-explorer>
     <div className={`fem-tree-tabs${props.views ? " open-fem3d-vier-tabs" : ""}`}>
@@ -273,7 +317,15 @@ export default function OpenFem3DExplorer(props: Props) {
         </Branch>
         <Branch label={t("tree.supports")} count={(props.model.supports ?? []).length
           + (props.model.plates ?? []).reduce((count, plate) => count + (plate.edgeSupports?.length ?? 0), 0)}
-          showNextLabel={(count) => t("tree.showNext", { count })}>
+          showNextLabel={(count) => t("tree.showNext", { count })}
+          // Alle opleggingsknopen in één selectie, zodat een lintknop (bijv.
+          // Scharnier) ze allemaal tegelijk wijzigt.
+          action={(props.model.supports ?? []).length > 0 ? {
+            label: t("tree.selectAll"),
+            onClick: () => props.setSelection({
+              type: "multi", nodeIds: (props.model.supports ?? []).map((support) => support.nodeId), beamIds: [],
+            }),
+          } : undefined}>
           {(props.model.supports ?? []).map((support) => <Leaf key={support.nodeId}
             label={t("tree.nodeLabel", { id: support.nodeId })}
             value={[
@@ -372,6 +424,7 @@ export default function OpenFem3DExplorer(props: Props) {
         {(props.combinations?.length ?? 0) > 0 && (props.combinationResults?.size ?? 0) > 0 && <Branch
           label="Belastingcombinaties"
           count={props.combinationResults?.size ?? 0}
+          defaultOpen={false}
           showNextLabel={(count) => t("tree.showNext", { count })}
         >
           {props.combinations?.filter((combination) => props.combinationResults?.has(combination.id)).map((combination) => {
@@ -387,7 +440,7 @@ export default function OpenFem3DExplorer(props: Props) {
           })}
         </Branch>}
         <div className="fem-results-toggle-list">
-          {RESULT_KEYS.map((key) => <div key={key} className="fem-results-row">
+          {RESULT_KEYS.map((key) => <div key={key} className="fem-results-row" data-open-fem3d-result-layer={key}>
             <button type="button"
               className={`fem-results-toggle${props.visibility[key] ? " active" : ""}`}
               onClick={() => props.setVisibility({ ...props.visibility, [key]: !props.visibility[key] })}>
@@ -399,6 +452,9 @@ export default function OpenFem3DExplorer(props: Props) {
               && <DeformationControls display={props.deformationDisplay ?? DEFAULT_OPEN_FEM_3D_DEFORMATION_DISPLAY}
                 setDisplay={props.setDeformationDisplay}
                 autoScale={props.result ? openFem3DAutoDeformationScale(props.model, props.result) : null} />}
+            {key === firstForceLayer && props.setDiagramLabels
+              && <DiagramLabelControls labels={props.diagramLabels ?? DEFAULT_OPEN_FEM_3D_DIAGRAM_LABELS}
+                setLabels={props.setDiagramLabels} />}
           </div>)}
         </div>
       </div>}

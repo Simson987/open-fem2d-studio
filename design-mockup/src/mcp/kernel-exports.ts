@@ -32,6 +32,22 @@ export * from "./sidecar";
 export * from "./fouten";
 export * from "./valideerModel";
 
+// De API-commando's (src/api/): de MCP-server voert ze via `api_uitvoeren`
+// uit, dus hun tests horen ook tegen de BUNDEL te draaien.
+export * from "../api/schema";
+export * from "../api/register";
+export * from "../api/projectDocument";
+export * from "../api/standaardRegister";
+export { MODEL3D_GEOMETRIE_COMMANDOS } from "../api/commands/model3dGeometrie";
+export { MODEL3D_VOORWAARDEN_COMMANDOS } from "../api/commands/model3dVoorwaarden";
+export { MODEL3D_BEWERKEN_COMMANDOS } from "../api/commands/model3dBewerken";
+export { PROJECT_COMMANDOS } from "../api/commands/project";
+export { STRAMIEN_COMMANDOS } from "../api/commands/stramien";
+// Extensies: het contract en het draaien van een extensiescript zonder app.
+export * from "../extensies/manifest";
+export { laadExtensieScript } from "./extensieSidecar";
+export * from "./apiSidecar";
+
 export * from "../components/fem/solver/engine";
 export * from "../components/fem/solver/combinations";
 // De kritieke lastfactor α_cr en de meldingen erbij (basisaudit nr 27): de

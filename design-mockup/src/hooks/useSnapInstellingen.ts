@@ -10,14 +10,37 @@
  * piepklein extern winkeltje op `useSyncExternalStore`: geen bibliotheek, geen
  * context-provider, en beide kanten lezen exact dezelfde waarde.
  *
- * De instelling is VLUCHTIG (leeft zolang het venster leeft) en hoort niet in
- * het projectbestand: het is een tekenhulp, geen modelgegeven.
+ * De instelling wordt BEWAARD tussen sessies (localStorage van dit venster) en
+ * hoort niet in het projectbestand: het is een tekenhulp, geen modelgegeven.
+ * Kapotte of ontbrekende opslag geeft gewoon de beginstand.
+ *
+ * HOEKSNAP (#53)
+ * Naast de drie puntsnaps (knoop, stramien, raster — die vangen een PUNT) is
+ * er de hoeksnap: die zet de RICHTING van een staaf in aanbouw op 0°/90°
+ * (desgewenst ook 30°, 45°, 60°) als hij daar binnen de tolerantie bij ligt.
+ * Hij hoort alleen bij het 2D-tekenvlak; `SNAP_SOORTEN` blijft daarom de lijst
+ * van de puntsnaps (statusbalk en 3D), `SNAP_SCHAKELAARS` is die lijst plus de
+ * hoeksnap (tab Weergave in 2D). De rekenregels staan in `lib/tekenhulp.ts`.
+ *
+ * VERBINDINGSTOLERANTIE (#55)
+ * Ook hier bewaard, maar geen snap: binnen deze afstand (mm) geldt een knoop
+ * als "op de staaf" of "op dezelfde plek" voor de modelcontrole, de rekenpoort,
+ * het plaatsen van een knoop en het herstel. Alleen het 2D-model; de regels en
+ * de grenzen (0,1–25 mm, standaard 5) staan in `lib/modelControle.ts`. Een
+ * andere waarde verplaatst niets: alleen de controle en de volgende plaatsing
+ * of het volgende herstel gebruiken hem.
  */
 import { useSyncExternalStore } from "react";
+import { begrensHoekTolerantie, HOEKSNAP_STANDAARD_TOLERANTIE } from "../lib/tekenhulp";
+import { begrensVerbindingstolerantie, CONTROLE_TOL_MM } from "../lib/modelControle";
 
-/** De snapsoorten, in de volgorde waarin ze voorrang hebben. */
+/** De puntsnaps, in de volgorde waarin ze voorrang hebben. */
 export const SNAP_SOORTEN = ["knoop", "stramien", "raster"] as const;
 export type SnapSoort = (typeof SNAP_SOORTEN)[number];
+
+/** Alle snapschakelaars: de puntsnaps plus de hoeksnap van een staaf (#53). */
+export const SNAP_SCHAKELAARS = [...SNAP_SOORTEN, "hoek"] as const;
+export type SnapSchakelaar = (typeof SNAP_SCHAKELAARS)[number];
 
 export interface SnapInstellingen {
   /** Vangen op een bestaande knoop — de sterkste snap. */
@@ -26,6 +49,17 @@ export interface SnapInstellingen {
   stramien: boolean;
   /** Vangen op het achtergrondraster — de zwakste snap. */
   raster: boolean;
+  /** Hoeksnap bij het tekenen van een staaf: richting op 0°/90° (#53). */
+  hoek: boolean;
+  /** Tolerantie van de hoeksnap in graden (0,1–15). */
+  hoekTolerantie: number;
+  /** Ook 30°, 45° en 60° (en hun spiegelingen). */
+  hoekExtra: boolean;
+  /**
+   * Verbindingstolerantie van het 2D-model in mm (0,1–25, #55): binnen deze
+   * afstand ligt een knoop op een staaf of op dezelfde plek als een andere.
+   */
+  verbindingsTolerantie: number;
 }
 
 /** NL-labels + uitleg voor de knopjes in de statusbalk. */
@@ -44,12 +78,65 @@ export const SNAP_LABELS: Record<SnapSoort, { kort: string; uitleg: string }> = 
   },
 };
 
-const BEGINSTAND: SnapInstellingen = { knoop: true, stramien: true, raster: true };
+export const SNAP_BEGINSTAND: SnapInstellingen = {
+  knoop: true, stramien: true, raster: true,
+  hoek: true, hoekTolerantie: HOEKSNAP_STANDAARD_TOLERANTIE, hoekExtra: false,
+  verbindingsTolerantie: CONTROLE_TOL_MM,
+};
 
-let stand: SnapInstellingen = BEGINSTAND;
+const OPSLAG_SLEUTEL = "open-fem-studio.snapInstellingen";
+
+/**
+ * Lees een bewaarde stand. Alleen bekende velden met het juiste type tellen;
+ * de rest komt uit de beginstand. Kapotte JSON → de beginstand.
+ */
+export function snapInstellingenUitOpslag(tekst: string | null): SnapInstellingen {
+  if (!tekst) return SNAP_BEGINSTAND;
+  let ruw: unknown;
+  try {
+    ruw = JSON.parse(tekst);
+  } catch {
+    return SNAP_BEGINSTAND;
+  }
+  if (!ruw || typeof ruw !== "object" || Array.isArray(ruw)) return SNAP_BEGINSTAND;
+  const r = ruw as Record<string, unknown>;
+  const vlag = (k: SnapSchakelaar) => (typeof r[k] === "boolean" ? r[k] as boolean : SNAP_BEGINSTAND[k]);
+  return {
+    knoop: vlag("knoop"),
+    stramien: vlag("stramien"),
+    raster: vlag("raster"),
+    hoek: vlag("hoek"),
+    hoekTolerantie: typeof r.hoekTolerantie === "number"
+      ? begrensHoekTolerantie(r.hoekTolerantie) : SNAP_BEGINSTAND.hoekTolerantie,
+    hoekExtra: typeof r.hoekExtra === "boolean" ? r.hoekExtra : SNAP_BEGINSTAND.hoekExtra,
+    verbindingsTolerantie: typeof r.verbindingsTolerantie === "number"
+      ? begrensVerbindingstolerantie(r.verbindingsTolerantie) : SNAP_BEGINSTAND.verbindingsTolerantie,
+  };
+}
+
+function laad(): SnapInstellingen {
+  try {
+    if (typeof localStorage === "undefined") return SNAP_BEGINSTAND;
+    return snapInstellingenUitOpslag(localStorage.getItem(OPSLAG_SLEUTEL));
+  } catch {
+    return SNAP_BEGINSTAND;
+  }
+}
+
+function bewaar(): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(OPSLAG_SLEUTEL, JSON.stringify(stand));
+  } catch {
+    // Privé venster of volle opslag: de stand geldt dan alleen deze sessie.
+  }
+}
+
+let stand: SnapInstellingen = laad();
 const luisteraars = new Set<() => void>();
 
 function meld() {
+  bewaar();
   for (const l of luisteraars) l();
 }
 
@@ -62,22 +149,51 @@ function lees(): SnapInstellingen {
   return stand;
 }
 
-/** Zet één snapsoort aan of uit. */
-export function zetSnap(soort: SnapSoort, aan: boolean): void {
+/** Zet één snapsoort (of de hoeksnap) aan of uit. */
+export function zetSnap(soort: SnapSchakelaar, aan: boolean): void {
   if (stand[soort] === aan) return;
   stand = { ...stand, [soort]: aan };
   meld();
 }
 
 /** Wissel één snapsoort. */
-export function wisselSnap(soort: SnapSoort): void {
+export function wisselSnap(soort: SnapSchakelaar): void {
   zetSnap(soort, !stand[soort]);
 }
 
-/** Zet alle snaps in één keer aan of uit. */
-export function zetAlleSnaps(aan: boolean): void {
-  if (SNAP_SOORTEN.every((s) => stand[s] === aan)) return;
-  stand = { knoop: aan, stramien: aan, raster: aan };
+/**
+ * Zet alle snaps in één keer aan of uit. Standaard alle schakelaars, de
+ * hoeksnap inbegrepen; de 3D-weergave geeft alleen de puntsnaps mee, want daar
+ * bestaat de hoeksnap (nog) niet.
+ */
+export function zetAlleSnaps(aan: boolean, soorten: readonly SnapSchakelaar[] = SNAP_SCHAKELAARS): void {
+  if (soorten.every((s) => stand[s] === aan)) return;
+  const volgend = { ...stand };
+  for (const s of soorten) volgend[s] = aan;
+  stand = volgend;
+  meld();
+}
+
+/** Tolerantie van de hoeksnap in graden, begrensd op 0,1–15. */
+export function zetHoekTolerantie(graden: number): void {
+  const waarde = begrensHoekTolerantie(graden);
+  if (stand.hoekTolerantie === waarde) return;
+  stand = { ...stand, hoekTolerantie: waarde };
+  meld();
+}
+
+/** Ook 30°, 45° en 60° voor de hoeksnap. */
+export function zetHoekExtra(aan: boolean): void {
+  if (stand.hoekExtra === aan) return;
+  stand = { ...stand, hoekExtra: aan };
+  meld();
+}
+
+/** Verbindingstolerantie van het 2D-model in mm, begrensd op 0,1–25 (#55). */
+export function zetVerbindingsTolerantie(mm: number): void {
+  const waarde = begrensVerbindingstolerantie(mm);
+  if (stand.verbindingsTolerantie === waarde) return;
+  stand = { ...stand, verbindingsTolerantie: waarde };
   meld();
 }
 
@@ -88,7 +204,7 @@ export function leesSnapInstellingen(): SnapInstellingen {
 
 /** Terug naar de beginstand — alleen voor tests. */
 export function herstelSnapBeginstand(): void {
-  stand = BEGINSTAND;
+  stand = SNAP_BEGINSTAND;
   meld();
 }
 

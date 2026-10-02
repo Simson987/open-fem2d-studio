@@ -69,6 +69,7 @@ import {
   rapportVoorbereiden,
   wachtOpRekenrust,
 } from "./rapportExport";
+import { appRegister, voerApiUitInApp, type ApiAppActies } from "./apiAdapter";
 
 const EVENT_OPDRACHT = "gui-control:opdracht";
 
@@ -187,6 +188,8 @@ export interface BedieningActies {
    * Het kanaal vraagt niet naar niet-opgeslagen werk, net als `model_laden`.
    */
   importeerIfcProject: (imp: IfcAnalyseImport) => void;
+  /** De acties waarmee de API-commando's (src/api/) in de app werken; zie apiAdapter.ts. */
+  api: ApiAppActies;
 }
 
 interface Opdracht {
@@ -1067,39 +1070,12 @@ export async function voerUit(
 
     case "screenshot_dom": {
       const { default: html2canvas } = await import("html2canvas");
-      const compatibeleKleur = (waarde: string) => waarde.replace(
-        /color\(\s*(?:srgb|display-p3)\s+([^)]*)\)/gi,
-        (_volledig, inhoud: string) => {
-          const [kanalen, alfaTekst] = inhoud.split("/").map((deel) => deel.trim());
-          const getallen = kanalen.split(/\s+/).map((deel) =>
-            deel.endsWith("%") ? Number.parseFloat(deel) / 100 : Number.parseFloat(deel));
-          if (getallen.length < 3 || getallen.some((getal) => !Number.isFinite(getal))) return "rgba(0,0,0,0)";
-          const alfa = alfaTekst === undefined
-            ? 1
-            : alfaTekst.endsWith("%") ? Number.parseFloat(alfaTekst) / 100 : Number.parseFloat(alfaTekst);
-          const kleur = getallen.slice(0, 3).map((getal) => Math.round(Math.max(0, Math.min(1, getal)) * 255));
-          return `rgba(${kleur[0]},${kleur[1]},${kleur[2]},${Number.isFinite(alfa) ? Math.max(0, Math.min(1, alfa)) : 1})`;
-        },
-      );
-      const kleurEigenschappen = [
-        "color", "background-color", "border-top-color", "border-right-color",
-        "border-bottom-color", "border-left-color", "outline-color",
-        "text-decoration-color", "fill", "stroke", "box-shadow", "text-shadow",
-      ] as const;
+      // html2canvas kent color() niet; de kloon wordt zelf nagelopen (#100).
+      const { maakKleurenCompatibel } = await import("../lib/html2canvasKleuren");
       const canvas = await html2canvas(document.body, {
         useCORS: true,
         logging: false,
-        onclone: (kopie) => {
-          const bron = [document.documentElement, ...document.querySelectorAll<HTMLElement | SVGElement>("*")];
-          const doel = [kopie.documentElement, ...kopie.querySelectorAll<HTMLElement | SVGElement>("*")];
-          for (let index = 0; index < Math.min(bron.length, doel.length); index += 1) {
-            const berekend = getComputedStyle(bron[index]);
-            for (const eigenschap of kleurEigenschappen) {
-              const waarde = berekend.getPropertyValue(eigenschap);
-              if (waarde.includes("color(")) doel[index].style.setProperty(eigenschap, compatibeleKleur(waarde));
-            }
-          }
-        },
+        onclone: maakKleurenCompatibel,
       });
       return { dataUrl: canvas.toDataURL("image/png") };
     }
@@ -1111,6 +1087,22 @@ export async function voerUit(
 
     case "rapport_afronden":
       return rapportAfronden(args, a);
+
+    // De API-commando's van de app (src/api/): de catalogus, en één commando
+    // uitvoeren. Het antwoord van `api_uitvoeren` is altijd een object met
+    // `ok`, zodat de foutcode van het register heel bij de MCP-server komt
+    // (het kanaal zelf kent alleen een fouttekst). Zie apiAdapter.ts.
+    case "api_catalogus":
+      return { commands: appRegister(a().api).catalogus().map((c) => ({
+        name: c.naam, description: c.beschrijving, inputSchema: c.invoer, kind: c.soort,
+      })) };
+
+    case "api_uitvoeren": {
+      if (typeof args.name !== "string") throw new Error("`name` (de naam van het commando) ontbreekt");
+      const antwoord = await voerApiUitInApp(a().api, args.name, args.input);
+      await verseRender();
+      return antwoord;
+    }
 
     default:
       throw new Error(`onbekende bedieningsopdracht \`${naam}\``);
