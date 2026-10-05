@@ -10,6 +10,8 @@ import { documentCommando, nietGevonden, verdwenenIds } from "../commandoHulp";
 import { metModel3d, model3dVan, type ApiDocument } from "../projectDocument";
 import { eenVan, getal, id, keuze, lijst, obj, ofNull, tekst } from "../schemaBouw";
 import { removeOpenFem3DSelection, type OpenFem3DModel } from "../../components/openFem3d/openFem3dModel";
+import { openFem3DSelectionFromIds } from "../../components/openFem3d/openFem3dSelection";
+import { LAST_SOORTEN, LAST_VELDEN, lastenVan, lastIdSchema, lastIdsUitInvoer, type LastIdInvoer } from "./model3dSelectie";
 import { transformOpenFem3D, type OpenFem3DTransformCommand } from "../../components/openFem3d/openFem3dTransform";
 import {
   applyOpenFem3DLevels, linkOpenFem3DToLevel, openFem3DLevelHeightM, openFem3DLevelRefusalText, openFem3DLevelsFromMetres,
@@ -21,13 +23,18 @@ import { DEFAULT_STRUCTURAL_GRID, type StructuralGrid } from "../../components/f
 
 interface Selectie { nodeIds?: number[]; beamIds?: number[]; plateIds?: number[] }
 
+/** Bestaan de knopen, staven en platen? Een onbekende id → NIET_GEVONDEN. */
+function controleerIds(model: OpenFem3DModel, { nodeIds = [], beamIds = [], plateIds = [] }: Selectie) {
+  for (const nodeId of nodeIds) if (!model.nodes.some((n) => n.id === nodeId)) throw nietGevonden("3D-knoop", nodeId);
+  for (const beamId of beamIds) if (!model.beams.some((b) => b.id === beamId)) throw nietGevonden("3D-staaf", beamId);
+  for (const plateId of plateIds) if (!(model.plates ?? []).some((p) => p.id === plateId)) throw nietGevonden("3D-plaat", plateId);
+}
+
 function controleerSelectie(model: OpenFem3DModel, { nodeIds = [], beamIds = [], plateIds = [] }: Selectie) {
   if (nodeIds.length + beamIds.length + plateIds.length === 0) {
     throw new ApiFout("INVOER_ONGELDIG", "Kies minstens één knoop, staaf of plaat.");
   }
-  for (const nodeId of nodeIds) if (!model.nodes.some((n) => n.id === nodeId)) throw nietGevonden("3D-knoop", nodeId);
-  for (const beamId of beamIds) if (!model.beams.some((b) => b.id === beamId)) throw nietGevonden("3D-staaf", beamId);
-  for (const plateId of plateIds) if (!(model.plates ?? []).some((p) => p.id === plateId)) throw nietGevonden("3D-plaat", plateId);
+  controleerIds(model, { nodeIds, beamIds, plateIds });
   return { type: "multi" as const, nodeIds, beamIds, plateIds };
 }
 
@@ -74,7 +81,7 @@ const transformatie = eenVan([
 
 const transformeren = documentCommando<Selectie & { command: OpenFem3DTransformCommand }, unknown>({
   naam: "model3d.transform",
-  beschrijving: "Een selectie verplaatsen, kopiëren, roteren of spiegelen, zoals het transformatiepaneel. De uitkomst noemt de selectie erna (bij kopiëren de nieuwe elementen).",
+  beschrijving: "Een selectie verplaatsen, kopiëren, roteren of spiegelen, zoals het transformatiepaneel. De uitkomst noemt de selectie erna (bij kopiëren de nieuwe elementen). Zou een staaf op een verticale bedding (kKnPerM3) daardoor (bijna) verticaal komen te staan, dan wordt de bewerking geweigerd.",
   invoer: obj({ ...selectieVelden, command: transformatie }, ["command"]),
   uitvoeren: ({ command, ...selectie }, document) => {
     const model = model3dVan(document);
@@ -83,18 +90,31 @@ const transformeren = documentCommando<Selectie & { command: OpenFem3DTransformC
   },
 });
 
-const selectieVerwijderen = documentCommando<Selectie, unknown>({
+/** Uitvoerveld per lastsoort: removedNodalLoadIds, removedMemberLoadIds, … */
+const verwijderdVeld = (veld: string) => `removed${veld[0].toUpperCase()}${veld.slice(1)}`;
+
+const selectieVerwijderen = documentCommando<Selectie & LastIdInvoer, unknown>({
   naam: "model3d.selection.delete",
-  beschrijving: "Knopen, staven en platen in één keer verwijderen, met alles wat eraan hangt (zoals Delete in de app).",
-  invoer: obj(selectieVelden),
-  uitvoeren: (selectie, document) => {
+  beschrijving: "Knopen, staven, platen en lasten in één keer verwijderen, met alles wat eraan hangt (zoals Delete in de app). "
+    + "De lastvelden zijn die van model3d.selection.filter, zodat een gefilterde selectie met lasten er zo in kan; een selectie "
+    + "met alleen lasten mag ook. De uitkomst noemt alles wat verdween, ook wat met een knoop, staaf of plaat meeging.",
+  invoer: obj({ ...selectieVelden, ...lastIdSchema("die weg moeten") }),
+  uitvoeren: (invoer, document) => {
     const model = model3dVan(document);
-    const nieuw = removeOpenFem3DSelection(model, controleerSelectie(model, selectie));
+    const { nodeIds = [], beamIds = [], plateIds = [] } = invoer;
+    controleerIds(model, { nodeIds, beamIds, plateIds });
+    const loads = lastIdsUitInvoer(model, invoer);
+    const selectie = openFem3DSelectionFromIds({ nodeIds, beamIds, plateIds, loads });
+    if (!selectie) throw new ApiFout("INVOER_ONGELDIG", "Kies minstens één knoop, staaf, plaat of last.");
+    const nieuw = removeOpenFem3DSelection(model, selectie);
+    const lastenVoor = lastenVan(model), lastenNa = lastenVan(nieuw);
     return {
       uitkomst: {
         removedNodeIds: verdwenenIds(model.nodes, nieuw.nodes),
         removedBeamIds: verdwenenIds(model.beams, nieuw.beams),
         removedPlateIds: verdwenenIds(model.plates, nieuw.plates),
+        ...Object.fromEntries(LAST_SOORTEN.map((soort) =>
+          [verwijderdVeld(LAST_VELDEN[soort]), verdwenenIds(lastenVoor[soort], lastenNa[soort])])),
       },
       document: metModel3d(document, nieuw),
     };

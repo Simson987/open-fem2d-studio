@@ -1,6 +1,6 @@
 [package]
 name = "open-fem-studio"
-version = "2026.39.2"
+version = "2026.41.0"
 description = "Open FEM Studio — eindige-elementenprogramma voor constructies (2D en 3D)"
 authors = ["OpenAEC Foundation"]
 license = "AGPL-3.0-or-later"

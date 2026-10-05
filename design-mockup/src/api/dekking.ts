@@ -27,7 +27,7 @@
  */
 import type { OpenFem3DTool } from "../components/openFem3d/openFem3dCommands";
 import type {
-  OpenFem3DBeam, OpenFem3DDiaphragm, OpenFem3DEndReleases, OpenFem3DLoadPanel, OpenFem3DMemberLoad,
+  OpenFem3DBeam, OpenFem3DBeamBedding, OpenFem3DDiaphragm, OpenFem3DEndReleases, OpenFem3DLoadPanel, OpenFem3DMemberLoad,
   OpenFem3DMemberPointLoad, OpenFem3DModel, OpenFem3DNodalLoad, OpenFem3DNode, OpenFem3DPlate,
   OpenFem3DPlateBoundarySegment, OpenFem3DPlateEdgeSupport, OpenFem3DPlateOpening, OpenFem3DPrescribedDisplacements,
   OpenFem3DSupport, OpenFem3DSupportSprings, OpenFem3DSurfaceLoad, OpenFem3DThermalLoad, OpenFem3DVector,
@@ -50,8 +50,9 @@ const veld = (commando: string | readonly string[], naam: string): Dekking => ({
 
 // ── Gereedschappen ─────────────────────────────────────────────────────────
 
-const OPLEGGING: Dekking = { commando: ["model3d.support.set", "model3d.support.setMany"] };
-const VEER: Dekking = { commando: "model3d.support.setSprings" };
+// Het gereedschap plaatst op een knoop, staaf, plaat of het werkvlak (#76): model3d.support.place.
+const OPLEGGING: Dekking = { commando: ["model3d.support.set", "model3d.support.setMany", "model3d.support.place"] };
+const VEER: Dekking = { commando: ["model3d.support.setSprings", "model3d.support.place"] };
 const TRANSFORMATIE: Dekking = { commando: "model3d.transform" };
 
 export const GEREEDSCHAP_3D = {
@@ -64,8 +65,10 @@ export const GEREEDSCHAP_3D = {
   addOpening: { commando: "model3d.plate.addOpening" },
   addOpeningArc: { commando: "model3d.plate.addOpening" },
   addMemberLoad: { commando: "model3d.load.member.add" },
+  addPointLoad: { commando: "model3d.load.placePoint" },
   addLoadPanel: { commando: "model3d.loadPanel.add" },
   loadPanelSpan: veld("model3d.loadPanel.update", "spanDirection"),
+  beamEndHinge: { commando: "model3d.beam.setEndHinge" },
   move: TRANSFORMATIE,
   rotate: TRANSFORMATIE,
   copy: TRANSFORMATIE,
@@ -120,7 +123,10 @@ export const LINT_3D: Record<string, Dekking> = {
   "ribbon:openFem3d.rotSpringX": VEER,
   "ribbon:openFem3d.rotSpringY": VEER,
   "ribbon:openFem3d.rotSpringZ": VEER,
-  "ribbon:home.pointLoad": { commando: ["model3d.load.nodal.add", "model3d.load.memberPoint.add"] },
+  "ribbon:openFem3d.beamEndHinge": GEREEDSCHAP_3D.beamEndHinge,
+  "ribbon:openFem3d.pinBeamsToColumns": { commando: "model3d.beam.pinToColumns" },
+  // Met een selectie het formulier van de knooplast of staafpuntlast, zonder selectie het gereedschap (#77).
+  "ribbon:home.pointLoad": { commando: ["model3d.load.placePoint", "model3d.load.nodal.add", "model3d.load.memberPoint.add"] },
   "ribbon:home.lineLoad": GEREEDSCHAP_3D.addMemberLoad,
   "ribbon:home.loadPanel": GEREEDSCHAP_3D.addLoadPanel,
   "ribbon:home.plateToLoadPanel": { commando: "model3d.plate.toLoadPanels" },
@@ -140,13 +146,21 @@ export const LINT_3D: Record<string, Dekking> = {
   "ribbon:home.undo": { commando: "app.undo" },
   "ribbon:home.redo": { commando: "app.redo" },
   "common:delete": { commando: "model3d.selection.delete" },
-  "ribbon:home.filterSelection": { fase: 4, reden: "selectie; in 3D staat de knop uit" },
+  // Het venster Selectiefilter (issue #94): dezelfde zuivere functie, id's in en uit.
+  "ribbon:home.filterSelection": { commando: "model3d.selection.filter" },
   "ribbon:openFem3d.fit": WEERGAVE,
   "ribbon:openFem3d.isoView": WEERGAVE,
   "ribbon:openFem3d.topView": WEERGAVE,
   "ribbon:openFem3d.frontView": WEERGAVE,
   "ribbon:openFem3d.sideView": WEERGAVE,
   "ribbon:openFem3d.visibility": WEERGAVE,
+  // Plaatweergave (issue #78): volume, vlak of mesh; een weergavevoorkeur, geen modelwijziging.
+  "ribbon:openFem3d.plateDisplayVolume": WEERGAVE,
+  "ribbon:openFem3d.plateDisplaySurface": WEERGAVE,
+  "ribbon:openFem3d.plateDisplayMesh": WEERGAVE,
+  // Section box (issue #86): hoort bij de weergave (zichtbaarheid en views); via de
+  // MCP-tool gui_configure_3d_view (section_box) in de draaiende app, nog geen API-commando.
+  "ribbon:openFem3d.sectionBox": WEERGAVE,
 };
 
 // ── De velden van het 3D-model ─────────────────────────────────────────────
@@ -198,9 +212,17 @@ export const VELDEN_3D = {
     rollAngleRad: veld(staafAddUpdate, "rollAngleDeg"),
     releases: veld(staafAddUpdate, "releases"),
     tensionOnly: veld(staafAddUpdate, "tensionOnly"),
+    // Staaf op bedding (#106); voor meer staven tegelijk ook model3d.beam.setBedding.
+    bedding: veld([...staafAddUpdate, "model3d.beam.setBedding"], "bedding"),
     name: veld(staafAddUpdate, "name"),
     group: veld(staafAddUpdate, "group"),
   } satisfies Record<keyof OpenFem3DBeam, Dekking>,
+  bedding: {
+    kKnPerM3: veld([...staafAddUpdate, "model3d.beam.setBedding"], "bedding.kKnPerM3"),
+    widthM: veld([...staafAddUpdate, "model3d.beam.setBedding"], "bedding.widthM"),
+    kLateralKnPerM3: veld([...staafAddUpdate, "model3d.beam.setBedding"], "bedding.kLateralKnPerM3"),
+    compressionOnly: veld([...staafAddUpdate, "model3d.beam.setBedding"], "bedding.compressionOnly"),
+  } satisfies Record<keyof OpenFem3DBeamBedding, Dekking>,
   eindscharnieren: {
     myStart: veld(staafAddUpdate, "releases.myStart"),
     myEnd: veld(staafAddUpdate, "releases.myEnd"),
@@ -260,6 +282,11 @@ export const VELDEN_3D = {
     qyEnd: veld(staaflast, "qyEnd"),
     qzStart: veld(staaflast, "qzStart"),
     qzEnd: veld(staaflast, "qzEnd"),
+    // Globale lijnlast (issue #80).
+    globalDirection: veld(staaflast, "globalDirection"),
+    qStart: veld(staaflast, "qStart"),
+    qEnd: veld(staaflast, "qEnd"),
+    perProjection: veld(staaflast, "perProjection"),
     startPositionM: veld(staaflast, "startPositionM"),
     endPositionM: veld(staaflast, "endPositionM"),
   } satisfies Record<keyof OpenFem3DMemberLoad, Dekking>,
@@ -369,6 +396,8 @@ export const VELDEN_3D = {
 
 // ── Knoppen in het eigenschappenpaneel, per bestand ────────────────────────
 // Op de labelsleutel; een knop zonder letterlijke sleutel op zijn klikfunctie.
+// Een bestand staat in src/components/openFem3d/, of met een map ervoor onder
+// src/components/ (een venster dat 2D en 3D delen).
 
 export const PANEEL_3D: Record<string, Record<string, Dekking>> = {
   "OpenFem3DProperties.tsx": {
@@ -421,6 +450,12 @@ export const PANEEL_3D: Record<string, Record<string, Dekking>> = {
     cancel: WEERGAVE,
     "openFem3d.apply": TRANSFORMATIE,
   },
+  // Het venster Selectiefilter (issue #94), ook in 2D.
+  "selectieFilter/SelectieFilterDialog.tsx": {
+    "selectieFilter.wissen": WEERGAVE,
+    cancel: WEERGAVE,
+    apply: { commando: "model3d.selection.filter" },
+  },
 };
 
 // ── Sneltoetsen ────────────────────────────────────────────────────────────
@@ -432,9 +467,16 @@ export const SNELTOETSEN_3D: Record<string, Dekking> = {
   mv: TRANSFORMATIE,
   co: TRANSFORMATIE,
   Delete: { commando: "model3d.selection.delete" },
-  Escape: { fase: 4, reden: "gereedschap afbreken of de selectie opheffen" },
-  Enter: { fase: 4, reden: "een label op het tekenvlak kiezen (selectie)" },
+  Escape: { fase: 4, reden: "gereedschap afbreken of de selectie opheffen; tijdens het slepen van een greep de section box resetten" },
+  Enter: { fase: 4, reden: "een label op het tekenvlak kiezen (selectie); bij het tekenen de getypte maat bevestigen (tekenhulp)" },
   " ": { fase: 4, reden: "een label op het tekenvlak kiezen (selectie)" },
+  // Tekenhulpen van het 3D-tekenvlak (#84): geen modelfunctie, de commando's
+  // krijgen coördinaten en lengtes al exact mee.
+  Alt: { fase: 4, reden: "tekenhulp: alle snaps tijdelijk uit" },
+  Shift: { fase: 4, reden: "tekenhulp: ortho, de richting langs een globale as" },
+  Backspace: { fase: 4, reden: "tekenhulp: een teken van de getypte maat wissen" },
+  ",": { fase: 4, reden: "tekenhulp: decimaalteken van de getypte maat" },
+  ".": { fase: 4, reden: "tekenhulp: decimaalteken van de getypte maat" },
   z: { commando: ["app.undo", "app.redo"] },
   y: { commando: "app.redo" },
   s: { commando: "app.project.save" },

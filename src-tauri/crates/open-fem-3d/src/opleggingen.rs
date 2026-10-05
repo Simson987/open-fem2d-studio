@@ -36,12 +36,20 @@
 //! alleen het geheel en elk deel apart, met een melding dat de controle de
 //! schijven zelf niet heeft nagegaan.
 //!
+//! Een staaf op bedding (`bedding`) is langs haar hele lengte opgelegd in de
+//! richtingen van haar grondveren: verticaal (Z) en eventueel zijdelings.
+//! Langs een rechte staaf houdt een rij veren hetzelfde tegen als de eerste en
+//! de laatste ervan; die twee voorwaarden per richting tellen mee, in hun
+//! eigen punt op de staafas. Bij alleen druk tellen alleen de veren die
+//! meedoen (`controleer_bij`).
+//!
 //! Buiten deze controle vallen interne mechanismen (scharnieren, vrijgegeven
 //! staafeinden): een model dat hier voldoende is opgelegd, kan toch singulier
 //! zijn. De melding bij een singuliere stijfheidsmatrix zegt dat dan.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
+use crate::bedding::{self, Los};
 use crate::shell::{add, cross, dot, norm, scale, sub, V3};
 use crate::{Member3D, Node3D, SolveRequest3D, Support3D};
 
@@ -164,6 +172,13 @@ fn rij(richting: usize, p: V3, c: V3, l: f64) -> V6 {
     rij
 }
 
+/// Voorwaarde van een translatie langs eenheidsrichting d in punt p:
+/// d·(t + θ × r) = d·t + θ·(r × d), zoals `rij` voor een globale as.
+fn rij_langs(d: V3, p: V3, c: V3, l: f64) -> V6 {
+    let arm = cross(sub(p, c), d);
+    [d[0], d[1], d[2], arm[0] / l, arm[1] / l, arm[2] / l]
+}
+
 struct Unie(Vec<usize>);
 
 impl Unie {
@@ -208,6 +223,9 @@ struct Model {
     /// Vast in het vlak van een schijf (ux, uy of rz), zoals `schijven` het telt.
     vlak_vast: Vec<bool>,
     in_element: Vec<bool>,
+    /// Voorwaarden van de bedding per knoop: (punt, richting), met het punt
+    /// ergens op de staafas; de knoop bepaalt alleen het deel.
+    extra: Vec<Vec<(V3, V3)>>,
     deel_van: Vec<usize>,
     delen: Vec<Deel>,
     schijven: Vec<Schijf>,
@@ -221,8 +239,17 @@ pub(crate) fn controleer(request: &SolveRequest3D, uitgesloten: &HashSet<usize>)
     controleer_met(request, uitgesloten, GROOTSTE_SCHIJVEN)
 }
 
+/// Als `controleer`, met de verticale grondveren in `los` (alleen druk) weggevallen.
+pub(crate) fn controleer_bij(request: &SolveRequest3D, uitgesloten: &HashSet<usize>, los: &Los) -> Vec<Bevinding> {
+    controleer_volledig(request, uitgesloten, GROOTSTE_SCHIJVEN, los)
+}
+
 fn controleer_met(request: &SolveRequest3D, uitgesloten: &HashSet<usize>, grootste_schijven: usize) -> Vec<Bevinding> {
-    let model = Model::bouw(request, uitgesloten, grootste_schijven);
+    controleer_volledig(request, uitgesloten, grootste_schijven, &Los::new())
+}
+
+fn controleer_volledig(request: &SolveRequest3D, uitgesloten: &HashSet<usize>, grootste_schijven: usize, los: &Los) -> Vec<Bevinding> {
+    let model = Model::bouw(request, uitgesloten, grootste_schijven, los);
     let mut groepen = Unie::nieuw(model.delen.len());
     for schijf in &model.schijven {
         for paar in schijf.knopen.windows(2) {
@@ -386,7 +413,7 @@ impl Boek {
 }
 
 impl Model {
-    fn bouw(request: &SolveRequest3D, uitgesloten: &HashSet<usize>, grootste_schijven: usize) -> Self {
+    fn bouw(request: &SolveRequest3D, uitgesloten: &HashSet<usize>, grootste_schijven: usize, los: &Los) -> Self {
         let mut knopen: Vec<&Node3D> = request.nodes.iter().collect();
         knopen.sort_by_key(|knoop| knoop.id);
         let ids: Vec<usize> = knopen.iter().map(|knoop| knoop.id).collect();
@@ -399,6 +426,11 @@ impl Model {
                 blok[i] = blokkeringen(steun);
                 vlak_vast[i] = steun.ux || steun.uy || steun.rz;
             }
+        }
+
+        let mut extra = vec![Vec::new(); ids.len()];
+        for (knoop, punt, richting) in bedding::steunen(request, los) {
+            if let Some(&i) = index.get(&knoop) { extra[i].push((punt, richting)); }
         }
 
         let mut unie = Unie::nieuw(ids.len());
@@ -453,7 +485,7 @@ impl Model {
         for schijf in &schijven {
             for &k in &schijf.knopen { delen[deel_van[k]].schijven.insert(schijf.id); }
         }
-        Self { ids, punt, blok, vlak_vast, in_element, deel_van, delen, schijven, grootste_schijven }
+        Self { ids, punt, blok, vlak_vast, in_element, extra, deel_van, delen, schijven, grootste_schijven }
     }
 
     fn zwaartepunt(&self, knopen: &[usize]) -> V3 {
@@ -461,7 +493,7 @@ impl Model {
         scale(som, 1.0 / knopen.len().max(1) as f64)
     }
 
-    fn opgelegd(&self, knoop: usize) -> bool { self.blok[knoop].iter().any(|v| *v) }
+    fn opgelegd(&self, knoop: usize) -> bool { self.blok[knoop].iter().any(|v| *v) || !self.extra[knoop].is_empty() }
 
     /// De voorwaarden van alle opleggingen in `knopen`, rond c.
     fn steunrijen(&self, knopen: &[usize], c: V3, l: f64) -> Vec<V6> {
@@ -469,6 +501,9 @@ impl Model {
         for &k in knopen {
             for (richting, vast) in self.blok[k].iter().enumerate() {
                 if *vast { rijen.push(rij(richting, self.punt[k], c, l)); }
+            }
+            for (punt, richting) in &self.extra[k] {
+                rijen.push(rij_langs(*richting, *punt, c, l));
             }
         }
         rijen
@@ -1358,6 +1393,7 @@ mod tests {
         Member3D {
             id, start_node_id: begin, end_node_id: eind, material_id: 1, section_id: 1,
             releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false,
+            bedding: None,
         }
     }
 
@@ -1577,6 +1613,48 @@ mod tests {
         let b = bevindingen(&raam(vec![veer(1, false, false), veer(2, false, false), veer(3, false, false)]));
         assert_eq!(b.len(), 1, "{b:?}");
         assert_eq!(namen(&b[0]), vec!["verschuiven in X", "verschuiven in Y", "draaien om Z"]);
+    }
+
+    /// Een staaf op bedding is langs haar lengte opgelegd in de richtingen van
+    /// haar grondveren (#106); bij alleen druk tellen alleen de veren die meedoen.
+    #[test]
+    fn bedding_telt_als_oplegging() {
+        use super::{controleer_bij, Los};
+        use crate::Bedding3D;
+        let op_bedding = |mut s: Member3D, k: Option<f64>, k_lat: Option<f64>| {
+            s.bedding = Some(Bedding3D { k_kn_per_m3: k, width_m: 1.0, k_lateral_kn_per_m3: k_lat, compression_only: true });
+            s
+        };
+        let ligger = |k_lat: Option<f64>| model(
+            vec![knoop(1, 0.0, 0.0, 0.0), knoop(2, 6.0, 0.0, 0.0)],
+            vec![op_bedding(staaf(1, 1, 2), Some(1e4), k_lat)],
+            vec![],
+        );
+        // Alleen verticaal: vrij zijn de bewegingen in het grondvlak en de torsie.
+        let b = bevindingen(&ligger(None));
+        assert_eq!(b.len(), 1, "{b:?}");
+        assert_eq!(namen(&b[0]), vec!["verschuiven in X", "verschuiven in Y", "draaien om X", "draaien om Z"]);
+        // Met zijdelingse bedding: alleen langs de staaf schuiven en torsie.
+        let r = ligger(Some(1e4));
+        assert_eq!(namen(&bevindingen(&r)[0]), vec!["verschuiven in X", "draaien om X"]);
+        // Alleen druk, alle verticale veren los: de ligger kan ook omhoog.
+        let n = crate::bedding::Plan::bouw(&r).unwrap().staven[0].stations.len();
+        let alle: Los = (0..n).map(|i| (1, i)).collect();
+        let b = controleer_bij(&r, &HashSet::new(), &alle);
+        assert!(namen(&b[0]).contains(&"verschuiven in Z"), "{b:?}");
+        // Alleen de veer in het begin doet mee: de ligger kan om Y kantelen.
+        let een: Los = (1..n).map(|i| (1, i)).collect();
+        let b = controleer_bij(&r, &HashSet::new(), &een);
+        assert!(!namen(&b[0]).contains(&"verschuiven in Z"), "{b:?}");
+        assert!(namen(&b[0]).iter().any(|naam| naam.starts_with("draaien om Y")), "{b:?}");
+        // Een paal met zijdelingse bedding en een verticale oplegging in de voet:
+        // alleen de torsie om de paalas blijft vrij.
+        let paal = model(
+            vec![knoop(1, 0.0, 0.0, -10.0), knoop(2, 0.0, 0.0, 0.0)],
+            vec![op_bedding(staaf(1, 1, 2), None, Some(1e4))],
+            vec![steun(1, VERTICAAL)],
+        );
+        assert_eq!(namen(&bevindingen(&paal)[0]), vec!["draaien om Z"]);
     }
 
     #[test]

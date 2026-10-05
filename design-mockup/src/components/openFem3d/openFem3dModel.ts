@@ -41,10 +41,40 @@ export interface OpenFem3DBeam {
    * op druk, dan valt zij voor die berekening weg (normaalkracht 0).
    */
   tensionOnly?: boolean;
+  /**
+   * Staaf op bedding (Winkler, issue #106): de grond steunt de staaf over haar
+   * hele lengte met veren k·b per m. Ontbreekt het veld (alle oudere
+   * bestanden), dan ligt de staaf niet op een bedding. De rekenkern knipt de
+   * staaf zelf fijn genoeg; zie {@link OpenFem3DBeamBedding}.
+   */
+  bedding?: OpenFem3DBeamBedding;
   /** Naam uit een bronmodel (bijvoorbeeld een IFC-analysemodel); alleen voor weergave en rapport. */
   name?: string;
   /** Onderdeel of groep (kolom, vloerligger, windverband …); alleen voor weergave, selectie en rapport. */
   group?: string;
+}
+
+/**
+ * Bedding onder (of langs) een 3D-staaf. Dezelfde betekenis als het veld
+ * `bedding` van `Member3D` in het rekencontract; lengtes in m zoals de rest
+ * van het 3D-model (de app toont en neemt b in mm).
+ *  - `kKnPerM3`: beddingsconstante voor de VERTICALE richting (globaal Z, de
+ *    grond ligt onder de staaf). Ontbreekt bij een (bijna) verticale staaf:
+ *    die kan alleen zijdelings op bedding staan (paal in de grond).
+ *  - `widthM`: contactbreedte b; de lijnstijfheid is k·b (kN/m per m).
+ *  - `kLateralKnPerM3`: zijdelingse bedding, horizontaal loodrecht op de
+ *    staafas naar beide zijden, altijd lineair. Bij een staaf steiler dan 45°
+ *    (een (schoor)paal, {@link openFem3DBeddingAllRound}) rondom, in twee
+ *    richtingen loodrecht op de as; bij een loodrechte paal in X en Y.
+ *  - `compressionOnly`: de verticale veren werken alleen op druk (de grond
+ *    trekt niet); alleen `true` wordt bewaard.
+ * Minstens één van beide constanten is gegeven ({@link readOpenFem3DBeamBedding}).
+ */
+export interface OpenFem3DBeamBedding {
+  kKnPerM3?: number;
+  widthM: number;
+  kLateralKnPerM3?: number;
+  compressionOnly?: boolean;
 }
 
 /**
@@ -123,18 +153,100 @@ export interface OpenFem3DNodalLoad extends OpenFem3DNodalLoadComponents {
   caseId?: number;
 }
 
-/** Trapezoidal staafbelasting in lokale y/z-richting; afstanden in m, intensiteiten in kN/m. */
-export interface OpenFem3DMemberLoad {
+/** Een globale as als richting van een lijnlast (issue #80). */
+export type OpenFem3DGlobalDirection = "x" | "y" | "z";
+export const OPEN_FEM_3D_GLOBAL_DIRECTIONS: readonly OpenFem3DGlobalDirection[] = ["x", "y", "z"];
+
+/** Wat elke lijnlast op een staaf heeft: staaf, geval en het belaste deel in m vanaf de beginknoop. */
+interface OpenFem3DMemberLoadBase {
   id: number;
   beamId: number;
   /** Belastinggeval uit de gedeelde projectlijst. Ontbrekend in oude bestanden = geval 1. */
   caseId?: number;
+  startPositionM: number;
+  endPositionM: number;
+}
+
+/** Trapezoidal staafbelasting in lokale y/z-richting; afstanden in m, intensiteiten in kN/m. */
+export interface OpenFem3DLocalMemberLoad extends OpenFem3DMemberLoadBase {
   qyStart: number;
   qyEnd: number;
   qzStart: number;
   qzEnd: number;
-  startPositionM: number;
-  endPositionM: number;
+  globalDirection?: undefined;
+  qStart?: undefined;
+  qEnd?: undefined;
+  perProjection?: undefined;
+}
+
+/**
+ * Lijnlast in een globale richting (issue #80): q met teken langs de globale
+ * as (Z negatief = omlaag), lineair van `qStart` naar `qEnd` over het belaste
+ * deel, in kN/m. Per meter staaflengte, of met `perProjection` per meter
+ * projectie van de staaf op het vlak loodrecht op de lastrichting (sneeuw op
+ * een schuine spant: Z-last per horizontale meter; per staafmeter is dat
+ * q·|e_x × d|). De kern zet de last om naar de staaf; de app rekent niets om.
+ */
+export interface OpenFem3DGlobalMemberLoad extends OpenFem3DMemberLoadBase {
+  globalDirection: OpenFem3DGlobalDirection;
+  qStart: number;
+  qEnd: number;
+  /** Alleen `true` wordt bewaard; ontbreekt = per meter staaflengte. */
+  perProjection?: boolean;
+  qyStart?: undefined;
+  qyEnd?: undefined;
+  qzStart?: undefined;
+  qzEnd?: undefined;
+}
+
+/** Een lijnlast op een staaf: lokaal (qy/qz) of, met `globalDirection`, globaal. */
+export type OpenFem3DMemberLoad = OpenFem3DLocalMemberLoad | OpenFem3DGlobalMemberLoad;
+
+/** De waarden van een lijnlast zonder id, staaf en geval (toevoegen en wijzigen). */
+export type OpenFem3DMemberLoadValues =
+  | Omit<OpenFem3DLocalMemberLoad, "id" | "beamId" | "caseId">
+  | Omit<OpenFem3DGlobalMemberLoad, "id" | "beamId" | "caseId">;
+
+/** Is dit een globale lijnlast (model of rekenverzoek)? */
+export function isOpenFem3DGlobalMemberLoad<T extends { globalDirection?: OpenFem3DGlobalDirection }>(
+  load: T,
+): load is T & { globalDirection: OpenFem3DGlobalDirection } {
+  return load.globalDirection !== undefined;
+}
+
+/** De eenheidsvector van een globale as. */
+export function openFem3DGlobalDirectionVector(direction: OpenFem3DGlobalDirection): Vector3 {
+  return direction === "x" ? [1, 0, 0] : direction === "y" ? [0, 1, 0] : [0, 0, 1];
+}
+
+/** Boven deze |d·e_x| ligt een globale lijnlast (bijna) langs haar staaf. */
+export const OPEN_FEM_3D_LOAD_ALONG_MEMBER = 0.95;
+
+/**
+ * Ligt deze lijnlast (bijna) langs haar staaf, met e_x de staafas? Alleen een
+ * globale last kan dat: een kolom onder Globaal Z, een ligger langs X onder
+ * Globaal X. Getekend vallen haar pijlen dan op de staafas; het tekenvlak en
+ * het rapportbeeld zetten ze daarom naast de staaf.
+ */
+export function openFem3DMemberLoadAlongMember(load: OpenFem3DMemberLoad, ex: readonly number[]): boolean {
+  if (!isOpenFem3DGlobalMemberLoad(load)) return false;
+  const d = openFem3DGlobalDirectionVector(load.globalDirection);
+  return Math.abs(d[0] * ex[0] + d[1] * ex[1] + d[2] * ex[2]) > OPEN_FEM_3D_LOAD_ALONG_MEMBER;
+}
+
+/**
+ * De factor van een globale lijnlast naar kN per meter staaflengte: 1 per
+ * staafmeter, en per projectie |e_x × d|, de lengte van de projectie van één
+ * staafmeter op het vlak loodrecht op de lastrichting d (cos α voor een
+ * Z-last op een spant onder helling α). Alleen voor de onafhankelijke
+ * krachtensom en de scheefstand; de staaf zelf belast de kern.
+ */
+export function openFem3DGlobalMemberLoadFactor(
+  ex: readonly number[], direction: OpenFem3DGlobalDirection, perProjection: boolean | undefined,
+): number {
+  if (!perProjection) return 1;
+  const d = openFem3DGlobalDirectionVector(direction);
+  return Math.hypot(ex[1] * d[2] - ex[2] * d[1], ex[2] * d[0] - ex[0] * d[2], ex[0] * d[1] - ex[1] * d[0]);
 }
 
 /** Puntlast op een staaf in lokale y/z-richting; positie in m en krachten in kN. */
@@ -558,14 +670,10 @@ function beamLength(model: OpenFem3DModel, beamId: number): number {
   return Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
 }
 
-function readMemberLoad(
-  value: Record<string, unknown>, model: OpenFem3DModel, id: number, beamId: number,
-): OpenFem3DMemberLoad {
-  const components = ["qyStart", "qyEnd", "qzStart", "qzEnd"] as const;
-  if (components.some((name) => typeof value[name] !== "number" || !Number.isFinite(value[name])) ||
-      components.every((name) => value[name] === 0)) {
-    throw new Error("Een 3D-staafbelasting moet vier eindige componenten en minstens één niet-nulwaarde hebben.");
-  }
+const LOCAL_MEMBER_LOAD_COMPONENTS = ["qyStart", "qyEnd", "qzStart", "qzEnd"] as const;
+
+/** Het belaste deel van een lijnlast, binnen de staaf. */
+function readMemberLoadRange(value: Record<string, unknown>, model: OpenFem3DModel, beamId: number) {
   const length = beamLength(model, beamId);
   const startPositionM = Number(value.startPositionM);
   const endPositionM = Number(value.endPositionM);
@@ -573,6 +681,56 @@ function readMemberLoad(
       startPositionM < 0 || endPositionM <= startPositionM || endPositionM > length + 1e-9) {
     throw new Error(`Een 3D-staafbelasting moet binnen de staaflengte van ${length} m liggen.`);
   }
+  return { startPositionM, endPositionM };
+}
+
+/**
+ * Een globale lijnlast (issue #80): een bekende richting, eindige qStart en
+ * qEnd met minstens één niet-nulwaarde, en geen lokale waarden (0 mag, zoals
+ * in het rekencontract, en valt weg). perProjection is ja/nee; alleen `true`
+ * wordt bewaard.
+ */
+function readGlobalMemberLoad(
+  value: Record<string, unknown>, model: OpenFem3DModel, id: number, beamId: number,
+): OpenFem3DGlobalMemberLoad {
+  const globalDirection = value.globalDirection;
+  if (!(OPEN_FEM_3D_GLOBAL_DIRECTIONS as readonly unknown[]).includes(globalDirection)) {
+    throw new Error(`Een 3D-staafbelasting heeft een ongeldige globale richting ${JSON.stringify(globalDirection)}; kies x, y of z.`);
+  }
+  if (LOCAL_MEMBER_LOAD_COMPONENTS.some((name) => value[name] !== undefined && value[name] !== 0)) {
+    throw new Error("Een globale 3D-staafbelasting heeft geen lokale waarden (qy, qz); geef qStart en qEnd langs de globale as.");
+  }
+  const { qStart, qEnd } = value;
+  if (typeof qStart !== "number" || typeof qEnd !== "number" || !Number.isFinite(qStart) || !Number.isFinite(qEnd) ||
+      (qStart === 0 && qEnd === 0)) {
+    throw new Error("Een globale 3D-staafbelasting moet een eindige qStart en qEnd en minstens één niet-nulwaarde hebben.");
+  }
+  if (value.perProjection !== undefined && typeof value.perProjection !== "boolean") {
+    throw new Error("perProjection van een globale 3D-staafbelasting is ja of nee (true/false).");
+  }
+  const { startPositionM, endPositionM } = readMemberLoadRange(value, model, beamId);
+  const caseId = readOptionalCaseId(value.caseId);
+  return {
+    id, beamId, ...(caseId !== undefined ? { caseId } : {}),
+    globalDirection: globalDirection as OpenFem3DGlobalDirection, qStart, qEnd,
+    ...(value.perProjection === true ? { perProjection: true } : {}),
+    startPositionM, endPositionM,
+  };
+}
+
+function readMemberLoad(
+  value: Record<string, unknown>, model: OpenFem3DModel, id: number, beamId: number,
+): OpenFem3DMemberLoad {
+  if (value.globalDirection !== undefined) return readGlobalMemberLoad(value, model, id, beamId);
+  if (value.qStart !== undefined || value.qEnd !== undefined || value.perProjection !== undefined) {
+    throw new Error("qStart, qEnd en perProjection horen bij een globale 3D-staafbelasting; geef ook globalDirection (x, y of z).");
+  }
+  const components = LOCAL_MEMBER_LOAD_COMPONENTS;
+  if (components.some((name) => typeof value[name] !== "number" || !Number.isFinite(value[name])) ||
+      components.every((name) => value[name] === 0)) {
+    throw new Error("Een 3D-staafbelasting moet vier eindige componenten en minstens één niet-nulwaarde hebben.");
+  }
+  const { startPositionM, endPositionM } = readMemberLoadRange(value, model, beamId);
   const caseId = readOptionalCaseId(value.caseId);
   return {
     id, beamId, ...(caseId !== undefined ? { caseId } : {}),
@@ -860,6 +1018,13 @@ export function parseOpenFem3DModel(value: unknown): OpenFem3DModel {
         ? typeof beam.tensionOnly === "boolean"
           ? (beam.tensionOnly ? { tensionOnly: true } : {})
           : (() => { throw new Error(`3D-staaf ${id} heeft een ongeldige waarde voor trek-alleen.`); })()
+        : {}),
+      // Staaf op bedding (#106); null in een bestand telt als geen bedding.
+      // Niet samen met trek-alleen: die staaf valt op druk weg en zou de grond loslaten.
+      ...(beam.bedding !== undefined && beam.bedding !== null
+        ? beam.tensionOnly === true
+          ? (() => { throw new Error(beddingTrekAlleenMelding(id)); })()
+          : { bedding: readOpenFem3DBeamBedding(beam.bedding, start, end, `3D-staaf ${id}`) }
         : {}),
       ...(() => {
         const name = readOptionalName(beam.name, `3D-staaf ${id}`);
@@ -1331,7 +1496,7 @@ export function removeOpenFem3DNodalLoad(model: OpenFem3DModel, loadId: number):
 export function addOpenFem3DMemberLoad(
   model: OpenFem3DModel,
   beamId: number,
-  values: Omit<OpenFem3DMemberLoad, "id" | "beamId" | "caseId">,
+  values: OpenFem3DMemberLoadValues,
   caseId?: number,
 ): OpenFem3DModel {
   const previous = model.memberLoads ?? [];
@@ -1343,7 +1508,7 @@ export function addOpenFem3DMemberLoad(
 export function updateOpenFem3DMemberLoad(
   model: OpenFem3DModel,
   loadId: number,
-  values: Omit<OpenFem3DMemberLoad, "id" | "beamId" | "caseId">,
+  values: OpenFem3DMemberLoadValues,
 ): OpenFem3DModel {
   const previous = model.memberLoads ?? [];
   const old = previous.find((load) => load.id === loadId);
@@ -1456,11 +1621,13 @@ export interface OpenFem3DBeamInput {
   /** Ontbrekende vrijheidsgraden zijn vast (false). */
   releases?: Partial<OpenFem3DEndReleases>;
   tensionOnly?: boolean;
+  /** Staaf op bedding; gekeurd met {@link readOpenFem3DBeamBedding}. */
+  bedding?: OpenFem3DBeamBedding;
   name?: string;
   group?: string;
 }
 
-/** Wijziging van een staaf; `null` wist een optioneel veld, `tensionOnly: false` wist trek-alleen. */
+/** Wijziging van een staaf; `null` wist een optioneel veld (ook de bedding), `tensionOnly: false` wist trek-alleen. */
 export interface OpenFem3DBeamPatch {
   startNodeId?: number;
   endNodeId?: number;
@@ -1469,6 +1636,7 @@ export interface OpenFem3DBeamPatch {
   rollAngleRad?: number | null;
   releases?: Partial<OpenFem3DEndReleases> | null;
   tensionOnly?: boolean;
+  bedding?: OpenFem3DBeamBedding | null;
   name?: string | null;
   group?: string | null;
 }
@@ -1562,10 +1730,15 @@ export function addOpenFem3DBeam(
   const existing = connectingBeam(model, startNodeId, endNodeId);
   if (existing) throw new Error(`Tussen 3D-knoop ${startNodeId} en ${endNodeId} ligt al 3D-staaf ${existing.id}.`);
   const base: OpenFem3DBeam = { id: nextEntityId(model.beams), startNodeId, endNodeId, ...OPEN_FEM_3D_DEFAULT_BEAM };
-  const beam = withBeamFields(base, input);
+  const fields = withBeamFields(base, input);
   // Lengte en verder dezelfde regels als bij omhangen.
-  setOpenFem3DBeamNodes({ ...model, beams: [...model.beams, beam] }, beam.id, startNodeId, endNodeId);
-  return { model: assertOpensAfterEdit({ ...model, beams: [...model.beams, beam] }), beam };
+  setOpenFem3DBeamNodes({ ...model, beams: [...model.beams, fields] }, fields.id, startNodeId, endNodeId);
+  // De bedding hangt af van de stand van de staaf (een verticale staaf alleen zijdelings).
+  const added = input.bedding === undefined
+    ? { ...model, beams: [...model.beams, fields] }
+    : setOpenFem3DBeamBedding({ ...model, beams: [...model.beams, fields] }, [fields.id], input.bedding);
+  const beam = added.beams[added.beams.length - 1]!;
+  return { model: assertOpensAfterEdit(added), beam };
 }
 
 /** Eigenschappen of knopen van een staaf wijzigen; lasten, toetsinstellingen en scharnieren blijven. */
@@ -1580,14 +1753,36 @@ export function updateOpenFem3DBeam(model: OpenFem3DModel, beamId: number, patch
     requireNode(model, endNodeId);
     const existing = connectingBeam(model, startNodeId, endNodeId, beamId);
     if (existing) throw new Error(`Tussen 3D-knoop ${startNodeId} en ${endNodeId} ligt al 3D-staaf ${existing.id}.`);
-    next = setOpenFem3DBeamNodes(model, beamId, startNodeId, endNodeId);
+    // Zonder de keuring van de bedding: die volgt hieronder, met een bedding
+    // uit dezelfde wijziging (bijv. omhangen naar verticaal en de k weghalen).
+    next = rehangOpenFem3DBeam(model, beamId, startNodeId, endNodeId);
   }
   const updated = withBeamFields(next.beams.find((item) => item.id === beamId)!, patch);
-  return assertOpensAfterEdit({ ...next, beams: next.beams.map((item) => item.id === beamId ? updated : item) });
+  next = { ...next, beams: next.beams.map((item) => item.id === beamId ? updated : item) };
+  // De bedding na het omhangen: ze wordt gekeurd tegen de nieuwe stand van de staaf.
+  if (patch.bedding !== undefined) next = setOpenFem3DBeamBedding(next, [beamId], patch.bedding);
+  return assertOpensAfterEdit(next);
 }
 
-/** Reconnect a member while preserving its loads, section, releases and checks. */
+/**
+ * Reconnect a member while preserving its loads, section, releases and checks.
+ * Een staaf op een verticale bedding (k) die daardoor (bijna) verticaal komt
+ * te staan, wordt geweigerd ({@link OpenFem3DBeddingVerticalError}).
+ */
 export function setOpenFem3DBeamNodes(
+  model: OpenFem3DModel,
+  beamId: number,
+  startNodeId: number,
+  endNodeId: number,
+): OpenFem3DModel {
+  const next = rehangOpenFem3DBeam(model, beamId, startNodeId, endNodeId);
+  // Een staaf op een verticale bedding mag niet verticaal komen te staan (#106).
+  assertOpenFem3DBeddingFitsGeometry(next, [beamId]);
+  return next;
+}
+
+/** Omhangen zonder de keuring van de bedding (die doet de aanroeper). */
+function rehangOpenFem3DBeam(
   model: OpenFem3DModel,
   beamId: number,
   startNodeId: number,
@@ -1612,7 +1807,8 @@ export function setOpenFem3DBeamNodes(
 /**
  * De lokale dwarsassen van een staaf omkeren: de profielrotatie draait 180°.
  * De lokale belastingcomponenten draaien mee, zodat hun richting in het
- * wereldstelsel bij het omkeren van beide dwarsassen behouden blijft.
+ * wereldstelsel bij het omkeren van beide dwarsassen behouden blijft. Een
+ * globale lijnlast (#80) hangt niet aan de lokale assen en blijft gelijk.
  */
 export function flipOpenFem3DBeamLocalAxes(model: OpenFem3DModel, beamId: number): OpenFem3DModel {
   if (!model.beams.some((item) => item.id === beamId)) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
@@ -1621,7 +1817,7 @@ export function flipOpenFem3DBeamLocalAxes(model: OpenFem3DModel, beamId: number
     beams: model.beams.map((item) => item.id === beamId
       ? { ...item, rollAngleRad: ((item.rollAngleRad ?? 0) + Math.PI) % (2 * Math.PI) }
       : item),
-    memberLoads: model.memberLoads?.map((load) => load.beamId === beamId
+    memberLoads: model.memberLoads?.map((load) => load.beamId === beamId && !isOpenFem3DGlobalMemberLoad(load)
       ? { ...load, qyStart: -load.qyStart, qyEnd: -load.qyEnd, qzStart: -load.qzStart, qzEnd: -load.qzEnd }
       : load),
     memberPointLoads: model.memberPointLoads?.map((load) => load.beamId === beamId
@@ -1673,6 +1869,509 @@ export function setOpenFem3DReleasePreset(
       return preset === "rigid" ? rest : { ...rest, releases: { ...OPEN_FEM_3D_RELEASE_PRESETS.pinned } };
     }),
   };
+}
+
+/** Een staafeind: het begin (startNodeId) of het eind (endNodeId). */
+export type OpenFem3DBeamEnd = "start" | "end";
+
+const END_RELEASE_KEYS: Readonly<Record<OpenFem3DBeamEnd, {
+  my: keyof OpenFem3DEndReleases; mz: keyof OpenFem3DEndReleases; torsion: keyof OpenFem3DEndReleases;
+}>> = {
+  start: { my: "myStart", mz: "mzStart", torsion: "torsionStart" },
+  end: { my: "myEnd", mz: "mzEnd", torsion: "torsionEnd" },
+};
+
+/** Draagt dit staafeind een scharnier (My, Mz of T los)? Dan tekent het tekenvlak er een bolletje. */
+export function openFem3DBeamEndHinged(beam: OpenFem3DBeam, end: OpenFem3DBeamEnd): boolean {
+  const keys = END_RELEASE_KEYS[end];
+  const releases = beam.releases;
+  return releases !== undefined && (releases[keys.my] || releases[keys.mz] || releases[keys.torsion]);
+}
+
+/** Een staaf met nieuwe scharnieren; zonder één losse vrijheidsgraad verdwijnt het veld (zoals Momentvast). */
+function withReleases(beam: OpenFem3DBeam, releases: OpenFem3DEndReleases): OpenFem3DBeam {
+  const { releases: _oud, ...rest } = beam;
+  return RELEASE_DOF.some((key) => releases[key]) ? { ...rest, releases } : rest;
+}
+
+/** Zet My en Mz aan één eind los (`true`) of vast (`false`); torsie blijft zoals hij is. */
+function withEndHinge(beam: OpenFem3DBeam, end: OpenFem3DBeamEnd, hinged: boolean): OpenFem3DBeam {
+  const keys = END_RELEASE_KEYS[end];
+  return withReleases(beam, { ...RIGID_OPEN_FEM_3D_END, ...beam.releases, [keys.my]: hinged, [keys.mz]: hinged });
+}
+
+/** Staan My en Mz aan dit eind allebei los? */
+function endFullyHinged(beam: OpenFem3DBeam, end: OpenFem3DBeamEnd): boolean {
+  const keys = END_RELEASE_KEYS[end];
+  return beam.releases?.[keys.my] === true && beam.releases?.[keys.mz] === true;
+}
+
+/**
+ * Het gereedschap "Scharnier aan staafeind" en model3d.beam.setEndHinge: My en
+ * Mz aan één eind van een staaf los, of weer vast. Zonder `hinged` wisselt de
+ * klik: stonden My en Mz daar allebei al los, dan gaan ze vast, anders allebei
+ * los (ook als alleen één van beide los stond). Torsie blijft zoals hij is.
+ * Verandert er niets, dan komt hetzelfde model terug.
+ */
+export function setOpenFem3DBeamEndHinge(
+  model: OpenFem3DModel,
+  beamId: number,
+  end: OpenFem3DBeamEnd,
+  hinged?: boolean,
+): { model: OpenFem3DModel; hinged: boolean } {
+  const beam = model.beams.find((item) => item.id === beamId);
+  if (!beam) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
+  const target = hinged ?? !endFullyHinged(beam, end);
+  const keys = END_RELEASE_KEYS[end];
+  const current = beam.releases;
+  if ((current?.[keys.my] ?? false) === target && (current?.[keys.mz] ?? false) === target) return { model, hinged: target };
+  const next = withEndHinge(beam, end, target);
+  return { model: { ...model, beams: model.beams.map((item) => item.id === beamId ? next : item) }, hinged: target };
+}
+
+/** Een staaf is een kolom als zijn as bijna verticaal staat: |ex·Z| groter dan dit. */
+export const OPEN_FEM_3D_COLUMN_COSINE = 0.95;
+
+/** Staat de staaf bijna verticaal (|ex·Z| > 0,95)? Een staaf met een ontbrekende knoop of zonder lengte niet. */
+export function openFem3DBeamIsColumn(
+  beam: Pick<OpenFem3DBeam, "startNodeId" | "endNodeId">,
+  nodesById: ReadonlyMap<number, Pick<OpenFem3DNode, "x" | "y" | "z">>,
+): boolean {
+  const a = nodesById.get(beam.startNodeId), b = nodesById.get(beam.endNodeId);
+  if (!a || !b) return false;
+  const length = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+  return length > 0 && Math.abs(b.z - a.z) / length > OPEN_FEM_3D_COLUMN_COSINE;
+}
+
+// ── Staaf op bedding (issue #106) ──────────────────────────────────────────
+
+/**
+ * Boven deze |ex·Z| (steiler dan 45°) werkt een zijdelingse bedding rondom,
+ * in twee richtingen loodrecht op de staafas, zoals bij een (schoor)paal;
+ * daaronder horizontaal loodrecht op de staaf. Dezelfde grens als de kern.
+ */
+export const OPEN_FEM_3D_BEDDING_ALL_ROUND_COSINE = Math.SQRT1_2;
+
+/** Werkt een zijdelingse bedding op deze staaf rondom (|ex·Z| > 1/√2)? Zonder knoop of lengte niet. */
+export function openFem3DBeddingAllRound(
+  beam: Pick<OpenFem3DBeam, "startNodeId" | "endNodeId">,
+  nodesById: ReadonlyMap<number, Pick<OpenFem3DNode, "x" | "y" | "z">>,
+): boolean {
+  const a = nodesById.get(beam.startNodeId), b = nodesById.get(beam.endNodeId);
+  if (!a || !b) return false;
+  const length = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+  return length > 0 && Math.abs(b.z - a.z) / length > OPEN_FEM_3D_BEDDING_ALL_ROUND_COSINE;
+}
+
+/**
+ * Een bewerking van de geometrie (knoop verplaatsen, draaien, spiegelen,
+ * omhangen) zou een staaf met een verticale bedding (k) (bijna) verticaal
+ * zetten. Dat kan niet (zie {@link readOpenFem3DBeamBedding}); de bewerking
+ * wordt geweigerd. `beamId` is de eerste staaf waarvoor dat geldt.
+ */
+export class OpenFem3DBeddingVerticalError extends Error {
+  constructor(readonly beamId: number) {
+    super(`3D-staaf ${beamId} komt dan (bijna) verticaal te staan en ligt op een verticale bedding (k): daar kan geen verticale bedding onder. `
+      + "Haal eerst de verticale k weg (alleen zijdelings, zoals bij een paal) of haal de bedding weg.");
+    this.name = "OpenFem3DBeddingVerticalError";
+  }
+}
+
+/**
+ * Keur na een bewerking van de geometrie of geen staaf met een verticale
+ * bedding (k) (bijna) verticaal staat; zo niet, dan een
+ * {@link OpenFem3DBeddingVerticalError}. `beamIds` beperkt de keuring tot die
+ * staven (bijvoorbeeld de omgehangen staaf); zonder: alle staven.
+ */
+export function assertOpenFem3DBeddingFitsGeometry(
+  model: Pick<OpenFem3DModel, "nodes" | "beams">,
+  beamIds?: Iterable<number>,
+): void {
+  const ids = beamIds === undefined ? null : new Set(beamIds);
+  const beams = model.beams.filter((beam) => beam.bedding?.kKnPerM3 !== undefined && (ids === null || ids.has(beam.id)));
+  if (beams.length === 0) return;
+  const nodes = new Map(model.nodes.map((node) => [node.id, node]));
+  const fout = beams.find((beam) => openFem3DBeamIsColumn(beam, nodes));
+  if (fout) throw new OpenFem3DBeddingVerticalError(fout.id);
+}
+
+/** De velden van een bedding; een ander veld is een tikfout en wordt geweigerd. */
+const BEDDING_KEYS = ["kKnPerM3", "widthM", "kLateralKnPerM3", "compressionOnly"] as const;
+
+/**
+ * Keur een bedding van de staaf van `start` naar `end` en geef haar in vaste
+ * vorm terug: constanten en breedte eindige getallen groter dan 0, minstens
+ * één constante, "alleen druk" alleen bij een verticale k (en alleen `true`
+ * bewaard). Een (bijna) verticale staaf (|ex·Z| > 0,95, net als de kern) kan
+ * geen verticale k krijgen: daar alleen de zijdelingse bedding van een paal.
+ * Dezelfde regels als de rekenkern, met een Nederlandse melding vooraf.
+ */
+export function readOpenFem3DBeamBedding(
+  value: unknown,
+  start: Pick<OpenFem3DNode, "x" | "y" | "z">,
+  end: Pick<OpenFem3DNode, "x" | "y" | "z">,
+  label: string,
+): OpenFem3DBeamBedding {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label}: de bedding moet een object zijn met k (kKnPerM3) en de contactbreedte (widthM).`);
+  }
+  const raw = value as Record<string, unknown>;
+  const onbekend = Object.keys(raw).filter((key) => raw[key] !== undefined && !(BEDDING_KEYS as readonly string[]).includes(key));
+  if (onbekend.length > 0) {
+    throw new Error(`${label}: onbekend veld in de bedding: ${onbekend.join(", ")}. Toegestaan: ${BEDDING_KEYS.join(", ")}.`);
+  }
+  const positief = (key: "kKnPerM3" | "widthM" | "kLateralKnPerM3", wat: string): number | undefined => {
+    const getal = raw[key];
+    if (getal === undefined || getal === null) return undefined;
+    if (typeof getal !== "number" || !Number.isFinite(getal) || getal <= 0) {
+      throw new Error(`${label}: ${wat} moet een eindig getal groter dan 0 zijn.`);
+    }
+    return getal;
+  };
+  const kKnPerM3 = positief("kKnPerM3", "de beddingsconstante k (kN/m³)");
+  const widthM = positief("widthM", "de contactbreedte b (m)");
+  const kLateralKnPerM3 = positief("kLateralKnPerM3", "de zijdelingse beddingsconstante (kN/m³)");
+  if (widthM === undefined) throw new Error(`${label}: de bedding mist de contactbreedte b (widthM, in m).`);
+  if (raw.compressionOnly !== undefined && typeof raw.compressionOnly !== "boolean") {
+    throw new Error(`${label}: "alleen druk" (compressionOnly) moet true of false zijn.`);
+  }
+  if (kKnPerM3 === undefined && kLateralKnPerM3 === undefined) {
+    throw new Error(`${label}: geef een beddingsconstante: k voor de verticale richting of de zijdelingse k.`);
+  }
+  if (kKnPerM3 !== undefined && openFem3DBeamIsColumn(
+    { startNodeId: 1, endNodeId: 2 }, new Map([[1, start], [2, end]]),
+  )) {
+    throw new Error(`${label} staat (bijna) verticaal: daar kan geen verticale bedding (k) onder. `
+      + "Geef alleen een zijdelingse bedding (kLateralKnPerM3), zoals bij een paal in de grond; die werkt rondom, loodrecht op de paal.");
+  }
+  if (raw.compressionOnly === true && kKnPerM3 === undefined) {
+    throw new Error(`${label}: "alleen druk" geldt voor de verticale bedding, en deze bedding heeft geen verticale k.`);
+  }
+  return {
+    ...(kKnPerM3 !== undefined ? { kKnPerM3 } : {}),
+    widthM,
+    ...(kLateralKnPerM3 !== undefined ? { kLateralKnPerM3 } : {}),
+    ...(raw.compressionOnly === true ? { compressionOnly: true } : {}),
+  };
+}
+
+/** De melding als een staaf zowel trek-alleen als op bedding zou zijn (dezelfde regel als de rekenkern). */
+export function beddingTrekAlleenMelding(beamId: number): string {
+  return `3D-staaf ${beamId} is trek-alleen en kan niet op bedding liggen: een trek-alleen staaf valt op druk weg en zou de grond loslaten. Zet eerst trek-alleen uit.`;
+}
+
+const sameBedding = (a: OpenFem3DBeamBedding | undefined, b: OpenFem3DBeamBedding | undefined) =>
+  a === b || (a !== undefined && b !== undefined && BEDDING_KEYS.every((key) => a[key] === b[key]));
+
+/**
+ * Zet dezelfde bedding op de staven `beamIds`, of haal haar weg (`null`). Eén
+ * modelwijziging, dus één stap ongedaan maken; dezelfde functie voor het
+ * eigenschappenpaneel en de API. Elke staaf wordt gekeurd met
+ * {@link readOpenFem3DBeamBedding} (een verticale staaf weigert een verticale
+ * k). Verandert er niets, dan komt hetzelfde model terug.
+ */
+export function setOpenFem3DBeamBedding(
+  model: OpenFem3DModel,
+  beamIds: readonly number[],
+  bedding: OpenFem3DBeamBedding | null,
+): OpenFem3DModel {
+  const ids = new Set(beamIds);
+  for (const id of ids) {
+    if (!model.beams.some((beam) => beam.id === id)) throw new Error(`3D-staaf ${id} bestaat niet.`);
+  }
+  const nodes = new Map(model.nodes.map((node) => [node.id, node]));
+  let changed = false;
+  const beams = model.beams.map((beam) => {
+    if (!ids.has(beam.id)) return beam;
+    const { bedding: _oud, ...rest } = beam;
+    let next: OpenFem3DBeamBedding | undefined;
+    if (bedding !== null) {
+      if (beam.tensionOnly) throw new Error(beddingTrekAlleenMelding(beam.id));
+      const start = nodes.get(beam.startNodeId), end = nodes.get(beam.endNodeId);
+      if (!start || !end) throw new Error(`3D-staaf ${beam.id} verwijst naar een ontbrekende knoop.`);
+      next = readOpenFem3DBeamBedding(bedding, start, end, `3D-staaf ${beam.id}`);
+    }
+    if (sameBedding(beam.bedding, next)) return beam;
+    changed = true;
+    return next === undefined ? rest : { ...rest, bedding: next };
+  });
+  return changed ? { ...model, beams } : model;
+}
+
+/**
+ * Waarom "Liggers scharnierend" een liggereind bij een kolom momentvast liet:
+ *  - "cantilever": het deel aan de andere kant van de ligger hangt alleen aan
+ *    deze kolomknoop (een uitkraging, dakoverstek of luifel, ook als die uit
+ *    meer staven bestaat); met een scharnier daar draait het vrij om de knoop;
+ *  - "hingeLine": dat deel zou alleen nog aan scharnieren op één rechte lijn
+ *    hangen, zonder een staaf langs die lijn die de torsie overdraagt (bijv.
+ *    twee uitkragingen met een randligger ertussen); het draait dan om die
+ *    lijn.
+ */
+export type OpenFem3DPinSkipReason = "cantilever" | "hingeLine";
+
+export interface OpenFem3DPinToColumnsResult {
+  model: OpenFem3DModel;
+  /** De staafeinden die My en Mz los kregen. */
+  changed: { beamId: number; end: OpenFem3DBeamEnd }[];
+  /** Liggereinden op een kolomkop die momentvast bleven, omdat er met een scharnier een mechanisme zou ontstaan. */
+  skipped: { beamId: number; end: OpenFem3DBeamEnd; reason: OpenFem3DPinSkipReason }[];
+}
+
+const RESTRAINT_DOF = ["ux", "uy", "uz", "rx", "ry", "rz"] as const;
+
+/** Houdt deze oplegging de knoop ergens vast (een geblokkeerde richting of een veer)? */
+function supportHolds(support: OpenFem3DSupport): boolean {
+  return RESTRAINT_DOF.some((dof) => support[dof])
+    || Object.values(support.springs ?? {}).some((value) => typeof value === "number" && value > 0);
+}
+
+/**
+ * De opdracht "Liggers scharnierend op kolommen" en model3d.beam.pinToColumns.
+ * Elk eind van een ligger (een staaf die niet bijna verticaal staat; een
+ * schuine spant telt dus mee) op een kolomkop krijgt My en Mz los. De kolommen
+ * zelf blijven doorgaand; torsie blijft zoals hij is.
+ *
+ * Een kolomkop is het BOVENSTE eind van een kolom (|ex·Z| > 0,95) die naar
+ * beneden ergens op steunt: via staven en platen, zonder langs haar eigen kop,
+ * bij een oplegging of veer. Het onderste eind telt niet: een balkrooster
+ * onder een kolomvoet of poer en een ligger waar een kolom op staat, blijven
+ * doorgaand. Een kolom die in stukken is geknipt, telt op elke tussenknoop
+ * (daar heeft het onderste stuk zijn kop). Een hangstaaf onder een ligger
+ * telt niet. Heeft het model nog geen enkele oplegging of veer, dan telt elke
+ * kolom.
+ *
+ * Vóór het losmaken kijkt de opdracht of het deel achter elke ligger daarna
+ * nog vastzit. Dat deel is alles wat vanaf het andere eind bereikbaar is
+ * zonder over een kolomkop te gaan. Het zit vast als het een oplegging of
+ * veer heeft, momentvast aan een kolomkop hangt (een kolom, plaat of ligger
+ * zonder scharnier daar), of aan scharnieren op ten minste drie kolomkoppen
+ * die niet op één lijn liggen. Hangt het aan koppen op één lijn, dan moet een
+ * staaf langs die lijn de torsie overdragen (zoals een ligger in stukken
+ * tussen twee kolommen). Anders blijven de einden van dat deel momentvast en
+ * staan ze in `skipped` (zie {@link OpenFem3DPinSkipReason}). Een ligger van
+ * kolomkop tot kolomkop heeft geen deel achter zich en gaat altijd los.
+ *
+ * `beamIds` beperkt het tot die staven (een kolom ertussen wordt
+ * overgeslagen); zonder `beamIds` gaat het om alle staven. `changed` noemt de
+ * staafeinden die veranderden; zonder verandering komt hetzelfde model terug.
+ */
+export function pinOpenFem3DBeamsToColumns(
+  model: OpenFem3DModel,
+  beamIds?: readonly number[],
+): OpenFem3DPinToColumnsResult {
+  const wanted = beamIds === undefined ? null : new Set(beamIds);
+  if (wanted) {
+    for (const id of wanted) {
+      if (!model.beams.some((item) => item.id === id)) throw new Error(`3D-staaf ${id} bestaat niet.`);
+    }
+  }
+  const nodesById = new Map(model.nodes.map((node) => [node.id, node]));
+  const validBeam = (beam: OpenFem3DBeam) =>
+    beam.startNodeId !== beam.endNodeId && nodesById.has(beam.startNodeId) && nodesById.has(beam.endNodeId);
+  const plateNodes = (model.plates ?? []).map((plate) =>
+    [...new Set([...plate.nodeIds, ...(plate.openings ?? []).flatMap((opening) => opening.nodeIds)])]
+      .filter((id) => nodesById.has(id)));
+
+  // Verbindingen: een staaf koppelt zijn twee knopen, een plaat al haar knopen.
+  const neighbours = new Map<number, number[]>();
+  const link = (a: number, b: number) => {
+    if (a === b) return;
+    for (const [from, to] of [[a, b], [b, a]] as const) {
+      let list = neighbours.get(from);
+      if (!list) neighbours.set(from, list = []);
+      list.push(to);
+    }
+  };
+  for (const beam of model.beams) if (validBeam(beam)) link(beam.startNodeId, beam.endNodeId);
+  for (const ids of plateNodes) for (let index = 1; index < ids.length; index += 1) link(ids[0]!, ids[index]!);
+
+  // Vastgehouden knopen: een oplegging of veer, of een plaat met een randoplegging.
+  const held = new Set<number>();
+  for (const support of model.supports ?? []) if (supportHolds(support)) held.add(support.nodeId);
+  (model.plates ?? []).forEach((plate, index) => {
+    if ((plate.edgeSupports ?? []).some((edge) => RESTRAINT_DOF.some((dof) => edge[dof]))) {
+      for (const id of plateNodes[index]!) held.add(id);
+    }
+  });
+
+  /** Bereikt een zoektocht vanaf `start`, zonder over `blocked` te gaan, een vastgehouden knoop? */
+  const reachesHeld = (start: number, blocked: number) => {
+    const seen = new Set([start, blocked]);
+    const queue = [start];
+    for (let index = 0; index < queue.length; index += 1) {
+      const id = queue[index]!;
+      if (held.has(id)) return true;
+      for (const next of neighbours.get(id) ?? []) {
+        if (!seen.has(next)) { seen.add(next); queue.push(next); }
+      }
+    }
+    return false;
+  };
+
+  // De kolommen en hun koppen.
+  const columns = new Set<number>();
+  const tops = new Set<number>();
+  for (const beam of model.beams) {
+    if (!openFem3DBeamIsColumn(beam, nodesById)) continue;
+    columns.add(beam.id);
+    const a = nodesById.get(beam.startNodeId)!, b = nodesById.get(beam.endNodeId)!;
+    const [bottom, top] = a.z <= b.z ? [a.id, b.id] : [b.id, a.id];
+    if (!tops.has(top) && (held.size === 0 || reachesHeld(bottom, top))) tops.add(top);
+  }
+
+  // De kandidaten: liggereinden op een kolomkop die nog niet helemaal los zijn.
+  type Candidate = { beam: OpenFem3DBeam; end: OpenFem3DBeamEnd; other: number };
+  const candidates: Candidate[] = [];
+  const isCandidate = new Set<string>();
+  for (const beam of model.beams) {
+    if (columns.has(beam.id) || (wanted && !wanted.has(beam.id)) || !validBeam(beam)) continue;
+    for (const end of ["start", "end"] as const) {
+      const nodeId = end === "start" ? beam.startNodeId : beam.endNodeId;
+      if (!tops.has(nodeId) || endFullyHinged(beam, end)) continue;
+      candidates.push({ beam, end, other: end === "start" ? beam.endNodeId : beam.startNodeId });
+      isCandidate.add(`${beam.id}:${end}`);
+    }
+  }
+
+  // De delen achter de kolomkoppen: samenhangende groepen knopen zonder kolomkop.
+  const part = new Map<number, number>();
+  let parts = 0;
+  for (const node of model.nodes) {
+    if (tops.has(node.id) || part.has(node.id)) continue;
+    part.set(node.id, parts);
+    const queue = [node.id];
+    for (let index = 0; index < queue.length; index += 1) {
+      for (const next of neighbours.get(queue[index]!) ?? []) {
+        if (!tops.has(next) && !part.has(next)) { part.set(next, parts); queue.push(next); }
+      }
+    }
+    parts += 1;
+  }
+  /** Hangt dit eind na de opdracht scharnierend aan zijn knoop (My of Mz los)? */
+  const hingedAfter = (beam: OpenFem3DBeam, end: OpenFem3DBeamEnd) => {
+    const keys = END_RELEASE_KEYS[end];
+    return isCandidate.has(`${beam.id}:${end}`) || beam.releases?.[keys.my] === true || beam.releases?.[keys.mz] === true;
+  };
+  /** Een scharnierende aansluiting op een kolomkop: de kop, de richting van de staaf vanaf de kop, en of hij torsie overdraagt. */
+  type Hinge = { top: number; direction: readonly [number, number, number]; carriesTorsion: boolean };
+  const hingeAt = (beam: OpenFem3DBeam, topEnd: OpenFem3DBeamEnd): Hinge => {
+    const top = nodesById.get(topEnd === "start" ? beam.startNodeId : beam.endNodeId)!;
+    const other = nodesById.get(topEnd === "start" ? beam.endNodeId : beam.startNodeId)!;
+    const length = Math.hypot(other.x - top.x, other.y - top.y, other.z - top.z);
+    return {
+      top: top.id,
+      direction: [(other.x - top.x) / length, (other.y - top.y) / length, (other.z - top.z) / length],
+      carriesTorsion: !beam.releases?.torsionStart && !beam.releases?.torsionEnd,
+    };
+  };
+  const hingesOf = new Map<number, Hinge[]>();
+  const steady = new Set<number>();
+  for (const id of held) if (part.has(id)) steady.add(part.get(id)!);
+  for (const beam of model.beams) {
+    if (!validBeam(beam)) continue;
+    const startPart = part.get(beam.startNodeId), endPart = part.get(beam.endNodeId);
+    // Precies één eind in een deel, het andere op een kolomkop.
+    if ((startPart === undefined) === (endPart === undefined)) continue;
+    const topEnd: OpenFem3DBeamEnd = startPart === undefined ? "start" : "end";
+    const partId = (startPart ?? endPart)!;
+    if (!hingedAfter(beam, topEnd)) { steady.add(partId); continue; }
+    let list = hingesOf.get(partId);
+    if (!list) hingesOf.set(partId, list = []);
+    list.push(hingeAt(beam, topEnd));
+  }
+  for (const ids of plateNodes) {
+    if (!ids.some((id) => tops.has(id))) continue;
+    for (const id of ids) if (part.has(id)) steady.add(part.get(id)!);
+  }
+
+  /** Zit iets dat alleen aan deze scharnieren op kolomkoppen hangt, daarna nog vast? */
+  const verdictOf = (hinges: readonly Hinge[]): OpenFem3DPinSkipReason | null => {
+    const points = [...new Set(hinges.map((hinge) => hinge.top))].map((id) => nodesById.get(id)!);
+    if (points.length <= 1) return "cantilever";
+    // De twee verst uit elkaar liggende koppen spannen de lijn op.
+    let a = points[0]!, b = points[1]!, longest = -1;
+    for (const p of points) for (const q of points) {
+      const distance = Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z);
+      if (distance > longest) { longest = distance; a = p; b = q; }
+    }
+    const axis = [(b.x - a.x) / longest, (b.y - a.y) / longest, (b.z - a.z) / longest] as const;
+    const offLine = points.some((p) => {
+      const v = [p.x - a.x, p.y - a.y, p.z - a.z] as const;
+      const along = v[0] * axis[0] + v[1] * axis[1] + v[2] * axis[2];
+      return Math.hypot(v[0] - along * axis[0], v[1] - along * axis[1], v[2] - along * axis[2]) > 1e-6 * Math.max(1, longest);
+    });
+    if (offLine) return null;
+    const torsionAlongLine = hinges.some((hinge) => hinge.carriesTorsion
+      && Math.abs(hinge.direction[0] * axis[0] + hinge.direction[1] * axis[1] + hinge.direction[2] * axis[2]) > 1 - 1e-6);
+    return torsionAlongLine ? null : "hingeLine";
+  };
+  const partVerdicts = new Map<number, OpenFem3DPinSkipReason | null>();
+  const verdictFor = (candidate: Candidate): OpenFem3DPinSkipReason | null => {
+    const partId = part.get(candidate.other);
+    // Een ligger tussen twee kolomkoppen: er hangt niets achter, en de koppen
+    // zelf staan op hun kolommen. Ook met torsie los blijft hij een pendelstaaf.
+    if (partId === undefined) return null;
+    if (steady.has(partId)) return null;
+    if (!partVerdicts.has(partId)) partVerdicts.set(partId, verdictOf(hingesOf.get(partId) ?? []));
+    return partVerdicts.get(partId)!;
+  };
+
+  const changed: OpenFem3DPinToColumnsResult["changed"] = [];
+  const skipped: OpenFem3DPinToColumnsResult["skipped"] = [];
+  const nextById = new Map<number, OpenFem3DBeam>();
+  for (const candidate of candidates) {
+    const reason = verdictFor(candidate);
+    if (reason) {
+      skipped.push({ beamId: candidate.beam.id, end: candidate.end, reason });
+      continue;
+    }
+    nextById.set(candidate.beam.id, withEndHinge(nextById.get(candidate.beam.id) ?? candidate.beam, candidate.end, true));
+    changed.push({ beamId: candidate.beam.id, end: candidate.end });
+  }
+  if (changed.length === 0) return { model, changed, skipped };
+  return { model: { ...model, beams: model.beams.map((beam) => nextById.get(beam.id) ?? beam) }, changed, skipped };
+}
+
+/**
+ * Voor welke staven "Liggers scharnierend" in het lint werkt: de
+ * geselecteerde staven (die bestaan, zonder dubbele), of `undefined` (alle
+ * staven) als er geen staaf geselecteerd is, ook als er alleen knopen of
+ * platen geselecteerd zijn.
+ */
+export function openFem3DPinToColumnsScope(
+  model: Pick<OpenFem3DModel, "beams">,
+  selection: OpenFem3DSelection,
+): number[] | undefined {
+  const selected = selection?.type === "beam" ? [selection.id] : selection?.type === "multi" ? selection.beamIds : [];
+  const existing = new Set(model.beams.map((beam) => beam.id));
+  const ids = [...new Set(selected)].filter((id) => existing.has(id));
+  return ids.length > 0 ? ids : undefined;
+}
+
+/** Een regel van een melding: een i18n-sleutel, met het aantal als die er een heeft. */
+export interface OpenFem3DMessagePart {
+  key: string;
+  count?: number;
+}
+
+/**
+ * De melding na "Liggers scharnierend": hoeveel staafeinden scharnierend zijn
+ * gemaakt (of dat er niets veranderde), binnen de selectie of in het hele
+ * model, en hoeveel liggereinden momentvast bleven omdat er anders een
+ * mechanisme ontstaat.
+ */
+export function openFem3DPinToColumnsMessage(
+  result: Pick<OpenFem3DPinToColumnsResult, "changed" | "skipped">,
+  scope: readonly number[] | undefined,
+): { level: "success" | "info"; title: OpenFem3DMessagePart; details: OpenFem3DMessagePart[] } {
+  const details: OpenFem3DMessagePart[] = [scope
+    ? { key: "ribbon:openFem3d.pinBeamsToColumnsScopeSelection", count: scope.length }
+    : { key: "ribbon:openFem3d.pinBeamsToColumnsScopeAll" }];
+  if (result.skipped.length > 0) details.push({ key: "ribbon:openFem3d.pinBeamsToColumnsSkipped", count: result.skipped.length });
+  return result.changed.length > 0
+    ? { level: "success", title: { key: "ribbon:openFem3d.pinBeamsToColumnsDone", count: result.changed.length }, details }
+    : { level: "info", title: { key: "ribbon:openFem3d.pinBeamsToColumnsNone" }, details };
 }
 
 export interface OpenFem3DBeamSplitResult {
@@ -1776,6 +2475,21 @@ export function splitOpenFem3DBeam(
     }
     const loadRatio = (splitDistance - load.startPositionM) /
       (load.endPositionM - load.startPositionM);
+    if (isOpenFem3DGlobalMemberLoad(load)) {
+      // Globaal (#80): richting en projectie gelden voor beide delen (zelfde e_x).
+      const qAtSplit = load.qStart + (load.qEnd - load.qStart) * loadRatio;
+      return [
+        { ...load, qEnd: qAtSplit, endPositionM: splitDistance },
+        {
+          ...load,
+          id: nextMemberLoadId++,
+          beamId: secondBeamId,
+          qStart: qAtSplit,
+          startPositionM: 0,
+          endPositionM: load.endPositionM - splitDistance,
+        },
+      ];
+    }
     const qyAtSplit = load.qyStart + (load.qyEnd - load.qyStart) * loadRatio;
     const qzAtSplit = load.qzStart + (load.qzEnd - load.qzStart) * loadRatio;
     return [
@@ -2005,13 +2719,29 @@ export function removeOpenFem3DNode(model: OpenFem3DModel, nodeId: number): Open
 
 /**
  * Verwijder de selectie, zoals de lintknop Verwijderen en de Delete-toets:
- * staven en platen eerst, daarna knopen met alles wat eraan hangt. Een plaat
+ * de gekozen lasten (een groepsselectie uit het selectiefilter, issue #94),
+ * dan staven en platen, daarna knopen met alles wat eraan hangt. Een plaat
  * gaat met haar openingen en oppervlaktelasten weg; haar knopen blijven staan.
  */
 export function removeOpenFem3DSelection(model: OpenFem3DModel, selection: OpenFem3DSelection): OpenFem3DModel {
   if (!selection) return model;
   if (selection.type === "multi") {
     let next = model;
+    const loads = selection.loads ?? {};
+    const weg = <K extends "loads" | "memberLoads" | "memberPointLoads" | "thermalLoads" | "surfaceLoads" | "loadPanels">(
+      key: K, ids: number[] | undefined,
+    ) => {
+      const items = next[key] as { id: number }[] | undefined;
+      if (!items || !ids?.length) return;
+      const set = new Set(ids);
+      next = { ...next, [key]: items.filter((item) => !set.has(item.id)) };
+    };
+    weg("loads", loads.nodalLoad);
+    weg("memberLoads", loads.memberLoad);
+    weg("memberPointLoads", loads.memberPointLoad);
+    weg("thermalLoads", loads.thermalLoad);
+    weg("surfaceLoads", loads.surfaceLoad);
+    weg("loadPanels", loads.loadPanel);
     for (const beamId of selection.beamIds) next = removeOpenFem3DBeam(next, beamId);
     for (const plateId of selection.plateIds ?? []) next = removeOpenFem3DPlate(next, plateId);
     for (const nodeId of selection.nodeIds) next = removeOpenFem3DNode(next, nodeId);

@@ -97,6 +97,7 @@ mod tests {
             members.push(Member3D {
                 id: index + 1, start_node_id: i, end_node_id: j, material_id: 1, section_id: 1,
                 releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: true,
+                bedding: None,
             });
         }
         SolveRequest3D {

@@ -8,7 +8,10 @@
 //     met asstaaf blijft het teken van de vrije draaias van een scharnier).
 // De veer is een echte schroefveer (vijf windingen, een spoel van een halve
 // maat breed); een rol is kegel, voetplaat, twee rollen en de ondergrond met
-// arcering, zonder de grote donkere schijf van vroeger.
+// arcering, zonder de grote donkere schijf van vroeger. Een inklemming is in
+// dezelfde stijl een massief blok onder de knoop, met een donkere kraag om de
+// knoop, op dezelfde ondergrond met arcering (vroeger een oranje schijf met
+// schuine staafjes).
 import * as THREE from "three";
 const { addOpenFem3DConditionMarkers, openFem3DConditionMarkerSize } = await import("./src/components/openFem3d/openFem3dMarkers.ts");
 const { OPEN_FEM_3D_SUPPORT_PRESETS, parseOpenFem3DModel } = await import("./src/components/openFem3d/openFem3dModel.ts");
@@ -118,11 +121,6 @@ console.log("\n[6] de standaardtekens blijven zoals ze waren");
   check("scharnier: kegel en voetplaat, geen ring",
     soort(scharnier, "ConeGeometry").length === 1 && soort(scharnier, "TorusGeometry").length === 0
       && soort(scharnier, "CylinderGeometry").some((c) => Math.abs(c.position.z + 1.08 * s) < 1e-9));
-  const inklemming = teken(OPEN_FEM_3D_SUPPORT_PRESETS.fixed);
-  check("inklemming: blok met arcering, geen kegel of ring",
-    soort(inklemming, "CylinderGeometry").some((c) => Math.abs(c.geometry.parameters.radiusTop - 0.76 * s) < 1e-12)
-      && soort(inklemming, "BoxGeometry").length === 3 && soort(inklemming, "ConeGeometry").length === 0
-      && soort(inklemming, "TorusGeometry").length === 0, String(soort(inklemming, "BoxGeometry").length));
   const draai = teken(OPEN_FEM_3D_SUPPORT_PRESETS.revoluteZ);
   check("scharnier met vrije z-as: de oranje ring (niet de donkere)",
     soort(draai, "TorusGeometry").length === 1 && kleur(soort(draai, "TorusGeometry")[0]) === ORANJE);
@@ -167,6 +165,58 @@ console.log("\n[8] een rol: kegel, voetplaat, twee rollen en de ondergrond met a
   check("vier arceringsstreepjes achter de ondergrond", arcering.length === 4
     && arcering.every((b) => diepte(b) > diepte(grond)), String(arcering.length));
   check("alles hoort bij knoop 1", alleKnoop(m));
+}
+
+console.log("\n[9] een inklemming: de knoop vastgeklemd in een blok op de ondergrond met arcering");
+{
+  // Het oude teken (een oranje schijf met schuine staafjes) was onduidelijk.
+  // Nu in de stijl van de rol: een massief oranje blok direct onder de knoop,
+  // een donkere kraag om de knoop, de grijze ondergrond met dezelfde arcering.
+  const m = teken(OPEN_FEM_3D_SUPPORT_PRESETS.fixed);
+  const GRIJS = 0x94a3b8;
+  const dozen = soort(m, "BoxGeometry");
+  const maten = (b) => b.geometry.parameters;
+  // Lokale y van een doos staat langs z (de vaste richting), zoals bij de rol.
+  const boven = (b) => b.position.z + maten(b).height / 2;
+  const onder = (b) => b.position.z - maten(b).height / 2;
+  const blokken = dozen.filter((b) => kleur(b) === ORANJE);
+  check("één oranje blok, rechtop", blokken.length === 1 && evenwijdig(lokaleY(blokken[0]), AS.z), String(blokken.length));
+  const blok = blokken[0];
+  check("… direct onder de knoop: de bovenkant op de knoop", blok && Math.abs(boven(blok)) < 1e-9 && blok.position.x === 0 && blok.position.y === 0,
+    blok && `${(boven(blok) / s).toFixed(3)} · maat`);
+  check("… massief: minstens een maat breed en 0,6 maat hoog", blok && maten(blok).width >= s && maten(blok).depth >= s
+    && maten(blok).height >= 0.6 * s, blok && JSON.stringify(maten(blok)));
+  const kragen = dozen.filter((b) => kleur(b) === DONKER && maten(b).width > 0.2 * s && maten(b).width < 0.6 * s);
+  check("een donkere kraag om de knoop: de knoop zit erin vastgeklemd", kragen.length === 1
+    && kragen[0].position.length() < 1e-9 && boven(kragen[0]) > 0 && onder(kragen[0]) < 0, String(kragen.length));
+  const gronden = dozen.filter((b) => kleur(b) === GRIJS);
+  check("de grijze ondergrond direct onder het blok, breder dan het blok", gronden.length === 1 && blok
+    && Math.abs(boven(gronden[0]) - onder(blok)) < 1e-9 && maten(gronden[0]).width > maten(blok).width
+    && evenwijdig(lokaleY(gronden[0]), AS.z), gronden.map((g) => (boven(g) / s).toFixed(3)).join());
+  const arcering = dozen.filter((b) => kleur(b) === DONKER && maten(b).width < 0.1 * s);
+  check("vier arceringsstreepjes onder de ondergrond", arcering.length === 4 && gronden.length === 1
+    && arcering.every((b) => b.position.z < onder(gronden[0])), String(arcering.length));
+  const rol = soort(teken(OPEN_FEM_3D_SUPPORT_PRESETS.zRoller), "BoxGeometry");
+  const zelfde = (filter) => {
+    const eigen = dozen.find(filter), vanRol = rol.find(filter);
+    return eigen !== undefined && vanRol !== undefined && JSON.stringify(maten(eigen)) === JSON.stringify(maten(vanRol));
+  };
+  check("dezelfde ondergrond en arcering als de rol",
+    zelfde((b) => kleur(b) === GRIJS) && zelfde((b) => kleur(b) === DONKER && maten(b).width < 0.1 * s));
+  check("geen kegel, ring, rol of ronde schijf (duidelijk anders dan scharnier en rol)",
+    soort(m, "ConeGeometry").length === 0 && soort(m, "TorusGeometry").length === 0 && soort(m, "CylinderGeometry").length === 0);
+  check("alles hoort bij knoop 1 (selecteerbaar als de knoop)", alleKnoop(m));
+  check("geen bol", geenBol(m));
+  // Gebundeld (vanaf vier tekens): dezelfde delen, elk in een eigen GPU-batch.
+  const vier = parseOpenFem3DModel({
+    nodes: [0, 3, 6, 9].map((x, i) => ({ id: i + 1, x, y: 0, z: 0 })), beams: [],
+    supports: [1, 2, 3, 4].map((nodeId) => ({ nodeId, ...OPEN_FEM_3D_SUPPORT_PRESETS.fixed })),
+  });
+  const groep = new THREE.Group();
+  addOpenFem3DConditionMarkers(groep, vier, { supports: true, loads: false });
+  check("vier inklemmingen: vier GPU-batches (blok, kraag, ondergrond, arcering) van selecteerbare knopen",
+    groep.children.length === 4 && groep.children.every((c) => c instanceof THREE.InstancedMesh && c.userData.type === "node"),
+    groep.children.map((c) => c.type).join());
 }
 
 console.log(`\n${geslaagd} geslaagd, ${gefaald} gefaald`);

@@ -3060,7 +3060,7 @@ dependencies = [
 
 [[package]]
 name = "open-fem-studio"
-version = "2026.39.2"
+version = "2026.41.0"
 dependencies = [
  "appdata-migratie",
  "concrete-check",

@@ -24,18 +24,30 @@ export function OpenFem3DTensionOnlyField({ model, beamIds, onChange }: {
   const mixed = on > 0 && on < chosen.length;
   const box = useRef<HTMLInputElement>(null);
   useEffect(() => { if (box.current) box.current.indeterminate = mixed; }, [mixed]);
+  // Een weigering (bijv. een staaf op bedding, #106) als melding, niet als fout.
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { setError(null); }, [beamIds.join(",")]);
   if (chosen.length === 0) return null;
+  const zet = (aan: boolean) => {
+    try {
+      onChange(setOpenFem3DTensionOnly(model, chosen.map((beam) => beam.id), aan));
+      setError(null);
+    } catch (fout) {
+      setError(fout instanceof Error ? fout.message : String(fout));
+    }
+  };
   return <section className="fem-prop-section">
     <div className="fem-prop-section-title">{t("openFem3d.trekSchijf.tensionOnlyTitle")}</div>
     <label className="open-fem3d-check-row">
       <input ref={box} type="checkbox" data-open-fem3d-tension-only
         checked={on === chosen.length}
-        onChange={(event) => onChange(setOpenFem3DTensionOnly(model, chosen.map((beam) => beam.id), event.target.checked))} />
+        onChange={(event) => zet(event.target.checked)} />
       <span>{chosen.length === 1
         ? t("openFem3d.trekSchijf.tensionOnly")
         : t("openFem3d.trekSchijf.tensionOnlyMulti", { count: chosen.length })}</span>
     </label>
     <p className="fem-prop-hint">{t("openFem3d.trekSchijf.tensionOnlyHint")}</p>
+    {error && <p className="open-fem3d-error" role="alert" data-open-fem3d-tension-only-error>{error}</p>}
   </section>;
 }
 

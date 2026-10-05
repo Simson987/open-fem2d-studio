@@ -58,14 +58,20 @@ export interface OpenFem3DViewCubeTeksten {
 }
 
 /**
- * Eén regel in het menu van de knop ▾. Een schakelaar (zoals later
- * Perspectief) is een `menuitemcheckbox` met `aan`.
+ * Eén regel in het menu van de knop ▾. Een schakelaar (zoals Perspectief of
+ * Section box) is een `menuitemcheckbox` met `aan`. Een regel die nu niets
+ * kan doen (Section box passend op selectie zonder selectie) staat erin met
+ * `uitgeschakeld` (aria-disabled): bereikbaar met het toetsenbord, maar
+ * kiezen doet niets en laat het menu open. `scheiding` zet een lijn boven de
+ * regel (het begin van een nieuwe groep), zonder eigen element.
  */
 export interface OpenFem3DViewCubeMenuItem {
   id: string;
   tekst: string;
   rol?: "menuitem" | "menuitemcheckbox";
   aan?: boolean;
+  uitgeschakeld?: boolean;
+  scheiding?: boolean;
   kies: () => void;
 }
 
@@ -300,6 +306,9 @@ export function createOpenFem3DViewCube(
       el.setAttribute("role", item.rol ?? "menuitem");
       if (item.rol === "menuitemcheckbox") el.setAttribute("aria-checked", item.aan ? "true" : "false");
       else el.removeAttribute("aria-checked");
+      if (item.uitgeschakeld) el.setAttribute("aria-disabled", "true");
+      else el.removeAttribute("aria-disabled");
+      el.classList.toggle("is-scheiding", item.scheiding === true);
       el.dataset.openFem3dViewCubeMenuitem = item.id;
       el.textContent = item.tekst;
     });
@@ -307,12 +316,38 @@ export function createOpenFem3DViewCube(
   zetMenu(menuItems);
 
   const menuOpen = () => !menu.hidden;
-  /** Onder de knop als er ruimte is in het tekenvlak, anders erboven. */
+  /**
+   * Onder de knop als er ruimte is in het tekenvlak, anders erboven. Past het
+   * menu ook daar niet (een laag tekenvlak; sinds de section box, issue #86,
+   * heeft het zes regels), dan aan de kant met de meeste ruimte, zo hoog als
+   * er ruimte is en met een schuifbalk: het blijft binnen het tekenvlak.
+   */
   const plaatsMenu = () => {
     delete keuze.dataset.omhoog;
+    menu.style.maxHeight = "";
     const vak = ouder.getBoundingClientRect();
     const r = menu.getBoundingClientRect();
-    if (r.bottom > vak.bottom - 4 && r.height > 0) keuze.dataset.omhoog = "";
+    if (!(r.height > 0) || r.bottom <= vak.bottom - 4) return;
+    const k = keuze.getBoundingClientRect();
+    const onder = vak.bottom - 4 - (k.bottom + 4);
+    const boven = k.top - 4 - (vak.top + 4);
+    const omhoog = boven >= r.height || boven > onder;
+    if (omhoog) keuze.dataset.omhoog = "";
+    const ruimte = omhoog ? boven : onder;
+    if (r.height <= ruimte) return;
+    // max-height geldt voor de inhoud: binnenrand en rand komen erbij.
+    const stijl = getComputedStyle(menu);
+    const extra = ["paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"]
+      .reduce((som, naam) => som + (parseFloat(stijl[naam as "paddingTop"]) || 0), 0);
+    menu.style.maxHeight = `${Math.max(40, Math.floor(ruimte - extra))}px`;
+  };
+  /** In een menu met schuifbalk: de regel met de focus in beeld (zonder de pagina te schuiven). */
+  const houdInBeeld = (el: HTMLElement | undefined) => {
+    if (!el || menu.scrollHeight <= menu.clientHeight) return;
+    if (el.offsetTop < menu.scrollTop) menu.scrollTop = el.offsetTop;
+    else if (el.offsetTop + el.offsetHeight > menu.scrollTop + menu.clientHeight) {
+      menu.scrollTop = el.offsetTop + el.offsetHeight - menu.clientHeight;
+    }
   };
   const onBuitenDruk = (event: PointerEvent) => {
     if (event.target instanceof Node && keuze.contains(event.target)) return;
@@ -329,6 +364,7 @@ export function createOpenFem3DViewCube(
     }
     const index = (focusIndex + itemElementen.length) % Math.max(1, itemElementen.length);
     itemElementen[index]?.focus({ preventScroll: true });
+    houdInBeeld(itemElementen[index]);
   };
   function sluitMenu(focusKnop: boolean, melden = true) {
     if (!menuOpen()) return;
@@ -336,13 +372,15 @@ export function createOpenFem3DViewCube(
     menuKnop.setAttribute("aria-expanded", "false");
     delete element.dataset.menuOpen;
     delete keuze.dataset.omhoog;
+    menu.style.maxHeight = "";
     document.removeEventListener("pointerdown", onBuitenDruk, true);
     if (focusKnop) menuKnop.focus({ preventScroll: true });
     if (melden) acties.menuWissel?.(false);
   }
   const kiesItem = (index: number) => {
     const item = items[index];
-    if (!item) return;
+    // Uitgeschakeld: niets te doen, het menu blijft open.
+    if (!item || item.uitgeschakeld) return;
     // Een keuze sluit het menu; de focus gaat terug naar de knop.
     sluitMenu(true);
     item.kies();

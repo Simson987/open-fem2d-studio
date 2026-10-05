@@ -10,6 +10,9 @@ import * as THREE from "three";
 import type { OpenFem3DLoadPanel, OpenFem3DModel, OpenFem3DNode, OpenFem3DPlate, OpenFem3DSurfaceLoad } from "./openFem3dModel";
 import { openFem3DLoadPanelGeometry } from "./openFem3dLoadPanels";
 import { openFem3DPlateShape } from "./openFem3dPlateGeometry";
+import {
+  DEFAULT_OPEN_FEM_3D_PLATE_DISPLAY, openFem3DPlateDrawnHalfThickness, type OpenFem3DPlateDisplay,
+} from "./openFem3dPlateDisplay";
 
 /**
  * Kleur per soort belastinggeval, gelijk aan de typelabels van de tabbalk
@@ -124,23 +127,39 @@ export function openFem3DLoadPanelSurface(
 }
 
 /**
+ * Afstand van het vlak van een oppervlaktelast tot de getekende plaatzijde:
+ * 5 % van de dikte, minstens 5 mm. Genoeg om niet samen te vallen met het
+ * plaatvlak (geen flikkering), klein genoeg om er zichtbaar bij te horen.
+ */
+export function openFem3DSurfaceLoadMarginM(thicknessM: number): number {
+  return Math.max(0.005, thicknessM * 0.05);
+}
+
+/**
  * Het gevulde vlak van een oppervlaktelast op een plaat: de plaatomtrek met
- * bogen, afronding en openingen, net buiten de plaat aan de kant waar de
- * last op aangrijpt (daar begint ook de lastpijl). Zo valt het vlak niet
- * samen met de plaatzijde en flikkert het niet.
+ * bogen, afronding en openingen, net buiten de getekende plaat aan de kant
+ * waar de last op aangrijpt (daar begint ook de lastpijl). Zo valt het vlak
+ * niet samen met de plaatzijde en flikkert het niet.
+ *
+ * "Net buiten" volgt de plaatweergave (issue #78): in Volume buiten de boven-
+ * of onderzijde (halve dikte plus marge), in Vlak en Mesh, waar de plaat
+ * alleen als middenvlak getekend wordt, alleen de marge boven of onder het
+ * middenvlak. Zonder keuze: Volume.
  */
 export function openFem3DSurfaceLoadSurface(
   model: OpenFem3DModel,
   plate: OpenFem3DPlate,
   load: Pick<OpenFem3DSurfaceLoad, "qx" | "qy" | "qz">,
   nodeIndex?: ReadonlyMap<number, OpenFem3DNode>,
+  display: OpenFem3DPlateDisplay = DEFAULT_OPEN_FEM_3D_PLATE_DISPLAY,
 ): OpenFem3DLoadSurface | null {
   const outline = openFem3DPlateShape(model, plate, nodeIndex);
   if (!outline) return null;
   const { shape, position, u, v, normal } = outline;
   const along = load.qx * normal.x + load.qy * normal.y + load.qz * normal.z;
   const side = along > 0 ? -1 : 1;
-  const offset = side * (plate.thicknessM / 2 + Math.max(0.005, plate.thicknessM * 0.05));
+  const offset = side * (openFem3DPlateDrawnHalfThickness(plate.thicknessM, display)
+    + openFem3DSurfaceLoadMarginM(plate.thicknessM));
   const lift = normal.clone().multiplyScalar(offset);
   const to3D = (p: THREE.Vector2): Vec3 => {
     const point = position.clone().addScaledVector(u, p.x).addScaledVector(v, p.y).add(lift);

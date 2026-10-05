@@ -349,6 +349,85 @@ function crossingParameters(a: V2, b: V2, region: Region): number[] {
   return out;
 }
 
+// ── Vlak en contour van één plaat (net en plaatsing gebruiken dezelfde) ─────
+
+/**
+ * Vlakassen van een plaat: oorsprong in de eerste hoekknoop, e1 langs de
+ * eerste rand, normaal (Newell) uit de knoopvolgorde. Plus de kleinste
+ * plaatmaat in die assen, voor de standaard-elementgrootte.
+ */
+function plateFrame(
+  plate: OpenFem3DPlate, byId: ReadonlyMap<number, OpenFem3DNode>,
+): { frame: Frame; normal: V3; shortest: number } {
+  const loop = plate.nodeIds.map((id) => byId.get(id));
+  if (loop.some((node) => !node)) throw new Error(`3D-plaat ${plate.id} verwijst naar een ontbrekende knoop.`);
+  const points = loop.map((node) => pointOf(node!));
+  const normal = newellNormal(points);
+  if (!(norm(normal) > 1e-12)) throw new Error(`3D-plaat ${plate.id} heeft geen oppervlakte.`);
+  const e1 = unit(sub(points[1], points[0]));
+  const n = unit(normal);
+  const frame: Frame = { origin: points[0], e1, e2: cross(n, e1), n };
+  const local = points.map((p) => toLocal(frame, p));
+  const xs = local.map((q) => q[0]), ys = local.map((q) => q[1]);
+  return { frame, normal, shortest: Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) };
+}
+
+/** Buitenrand en openingen van een plaat, bogen bemonsterd op `spacing` (zoals in het net). */
+function plateContours(
+  plate: OpenFem3DPlate, byId: ReadonlyMap<number, OpenFem3DNode>, spacing: number, frame: Frame,
+): { outer: Contour; holes: Contour[] } {
+  const outer = plate.boundary
+    ? contourFromBoundary(plate.boundary, byId, spacing, frame)
+    : contourFromLoop(plate.nodeIds.map((id) => pointOf(byId.get(id)!)), plate.cornerRadiusM ?? 0, spacing);
+  if (!outer) throw new Error(`3D-plaat ${plate.id}: de rand is niet op te bouwen.`);
+  const holes: Contour[] = [];
+  for (const opening of plate.openings ?? []) {
+    const contour = opening.boundary
+      ? contourFromBoundary(opening.boundary, byId, spacing, frame)
+      : contourFromLoop(opening.nodeIds.map((id) => pointOf(byId.get(id)!)), opening.cornerRadiusM ?? 0, spacing);
+    if (!contour) throw new Error(`Opening ${opening.id} van 3D-plaat ${plate.id} is niet op te bouwen.`);
+    holes.push(contour);
+  }
+  return { outer, holes };
+}
+
+/** Het vlak waarin het net een plaat legt: een punt erop (de eerste hoekknoop) en de eenheidsnormaal. */
+export interface OpenFem3DPlatePlane {
+  origin: { x: number; y: number; z: number };
+  normal: { x: number; y: number; z: number };
+}
+
+/** Het middenvlak van een plaat, zoals het rekennet het gebruikt (Newell-normaal door de eerste hoekknoop). */
+export function openFem3DPlatePlane(model: OpenFem3DModel, plate: OpenFem3DPlate): OpenFem3DPlatePlane {
+  const { frame } = plateFrame(plate, new Map(model.nodes.map((node) => [node.id, node])));
+  const [ox, oy, oz] = frame.origin, [nx, ny, nz] = frame.n;
+  return { origin: { x: ox, y: oy, z: oz }, normal: { x: nx, y: ny, z: nz } };
+}
+
+/**
+ * Waar een punt van het plaatvlak ligt, met de contour zoals het rekennet hem
+ * gebruikt (bogen en afgeronde hoeken bemonsterd op twee keer de
+ * elementgrootte): "inside" en "boundary" komen als bijzonder punt in het net,
+ * "opening" (in een opening) en "outside" (buiten de buitenrand) niet. Het
+ * punt wordt in het vlak beoordeeld; de afstand tot het vlak telt niet mee.
+ */
+export function classifyOpenFem3DPlatePoint(
+  model: OpenFem3DModel, plate: OpenFem3DPlate, point: { x: number; y: number; z: number },
+): "inside" | "boundary" | "opening" | "outside" {
+  const byId = new Map(model.nodes.map((node) => [node.id, node]));
+  const { frame, shortest } = plateFrame(plate, byId);
+  const meshSize = plate.meshSizeM ?? defaultOpenFem3DPlateMeshSizeM(shortest);
+  const { outer, holes } = plateContours(plate, byId, 2 * meshSize, frame);
+  const region: Region = {
+    outer: contourPolyline(outer).map((p) => toLocal(frame, p)),
+    holes: holes.map((hole) => contourPolyline(hole).map((p) => toLocal(frame, p))),
+  };
+  const q = toLocal(frame, [point.x, point.y, point.z]);
+  const state = classify(q, region);
+  if (state !== "outside") return state;
+  return insidePolygon(q, region.outer) && region.holes.some((hole) => insidePolygon(q, hole)) ? "opening" : "outside";
+}
+
 // ── Lijndragers en hun verdeling ────────────────────────────────────────────
 
 interface Carrier {
@@ -397,21 +476,9 @@ export async function meshOpenFem3DPlates(
   const frames = new Map<number, Frame>();
   const sizes = new Map<number, { shortest: number; area: number }>();
   for (const plate of plates) {
-    const loop = plate.nodeIds.map((id) => byId.get(id));
-    if (loop.some((node) => !node)) throw new Error(`3D-plaat ${plate.id} verwijst naar een ontbrekende knoop.`);
-    const points = loop.map((node) => pointOf(node!));
-    const normal = newellNormal(points);
-    if (!(norm(normal) > 1e-12)) throw new Error(`3D-plaat ${plate.id} heeft geen oppervlakte.`);
-    const e1 = unit(sub(points[1], points[0]));
-    const n = unit(normal);
-    const frame: Frame = { origin: points[0], e1, e2: cross(n, e1), n };
+    const { frame, normal, shortest } = plateFrame(plate, byId);
     frames.set(plate.id, frame);
-    const local = points.map((p) => toLocal(frame, p));
-    const xs = local.map((q) => q[0]), ys = local.map((q) => q[1]);
-    sizes.set(plate.id, {
-      shortest: Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)),
-      area: Math.abs(norm(normal)) / 2,
-    });
+    sizes.set(plate.id, { shortest, area: Math.abs(norm(normal)) / 2 });
   }
   const meshSizes = new Map<number, number>();
   for (const plate of plates) {
@@ -434,18 +501,7 @@ export async function meshOpenFem3DPlates(
   for (const plate of plates) {
     const frame = frames.get(plate.id)!;
     const spacing = 2 * meshSizes.get(plate.id)!;
-    const outer = plate.boundary
-      ? contourFromBoundary(plate.boundary, byId, spacing, frame)
-      : contourFromLoop(plate.nodeIds.map((id) => pointOf(byId.get(id)!)), plate.cornerRadiusM ?? 0, spacing);
-    if (!outer) throw new Error(`3D-plaat ${plate.id}: de rand is niet op te bouwen.`);
-    const holes: Contour[] = [];
-    for (const opening of plate.openings ?? []) {
-      const contour = opening.boundary
-        ? contourFromBoundary(opening.boundary, byId, spacing, frame)
-        : contourFromLoop(opening.nodeIds.map((id) => pointOf(byId.get(id)!)), opening.cornerRadiusM ?? 0, spacing);
-      if (!contour) throw new Error(`Opening ${opening.id} van 3D-plaat ${plate.id} is niet op te bouwen.`);
-      holes.push(contour);
-    }
+    const { outer, holes } = plateContours(plate, byId, spacing, frame);
     geometries.push({
       plate, frame, outer, holes,
       shortestSpan: sizes.get(plate.id)!.shortest,

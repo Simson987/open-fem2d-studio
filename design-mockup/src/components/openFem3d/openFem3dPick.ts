@@ -60,19 +60,33 @@ export interface OpenFem3DPick {
   reason: OpenFem3DPickReason;
 }
 
-export function chooseOpenFem3DPick(candidates: OpenFem3DPickCandidates): OpenFem3DPick | null {
-  const { load, node, support, rayBeam, lineBeam, plate, loadDepthToleranceM } = candidates;
-  // De staaf: het getekende profiel onder de cursor, of de systeemlijn
-  // binnen de klikzone als die ervóór ligt.
-  let beam: { id: number; front: number; point: OpenFem3DPickPoint; reason: "beam-ray" | "beam-line" } | null = null;
+type OpenFem3DBeamCandidate = NonNullable<OpenFem3DPickCandidates["rayBeam"]>;
+
+/**
+ * De staaf: het getekende profiel onder de cursor, of de systeemlijn binnen
+ * de klikzone als die ervóór ligt. `front`: de voorkant van de staaf (m).
+ */
+function frontBeam(
+  rayBeam: OpenFem3DBeamCandidate | null | undefined, lineBeam: OpenFem3DBeamCandidate | null | undefined,
+): { id: number; front: number; point: OpenFem3DPickPoint; reason: "beam-ray" | "beam-line" } | null {
   if (rayBeam && lineBeam && lineBeam.id !== rayBeam.id
     && lineBeam.distance - lineBeam.halfSizeM < rayBeam.distance) {
-    beam = { id: lineBeam.id, front: lineBeam.distance - lineBeam.halfSizeM, point: lineBeam.point, reason: "beam-line" };
-  } else if (rayBeam) {
-    beam = { id: rayBeam.id, front: rayBeam.distance, point: rayBeam.point, reason: "beam-ray" };
-  } else if (lineBeam) {
-    beam = { id: lineBeam.id, front: lineBeam.distance - lineBeam.halfSizeM, point: lineBeam.point, reason: "beam-line" };
+    return { id: lineBeam.id, front: lineBeam.distance - lineBeam.halfSizeM, point: lineBeam.point, reason: "beam-line" };
   }
+  if (rayBeam) return { id: rayBeam.id, front: rayBeam.distance, point: rayBeam.point, reason: "beam-ray" };
+  if (lineBeam) return { id: lineBeam.id, front: lineBeam.distance - lineBeam.halfSizeM, point: lineBeam.point, reason: "beam-line" };
+  return null;
+}
+
+/** Een knoop aan een staafeinde zit ín het profiel; alleen een profiel dat er ruim voor ligt, verbergt hem. */
+function nodeHiddenByProfile(profile: { distance: number; halfSizeM: number } | null | undefined, nodeFront: number): boolean {
+  return profile !== null && profile !== undefined
+    && profile.distance < nodeFront - Math.max(2 * profile.halfSizeM, 0.1);
+}
+
+export function chooseOpenFem3DPick(candidates: OpenFem3DPickCandidates): OpenFem3DPick | null {
+  const { load, node, support, rayBeam, lineBeam, plate, loadDepthToleranceM } = candidates;
+  const beam = frontBeam(rayBeam, lineBeam);
   const nodeFront = node ? node.distance - node.radiusM : Infinity;
 
   if (load) {
@@ -89,13 +103,7 @@ export function chooseOpenFem3DPick(candidates: OpenFem3DPickCandidates): OpenFe
     }
   }
 
-  if (node) {
-    // Een knoop aan een staafeinde zit ín het profiel; alleen een profiel dat
-    // er ruim voor ligt, verbergt hem.
-    const hidden = rayBeam !== null && rayBeam !== undefined
-      && rayBeam.distance < nodeFront - Math.max(2 * rayBeam.halfSizeM, 0.1);
-    if (!hidden) return { type: "node", id: node.id, reason: "node" };
-  }
+  if (node && !nodeHiddenByProfile(rayBeam, nodeFront)) return { type: "node", id: node.id, reason: "node" };
 
   if (support) {
     // Het teken ligt onder de cursor. Alleen wat op die pixel ervoor getekend
@@ -110,4 +118,79 @@ export function chooseOpenFem3DPick(candidates: OpenFem3DPickCandidates): OpenFe
     return { type: "beam", id: beam.id, point: beam.point, reason: beam.reason };
   }
   return plate ? { type: "plate", id: plate.id, reason: "plate" } : null;
+}
+
+/** Een getekende staaf of plaat op de straal door de knoop zelf (afstand in m vanaf de camera). */
+export type OpenFem3DNodeRayHit =
+  | { type: "beam"; id: number; distance: number; halfSizeM: number }
+  | { type: "plate"; id: number; distance: number; bandM: number };
+
+export interface OpenFem3DPlacementNodeCandidate {
+  id: number;
+  /** Afstand van het knoopmiddelpunt tot de camera (m), zoals een raycast meet. */
+  distance: number;
+  radiusM: number;
+  /** Staven waarvan de knoop begin- of eindknoop is: hij zit in hun profiel, dus zij dekken hem niet af. */
+  beamIds?: readonly number[];
+  /** Platen in wier middenvlak de knoop ligt: zij dekken hem evenmin af. */
+  plateIds?: readonly number[];
+  /**
+   * De getekende staven en platen op de straal door het schermpunt van de
+   * knoop zelf, vóór de knoop. Of de knoop zichtbaar is, hangt af van wat op
+   * zijn eigen pixel vóór hem ligt, niet van wat de klikstraal ernaast raakt:
+   * een staaf of plaat die naar de camera toe loopt, ligt op de klikplek al
+   * gauw tientallen centimeters vóór de knoop zonder hem af te dekken.
+   * Afgedekt is hij door een profiel van een andere staaf dat er ruim voor
+   * ligt, of door een andere plaat die verder dan haar band voor hem ligt
+   * (een knoop op de vloer onder een plaat hoort niet bij deze klik).
+   * Ontbreekt de lijst, dan is er niets gemeten en telt de knoop als zichtbaar.
+   */
+  ownRay?: readonly OpenFem3DNodeRayHit[];
+}
+
+export type OpenFem3DPlacementCandidates = Pick<OpenFem3DPickCandidates, "support" | "rayBeam" | "lineBeam"> & {
+  /** De knoop binnen de snapzone. */
+  node?: OpenFem3DPlacementNodeCandidate | null;
+  /** Eerste raycasttreffer op een plaat, met het raakpunt (m). */
+  plate?: { id: number; distance: number; bandM: number; point: OpenFem3DPickPoint } | null;
+};
+
+export type OpenFem3DPlacementPick =
+  | { type: "node"; id: number; reason: "node" | "support" }
+  | { type: "beam"; id: number; point: OpenFem3DPickPoint; reason: "beam-ray" | "beam-line" }
+  | { type: "plate"; id: number; point: OpenFem3DPickPoint };
+
+/** Is de knoop op zijn eigen schermpunt afgedekt door een staaf of plaat waar hij niet bij hoort? */
+export function openFem3DPlacementNodeHidden(node: OpenFem3DPlacementNodeCandidate): boolean {
+  const front = node.distance - node.radiusM;
+  return (node.ownRay ?? []).some((hit) => hit.type === "beam"
+    ? !(node.beamIds ?? []).includes(hit.id) && nodeHiddenByProfile(hit, front)
+    : !(node.plateIds ?? []).includes(hit.id) && hit.distance + hit.bandM < front);
+}
+
+/**
+ * Wat één klik met een plaatsgereedschap raakt (oplegging, veer, puntlast;
+ * issues #76 en #77). Anders dan bij selecteren tellen lasttekens niet, en
+ * wint een knoop binnen de snapzone (`node`: 14 px, of de getekende bol als
+ * die groter is) van de staaf of plaat eronder:
+ *
+ *  1. de knoop binnen de snapzone — tenzij hij op zijn eigen schermpunt
+ *     afgedekt is (zie `OpenFem3DPlacementNodeCandidate.ownRay`);
+ *  2. een opleggingsteken onder de cursor: zijn knoop (zoals bij selecteren);
+ *  3. de staaf onder of vlak naast de cursor, met het punt op de staaf —
+ *     tenzij hij buiten de plaatband achter een geraakte plaat ligt;
+ *  4. de plaat, met het raakpunt op haar oppervlak;
+ *  5. niets: leeg tekenvlak (het werkvlak).
+ */
+export function chooseOpenFem3DPlacement(candidates: OpenFem3DPlacementCandidates): OpenFem3DPlacementPick | null {
+  const { node, support, rayBeam, lineBeam, plate } = candidates;
+  const behindPlate = (front: number) => plate !== null && plate !== undefined && front > plate.distance + plate.bandM;
+  if (node && !openFem3DPlacementNodeHidden(node)) return { type: "node", id: node.id, reason: "node" };
+  if (support) {
+    const coveredByProfile = rayBeam !== null && rayBeam !== undefined && rayBeam.distance < support.distance;
+    if (!coveredByProfile && !behindPlate(support.distance)) return { type: "node", id: support.nodeId, reason: "support" };
+  }
+  const beam = frontBeam(rayBeam, lineBeam);
+  if (beam && !behindPlate(beam.front)) return { type: "beam", id: beam.id, point: beam.point, reason: beam.reason };
+  return plate ? { type: "plate", id: plate.id, point: plate.point } : null;
 }

@@ -161,12 +161,26 @@ export function voorgesteldeProjectnaam(pad: string | null | undefined): string 
  *      modelinstellingen voor trek-alleen staven (alleen `true` wordt
  *      bewaard). Een oudere uitgave slaat ze over en rekent de verbanden
  *      spanningsloos in de onvervormde stand en zonder kruisregel.
+ *      Eveneens binnen `model3d` (oktober 2026, issue #80, geen versie-bump):
+ *      een lijnlast in een globale richting, `memberLoads[]` met
+ *      `globalDirection`, `qStart`, `qEnd` en eventueel `perProjection` in
+ *      plaats van qy/qz. Een eerdere uitgave valt daar niet stil overheen: zij
+ *      eist vier eindige lokale componenten en weigert het bestand met een
+ *      melding. Een bestand zonder globale lijnlast is byte-gelijk aan voorheen.
  *  4 — `model3d.loadPanels`: belastingvlakken die hun oppervlaktelast naar de
  *      liggers afdragen. Om dezelfde reden als bij 3: een uitgave zonder
  *      belastingvlakken zou de lijst bij het lezen overslaan en dus rekenen
  *      ZONDER die lasten. Alleen een bestand dat werkelijk belastingvlakken
  *      bevat krijgt versie 4; een 3D-project zonder blijft versie 3 en een
  *      bestand van versie 3 laadt ongewijzigd.
+ *  5 — `model3d.beams[].bedding`: staven op bedding (Winkler, issue #106).
+ *      Om dezelfde reden als bij 4: een uitgave zonder bedding (2026.39.2 en
+ *      ouder) zou het veld bij het lezen stil overslaan en dus rekenen ZONDER
+ *      de grond, of met alleen de grond als oplegging weigeren te rekenen; na
+ *      opslaan was de bedding weg. Alleen een bestand met minstens één staaf
+ *      op bedding krijgt versie 5 (ook met belastingvlakken); een 3D-project
+ *      zonder bedding houdt versie 3 of 4, en bestanden van versie 3 en 4
+ *      laden ongewijzigd.
  * v1-bestanden blijven leesbaar: de v2-velden zijn optioneel en ontbrekende
  * velden krijgen bij het laden de bestaande defaults (defaultCombinations()
  * en DEFAULT_STRUCTURAL_GRID in useFemStore.loadProjectState).
@@ -202,8 +216,10 @@ export const PROJECT_FORMAT_VERSION = 2;
 export const PROJECT_FORMAT_VERSION_3D = 3;
 /** Belastingvlakken in het 3D-model: eerdere uitgaven moeten weigeren, niet stil overslaan. */
 export const PROJECT_FORMAT_VERSION_3D_LOAD_PANELS = 4;
+/** Staven op bedding in het 3D-model: eerdere uitgaven moeten weigeren, niet de grond stil laten vallen. */
+export const PROJECT_FORMAT_VERSION_3D_BEDDING = 5;
 /** De hoogste versie die deze uitgave kan lezen. */
-export const PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_3D_LOAD_PANELS;
+export const PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_3D_BEDDING;
 
 /** JSON-vorm van één belastingcombinatie: `factors` als { caseId: factor }. */
 export interface ProjectFileCombination {
@@ -493,6 +509,7 @@ export function serializeProject(state: Omit<ProjectFile, "format" | "version" |
   const file: ProjectFile = {
     format: PROJECT_FORMAT_ID,
     version: modelDimension !== "3d" ? PROJECT_FORMAT_VERSION
+      : model3d?.beams.some((beam) => beam.bedding !== undefined) ? PROJECT_FORMAT_VERSION_3D_BEDDING
       : (model3d?.loadPanels?.length ?? 0) > 0 ? PROJECT_FORMAT_VERSION_3D_LOAD_PANELS : PROJECT_FORMAT_VERSION_3D,
     savedAt: new Date().toISOString(),
     ...state,

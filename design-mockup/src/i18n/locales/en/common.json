@@ -37,6 +37,7 @@
     "rasterHint": "Show the canvas background grid.",
     "snap": "Snap",
     "snapAll": "All snap types",
+    "spoorHint": "Object tracking while drawing in 3D: rest the mouse on a node or beam to acquire it; tracking lines along the axes in the work plane, their intersections, extension, perpendicular and parallel. Alt turns all snaps off temporarily, Shift keeps the direction along an axis.",
     "hoekHint": "Angle snap while drawing a member: if the direction is within the tolerance of 0° or 90°, it is set exactly to that angle; the length stays the same. A node or grid line takes precedence.",
     "hoekTolerantie": "Tolerance (°)",
     "hoekTolerantieHint": "How many degrees the direction may deviate: 0.1 to 15. Comma or point allowed.",
@@ -101,7 +102,14 @@
     "nodes": "Nodes",
     "beams": "Members",
     "plates": "Plates",
-    "mesh": "Mesh (element layout)",
+    "plateDisplay": "Plate display",
+    "plateDisplayHint": "How plates are drawn: as a volume with their thickness, as a surface (the mid-plane only) or as a mesh (the elements of the analysis mesh on the mid-plane).",
+    "plateDisplayVolume": "Volume",
+    "plateDisplaySurface": "Surface",
+    "plateDisplayMesh": "Mesh",
+    "plateDisplayVolumeHint": "Plates as a volume, with their thickness.",
+    "plateDisplaySurfaceHint": "Only the mid-plane of the plate, thin and semi-transparent, with the outline and the openings as lines.",
+    "plateDisplayMeshHint": "The elements of the analysis mesh on the mid-plane, with a lightly filled surface underneath.",
     "profiles": "Profiles (volume)",
     "profileColors": "Sections in colour",
     "nodeNumbers": "Node numbers",
@@ -111,6 +119,7 @@
     "loads": "Loads",
     "grid": "Grid",
     "structuralGrid": "Grids and levels",
+    "levelMarks": "Level marks",
     "axes": "X/Y/Z axes",
     "memberAxes": "Local member axes",
     "viewCube": "View cube",
@@ -125,6 +134,7 @@
     "torsion": "Torsion T",
     "momentY": "Moment My",
     "momentZ": "Moment Mz",
+    "groundPressure": "Ground pressure",
     "remembered": "Visibility is remembered on this device; saved views are stored with the project.",
     "viewSetsAria": "Saved 3D views",
     "viewSetsTitle": "Saved views",
@@ -157,6 +167,14 @@
     "density": "Number of values",
     "densityHint": "Few: only the governing value per diagram. Middle: as before. Many: start, end, extreme and quarter points on all members. Selected members always show their values.",
     "densityValue": "Level {{n}} of {{max}}"
+  },
+  "openFem3dSymbolScale": {
+    "size": "Size",
+    "hint": "Size relative to the automatic size (25–400%). Double-click the slider or click the value to return to 100%.",
+    "nodesAria": "Size of the nodes",
+    "supportsAria": "Size of the supports",
+    "reset": "Back to 100%",
+    "value": "{{n}}%"
   },
   "openFem3dViews": {
     "tab": "Views",
@@ -246,6 +264,7 @@
     "knoop": "Node",
     "stramien": "Grid line",
     "raster": "Grid",
+    "spoor": "Object tracking",
     "hoek": "Angle"
   },
   "section": "Section {{number}}",
@@ -553,7 +572,8 @@
     "snapExplain": {
       "knoop": "Snap to existing nodes. Takes precedence over grid lines and the grid.",
       "stramien": "Snap to grid lines and levels. Takes precedence over the grid.",
-      "raster": "Snap to the background grid — the weakest snap."
+      "raster": "Snap to the background grid — the weakest snap.",
+      "spoor": "Align with nodes and beams the mouse rested on and with the start point: tracking lines along X, Y and Z, intersections, extension, perpendicular and parallel. 3D only."
     }
   },
   "documentBar": {
@@ -1286,5 +1306,76 @@
     "gekopieerd": "Copied",
     "sluiten": "Close",
     "mislukt": "IFC import failed"
+  },
+  "selectieFilter": {
+    "title": "Selection filter",
+    "basisSelectie_one": "Works on the current selection: {{count}} element.",
+    "basisSelectie_other": "Works on the current selection: {{count}} elements.",
+    "basisModel_one": "Nothing is selected: the filter works on the whole model ({{count}} element).",
+    "basisModel_other": "Nothing is selected: the filter works on the whole model ({{count}} elements).",
+    "uitleg": "Tick values per property and choose whether to keep only those or remove them. Several properties apply together: what remains meets all of them. Keeping also drops whatever lacks the property.",
+    "groepAlgemeen": "General",
+    "groepStaven": "Members",
+    "groepLasten": "Loads",
+    "kenmerk": {
+      "type": "Type",
+      "level": "Level",
+      "material": "Material",
+      "profile": "Section",
+      "group": "Group",
+      "role": "Member type",
+      "direction": "Direction",
+      "length": "Length",
+      "loadCase": "Load case",
+      "loadKind": "Load kind"
+    },
+    "modus": {
+      "keep": "Keep only these",
+      "remove": "Remove these"
+    },
+    "modusVoor": "Keep or remove: {{kenmerk}}",
+    "type": {
+      "node": "Nodes",
+      "beam": "Members",
+      "plate": "Plates",
+      "load": "Loads",
+      "support": "Supports"
+    },
+    "richting": {
+      "horizontal": "Horizontal",
+      "vertical": "Vertical",
+      "sloped": "Sloped"
+    },
+    "richtingHint": "Vertical: |ex·Z| > 0.95; horizontal: |ex·Z| < 0.05; sloped in between.",
+    "levelHint": "Nodes on or linked to the level, and members and plates whose nodes all lie on it.",
+    "lastSoort": {
+      "nodal": "Nodal load",
+      "moment": "Moment",
+      "line": "Line load",
+      "memberPoint": "Point load on member",
+      "thermal": "Temperature load",
+      "surface": "Surface load",
+      "edge": "Edge load",
+      "edgePoint": "Point load on plate edge",
+      "loadPanel": "Load panel"
+    },
+    "zonder": "(none)",
+    "van": "from",
+    "tot": "to",
+    "vanMm": "Length from (mm)",
+    "totMm": "Length to (mm)",
+    "lengteBereik": "Members in the base: {{min}} – {{max}} mm; the limits are included.",
+    "geval": "Load case {{id}}",
+    "resultaat": "What remains",
+    "vanBasis": "of {{basis}}",
+    "over_one": "Remaining: {{over}} of {{count}} element",
+    "over_other": "Remaining: {{over}} of {{count}} elements",
+    "niets": "Nothing remains; Apply clears the selection.",
+    "meerdereGevallen": {
+      "titel": "Loads in several load cases",
+      "tekst": "The chosen loads lie in {{aantal}} load cases. They are all selected, but only those of the active case ({{geval}}) are shown."
+    },
+    "criteriaActief": "Active properties: {{count}}",
+    "wissen": "Clear"
   }
 }

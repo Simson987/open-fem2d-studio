@@ -62,6 +62,9 @@ import {
   type Windgebied,
 } from "../../../lib/wind/windEurocode";
 import {
+  isOpenFem3DGlobalMemberLoad,
+  openFem3DGlobalDirectionVector,
+  openFem3DGlobalMemberLoadFactor,
   openFem3DMemberAxes,
   parseOpenFem3DModel,
   type OpenFem3DBeam,
@@ -1005,8 +1008,17 @@ function belastingsom(model: OpenFem3DModel): Record<number, { fx: number; fy: n
   for (const load of model.memberLoads ?? []) {
     const beam = model.beams.find((b) => b.id === load.beamId)!;
     const a = nodeById.get(beam.startNodeId)!, e = nodeById.get(beam.endNodeId)!;
-    const { ey, ez } = openFem3DMemberAxes(a, e, beam.rollAngleRad ?? 0);
+    const { ex, ey, ez } = openFem3DMemberAxes(a, e, beam.rollAngleRad ?? 0);
     const lengte = load.endPositionM - load.startPositionM;
+    if (isOpenFem3DGlobalMemberLoad(load)) {
+      // Globale lijnlast (#80): langs de globale as, per projectie maal |e_x × d|.
+      const d = openFem3DGlobalDirectionVector(load.globalDirection);
+      const f = openFem3DGlobalMemberLoadFactor(ex, load.globalDirection, load.perProjection);
+      const totaal = f * (load.qStart + load.qEnd) / 2 * lengte;
+      const s = bij(load.caseId ?? 1);
+      s.fx += d[0] * totaal; s.fy += d[1] * totaal; s.fz += d[2] * totaal;
+      continue;
+    }
     const fy = (load.qyStart + load.qyEnd) / 2 * lengte;
     const fz = (load.qzStart + load.qzEnd) / 2 * lengte;
     const s = bij(load.caseId ?? 1);

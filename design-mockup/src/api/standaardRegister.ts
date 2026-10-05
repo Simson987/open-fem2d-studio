@@ -12,6 +12,7 @@ import { jaNee, obj, tekst } from "./schemaBouw";
 import { MODEL3D_GEOMETRIE_COMMANDOS } from "./commands/model3dGeometrie";
 import { MODEL3D_VOORWAARDEN_COMMANDOS } from "./commands/model3dVoorwaarden";
 import { MODEL3D_BEWERKEN_COMMANDOS } from "./commands/model3dBewerken";
+import { MODEL3D_SELECTIE_COMMANDOS } from "./commands/model3dSelectie";
 import { PROJECT_COMMANDOS } from "./commands/project";
 import { STRAMIEN_COMMANDOS } from "./commands/stramien";
 
@@ -46,6 +47,7 @@ export function standaardCommandos(): ApiCommando[] {
     ...MODEL3D_GEOMETRIE_COMMANDOS,
     ...MODEL3D_VOORWAARDEN_COMMANDOS,
     ...MODEL3D_BEWERKEN_COMMANDOS,
+    ...MODEL3D_SELECTIE_COMMANDOS,
     ...APP_COMMANDOS,
   ];
 }

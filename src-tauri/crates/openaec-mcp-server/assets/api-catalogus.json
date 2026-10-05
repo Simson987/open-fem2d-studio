@@ -124,6 +124,35 @@
             "type": "boolean",
             "description": "Trek-alleen staaf (bijv. een windverband): valt weg zolang hij op druk staat."
           },
+          "bedding": {
+            "type": "object",
+            "properties": {
+              "kKnPerM3": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Beddingsconstante k in kN/m³ voor de verticale richting (globaal Z; de grond ligt onder de staaf). Niet bij een (bijna) verticale staaf."
+              },
+              "widthM": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Contactbreedte b in m; de lijnstijfheid is k·b (kN/m per m)."
+              },
+              "kLateralKnPerM3": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Zijdelingse beddingsconstante in kN/m³: horizontaal loodrecht op de staafas, naar beide zijden, altijd lineair. Bij een staaf steiler dan 45° (een (schoor)paal) rondom, in twee richtingen loodrecht op de as; bij een loodrechte paal in X en Y."
+              },
+              "compressionOnly": {
+                "type": "boolean",
+                "description": "Alleen druk: de verticale veren vallen weg waar de staaf omhoog komt (de grond trekt niet)."
+              }
+            },
+            "required": [
+              "widthM"
+            ],
+            "additionalProperties": false,
+            "description": "Staaf op bedding (Winkler): de grond steunt de staaf over haar hele lengte; de rekenkern knipt de staaf fijn genoeg. Geef kKnPerM3, kLateralKnPerM3 of beide."
+          },
           "name": {
             "type": "string",
             "description": "Naam van de staaf (alleen weergave en rapport)."
@@ -174,6 +203,121 @@
         },
         "required": [
           "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.beam.pinToColumns",
+      "description": "Liggers scharnierend op kolommen aansluiten, zoals de knop in het lint: elk eind van een ligger (een staaf die niet bijna verticaal staat; een schuine spant telt mee) op een kolomkop krijgt My en Mz los. Een kolomkop is het bovenste eind van een kolom (|ex·Z| > 0,95) die naar beneden op een oplegging of veer steunt; het onderste eind telt niet, dus een balkrooster onder een kolomvoet of poer en een ligger waar een kolom op staat, blijven doorgaand. Kolommen blijven doorgaand; torsie blijft zoals hij is. Een eind blijft momentvast als het deel achter de ligger anders zou gaan draaien: reason cantilever (het hangt alleen aan die kolomkop, zoals een uitkraging of luifel) of hingeLine (het hangt alleen aan scharnieren op één lijn zonder staaf langs die lijn). Zonder beamIds alle staven, anders alleen de genoemde (een kolom ertussen wordt overgeslagen). Geeft de staafeinden die veranderden (changed, count) en die momentvast bleven (skipped); een eind dat al scharnierend was, telt niet mee.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "beamIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een staaf."
+            },
+            "minItems": 1,
+            "description": "Alleen deze staven; weglaten = alle staven."
+          }
+        },
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.beam.setBedding",
+      "description": "Eén of meer 3D-staven op dezelfde bedding zetten (Winkler, zoals het vinkje Op bedding in het eigenschappenpaneel), of de bedding weghalen met null. Eén stap ongedaan maken. Een (bijna) verticale staaf krijgt alleen een zijdelingse bedding (kLateralKnPerM3); een verticale k wordt dan geweigerd.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "beamIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een staaf."
+            },
+            "minItems": 1,
+            "description": "De staven."
+          },
+          "bedding": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kKnPerM3": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Beddingsconstante k in kN/m³ voor de verticale richting (globaal Z; de grond ligt onder de staaf). Niet bij een (bijna) verticale staaf."
+                  },
+                  "widthM": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Contactbreedte b in m; de lijnstijfheid is k·b (kN/m per m)."
+                  },
+                  "kLateralKnPerM3": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Zijdelingse beddingsconstante in kN/m³: horizontaal loodrecht op de staafas, naar beide zijden, altijd lineair. Bij een staaf steiler dan 45° (een (schoor)paal) rondom, in twee richtingen loodrecht op de as; bij een loodrechte paal in X en Y."
+                  },
+                  "compressionOnly": {
+                    "type": "boolean",
+                    "description": "Alleen druk: de verticale veren vallen weg waar de staaf omhoog komt (de grond trekt niet)."
+                  }
+                },
+                "required": [
+                  "widthM"
+                ],
+                "additionalProperties": false,
+                "description": "Staaf op bedding (Winkler): de grond steunt de staaf over haar hele lengte; de rekenkern knipt de staaf fijn genoeg. Geef kKnPerM3, kLateralKnPerM3 of beide."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "De bedding voor alle genoemde staven; null haalt haar weg."
+          }
+        },
+        "required": [
+          "beamIds",
+          "bedding"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.beam.setEndHinge",
+      "description": "Eén eind van een 3D-staaf scharnierend maken of weer vast, zoals het gereedschap Scharnier aan staafeind: My en Mz aan dat eind samen los (hinged true) of vast (false); torsie blijft zoals hij is. Zonder hinged wisselt het, zoals een klik: stonden My en Mz daar allebei los, dan gaan ze vast, anders allebei los. Zonder losse vrijheidsgraad verdwijnt het scharnierveld (momentvast). Een losse combinatie (bijv. alleen My) zet je met model3d.beam.update (releases).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "beamId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de staaf."
+          },
+          "end": {
+            "type": "string",
+            "enum": [
+              "start",
+              "end"
+            ],
+            "description": "start: het eind bij startNodeId; end: het eind bij endNodeId."
+          },
+          "hinged": {
+            "type": "boolean",
+            "description": "true: My en Mz los; false: vast; weglaten: wisselen."
+          }
+        },
+        "required": [
+          "beamId",
+          "end"
         ],
         "additionalProperties": false
       },
@@ -369,6 +513,43 @@
             "type": "boolean",
             "description": "Trek-alleen staaf (bijv. een windverband): valt weg zolang hij op druk staat."
           },
+          "bedding": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kKnPerM3": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Beddingsconstante k in kN/m³ voor de verticale richting (globaal Z; de grond ligt onder de staaf). Niet bij een (bijna) verticale staaf."
+                  },
+                  "widthM": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Contactbreedte b in m; de lijnstijfheid is k·b (kN/m per m)."
+                  },
+                  "kLateralKnPerM3": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Zijdelingse beddingsconstante in kN/m³: horizontaal loodrecht op de staafas, naar beide zijden, altijd lineair. Bij een staaf steiler dan 45° (een (schoor)paal) rondom, in twee richtingen loodrecht op de as; bij een loodrechte paal in X en Y."
+                  },
+                  "compressionOnly": {
+                    "type": "boolean",
+                    "description": "Alleen druk: de verticale veren vallen weg waar de staaf omhoog komt (de grond trekt niet)."
+                  }
+                },
+                "required": [
+                  "widthM"
+                ],
+                "additionalProperties": false,
+                "description": "Staaf op bedding (Winkler): de grond steunt de staaf over haar hele lengte; de rekenkern knipt de staaf fijn genoeg. Geef kKnPerM3, kLateralKnPerM3 of beide."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Staaf op bedding; null haalt de bedding weg."
+          },
           "name": {
             "oneOf": [
               {
@@ -505,7 +686,7 @@
     },
     {
       "name": "model3d.load.member.add",
-      "description": "Een (trapeziumvormige) lijnlast op een staaf toevoegen, in lokale y/z. Zonder positie: over de hele staaf.",
+      "description": "Een (trapeziumvormige) lijnlast op een staaf toevoegen: in lokale y/z (qyStart … qzEnd), of met globalDirection in een globale richting (qStart/qEnd, per staafmeter of met perProjection per meter projectie). Zonder positie: over de hele staaf.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -521,7 +702,7 @@
           },
           "qyStart": {
             "type": "number",
-            "description": "Lijnlast in lokale y aan het begin, kN/m."
+            "description": "Lijnlast in lokale y aan het begin, kN/m. Alleen bij een lokale last."
           },
           "qyEnd": {
             "type": "number",
@@ -529,11 +710,32 @@
           },
           "qzStart": {
             "type": "number",
-            "description": "Lijnlast in lokale z aan het begin, kN/m."
+            "description": "Lijnlast in lokale z aan het begin, kN/m. Alleen bij een lokale last."
           },
           "qzEnd": {
             "type": "number",
             "description": "Lijnlast in lokale z aan het eind, kN/m."
+          },
+          "globalDirection": {
+            "type": "string",
+            "enum": [
+              "x",
+              "y",
+              "z"
+            ],
+            "description": "Globale richting van de last: x, y of z. Met dit veld is het een globale lijnlast (qStart/qEnd langs die as, de kern zet hem om naar de staaf); zonder is het een lokale last (qy/qz)."
+          },
+          "qStart": {
+            "type": "number",
+            "description": "Globale lijnlast aan het begin, kN/m, met teken langs de globale as (z negatief = omlaag). Alleen met globalDirection."
+          },
+          "qEnd": {
+            "type": "number",
+            "description": "Globale lijnlast aan het eind, kN/m; ontbreekt bij toevoegen = qStart."
+          },
+          "perProjection": {
+            "type": "boolean",
+            "description": "Alleen met globalDirection. true: per meter projectie van de staaf op het vlak loodrecht op de lastrichting (sneeuw op een schuin dak: per horizontale meter); false of ontbreekt: per meter staaflengte."
           },
           "startPositionM": {
             "type": "number",
@@ -574,7 +776,7 @@
     },
     {
       "name": "model3d.load.member.update",
-      "description": "Waarden of positie van een lijnlast wijzigen; niet genoemde velden blijven.",
+      "description": "Waarden, richting of positie van een lijnlast wijzigen; niet genoemde velden blijven. globalDirection maakt een lokale last globaal (met qStart), null maakt hem weer lokaal (met qy/qz).",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -585,7 +787,7 @@
           },
           "qyStart": {
             "type": "number",
-            "description": "Lijnlast in lokale y aan het begin, kN/m."
+            "description": "Lijnlast in lokale y aan het begin, kN/m. Alleen bij een lokale last."
           },
           "qyEnd": {
             "type": "number",
@@ -593,11 +795,40 @@
           },
           "qzStart": {
             "type": "number",
-            "description": "Lijnlast in lokale z aan het begin, kN/m."
+            "description": "Lijnlast in lokale z aan het begin, kN/m. Alleen bij een lokale last."
           },
           "qzEnd": {
             "type": "number",
             "description": "Lijnlast in lokale z aan het eind, kN/m."
+          },
+          "globalDirection": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "description": "Globale richting van de last: x, y of z. Met dit veld is het een globale lijnlast (qStart/qEnd langs die as, de kern zet hem om naar de staaf); zonder is het een lokale last (qy/qz)."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Globale richting x, y of z (een lokale last wordt globaal; geef dan qStart), of null: weer een lokale last (geef dan qy/qz). Ontbreekt = blijft."
+          },
+          "qStart": {
+            "type": "number",
+            "description": "Globale lijnlast aan het begin, kN/m, met teken langs de globale as (z negatief = omlaag). Alleen met globalDirection."
+          },
+          "qEnd": {
+            "type": "number",
+            "description": "Globale lijnlast aan het eind, kN/m; ontbreekt bij toevoegen = qStart."
+          },
+          "perProjection": {
+            "type": "boolean",
+            "description": "Alleen met globalDirection. true: per meter projectie van de staaf op het vlak loodrecht op de lastrichting (sneeuw op een schuin dak: per horizontale meter); false of ontbreekt: per meter staaflengte."
           },
           "startPositionM": {
             "type": "number",
@@ -811,6 +1042,111 @@
         },
         "required": [
           "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.load.placePoint",
+      "description": "Een puntlast plaatsen zoals het gereedschap Puntlast in de app: op een knoop een knooplast (globale assen), op een staaf een staafpuntlast op die plek (lokale y/z; de staaf blijft heel). Zonder waarden: −10 kN omlaag (Fz op een knoop, Pz op een staaf). fx … mz alleen bij een knoop, py en pz alleen bij een staaf.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "node"
+                  },
+                  "nodeId": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "Id van een bestaande 3D-knoop."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "nodeId"
+                ],
+                "additionalProperties": false,
+                "description": "Een bestaande knoop."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "beam"
+                  },
+                  "beamId": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "Id van een bestaande 3D-staaf."
+                  },
+                  "t": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Plek als fractie van de staaflengte: 0 = beginknoop, 1 = eindknoop."
+                  },
+                  "positionM": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Plek in m vanaf de beginknoop."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "beamId"
+                ],
+                "additionalProperties": false,
+                "description": "Een plek op een staaf: t óf positionM. De last komt op die plek."
+              }
+            ],
+            "description": "Waar de puntlast komt."
+          },
+          "caseId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Belastinggeval; ontbreekt = het actieve geval van het project."
+          },
+          "fx": {
+            "type": "number",
+            "description": "Kracht in X, kN."
+          },
+          "fy": {
+            "type": "number",
+            "description": "Kracht in Y, kN."
+          },
+          "fz": {
+            "type": "number",
+            "description": "Kracht in Z, kN (negatief = omlaag)."
+          },
+          "mx": {
+            "type": "number",
+            "description": "Moment om X, kNm."
+          },
+          "my": {
+            "type": "number",
+            "description": "Moment om Y, kNm."
+          },
+          "mz": {
+            "type": "number",
+            "description": "Moment om Z, kNm."
+          },
+          "py": {
+            "type": "number",
+            "description": "Puntlast in lokale y, kN."
+          },
+          "pz": {
+            "type": "number",
+            "description": "Puntlast in lokale z, kN."
+          }
+        },
+        "required": [
+          "target"
         ],
         "additionalProperties": false
       },
@@ -1660,7 +1996,7 @@
     },
     {
       "name": "model3d.selection.delete",
-      "description": "Knopen, staven en platen in één keer verwijderen, met alles wat eraan hangt (zoals Delete in de app).",
+      "description": "Knopen, staven, platen en lasten in één keer verwijderen, met alles wat eraan hangt (zoals Delete in de app). De lastvelden zijn die van model3d.selection.filter, zodat een gefilterde selectie met lasten er zo in kan; een selectie met alleen lasten mag ook. De uitkomst noemt alles wat verdween, ook wat met een knoop, staaf of plaat meeging.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1690,6 +2026,374 @@
               "description": "Id van een 3D-plaat."
             },
             "description": "Platen (hun knopen en openingen gaan mee)."
+          },
+          "nodalLoadIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een knooplast."
+            },
+            "description": "Knooplasten die weg moeten."
+          },
+          "memberLoadIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een lijnlast."
+            },
+            "description": "Lijnlasten die weg moeten."
+          },
+          "memberPointLoadIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een puntlast op een staaf."
+            },
+            "description": "Puntlasten op staven die weg moeten."
+          },
+          "thermalLoadIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een temperatuurlast."
+            },
+            "description": "Temperatuurlasten die weg moeten."
+          },
+          "surfaceLoadIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een vlaklast."
+            },
+            "description": "Vlaklasten die weg moeten."
+          },
+          "loadPanelIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een belastingvlak."
+            },
+            "description": "Belastingvlakken die weg moeten."
+          }
+        },
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.selection.filter",
+      "description": "Een selectie verfijnen zoals het venster Selectiefilter: id's in, id's uit. Zonder id's werkt het op het hele model. Criteria op type, profiel, materiaal, groep, richting, level, lengte (mm), belastinggeval en soort last; per criterium keep (alleen deze houden) of remove (deze weghalen); alle criteria samen (EN). Het document verandert niet. In de draaiende app zet select: true de uitkomst als selectie (zoals Toepassen); buiten de app zet het niets (selectionApplied: false).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een knoop."
+            },
+            "description": "Knopen in de selectie."
+          },
+          "beamIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een staaf."
+            },
+            "description": "Staven in de selectie."
+          },
+          "plateIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een plaat."
+            },
+            "description": "Platen in de selectie."
+          },
+          "nodalLoadIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een knooplast."
+            },
+            "description": "Knooplasten in de selectie."
+          },
+          "memberLoadIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een lijnlast."
+            },
+            "description": "Lijnlasten in de selectie."
+          },
+          "memberPointLoadIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een puntlast op een staaf."
+            },
+            "description": "Puntlasten op staven in de selectie."
+          },
+          "thermalLoadIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een temperatuurlast."
+            },
+            "description": "Temperatuurlasten in de selectie."
+          },
+          "surfaceLoadIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een vlaklast."
+            },
+            "description": "Vlaklasten in de selectie."
+          },
+          "loadPanelIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een belastingvlak."
+            },
+            "description": "Belastingvlakken in de selectie."
+          },
+          "criteria": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "property": {
+                      "const": "type"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "keep",
+                        "remove"
+                      ],
+                      "description": "keep: alleen wat voldoet houden (wat het kenmerk niet heeft, valt ook weg); remove: wat voldoet weghalen."
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "node",
+                          "beam",
+                          "plate",
+                          "load",
+                          "support"
+                        ]
+                      },
+                      "description": "node, beam, plate, load, support (een knoop met een oplegging)."
+                    }
+                  },
+                  "required": [
+                    "property",
+                    "mode",
+                    "values"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Type element."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "property": {
+                      "type": "string",
+                      "enum": [
+                        "profile",
+                        "material",
+                        "group",
+                        "level"
+                      ]
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "keep",
+                        "remove"
+                      ],
+                      "description": "keep: alleen wat voldoet houden (wat het kenmerk niet heeft, valt ook weg); remove: wat voldoet weghalen."
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Profielnaam (\"HEA 200\"), materiaal, groep of level-id; \"\" = zonder."
+                    }
+                  },
+                  "required": [
+                    "property",
+                    "mode",
+                    "values"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Profiel of materiaal (staaf; materiaal ook plaat), groep (staaf), level (knoop, staaf of plaat op dat level; id uit model3d.levels.get)."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "property": {
+                      "const": "direction"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "keep",
+                        "remove"
+                      ],
+                      "description": "keep: alleen wat voldoet houden (wat het kenmerk niet heeft, valt ook weg); remove: wat voldoet weghalen."
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "horizontal",
+                          "vertical",
+                          "sloped"
+                        ]
+                      },
+                      "description": "vertical: |ex·Z| > 0,95; horizontal: |ex·Z| < 0,05; anders sloped."
+                    }
+                  },
+                  "required": [
+                    "property",
+                    "mode",
+                    "values"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Richting van een staaf."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "property": {
+                      "const": "loadCase"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "keep",
+                        "remove"
+                      ],
+                      "description": "keep: alleen wat voldoet houden (wat het kenmerk niet heeft, valt ook weg); remove: wat voldoet weghalen."
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "description": "Id van een belastinggeval."
+                      }
+                    }
+                  },
+                  "required": [
+                    "property",
+                    "mode",
+                    "values"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Belastinggeval van een last."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "property": {
+                      "const": "loadKind"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "keep",
+                        "remove"
+                      ],
+                      "description": "keep: alleen wat voldoet houden (wat het kenmerk niet heeft, valt ook weg); remove: wat voldoet weghalen."
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "nodal",
+                          "line",
+                          "memberPoint",
+                          "thermal",
+                          "surface",
+                          "loadPanel"
+                        ]
+                      },
+                      "description": "nodal (knooplast), line (lijnlast), memberPoint (puntlast op staaf), thermal, surface (vlaklast), loadPanel (belastingvlak)."
+                    }
+                  },
+                  "required": [
+                    "property",
+                    "mode",
+                    "values"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Soort last."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "property": {
+                      "const": "length"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "keep",
+                        "remove"
+                      ],
+                      "description": "keep: alleen wat voldoet houden (wat het kenmerk niet heeft, valt ook weg); remove: wat voldoet weghalen."
+                    },
+                    "fromMm": {
+                      "type": "number",
+                      "minimum": 0,
+                      "description": "Vanaf deze lengte, mm (telt mee)."
+                    },
+                    "toMm": {
+                      "type": "number",
+                      "minimum": 0,
+                      "description": "Tot en met deze lengte, mm."
+                    }
+                  },
+                  "required": [
+                    "property",
+                    "mode"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Lengte van een staaf in mm; van en/of tot."
+                }
+              ],
+              "description": "Een criterium."
+            },
+            "description": "De criteria; een criterium zonder waarden doet niet mee."
+          },
+          "select": {
+            "type": "boolean",
+            "description": "In de draaiende app de uitkomst als selectie zetten (zoals Toepassen)."
           }
         },
         "additionalProperties": false
@@ -1711,6 +2415,167 @@
             "description": "Kruisregel: van twee kruisende trek-alleen staven blijft de staaf met de grootste N actief."
           }
         },
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.support.place",
+      "description": "Een oplegging of veer plaatsen zoals de gereedschappen Oplegging en Veer in de app: op een knoop; op een staaf (de staaf wordt op die plek gesplitst zoals bij een tussenknoop, lasten en eindscharnieren blijven goed verdeeld; op t = 0 of 1 de eindknoop); op een plaat (nieuwe knoop in het middenvlak, het punt loodrecht geprojecteerd, met het level van de plaat; een punt in een opening of buiten de plaat wordt geweigerd); of op een vrij punt (de knoop die daar ligt, of een nieuwe). Geef preset (oplegging) óf springAxis (veer). Knoop en oplegging zijn één bewerking.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "node"
+                  },
+                  "nodeId": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "Id van een bestaande 3D-knoop."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "nodeId"
+                ],
+                "additionalProperties": false,
+                "description": "Een bestaande knoop."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "beam"
+                  },
+                  "beamId": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "Id van een bestaande 3D-staaf."
+                  },
+                  "t": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Plek als fractie van de staaflengte: 0 = beginknoop, 1 = eindknoop."
+                  },
+                  "positionM": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Plek in m vanaf de beginknoop."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "beamId"
+                ],
+                "additionalProperties": false,
+                "description": "Een plek op een staaf: t óf positionM. De staaf wordt daar gesplitst."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "plate"
+                  },
+                  "plateId": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "Id van een bestaande 3D-plaat."
+                  },
+                  "x": {
+                    "type": "number",
+                    "description": "x in m (globaal)."
+                  },
+                  "y": {
+                    "type": "number",
+                    "description": "y in m (globaal)."
+                  },
+                  "z": {
+                    "type": "number",
+                    "description": "z in m (globaal, omhoog)."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "plateId",
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false,
+                "description": "Een punt op of bij een plaat; het wordt loodrecht op het middenvlak geprojecteerd."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "point"
+                  },
+                  "x": {
+                    "type": "number",
+                    "description": "x in m (globaal)."
+                  },
+                  "y": {
+                    "type": "number",
+                    "description": "y in m (globaal)."
+                  },
+                  "z": {
+                    "type": "number",
+                    "description": "z in m (globaal, omhoog)."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false,
+                "description": "Een vrij punt (zoals een klik op het werkvlak)."
+              }
+            ],
+            "description": "Waar de oplegging of veer komt."
+          },
+          "preset": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "pinned",
+              "xRoller",
+              "yRoller",
+              "zRoller",
+              "revoluteX",
+              "revoluteY",
+              "revoluteZ"
+            ],
+            "description": "Oplegging: fixed (inklemming), pinned (scharnier), x-/y-/zRoller, revoluteX/Y/Z."
+          },
+          "springAxis": {
+            "type": "string",
+            "enum": [
+              "kx",
+              "ky",
+              "kz",
+              "krx",
+              "kry",
+              "krz"
+            ],
+            "description": "Veer: kx, ky, kz (translatie, kN/m) of krx, kry, krz (rotatie, kNm/rad), in globale assen. Andere veren op de knoop blijven."
+          },
+          "stiffness": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Stijfheid van de veer; ontbreekt = 10 000 kN/m (translatie) of 1000 kNm/rad (rotatie)."
+          }
+        },
+        "required": [
+          "target"
+        ],
         "additionalProperties": false
       },
       "kind": "document"
@@ -1926,7 +2791,7 @@
     },
     {
       "name": "model3d.transform",
-      "description": "Een selectie verplaatsen, kopiëren, roteren of spiegelen, zoals het transformatiepaneel. De uitkomst noemt de selectie erna (bij kopiëren de nieuwe elementen).",
+      "description": "Een selectie verplaatsen, kopiëren, roteren of spiegelen, zoals het transformatiepaneel. De uitkomst noemt de selectie erna (bij kopiëren de nieuwe elementen). Zou een staaf op een verticale bedding (kKnPerM3) daardoor (bijna) verticaal komen te staan, dan wordt de bewerking geweigerd.",
       "inputSchema": {
         "type": "object",
         "properties": {

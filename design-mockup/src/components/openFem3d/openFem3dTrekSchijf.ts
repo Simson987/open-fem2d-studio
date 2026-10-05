@@ -11,16 +11,21 @@
  * Pure rekencode zonder DOM: de sidecarbundel neemt hem mee via
  * `openFem3dSolver.ts`.
  */
-import type { OpenFem3DDiaphragm, OpenFem3DModel } from "./openFem3dModel";
+import { beddingTrekAlleenMelding, type OpenFem3DDiaphragm, type OpenFem3DModel } from "./openFem3dModel";
 
 /** Toegestaan hoogteverschil binnen één schijf, in m (gelijk aan de rekenkern). */
 export const OPEN_FEM_3D_DIAPHRAGM_HEIGHT_TOLERANCE_M = 1e-3;
 
-/** Zet trek-alleen aan of uit op de gegeven staven; uit = het veld verdwijnt. */
+/**
+ * Zet trek-alleen aan of uit op de gegeven staven; uit = het veld verdwijnt.
+ * Een staaf op bedding (#106) kan niet trek-alleen worden: geweigerd.
+ */
 export function setOpenFem3DTensionOnly(
   model: OpenFem3DModel, beamIds: readonly number[], on: boolean,
 ): OpenFem3DModel {
   const ids = new Set(beamIds);
+  const opBedding = on ? model.beams.find((beam) => ids.has(beam.id) && beam.bedding) : undefined;
+  if (opBedding) throw new Error(beddingTrekAlleenMelding(opBedding.id));
   return {
     ...model,
     beams: model.beams.map((beam) => {

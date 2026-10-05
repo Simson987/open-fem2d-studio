@@ -50,6 +50,7 @@ function nepApp(start = leegDocument()) {
     opslaan: async (pad) => { log.push(["opslaan", pad ?? null]); return pad ?? "C:/huidig.ifcfem"; },
     openen: async (pad) => { log.push(["openen", pad]); return pad; },
     heeftNietOpgeslagenWerk: () => acties.nietOpgeslagen === true,
+    zetSelectie3D: (selectie) => log.push(["zetSelectie3D", selectie]),
   };
   return { acties, log, doc: () => doc };
 }
@@ -182,6 +183,25 @@ console.log("\n[7b] een belastinggeval verwijderen in een 3D-project: één stap
   await voerApiUitInApp(app3d.acties, "model3d.node.add", { x: 1, y: 0, z: 0 });
   check("een gewone 3D-bewerking krijgt geen gevallenstap mee",
     JSON.stringify(app3d.log) === JSON.stringify([["bewerk3D", "zonder stramien"]]), JSON.stringify(app3d.log));
+}
+
+console.log("\n[7c] model3d.selection.filter met select: de app zet de selectie (issue #94)");
+{
+  const filterApp = nepApp();
+  for (const [x, z] of [[0, 0], [6, 0], [0, 4]]) await voerApiUitInApp(filterApp.acties, "model3d.node.add", { x, y: 0, z });
+  await voerApiUitInApp(filterApp.acties, "model3d.beam.add", { startNodeId: 1, endNodeId: 2 });
+  await voerApiUitInApp(filterApp.acties, "model3d.beam.add", { startNodeId: 1, endNodeId: 3 });
+  filterApp.log.length = 0;
+  const gefilterd = await voerApiUitInApp(filterApp.acties, "model3d.selection.filter",
+    { criteria: [{ property: "direction", mode: "keep", values: ["vertical"] }], select: true });
+  check("select: true komt via voerApiUitInApp bij acties.zetSelectie3D, met de uitkomst als selectie",
+    gefilterd.ok && gefilterd.output.selectionApplied === true
+    && JSON.stringify(filterApp.log) === JSON.stringify([["zetSelectie3D", { type: "beam", id: 2 }]]),
+    JSON.stringify([gefilterd, filterApp.log]));
+  filterApp.log.length = 0;
+  const zonder = await voerApiUitInApp(filterApp.acties, "model3d.selection.filter", { beamIds: [1, 2] });
+  check("zonder select blijft de selectie in de app staan", zonder.ok && zonder.output.selectionApplied === false
+    && filterApp.log.length === 0, JSON.stringify(filterApp.log));
 }
 
 console.log("\n[8] het bedieningskanaal: api_catalogus en api_uitvoeren");

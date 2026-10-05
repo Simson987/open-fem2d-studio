@@ -9,10 +9,10 @@ import { documentCommando, nietGevonden, nieuwElement, verdwenenIds } from "../c
 import { metModel3d, model3dVan } from "../projectDocument";
 import { eenVan, geheel, getal, id, jaNee, keuze, lijst, obj, ofNull, tekst } from "../schemaBouw";
 import {
-  addOpenFem3DBeam, addOpenFem3DNode, addOpenFem3DPlate, addOpenFem3DPlateOpening, flipOpenFem3DBeamLocalAxes, removeOpenFem3DBeam,
-  removeOpenFem3DNode, removeOpenFem3DPlate, setOpenFem3DReleasePreset, splitOpenFem3DBeam, updateOpenFem3DBeam, updateOpenFem3DNode,
-  updateOpenFem3DPlate,
-  type OpenFem3DBeamPatch, type OpenFem3DEndReleases, type OpenFem3DModel, type OpenFem3DPlateBoundarySegment,
+  addOpenFem3DBeam, addOpenFem3DNode, addOpenFem3DPlate, addOpenFem3DPlateOpening, flipOpenFem3DBeamLocalAxes, pinOpenFem3DBeamsToColumns,
+  removeOpenFem3DBeam, removeOpenFem3DNode, removeOpenFem3DPlate, setOpenFem3DBeamBedding, setOpenFem3DBeamEndHinge, setOpenFem3DReleasePreset,
+  splitOpenFem3DBeam, updateOpenFem3DBeam, updateOpenFem3DNode, updateOpenFem3DPlate,
+  type OpenFem3DBeamBedding, type OpenFem3DBeamEnd, type OpenFem3DBeamPatch, type OpenFem3DEndReleases, type OpenFem3DModel, type OpenFem3DPlateBoundarySegment,
   type OpenFem3DPlateEdgeSupport, type OpenFem3DReleasePreset,
 } from "../../components/openFem3d/openFem3dModel";
 
@@ -46,12 +46,20 @@ const scharnieren = obj({
   torsionStart: jaNee("Torsiescharnier aan het begin."),
   torsionEnd: jaNee("Torsiescharnier aan het eind."),
 }, [], "Eindscharnieren in lokale assen; een ontbrekende vrijheidsgraad is vast.");
+/** Staaf op bedding (#106): dezelfde velden als het model en het rekencontract. */
+const bedding = obj({
+  kKnPerM3: getal("Beddingsconstante k in kN/m³ voor de verticale richting (globaal Z; de grond ligt onder de staaf). Niet bij een (bijna) verticale staaf.", { exclusiveMinimum: 0 }),
+  widthM: getal("Contactbreedte b in m; de lijnstijfheid is k·b (kN/m per m).", { exclusiveMinimum: 0 }),
+  kLateralKnPerM3: getal("Zijdelingse beddingsconstante in kN/m³: horizontaal loodrecht op de staafas, naar beide zijden, altijd lineair. Bij een staaf steiler dan 45° (een (schoor)paal) rondom, in twee richtingen loodrecht op de as; bij een loodrechte paal in X en Y.", { exclusiveMinimum: 0 }),
+  compressionOnly: jaNee("Alleen druk: de verticale veren vallen weg waar de staaf omhoog komt (de grond trekt niet)."),
+}, ["widthM"], "Staaf op bedding (Winkler): de grond steunt de staaf over haar hele lengte; de rekenkern knipt de staaf fijn genoeg. Geef kKnPerM3, kLateralKnPerM3 of beide.");
 const staafVelden = {
   profileName: tekst("Profielnaam uit de bibliotheek, bijv. \"IPE 200\", \"HEA 300\", \"CHS 88.9x4\", \"Strip 80x10\".", { minLength: 1 }),
   material: tekst("Materiaal, bijv. \"S235\", \"S355\", \"C24\", \"C30/37\".", { minLength: 1 }),
   rollAngleDeg: getal("Rotatie van de lokale y/z-assen om de staafas, in graden."),
   releases: scharnieren,
   tensionOnly: jaNee("Trek-alleen staaf (bijv. een windverband): valt weg zolang hij op druk staat."),
+  bedding,
   name: tekst("Naam van de staaf (alleen weergave en rapport)."),
   group: tekst("Groep, bijv. \"kolom\", \"spantligger\", \"windverband\"."),
 };
@@ -66,7 +74,7 @@ const contour = (wat: string) => lijst(knoopId, `Knoopvolgorde rond ${wat}; alle
 
 interface StaafVeldenInvoer {
   profileName?: string; material?: string; rollAngleDeg?: number; releases?: Partial<OpenFem3DEndReleases>;
-  tensionOnly?: boolean; name?: string; group?: string;
+  tensionOnly?: boolean; bedding?: OpenFem3DBeamBedding; name?: string; group?: string;
 }
 type Wisbaar<T> = { [K in keyof T]?: T[K] | null };
 
@@ -166,13 +174,33 @@ const staafWijzigen = documentCommando<{ id: number; startNodeId?: number; endNo
     startNodeId: knoopId, endNodeId: knoopId,
     profileName: ofNull(staafVelden.profileName), material: ofNull(staafVelden.material),
     rollAngleDeg: ofNull(staafVelden.rollAngleDeg), releases: ofNull(scharnieren),
-    tensionOnly: staafVelden.tensionOnly, name: ofNull(staafVelden.name), group: ofNull(staafVelden.group),
+    tensionOnly: staafVelden.tensionOnly, bedding: ofNull(bedding, "Staaf op bedding; null haalt de bedding weg."),
+    name: ofNull(staafVelden.name), group: ofNull(staafVelden.group),
   }, ["id"]),
   uitvoeren: ({ id: beamId, ...rest }, document) => {
     const huidig = model3dVan(document);
     vindStaaf(huidig, beamId);
     const model = updateOpenFem3DBeam(huidig, beamId, naarPatch(rest));
     return { uitkomst: { beam: vindStaaf(model, beamId) }, document: metModel3d(document, model) };
+  },
+});
+
+const staafBedding = documentCommando<{ beamIds: number[]; bedding: OpenFem3DBeamBedding | null }, unknown>({
+  naam: "model3d.beam.setBedding",
+  beschrijving: "Eén of meer 3D-staven op dezelfde bedding zetten (Winkler, zoals het vinkje Op bedding in het eigenschappenpaneel), of de bedding weghalen met null. Eén stap ongedaan maken. Een (bijna) verticale staaf krijgt alleen een zijdelingse bedding (kLateralKnPerM3); een verticale k wordt dan geweigerd.",
+  invoer: obj({
+    beamIds: lijst(id("Id van een staaf."), "De staven.", { minItems: 1 }),
+    bedding: ofNull(bedding, "De bedding voor alle genoemde staven; null haalt haar weg."),
+  }, ["beamIds", "bedding"]),
+  uitvoeren: ({ beamIds, bedding: nieuw }, document) => {
+    const huidig = model3dVan(document);
+    const ids = [...new Set(beamIds)];
+    for (const beamId of ids) vindStaaf(huidig, beamId);
+    const model = setOpenFem3DBeamBedding(huidig, ids, nieuw);
+    return {
+      uitkomst: { beamIds: ids, bedding: ids.map((beamId) => ({ beamId, bedding: vindStaaf(model, beamId).bedding ?? null })) },
+      document: metModel3d(document, model),
+    };
   },
 });
 
@@ -242,6 +270,44 @@ const scharnierSituatie = documentCommando<{ beamIds: number[]; preset: OpenFem3
     for (const beamId of ids) vindStaaf(huidig, beamId);
     const model = setOpenFem3DReleasePreset(huidig, ids, preset);
     return { uitkomst: { beamIds: ids, preset }, document: metModel3d(document, model) };
+  },
+});
+
+const staafeindScharnier = documentCommando<{ beamId: number; end: OpenFem3DBeamEnd; hinged?: boolean }, unknown>({
+  naam: "model3d.beam.setEndHinge",
+  beschrijving: "Eén eind van een 3D-staaf scharnierend maken of weer vast, zoals het gereedschap Scharnier aan staafeind: My en Mz aan dat eind samen los (hinged true) of vast (false); torsie blijft zoals hij is. Zonder hinged wisselt het, zoals een klik: stonden My en Mz daar allebei los, dan gaan ze vast, anders allebei los. Zonder losse vrijheidsgraad verdwijnt het scharnierveld (momentvast). Een losse combinatie (bijv. alleen My) zet je met model3d.beam.update (releases).",
+  invoer: obj({
+    beamId: id("Id van de staaf."),
+    end: keuze(["start", "end"], "start: het eind bij startNodeId; end: het eind bij endNodeId."),
+    hinged: jaNee("true: My en Mz los; false: vast; weglaten: wisselen."),
+  }, ["beamId", "end"]),
+  uitvoeren: ({ beamId, end, hinged }, document) => {
+    const huidig = model3dVan(document);
+    vindStaaf(huidig, beamId);
+    const resultaat = setOpenFem3DBeamEndHinge(huidig, beamId, end, hinged);
+    const beam = resultaat.model.beams.find((item) => item.id === beamId)!;
+    return {
+      uitkomst: { beamId, end, hinged: resultaat.hinged, releases: beam.releases ?? null },
+      document: metModel3d(document, resultaat.model),
+    };
+  },
+});
+
+const liggersOpKolommen = documentCommando<{ beamIds?: number[] }, unknown>({
+  naam: "model3d.beam.pinToColumns",
+  beschrijving: "Liggers scharnierend op kolommen aansluiten, zoals de knop in het lint: elk eind van een ligger (een staaf die niet bijna verticaal staat; een schuine spant telt mee) op een kolomkop krijgt My en Mz los. Een kolomkop is het bovenste eind van een kolom (|ex·Z| > 0,95) die naar beneden op een oplegging of veer steunt; het onderste eind telt niet, dus een balkrooster onder een kolomvoet of poer en een ligger waar een kolom op staat, blijven doorgaand. Kolommen blijven doorgaand; torsie blijft zoals hij is. Een eind blijft momentvast als het deel achter de ligger anders zou gaan draaien: reason cantilever (het hangt alleen aan die kolomkop, zoals een uitkraging of luifel) of hingeLine (het hangt alleen aan scharnieren op één lijn zonder staaf langs die lijn). Zonder beamIds alle staven, anders alleen de genoemde (een kolom ertussen wordt overgeslagen). Geeft de staafeinden die veranderden (changed, count) en die momentvast bleven (skipped); een eind dat al scharnierend was, telt niet mee.",
+  invoer: obj({
+    beamIds: lijst(id("Id van een staaf."), "Alleen deze staven; weglaten = alle staven.", { minItems: 1 }),
+  }, []),
+  uitvoeren: ({ beamIds }, document) => {
+    const huidig = model3dVan(document);
+    const ids = beamIds === undefined ? undefined : [...new Set(beamIds)];
+    for (const beamId of ids ?? []) vindStaaf(huidig, beamId);
+    const resultaat = pinOpenFem3DBeamsToColumns(huidig, ids);
+    return {
+      uitkomst: { changed: resultaat.changed, count: resultaat.changed.length, skipped: resultaat.skipped },
+      document: metModel3d(document, resultaat.model),
+    };
   },
 });
 
@@ -322,6 +388,7 @@ const openingToevoegen = documentCommando<{
 
 export const MODEL3D_GEOMETRIE_COMMANDOS = [
   modelLezen, knoopToevoegen, knoopWijzigen, knoopVerwijderen,
-  staafToevoegen, staafWijzigen, staafVerwijderen, staafSplitsen, assenOmkeren, scharnierSituatie,
+  staafToevoegen, staafWijzigen, staafBedding, staafVerwijderen, staafSplitsen, assenOmkeren, scharnierSituatie, staafeindScharnier,
+  liggersOpKolommen,
   plaatToevoegen, plaatWijzigen, plaatVerwijderen, openingToevoegen,
 ];

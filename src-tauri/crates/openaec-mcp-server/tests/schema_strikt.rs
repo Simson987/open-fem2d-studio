@@ -1040,6 +1040,166 @@ async fn schema_van_de_belastingvlakken_in_het_3d_model_is_strikt() {
         json!("boolean"),
         "de zichtbaarheid van de belastingvlakken hoort schakelbaar te zijn"
     );
+    assert_eq!(
+        weergave["inputSchema"]["properties"]["visibility"]["properties"]["levelMarks"]["type"],
+        json!("boolean"),
+        "de peilmaten bij de levels horen los van het stramien schakelbaar te zijn (issue #92)"
+    );
+    // De grootte van knopen en opleggingen (issue #82): een getal in % van de
+    // automatische maat, 25–400; het strikte schema laat geen andere sleutel door.
+    let zicht = &weergave["inputSchema"]["properties"]["visibility"];
+    assert_eq!(zicht["additionalProperties"], json!(false));
+    for sleutel in ["nodeSizePercent", "supportSizePercent"] {
+        assert_eq!(zicht["properties"][sleutel]["type"], json!("number"), "{sleutel} hoort een getal te zijn");
+        assert_eq!(zicht["properties"][sleutel]["minimum"], json!(25), "{sleutel}: ondergrens 25 %");
+        assert_eq!(zicht["properties"][sleutel]["maximum"], json!(400), "{sleutel}: bovengrens 400 %");
+    }
+    // De plaatweergave (issue #78): één keuze uit volume, surface en mesh; een
+    // andere tekst laat het strikte schema niet door.
+    assert_eq!(zicht["properties"]["plateDisplay"]["type"], json!("string"));
+    assert_eq!(
+        zicht["properties"]["plateDisplay"]["enum"],
+        json!(["volume", "surface", "mesh"]),
+        "de plaatweergave hoort een van drie standen te zijn (issue #78)"
+    );
+    // De section box (issue #86): strikt op elk niveau. Zonder
+    // `additionalProperties: false` viel een tikfout als `max` (in plaats van
+    // `max_m`) stil weg en kreeg de doos de modelgrenzen.
+    let doos = &weergave["inputSchema"]["properties"]["section_box"];
+    assert_eq!(doos["additionalProperties"], json!(false), "{doos}");
+    assert_eq!(doos["required"], json!(["enabled"]), "aan/uit is verplicht");
+    assert_eq!(doos["properties"]["enabled"]["type"], json!("boolean"));
+    assert_eq!(doos["properties"]["fit"]["enum"], json!(["model", "selection"]));
+    let punt = &weergave["inputSchema"]["$defs"]["pointM"];
+    assert_eq!(punt["additionalProperties"], json!(false), "{punt}");
+    assert_eq!(punt["required"], json!(["x", "y", "z"]));
+    for grens in ["min_m", "max_m"] {
+        assert_eq!(doos["properties"][grens]["$ref"], json!("#/$defs/pointM"), "{grens}");
+    }
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+/// Staaf op bedding (issue #106) over de echte binary: het schema van
+/// `solve_open_fem_3d` (members[].bedding) en van `gui_build_3d_model`
+/// (beams[].bedding) is strikt, `gui_configure_3d_view` kent de laag
+/// Gronddruk, een tikfout in een beddingveld wordt geweigerd, en een vrije
+/// balk van 6 m onder een gelijkmatige last q = 30 kN/m op k·b = 50 000 ·
+/// 0,6 = 30 000 kN/m² zakt overal q/(k·b) = 1 mm, met Σ veerkrachten = q·L.
+#[tokio::test]
+async fn staaf_op_bedding_via_mcp_is_strikt_en_rekent() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let tool = tooldefinitie(&mut stdin, &mut reader, 120, "solve_open_fem_3d").await;
+    let bedding = &tool["inputSchema"]["properties"]["members"]["items"]["properties"]["bedding"];
+    assert_eq!(bedding["additionalProperties"], json!(false), "{bedding}");
+    assert_eq!(bedding["required"], json!(["widthM"]));
+    for veld in ["kKnPerM3", "widthM", "kLateralKnPerM3", "compressionOnly"] {
+        assert!(bedding["properties"].get(veld).is_some(), "{veld} ontbreekt");
+    }
+    let bouw = tooldefinitie(&mut stdin, &mut reader, 121, "gui_build_3d_model").await;
+    let app = &bouw["inputSchema"]["properties"]["beams"]["items"]["properties"]["bedding"];
+    assert_eq!(app["additionalProperties"], json!(false), "{app}");
+    assert_eq!(app["required"], json!(["width_m"]));
+    let weergave = tooldefinitie(&mut stdin, &mut reader, 122, "gui_configure_3d_view").await;
+    assert_eq!(weergave["inputSchema"]["properties"]["visibility"]["properties"]["groundPressure"]["type"], json!("boolean"));
+
+    let verzoek = json!({
+        "analysis": "linear",
+        "nodes": [{ "id": 1, "x": 0, "y": 0, "z": 0 }, { "id": 2, "x": 6, "y": 0, "z": 0 }],
+        "materials": [{ "id": 1, "name": "S235", "eMpa": 210000, "nu": 0.3 }],
+        "sections": [{ "id": 1, "name": "balk", "areaM2": 0.0149, "iyM4": 2.517e-4, "izM4": 8.56e-5, "torsionJM4": 1.85e-6 }],
+        "members": [{ "id": 1, "startNodeId": 1, "endNodeId": 2, "materialId": 1, "sectionId": 1,
+            "bedding": { "kKnPerM3": 50000, "widthM": 0.6 } }],
+        "supports": [{ "nodeId": 1, "ux": true, "uy": true, "uz": false, "rx": true, "ry": false, "rz": true }],
+        "nodalLoads": [],
+        "memberLoads": [{ "id": 1, "memberId": 1, "qyStartKnPerM": 0, "qyEndKnPerM": 0, "qzStartKnPerM": -30, "qzEndKnPerM": -30,
+            "startPositionM": 0, "endPositionM": 6 }],
+        "bucklingModes": 0
+    });
+    let uit = roep_tool_aan(&mut stdin, &mut reader, 123, "solve_open_fem_3d", verzoek.clone()).await;
+    assert_eq!(uit["isError"], json!(false), "{uit}");
+    let lid = &uit["structuredContent"]["bedding"][0];
+    assert_eq!(lid["memberId"], json!(1), "{uit}");
+    let punten = lid["points"].as_array().expect("punten");
+    assert!(punten.len() >= 3);
+    for punt in punten {
+        let zakking = punt["settlementM"].as_f64().unwrap();
+        assert!((zakking - 0.001).abs() <= 0.01 * 0.001, "zakking {zakking} op t = {}", punt["t"]);
+    }
+    let som = lid["totalReactionKn"].as_f64().unwrap();
+    assert!((som - 180.0).abs() < 1e-6, "Σ veerkrachten {som}");
+    // Een tikfout in een beddingveld: het contract weigert onbekende velden.
+    let mut tikfout = verzoek;
+    tikfout["members"][0]["bedding"] = json!({ "kKnPerm3": 50000, "widthM": 0.6 });
+    schrijf(&mut stdin, json!({
+        "jsonrpc": "2.0", "id": 124, "method": "tools/call",
+        "params": { "name": "solve_open_fem_3d", "arguments": tikfout }
+    })).await;
+    let antwoord = lees_bericht(&mut reader).await;
+    let melding = antwoord["error"]["message"].as_str().map(str::to_owned)
+        .unwrap_or_else(|| foutmelding(&antwoord["result"]));
+    assert!(melding.contains("kKnPerm3"), "{antwoord}");
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+/// Lijnlast in een globale richting (issue #80) over de echte binary: het
+/// schema van `solve_open_fem_3d` kent globalDirection, qStartKnPerM,
+/// qEndKnPerM en perProjection strikt, een tikfout in een lastveld wordt
+/// geweigerd, en een vrij opgelegde schuine spant (4 m horizontaal, 3 m
+/// omhoog) onder sneeuw q = 2 kN/m per horizontale meter heeft ΣRz = q·4 m =
+/// 8 kN; per staafmeter (zonder perProjection) q·5 m = 10 kN.
+#[tokio::test]
+async fn globale_lijnlast_via_mcp_is_strikt_en_rekent() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let tool = tooldefinitie(&mut stdin, &mut reader, 130, "solve_open_fem_3d").await;
+    let last = &tool["inputSchema"]["properties"]["memberLoads"]["items"];
+    assert_eq!(last["additionalProperties"], json!(false), "{last}");
+    assert_eq!(last["required"], json!(["id", "memberId"]));
+    assert_eq!(last["properties"]["globalDirection"]["enum"], json!(["x", "y", "z"]));
+    for veld in ["qStartKnPerM", "qEndKnPerM", "perProjection"] {
+        assert!(last["properties"].get(veld).is_some(), "{veld} ontbreekt");
+    }
+
+    let verzoek = |per_projectie: bool| json!({
+        "analysis": "linear",
+        "nodes": [{ "id": 1, "x": 0, "y": 0, "z": 0 }, { "id": 2, "x": 4, "y": 0, "z": 3 }],
+        "materials": [{ "id": 1, "name": "S235", "eMpa": 210000, "nu": 0.3 }],
+        "sections": [{ "id": 1, "name": "spant", "areaM2": 0.00538, "iyM4": 8.356e-5, "izM4": 6.04e-6, "torsionJM4": 2.01e-7 }],
+        "members": [{ "id": 1, "startNodeId": 1, "endNodeId": 2, "materialId": 1, "sectionId": 1 }],
+        "supports": [
+            { "nodeId": 1, "ux": true, "uy": true, "uz": true, "rx": true, "ry": false, "rz": true },
+            { "nodeId": 2, "ux": false, "uy": true, "uz": true, "rx": false, "ry": false, "rz": false }
+        ],
+        "nodalLoads": [],
+        "memberLoads": [{ "id": 1, "memberId": 1, "globalDirection": "z", "qStartKnPerM": -2, "qEndKnPerM": -2,
+            "perProjection": per_projectie, "startPositionM": 0, "endPositionM": 5 }],
+        "bucklingModes": 0
+    });
+    // Een tikfout in een lastveld: het contract weigert onbekende velden (ook een kern van vóór #80).
+    let mut tikfout = verzoek(true);
+    tikfout["memberLoads"][0] = json!({ "id": 1, "memberId": 1, "globalDirecton": "z", "qStartKnPerM": -2, "qEndKnPerM": -2 });
+    schrijf(&mut stdin, json!({
+        "jsonrpc": "2.0", "id": 131, "method": "tools/call",
+        "params": { "name": "solve_open_fem_3d", "arguments": tikfout }
+    })).await;
+    let antwoord = lees_bericht(&mut reader).await;
+    let melding = antwoord["error"]["message"].as_str().map(str::to_owned)
+        .unwrap_or_else(|| foutmelding(&antwoord["result"]));
+    assert!(melding.contains("globalDirecton"), "{antwoord}");
+
+    for (id, per_projectie, verwacht) in [(132, true, 8.0), (133, false, 10.0)] {
+        schrijf(&mut stdin, json!({
+            "jsonrpc": "2.0", "id": id, "method": "tools/call",
+            "params": { "name": "solve_open_fem_3d", "arguments": verzoek(per_projectie) }
+        })).await;
+        let antwoord = lees_bericht(&mut reader).await;
+        let uit = &antwoord["result"];
+        assert_eq!(uit["isError"], json!(false), "{antwoord}");
+        let som: f64 = uit["structuredContent"]["reactions"].as_array().expect("reacties").iter()
+            .map(|r| r["fz"].as_f64().unwrap()).sum();
+        assert!((som - verwacht).abs() < 1e-6, "ΣRz {som}, verwacht {verwacht} (per projectie: {per_projectie})");
+    }
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }

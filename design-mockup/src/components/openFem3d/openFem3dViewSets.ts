@@ -1,5 +1,5 @@
 import type { OpenFem3DView } from "./openFem3dCommands";
-import { DEFAULT_OPEN_FEM_3D_VISIBILITY, type OpenFem3DVisibility } from "./openFem3dVisibility";
+import { normalizeOpenFem3DVisibility, type OpenFem3DVisibility } from "./openFem3dVisibility";
 import { normalizeOpenFem3DDiagramLabels, type OpenFem3DDiagramLabels } from "./openFem3dDiagramLabels";
 
 export interface OpenFem3DCameraState {
@@ -176,11 +176,10 @@ export function parseOpenFem3DViewSets(value: unknown): OpenFem3DViewSet[] {
     if (!savedVisibility || typeof savedVisibility !== "object" || Array.isArray(savedVisibility)) {
       throw new Error("Een opgeslagen 3D-weergave mist de zichtbaarheidsinstellingen.");
     }
-    const visibility = { ...DEFAULT_OPEN_FEM_3D_VISIBILITY };
-    for (const key of Object.keys(visibility) as (keyof OpenFem3DVisibility)[]) {
-      const entry = (savedVisibility as Record<string, unknown>)[key];
-      if (typeof entry === "boolean") visibility[key] = entry;
-    }
+    // Dezelfde parser als de bewaarde zichtbaarheid: een ontbrekende vlag de
+    // standaard, de grootte van knopen en opleggingen (issue #82) begrensd,
+    // in een oudere view zonder die velden 100 %.
+    const visibility = normalizeOpenFem3DVisibility(savedVisibility);
     const combinationId = raw.combinationId === null || raw.combinationId === undefined
       ? null
       : Number.isSafeInteger(raw.combinationId) && Number(raw.combinationId) > 0

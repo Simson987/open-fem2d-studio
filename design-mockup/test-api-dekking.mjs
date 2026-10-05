@@ -111,6 +111,7 @@ const handlers = Object.fromEntries([
   "onOpenFem3DToolChange", "onOpenFem3DFit", "onOpenFem3DViewChange", "onToggle3DVisibility", "onOpenFem3DSupportPreset",
   "onOpenFem3DSpringTool", "onOpenFem3DRequestNodalLoad", "onOpenFem3DRequestMemberLoad", "onOpenFem3DRequestMemberPointLoad",
   "onOpenFem3DRequestThermalLoad", "onOpenFem3DRequestSurfaceLoad", "onOpenFem3DConvertPlateToLoadPanel",
+  "onOpenFem3DPinBeamsToColumns", "onOpenFem3DPlateDisplayChange", "onOpenFem3DSectionBoxToggle",
 ].map((naam) => [naam, niets]));
 const html = renderToStaticMarkup(React.createElement(HomeTab, {
   ...handlers, modelDimension: "3d", availableOpenFem3DTools: Object.keys(GEREEDSCHAP_3D),
@@ -150,7 +151,8 @@ function knopIds(tekst) {
   return ids;
 }
 for (const [bestand, gedekt] of Object.entries(PANEEL_3D)) {
-  const gevonden = knopIds(bron(`src/components/openFem3d/${bestand}`));
+  // Met een map ervoor (een venster dat 2D en 3D delen) onder src/components/.
+  const gevonden = knopIds(bron(bestand.includes("/") ? `src/components/${bestand}` : `src/components/openFem3d/${bestand}`));
   const nieuw = zonder(gevonden, new Set(Object.keys(gedekt)));
   const weg = zonder(new Set(Object.keys(gedekt)), gevonden);
   check(`${bestand}: ${gevonden.size} knoppen, alle gedekt`, gevonden.size > 0 && nieuw.length === 0 && weg.length === 0,

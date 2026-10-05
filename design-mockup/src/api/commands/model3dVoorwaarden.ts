@@ -5,15 +5,22 @@
  * en de trek-alleen-instellingen. Dunne lagen over de zuivere functies van
  * de app; dezelfde regels.
  *
+ * Plaatsen op een object (issues #76 en #77): `model3d.support.place` en
+ * `model3d.load.placePoint` doen wat de gereedschappen Oplegging, Veer en
+ * Puntlast in de app doen, met dezelfde zuivere functies
+ * (openFem3dNodeTools, openFem3dPlaatsen): op een knoop, op een staaf, op een
+ * plaat of op een vrij punt.
+ *
  * Een last zonder `caseId` komt in het actieve belastinggeval van het
  * project, net als bij het tekengereedschap. Een onbekend geval is
- * NIET_GEVONDEN. Krachten in kN, momenten in kNm, lijnlasten in kN/m,
+ * NIET_GEVONDEN. Een lijnlast is lokaal (qy/qz) of, met `globalDirection`,
+ * globaal (issue #80). Krachten in kN, momenten in kNm, lijnlasten in kN/m,
  * vlaklasten in kN/m², lengtes in m, temperatuurverschillen in K.
  */
 import { ApiFout } from "../register";
 import { documentCommando, nietGevonden, nieuwElement } from "../commandoHulp";
 import { metModel3d, model3dVan, type ApiDocument } from "../projectDocument";
-import { getal, id, jaNee, keuze, lijst, obj, ofNull, tekst } from "../schemaBouw";
+import { eenVan, getal, id, jaNee, keuze, lijst, obj, ofNull, tekst } from "../schemaBouw";
 import {
   OPEN_FEM_3D_SUPPORT_PRESETS,
   addOpenFem3DMemberLoad, addOpenFem3DMemberPointLoad, addOpenFem3DNodalLoad, addOpenFem3DSurfaceLoad,
@@ -21,6 +28,8 @@ import {
   removeOpenFem3DNodalLoad, removeOpenFem3DSupport, removeOpenFem3DSurfaceLoad, removeOpenFem3DThermalLoad,
   setOpenFem3DSupport, setOpenFem3DSupportPrescribed, setOpenFem3DSupportSprings, updateOpenFem3DMemberLoad,
   updateOpenFem3DMemberPointLoad, updateOpenFem3DNodalLoad, updateOpenFem3DSurfaceLoad, updateOpenFem3DThermalLoad,
+  OPEN_FEM_3D_GLOBAL_DIRECTIONS, isOpenFem3DGlobalMemberLoad,
+  type OpenFem3DGlobalDirection, type OpenFem3DMemberLoad, type OpenFem3DMemberLoadValues,
   type OpenFem3DModel, type OpenFem3DPrescribedDisplacements, type OpenFem3DSupportPreset,
   type OpenFem3DSupportRestraints, type OpenFem3DSupportSprings, type OpenFem3DVector,
 } from "../../components/openFem3d/openFem3dModel";
@@ -32,6 +41,13 @@ import {
   addOpenFem3DDiaphragm, removeOpenFem3DDiaphragm, setOpenFem3DTensionOnly, setOpenFem3DTensionOnlySetting,
   type OpenFem3DDiaphragmRefusal,
 } from "../../components/openFem3d/openFem3dTrekSchijf";
+import {
+  OPEN_FEM_3D_DEFAULT_SPRING_STIFFNESS, placeOpenFem3DNodeCondition, type OpenFem3DNodeCondition,
+} from "../../components/openFem3d/openFem3dNodeTools";
+import {
+  placeOpenFem3DPointLoad, type OpenFem3DPlacementTarget, type OpenFem3DPointLoadTarget,
+} from "../../components/openFem3d/openFem3dPlaatsen";
+import type { OpenFem3DSpringAxis } from "../../components/openFem3d/openFem3dCommands";
 
 // ── Hulp ──────────────────────────────────────────────────────────────────
 
@@ -85,12 +101,65 @@ const knoopLastVelden = {
   fx: getal("Kracht in X, kN."), fy: getal("Kracht in Y, kN."), fz: getal("Kracht in Z, kN (negatief = omlaag)."),
   mx: getal("Moment om X, kNm."), my: getal("Moment om Y, kNm."), mz: getal("Moment om Z, kNm."),
 };
+const globaleRichting = keuze([...OPEN_FEM_3D_GLOBAL_DIRECTIONS],
+  "Globale richting van de last: x, y of z. Met dit veld is het een globale lijnlast (qStart/qEnd langs die as, de kern zet hem om naar de staaf); zonder is het een lokale last (qy/qz).");
 const lijnLastVelden = {
-  qyStart: getal("Lijnlast in lokale y aan het begin, kN/m."), qyEnd: getal("Lijnlast in lokale y aan het eind, kN/m."),
-  qzStart: getal("Lijnlast in lokale z aan het begin, kN/m."), qzEnd: getal("Lijnlast in lokale z aan het eind, kN/m."),
+  qyStart: getal("Lijnlast in lokale y aan het begin, kN/m. Alleen bij een lokale last."), qyEnd: getal("Lijnlast in lokale y aan het eind, kN/m."),
+  qzStart: getal("Lijnlast in lokale z aan het begin, kN/m. Alleen bij een lokale last."), qzEnd: getal("Lijnlast in lokale z aan het eind, kN/m."),
+  globalDirection: globaleRichting,
+  qStart: getal("Globale lijnlast aan het begin, kN/m, met teken langs de globale as (z negatief = omlaag). Alleen met globalDirection."),
+  qEnd: getal("Globale lijnlast aan het eind, kN/m; ontbreekt bij toevoegen = qStart."),
+  perProjection: jaNee("Alleen met globalDirection. true: per meter projectie van de staaf op het vlak loodrecht op de lastrichting (sneeuw op een schuin dak: per horizontale meter); false of ontbreekt: per meter staaflengte."),
   startPositionM: getal("Begin van de last in m vanaf de beginknoop; ontbreekt = 0.", { minimum: 0 }),
   endPositionM: getal("Eind van de last in m vanaf de beginknoop; ontbreekt = de staaflengte.", { exclusiveMinimum: 0 }),
 };
+/** Wijzigen: globalDirection null maakt van een globale last weer een lokale (geef dan qy/qz). */
+const lijnLastWijzigVelden = {
+  ...lijnLastVelden,
+  globalDirection: ofNull(globaleRichting,
+    "Globale richting x, y of z (een lokale last wordt globaal; geef dan qStart), of null: weer een lokale last (geef dan qy/qz). Ontbreekt = blijft."),
+};
+type LijnLastInvoer = Partial<Record<"qyStart" | "qyEnd" | "qzStart" | "qzEnd" | "qStart" | "qEnd" | "startPositionM" | "endPositionM", number>>
+  & { globalDirection?: OpenFem3DGlobalDirection | null; perProjection?: boolean };
+const LOKALE_VELDEN = ["qyStart", "qyEnd", "qzStart", "qzEnd"] as const;
+const GLOBALE_VELDEN = ["qStart", "qEnd", "perProjection"] as const;
+
+/**
+ * De waarden van een lijnlast uit de invoer (issue #80: lokaal of globaal).
+ * Bij wijzigen is `oud` de basis: niet genoemde velden blijven, ook bij een
+ * wissel tussen lokaal en globaal (dan zijn de nieuwe waarden nodig). Lokale
+ * en globale velden door elkaar is een invoerfout.
+ */
+function lijnLastWaarden(invoer: LijnLastInvoer, oud: OpenFem3DMemberLoad | undefined, lengte: number): OpenFem3DMemberLoadValues {
+  const startPositionM = invoer.startPositionM ?? oud?.startPositionM ?? 0;
+  const endPositionM = invoer.endPositionM ?? oud?.endPositionM ?? lengte;
+  const richting = invoer.globalDirection === undefined ? oud?.globalDirection : invoer.globalDirection ?? undefined;
+  const lokaal = LOKALE_VELDEN.filter((veld) => invoer[veld] !== undefined);
+  const globaal = GLOBALE_VELDEN.filter((veld) => invoer[veld] !== undefined);
+  if (richting) {
+    if (lokaal.length > 0) {
+      throw new ApiFout("INVOER_ONGELDIG", `Een globale lijnlast heeft geen ${lokaal.join(", ")}; geef qStart en qEnd langs de globale as.`);
+    }
+    const vorige = oud && isOpenFem3DGlobalMemberLoad(oud) ? oud : undefined;
+    const qStart = invoer.qStart ?? vorige?.qStart;
+    if (qStart === undefined) throw new ApiFout("INVOER_ONGELDIG", "Een globale lijnlast heeft qStart nodig (kN/m langs de globale as).");
+    return {
+      globalDirection: richting, qStart, qEnd: invoer.qEnd ?? vorige?.qEnd ?? qStart,
+      perProjection: invoer.perProjection ?? vorige?.perProjection ?? false, startPositionM, endPositionM,
+    };
+  }
+  if (globaal.length > 0) {
+    throw new ApiFout("INVOER_ONGELDIG", `${globaal.join(", ")} hoort bij een globale lijnlast; geef ook globalDirection (x, y of z).`);
+  }
+  if (oud && !isOpenFem3DGlobalMemberLoad(oud)) {
+    return {
+      qyStart: invoer.qyStart ?? oud.qyStart, qyEnd: invoer.qyEnd ?? oud.qyEnd,
+      qzStart: invoer.qzStart ?? oud.qzStart, qzEnd: invoer.qzEnd ?? oud.qzEnd, startPositionM, endPositionM,
+    };
+  }
+  const qyStart = invoer.qyStart ?? 0, qzStart = invoer.qzStart ?? 0;
+  return { qyStart, qyEnd: invoer.qyEnd ?? qyStart, qzStart, qzEnd: invoer.qzEnd ?? qzStart, startPositionM, endPositionM };
+}
 const puntLastVelden = {
   py: getal("Puntlast in lokale y, kN."), pz: getal("Puntlast in lokale z, kN."),
   positionM: getal("Plaats in m vanaf de beginknoop.", { minimum: 0 }),
@@ -193,6 +262,114 @@ const opleggingWeg = documentCommando<{ nodeId: number }, unknown>({
   },
 });
 
+// ── Plaatsen op een object (issues #76 en #77) ──────────────────────────────
+
+const VEERRICHTINGEN: OpenFem3DSpringAxis[] = ["kx", "ky", "kz", "krx", "kry", "krz"];
+const coordinaten = {
+  x: getal("x in m (globaal)."), y: getal("y in m (globaal)."), z: getal("z in m (globaal, omhoog)."),
+};
+const knoopDoel = obj({ kind: { const: "node" }, nodeId: knoopId }, ["kind", "nodeId"], "Een bestaande knoop.");
+const staafDoel = (wat: string) => obj({
+  kind: { const: "beam" }, beamId: staafId,
+  t: getal("Plek als fractie van de staaflengte: 0 = beginknoop, 1 = eindknoop.", { minimum: 0, maximum: 1 }),
+  positionM: getal("Plek in m vanaf de beginknoop.", { minimum: 0 }),
+}, ["kind", "beamId"], `Een plek op een staaf: t óf positionM. ${wat}`);
+
+type DoelInvoer =
+  | { kind: "node"; nodeId: number }
+  | { kind: "beam"; beamId: number; t?: number; positionM?: number }
+  | { kind: "plate"; plateId: number; x: number; y: number; z: number }
+  | { kind: "point"; x: number; y: number; z: number };
+
+/** Het doel uit de invoer, als plaatsingsdoel van de app; een onbekend element is NIET_GEVONDEN. */
+function naarDoel(model: OpenFem3DModel, doel: DoelInvoer): OpenFem3DPlacementTarget {
+  switch (doel.kind) {
+    case "node":
+      vindKnoop(model, doel.nodeId);
+      return { nodeId: doel.nodeId };
+    case "beam": {
+      vindStaaf(model, doel.beamId);
+      if ((doel.t === undefined) === (doel.positionM === undefined)) {
+        throw new ApiFout("INVOER_ONGELDIG", "Geef de plek op de staaf als t (0–1) óf als positionM (m), niet allebei.");
+      }
+      return doel.t !== undefined ? { beamId: doel.beamId, t: doel.t } : { beamId: doel.beamId, positionM: doel.positionM! };
+    }
+    case "plate":
+      vindIn(model.plates, "3D-plaat", doel.plateId);
+      return { plateId: doel.plateId, point: { x: doel.x, y: doel.y, z: doel.z } };
+    case "point":
+      return { position: { x: doel.x, y: doel.y, z: doel.z } };
+  }
+}
+
+const opleggingPlaatsen = documentCommando<{
+  target: DoelInvoer; preset?: OpenFem3DSupportPreset; springAxis?: OpenFem3DSpringAxis; stiffness?: number;
+}, unknown>({
+  naam: "model3d.support.place",
+  beschrijving: "Een oplegging of veer plaatsen zoals de gereedschappen Oplegging en Veer in de app: op een knoop; op een staaf (de staaf wordt op die plek gesplitst zoals bij een tussenknoop, lasten en eindscharnieren blijven goed verdeeld; op t = 0 of 1 de eindknoop); op een plaat (nieuwe knoop in het middenvlak, het punt loodrecht geprojecteerd, met het level van de plaat; een punt in een opening of buiten de plaat wordt geweigerd); of op een vrij punt (de knoop die daar ligt, of een nieuwe). Geef preset (oplegging) óf springAxis (veer). Knoop en oplegging zijn één bewerking.",
+  invoer: obj({
+    target: eenVan([
+      knoopDoel,
+      staafDoel("De staaf wordt daar gesplitst."),
+      obj({ kind: { const: "plate" }, plateId: id("Id van een bestaande 3D-plaat."), ...coordinaten }, ["kind", "plateId", "x", "y", "z"],
+        "Een punt op of bij een plaat; het wordt loodrecht op het middenvlak geprojecteerd."),
+      obj({ kind: { const: "point" }, ...coordinaten }, ["kind", "x", "y", "z"], "Een vrij punt (zoals een klik op het werkvlak)."),
+    ], "Waar de oplegging of veer komt."),
+    preset: keuze(PRESETS, "Oplegging: fixed (inklemming), pinned (scharnier), x-/y-/zRoller, revoluteX/Y/Z."),
+    springAxis: keuze(VEERRICHTINGEN, "Veer: kx, ky, kz (translatie, kN/m) of krx, kry, krz (rotatie, kNm/rad), in globale assen. Andere veren op de knoop blijven."),
+    stiffness: getal("Stijfheid van de veer; ontbreekt = 10 000 kN/m (translatie) of 1000 kNm/rad (rotatie).", { exclusiveMinimum: 0 }),
+  }, ["target"]),
+  uitvoeren: ({ target, preset, springAxis, stiffness }, document) => {
+    const model = model3dVan(document);
+    if ((preset === undefined) === (springAxis === undefined)) {
+      throw new ApiFout("INVOER_ONGELDIG", "Geef preset (oplegging) óf springAxis (veer).");
+    }
+    if (stiffness !== undefined && springAxis === undefined) {
+      throw new ApiFout("INVOER_ONGELDIG", "stiffness hoort bij een veer (springAxis).");
+    }
+    const condition: OpenFem3DNodeCondition = preset !== undefined
+      ? { kind: "support", preset } : { kind: "spring", axis: springAxis! };
+    const geplaatst = placeOpenFem3DNodeCondition(model, naarDoel(model, target), condition,
+      springAxis !== undefined ? stiffness ?? OPEN_FEM_3D_DEFAULT_SPRING_STIFFNESS[springAxis] : 0);
+    return {
+      uitkomst: {
+        nodeId: geplaatst.nodeId, created: geplaatst.created,
+        ...(geplaatst.split ? { split: geplaatst.split } : {}),
+        node: geplaatst.model.nodes.find((node) => node.id === geplaatst.nodeId),
+        support: geplaatst.model.supports?.find((s) => s.nodeId === geplaatst.nodeId) ?? null,
+      },
+      document: met(document, geplaatst.model),
+    };
+  },
+});
+
+const puntlastPlaatsen = documentCommando<{
+  target: Extract<DoelInvoer, { kind: "node" | "beam" }>; caseId?: number; py?: number; pz?: number;
+} & Partial<Record<keyof typeof knoopLastVelden, number>>, unknown>({
+  naam: "model3d.load.placePoint",
+  beschrijving: "Een puntlast plaatsen zoals het gereedschap Puntlast in de app: op een knoop een knooplast (globale assen), op een staaf een staafpuntlast op die plek (lokale y/z; de staaf blijft heel). Zonder waarden: −10 kN omlaag (Fz op een knoop, Pz op een staaf). fx … mz alleen bij een knoop, py en pz alleen bij een staaf.",
+  invoer: obj({
+    target: eenVan([knoopDoel, staafDoel("De last komt op die plek.")], "Waar de puntlast komt."),
+    caseId: gevalId,
+    ...knoopLastVelden,
+    py: puntLastVelden.py, pz: puntLastVelden.pz,
+  }, ["target"]),
+  uitvoeren: ({ target, caseId, ...waarden }, document) => {
+    const model = model3dVan(document);
+    const doel = naarDoel(model, target) as OpenFem3DPointLoadTarget;
+    const gegeven = (velden: readonly string[]) => velden.filter((veld) => (waarden as Record<string, unknown>)[veld] !== undefined);
+    const vreemd = target.kind === "node" ? gegeven(["py", "pz"]) : gegeven(Object.keys(knoopLastVelden));
+    if (vreemd.length > 0) {
+      throw new ApiFout("INVOER_ONGELDIG", `${vreemd.join(", ")} hoort niet bij een puntlast op een ${target.kind === "node" ? "knoop" : "staaf"}.`);
+    }
+    const geplaatst = placeOpenFem3DPointLoad(model, doel, geval(document, caseId), waarden);
+    const load = geplaatst.kind === "nodal"
+      ? geplaatst.model.loads?.find((item) => item.id === geplaatst.loadId)
+      : geplaatst.model.memberPointLoads?.find((item) => item.id === geplaatst.loadId);
+    return { uitkomst: { kind: geplaatst.kind, load }, document: met(document, geplaatst.model) };
+  },
+});
+
 // ── Lasten ────────────────────────────────────────────────────────────────
 
 const knoopLastToevoegen = documentCommando<{ nodeId: number; caseId?: number } & Partial<Record<keyof typeof knoopLastVelden, number>>, unknown>({
@@ -221,28 +398,25 @@ const knoopLastWijzigen = documentCommando<{ id: number } & Partial<Record<keyof
   },
 });
 
-const staafLastToevoegen = documentCommando<{ beamId: number; caseId?: number } & Partial<Record<keyof typeof lijnLastVelden, number>>, unknown>({
+const staafLastToevoegen = documentCommando<{ beamId: number; caseId?: number } & LijnLastInvoer, unknown>({
   naam: "model3d.load.member.add",
-  beschrijving: "Een (trapeziumvormige) lijnlast op een staaf toevoegen, in lokale y/z. Zonder positie: over de hele staaf.",
+  beschrijving: "Een (trapeziumvormige) lijnlast op een staaf toevoegen: in lokale y/z (qyStart … qzEnd), of met globalDirection in een globale richting (qStart/qEnd, per staafmeter of met perProjection per meter projectie). Zonder positie: over de hele staaf.",
   invoer: obj({ beamId: staafId, caseId: gevalId, ...lijnLastVelden }, ["beamId"]),
-  uitvoeren: ({ beamId, caseId, qyStart = 0, qyEnd, qzStart = 0, qzEnd, startPositionM = 0, endPositionM }, document) => {
+  uitvoeren: ({ beamId, caseId, ...invoer }, document) => {
     const model = model3dVan(document);
     const lengte = staafLengte(model, beamId);
-    const nieuw = addOpenFem3DMemberLoad(model, beamId, {
-      qyStart, qyEnd: qyEnd ?? qyStart, qzStart, qzEnd: qzEnd ?? qzStart,
-      startPositionM, endPositionM: endPositionM ?? lengte,
-    }, geval(document, caseId));
+    const nieuw = addOpenFem3DMemberLoad(model, beamId, lijnLastWaarden(invoer, undefined, lengte), geval(document, caseId));
     return { uitkomst: { load: nieuwElement(model.memberLoads, nieuw.memberLoads) }, document: met(document, nieuw) };
   },
 });
-const staafLastWijzigen = documentCommando<{ id: number } & Partial<Record<keyof typeof lijnLastVelden, number>>, unknown>({
+const staafLastWijzigen = documentCommando<{ id: number } & LijnLastInvoer, unknown>({
   naam: "model3d.load.member.update",
-  beschrijving: "Waarden of positie van een lijnlast wijzigen; niet genoemde velden blijven.",
-  invoer: obj({ id: id("Id van de lijnlast."), ...lijnLastVelden }, ["id"]),
+  beschrijving: "Waarden, richting of positie van een lijnlast wijzigen; niet genoemde velden blijven. globalDirection maakt een lokale last globaal (met qStart), null maakt hem weer lokaal (met qy/qz).",
+  invoer: obj({ id: id("Id van de lijnlast."), ...lijnLastWijzigVelden }, ["id"]),
   uitvoeren: ({ id: loadId, ...patch }, document) => {
     const model = model3dVan(document);
-    const { id: _id, beamId: _beam, caseId: _case, ...oud } = vindIn(model.memberLoads, "3D-lijnlast", loadId);
-    const nieuw = updateOpenFem3DMemberLoad(model, loadId, { ...oud, ...patch });
+    const oud = vindIn(model.memberLoads, "3D-lijnlast", loadId);
+    const nieuw = updateOpenFem3DMemberLoad(model, loadId, lijnLastWaarden(patch, oud, staafLengte(model, oud.beamId)));
     return { uitkomst: { load: vindIn(nieuw.memberLoads, "3D-lijnlast", loadId) }, document: met(document, nieuw) };
   },
 });
@@ -463,7 +637,7 @@ const instellingen = documentCommando<{ tensionOnlyFitAfterPermanent?: boolean; 
 });
 
 export const MODEL3D_VOORWAARDEN_COMMANDOS = [
-  opleggingZetten, opleggingenZetten, verenZetten, opgelegdZetten, opleggingWeg,
+  opleggingZetten, opleggingenZetten, verenZetten, opgelegdZetten, opleggingWeg, opleggingPlaatsen, puntlastPlaatsen,
   knoopLastToevoegen, knoopLastWijzigen, lastVerwijderen("knooplast", "loads", "model3d.load.nodal.delete", removeOpenFem3DNodalLoad),
   staafLastToevoegen, staafLastWijzigen, lastVerwijderen("lijnlast", "memberLoads", "model3d.load.member.delete", removeOpenFem3DMemberLoad),
   puntLastToevoegen, puntLastWijzigen, lastVerwijderen("puntlast", "memberPointLoads", "model3d.load.memberPoint.delete", removeOpenFem3DMemberPointLoad),

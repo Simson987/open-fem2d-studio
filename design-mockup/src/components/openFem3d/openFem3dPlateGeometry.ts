@@ -1,9 +1,15 @@
 import * as THREE from "three";
 import type { OpenFem3DModel, OpenFem3DNode, OpenFem3DPlate, OpenFem3DPlateBoundarySegment } from "./openFem3dModel";
 import { circularArcThroughPoints2D } from "./openFem3dCircularArc";
+import { OPEN_FEM_3D_PLATE_DISPLAY_STYLES, type OpenFem3DPlateDisplay } from "./openFem3dPlateDisplay";
 
 export interface OpenFem3DPlateGeometry {
-  geometry: THREE.ExtrudeGeometry;
+  /**
+   * In de eigen vlakassen van de plaat, het middenvlak op z = 0. Volume: de
+   * extrusie over de dikte (z = −t/2 … t/2); Vlak en Mesh: alleen het
+   * middenvlak (z = 0), zonder dikte (issue #78).
+   */
+  geometry: THREE.BufferGeometry;
   position: THREE.Vector3;
   quaternion: THREE.Quaternion;
   normal: THREE.Vector3;
@@ -122,31 +128,50 @@ export function openFem3DPlateShape(
   return { shape, position, u, v, normal, quaternion };
 }
 
+/**
+ * De plaat als Three.js-geometrie in de gekozen plaatweergave (issue #78):
+ * "volume" (standaard) de extrusie over de dikte, "surface" en "mesh" alleen
+ * het middenvlak (dezelfde omtrek, bogen en openingen, geen dikte).
+ */
 export function createOpenFem3DPlateGeometry(
   model: OpenFem3DModel,
   plate: OpenFem3DPlate,
   nodeIndex?: ReadonlyMap<number, OpenFem3DNode>,
+  display: OpenFem3DPlateDisplay = "volume",
 ): OpenFem3DPlateGeometry | null {
   const outline = openFem3DPlateShape(model, plate, nodeIndex);
   if (!outline) return null;
   const { shape, position, normal, quaternion } = outline;
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth: plate.thicknessM,
-    bevelEnabled: false,
-    curveSegments: 10,
-  });
-  geometry.translate(0, 0, -plate.thicknessM / 2);
-  geometry.computeVertexNormals();
+  let geometry: THREE.BufferGeometry;
+  if (OPEN_FEM_3D_PLATE_DISPLAY_STYLES[display]?.flat) {
+    // Hetzelfde aantal boogstukken als de extrusie: dezelfde omtrek.
+    geometry = new THREE.ShapeGeometry(shape, 10);
+  } else {
+    geometry = new THREE.ExtrudeGeometry(shape, {
+      depth: plate.thicknessM,
+      bevelEnabled: false,
+      curveSegments: 10,
+    });
+    geometry.translate(0, 0, -plate.thicknessM / 2);
+    geometry.computeVertexNormals();
+  }
   // Het gemiddelde van de contourknopen kan in een opening vallen. Kies het
   // zwaartepunt van een echte kapdriehoek: die ligt altijd op het plaatvlak.
+  // De extrusie heeft de kapvlakken in groep 0 (zonder index); het vlak is
+  // één geïndexeerde groep.
   const cap = geometry.groups.find((group) => group.materialIndex === 0);
   const vertices = geometry.getAttribute("position");
+  const indices = geometry.getIndex();
+  const capStart = cap?.start ?? 0;
+  const capCount = cap?.count ?? (indices ? indices.count : vertices.count);
+  const vertexAt = (k: number) => indices ? indices.getX(k) : k;
   let anchor = new THREE.Vector3();
   let largestArea = 0;
-  if (cap) for (let index = cap.start; index + 2 < cap.start + cap.count; index += 3) {
-    const ax = vertices.getX(index), ay = vertices.getY(index);
-    const bx = vertices.getX(index + 1), by = vertices.getY(index + 1);
-    const cx = vertices.getX(index + 2), cy = vertices.getY(index + 2);
+  for (let index = capStart; index + 2 < capStart + capCount; index += 3) {
+    const a = vertexAt(index), b = vertexAt(index + 1), c = vertexAt(index + 2);
+    const ax = vertices.getX(a), ay = vertices.getY(a);
+    const bx = vertices.getX(b), by = vertices.getY(b);
+    const cx = vertices.getX(c), cy = vertices.getY(c);
     const area = Math.abs((bx - ax) * (cy - ay) - (by - ay) * (cx - ax));
     if (area > largestArea) {
       largestArea = area;

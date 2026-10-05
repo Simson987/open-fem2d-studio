@@ -45,7 +45,12 @@ import {
   splitOpenFem3DBeam,
   type OpenFem3DModel,
 } from "../components/openFem3d/openFem3dModel";
-import type { OpenFem3DVisibility } from "../components/openFem3d/openFem3dVisibility";
+import {
+  isOpenFem3DSymbolScaleKey, OPEN_FEM_3D_VISIBILITY_FLAGS, type OpenFem3DVisibility, type OpenFem3DVisibilityFlag,
+} from "../components/openFem3d/openFem3dVisibility";
+import { normalizeOpenFem3DSymbolPercent } from "../components/openFem3d/openFem3dSymbolScale";
+import { isOpenFem3DPlateDisplay } from "../components/openFem3d/openFem3dPlateDisplay";
+import { DEFAULT_OPEN_FEM_3D_SECTION_BOX, openFem3DSectionBoxUitOpdracht } from "../components/openFem3d/openFem3dSectionBox";
 import { analyseOpenFem3DLoadPanels } from "../components/openFem3d/openFem3dLoadPanels";
 import {
   applyOpenFem3DLevels,
@@ -139,6 +144,8 @@ export interface BedieningActies {
      */
     setStructuralGrid: (grid: StructuralGrid) => void;
     setView: (view: OpenFem3DView) => void;
+    /** De huidige 3D-selectie: `section_box.fit = "selection"` (issue #86) zet de doos eromheen. */
+    selection?: OpenFem3DSelection;
     setSelection: (selection: OpenFem3DSelection) => void;
     selectCombination: (id: number) => void;
     updateBeam: (id: number, updates: Partial<OpenFem3DModel["beams"][number]>) => void;
@@ -309,6 +316,29 @@ export function useBediening(acties: BedieningActies): boolean {
 }
 
 // ── De acties ───────────────────────────────────────────────────────────────
+
+/** De velden van `beams[].bedding` in het kanaal en hun naam in het 3D-model. */
+const BEDDING_KANAAL = {
+  k_kn_per_m3: "kKnPerM3", width_m: "widthM", k_lateral_kn_per_m3: "kLateralKnPerM3", compression_only: "compressionOnly",
+} as const;
+
+/**
+ * `beams[].bedding` van model_3d_bouwen in modelvorm. Een onbekend veld is een
+ * tikfout en wordt geweigerd; de waarden keurt parseOpenFem3DModel.
+ */
+function beddingVanKanaal(waarde: unknown, staaf: number): Record<string, unknown> {
+  if (!waarde || typeof waarde !== "object" || Array.isArray(waarde)) {
+    throw new Error(`3D-staaf ${staaf}: bedding moet een object zijn (k_kn_per_m3, width_m, …)`);
+  }
+  const uit: Record<string, unknown> = {};
+  for (const [sleutel, inhoud] of Object.entries(waarde as Record<string, unknown>)) {
+    if (inhoud === undefined) continue;
+    const veld = BEDDING_KANAAL[sleutel as keyof typeof BEDDING_KANAAL];
+    if (!veld) throw new Error(`3D-staaf ${staaf}: onbekend veld in bedding: ${sleutel} (toegestaan: ${Object.keys(BEDDING_KANAAL).join(", ")})`);
+    uit[veld] = inhoud;
+  }
+  return uit;
+}
 
 /**
  * Voer één opdracht uit. Geëxporteerd voor test-bediening-wachten.mjs, dat
@@ -524,6 +554,9 @@ export async function voerUit(
             : {}),
           // Trek-alleen: alleen `true` zet het aan; de modelkeuring weigert een niet-boolean.
           ...(beam.tension_only !== undefined ? { tensionOnly: beam.tension_only } : {}),
+          // Staaf op bedding (#106): de velden in modelvorm; de modelkeuring
+          // weigert ongeldige waarden en een verticale k op een kolom.
+          ...(beam.bedding !== undefined ? { bedding: beddingVanKanaal(beam.bedding, index + 1) } : {}),
         };
       });
       const supports = rawSupports.map((value, index) => {
@@ -815,17 +848,51 @@ export async function voerUit(
 
     case "weergave_3d_configureren": {
       if (a().modelDimension !== "3d") throw new Error("de actieve projectdimensie is 2D; bouw of converteer eerst een 3D-model");
+      // De section box (issue #86) eerst keuren: een fout laat dan alles staan.
+      const sectionBox = args.section_box === undefined ? undefined
+        : openFem3DSectionBoxUitOpdracht(args.section_box, a().openFem3d.visibility.sectionBox ?? DEFAULT_OPEN_FEM_3D_SECTION_BOX,
+          a().openFem3d.model, a().openFem3d.selection ?? null);
       if (args.visibility !== undefined) {
         if (!args.visibility || typeof args.visibility !== "object" || Array.isArray(args.visibility)) {
           throw new Error("`visibility` moet een object zijn");
         }
         const current = a().openFem3d.visibility;
-        const next = { ...current };
-        for (const [key, value] of Object.entries(args.visibility as Record<string, unknown>)) {
-          if (!(key in current) || typeof value !== "boolean") throw new Error(`ongeldige 3D-zichtbaarheidsoptie ${key}`);
-          next[key as keyof OpenFem3DVisibility] = value;
+        const next: OpenFem3DVisibility = { ...current };
+        const gevraagd = args.visibility as Record<string, unknown>;
+        for (const [key, value] of Object.entries(gevraagd)) {
+          // De plaatweergave (issue #78): volume, surface of mesh.
+          if (key === "plateDisplay") {
+            if (!isOpenFem3DPlateDisplay(value)) {
+              throw new Error("ongeldige 3D-zichtbaarheidsoptie plateDisplay: volume, surface of mesh");
+            }
+            next.plateDisplay = value;
+            continue;
+          }
+          // De oude schakelaar mesh blijft aangenomen voor bestaande aanroepen:
+          // true → mesh, false → volume. Staat plateDisplay er ook, dan wint die.
+          if (key === "mesh") {
+            if (typeof value !== "boolean") throw new Error("ongeldige 3D-zichtbaarheidsoptie mesh: true of false");
+            if (gevraagd.plateDisplay === undefined) next.plateDisplay = value ? "mesh" : "volume";
+            continue;
+          }
+          // De grootte van knopen en opleggingen (issue #82): een getal in %,
+          // begrensd tot 25–400 zoals de regelaar en de opslag.
+          if (isOpenFem3DSymbolScaleKey(key)) {
+            if (typeof value !== "number" || !Number.isFinite(value)) {
+              throw new Error(`ongeldige 3D-zichtbaarheidsoptie ${key}: een getal in % tussen 25 en 400`);
+            }
+            next[key] = normalizeOpenFem3DSymbolPercent(value);
+            continue;
+          }
+          if (!OPEN_FEM_3D_VISIBILITY_FLAGS.includes(key as OpenFem3DVisibilityFlag) || typeof value !== "boolean") {
+            throw new Error(`ongeldige 3D-zichtbaarheidsoptie ${key}`);
+          }
+          next[key as OpenFem3DVisibilityFlag] = value;
         }
+        if (sectionBox) next.sectionBox = sectionBox;
         a().openFem3d.setVisibility(next);
+      } else if (sectionBox) {
+        a().openFem3d.setVisibility({ ...a().openFem3d.visibility, sectionBox });
       }
       if (args.structural_grid !== undefined) {
         if (!args.structural_grid || typeof args.structural_grid !== "object" || Array.isArray(args.structural_grid)) {

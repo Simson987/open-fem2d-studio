@@ -28,6 +28,8 @@
 .open-fem3d-report-page th,.open-fem3d-report-page td { padding:1.35mm 1.7mm; border-bottom:1px solid #e2e8f0; text-align:right; white-space:nowrap; }
 .open-fem3d-report-page th:first-child,.open-fem3d-report-page td:first-child { text-align:left; }.open-fem3d-report-page thead th { background:#f1f5f9; color:#475569; font-weight:700; }
 .open-fem3d-report-page tbody th { width:44mm; color:#475569; font-weight:600; }.open-fem3d-report-page tbody th+td { text-align:left; }
+/* Staven op bedding (#106): tot elf kolommen; de koppen breken af zodat de tabel op de pagina past. */
+.open-fem3d-report-page .open-fem3d-report-bedding thead th { white-space:normal; vertical-align:bottom; }
 .open-fem3d-report-checks th:nth-child(2),.open-fem3d-report-checks td:nth-child(2),
 .open-fem3d-report-checks th:nth-child(3),.open-fem3d-report-checks td:nth-child(3) { text-align:left; white-space:normal; }
 .open-fem3d-report-good { color:#15803d; }.open-fem3d-report-bad { color:#b91c1c; }.open-fem3d-report-note { color:#64748b; font-size:8pt; }

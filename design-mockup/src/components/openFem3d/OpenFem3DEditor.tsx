@@ -26,11 +26,15 @@ import { buildOpenFem3DUtilizations } from "./openFem3dUtilization";
 import { openFem3DStaalgewicht } from "./openFem3dStaalgewicht";
 import OpenFem3DTransformPanel from "./OpenFem3DTransformPanel";
 import { transformOpenFem3D, type OpenFem3DTransformCommand } from "./openFem3dTransform";
-import { openFem3DSelectionCount, type OpenFem3DSelection } from "./openFem3dSelection";
+import {
+  OPEN_FEM_3D_LOAD_SELECTION_TYPES, openFem3DSelectionFromIds, openFem3DSelectionGeometryCount,
+  type OpenFem3DLoadIds, type OpenFem3DLoadSelectionType, type OpenFem3DSelection,
+} from "./openFem3dSelection";
 import type { OpenFem3DCameraState, OpenFem3DViewSet } from "./openFem3dViewSets";
 import { openFem3DStartCamera } from "./openFem3dViewCube";
 import type { OpenFem3DEditMeta } from "./openFem3dHistory";
 import type { OpenFem3DNodeTarget } from "./openFem3dNodeTools";
+import type { OpenFem3DPointLoadTarget } from "./openFem3dPlaatsen";
 import type { OpenFem3DDeformationDisplay } from "./openFem3dDeformationDisplay";
 import type { OpenFem3DDiagramLabels } from "./openFem3dDiagramLabels";
 import { openFem3DWorkLevel, openFem3DWorkPlaneIsHorizontal, openFem3DWorkPlaneOptions } from "./openFem3dWorkPlane";
@@ -48,8 +52,10 @@ const DRAW_HELP_KEYS: Partial<Record<OpenFem3DTool, string>> = {
   addOpening: "openFem3d.openingHelp",
   addOpeningArc: "openFem3d.openingArcHelp",
   addMemberLoad: "openFem3d.memberLoadPlacementHelp",
+  addPointLoad: "openFem3d.pointLoadPlacementHelp",
   addLoadPanel: "openFem3d.loadPanelHelp",
   loadPanelSpan: "openFem3d.loadPanelSpanHelp",
+  beamEndHinge: "openFem3d.beamEndHingeHelp",
 };
 
 interface Props {
@@ -61,8 +67,10 @@ interface Props {
   onVisibilityClose?: () => void;
   tool?: OpenFem3DTool;
   onToolChange?: (tool: OpenFem3DTool) => void;
-  /** Oplegging- of veergereedschap: klik op een knoop of in leeg canvas (werkvlak). */
+  /** Oplegging- of veergereedschap: klik op een knoop, staaf, plaat of in leeg canvas (werkvlak). */
   onPlaceNodeCondition?: (target: OpenFem3DNodeTarget) => void;
+  /** Puntlastgereedschap: klik op een knoop (knooplast) of op een staaf (staafpuntlast op die plek). */
+  onPlacePointLoad?: (target: OpenFem3DPointLoadTarget) => void;
   /** Vergroting van de vervormde vorm en het onvervormde model erachter. */
   deformationDisplay?: OpenFem3DDeformationDisplay;
   /** Getallen bij de snedekrachtlijnen (Waarden, weinig … veel); ook mee in een view uit het venster Views. */
@@ -106,7 +114,7 @@ interface Props {
 /** Canvas only: 3D uses the shared ribbon, Explorer and Properties panels. */
 export default function OpenFem3DEditor({
   model, calculationModel, onChange, visibilityOpen = false, onVisibilityOpen, onVisibilityClose,
-  tool = "select", onToolChange, onPlaceNodeCondition, deformationDisplay, diagramLabels, deleteToken = 0, fitRequest = 0, viewRequest, onCameraViewChange,
+  tool = "select", onToolChange, onPlaceNodeCondition, onPlacePointLoad, deformationDisplay, diagramLabels, deleteToken = 0, fitRequest = 0, viewRequest, onCameraViewChange,
   initialCamera, onCameraStateChange,
   selection: controlledSelection, onSelectionChange, onOpenCheckForBeam,
   visibility: visibilityProp, onVisibilityChange, showLoadCase = true, resultsActive = false, structuralGrid, gridSpacingM,
@@ -176,11 +184,24 @@ export default function OpenFem3DEditor({
       const nodeIds = selection.nodeIds.filter((id) => model.nodes.some((node) => node.id === id));
       const beamIds = selection.beamIds.filter((id) => model.beams.some((beam) => beam.id === id));
       const plateIds = (selection.plateIds ?? []).filter((id) => (model.plates ?? []).some((plate) => plate.id === id));
-      if (nodeIds.length !== selection.nodeIds.length || beamIds.length !== selection.beamIds.length || plateIds.length !== (selection.plateIds?.length ?? 0)) {
-        const total = nodeIds.length + beamIds.length + plateIds.length;
-        setSelection(total === 0 ? null
-          : total === 1 ? nodeIds.length ? { type: "node", id: nodeIds[0] } : beamIds.length ? { type: "beam", id: beamIds[0] } : { type: "plate", id: plateIds[0] }
-          : { type: "multi", nodeIds, beamIds, ...(plateIds.length ? { plateIds } : {}) });
+      // Lasten uit het selectiefilter (issue #94) blijven staan zolang ze
+      // bestaan, ook in een ander belastinggeval: de groep is één keuze.
+      const loadsOfType: Record<OpenFem3DLoadSelectionType, readonly { id: number }[] | undefined> = {
+        nodalLoad: model.loads, memberLoad: model.memberLoads, memberPointLoad: model.memberPointLoads,
+        thermalLoad: model.thermalLoads, surfaceLoad: model.surfaceLoads, loadPanel: model.loadPanels,
+      };
+      const loads: OpenFem3DLoadIds = {};
+      let loadsChanged = false;
+      for (const type of OPEN_FEM_3D_LOAD_SELECTION_TYPES) {
+        const chosen = selection.loads?.[type];
+        if (!chosen?.length) continue;
+        const present = new Set((loadsOfType[type] ?? []).map((load) => load.id));
+        const kept = chosen.filter((id) => present.has(id));
+        if (kept.length !== chosen.length) loadsChanged = true;
+        if (kept.length) loads[type] = kept;
+      }
+      if (loadsChanged || nodeIds.length !== selection.nodeIds.length || beamIds.length !== selection.beamIds.length || plateIds.length !== (selection.plateIds?.length ?? 0)) {
+        setSelection(openFem3DSelectionFromIds({ nodeIds, beamIds, plateIds, loads }));
       }
       return;
     }
@@ -211,11 +232,12 @@ export default function OpenFem3DEditor({
     deleteSelection();
   }, [deleteToken]);
 
-  // Het rekennet voor de weergave "Mesh" zonder resultaat: asynchroon (Triangle)
-  // en met een korte vertraging, zodat slepen niet elke tussenstap meshed.
+  // Het rekennet voor de plaatweergave "mesh" (issue #78) zonder resultaat:
+  // asynchroon (Triangle) en met een korte vertraging, zodat slepen niet elke
+  // tussenstap meshed.
   const [displayMesh, setDisplayMesh] = useState<OpenFem3DPlateMesh | null>(null);
   const [meshMessage, setMeshMessage] = useState<string | null>(null);
-  const needsDisplayMesh = visibility.mesh && visibility.plates && (model.plates ?? []).length > 0 && !result?.plateMesh;
+  const needsDisplayMesh = visibility.plateDisplay === "mesh" && visibility.plates && (model.plates ?? []).length > 0 && !result?.plateMesh;
   useEffect(() => {
     if (!needsDisplayMesh) { setMeshMessage(null); return; }
     let cancelled = false;
@@ -281,8 +303,10 @@ export default function OpenFem3DEditor({
   }, []);
   const transformTool = (["move", "rotate", "copy", "mirror"] as const)
     .find((candidate) => candidate === tool);
+  // Een groep met alleen lasten (selectiefilter, issue #94) heeft geen knopen om te verplaatsen.
   const transformSelection = selection && (
-    selection.type === "node" || selection.type === "beam" || selection.type === "plate" || selection.type === "multi"
+    selection.type === "node" || selection.type === "beam" || selection.type === "plate"
+    || (selection.type === "multi" && openFem3DSelectionGeometryCount(selection) > 0)
   ) ? selection : null;
   const applyTransform = (command: OpenFem3DTransformCommand) => {
     if (!transformSelection) return;
@@ -325,11 +349,15 @@ export default function OpenFem3DEditor({
           loadCaseTypes={loadCaseTypes}
           onToolChange={onToolChange}
           onPlaceNodeCondition={onPlaceNodeCondition}
+          onPlacePointLoad={onPlacePointLoad}
           deformationDisplay={deformationDisplay}
           diagramLabels={diagramLabels}
           // Menu-item Perspectief van de view cube: dezelfde zichtbaarheid als
           // de schakelaar in Weergave en in het venster Zichtbaarheid.
           onPerspectiveChange={(perspective) => setVisibility({ ...visibility, perspective })}
+          // De section box (issue #86) hoort bij de weergave: in de
+          // zichtbaarheid, bewaard en in opgeslagen views.
+          onSectionBoxChange={(sectionBox) => setVisibility({ ...visibility, sectionBox })}
         />
         <div className="open-fem3d-stage-header">
           <strong>{t("openFem3d.title")}</strong>
@@ -363,9 +391,11 @@ export default function OpenFem3DEditor({
         </div>}
         {transformTool && transformSelection && <OpenFem3DTransformPanel
           tool={transformTool}
+          // Alleen knopen, staven en platen: lasten in de groep (selectiefilter,
+          // issue #94) worden niet zelf getransformeerd en tellen hier niet mee.
           selectionLabel={transformSelection.type === "multi"
             ? t("openFem3d.multiSelection", {
-              count: openFem3DSelectionCount(transformSelection), nodes: transformSelection.nodeIds.length,
+              count: openFem3DSelectionGeometryCount(transformSelection), nodes: transformSelection.nodeIds.length,
               beams: transformSelection.beamIds.length, plates: transformSelection.plateIds?.length ?? 0,
             })
             : transformSelection.type === "node" ? t("tree.nodeLabel", { ns: "common", id: transformSelection.id })

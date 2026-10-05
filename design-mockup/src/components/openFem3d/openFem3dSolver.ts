@@ -11,8 +11,15 @@ import { STEEL_SECTION_DIMS } from "../../lib/steelSectionDims.generated";
 import { profielAliasSleutel } from "../../lib/strip";
 import { thermalAlphaForMaterial } from "../../lib/thermalAlpha";
 import {
-  openFem3DLoadCaseId, openFem3DMemberAxes, type OpenFem3DModel, type OpenFem3DSupport,
+  OPEN_FEM_3D_BEDDING_ALL_ROUND_COSINE, isOpenFem3DGlobalMemberLoad, openFem3DGlobalDirectionVector, openFem3DGlobalMemberLoadFactor,
+  openFem3DLoadCaseId, openFem3DMemberAxes, readOpenFem3DBeamBedding, type OpenFem3DBeamBedding,
+  type OpenFem3DGlobalDirection, type OpenFem3DMemberLoad,
+  type OpenFem3DModel,
+  type OpenFem3DSupport,
 } from "./openFem3dModel";
+import {
+  OPEN_FEM_3D_BEDDING_LATERAL_BALANCE_NOTICE, openFem3DBeddingPileLateralForces, openFem3DBeddingTributaryLengths,
+} from "./openFem3dBedding";
 import { withOpenFem3DLoadPanels } from "./openFem3dLoadPanels";
 import { metScheefstandLasten, type OpenFem3DScheefstand } from "./openFem3dScheefstand";
 import { meshOpenFem3DPlates, type OpenFem3DPlateMesh } from "./openFem3dPlateMesh";
@@ -179,6 +186,43 @@ export interface OpenFem3DSolveResult {
   tensionOnlyFit?: { memberId: number; deltaMm: number }[];
   /** Trek-alleen staven die alleen dankzij de kruisregel actief zijn (oplopend). */
   crossRuleMembers?: number[];
+  /**
+   * Staven op bedding (issue #106): per staaf de zakking en de gronddruk op de
+   * knopen die de kern maakte. Alleen als het model staven op bedding heeft;
+   * ontbreekt bij een kern van vóór de bedding.
+   */
+  bedding?: OpenFem3DBeddingMemberResult[];
+}
+
+/** Eén punt van een staaf op bedding: een knoop van de kern, met de einden. */
+export interface OpenFem3DBeddingPoint {
+  /** Relatieve positie langs de staaf: 0 = begin, 1 = eind. */
+  t: number;
+  /** Verticale zakking in m, positief omlaag. */
+  settlementM: number;
+  /** De lijnlast die de grond op de staaf zet (k·b·zakking), kN/m, positief omhoog; 0 waar de veer wegviel. */
+  pressureKnPerM: number;
+  /**
+   * Zijdelingse lijnlast van de grond op de staaf (kN/m), alleen bij een zijdelingse bedding: bij een liggende
+   * of schuine staaf de component met teken langs de horizontale normaal n = Z × e_x (genormeerd; positief langs
+   * +n, de grond duwt tegen de verplaatsing in), bij een staaf steiler dan 45° (rondom, een (schoor)paal) de grootte
+   * van de resultante loodrecht op de as.
+   */
+  lateralKnPerM?: number;
+  /** False waar de verticale veer bij alleen druk is weggevallen (geen contact). */
+  active: boolean;
+}
+
+export interface OpenFem3DBeddingMemberResult {
+  memberId: number;
+  points: OpenFem3DBeddingPoint[];
+  maxPressureKnPerM: number;
+  minPressureKnPerM: number;
+  maxSettlementM: number;
+  /** De som van alle (verticale) veerkrachten van de staaf, kN. */
+  totalReactionKn: number;
+  /** Het deel van de lengte zonder contact (0 … 1). */
+  liftedFraction: number;
 }
 
 /**
@@ -191,7 +235,7 @@ export interface OpenFem3DSolveResult {
 export function openFem3DGlobalForceBalance(
   input: Omit<OpenFem3DSolveRequestBody, "bucklingModes">,
   result: Pick<OpenFem3DSolveResult, "reactions">
-    & Partial<Pick<OpenFem3DSolveResult, "analysis" | "displacements" | "memberForces">>,
+    & Partial<Pick<OpenFem3DSolveResult, "analysis" | "displacements" | "memberForces" | "bedding">>,
 ): NonNullable<OpenFem3DSolveResult["forceBalance"]> {
   const applied: [number, number, number] = [0, 0, 0];
   const appliedMoment: [number, number, number] = [0, 0, 0];
@@ -236,6 +280,20 @@ export function openFem3DGlobalForceBalance(
   for (const load of input.memberLoads) {
     const { start, ex, ey, ez } = memberGeometry(load.memberId);
     const length = load.endPositionM - load.startPositionM;
+    if (isOpenFem3DGlobalMemberLoad(load)) {
+      // Globale lijnlast (#80): per staafmeter f·q(s) langs d, met f = 1 of,
+      // per projectie, |e_x × d|. Kracht d·f·∫q ds, moment om de oorsprong
+      // start × F + e_x × d·f·∫s·q(s) ds (s vanaf het staafbegin).
+      const d = openFem3DGlobalDirectionVector(load.globalDirection);
+      const f = openFem3DGlobalMemberLoadFactor(ex, load.globalDirection, load.perProjection);
+      const total = f * (load.qStartKnPerM + load.qEndKnPerM) * length / 2;
+      const force: Vector3 = [d[0] * total, d[1] * total, d[2] * total];
+      add(applied, force);
+      add(appliedMoment, cross([start.x, start.y, start.z], force));
+      const s = load.startPositionM * total + f * length ** 2 * (load.qStartKnPerM / 6 + load.qEndKnPerM / 3);
+      add(appliedMoment, cross(ex as Vector3, [d[0] * s, d[1] * s, d[2] * s]));
+      continue;
+    }
     const fy = (load.qyStartKnPerM + load.qyEndKnPerM) * length / 2;
     const fz = (load.qzStartKnPerM + load.qzEndKnPerM) * length / 2;
     const force = localVector(ey, ez, fy, fz);
@@ -281,6 +339,31 @@ export function openFem3DGlobalForceBalance(
     imbalanceKn[2] += reaction.fz;
     add(momentImbalanceKnm, cross([node.x, node.y, node.z], [reaction.fx, reaction.fy, reaction.fz]));
     add(momentImbalanceKnm, [reaction.mx, reaction.my, reaction.mz]);
+  }
+  // Grondveren van staven op bedding (#106): de kern zet ze op zijn knopen
+  // langs de staaf, elk met k·b maal de halve stukken ernaast. De veerkracht
+  // is dus de gronddruk maal die lengte, verticaal in globaal +Z, op het punt
+  // t. Ze werken als reacties (de oplegreacties zelf bevatten ze niet). De
+  // zijdelingse grondkracht van een liggende staaf werkt langs n = Z × e_x;
+  // die van een staaf steiler dan 45° (rondom, een (schoor)paal) staat alleen
+  // als grootte in het resultaat en telt hier niet mee (zie
+  // openFem3DBeddingPileLateralForces).
+  for (const member of result.bedding ?? []) {
+    const { start, ex } = memberGeometry(member.memberId);
+    const definition = memberById.get(member.memberId)!;
+    const end = nodeById.get(definition.endNodeId)!;
+    const length = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
+    const lengths = openFem3DBeddingTributaryLengths(member.points, length);
+    const pile = Math.abs(ex[2]) > OPEN_FEM_3D_BEDDING_ALL_ROUND_COSINE;
+    const side = cross([0, 0, 1], ex as Vector3);
+    const sideLength = Math.hypot(...side);
+    member.points.forEach((point, index) => {
+      const lateral = !pile && sideLength > 0 ? (point.lateralKnPerM ?? 0) * lengths[index] / sideLength : 0;
+      const force: Vector3 = [lateral * side[0], lateral * side[1], point.pressureKnPerM * lengths[index] + lateral * side[2]];
+      const position = memberPoint(start, ex, point.t * length);
+      add(imbalanceKn, force);
+      add(momentImbalanceKnm, cross(position, force));
+    });
   }
   const secondOrderMomentKnm = result.analysis === "p-delta" && result.displacements && result.memberForces
     ? openFem3DSecondOrderMomentKnm(input, { displacements: result.displacements, memberForces: result.memberForces })
@@ -371,9 +454,10 @@ function selectedLoads(model: OpenFem3DModel, loadSelection: OpenFem3DLoadSelect
       mx: load.mx * factor, my: load.my * factor, mz: load.mz * factor,
     }];
   });
-  const memberLoads = (model.memberLoads ?? []).flatMap((load) => {
+  const memberLoads = (model.memberLoads ?? []).flatMap((load): OpenFem3DMemberLoad[] => {
     const factor = factorForLoad(loadSelection, openFem3DLoadCaseId(load));
     if (factor === 0) return [];
+    if (isOpenFem3DGlobalMemberLoad(load)) return [{ ...load, qStart: load.qStart * factor, qEnd: load.qEnd * factor }];
     return [{
       ...load,
       qyStart: load.qyStart * factor, qyEnd: load.qyEnd * factor,
@@ -410,16 +494,28 @@ function selectedLoads(model: OpenFem3DModel, loadSelection: OpenFem3DLoadSelect
 function contractLoads(loads: ReturnType<typeof selectedLoads>) {
   return {
     nodalLoads: loads.nodalLoads.map(({ caseId: _caseId, ...load }) => load),
-    memberLoads: loads.memberLoads.map((load) => ({
-      id: load.id,
-      memberId: load.beamId,
-      qyStartKnPerM: load.qyStart,
-      qyEndKnPerM: load.qyEnd,
-      qzStartKnPerM: load.qzStart,
-      qzEndKnPerM: load.qzEnd,
-      startPositionM: load.startPositionM,
-      endPositionM: load.endPositionM,
-    })),
+    memberLoads: loads.memberLoads.map((load): OpenFem3DMemberLoadBody => isOpenFem3DGlobalMemberLoad(load)
+      // Globaal (#80): 1-op-1 volgens het contract; de kern zet de last om naar de staaf.
+      ? {
+          id: load.id,
+          memberId: load.beamId,
+          globalDirection: load.globalDirection,
+          qStartKnPerM: load.qStart,
+          qEndKnPerM: load.qEnd,
+          ...(load.perProjection ? { perProjection: true } : {}),
+          startPositionM: load.startPositionM,
+          endPositionM: load.endPositionM,
+        }
+      : {
+          id: load.id,
+          memberId: load.beamId,
+          qyStartKnPerM: load.qyStart,
+          qyEndKnPerM: load.qyEnd,
+          qzStartKnPerM: load.qzStart,
+          qzEndKnPerM: load.qzEnd,
+          startPositionM: load.startPositionM,
+          endPositionM: load.endPositionM,
+        }),
     memberPointLoads: loads.memberPointLoads.map((load) => ({
       id: load.id,
       memberId: load.beamId,
@@ -465,7 +561,9 @@ export function buildOpenFem3DSolveRequest(
   if (model.nodes.length < 2 || (model.beams.length === 0 && plates.length === 0)) {
     throw new Error("Voeg minstens twee knopen en één staaf of plaat toe voordat je rekent.");
   }
-  if ((model.supports ?? []).length === 0 && !plates.some((plate) => (plate.edgeSupports?.length ?? 0) > 0)) {
+  // Grondveren van staven op bedding tellen als oplegging, net als in de kern (#106).
+  if ((model.supports ?? []).length === 0 && !plates.some((plate) => (plate.edgeSupports?.length ?? 0) > 0)
+    && !model.beams.some((beam) => beam.bedding)) {
     throw new Error("Voeg minstens één 3D-oplegging toe.");
   }
   const selected = selectedLoads(model, loadSelection);
@@ -499,12 +597,19 @@ export function buildOpenFem3DSolveRequest(
   const materialIds = new Map<string, number>();
   const sectionIds = new Map<string, number>();
 
+  const nodeIndex = new Map(model.nodes.map((node) => [node.id, node]));
   const members = model.beams.map((beam) => {
     const material = beam.material?.trim();
     const profile = beam.profileName?.trim();
     if (!material || !profile) {
       throw new Error(`Staaf ${beam.id}: wijs eerst een materiaal en profiel toe.`);
     }
+    // Staaf op bedding (#106): dezelfde keuring als het model, zodat een
+    // ongeldige bedding (bijv. een verticale k op een kolom) vóór de kern
+    // een Nederlandse melding geeft.
+    const bedding: OpenFem3DBeamBedding | undefined = beam.bedding
+      ? readOpenFem3DBeamBedding(beam.bedding, nodeIndex.get(beam.startNodeId)!, nodeIndex.get(beam.endNodeId)!, `Staaf ${beam.id}`)
+      : undefined;
     const resolved = resolveSection(material, profile);
     if (resolved.bron === "default") throw new Error(`Staaf ${beam.id}: ${resolved.reden ?? "doorsnede onbekend"}.`);
 
@@ -561,6 +666,8 @@ export function buildOpenFem3DSolveRequest(
         : {}),
       // Alleen meesturen als het aan staat: een oudere kern kent het veld niet.
       ...(beam.tensionOnly ? { tensionOnly: true } : {}),
+      // Idem voor de bedding: alleen bij een staaf op bedding (contract #106).
+      ...(bedding ? { bedding } : {}),
     };
   });
 
@@ -776,6 +883,24 @@ export async function solveOpenFem3DCombination(
   return withOpenFem3DCableSelfWeightNotice(withLoadPanelDiagnostics(result, model, factors), model, factors, options);
 }
 
+/**
+ * Een lijnlast in het rekencontract: lokaal (qy/qz) of, sinds issue #80, in
+ * een globale richting met q langs die as (Z negatief = omlaag), per
+ * staafmeter of met `perProjection` per meter projectie loodrecht op de
+ * lastrichting. Een globale last draagt geen lokale velden.
+ */
+export type OpenFem3DMemberLoadBody =
+  | {
+      id: number; memberId: number; qyStartKnPerM: number; qyEndKnPerM: number;
+      qzStartKnPerM: number; qzEndKnPerM: number; startPositionM: number; endPositionM: number;
+      globalDirection?: undefined;
+    }
+  | {
+      id: number; memberId: number; globalDirection: OpenFem3DGlobalDirection;
+      qStartKnPerM: number; qEndKnPerM: number; perProjection?: boolean;
+      startPositionM: number; endPositionM: number;
+    };
+
 /** Het versievaste rekenverzoek aan de Rust-adapter (contract 1 of 2). */
 export interface OpenFem3DSolveRequestBody {
   schemaVersion: 1 | 2;
@@ -789,13 +914,12 @@ export interface OpenFem3DSolveRequestBody {
     rollAngleRad?: number;
     intermediateNodeIds?: number[];
     tensionOnly?: boolean;
+    /** Staaf op bedding: dezelfde velden als in het model (m, kN/m³). */
+    bedding?: OpenFem3DBeamBedding;
   }[];
   supports: (Record<string, unknown> & { nodeId: number })[];
   nodalLoads: { id: number; nodeId: number; fx: number; fy: number; fz: number; mx: number; my: number; mz: number }[];
-  memberLoads: {
-    id: number; memberId: number; qyStartKnPerM: number; qyEndKnPerM: number;
-    qzStartKnPerM: number; qzEndKnPerM: number; startPositionM: number; endPositionM: number;
-  }[];
+  memberLoads: OpenFem3DMemberLoadBody[];
   memberPointLoads: { id: number; memberId: number; pyKn: number; pzKn: number; positionM: number }[];
   thermalLoads: {
     id: number; memberId: number; deltaTUniformK: number; deltaTGradientYK: number; deltaTGradientZK: number;
@@ -823,10 +947,16 @@ export interface OpenFem3DTensionOnlyFitBody {
 }
 
 async function callOpenFem3DSolver(input: OpenFem3DSolveRequestBody): Promise<OpenFem3DSolveResult> {
-  const checked = (result: OpenFem3DSolveResult): OpenFem3DSolveResult => ({
-    ...result,
-    forceBalance: openFem3DGlobalForceBalance(input, result),
-  });
+  const checked = (result: OpenFem3DSolveResult): OpenFem3DSolveResult => {
+    // Met zijdelingse grondkrachten op een paal sluit de onafhankelijke som
+    // niet (hun richting staat niet in het resultaat); zeg dat in plaats van
+    // een afwijking te melden die er niet is.
+    if (openFem3DBeddingPileLateralForces(input, result)) {
+      const { forceBalance: _niet, ...rest } = result;
+      return { ...rest, diagnostics: [...result.diagnostics, OPEN_FEM_3D_BEDDING_LATERAL_BALANCE_NOTICE] };
+    }
+    return { ...result, forceBalance: openFem3DGlobalForceBalance(input, result) };
+  };
   const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
   const usesLegacyCompatibleLoads = input.schemaVersion === 1
     && input.memberLoads.length === 0

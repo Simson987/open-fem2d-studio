@@ -3,8 +3,9 @@
 // de staalhal van 60 × 30 m met dunne buisverbanden; de view cube (groep
 // "kubus"), perspectief of parallel (groep "parallel") en de waarden bij de
 // snedekrachtlijnen (groep "waarden", issue #95), een lijnlast kiezen en
-// markeren (groep "lijnlast", issue #81), zie
-// scripts/open-fem3d-selectie-browser.tsx. De groep "strikt" draait in een
+// markeren (groep "lijnlast", issue #81), scharnierbolletjes op staafeinden,
+// het gereedschap Scharnier aan staafeind en het inklemmingsteken (groep
+// "scharnier", issue #93), zie scripts/open-fem3d-selectie-browser.tsx. De groep "strikt" draait in een
 // ontwikkelbundel: alleen daar voert React StrictMode effecten tweemaal uit.
 //
 // Met OPEN_FEM3D_SELECTIE_DIAG=1 schrijft de test alleen de telling per
@@ -66,8 +67,8 @@ try {
     assert.equal(report.error, null, report.error);
   } else {
     let totaal = 0;
-    // OPEN_FEM3D_SELECTIE_GROEP=kubus (of groot, klein, parallel, waarden, lijnlast, strikt) draait één groep.
-    const groepen = ["groot", "klein", "kubus", "parallel", "waarden", "lijnlast", "strikt"].filter((g) => !process.env.OPEN_FEM3D_SELECTIE_GROEP || g === process.env.OPEN_FEM3D_SELECTIE_GROEP);
+    // OPEN_FEM3D_SELECTIE_GROEP=kubus (of groot, klein, parallel, waarden, lijnlast, scharnier, strikt) draait één groep.
+    const groepen = ["groot", "klein", "kubus", "parallel", "waarden", "lijnlast", "scharnier", "strikt"].filter((g) => !process.env.OPEN_FEM3D_SELECTIE_GROEP || g === process.env.OPEN_FEM3D_SELECTIE_GROEP);
     for (const groep of groepen) {
       const pagina = groep === "strikt" ? await bouw("test-dev", "development") : html;
       const report = draai(`groep=${groep}`, `profiel-${groep}`, pagina);
@@ -76,9 +77,10 @@ try {
       assert.equal(report.tests.filter((t) => t.error).length, 0, "3D-selectie-UI regressies");
       totaal += report.tests.length;
     }
-    // Schermafbeeldingen (de vervormde vorm en de view cube, driemaal
-    // vergroot): zet OPEN_FEM3D_SCHERMAFBEELDINGEN op een bestaande map;
-    // zonder die variabele wordt er niets gemaakt.
+    // Schermafbeeldingen (de vervormde vorm, de view cube driemaal vergroot,
+    // de scharnierbolletjes en het inklemmingsteken van dichtbij): zet
+    // OPEN_FEM3D_SCHERMAFBEELDINGEN op een bestaande map; zonder die variabele
+    // wordt er niets gemaakt.
     const map = process.env.OPEN_FEM3D_SCHERMAFBEELDINGEN;
     if (map) {
       assert.ok(existsSync(map), `map voor schermafbeeldingen bestaat niet: ${map}`);
@@ -88,6 +90,8 @@ try {
       for (const [bestand, beeld, venster] of [
         ["vervormde-vorm.png", "vervormd", "1000,700"], ["view-cube-start.png", "kubus-start", "1100,720"],
         ["view-cube-onder.png", "kubus-onder", "1100,720"], ["view-cube-menu.png", "kubus-menu", "1100,720"],
+        ...["scharnier-overzicht", "scharnier-iso", "scharnier-opzij", "scharnier-klein", "scharnier-profiel", "inklemming-iso", "inklemming-opzij", "inklemming-boven",
+          "opleggingen-naast-elkaar"].map((beeld) => [`${beeld}.png`, beeld, "1000,700"]),
       ]) {
         const pad = join(map, bestand);
         startBrowser(browser, ["--headless=new", "--disable-gpu", "--enable-unsafe-swiftshader", "--no-first-run",

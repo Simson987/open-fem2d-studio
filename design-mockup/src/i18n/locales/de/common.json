@@ -37,6 +37,7 @@
     "rasterHint": "Das Hintergrundraster der Zeichenfläche anzeigen.",
     "snap": "Fang",
     "snapAll": "Alle Fangarten",
+    "spoorHint": "Objektspur beim Zeichnen in 3D: die Maus kurz über einem Knoten oder Stab halten, um ihn zu erfassen; Spurlinien entlang der Achsen in der Arbeitsebene, ihre Schnittpunkte, Verlängerung, lotrecht und parallel. Alt schaltet alle Fänge vorübergehend aus, Shift hält die Richtung entlang einer Achse.",
     "hoekHint": "Winkelfang beim Zeichnen eines Stabes: Liegt die Richtung innerhalb der Toleranz von 0° oder 90°, wird sie genau darauf gesetzt; die Länge bleibt gleich. Ein Knoten oder eine Rasterachse hat Vorrang.",
     "hoekTolerantie": "Toleranz (°)",
     "hoekTolerantieHint": "Um wie viel Grad die Richtung abweichen darf: 0,1 bis 15. Komma oder Punkt erlaubt.",
@@ -101,7 +102,14 @@
     "nodes": "Knoten",
     "beams": "Stäbe",
     "plates": "Platten",
-    "mesh": "Netz (Elementteilung)",
+    "plateDisplay": "Plattendarstellung",
+    "plateDisplayHint": "Wie Platten gezeichnet werden: als Volumen mit ihrer Dicke, als Fläche (nur die Mittelebene) oder als Netz (die Elemente des Berechnungsnetzes auf der Mittelebene).",
+    "plateDisplayVolume": "Volumen",
+    "plateDisplaySurface": "Fläche",
+    "plateDisplayMesh": "Netz",
+    "plateDisplayVolumeHint": "Platten als Volumen, mit ihrer Dicke.",
+    "plateDisplaySurfaceHint": "Nur die Mittelebene der Platte, dünn und halbtransparent, mit dem Umriss und den Öffnungen als Linie.",
+    "plateDisplayMeshHint": "Die Elemente des Berechnungsnetzes auf der Mittelebene, mit einer leicht gefüllten Fläche darunter.",
     "profiles": "Profile (Volumen)",
     "profileColors": "Profile farbig",
     "nodeNumbers": "Knotennummern",
@@ -111,6 +119,7 @@
     "loads": "Lasten",
     "grid": "Raster",
     "structuralGrid": "Achsraster und Ebenen",
+    "levelMarks": "Höhenkoten",
     "axes": "X/Y/Z-Achsen",
     "memberAxes": "Lokale Stabachsen",
     "viewCube": "Ansichtswürfel",
@@ -125,6 +134,7 @@
     "torsion": "Torsion T",
     "momentY": "Moment My",
     "momentZ": "Moment Mz",
+    "groundPressure": "Bodenpressung",
     "remembered": "Die Sichtbarkeit wird auf diesem Gerät gespeichert; gespeicherte Ansichten gehören zum Projekt.",
     "viewSetsAria": "Gespeicherte 3D-Ansichten",
     "viewSetsTitle": "Gespeicherte Ansichten",
@@ -157,6 +167,14 @@
     "density": "Anzahl der Werte",
     "densityHint": "Wenig: nur der maßgebende Wert je Linie. Mitte: wie bisher. Viel: Anfang, Ende, Extremwert und Viertelspunkte an allen Stäben. Ausgewählte Stäbe zeigen ihre Werte immer.",
     "densityValue": "Stufe {{n}} von {{max}}"
+  },
+  "openFem3dSymbolScale": {
+    "size": "Größe",
+    "hint": "Größe im Verhältnis zur automatischen Größe (25–400 %). Doppelklick auf den Regler oder Klick auf den Wert: zurück auf 100 %.",
+    "nodesAria": "Größe der Knoten",
+    "supportsAria": "Größe der Auflager",
+    "reset": "Zurück auf 100 %",
+    "value": "{{n}} %"
   },
   "openFem3dViews": {
     "tab": "Ansichten",
@@ -246,6 +264,7 @@
     "knoop": "Knoten",
     "stramien": "Achsraster",
     "raster": "Raster",
+    "spoor": "Objektspur",
     "hoek": "Winkel"
   },
   "section": "Abschnitt {{number}}",
@@ -553,7 +572,8 @@
     "snapExplain": {
       "knoop": "Fangen an vorhandenen Knoten. Hat Vorrang vor Achsen und Raster.",
       "stramien": "Fangen an Rasterachsen und Ebenen. Hat Vorrang vor dem Raster.",
-      "raster": "Fangen am Hintergrundraster — der schwächste Fang."
+      "raster": "Fangen am Hintergrundraster — der schwächste Fang.",
+      "spoor": "Ausrichten an Knoten und Stäben, über denen die Maus kurz stand, und am Startpunkt: Spurlinien entlang X, Y und Z, Schnittpunkte, Verlängerung, lotrecht und parallel. Nur in 3D."
     }
   },
   "documentBar": {
@@ -1286,5 +1306,76 @@
     "gekopieerd": "Kopiert",
     "sluiten": "Schließen",
     "mislukt": "IFC-Import fehlgeschlagen"
+  },
+  "selectieFilter": {
+    "title": "Auswahlfilter",
+    "basisSelectie_one": "Wirkt auf die aktuelle Auswahl: {{count}} Element.",
+    "basisSelectie_other": "Wirkt auf die aktuelle Auswahl: {{count}} Elemente.",
+    "basisModel_one": "Nichts ist ausgewählt: Der Filter wirkt auf das ganze Modell ({{count}} Element).",
+    "basisModel_other": "Nichts ist ausgewählt: Der Filter wirkt auf das ganze Modell ({{count}} Elemente).",
+    "uitleg": "Pro Merkmal Werte ankreuzen und wählen, ob nur diese behalten oder entfernt werden. Mehrere Merkmale gelten gemeinsam: Was übrig bleibt, erfüllt alle. Behalten entfernt auch, was das Merkmal nicht hat.",
+    "groepAlgemeen": "Allgemein",
+    "groepStaven": "Stäbe",
+    "groepLasten": "Lasten",
+    "kenmerk": {
+      "type": "Typ",
+      "level": "Ebene",
+      "material": "Material",
+      "profile": "Profil",
+      "group": "Gruppe",
+      "role": "Stabtyp",
+      "direction": "Richtung",
+      "length": "Länge",
+      "loadCase": "Lastfall",
+      "loadKind": "Lastart"
+    },
+    "modus": {
+      "keep": "Nur diese behalten",
+      "remove": "Diese entfernen"
+    },
+    "modusVoor": "Behalten oder entfernen: {{kenmerk}}",
+    "type": {
+      "node": "Knoten",
+      "beam": "Stäbe",
+      "plate": "Platten",
+      "load": "Lasten",
+      "support": "Auflager"
+    },
+    "richting": {
+      "horizontal": "Horizontal",
+      "vertical": "Vertikal",
+      "sloped": "Schräg"
+    },
+    "richtingHint": "Vertikal: |ex·Z| > 0,95; horizontal: |ex·Z| < 0,05; dazwischen schräg.",
+    "levelHint": "Knoten auf der Ebene oder mit ihr verknüpft, sowie Stäbe und Platten, deren Knoten alle darauf liegen.",
+    "lastSoort": {
+      "nodal": "Knotenlast",
+      "moment": "Moment",
+      "line": "Linienlast",
+      "memberPoint": "Einzellast auf Stab",
+      "thermal": "Temperaturlast",
+      "surface": "Flächenlast",
+      "edge": "Randlast",
+      "edgePoint": "Einzellast auf Plattenrand",
+      "loadPanel": "Lastfläche"
+    },
+    "zonder": "(keine)",
+    "van": "von",
+    "tot": "bis",
+    "vanMm": "Länge von (mm)",
+    "totMm": "Länge bis (mm)",
+    "lengteBereik": "Stäbe in der Basis: {{min}} – {{max}} mm; die Grenzen zählen mit.",
+    "geval": "Lastfall {{id}}",
+    "resultaat": "Was übrig bleibt",
+    "vanBasis": "von {{basis}}",
+    "over_one": "Übrig: {{over}} von {{count}} Element",
+    "over_other": "Übrig: {{over}} von {{count}} Elementen",
+    "niets": "Nichts bleibt übrig; Anwenden hebt die Auswahl auf.",
+    "meerdereGevallen": {
+      "titel": "Lasten in mehreren Lastfällen",
+      "tekst": "Die gewählten Lasten liegen in {{aantal}} Lastfällen. Sie sind alle ausgewählt, aber nur die des aktiven Lastfalls ({{geval}}) werden angezeigt."
+    },
+    "criteriaActief": "Aktive Merkmale: {{count}}",
+    "wissen": "Leeren"
   }
 }

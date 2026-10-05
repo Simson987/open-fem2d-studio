@@ -37,6 +37,7 @@
     "rasterHint": "Toon het achtergrondraster van het tekenvlak.",
     "snap": "Snap",
     "snapAll": "Alle snapsoorten",
+    "spoorHint": "Objectspoor bij het tekenen in 3D: hang even met de muis boven een knoop of staaf om hem te verwerven; spoorlijnen langs de assen in het werkvlak, hun snijpunten, verlengen, loodrecht en parallel. Alt zet alle snaps tijdelijk uit, Shift houdt de richting langs een as.",
     "hoekHint": "Hoeksnap bij het tekenen van een staaf: ligt de richting binnen de tolerantie van 0° of 90°, dan wordt hij daar exact op gezet; de lengte blijft gelijk. Een knoop of stramienas gaat voor.",
     "hoekTolerantie": "Tolerantie (°)",
     "hoekTolerantieHint": "Hoeveel graden de richting ernaast mag liggen: 0,1 tot 15. Komma of punt mag.",
@@ -101,7 +102,14 @@
     "nodes": "Knopen",
     "beams": "Staven",
     "plates": "Platen",
-    "mesh": "Mesh (elementverdeling)",
+    "plateDisplay": "Plaatweergave",
+    "plateDisplayHint": "Hoe platen getekend worden: als volume met hun dikte, als vlak (alleen het middenvlak) of als mesh (de elementen van het rekennet op het middenvlak).",
+    "plateDisplayVolume": "Volume",
+    "plateDisplaySurface": "Vlak",
+    "plateDisplayMesh": "Mesh",
+    "plateDisplayVolumeHint": "Platen als volume, met hun dikte.",
+    "plateDisplaySurfaceHint": "Alleen het middenvlak van de plaat, dun en halfdoorzichtig, met de omtrek en de openingen als lijn.",
+    "plateDisplayMeshHint": "De elementen van het rekennet op het middenvlak, met een licht gevuld vlak eronder.",
     "profiles": "Profielen (volume)",
     "profileColors": "Profielen in kleur",
     "nodeNumbers": "Knoopnummers",
@@ -111,6 +119,7 @@
     "loads": "Belastingen",
     "grid": "Raster",
     "structuralGrid": "Stramienen en levels",
+    "levelMarks": "Peilmaten",
     "axes": "X/Y/Z-assen",
     "memberAxes": "Lokale staafassen",
     "viewCube": "Aanzichtkubus",
@@ -125,6 +134,7 @@
     "torsion": "Torsie T",
     "momentY": "Moment My",
     "momentZ": "Moment Mz",
+    "groundPressure": "Gronddruk",
     "remembered": "Zichtbaarheid wordt op dit apparaat onthouden; opgeslagen views gaan mee met het project.",
     "viewSetsAria": "Opgeslagen 3D-weergaven",
     "viewSetsTitle": "Opgeslagen views",
@@ -157,6 +167,14 @@
     "density": "Aantal waarden",
     "densityHint": "Weinig: alleen de maatgevende waarde per lijn. Midden: zoals altijd. Veel: begin, eind, uiterste en kwartpunten op alle staven. Geselecteerde staven tonen hun waarden altijd.",
     "densityValue": "Stand {{n}} van {{max}}"
+  },
+  "openFem3dSymbolScale": {
+    "size": "Grootte",
+    "hint": "Grootte ten opzichte van de automatische maat (25–400 %). Dubbelklik op de regelaar of klik op de waarde: terug naar 100 %.",
+    "nodesAria": "Grootte van de knopen",
+    "supportsAria": "Grootte van de opleggingen",
+    "reset": "Terug naar 100 %",
+    "value": "{{n}} %"
   },
   "openFem3dViews": {
     "tab": "Views",
@@ -246,6 +264,7 @@
     "knoop": "Knoop",
     "stramien": "Stramien",
     "raster": "Raster",
+    "spoor": "Objectspoor",
     "hoek": "Hoek"
   },
   "section": "Sectie {{number}}",
@@ -553,7 +572,8 @@
     "snapExplain": {
       "knoop": "Vangen op bestaande knopen. Wint van stramien en raster.",
       "stramien": "Vangen op stramienassen en levels. Wint van het raster.",
-      "raster": "Vangen op het achtergrondraster — de zwakste snap."
+      "raster": "Vangen op het achtergrondraster — de zwakste snap.",
+      "spoor": "Uitlijnen op knopen en staven waar de muis even boven hing en op het beginpunt: spoorlijnen langs X, Y en Z, snijpunten, verlengen, loodrecht en parallel. Alleen in 3D."
     }
   },
   "documentBar": {
@@ -1286,5 +1306,76 @@
     "gekopieerd": "Gekopieerd",
     "sluiten": "Sluiten",
     "mislukt": "IFC-import mislukt"
+  },
+  "selectieFilter": {
+    "title": "Selectiefilter",
+    "basisSelectie_one": "Werkt op de huidige selectie: {{count}} element.",
+    "basisSelectie_other": "Werkt op de huidige selectie: {{count}} elementen.",
+    "basisModel_one": "Er is niets geselecteerd: het filter werkt op het hele model ({{count}} element).",
+    "basisModel_other": "Er is niets geselecteerd: het filter werkt op het hele model ({{count}} elementen).",
+    "uitleg": "Vink per kenmerk waarden aan en kies of je alleen die houdt of ze weghaalt. Meerdere kenmerken gelden samen: wat overblijft, voldoet aan alle. Houden laat ook vallen wat het kenmerk niet heeft.",
+    "groepAlgemeen": "Algemeen",
+    "groepStaven": "Staven",
+    "groepLasten": "Lasten",
+    "kenmerk": {
+      "type": "Type",
+      "level": "Level",
+      "material": "Materiaal",
+      "profile": "Profiel",
+      "group": "Groep",
+      "role": "Staaftype",
+      "direction": "Richting",
+      "length": "Lengte",
+      "loadCase": "Belastinggeval",
+      "loadKind": "Soort last"
+    },
+    "modus": {
+      "keep": "Alleen deze houden",
+      "remove": "Deze weghalen"
+    },
+    "modusVoor": "Houden of weghalen: {{kenmerk}}",
+    "type": {
+      "node": "Knopen",
+      "beam": "Staven",
+      "plate": "Platen",
+      "load": "Lasten",
+      "support": "Opleggingen"
+    },
+    "richting": {
+      "horizontal": "Horizontaal",
+      "vertical": "Verticaal",
+      "sloped": "Schuin"
+    },
+    "richtingHint": "Verticaal: |ex·Z| > 0,95; horizontaal: |ex·Z| < 0,05; daartussen schuin.",
+    "levelHint": "Knopen op of gekoppeld aan het level, en staven en platen waarvan alle knopen erop liggen.",
+    "lastSoort": {
+      "nodal": "Knooplast",
+      "moment": "Moment",
+      "line": "Lijnlast",
+      "memberPoint": "Puntlast op staaf",
+      "thermal": "Temperatuurlast",
+      "surface": "Vlaklast",
+      "edge": "Randlast",
+      "edgePoint": "Puntlast op plaatrand",
+      "loadPanel": "Belastingvlak"
+    },
+    "zonder": "(geen)",
+    "van": "van",
+    "tot": "tot",
+    "vanMm": "Lengte van (mm)",
+    "totMm": "Lengte tot (mm)",
+    "lengteBereik": "Staven in de basis: {{min}} – {{max}} mm; de grenzen tellen mee.",
+    "geval": "Belastinggeval {{id}}",
+    "resultaat": "Wat overblijft",
+    "vanBasis": "van {{basis}}",
+    "over_one": "Over: {{over}} van {{count}} element",
+    "over_other": "Over: {{over}} van {{count}} elementen",
+    "niets": "Er blijft niets over; Toepassen heft de selectie op.",
+    "meerdereGevallen": {
+      "titel": "Lasten in meerdere belastinggevallen",
+      "tekst": "De gekozen lasten liggen in {{aantal}} belastinggevallen. Ze zijn allemaal geselecteerd, maar alleen die van het actieve geval ({{geval}}) staan in beeld."
+    },
+    "criteriaActief": "Actieve kenmerken: {{count}}",
+    "wissen": "Wissen"
   }
 }

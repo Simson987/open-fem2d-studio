@@ -34,18 +34,29 @@ fn nodal_loads_schema() -> Value {
     })
 }
 
+/// Lokale component van een lijnlast: ontbreekt = 0 (sinds de globale lijnlast, issue #80).
+fn local_component_schema() -> Value {
+    json!({ "type": "number", "default": 0, "description": "Eindig getal; ontbreekt = 0. Bij een globale last 0 of weglaten." })
+}
+
 fn member_loads_schema() -> Value {
     json!({
         "type": "array", "default": [],
-        "description": "Trapezoidal member loads in local y/z axes. Intensities are kN/m; positions are metres from member start.",
+        "description": "Trapeziumvormige lijnlasten op staven in kN/m; posities in m vanaf het staafbegin. Lokaal: qy/qz langs de staafassen y/z (een ontbrekende component is 0). Globaal (issue #80): globalDirection x, y of z met qStartKnPerM/qEndKnPerM met teken langs die globale as (z negatief = omlaag), lineair over het bereik; per meter staaflengte, of met perProjection per meter projectie van de staaf op het vlak loodrecht op de lastrichting (sneeuw op een schuine spant: per horizontale meter, dus q·|e_x × d| per staafmeter). Een globale last heeft geen lokale waarden (0 of weglaten).",
         "items": {
             "type": "object", "additionalProperties": false,
-            "required": ["id", "memberId", "qyStartKnPerM", "qyEndKnPerM", "qzStartKnPerM", "qzEndKnPerM"],
+            "required": ["id", "memberId"],
             "properties": {
                 "id": { "type": "integer", "minimum": 1 },
                 "memberId": { "type": "integer", "minimum": 1 },
-                "qyStartKnPerM": vector_schema(), "qyEndKnPerM": vector_schema(),
-                "qzStartKnPerM": vector_schema(), "qzEndKnPerM": vector_schema(),
+                "qyStartKnPerM": local_component_schema(), "qyEndKnPerM": local_component_schema(),
+                "qzStartKnPerM": local_component_schema(), "qzEndKnPerM": local_component_schema(),
+                "globalDirection": { "type": "string", "enum": ["x", "y", "z"],
+                    "description": "Globale lastrichting; aanwezig = een globale lijnlast met qStartKnPerM en qEndKnPerM." },
+                "qStartKnPerM": { "type": "number", "description": "Globale last aan het begin van het bereik, kN/m, met teken langs de globale as." },
+                "qEndKnPerM": { "type": "number", "description": "Globale last aan het eind van het bereik, kN/m, met teken langs de globale as." },
+                "perProjection": { "type": "boolean", "default": false,
+                    "description": "Alleen bij een globale last: per meter projectie loodrecht op de lastrichting in plaats van per meter staaflengte." },
                 "startPositionM": { "type": ["number", "null"], "minimum": 0 },
                 "endPositionM": { "type": ["number", "null"], "exclusiveMinimum": 0 }
             }
@@ -104,11 +115,30 @@ fn surface_loads_schema() -> Value {
     })
 }
 
+/// Staaf op bedding (issue #106): dezelfde velden als `Member3D.bedding` van
+/// de kern. Minstens één van beide constanten; dat keurt de kern.
+fn bedding_schema() -> Value {
+    json!({
+        "type": "object", "additionalProperties": false,
+        "required": ["widthM"],
+        "description": "Staaf op bedding (Winkler): de grond steunt de staaf met veren k·b over de hele lengte; de adapter knipt de staaf zelf fijn genoeg. Geef kKnPerM3, kLateralKnPerM3 of beide. Een (bijna) verticale staaf (|ex·Z| > 0,95) krijgt alleen kLateralKnPerM3 (paal); een verticale k wordt daar geweigerd. Het resultaat geeft per staaf de zakking en de gronddruk in `bedding`.",
+        "properties": {
+            "kKnPerM3": { "type": "number", "exclusiveMinimum": 0,
+                "description": "Beddingsconstante k in kN/m³ voor de verticale richting (globaal Z, de grond ligt onder de staaf); lijnstijfheid k·b in kN/m per m." },
+            "widthM": { "type": "number", "exclusiveMinimum": 0, "description": "Contactbreedte b in m." },
+            "kLateralKnPerM3": { "type": "number", "exclusiveMinimum": 0,
+                "description": "Zijdelingse beddingsconstante in kN/m³: horizontaal loodrecht op de staafas, naar beide zijden, altijd lineair (ook bij compressionOnly). Bij een staaf steiler dan 45° (een (schoor)paal) rondom, in twee richtingen loodrecht op de as; bij een loodrechte paal in X en Y." },
+            "compressionOnly": { "type": "boolean", "default": false,
+                "description": "Alleen druk: de verticale veren vallen weg waar de staaf omhoog komt (de grond trekt niet)." }
+        }
+    })
+}
+
 /// Strikt schema voor het neutrale Open FEM 3D-contract.
 pub(super) fn tool_definitions() -> Vec<Value> {
     vec![json!({
         "name": TOOL,
-        "description": "Analyseer een ruimtelijk 3D-model (staven en vlakke platen) met de vastgezette externe 3D-kern. Staven: standaard directe tweede orde (P-Delta); de adapter itereert daarbij zelf met een verse factorisatie per iteratie en bepaalt de eerste knikfactor alpha_cr (stabiliteitspoort; EN 1993-1-1 5.2.1 vraagt alpha_cr >= 10 voor eerste orde). Trek-alleen staven (tensionOnly) vallen per berekening weg zolang ze op druk staan; starre schijven (diaphragms) koppelen X, Y en de rotatie om Z van knopen op één hoogte. Met tensionOnlyFit worden trek-alleen staven gemonteerd onder opgegeven montagelasten (spanningsloze lengte L + Δ0); tensionOnlyCrossRule houdt van elk kruis van twee trek-alleen staven er één actief. Platen (contractversie 2): vierhoekige MITC4-schaalelementen per plaat (plates + shellElements), vlaklasten in globale assen (surfaceLoads) en staven die via intermediateNodeIds aan plaatknopen hangen; een model met platen rekent alleen lineair (analysis: linear). Het resultaat bevat knoopverplaatsingen, oplegreacties, zes snedekrachten per staaf, convergentie, eigenwaarde-knikfactoren, de inactieve trek-alleen staven (inactiveMembers) en per plaat momenten, membraan- en dwarskrachten en spanningen boven/onder in plaatassen. Eenheden: m, kN, kNm en MPa.",
+        "description": "Analyseer een ruimtelijk 3D-model (staven en vlakke platen) met de vastgezette externe 3D-kern. Staven: standaard directe tweede orde (P-Delta); de adapter itereert daarbij zelf met een verse factorisatie per iteratie en bepaalt de eerste knikfactor alpha_cr (stabiliteitspoort; EN 1993-1-1 5.2.1 vraagt alpha_cr >= 10 voor eerste orde). Trek-alleen staven (tensionOnly) vallen per berekening weg zolang ze op druk staan; staven op bedding (bedding: Winkler-veren k·b over de lengte, optioneel zijdelings en alleen druk) geven per staaf de zakking en gronddruk terug; starre schijven (diaphragms) koppelen X, Y en de rotatie om Z van knopen op één hoogte. Met tensionOnlyFit worden trek-alleen staven gemonteerd onder opgegeven montagelasten (spanningsloze lengte L + Δ0); tensionOnlyCrossRule houdt van elk kruis van twee trek-alleen staven er één actief. Platen (contractversie 2): vierhoekige MITC4-schaalelementen per plaat (plates + shellElements), vlaklasten in globale assen (surfaceLoads) en staven die via intermediateNodeIds aan plaatknopen hangen; een model met platen rekent alleen lineair (analysis: linear). Het resultaat bevat knoopverplaatsingen, oplegreacties, zes snedekrachten per staaf, convergentie, eigenwaarde-knikfactoren, de inactieve trek-alleen staven (inactiveMembers) en per plaat momenten, membraan- en dwarskrachten en spanningen boven/onder in plaatassen. Eenheden: m, kN, kNm en MPa.",
         "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -179,6 +209,7 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                                 "type": "boolean", "default": false,
                                 "description": "Trek-alleen: de staaf doet alleen mee zolang zij niet op druk staat. Komt zij in deze berekening op druk, dan valt zij weg (normaalkracht 0) en staat zij in inactiveMembers; haar staaflasten gaan statisch gelijkwaardig naar de eindknopen."
                             },
+                            "bedding": bedding_schema(),
                             "releases": {
                                 "type": "object", "additionalProperties": false,
                                 "properties": {
@@ -364,6 +395,81 @@ mod tests {
             "diaphragms": [{ "id": 1, "nodeId": [1, 2] }]
         }));
         assert!(tikfout.is_err(), "een tikfout in een schijfveld hoort geweigerd te worden");
+    }
+
+    /// Staaf op bedding (#106): strikt object met widthM verplicht, de vier
+    /// velden van het contract; de kern leest het veld en weigert een tikfout.
+    #[test]
+    fn schema_kent_staaf_op_bedding_strikt() {
+        let definition = &tool_definitions()[0];
+        let bedding = &definition["inputSchema"]["properties"]["members"]["items"]["properties"]["bedding"];
+        assert_eq!(bedding["type"], "object");
+        assert_eq!(bedding["additionalProperties"], false);
+        assert_eq!(bedding["required"], json!(["widthM"]));
+        let velden: Vec<&str> = bedding["properties"].as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(velden.len(), 4);
+        for veld in ["kKnPerM3", "widthM", "kLateralKnPerM3", "compressionOnly"] {
+            assert!(velden.contains(&veld), "{veld}");
+        }
+        for veld in ["kKnPerM3", "widthM", "kLateralKnPerM3"] {
+            assert_eq!(bedding["properties"][veld]["exclusiveMinimum"], 0, "{veld}");
+        }
+        assert_eq!(bedding["properties"]["compressionOnly"]["default"], false);
+        let verzoek = json!({
+            "nodes": [{ "id": 1, "x": 0, "y": 0, "z": 0 }, { "id": 2, "x": 6, "y": 0, "z": 0 }],
+            "materials": [{ "id": 1, "name": "S235", "eMpa": 210000, "nu": 0.3 }],
+            "sections": [{ "id": 1, "name": "a", "areaM2": 0.01, "iyM4": 1e-5, "izM4": 1e-5, "torsionJM4": 1e-5 }],
+            "members": [{ "id": 1, "startNodeId": 1, "endNodeId": 2, "materialId": 1, "sectionId": 1,
+                "bedding": { "kKnPerM3": 50000, "widthM": 0.6, "compressionOnly": true } }]
+        });
+        let gelezen = serde_json::from_value::<open_fem_3d::SolveRequest3D>(verzoek)
+            .unwrap_or_else(|fout| panic!("bedding hoort in het contract: {fout}"));
+        let bedding = gelezen.members[0].bedding.as_ref().expect("bedding gelezen");
+        assert_eq!((bedding.k_kn_per_m3, bedding.width_m, bedding.compression_only), (Some(50000.0), 0.6, true));
+        let tikfout = serde_json::from_value::<open_fem_3d::SolveRequest3D>(json!({
+            "nodes": [], "materials": [], "sections": [],
+            "members": [{ "id": 1, "startNodeId": 1, "endNodeId": 2, "materialId": 1, "sectionId": 1,
+                "bedding": { "kKnPerm3": 50000, "widthM": 0.6 } }]
+        }));
+        assert!(tikfout.is_err(), "een tikfout in een beddingveld hoort geweigerd te worden");
+    }
+
+    /// Globale lijnlast (#80): globalDirection (x, y, z), qStartKnPerM,
+    /// qEndKnPerM en perProjection; de lokale qy/qz zijn niet meer verplicht
+    /// (ontbreekt = 0). Het contract van de kern leest een globale last en
+    /// weigert een tikfout.
+    #[test]
+    fn schema_kent_globale_lijnlast_strikt() {
+        let definition = &tool_definitions()[0];
+        let items = &definition["inputSchema"]["properties"]["memberLoads"]["items"];
+        assert_eq!(items["additionalProperties"], false);
+        assert_eq!(items["required"], json!(["id", "memberId"]));
+        assert_eq!(items["properties"]["globalDirection"]["enum"], json!(["x", "y", "z"]));
+        assert_eq!(items["properties"]["qStartKnPerM"]["type"], "number");
+        assert_eq!(items["properties"]["qEndKnPerM"]["type"], "number");
+        assert_eq!(items["properties"]["perProjection"]["type"], "boolean");
+        assert_eq!(items["properties"]["perProjection"]["default"], false);
+        for veld in ["qyStartKnPerM", "qyEndKnPerM", "qzStartKnPerM", "qzEndKnPerM"] {
+            assert_eq!(items["properties"][veld]["default"], 0, "{veld}");
+        }
+        let verzoek = |last: Value| json!({
+            "nodes": [{ "id": 1, "x": 0, "y": 0, "z": 0 }, { "id": 2, "x": 4, "y": 0, "z": 3 }],
+            "materials": [{ "id": 1, "name": "S235", "eMpa": 210000, "nu": 0.3 }],
+            "sections": [{ "id": 1, "name": "a", "areaM2": 0.01, "iyM4": 1e-5, "izM4": 1e-5, "torsionJM4": 1e-5 }],
+            "members": [{ "id": 1, "startNodeId": 1, "endNodeId": 2, "materialId": 1, "sectionId": 1 }],
+            "memberLoads": [last]
+        });
+        let globaal = json!({ "id": 1, "memberId": 1, "globalDirection": "z", "qStartKnPerM": -2, "qEndKnPerM": -2,
+            "perProjection": true, "startPositionM": 0, "endPositionM": 5 });
+        let gelezen = serde_json::from_value::<open_fem_3d::SolveRequest3D>(verzoek(globaal))
+            .unwrap_or_else(|fout| panic!("een globale lijnlast hoort in het contract: {fout}"));
+        assert_eq!(gelezen.member_loads.len(), 1);
+        assert_eq!(gelezen.member_loads[0].global_direction, Some(open_fem_3d::GlobalDirection3D::Z));
+        assert!(gelezen.member_loads[0].per_projection);
+        let tikfout = serde_json::from_value::<open_fem_3d::SolveRequest3D>(verzoek(json!({
+            "id": 1, "memberId": 1, "globalDirecton": "z", "qStartKnPerM": -2, "qEndKnPerM": -2
+        })));
+        assert!(tikfout.is_err(), "een tikfout in een lastveld hoort geweigerd te worden");
     }
 
     #[test]

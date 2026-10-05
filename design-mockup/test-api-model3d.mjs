@@ -86,6 +86,54 @@ check("een plaats voorbij het eind → GEWEIGERD", faalt("model3d.beam.split", {
   check("een onbekende situatie → INVOER_ONGELDIG", faalt("model3d.beam.setReleasePreset", { beamIds: [1], preset: "half" })?.code === "INVOER_ONGELDIG");
   doc = bewaard;
 }
+{
+  // Scharnier aan één staafeind (het gereedschap in het lint) en liggers
+  // scharnierend op kolommen (#93), op een eigen portaal met uitkraging:
+  // kolommen 1 en 2, ligger 3 tussen de kolomkoppen, uitkraging 4.
+  const bewaard = doc;
+  doc = leegDocument();
+  for (const [x, y, z] of [[0, 0, 0], [0, 0, 4], [6, 0, 0], [6, 0, 4], [9, 0, 4]]) doe("model3d.node.add", { x, y, z });
+  for (const [a, b] of [[1, 2], [3, 4], [2, 4], [4, 5]]) doe("model3d.beam.add", { startNodeId: a, endNodeId: b });
+  const r = (id) => model().beams.find((b) => b.id === id).releases;
+  const einden = (changed) => changed.map((c) => `${c.beamId}${c.end === "start" ? "b" : "e"}${c.reason ? `:${c.reason}` : ""}`).join(" ");
+  const portaal = doc;
+  const los = doe("model3d.beam.setEndHinge", { beamId: 3, end: "start" });
+  check("setEndHinge zonder hinged wisselt: My en Mz aan het begin los",
+    los.beamId === 3 && los.end === "start" && los.hinged === true && r(3).myStart && r(3).mzStart && !r(3).myEnd && !r(3).torsionStart,
+    JSON.stringify(los));
+  const vast = doe("model3d.beam.setEndHinge", { beamId: 3, end: "start" });
+  check("… nog eens: weer vast, zonder scharnierveld (zoals Momentvast)", vast.hinged === false && r(3) === undefined);
+  check("hinged: true zet los, ook twee keer", doe("model3d.beam.setEndHinge", { beamId: 3, end: "end", hinged: true }).hinged
+    && doe("model3d.beam.setEndHinge", { beamId: 3, end: "end", hinged: true }).hinged && r(3).myEnd && r(3).mzEnd);
+  check("een onbekende staaf → NIET_GEVONDEN", faalt("model3d.beam.setEndHinge", { beamId: 9, end: "start" })?.code === "NIET_GEVONDEN");
+  check("een onbekend eind → INVOER_ONGELDIG", faalt("model3d.beam.setEndHinge", { beamId: 3, end: "midden" })?.code === "INVOER_ONGELDIG");
+  doc = portaal;
+  const alles = doe("model3d.beam.pinToColumns", {});
+  check("pinToColumns zonder beamIds: de ligger tussen de kolomkoppen aan beide einden",
+    alles.count === 2 && einden(alles.changed) === "3b 3e", JSON.stringify(alles));
+  check("… de uitkraging blijft momentvast (anders een mechanisme) en staat in skipped",
+    einden(alles.skipped) === "4b:cantilever" && r(4) === undefined, JSON.stringify(alles.skipped));
+  check("… de kolommen blijven doorgaand, torsie overal vast", r(1) === undefined && r(2) === undefined
+    && !r(3).torsionStart && !r(3).torsionEnd);
+  const nogEens = doe("model3d.beam.pinToColumns", { beamIds: [3, 4] });
+  check("nog eens: niets meer te doen (de uitkraging blijft overgeslagen)",
+    nogEens.count === 0 && nogEens.changed.length === 0 && einden(nogEens.skipped) === "4b:cantilever");
+  doc = portaal;
+  const selectie = doe("model3d.beam.pinToColumns", { beamIds: [4, 1] });
+  check("alleen de genoemde staven: de uitkraging blijft momentvast, kolom 1 en ligger 3 niet aangeraakt",
+    selectie.count === 0 && einden(selectie.skipped) === "4b:cantilever" && r(3) === undefined && r(1) === undefined && r(4) === undefined,
+    JSON.stringify(selectie));
+  // Een kolom onder het vrije eind: dan is de uitkraging een ligger tussen twee kolomkoppen.
+  doc = portaal;
+  doe("model3d.node.add", { x: 9, y: 0, z: 0 });
+  doe("model3d.beam.add", { startNodeId: 6, endNodeId: 5 });
+  const gesteund = doe("model3d.beam.pinToColumns", { beamIds: [4, 1] });
+  check("met een kolom onder het eind: staaf 4 aan beide einden scharnierend",
+    einden(gesteund.changed) === "4b 4e" && gesteund.skipped.length === 0 && r(4).myStart && r(4).mzEnd, JSON.stringify(gesteund));
+  check("een onbekende staaf → NIET_GEVONDEN", faalt("model3d.beam.pinToColumns", { beamIds: [3, 99] })?.code === "NIET_GEVONDEN");
+  check("een lege lijst → INVOER_ONGELDIG", faalt("model3d.beam.pinToColumns", { beamIds: [] })?.code === "INVOER_ONGELDIG");
+  doc = bewaard;
+}
 check("een onbekende staaf verwijderen → NIET_GEVONDEN", faalt("model3d.beam.delete", { id: 99 })?.code === "NIET_GEVONDEN");
 doe("model3d.beam.delete", { id: 2 });
 check("staaf verwijderd, knopen blijven", !model().beams.some((b) => b.id === 2) && model().nodes.length === 5);

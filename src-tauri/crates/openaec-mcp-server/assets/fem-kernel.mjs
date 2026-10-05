@@ -1191,12 +1191,12 @@ var init_Mesh = __esm({
           return Math.atan2(n2.y - n1.y, n2.x - n1.x);
         };
         const anglesEqual = (a1, a2) => {
-          const norm4 = (a) => {
+          const norm5 = (a) => {
             let n2 = a % Math.PI;
             if (n2 < 0) n2 += Math.PI;
             return n2;
           };
-          return Math.abs(norm4(a1) - norm4(a2)) < 0.01;
+          return Math.abs(norm5(a1) - norm5(a2)) < 0.01;
         };
         for (const beam of beams) {
           if (visited.has(beam.id)) continue;
@@ -1918,10 +1918,10 @@ function calculateDKTStiffness(n1, n2, n3, material, thickness) {
     const BbT = Bb.transpose();
     const BbTDb = BbT.multiply(Db);
     const BbTDbBb = BbTDb.multiply(Bb);
-    const scale2 = A * gp.w;
+    const scale4 = A * gp.w;
     for (let i = 0; i < 9; i++) {
       for (let j = 0; j < 9; j++) {
-        Ke.addAt(i, j, scale2 * BbTDbBb.get(i, j));
+        Ke.addAt(i, j, scale4 * BbTDbBb.get(i, j));
       }
     }
   }
@@ -4842,11 +4842,11 @@ function angleBetween(ax, ay, bx, by, cx, cy) {
   const v1y = ay - by;
   const v2x = cx - bx;
   const v2y = cy - by;
-  const dot5 = v1x * v2x + v1y * v2y;
+  const dot6 = v1x * v2x + v1y * v2y;
   const len1 = Math.sqrt(v1x * v1x + v1y * v1y);
   const len2 = Math.sqrt(v2x * v2x + v2y * v2y);
   if (len1 < 1e-12 || len2 < 1e-12) return 0;
-  const cosA = Math.max(-1, Math.min(1, dot5 / (len1 * len2)));
+  const cosA = Math.max(-1, Math.min(1, dot6 / (len1 * len2)));
   return Math.acos(cosA) * (180 / Math.PI);
 }
 function isConvexQuad(points, a, b, c, d) {
@@ -4855,8 +4855,8 @@ function isConvexQuad(points, a, b, c, d) {
     const p0 = pts[i];
     const p1 = pts[(i + 1) % 4];
     const p2 = pts[(i + 2) % 4];
-    const cross4 = (p1.x - p0.x) * (p2.y - p1.y) - (p1.y - p0.y) * (p2.x - p1.x);
-    if (cross4 < 0) return false;
+    const cross5 = (p1.x - p0.x) * (p2.y - p1.y) - (p1.y - p0.y) * (p2.x - p1.x);
+    if (cross5 < 0) return false;
   }
   return true;
 }
@@ -5031,11 +5031,11 @@ function rasterLijnen(lo, hi, dwingend, meshSize) {
   return uit;
 }
 function knoopLijnenBuitenTol(lo, hi, openingLijnen, knoopLijnen) {
-  const TOL = 1;
+  const TOL2 = 1;
   const genomen = [lo, hi, ...openingLijnen];
   const uit = [];
   for (const v of [...knoopLijnen ?? []].sort((a, b) => a - b)) {
-    if (genomen.some((w) => Math.abs(w - v) <= TOL && w !== v)) continue;
+    if (genomen.some((w) => Math.abs(w - v) <= TOL2 && w !== v)) continue;
     genomen.push(v);
     uit.push(v);
   }
@@ -5491,10 +5491,10 @@ function valideerPlaatPolygoon(punten, tolMm = 1) {
   for (let i = 0; i < n2; i++) {
     const p0 = punten[(i + n2 - 1) % n2], p1 = punten[i], p2 = punten[(i + 1) % n2];
     const cr = kruis(p1, p0, p2);
-    const dot5 = (p0.x - p1.x) * (p2.x - p1.x) + (p0.z - p1.z) * (p2.z - p1.z);
+    const dot6 = (p0.x - p1.x) * (p2.x - p1.x) + (p0.z - p1.z) * (p2.z - p1.z);
     const l1 = Math.hypot(p0.x - p1.x, p0.z - p1.z);
     const l2 = Math.hypot(p2.x - p1.x, p2.z - p1.z);
-    if (l1 > 0 && l2 > 0 && Math.abs(cr) <= tolMm * Math.max(l1, l2) && dot5 > 0) {
+    if (l1 > 0 && l2 > 0 && Math.abs(cr) <= tolMm * Math.max(l1, l2) && dot6 > 0) {
       return `De rand vouwt bij hoek ${i + 1} op zichzelf terug \u2014 teken een echte omtrek.`;
     }
   }
@@ -15977,19 +15977,19 @@ function vloerDakEis(beam, data, slsCombos) {
   const klasse = mapDeflectionClass(cfg.deflectionClass);
   const gewogen = [];
   const ontbreekt = [];
-  for (const norm4 of BGT_NORMCOMBINATIES) {
+  for (const norm5 of BGT_NORMCOMBINATIES) {
     let gevonden = false;
-    for (const combo of combinatiesVanSoort(slsCombos, norm4.soort)) {
+    for (const combo of combinatiesVanSoort(slsCombos, norm5.soort)) {
       const result = data.combinationResults.get(combo.id) ?? null;
       if (!result || !result.elements.has(beam.id)) continue;
       gevonden = true;
       gewogen.push({
         naam: combo.name,
-        uitdrukking: norm4.uitdrukking,
+        uitdrukking: norm5.uitdrukking,
         w: extractFieldDeflectionMm(beam, result)
       });
     }
-    if (!gevonden) ontbreekt.push(norm4.uitdrukking);
+    if (!gevonden) ontbreekt.push(norm5.uitdrukking);
   }
   const nietHerkend = [];
   for (const combo of slsCombos) {
@@ -18061,18 +18061,18 @@ function normaliseerSegmenten(beamId, segmenten, L_mm) {
       `Staaf ${beamId}: het veld "segmenten" is aanwezig maar leeg. Laat het weg om met \xE9\xE9n doorsnede over de volle lengte te rekenen.`
     );
   }
-  const TOL = 1e-9;
+  const TOL2 = 1e-9;
   const uit = segmenten.map((s, i) => {
     const t0 = s.tStart, t1 = s.tEnd, I_mm4 = s.I;
     if (!Number.isFinite(t0) || !Number.isFinite(t1) || !Number.isFinite(I_mm4)) {
       throw new Error(`Staaf ${beamId}, segment ${i + 1}: tStart, tEnd en I moeten getallen zijn.`);
     }
-    if (t0 < -TOL || t1 > 1 + TOL) {
+    if (t0 < -TOL2 || t1 > 1 + TOL2) {
       throw new Error(
         `Staaf ${beamId}, segment ${i + 1}: tStart/tEnd moeten tussen 0 en 1 liggen (gekregen ${t0} \u2026 ${t1}).`
       );
     }
-    if (t1 - t0 <= TOL) {
+    if (t1 - t0 <= TOL2) {
       throw new Error(
         `Staaf ${beamId}, segment ${i + 1}: tEnd (${t1}) moet groter zijn dan tStart (${t0}).`
       );
@@ -18094,13 +18094,13 @@ function normaliseerSegmenten(beamId, segmenten, L_mm) {
     }
     return { t0, t1, I_mm4, ...A_mm2 !== void 0 ? { A_mm2 } : {}, index: i };
   });
-  if (Math.abs(uit[0].t0) > TOL || Math.abs(uit[uit.length - 1].t1 - 1) > TOL) {
+  if (Math.abs(uit[0].t0) > TOL2 || Math.abs(uit[uit.length - 1].t1 - 1) > TOL2) {
     throw new Error(
       `Staaf ${beamId}: de segmenten moeten de hele staaf dekken \u2014 het eerste segment begint bij tStart ${uit[0].t0} en het laatste eindigt bij tEnd ${uit[uit.length - 1].t1}; verwacht 0 en 1.`
     );
   }
   for (let i = 1; i < uit.length; i++) {
-    if (Math.abs(uit[i].t0 - uit[i - 1].t1) > TOL) {
+    if (Math.abs(uit[i].t0 - uit[i - 1].t1) > TOL2) {
       throw new Error(
         `Staaf ${beamId}: segment ${i} eindigt op ${uit[i - 1].t1} en segment ${i + 1} begint op ${uit[i].t0}. De segmenten moeten aaneensluiten (geen gat en geen overlap).`
       );
@@ -19360,15 +19360,15 @@ function eisEindigeUitkomst(r, wat) {
       `De berekening leverde een ongeldig getal (NaN of oneindig) op${wat} bij ${waar}. Dat resultaat wordt niet getoond of getoetst. Meestal zit er een rekenelement van (bijna) lengte nul in het model \u2014 twee knopen of een puntlast vlak naast elkaar \u2014 of een staaf zonder stijfheid.`
     );
   };
-  const eindig = (v) => v === void 0 || Number.isFinite(v);
+  const eindig2 = (v) => v === void 0 || Number.isFinite(v);
   for (const [id2, d] of r.displacements) {
-    if (!eindig(d.ux) || !eindig(d.uz) || !eindig(d.ry)) stop(`de verplaatsing van knoop ${id2}`);
+    if (!eindig2(d.ux) || !eindig2(d.uz) || !eindig2(d.ry)) stop(`de verplaatsing van knoop ${id2}`);
   }
   for (const [id2, re] of r.reactions) {
-    if (!eindig(re.fx) || !eindig(re.fz) || !eindig(re.my)) stop(`de oplegreactie van knoop ${id2}`);
+    if (!eindig2(re.fx) || !eindig2(re.fz) || !eindig2(re.my)) stop(`de oplegreactie van knoop ${id2}`);
   }
   for (const [id2, ef] of r.elements) {
-    if (!eindig(ef.N) || !eindig(ef.V) || !eindig(ef.M_start) || !eindig(ef.M_end)) {
+    if (!eindig2(ef.N) || !eindig2(ef.V) || !eindig2(ef.M_start) || !eindig2(ef.M_end)) {
       stop(`de staafkrachten van staaf ${id2}`);
     }
     const lijnen = [
@@ -20474,7 +20474,7 @@ function analyseerHellendDak(dak) {
     const [xa, za, xb, zb] = g.x1 <= g.x2 ? [g.x1, g.z1, g.x2, g.z2] : [g.x2, g.z2, g.x1, g.z1];
     return Math.atan2(zb - za, xb - xa) * 180 / Math.PI;
   };
-  const TOL = 0.5, SPREIDING = 2;
+  const TOL2 = 0.5, SPREIDING = 2;
   const hellingen = dak.map((g) => Math.abs(stijging(g)));
   const onbekend2 = (reden) => ({ vorm: null, alpha: Math.max(0, ...hellingen), xNok: null, hoogKant: null, reden });
   if (dak.length === 0) return onbekend2("Er is geen staaf met belastingtype hellend dak.");
@@ -20482,8 +20482,8 @@ function analyseerHellendDak(dak) {
     return onbekend2(`De staven "hellend dak" hebben hellingen van ${graden(Math.min(...hellingen))} tot ${graden(Math.max(...hellingen))}. Tabel 7.3/7.4 gaat uit van \xE9\xE9n dakhelling \u03B1; een geknikt of ongelijk dak staat er niet in.`);
   }
   const alpha = Math.max(...hellingen);
-  const op = dak.filter((g) => stijging(g) > TOL);
-  const af = dak.filter((g) => stijging(g) < -TOL);
+  const op = dak.filter((g) => stijging(g) > TOL2);
+  const af = dak.filter((g) => stijging(g) < -TOL2);
   if (af.length === 0 && op.length > 0) return { vorm: "lessenaar", alpha, xNok: null, hoogKant: "rechts" };
   if (op.length === 0 && af.length > 0) return { vorm: "lessenaar", alpha, xNok: null, hoogKant: "links" };
   if (op.length === 0 && af.length === 0) return onbekend2('De staven "hellend dak" liggen vlak.');
@@ -23520,8 +23520,8 @@ function normVanMateriaal(soort) {
 function normenInModel(beams) {
   const uit = leeg();
   for (const beam of beams) {
-    const norm4 = normVanMateriaal(materiaalVanStaaf(beam));
-    if (norm4 !== null) uit[norm4] = true;
+    const norm5 = normVanMateriaal(materiaalVanStaaf(beam));
+    if (norm5 !== null) uit[norm5] = true;
   }
   return uit;
 }
@@ -23700,12 +23700,12 @@ var BASISWAARDE = {
     uitleg: vt(`${S}base.en1995`, "\u03C6 = 0,005 rad voor h \u2264 5 m; deze norm kent geen losse basiswaarde.")
   }
 };
-function phiVolgensNorm(norm4, hoogteM, aantalElementen) {
+function phiVolgensNorm(norm5, hoogteM, aantalElementen) {
   const h = Number.isFinite(hoogteM) && hoogteM > 0 ? hoogteM : 0;
   const m = Math.max(1, Math.floor(Number.isFinite(aantalElementen) ? aantalElementen : 1));
-  const basis = BASISWAARDE[norm4];
+  const basis = BASISWAARDE[norm5];
   const regels = [];
-  if (norm4 === "en1995") {
+  if (norm5 === "en1995") {
     const phi2 = h > 5 ? 5e-3 * Math.sqrt(5 / h) : 5e-3;
     regels.push(regel(
       "h",
@@ -23722,19 +23722,19 @@ function phiVolgensNorm(norm4, hoogteM, aantalElementen) {
         "h \u2264 5 m, dus \u03C6 = 0,005 rad. Deze norm kent geen \u03B1_m en geen ondergrens op de hoogtereductie."
       )
     ));
-    return { norm: norm4, phi: phi2, regels };
+    return { norm: norm5, phi: phi2, regels };
   }
   const ah = alphaH(h);
   const am = alphaM(m);
   const phi = basis.waarde * ah.waarde * am;
-  const symbool = norm4 === "en1992" ? "\u03B8" : "\u03C6";
-  const artikelFormule = norm4 === "en1992" ? "EN 1992-1-1 (5.1)" : "EN 1993-1-1 (5.5)";
+  const symbool = norm5 === "en1992" ? "\u03B8" : "\u03C6";
+  const artikelFormule = norm5 === "en1992" ? "EN 1992-1-1 (5.1)" : "EN 1993-1-1 (5.5)";
   regels.push(regel(`${symbool}\u2080`, `1/${basis.noemer} = ${getal3(basis.waarde, 5)}`, basis.artikel, basis.uitleg));
   regels.push(regel(
     "h",
     `${getal3(h, 3)} m`,
     artikelFormule,
-    norm4 === "en1992" ? vt(`${S}h.en1992`, "l is de hoogte van het gebouw; \xA75.2(6), geval 'effect op de schorende constructie'.") : vt(`${S}h.en1993`, "h is de hoogte van de constructie, in meter (figuur 5.2).")
+    norm5 === "en1992" ? vt(`${S}h.en1992`, "l is de hoogte van het gebouw; \xA75.2(6), geval 'effect op de schorende constructie'.") : vt(`${S}h.en1993`, "h is de hoogte van de constructie, in meter (figuur 5.2).")
   ));
   const hTekst = getal3(h, 3);
   regels.push(regel(
@@ -23747,7 +23747,7 @@ function phiVolgensNorm(norm4, hoogteM, aantalElementen) {
     "m",
     String(m),
     artikelFormule,
-    norm4 === "en1992" ? vt(`${S}m.en1992`, "m is het aantal verticale elementen dat bijdraagt aan de horizontale kracht op de schorende constructie.") : vt(`${S}m.en1993`, "m is het aantal kolommen in een rij (alleen die met N_Ed \u2265 50 % van het gemiddelde).")
+    norm5 === "en1992" ? vt(`${S}m.en1992`, "m is het aantal verticale elementen dat bijdraagt aan de horizontale kracht op de schorende constructie.") : vt(`${S}m.en1993`, "m is het aantal kolommen in een rij (alleen die met N_Ed \u2265 50 % van het gemiddelde).")
   ));
   regels.push(regel(
     "\u03B1_m",
@@ -23756,7 +23756,7 @@ function phiVolgensNorm(norm4, hoogteM, aantalElementen) {
     vt(`${S}alphaM`, `\u03B1_m = \u221A(0,5\xB7(1 + 1/m)) = \u221A(0,5\xB7(1 + 1/${m})).`, { m })
   ));
   regels.push(regel(
-    norm4 === "en1992" ? "\u03B8_i" : "\u03C6",
+    norm5 === "en1992" ? "\u03B8_i" : "\u03C6",
     `${getal3(phi, 5)} rad = 1/${getal3(1 / phi, 0)}`,
     artikelFormule,
     vt(
@@ -23765,7 +23765,7 @@ function phiVolgensNorm(norm4, hoogteM, aantalElementen) {
       { symbool, a: getal3(basis.waarde, 5), b: getal3(ah.waarde, 4), c: getal3(am, 4) }
     )
   ));
-  return { norm: norm4, phi, regels };
+  return { norm: norm5, phi, regels };
 }
 function toepasselijkeScheefstandNormen(beams) {
   const vlaggen = normenInModel(beams);
@@ -23951,6 +23951,18 @@ function resolveOpenFem3DPlateMaterial(plate) {
 }
 
 // src/components/openFem3d/openFem3dModel.ts
+var OPEN_FEM_3D_GLOBAL_DIRECTIONS = ["x", "y", "z"];
+function isOpenFem3DGlobalMemberLoad(load) {
+  return load.globalDirection !== void 0;
+}
+function openFem3DGlobalDirectionVector(direction) {
+  return direction === "x" ? [1, 0, 0] : direction === "y" ? [0, 1, 0] : [0, 0, 1];
+}
+function openFem3DGlobalMemberLoadFactor(ex, direction, perProjection) {
+  if (!perProjection) return 1;
+  const d = openFem3DGlobalDirectionVector(direction);
+  return Math.hypot(ex[1] * d[2] - ex[2] * d[1], ex[2] * d[0] - ex[0] * d[2], ex[0] * d[1] - ex[1] * d[0]);
+}
 var EMPTY_OPEN_FEM_3D = {
   nodes: [],
   beams: [],
@@ -24073,8 +24085,8 @@ function withOpenFem3DSelfWeight(model, caseId) {
       }
       continue;
     }
-    const dot5 = (axis) => qGlobal[0] * axis[0] + qGlobal[1] * axis[1] + qGlobal[2] * axis[2];
-    const qx = dot5(ex), qy = dot5(ey), qz = dot5(ez);
+    const dot6 = (axis) => qGlobal[0] * axis[0] + qGlobal[1] * axis[1] + qGlobal[2] * axis[2];
+    const qx = dot6(ex), qy = dot6(ey), qz = dot6(ez);
     if (Math.abs(qy) > 1e-12 || Math.abs(qz) > 1e-12) {
       memberLoads.push({
         id: nextMemberLoadId++,
@@ -24172,17 +24184,55 @@ function beamLength(model, beamId) {
   const end = model.nodes.find((node) => node.id === beam.endNodeId);
   return Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
 }
-function readMemberLoad(value, model, id2, beamId) {
-  const components = ["qyStart", "qyEnd", "qzStart", "qzEnd"];
-  if (components.some((name) => typeof value[name] !== "number" || !Number.isFinite(value[name])) || components.every((name) => value[name] === 0)) {
-    throw new Error("Een 3D-staafbelasting moet vier eindige componenten en minstens \xE9\xE9n niet-nulwaarde hebben.");
-  }
+var LOCAL_MEMBER_LOAD_COMPONENTS = ["qyStart", "qyEnd", "qzStart", "qzEnd"];
+function readMemberLoadRange(value, model, beamId) {
   const length = beamLength(model, beamId);
   const startPositionM = Number(value.startPositionM);
   const endPositionM = Number(value.endPositionM);
   if (!Number.isFinite(startPositionM) || !Number.isFinite(endPositionM) || startPositionM < 0 || endPositionM <= startPositionM || endPositionM > length + 1e-9) {
     throw new Error(`Een 3D-staafbelasting moet binnen de staaflengte van ${length} m liggen.`);
   }
+  return { startPositionM, endPositionM };
+}
+function readGlobalMemberLoad(value, model, id2, beamId) {
+  const globalDirection = value.globalDirection;
+  if (!OPEN_FEM_3D_GLOBAL_DIRECTIONS.includes(globalDirection)) {
+    throw new Error(`Een 3D-staafbelasting heeft een ongeldige globale richting ${JSON.stringify(globalDirection)}; kies x, y of z.`);
+  }
+  if (LOCAL_MEMBER_LOAD_COMPONENTS.some((name) => value[name] !== void 0 && value[name] !== 0)) {
+    throw new Error("Een globale 3D-staafbelasting heeft geen lokale waarden (qy, qz); geef qStart en qEnd langs de globale as.");
+  }
+  const { qStart, qEnd } = value;
+  if (typeof qStart !== "number" || typeof qEnd !== "number" || !Number.isFinite(qStart) || !Number.isFinite(qEnd) || qStart === 0 && qEnd === 0) {
+    throw new Error("Een globale 3D-staafbelasting moet een eindige qStart en qEnd en minstens \xE9\xE9n niet-nulwaarde hebben.");
+  }
+  if (value.perProjection !== void 0 && typeof value.perProjection !== "boolean") {
+    throw new Error("perProjection van een globale 3D-staafbelasting is ja of nee (true/false).");
+  }
+  const { startPositionM, endPositionM } = readMemberLoadRange(value, model, beamId);
+  const caseId = readOptionalCaseId(value.caseId);
+  return {
+    id: id2,
+    beamId,
+    ...caseId !== void 0 ? { caseId } : {},
+    globalDirection,
+    qStart,
+    qEnd,
+    ...value.perProjection === true ? { perProjection: true } : {},
+    startPositionM,
+    endPositionM
+  };
+}
+function readMemberLoad(value, model, id2, beamId) {
+  if (value.globalDirection !== void 0) return readGlobalMemberLoad(value, model, id2, beamId);
+  if (value.qStart !== void 0 || value.qEnd !== void 0 || value.perProjection !== void 0) {
+    throw new Error("qStart, qEnd en perProjection horen bij een globale 3D-staafbelasting; geef ook globalDirection (x, y of z).");
+  }
+  const components = LOCAL_MEMBER_LOAD_COMPONENTS;
+  if (components.some((name) => typeof value[name] !== "number" || !Number.isFinite(value[name])) || components.every((name) => value[name] === 0)) {
+    throw new Error("Een 3D-staafbelasting moet vier eindige componenten en minstens \xE9\xE9n niet-nulwaarde hebben.");
+  }
+  const { startPositionM, endPositionM } = readMemberLoadRange(value, model, beamId);
   const caseId = readOptionalCaseId(value.caseId);
   return {
     id: id2,
@@ -24278,12 +24328,12 @@ function readPlateBoundary(value, loop, nodeIds, nodes, label) {
       const start = nodes.get(startNodeId), control = nodes.get(controlNodeId), end = nodes.get(endNodeId);
       const first = [control.x - start.x, control.y - start.y, control.z - start.z];
       const second = [end.x - start.x, end.y - start.y, end.z - start.z];
-      const cross4 = Math.hypot(
+      const cross5 = Math.hypot(
         first[1] * second[2] - first[2] * second[1],
         first[2] * second[0] - first[0] * second[2],
         first[0] * second[1] - first[1] * second[0]
       );
-      if (cross4 <= 1e-12 * Math.hypot(...first) * Math.hypot(...second)) {
+      if (cross5 <= 1e-12 * Math.hypot(...first) * Math.hypot(...second)) {
         throw new Error(`${label} bevat een boog waarvan begin-, stuur- en eindpunt op \xE9\xE9n lijn liggen.`);
       }
       return { kind: "arc", startNodeId, controlNodeId, endNodeId };
@@ -24313,8 +24363,8 @@ function validatePlatePlane(nodes, nodeIds, label) {
   }
   if (!normal) throw new Error(`${label} heeft geen oppervlakte.`);
   const length = Math.hypot(...normal);
-  const scale2 = Math.max(1, ...points.map((point) => Math.hypot(point.x - a.x, point.y - a.y, point.z - a.z)));
-  if (points.some((point) => Math.abs((point.x - a.x) * normal[0] + (point.y - a.y) * normal[1] + (point.z - a.z) * normal[2]) / length > scale2 * 1e-7)) {
+  const scale4 = Math.max(1, ...points.map((point) => Math.hypot(point.x - a.x, point.y - a.y, point.z - a.z)));
+  if (points.some((point) => Math.abs((point.x - a.x) * normal[0] + (point.y - a.y) * normal[1] + (point.z - a.z) * normal[2]) / length > scale4 * 1e-7)) {
     throw new Error(`${label} moet vlak zijn.`);
   }
 }
@@ -24346,11 +24396,11 @@ function validateOpeningInsidePlate(nodes, plateLoop, plateBoundary, openingLoop
     const a = nodes.get(plateLoop[index]), b = nodes.get(plateLoop[index + 1]);
     const ax = a.x - origin.x, ay = a.y - origin.y, az = a.z - origin.z;
     const bx = b.x - origin.x, by = b.y - origin.y, bz = b.z - origin.z;
-    const cross4 = [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx];
-    if (Math.hypot(...cross4) > 1e-12) normal = cross4;
+    const cross5 = [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx];
+    if (Math.hypot(...cross5) > 1e-12) normal = cross5;
   }
   if (!normal) throw new Error(`${label} heeft geen vlakke buitencontour.`);
-  const norm4 = Math.hypot(...normal);
+  const norm5 = Math.hypot(...normal);
   const drop = Math.abs(normal[0]) > Math.abs(normal[1]) ? Math.abs(normal[0]) > Math.abs(normal[2]) ? "x" : "z" : Math.abs(normal[1]) > Math.abs(normal[2]) ? "y" : "z";
   const project = (point) => drop === "x" ? [point.y, point.z] : drop === "y" ? [point.x, point.z] : [point.x, point.y];
   const outline = outer.map(project);
@@ -24374,7 +24424,7 @@ function validateOpeningInsidePlate(nodes, plateLoop, plateBoundary, openingLoop
   for (const point of [...opening, ...openingLoop.map((id2) => nodes.get(id2))]) {
     const planeDistance = Math.abs(
       (point.x - origin.x) * normal[0] + (point.y - origin.y) * normal[1] + (point.z - origin.z) * normal[2]
-    ) / norm4;
+    ) / norm5;
     if (planeDistance > tolerance || !inside(project(point))) {
       throw new Error(`${label} moet volledig binnen de plaat liggen, zonder de buitenrand te raken.`);
     }
@@ -24439,6 +24489,11 @@ function parseOpenFem3DModel(value) {
       ...beam.tensionOnly !== void 0 ? typeof beam.tensionOnly === "boolean" ? beam.tensionOnly ? { tensionOnly: true } : {} : (() => {
         throw new Error(`3D-staaf ${id2} heeft een ongeldige waarde voor trek-alleen.`);
       })() : {},
+      // Staaf op bedding (#106); null in een bestand telt als geen bedding.
+      // Niet samen met trek-alleen: die staaf valt op druk weg en zou de grond loslaten.
+      ...beam.bedding !== void 0 && beam.bedding !== null ? beam.tensionOnly === true ? (() => {
+        throw new Error(beddingTrekAlleenMelding(id2));
+      })() : { bedding: readOpenFem3DBeamBedding(beam.bedding, start, end, `3D-staaf ${id2}`) } : {},
       ...(() => {
         const name = readOptionalName(beam.name, `3D-staaf ${id2}`);
         const group = readOptionalName(beam.group, `3D-staaf ${id2}`);
@@ -25001,9 +25056,11 @@ function addOpenFem3DBeam(model, input) {
   const existing = connectingBeam(model, startNodeId, endNodeId);
   if (existing) throw new Error(`Tussen 3D-knoop ${startNodeId} en ${endNodeId} ligt al 3D-staaf ${existing.id}.`);
   const base = { id: nextEntityId(model.beams), startNodeId, endNodeId, ...OPEN_FEM_3D_DEFAULT_BEAM };
-  const beam = withBeamFields(base, input);
-  setOpenFem3DBeamNodes({ ...model, beams: [...model.beams, beam] }, beam.id, startNodeId, endNodeId);
-  return { model: assertOpensAfterEdit({ ...model, beams: [...model.beams, beam] }), beam };
+  const fields = withBeamFields(base, input);
+  setOpenFem3DBeamNodes({ ...model, beams: [...model.beams, fields] }, fields.id, startNodeId, endNodeId);
+  const added = input.bedding === void 0 ? { ...model, beams: [...model.beams, fields] } : setOpenFem3DBeamBedding({ ...model, beams: [...model.beams, fields] }, [fields.id], input.bedding);
+  const beam = added.beams[added.beams.length - 1];
+  return { model: assertOpensAfterEdit(added), beam };
 }
 function updateOpenFem3DBeam(model, beamId, patch) {
   const beam = model.beams.find((item) => item.id === beamId);
@@ -25016,12 +25073,19 @@ function updateOpenFem3DBeam(model, beamId, patch) {
     requireNode(model, endNodeId);
     const existing = connectingBeam(model, startNodeId, endNodeId, beamId);
     if (existing) throw new Error(`Tussen 3D-knoop ${startNodeId} en ${endNodeId} ligt al 3D-staaf ${existing.id}.`);
-    next = setOpenFem3DBeamNodes(model, beamId, startNodeId, endNodeId);
+    next = rehangOpenFem3DBeam(model, beamId, startNodeId, endNodeId);
   }
   const updated = withBeamFields(next.beams.find((item) => item.id === beamId), patch);
-  return assertOpensAfterEdit({ ...next, beams: next.beams.map((item) => item.id === beamId ? updated : item) });
+  next = { ...next, beams: next.beams.map((item) => item.id === beamId ? updated : item) };
+  if (patch.bedding !== void 0) next = setOpenFem3DBeamBedding(next, [beamId], patch.bedding);
+  return assertOpensAfterEdit(next);
 }
 function setOpenFem3DBeamNodes(model, beamId, startNodeId, endNodeId) {
+  const next = rehangOpenFem3DBeam(model, beamId, startNodeId, endNodeId);
+  assertOpenFem3DBeddingFitsGeometry(next, [beamId]);
+  return next;
+}
+function rehangOpenFem3DBeam(model, beamId, startNodeId, endNodeId) {
   const beam = model.beams.find((item) => item.id === beamId);
   if (!beam) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
   const start = model.nodes.find((node) => node.id === startNodeId);
@@ -25040,7 +25104,7 @@ function flipOpenFem3DBeamLocalAxes(model, beamId) {
   return {
     ...model,
     beams: model.beams.map((item) => item.id === beamId ? { ...item, rollAngleRad: ((item.rollAngleRad ?? 0) + Math.PI) % (2 * Math.PI) } : item),
-    memberLoads: model.memberLoads?.map((load) => load.beamId === beamId ? { ...load, qyStart: -load.qyStart, qyEnd: -load.qyEnd, qzStart: -load.qzStart, qzEnd: -load.qzEnd } : load),
+    memberLoads: model.memberLoads?.map((load) => load.beamId === beamId && !isOpenFem3DGlobalMemberLoad(load) ? { ...load, qyStart: -load.qyStart, qyEnd: -load.qyEnd, qzStart: -load.qzStart, qzEnd: -load.qzEnd } : load),
     memberPointLoads: model.memberPointLoads?.map((load) => load.beamId === beamId ? { ...load, py: -load.py, pz: -load.pz } : load),
     thermalLoads: model.thermalLoads?.map((load) => load.beamId === beamId ? { ...load, deltaTGradientYK: -load.deltaTGradientYK, deltaTGradientZK: -load.deltaTGradientZK } : load)
   };
@@ -25065,6 +25129,289 @@ function setOpenFem3DReleasePreset(model, beamIds, preset) {
       return preset === "rigid" ? rest : { ...rest, releases: { ...OPEN_FEM_3D_RELEASE_PRESETS.pinned } };
     })
   };
+}
+var END_RELEASE_KEYS = {
+  start: { my: "myStart", mz: "mzStart", torsion: "torsionStart" },
+  end: { my: "myEnd", mz: "mzEnd", torsion: "torsionEnd" }
+};
+function withReleases(beam, releases) {
+  const { releases: _oud, ...rest } = beam;
+  return RELEASE_DOF.some((key) => releases[key]) ? { ...rest, releases } : rest;
+}
+function withEndHinge(beam, end, hinged) {
+  const keys = END_RELEASE_KEYS[end];
+  return withReleases(beam, { ...RIGID_OPEN_FEM_3D_END, ...beam.releases, [keys.my]: hinged, [keys.mz]: hinged });
+}
+function endFullyHinged(beam, end) {
+  const keys = END_RELEASE_KEYS[end];
+  return beam.releases?.[keys.my] === true && beam.releases?.[keys.mz] === true;
+}
+function setOpenFem3DBeamEndHinge(model, beamId, end, hinged) {
+  const beam = model.beams.find((item) => item.id === beamId);
+  if (!beam) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
+  const target = hinged ?? !endFullyHinged(beam, end);
+  const keys = END_RELEASE_KEYS[end];
+  const current = beam.releases;
+  if ((current?.[keys.my] ?? false) === target && (current?.[keys.mz] ?? false) === target) return { model, hinged: target };
+  const next = withEndHinge(beam, end, target);
+  return { model: { ...model, beams: model.beams.map((item) => item.id === beamId ? next : item) }, hinged: target };
+}
+var OPEN_FEM_3D_COLUMN_COSINE = 0.95;
+function openFem3DBeamIsColumn(beam, nodesById) {
+  const a = nodesById.get(beam.startNodeId), b = nodesById.get(beam.endNodeId);
+  if (!a || !b) return false;
+  const length = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+  return length > 0 && Math.abs(b.z - a.z) / length > OPEN_FEM_3D_COLUMN_COSINE;
+}
+var OPEN_FEM_3D_BEDDING_ALL_ROUND_COSINE = Math.SQRT1_2;
+var OpenFem3DBeddingVerticalError = class extends Error {
+  constructor(beamId) {
+    super(`3D-staaf ${beamId} komt dan (bijna) verticaal te staan en ligt op een verticale bedding (k): daar kan geen verticale bedding onder. Haal eerst de verticale k weg (alleen zijdelings, zoals bij een paal) of haal de bedding weg.`);
+    this.beamId = beamId;
+    this.name = "OpenFem3DBeddingVerticalError";
+  }
+};
+function assertOpenFem3DBeddingFitsGeometry(model, beamIds) {
+  const ids = beamIds === void 0 ? null : new Set(beamIds);
+  const beams = model.beams.filter((beam) => beam.bedding?.kKnPerM3 !== void 0 && (ids === null || ids.has(beam.id)));
+  if (beams.length === 0) return;
+  const nodes = new Map(model.nodes.map((node) => [node.id, node]));
+  const fout = beams.find((beam) => openFem3DBeamIsColumn(beam, nodes));
+  if (fout) throw new OpenFem3DBeddingVerticalError(fout.id);
+}
+var BEDDING_KEYS = ["kKnPerM3", "widthM", "kLateralKnPerM3", "compressionOnly"];
+function readOpenFem3DBeamBedding(value, start, end, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label}: de bedding moet een object zijn met k (kKnPerM3) en de contactbreedte (widthM).`);
+  }
+  const raw = value;
+  const onbekend2 = Object.keys(raw).filter((key) => raw[key] !== void 0 && !BEDDING_KEYS.includes(key));
+  if (onbekend2.length > 0) {
+    throw new Error(`${label}: onbekend veld in de bedding: ${onbekend2.join(", ")}. Toegestaan: ${BEDDING_KEYS.join(", ")}.`);
+  }
+  const positief2 = (key, wat) => {
+    const getal5 = raw[key];
+    if (getal5 === void 0 || getal5 === null) return void 0;
+    if (typeof getal5 !== "number" || !Number.isFinite(getal5) || getal5 <= 0) {
+      throw new Error(`${label}: ${wat} moet een eindig getal groter dan 0 zijn.`);
+    }
+    return getal5;
+  };
+  const kKnPerM3 = positief2("kKnPerM3", "de beddingsconstante k (kN/m\xB3)");
+  const widthM = positief2("widthM", "de contactbreedte b (m)");
+  const kLateralKnPerM3 = positief2("kLateralKnPerM3", "de zijdelingse beddingsconstante (kN/m\xB3)");
+  if (widthM === void 0) throw new Error(`${label}: de bedding mist de contactbreedte b (widthM, in m).`);
+  if (raw.compressionOnly !== void 0 && typeof raw.compressionOnly !== "boolean") {
+    throw new Error(`${label}: "alleen druk" (compressionOnly) moet true of false zijn.`);
+  }
+  if (kKnPerM3 === void 0 && kLateralKnPerM3 === void 0) {
+    throw new Error(`${label}: geef een beddingsconstante: k voor de verticale richting of de zijdelingse k.`);
+  }
+  if (kKnPerM3 !== void 0 && openFem3DBeamIsColumn(
+    { startNodeId: 1, endNodeId: 2 },
+    /* @__PURE__ */ new Map([[1, start], [2, end]])
+  )) {
+    throw new Error(`${label} staat (bijna) verticaal: daar kan geen verticale bedding (k) onder. Geef alleen een zijdelingse bedding (kLateralKnPerM3), zoals bij een paal in de grond; die werkt rondom, loodrecht op de paal.`);
+  }
+  if (raw.compressionOnly === true && kKnPerM3 === void 0) {
+    throw new Error(`${label}: "alleen druk" geldt voor de verticale bedding, en deze bedding heeft geen verticale k.`);
+  }
+  return {
+    ...kKnPerM3 !== void 0 ? { kKnPerM3 } : {},
+    widthM,
+    ...kLateralKnPerM3 !== void 0 ? { kLateralKnPerM3 } : {},
+    ...raw.compressionOnly === true ? { compressionOnly: true } : {}
+  };
+}
+function beddingTrekAlleenMelding(beamId) {
+  return `3D-staaf ${beamId} is trek-alleen en kan niet op bedding liggen: een trek-alleen staaf valt op druk weg en zou de grond loslaten. Zet eerst trek-alleen uit.`;
+}
+var sameBedding = (a, b) => a === b || a !== void 0 && b !== void 0 && BEDDING_KEYS.every((key) => a[key] === b[key]);
+function setOpenFem3DBeamBedding(model, beamIds, bedding2) {
+  const ids = new Set(beamIds);
+  for (const id2 of ids) {
+    if (!model.beams.some((beam) => beam.id === id2)) throw new Error(`3D-staaf ${id2} bestaat niet.`);
+  }
+  const nodes = new Map(model.nodes.map((node) => [node.id, node]));
+  let changed = false;
+  const beams = model.beams.map((beam) => {
+    if (!ids.has(beam.id)) return beam;
+    const { bedding: _oud, ...rest } = beam;
+    let next;
+    if (bedding2 !== null) {
+      if (beam.tensionOnly) throw new Error(beddingTrekAlleenMelding(beam.id));
+      const start = nodes.get(beam.startNodeId), end = nodes.get(beam.endNodeId);
+      if (!start || !end) throw new Error(`3D-staaf ${beam.id} verwijst naar een ontbrekende knoop.`);
+      next = readOpenFem3DBeamBedding(bedding2, start, end, `3D-staaf ${beam.id}`);
+    }
+    if (sameBedding(beam.bedding, next)) return beam;
+    changed = true;
+    return next === void 0 ? rest : { ...rest, bedding: next };
+  });
+  return changed ? { ...model, beams } : model;
+}
+var RESTRAINT_DOF = ["ux", "uy", "uz", "rx", "ry", "rz"];
+function supportHolds(support) {
+  return RESTRAINT_DOF.some((dof) => support[dof]) || Object.values(support.springs ?? {}).some((value) => typeof value === "number" && value > 0);
+}
+function pinOpenFem3DBeamsToColumns(model, beamIds) {
+  const wanted = beamIds === void 0 ? null : new Set(beamIds);
+  if (wanted) {
+    for (const id2 of wanted) {
+      if (!model.beams.some((item) => item.id === id2)) throw new Error(`3D-staaf ${id2} bestaat niet.`);
+    }
+  }
+  const nodesById = new Map(model.nodes.map((node) => [node.id, node]));
+  const validBeam = (beam) => beam.startNodeId !== beam.endNodeId && nodesById.has(beam.startNodeId) && nodesById.has(beam.endNodeId);
+  const plateNodes = (model.plates ?? []).map((plate) => [.../* @__PURE__ */ new Set([...plate.nodeIds, ...(plate.openings ?? []).flatMap((opening) => opening.nodeIds)])].filter((id2) => nodesById.has(id2)));
+  const neighbours = /* @__PURE__ */ new Map();
+  const link = (a, b) => {
+    if (a === b) return;
+    for (const [from, to] of [[a, b], [b, a]]) {
+      let list = neighbours.get(from);
+      if (!list) neighbours.set(from, list = []);
+      list.push(to);
+    }
+  };
+  for (const beam of model.beams) if (validBeam(beam)) link(beam.startNodeId, beam.endNodeId);
+  for (const ids of plateNodes) for (let index = 1; index < ids.length; index += 1) link(ids[0], ids[index]);
+  const held = /* @__PURE__ */ new Set();
+  for (const support of model.supports ?? []) if (supportHolds(support)) held.add(support.nodeId);
+  (model.plates ?? []).forEach((plate, index) => {
+    if ((plate.edgeSupports ?? []).some((edge) => RESTRAINT_DOF.some((dof) => edge[dof]))) {
+      for (const id2 of plateNodes[index]) held.add(id2);
+    }
+  });
+  const reachesHeld = (start, blocked) => {
+    const seen = /* @__PURE__ */ new Set([start, blocked]);
+    const queue = [start];
+    for (let index = 0; index < queue.length; index += 1) {
+      const id2 = queue[index];
+      if (held.has(id2)) return true;
+      for (const next of neighbours.get(id2) ?? []) {
+        if (!seen.has(next)) {
+          seen.add(next);
+          queue.push(next);
+        }
+      }
+    }
+    return false;
+  };
+  const columns = /* @__PURE__ */ new Set();
+  const tops = /* @__PURE__ */ new Set();
+  for (const beam of model.beams) {
+    if (!openFem3DBeamIsColumn(beam, nodesById)) continue;
+    columns.add(beam.id);
+    const a = nodesById.get(beam.startNodeId), b = nodesById.get(beam.endNodeId);
+    const [bottom, top] = a.z <= b.z ? [a.id, b.id] : [b.id, a.id];
+    if (!tops.has(top) && (held.size === 0 || reachesHeld(bottom, top))) tops.add(top);
+  }
+  const candidates = [];
+  const isCandidate = /* @__PURE__ */ new Set();
+  for (const beam of model.beams) {
+    if (columns.has(beam.id) || wanted && !wanted.has(beam.id) || !validBeam(beam)) continue;
+    for (const end of ["start", "end"]) {
+      const nodeId = end === "start" ? beam.startNodeId : beam.endNodeId;
+      if (!tops.has(nodeId) || endFullyHinged(beam, end)) continue;
+      candidates.push({ beam, end, other: end === "start" ? beam.endNodeId : beam.startNodeId });
+      isCandidate.add(`${beam.id}:${end}`);
+    }
+  }
+  const part = /* @__PURE__ */ new Map();
+  let parts = 0;
+  for (const node of model.nodes) {
+    if (tops.has(node.id) || part.has(node.id)) continue;
+    part.set(node.id, parts);
+    const queue = [node.id];
+    for (let index = 0; index < queue.length; index += 1) {
+      for (const next of neighbours.get(queue[index]) ?? []) {
+        if (!tops.has(next) && !part.has(next)) {
+          part.set(next, parts);
+          queue.push(next);
+        }
+      }
+    }
+    parts += 1;
+  }
+  const hingedAfter = (beam, end) => {
+    const keys = END_RELEASE_KEYS[end];
+    return isCandidate.has(`${beam.id}:${end}`) || beam.releases?.[keys.my] === true || beam.releases?.[keys.mz] === true;
+  };
+  const hingeAt = (beam, topEnd) => {
+    const top = nodesById.get(topEnd === "start" ? beam.startNodeId : beam.endNodeId);
+    const other = nodesById.get(topEnd === "start" ? beam.endNodeId : beam.startNodeId);
+    const length = Math.hypot(other.x - top.x, other.y - top.y, other.z - top.z);
+    return {
+      top: top.id,
+      direction: [(other.x - top.x) / length, (other.y - top.y) / length, (other.z - top.z) / length],
+      carriesTorsion: !beam.releases?.torsionStart && !beam.releases?.torsionEnd
+    };
+  };
+  const hingesOf = /* @__PURE__ */ new Map();
+  const steady = /* @__PURE__ */ new Set();
+  for (const id2 of held) if (part.has(id2)) steady.add(part.get(id2));
+  for (const beam of model.beams) {
+    if (!validBeam(beam)) continue;
+    const startPart = part.get(beam.startNodeId), endPart = part.get(beam.endNodeId);
+    if (startPart === void 0 === (endPart === void 0)) continue;
+    const topEnd = startPart === void 0 ? "start" : "end";
+    const partId = startPart ?? endPart;
+    if (!hingedAfter(beam, topEnd)) {
+      steady.add(partId);
+      continue;
+    }
+    let list = hingesOf.get(partId);
+    if (!list) hingesOf.set(partId, list = []);
+    list.push(hingeAt(beam, topEnd));
+  }
+  for (const ids of plateNodes) {
+    if (!ids.some((id2) => tops.has(id2))) continue;
+    for (const id2 of ids) if (part.has(id2)) steady.add(part.get(id2));
+  }
+  const verdictOf = (hinges) => {
+    const points = [...new Set(hinges.map((hinge) => hinge.top))].map((id2) => nodesById.get(id2));
+    if (points.length <= 1) return "cantilever";
+    let a = points[0], b = points[1], longest = -1;
+    for (const p2 of points) for (const q of points) {
+      const distance = Math.hypot(q.x - p2.x, q.y - p2.y, q.z - p2.z);
+      if (distance > longest) {
+        longest = distance;
+        a = p2;
+        b = q;
+      }
+    }
+    const axis = [(b.x - a.x) / longest, (b.y - a.y) / longest, (b.z - a.z) / longest];
+    const offLine = points.some((p2) => {
+      const v = [p2.x - a.x, p2.y - a.y, p2.z - a.z];
+      const along = v[0] * axis[0] + v[1] * axis[1] + v[2] * axis[2];
+      return Math.hypot(v[0] - along * axis[0], v[1] - along * axis[1], v[2] - along * axis[2]) > 1e-6 * Math.max(1, longest);
+    });
+    if (offLine) return null;
+    const torsionAlongLine = hinges.some((hinge) => hinge.carriesTorsion && Math.abs(hinge.direction[0] * axis[0] + hinge.direction[1] * axis[1] + hinge.direction[2] * axis[2]) > 1 - 1e-6);
+    return torsionAlongLine ? null : "hingeLine";
+  };
+  const partVerdicts = /* @__PURE__ */ new Map();
+  const verdictFor = (candidate) => {
+    const partId = part.get(candidate.other);
+    if (partId === void 0) return null;
+    if (steady.has(partId)) return null;
+    if (!partVerdicts.has(partId)) partVerdicts.set(partId, verdictOf(hingesOf.get(partId) ?? []));
+    return partVerdicts.get(partId);
+  };
+  const changed = [];
+  const skipped = [];
+  const nextById = /* @__PURE__ */ new Map();
+  for (const candidate of candidates) {
+    const reason = verdictFor(candidate);
+    if (reason) {
+      skipped.push({ beamId: candidate.beam.id, end: candidate.end, reason });
+      continue;
+    }
+    nextById.set(candidate.beam.id, withEndHinge(nextById.get(candidate.beam.id) ?? candidate.beam, candidate.end, true));
+    changed.push({ beamId: candidate.beam.id, end: candidate.end });
+  }
+  if (changed.length === 0) return { model, changed, skipped };
+  return { model: { ...model, beams: model.beams.map((beam) => nextById.get(beam.id) ?? beam) }, changed, skipped };
 }
 var RIGID_OPEN_FEM_3D_END = {
   myStart: false,
@@ -25138,6 +25485,20 @@ function splitOpenFem3DBeam(model, beamId, ratio) {
       }];
     }
     const loadRatio = (splitDistance - load.startPositionM) / (load.endPositionM - load.startPositionM);
+    if (isOpenFem3DGlobalMemberLoad(load)) {
+      const qAtSplit = load.qStart + (load.qEnd - load.qStart) * loadRatio;
+      return [
+        { ...load, qEnd: qAtSplit, endPositionM: splitDistance },
+        {
+          ...load,
+          id: nextMemberLoadId++,
+          beamId: secondBeamId,
+          qStart: qAtSplit,
+          startPositionM: 0,
+          endPositionM: load.endPositionM - splitDistance
+        }
+      ];
+    }
     const qyAtSplit = load.qyStart + (load.qyEnd - load.qyStart) * loadRatio;
     const qzAtSplit = load.qzStart + (load.qzEnd - load.qzStart) * loadRatio;
     return [
@@ -25313,6 +25674,19 @@ function removeOpenFem3DSelection(model, selection) {
   if (!selection) return model;
   if (selection.type === "multi") {
     let next = model;
+    const loads = selection.loads ?? {};
+    const weg = (key, ids) => {
+      const items = next[key];
+      if (!items || !ids?.length) return;
+      const set = new Set(ids);
+      next = { ...next, [key]: items.filter((item) => !set.has(item.id)) };
+    };
+    weg("loads", loads.nodalLoad);
+    weg("memberLoads", loads.memberLoad);
+    weg("memberPointLoads", loads.memberPointLoad);
+    weg("thermalLoads", loads.thermalLoad);
+    weg("surfaceLoads", loads.surfaceLoad);
+    weg("loadPanels", loads.loadPanel);
     for (const beamId of selection.beamIds) next = removeOpenFem3DBeam(next, beamId);
     for (const plateId of selection.plateIds ?? []) next = removeOpenFem3DPlate(next, plateId);
     for (const nodeId of selection.nodeIds) next = removeOpenFem3DNode(next, nodeId);
@@ -25340,12 +25714,67 @@ function removeOpenFem3DSelection(model, selection) {
   }
 }
 
+// src/components/openFem3d/openFem3dSymbolScale.ts
+var OPEN_FEM_3D_SYMBOL_PERCENT_MIN = 25;
+var OPEN_FEM_3D_SYMBOL_PERCENT_MAX = 400;
+var OPEN_FEM_3D_SYMBOL_PERCENT_DEFAULT = 100;
+function normalizeOpenFem3DSymbolPercent(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return OPEN_FEM_3D_SYMBOL_PERCENT_DEFAULT;
+  return Math.min(OPEN_FEM_3D_SYMBOL_PERCENT_MAX, Math.max(OPEN_FEM_3D_SYMBOL_PERCENT_MIN, Math.round(value)));
+}
+
+// src/components/openFem3d/openFem3dPlateDisplay.ts
+var OPEN_FEM_3D_PLATE_DISPLAYS = ["volume", "surface", "mesh"];
+var DEFAULT_OPEN_FEM_3D_PLATE_DISPLAY = "volume";
+function isOpenFem3DPlateDisplay(value) {
+  return typeof value === "string" && OPEN_FEM_3D_PLATE_DISPLAYS.includes(value);
+}
+function openFem3DPlateDisplayFromSaved(saved) {
+  if (saved.plateDisplay !== void 0) {
+    return isOpenFem3DPlateDisplay(saved.plateDisplay) ? saved.plateDisplay : DEFAULT_OPEN_FEM_3D_PLATE_DISPLAY;
+  }
+  return saved.mesh === true ? "mesh" : DEFAULT_OPEN_FEM_3D_PLATE_DISPLAY;
+}
+
+// src/components/openFem3d/openFem3dSectionBox.ts
+var DEFAULT_OPEN_FEM_3D_SECTION_BOX = Object.freeze({ enabled: false, bounds: null });
+var OPEN_FEM_3D_SECTION_BOX_MIN_M = 0.1;
+var naarMm = (waarde) => Math.round(waarde * 1e3) / 1e3;
+function begrensMaat(bounds) {
+  const min = [...bounds.min];
+  const max = [...bounds.max];
+  for (let i = 0; i < 3; i += 1) {
+    if (max[i] - min[i] >= OPEN_FEM_3D_SECTION_BOX_MIN_M - 1e-9) continue;
+    const midden = (min[i] + max[i]) / 2;
+    min[i] = naarMm(midden - OPEN_FEM_3D_SECTION_BOX_MIN_M / 2);
+    max[i] = naarMm(min[i] + OPEN_FEM_3D_SECTION_BOX_MIN_M);
+  }
+  return { min, max };
+}
+var punt3 = (value) => Array.isArray(value) && value.length === 3 && value.every((v) => typeof v === "number" && Number.isFinite(v)) ? [Number(value[0]), Number(value[1]), Number(value[2])] : null;
+function normalizeOpenFem3DSectionBoxBounds(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value;
+  const a = punt3(raw.min), b = punt3(raw.max);
+  if (!a || !b) return null;
+  return begrensMaat({
+    min: [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2])],
+    max: [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])]
+  });
+}
+function normalizeOpenFem3DSectionBox(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return DEFAULT_OPEN_FEM_3D_SECTION_BOX;
+  const raw = value;
+  const bounds = normalizeOpenFem3DSectionBoxBounds(raw.bounds);
+  return { enabled: raw.enabled === true && bounds !== null, bounds };
+}
+
 // src/components/openFem3d/openFem3dVisibility.ts
 var DEFAULT_OPEN_FEM_3D_VISIBILITY = {
   nodes: true,
   beams: true,
   plates: true,
-  mesh: false,
+  plateDisplay: DEFAULT_OPEN_FEM_3D_PLATE_DISPLAY,
   profiles: false,
   profileColors: false,
   nodeNumbers: true,
@@ -25360,6 +25789,7 @@ var DEFAULT_OPEN_FEM_3D_VISIBILITY = {
   viewCube: true,
   perspective: true,
   structuralGrid: true,
+  levelMarks: true,
   deformation: true,
   reactions: true,
   utilization: true,
@@ -25368,8 +25798,30 @@ var DEFAULT_OPEN_FEM_3D_VISIBILITY = {
   shearZ: false,
   torsion: false,
   momentY: false,
-  momentZ: false
+  momentZ: false,
+  groundPressure: false,
+  nodeSizePercent: OPEN_FEM_3D_SYMBOL_PERCENT_DEFAULT,
+  supportSizePercent: OPEN_FEM_3D_SYMBOL_PERCENT_DEFAULT,
+  sectionBox: DEFAULT_OPEN_FEM_3D_SECTION_BOX
 };
+var OPEN_FEM_3D_SYMBOL_SCALE_KEYS = ["nodeSizePercent", "supportSizePercent"];
+function isOpenFem3DSymbolScaleKey(key) {
+  return OPEN_FEM_3D_SYMBOL_SCALE_KEYS.includes(key);
+}
+var OPEN_FEM_3D_VISIBILITY_FLAGS = Object.keys(DEFAULT_OPEN_FEM_3D_VISIBILITY).filter((key) => !isOpenFem3DSymbolScaleKey(key) && key !== "plateDisplay" && key !== "sectionBox");
+function normalizeOpenFem3DVisibility(value) {
+  const result = { ...DEFAULT_OPEN_FEM_3D_VISIBILITY };
+  if (!value || typeof value !== "object" || Array.isArray(value)) return result;
+  const saved = value;
+  for (const key of OPEN_FEM_3D_VISIBILITY_FLAGS) {
+    const entry = saved[key];
+    if (typeof entry === "boolean") result[key] = entry;
+  }
+  for (const key of OPEN_FEM_3D_SYMBOL_SCALE_KEYS) result[key] = normalizeOpenFem3DSymbolPercent(saved[key]);
+  result.plateDisplay = openFem3DPlateDisplayFromSaved(saved);
+  result.sectionBox = normalizeOpenFem3DSectionBox(saved.sectionBox);
+  return result;
+}
 
 // src/components/openFem3d/openFem3dDiagramLabels.ts
 var DEFAULT_OPEN_FEM_3D_DIAGRAM_LABELS = { show: true, stand: 3 };
@@ -25418,11 +25870,7 @@ function parseOpenFem3DViewSets(value) {
     if (!savedVisibility || typeof savedVisibility !== "object" || Array.isArray(savedVisibility)) {
       throw new Error("Een opgeslagen 3D-weergave mist de zichtbaarheidsinstellingen.");
     }
-    const visibility = { ...DEFAULT_OPEN_FEM_3D_VISIBILITY };
-    for (const key of Object.keys(visibility)) {
-      const entry = savedVisibility[key];
-      if (typeof entry === "boolean") visibility[key] = entry;
-    }
+    const visibility = normalizeOpenFem3DVisibility(savedVisibility);
     const combinationId = raw.combinationId === null || raw.combinationId === void 0 ? null : Number.isSafeInteger(raw.combinationId) && Number(raw.combinationId) > 0 ? Number(raw.combinationId) : (() => {
       throw new Error("Een opgeslagen 3D-weergave verwijst naar een ongeldige resultaatcombinatie.");
     })();
@@ -25462,7 +25910,8 @@ function isProjectFormatId(waarde) {
 var PROJECT_FORMAT_VERSION = 2;
 var PROJECT_FORMAT_VERSION_3D = 3;
 var PROJECT_FORMAT_VERSION_3D_LOAD_PANELS = 4;
-var PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_3D_LOAD_PANELS;
+var PROJECT_FORMAT_VERSION_3D_BEDDING = 5;
+var PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_3D_BEDDING;
 var SOORTEN = ["6.10a", "6.10b", "6.14b", "6.15b", "6.16b"];
 function combinationsToFile(combos) {
   return combos.map((c) => ({
@@ -25537,7 +25986,7 @@ function serializeProject(state) {
   const model3d = modelDimension === "3d" ? parseOpenFem3DModel(state.model3d) : void 0;
   const file = {
     format: PROJECT_FORMAT_ID,
-    version: modelDimension !== "3d" ? PROJECT_FORMAT_VERSION : (model3d?.loadPanels?.length ?? 0) > 0 ? PROJECT_FORMAT_VERSION_3D_LOAD_PANELS : PROJECT_FORMAT_VERSION_3D,
+    version: modelDimension !== "3d" ? PROJECT_FORMAT_VERSION : model3d?.beams.some((beam) => beam.bedding !== void 0) ? PROJECT_FORMAT_VERSION_3D_BEDDING : (model3d?.loadPanels?.length ?? 0) > 0 ? PROJECT_FORMAT_VERSION_3D_LOAD_PANELS : PROJECT_FORMAT_VERSION_3D,
     savedAt: (/* @__PURE__ */ new Date()).toISOString(),
     ...state,
     modelDimension,
@@ -25643,7 +26092,7 @@ function deserializeProject(text) {
 init_femTypes();
 
 // package.json
-var version = "2026.39.2";
+var version = "2026.41.0";
 
 // src/mcp/fouten.ts
 var AFBEELDINGEN = [
@@ -25870,6 +26319,32 @@ init_sectionResolver();
 init_steelGrades();
 init_steelSectionDims_generated();
 init_strip();
+
+// src/components/openFem3d/openFem3dBedding.ts
+function openFem3DBeddingResultOf(result, memberId) {
+  return result?.bedding?.find((item) => item.memberId === memberId);
+}
+function openFem3DBeddingSettlementAt(member, t) {
+  const points = member.points;
+  if (points.length === 0) return 0;
+  if (t <= points[0].t) return points[0].settlementM;
+  for (let index = 1; index < points.length; index += 1) {
+    const right = points[index];
+    if (t <= right.t) {
+      const left = points[index - 1];
+      const span = right.t - left.t;
+      return span > 1e-12 ? left.settlementM + (right.settlementM - left.settlementM) * (t - left.t) / span : right.settlementM;
+    }
+  }
+  return points[points.length - 1].settlementM;
+}
+function openFem3DBeddingTributaryLengths(points, lengthM) {
+  return points.map((point, index) => {
+    const left = index > 0 ? (point.t - points[index - 1].t) / 2 : 0;
+    const right = index < points.length - 1 ? (points[index + 1].t - point.t) / 2 : 0;
+    return (left + right) * lengthM;
+  });
+}
 
 // src/components/openFem3d/openFem3dLoadPanels.ts
 var OPEN_FEM_3D_LOAD_PANEL_TOLERANCE_M = 1e-3;
@@ -26147,7 +26622,7 @@ function mergePieces(pieces) {
   for (const piece of pieces) {
     const previous = merged[merged.length - 1];
     if (previous && Math.abs(previous.endPositionM - piece.startPositionM) <= 1e-12 * Math.max(1, piece.endPositionM)) {
-      const scale2 = Math.max(
+      const scale4 = Math.max(
         1e-12,
         Math.abs(previous.widthStartM),
         Math.abs(previous.widthEndM),
@@ -26155,7 +26630,7 @@ function mergePieces(pieces) {
         Math.abs(piece.widthEndM)
       );
       const a = slope(previous), b = slope(piece);
-      if (Math.abs(previous.widthEndM - piece.widthStartM) <= 1e-9 * scale2 && Math.abs(a - b) <= 1e-7 * Math.max(1, Math.abs(a), Math.abs(b))) {
+      if (Math.abs(previous.widthEndM - piece.widthStartM) <= 1e-9 * scale4 && Math.abs(a - b) <= 1e-7 * Math.max(1, Math.abs(a), Math.abs(b))) {
         merged[merged.length - 1] = { ...previous, endPositionM: piece.endPositionM, widthEndM: piece.widthEndM };
         continue;
       }
@@ -26321,7 +26796,7 @@ function rayIntervals(p0, m, polygon, epsilon, origin, along) {
   }
   return intervals;
 }
-var combine = (target, add2, sign) => target && add2 ? { c0: target.c0 + sign * add2.c0, c1: target.c1 + sign * add2.c1 } : null;
+var combine = (target, add4, sign) => target && add4 ? { c0: target.c0 + sign * add4.c0, c1: target.c1 + sign * add4.c1 } : null;
 function twoWayWidths(receivers, geometry) {
   const polygon = geometry.polygon;
   const size = geometry.sizeM;
@@ -26909,10 +27384,204 @@ init_combinations();
 init_vertaalbareTekst();
 init_steelGrades();
 
+// src/components/openFem3d/openFem3dPlateMesh.ts
+var TOL = 1e-6;
+var sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+var add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+var scale = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+var dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+var cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+var norm = (a) => Math.hypot(a[0], a[1], a[2]);
+var unit = (a) => {
+  const l = norm(a);
+  return [a[0] / l, a[1] / l, a[2] / l];
+};
+var pointOf = (node) => [node.x, node.y, node.z];
+function defaultOpenFem3DPlateMeshSizeM(shortestSpanM) {
+  return Math.min(0.5, Math.max(0.1, shortestSpanM / 10));
+}
+function toLocal(frame, p2) {
+  const d = sub(p2, frame.origin);
+  return [dot(d, frame.e1), dot(d, frame.e2)];
+}
+function toGlobal(frame, q) {
+  return add(frame.origin, add(scale(frame.e1, q[0]), scale(frame.e2, q[1])));
+}
+function newellNormal(points) {
+  const n2 = [0, 0, 0];
+  for (let i = 0; i < points.length; i += 1) {
+    const a = points[i], b = points[(i + 1) % points.length];
+    n2[0] += (a[1] - b[1]) * (a[2] + b[2]);
+    n2[1] += (a[2] - b[2]) * (a[0] + b[0]);
+    n2[2] += (a[0] - b[0]) * (a[1] + b[1]);
+  }
+  return n2;
+}
+function arcPoints(start, through, end, spacing, frame) {
+  const a = toLocal(frame, start), m = toLocal(frame, through), b = toLocal(frame, end);
+  const arc = circularArcThroughPoints2D({ x: a[0], y: a[1] }, { x: m[0], y: m[1] }, { x: b[0], y: b[1] });
+  if (!arc) return null;
+  const angleOf = (q) => Math.atan2(q[1] - arc.center.y, q[0] - arc.center.x);
+  const unwrap = (angle) => {
+    let delta = angle - arc.startAngle;
+    if (arc.sweep >= 0) {
+      while (delta < 0) delta += 2 * Math.PI;
+      while (delta > 2 * Math.PI) delta -= 2 * Math.PI;
+    } else {
+      while (delta > 0) delta -= 2 * Math.PI;
+      while (delta < -2 * Math.PI) delta += 2 * Math.PI;
+    }
+    return delta;
+  };
+  const middle = unwrap(angleOf(m));
+  const sample = (from, to) => {
+    const count = Math.max(1, Math.ceil(Math.abs(to - from) * arc.radius / spacing - 1e-9));
+    return Array.from({ length: count + 1 }, (_, k) => {
+      const angle = arc.startAngle + from + (to - from) * k / count;
+      return [arc.center.x + arc.radius * Math.cos(angle), arc.center.y + arc.radius * Math.sin(angle)];
+    });
+  };
+  const first = sample(0, middle);
+  const second = sample(middle, arc.sweep);
+  first[first.length - 1] = m;
+  second[0] = m;
+  second[second.length - 1] = b;
+  first[0] = a;
+  const local = [...first, ...second.slice(1)];
+  return {
+    points: local.map((q) => toGlobal(frame, q)),
+    center: toGlobal(frame, [arc.center.x, arc.center.y]),
+    radius: arc.radius
+  };
+}
+function contourFromBoundary(boundary, byId, spacing, frame) {
+  const pieces = [];
+  for (const segment of boundary) {
+    const start = byId.get(segment.startNodeId), end = byId.get(segment.endNodeId);
+    if (!start || !end) return null;
+    if (segment.kind === "line") {
+      pieces.push({ kind: "line", a: pointOf(start), b: pointOf(end) });
+    } else {
+      const control = byId.get(segment.controlNodeId);
+      if (!control) return null;
+      const sampled = arcPoints(pointOf(start), pointOf(control), pointOf(end), spacing, frame);
+      if (!sampled) return null;
+      pieces.push({ kind: "curve", points: sampled.points, arc: { center: sampled.center, radius: sampled.radius } });
+    }
+  }
+  return { pieces };
+}
+function contourFromLoop(loop, radius, spacing) {
+  if (!(radius > 0)) {
+    return { pieces: loop.map((a, i) => ({ kind: "line", a, b: loop[(i + 1) % loop.length] })) };
+  }
+  const count = loop.length;
+  const corners = loop.map((corner, index) => {
+    const previous = loop[(index + count - 1) % count], next = loop[(index + 1) % count];
+    const incoming = sub(previous, corner), outgoing = sub(next, corner);
+    const limited = Math.min(radius, norm(incoming) * 0.45, norm(outgoing) * 0.45);
+    return {
+      start: add(corner, scale(unit(incoming), limited)),
+      corner,
+      end: add(corner, scale(unit(outgoing), limited))
+    };
+  });
+  const pieces = [];
+  for (let index = 0; index < count; index += 1) {
+    const { start, corner, end } = corners[index];
+    const bezier = (s) => add(add(scale(start, (1 - s) ** 2), scale(corner, 2 * s * (1 - s))), scale(end, s * s));
+    const length = Array.from({ length: 8 }, (_, k) => norm(sub(bezier((k + 1) / 8), bezier(k / 8)))).reduce((a, b) => a + b, 0);
+    const steps = Math.max(1, Math.ceil(length / spacing - 1e-9));
+    pieces.push({ kind: "curve", points: Array.from({ length: steps + 1 }, (_, k) => bezier(k / steps)) });
+    const next = corners[(index + 1) % count];
+    if (norm(sub(next.start, end)) > TOL) pieces.push({ kind: "line", a: end, b: next.start });
+  }
+  return { pieces };
+}
+function contourPolyline(contour2) {
+  const out = [];
+  for (const piece of contour2.pieces) {
+    const points = piece.kind === "line" ? [piece.a, piece.b] : piece.points;
+    for (const p2 of points) {
+      if (out.length === 0 || norm(sub(out[out.length - 1], p2)) > TOL) out.push(p2);
+    }
+  }
+  if (out.length > 1 && norm(sub(out[0], out[out.length - 1])) <= TOL) out.pop();
+  return out;
+}
+function distanceToSegment2(p2, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const l2 = dx * dx + dy * dy;
+  const t = l2 > 0 ? Math.max(0, Math.min(1, ((p2[0] - a[0]) * dx + (p2[1] - a[1]) * dy) / l2)) : 0;
+  return Math.hypot(p2[0] - a[0] - t * dx, p2[1] - a[1] - t * dy);
+}
+function insidePolygon(p2, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i], b = polygon[j];
+    if (a[1] > p2[1] !== b[1] > p2[1] && p2[0] < (b[0] - a[0]) * (p2[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+}
+function classify(p2, region) {
+  for (const loop of [region.outer, ...region.holes]) {
+    for (let i = 0; i < loop.length; i += 1) {
+      if (distanceToSegment2(p2, loop[i], loop[(i + 1) % loop.length]) <= TOL) return "boundary";
+    }
+  }
+  if (!insidePolygon(p2, region.outer)) return "outside";
+  return region.holes.some((hole) => insidePolygon(p2, hole)) ? "outside" : "inside";
+}
+function plateFrame(plate, byId) {
+  const loop = plate.nodeIds.map((id2) => byId.get(id2));
+  if (loop.some((node) => !node)) throw new Error(`3D-plaat ${plate.id} verwijst naar een ontbrekende knoop.`);
+  const points = loop.map((node) => pointOf(node));
+  const normal = newellNormal(points);
+  if (!(norm(normal) > 1e-12)) throw new Error(`3D-plaat ${plate.id} heeft geen oppervlakte.`);
+  const e1 = unit(sub(points[1], points[0]));
+  const n2 = unit(normal);
+  const frame = { origin: points[0], e1, e2: cross(n2, e1), n: n2 };
+  const local = points.map((p2) => toLocal(frame, p2));
+  const xs = local.map((q) => q[0]), ys = local.map((q) => q[1]);
+  return { frame, normal, shortest: Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) };
+}
+function plateContours(plate, byId, spacing, frame) {
+  const outer = plate.boundary ? contourFromBoundary(plate.boundary, byId, spacing, frame) : contourFromLoop(plate.nodeIds.map((id2) => pointOf(byId.get(id2))), plate.cornerRadiusM ?? 0, spacing);
+  if (!outer) throw new Error(`3D-plaat ${plate.id}: de rand is niet op te bouwen.`);
+  const holes = [];
+  for (const opening of plate.openings ?? []) {
+    const contour2 = opening.boundary ? contourFromBoundary(opening.boundary, byId, spacing, frame) : contourFromLoop(opening.nodeIds.map((id2) => pointOf(byId.get(id2))), opening.cornerRadiusM ?? 0, spacing);
+    if (!contour2) throw new Error(`Opening ${opening.id} van 3D-plaat ${plate.id} is niet op te bouwen.`);
+    holes.push(contour2);
+  }
+  return { outer, holes };
+}
+function openFem3DPlatePlane(model, plate) {
+  const { frame } = plateFrame(plate, new Map(model.nodes.map((node) => [node.id, node])));
+  const [ox, oy, oz] = frame.origin, [nx, ny, nz] = frame.n;
+  return { origin: { x: ox, y: oy, z: oz }, normal: { x: nx, y: ny, z: nz } };
+}
+function classifyOpenFem3DPlatePoint(model, plate, point) {
+  const byId = new Map(model.nodes.map((node) => [node.id, node]));
+  const { frame, shortest } = plateFrame(plate, byId);
+  const meshSize = plate.meshSizeM ?? defaultOpenFem3DPlateMeshSizeM(shortest);
+  const { outer, holes } = plateContours(plate, byId, 2 * meshSize, frame);
+  const region = {
+    outer: contourPolyline(outer).map((p2) => toLocal(frame, p2)),
+    holes: holes.map((hole) => contourPolyline(hole).map((p2) => toLocal(frame, p2)))
+  };
+  const q = toLocal(frame, [point.x, point.y, point.z]);
+  const state = classify(q, region);
+  if (state !== "outside") return state;
+  return insidePolygon(q, region.outer) && region.holes.some((hole) => insidePolygon(q, hole)) ? "opening" : "outside";
+}
+
 // src/components/openFem3d/openFem3dTrekSchijf.ts
 var OPEN_FEM_3D_DIAPHRAGM_HEIGHT_TOLERANCE_M = 1e-3;
 function setOpenFem3DTensionOnly(model, beamIds, on) {
   const ids = new Set(beamIds);
+  const opBedding = on ? model.beams.find((beam) => ids.has(beam.id) && beam.bedding) : void 0;
+  if (opBedding) throw new Error(beddingTrekAlleenMelding(opBedding.id));
   return {
     ...model,
     beams: model.beams.map((beam) => {
@@ -26985,18 +27654,18 @@ function openFem3DGlobalForceBalance(input, result) {
   const appliedMoment = [0, 0, 0];
   const nodeById = new Map(input.nodes.map((node) => [node.id, node]));
   const memberById = new Map(input.members.map((member) => [member.id, member]));
-  const cross4 = (a, b) => [
+  const cross5 = (a, b) => [
     a[1] * b[2] - a[2] * b[1],
     a[2] * b[0] - a[0] * b[2],
     a[0] * b[1] - a[1] * b[0]
   ];
-  const add2 = (target, value) => {
+  const add4 = (target, value) => {
     for (let axis = 0; axis < 3; axis++) target[axis] += value[axis];
   };
   const addForceAt = (force, position, couple = [0, 0, 0]) => {
-    add2(applied, force);
-    add2(appliedMoment, cross4(position, force));
-    add2(appliedMoment, couple);
+    add4(applied, force);
+    add4(appliedMoment, cross5(position, force));
+    add4(appliedMoment, couple);
   };
   const memberGeometry = (memberId) => {
     const member = memberById.get(memberId);
@@ -27027,14 +27696,25 @@ function openFem3DGlobalForceBalance(input, result) {
   for (const load of input.memberLoads) {
     const { start, ex, ey, ez } = memberGeometry(load.memberId);
     const length = load.endPositionM - load.startPositionM;
+    if (isOpenFem3DGlobalMemberLoad(load)) {
+      const d = openFem3DGlobalDirectionVector(load.globalDirection);
+      const f = openFem3DGlobalMemberLoadFactor(ex, load.globalDirection, load.perProjection);
+      const total = f * (load.qStartKnPerM + load.qEndKnPerM) * length / 2;
+      const force2 = [d[0] * total, d[1] * total, d[2] * total];
+      add4(applied, force2);
+      add4(appliedMoment, cross5([start.x, start.y, start.z], force2));
+      const s = load.startPositionM * total + f * length ** 2 * (load.qStartKnPerM / 6 + load.qEndKnPerM / 3);
+      add4(appliedMoment, cross5(ex, [d[0] * s, d[1] * s, d[2] * s]));
+      continue;
+    }
     const fy = (load.qyStartKnPerM + load.qyEndKnPerM) * length / 2;
     const fz = (load.qzStartKnPerM + load.qzEndKnPerM) * length / 2;
     const force = localVector(ey, ez, fy, fz);
-    add2(applied, force);
-    add2(appliedMoment, cross4([start.x, start.y, start.z], force));
+    add4(applied, force);
+    add4(appliedMoment, cross5([start.x, start.y, start.z], force));
     const sy = load.startPositionM * fy + length ** 2 * (load.qyStartKnPerM / 6 + load.qyEndKnPerM / 3);
     const sz = load.startPositionM * fz + length ** 2 * (load.qzStartKnPerM / 6 + load.qzEndKnPerM / 3);
-    add2(appliedMoment, cross4(ex, localVector(ey, ez, sy, sz)));
+    add4(appliedMoment, cross5(ex, localVector(ey, ez, sy, sz)));
   }
   for (const load of input.memberPointLoads) addLocalMemberForce(load.memberId, load.pyKn, load.pzKn, load.positionM);
   const surfaceByPlate = /* @__PURE__ */ new Map();
@@ -27051,7 +27731,7 @@ function openFem3DGlobalForceBalance(input, result) {
       return [node.x, node.y, node.z];
     });
     for (const [a, b, c] of [[corners[0], corners[1], corners[2]], [corners[0], corners[2], corners[3]]]) {
-      const area = Math.hypot(...cross4(
+      const area = Math.hypot(...cross5(
         [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
         [c[0] - a[0], c[1] - a[1], c[2] - a[2]]
       )) / 2;
@@ -27067,8 +27747,25 @@ function openFem3DGlobalForceBalance(input, result) {
     imbalanceKn[0] += reaction.fx;
     imbalanceKn[1] += reaction.fy;
     imbalanceKn[2] += reaction.fz;
-    add2(momentImbalanceKnm, cross4([node.x, node.y, node.z], [reaction.fx, reaction.fy, reaction.fz]));
-    add2(momentImbalanceKnm, [reaction.mx, reaction.my, reaction.mz]);
+    add4(momentImbalanceKnm, cross5([node.x, node.y, node.z], [reaction.fx, reaction.fy, reaction.fz]));
+    add4(momentImbalanceKnm, [reaction.mx, reaction.my, reaction.mz]);
+  }
+  for (const member of result.bedding ?? []) {
+    const { start, ex } = memberGeometry(member.memberId);
+    const definition = memberById.get(member.memberId);
+    const end = nodeById.get(definition.endNodeId);
+    const length = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
+    const lengths = openFem3DBeddingTributaryLengths(member.points, length);
+    const pile = Math.abs(ex[2]) > OPEN_FEM_3D_BEDDING_ALL_ROUND_COSINE;
+    const side = cross5([0, 0, 1], ex);
+    const sideLength = Math.hypot(...side);
+    member.points.forEach((point, index) => {
+      const lateral = !pile && sideLength > 0 ? (point.lateralKnPerM ?? 0) * lengths[index] / sideLength : 0;
+      const force = [lateral * side[0], lateral * side[1], point.pressureKnPerM * lengths[index] + lateral * side[2]];
+      const position = memberPoint(start, ex, point.t * length);
+      add4(imbalanceKn, force);
+      add4(momentImbalanceKnm, cross5(position, force));
+    });
   }
   const secondOrderMomentKnm = result.analysis === "p-delta" && result.displacements && result.memberForces ? openFem3DSecondOrderMomentKnm(input, { displacements: result.displacements, memberForces: result.memberForces }) : void 0;
   if (secondOrderMomentKnm) {
@@ -27133,6 +27830,7 @@ function selectedLoads(model, loadSelection) {
   const memberLoads = (model.memberLoads ?? []).flatMap((load) => {
     const factor = factorForLoad(loadSelection, openFem3DLoadCaseId(load));
     if (factor === 0) return [];
+    if (isOpenFem3DGlobalMemberLoad(load)) return [{ ...load, qStart: load.qStart * factor, qEnd: load.qEnd * factor }];
     return [{
       ...load,
       qyStart: load.qyStart * factor,
@@ -27172,7 +27870,16 @@ function selectedLoads(model, loadSelection) {
 function contractLoads(loads) {
   return {
     nodalLoads: loads.nodalLoads.map(({ caseId: _caseId, ...load }) => load),
-    memberLoads: loads.memberLoads.map((load) => ({
+    memberLoads: loads.memberLoads.map((load) => isOpenFem3DGlobalMemberLoad(load) ? {
+      id: load.id,
+      memberId: load.beamId,
+      globalDirection: load.globalDirection,
+      qStartKnPerM: load.qStart,
+      qEndKnPerM: load.qEnd,
+      ...load.perProjection ? { perProjection: true } : {},
+      startPositionM: load.startPositionM,
+      endPositionM: load.endPositionM
+    } : {
       id: load.id,
       memberId: load.beamId,
       qyStartKnPerM: load.qyStart,
@@ -27181,7 +27888,7 @@ function contractLoads(loads) {
       qzEndKnPerM: load.qzEnd,
       startPositionM: load.startPositionM,
       endPositionM: load.endPositionM
-    })),
+    }),
     memberPointLoads: loads.memberPointLoads.map((load) => ({
       id: load.id,
       memberId: load.beamId,
@@ -27210,7 +27917,7 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
   if (model.nodes.length < 2 || model.beams.length === 0 && plates.length === 0) {
     throw new Error("Voeg minstens twee knopen en \xE9\xE9n staaf of plaat toe voordat je rekent.");
   }
-  if ((model.supports ?? []).length === 0 && !plates.some((plate) => (plate.edgeSupports?.length ?? 0) > 0)) {
+  if ((model.supports ?? []).length === 0 && !plates.some((plate) => (plate.edgeSupports?.length ?? 0) > 0) && !model.beams.some((beam) => beam.bedding)) {
     throw new Error("Voeg minstens \xE9\xE9n 3D-oplegging toe.");
   }
   const selected = selectedLoads(model, loadSelection);
@@ -27233,12 +27940,14 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
   const sections = [];
   const materialIds = /* @__PURE__ */ new Map();
   const sectionIds = /* @__PURE__ */ new Map();
+  const nodeIndex = new Map(model.nodes.map((node) => [node.id, node]));
   const members = model.beams.map((beam) => {
     const material = beam.material?.trim();
     const profile = beam.profileName?.trim();
     if (!material || !profile) {
       throw new Error(`Staaf ${beam.id}: wijs eerst een materiaal en profiel toe.`);
     }
+    const bedding2 = beam.bedding ? readOpenFem3DBeamBedding(beam.bedding, nodeIndex.get(beam.startNodeId), nodeIndex.get(beam.endNodeId), `Staaf ${beam.id}`) : void 0;
     const resolved = resolveSection(material, profile);
     if (resolved.bron === "default") throw new Error(`Staaf ${beam.id}: ${resolved.reden ?? "doorsnede onbekend"}.`);
     let materialId = materialIds.get(material);
@@ -27292,7 +28001,9 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
       ...beam.rollAngleRad !== void 0 ? { rollAngleRad: beam.rollAngleRad } : {},
       ...plateMesh?.beamIntermediateNodes.get(beam.id)?.length ? { intermediateNodeIds: plateMesh.beamIntermediateNodes.get(beam.id) } : {},
       // Alleen meesturen als het aan staat: een oudere kern kent het veld niet.
-      ...beam.tensionOnly ? { tensionOnly: true } : {}
+      ...beam.tensionOnly ? { tensionOnly: true } : {},
+      // Idem voor de bedding: alleen bij een staaf op bedding (contract #106).
+      ...bedding2 ? { bedding: bedding2 } : {}
     };
   });
   const plateEntries = plates.map((plate) => {
@@ -27403,7 +28114,7 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
 init_sectionResolver();
 init_steelSectionDims_generated();
 init_strip();
-var dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+var dot4 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 function profileKey2(value) {
   return profielAliasSleutel(
     value.toUpperCase().split("").filter((character) => ![" ", "-", "."].includes(character)).join("")
@@ -27459,17 +28170,19 @@ function openFem3DMemberDisplacementStations(model, beam, result, intervals = 20
   const rotation = (value) => [value.rx, value.ry, value.rz];
   const u1 = translation(startResult), u2 = translation(endResult);
   const r1 = rotation(startResult), r2 = rotation(endResult);
-  const localU1 = dot(ex, u1), localU2 = dot(ex, u2);
-  const localV1 = dot(ey, u1), localV2 = dot(ey, u2);
-  const localW1 = dot(ez, u1), localW2 = dot(ez, u2);
-  const localRy1 = dot(ey, r1), localRy2 = dot(ey, r2);
-  const localRz1 = dot(ez, r1), localRz2 = dot(ez, r2);
+  const localU1 = dot4(ex, u1), localU2 = dot4(ex, u2);
+  const localV1 = dot4(ey, u1), localV2 = dot4(ey, u2);
+  const localW1 = dot4(ez, u1), localW2 = dot4(ez, u2);
+  const localRy1 = dot4(ey, r1), localRy2 = dot4(ey, r2);
+  const localRz1 = dot4(ez, r1), localRz2 = dot4(ez, r2);
   const count = Math.max(2, Math.round(intervals));
   const stiffness = bendingStiffness(beam);
   const momentY = result.diagrams?.momentY.find((diagram) => diagram.memberId === beam.id)?.points;
   const momentZ = result.diagrams?.momentZ.find((diagram) => diagram.memberId === beam.id)?.points;
   const integratedV = stiffness && momentZ && momentZ.length >= 2 ? displacementFromCurvature(momentZ, -1 / (stiffness.eKnM2 * stiffness.izM4), localV1, localV2, length, count) : null;
   const integratedW = stiffness && momentY && momentY.length >= 2 ? displacementFromCurvature(momentY, 1 / (stiffness.eKnM2 * stiffness.iyM4), localW1, localW2, length, count) : null;
+  const bedding2 = beam.bedding?.kKnPerM3 !== void 0 ? openFem3DBeddingResultOf(result, beam.id) : void 0;
+  const settlement = bedding2 && bedding2.points.length >= 2 ? bedding2 : void 0;
   return Array.from({ length: count + 1 }, (_, index) => {
     const t = index / count;
     const h1 = 1 - 3 * t ** 2 + 2 * t ** 3;
@@ -27481,7 +28194,7 @@ function openFem3DMemberDisplacementStations(model, beam, result, intervals = 20
     const w = integratedW?.[index] ?? h1 * localW1 - h2 * localRy1 + h3 * localW2 - h4 * localRy2;
     const ux = ex[0] * u + ey[0] * v + ez[0] * w;
     const uy = ex[1] * u + ey[1] * v + ez[1] * w;
-    const uz = ex[2] * u + ey[2] * v + ez[2] * w;
+    const uz = settlement ? -openFem3DBeddingSettlementAt(settlement, t) : ex[2] * u + ey[2] * v + ez[2] * w;
     return { t, ux, uy, uz, magnitude: Math.hypot(ux, uy, uz) };
   });
 }
@@ -28570,8 +29283,18 @@ function belastingsom(model) {
   for (const load of model.memberLoads ?? []) {
     const beam = model.beams.find((b) => b.id === load.beamId);
     const a = nodeById.get(beam.startNodeId), e = nodeById.get(beam.endNodeId);
-    const { ey, ez } = openFem3DMemberAxes(a, e, beam.rollAngleRad ?? 0);
+    const { ex, ey, ez } = openFem3DMemberAxes(a, e, beam.rollAngleRad ?? 0);
     const lengte = load.endPositionM - load.startPositionM;
+    if (isOpenFem3DGlobalMemberLoad(load)) {
+      const d = openFem3DGlobalDirectionVector(load.globalDirection);
+      const f = openFem3DGlobalMemberLoadFactor(ex, load.globalDirection, load.perProjection);
+      const totaal = f * (load.qStart + load.qEnd) / 2 * lengte;
+      const s2 = bij(load.caseId ?? 1);
+      s2.fx += d[0] * totaal;
+      s2.fy += d[1] * totaal;
+      s2.fz += d[2] * totaal;
+      continue;
+    }
     const fy = (load.qyStart + load.qyEnd) / 2 * lengte;
     const fz = (load.qzStart + load.qzEnd) / 2 * lengte;
     const s = bij(load.caseId ?? 1);
@@ -29482,27 +30205,27 @@ function leesEenheden(ifc) {
     omschrijving: `Eenheden in het bestand: lengte ${lengteLabel}, kracht ${krachtLabel}, lijnlast ${lijnlast.label}, vlaklast ${vlaklast.label}, moment ${moment.label}. Omgerekend naar m, kN, kN/m, kN/m\xB2 en kNm.`
   };
 }
-var dot4 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-var cross = (a, b) => [
+var dot5 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+var cross4 = (a, b) => [
   a[1] * b[2] - a[2] * b[1],
   a[2] * b[0] - a[0] * b[2],
   a[0] * b[1] - a[1] * b[0]
 ];
-var sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-var add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-var scale = (a, f) => [a[0] * f, a[1] * f, a[2] * f];
-var norm = (a) => Math.hypot(a[0], a[1], a[2]);
-var unit = (a) => scale(a, 1 / norm(a));
+var sub4 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+var add2 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+var scale2 = (a, f) => [a[0] * f, a[1] * f, a[2] * f];
+var norm4 = (a) => Math.hypot(a[0], a[1], a[2]);
+var unit2 = (a) => scale2(a, 1 / norm4(a));
 var IDENTITEIT = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1], o: [0, 0, 0] };
-var draai = (t, v) => add(add(scale(t.x, v[0]), scale(t.y, v[1])), scale(t.z, v[2]));
-var pas = (t, p2) => add(t.o, draai(t, p2));
+var draai = (t, v) => add2(add2(scale2(t.x, v[0]), scale2(t.y, v[1])), scale2(t.z, v[2]));
+var pas = (t, p2) => add2(t.o, draai(t, p2));
 var na = (a, b) => ({ x: draai(a, b.x), y: draai(a, b.y), z: draai(a, b.z), o: pas(a, b.o) });
 var inverse = (t) => {
   const x = [t.x[0], t.y[0], t.z[0]];
   const y = [t.x[1], t.y[1], t.z[1]];
   const z = [t.x[2], t.y[2], t.z[2]];
   const r = { x, y, z, o: [0, 0, 0] };
-  return { x, y, z, o: scale(draai(r, t.o), -1) };
+  return { x, y, z, o: scale2(draai(r, t.o), -1) };
 };
 var Meetkunde = class {
   constructor(ifc, lengte, meld) {
@@ -29525,7 +30248,7 @@ var Meetkunde = class {
     const c = arg(r, 0);
     if (!Array.isArray(c)) return null;
     const v = [getalVan(c[0] ?? null) ?? 0, getalVan(c[1] ?? null) ?? 0, getalVan(c[2] ?? null) ?? 0];
-    return norm(v) > KLEIN ? unit(v) : null;
+    return norm4(v) > KLEIN ? unit2(v) : null;
   }
   /** IfcAxis2Placement3D of 2D → transformatie (IfcBuildAxes / IfcFirstProjAxis). */
   plaatsing(id2) {
@@ -29535,15 +30258,15 @@ var Meetkunde = class {
       const o = this.punt(refVan(arg(r, 0))) ?? [0, 0, 0];
       const z = this.richting(refVan(arg(r, 1))) ?? [0, 0, 1];
       const ref = this.richting(refVan(arg(r, 2))) ?? (Math.abs(z[0] - 1) < KLEIN && Math.abs(z[1]) < KLEIN && Math.abs(z[2]) < KLEIN ? [0, 1, 0] : [1, 0, 0]);
-      const x0 = sub(ref, scale(z, dot4(ref, z)));
-      const x = norm(x0) > KLEIN ? unit(x0) : unit(cross([0, 1, 0], z));
-      return { x, y: cross(z, x), z, o };
+      const x0 = sub4(ref, scale2(z, dot5(ref, z)));
+      const x = norm4(x0) > KLEIN ? unit2(x0) : unit2(cross4([0, 1, 0], z));
+      return { x, y: cross4(z, x), z, o };
     }
     if (r.type === "IFCAXIS2PLACEMENT2D") {
       const o = this.punt(refVan(arg(r, 0))) ?? [0, 0, 0];
       const ref = this.richting(refVan(arg(r, 1))) ?? [1, 0, 0];
-      const x = unit([ref[0], ref[1], 0]);
-      return { x, y: cross([0, 0, 1], x), z: [0, 0, 1], o: [o[0], o[1], 0] };
+      const x = unit2([ref[0], ref[1], 0]);
+      return { x, y: cross4([0, 0, 1], x), z: [0, 0, 1], o: [o[0], o[1], 0] };
     }
     return IDENTITEIT;
   }
@@ -29862,7 +30585,7 @@ var gelijkeConditie = (a, b) => a.soort === b.soort && (a.soort !== "veer" || b.
 function canoniekeNormaal(n2) {
   const e = 1e-6;
   const omkeren = Math.abs(n2[2]) > e ? n2[2] > 0 : Math.abs(n2[1]) > e ? n2[1] > 0 : n2[0] > 0;
-  return omkeren ? scale(n2, -1) : n2;
+  return omkeren ? scale2(n2, -1) : n2;
 }
 function newell(punten) {
   const n2 = [0, 0, 0];
@@ -30125,14 +30848,14 @@ var Importeur = class {
       const axis = this.meetkunde.richting(refVan(arg(lid, 8)));
       if (axis) {
         const a = draai(trafo, axis);
-        const loodrecht = sub(a, scale(basis.ex, dot4(a, basis.ex)));
-        if (norm(loodrecht) > 1e-6) zIfc = unit(loodrecht);
+        const loodrecht = sub4(a, scale2(basis.ex, dot5(a, basis.ex)));
+        if (norm4(loodrecht) > 1e-6) zIfc = unit2(loodrecht);
       }
       if (!zIfc) {
         this.meldingen.voeg("waarschuwing", "Staaf zonder bruikbare Axis (ontbreekt of evenwijdig aan de staaf); rolhoek 0 aangenomen", label);
         zIfc = basis.ez;
       }
-      let roll = Math.atan2(-dot4(zIfc, basis.ey), dot4(zIfc, basis.ez));
+      let roll = Math.atan2(-dot5(zIfc, basis.ey), dot5(zIfc, basis.ez));
       const mat = this.materiaalRecords(lid);
       let material;
       if (mat.materiaal) {
@@ -30204,7 +30927,7 @@ var Importeur = class {
         lengte,
         ketenVan: 0,
         ketenTot: lengte,
-        ifcAssen: [basis.ex, cross(zIfc, basis.ex), zIfc],
+        ifcAssen: [basis.ex, cross4(zIfc, basis.ex), zIfc],
         pendel: soort === "PIN_JOINED_MEMBER"
       };
       this.staven.push(info2);
@@ -30248,9 +30971,9 @@ var Importeur = class {
         if (connectieId === null || knoopId3 === void 0 || knoopId3 === a.id || knoopId3 === b.id) continue;
         const label = `${info2.label} bij ${this.connectieLabel(connectieId)}`;
         const k = this.nodeById.get(knoopId3);
-        const rel = sub([k.x, k.y, k.z], [a.x, a.y, a.z]);
-        const s = dot4(rel, ex);
-        if (norm(sub(rel, scale(ex, s))) > KNOOP_TOLERANTIE_M || s < -KNOOP_TOLERANTIE_M || s > info2.lengte + KNOOP_TOLERANTIE_M) {
+        const rel = sub4([k.x, k.y, k.z], [a.x, a.y, a.z]);
+        const s = dot5(rel, ex);
+        if (norm4(sub4(rel, scale2(ex, s))) > KNOOP_TOLERANTIE_M || s < -KNOOP_TOLERANTIE_M || s > info2.lengte + KNOOP_TOLERANTIE_M) {
           this.meldingen.voeg("waarschuwing", "Aansluiting op een knoop die niet op de staaf ligt; genegeerd", label);
           continue;
         }
@@ -30368,7 +31091,7 @@ var Importeur = class {
         if (stelselId !== null) {
           const s = this.meetkunde.plaatsing(stelselId);
           voorwaardeAssen = [draai(trafo, s.x), draai(trafo, s.y), draai(trafo, s.z)];
-          const samen = voorwaardeAssen.every((as3, i) => Math.abs(Math.abs(dot4(as3, ifcAssen[i])) - 1) < 1e-6);
+          const samen = voorwaardeAssen.every((as3, i) => Math.abs(Math.abs(dot5(as3, ifcAssen[i])) - 1) < 1e-6);
           if (!samen) {
             this.meldingen.voeg(
               "waarschuwing",
@@ -30380,7 +31103,7 @@ var Importeur = class {
         const vrij = voorwaardeAssen.filter((_, i) => c[3 + i].soort === "vrij");
         const velden = kant === "Start" ? ["torsionStart", "myStart", "mzStart"] : ["torsionEnd", "myEnd", "mzEnd"];
         [assen.ex, assen.ey, assen.ez].forEach((as3, i) => {
-          const aandeel = vrij.reduce((som, f) => som + dot4(as3, f) ** 2, 0);
+          const aandeel = vrij.reduce((som, f) => som + dot5(as3, f) ** 2, 0);
           if (aandeel > 1e-6 && aandeel < 1 - 1e-6) {
             this.meldingen.voeg(
               "waarschuwing",
@@ -30482,7 +31205,7 @@ var Importeur = class {
       const buiten = randen.find((r) => r.type === "IFCFACEOUTERBOUND") ?? randen.slice().sort((a, b) => {
         const opp = (r) => {
           const l = this.lusPunten(r, trafo);
-          return l ? norm(newell(l)) : 0;
+          return l ? norm4(newell(l)) : 0;
         };
         return opp(b) - opp(a);
       })[0];
@@ -30500,17 +31223,17 @@ var Importeur = class {
         );
       }
       const n2 = newell(buitenLus.punten);
-      if (norm(n2) / 2 <= 1e-9) {
+      if (norm4(n2) / 2 <= 1e-9) {
         this.meldingen.voeg("nietOndersteund", "Vlak zonder oppervlakte; niet ingelezen", label);
         continue;
       }
       const hoogte = buitenLus.punten.reduce((s, p2) => s + p2[2], 0) / buitenLus.punten.length;
       const horizontaal = buitenLus.punten.every((p2) => Math.abs(p2[2] - hoogte) <= KNOOP_TOLERANTIE_M);
-      let lokaalZ = unit(n2), lokaalX = unit(sub(buitenLus.punten[1], buitenLus.punten[0]));
+      let lokaalZ = unit2(n2), lokaalX = unit2(sub4(buitenLus.punten[1], buitenLus.punten[0]));
       const drager = this.ifc.get(refVan(arg(face, 1)));
       if (face.type === "IFCFACESURFACE" && drager?.type === "IFCPLANE") {
         const p2 = this.meetkunde.plaatsing(refVan(arg(drager, 0)));
-        lokaalZ = scale(draai(trafo, p2.z), janeeVan(arg(face, 2)) === false ? -1 : 1);
+        lokaalZ = scale2(draai(trafo, p2.z), janeeVan(arg(face, 2)) === false ? -1 : 1);
         lokaalX = draai(trafo, p2.x);
       }
       const typeNaam = enumVan(arg(vlak, 7)) ?? "NOTDEFINED";
@@ -30555,7 +31278,7 @@ var Importeur = class {
         horizontaal,
         hoogte,
         ...spanDirection ? { spanDirection } : {},
-        normaal: canoniekeNormaal(unit(n2)),
+        normaal: canoniekeNormaal(unit2(n2)),
         lokaalX,
         lokaalZ,
         gekoppeld,
@@ -30710,7 +31433,7 @@ var Importeur = class {
   voegAxiaal(nodeId, caseId, f) {
     const sleutel = `${nodeId}|${caseId}`;
     const bestaand = this.axiaal.get(sleutel);
-    if (bestaand) bestaand.f = add(bestaand.f, f);
+    if (bestaand) bestaand.f = add2(bestaand.f, f);
     else this.axiaal.set(sleutel, { nodeId, caseId, f });
   }
   actiesVan(groep, bezocht) {
@@ -30755,7 +31478,7 @@ var Importeur = class {
       }
     }
     for (const { nodeId, caseId, f } of this.axiaal.values()) {
-      if (norm(f) <= KLEIN) continue;
+      if (norm4(f) <= KLEIN) continue;
       this.loads.push({ id: this.loads.length + 1, nodeId, caseId, fx: f[0], fy: f[1], fz: f[2], mx: 0, my: 0, mz: 0 });
     }
   }
@@ -30805,9 +31528,9 @@ var Importeur = class {
     if (vertex || heeftPlaatsing) {
       const trafo = heeftPlaatsing ? this.trafoVan(actie) : keten.eerste.trafo;
       const p2 = pas(trafo, (vertex ? this.meetkunde.vertex(vertex.id) : null) ?? [0, 0, 0]);
-      const rel = sub(p2, [a.x, a.y, a.z]);
-      s = dot4(rel, assen.ex);
-      if (norm(sub(rel, scale(assen.ex, s))) > KNOOP_TOLERANTIE_M) {
+      const rel = sub4(p2, [a.x, a.y, a.z]);
+      s = dot5(rel, assen.ex);
+      if (norm4(sub4(rel, scale2(assen.ex, s))) > KNOOP_TOLERANTIE_M) {
         this.meldingen.voeg("waarschuwing", "Puntlast ligt naast de staafas; loodrecht op de staaf geprojecteerd", label);
       }
       s = Math.max(0, Math.min(keten.lengte, s));
@@ -30821,14 +31544,14 @@ var Importeur = class {
     const deel = keten.delen.find((d) => s < d.ketenTot) ?? keten.delen[keten.delen.length - 1];
     const positie = opDeel(deel, s);
     const assenDeel = this.assenVan(deel);
-    const py = dot4(fGlobaal, assenDeel.ey), pz = dot4(fGlobaal, assenDeel.ez), px = dot4(fGlobaal, assenDeel.ex);
+    const py = dot5(fGlobaal, assenDeel.ey), pz = dot5(fGlobaal, assenDeel.ez), px = dot5(fGlobaal, assenDeel.ex);
     const doel = this.doelGeval(caseId);
     if (Math.abs(py) > KLEIN || Math.abs(pz) > KLEIN) {
       this.memberPointLoads.push({ id: this.memberPointLoads.length + 1, beamId: deel.beam.id, caseId: doel, py, pz, positionM: positie });
     }
     if (Math.abs(px) > KLEIN) {
-      this.voegAxiaal(deel.beam.startNodeId, doel, scale(assenDeel.ex, px * (1 - positie / deel.lengte)));
-      this.voegAxiaal(deel.beam.endNodeId, doel, scale(assenDeel.ex, px * positie / deel.lengte));
+      this.voegAxiaal(deel.beam.startNodeId, doel, scale2(assenDeel.ex, px * (1 - positie / deel.lengte)));
+      this.voegAxiaal(deel.beam.endNodeId, doel, scale2(assenDeel.ex, px * positie / deel.lengte));
     }
   }
   /** De delen van een IFC-staaf met haar begin, assen en lengte; null als het element geen staaf van dit model is. */
@@ -30884,7 +31607,7 @@ var Importeur = class {
     const eigenRand = this.meetkunde.topologie(actie).map((item) => this.meetkunde.rand(item)).find((r) => r !== null);
     if (eigenRand) {
       const trafo = refVan(arg(actie, 5)) === null ? keten.eerste.trafo : this.trafoVan(actie);
-      const posities = [eigenRand.start, eigenRand.eind].map((v) => dot4(sub(pas(trafo, this.meetkunde.vertex(v) ?? [0, 0, 0]), [a.x, a.y, a.z]), assen.ex));
+      const posities = [eigenRand.start, eigenRand.eind].map((v) => dot5(sub4(pas(trafo, this.meetkunde.vertex(v) ?? [0, 0, 0]), [a.x, a.y, a.z]), assen.ex));
       van = Math.max(0, Math.min(...posities));
       tot = Math.min(keten.lengte, Math.max(...posities));
       if (tot - van <= KNOOP_TOLERANTIE_M) {
@@ -30898,7 +31621,7 @@ var Importeur = class {
       if (totS - vanS <= 1e-9) continue;
       const vanDeel = opDeel(deel, vanS), totDeel = opDeel(deel, totS);
       const assenDeel = this.assenVan(deel);
-      const qy = dot4(qGlobaal, assenDeel.ey), qz = dot4(qGlobaal, assenDeel.ez), qx = dot4(qGlobaal, assenDeel.ex);
+      const qy = dot5(qGlobaal, assenDeel.ey), qz = dot5(qGlobaal, assenDeel.ez), qx = dot5(qGlobaal, assenDeel.ex);
       if (Math.abs(qy) > KLEIN || Math.abs(qz) > KLEIN) {
         this.memberLoads.push({
           id: this.memberLoads.length + 1,
@@ -30915,8 +31638,8 @@ var Importeur = class {
       if (Math.abs(qx) > KLEIN) {
         const totaal = qx * (totDeel - vanDeel);
         const eindKracht = totaal * (vanDeel + totDeel) / 2 / deel.lengte;
-        this.voegAxiaal(deel.beam.startNodeId, doel, scale(assenDeel.ex, totaal - eindKracht));
-        this.voegAxiaal(deel.beam.endNodeId, doel, scale(assenDeel.ex, eindKracht));
+        this.voegAxiaal(deel.beam.startNodeId, doel, scale2(assenDeel.ex, totaal - eindKracht));
+        this.voegAxiaal(deel.beam.endNodeId, doel, scale2(assenDeel.ex, eindKracht));
       }
     }
   }
@@ -30945,7 +31668,7 @@ var Importeur = class {
       return;
     }
     const p2 = [1, 2, 3].map((i) => (getalVan(arg(last, i)) ?? 0) * this.eenheden.vlaklast);
-    const f = lokaal ? naarGlobaal([vlak.lokaalX, cross(vlak.lokaalZ, vlak.lokaalX), vlak.lokaalZ], p2) : p2;
+    const f = lokaal ? naarGlobaal([vlak.lokaalX, cross4(vlak.lokaalZ, vlak.lokaalX), vlak.lokaalZ], p2) : p2;
     const geprojecteerd = !lokaal && enumVan(arg(actie, 10)) === "PROJECTED_LENGTH";
     const doel = this.doelGeval(caseId);
     const telOp = (direction, q) => {
@@ -30967,8 +31690,8 @@ var Importeur = class {
       telOp("gravity", geprojecteerd ? -f[2] : -f[2] / nz);
       return;
     }
-    const langsNormaal = dot4(f, vlak.normaal);
-    if (norm(sub(f, scale(vlak.normaal, langsNormaal))) <= 1e-6 * norm(f)) {
+    const langsNormaal = dot5(f, vlak.normaal);
+    if (norm4(sub4(f, scale2(vlak.normaal, langsNormaal))) <= 1e-6 * norm4(f)) {
       if (geprojecteerd) this.meldingen.voeg("waarschuwing", "Vlaklast loodrecht op het vlak per geprojecteerde oppervlakte; als per m\xB2 vlak ingelezen", label);
       telOp("normal", langsNormaal);
       return;
@@ -30998,7 +31721,7 @@ var Importeur = class {
     const randen = refsVan(arg(faces[0], 0)).map((id2) => this.ifc.get(id2)).filter((r) => !!r);
     const lussen = randen.map((r) => ({ buiten: r.type === "IFCFACEOUTERBOUND", punten: this.lusPunten(r, trafo) }));
     if (lussen.length === 0 || lussen.some((l) => l.punten === null)) return "onleesbaar";
-    const buiten = lussen.find((l) => l.buiten) ?? lussen.slice().sort((a, b) => norm(newell(b.punten)) - norm(newell(a.punten)))[0];
+    const buiten = lussen.find((l) => l.buiten) ?? lussen.slice().sort((a, b) => norm4(newell(b.punten)) - norm4(newell(a.punten)))[0];
     if (!zelfdeVeelhoek(buiten.punten, vlak.rand, KNOOP_TOLERANTIE_M)) return "deel";
     const openingen = lussen.filter((l) => l !== buiten);
     return openingen.every((o) => vlak.openingen.some((v) => zelfdeVeelhoek(o.punten, v, KNOOP_TOLERANTIE_M))) ? "geheel" : "deel";
@@ -31023,8 +31746,8 @@ var Importeur = class {
         const g = openFem3DLoadPanelGeometry({ nodes: this.nodes }, panel, this.nodeById);
         const inVlak = (id2) => {
           const k = this.nodeById.get(id2);
-          const rel = sub([k.x, k.y, k.z], g.origin);
-          return Math.abs(dot4(rel, g.normal)) <= KNOOP_TOLERANTIE_M && puntInVeelhoek([dot4(rel, g.axisU), dot4(rel, g.axisV)], g.polygon, KNOOP_TOLERANTIE_M);
+          const rel = sub4([k.x, k.y, k.z], g.origin);
+          return Math.abs(dot5(rel, g.normal)) <= KNOOP_TOLERANTIE_M && puntInVeelhoek([dot5(rel, g.axisU), dot5(rel, g.axisV)], g.polygon, KNOOP_TOLERANTIE_M);
         };
         const uitgesloten = this.staven.filter((s) => (s.beam.tensionOnly || s.pendel) && inVlak(s.beam.startNodeId) && inVlak(s.beam.endNodeId)).map((s) => s.beam.id);
         if (uitgesloten.length > 0) panel.excludedBeamIds = uitgesloten;
@@ -31237,14 +31960,14 @@ function opDeel(deel, s) {
   return Math.max(0, Math.min(deel.lengte, t));
 }
 function afstandTotLijnstuk2(p2, a, b) {
-  const ab = sub(b, a);
-  const lengte2 = dot4(ab, ab);
-  const t = lengte2 <= 0 ? 0 : Math.max(0, Math.min(1, dot4(sub(p2, a), ab) / lengte2));
-  return norm(sub(p2, add(a, scale(ab, t))));
+  const ab = sub4(b, a);
+  const lengte2 = dot5(ab, ab);
+  const t = lengte2 <= 0 ? 0 : Math.max(0, Math.min(1, dot5(sub4(p2, a), ab) / lengte2));
+  return norm4(sub4(p2, add2(a, scale2(ab, t))));
 }
 function hoekpunten(lus, tol) {
-  let p2 = lus.filter((v, i) => i === 0 || norm(sub(v, lus[i - 1])) > tol);
-  if (p2.length > 1 && norm(sub(p2[0], p2[p2.length - 1])) <= tol) p2 = p2.slice(0, -1);
+  let p2 = lus.filter((v, i) => i === 0 || norm4(sub4(v, lus[i - 1])) > tol);
+  if (p2.length > 1 && norm4(sub4(p2[0], p2[p2.length - 1])) <= tol) p2 = p2.slice(0, -1);
   let weg = true;
   while (weg && p2.length > 3) {
     weg = false;
@@ -31262,7 +31985,7 @@ function zelfdeVeelhoek(a, b, tol) {
   const p2 = hoekpunten(a, tol), q = hoekpunten(b, tol);
   const n2 = p2.length;
   if (n2 < 3 || q.length !== n2) return false;
-  const gelijk2 = (u, v) => norm(sub(u, v)) <= tol;
+  const gelijk2 = (u, v) => norm4(sub4(u, v)) <= tol;
   for (let start = 0; start < n2; start += 1) {
     if (!gelijk2(p2[0], q[start])) continue;
     if (p2.every((u, i) => gelijk2(u, q[(start + i) % n2]))) return true;
@@ -31271,7 +31994,7 @@ function zelfdeVeelhoek(a, b, tol) {
   return false;
 }
 function naarGlobaal(assen, v) {
-  return add(add(scale(assen[0], v[0]), scale(assen[1], v[1])), scale(assen[2], v[2]));
+  return add2(add2(scale2(assen[0], v[0]), scale2(assen[1], v[1])), scale2(assen[2], v[2]));
 }
 function isGlobaal(t) {
   return Math.abs(t.x[0] - 1) < 1e-9 && Math.abs(t.y[1] - 1) < 1e-9 && Math.abs(t.z[2] - 1) < 1e-9;
@@ -31610,12 +32333,12 @@ function valideer(schema, waarde, pad = "") {
       }
       for (const [veld, inhoud] of Object.entries(waarde)) {
         if (inhoud === void 0) continue;
-        const sub4 = schema.properties[veld];
-        if (!sub4) {
+        const sub5 = schema.properties[veld];
+        if (!sub5) {
           meld(`onbekend veld; toegestaan: ${Object.keys(schema.properties).join(", ") || "(geen)"}`, `${pad}.${veld}`);
           continue;
         }
-        problemen.push(...valideer(sub4, inhoud, `${pad}.${veld}`));
+        problemen.push(...valideer(sub5, inhoud, `${pad}.${veld}`));
       }
       break;
     }
@@ -31676,7 +32399,7 @@ function isStrikt(schema, pad = "") {
   if (schema.type === "array") return isStrikt(schema.items, `${pad}[]`);
   if (schema.type !== "object") return [];
   const eigen = schema.additionalProperties === false ? [] : [pad];
-  return [...eigen, ...Object.entries(schema.properties ?? {}).flatMap(([veld, sub4]) => isStrikt(sub4, `${pad}.${veld}`))];
+  return [...eigen, ...Object.entries(schema.properties ?? {}).flatMap(([veld, sub5]) => isStrikt(sub5, `${pad}.${veld}`))];
 }
 
 // src/api/register.ts
@@ -31880,12 +32603,19 @@ var scharnieren = obj({
   torsionStart: jaNee("Torsiescharnier aan het begin."),
   torsionEnd: jaNee("Torsiescharnier aan het eind.")
 }, [], "Eindscharnieren in lokale assen; een ontbrekende vrijheidsgraad is vast.");
+var bedding = obj({
+  kKnPerM3: getal4("Beddingsconstante k in kN/m\xB3 voor de verticale richting (globaal Z; de grond ligt onder de staaf). Niet bij een (bijna) verticale staaf.", { exclusiveMinimum: 0 }),
+  widthM: getal4("Contactbreedte b in m; de lijnstijfheid is k\xB7b (kN/m per m).", { exclusiveMinimum: 0 }),
+  kLateralKnPerM3: getal4("Zijdelingse beddingsconstante in kN/m\xB3: horizontaal loodrecht op de staafas, naar beide zijden, altijd lineair. Bij een staaf steiler dan 45\xB0 (een (schoor)paal) rondom, in twee richtingen loodrecht op de as; bij een loodrechte paal in X en Y.", { exclusiveMinimum: 0 }),
+  compressionOnly: jaNee("Alleen druk: de verticale veren vallen weg waar de staaf omhoog komt (de grond trekt niet).")
+}, ["widthM"], "Staaf op bedding (Winkler): de grond steunt de staaf over haar hele lengte; de rekenkern knipt de staaf fijn genoeg. Geef kKnPerM3, kLateralKnPerM3 of beide.");
 var staafVelden = {
   profileName: tekst('Profielnaam uit de bibliotheek, bijv. "IPE 200", "HEA 300", "CHS 88.9x4", "Strip 80x10".', { minLength: 1 }),
   material: tekst('Materiaal, bijv. "S235", "S355", "C24", "C30/37".', { minLength: 1 }),
   rollAngleDeg: getal4("Rotatie van de lokale y/z-assen om de staafas, in graden."),
   releases: scharnieren,
   tensionOnly: jaNee("Trek-alleen staaf (bijv. een windverband): valt weg zolang hij op druk staat."),
+  bedding,
   name: tekst("Naam van de staaf (alleen weergave en rapport)."),
   group: tekst('Groep, bijv. "kolom", "spantligger", "windverband".')
 };
@@ -31996,6 +32726,7 @@ var staafWijzigen = documentCommando({
     rollAngleDeg: ofNull(staafVelden.rollAngleDeg),
     releases: ofNull(scharnieren),
     tensionOnly: staafVelden.tensionOnly,
+    bedding: ofNull(bedding, "Staaf op bedding; null haalt de bedding weg."),
     name: ofNull(staafVelden.name),
     group: ofNull(staafVelden.group)
   }, ["id"]),
@@ -32004,6 +32735,24 @@ var staafWijzigen = documentCommando({
     vindStaaf(huidig, beamId);
     const model = updateOpenFem3DBeam(huidig, beamId, naarPatch(rest));
     return { uitkomst: { beam: vindStaaf(model, beamId) }, document: metModel3d(document2, model) };
+  }
+});
+var staafBedding = documentCommando({
+  naam: "model3d.beam.setBedding",
+  beschrijving: "E\xE9n of meer 3D-staven op dezelfde bedding zetten (Winkler, zoals het vinkje Op bedding in het eigenschappenpaneel), of de bedding weghalen met null. E\xE9n stap ongedaan maken. Een (bijna) verticale staaf krijgt alleen een zijdelingse bedding (kLateralKnPerM3); een verticale k wordt dan geweigerd.",
+  invoer: obj({
+    beamIds: lijst(id("Id van een staaf."), "De staven.", { minItems: 1 }),
+    bedding: ofNull(bedding, "De bedding voor alle genoemde staven; null haalt haar weg.")
+  }, ["beamIds", "bedding"]),
+  uitvoeren: ({ beamIds, bedding: nieuw }, document2) => {
+    const huidig = model3dVan(document2);
+    const ids = [...new Set(beamIds)];
+    for (const beamId of ids) vindStaaf(huidig, beamId);
+    const model = setOpenFem3DBeamBedding(huidig, ids, nieuw);
+    return {
+      uitkomst: { beamIds: ids, bedding: ids.map((beamId) => ({ beamId, bedding: vindStaaf(model, beamId).bedding ?? null })) },
+      document: metModel3d(document2, model)
+    };
   }
 });
 var staafVerwijderen = documentCommando({
@@ -32069,6 +32818,42 @@ var scharnierSituatie = documentCommando({
     for (const beamId of ids) vindStaaf(huidig, beamId);
     const model = setOpenFem3DReleasePreset(huidig, ids, preset);
     return { uitkomst: { beamIds: ids, preset }, document: metModel3d(document2, model) };
+  }
+});
+var staafeindScharnier = documentCommando({
+  naam: "model3d.beam.setEndHinge",
+  beschrijving: "E\xE9n eind van een 3D-staaf scharnierend maken of weer vast, zoals het gereedschap Scharnier aan staafeind: My en Mz aan dat eind samen los (hinged true) of vast (false); torsie blijft zoals hij is. Zonder hinged wisselt het, zoals een klik: stonden My en Mz daar allebei los, dan gaan ze vast, anders allebei los. Zonder losse vrijheidsgraad verdwijnt het scharnierveld (momentvast). Een losse combinatie (bijv. alleen My) zet je met model3d.beam.update (releases).",
+  invoer: obj({
+    beamId: id("Id van de staaf."),
+    end: keuze(["start", "end"], "start: het eind bij startNodeId; end: het eind bij endNodeId."),
+    hinged: jaNee("true: My en Mz los; false: vast; weglaten: wisselen.")
+  }, ["beamId", "end"]),
+  uitvoeren: ({ beamId, end, hinged }, document2) => {
+    const huidig = model3dVan(document2);
+    vindStaaf(huidig, beamId);
+    const resultaat = setOpenFem3DBeamEndHinge(huidig, beamId, end, hinged);
+    const beam = resultaat.model.beams.find((item) => item.id === beamId);
+    return {
+      uitkomst: { beamId, end, hinged: resultaat.hinged, releases: beam.releases ?? null },
+      document: metModel3d(document2, resultaat.model)
+    };
+  }
+});
+var liggersOpKolommen = documentCommando({
+  naam: "model3d.beam.pinToColumns",
+  beschrijving: "Liggers scharnierend op kolommen aansluiten, zoals de knop in het lint: elk eind van een ligger (een staaf die niet bijna verticaal staat; een schuine spant telt mee) op een kolomkop krijgt My en Mz los. Een kolomkop is het bovenste eind van een kolom (|ex\xB7Z| > 0,95) die naar beneden op een oplegging of veer steunt; het onderste eind telt niet, dus een balkrooster onder een kolomvoet of poer en een ligger waar een kolom op staat, blijven doorgaand. Kolommen blijven doorgaand; torsie blijft zoals hij is. Een eind blijft momentvast als het deel achter de ligger anders zou gaan draaien: reason cantilever (het hangt alleen aan die kolomkop, zoals een uitkraging of luifel) of hingeLine (het hangt alleen aan scharnieren op \xE9\xE9n lijn zonder staaf langs die lijn). Zonder beamIds alle staven, anders alleen de genoemde (een kolom ertussen wordt overgeslagen). Geeft de staafeinden die veranderden (changed, count) en die momentvast bleven (skipped); een eind dat al scharnierend was, telt niet mee.",
+  invoer: obj({
+    beamIds: lijst(id("Id van een staaf."), "Alleen deze staven; weglaten = alle staven.", { minItems: 1 })
+  }, []),
+  uitvoeren: ({ beamIds }, document2) => {
+    const huidig = model3dVan(document2);
+    const ids = beamIds === void 0 ? void 0 : [...new Set(beamIds)];
+    for (const beamId of ids ?? []) vindStaaf(huidig, beamId);
+    const resultaat = pinOpenFem3DBeamsToColumns(huidig, ids);
+    return {
+      uitkomst: { changed: resultaat.changed, count: resultaat.changed.length, skipped: resultaat.skipped },
+      document: metModel3d(document2, resultaat.model)
+    };
   }
 });
 var plaatToevoegen = documentCommando({
@@ -32150,15 +32935,154 @@ var MODEL3D_GEOMETRIE_COMMANDOS = [
   knoopVerwijderen,
   staafToevoegen,
   staafWijzigen,
+  staafBedding,
   staafVerwijderen,
   staafSplitsen,
   assenOmkeren,
   scharnierSituatie,
+  staafeindScharnier,
+  liggersOpKolommen,
   plaatToevoegen,
   plaatWijzigen,
   plaatVerwijderen,
   openingToevoegen
 ];
+
+// src/components/openFem3d/openFem3dPlaatsen.ts
+var OPEN_FEM_3D_DEFAULT_POINT_LOAD_KN = -10;
+var BEAM_END_RATIO = 1e-6;
+var SAME_POINT_M = 1e-7;
+var SAME_PLATE_POINT_M = 1e-6;
+function requireNodeId(model, nodeId) {
+  if (!model.nodes.some((node) => node.id === nodeId)) throw new Error(`3D-knoop ${nodeId} bestaat niet.`);
+}
+function openFem3DBeamSpotRatio(model, spot) {
+  const beam = model.beams.find((item) => item.id === spot.beamId);
+  if (!beam) throw new Error(`3D-staaf ${spot.beamId} bestaat niet.`);
+  const start = model.nodes.find((node) => node.id === beam.startNodeId);
+  const end = model.nodes.find((node) => node.id === beam.endNodeId);
+  if (!start || !end) throw new Error("De 3D-staaf verwijst naar een ontbrekende knoop.");
+  const lengthM = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
+  if (!(lengthM > 1e-12)) throw new Error(`3D-staaf ${spot.beamId} heeft geen lengte.`);
+  const given = "t" in spot ? spot.t * lengthM : spot.positionM;
+  if (!Number.isFinite(given) || given < -1e-9 || given > lengthM + 1e-9) {
+    throw new Error(`De plek moet binnen de staaflengte van 3D-staaf ${spot.beamId} liggen (0 \u2026 ${lengthM} m).`);
+  }
+  const positionM = Math.min(lengthM, Math.max(0, given));
+  return { ratio: positionM / lengthM, positionM, lengthM };
+}
+function projectOpenFem3DPointOnPlate(model, plateId, point, options = {}) {
+  const plate = (model.plates ?? []).find((item) => item.id === plateId);
+  if (!plate) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
+  if (![point.x, point.y, point.z].every(Number.isFinite)) throw new Error("Het punt op de plaat moet eindige co\xF6rdinaten hebben.");
+  const { origin, normal } = openFem3DPlatePlane(model, plate);
+  const afstand3 = (point.x - origin.x) * normal.x + (point.y - origin.y) * normal.y + (point.z - origin.z) * normal.z;
+  const projected = {
+    x: point.x - afstand3 * normal.x,
+    y: point.y - afstand3 * normal.y,
+    z: point.z - afstand3 * normal.z
+  };
+  const axes = ["x", "y", "z"];
+  const dependent = axes.reduce((best, axis) => Math.abs(normal[axis]) > Math.abs(normal[best]) ? axis : best);
+  const free = axes.filter((axis) => axis !== dependent);
+  if (options.roundToMm) for (const axis of free) projected[axis] = Math.round(projected[axis] * 1e3) / 1e3;
+  projected[dependent] = origin[dependent] - free.reduce((sum, axis) => sum + normal[axis] * (projected[axis] - origin[axis]), 0) / normal[dependent];
+  for (const axis of axes) if (Object.is(projected[axis], -0)) projected[axis] = 0;
+  return { point: projected, state: classifyOpenFem3DPlatePoint(model, plate, projected) };
+}
+function nextNodeId(model) {
+  return model.nodes.reduce((maximum, node) => Math.max(maximum, node.id), 0) + 1;
+}
+function resolveOpenFem3DPlacementNode(model, target) {
+  if ("nodeId" in target) {
+    requireNodeId(model, target.nodeId);
+    return { model, nodeId: target.nodeId, created: "existing" };
+  }
+  if ("position" in target) {
+    const { x, y, z } = target.position;
+    if (![x, y, z].every(Number.isFinite)) throw new Error("Het punt moet eindige co\xF6rdinaten hebben.");
+    const existing = model.nodes.find((node) => Math.hypot(node.x - x, node.y - y, node.z - z) < SAME_POINT_M);
+    if (existing) return { model, nodeId: existing.id, created: "existing" };
+    const nodeId = nextNodeId(model);
+    return { model: { ...model, nodes: [...model.nodes, { id: nodeId, x, y, z }] }, nodeId, created: "point" };
+  }
+  if ("plateId" in target) {
+    const plate = (model.plates ?? []).find((item) => item.id === target.plateId);
+    const { point, state } = projectOpenFem3DPointOnPlate(model, target.plateId, target.point);
+    if (state === "opening") throw new Error(`Het punt ligt in een opening van 3D-plaat ${target.plateId}.`);
+    if (state === "outside") throw new Error(`Het punt ligt buiten 3D-plaat ${target.plateId}.`);
+    const existing = model.nodes.find((node2) => Math.hypot(node2.x - point.x, node2.y - point.y, node2.z - point.z) <= SAME_PLATE_POINT_M);
+    if (existing) return { model, nodeId: existing.id, created: "existing" };
+    const nodeId = nextNodeId(model);
+    const node = { id: nodeId, ...point, ...plate.levelId !== void 0 ? { levelId: plate.levelId } : {} };
+    return { model: { ...model, nodes: [...model.nodes, node] }, nodeId, created: "plate" };
+  }
+  const { ratio } = openFem3DBeamSpotRatio(model, target);
+  const beam = model.beams.find((item) => item.id === target.beamId);
+  if (ratio <= BEAM_END_RATIO) return { model, nodeId: beam.startNodeId, created: "existing" };
+  if (ratio >= 1 - BEAM_END_RATIO) return { model, nodeId: beam.endNodeId, created: "existing" };
+  const split = splitOpenFem3DBeam(model, target.beamId, ratio);
+  return {
+    model: split.model,
+    nodeId: split.nodeId,
+    created: "beamSplit",
+    split: { beamId: split.firstBeamId, secondBeamId: split.secondBeamId }
+  };
+}
+function placeOpenFem3DPointLoad(model, target, caseId, values) {
+  const given = values && Object.values(values).some((value) => value !== void 0);
+  if ("nodeId" in target) {
+    requireNodeId(model, target.nodeId);
+    const components = given ? { fx: values.fx ?? 0, fy: values.fy ?? 0, fz: values.fz ?? 0, mx: values.mx ?? 0, my: values.my ?? 0, mz: values.mz ?? 0 } : { fx: 0, fy: 0, fz: OPEN_FEM_3D_DEFAULT_POINT_LOAD_KN, mx: 0, my: 0, mz: 0 };
+    const next2 = addOpenFem3DNodalLoad(model, target.nodeId, components, caseId);
+    const loadId2 = next2.loads[next2.loads.length - 1].id;
+    return { model: next2, kind: "nodal", loadId: loadId2, selection: { type: "nodalLoad", id: loadId2 } };
+  }
+  const { positionM } = openFem3DBeamSpotRatio(model, target);
+  const forces = given ? { py: values.py ?? 0, pz: values.pz ?? 0 } : { py: 0, pz: OPEN_FEM_3D_DEFAULT_POINT_LOAD_KN };
+  const next = addOpenFem3DMemberPointLoad(model, target.beamId, { ...forces, positionM }, caseId);
+  const loadId = next.memberPointLoads[next.memberPointLoads.length - 1].id;
+  return { model: next, kind: "memberPoint", loadId, selection: { type: "memberPointLoad", id: loadId } };
+}
+
+// src/components/openFem3d/openFem3dNodeTools.ts
+var OPEN_FEM_3D_SPRING_KEYS = {
+  kx: "kxKnPerM",
+  ky: "kyKnPerM",
+  kz: "kzKnPerM",
+  krx: "krxKnmPerRad",
+  kry: "kryKnmPerRad",
+  krz: "krzKnmPerRad"
+};
+var OPEN_FEM_3D_DEFAULT_SPRING_STIFFNESS = {
+  kx: 1e4,
+  ky: 1e4,
+  kz: 1e4,
+  krx: 1e3,
+  kry: 1e3,
+  krz: 1e3
+};
+var SPRING_AXES = Object.keys(OPEN_FEM_3D_SPRING_KEYS);
+function applyOpenFem3DNodeCondition(model, nodeId, condition, springStiffness) {
+  if (condition.kind === "support") {
+    return setOpenFem3DSupport(model, nodeId, OPEN_FEM_3D_SUPPORT_PRESETS[condition.preset]);
+  }
+  const existing = model.supports?.find((support) => support.nodeId === nodeId)?.springs ?? {};
+  return setOpenFem3DSupportSprings(model, nodeId, {
+    ...existing,
+    [OPEN_FEM_3D_SPRING_KEYS[condition.axis]]: springStiffness
+  });
+}
+function placeOpenFem3DNodeCondition(model, target, condition, springStiffness) {
+  const placed = resolveOpenFem3DPlacementNode(model, target);
+  return {
+    model: applyOpenFem3DNodeCondition(placed.model, placed.nodeId, condition, springStiffness),
+    nodeId: placed.nodeId,
+    createdNode: placed.created !== "existing",
+    created: placed.created,
+    ...placed.split ? { split: placed.split } : {}
+  };
+}
 
 // src/api/commands/model3dVoorwaarden.ts
 function vindKnoop2(model, nodeId) {
@@ -32220,14 +33144,69 @@ var knoopLastVelden = {
   my: getal4("Moment om Y, kNm."),
   mz: getal4("Moment om Z, kNm.")
 };
+var globaleRichting = keuze(
+  [...OPEN_FEM_3D_GLOBAL_DIRECTIONS],
+  "Globale richting van de last: x, y of z. Met dit veld is het een globale lijnlast (qStart/qEnd langs die as, de kern zet hem om naar de staaf); zonder is het een lokale last (qy/qz)."
+);
 var lijnLastVelden = {
-  qyStart: getal4("Lijnlast in lokale y aan het begin, kN/m."),
+  qyStart: getal4("Lijnlast in lokale y aan het begin, kN/m. Alleen bij een lokale last."),
   qyEnd: getal4("Lijnlast in lokale y aan het eind, kN/m."),
-  qzStart: getal4("Lijnlast in lokale z aan het begin, kN/m."),
+  qzStart: getal4("Lijnlast in lokale z aan het begin, kN/m. Alleen bij een lokale last."),
   qzEnd: getal4("Lijnlast in lokale z aan het eind, kN/m."),
+  globalDirection: globaleRichting,
+  qStart: getal4("Globale lijnlast aan het begin, kN/m, met teken langs de globale as (z negatief = omlaag). Alleen met globalDirection."),
+  qEnd: getal4("Globale lijnlast aan het eind, kN/m; ontbreekt bij toevoegen = qStart."),
+  perProjection: jaNee("Alleen met globalDirection. true: per meter projectie van de staaf op het vlak loodrecht op de lastrichting (sneeuw op een schuin dak: per horizontale meter); false of ontbreekt: per meter staaflengte."),
   startPositionM: getal4("Begin van de last in m vanaf de beginknoop; ontbreekt = 0.", { minimum: 0 }),
   endPositionM: getal4("Eind van de last in m vanaf de beginknoop; ontbreekt = de staaflengte.", { exclusiveMinimum: 0 })
 };
+var lijnLastWijzigVelden = {
+  ...lijnLastVelden,
+  globalDirection: ofNull(
+    globaleRichting,
+    "Globale richting x, y of z (een lokale last wordt globaal; geef dan qStart), of null: weer een lokale last (geef dan qy/qz). Ontbreekt = blijft."
+  )
+};
+var LOKALE_VELDEN = ["qyStart", "qyEnd", "qzStart", "qzEnd"];
+var GLOBALE_VELDEN = ["qStart", "qEnd", "perProjection"];
+function lijnLastWaarden(invoer, oud, lengte) {
+  const startPositionM = invoer.startPositionM ?? oud?.startPositionM ?? 0;
+  const endPositionM = invoer.endPositionM ?? oud?.endPositionM ?? lengte;
+  const richting2 = invoer.globalDirection === void 0 ? oud?.globalDirection : invoer.globalDirection ?? void 0;
+  const lokaal = LOKALE_VELDEN.filter((veld) => invoer[veld] !== void 0);
+  const globaal = GLOBALE_VELDEN.filter((veld) => invoer[veld] !== void 0);
+  if (richting2) {
+    if (lokaal.length > 0) {
+      throw new ApiFout("INVOER_ONGELDIG", `Een globale lijnlast heeft geen ${lokaal.join(", ")}; geef qStart en qEnd langs de globale as.`);
+    }
+    const vorige = oud && isOpenFem3DGlobalMemberLoad(oud) ? oud : void 0;
+    const qStart = invoer.qStart ?? vorige?.qStart;
+    if (qStart === void 0) throw new ApiFout("INVOER_ONGELDIG", "Een globale lijnlast heeft qStart nodig (kN/m langs de globale as).");
+    return {
+      globalDirection: richting2,
+      qStart,
+      qEnd: invoer.qEnd ?? vorige?.qEnd ?? qStart,
+      perProjection: invoer.perProjection ?? vorige?.perProjection ?? false,
+      startPositionM,
+      endPositionM
+    };
+  }
+  if (globaal.length > 0) {
+    throw new ApiFout("INVOER_ONGELDIG", `${globaal.join(", ")} hoort bij een globale lijnlast; geef ook globalDirection (x, y of z).`);
+  }
+  if (oud && !isOpenFem3DGlobalMemberLoad(oud)) {
+    return {
+      qyStart: invoer.qyStart ?? oud.qyStart,
+      qyEnd: invoer.qyEnd ?? oud.qyEnd,
+      qzStart: invoer.qzStart ?? oud.qzStart,
+      qzEnd: invoer.qzEnd ?? oud.qzEnd,
+      startPositionM,
+      endPositionM
+    };
+  }
+  const qyStart = invoer.qyStart ?? 0, qzStart = invoer.qzStart ?? 0;
+  return { qyStart, qyEnd: invoer.qyEnd ?? qyStart, qzStart, qzEnd: invoer.qzEnd ?? qzStart, startPositionM, endPositionM };
+}
 var puntLastVelden = {
   py: getal4("Puntlast in lokale y, kN."),
   pz: getal4("Puntlast in lokale z, kN."),
@@ -32324,6 +33303,106 @@ var opleggingWeg = documentCommando({
     return { uitkomst: { removedSupportNodeId: nodeId }, document: met(document2, removeOpenFem3DSupport(model, nodeId)) };
   }
 });
+var VEERRICHTINGEN = ["kx", "ky", "kz", "krx", "kry", "krz"];
+var coordinaten = {
+  x: getal4("x in m (globaal)."),
+  y: getal4("y in m (globaal)."),
+  z: getal4("z in m (globaal, omhoog).")
+};
+var knoopDoel = obj({ kind: { const: "node" }, nodeId: knoopId2 }, ["kind", "nodeId"], "Een bestaande knoop.");
+var staafDoel = (wat) => obj({
+  kind: { const: "beam" },
+  beamId: staafId,
+  t: getal4("Plek als fractie van de staaflengte: 0 = beginknoop, 1 = eindknoop.", { minimum: 0, maximum: 1 }),
+  positionM: getal4("Plek in m vanaf de beginknoop.", { minimum: 0 })
+}, ["kind", "beamId"], `Een plek op een staaf: t \xF3f positionM. ${wat}`);
+function naarDoel(model, doel) {
+  switch (doel.kind) {
+    case "node":
+      vindKnoop2(model, doel.nodeId);
+      return { nodeId: doel.nodeId };
+    case "beam": {
+      vindStaaf2(model, doel.beamId);
+      if (doel.t === void 0 === (doel.positionM === void 0)) {
+        throw new ApiFout("INVOER_ONGELDIG", "Geef de plek op de staaf als t (0\u20131) \xF3f als positionM (m), niet allebei.");
+      }
+      return doel.t !== void 0 ? { beamId: doel.beamId, t: doel.t } : { beamId: doel.beamId, positionM: doel.positionM };
+    }
+    case "plate":
+      vindIn(model.plates, "3D-plaat", doel.plateId);
+      return { plateId: doel.plateId, point: { x: doel.x, y: doel.y, z: doel.z } };
+    case "point":
+      return { position: { x: doel.x, y: doel.y, z: doel.z } };
+  }
+}
+var opleggingPlaatsen = documentCommando({
+  naam: "model3d.support.place",
+  beschrijving: "Een oplegging of veer plaatsen zoals de gereedschappen Oplegging en Veer in de app: op een knoop; op een staaf (de staaf wordt op die plek gesplitst zoals bij een tussenknoop, lasten en eindscharnieren blijven goed verdeeld; op t = 0 of 1 de eindknoop); op een plaat (nieuwe knoop in het middenvlak, het punt loodrecht geprojecteerd, met het level van de plaat; een punt in een opening of buiten de plaat wordt geweigerd); of op een vrij punt (de knoop die daar ligt, of een nieuwe). Geef preset (oplegging) \xF3f springAxis (veer). Knoop en oplegging zijn \xE9\xE9n bewerking.",
+  invoer: obj({
+    target: eenVan([
+      knoopDoel,
+      staafDoel("De staaf wordt daar gesplitst."),
+      obj(
+        { kind: { const: "plate" }, plateId: id("Id van een bestaande 3D-plaat."), ...coordinaten },
+        ["kind", "plateId", "x", "y", "z"],
+        "Een punt op of bij een plaat; het wordt loodrecht op het middenvlak geprojecteerd."
+      ),
+      obj({ kind: { const: "point" }, ...coordinaten }, ["kind", "x", "y", "z"], "Een vrij punt (zoals een klik op het werkvlak).")
+    ], "Waar de oplegging of veer komt."),
+    preset: keuze(PRESETS, "Oplegging: fixed (inklemming), pinned (scharnier), x-/y-/zRoller, revoluteX/Y/Z."),
+    springAxis: keuze(VEERRICHTINGEN, "Veer: kx, ky, kz (translatie, kN/m) of krx, kry, krz (rotatie, kNm/rad), in globale assen. Andere veren op de knoop blijven."),
+    stiffness: getal4("Stijfheid van de veer; ontbreekt = 10 000 kN/m (translatie) of 1000 kNm/rad (rotatie).", { exclusiveMinimum: 0 })
+  }, ["target"]),
+  uitvoeren: ({ target, preset, springAxis, stiffness }, document2) => {
+    const model = model3dVan(document2);
+    if (preset === void 0 === (springAxis === void 0)) {
+      throw new ApiFout("INVOER_ONGELDIG", "Geef preset (oplegging) \xF3f springAxis (veer).");
+    }
+    if (stiffness !== void 0 && springAxis === void 0) {
+      throw new ApiFout("INVOER_ONGELDIG", "stiffness hoort bij een veer (springAxis).");
+    }
+    const condition = preset !== void 0 ? { kind: "support", preset } : { kind: "spring", axis: springAxis };
+    const geplaatst = placeOpenFem3DNodeCondition(
+      model,
+      naarDoel(model, target),
+      condition,
+      springAxis !== void 0 ? stiffness ?? OPEN_FEM_3D_DEFAULT_SPRING_STIFFNESS[springAxis] : 0
+    );
+    return {
+      uitkomst: {
+        nodeId: geplaatst.nodeId,
+        created: geplaatst.created,
+        ...geplaatst.split ? { split: geplaatst.split } : {},
+        node: geplaatst.model.nodes.find((node) => node.id === geplaatst.nodeId),
+        support: geplaatst.model.supports?.find((s) => s.nodeId === geplaatst.nodeId) ?? null
+      },
+      document: met(document2, geplaatst.model)
+    };
+  }
+});
+var puntlastPlaatsen = documentCommando({
+  naam: "model3d.load.placePoint",
+  beschrijving: "Een puntlast plaatsen zoals het gereedschap Puntlast in de app: op een knoop een knooplast (globale assen), op een staaf een staafpuntlast op die plek (lokale y/z; de staaf blijft heel). Zonder waarden: \u221210 kN omlaag (Fz op een knoop, Pz op een staaf). fx \u2026 mz alleen bij een knoop, py en pz alleen bij een staaf.",
+  invoer: obj({
+    target: eenVan([knoopDoel, staafDoel("De last komt op die plek.")], "Waar de puntlast komt."),
+    caseId: gevalId,
+    ...knoopLastVelden,
+    py: puntLastVelden.py,
+    pz: puntLastVelden.pz
+  }, ["target"]),
+  uitvoeren: ({ target, caseId, ...waarden }, document2) => {
+    const model = model3dVan(document2);
+    const doel = naarDoel(model, target);
+    const gegeven2 = (velden) => velden.filter((veld) => waarden[veld] !== void 0);
+    const vreemd = target.kind === "node" ? gegeven2(["py", "pz"]) : gegeven2(Object.keys(knoopLastVelden));
+    if (vreemd.length > 0) {
+      throw new ApiFout("INVOER_ONGELDIG", `${vreemd.join(", ")} hoort niet bij een puntlast op een ${target.kind === "node" ? "knoop" : "staaf"}.`);
+    }
+    const geplaatst = placeOpenFem3DPointLoad(model, doel, geval(document2, caseId), waarden);
+    const load = geplaatst.kind === "nodal" ? geplaatst.model.loads?.find((item) => item.id === geplaatst.loadId) : geplaatst.model.memberPointLoads?.find((item) => item.id === geplaatst.loadId);
+    return { uitkomst: { kind: geplaatst.kind, load }, document: met(document2, geplaatst.model) };
+  }
+});
 var knoopLastToevoegen = documentCommando({
   naam: "model3d.load.nodal.add",
   beschrijving: "Een knooplast (krachten en momenten in globale assen) toevoegen. Ontbrekende componenten zijn 0.",
@@ -32355,30 +33434,23 @@ var knoopLastWijzigen = documentCommando({
 });
 var staafLastToevoegen = documentCommando({
   naam: "model3d.load.member.add",
-  beschrijving: "Een (trapeziumvormige) lijnlast op een staaf toevoegen, in lokale y/z. Zonder positie: over de hele staaf.",
+  beschrijving: "Een (trapeziumvormige) lijnlast op een staaf toevoegen: in lokale y/z (qyStart \u2026 qzEnd), of met globalDirection in een globale richting (qStart/qEnd, per staafmeter of met perProjection per meter projectie). Zonder positie: over de hele staaf.",
   invoer: obj({ beamId: staafId, caseId: gevalId, ...lijnLastVelden }, ["beamId"]),
-  uitvoeren: ({ beamId, caseId, qyStart = 0, qyEnd, qzStart = 0, qzEnd, startPositionM = 0, endPositionM }, document2) => {
+  uitvoeren: ({ beamId, caseId, ...invoer }, document2) => {
     const model = model3dVan(document2);
     const lengte = staafLengte(model, beamId);
-    const nieuw = addOpenFem3DMemberLoad(model, beamId, {
-      qyStart,
-      qyEnd: qyEnd ?? qyStart,
-      qzStart,
-      qzEnd: qzEnd ?? qzStart,
-      startPositionM,
-      endPositionM: endPositionM ?? lengte
-    }, geval(document2, caseId));
+    const nieuw = addOpenFem3DMemberLoad(model, beamId, lijnLastWaarden(invoer, void 0, lengte), geval(document2, caseId));
     return { uitkomst: { load: nieuwElement(model.memberLoads, nieuw.memberLoads) }, document: met(document2, nieuw) };
   }
 });
 var staafLastWijzigen = documentCommando({
   naam: "model3d.load.member.update",
-  beschrijving: "Waarden of positie van een lijnlast wijzigen; niet genoemde velden blijven.",
-  invoer: obj({ id: id("Id van de lijnlast."), ...lijnLastVelden }, ["id"]),
+  beschrijving: "Waarden, richting of positie van een lijnlast wijzigen; niet genoemde velden blijven. globalDirection maakt een lokale last globaal (met qStart), null maakt hem weer lokaal (met qy/qz).",
+  invoer: obj({ id: id("Id van de lijnlast."), ...lijnLastWijzigVelden }, ["id"]),
   uitvoeren: ({ id: loadId, ...patch }, document2) => {
     const model = model3dVan(document2);
-    const { id: _id, beamId: _beam, caseId: _case, ...oud } = vindIn(model.memberLoads, "3D-lijnlast", loadId);
-    const nieuw = updateOpenFem3DMemberLoad(model, loadId, { ...oud, ...patch });
+    const oud = vindIn(model.memberLoads, "3D-lijnlast", loadId);
+    const nieuw = updateOpenFem3DMemberLoad(model, loadId, lijnLastWaarden(patch, oud, staafLengte(model, oud.beamId)));
     return { uitkomst: { load: vindIn(nieuw.memberLoads, "3D-lijnlast", loadId) }, document: met(document2, nieuw) };
   }
 });
@@ -32595,6 +33667,8 @@ var MODEL3D_VOORWAARDEN_COMMANDOS = [
   verenZetten,
   opgelegdZetten,
   opleggingWeg,
+  opleggingPlaatsen,
+  puntlastPlaatsen,
   knoopLastToevoegen,
   knoopLastWijzigen,
   lastVerwijderen("knooplast", "loads", "model3d.load.nodal.delete", removeOpenFem3DNodalLoad),
@@ -32620,6 +33694,376 @@ var MODEL3D_VOORWAARDEN_COMMANDOS = [
   trekAlleen,
   instellingen
 ];
+
+// src/components/openFem3d/openFem3dSelection.ts
+var OPEN_FEM_3D_LOAD_SELECTION_TYPES = [
+  "nodalLoad",
+  "memberLoad",
+  "memberPointLoad",
+  "thermalLoad",
+  "surfaceLoad",
+  "loadPanel"
+];
+function openFem3DSelectionFromIds(ids) {
+  const sorted = (values = []) => [...new Set(values)].sort((a, b) => a - b);
+  const nodeIds = sorted(ids.nodeIds);
+  const beamIds = sorted(ids.beamIds);
+  const plateIds = sorted(ids.plateIds);
+  const loads = {};
+  for (const type of OPEN_FEM_3D_LOAD_SELECTION_TYPES) {
+    const loadIds = sorted(ids.loads?.[type]);
+    if (loadIds.length) loads[type] = loadIds;
+  }
+  const loadEntries = Object.entries(loads);
+  const loadCount = loadEntries.reduce((count, [, loadIds]) => count + loadIds.length, 0);
+  const total = nodeIds.length + beamIds.length + plateIds.length + loadCount;
+  if (total === 0) return null;
+  if (total === 1) {
+    if (nodeIds.length) return { type: "node", id: nodeIds[0] };
+    if (beamIds.length) return { type: "beam", id: beamIds[0] };
+    if (plateIds.length) return { type: "plate", id: plateIds[0] };
+    const [type, [id2]] = loadEntries[0];
+    return { type, id: id2 };
+  }
+  return {
+    type: "multi",
+    nodeIds,
+    beamIds,
+    ...plateIds.length ? { plateIds } : {},
+    ...loadCount ? { loads } : {}
+  };
+}
+
+// src/components/selectieFilter/selectieFilter.ts
+init_femTypes();
+var FILTER_TYPEN = ["node", "beam", "plate", "load", "support"];
+var FILTER_RICHTINGEN = ["horizontal", "vertical", "sloped"];
+var FILTER_VERTICAAL = OPEN_FEM_3D_COLUMN_COSINE;
+var FILTER_HORIZONTAAL = 0.05;
+var LENGTE_MARGE_MM = 1e-6;
+function filterRichting(ezAbs) {
+  const ez = Math.abs(ezAbs);
+  if (ez > FILTER_VERTICAAL) return "vertical";
+  if (ez < FILTER_HORIZONTAAL) return "horizontal";
+  return "sloped";
+}
+var eindig = (waarde) => typeof waarde === "number" && Number.isFinite(waarde);
+function filterCriteriumActief(criterium2) {
+  if (criterium2.property === "length") return eindig(criterium2.fromMm) || eindig(criterium2.toMm);
+  return criterium2.values.length > 0;
+}
+function keurFilterCriteria(criteria) {
+  for (const criterium2 of criteria) {
+    if (criterium2.property !== "length") continue;
+    const { fromMm, toMm } = criterium2;
+    if (fromMm !== void 0 && (!eindig(fromMm) || fromMm < 0) || toMm !== void 0 && (!eindig(toMm) || toMm < 0)) {
+      throw new Error("Een lengte in het filter is een getal van 0 mm of meer.");
+    }
+    if (eindig(fromMm) && eindig(toMm) && fromMm > toMm) {
+      throw new Error(`De lengte "van" (${fromMm} mm) is groter dan "tot" (${toMm} mm).`);
+    }
+  }
+}
+function voldoetAanCriterium(element, criterium2) {
+  switch (criterium2.property) {
+    case "type":
+      return criterium2.values.some((type) => type === element.soort || type === "support" && element.soort === "node" && element.support === true);
+    case "profile":
+    case "material":
+    case "group":
+    case "role": {
+      const waarde = element[criterium2.property];
+      return waarde !== void 0 && criterium2.values.includes(waarde);
+    }
+    case "level":
+      return (element.levels ?? []).some((level) => criterium2.values.includes(level));
+    case "direction":
+      return element.direction !== void 0 && criterium2.values.includes(element.direction);
+    case "loadCase":
+      return element.loadCase !== void 0 && criterium2.values.includes(element.loadCase);
+    case "loadKind":
+      return element.loadKind !== void 0 && criterium2.values.includes(element.loadKind);
+    case "length": {
+      const lengte = element.lengthMm;
+      if (lengte === void 0) return false;
+      if (eindig(criterium2.fromMm) && lengte < criterium2.fromMm - LENGTE_MARGE_MM) return false;
+      if (eindig(criterium2.toMm) && lengte > criterium2.toMm + LENGTE_MARGE_MM) return false;
+      return true;
+    }
+  }
+}
+function filterElementen(elementen, criteria) {
+  const actief2 = criteria.filter(filterCriteriumActief);
+  return elementen.filter((element) => actief2.every((criterium2) => voldoetAanCriterium(element, criterium2) === (criterium2.mode === "keep")));
+}
+function filterTelling(elementen) {
+  const telling = { node: 0, beam: 0, plate: 0, load: 0, support: 0, total: 0 };
+  for (const element of elementen) {
+    telling[element.soort] += 1;
+    telling.total += 1;
+    if (element.soort === "node" && element.support) telling.support += 1;
+  }
+  return telling;
+}
+
+// src/components/openFem3d/openFem3dSelectieFilter.ts
+var OPEN_FEM_3D_FILTER_LAST_SOORT = {
+  nodalLoad: "nodal",
+  memberLoad: "line",
+  memberPointLoad: "memberPoint",
+  thermalLoad: "thermal",
+  surfaceLoad: "surface",
+  loadPanel: "loadPanel"
+};
+var SELECTIE_SOORT = Object.fromEntries(
+  Object.entries(OPEN_FEM_3D_FILTER_LAST_SOORT).map(([type, soort]) => [soort, type])
+);
+var LEVEL_MARGE_MM = 0.5;
+function lastenVan(model) {
+  return {
+    nodalLoad: model.loads ?? [],
+    memberLoad: model.memberLoads ?? [],
+    memberPointLoad: model.memberPointLoads ?? [],
+    thermalLoad: model.thermalLoads ?? [],
+    surfaceLoad: model.surfaceLoads ?? [],
+    loadPanel: model.loadPanels ?? []
+  };
+}
+function openFem3DFilterElementen(model, levels, ids) {
+  const nodeById = new Map(model.nodes.map((node) => [node.id, node]));
+  const supported = new Set((model.supports ?? []).map((support) => support.nodeId));
+  const nodeLevels = /* @__PURE__ */ new Map();
+  const levelsOfNode = (nodeId) => {
+    let result = nodeLevels.get(nodeId);
+    if (result) return result;
+    const node = nodeById.get(nodeId);
+    result = node ? levels.filter((level) => node.levelId === level.id || Math.abs(node.z * 1e3 - level.position) <= LEVEL_MARGE_MM).map((level) => level.id) : [];
+    nodeLevels.set(nodeId, result);
+    return result;
+  };
+  const common = (nodeIds) => {
+    if (nodeIds.length === 0) return [];
+    return nodeIds.slice(1).reduce(
+      (acc, nodeId) => acc.filter((level) => levelsOfNode(nodeId).includes(level)),
+      levelsOfNode(nodeIds[0])
+    );
+  };
+  const kies = (items, gekozen) => {
+    if (!ids) return items;
+    const set = new Set(gekozen ?? []);
+    return items.filter((item) => set.has(item.id));
+  };
+  const elementen = [];
+  for (const node of kies(model.nodes, ids?.nodeIds)) {
+    elementen.push({ soort: "node", id: node.id, support: supported.has(node.id), levels: levelsOfNode(node.id) });
+  }
+  for (const beam of kies(model.beams, ids?.beamIds)) {
+    const start = nodeById.get(beam.startNodeId), end = nodeById.get(beam.endNodeId);
+    const lengthM = start && end ? Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z) : 0;
+    elementen.push({
+      soort: "beam",
+      id: beam.id,
+      profile: beam.profileName?.trim() ?? "",
+      material: beam.material?.trim() ?? "",
+      group: beam.group?.trim() ?? "",
+      ...start && end && lengthM > 0 ? { direction: filterRichting((end.z - start.z) / lengthM) } : {},
+      lengthMm: lengthM * 1e3,
+      levels: common([beam.startNodeId, beam.endNodeId])
+    });
+  }
+  for (const plate of kies(model.plates ?? [], ids?.plateIds)) {
+    const levelsOfPlate = new Set(common(plate.nodeIds));
+    if (plate.levelId !== void 0) levelsOfPlate.add(plate.levelId);
+    elementen.push({
+      soort: "plate",
+      id: plate.id,
+      material: plate.material?.trim() ?? "",
+      levels: levels.map((level) => level.id).filter((id2) => levelsOfPlate.has(id2))
+    });
+  }
+  const lasten = lastenVan(model);
+  for (const type of OPEN_FEM_3D_LOAD_SELECTION_TYPES) {
+    for (const load of kies(lasten[type], ids?.loads[type])) {
+      elementen.push({
+        soort: "load",
+        id: load.id,
+        loadKind: OPEN_FEM_3D_FILTER_LAST_SOORT[type],
+        loadCase: openFem3DLoadCaseId(load)
+      });
+    }
+  }
+  return elementen;
+}
+function openFem3DIdsVanElementen(elementen) {
+  const ids = { nodeIds: [], beamIds: [], plateIds: [], loads: {} };
+  for (const element of elementen) {
+    if (element.soort === "node") ids.nodeIds.push(element.id);
+    else if (element.soort === "beam") ids.beamIds.push(element.id);
+    else if (element.soort === "plate") ids.plateIds.push(element.id);
+    else {
+      const type = element.loadKind && SELECTIE_SOORT[element.loadKind];
+      if (type) (ids.loads[type] ??= []).push(element.id);
+    }
+  }
+  const oplopend = (lijst2) => lijst2.sort((a, b) => a - b);
+  oplopend(ids.nodeIds);
+  oplopend(ids.beamIds);
+  oplopend(ids.plateIds);
+  Object.values(ids.loads).forEach((lijst2) => oplopend(lijst2));
+  return ids;
+}
+function filterOpenFem3D(model, levels, ids, criteria) {
+  const over = filterElementen(openFem3DFilterElementen(model, levels, ids), criteria);
+  return { ids: openFem3DIdsVanElementen(over), telling: filterTelling(over), heleModel: ids === null };
+}
+
+// src/api/commands/model3dSelectie.ts
+var LAST_VELDEN = {
+  nodalLoad: "nodalLoadIds",
+  memberLoad: "memberLoadIds",
+  memberPointLoad: "memberPointLoadIds",
+  thermalLoad: "thermalLoadIds",
+  surfaceLoad: "surfaceLoadIds",
+  loadPanel: "loadPanelIds"
+};
+var LAST_SOORTEN = Object.keys(LAST_VELDEN);
+var LAST_NAAM = {
+  nodalLoad: "3D-knooplast",
+  memberLoad: "3D-lijnlast",
+  memberPointLoad: "3D-puntlast op staaf",
+  thermalLoad: "3D-temperatuurlast",
+  surfaceLoad: "3D-vlaklast",
+  loadPanel: "3D-belastingvlak"
+};
+var lastenVan2 = (model) => ({
+  nodalLoad: model.loads ?? [],
+  memberLoad: model.memberLoads ?? [],
+  memberPointLoad: model.memberPointLoads ?? [],
+  thermalLoad: model.thermalLoads ?? [],
+  surfaceLoad: model.surfaceLoads ?? [],
+  loadPanel: model.loadPanels ?? []
+});
+var bestaat = (items, ids, soort) => {
+  const set = new Set(items.map((item) => item.id));
+  for (const gekozen of ids) if (!set.has(gekozen)) throw nietGevonden(soort, gekozen);
+};
+function lastIdsUitInvoer(model, invoer) {
+  const lasten = lastenVan2(model);
+  const loads = {};
+  for (const soort of LAST_SOORTEN) {
+    const gekozen = invoer[LAST_VELDEN[soort]] ?? [];
+    bestaat(lasten[soort], gekozen, LAST_NAAM[soort]);
+    if (gekozen.length) loads[soort] = gekozen;
+  }
+  return loads;
+}
+function lastIdSchema(rol) {
+  return {
+    nodalLoadIds: lijst(id("Id van een knooplast."), `Knooplasten ${rol}.`),
+    memberLoadIds: lijst(id("Id van een lijnlast."), `Lijnlasten ${rol}.`),
+    memberPointLoadIds: lijst(id("Id van een puntlast op een staaf."), `Puntlasten op staven ${rol}.`),
+    thermalLoadIds: lijst(id("Id van een temperatuurlast."), `Temperatuurlasten ${rol}.`),
+    surfaceLoadIds: lijst(id("Id van een vlaklast."), `Vlaklasten ${rol}.`),
+    loadPanelIds: lijst(id("Id van een belastingvlak."), `Belastingvlakken ${rol}.`)
+  };
+}
+function idsUitInvoer(model, invoer) {
+  const ids = {
+    nodeIds: invoer.nodeIds ?? [],
+    beamIds: invoer.beamIds ?? [],
+    plateIds: invoer.plateIds ?? [],
+    loads: {}
+  };
+  bestaat(model.nodes, ids.nodeIds, "3D-knoop");
+  bestaat(model.beams, ids.beamIds, "3D-staaf");
+  bestaat(model.plates ?? [], ids.plateIds, "3D-plaat");
+  ids.loads = lastIdsUitInvoer(model, invoer);
+  const aantal2 = ids.nodeIds.length + ids.beamIds.length + ids.plateIds.length + LAST_SOORTEN.reduce((n2, soort) => n2 + (ids.loads[soort]?.length ?? 0), 0);
+  return aantal2 === 0 ? null : ids;
+}
+var modus = keuze(["keep", "remove"], "keep: alleen wat voldoet houden (wat het kenmerk niet heeft, valt ook weg); remove: wat voldoet weghalen.");
+var criterium = (property, values, beschrijving) => obj({ property, mode: modus, values }, ["property", "mode", "values"], beschrijving);
+var criteriumSchema = eenVan([
+  criterium(
+    { const: "type" },
+    lijst(keuze([...FILTER_TYPEN]), "node, beam, plate, load, support (een knoop met een oplegging)."),
+    "Type element."
+  ),
+  criterium(
+    keuze(["profile", "material", "group", "level"]),
+    lijst(tekst(), 'Profielnaam ("HEA 200"), materiaal, groep of level-id; "" = zonder.'),
+    "Profiel of materiaal (staaf; materiaal ook plaat), groep (staaf), level (knoop, staaf of plaat op dat level; id uit model3d.levels.get)."
+  ),
+  criterium(
+    { const: "direction" },
+    lijst(keuze([...FILTER_RICHTINGEN]), "vertical: |ex\xB7Z| > 0,95; horizontal: |ex\xB7Z| < 0,05; anders sloped."),
+    "Richting van een staaf."
+  ),
+  criterium({ const: "loadCase" }, lijst(id("Id van een belastinggeval.")), "Belastinggeval van een last."),
+  criterium(
+    { const: "loadKind" },
+    lijst(
+      keuze([...new Set(Object.values(OPEN_FEM_3D_FILTER_LAST_SOORT))]),
+      "nodal (knooplast), line (lijnlast), memberPoint (puntlast op staaf), thermal, surface (vlaklast), loadPanel (belastingvlak)."
+    ),
+    "Soort last."
+  ),
+  obj({
+    property: { const: "length" },
+    mode: modus,
+    fromMm: getal4("Vanaf deze lengte, mm (telt mee).", { minimum: 0 }),
+    toMm: getal4("Tot en met deze lengte, mm.", { minimum: 0 })
+  }, ["property", "mode"], "Lengte van een staaf in mm; van en/of tot.")
+], "Een criterium.");
+var selectieFilteren = {
+  naam: "model3d.selection.filter",
+  beschrijving: "Een selectie verfijnen zoals het venster Selectiefilter: id's in, id's uit. Zonder id's werkt het op het hele model. Criteria op type, profiel, materiaal, groep, richting, level, lengte (mm), belastinggeval en soort last; per criterium keep (alleen deze houden) of remove (deze weghalen); alle criteria samen (EN). Het document verandert niet. In de draaiende app zet select: true de uitkomst als selectie (zoals Toepassen); buiten de app zet het niets (selectionApplied: false).",
+  invoer: obj({
+    nodeIds: lijst(id("Id van een knoop."), "Knopen in de selectie."),
+    beamIds: lijst(id("Id van een staaf."), "Staven in de selectie."),
+    plateIds: lijst(id("Id van een plaat."), "Platen in de selectie."),
+    ...lastIdSchema("in de selectie"),
+    criteria: lijst(criteriumSchema, "De criteria; een criterium zonder waarden doet niet mee."),
+    select: jaNee("In de draaiende app de uitkomst als selectie zetten (zoals Toepassen).")
+  }),
+  soort: "document",
+  uitvoeren: (invoer, context) => {
+    const document2 = context.document;
+    const model = model3dVan(document2);
+    const criteria = invoer.criteria ?? [];
+    try {
+      keurFilterCriteria(criteria);
+    } catch (fout) {
+      throw new ApiFout("INVOER_ONGELDIG", fout instanceof Error ? fout.message : String(fout));
+    }
+    const ids = idsUitInvoer(model, invoer);
+    const uit = filterOpenFem3D(model, document2.structuralGrid?.zAxes ?? [], ids, criteria);
+    const app = context.app;
+    const zetten = invoer.select === true && typeof app?.zetSelectie3D === "function";
+    if (zetten) app.zetSelectie3D(openFem3DSelectionFromIds(uit.ids));
+    const steunknopen = new Set((model.supports ?? []).map((support) => support.nodeId));
+    return {
+      uitkomst: {
+        nodeIds: uit.ids.nodeIds,
+        beamIds: uit.ids.beamIds,
+        plateIds: uit.ids.plateIds,
+        ...Object.fromEntries(LAST_SOORTEN.map((soort) => [LAST_VELDEN[soort], uit.ids.loads[soort] ?? []])),
+        supportNodeIds: uit.ids.nodeIds.filter((nodeId) => steunknopen.has(nodeId)),
+        counts: {
+          nodes: uit.telling.node,
+          beams: uit.telling.beam,
+          plates: uit.telling.plate,
+          loads: uit.telling.load,
+          supports: uit.telling.support,
+          total: uit.telling.total
+        },
+        wholeModel: uit.heleModel,
+        selectionApplied: zetten
+      }
+    };
+  }
+};
+var MODEL3D_SELECTIE_COMMANDOS = [selectieFilteren];
 
 // src/lib/peilmaat.ts
 var PEILMAAT_FONT_PX = 12.5;
@@ -33013,37 +34457,42 @@ function transformOpenFem3D(model, selection, command) {
   for (const id2 of ids) {
     const nodeIndex = index.nodeIndexById.get(id2);
     const node = model.nodes[nodeIndex];
-    let next;
-    if (command.kind === "move") next = {
+    let next2;
+    if (command.kind === "move") next2 = {
       ...node,
       x: node.x + command.dx,
       y: node.y + command.dy,
       z: node.z + command.dz
     };
-    else if (command.kind === "rotate") next = {
+    else if (command.kind === "rotate") next2 = {
       ...node,
       ...rotatePoint(node, center, command.axis, command.angleDeg * Math.PI / 180)
     };
     else {
       const coordinate = node[command.axis];
-      next = { ...node, [command.axis]: 2 * command.offset - coordinate };
+      next2 = { ...node, [command.axis]: 2 * command.offset - coordinate };
     }
-    if (next.x !== node.x || next.y !== node.y || next.z !== node.z) changed = true;
-    nodes[nodeIndex] = keepLevelLink(node, next);
+    if (next2.x !== node.x || next2.y !== node.y || next2.z !== node.z) changed = true;
+    nodes[nodeIndex] = keepLevelLink(node, next2);
   }
   if (!changed) return { model, selection };
-  return { model: withConsistentOpenFem3DPlateLevels({ ...model, nodes }), selection };
+  const next = withConsistentOpenFem3DPlateLevels({ ...model, nodes });
+  assertOpenFem3DBeddingFitsGeometry(next, model.beams.filter((beam) => idSet.has(beam.startNodeId) || idSet.has(beam.endNodeId)).map((beam) => beam.id));
+  return { model: next, selection };
 }
 
 // src/api/commands/model3dBewerken.ts
 init_femTypes();
+function controleerIds(model, { nodeIds = [], beamIds = [], plateIds = [] }) {
+  for (const nodeId of nodeIds) if (!model.nodes.some((n2) => n2.id === nodeId)) throw nietGevonden("3D-knoop", nodeId);
+  for (const beamId of beamIds) if (!model.beams.some((b) => b.id === beamId)) throw nietGevonden("3D-staaf", beamId);
+  for (const plateId of plateIds) if (!(model.plates ?? []).some((p2) => p2.id === plateId)) throw nietGevonden("3D-plaat", plateId);
+}
 function controleerSelectie(model, { nodeIds = [], beamIds = [], plateIds = [] }) {
   if (nodeIds.length + beamIds.length + plateIds.length === 0) {
     throw new ApiFout("INVOER_ONGELDIG", "Kies minstens \xE9\xE9n knoop, staaf of plaat.");
   }
-  for (const nodeId of nodeIds) if (!model.nodes.some((n2) => n2.id === nodeId)) throw nietGevonden("3D-knoop", nodeId);
-  for (const beamId of beamIds) if (!model.beams.some((b) => b.id === beamId)) throw nietGevonden("3D-staaf", beamId);
-  for (const plateId of plateIds) if (!(model.plates ?? []).some((p2) => p2.id === plateId)) throw nietGevonden("3D-plaat", plateId);
+  controleerIds(model, { nodeIds, beamIds, plateIds });
   return { type: "multi", nodeIds, beamIds, plateIds };
 }
 function stramien(document2) {
@@ -33085,7 +34534,7 @@ var transformatie = eenVan([
 ], "De bewerking.");
 var transformeren = documentCommando({
   naam: "model3d.transform",
-  beschrijving: "Een selectie verplaatsen, kopi\xEBren, roteren of spiegelen, zoals het transformatiepaneel. De uitkomst noemt de selectie erna (bij kopi\xEBren de nieuwe elementen).",
+  beschrijving: "Een selectie verplaatsen, kopi\xEBren, roteren of spiegelen, zoals het transformatiepaneel. De uitkomst noemt de selectie erna (bij kopi\xEBren de nieuwe elementen). Zou een staaf op een verticale bedding (kKnPerM3) daardoor (bijna) verticaal komen te staan, dan wordt de bewerking geweigerd.",
   invoer: obj({ ...selectieVelden, command: transformatie }, ["command"]),
   uitvoeren: ({ command, ...selectie }, document2) => {
     const model = model3dVan(document2);
@@ -33093,18 +34542,26 @@ var transformeren = documentCommando({
     return { uitkomst: { selection: resultaat.selection }, document: metModel3d(document2, resultaat.model) };
   }
 });
+var verwijderdVeld = (veld) => `removed${veld[0].toUpperCase()}${veld.slice(1)}`;
 var selectieVerwijderen = documentCommando({
   naam: "model3d.selection.delete",
-  beschrijving: "Knopen, staven en platen in \xE9\xE9n keer verwijderen, met alles wat eraan hangt (zoals Delete in de app).",
-  invoer: obj(selectieVelden),
-  uitvoeren: (selectie, document2) => {
+  beschrijving: "Knopen, staven, platen en lasten in \xE9\xE9n keer verwijderen, met alles wat eraan hangt (zoals Delete in de app). De lastvelden zijn die van model3d.selection.filter, zodat een gefilterde selectie met lasten er zo in kan; een selectie met alleen lasten mag ook. De uitkomst noemt alles wat verdween, ook wat met een knoop, staaf of plaat meeging.",
+  invoer: obj({ ...selectieVelden, ...lastIdSchema("die weg moeten") }),
+  uitvoeren: (invoer, document2) => {
     const model = model3dVan(document2);
-    const nieuw = removeOpenFem3DSelection(model, controleerSelectie(model, selectie));
+    const { nodeIds = [], beamIds = [], plateIds = [] } = invoer;
+    controleerIds(model, { nodeIds, beamIds, plateIds });
+    const loads = lastIdsUitInvoer(model, invoer);
+    const selectie = openFem3DSelectionFromIds({ nodeIds, beamIds, plateIds, loads });
+    if (!selectie) throw new ApiFout("INVOER_ONGELDIG", "Kies minstens \xE9\xE9n knoop, staaf, plaat of last.");
+    const nieuw = removeOpenFem3DSelection(model, selectie);
+    const lastenVoor = lastenVan2(model), lastenNa = lastenVan2(nieuw);
     return {
       uitkomst: {
         removedNodeIds: verdwenenIds(model.nodes, nieuw.nodes),
         removedBeamIds: verdwenenIds(model.beams, nieuw.beams),
-        removedPlateIds: verdwenenIds(model.plates, nieuw.plates)
+        removedPlateIds: verdwenenIds(model.plates, nieuw.plates),
+        ...Object.fromEntries(LAST_SOORTEN.map((soort) => [verwijderdVeld(LAST_VELDEN[soort]), verdwenenIds(lastenVoor[soort], lastenNa[soort])]))
       },
       document: metModel3d(document2, nieuw)
     };
@@ -33514,6 +34971,7 @@ function standaardCommandos() {
     ...MODEL3D_GEOMETRIE_COMMANDOS,
     ...MODEL3D_VOORWAARDEN_COMMANDOS,
     ...MODEL3D_BEWERKEN_COMMANDOS,
+    ...MODEL3D_SELECTIE_COMMANDOS,
     ...APP_COMMANDOS
   ];
 }
@@ -36499,6 +37957,7 @@ export {
   MIN_SEGMENT_MM,
   MODEL3D_BEWERKEN_COMMANDOS,
   MODEL3D_GEOMETRIE_COMMANDOS,
+  MODEL3D_SELECTIE_COMMANDOS,
   MODEL3D_VOORWAARDEN_COMMANDOS,
   NU_BETON,
   NU_STAAL,

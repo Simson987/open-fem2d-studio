@@ -4,8 +4,10 @@
 //! Engine types are constructed at this boundary, so another frame, plate,
 //! or solid engine can implement the same application contract later.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
+mod bedding;
+mod globale_lasten;
 mod kruisregel;
 mod montage;
 mod opleggingen;
@@ -124,6 +126,32 @@ pub struct Member3D {
     /// Trek-alleen: de staaf doet alleen mee zolang zij niet op druk staat.
     #[serde(default)]
     pub tension_only: bool,
+    /// Bedding (grond) onder of naast de staaf; zie de module `bedding`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bedding: Option<Bedding3D>,
+}
+
+/// Bedding (Winkler) van een staaf: grondveren langs de hele staaf (#106).
+/// Minstens één van beide beddingsconstanten is gegeven.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Bedding3D {
+    /// Beddingsconstante k in kN/m³ voor de verticale richting (globaal Z; de
+    /// grond ligt onder de staaf). Niet toegestaan bij een (bijna) verticale
+    /// staaf (|e_x·Z| > 0,95).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub k_kn_per_m3: Option<f64>,
+    /// Contactbreedte b in m; de lijnstijfheid van de grond is k·b in kN/m per m.
+    pub width_m: f64,
+    /// Zijdelingse beddingsconstante in kN/m³: horizontaal loodrecht op de
+    /// staafas, naar beide zijden en altijd lineair. Bij een staaf die steiler
+    /// staat dan 45° (een (schoor)paal) werkt zij rondom, in twee richtingen
+    /// loodrecht op de as; bij een loodrechte paal in globaal X en Y.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub k_lateral_kn_per_m3: Option<f64>,
+    /// Alleen druk: de verticale veren vallen weg waar de staaf omhoog komt.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub compression_only: bool,
 }
 
 /// Starre schijf in het horizontale vlak: X, Y en de rotatie om Z van alle
@@ -180,19 +208,83 @@ pub struct NodalLoad3D {
 
 /// Trapezoidal line load in the member's local y/z axes.
 /// Intensities are kN/m; optional positions are metres from the start node.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// Met `globalDirection` is het een globale last (#80): de intensiteit
+/// `qStartKnPerM` → `qEndKnPerM` werkt met teken langs globaal X, Y of Z (Z
+/// negatief = omlaag), lineair verlopend over hetzelfde bereik. Standaard per
+/// meter staaflengte; met `perProjection` per meter projectie van de staaf op
+/// het vlak loodrecht op de lastrichting (sneeuw op een schuine spant). De
+/// lokale velden zijn dan 0 of ontbreken. De adapter ontbindt de last in de
+/// lokale assen (module `globale_lasten`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MemberLoad3D {
     pub id: usize,
     pub member_id: usize,
+    #[serde(default)]
     pub qy_start_kn_per_m: f64,
+    #[serde(default)]
     pub qy_end_kn_per_m: f64,
+    #[serde(default)]
     pub qz_start_kn_per_m: f64,
+    #[serde(default)]
     pub qz_end_kn_per_m: f64,
     #[serde(default)]
     pub start_position_m: Option<f64>,
     #[serde(default)]
     pub end_position_m: Option<f64>,
+    /// Globale lastrichting; ontbreekt bij een lokale last.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub global_direction: Option<GlobalDirection3D>,
+    /// Intensiteit van een globale last bij het begin van het bereik, kN/m.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub q_start_kn_per_m: Option<f64>,
+    /// Intensiteit van een globale last bij het eind van het bereik, kN/m.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub q_end_kn_per_m: Option<f64>,
+    /// Globale last per meter projectie in plaats van per meter staaflengte.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub per_projection: bool,
+}
+
+/// Globale richting van een staafbelasting; in JSON "x", "y" of "z".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GlobalDirection3D {
+    X,
+    Y,
+    Z,
+}
+
+impl GlobalDirection3D {
+    /// De naam in het contract: "x", "y" of "z".
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::X => "x",
+            Self::Y => "y",
+            Self::Z => "z",
+        }
+    }
+}
+
+impl Serialize for GlobalDirection3D {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+/// Eigen inlezing, zodat een onbekende richting een Nederlandse melding geeft.
+impl<'de> Deserialize<'de> for GlobalDirection3D {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let tekst = String::deserialize(deserializer)?;
+        match tekst.as_str() {
+            "x" => Ok(Self::X),
+            "y" => Ok(Self::Y),
+            "z" => Ok(Self::Z),
+            anders => Err(serde::de::Error::custom(format!(
+                "onbekende globale lastrichting \"{anders}\" in globalDirection; verwacht \"x\", \"y\" of \"z\"",
+            ))),
+        }
+    }
 }
 
 /// Concentrated force on a member in its local y/z axes.
@@ -509,6 +601,17 @@ pub struct SolveResult3D {
     /// Trek-alleen staven die alleen dankzij de kruisregel actief zijn, oplopend.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cross_rule_members: Vec<usize>,
+    /// Per staaf op bedding: zakking en grondlast per rekenknoop, oplopend op
+    /// staaf-id. Leeg (en weggelaten) zonder staven op bedding.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bedding: Vec<MemberBedding3D>,
+    /// Alleen binnen de adapter, niet in het contract: per staaf met een
+    /// axiale lijnlast uit een globale last N_vast van de hele staaf aan begin
+    /// en eind (zie `globale_lasten`). De trek-alleen-lus trekt die af van
+    /// `n_start_kn`/`n_end_kn` en kijkt zo naar de normaalkracht zonder de
+    /// eigen axiale last.
+    #[serde(skip)]
+    pub(crate) n_vast_einden: BTreeMap<usize, [f64; 2]>,
 }
 
 /// De montageverlenging van één trek-alleen staaf: zijn spanningsloze lengte
@@ -518,6 +621,43 @@ pub struct SolveResult3D {
 pub struct TensionOnlyFitMember3D {
     pub member_id: usize,
     pub delta_mm: f64,
+}
+
+/// De grond onder één rekenknoop van een staaf op bedding.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BeddingPoint3D {
+    /// Plaats langs de staaf, 0 bij de beginknoop en 1 bij de eindknoop.
+    pub t: f64,
+    /// Zakking in m, positief omlaag (−u_z).
+    pub settlement_m: f64,
+    /// Verticale lijnlast van de grond op de staaf in kN/m, positief omhoog:
+    /// k·b·zakking; 0 waar de veer bij alleen druk is weggevallen.
+    pub pressure_kn_per_m: f64,
+    /// Zijdelingse lijnlast van de grond op de staaf in kN/m, alleen bij een
+    /// zijdelingse bedding: de component langs de horizontale normaal n =
+    /// Z × e_x (genormeerd), of bij een staaf steiler dan 45° (rondom) de
+    /// grootte van de resultante loodrecht op de as.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lateral_kn_per_m: Option<f64>,
+    /// `false` waar de verticale veer bij alleen druk is weggevallen.
+    pub active: bool,
+}
+
+/// De bedding van één staaf in het resultaat.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberBedding3D {
+    pub member_id: usize,
+    /// Per rekenknoop van de adapter, van begin tot eind (inclusief de einden).
+    pub points: Vec<BeddingPoint3D>,
+    pub max_pressure_kn_per_m: f64,
+    pub min_pressure_kn_per_m: f64,
+    pub max_settlement_m: f64,
+    /// Som van de verticale veerkrachten op de staaf in kN, positief omhoog.
+    pub total_reaction_kn: f64,
+    /// Aandeel van de staaflengte zonder contact (alleen druk).
+    pub lifted_fraction: f64,
 }
 
 fn convert_member_diagram(value: EngineElementDiagram3D) -> MemberDiagram3D {
@@ -538,7 +678,7 @@ fn finite(value: f64, label: &str) -> Result<(), String> {
     if value.is_finite() { Ok(()) } else { Err(format!("{label} is niet eindig")) }
 }
 
-fn positive(value: f64, label: &str) -> Result<(), String> {
+pub(crate) fn positive(value: f64, label: &str) -> Result<(), String> {
     finite(value, label)?;
     if value > 0.0 { Ok(()) } else { Err(format!("{label} moet groter zijn dan nul")) }
 }
@@ -570,7 +710,10 @@ fn validate(request: &SolveRequest3D) -> Result<HashMap<usize, shell::PlateGeome
     if request.members.is_empty() && request.shell_elements.is_empty() {
         return Err("een 3D-model heeft minstens één staaf of plaatelement nodig".into());
     }
-    if request.supports.is_empty() { return Err("een 3D-model heeft minstens één oplegging nodig".into()); }
+    // Een staaf op bedding ligt op grondveren; die tellen als oplegging.
+    if request.supports.is_empty() && !request.members.iter().any(|member| member.bedding.is_some()) {
+        return Err("een 3D-model heeft minstens één oplegging nodig".into());
+    }
     if request.max_iterations == 0 || request.max_iterations > 10_000 {
         return Err("maxIterations moet tussen 1 en 10000 liggen".into());
     }
@@ -623,6 +766,7 @@ fn validate(request: &SolveRequest3D) -> Result<HashMap<usize, shell::PlateGeome
         if let Some(roll) = member.roll_angle_rad { finite(roll, "rollAngleRad")?; }
         member_stations(member, &node_by_id)?;
     }
+    bedding::valideer(request)?;
     let mut support_nodes = HashSet::new();
     for support in &request.supports {
         if !node_ids.contains(&support.node_id) { return Err(format!("oplegging verwijst naar ontbrekende knoop {}", support.node_id)); }
@@ -668,8 +812,8 @@ fn validate(request: &SolveRequest3D) -> Result<HashMap<usize, shell::PlateGeome
         if !member_ids.contains(&load.member_id) {
             return Err(format!("staafbelasting {} verwijst naar ontbrekende staaf {}", load.id, load.member_id));
         }
-        let values = [load.qy_start_kn_per_m, load.qy_end_kn_per_m,
-            load.qz_start_kn_per_m, load.qz_end_kn_per_m];
+        // De lokale waarden, of bij een globale last (#80) haar intensiteiten.
+        let values = globale_lasten::keur_velden(load)?;
         if values.iter().any(|v| !v.is_finite()) {
             return Err(format!("staafbelasting {} bevat geen eindige waarde", load.id));
         }
@@ -728,7 +872,7 @@ fn validate(request: &SolveRequest3D) -> Result<HashMap<usize, shell::PlateGeome
 
 /// Tussenknopen van een staaf, geordend van begin naar eind, met hun afstand
 /// tot de beginknoop (m). Leeg voor een ongeknipte staaf.
-fn member_stations(member: &Member3D, node_by_id: &HashMap<usize, &Node3D>) -> Result<Vec<(usize, f64)>, String> {
+pub(crate) fn member_stations(member: &Member3D, node_by_id: &HashMap<usize, &Node3D>) -> Result<Vec<(usize, f64)>, String> {
     if member.intermediate_node_ids.is_empty() { return Ok(vec![]); }
     let a = node_by_id[&member.start_node_id];
     let b = node_by_id[&member.end_node_id];
@@ -770,6 +914,9 @@ struct MemberPart {
     engine_id: usize,
     start_m: f64,
     end_m: f64,
+    /// Begin- en eindknoop van het deel in de kern.
+    node_i: usize,
+    node_j: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -787,12 +934,29 @@ struct EngineModel {
     split: bool,
     /// Kern-id's van de plaatelementen (voor het samenvatten van meldingen).
     shell_engine_ids: HashSet<usize>,
+    /// Staven op bedding: rekenknopen en veren (leeg zonder bedding).
+    bedding: bedding::Plan,
+    /// Weggevallen verticale veren (alleen druk) in deze berekening.
+    los: bedding::Los,
+    /// Grondknopen en veerelementen van de bedding: alleen voor de kern.
+    grond: bedding::Grond,
+    /// Axiale component van globale staaflasten per kerndeel (kern-id), voor
+    /// de correctie van de normaalkrachten (zie `globale_lasten`).
+    axiaal: BTreeMap<usize, Vec<globale_lasten::AxiaalDeel>>,
+    /// Per staaf met een axiale lijnlast: N_vast van de hele staaf aan begin
+    /// en eind (zie `globale_lasten`), voor de trek-alleen-lus.
+    n_vast_einden: BTreeMap<usize, [f64; 2]>,
 }
 
-fn to_engine_input(request: &SolveRequest3D) -> Result<EngineModel, String> {
-    let nodes = request.nodes.iter().map(|node| (node.id.to_string(), SolverNode3D {
+fn to_engine_input(request: &SolveRequest3D, los: &bedding::Los) -> Result<EngineModel, String> {
+    // Staven op bedding krijgen rekenknopen langs de staaf (module `bedding`).
+    let plan = bedding::Plan::bouw(request)?;
+    let mut nodes: HashMap<String, SolverNode3D> = request.nodes.iter().map(|node| (node.id.to_string(), SolverNode3D {
         id: node.id, x: node.x, y: node.y, z: node.z,
     })).collect();
+    for (id, punt) in &plan.nieuwe_knopen {
+        nodes.insert(id.to_string(), SolverNode3D { id: *id, x: punt[0], y: punt[1], z: punt[2] });
+    }
     let materials = request.materials.iter().map(|material| (material.id.to_string(), SolverMaterial {
         id: material.id, e: material.e_mpa, nu: material.nu,
     })).collect();
@@ -820,12 +984,32 @@ fn to_engine_input(request: &SolveRequest3D) -> Result<EngineModel, String> {
         let a = node_by_id[&member.start_node_id];
         let b = node_by_id[&member.end_node_id];
         let length = ((a.x - b.x).powi(2) + (a.y - b.y).powi(2) + (a.z - b.z).powi(2)).sqrt();
-        let stations = member_stations(member, &node_by_id)?;
-        let mut chain = vec![(member.start_node_id, 0.0)];
-        chain.extend(stations.iter().copied());
-        chain.push((member.end_node_id, length));
+        let chain = match plan.staaf(member.id) {
+            // Op bedding: begin, rekenknopen (met de bestaande tussenknopen) en eind.
+            Some(staaf) => staaf.keten(),
+            None => {
+                let stations = member_stations(member, &node_by_id)?;
+                let mut chain = vec![(member.start_node_id, 0.0)];
+                chain.extend(stations.iter().copied());
+                chain.push((member.end_node_id, length));
+                chain
+            }
+        };
         split |= chain.len() > 2;
         let count = chain.len() - 1;
+        // Torsie aan beide einden vrij bij een staaf op bedding zonder
+        // plaatknopen: de kern laat de hele torsie van een deel vallen zodra
+        // één van zijn einden vrij is. Met de vrijgave op het eerste én het
+        // laatste deel zouden de rekenknopen ertussen dan vrij om de staafas
+        // draaien (de grondveren grijpen in de as aan; review #106). Alleen het
+        // eerste deel krijgt de vrijgave: dat deel draagt geen torsie, dus de
+        // staaf als geheel ook niet (mechanisch gelijk), en de rekenknopen
+        // hangen in torsie aan de eindknoop. Plaatknopen houden die draaiing
+        // zelf vast; daar blijft de verdeling zoals bij elke geknipte staaf.
+        let torsie_alleen_begin = plan.staaf(member.id).is_some()
+            && member.releases.torsion_start
+            && member.releases.torsion_end
+            && member.intermediate_node_ids.is_empty();
         let mut parts = Vec::with_capacity(count);
         for index in 0..count {
             let engine_id = if index == 0 { member.id } else { let id = next_engine_id; next_engine_id += 1; id };
@@ -843,7 +1027,7 @@ fn to_engine_input(request: &SolveRequest3D) -> Result<EngineModel, String> {
                 release_mz_start: first && member.releases.mz_start,
                 release_mz_end: last && member.releases.mz_end,
                 release_t_start: first && member.releases.torsion_start,
-                release_t_end: last && member.releases.torsion_end,
+                release_t_end: last && member.releases.torsion_end && !torsie_alleen_begin,
                 local_yx: None,
                 local_yy: None,
                 local_yz: None,
@@ -852,13 +1036,16 @@ fn to_engine_input(request: &SolveRequest3D) -> Result<EngineModel, String> {
                 // contract is explicit and uses radians.
                 roll_angle: member.roll_angle_rad.map(f64::to_degrees),
             });
-            parts.push(MemberPart { engine_id, start_m: chain[index].1, end_m: chain[index + 1].1 });
+            parts.push(MemberPart {
+                engine_id, start_m: chain[index].1, end_m: chain[index + 1].1,
+                node_i: chain[index].0, node_j: chain[index + 1].0,
+            });
         }
         member_parts.push(MemberParts { member_id: member.id, length_m: length, parts });
     }
     let parts_by_member: HashMap<usize, &MemberParts> = member_parts.iter().map(|m| (m.member_id, m)).collect();
 
-    let supports = request.supports.iter().enumerate().map(|(index, support)| ((index + 1).to_string(), SolverSupport3D {
+    let mut supports: HashMap<String, SolverSupport3D> = request.supports.iter().enumerate().map(|(index, support)| ((index + 1).to_string(), SolverSupport3D {
         node_id: support.node_id,
         rx: support.ux, ry: support.uy, rz: support.uz,
         rrx: support.rx, rry: support.ry, rrz: support.rz,
@@ -875,38 +1062,90 @@ fn to_engine_input(request: &SolveRequest3D) -> Result<EngineModel, String> {
         mx: load.mx, my: load.my, mz: load.mz,
         bw: None,
     })).collect();
+    // Per kern-id. Een BTreeMap en geen extra HashMap: elke nieuwe HashMap
+    // schuift de hashsleutels van de maps die daarna in deze draad ontstaan
+    // (ook in de kern). Een verzoek zonder globale last volgt zo precies het
+    // oude rekenpad.
+    let mut axiaal: BTreeMap<usize, Vec<globale_lasten::AxiaalDeel>> = BTreeMap::new();
+    // Per staaf-id: N_vast van de hele staaf aan begin en eind.
+    let mut n_vast_einden: BTreeMap<usize, [f64; 2]> = BTreeMap::new();
     for load in &request.member_loads {
         let member = parts_by_member[&load.member_id];
-        if member.parts.len() == 1 {
+        // Een globale last (#80) in lokale assen; een lokale last houdt haar
+        // waarden exact (geen axiale component).
+        let assen = load.global_direction.map(|_| {
+            let staaf = request.members.iter().find(|staaf| staaf.id == load.member_id).expect("staaf is gekeurd");
+            globale_lasten::assen(staaf, node_by_id[&staaf.start_node_id], node_by_id[&staaf.end_node_id])
+        });
+        let lokaal = globale_lasten::componenten(load, &assen.unwrap_or_default());
+        let (qy, qz, qx) = (lokaal.qy, lokaal.qz, lokaal.qx);
+        // Een globale last zonder dwarscomponent (langs de staafas) geeft de kern
+        // geen verdeelde last.
+        let dwars = assen.is_none() || qy.iter().chain(&qz).any(|q| *q != 0.0);
+        if dwars && member.parts.len() == 1 {
             // Ongeknipte staaf: exact de oude doorgifte, zodat bestaande
             // uitkomsten bit-gelijk blijven.
             loads.push(SolverLoad3D::Distributed(SolverDistributedLoad3D {
                 element_id: member.parts[0].engine_id,
-                q_yi: load.qy_start_kn_per_m,
-                q_yj: load.qy_end_kn_per_m,
-                q_zi: load.qz_start_kn_per_m,
-                q_zj: load.qz_end_kn_per_m,
+                q_yi: qy[0],
+                q_yj: qy[1],
+                q_zi: qz[0],
+                q_zj: qz[1],
                 a: load.start_position_m,
                 b: load.end_position_m,
             }));
-            continue;
         }
         let a = load.start_position_m.unwrap_or(0.0);
         let b = load.end_position_m.unwrap_or(member.length_m);
-        let intensity = |start: f64, end: f64, s: f64| start + (end - start) * (s - a) / (b - a);
+        let intensity = |q: [f64; 2], s: f64| q[0] + (q[1] - q[0]) * (s - a) / (b - a);
+        if dwars && member.parts.len() > 1 {
+            for part in &member.parts {
+                let low = a.max(part.start_m);
+                let high = b.min(part.end_m);
+                if high - low <= 1e-12 * member.length_m.max(1.0) { continue; }
+                loads.push(SolverLoad3D::Distributed(SolverDistributedLoad3D {
+                    element_id: part.engine_id,
+                    q_yi: intensity(qy, low),
+                    q_yj: intensity(qy, high),
+                    q_zi: intensity(qz, low),
+                    q_zj: intensity(qz, high),
+                    a: Some(low - part.start_m),
+                    b: Some(high - part.start_m),
+                }));
+            }
+        }
+        // De axiale component: per kerndeel gelijkwaardige knooplasten langs
+        // e_x, en de correctie van N in `convert_result` (`globale_lasten`).
+        let Some([ex, _, _]) = assen else { continue };
+        if qx.iter().all(|q| *q == 0.0) { continue; }
+        // N_vast van de hele staaf aan begin en eind, voor de status van een
+        // trek-alleen staaf (ook als de kern haar in delen rekent).
+        let geheel = globale_lasten::AxiaalDeel { h: member.length_m, van: a, tot: b, q_van: qx[0], q_tot: qx[1] };
+        let einden = n_vast_einden.entry(load.member_id).or_insert([0.0; 2]);
+        einden[0] += geheel.n_vast(0.0);
+        einden[1] += geheel.n_vast(member.length_m);
         for part in &member.parts {
             let low = a.max(part.start_m);
             let high = b.min(part.end_m);
             if high - low <= 1e-12 * member.length_m.max(1.0) { continue; }
-            loads.push(SolverLoad3D::Distributed(SolverDistributedLoad3D {
-                element_id: part.engine_id,
-                q_yi: intensity(load.qy_start_kn_per_m, load.qy_end_kn_per_m, low),
-                q_yj: intensity(load.qy_start_kn_per_m, load.qy_end_kn_per_m, high),
-                q_zi: intensity(load.qz_start_kn_per_m, load.qz_end_kn_per_m, low),
-                q_zj: intensity(load.qz_start_kn_per_m, load.qz_end_kn_per_m, high),
-                a: Some(low - part.start_m),
-                b: Some(high - part.start_m),
-            }));
+            let deel = globale_lasten::AxiaalDeel {
+                h: part.end_m - part.start_m,
+                van: low - part.start_m,
+                tot: high - part.start_m,
+                q_van: intensity(qx, low),
+                q_tot: intensity(qx, high),
+            };
+            let (begin, eind) = deel.knooplasten();
+            for (node_id, kracht) in [(part.node_i, begin), (part.node_j, eind)] {
+                if kracht == 0.0 { continue; }
+                loads.push(SolverLoad3D::Nodal(SolverNodalLoad3D {
+                    node_id,
+                    fx: kracht * ex[0], fy: kracht * ex[1], fz: kracht * ex[2],
+                    mx: 0.0, my: 0.0, mz: 0.0,
+                    bw: None,
+                }));
+            }
+            axiaal.entry(part.engine_id).or_default().push(deel);
         }
     }
     for load in &request.member_point_loads {
@@ -977,14 +1216,17 @@ fn to_engine_input(request: &SolveRequest3D) -> Result<EngineModel, String> {
             node_id, fx: force[0], fy: force[1], fz: force[2], mx: 0.0, my: 0.0, mz: 0.0, bw: None,
         }));
     }
+    // Grondveren van de bedding: oplegveren en veerelementen naar grondknopen.
+    let mut connectors = HashMap::new();
+    let grond = plan.voeg_veren_toe(los, &mut nodes, &mut supports, &mut connectors, &mut next_engine_id);
     let input = SolverInput3D {
         nodes, materials, sections, elements, supports, loads,
         constraints: schijven::koppelingen(request).0, left_hand: None,
         plates, quads, quad9s: HashMap::new(),
         solid_shells: HashMap::new(), curved_shells: HashMap::new(),
-        curved_beams: vec![], connectors: HashMap::new(),
+        curved_beams: vec![], connectors,
     };
-    Ok(EngineModel { input, members: member_parts, split, shell_engine_ids })
+    Ok(EngineModel { input, members: member_parts, split, shell_engine_ids, bedding: plan, los: los.clone(), grond, axiaal, n_vast_einden })
 }
 
 /// Knikgegevens per staaf van het contract: bij geknipte staven één regel
@@ -1088,10 +1330,16 @@ fn merge_diagrams(parts_of: &[MemberParts], diagrams: Vec<EngineElementDiagram3D
 
 /// Kwaliteitsmeldingen van de kern over plaatelementen, samengevat per soort:
 /// een fijn net geeft anders honderden losse regels.
-fn summarize_diagnostics(results: &AnalysisResults3D, shell_engine_ids: &HashSet<usize>) -> Vec<String> {
+fn summarize_diagnostics(results: &AnalysisResults3D, shell_engine_ids: &HashSet<usize>, grond: &bedding::Grond) -> Vec<String> {
     let mut counts: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     let mut messages = Vec::new();
     for item in &results.structured_diagnostics {
+        // Grondknopen en veerelementen van de bedding bestaan alleen voor de
+        // kern; een melding over hen (bijvoorbeeld twee grondknopen op één
+        // plek onder een gedeelde eindknoop) zegt niets over het model.
+        if grond.betreft(&item.node_ids, &item.element_ids) {
+            continue;
+        }
         // De kern toetst "nearly vertical" bij een staaf zonder oriëntatievector
         // tegen globaal Y, terwijl haar lokale assen (en Open FEM 3D) Z omhoog
         // gebruiken. Deze adapter geeft nooit een oriëntatievector mee, dus elke
@@ -1174,7 +1422,44 @@ fn convert_result(
             equilibrium.equilibrium_ok = equilibrium.max_imbalance < 1e-6 * max_force.max(1.0);
         }
     }
-    let engine_diagrams = compute_diagrams_3d(&results);
+    let mut engine_diagrams = compute_diagrams_3d(&results);
+    // Globale lijnlasten (#80): de axiale component als lijnlast in de N-lijn
+    // en de eindnormaalkrachten van elk kerndeel, vóór de bedding en het
+    // samenvoegen van geknipte staven (zie `globale_lasten`).
+    if !model.axiaal.is_empty() {
+        globale_lasten::corrigeer(&model.axiaal, &mut engine_diagrams.axial, &mut results.element_forces);
+    }
+    // Staven op bedding: de grond als verdeelde last in de normaal- en
+    // dwarskrachten, op de lijnen van de delen en op de staafeinden hieronder
+    // (zie `bedding::correctie`).
+    // De verplaatsingen van alle knopen van de kern, met de rekenknopen.
+    let bedding_displacements: HashMap<usize, [f64; 6]> = if model.bedding.is_empty() {
+        HashMap::new()
+    } else {
+        results.displacements.iter().map(|d| (d.node_id, [d.ux, d.uy, d.uz, d.rx, d.ry, d.rz])).collect()
+    };
+    let grondkrachten = if model.bedding.is_empty() {
+        HashMap::new()
+    } else {
+        model.bedding.grondkrachten_lokaal(&model.los, &bedding_displacements)
+    };
+    if !grondkrachten.is_empty() {
+        let lijsten = [&mut engine_diagrams.axial, &mut engine_diagrams.shear_y, &mut engine_diagrams.shear_z];
+        for (as_, lijst) in lijsten.into_iter().enumerate() {
+            let index: HashMap<usize, usize> = lijst.iter().enumerate().map(|(i, d)| (d.element_id, i)).collect();
+            for member in &model.members {
+                let (Some(staaf), Some(krachten)) = (model.bedding.staaf(member.member_id), grondkrachten.get(&member.member_id))
+                    else { continue };
+                for (deel, part) in member.parts.iter().enumerate() {
+                    let Some(&i) = index.get(&part.engine_id) else { continue };
+                    let h = part.end_m - part.start_m;
+                    for point in &mut lijst[i].points {
+                        point.value += bedding::correctie(staaf, krachten, deel, point.t * h)[as_];
+                    }
+                }
+            }
+        }
+    }
     let diagrams = if model.split {
         Diagrams3D {
             moment_y: merge_diagrams(&model.members, engine_diagrams.moment_y),
@@ -1201,7 +1486,7 @@ fn convert_result(
         equilibrium_ok: value.equilibrium_ok,
     });
     let solver_path = results.solver_run_meta.as_ref().map(|meta| meta.solver_path.clone());
-    let diagnostics = summarize_diagnostics(&results, &model.shell_engine_ids);
+    let diagnostics = summarize_diagnostics(&results, &model.shell_engine_ids, &model.grond);
     let to_contract = |value: &rekenkern::types::ElementForces3D, member_id: usize, length: f64| MemberForces3D {
         member_id, length_m: length,
         n_start_kn: value.n_start, n_end_kn: value.n_end,
@@ -1224,6 +1509,17 @@ fn convert_result(
             forces.torsion_end_knm = last.mx_end;
             forces.my_end_knm = last.my_end;
             forces.mz_end_knm = last.mz_end;
+            if let (Some(staaf), Some(krachten)) = (model.bedding.staaf(member.member_id), grondkrachten.get(&member.member_id)) {
+                let laatste = member.parts.len() - 1;
+                let begin = bedding::correctie(staaf, krachten, 0, 0.0);
+                let eind = bedding::correctie(staaf, krachten, laatste, member.parts[laatste].end_m - member.parts[laatste].start_m);
+                forces.n_start_kn += begin[0];
+                forces.vy_start_kn += begin[1];
+                forces.vz_start_kn += begin[2];
+                forces.n_end_kn += eind[0];
+                forces.vy_end_kn += eind[1];
+                forces.vz_end_kn += eind[2];
+            }
             Some(forces)
         }).collect()
     } else {
@@ -1241,6 +1537,17 @@ fn convert_result(
     let (plates, shell_elements, shell_nodes) = match shells {
         Some(output) => (output.plates, output.elements, output.nodes),
         None => (vec![], vec![], vec![]),
+    };
+    // Bedding: zakking en grondlast per rekenknoop. Daarna blijven alleen de
+    // modelknopen over; de veerkrachten van de rekenknopen en grondknopen
+    // zitten al in de evenwichtssom hierboven.
+    let bedding = if model.bedding.is_empty() {
+        vec![]
+    } else {
+        let model_nodes: HashSet<usize> = request.nodes.iter().map(|node| node.id).collect();
+        results.displacements.retain(|value| model_nodes.contains(&value.node_id));
+        results.reactions.retain(|value| model_nodes.contains(&value.node_id));
+        model.bedding.resultaat(&model.los, &bedding_displacements)
     };
     SolveResult3D {
         schema_version: CONTRACT_VERSION,
@@ -1268,6 +1575,8 @@ fn convert_result(
         tension_only_rounds: 0,
         tension_only_fit: vec![],
         cross_rule_members: vec![],
+        bedding,
+        n_vast_einden: model.n_vast_einden.clone(),
     }
 }
 
@@ -1327,8 +1636,9 @@ fn require_usable_solution(context: &str, results: &AnalysisResults3D) -> Result
 
 /// Validate, route, solve, and translate one 3D request.
 ///
-/// Trek-alleen staven lopen via een buitenlus (`trek_alleen`) die elke ronde
-/// `solve_fixed` aanroept; zonder trek-alleen staven is dat één aanroep.
+/// Trek-alleen staven en bedding met alleen druk lopen via een buitenlus
+/// (`trek_alleen`) die elke ronde `solve_fixed` aanroept; zonder die twee is
+/// dat één aanroep.
 pub fn solve(request: SolveRequest3D) -> Result<SolveResult3D, String> {
     let plate_geometry = validate(&request)?;
     // Montagelasten: dezelfde keuring als de gewone lasten, op het verzoek
@@ -1358,7 +1668,8 @@ pub fn solve(request: SolveRequest3D) -> Result<SolveResult3D, String> {
     Ok(result)
 }
 
-/// Eén berekening met een vaste set staven. De tweede orde en de
+/// Eén berekening met een vaste set staven en, bij bedding met alleen druk,
+/// een vaste set weggevallen grondveren (`los`). De tweede orde en de
 /// stabiliteitspoort (eerste knikfactor) rekent de adapter zelf, zie
 /// `tweede_orde`.
 pub(crate) fn solve_fixed(
@@ -1366,8 +1677,9 @@ pub(crate) fn solve_fixed(
     plate_geometry: &HashMap<usize, shell::PlateGeometry>,
     analysis: AnalysisKind,
     buckling_modes: usize,
+    los: &bedding::Los,
 ) -> Result<SolveResult3D, String> {
-    let model = to_engine_input(request)?;
+    let model = to_engine_input(request, los)?;
     let input = &model.input;
     // Een fout die op een mechanisme kan wijzen, krijgt de bevindingen van de
     // controle op de opleggingen erbij (alleen als die iets vindt).

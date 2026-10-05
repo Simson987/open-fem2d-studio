@@ -190,8 +190,10 @@ check("gelijk-vergelijking", L.sameOpenFem3DDiagramLabels({ show: true, stand: 2
 log("\n[2] staafindeling en eerste aangevinkte lijn");
 gelijk("indeling: ≤ 24 staven alle, anders elke ceil(n/16)e",
   [1, 24, 25, 32, 33, 100, 1000].map(L.openFem3DResultLabelStride), [1, 1, 2, 2, 3, 7, 63]);
-gelijk("de zes lijnen in de volgorde van de tab Resultaten", L.OPEN_FEM_3D_FORCE_LAYERS,
-  OPEN_FEM_3D_RESULT_LAYERS.filter((k) => ["axialForce", "shearY", "shearZ", "torsion", "momentY", "momentZ"].includes(k)));
+// De zes snedekrachten en (issue #106) de gronddruk onder staven op bedding.
+gelijk("de lijnen met waarden in de volgorde van de tab Resultaten", L.OPEN_FEM_3D_FORCE_LAYERS,
+  OPEN_FEM_3D_RESULT_LAYERS.filter((k) => ["axialForce", "shearY", "shearZ", "torsion", "momentY", "momentZ", "groundPressure"].includes(k)));
+gelijk("alleen de gronddruk: het sub-blok Waarden onder Gronddruk", L.openFem3DFirstActiveForceLayer({ ...DEFAULT_OPEN_FEM_3D_VISIBILITY, groundPressure: true }), "groundPressure");
 gelijk("geen lijn aan: geen sub-blok", L.openFem3DFirstActiveForceLayer(DEFAULT_OPEN_FEM_3D_VISIBILITY), null);
 gelijk("alleen My: onder My", L.openFem3DFirstActiveForceLayer({ ...DEFAULT_OPEN_FEM_3D_VISIBILITY, momentY: true }), "momentY");
 gelijk("Vy en My: onder Vy (de eerste)", L.openFem3DFirstActiveForceLayer({ ...DEFAULT_OPEN_FEM_3D_VISIBILITY, momentY: true, shearY: true }), "shearY");

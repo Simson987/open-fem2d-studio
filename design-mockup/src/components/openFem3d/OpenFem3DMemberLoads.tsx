@@ -10,12 +10,16 @@ import {
   updateOpenFem3DMemberLoad,
   updateOpenFem3DMemberPointLoad,
   updateOpenFem3DThermalLoad,
+  isOpenFem3DGlobalMemberLoad,
+  type OpenFem3DGlobalDirection,
   type OpenFem3DMemberLoad,
+  type OpenFem3DMemberLoadValues,
   type OpenFem3DMemberPointLoad,
   type OpenFem3DThermalLoad,
   type OpenFem3DModel,
 } from "./openFem3dModel";
 import { formatLength, parseLength, toonMm } from "../../lib/lengthInput";
+import { OPEN_FEM_3D_DEFAULT_POINT_LOAD_KN } from "./openFem3dPlaatsen";
 import "./OpenFem3DNodeConditions.css";
 
 interface Props {
@@ -32,23 +36,40 @@ interface Props {
 
 // Posities worden in mm getypt (issue #36); het 3D-model bewaart meters vanaf
 // het staafbegin. De tekstvelden houden daarom mm-tekst vast.
-type Values = Record<"qyStart" | "qyEnd" | "qzStart" | "qzEnd" | "startMm" | "endMm", string>;
+// qStart/qEnd zijn de waarden van een globale last (issue #80), qy/qz die van een lokale.
+type Values = Record<"qyStart" | "qyEnd" | "qzStart" | "qzEnd" | "startMm" | "endMm", string> & Partial<Record<"qStart" | "qEnd", string>>;
 type PointValues = Record<"py" | "pz" | "positionMm", string>;
 type ThermalValues = Record<"deltaTUniformK" | "deltaTGradientYK" | "deltaTGradientZK", string>;
 
-function emptyValues(lengthM: number): Values {
-  return { qyStart: "0", qyEnd: "0", qzStart: "-5", qzEnd: "-5", startMm: "0", endMm: formatLength(lengthM, "m") };
-}
+/** De keuze Richting: lokaal y of z, of een globale as X, Y of Z (issue #80). */
+type LineDirection = "y" | "z" | "X" | "Y" | "Z";
+const GLOBAL_LINE_DIRECTIONS = { X: "x", Y: "y", Z: "z" } as const satisfies Record<string, OpenFem3DGlobalDirection>;
+const globalOf = (direction: LineDirection): OpenFem3DGlobalDirection | null =>
+  direction === "X" || direction === "Y" || direction === "Z" ? GLOBAL_LINE_DIRECTIONS[direction] : null;
+/** Het veld met de beginwaarde (en eindwaarde) van een richting. */
+const startKey = (direction: LineDirection) => globalOf(direction) ? "qStart" as const : `q${direction as "y" | "z"}Start` as const;
+const endKey = (direction: LineDirection) => globalOf(direction) ? "qEnd" as const : `q${direction as "y" | "z"}End` as const;
 
-function loadValues(load: OpenFem3DMemberLoad): Values {
+function emptyValues(lengthM: number): Values {
   return {
-    qyStart: String(load.qyStart), qyEnd: String(load.qyEnd), qzStart: String(load.qzStart), qzEnd: String(load.qzEnd),
-    startMm: formatLength(load.startPositionM, "m"), endMm: formatLength(load.endPositionM, "m"),
+    qyStart: "0", qyEnd: "0", qzStart: "-5", qzEnd: "-5", qStart: "0", qEnd: "0",
+    startMm: "0", endMm: formatLength(lengthM, "m"),
   };
 }
 
+function loadValues(load: OpenFem3DMemberLoad): Values {
+  const range = { startMm: formatLength(load.startPositionM, "m"), endMm: formatLength(load.endPositionM, "m") };
+  return isOpenFem3DGlobalMemberLoad(load)
+    ? { qyStart: "0", qyEnd: "0", qzStart: "0", qzEnd: "0", qStart: String(load.qStart), qEnd: String(load.qEnd), ...range }
+    : {
+        qyStart: String(load.qyStart), qyEnd: String(load.qyEnd), qzStart: String(load.qzStart), qzEnd: String(load.qzEnd),
+        qStart: "0", qEnd: "0", ...range,
+      };
+}
+
+/** Een nieuwe staafpuntlast: dezelfde standaardwaarde als het gereedschap Puntlast (−10 kN), in het midden. */
 function emptyPointValues(lengthM: number): PointValues {
-  return { py: "0", pz: "-10", positionMm: formatLength(lengthM / 2, "m") };
+  return { py: "0", pz: String(OPEN_FEM_3D_DEFAULT_POINT_LOAD_KN), positionMm: formatLength(lengthM / 2, "m") };
 }
 
 /**
@@ -65,15 +86,23 @@ function textToMeters(text: string, storedM: number): number {
  * Lijnlast uit de ingetypte tekst: begin en eind in mm naar meters. Null bij
  * een ongeldige of buiten de staaf vallende positie; dan verandert er niets.
  * `stored` is waarmee het formulier gevuld werd (de bewerkte last, of 0 tot de
- * staaflengte voor een nieuwe last).
+ * staaflengte voor een nieuwe last). Met `global` (issue #80) is het een
+ * globale last uit qStart en qEnd, per staafmeter of per projectie.
  */
 export function openFem3DMemberLoadFromText(
   values: Values, lengthM: number,
   stored: { startPositionM: number; endPositionM: number } = { startPositionM: 0, endPositionM: lengthM },
-): Omit<OpenFem3DMemberLoad, "id" | "beamId" | "caseId"> | null {
+  global?: { direction: OpenFem3DGlobalDirection; perProjection: boolean },
+): OpenFem3DMemberLoadValues | null {
   const startPositionM = textToMeters(values.startMm, stored.startPositionM);
   const endPositionM = textToMeters(values.endMm, stored.endPositionM);
   if (!(startPositionM >= 0 && endPositionM > startPositionM && endPositionM <= lengthM + 1e-9)) return null;
+  if (global) {
+    return {
+      globalDirection: global.direction, qStart: Number(values.qStart ?? 0), qEnd: Number(values.qEnd ?? 0),
+      perProjection: global.perProjection, startPositionM, endPositionM,
+    };
+  }
   return {
     qyStart: Number(values.qyStart), qyEnd: Number(values.qyEnd),
     qzStart: Number(values.qzStart), qzEnd: Number(values.qzEnd),
@@ -90,10 +119,20 @@ export function openFem3DMemberPointLoadFromText(
   return { py: Number(values.py), pz: Number(values.pz), positionM };
 }
 
-function describe(load: OpenFem3DMemberLoad): string {
+/**
+ * De regel van een lijnlast in de lijst (en de verkenner): lokaal "qy …" en
+ * "qz …", globaal (#80) "qZ …" met de as in hoofdletter en, per projectie, de
+ * korte aanduiding `projection`.
+ */
+export function openFem3DMemberLoadSummary(load: OpenFem3DMemberLoad, projection: string): string {
+  const range = `${toonMm(load.startPositionM, "m")}–${toonMm(load.endPositionM, "m")} mm`;
+  if (isOpenFem3DGlobalMemberLoad(load)) {
+    return [`q${load.globalDirection.toUpperCase()} ${load.qStart}→${load.qEnd}`, load.perProjection ? projection : "", range]
+      .filter(Boolean).join(" · ");
+  }
   const y = load.qyStart || load.qyEnd ? `qy ${load.qyStart}→${load.qyEnd}` : "";
   const z = load.qzStart || load.qzEnd ? `qz ${load.qzStart}→${load.qzEnd}` : "";
-  return [y, z, `${toonMm(load.startPositionM, "m")}–${toonMm(load.endPositionM, "m")} mm`].filter(Boolean).join(" · ");
+  return [y, z, range].filter(Boolean).join(" · ");
 }
 
 export default function OpenFem3DMemberLoads({
@@ -106,7 +145,10 @@ export default function OpenFem3DMemberLoads({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [values, setValues] = useState<Values>(() => emptyValues(lengthM));
   const [activeEditor, setActiveEditor] = useState<"line" | "point" | "thermal">("line");
-  const [lineDirection, setLineDirection] = useState<"y" | "z">("z");
+  // De korte aanduiding per projectie in de lijst; buiten de knop vertaald, zodat de API-dekking die knop als `select` blijft kennen.
+  const projectionShort = t("openFem3d.memberLoads.perProjectionShort");
+  const [lineDirection, setLineDirection] = useState<LineDirection>("z");
+  const [perProjection, setPerProjection] = useState(false);
   const [showLineDetails, setShowLineDetails] = useState(false);
   const [error, setError] = useState("");
   const firstInput = useRef<HTMLInputElement>(null);
@@ -128,6 +170,7 @@ export default function OpenFem3DMemberLoads({
     setEditingId(null);
     setValues(emptyValues(lengthM));
     setLineDirection("z");
+    setPerProjection(false);
     setShowLineDetails(false);
     setError("");
     requestAnimationFrame(() => firstInput.current?.focus());
@@ -176,9 +219,17 @@ export default function OpenFem3DMemberLoads({
     setActiveEditor("line");
     setEditingId(load.id);
     setValues(loadValues(load));
-    setLineDirection(Math.abs(load.qyStart) + Math.abs(load.qyEnd) > Math.abs(load.qzStart) + Math.abs(load.qzEnd) ? "y" : "z");
-    setShowLineDetails(load.qyStart !== load.qyEnd || load.qzStart !== load.qzEnd ||
-      (load.qyStart !== 0 && load.qzStart !== 0) || load.startPositionM !== 0 || load.endPositionM !== lengthM);
+    const partial = load.startPositionM !== 0 || load.endPositionM !== lengthM;
+    if (isOpenFem3DGlobalMemberLoad(load)) {
+      setLineDirection(load.globalDirection.toUpperCase() as LineDirection);
+      setPerProjection(load.perProjection === true);
+      setShowLineDetails(load.qStart !== load.qEnd || partial);
+    } else {
+      setLineDirection(Math.abs(load.qyStart) + Math.abs(load.qyEnd) > Math.abs(load.qzStart) + Math.abs(load.qzEnd) ? "y" : "z");
+      setPerProjection(false);
+      setShowLineDetails(load.qyStart !== load.qyEnd || load.qzStart !== load.qzEnd ||
+        (load.qyStart !== 0 && load.qzStart !== 0) || partial);
+    }
     setError("");
   };
 
@@ -194,12 +245,14 @@ export default function OpenFem3DMemberLoads({
     } else {
       const q = fields.get("uniformQ");
       if (typeof q === "string") {
-        submitted[`q${lineDirection}Start`] = q;
-        submitted[`q${lineDirection}End`] = q;
+        submitted[startKey(lineDirection)] = q;
+        submitted[endKey(lineDirection)] = q;
       }
     }
     const editing = editingId === null ? undefined : (model.memberLoads ?? []).find((load) => load.id === editingId);
-    const parsed = openFem3DMemberLoadFromText(submitted, lengthM, editing);
+    const direction = globalOf(lineDirection);
+    const parsed = openFem3DMemberLoadFromText(submitted, lengthM, editing,
+      direction ? { direction, perProjection } : undefined);
     if (!parsed) {
       setError(t("canvas.popover.invalidRange", { ns: "common", lengte: toonMm(lengthM, "m") }));
       return;
@@ -314,7 +367,7 @@ export default function OpenFem3DMemberLoads({
     {name === "startMm" || name === "endMm"
       ? <input ref={ref ? firstInput : undefined} name={name} type="text" inputMode="decimal" required value={values[name]}
         onChange={(event) => setValues({ ...values, [name]: event.target.value })} />
-      : <input ref={ref ? firstInput : undefined} name={name} type="number" step="any" required value={values[name]}
+      : <input ref={ref ? firstInput : undefined} name={name} type="number" step="any" required value={values[name] ?? "0"}
         onChange={(event) => setValues({ ...values, [name]: event.target.value })} />}
   </label>;
 
@@ -329,28 +382,40 @@ export default function OpenFem3DMemberLoads({
       <p className="fem-prop-hint">{t("openFem3d.memberLoads.lineHint", { length: toonMm(lengthM, "m") })}</p>
       {loads.length > 0 && <div className="open-fem3d-condition-load-list">
         {loads.map((load) => <div key={load.id} className={editingId === load.id ? "selected" : ""}>
-          <button type="button" onClick={() => select(load)}><strong>#{load.id}</strong> {describe(load)}</button>
+          <button type="button" onClick={() => select(load)}><strong>#{load.id}</strong> {openFem3DMemberLoadSummary(load, projectionShort)}</button>
           <button type="button" onClick={() => remove(load.id)} aria-label={t("openFem3d.memberLoads.deleteLine", { id: load.id })}>×</button>
         </div>)}
       </div>}
       <button className="open-fem3d-condition-new" type="button" onClick={beginNew}>{t("openFem3d.memberLoads.newLine")}</button>
       <form onSubmit={save}>
         <div className="open-fem3d-load-quick">
-          <label><span>{t("openFem3d.memberLoads.direction")}</span><select value={lineDirection} onChange={(event) => {
-            const direction = event.target.value as "y" | "z";
-            const q = values[`q${lineDirection}Start`];
+          <label><span>{t("openFem3d.memberLoads.direction")}</span><select data-open-fem3d-line-direction value={lineDirection} onChange={(event) => {
+            // De ingevulde q gaat mee naar de nieuwe richting; de andere waarden worden 0.
+            const direction = event.target.value as LineDirection;
+            const q = values[startKey(lineDirection)] ?? "0";
             setLineDirection(direction);
-            setValues({ ...values,
-              qyStart: direction === "y" ? q : "0", qyEnd: direction === "y" ? q : "0",
-              qzStart: direction === "z" ? q : "0", qzEnd: direction === "z" ? q : "0" });
-          }}><option value="z">{t("openFem3d.memberLoads.localZ")}</option><option value="y">{t("openFem3d.memberLoads.localY")}</option></select></label>
+            setValues({ ...values, qyStart: "0", qyEnd: "0", qzStart: "0", qzEnd: "0", qStart: "0", qEnd: "0",
+              [startKey(direction)]: q, [endKey(direction)]: q });
+          }}>
+            <option value="z">{t("openFem3d.memberLoads.localZ")}</option><option value="y">{t("openFem3d.memberLoads.localY")}</option>
+            <option value="X">{t("openFem3d.memberLoads.globalX")}</option><option value="Y">{t("openFem3d.memberLoads.globalY")}</option>
+            <option value="Z">{t("openFem3d.memberLoads.globalZ")}</option>
+          </select></label>
           <label><span>q (kN/m)</span><input ref={firstInput} name="uniformQ" type="number" step="any" required
-            value={values[`q${lineDirection}Start`]}
+            value={values[startKey(lineDirection)] ?? "0"}
             onChange={(event) => setValues({ ...values,
-              [`q${lineDirection}Start`]: event.target.value,
-              [`q${lineDirection}End`]: event.target.value,
+              [startKey(lineDirection)]: event.target.value,
+              [endKey(lineDirection)]: event.target.value,
             })} /></label>
         </div>
+        {globalOf(lineDirection) && <>
+          <label className="open-fem3d-check-row open-fem3d-load-projection">
+            <input type="checkbox" data-open-fem3d-per-projection checked={perProjection}
+              onChange={(event) => setPerProjection(event.target.checked)} />
+            <span>{t("openFem3d.memberLoads.perProjection")}</span>
+          </label>
+          <p className="fem-prop-hint" data-open-fem3d-per-projection-hint>{t("openFem3d.memberLoads.perProjectionHint")}</p>
+        </>}
         <button className="open-fem3d-load-more" type="button" aria-expanded={showLineDetails}
           onClick={() => setShowLineDetails((open) => !open)}>
           {showLineDetails ? t("openFem3d.memberLoads.fewerOptions") : t("openFem3d.memberLoads.moreOptions")}
@@ -359,8 +424,12 @@ export default function OpenFem3DMemberLoads({
           <fieldset>
             <legend>{t("openFem3d.memberLoads.intensity")}</legend>
             <div className="open-fem3d-condition-values open-fem3d-member-load-values">
-              {field("qyStart", t("openFem3d.memberLoads.qyStart"))}{field("qyEnd", t("openFem3d.memberLoads.qyEnd"))}
-              {field("qzStart", t("openFem3d.memberLoads.qzStart"))}{field("qzEnd", t("openFem3d.memberLoads.qzEnd"))}
+              {globalOf(lineDirection)
+                ? <>{field("qStart", t("openFem3d.memberLoads.qStart"))}{field("qEnd", t("openFem3d.memberLoads.qEnd"))}</>
+                : <>
+                  {field("qyStart", t("openFem3d.memberLoads.qyStart"))}{field("qyEnd", t("openFem3d.memberLoads.qyEnd"))}
+                  {field("qzStart", t("openFem3d.memberLoads.qzStart"))}{field("qzEnd", t("openFem3d.memberLoads.qzEnd"))}
+                </>}
             </div>
           </fieldset>
           <fieldset>

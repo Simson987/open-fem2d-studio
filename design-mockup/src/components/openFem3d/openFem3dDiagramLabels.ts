@@ -1,7 +1,7 @@
 /**
  * openFem3dDiagramLabels.ts — de getallen bij de snedekrachtlijnen in 3D
- * (issue #95). Eén gedeelde instelling voor de zes lijnen (N, Vy, Vz, T, My,
- * Mz): Waarden aan of uit, en een stand van 1 (weinig) tot 5 (veel). Een
+ * (issue #95). Eén gedeelde instelling voor de lijnen (N, Vy, Vz, T, My, Mz
+ * en de gronddruk p van #106): Waarden aan of uit, en een stand van 1 (weinig) tot 5 (veel). Een
  * weergavevoorkeur van de gebruiker (onthouden in de browser, en mee in een
  * eigen view), geen modelgegeven. Geen React, geen Three.
  *
@@ -88,12 +88,15 @@ export function saveOpenFem3DDiagramLabels(value: OpenFem3DDiagramLabels): void 
 export type OpenFem3DMidForce = "axialForce" | "torsion";
 export type OpenFem3DForceLayer = OpenFem3DDiagramComponent | OpenFem3DMidForce;
 
-/** De zes lijnen, in de volgorde van de tab Resultaten. */
+/**
+ * De lijnen met waarden, in de volgorde van de tab Resultaten: de zes
+ * snedekrachten en de gronddruk onder staven op bedding (issue #106).
+ */
 export const OPEN_FEM_3D_FORCE_LAYERS: readonly OpenFem3DForceLayer[] = [
-  "axialForce", "shearY", "shearZ", "torsion", "momentY", "momentZ",
+  "axialForce", "shearY", "shearZ", "torsion", "momentY", "momentZ", "groundPressure",
 ];
 /** De getekende lijnen, in tekenvolgorde. */
-export const OPEN_FEM_3D_DIAGRAM_COMPONENTS: readonly OpenFem3DDiagramComponent[] = ["shearY", "shearZ", "momentY", "momentZ"];
+export const OPEN_FEM_3D_DIAGRAM_COMPONENTS: readonly OpenFem3DDiagramComponent[] = ["shearY", "shearZ", "momentY", "momentZ", "groundPressure"];
 /** De delen van het middenlabel, in leesvolgorde. */
 export const OPEN_FEM_3D_MID_FORCES: readonly OpenFem3DMidForce[] = ["axialForce", "torsion"];
 

@@ -536,7 +536,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "gui_build_3d_model",
-            "description": format!("{vooraf}Replaces the active project with a 3D frame model and opens its 3D workspace. Coordinates are metres; from/to/node are 1-based indices into nodes. Member profile_name, material, roll_angle_deg, local end releases, tension_only and optional check_config are retained and feed the 3D view, solver, IFC and EN 1992/EN 1993 checks. Optional diaphragms couple X, Y and the rotation about Z of nodes at one height as a rigid horizontal plane. The model settings tension_only_fit_after_permanent (tension-only members fitted after the permanent load) and tension_only_cross_rule (of two crossing tension-only members one always stays active) go with the model. For concrete, check_config uses the same BeamCheckConfig fields as the properties panel (including betonKorf and optional betonKolom). Optional levels (horizontal structural-grid axes: label and height in metres) replace the levels of the structural grid; a node or plate with `level` (1-based index into levels) is linked to that level, so it moves along when the level height changes in the app. A linked node's z must equal the level height; a linked plate lies horizontally on the level with all its nodes. Optional load_panels carry a surface load (kN/m²) without stiffness to the beams in their plane; the app converts them into member and nodal loads before the frame kernel and reports per panel which members carry and any warning."),
+            "description": format!("{vooraf}Replaces the active project with a 3D frame model and opens its 3D workspace. Coordinates are metres; from/to/node are 1-based indices into nodes. Member profile_name, material, roll_angle_deg, local end releases, tension_only, bedding (member on an elastic foundation) and optional check_config are retained and feed the 3D view, solver, IFC and EN 1992/EN 1993 checks. Optional diaphragms couple X, Y and the rotation about Z of nodes at one height as a rigid horizontal plane. The model settings tension_only_fit_after_permanent (tension-only members fitted after the permanent load) and tension_only_cross_rule (of two crossing tension-only members one always stays active) go with the model. For concrete, check_config uses the same BeamCheckConfig fields as the properties panel (including betonKorf and optional betonKolom). Optional levels (horizontal structural-grid axes: label and height in metres) replace the levels of the structural grid; a node or plate with `level` (1-based index into levels) is linked to that level, so it moves along when the level height changes in the app. A linked node's z must equal the level height; a linked plate lies horizontally on the level with all its nodes. Optional load_panels carry a surface load (kN/m²) without stiffness to the beams in their plane; the app converts them into member and nodal loads before the frame kernel and reports per panel which members carry and any warning."),
             "inputSchema": { "type": "object", "additionalProperties": false,
                 "properties": {
                     "levels": { "type": "array", "description": "Levels: horizontal structural-grid axes with a label and a height in metres (e.g. Ground 0, First floor 3). A label that already exists in the app keeps its identity.",
@@ -551,6 +551,10 @@ pub fn tool_definitions() -> Vec<Value> {
                             "releases": {"type":"object","additionalProperties":false,"description":"Released local end moments/torsion.",
                                 "properties":{"my_start":{"type":"boolean"},"my_end":{"type":"boolean"},"mz_start":{"type":"boolean"},"mz_end":{"type":"boolean"},"torsion_start":{"type":"boolean"},"torsion_end":{"type":"boolean"}}},
                             "tension_only": {"type":"boolean","description":"Tension-only member (e.g. a round-bar wind brace): it drops out of a load case or combination in which it would be in compression (axial force 0)."},
+                            "bedding": {"type":"object","additionalProperties":false,"required":["width_m"],
+                                "description":"Member on an elastic (Winkler) foundation: soil springs k·b along the whole length; the solver subdivides the member itself. k_kn_per_m3 is the vertical modulus in kN/m³ (global Z, soil below the member), width_m the contact width b in metres, k_lateral_kn_per_m3 an optional lateral modulus in kN/m³ (horizontal, perpendicular to the member, both sides, always linear; all round, in two directions perpendicular to the axis, for a member steeper than 45°), compression_only drops the vertical springs where the member lifts. Give k_kn_per_m3, k_lateral_kn_per_m3 or both. A (nearly) vertical member (pile) takes only k_lateral_kn_per_m3.",
+                                "properties":{"k_kn_per_m3":{"type":"number","exclusiveMinimum":0},"width_m":{"type":"number","exclusiveMinimum":0},
+                                    "k_lateral_kn_per_m3":{"type":"number","exclusiveMinimum":0},"compression_only":{"type":"boolean"}}},
                             "check_config": {"type":"object","additionalProperties":true} }, "required": ["from","to"] } },
                     "supports": { "type": "array", "description":"A support needs a rigid preset, one or more global springs, or both on different DOFs. Springs are kN/m or kNm/rad. Prescribed translations are m and rotations rad and need a matching rigid preset DOF.",
                         "items": { "type": "object", "additionalProperties": false,
@@ -621,20 +625,24 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "gui_configure_3d_view",
-            "description": format!("{vooraf}Configures the current 3D workspace: camera, visible objects, profile volumes and structural grid (grid axes and levels). Structural-grid positions are metres. z_levels are the levels: a level whose label already exists keeps its identity, so nodes and plates linked to it move to its new height; the app refuses a change that would leave a member without length or a plate out of plane, and then nothing changes."),
+            "description": format!("{vooraf}Configures the current 3D workspace: camera, visible objects, how plates are drawn (plateDisplay: volume, surface or mesh), the size of nodes and supports (in % of their automatic size), profile volumes, structural grid (grid axes and levels) and the section box. Structural-grid positions are metres. z_levels are the levels: a level whose label already exists keeps its identity, so nodes and plates linked to it move to its new height; the app refuses a change that would leave a member without length or a plate out of plane, and then nothing changes. The section box is an axis-aligned box in global X/Y/Z (metres) that cuts the model: only what lies inside is drawn, selectable and snappable; it belongs to the view (saved with the visibility and in saved views)."),
             "inputSchema": { "type": "object", "additionalProperties": false,
                 "properties": {
                     "view": { "type": "string", "enum": ["iso","top","front","side"] },
                     "visibility": { "type": "object", "additionalProperties": false,
                         "properties": {
                             "nodes":{"type":"boolean"}, "beams":{"type":"boolean"}, "plates":{"type":"boolean"}, "profiles":{"type":"boolean"},
+                            "plateDisplay":{"type":"string","enum":["volume","surface","mesh"],"description":"How plates are drawn: volume (with their thickness), surface (the mid-plane only, semi-transparent, with outline and openings) or mesh (the elements of the analysis mesh on the mid-plane). Independent of plates (shown or hidden)."},
                             "nodeNumbers":{"type":"boolean"}, "beamNumbers":{"type":"boolean"}, "nodeCoordinates":{"type":"boolean"},
                             "supports":{"type":"boolean"}, "loads":{"type":"boolean"}, "loadPanels":{"type":"boolean"}, "grid":{"type":"boolean"},
-                            "axes":{"type":"boolean"}, "structuralGrid":{"type":"boolean"},
+                            "axes":{"type":"boolean"}, "structuralGrid":{"type":"boolean"}, "levelMarks":{"type":"boolean"},
                             "deformation":{"type":"boolean"}, "reactions":{"type":"boolean"},
                             "utilization":{"type":"boolean"}, "axialForce":{"type":"boolean"},
                             "shearY":{"type":"boolean"}, "shearZ":{"type":"boolean"},
-                            "torsion":{"type":"boolean"}, "momentY":{"type":"boolean"}, "momentZ":{"type":"boolean"}
+                            "torsion":{"type":"boolean"}, "momentY":{"type":"boolean"}, "momentZ":{"type":"boolean"},
+                            "groundPressure":{"type":"boolean","description":"Ground pressure under members on an elastic foundation (kN/m), drawn below the member; parts without contact (compression only) dashed grey."},
+                            "nodeSizePercent":{"type":"number","minimum":25,"maximum":400,"description":"Size of the node spheres in % of their automatic size (100 = automatic)."},
+                            "supportSizePercent":{"type":"number","minimum":25,"maximum":400,"description":"Size of the support symbols in % of their automatic size (100 = automatic). Loads keep their size."}
                         } },
                     "structural_grid": { "type": "object", "additionalProperties": false,
                         "properties": {
@@ -642,10 +650,20 @@ pub fn tool_definitions() -> Vec<Value> {
                             "x_axes":{"$ref":"#/$defs/axisList"},
                             "y_axes":{"$ref":"#/$defs/axisList"},
                             "z_levels":{"$ref":"#/$defs/axisList"}
+                        } },
+                    "section_box": { "type": "object", "additionalProperties": false, "required": ["enabled"],
+                        "description": "Section box (axis-aligned, global X/Y/Z in metres). enabled switches it on or off; off keeps the bounds. Give min_m and max_m together (each axis at least 100 mm), or fit: model (the model bounds plus a margin) or selection (around the current 3D selection), not both. On without bounds or fit: the kept bounds, else the model bounds.",
+                        "properties": {
+                            "enabled":{"type":"boolean"},
+                            "min_m":{"$ref":"#/$defs/pointM"},
+                            "max_m":{"$ref":"#/$defs/pointM"},
+                            "fit":{"type":"string","enum":["model","selection"]}
                         } }
                 },
                 "$defs": { "axisList": { "type":"array", "items": { "type":"object", "additionalProperties":false,
-                    "properties": { "label":{"type":"string"}, "position_m":{"type":"number"} }, "required":["label","position_m"] } } }
+                    "properties": { "label":{"type":"string"}, "position_m":{"type":"number"} }, "required":["label","position_m"] } },
+                    "pointM": { "type":"object", "additionalProperties":false, "required":["x","y","z"],
+                        "properties": { "x":{"type":"number"}, "y":{"type":"number"}, "z":{"type":"number"} } } }
             }
         }),
         json!({
@@ -926,7 +944,7 @@ mod tests {
         let visibility = &view["inputSchema"]["properties"]["visibility"]["properties"];
         for layer in [
             "plates", "deformation", "reactions", "utilization", "axialForce", "shearY",
-            "shearZ", "torsion", "momentY", "momentZ",
+            "shearZ", "torsion", "momentY", "momentZ", "groundPressure",
         ] {
             assert_eq!(visibility[layer]["type"], json!("boolean"), "{layer} ontbreekt");
         }
@@ -958,6 +976,31 @@ mod tests {
         assert_eq!(panel["properties"]["excluded_beams"]["items"]["minimum"], json!(1));
         let view = defs.iter().find(|d| d["name"] == "gui_configure_3d_view").unwrap();
         assert_eq!(view["inputSchema"]["properties"]["visibility"]["properties"]["loadPanels"]["type"], json!("boolean"));
+        // De peilmaten bij de levels (issue #92) staan los van het stramien: eigen schakelaar.
+        assert_eq!(view["inputSchema"]["properties"]["visibility"]["properties"]["levelMarks"]["type"], json!("boolean"));
+        // De grootte van knopen en opleggingen (issue #82): een getal in %, 25–400.
+        let zicht = &view["inputSchema"]["properties"]["visibility"]["properties"];
+        for sleutel in ["nodeSizePercent", "supportSizePercent"] {
+            assert_eq!(zicht[sleutel]["type"], json!("number"), "{sleutel}");
+            assert_eq!(zicht[sleutel]["minimum"], json!(25), "{sleutel}");
+        }
+        assert_eq!(zicht["nodeSizePercent"]["maximum"], json!(400));
+        assert_eq!(zicht["supportSizePercent"]["maximum"], json!(400));
+        // De plaatweergave (issue #78): één keuze uit drie standen, geen schakelaar.
+        assert_eq!(zicht["plateDisplay"]["type"], json!("string"));
+        assert_eq!(zicht["plateDisplay"]["enum"], json!(["volume", "surface", "mesh"]));
+        // De section box (issue #86): strikt, aan/uit verplicht, grenzen als {x, y, z} in m.
+        let doos = &view["inputSchema"]["properties"]["section_box"];
+        assert_eq!(doos["additionalProperties"], json!(false));
+        assert_eq!(doos["required"], json!(["enabled"]));
+        assert_eq!(doos["properties"]["enabled"]["type"], json!("boolean"));
+        assert_eq!(doos["properties"]["fit"]["enum"], json!(["model", "selection"]));
+        for grens in ["min_m", "max_m"] {
+            assert_eq!(doos["properties"][grens]["$ref"], json!("#/$defs/pointM"), "{grens}");
+        }
+        let punt = &view["inputSchema"]["$defs"]["pointM"];
+        assert_eq!(punt["additionalProperties"], json!(false));
+        assert_eq!(punt["required"], json!(["x", "y", "z"]));
     }
 
     /// Trek-alleen per staaf en starre schijven in `gui_build_3d_model`:
@@ -975,6 +1018,23 @@ mod tests {
         assert_eq!(diaphragm["properties"]["nodes"]["minItems"], json!(2));
         assert_eq!(diaphragm["properties"]["nodes"]["items"]["minimum"], json!(1));
         assert_eq!(diaphragm["properties"]["name"]["type"], json!("string"));
+    }
+
+    /// Staaf op bedding (#106) in `gui_build_3d_model`: een strikt object met
+    /// width_m verplicht en de vier velden in snake_case.
+    #[test]
+    fn het_3d_schema_draagt_staaf_op_bedding_strikt() {
+        let defs = tool_definitions();
+        let bouw = defs.iter().find(|d| d["name"] == "gui_build_3d_model").unwrap();
+        let bedding = &bouw["inputSchema"]["properties"]["beams"]["items"]["properties"]["bedding"];
+        assert_eq!(bedding["type"], json!("object"));
+        assert_eq!(bedding["additionalProperties"], json!(false));
+        assert_eq!(bedding["required"], json!(["width_m"]));
+        for veld in ["k_kn_per_m3", "width_m", "k_lateral_kn_per_m3"] {
+            assert_eq!(bedding["properties"][veld]["exclusiveMinimum"], json!(0), "{veld}");
+        }
+        assert_eq!(bedding["properties"]["compression_only"]["type"], json!("boolean"));
+        assert_eq!(bedding["properties"].as_object().unwrap().len(), 4);
     }
 
     /// De modelinstellingen voor trek-alleen staven in `gui_build_3d_model`:

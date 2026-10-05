@@ -5,9 +5,12 @@ import OpenFem3DNodeConditions, { type OpenFem3DLoadEditorRequest, type OpenFem3
 import OpenFem3DMemberLoads from "./OpenFem3DMemberLoads";
 import OpenFem3DLoadPanelProperties from "./OpenFem3DLoadPanelProperties";
 import { OpenFem3DDiaphragmFromSelection, OpenFem3DNodeDiaphragmRow, OpenFem3DTensionOnlyField } from "./OpenFem3DTrekSchijfVelden";
-import type { OpenFem3DSelection } from "./openFem3dSelection";
+import { OpenFem3DBeddingField, OpenFem3DBeddingResults } from "./OpenFem3DBeddingVeld";
+import { openFem3DBeddingRefusal } from "./openFem3dBedding";
+import { openFem3DSelectionLoadCount, type OpenFem3DSelection } from "./openFem3dSelection";
+import { openFem3DSelectieBelastinggevallen, openFem3DSelectieIds } from "./openFem3dSelectieFilter";
 import {
-  flipOpenFem3DBeamLocalAxes, openFem3DReleasePresetOf, openFem3DSupportPresetOf, removeOpenFem3DSurfaceLoad, setOpenFem3DBeamNodes,
+  assertOpenFem3DBeddingFitsGeometry, flipOpenFem3DBeamLocalAxes, openFem3DReleasePresetOf, openFem3DSupportPresetOf, removeOpenFem3DSurfaceLoad, setOpenFem3DBeamNodes,
   setOpenFem3DReleasePreset, updateOpenFem3DPlate, updateOpenFem3DSurfaceLoad, type OpenFem3DModel, type OpenFem3DReleasePreset,
   type OpenFem3DSupportPreset,
 } from "./openFem3dModel";
@@ -127,6 +130,8 @@ function LevelSelect({ value, levels, disabled, mixed = false, onChange }: {
 /**
  * Eén knoopcoördinaat wijzigen (meters, zoals het 3D-model rekent). Geeft null
  * als een staaf daardoor geen lengte meer zou hebben: dan verandert er niets.
+ * Zet het een staaf op een verticale bedding (k) (bijna) verticaal, dan volgt
+ * een OpenFem3DBeddingVerticalError (#106): dezelfde regel als bij het lezen.
  */
 export function openFem3DModelWithNodeCoordinate(
   model: OpenFem3DModel, nodeId: number, axis: "x" | "y" | "z", meters: number,
@@ -146,7 +151,10 @@ export function openFem3DModelWithNodeCoordinate(
     const a = byId.get(item.startNodeId), b = byId.get(item.endNodeId);
     return a && b && a.x === b.x && a.y === b.y && a.z === b.z;
   })) return null;
-  return withConsistentOpenFem3DPlateLevels({ ...model, nodes });
+  const next = withConsistentOpenFem3DPlateLevels({ ...model, nodes });
+  assertOpenFem3DBeddingFitsGeometry(next, model.beams
+    .filter((beam) => beam.startNodeId === nodeId || beam.endNodeId === nodeId).map((beam) => beam.id));
+  return next;
 }
 
 export default function OpenFem3DProperties({
@@ -180,6 +188,14 @@ export default function OpenFem3DProperties({
   // Een geweigerde levelkeuze (bv. een knoop die een plaat op haar level houdt).
   const [levelError, setLevelError] = useState<string | null>(null);
   useEffect(() => { setLevelError(null); }, [selection]);
+  // Een geweigerde geometriewijziging (knoop verplaatsen, staaf omhangen), bv.
+  // een staaf op een verticale bedding die verticaal zou komen te staan (#106).
+  const [geometryError, setGeometryError] = useState<string | null>(null);
+  useEffect(() => { setGeometryError(null); }, [selection]);
+  const refusalText = (reason: unknown) => {
+    const bedding = openFem3DBeddingRefusal(reason);
+    return bedding ? t(bedding.key, bedding.values) : reason instanceof Error ? reason.message : String(reason);
+  };
 
   useEffect(() => {
     if (beam) setRollDegrees(String((beam.rollAngleRad ?? 0) * 180 / Math.PI));
@@ -233,6 +249,7 @@ export default function OpenFem3DProperties({
 
   if (selection?.type === "multi") {
     const multiPlateIds = selection.plateIds ?? [];
+    const multiLoadCount = openFem3DSelectionLoadCount(selection);
     const chosen = [
       ...selection.nodeIds.map((id) => model.nodes.find((item) => item.id === id)?.levelId ?? ""),
       ...multiPlateIds.map((id) => model.plates?.find((item) => item.id === id)?.levelId ?? ""),
@@ -244,6 +261,12 @@ export default function OpenFem3DProperties({
     </div><div className="fem-prop-body"><p className="fem-prop-hint">
       {t("openFem3d.props.multiHint")}
     </p>
+    {/* Lasten uit het selectiefilter (issue #94): hoeveel, en in hoeveel gevallen. */}
+    {multiLoadCount > 0 && <p className="fem-prop-hint" data-open-fem3d-multi-loads={multiLoadCount}>
+      {t("openFem3d.props.multiLoads", {
+        count: multiLoadCount, cases: openFem3DSelectieBelastinggevallen(model, openFem3DSelectieIds(selection)!).length,
+      })}
+    </p>}
     {chosen.length > 0 && <Section title={t("openFem3d.levels.level")}>
       <Row label={t("openFem3d.levels.level")}>
         <LevelSelect value={common ?? ""} mixed={common === undefined} levels={levels} disabled={levels.length === 0}
@@ -258,6 +281,7 @@ export default function OpenFem3DProperties({
       <p className="fem-prop-hint">{t("openFem3d.props.releasePresetsMulti", { count: selection.beamIds.length })}</p>
     </Section>}
     <OpenFem3DTensionOnlyField model={model} beamIds={selection.beamIds} onChange={onChange} />
+    <OpenFem3DBeddingField model={model} beamIds={selection.beamIds} onChange={onChange} />
     <OpenFem3DDiaphragmFromSelection model={model} nodeIds={selection.nodeIds} onChange={onChange} />
     </div></div>;
   }
@@ -288,10 +312,26 @@ export default function OpenFem3DProperties({
 
   const applyCoordinate = (axis: "x" | "y" | "z", meters: number) => {
     if (!node) return;
-    const next = openFem3DModelWithNodeCoordinate(model, node.id, axis, meters);
+    let next: OpenFem3DModel | null = null;
+    try {
+      next = openFem3DModelWithNodeCoordinate(model, node.id, axis, meters);
+      setGeometryError(null);
+    } catch (reason) {
+      setGeometryError(refusalText(reason));
+    }
     if (next) onChange(next);
     else setCoordinateRevision((revision) => ({ ...revision, [axis]: revision[axis] + 1 }));
   };
+  const applyBeamNodes = (beamId: number, startNodeId: number, endNodeId: number) => {
+    try {
+      onChange(setOpenFem3DBeamNodes(model, beamId, startNodeId, endNodeId));
+      setGeometryError(null);
+    } catch (reason) {
+      setGeometryError(refusalText(reason));
+    }
+  };
+  const geometryErrorLine = geometryError
+    && <p className="open-fem3d-error" role="alert" data-open-fem3d-geometry-error>{geometryError}</p>;
 
   const updateBeam = (patch: Partial<NonNullable<typeof beam>>) => {
     if (!beam) return;
@@ -343,6 +383,7 @@ export default function OpenFem3DProperties({
               required min={-Infinity} value={node[axis]} disabled={axis === "z" && node.levelId !== undefined}
               onChange={(meters) => { if (meters !== undefined) applyCoordinate(axis, meters); }} />
           </Row>)}
+          {geometryErrorLine}
           <Row label={t("openFem3d.levels.level")}>
             <LevelSelect value={node.levelId ?? ""} levels={levels}
               disabled={nodeHeldBy !== null || (levels.length === 0 && node.levelId === undefined)}
@@ -365,20 +406,21 @@ export default function OpenFem3DProperties({
         <Section title={t("openFem3d.geometry", "Geometrie")}>
           <Row label="ID"><code>{beam.id}</code></Row>
           <Row label={t("openFem3d.startNode")}><select className="fem-prop-input" value={beam.startNodeId}
-            onChange={(event) => onChange(setOpenFem3DBeamNodes(model, beam.id, Number(event.target.value), beam.endNodeId))}>
+            onChange={(event) => applyBeamNodes(beam.id, Number(event.target.value), beam.endNodeId)}>
             {model.nodes.map((candidate) => <option key={candidate.id} value={candidate.id}
               disabled={candidate.id === beam.endNodeId || (
                 candidate.x === beamGeometry?.end.x && candidate.y === beamGeometry?.end.y && candidate.z === beamGeometry?.end.z
               )}>K{candidate.id} ({toonMm(candidate.x, "m")}, {toonMm(candidate.y, "m")}, {toonMm(candidate.z, "m")})</option>)}
           </select></Row>
           <Row label={t("openFem3d.endNode")}><select className="fem-prop-input" value={beam.endNodeId}
-            onChange={(event) => onChange(setOpenFem3DBeamNodes(model, beam.id, beam.startNodeId, Number(event.target.value)))}>
+            onChange={(event) => applyBeamNodes(beam.id, beam.startNodeId, Number(event.target.value))}>
             {model.nodes.map((candidate) => <option key={candidate.id} value={candidate.id}
               disabled={candidate.id === beam.startNodeId || (
                 candidate.x === beamGeometry?.start.x && candidate.y === beamGeometry?.start.y && candidate.z === beamGeometry?.start.z
               )}>K{candidate.id} ({toonMm(candidate.x, "m")}, {toonMm(candidate.y, "m")}, {toonMm(candidate.z, "m")})</option>)}
           </select></Row>
           <Row label={t("openFem3d.length", "Lengte")}><code>{toonMm(beamGeometry?.length ?? 0, "m")} mm</code></Row>
+          {geometryErrorLine}
         </Section>
         <Section title={t("openFem3d.crossSection", "Profiel en materiaal")}>
           <Row label={t("openFem3d.profile")}><code>{beam.profileName || "—"} — {beam.material || "—"}</code></Row>
@@ -441,6 +483,7 @@ export default function OpenFem3DProperties({
           </div>
         </Section>
         <OpenFem3DTensionOnlyField model={model} beamIds={[beam.id]} onChange={onChange} />
+        <OpenFem3DBeddingField model={model} beamIds={[beam.id]} onChange={onChange} />
         <OpenFem3DMemberLoads model={model} beamId={beam.id} lengthM={beamGeometry?.length ?? 0}
           onChange={onChange} editorRequest={memberLoadEditorRequest} pointEditorRequest={memberPointLoadEditorRequest}
           thermalEditorRequest={thermalLoadEditorRequest}
@@ -583,6 +626,7 @@ export default function OpenFem3DProperties({
             {fit && <p className="fem-prop-hint">{t("openFem3d.trekSchijf.fitDeltaHint")}</p>}
           </Section>;
         })()}
+        {beam && result && <OpenFem3DBeddingResults model={model} beamId={beam.id} result={result} />}
         {beam && memberForces && <Section title={t("openFem3d.memberForces", "Staafkrachten begin / eind")}>
           <Row label="N"><code>{value(memberForces.nStartKn)} / {value(memberForces.nEndKn)} kN</code></Row>
           <Row label="Vy"><code>{value(memberForces.vyStartKn)} / {value(memberForces.vyEndKn)} kN</code></Row>

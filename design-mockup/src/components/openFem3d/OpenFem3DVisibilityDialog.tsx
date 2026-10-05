@@ -1,7 +1,11 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Modal from "../Modal";
-import { DEFAULT_OPEN_FEM_3D_VISIBILITY, OPEN_FEM_3D_RESULT_LAYERS, type OpenFem3DVisibility } from "./openFem3dVisibility";
+import {
+  DEFAULT_OPEN_FEM_3D_VISIBILITY, OPEN_FEM_3D_RESULT_LAYERS, type OpenFem3DVisibility, type OpenFem3DVisibilityFlag,
+} from "./openFem3dVisibility";
+import OpenFem3DSymbolScaleControl from "./OpenFem3DSymbolScaleControl";
+import OpenFem3DPlateDisplayChoice from "./OpenFem3DPlateDisplayChoice";
 import "./OpenFem3DEditor.css";
 import { bewaarOpenFem3DViewSet, type OpenFem3DCameraState, type OpenFem3DViewSet } from "./openFem3dViewSets";
 import type { OpenFem3DView } from "./openFem3dCommands";
@@ -26,10 +30,12 @@ interface Props {
   onApplyViewSet?: (viewSet: OpenFem3DViewSet) => void;
 }
 
-const GROUPS: { title: string; keys: readonly (keyof OpenFem3DVisibility)[] }[] = [
-  { title: "geometry", keys: ["nodes", "beams", "plates", "mesh", "profiles", "profileColors", "supports", "loads", "loadPanels"] },
+const GROUPS: { title: string; keys: readonly OpenFem3DVisibilityFlag[] }[] = [
+  // Onder Platen de keuze Volume, Vlak of Mesh (issue #78), geen schakelaar.
+  { title: "geometry", keys: ["nodes", "beams", "plates", "profiles", "profileColors", "supports", "loads", "loadPanels"] },
   { title: "labels", keys: ["nodeNumbers", "beamNumbers", "nodeCoordinates"] },
-  { title: "workspace", keys: ["grid", "structuralGrid", "axes", "memberAxes", "viewCube", "perspective"] },
+  // Peilmaten direct onder het stramien, maar los ervan te schakelen (issue #92).
+  { title: "workspace", keys: ["grid", "structuralGrid", "levelMarks", "axes", "memberAxes", "viewCube", "perspective"] },
   { title: "results", keys: OPEN_FEM_3D_RESULT_LAYERS },
 ];
 
@@ -94,20 +100,28 @@ export default function OpenFem3DVisibilityDialog({
         {GROUPS.map((group) => (
           <section key={group.title}>
             <h3>{t(`openFem3dVisibility.${group.title}`)}</h3>
-            {group.keys.map((key) => (
-              <button
-                key={key}
-                type="button"
-                role="switch"
-                aria-checked={visibility[key]}
-                className="open-fem3d-visibility-row"
-                data-vlag={key}
-                onClick={() => onChange({ ...visibility, [key]: !visibility[key] })}
-              >
-                <span>{t(`openFem3dVisibility.${key}`)}</span>
-                <span className={`open-fem3d-visibility-switch${visibility[key] ? " on" : ""}`} aria-hidden="true" />
-              </button>
-            ))}
+            {group.keys.map((key) => {
+              // Onder Knopen en Opleggingen de regelaar Grootte (issue #82).
+              const schaal = key === "nodes" ? "nodeSizePercent" : key === "supports" ? "supportSizePercent" : null;
+              return <Fragment key={key}>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={visibility[key]}
+                  className="open-fem3d-visibility-row"
+                  data-vlag={key}
+                  onClick={() => onChange({ ...visibility, [key]: !visibility[key] })}
+                >
+                  <span>{t(`openFem3dVisibility.${key}`)}</span>
+                  <span className={`open-fem3d-visibility-switch${visibility[key] ? " on" : ""}`} aria-hidden="true" />
+                </button>
+                {schaal && (key === "nodes" || key === "supports") && <OpenFem3DSymbolScaleControl variant="dialog"
+                  target={key} percent={visibility[schaal]} disabled={!visibility[key]}
+                  onChange={(percent) => onChange({ ...visibility, [schaal]: percent })} />}
+                {key === "plates" && <OpenFem3DPlateDisplayChoice variant="dialog" value={visibility.plateDisplay}
+                  dimmed={!visibility.plates} onChange={(plateDisplay) => onChange({ ...visibility, plateDisplay })} />}
+              </Fragment>;
+            })}
           </section>
         ))}
       </div>

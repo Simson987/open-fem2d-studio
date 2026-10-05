@@ -3,6 +3,7 @@ import type { OpenFem3DDiagramPoint, OpenFem3DDisplacement, OpenFem3DSolveResult
 import { parseRechthoek, resolveSection } from "../../lib/sectionResolver";
 import { STEEL_SECTION_DIMS } from "../../lib/steelSectionDims.generated";
 import { profielAliasSleutel } from "../../lib/strip";
+import { openFem3DBeddingResultOf, openFem3DBeddingSettlementAt } from "./openFem3dBedding";
 
 type Vector3 = [number, number, number];
 
@@ -80,7 +81,9 @@ export interface OpenFem3DDisplacementStation {
  * Euler-Bernoulli-verplaatsingslijn in de lokale staafassen. Als de solver
  * momentstations levert, wordt de kromming M/EI geïntegreerd en passen beide
  * eindtranslaties exact. Daardoor blijven verdeelde lasten en scharnieren
- * zichtbaar. Oude resultaten vallen terug op kubische eindinterpolatie.
+ * zichtbaar. Oude resultaten vallen terug op kubische eindinterpolatie. Bij
+ * een staaf op een verticale bedding volgt uz de zakking die de kern langs de
+ * staaf gaf (lineair tussen zijn knopen).
  */
 export function openFem3DMemberDisplacementStations(
   model: OpenFem3DModel,
@@ -116,6 +119,12 @@ export function openFem3DMemberDisplacementStations(
     ? displacementFromCurvature(momentY, 1 / (stiffness.eKnM2 * stiffness.iyM4), localW1, localW2, length, count)
     : null;
 
+  // Staaf op bedding (#106): de kern geeft de zakking op zijn eigen knopen
+  // langs de staaf. Die verticale verplaatsing is gezaghebbend; de vorm uit de
+  // kromming en de einden geldt dan alleen nog voor de andere richtingen.
+  const bedding = beam.bedding?.kKnPerM3 !== undefined ? openFem3DBeddingResultOf(result, beam.id) : undefined;
+  const settlement = bedding && bedding.points.length >= 2 ? bedding : undefined;
+
   return Array.from({ length: count + 1 }, (_, index) => {
     const t = index / count;
     const h1 = 1 - 3 * t ** 2 + 2 * t ** 3;
@@ -128,7 +137,7 @@ export function openFem3DMemberDisplacementStations(
     const w = integratedW?.[index] ?? (h1 * localW1 - h2 * localRy1 + h3 * localW2 - h4 * localRy2);
     const ux = ex[0] * u + ey[0] * v + ez[0] * w;
     const uy = ex[1] * u + ey[1] * v + ez[1] * w;
-    const uz = ex[2] * u + ey[2] * v + ez[2] * w;
+    const uz = settlement ? -openFem3DBeddingSettlementAt(settlement, t) : ex[2] * u + ey[2] * v + ez[2] * w;
     return { t, ux, uy, uz, magnitude: Math.hypot(ux, uy, uz) };
   });
 }

@@ -1,8 +1,12 @@
 import * as THREE from "three";
 import type { OpenFem3DModel } from "./openFem3dModel";
-import type { OpenFem3DSelection, OpenFem3DSingleSelection } from "./openFem3dSelection";
+import { openFem3DSelectionFromIds, type OpenFem3DSelection, type OpenFem3DSingleSelection } from "./openFem3dSelection";
 import { openFem3DProjectSegment } from "./openFem3dBeamScreenPick";
-import { driehoekRaaktKader, lijnstukRaaktKader, type KaderModus } from "../../lib/kaderSelectie";
+import { driehoekRaaktKader, lijnstukRaaktKader, veelhoekRaaktKader, type KaderModus } from "../../lib/kaderSelectie";
+import {
+  openFem3DSectionBoxBevat, openFem3DSectionBoxKnipLijnstuk, openFem3DSectionBoxStaafStand, openFem3DSectionBoxVeelhoek,
+  openFem3DSectionBoxVeelhoekStand, type OpenFem3DSectionBoxBounds,
+} from "./openFem3dSectionBox";
 
 export interface OpenFem3DScreenBox { left: number; top: number; right: number; bottom: number }
 
@@ -216,6 +220,12 @@ export function openFem3DMeshTouchesBox(
  * Valt er geen knoop, staaf of plaat in het kader, dan kiest het kader de
  * last die het raakt (`loadSegments`, zie {@link loadInScreenBox}). Een last
  * gaat niet samen met geometrie in één selectie.
+ *
+ * Section box (`doos`, issue #86): alleen wat binnen de doos valt telt. Een
+ * knoop of staaf (systeemlijn) of plaat (omtrek) geheel buiten de doos valt
+ * weg; een staaf of plaat die de doos snijdt, telt met haar zichtbare deel:
+ * venster = het geknipte stuk geheel in het kader, crossing = het geknipte
+ * stuk raakt het kader. Een last telt met het deel van zijn pijl binnen de doos.
  */
 export function selectOpenFem3DInScreenBox(
   model: OpenFem3DModel,
@@ -229,6 +239,7 @@ export function selectOpenFem3DInScreenBox(
   selectNodes: boolean,
   mode: KaderModus = "venster",
   loadSegments: readonly OpenFem3DBoxLoadSegment[] = [],
+  doos: OpenFem3DSectionBoxBounds | null = null,
 ): OpenFem3DSelection {
   camera.updateMatrixWorld();
   const nodes = new Set<number>();
@@ -236,6 +247,7 @@ export function selectOpenFem3DInScreenBox(
   const plates = new Set<number>();
   if (selectNodes) {
     for (const node of model.nodes) {
+      if (doos && !openFem3DSectionBoxBevat(doos, node)) continue;
       const point = projectedPoint(new THREE.Vector3(node.x, node.y, node.z), camera, width, height);
       if (point && point.x >= box.left && point.x <= box.right && point.y >= box.top && point.y <= box.bottom) {
         nodes.add(node.id);
@@ -243,9 +255,10 @@ export function selectOpenFem3DInScreenBox(
     }
   }
   const crossing = mode === "crossing";
-  const nodeById = crossing ? new Map(model.nodes.map((node) => [node.id, node])) : null;
-  const beamById = crossing ? new Map(model.beams.map((beam) => [beam.id, beam])) : null;
-  const matrix = crossing
+  const nodeById = crossing || doos ? new Map(model.nodes.map((node) => [node.id, node])) : null;
+  const beamById = crossing || doos ? new Map(model.beams.map((beam) => [beam.id, beam])) : null;
+  const plateById = doos ? new Map((model.plates ?? []).map((plate) => [plate.id, plate])) : null;
+  const matrix = crossing || doos
     ? new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).elements
     : null;
   const systemLineTouches = (beamId: number) => {
@@ -256,13 +269,54 @@ export function selectOpenFem3DInScreenBox(
     const segment = openFem3DProjectSegment(matrix!, start, end, width, height);
     return !!segment && lijnstukRaaktKader({ x: segment.ax, y: segment.ay }, { x: segment.bx, y: segment.by }, box);
   };
+  const inKader = (p: { x: number; y: number }) => p.x >= box.left && p.x <= box.right && p.y >= box.top && p.y <= box.bottom;
+  const staafEinden = (beamId: number) => {
+    const beam = beamById!.get(beamId);
+    const start = beam && nodeById!.get(beam.startNodeId);
+    const end = beam && nodeById!.get(beam.endNodeId);
+    return start && end ? { start, end } : null;
+  };
+  const plaatOmtrek = (plateId: number) => (plateById!.get(plateId)?.nodeIds ?? [])
+    .map((id) => nodeById!.get(id)).filter((node): node is NonNullable<typeof node> => Boolean(node));
+  /** Binnen, deels of buiten de section box (systeemlijn of plaatomtrek). */
+  const standInDoos = (type: "beam" | "plate", id: number) => {
+    if (type === "beam") {
+      const einden = staafEinden(id);
+      return einden ? openFem3DSectionBoxStaafStand(doos!, einden.start, einden.end) : "buiten";
+    }
+    return openFem3DSectionBoxVeelhoekStand(doos!, plaatOmtrek(id));
+  };
+  /** Het zichtbare deel van een staaf of plaat die de doos snijdt, tegen het kader. */
+  const zichtbaarDeelGeselecteerd = (type: "beam" | "plate", id: number) => {
+    if (type === "beam") {
+      const einden = staafEinden(id);
+      const deel = einden && openFem3DSectionBoxKnipLijnstuk(doos!, einden.start, einden.end);
+      const segment = deel && openFem3DProjectSegment(matrix!, deel.a, deel.b, width, height);
+      if (!segment) return false;
+      const a = { x: segment.ax, y: segment.ay }, b = { x: segment.bx, y: segment.by };
+      return crossing ? lijnstukRaaktKader(a, b, box) : segment.s0 === 0 && segment.s1 === 1 && inKader(a) && inKader(b);
+    }
+    const geknipt = openFem3DSectionBoxVeelhoek(doos!, plaatOmtrek(id));
+    const scherm = geknipt.map((p) => projectedPoint(new THREE.Vector3(p.x, p.y, p.z), camera, width, height));
+    if (scherm.length < 3 || scherm.some((p) => !p)) return false;
+    const punten = scherm as { x: number; y: number }[];
+    return crossing ? veelhoekRaaktKader(punten, [], box) : punten.every(inKader);
+  };
   const selected = (type: "beam" | "plate", id: number, object: THREE.Mesh, instanceIndex?: number) => {
+    if (doos) {
+      const stand = standInDoos(type, id);
+      if (stand === "buiten") return false;
+      if (stand === "deels") return zichtbaarDeelGeselecteerd(type, id);
+    }
     if (!crossing) return openFem3DBoxContainsMesh(box, object, camera, width, height, instanceIndex);
     if (type === "beam" && systemLineTouches(id)) return true;
     return openFem3DMeshTouchesBox(box, object, camera, width, height, instanceIndex);
   };
   for (const object of meshes) {
     if (!(object instanceof THREE.Mesh) || !object.visible) continue;
+    // Een scharnierbolletje ligt op de staaf; het kader kiest de staaf zelf
+    // (venster: helemaal erin), niet een bolletje dat er toevallig in valt.
+    if (object.userData.openFem3dBeamHinge === true) continue;
     const type = object.userData.type === "beam" ? "beam"
       : object.userData.type === "plate" ? "plate" : null;
     if (!type) continue;
@@ -278,8 +332,14 @@ export function selectOpenFem3DInScreenBox(
       if (!target.has(object.userData.id) && selected(type, object.userData.id, object)) target.add(object.userData.id);
     }
   }
-  if (nodes.size + beams.size + plates.size === 0 && loadSegments.length > 0) {
-    const load = loadInScreenBox(loadSegments,
+  const lastDelen = doos
+    ? loadSegments.flatMap((segment) => {
+      const deel = openFem3DSectionBoxKnipLijnstuk(doos, segment.a, segment.b);
+      return deel ? [{ ...segment, a: deel.a, b: deel.b }] : [];
+    })
+    : loadSegments;
+  if (nodes.size + beams.size + plates.size === 0 && lastDelen.length > 0) {
+    const load = loadInScreenBox(lastDelen,
       matrix ?? new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).elements,
       width, height, box, crossing);
     if (load) return load;
@@ -298,6 +358,10 @@ export function selectOpenFem3DInScreenBox(
   const beamIds = [...beams].sort((a, b) => a - b);
   const plateIds = [...plates].sort((a, b) => a - b);
   if (nodeIds.length + beamIds.length + plateIds.length === 0) return additive ? current : null;
+  // Lasten uit het selectiefilter (issue #94) blijven bij een kader met Ctrl staan.
+  if (additive && current?.type === "multi" && current.loads) {
+    return openFem3DSelectionFromIds({ nodeIds, beamIds, plateIds, loads: current.loads });
+  }
   if (nodeIds.length === 1 && beamIds.length + plateIds.length === 0) return { type: "node", id: nodeIds[0] };
   if (beamIds.length === 1 && nodeIds.length + plateIds.length === 0) return { type: "beam", id: beamIds[0] };
   if (plateIds.length === 1 && nodeIds.length + beamIds.length === 0) return { type: "plate", id: plateIds[0] };

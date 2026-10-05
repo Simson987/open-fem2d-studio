@@ -41,6 +41,7 @@ export * from "../api/standaardRegister";
 export { MODEL3D_GEOMETRIE_COMMANDOS } from "../api/commands/model3dGeometrie";
 export { MODEL3D_VOORWAARDEN_COMMANDOS } from "../api/commands/model3dVoorwaarden";
 export { MODEL3D_BEWERKEN_COMMANDOS } from "../api/commands/model3dBewerken";
+export { MODEL3D_SELECTIE_COMMANDOS } from "../api/commands/model3dSelectie";
 export { PROJECT_COMMANDOS } from "../api/commands/project";
 export { STRAMIEN_COMMANDOS } from "../api/commands/stramien";
 // Extensies: het contract en het draaien van een extensiescript zonder app.

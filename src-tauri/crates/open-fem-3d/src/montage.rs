@@ -34,7 +34,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::{
-    shell::PlateGeometry, AnalysisKind, Member3D, SolveRequest3D, ThermalLoad3D,
+    bedding::Los, shell::PlateGeometry, AnalysisKind, Member3D, SolveRequest3D, ThermalLoad3D,
 };
 
 /// Hoogstens zoveel montageberekeningen per verzoek.
@@ -175,7 +175,8 @@ pub(crate) fn bepaal(
     let mut vorige: Option<Vec<f64>> = None;
     let mut schaal = 1.0;
     for berekening in 1..=MAX_BEREKENINGEN {
-        let uitkomst = crate::solve_fixed(&met_aanpassing(&basis, &delta_m), platen, AnalysisKind::Linear, 0)
+        // De montage rekent met alle grondveren van een bedding (lineair).
+        let uitkomst = crate::solve_fixed(&met_aanpassing(&basis, &delta_m), platen, AnalysisKind::Linear, 0, &Los::new())
             .map_err(|fout| format!("montageberekening van de trek-alleen staven: {fout}"))?;
         let verplaatsing: HashMap<usize, [f64; 3]> = uitkomst.displacements.iter()
             .map(|d| (d.node_id, [d.ux, d.uy, d.uz])).collect();

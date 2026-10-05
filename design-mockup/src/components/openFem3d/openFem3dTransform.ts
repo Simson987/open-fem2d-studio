@@ -1,4 +1,4 @@
-import type { OpenFem3DModel, OpenFem3DPlateBoundarySegment } from "./openFem3dModel";
+import { assertOpenFem3DBeddingFitsGeometry, type OpenFem3DModel, type OpenFem3DPlateBoundarySegment } from "./openFem3dModel";
 import type { OpenFem3DMultiSelection, OpenFem3DSingleSelection } from "./openFem3dSelection";
 import { withConsistentOpenFem3DPlateLevels } from "./openFem3dLevels";
 
@@ -274,5 +274,10 @@ export function transformOpenFem3D(
     nodes[nodeIndex] = keepLevelLink(node, next);
   }
   if (!changed) return { model, selection };
-  return { model: withConsistentOpenFem3DPlateLevels({ ...model, nodes }), selection };
+  const next = withConsistentOpenFem3DPlateLevels({ ...model, nodes });
+  // Draaien, spiegelen of verplaatsen mag een staaf op een verticale bedding
+  // (k) niet verticaal zetten (#106): dezelfde regel als bij het lezen.
+  assertOpenFem3DBeddingFitsGeometry(next, model.beams
+    .filter((beam) => idSet.has(beam.startNodeId) || idSet.has(beam.endNodeId)).map((beam) => beam.id));
+  return { model: next, selection };
 }

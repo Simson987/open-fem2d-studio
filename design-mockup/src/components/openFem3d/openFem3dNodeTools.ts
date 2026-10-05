@@ -7,20 +7,25 @@ import {
   type OpenFem3DSupportSprings,
 } from "./openFem3dModel";
 import type { OpenFem3DSpringAxis } from "./openFem3dCommands";
+import { resolveOpenFem3DPlacementNode, type OpenFem3DPlacementNode, type OpenFem3DPlacementTarget } from "./openFem3dPlaatsen";
 
 /**
  * Gereedschappen die een knoopvoorwaarde plaatsen: een oplegging
- * (`support:<preset>`) of een oplegveer (`spring:<as>`). Een klik op een
- * knoop geeft die knoop de voorwaarde; een klik in leeg canvas maakt daar
- * eerst een knoop op het werkvlak. Beide in één modelwijziging, dus één stap
- * ongedaan maken.
+ * (`support:<preset>`) of een oplegveer (`spring:<as>`). Een klik op (of
+ * binnen de snapzone van) een knoop geeft die knoop de voorwaarde; een klik
+ * op een staaf splitst die staaf daar, op een plaat komt er een knoop in het
+ * middenvlak, en in leeg canvas een knoop op het werkvlak (openFem3dPlaatsen).
+ * Knoop en voorwaarde in één modelwijziging, dus één stap ongedaan maken.
  */
 export type OpenFem3DNodeCondition =
   | { kind: "support"; preset: OpenFem3DSupportPreset }
   | { kind: "spring"; axis: OpenFem3DSpringAxis };
 
-/** Waar de klik landde: op een bestaande knoop, of op een punt van het werkvlak (m). */
-export type OpenFem3DNodeTarget = { nodeId: number } | { position: { x: number; y: number; z: number } };
+/**
+ * Waar de klik landde: een bestaande knoop, een punt van het werkvlak (m), een
+ * plek op een staaf of een punt op een plaat (zie openFem3dPlaatsen).
+ */
+export type OpenFem3DNodeTarget = OpenFem3DPlacementTarget;
 
 export const OPEN_FEM_3D_SPRING_KEYS: Record<OpenFem3DSpringAxis, keyof OpenFem3DSupportSprings> = {
   kx: "kxKnPerM", ky: "kyKnPerM", kz: "kzKnPerM",
@@ -117,31 +122,42 @@ export function applyOpenFem3DNodeConditionToNodes(
 }
 
 /**
- * Plaats de voorwaarde op het doel: een bestaande knoop, of een punt van het
- * werkvlak. Ligt daar al een knoop (binnen 0,1 µm), dan krijgt die hem;
- * anders komt er een nieuwe knoop. Eén nieuw model, dus één stap ongedaan maken.
+ * Plaats de voorwaarde op het doel: een bestaande knoop, een plek op een staaf
+ * (die daar gesplitst wordt), een punt op een plaat (nieuwe knoop in het
+ * middenvlak) of een punt van het werkvlak (de knoop die daar binnen 0,1 µm
+ * ligt, of een nieuwe). Eén nieuw model, dus één stap ongedaan maken. Een
+ * ongeldig doel (in een opening, buiten de plaat of staaf) is een fout.
  */
 export function placeOpenFem3DNodeCondition(
   model: OpenFem3DModel,
   target: OpenFem3DNodeTarget,
   condition: OpenFem3DNodeCondition,
   springStiffness: number,
-): { model: OpenFem3DModel; nodeId: number; createdNode: boolean } {
-  let next = model;
-  let nodeId: number;
-  let createdNode = false;
-  if ("nodeId" in target) {
-    nodeId = target.nodeId;
-  } else {
-    const { x, y, z } = target.position;
-    const existing = model.nodes.find((node) => Math.hypot(node.x - x, node.y - y, node.z - z) < 1e-7);
-    if (existing) {
-      nodeId = existing.id;
-    } else {
-      nodeId = model.nodes.reduce((maximum, node) => Math.max(maximum, node.id), 0) + 1;
-      next = { ...model, nodes: [...model.nodes, { id: nodeId, x, y, z }] };
-      createdNode = true;
-    }
-  }
-  return { model: applyOpenFem3DNodeCondition(next, nodeId, condition, springStiffness), nodeId, createdNode };
+): { model: OpenFem3DModel; nodeId: number; createdNode: boolean; created: OpenFem3DPlacementNode["created"]; split?: OpenFem3DPlacementNode["split"] } {
+  const placed = resolveOpenFem3DPlacementNode(model, target);
+  return {
+    model: applyOpenFem3DNodeCondition(placed.model, placed.nodeId, condition, springStiffness),
+    nodeId: placed.nodeId,
+    createdNode: placed.created !== "existing",
+    created: placed.created,
+    ...(placed.split ? { split: placed.split } : {}),
+  };
+}
+
+/**
+ * Eén klik met een oplegging- of veergereedschap, zoals App.tsx hem verwerkt
+ * (applyOpenFem3DNodeTool): de voorwaarde van het gereedschap op het doel,
+ * een veer met de laatst ingevulde stijfheid. Eén nieuw model, dus één
+ * modelwijziging en één stap ongedaan maken. `null`: het gereedschap plaatst
+ * geen voorwaarde, of de aangeklikte knoop bestaat niet (meer).
+ */
+export function openFem3DNodeToolClick(
+  model: OpenFem3DModel, target: OpenFem3DNodeTarget, tool: string,
+): { model: OpenFem3DModel; nodeId: number; condition: OpenFem3DNodeCondition } | null {
+  const condition = openFem3DNodeConditionOfTool(tool);
+  if (!condition) return null;
+  if ("nodeId" in target && !model.nodes.some((node) => node.id === target.nodeId)) return null;
+  const stiffness = condition.kind === "spring" ? readOpenFem3DSpringStiffness(condition.axis) : 0;
+  const placed = placeOpenFem3DNodeCondition(model, target, condition, stiffness);
+  return { model: placed.model, nodeId: placed.nodeId, condition };
 }

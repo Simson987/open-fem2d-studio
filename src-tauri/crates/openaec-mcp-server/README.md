@@ -557,8 +557,25 @@ drukkracht. Het resultaat noemt die staven (`crossRuleMembers`); de melding
 geeft het aantal kruisen waarin de regel nodig was en de grootste drukkracht in
 een actieve trek-alleen staaf.
 
+**Staaf op bedding.** `members[].bedding: { kKnPerM3?, widthM,
+kLateralKnPerM3?, compressionOnly? }` legt een staaf op grondveren (Winkler)
+over haar hele lengte: verticaal (globaal Z, de grond ligt onder de staaf) met
+de lijnstijfheid k·b, en desgewenst zijdelings (horizontaal loodrecht op de
+staafas, naar beide zijden, altijd lineair; bij een staaf steiler dan 45°, een
+(schoor)paal, rondom in twee richtingen loodrecht op de as). Minstens één van
+beide constanten; een (bijna) verticale staaf (|e_x·Z| > 0,95, een paal)
+krijgt alleen `kLateralKnPerM3`. Met `compressionOnly` vallen de
+verticale veren weg waar de staaf omhoog komt. De adapter knipt de staaf zelf
+fijn genoeg. Het resultaat geeft per staaf op bedding (`bedding: [{ memberId,
+points: [{ t, settlementM, pressureKnPerM, lateralKnPerM?, active }],
+maxPressureKnPerM, minPressureKnPerM, maxSettlementM, totalReactionKn,
+liftedFraction }]`) de zakking (positief omlaag), de lijnlast van de grond op
+de staaf (positief omhoog) en het deel van de lengte zonder contact; de
+grondveren staan niet bij de oplegreacties.
+
 `gui_build_3d_model` kent dezelfde velden in de app: `beams[].tension_only`,
-`diaphragms: [{ nodes, name? }]` met 1-gebaseerde knoopindices, en de
+`beams[].bedding: { k_kn_per_m3?, width_m, k_lateral_kn_per_m3?,
+compression_only? }`, `diaphragms: [{ nodes, name? }]` met 1-gebaseerde knoopindices, en de
 modelinstellingen `tension_only_fit_after_permanent` (montagelasten zijn de
 blijvende belastinggevallen met factor 1, inclusief eigen gewicht en
 belastingvlakken) en `tension_only_cross_rule`. In de app werkt het eigen
@@ -928,7 +945,7 @@ on exit (`gui_quit` exits through the app's own path so that happens).
 | `gui_load_model {path}` | loads a `.femp`/`.ifcfem`/`.ifcfem2d` (read by the app process) |
 | `gui_build_model {...}` | builds nodes/beams/supports/loads through the store actions |
 | `gui_build_3d_model {...}` | builds a 3D frame in metres, with supports, nodal loads, optional member profiles, tension-only members, rigid diaphragms and optional levels (nodes and plates linked to a level) |
-| `gui_configure_3d_view {...}` | sets the 3D camera, visibility, profile volumes and the structural grid (X/Y grid axes and levels; linked nodes follow a level) |
+| `gui_configure_3d_view {...}` | sets the 3D camera, visibility, how plates are drawn (`plateDisplay`: `volume`, `surface` or `mesh`), the size of nodes and supports (`nodeSizePercent`, `supportSizePercent`: 25–400 %), profile volumes, the structural grid (X/Y grid axes and levels; linked nodes follow a level) and the section box (`section_box`: `enabled`, with `min_m`/`max_m` as `{x, y, z}` in metres or `fit`: `model`/`selection`; only what lies inside the box is drawn, selectable and snappable) |
 | `gui_select_member {id}` | selects a member as if clicked |
 | `gui_set_cage {beam_id, cage}` | sets `checkConfig.betonKorf` (same `ReinforcementCage` as `check_concrete_beam`) |
 | `gui_set_analysis {analysis_type}` | `eersteOrde` / `tweedeOrdeGeometrisch` / `tweedeOrdeFysisch` |

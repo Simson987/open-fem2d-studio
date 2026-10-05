@@ -37,6 +37,7 @@
     "rasterHint": "Afficher la grille d’arrière-plan du canevas.",
     "snap": "Accrochage",
     "snapAll": "Tous les accrochages",
+    "spoorHint": "Repérage d’objet lors du tracé en 3D : laissez la souris un instant sur un nœud ou une barre pour l’acquérir ; lignes de repérage selon les axes du plan de travail, leurs intersections, prolongement, perpendiculaire et parallèle. Alt désactive temporairement tous les accrochages, Maj garde la direction selon un axe.",
     "hoekHint": "Accrochage angulaire lors du tracé d’une barre : si la direction est à moins de la tolérance de 0° ou 90°, elle est placée exactement sur cet angle ; la longueur reste la même. Un nœud ou un axe de trame est prioritaire.",
     "hoekTolerantie": "Tolérance (°)",
     "hoekTolerantieHint": "Écart admis de la direction, en degrés : 0,1 à 15. Virgule ou point accepté.",
@@ -101,7 +102,14 @@
     "nodes": "Nœuds",
     "beams": "Barres",
     "plates": "Plaques",
-    "mesh": "Maillage (éléments)",
+    "plateDisplay": "Affichage des plaques",
+    "plateDisplayHint": "Comment les plaques sont dessinées : en volume avec leur épaisseur, en surface (le plan moyen seul) ou en maillage (les éléments du maillage de calcul sur le plan moyen).",
+    "plateDisplayVolume": "Volume",
+    "plateDisplaySurface": "Surface",
+    "plateDisplayMesh": "Maillage",
+    "plateDisplayVolumeHint": "Plaques en volume, avec leur épaisseur.",
+    "plateDisplaySurfaceHint": "Uniquement le plan moyen de la plaque, fin et semi-transparent, avec le contour et les ouvertures en traits.",
+    "plateDisplayMeshHint": "Les éléments du maillage de calcul sur le plan moyen, avec une surface légèrement remplie en dessous.",
     "profiles": "Profilés (volume)",
     "profileColors": "Profilés en couleur",
     "nodeNumbers": "Numéros de nœuds",
@@ -111,6 +119,7 @@
     "loads": "Charges",
     "grid": "Grille",
     "structuralGrid": "Trames et niveaux",
+    "levelMarks": "Cotes de niveau",
     "axes": "Axes X/Y/Z",
     "memberAxes": "Axes locales des barres",
     "viewCube": "Cube de vue",
@@ -125,6 +134,7 @@
     "torsion": "Torsion T",
     "momentY": "Moment My",
     "momentZ": "Moment Mz",
+    "groundPressure": "Pression du sol",
     "remembered": "La visibilité est mémorisée sur cet appareil ; les vues enregistrées font partie du projet.",
     "viewSetsAria": "Vues 3D enregistrées",
     "viewSetsTitle": "Vues enregistrées",
@@ -157,6 +167,14 @@
     "density": "Nombre de valeurs",
     "densityHint": "Peu : seulement la valeur déterminante par diagramme. Milieu : comme avant. Beaucoup : début, fin, extremum et quarts de portée sur toutes les barres. Les barres sélectionnées affichent toujours leurs valeurs.",
     "densityValue": "Niveau {{n}} sur {{max}}"
+  },
+  "openFem3dSymbolScale": {
+    "size": "Taille",
+    "hint": "Taille par rapport à la taille automatique (25–400 %). Double-cliquez sur le curseur ou cliquez sur la valeur pour revenir à 100 %.",
+    "nodesAria": "Taille des nœuds",
+    "supportsAria": "Taille des appuis",
+    "reset": "Revenir à 100 %",
+    "value": "{{n}} %"
   },
   "openFem3dViews": {
     "tab": "Vues",
@@ -246,6 +264,7 @@
     "knoop": "Nœud",
     "stramien": "Trame",
     "raster": "Grille",
+    "spoor": "Repérage d’objet",
     "hoek": "Angle"
   },
   "section": "Section {{number}}",
@@ -553,7 +572,8 @@
     "snapExplain": {
       "knoop": "Accrochage aux nœuds existants. Prioritaire sur les files et la grille.",
       "stramien": "Accrochage aux files et aux niveaux. Prioritaire sur la grille.",
-      "raster": "Accrochage à la grille de fond — l'accrochage le plus faible."
+      "raster": "Accrochage à la grille de fond — l'accrochage le plus faible.",
+      "spoor": "Alignement sur les nœuds et barres survolés un instant et sur le point de départ : lignes de repérage selon X, Y et Z, intersections, prolongement, perpendiculaire et parallèle. En 3D uniquement."
     }
   },
   "documentBar": {
@@ -1286,5 +1306,76 @@
     "gekopieerd": "Copié",
     "sluiten": "Fermer",
     "mislukt": "Échec de l'importation IFC"
+  },
+  "selectieFilter": {
+    "title": "Filtre de sélection",
+    "basisSelectie_one": "Agit sur la sélection actuelle : {{count}} élément.",
+    "basisSelectie_other": "Agit sur la sélection actuelle : {{count}} éléments.",
+    "basisModel_one": "Rien n’est sélectionné : le filtre agit sur tout le modèle ({{count}} élément).",
+    "basisModel_other": "Rien n’est sélectionné : le filtre agit sur tout le modèle ({{count}} éléments).",
+    "uitleg": "Cochez des valeurs par critère et choisissez de ne garder que celles-ci ou de les retirer. Plusieurs critères s’appliquent ensemble : ce qui reste les satisfait tous. Garder écarte aussi ce qui n’a pas le critère.",
+    "groepAlgemeen": "Général",
+    "groepStaven": "Barres",
+    "groepLasten": "Charges",
+    "kenmerk": {
+      "type": "Type",
+      "level": "Niveau",
+      "material": "Matériau",
+      "profile": "Profil",
+      "group": "Groupe",
+      "role": "Type de barre",
+      "direction": "Direction",
+      "length": "Longueur",
+      "loadCase": "Cas de charge",
+      "loadKind": "Type de charge"
+    },
+    "modus": {
+      "keep": "Ne garder que celles-ci",
+      "remove": "Retirer celles-ci"
+    },
+    "modusVoor": "Garder ou retirer : {{kenmerk}}",
+    "type": {
+      "node": "Nœuds",
+      "beam": "Barres",
+      "plate": "Plaques",
+      "load": "Charges",
+      "support": "Appuis"
+    },
+    "richting": {
+      "horizontal": "Horizontale",
+      "vertical": "Verticale",
+      "sloped": "Inclinée"
+    },
+    "richtingHint": "Verticale : |ex·Z| > 0,95 ; horizontale : |ex·Z| < 0,05 ; inclinée entre les deux.",
+    "levelHint": "Nœuds sur le niveau ou liés à celui-ci, et barres et plaques dont tous les nœuds s’y trouvent.",
+    "lastSoort": {
+      "nodal": "Charge nodale",
+      "moment": "Moment",
+      "line": "Charge linéique",
+      "memberPoint": "Charge ponctuelle sur barre",
+      "thermal": "Charge thermique",
+      "surface": "Charge surfacique",
+      "edge": "Charge de bord",
+      "edgePoint": "Charge ponctuelle sur bord de plaque",
+      "loadPanel": "Surface de charge"
+    },
+    "zonder": "(aucun)",
+    "van": "de",
+    "tot": "à",
+    "vanMm": "Longueur de (mm)",
+    "totMm": "Longueur à (mm)",
+    "lengteBereik": "Barres dans la base : {{min}} – {{max}} mm ; les bornes sont incluses.",
+    "geval": "Cas de charge {{id}}",
+    "resultaat": "Ce qui reste",
+    "vanBasis": "sur {{basis}}",
+    "over_one": "Reste : {{over}} sur {{count}} élément",
+    "over_other": "Reste : {{over}} sur {{count}} éléments",
+    "niets": "Il ne reste rien ; Appliquer annule la sélection.",
+    "meerdereGevallen": {
+      "titel": "Charges dans plusieurs cas de charge",
+      "tekst": "Les charges choisies se trouvent dans {{aantal}} cas de charge. Elles sont toutes sélectionnées, mais seules celles du cas actif ({{geval}}) sont affichées."
+    },
+    "criteriaActief": "Critères actifs : {{count}}",
+    "wissen": "Effacer"
   }
 }

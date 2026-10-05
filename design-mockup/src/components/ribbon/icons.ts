@@ -194,3 +194,9 @@ export const reportSectionsIcon = `<svg fill="none" stroke="currentColor" stroke
 
 // Zichtbaarheid (issue #47): een oog — het venster met alle weergave-instellingen.
 export const zichtbaarheidIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>`;
+
+// Plaatweergave in 3D (issue #78): volume (plaat met dikte), vlak (alleen het
+// middenvlak) en mesh (de elementen op het middenvlak). Lint, venster en verkenner.
+export const plateVolumeIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10 12 6l9 4-9 4-9-4Z" fill="currentColor" fill-opacity=".18" stroke-width="1.8" stroke-linejoin="round"/><path d="M3 10v3.5l9 4 9-4V10M12 14v3.5" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+export const plateSurfaceIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 12 12 8l9 4-9 4-9-4Z" fill="currentColor" fill-opacity=".18" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+export const plateMeshIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 12 12 8l9 4-9 4-9-4Z" stroke-width="1.8" stroke-linejoin="round"/><path d="M6 13.33l9-4M9 14.67l9-4M6 10.67l9 4M9 9.33l9 4" stroke-width="1.1"/></svg>`;

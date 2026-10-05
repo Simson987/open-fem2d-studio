@@ -4,6 +4,7 @@ import RibbonButton from "./RibbonButton";
 import RibbonButtonStack from "./RibbonButtonStack";
 import type { OpenFem3DSpringAxis, OpenFem3DTool, OpenFem3DView } from "../openFem3d/openFem3dCommands";
 import type { OpenFem3DSupportPreset } from "../openFem3d/openFem3dModel";
+import type { OpenFem3DPlateDisplay } from "../openFem3d/openFem3dPlateDisplay";
 import {
   fileNewIcon,
   fileOpenIcon,
@@ -39,6 +40,9 @@ import {
   copyIcon,
   filterIcon,
   zichtbaarheidIcon,
+  plateVolumeIcon,
+  plateSurfaceIcon,
+  plateMeshIcon,
 } from "./icons";
 
 interface HomeTabProps {
@@ -62,7 +66,7 @@ interface HomeTabProps {
   /** Opens the wind load generator (EN 1991-1-4 + NL NB). */
   onOpenWindGenerator?: () => void;
   onOpenWaterAccumulation?: () => void;
-  /** Quick filter: reduce current selection to one type only. */
+  /** Venster Selectiefilter: de selectie (of het hele model) verfijnen (issue #94). */
   onFilterSelection?: () => void;
   /** Wired file-menu actions. */
   onNewProject?: () => void;
@@ -82,6 +86,12 @@ interface HomeTabProps {
   openFem3dView?: OpenFem3DView;
   onToggle3DVisibility?: () => void;
   visibility3DOpen?: boolean;
+  /** Plaatweergave in 3D (issue #78): volume, vlak of mesh; de actieve knop licht op. */
+  openFem3dPlateDisplay?: OpenFem3DPlateDisplay;
+  onOpenFem3DPlateDisplayChange?: (display: OpenFem3DPlateDisplay) => void;
+  /** Section box in 3D (issue #86): staat hij aan (de knop licht op), en aan/uit zetten. */
+  openFem3dSectionBox?: boolean;
+  onOpenFem3DSectionBoxToggle?: () => void;
   hasOpenFem3DNodeSelection?: boolean;
   hasOpenFem3DBeamSelection?: boolean;
   hasOpenFem3DPlateSelection?: boolean;
@@ -95,6 +105,8 @@ interface HomeTabProps {
   onOpenFem3DRequestSurfaceLoad?: () => void;
   /** Zet de geselecteerde 3D-plaat om in een belastingvlak (geen stijfheid, alleen lastafdracht). */
   onOpenFem3DConvertPlateToLoadPanel?: () => void;
+  /** 3D: liggers scharnierend op kolommen; de geselecteerde staven, of alle staven zonder selectie. */
+  onOpenFem3DPinBeamsToColumns?: () => void;
 }
 
 const stub = (label: string) => () => console.log(`TODO: ${label}`);
@@ -116,6 +128,12 @@ const revoluteIcon = (axis: "X" | "Y" | "Z") => `<svg fill="none" stroke="curren
 const ySpringIcon = `<svg fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 16 16"><path d="M15,8 L13,8 L11.5,4 L9.5,12 L7.5,4 L5.5,12 L4,8 L3,8"/><line x1="1" y1="2" x2="1" y2="14" stroke="#333"/><text x="13" y="4.5" text-anchor="middle" fill="currentColor" stroke="none" font-size="5" font-family="sans-serif">Y</text></svg>`;
 /** Rotatieveer om een globale as (3D). */
 const rotSpringIcon = (axis: string) => `<svg fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" viewBox="0 0 16 16"><path d="M4,4 A5,5 0 0,1 12,4"/><path d="M12,12 A5,5 0 0,1 4,12"/><circle cx="8" cy="8" r="1.5" fill="#f59e0b"/><text x="14" y="15.5" text-anchor="middle" fill="currentColor" stroke="none" font-size="5" font-family="sans-serif">${axis}</text></svg>`;
+/** Scharnier aan staafeind: een staaf met een open bolletje net vóór de knoop. */
+const beamEndHingeIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M2 12h11.4"/><circle cx="16" cy="12" r="2.6" stroke-width="1.6"/><circle cx="21" cy="12" r="1.8" fill="currentColor" stroke="none"/></svg>`;
+/** Liggers scharnierend op kolommen: een portaal met een open bolletje aan elk liggereind. */
+const pinBeamsToColumnsIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M5 21V6m14 15V6M5 6h.6m4 0h4.8m4 0H19"/><circle cx="7.6" cy="6" r="2" stroke-width="1.6"/><circle cx="16.4" cy="6" r="2" stroke-width="1.6"/><path stroke-width="1.4" d="M2 21h20"/></svg>`;
+/** Section box: een doos met gestippelde binnenribben en een greep (pijltje) op het voorvlak. */
+const sectionBoxIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.7" stroke-linejoin="round" d="m11 3 8 4.5v9L11 21l-8-4.5v-9z"/><path stroke-width="1.3" stroke-dasharray="2 1.6" d="m3 7.5 8 4.5 8-4.5M11 12v9"/><path stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M19 12h3m-1.4-1.6L22 12l-1.4 1.6"/></svg>`;
 const yRollerIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.8" stroke-linejoin="round" d="M5 12h14l-7-7-7 7Z"/><circle cx="9" cy="16" r="2"/><circle cx="15" cy="16" r="2"/><path stroke-width="1.8" d="M4 20h16"/><text x="20" y="8" text-anchor="middle" fill="currentColor" stroke="none" font-size="6" font-family="sans-serif">Y</text></svg>`;
 
 export default function HomeTab({
@@ -132,10 +150,11 @@ export default function HomeTab({
   openFem3dTool = "select", availableOpenFem3DTools = ["select", "addNode", "addBeam", "addSubNode", "addPlate", "addPlateArc", "addOpening", "addOpeningArc", "move", "rotate", "copy", "mirror"],
   onOpenFem3DToolChange, canOpenFem3DDelete,
   onOpenFem3DFit, onOpenFem3DViewChange, openFem3dView = "iso",
-  onToggle3DVisibility, visibility3DOpen,
+  onToggle3DVisibility, visibility3DOpen, openFem3dPlateDisplay = "volume", onOpenFem3DPlateDisplayChange,
+  openFem3dSectionBox = false, onOpenFem3DSectionBoxToggle,
   hasOpenFem3DNodeSelection, hasOpenFem3DBeamSelection, hasOpenFem3DPlateSelection, onOpenFem3DSupportPreset, onOpenFem3DSpringTool,
   onOpenFem3DRequestNodalLoad, onOpenFem3DRequestMemberLoad, onOpenFem3DRequestMemberPointLoad, onOpenFem3DRequestThermalLoad, onOpenFem3DRequestSurfaceLoad,
-  onOpenFem3DConvertPlateToLoadPanel,
+  onOpenFem3DConvertPlateToLoadPanel, onOpenFem3DPinBeamsToColumns,
 }: HomeTabProps) {
   const { t } = useTranslation("ribbon");
   const is3D = modelDimension === "3d";
@@ -409,6 +428,27 @@ export default function HomeTab({
                 title={springPlacementTitle}
               />)}
             </RibbonButtonStack>
+            {/* Scharnieren aan staafeinden (#93): een gereedschap per eind, en
+                in één keer alle liggers scharnierend op hun kolommen. */}
+            <RibbonButtonStack>
+              <RibbonButton
+                icon={beamEndHingeIcon}
+                label={t("openFem3d.beamEndHinge")}
+                size="small"
+                active={openFem3dTool === "beamEndHinge"}
+                onClick={() => onOpenFem3DToolChange?.("beamEndHinge")}
+                disabled={!onOpenFem3DToolChange}
+                title={t("openFem3d.beamEndHingeHint")}
+              />
+              <RibbonButton
+                icon={pinBeamsToColumnsIcon}
+                label={t("openFem3d.pinBeamsToColumns")}
+                size="small"
+                onClick={onOpenFem3DPinBeamsToColumns}
+                disabled={!onOpenFem3DPinBeamsToColumns}
+                title={t("openFem3d.pinBeamsToColumnsHint")}
+              />
+            </RibbonButtonStack>
           </> : <RibbonButtonStack>
             <RibbonButton
               icon={bcZSpringIcon}
@@ -436,21 +476,27 @@ export default function HomeTab({
 
         {/* Loads — Point + Line large, rest stacked */}
         <RibbonGroup label={t("home.loads")}>
+          {/* 3D (#77): met een geselecteerde staaf of knoop het formulier van
+              de staafpuntlast of knooplast, zoals altijd; zonder selectie het
+              gereedschap Puntlast (klik op een knoop of staaf). */}
           <RibbonButton
             icon={loadPointIcon}
             label={t("home.pointLoad")}
             size="large"
-            active={!is3D && toolActive("addPointLoad")}
+            active={is3D ? openFem3dTool === "addPointLoad" : toolActive("addPointLoad")}
             onClick={() => is3D
-              ? hasOpenFem3DBeamSelection
-                ? onOpenFem3DRequestMemberPointLoad?.()
-                : onOpenFem3DRequestNodalLoad?.("force")
+              ? hasOpenFem3DBeamSelection && onOpenFem3DRequestMemberPointLoad
+                ? onOpenFem3DRequestMemberPointLoad()
+                : hasOpenFem3DNodeSelection && onOpenFem3DRequestNodalLoad
+                  ? onOpenFem3DRequestNodalLoad("force")
+                  : onOpenFem3DToolChange?.("addPointLoad")
               : setTool("addPointLoad")}
             disabled={is3D && !(
               (hasOpenFem3DNodeSelection && onOpenFem3DRequestNodalLoad) ||
-              (hasOpenFem3DBeamSelection && onOpenFem3DRequestMemberPointLoad)
+              (hasOpenFem3DBeamSelection && onOpenFem3DRequestMemberPointLoad) ||
+              onOpenFem3DToolChange
             )}
-            title={is3D ? (hasOpenFem3DBeamSelection ? beamConditionTitle : nodeConditionTitle) : undefined}
+            title={is3D && !hasOpenFem3DBeamSelection && !hasOpenFem3DNodeSelection ? t("openFem3d.pointLoadPlacementHelp") : undefined}
           />
           <RibbonButton
             icon={loadLineIcon}
@@ -609,15 +655,14 @@ export default function HomeTab({
           </RibbonButtonStack>
         </RibbonGroup>
 
-        {/* Selection — Filter (large) */}
+        {/* Selectie — Filter (groot): het venster Selectiefilter, in 2D en 3D (issue #94). */}
         <RibbonGroup label={t("home.selection")}>
           <RibbonButton
             icon={filterIcon}
             label={t("home.filterSelection")}
             size="large"
             onClick={onFilterSelection ?? stub("Filter selection (no handler)")}
-            disabled={is3D}
-            title={is3D ? unsupported3D : undefined}
+            title={t("home.filterSelectionHint")}
           />
         </RibbonGroup>
 
@@ -632,6 +677,16 @@ export default function HomeTab({
               <RibbonButton icon={frontIcon} label={t("openFem3d.frontView")} size="small" active={openFem3dView === "front"} onClick={() => onOpenFem3DViewChange?.("front")} disabled={!onOpenFem3DViewChange} />
               <RibbonButton icon={sideIcon} label={t("openFem3d.sideView")} size="small" active={openFem3dView === "side"} onClick={() => onOpenFem3DViewChange?.("side")} disabled={!onOpenFem3DViewChange} />
               <RibbonButton icon={zichtbaarheidIcon} label={t("openFem3d.visibility")} size="small" active={visibility3DOpen} onClick={onToggle3DVisibility} disabled={!onToggle3DVisibility} />
+            </RibbonButtonStack>
+            {/* Plaatweergave (issue #78): dezelfde keuze als onder Platen in Zichtbaarheid en de verkenner. */}
+            <RibbonButtonStack>
+              <RibbonButton icon={plateVolumeIcon} label={t("openFem3d.plateDisplayVolume")} title={t("openFem3d.plateDisplayVolumeHint")} size="small" active={openFem3dPlateDisplay === "volume"} onClick={() => onOpenFem3DPlateDisplayChange?.("volume")} disabled={!onOpenFem3DPlateDisplayChange} />
+              <RibbonButton icon={plateSurfaceIcon} label={t("openFem3d.plateDisplaySurface")} title={t("openFem3d.plateDisplaySurfaceHint")} size="small" active={openFem3dPlateDisplay === "surface"} onClick={() => onOpenFem3DPlateDisplayChange?.("surface")} disabled={!onOpenFem3DPlateDisplayChange} />
+              <RibbonButton icon={plateMeshIcon} label={t("openFem3d.plateDisplayMesh")} title={t("openFem3d.plateDisplayMeshHint")} size="small" active={openFem3dPlateDisplay === "mesh"} onClick={() => onOpenFem3DPlateDisplayChange?.("mesh")} disabled={!onOpenFem3DPlateDisplayChange} />
+            </RibbonButtonStack>
+            {/* Section box (issue #86): dezelfde schakelaar als in het menu ▾ van de view cube. */}
+            <RibbonButtonStack>
+              <RibbonButton icon={sectionBoxIcon} label={t("openFem3d.sectionBox")} title={t("openFem3d.sectionBoxHint")} size="small" active={openFem3dSectionBox} onClick={onOpenFem3DSectionBoxToggle} disabled={!onOpenFem3DSectionBoxToggle} />
             </RibbonButtonStack>
           </RibbonGroup>
         )}

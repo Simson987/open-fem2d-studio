@@ -22,6 +22,13 @@
  * van de puntsnaps (statusbalk en 3D), `SNAP_SCHAKELAARS` is die lijst plus de
  * hoeksnap (tab Weergave in 2D). De rekenregels staan in `lib/tekenhulp.ts`.
  *
+ * OBJECTSPOOR (#84)
+ * Alleen op het 3D-tekenvlak: uitlijnen op verworven knopen en staven
+ * (spoorlijnen, snijpunten, verlengen, loodrecht, parallel), zie
+ * `components/openFem3d/openFem3dTekenhulp.ts`. Standaard aan; een oude stand
+ * zonder de sleutel krijgt hem ook aan. `SNAP_SCHAKELAARS_3D` zijn de
+ * schakelaars van de 3D-werkruimte (statusbalk en tab Weergave).
+ *
  * VERBINDINGSTOLERANTIE (#55)
  * Ook hier bewaard, maar geen snap: binnen deze afstand (mm) geldt een knoop
  * als "op de staaf" of "op dezelfde plek" voor de modelcontrole, de rekenpoort,
@@ -38,9 +45,12 @@ import { begrensVerbindingstolerantie, CONTROLE_TOL_MM } from "../lib/modelContr
 export const SNAP_SOORTEN = ["knoop", "stramien", "raster"] as const;
 export type SnapSoort = (typeof SNAP_SOORTEN)[number];
 
-/** Alle snapschakelaars: de puntsnaps plus de hoeksnap van een staaf (#53). */
+/** Alle snapschakelaars van 2D: de puntsnaps plus de hoeksnap van een staaf (#53). */
 export const SNAP_SCHAKELAARS = [...SNAP_SOORTEN, "hoek"] as const;
-export type SnapSchakelaar = (typeof SNAP_SCHAKELAARS)[number];
+/** De snapschakelaars van 3D: de puntsnaps plus het objectspoor (#84). */
+export const SNAP_SCHAKELAARS_3D = [...SNAP_SOORTEN, "spoor"] as const;
+export type SnapSchakelaar3D = (typeof SNAP_SCHAKELAARS_3D)[number];
+export type SnapSchakelaar = (typeof SNAP_SCHAKELAARS)[number] | SnapSchakelaar3D;
 
 export interface SnapInstellingen {
   /** Vangen op een bestaande knoop — de sterkste snap. */
@@ -51,6 +61,8 @@ export interface SnapInstellingen {
   raster: boolean;
   /** Hoeksnap bij het tekenen van een staaf: richting op 0°/90° (#53). */
   hoek: boolean;
+  /** Objectspoor op het 3D-tekenvlak (#84). */
+  spoor: boolean;
   /** Tolerantie van de hoeksnap in graden (0,1–15). */
   hoekTolerantie: number;
   /** Ook 30°, 45° en 60° (en hun spiegelingen). */
@@ -62,8 +74,8 @@ export interface SnapInstellingen {
   verbindingsTolerantie: number;
 }
 
-/** NL-labels + uitleg voor de knopjes in de statusbalk. */
-export const SNAP_LABELS: Record<SnapSoort, { kort: string; uitleg: string }> = {
+/** NL-labels + uitleg voor de knopjes in de statusbalk (terugval als een vertaling ontbreekt). */
+export const SNAP_LABELS: Record<SnapSoort | "spoor", { kort: string; uitleg: string }> = {
   knoop: {
     kort: "Knoop",
     uitleg: "Vangen op bestaande knopen. Wint van stramien en raster.",
@@ -76,11 +88,15 @@ export const SNAP_LABELS: Record<SnapSoort, { kort: string; uitleg: string }> = 
     kort: "Raster",
     uitleg: "Vangen op het achtergrondraster — de zwakste snap.",
   },
+  spoor: {
+    kort: "Objectspoor",
+    uitleg: "Uitlijnen op verworven knopen en staven (alleen in 3D).",
+  },
 };
 
 export const SNAP_BEGINSTAND: SnapInstellingen = {
   knoop: true, stramien: true, raster: true,
-  hoek: true, hoekTolerantie: HOEKSNAP_STANDAARD_TOLERANTIE, hoekExtra: false,
+  hoek: true, spoor: true, hoekTolerantie: HOEKSNAP_STANDAARD_TOLERANTIE, hoekExtra: false,
   verbindingsTolerantie: CONTROLE_TOL_MM,
 };
 
@@ -106,6 +122,7 @@ export function snapInstellingenUitOpslag(tekst: string | null): SnapInstellinge
     stramien: vlag("stramien"),
     raster: vlag("raster"),
     hoek: vlag("hoek"),
+    spoor: vlag("spoor"),
     hoekTolerantie: typeof r.hoekTolerantie === "number"
       ? begrensHoekTolerantie(r.hoekTolerantie) : SNAP_BEGINSTAND.hoekTolerantie,
     hoekExtra: typeof r.hoekExtra === "boolean" ? r.hoekExtra : SNAP_BEGINSTAND.hoekExtra,
@@ -149,7 +166,7 @@ function lees(): SnapInstellingen {
   return stand;
 }
 
-/** Zet één snapsoort (of de hoeksnap) aan of uit. */
+/** Zet één snapsoort (of de hoeksnap, of het objectspoor) aan of uit. */
 export function zetSnap(soort: SnapSchakelaar, aan: boolean): void {
   if (stand[soort] === aan) return;
   stand = { ...stand, [soort]: aan };
@@ -162,9 +179,9 @@ export function wisselSnap(soort: SnapSchakelaar): void {
 }
 
 /**
- * Zet alle snaps in één keer aan of uit. Standaard alle schakelaars, de
- * hoeksnap inbegrepen; de 3D-weergave geeft alleen de puntsnaps mee, want daar
- * bestaat de hoeksnap (nog) niet.
+ * Zet alle snaps in één keer aan of uit. Standaard de schakelaars van 2D, de
+ * hoeksnap inbegrepen; de 3D-weergave geeft `SNAP_SCHAKELAARS_3D` mee (de
+ * puntsnaps en het objectspoor), want daar bestaat de hoeksnap niet.
  */
 export function zetAlleSnaps(aan: boolean, soorten: readonly SnapSchakelaar[] = SNAP_SCHAKELAARS): void {
   if (soorten.every((s) => stand[s] === aan)) return;

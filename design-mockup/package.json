@@ -1,7 +1,7 @@
 {
   "name": "open-fem-studio",
   "private": true,
-  "version": "2026.39.2",
+  "version": "2026.41.0",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {

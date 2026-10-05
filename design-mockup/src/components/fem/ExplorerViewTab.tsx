@@ -1,9 +1,10 @@
 import { useTranslation } from "react-i18next";
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { Fragment, useState, type Dispatch, type SetStateAction } from "react";
 import type { DisplayFlags } from "./FemResultsOverlay";
 import { vlagAan, zetVlag, type AanUitVlag } from "../../lib/zichtbaarheid";
 import {
   SNAP_SCHAKELAARS,
+  SNAP_SCHAKELAARS_3D,
   SNAP_SOORTEN,
   useSnapInstellingen,
   zetAlleSnaps,
@@ -15,7 +16,12 @@ import {
 } from "../../hooks/useSnapInstellingen";
 import { leesHoekTolerantie } from "../../lib/tekenhulp";
 import { leesVerbindingstolerantie } from "../../lib/modelControle";
-import { OPEN_FEM_3D_RESULT_LAYERS, type OpenFem3DVisibility } from "../openFem3d/openFem3dVisibility";
+import {
+  OPEN_FEM_3D_RESULT_LAYERS, OPEN_FEM_3D_VISIBILITY_FLAGS, type OpenFem3DVisibility, type OpenFem3DVisibilityFlag,
+} from "../openFem3d/openFem3dVisibility";
+import OpenFem3DSymbolScaleControl from "../openFem3d/OpenFem3DSymbolScaleControl";
+import OpenFem3DPlateDisplayChoice, { OPEN_FEM_3D_PLATE_DISPLAY_KEYS } from "../openFem3d/OpenFem3DPlateDisplayChoice";
+import { OPEN_FEM_3D_PLATE_DISPLAYS } from "../openFem3d/openFem3dPlateDisplay";
 import {
   arrowIcon,
   barIcon,
@@ -190,15 +196,18 @@ export default function ExplorerViewTab({
   const { t } = useTranslation("common");
   const [query, setQuery] = useState("");
   const snaps = useSnapInstellingen();
-  // De hoeksnap bestaat alleen op het 2D-tekenvlak; in 3D gaat "alle" over
-  // de drie puntsnaps.
-  const snapSchakelaars = workspace === "2d" ? SNAP_SCHAKELAARS : SNAP_SOORTEN;
+  // De hoeksnap bestaat alleen op het 2D-tekenvlak, het objectspoor alleen op
+  // het 3D-tekenvlak (#84); "alle" gaat over de schakelaars van de werkruimte.
+  const snapSchakelaars = workspace === "2d" ? SNAP_SCHAKELAARS : SNAP_SCHAKELAARS_3D;
   const allSnaps = snapSchakelaars.every((key) => snaps[key]);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matches = (label: string) => !normalizedQuery || label.toLocaleLowerCase().includes(normalizedQuery);
   const matchesSnapGroup = Boolean(normalizedQuery)
     && t("zichtbaarheid.snap").toLocaleLowerCase().includes(normalizedQuery);
   const matchesSnap = (label: string) => matchesSnapGroup || matches(label);
+  // Zoeken op "plaatweergave", "vlak" of "mesh" toont Platen met de keuze eronder.
+  const matchesPlateDisplay = Boolean(normalizedQuery) && (matches(t("openFem3dVisibility.plateDisplay"))
+    || OPEN_FEM_3D_PLATE_DISPLAYS.some((stand) => matches(t(`openFem3dVisibility.${OPEN_FEM_3D_PLATE_DISPLAY_KEYS[stand]}`))));
 
   const setFlag = (key: AanUitVlag, value: boolean) =>
     setDisplayFlags((flags) => zetVlag(flags, key, value));
@@ -273,16 +282,29 @@ export default function ExplorerViewTab({
       </div>
       <div className="fem-results-toggle-list">
         {/* Alleen de modellagen; de resultaatlagen staan onder Resultaten. */}
-        {(Object.keys(openFem3dVisibility) as (keyof OpenFem3DVisibility)[])
-          .filter((key) => !OPEN_FEM_3D_RESULT_LAYERS.includes(key) && matches(t(`openFem3dVisibility.${key}`))).map((key) => (
-          <ToggleRow
-            key={key}
-            label={t(`openFem3dVisibility.${key}`)}
-            icon={OPEN_FEM_3D_ICONS[key]}
-            value={openFem3dVisibility[key]}
-            onChange={(value) => setOpenFem3DVisibility({ ...openFem3dVisibility, [key]: value })}
-          />
-        ))}
+        {OPEN_FEM_3D_VISIBILITY_FLAGS
+          .filter((key) => !OPEN_FEM_3D_RESULT_LAYERS.includes(key) && (matches(t(`openFem3dVisibility.${key}`))
+            || (key === "nodes" || key === "supports") && matches(t("openFem3dSymbolScale.size"))
+            || key === "plates" && matchesPlateDisplay)).map((key) => {
+          // Onder Knopen en Opleggingen de regelaar Grootte (issue #82), als
+          // subregel zoals Waarden onder de snedekrachtlijnen.
+          const schaal = key === "nodes" ? "nodeSizePercent" : key === "supports" ? "supportSizePercent" : null;
+          return <Fragment key={key}>
+            <ToggleRow
+              label={t(`openFem3dVisibility.${key}`)}
+              icon={OPEN_FEM_3D_ICONS[key]}
+              value={openFem3dVisibility[key]}
+              onChange={(value) => setOpenFem3DVisibility({ ...openFem3dVisibility, [key]: value })}
+            />
+            {schaal && (key === "nodes" || key === "supports") && <OpenFem3DSymbolScaleControl
+              target={key} percent={openFem3dVisibility[schaal]} disabled={!openFem3dVisibility[key]}
+              onChange={(percent) => setOpenFem3DVisibility({ ...openFem3dVisibility, [schaal]: percent })} />}
+            {/* Onder Platen de plaatweergave: Volume, Vlak of Mesh (issue #78). */}
+            {key === "plates" && <OpenFem3DPlateDisplayChoice value={openFem3dVisibility.plateDisplay}
+              dimmed={!openFem3dVisibility.plates}
+              onChange={(plateDisplay) => setOpenFem3DVisibility({ ...openFem3dVisibility, plateDisplay })} />}
+          </Fragment>;
+        })}
       </div>
     </section>
   );
@@ -302,6 +324,17 @@ export default function ExplorerViewTab({
             sub
           />
         ))}
+        {/* Objectspoor bij het tekenen (#84), alleen in 3D. */}
+        {workspace === "3d" && matchesSnap(t("snap.spoor")) && (
+          <ToggleRow
+            label={t("snap.spoor")}
+            hint={t("zichtbaarheid.spoorHint")}
+            icon={SPOOR_ICON}
+            value={snaps.spoor}
+            onChange={(value) => zetSnap("spoor", value)}
+            sub
+          />
+        )}
         {/* Hoeksnap bij het tekenen van een staaf (#53), alleen in 2D. */}
         {workspace === "2d" && matchesSnap(t("snap.hoek")) && (
           <>
@@ -344,11 +377,10 @@ export default function ExplorerViewTab({
   );
 }
 
-const OPEN_FEM_3D_ICONS: Record<keyof OpenFem3DVisibility, string> = {
+const OPEN_FEM_3D_ICONS: Record<OpenFem3DVisibilityFlag, string> = {
   nodes: nodeIcon,
   beams: barIcon,
   plates: plateIcon,
-  mesh: gridIcon,
   profiles: sectionsIcon,
   profileColors: sectionsIcon,
   nodeNumbers: tableNodesIcon,
@@ -359,6 +391,8 @@ const OPEN_FEM_3D_ICONS: Record<keyof OpenFem3DVisibility, string> = {
   loadPanels: loadPanelIcon,
   grid: gridIcon,
   structuralGrid: tableIcon,
+  // Hetzelfde pictogram als de peilmaten in 2D.
+  levelMarks: viewerMeasureIcon,
   axes: arrowIcon,
   memberAxes: arrowIcon,
   viewCube: viewerOrbitIcon,
@@ -372,10 +406,15 @@ const OPEN_FEM_3D_ICONS: Record<keyof OpenFem3DVisibility, string> = {
   torsion: arrowIcon,
   momentY: arrowIcon,
   momentZ: arrowIcon,
+  // Gronddruk onder staven op bedding (#106), net als de snedekrachtlijnen.
+  groundPressure: arrowIcon,
 };
 
 /** Een hoek tussen twee benen met een boogje — voor de hoeksnap. */
 const HOEK_ICON = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19h16M4 19 15 6"/><path stroke-linecap="round" stroke-width="2" d="M11 19a7 7 0 0 0-1.6-4.5"/></svg>`;
+
+/** Objectspoor: een verworven punt (kruisje) met een gestippelde spoorlijn. */
+const SPOOR_ICON = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="m4 4 4 4M8 4 4 8"/><path stroke-linecap="round" stroke-width="2" stroke-dasharray="2 3" d="M6 12v8M10 6h10"/><circle cx="6" cy="20" r="1.6" fill="currentColor" stroke="none"/></svg>`;
 
 const SNAP_ICONS: Record<SnapSoort, string> = {
   knoop: nodeIcon,

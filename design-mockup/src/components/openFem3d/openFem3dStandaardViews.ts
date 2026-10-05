@@ -41,6 +41,7 @@ export type OpenFem3DViewModus = "model" | "loadCase" | "results";
 const INHOUD: readonly (keyof OpenFem3DVisibility)[] = [
   "beams", "plates", "profiles", "supports", "loads",
   "deformation", "reactions", "utilization", "axialForce", "shearY", "shearZ", "torsion", "momentY", "momentZ",
+  "groundPressure",
 ];
 const lagen = (aan: (keyof OpenFem3DVisibility)[]): Partial<OpenFem3DVisibility> =>
   Object.fromEntries(INHOUD.map((k) => [k, aan.includes(k)]));

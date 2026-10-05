@@ -7,6 +7,7 @@ import type { StructuralGrid } from "../fem/femTypes";
 import type { LoadCombination } from "../fem/solver/combinations";
 import { openFem3DSelectionContains, toggleOpenFem3DSelection, type OpenFem3DSelection, type OpenFem3DSingleSelection } from "./openFem3dSelection";
 import { openFem3DSupportPresetOf, type OpenFem3DModel } from "./openFem3dModel";
+import { openFem3DMemberLoadSummary } from "./OpenFem3DMemberLoads";
 import { removeOpenFem3DDiaphragm } from "./openFem3dTrekSchijf";
 import type { OpenFem3DSolveResult } from "./openFem3dSolver";
 import { openFem3DUlsUc, type OpenFem3DSteelChecks } from "./openFem3dSteelCheck";
@@ -361,11 +362,7 @@ export default function OpenFem3DExplorer(props: Props) {
             onClick={(event) => select(event, { type: "nodalLoad", id: load.id })} />)}
           {memberLoads.map((load) => <Leaf key={`member-${load.id}`}
             label={`#${load.id} · ${t("tree.barLabel", { id: load.beamId })}`}
-            value={[
-              load.qyStart !== 0 || load.qyEnd !== 0 ? `qy ${load.qyStart}→${load.qyEnd}` : "",
-              load.qzStart !== 0 || load.qzEnd !== 0 ? `qz ${load.qzStart}→${load.qzEnd}` : "",
-              `${toonMm(load.startPositionM, "m")}–${toonMm(load.endPositionM, "m")} mm`,
-            ].filter(Boolean).join(" · ")}
+            value={openFem3DMemberLoadSummary(load, t("openFem3d.memberLoads.perProjectionShort", { ns: "ribbon" }))}
             active={openFem3DSelectionContains(props.selection, "memberLoad", load.id)}
             onClick={(event) => select(event, { type: "memberLoad", id: load.id })} />)}
           {memberPointLoads.map((load) => <Leaf key={`member-point-${load.id}`}
@@ -444,7 +441,7 @@ export default function OpenFem3DExplorer(props: Props) {
             <button type="button"
               className={`fem-results-toggle${props.visibility[key] ? " active" : ""}`}
               onClick={() => props.setVisibility({ ...props.visibility, [key]: !props.visibility[key] })}>
-              <span className="fem-results-toggle-swatch" style={{ background: key === "deformation" ? "#dc2626" : key === "reactions" ? "#16a34a" : key === "utilization" ? "linear-gradient(90deg,#16a34a 0 25%,#84cc16 25% 50%,#f59e0b 50% 75%,#dc2626 75%)" : "#d97706" }} />
+              <span className="fem-results-toggle-swatch" style={{ background: key === "deformation" ? "#dc2626" : key === "reactions" ? "#16a34a" : key === "utilization" ? "linear-gradient(90deg,#16a34a 0 25%,#84cc16 25% 50%,#f59e0b 50% 75%,#dc2626 75%)" : key === "groundPressure" ? "#8b5e34" : "#d97706" }} />
               <span className="fem-results-toggle-label">{t(`openFem3dVisibility.${key}`)}</span>
               <span className={`fem-switch${props.visibility[key] ? " on" : ""}`}><span className="fem-switch-dot" /></span>
             </button>

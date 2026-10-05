@@ -96,6 +96,12 @@ interface RibbonProps {
   openFem3dView?: OpenFem3DView;
   onToggle3DVisibility?: () => void;
   visibility3DOpen?: boolean;
+  /** Plaatweergave in 3D (issue #78): volume, vlak of mesh. */
+  openFem3dPlateDisplay?: import("../openFem3d/openFem3dPlateDisplay").OpenFem3DPlateDisplay;
+  onOpenFem3DPlateDisplayChange?: (display: import("../openFem3d/openFem3dPlateDisplay").OpenFem3DPlateDisplay) => void;
+  /** Section box in 3D (issue #86): aan (de knop licht op) en aan/uit zetten. */
+  openFem3dSectionBox?: boolean;
+  onOpenFem3DSectionBoxToggle?: () => void;
   hasOpenFem3DNodeSelection?: boolean;
   hasOpenFem3DBeamSelection?: boolean;
   hasOpenFem3DPlateSelection?: boolean;
@@ -108,6 +114,8 @@ interface RibbonProps {
   onOpenFem3DRequestThermalLoad?: () => void;
   onOpenFem3DRequestSurfaceLoad?: () => void;
   onOpenFem3DConvertPlateToLoadPanel?: () => void;
+  /** 3D: liggers scharnierend op kolommen (de selectie, of alle staven). */
+  onOpenFem3DPinBeamsToColumns?: () => void;
   /** @deprecated — read from useReportStore in the Report tab/preview. Kept for prop-compat. */
   pageSize?: "A4" | "A3";
   /** @deprecated */
@@ -142,10 +150,10 @@ export default function Ribbon({
   onSaveProject, onSaveProjectAs,
   openFem3dTool, availableOpenFem3DTools, onOpenFem3DToolChange, canOpenFem3DDelete,
   onOpenFem3DFit, onOpenFem3DViewChange, openFem3dView,
-  onToggle3DVisibility, visibility3DOpen, hasOpenFem3DNodeSelection, hasOpenFem3DBeamSelection, hasOpenFem3DPlateSelection,
+  onToggle3DVisibility, visibility3DOpen, openFem3dPlateDisplay, onOpenFem3DPlateDisplayChange, openFem3dSectionBox, onOpenFem3DSectionBoxToggle, hasOpenFem3DNodeSelection, hasOpenFem3DBeamSelection, hasOpenFem3DPlateSelection,
   onOpenFem3DSupportPreset, onOpenFem3DSpringTool, onOpenFem3DRequestNodalLoad, onOpenFem3DRequestMemberLoad,
   onOpenFem3DRequestMemberPointLoad, onOpenFem3DRequestThermalLoad, onOpenFem3DRequestSurfaceLoad,
-  onOpenFem3DConvertPlateToLoadPanel,
+  onOpenFem3DConvertPlateToLoadPanel, onOpenFem3DPinBeamsToColumns,
   onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid,
   onFilterSelection,
   onExportHtml, scheefstandToelichting, analyseToelichting, windToelichting,
@@ -283,6 +291,10 @@ export default function Ribbon({
           openFem3dView={openFem3dView}
           onToggle3DVisibility={onToggle3DVisibility}
           visibility3DOpen={visibility3DOpen}
+          openFem3dPlateDisplay={openFem3dPlateDisplay}
+          onOpenFem3DPlateDisplayChange={onOpenFem3DPlateDisplayChange}
+          openFem3dSectionBox={openFem3dSectionBox}
+          onOpenFem3DSectionBoxToggle={onOpenFem3DSectionBoxToggle}
           hasOpenFem3DNodeSelection={hasOpenFem3DNodeSelection}
           hasOpenFem3DBeamSelection={hasOpenFem3DBeamSelection}
           hasOpenFem3DPlateSelection={hasOpenFem3DPlateSelection}
@@ -294,6 +306,7 @@ export default function Ribbon({
           onOpenFem3DRequestThermalLoad={onOpenFem3DRequestThermalLoad}
           onOpenFem3DRequestSurfaceLoad={onOpenFem3DRequestSurfaceLoad}
           onOpenFem3DConvertPlateToLoadPanel={onOpenFem3DConvertPlateToLoadPanel}
+          onOpenFem3DPinBeamsToColumns={onOpenFem3DPinBeamsToColumns}
         />;
       case "table":
         return <TableTab

@@ -12,7 +12,7 @@
 //! de onderzijde (−z-zijde van de plaatassen).
 
 use open_fem_3d::{
-    solve, AnalysisKind, Material3D, Member3D, NodalLoad3D, Node3D, Plate3D, Section3D,
+    solve, AnalysisKind, Bedding3D, Material3D, Member3D, NodalLoad3D, Node3D, Plate3D, Section3D,
     ShellElement3D, ShellNodeResult3D, SolveRequest3D, SolveResult3D, Support3D, SurfaceLoad3D,
 };
 
@@ -422,6 +422,7 @@ fn plate_on_edge_beams_is_in_equilibrium_and_shares_nodes() {
             id: index + 1, start_node_id: g.id(start.0, start.1), end_node_id: g.id(end.0, end.1),
             material_id: 1, section_id: 1, releases: Default::default(), roll_angle_rad: None,
             intermediate_node_ids: steps.iter().map(|&(i, j)| g.id(i, j)).collect(), tension_only: false,
+            bedding: None,
         });
     }
     for (i, j) in [(0, 0), (n, 0), (n, n), (0, n)] {
@@ -457,6 +458,57 @@ fn plate_on_edge_beams_is_in_equilibrium_and_shares_nodes() {
     assert!(moment_x.abs() < 1e-6 * total * a);
 }
 
+#[test]
+fn plate_on_bedded_edge_beams_carries_the_load_into_the_ground() {
+    // Vloer 6×6 m op vier funderingsbalken op bedding (#106), zonder
+    // verticale opleggingen: de grond draagt alles. De balken hangen via
+    // tussenknopen aan de plaatrand; die blijven rekenknopen van de bedding.
+    // Horizontaal en om Z houden twee hoekknopen het geheel vast.
+    let (a, t, q, n) = (6.0, 0.2, 5.0, 12);
+    let mut nodes = Vec::new();
+    let g = grid(n, n, [0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], a, a, &mut nodes);
+    let mut input = request(nodes, 30_000.0, 0.2, t, quads(&g, 1, 1));
+    input.sections.push(Section3D {
+        id: 1, name: "300x600".into(), area_m2: 0.18, iy_m4: 0.3 * 0.6_f64.powi(3) / 12.0,
+        iz_m4: 0.6 * 0.3_f64.powi(3) / 12.0, torsion_j_m4: 0.0037, shear_area_y_m2: None, shear_area_z_m2: None,
+    });
+    let edges = [((0, 0), (n, 0)), ((n, 0), (n, n)), ((n, n), (0, n)), ((0, n), (0, 0))];
+    for (index, (start, end)) in edges.iter().enumerate() {
+        let steps: Vec<(usize, usize)> = (1..n).map(|k| {
+            let s = k as f64 / n as f64;
+            let lerp = |p: usize, q: usize| (p as f64 + (q as f64 - p as f64) * s).round() as usize;
+            (lerp(start.0, end.0), lerp(start.1, end.1))
+        }).collect();
+        input.members.push(Member3D {
+            id: index + 1, start_node_id: g.id(start.0, start.1), end_node_id: g.id(end.0, end.1),
+            material_id: 1, section_id: 1, releases: Default::default(), roll_angle_rad: None,
+            intermediate_node_ids: steps.iter().map(|&(i, j)| g.id(i, j)).collect(), tension_only: false,
+            bedding: Some(Bedding3D { k_kn_per_m3: Some(20_000.0), width_m: 0.6, k_lateral_kn_per_m3: None, compression_only: false }),
+        });
+    }
+    input.supports.push(support(g.id(0, 0), [true, true, false, false, false, false]));
+    input.supports.push(support(g.id(n, 0), [false, true, false, false, false, false]));
+    input.surface_loads.push(SurfaceLoad3D { id: 1, plate_id: 1, qx_kn_per_m2: 0.0, qy_kn_per_m2: 0.0, qz_kn_per_m2: -q });
+    let result = solve(input).unwrap();
+    let total = q * a * a;
+    let grond: f64 = result.bedding.iter().map(|b| b.total_reaction_kn).sum();
+    assert!(relative(grond, total) < 1e-9, "grond {grond} tegen q·A {total}");
+    // Symmetrie: elke balk draagt een kwart.
+    for b in &result.bedding {
+        assert!(relative(b.total_reaction_kn, total / 4.0) < 1e-6, "balk {}: {}", b.member_id, b.total_reaction_kn);
+    }
+    let equilibrium = result.equilibrium.as_ref().unwrap();
+    assert!(equilibrium.equilibrium_ok && equilibrium.residual_ok);
+    // Alleen de modelknopen in de uitvoer; elke plaatrandknoop is een rekenknoop
+    // van de bedding met zijn eigen zakking.
+    assert_eq!(result.displacements.len(), (n + 1) * (n + 1));
+    let balk = result.bedding.iter().find(|b| b.member_id == 1).unwrap();
+    let midden = balk.points.iter().find(|p| (p.t - 0.5).abs() < 1e-12).expect("plaatknoop midden rand");
+    assert!((midden.settlement_m + uz(&result, g.id(n / 2, 0))).abs() < 1e-15);
+    // De vloer zakt in het midden meer dan de rand.
+    assert!(uz(&result, g.id(n / 2, n / 2)) < uz(&result, g.id(n / 2, 0)));
+}
+
 fn g_node(g: &Grid, a: f64, n: usize, id: usize) -> V3 {
     let index = id - g.first_id;
     let (i, j) = (index % (n + 1), index / (n + 1));
@@ -478,7 +530,7 @@ fn split_member_equals_unsplit_member() {
         sections: vec![Section3D { id: 1, name: "ref".into(), area_m2: 0.01, iy_m4: 8e-5, iz_m4: 1e-5,
             torsion_j_m4: 1e-6, shear_area_y_m2: None, shear_area_z_m2: None }],
         members: vec![Member3D { id: 7, start_node_id: 1, end_node_id: 2, material_id: 1, section_id: 1,
-            releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false }],
+            releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false, bedding: None }],
         supports: vec![
             support(1, [true, true, true, true, false, false]),
             support(2, [false, true, true, false, false, false]),
@@ -486,6 +538,7 @@ fn split_member_equals_unsplit_member() {
         nodal_loads: vec![], member_loads: vec![open_fem_3d::MemberLoad3D {
             id: 1, member_id: 7, qy_start_kn_per_m: 0.0, qy_end_kn_per_m: 0.0,
             qz_start_kn_per_m: -4.0, qz_end_kn_per_m: -10.0, start_position_m: Some(0.5), end_position_m: Some(4.5),
+            ..Default::default()
         }],
         member_point_loads: vec![open_fem_3d::MemberPointLoad3D { id: 1, member_id: 7, py_kn: 0.0, pz_kn: -12.0, position_m: 2.5 }],
         thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![], tension_only_fit: None, tension_only_cross_rule: false,
@@ -516,6 +569,7 @@ fn split_member_equals_unsplit_member() {
     simple.member_loads[0] = open_fem_3d::MemberLoad3D {
         id: 1, member_id: 7, qy_start_kn_per_m: 0.0, qy_end_kn_per_m: 0.0,
         qz_start_kn_per_m: -6.0, qz_end_kn_per_m: -6.0, start_position_m: None, end_position_m: None,
+        ..Default::default()
     };
     let simple = solve(simple).unwrap();
     let ei = 210_000.0 * 1000.0 * 8e-5;

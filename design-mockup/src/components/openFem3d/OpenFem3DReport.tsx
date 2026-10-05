@@ -1,4 +1,4 @@
-import { openFem3DSupportPresetOf, type OpenFem3DModel } from "./openFem3dModel";
+import { isOpenFem3DGlobalMemberLoad, openFem3DSupportPresetOf, type OpenFem3DModel } from "./openFem3dModel";
 import { analyseOpenFem3DLoadPanels } from "./openFem3dLoadPanels";
 import { toonMm } from "../../lib/lengthInput";
 import type { OpenFem3DDiagrams, OpenFem3DSolveResult } from "./openFem3dSolver";
@@ -22,6 +22,7 @@ import { openFem3DStabilityRow, openFem3DTensionOnlySummary } from "./openFem3dT
 import type { OpenFem3DStandaardViewId, OpenFem3DViewSet } from "./openFem3dViewSets";
 import { formatOpenFem3DPlateValue, openFem3DPlateExtremes } from "./openFem3dPlateResults";
 import { openFem3DPlateEdges } from "./openFem3dPlateEdges";
+import { openFem3DBeddingSummary } from "./openFem3dBedding";
 import "./OpenFem3DReport.css";
 
 interface OpenFem3DReportProps {
@@ -122,13 +123,23 @@ export default function OpenFem3DReport({
       mx: load.mx * loadFactor, my: load.my * loadFactor, mz: load.mz * loadFactor,
     }];
   });
+  // Eén regel per richting: lokaal y of z (een last met qy én qz geeft twee
+  // regels), of globaal X/Y/Z, per staafmeter of per projectie (issue #80).
   const memberLoads = (model.memberLoads ?? []).flatMap((load) => {
     const loadFactor = factor(load.caseId ?? 1);
-    return loadFactor === 0 ? [] : [{
-      ...load, loadFactor,
-      qyStart: load.qyStart * loadFactor, qyEnd: load.qyEnd * loadFactor,
-      qzStart: load.qzStart * loadFactor, qzEnd: load.qzEnd * loadFactor,
-    }];
+    if (loadFactor === 0) return [];
+    const row = (key: string, direction: string, qStart: number, qEnd: number) => ({
+      key, id: load.id, caseId: load.caseId ?? 1, loadFactor, beamId: load.beamId, direction,
+      qStart: qStart * loadFactor, qEnd: qEnd * loadFactor, startPositionM: load.startPositionM, endPositionM: load.endPositionM,
+    });
+    if (isOpenFem3DGlobalMemberLoad(load)) {
+      return [row(String(load.id), t(load.perProjection ? "openFem3d.report.directionGlobalProjection" : "openFem3d.report.directionGlobal",
+        { axis: load.globalDirection.toUpperCase() }), load.qStart, load.qEnd)];
+    }
+    return [
+      ...(load.qyStart !== 0 || load.qyEnd !== 0 ? [row(`${load.id}-y`, t("openFem3d.report.directionLocal", { axis: "y" }), load.qyStart, load.qyEnd)] : []),
+      ...(load.qzStart !== 0 || load.qzEnd !== 0 ? [row(`${load.id}-z`, t("openFem3d.report.directionLocal", { axis: "z" }), load.qzStart, load.qzEnd)] : []),
+    ];
   });
   const memberPointLoads = (model.memberPointLoads ?? []).flatMap((load) => {
     const loadFactor = factor(load.caseId ?? 1);
@@ -207,6 +218,37 @@ export default function OpenFem3DReport({
     <p className="open-fem3d-report-note">{t("openFem3d.report.loadPanelNote")}</p>
   </>;
 
+  // Staven op bedding (#106): de invoer en, met een uitkomst, wat de kern
+  // ervan maakte. p/b is de gronddruk onder de contactbreedte.
+  const beddingRows = openFem3DBeddingSummary(model, result);
+  const beddingLateral = beddingRows.some((row) => row.kLateralKnPerM3 !== null);
+  const beddingSection = beddingRows.length > 0 && <section data-open-fem3d-report-bedding>
+    <h2>{t("openFem3d.report.beddingTitle")}</h2>
+    <table className="open-fem3d-report-wide open-fem3d-report-bedding"><thead><tr>
+      <th>{t("openFem3d.report.member")}</th><th>{t("openFem3d.report.beddingK")}</th><th>{t("openFem3d.report.beddingWidth")}</th>
+      {beddingLateral && <th>{t("openFem3d.report.beddingLateral")}</th>}
+      <th>{t("openFem3d.report.beddingCompressionOnly")}</th>
+      <th>{t("openFem3d.report.beddingSettlement")}</th><th>{t("openFem3d.report.beddingPressure")}</th>
+      <th>{t("openFem3d.report.beddingStress")}</th><th>{t("openFem3d.report.beddingLifted")}</th>
+      <th>{t("openFem3d.report.beddingReaction")}</th>
+      {beddingLateral && <th>{t("openFem3d.report.beddingLateralMax")}</th>}
+    </tr></thead><tbody>
+      {beddingRows.map((row) => <tr key={row.beamId} data-open-fem3d-report-bedding-row={row.beamId}>
+        <td>{row.beamId}</td><td>{row.kKnPerM3 === null ? "—" : number(row.kKnPerM3, 0)}</td><td>{number(row.widthMm, 0)}</td>
+        {beddingLateral && <td>{row.kLateralKnPerM3 === null ? "—" : number(row.kLateralKnPerM3, 0)}</td>}
+        <td>{t(row.compressionOnly ? "openFem3d.report.beddingYes" : "openFem3d.report.beddingNo")}</td>
+        <td>{row.result ? number(row.result.maxSettlementMm, 2) : "—"}</td>
+        <td>{row.result ? number(row.result.maxPressureKnPerM, 2) : "—"}</td>
+        <td>{row.result ? number(row.result.maxPressureKnPerM2, 1) : "—"}</td>
+        <td>{row.result ? `${number(row.result.liftedPercent, 1)} %` : "—"}</td>
+        <td>{row.result ? number(row.result.totalReactionKn, 2) : "—"}</td>
+        {beddingLateral && <td>{row.result?.maxLateralKnPerM == null ? "—" : number(row.result.maxLateralKnPerM, 2)}</td>}
+      </tr>)}
+    </tbody></table>
+    {result && beddingRows.some((row) => row.result === null) && <p className="open-fem3d-report-bad">{t("openFem3d.bedding.noResult")}</p>}
+    <p className="open-fem3d-report-note">{t("openFem3d.report.beddingNote")}</p>
+  </section>;
+
   return (
     <div className="open-fem3d-report-shell" data-open-fem3d-report={result ? "calculated" : "pending"}>
       <div className="open-fem3d-report-toolbar">
@@ -232,6 +274,7 @@ export default function OpenFem3DReport({
             <p>{t("openFem3d.report.pendingHint")}</p>
           </section>
           {viewsSectie}
+          {beddingSection}
           {loadPanelSection && <section>{loadPanelSection}</section>}
           {(model.plates?.length ?? 0) > 0 && <section>
             <h2>{t("openFem3d.report.platesAndOpenings")}</h2>
@@ -278,6 +321,7 @@ export default function OpenFem3DReport({
           </section>
 
           {viewsSectie}
+          {beddingSection}
           {(result.plates?.length ?? 0) > 0 && <section data-open-fem3d-report-plates>
             <h2>{t("openFem3d.report.platesResults")}</h2>
             <p className="open-fem3d-report-note">{t("openFem3d.report.platesResultsNote")}</p>
@@ -461,12 +505,11 @@ export default function OpenFem3DReport({
             </>}
             <h3>{t("openFem3d.report.memberLoads")}</h3>
             <table className="open-fem3d-report-wide"><thead><tr>
-              <th>ID</th><th>{t("openFem3d.report.case")}</th><th>{t("openFem3d.report.factor")}</th><th>{t("openFem3d.report.member")}</th><th>{t("openFem3d.report.qyStart")}</th><th>{t("openFem3d.report.qyEnd")}</th><th>{t("openFem3d.report.qzStart")}</th><th>{t("openFem3d.report.qzEnd")}</th><th>{t("openFem3d.report.range")}</th>
+              <th>ID</th><th>{t("openFem3d.report.case")}</th><th>{t("openFem3d.report.factor")}</th><th>{t("openFem3d.report.member")}</th><th>{t("openFem3d.report.direction")}</th><th>{t("openFem3d.report.qStart")}</th><th>{t("openFem3d.report.qEnd")}</th><th>{t("openFem3d.report.range")}</th>
             </tr></thead><tbody>
-              {memberLoads.map((load) => <tr key={load.id}>
-                <td>{load.id}</td><td>{load.caseId ?? 1}</td><td>{number(load.loadFactor, 3)}</td><td>{load.beamId}</td>
-                <td>{signed(load.qyStart)}</td><td>{signed(load.qyEnd)}</td>
-                <td>{signed(load.qzStart)}</td><td>{signed(load.qzEnd)}</td>
+              {memberLoads.map((load) => <tr key={load.key} data-open-fem3d-report-member-load={load.key}>
+                <td>{load.id}</td><td>{load.caseId}</td><td>{number(load.loadFactor, 3)}</td><td>{load.beamId}</td>
+                <td>{load.direction}</td><td>{signed(load.qStart)}</td><td>{signed(load.qEnd)}</td>
                 <td>{number(load.startPositionM)}–{number(load.endPositionM)} m</td>
               </tr>)}
             </tbody></table>

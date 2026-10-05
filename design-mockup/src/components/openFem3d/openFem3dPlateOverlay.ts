@@ -2,11 +2,13 @@
  * Laag voor het 3D-tekenvlak met het rekennet van de platen (elementranden)
  * en de resultaatcontour. Staat los van de modelopbouw in ThreeFrameCanvas:
  * het tekenvlak roept `buildOpenFem3DPlateOverlay` na elke herbouw aan en hangt
- * de groep in de scène.
+ * de groep in de scène. Elementranden en contour liggen op het middenvlak van
+ * de plaat; de elementranden alleen in de plaatweergave "mesh" (issue #78).
  */
 import * as THREE from "three";
 import { sampleCircularArc3D } from "./openFem3dCircularArc";
 import { addOpenFem3DSupportGlyphs, openFem3DConditionMarkerSize } from "./openFem3dMarkers";
+import { openFem3DScaledSymbolSize } from "./openFem3dSymbolScale";
 import type { OpenFem3DModel, OpenFem3DSupportRestraints } from "./openFem3dModel";
 import { openFem3DPlateEdges } from "./openFem3dPlateEdges";
 import type { OpenFem3DPlateMesh } from "./openFem3dPlateMesh";
@@ -17,14 +19,17 @@ import {
 
 export interface OpenFem3DPlateOverlayInput {
   model: OpenFem3DModel;
-  /** Net zonder resultaat (weergave "Mesh" in de modeltab). */
+  /** Net zonder resultaat (plaatweergave "mesh" in de modeltab). */
   mesh: OpenFem3DPlateMesh | null;
   result: OpenFem3DSolveResult | null;
   quantity: OpenFem3DPlateQuantity | null;
+  /** De elementranden tekenen: alleen in de plaatweergave "mesh" (issue #78). */
   showMesh: boolean;
   showPlates: boolean;
   /** Randopleggingen tekenen (weergave "Opleggingen"). */
   showSupports?: boolean;
+  /** Grootte van de opleggingssymbolen in % van de automatische maat (issue #82); ontbreekt: 100 %. */
+  supportSizePercent?: number;
   deformation: boolean;
   /** Vergroting van de verplaatsingen (dezelfde als de staven). */
   deformationScale: number;
@@ -41,23 +46,25 @@ type V3 = [number, number, number];
 export function buildOpenFem3DPlateOverlay(input: OpenFem3DPlateOverlayInput): OpenFem3DPlateOverlay {
   const group = new THREE.Group();
   group.name = "open-fem3d-plate-overlay";
-  if (input.showSupports) addEdgeSupportMarkers(group, input.model);
+  if (input.showSupports) {
+    const edgeSupports = buildOpenFem3DPlateEdgeSupports(input.model, input.supportSizePercent);
+    if (edgeSupports) group.add(edgeSupports);
+  }
   const resultMesh = input.result?.plateMesh && (input.result.shellNodes?.length ?? 0) > 0 ? input.result.plateMesh : null;
   const mesh = resultMesh ?? input.mesh;
   if (!input.showPlates || !mesh || mesh.elements.length === 0) return { group, contourShown: false };
   const positions = new Map<number, V3>();
   for (const node of input.model.nodes) positions.set(node.id, [node.x, node.y, node.z]);
   for (const node of mesh.nodes) positions.set(node.id, [node.x, node.y, node.z]);
-  const thickness = new Map((input.model.plates ?? []).map((plate) => [plate.id, plate.thicknessM]));
   const contour = input.quantity && resultMesh ? input.quantity : null;
   const displacement = new Map<number, V3>();
   const deformed = Boolean(input.result && input.deformation && resultMesh);
   if (deformed) for (const d of input.result!.displacements) displacement.set(d.nodeId, [d.ux, d.uy, d.uz]);
-  const place = (id: number, offset: V3 = [0, 0, 0]): V3 => {
+  const place = (id: number): V3 => {
     const p = positions.get(id)!;
     const u = displacement.get(id);
     const s = deformed && u ? input.deformationScale : 0;
-    return [p[0] + (u ? u[0] * s : 0) + offset[0], p[1] + (u ? u[1] * s : 0) + offset[1], p[2] + (u ? u[2] * s : 0) + offset[2]];
+    return [p[0] + (u ? u[0] * s : 0), p[1] + (u ? u[1] * s : 0), p[2] + (u ? u[2] * s : 0)];
   };
   const byPlate = new Map<number, typeof mesh.elements>();
   for (const element of mesh.elements) {
@@ -67,13 +74,6 @@ export function buildOpenFem3DPlateOverlay(input: OpenFem3DPlateOverlayInput): O
   const definition = contour ? openFem3DPlateQuantity(contour) : null;
   const range = contour ? openFem3DPlateQuantityRange(input.result, contour) : null;
   for (const [plateId, elements] of byPlate) {
-    // Normaal uit het eerste element (alle elementen van een plaat liggen in één vlak).
-    const [a, b, c, d] = elements[0].nodeIds.map((id) => positions.get(id)!);
-    const diagonal1 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-    const diagonal2 = [d[0] - b[0], d[1] - b[1], d[2] - b[2]];
-    const normal = new THREE.Vector3().crossVectors(
-      new THREE.Vector3(...diagonal1), new THREE.Vector3(...diagonal2)).normalize();
-    const half = (thickness.get(plateId) ?? 0.2) / 2 + 0.002;
     if (contour && definition && range) {
       const values = new Map<number, number>();
       for (const node of input.result!.shellNodes ?? []) {
@@ -116,17 +116,16 @@ export function buildOpenFem3DPlateOverlay(input: OpenFem3DPlateOverlayInput): O
     if (input.showMesh) {
       const edges = new Set<string>();
       const segments: number[] = [];
-      // Zonder contour liggen de lijnen op beide plaatvlakken, anders op de contour.
-      const offsets: V3[] = contour
-        ? [[0, 0, 0]]
-        : [[normal.x * half, normal.y * half, normal.z * half], [-normal.x * half, -normal.y * half, -normal.z * half]];
+      // Op het middenvlak (de rekenknopen), met of zonder contour: in de
+      // plaatweergave "mesh" heeft de plaat geen dikte (issue #78). Het
+      // gevulde vlak eronder wijkt in de diepte terug (polygonOffset).
       for (const element of elements) {
         for (let k = 0; k < 4; k += 1) {
           const from = element.nodeIds[k], to = element.nodeIds[(k + 1) % 4];
           const key = from < to ? `${from}-${to}` : `${to}-${from}`;
           if (edges.has(key)) continue;
           edges.add(key);
-          for (const offset of offsets) segments.push(...place(from, offset), ...place(to, offset));
+          segments.push(...place(from), ...place(to));
         }
       }
       const lines = new THREE.LineSegments(
@@ -140,18 +139,25 @@ export function buildOpenFem3DPlateOverlay(input: OpenFem3DPlateOverlayInput): O
   return { group, contourShown: Boolean(contour && range) };
 }
 
+/** Naam van de groep met randopleggingen binnen de plaatlaag. */
+export const OPEN_FEM_3D_PLATE_EDGE_SUPPORTS_NAME = "open-fem3d-plate-edge-supports";
+
 /**
  * Randopleggingen: een lijn langs de opgelegde rand met om de zoveel meter
  * hetzelfde symbool als een knoopoplegging (niet selecteerbaar; de plaat
- * zelf blijft het aanklikbare object).
+ * zelf blijft het aanklikbare object). Null als geen plaat een randoplegging
+ * heeft. Los aan te roepen, zodat het tekenvlak bij de regelaar Opleggingen
+ * (issue #82) alleen deze groep vervangt en niet het net en de contour.
  */
-function addEdgeSupportMarkers(group: THREE.Group, model: OpenFem3DModel): void {
+export function buildOpenFem3DPlateEdgeSupports(model: OpenFem3DModel, supportSizePercent?: number): THREE.Group | null {
   const plates = (model.plates ?? []).filter((plate) => (plate.edgeSupports?.length ?? 0) > 0);
-  if (plates.length === 0) return;
+  if (plates.length === 0) return null;
   const byId = new Map(model.nodes.map((node) => [node.id, node]));
-  const size = openFem3DConditionMarkerSize(model.nodes) * 0.55;
+  // Dezelfde regelaar als de knoopopleggingen (issue #82). Een groter teken
+  // staat ook verder uit elkaar (om de 3 maten), zodat ze niet overlappen.
+  const size = openFem3DScaledSymbolSize(openFem3DConditionMarkerSize(model.nodes) * 0.55, supportSizePercent);
   const markers = new THREE.Group();
-  markers.name = "open-fem3d-plate-edge-supports";
+  markers.name = OPEN_FEM_3D_PLATE_EDGE_SUPPORTS_NAME;
   const segments: number[] = [];
   const glyphs: { point: THREE.Vector3; restraints: OpenFem3DSupportRestraints }[] = [];
   for (const plate of plates) {
@@ -194,5 +200,5 @@ function addEdgeSupportMarkers(group: THREE.Group, model: OpenFem3DModel): void 
     lines.userData = { pickable: false, openFem3dSupportGlyph: true };
     markers.add(lines);
   }
-  group.add(markers);
+  return markers;
 }

@@ -22,7 +22,7 @@ import FemCanvas from "../src/components/fem/FemCanvas";
 import { ResultatenTab } from "../src/components/fem/FemProjectTree";
 // De modellagen staan in de verkenner in de tab Weergave, de resultaatlagen in de tab Resultaten.
 import ExplorerViewTab from "../src/components/fem/ExplorerViewTab";
-import { DEFAULT_OPEN_FEM_3D_VISIBILITY, OPEN_FEM_3D_RESULT_LAYERS } from "../src/components/openFem3d/openFem3dVisibility";
+import { OPEN_FEM_3D_RESULT_LAYERS, OPEN_FEM_3D_VISIBILITY_FLAGS, DEFAULT_OPEN_FEM_3D_VISIBILITY } from "../src/components/openFem3d/openFem3dVisibility";
 import ZichtbaarheidVenster from "../src/components/fem/ZichtbaarheidVenster";
 import InsightsTab from "../src/components/ribbon/InsightsTab";
 import { DEFAULT_DISPLAY_FLAGS, type DisplayFlags } from "../src/components/fem/FemResultsOverlay";
@@ -326,8 +326,12 @@ async function run() {
     for (const laag of ["nodes", "beams", "supports", "loads", "grid"] as const) {
       ok(labels.includes(t(`openFem3dVisibility.${laag}`)), `modellaag ${laag} ontbreekt onder Weergave`);
     }
-    gelijk(labels.length, Object.keys(DEFAULT_OPEN_FEM_3D_VISIBILITY).length - OPEN_FEM_3D_RESULT_LAYERS.length,
-      "aantal rijen = alle lagen min de resultaatlagen");
+    // De grootte van knopen en opleggingen (issue #82) is geen laag maar een
+    // regelaar onder zijn laag: geen eigen schakelaar.
+    gelijk(labels.length, OPEN_FEM_3D_VISIBILITY_FLAGS.length - OPEN_FEM_3D_RESULT_LAYERS.length,
+      "aantal rijen = alle aan/uit-lagen min de resultaatlagen");
+    gelijk([...container.querySelectorAll('.explorer-view-section[data-workspace="3d"] [data-open-fem3d-symbol-scale]')]
+      .map((el) => (el as HTMLElement).dataset.openFem3dSymbolScale), ["nodes", "supports"], "regelaars Grootte onder Knopen en Opleggingen");
   });
 
   await test("lijnlast: in- en uitzoomen verandert het aantal pijlen niet (#101)", async () => {

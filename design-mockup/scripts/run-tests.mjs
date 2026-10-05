@@ -84,6 +84,15 @@ const BUNDEL_TESTS = new Set([
   // alles hoort ook daartegen te slagen.
   "api-schema", "api-document", "api-register", "api-model3d", "api-model3d-voorwaarden",
   "api-model3d-bewerken", "api-project", "api-stramien", "api-sidecar",
+  // Plaatsen op een object (#76, #77): model3d.support.place en model3d.load.placePoint.
+  "api-model3d-plaatsen",
+  // Staaf op bedding in 3D (issue #106): beam.add/update en beam.setBedding.
+  "api-model3d-bedding",
+  // Selectiefilter (issue #94): model3d.selection.filter, id's in en uit, en `select` met een nagebootste app.
+  "api-model3d-selectie",
+  // Lijnlast in een globale richting (issue #80): model3d.load.member.add/update met globalDirection,
+  // qStart/qEnd en perProjection, van lokaal naar globaal en terug.
+  "api-model3d-globale-lijnlast",
   // Het contract van extensies (manifest, importresultaat) en het draaien van
   // een extensiescript in Node: de MCP-server importeert zonder app via de bundel.
   "extensie-contract",
@@ -406,8 +415,15 @@ const ALLEEN_BRON = new Map([
     "open-fem3d-concrete-check", "open-fem3d-conditions", "open-fem3d-conversion",
     // Momentvast en Scharnierend voor de eindscharnieren van een staaf.
     "open-fem3d-eindscharnieren",
+    // Scharnier aan één staafeind, liggers scharnierend op kolommen en waar
+    // de scharnierbolletjes komen (issue #93).
+    "open-fem3d-staafeinden",
     "open-fem3d-current", "open-fem3d-displacement", "open-fem3d-force-stations",
     "open-fem3d-history", "open-fem3d-knoopgereedschap", "open-fem3d-large-frame", "open-fem3d-levels", "open-fem3d-member-load", "open-fem3d-mm-invoer",
+    // Peilmaten bij de levels in 3D (issue #92): tekst, plaats, dunning en de
+    // zichtbaarheid los van het stramien; en het echte tekenvlak in de browser
+    // (hoek per kijkrichting, niet over staven, in beeld na passend beeld).
+    "open-fem3d-peilmaten", "open-fem3d-peilmaten-ui",
     "open-fem3d-plates-views", "open-fem3d-platen", "open-fem3d-profile-geometry", "open-fem3d-report-views",
     "open-fem3d-selectie", "open-fem3d-selectie-ui", "open-fem3d-momentlijn",
     // Trek-alleen en schijven in de echte onderdelen (headless browser).
@@ -426,7 +442,44 @@ const ALLEEN_BRON = new Map([
     // Waarden bij de snedekrachtlijnen (issue #95): de standen weinig … veel, stand 3 = de oude regel,
     // monotoon, selectie, Waarden uit, views en de bedrading (de browserproef zit in open-fem3d-selectie-ui).
     "open-fem3d-diagram-labels",
+    // Grootte van knopen en opleggingen (issue #82): begrenzen, standaard, oude opslag en views, maat × schaal,
+    // rapportbeeld en bedieningskanaal; en het echte tekenvlak in de browser (200 % = twee keer zo groot, kiezen).
+    "open-fem3d-symboolschaal", "open-fem3d-symboolschaal-ui",
+    // Plaatweergave volume, vlak of mesh (issue #78): overname van de oude schakelaar mesh in opslag en views,
+    // geometrie per stand, elementlijnen op het middenvlak, kanaal en MCP-schema, en het echte tekenvlak in de
+    // browser (dikte per stand, kiezen, snel pad ook met plaatbatches, keuzegroep en lint).
+    "open-fem3d-plaatweergave", "open-fem3d-plaatweergave-ui",
+    // Plaatsen op een object (issues #76 en #77): oplegging, veer en puntlast op een knoop (snapzone), staaf
+    // (splitsen; puntlast op de plek) of plaat (knoop in het middenvlak, rekennet), één stap ongedaan maken; en het
+    // echte tekenvlak in de browser (klikken naast een knoop, midden op een staaf, op een plaat; lint en paneel).
+    "open-fem3d-plaatsen", "open-fem3d-plaatsen-ui",
+    // Tekenhulpen van het 3D-tekenvlak (issue #84): objectspoor (uitlijnen, snijpunt, verlengen, loodrecht,
+    // parallel), voorrang, Alt, Shift als ortho, directe lengte-invoer, de snapinstelling Objectspoor en de
+    // prestatie in een hal; en het echte tekenvlak met statusbalk en tab Weergave in de browser.
+    "open-fem3d-tekenhulp", "open-fem3d-tekenhulp-ui",
+    // Staaf op bedding in 3D (issue #106): keuren, zetten en weghalen, het verzoek, de uitkomst (gronddruk,
+    // contact, zakking, rapport, krachtensom), het bedieningskanaal en de echte kern; de eigenschappen, de band
+    // en de laag Gronddruk in de browser; en van eind tot eind een funderingsbalk door de rekenweg van de app en
+    // de echte kern, vergeleken met de vrije balk op bedding (Hetényi), met tekenvlak en rapport in de browser.
+    "open-fem3d-bedding", "open-fem3d-bedding-ui", "open-fem3d-bedding-e2e",
+    // Section box (issue #86): de doos om model en selectie, binnen/buiten (punt, staaf, plaat, lijn), slepen,
+    // clipping planes en grepen, opslag en views, kanaal en MCP-schema, rapportbeeld en kader; en het echte
+    // tekenvlak in de browser (menu, een vlak slepen, niet zichtbaar en niet kiesbaar buiten de doos, kader, snap).
+    "open-fem3d-section-box", "open-fem3d-section-box-ui",
+    // Lijnlast in een globale richting (issue #80): keuren, oude bestanden, bewerken, het verzoek, de
+    // versie, krachtensom, scheefstand, de pijlen en de projectielijn, de echte kern; het lastpaneel, de
+    // pijlrichting en het rapport in de browser; en van eind tot eind een schuine spant onder sneeuw per
+    // projectie door de rekenweg van de app en de echte kern: reacties, M, V en de N-lijn tegen de hand.
+    "open-fem3d-globale-lijnlast", "open-fem3d-globale-lijnlast-ui", "open-fem3d-globale-lijnlast-e2e",
   ].map((name) => [name, "3D-app, Three-weergave of aparte Rust-kern; geen module van de 2D-sidecarbundel."]),
+  [
+    "selectiefilter",
+    "de zuivere kern van het selectiefilter (issue #94) met de 3D- en 2D-adapter, de 3D-groepsselectie met lasten en het verwijderen ervan: de modules zelf staan niet in de barrel (alleen het commando, dat test-api-model3d-selectie in beide standen bewaakt), en de 2D-adapter hoort bij het tekenvlak",
+  ],
+  [
+    "selectiefilter-ui",
+    "het echte venster Selectiefilter (React, CSS) in een lokale headless browser, in 3D en in 2D: kiezen, telling, Toepassen en Annuleren. React en de DOM bestaan in de sidecarbundel niet",
+  ],
   ["aluminium-materiaal", "Materiaalbibliotheek en doorsnedeadapter buiten de sidecarbarrel."],
   ["aluminium-solver-verificatie", "Bouwt het model met modelNaarSolverInput, buiten de sidecarbarrel."],
   ["aluminium-voorspanning-verificatie", "Aluminium- en voorspancontrole buiten de sidecarbarrel."],

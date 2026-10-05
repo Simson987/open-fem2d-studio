@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { OpenFem3DBeam, OpenFem3DNode } from "./openFem3dModel";
 import { openFem3DCameraAfstand } from "./openFem3dProjectie";
+import { openFem3DSectionBoxKnipLijnstuk, type OpenFem3DSectionBoxBounds } from "./openFem3dSectionBox";
 
 export interface OpenFem3DBeamScreenHit {
   beamId: number;
@@ -146,6 +147,10 @@ export function findOpenFem3DSegmentNearScreenPoint<T extends { a: Punt; b: Punt
  * `radiusPx`. Zo is ook een dunne staaf (buisverband, analytische as, een
  * profiel van één pixel breed) met één klik vlak naast de getekende lijn te
  * kiezen. Bij gelijke schermafstand wint de voorste staaf.
+ *
+ * Met een section box (issue #86) telt alleen het deel van de systeemlijn
+ * binnen de doos: een staaf erbuiten is niet te kiezen, een staaf die de doos
+ * snijdt alleen op zijn zichtbare stuk.
  */
 export function findOpenFem3DBeamNearScreenPoint(
   beams: readonly OpenFem3DBeam[],
@@ -156,12 +161,19 @@ export function findOpenFem3DBeamNearScreenPoint(
   xPx: number,
   yPx: number,
   radiusPx = 6,
+  doos: OpenFem3DSectionBoxBounds | null = null,
 ): OpenFem3DBeamScreenHit | null {
-  const segments: { a: OpenFem3DNode; b: OpenFem3DNode; beamId: number }[] = [];
+  const segments: { a: Punt; b: Punt; beamId: number }[] = [];
   for (const beam of beams) {
     const a = nodes.get(beam.startNodeId);
     const b = nodes.get(beam.endNodeId);
-    if (a && b) segments.push({ a, b, beamId: beam.id });
+    if (!a || !b) continue;
+    if (!doos) {
+      segments.push({ a, b, beamId: beam.id });
+      continue;
+    }
+    const deel = openFem3DSectionBoxKnipLijnstuk(doos, a, b);
+    if (deel) segments.push({ ...deel, beamId: beam.id });
   }
   const hit = findOpenFem3DSegmentNearScreenPoint(segments, camera, width, height, xPx, yPx, radiusPx);
   return hit ? {

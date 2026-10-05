@@ -9,7 +9,7 @@ import {
 } from "./openFem3dUtilization";
 import { openFem3DMaximumDisplacementM, openFem3DMemberDisplacementStations } from "./openFem3dDisplacement";
 import { useId } from "react";
-import type { RapportBeeld } from "./openFem3dRapportBeeld";
+import { openFem3DRapportOpleggingPad, type RapportBeeld } from "./openFem3dRapportBeeld";
 
 type Projection = "isometric" | "front" | "top";
 type Point2D = { u: number; v: number };
@@ -207,8 +207,11 @@ export function OpenFem3DViewFiguur({ beeld, titel, ondertitel, reden, vergrotin
         <line x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} stroke={p.kleur} strokeWidth="1.6" markerEnd={pijlkop(p.kleur)} />
         {p.label && <text x={p.x1 + 4} y={p.y1 - 4} className="open-fem3d-report-svg-label" fill={p.kleur}>{p.label}</text>}
       </g>)}
-      {beeld.opleggingen.map((q, i) => <path key={`o${i}`} d={`M ${q.x} ${q.y + 4} l -8 13 h 16 z`} fill="#fff" stroke="#111827" strokeWidth="2" />)}
-      {beeld.knopen.map((k) => <circle key={`k${k.id}`} cx={k.x} cy={k.y} r="3.4" fill="#fff" stroke="#111827" strokeWidth="1.6" />)}
+      {/* De maten van oplegging en knoop volgen de regelaars van de view (issue #82). */}
+      {/* De top van het teken ligt vlak onder de knoopcirkel, ook als de schalen verschillen. */}
+      {beeld.opleggingen.map((q, i) => <path key={`o${i}`}
+        d={openFem3DRapportOpleggingPad(q, beeld.knoopStraal, beeld.opleggingSchaal)} fill="#fff" stroke="#111827" strokeWidth="2" />)}
+      {beeld.knopen.map((k) => <circle key={`k${k.id}`} cx={k.x} cy={k.y} r={beeld.knoopStraal} fill="#fff" stroke="#111827" strokeWidth="1.6" />)}
       {beeld.teksten.map((tekst, i) => <text key={`t${i}`} x={tekst.x} y={tekst.y} className="open-fem3d-report-svg-node" style={{ fill: tekst.kleur }}>{tekst.tekst}</text>)}
     </svg> : <p className="open-fem3d-report-note open-fem3d-report-view-leeg">{reden}</p>}
     {beeld && (beeld.legenda.length > 0 || vergrotingTekst) && <p className="open-fem3d-report-view-legend">

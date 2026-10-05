@@ -30,6 +30,9 @@
 .open-fem3d-load-quick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
 .open-fem3d-load-quick label { min-width: 0; }
 .open-fem3d-load-quick input, .open-fem3d-load-quick select { width: 100%; box-sizing: border-box; }
+/* Per projectie bij een globale lijnlast (#80): vinkje met de uitleg eronder. */
+.open-fem3d-member-loads .open-fem3d-load-projection { flex-direction: row; margin: 0 0 4px; cursor: pointer; }
+.open-fem3d-member-loads .open-fem3d-load-projection + .fem-prop-hint { margin: 0 0 6px; color: var(--theme-text-muted); }
 .open-fem3d-load-more { display: block; width: 100%; margin: 3px 0 9px; padding: 6px 0; border: 0; background: transparent; color: var(--theme-accent); text-align: left; font: inherit; font-size: 11px; cursor: pointer; }
 .open-fem3d-load-details { padding: 8px; margin-bottom: 9px; border: 1px solid var(--theme-border); border-radius: 5px; background: var(--theme-bg); }
 .open-fem3d-member-loads .open-fem3d-condition-new { margin-bottom: 8px; text-align: left; padding-left: 8px; }

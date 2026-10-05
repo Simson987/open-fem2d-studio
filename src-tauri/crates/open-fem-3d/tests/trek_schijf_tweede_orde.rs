@@ -18,7 +18,7 @@ fn doorsnede(id: usize, area: f64, i: f64, j: f64) -> Section3D {
 
 fn staaf(id: usize, begin: usize, eind: usize, sectie: usize) -> Member3D {
     Member3D { id, start_node_id: begin, end_node_id: eind, material_id: 1, section_id: sectie,
-        releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false }
+        releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false, bedding: None }
 }
 
 fn scharnierend(mut staaf: Member3D) -> Member3D {
@@ -172,6 +172,7 @@ fn staaflast_op_een_inactieve_staaf_blijft_in_het_evenwicht() {
     req.member_loads.push(MemberLoad3D {
         id: 1, member_id: 4, qy_start_kn_per_m: 0.0, qy_end_kn_per_m: 0.0,
         qz_start_kn_per_m: -0.5, qz_end_kn_per_m: -0.5, start_position_m: None, end_position_m: None,
+        ..Default::default()
     });
     let r = solve(req.clone()).unwrap();
     assert_eq!(r.inactive_members, vec![4]);

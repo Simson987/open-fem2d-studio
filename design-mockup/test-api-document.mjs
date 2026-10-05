@@ -43,5 +43,26 @@ check("metModel3d zet het model en de dimensie 3d", met.model3d === model && met
 check("… en laat het origineel ongewijzigd", tweeD.model3d === undefined && tweeD.modelDimension === "2d");
 check("het model overleeft de tekst", model3dVan(documentUitTekst(documentNaarTekst(met))).nodes.length === 1);
 
+// De MCP-server voert de commando's zonder app uit op een projectbestand:
+// lezen en weer schrijven via dit document. Een zichtbaarheidssleutel die de
+// (bundel)code niet kent, valt daarbij stil weg uit de opgeslagen views; de
+// peilmaten (issue #92, `levelMarks`) zijn de nieuwste.
+console.log("\n[4] opgeslagen 3D-views overleven de tekst");
+const camera = { position: [10, -10, 8], target: [0, 0, 0], up: [0, 0, 1] };
+const metViews = {
+  ...leeg,
+  openFem3dViewSets: [
+    { id: "zonder-peil", name: "Zonder peilmaten", view: "front", camera, visibility: { levelMarks: false, structuralGrid: true }, combinationId: null },
+    { id: "oud", name: "Oud", view: "iso", camera, visibility: { structuralGrid: false }, combinationId: null },
+  ],
+};
+const views = documentUitTekst(documentNaarTekst(metViews)).openFem3dViewSets ?? [];
+check("een view met de peilmaten uit houdt ze uit", views[0]?.visibility.levelMarks === false,
+  json(views[0]?.visibility));
+check("… en het stramien aan", views[0]?.visibility.structuralGrid === true);
+check("een oude view zonder de sleutel krijgt de peilmaten aan (de standaard)", views[1]?.visibility.levelMarks === true,
+  json(views[1]?.visibility));
+check("… met zijn eigen stramien uit", views[1]?.visibility.structuralGrid === false);
+
 console.log(`\n${geslaagd} geslaagd, ${gefaald} gefaald`);
 process.exit(gefaald > 0 ? 1 : 0);

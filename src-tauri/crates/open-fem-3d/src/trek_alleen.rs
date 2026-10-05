@@ -3,11 +3,25 @@
 //! Algoritme:
 //! 1. begin met alle staven actief;
 //! 2. los het model met de actieve staven op;
-//! 3. een actieve trek-alleen staaf met een drukkracht N < −tol wordt inactief;
-//!    een inactieve staaf wordt weer actief als de verlenging van zijn einden
-//!    (u_j − u_i)·e_x, verminderd met de vrije temperatuurverlenging, bij
-//!    actieve staaf een trekkracht > tol zou geven;
+//! 3. een actieve trek-alleen staaf met een drukkracht N < −tol aan begin of
+//!    eind wordt inactief; een inactieve staaf wordt weer actief als de
+//!    verlenging van zijn einden (u_j − u_i)·e_x, verminderd met de vrije
+//!    temperatuurverlenging, bij actieve staaf een trekkracht > tol zou geven;
 //! 4. herhaal tot de set niet meer verandert.
+//!
+//! Beide regels kijken naar dezelfde grootheid: de normaalkracht zonder een
+//! eigen axiale lijnlast, bij een ongeknipte staaf EA·(verlenging/L − αΔT),
+//! constant langs de staaf. Een globale lijnlast met een component langs de
+//! staaf (module `globale_lasten`) voegt daar in de uitvoer N_vast aan toe, de
+//! normaalkracht van de aan beide einden vastgehouden staaf onder die eigen
+//! last (gemiddeld nul). Die telt voor de status niet mee
+//! (`status_normaalkracht`, met N_vast van de hele staaf, ook als de kern haar
+//! in delen rekent): anders zou een einde dat alleen door de eigen last
+//! plaatselijk op druk staat de staaf uitschakelen, terwijl het weer
+//! inschakelen naar de N uit de verlenging kijkt, en zou de staaf tussen trek
+//! en druk blijven wisselen. Staat een actieve staaf zo aan een einde
+//! plaatselijk op druk, dan volgt een melding. De kruisregel kiest met
+//! dezelfde grootheid.
 //!
 //! Bij tweede orde convergeert de set eerst met lineaire rondes; daarna volgen
 //! tweede-orderondes vanaf die set. Zo blokkeert een verband dat in de eerste
@@ -23,6 +37,15 @@
 //! inactieve staaf die een knoop zonder andere staaf of volledige oplegging
 //! achterlaat.
 //!
+//! Dezelfde lus houdt de verticale grondveren van een bedding met alleen druk
+//! bij (module `bedding`): een veer met een zakking < −tol (de staaf komt
+//! omhoog) valt weg, een weggevallen veer met een zakking > tol doet weer mee.
+//! De toestand van een ronde is dan het paar (inactieve staven, weggevallen
+//! veren); beide sets moeten stabiel zijn, en dezelfde bescherming tegen
+//! oscilleren en te veel rondes geldt voor het paar. Valt door het loskomen
+//! een beweging vrij, dan volgt vóór het rekenen een melding
+//! (`bedding::controleer_contact`).
+//!
 //! Twee opties op het verzoek: montagelasten (`tensionOnlyFit`, module
 //! `montage`) geven elke trek-alleen staaf vóór de lus haar spanningsloze
 //! lengte L + Δ0, als gelijkwaardige temperatuurlast die in elke ronde
@@ -35,8 +58,8 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use rekenkern::element::compute_local_axes_3d;
 
 use crate::{
-    kruisregel, montage, shell::PlateGeometry, AnalysisKind, DiagramPoint3D, Member3D, MemberDiagram3D,
-    MemberForces3D, NodalLoad3D, Node3D, SolveRequest3D, SolveResult3D, TensionOnlyFitMember3D,
+    bedding::{self, Los}, globale_lasten, kruisregel, montage, shell::PlateGeometry, AnalysisKind, DiagramPoint3D, Member3D,
+    MemberDiagram3D, MemberForces3D, NodalLoad3D, Node3D, SolveRequest3D, SolveResult3D, TensionOnlyFitMember3D,
 };
 
 /// Maximaal aantal statusrondes per fase (lineair, tweede orde).
@@ -72,27 +95,33 @@ impl<'a> Geometrie<'a> {
     }
 }
 
-/// Reken het verzoek door met trek-alleen staven, of direct als er geen zijn.
+/// Reken het verzoek door met trek-alleen staven en bedding met alleen druk,
+/// of direct als er geen van beide is.
 pub(crate) fn los_op(
     request: &SolveRequest3D,
     platen: &HashMap<usize, PlateGeometry>,
 ) -> Result<SolveResult3D, String> {
-    if !request.members.iter().any(|staaf| staaf.tension_only) {
-        return crate::solve_fixed(request, platen, request.analysis, request.buckling_modes);
+    let trek = request.members.iter().any(|staaf| staaf.tension_only);
+    let druk = bedding::met_alleen_druk(request);
+    if !trek && !druk {
+        let mut uitkomst = crate::solve_fixed(request, platen, request.analysis, request.buckling_modes, &Los::new())?;
+        uitkomst.diagnostics.extend(bedding::diagnose(request, &uitkomst, None));
+        return Ok(uitkomst);
     }
     // Montage: Δ0 per staaf, als temperatuurlast in het verzoek van elke ronde.
-    let montage = montage::bepaal(request, platen)?;
+    let montage = if trek { montage::bepaal(request, platen)? } else { None };
     let werk: Cow<SolveRequest3D> = match &montage {
         Some(montage) => Cow::Owned(montage::met_aanpassing(request, &montage.delta_m)),
         None => Cow::Borrowed(request),
     };
     let werk = werk.as_ref();
-    let kruisen = if request.tension_only_cross_rule { kruisregel::kruisen(request) } else { vec![] };
+    let kruisen = if trek && request.tension_only_cross_rule { kruisregel::kruisen(request) } else { vec![] };
     let fasen: &[AnalysisKind] = match request.analysis {
         AnalysisKind::Linear => &[AnalysisKind::Linear],
         AnalysisKind::PDelta => &[AnalysisKind::Linear, AnalysisKind::PDelta],
     };
     let mut inactief = BTreeSet::new();
+    let mut los = Los::new();
     let mut gehouden = BTreeSet::new();
     let mut toegepast = 0;
     let mut rondes = 0;
@@ -102,46 +131,44 @@ pub(crate) fn los_op(
         // Bij tweede orde hoort de knikanalyse bij elke ronde (stabiliteitspoort);
         // bij een lineaire berekening volgt zij één keer na de laatste ronde.
         let modes = if fase == AnalysisKind::PDelta { request.buckling_modes } else { 0 };
-        let mut gezien: HashSet<BTreeSet<usize>> = HashSet::from([inactief.clone()]);
+        let mut gezien: HashSet<(BTreeSet<usize>, Los)> = HashSet::from([(inactief.clone(), los.clone())]);
         let mut stabiel = false;
         for _ in 0..MAX_RONDES {
             rondes += 1;
             controleer_losse_knopen(werk, &inactief)?;
+            bedding::controleer_contact(werk, &inactief.iter().copied().collect(), &los)?;
             let verzoek = gereduceerd(werk, &inactief);
-            let uitkomst = crate::solve_fixed(&verzoek, platen, fase, modes).map_err(|fout| {
-                if inactief.is_empty() { fout } else {
-                    format!("{fout} (trek-alleen ronde {rondes}; inactief: staaf {})", lijst(inactief.iter().copied()))
-                }
-            })?;
-            let status = nieuwe_status(werk, &uitkomst, &inactief, &kruisen);
+            let uitkomst = crate::solve_fixed(&verzoek, platen, fase, modes, &los)
+                .map_err(|fout| met_toestand(fout, rondes, &inactief, &los))?;
+            let status = if trek {
+                nieuwe_status(werk, &uitkomst, &inactief, &kruisen)
+            } else {
+                Status { inactief: BTreeSet::new(), gehouden: BTreeSet::new(), toegepast: 0 }
+            };
             let nieuw = status.inactief;
-            if nieuw == inactief {
+            let nieuw_los = bedding::nieuwe_los(werk, &uitkomst, &los);
+            if nieuw == inactief && nieuw_los == los {
                 gehouden = status.gehouden;
                 toegepast = status.toegepast;
                 laatste = Some(uitkomst);
                 stabiel = true;
                 break;
             }
-            if !gezien.insert(nieuw.clone()) {
-                return Err(format!(
-                    "trek-alleen: de staven {} blijven tussen trek en druk wisselen; na ronde {rondes} keerde een eerdere toestand terug. Er is geen eenduidige set actieve staven. Controleer of deze verbanden samen een mechanisme vormen, of maak een ervan een gewone staaf.",
-                    lijst(inactief.symmetric_difference(&nieuw).copied()),
-                ));
+            if !gezien.insert((nieuw.clone(), nieuw_los.clone())) {
+                return Err(wisselfout(rondes, &inactief, &nieuw, &los, &nieuw_los));
             }
             inactief = nieuw;
+            los = nieuw_los;
         }
         if !stabiel {
-            return Err(format!(
-                "trek-alleen: na {MAX_RONDES} statusrondes nog geen stabiele set actieve staven; inactief waren laatst de staven {}.",
-                lijst(inactief.iter().copied()),
-            ));
+            return Err(rondefout(&inactief, &los));
         }
         if laatste_fase && fase == AnalysisKind::Linear && request.buckling_modes > 0 {
-            laatste = Some(crate::solve_fixed(&gereduceerd(werk, &inactief), platen, fase, request.buckling_modes)?);
+            laatste = Some(crate::solve_fixed(&gereduceerd(werk, &inactief), platen, fase, request.buckling_modes, &los)?);
         }
     }
     let uitkomst = laatste.expect("minstens één fase met een stabiele set");
-    let mut uitkomst = afronden(werk, uitkomst, &inactief, rondes);
+    let mut uitkomst = if trek { afronden(werk, uitkomst, &inactief, rondes) } else { uitkomst };
     if let Some(montage) = &montage {
         let aantal = montage.delta_m.len();
         uitkomst.diagnostics.extend(montage::diagnose(montage, aantal));
@@ -149,11 +176,66 @@ pub(crate) fn los_op(
             .map(|(id, delta)| TensionOnlyFitMember3D { member_id: *id, delta_mm: delta * 1000.0 })
             .collect();
     }
-    if request.tension_only_cross_rule {
+    if trek && request.tension_only_cross_rule {
         uitkomst.diagnostics.push(kruisregel_diagnose(werk, &uitkomst, &kruisen, &gehouden, toegepast));
         uitkomst.cross_rule_members = gehouden.into_iter().collect();
     }
+    uitkomst.diagnostics.extend(bedding::diagnose(request, &uitkomst, druk.then_some(rondes)));
     Ok(uitkomst)
+}
+
+/// Een rekenfout in een statusronde, met de toestand van die ronde.
+fn met_toestand(fout: String, rondes: usize, inactief: &BTreeSet<usize>, los: &Los) -> String {
+    let mut toestand = Vec::new();
+    if !inactief.is_empty() {
+        toestand.push(format!("trek-alleen ronde {rondes}; inactief: staaf {}", lijst(inactief.iter().copied())));
+    }
+    if !los.is_empty() {
+        toestand.push(format!(
+            "bedding alleen druk ronde {rondes}; {} grondveer/grondveren los onder staaf {}",
+            los.len(), lijst(bedding::staven_met_los(los)),
+        ));
+    }
+    if toestand.is_empty() { fout } else { format!("{fout} ({})", toestand.join("; ")) }
+}
+
+/// Een toestand die terugkeert: de staven of de grondveren blijven wisselen.
+fn wisselfout(rondes: usize, inactief: &BTreeSet<usize>, nieuw: &BTreeSet<usize>, los: &Los, nieuw_los: &Los) -> String {
+    let staven: Vec<usize> = inactief.symmetric_difference(nieuw).copied().collect();
+    let grond: Los = los.symmetric_difference(nieuw_los).copied().collect();
+    let mut delen = Vec::new();
+    if !staven.is_empty() {
+        delen.push(format!(
+            "trek-alleen: de staven {} blijven tussen trek en druk wisselen; na ronde {rondes} keerde een eerdere toestand terug. Er is geen eenduidige set actieve staven. Controleer of deze verbanden samen een mechanisme vormen, of maak een ervan een gewone staaf.",
+            lijst(staven),
+        ));
+    }
+    if !grond.is_empty() {
+        delen.push(format!(
+            "bedding (alleen druk): de grondveren onder staaf {} blijven tussen contact en loskomen wisselen; na ronde {rondes} keerde een eerdere toestand terug. Er is geen eenduidige contactzone. Controleer de belasting en de opleggingen van deze staaf, of reken de bedding zonder alleen druk.",
+            lijst(bedding::staven_met_los(&grond)),
+        ));
+    }
+    delen.join(" ")
+}
+
+/// Na `MAX_RONDES` rondes in één fase nog geen stabiele toestand.
+fn rondefout(inactief: &BTreeSet<usize>, los: &Los) -> String {
+    if los.is_empty() {
+        return format!(
+            "trek-alleen: na {MAX_RONDES} statusrondes nog geen stabiele set actieve staven; inactief waren laatst de staven {}.",
+            lijst(inactief.iter().copied()),
+        );
+    }
+    let mut tekst = format!(
+        "bedding (alleen druk): na {MAX_RONDES} statusrondes nog geen stabiele contactzone; los van de grond waren laatst {} grondveer/grondveren onder staaf {}",
+        los.len(), lijst(bedding::staven_met_los(los)),
+    );
+    if !inactief.is_empty() {
+        tekst.push_str(&format!("; trek-alleen inactief waren laatst de staven {}", lijst(inactief.iter().copied())));
+    }
+    tekst.push('.');
+    tekst
 }
 
 /// De regel voor de diagnostiek van de kruisregel.
@@ -175,7 +257,7 @@ fn kruisregel_diagnose(
         .filter(|staaf| staaf.tension_only).map(|staaf| staaf.id).collect();
     let druk = uitkomst.member_forces.iter()
         .filter(|f| trek_alleen.contains(&f.member_id) && !inactief.contains(&f.member_id))
-        .map(|f| (f.n_start_kn.min(f.n_end_kn), f.member_id))
+        .map(|f| (status_normaalkracht(uitkomst, f), f.member_id))
         .filter(|(n, _)| *n < -1e-6 * schaal)
         .min_by(|a, b| a.0.total_cmp(&b.0));
     let regel = if nodig == 0 {
@@ -248,13 +330,18 @@ fn gereduceerd(request: &SolveRequest3D, inactief: &BTreeSet<usize>) -> SolveReq
         });
         volgende_id += 1;
     };
-    // Eindreacties van een vrij opgelegde staaf onder een lokale last (qy, qz)
-    // als globale knoopkrachten op begin- en eindknoop.
-    let mut verdeel = |staaf: &Member3D, begin_y: f64, eind_y: f64, begin_z: f64, eind_z: f64| {
-        let (_, ey, ez) = geometrie.assen(staaf);
-        let globaal = |y: f64, z: f64| [y * ey[0] + z * ez[0], y * ey[1] + z * ez[1], y * ey[2] + z * ez[2]];
-        knooplast(staaf.start_node_id, globaal(begin_y, begin_z));
-        knooplast(staaf.end_node_id, globaal(eind_y, eind_z));
+    // Eindreacties van een vrij opgelegde staaf onder een last in lokale assen
+    // (x, y, z) als globale knoopkrachten op begin- en eindknoop. Een lokale
+    // last heeft geen x-component; een globale last (#80) wel.
+    let mut verdeel = |staaf: &Member3D, begin: [f64; 3], eind: [f64; 3]| {
+        let (ex, ey, ez) = geometrie.assen(staaf);
+        let globaal = |[x, y, z]: [f64; 3]| [
+            x * ex[0] + y * ey[0] + z * ez[0],
+            x * ex[1] + y * ey[1] + z * ez[1],
+            x * ex[2] + y * ey[2] + z * ez[2],
+        ];
+        knooplast(staaf.start_node_id, globaal(begin));
+        knooplast(staaf.end_node_id, globaal(eind));
     };
     for load in request.member_loads.iter().filter(|load| inactief.contains(&load.member_id)) {
         let staaf = staven[&load.member_id];
@@ -262,20 +349,23 @@ fn gereduceerd(request: &SolveRequest3D, inactief: &BTreeSet<usize>) -> SolveReq
         let a = load.start_position_m.unwrap_or(0.0);
         let b = load.end_position_m.unwrap_or(lengte);
         // Trapezium van q_a (bij a) naar q_b (bij b): resultante en eerste moment om het begin.
-        let einden = |qa: f64, qb: f64| {
+        let einden = |[qa, qb]: [f64; 2]| {
             let resultante = (qa + qb) / 2.0 * (b - a);
             let moment = (b - a) / 6.0 * (qa * (2.0 * a + b) + qb * (a + 2.0 * b));
             let eind = moment / lengte;
             (resultante - eind, eind)
         };
-        let (begin_y, eind_y) = einden(load.qy_start_kn_per_m, load.qy_end_kn_per_m);
-        let (begin_z, eind_z) = einden(load.qz_start_kn_per_m, load.qz_end_kn_per_m);
-        verdeel(staaf, begin_y, eind_y, begin_z, eind_z);
+        let (ex, ey, ez) = geometrie.assen(staaf);
+        let lokaal = globale_lasten::componenten(load, &[ex, ey, ez]);
+        let (begin_x, eind_x) = einden(lokaal.qx);
+        let (begin_y, eind_y) = einden(lokaal.qy);
+        let (begin_z, eind_z) = einden(lokaal.qz);
+        verdeel(staaf, [begin_x, begin_y, begin_z], [eind_x, eind_y, eind_z]);
     }
     for load in request.member_point_loads.iter().filter(|load| inactief.contains(&load.member_id)) {
         let staaf = staven[&load.member_id];
         let deel = load.position_m / geometrie.lengte(staaf);
-        verdeel(staaf, load.py_kn * (1.0 - deel), load.py_kn * deel, load.pz_kn * (1.0 - deel), load.pz_kn * deel);
+        verdeel(staaf, [0.0, load.py_kn * (1.0 - deel), load.pz_kn * (1.0 - deel)], [0.0, load.py_kn * deel, load.pz_kn * deel]);
     }
     verzoek.members.retain(|staaf| !inactief.contains(&staaf.id));
     verzoek.member_loads.retain(|load| !inactief.contains(&load.member_id));
@@ -291,6 +381,15 @@ struct Status {
     gehouden: BTreeSet<usize>,
     /// Aantal kruisen waarin de regel een diagonaal actief hield.
     toegepast: usize,
+}
+
+/// De normaalkracht waarnaar de status van een actieve trek-alleen staaf
+/// kijkt: de kleinste van begin en eind, zonder N_vast van een eigen axiale
+/// lijnlast (zie de moduletekst). Zonder zo'n last is dat precies
+/// min(n_start, n_end).
+fn status_normaalkracht(uitkomst: &SolveResult3D, kracht: &MemberForces3D) -> f64 {
+    let [begin, eind] = uitkomst.n_vast_einden.get(&kracht.member_id).copied().unwrap_or([0.0; 2]);
+    (kracht.n_start_kn - begin).min(kracht.n_end_kn - eind)
 }
 
 /// De nieuwe set inactieve staven na één berekening.
@@ -328,8 +427,7 @@ fn nieuwe_status(
             let n = materiaal.e_mpa * 1000.0 * doorsnede.area_m2 * (verlenging / lengte - alpha * delta_t);
             (n, n <= tolerantie)
         } else {
-            let kracht = krachten[&staaf.id];
-            let n = kracht.n_start_kn.min(kracht.n_end_kn);
+            let n = status_normaalkracht(uitkomst, krachten[&staaf.id]);
             (n, n < -tolerantie)
         };
         normaalkracht.insert(staaf.id, n);
@@ -405,6 +503,25 @@ fn afronden(request: &SolveRequest3D, mut uitkomst: SolveResult3D, inactief: &BT
         uitkomst.diagnostics.push(
             "Trek-alleen: staaflasten op inactieve staven zijn als knooplasten op hun eindknopen gezet.".into(),
         );
+    }
+    // Een actieve staaf die alleen door haar eigen axiale lijnlast aan een
+    // einde op druk staat: de status keek naar de normaalkracht zonder die last.
+    let schaal = uitkomst.member_forces.iter()
+        .map(|f| f.n_start_kn.abs().max(f.n_end_kn.abs()))
+        .fold(1.0, f64::max);
+    let tolerantie = 1e-6 * schaal;
+    let plaatselijk: Vec<String> = request.members.iter()
+        .filter(|staaf| staaf.tension_only && !inactief.contains(&staaf.id)
+            && uitkomst.n_vast_einden.contains_key(&staaf.id))
+        .filter_map(|staaf| uitkomst.member_forces.iter().find(|f| f.member_id == staaf.id))
+        .filter(|f| f.n_start_kn.min(f.n_end_kn) < -tolerantie && status_normaalkracht(&uitkomst, f) >= -tolerantie)
+        .map(|f| format!("staaf {} (kleinste N {:.3} kN)", f.member_id, f.n_start_kn.min(f.n_end_kn)))
+        .collect();
+    if !plaatselijk.is_empty() {
+        uitkomst.diagnostics.push(format!(
+            "Trek-alleen: {} staat aan een einde plaatselijk op druk door de eigen lijnlast langs de staaf (een globale last met een component langs de staafas). De status volgt de normaalkracht zonder die eigen last (bij een staaf zonder aansluitingen tussen haar einden het gemiddelde over de staaf); die is trek, dus de staaf doet mee.",
+            plaatselijk.join(", "),
+        ));
     }
     uitkomst.inactive_members = inactief.iter().copied().collect();
     uitkomst.tension_only_rounds = rondes;

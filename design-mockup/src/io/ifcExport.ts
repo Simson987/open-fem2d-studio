@@ -193,7 +193,10 @@ import {
   isSteelCheckResult, isConcreteCheckResult,
 } from "../lib/checkTypes";
 import type { ReinforcementCage } from "../lib/types/concrete/ReinforcementCage";
-import { openFem3DLoadCaseId, openFem3DMemberAxes, parseOpenFem3DModel, type OpenFem3DModel, type OpenFem3DPlateBoundarySegment } from "../components/openFem3d/openFem3dModel";
+import {
+  OPEN_FEM_3D_GLOBAL_DIRECTIONS, isOpenFem3DGlobalMemberLoad, openFem3DLoadCaseId, openFem3DMemberAxes, parseOpenFem3DModel,
+  type OpenFem3DModel, type OpenFem3DPlateBoundarySegment,
+} from "../components/openFem3d/openFem3dModel";
 
 // ── Invoertype ──────────────────────────────────────────────────────────────
 
@@ -1367,32 +1370,44 @@ function schrijf3DRekenmodel(
       const van = knoopPerId.get(staaf.startNodeId)!;
       const naar = knoopPerId.get(staaf.endNodeId)!;
       const lengte = Math.hypot(naar.x - van.x, naar.y - van.y, naar.z - van.z);
-      const lijnkracht = (qy: number, qz: number, naam: string) => w.ent(
-        "IFCSTRUCTURALLOADLINEARFORCE", stepString(naam), "$",
-        `IFCLINEARFORCEMEASURE(${reeel(qy * 1e3)})`,
-        `IFCLINEARFORCEMEASURE(${reeel(qz * 1e3)})`, "$", "$", "$",
+      // Componenten X, Y, Z van de lijnkracht; null = "$". Een lokale last
+      // staat in de staafassen (y, z); een globale last (#80) in de globale
+      // assen, per projectie als PROJECTED_LENGTH.
+      const globaal = isOpenFem3DGlobalMemberLoad(last) ? last : null;
+      const lijnkracht = (componenten: readonly (number | null)[], naam: string) => w.ent(
+        "IFCSTRUCTURALLOADLINEARFORCE", stepString(naam),
+        ...componenten.map((q) => q === null ? "$" : `IFCLINEARFORCEMEASURE(${reeel(q * 1e3)})`), "$", "$", "$",
       );
+      const componenten = (eind: boolean): (number | null)[] => {
+        if (!isOpenFem3DGlobalMemberLoad(last)) return [null, eind ? last.qyEnd : last.qyStart, eind ? last.qzEnd : last.qzStart];
+        const q = eind ? last.qEnd : last.qStart;
+        return OPEN_FEM_3D_GLOBAL_DIRECTIONS.map((as) => as === last.globalDirection ? q : 0);
+      };
+      const nul = globaal ? [0, 0, 0] : [null, 0, 0];
+      const stelsel = globaal ? ".GLOBAL_COORDS." : ".LOCAL_COORDS.";
+      const lengteSoort = globaal?.perProjection ? ".PROJECTED_LENGTH." : ".TRUE_LENGTH.";
       const volledig = last.startPositionM <= 1e-12 && Math.abs(last.endPositionM - lengte) <= 1e-9;
-      const uniform = last.qyStart === last.qyEnd && last.qzStart === last.qzEnd;
+      const eindwaarden = componenten(true);
+      const uniform = componenten(false).every((q, index) => q === eindwaarden[index]);
       let actie: number;
       if (volledig && uniform) {
-        const kracht = lijnkracht(last.qyStart, last.qzStart, `3D q ${last.id}`);
+        const kracht = lijnkracht(componenten(false), `3D q ${last.id}`);
         actie = w.ent("IFCSTRUCTURALLINEARACTION",
           w.guid(`3d:staaflast:${last.id}`), "$", stepString(`3D-staaflast ${last.id}`), "$", "$",
-          "$", "$", ref(kracht), ".LOCAL_COORDS.", "$", ".TRUE_LENGTH.", ".CONST.");
+          "$", "$", ref(kracht), stelsel, "$", lengteSoort, ".CONST.");
       } else {
         const waarden: number[] = [];
         const posities: string[] = [];
         if (last.startPositionM > 1e-12) {
-          waarden.push(lijnkracht(0, 0, `3D q ${last.id} nul`));
+          waarden.push(lijnkracht(nul, `3D q ${last.id} nul`));
           posities.push(reeel(0));
         }
-        waarden.push(lijnkracht(last.qyStart, last.qzStart, `3D q ${last.id} begin`));
+        waarden.push(lijnkracht(componenten(false), `3D q ${last.id} begin`));
         posities.push(reeel(last.startPositionM));
-        waarden.push(lijnkracht(last.qyEnd, last.qzEnd, `3D q ${last.id} eind`));
+        waarden.push(lijnkracht(componenten(true), `3D q ${last.id} eind`));
         posities.push(reeel(last.endPositionM));
         if (last.endPositionM < lengte - 1e-9) {
-          waarden.push(lijnkracht(0, 0, `3D q ${last.id} nul`));
+          waarden.push(lijnkracht(nul, `3D q ${last.id} nul`));
           posities.push(reeel(lengte));
         }
         const config = w.ent("IFCSTRUCTURALLOADCONFIGURATION",
@@ -1400,7 +1415,7 @@ function schrijf3DRekenmodel(
           `(${posities.map((positie) => `(${positie})`).join(",")})`);
         actie = w.ent("IFCSTRUCTURALCURVEACTION",
           w.guid(`3d:staaflast:${last.id}`), "$", stepString(`3D-staaflast ${last.id}`), "$", "$",
-          "$", "$", ref(config), ".LOCAL_COORDS.", "$", ".TRUE_LENGTH.",
+          "$", "$", ref(config), stelsel, "$", lengteSoort,
           volledig ? ".LINEAR." : ".POLYGONAL.");
       }
       w.ent("IFCRELCONNECTSSTRUCTURALACTIVITY",
@@ -2927,7 +2942,9 @@ export function bouwIfcBoom(
           kinderen: [
             ...staaflasten3d.map((l) => ({
               type: "IfcStructuralCurveAction",
-              naam: `Staaf ${l.beamId} — qy ${l.qyStart}→${l.qyEnd}; qz ${l.qzStart}→${l.qzEnd} kN/m`,
+              naam: isOpenFem3DGlobalMemberLoad(l)
+                ? `Staaf ${l.beamId} — globaal ${l.globalDirection.toUpperCase()} ${l.qStart}→${l.qEnd} kN/m${l.perProjection ? " per projectie" : ""}`
+                : `Staaf ${l.beamId} — qy ${l.qyStart}→${l.qyEnd}; qz ${l.qzStart}→${l.qzEnd} kN/m`,
             })),
             ...staafpuntlasten3d.map((l) => ({
               type: "IfcStructuralPointAction",

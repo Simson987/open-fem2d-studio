@@ -4,6 +4,7 @@ import type { TFunction } from "i18next";
 import { parseLength } from "../../lib/lengthInput";
 import type { OpenFem3DTool } from "./openFem3dCommands";
 import type { OpenFem3DAxis, OpenFem3DTransformCommand } from "./openFem3dTransform";
+import { openFem3DBeddingRefusal } from "./openFem3dBedding";
 
 type OpenFem3DTransformTool = Extract<OpenFem3DTool, "move" | "rotate" | "copy" | "mirror">;
 
@@ -75,7 +76,9 @@ export default function OpenFem3DTransformPanel({ tool, selectionLabel, onApply,
     try {
       onApply(openFem3DTransformCommand(tool, { dx, dy, dz, axis, angle, offset }, t));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      // Een staaf op een verticale bedding die verticaal zou komen (#106): vertaald.
+      const bedding = openFem3DBeddingRefusal(reason);
+      setError(bedding ? t(bedding.key, bedding.values) : reason instanceof Error ? reason.message : String(reason));
     }
   };
 

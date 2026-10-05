@@ -10,7 +10,8 @@
 //! verse symbolische analyse.
 //!
 //! Formulering:
-//! - K is de lineaire stijfheid van de kern, inclusief oplegveren.
+//! - K is de lineaire stijfheid van de kern, inclusief oplegveren en de
+//!   grondveren van een bedding.
 //! - K_G per staaf is de consistente geometrische stijfheid die de kern ook
 //!   gebruikt (N/(30L), alleen de buigvrijheidsgraden, geen torsieterm). Anders
 //!   dan de kern condenseert deze module K_G bij een vrijgegeven staafeinde met
@@ -110,11 +111,13 @@ fn paniek_tekst(payload: Box<dyn std::any::Any + Send>) -> String {
 
 /// De geometrische stijfheid van deze module kent alleen raamwerkstaven met
 /// zes vrijheidsgraden per knoop. Een model met andere elementen gaat niet
-/// door de tweede orde of de knikanalyse van de adapter.
+/// door de tweede orde of de knikanalyse van de adapter. De veerelementen
+/// (connectors) van een bedding mogen erbij: het zijn lineaire grondveren in
+/// K zonder geometrische stijfheid, zoals bij een Winkler-grond (`bedding`).
 fn alleen_staven(input: &SolverInput3D) -> Result<(), String> {
     if !input.plates.is_empty() || !input.quads.is_empty() || !input.quad9s.is_empty()
         || !input.solid_shells.is_empty() || !input.curved_shells.is_empty()
-        || !input.curved_beams.is_empty() || !input.connectors.is_empty()
+        || !input.curved_beams.is_empty()
         || input.sections.values().any(|section| section.cw.is_some())
         || input.elements.values().any(|element| element.elem_type != "frame")
     {

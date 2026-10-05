@@ -26,11 +26,28 @@ export function openFem3DSelectionPivot(model: OpenFem3DModel, selection: OpenFe
     case "node": nodeIds.add(selection.id); break;
     case "beam": addBeam(selection.id); break;
     case "plate": addPlate(selection.id); break;
-    case "multi":
+    case "multi": {
       selection.nodeIds.forEach((id) => nodeIds.add(id));
       selection.beamIds.forEach(addBeam);
       selection.plateIds?.forEach(addPlate);
+      // Lasten uit het selectiefilter (issue #94): om het element waar ze op staan.
+      const loads = selection.loads;
+      if (loads) {
+        const gekozen = (ids: number[] | undefined) => new Set(ids ?? []);
+        const nodal = gekozen(loads.nodalLoad);
+        (model.loads ?? []).forEach((load) => { if (nodal.has(load.id)) nodeIds.add(load.nodeId); });
+        for (const [list, ids] of [[model.memberLoads, loads.memberLoad], [model.memberPointLoads, loads.memberPointLoad],
+          [model.thermalLoads, loads.thermalLoad]] as const) {
+          const set = gekozen(ids);
+          (list ?? []).forEach((load) => { if (set.has(load.id)) addBeam(load.beamId); });
+        }
+        const surface = gekozen(loads.surfaceLoad);
+        (model.surfaceLoads ?? []).forEach((load) => { if (surface.has(load.id)) addPlate(load.plateId); });
+        const panels = gekozen(loads.loadPanel);
+        (model.loadPanels ?? []).forEach((panel) => { if (panels.has(panel.id)) panel.nodeIds.forEach((id) => nodeIds.add(id)); });
+      }
       break;
+    }
     case "nodalLoad": {
       const load = (model.loads ?? []).find((item) => item.id === selection.id);
       if (load) nodeIds.add(load.nodeId);

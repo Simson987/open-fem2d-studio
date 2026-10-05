@@ -25,12 +25,16 @@ import CheckPanel, { CheckPanelToggle } from "./components/panels/CheckPanel";
 import FemProjectTree from "./components/fem/FemProjectTree";
 import FemProperties from "./components/fem/FemProperties";
 import FemCanvas from "./components/fem/FemCanvas";
-import { addOpenFem3DSurfaceLoad, withOpenFem3DSelfWeight, type OpenFem3DModel } from "./components/openFem3d/openFem3dModel";
+import {
+  addOpenFem3DSurfaceLoad, openFem3DPinToColumnsMessage, openFem3DPinToColumnsScope, pinOpenFem3DBeamsToColumns, withOpenFem3DSelfWeight,
+  type OpenFem3DModel,
+} from "./components/openFem3d/openFem3dModel";
 import { setOpenFem3DTensionOnlySetting } from "./components/openFem3d/openFem3dTrekSchijf";
 import {
-  applyOpenFem3DNodeConditionToNodes, openFem3DNodeConditionOfTool, placeOpenFem3DNodeCondition, readOpenFem3DSpringStiffness,
+  applyOpenFem3DNodeConditionToNodes, openFem3DNodeConditionOfTool, openFem3DNodeToolClick, readOpenFem3DSpringStiffness,
   type OpenFem3DNodeTarget,
 } from "./components/openFem3d/openFem3dNodeTools";
+import { placeOpenFem3DPointLoad, type OpenFem3DPointLoadTarget } from "./components/openFem3d/openFem3dPlaatsen";
 import { readOpenFem3DDeformationDisplay, saveOpenFem3DDeformationDisplay } from "./components/openFem3d/openFem3dDeformationDisplay";
 import { readOpenFem3DDiagramLabels, saveOpenFem3DDiagramLabels } from "./components/openFem3d/openFem3dDiagramLabels";
 import { openFem3dHistoryReducer, openFem3DHistoryExtern, openFem3DHistoryLevelPatch, type OpenFem3DAction, type OpenFem3DEditMeta, type OpenFem3DHistory } from "./components/openFem3d/openFem3dHistory";
@@ -44,10 +48,17 @@ import {
 } from "./components/openFem3d/openFem3dLoadPanels";
 import type { OpenFem3DSpringAxis, OpenFem3DTool, OpenFem3DView } from "./components/openFem3d/openFem3dCommands";
 import type { OpenFem3DSelection } from "./components/openFem3d/openFem3dSelection";
+import { openFem3DSelectieBelastinggevallen, openFem3DSelectieIds } from "./components/openFem3d/openFem3dSelectieFilter";
+import { SelectieFilterVenster2D, SelectieFilterVenster3D } from "./components/selectieFilter/SelectieFilterVenster";
+import { filterLastGeval } from "./components/selectieFilter/selectieFilter";
+import { selectieBelastinggevallen2D, type SelectieIds2D } from "./components/fem/selectieFilter2d";
 import type { OpenFem3DCameraState, OpenFem3DStandaardViewId, OpenFem3DViewSet } from "./components/openFem3d/openFem3dViewSets";
 import { openFem3DStartCamera } from "./components/openFem3d/openFem3dViewCube";
 import { openFem3DMaatgevendeCombinatie, openFem3DViewSetToepassing, type OpenFem3DViewToepassing } from "./components/openFem3d/openFem3dStandaardViews";
-import { readOpenFem3DVisibility, saveOpenFem3DVisibility } from "./components/openFem3d/openFem3dVisibility";
+import {
+  openFem3DVisibilityForTool, openFem3DVisibilityZonderSectionBox, readOpenFem3DVisibility, saveOpenFem3DVisibility,
+} from "./components/openFem3d/openFem3dVisibility";
+import { openFem3DSectionBoxSchakel } from "./components/openFem3d/openFem3dSectionBox";
 import { readOpenFem3DPlateQuantity, saveOpenFem3DPlateQuantity } from "./components/openFem3d/openFem3dPlateResults";
 import { convert2DTo3D } from "./components/openFem3d/convert2DTo3D";
 import { solveOpenFem3D, solveOpenFem3DCombination, type OpenFem3DSolveResult } from "./components/openFem3d/openFem3dSolver";
@@ -88,7 +99,7 @@ import { getDetachedParams, useWindowManager } from "./hooks/useWindowManager";
 // aangesproken van buiten. Doet niets zolang Rust zegt dat het kanaal uit staat.
 import { useBediening, type RekengangUitkomst } from "./bediening/bediening";
 import { useFemStore } from "./hooks/useFemStore";
-import type { GridAxisLine, GridSettings, StructuralGrid, Tool } from "./components/fem/femTypes";
+import type { GridAxisLine, GridSettings, Selection, StructuralGrid, Tool } from "./components/fem/femTypes";
 import { DEFAULT_GRID, DEFAULT_STRUCTURAL_GRID, nonlinearVoorBestand } from "./components/fem/femTypes";
 import LengthInput from "./components/LengthInput";
 import type { SolverResult } from "./components/fem/solver/types";
@@ -137,7 +148,7 @@ import {
 } from "./lib/eigenGewicht";
 import { eigenGewichtOverzicht } from "./lib/eigenGewichtOverzicht";
 import { controleerVoorRekenen, leesbareRekenfout } from "./lib/rekenPoort";
-import { leesSnapInstellingen } from "./hooks/useSnapInstellingen";
+import { leesSnapInstellingen, SNAP_SCHAKELAARS_3D, SNAP_SOORTEN } from "./hooks/useSnapInstellingen";
 // Scheefstand: φ komt óf uit de vaste noemer (het oude gedrag, en de stand van
 // elk bestaand projectbestand) óf uit de normformule van EN 1993-1-1 (5.5),
 // EN 1992-1-1 (5.1) of EN 1995-1-1 (5.1) — zie lib/scheefstandNorm.ts.
@@ -375,12 +386,14 @@ function App() {
   const handleOpenFem3DToolChange = (next: OpenFem3DTool) => {
     setOpenFem3dTool(next);
     if (next !== "loadPanelSpan") setOpenFem3dSpanPick(null);
-    if (next === "addLoadPanel") {
-      // Wat je tekent, moet je ook zien: lasten en belastingvlakken in beeld.
+    if (next === "addLoadPanel" || next === "addPointLoad") {
+      // Wat je tekent, moet je ook zien: lasten (en belastingvlakken) in beeld.
       setOpenFem3dShowLoadCase(true);
       setResultsTabActive(false);
-      setOpenFem3dVisibility((value) => value.loads && value.loadPanels ? value : { ...value, loads: true, loadPanels: true });
     }
+    // Wat het gereedschap nodig heeft, komt in beeld: lasten en belastingvlakken
+    // bij een belastingvlak, de staven bij Scharnier aan staafeind (#93).
+    setOpenFem3dVisibility((value) => openFem3DVisibilityForTool(value, next));
   };
   const handleOpenFem3DSelectionChange = (next: OpenFem3DSelection) => {
     if (openFem3dTool === "loadPanelSpan" && openFem3dSpanPick) {
@@ -429,18 +442,65 @@ function App() {
    * veer gaat de cursor naar het veerveld, met de laatst gebruikte stijfheid.
    */
   const applyOpenFem3DNodeTool = (target: OpenFem3DNodeTarget, tool: OpenFem3DTool = openFem3dTool) => {
-    const condition = openFem3DNodeConditionOfTool(tool);
-    if (!condition) return;
-    const current = openFem3dHistoryRef.current.model;
-    if ("nodeId" in target && !current.nodes.some((node) => node.id === target.nodeId)) return;
-    const stiffness = condition.kind === "spring" ? readOpenFem3DSpringStiffness(condition.axis) : 0;
-    const placed = placeOpenFem3DNodeCondition(current, target, condition, stiffness);
+    const placed = openFem3DNodeToolClick(openFem3dHistoryRef.current.model, target, tool);
+    if (!placed) return;
     setOpenFem3d(placed.model);
     setOpenFem3dSelection({ type: "node", id: placed.nodeId });
+    const { condition } = placed;
     if (condition.kind === "spring") {
       setRightPanelOpen(true);
       setOpenFem3dSpringEditorRequest((request) => ({ axis: condition.axis, serial: (request?.serial ?? 0) + 1 }));
     }
+  };
+  /**
+   * Puntlastgereedschap (#77): de klik landde op een knoop (knooplast) of op
+   * een staaf (staafpuntlast op die plek), met de standaardwaarde in het
+   * actieve belastinggeval. Eén stap ongedaan maken; de nieuwe last staat
+   * geselecteerd in het eigenschappenpaneel, om de waarde of plek te verfijnen.
+   */
+  const applyOpenFem3DPointLoadTool = (target: OpenFem3DPointLoadTarget) => {
+    const current = openFem3dHistoryRef.current.model;
+    const placed = placeOpenFem3DPointLoad(current, target, fem.activeLoadCaseId);
+    setOpenFem3d(placed.model);
+    setOpenFem3dShowLoadCase(true);
+    setResultsTabActive(false);
+    setOpenFem3dSelection(placed.selection);
+    setRightPanelOpen(true);
+  };
+  /**
+   * Na Toepassen met lasten (selectiefilter, issue #94), in 2D en 3D: liggen
+   * de gekozen lasten in meerdere belastinggevallen, dan staan alleen die van
+   * het actieve geval in beeld (`filterLastGeval`); zeg dat.
+   */
+  const meldGefilterdeLastenInMeerdereGevallen = (gevallen: readonly number[], geval: number) => {
+    const naam = fem.loadCases.find((item) => item.id === geval)?.name
+      || i18next.t("common:selectieFilter.geval", { id: geval });
+    void import("./io/notify").then(({ notifyInfo }) => notifyInfo(
+      i18next.t("common:selectieFilter.meerdereGevallen.titel"),
+      i18next.t("common:selectieFilter.meerdereGevallen.tekst", { aantal: gevallen.length, geval: naam }),
+    )).catch(() => {});
+  };
+  /**
+   * De selectie uit het selectiefilter (issue #94), ook via
+   * model3d.selection.filter met `select`. Staan er lasten in, dan komen de
+   * lasten in beeld: lastweergave en de zichtbaarheid van lasten en
+   * belastingvlakken aan, resultaten uit, en het geval van `filterLastGeval`
+   * actief (anders stonden ze geselecteerd maar niet getekend). Liggen ze in
+   * meerdere gevallen, dan volgt een melding. Er is geen selectiegeschiedenis:
+   * het is één gewone selectiewissel.
+   */
+  const zetGefilterdeSelectie3D = (next: OpenFem3DSelection) => {
+    setOpenFem3dSelection(next);
+    const ids = openFem3DSelectieIds(next);
+    if (!ids) return;
+    const gevallen = openFem3DSelectieBelastinggevallen(openFem3dHistoryRef.current.model, ids);
+    const keuze = filterLastGeval(gevallen, fem.activeLoadCaseId);
+    if (!keuze) return;
+    setOpenFem3dShowLoadCase(true);
+    setResultsTabActive(false);
+    setOpenFem3dVisibility((value) => value.loads && value.loadPanels ? value : { ...value, loads: true, loadPanels: true });
+    if (keuze.geval !== fem.activeLoadCaseId) fem.setActiveLoadCaseId(keuze.geval);
+    if (keuze.meerdere) meldGefilterdeLastenInMeerdereGevallen(gevallen, keuze.geval);
   };
   /**
    * Een lintknop voor een oplegging of veer met een selectie: één knoop krijgt
@@ -457,6 +517,25 @@ function App() {
     const current = openFem3dHistoryRef.current.model;
     const next = applyOpenFem3DNodeConditionToNodes(current, nodeIds, condition, stiffness);
     if (next !== current) setOpenFem3d(next);
+  };
+  /**
+   * Liggers scharnierend op kolommen (#93): de geselecteerde staven, of alle
+   * staven als er geen staaf geselecteerd is (openFem3DPinToColumnsScope).
+   * Eén stap ongedaan maken; een melding (openFem3DPinToColumnsMessage) zegt
+   * hoeveel staafeinden scharnierend zijn gemaakt en hoeveel momentvast
+   * bleven omdat er anders een mechanisme ontstaat.
+   */
+  const handleOpenFem3DPinBeamsToColumns = () => {
+    const current = openFem3dHistoryRef.current.model;
+    const scope = openFem3DPinToColumnsScope(current, openFem3dSelection);
+    const result = pinOpenFem3DBeamsToColumns(current, scope);
+    if (result.model !== current) setOpenFem3d(result.model);
+    const message = openFem3DPinToColumnsMessage(result, scope);
+    const tekst = (part: { key: string; count?: number }) =>
+      i18next.t(part.key, part.count === undefined ? {} : { count: part.count });
+    void import("./io/notify").then(({ notifyInfo, notifySuccess }) => {
+      (message.level === "success" ? notifySuccess : notifyInfo)(tekst(message.title), message.details.map(tekst).join(" "));
+    }).catch(() => {});
   };
   const [openFem3dDeleteToken, setOpenFem3dDeleteToken] = useState(0);
   const [openFem3dFitToken, setOpenFem3dFitToken] = useState(0);
@@ -847,6 +926,8 @@ function App() {
   const [displayFlags, setDisplayFlags] = useState<DisplayFlags>(DEFAULT_DISPLAY_FLAGS);
   // Venster Zichtbaarheid (issue #47): alle weergave-instellingen bij elkaar.
   const [zichtbaarheidOpen, setZichtbaarheidOpen] = useState(false);
+  // Venster Selectiefilter (issue #94), in 2D en 3D, via de lintknop Filter.
+  const [selectieFilterOpen, setSelectieFilterOpen] = useState(false);
   // De model-lagen (knoopnummers, staafnummers, aanzicht, …) per gebruiker
   // onthouden in de voorkeuren, niet in het projectbestand. Eerst lezen; pas
   // daarna schrijven, anders overschrijft de standaard de bewaarde keuze.
@@ -1112,6 +1193,8 @@ function App() {
         (parsed.structuralGrid ?? DEFAULT_STRUCTURAL_GRID).zAxes,
       ) });
       setOpenFem3dCameraSnapshot(null);
+      // Een ander model: de section box (issue #86) uit, zonder de grenzen van het vorige.
+      setOpenFem3dVisibility(openFem3DVisibilityZonderSectionBox);
       setOpenFem3dViewSets(parsed.openFem3dViewSets ?? []);
       setOpenFem3dStandaardViewsUitRapport(parsed.openFem3dStandaardViewsUitRapport ?? []);
       setOpenFem3dActieveView(null);
@@ -1302,6 +1385,8 @@ function App() {
     baselineResetRef.current = true;
     dispatchOpenFem3D({ type: "replace", model: { nodes: [], beams: [] } });
     setOpenFem3dCameraSnapshot(null);
+    // Een ander model: de section box (issue #86) uit, zonder de grenzen van het vorige.
+    setOpenFem3dVisibility(openFem3DVisibilityZonderSectionBox);
     setOpenFem3dSelection(null);
     setModelDimension("2d");
     setOpenFem3dViewSets([]);
@@ -1582,6 +1667,8 @@ function App() {
     });
     dispatchOpenFem3D({ type: "replace", model: converted.model });
     setOpenFem3dCameraSnapshot(null);
+    // Een ander model: de section box (issue #86) uit, zonder de grenzen van het vorige.
+    setOpenFem3dVisibility(openFem3DVisibilityZonderSectionBox);
     setOpenFem3dSelection(null);
     setModelDimension("3d");
     setActiveView("openFem3d");
@@ -1604,6 +1691,8 @@ function App() {
     if (actief !== undefined) store.setActiveLoadCaseId(actief);
     dispatchOpenFem3D({ type: "edit", model });
     setOpenFem3dCameraSnapshot(null);
+    // Een ander model: de section box (issue #86) uit, zonder de grenzen van het vorige.
+    setOpenFem3dVisibility(openFem3DVisibilityZonderSectionBox);
     setOpenFem3dSelection(null);
     setModelDimension("3d");
     setActiveView("openFem3d");
@@ -2509,7 +2598,7 @@ function App() {
         setOpenFem3dVisibility((value) => ({
           ...value, deformation: true, reactions: true, utilization: true,
           momentY: value.axialForce || value.shearY || value.shearZ || value.torsion || value.momentY || value.momentZ
-            ? value.momentY : true,
+            || value.groundPressure ? value.momentY : true,
         }));
         const unbalanced = [...casePairs, ...combinationPairs]
           .map(([, value]) => value.forceBalance)
@@ -2894,6 +2983,31 @@ function App() {
   // terwijl je de afleiding leest, en zie je welke staaf je voor je hebt.
   const isFullWidthView = activeView === "openFem3d" || activeView === "viewer" || activeView === "ifc" || activeView === "report" || activeView === "insights";
 
+  // Het 2D-model voor het selectiefilter (issue #94); één object per modelstand.
+  const selectieFilterModel2D = useMemo(
+    () => ({ nodes: fem.nodes, beams: fem.beams, plates: fem.plates, supports: fem.supports, loads: fem.loads }),
+    [fem.nodes, fem.beams, fem.plates, fem.supports, fem.loads]);
+  /**
+   * De selectie uit het selectiefilter in 2D (issue #94), zoals in 3D
+   * (`zetGefilterdeSelectie3D`): het tekenvlak toont alleen de lasten van het
+   * actieve geval, buiten de combinatie-, omhullende- en resultatenweergave.
+   * Staan er lasten in, dan wordt het geval van `filterLastGeval` actief en
+   * gaat de weergave terug naar dat geval, zoals de gevalkiezer in de
+   * verkenner; liggen ze in meerdere gevallen, dan volgt een melding.
+   */
+  const zetGefilterdeSelectie2D = (next: Selection, ids: SelectieIds2D) => {
+    fem.setSelection(next);
+    const gevallen = selectieBelastinggevallen2D(selectieFilterModel2D, ids);
+    const keuze = filterLastGeval(gevallen, fem.activeLoadCaseId);
+    if (!keuze) return;
+    if (keuze.geval !== fem.activeLoadCaseId) fem.setActiveLoadCaseId(keuze.geval);
+    fem.setActiveCombinationId(null);
+    fem.setEnvelopeView(false);
+    fem.setShowLoads(true);
+    setResultsTabActive(false);
+    if (keuze.meerdere) meldGefilterdeLastenInMeerdereGevallen(gevallen, keuze.geval);
+  };
+
   /**
    * De geselecteerde BETONstaaf, of `null`.
    *
@@ -2975,6 +3089,7 @@ function App() {
               tool={openFem3dTool}
               onToolChange={handleOpenFem3DToolChange}
               onPlaceNodeCondition={(target) => applyOpenFem3DNodeTool(target)}
+              onPlacePointLoad={(target) => applyOpenFem3DPointLoadTool(target)}
               deformationDisplay={openFem3dDeformationDisplay}
               diagramLabels={openFem3dDiagramLabels}
               deleteToken={openFem3dDeleteToken}
@@ -3261,6 +3376,8 @@ function App() {
       return pad;
     },
     heeftNietOpgeslagenWerk: () => isDirtyRef.current,
+    // model3d.selection.filter met `select` (issue #94): zoals Toepassen in het venster.
+    zetSelectie3D: (selectie) => zetGefilterdeSelectie3D(selectie),
   };
 
   /**
@@ -3291,6 +3408,8 @@ function App() {
         if (levels) setStructuralGridState((current) => ({ ...current, zAxes: levels }));
         dispatchOpenFem3D({ type: "replace", model });
         setOpenFem3dCameraSnapshot(null);
+        // Een ander model: de section box (issue #86) uit, zonder de grenzen van het vorige.
+        setOpenFem3dVisibility(openFem3DVisibilityZonderSectionBox);
         setOpenFem3dSelection(null);
         setModelDimension("3d");
         setActiveView("openFem3d");
@@ -3304,6 +3423,8 @@ function App() {
         setActiveView("openFem3d");
         setOpenFem3dViewRequest((previous) => ({ kind, token: previous.token + 1 }));
       },
+      // De selectie: `section_box.fit = "selection"` (issue #86) zet de doos eromheen.
+      selection: openFem3dSelection,
       setSelection: setOpenFem3dSelection,
       selectCombination: (id) => {
         const result = openFem3dCombinationResults.get(id);
@@ -3392,6 +3513,15 @@ function App() {
         openFem3dView={openFem3dViewRequest.kind}
         onToggle3DVisibility={() => setVisibility3DOpen((open) => !open)}
         visibility3DOpen={visibility3DOpen}
+        openFem3dPlateDisplay={openFem3dVisibility.plateDisplay}
+        onOpenFem3DPlateDisplayChange={(plateDisplay) => setOpenFem3dVisibility((visibility) =>
+          // Dezelfde stand nog eens: hetzelfde object, dan bouwt het tekenvlak niets opnieuw op.
+          visibility.plateDisplay === plateDisplay ? visibility : { ...visibility, plateDisplay })}
+        // Section box (issue #86): dezelfde schakelaar als in het menu ▾ van de view cube.
+        openFem3dSectionBox={openFem3dVisibility.sectionBox.enabled}
+        onOpenFem3DSectionBoxToggle={() => setOpenFem3dVisibility((visibility) => ({
+          ...visibility, sectionBox: openFem3DSectionBoxSchakel(visibility.sectionBox, openFem3d),
+        }))}
         hasOpenFem3DNodeSelection={openFem3dSelection?.type === "node" && openFem3d.nodes.some((node) => node.id === openFem3dSelection.id)}
         hasOpenFem3DBeamSelection={openFem3dSelection?.type === "beam" && openFem3d.beams.some((beam) => beam.id === openFem3dSelection.id)}
         hasOpenFem3DPlateSelection={openFem3dSelection?.type === "plate" && (openFem3d.plates ?? []).some((plate) => plate.id === openFem3dSelection.id)}
@@ -3399,6 +3529,7 @@ function App() {
           setOpenFem3dTool(`support:${preset}`);
           applyOpenFem3DNodeToolToSelection(`support:${preset}`);
         }}
+        onOpenFem3DPinBeamsToColumns={handleOpenFem3DPinBeamsToColumns}
         onOpenFem3DSpringTool={(axis) => {
           // Een gereedschap zoals de opleggingen; een geselecteerde knoop krijgt
           // de veer meteen.
@@ -3475,16 +3606,7 @@ function App() {
         onValidateIfc={() => { void handleValidateIfc(); }}
         onOpenIfcView={() => setActiveView("ifc")}
         onImportIfcAnalysisModel={() => { void handleImportIfcAnalyse(); }}
-        onFilterSelection={() => {
-          // Filter current selection: if multi-selection, keep only the first
-          // type (nodes / beams / plates) — quickest visible effect for now.
-          const sel = fem.selection as any;
-          if (sel && sel.type === "multi") {
-            if (sel.nodeIds.length > 0)        fem.setSelection({ type: "node", id: sel.nodeIds[0] } as any);
-            else if (sel.beamIds.length > 0)   fem.setSelection({ type: "beam", id: sel.beamIds[0] } as any);
-            else if (sel.plateIds.length > 0)  fem.setSelection({ type: "plate", id: sel.plateIds[0] } as any);
-          }
-        }}
+        onFilterSelection={() => setSelectieFilterOpen(true)}
         onShowInsightsMode={(m) => { setInsightsMode(m); setActiveView("insights"); }}
         onOpenZichtbaarheid={() => setZichtbaarheidOpen(true)}
         onExportMatrixCsv={async () => {
@@ -3951,8 +4073,10 @@ function App() {
         zoomPct={activeView === "default" ? zoomPct : undefined}
         solverStatus={solverStatus}
         // Snapknopjes horen bij de tekenweergave; in de rapport-/IFC-weergave
-        // valt er niets te snappen.
-        toonSnap={!isFullWidthView && (modelDimension === "2d" || activeView === "openFem3d")}
+        // valt er niets te snappen. Het 3D-tekenvlak telt als volle breedte,
+        // maar tekent wel: daar ook, met het objectspoor erbij (#84).
+        toonSnap={(!isFullWidthView && modelDimension === "2d") || activeView === "openFem3d"}
+        snapSchakelaars={activeView === "openFem3d" ? SNAP_SCHAKELAARS_3D : SNAP_SOORTEN}
         bedieningActief={bedieningActief}
       />
       <Backstage
@@ -3998,6 +4122,27 @@ function App() {
         setStramienAan={(aan) => fem.setStructuralGrid(prev => ({ ...prev, enabled: aan }))}
         hasPlates={fem.plates.length > 0}
       />
+      {/* Selectiefilter (issue #94): op de selectie, of zonder selectie op het hele model. */}
+      {modelDimension === "3d" ? (
+        <SelectieFilterVenster3D
+          open={selectieFilterOpen}
+          onClose={() => setSelectieFilterOpen(false)}
+          model={openFem3d}
+          levels={fem.structuralGrid.zAxes}
+          loadCases={fem.loadCases}
+          selection={openFem3dSelection}
+          onSelect={(next) => zetGefilterdeSelectie3D(next)}
+        />
+      ) : (
+        <SelectieFilterVenster2D
+          open={selectieFilterOpen}
+          onClose={() => setSelectieFilterOpen(false)}
+          model={selectieFilterModel2D}
+          loadCases={fem.loadCases}
+          selection={fem.selection}
+          onSelect={(next, ids) => zetGefilterdeSelectie2D(next, ids)}
+        />
+      )}
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} onThemeChange={setTheme} />
       <LibraryDialog open={libraryOpen} onClose={() => setLibraryOpen(false)} initialTab={libraryTab} />
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />

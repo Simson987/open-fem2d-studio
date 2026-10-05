@@ -27,6 +27,7 @@ import { standaardCommandos } from "../api/standaardRegister";
 import { combinationsFromFile } from "../io/projectFile";
 import type { OpenFem3DModel } from "../components/openFem3d/openFem3dModel";
 import type { OpenFem3DExternStap } from "../components/openFem3d/openFem3dHistory";
+import type { OpenFem3DSelection } from "../components/openFem3d/openFem3dSelection";
 import type { Load, LoadCase, StructuralGrid } from "../components/fem/femTypes";
 import type { LoadCombination } from "../components/fem/solver/combinations";
 
@@ -62,6 +63,13 @@ export interface ApiAppActies {
   openen(pad: string): Promise<string>;
   /** Of het project wijzigingen heeft die nog niet zijn opgeslagen. */
   heeftNietOpgeslagenWerk(): boolean;
+  /**
+   * De 3D-selectie zetten, zoals Toepassen in het venster Selectiefilter
+   * (issue #94): `model3d.selection.filter` met `select: true`. Verplicht,
+   * zodat tsc bewaakt dat App.tsx hem levert. De sidecar bouwt geen
+   * ApiAppActies; daar heeft het commando geen app en zet het niets.
+   */
+  zetSelectie3D(selectie: OpenFem3DSelection): void;
 }
 
 export type ApiAntwoord =

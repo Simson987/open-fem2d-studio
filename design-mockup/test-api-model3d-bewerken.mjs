@@ -1,10 +1,12 @@
 // API-commando's om het 3D-model als geheel te bewerken
 // (src/api/commands/model3dBewerken.ts): transformaties, een selectie
-// verwijderen en levels, via het register op een portaal.
+// verwijderen (ook met lasten, de uitkomst van model3d.selection.filter) en
+// levels, via het register op een portaal.
 const { maakRegister } = await import("./src/api/register.ts");
-const { leegDocument, model3dVan } = await import("./src/api/projectDocument.ts");
+const { leegDocument, metModel3d, model3dVan } = await import("./src/api/projectDocument.ts");
 const { MODEL3D_GEOMETRIE_COMMANDOS } = await import("./src/api/commands/model3dGeometrie.ts");
 const { MODEL3D_BEWERKEN_COMMANDOS } = await import("./src/api/commands/model3dBewerken.ts");
+const { MODEL3D_SELECTIE_COMMANDOS } = await import("./src/api/commands/model3dSelectie.ts");
 
 let geslaagd = 0, gefaald = 0;
 const check = (naam, ok, detail = "") => {
@@ -47,6 +49,55 @@ const weg = doe("model3d.selection.delete", { beamIds: kopie.selection.beamIds }
 check("de gekopieerde staven weg, hun knopen blijven", weg.removedBeamIds.length === 3 && model3dVan(doc).nodes.length === 8, JSON.stringify(weg));
 const knopenWeg = doe("model3d.selection.delete", { nodeIds: [5, 6, 7, 8] });
 check("losse knopen weg", knopenWeg.removedNodeIds.join() === "5,6,7,8" && model3dVan(doc).nodes.length === 4);
+
+console.log("\n[2b] selectie met lasten verwijderen (issue #94), zoals Delete na het selectiefilter");
+{
+  const knoopLast = (id, nodeId, caseId) => ({ id, nodeId, caseId, fx: 1, fy: 0, fz: 0, mx: 0, my: 0, mz: 0 });
+  const lijnLast = (id, beamId, caseId) => ({ id, beamId, caseId, qyStart: 0, qyEnd: 0, qzStart: -1, qzEnd: -1, startPositionM: 0, endPositionM: 6 });
+  // Een ligger en een kolom met lasten in twee gevallen.
+  const metLasten = metModel3d(leegDocument(), {
+    nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 6, y: 0, z: 0 }, { id: 3, x: 6, y: 0, z: 4 }],
+    beams: [{ id: 1, startNodeId: 1, endNodeId: 2 }, { id: 2, startNodeId: 2, endNodeId: 3 }],
+    supports: [],
+    loads: [knoopLast(1, 3, 1), knoopLast(2, 2, 2)],
+    memberLoads: [lijnLast(1, 1, 2), lijnLast(2, 2, 1)],
+    memberPointLoads: [{ id: 1, beamId: 1, caseId: 2, py: 0, pz: -5, positionM: 3 }],
+    thermalLoads: [], plates: [], surfaceLoads: [], loadPanels: [],
+  });
+  const reg = maakRegister([...MODEL3D_BEWERKEN_COMMANDOS, ...MODEL3D_SELECTIE_COMMANDOS]);
+  const voer = (naam, invoer, document = metLasten) => reg.voerUit(naam, invoer, { document });
+  const faaltOp = (invoer) => { try { voer("model3d.selection.delete", invoer); return null; } catch (e) { return e; } };
+  const lijst = (ids) => (ids ?? []).join(",");
+
+  // De id-velden van het filter gaan ongewijzigd in delete.
+  const { counts, wholeModel, selectionApplied, supportNodeIds, ...gefilterd } =
+    voer("model3d.selection.filter", { criteria: [{ property: "loadCase", mode: "keep", values: [2] }] }).uitkomst;
+  check("het filter geeft de lasten van geval 2 (knooplast 2, lijnlast 1, puntlast 1)", counts.loads === 3
+    && lijst(gefilterd.nodalLoadIds) === "2" && lijst(gefilterd.memberLoadIds) === "1" && lijst(gefilterd.memberPointLoadIds) === "1",
+  JSON.stringify(gefilterd));
+  const weg = voer("model3d.selection.delete", gefilterd);
+  const na = model3dVan(weg.document);
+  check("de uitkomst van het filter in één commando weg: alleen de lasten van geval 2, de geometrie blijft",
+    lijst(na.loads.map((l) => l.id)) === "1" && lijst(na.memberLoads.map((l) => l.id)) === "2" && na.memberPointLoads.length === 0
+    && na.beams.length === 2 && na.nodes.length === 3, JSON.stringify(na));
+  check("de uitkomst noemt de verwijderde lasten per soort",
+    lijst(weg.uitkomst.removedNodalLoadIds) === "2" && lijst(weg.uitkomst.removedMemberLoadIds) === "1"
+    && lijst(weg.uitkomst.removedMemberPointLoadIds) === "1" && lijst(weg.uitkomst.removedThermalLoadIds) === ""
+    && lijst(weg.uitkomst.removedSurfaceLoadIds) === "" && lijst(weg.uitkomst.removedLoadPanelIds) === ""
+    && lijst(weg.uitkomst.removedNodeIds) === "" && lijst(weg.uitkomst.removedBeamIds) === "", JSON.stringify(weg.uitkomst));
+  const een = voer("model3d.selection.delete", { memberLoadIds: [2] });
+  check("één last: alleen die last weg", lijst(model3dVan(een.document).memberLoads.map((l) => l.id)) === "1"
+    && lijst(een.uitkomst.removedMemberLoadIds) === "2");
+  const gemengd = voer("model3d.selection.delete", { beamIds: [1], nodalLoadIds: [1] });
+  check("staaf en last samen: de staaf met zijn lasten, en de gekozen knooplast",
+    lijst(gemengd.uitkomst.removedBeamIds) === "1" && lijst(gemengd.uitkomst.removedNodalLoadIds) === "1"
+    && lijst(gemengd.uitkomst.removedMemberLoadIds) === "1" && lijst(gemengd.uitkomst.removedMemberPointLoadIds) === "1"
+    && lijst(model3dVan(gemengd.document).loads.map((l) => l.id)) === "2", JSON.stringify(gemengd.uitkomst));
+  const leeg = faaltOp({});
+  check("niets gekozen → INVOER_ONGELDIG, en de melding noemt lasten", leeg?.code === "INVOER_ONGELDIG" && leeg.message.includes("last"),
+    leeg?.message);
+  check("onbekende last → NIET_GEVONDEN", faaltOp({ thermalLoadIds: [9] })?.code === "NIET_GEVONDEN");
+}
 
 console.log("\n[3] levels");
 const gezet = doe("model3d.levels.set", { levels: [{ label: "vloer", heightM: 4 }, { label: "dak", heightM: 8 }] }).levels;

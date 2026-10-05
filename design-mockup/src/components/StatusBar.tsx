@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { fetchAppVersion, toonVersie } from "../lib/appVersion";
 import {
-  SNAP_LABELS, SNAP_SOORTEN, useSnapInstellingen, wisselSnap,
+  SNAP_LABELS, SNAP_SOORTEN, useSnapInstellingen, wisselSnap, type SnapSchakelaar3D,
 } from "../hooks/useSnapInstellingen";
 import "./StatusBar.css";
 
@@ -29,6 +29,11 @@ interface StatusBarProps {
    */
   toonSnap?: boolean;
   /**
+   * Welke snapknopjes: standaard de puntsnaps (knoop, stramien, raster); de
+   * 3D-werkruimte geeft daar het objectspoor bij (#84).
+   */
+  snapSchakelaars?: readonly SnapSchakelaar3D[];
+  /**
    * Staat het bedieningskanaal aan (app gestart met OPENAEC_GUI_CONTROL=1)?
    * Dan hoort dat zichtbaar te zijn: iemand die de app ziet, weet zo dat er
    * van buiten aan wordt gedraaid.
@@ -43,6 +48,7 @@ export default function StatusBar({
   zoomPct,
   solverStatus,
   toonSnap = false,
+  snapSchakelaars = SNAP_SOORTEN,
   bedieningActief = false,
 }: StatusBarProps) {
   const { t } = useTranslation();
@@ -146,11 +152,13 @@ export default function StatusBar({
 
       <div className="status-bar-right">
         {/* Snap aan/uit per soort. De volgorde is de voorrangsvolgorde:
-            knoop wint van stramien, stramien wint van raster. */}
+            knoop wint van stramien, stramien wint van raster; in 3D staat
+            het objectspoor erachter (het gaat in 3D wel vóór stramien en
+            raster, zie openFem3dTekenhulp.ts). */}
         {toonSnap && (
           <div className="status-snap" role="group" aria-label={t("snapGroup", "Snap")}>
             <span className="status-item-label">{t("snapLabel", "Snap")}:</span>
-            {SNAP_SOORTEN.map((soort) => (
+            {snapSchakelaars.map((soort) => (
               <button
                 key={soort}
                 type="button"

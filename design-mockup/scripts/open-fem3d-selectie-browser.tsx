@@ -59,11 +59,26 @@
  *    model (1200 staven, stand 5) met alleen de labels die in beeld passen als
  *    element, en in de verkenner het sub-blok Waarden onder de eerste
  *    aangevinkte lijn, ook op 240 px breed (nl en fr).
+ *  - Scharnieren aan staafeinden en het inklemmingsteken (groep "scharnier",
+ *    issue #93): het bolletje op de staafas net vóór de knoopbol bij elk
+ *    staafeind met een scharnier (los en in een GPU-batch, kiesbaar als de
+ *    staaf, mee gekleurd bij selecteren), met de getekende rand kleiner dan
+ *    de knoopbol en dikker dan de staaf, ook in een klein portaal; in de
+ *    profielweergave door het eigen profiel heen te zien maar achter een
+ *    profiel ervoor niet (beeldpunten); geen bolletjes zonder scharnier of
+ *    met de staven uit, ook langs de snelle wegen zonder opnieuw te mounten
+ *    (staven en profielen aan/uit, een knoop verplaatsen); het gereedschap Scharnier aan
+ *    staafeind in de echte editor (een klik bij het begin of het eind zet My
+ *    en Mz los en weer vast, één stap ongedaan maken per klik, de uitleg in
+ *    de kop); de inklemming als blok met kraag op de gearceerde ondergrond,
+ *    los en gebundeld, met een klik erop de knoop.
  *
  * Zonder hash draait de testreeks; `#diag` telt alleen hoe vaak één klik op of
  * naast een staaf van de staalhal die staaf selecteert; `#beeld=…` toont
  * alleen een beeld voor een schermafbeelding (vervormd, kubus-start,
- * kubus-onder, kubus-menu).
+ * kubus-onder, kubus-menu, scharnier-overzicht, scharnier-iso,
+ * scharnier-opzij, scharnier-klein, scharnier-profiel, inklemming-iso,
+ * inklemming-opzij, inklemming-boven, opleggingen-naast-elkaar).
  */
 import React, { useReducer, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -85,7 +100,8 @@ import ThreeFrameCanvas from "../src/components/openFem3d/ThreeFrameCanvas";
 import OpenFem3DEditor from "../src/components/openFem3d/OpenFem3DEditor";
 import { openFem3DConditionMarkerSize } from "../src/components/openFem3d/openFem3dMarkers";
 import {
-  addOpenFem3DPlate, addOpenFem3DPlateOpening, addOpenFem3DSurfaceLoad, parseOpenFem3DModel, type OpenFem3DModel,
+  addOpenFem3DPlate, addOpenFem3DPlateOpening, addOpenFem3DSurfaceLoad, OPEN_FEM_3D_SUPPORT_PRESETS, parseOpenFem3DModel,
+  pinOpenFem3DBeamsToColumns, type OpenFem3DModel,
 } from "../src/components/openFem3d/openFem3dModel";
 import {
   DEFAULT_OPEN_FEM_3D_VISIBILITY, OPEN_FEM_3D_RESULT_LAYERS, readOpenFem3DVisibility, saveOpenFem3DVisibility,
@@ -123,6 +139,9 @@ let renderCamera: THREE.Camera | null = null;
 // De scène die het laatst getekend is: de lijnlastproeven (#81) lezen daarin
 // de kleur van elke pijl, zoals hij op het scherm komt.
 let renderScene: THREE.Object3D | null = null;
+// De renderer die het laatst tekende: de scharnierproeven (#93) lezen er
+// beeldpunten mee uit (beeldpunt).
+let renderRenderer: THREE.WebGLRenderer | null = null;
 let rendererTeller = 0;
 Object.defineProperty(THREE.WebGLRenderer.prototype, "render", {
   configurable: true,
@@ -130,7 +149,10 @@ Object.defineProperty(THREE.WebGLRenderer.prototype, "render", {
     rendererTeller += 1;
     Object.defineProperty(this, "render", {
       configurable: true, writable: true,
-      value: (scene: THREE.Object3D, cam: THREE.Camera) => { renderCamera = cam; renderScene = scene; return fn.call(this, scene, cam); },
+      value: (scene: THREE.Object3D, cam: THREE.Camera) => {
+        renderCamera = cam; renderScene = scene; renderRenderer = this;
+        return fn.call(this, scene, cam);
+      },
     });
   },
 });
@@ -454,6 +476,15 @@ async function run() {
     document.getElementById("uitslag")!.remove();
     return;
   }
+  // Scharnierbolletjes en opleggingstekens van dichtbij (#93).
+  const scharnierBeeld = /^#beeld=((?:scharnier|inklemming)-\w+|opleggingen-naast-elkaar)$/.exec(location.hash)?.[1];
+  if (scharnierBeeld) {
+    const beeld = SCHARNIER_BEELDEN[scharnierBeeld];
+    ok(beeld, `onbekend beeld ${scharnierBeeld}`);
+    await toon(beeld!.model, { ...snel, perspective: beeld!.parallel !== true, ...beeld!.zicht }, { camera: beeld!.camera });
+    document.getElementById("uitslag")!.remove();
+    return;
+  }
   if (location.hash === "#diag") {
     const uitkomst = await diagnose();
     document.getElementById("uitslag")!.textContent = JSON.stringify({ diag: uitkomst, tests: [], error: null });
@@ -469,6 +500,7 @@ async function run() {
   if (groep === "alles" || groep === "parallel") await parallelProeven();
   if (groep === "alles" || groep === "waarden") await waardenProeven();
   if (groep === "alles" || groep === "lijnlast") await lijnlastProeven();
+  if (groep === "alles" || groep === "scharnier") await scharnierProeven();
   // Alleen in de ontwikkelbundel (test-open-fem3d-selectie-ui.mjs bouwt die apart).
   if (groep === "strikt") await strikteProeven();
 }
@@ -1255,9 +1287,11 @@ async function kubusProeven() {
     gelijk(knop.getAttribute("aria-expanded"), "true", "open na een klik");
     ok(!menuEl().hidden, "menu open");
     gelijk([menuEl().getAttribute("role"), menuEl().getAttribute("aria-labelledby")], ["menu", knop.id], "menu");
+    // Sinds issue #86 daaronder de section box: een schakelaar, passend op selectie en resetten.
     gelijk([...menuEl().children].map((el) => [el.getAttribute("role"), el.textContent]),
-      [["menuitem", "Startaanzicht"], ["menuitem", "Passend beeld"], ["menuitemcheckbox", "Perspectief"]],
-      "drie regels (Perspectief als schakelaar), geen plekhouders");
+      [["menuitem", "Startaanzicht"], ["menuitem", "Passend beeld"], ["menuitemcheckbox", "Perspectief"],
+        ["menuitemcheckbox", "Section box"], ["menuitem", "Section box passend op selectie"], ["menuitem", "Section box resetten"]],
+      "zes regels (Perspectief en Section box als schakelaar), geen plekhouders");
     gelijk(actiefEl(), menuItemEl("start"), "de focus staat op de eerste regel");
     klikEcht(menuItemEl("start"), "Startaanzicht");
     ok(menuEl().hidden && knop.getAttribute("aria-expanded") === "false", "een keuze sluit het menu");
@@ -1290,21 +1324,27 @@ async function kubusProeven() {
       gelijk(actiefEl(), menuItemEl("passend"), "pijl omlaag: volgende regel");
       toets("ArrowDown", actiefEl());
       gelijk(actiefEl(), menuItemEl("perspectief"), "pijl omlaag: de schakelaar Perspectief");
+      // Daaronder de section box (issue #86): de schakelaar, passend op
+      // selectie (zonder selectie uitgeschakeld, wel bereikbaar) en Reset.
+      for (const regel of ["sectionBox", "sectionBoxSelectie", "sectionBoxReset"]) {
+        toets("ArrowDown", actiefEl());
+        gelijk(actiefEl(), menuItemEl(regel), `pijl omlaag: ${regel}`);
+      }
       toets("ArrowDown", actiefEl());
       gelijk(actiefEl(), menuItemEl("start"), "pijl omlaag rondom");
       toets("ArrowUp", actiefEl());
-      gelijk(actiefEl(), menuItemEl("perspectief"), "pijl omhoog rondom");
+      gelijk(actiefEl(), menuItemEl("sectionBoxReset"), "pijl omhoog rondom");
       toets("Home", actiefEl());
       gelijk(actiefEl(), menuItemEl("start"), "Home");
       toets("End", actiefEl());
-      gelijk(actiefEl(), menuItemEl("perspectief"), "End");
+      gelijk(actiefEl(), menuItemEl("sectionBoxReset"), "End");
       toets("Escape", actiefEl());
       ok(menuEl().hidden, "Escape sluit");
       gelijk(actiefEl(), knop, "Escape: de focus terug op de knop");
     }
     gelijk(tekenvlakEl().dataset.openFem3dEscape, undefined, "Escape in het menu raakt het tekenvlak niet (gereedschap, selectie)");
     toets("ArrowUp", knop);
-    gelijk(actiefEl(), menuItemEl("perspectief"), "pijl omhoog op de knop: de laatste regel");
+    gelijk(actiefEl(), menuItemEl("sectionBoxReset"), "pijl omhoog op de knop: de laatste regel");
     toets("Tab", actiefEl());
     ok(menuEl().hidden, "Tab sluit");
     // Enter op een regel kiest hem: Startaanzicht.
@@ -1828,8 +1868,10 @@ async function kubusProeven() {
       await wacht();
       gelijk(stand(), voor, `${toetsNaam} in het open menu: model, selectie, gereedschap en menu blijven`);
     }
-    // Typ-vooruit: p → Passend beeld, nog eens p → Perspectief, s → Startaanzicht.
-    for (const [letter, regel] of [["p", "passend"], ["p", "perspectief"], ["s", "start"]] as const) {
+    // Typ-vooruit: p → Passend beeld, nog eens p → Perspectief; s → de drie
+    // regels van de section box (issue #86) en dan rondom naar Startaanzicht.
+    for (const [letter, regel] of [["p", "passend"], ["p", "perspectief"], ["s", "sectionBox"], ["s", "sectionBoxSelectie"],
+      ["s", "sectionBoxReset"], ["s", "start"]] as const) {
       toets(letter, actiefEl());
       gelijk(actiefEl(), menuItemEl(regel), `${letter}: naar ${regel}`);
     }
@@ -2280,8 +2322,11 @@ async function parallelProeven() {
     cameraOpgeslagen = null;
     menuKnopEl().focus();
     toets("Enter", menuKnopEl());
-    toets("End", actiefEl());
-    gelijk(actiefEl(), item(), "End: de schakelaar");
+    // Perspectief is de derde regel (sinds issue #86 staat de section box eronder, dus niet End).
+    toets("Home", actiefEl());
+    toets("ArrowDown", actiefEl());
+    toets("ArrowDown", actiefEl());
+    ok(actiefEl() === item(), "pijl omlaag: de schakelaar Perspectief");
     toets("Enter", actiefEl());
     await wacht();
     gelijk([editorZichtNu?.perspective, diag().openFem3dProjection, item().getAttribute("aria-checked")],
@@ -3032,6 +3077,533 @@ async function lijnlastProeven() {
       gelijk(lastObjecten() === objecten, true, `deselecteren bouwde de scène niet opnieuw op (bouwmodus ${diag().openFem3dBuildMode})`);
     });
   }
+
+  // Een groepsselectie met lasten (selectiefilter, issue #94): elke last in de
+  // groep geheel gemarkeerd, los en in GPU-batches; uit de groep gehaald of
+  // gedeselecteerd weer in zijn eigen kleuren, zonder de scène op te bouwen.
+  for (const opzet of LIJNLAST_MODELLEN.slice(0, 2)) {
+    await test(`groepsselectie met lasten (#94), ${opzet.naam}: beide lijnlasten gemarkeerd; uit de groep of deselecteren zet de eigen kleuren terug`, async () => {
+      await toon(opzet.model, { ...snel }, { camera: lijnlastCamera });
+      const basis = new Map(LIJNLASTEN.map((last) => [last.id, lastMarkering("memberLoad", last.id)]));
+      const objecten = lastObjecten();
+      flushSync(() => zetTekenvlakSelectie({ type: "multi", nodeIds: [], beamIds: [], loads: { memberLoad: [5, 6] } }));
+      await wacht();
+      for (const last of LIJNLASTEN) {
+        const m = lastMarkering("memberLoad", last.id);
+        ok(heelGemarkeerd(m) && m.delen === 2 * last.pijlen.length + 1, `groep: last ${last.id} ${markeringTekst(m)}`);
+      }
+      gelijk(lastObjecten() === objecten, true, `de groep kleurt alleen (bouwmodus ${diag().openFem3dBuildMode})`);
+      flushSync(() => zetTekenvlakSelectie({ type: "multi", nodeIds: [], beamIds: [1], loads: { memberLoad: [6] } }));
+      await wacht();
+      gelijk(lastMarkering("memberLoad", 5).kleuren, basis.get(5)!.kleuren, "last 5 uit de groep: terug in zijn eigen kleuren");
+      ok(heelGemarkeerd(lastMarkering("memberLoad", 6)), `last 6 blijft gemarkeerd: ${markeringTekst(lastMarkering("memberLoad", 6))}`);
+      await geenSelectie();
+      for (const last of LIJNLASTEN) {
+        gelijk(lastMarkering("memberLoad", last.id).kleuren, basis.get(last.id)!.kleuren, `deselecteren: last ${last.id} terug in zijn eigen kleuren`);
+      }
+    });
+  }
+}
+
+// ── Scharnieren aan staafeinden en het inklemmingsteken (#93, groep "scharnier") ──
+// Een portaal van 6 × 4 m: kolommen 1 (1→2) en 2 (3→4), ligger 3 (2→4) en
+// inklemmingen aan de kolomvoeten. Met een tweede veld (kolom 4, ligger 5)
+// zijn er vier scharnieren: de bolletjes in een GPU-batch.
+const INKLEMMING = OPEN_FEM_3D_SUPPORT_PRESETS.fixed;
+const scharnierBasis = {
+  nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 0, y: 0, z: 4 }, { id: 3, x: 6, y: 0, z: 0 }, { id: 4, x: 6, y: 0, z: 4 }],
+  beams: [{ id: 1, startNodeId: 1, endNodeId: 2 }, { id: 2, startNodeId: 3, endNodeId: 4 }, { id: 3, startNodeId: 2, endNodeId: 4 }],
+  supports: [{ nodeId: 1, ...INKLEMMING }, { nodeId: 3, ...INKLEMMING }],
+};
+const scharnierVrij = parseOpenFem3DModel(scharnierBasis);
+const scharnierPortaal = pinOpenFem3DBeamsToColumns(scharnierVrij).model;
+const scharnierTweeVelden = pinOpenFem3DBeamsToColumns(parseOpenFem3DModel({
+  nodes: [...scharnierBasis.nodes, { id: 5, x: 12, y: 0, z: 0 }, { id: 6, x: 12, y: 0, z: 4 }],
+  beams: [...scharnierBasis.beams, { id: 4, startNodeId: 5, endNodeId: 6 }, { id: 5, startNodeId: 4, endNodeId: 6 }],
+  supports: [...scharnierBasis.supports, { nodeId: 5, ...INKLEMMING }],
+})).model;
+// Vier kolommen van 3 m met elk een inklemming: de tekens in GPU-batches.
+const vierInklemmingen = parseOpenFem3DModel({
+  nodes: [0, 3, 6, 9].flatMap((x, k) => [{ id: 2 * k + 1, x, y: 0, z: 0 }, { id: 2 * k + 2, x, y: 0, z: 3 }]),
+  beams: [0, 1, 2, 3].map((k) => ({ id: k + 1, startNodeId: 2 * k + 1, endNodeId: 2 * k + 2 })),
+  supports: [1, 3, 5, 7].map((nodeId) => ({ nodeId, ...INKLEMMING })),
+});
+// Inklemming, scharnier en rol naast elkaar, elk onder een korte kolom.
+const opleggingenNaastElkaar = parseOpenFem3DModel({
+  nodes: [0, 1.6, 3.2].flatMap((x, k) => [{ id: 2 * k + 1, x, y: 0, z: 0 }, { id: 2 * k + 2, x, y: 0, z: 1.2 }]),
+  beams: [0, 1, 2].map((k) => ({ id: k + 1, startNodeId: 2 * k + 1, endNodeId: 2 * k + 2 })),
+  supports: [
+    { nodeId: 1, ...OPEN_FEM_3D_SUPPORT_PRESETS.fixed }, { nodeId: 3, ...OPEN_FEM_3D_SUPPORT_PRESETS.pinned },
+    { nodeId: 5, ...OPEN_FEM_3D_SUPPORT_PRESETS.zRoller },
+  ],
+});
+/** Een camera naar `doel` vanuit richting `r` (van het doel naar de camera), op `afstand`. */
+const camNaar = (doel: number[], r: number[], afstand: number, up: [number, number, number] = [0, 0, 1]): OpenFem3DCameraState => {
+  const v = new THREE.Vector3(...r).normalize().multiplyScalar(afstand);
+  return { position: [doel[0]! + v.x, doel[1]! + v.y, doel[2]! + v.z], target: [doel[0]!, doel[1]!, doel[2]!], up };
+};
+const portaalMaat = openFem3DConditionMarkerSize(scharnierTweeVelden.nodes);
+/**
+ * De beelden voor de schermafbeeldingen (#beeld=…): licht podium, iso, opzij
+ * en van boven. Van boven in parallelle projectie met de camera boven de
+ * kolomkop (in perspectief steekt de kolom anders door de camera).
+ */
+const SCHARNIER_BEELDEN: Record<string, {
+  model: OpenFem3DModel; camera: OpenFem3DCameraState; parallel?: boolean; zicht?: Partial<OpenFem3DVisibility>;
+}> = {
+  "scharnier-overzicht": { model: scharnierTweeVelden, camera: { position: [14, -10.5, 8], target: [6, 0, 2], up: [0, 0, 1] } },
+  // De kop van de middelste kolom: links het eind van ligger 3, rechts het begin van ligger 5.
+  "scharnier-iso": { model: scharnierTweeVelden, camera: camNaar([6, 0, 4], [0.9, -1.1, 0.75], 2.4) },
+  "scharnier-opzij": { model: scharnierTweeVelden, camera: camNaar([6, 0, 3.9], [0, -1, 0], 2.6) },
+  "inklemming-iso": { model: scharnierTweeVelden, camera: camNaar([0, 0, -0.35 * portaalMaat], [1.1, -1.4, 0.9], 4.2 * portaalMaat) },
+  "inklemming-opzij": { model: scharnierTweeVelden, camera: camNaar([0, 0, -0.35 * portaalMaat], [0, -1, 0], 4.2 * portaalMaat) },
+  "inklemming-boven": { model: scharnierTweeVelden, parallel: true, camera: {
+    ...camNaar([0, 0, -0.35 * portaalMaat], [0, 0, 1], 12, [0, 1, 0]), orthoHalfHeight: 1.6 * portaalMaat,
+  } },
+  "opleggingen-naast-elkaar": { model: opleggingenNaastElkaar, camera: camNaar([1.6, 0, 0.3], [0.9, -1.3, 0.8], 4.6) },
+};
+
+type Scharnierbol = {
+  beamId: number; end: string; positie: THREE.Vector3; straal: number; kleur: number; batch: boolean;
+  /** De getekende buitenstraal van de rand eromheen (uit de mesh of de instantie gelezen). */
+  rand: number;
+  /** Diepteverschuiving naar de camera (profielweergave) en of de dieptetoets aan staat. */
+  bias: number; dieptetoets: boolean;
+};
+/** De scharnierbolletjes in de scène die het tekenvlak het laatst tekende, elk met zijn rand. */
+function scharnierBollen(): { bollen: Scharnierbol[]; randen: number } {
+  ok(renderScene, "er is getekend");
+  const bollen: Scharnierbol[] = [];
+  const randen: { positie: THREE.Vector3; straal: number }[] = [];
+  const matrix = new THREE.Matrix4(), positie = new THREE.Vector3(), draai = new THREE.Quaternion(), schaal = new THREE.Vector3();
+  const kleur = new THREE.Color();
+  renderScene!.updateMatrixWorld(true);
+  renderScene!.traverse((object) => {
+    if (object.userData.openFem3dBeamHinge !== true || !object.visible) return;
+    const rand = object.userData.openFem3dBeamHingeRim === true;
+    const materiaal = (object as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    const lees = (index: number | null) => {
+      if (index === null) object.matrixWorld.decompose(positie, draai, schaal);
+      else {
+        (object as THREE.InstancedMesh).getMatrixAt(index, matrix);
+        matrix.premultiply(object.matrixWorld).decompose(positie, draai, schaal);
+      }
+      ok(Math.abs(schaal.x - schaal.y) < 1e-12 && Math.abs(schaal.x - schaal.z) < 1e-12, "een bol, geen ellipsoïde");
+      if (rand) { randen.push({ positie: positie.clone(), straal: schaal.x }); return; }
+      const bias = object.userData.openFem3dHingeDepthBias;
+      if (index !== null) (object as THREE.InstancedMesh).getColorAt(index, kleur);
+      bollen.push({
+        beamId: index === null ? object.userData.id : object.userData.instanceIds[index],
+        end: index === null ? object.userData.openFem3dBeamHingeEnd : object.userData.openFem3dBeamHingeEnds[index],
+        positie: positie.clone(), straal: schaal.x, kleur: index === null ? materiaal.color.getHex() : kleur.getHex(),
+        batch: index !== null, rand: Number.NaN, bias: Array.isArray(bias) ? bias[index!] : bias, dieptetoets: materiaal.depthTest,
+      });
+    };
+    if (object instanceof THREE.InstancedMesh) for (let index = 0; index < object.count; index += 1) lees(index);
+    else lees(null);
+  });
+  for (const bol of bollen) {
+    const eigen = randen.filter((rand) => rand.positie.distanceTo(bol.positie) < 1e-9);
+    ok(eigen.length === 1, `${bol.beamId}${bol.end}: precies één rand om het bolletje (${eigen.length})`);
+    bol.rand = eigen[0]!.straal;
+  }
+  return { bollen, randen: randen.length };
+}
+/** De straal van de getekende knoopbollen. */
+function knoopbolStraal(): number {
+  let straal = Number.NaN;
+  renderScene?.traverse((object) => {
+    if (object.userData.openFem3dNodeVisual === true && object instanceof THREE.InstancedMesh) {
+      straal = (object.geometry as THREE.SphereGeometry).parameters.radius;
+    }
+  });
+  ok(Number.isFinite(straal), "knoopbollen getekend");
+  return straal;
+}
+const bolTekst = (bollen: Scharnierbol[]) => bollen.map((b) => `${b.beamId}${b.end}`).sort();
+/** De straal van een analytische staaf in het tekenvlak (ANALYTICAL_BEAM_RADIUS_M). */
+const STAAFSTRAAL = 0.035;
+/**
+ * Toets een scharnierbolletje tegen de knoopbol en de staaf: kleiner dan de
+ * knoopbol, ook met de werkelijk getekende rand; duidelijk dikker dan de
+ * staaf; met een dunne rand; en vrij van de knoopbol.
+ */
+function toetsMaat(bol: Scharnierbol, knoop: number, knooppunt: THREE.Vector3, maat: number) {
+  const naam = `${bol.beamId}${bol.end}`;
+  ok(bol.rand <= 0.85 * knoop, `${naam}: met de rand kleiner dan de knoopbol (${bol.rand.toFixed(4)} tegen ${knoop.toFixed(4)} m)`);
+  ok(bol.straal >= 1.25 * STAAFSTRAAL - 1e-9, `${naam}: duidelijk dikker dan de staaf (${bol.straal.toFixed(4)} tegen ${STAAFSTRAAL} m)`);
+  ok(bol.rand > bol.straal && bol.rand <= 1.15 * bol.straal, `${naam}: een dunne rand (${(bol.rand / bol.straal).toFixed(3)} × de straal)`);
+  ok(knoop >= 2.2 * STAAFSTRAAL - 1e-9, `knoopbol minstens 2,2 × de staafstraal (${knoop.toFixed(4)} m)`);
+  const vrij = bol.positie.distanceTo(knooppunt) - knoop - bol.rand;
+  ok(vrij > 0.1 * maat, `${naam}: raakt de knoopbol niet, ook niet met de rand (${vrij.toFixed(3)} m vrij)`);
+}
+/**
+ * De kleur van het beeld op schermpunt `p`. De laatst getekende scène wordt
+ * nog eens getekend en meteen uitgelezen: zonder preserveDrawingBuffer is de
+ * tekenbuffer alleen binnen dezelfde taak geldig.
+ */
+function beeldpunt(p: Pt): [number, number, number] {
+  ok(renderRenderer && renderScene && renderCamera, "er is getekend");
+  renderRenderer!.render(renderScene!, renderCamera!);
+  const gl = renderRenderer!.getContext();
+  const doek = renderRenderer!.domElement;
+  const sx = doek.width / doek.clientWidth, sy = doek.height / doek.clientHeight;
+  const px = new Uint8Array(4);
+  gl.readPixels(Math.round(p.x * sx), Math.round(doek.height - p.y * sy), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  return [px[0]!, px[1]!, px[2]!];
+}
+/** Het lichte bolletje (wit, belicht lichtgrijs): helder en zonder kleur. */
+const licht = ([r, g, b]: number[]) => Math.min(r!, g!, b!) >= 150 && Math.max(r!, g!, b!) - Math.min(r!, g!, b!) < 30;
+const blauw = ([r, , b]: number[]) => b! > r! + 60;
+/** De delen van een opleggingsteken van knoop `nodeId` (los getekend): geometrie, kleur, maten, wereldpositie. */
+function opleggingsDelen(nodeId: number) {
+  const delen: { soort: string; kleur: number; maten: Record<string, number>; positie: THREE.Vector3 }[] = [];
+  renderScene!.updateMatrixWorld(true);
+  renderScene!.traverse((object) => {
+    if (!(object instanceof THREE.Mesh) || object instanceof THREE.InstancedMesh) return;
+    if (object.userData.type !== "node" || object.userData.id !== nodeId) return;
+    delen.push({
+      soort: object.geometry.type, kleur: (object.material as THREE.MeshStandardMaterial).color.getHex(),
+      maten: { ...(object.geometry as THREE.BoxGeometry).parameters }, positie: object.getWorldPosition(new THREE.Vector3()),
+    });
+  });
+  return delen;
+}
+const ORANJE_TEKEN = 0xd97706, DONKER_TEKEN = 0x475569, GRIJZE_GROND = 0x94a3b8;
+
+// Een klein portaal van 3 × 2,5 m: daar is de knoopbol het kleinst.
+const kleinPortaal = pinOpenFem3DBeamsToColumns(parseOpenFem3DModel({
+  nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 0, y: 0, z: 2.5 }, { id: 3, x: 3, y: 0, z: 0 }, { id: 4, x: 3, y: 0, z: 2.5 }],
+  beams: scharnierBasis.beams,
+  supports: scharnierBasis.supports,
+})).model;
+// Profielweergave: een HEA 300-portaal op y = 3 met de scharnierende ligger
+// 3 (2→4), en vóór het begin van die ligger, op y = 0, een losse HEA 300 (4).
+const HEA = { profileName: "HEA 300", material: "S235" };
+const voorEnAchter = pinOpenFem3DBeamsToColumns(parseOpenFem3DModel({
+  nodes: [
+    { id: 1, x: 0, y: 3, z: 0 }, { id: 2, x: 0, y: 3, z: 4 }, { id: 3, x: 6, y: 3, z: 0 }, { id: 4, x: 6, y: 3, z: 4 },
+    { id: 5, x: -1, y: 0, z: 4 }, { id: 6, x: 2, y: 0, z: 4 },
+  ],
+  beams: [...scharnierBasis.beams.map((beam) => ({ ...beam, ...HEA })), { id: 4, startNodeId: 5, endNodeId: 6, ...HEA }],
+  supports: scharnierBasis.supports,
+})).model;
+// Hetzelfde met een tweede veld (kolom 4, ligger 5): vier scharnieren, dus de
+// bolletjes in een GPU-batch met de diepteverschuiving per instantie. De losse
+// HEA 300 (6) staat weer vóór het begin van ligger 3.
+const voorEnAchterBatch = pinOpenFem3DBeamsToColumns(parseOpenFem3DModel({
+  nodes: [
+    { id: 1, x: 0, y: 3, z: 0 }, { id: 2, x: 0, y: 3, z: 4 }, { id: 3, x: 6, y: 3, z: 0 }, { id: 4, x: 6, y: 3, z: 4 },
+    { id: 5, x: 12, y: 3, z: 0 }, { id: 6, x: 12, y: 3, z: 4 }, { id: 7, x: -1, y: 0, z: 4 }, { id: 8, x: 2, y: 0, z: 4 },
+  ],
+  beams: [
+    ...scharnierBasis.beams.map((beam) => ({ ...beam, ...HEA })), { id: 4, startNodeId: 5, endNodeId: 6, ...HEA },
+    { id: 5, startNodeId: 4, endNodeId: 6, ...HEA }, { id: 6, startNodeId: 7, endNodeId: 8, ...HEA },
+  ],
+  supports: [...scharnierBasis.supports, { nodeId: 5, ...INKLEMMING }],
+})).model;
+// Een lange rij van 130 kolommen met scharnierende liggers ertussen: 260
+// knopen, zodat het verplaatsen van een knoop de snelle weg neemt.
+const langeRij = pinOpenFem3DBeamsToColumns(parseOpenFem3DModel({
+  nodes: Array.from({ length: 130 }, (_, k) => [{ id: 2 * k + 1, x: 3 * k, y: 0, z: 0 }, { id: 2 * k + 2, x: 3 * k, y: 0, z: 4 }]).flat(),
+  beams: [
+    ...Array.from({ length: 130 }, (_, k) => ({ id: k + 1, startNodeId: 2 * k + 1, endNodeId: 2 * k + 2 })),
+    ...Array.from({ length: 129 }, (_, k) => ({ id: 131 + k, startNodeId: 2 * k + 2, endNodeId: 2 * k + 4 })),
+  ],
+  supports: Array.from({ length: 130 }, (_, k) => ({ nodeId: 2 * k + 1, ...INKLEMMING })),
+})).model;
+
+// De bolletjes in het kleine portaal van dichtbij, en in de profielweergave
+// (het begin van de achterste ligger zit achter de HEA 300 ervoor).
+SCHARNIER_BEELDEN["scharnier-klein"] = { model: kleinPortaal, camera: camNaar([3, 0, 2.5], [0.9, -1.1, 0.75], 1.6) };
+SCHARNIER_BEELDEN["scharnier-profiel"] = {
+  model: voorEnAchter, camera: camNaar([3, 1.5, 3.6], [0.35, -1, 0.45], 9), zicht: { profiles: true },
+};
+
+// Een tekenvlak dat model en zichtbaarheid in zijn eigen toestand houdt: een
+// wijziging gaat als nieuwe props naar hetzelfde tekenvlak, zoals in de app,
+// en neemt dus de snelle wegen (staven of profielen aan/uit, knoop verplaatsen).
+let zetWisselModel: (model: OpenFem3DModel) => void = () => {};
+let zetWisselZicht: (zicht: OpenFem3DVisibility) => void = () => {};
+function Wisselvlak({ begin, zicht, camera: cam }: { begin: OpenFem3DModel; zicht: OpenFem3DVisibility; camera: OpenFem3DCameraState }) {
+  const [model, setModel] = useState(begin);
+  const [visibility, setVisibility] = useState(zicht);
+  const [cameraVerzoek] = useState({ state: cam, token: 1 });
+  zetWisselModel = (next) => flushSync(() => setModel(next));
+  zetWisselZicht = (next) => flushSync(() => setVisibility(next));
+  return <div className="open-fem3d-stage" style={{ width: BREED, height: HOOG, flex: "none" }}>
+    <ThreeFrameCanvas
+      model={model} onChange={() => {}} tool="select" selection={null} onSelect={() => {}} onToolChange={() => {}}
+      fitToken={0} visibility={visibility} utilizations={GEEN_BENUTTINGEN} cameraRequest={cameraVerzoek} result={null}
+    />
+  </div>;
+}
+
+async function scharnierProeven() {
+  const vooraan = camNaar([3, 0, 2.5], [0, -1, 0], 12);
+  await test("scharnier: een klein licht bolletje met een donkere rand op de ligger, net vóór elke kolomknoop", async () => {
+    await toon(scharnierPortaal, { ...snel }, { camera: vooraan });
+    gelijk(diag().openFem3dBeamHinges, "2", "diagnose: twee scharnieren");
+    const { bollen, randen } = scharnierBollen();
+    gelijk(bolTekst(bollen), ["3end", "3start"], "aan beide einden van ligger 3, niet op de kolommen");
+    gelijk(randen, 2, "elk bolletje met een rand");
+    const knoop = knoopbolStraal();
+    const maat = openFem3DConditionMarkerSize(scharnierPortaal.nodes);
+    for (const bol of bollen) {
+      const eind = new THREE.Vector3(bol.end === "start" ? 0 : 6, 0, 4);
+      const afstand = bol.positie.distanceTo(eind);
+      ok(Math.abs(bol.positie.y) < 1e-9 && Math.abs(bol.positie.z - 4) < 1e-9, `${bol.end}: op de staafas (${bol.positie.toArray()})`);
+      ok(bol.end === "start" ? bol.positie.x > 0 : bol.positie.x < 6, `${bol.end}: op de ligger, aan de kant van de staaf`);
+      toetsMaat(bol, knoop, eind, maat);
+      ok(afstand < maat, `${bol.end}: net vóór de knoop (${afstand.toFixed(3)} m, maat ${maat.toFixed(3)} m)`);
+      gelijk([bol.kleur, bol.batch, bol.dieptetoets, bol.bias], [0xffffff, false, true, 0], `${bol.end}: wit, los getekend, in de diepte`);
+    }
+    // Te zien: licht in het midden van het bolletje, vlak naast de rand de blauwe staaf.
+    const begin = bollen.find((bol) => bol.end === "start")!;
+    const cam = camera();
+    const opBol = beeldpunt(scherm(cam, begin.positie));
+    const opStaaf = beeldpunt(scherm(cam, begin.positie.clone().add(new THREE.Vector3(begin.rand + 0.03, 0, 0))));
+    ok(licht(opBol) && blauw(opStaaf), `het bolletje is te zien (${opBol}), naast de rand de staaf (${opStaaf})`);
+    // Een klik op het bolletje kiest de ligger en kleurt het bolletje mee.
+    klik(scherm(cam, begin.positie));
+    gelijk(selectie, { type: "beam", id: 3 }, "klik op het bolletje");
+    await wacht();
+    gelijk(scharnierBollen().bollen.map((bol) => bol.kleur), [SELECTIEKLEUR, SELECTIEKLEUR], "beide bolletjes in de selectiekleur");
+    await geenSelectie();
+    gelijk(scharnierBollen().bollen.map((bol) => bol.kleur), [0xffffff, 0xffffff], "na deselecteren weer wit");
+  });
+
+  await test("scharnier: ook in een klein portaal (3 × 2,5 m) een kleine bol vóór de grote, met de rand kleiner dan de knoopbol", async () => {
+    await toon(kleinPortaal, { ...snel }, { camera: camNaar([1.5, 0, 2.2], [0, -1, 0], 5) });
+    const { bollen } = scharnierBollen();
+    gelijk(bolTekst(bollen), ["3end", "3start"], "twee bolletjes");
+    const knoop = knoopbolStraal();
+    gelijk(knoop.toFixed(4), (2.2 * STAAFSTRAAL).toFixed(4), "de knoopbol op zijn ondergrens");
+    const maat = openFem3DConditionMarkerSize(kleinPortaal.nodes);
+    for (const bol of bollen) toetsMaat(bol, knoop, new THREE.Vector3(bol.end === "start" ? 0 : 3, 0, 2.5), maat);
+    // Op het scherm: het bolletje (met rand) is kleiner dan de knoopbol en breder dan de staaf.
+    const cam = camera();
+    const straalPx = (p: THREE.Vector3, r: number) => scherm(cam, p.clone().add(new THREE.Vector3(0, 0, r))).y - scherm(cam, p).y;
+    const bol = bollen[0]!;
+    const [d, k, s] = [-straalPx(bol.positie, bol.rand), -straalPx(new THREE.Vector3(0, 0, 2.5), knoop), -straalPx(bol.positie, STAAFSTRAAL)];
+    ok(d < 0.9 * k && d > 1.3 * s, `op het scherm: bolletje ${(2 * d).toFixed(1)} px, knoopbol ${(2 * k).toFixed(1)} px, staaf ${(2 * s).toFixed(1)} px`);
+  });
+
+  await test("scharnier: zonder scharnier geen bolletjes; met de staven uit ook niet", async () => {
+    await toon(scharnierVrij, { ...snel }, { camera: vooraan });
+    gelijk([diag().openFem3dBeamHinges, scharnierBollen().bollen.length, scharnierBollen().randen], ["0", 0, 0], "momentvast portaal");
+    await toon(scharnierPortaal, { ...snel, beams: false }, { camera: vooraan });
+    gelijk([diag().openFem3dBeamHinges, scharnierBollen().bollen.length, scharnierBollen().randen], ["0", 0, 0], "staven uit");
+  });
+
+  await test("scharnier: langs de snelle wegen (zonder opnieuw te mounten): staven uit en aan, profielen aan en uit", async () => {
+    mount(<Wisselvlak begin={scharnierPortaal} zicht={{ ...snel }} camera={vooraan} />);
+    await wacht(200);
+    gelijk([diag().openFem3dBeamHinges, scharnierBollen().bollen.length], ["2", 2], "begin: twee bolletjes");
+    zetWisselZicht({ ...snel, beams: false });
+    await wacht();
+    gelijk([diag().openFem3dBuildMode, diag().openFem3dBeamHinges, scharnierBollen().bollen.length, scharnierBollen().randen],
+      ["beam-visibility", "0", 0, 0], "staven uit: de snelle weg, geen bolletjes en geen randen");
+    zetWisselZicht({ ...snel });
+    await wacht();
+    gelijk([diag().openFem3dBuildMode, diag().openFem3dBeamHinges, bolTekst(scharnierBollen().bollen)],
+      ["beam-visibility", "2", ["3end", "3start"]], "staven weer aan: de bolletjes terug");
+    zetWisselZicht({ ...snel, profiles: true });
+    await wacht();
+    const profiel = scharnierBollen().bollen;
+    gelijk([diag().openFem3dBuildMode, profiel.length], ["beam-profiles", 2], "profielen aan: de snelle weg");
+    ok(profiel.every((bol) => bol.dieptetoets && bol.bias > 0), `profielen aan: met dieptetoets en diepteverschuiving (${profiel.map((bol) => bol.bias)})`);
+    zetWisselZicht({ ...snel });
+    await wacht();
+    ok(scharnierBollen().bollen.every((bol) => bol.bias === 0), "profielen uit: geen diepteverschuiving meer");
+    // Een knoop verplaatsen in een groot model (vanaf 250 knopen de snelle weg): de bolletjes gaan mee.
+    mount(<Wisselvlak begin={langeRij} zicht={{ ...snel }} camera={camNaar([3, 0, 3.5], [0, -1, 0], 7)} />);
+    await wacht(250);
+    gelijk(diag().openFem3dBeamHinges, String(2 * 129), "lange rij: twee bolletjes per ligger");
+    const verplaatst = { ...langeRij, nodes: langeRij.nodes.map((node) => node.id === 4 ? { ...node, z: 3.5 } : node) };
+    zetWisselModel(verplaatst);
+    await wacht();
+    gelijk(diag().openFem3dBuildMode, "move-nodes", "knoop 4 omlaag: de snelle weg");
+    const knoop4 = new THREE.Vector3(3, 0, 3.5);
+    const bijKnoop4 = scharnierBollen().bollen.filter((bol) => (bol.beamId === 131 && bol.end === "end") || (bol.beamId === 132 && bol.end === "start"));
+    gelijk(bijKnoop4.length, 2, "de twee bolletjes bij knoop 4");
+    for (const bol of bijKnoop4) {
+      const ander = new THREE.Vector3(bol.beamId === 131 ? 0 : 6, 0, 4);
+      const as = ander.clone().sub(knoop4).normalize();
+      const naarBol = bol.positie.clone().sub(knoop4);
+      // De GPU-batch bewaart zijn matrices in 32 bits: op een honderdste millimeter.
+      ok(naarBol.clone().cross(as).length() < 1e-5 && naarBol.dot(as) > 0,
+        `${bol.beamId}${bol.end}: op de nieuwe staafas, aan de kant van de staaf (${bol.positie.toArray().map((v) => v.toFixed(3))})`);
+    }
+  });
+
+  await test("scharnier: vier scharnieren in één GPU-batch; een klik op een bolletje kiest die staaf en kleurt alleen zijn bolletjes", async () => {
+    await toon(scharnierTweeVelden, { ...snel }, { camera: camNaar([6, 0, 3], [0, -1, 0], 7) });
+    gelijk(diag().openFem3dBeamHinges, "4", "diagnose");
+    const { bollen, randen } = scharnierBollen();
+    gelijk(bolTekst(bollen), ["3end", "3start", "5end", "5start"], "ligger 3 en ligger 5, beide einden");
+    ok(bollen.every((bol) => bol.batch) && randen === 4, "bolletjes en randen elk in een GPU-batch");
+    let batches = 0;
+    renderScene!.traverse((object) => { if (object instanceof THREE.InstancedMesh && object.userData.openFem3dBeamHinge === true) batches += 1; });
+    gelijk(batches, 2, "één batch voor de bolletjes, één voor de randen");
+    const knoop = knoopbolStraal();
+    const maat = openFem3DConditionMarkerSize(scharnierTweeVelden.nodes);
+    for (const bol of bollen) {
+      const x = ({ "3start": 0, "3end": 6, "5start": 6, "5end": 12 } as Record<string, number>)[`${bol.beamId}${bol.end}`]!;
+      toetsMaat(bol, knoop, new THREE.Vector3(x, 0, 4), maat);
+    }
+    // Aan de kop van kolom 2 zitten twee bolletjes: links ligger 3, rechts ligger 5.
+    const rechts = bollen.find((bol) => bol.beamId === 5 && bol.end === "start")!;
+    ok(rechts.positie.x > 6 && Math.abs(rechts.positie.z - 4) < 1e-9, "begin van ligger 5 rechts van de kolomkop");
+    klik(scherm(camera(), rechts.positie));
+    gelijk(selectie, { type: "beam", id: 5 }, "klik op het rechter bolletje");
+    await wacht();
+    const kleuren = Object.fromEntries(scharnierBollen().bollen.map((bol) => [`${bol.beamId}${bol.end}`, bol.kleur]));
+    gelijk(kleuren, { "3start": 0xffffff, "3end": 0xffffff, "5start": SELECTIEKLEUR, "5end": SELECTIEKLEUR }, "alleen de bolletjes van ligger 5");
+    await geenSelectie();
+    ok(scharnierBollen().bollen.every((bol) => bol.kleur === 0xffffff), "na deselecteren weer wit");
+  });
+
+  await test("scharnier: in de profielweergave door het eigen profiel heen te zien, achter een profiel ervoor niet", async () => {
+    // Recht van voren: de losse HEA 300 op y = 0 staat precies vóór het begin
+    // van de scharnierende ligger op y = 3; het eind van die ligger is vrij.
+    await toon(voorEnAchter, { ...snel, profiles: true, supports: false }, { camera: camNaar([3, 3, 4], [0, -1, 0], 12) });
+    const { bollen } = scharnierBollen();
+    gelijk(bolTekst(bollen), ["3end", "3start"], "twee bolletjes");
+    for (const bol of bollen) {
+      // HEA 300: de verste hoek ligt √(0,15² + 0,145²) ≈ 0,21 m van de as.
+      ok(bol.dieptetoets && bol.bias > 0.2 && bol.bias < 0.3 + bol.rand,
+        `${bol.end}: met dieptetoets, naar voren zo ver als het profiel uitsteekt (${bol.bias.toFixed(3)} m)`);
+    }
+    const cam = camera();
+    const begin = bollen.find((bol) => bol.end === "start")!, eind = bollen.find((bol) => bol.end === "end")!;
+    const naastEind = eind.positie.clone().add(new THREE.Vector3(0, 0, eind.rand + 0.04));
+    const [opEind, naast] = [beeldpunt(scherm(cam, eind.positie)), beeldpunt(scherm(cam, naastEind))];
+    ok(licht(opEind) && blauw(naast), `het eind: het lichte bolletje vóór het eigen profiel (${opEind}), ernaast het profiel (${naast})`);
+    const voor = beeldpunt(scherm(cam, begin.positie));
+    ok(!licht(voor) && blauw(voor), `het begin: achter de HEA 300 ervoor verborgen (${voor})`);
+  });
+
+  await test("scharnier: ook in een GPU-batch (vier bolletjes) in de profielweergave door het eigen profiel heen te zien, achter een profiel ervoor niet", async () => {
+    // De diepteverschuiving loopt hier via een attribuut per instantie, niet
+    // via een uniform zoals bij losse bolletjes.
+    await toon(voorEnAchterBatch, { ...snel, profiles: true, supports: false }, { camera: camNaar([6, 3, 4], [0, -1, 0], 16) });
+    const { bollen } = scharnierBollen();
+    gelijk(bolTekst(bollen), ["3end", "3start", "5end", "5start"], "vier bolletjes");
+    ok(bollen.every((bol) => bol.batch && bol.dieptetoets && bol.bias > 0.2 && bol.bias < 0.3 + bol.rand),
+      `in een GPU-batch, met dieptetoets en diepteverschuiving (${bollen.map((bol) => bol.bias.toFixed(3))})`);
+    const cam = camera();
+    for (const bol of bollen.filter((item) => !(item.beamId === 3 && item.end === "start"))) {
+      const kleur = beeldpunt(scherm(cam, bol.positie));
+      ok(licht(kleur), `${bol.beamId}${bol.end}: het lichte bolletje vóór het eigen profiel (${kleur})`);
+    }
+    const verborgen = bollen.find((bol) => bol.beamId === 3 && bol.end === "start")!;
+    const voor = beeldpunt(scherm(cam, verborgen.positie));
+    ok(!licht(voor) && blauw(voor), `3start: achter de HEA 300 ervoor verborgen (${voor})`);
+  });
+
+  await test("gereedschap Scharnier aan staafeind: een klik bij een eind zet My en Mz los, nog een klik weer vast; elke klik één stap", async () => {
+    let historie = { model: scharnierVrij, past: [] as OpenFem3DModel[], future: [] as OpenFem3DModel[] };
+    let doe: (action: Parameters<typeof openFem3dHistoryReducer>[1]) => void = () => {};
+    let zetTool: (tool: OpenFem3DTool) => void = () => {};
+    let editorTool: OpenFem3DTool = "select";
+    function Editor() {
+      const [state, dispatch] = useReducer(openFem3dHistoryReducer, historie);
+      const [sel, setSel] = useState<OpenFem3DSelection>(null);
+      const [tool, setTool] = useState<OpenFem3DTool>("select");
+      historie = state;
+      doe = dispatch;
+      zetTool = setTool;
+      editorTool = tool;
+      return <div style={{ width: BREED, height: HOOG, display: "flex" }}>
+        <OpenFem3DEditor model={state.model} onChange={(model, meta) => dispatch({ type: "edit", model, ...meta })}
+          tool={tool} onToolChange={setTool} selection={sel} onSelectionChange={setSel}
+          visibility={editorZicht} initialCamera={vooraan} />
+      </div>;
+    }
+    mount(<Editor />);
+    await wacht(200);
+    flushSync(() => zetTool("beamEndHinge"));
+    await wacht();
+    const kop = container.querySelector(".open-fem3d-stage-header > span")?.textContent ?? "";
+    gelijk(kop, i18next.t("ribbon:openFem3d.beamEndHingeHelp"), "de uitleg van het gereedschap in de kop");
+    ok(kop.includes("My") && kop.includes("Mz"), "de uitleg noemt My en Mz");
+    ok(tekenvlakEl().className.includes("open-fem3d-tool-support"), "kruisdraadcursor");
+    const releases = (id: number) => historie.model.beams.find((beam) => beam.id === id)!.releases;
+    const los = (id: number) => Object.entries(releases(id) ?? {}).filter(([, v]) => v).map(([k]) => k).sort().join(",") || "vast";
+    const cam = camera();
+    // Op 20 % van ligger 3: het begin (bij knoop 2).
+    klik(scherm(cam, { x: 1.2, y: 0, z: 4 }));
+    await wacht();
+    gelijk([los(3), historie.past.length, diag().openFem3dBeamHinges], ["myStart,mzStart", 1, "1"], "klik bij het begin: My en Mz los, één stap, één bolletje");
+    gelijk(bolTekst(scharnierBollen().bollen), ["3start"], "het bolletje bij het begin");
+    gelijk(diag().openFem3dBeamEndHinge, "3:start:los", "diagnose");
+    // Dezelfde plek (nu vlak naast het bolletje): weer vast.
+    klik(scherm(cam, { x: 1.2, y: 0, z: 4 }));
+    await wacht();
+    gelijk([los(3), releases(3), historie.past.length, diag().openFem3dBeamHinges], ["vast", undefined, 2, "0"],
+      "tweede klik: weer vast (zonder scharnierveld), één stap, geen bolletje");
+    // Op 85 %: het eind (bij knoop 4).
+    klik(scherm(cam, { x: 5.1, y: 0, z: 4 }));
+    await wacht();
+    gelijk([los(3), historie.past.length], ["myEnd,mzEnd", 3], "klik bij het eind");
+    gelijk(bolTekst(scharnierBollen().bollen), ["3end"], "het bolletje bij het eind");
+    // Een klik op het bolletje zelf zet het eind weer vast.
+    klik(scherm(cam, scharnierBollen().bollen[0]!.positie));
+    await wacht();
+    gelijk([los(3), historie.past.length, diag().openFem3dBeamHinges], ["vast", 4, "0"], "klik op het bolletje: weer vast");
+    // Kolom 1, 0,6 m onder de kop: het eind van de kolom.
+    klik(scherm(cam, { x: 0, y: 0, z: 3.4 }));
+    await wacht();
+    gelijk([los(1), los(3), historie.past.length], ["myEnd,mzEnd", "vast", 5], "kolomkop scharnierend, de ligger niet");
+    gelijk(bolTekst(scharnierBollen().bollen), ["1end"], "het bolletje onder de kolomkop");
+    // Een klik in het niets verandert niets.
+    klik({ x: 40, y: HOOG - 40 });
+    await wacht();
+    gelijk(historie.past.length, 5, "klik in het niets: geen stap");
+    flushSync(() => doe({ type: "undo" }));
+    await wacht();
+    gelijk([los(1), historie.past.length, diag().openFem3dBeamHinges], ["vast", 4, "0"], "ongedaan maken: één klik terug");
+    toets("Escape");
+    await wacht();
+    gelijk(editorTool, "select", "Escape: terug naar Selecteren");
+  });
+
+  await test("inklemming: een oranje blok onder de knoop, een donkere kraag om de knoop, de grijze ondergrond met arcering; een klik erop kiest de knoop", async () => {
+    const maat = openFem3DConditionMarkerSize(scharnierPortaal.nodes);
+    await toon(scharnierPortaal, { ...snel }, { camera: camNaar([0, 0, -0.4 * maat], [1.1, -1.4, 0.9], 5 * maat) });
+    const delen = opleggingsDelen(1);
+    const blokken = delen.filter((deel) => deel.soort === "BoxGeometry" && deel.kleur === ORANJE_TEKEN);
+    gelijk(blokken.length, 1, "één oranje blok");
+    const blok = blokken[0]!;
+    ok(Math.abs(blok.positie.z + blok.maten.height / 2) < 1e-9 && Math.hypot(blok.positie.x, blok.positie.y) < 1e-9,
+      `bovenkant van het blok op de knoop (${(blok.positie.z + blok.maten.height / 2).toFixed(4)})`);
+    ok(delen.some((deel) => deel.soort === "BoxGeometry" && deel.kleur === DONKER_TEKEN && deel.positie.length() < 1e-9
+      && deel.maten.width > 0.2 * maat), "de donkere kraag om de knoop");
+    gelijk(delen.filter((deel) => deel.kleur === GRIJZE_GROND).length, 1, "de grijze ondergrond");
+    gelijk(delen.filter((deel) => deel.kleur === DONKER_TEKEN && deel.maten.width < 0.1 * maat).length, 4, "vier arceringsstreepjes");
+    ok(!delen.some((deel) => deel.soort === "ConeGeometry" || deel.soort === "CylinderGeometry" || deel.soort === "TorusGeometry"),
+      `geen kegel, schijf of ring (${[...new Set(delen.map((deel) => deel.soort))].join(", ")})`);
+    // Een klik op de voorkant van het blok, onder de knoop.
+    klik(scherm(camera(), { x: 0, y: -0.5 * blok.maten.depth, z: blok.positie.z }));
+    gelijk(selectie, { type: "node", id: 1 }, "klik op het blok");
+  });
+
+  await test("inklemming in GPU-batches (vier tekens): blok, kraag, ondergrond en arcering; een klik op een blok kiest zijn knoop", async () => {
+    const maat = openFem3DConditionMarkerSize(vierInklemmingen.nodes);
+    await toon(vierInklemmingen, { ...snel }, { camera: camNaar([4.5, 0, 0.6], [0.5, -1.4, 0.7], 11) });
+    const vormen: string[] = [];
+    renderScene!.traverse((object) => {
+      if (!(object instanceof THREE.InstancedMesh) || object.userData.type !== "node" || object.userData.openFem3dNodeVisual
+        || object.userData.openFem3dNodeHit) return;
+      const p = (object.geometry as THREE.BoxGeometry).parameters;
+      vormen.push(`${object.geometry.type} ${(p.width / maat).toFixed(2)}×${(p.height / maat).toFixed(2)} ×${object.count}`);
+    });
+    gelijk(vormen.sort(), ["BoxGeometry 0.06×0.34 ×16", "BoxGeometry 0.46×0.18 ×4", "BoxGeometry 1.10×0.75 ×4", "BoxGeometry 1.80×0.06 ×4"],
+      "vier batches: arcering, kraag, blok en ondergrond");
+    klik(scherm(camera(), { x: 6, y: -0.55 * maat, z: -0.375 * maat }));
+    gelijk(selectie, { type: "node", id: 5 }, "klik op het derde blok");
+  });
 }
 
 // ── React StrictMode (ontwikkelbundel): eigen groep, eigen bundel en browserproces ──

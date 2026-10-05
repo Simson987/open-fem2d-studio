@@ -125,6 +125,7 @@ fn uniform_local_z_member_load_matches_cantilever_closed_form() {
         qy_start_kn_per_m: 0.0, qy_end_kn_per_m: 0.0,
         qz_start_kn_per_m: -4.0, qz_end_kn_per_m: -4.0,
         start_position_m: None, end_position_m: None,
+        ..Default::default()
     });
     let result = solve(input).unwrap();
     let tip = result.displacements.iter().find(|value| value.node_id == 2).unwrap();
@@ -174,6 +175,7 @@ fn member_end_release_matches_propped_cantilever_closed_form() {
         qz_end_kn_per_m: -load,
         start_position_m: None,
         end_position_m: None,
+        ..Default::default()
     });
 
     let result = solve(input).unwrap();
@@ -222,7 +224,7 @@ fn translational_support_spring_matches_closed_form_and_reports_reaction() {
 
 fn member(id: usize, start: usize, end: usize) -> Member3D {
     Member3D { id, start_node_id: start, end_node_id: end, material_id: 1, section_id: 1,
-        releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false }
+        releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false, bedding: None }
 }
 
 fn fixed(node_id: usize) -> Support3D {

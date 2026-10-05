@@ -40,7 +40,7 @@ import {
   withOpenFem3DLoadPanels,
 } from "./src/components/openFem3d/openFem3dLoadPanels.ts";
 import { buildOpenFem3DSolveRequest, openFem3DGlobalForceBalance } from "./src/components/openFem3d/openFem3dSolver.ts";
-import { deserializeProject, serializeProject, PROJECT_FORMAT_VERSION_3D } from "./src/io/projectFile.ts";
+import { deserializeProject, serializeProject, PROJECT_FORMAT_VERSION_3D, PROJECT_FORMAT_VERSION_MAX } from "./src/io/projectFile.ts";
 import {
   OPEN_FEM_3D_LOAD_CASE_COLORS,
   OPEN_FEM_3D_LOAD_SURFACE_OPACITY,
@@ -421,7 +421,8 @@ const vloer = (() => {
   const oud = deserializeProject(serializeProject(project(vloer)));
   assert.equal(oud.version, PROJECT_FORMAT_VERSION_3D, "zonder belastingvlakken blijft het versie 3");
   assert.equal(oud.model3d.loadPanels, undefined, "een oud bestand krijgt er geen lijst bij");
-  assert.throws(() => deserializeProject(JSON.stringify({ ...JSON.parse(tekst), version: PROJECT_FORMAT_VERSION_3D + 2 })), /nieuwere versie/);
+  // Een versie boven de hoogste leesbare (sinds de bedding van #106 is dat 5) wordt geweigerd.
+  assert.throws(() => deserializeProject(JSON.stringify({ ...JSON.parse(tekst), version: PROJECT_FORMAT_VERSION_MAX + 1 })), /nieuwere versie/);
   console.log("  ✓ projectbestand: versie 4 met vlakken, versie 3 zonder, oude bestanden leesbaar");
 }
 

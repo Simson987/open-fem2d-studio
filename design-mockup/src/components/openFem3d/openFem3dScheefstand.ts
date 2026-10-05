@@ -37,7 +37,10 @@ import {
 } from "../../lib/scheefstandNorm";
 import { vt, type VertaalbareTekst } from "../../lib/vertaalbareTekst";
 import { STEEL_GRADES } from "../../lib/steelGrades";
-import { openFem3DMemberAxes, type OpenFem3DModel } from "./openFem3dModel";
+import {
+  isOpenFem3DGlobalMemberLoad, openFem3DGlobalMemberLoadFactor, openFem3DMemberAxes,
+  type OpenFem3DGlobalDirection, type OpenFem3DModel,
+} from "./openFem3dModel";
 
 const S = "common:loadCases.swayDerivation.";
 
@@ -234,11 +237,20 @@ export interface OpenFem3DScheefstandVerzoek {
   nodes: readonly { id: number; x: number; y: number; z: number }[];
   members: readonly { id: number; startNodeId: number; endNodeId: number; rollAngleRad?: number }[];
   nodalLoads: readonly { id: number; nodeId: number; fx: number; fy: number; fz: number; mx: number; my: number; mz: number }[];
-  memberLoads: readonly {
-    id: number; memberId: number;
-    qyStartKnPerM: number; qyEndKnPerM: number; qzStartKnPerM: number; qzEndKnPerM: number;
-    startPositionM?: number; endPositionM?: number;
-  }[];
+  memberLoads: readonly (
+    | {
+        id: number; memberId: number;
+        qyStartKnPerM: number; qyEndKnPerM: number; qzStartKnPerM: number; qzEndKnPerM: number;
+        startPositionM?: number; endPositionM?: number;
+        globalDirection?: undefined;
+      }
+    | {
+        /** Globale lijnlast (issue #80): q langs de globale as, per staafmeter of per projectie. */
+        id: number; memberId: number; globalDirection: OpenFem3DGlobalDirection;
+        qStartKnPerM: number; qEndKnPerM: number; perProjection?: boolean;
+        startPositionM?: number; endPositionM?: number;
+      }
+  )[];
   memberPointLoads: readonly { id: number; memberId: number; pyKn: number; pzKn: number; positionM: number }[];
   /** Vlaklasten op platen, globaal per m² (alleen bij een model met platen). */
   surfaceLoads?: readonly { id: number; plateId: number; qxKnPerM2: number; qyKnPerM2: number; qzKnPerM2: number }[];
@@ -254,6 +266,11 @@ export interface OpenFem3DScheefstandVerzoek {
  *    contract van de kern niet als verdeelde last kent, gaat als knooplast
  *    naar de uiteinden volgens de hefboomregel, zodat resultante én moment
  *    om elk uiteinde kloppen.
+ *  - Globale lijnlast (#80) in Z: per staafmeter q_Z = f·q (f = 1, of per
+ *    projectie |e_x × Z|) geeft q_h = −φ·q_Z als globale lijnlast per
+ *    staafmeter in de gekozen richting, over hetzelfde deel; de kern zet die
+ *    om naar de staaf, ook het axiale deel. Een globale X- of Y-last heeft
+ *    geen verticale component.
  *  - Puntlast op een staaf: net zo, met het axiale deel naar de uiteinden.
  *
  * De som van alle toegevoegde horizontale krachten is exact φ·ΣV.
@@ -292,6 +309,17 @@ export function metScheefstandLasten<T extends OpenFem3DScheefstandVerzoek>(verz
   for (const last of verzoek.memberLoads) {
     const { ex, ey, ez, lengte } = assenVan(last.memberId);
     const a = last.startPositionM ?? 0, b = last.endPositionM ?? lengte;
+    if (isOpenFem3DGlobalMemberLoad(last)) {
+      if (last.globalDirection !== "z") continue;
+      const f = openFem3DGlobalMemberLoadFactor(ex, "z", last.perProjection);
+      const h1 = -phi * f * last.qStartKnPerM, h2 = -phi * f * last.qEndKnPerM;
+      if (h1 === 0 && h2 === 0) continue;
+      extraStaaflasten.push({
+        id: volgendeStaaflastId++, memberId: last.memberId, globalDirection: as,
+        qStartKnPerM: richting * h1, qEndKnPerM: richting * h2, startPositionM: a, endPositionM: b,
+      } as T["memberLoads"][number]);
+      continue;
+    }
     // Globale verticale component aan begin en eind van het belaste deel.
     const qZ1 = last.qyStartKnPerM * ey[2] + last.qzStartKnPerM * ez[2];
     const qZ2 = last.qyEndKnPerM * ey[2] + last.qzEndKnPerM * ez[2];

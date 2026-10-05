@@ -91,6 +91,7 @@ fn request_from_case(
             roll_angle_rad: None,
             intermediate_node_ids: vec![],
             tension_only: false,
+            bedding: None,
         })
         .collect();
     let supports = case
