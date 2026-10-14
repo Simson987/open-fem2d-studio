@@ -53,6 +53,10 @@
     "clearAll": "Clear all",
     "noRecent": "No recent files yet",
     "remove": "Remove",
+    "chooseImporter": "Choose the importer (number):",
+    "invalidImporter": "No valid importer was selected.",
+    "reportTitle": "Import report",
+    "closeReport": "Close",
     "justNow": "Just now",
     "minutesAgo_one": "{{count}} min ago",
     "minutesAgo_other": "{{count}} min ago",
@@ -64,6 +68,15 @@
     "importIfcHint": "Read an IFC4 structural analysis model (Structural Analysis View) as a new 3D project."
   },
   "extensionManager": {
+    "intro": "Install a ZIP or link a folder containing extension.json. Extensions import files locally.",
+    "trustWarning": "An extension runs code on this computer. Only link extensions you made or trust. Continue?",
+    "linkFolder": "Link folder…",
+    "reload": "Reload",
+    "empty": "No extensions installed or linked yet.",
+    "other": "Other",
+    "enabled": "Enabled",
+    "unlink": "Unlink",
+    "remove": "Remove",
     "desc": {
       "ifc-importer": "Import IFC4 STEP files into the application",
       "pdf-export": "Export reports as PDF using OpenAEC Report Generator",

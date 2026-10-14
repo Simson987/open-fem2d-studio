@@ -233,10 +233,13 @@ console.log("\n[4] montage na de permanente belasting via de Rust-kern");
   gelijk(kracht(gw.result, 4).nStartKn, h * d / 6, "G + W: N strip 4 = H·d/L", 1e-6);
   gelijk(kracht(gw.result, 4).nStartKn, kracht(w.result, 4).nStartKn, "G + W = W alleen (superpositie)", 1e-6);
 
-  // Zonder de instelling: oude gedrag, de kolomverkorting drukt beide strips.
-  const uit = await rekenModel(portaal({ p, h }), 1);
-  ok(JSON.stringify(uit.result.inactiveMembers) === "[4,5]", "zonder montage vallen beide strips onder G weg");
-  ok(uit.request.tensionOnlyFit === undefined && uit.result.tensionOnlyFit === undefined, "zonder montage geen montagevelden");
+  // Zonder de instelling drukt de kolomverkorting beide strips. Het portaal
+  // wordt dan een mechanisme, ook al stoot G de zijdelingse beweging niet aan.
+  const uitRequest = { ...buildOpenFem3DSolveRequest(portaal({ p, h }), "linear", 1, undefined, { permanentCaseIds: [1] }), bucklingModes: 0 };
+  const uit = await reken(uitRequest);
+  ok(uit.fout?.includes("mechanisme") && uit.fout.includes("inactief: staaf 4, 5"),
+    "zonder montage vallen beide strips weg en wordt het portaal afgekeurd");
+  ok(uitRequest.tensionOnlyFit === undefined && uit.tensionOnlyFit === undefined, "zonder montage geen montagevelden");
 }
 
 console.log("\n[5] kruisregel via de app");

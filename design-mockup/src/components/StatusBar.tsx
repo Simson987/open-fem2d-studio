@@ -110,7 +110,7 @@ export default function StatusBar({
               className="status-item status-bediening"
               title={t(
                 "remoteControlHint",
-                "De app is gestart met OPENAEC_GUI_CONTROL=1 en wordt via het bedieningskanaal aangestuurd.",
+                "Het standaard ingeschakelde bedieningskanaal laat een AI-assistent of script de app bedienen (Instellingen → AI-assistent (MCP), of OPENAEC_GUI_CONTROL=1).",
               )}
             >
               <span className="status-bediening-dot" aria-hidden="true" />

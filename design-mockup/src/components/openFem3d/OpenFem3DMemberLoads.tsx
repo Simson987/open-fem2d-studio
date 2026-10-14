@@ -21,6 +21,7 @@ import {
 import { formatLength, parseLength, toonMm } from "../../lib/lengthInput";
 import { OPEN_FEM_3D_DEFAULT_POINT_LOAD_KN } from "./openFem3dPlaatsen";
 import "./OpenFem3DNodeConditions.css";
+import "./OpenFem3DMemberLoads.css";
 
 interface Props {
   model: OpenFem3DModel;
@@ -363,144 +364,152 @@ export default function OpenFem3DMemberLoads({
   }, [selectedLoad?.kind, selectedLoad?.id, beamId, activeLoadCaseId]);
 
   // Positievelden zijn tekst met een decimaal toetsenbord, zodat 1500,5 mag.
-  const field = (name: keyof Values, label: string, ref = false) => <label><span>{label}</span>
+  // Elk veld is een rij van het eigenschappenpaneel: label links, veld rechts (issue #108).
+  const field = (name: keyof Values, label: string, ref = false) => <label className="fem-prop-row">
+    <span className="fem-prop-label">{label}</span>
     {name === "startMm" || name === "endMm"
-      ? <input ref={ref ? firstInput : undefined} name={name} type="text" inputMode="decimal" required value={values[name]}
+      ? <input ref={ref ? firstInput : undefined} className="fem-prop-input" name={name} type="text" inputMode="decimal" required value={values[name]}
         onChange={(event) => setValues({ ...values, [name]: event.target.value })} />
-      : <input ref={ref ? firstInput : undefined} name={name} type="number" step="any" required value={values[name] ?? "0"}
+      : <input ref={ref ? firstInput : undefined} className="fem-prop-input" name={name} type="number" step="any" required value={values[name] ?? "0"}
         onChange={(event) => setValues({ ...values, [name]: event.target.value })} />}
   </label>;
 
+  // Opbouw als het knooppaneel (OpenFem3DNodeConditions): een sectie met de kop
+  // als band, de keuze Lijnlast/Puntlast/Temperatuur als knoppenrij, velden als
+  // .fem-prop-row met .fem-prop-input en de knoppen van dat paneel. Geen kale
+  // h3/label/select/input/button: die vallen terug op de letter van de pagina of
+  // van de browser (issue #108, test-open-fem3d-lastpaneel-ui.mjs).
   return <div className="open-fem3d-conditions open-fem3d-member-loads">
-    <div className="open-fem3d-load-tabs" role="tablist" aria-label={t("openFem3d.memberLoads.tabsAria")}>
-      <button type="button" role="tab" aria-selected={activeEditor === "line"} onClick={() => setActiveEditor("line")}>{t("openFem3d.memberLoads.tabLine")}</button>
-      <button type="button" role="tab" aria-selected={activeEditor === "point"} onClick={() => setActiveEditor("point")}>{t("openFem3d.memberLoads.tabPoint")}</button>
-      <button type="button" role="tab" aria-selected={activeEditor === "thermal"} onClick={() => setActiveEditor("thermal")}>{t("openFem3d.memberLoads.tabThermal")}</button>
-    </div>
-    {activeEditor === "line" && <section>
-      <h3>{t("openFem3d.memberLoads.lineTitle")}</h3>
-      <p className="fem-prop-hint">{t("openFem3d.memberLoads.lineHint", { length: toonMm(lengthM, "m") })}</p>
-      {loads.length > 0 && <div className="open-fem3d-condition-load-list">
-        {loads.map((load) => <div key={load.id} className={editingId === load.id ? "selected" : ""}>
-          <button type="button" onClick={() => select(load)}><strong>#{load.id}</strong> {openFem3DMemberLoadSummary(load, projectionShort)}</button>
-          <button type="button" onClick={() => remove(load.id)} aria-label={t("openFem3d.memberLoads.deleteLine", { id: load.id })}>×</button>
-        </div>)}
-      </div>}
-      <button className="open-fem3d-condition-new" type="button" onClick={beginNew}>{t("openFem3d.memberLoads.newLine")}</button>
-      <form onSubmit={save}>
-        <div className="open-fem3d-load-quick">
-          <label><span>{t("openFem3d.memberLoads.direction")}</span><select data-open-fem3d-line-direction value={lineDirection} onChange={(event) => {
-            // De ingevulde q gaat mee naar de nieuwe richting; de andere waarden worden 0.
-            const direction = event.target.value as LineDirection;
-            const q = values[startKey(lineDirection)] ?? "0";
-            setLineDirection(direction);
-            setValues({ ...values, qyStart: "0", qyEnd: "0", qzStart: "0", qzEnd: "0", qStart: "0", qEnd: "0",
-              [startKey(direction)]: q, [endKey(direction)]: q });
-          }}>
-            <option value="z">{t("openFem3d.memberLoads.localZ")}</option><option value="y">{t("openFem3d.memberLoads.localY")}</option>
-            <option value="X">{t("openFem3d.memberLoads.globalX")}</option><option value="Y">{t("openFem3d.memberLoads.globalY")}</option>
-            <option value="Z">{t("openFem3d.memberLoads.globalZ")}</option>
-          </select></label>
-          <label><span>q (kN/m)</span><input ref={firstInput} name="uniformQ" type="number" step="any" required
-            value={values[startKey(lineDirection)] ?? "0"}
-            onChange={(event) => setValues({ ...values,
-              [startKey(lineDirection)]: event.target.value,
-              [endKey(lineDirection)]: event.target.value,
-            })} /></label>
-        </div>
-        {globalOf(lineDirection) && <>
-          <label className="open-fem3d-check-row open-fem3d-load-projection">
-            <input type="checkbox" data-open-fem3d-per-projection checked={perProjection}
-              onChange={(event) => setPerProjection(event.target.checked)} />
-            <span>{t("openFem3d.memberLoads.perProjection")}</span>
-          </label>
-          <p className="fem-prop-hint" data-open-fem3d-per-projection-hint>{t("openFem3d.memberLoads.perProjectionHint")}</p>
-        </>}
-        <button className="open-fem3d-load-more" type="button" aria-expanded={showLineDetails}
-          onClick={() => setShowLineDetails((open) => !open)}>
-          {showLineDetails ? t("openFem3d.memberLoads.fewerOptions") : t("openFem3d.memberLoads.moreOptions")}
-        </button>
-        {showLineDetails && <div className="open-fem3d-load-details">
-          <fieldset>
-            <legend>{t("openFem3d.memberLoads.intensity")}</legend>
-            <div className="open-fem3d-condition-values open-fem3d-member-load-values">
+    <section className="fem-prop-section">
+      <div className="fem-prop-section-title">{t("openFem3d.memberLoads.tabsAria")}</div>
+      <div className="open-fem3d-load-tabs" role="tablist" aria-label={t("openFem3d.memberLoads.tabsAria")}>
+        <button type="button" role="tab" aria-selected={activeEditor === "line"} onClick={() => setActiveEditor("line")}>{t("openFem3d.memberLoads.tabLine")}</button>
+        <button type="button" role="tab" aria-selected={activeEditor === "point"} onClick={() => setActiveEditor("point")}>{t("openFem3d.memberLoads.tabPoint")}</button>
+        <button type="button" role="tab" aria-selected={activeEditor === "thermal"} onClick={() => setActiveEditor("thermal")}>{t("openFem3d.memberLoads.tabThermal")}</button>
+      </div>
+      {activeEditor === "line" && <div className="open-fem3d-load-editor">
+        <h3 className="open-fem3d-load-title">{t("openFem3d.memberLoads.lineTitle")}</h3>
+        <p className="fem-prop-hint">{t("openFem3d.memberLoads.lineHint", { length: toonMm(lengthM, "m") })}</p>
+        {loads.length > 0 && <div className="open-fem3d-condition-load-list">
+          {loads.map((load) => <div key={load.id} className={editingId === load.id ? "selected" : ""}>
+            <button type="button" onClick={() => select(load)}><strong>#{load.id}</strong> {openFem3DMemberLoadSummary(load, projectionShort)}</button>
+            <button type="button" onClick={() => remove(load.id)} aria-label={t("openFem3d.memberLoads.deleteLine", { id: load.id })}>×</button>
+          </div>)}
+        </div>}
+        <button className="open-fem3d-condition-new open-fem3d-nc-secondary" type="button" onClick={beginNew}>{t("openFem3d.memberLoads.newLine")}</button>
+        <form onSubmit={save}>
+          <div className="open-fem3d-load-quick">
+            <label className="fem-prop-row"><span className="fem-prop-label">{t("openFem3d.memberLoads.direction")}</span><select className="fem-prop-input" data-open-fem3d-line-direction value={lineDirection} onChange={(event) => {
+              // De ingevulde q gaat mee naar de nieuwe richting; de andere waarden worden 0.
+              const direction = event.target.value as LineDirection;
+              const q = values[startKey(lineDirection)] ?? "0";
+              setLineDirection(direction);
+              setValues({ ...values, qyStart: "0", qyEnd: "0", qzStart: "0", qzEnd: "0", qStart: "0", qEnd: "0",
+                [startKey(direction)]: q, [endKey(direction)]: q });
+            }}>
+              <option value="z">{t("openFem3d.memberLoads.localZ")}</option><option value="y">{t("openFem3d.memberLoads.localY")}</option>
+              <option value="X">{t("openFem3d.memberLoads.globalX")}</option><option value="Y">{t("openFem3d.memberLoads.globalY")}</option>
+              <option value="Z">{t("openFem3d.memberLoads.globalZ")}</option>
+            </select></label>
+            <label className="fem-prop-row"><span className="fem-prop-label">q (kN/m)</span><input ref={firstInput} className="fem-prop-input" name="uniformQ" type="number" step="any" required
+              value={values[startKey(lineDirection)] ?? "0"}
+              onChange={(event) => setValues({ ...values,
+                [startKey(lineDirection)]: event.target.value,
+                [endKey(lineDirection)]: event.target.value,
+              })} /></label>
+          </div>
+          {globalOf(lineDirection) && <>
+            <label className="open-fem3d-check-row open-fem3d-load-projection">
+              <input type="checkbox" className="fem-prop-checkbox" data-open-fem3d-per-projection checked={perProjection}
+                onChange={(event) => setPerProjection(event.target.checked)} />
+              <span>{t("openFem3d.memberLoads.perProjection")}</span>
+            </label>
+            <p className="fem-prop-hint" data-open-fem3d-per-projection-hint>{t("openFem3d.memberLoads.perProjectionHint")}</p>
+          </>}
+          <button className="open-fem3d-load-more" type="button" aria-expanded={showLineDetails}
+            onClick={() => setShowLineDetails((open) => !open)}>
+            {showLineDetails ? t("openFem3d.memberLoads.fewerOptions") : t("openFem3d.memberLoads.moreOptions")}
+          </button>
+          {showLineDetails && <div className="open-fem3d-load-details">
+            <fieldset>
+              <legend>{t("openFem3d.memberLoads.intensity")}</legend>
               {globalOf(lineDirection)
                 ? <>{field("qStart", t("openFem3d.memberLoads.qStart"))}{field("qEnd", t("openFem3d.memberLoads.qEnd"))}</>
                 : <>
                   {field("qyStart", t("openFem3d.memberLoads.qyStart"))}{field("qyEnd", t("openFem3d.memberLoads.qyEnd"))}
                   {field("qzStart", t("openFem3d.memberLoads.qzStart"))}{field("qzEnd", t("openFem3d.memberLoads.qzEnd"))}
                 </>}
-            </div>
-          </fieldset>
-          <fieldset>
-            <legend>{t("openFem3d.memberLoads.range")}</legend>
-            <div className="open-fem3d-condition-values open-fem3d-member-load-values">
+            </fieldset>
+            <fieldset>
+              <legend>{t("openFem3d.memberLoads.range")}</legend>
               {field("startMm", t("openFem3d.memberLoads.start"))}{field("endMm", t("openFem3d.memberLoads.end"))}
-            </div>
-          </fieldset>
-        </div>}
-        <button className="open-fem3d-load-submit" type="submit">{editingId === null ? t("openFem3d.memberLoads.addLine") : t("openFem3d.memberLoads.saveLine")}</button>
-      </form>
-      {error && <p className="open-fem3d-error" role="alert">{error}</p>}
-    </section>}
-    {activeEditor === "point" && <section>
-      <h3>{t("openFem3d.memberLoads.pointTitle")}</h3>
-      <p className="fem-prop-hint">{t("openFem3d.memberLoads.pointHint")}</p>
-      {pointLoads.length > 0 && <div className="open-fem3d-condition-load-list">
-        {pointLoads.map((load) => <div key={load.id} className={pointEditingId === load.id ? "selected" : ""}>
-          <button type="button" onClick={() => selectPoint(load)}>
-            <strong>P#{load.id}</strong> Py {load.py} · Pz {load.pz} · x {toonMm(load.positionM, "m")} mm
-          </button>
-          <button type="button" onClick={() => removePoint(load.id)} aria-label={t("openFem3d.memberLoads.deletePoint", { id: load.id })}>×</button>
-        </div>)}
-      </div>}
-      <button className="open-fem3d-condition-new" type="button" onClick={beginNewPoint}>{t("openFem3d.memberLoads.newPoint")}</button>
-      <form onSubmit={savePoint}>
-        <fieldset>
-          <legend>{t("openFem3d.memberLoads.forceAndPosition")}</legend>
-          <div className="open-fem3d-condition-values open-fem3d-member-load-values">
-            <label><span>Py (kN)</span><input ref={firstPointInput} type="number" step="any" required value={pointValues.py}
-              onChange={(event) => setPointValues({ ...pointValues, py: event.target.value })} /></label>
-            <label><span>Pz (kN)</span><input type="number" step="any" required value={pointValues.pz}
-              onChange={(event) => setPointValues({ ...pointValues, pz: event.target.value })} /></label>
-            <label><span>{t("openFem3d.memberLoads.positionMm")}</span><input type="text" inputMode="decimal" required value={pointValues.positionMm}
-              onChange={(event) => setPointValues({ ...pointValues, positionMm: event.target.value })} /></label>
+            </fieldset>
+          </div>}
+          <div className="open-fem3d-nc-actions">
+            <button className="open-fem3d-load-submit open-fem3d-nc-primary" type="submit">{editingId === null ? t("openFem3d.memberLoads.addLine") : t("openFem3d.memberLoads.saveLine")}</button>
           </div>
-        </fieldset>
-        <button type="submit">{pointEditingId === null ? t("openFem3d.memberLoads.add") : t("save", { ns: "common" })}</button>
-      </form>
-      {error && <p className="open-fem3d-error" role="alert">{error}</p>}
-    </section>}
-    {activeEditor === "thermal" && <section>
-      <h3>{t("openFem3d.memberLoads.thermalTitle")}</h3>
-      <p className="fem-prop-hint">{t("openFem3d.memberLoads.thermalHint")}</p>
-      {thermalLoads.length > 0 && <div className="open-fem3d-condition-load-list">
-        {thermalLoads.map((load) => <div key={load.id} className={thermalEditingId === load.id ? "selected" : ""}>
-          <button type="button" onClick={() => selectThermal(load)}>
-            <strong>ΔT#{load.id}</strong> {load.deltaTUniformK} K · ΔTy {load.deltaTGradientYK} · ΔTz {load.deltaTGradientZK}
-          </button>
-          <button type="button" onClick={() => removeThermal(load.id)} aria-label={t("openFem3d.memberLoads.deleteThermal", { id: load.id })}>×</button>
-        </div>)}
+        </form>
+        {error && <p className="open-fem3d-error" role="alert">{error}</p>}
       </div>}
-      <button className="open-fem3d-condition-new" type="button" onClick={beginNewThermal}>{t("openFem3d.memberLoads.newThermal")}</button>
-      <form onSubmit={saveThermal}>
-        <fieldset>
-          <legend>{t("openFem3d.memberLoads.thermalLegend")}</legend>
-          <div className="open-fem3d-condition-values open-fem3d-member-load-values">
-            <label><span>{t("openFem3d.memberLoads.deltaTUniform")}</span><input ref={firstThermalInput} type="number" step="any" required
+      {activeEditor === "point" && <div className="open-fem3d-load-editor">
+        <h3 className="open-fem3d-load-title">{t("openFem3d.memberLoads.pointTitle")}</h3>
+        <p className="fem-prop-hint">{t("openFem3d.memberLoads.pointHint")}</p>
+        {pointLoads.length > 0 && <div className="open-fem3d-condition-load-list">
+          {pointLoads.map((load) => <div key={load.id} className={pointEditingId === load.id ? "selected" : ""}>
+            <button type="button" onClick={() => selectPoint(load)}>
+              <strong>P#{load.id}</strong> Py {load.py} · Pz {load.pz} · x {toonMm(load.positionM, "m")} mm
+            </button>
+            <button type="button" onClick={() => removePoint(load.id)} aria-label={t("openFem3d.memberLoads.deletePoint", { id: load.id })}>×</button>
+          </div>)}
+        </div>}
+        <button className="open-fem3d-condition-new open-fem3d-nc-secondary" type="button" onClick={beginNewPoint}>{t("openFem3d.memberLoads.newPoint")}</button>
+        <form onSubmit={savePoint}>
+          <fieldset>
+            <legend>{t("openFem3d.memberLoads.forceAndPosition")}</legend>
+            <label className="fem-prop-row"><span className="fem-prop-label">Py (kN)</span><input ref={firstPointInput} className="fem-prop-input" type="number" step="any" required value={pointValues.py}
+              onChange={(event) => setPointValues({ ...pointValues, py: event.target.value })} /></label>
+            <label className="fem-prop-row"><span className="fem-prop-label">Pz (kN)</span><input className="fem-prop-input" type="number" step="any" required value={pointValues.pz}
+              onChange={(event) => setPointValues({ ...pointValues, pz: event.target.value })} /></label>
+            <label className="fem-prop-row"><span className="fem-prop-label">{t("openFem3d.memberLoads.positionMm")}</span><input className="fem-prop-input" type="text" inputMode="decimal" required value={pointValues.positionMm}
+              onChange={(event) => setPointValues({ ...pointValues, positionMm: event.target.value })} /></label>
+          </fieldset>
+          <div className="open-fem3d-nc-actions">
+            <button className="open-fem3d-load-submit open-fem3d-nc-primary" type="submit">{pointEditingId === null ? t("openFem3d.memberLoads.add") : t("save", { ns: "common" })}</button>
+          </div>
+        </form>
+        {error && <p className="open-fem3d-error" role="alert">{error}</p>}
+      </div>}
+      {activeEditor === "thermal" && <div className="open-fem3d-load-editor">
+        <h3 className="open-fem3d-load-title">{t("openFem3d.memberLoads.thermalTitle")}</h3>
+        <p className="fem-prop-hint">{t("openFem3d.memberLoads.thermalHint")}</p>
+        {thermalLoads.length > 0 && <div className="open-fem3d-condition-load-list">
+          {thermalLoads.map((load) => <div key={load.id} className={thermalEditingId === load.id ? "selected" : ""}>
+            <button type="button" onClick={() => selectThermal(load)}>
+              <strong>ΔT#{load.id}</strong> {load.deltaTUniformK} K · ΔTy {load.deltaTGradientYK} · ΔTz {load.deltaTGradientZK}
+            </button>
+            <button type="button" onClick={() => removeThermal(load.id)} aria-label={t("openFem3d.memberLoads.deleteThermal", { id: load.id })}>×</button>
+          </div>)}
+        </div>}
+        <button className="open-fem3d-condition-new open-fem3d-nc-secondary" type="button" onClick={beginNewThermal}>{t("openFem3d.memberLoads.newThermal")}</button>
+        <form onSubmit={saveThermal}>
+          <fieldset>
+            <legend>{t("openFem3d.memberLoads.thermalLegend")}</legend>
+            <label className="fem-prop-row"><span className="fem-prop-label">{t("openFem3d.memberLoads.deltaTUniform")}</span><input ref={firstThermalInput} className="fem-prop-input" type="number" step="any" required
               value={thermalValues.deltaTUniformK}
               onChange={(event) => setThermalValues({ ...thermalValues, deltaTUniformK: event.target.value })} /></label>
-            <label><span>{t("openFem3d.memberLoads.deltaTLocalY")}</span><input type="number" step="any" required
+            <label className="fem-prop-row"><span className="fem-prop-label">{t("openFem3d.memberLoads.deltaTLocalY")}</span><input className="fem-prop-input" type="number" step="any" required
               value={thermalValues.deltaTGradientYK}
               onChange={(event) => setThermalValues({ ...thermalValues, deltaTGradientYK: event.target.value })} /></label>
-            <label><span>{t("openFem3d.memberLoads.deltaTLocalZ")}</span><input type="number" step="any" required
+            <label className="fem-prop-row"><span className="fem-prop-label">{t("openFem3d.memberLoads.deltaTLocalZ")}</span><input className="fem-prop-input" type="number" step="any" required
               value={thermalValues.deltaTGradientZK}
               onChange={(event) => setThermalValues({ ...thermalValues, deltaTGradientZK: event.target.value })} /></label>
+          </fieldset>
+          <div className="open-fem3d-nc-actions">
+            <button className="open-fem3d-load-submit open-fem3d-nc-primary" type="submit">{thermalEditingId === null ? t("openFem3d.memberLoads.add") : t("save", { ns: "common" })}</button>
           </div>
-        </fieldset>
-        <button type="submit">{thermalEditingId === null ? t("openFem3d.memberLoads.add") : t("save", { ns: "common" })}</button>
-      </form>
-      {error && <p className="open-fem3d-error" role="alert">{error}</p>}
-    </section>}
+        </form>
+        {error && <p className="open-fem3d-error" role="alert">{error}</p>}
+      </div>}
+    </section>
   </div>;
 }

@@ -53,6 +53,10 @@
     "clearAll": "Alle löschen",
     "noRecent": "Noch keine zuletzt verwendeten Dateien",
     "remove": "Entfernen",
+    "chooseImporter": "Importeur wählen (Nummer):",
+    "invalidImporter": "Kein gültiger Importeur gewählt.",
+    "reportTitle": "Importbericht",
+    "closeReport": "Schließen",
     "justNow": "Gerade eben",
     "minutesAgo_one": "vor {{count}} Min.",
     "minutesAgo_other": "vor {{count}} Min.",
@@ -64,6 +68,15 @@
     "importIfcHint": "Ein IFC4-Analysemodell (Structural Analysis View) als neues 3D-Projekt einlesen."
   },
   "extensionManager": {
+    "intro": "Eine ZIP-Datei installieren oder einen Ordner mit extension.json verknüpfen. Erweiterungen importieren Dateien lokal.",
+    "trustWarning": "Eine Erweiterung führt Code auf diesem Computer aus. Nur eigene oder vertrauenswürdige Erweiterungen verknüpfen. Fortfahren?",
+    "linkFolder": "Ordner verknüpfen…",
+    "reload": "Neu laden",
+    "empty": "Noch keine Erweiterungen installiert oder verknüpft.",
+    "other": "Sonstige",
+    "enabled": "Aktiv",
+    "unlink": "Trennen",
+    "remove": "Entfernen",
     "desc": {
       "ifc-importer": "IFC4-STEP-Dateien in die Anwendung importieren",
       "pdf-export": "Berichte mit dem OpenAEC Report Generator als PDF exportieren",

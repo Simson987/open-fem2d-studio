@@ -21,6 +21,8 @@ interface RibbonProps {
   onThemeSelect?: (theme: string) => void;
   /** Open de alleen-lezen bibliotheek-dialoog (profielen / materialen). */
   onOpenLibrary?: (tab: "sections" | "materials") => void;
+  /** Open Instellingen op het tabblad AI-assistent (MCP) (issue #109). */
+  onOpenAiAssistant?: () => void;
   activeView: string;
   onViewChange: (view: string) => void;
   modelDimension?: "2d" | "3d";
@@ -102,6 +104,8 @@ interface RibbonProps {
   /** Section box in 3D (issue #86): aan (de knop licht op) en aan/uit zetten. */
   openFem3dSectionBox?: boolean;
   onOpenFem3DSectionBoxToggle?: () => void;
+  openFem3dExploded?: boolean;
+  onOpenFem3DExplodeToggle?: () => void;
   hasOpenFem3DNodeSelection?: boolean;
   hasOpenFem3DBeamSelection?: boolean;
   hasOpenFem3DPlateSelection?: boolean;
@@ -116,6 +120,10 @@ interface RibbonProps {
   onOpenFem3DConvertPlateToLoadPanel?: () => void;
   /** 3D: liggers scharnierend op kolommen (de selectie, of alle staven). */
   onOpenFem3DPinBeamsToColumns?: () => void;
+  /** 3D: knopen op staven aansluiten (de selectie, of het hele model), issue #63. */
+  onOpenFem3DConnectNodes?: () => void;
+  /** 3D: samenvallende knopen samenvoegen (de selectie, of het hele model), issue #75. */
+  onOpenFem3DMergeNodes?: () => void;
   /** @deprecated — read from useReportStore in the Report tab/preview. Kept for prop-compat. */
   pageSize?: "A4" | "A3";
   /** @deprecated */
@@ -143,17 +151,17 @@ type TabId = (typeof TABS)[number];
 export default function Ribbon({
   onFileTabClick, onSettingsClick, onProjectSettingsClick, activeView, onViewChange,
   modelDimension = "2d", onConvertTo3D, onOpenSteelHall,
-  theme, onThemeSelect, onOpenLibrary,
+  theme, onThemeSelect, onOpenLibrary, onOpenAiAssistant,
   femTool, onFemToolChange, onSolve, hasResults,
   onDelete, onUndo, onRedo, canUndo, canRedo, onOpenGrids,
   onOpenLoadCases, onOpenLoadCombinations, onOpenWindGenerator, onOpenWaterAccumulation, onNewProject, onOpenProject,
   onSaveProject, onSaveProjectAs,
   openFem3dTool, availableOpenFem3DTools, onOpenFem3DToolChange, canOpenFem3DDelete,
   onOpenFem3DFit, onOpenFem3DViewChange, openFem3dView,
-  onToggle3DVisibility, visibility3DOpen, openFem3dPlateDisplay, onOpenFem3DPlateDisplayChange, openFem3dSectionBox, onOpenFem3DSectionBoxToggle, hasOpenFem3DNodeSelection, hasOpenFem3DBeamSelection, hasOpenFem3DPlateSelection,
+  onToggle3DVisibility, visibility3DOpen, openFem3dPlateDisplay, onOpenFem3DPlateDisplayChange, openFem3dSectionBox, onOpenFem3DSectionBoxToggle, openFem3dExploded, onOpenFem3DExplodeToggle, hasOpenFem3DNodeSelection, hasOpenFem3DBeamSelection, hasOpenFem3DPlateSelection,
   onOpenFem3DSupportPreset, onOpenFem3DSpringTool, onOpenFem3DRequestNodalLoad, onOpenFem3DRequestMemberLoad,
   onOpenFem3DRequestMemberPointLoad, onOpenFem3DRequestThermalLoad, onOpenFem3DRequestSurfaceLoad,
-  onOpenFem3DConvertPlateToLoadPanel, onOpenFem3DPinBeamsToColumns,
+  onOpenFem3DConvertPlateToLoadPanel, onOpenFem3DPinBeamsToColumns, onOpenFem3DConnectNodes, onOpenFem3DMergeNodes,
   onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid,
   onFilterSelection,
   onExportHtml, scheefstandToelichting, analyseToelichting, windToelichting,
@@ -295,6 +303,8 @@ export default function Ribbon({
           onOpenFem3DPlateDisplayChange={onOpenFem3DPlateDisplayChange}
           openFem3dSectionBox={openFem3dSectionBox}
           onOpenFem3DSectionBoxToggle={onOpenFem3DSectionBoxToggle}
+          openFem3dExploded={openFem3dExploded}
+          onOpenFem3DExplodeToggle={onOpenFem3DExplodeToggle}
           hasOpenFem3DNodeSelection={hasOpenFem3DNodeSelection}
           hasOpenFem3DBeamSelection={hasOpenFem3DBeamSelection}
           hasOpenFem3DPlateSelection={hasOpenFem3DPlateSelection}
@@ -307,6 +317,8 @@ export default function Ribbon({
           onOpenFem3DRequestSurfaceLoad={onOpenFem3DRequestSurfaceLoad}
           onOpenFem3DConvertPlateToLoadPanel={onOpenFem3DConvertPlateToLoadPanel}
           onOpenFem3DPinBeamsToColumns={onOpenFem3DPinBeamsToColumns}
+          onOpenFem3DConnectNodes={onOpenFem3DConnectNodes}
+          onOpenFem3DMergeNodes={onOpenFem3DMergeNodes}
         />;
       case "table":
         return <TableTab
@@ -323,6 +335,7 @@ export default function Ribbon({
           theme={theme}
           onThemeSelect={onThemeSelect}
           onOpenLibrary={onOpenLibrary}
+          onOpenAiAssistant={onOpenAiAssistant}
         />;
       case "insights":
         return <InsightsTab onShowInsights={() => onViewChange("insights")} onShowInsightsMode={onShowInsightsMode} onExportMatrixCsv={onExportMatrixCsv} onOpenZichtbaarheid={onOpenZichtbaarheid} />;
@@ -365,6 +378,8 @@ export default function Ribbon({
           <div
             className={`ribbon-content-panel ribbon-panel-exit-${direction}`}
             key={`prev-${prevTab}`}
+            inert
+            aria-hidden="true"
           >
             {renderContent(prevTab)}
           </div>

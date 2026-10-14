@@ -191,7 +191,7 @@ export default function WindGeneratorDialog({ open, onClose, wind }: Props) {
                   </button>
                   <button type="button" className={`wgd-toggle${i.stuwdrukBron === "handmatig" ? " aan" : ""}`}
                     onClick={() => set({ stuwdrukBron: "handmatig" })} title={t("wind.qpManual")}>
-                    q_p NB
+                    q_p {t("wind.qpManualShort")}
                   </button>
                   {i.stuwdrukBron === "handmatig" && (
                     <Getal label="q_p" value={i.qpHandmatig_kNm2} step={0.01} eenheid="kN/m²"
@@ -200,6 +200,20 @@ export default function WindGeneratorDialog({ open, onClose, wind }: Props) {
                   {s && i.stuwdrukBron === "berekend" && (
                     <span className="wgd-uitkomst">{`q_p = ${nl(s.stuwdruk.qp_kNm2, 3)} kN/m²`}</span>
                   )}
+                </div>
+                {i.stuwdrukBron === "handmatig" && (
+                  <div className="wgd-field">
+                    <label htmlFor="wgd-qp-manual-source">{t("wind.qpManualSource")}</label>
+                    <input id="wgd-qp-manual-source" type="text"
+                      value={typeof i.qpHandmatigBron === "string" ? i.qpHandmatigBron : ""}
+                      placeholder={t("wind.qpManualSourcePlaceholder")}
+                      onChange={(e) => set({ qpHandmatigBron: e.target.value })} />
+                  </div>
+                )}
+                <div className="wgd-getallen">
+                  <Getal required label={`${t("openFem3d.envelopeLoads.structural")} cₛ·c_d`}
+                    value={i.structuralFactor ?? 1} min={0.01} step={0.05} eenheid=""
+                    onChange={(v) => set({ structuralFactor: v ?? 0 })} />
                 </div>
               </div>
 
@@ -347,6 +361,15 @@ export default function WindGeneratorDialog({ open, onClose, wind }: Props) {
                       onChange={(v) => set({ cpiHandmatig: v ?? 0 })} />
                   )}
                 </div>
+                {i.cpiKeuze === "handmatig" && (
+                  <div className="wgd-field">
+                    <label htmlFor="wgd-cpi-manual-source">{t("wind.cpiManualSource")}</label>
+                    <input id="wgd-cpi-manual-source" type="text"
+                      value={typeof i.cpiHandmatigBron === "string" ? i.cpiHandmatigBron : ""}
+                      placeholder={t("wind.cpiManualSourcePlaceholder")}
+                      onChange={(e) => set({ cpiHandmatigBron: e.target.value })} />
+                  </div>
+                )}
               </div>
               )}
 

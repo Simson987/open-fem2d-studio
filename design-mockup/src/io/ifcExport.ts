@@ -197,6 +197,8 @@ import {
   OPEN_FEM_3D_GLOBAL_DIRECTIONS, isOpenFem3DGlobalMemberLoad, openFem3DLoadCaseId, openFem3DMemberAxes, parseOpenFem3DModel,
   type OpenFem3DModel, type OpenFem3DPlateBoundarySegment,
 } from "../components/openFem3d/openFem3dModel";
+import { openFem3DBeamVerloop } from "../components/openFem3d/openFem3dVerloop";
+import { openFem3DEnvelopePanelGeometry } from "../components/openFem3d/openFem3dEnvelopePanels";
 
 // ── Invoertype ──────────────────────────────────────────────────────────────
 
@@ -963,7 +965,9 @@ export function bouwIfcRekenmodel(
   // entiteiten en houden daardoor exact dezelfde export.
   if (model.model3d !== undefined) {
     const openFem3d = parseOpenFem3DModel(model.model3d);
-    if (openFem3d.beams.length > 0 || (openFem3d.plates?.length ?? 0) > 0) {
+    schrijf3DSchilpanelen(w, openFem3d, context, gebouw);
+    if (openFem3d.beams.length > 0 || (openFem3d.plates?.length ?? 0) > 0
+      || (openFem3d.envelopePanels?.length ?? 0) > 0) {
       schrijf3DRekenmodel(w, openFem3d, {
         context, gebouw, richtingY, richtingZ, projectNaam, zonderLasten,
         loadCases: model.loadCases,
@@ -1005,6 +1009,46 @@ export function bouwIfcRekenmodel(
     "END-ISO-10303-21;",
     "",
   ].join("\n");
+}
+
+/** Gebouwschil zonder rekenstijfheid: IFC4 IfcCovering met een vlak en gaten. */
+function schrijf3DSchilpanelen(w: SpfSchrijver, model: OpenFem3DModel, context: number, gebouw: number): void {
+  const byId = new Map(model.nodes.map((node) => [node.id, node]));
+  const coverings: number[] = [];
+  for (const panel of model.envelopePanels ?? []) {
+    const geometry = openFem3DEnvelopePanelGeometry(model, panel);
+    const loop = (ids: number[]) => w.ent("IFCPOLYLOOP", lijst(ids.map((id) => {
+      const node = byId.get(id)!;
+      return w.ent("IFCCARTESIANPOINT", `(${reeel(node.x)},${reeel(node.y)},${reeel(node.z)})`);
+    })));
+    const outer = w.ent("IFCFACEOUTERBOUND", ref(loop(panel.nodeIds)), ".T.");
+    const holes = (panel.openings ?? []).map((opening) =>
+      w.ent("IFCFACEBOUND", ref(loop(opening.nodeIds)), ".T."));
+    const face = w.ent("IFCFACE", lijst([outer, ...holes]));
+    const faceSet = w.ent("IFCCONNECTEDFACESET", lijst([face]));
+    const surface = w.ent("IFCFACEBASEDSURFACEMODEL", lijst([faceSet]));
+    const shape = w.ent("IFCSHAPEREPRESENTATION", ref(context), "'Body'", "'SurfaceModel'", lijst([surface]));
+    const productShape = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([shape]));
+    const covering = w.ent("IFCCOVERING",
+      w.guid(`3d:schilpaneel:${panel.id}`), "$", stepString(panel.name ?? `3D-schilpaneel ${panel.id}`),
+      stepString("OpenFEM 3D-schilpaneel zonder constructieve stijfheid"), "$", "$", ref(productShape),
+      stepString(String(panel.id)), panel.type === "roof" ? ".ROOFING." : ".CLADDING.");
+    coverings.push(covering);
+    schrijfEigenschappen(w, "OpenFEM3D_Schilpaneel", `3d:schilpaneel:${panel.id}`, [
+      eGeheel("Paneelnummer", panel.id), eLabel("Type", panel.type),
+      eLabel("Afdracht", panel.distribution), eLabel("Hoekknopen", panel.nodeIds.join(",")),
+      eLabel("Openingen", (panel.openings ?? []).map((opening) =>
+        `${opening.id}:${opening.nodeIds.join(",")}`).join(";")),
+      eJaNee("BuitenwaartsOmgekeerd", !!panel.flipOuterSide),
+      eMaat("NettoOppervlak", "IFCAREAMEASURE", geometry.netAreaM2),
+      ...(panel.claddingWeightKnPerM2 !== undefined
+        ? [eMaat("BekledingsgewichtKNPerM2", "IFCREAL", panel.claddingWeightKnPerM2)] : []),
+      ...(panel.spanDirection ? [eLabel("Overspanningsrichting",
+        `${panel.spanDirection.x},${panel.spanDirection.y},${panel.spanDirection.z}`)] : []),
+    ], [covering]);
+  }
+  if (coverings.length > 0) w.ent("IFCRELCONTAINEDINSPATIALSTRUCTURE",
+    w.guid("3d:schilpanelen:gebouw"), "$", "$", "$", lijst(coverings), ref(gebouw));
 }
 
 // ── Opleggingen ─────────────────────────────────────────────────────────────
@@ -1230,6 +1274,23 @@ function schrijf3DRekenmodel(
       "$", ref(vorm), beideEindenScharnier ? ".PIN_JOINED_MEMBER." : ".RIGID_JOINED_MEMBER.", ref(dwarsrichting));
     memberPerStaaf.set(staaf.id, member);
     leden.push(member);
+    // Verlopende staaf (#73). Het 3D-analysemodel draagt per staaf alleen de
+    // systeemlijn, geen doorsnede (ook niet bij een prismatische staaf); een
+    // IfcExtrudedAreaSolidTapered of een materiaalprofielset met verloop past
+    // daar dus niet. Begin- en eindprofiel en het lineaire verloop staan
+    // daarom in een eigen set aan de staaf, en de beperkingenlijst zegt het.
+    const verloop = staaf.profileNameEnd !== undefined ? openFem3DBeamVerloop(staaf) : null;
+    if (verloop?.status === "verlopend") {
+      schrijfEigenschappen(w, "OpenFEM3D_Staaf", `3d:staaf:${staaf.id}`, [
+        eGeheel("Staafnummer", staaf.id),
+        eLabel("Profiel", staaf.profileName ?? ""),
+        eLabel("Eindprofiel", staaf.profileNameEnd ?? ""),
+        eLabel("Materiaal", staaf.material ?? ""),
+        eTekst("Verloop", verloop.verloop.soort === "gelastI"
+          ? "lineair van begin- naar eindprofiel, gerekend als gelast I-profiel zonder afrondingsstraal"
+          : "lineair van begin- naar eindprofiel (rechthoek b x h)"),
+      ], [member]);
+    }
     for (const [kant, nodeId] of [["start", staaf.startNodeId], ["eind", staaf.endNodeId]] as const) {
       const my = kant === "start" ? rel?.myStart : rel?.myEnd;
       const mz = kant === "start" ? rel?.mzStart : rel?.mzEnd;
@@ -2584,6 +2645,21 @@ export function verzamelIfcBeperkingen(
     );
   }
 
+  // Verlopende 3D-staven (#73): het 3D-analysemodel draagt geen doorsnede per
+  // staaf; zeg waar het verloop wél staat.
+  const verlopend3d = model.model3d
+    ? parseOpenFem3DModel(model.model3d).beams.filter((staaf) =>
+      staaf.profileNameEnd !== undefined && openFem3DBeamVerloop(staaf).status === "verlopend")
+    : [];
+  if (verlopend3d.length > 0) {
+    regels.push(
+      `${verlopend3d.length === 1 ? "Verlopende 3D-staaf" : "Verlopende 3D-staven"} ` +
+      `(${verlopend3d.map((staaf) => staaf.id).join(", ")}): het 3D-rekenmodel in IFC draagt per staaf ` +
+      "alleen de systeemlijn, geen doorsnede. Begin- en eindprofiel en het lineaire verloop staan " +
+      "in de eigenschappenset OpenFEM3D_Staaf van de staaf.",
+    );
+  }
+
   // Staven of lasten die naar iets verwijzen dat niet bestaat.
   const knoopIds = new Set(model.nodes.map(n => n.id));
   const staafIds = new Set(model.beams.map(b => b.id));
@@ -3096,7 +3172,7 @@ export const GEWORTELDE_ENTITEITEN = [
   "IFCSTRUCTURALPOINTACTION", "IFCSTRUCTURALLINEARACTION",
   "IFCSTRUCTURALCURVEACTION",
   // Bouwkundig model, eigenschappen en hoeveelheden
-  "IFCBEAM", "IFCCOLUMN", "IFCREINFORCINGBAR",
+  "IFCBEAM", "IFCCOLUMN", "IFCCOVERING", "IFCREINFORCINGBAR",
   "IFCPROPERTYSET", "IFCELEMENTQUANTITY",
   "IFCRELAGGREGATES", "IFCRELSERVICESBUILDINGS",
   "IFCRELCONNECTSSTRUCTURALMEMBER", "IFCRELCONNECTSSTRUCTURALACTIVITY",
@@ -3570,7 +3646,7 @@ function schrijfEigenDoorsnede(w: SpfSchrijver, naam: string, d: EigenDoorsnede)
   const props = Number.isFinite(e.iz_mm4)
     ? {
         iz: e.iz_mm4, welY: e.wel_y_mm3, welZ: e.wel_z_mm3, wplY: e.wpl_y_mm3, wplZ: e.wpl_z_mm3,
-        avZ: e.av_z_mm2, it: e.it_mm4, iw: e.iw_mm6, iRadY: e.iy_radius_mm, iRadZ: e.iz_radius_mm,
+        avY: e.av_y_mm2, avZ: e.av_z_mm2, it: e.it_mm4, iw: e.iw_mm6, iRadY: e.iy_radius_mm, iRadZ: e.iz_radius_mm,
       }
     : undefined;
   const gemeen = {

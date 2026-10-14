@@ -10,6 +10,7 @@ import {
   zetAlleSnaps,
   zetHoekExtra,
   zetHoekTolerantie,
+  zetKnopenAansluiten,
   zetSnap,
   zetVerbindingsTolerantie,
   type SnapSoort,
@@ -60,7 +61,7 @@ interface Props {
 }
 
 function ToggleRow({
-  label, hint, icon, value, onChange, sub = false,
+  label, hint, icon, value, onChange, sub = false, wrap = false,
 }: {
   label: string;
   hint?: string;
@@ -68,13 +69,15 @@ function ToggleRow({
   value: boolean;
   onChange: (value: boolean) => void;
   sub?: boolean;
+  /** Een lang label op twee regels in plaats van afgekapt (Knopen automatisch samenvoegen en aansluiten, #63 en #75). */
+  wrap?: boolean;
 }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={value}
-      className={`fem-results-toggle explorer-view-toggle${value ? " active" : ""}${sub ? " sub" : ""}`}
+      className={`fem-results-toggle explorer-view-toggle${value ? " active" : ""}${sub ? " sub" : ""}${wrap ? " wrap" : ""}`}
       title={hint}
       onClick={() => onChange(!value)}
     >
@@ -152,9 +155,10 @@ function HoekSnapOpties({ tolerantie, extra, actief }: { tolerantie: number; ext
 }
 
 /**
- * De verbindingstolerantie van het 2D-model (#55), als rij bij de snaps:
+ * De verbindingstolerantie (#55; sinds #63 ook in 3D), als rij bij de snaps:
  * binnen deze afstand (mm, 0,1–25, komma of punt) geldt een knoop als "op de
- * staaf" of "op dezelfde plek". De uitleg staat in de tooltip. Bewaard met de
+ * staaf" of "op dezelfde plek". De uitleg staat in de tooltip, per werkruimte
+ * (`hint`): in 3D wordt een knoop nooit verschoven. Bewaard met de
  * snapinstellingen; een andere waarde verplaatst niets.
  *
  * De eenheid staat als vaste tekst direct achter het veld, niet in het label:
@@ -164,12 +168,11 @@ function HoekSnapOpties({ tolerantie, extra, actief }: { tolerantie: number; ext
  * (zie `.explorer-view-invoer-rij` in FemProjectTree.css); het label wordt
  * niet afgekapt.
  */
-function VerbindingsTolerantieRij({ waarde }: { waarde: number }) {
+function VerbindingsTolerantieRij({ waarde, hint }: { waarde: number; hint: string }) {
   const { t } = useTranslation("common");
   const label = t("zichtbaarheid.verbindingsTolerantie");
   return (
-    <label className="explorer-view-invoer-rij" data-snap-opties="verbinding"
-      title={t("zichtbaarheid.verbindingsTolerantieHint")}>
+    <label className="explorer-view-invoer-rij" data-snap-opties="verbinding" title={hint}>
       <span className="explorer-view-toggle-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: linkIcon }} />
       <span className="explorer-view-invoer-label">{label}</span>
       <span className="explorer-view-invoer-veld">
@@ -349,9 +352,23 @@ export default function ExplorerViewTab({
             <HoekSnapOpties tolerantie={snaps.hoekTolerantie} extra={snaps.hoekExtra} actief={snaps.hoek} />
           </>
         )}
-        {/* Verbindingstolerantie van het 2D-model (#55), alleen in 2D. */}
-        {workspace === "2d" && matchesSnap(t("zichtbaarheid.verbindingsTolerantie")) && (
-          <VerbindingsTolerantieRij waarde={snaps.verbindingsTolerantie} />
+        {/* Knopen automatisch samenvoegen en aansluiten (#63, #75), alleen in 3D. Geen
+            snap: "Alle snapsoorten" laat hem staan. */}
+        {workspace === "3d" && matchesSnap(t("zichtbaarheid.knopenAansluiten")) && (
+          <ToggleRow
+            label={t("zichtbaarheid.knopenAansluiten")}
+            hint={t("zichtbaarheid.knopenAansluitenHint")}
+            icon={linkIcon}
+            value={snaps.knopenAansluiten}
+            onChange={zetKnopenAansluiten}
+            wrap
+          />
+        )}
+        {/* Verbindingstolerantie (#55): in 2D en, sinds #63, in 3D; één
+            instelling, met de uitleg van de werkruimte. */}
+        {matchesSnap(t("zichtbaarheid.verbindingsTolerantie")) && (
+          <VerbindingsTolerantieRij waarde={snaps.verbindingsTolerantie}
+            hint={t(workspace === "3d" ? "zichtbaarheid.verbindingsTolerantieHint3d" : "zichtbaarheid.verbindingsTolerantieHint")} />
         )}
       </div>
     </section>
@@ -389,6 +406,7 @@ const OPEN_FEM_3D_ICONS: Record<OpenFem3DVisibilityFlag, string> = {
   supports: bcPinnedIcon,
   loads: loadPointIcon,
   loadPanels: loadPanelIcon,
+  envelopePanels: loadPanelIcon,
   grid: gridIcon,
   structuralGrid: tableIcon,
   // Hetzelfde pictogram als de peilmaten in 2D.

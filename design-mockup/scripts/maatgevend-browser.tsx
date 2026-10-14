@@ -22,7 +22,9 @@ const tests: { name: string; error?: string }[] = [];
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 function ok(value: unknown, message: string): asserts value { if (!value) throw Error(message); }
 async function test(name: string, run: () => void | Promise<void>) {
+  document.body.dataset.openFem3dCurrentTest = name;
   try { await run(); tests.push({ name }); } catch (error) { tests.push({ name, error: String(error) }); }
+  document.body.dataset.openFem3dCompletedTests = String(tests.length);
 }
 
 const krachten = { n_ed: 0, vy_ed: 0, vz_ed: 28.4, mt_ed: 0, my_ed: 61.2, mz_ed: 0 };
@@ -82,6 +84,7 @@ const combinations = [
 ];
 
 async function run() {
+  document.body.dataset.openFem3dCurrentTest = "initialisatie";
   document.documentElement.setAttribute("data-theme", THEMA);
   await i18next.use(initReactI18next).init({
     lng: "nl", resources: { nl: { check: checkNl, common: commonNl, ribbon: ribbonNl } }, defaultNS: "common", initImmediate: false,
@@ -214,6 +217,7 @@ async function run() {
   window.scrollTo(0, 0);
 
   document.getElementById("uitslag")!.textContent = JSON.stringify({ tests, error: null });
+  document.body.dataset.openFem3dCurrentTest = "";
 }
 run().catch((error) => {
   document.getElementById("uitslag")!.textContent = JSON.stringify({ tests, error: String(error) });

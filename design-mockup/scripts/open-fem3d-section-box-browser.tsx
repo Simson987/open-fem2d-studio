@@ -270,11 +270,26 @@ async function run() {
   herstelSnapBeginstand();
   const beeld = new URLSearchParams(location.hash.slice(1)).get("beeld");
   if (beeld) { await toonBeeld(beeld); return; }
+  const groep = new URLSearchParams(location.hash.slice(1)).get("groep");
 
+  if (groep !== "prestatie") {
+  await test("Exploderen via het kubusmenu: afstand, bediening en onveranderd rekenmodel", async () => {
+    await begin();
+    const original = stand.model;
+    gelijk(menuItemEl("explode").getAttribute("aria-checked"), "false", "standaard uit");
+    await menu("explode");
+    await wacht(500);
+    gelijk(stand.zicht.explode.amountM, 2, "twee meter per level");
+    gelijk(menuItemEl("explode").getAttribute("aria-checked"), "true", "menu aangevinkt");
+    gelijk(container.querySelector<HTMLInputElement>(".open-fem3d-explode input")?.value, "2000", "schuifregelaar in mm");
+    ok(stand.model === original, "rekenmodel blijft hetzelfde object");
+    await menu("explode");
+    gelijk(stand.zicht.explode.amountM, 0, "normale weergave terug");
+  });
   await test("menu ▾: Section box aan — het vinkje, de modelgrenzen plus marge, alleen tekenen (geen opbouw)", async () => {
     await begin();
     const regels = [...menuEl().querySelectorAll<HTMLElement>("[data-open-fem3d-view-cube-menuitem]")].map((el) => el.dataset.openFem3dViewCubeMenuitem);
-    gelijk(regels, ["start", "passend", "perspectief", "sectionBox", "sectionBoxSelectie", "sectionBoxReset"], "de regels van het menu");
+    gelijk(regels, ["start", "passend", "perspectief", "explode", "sectionBox", "sectionBoxSelectie", "sectionBoxReset"], "de regels van het menu");
     gelijk([menuItemEl("sectionBox").getAttribute("role"), menuItemEl("sectionBox").getAttribute("aria-checked")],
       ["menuitemcheckbox", "false"], "een schakelaar, uit");
     gelijk(menuItemEl("sectionBoxSelectie").getAttribute("aria-disabled"), "true", "zonder selectie: passend op selectie uitgeschakeld");
@@ -555,8 +570,9 @@ async function run() {
     gelijk(tekenvlak().dataset.openFem3dSectionBox, "-0.9,-0.9,-0.9;6.9,3,3.9", "in het tekenvlak");
     flushSync(() => zet.vensterOpen(false));
   });
+  }
 
-  await test("prestatie in een hal van 631 staven: twintig sleepstappen zonder opbouw en zonder nieuwe shader", async () => {
+  if (groep !== "basis") await test("prestatie in een hal van 631 staven: twintig sleepstappen zonder opbouw en zonder nieuwe shader", async () => {
     const model = hal();
     info.push(`hal: ${model.nodes.length} knopen, ${model.beams.length} staven`);
     mount(<Werkruimte begin={model} zicht={{ ...ZICHT, profiles: true }}

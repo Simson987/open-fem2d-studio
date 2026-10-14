@@ -34,7 +34,7 @@ fn knoop(id: usize, x: f64, y: f64, z: f64) -> Node3D { Node3D { id, x, y, z } }
 fn staaf(id: usize, begin: usize, eind: usize) -> Member3D {
     Member3D { id, start_node_id: begin, end_node_id: eind, material_id: 1, section_id: 1,
         releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false,
-        bedding: None }
+        bedding: None, part_section_ids: None }
 }
 
 /// Oplegging met per richting (ux, uy, uz, rx, ry, rz) vast of vrij.
@@ -50,7 +50,7 @@ const SCHARNIER_Y: [bool; 6] = [true, true, true, true, false, true];
 fn verzoek(nodes: Vec<Node3D>, members: Vec<Member3D>, supports: Vec<Support3D>) -> SolveRequest3D {
     SolveRequest3D {
         schema_version: 2, analysis: AnalysisKind::Linear, nodes,
-        materials: vec![Material3D { id: 1, name: "staal".into(), e_mpa: 210_000.0, nu: 0.3, alpha_per_k: None }],
+        materials: vec![Material3D { id: 1, name: "staal".into(), e_mpa: 210_000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
         sections: vec![doorsnede()], members, supports, nodal_loads: vec![], member_loads: vec![],
         member_point_loads: vec![], thermal_loads: vec![], plates: vec![], shell_elements: vec![],
         surface_loads: vec![], diaphragms: vec![], tension_only_fit: None, tension_only_cross_rule: false,

@@ -47,6 +47,9 @@ fn houten_staaf(
         })
         .collect();
     check_timber_beam(TimberBeamCheckInput {
+        ruimtelijk: false,
+        is_cantilever: false,
+        deflection_not_applicable_reason: None,
         bijlage: Default::default(),
         beam_id: 1,
         width_mm: b_mm,
@@ -78,6 +81,7 @@ fn houten_staaf(
         staaf_notities: None,
         width_end_mm: None,
         height_end_mm: None,
+        zijdelingse_knik_in_analyse: None,
     })
 }
 

@@ -15,10 +15,13 @@
  *    kreeg L_st = 3000 mm (UC_kip 0,406) waar tabel NB.NB.1 geval 5 de
  *    vervangende ligger van 2·L = 6000 mm voorschrijft (UC_kip 0,720);
  *  * een **doorlopend** eind — de staaf loopt zonder oplegging in het
- *    verlengde door in een staaf met een ándere doorsnede of een ander
- *    materiaal. Delen met dezelfde doorsnede voegt de invoerbouwer al samen
- *    tot één staaf; bij een wisselende doorsnede kan dat niet, en dan kan de
- *    kern de kipvelden en de kniklengte niet per deel bepalen. Hij weigert
- *    dan met reden in plaats van het eind stil als gaffel te nemen.
+ *    verlengde door in een staaf met een ándere doorsnede, een ander
+ *    materiaal of een verlopend profiel. Delen met dezelfde doorsnede voegt
+ *    de invoerbouwer al samen tot één staaf (ook over een scharnier of veer
+ *    heen); bij een wisselende doorsnede kan dat niet, en dan kan de kern de
+ *    kipvelden en de kniklengte niet per deel bepalen. Hij weigert dan met
+ *    reden in plaats van het eind stil als gaffel te nemen, en ontbreekt
+ *    daardoor de kniktoets bij druk of de kiptoets bij buiging, dan is de
+ *    status van de staaf NotApplicable (niet volledig getoetst) en niet Ok.
  */
 export type Staafeind = "Gaffel" | "Vrij" | "Doorlopend";

@@ -138,17 +138,25 @@ assert.equal(removeOpenFem3DNode(loaded, 1).memberLoads.length, 0, "knoop verwij
 assert.equal(removeOpenFem3DBeam(pointLoaded, 1).memberPointLoads.length, 0, "staaf verwijderen ruimt puntlasten op");
 assert.equal(removeOpenFem3DNode(pointLoaded, 1).memberPointLoads.length, 0, "knoop verwijderen ruimt staafpuntlasten op");
 
-const horizontalWeight = withOpenFem3DSelfWeight(base, 5);
+// Eigen gewicht (#112): een globale lijnlast in Z over de hele staaf, ook bij een
+// liggende, gedraaide of staande staaf. De kern ontbindt haar in de lokale assen
+// en verdeelt de axiale component; de app zet geen knooplasten meer.
 const expectedWeight = 7850 * (2850e-6) * 9.81 / 1000;
-assert.equal(horizontalWeight.loads.length, 0, "horizontale zwaartekracht heeft geen lokale axiale component");
+const isEigenGewicht = (load, lengte) => load.caseId === 5 && load.globalDirection === "z" && load.perProjection === undefined
+  && Math.abs(load.qStart + expectedWeight) < 1e-12 && load.qEnd === load.qStart
+  && load.startPositionM === 0 && Math.abs(load.endPositionM - lengte) < 1e-12;
+const horizontalWeight = withOpenFem3DSelfWeight(base, 5);
+assert.equal(horizontalWeight.loads.length, 0, "eigen gewicht geeft geen knooplasten");
 assert.equal(horizontalWeight.memberLoads.length, 1);
-assert.equal(horizontalWeight.memberLoads[0].caseId, 5);
-assert.ok(Math.abs(horizontalWeight.memberLoads[0].qzStart + expectedWeight) < 1e-12);
+assert.ok(isEigenGewicht(horizontalWeight.memberLoads[0], 4), "liggend: één globale Z-last −ρ·A·g over de hele staaf");
 assert.equal(base.memberLoads.length, 0, "automatisch eigen gewicht blijft vluchtig");
 const rolledWeight = withOpenFem3DSelfWeight({ ...oriented, loads: [], memberLoads: [] }, 5);
-assert.ok(Math.abs(rolledWeight.memberLoads[0].qyStart + expectedWeight) < 1e-12);
-assert.ok(Math.abs(rolledWeight.memberLoads[0].qzStart) < 1e-12,
-  "eigen gewicht volgt na profielrotatie dezelfde lokale assen als de solver");
+assert.ok(rolledWeight.memberLoads.length === 1 && isEigenGewicht(rolledWeight.memberLoads[0], 4),
+  "gedraaid profiel: dezelfde globale last; de kern ontbindt haar met de rolhoek");
+const rolledRequest = buildOpenFem3DSolveRequest(rolledWeight, "linear", new Map([[5, 1]]));
+assert.ok(rolledRequest.memberLoads.length === 1 && rolledRequest.memberLoads[0].globalDirection === "z"
+  && rolledRequest.memberLoads[0].qStartKnPerM === rolledWeight.memberLoads[0].qStart,
+  "het rekenverzoek draagt de globale last ongewijzigd");
 
 const vertical = parseOpenFem3DModel({
   nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 0, y: 0, z: 4 }],
@@ -156,9 +164,8 @@ const vertical = parseOpenFem3DModel({
   supports: [], loads: [], memberLoads: [],
 });
 const verticalWeight = withOpenFem3DSelfWeight(vertical, 5);
-assert.equal(verticalWeight.memberLoads.length, 0, "verticale zwaartekracht is volledig axiaal");
-assert.equal(verticalWeight.loads.length, 2);
-assert.ok(Math.abs(verticalWeight.loads.reduce((sum, load) => sum + load.fz, 0) + expectedWeight * 4) < 1e-12,
-  "axiaal eigen gewicht levert exact zijn totale globale gewicht op");
+assert.equal(verticalWeight.loads.length, 0, "staand: geen knooplasten op de staafeinden meer");
+assert.ok(verticalWeight.memberLoads.length === 1 && isEigenGewicht(verticalWeight.memberLoads[0], 4),
+  "staand: één globale Z-last langs de staaf, samen exact ρ·A·g·L");
 
 console.log("3D-staaflast: model, solvercontract, markers en opruimen geslaagd");

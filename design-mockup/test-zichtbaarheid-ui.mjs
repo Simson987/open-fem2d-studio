@@ -17,7 +17,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "no
 import { tmpdir } from "node:os";
 import { join, basename, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { startBrowser } from "./scripts/headlessBrowser.mjs";
+import { browserResult, startBrowser } from "./scripts/headlessBrowser.mjs";
 
 const browser = [process.env.OPENAEC_BROWSER,
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -57,10 +57,9 @@ try {
     "--virtual-time-budget=10000", ...extra, doel,
   ], { encoding: "utf8", timeout: 90_000, maxBuffer: 32 * 1024 * 1024 });
 
-  const result = chromium(["--dump-dom"], pathToFileURL(html).href);
-  const match = /<pre id="uitslag">([^<]*)<\/pre>/.exec(result.stdout ?? "");
-  assert.ok(match?.[1], result.error?.message ?? result.stderr?.slice(0, 1500) ?? "Geen browserresultaat");
-  const report = JSON.parse(match[1].replace(/&quot;/g, '"').replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&"));
+  const report = await browserResult(browser, ["--headless=new", "--disable-gpu", "--no-first-run",
+    "--no-default-browser-check", `--user-data-dir=${join(folder, "profiel-resultaat")}`,
+    "--window-size=1220,700", pathToFileURL(html).href]);
   for (const item of report.tests) console.log(`  ${item.error ? "FAIL" : "ok"} ${item.name}${item.error ? ": " + item.error : ""}`);
   assert.equal(report.error, null, report.error);
   assert.equal(report.tests.filter((t) => t.error).length, 0, "Zichtbaarheid-UI regressies");

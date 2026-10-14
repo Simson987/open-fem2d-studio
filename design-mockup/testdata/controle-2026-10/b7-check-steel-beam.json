@@ -1,0 +1,45 @@
+{
+ "tool": "check_steel_beam",
+ "arguments": {
+  "beam_id": 1,
+  "profile_name": "IPE300",
+  "steel_grade": "S355",
+  "length_m": 3,
+  "forces_envelope": [
+   {
+    "combination_id": 1,
+    "position_mm": 0,
+    "forces": {
+     "n_ed": -500,
+     "vy_ed": 0,
+     "vz_ed": 0,
+     "mt_ed": 0,
+     "my_ed": 0,
+     "mz_ed": 0
+    }
+   },
+   {
+    "combination_id": 1,
+    "position_mm": 3000,
+    "forces": {
+     "n_ed": -500,
+     "vy_ed": 0,
+     "vz_ed": 0,
+     "mt_ed": 0,
+     "my_ed": 0,
+     "mz_ed": 0
+    }
+   }
+  ],
+  "lateral_bracing": {
+   "top_flange_positions": [],
+   "bottom_flange_positions": []
+  },
+  "deflection_limit_class": "Floor",
+  "deflection_limit_numerator": 333,
+  "deflection_actual_max_mm": 0,
+  "is_cantilever": false,
+  "consequence_class": "CC2"
+ },
+ "toelichting": "IPE300 S355, L = 3000 mm, N_Ed = -500 kN, geen kipsteunen. Hand: klasse 4, A_eff = 5269 mm2, N_c,Rd = 1870,5 kN, chi_z = 0,500, N_b,Rd = 936,0 kN, UC 0,534."
+}

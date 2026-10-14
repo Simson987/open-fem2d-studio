@@ -45,6 +45,9 @@
     "hoekExtraHint": "L’accrochage angulaire saisit alors aussi 30°, 45° et 60° et leurs symétriques.",
     "verbindingsTolerantie": "Tolérance de connexion",
     "verbindingsTolerantieHint": "En deçà de cette distance, un nœud est considéré « sur la barre » ou « au même endroit » qu’un autre nœud : le contrôle du modèle le signale, et un nouveau nœud est relié ou réutilisé. 0,1 à 25 mm, 5 par défaut. Virgule ou point accepté. Les nœuds existants ne sont pas déplacés ; un nouveau nœud sur une barre est placé sur l’axe de la barre.",
+    "knopenAansluiten": "Fusionner et relier les nœuds automatiquement",
+    "knopenAansluitenHint": "En 3D uniquement. Si, après un tracé, une insertion, un déplacement ou une copie, un point se trouve à moins de la tolérance de connexion d’un nœud existant, il devient ce nœud (fusionné). Si un nœud se trouve ensuite sur une barre, ou si une nouvelle barre passe par un nœud existant, la barre y est divisée. Dans la même étape d’annulation, avec un message. La liaison a aussi lieu après l’importation d’un modèle. Un projet ouvert ne change pas de lui-même : le contrôle du modèle sur la zone de dessin signale ces nœuds, avec les boutons Fusionner et Relier.",
+    "verbindingsTolerantieHint3d": "En deçà de cette distance de l’axe de la barre, un nœud est considéré « sur la barre », et en deçà de cette distance d’un autre nœud « au même endroit » : le contrôle du modèle le signale, Relier les nœuds divise la barre en ce point et Fusionner les nœuds en fait un seul nœud (aussi automatiquement). 0,1 à 25 mm, 5 par défaut ; le même réglage qu’en 2D. Un nœud à moins de cette distance d’une extrémité, mesurée le long de l’axe de la barre, ne compte pas « sur la barre ». Le nœud n’est pas déplacé : les tronçons de la barre vont jusqu’au nœud.",
     "groepLabels": "Étiquettes",
     "groepGeometrie": "Géométrie",
     "groepResultaten": "Résultats",
@@ -77,6 +80,9 @@
     "none": "Aucun",
     "legend": "Légende du résultat de plaque",
     "signNote": "Axes de plaque : z = normale (dalle : vers le haut ; voile : y vers le haut). Moments positifs pour une traction en face inférieure.",
+    "beddingNote": "Plaque sur fondation : tassement positif vers le sol (contre la normale de la plaque), pression du sol k·tassement.",
+    "noContactGrey": "Gris avec point : pas de contact (compression seule).",
+    "noContactDots": "Point : pas de contact (compression seule).",
     "linearNotice": "Les plaques sont calculées au premier ordre (linéaire) ; le second ordre avec plaques n'est pas encore disponible dans le noyau 3D.",
     "meshPending": "Création du maillage…",
     "meshFailed": "Maillage : {{message}}",
@@ -91,7 +97,9 @@
       "vx": "Effort tranchant vx",
       "vy": "Effort tranchant vy",
       "vonMisesTop": "Contrainte de Von Mises supérieure",
-      "vonMisesBottom": "Contrainte de Von Mises inférieure"
+      "vonMisesBottom": "Contrainte de Von Mises inférieure",
+      "groundPressure": "Pression du sol",
+      "settlement": "Tassement (vers le sol)"
     }
   },
   "openFem3dVisibility": {
@@ -149,7 +157,8 @@
     "modeLoadCase": "cas de charge",
     "modeCurrent": "onglet actuel",
     "deleteViewSet": "Supprimer {{name}}",
-    "loadPanels": "Surfaces de charge"
+    "loadPanels": "Surfaces de charge",
+    "envelopePanels": "Panneaux de façade et de toiture"
   },
   "openFem3dDeformation": {
     "scale": "Amplification",
@@ -291,8 +300,8 @@
     "noRecent": "Aucun projet récent pour l'instant.",
     "showOnStartup": "Afficher cet écran au démarrage",
     "skip": "Passer",
-    "steelHall": "Hall en acier",
-    "steelHallDesc": "Un hall en acier en modèle 3D, avec l'assistant"
+    "steelHall": "Hall (acier ou bois)",
+    "steelHallDesc": "Un hall en acier ou en bois en modèle 3D, avec l'assistant"
   },
   "projectSettings": {
     "title": "Paramètres du projet",
@@ -373,6 +382,9 @@
     "qpSource": "Détermination de q_p",
     "qpCalculated": "Calculer selon EN 1991-1-4 §4",
     "qpManual": "Saisir manuellement (p. ex. d'après le tableau de l'AN)",
+    "qpManualShort": "manuel",
+    "qpManualSource": "Source de la pression du vent saisie manuellement",
+    "qpManualSourcePlaceholder": "P. ex. calcul du projet, tableau et édition",
     "qpValue": "q_p [kN/m²]",
     "windLeft": "Vent de gauche",
     "windRight": "Vent de droite",
@@ -382,6 +394,8 @@
     "cpiPlus": "Seulement +0,20",
     "cpiMinus": "Seulement −0,30",
     "cpiManual": "Manuel",
+    "cpiManualSource": "Source de la pression intérieure saisie manuellement",
+    "cpiManualSourcePlaceholder": "P. ex. calcul des ouvertures, document et édition",
     "spacing": "Entraxe des portiques [m]",
     "position": "Position",
     "positionInner": "Portique courant",
@@ -489,7 +503,9 @@
       "unknownFieldsBody": "{{velden}} — ils ne sont pas chargés et disparaîtront au prochain enregistrement. Conservez une copie du fichier si vous en avez besoin.",
       "projectOpened": "Projet ouvert",
       "libraryUpdated": "Bibliothèque mise à jour par ce projet",
-      "openFailed": "Impossible d'ouvrir le fichier"
+      "openFailed": "Impossible d'ouvrir le fichier",
+      "notAProjectTitle": "Pas un projet Open FEM Studio",
+      "notAProjectBody": "{{naam}} n'est pas un fichier de projet (.ifcfem ou .ifcfem2d) et n'a pas été ouvert."
     },
     "ifc": {
       "exportErrors": "L'export IFC contient des erreurs",
@@ -566,7 +582,7 @@
       "finish": "Terminer"
     }
   },
-  "remoteControlHint": "L'application a été lancée avec OPENAEC_GUI_CONTROL=1 et est pilotée via le canal de commande.",
+  "remoteControlHint": "Le canal de commande, activé par défaut, permet à un assistant IA ou à un script de piloter l'application (Paramètres → Assistant IA (MCP), ou OPENAEC_GUI_CONTROL=1).",
   "remoteControlActive": "commande à distance active",
   "statusBar": {
     "snapExplain": {
@@ -616,6 +632,9 @@
     "consequenceExplainFavourable": "(action permanente favorable 0,9). Ces valeurs incluent",
     "consequenceExplainTail": " ; ce facteur n'est pas appliqué une seconde fois à un résultat. Une combinaison que vous avez modifiée ou ajoutée vous-même ne suit pas la classe de conséquences.",
     "windRegion": "Zone de vent (EN 1991-1-4/NB)",
+    "windCode": "Méthode normative de vent",
+    "windCodeDutchLegacy": "Méthode néerlandaise (calcul existant)",
+    "windCodeUnavailable": "Méthode de vent indisponible : {{code}}",
     "terrainCategory": "Catégorie de terrain (EN 1991-1-4 tableau 4.1)",
     "windExplainRegion": "La zone de vent {{gebied}} donne une vitesse de référence du vent",
     "windExplainTerrain": "La catégorie de terrain donne",
@@ -736,6 +755,7 @@
     },
     "uc": {
       "badgeTitle": "Barre {{staaf}} : déterminant {{toets}} — cliquez pour la vérification",
+      "nietGetoetst": "non vérifié",
       "plaatBadgeTitle": "Plaque {{plaat}} : déterminant {{toets}} — voir le panneau de vérification",
       "plaatLegenda": "UC élément de plaque"
     },
@@ -787,6 +807,19 @@
       "splitLine": "Nœud {{knoop}} relié à la barre {{staaf}} : celle-ci a été scindée en barre {{deel1}} et barre {{deel2}}.",
       "splitLineOffset": "Nœud {{knoop}} relié à la barre {{staaf}} : celle-ci a été scindée en barre {{deel1}} et barre {{deel2}}. Le nœud était à {{mm}} mm de l’axe de la barre ; la barre présente maintenant un coude à cet endroit.",
       "mergeLine": "Nœud {{verwijderd}} fusionné avec le nœud {{bewaard}}.",
+      "loadValue": {
+        "lineNone": "La charge linéique {{last}} sur la barre {{staaf}} n'a pas de valeur. Saisissez `q` (uniformément répartie, kN/m) ou `qStart` et `qEnd` (trapézoïdale).",
+        "lineNoneWrongField": "La charge linéique {{last}} sur la barre {{staaf}} n'a pas de valeur : {{velden}} n'est pas lu pour une charge linéique. Saisissez `q` (uniformément répartie, kN/m) ou `qStart` et `qEnd` (trapézoïdale).",
+        "lineHalf": "La charge linéique {{last}} sur la barre {{staaf}} a bien `{{heeft}}` mais pas `{{mist}}` (ni `q` comme valeur de repli). Saisissez `{{mist}}` ; pour une charge uniforme, seulement `q`.",
+        "lineWrongField": "Charge linéique {{last}} sur la barre {{staaf}} : {{velden}} n'est pas lu pour une charge linéique et serait perdu. Saisissez une charge ponctuelle ou un moment comme charge distincte.",
+        "lineRange": "Charge linéique {{last}} sur la barre {{staaf}} : la partie chargée ne commence pas avant sa fin (startFrac {{begin}}, endFrac {{einde}}). Une partie vide ou inversée n'est pas une charge et serait perdue. Saisissez 0 ≤ startFrac < endFrac ≤ 1, mesuré depuis le nœud de départ.",
+        "momentNone": "Le moment {{last}} au nœud {{knoop}} n'a pas de valeur. Un moment se saisit dans `my` (kNm).",
+        "momentWrongField": "Le moment {{last}} au nœud {{knoop}} n'a pas de valeur dans `my` : {{velden}} n'est pas lu pour un moment. Un moment se saisit dans `my` (kNm).",
+        "momentExtraField": "Moment {{last}} au nœud {{knoop}} : {{velden}} n'est pas lu pour un moment et serait perdu. Saisissez une force comme charge ponctuelle distincte.",
+        "forceNone": "La charge ponctuelle {{last}} n'a pas de valeur. Saisissez `fz` (verticale) et/ou `fx` (horizontale), en kN.",
+        "forceWrongField": "La charge ponctuelle {{last}} n'a pas de valeur dans `fx` ou `fz` : `my` n'est pas lu pour une charge ponctuelle. Un moment est une charge distincte (pointMoment).",
+        "forceExtraField": "Charge ponctuelle {{last}} : `my` n'est pas lu pour une charge ponctuelle et serait perdu. Un moment est une charge distincte (pointMoment)."
+      },
       "plateEdge": {
         "openingOnPerimeterRoute": "la charge se trouve sur le bord d'une ouverture (`openingId`), mais elle est lue ici par un chemin qui ne connaît que le contour de la plaque. Signalez-le : l'adresse est volontairement refusée plutôt que placée en silence sur le contour.",
         "nameAndIndex": "la charge indique à la fois un bord nommé (`edge`) et un indice de bord (`edgeIndex`). N'en indiquez qu'un : avec deux adresses, on ne peut pas savoir quel bord est visé ni à partir de quel coin les positions sont comptées.",
@@ -1013,6 +1046,7 @@
     "undoReplaceTitle": "Rétablir les combinaisons telles qu'elles figuraient dans le fichier de projet",
     "replaceConfirm": "Remplacer toutes les combinaisons (sauf celles du générateur de vent) par le jeu standard ? Vos propres combinaisons seront perdues.",
     "replaceWithStandard": "Remplacer par les combinaisons standard",
+    "keepCustomFactors": "Conserver les coefficients personnalisés",
     "regenerateWind": "Régénérer la charge de vent",
     "originTitle": "Standard = déduite des cas et de la classe de conséquences ; personnalisée = établie ou modifiée par vous",
     "origin": "Origine",
@@ -1202,8 +1236,13 @@
     "openingCount_other": "{{count}} ouvertures",
     "loadPanels": "Surfaces de charge",
     "loadPanelLabel": "Surface de charge {{id}}",
+    "envelopePanels": "Panneaux",
+    "envelopePanelLabel": "Panneau {{id}}",
+    "envelopeFacade": "façade",
+    "envelopeRoof": "toiture",
     "loadPanelGravity": "pesanteur",
     "loadPanelNormal": "perpendiculaire",
+    "loadPanelVerticalSurface": "verticale par surface",
     "loadPanelOneWay": "1 sens",
     "loadPanelTwoWay": "2 sens",
     "diaphragms": "Diaphragmes",
@@ -1377,5 +1416,13 @@
     },
     "criteriaActief": "Critères actifs : {{count}}",
     "wissen": "Effacer"
+  },
+  "envelopePanel": {
+    "geometry": "Géométrie", "name": "Nom", "type": "Type", "area": "Surface nette",
+    "outerSide": "Face extérieure", "flip": "Inverser la face extérieure", "transfer": "Transfert des charges",
+    "distribution": "Direction", "span": "Portée", "customSpan": "Direction personnalisée",
+    "weight": "Poids du revêtement", "openings": "Ouvertures", "removeOpening": "Supprimer",
+    "addOpening": "Ajouter une ouverture", "openingNodes": "Identifiants des nœuds séparés par des virgules",
+    "invalidOpening": "Saisissez au moins trois identifiants de nœuds valides.", "add": "Ajouter", "delete": "Supprimer le panneau"
   }
 }

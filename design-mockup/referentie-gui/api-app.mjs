@@ -44,11 +44,15 @@ import { fileURLToPath } from "node:url";
 
 const HIER = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HIER, "..", "..");
+const EXE = process.platform === "win32" ? ".exe" : "";
 const APP = process.env.OPENAEC_APP
-  ?? join(REPO, "src-tauri", "target", "release", "open-fem-studio.exe");
-const MCP = join(REPO, "src-tauri", "target", "release", "openaec-mcp-server.exe");
+  ?? join(REPO, "src-tauri", "target", "release", `open-fem-studio${EXE}`);
+const MCP = join(REPO, "src-tauri", "target", "release", `openaec-mcp-server${EXE}`);
 const CATALOGUS = join(REPO, "src-tauri", "crates", "openaec-mcp-server", "assets", "api-catalogus.json");
+const EXTENSIE = join(REPO, "design-mockup", "test-fixtures", "extensie-voorbeeld");
+const IMPORTBESTAND = join(EXTENSIE, "voorbeeld.demofem");
 const WERK = join(tmpdir(), `openfem-api-app-${process.pid}`);
+const APPDATA_TEST = join(WERK, "appdata");
 const VINDBESTAND = join(WERK, "gui-control.json");
 const PROJECT = join(WERK, "api-app.ifcfem");
 
@@ -71,13 +75,15 @@ for (const [wat, pad] of [["app", APP], ["MCP-server", MCP]]) {
   }
 }
 mkdirSync(WERK, { recursive: true });
+mkdirSync(APPDATA_TEST, { recursive: true });
 
 // ── De MCP-server over stdio ────────────────────────────────────────────────
 class Mcp {
   constructor() {
     this.kind = spawn(MCP, [], {
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, OPENAEC_GUI_CONTROL_FILE: VINDBESTAND },
+      env: { ...process.env, APPDATA: APPDATA_TEST, XDG_DATA_HOME: APPDATA_TEST,
+        OPENAEC_GUI_CONTROL_FILE: VINDBESTAND, OPENAEC_EXTENSIONS_DIRS: EXTENSIE },
     });
     this.buffer = "";
     this.wachtenden = new Map();
@@ -140,8 +146,11 @@ log("═════════════════════════
 const app = spawn(APP, [], {
   env: {
     ...process.env,
+    APPDATA: APPDATA_TEST,
+    XDG_DATA_HOME: APPDATA_TEST,
     OPENAEC_GUI_CONTROL: "1",
     OPENAEC_GUI_CONTROL_FILE: VINDBESTAND,
+    OPENAEC_EXTENSIONS_DIRS: EXTENSIE,
     WEBVIEW2_USER_DATA_FOLDER: join(WERK, "webview2"),
   },
   stdio: "ignore", detached: false,
@@ -179,7 +188,7 @@ async function inApp(tool, args = {}) {
 const schermen = {};
 async function scherm(naam) {
   const pad = join(WERK, `${naam}.png`);
-  await mcp.tool("gui_screenshot", { window: "main", path: pad });
+  await mcp.tool("gui_screenshot", { window: "main", path: pad, dom: process.platform !== "win32" });
   schermen[naam] = readFileSync(pad);
   return pad;
 }
@@ -304,13 +313,33 @@ try {
   const stramien = await inApp("project_grid_get");
   eis("de app heeft het nieuwe stramien", stramien.xAxes.map((as) => `${as.label}@${as.positionM}`).join() === "A@0,B@6"
     && stramien.yAxes.length === 1, JSON.stringify(stramien));
+
+  // ── 12. Lokale importextensie via de echte app ────────────────────────────
+  log("\n⑫ app_project_import via de voorbeeldextensie");
+  const extensies = await inApp("extensions_list");
+  eis("de voorbeeldextensie is ingeschakeld", extensies.extensions.some((e) =>
+    e.id === "org.openaec.voorbeeld" && e.enabled && e.importers.some((i) => i.fileExtensions.includes("demofem"))),
+    JSON.stringify(extensies.extensions));
+  const importantwoord = await inApp("app_project_import", { path: IMPORTBESTAND, discardChanges: true });
+  eis("de import geeft extensie en verslag terug", importantwoord.project === "nieuw"
+    && importantwoord.extension.id === "org.openaec.voorbeeld" && importantwoord.messages.length === 2,
+    JSON.stringify(importantwoord));
+  const zonderImportpad = await mcp.weigering("app_project_save", {});
+  eis("het geïmporteerde project heeft nog geen opslagpad", zonderImportpad?.error_code === "GEWEIGERD",
+    zonderImportpad?.melding ?? "het werd opgeslagen");
+  const importDoel = join(WERK, "geimporteerd.ifcfem");
+  await inApp("app_project_save", { path: importDoel });
+  const importProject = JSON.parse(readFileSync(importDoel, "utf8"));
+  eis("Opslaan bewaart het 2D-project met vier knopen en drie staven", importProject.modelDimension === "2d"
+    && importProject.nodes.length === 4 && importProject.beams.length === 3,
+    `${importProject.nodes.length} knopen, ${importProject.beams.length} staven`);
 } catch (e) {
   failed++;
   log(`  ✗ afgebroken: ${e instanceof Error ? e.message : String(e)}`);
 }
 
-// ── 12. Afsluiten en opruimen ───────────────────────────────────────────────
-log("\n⑫ Afsluiten");
+// ── 13. Afsluiten en opruimen ───────────────────────────────────────────────
+log("\n⑬ Afsluiten");
 try {
   const q = await mcp.tool("gui_quit");
   eis("gui_quit wordt bevestigd", q?.afgesloten === true);

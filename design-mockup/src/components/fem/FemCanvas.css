@@ -514,11 +514,15 @@
 }
 
 /* ── Stramien (structural grid) ─────────────────────────────────────── */
+/* Streep-stip zoals stramien- en hartlijnen op een constructietekening
+   (issue #103): lange streep, tussenruimte, stip, tussenruimte, in
+   schermpixels. Hetzelfde patroon als 3D: lib/stramienStreepStip.ts
+   (test-stramien-streepstip.mjs houdt ze gelijk). */
 .fem-stramien-line {
   stroke: #ffb000;
   stroke-width: 1;
   opacity: 0.35;
-  stroke-dasharray: 6 3;
+  stroke-dasharray: 16 4 2 4;
 }
 .fem-stramien-bubble {
   fill: var(--theme-bg);

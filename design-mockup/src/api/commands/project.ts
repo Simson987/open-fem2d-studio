@@ -38,7 +38,7 @@ interface Uitgangspunten { gevolgklasse?: unknown; nationaleBijlage?: unknown }
  * regel als het openen in de app (en de sidecar). Meldingen van die regel
  * (vervangen standaardset, afwijkingen) komen mee.
  */
-function combinatieStaatVan(document: ApiDocument): { staat: CombinatieStaat; meldingen: string[] } {
+export function combinatieStaatVan(document: ApiDocument): { staat: CombinatieStaat; meldingen: string[] } {
   const combinaties = combinationsFromFile(document.combinations);
   const uitgangspunten = (document.projectInfo as { uitgangspunten?: Uitgangspunten } | undefined)?.uitgangspunten;
   const uitBestand = GEVOLGKLASSEN.includes(uitgangspunten?.gevolgklasse as Gevolgklasse)
@@ -54,6 +54,7 @@ function combinatieStaatVan(document: ApiDocument): { staat: CombinatieStaat; me
   }
   const { staat, afwijking, vervanging } = openCombinatieStaat({
     loadCases: document.loadCases, combinations: combinaties, gevolgklasse: klasse, bijlage, idTellers: document.idTellers,
+    loads: document.loads,
   });
   return {
     staat,
@@ -61,7 +62,7 @@ function combinatieStaatVan(document: ApiDocument): { staat: CombinatieStaat; me
   };
 }
 
-function metCombinatieStaat(document: ApiDocument, staat: CombinatieStaat): ApiDocument {
+export function metCombinatieStaat(document: ApiDocument, staat: CombinatieStaat): ApiDocument {
   return {
     ...document,
     loadCases: staat.loadCases,

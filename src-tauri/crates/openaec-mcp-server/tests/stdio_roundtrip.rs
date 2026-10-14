@@ -101,10 +101,11 @@ async fn stdio_roundtrip_initialize_list_call() {
     // niet uitputtend, dus zonder deze telling zou zo'n tool ongemerkt
     // meeliften.
     // 29 rekenkern-/FEM-tools (inclusief solve_open_fem_3d,
-    // open_fem_3d_staalhal_maken en open_fem_3d_ifc_importeren) + 22
+    // open_fem_3d_staalhal_maken en open_fem_3d_ifc_importeren) + 23
     // gui_*-tools (het bedieningskanaal van de desktop-app, zie gui_tools.rs;
     // sinds de staalhal ook gui_build_3d_steel_hall, sinds de IFC-import ook
-    // gui_import_ifc_analysis_model) = 51 vaste tools.
+    // gui_import_ifc_analysis_model, sinds issue #109 ook gui_start_app)
+    // + project_import (lokale extensie) = 53 vaste tools.
     // Daarbij één tool per API-commando van de app, uit de ingebakken catalogus
     // (assets/api-catalogus.json, geschreven door `npm run build:sidecar`).
     // Ook die tellen exact: elk commando uit de catalogus, niets meer.
@@ -118,8 +119,8 @@ async fn stdio_roundtrip_initialize_list_call() {
         .collect();
     assert_eq!(
         tools.len(),
-        51 + api_namen.len(),
-        "expected 51 + {} tools, got {}",
+        53 + api_namen.len(),
+        "expected 53 + {} tools, got {}",
         api_namen.len(),
         tools.len()
     );
@@ -132,7 +133,9 @@ async fn stdio_roundtrip_initialize_list_call() {
     }
     for expected in [
         "list_steel_profiles",
+        "project_import",
         "gui_status",
+        "gui_start_app",
         "gui_build_3d_model",
         "gui_select_3d_plate",
         "gui_split_3d_member",

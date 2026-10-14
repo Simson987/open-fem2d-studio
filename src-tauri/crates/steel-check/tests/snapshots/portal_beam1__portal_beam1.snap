@@ -1,6 +1,6 @@
 ---
 source: crates/steel-check/tests/portal_beam1.rs
-assertion_line: 304
+assertion_line: 311
 expression: run()
 ---
 {
@@ -927,7 +927,7 @@ expression: run()
               "unit": "",
               "notes": [
                 "N_Ed is de grootste drukkracht uit de omhullende (combinatie 21, x = 0 mm). De toets rekent met die kracht over de hele staaf.",
-                "(6.47) geldt voor doorsneden van klasse 1, 2 en 3. Een doorsnede van klasse 4 wordt eerder in de toetsing geweigerd, dus (6.48) komt hier niet voor.",
+                "(6.47) geldt voor doorsneden van klasse 1, 2 en 3; bij klasse 4 rekent de toetsing met A_eff volgens (6.48).",
                 "Elke as krijgt hieronder een eigen, volledige tak: kniklengte met herkomst, traagheidsstraal, relatieve slankheid, knikkromme, reductiefactor, knikweerstand en unity check. De knikweerstand van de staaf is de kleinste van de takken."
               ]
             },
@@ -2235,7 +2235,7 @@ expression: run()
         "data": {
           "id": "deflection_w_fin",
           "title": "Doorbuiging w_fin (BGT)",
-          "article": "NEN-EN 1990 (BGT)",
+          "article": "NEN-EN 1990:2002/NB:2019 A1.4.3(4)",
           "force_state": {
             "combination_id": 0,
             "position_mm": 0.0,
@@ -2262,21 +2262,23 @@ expression: run()
             },
             {
               "symbol": "L/n",
-              "value": 333.0,
+              "value": 250.0,
               "unit": "-"
             }
           ],
           "deelstappen": [],
-          "value": 15.015015015015015,
+          "value": 20.0,
           "unit": "mm",
           "uc": {
             "ed": 0.0,
-            "rd": 15.015015015015015,
+            "rd": 20.0,
             "uc": 0.0,
             "formula_latex": "|w| / w_{max}"
           },
           "status": "Ok",
-          "notes": []
+          "notes": [
+            "Grenswaarde w_fin (w_max: de doorbuiging met de zeeg verrekend): 1/250 deel van ℓ_rep, volgens NEN-EN 1990:2002/NB:2019 A1.4.3(4), \"bij zowel vloeren als daken\". Met ℓ_rep = 5000 mm is dat 20.0 mm."
+          ]
         }
       }
     },

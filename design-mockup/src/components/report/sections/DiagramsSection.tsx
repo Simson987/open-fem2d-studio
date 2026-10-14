@@ -21,6 +21,7 @@
 import { useTranslation } from "react-i18next";
 import type { Beam, Node, StructuralGrid, Support } from "../../fem/femTypes";
 import type { ElementForces, SolverResult } from "../../fem/solver/types";
+import { momentExtremen } from "../../fem/solver/veldExtremen";
 import {
   referentieVanStaaf,
   spiegelElementKrachten,
@@ -66,6 +67,28 @@ interface BeamSeriesData {
   M: Series;
   V: Series;
   N: Series;
+  /**
+   * Het grootste en kleinste moment op de staaf met hun plaats (mm), ook
+   * tussen de stations (V = 0, `momentExtremen`); bij de omhullende over alle
+   * combinaties. Ontbreekt als er niets te verfijnen viel.
+   */
+  mVeld?: { max: { v: number; x: number }; min: { v: number; x: number } };
+}
+
+/** Veldextremen van M over één of meer combinaties (zie `momentExtremen`). */
+function momentVeld(efs: ElementForces[]): BeamSeriesData["mVeld"] {
+  let uit: BeamSeriesData["mVeld"];
+  for (const ef of efs) {
+    const e = momentExtremen(ef);
+    if (!e) continue;
+    if (!uit) {
+      uit = { max: { v: e.max.M, x: e.max.x }, min: { v: e.min.M, x: e.min.x } };
+      continue;
+    }
+    if (e.max.M > uit.max.v) uit.max = { v: e.max.M, x: e.max.x };
+    if (e.min.M < uit.min.v) uit.min = { v: e.min.M, x: e.min.x };
+  }
+  return uit;
 }
 
 function seriesFrom(values: number[]): Series {
@@ -176,12 +199,17 @@ interface ForceFigureProps extends FigureSceneProps {
   band: boolean;
   /** Reactie per opgelegde knoop (N); null = geen reactiepijlen. */
   reactions: Map<number, { fx: number; fz: number }> | null;
+  /**
+   * Veldextremen met hun plaats, ook tussen de stations (alleen bij M). Zonder
+   * deze functie labelt de figuur het grootste station.
+   */
+  veld?: (d: BeamSeriesData) => BeamSeriesData["mVeld"];
 }
 
 /** Eén krachtenfiguur over de hele constructie (M, V of N). */
 function ForceFigure({
   figKey, caption, data, pick, sign, unitDiv, decimals, unit, fill, stroke, band,
-  tr, nodes, beams, supports, structuralGrid, nodeById, reactions,
+  tr, nodes, beams, supports, structuralGrid, nodeById, reactions, veld,
 }: ForceFigureProps) {
   const AMP = ampFor(tr);
   const markerId = `rpt-fig-arrow-${figKey}`;
@@ -222,11 +250,12 @@ function ForceFigure({
       const t = d.stations[i] / d.L_mm;
       return [x1 + dxS * t, y1 + dyS * t];
     };
-    const curveAt = (i: number, v: number): [number, number] => {
-      const [bx, by] = baseAt(i);
+    const curveAtX = (xMm: number, v: number): [number, number] => {
+      const t = xMm / d.L_mm;
       const off = sign * v * k;
-      return [bx + pxU * off, by + pyU * off];
+      return [x1 + dxS * t + pxU * off, y1 + dyS * t + pyU * off];
     };
+    const curveAt = (i: number, v: number): [number, number] => curveAtX(d.stations[i], v);
     const ptsOf = (arr: number[]): string[] =>
       Array.from({ length: n }, (_, i) => {
         const [cx, cy] = curveAt(i, arr[i]);
@@ -259,9 +288,9 @@ function ForceFigure({
     }
 
     // ── Labels met teken: staafeinden + veldextremen, meegeroteerd ──
-    const tryLabel = (i: number, v: number, key: string) => {
+    const tryLabel = (i: number, v: number, key: string, xMm?: number) => {
       if (Math.abs(v) <= labelEps) return;
-      const [cx, cy] = curveAt(i, v);
+      const [cx, cy] = xMm === undefined ? curveAt(i, v) : curveAtX(xMm, v);
       const side = sign * v >= 0 ? 1 : -1; // net voorbij de kromme, weg van de as
       const lx = cx + pxU * side * 15;
       const ly = cy + pyU * side * 15;
@@ -292,8 +321,15 @@ function ForceFigure({
       if (s.max[i] > s.max[iMax]) iMax = i;
       if (s.min[i] < s.min[iMin]) iMin = i;
     }
-    if (iMax > 0 && iMax < n - 1) tryLabel(iMax, s.max[iMax], `l${d.beam.id}e`);
-    if (iMin > 0 && iMin < n - 1) tryLabel(iMin, s.min[iMin], `l${d.beam.id}f`);
+    // Bij M het extreem waar V = 0, ook tussen de stations (controle 12
+    // oktober 2026, punt C8): dezelfde waarde als in de omhullende en de
+    // toetsing, op zijn eigen plaats.
+    const v = veld?.(d);
+    const binnen = (x: number) => x > d.stations[0] + 1e-6 && x < d.stations[n - 1] - 1e-6;
+    if (v && binnen(v.max.x) && v.max.v >= s.max[iMax]) tryLabel(iMax, v.max.v, `l${d.beam.id}e`, v.max.x);
+    else if (iMax > 0 && iMax < n - 1) tryLabel(iMax, s.max[iMax], `l${d.beam.id}e`);
+    if (v && binnen(v.min.x) && v.min.v <= s.min[iMin]) tryLabel(iMin, v.min.v, `l${d.beam.id}f`, v.min.x);
+    else if (iMin > 0 && iMin < n - 1) tryLabel(iMin, s.min[iMin], `l${d.beam.id}f`);
   }
 
   // ── Reactiepijlen met waarde bij de opleggingen ──
@@ -561,6 +597,7 @@ export default function DiagramsSection() {
         M: envelopeSeries(efs, (ef) => ef.bendingMoment),
         V: envelopeSeries(efs, (ef) => ef.shearForce),
         N: envelopeSeries(efs, (ef) => ef.normalForce),
+        mVeld: momentVeld(efs),
       });
     } else {
       const lokaal = rs.result?.elements.get(beam.id);
@@ -573,6 +610,7 @@ export default function DiagramsSection() {
         M: seriesFrom(ef.bendingMoment),
         V: seriesFrom(ef.shearForce),
         N: seriesFrom(ef.normalForce),
+        mVeld: momentVeld([ef]),
       });
     }
   }
@@ -637,7 +675,7 @@ export default function DiagramsSection() {
           <ForceFigure {...scene} figKey="M" caption={capM} data={data}
             pick={(d) => d.M} sign={-1} unitDiv={1e6} decimals={1} unit="kNm"
             fill={COLOR_M.fill} stroke={COLOR_M.stroke} band={isEnvelope}
-            reactions={reactions} />
+            reactions={reactions} veld={(d) => d.mVeld} />
           <ForceFigure {...scene} figKey="V" caption={capV} data={data}
             pick={(d) => d.V} sign={1} unitDiv={1e3} decimals={1} unit="kN"
             fill={COLOR_V.fill} stroke={COLOR_V.stroke} band={isEnvelope}

@@ -11,6 +11,7 @@ import check from "../src/i18n/locales/nl/check.json";
 import ribbon from "../src/i18n/locales/nl/ribbon.json";
 import StaalhalWizard from "../src/components/openFem3d/wizards/StaalhalWizard";
 import type { StaalhalResultaat } from "../src/components/openFem3d/wizards/staalhal";
+import { NEDERLANDSE_WINDROUTE } from "../src/lib/wind/windCodeRoute";
 
 const tests: string[] = [];
 const container = document.getElementById("root")!;
@@ -26,11 +27,19 @@ function veld<T extends HTMLElement>(label: string, soort = "input,select"): T {
   if (!el) throw Error("Veld ontbreekt: " + label);
   return el;
 }
+/**
+ * Typt een waarde en verlaat het veld; de mm-velden bevestigen pas bij het verlaten.
+ * Dat verlaten is een eigen `focusout` (daar luistert Reacts onBlur naar), niet
+ * el.focus()/el.blur(): Chromium verstuurt focus-, blur- en focusout-events alleen
+ * als de pagina zelf focus heeft, en headless krijgt de pagina die pas even ná het
+ * laden. Deze proef draait tijdens het laden, dus met el.blur() hing het bevestigen
+ * af van die wedloop: zonder focus bleef de lengte 60 000 mm en het voorbeeld op
+ * 165 knopen staan (#105). Zo volgt de proef bij elke start hetzelfde pad.
+ */
 function typ(el: HTMLInputElement, waarde: string) {
-  el.focus();
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, waarde);
   flushSync(() => el.dispatchEvent(new Event("input", { bubbles: true })));
-  flushSync(() => el.blur());
+  flushSync(() => el.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
 }
 function kies(el: HTMLSelectElement, waarde: string) {
   Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(el, waarde);
@@ -50,7 +59,9 @@ const maakKnop = () => [...document.querySelectorAll<HTMLButtonElement>(".shw-kn
 async function run() {
   await i18next.use(initReactI18next).init({ lng: "nl", resources: { nl: { common, check, ribbon } }, defaultNS: "common", initImmediate: false });
   let gemaakt: StaalhalResultaat | null = null;
-  flushSync(() => root.render(<StaalhalWizard open onClose={() => {}} onMaken={(hal) => { gemaakt = hal; }} />));
+  const toon = (windCodeId: string) => flushSync(() => root.render(<StaalhalWizard open onClose={() => {}}
+    windCodeId={windCodeId} onMaken={(hal) => { gemaakt = hal; }} />));
+  toon(NEDERLANDSE_WINDROUTE);
 
   equal([...document.querySelectorAll(".shw-stap")].map((el) => el.textContent),
     ["1Afmetingen", "2Profielen", "3Verbanden", "4Fundering", "5Belastingen", "6Overzicht"], "zes stappen");
@@ -58,6 +69,15 @@ async function run() {
   equal(document.querySelectorAll(".shw-svg").length, 2, "doorsnede en plattegrond");
   equal(veld<HTMLInputElement>("Lengte").value, "60000", "lengte in mm");
   tests.push("Wizard opent met de voorbeeldhal: zes stappen, 165 knopen, 340 staven, 22 opleggingen, lengte 60000 mm");
+
+  toon("asce-7-22");
+  ok(document.querySelector(".shw-problemen")?.textContent?.includes("asce-7-22"), "onbekende route zichtbaar");
+  ok(maakKnop().disabled, "Maken uit bij een niet beschikbare windroute");
+  klik(maakKnop(), "uitgeschakelde Maken-knop");
+  equal(gemaakt, null, "geen Nederlandse hal gemaakt voor een andere route");
+  toon(NEDERLANDSE_WINDROUTE);
+  ok(!document.querySelector(".shw-problemen") && !maakKnop().disabled, "Nederlandse route weer beschikbaar");
+  tests.push("Een andere projectwindroute blokkeert de Nederlandse staalhal en toont de routecode");
 
   // Lengte 48 000 mm: ⌈48/6⌉ = 8 vakken → 9 spanten × (2 + 13) = 135 knopen.
   typ(veld<HTMLInputElement>("Lengte"), "48000");
@@ -89,7 +109,16 @@ async function run() {
   ok(!document.querySelector(".shw-problemen") && !maakKnop().disabled, "probleem weg na herstel");
   tests.push("Scharnierende voeten zonder wandverband: vertaalde melding, Maken uit; hersteld: Maken aan");
 
+  const trekAlleen = [...document.querySelectorAll(".shw-vink")].find((el) => el.textContent?.startsWith("Verbanden alleen op trek"))!.querySelector("input")!;
+  klik(trekAlleen, "trek-alleenverband");
+  ok(!document.querySelector(".shw-problemen") && !maakKnop().disabled, "trek-alleenverband is geldige invoer");
+
+  stap("Belastingen");
+  typ(veld<HTMLInputElement>("Dakgebruik (Q, categorie H)"), "0.4");
+  ok(!document.querySelector(".shw-problemen") && !maakKnop().disabled, "dakgebruikslast is geldige invoer");
+
   stap("Overzicht");
+  ok(document.body.textContent?.includes("Dakgebruik (Q)"), "eigen Q-geval staat in het overzicht");
   ok(document.body.textContent?.includes("9 spanten h.o.h. 6000 mm"), "overzicht met spanten");
   klik(maakKnop(), "Maken");
   await new Promise((resolve) => setTimeout(resolve, 20));
@@ -97,7 +126,13 @@ async function run() {
   ok(hal, "onMaken aangeroepen");
   equal([hal!.parameters.lengteMm, hal!.parameters.fundering.type, hal!.parameters.kolomvoet, hal!.samenvatting.aantallen.palen],
     [48000, "balkrooster", "scharnierend", 54], "resultaat van de generator");
+  ok(hal!.parameters.verbanden.trekAlleen && hal!.model.beams
+    .filter((beam) => [...hal!.samenvatting.groepen.dakverband, ...hal!.samenvatting.groepen.wandverband].includes(beam.id))
+    .every((beam) => beam.tensionOnly === true), "wizard bewaart trek-alleen op alle verbanden");
+  ok(hal!.loadCases.some((item) => item.name === "Dakgebruik (Q)" && item.categorie === "H"), "wizard bewaart Q als categorie H");
   tests.push("Maken geeft het resultaat van de generator door (48000 mm, balkrooster, scharnierend, 54 palen)");
+  tests.push("Trek-alleenverband loopt van wizardkeuze naar het 3D-model");
+  tests.push("Dakgebruik Q verschijnt in het overzicht en het categorie-H-belastinggeval");
 }
 
 run().then(() => {

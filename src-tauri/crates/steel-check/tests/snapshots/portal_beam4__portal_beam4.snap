@@ -1,6 +1,6 @@
 ---
 source: crates/steel-check/tests/portal_beam4.rs
-assertion_line: 283
+assertion_line: 290
 expression: run()
 ---
 {
@@ -1530,7 +1530,7 @@ expression: run()
         "data": {
           "id": "deflection_w_fin",
           "title": "Doorbuiging w_fin (BGT)",
-          "article": "NEN-EN 1990 (BGT)",
+          "article": "NEN-EN 1990:2002/NB:2019 A1.4.3(4)",
           "force_state": {
             "combination_id": 0,
             "position_mm": 0.0,
@@ -1557,21 +1557,23 @@ expression: run()
             },
             {
               "symbol": "L/n",
-              "value": 333.0,
+              "value": 250.0,
               "unit": "-"
             }
           ],
           "deelstappen": [],
-          "value": 15.015015015015015,
+          "value": 20.0,
           "unit": "mm",
           "uc": {
             "ed": 0.0,
-            "rd": 15.015015015015015,
+            "rd": 20.0,
             "uc": 0.0,
             "formula_latex": "|w| / w_{max}"
           },
           "status": "Ok",
-          "notes": []
+          "notes": [
+            "Grenswaarde w_fin (w_max: de doorbuiging met de zeeg verrekend): 1/250 deel van ℓ_rep, volgens NEN-EN 1990:2002/NB:2019 A1.4.3(4), \"bij zowel vloeren als daken\". Met ℓ_rep = 5000 mm is dat 20.0 mm."
+          ]
         }
       }
     },

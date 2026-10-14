@@ -73,6 +73,14 @@ export function fmtValue(v: number, maxDigits = 3): string {
   return rapportGetal(v, { maximumFractionDigits: maxDigits });
 }
 
+/**
+ * Een geheel getal voluit met duizendtallen ("2.190.000"), ook boven 10⁶: voor
+ * tabelkolommen als A en W_y, waar `fmtValue` er "2E6" van zou maken (#113).
+ */
+export function fmtGeheel(v: number): string {
+  return rapportGetal(v, { notation: "standard", maximumFractionDigits: 0 });
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // Afleidingen zetten zoals het referentie-rapport
 // ═══════════════════════════════════════════════════════════════════════

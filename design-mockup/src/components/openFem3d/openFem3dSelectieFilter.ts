@@ -87,7 +87,7 @@ export function openFem3DSelectieIds(selection: OpenFem3DSelection): OpenFem3DSe
   } else if (selection.type === "node") ids.nodeIds = [selection.id];
   else if (selection.type === "beam") ids.beamIds = [selection.id];
   else if (selection.type === "plate") ids.plateIds = [selection.id];
-  else ids.loads[selection.type] = [selection.id];
+  else if (selection.type !== "envelopePanel") ids.loads[selection.type] = [selection.id];
   const leeg = ids.nodeIds.length + ids.beamIds.length + ids.plateIds.length
     + OPEN_FEM_3D_LOAD_SELECTION_TYPES.reduce((n, type) => n + (ids.loads[type]?.length ?? 0), 0) === 0;
   return leeg ? null : ids;

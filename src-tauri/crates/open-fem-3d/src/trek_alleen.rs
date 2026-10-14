@@ -38,8 +38,10 @@
 //! achterlaat.
 //!
 //! Dezelfde lus houdt de verticale grondveren van een bedding met alleen druk
-//! bij (module `bedding`): een veer met een zakking < −tol (de staaf komt
-//! omhoog) valt weg, een weggevallen veer met een zakking > tol doet weer mee.
+//! bij (module `bedding`), en de grondveren van een plaat op bedding met
+//! alleen druk (module `plaatbedding`, #107): een veer met een zakking < −tol
+//! (de staaf of plaat komt van de grond) valt weg, een weggevallen veer met
+//! een zakking > tol doet weer mee.
 //! De toestand van een ronde is dan het paar (inactieve staven, weggevallen
 //! veren); beide sets moeten stabiel zijn, en dezelfde bescherming tegen
 //! oscilleren en te veel rondes geldt voor het paar. Valt door het loskomen
@@ -58,7 +60,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use rekenkern::element::compute_local_axes_3d;
 
 use crate::{
-    bedding::{self, Los}, globale_lasten, kruisregel, montage, shell::PlateGeometry, AnalysisKind, DiagramPoint3D, Member3D,
+    bedding::{self, Los}, globale_lasten, kruisregel, montage, plaatbedding, shell::PlateGeometry, AnalysisKind, DiagramPoint3D, Member3D,
     MemberDiagram3D, MemberForces3D, NodalLoad3D, Node3D, SolveRequest3D, SolveResult3D, TensionOnlyFitMember3D,
 };
 
@@ -102,10 +104,11 @@ pub(crate) fn los_op(
     platen: &HashMap<usize, PlateGeometry>,
 ) -> Result<SolveResult3D, String> {
     let trek = request.members.iter().any(|staaf| staaf.tension_only);
-    let druk = bedding::met_alleen_druk(request);
+    let druk = bedding::met_alleen_druk(request) || plaatbedding::met_alleen_druk(request);
     if !trek && !druk {
         let mut uitkomst = crate::solve_fixed(request, platen, request.analysis, request.buckling_modes, &Los::new())?;
         uitkomst.diagnostics.extend(bedding::diagnose(request, &uitkomst, None));
+        uitkomst.diagnostics.extend(plaatbedding::diagnose(request, &uitkomst, None));
         return Ok(uitkomst);
     }
     // Montage: Δ0 per staaf, als temperatuurlast in het verzoek van elke ronde.
@@ -181,6 +184,7 @@ pub(crate) fn los_op(
         uitkomst.cross_rule_members = gehouden.into_iter().collect();
     }
     uitkomst.diagnostics.extend(bedding::diagnose(request, &uitkomst, druk.then_some(rondes)));
+    uitkomst.diagnostics.extend(plaatbedding::diagnose(request, &uitkomst, druk.then_some(rondes)));
     Ok(uitkomst)
 }
 
@@ -192,8 +196,8 @@ fn met_toestand(fout: String, rondes: usize, inactief: &BTreeSet<usize>, los: &L
     }
     if !los.is_empty() {
         toestand.push(format!(
-            "bedding alleen druk ronde {rondes}; {} grondveer/grondveren los onder staaf {}",
-            los.len(), lijst(bedding::staven_met_los(los)),
+            "bedding alleen druk ronde {rondes}; {} grondveer/grondveren los onder {}",
+            los.len(), bedding::beschrijf_los(los),
         ));
     }
     if toestand.is_empty() { fout } else { format!("{fout} ({})", toestand.join("; ")) }
@@ -202,7 +206,7 @@ fn met_toestand(fout: String, rondes: usize, inactief: &BTreeSet<usize>, los: &L
 /// Een toestand die terugkeert: de staven of de grondveren blijven wisselen.
 fn wisselfout(rondes: usize, inactief: &BTreeSet<usize>, nieuw: &BTreeSet<usize>, los: &Los, nieuw_los: &Los) -> String {
     let staven: Vec<usize> = inactief.symmetric_difference(nieuw).copied().collect();
-    let grond: Los = los.symmetric_difference(nieuw_los).copied().collect();
+    let grond: Los = los.verschil(nieuw_los);
     let mut delen = Vec::new();
     if !staven.is_empty() {
         delen.push(format!(
@@ -212,8 +216,8 @@ fn wisselfout(rondes: usize, inactief: &BTreeSet<usize>, nieuw: &BTreeSet<usize>
     }
     if !grond.is_empty() {
         delen.push(format!(
-            "bedding (alleen druk): de grondveren onder staaf {} blijven tussen contact en loskomen wisselen; na ronde {rondes} keerde een eerdere toestand terug. Er is geen eenduidige contactzone. Controleer de belasting en de opleggingen van deze staaf, of reken de bedding zonder alleen druk.",
-            lijst(bedding::staven_met_los(&grond)),
+            "bedding (alleen druk): de grondveren onder {} blijven tussen contact en loskomen wisselen; na ronde {rondes} keerde een eerdere toestand terug. Er is geen eenduidige contactzone. Controleer de belasting en de opleggingen van deze {}, of reken de bedding zonder alleen druk.",
+            bedding::beschrijf_los(&grond), bedding::soort_los(&grond),
         ));
     }
     delen.join(" ")
@@ -228,8 +232,8 @@ fn rondefout(inactief: &BTreeSet<usize>, los: &Los) -> String {
         );
     }
     let mut tekst = format!(
-        "bedding (alleen druk): na {MAX_RONDES} statusrondes nog geen stabiele contactzone; los van de grond waren laatst {} grondveer/grondveren onder staaf {}",
-        los.len(), lijst(bedding::staven_met_los(los)),
+        "bedding (alleen druk): na {MAX_RONDES} statusrondes nog geen stabiele contactzone; los van de grond waren laatst {} grondveer/grondveren onder {}",
+        los.len(), bedding::beschrijf_los(los),
     );
     if !inactief.is_empty() {
         tekst.push_str(&format!("; trek-alleen inactief waren laatst de staven {}", lijst(inactief.iter().copied())));
@@ -417,14 +421,15 @@ fn nieuwe_status(
             let (a, b) = (verplaatsing[&staaf.start_node_id], verplaatsing[&staaf.end_node_id]);
             let verlenging: f64 = (0..3).map(|as_| (b[as_] - a[as_]) * ex[as_]).sum();
             let materiaal = request.materials.iter().find(|m| m.id == staaf.material_id).unwrap();
-            let doorsnede = request.sections.iter().find(|s| s.id == staaf.section_id).unwrap();
+            // Bij een verlopende staaf (#73) de delen in serie: n/Σ(1/A_i).
+            let oppervlakte = crate::verloop::axiale_oppervlakte(request, staaf).expect("doorsnede is gekeurd");
             let alpha = materiaal.alpha_per_k.unwrap_or(12e-6);
             let delta_t: f64 = request.thermal_loads.iter()
                 .filter(|load| load.member_id == staaf.id)
                 .map(|load| load.delta_t_uniform_k)
                 .sum();
             let lengte = geometrie.lengte(staaf);
-            let n = materiaal.e_mpa * 1000.0 * doorsnede.area_m2 * (verlenging / lengte - alpha * delta_t);
+            let n = materiaal.e_mpa * 1000.0 * oppervlakte * (verlenging / lengte - alpha * delta_t);
             (n, n <= tolerantie)
         } else {
             let n = status_normaalkracht(uitkomst, krachten[&staaf.id]);

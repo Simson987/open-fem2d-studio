@@ -775,11 +775,13 @@ fn remedie_bij(code: &str) -> String {
         "GEWEIGERD" => "De melding zegt welke modelregel weigert; pas de invoer of het model \
              daarop aan. Er is niets gewijzigd."
             .to_owned(),
-        "GEEN_DOCUMENT" => "Geef `project` (pad naar een .ifcfem-bestand) mee, of start de app \
-             met OPENAEC_GUI_CONTROL=1 en laat `project` weg."
+        "GEEN_DOCUMENT" => "Geef `project` (pad naar een .ifcfem-bestand) mee, of laat `project` \
+             weg in de draaiende app: zet daar Instellingen → AI-assistent (MCP) aan (of start haar \
+             met gui_start_app, of met OPENAEC_GUI_CONTROL=1)."
             .to_owned(),
-        "ALLEEN_IN_APP" => "Start de app met OPENAEC_GUI_CONTROL=1 en roep de tool aan zonder \
-             `project`."
+        "ALLEEN_IN_APP" => "Roep de tool aan zonder `project`, in de draaiende app: zet daar \
+             Instellingen → AI-assistent (MCP) aan (of start haar met gui_start_app, of met \
+             OPENAEC_GUI_CONTROL=1)."
             .to_owned(),
         "INVOER_ONGELDIG" => "Kijk in `detail` welk veld wordt genoemd. Onbekende velden worden \
              geweigerd en niet genegeerd: een genegeerd veld levert een geslaagde \

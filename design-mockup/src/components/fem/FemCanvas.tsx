@@ -33,7 +33,7 @@ import { kaderModus, selecteerInKader, type SchermPunt } from "../../lib/kaderSe
 import { escapeActie, isInvoerVeld, volgDialoogBijToets } from "../../lib/escapeToets";
 import { lastIdVanKlik } from "../../lib/klikOpLast";
 import { laatVeldLos } from "../../lib/undoRoute";
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import i18next from "i18next";
 import { parseLength, formatLength } from "../../lib/lengthInput";
@@ -61,7 +61,7 @@ import AanzichtLaag from "./AanzichtLaag";
 import { vertaal } from "../../lib/vertaalbareTekst";
 import type {
   Tool, Node, Beam, Plate, PlaatMeshCache, PlaatPunt, Support, Load, Selection,
-  ViewTransform, GridSettings, SupportType, StructuralGrid,
+  ViewTransform, GridSettings, SupportType, StructuralGrid, Snapshot,
 } from "./femTypes";
 import {
   withPlateDefaults, PLATE_DEFAULTS,
@@ -500,7 +500,7 @@ interface FemCanvasProps {
   // Transformaties (multi-bewust). `false` = selectie bevat niets
   // transformeerbaars → canvas toont feedback i.p.v. een stille no-op.
   translateSelection: (sel: Selection, dx: number, dz: number) => boolean;
-  copySelection: (sel: Selection, dx: number, dz: number) => boolean;
+  copySelection: (sel: Selection, dx: number, dz: number, source?: Snapshot) => boolean;
   rotateSelection: (sel: Selection, cx: number, cz: number, angleRad: number) => boolean;
   mirrorSelection: (sel: Selection, x1: number, z1: number, x2: number, z2: number) => boolean;
   /**
@@ -797,6 +797,11 @@ export default function FemCanvas(props: FemCanvasProps) {
    * gaat niet mee in het projectbestand en niet naar het systeemklembord.
    */
   const lastenKlembordRef = useRef<KlembordLast[]>([]);
+  /** Modelselectie voor Ctrl+C/V. De store kopieert ook de opleggingen op de
+   * geselecteerde knopen en legt elke plakactie vast als één undo-stap. */
+  const modelKlembordRef = useRef<{
+    selection: Selection; snapshot: Snapshot; aantalPlakken: number;
+  } | null>(null);
 
   // ── Drag-to-move state (mouse-driven, Select tool only) ────────────────
   // While dragging a node or beam we keep the original positions of all the
@@ -928,16 +933,24 @@ export default function FemCanvas(props: FemCanvasProps) {
     }
   }, [plates, nodes]);
 
-  // Resize observer
-  useEffect(() => {
+  // Meet de beginmaat vóór de eerste zichtbare render opnieuw. Anders rekent
+  // een lijnlast eerst met de standaardbreedte van 1000 px en verandert haar
+  // pijlaantal pas bij de eerste ResizeObserver-melding of zoomactie (#101).
+  useLayoutEffect(() => {
     if (!svgRef.current) return;
+    const parent = svgRef.current.parentElement!;
+    const meet = (w: number, h: number) => {
+      if (w > 0 && h > 0) setSize((vorig) => vorig.w === w && vorig.h === h ? vorig : { w, h });
+    };
+    const begin = parent.getBoundingClientRect();
+    meet(begin.width, begin.height);
     const ro = new ResizeObserver(entries => {
       for (const e of entries) {
         const r = e.contentRect;
-        if (r.width > 0 && r.height > 0) setSize({ w: r.width, h: r.height });
+        meet(r.width, r.height);
       }
     });
-    ro.observe(svgRef.current.parentElement!);
+    ro.observe(parent);
     return () => ro.disconnect();
   }, []);
 
@@ -1696,7 +1709,13 @@ export default function FemCanvas(props: FemCanvasProps) {
         setSelection({ type: "load", id: lastId });
         return;
       }
-      const overNodeId = findSnapNode(sx, sy);
+      // Een klik op het getekende opleggingssymbool valt vaak buiten de
+      // knoopstraal van 14 px. Selecteer dan de bijbehorende knoop, zodat
+      // kopiëren ook de oplegging meeneemt.
+      const supportGroep = (e.target as Element | null)?.closest("[data-support-node-id]");
+      const supportNodeId = supportGroep?.getAttribute("data-support-node-id");
+      const overNodeId = supportNodeId !== null && supportNodeId !== undefined
+        ? Number(supportNodeId) : findSnapNode(sx, sy);
       const overBeam = findSnapBeam(sx, sy);
       const world = screenToWorld(sx, sy);
 
@@ -1884,7 +1903,10 @@ export default function FemCanvas(props: FemCanvasProps) {
     const rect = svgRef.current!.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
-    const overNodeId = findSnapNode(sx, sy);
+    const supportNodeId = (e.target as Element | null)?.closest("[data-support-node-id]")
+      ?.getAttribute("data-support-node-id");
+    const overNodeId = supportNodeId !== null && supportNodeId !== undefined
+      ? Number(supportNodeId) : findSnapNode(sx, sy);
     // Model-positie uit het klik-event zelf. Niet op hoverModel leunen: dat is
     // de laatste mousemove-positie, en een klik zonder voorafgaande beweging
     // (touchpad-tap, snelle klik, automation) komt dan stilzwijgend op de
@@ -2317,21 +2339,29 @@ export default function FemCanvas(props: FemCanvasProps) {
         }
       }
 
-      // ── Ctrl+C / Ctrl+V — belastingen naar een ander belastinggeval ──
-      // Werkt op een lastselectie: één aangeklikte last, of de hele set uit
-      // "selecteer alle <soort>" in het contextmenu. Ctrl+C legt ze op het
-      // canvasklembord, Ctrl+V plakt ze in het ACTIEVE belastinggeval — dus
-      // eerst van tabblad wisselen, dan plakken. Zonder lastselectie laat
-      // Ctrl+C de toets ongemoeid, zodat kopiëren elders normaal blijft
-      // werken.
+      // ── Ctrl+C / Ctrl+V — modelselectie of belastingen ──
+      // Lastselecties gaan naar het belastingklembord en worden in het actieve
+      // belastinggeval geplakt. Een geselecteerde knoop/staaf/plaat gaat naar
+      // het modelklembord; de store neemt aanhangende opleggingen en lasten mee.
+      // Zonder kopieerbare selectie blijft de toets voor andere vensters vrij.
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !grabMode && !rotateMode) {
         const k = e.key.toLowerCase();
         if (k === "c") {
           const ids = selection?.type === "load" ? [selection.id]
             : selection?.type === "multi" ? (selection.loadIds ?? [])
             : [];
-          if (ids.length === 0) return;
+          const heeftModel = selectionNodeIds(selection).length > 0;
+          if (ids.length === 0 && !heeftModel) return;
           e.preventDefault();
+          if (heeftModel) {
+            modelKlembordRef.current = {
+              selection, snapshot: { nodes, beams, supports, plates, loads }, aantalPlakken: 0,
+            };
+            lastenKlembordRef.current = [];
+            notifyInfo(i18next.t("common:copy"));
+            return;
+          }
+          modelKlembordRef.current = null;
           // Het model gaat mee: elke klembordlast krijgt de PLAATS van zijn
           // aangrijpingspunt. Zonder dat landde een last bij het plakken op een
           // nieuwe staaf die toevallig hetzelfde nummer had gekregen — zie
@@ -2344,6 +2374,19 @@ export default function FemCanvas(props: FemCanvasProps) {
           return;
         }
         if (k === "v") {
+          const modelKlembord = modelKlembordRef.current;
+          if (modelKlembord) {
+            e.preventDefault();
+            const volgende = modelKlembord.aantalPlakken + 1;
+            if (copySelection(modelKlembord.selection, volgende * 500, 0, modelKlembord.snapshot)) {
+              modelKlembord.aantalPlakken = volgende;
+              notifyInfo(i18next.t("common:paste"));
+            } else {
+              notifyWarning(i18next.t("common:canvas.transform.nothingToDuplicate"),
+                i18next.t("common:canvas.transform.emptySelection"));
+            }
+            return;
+          }
           const klembord = lastenKlembordRef.current;
           if (klembord.length === 0 || !plakLasten) return;
           e.preventDefault();
@@ -2513,7 +2556,7 @@ export default function FemCanvas(props: FemCanvasProps) {
   }, [selection, deleteSelected, setSelection, nodes, size, hoverModel,
       grabMode, rotateMode, cancelGrab, commitGrab, cancelRotate, commitRotate,
       selectionNodeIds, copySelection, onToolChange, tool, loadHandleDrag,
-      loads, plakLasten, activeLoadCaseId,
+      beams, supports, plates, loads, plakLasten, activeLoadCaseId,
       beamStart, beamLengte, commitBeamLengte]);
 
   // ── Alt en Shift zonder muisbeweging (#53) ──────────────────────────────
@@ -2670,7 +2713,7 @@ export default function FemCanvas(props: FemCanvasProps) {
       const hatchBot = groundY + 7.5;
       const hatchXs = [-14, -8, -2, 4, 10, 16];
       return (
-        <g key={`sup${s.nodeId}`}>
+        <g key={`sup${s.nodeId}`} data-support-node-id={s.nodeId}>
           <polygon points={`${p.x},${p.y} ${p.x - 12},${triBase} ${p.x + 12},${triBase}`} className="fem-support" />
           <line x1={p.x - 16} y1={groundY} x2={p.x + 16} y2={groundY} className="fem-support-ground" />
           {hatchXs.map((dx, i) => (
@@ -2700,7 +2743,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         );
       }
       return (
-        <g key={`sup${s.nodeId}`}>
+        <g key={`sup${s.nodeId}`} data-support-node-id={s.nodeId}>
           <line
             x1={p.x - halveBreedte} y1={p.y}
             x2={p.x + halveBreedte} y2={p.y}
@@ -2712,7 +2755,7 @@ export default function FemCanvas(props: FemCanvasProps) {
     }
     if (s.type === "xRoller") {
       return (
-        <g key={`sup${s.nodeId}`}>
+        <g key={`sup${s.nodeId}`} data-support-node-id={s.nodeId}>
           <polygon points={`${p.x},${p.y} ${p.x - 20},${p.y - 12} ${p.x - 20},${p.y + 12}`} className="fem-support" />
           <line x1={p.x - 25} y1={p.y - 16} x2={p.x - 25} y2={p.y + 16} className="fem-support-ground" />
         </g>
@@ -2720,7 +2763,7 @@ export default function FemCanvas(props: FemCanvasProps) {
     }
     if (s.type === "zRoller") {
       return (
-        <g key={`sup${s.nodeId}`}>
+        <g key={`sup${s.nodeId}`} data-support-node-id={s.nodeId}>
           <polygon points={`${p.x},${p.y} ${p.x - 12},${p.y + 20} ${p.x + 12},${p.y + 20}`} className="fem-support" />
           <circle cx={p.x - 6} cy={p.y + 22} r={2.5} className="fem-support" />
           <circle cx={p.x + 6} cy={p.y + 22} r={2.5} className="fem-support" />
@@ -2735,7 +2778,7 @@ export default function FemCanvas(props: FemCanvasProps) {
       const ys = [top, top + 4, top + 8, top + 12, top + 16, bot];
       const points = xs.map((x, i) => `${x},${ys[i]}`).join(" ");
       return (
-        <g key={`sup${s.nodeId}`}>
+        <g key={`sup${s.nodeId}`} data-support-node-id={s.nodeId}>
           <polyline points={points} className="fem-spring" />
           <line x1={p.x - 16} y1={p.y + 32} x2={p.x + 16} y2={p.y + 32} className="fem-support-ground" />
           {s.k !== undefined && <text x={p.x + 18} y={p.y + 22} className="fem-spring-label">k={s.k}</text>}
@@ -2748,7 +2791,7 @@ export default function FemCanvas(props: FemCanvasProps) {
       const xs = [left, left + 4, left + 8, left + 12, left + 16, right];
       const points = xs.map((x, i) => `${x},${ys[i]}`).join(" ");
       return (
-        <g key={`sup${s.nodeId}`}>
+        <g key={`sup${s.nodeId}`} data-support-node-id={s.nodeId}>
           <polyline points={points} className="fem-spring" />
           <line x1={p.x - 32} y1={p.y - 12} x2={p.x - 32} y2={p.y + 12} className="fem-support-ground" />
           {s.k !== undefined && <text x={p.x + 12} y={p.y + 4} className="fem-spring-label">k={s.k}</text>}
@@ -2785,7 +2828,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         punten.push(`${(p.x + r * Math.sin(hoek)).toFixed(2)},${(p.y + 12 - r * Math.cos(hoek)).toFixed(2)}`);
       }
       return (
-        <g key={`sup${s.nodeId}`}>
+        <g key={`sup${s.nodeId}`} data-support-node-id={s.nodeId}>
           {/* aansluiting knoop → spiraal en spiraal → grondlijn */}
           <line x1={p.x} y1={p.y} x2={p.x} y2={p.y + 12 - rMax} className="fem-spring" />
           <polyline points={punten.join(" ")} fill="none" className="fem-spring" />
@@ -4996,7 +5039,10 @@ export default function FemCanvas(props: FemCanvasProps) {
 
         {/* Unity-check-badges (Resultaten-tab, rij "Unity check"): per staaf
             met toetsresultaat de maatgevende UC op het staafmidden. Groen
-            ≤ 1,0, rood > 1,0; klik opent het toetsingspaneel voor die staaf. */}
+            ≤ 1,0, rood > 1,0; grijs "niet getoetst" bij status n.v.t. — een
+            niet (volledig) getoetste staaf leest nooit als "voldoet", ook niet
+            met uc_max = 0 (controle 2026-10, punt B7). Klik opent het
+            toetsingspaneel voor die staaf. */}
         {showLoads && perCase && !solverBusy && !solveError && displayFlags.uc === true && checkResults.length > 0 && (
           <g className="fem-uc-layer">
             {checkResults.map(r => {
@@ -5008,8 +5054,9 @@ export default function FemCanvas(props: FemCanvasProps) {
               const p2 = worldToScreen(nB.x, nB.z);
               const mx = (p1.x + p2.x) / 2;
               const my = (p1.y + p2.y) / 2;
-              const ok = r.uc_max <= 1.0;
-              const tekst = `UC ${fmtNl(r.uc_max, 2)}`;
+              const nietGetoetst = r.status === "NotApplicable";
+              const ok = !nietGetoetst && r.uc_max <= 1.0;
+              const tekst = nietGetoetst ? tCommon("canvas.uc.nietGetoetst") : `UC ${fmtNl(r.uc_max, 2)}`;
               const bw = tekst.length * 7.5 + 16;
               return (
                 <g
@@ -5025,7 +5072,7 @@ export default function FemCanvas(props: FemCanvasProps) {
                   <title>{tCommon("canvas.uc.badgeTitle", { staaf: r.beam_id, toets: r.governing_check_id })}</title>
                   <rect
                     x={mx - bw / 2} y={my - 11} width={bw} height={22} rx={11}
-                    fill={ok ? "#16a34a" : "#dc2626"}
+                    fill={nietGetoetst ? "#64748b" : ok ? "#16a34a" : "#dc2626"}
                   />
                   <text x={mx} y={my + 4} className="fem-uc-badge-text">{tekst}</text>
                 </g>

@@ -6,7 +6,7 @@
  * Zuiver: geen React, geen DOM. Gaat mee in de sidecarbundel.
  */
 import { ApiFout, type ApiCommando, type ApiUitkomst } from "./register";
-import type { ApiDocument } from "./projectDocument";
+import { eigenDoorsnedenNaarWinkel, metGebruikteEigenDoorsneden, type ApiDocument } from "./projectDocument";
 import type { ApiObjectSchema } from "./schema";
 
 export interface DocumentCommandoDefinitie<I, U> {
@@ -22,7 +22,14 @@ export function documentCommando<I, U>(definitie: DocumentCommandoDefinitie<I, U
     beschrijving: definitie.beschrijving,
     invoer: definitie.invoer,
     soort: "document",
-    uitvoeren: (invoer, context) => definitie.uitvoeren(invoer, context.document!),
+    // De eigen doorsneden reizen met het document mee, zoals bij Openen en
+    // Opslaan in de app: vóór het commando in de winkel, erna in het document
+    // voor zover zijn staven ernaar verwijzen.
+    uitvoeren: (invoer, context) => {
+      eigenDoorsnedenNaarWinkel(context.document!);
+      const uitkomst = definitie.uitvoeren(invoer, context.document!);
+      return uitkomst.document ? { ...uitkomst, document: metGebruikteEigenDoorsneden(uitkomst.document) } : uitkomst;
+    },
   };
 }
 

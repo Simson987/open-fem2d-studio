@@ -18,7 +18,7 @@ fn doorsnede(id: usize, area: f64, i: f64, j: f64) -> Section3D {
 
 fn staaf(id: usize, begin: usize, eind: usize, sectie: usize) -> Member3D {
     Member3D { id, start_node_id: begin, end_node_id: eind, material_id: 1, section_id: sectie,
-        releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false, bedding: None }
+        releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false, bedding: None, part_section_ids: None }
 }
 
 fn scharnierend(mut staaf: Member3D) -> Member3D {
@@ -46,7 +46,7 @@ fn verzoek(nodes: Vec<Node3D>, sections: Vec<Section3D>, members: Vec<Member3D>,
     supports: Vec<Support3D>, nodal_loads: Vec<NodalLoad3D>) -> SolveRequest3D {
     SolveRequest3D {
         schema_version: 1, analysis: AnalysisKind::Linear, nodes,
-        materials: vec![Material3D { id: 1, name: "S235".into(), e_mpa: 210_000.0, nu: 0.3, alpha_per_k: None }],
+        materials: vec![Material3D { id: 1, name: "S235".into(), e_mpa: 210_000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
         sections, members, supports, nodal_loads, member_loads: vec![], member_point_loads: vec![],
         thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![], tension_only_fit: None, tension_only_cross_rule: false,
         max_iterations: 50, tolerance: 1e-10, buckling_modes: 0,
@@ -317,7 +317,7 @@ fn schijven_worden_gekeurd() {
 /// Ingeklemde kolom L = 4 m in 8 elementen, I = 8·10⁻⁶ m⁴:
 /// N_cr = π²EI/(4L²) = 259,08 kN. Bij P = 0,3·N_cr en H = 1 kN versterkt de
 /// kopverplaatsing volgens 1/(1 − P/N_cr) = 1,4286 (de exacte balk-kolom-
-/// oplossing 3(tan μ − μ)/μ³ = 1,4221 ligt daar 0,45 % onder). De eerste
+/// oplossing 3(tan μ − μ)/μ³ = 1,4228 ligt daar 0,40 % onder). De eerste
 /// knikfactor is N_cr/P = 3,3333.
 #[test]
 fn uitkragende_kolom_volgt_de_versterking_en_de_knikfactor_binnen_1_procent() {
@@ -448,6 +448,14 @@ fn portaal_met_ligger_in_12_elementen_rekent_tweede_orde() {
 /// 125 knopen, 600 vrije vrijheidsgraden. De tweede orde rekent zonder
 /// matrixfout, het krachtenevenwicht sluit exact en het momentverschil is
 /// precies het tweede-ordemoment.
+///
+/// De verbanden zijn buizen 168,3×8 (A = 40,3 cm², I = 1297 cm⁴). Tot oktober
+/// 2026 stond hier 88,9×4 (10,67 cm², 96,34 cm⁴): dat verband van 6,95 m krijgt
+/// in dit raamwerk 41,07 kN druk bij een Eulerlast van 41,38 kN. Met één
+/// element per staaf zag de knikanalyse dat niet (α_cr > 10); met de staven
+/// in vier delen (K4, #186) is α_cr = 1,008 en is de tweede orde terecht
+/// instabiel. Met de zwaardere buis knikt het meest gedrukte verband als
+/// eerste: α_cr = π²·E·I/(L²·|N|) met de eerste-ordenormaalkracht.
 #[test]
 fn groot_raamwerk_rekent_tweede_orde_zonder_factorisatiefout() {
     let n = 4usize;
@@ -480,12 +488,15 @@ fn groot_raamwerk_rekent_tweede_orde_zonder_factorisatiefout() {
         vec![
             doorsnede(1, 112.5e-4, 12e-5, 85e-8),
             doorsnede(2, 53.81e-4, 8.4e-5, 20e-8),
-            doorsnede(3, 10.67e-4, 96.34e-8, 192.7e-8),
+            doorsnede(3, 40.3e-4, 1297e-8, 2594e-8),
         ],
         members, supports, loads,
     );
     req.analysis = AnalysisKind::PDelta;
     req.buckling_modes = 1;
+    // De verbanden: na 100 kolommen en 160 liggers.
+    let eerste_verband = n * (n + 1) * (n + 1) + 2 * n * n * (n + 1) + 1;
+    assert_eq!(req.members.len() - eerste_verband + 1, 8 * n, "acht verbanden per bouwlaag");
     let vrij = (req.nodes.len() - req.supports.len()) * 6;
     assert!(vrij >= 500, "{vrij} vrije vrijheidsgraden");
     let r = solve(req.clone()).unwrap();
@@ -496,8 +507,13 @@ fn groot_raamwerk_rekent_tweede_orde_zonder_factorisatiefout() {
     let tweede_orde = tweede_orde_moment(&req, &r);
     for as_ in 0..3 { dichtbij(moment[as_], tweede_orde[as_], 1e-6, 1e-6, "momentensom = Σ N·(e_x × Δu)"); }
     let alpha = knikfactor(&r);
-    assert!(alpha > 10.0, "α_cr = {alpha}");
-    eprintln!("groot raamwerk: {vrij} vrije vg, α_cr = {alpha:.3}, versterking {:.5}, {} iteraties",
+    let BucklingSummary::Available { members: knik, .. } = &r.buckling else { unreachable!() };
+    let l_verband = (6.0f64 * 6.0 + 3.5 * 3.5).sqrt();
+    let euler = std::f64::consts::PI.powi(2) * E_KN_M2 * 1297e-8 / (l_verband * l_verband);
+    let hand = knik.iter().filter(|m| m.member_id >= eerste_verband && m.axial_force_kn < 0.0)
+        .map(|m| euler / m.axial_force_kn.abs()).fold(f64::INFINITY, f64::min);
+    assert!(alpha >= hand && alpha <= hand * 1.002, "α_cr = {alpha} tegen de knik van het verband {hand}");
+    eprintln!("groot raamwerk: {vrij} vrije vg, α_cr = {alpha:.3} (verband {hand:.3}), versterking {:.5}, {} iteraties",
         samenvatting.max_amplification, samenvatting.iterations);
 }
 

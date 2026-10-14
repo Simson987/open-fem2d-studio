@@ -12,8 +12,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { spawnSync } from "node:child_process";
-import { startBrowser } from "./scripts/headlessBrowser.mjs";
+import { browserResult, startBrowser } from "./scripts/headlessBrowser.mjs";
 
 const browser = [process.env.OPENAEC_BROWSER,
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -39,15 +38,14 @@ try {
       bundle.outputFiles[0].text.replace(/<\/script/gi, "<\\/script") + "</script>");
     return html;
   };
-  const vlaggen = (thema) => ["--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
-    `--user-data-dir=${join(folder, "profiel-" + thema)}`, "--window-size=860,2000", "--virtual-time-budget=12000"];
+  const vlaggen = (thema, virtueleTijd = true) => ["--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+    `--user-data-dir=${join(folder, "profiel-" + thema)}`, "--window-size=860,2000",
+    ...(virtueleTijd ? ["--virtual-time-budget=12000"] : [])];
 
   const html = await pagina("light");
-  const result = startBrowser(browser, [...vlaggen("light"), "--dump-dom", pathToFileURL(html).href],
-    { encoding: "utf8", timeout: 180_000, maxBuffer: 32 * 1024 * 1024 });
-  const match = /<pre id="uitslag">([^<]*)<\/pre>/.exec(result.stdout ?? "");
-  assert.ok(match?.[1], result.error?.message ?? result.stderr?.slice(0, 1500) ?? "Geen browserresultaat");
-  const report = JSON.parse(match[1].replace(/&quot;/g, '"').replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&"));
+  // Lees de uitslag zodra de pagina klaar is; CDP toont bij een hang ook
+  // welke test het laatst bezig was, zonder op --dump-dom te wachten (#46).
+  const report = await browserResult(browser, [...vlaggen("light", false), pathToFileURL(html).href], 45_000);
   for (const item of report.tests) console.log(`  ${item.error ? "FAIL" : "ok"} ${item.name}${item.error ? ": " + item.error : ""}`);
   assert.equal(report.error, null, report.error);
   assert.equal(report.tests.filter((t) => t.error).length, 0, "Regressies in het toetsingspaneel");
@@ -64,5 +62,13 @@ try {
   }
   console.log(`${report.tests.length} geslaagd, 0 gefaald`);
 } finally {
-  rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  // Edge-hulpprocessen kunnen op Windows hun cache nog vasthouden nadat het
+  // hoofdproces is gestopt. Een tijdelijk profiel dat dan niet weg kan, mag
+  // een geslaagde UI-proef niet alsnog laten falen.
+  try {
+    rmSync(folder, { recursive: true, force: true, maxRetries: 20, retryDelay: 500 });
+  } catch (error) {
+    if (process.platform !== "win32" || !["EBUSY", "EPERM", "EACCES"].includes(error?.code)) throw error;
+    console.warn(`Tijdelijk Edge-profiel nog vergrendeld; opruimen overgeslagen: ${folder}`);
+  }
 }

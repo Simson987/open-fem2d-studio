@@ -6,7 +6,7 @@ Claude Code, etc.). It speaks JSON-RPC 2.0 over stdio and wraps the same
 Rust crates the Tauri desktop app uses, so a tool call from Claude returns
 byte-identical results to clicking through the UI.
 
-The 51 fixed tools, in ten groups (the exact roster is pinned by
+The 53 fixed tools, in eleven groups (the exact roster is pinned by
 `tests/stdio_roundtrip.rs` and `tests/drie_wegen_kruistabel.rs`), plus one tool
 per command of the app's command register — see *Commando's uit de app*:
 
@@ -20,8 +20,9 @@ per command of the app's command register — see *Commando's uit de app*:
 | 3D frame and plate solver | `solve_open_fem_3d` |
 | 3D steel hall (generator, optionally solved and checked) | `open_fem_3d_staalhal_maken` |
 | IFC4 structural analysis model import (optionally solved and checked) | `open_fem_3d_ifc_importeren` |
+| local file import through extensions | `project_import` (see [extension guide](../../../docs/extensies.md)) |
 | reporting | `generate_steel_report_pdf` |
-| driving the running app | twenty-two `gui_*` tools, see the last section |
+| driving the running app | twenty-three `gui_*` tools, see the last section |
 | the app's command register: 3D model, project, undo | one tool per command (`model3d_*`, `project_*`, `app_*`), generated from the app's catalogue — see *Commando's uit de app* |
 
 `generate_steel_report_pdf` sits in its own group on purpose: the name is
@@ -89,15 +90,61 @@ src-tauri/target/release/openaec-mcp-server.exe     # Windows
 The binary is fully self-contained (the steel-profile catalogue and PDF fonts
 are baked in via `include_bytes!`). No data files need to ship alongside it.
 
+## Een AI-assistent koppelen
+
+In de app staat alles op één plek: **Instellingen → AI-assistent (MCP)** (ook via
+het lint *Instellingen → AI-assistent (MCP)*). Daar staat het pad van de
+meegeleverde server, en er zijn drie wegen om hem aan een assistent te koppelen:
+
+1. **De knop "Toevoegen aan Claude Desktop".** Zet de regel `open-fem-studio`
+   (`{ "command": "<pad>", "args": [] }`) in `mcpServers` van
+   `%APPDATA%\Claude\claude_desktop_config.json` (macOS:
+   `~/Library/Application Support/Claude/`). Andere servers en instellingen
+   blijven staan, met dezelfde volgorde en inspringing; vooraf komt er een
+   reservekopie `claude_desktop_config.json.<JJJJMMDD-UUMMSS>.bak` (UTC) naast;
+   staat er ongeldige JSON in het bestand, dan weigert de knop en blijft het
+   bestand onaangeroerd. Start Claude Desktop daarna opnieuw.
+2. **Claude Code**, met de opdracht die het paneel laat kopiëren:
+
+   ```bash
+   claude mcp add --scope user open-fem-studio -- "C:\Users\you\AppData\Local\Open FEM Studio\openaec-mcp-server.exe"
+   ```
+
+3. **Een andere MCP-client**, met het JSON-fragment uit het paneel:
+
+   ```json
+   {
+     "mcpServers": {
+       "open-fem-studio": {
+         "command": "C:\\Users\\you\\AppData\\Local\\Open FEM Studio\\openaec-mcp-server.exe",
+         "args": []
+       }
+     }
+   }
+   ```
+
+De reken- en toetstools werken daarmee meteen. Voor de `gui_*`-tools en de
+app-commando's zonder `project` moet de app draaien. Bij een nieuwe installatie
+staat **"Bediening door een AI-assistent toestaan (MCP)"** standaard aan. Een
+expliciete keuze voor uit blijft ook na updates bewaard. Bij een ongeldig of
+onleesbaar instellingenbestand blijft het kanaal uit. De app luistert alleen
+op 127.0.0.1 en vereist voor iedere opdracht de sessiesleutel uit het alleen
+voor de gebruiker leesbare `gui-control.json`. De assistent kan anders
+`gui_start_app` aanroepen, die de geïnstalleerde app met bediening start als hij
+nog niet draait — alleen voor die sessie; de bewaarde instelling verandert niet.
+Voor ontwikkelaars blijft `OPENAEC_GUI_CONTROL=1` werken.
+
 ## Wire it into Claude Desktop / Claude Code
 
-Add an entry to your `claude_desktop_config.json`:
+The app does this for you (see *Een AI-assistent koppelen* above). By hand:
+add an entry to your `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
-    "openaec-fem": {
-      "command": "C:\\Users\\you\\AppData\\Local\\Open FEM Studio\\openaec-mcp-server.exe"
+    "open-fem-studio": {
+      "command": "C:\\Users\\you\\AppData\\Local\\Open FEM Studio\\openaec-mcp-server.exe",
+      "args": []
     }
   }
 }
@@ -108,11 +155,11 @@ The config file lives at:
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
-Restart Claude Desktop after editing. All 51 tools should appear in the tools
-picker. For Claude Code:
+Restart Claude Desktop after editing. All 53 fixed tools (plus the app's
+commands) should appear in the tools picker. For Claude Code:
 
 ```bash
-claude mcp add openaec-fem -- "C:\Users\you\AppData\Local\Open FEM Studio\openaec-mcp-server.exe"
+claude mcp add --scope user open-fem-studio -- "C:\Users\you\AppData\Local\Open FEM Studio\openaec-mcp-server.exe"
 ```
 
 To raise the log level (logs go to **stderr** so they never collide with
@@ -121,7 +168,7 @@ JSON-RPC traffic on stdout), set the env var `OPENAEC_MCP_LOG=debug`:
 ```json
 {
   "mcpServers": {
-    "openaec-fem": {
+    "open-fem-studio": {
       "command": "C:\\path\\to\\openaec-mcp-server.exe",
       "env": { "OPENAEC_MCP_LOG": "debug" }
     }
@@ -499,6 +546,13 @@ ontwikkelbrowser: een ruimtelijk raamwerk, lineair of in directe tweede orde
 (`analysis: "p-delta"`, de standaard). Eenheden m, kN, kNm en MPa; het schema
 is op elk niveau strikt en het contract weigert onbekende velden.
 
+**Hout in 3D.** Een materiaal kan `gMpa` opgeven naast `eMpa` en `nu`.
+Zonder `gMpa` volgt de schuifmodulus als voorheen uit `E/(2(1+ν))`.
+Voor een houtsterkteklasse geeft de app `E_mean` en `G_mean` onafhankelijk door.
+De adapter schaalt per combinatie van materiaal en doorsnede de torsieconstante
+en eventuele afschuifoppervlakken, zodat de vastgepinde isotrope kern dezelfde
+`G·J` en `G·A_s` gebruikt. Buigstijfheid `E·I` verandert daardoor niet.
+
 **Tweede orde.** De adapter itereert zelf: (K + K_G(N))·u = F met een verse
 factorisatie per iteratie, tot de relatieve verplaatsingswijziging onder
 `tolerance` ligt. Een tangent die niet positief definiet is, geeft een melding
@@ -573,9 +627,27 @@ liftedFraction }]`) de zakking (positief omlaag), de lijnlast van de grond op
 de staaf (positief omhoog) en het deel van de lengte zonder contact; de
 grondveren staan niet bij de oplegreacties.
 
+**Plaat op bedding.** `plates[].bedding: { kKnPerM3, compressionOnly? }` legt
+een plaat op grondveren (Winkler), bijvoorbeeld een vloer op zand: de adapter
+zet op elke knoop van haar elementen een veer k·A_trib loodrecht op het
+plaatvlak, met A_trib het tributaire oppervlak uit de elementen van die plaat
+(samen het plaatoppervlak min de openingen). De grond ligt aan de onderzijde:
+tegen de plaatnormaal in (de z-as van de plaatassen; bij een vloer globaal
+−Z). Bij een wand legt de assenafspraak die zijde vast en is zij niet te
+kiezen: een wand in het XZ-vlak heeft de grond aan +Y, in het YZ-vlak aan −X
+(de diagnostics noemen haar; ligt de grond aan de andere kant, dan zijn
+zakking en gronddruk van teken omgekeerd en is `compressionOnly` niet
+bruikbaar). Met `compressionOnly` vallen de veren weg waar de plaat loskomt. Het
+resultaat geeft per plaat op bedding (`plateBedding: [{ plateId, nodes:
+[{ nodeId, settlementM, pressureKnPerM2, active }], maxPressureKnPerM2,
+minPressureKnPerM2, maxSettlementM, totalReactionKn, liftedFraction }]`) de
+zakking (positief de grond in), de gronddruk k·zakking (0 waar geen contact) en
+het deel van het oppervlak zonder contact; de grondveren staan niet bij de
+oplegreacties.
+
 `gui_build_3d_model` kent dezelfde velden in de app: `beams[].tension_only`,
 `beams[].bedding: { k_kn_per_m3?, width_m, k_lateral_kn_per_m3?,
-compression_only? }`, `diaphragms: [{ nodes, name? }]` met 1-gebaseerde knoopindices, en de
+compression_only? }`, `plates[].bedding: { k_kn_per_m3, compression_only? }`, `diaphragms: [{ nodes, name? }]` met 1-gebaseerde knoopindices, en de
 modelinstellingen `tension_only_fit_after_permanent` (montagelasten zijn de
 blijvende belastinggevallen met factor 1, inclusief eigen gewicht en
 belastingvlakken) en `tension_only_cross_rule`. In de app werkt het eigen
@@ -706,7 +778,7 @@ aannames van de 3D-toetsinvoer (kniklengte = staaflengte, geen kipsteunen)
 en beide diagonalen van de kruisen meewerkend halen de gordingen en de
 wanddiagonalen de toets niet. Kies zwaardere profielen of meer verbandvakken.
 
-**In de draaiende app** (bedieningskanaal, `OPENAEC_GUI_CONTROL=1`):
+**In de draaiende app** (bedieningskanaal: Instellingen → AI-assistent (MCP), of `OPENAEC_GUI_CONTROL=1`):
 `gui_build_3d_steel_hall { "hal": { … } }` — paginaopdracht `staalhal_maken`.
 Het 3D-model wordt vervangen als één undo-stap, de gevallen van de hal worden
 aan die van het project gekoppeld, het stramien en het eigen gewicht worden
@@ -771,7 +843,7 @@ weggelaten om toch te rekenen.
     "pad": "C:/projecten/hal/analysemodel.ifc", "analysemodel": "Hal", "reken": true } }
 ```
 
-**In de draaiende app** (bedieningskanaal, `OPENAEC_GUI_CONTROL=1`):
+**In de draaiende app** (bedieningskanaal: Instellingen → AI-assistent (MCP), of `OPENAEC_GUI_CONTROL=1`):
 `gui_import_ifc_analysis_model { "path": "…", "analysis_model": "Hal" }` —
 de app leest het bestand, zet het als nieuw 3D-project neer (zonder te vragen
 naar niet-opgeslagen werk) en geeft het verslag terug.
@@ -795,8 +867,9 @@ weergave en rapport volgen.
     solverbundel en schrijft het resultaat terug (eerst naast het bestand,
     dan in één keer vervangen). `save: false` laat het bestand staan.
     Antwoord: `{output, saved, project}`.
-  - Zonder `project` gaat het commando naar de draaiende app (gestart met
-    `OPENAEC_GUI_CONTROL=1`, zie de laatste sectie), als één stap die
+  - Zonder `project` gaat het commando naar de draaiende app (bediening aan via
+    Instellingen → AI-assistent (MCP), `gui_start_app` of `OPENAEC_GUI_CONTROL=1`,
+    zie de laatste sectie), als één stap die
     `app_undo` of Ctrl+Z ongedaan maakt. Antwoord: `{output, via: "app"}`.
 - **App-commando's** (`app_undo`, `app_redo`, `app_project_save`,
   `app_project_open`) werken alleen in de draaiende app.
@@ -860,7 +933,7 @@ cargo test -p openaec-mcp-server
 | test | what it pins down |
 |---|---|
 | `stdio_roundtrip.rs` | the full handshake against the real binary: `initialize` → `notifications/initialized` → `tools/list` → `tools/call`, and the complete tool roster |
-| `schema_strikt.rs` | the input schemas of `check_steel_beam`, `check_concrete_beam` and `concrete_mn_kappa` are complete and strict; a typo in a field name is refused, not silently defaulted |
+| `schema_strikt.rs` | the input schemas of `check_steel_beam`, `check_concrete_beam` and `concrete_mn_kappa` (and of the timber, steel-hall, IFC-import and `gui_start_app` tools) are complete and strict; a typo in a field name is refused, not silently defaulted |
 | `drie_wegen_beton.rs` | **the three ways give the same answer**: the same JSON through the Tauri command's engine call, through `toetsbrug::behandel` and through the real MCP binary, compared field by field, plus anchor values so all three cannot drift together |
 | `drie_wegen_dekkingslijn.rs` | the same for `concrete_dekkingslijn` (§9.2.1.3 / figure 9.2 and §6.2): one member through all three ways, plus anchor values that follow from the norm — two bar bundles for a 3/5/3 curtailment, two points on every zone boundary (left and right of the jump), and the full tensile force jumping by 5/3 there. Also pins that an axial force without a supplied `z_mm` fails on ALL three ways with 6.2.3(1) in the reason, and that a typo in a field name is refused |
 | `beton_in_check_fem_model.rs` | a concrete beam in a mixed model is reported in `skipped_beams` instead of vanishing; `beam_ids` is respected; a model carrying a reinforcement cage is refused by the field gate |
@@ -868,7 +941,12 @@ cargo test -p openaec-mcp-server
 | `fem_golden.rs`, `sidecar.rs`, `fout_paden.rs` | the FEM chain: golden values, the Node sidecar, and the error paths |
 | `ifc_import_mcp.rs` | `open_fem_3d_ifc_importeren` end to end on the synthetic files of `docs/verificatie/ifc-analyse`: without a model choice the error lists both analysis models; the canopy model is imported, solved and checked with ΣR per load case equal to hand values and equilibrium everywhere; the hall comes back with its report and an honest calculation status; the mm/kN file gives exactly the same model; a missing file is reported (needs Node ≥ 20) |
 | `api_tools.rs` | the tools generated from the app's command catalogue: a chain of commands on a temporary project file (headless, through the Node sidecar), `save: false`, and the error codes — `NIET_GEVONDEN`, `INVOER_ONGELDIG`, `BESTAND_ONLEESBAAR`, and `ARGUMENT_ONGELDIG` for another file type or `project` on an app command (needs Node ≥ 20) |
+| `extensie_import.rs` | `project_import` through the actual MCP binary and Node sidecar: the example extension produces an `.ifcfem` file; an unknown type is refused without overwriting it (needs Node ≥ 20) |
 | `staalhal_mcp.rs` | `open_fem_3d_staalhal_maken` end to end: the default hall equals the example project file node for node, every schema default equals the generator's, ΣR per load case and Σ pile reactions match hand values, equilibrium in every case and combination, a UC for every steel member, and parameter errors come back with code and field (needs Node ≥ 20) |
+| `gui_start_app_pijpen.rs` | the app that `gui_start_app` starts does not hold the client's pipes open: a stand-in app (a copy of the test binary that keeps running) is started through the real server with piped stdio, the server stops on a closed stdin, and stdout and stderr must close within 2 s — on Windows the server clears the inherit flag of its own std handles before it starts the app |
+| `gui_bereikbaarheid.rs` | what a client hears when the app is not reachable — no control file, a closed port, a control file from an earlier session (token refused) — on a `gui_*` tool and on an app command: the text says *Instellingen → AI-assistent (MCP)*, `gui_start_app` and `OPENAEC_GUI_CONTROL=1`, with error code `APP_NIET_BEREIKBAAR`; and `gui_start_app` without an app executable starts nothing (`APP_NIET_GEVONDEN`). Runs with its own `OPENAEC_GUI_CONTROL_FILE` and a non-existent `OPENAEC_APP` |
+
+The unit tests of `gui_start_app` (in `src/gui_tools.rs`) start a stand-in app — the test binary itself, restarted with only the test `nep_app` — that writes a control file and answers `/status` and the page command `status`: the tool waits for the control file of THAT process and for the page, ignores a stale control file, reports a process that stops at once (`APP_GESTOPT`, the single-instance case) and does not wait past `timeout_s` (`APP_START_TIJD`). Further unit tests pin that only an app of this user in this session counts as running (`tasklist` with the own session, `pgrep -u` with the own uid; on Windows checked against the test process itself) and that the control file is looked up in the app data folder per platform, as Tauri chooses it.
 
 `beton_in_check_fem_model.rs` and the FEM tests need Node ≥ 20, because the
 solve runs in the Node sidecar; they fail with that message rather than skipping
@@ -919,11 +997,26 @@ silently. The steel and concrete check tools run entirely in Rust, so
 
 ## GUI tools: driving the running desktop app (`gui_*`)
 
-Twenty-two tools operate the **running** Open FEM Studio desktop app through
+Twenty-three tools operate the **running** Open FEM Studio desktop app through
 its control channel. They are not engine calls and are therefore outside the
 three-ways rule — they *are* the way to the GUI.
 
-Start the app with the channel enabled:
+The channel is on after a fresh installation. Change it in **Settings → AI assistant (MCP)** (Dutch UI:
+*Instellingen → AI-assistent (MCP)*), "Allow an AI assistant to control the app
+(MCP)". An explicit off choice stays off after updates. Invalid or unreadable
+settings also keep the channel off. The choice is stored (`ai-assistent.json` in the
+app data folder), applies at once — switching it off removes the control file
+and closes the port, switching it on again gives a new port and token — and
+starts the channel at every later start. Or let the assistant call
+`gui_start_app`: when the app is not running it starts the installed app (next to
+this server, or `OPENAEC_APP`) with the channel on and waits for it. That channel
+lasts for that session only: the saved setting stays as it was, and the panel
+shows the session apart from it (the checkbox shows the saved choice) with a
+button to switch it off now. The started app inherits nothing from this server —
+no stdin/stdout/stderr, and on Windows not the client's pipes either (the server
+clears the inherit flag of its own std handles first), so the client still sees
+the server's stdout close when the server exits. For developers and test
+scripts the environment variable still works:
 
 ```
 set OPENAEC_GUI_CONTROL=1
@@ -931,17 +1024,42 @@ set OPENAEC_GUI_CONTROL=1
 ```
 
 The app then listens on `127.0.0.1:<free port>` with a per-session token and
-writes `gui-control.json` (`{pid, poort, token, versie}`) to
-`%LOCALAPPDATA%\org.openaec.fem-studio\`. The tools find it there
-(override with `OPENAEC_GUI_CONTROL_FILE`); an app up to 2026.39.1 uses
-`%LOCALAPPDATA%\org.openaec.fem2d-studio\`, which the tools fall back to. While the channel is active the
+writes `gui-control.json` (`{pid, poort, token, versie}`) to its app data folder
+`org.openaec.fem-studio`: under `%LOCALAPPDATA%` on Windows,
+`~/Library/Application Support` on macOS, and `$XDG_DATA_HOME` or
+`~/.local/share` on Linux. On macOS and Linux the file is readable by the user
+only (0600; a new folder 0700); on Windows its protected ACL grants access to
+the current user only, because the token gives full control. The tools
+find it there (override with `OPENAEC_GUI_CONTROL_FILE`); an app up to 2026.39.1
+uses `org.openaec.fem2d-studio`, which the tools fall back to. The liveness check
+`GET /status` answers at once with the token, also while a long command runs; the commands
+themselves run one at a time, in order. While the channel is active the
 status bar shows *bediening op afstand actief*. Nothing listens without the
-variable, nothing accepts a call without the token, and the file is removed
-on exit (`gui_quit` exits through the app's own path so that happens).
+default-on setting or the variable, no request succeeds without the token, and the file
+is removed on exit (`gui_quit` exits through the app's own path so that
+happens). The app does not start a channel over the control file of another
+running instance whose port still answers. When the app is not reachable, every
+`gui_*` tool (and every app command without `project`) fails with error code
+`APP_NIET_BEREIKBAAR` and says what to do.
+
+The installed app keeps a single window: double-clicking a `.ifcfem` or
+`.ifcfem2d` file opens it in the running app, also in the one with the
+channel. The other side of that: if Open FEM Studio is already running without
+the channel, starting it again with `OPENAEC_GUI_CONTROL=1` only brings that
+window to the front, and no channel listens. Switch the setting on in that
+window, or close it first; `gui_start_app` sees the running app (of this user,
+in this session — an app in another user's session does not count), starts no
+second one and says so (`APP_DRAAIT_ZONDER_KANAAL`). A separate
+instance next to the user's app (as the scripts in `design-mockup/referentie-gui/`
+start one) needs both `OPENAEC_GUI_CONTROL=1` and its own
+`OPENAEC_GUI_CONTROL_FILE`; such an instance stays outside the single window.
+A development build (`npm run tauri dev`) stays outside it too, unless it is
+started with `OPENAEC_EEN_INSTANTIE=1`.
 
 | Tool | What it does in the app |
 |---|---|
 | `gui_status` | reachable? pid, port, version, active view, selection, member count |
+| `gui_start_app {timeout_s?}` | starts the installed app with the channel on (for that session only) when it is not running, and waits (default 60 s, 5–300) for the channel and the page; starts nothing when the channel is already reachable, and no second app when the app runs without the channel |
 | `gui_load_model {path}` | loads a `.femp`/`.ifcfem`/`.ifcfem2d` (read by the app process) |
 | `gui_build_model {...}` | builds nodes/beams/supports/loads through the store actions |
 | `gui_build_3d_model {...}` | builds a 3D frame in metres, with supports, nodal loads, optional member profiles, tension-only members, rigid diaphragms and optional levels (nodes and plates linked to a level) |

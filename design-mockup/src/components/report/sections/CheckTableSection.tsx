@@ -134,8 +134,11 @@ function BeknopteRijen({ results, namen }: {
               )}
               <MaatgevendeHerkomst result={r} namen={namen} />
             </td>
-            <td className={`rpt-num${r.uc_max > 1 ? " rpt-uc-fail" : ""}`}>
-              {fmtUc(r.uc_max)}
+            {/* Status n.v.t. = niet (volledig) getoetst: geen UC-getal, want een
+                getal onder 1 leest als "voldoet" (controle 2026-10, B7; sinds
+                K6 ook een staaf met een doorlopend eind). */}
+            <td className={`rpt-num${r.status !== "NotApplicable" && r.uc_max > 1 ? " rpt-uc-fail" : ""}`}>
+              {r.status === "NotApplicable" ? "—" : fmtUc(r.uc_max)}
             </td>
             <td className={statusCel(r.status)}>{statusLabel(t, r.status)}</td>
           </tr>

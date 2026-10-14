@@ -20,7 +20,8 @@ import { fileURLToPath } from "node:url";
 import { buildOpenFem3DSolveRequest, openFem3DGlobalForceBalance } from "./src/components/openFem3d/openFem3dSolver.ts";
 import { openFem3DMaximumDisplacementM } from "./src/components/openFem3d/openFem3dDisplacement.ts";
 import { withOpenFem3DSelfWeight } from "./src/components/openFem3d/openFem3dModel.ts";
-import { maakStaalhal, staalhalProject, STAALHAL_STANDAARD } from "./src/components/openFem3d/wizards/staalhal.ts";
+import { maakStaalhal, requireStaalhalWindRoute, staalhalProject, STAALHAL_STANDAARD } from "./src/components/openFem3d/wizards/staalhal.ts";
+import { DEFAULT_UITGANGSPUNTEN } from "./src/lib/projectBasisDefaults.ts";
 import { resolveSection } from "./src/lib/sectionResolver.ts";
 import { deserializeProject, serializeProject } from "./src/io/projectFile.ts";
 
@@ -50,11 +51,20 @@ for (const profiel of new Set(model.beams.map((b) => b.profileName))) {
 const fixturePath = fileURLToPath(new URL("../docs/verificatie/3d-raamwerk/staalhal-60x30.ifcfem", import.meta.url));
 // Het projectnummer is dat van het voorbeeld; de generator zelf laat het leeg.
 const project = staalhalProject(hal, { projectNumber: "VB-3D-HAL-01" });
-assert.deepEqual(project.projectInfo, { name: "Staalhal 60 × 30 m", projectNumber: "VB-3D-HAL-01" });
+assert.deepEqual(project.projectInfo, { name: "Staalhal 60 × 30 m", projectNumber: "VB-3D-HAL-01",
+  uitgangspunten: DEFAULT_UITGANGSPUNTEN });
+assert.deepEqual(staalhalProject(hal, { uitgangspunten: { gevolgklasse: "CC3" } }).projectInfo.uitgangspunten,
+  { ...DEFAULT_UITGANGSPUNTEN, gevolgklasse: "CC3" }, "gedeeltelijke projectbasis behoudt volledige defaults");
+assert.doesNotThrow(() => requireStaalhalWindRoute({}));
+assert.throws(() => requireStaalhalWindRoute({ uitgangspunten: { windCodeId: "asce-7-22" } }), /niet beschikbaar/);
+assert.throws(() => staalhalProject(hal, { uitgangspunten: { windCodeId: "asce-7-22" } }), /niet beschikbaar/);
+assert.throws(() => staalhalProject(hal, { uitgangspunten: null }), /object/);
 if (process.argv.includes("--write-fixture")) writeFileSync(fixturePath, serializeProject(project));
 assert.ok(existsSync(fixturePath), "projectbestand staalhal ontbreekt (schrijf het met --write-fixture)");
 const geladen = deserializeProject(readFileSync(fixturePath, "utf8"));
 assert.deepEqual(geladen.model3d, model, "het projectbestand is gelijk aan het model uit deze test");
+assert.deepEqual(geladen.projectInfo.uitgangspunten, DEFAULT_UITGANGSPUNTEN,
+  "het projectbestand bewaart de complete uitgangspunten met windroute");
 assert.equal(geladen.modelDimension, "3d");
 console.log("  ✓ model: 165 knopen, 340 staven, 22 inklemmingen; projectbestand gelijk");
 

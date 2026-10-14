@@ -229,6 +229,16 @@ async fn schema_van_check_steel_beam_is_volledig_en_strikt() {
         // De nettodoorsnede voor 6.2.3 (6.7); zonder dit veld in het schema
         // kan een client geen gaten in de aansluiting opgeven.
         "a_net_mm2",
+        // De bijkomende zakking per combinatie bepaald en de lengte van het
+        // getoetste deel (een doorgaande lijn met een overstek); zonder deze
+        // velden in het schema weigert `additionalProperties: false` de invoer
+        // die `check_fem_model` en de app voor zo'n staaf bouwen.
+        "deflection_add_mm",
+        "deflection_length_m",
+        // Een vrij eind in een tweede-orde-berekening met scheefstand: L in
+        // plaats van 2·L; zonder dit veld in het schema weigert
+        // `additionalProperties: false` de invoer van `check_fem_model`.
+        "zijdelingse_knik_in_analyse",
     ] {
         assert!(
             props[veld].is_object(),
@@ -824,10 +834,10 @@ async fn schema_van_de_houttools_is_strikt_op_elk_niveau() {
     assert!(staaf["properties"]["bijlage"].is_object(), "bijlage ontbreekt");
     assert_eq!(
         staaf["properties"].as_object().unwrap().len(),
-        31,
-        "het schema van de houten staaf hoort precies de 31 velden van TimberBeamCheckInput te kennen 
+        33,
+        "het schema van de houten staaf hoort precies deze 33 velden van TimberBeamCheckInput te kennen 
          (25 + load_duration_per_combination + staaf_notities + width_end_mm + height_end_mm + bijlage
-         + deflection_quasi_perm_fin_mm)"
+         + deflection_quasi_perm_fin_mm + is_cantilever + zijdelingse_knik_in_analyse)"
     );
     // Issue #23: de langeduurzakking van 2.2.3(4) is voor een client op te geven.
     assert!(
@@ -1023,7 +1033,7 @@ async fn schema_van_de_belastingvlakken_in_het_3d_model_is_strikt() {
     let vlak = &vlakken["items"];
     assert_eq!(vlak["additionalProperties"], json!(false), "een belastingvlak hoort strikt te zijn: {vlak}");
     assert_eq!(vlak["required"], json!(["nodes", "q", "direction", "distribution"]));
-    assert_eq!(vlak["properties"]["direction"]["enum"], json!(["gravity", "normal"]));
+    assert_eq!(vlak["properties"]["direction"]["enum"], json!(["gravity", "normal", "verticalSurface"]));
     assert_eq!(vlak["properties"]["distribution"]["enum"], json!(["oneWay", "twoWay"]));
     assert_eq!(vlak["properties"]["span_direction"]["additionalProperties"], json!(false));
     assert_eq!(vlak["properties"]["span_direction"]["required"], json!(["x", "y", "z"]));
@@ -1200,6 +1210,57 @@ async fn globale_lijnlast_via_mcp_is_strikt_en_rekent() {
             .map(|r| r["fz"].as_f64().unwrap()).sum();
         assert!((som - verwacht).abs() < 1e-6, "ΣRz {som}, verwacht {verwacht} (per projectie: {per_projectie})");
     }
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+/// Verlopende staaf (issue #73) over de echte binary: het schema van
+/// `solve_open_fem_3d` kent `partSectionIds` (2 tot 64 doorsnede-id's), en een
+/// uitkrager van 4 m in twee gelijke delen (I₁ = 2·10⁻⁴ m⁴ aan de inklemming,
+/// I₂ = 5·10⁻⁵ m⁴ aan het vrije eind) onder P = 10 kN zakt aan het eind
+///   w = P/E·[ (4³ − 2³)/3 / I₁ + 2³/3 / I₂ ] = 10/2,1·10⁸ · 146 666,7 = 6,984 mm
+/// (alleen buiging, exact: het verzoek geeft geen afschuifoppervlak mee), met
+/// het inklemmingsmoment P·L = 40 kNm op de ene staaf.
+#[tokio::test]
+async fn verlopende_staaf_via_mcp_is_strikt_en_rekent() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let tool = tooldefinitie(&mut stdin, &mut reader, 140, "solve_open_fem_3d").await;
+    let delen = &tool["inputSchema"]["properties"]["members"]["items"]["properties"]["partSectionIds"];
+    assert_eq!(delen["type"], json!("array"), "{delen}");
+    assert_eq!((delen["minItems"].clone(), delen["maxItems"].clone()), (json!(2), json!(64)));
+    assert_eq!(delen["items"]["minimum"], json!(1));
+
+    let verzoek = json!({
+        "analysis": "linear",
+        "nodes": [{ "id": 1, "x": 0, "y": 0, "z": 0 }, { "id": 2, "x": 4, "y": 0, "z": 0 }],
+        "materials": [{ "id": 1, "name": "S235", "eMpa": 210000, "nu": 0.3 }],
+        "sections": [
+            { "id": 1, "name": "begin", "areaM2": 0.01, "iyM4": 2e-4, "izM4": 2e-5, "torsionJM4": 1e-6 },
+            { "id": 2, "name": "eind", "areaM2": 0.006, "iyM4": 5e-5, "izM4": 5e-6, "torsionJM4": 5e-7 }
+        ],
+        "members": [{ "id": 1, "startNodeId": 1, "endNodeId": 2, "materialId": 1, "sectionId": 1, "partSectionIds": [1, 2] }],
+        "supports": [{ "nodeId": 1, "ux": true, "uy": true, "uz": true, "rx": true, "ry": true, "rz": true }],
+        "nodalLoads": [{ "id": 1, "nodeId": 2, "fx": 0, "fy": 0, "fz": -10, "mx": 0, "my": 0, "mz": 0 }],
+        "bucklingModes": 0
+    });
+    schrijf(&mut stdin, json!({
+        "jsonrpc": "2.0", "id": 141, "method": "tools/call",
+        "params": { "name": "solve_open_fem_3d", "arguments": verzoek }
+    })).await;
+    let antwoord = lees_bericht(&mut reader).await;
+    // De server linkt de kern als crate: hij kent partSectionIds altijd.
+    assert!(antwoord["error"].is_null(), "{antwoord}");
+    let uit = &antwoord["result"];
+    assert_eq!(uit["isError"], json!(false), "{antwoord}");
+    let verplaatsingen = uit["structuredContent"]["displacements"].as_array().unwrap();
+    assert_eq!(verplaatsingen.len(), 2, "alleen de modelknopen, geen grensknoop van de delen: {verplaatsingen:?}");
+    let eind = verplaatsingen.iter().find(|d| d["nodeId"] == json!(2)).unwrap()["uz"].as_f64().unwrap();
+    let verwacht = 10.0 / 2.1e8 * ((64.0 - 8.0) / 3.0 / 2e-4 + 8.0 / 3.0 / 5e-5);
+    assert!(((-eind) - verwacht).abs() <= 1e-12 * verwacht, "zakking {eind}, verwacht −{verwacht}");
+    let krachten = uit["structuredContent"]["memberForces"].as_array().unwrap();
+    assert_eq!(krachten.len(), 1, "de delen zijn weer één staaf: {krachten:?}");
+    let moment = krachten[0]["myStartKnm"].as_f64().unwrap();
+    assert!((moment.abs() - 40.0).abs() < 1e-12 * 40.0, "inklemmingsmoment {moment}");
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }
@@ -1479,6 +1540,68 @@ async fn solve_open_fem_3d_rekent_platen_en_weigert_een_tikfout() {
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }
 
+/// Plaat op bedding (issue #107) over de echte binary: het schema van
+/// `solve_open_fem_3d` (plates[].bedding) en van `gui_build_3d_model`
+/// (plates[].bedding) is strikt, en een tikfout in een beddingveld wordt
+/// geweigerd. Een vloer van 4 × 4 m (2 × 2 MITC4-elementen), alleen in haar
+/// vlak gesteund, onder q = 5 kN/m² op k = 20 000 kN/m³: overal een zakking
+/// q/k = 0,25 mm en gronddruk q (afrondingsruis, 10⁻⁹) en Σ veerkrachten
+/// q·A = 80 kN.
+#[tokio::test]
+async fn plaat_op_bedding_via_mcp_is_strikt_en_rekent() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let tool = tooldefinitie(&mut stdin, &mut reader, 170, "solve_open_fem_3d").await;
+    let bedding = &tool["inputSchema"]["properties"]["plates"]["items"]["properties"]["bedding"];
+    assert_eq!(bedding["additionalProperties"], json!(false), "{bedding}");
+    assert_eq!(bedding["required"], json!(["kKnPerM3"]));
+    for veld in ["kKnPerM3", "compressionOnly"] {
+        assert!(bedding["properties"].get(veld).is_some(), "{veld} ontbreekt");
+    }
+    let bouw = tooldefinitie(&mut stdin, &mut reader, 171, "gui_build_3d_model").await;
+    let app = &bouw["inputSchema"]["properties"]["plates"]["items"]["properties"]["bedding"];
+    assert_eq!(app["additionalProperties"], json!(false), "{app}");
+    assert_eq!(app["required"], json!(["k_kn_per_m3"]));
+
+    // De vloer van plaatverzoek, maar alleen in haar vlak gesteund: verticaal draagt de grond.
+    let mut verzoek = plaatverzoek();
+    verzoek["plates"][0]["bedding"] = json!({ "kKnPerM3": 20000.0 });
+    verzoek["supports"] = json!([
+        { "nodeId": 1, "ux": true, "uy": true, "uz": false, "rx": false, "ry": false, "rz": false },
+        { "nodeId": 3, "ux": false, "uy": true, "uz": false, "rx": false, "ry": false, "rz": false }
+    ]);
+    let uit = roep_tool_aan(&mut stdin, &mut reader, 172, "solve_open_fem_3d", verzoek.clone()).await;
+    let melding = foutmelding(&uit);
+    assert!(uit["isError"] != json!(true), "plaat op bedding rekent niet: {melding}");
+    let resultaat: Value = serde_json::from_str(&melding).expect("resultaat is JSON");
+    let vloer = &resultaat["plateBedding"][0];
+    assert_eq!(vloer["plateId"], json!(1), "{resultaat}");
+    let knopen = vloer["nodes"].as_array().expect("knopen");
+    assert_eq!(knopen.len(), 9, "elke knoop van de vloer");
+    for knoop in knopen {
+        let zakking = knoop["settlementM"].as_f64().unwrap();
+        assert!((zakking - 0.00025).abs() <= 1e-9 * 0.00025, "zakking {zakking} op knoop {}", knoop["nodeId"]);
+        let druk = knoop["pressureKnPerM2"].as_f64().unwrap();
+        assert!((druk - 5.0).abs() <= 1e-9 * 5.0, "gronddruk {druk} op knoop {}", knoop["nodeId"]);
+        assert_eq!(knoop["active"], json!(true));
+    }
+    let som = vloer["totalReactionKn"].as_f64().unwrap();
+    assert!((som - 80.0).abs() < 1e-9 * 80.0, "Σ veerkrachten {som}");
+    assert_eq!(vloer["liftedFraction"].as_f64(), Some(0.0));
+    // Een tikfout in een beddingveld: het schema weigert onbekende velden.
+    let mut tikfout = verzoek;
+    tikfout["plates"][0]["bedding"] = json!({ "kKnPerm3": 20000.0 });
+    schrijf(&mut stdin, json!({
+        "jsonrpc": "2.0", "id": 173, "method": "tools/call",
+        "params": { "name": "solve_open_fem_3d", "arguments": tikfout }
+    })).await;
+    let antwoord = lees_bericht(&mut reader).await;
+    let melding = antwoord["error"]["message"].as_str().map(str::to_owned)
+        .unwrap_or_else(|| foutmelding(&antwoord["result"]));
+    assert!(melding.contains("kKnPerm3"), "{antwoord}");
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
 // ── De import van een IFC4-analysemodel ─────────────────────────────────────
 
 /// `open_fem_3d_ifc_importeren` en `gui_import_ifc_analysis_model` zijn op ELK
@@ -1534,6 +1657,43 @@ async fn tikfout_in_de_ifc_importargumenten_wordt_geweigerd() {
         json!({ "path": "C:/x.ifc", "analysis-model": 1 })).await;
     assert_eq!(gui["isError"], json!(true), "{gui}");
     assert!(foutmelding(&gui).contains("unknown field"), "{}", foutmelding(&gui));
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+// ── De app starten (issue #109) ─────────────────────────────────────────────
+
+/// `gui_start_app` heeft één optioneel argument, `timeout_s` (5–300 s), en
+/// weigert al het andere: een tikfout (`timeout`) mag niet stil de standaard
+/// van 60 s opleveren, en zeker geen ander gedrag. De weigering komt vóór er
+/// iets gestart of gezocht wordt.
+#[tokio::test]
+async fn schema_van_gui_start_app_is_strikt() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let tool = tooldefinitie(&mut stdin, &mut reader, 90, "gui_start_app").await;
+    let s = &tool["inputSchema"];
+    assert_eq!(s["type"], json!("object"));
+    assert_eq!(s["additionalProperties"], json!(false));
+    assert!(s.get("required").is_none() || s["required"] == json!([]), "{s}");
+    let t = &s["properties"]["timeout_s"];
+    assert_eq!(t["type"], json!("integer"));
+    assert_eq!(t["minimum"], json!(5));
+    assert_eq!(t["maximum"], json!(300));
+    assert_eq!(t["default"], json!(60));
+    assert_eq!(s["properties"].as_object().unwrap().len(), 1, "alleen timeout_s");
+    let beschrijving = tool["description"].as_str().unwrap();
+    assert!(beschrijving.contains("OPENAEC_APP"), "{beschrijving}");
+    assert!(beschrijving.contains("AI assistant (MCP)"), "{beschrijving}");
+
+    let tikfout = roep_tool_aan(&mut stdin, &mut reader, 91, "gui_start_app", json!({ "timeout": 10 })).await;
+    assert_eq!(tikfout["isError"], json!(true), "{tikfout}");
+    assert!(foutmelding(&tikfout).contains("unknown field"), "{}", foutmelding(&tikfout));
+    assert_eq!(tikfout["structuredContent"]["error_code"], json!("ARGUMENT_ONGELDIG"));
+    for buiten in [json!({ "timeout_s": 1 }), json!({ "timeout_s": 301 })] {
+        let uit = roep_tool_aan(&mut stdin, &mut reader, 92, "gui_start_app", buiten.clone()).await;
+        assert_eq!(uit["isError"], json!(true), "{buiten}: {uit}");
+        assert_eq!(uit["structuredContent"]["error_code"], json!("ARGUMENT_ONGELDIG"), "{buiten}");
+    }
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }

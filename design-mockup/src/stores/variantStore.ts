@@ -237,6 +237,12 @@ export const useVariantStore = create<VariantState>((set, get) => ({
         const gedeeld = {
           nodes: data.nodes,
           beams: [variantBeam],
+          // Het hele model en de platen, zoals bij de toetsing ernaast: anders
+          // ziet de bouwer de kolom onder de ligger niet, en wordt een gewone
+          // overspanning een uitkraging met een twee keer te ruime
+          // doorbuigingsgrens (controle 2026-10, punt K5).
+          alleBeams: data.beams.map((b) => (b.id === variantBeam.id ? variantBeam : b)),
+          plates: data.plates,
           supports: data.supports,
           combinations: data.combinations,
           combinationResults: data.combinationResults,

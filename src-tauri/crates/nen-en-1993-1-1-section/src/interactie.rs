@@ -35,11 +35,24 @@
 //!
 //! Tot V_Ed ≤ V_pl,Rd/2 verandert er niets (6.2.10(2)). Daarboven rekent de
 //! norm met (1 − ρ)·f_y "voor het afschuifoppervlak", ρ = (2V_Ed/V_pl,Rd − 1)²
-//! (6.2.10(3)). Hier is die verlaagde vloeigrens op de HELE doorsnede gezet,
-//! met de grootste ρ van beide richtingen: N_pl,Rd en beide M_pl,Rd gaan met
-//! (1 − ρ) omlaag. Dat is de veilige kant — de flenzen van een I dragen de
-//! dwarskracht in z-richting niet — en het is dezelfde aanpak als de toets
-//! 6.2.8 en die van massief rond.
+//! (6.2.10(3)).
+//!
+//! * Dubbelsymmetrische I met alleen V_z boven de helft (ρ_y = 0, ρ_z < 1):
+//!   het afschuifoppervlak is het lijf, A_w = h_w·t_w. Alleen het lijf krijgt
+//!   (1 − ρ)·f_y: N_pl,V,Rd = (A − ρ·A_w)·f_y/γ_M0, M_pl,y,V,Rd volgens (6.30),
+//!   (W_pl,y − ρ·A_w²/(4·t_w))·f_y/γ_M0, en M_pl,z,V,Rd = (W_pl,z −
+//!   ρ·h_w·t_w²/4)·f_y/γ_M0. De interactie van 6.2.9 loopt daarna op die
+//!   weerstanden, met a = (A − ρ·A_w − 2·b·t_f)/(A − ρ·A_w). Bij klasse 3 is
+//!   de buigweerstand om y die van (6.30), begrensd op W_el,y·f_y/γ_M0 —
+//!   dezelfde M_y,V,Rd als in de toets 6.2.8, zodat beide toetsen bij N = 0
+//!   hetzelfde zeggen. Tot oktober 2026 kreeg ook de I de verlaging over de
+//!   hele doorsnede, en gaf 6.2.10 daardoor dezelfde te lage weerstand als 6.2.8
+//!   (controle 2026-10, punt B6).
+//! * Elke andere doorsnede, en de I met V_y boven de helft: de verlaagde
+//!   vloeigrens op de HELE doorsnede, met de grootste ρ van beide richtingen:
+//!   N_pl,Rd en beide M_pl,Rd gaan met (1 − ρ) omlaag. Dat is de veilige kant,
+//!   en het is dezelfde aanpak als de toets 6.2.8 bij die vormen en die van
+//!   massief rond.
 //!
 //! ## De unity check
 //!
@@ -59,6 +72,14 @@
 //! n → 1 gaat M_N,Rd naar nul en de UC naar oneindig, en bij n > 1 wordt
 //! M_N,Rd negatief. Voor een I-profiel om de y-as komt de evenredige UC neer
 //! op max(m; n + (1 − 0,5a)·m) met m = M_Ed/M_pl,Rd.
+//!
+//! Eén uitzondering, in 6.2.10: werken alleen M_y,Ed en dwarskracht (N_Ed = 0,
+//! M_z,Ed = 0, ρ < 1), dan zegt 6.2.10 hetzelfde als 6.2.8, en dan is de UC in
+//! beide statussen de verhouding M_y,Ed/M_y,V,Rd — dezelfde definitie als
+//! 6.2.8. De evenredige overschrijding schaalt V mee en verlaagt daarmee ρ; tot
+//! oktober 2026 stond er zo voor dezelfde krachten een andere UC dan bij 6.2.8
+//! (controle 2026-10, punt B6). Die verhouding loopt hier niet uit de hand:
+//! zonder N bestaat M_y,V,Rd zolang ρ < 1.
 //!
 //! Is N_Ed ≥ N_pl,Rd, dan zegt de toets dat met zoveel woorden: "N_Ed ≥
 //! N_pl,Rd: de doorsnede bezwijkt al op normaalkracht".
@@ -327,6 +348,11 @@ struct Uitwerking {
     rho: f64,
     /// 1 − ρ.
     factor: f64,
+    /// Is (1 − ρ)·f_y alleen op het lijf gezet (I met alleen V_z boven de
+    /// helft)? Zo niet en ρ > 0, dan op de hele doorsnede.
+    lijf_alleen: bool,
+    /// A_w = h_w·t_w (mm²), alleen gebruikt als `lijf_alleen`.
+    a_w_lijf: f64,
     /// Weerstanden met (1 − ρ)·f_y (kN, kNm).
     n_pl: f64,
     m_pl_y: f64,
@@ -403,14 +429,55 @@ fn uitwerken(
     let rho = rho_y.max(rho_z);
     let factor = 1.0 - rho;
 
+    // ── Alleen het lijf als afschuifoppervlak? ──────────────────────────────
+    // 6.2.10(3) verlaagt f_y "voor het afschuifoppervlak". Bij de
+    // dubbelsymmetrische I met alleen V_z boven de helft is dat het lijf,
+    // A_w = h_w·t_w (6.2.8(5)); zie de moduledocumentatie.
+    let h_w_lijf = p.h_mm - 2.0 * p.tf_mm;
+    let a_w_lijf = h_w_lijf * p.tw_mm;
+    let lijf_alleen = matches!(vorm, Interactievorm::I)
+        && rho_y == 0.0
+        && rho_z > 0.0
+        && rho_z < 1.0
+        && h_w_lijf > 0.0
+        && p.tw_mm > 0.0
+        && p.wpl_y_mm3 > 0.0
+        && a_w_lijf < p.area_mm2;
+
     // ── Weerstanden met (1 − ρ)·f_y ─────────────────────────────────────────
     // Bij ρ ≥ 1 blijft er niets over; geen negatieve weerstanden.
     let fyd = factor.max(0.0) * fy / g0;
-    let n_pl = p.area_mm2 * fyd * 1e-3;
-    let m_pl_y = p.wpl_y_mm3 * fyd * 1e-6;
-    let m_pl_z = p.wpl_z_mm3 * fyd * 1e-6;
-    let m_el_y = p.wel_y_mm3 * fyd * 1e-6;
-    let m_el_z = p.wel_z_mm3 * fyd * 1e-6;
+    let (n_pl, m_pl_y, m_pl_z, m_el_y, m_el_z) = if lijf_alleen {
+        let fyd_vol = fy / g0;
+        let r = rho_z;
+        // (6.30) om y; om z draagt het lijf alleen h_w·t_w²/4 bij aan W_pl,z.
+        let w_pl_y = (p.wpl_y_mm3 - r * a_w_lijf * a_w_lijf / (4.0 * p.tw_mm)).max(0.0);
+        let w_pl_z = (p.wpl_z_mm3 - r * h_w_lijf * p.tw_mm * p.tw_mm / 4.0).max(0.0);
+        // Elastisch om y: (6.30) begrensd op W_el,y, dezelfde M_y,V,Rd als de
+        // toets 6.2.8 bij klasse 3. Om z: de lijfbijdrage h_w·t_w³/12 aan I_z
+        // met (1 − ρ), gedeeld door b/2.
+        let w_el_y = w_pl_y.min(p.wel_y_mm3);
+        let w_el_z = if p.b_mm > 0.0 {
+            (p.wel_z_mm3 - r * h_w_lijf * p.tw_mm.powi(3) / 12.0 / (p.b_mm / 2.0)).max(0.0)
+        } else {
+            p.wel_z_mm3
+        };
+        (
+            (p.area_mm2 - r * a_w_lijf) * fyd_vol * 1e-3,
+            w_pl_y * fyd_vol * 1e-6,
+            w_pl_z * fyd_vol * 1e-6,
+            w_el_y * fyd_vol * 1e-6,
+            w_el_z * fyd_vol * 1e-6,
+        )
+    } else {
+        (
+            p.area_mm2 * fyd * 1e-3,
+            p.wpl_y_mm3 * fyd * 1e-6,
+            p.wpl_z_mm3 * fyd * 1e-6,
+            p.wel_y_mm3 * fyd * 1e-6,
+            p.wel_z_mm3 * fyd * 1e-6,
+        )
+    };
     let n = if n_pl > 0.0 { k.n / n_pl } else if k.n > 0.0 { f64::INFINITY } else { 0.0 };
     let m_res = if ronde_buis { k.my.hypot(k.mz) } else { 0.0 };
 
@@ -423,6 +490,8 @@ fn uitwerken(
         v_res,
         rho,
         factor,
+        lijf_alleen,
+        a_w_lijf,
         n_pl,
         m_pl_y,
         m_pl_z,
@@ -513,8 +582,11 @@ fn uitwerken(
         }
         Interactievorm::I => {
             vrijstelling(&mut u);
-            u.a = if p.b_mm > 0.0 && p.tf_mm > 0.0 {
-                fractie((p.area_mm2 - 2.0 * p.b_mm * p.tf_mm) / p.area_mm2)
+            // Met (1 − ρ)·f_y op het lijf telt het lijf voor ρ·A_w minder mee:
+            // a is de lijffractie van die verminderde doorsnede.
+            let a_v = if lijf_alleen { p.area_mm2 - rho_z * a_w_lijf } else { p.area_mm2 };
+            u.a = if p.b_mm > 0.0 && p.tf_mm > 0.0 && a_v > 0.0 {
+                fractie((a_v - 2.0 * p.b_mm * p.tf_mm) / a_v)
             } else {
                 0.0
             };
@@ -662,7 +734,22 @@ pub fn buiging_en_normaalkracht(
 
     let k = Krachten::uit(&force_state.forces);
     let u = uitwerken(p, grade, klasse, vorm, soort, k);
-    let uc = if u.voldoet {
+    let ronde_buis = matches!(vorm, Interactievorm::RondeBuis);
+    // Alleen buiging om y met dwarskracht (N_Ed = 0, M_z,Ed = 0, ρ < 1): dan zegt
+    // 6.2.10 hetzelfde als 6.2.8, en geldt dezelfde ene UC-definitie,
+    // M_y,Ed/M_y,V,Rd, ook als het criterium niet voldoet. De evenredige
+    // overschrijding (1/λ) zou hier V meeschalen en daarmee ρ verlagen: voor
+    // dezelfde krachten stond er dan een andere UC dan bij 6.2.8 (controle
+    // 2026-10, punt B6: 1,37 tegen 1,53 bij een IPE 300 met V = 300 kN en
+    // M = 200 kNm).
+    let alleen_my_en_v = soort.met_dwarskracht()
+        && !ronde_buis
+        && k.n == 0.0
+        && k.mz == 0.0
+        && k.my > 0.0
+        && u.factor > 0.0;
+    let verhouding = u.voldoet || alleen_my_en_v;
+    let uc = if verhouding {
         uc_bij_voldoen(&u)
     } else {
         evenredige_uc(|l| uitwerken(p, grade, klasse, vorm, soort, k.maal(l)).voldoet)
@@ -673,7 +760,6 @@ pub fn buiging_en_normaalkracht(
 
     let mut notes: Vec<String> = Vec::new();
     let mut deelstappen: Vec<Deelstap> = Vec::new();
-    let ronde_buis = matches!(vorm, Interactievorm::RondeBuis);
 
     // ── ρ (alleen 6.2.10) ───────────────────────────────────────────────────
     if soort.met_dwarskracht() {
@@ -692,6 +778,20 @@ pub fn buiging_en_normaalkracht(
             notes.push(format!(
                 "{v_tekst}, {v_pl_tekst}: de dwarskracht blijft onder V_pl,Rd/2, dus de \
                  weerstanden van 6.2.9 gelden onverminderd (6.2.10(2)), ρ = 0."
+            ));
+        } else if u.lijf_alleen {
+            notes.push(format!(
+                "{v_tekst}, {v_pl_tekst}: boven V_pl,Rd/2 geldt ρ = (2·V_Ed/V_pl,Rd − 1)² \
+                 (6.2.10(3)): ρ_z = {}. De verlaagde vloeigrens (1 − ρ)·f_y geldt alleen voor het \
+                 afschuifoppervlak, hier het lijf met A_w = h_w·t_w = {} mm²: N_pl,V,Rd = \
+                 (A − ρ·A_w)·f_y/γ_M0 = {} kN, M_pl,y,V,Rd = (W_pl,y − ρ·A_w²/(4·t_w))·f_y/γ_M0 = \
+                 {} kNm (6.30) en M_pl,z,V,Rd = (W_pl,z − ρ·h_w·t_w²/4)·f_y/γ_M0 = {} kNm. De \
+                 interactie van 6.2.9 loopt op die weerstanden.",
+                nl(u.rho_z, 4),
+                nl(u.a_w_lijf, 1),
+                nl(u.n_pl, 3),
+                nl(u.m_pl_y, 3),
+                nl(u.m_pl_z, 3)
             ));
         } else {
             notes.push(format!(
@@ -749,13 +849,24 @@ pub fn buiging_en_normaalkracht(
         "Relatieve normaalkracht",
         "n",
         "art. 6.2.9.1(5)",
-        format!(r"n = \frac{{N_{{Ed}}}}{{{rho_tekst}N_{{pl,Rd}}}}"),
-        if u.rho > 0.0 {
+        if u.lijf_alleen {
+            r"n = \frac{N_{Ed}}{(A - \rho A_w) f_y/\gamma_{M0}}".to_string()
+        } else {
+            format!(r"n = \frac{{N_{{Ed}}}}{{{rho_tekst}N_{{pl,Rd}}}}")
+        },
+        if u.lijf_alleen {
+            format!(r"n = \frac{{{}}}{{{}}}", lx(k.n, 3), lx(u.n_pl, 3))
+        } else if u.rho > 0.0 {
             format!(r"n = \frac{{{}}}{{{} \cdot {}}}", lx(k.n, 3), lx(u.factor, 4), lx(n_pl_vol, 3))
         } else {
             format!(r"n = \frac{{{}}}{{{}}}", lx(k.n, 3), lx(n_pl_vol, 3))
         },
-        vec![nv(r"N_{Ed}", k.n, "kN"), nv(r"N_{pl,Rd}", n_pl_vol, "kN")],
+        if u.lijf_alleen {
+            // De noemer die hierboven is ingevuld: N_pl,V,Rd met (1 − ρ)·f_y op het lijf.
+            vec![nv(r"N_{Ed}", k.n, "kN"), nv(r"N_{pl,V,Rd}", u.n_pl, "kN")]
+        } else {
+            vec![nv(r"N_{Ed}", k.n, "kN"), nv(r"N_{pl,Rd}", n_pl_vol, "kN")]
+        },
         Some(u.n),
         "-",
         vec![
@@ -912,24 +1023,54 @@ pub fn buiging_en_normaalkracht(
                         ));
                     }
                     if matches!(vorm, Interactievorm::I) {
+                        // Met (1 − ρ)·f_y alleen op het lijf telt het lijf voor
+                        // ρ·A_w minder mee; a is dan de lijffractie van die
+                        // verminderde doorsnede (zie `uitwerken`), en zo staat hij
+                        // er ook ingevuld.
+                        let (formule_a, ingevuld_a, variabelen_a) = if u.lijf_alleen {
+                            let a_v = p.area_mm2 - u.rho_z * u.a_w_lijf;
+                            (
+                                r"a = \frac{A - \rho A_w - 2 b t_f}{A - \rho A_w} \leq 0{,}5".to_string(),
+                                format!(
+                                    r"a = \frac{{{} - 2 \cdot {} \cdot {}}}{{{}}}",
+                                    lx(a_v, 1),
+                                    lx(p.b_mm, 1),
+                                    lx(p.tf_mm, 2),
+                                    lx(a_v, 1)
+                                ),
+                                vec![
+                                    nv("A", p.area_mm2, "mm²"),
+                                    nv(r"\rho", u.rho_z, "-"),
+                                    nv("A_w", u.a_w_lijf, "mm²"),
+                                    nv("b", p.b_mm, "mm"),
+                                    nv("t_f", p.tf_mm, "mm"),
+                                ],
+                            )
+                        } else {
+                            (
+                                r"a = \frac{A - 2 b t_f}{A} \leq 0{,}5".to_string(),
+                                format!(
+                                    r"a = \frac{{{} - 2 \cdot {} \cdot {}}}{{{}}}",
+                                    lx(p.area_mm2, 1),
+                                    lx(p.b_mm, 1),
+                                    lx(p.tf_mm, 2),
+                                    lx(p.area_mm2, 1)
+                                ),
+                                vec![
+                                    nv("A", p.area_mm2, "mm²"),
+                                    nv("b", p.b_mm, "mm"),
+                                    nv("t_f", p.tf_mm, "mm"),
+                                ],
+                            )
+                        };
                         deelstappen.push(stap(
                             "a",
                             "Lijfaandeel van de doorsnede",
                             "a",
                             "art. 6.2.9.1(5)",
-                            r"a = \frac{A - 2 b t_f}{A} \leq 0{,}5".to_string(),
-                            format!(
-                                r"a = \frac{{{} - 2 \cdot {} \cdot {}}}{{{}}}",
-                                lx(p.area_mm2, 1),
-                                lx(p.b_mm, 1),
-                                lx(p.tf_mm, 2),
-                                lx(p.area_mm2, 1)
-                            ),
-                            vec![
-                                nv("A", p.area_mm2, "mm²"),
-                                nv("b", p.b_mm, "mm"),
-                                nv("t_f", p.tf_mm, "mm"),
-                            ],
+                            formule_a,
+                            ingevuld_a,
+                            variabelen_a,
                             Some(u.a),
                             "-",
                             vec![format!(
@@ -1210,7 +1351,7 @@ pub fn buiging_en_normaalkracht(
 
     // ── De unity check ──────────────────────────────────────────────────────
     let biaxiaal = !ronde_buis && k.my > 0.0 && k.mz > 0.0;
-    let (uc_ed, uc_rd, uc_formule): (f64, f64, String) = if !u.voldoet {
+    let (uc_ed, uc_rd, uc_formule): (f64, f64, String) = if !verhouding {
         (uc, 1.0, r"1/\lambda".to_string())
     } else {
         match (u.criterium, klasse_12(klasse)) {
@@ -1221,7 +1362,14 @@ pub fn buiging_en_normaalkracht(
             _ => (u.lhs, 1.0, r"\Sigma".to_string()),
         }
     };
-    let uc_toelichting = if !u.voldoet {
+    let uc_toelichting = if !u.voldoet && alleen_my_en_v {
+        format!(
+            "Het criterium voldoet niet. Er werken alleen M_y,Ed en dwarskracht (N_Ed = 0, \
+             M_z,Ed = 0): de unity check is dan, net als bij 6.2.8, de verhouding M_y,Ed/M_y,V,Rd = \
+             {} — één definitie, of het criterium nu voldoet of niet.",
+            nl(uc, 3)
+        )
+    } else if !u.voldoet {
         format!(
             "Het criterium voldoet niet. De unity check is de EVENREDIGE overschrijding: alle \
              snedekrachten (N, V en M) moeten samen door {} worden gedeeld om op de \

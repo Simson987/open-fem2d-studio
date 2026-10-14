@@ -54,6 +54,7 @@ import {
   type OpenFem3DMemberLoad,
   type OpenFem3DMemberPointLoad,
   type OpenFem3DModel,
+  type OpenFem3DEnvelopePanel,
   type OpenFem3DNodalLoad,
   type OpenFem3DNode,
   type OpenFem3DSupport,
@@ -1118,6 +1119,7 @@ class Importeur {
   private readonly axiaal = new Map<string, { nodeId: number; caseId: number; f: V3 }>();
   private readonly vlakLasten = new Map<string, VlakLast>();
   readonly loadPanels: OpenFem3DLoadPanel[] = [];
+  readonly envelopePanels: OpenFem3DEnvelopePanel[] = [];
   /** Per belastingvlak (index = id − 1) het vlak waar het vandaan komt. */
   private readonly panelBron: VlakLast[] = [];
   readonly combinations: LoadCombination[] = [];
@@ -1609,6 +1611,60 @@ class Importeur {
     if (janeeVan(arg(bound, 1)) === false) schoon.reverse();
     if (schoon.length < 3) return null;
     return { knopen: schoon, punten: schoon.map((id) => { const k = this.nodeById.get(id)!; return [k.x, k.y, k.z] as V3; }) };
+  }
+
+  /** OpenFEM-schil uit een bouwkundig IfcCovering, zonder rekenstijfheid. */
+  schilpanelen(): void {
+    for (const covering of this.ifc.vanType("IFCCOVERING")) {
+      const props = (this.ifc.eigenschappen.get(covering.id) ?? [])
+        .filter((property) => property.pset === "OpenFEM3D_Schilpaneel");
+      if (props.length === 0) continue;
+      const property = (naam: string) => props.find((item) => item.naam === naam)?.waarde;
+      const items = this.meetkunde.topologie(covering);
+      const faces = items.flatMap((item) => item.type === "IFCFACEBASEDSURFACEMODEL"
+          ? refsVan(arg(item, 0)).flatMap((setId) => refsVan(arg(this.ifc.get(setId), 0)))
+            .map((id) => this.ifc.get(id)).filter((face): face is StepRecord => !!face)
+          : item.type === "IFCFACE" ? [item] : []);
+      const face = faces[0];
+      if (!face) {
+        this.meldingen.voeg("nietOndersteund", "Schilpaneel zonder leesbaar IFC-vlak overgeslagen");
+        continue;
+      }
+      const bounds = refsVan(arg(face, 0)).map((id) => this.ifc.get(id))
+        .filter((bound): bound is StepRecord => !!bound);
+      const outer = bounds.find((bound) => bound.type === "IFCFACEOUTERBOUND");
+      const trafo = this.trafoVan(covering);
+      const boundary = outer ? this.lus(outer, trafo) : null;
+      if (!boundary) {
+        this.meldingen.voeg("nietOndersteund", "Schilpaneel met onleesbare buitenrand overgeslagen");
+        continue;
+      }
+      const openings = bounds.filter((bound) => bound !== outer).map((bound, index) => {
+        const loop = this.lus(bound, trafo);
+        return loop ? { id: index + 1, nodeIds: loop.knopen } : null;
+      });
+      if (openings.some((opening) => !opening)) {
+        this.meldingen.voeg("nietOndersteund", "Schilpaneel met onleesbare opening overgeslagen");
+        continue;
+      }
+      const rawSpan = property("Overspanningsrichting");
+      const spanParts = typeof rawSpan === "string" ? rawSpan.split(",").map(Number) : [];
+      const spanDirection = spanParts.length === 3 && spanParts.every(Number.isFinite)
+        ? { x: spanParts[0], y: spanParts[1], z: spanParts[2] } : undefined;
+      const distribution = property("Afdracht") === "oneWay" && spanDirection ? "oneWay" : "twoWay";
+      const weight = property("BekledingsgewichtKNPerM2");
+      this.envelopePanels.push({
+        id: this.envelopePanels.length + 1,
+        nodeIds: boundary.knopen,
+        type: property("Type") === "roof" || enumVan(arg(covering, 8)) === "ROOFING" ? "roof" : "facade",
+        distribution,
+        ...(spanDirection ? { spanDirection } : {}),
+        ...(property("BuitenwaartsOmgekeerd") === true ? { flipOuterSide: true } : {}),
+        ...(openings.length ? { openings: openings as { id: number; nodeIds: number[] }[] } : {}),
+        ...(typeof weight === "number" ? { claddingWeightKnPerM2: weight } : {}),
+        ...((tekstVan(arg(covering, 2)) ?? "").trim() ? { name: tekstVan(arg(covering, 2))!.trim() } : {}),
+      });
+    }
   }
 
   vlakLijst(): void {
@@ -2259,6 +2315,10 @@ class Importeur {
     const gebruikt = new Set<number>();
     for (const s of this.staven) { gebruikt.add(s.beam.startNodeId); gebruikt.add(s.beam.endNodeId); }
     for (const p of this.loadPanels) for (const id of p.nodeIds) gebruikt.add(id);
+    for (const p of this.envelopePanels) {
+      for (const id of p.nodeIds) gebruikt.add(id);
+      for (const opening of p.openings ?? []) for (const id of opening.nodeIds) gebruikt.add(id);
+    }
     for (const l of this.loads) gebruikt.add(l.nodeId);
     const los = this.nodes.filter((k) => !gebruikt.has(k.id));
     if (los.length === 0) return;
@@ -2280,6 +2340,10 @@ class Importeur {
     this.supports.splice(0, this.supports.length, ...opleggingen);
     for (const l of this.loads) l.nodeId = nieuw.get(l.nodeId)!;
     for (const p of this.loadPanels) p.nodeIds = p.nodeIds.map((id) => nieuw.get(id)!);
+    for (const p of this.envelopePanels) {
+      p.nodeIds = p.nodeIds.map((id) => nieuw.get(id)!);
+      for (const opening of p.openings ?? []) opening.nodeIds = opening.nodeIds.map((id) => nieuw.get(id)!);
+    }
     for (const [i, d] of this.diaphragms.entries()) {
       d.nodeIds = d.nodeIds.filter((id) => nieuw.has(id)).map((id) => nieuw.get(id)!);
       this.schijven[i].knopen = d.nodeIds.length;
@@ -2298,6 +2362,7 @@ class Importeur {
       nodes: this.nodes, beams: this.staven.map((s) => s.beam), supports: this.supports,
       loads: this.loads, memberLoads: this.memberLoads, memberPointLoads: this.memberPointLoads,
       thermalLoads: [], plates: [], surfaceLoads: [], loadPanels: this.loadPanels,
+      envelopePanels: this.envelopePanels,
       ...(this.diaphragms.length > 0 ? { diaphragms: this.diaphragms } : {}),
     };
     let model3d: OpenFem3DModel;
@@ -2448,6 +2513,7 @@ export function importeerIfcAnalyseModel(
   importeur.tussenknopen();
   importeur.eindscharnieren();
   importeur.vlakLijst();
+  importeur.schilpanelen();
   importeur.schijfLijst();
   importeur.gevallen();
   importeur.lasten();

@@ -97,12 +97,12 @@ mod tests {
             members.push(Member3D {
                 id: index + 1, start_node_id: i, end_node_id: j, material_id: 1, section_id: 1,
                 releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: true,
-                bedding: None,
+                bedding: None, part_section_ids: None,
             });
         }
         SolveRequest3D {
             schema_version: 1, analysis: AnalysisKind::Linear, nodes,
-            materials: vec![Material3D { id: 1, name: "S235".into(), e_mpa: 210_000.0, nu: 0.3, alpha_per_k: None }],
+            materials: vec![Material3D { id: 1, name: "S235".into(), e_mpa: 210_000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
             sections: vec![Section3D { id: 1, name: "strip".into(), area_m2: 5e-4, iy_m4: 1e-8, iz_m4: 1e-8,
                 torsion_j_m4: 1e-8, shear_area_y_m2: None, shear_area_z_m2: None }],
             members, supports: vec![], nodal_loads: vec![], member_loads: vec![], member_point_loads: vec![],

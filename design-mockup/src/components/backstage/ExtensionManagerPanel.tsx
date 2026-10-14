@@ -1,215 +1,100 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useExtensieStore } from "../../extensies/extensieStore";
 import "./ExtensionManagerPanel.css";
-
-interface InstalledExtension {
-  id: string;
-  name: string;
-  version: string;
-  description: string;
-  author: string;
-  category: string;
-  enabled: boolean;
-}
-
-interface CatalogEntry {
-  id: string;
-  name: string;
-  version: string;
-  description: string;
-  author: string;
-  category: string;
-}
-
-const SAMPLE_INSTALLED: InstalledExtension[] = [
-  {
-    id: "ifc-importer",
-    name: "IFC Importer",
-    version: "1.0.0",
-    description: "Import IFC4 STEP files into the application",
-    author: "OpenAEC Foundation",
-    category: "Import/Export",
-    enabled: true,
-  },
-  {
-    id: "pdf-export",
-    name: "PDF Export",
-    version: "0.9.0",
-    description: "Export reports as PDF using OpenAEC Report Generator",
-    author: "OpenAEC Foundation",
-    category: "Reporting",
-    enabled: true,
-  },
-];
-
-const SAMPLE_CATALOG: CatalogEntry[] = [
-  {
-    id: "excel-importer",
-    name: "Excel Importer",
-    version: "1.2.0",
-    description: "Import data from Excel spreadsheets (.xlsx)",
-    author: "Community",
-    category: "Import/Export",
-  },
-  {
-    id: "bonsai-sync",
-    name: "Bonsai Live Sync",
-    version: "0.5.0",
-    description: "Sync IFC models with Bonsai/Blender via WebSocket",
-    author: "OpenAEC Foundation",
-    category: "Utility",
-  },
-  {
-    id: "calculation-engine",
-    name: "Structural Calc Engine",
-    version: "0.3.0",
-    description: "Basic structural calculation blocks for reports",
-    author: "Community",
-    category: "Calculation",
-  },
-];
-
-const CATEGORY_COLORS: Record<string, string> = {
-  "Import/Export": "#22d3ee",
-  Calculation: "#60a5fa",
-  Reporting: "#a78bfa",
-  Utility: "#a1a1aa",
-  Other: "#71717a",
-};
-
-/** Categorie → i18n-sleutel onder extensionManager.category. */
-const CATEGORY_KEYS: Record<string, string> = {
-  "Import/Export": "importExport",
-  Calculation: "calculation",
-  Reporting: "reporting",
-  Utility: "utility",
-  Other: "other",
-};
 
 export default function ExtensionManagerPanel() {
   const { t } = useTranslation("backstage");
-  const [tab, setTab] = useState<"installed" | "browse">("installed");
-  const [search, setSearch] = useState("");
-  const [extensions, setExtensions] = useState(SAMPLE_INSTALLED);
+  const kaarten = useExtensieStore((state) => state.kaarten);
+  const laadfout = useExtensieStore((state) => state.fout);
+  const laden = useExtensieStore((state) => state.laden);
+  const zetIngeschakeld = useExtensieStore((state) => state.zetIngeschakeld);
+  const koppelMap = useExtensieStore((state) => state.koppelMap);
+  const ontkoppel = useExtensieStore((state) => state.ontkoppel);
+  const installeerZip = useExtensieStore((state) => state.installeerZip);
+  const verwijder = useExtensieStore((state) => state.verwijder);
+  const [zoektekst, setZoektekst] = useState("");
+  const [actieFout, setActieFout] = useState<string | null>(null);
+  const [bezig, setBezig] = useState(false);
 
-  const toggleExtension = (id: string) => {
-    setExtensions((prev) =>
-      prev.map((ext) => (ext.id === id ? { ...ext, enabled: !ext.enabled } : ext))
-    );
-  };
+  useEffect(() => { void laden(); }, [laden]);
 
-  // Omschrijving en categorie zoals ze in de gekozen taal getoond worden.
-  const descriptionOf = (ext: CatalogEntry) =>
-    t(`extensionManager.desc.${ext.id}`);
-  const categoryOf = (ext: CatalogEntry) =>
-    CATEGORY_KEYS[ext.category] ? t(`extensionManager.category.${CATEGORY_KEYS[ext.category]}`) : ext.category;
+  async function voerUit(actie: () => Promise<void>) {
+    setBezig(true);
+    setActieFout(null);
+    try { await actie(); }
+    catch (fout) { setActieFout(fout instanceof Error ? fout.message : String(fout)); }
+    finally { setBezig(false); }
+  }
 
-  const filteredInstalled = extensions.filter(
-    (e) =>
-      !search ||
-      e.name.toLowerCase().includes(search.toLowerCase()) ||
-      descriptionOf(e).toLowerCase().includes(search.toLowerCase())
-  );
+  async function kiesZip() {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const pad = await open({ multiple: false, filters: [{ name: "ZIP", extensions: ["zip"] }] });
+    if (!pad || Array.isArray(pad) || !window.confirm(t("extensionManager.trustWarning"))) return;
+    await installeerZip(pad);
+  }
 
-  const filteredCatalog = SAMPLE_CATALOG.filter(
-    (e) =>
-      !search ||
-      e.name.toLowerCase().includes(search.toLowerCase()) ||
-      descriptionOf(e).toLowerCase().includes(search.toLowerCase())
-  );
+  async function kiesMap() {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const map = await open({ directory: true, multiple: false });
+    if (!map || Array.isArray(map) || !window.confirm(t("extensionManager.trustWarning"))) return;
+    await koppelMap(map);
+  }
+
+  const zichtbaar = kaarten.filter((kaart) => {
+    const tekst = `${kaart.manifest?.name ?? ""} ${kaart.manifest?.description ?? ""} ${kaart.map}`.toLocaleLowerCase();
+    return tekst.includes(zoektekst.toLocaleLowerCase());
+  });
 
   return (
     <div className="ext-manager">
       <h2 className="ext-manager-title">{t("extensions")}</h2>
-
-      <div className="ext-tabs">
-        <button
-          className={`ext-tab${tab === "installed" ? " active" : ""}`}
-          onClick={() => setTab("installed")}
-        >
-          {t("extInstalled")} ({extensions.length})
-        </button>
-        <button
-          className={`ext-tab${tab === "browse" ? " active" : ""}`}
-          onClick={() => setTab("browse")}
-        >
-          {t("extBrowse")}
-        </button>
-      </div>
-
+      <p className="ext-manager-hint">{t("extensionManager.intro")}</p>
       <div className="ext-search-row">
-        <input
-          type="text"
-          className="ext-search"
-          placeholder={t("extSearchPlaceholder")}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <button className="ext-upload-btn" title={t("extInstallFile")}>
-          + ZIP
+        <input type="search" className="ext-search" value={zoektekst}
+          placeholder={t("extSearchPlaceholder")} onChange={(event) => setZoektekst(event.target.value)} />
+        <button className="ext-upload-btn" disabled={bezig} onClick={() => { void voerUit(kiesZip); }}>+ ZIP</button>
+        <button className="ext-upload-btn" disabled={bezig} onClick={() => { void voerUit(kiesMap); }}>
+          {t("extensionManager.linkFolder")}
+        </button>
+        <button className="ext-upload-btn" disabled={bezig} onClick={() => { void voerUit(laden); }}>
+          {t("extensionManager.reload")}
         </button>
       </div>
-
+      {(actieFout || laadfout) && <p className="ext-error" role="alert">{actieFout || laadfout}</p>}
+      {zichtbaar.length === 0 && !actieFout && !laadfout &&
+        <p className="ext-manager-hint">{t("extensionManager.empty")}</p>}
       <div className="ext-list">
-        {tab === "installed" &&
-          filteredInstalled.map((ext) => (
-            <div key={ext.id} className={`ext-card${ext.enabled ? "" : " disabled"}`}>
+        {zichtbaar.map((kaart) => {
+          const manifest = kaart.manifest;
+          return (
+            <div key={kaart.map} className={`ext-card${kaart.ingeschakeld ? "" : " disabled"}`}>
               <div className="ext-card-header">
-                <span
-                  className="ext-category-badge"
-                  style={{ background: CATEGORY_COLORS[ext.category] || "#71717a" }}
-                >
-                  {categoryOf(ext)}
-                </span>
-                <span className="ext-version">v{ext.version}</span>
+                <span className="ext-category-badge">{manifest?.category || t("extensionManager.other")}</span>
+                {manifest && <span className="ext-version">v{manifest.version}</span>}
               </div>
               <div className="ext-card-body">
-                <strong className="ext-name">{ext.name}</strong>
-                <p className="ext-desc">{descriptionOf(ext)}</p>
-                <span className="ext-author">{ext.author}</span>
+                <strong className="ext-name">{manifest?.name || kaart.map.split(/[\\/]/).pop()}</strong>
+                {manifest?.description && <p className="ext-desc">{manifest.description}</p>}
+                <span className="ext-author">{manifest?.author || ""}</span>
+                {manifest && <p className="ext-types">{manifest.importers.flatMap((importeur) => importeur.fileExtensions.map((ext) => `.${ext}`)).join(", ")}</p>}
+                <p className="ext-path">{kaart.map}</p>
+                {kaart.fout && <p className="ext-error" role="alert">{kaart.fout}</p>}
               </div>
               <div className="ext-card-actions">
-                <label className="ext-toggle">
-                  <input
-                    type="checkbox"
-                    checked={ext.enabled}
-                    onChange={() => toggleExtension(ext.id)}
-                  />
-                  <span className="ext-toggle-slider" />
-                </label>
+                {manifest && <label className="ext-enabled-label">
+                  <input type="checkbox" checked={kaart.ingeschakeld} disabled={bezig}
+                    onChange={(event) => { void voerUit(() => zetIngeschakeld(manifest.id, event.target.checked)); }} />
+                  {t("extensionManager.enabled")}
+                </label>}
+                {kaart.bron !== "omgeving" && <button className="ext-install-btn" disabled={bezig}
+                  onClick={() => { void voerUit(() => kaart.bron === "gekoppeld" ? ontkoppel(kaart.map) : verwijder(kaart.map)); }}>
+                  {t(kaart.bron === "gekoppeld" ? "extensionManager.unlink" : "extensionManager.remove")}
+                </button>}
               </div>
             </div>
-          ))}
-
-        {tab === "browse" &&
-          filteredCatalog.map((ext) => {
-            const isInstalled = extensions.some((e) => e.id === ext.id);
-            return (
-              <div key={ext.id} className="ext-card">
-                <div className="ext-card-header">
-                  <span
-                    className="ext-category-badge"
-                    style={{ background: CATEGORY_COLORS[ext.category] || "#71717a" }}
-                  >
-                    {categoryOf(ext)}
-                  </span>
-                  <span className="ext-version">v{ext.version}</span>
-                </div>
-                <div className="ext-card-body">
-                  <strong className="ext-name">{ext.name}</strong>
-                  <p className="ext-desc">{descriptionOf(ext)}</p>
-                  <span className="ext-author">{ext.author}</span>
-                </div>
-                <div className="ext-card-actions">
-                  {isInstalled ? (
-                    <span className="ext-installed-badge">{t("extInstalledBadge")}</span>
-                  ) : (
-                    <button className="ext-install-btn">{t("extInstallBtn")}</button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          );
+        })}
       </div>
     </div>
   );

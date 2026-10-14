@@ -307,6 +307,18 @@ log("\n[7] Kopieer: enkelvoudige selecties en platen");
   check("lege selectie → null", computeSelectionCopy(cur, null, 100, 0) === null);
   check("lastselectie → null",
     computeSelectionCopy(cur, { type: "load", id: 1 }, 100, 0) === null);
+
+  // Ctrl+C bewaart de bron. Na verwijderen van de oorspronkelijke knoop moet
+  // Ctrl+V nog dezelfde oplegging plakken, met een nieuw id in het doelmodel.
+  const bron = { ...cur, supports: [{ nodeId: 1, type: "fixed" }] };
+  const doel = { nodes: [{ id: 9, x: 9000, z: 0 }], beams: [], plates: [], supports: [], loads: [] };
+  const geplakt = computeSelectionCopy(bron, { type: "node", id: 1 }, 500, 0, doel);
+  check("plakken gebruikt bewaarde bron en actuele doel-id's",
+    geplakt.nodes.length === 2 && geplakt.nodes[1].id === 10 && geplakt.nodes[1].x === 500);
+  check("oplegging wordt op de geplakte knoop herplaatst",
+    geplakt.supports.length === 1 && geplakt.supports[0].nodeId === 10 && geplakt.supports[0].type === "fixed");
+  check("doelmodel blijft onveranderd voor de undo-snapshot",
+    doel.nodes.length === 1 && doel.supports.length === 0);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

@@ -61,6 +61,7 @@ export const SIDECAR_OPS = [
   // projectbestand: de catalogus, en één commando uitvoeren. Zie apiSidecar.ts.
   "api_catalogus",
   "api_uitvoeren",
+  "extensie_importeren",
 ] as const;
 
 export type SidecarOp = (typeof SIDECAR_OPS)[number];

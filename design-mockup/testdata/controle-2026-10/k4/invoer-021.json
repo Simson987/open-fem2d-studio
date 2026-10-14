@@ -1,0 +1,90 @@
+{
+ "tool": "open-fem-studio__solve_open_fem_3d",
+ "omschrijving": "021 run C: pendelstaaf 5 m, 1 element, N=300 kN, q=2 kN/m, P-Delta + knik",
+ "arguments": {
+  "nodes": [
+   {
+    "id": 1,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   {
+    "id": 2,
+    "x": 5,
+    "y": 0,
+    "z": 0
+   }
+  ],
+  "materials": [
+   {
+    "id": 1,
+    "name": "staal",
+    "eMpa": 210000,
+    "nu": 0.3
+   }
+  ],
+  "sections": [
+   {
+    "id": 1,
+    "name": "sym",
+    "areaM2": 0.005383,
+    "iyM4": 3.692e-05,
+    "izM4": 3.692e-05,
+    "torsionJM4": 2.1e-07
+   }
+  ],
+  "members": [
+   {
+    "id": 1,
+    "startNodeId": 1,
+    "endNodeId": 2,
+    "materialId": 1,
+    "sectionId": 1
+   }
+  ],
+  "supports": [
+   {
+    "nodeId": 1,
+    "ux": true,
+    "uy": true,
+    "uz": true,
+    "rx": true,
+    "ry": false,
+    "rz": false
+   },
+   {
+    "nodeId": 2,
+    "ux": false,
+    "uy": true,
+    "uz": true,
+    "rx": false,
+    "ry": false,
+    "rz": false
+   }
+  ],
+  "nodalLoads": [
+   {
+    "id": 1,
+    "nodeId": 2,
+    "fx": -300,
+    "fy": 0,
+    "fz": 0,
+    "mx": 0,
+    "my": 0,
+    "mz": 0
+   }
+  ],
+  "memberLoads": [
+   {
+    "id": 1,
+    "memberId": 1,
+    "globalDirection": "z",
+    "qStartKnPerM": -2,
+    "qEndKnPerM": -2
+   }
+  ],
+  "analysis": "p-delta",
+  "bucklingModes": 3
+ }
+}

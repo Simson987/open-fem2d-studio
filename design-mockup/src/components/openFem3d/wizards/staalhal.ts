@@ -1,5 +1,5 @@
 /**
- * Stalen hal als 3D-raamwerk — één pure generator.
+ * Hal van staal of hout als 3D-raamwerk — één pure generator.
  *
  * De wizard in de app, de opdracht `staalhal_maken` van het bedieningskanaal
  * en de MCP-tool `open_fem_3d_staalhal_maken` roepen allemaal DEZE functies
@@ -11,28 +11,46 @@
  *  - x langs de hal (lengte), y dwars (overspanning), z omhoog; peil 0 = z 0.
  *  - Spanten op x = i · L/n (n vakken). Een opgegeven spantafstand is een
  *    MAXIMUM: n = ⌈L/s⌉ en de werkelijke h.o.h.-afstand is L/n.
- *  - Per spant twee kolommen (y = 0 en y = B) en een spantligger over de
- *    dakknopen. Kolommen zijn 90° om hun as gedraaid: het lijf ligt in het
- *    spantvlak en de lokale z-as wijst naar +Y.
+ *  - Per spant een kolom op elke grens van de gelijke overspanningen en een
+ *    spantligger over de dakknopen. Kolommen zijn 90° om hun as gedraaid:
+ *    het lijf ligt in het spantvlak en de lokale z-as wijst naar +Y.
  *  - Dakknopen op y = j · B/m, met m velden. De gordingafstand is een
  *    MAXIMUM, horizontaal gemeten; bij een zadeldak is m even zodat de nok een
  *    knoop is.
  *  - Gordingen (binnen) en randliggers (langs de goten) lopen van spant tot
  *    spant en zijn aan beide einden scharnierend (My en Mz vrij).
  *  - Verbanden (kruizen, scharnierend) in de gekozen vakken: dakverband in elk
- *    gordingveld, wandverband in beide langsgevels.
+ *    gordingveld, wandverband in beide langsgevels, optioneel een kruis per
+ *    overspanning in beide kopgevelvlakken. Optioneel trek-alleen;
+ *    de 3D-kern bepaalt de actieve diagonalen met de kruisregel.
  *
  * BELASTINGEN (per m² HORIZONTALE PROJECTIE, zoals het oorspronkelijke
- * voorbeeldmodel): dakafwerking (G), sneeuw (S) en windzuiging op het dak als
- * lijnlast op de gordingen met hun invloedsbreedte; wind dwars (+Y) als
+ * voorbeeldmodel): dakafwerking (G), sneeuw (S), optioneel dakgebruik (Q,
+ * categorie H) en windzuiging op het dak als lijnlast op de gordingen met
+ * hun invloedsbreedte; wind dwars (+Y) als
  * lijnlast op de kolommen (loef druk, lij zuiging); wind langs (+X) als
  * knooplasten op de dakrand van het eerste spant (de helft van de kopgevel,
  * de andere helft gaat via de gevelstijlen rechtstreeks naar de fundering).
  * Het eigen gewicht staat in het vaste geval "Eigen gewicht" en wordt bij het
  * rekenen uit profiel, materiaal en geometrie afgeleid (ρ · A · g).
  *
+ * VERLOPEND PROFIEL (issue #73). Een groep kan een eindprofiel krijgen
+ * (`profielEind`), met dezelfde keuring als elke verlopende staaf
+ * (`bepaalVerloop`):
+ *  - kolom: van de voet (begin) naar de kop (eind), één staaf;
+ *  - spantligger: van de goot (begin) naar het midden van de overspanning
+ *    (eind), aan beide zijden gelijk — bij een zadeldak is dat de nok. De
+ *    ligger bestaat uit staven tussen de dakknopen; elke staaf verloopt van
+ *    de doorsnede op haar beginknoop naar die op haar eindknoop, zodat de
+ *    doorsnede over de hele ligger lineair verloopt zonder sprong. Een stalen
+ *    tussendoorsnede is een eigen gelaste I (zoals bij het splitsen van een
+ *    verlopende staaf); die staan in `eigenDoorsneden` van het resultaat en
+ *    gaan mee in het projectbestand. Het midden moet een dakknoop zijn (een
+ *    even aantal gordingvelden);
+ *  - gording, randligger en verband: geen verloop (geweigerd met reden).
+ *
  * FUNDERING. Standaard vaste opleggingen onder de kolommen (ingeklemd of
- * scharnierend). Of een BALKROOSTER: betonnen funderingsbalken langs beide
+ * scharnierend). Of een BALKROOSTER: betonnen funderingsbalken langs alle
  * kolomlijnen en dwarsbalken onder elk spant of alleen onder de kopspanten,
  * met hun systeemlijn op een diepte d onder peil. Ligt het rooster dieper dan
  * peil, dan verbindt een betonnen poer (doorsnede van de balk, lange zijde in
@@ -47,12 +65,17 @@
  * veld en een Nederlandse melding (voor API-clients).
  */
 import type { LoadCase, StructuralGrid } from "../../fem/femTypes";
-import { CONCRETE_E_CM, resolveSection, dichtheidVanMateriaal, G } from "../../../lib/sectionResolver";
+import {
+  CONCRETE_E_CM, bepaalVerloop, dichtheidVanMateriaal, G, matenOpPositie, resolveSection, type VerlopendeDoorsnede,
+} from "../../../lib/sectionResolver";
+import { tussenProfielVoorSplitsing } from "../../../lib/verloopSplitsen";
+import type { EigenDoorsnede } from "../../../lib/profieleditor/types";
+import { openFem3DVerloopIndelingVan } from "../openFem3dVerloop";
 import { STEEL_GRADES } from "../../../lib/steelGrades";
+import { matchSupportedTimberGrade, parseTimberRectMm } from "../../../lib/timberCheckBuilder";
 import { profileLookupKey } from "../../../lib/steelCheckBuilder";
 import { STEEL_SECTION_DIMS } from "../../../lib/steelSectionDims.generated";
 import {
-  berekenStuwdruk,
   cpeWand,
   CSCD_BRON,
   CSCD_GRENSHOOGTE_M,
@@ -61,6 +84,9 @@ import {
   type TerreinCategorie,
   type Windgebied,
 } from "../../../lib/wind/windEurocode";
+import { calculateWindReferencePressure, NEDERLANDSE_WINDROUTE,
+  requireWindCodeId, windCodeIdFromProjectInfo } from "../../../lib/wind/windCodeRoute";
+import { DEFAULT_UITGANGSPUNTEN } from "../../../lib/projectBasisDefaults";
 import {
   isOpenFem3DGlobalMemberLoad,
   openFem3DGlobalDirectionVector,
@@ -88,6 +114,11 @@ export type StaalhalWindBron = "handmatig" | "stuwdruk";
 export interface StaalhalProfiel {
   profiel: string;
   materiaal: string;
+  /**
+   * Eindprofiel van een verlopende staaf (#73); ontbreekt = prismatisch. Alleen
+   * bij kolom (voet → kop) en spantligger (goot → midden van de overspanning).
+   */
+  profielEind?: string;
 }
 
 /**
@@ -97,6 +128,8 @@ export interface StaalhalProfiel {
 export interface StaalhalParameters {
   lengteMm: number;
   breedteMm: number;
+  /** Gelijke overspanningen dwars op de hal; op elke grens staat een kolomlijn. */
+  aantalOverspanningen: number;
   /** Aantal vakken tussen de spanten; aantal spanten = aantalVakken + 1. */
   aantalVakken: number;
   goothoogteMm: number;
@@ -106,7 +139,7 @@ export interface StaalhalParameters {
   gordingafstandMm: number;
   profielen: Record<StaalhalProfielGroep, StaalhalProfiel>;
   kolomvoet: StaalhalKolomvoet;
-  verbanden: { vakken: StaalhalVerbandVakken; dak: boolean; wanden: boolean };
+  verbanden: { vakken: StaalhalVerbandVakken; dak: boolean; wanden: boolean; kopgevels: boolean; trekAlleen: boolean };
   fundering: {
     type: StaalhalFunderingType;
     balkBreedteMm: number;
@@ -124,6 +157,8 @@ export interface StaalhalParameters {
   lasten: {
     dakafwerkingKnM2: number;
     sneeuwKnM2: number;
+    /** Optionele dakgebruikslast Q, categorie H, per m² horizontale projectie. */
+    dakgebruikKnM2: number;
     wind: {
       bron: StaalhalWindBron;
       /** Handmatig: druk op de loefgevel, zuiging op de lijgevel, opwaartse zuiging op het dak. */
@@ -147,18 +182,30 @@ export interface StaalhalParameters {
 // bewijzen dat zijn strikte schema dezelfde velden noemt als deze poort (zie
 // `staalhal_tools.rs`). Wie hier een veld toevoegt, voegt het daar ook toe.
 export const STAALHAL_VELDEN = [
-  "lengteMm", "breedteMm", "spantafstandMm", "aantalVakken", "goothoogteMm", "dak", "gordingafstandMm",
+  "lengteMm", "breedteMm", "aantalOverspanningen", "spantafstandMm", "aantalVakken", "goothoogteMm", "dak", "gordingafstandMm",
   "profielen", "kolomvoet", "verbanden", "fundering", "lasten", "eigenGewicht", "projectnaam",
 ] as const;
 export const STAALHAL_DAK_VELDEN = ["type", "nokhoogteMm", "hellingGraden"] as const;
 export const STAALHAL_PROFIEL_GROEPEN = ["kolom", "spantligger", "gording", "randligger", "verband"] as const;
-export const STAALHAL_PROFIEL_VELDEN = ["profiel", "materiaal"] as const;
-export const STAALHAL_VERBAND_VELDEN = ["vakken", "dak", "wanden"] as const;
+export const STAALHAL_PROFIEL_VELDEN = ["profiel", "materiaal", "profielEind"] as const;
+/**
+ * Een keuze uit de profielkiezer (`ProfielKeuze`) als profiel van een groep:
+ * het eindprofiel (verlopend, #73) gaat mee, een prismatische keuze heeft er
+ * geen. De generator keurt het verloop (`controleer`).
+ */
+export function staalhalProfielUitKeuze(keuze: { material: string; profile: string; profileEnd?: string }): StaalhalProfiel {
+  const eind = keuze.profileEnd?.trim() ?? "";
+  return { profiel: keuze.profile, materiaal: keuze.material, ...(eind ? { profielEind: eind } : {}) };
+}
+
+/** De groepen waarbij een eindprofiel (verlopend, #73) betekenis heeft. */
+export const STAALHAL_VERLOOP_GROEPEN: readonly StaalhalProfielGroep[] = ["kolom", "spantligger"];
+export const STAALHAL_VERBAND_VELDEN = ["vakken", "dak", "wanden", "kopgevels", "trekAlleen"] as const;
 export const STAALHAL_FUNDERING_VELDEN = [
   "type", "balkBreedteMm", "balkHoogteMm", "betonklasse", "dwarsbalken", "diepteMm",
   "paalKzKnPerMm", "paalHorizontaal", "paalKhKnPerMm", "paalAfstandMm",
 ] as const;
-export const STAALHAL_LASTEN_VELDEN = ["dakafwerkingKnM2", "sneeuwKnM2", "wind"] as const;
+export const STAALHAL_LASTEN_VELDEN = ["dakafwerkingKnM2", "sneeuwKnM2", "dakgebruikKnM2", "wind"] as const;
 export const STAALHAL_WIND_VELDEN = [
   "bron", "drukKnM2", "zuigingKnM2", "dakZuigingKnM2", "windgebied", "terreincategorie", "cDak",
 ] as const;
@@ -167,6 +214,7 @@ export const STAALHAL_WIND_VELDEN = [
 export const STAALHAL_GRENZEN = {
   maxVakken: 100,
   maxGordingvelden: 60,
+  maxOverspanningen: 10,
   maxPalen: 2000,
   maxMaatMm: 500_000,
   maxHoogteMm: 60_000,
@@ -180,6 +228,7 @@ const STANDAARD_HELLING = 0.1;
 export const STAALHAL_STANDAARD: StaalhalParameters = {
   lengteMm: 60_000,
   breedteMm: 30_000,
+  aantalOverspanningen: 1,
   aantalVakken: 10,
   goothoogteMm: 8_000,
   dak: { type: "zadeldak", nokhoogteMm: 9_500 },
@@ -192,7 +241,7 @@ export const STAALHAL_STANDAARD: StaalhalParameters = {
     verband: { profiel: "CHS 88.9x4", materiaal: "S235" },
   },
   kolomvoet: "ingeklemd",
-  verbanden: { vakken: "kopvakken", dak: true, wanden: true },
+  verbanden: { vakken: "kopvakken", dak: true, wanden: true, kopgevels: false, trekAlleen: false },
   fundering: {
     type: "opleggingen",
     balkBreedteMm: 400,
@@ -209,6 +258,7 @@ export const STAALHAL_STANDAARD: StaalhalParameters = {
     // Sneeuw 0,8 · 0,7; wind met q_p ≈ 0,8 kN/m²: loef 0,8, lij 0,5, dak 0,6 opwaarts.
     dakafwerkingKnM2: 0.3,
     sneeuwKnM2: 0.56,
+    dakgebruikKnM2: 0,
     wind: {
       bron: "handmatig",
       drukKnM2: 0.64,
@@ -232,7 +282,7 @@ export const STAALHAL_STANDAARD_SPANTAFSTAND_MM = 6_000;
 export const STAALHAL_LEVEL = { peil: "peil", goot: "goot", nok: "nok", fundering: "fundering" } as const;
 
 /** Vaste id's; de app beeldt ze bij het toepassen af op de gevallen van het project. */
-export const STAALHAL_GEVAL = { permanent: 1, sneeuw: 2, windDwars: 3, windLangs: 4, eigenGewicht: 5 } as const;
+export const STAALHAL_GEVAL = { permanent: 1, sneeuw: 2, windDwars: 3, windLangs: 4, eigenGewicht: 5, dakgebruik: 6 } as const;
 
 const HANDMATIGE_GEVALLEN: readonly LoadCase[] = [
   { id: STAALHAL_GEVAL.permanent, name: "Permanent (G)", type: "dead" },
@@ -243,6 +293,9 @@ const HANDMATIGE_GEVALLEN: readonly LoadCase[] = [
 const EIGEN_GEWICHT_GEVAL: LoadCase = {
   id: STAALHAL_GEVAL.eigenGewicht, name: "Eigen gewicht", type: "dead", eigenGewicht: true,
 };
+const DAKGEBRUIK_GEVAL: LoadCase = {
+  id: STAALHAL_GEVAL.dakgebruik, name: "Dakgebruik (Q)", type: "live", categorie: "H",
+};
 
 // ── Fouten ──────────────────────────────────────────────────────────────────
 
@@ -250,7 +303,8 @@ export type StaalhalFoutcode =
   | "onbekendVeld" | "geenObject" | "geenGetal" | "geenGeheelGetal" | "geenTekst" | "geenJaNee"
   | "ongeldigeKeuze" | "buitenBereik" | "spantafstandEnAantal" | "nokEnHelling" | "nokTeLaag"
   | "teVeelVakken" | "teVeelGordingvelden" | "profielOnbekend" | "geenStaal" | "geen3dDoorsnede"
-  | "geenBeton" | "verbandVak" | "instabielLangs" | "teVeelPalen";
+  | "geenBeton" | "verbandVak" | "instabielLangs" | "teVeelPalen"
+  | "verloopOngeldig" | "verloopNietBijGroep" | "verloopZonderMidden";
 
 export interface StaalhalProbleem {
   code: StaalhalFoutcode;
@@ -375,6 +429,8 @@ export function leesStaalhalInvoer(invoer: unknown = {}): StaalhalParameters {
 
   const lengteMm = leesGetal(raw, "lengteMm", "lengteMm", s.lengteMm, { min: 0, minExclusief: true, max: STAALHAL_GRENZEN.maxMaatMm }, p);
   const breedteMm = leesGetal(raw, "breedteMm", "breedteMm", s.breedteMm, { min: 0, minExclusief: true, max: STAALHAL_GRENZEN.maxMaatMm }, p);
+  const aantalOverspanningen = leesGetal(raw, "aantalOverspanningen", "aantalOverspanningen", s.aantalOverspanningen,
+    { min: 1, max: STAALHAL_GRENZEN.maxOverspanningen, geheel: true }, p);
   const goothoogteMm = leesGetal(raw, "goothoogteMm", "goothoogteMm", s.goothoogteMm, { min: 0, minExclusief: true, max: STAALHAL_GRENZEN.maxHoogteMm }, p);
 
   let aantalVakken = s.aantalVakken;
@@ -433,9 +489,11 @@ export function leesStaalhalInvoer(invoer: unknown = {}): StaalhalParameters {
   const profielen = {} as Record<StaalhalProfielGroep, StaalhalProfiel>;
   for (const groep of STAALHAL_PROFIEL_GROEPEN) {
     const groepRaw = leesObject(profielenRaw[groep], `profielen.${groep}`, STAALHAL_PROFIEL_VELDEN, p);
+    const profielEind = leesTekst(groepRaw, "profielEind", `profielen.${groep}.profielEind`, "", p);
     profielen[groep] = {
       profiel: leesTekst(groepRaw, "profiel", `profielen.${groep}.profiel`, s.profielen[groep].profiel, p),
       materiaal: leesTekst(groepRaw, "materiaal", `profielen.${groep}.materiaal`, s.profielen[groep].materiaal, p),
+      ...(profielEind ? { profielEind } : {}),
     };
   }
 
@@ -457,6 +515,8 @@ export function leesStaalhalInvoer(invoer: unknown = {}): StaalhalParameters {
     vakken,
     dak: leesJaNee(verbandRaw, "dak", "verbanden.dak", s.verbanden.dak, p),
     wanden: leesJaNee(verbandRaw, "wanden", "verbanden.wanden", s.verbanden.wanden, p),
+    kopgevels: leesJaNee(verbandRaw, "kopgevels", "verbanden.kopgevels", s.verbanden.kopgevels, p),
+    trekAlleen: leesJaNee(verbandRaw, "trekAlleen", "verbanden.trekAlleen", s.verbanden.trekAlleen, p),
   };
 
   const fRaw = leesObject(raw.fundering, "fundering", STAALHAL_FUNDERING_VELDEN, p);
@@ -480,6 +540,7 @@ export function leesStaalhalInvoer(invoer: unknown = {}): StaalhalParameters {
   const lasten: StaalhalParameters["lasten"] = {
     dakafwerkingKnM2: leesGetal(lRaw, "dakafwerkingKnM2", "lasten.dakafwerkingKnM2", s.lasten.dakafwerkingKnM2, { min: 0, max: 100 }, p),
     sneeuwKnM2: leesGetal(lRaw, "sneeuwKnM2", "lasten.sneeuwKnM2", s.lasten.sneeuwKnM2, { min: 0, max: 100 }, p),
+    dakgebruikKnM2: leesGetal(lRaw, "dakgebruikKnM2", "lasten.dakgebruikKnM2", s.lasten.dakgebruikKnM2, { min: 0, max: 100 }, p),
     wind: {
       bron: leesKeuze(wRaw, "bron", "lasten.wind.bron", ["handmatig", "stuwdruk"] as const, w.bron, p),
       drukKnM2: leesGetal(wRaw, "drukKnM2", "lasten.wind.drukKnM2", w.drukKnM2, { min: 0, max: 100 }, p),
@@ -497,7 +558,7 @@ export function leesStaalhalInvoer(invoer: unknown = {}): StaalhalParameters {
 
   if (p.length > 0) throw new StaalhalFout(p);
   return {
-    lengteMm, breedteMm, aantalVakken, goothoogteMm,
+    lengteMm, breedteMm, aantalOverspanningen, aantalVakken, goothoogteMm,
     dak: { type: daktype, nokhoogteMm }, gordingafstandMm,
     profielen, kolomvoet, verbanden, fundering, lasten, eigenGewicht, projectnaam,
   };
@@ -508,6 +569,8 @@ export function leesStaalhalInvoer(invoer: unknown = {}): StaalhalParameters {
 export interface StaalhalMaten {
   lengteMm: number;
   breedteMm: number;
+  aantalOverspanningen: number;
+  overspanningMm: number;
   aantalVakken: number;
   aantalSpanten: number;
   /** Werkelijke h.o.h.-afstand van de spanten. */
@@ -523,8 +586,13 @@ export interface StaalhalMaten {
 }
 
 function aantalGordingvelden(p: StaalhalParameters): number {
-  if (p.dak.type === "zadeldak") return 2 * Math.max(1, Math.ceil(p.breedteMm / 2 / p.gordingafstandMm - 1e-9));
-  return Math.max(1, Math.ceil(p.breedteMm / p.gordingafstandMm - 1e-9));
+  const minimum = p.dak.type === "zadeldak"
+    ? 2 * Math.max(1, Math.ceil(p.breedteMm / 2 / p.gordingafstandMm - 1e-9))
+    : Math.max(1, Math.ceil(p.breedteMm / p.gordingafstandMm - 1e-9));
+  // Elke binnenkolom moet op een dakknoop liggen; bij een zadeldak de nok ook.
+  const stap = p.dak.type === "zadeldak" && p.aantalOverspanningen % 2 !== 0
+    ? 2 * p.aantalOverspanningen : p.aantalOverspanningen;
+  return Math.ceil(minimum / stap) * stap;
 }
 
 function verbandvakken(p: StaalhalParameters): number[] {
@@ -543,6 +611,8 @@ export function staalhalMaten(p: StaalhalParameters): StaalhalMaten {
   return {
     lengteMm: p.lengteMm,
     breedteMm: p.breedteMm,
+    aantalOverspanningen: p.aantalOverspanningen,
+    overspanningMm: p.breedteMm / p.aantalOverspanningen,
     aantalVakken: p.aantalVakken,
     aantalSpanten: p.aantalVakken + 1,
     spantafstandMm: p.lengteMm / p.aantalVakken,
@@ -567,10 +637,11 @@ function controleer(p: StaalhalParameters, maten: StaalhalMaten): Problemen {
   for (const groep of STAALHAL_PROFIEL_GROEPEN) {
     const { profiel, materiaal } = p.profielen[groep];
     const veld = `profielen.${groep}`;
-    if (!STEEL_GRADES.includes(materiaal)) {
+    const hout = matchSupportedTimberGrade(materiaal) !== null;
+    if (!STEEL_GRADES.includes(materiaal) && !hout) {
       probleem(problemen, "geenStaal", `${veld}.materiaal`,
-        `${groep}: "${materiaal}" is geen staalsoort; een stalen hal gebruikt ${STEEL_GRADES.join(", ")}.`,
-        { groep, materiaal, toegestaan: STEEL_GRADES.join(", ") });
+        `${groep}: "${materiaal}" is geen ondersteunde staal- of houtsterkteklasse.`,
+        { groep, materiaal, toegestaan: `${STEEL_GRADES.join(", ")}, C14–C35, GL24h–GL36h` });
       continue;
     }
     const opgelost = resolveSection(materiaal, profiel);
@@ -580,10 +651,30 @@ function controleer(p: StaalhalParameters, maten: StaalhalMaten): Problemen {
         { groep, profiel });
       continue;
     }
-    if (!STEEL_SECTION_DIMS[profileLookupKey(profiel)]?.props) {
+    if (hout ? !parseTimberRectMm(profiel) : !STEEL_SECTION_DIMS[profileLookupKey(profiel)]?.props) {
       probleem(problemen, "geen3dDoorsnede", `${veld}.profiel`,
-        `${groep}: profiel "${profiel}" mist I_z en I_t voor een ruimtelijke berekening; kies een catalogusprofiel.`,
+        hout
+          ? `${groep}: houtprofiel "${profiel}" is geen rechthoek b×h in mm.`
+          : `${groep}: profiel "${profiel}" mist I_z en I_t voor een ruimtelijke berekening; kies een catalogusprofiel.`,
         { groep, profiel });
+      continue;
+    }
+    // Verlopend profiel (#73): dezelfde keuring als elke verlopende staaf.
+    const profielEind = p.profielen[groep].profielEind;
+    if (profielEind === undefined) continue;
+    const verloop = bepaalVerloop(materiaal, profiel, profielEind);
+    if (verloop.status === "fout") {
+      probleem(problemen, "verloopOngeldig", `${veld}.profielEind`,
+        `${groep}: eindprofiel "${profielEind}" past niet bij "${profiel}": ${verloop.reden}.`,
+        { groep, profiel, profielEind, reden: verloop.reden });
+    } else if (verloop.status === "verlopend" && !STAALHAL_VERLOOP_GROEPEN.includes(groep)) {
+      probleem(problemen, "verloopNietBijGroep", `${veld}.profielEind`,
+        `${groep}: een verlopend profiel kan alleen bij de kolommen (voet → kop) en de spantliggers (goot → midden); laat het eindprofiel weg.`,
+        { groep });
+    } else if (verloop.status === "verlopend" && groep === "spantligger" && maten.aantalGordingvelden % 2 !== 0) {
+      probleem(problemen, "verloopZonderMidden", `${veld}.profielEind`,
+        `spantligger: een verlopende spantligger loopt van de goot naar het midden van de overspanning, en daar ligt bij ${maten.aantalGordingvelden} gordingvelden geen dakknoop. Kies een gordingafstand met een even aantal velden.`,
+        { groep, aantal: maten.aantalGordingvelden });
     }
   }
   for (const vak of maten.verbandvakken) {
@@ -622,16 +713,17 @@ function paalFracties(lengteMm: number, afstandMm: number): number[] {
 
 function roosterIndeling(p: StaalhalParameters, maten: StaalhalMaten) {
   const langsTussen = paalFracties(maten.spantafstandMm, p.fundering.paalAfstandMm).length;
-  const dwarsTussen = paalFracties(p.breedteMm, p.fundering.paalAfstandMm).length;
+  const dwarsTussen = paalFracties(maten.overspanningMm, p.fundering.paalAfstandMm).length;
   const dwarsbalken = p.fundering.dwarsbalken === "elkSpant" ? maten.aantalSpanten : Math.min(2, maten.aantalSpanten);
-  const palen = 2 * (maten.aantalSpanten + p.aantalVakken * langsTussen) + dwarsbalken * dwarsTussen;
+  const palen = (p.aantalOverspanningen + 1) * (maten.aantalSpanten + p.aantalVakken * langsTussen)
+    + dwarsbalken * p.aantalOverspanningen * dwarsTussen;
   return { langsTussen, dwarsTussen, dwarsbalken, palen };
 }
 
 // ── Het model ───────────────────────────────────────────────────────────────
 
 export type StaalhalStaafGroep =
-  | "kolom" | "spantligger" | "gording" | "randligger" | "dakverband" | "wandverband" | "funderingsbalk" | "poer";
+  | "kolom" | "spantligger" | "gording" | "randligger" | "dakverband" | "wandverband" | "kopgevelverband" | "funderingsbalk" | "poer";
 
 export interface StaalhalSamenvatting {
   maten: StaalhalMaten;
@@ -647,6 +739,7 @@ export interface StaalhalSamenvatting {
   lasten: {
     dakafwerkingKnM2: number;
     sneeuwKnM2: number;
+    dakgebruikKnM2: number;
     windDwarsDrukKnM2: number;
     windDwarsZuigingKnM2: number;
     windLangsDrukKnM2: number;
@@ -661,15 +754,22 @@ export interface StaalhalSamenvatting {
   /** Σ opgegeven lasten per belastinggeval (zonder eigen gewicht), kN, globale assen. */
   belastingsom: Record<number, { fx: number; fy: number; fz: number }>;
   /** Σ ρ·A·g·L per materiaalsoort, kN (naar beneden). */
-  eigenGewichtKn: { staal: number; beton: number };
+  eigenGewichtKn: { staal: number; hout: number; beton: number };
 }
 
 export interface StaalhalResultaat {
   parameters: StaalhalParameters;
   model: OpenFem3DModel;
   /**
-   * Stramien van de hal (mm): assen 1…n op de spanten, A en B op de
-   * langsgevels, en de levels peil 0, goot, nok (niet bij een plat dak) en —
+   * De eigen gelaste tussendoorsneden van een verlopende spantligger (#73),
+   * waar de staven met `EIGEN:<naam>` naar verwijzen; leeg zonder verloop. De
+   * generator bewaart ze niet zelf (hij is puur): wie de hal toepast of
+   * doorrekent, zet ze in de winkel, en het projectbestand draagt ze mee.
+   */
+  eigenDoorsneden: EigenDoorsnede[];
+  /**
+   * Stramien van de hal (mm): assen 1…n op de spanten, A… op de
+   * kolomlijnen, en de levels peil 0, goot, nok (niet bij een plat dak) en —
    * bij een balkrooster dieper dan peil — de systeemlijn van de fundering.
    * De level-id's liggen vast (`STAALHAL_LEVEL`).
    */
@@ -686,7 +786,8 @@ const SCHARNIEREN = { myStart: true, myEnd: true, mzStart: true, mzEnd: true };
 /** Wind uit de parameters: handmatig, of q_p · c_pe volgens NEN-EN 1991-1-4. */
 function windlasten(p: StaalhalParameters): StaalhalSamenvatting["lasten"] {
   const w = p.lasten.wind;
-  const basis = { dakafwerkingKnM2: p.lasten.dakafwerkingKnM2, sneeuwKnM2: p.lasten.sneeuwKnM2 };
+  const basis = { dakafwerkingKnM2: p.lasten.dakafwerkingKnM2,
+    sneeuwKnM2: p.lasten.sneeuwKnM2, dakgebruikKnM2: p.lasten.dakgebruikKnM2 };
   if (w.bron === "handmatig") {
     return {
       ...basis,
@@ -697,7 +798,8 @@ function windlasten(p: StaalhalParameters): StaalhalSamenvatting["lasten"] {
     };
   }
   const hoogteM = p.dak.nokhoogteMm / 1000;
-  const stuwdruk = berekenStuwdruk(w.windgebied, w.terreincategorie, hoogteM);
+  const stuwdruk = calculateWindReferencePressure({ codeId: NEDERLANDSE_WINDROUTE,
+    source: "calculated", windgebied: w.windgebied, terreincategorie: w.terreincategorie }, hoogteM);
   const qp = stuwdruk.qp_kNm2;
   const dwars = cpeWand(p.dak.nokhoogteMm / p.breedteMm);
   const langs = cpeWand(p.dak.nokhoogteMm / p.lengteMm);
@@ -728,6 +830,8 @@ export function maakStaalhal(invoer: unknown = {}): StaalhalResultaat {
   const waarschuwingen: string[] = [];
   const lengte = p.lengteMm / 1000;
   const breedte = p.breedteMm / 1000;
+  const nOverspanningen = p.aantalOverspanningen;
+  const overspanning = breedte / nOverspanningen;
   const goothoogte = p.goothoogteMm / 1000;
   const nokhoogte = p.dak.nokhoogteMm / 1000;
   const nVak = p.aantalVakken;
@@ -744,7 +848,7 @@ export function maakStaalhal(invoer: unknown = {}): StaalhalResultaat {
     return Math.round((goothoogte + helling * stijging) * 1e9) / 1e9;
   };
   const lasten = windlasten(p);
-  if (maten.hellingGraden > 10 + 1e-9 && (lasten.dakafwerkingKnM2 > 0 || lasten.sneeuwKnM2 > 0)) {
+  if (maten.hellingGraden > 10 + 1e-9 && (lasten.dakafwerkingKnM2 > 0 || lasten.sneeuwKnM2 > 0 || lasten.dakgebruikKnM2 > 0)) {
     waarschuwingen.push(
       `De daklasten staan per m² horizontale projectie. Bij een helling van ${fmt(maten.hellingGraden)}° is een last ` +
       `per m² dakvlak ${fmt(1 / Math.cos(maten.hellingGraden * Math.PI / 180))} × zo groot; reken de dakafwerking zo nodig om.`);
@@ -771,7 +875,7 @@ export function maakStaalhal(invoer: unknown = {}): StaalhalResultaat {
     return nodes.length;
   };
   const groepen: Record<StaalhalStaafGroep, number[]> = {
-    kolom: [], spantligger: [], gording: [], randligger: [], dakverband: [], wandverband: [], funderingsbalk: [], poer: [],
+    kolom: [], spantligger: [], gording: [], randligger: [], dakverband: [], wandverband: [], kopgevelverband: [], funderingsbalk: [], poer: [],
   };
   const staaf = (groep: StaalhalStaafGroep, a: number, b: number, profileName: string, material: string,
     extra: Partial<OpenFem3DBeam> = {}) => {
@@ -780,11 +884,11 @@ export function maakStaalhal(invoer: unknown = {}): StaalhalResultaat {
     return beams.length;
   };
 
-  // Knopen: per spant de twee kolomvoeten en de dakknopen.
+  // Knopen: per spant een voet op elke kolomlijn en alle dakknopen.
   for (let i = 0; i < nSpant; i++) {
     const x = i * spantafstand;
-    zet(`voet-${i}-0`, x, 0, 0);
-    zet(`voet-${i}-1`, x, breedte, 0);
+    for (let lijn = 0; lijn <= nOverspanningen; lijn++)
+      zet(`voet-${i}-${lijn}`, x, lijn * overspanning, 0);
     for (let j = 0; j < nDak; j++) {
       const y = j * gordingafstand;
       zet(`dak-${i}-${j}`, x, y, dakZ(y));
@@ -795,25 +899,62 @@ export function maakStaalhal(invoer: unknown = {}): StaalhalResultaat {
   const voetScharnier = p.kolomvoet === "scharnierend";
 
   const pr = p.profielen;
-  const kolommen: { id: number; i: number; zijde: 0 | 1 }[] = [];
+  // Verlopende kolom en spantligger (#73); de keuring zit in `controleer`.
+  const verloopVan = (groep: StaalhalProfielGroep): VerlopendeDoorsnede | null => {
+    const keuze = pr[groep];
+    if (keuze.profielEind === undefined) return null;
+    const v = bepaalVerloop(keuze.materiaal, keuze.profiel, keuze.profielEind);
+    return v.status === "verlopend" ? v.verloop : null;
+  };
+  const kolomVerloop = verloopVan("kolom");
+  const spantVerloop = verloopVan("spantligger");
+  const eigenDoorsneden: EigenDoorsnede[] = [];
+  /** Het profiel van de spantligger op relatieve plaats t (0 = goot, 1 = midden). */
+  const spantProfiel = (t: number): string => {
+    if (t <= 1e-12) return pr.spantligger.profiel;
+    if (t >= 1 - 1e-12) return pr.spantligger.profielEind!;
+    const tussen = tussenProfielVoorSplitsing(pr.spantligger.materiaal, pr.spantligger.profiel, pr.spantligger.profielEind, t, eigenDoorsneden);
+    if (!tussen) throw new Error("spantligger: het verloop is verdwenen tijdens het bouwen.");
+    if (tussen.bewaren && !eigenDoorsneden.some((d) => d.naam === tussen.bewaren!.naam)) eigenDoorsneden.push(tussen.bewaren);
+    return tussen.tussenProfiel;
+  };
+  /** Per staaf van een verlopende spantligger: het verloop over die staaf, voor het eigen gewicht. */
+  const staafVerloop = new Map<number, VerlopendeDoorsnede>();
+  const kolommen: { id: number; i: number; lijn: number; dakJ: number }[] = [];
   for (let i = 0; i < nSpant; i++) {
-    for (const [zijde, j] of [[0, 0], [1, nDak - 1]] as const) {
-      const id = staaf("kolom", k(`voet-${i}-${zijde}`), k(`dak-${i}-${j}`), pr.kolom.profiel, pr.kolom.materiaal, {
+    for (let lijn = 0; lijn <= nOverspanningen; lijn++) {
+      const j = lijn * velden / nOverspanningen;
+      const id = staaf("kolom", k(`voet-${i}-${lijn}`), k(`dak-${i}-${j}`), pr.kolom.profiel, pr.kolom.materiaal, {
+        // Verlopend: van de voet (begin) naar de kop (eind).
+        ...(kolomVerloop ? { profileNameEnd: pr.kolom.profielEind } : {}),
         rollAngleRad: Math.PI / 2,
         // Op het balkrooster is een scharnierende voet een eindscharnier van
         // de kolom zelf; op vaste opleggingen is het de oplegging.
         ...(!opleggingen && voetScharnier ? { releases: { myStart: true, mzStart: true } as OpenFem3DBeam["releases"] } : {}),
       });
-      kolommen.push({ id, i, zijde });
+      kolommen.push({ id, i, lijn, dakJ: j });
       if (opleggingen) {
         supports.push({
-          nodeId: k(`voet-${i}-${zijde}`),
+          nodeId: k(`voet-${i}-${lijn}`),
           ux: true, uy: true, uz: true, rx: !voetScharnier, ry: !voetScharnier, rz: !voetScharnier,
         });
       }
     }
     for (let j = 0; j + 1 < nDak; j++) {
-      staaf("spantligger", k(`dak-${i}-${j}`), k(`dak-${i}-${j + 1}`), pr.spantligger.profiel, pr.spantligger.materiaal);
+      if (!spantVerloop) {
+        staaf("spantligger", k(`dak-${i}-${j}`), k(`dak-${i}-${j + 1}`), pr.spantligger.profiel, pr.spantligger.materiaal);
+        continue;
+      }
+      // Verlopend: t = afstand tot de dichtstbijzijnde goot / (B/2); de
+      // velden zijn even, dus het midden is een dakknoop en geen staaf
+      // loopt eroverheen.
+      const tVan = (jj: number) => Math.min(jj, velden - jj) / (velden / 2);
+      const t0 = tVan(j), t1 = tVan(j + 1);
+      const id = staaf("spantligger", k(`dak-${i}-${j}`), k(`dak-${i}-${j + 1}`), spantProfiel(t0), pr.spantligger.materiaal,
+        { profileNameEnd: spantProfiel(t1) });
+      staafVerloop.set(id, {
+        ...spantVerloop, begin: matenOpPositie(spantVerloop, t0), eind: matenOpPositie(spantVerloop, t1),
+      });
     }
   }
   const gordingen: { id: number; rand: boolean }[] = [];
@@ -829,7 +970,10 @@ export function maakStaalhal(invoer: unknown = {}): StaalhalResultaat {
   for (const vak of maten.verbandvakken) {
     const i = vak - 1;
     const verband = (groep: StaalhalStaafGroep, a: string, b: string) =>
-      staaf(groep, k(a), k(b), pr.verband.profiel, pr.verband.materiaal, { releases: { ...SCHARNIEREN } as OpenFem3DBeam["releases"] });
+      staaf(groep, k(a), k(b), pr.verband.profiel, pr.verband.materiaal, {
+        releases: { ...SCHARNIEREN } as OpenFem3DBeam["releases"],
+        ...(p.verbanden.trekAlleen ? { tensionOnly: true } : {}),
+      });
     if (p.verbanden.dak) {
       for (let j = 0; j + 1 < nDak; j++) {
         verband("dakverband", `dak-${i}-${j}`, `dak-${i + 1}-${j + 1}`);
@@ -844,6 +988,26 @@ export function maakStaalhal(invoer: unknown = {}): StaalhalResultaat {
     }
   }
 
+  // Optionele kruizen in de twee kopgevelvlakken. De voeten en gootknopen
+  // bestaan al in het spant; het kruis draagt via die knopen af naar de
+  // opleggingen of het balkrooster. Bij één lengte-vak delen beide gevels
+  // geen staven: elk kruis ligt in zijn eigen x-vlak.
+  if (p.verbanden.kopgevels) {
+    for (const i of [0, nSpant - 1]) {
+      for (let span = 0; span < nOverspanningen; span++) {
+        const links = span * velden / nOverspanningen;
+        const rechts = (span + 1) * velden / nOverspanningen;
+        for (const [lijn, andereJ] of [[span, rechts], [span + 1, links]] as const) {
+          staaf("kopgevelverband", k(`voet-${i}-${lijn}`), k(`dak-${i}-${andereJ}`),
+            pr.verband.profiel, pr.verband.materiaal, {
+              releases: { ...SCHARNIEREN } as OpenFem3DBeam["releases"],
+              ...(p.verbanden.trekAlleen ? { tensionOnly: true } : {}),
+            });
+        }
+      }
+    }
+  }
+
   // ── Balkrooster ──
   const paalknopen: number[] = [];
   if (!opleggingen) {
@@ -853,22 +1017,22 @@ export function maakStaalhal(invoer: unknown = {}): StaalhalResultaat {
     const balkProfiel = `${fmtMaat(f.balkBreedteMm)}x${fmtMaat(f.balkHoogteMm)}`;
     const beton = f.betonklasse;
     const langsFracties = paalFracties(maten.spantafstandMm, f.paalAfstandMm);
-    const dwarsFracties = paalFracties(p.breedteMm, f.paalAfstandMm);
+    const dwarsFracties = paalFracties(maten.overspanningMm, f.paalAfstandMm);
     // Roosterknoop onder een kolom: de kolomvoet zelf als het rooster op peil
     // ligt, anders een knoop op de systeemlijn eronder.
-    const roosterKnoop = (i: number, zijde: 0 | 1) => {
-      if (diepte === 0) return k(`voet-${i}-${zijde}`);
-      const sleutel = `rooster-${i}-${zijde}`;
-      return knoop.get(sleutel) ?? zet(sleutel, i * spantafstand, zijde === 0 ? 0 : breedte, zRooster);
+    const roosterKnoop = (i: number, lijn: number) => {
+      if (diepte === 0) return k(`voet-${i}-${lijn}`);
+      const sleutel = `rooster-${i}-${lijn}`;
+      return knoop.get(sleutel) ?? zet(sleutel, i * spantafstand, lijn * overspanning, zRooster);
     };
     const langslijnen: number[][] = [];
-    for (const zijde of [0, 1] as const) {
+    for (let lijnIndex = 0; lijnIndex <= nOverspanningen; lijnIndex++) {
       const lijn: number[] = [];
       for (let i = 0; i < nSpant; i++) {
-        lijn.push(roosterKnoop(i, zijde));
+        lijn.push(roosterKnoop(i, lijnIndex));
         if (i + 1 < nSpant) {
           for (const [m, t] of langsFracties.entries()) {
-            lijn.push(zet(`langs-${zijde}-${i}-${m}`, (i + t) * spantafstand, zijde === 0 ? 0 : breedte, zRooster));
+            lijn.push(zet(`langs-${lijnIndex}-${i}-${m}`, (i + t) * spantafstand, lijnIndex * overspanning, zRooster));
           }
         }
       }
@@ -877,24 +1041,28 @@ export function maakStaalhal(invoer: unknown = {}): StaalhalResultaat {
     const dwarsSpanten = f.dwarsbalken === "elkSpant"
       ? Array.from({ length: nSpant }, (_, i) => i)
       : [...new Set([0, nSpant - 1])];
-    const dwarslijnen: number[][] = dwarsSpanten.map((i) => [
-      roosterKnoop(i, 0),
-      ...dwarsFracties.map((t, m) => zet(`dwars-${i}-${m}`, i * spantafstand, t * breedte, zRooster)),
-      roosterKnoop(i, 1),
-    ]);
+    const dwarslijnen: number[][] = dwarsSpanten.map((i) => {
+      const lijn = [roosterKnoop(i, 0)];
+      for (let span = 0; span < nOverspanningen; span++) {
+        for (const [m, t] of dwarsFracties.entries())
+          lijn.push(zet(`dwars-${i}-${span}-${m}`, i * spantafstand, (span + t) * overspanning, zRooster));
+        lijn.push(roosterKnoop(i, span + 1));
+      }
+      return lijn;
+    });
     for (const lijn of [...langslijnen, ...dwarslijnen]) {
       for (let m = 0; m + 1 < lijn.length; m++) staaf("funderingsbalk", lijn[m], lijn[m + 1], balkProfiel, beton);
     }
     if (diepte > 0) {
       for (const kolom of kolommen) {
         // Van de roosterknoop omhoog naar de kolomvoet; lange zijde in het spantvlak (lokale z = +Y).
-        staaf("poer", roosterKnoop(kolom.i, kolom.zijde), k(`voet-${kolom.i}-${kolom.zijde}`), balkProfiel, beton,
+        staaf("poer", roosterKnoop(kolom.i, kolom.lijn), k(`voet-${kolom.i}-${kolom.lijn}`), balkProfiel, beton,
           { rollAngleRad: Math.PI / 2 });
       }
     }
     // Palen: elke roosterknoop, in de volgorde van de langslijnen en daarna de
     // tussenknopen van de dwarsbalken.
-    const volgorde = [...langslijnen.flat(), ...dwarslijnen.flatMap((lijn) => lijn.slice(1, -1))];
+    const volgorde = [...new Set([...langslijnen.flat(), ...dwarslijnen.flatMap((lijn) => lijn.slice(1, -1))])];
     const kz = f.paalKzKnPerMm * 1000, kh = f.paalKhKnPerMm * 1000;
     const vastX = roosterKnoop(0, 0), vastY = roosterKnoop(nSpant - 1, 0);
     for (const nodeId of volgorde) {
@@ -927,14 +1095,16 @@ export function maakStaalhal(invoer: unknown = {}): StaalhalResultaat {
     const strook = g.rand ? gordingafstand / 2 : gordingafstand;
     lijnlast(g.id, STAALHAL_GEVAL.permanent, -lasten.dakafwerkingKnM2 * strook, spantafstand);
     lijnlast(g.id, STAALHAL_GEVAL.sneeuw, -lasten.sneeuwKnM2 * strook, spantafstand);
+    lijnlast(g.id, STAALHAL_GEVAL.dakgebruik, -lasten.dakgebruikKnM2 * strook, spantafstand);
     lijnlast(g.id, STAALHAL_GEVAL.windDwars, lasten.dakZuigingKnM2 * strook, spantafstand);
   }
   // Wind dwars (+Y) op de kolommen: met rolhoek 90° valt lokale z samen met +Y.
   for (const kolom of kolommen) {
+    if (kolom.lijn !== 0 && kolom.lijn !== nOverspanningen) continue;
     const strook = kolom.i === 0 || kolom.i === nSpant - 1 ? spantafstand / 2 : spantafstand;
-    const top = nodes[k(`dak-${kolom.i}-${kolom.zijde === 0 ? 0 : nDak - 1}`) - 1];
+    const top = nodes[k(`dak-${kolom.i}-${kolom.dakJ}`) - 1];
     lijnlast(kolom.id, STAALHAL_GEVAL.windDwars,
-      (kolom.zijde === 0 ? lasten.windDwarsDrukKnM2 : lasten.windDwarsZuigingKnM2) * strook, top.z);
+      (kolom.lijn === 0 ? lasten.windDwarsDrukKnM2 : lasten.windDwarsZuigingKnM2) * strook, top.z);
   }
   // Wind langs (+X) op de kopgevel: de helft via de gevelstijlen naar de
   // dakrand van het eerste spant, randknopen half.
@@ -948,14 +1118,17 @@ export function maakStaalhal(invoer: unknown = {}): StaalhalResultaat {
     }
   }
 
-  const model = parseOpenFem3DModel({ nodes, beams, supports, loads, memberLoads, memberPointLoads: [] });
+  const model = parseOpenFem3DModel({ nodes, beams, supports, loads, memberLoads, memberPointLoads: [],
+    ...(p.verbanden.trekAlleen && ((maten.verbandvakken.length > 0 && (p.verbanden.dak || p.verbanden.wanden)) || p.verbanden.kopgevels)
+      ? { tensionOnlyCrossRule: true } : {}) });
   const stramien: StructuralGrid = {
     enabled: true,
     xAxes: Array.from({ length: nSpant }, (_, i) => ({ id: `spant-${i + 1}`, label: String(i + 1), position: i * maten.spantafstandMm })),
-    yAxes: [
-      { id: "gevel-A", label: "A", position: 0 },
-      { id: "gevel-B", label: "B", position: p.breedteMm },
-    ],
+    yAxes: Array.from({ length: nOverspanningen + 1 }, (_, lijn) => {
+      const label = String.fromCharCode(65 + lijn);
+      return { id: lijn === 0 || lijn === nOverspanningen ? `gevel-${label}` : `as-${label}`,
+        label, position: lijn * maten.overspanningMm };
+    }),
     zAxes: [
       ...(p.fundering.type === "balkrooster" && p.fundering.diepteMm > 0
         ? [{ id: STAALHAL_LEVEL.fundering, label: "Fundering", position: -p.fundering.diepteMm }] : []),
@@ -964,10 +1137,12 @@ export function maakStaalhal(invoer: unknown = {}): StaalhalResultaat {
       ...(p.dak.type === "platdak" ? [] : [{ id: STAALHAL_LEVEL.nok, label: p.dak.type === "zadeldak" ? "Nok" : "Hoge zijde", position: p.dak.nokhoogteMm }]),
     ],
   };
-  const loadCases = [...(p.eigenGewicht ? [{ ...EIGEN_GEWICHT_GEVAL }] : []), ...HANDMATIGE_GEVALLEN.map((c) => ({ ...c }))];
+  const loadCases = [...(p.eigenGewicht ? [{ ...EIGEN_GEWICHT_GEVAL }] : []), ...HANDMATIGE_GEVALLEN.map((c) => ({ ...c })),
+    ...(lasten.dakgebruikKnM2 > 0 ? [{ ...DAKGEBRUIK_GEVAL }] : [])];
   return {
     parameters: p,
     model,
+    eigenDoorsneden,
     stramien,
     loadCases,
     selfWeightEnabled: p.eigenGewicht,
@@ -985,7 +1160,7 @@ export function maakStaalhal(invoer: unknown = {}): StaalhalResultaat {
       paalknopen,
       lasten,
       belastingsom: belastingsom(model),
-      eigenGewichtKn: eigenGewichtSom(model),
+      eigenGewichtKn: eigenGewichtSom(model, staafVerloop, kolomVerloop),
     },
     waarschuwingen,
   };
@@ -1029,16 +1204,29 @@ function belastingsom(model: OpenFem3DModel): Record<number, { fx: number; fy: n
   return som;
 }
 
-/** Σ ρ · A · g · L per materiaalsoort in kN; dezelfde doorsnede als de rekenkern (bruto A). */
-function eigenGewichtSom(model: OpenFem3DModel): { staal: number; beton: number } {
+/**
+ * Σ ρ · A · g · L per materiaalsoort in kN; dezelfde doorsnede als de
+ * rekenkern (bruto A). Een verlopende staaf (#73) met de gemiddelde A van haar
+ * gelijke delen, zoals het eigen gewicht bij het rekenen; het verloop per
+ * staaf komt van de generator zelf (`staafVerloop`, `kolomVerloop`), want een
+ * gelaste tussendoorsnede staat nog niet in de winkel.
+ */
+function eigenGewichtSom(
+  model: OpenFem3DModel, staafVerloop: ReadonlyMap<number, VerlopendeDoorsnede>, kolomVerloop: VerlopendeDoorsnede | null,
+): { staal: number; hout: number; beton: number } {
   const nodeById = new Map(model.nodes.map((n) => [n.id, n]));
-  const som = { staal: 0, beton: 0 };
+  const som = { staal: 0, hout: 0, beton: 0 };
   for (const beam of model.beams) {
     const a = nodeById.get(beam.startNodeId)!, e = nodeById.get(beam.endNodeId)!;
     const lengte = Math.hypot(e.x - a.x, e.y - a.y, e.z - a.z);
+    const verloop = staafVerloop.get(beam.id) ?? (beam.profileNameEnd !== undefined ? kolomVerloop : null);
     const d = resolveSection(beam.material ?? "", beam.profileName ?? "");
-    const kn = dichtheidVanMateriaal(beam.material) * (d.aBruto ?? d.A) * 1e-6 * G / 1000 * lengte;
+    const area = verloop
+      ? openFem3DVerloopIndelingVan(verloop, lengte).delen.reduce((t, deel) => t + deel.doorsnede.areaMm2 * (deel.tEnd - deel.tStart), 0)
+      : d.aBruto ?? d.A;
+    const kn = dichtheidVanMateriaal(beam.material) * area * 1e-6 * G / 1000 * lengte;
     if ((beam.material ?? "") in CONCRETE_E_CM) som.beton += kn;
+    else if (matchSupportedTimberGrade(beam.material)) som.hout += kn;
     else som.staal += kn;
   }
   return som;
@@ -1071,9 +1259,16 @@ export function metBelastinggevalIds(model: OpenFem3DModel, idVoor: (halId: numb
   };
 }
 
-/** Standaardnaam van het project: "Staalhal 60 × 30 m". */
+/** Standaardnaam volgens het hoofdmateriaal; het stalen voorbeeld behoudt zijn naam. */
 export function staalhalProjectnaam(p: StaalhalParameters): string {
-  return p.projectnaam || `Staalhal ${fmt(p.lengteMm / 1000)} × ${fmt(p.breedteMm / 1000)} m`;
+  const materialen = Object.values(p.profielen).map((groep) => matchSupportedTimberGrade(groep.materiaal) !== null);
+  const soort = materialen.every(Boolean) ? "Houten hal" : materialen.some(Boolean) ? "Hal" : "Staalhal";
+  return p.projectnaam || `${soort} ${fmt(p.lengteMm / 1000)} × ${fmt(p.breedteMm / 1000)} m`;
+}
+
+/** The steel hall's wind cases use the legacy Dutch route, including manual pressures. */
+export function requireStaalhalWindRoute(projectInfo: unknown): void {
+  requireWindCodeId(windCodeIdFromProjectInfo(projectInfo));
 }
 
 /**
@@ -1087,6 +1282,11 @@ export function staalhalProject(
   projectInfo: Record<string, unknown> = {},
   opties: { stramien?: boolean } = {},
 ) {
+  requireStaalhalWindRoute(projectInfo);
+  const savedBasis = projectInfo.uitgangspunten;
+  if (savedBasis !== undefined && (savedBasis === null || typeof savedBasis !== "object" || Array.isArray(savedBasis))) {
+    throw new Error("Projectuitgangspunten moeten een object zijn.");
+  }
   return {
     nodes: [], beams: [], supports: [], plates: [], loads: [],
     loadCases: resultaat.loadCases,
@@ -1096,7 +1296,11 @@ export function staalhalProject(
     analysetype: "eersteOrde" as const,
     modelDimension: "3d" as const,
     model3d: resultaat.model,
+    // De gelaste tussendoorsneden van een verlopende spantligger (#73).
+    ...(resultaat.eigenDoorsneden.length > 0 ? { eigenDoorsneden: resultaat.eigenDoorsneden } : {}),
     ...(opties.stramien ? { structuralGrid: resultaat.stramien } : {}),
-    projectInfo: { name: staalhalProjectnaam(resultaat.parameters), ...projectInfo },
+    projectInfo: { name: staalhalProjectnaam(resultaat.parameters), ...projectInfo,
+      uitgangspunten: { ...DEFAULT_UITGANGSPUNTEN, ...(savedBasis as Record<string, unknown> | undefined),
+        windCodeId: NEDERLANDSE_WINDROUTE } },
   };
 }

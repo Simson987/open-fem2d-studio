@@ -41,6 +41,16 @@
  * Zwaaiknik van een portaal is met één element al nauwkeurig, maar de
  * tussenverdieping-knik van een doorgaande kolom niet.
  *
+ * Een PENDELSTAAF (momentscharnier aan beide einden) blijft één element. Haar
+ * eigen boogknik is een staafvorm met L_cr = L, en die dekt de staaftoets
+ * (6.3.1); 5.2.1(3) gaat over instabiliteit in een globale vorm. Haar
+ * bijdrage aan de zijwaartse vormen (P-Δ van een pendelkolom) blijft via de
+ * koordterm van K_g behouden. Gemeten (controle 12 oktober 2026, B10): een
+ * vakwerk 12 × 2 m met alleen scharnieren kreeg met de snede α_cr = 5,53 — de
+ * Euler-last van één eindschoor — en daarmee "EERSTE ORDE NIET TOEGESTAAN",
+ * terwijl hetzelfde vakwerk met stijve knopen α_cr = 11,5 gaf. Zonder de
+ * snede: α_cr ≈ 768.
+ *
  * Alleen knik IN het vlak: knik uit het vlak kent het model niet, en die
  * blijft de zaak van de staaftoets (6.3.1 om de z-as).
  *
@@ -60,6 +70,7 @@ import { buildMesh } from "./engine";
 import type { LoadCombination } from "./combinations";
 import type { ElementForces, MultiInput, SolverResult } from "./types";
 import type { Analysetype } from "../femTypes";
+import { phiLosseKolom } from "../../../lib/scheefstandNorm";
 
 /** De grens van EN 1993-1-1 5.2.1(3): eerste orde alleen bij α_cr ≥ 10. */
 export const ALPHA_CR_GRENS_EERSTE_ORDE = 10;
@@ -84,6 +95,17 @@ export interface AlphaCrUitkomst {
     | "niet_bepaald";
   grens?: number;
   reden?: string;
+}
+
+/**
+ * Een staaf met een momentscharnier aan BEIDE einden (release `Ry` of een
+ * `hinge`-aansluiting, zoals de engine ze leest). Een rotatieveer telt niet:
+ * een release gaat daar al voor, en zonder release is het einde niet vrij.
+ */
+function isPendelstaaf(b: MultiInput["beams"][number]): boolean {
+  const start = !!(b.releases?.startRy || b.startConnection === "hinge");
+  const eind = !!(b.releases?.endRy || b.endConnection === "hinge");
+  return start && eind;
 }
 
 /** Lineaire interpolatie van N (trek positief) op x langs de staaf. */
@@ -125,12 +147,12 @@ export function bepaalAlphaCr(
     );
   }
 
-  // Elke staaf in twee elementen (zie de toelichting bovenaan). Een staaf die
-  // al een snede op L/2 heeft, krijgt geen tweede: de adapter laat een snede
-  // op een bestaande knoop vervallen.
+  // Elke staaf in twee elementen (zie de toelichting bovenaan), behalve een
+  // pendelstaaf. Een staaf die al een snede op L/2 heeft, krijgt geen tweede:
+  // de adapter laat een snede op een bestaande knoop vervallen.
   const fijner: MultiInput = {
     ...input,
-    beams: input.beams.map((b) => ({
+    beams: input.beams.map((b) => (isPendelstaaf(b) ? b : {
       ...b,
       extraSneden: [...new Set([...(b.extraSneden ?? []), 0.5])],
     })),
@@ -318,7 +340,8 @@ export function analyseToelichting(
       "Kritieke lastfactor α_cr per UGT-combinatie (NEN-EN 1993-1-1 5.2.1(3)): de factor op de " +
         "belasting van de combinatie waarbij K_e + α·K_g(N_Ed) singulier wordt — de laagste " +
         "knikvorm van het vlakke raamwerk met de normaalkrachten van die combinatie, elke staaf in " +
-        "twee elementen. Alleen knik in het vlak; knik uit het vlak blijft de zaak van de staaftoets.",
+        "twee elementen (een pendelstaaf in één: haar eigen boogknik met L_cr = L dekt de " +
+        "staaftoets). Alleen knik in het vlak; knik uit het vlak blijft de zaak van de staaftoets.",
     );
     for (const u of uitkomsten) regels.push(`    ${alphaCrLabel(u)}   [${u.naam}]`);
     regels.push(
@@ -339,18 +362,34 @@ export interface StabiliteitVoorToets {
   analysetype: Analysetype;
   alphaCr: AlphaCrUitkomst[];
   scheefstandAan: boolean;
+  /**
+   * De scheefstand φ (rad) waarmee de berekening de verticale lasten een
+   * horizontale metgezel H = φ·V gaf. Nodig om te beslissen of de zijdelingse
+   * knik van een losse kolom met een vrije kop in de krachten zit
+   * (`zijdelingseKnikInVlakModel`). Ontbreekt → niet bekend, en dan geldt 2·L.
+   */
+  scheefstandPhi?: number;
 }
 
 /**
  * De kanttekening bij een op DRUK belaste staaf waarvan de kniklengte in het
- * vlak op de systeemlengte terugvalt, terwijl de berekening eerste orde is en
- * α_cr < 10: dan is de knikweerstand van 6.3.1 om de y-as niet volgens
- * 5.2.2(7)b bepaald. `null` als er niets te melden is.
+ * vlak niet uit de zijdelingse knikvorm is bepaald, terwijl de berekening
+ * eerste orde is en α_cr < 10 (5.2.1(3)). `null` als er niets te melden is.
+ *
+ * Twee gevallen:
+ *  - een gewone staaf zonder opgegeven L_cr,y valt terug op de systeemlengte;
+ *    5.2.2(7)b staat dat alleen toe na een tweede-orde-berekening met
+ *    imperfecties, dus de knikweerstand om y is NIET normconform bepaald;
+ *  - een staaf met een VRIJ eind (`vrijEind`) krijgt van de kern 2·L, de
+ *    zijdelingse knikvorm van de ingeklemd-vrije staaf (5.2.2(8)). Dat
+ *    veronderstelt een volledig ingeklemde voet; bij een verende voet of een
+ *    voet op een ligger is de knikvorm langer, en dan volgt L_cr,y uit α_cr.
  */
 export function alphaCrStaafNotitie(
   stabiliteit: StabiliteitVoorToets | undefined,
   nEdMinKn: number,
   kniklengteYOpgegeven: boolean,
+  vrijEind = false,
 ): string | null {
   if (!stabiliteit || stabiliteit.analysetype !== "eersteOrde") return null;
   if (!(nEdMinKn < 0) || kniklengteYOpgegeven) return null;
@@ -359,12 +398,82 @@ export function alphaCrStaafNotitie(
   );
   if (teLaag.length === 0) return null;
   const laagste = teLaag.reduce((a, b) => ((b.alphaCr ?? Infinity) < (a.alphaCr ?? Infinity) ? b : a));
+  const kop = `EERSTE ORDE MET α_cr = ${nl(laagste.alphaCr ?? NaN)} (combinatie "${laagste.naam}") < ` +
+    `${ALPHA_CR_GRENS_EERSTE_ORDE}: deze staaf staat onder druk`;
+  if (vrijEind) {
+    return (
+      kop + " en heeft een vrij eind. De kern neemt L_cr,y = 2·L, de zijdelingse knikvorm van de " +
+      "ingeklemd-vrije staaf (NEN-EN 1993-1-1 5.2.2(8)). Dat veronderstelt een volledig ingeklemde voet; " +
+      "bij een verende voet of een voet op een ligger is de zijdelingse knikvorm langer. Bepaal L_cr,y " +
+      "dan uit α_cr, L_cr,y = π·√(EI/(α_cr·N_Ed)) met de N_Ed van die combinatie, en geef haar op als zij " +
+      "groter is dan 2·L — of kies tweede orde (P-Δ) met scheefstand."
+    );
+  }
   return (
-    `EERSTE ORDE MET α_cr = ${nl(laagste.alphaCr ?? NaN)} (combinatie "${laagste.naam}") < ` +
-    `${ALPHA_CR_GRENS_EERSTE_ORDE}: deze staaf staat onder druk en de kniklengte in het vlak valt ` +
-    "terug op de systeemlengte. NEN-EN 1993-1-1 5.2.2(7)b staat die terugval alleen toe bij krachten " +
-    "uit een tweede-orde-berekening met imperfecties, en 5.2.1(3) staat eerste orde bij α_cr < 10 " +
-    "niet toe. De knikweerstand om de y-as hieronder is daarom NIET normconform bepaald: kies tweede " +
-    "orde (P-Δ) met scheefstand, of geef L_cr,y uit de zijdelingse knikvorm op (5.2.2(8))."
+    kop + " en de kniklengte in het vlak valt terug op de systeemlengte. NEN-EN 1993-1-1 5.2.2(7)b " +
+    "staat die terugval alleen toe bij krachten uit een tweede-orde-berekening met imperfecties, en " +
+    "5.2.1(3) staat eerste orde bij α_cr < 10 niet toe. De knikweerstand om de y-as hieronder is daarom " +
+    "NIET normconform bepaald: kies tweede orde (P-Δ) met scheefstand, of geef L_cr,y uit de zijdelingse " +
+    "knikvorm op (5.2.2(8))."
   );
+}
+
+/** Wat `zijdelingseKnikInVlakModel` beslist voor één staaf met een vrij eind. */
+export interface ZijdelingseKnikBesluit {
+  /** Het kernveld `zijdelingse_knik_in_analyse`; weg = geen as gedekt (2·L). */
+  veld?: { y: boolean; z: boolean };
+  /** Een kanttekening voor `staaf_notities` als de regel NET niet geldt. */
+  notitie?: string;
+}
+
+/**
+ * Of het VLAKKE model de zijdelingse knik van een STALEN staaf met een vrij
+ * eind al in de krachten heeft, en dus om y de systeemlengte L geldt in plaats
+ * van 2·L (NEN-EN 1993-1-1 5.2.2(7)b). Gaat naar het kernveld
+ * `zijdelingse_knik_in_analyse`. Uit het vlak (z) ziet de berekening niets; daar
+ * blijft het altijd 2·L.
+ *
+ * Gedekt is het alleen als ALLE vier gelden:
+ *  - tweede orde (P-Δ of fysisch): eerste orde vergroot niets;
+ *  - met scheefstand: zonder verplaatst een centrisch gedrukte kolom niet
+ *    zijdelings, en tweede orde vergroot nul;
+ *  - een STAANDE staaf (≥ 75°, `referentieVanStaaf`): de scheefstand is een
+ *    horizontale metgezel H = φ·V bij de verticale last (`engine.ts`) en stoot
+ *    de knikvorm van een kolom aan, niet die van een liggende uitkraging;
+ *  - de φ van de berekening is minstens die van de kolom ZELF
+ *    (`phiLosseKolom`: h = haar lengte, m = 1). De φ van het model middelt over
+ *    alle kolommen en de hoogte van het gebouw; een kolom met een vrije kop
+ *    hangt nergens aan en middelt met niets.
+ *
+ * Alleen voor staal. Hout houdt 2·L: NEN-EN 1995-1-1 eist bij tweede orde
+ * E_d = E_mean/γ_M (2.2.2(1)P) en de boogimperfectie van 5.4.4(2), en de
+ * P-Δ van deze app rekent met E_mean en zonder boogimperfectie.
+ *
+ * Geldt alles behalve de φ-eis, dan komt er een kanttekening die zegt waarom
+ * het toch 2·L is.
+ */
+export function zijdelingseKnikInVlakModel(
+  stabiliteit: StabiliteitVoorToets | undefined,
+  staand: boolean,
+  lengteM: number,
+): ZijdelingseKnikBesluit {
+  if (!staand) return {};
+  if (!stabiliteit || stabiliteit.analysetype === "eersteOrde" || !stabiliteit.scheefstandAan) return {};
+  const nodig = phiLosseKolom(lengteM);
+  const gebruikt = stabiliteit.scheefstandPhi;
+  if (gebruikt !== undefined && Number.isFinite(gebruikt) && gebruikt >= nodig * (1 - 1e-9)) {
+    return { veld: { y: true, z: false } };
+  }
+  return {
+    notitie:
+      "VRIJ STAAFEIND, TWEEDE ORDE: de berekening is tweede orde met scheefstand, maar de " +
+      (gebruikt !== undefined && Number.isFinite(gebruikt) && gebruikt > 0
+        ? `scheefstand φ = 1/${nl(1 / gebruikt, 0)} van het model is kleiner dan `
+        : "scheefstand φ van het model is niet bekend en dus niet aantoonbaar minstens ") +
+      `φ = 1/${nl(1 / nodig, 0)} die deze kolom zelf hoort te krijgen (NEN-EN 1993-1-1 (5.5) met ` +
+      `h = ${nl(lengteM, 3)} m, haar eigen lengte, en m = 1: een kolom met een vrije kop hangt ` +
+      "nergens aan en middelt haar scheefstand met niets). Haar zijdelingse knik zit dus niet volledig in " +
+      "de krachten, en de kniklengte in het vlak blijft 2·L. Wie L wil gebruiken, rekent met een " +
+      "scheefstand van minstens die φ of geeft de kniklengte zelf op.",
+  };
 }

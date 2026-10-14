@@ -12,6 +12,9 @@
 //     u_eind = σ·L/E (mechanicaboek, staaf onder trek), σx per element ≈ 5,0
 //     N/mm², ΣR_x = σ·b·t (evenwicht).
 // Beide testen draaien voor elementType 'triangle' én 'quad'.
+// (c) De trekstaaf (quad) met een staaf met scharnieren aan beide einden
+//     tussen twee knopen van de onder- of bovenrand: het schijfpad
+//     assembleert geen staven, dus dezelfde uitkomst als (b) en geen fout.
 //
 // Uitvoeren: npx tsx test-plaat-schijf.mjs   (vanuit design-mockup/)
 
@@ -135,8 +138,8 @@ function runPatchTest(elementType) {
 // (b) TREKSTAAF — 1,0 × 0,2 m, t = 10 mm, σ = 5 N/mm², 10×2-mesh
 // ─────────────────────────────────────────────────────────────────────────
 
-function runTensionBar(elementType) {
-  log(`\n[trekstaaf ${elementType}] 1,0 × 0,2 m, t=10 mm, σ=5 N/mm², 10×2-mesh`);
+function runTensionBar(elementType, pendelRand = null) {
+  log(`\n[trekstaaf ${elementType}${pendelRand ? `, met een pendelstaaf op de ${pendelRand}` : ""}] 1,0 × 0,2 m, t=10 mm, σ=5 N/mm², 10×2-mesh`);
   const L = 1.0, b = 0.2, t = 0.01;
   const sigma = 5e6; // Pa
   const Ftot = sigma * b * t; // 10.000 N
@@ -147,6 +150,20 @@ function runTensionBar(elementType) {
     divisionsX: 10, divisionsY: 2,
     materialId: 1, thickness: t, elementType,
   });
+  // Een staaf met scharnieren aan beide einden tussen twee randknopen. Het
+  // schijfpad (plane_stress) assembleert geen staven: hij hoort niets te
+  // veranderen. Controle 12 oktober 2026 (B10): het vastzetten van "vrije
+  // knoopdraaiingen" rekende hier met 3 DOF per knoop, terwijl een schijf er
+  // 2 heeft. Op de bovenrand gaf dat een TypeError, op de onderrand zette
+  // het stil een translatie van een andere knoop vast (u_eind 1,55e-5 …
+  // 2,15e-5 m in plaats van 2,381e-5 m).
+  if (pendelRand) {
+    const rand = pendelRand === "bovenrand" ? region.edges.top.nodeIds : region.edges.bottom.nodeIds;
+    const [a, c] = pendelRand === "bovenrand" ? rand.slice(-2) : rand.slice(2, 4);
+    const staaf = mesh.addBeamElement([a, c], 1);
+    staaf.startConnection = "hinge";
+    staaf.endConnection = "hinge";
+  }
 
   // Linkerrand: u vast; linksonder ook v vast (statisch bepaald in y,
   // dwarscontractie blijft vrij — consistent met de exacte oplossing)
@@ -200,6 +217,14 @@ function runTensionBar(elementType) {
 for (const elementType of ["triangle", "quad"]) {
   runPatchTest(elementType);
   runTensionBar(elementType);
+}
+for (const pendelRand of ["onderrand", "bovenrand"]) {
+  try {
+    runTensionBar("quad", pendelRand);
+  } catch (e) {
+    failed++;
+    log(`  ✗ trekstaaf met een pendelstaaf op de ${pendelRand}: ${e.message}`);
+  }
 }
 
 log(`\n${passed} geslaagd, ${failed} gefaald`);

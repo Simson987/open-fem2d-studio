@@ -10,6 +10,7 @@ use nen_en_1993_1_1_section::{
     bending::{m_y_c_rd, m_z_c_rd},
     shear::{v_z_c_rd, v_y_c_rd},
     combined_mv::check_combined_mv,
+    effectief::{self, effectieve_doorsnede, EffectieveDoorsnede, Klasse4Vorm},
     rond::{combinatie_rond, RondCombinatie},
     trek::{n_t_rd, n_t_rd_draadeind, TOETS_DRAADEIND, TOETS_TREK},
     interactie::{buiging_en_normaalkracht, Interactiesoort, Interactievorm},
@@ -17,8 +18,8 @@ use nen_en_1993_1_1_section::{
 use nen_en_1993_1_1_stability::{
     StabilityCalc,
     buckling_curve::BucklingCurve,
-    column_buckling::{n_b_rd, Knikas, Knikassen},
-    kniklengte::{bepaal_kniklengte, Kniklengte, Steunen, Steunrand},
+    column_buckling::{n_b_rd, n_b_rd_klasse4, Knikas, Knikassen},
+    kniklengte::{bepaal_kniklengte, Kniklengte, KniklengteHerkomst, Steunen, Steunrand},
     interaction_factors::{cm_uit_momentenlijn, interaction_factors_method_2, CmUitkomst},
     combined_n_m::{check_combined_n_my, check_combined_n_mz},
 };
@@ -30,7 +31,7 @@ use crate::input::{
     MELDING_AFSCHUIVING_HOEKPROFIEL, MELDING_BUIGING_HOEKPROFIEL, MELDING_KNIK_HOOFDASSEN,
     MELDING_VORM_NIET_CONTROLEERBAAR, REDEN_GESLOTEN_CEL_NIET_GEDECLAREERD,
     REDEN_INTERACTIE_ZONDER_KIP, REDEN_KIP_HOEKPROFIEL, REDEN_KIP_NIET_DUBBELSYMMETRISCH,
-    REDEN_KLASSE_4, reden_lijfplooi, MELDING_KOKER_WARMVERVAARDIGD,
+    REDEN_KLASSE_4, reden_lijfplooi, NIET_VOLLEDIG_GETOETST, MELDING_KOKER_WARMVERVAARDIGD,
     MELDING_AFSCHUIVING_RONDSTAAL, MELDING_BUIGING_RONDSTAAL, MELDING_INTERACTIE_RONDSTAAL,
     MELDING_KNIK_RONDSTAAL, MELDING_TREK_RONDSTAAL, REDEN_INTERACTIE_GEEN_DRUK,
     REDEN_KIP_NVT_RONDSTAAL, reden_knik_geen_druk, MELDING_DOORSNEDE_STRIP,
@@ -38,7 +39,7 @@ use crate::input::{
     REDEN_KIP_STRIP_STERKE_AS, MELDING_TREK_ALLEEN, TOETS_TREK_ALLEEN,
 };
 use crate::result::{BeamCheckResult, NamedCheck, CheckKind};
-use crate::deflection::check_deflection_pair;
+use crate::deflection::check_deflection_pair_met_w_add;
 
 /// Find the force point that maximises `score(forces)`.
 /// Falls back to a zero-force point if the envelope is empty.
@@ -108,6 +109,39 @@ fn interpolate_my_at(envelope: &[ForcePoint], position_mm: f64, combo_id: u32) -
 /// eruit afgeleid en erft de aanname. Zie
 /// [`BeamCheckInput::deflection_notes`](crate::BeamCheckInput) voor waarom dit
 /// kanaal bestaat.
+/// w_fin en w_add van de staaf, of van het deel dat de invoerbouwer aanwijst
+/// (`deflection_length_m`, bij een doorgaande lijn met een overstek), met de
+/// door de bouwer per combinatie bepaalde w_add als die er is
+/// (`deflection_add_mm`). Beide velden zijn al gekeurd
+/// ([`crate::deflection::keur_doorbuigingsdeel`]).
+fn doorbuigingstoetsen(input: &BeamCheckInput) -> (ResistanceCalc, ResistanceCalc) {
+    let lengte_m = input.deflection_length_m.unwrap_or(input.length_m);
+    let (mut fin, mut add) = check_deflection_pair_met_w_add(
+        input.deflection_actual_max_mm,
+        input.pre_camber_mm,
+        input.deflection_permanent_mm,
+        lengte_m,
+        input.deflection_limit_class,
+        input.deflection_limit_numerator,
+        input.deflection_add_limit_numerator,
+        input.is_cantilever,
+        input.deflection_add_mm,
+    );
+    if input.deflection_length_m.is_some() {
+        let tekst = format!(
+            "Getoetst deel: {} mm van de staaflengte {} mm — de invoerbouwer heeft de doorbuiging \
+             op dit deel gemeten (zie de toelichting hieronder), en de grens rekent met de lengte \
+             van dat deel (NEN-EN 1990:2002/NB:2019 A1.4.3: ℓ_rep is de lengte van de overspanning \
+             of tweemaal die van de uitkraging).",
+            nl_getal(lengte_m * 1000.0),
+            nl_getal(input.length_m * 1000.0),
+        );
+        fin.notes.push(tekst.clone());
+        add.notes.push(tekst);
+    }
+    (fin, add)
+}
+
 fn met_invoernotities(mut check: ResistanceCalc, input: &BeamCheckInput) -> ResistanceCalc {
     check.notes.extend(input.deflection_notes.iter().cloned());
     check
@@ -128,6 +162,17 @@ fn make_stability(check: StabilityCalc) -> NamedCheck {
 /// η uit NEN-EN 1993-1-1 6.2.6(3): 1,2 voor staalsoorten t/m S460. Zelfde
 /// waarde als `CompositeSection::eta_schuif` in de rekenkern.
 const ETA_SCHUIF: f64 = 1.2;
+
+/// Een dwarskracht tot deze grootte (kN) telt als nul: numerieke ruis uit de
+/// solver mag een staaf niet "niet volledig getoetst" maken.
+const V_NUL_KN: f64 = 1e-6;
+
+/// Hetzelfde voor de normaalkracht (kN) en het moment om y (kNm) bij een
+/// geweigerde knik- of kiptoets aan een doorlopend staafeind: een zuiver
+/// gedrukte staaf kreeg zo door M = 6,6·10⁻¹⁸ kNm "niet volledig getoetst"
+/// (review van de samenvoeging 2026.42).
+const N_NUL_KN: f64 = 1e-6;
+const M_NUL_KNM: f64 = 1e-6;
 
 /// De doorsnede waarop getoetst wordt, plus wat er níet gerekend mag worden.
 ///
@@ -161,6 +206,10 @@ struct Doorsnede {
     schuif_weigering: Option<String>,
     /// Reden waarom géén enkele weerstands- of stabiliteitstoets mag draaien.
     totaal_weigering: Option<String>,
+    /// De vorm waarvoor bij klasse 4 de effectieve doorsnede volgens
+    /// NEN-EN 1993-1-5 4.4 bepaald kan worden (zie `effectief`); `None` voor
+    /// elke andere vorm.
+    klasse4_vorm: Option<Klasse4Vorm>,
     /// Losse meldingen die als eigen regel in de checklijst landen.
     meldingen: Vec<(&'static str, &'static str, String)>,
     /// Notities die bij de kipcontrole horen als die wél draait.
@@ -204,6 +253,24 @@ fn hang_toets_notities(checks: &mut [NamedCheck], notities: &[(&'static str, Str
             plak_notitie(c, tekst);
         }
     }
+}
+
+/// De kanttekening bij elke toets die met de effectieve doorsnede van een
+/// klasse 4-doorsnede rekent.
+fn klasse4_toelichting(e: &EffectieveDoorsnede, p: &SectionProperties) -> String {
+    format!(
+        "Klasse 4 (NEN-EN 1993-1-1 6.2.2.5): gerekend met de effectieve doorsnede volgens \
+         NEN-EN 1993-1-5 4.4 — A_eff = {} mm² (A = {} mm²), W_eff,y = {} mm³ (W_el,y = {} mm³), \
+         W_eff,z = {} mm³ (W_el,z = {} mm³) — en de elastische formules (klasse 3) op die \
+         grootheden. De doorsnede is dubbelsymmetrisch: e_N = 0. Stijfheid (I, i, I_t, I_w, N_cr, \
+         M_cr) en afschuifoppervlak blijven bruto.",
+        nl_getal(e.a_eff_mm2),
+        nl_getal(p.area_mm2),
+        nl_getal(e.w_eff_y_mm3),
+        nl_getal(p.wel_y_mm3),
+        nl_getal(e.w_eff_z_mm3),
+        nl_getal(p.wel_z_mm3),
+    )
 }
 
 /// De toetsen waarin f_y (of f_u) rechtstreeks in de formule staat; daar
@@ -313,6 +380,43 @@ fn toetsgegevens(id: &str) -> (&'static str, &'static str, bool) {
         .find(|(t, ..)| *t == id)
         .map(|&(_, titel, artikel, stab)| (titel, artikel, stab))
         .unwrap_or(("", "", false))
+}
+
+/// De schuiftoets om z bij een geweigerde lijfplooitoets (h_w/t_w > 72ε/η,
+/// NEN-EN 1993-1-5 §5.1(2)). De plooiweerstand V_b,Rd van 1993-1-5 §5 is niet
+/// geïmplementeerd, maar 6.2.6(1) eist hoe dan ook V_Ed ≤ V_pl,Rd: de
+/// plastische weerstand is een BOVENGRENS, en de plooitoets kan alleen lager
+/// uitkomen. Overschrijdt V_z,Ed die bovengrens, dan voldoet de staaf in elk
+/// geval niet; de toets staat er dan gerekend, met status "voldoet niet". Anders
+/// blijft hij geweigerd met `redenen` — een V_Ed onder V_pl,Rd zegt zonder de
+/// plooitoets niets.
+///
+/// Tot oktober 2026 werd de toets altijd geweigerd, ook bij V_Ed > V_pl,Rd, en
+/// las zo'n staaf als "voldoet" (controle 2026-10, punt B7: een IPE 600 S460 in
+/// klasse 4 met V_z,Ed = 2600 kN > V_pl,z,Rd = 2225 kN kreeg status Ok).
+fn schuif_met_bovengrens(
+    p: &SectionProperties,
+    grade: &SteelGrade,
+    state: ForceStateSnapshot,
+    redenen: Vec<String>,
+    lijfplooi: &str,
+) -> NamedCheck {
+    let mut v = v_z_c_rd(p, grade, state);
+    let boven = v.uc.as_ref().is_some_and(|u| u.uc > 1.0);
+    if boven {
+        v.status = CheckStatus::NotOk;
+        v.notes.push(format!(
+            "V_z,Ed = {} kN > V_pl,z,Rd = {} kN: de doorsnede voldoet al niet aan 6.2.6(1). De \
+             plastische dwarskrachtweerstand is een bovengrens; de plooitoets van NEN-EN 1993-1-5 \
+             §5 is niet uitgevoerd ({lijfplooi}) en kan alleen een lagere weerstand geven.",
+            nl_getal_2(state.forces.vz_ed.abs()),
+            nl_getal_2(v.value),
+        ));
+        make_resistance(v)
+    } else {
+        let (titel, artikel, stab) = toetsgegevens("6.2.6_shear_z");
+        weigering("6.2.6_shear_z", titel, artikel, stab, redenen, state)
+    }
 }
 
 /// Kiest de doorsnede: eerst de inline `custom_section`, anders de database.
@@ -502,13 +606,22 @@ fn resolveer_doorsnede(
             rond_d_mm: is_rond.then_some(profile.geometry.h),
             interactievorm,
             schuif_weigering: None,
-            // Klasse 4: geen effectieve breedtes volgens NEN-EN 1993-1-5, dus
-            // niet getoetst — net als op het inline pad. Tot oktober 2026 gold
-            // dat alleen daar: een catalogusprofiel in klasse 4 (een slanke
-            // koker of buis, een hoeklijn buiten de klasse-3-regel, een lijf
-            // dat onder druk klasse 4 wordt) werd gerekend met W_el en de
-            // volle A, zonder plooireductie.
-            totaal_weigering: (klasse == CrossSectionClass::Class4).then(|| REDEN_KLASSE_4.to_string()),
+            // Klasse 4 wordt in `check_beam` afgehandeld: met de effectieve
+            // doorsnede volgens NEN-EN 1993-1-5 4.4 waar die voor de vorm
+            // bepaald kan worden (I-profiel, koker), anders met een gerichte
+            // weigering van alleen de toetsen die van de klasse afhangen.
+            totaal_weigering: None,
+            klasse4_vorm: match profile.kind {
+                ProfileKind::ISection => Some(Klasse4Vorm::I {
+                    h: p.h_mm,
+                    b: p.b_mm,
+                    tf: p.tf_mm,
+                    tw: p.tw_mm,
+                    r: p.r_mm,
+                }),
+                ProfileKind::Shs | ProfileKind::Rhs => Some(Klasse4Vorm::Koker { h: p.h_mm, b: p.b_mm, t: p.tw_mm }),
+                _ => None,
+            },
             meldingen: vec![],
             kip_notities: vec![],
             knikassen: if is_hoeklijn {
@@ -687,9 +800,17 @@ fn doorsnede_uit_custom(
         .filter(|hw| *hw > grens_lijfplooi)
         .map(|hw| reden_lijfplooi(hw, grens_lijfplooi));
 
-    // (2) Klasse 4: geen effectieve breedtes, dus geen enkele weerstand.
-    let totaal_weigering = (klasse == CrossSectionClass::Class4)
-        .then(|| REDEN_KLASSE_4.to_string());
+    // (2) Klasse 4: in `check_beam`, met de effectieve doorsnede voor de
+    //     dubbelsymmetrische gelaste I (NEN-EN 1993-1-5 4.4); elke andere
+    //     samengestelde vorm weigert daar de toetsen die van de klasse afhangen.
+    let totaal_weigering: Option<String> = None;
+    let klasse4_vorm = matches!(interactievorm, Interactievorm::I).then(|| Klasse4Vorm::I {
+        h: props.h_mm,
+        b: props.b_mm,
+        tf: props.tf_mm,
+        tw: props.tw_mm,
+        r: 0.0,
+    });
 
     // Knikkrommen: tabel 6.2, **gelaste** I-doorsnede. t_f ≤ 40 mm → b (y-y) en
     // c (z-z); t_f > 40 mm → c (y-y) en d (z-z). Een inline doorsnede erft
@@ -727,6 +848,7 @@ fn doorsnede_uit_custom(
         kip_weigering,
         schuif_weigering,
         totaal_weigering,
+        klasse4_vorm,
         meldingen,
         kip_notities,
         // Een inline doorsnede is uit platen samengesteld en heeft geen
@@ -759,7 +881,14 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
         input.deflection_limit_class,
         input.deflection_limit_numerator,
         input.deflection_add_limit_numerator,
-    ) {
+    )
+    .and_then(|_| {
+        crate::deflection::keur_doorbuigingsdeel(
+            input.length_m,
+            input.deflection_length_m,
+            input.deflection_add_mm,
+        )
+    }) {
         return BeamCheckResult {
             beam_id: input.beam_id,
             profile_name: input.profile_name.clone(),
@@ -1015,16 +1144,68 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
             vec![reden.clone()], bend_state));
     }
 
-    // Klasse 4 (weigering 2): geen effectieve breedtes volgens NEN-EN 1993-1-5,
-    // dus geen enkele weerstands- of stabiliteitstoets. Alle dertien toetsen
-    // blijven mét reden in de lijst staan; alleen de doorbuigingstoets — puur
-    // EI en dus altijd geldig — draait nog. Ook de trektoets blijft hier leeg:
-    // een staaf die op één punt niet toetsbaar is, is als geheel niet getoetst
-    // (en de verlopende staaf herkent een weigering aan "geen enkele UC").
-    if let Some(reden4) = doorsnede.totaal_weigering.clone() {
+    // KLASSE 4 (NEN-EN 1993-1-1 6.2.2.5). Een doorsnede in klasse 4 plooit
+    // plaatselijk voordat zij de vloeigrens haalt; de norm rekent dan met de
+    // effectieve doorsnede volgens NEN-EN 1993-1-5 4.4: A_eff onder
+    // gelijkmatige druk, W_eff,y en W_eff,z onder zuivere buiging (zie
+    // `nen_en_1993_1_1_section::effectief`). Daarmee lopen de toetsen zoals
+    // bij klasse 3 — elastisch — maar op de effectieve grootheden: (6.11),
+    // (6.15), (6.44), (6.48)/(6.51), kip met W_eff,y (6.3.2.1(3)) en 6.3.3 met
+    // tabel 6.7, klasse 4. Knik en kip houden de bruto stijfheid.
+    //
+    // Tot oktober 2026 werd elke klasse 4-doorsnede als geheel geweigerd, met
+    // uc_max = 0 en status "n.v.t." — ook trek en dwarskracht, die niet van de
+    // plooiklasse afhangen. Een IPE 300 in S355 onder druk (lijf c/t = 35,0 >
+    // 42ε = 34,2) kreeg zo geen enkele uitkomst (controle 2026-10, punt B7).
+    let klasse4: Option<EffectieveDoorsnede> = if classification == CrossSectionClass::Class4 {
+        doorsnede.klasse4_vorm.and_then(|v| effectieve_doorsnede(v, p, &grade))
+    } else {
+        None
+    };
+    // Klasse 4 zonder effectieve doorsnede (een vorm waarvoor 4.4 hier niet is
+    // uitgewerkt): de toetsen die van de klasse afhangen worden geweigerd.
+    let klasse4_reden: Option<String> = (classification == CrossSectionClass::Class4 && klasse4.is_none())
+        .then(|| REDEN_KLASSE_4.to_string())
+        .or_else(|| doorsnede.totaal_weigering.clone());
+    // Lijfplooi onder schuifkracht (NEN-EN 1993-1-5 §5.1(2)) bij een slanke
+    // doorsnede: boven h_w/t_w = 72ε/η draagt het lijf de volle V_pl,Rd niet
+    // meer, en die plooitoets is niet geïmplementeerd. Op het inline pad stond
+    // dit al in `schuif_weigering`; bij klasse 4 geldt het voor elke vorm.
+    let schuif_weigering: Option<String> = doorsnede.schuif_weigering.clone().or_else(|| {
+        let h_w = p.h_mm - 2.0 * p.tf_mm;
+        let grens = 72.0 * epsilon(&grade) / ETA_SCHUIF;
+        (classification == CrossSectionClass::Class4 && p.tw_mm > 0.0 && h_w > 0.0 && h_w / p.tw_mm > grens)
+            .then(|| reden_lijfplooi(h_w / p.tw_mm, grens))
+    });
+
+    // Klasse 4 zonder effectieve doorsnede: alleen trek (6.2.3), dwarskracht
+    // (6.2.6) en de doorbuiging worden gerekend — die hangen niet van de
+    // plooiklasse af. Alle andere toetsen blijven mét reden in de lijst. De
+    // staaf is dan NIET VOLLEDIG GETOETST: status n.v.t. (of "voldoet niet"
+    // als een gerekende toets faalt), nooit "voldoet".
+    if let Some(reden4) = klasse4_reden.clone() {
         for &(id, titel, artikel, stabiliteit) in TOETSEN.iter() {
+            match id {
+                TOETS_TREK => {
+                    checks.push(make_resistance(n_t_rd(p, &grade, a_net, trek_state)));
+                    continue;
+                }
+                "6.2.6_shear_z" => {
+                    checks.push(match &schuif_weigering {
+                        None => make_resistance(v_z_c_rd(p, &grade, shear_state)),
+                        // Lijfplooi: V_pl,Rd als bovengrens (zie `schuif_met_bovengrens`).
+                        Some(r) => schuif_met_bovengrens(p, &grade, shear_state, vec![reden4.clone(), r.clone()], r),
+                    });
+                    continue;
+                }
+                "6.2.6_shear_y" => {
+                    checks.push(make_resistance(v_y_c_rd(p, &grade, shear_y_state)));
+                    continue;
+                }
+                _ => {}
+            }
             let mut redenen = vec![reden4.clone()];
-            if let Some(r) = &doorsnede.schuif_weigering {
+            if let Some(r) = &schuif_weigering {
                 if matches!(id, "6.2.6_shear_z" | "6.2.8_combined_mv" | "6.2.10_combined_mnv") {
                     redenen.push(r.clone());
                 }
@@ -1044,30 +1225,29 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
             };
             checks.push(weigering(id, titel, artikel, stabiliteit, redenen, state));
         }
-        let (defl_fin, defl_add) = check_deflection_pair(
-            input.deflection_actual_max_mm,
-            input.pre_camber_mm,
-            input.deflection_permanent_mm,
-            input.length_m,
-            input.deflection_limit_class,
-            input.deflection_limit_numerator,
-            input.deflection_add_limit_numerator,
-            input.is_cantilever,
-        );
+        let (defl_fin, defl_add) = doorbuigingstoetsen(&input);
         checks.push(make_resistance(met_invoernotities(defl_fin, &input)));
         checks.push(make_resistance(defl_add));
 
         // Ook op het klasse-4-pad hoort een doorsnedegebonden beperking bij de
         // toets te staan waarop zij slaat; de toets is er, hij is alleen
-        // geweigerd. De dikteklasse (tabel 3.1) staat alleen bij gerekende
-        // toetsen, en hier is er geen; ε voor de klasse-indeling kwam wel uit
-        // de dikte-afhankelijke f_y.
+        // geweigerd. De dikteklasse (tabel 3.1) alleen bij de gerekende toetsen.
         hang_toets_notities(&mut checks, &doorsnede.toets_notities);
+        hang_dikte_notitie(&mut checks, &dikte_notitie);
 
         let mut uc_max = 0.0_f64;
+        let mut governing = String::new();
         for c in &checks {
-            uc_max = uc_max.max(uc_of(c));
+            let uc = uc_of(c);
+            if uc > uc_max {
+                uc_max = uc;
+                governing = c.id.clone();
+            }
         }
+        // Faalt een gerekende toets, dan voldoet de staaf niet — dat staat
+        // vast, ook zonder de andere toetsen. Anders is hij niet volledig
+        // getoetst, en leest de status nooit als "voldoet".
+        let faalt = uc_max > 1.0;
         return BeamCheckResult {
             beam_id: input.beam_id,
             profile_name: doorsnede.naam.clone(),
@@ -1075,8 +1255,12 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
             classification,
             checks,
             uc_max,
-            status: CheckStatus::NotApplicable,
-            governing_check_id: format!("NIET TOETSBAAR: {reden4}"),
+            status: if faalt { CheckStatus::NotOk } else { CheckStatus::NotApplicable },
+            governing_check_id: if faalt {
+                governing
+            } else {
+                format!("NIET TOETSBAAR: {reden4}")
+            },
             // Prismatische staaf: geen verloopgegevens, en dan ook niet
             // geserialiseerd (zie BeamCheckResult::verloop).
             verloop: None,
@@ -1093,14 +1277,78 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     if let Some(d_mm) = doorsnede.rond_d_mm {
         checks.push(make_resistance(n_t_rd_draadeind(d_mm, &grade, trek_state)));
     }
-    // Druk op het punt met de grootste druk; zonder druk n.v.t.
-    checks.push(make_resistance(n_c_rd(p, &grade, comp_state)));
 
-    let bend_y = m_y_c_rd(p, &grade, classification, bend_state);
+    // Klasse 4 met effectieve doorsnede: vanaf hier rekenen de toetsen die van
+    // de klasse afhangen met `p_reken` (A_eff, W_eff,y, W_eff,z; de rest
+    // bruto) en, waar een klasse gevraagd wordt, als klasse 3 — de elastische
+    // formules, op de effectieve grootheden. Trek (hierboven) en dwarskracht
+    // blijven op de brutodoorsnede. Zonder klasse 4 is `p_reken` gewoon `p`.
+    let p_reken: &SectionProperties = klasse4.as_ref().map(|e| &e.props).unwrap_or(p);
+    let klasse_reken = if klasse4.is_some() { CrossSectionClass::Class3 } else { classification };
+    let klasse4_notitie: Option<String> = klasse4.as_ref().map(|e| klasse4_toelichting(e, p));
+
+    // Druk op het punt met de grootste druk; zonder druk n.v.t.
+    let mut druk = n_c_rd(p_reken, &grade, comp_state);
+    if let Some(e) = &klasse4 {
+        // (6.11): N_c,Rd = A_eff·f_y/γ_M0.
+        druk.article = "art. 6.2.4 (6.11)".to_string();
+        druk.formula_latex = r"N_{c,Rd} = \frac{A_{eff} \cdot f_y}{\gamma_{M0}}".to_string();
+        for v in druk.variables.iter_mut().filter(|v| v.symbol == "A") {
+            v.symbol = "A_{eff}".to_string();
+        }
+        druk.deelstappen = effectief::deelstappen(
+            &e.druk, &grade, "A_{eff}", "Effectieve oppervlakte onder gelijkmatige druk",
+            e.a_eff_mm2, "mm²", p.area_mm2,
+        );
+        druk.notes.push(format!(
+            "Klasse 4: A_eff = {} mm² (bruto A = {} mm²) volgens NEN-EN 1993-1-5 4.4 — {}. De \
+             doorsnede is dubbelsymmetrisch, dus het zwaartepunt verschuift niet (e_N = 0).",
+            nl_getal(e.a_eff_mm2),
+            nl_getal(p.area_mm2),
+            effectief::beschrijf(&e.druk)
+        ));
+    }
+    checks.push(make_resistance(druk));
+
+    // Bij klasse 4 W_eff,y (6.15): `m_y_c_rd` noemt W_eff,y al bij klasse 4.
+    let mut bend_y = m_y_c_rd(p_reken, &grade, classification, bend_state);
+    if let Some(e) = &klasse4 {
+        bend_y.article = "art. 6.2.5 (6.15)".to_string();
+        bend_y.formula_latex = r"M_{y,c,Rd} = \frac{W_{eff,y,min} \cdot f_y}{\gamma_{M0}}".to_string();
+        bend_y.deelstappen = effectief::deelstappen(
+            &e.buiging_y, &grade, "W_{eff,y}", "Effectief weerstandsmoment onder buiging om y",
+            e.w_eff_y_mm3, "mm³", p.wel_y_mm3,
+        );
+        bend_y.notes.push(format!(
+            "Klasse 4: W_eff,y = {} mm³ (W_el,y = {} mm³) onder zuivere buiging om de y-as, \
+             NEN-EN 1993-1-5 4.4 — {}.",
+            nl_getal(e.w_eff_y_mm3),
+            nl_getal(p.wel_y_mm3),
+            effectief::beschrijf(&e.buiging_y)
+        ));
+    }
     let m_y_c_rd_knm = bend_y.value;
     checks.push(make_resistance(bend_y));
 
-    let bend_z = m_z_c_rd(p, &grade, classification, bend_z_state);
+    let mut bend_z = m_z_c_rd(p_reken, &grade, classification, bend_z_state);
+    if let Some(e) = &klasse4 {
+        bend_z.article = "art. 6.2.5 (6.15)".to_string();
+        bend_z.formula_latex = r"M_{z,c,Rd} = \frac{W_{eff,z,min} \cdot f_y}{\gamma_{M0}}".to_string();
+        for v in bend_z.variables.iter_mut().filter(|v| v.symbol == r"W_{el,z}") {
+            v.symbol = r"W_{eff,z}".to_string();
+        }
+        bend_z.deelstappen = effectief::deelstappen(
+            &e.buiging_z, &grade, "W_{eff,z}", "Effectief weerstandsmoment onder buiging om z",
+            e.w_eff_z_mm3, "mm³", p.wel_z_mm3,
+        );
+        bend_z.notes.push(format!(
+            "Klasse 4: W_eff,z = {} mm³ (W_el,z = {} mm³) onder zuivere buiging om de z-as, \
+             NEN-EN 1993-1-5 4.4 — {}.",
+            nl_getal(e.w_eff_z_mm3),
+            nl_getal(p.wel_z_mm3),
+            effectief::beschrijf(&e.buiging_z)
+        ));
+    }
     checks.push(make_resistance(bend_z));
 
     // Lijfplooi (weigering 3): boven 72ε/η draagt het lijf niet meer de volle
@@ -1111,10 +1359,11 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     let geweigerd_v = |id: &str, state: ForceStateSnapshot| -> NamedCheck {
         let (titel, artikel, stab) = toetsgegevens(id);
         weigering(id, titel, artikel, stab,
-            vec![doorsnede.schuif_weigering.clone().unwrap_or_default()], state)
+            vec![schuif_weigering.clone().unwrap_or_default()], state)
     };
-    let v_z_pl_rd = if doorsnede.schuif_weigering.is_some() {
-        checks.push(geweigerd_v("6.2.6_shear_z", shear_state));
+    let v_z_pl_rd = if let Some(r) = &schuif_weigering {
+        // V_pl,Rd als bovengrens: V_Ed > V_pl,Rd voldoet in elk geval niet.
+        checks.push(schuif_met_bovengrens(p, &grade, shear_state, vec![r.clone()], r));
         0.0 // wordt niet gebruikt: elke afnemer van V_pl,Rd is hieronder geweigerd
     } else {
         let shear_z = v_z_c_rd(p, &grade, shear_state);
@@ -1150,7 +1399,7 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
             )));
         }
     } else {
-        match doorsnede.schuif_weigering {
+        match schuif_weigering {
             Some(_) => checks.push(geweigerd_v("6.2.8_combined_mv", bend_state)),
             None => {
                 // 6.2.8 op ELK punt van de omhullende, net als 6.2.9 en 6.2.10:
@@ -1163,7 +1412,7 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
                     env,
                     bend_state,
                     "telkens met V_z,Ed en M_y,Ed van dat punt",
-                    |s| check_combined_mv(p, &grade, classification, v_z_pl_rd, m_y_c_rd_knm, s),
+                    |s| check_combined_mv(p, &grade, classification, &doorsnede.interactievorm, v_z_pl_rd, m_y_c_rd_knm, s),
                 )));
             }
         }
@@ -1174,9 +1423,9 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
             "telkens met N, M_y en M_z van dat punt",
             |s| {
                 buiging_en_normaalkracht(
-                    p,
+                    p_reken,
                     &grade,
-                    classification,
+                    klasse_reken,
                     &doorsnede.interactievorm,
                     Interactiesoort::BuigingNormaal,
                     s,
@@ -1184,7 +1433,7 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
             },
         )));
 
-        match doorsnede.schuif_weigering {
+        match schuif_weigering {
             Some(_) => checks.push(geweigerd_v("6.2.10_combined_mnv", bend_state)),
             None => {
                 checks.push(make_resistance(maatgevend_over_omhullende(
@@ -1193,9 +1442,9 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
                     "telkens met N, V_y, V_z, M_y en M_z van dat punt",
                     |s| {
                         buiging_en_normaalkracht(
-                            p,
+                            p_reken,
                             &grade,
-                            classification,
+                            klasse_reken,
                             &doorsnede.interactievorm,
                             Interactiesoort::BuigingNormaalDwars,
                             s,
@@ -1257,7 +1506,8 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     let reden_doorlopend_kip: Option<String> = (!doorlopend.is_empty() && !beide_vrij).then(|| {
         format!(
             "de staaf loopt aan {} zonder oplegging in het verlengde door in een staaf met een \
-             andere doorsnede of een ander materiaal. Dat staafeind is geen gaffel, en NB.NB.4.3 \
+             andere doorsnede, een ander materiaal of een verlopend profiel. Dat staafeind is geen \
+             gaffel, en NB.NB.4.3 \
              kent alleen kipvelden tussen gaffels en kipsteunen; de kipvelden van een doorgaande \
              lijn met wisselende doorsnede zijn niet per deel te bepalen. Kip is daarom niet \
              getoetst: zet op die tussenknoop een kipsteun (aan beide flenzen) of toets de \
@@ -1273,7 +1523,8 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     {
         Some(format!(
             "de staaf loopt aan {} zonder oplegging in het verlengde door in een staaf met een \
-             andere doorsnede of een ander materiaal. De terugval van de kniklengte op de \
+             andere doorsnede, een ander materiaal of een verlopend profiel. De terugval van de \
+             kniklengte op de \
              staaflengte zou dat staafeind als zijdelings gesteund aannemen, en dat is het niet \
              (basisaudit nr 29: een tussenknoop halveerde zo de kniklengte). Geef L_cr,y én \
              L_cr,z op voor de doorgaande lijn als geheel; dan wordt de kniktoets uitgevoerd",
@@ -1284,14 +1535,31 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     };
     // Een vrij eind zonder opgegeven kniklengte: 2·L, niet de staaflengte en
     // ook niet de afleiding uit de kipsteunen — die veronderstelt gesteunde
-    // staafeinden.
-    let kniklengte_of_vrij = |as_naam: &str, in_vlak: bool, opgegeven_m: f64, steunen: Option<Steunen<'_>>| {
+    // staafeinden. Zit de zijdelingse uitbuiging om die as al in een globale
+    // tweede-orde-berekening met scheefstand, dan de staaflengte (5.2.2(7)b).
+    // Bij een hoekprofiel vallen u en v niet samen met y en z: dan alleen als
+    // de berekening beide richtingen dekt.
+    let zijdelings = input.zijdelingse_knik_in_analyse.unwrap_or_default();
+    let (gedekt_1, gedekt_2) = if eigen_assen {
+        (zijdelings.y, zijdelings.z)
+    } else {
+        let beide = zijdelings.y && zijdelings.z;
+        (beide, beide)
+    };
+    let kniklengte_of_vrij = |as_naam: &str, in_vlak: bool, opgegeven_m: f64, steunen: Option<Steunen<'_>>, gedekt: bool| {
         match vrij_eind {
-            Some(plaats) if !opgegeven(opgegeven_m) => Kniklengte::vrij_eind(as_naam, l_staaf_mm, in_vlak, plaats),
+            Some(plaats) if !opgegeven(opgegeven_m) => Kniklengte::vrij_eind_volgens_analyse(
+                as_naam,
+                l_staaf_mm,
+                in_vlak,
+                plaats,
+                gedekt,
+                "NEN-EN 1993-1-1 5.2.2(7)b",
+            ),
             _ => bepaal_kniklengte(as_naam, in_vlak, opgegeven_m, l_staaf_mm, steunen),
         }
     };
-    let kniklengte_1 = kniklengte_of_vrij(assen_info.naam_1, eigen_assen, input.buckling_length_y_m, None);
+    let kniklengte_1 = kniklengte_of_vrij(assen_info.naam_1, eigen_assen, input.buckling_length_y_m, None, gedekt_1);
     let kniklengte_2 = kniklengte_of_vrij(
         assen_info.naam_2,
         false,
@@ -1301,9 +1569,18 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
             onder: &input.lateral_bracing.bottom_flange_positions,
             soort: Steunrand::Flens,
         }),
+        gedekt_2,
     );
     // L_cr,y blijft nodig voor de sway-kanttekening bij C_my (stap 8).
     let l_cr_y_mm = kniklengte_1.l_cr_mm;
+    // Een vrij eind heeft een knikvorm met verplaatsbare knopen, met 2·L én met
+    // L uit de tweede orde; stap 8 houdt dan C_m = 0,9 als ondergrens, om
+    // beide assen. (Om y deed de regel L_cr,y > L dat bij 2·L al.)
+    let zijdelings_l_1 = kniklengte_1.herkomst == KniklengteHerkomst::VrijEindTweedeOrde;
+    let vrij_as_2 = matches!(
+        kniklengte_2.herkomst,
+        KniklengteHerkomst::VrijEind | KniklengteHerkomst::VrijEindTweedeOrde
+    );
     let knikassen = [
         Knikas {
             kniklengte: kniklengte_1,
@@ -1327,7 +1604,7 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     // opgezocht: de symboolnamen dragen de asnaam ("\chi_u" bij een
     // hoekprofiel), en een zoekopdracht op "\chi_y" zou daar stilzwijgend op
     // de standaardwaarde 1,0 uitkomen — een knikreductie die er niet is.
-    let n_pl_rd_kn = p.area_mm2 * grade.fy_mpa * 1e-3;
+    let n_pl_rd_kn = p_reken.area_mm2 * grade.fy_mpa * 1e-3;
     // Zonder druk in de omhullende is knik niet van toepassing — voor elke
     // doorsnede; er valt niets te knikken. `comp_state` is het meest gedrukte
     // punt, dus N ≥ 0 daar betekent: nergens druk. De knikweerstanden worden
@@ -1340,7 +1617,12 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
         checks.push(weigering("6.3.1_buckling", titel, artikel, stab, vec![reden.clone()], comp_state));
         (f64::NAN, f64::NAN, f64::NAN, f64::NAN)
     } else {
-        let knik = n_b_rd(p, &grade, &knikassen, comp_state);
+        // Klasse 4: (6.48) met A_eff en (6.51) met √(A_eff/A).
+        let knik = if klasse4.is_some() {
+            n_b_rd_klasse4(p_reken, &grade, &knikassen, comp_state, p.area_mm2)
+        } else {
+            n_b_rd(p, &grade, &knikassen, comp_state)
+        };
         let uit = (
             knik.per_as[0].chi * n_pl_rd_rd_fn(n_pl_rd_kn, grade.gamma_m1),
             knik.per_as[1].chi * n_pl_rd_rd_fn(n_pl_rd_kn, grade.gamma_m1),
@@ -1393,13 +1675,15 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     //    — mét reden — en vervalt 6.3.3, want dat deelt door M_b,Rd.
     let is_channel = doorsnede.is_channel;
     let l_staaf_kip_mm = input.length_m * 1000.0;
-    let is_class_1_or_2 = matches!(classification, CrossSectionClass::Class1 | CrossSectionClass::Class2);
+    let is_class_1_or_2 = matches!(klasse_reken, CrossSectionClass::Class1 | CrossSectionClass::Class2);
     // Art. 6.3.2.1(3): W_y = W_pl,y bij klasse 1 en 2, W_el,y bij klasse 3 — in
     // λ̄_LT, in M_b,Rd en daarmee in de M_y,Rk van 6.3.3 (tabel 6.7). Klasse 4
     // is hierboven al als hele staaf geweigerd (`totaal_weigering`); kwam hij
     // hier toch, dan rekent hij elastisch, en dat is voor klasse 4 te gunstig —
     // vandaar de expliciete weigering hieronder.
-    let kip_w = KipWeerstandsmoment::voor_klasse(classification);
+    // Klasse 4 met effectieve doorsnede: W_y = W_eff,y (art. 6.3.2.1(3)), via
+    // `p_reken` en de elastische tak.
+    let kip_w = KipWeerstandsmoment::voor_klasse(klasse_reken);
     let kip_weigering = kip_weigering.or_else(|| {
         (kip_w.is_none() && doorsnede.kip_nvt.is_none()).then(|| {
             "kip 6.3.2 is niet gerekend: de doorsnede is klasse 4 en W_eff,y (NEN-EN 1993-1-5) is \
@@ -1600,7 +1884,7 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     let kip_gerekend = kip_weigering.is_none() && doorsnede.kip_nvt.is_none();
     // Waar kip niet van toepassing is, is χ_LT = 1 en M_b,Rd = M_c,Rd met de
     // weerstand van de doorsneedklasse (γ_M1).
-    let m_b_rd_zonder_kip = kip_w.mm3(p) * grade.fy_mpa / grade.gamma_m1 * 1e-6;
+    let m_b_rd_zonder_kip = kip_w.mm3(p_reken) * grade.fy_mpa / grade.gamma_m1 * 1e-6;
     let per_combinatie: Vec<KipPerCombinatie> = combinaties
         .iter()
         .map(|&c| {
@@ -1618,14 +1902,14 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
             let bend_c = snap(governing_for(&punten_van(c), |f| f.my_ed.abs()));
             let (ltb, veld) = if is_channel {
                 m_b_rd_channel_met_veld(
-                    p, &grade, kip_w, geo.l_g_mm, &geo.kipvelden,
+                    p_reken, &grade, kip_w, geo.l_g_mm, &geo.kipvelden,
                     input.q_equiv_n_per_mm,
                     input.z_a_mm,
                     bend_c,
                 )
             } else {
                 m_b_rd_met_veld(
-                    p, &grade, kip_w, geo.l_g_mm, &geo.kipvelden,
+                    p_reken, &grade, kip_w, geo.l_g_mm, &geo.kipvelden,
                     input.q_equiv_n_per_mm,
                     input.z_a_mm,
                     doorsnede.kip_profielsoort,
@@ -1734,15 +2018,27 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     // maar de formule is die van 6.3.3). M_y,Rk zit in M_b,Rd = χ_LT·M_y,Rk/γ_M1
     // van de kiptoets; die rekent per art. 6.3.2.1(3) met dezelfde W_y.
     let (w_z_rk, w_z_symbool) = if is_class_1_or_2 {
-        (p.wpl_z_mm3, "W_pl,z")
+        (p_reken.wpl_z_mm3, "W_pl,z")
+    } else if klasse4.is_some() {
+        (p_reken.wel_z_mm3, "W_eff,z")
     } else {
-        (p.wel_z_mm3, "W_el,z")
+        (p_reken.wel_z_mm3, "W_el,z")
     };
-    let n_rk_kn = p.area_mm2 * grade.fy_mpa * 1e-3;
-    let m_y_rk_knm = kip_w.mm3(p) * grade.fy_mpa * 1e-6;
+    let n_rk_kn = p_reken.area_mm2 * grade.fy_mpa * 1e-3;
+    let m_y_rk_knm = kip_w.mm3(p_reken) * grade.fy_mpa * 1e-6;
     let m_z_rk_knm = w_z_rk * grade.fy_mpa * 1e-6;
     let m_z_c_rd_knm = m_z_rk_knm / grade.gamma_m1;
-    let tabel_6_7 = format!(
+    let tabel_6_7 = if klasse4.is_some() {
+        format!(
+            "Tabel 6.7, klasse 4: N_Rk = A_eff·f_y = {} kN, M_y,Rk = W_eff,y·f_y = {} kNm en \
+             M_z,Rk = W_eff,z·f_y = {} kNm; ΔM_y,Ed = e_N,y·N_Ed en ΔM_z,Ed = e_N,z·N_Ed zijn nul, \
+             want de doorsnede is dubbelsymmetrisch (e_N = 0). De interactiefactoren zijn die \
+             van klasse 3 en 4 (bijlage B, tabel B.1/B.2).",
+            nl_getal_3(n_rk_kn),
+            nl_getal_3(m_y_rk_knm),
+            nl_getal_3(m_z_rk_knm)
+        )
+    } else { format!(
         "Tabel 6.7, klasse {}: N_Rk = A·f_y = {} kN, M_y,Rk = {}·f_y = {} kNm en M_z,Rk = \
          {}·f_y = {} kNm{}.",
         match classification {
@@ -1760,7 +2056,7 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
         } else {
             "; bij klasse 3 de elastische weerstandsmomenten, ook in M_b,Rd (art. 6.3.2.1(3))"
         }
-    );
+    ) };
     // Wanneer 6.3.3 niet gerekend wordt, en waarom. Als de kip geweigerd is —
     // 6.61 en 6.62 delen door M_b,Rd, en zonder kipcontrole bestaat dat getal
     // niet; doorrekenen met χ_LT = 1 zou de kip stilzwijgend wegpoetsen. Waar
@@ -1829,8 +2125,32 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
                     nl_getal(l_staaf_mm)
                 ));
                 cm_y.cm = 0.9;
+            } else if zijdelings_l_1 && cm_y.cm < 0.9 {
+                // Tabel B.3, onder de tabel: een staaf met een knikvorm met
+                // verplaatsbare knopen krijgt C_m = 0,9. Een vrij staafeind IS
+                // zo'n staaf, ook als haar zijdelingse knik in de tweede-orde-
+                // berekening zit en L_cr daarom de staaflengte is. Of de
+                // ondergrens na zo'n berekening nog nodig is, laat de norm open;
+                // hier is de veilige lezing gekozen.
+                cm_y.toelichting.push_str(
+                    " Een staafeind is vrij: de staaf heeft een knikvorm met verplaatsbare knopen, ook al \
+                     is L_cr,y de staaflengte omdat de zijdelingse knik in de tweede-orde-berekening zit. \
+                     Tabel B.3 schrijft daarvoor C_my = 0,9 voor, en die is hier als ondergrens \
+                     aangehouden (C_my = 0,9).",
+                );
+                cm_y.cm = 0.9;
             }
-            let cm_z: CmUitkomst = cm_uit_momentenlijn(&momentenlijn(|f| f.mz_ed));
+            let mut cm_z: CmUitkomst = cm_uit_momentenlijn(&momentenlijn(|f| f.mz_ed));
+            if vrij_as_2 && cm_z.cm < 0.9 {
+                // Zie hierboven bij C_my; om z geldt het ook bij 2·L, want
+                // daar is geen regel L_cr,z > L zoals om y.
+                cm_z.toelichting.push_str(
+                    " Een staafeind is vrij: de staaf heeft een knikvorm met verplaatsbare knopen. \
+                     Tabel B.3 schrijft daarvoor C_mz = 0,9 voor, en die is hier als ondergrens \
+                     aangehouden (C_mz = 0,9).",
+                );
+                cm_z.cm = 0.9;
+            }
             let cm_lt: CmUitkomst = {
                 // Het maatgevende kipveld van deze combinatie: de bemonsterde
                 // punten erbinnen, plus de (geïnterpoleerde) momenten op de
@@ -1970,16 +2290,7 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     // 9. Doorbuiging (BGT): eindzakking w_fin (L/klasse, A1.4.3(4)) en
     //    bijkomende zakking w_add (ℓ_rep/n uit A1.4.3(3), afgeleid van de
     //    klasse tenzij `deflection_add_limit_numerator` een noemer opgeeft).
-    let (defl_fin, defl_add) = check_deflection_pair(
-        input.deflection_actual_max_mm,
-        input.pre_camber_mm,
-        input.deflection_permanent_mm,
-        input.length_m,
-        input.deflection_limit_class,
-        input.deflection_limit_numerator,
-        input.deflection_add_limit_numerator,
-        input.is_cantilever,
-    );
+    let (defl_fin, defl_add) = doorbuigingstoetsen(&input);
     checks.push(make_resistance(met_invoernotities(defl_fin, &input)));
     checks.push(make_resistance(defl_add));
 
@@ -1996,6 +2307,44 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     //     knikweerstand van een hoeklijn leest, hoort dáár te zien dat de
     //     slankheid om u-u en v-v is bepaald.
     hang_toets_notities(&mut checks, &doorsnede.toets_notities);
+    // De klasse-4-toelichting alleen bij de toetsen die werkelijk met de
+    // effectieve doorsnede gerekend hebben; een geweigerde toets houdt alleen
+    // zijn reden.
+    if let Some(tekst) = &klasse4_notitie {
+        const MET_EFFECTIEVE_DOORSNEDE: [&str; 7] = [
+            "6.2.8_combined_mv",
+            "6.2.9_combined_mn",
+            "6.2.10_combined_mnv",
+            "6.3.1_buckling",
+            "6.3.2_ltb",
+            "6.3.3_eq_6_61",
+            "6.3.3_eq_6_62",
+        ];
+        for c in checks.iter_mut().filter(|c| MET_EFFECTIEVE_DOORSNEDE.contains(&c.id.as_str())) {
+            let gerekend = match &c.kind {
+                CheckKind::Resistance(r) => r.uc.is_some(),
+                CheckKind::Stability(s) => s.uc.is_some(),
+            };
+            if gerekend {
+                plak_notitie(c, tekst);
+            }
+        }
+        // De kiptoets rekent met W_eff,y (art. 6.3.2.1(3)) via de elastische
+        // tak, die het symbool W_el,y voert; in het rapport hoort het
+        // weerstandsmoment te heten naar wat het is.
+        for c in checks.iter_mut().filter(|c| c.id == "6.3.2_ltb") {
+            if let CheckKind::Stability(s) = &mut c.kind {
+                let noem = |t: &mut String| *t = t.replace("W_{el,y}", "W_{eff,y}");
+                noem(&mut s.formula_latex);
+                s.variables.iter_mut().for_each(|v| noem(&mut v.symbol));
+                for d in s.deelstappen.iter_mut() {
+                    noem(&mut d.formula_latex);
+                    noem(&mut d.ingevuld_latex);
+                    d.variables.iter_mut().for_each(|v| noem(&mut v.symbol));
+                }
+            }
+        }
+    }
     // 9c. De dikteklasse van tabel 3.1 bij elke GEREKENDE toets die f_y in
     //     haar formule heeft. Een geweigerde toets heeft geen f_y gebruikt en
     //     krijgt de regel niet; haar notities zijn de reden van de weigering.
@@ -2022,7 +2371,71 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
             governing_check_id = c.id.clone();
         }
     }
-    let status = if uc_max <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk };
+    // Een geweigerde lijfplooitoets terwijl er dwarskracht is: 6.2.6 om z, 6.2.8
+    // en 6.2.10 zijn niet gerekend, en die toetsen zijn bij V_z,Ed ≠ 0 nodig. De
+    // staaf is dan NIET VOLLEDIG GETOETST — status n.v.t., nooit "voldoet" —
+    // tenzij een gerekende toets al faalt (waaronder V_Ed > V_pl,Rd, zie
+    // `schuif_met_bovengrens`). Zonder dwarskracht speelt de lijfplooi niet:
+    // dan zeggen 6.2.8 en 6.2.10 niets meer dan 6.2.5 en 6.2.9. Tot oktober
+    // 2026 telde de weigering niet mee en las zo'n staaf als "voldoet"
+    // (controle 2026-10, punt B7).
+    let onvolledig = schuif_weigering
+        .as_ref()
+        .filter(|_| shear_state.forces.vz_ed.abs() > V_NUL_KN);
+    // Een DOORLOPEND staafeind laat de kniktoets (zonder opgegeven
+    // kniklengtes) en de kiptoets weigeren. Een geweigerde toets telt als 0;
+    // zonder deze regel stond de staaf dan op Ok terwijl 6.3.1 bij druk of
+    // 6.3.2 bij buiging niet was getoetst (controle oktober 2026, K6: een
+    // kolom met een veer op 3 m kwam zo van UC 1,162 NotOk op 0,329 Ok). De
+    // status is dan NotApplicable: niet volledig getoetst. NotOk blijft NotOk.
+    //
+    // Rekenruis (|N|, |M_y| tot 10⁻⁶) telt niet als druk of buiging, net als
+    // bij de dwarskracht hierboven.
+    //
+    // De reden staat, net als bij de lijfplooi, in `governing_check_id` achter
+    // NIET_VOLLEDIG_GETOETST: zo toont elke weergave de reden in plaats van
+    // een toets-id met een UC onder 1, en ziet de toetsing van een verlopende
+    // staaf (`verlopend.rs`) dat een deelvraag niet volledig getoetst is. Zonder
+    // dat voorvoegsel kwam een verlopende kolom met een doorlopend eind op Ok
+    // (review van de samenvoeging 2026.42).
+    let doorlopend_geweigerd = !doorlopend.is_empty() && !beide_vrij;
+    let knik_ontbreekt =
+        doorlopend_geweigerd && knik_weigering.is_some() && comp_state.forces.n_ed < -N_NUL_KN;
+    let kip_ontbreekt = doorlopend_geweigerd
+        && kip_weigering.is_some()
+        && env.iter().any(|fp| fp.forces.my_ed.abs() > M_NUL_KNM);
+    let status = if uc_max > 1.0 {
+        CheckStatus::NotOk
+    } else if onvolledig.is_some() || knik_ontbreekt || kip_ontbreekt {
+        CheckStatus::NotApplicable
+    } else {
+        CheckStatus::Ok
+    };
+    if status == CheckStatus::NotApplicable {
+        let mut redenen: Vec<String> = Vec::new();
+        if let Some(reden) = onvolledig {
+            redenen.push(reden.clone());
+        }
+        let ontbreekt: Vec<&str> = [
+            (knik_ontbreekt, "de kolomknik (6.3.1) bij druk"),
+            (kip_ontbreekt, "de kip (6.3.2) bij buiging"),
+        ]
+        .iter()
+        .filter(|(ja, _)| *ja)
+        .map(|(_, wat)| *wat)
+        .collect();
+        if !ontbreekt.is_empty() {
+            redenen.push(format!(
+                "{} niet getoetst: de staaf loopt aan {} zonder oplegging door in een staaf met een \
+                 andere doorsnede, een ander materiaal of een verlopend profiel (de reden staat bij de toets)",
+                ontbreekt.join(" en "),
+                doorlopend.join(" en ")
+            ));
+        }
+        if !redenen.is_empty() {
+            governing_check_id = format!("{NIET_VOLLEDIG_GETOETST}: {}", redenen.join("; "));
+        }
+    }
 
     BeamCheckResult {
         beam_id: input.beam_id,

@@ -35,6 +35,17 @@ check("hij vraagt de route op", /undoRoute\(/.test(blok) && /=== "veld"\) return
 check("hij sluit invoervelden niet meer in het algemeen uit", !/tagName === "INPUT" \|\|/.test(blok));
 check("een veld wordt eerst vastgelegd (blur)", /moetEerstVastleggen\(t\)[\s\S]*\.blur\(\)/.test(blok));
 check("undo wacht een tik en gebruikt de actuele undo (ref)", /setTimeout\(voerUit, 0\)/.test(blok) && /undoRedoRef\.current\.undo\(\)/.test(blok));
+check("sneltoets kiest de historie van de modeldimensie, ook buiten de modelweergave",
+  /if \(modelDimension === "3d"\) undoRedoOpenFem3D\(isUndo/.test(blok)
+  && !/activeView === "openFem3d"/.test(blok));
+const werkbalk = /const toolbarUndoRedo = [\s\S]*?\n  };/.exec(app)?.[0] ?? "";
+check("undo- en redo-knoppen wachten op de blur-commit en lezen de actuele historie",
+  /setTimeout\(\(\) => \{[\s\S]*undoRedoRef\.current\[kind\]\(\);[\s\S]*}, 0\)/.test(werkbalk)
+  && /onUndoClick=\{\(\) => toolbarUndoRedo\("undo"\)\}/.test(app)
+  && /onUndo=\{\(\) => toolbarUndoRedo\("undo"\)\}/.test(app));
+check("API-undo en redo kiezen ook de historie van de modeldimensie",
+  /ongedaanMaken: \(\) => \{\s*if \(modelDimension === "3d" && explodeAmountRef\.current > 0\)[^\n]*\n\s*if \(modelDimension === "3d"\) undoRedoOpenFem3D\("undo"\)/.test(app)
+  && /opnieuw: \(\) => \{\s*if \(modelDimension === "3d" && explodeAmountRef\.current > 0\)[^\n]*\n\s*if \(modelDimension === "3d"\) undoRedoOpenFem3D\("redo"\)/.test(app));
 
 log("\n[3] een klik op het tekenvlak laat een veld los (anders ging Ctrl+Z na slepen naar het veld)");
 {

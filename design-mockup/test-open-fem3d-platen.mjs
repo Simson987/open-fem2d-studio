@@ -503,7 +503,9 @@ async function vierkantMetRanden({ a, t, q, h, randen, supports = [] }) {
   const egRequest = { ...buildOpenFem3DSolveRequest(eg, "linear", 1, mesh), bucklingModes: 0 };
   const egR = await reken(egRequest);
   const plaatGewicht = 2500 * 9.81 * 0.2 * 30 / 1000;
-  const staafGewicht = eg.memberLoads.reduce((s, l) => s + (-l.qzStart - l.qzEnd) / 2 * (l.endPositionM - l.startPositionM), 0)
+  // Het eigen gewicht van de staven is een globale Z-last per staafmeter (#112).
+  assert.ok(eg.memberLoads.every((l) => l.globalDirection === "z" && !l.perProjection), "eigen gewicht van de staven als globale Z-last");
+  const staafGewicht = eg.memberLoads.reduce((s, l) => s + (-l.qStart - l.qEnd) / 2 * (l.endPositionM - l.startPositionM), 0)
     + eg.loads.reduce((s, l) => s - l.fz, 0);
   const somEg = egR.reactions.reduce((s, x) => s + x.fz, 0);
   assert.ok(Math.abs(somEg - plaatGewicht - staafGewicht) < 1e-6 * somEg, `eigen gewicht ${somEg} tegen ${plaatGewicht + staafGewicht}`);

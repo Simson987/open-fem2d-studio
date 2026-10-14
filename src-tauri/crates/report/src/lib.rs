@@ -1545,18 +1545,16 @@ impl PageCallback for OpenAecHeaderFooter {
 
 // ── Summary table ─────────────────────────────────────────────────────────────
 
-fn build_summary_table(members: &[ReportMember<'_>]) -> Table {
-    let headers: Vec<String> = vec![
-        "Beam".into(),
-        "Section".into(),
-        "Grade".into(),
-        "Standard".into(),
-        "UC".into(),
-        "Governing".into(),
-        "Status".into(),
-    ];
-
-    let body: Vec<Vec<String>> = members
+/// De rijen van de samenvattingstabel, één per staaf: staaf, doorsnede,
+/// materiaal, norm, UC, maatgevende toets en status. Los van de opmaak, zodat
+/// een test de inhoud kan lezen.
+///
+/// Een staaf met status n.v.t. is niet (volledig) getoetst: de UC-kolom toont
+/// dan "—" en nooit een getal — ook niet bij uc_max = 0 of bij de UC van de
+/// toetsen die wél gerekend zijn — want een getal onder 1 leest als "voldoet"
+/// (controle 2026-10, punt B7).
+pub fn samenvattingsrijen(members: &[ReportMember<'_>]) -> Vec<Vec<String>> {
+    members
         .iter()
         .map(|m| {
             vec![
@@ -1568,12 +1566,30 @@ fn build_summary_table(members: &[ReportMember<'_>]) -> Table {
                 },
                 m.grade_label.to_string(),
                 m.norm_label().to_string(),
-                getal_tekst(m.uc_max, 2),
+                if matches!(m.status, CheckStatus::NotApplicable) {
+                    "—".to_string()
+                } else {
+                    getal_tekst(m.uc_max, 2)
+                },
                 m.governing_check_id.to_string(),
                 status_label(m.status).into(),
             ]
         })
-        .collect();
+        .collect()
+}
+
+fn build_summary_table(members: &[ReportMember<'_>]) -> Table {
+    let headers: Vec<String> = vec![
+        "Beam".into(),
+        "Section".into(),
+        "Grade".into(),
+        "Standard".into(),
+        "UC".into(),
+        "Governing".into(),
+        "Status".into(),
+    ];
+
+    let body: Vec<Vec<String>> = samenvattingsrijen(members);
 
     let style = TableStyleConfig {
         header_background: Some(C_DEEP),

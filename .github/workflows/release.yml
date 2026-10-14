@@ -58,6 +58,16 @@ jobs:
     name: Build – ${{ matrix.label }}
     runs-on: ${{ matrix.platform }}
 
+    # Ondertekenen gebeurt alleen als de secrets er zijn (zelfde opzet als Open
+    # PDF Studio en Open Pointcloud Studio). Zonder secrets bouwt de release
+    # onondertekend, zoals voorheen: een build mag niet stuk gaan op een
+    # ontbrekend certificaat.
+    #   Windows: Azure Trusted Signing (AZURE_*), via bundle.windows.signCommand.
+    #   macOS:   Developer ID + notarisatie met een App Store Connect API-sleutel (APPLE_*).
+    env:
+      WIN_SIGN: ${{ secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_ENDPOINT != '' && secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME != '' }}
+      MAC_SIGN: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_API_KEY != '' }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -116,12 +126,147 @@ jobs:
       - name: Build MCP-server (meegeleverd in de installer)
         run: node scripts/mcp-sidecar.mjs --target ${{ matrix.rust-target }}
 
+      # ── Windows ondertekenen (Azure Trusted Signing) ──
+      # Installeert signtool en de Trusted Signing-dlib op de runner en
+      # ondertekent alvast de MCP-sidecar in src-tauri/binaries. Tauri
+      # ondertekent daarna zelf elke Windows-binary zodra
+      # bundle.windows.signCommand gezet is: de sidecar, de app-exe (pas nadat
+      # de bundler het bundeltype erin heeft gezet; eerder ondertekenen geeft een
+      # HashMismatch), de NSIS-dll's, uninstall.exe en de installers.
+      - name: Install Azure signing tools (Windows)
+        if: runner.os == 'Windows' && env.WIN_SIGN == 'true'
+        uses: azure/trusted-signing-action@v1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
+          cache-dependencies: false
+          files-folder: ${{ github.workspace }}/src-tauri/binaries
+          files-folder-filter: exe
+          files-folder-depth: 1
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      # Een CI-config die tauri.bundel.conf.json (de MCP-sidecar) aanvult met een
+      # signCommand naar de signtool + dlib van hierboven.
+      - name: Configure Tauri sign command (Windows)
+        if: runner.os == 'Windows' && env.WIN_SIGN == 'true'
+        shell: pwsh
+        env:
+          AZURE_ENDPOINT: ${{ secrets.AZURE_ENDPOINT }}
+          AZURE_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          AZURE_PROFILE: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
+        run: |
+          $root = Join-Path $env:LOCALAPPDATA 'TrustedSigning'
+          $signtool = Get-ChildItem $root -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '[\\/]x64[\\/]' } | Select-Object -First 1
+          $dlib = Get-ChildItem $root -Recurse -Filter Azure.CodeSigning.Dlib.dll -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '[\\/]x64[\\/]' } | Select-Object -First 1
+          if (-not $signtool -or -not $dlib) { Write-Error "signtool of de Trusted Signing-dlib niet gevonden onder $root"; exit 1 }
+          $metadata = Join-Path $env:RUNNER_TEMP 'trusted-signing-metadata.json'
+          @{
+            Endpoint = $env:AZURE_ENDPOINT
+            CodeSigningAccountName = $env:AZURE_ACCOUNT
+            CertificateProfileName = $env:AZURE_PROFILE
+          } | ConvertTo-Json | Set-Content -Path $metadata -Encoding utf8
+          $conf = Get-Content src-tauri/tauri.bundel.conf.json -Raw | ConvertFrom-Json -AsHashtable
+          $conf.bundle.windows = @{ signCommand = @{
+            cmd = $signtool.FullName
+            args = @('sign', '/v', '/fd', 'SHA256', '/tr', 'http://timestamp.acs.microsoft.com', '/td', 'SHA256',
+                     '/dlib', $dlib.FullName, '/dmdf', $metadata, '%1')
+          } }
+          $conf | ConvertTo-Json -Depth 10 | Set-Content -Path src-tauri/tauri.signing.conf.json -Encoding utf8
+          Get-Content src-tauri/tauri.signing.conf.json
+
+      # ── macOS ondertekenen en notariseren ──
+      # Notarisatie via een App Store Connect API-sleutel: in Open PDF Studio gaf
+      # Apple-ID + app-specifiek wachtwoord een blijvende HTTP 500 op de notary-API.
+      - name: Write App Store Connect API key (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGN == 'true'
+        shell: bash
+        env:
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
+        run: printf '%s' "$APPLE_API_KEY_CONTENT" > "$RUNNER_TEMP/apple-api-key.p8"
+
+      # Onondertekend: Linux altijd, Windows en macOS zolang hun secrets ontbreken.
       - name: Build Tauri app
+        if: >-
+          !(runner.os == 'Windows' && env.WIN_SIGN == 'true') &&
+          !(runner.os == 'macOS' && env.MAC_SIGN == 'true')
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           args: --target ${{ matrix.rust-target }} --bundles ${{ matrix.bundles }} --config src-tauri/tauri.bundel.conf.json
+
+      - name: Build Tauri app (Windows, ondertekend)
+        if: runner.os == 'Windows' && env.WIN_SIGN == 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # De dlib meldt zich met deze gegevens aan bij Azure.
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        with:
+          args: --target ${{ matrix.rust-target }} --bundles ${{ matrix.bundles }} --config src-tauri/tauri.signing.conf.json
+
+      - name: Build Tauri app (macOS, ondertekend en genotariseerd)
+        if: runner.os == 'macOS' && env.MAC_SIGN == 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ runner.temp }}/apple-api-key.p8
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          args: --target ${{ matrix.rust-target }} --bundles ${{ matrix.bundles }} --config src-tauri/tauri.bundel.conf.json
+
+      # Bewijs op wat gebruikers downloaden: beide installers dragen een geldige
+      # handtekening (Tauri ondertekent de app-exe, de sidecar en de
+      # NSIS-onderdelen vóór het inpakken).
+      - name: Verify signatures (Windows)
+        if: runner.os == 'Windows' && env.WIN_SIGN == 'true'
+        shell: pwsh
+        run: |
+          $bundle = "src-tauri/target/${{ matrix.rust-target }}/release/bundle"
+          $files = @(Get-ChildItem "$bundle/nsis/*-setup.exe") + @(Get-ChildItem "$bundle/msi/*.msi")
+          $fout = $false
+          foreach ($f in $files) {
+            $sig = Get-AuthenticodeSignature $f.FullName
+            Write-Output ("{0}: {1} ({2})" -f $f.Name, $sig.Status, $sig.SignerCertificate.Subject)
+            if ($sig.Status -ne 'Valid') { $fout = $true }
+          }
+          if ($fout -or $files.Count -lt 2) { Write-Error 'Niet alle Windows-installers zijn geldig ondertekend'; exit 1 }
+
+      # De .app uit de dmg (wat gebruikers echt krijgen): handtekening,
+      # Gatekeeper en het geniete notarisatieticket.
+      - name: Verify signature and notarization (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGN == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          DMG_PATH="$(find src-tauri/target/${{ matrix.rust-target }}/release/bundle/dmg -name '*.dmg' -print -quit)"
+          test -n "$DMG_PATH"
+          MOUNT_DIR="$(mktemp -d)"
+          hdiutil attach -nobrowse -readonly -mountpoint "$MOUNT_DIR" "$DMG_PATH"
+          APP_SRC="$(find "$MOUNT_DIR" -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$APP_SRC"
+          mkdir -p "$RUNNER_TEMP/verify-app"
+          cp -R "$APP_SRC" "$RUNNER_TEMP/verify-app/"
+          hdiutil detach "$MOUNT_DIR"
+          APP_PATH="$RUNNER_TEMP/verify-app/$(basename "$APP_SRC")"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          spctl --assess --type execute --verbose=4 "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7

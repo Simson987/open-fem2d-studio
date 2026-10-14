@@ -10,13 +10,14 @@ import {
 } from "../../core/solver/SolverRegistry";
 import Modal from "../Modal";
 import ThemedSelect from "../ThemedSelect";
+import AiAssistentPaneel from "./AiAssistentPaneel";
 import "../ThemedSelect.css";
 import "./SettingsDialog.css";
 
 const THEME_OPTIONS = [
   { value: "light",     labelKey: "appearance.light",     swatches: ["#FAFAF9", "#FFFFFF", "#D97706", "#36363E"] },
-  { value: "forge",     labelKey: "appearance.forge",     swatches: ["#36363E", "#44444C", "#D97706", "#FAFAF9"] },
-  { value: "openaec",   labelKey: "appearance.dark",      swatches: ["#27272A", "#1C1917", "#D97706", "#FAFAF9"] },
+  { value: "forge",     labelKey: "appearance.forge",     swatches: ["#36363E", "#27272A", "#FBBF24", "#FAFAF9"] },
+  { value: "openaec",   labelKey: "appearance.dark",      swatches: ["#27272A", "#1C1917", "#FBBF24", "#FAFAF9"] },
   { value: "blueprint", labelKey: "appearance.blueprint", swatches: ["#0F1B2D", "#1A2C45", "#60A5FA", "#E0E7FF"] },
   { value: "contrast",  labelKey: "appearance.contrast",  swatches: ["#000000", "#0A0A0A", "#FFD700", "#FFFFFF"] },
 ];
@@ -28,7 +29,10 @@ const THEME_OPTIONS = [
    Voorbeeld met domein-tab:
      const TAB_IDS = ["general", "appearance", "calculation", "about"] as const;
    ─────────────────────────────────────────────────────────── */
-const TAB_IDS = ["general", "appearance", "calculation", "about"] as const;
+// "aiAssistant": Instellingen → AI-assistent (MCP) (issue #109). Dat tabblad
+// werkt meteen (schakelaar, koppelknop) en doet niet mee met Opslaan/Annuleren.
+const TAB_IDS = ["general", "appearance", "calculation", "aiAssistant", "about"] as const;
+export type SettingsTabId = (typeof TAB_IDS)[number];
 
 export function applyTheme(theme?: string) {
   document.documentElement.setAttribute("data-theme", theme || "light");
@@ -39,6 +43,8 @@ interface SettingsDialogProps {
   onClose: () => void;
   theme: string;
   onThemeChange: (theme: string) => void;
+  /** Open op dit tabblad (bijv. "aiAssistant" vanaf het lint); zonder: het laatst gebruikte. */
+  initialTab?: SettingsTabId;
 }
 
 export default function SettingsDialog({
@@ -46,10 +52,15 @@ export default function SettingsDialog({
   onClose,
   theme,
   onThemeChange,
+  initialTab,
 }: SettingsDialogProps) {
   const { t } = useTranslation("settings");
   const { t: tCommon } = useTranslation("common");
-  const [activeTab, setActiveTab] = useState("general");
+  const [activeTab, setActiveTab] = useState<string>("general");
+  // Geopend met een tabblad (het lint: Instellingen → AI-assistent (MCP)).
+  useEffect(() => {
+    if (open && initialTab) setActiveTab(initialTab);
+  }, [open, initialTab]);
 
   // Draft state — only committed on Save
   const [draftTheme, setDraftTheme] = useState(theme);
@@ -172,6 +183,7 @@ export default function SettingsDialog({
           {activeTab === "calculation" && (
             <CalculationTabContent solver={draftSolver} onSolverChange={setDraftSolver} />
           )}
+          {activeTab === "aiAssistant" && <AiAssistentPaneel />}
           {activeTab === "about" && <AboutTabContent />}
         </div>
       </div>

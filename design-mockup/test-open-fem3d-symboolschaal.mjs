@@ -178,8 +178,8 @@ await check("het zijn geen aan/uit-vlaggen: niet in de lijst van vlaggen, wel in
   assert.ok(V.OPEN_FEM_3D_VISIBILITY_FLAGS.every((k) => typeof DEFAULT[k] === "boolean"));
   // Alle sleutels = de vlaggen + deze twee schalen + de plaatweergave (issue
   // #78, een keuze uit drie standen; test-open-fem3d-plaatweergave.mjs) + de
-  // section box (issue #86; test-open-fem3d-section-box.mjs).
-  assert.equal(V.OPEN_FEM_3D_VISIBILITY_FLAGS.length + 2 + 1 + 1, Object.keys(DEFAULT).length);
+  // section box (issue #86) + de explode-stand (issue #104).
+  assert.equal(V.OPEN_FEM_3D_VISIBILITY_FLAGS.length + 2 + 1 + 1 + 1, Object.keys(DEFAULT).length);
 });
 await check("dezelfde parser voor opslag en views: vlaggen alleen als boolean, schalen begrensd", () => {
   const v = V.normalizeOpenFem3DVisibility({ nodes: false, supports: "nee", nodeSizePercent: 1000, supportSizePercent: 60 });

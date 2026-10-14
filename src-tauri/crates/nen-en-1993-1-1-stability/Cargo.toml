@@ -18,3 +18,4 @@ nen-en-1993-1-1-section = { path = "../nen-en-1993-1-1-section" }
 [dev-dependencies]
 approx = { workspace = true }
 insta = { workspace = true }
+serde_json = { workspace = true }

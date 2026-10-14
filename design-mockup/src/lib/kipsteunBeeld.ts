@@ -24,7 +24,7 @@ import type { Staafeinden } from "./types/steel/Staafeinden";
 import type { Staafstand } from "./types/steel/Staafstand";
 import { STEEL_GRADES, beamLengthMm, isSteelProfile } from "./steelCheckBuilder";
 import { matchSupportedTimberGrade } from "./timberCheckBuilder";
-import { bepaalStaafeinden, voegDoorgaandeLijnenSamen } from "./doorgaandeLijn";
+import { bepaalStaafeinden, voegDoorgaandeLijnenSamen, type PlaatVoorEinden } from "./doorgaandeLijn";
 import { referentieVanStaaf, toetsdataInReferentierichting } from "./referentierichting";
 import {
   kipsteunenVanStaaf,
@@ -41,7 +41,7 @@ export interface KipsteunModel {
    * staafeinden als gaffel — dezelfde terugval als in de bouwers.
    */
   supports?: Support[];
-  plates?: { nodeIds: number[] }[];
+  plates?: PlaatVoorEinden[];
 }
 
 export interface Punt {

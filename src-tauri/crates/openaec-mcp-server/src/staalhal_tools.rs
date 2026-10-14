@@ -1,4 +1,4 @@
-//! `open_fem_3d_staalhal_maken` — een stalen hal als 3D-raamwerk met één
+//! `open_fem_3d_staalhal_maken` — een hal van staal of hout als 3D-raamwerk met één
 //! aanroep: model (projectbestand), en desgewenst meteen doorgerekend en
 //! getoetst.
 //!
@@ -11,9 +11,10 @@
 //!   2. hier: elk verzoek door `open_fem_3d::solve`, dezelfde vastgezette
 //!      3D-kern als het Tauri-command en de tool `solve_open_fem_3d`;
 //!   3. sidecar `staalhal_uitwerken` — reactiesommen, evenwicht, verplaatsingen
-//!      en de EN 1993-toetsinvoer (`buildOpenFem3DSteelCheckInputs`);
-//!   4. hier: `steel_check::check_all_beams`, de functie achter het
-//!      Tauri-command `check_steel_beams`, en het groeperen van de uitkomsten
+//!      en de EN 1993/EN 1995-toetsinvoer;
+//!   4. hier: `steel_check::check_all_beams` en
+//!      `timber_check::check_all_timber_beams`, de functies achter de
+//!      Tauri-commands, en het groeperen van de uitkomsten
 //!      per rol (kolom, spantligger, …) met de staafnummers die de generator
 //!      meegaf.
 //! De parameters van de hal worden in de sidecar gelezen, met dezelfde poort
@@ -38,6 +39,10 @@ pub(crate) fn is_staalhal_tool(naam: &str) -> bool {
 // ── Schema ──────────────────────────────────────────────────────────────────
 
 const STAALSOORTEN: [&str; 5] = ["S235", "S275", "S355", "S420", "S460"];
+const HOUTSOORTEN: [&str; 13] = [
+    "C14", "C16", "C18", "C20", "C22", "C24", "C27", "C30", "C35",
+    "GL24h", "GL28h", "GL32h", "GL36h",
+];
 const BETONKLASSEN: [&str; 14] = [
     "C12/15", "C16/20", "C20/25", "C25/30", "C30/37", "C35/45", "C40/50", "C45/55", "C50/60",
     "C55/67", "C60/75", "C70/85", "C80/95", "C90/105",
@@ -52,14 +57,17 @@ fn last(standaard: f64, beschrijving: &str) -> Value {
 }
 
 fn profielkeuze(profiel: &str, rol: &str) -> Value {
+    let materialen = [STAALSOORTEN.as_slice(), HOUTSOORTEN.as_slice()].concat();
     json!({
         "type": "object",
         "additionalProperties": false,
-        "description": format!("{rol}: catalogusprofiel en staalsoort."),
+        "description": format!("{rol}: catalogusprofiel in staal of rechthoekig houtprofiel b×h in mm."),
         "properties": {
             "profiel": { "type": "string", "minLength": 1, "default": profiel,
-                "description": "Profiel uit de staalcatalogus (met I_z en I_t), bijv. \"HEA 450\" of \"CHS 88.9x4\"." },
-            "materiaal": { "type": "string", "enum": STAALSOORTEN, "default": "S235" }
+                "description": "Staalcatalogus, bijv. \"HEA 450\", of rechthoekig hout, bijv. \"160x400\" (b×h mm)." },
+            "materiaal": { "type": "string", "enum": materialen, "default": "S235" },
+            "profielEind": { "type": "string",
+                "description": "Optioneel: eindprofiel van een verlopende staaf (issue #73), I/H naar I/H uit de staalcatalogus (gerekend als gelast I-profiel). Alleen bij de kolommen (van de voet naar de kop) en de spantliggers (van de goot naar het midden van de overspanning, aan beide zijden gelijk; vraagt een even aantal gordingvelden). Bij gording, randligger en verband geweigerd. Leeg of weggelaten = prismatisch." }
         }
     })
 }
@@ -76,7 +84,9 @@ pub(crate) fn hal_schema() -> Value {
         "description": "Parameters van de hal. Alle lengtes in mm; ontbrekende velden krijgen de standaardwaarde (samen: de voorbeeldhal 60 × 30 m). Assen: x langs de hal, y dwars (overspanning), z omhoog, peil 0 = z 0.",
         "properties": {
             "lengteMm": maat(60000.0, 500000.0, "Lengte van de hal (x), mm."),
-            "breedteMm": maat(30000.0, 500000.0, "Breedte = overspanning van de spanten (y), mm."),
+            "breedteMm": maat(30000.0, 500000.0, "Totale breedte van de hal (y), mm."),
+            "aantalOverspanningen": { "type": "integer", "minimum": 1, "maximum": 10, "default": 1,
+                "description": "Aantal gelijke overspanningen dwars op de hal. Elke grens krijgt een kolomlijn en een dakknoop; 1 behoudt de enkele overspanning." },
             "spantafstandMm": maat(6000.0, 500000.0, "Grootste h.o.h.-afstand van de spanten, mm. Aantal vakken = ⌈lengte/spantafstand⌉, de werkelijke afstand lengte/aantal. Niet samen met aantalVakken."),
             "aantalVakken": { "type": "integer", "minimum": 1, "maximum": 100,
                 "description": "Aantal vakken tussen de spanten (aantal spanten = vakken + 1). Niet samen met spantafstandMm." },
@@ -98,7 +108,7 @@ pub(crate) fn hal_schema() -> Value {
             "profielen": {
                 "type": "object",
                 "additionalProperties": false,
-                "description": "Profielen per groep; alleen staal (S235–S460) met een catalogusprofiel.",
+                "description": "Profielen per groep: staal S235–S460 uit de catalogus of hout C14–C35/GL24h–GL36h met rechthoekige b×h-doorsnede.",
                 "properties": {
                     "kolom": profielkeuze("HEA 450", "Kolommen (90° gedraaid: lijf in het spantvlak)"),
                     "spantligger": profielkeuze("IPE 600", "Spantliggers"),
@@ -121,7 +131,9 @@ pub(crate) fn hal_schema() -> Value {
                         "default": "kopvakken"
                     },
                     "dak": { "type": "boolean", "default": true, "description": "Dakverband: kruis in elk gordingveld van de gekozen vakken." },
-                    "wanden": { "type": "boolean", "default": true, "description": "Wandverband: kruis in beide langsgevels van de gekozen vakken. Verplicht bij scharnierende kolomvoeten." }
+                    "wanden": { "type": "boolean", "default": true, "description": "Wandverband: kruis in beide langsgevels van de gekozen vakken. Verplicht bij scharnierende kolomvoeten." },
+                    "kopgevels": { "type": "boolean", "default": false, "description": "Kruisverband in beide kopgevelvlakken, tussen de kolomvoeten en tegenoverliggende gootknopen." },
+                    "trekAlleen": { "type": "boolean", "default": false, "description": "Dak-, wand- en kopgevelverbanden alleen op trek laten werken; de 3D-kern bepaalt per belastinggeval de actieve diagonalen." }
                 }
             },
             "fundering": {
@@ -150,10 +162,11 @@ pub(crate) fn hal_schema() -> Value {
             "lasten": {
                 "type": "object",
                 "additionalProperties": false,
-                "description": "Lasten in kN/m² horizontale projectie. Belastinggevallen: 1 Permanent (G), 2 Sneeuw (S), 3 Wind dwars (+Y), 4 Wind langs (+X), 5 Eigen gewicht.",
+                "description": "Lasten in kN/m² horizontale projectie. Belastinggevallen: 1 Permanent (G), 2 Sneeuw (S), 3 Wind dwars (+Y), 4 Wind langs (+X), 5 Eigen gewicht; bij dakgebruik > 0 ook 6 Dakgebruik (Q, categorie H).",
                 "properties": {
                     "dakafwerkingKnM2": last(0.3, "Dakafwerking (G), op de gordingen."),
                     "sneeuwKnM2": last(0.56, "Sneeuw (S), op de gordingen."),
+                    "dakgebruikKnM2": last(0.0, "Optionele dakgebruikslast Q, categorie H, op de gordingen per m² horizontale projectie. Nul laat het geval weg."),
                     "wind": {
                         "type": "object",
                         "additionalProperties": false,
@@ -181,7 +194,7 @@ pub(crate) fn hal_schema() -> Value {
 pub(crate) fn tool_definitions() -> Vec<Value> {
     vec![json!({
         "name": TOOL,
-        "description": "Maak een stalen hal als 3D-raamwerk (spanten, gordingen, randliggers, dak- en wandverbanden, lasten G/S/W dwars/W langs en eigen gewicht), eventueel op een betonnen balkrooster op palen. Geeft het projectbestand (.ifcfem-inhoud, te openen in Open FEM Studio of met gui_load_model), een samenvatting (aantallen, maten, staafnummers per groep) en waarschuwingen. Met `reken: true` rekent dezelfde 3D-kern als solve_open_fem_3d elk belastinggeval en elke standaardcombinatie, en komen per geval de reactiesommen, het evenwicht, de grootste verplaatsing, de zijverplaatsing van de goot en de paalreacties terug; met `toetsen` (standaard aan) ook de EN 1993-toetsing met UC per groep. Dezelfde generator als de wizard \"Stalen hal…\" in de app.",
+        "description": "Maak een stalen hal als 3D-raamwerk (spanten, gordingen, randliggers, dak- en wandverbanden, lasten G/S/W dwars/W langs, optioneel dakgebruik Q en eigen gewicht), eventueel op een betonnen balkrooster op palen. Geeft het projectbestand (.ifcfem-inhoud, te openen in Open FEM Studio of met gui_load_model), een samenvatting (aantallen, maten, staafnummers per groep) en waarschuwingen. Met `reken: true` rekent dezelfde 3D-kern als solve_open_fem_3d elk belastinggeval en elke standaardcombinatie, en komen per geval de reactiesommen, het evenwicht, de grootste verplaatsing, de zijverplaatsing van de goot en de paalreacties terug; met `toetsen` (standaard aan) ook de EN 1993-toetsing met UC per groep. Dezelfde generator als de wizard \"Stalen hal…\" in de app.",
         "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -194,7 +207,7 @@ pub(crate) fn tool_definitions() -> Vec<Value> {
                 "gevolgklasse": { "type": "string", "enum": ["CC1", "CC2", "CC3"], "default": "CC2",
                     "description": "Gevolgklasse voor de factoren van de standaardcombinaties (NEN-EN 1990 NB)." },
                 "toetsen": { "type": "boolean", "default": true,
-                    "description": "Met reken: ook EN 1993 toetsen (staven van staal; beton wordt met reden overgeslagen)." },
+                    "description": "Met reken: staal toetsen volgens EN 1993 en hout volgens EN 1995; beton wordt met reden overgeslagen." },
                 "stramien": { "type": "boolean", "default": true,
                     "description": "Het stramien van de hal (spanten, gevels, levels) in het projectbestand." },
                 "detail": { "type": "string", "enum": ["samenvatting", "volledig"], "default": "samenvatting",
@@ -363,6 +376,20 @@ pub(crate) async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError>
             "toetsing".to_owned(),
             groepeer_toetsing(&uitkomsten, &gemaakt["samenvatting"]["groepen"], &uitgewerkt, volledig),
         );
+        let hout_invoer: Vec<timber_check::TimberBeamCheckInput> = serde_json::from_value(uitgewerkt["houtToetsinvoer"].clone())
+            .map_err(|e| RpcError::tool_exec(format!("de houttoetsinvoer van de sidecar past niet op TimberBeamCheckInput: {e}")))?;
+        let hout_uitkomsten = tokio::task::spawn_blocking(move || timber_check::check_all_timber_beams(hout_invoer))
+            .await
+            .map_err(|e| RpcError::tool_exec(format!("houttoetsing kon niet worden afgerond: {e}")))?;
+        let hout_uitkomsten = serde_json::to_value(hout_uitkomsten)
+            .map_err(|e| RpcError::tool_exec(format!("houttoetsuitkomst niet naar JSON: {e}")))?;
+        let hout_metadata = json!({
+            "nietGetoetst": uitgewerkt["houtNietGetoetst"],
+            "notities": uitgewerkt["houtNotities"],
+        });
+        let mut hout_toetsing = groepeer_toetsing(&hout_uitkomsten, &gemaakt["samenvatting"]["groepen"], &hout_metadata, volledig);
+        hout_toetsing["norm"] = json!("NEN-EN 1995-1-1");
+        berekening.insert("hout_toetsing".to_owned(), hout_toetsing);
     }
     uit.insert("berekening".to_owned(), Value::Object(berekening));
     Ok(Value::Object(uit))
@@ -391,11 +418,12 @@ pub(crate) fn groepeer_toetsing(uitkomsten: &Value, groepen: &Value, uitgewerkt:
         let uc = r["uc_max"].as_f64().unwrap_or(f64::NAN);
         let groep = groep_van.get(&id).cloned().unwrap_or_else(|| "overig".to_owned());
         let status = r["status"].as_str().unwrap_or("?").to_owned();
+        let profiel = r.get("profile_name").or_else(|| r.get("section_name")).unwrap_or(&Value::Null);
         *telling.entry(status.clone()).or_default() += 1;
         let samenvatting = json!({
             "beam_id": id,
             "groep": groep,
-            "profiel": r["profile_name"],
+            "profiel": profiel,
             "uc_max": uc,
             "status": status,
             "maatgevende_toets": r["governing_check_id"],
@@ -406,7 +434,7 @@ pub(crate) fn groepeer_toetsing(uitkomsten: &Value, groepen: &Value, uitgewerkt:
         if g.get("uc_max").and_then(Value::as_f64).is_none_or(|huidig| uc > huidig) {
             g.insert("uc_max".to_owned(), json!(uc));
             g.insert("beam_id".to_owned(), json!(id));
-            g.insert("profiel".to_owned(), r["profile_name"].clone());
+            g.insert("profiel".to_owned(), profiel.clone());
             g.insert("maatgevende_toets".to_owned(), r["governing_check_id"].clone());
         }
         if maatgevend.as_ref().is_none_or(|(huidig, _)| uc > *huidig) {

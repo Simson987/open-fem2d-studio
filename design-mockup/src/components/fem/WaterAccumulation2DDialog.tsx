@@ -3,7 +3,22 @@ import { useTranslation } from "react-i18next";
 import Modal from "../Modal";
 import { calculateWaterAccumulation2D, type WaterAccumulation2DResult } from "../../lib/waterAccumulation2d";
 import { formatLength, parseLength } from "../../lib/lengthInput";
+import { openExternal } from "../../lib/tauri";
 import "./WaterAccumulation2DDialog.css";
+
+const BRON_2006 = "https://gratis-publicaties.bouwenmetstaal.nl/pdf_serve/?n=Wateraccumulatie+%28Technisch+dossier+%231%29-1.pdf&p=pdf&pub=176-1.pdf";
+const BRON_2022 = "https://heronjournal.nl/67-2/3.pdf";
+
+/**
+ * Bronlink via de gedeelde helper (#38): in de app de standaardbrowser, anders
+ * een nieuw tabblad. preventDefault houdt ook het klikscript van de
+ * opener-plugin erbuiten (dat opent een target="_blank"-link anders zelf,
+ * zonder terugval).
+ */
+const openBron = (url: string) => (e: React.MouseEvent) => {
+  e.preventDefault();
+  void openExternal(url);
+};
 
 interface Props {
   open: boolean;
@@ -102,7 +117,7 @@ export default function WaterAccumulation2DDialog({ open, onClose, selectedBeam 
         </svg>}
         <p className="water2d-note">{t("waterAccumulatie.modelNote", { n: result.iterations })}</p>
       </div>}
-      <p className="water2d-source">{t("waterAccumulatie.sources")} <a href="https://gratis-publicaties.bouwenmetstaal.nl/pdf_serve/?n=Wateraccumulatie+%28Technisch+dossier+%231%29-1.pdf&p=pdf&pub=176-1.pdf" target="_blank" rel="noreferrer">{t("waterAccumulatie.source2006")}</a> {t("waterAccumulatie.sourcesAnd")} <a href="https://heronjournal.nl/67-2/3.pdf" target="_blank" rel="noreferrer">{t("waterAccumulatie.source2022")}</a>. {t("waterAccumulatie.sourcesNote")}</p>
+      <p className="water2d-source">{t("waterAccumulatie.sources")} <a href={BRON_2006} target="_blank" rel="noreferrer" onClick={openBron(BRON_2006)}>{t("waterAccumulatie.source2006")}</a> {t("waterAccumulatie.sourcesAnd")} <a href={BRON_2022} target="_blank" rel="noreferrer" onClick={openBron(BRON_2022)}>{t("waterAccumulatie.source2022")}</a>. {t("waterAccumulatie.sourcesNote")}</p>
     </div>
   </Modal>;
 }

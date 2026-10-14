@@ -105,6 +105,9 @@ fn invoer(
     kip: bool,
 ) -> TimberBeamCheckInput {
     TimberBeamCheckInput {
+        ruimtelijk: false,
+        is_cantilever: false,
+        deflection_not_applicable_reason: None,
         bijlage: Default::default(),
         beam_id: 1,
         width_mm: B_MM,
@@ -154,6 +157,7 @@ fn invoer(
         staaf_notities: None,
         width_end_mm: None,
         height_end_mm: None,
+        zijdelingse_knik_in_analyse: None,
     }
 }
 

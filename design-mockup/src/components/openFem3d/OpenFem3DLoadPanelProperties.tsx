@@ -126,6 +126,7 @@ export default function OpenFem3DLoadPanelProperties({
           onChange={(event) => apply({ direction: event.target.value as typeof panel.direction })}>
           <option value="gravity">{t("openFem3d.loadPanel.gravity")}</option>
           <option value="normal">{t("openFem3d.loadPanel.normal")}</option>
+          <option value="verticalSurface">{t("openFem3d.loadPanel.verticalSurface")}</option>
         </select>
       </Row>
       {panel.direction === "normal" && geometry && <p className="fem-prop-hint">{t("openFem3d.loadPanel.normalHint", {

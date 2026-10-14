@@ -1,0 +1,67 @@
+{
+ "tool": "check_fem_model",
+ "arguments": {
+  "model": {
+   "nodes": [
+    {
+     "id": 1,
+     "x": 0,
+     "z": 0
+    },
+    {
+     "id": 2,
+     "x": 3000,
+     "z": 0
+    }
+   ],
+   "beams": [
+    {
+     "id": 1,
+     "from": 1,
+     "to": 2,
+     "material": "S355",
+     "profile": "HEA200",
+     "checkConfig": {
+      "deflectionClass": "cantilever"
+     }
+    }
+   ],
+   "supports": [
+    {
+     "nodeId": 1,
+     "type": "fixed"
+    }
+   ],
+   "loadCases": [
+    {
+     "id": 1,
+     "name": "Permanent",
+     "type": "dead"
+    },
+    {
+     "id": 2,
+     "name": "Variabel",
+     "type": "live"
+    }
+   ],
+   "loads": [
+    {
+     "id": 1,
+     "type": "lineLoad",
+     "beamId": 1,
+     "caseId": 1,
+     "q": -5
+    },
+    {
+     "id": 2,
+     "type": "pointForce",
+     "nodeId": 2,
+     "caseId": 2,
+     "fz": -10
+    }
+   ],
+   "selfWeightEnabled": false
+  }
+ },
+ "toelichting": "Uitkraging HEA200 S355, L = 3000 mm, ingeklemd; G: q = 5 kN/m, Q: F = 10 kN op het vrije eind. Hand: w_fin = 18,14 mm, w_add = 11,61 mm, l_rep = 6000 mm."
+}

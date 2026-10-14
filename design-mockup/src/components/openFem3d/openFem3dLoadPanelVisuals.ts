@@ -70,7 +70,7 @@ function hatchSegments(polygon: readonly [number, number][], spacing: number): [
 export function openFem3DLoadSurfaceObjects(
   surface: OpenFem3DLoadSurface,
   color: number,
-  selection: { type: "loadPanel" | "surfaceLoad"; id: number },
+  selection: { type: "loadPanel" | "surfaceLoad" | "envelopePanel"; id: number },
 ): THREE.Object3D[] {
   const fillGeometry = new THREE.BufferGeometry();
   fillGeometry.setAttribute("position", new THREE.Float32BufferAttribute(surface.positions, 3));

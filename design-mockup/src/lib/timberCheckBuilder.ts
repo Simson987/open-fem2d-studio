@@ -78,7 +78,16 @@ import {
   deflectionNotesFor,
   extractFieldDeflectionMm,
 } from "./steelCheckBuilder";
-import { voegDoorgaandeLijnenSamen } from "./doorgaandeLijn";
+import { bepaalStaafeinden, steunpuntenOpLijn, voegDoorgaandeLijnenSamen, type PlaatVoorEinden } from "./doorgaandeLijn";
+import {
+  delenNotitie,
+  doorbuigingsDelen,
+  inklemmingVanStaaf,
+  lRepVanDeelMm,
+  type DoorbuigingsDeel,
+  type Inklemming,
+} from "./uitkraging";
+import type { Staafeinden } from "./types/steel/Staafeinden";
 import { kipsteunenVanStaaf } from "./kipsteunen";
 import { alphaCrStaafNotitie, type StabiliteitVoorToets } from "../components/fem/solver/alphaCr";
 import {
@@ -206,6 +215,64 @@ export function timberDeflectionNumerators(
 }
 
 /**
+ * De noemers n voor w_fin en w_add op de STAAFLENGTE (de houtkern rekent L/n),
+ * met de uitkraging en de delen van een doorgaande lijn verwerkt, plus de
+ * regel voor `deflection_notes` als er iets is omgerekend.
+ *
+ *  - Een herkend vrij staafeind maakt de staaf een uitkraging, ook als de
+ *    klasse dat niet zegt: ℓ_rep = 2·L (NEN-EN 1990:2002/NB:2019 A1.4.3), dus
+ *    de noemers van de klasse gehalveerd — zoals de klasse "uitkraging" al
+ *    doet. Bij "uitkraging" zelf en bij een eigen noemer verandert niets.
+ *  - Een doorgaande lijn die in delen is getoetst (`HoutDoorbuiging.deel`):
+ *    de noemers van de klasse gelden op ℓ_rep van het getoetste deel (zijn
+ *    lengte, of tweemaal die van het overstek) en worden omgerekend naar de
+ *    lijnlengte: n_L = n · L / ℓ_rep. Bij de klasse "uitkraging" zijn de
+ *    noemers op ℓ_rep die van een vloer; een eigen noemer geldt op de lengte
+ *    van het deel.
+ */
+export function houtDoorbuigingsNoemers(
+  cfg: BeamCheckConfig,
+  doorbuiging: Pick<HoutDoorbuiging, "inklemming" | "deel">,
+  lengthMm: number,
+): { fin: number; add: number; notitie: string | null } {
+  const klasse = timberDeflectionNumerators(cfg.deflectionClass, cfg.deflectionLimitNumerator);
+  const getal = (v: number) => String(Math.round(v * 1000) / 1000).replace(".", ",");
+  const deel = doorbuiging.deel;
+  if (deel) {
+    const lengteDeel = deel.totMm - deel.vanMm;
+    const eigen = cfg.deflectionClass === "custom";
+    const basis = cfg.deflectionClass === "cantilever" ? timberDeflectionNumerators("floor", undefined) : klasse;
+    const referentie = eigen ? lengteDeel : lRepVanDeelMm(deel);
+    const f = lengthMm / referentie;
+    const uit = { fin: basis.fin * f, add: basis.add * f };
+    return {
+      ...uit,
+      notitie:
+        `Getoetst deel (${deel.soort}, x = ${getal(deel.vanMm)}–${getal(deel.totMm)} mm): ` +
+        (eigen
+          ? `de eigen noemer ${getal(basis.fin)} geldt op de lengte van het deel, ${getal(lengteDeel)} mm`
+          : `ℓ_rep = ${deel.inklemming ? `2 × ${getal(lengteDeel)} = ` : ""}${getal(referentie)} mm, ` +
+            `met de noemers ${getal(basis.fin)} (w_fin) en ${getal(basis.add)} (w_add) op ℓ_rep`) +
+        `. Op de lijnlengte L = ${getal(lengthMm)} mm is dat w_fin tegen L/${getal(uit.fin)} en ` +
+        `w_add tegen L/${getal(uit.add)}.`,
+    };
+  }
+  const vrijEindZonderKlasse =
+    (doorbuiging.inklemming === "begin" || doorbuiging.inklemming === "eind") &&
+    cfg.deflectionClass !== "cantilever" &&
+    cfg.deflectionClass !== "custom";
+  if (!vrijEindZonderKlasse) return { ...klasse, notitie: null };
+  const uit = { fin: klasse.fin / 2, add: klasse.add / 2 };
+  return {
+    ...uit,
+    notitie:
+      `Uitkraging (vrij staafeind herkend): ℓ_rep = 2·L, dus w_fin tegen L/${uit.fin} en ` +
+      `w_add tegen L/${uit.add} op de staaflengte (de noemers ${klasse.fin} en ` +
+      `${klasse.add} van de klasse, op ℓ_rep).`,
+  };
+}
+
+/**
  * Sterkteklassen die de Rust EN 1995-kern kent (nen-en-1995-1-1/data.rs):
  * EN 338 naaldhout C14–C35 en EN 14080 gelamineerd hout GL24h–GL36h.
  * Browser-fallback voor `list_timber_grades`.
@@ -289,6 +356,7 @@ export function quasiPermanentDeflection(
   combo: LoadCombination | null,
   result: SolverResult | null,
   wInstMm: number,
+  inklemming: Inklemming | DoorbuigingsDeel | null = null,
 ): QuasiPermanentDeflection {
   const terugval = (reden: string): QuasiPermanentDeflection => ({
     mm: wInstMm,
@@ -315,7 +383,7 @@ export function quasiPermanentDeflection(
     );
   }
   return {
-    mm: extractFieldDeflectionMm(beam, result),
+    mm: extractFieldDeflectionMm(beam, result, inklemming),
     notes: [
       `w_qp is de zakking onder de quasi-blijvende BGT-combinatie "${combo.name}" ` +
         `(${combo.formula}); de ψ₂-factoren zitten in de combinatiefactoren. ` +
@@ -333,12 +401,13 @@ function grootsteZakking(
   beam: Beam,
   combos: readonly LoadCombination[],
   results: Map<number, SolverResult>,
+  inklemming: Inklemming | DoorbuigingsDeel | null,
 ): { combo: LoadCombination; w: number; alle: { combo: LoadCombination; w: number }[] } | null {
   const alle: { combo: LoadCombination; w: number }[] = [];
   for (const combo of combos) {
     const r = results.get(combo.id);
     if (!r || !r.elements.has(beam.id)) continue;
-    alle.push({ combo, w: extractFieldDeflectionMm(beam, r) });
+    alle.push({ combo, w: extractFieldDeflectionMm(beam, r, inklemming) });
   }
   if (alle.length === 0) return null;
   let max = alle[0];
@@ -375,6 +444,7 @@ function langeduurzakking(
   slsQuasiLijst: readonly LoadCombination[],
   results: Map<number, SolverResult>,
   wInstMm: number,
+  inklemming: Inklemming | DoorbuigingsDeel | null,
 ): Langeduurzakking {
   const varianten = combinations.filter(isBgtEindtoestand);
   if (varianten.length === 0) {
@@ -403,8 +473,8 @@ function langeduurzakking(
     const rq = results.get(combo.id);
     const rv = variant ? results.get(variant.id) : undefined;
     if (!variant || !rq || !rv || !rq.elements.has(beam.id) || !rv.elements.has(beam.id)) continue;
-    const wq = extractFieldDeflectionMm(beam, rq);
-    const wf = extractFieldDeflectionMm(beam, rv);
+    const wq = extractFieldDeflectionMm(beam, rq, inklemming);
+    const wf = extractFieldDeflectionMm(beam, rv, inklemming);
     gemeten.push({ combo, variant, wq, wf, fin: wInstMm + (wf - wq) });
   }
   if (gemeten.length === 0) {
@@ -456,6 +526,38 @@ export interface HoutDoorbuiging {
   permMm: number;
   /** `deflection_notes` voor de kern: referentielijn, w_inst, w_qp en w₁. */
   notes: string[];
+  /**
+   * De inklemming als de staaf (of het getoetste deel) een uitkraging is (een
+   * vrij staafeind, of de klasse "uitkraging"); `null` voor een gewone
+   * overspanning. Zie `lib/uitkraging.ts`.
+   */
+  inklemming: Inklemming | null;
+  /**
+   * Bij een doorgaande lijn met een overstek: het getoetste DEEL (het veld of
+   * het overstek, zie `doorbuigingsDelen`). Ontbreekt = de hele staaf. De
+   * noemers op de staaflengte volgen dan uit ℓ_rep van dat deel; zie
+   * `houtDoorbuigingsNoemers`.
+   */
+  deel?: DoorbuigingsDeel;
+}
+
+/**
+ * k_def uit EN 1995-1-1 tabel 3.2 voor massief en gelijmd gelamineerd hout,
+ * per klimaatklasse — ALLEEN om bij een lijn in delen het maatgevende deel te
+ * kiezen (`houtDoorbuigingsInvoer`); de toets zelf neemt k_def uit de kern.
+ */
+const K_DEF_KEUZE: Record<1 | 2 | 3, number> = { 1: 0.6, 2: 0.8, 3: 2.0 };
+
+/** Opties van `houtDoorbuigingsInvoer`: wat de bouwer over de staaf weet. */
+export interface HoutDoorbuigingsOpties {
+  /**
+   * De staafeinden, bepaald zoals de staalbouwer dat doet (met het hele model
+   * en de platen, zie `bepaalStaafeinden`). Ontbreekt: hier bepaald met
+   * `data.alleBeams ?? data.beams` en `data.plates`.
+   */
+  staafeinden?: Staafeinden;
+  /** De steunpunten op een doorgaande lijn (mm), zie `steunpuntenOpLijn`. */
+  steunpuntenMm?: readonly number[];
 }
 
 /**
@@ -471,8 +573,70 @@ export function houtDoorbuigingsInvoer(
   data: Pick<
     TimberBuildData,
     "nodes" | "beams" | "supports" | "combinations" | "combinationResults" | "loadCases"
-  >,
+  > &
+    Partial<Pick<TimberBuildData, "alleBeams" | "plates">>,
+  opties: HoutDoorbuigingsOpties = {},
 ): HoutDoorbuiging {
+  // Uitkraging? Dan meet de zakking vanaf het ingeklemde eind en niet vanaf de
+  // koorde tussen de verplaatste staafeinden (controle 2026-10, punt K5). De
+  // einden zoals de staalbouwer ze bepaalt: op het HELE model (een kolom die
+  // buiten de selectie valt, is nog steeds een steun) en met de platen (ook een
+  // knoop op een plaatrand). Tot de herziening zag deze functie alleen de
+  // getoetste staven en alleen de opleggingen: een ligger op een kolom, met
+  // `beam_ids` getoetst, werd zo een uitkraging met een te ruime grens.
+  const einden =
+    opties.staafeinden ??
+    bepaalStaafeinden(beam, data.nodes, data.alleBeams ?? data.beams, data.supports, new Set(), data.plates);
+  const inklemming = inklemmingVanStaaf(einden, beam.checkConfig?.deflectionClass === "cantilever");
+  const delen = doorbuigingsDelen(beamLengthMm(beam, data.nodes), inklemming, opties.steunpuntenMm ?? []);
+  if (delen.length === 1) return houtDoorbuigingVanDeel(beam, data, inklemming);
+
+  // Een doorgaande lijn met een overstek: elk deel apart, en het deel met de
+  // grootste verhouding w/ℓ_rep (w ≈ |w_inst| + k_def·|w_qp|, met k_def uit
+  // tabel 3.2 bij de klimaatklasse) gaat de kern in — zie `doorbuigingsDelen`.
+  const kDef = K_DEF_KEUZE[beam.checkConfig?.serviceClass ?? 1] ?? 0.6;
+  const perDeel = delen.map((d) => houtDoorbuigingVanDeel(beam, data, d));
+  const wFin = (h: HoutDoorbuiging) =>
+    Math.abs(h.instMm) +
+    (h.quasiFinMm !== undefined ? Math.abs(h.quasiFinMm - h.quasiMm) : kDef * Math.abs(h.quasiMm));
+  let m = 0;
+  let beste = -1;
+  perDeel.forEach((h, i) => {
+    const v = Math.max(wFin(h), Math.abs(wFin(h) - Math.abs(h.permMm))) / lRepVanDeelMm(delen[i]);
+    if (v > beste) {
+      beste = v;
+      m = i;
+    }
+  });
+  const gekozen = perDeel[m];
+  gekozen.notes.splice(
+    1,
+    0,
+    delenNotitie(
+      delen,
+      perDeel.map((h) => ({ wFinMm: wFin(h), wAddMm: wFin(h) - Math.abs(h.permMm) })),
+      m,
+    ) +
+      " (Hout: w = |w_inst| + k_def·|w_qp| met k_def = " +
+      kDef.toFixed(1).replace(".", ",") +
+      " uit EN 1995-1-1 tabel 3.2, alleen om het maatgevende deel te kiezen.)",
+  );
+  return { ...gekozen, deel: delen[m] };
+}
+
+/**
+ * De zakkingen van de hele staaf (`meting` = de inklemming of `null`) of van
+ * één deel ervan — de keten van `houtDoorbuigingsInvoer`.
+ */
+function houtDoorbuigingVanDeel(
+  beam: Beam,
+  data: Pick<
+    TimberBuildData,
+    "nodes" | "beams" | "supports" | "combinations" | "combinationResults" | "loadCases"
+  >,
+  meting: Inklemming | DoorbuigingsDeel | null,
+): HoutDoorbuiging {
+  const inklemming = meting !== null && typeof meting === "object" ? meting.inklemming : meting;
   // Zonder de BGT-eindtoestand van hout (2.2.3(4)): die draagt het kenmerk van
   // zijn quasi-blijvende combinatie en zou anders als w_inst of w_qp meetellen.
   // `langeduurzakking` hieronder leest hem apart.
@@ -506,6 +670,7 @@ export function houtDoorbuigingsInvoer(
     beam,
     slsKarakteristiek.length > 0 ? [...slsKarakteristiek, ...slsNietHerkend] : slsCombos,
     data.combinationResults,
+    meting,
   );
   const wInstMm = inst ? inst.w : 0;
   const nietHerkendGemeten = inst
@@ -534,16 +699,17 @@ export function houtDoorbuigingsInvoer(
         "GEEN UITKOMST voor w_inst: geen enkele BGT-combinatie levert een zakking voor " +
           "deze staaf — reken het model opnieuw door. De 0 is een ontbrekende uitkomst.",
       ];
-  const quasi = grootsteZakking(beam, slsQuasiLijst, data.combinationResults);
+  const quasi = grootsteZakking(beam, slsQuasiLijst, data.combinationResults, meting);
   const wQuasi = quasiPermanentDeflection(
     beam,
     quasi?.combo ?? slsQuasiLijst[0] ?? null,
     quasi ? data.combinationResults.get(quasi.combo.id) ?? null : null,
     wInstMm,
+    meting,
   );
   // w_qp,fin (2.2.3(4)) als de vereenvoudiging van 2.2.3(5) niet geldt.
   const langeduur = langeduurzakking(
-    beam, data.combinations, slsQuasiLijst, data.combinationResults, wInstMm,
+    beam, data.combinations, slsQuasiLijst, data.combinationResults, wInstMm, meting,
   );
   // w₁: de zakking onder ALLEEN de blijvende belasting, uit de BGT-combinatie
   // die uitsluitend de blijvende gevallen draagt. Zonder die combinatie 0 —
@@ -555,7 +721,7 @@ export function houtDoorbuigingsInvoer(
     meet: (combo) => {
       const r = data.combinationResults.get(combo.id);
       if (!r || !r.elements.has(beam.id)) return null;
-      return extractFieldDeflectionMm(beam, r);
+      return extractFieldDeflectionMm(beam, r, meting);
     },
   });
 
@@ -565,8 +731,12 @@ export function houtDoorbuigingsInvoer(
     quasiMm: langeduur.paar ? langeduur.paar.quasiMm : wQuasi.mm,
     ...(langeduur.paar ? { quasiFinMm: langeduur.paar.quasiFinMm } : {}),
     permMm: wPerm.mm,
+    inklemming,
     notes: [
-      ...deflectionNotesFor(beam, data.nodes, data.beams, data.supports),
+      ...deflectionNotesFor(
+        beam, data.nodes, data.beams, data.supports, inklemming,
+        meting !== null && typeof meting === "object" ? meting : undefined,
+      ),
       ...instNotes,
       // Een BEWUSTE, strengere keuze die in het rapport hoort te staan: EC5
       // 2.2.3(2) rekent de momentane zakking met de karakteristieke
@@ -600,7 +770,7 @@ export interface TimberBuildData {
   /** Alle staven van het model; zie `SteelBuildData.alleBeams`. */
   alleBeams?: Beam[];
   /** Platen; zie `SteelBuildData.plates`. */
-  plates?: { nodeIds: number[] }[];
+  plates?: PlaatVoorEinden[];
   /** Analysetype en α_cr; zie `SteelBuildData.stabiliteit`. */
   stabiliteit?: StabiliteitVoorToets;
   combinations: LoadCombination[];
@@ -770,7 +940,17 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
     // Alle zakkingen van deze staaf in één keer, met hun verantwoording:
     // w_inst (6.14b), w_qp (6.16b) en w₁ (alleen blijvend). Gedeeld met de
     // CLT-bouwer — zie `houtDoorbuigingsInvoer`.
-    const doorbuiging = houtDoorbuigingsInvoer(beam, data);
+    // De einden en de steunpunten op een doorgaande lijn zoals de staalbouwer
+    // ze bepaalt: op het hele model en met de platen.
+    const alleBeams = ruweData.alleBeams ?? ruweData.beams;
+    const lijnVanStaaf = lijn.lijnen.get(beam.id);
+    const ledenVanLijn = new Set(lijnVanStaaf?.delen.map((d) => d.beam.id) ?? []);
+    const staafeinden = bepaalStaafeinden(beam, data.nodes, alleBeams, data.supports, ledenVanLijn, ruweData.plates);
+    const vrijEind = staafeinden.begin === "Vrij" || staafeinden.eind === "Vrij";
+    const doorbuiging = houtDoorbuigingsInvoer(beam, data, {
+      staafeinden,
+      steunpuntenMm: steunpuntenOpLijn(beam, data.nodes, lijnVanStaaf),
+    });
 
     // Per-staaf toetsconfiguratie; ontbrekende velden → defaults hierboven.
     // preCamber_mm wordt voor hout bewust niet geconsumeerd: de houtkern
@@ -780,7 +960,10 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
     // Kipsteunen per rand en de kipsteunafstand: één afleiding, gedeeld met het
     // tekenvlak (`lib/kipsteunen.ts`, issue #40).
     const kip = kipsteunenVanStaaf(cfg, lengthMm, "hout");
-    const defl = timberDeflectionNumerators(cfg.deflectionClass, cfg.deflectionLimitNumerator);
+    // De noemers op de staaflengte, met de uitkraging (ℓ_rep = 2·L) en de
+    // delen van een doorgaande lijn verwerkt — zie `houtDoorbuigingsNoemers`.
+    const defl = houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm);
+    if (defl.notitie) doorbuiging.notes.push(defl.notitie);
     // Een scheurfactor buiten (0, 1] is geen keuze maar een fout; die gaat
     // niet stil op 1,0 maar houdt de staaf buiten de toetsing, met reden.
     const kCr = kCrUitConfig(cfg);
@@ -803,6 +986,8 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
       ruweData.stabiliteit,
       Math.min(...forcesEnvelope.map((p) => p.forces.n_ed)),
       Number.isFinite(cfg.bucklingLengthY_m) && (cfg.bucklingLengthY_m as number) > 0,
+      // Een vrij eind: de kern neemt 2·L; de kanttekening heeft daar een eigen tekst.
+      vrijEind,
     );
     if (alphaNotitie) staafNotities.push(alphaNotitie);
 
@@ -858,8 +1043,22 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
       // drukterm van de kiptoets: om y de staaflengte, om z de grootste
       // afstand tussen plaatsen met een steun aan de boven- ÉN onderrand
       // (`lateral_bracing` hieronder), anders de staaflengte.
-      buckling_length_y_m: cfg.bucklingLengthY_m ?? 0,
-      buckling_length_z_m: cfg.bucklingLengthZ_m ?? 0,
+      // Bij een doorgaande lijn zonder opgave: de kniklengte per vak (KNIK PER
+      // VAK in `lib/doorgaandeLijn.ts`), met de aanname in `staaf_notities`.
+      buckling_length_y_m: cfg.bucklingLengthY_m ?? lijn.kniklengtes.get(beam.id)?.yM ?? 0,
+      buckling_length_z_m: cfg.bucklingLengthZ_m ?? lijn.kniklengtes.get(beam.id)?.zM ?? 0,
+      ruimtelijk: false,
+      // Een vrij staafeind (uitkraging, vrijstaande kolom): zonder opgegeven
+      // kniklengte rekent de kern dan met 2·L, niet met de staaflengte. Tot
+      // oktober 2026 stond hier hard `false`, en kreeg een vrijstaande houten
+      // kolom L_cr = L: een viermaal te hoge kritieke kracht. Dezelfde
+      // staafeinden als bij staal en als bij de doorbuiging hierboven.
+      is_cantilever: vrijEind,
+      // `zijdelingse_knik_in_analyse` (L in plaats van 2·L bij tweede orde met
+      // scheefstand) gaat bij hout bewust NIET mee: NEN-EN 1995-1-1 eist bij
+      // tweede orde E_d = E_mean/γ_M (2.2.2(1)P) en de boogimperfectie van
+      // 5.4.4(2), en de P-Δ van deze app rekent met E_mean en zonder
+      // boogimperfectie. Een vrij houten eind houdt dus 2·L.
       // Zijdelingse steunen per rand — ALLEEN voor de kniklengte om z. Dezelfde
       // twee lijsten als bij staal (boven = bovenrand, onder = onderrand). De
       // kipsteunafstand hieronder blijft er uitdrukkelijk los van.

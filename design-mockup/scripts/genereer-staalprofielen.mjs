@@ -113,6 +113,8 @@ export interface SteelSectionProps {
   wplY: number;
   /** Plastisch weerstandsmoment zwakke as Wpl;z in mm³. */
   wplZ: number;
+  /** Afschuifoppervlak Av;y in mm². */
+  avY: number;
   /** Afschuifoppervlak Av;z in mm². */
   avZ: number;
   /** Torsietraagheidsmoment It in mm⁴. */
@@ -200,7 +202,7 @@ for (const [k, p] of uniek) {
     `{ iz: ${num(pr.iz_mm4, `${k}.iz_mm4`)}, ` +
     `welY: ${num(pr.wel_y_mm3, `${k}.wel_y_mm3`)}, welZ: ${num(pr.wel_z_mm3, `${k}.wel_z_mm3`)}, ` +
     `wplY: ${num(pr.wpl_y_mm3, `${k}.wpl_y_mm3`)}, wplZ: ${num(pr.wpl_z_mm3, `${k}.wpl_z_mm3`)}, ` +
-    `avZ: ${num(pr.av_z_mm2, `${k}.av_z_mm2`)}, it: ${num(pr.it_mm4, `${k}.it_mm4`)}, ` +
+    `avY: ${num(pr.av_y_mm2, `${k}.av_y_mm2`)}, avZ: ${num(pr.av_z_mm2, `${k}.av_z_mm2`)}, it: ${num(pr.it_mm4, `${k}.it_mm4`)}, ` +
     `iw: ${num(pr.iw_mm6, `${k}.iw_mm6`)}, ` +
     `iRadY: ${num(pr.iy_radius_mm, `${k}.iy_radius_mm`)}, iRadZ: ${num(pr.iz_radius_mm, `${k}.iz_radius_mm`)} }`;
   dims +=

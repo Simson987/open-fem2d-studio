@@ -1,4 +1,5 @@
 import type { OpenFem3DTool } from "./openFem3dCommands";
+import { DEFAULT_OPEN_FEM_3D_EXPLODE, normalizeOpenFem3DExplode, type OpenFem3DExplode } from "./openFem3dExplode";
 import { normalizeOpenFem3DSymbolPercent, OPEN_FEM_3D_SYMBOL_PERCENT_DEFAULT } from "./openFem3dSymbolScale";
 import {
   DEFAULT_OPEN_FEM_3D_PLATE_DISPLAY, openFem3DPlateDisplayFromSaved, type OpenFem3DPlateDisplay,
@@ -33,6 +34,8 @@ export interface OpenFem3DVisibility {
   loads: boolean;
   /** Belastingvlakken (arcering, lastpijlen, overspanning); samen met `loads`. */
   loadPanels: boolean;
+  /** Gevel- en dakpanelen van de gebouwschil, los van zichtbare lasten. */
+  envelopePanels: boolean;
   grid: boolean;
   axes: boolean;
   /** Local x/y/z directions on each member. */
@@ -87,6 +90,8 @@ export interface OpenFem3DVisibility {
    * elke wijziging vervangen wordt (zie openFem3dSectionBox.ts).
    */
   sectionBox: OpenFem3DSectionBox;
+  /** View-only separation of floors (issue #104); never changes analysis geometry. */
+  explode: OpenFem3DExplode;
 }
 
 export const DEFAULT_OPEN_FEM_3D_VISIBILITY: OpenFem3DVisibility = {
@@ -102,6 +107,7 @@ export const DEFAULT_OPEN_FEM_3D_VISIBILITY: OpenFem3DVisibility = {
   supports: true,
   loads: true,
   loadPanels: true,
+  envelopePanels: true,
   grid: true,
   axes: true,
   memberAxes: false,
@@ -122,13 +128,14 @@ export const DEFAULT_OPEN_FEM_3D_VISIBILITY: OpenFem3DVisibility = {
   nodeSizePercent: OPEN_FEM_3D_SYMBOL_PERCENT_DEFAULT,
   supportSizePercent: OPEN_FEM_3D_SYMBOL_PERCENT_DEFAULT,
   sectionBox: DEFAULT_OPEN_FEM_3D_SECTION_BOX,
+  explode: DEFAULT_OPEN_FEM_3D_EXPLODE,
 };
 
 /** De twee schalen van issue #82: getallen in % (openFem3dSymbolScale.ts), geen aan/uit-vlaggen. */
 export const OPEN_FEM_3D_SYMBOL_SCALE_KEYS = ["nodeSizePercent", "supportSizePercent"] as const;
 export type OpenFem3DSymbolScaleKey = (typeof OPEN_FEM_3D_SYMBOL_SCALE_KEYS)[number];
 /** Een laag die aan of uit staat: alles behalve de schalen, de plaatweergave en de section box. */
-export type OpenFem3DVisibilityFlag = Exclude<keyof OpenFem3DVisibility, OpenFem3DSymbolScaleKey | "plateDisplay" | "sectionBox">;
+export type OpenFem3DVisibilityFlag = Exclude<keyof OpenFem3DVisibility, OpenFem3DSymbolScaleKey | "plateDisplay" | "sectionBox" | "explode">;
 
 export function isOpenFem3DSymbolScaleKey(key: string): key is OpenFem3DSymbolScaleKey {
   return (OPEN_FEM_3D_SYMBOL_SCALE_KEYS as readonly string[]).includes(key);
@@ -137,7 +144,7 @@ export function isOpenFem3DSymbolScaleKey(key: string): key is OpenFem3DSymbolSc
 /** De aan/uit-vlaggen, in de volgorde van de verkenner en het venster. */
 export const OPEN_FEM_3D_VISIBILITY_FLAGS: readonly OpenFem3DVisibilityFlag[] = (
   Object.keys(DEFAULT_OPEN_FEM_3D_VISIBILITY) as (keyof OpenFem3DVisibility)[]
-).filter((key): key is OpenFem3DVisibilityFlag => !isOpenFem3DSymbolScaleKey(key) && key !== "plateDisplay" && key !== "sectionBox");
+).filter((key): key is OpenFem3DVisibilityFlag => !isOpenFem3DSymbolScaleKey(key) && key !== "plateDisplay" && key !== "sectionBox" && key !== "explode");
 
 /**
  * Bewaarde zichtbaarheid (browseropslag of een opgeslagen view) → een geldige
@@ -159,6 +166,7 @@ export function normalizeOpenFem3DVisibility(value: unknown): OpenFem3DVisibilit
   for (const key of OPEN_FEM_3D_SYMBOL_SCALE_KEYS) result[key] = normalizeOpenFem3DSymbolPercent(saved[key]);
   result.plateDisplay = openFem3DPlateDisplayFromSaved(saved);
   result.sectionBox = normalizeOpenFem3DSectionBox(saved.sectionBox);
+  result.explode = normalizeOpenFem3DExplode(saved.explode);
   return result;
 }
 
@@ -169,8 +177,8 @@ export function normalizeOpenFem3DVisibility(value: unknown): OpenFem3DVisibilit
  * aan neemt dan de grenzen van het nieuwe model. Zonder doos: hetzelfde object.
  */
 export function openFem3DVisibilityZonderSectionBox(visibility: OpenFem3DVisibility): OpenFem3DVisibility {
-  return visibility.sectionBox.enabled || visibility.sectionBox.bounds
-    ? { ...visibility, sectionBox: DEFAULT_OPEN_FEM_3D_SECTION_BOX } : visibility;
+  return visibility.sectionBox.enabled || visibility.sectionBox.bounds || visibility.explode.amountM > 0
+    ? { ...visibility, sectionBox: DEFAULT_OPEN_FEM_3D_SECTION_BOX, explode: DEFAULT_OPEN_FEM_3D_EXPLODE } : visibility;
 }
 
 /**
@@ -212,6 +220,9 @@ export function saveOpenFem3DVisibility(value: OpenFem3DVisibility): void {
 export function openFem3DVisibilityForTool(visibility: OpenFem3DVisibility, tool: OpenFem3DTool): OpenFem3DVisibility {
   if (tool === "addLoadPanel" && !(visibility.loads && visibility.loadPanels)) {
     return { ...visibility, loads: true, loadPanels: true };
+  }
+  if (tool === "addEnvelopePanel" && !visibility.envelopePanels) {
+    return { ...visibility, envelopePanels: true };
   }
   if (tool === "addPointLoad" && !visibility.loads) return { ...visibility, loads: true };
   if (tool === "beamEndHinge" && !visibility.beams) return { ...visibility, beams: true };

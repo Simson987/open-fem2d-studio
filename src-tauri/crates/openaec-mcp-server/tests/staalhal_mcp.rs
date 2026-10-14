@@ -203,6 +203,34 @@ async fn standaardhal_gerekend_en_getoetst() {
     eprintln!("staalhal: uc_max {uc:.3} ({})", t["maatgevend"]);
 }
 
+#[tokio::test]
+async fn houten_hal_gerekend_en_volgens_en_1995_getoetst() {
+    eis_node().await;
+    let uit = hal(json!({
+        "hal": {
+            "lengteMm": 12000, "breedteMm": 8000, "aantalVakken": 2,
+            "dak": { "type": "platdak" }, "gordingafstandMm": 2000,
+            "profielen": {
+                "kolom": { "materiaal": "GL28h", "profiel": "200x400" },
+                "spantligger": { "materiaal": "GL28h", "profiel": "160x400" },
+                "gording": { "materiaal": "C24", "profiel": "80x200" },
+                "randligger": { "materiaal": "C24", "profiel": "100x200" },
+                "verband": { "materiaal": "C24", "profiel": "100x100" }
+            }
+        }, "reken": true
+    })).await;
+    dichtbij(&uit["samenvatting"]["eigenGewichtKn"]["staal"], 0.0, "geen staal in houten hal", 1e-9);
+    assert!(uit["samenvatting"]["eigenGewichtKn"]["hout"].as_f64().is_some_and(|v| v > 0.0));
+    dichtbij(&geval(&uit, 1)["reactiesomKn"]["fz"], 28.8, "G op houten hal", 1e-3);
+    assert!(uit["berekening"]["toetsing"]["uc_max"].is_null());
+    let hout = &uit["berekening"]["hout_toetsing"];
+    assert_eq!(hout["norm"], json!("NEN-EN 1995-1-1"));
+    assert!(hout["uc_max"].as_f64().is_some_and(|v| v.is_finite() && v > 0.0));
+    assert_eq!(hout["niet_getoetst"], json!([]));
+    let aantal: u64 = hout["status_telling"].as_object().unwrap().values().map(|v| v.as_u64().unwrap()).sum();
+    assert_eq!(aantal, uit["samenvatting"]["aantallen"]["staven"].as_u64().unwrap());
+}
+
 /// Op het balkrooster dragen alleen de palen af: Σ paalreacties = Σ lasten,
 /// en onder eigen gewicht staal + beton.
 #[tokio::test]

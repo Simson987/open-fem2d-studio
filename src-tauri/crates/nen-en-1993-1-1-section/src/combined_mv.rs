@@ -14,28 +14,48 @@
 //! ```text
 //! ρ = 0                            als V ≤ V_pl,z,Rd/2          (6.2.8(2))
 //! ρ = (2·V/V_pl,z,Rd − 1)²          anders                       (6.2.8(3))
-//! M_y,V,Rd = (1 − ρ)·M_y,c,Rd
 //! ```
 //!
-//! De verlaagde vloeigrens (1 − ρ)·f_y staat hier op de HELE doorsnede. De
-//! norm verlaagt alleen het afschuifoppervlak; voor een I-profiel met gelijke
-//! flenzen geeft (6.30) daarom een hogere M_y,V,Rd. Dit is de veilige kant, en
-//! dezelfde afspraak als in 6.2.10 (`interactie`).
+//! ## M_y,V,Rd
 //!
-//! De unity check volgt de afspraak van `interactie`: voldoet het criterium,
-//! dan M_y,Ed/M_y,V,Rd; voldoet het niet, dan de EVENREDIGE overschrijding —
-//! de factor waardoor V_z,Ed en M_y,Ed samen gedeeld moeten worden om op de
-//! grens te komen. Die is eindig, precies 1 op de grens, en loopt niet naar
-//! oneindig als V_Ed naar V_pl,Rd gaat. Zonder reductie (ρ = 0) valt hij samen
-//! met M_y,Ed/M_y,c,Rd en staat hij er ook zo. Bij V_Ed > V_pl,Rd staat bovenaan
-//! "V_Ed ≥ V_pl,Rd: de doorsnede bezwijkt al op dwarskracht". Met N_Ed = 0 en
-//! alleen buiging om y komt 6.2.10 zo op dezelfde uitkomst.
+//! 6.2.8(3) verlaagt de vloeigrens tot (1 − ρ)·f_y voor het AFSCHUIFOPPERVLAK.
+//! Voor een I- of H-profiel met gelijke flenzen en buiging om de sterke as
+//! schrijft 6.2.8(5) dat uit als (6.30):
+//!
+//! ```text
+//! M_y,V,Rd = (W_pl,y − ρ·A_w²/(4·t_w))·f_y/γ_M0,   maar M_y,V,Rd ≤ M_y,c,Rd
+//! A_w = h_w·t_w,  h_w = h − 2·t_f
+//! ```
+//!
+//! Dat geldt hier voor de dubbelsymmetrische I uit de catalogus en de gelaste
+//! dubbelsymmetrische I (de vorm [`Interactievorm::I`]). Voor elke andere vorm
+//! geeft de norm geen uitgeschreven formule; daar blijft de verlaagde
+//! vloeigrens op de HELE doorsnede staan, M_y,V,Rd = (1 − ρ)·M_y,c,Rd: de
+//! veilige kant (bij een koker ongeveer 4 % te streng, zie de controle van
+//! oktober 2026).
+//!
+//! Tot oktober 2026 gold (1 − ρ)·M_y,c,Rd ook voor de I: bij een IPE 300 S235
+//! met V_z,Ed = 300 kN gaf dat M_y,V,Rd = 70,5 kNm waar (6.30) 130,7 kNm geeft,
+//! en een ligger met M_y,Ed = 100 kNm werd ten onrechte afgekeurd.
+//!
+//! ## De unity check
+//!
+//! Eén definitie: UC = M_y,Ed / M_y,V,Rd, of het criterium nu voldoet of niet.
+//! Tot oktober 2026 werd bij "voldoet niet" de evenredige overschrijding
+//! gemeld (1/λ), zodat dezelfde toets twee soorten getallen gaf.
+//!
+//! Alleen waar M_y,Ed / M_y,V,Rd niet bestaat — V_Ed > V_pl,Rd, waar ρ > 1 en de
+//! formules van 6.2.8 niet meer gelden, of een M_y,V,Rd van nul — is de UC de
+//! evenredige overschrijding: de factor waardoor V_z,Ed en M_y,Ed samen gedeeld
+//! moeten worden om op de grens te komen. Die is eindig en groter dan 1, en er
+//! staat dan bovenaan "V_Ed ≥ V_pl,Rd: de doorsnede bezwijkt al op
+//! dwarskracht".
 
 use mechanics::ForceStateSnapshot;
 use section_properties::SectionProperties;
 
 use crate::classification::CrossSectionClass;
-use crate::interactie::evenredige_uc;
+use crate::interactie::{evenredige_uc, Interactievorm};
 use crate::opmaak::{lx, nl, nv, stap};
 use crate::{CheckStatus, Deelstap, ResistanceCalc, SteelGrade, UnityCheck};
 
@@ -61,36 +81,69 @@ pub fn rho(v_ed_kn: f64, v_pl_rd_kn: f64) -> f64 {
     }
 }
 
-/// Voldoet 6.2.8 bij V_z,Ed = `v` en M_y,Ed = `m` (beide ≥ 0)? Boven V_pl,Rd
-/// is er geen weerstand meer over.
-fn voldoet(v: f64, m: f64, v_pl: f64, m_c: f64) -> bool {
-    v <= v_pl && m <= (1.0 - rho(v, v_pl)).max(0.0) * m_c
+/// De maten die (6.30) vraagt, als de doorsnede een I- of H-profiel met
+/// gelijke flenzen is en alle maten bekend zijn: (A_w, t_w, W_pl,y, h_w).
+fn maten_6_30(p: &SectionProperties, vorm: &Interactievorm) -> Option<(f64, f64, f64, f64)> {
+    if !matches!(vorm, Interactievorm::I) {
+        return None;
+    }
+    let h_w = p.h_mm - 2.0 * p.tf_mm;
+    let ok = |v: f64| v.is_finite() && v > 0.0;
+    (ok(h_w) && ok(p.tw_mm) && ok(p.wpl_y_mm3)).then(|| (h_w * p.tw_mm, p.tw_mm, p.wpl_y_mm3, h_w))
 }
 
-/// §6.2.8 op één krachtentoestand: M_y,Ed tegen M_y,V,Rd = (1 − ρ)·M_y,c,Rd.
+/// M_y,V,Rd in kNm bij een gegeven ρ (≤ 1): (6.30) voor de I met gelijke
+/// flenzen, anders (1 − ρ)·M_y,c,Rd. Nooit boven M_y,c,Rd en nooit negatief.
+fn m_y_v_rd(
+    rho: f64,
+    m_c_rd_knm: f64,
+    grade: &SteelGrade,
+    maten: Option<(f64, f64, f64, f64)>,
+) -> f64 {
+    if rho <= 0.0 {
+        return m_c_rd_knm;
+    }
+    match maten {
+        Some((a_w, t_w, w_pl, _)) => {
+            let m = (w_pl - rho * a_w * a_w / (4.0 * t_w)) * grade.fy_mpa / grade.gamma_m0 * 1e-6;
+            m.min(m_c_rd_knm).max(0.0)
+        }
+        None => (1.0 - rho).max(0.0) * m_c_rd_knm,
+    }
+}
+
+/// §6.2.8 op één krachtentoestand: M_y,Ed tegen M_y,V,Rd.
 ///
 /// `v_pl_rd_kn` is V_pl,z,Rd van 6.2.6, `m_c_rd_knm` de M_y,c,Rd van 6.2.5
-/// (W_pl,y bij klasse 1 en 2, W_el,y bij klasse 3).
+/// (W_pl,y bij klasse 1 en 2, W_el,y bij klasse 3, W_eff,y bij klasse 4).
+/// `vorm` beslist of (6.30) geldt: alleen bij [`Interactievorm::I`].
 pub fn check_combined_mv(
-    _p: &SectionProperties, _grade: &SteelGrade, _class: CrossSectionClass,
-    v_pl_rd_kn: f64, m_c_rd_knm: f64,
+    p: &SectionProperties,
+    grade: &SteelGrade,
+    _class: CrossSectionClass,
+    vorm: &Interactievorm,
+    v_pl_rd_kn: f64,
+    m_c_rd_knm: f64,
     force_state: ForceStateSnapshot,
 ) -> ResistanceCalc {
     let v = force_state.forces.vz_ed.abs();
     let m = force_state.forces.my_ed.abs();
     let rho = rho(v, v_pl_rd_kn);
-    let factor = (1.0 - rho).max(0.0);
-    let m_v_rd = factor * m_c_rd_knm;
+    let maten = maten_6_30(p, vorm);
     let bezweken_v = v > v_pl_rd_kn;
-    let ok = voldoet(v, m, v_pl_rd_kn, m_c_rd_knm);
-    // Zonder reductie (ρ = 0, dus V ≤ V_pl,Rd/2) is de evenredige
-    // overschrijding precies M_y,Ed/M_y,c,Rd: wie V en M samen verkleint, houdt
-    // ρ op nul. Dan staat de UC er gewoon als die verhouding.
-    let klassiek = ok || rho == 0.0;
+    // Boven V_pl,Rd is ρ > 1 en bestaat (6.30) niet meer; de weerstand wordt
+    // dan niet uitgerekend maar als nul genomen (zie `voldoet`).
+    let m_v_rd = if bezweken_v { 0.0 } else { m_y_v_rd(rho, m_c_rd_knm, grade, maten) };
+    let voldoet = |v: f64, m: f64| -> bool {
+        v <= v_pl_rd_kn && m <= m_y_v_rd(crate::combined_mv::rho(v, v_pl_rd_kn), m_c_rd_knm, grade, maten)
+    };
+    // Eén definitie, M_y,Ed/M_y,V,Rd; de evenredige overschrijding alleen waar
+    // die verhouding niet bestaat (V_Ed > V_pl,Rd of M_y,V,Rd = 0).
+    let klassiek = !bezweken_v && (m_v_rd > 0.0 || m == 0.0);
     let uc = if klassiek {
         if m > 0.0 { m / m_v_rd } else { 0.0 }
     } else {
-        evenredige_uc(|l| voldoet(l * v, l * m, v_pl_rd_kn, m_c_rd_knm))
+        evenredige_uc(|l| voldoet(l * v, l * m))
     };
 
     let mut notes: Vec<String> = Vec::new();
@@ -109,12 +162,34 @@ pub fn check_combined_mv(
             nl(v_pl_rd_kn / 2.0, 3),
             nl(m_c_rd_knm, 3)
         ));
+    } else if let Some((a_w, t_w, w_pl, h_w)) = maten {
+        let m_630 = (w_pl - rho * a_w * a_w / (4.0 * t_w)) * grade.fy_mpa / grade.gamma_m0 * 1e-6;
+        notes.push(format!(
+            "V_z,Ed = {} kN > V_pl,z,Rd/2 = {} kN: ρ = (2·V_Ed/V_pl,Rd − 1)² = {} (6.2.8(3)). De \
+             verlaagde vloeigrens (1 − ρ)·f_y geldt alleen voor het afschuifoppervlak, het lijf: \
+             voor een I-profiel met gelijke flenzen en buiging om de sterke as is dat (6.30), \
+             M_y,V,Rd = (W_pl,y − ρ·A_w²/(4·t_w))·f_y/γ_M0 met A_w = h_w·t_w = {} · {} = {} mm² \
+             (h_w = h − 2·t_f). Dat geeft {} kNm{}.",
+            nl(v, 3),
+            nl(v_pl_rd_kn / 2.0, 3),
+            nl(rho, 4),
+            nl(h_w, 1),
+            nl(t_w, 1),
+            nl(a_w, 1),
+            nl(m_630, 3),
+            if m_630 > m_c_rd_knm {
+                format!(", begrensd op M_y,c,Rd = {} kNm (6.2.8(5))", nl(m_c_rd_knm, 3))
+            } else {
+                String::new()
+            }
+        ));
     } else {
         notes.push(format!(
             "V_z,Ed = {} kN > V_pl,z,Rd/2 = {} kN: ρ = (2·V_Ed/V_pl,Rd − 1)² = {} (6.2.8(3)). De \
-             verlaagde vloeigrens (1 − ρ)·f_y is op de HELE doorsnede gezet: M_y,V,Rd = \
-             (1 − ρ)·M_y,c,Rd = {} kNm. De norm verlaagt alleen het afschuifoppervlak (voor een \
-             I-profiel met gelijke flenzen geeft (6.30) meer); dit is de veilige kant.",
+             norm verlaagt de vloeigrens tot (1 − ρ)·f_y voor het afschuifoppervlak, maar geeft \
+             alleen voor een I-profiel met gelijke flenzen een uitgeschreven formule (6.30). Voor \
+             deze doorsnede is de verlaagde vloeigrens op de HELE doorsnede gezet: M_y,V,Rd = \
+             (1 − ρ)·M_y,c,Rd = {} kNm — de veilige kant.",
             nl(v, 3),
             nl(v_pl_rd_kn / 2.0, 3),
             nl(rho, 4),
@@ -123,13 +198,39 @@ pub fn check_combined_mv(
     }
     if !klassiek {
         notes.push(format!(
-            "Het criterium voldoet niet. De unity check is de EVENREDIGE overschrijding: V_z,Ed en \
-             M_y,Ed moeten samen door {} worden gedeeld om op de grens van 6.2.8 uit te komen. Dat \
-             getal is eindig en precies 1,0 op de grens; M_y,Ed/M_y,V,Rd zou bij V_Ed → V_pl,Rd \
-             naar oneindig lopen.",
+            "M_y,Ed/M_y,V,Rd bestaat hier niet (V_Ed > V_pl,Rd, of geen momentweerstand over). De \
+             unity check is daarom de EVENREDIGE overschrijding: V_z,Ed en M_y,Ed moeten samen door \
+             {} worden gedeeld om op de grens van 6.2.8 uit te komen.",
             nl(uc, 3)
         ));
     }
+
+    let (formule_mv, ingevuld_mv, variabelen_mv) = match maten {
+        Some((a_w, t_w, w_pl, _)) if rho > 0.0 => (
+            r"M_{y,V,Rd} = \left( W_{pl,y} - \frac{\rho A_w^2}{4 t_w} \right) \frac{f_y}{\gamma_{M0}} \le M_{y,c,Rd}".to_string(),
+            format!(
+                r"M_{{y,V,Rd}} = \left( {} - \frac{{{} \cdot {}^2}}{{4 \cdot {}}} \right) \cdot \frac{{{}}}{{{}}} \cdot 10^{{-6}}",
+                lx(w_pl, 0),
+                lx(rho, 4),
+                lx(a_w, 1),
+                lx(t_w, 1),
+                lx(grade.fy_mpa, 0),
+                lx(grade.gamma_m0, 2)
+            ),
+            vec![
+                nv(r"W_{pl,y}", w_pl, "mm³"),
+                nv(r"\rho", rho, "-"),
+                nv(r"A_w", a_w, "mm²"),
+                nv(r"t_w", t_w, "mm"),
+                nv(r"M_{y,c,Rd}", m_c_rd_knm, "kNm"),
+            ],
+        ),
+        _ => (
+            r"M_{y,V,Rd} = (1 - \rho) \cdot M_{y,c,Rd}".to_string(),
+            format!(r"M_{{y,V,Rd}} = (1 - {}) \cdot {}", lx(rho, 4), lx(m_c_rd_knm, 3)),
+            vec![nv(r"\rho", rho, "-"), nv(r"M_{y,c,Rd}", m_c_rd_knm, "kNm")],
+        ),
+    };
 
     let deelstappen: Vec<Deelstap> = vec![
         stap(
@@ -156,10 +257,10 @@ pub fn check_combined_mv(
             "m_v_rd",
             "Momentweerstand met dwarskracht",
             r"M_{y,V,Rd}",
-            "art. 6.2.8(3)",
-            r"M_{y,V,Rd} = (1 - \rho) \cdot M_{y,c,Rd}".to_string(),
-            format!(r"M_{{y,V,Rd}} = (1 - {}) \cdot {}", lx(rho, 4), lx(m_c_rd_knm, 3)),
-            vec![nv(r"\rho", rho, "-"), nv(r"M_{y,c,Rd}", m_c_rd_knm, "kNm")],
+            if maten.is_some() && rho > 0.0 { "art. 6.2.8(5) (6.30)" } else { "art. 6.2.8(3)" },
+            formule_mv.clone(),
+            ingevuld_mv,
+            variabelen_mv,
             Some(m_v_rd),
             "kNm",
             vec![],
@@ -176,9 +277,9 @@ pub fn check_combined_mv(
         deelstappen,
         id: TOETS_MV.to_string(),
         title: "Buiging en dwarskracht".to_string(),
-        article: "art. 6.2.8".to_string(),
+        article: if maten.is_some() && rho > 0.0 { "art. 6.2.8 (6.30)" } else { "art. 6.2.8" }.to_string(),
         force_state,
-        formula_latex: r"M_{y,V,Rd} = (1 - \rho) \cdot M_{y,c,Rd}".to_string(),
+        formula_latex: formule_mv,
         variables: vec![
             nv(r"V_{z,Ed}", v, "kN"),
             nv(r"V_{z,pl,Rd}", v_pl_rd_kn, "kN"),
@@ -208,9 +309,32 @@ mod tests {
         }
     }
 
+    /// Een doorsnede zonder maten en zonder I-vorm: (1 − ρ)·M_y,c,Rd.
     fn toets(v: f64, m: f64) -> ResistanceCalc {
         let p = SectionProperties::default();
-        check_combined_mv(&p, &crate::S235, CrossSectionClass::Class1, 400.0, 200.0, toestand(v, m))
+        check_combined_mv(
+            &p,
+            &crate::S235,
+            CrossSectionClass::Class1,
+            &Interactievorm::Lineair(String::new()),
+            400.0,
+            200.0,
+            toestand(v, m),
+        )
+    }
+
+    /// IPE 300 (catalogusmaten) met de (6.30)-formule.
+    fn ipe300() -> SectionProperties {
+        SectionProperties {
+            area_mm2: 5381.0,
+            h_mm: 300.0,
+            b_mm: 150.0,
+            tw_mm: 7.1,
+            tf_mm: 10.7,
+            r_mm: 15.0,
+            wpl_y_mm3: 628.0e3,
+            ..Default::default()
+        }
     }
 
     /// Tot en met V_pl,Rd/2 geen reductie: UC = M/M_c,Rd.
@@ -230,15 +354,17 @@ mod tests {
         assert_relative_eq!(r.uc.unwrap().uc, 0.8, max_relative = 1e-12);
     }
 
-    /// Voldoet niet: V = 300, M = 160 > 150. De evenredige UC λ* volgt uit
-    /// 160λ = 200·(1 − (1,5λ − 1)²): 2,25λ² − 2,2λ = 0 → λ* = 2,2/2,25 =
-    /// 0,977778 (de wortel boven 1/1,5, waar ρ meedoet), UC = 1/λ* = 1,022727.
+    /// Voldoet niet: V = 300, M = 160 > 150. Eén UC-definitie, ook bij
+    /// "voldoet niet": UC = M_y,Ed/M_y,V,Rd = 160/150 = 1,0667. Tot oktober 2026
+    /// stond hier de evenredige overschrijding 2,25/2,2 = 1,0227 (controle
+    /// 2026-10, punt B6: twee definities in één toets).
     #[test]
-    fn voldoet_niet_evenredig() {
+    fn voldoet_niet_met_dezelfde_verhouding() {
         let r = toets(300.0, 160.0);
-        assert_relative_eq!(r.uc.as_ref().unwrap().uc, 2.25 / 2.2, max_relative = 1e-9);
+        let uc = r.uc.as_ref().unwrap();
+        assert_relative_eq!(uc.uc, 160.0 / 150.0, max_relative = 1e-12);
+        assert_eq!((uc.ed, uc.rd), (160.0, 150.0));
         assert_eq!(r.status, CheckStatus::NotOk);
-        assert!(r.notes.iter().any(|t| t.starts_with("Het criterium voldoet niet")));
     }
 
     /// Voldoet niet zonder dwarskrachtinvloed (V ≤ V_pl,Rd/2): de UC is dan
@@ -249,7 +375,6 @@ mod tests {
         let uc = r.uc.as_ref().unwrap();
         assert_relative_eq!(uc.uc, 1.25, max_relative = 1e-12);
         assert_eq!((uc.ed, uc.rd), (250.0, 200.0));
-        assert!(r.notes.iter().all(|t| !t.starts_with("Het criterium voldoet niet")));
     }
 
     /// Boven V_pl,Rd: eindige UC en de melding bovenaan. Zonder moment is de
@@ -259,5 +384,57 @@ mod tests {
         let r = toets(500.0, 0.0);
         assert_relative_eq!(r.uc.as_ref().unwrap().uc, 1.25, max_relative = 1e-9);
         assert!(r.notes[0].starts_with("V_Ed ≥ V_pl,Rd: de doorsnede bezwijkt al op dwarskracht"));
+    }
+
+    /// Controle 2026-10, punt B6: IPE 300 S235, V_z,Ed = 300 kN, V_pl,z,Rd =
+    /// 348,42 kN (A_v = 2568 mm²). Met de hand:
+    ///   ρ = (2·300/348,42 − 1)² = 0,5214;
+    ///   A_w = (300 − 2·10,7)·7,1 = 1978,06 mm²;
+    ///   M_y,V,Rd = (628 000 − 0,5214·1978,06²/(4·7,1))·235·10⁻⁶ = 130,70 kNm.
+    /// M_y,Ed = 100 kNm → UC 0,765 (voldoet); 200 kNm → UC 1,530.
+    #[test]
+    fn ipe300_volgens_6_30() {
+        let p = ipe300();
+        let v_pl = 2568.0 * 235.0 / 3f64.sqrt() * 1e-3;
+        let m_c = 628.0e3 * 235.0 * 1e-6;
+        let rho_hand = (2.0 * 300.0 / v_pl - 1.0f64).powi(2);
+        let m_v_hand = (628.0e3 - rho_hand * 1978.06f64.powi(2) / (4.0 * 7.1)) * 235.0 * 1e-6;
+        assert_relative_eq!(m_v_hand, 130.70, max_relative = 1e-4);
+        for (m, uc_hand, status) in [(100.0, 0.765, CheckStatus::Ok), (200.0, 1.530, CheckStatus::NotOk)] {
+            let r = check_combined_mv(
+                &p,
+                &crate::S235,
+                CrossSectionClass::Class1,
+                &Interactievorm::I,
+                v_pl,
+                m_c,
+                toestand(300.0, m),
+            );
+            assert_relative_eq!(r.value, m_v_hand, max_relative = 1e-9);
+            let uc = r.uc.as_ref().unwrap();
+            assert_relative_eq!(uc.uc, m / m_v_hand, max_relative = 1e-12);
+            assert_relative_eq!(uc.uc, uc_hand, max_relative = 2e-3);
+            assert_eq!(uc.formula_latex, r"M_{y,Ed} / M_{y,V,Rd}");
+            assert_eq!(r.status, status);
+        }
+    }
+
+    /// (6.30) nooit boven M_y,c,Rd: bij klasse 3 is dat W_el,y·f_y.
+    #[test]
+    fn formule_6_30_begrensd_op_m_c_rd() {
+        let p = ipe300();
+        let v_pl = 2568.0 * 235.0 / 3f64.sqrt() * 1e-3;
+        // V net boven de helft: ρ klein, (6.30) ligt dan boven W_el,y·f_y.
+        let m_el = 557.0e3 * 235.0 * 1e-6;
+        let r = check_combined_mv(
+            &p,
+            &crate::S235,
+            CrossSectionClass::Class3,
+            &Interactievorm::I,
+            v_pl,
+            m_el,
+            toestand(0.51 * v_pl, 50.0),
+        );
+        assert_relative_eq!(r.value, m_el, max_relative = 1e-12);
     }
 }

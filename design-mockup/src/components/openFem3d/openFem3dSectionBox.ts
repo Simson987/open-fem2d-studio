@@ -132,6 +132,11 @@ export function openFem3DSectionBoxSelectieKnopen(model: OpenFem3DModel, selecti
   if (selection.type === "node") ids.add(selection.id);
   else if (selection.type === "beam") metStaaf(selection.id);
   else if (selection.type === "plate") metPlaat(selection.id);
+  else if (selection.type === "envelopePanel") {
+    const panel = (model.envelopePanels ?? []).find((candidate) => candidate.id === selection.id);
+    panel?.nodeIds.forEach((id) => ids.add(id));
+    panel?.openings?.forEach((opening) => opening.nodeIds.forEach((id) => ids.add(id)));
+  }
   else if (selection.type === "multi") {
     selection.nodeIds.forEach((id) => ids.add(id));
     selection.beamIds.forEach(metStaaf);

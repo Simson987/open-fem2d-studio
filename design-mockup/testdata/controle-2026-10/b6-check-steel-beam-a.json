@@ -1,0 +1,65 @@
+{
+ "tool": "check_steel_beam",
+ "arguments": {
+  "beam_id": 1,
+  "profile_name": "IPE300",
+  "steel_grade": "S235",
+  "length_m": 1,
+  "forces_envelope": [
+   {
+    "combination_id": 1,
+    "position_mm": 0,
+    "forces": {
+     "n_ed": 0,
+     "vy_ed": 0,
+     "vz_ed": 300,
+     "mt_ed": 0,
+     "my_ed": 100,
+     "mz_ed": 0
+    }
+   },
+   {
+    "combination_id": 1,
+    "position_mm": 500,
+    "forces": {
+     "n_ed": 0,
+     "vy_ed": 0,
+     "vz_ed": 300,
+     "mt_ed": 0,
+     "my_ed": 150,
+     "mz_ed": 0
+    }
+   },
+   {
+    "combination_id": 1,
+    "position_mm": 1000,
+    "forces": {
+     "n_ed": 0,
+     "vy_ed": 0,
+     "vz_ed": 300,
+     "mt_ed": 0,
+     "my_ed": 200,
+     "mz_ed": 0
+    }
+   }
+  ],
+  "lateral_bracing": {
+   "top_flange_positions": [
+    0,
+    0.5,
+    1
+   ],
+   "bottom_flange_positions": [
+    0,
+    0.5,
+    1
+   ]
+  },
+  "deflection_limit_class": "Floor",
+  "deflection_limit_numerator": 333,
+  "deflection_actual_max_mm": 0,
+  "is_cantilever": false,
+  "consequence_class": "CC2"
+ },
+ "toelichting": "IPE300 S235, L = 1000 mm, V_z,Ed = 300 kN; M_y,Ed 100 tot 200 kNm. Hand: UC 6.2.8 = 200/130,70 = 1,530 op x = 1000 mm."
+}

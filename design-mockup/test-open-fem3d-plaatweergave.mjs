@@ -110,8 +110,8 @@ await check("geen aan/uit-vlag: niet in de lijst van vlaggen; de oude sleutel me
   assert.ok(!("mesh" in DEFAULT), "DEFAULT kent geen mesh meer");
   assert.ok(V.OPEN_FEM_3D_VISIBILITY_FLAGS.every((k) => typeof DEFAULT[k] === "boolean"));
   // Alle sleutels = de vlaggen + de twee schalen (issue #82) + deze keuze
-  // + de section box (issue #86, evenmin een aan/uit-vlag).
-  assert.equal(V.OPEN_FEM_3D_VISIBILITY_FLAGS.length + 4, Object.keys(DEFAULT).length);
+  // + de section box (issue #86) + de explode-stand (issue #104).
+  assert.equal(V.OPEN_FEM_3D_VISIBILITY_FLAGS.length + 5, Object.keys(DEFAULT).length);
 });
 await check("isOpenFem3DPlateDisplay: alleen de drie teksten", () => {
   for (const s of ["volume", "surface", "mesh"]) assert.equal(D.isOpenFem3DPlateDisplay(s), true, s);

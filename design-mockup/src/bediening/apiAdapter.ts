@@ -30,6 +30,8 @@ import type { OpenFem3DExternStap } from "../components/openFem3d/openFem3dHisto
 import type { OpenFem3DSelection } from "../components/openFem3d/openFem3dSelection";
 import type { Load, LoadCase, StructuralGrid } from "../components/fem/femTypes";
 import type { LoadCombination } from "../components/fem/solver/combinations";
+import type { ExtensieKaart } from "../extensies/extensieStore";
+import type { ExtensieManifest, ImportMelding } from "../extensies/manifest";
 
 export interface ApiAppActies {
   /** Het project zoals Opslaan het zou schrijven. */
@@ -61,6 +63,8 @@ export interface ApiAppActies {
   opslaan(pad?: string): Promise<string>;
   /** Een projectbestand openen zoals Openen (zonder vraag); geeft het pad. */
   openen(pad: string): Promise<string>;
+  importeren(pad: string, importerId?: string): Promise<{ meldingen: ImportMelding[]; extensie: ExtensieManifest }>;
+  extensies(): Promise<ExtensieKaart[]>;
   /** Of het project wijzigingen heeft die nog niet zijn opgeslagen. */
   heeftNietOpgeslagenWerk(): boolean;
   /**
@@ -70,6 +74,7 @@ export interface ApiAppActies {
    * ApiAppActies; daar heeft het commando geen app en zet het niets.
    */
   zetSelectie3D(selectie: OpenFem3DSelection): void;
+  zetExplode3D(amountM: number): void;
 }
 
 export type ApiAntwoord =
@@ -138,6 +143,10 @@ function bewaakNietOpgeslagen(acties: ApiAppActies, invoer: unknown): void {
 /** Het register van de app: de app-commando's met hun echte uitvoering. */
 export function appRegister(acties: ApiAppActies): ApiRegister {
   const echt: Record<string, ApiCommando["uitvoeren"]> = {
+    "app.view3d.explode": (invoer: { mode: "levels"; amountMm: number }) => {
+      acties.zetExplode3D(invoer.amountMm / 1000);
+      return { uitkomst: { mode: invoer.mode, amountMm: invoer.amountMm } };
+    },
     "app.undo": () => { acties.ongedaanMaken(); return { uitkomst: { done: true } }; },
     "app.redo": () => { acties.opnieuw(); return { uitkomst: { done: true } }; },
     "app.project.save": async (invoer: { path?: string }) => ({ uitkomst: { path: await acties.opslaan(invoer.path) } }),
@@ -145,6 +154,22 @@ export function appRegister(acties: ApiAppActies): ApiRegister {
       bewaakNietOpgeslagen(acties, invoer);
       return { uitkomst: { path: await acties.openen(invoer.path) } };
     },
+    "app.project.import": async (invoer: { path: string; importer?: string; discardChanges?: boolean }) => {
+      bewaakNietOpgeslagen(acties, invoer);
+      const { meldingen, extensie } = await acties.importeren(invoer.path, invoer.importer);
+      return { uitkomst: { path: invoer.path, project: "nieuw", messages: meldingen,
+        extension: { id: extensie.id, name: extensie.name, version: extensie.version } } };
+    },
+    "extensions.list": async () => ({ uitkomst: { extensions: (await acties.extensies()).map((kaart) => ({
+      id: kaart.manifest?.id ?? null,
+      name: kaart.manifest?.name ?? null,
+      version: kaart.manifest?.version ?? null,
+      enabled: kaart.ingeschakeld,
+      source: kaart.bron,
+      folder: kaart.map,
+      importers: kaart.manifest?.importers ?? [],
+      ...(kaart.fout ? { error: kaart.fout } : {}),
+    })) } }),
   };
   return maakRegister(standaardCommandos().map((commando) =>
     commando.soort === "app" && echt[commando.naam] ? { ...commando, uitvoeren: echt[commando.naam] } : commando));

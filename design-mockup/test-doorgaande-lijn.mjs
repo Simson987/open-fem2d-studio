@@ -205,6 +205,12 @@ log("\n[7] Doorlopend in een ander profiel (IPE 300 → IPE 200, geen oplegging)
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Een kolom die op de tussenknoop STAAT (met een vrije kop) steunt de ligger
+// nergens: de liggers blijven één lijn van 6 m, voor de kip, de doorbuiging
+// én de knik, met een notitie over de aansluiting. Een eerste oplossing van K6
+// (controle oktober 2026, #188) knipte de lijn hier en maakte de knoop stil
+// een gaffel (kip-UC 2,235 → 1,207, w_fin 1,245 → 0,502); zie
+// test-vakwerk-kniklengte.mjs [6] voor de kern.
 log("\n[8] Kolom die op de tussenknoop staat: wél samengevoegd, mét notitie over de aansluiting");
 {
   const r = staal({
@@ -220,6 +226,8 @@ log("\n[8] Kolom die op de tussenknoop staat: wél samengevoegd, mét notitie ov
   const lijn = r.inputs.find((i) => i.beam_id === 1);
   check("lijn 1+2 als staaf 1 van 6 m; kolom 5 apart", r.inputs.length === 2 && lijn.length_m === 6 && r.inputs.some((i) => i.beam_id === 5));
   check("notitie noemt staaf 5 op tussenknoop 3", lijn.staaf_notities.some((n) => /tussenknoop 3/.test(n) && /staaf 5/.test(n)), JSON.stringify(lijn.staaf_notities));
+  check("de kolom heeft een vrije kop: geen kniklengte per vak, geen gaffel op knoop 3",
+    lijn.buckling_length_y_m === 0 && lijn.buckling_length_z_m === 0 && lijn.staafeinden === undefined);
   const kolom = r.inputs.find((i) => i.beam_id === 5);
   check("kolom 5: voet op de ligger is een aansluiting (gaffel), kop vrij", kolom.staafeinden?.begin === "Gaffel" && kolom.staafeinden?.eind === "Vrij", JSON.stringify(kolom.staafeinden));
 }

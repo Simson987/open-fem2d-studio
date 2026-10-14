@@ -4,14 +4,16 @@ import ProfielKiezer from "../fem/ProfielKiezer";
 import OpenFem3DNodeConditions, { type OpenFem3DLoadEditorRequest, type OpenFem3DSpringEditorRequest } from "./OpenFem3DNodeConditions";
 import OpenFem3DMemberLoads from "./OpenFem3DMemberLoads";
 import OpenFem3DLoadPanelProperties from "./OpenFem3DLoadPanelProperties";
+import OpenFem3DEnvelopePanelProperties from "./OpenFem3DEnvelopePanelProperties";
 import { OpenFem3DDiaphragmFromSelection, OpenFem3DNodeDiaphragmRow, OpenFem3DTensionOnlyField } from "./OpenFem3DTrekSchijfVelden";
 import { OpenFem3DBeddingField, OpenFem3DBeddingResults } from "./OpenFem3DBeddingVeld";
+import { OpenFem3DPlateBeddingField, OpenFem3DPlateBeddingResults } from "./OpenFem3DPlaatBeddingVeld";
 import { openFem3DBeddingRefusal } from "./openFem3dBedding";
 import { openFem3DSelectionLoadCount, type OpenFem3DSelection } from "./openFem3dSelection";
 import { openFem3DSelectieBelastinggevallen, openFem3DSelectieIds } from "./openFem3dSelectieFilter";
 import {
-  assertOpenFem3DBeddingFitsGeometry, flipOpenFem3DBeamLocalAxes, openFem3DReleasePresetOf, openFem3DSupportPresetOf, removeOpenFem3DSurfaceLoad, setOpenFem3DBeamNodes,
-  setOpenFem3DReleasePreset, updateOpenFem3DPlate, updateOpenFem3DSurfaceLoad, type OpenFem3DModel, type OpenFem3DReleasePreset,
+  applyOpenFem3DProfileChoice, assertOpenFem3DBeddingFitsGeometry, flipOpenFem3DBeamLocalAxes, openFem3DReleasePresetOf, openFem3DSupportPresetOf, removeOpenFem3DSurfaceLoad, setOpenFem3DBeamNodes,
+  setOpenFem3DReleasePreset, updateOpenFem3DBeam, updateOpenFem3DPlate, updateOpenFem3DSurfaceLoad, type OpenFem3DModel, type OpenFem3DReleasePreset,
   type OpenFem3DSupportPreset,
 } from "./openFem3dModel";
 import {
@@ -28,10 +30,15 @@ import {
   type OpenFem3DSteelChecks,
 } from "./openFem3dSteelCheck";
 import { matchSupportedConcreteClass } from "../../lib/betonCheckBuilder";
+import { matchSupportedTimberGrade } from "../../lib/timberCheckBuilder";
+import { openFem3DTimberGoverningUlsCheck, openFem3DTimberUlsUc, type OpenFem3DTimberChecks } from "./openFem3dTimberCheck";
+import { doorsnedeNaamVertaald } from "../../lib/verloopKeuze";
+import { openFem3DBeamAls2D } from "./openFem3dVerloop";
 import { toonMm } from "../../lib/lengthInput";
 import LengthInput from "../LengthInput";
 import type { OpenFem3DConcreteChecks } from "./openFem3dConcreteCheck";
 import KolomVelden from "../beton/KolomVelden";
+import OpenFem3DAnalysisMaterialField from "./OpenFem3DAnalysisMaterialField";
 import "../fem/FemProperties.css";
 import "./OpenFem3DProperties.css";
 
@@ -42,6 +49,7 @@ interface Props {
   result: OpenFem3DSolveResult | null;
   checks?: OpenFem3DSteelChecks | null;
   concreteChecks?: OpenFem3DConcreteChecks | null;
+  timberChecks?: OpenFem3DTimberChecks | null;
   checksRunning?: boolean;
   checksError?: string | null;
   loadEditorRequest?: OpenFem3DLoadEditorRequest | null;
@@ -158,7 +166,7 @@ export function openFem3DModelWithNodeCoordinate(
 }
 
 export default function OpenFem3DProperties({
-  model, selection, onChange, result, checks, concreteChecks, checksRunning, checksError,
+  model, selection, onChange, result, checks, concreteChecks, timberChecks, checksRunning, checksError,
   loadEditorRequest, springEditorRequest, memberLoadEditorRequest, memberPointLoadEditorRequest,
   thermalLoadEditorRequest, activeLoadCaseId = 1, normFocus, levels = [],
   onPickLoadPanelSpan, loadPanelSpanPickActive = false, loadCaseOptions = [],
@@ -192,6 +200,8 @@ export default function OpenFem3DProperties({
   // een staaf op een verticale bedding die verticaal zou komen te staan (#106).
   const [geometryError, setGeometryError] = useState<string | null>(null);
   useEffect(() => { setGeometryError(null); }, [selection]);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  useEffect(() => { setProfileError(null); }, [selection]);
   const refusalText = (reason: unknown) => {
     const bedding = openFem3DBeddingRefusal(reason);
     return bedding ? t(bedding.key, bedding.values) : reason instanceof Error ? reason.message : String(reason);
@@ -216,8 +226,11 @@ export default function OpenFem3DProperties({
   const checkSkip = beam ? checks?.skipped.find((item) => item.beamId === beam.id) : undefined;
   const concreteCheck = beam ? concreteChecks?.results.find((item) => item.beam_id === beam.id) : undefined;
   const concreteSkip = beam ? concreteChecks?.skipped.find((item) => item.beamId === beam.id) : undefined;
+  const timberCheck = beam ? timberChecks?.results.find((item) => item.beam_id === beam.id) : undefined;
+  const timberSkip = beam ? timberChecks?.skipped.find((item) => item.beamId === beam.id) : undefined;
   const concreteGoverning = concreteCheck?.checks.find((item) => item.id === concreteCheck.governing_check_id);
   const beamIsConcrete = !!beam && matchSupportedConcreteClass(beam.material) !== null;
+  const beamIsTimber = !!beam && matchSupportedTimberGrade(beam.material) !== null;
   const governingCheck = beamCheck ? openFem3DGoverningUlsCheck(beamCheck) : undefined;
   const beamGeometry = useMemo(() => {
     if (!beam) return null;
@@ -282,6 +295,7 @@ export default function OpenFem3DProperties({
     </Section>}
     <OpenFem3DTensionOnlyField model={model} beamIds={selection.beamIds} onChange={onChange} />
     <OpenFem3DBeddingField model={model} beamIds={selection.beamIds} onChange={onChange} />
+    <OpenFem3DPlateBeddingField model={model} plateIds={multiPlateIds} onChange={onChange} />
     <OpenFem3DDiaphragmFromSelection model={model} nodeIds={selection.nodeIds} onChange={onChange} />
     </div></div>;
   }
@@ -296,6 +310,18 @@ export default function OpenFem3DProperties({
         <OpenFem3DLoadPanelProperties model={model} panelId={selection.id} onChange={onChange}
           onPickSpanDirection={onPickLoadPanelSpan} spanPickActive={loadPanelSpanPickActive}
           loadCaseOptions={loadCaseOptions} />
+      </div>
+    </div>;
+  }
+
+  if (selection?.type === "envelopePanel" && (model.envelopePanels ?? []).some((panel) => panel.id === selection.id)) {
+    return <div className="fem-properties" data-open-fem3d-properties={selection.id}>
+      <div className="fem-prop-selection">
+        <span className="fem-prop-selection-label">{t("openFem3d.selection", "Selectie")}</span>
+        <span className="fem-prop-selection-value">{t("tree.envelopePanelLabel", { id: selection.id })}</span>
+      </div>
+      <div className="fem-prop-body" key={`envelopePanel:${selection.id}`}>
+        <OpenFem3DEnvelopePanelProperties model={model} panelId={selection.id} onChange={onChange} />
       </div>
     </div>;
   }
@@ -369,7 +395,7 @@ export default function OpenFem3DProperties({
     <div className="fem-prop-tabs">
       <button className={`fem-prop-tab${tab === "general" ? " active" : ""}`} onClick={() => setTab("general")}>{t("openFem3d.general", "Algemeen")}</button>
       <button className={`fem-prop-tab${tab === "results" ? " active" : ""}`} onClick={() => setTab("results")}>{t("openFem3d.results")}</button>
-      {beam && <button className={`fem-prop-tab${tab === "norm" ? " active" : ""}`} onClick={() => setTab("norm")}>{beamIsConcrete ? "EN 1992" : "EN 1993"}</button>}
+      {beam && <button className={`fem-prop-tab${tab === "norm" ? " active" : ""}`} onClick={() => setTab("norm")}>{beamIsConcrete ? "EN 1992" : beamIsTimber ? "EN 1995" : "EN 1993"}</button>}
     </div>
 
     <div className="fem-prop-body" key={`${selection.type}:${selection.id}:${tab}`}>
@@ -405,6 +431,20 @@ export default function OpenFem3DProperties({
       {tab === "general" && beam && <>
         <Section title={t("openFem3d.geometry", "Geometrie")}>
           <Row label="ID"><code>{beam.id}</code></Row>
+          <Row label={t("openFem3d.props.memberName")}><input
+            key={`${beam.id}:${beam.name ?? ""}`} className="fem-prop-input" type="text"
+            defaultValue={beam.name ?? ""}
+            onBlur={(event) => {
+              const naam = event.currentTarget.value.trim();
+              if (naam === (beam.name ?? "")) return;
+              try {
+                onChange(updateOpenFem3DBeam(model, beam.id, { name: naam || null }));
+                setGeometryError(null);
+              } catch (reason) { setGeometryError(refusalText(reason)); }
+            }}
+            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+          /></Row>
+          <p className="fem-prop-hint">{t("openFem3d.props.memberNameHint")}</p>
           <Row label={t("openFem3d.startNode")}><select className="fem-prop-input" value={beam.startNodeId}
             onChange={(event) => applyBeamNodes(beam.id, Number(event.target.value), beam.endNodeId)}>
             {model.nodes.map((candidate) => <option key={candidate.id} value={candidate.id}
@@ -423,36 +463,46 @@ export default function OpenFem3DProperties({
           {geometryErrorLine}
         </Section>
         <Section title={t("openFem3d.crossSection", "Profiel en materiaal")}>
-          <Row label={t("openFem3d.profile")}><code>{beam.profileName || "—"} — {beam.material || "—"}</code></Row>
+          {/* Een verlopende staaf (#73) heet zoals in 2D: "IPE 500 → IPE 300 (verlopend)". */}
+          <Row label={t("openFem3d.profile")}><code data-open-fem3d-profile>
+            {beam.profileName ? doorsnedeNaamVertaald(openFem3DBeamAls2D(beam), t) : "—"} — {beam.material || "—"}
+          </code></Row>
           <div className="fem-prop-kiezer-row"><button className="fem-prop-kiezer-btn" onClick={() => setProfileOpen(true)}>{t("openFem3d.chooseProfile", "Profiel kiezen…")}</button></div>
+          {profileError && <p className="open-fem3d-error" role="alert">{profileError}</p>}
           {profileOpen && <ProfielKiezer
             open
             onClose={() => setProfileOpen(false)}
-            huidig={{ material: beam.material ?? "S235", profile: beam.profileName ?? "IPE 200" }}
+            huidig={{
+              material: beam.material ?? "S235", profile: beam.profileName ?? "IPE 200",
+              ...(beam.profileNameEnd ? { profileEnd: beam.profileNameEnd } : {}),
+            }}
             huidigBeton={{
               ...(beam.checkConfig?.betonKorf ? { korf: beam.checkConfig.betonKorf } : {}),
               ...(beam.checkConfig?.betonMilieuklasse ? { milieuklasse: beam.checkConfig.betonMilieuklasse } : {}),
               ...(beam.checkConfig?.betonConstructieklasse ? { constructieklasse: beam.checkConfig.betonConstructieklasse } : {}),
             }}
             onApply={(choice) => {
-              onChange({ ...model, beams: model.beams.map((item) => item.id === beam.id
-                ? {
-                    ...item,
-                    material: choice.material,
-                    profileName: choice.profile,
-                    ...(choice.beton ? {
-                      checkConfig: {
-                        ...(item.checkConfig ?? {}),
-                        betonKorf: choice.beton.korf,
-                        betonMilieuklasse: choice.beton.milieuklasse ?? undefined,
-                        betonConstructieklasse: choice.beton.constructieklasse ?? undefined,
-                      },
-                    } : {}),
-                  }
-                : item) });
+              // Materiaal, profiel én eindprofiel (verlopend, #73): dezelfde
+              // zuivere functie als model3d.beam.update; een prismatische keuze
+              // haalt een eerder eindprofiel weg.
+              try {
+                onChange(applyOpenFem3DProfileChoice(model, [beam.id], choice));
+                setProfileError(null);
+              } catch (reason) {
+                setProfileError(refusalText(reason));
+              }
               setProfileOpen(false);
             }}
           />}
+          {beamIsConcrete && beam.material && <OpenFem3DAnalysisMaterialField
+            model={model} material={beam.material} onChange={onChange} />}
+          <label className="fem-prop-hint">
+            <input type="checkbox" data-open-fem3d-shear-deformation
+              checked={beam.shearDeformation ?? false}
+              onChange={(event) => updateBeam({ shearDeformation: event.target.checked })} />{" "}
+            {t("openFem3d.props.shearDeformation")}
+          </label>
+          <p className="fem-prop-hint">{t("openFem3d.props.shearDeformationHint")}</p>
         </Section>
         <Section title={t("openFem3d.localAxesAndReleases", "Lokale assen en eindscharnieren")}>
           <Row label={t("openFem3d.rollAngle", "Profielrotatie")}>
@@ -515,6 +565,7 @@ export default function OpenFem3DProperties({
           <Row label={t("openFem3d.material")}><input className="fem-prop-input" defaultValue={plate.material ?? "C30/37"}
             key={`material-${plate.id}-${plate.material}`}
             onBlur={(event) => onChange(updateOpenFem3DPlate(model, plate.id, { material: event.currentTarget.value.trim() || "C30/37" }))} /></Row>
+          {plate.material && <OpenFem3DAnalysisMaterialField model={model} material={plate.material} onChange={onChange} />}
           <Row label={t("openFem3d.props.openings")}><code>{plate.openings?.length ?? 0}</code></Row>
           <Row label={t("openFem3d.levels.level")}>
             <LevelSelect value={plate.levelId ?? ""} levels={levels}
@@ -561,6 +612,8 @@ export default function OpenFem3DProperties({
           })}
           <p className="fem-prop-hint">{t("openFem3d.props.edgeSupportsHint")}</p>
         </Section>
+        {/* Plaat op bedding (#107): k en alleen druk; de kern zet de grondveren. */}
+        <OpenFem3DPlateBeddingField model={model} plateIds={[plate.id]} onChange={onChange} />
         <Section title={t("openFem3d.props.surfaceLoads")}>
           {(model.surfaceLoads ?? []).filter((load) => load.plateId === plate.id).length === 0 && <p className="fem-prop-hint">{t("openFem3d.props.surfaceLoadHint")}</p>}
           {surfaceLoad && <>
@@ -603,6 +656,7 @@ export default function OpenFem3DProperties({
             <p className="fem-prop-hint">{t("openFem3dPlate.signNote", { ns: "common" })}</p>
           </Section>;
         })()}
+        {plate && result && <OpenFem3DPlateBeddingResults model={model} plateId={plate.id} result={result} />}
         {node && displacement && <Section title={t("openFem3d.displacements", "Knoopverplaatsingen")}>
           <Row label="Ux"><code>{value(displacement.ux * 1000)} mm</code></Row><Row label="Uy"><code>{value(displacement.uy * 1000)} mm</code></Row><Row label="Uz"><code>{value(displacement.uz * 1000)} mm</code></Row>
           <Row label="Rx"><code>{value(displacement.rx, 6)} rad</code></Row><Row label="Ry"><code>{value(displacement.ry, 6)} rad</code></Row><Row label="Rz"><code>{value(displacement.rz, 6)} rad</code></Row>
@@ -641,8 +695,8 @@ export default function OpenFem3DProperties({
         <Section title={t("openFem3d.stability", "Stabiliteit")}>
           <Row label="αcr"><code>{result?.buckling.status === "available" ? value(result.buckling.modes[0]?.loadFactor ?? NaN) : "—"}</code></Row>
           <Row label="Lcr"><code>{buckling ? `${value(buckling.effectiveLengthM)} m` : "—"}</code></Row>
-          <Row label="λy"><code>{buckling ? value(buckling.slendernessY) : "—"}</code></Row>
-          <Row label="λz"><code>{buckling ? value(buckling.slendernessZ) : "—"}</code></Row>
+          <Row label={result?.principalAxesMemberIds?.includes(beam.id) ? "λu" : "λy"}><code>{buckling ? value(buckling.slendernessY) : "—"}</code></Row>
+          <Row label={result?.principalAxesMemberIds?.includes(beam.id) ? "λv" : "λz"}><code>{buckling ? value(buckling.slendernessZ) : "—"}</code></Row>
         </Section>
         {beamIsConcrete && <Section title={t("openFem3d.props.columnSection")}>
           <KolomVelden
@@ -660,13 +714,22 @@ export default function OpenFem3DProperties({
             idPrefix={`open-fem3d-column-${beam.id}`}
           />
         </Section>}
-        {!beamIsConcrete && <Section title={t("openFem3d.props.steelUlsSection")}>
+        {!beamIsConcrete && !beamIsTimber && <Section title={t("openFem3d.props.steelUlsSection")}>
           {checksRunning && <p className="fem-prop-hint">{t("openFem3d.props.steelRunning")}</p>}
           {checksError && <p className="open-fem3d-error" role="alert">{checksError}</p>}
           {!checksRunning && !checksError && !beamCheck && <p className="fem-prop-hint">
             {checkSkip?.reason ?? (result ? t("openFem3d.props.noSteelCheck") : t("openFem3d.props.calculateFirst"))}
           </p>}
-          {beamCheck && <>
+          {beamCheck && beamCheck.status === "NotApplicable" && <>
+            {/* Niet (volledig) getoetst: geen "voldoet" en geen UC, maar de
+                reden van de kern (controle 2026-10, punt B7). */}
+            <Row label={t("openFem3d.check.status")}><strong className="open-fem3d-check-na" data-open-fem3d-niet-getoetst>
+              {t("openFem3d.check.notChecked")}
+            </strong></Row>
+            <Row label={t("openFem3d.check.ucUls")}><code>—</code></Row>
+            <p className="fem-prop-hint">{t("openFem3d.check.notCheckedReason", { reason: beamCheck.governing_check_id })}</p>
+          </>}
+          {beamCheck && beamCheck.status !== "NotApplicable" && <>
             <Row label={t("openFem3d.check.status")}><strong className={openFem3DUlsUc(beamCheck) <= 1 ? "open-fem3d-check-ok" : "open-fem3d-check-not-ok"}>
               {openFem3DUlsUc(beamCheck) <= 1 ? t("openFem3d.check.pass") : t("openFem3d.check.fail")}
             </strong></Row>
@@ -683,6 +746,22 @@ export default function OpenFem3DProperties({
                 .map((check) => <div key={check.id}>
                   <span>{check.kind.data.title}</span><code>{value(checkUc(check) ?? 0)}</code>
                 </div>)}
+            </div>
+          </>}
+        </Section>}
+        {beamIsTimber && <Section title={t("openFem3d.props.timberUlsSection")}>
+          {checksRunning && <p className="fem-prop-hint">{t("openFem3d.props.steelRunning")}</p>}
+          {checksError && <p className="open-fem3d-error" role="alert">{checksError}</p>}
+          {!checksRunning && !checksError && !timberCheck && <p className="fem-prop-hint">
+            {timberSkip?.reason ?? (result ? t("openFem3d.props.noTimberCheck") : t("openFem3d.props.calculateFirst"))}
+          </p>}
+          {timberCheck && <>
+            <Row label={t("openFem3d.check.ucUls")}><code>{value(openFem3DTimberUlsUc(timberCheck))}</code></Row>
+            <Row label={t("openFem3d.check.governing")}><code>{openFem3DTimberGoverningUlsCheck(timberCheck)?.id ?? "—"}</code></Row>
+            <div className="open-fem3d-check-list">
+              {timberCheck.checks.filter((check) => !check.id.startsWith("deflection_") && check.kind.data.uc)
+                .sort((a, b) => (checkUc(b) ?? 0) - (checkUc(a) ?? 0))
+                .map((check) => <div key={check.id}><span>{check.kind.data.title}</span><code>{value(checkUc(check) ?? 0)}</code></div>)}
             </div>
           </>}
         </Section>}

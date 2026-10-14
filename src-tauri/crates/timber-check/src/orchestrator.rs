@@ -1,9 +1,9 @@
 //! Orchestrator: neem TimberBeamCheckInput, voer alle EN 1995-toetsen uit,
 //! lever TimberBeamCheckResult met volledige afleiding.
 
-use mechanics::{ForcePoint, ForceStateSnapshot, InternalForces};
+use mechanics::{ForcePoint, ForceStateSnapshot};
 use nen_en_1993_1_1_section::{CheckStatus, ResistanceCalc};
-use nen_en_1993_1_1_stability::kniklengte::{bepaal_kniklengte, Steunen, Steunrand};
+use nen_en_1993_1_1_stability::kniklengte::{bepaal_kniklengte, Kniklengte, Steunen, Steunrand};
 use nen_en_1993_1_1_stability::StabilityCalc;
 use nen_en_1995_1_1::stability::{
     check_beam_stability, check_column_stability, effective_length_mm,
@@ -12,38 +12,13 @@ use nen_en_1995_1_1::stability::{
 };
 use nen_en_1995_1_1::{
     bending, beta_c, compression, deflection, design_strength, k_def, k_h, k_m, k_mod,
-    k_sys, shear, strength_class_by_name, LoadDurationClass, StrengthClass, TimberSection,
+    k_sys, shear, torsion, strength_class_by_name, LoadDurationClass, StrengthClass, TimberSection,
 };
 use steel_check::{CheckKind, CustomSection, NamedCheck};
 
 use crate::belastingduur::{self, kmod_notitie, Groep, KlasseUc, KmodPerLoadDuration};
 use crate::input::TimberBeamCheckInput;
 use crate::result::TimberBeamCheckResult;
-
-/// Zoek het envelop-punt dat `score` maximaliseert (0-krachtenpunt als de
-/// envelop leeg is) — zelfde aanpak als de staal-orchestrator.
-fn governing_for<F>(env: &[ForcePoint], score: F) -> ForcePoint
-where
-    F: Fn(&InternalForces) -> f64,
-{
-    if env.is_empty() {
-        return ForcePoint {
-            combination_id: 0,
-            position_mm: 0.0,
-            forces: Default::default(),
-        };
-    }
-    let mut best = env[0];
-    let mut best_score = score(&best.forces);
-    for p in &env[1..] {
-        let s = score(&p.forces);
-        if s > best_score {
-            best = *p;
-            best_score = s;
-        }
-    }
-    best
-}
 
 fn make_resistance(check: ResistanceCalc) -> NamedCheck {
     NamedCheck { id: check.id.clone(), kind: CheckKind::Resistance(check) }
@@ -203,7 +178,7 @@ struct Keten<'a> {
 /// hele omhullende en `load_duration` van de staaf: precies de keten van vóór
 /// september 2026. Met die lijst één keer per aanwezige klasse, met de punten
 /// van die klasse (zie `crate::belastingduur`).
-fn toetsketen(k: &Keten, omhullende: &[ForcePoint], duur: LoadDurationClass) -> Vec<NamedCheck> {
+fn toetsketen_punt(k: &Keten, punt: ForcePoint, duur: LoadDurationClass) -> Vec<NamedCheck> {
     let input = k.input;
     let section = k.section;
     let mat = k.mat;
@@ -253,33 +228,38 @@ fn toetsketen(k: &Keten, omhullende: &[ForcePoint], duur: LoadDurationClass) -> 
     let f_mzd = design_strength(mat.f_mk, kmod, gamma, kh_z, ksys);
     let f_vd = design_strength(mat.f_vk, kmod, gamma, 1.0, ksys);
 
-    // Maatgevende krachtspunten per toets (zelfde strategie als staal).
-    let gov_compression = governing_for(omhullende, |f| {
-        if f.n_ed < 0.0 { f.n_ed.abs() } else { 0.0 }
-    });
-    let gov_tension = governing_for(omhullende, |f| f.n_ed.max(0.0));
-    let gov_bending = governing_for(omhullende, |f| f.my_ed.abs() + f.n_ed.abs() * 0.01);
-    let gov_shear = governing_for(omhullende, |f| f.vz_ed.abs());
-
-    let comp_state = ForceStateSnapshot::from_point(&gov_compression);
-    let tens_state = ForceStateSnapshot::from_point(&gov_tension);
-    let bend_state = ForceStateSnapshot::from_point(&gov_bending);
-    let shear_state = ForceStateSnapshot::from_point(&gov_shear);
+    // Elke toets wordt op ieder station van zijn combinatie uitgevoerd.
+    // De omhulling kiest verderop per toets de hoogste berekende UC, zodat
+    // My, Mz, Vy, Vz, T en N op verschillende stations kunnen regeren.
+    let state = ForceStateSnapshot::from_point(&punt);
 
     // Doorsnedetoetsen.
     let mut checks: Vec<NamedCheck> = Vec::new();
     checks.push(make_resistance(compression::check_tension_parallel(
-        section, f_t0d, tens_state,
+        section, f_t0d, state,
     )));
     checks.push(make_resistance(compression::check_compression_parallel(
-        section, f_c0d, comp_state,
+        section, f_c0d, state,
     )));
     checks.push(make_resistance(bending::check_bending(
-        section, f_myd, f_mzd, km, bend_state,
+        section, f_myd, f_mzd, km, state,
+    )));
+    checks.push(make_resistance(bending::check_bending_tension(
+        section, f_t0d, f_myd, f_mzd, km, state,
+    )));
+    // §6.2.4 (6.19)/(6.20): druk met buiging op doorsnedeniveau.
+    checks.push(make_resistance(bending::check_bending_compression(
+        section, f_c0d, f_myd, f_mzd, km, state,
     )));
     checks.push(make_resistance(shear::check_shear(
-        section, f_vd, k_cr, shear_state,
+        section, f_vd, k_cr, state,
     )));
+    // De nieuwe torsietoetsen verschijnen zodra de staaf in een van haar
+    // combinaties torsie draagt. De 2D-referenties (T = 0) houden hun lijst.
+    if input.forces_envelope.iter().any(|p| p.forces.mt_ed.abs() > 1e-12) {
+        checks.push(make_resistance(torsion::check_torsion(section, f_vd, state)));
+        checks.push(make_resistance(torsion::check_torsion_shear(section, f_vd, k_cr, state)));
+    }
 
     // Kolomknik §6.3.2 op het maatgevende buigpunt (conform de
     // referentie-uitwerking: veldmoment + normaalkracht).
@@ -290,17 +270,33 @@ fn toetsketen(k: &Keten, omhullende: &[ForcePoint], duur: LoadDurationClass) -> 
     // hieronder ook naar de drukterm van de kiptoets.
     let bc = beta_c(mat.timber_type);
     let l_staaf_mm = input.length_m * 1e3;
-    let kniklengte_y = bepaal_kniklengte("y", true, input.buckling_length_y_m, l_staaf_mm, None);
-    let kniklengte_z = bepaal_kniklengte(
-        "z",
-        false,
-        input.buckling_length_z_m,
-        l_staaf_mm,
+    // Een vrij eind zonder opgegeven kniklengte: 2·L, of de staaflengte om
+    // een as waarvan de zijdelingse uitbuiging al in de globale tweede-orde-
+    // berekening met scheefstand zit (zie `ZijdelingseKnikInAnalyse`).
+    let zijdelings = input.zijdelingse_knik_in_analyse.unwrap_or_default();
+    let kniklengte_of_vrij = |as_naam: &str, in_vlak: bool, opgegeven_m: f64, steunen: Option<Steunen<'_>>, gedekt: bool| {
+        if input.is_cantilever && !(opgegeven_m.is_finite() && opgegeven_m > 0.0) {
+            Kniklengte::vrij_eind_volgens_analyse(
+                as_naam,
+                l_staaf_mm,
+                in_vlak,
+                "een van de staafeinden",
+                gedekt,
+                "NEN-EN 1995-1-1 5.4.4, op voorwaarde dat die berekening met E_d = E_mean/γ_M (2.2.2(1)P) en de imperfecties van 5.4.4(2) is gemaakt",
+            )
+        } else {
+            bepaal_kniklengte(as_naam, in_vlak, opgegeven_m, l_staaf_mm, steunen)
+        }
+    };
+    let kniklengte_y = kniklengte_of_vrij("y", true, input.buckling_length_y_m, None, zijdelings.y);
+    let kniklengte_z = kniklengte_of_vrij(
+        "z", input.ruimtelijk, input.buckling_length_z_m,
         input.lateral_bracing.as_ref().map(|b| Steunen {
             boven: &b.top_flange_positions,
             onder: &b.bottom_flange_positions,
             soort: Steunrand::Rand,
         }),
+        zijdelings.z,
     );
     let l_cr_z_mm = kniklengte_z.l_cr_mm;
     let kniklengte_z_samenvatting = kniklengte_z.samenvatting();
@@ -318,7 +314,7 @@ fn toetsketen(k: &Keten, omhullende: &[ForcePoint], duur: LoadDurationClass) -> 
             f_mzd_mpa: f_mzd,
             k_m: km,
         },
-        bend_state,
+        state,
     );
     kolom.notes.extend(staaf_notities.iter().cloned());
     checks.push(make_stability(kolom));
@@ -368,9 +364,10 @@ fn toetsketen(k: &Keten, omhullende: &[ForcePoint], duur: LoadDurationClass) -> 
                 e0_05_mpa: mat.e0_05,
                 beta_c: bc,
                 f_myd_mpa: f_myd,
+                f_mzd_mpa: f_mzd,
                 f_c0d_mpa: f_c0d,
             },
-            bend_state,
+            state,
         );
         // Waar de kniklengte in de drukterm van (6.35) vandaan komt. Zonder
         // deze regel ziet de lezer van de kiptoets k_c,z staan maar niet met
@@ -387,9 +384,24 @@ fn toetsketen(k: &Keten, omhullende: &[ForcePoint], duur: LoadDurationClass) -> 
         // Uitgezet door de invoer: NIET stil weglaten. De toets staat als
         // "niet van toepassing" in het resultaat, met de aanname (gedrukte
         // rand doorgaand gesteund, art. 6.3.3(5)) in de notitie.
-        checks.push(make_stability(kip_overgeslagen_drukzijde_gesteund(section, bend_state)));
+        checks.push(make_stability(kip_overgeslagen_drukzijde_gesteund(section, state)));
     }
 
+    checks
+}
+
+fn toetsketen(k: &Keten, omhullende: &[ForcePoint], duur: LoadDurationClass) -> Vec<NamedCheck> {
+    let nul = ForcePoint { combination_id: 0, position_mm: 0.0, forces: Default::default() };
+    let mut punten = omhullende.iter().copied();
+    let mut checks = toetsketen_punt(k, punten.next().unwrap_or(nul), duur);
+    for punt in punten {
+        let op_punt = toetsketen_punt(k, punt, duur);
+        for (beste, kandidaat) in checks.iter_mut().zip(op_punt) {
+            if uc_of(&kandidaat) > uc_of(beste) {
+                *beste = kandidaat;
+            }
+        }
+    }
     checks
 }
 
@@ -606,7 +618,7 @@ pub fn check_timber_beam(input: TimberBeamCheckInput) -> TimberBeamCheckResult {
     // Met een aangeleverde w_qp,fin volgens 2.2.3(4) (delen met verschillend
     // kruipgedrag), anders de vereenvoudiging van 2.2.3(5) — bit-identiek aan
     // de rekengang van vóór dat veld.
-    let (mut fin, add) = deflection::check_deflection_pair_met_langeduur(
+    let (mut fin, mut add) = deflection::check_deflection_pair_met_langeduur(
         input.deflection_inst_mm,
         input.deflection_quasi_perm_mm,
         input.deflection_quasi_perm_fin_mm,
@@ -621,6 +633,13 @@ pub fn check_timber_beam(input: TimberBeamCheckInput) -> TimberBeamCheckResult {
     // erft de aanname dus, wat in de toelichting zelf hoort te staan.
     fin.notes.extend(input.deflection_notes.iter().cloned());
     fin.notes.extend(input.staaf_notities.iter().flatten().cloned());
+    if let Some(reason) = input.deflection_not_applicable_reason.as_ref() {
+        for check in [&mut fin, &mut add] {
+            check.uc = None;
+            check.status = CheckStatus::NotApplicable;
+            check.notes.push(format!("BGT niet getoetst: {reason}"));
+        }
+    }
     checks.push(make_resistance(fin));
     checks.push(make_resistance(add));
 

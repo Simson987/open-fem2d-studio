@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { getSetting, setSetting } from "../store";
 
 export interface RecentFile {
@@ -23,9 +23,21 @@ function inferType(path: string): RecentFile["type"] {
 export function useRecentFiles() {
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // De laatste lijst, al voordat React opnieuw rendert. Opent de
+  // bestandskoppeling (#90) meerdere bestanden kort na elkaar, dan bouwt elk
+  // `addRecentFile` voort op het vorige; met de lijst uit de closure van de
+  // vorige render viel er een bestand weg.
+  const lijstRef = useRef<RecentFile[]>([]);
+
+  const zet = useCallback(async (updated: RecentFile[]) => {
+    lijstRef.current = updated;
+    setRecentFiles(updated);
+    await setSetting(STORE_KEY, updated);
+  }, []);
 
   useEffect(() => {
     getSetting<RecentFile[]>(STORE_KEY, []).then((files) => {
+      lijstRef.current = files;
       setRecentFiles(files);
       setLoaded(true);
     });
@@ -43,30 +55,23 @@ export function useRecentFiles() {
             }
           : { ...pathOrFile, timestamp: Date.now() };
 
-      const updated = [
-        file,
-        ...recentFiles.filter((f) => f.path !== file.path),
-      ].slice(0, MAX_RECENT);
-
-      setRecentFiles(updated);
-      await setSetting(STORE_KEY, updated);
+      await zet(
+        [file, ...lijstRef.current.filter((f) => f.path !== file.path)].slice(0, MAX_RECENT),
+      );
     },
-    [recentFiles]
+    [zet]
   );
 
   const removeRecentFile = useCallback(
     async (path: string) => {
-      const updated = recentFiles.filter((f) => f.path !== path);
-      setRecentFiles(updated);
-      await setSetting(STORE_KEY, updated);
+      await zet(lijstRef.current.filter((f) => f.path !== path));
     },
-    [recentFiles]
+    [zet]
   );
 
   const clearRecentFiles = useCallback(async () => {
-    setRecentFiles([]);
-    await setSetting(STORE_KEY, []);
-  }, []);
+    await zet([]);
+  }, [zet]);
 
   return { recentFiles, loaded, addRecentFile, removeRecentFile, clearRecentFiles };
 }

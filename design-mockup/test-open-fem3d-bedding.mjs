@@ -261,7 +261,8 @@ console.log("\n[3] het projectbestand");
   weigert(() => deserializeProject(JSON.stringify(bestand)), /groter dan 0/, "een bestand met een ongeldige bedding wordt geweigerd");
   // Versie (review #106): een uitgave zonder bedding (2026.39.2 en ouder, hoogste versie 4) zou het
   // veld stil overslaan en zonder de grond rekenen. Met bedding dus versie 5, die zo'n uitgave weigert.
-  ok(PROJECT_FORMAT_VERSION_3D_BEDDING === 5 && PROJECT_FORMAT_VERSION_MAX === 5, "versie 5 voor bedding is de hoogste leesbare versie");
+  // Sinds #73 (verlopende staven, versie 6) en #107 (plaat op bedding, versie 7) is 5 niet meer de hoogste leesbare versie; de staafbedding houdt 5.
+  ok(PROJECT_FORMAT_VERSION_3D_BEDDING === 5 && PROJECT_FORMAT_VERSION_MAX >= 5, "versie 5 voor bedding, en die is leesbaar");
   ok(JSON.parse(serializeProject(project(met))).version === 5, "met een staaf op bedding: versie 5");
   const paalAlleen = parseOpenFem3DModel(basis({ paal: { bedding: { widthM: 0.3, kLateralKnPerM3: 20_000 } } }));
   ok(JSON.parse(serializeProject(project(paalAlleen))).version === 5, "ook met alleen een zijdelingse bedding: versie 5");
@@ -270,7 +271,9 @@ console.log("\n[3] het projectbestand");
   ok(JSON.parse(serializeProject(project(setOpenFem3DBeamBedding(met, [1], null)))).version === 3, "bedding weer weg: terug naar versie 3");
   const versie5 = serializeProject(project(met));
   ok(JSON.stringify(deserializeProject(versie5).model3d.beams[0].bedding) === JSON.stringify(met.beams[0].bedding), "een bestand van versie 5 leest terug");
-  weigert(() => deserializeProject(JSON.stringify({ ...JSON.parse(versie5), version: 6 })), /nieuwere versie \(6\)/, "versie 6 wordt geweigerd");
+  const nieuwer = PROJECT_FORMAT_VERSION_MAX + 1;
+  weigert(() => deserializeProject(JSON.stringify({ ...JSON.parse(versie5), version: nieuwer })), new RegExp(`nieuwere versie \\(${nieuwer}\\)`),
+    `versie ${nieuwer} (boven de hoogste leesbare) wordt geweigerd`);
 }
 
 console.log("\n[4] de verzoekopbouw");

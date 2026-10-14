@@ -27,8 +27,8 @@
  */
 import type { OpenFem3DTool } from "../components/openFem3d/openFem3dCommands";
 import type {
-  OpenFem3DBeam, OpenFem3DBeamBedding, OpenFem3DDiaphragm, OpenFem3DEndReleases, OpenFem3DLoadPanel, OpenFem3DMemberLoad,
-  OpenFem3DMemberPointLoad, OpenFem3DModel, OpenFem3DNodalLoad, OpenFem3DNode, OpenFem3DPlate,
+  OpenFem3DBeam, OpenFem3DBeamBedding, OpenFem3DDiaphragm, OpenFem3DEndReleases, OpenFem3DEnvelopePanel, OpenFem3DLoadPanel, OpenFem3DMemberLoad,
+  OpenFem3DMemberPointLoad, OpenFem3DModel, OpenFem3DNodalLoad, OpenFem3DNode, OpenFem3DPlate, OpenFem3DPlateBedding,
   OpenFem3DPlateBoundarySegment, OpenFem3DPlateEdgeSupport, OpenFem3DPlateOpening, OpenFem3DPrescribedDisplacements,
   OpenFem3DSupport, OpenFem3DSupportSprings, OpenFem3DSurfaceLoad, OpenFem3DThermalLoad, OpenFem3DVector,
 } from "../components/openFem3d/openFem3dModel";
@@ -67,10 +67,13 @@ export const GEREEDSCHAP_3D = {
   addMemberLoad: { commando: "model3d.load.member.add" },
   addPointLoad: { commando: "model3d.load.placePoint" },
   addLoadPanel: { commando: "model3d.loadPanel.add" },
+  addEnvelopePanel: { commando: "model3d.panel.add" },
   loadPanelSpan: veld("model3d.loadPanel.update", "spanDirection"),
   beamEndHinge: { commando: "model3d.beam.setEndHinge" },
   move: TRANSFORMATIE,
   rotate: TRANSFORMATIE,
+  // Ook met basispunt en doelpunt in het tekenvlak (openFem3dCopyPoints.ts): dat is dezelfde kopie met
+  // dx/dy/dz = doelpunt − basispunt; de punten zelf zijn bediening, geen modelinvoer.
   copy: TRANSFORMATIE,
   mirror: TRANSFORMATIE,
   "support:fixed": OPLEGGING,
@@ -107,6 +110,10 @@ export const LINT_3D: Record<string, Dekking> = {
   "ribbon:home.subNode": GEREEDSCHAP_3D.addSubNode,
   "ribbon:home.plate": GEREEDSCHAP_3D.addPlate,
   "ribbon:home.opening": GEREEDSCHAP_3D.addOpening,
+  // Knopen op staven aansluiten (issue #63): dezelfde zuivere functie, op de selectie of het hele model.
+  "ribbon:openFem3d.connectNodes": { commando: "model3d.beam.connectNodes" },
+  // Knopen samenvoegen (issue #75), in de groep Bewerken: dezelfde zuivere functie, op de selectie of het hele model.
+  "ribbon:openFem3d.mergeNodes": { commando: "model3d.nodes.merge" },
   "ribbon:home.surfaceLoad": { commando: "model3d.load.surface.add" },
   "ribbon:home.grids": { commando: ["project.grid.set", "model3d.levels.set"] },
   "ribbon:home.pinned": OPLEGGING,
@@ -129,6 +136,7 @@ export const LINT_3D: Record<string, Dekking> = {
   "ribbon:home.pointLoad": { commando: ["model3d.load.placePoint", "model3d.load.nodal.add", "model3d.load.memberPoint.add"] },
   "ribbon:home.lineLoad": GEREEDSCHAP_3D.addMemberLoad,
   "ribbon:home.loadPanel": GEREEDSCHAP_3D.addLoadPanel,
+  "ribbon:home.envelopePanel": GEREEDSCHAP_3D.addEnvelopePanel,
   "ribbon:home.plateToLoadPanel": { commando: "model3d.plate.toLoadPanels" },
   "ribbon:home.pointLoadH": { commando: "model3d.load.nodal.add" },
   "ribbon:home.moment": { commando: "model3d.load.nodal.add" },
@@ -137,7 +145,7 @@ export const LINT_3D: Record<string, Dekking> = {
   "ribbon:home.combinations": {
     commando: ["project.combination.add", "project.combination.update", "project.combination.delete", "project.combinations.resetToStandard"],
   },
-  "ribbon:home.windGenerator": { fase: 2, reden: "generator voor het 2D-model; in 3D staat de knop uit" },
+  "ribbon:home.generateEnvelopeLoads": { commando: "model3d.envelope.generateLoads" },
   "ribbon:home.waterAccumulation": { fase: 2, reden: "generator voor het 2D-model; in 3D staat de knop uit" },
   "ribbon:home.move": TRANSFORMATIE,
   "ribbon:home.rotate": TRANSFORMATIE,
@@ -161,6 +169,7 @@ export const LINT_3D: Record<string, Dekking> = {
   // Section box (issue #86): hoort bij de weergave (zichtbaarheid en views); via de
   // MCP-tool gui_configure_3d_view (section_box) in de draaiende app, nog geen API-commando.
   "ribbon:openFem3d.sectionBox": WEERGAVE,
+  "ribbon:openFem3d.explode": { commando: "app.view3d.explode" },
 };
 
 // ── De velden van het 3D-model ─────────────────────────────────────────────
@@ -175,6 +184,7 @@ const thermisch = ["model3d.load.thermal.add", "model3d.load.thermal.update"];
 const vlaklast = ["model3d.load.surface.add", "model3d.load.surface.update"];
 const vlak = ["model3d.loadPanel.add", "model3d.loadPanel.update"];
 const gevalBijToevoegen = (commando: string) => veld(commando, "caseId");
+const modelLaag: Dekking = { fase: 2, reden: "3D-modellaag wordt in het project bewaard; API-commando's voor toewijzing volgen." };
 
 type BoogRand = Extract<OpenFem3DPlateBoundarySegment, { kind: "arc" }>;
 
@@ -182,6 +192,8 @@ export const VELDEN_3D = {
   model: {
     nodes: { commando: "model3d.node.add" },
     beams: { commando: "model3d.beam.add" },
+    layers: modelLaag,
+    analysisMaterials: { commando: "model3d.material.setAnalysis" },
     supports: { commando: "model3d.support.set" },
     loads: { commando: "model3d.load.nodal.add" },
     memberLoads: { commando: "model3d.load.member.add" },
@@ -190,12 +202,15 @@ export const VELDEN_3D = {
     plates: { commando: "model3d.plate.add" },
     surfaceLoads: { commando: "model3d.load.surface.add" },
     loadPanels: { commando: "model3d.loadPanel.add" },
+    envelopePanels: { commando: "model3d.panel.add" },
+    generatedNodeIds: { afgeleid: "hulpknopen van de 3D-belastinggenerator worden bij genereren bijgehouden" },
     diaphragms: { commando: "model3d.diaphragm.add" },
     tensionOnlyFitAfterPermanent: veld("model3d.settings.update", "tensionOnlyFitAfterPermanent"),
     tensionOnlyCrossRule: veld("model3d.settings.update", "tensionOnlyCrossRule"),
   } satisfies Record<keyof OpenFem3DModel, Dekking>,
   knoop: {
     id: ID,
+    layerId: modelLaag,
     x: veld(knoopAddUpdate, "x"),
     y: veld(knoopAddUpdate, "y"),
     z: veld(knoopAddUpdate, "z"),
@@ -204,14 +219,18 @@ export const VELDEN_3D = {
   } satisfies Record<keyof OpenFem3DNode, Dekking>,
   staaf: {
     id: ID,
+    layerId: modelLaag,
     startNodeId: veld(staafAddUpdate, "startNodeId"),
     endNodeId: veld(staafAddUpdate, "endNodeId"),
     profileName: veld(staafAddUpdate, "profileName"),
+    // Verlopende staaf (#73): begin → eind; update met null maakt haar prismatisch.
+    profileNameEnd: veld(staafAddUpdate, "profileNameEnd"),
     material: veld(staafAddUpdate, "material"),
     checkConfig: { fase: 3, reden: "toetsinstellingen per staaf (kniklengtes, kipsteunen, betonkorf, milieuklasse)" },
     rollAngleRad: veld(staafAddUpdate, "rollAngleDeg"),
     releases: veld(staafAddUpdate, "releases"),
     tensionOnly: veld(staafAddUpdate, "tensionOnly"),
+    shearDeformation: veld(staafAddUpdate, "shearDeformation"),
     // Staaf op bedding (#106); voor meer staven tegelijk ook model3d.beam.setBedding.
     bedding: veld([...staafAddUpdate, "model3d.beam.setBedding"], "bedding"),
     name: veld(staafAddUpdate, "name"),
@@ -238,6 +257,7 @@ export const VELDEN_3D = {
   } satisfies Record<keyof OpenFem3DDiaphragm, Dekking>,
   oplegging: {
     nodeId: veld("model3d.support.set", "nodeId"),
+    layerId: modelLaag,
     ux: veld("model3d.support.set", "ux"),
     uy: veld("model3d.support.set", "uy"),
     uz: veld("model3d.support.set", "uz"),
@@ -265,6 +285,7 @@ export const VELDEN_3D = {
   } satisfies Record<keyof OpenFem3DPrescribedDisplacements, Dekking>,
   knooplast: {
     id: ID,
+    layerId: modelLaag,
     nodeId: veld("model3d.load.nodal.add", "nodeId"),
     caseId: gevalBijToevoegen("model3d.load.nodal.add"),
     fx: veld(knooplast, "fx"),
@@ -273,9 +294,11 @@ export const VELDEN_3D = {
     mx: veld(knooplast, "mx"),
     my: veld(knooplast, "my"),
     mz: veld(knooplast, "mz"),
+    generated: { afgeleid: "NBC-deelwindgenerator bewaart bron en gevalsleutel bij zijn knooplasten" },
   } satisfies Record<keyof OpenFem3DNodalLoad, Dekking>,
   staaflast: {
     id: ID,
+    layerId: modelLaag,
     beamId: veld("model3d.load.member.add", "beamId"),
     caseId: gevalBijToevoegen("model3d.load.member.add"),
     qyStart: veld(staaflast, "qyStart"),
@@ -292,6 +315,7 @@ export const VELDEN_3D = {
   } satisfies Record<keyof OpenFem3DMemberLoad, Dekking>,
   staafpuntlast: {
     id: ID,
+    layerId: modelLaag,
     beamId: veld("model3d.load.memberPoint.add", "beamId"),
     caseId: gevalBijToevoegen("model3d.load.memberPoint.add"),
     py: veld(puntlast, "py"),
@@ -300,6 +324,7 @@ export const VELDEN_3D = {
   } satisfies Record<keyof OpenFem3DMemberPointLoad, Dekking>,
   temperatuurlast: {
     id: ID,
+    layerId: modelLaag,
     beamId: veld("model3d.load.thermal.add", "beamId"),
     caseId: gevalBijToevoegen("model3d.load.thermal.add"),
     deltaTUniformK: veld(thermisch, "deltaTUniformK"),
@@ -308,6 +333,7 @@ export const VELDEN_3D = {
   } satisfies Record<keyof OpenFem3DThermalLoad, Dekking>,
   plaat: {
     id: ID,
+    layerId: modelLaag,
     nodeIds: veld("model3d.plate.add", "nodeIds"),
     boundary: veld("model3d.plate.add", "boundary"),
     thicknessM: veld(plaatAddUpdate, "thicknessM"),
@@ -317,7 +343,13 @@ export const VELDEN_3D = {
     levelId: veld("model3d.node.linkLevel", "plateIds"),
     meshSizeM: veld("model3d.plate.update", "meshSizeM"),
     edgeSupports: veld("model3d.plate.update", "edgeSupports"),
+    // Plaat op bedding (#107); voor meer platen tegelijk ook model3d.plate.setBedding.
+    bedding: veld([...plaatAddUpdate, "model3d.plate.setBedding"], "bedding"),
   } satisfies Record<keyof OpenFem3DPlate, Dekking>,
+  plaatbedding: {
+    kKnPerM3: veld([...plaatAddUpdate, "model3d.plate.setBedding"], "bedding.kKnPerM3"),
+    compressionOnly: veld([...plaatAddUpdate, "model3d.plate.setBedding"], "bedding.compressionOnly"),
+  } satisfies Record<keyof OpenFem3DPlateBedding, Dekking>,
   plaatrand: {
     kind: veld(["model3d.plate.add", "model3d.plate.addOpening"], "boundary.kind"),
     startNodeId: veld(["model3d.plate.add", "model3d.plate.addOpening"], "boundary.startNodeId"),
@@ -341,6 +373,7 @@ export const VELDEN_3D = {
   } satisfies Record<keyof OpenFem3DPlateEdgeSupport, Dekking>,
   vlaklast: {
     id: ID,
+    layerId: modelLaag,
     plateId: veld("model3d.load.surface.add", "plateId"),
     caseId: gevalBijToevoegen("model3d.load.surface.add"),
     qx: veld(vlaklast, "qx"),
@@ -349,6 +382,8 @@ export const VELDEN_3D = {
   } satisfies Record<keyof OpenFem3DSurfaceLoad, Dekking>,
   belastingvlak: {
     id: ID,
+    layerId: modelLaag,
+    generated: { afgeleid: "de 3D-generator bewaart herkomst, zone en normwaarden bij zijn belastingvlakken" },
     nodeIds: veld("model3d.loadPanel.add", "nodeIds"),
     caseId: veld(vlak, "caseId"),
     q: veld(vlak, "q"),
@@ -356,7 +391,20 @@ export const VELDEN_3D = {
     distribution: veld(vlak, "distribution"),
     spanDirection: veld(vlak, "spanDirection"),
     excludedBeamIds: veld(vlak, "excludedBeamIds"),
+    openings: veld(vlak, "openings"),
   } satisfies Record<keyof OpenFem3DLoadPanel, Dekking>,
+  schilpaneel: {
+    id: ID,
+    layerId: modelLaag,
+    nodeIds: veld("model3d.panel.add", "nodeIds"),
+    type: veld("model3d.panel.add", "type"),
+    flipOuterSide: veld("model3d.panel.update", "flipOuterSide"),
+    distribution: veld("model3d.panel.update", "distribution"),
+    spanDirection: veld("model3d.panel.update", "spanDirection"),
+    openings: veld("model3d.panel.update", "openings"),
+    claddingWeightKnPerM2: veld("model3d.panel.update", "claddingWeightKnPerM2"),
+    name: veld("model3d.panel.update", "name"),
+  } satisfies Record<keyof OpenFem3DEnvelopePanel, Dekking>,
   overspanningsrichting: {
     x: veld(vlak, "spanDirection.x"),
     y: veld(vlak, "spanDirection.y"),
@@ -441,6 +489,13 @@ export const PANEEL_3D: Record<string, Record<string, Dekking>> = {
     "openFem3d.loadPanel.pickSpan": veld("model3d.loadPanel.update", "spanDirection"),
     "openFem3d.loadPanel.duplicateButton": { commando: "model3d.loadPanel.duplicate" },
     "openFem3d.loadPanel.delete": { commando: "model3d.loadPanel.delete" },
+  },
+  // De modelcontrole op het 3D-tekenvlak (issues #63 en #75): knopen op een staaf zonder verbinding, en samenvallende knopen.
+  "OpenFem3DModelCheck.tsx": {
+    "openFem3d.modelCheck.toggleTitle": WEERGAVE,
+    "openFem3d.modelCheck.connectTitle": { commando: "model3d.beam.connectNodes" },
+    // Samenvallende knopen (issue #75): de knop Samenvoegen.
+    "openFem3d.modelCheck.mergeTitle": { commando: "model3d.nodes.merge" },
   },
   "OpenFem3DTrekSchijfVelden.tsx": {
     "openFem3d.trekSchijf.makeDiaphragm": { commando: "model3d.diaphragm.add" },

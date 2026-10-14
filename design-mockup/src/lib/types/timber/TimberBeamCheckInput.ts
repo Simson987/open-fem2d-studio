@@ -8,6 +8,7 @@ import type { LtbLoadCase } from "./LtbLoadCase";
 import type { LtbLoadPosition } from "./LtbLoadPosition";
 import type { NationaleBijlage } from "../norm/NationaleBijlage";
 import type { ServiceClass } from "./ServiceClass";
+import type { ZijdelingseKnikInAnalyse } from "../steel/ZijdelingseKnikInAnalyse";
 
 /**
  * Invoer voor één houten staaf (rechthoekige doorsnede b × h).
@@ -20,7 +21,7 @@ import type { ServiceClass } from "./ServiceClass";
  * (w_fin-UC 0,788 in plaats van 1,143) — beide zonder melding. Staal
  * (`BeamCheckInput`) en beton (`ConcreteBeamCheckInput`) weigerden al.
  */
-export type TimberBeamCheckInput = { 
+export type TimberBeamCheckInput = {
 /**
  * De nationale bijlage waarmee getoetst wordt.
  *
@@ -36,17 +37,17 @@ export type TimberBeamCheckInput = {
  * regel weg; de test `zodra_er_een_tweede_bijlage_is_moet_de_serde_default_weg`
  * in `nationale-bijlage` valt dan om en zegt dat.
  */
-bijlage: NationaleBijlage, beam_id: number, 
+bijlage: NationaleBijlage, beam_id: number,
 /**
  * Doorsnedebreedte b in mm. Bij een samengestelde doorsnede
  * (`custom_section`) de omhullende breedte; de toetsing rekent dan met
  * de grootheden uit die doorsnede en niet met b x h.
  */
-width_mm: number, 
+width_mm: number,
 /**
  * Doorsnedehoogte h in mm (buiging om de sterke as).
  */
-height_mm: number, 
+height_mm: number,
 /**
  * Een samengestelde doorsnede uit de profieleditor, als lamellen.
  *
@@ -69,15 +70,15 @@ height_mm: number,
  * bouwers ongewijzigd blijven compileren -- dezelfde afspraak als bij
  * `BeamCheckInput::custom_section` van de staaltoetsing.
  */
-custom_section?: CustomSection, 
+custom_section?: CustomSection,
 /**
  * Sterkteklasse, bijv. "C24" (EN 338) of "GL28h" (EN 14080).
  */
-strength_class: string, 
+strength_class: string,
 /**
  * Klimaatklasse (service class) §2.3.1.3.
  */
-service_class: ServiceClass, 
+service_class: ServiceClass,
 /**
  * Belastingduurklasse (§2.3.1.2) voor de hele omhullende, en de TERUGVAL
  * voor een combinatie die niet in [`Self::load_duration_per_combination`]
@@ -88,7 +89,7 @@ service_class: ServiceClass,
  * combinatie; met één klasse wordt de combinatie met alleen de blijvende
  * belasting dus niet met k_mod "blijvend" getoetst.
  */
-load_duration: LoadDurationClass, 
+load_duration: LoadDurationClass,
 /**
  * De belastingduurklasse per UGT-combinatie (§3.1.3(2)).
  *
@@ -97,15 +98,15 @@ load_duration: LoadDurationClass,
  * (of weggelaten): het gedrag van vóór dit veld, met `load_duration` voor
  * alles. Zie `crate::belastingduur`.
  */
-load_duration_per_combination?: Array<CombinationLoadDuration>, 
+load_duration_per_combination?: Array<CombinationLoadDuration>,
 /**
  * Staaflengte in m.
  */
-length_m: number, 
+length_m: number,
 /**
  * Krachtsverloop (envelop) langs de staaf; N drukt negatief.
  */
-forces_envelope: Array<ForcePoint>, 
+forces_envelope: Array<ForcePoint>,
 /**
  * Kniklengte om de sterke y-as (m) — knik IN het vlak van het model.
  *
@@ -113,7 +114,7 @@ forces_envelope: Array<ForcePoint>,
  * zegt dat in de afleiding ("staaflengte (terugval)"). Negatief of niet
  * eindig wordt genegeerd mét een kanttekening.
  */
-buckling_length_y_m: number, 
+buckling_length_y_m: number,
 /**
  * Kniklengte om de zwakke z-as (m) — knik UIT het vlak van het model.
  *
@@ -123,7 +124,16 @@ buckling_length_y_m: number,
  * gebruikte waarde en haar herkomst staan in de kolomtoets en in de
  * drukterm van de kiptoets.
  */
-buckling_length_z_m: number, 
+buckling_length_z_m: number,
+/**
+ * Ruimtelijk raamwerk: de berekening ziet knik om beide doorsnedeassen.
+ */
+ruimtelijk: boolean,
+/**
+ * Vrij staafeind: zonder opgegeven kniklengte geldt L_cr = 2 L, behalve om
+ * een as uit [`Self::zijdelingse_knik_in_analyse`] (dan L).
+ */
+is_cantilever: boolean,
 /**
  * Zijdelingse steunen als fracties van de staaflengte, per rand — dezelfde
  * vorm als bij staal (`top_flange_positions` = bovenrand,
@@ -136,23 +146,23 @@ buckling_length_z_m: number,
  *
  * Weglaten = geen steunen, dus geen afleiding.
  */
-lateral_bracing?: LateralBracing, 
+lateral_bracing?: LateralBracing,
 /**
  * Kipsteunafstand (m) voor tabel 6.1; 0 → staaflengte.
  */
-ltb_segment_length_m: number, 
+ltb_segment_length_m: number,
 /**
  * Belastinggeval voor l_ef (tabel 6.1).
  */
-ltb_load_case: LtbLoadCase, 
+ltb_load_case: LtbLoadCase,
 /**
  * Aangrijpingspunt van de belasting (tabel 6.1, voetnoot).
  */
-ltb_load_position: LtbLoadPosition, 
+ltb_load_position: LtbLoadPosition,
 /**
  * Expliciete effectieve kiplengte in m; 0 → berekenen via tabel 6.1.
  */
-ltb_effective_length_override_m: number, 
+ltb_effective_length_override_m: number,
 /**
  * Kiptoets §6.3.3 uitvoeren. `false` betekent: de gedrukte rand is over
  * de volle lengte zijdelings gesteund en de opleggingen zijn torsievast,
@@ -161,7 +171,7 @@ ltb_effective_length_override_m: number,
  * gezet. De referentie-uitwerking voert 6.3.3 alleen voor de ligger uit,
  * niet voor de kolommen.
  */
-perform_ltb_check: boolean, 
+perform_ltb_check: boolean,
 /**
  * Scheurfactor k_cr voor dwarskracht (6.13a), bereik (0, 1]. 1,0 is de
  * waarde van NEN-EN 1995-1-1/NB bij 6.1.7 voor een prismatische
@@ -169,31 +179,31 @@ perform_ltb_check: boolean,
  * Alleen bij een rechthoek gelezen; bij een samengestelde doorsnede
  * bepaalt de kern k_cr zelf (`shear::k_cr_nb`).
  */
-k_cr: number, 
+k_cr: number,
 /**
  * Lastverdelend systeem aanwezig → k_sys = 1,1 (§6.6).
  */
-load_sharing: boolean, 
+load_sharing: boolean,
 /**
  * Zakking onder de karakteristieke BGT-combinatie (mm, negatief = omlaag).
  */
-deflection_inst_mm: number, 
+deflection_inst_mm: number,
 /**
  * Zakking onder de quasi-blijvende BGT-combinatie (mm).
  */
-deflection_quasi_perm_mm: number, 
+deflection_quasi_perm_mm: number,
 /**
  * Zakking onder de blijvende BGT-combinatie (mm).
  */
-deflection_permanent_mm: number, 
+deflection_permanent_mm: number,
 /**
  * Noemer voor w_fin (L/n), NB-standaard 250.
  */
-deflection_limit_fin: number, 
+deflection_limit_fin: number,
 /**
  * Noemer voor w_add (L/n), NB-standaard 333.
  */
-deflection_limit_add: number, 
+deflection_limit_add: number,
 /**
  * Vrije toelichtingen bij de doorbuigingstoets, die letterlijk in de
  * `notes` van de w_fin-regel van het rapport belanden.
@@ -205,7 +215,7 @@ deflection_limit_add: number,
  * is teruggevallen. Zonder dit kanaal zou zo'n terugval onzichtbaar zijn,
  * en een onzichtbare aanname is geen aanname maar een fout in wording.
  */
-deflection_notes: Array<string>, 
+deflection_notes: Array<string>,
 /**
  * Langeduurzakking w_qp,fin (mm, met teken): de zakking onder de
  * quasi-blijvende BGT-combinatie, berekend met de EINDSTIJFHEID
@@ -222,7 +232,13 @@ deflection_notes: Array<string>,
  * `None` (weglaten) = de vereenvoudiging van 2.2.3(5), precies zoals
  * vóór dit veld. Een niet-eindig getal wordt geweigerd met reden.
  */
-deflection_quasi_perm_fin_mm?: number, 
+deflection_quasi_perm_fin_mm?: number,
+/**
+ * Reden waarom de BGT-zakking niet betrouwbaar kan worden bepaald.
+ * De sterkte- en stabiliteitstoetsen blijven beschikbaar; w_fin en w_add
+ * worden expliciet `NotApplicable` zonder UC.
+ */
+deflection_not_applicable_reason?: string,
 /**
  * Toelichtingen bij de STAAF ALS GEHEEL, letterlijk bij de kolomtoets
  * (art. 6.3.2), de kiptoets (art. 6.3.3) en de eindzakking gezet; rekenen
@@ -231,7 +247,7 @@ deflection_quasi_perm_fin_mm?: number,
  * is getoetst, over welke lengte, en welke tussenknopen niet als steun
  * tellen. `None` of leeg = niets te melden.
  */
-staaf_notities?: Array<string>, 
+staaf_notities?: Array<string>,
 /**
  * Breedte b aan het EIND van de staaf (x = L) van een VERLOPENDE staaf;
  * [`Self::width_mm`] is dan de breedte aan het begin (x = 0).
@@ -250,11 +266,27 @@ staaf_notities?: Array<string>,
  * Een samengestelde doorsnede (`custom_section`) kan niet verlopen: dan
  * wordt geweigerd met reden.
  */
-width_end_mm?: number, 
+width_end_mm?: number,
 /**
  * Hoogte h aan het EIND van de staaf (x = L); zie [`Self::width_end_mm`].
  *
  * Dit is de maat waar het bij een afgezaagde balklaag om gaat: de
  * rekenhoogte verloopt over de overspanning, en k_h verloopt mee.
  */
-height_end_mm?: number, };
+height_end_mm?: number,
+/**
+ * Om welke assen de globale berekening tweede orde (P-Δ) MET scheefstand
+ * is en de staaf kan laten uitbuigen. Alleen van belang bij een vrij
+ * staafeind ([`Self::is_cantilever`]) zonder opgegeven kniklengte: om een
+ * gedekte as geldt dan de staaflengte, om een niet-gedekte as 2·L.
+ *
+ * Alleen zetten als die tweede-orde-berekening voldoet aan NEN-EN 1995-1-1:
+ * rekenstijfheden E_d = E_mean/γ_M (2.2.2(1)P) en de imperfecties van
+ * 5.4.4(2), de scheefstand én de boogimperfectie e = 0,0025·l. De app en
+ * `check_fem_model` zetten het voor hout niet: hun P-Δ rekent met E_mean.
+ * Zie [`ZijdelingseKnikInAnalyse`].
+ *
+ * `None` of weglaten = geen as gedekt, 2·L bij een vrij eind: de veilige
+ * kant voor wie de berekening niet kent.
+ */
+zijdelingse_knik_in_analyse?: ZijdelingseKnikInAnalyse, };

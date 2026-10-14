@@ -38,9 +38,9 @@ function leesGetal(tekst: string): number | undefined {
 /**
  * Een getalveld dat pas bij verlaten of Enter doorgeeft. Een ongeldige of
  * niet-positieve waarde zet de vorige tekst terug; leeg geeft undefined (als
- * `optional`), anders ook de vorige tekst.
+ * `optional`), anders ook de vorige tekst. Ook voor de plaatbedding (#107).
  */
-function GetalVeld({ value, optional, onCommit, ...props }: {
+export function GetalVeld({ value, optional, onCommit, ...props }: {
   value: number | undefined;
   optional?: boolean;
   onCommit: (value: number | undefined) => void;

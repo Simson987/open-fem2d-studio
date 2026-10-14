@@ -16,7 +16,7 @@ import { existsSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, basename, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { startBrowser } from "./scripts/headlessBrowser.mjs";
+import { browserResult, startBrowser } from "./scripts/headlessBrowser.mjs";
 
 const browser = [process.env.OPENAEC_BROWSER,
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -52,28 +52,29 @@ try {
   const html = await bouw("test", "production");
   // WebGL via SwiftShader is traag; elke groep krijgt een eigen browserproces
   // (en daarmee een eigen klok in scripts/headlessBrowser.mjs).
-  const draai = (hash, profiel, pagina = html) => {
-    const result = startBrowser(browser, ["--headless=new", "--disable-gpu", "--enable-unsafe-swiftshader", "--no-first-run",
+  const draai = async (hash, profiel, pagina = html) => {
+    return browserResult(browser, ["--headless=new", "--disable-gpu", "--enable-unsafe-swiftshader", "--no-first-run",
       "--no-default-browser-check", `--user-data-dir=${join(folder, profiel)}`, "--window-size=1100,800",
-      "--virtual-time-budget=60000", "--dump-dom", `${pathToFileURL(pagina).href}#${hash}`,
-    ], { encoding: "utf8", timeout: 90_000, maxBuffer: 32 * 1024 * 1024 });
-    const match = /<pre id="uitslag">([^<]*)<\/pre>/.exec(result.stdout ?? "");
-    assert.ok(match?.[1], result.error?.message ?? result.stderr?.slice(0, 1500) ?? "Geen browserresultaat");
-    return JSON.parse(match[1].replace(/&quot;/g, '"').replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&"));
+      `${pathToFileURL(pagina).href}#${hash}`,
+    ]);
   };
   if (diag) {
-    const report = draai(process.env.OPEN_FEM3D_SELECTIE_HASH ?? "diag", "profiel-diag");
+    const report = await draai(process.env.OPEN_FEM3D_SELECTIE_HASH ?? "diag", "profiel-diag");
     console.log(JSON.stringify(report.diag, null, 2));
     assert.equal(report.error, null, report.error);
   } else {
     let totaal = 0;
-    // OPEN_FEM3D_SELECTIE_GROEP=kubus (of groot, klein, parallel, waarden, lijnlast, scharnier, strikt) draait één groep.
-    const groepen = ["groot", "klein", "kubus", "parallel", "waarden", "lijnlast", "scharnier", "strikt"].filter((g) => !process.env.OPEN_FEM3D_SELECTIE_GROEP || g === process.env.OPEN_FEM3D_SELECTIE_GROEP);
+    // OPEN_FEM3D_SELECTIE_GROEP=kubus (of groot1..groot8, klein, parallel,
+    // waarden, lijnlast, scharnier, strikt) draait één groep. De staalhal is
+    // per proef gesplitst om de WebGL-werkbelasting per browser te begrenzen.
+    const groepen = [...Array.from({ length: 8 }, (_, i) => `groot${i + 1}`), "klein", "kubus", "parallel", "waarden", "lijnlast", "scharnier", "strikt"].filter((g) => !process.env.OPEN_FEM3D_SELECTIE_GROEP || g === process.env.OPEN_FEM3D_SELECTIE_GROEP);
     for (const groep of groepen) {
       const pagina = groep === "strikt" ? await bouw("test-dev", "development") : html;
-      const report = draai(`groep=${groep}`, `profiel-${groep}`, pagina);
+      const hash = groep.startsWith("groot") ? `groep=groot&test=${groep.slice(5)}` : `groep=${groep}`;
+      const report = await draai(hash, `profiel-${groep}`, pagina);
       for (const item of report.tests) console.log(`  ${item.error ? "FAIL" : "ok"} ${item.name}${item.error ? ": " + item.error : ""}`);
       assert.equal(report.error, null, report.error);
+      if (groep.startsWith("groot")) assert.equal(report.tests.length, 1, `${groep}: één proef verwacht`);
       assert.equal(report.tests.filter((t) => t.error).length, 0, "3D-selectie-UI regressies");
       totaal += report.tests.length;
     }

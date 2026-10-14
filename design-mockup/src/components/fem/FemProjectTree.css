@@ -110,6 +110,14 @@
 .explorer-view-toggle.sub {
   padding-left: 24px;
 }
+/* Een lang label (Knopen op staven automatisch aansluiten, #63) loopt door op
+   een tweede regel in plaats van afgekapt te worden; de schakelaar blijft rechts. */
+.explorer-view-toggle.wrap .fem-results-toggle-label {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  font-size: 10.5px;
+}
 
 /* Opties van de hoeksnap (#53) onder de rij Hoek: tolerantie en extra hoeken. */
 .explorer-view-hoek-opties {

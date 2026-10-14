@@ -558,7 +558,9 @@ async function run() {
   }
   {
     // #55 — verbindingstolerantie. (a) De rij in de tab Weergave: komma en
-    // punt, begrensd op 0,1–25 mm, bewaard, uitleg als tooltip, alleen in 2D.
+    // punt, begrensd op 0,1–25 mm, bewaard, uitleg als tooltip. Sinds #63
+    // staat dezelfde rij ook in 3D, met de uitleg van 3D (de knoop wordt daar
+    // niet verplaatst).
     herstelSnapBeginstand();
     // In een vak van 240 px: de standaardbreedte van het linkerpaneel
     // (App.tsx, leftPanelWidth). De stijl van de tab laadt test-mm-invoer-ui.
@@ -623,9 +625,12 @@ async function run() {
     tab("2d");
     equal(veld().value, "0,1", "Opnieuw geopend: de bewaarde waarde");
     tab("3d");
-    ok(!rij(), "Geen rij Verbindingstolerantie in 3D");
+    ok(rij(), "Rij Verbindingstolerantie ook in 3D (#63)");
+    equal(veld().value, "0,1", "3D: dezelfde instelling als 2D");
+    ok((rij()!.getAttribute("title") ?? "").includes("De knoop wordt niet verplaatst"),
+      "3D: de uitleg van 3D als tooltip: " + rij()!.getAttribute("title"));
     herstelSnapBeginstand();
-    tests.push("Tab Weergave: rij Verbindingstolerantie, eenheid mm zichtbaar en label heel bij 240 px (nl/en/de/fr), komma en punt (0,1–25), bewaard, tooltip, alleen in 2D");
+    tests.push("Tab Weergave: rij Verbindingstolerantie, eenheid mm zichtbaar en label heel bij 240 px (nl/en/de/fr), komma en punt (0,1–25), bewaard, tooltip; in 3D dezelfde instelling met de uitleg van 3D (#63)");
   }
   {
     // #102 — Eén klik die twee undo-stappen opslaat (een staaf naar een nieuw

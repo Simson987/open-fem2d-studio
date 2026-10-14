@@ -45,6 +45,9 @@
     "hoekExtraHint": "De hoeksnap vangt dan ook op 30°, 45° en 60° en hun spiegelingen.",
     "verbindingsTolerantie": "Verbindingstolerantie",
     "verbindingsTolerantieHint": "Binnen deze afstand geldt een knoop als 'op de staaf' of 'op dezelfde plek' als een andere knoop: de modelcontrole meldt het, en een nieuwe knoop wordt aangesloten of hergebruikt. 0,1 tot 25 mm, standaard 5. Komma of punt mag. Bestaande knopen worden niet verplaatst; een nieuwe knoop op een staaf komt op de staafas.",
+    "knopenAansluiten": "Knopen automatisch samenvoegen en aansluiten",
+    "knopenAansluitenHint": "Alleen in 3D. Ligt na het tekenen, invoegen, verplaatsen of kopiëren een punt binnen de verbindingstolerantie van een bestaande knoop, dan wordt het die knoop (samengevoegd). Ligt een knoop daarna op een staaf, of loopt een nieuwe staaf door een bestaande knoop, dan wordt de staaf daar gesplitst. In dezelfde stap ongedaan maken, met een melding. Het aansluiten ook na het importeren van een model. Een geopend project verandert niet vanzelf: de modelcontrole op het tekenvlak meldt zulke knopen, met de knoppen Samenvoegen en Aansluiten.",
+    "verbindingsTolerantieHint3d": "Binnen deze afstand van de staafas geldt een knoop als 'op de staaf', en binnen deze afstand van een andere knoop als 'op dezelfde plek': de modelcontrole meldt het, Knopen aansluiten splitst de staaf daar en Knopen samenvoegen maakt er één knoop van (ook automatisch). 0,1 tot 25 mm, standaard 5; dezelfde instelling als in 2D. Een knoop die langs de staafas binnen deze afstand van een staafeind ligt, telt niet als 'op de staaf'. De knoop wordt niet verplaatst: de delen van de staaf lopen naar de knoop.",
     "groepLabels": "Labels",
     "groepGeometrie": "Geometrie",
     "groepResultaten": "Resultaten",
@@ -77,6 +80,9 @@
     "none": "Geen",
     "legend": "Legenda plaatresultaat",
     "signNote": "Plaatassen: z = plaatnormaal (vloer: omhoog; wand: y omhoog). Momenten positief bij trek aan de onderzijde.",
+    "beddingNote": "Plaat op bedding: zakking positief de grond in (tegen de plaatnormaal in), gronddruk k·zakking.",
+    "noContactGrey": "Grijs met stip: geen contact (alleen druk).",
+    "noContactDots": "Stip: geen contact (alleen druk).",
     "linearNotice": "Platen rekenen eerste orde (lineair); tweede orde met platen is in de 3D-kern nog niet beschikbaar.",
     "meshPending": "Rekennet wordt gemaakt…",
     "meshFailed": "Rekennet: {{message}}",
@@ -91,7 +97,9 @@
       "vx": "Dwarskracht vx",
       "vy": "Dwarskracht vy",
       "vonMisesTop": "Von Mises-spanning boven",
-      "vonMisesBottom": "Von Mises-spanning onder"
+      "vonMisesBottom": "Von Mises-spanning onder",
+      "groundPressure": "Gronddruk",
+      "settlement": "Zakking (in de grond)"
     }
   },
   "openFem3dVisibility": {
@@ -149,7 +157,8 @@
     "modeLoadCase": "belastinggeval",
     "modeCurrent": "huidige tabstand",
     "deleteViewSet": "{{name}} verwijderen",
-    "loadPanels": "Belastingvlakken"
+    "loadPanels": "Belastingvlakken",
+    "envelopePanels": "Gevel- en dakpanelen"
   },
   "openFem3dDeformation": {
     "scale": "Vergroting",
@@ -291,8 +300,8 @@
     "noRecent": "Nog geen recente projecten.",
     "showOnStartup": "Dit scherm tonen bij opstarten",
     "skip": "Overslaan",
-    "steelHall": "Stalen hal",
-    "steelHallDesc": "Een stalen hal als 3D-model, met de wizard"
+    "steelHall": "Hal (staal of hout)",
+    "steelHallDesc": "Een hal van staal of hout als 3D-model, met de wizard"
   },
   "projectSettings": {
     "title": "Projectinstellingen",
@@ -373,6 +382,9 @@
     "qpSource": "Bepaling van q_p",
     "qpCalculated": "Berekenen volgens EN 1991-1-4 §4",
     "qpManual": "Handmatig invoeren (bijv. uit de NB-tabel)",
+    "qpManualShort": "handmatig",
+    "qpManualSource": "Herkomst van de handmatige stuwdruk",
+    "qpManualSourcePlaceholder": "Bijv. projectberekening, tabel en editie",
     "qpValue": "q_p [kN/m²]",
     "windLeft": "Wind van links",
     "windRight": "Wind van rechts",
@@ -382,6 +394,8 @@
     "cpiPlus": "Alleen +0,20",
     "cpiMinus": "Alleen −0,30",
     "cpiManual": "Handmatig",
+    "cpiManualSource": "Herkomst van handmatige binnendruk",
+    "cpiManualSourcePlaceholder": "Bijv. openingsberekening, document en editie",
     "spacing": "H.o.h. spanten [m]",
     "position": "Positie",
     "positionInner": "Tussenspant",
@@ -489,7 +503,9 @@
       "unknownFieldsBody": "{{velden}} — ze worden niet geladen en verdwijnen bij het volgende Opslaan. Bewaar een kopie van het bestand als je ze nodig hebt.",
       "projectOpened": "Project geopend",
       "libraryUpdated": "Bibliotheek bijgewerkt door dit project",
-      "openFailed": "Kan bestand niet openen"
+      "openFailed": "Kan bestand niet openen",
+      "notAProjectTitle": "Geen Open FEM Studio-project",
+      "notAProjectBody": "{{naam}} is geen projectbestand (.ifcfem of .ifcfem2d) en is niet geopend."
     },
     "ifc": {
       "exportErrors": "IFC-export bevat fouten",
@@ -566,7 +582,7 @@
       "finish": "Afronden"
     }
   },
-  "remoteControlHint": "De app is gestart met OPENAEC_GUI_CONTROL=1 en wordt via het bedieningskanaal aangestuurd.",
+  "remoteControlHint": "Het standaard ingeschakelde bedieningskanaal laat een AI-assistent of script de app bedienen (Instellingen → AI-assistent (MCP), of OPENAEC_GUI_CONTROL=1).",
   "remoteControlActive": "bediening op afstand actief",
   "statusBar": {
     "snapExplain": {
@@ -616,6 +632,9 @@
     "consequenceExplainFavourable": "(gunstig werkende blijvende belasting 0,9). Daarin zit",
     "consequenceExplainTail": "; die factor wordt niet nog eens op een uitkomst toegepast. Een combinatie die u zelf hebt aangepast of toegevoegd, volgt de gevolgklasse niet.",
     "windRegion": "Windgebied (EN 1991-1-4/NB)",
+    "windCode": "Windnormroute",
+    "windCodeDutchLegacy": "Nederlandse route (bestaande berekening)",
+    "windCodeUnavailable": "Niet beschikbare windroute: {{code}}",
     "terrainCategory": "Terreincategorie (EN 1991-1-4 tabel 4.1)",
     "windExplainRegion": "Windgebied {{gebied}} geeft een basiswindsnelheid",
     "windExplainTerrain": "De terreincategorie levert",
@@ -736,6 +755,7 @@
     },
     "uc": {
       "badgeTitle": "Staaf {{staaf}}: maatgevend {{toets}} — klik voor de toetsing",
+      "nietGetoetst": "niet getoetst",
       "plaatBadgeTitle": "Plaat {{plaat}}: maatgevend {{toets}} — zie het toetsingspaneel",
       "plaatLegenda": "UC plaatelement"
     },
@@ -787,6 +807,19 @@
       "splitLine": "Knoop {{knoop}} verbonden met staaf {{staaf}}: die is gesplitst in staaf {{deel1}} en staaf {{deel2}}.",
       "splitLineOffset": "Knoop {{knoop}} verbonden met staaf {{staaf}}: die is gesplitst in staaf {{deel1}} en staaf {{deel2}}. De knoop lag {{mm}} mm naast de staafas; daar zit nu een knik.",
       "mergeLine": "Knoop {{verwijderd}} samengevoegd met knoop {{bewaard}}.",
+      "loadValue": {
+        "lineNone": "Lijnlast {{last}} op staaf {{staaf}} heeft geen waarde. Vul `q` in (gelijkmatig verdeeld, kN/m) of `qStart` en `qEnd` (trapezium).",
+        "lineNoneWrongField": "Lijnlast {{last}} op staaf {{staaf}} heeft geen waarde: {{velden}} wordt bij een lijnlast niet gelezen. Vul `q` in (gelijkmatig verdeeld, kN/m) of `qStart` en `qEnd` (trapezium).",
+        "lineHalf": "Lijnlast {{last}} op staaf {{staaf}} heeft wel `{{heeft}}` maar geen `{{mist}}` (en geen `q` als terugval). Vul `{{mist}}` in; bij een gelijkmatige last alleen `q`.",
+        "lineWrongField": "Lijnlast {{last}} op staaf {{staaf}}: {{velden}} wordt bij een lijnlast niet gelezen en zou wegvallen. Zet een puntlast of koppel als aparte last.",
+        "lineRange": "Lijnlast {{last}} op staaf {{staaf}}: het belaste deel begint niet vóór zijn einde (startFrac {{begin}}, endFrac {{einde}}). Een leeg of omgekeerd deel is geen last en zou wegvallen. Geef 0 ≤ startFrac < endFrac ≤ 1, gemeten vanaf de startknoop.",
+        "momentNone": "Koppel {{last}} op knoop {{knoop}} heeft geen waarde. Een koppel staat in `my` (kNm).",
+        "momentWrongField": "Koppel {{last}} op knoop {{knoop}} heeft geen waarde in `my`: {{velden}} wordt bij een koppel niet gelezen. Een koppel staat in `my` (kNm).",
+        "momentExtraField": "Koppel {{last}} op knoop {{knoop}}: {{velden}} wordt bij een koppel niet gelezen en zou wegvallen. Zet een kracht als aparte puntlast.",
+        "forceNone": "Puntlast {{last}} heeft geen waarde. Vul `fz` (verticaal) en/of `fx` (horizontaal) in, in kN.",
+        "forceWrongField": "Puntlast {{last}} heeft geen waarde in `fx` of `fz`: `my` wordt bij een puntlast niet gelezen. Een koppel is een aparte last (pointMoment).",
+        "forceExtraField": "Puntlast {{last}}: `my` wordt bij een puntlast niet gelezen en zou wegvallen. Een koppel is een aparte last (pointMoment)."
+      },
       "plateEdge": {
         "openingOnPerimeterRoute": "de last staat op de rand van een opening (`openingId`), maar hij wordt hier gelezen door een route die alleen de omtrek van de plaat kent. Meld dit: het adres wordt bewust geweigerd in plaats van stil op de omtrek gelegd.",
         "nameAndIndex": "de last noemt zowel een benoemde rand (`edge`) als een rand-index (`edgeIndex`). Geef er één: met twee adressen is niet te zeggen welke rand bedoeld is en vanaf welke hoek de posities tellen.",
@@ -1013,6 +1046,7 @@
     "undoReplaceTitle": "Zet de combinaties terug zoals ze in het projectbestand stonden",
     "replaceConfirm": "Alle combinaties (behalve die van de windgenerator) vervangen door de standaardset? Uw eigen combinaties gaan daarbij verloren.",
     "replaceWithStandard": "Vervang door standaardcombinaties",
+    "keepCustomFactors": "Behoud eigen factoren",
     "regenerateWind": "Windbelasting opnieuw genereren",
     "originTitle": "Standaard = afgeleid uit de gevallen en de gevolgklasse; eigen = door u opgesteld of aangepast",
     "origin": "Herkomst",
@@ -1202,8 +1236,13 @@
     "openingCount_other": "{{count}} openingen",
     "loadPanels": "Belastingvlakken",
     "loadPanelLabel": "Belastingvlak {{id}}",
+    "envelopePanels": "Panelen",
+    "envelopePanelLabel": "Paneel {{id}}",
+    "envelopeFacade": "gevel",
+    "envelopeRoof": "dak",
     "loadPanelGravity": "zwaartekracht",
     "loadPanelNormal": "loodrecht",
+    "loadPanelVerticalSurface": "verticaal per vlak",
     "loadPanelOneWay": "1 richting",
     "loadPanelTwoWay": "2 richtingen",
     "diaphragms": "Schijven",
@@ -1377,5 +1416,13 @@
     },
     "criteriaActief": "Actieve kenmerken: {{count}}",
     "wissen": "Wissen"
+  },
+  "envelopePanel": {
+    "geometry": "Geometrie", "name": "Naam", "type": "Type", "area": "Netto oppervlak",
+    "outerSide": "Buitenzijde", "flip": "Buitenzijde omkeren", "transfer": "Afdracht",
+    "distribution": "Richting", "span": "Overspanning", "customSpan": "Eigen richting",
+    "weight": "Bekledingsgewicht", "openings": "Openingen", "removeOpening": "Verwijderen",
+    "addOpening": "Opening toevoegen", "openingNodes": "Knoopnummers, gescheiden door komma's",
+    "invalidOpening": "Geef minstens drie geldige knoopnummers op.", "add": "Toevoegen", "delete": "Paneel verwijderen"
   }
 }

@@ -239,11 +239,25 @@ export function profielKleuring2d(
   })));
 }
 
-/** De toekenning voor de staven van een 3D-model (`profileName`, `material`). */
+/**
+ * De toekenning voor de staven van een 3D-model (`profileName`, `material`).
+ * Een verlopende staaf (`profileNameEnd`, #73) is een eigen profiel met
+ * dezelfde naam als in 2D: "IPE 300 → IPE 200 (verlopend)"; met `t` staat de
+ * legenda in de taal van de interface.
+ */
 export function openFem3DProfielKleuring(
-  beams: readonly { id: number; profileName?: string; material?: string }[],
+  beams: readonly { id: number; profileName?: string; profileNameEnd?: string; material?: string }[],
+  t?: Vertaalfunctie,
 ): ProfielKleuring {
-  return profielKleuring(beams.map((b) => ({ id: b.id, profiel: b.profileName ?? null, materiaal: b.material ?? null })));
+  return profielKleuring(beams.map((b) => {
+    const als2d = { material: b.material, profile: b.profileName, profileEnd: b.profileNameEnd };
+    return {
+      id: b.id,
+      profiel: b.profileName ? doorsnedeNaam(als2d) : null,
+      ...(b.profileName && t ? { weergave: doorsnedeNaamVertaald(als2d, t) } : {}),
+      materiaal: b.material ?? null,
+    };
+  }));
 }
 
 /**

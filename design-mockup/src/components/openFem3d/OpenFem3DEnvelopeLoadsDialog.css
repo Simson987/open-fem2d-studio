@@ -1,0 +1,26 @@
+.open-fem3d-envelope-sheet { width: min(680px, 95vw); }
+.open-fem3d-envelope-loads { color: var(--theme-text); font-size: 12px; }
+.open-fem3d-envelope-loads label { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.open-fem3d-envelope-loads input[type="number"],
+.open-fem3d-envelope-loads select {
+  width: 110px;
+  padding: 4px 6px;
+  background: var(--theme-bg);
+  color: var(--theme-text);
+  border: 1px solid var(--theme-border);
+  border-radius: 3px;
+}
+.open-fem3d-envelope-loads input[type="checkbox"] { accent-color: var(--theme-accent); }
+.open-fem3d-envelope-loads p { margin: 4px 0; color: var(--theme-text-secondary); }
+.open-fem3d-envelope-loads p[role="alert"] { color: var(--theme-error, #c33); }
+.open-fem3d-envelope-loads button {
+  align-self: flex-start;
+  padding: 6px 12px;
+  border: 1px solid var(--theme-accent);
+  border-radius: 3px;
+  background: var(--theme-accent);
+  color: var(--theme-accent-text);
+  cursor: pointer;
+}
+.open-fem3d-envelope-loads button:disabled { opacity: 0.55; cursor: not-allowed; }
+.open-fem3d-envelope-loads th, .open-fem3d-envelope-loads td { white-space: nowrap; }

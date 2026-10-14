@@ -49,6 +49,12 @@ function nepApp(start = leegDocument()) {
     opnieuw: () => log.push(["opnieuw"]),
     opslaan: async (pad) => { log.push(["opslaan", pad ?? null]); return pad ?? "C:/huidig.ifcfem"; },
     openen: async (pad) => { log.push(["openen", pad]); return pad; },
+    importeren: async (pad, importerId) => {
+      log.push(["importeren", pad, importerId ?? null]);
+      return { meldingen: [{ level: "info", text: "3 knopen" }], extensie: { id: "org.openaec.voorbeeld", name: "Voorbeeldformaat", version: "1.0.0" } };
+    },
+    extensies: async () => [{ map: "C:/extensies/demo", bron: "gekoppeld", ingeschakeld: true,
+      manifest: { id: "org.openaec.voorbeeld", name: "Voorbeeldformaat", version: "1.0.0", importers: [] } }],
     heeftNietOpgeslagenWerk: () => acties.nietOpgeslagen === true,
     zetSelectie3D: (selectie) => log.push(["zetSelectie3D", selectie]),
   };
@@ -120,6 +126,20 @@ check("met discardChanges: openen(pad), en het pad terug", geopend.ok && geopend
 const schoon = nepApp();
 check("zonder niet-opgeslagen werk opent hij meteen",
   (await voerApiUitInApp(schoon.acties, "app.project.open", { path: "C:/a.ifcfem" })).ok && schoon.log.at(-1)[0] === "openen");
+const geweigerdImport = await voerApiUitInApp(vuil.acties, "app.project.import", { path: "C:/model.demofem" });
+check("app.project.import weigert bij niet-opgeslagen werk", !geweigerdImport.ok && geweigerdImport.error.code === "GEWEIGERD"
+  && !vuil.log.some(([naam]) => naam === "importeren"));
+const geimporteerd = await voerApiUitInApp(vuil.acties, "app.project.import", {
+  path: "C:/model.demofem", importer: "org.openaec.voorbeeld/demofem", discardChanges: true,
+});
+check("app.project.import laadt als nieuw project en geeft verslag + extensie terug",
+  geimporteerd.ok && geimporteerd.output.project === "nieuw" && geimporteerd.output.messages[0].text === "3 knopen"
+  && geimporteerd.output.extension.id === "org.openaec.voorbeeld"
+  && vuil.log.at(-1)[0] === "importeren", JSON.stringify(geimporteerd));
+const lijst = await voerApiUitInApp(schoon.acties, "extensions.list", {});
+check("extensions.list toont de gekoppelde importeurs en hun status",
+  lijst.ok && lijst.output.extensions[0].source === "gekoppeld"
+  && lijst.output.extensions[0].enabled === true, JSON.stringify(lijst));
 
 console.log("\n[4d] het stramien");
 const stramien3D = nepApp();

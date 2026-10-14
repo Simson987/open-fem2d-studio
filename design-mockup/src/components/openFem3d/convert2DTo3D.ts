@@ -9,6 +9,7 @@ import type {
   OpenFem3DSupportRestraints,
 } from "./openFem3dModel";
 import { openFem3DMemberAxes } from "./openFem3dModel";
+import { openFem3DBeamVerloop } from "./openFem3dVerloop";
 
 export interface ConversionResult {
   model: OpenFem3DModel;
@@ -26,7 +27,7 @@ const supportMap: Partial<Record<Support["type"], OpenFem3DSupportRestraints>> =
 /**
  * Lift a planar X/Z frame into the X/Y/Z workspace at Y = 0.
  * Geometry, rigid restraints, nodal forces/moments and transverse member
- * loads are copied. Entity numbers stay equal so IFC and audit output can
+ * loads are copied, and so is the end profile of a tapered member. Entity numbers stay equal so IFC and audit output can
  * keep referring to them. A 2D line load with an axial component cannot be
  * represented by the current 3D member-load contract and is counted as
  * skipped instead of being silently changed.
@@ -48,6 +49,14 @@ export function convert2DTo3D(input: {
     startNodeId: beam.from,
     endNodeId: beam.to,
     ...(beam.profile ? { profileName: beam.profile } : {}),
+    // Verlopend profiel (#73): het eindprofiel gaat mee; `from` is het begin.
+    // Dezelfde keuring als het lezen van een bestand: wat `bepaalVerloop`
+    // prismatisch noemt (ook hetzelfde profiel anders gespeld, "IPE300" naast
+    // "IPE 300") krijgt geen veld; een ongeldig verloop blijft zichtbaar staan
+    // en wordt bij rekenen en toetsen met de reden geweigerd.
+    ...(beam.profile && beam.profileEnd?.trim()
+      && openFem3DBeamVerloop({ material: beam.material, profileName: beam.profile, profileNameEnd: beam.profileEnd }).status !== "prismatisch"
+      ? { profileNameEnd: beam.profileEnd.trim() } : {}),
     ...(beam.material ? { material: beam.material } : {}),
     ...(beam.checkConfig ? { checkConfig: beam.checkConfig } : {}),
   }));

@@ -165,7 +165,8 @@ export function openFem3DViewSetToepassing(viewSet: OpenFem3DViewSet): OpenFem3D
 
 /** Dezelfde zichtbaarheid (alle vlaggen)? */
 export function openFem3DZichtGelijk(a: OpenFem3DVisibility, b: OpenFem3DVisibility): boolean {
-  return (Object.keys(DEFAULT_OPEN_FEM_3D_VISIBILITY) as (keyof OpenFem3DVisibility)[]).every((k) => a[k] === b[k]);
+  return (Object.keys(DEFAULT_OPEN_FEM_3D_VISIBILITY) as (keyof OpenFem3DVisibility)[]).every((k) =>
+    k === "explode" ? a.explode.mode === b.explode.mode && a.explode.amountM === b.explode.amountM : a[k] === b[k]);
 }
 
 /**

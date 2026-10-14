@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type ClipboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import html2canvas from "html2canvas";
 import { maakKleurenCompatibel } from "../../lib/html2canvasKleuren";
+import { openExternal } from "../../lib/tauri";
 import Modal from "../Modal";
 import "./FeedbackDialog.css";
 
@@ -29,15 +30,6 @@ async function getOsInfo(): Promise<string> {
     return `${osType} ${osVer} (${arch})`.replace(/\s+/g, " ").trim();
   } catch {
     return navigator.platform || "Unknown";
-  }
-}
-
-async function openExternal(url: string) {
-  try {
-    const { openUrl } = await import("@tauri-apps/plugin-opener");
-    await openUrl(url);
-  } catch {
-    window.open(url, "_blank", "noopener,noreferrer");
   }
 }
 

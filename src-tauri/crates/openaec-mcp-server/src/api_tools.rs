@@ -82,7 +82,7 @@ pub(crate) fn tool_definitions() -> Vec<Value> {
                 });
                 beschrijving.push_str(" Met `project` zonder app op dat bestand; anders in de draaiende app.");
             } else {
-                beschrijving.push_str(" Alleen in de draaiende app (gestart met OPENAEC_GUI_CONTROL=1).");
+                beschrijving.push_str(" Alleen in de draaiende app (Instellingen → AI-assistent (MCP) aan, of gestart met gui_start_app of OPENAEC_GUI_CONTROL=1).");
             }
             json!({ "name": t.tool, "description": beschrijving, "inputSchema": schema })
         })

@@ -161,8 +161,16 @@ export interface StuwdrukResultaat {
   ze_m: number;
   /** true wanneer de gebruiker de stuwdruk handmatig heeft opgegeven. */
   handmatig: boolean;
+  /** Expliciete drukmethode van deze historische Nederlandse route. Oudere bestanden missen dit veld. */
+  drukmethode?: "en-terreinprofiel" | "handmatig-opgegeven";
   /** Volledige afleiding, regel voor regel, met vindplaats. */
   afleiding: AfleidingsRegel[];
+}
+
+export function drukmethodeLabel(methode: StuwdrukResultaat["drukmethode"]): string {
+  if (methode === "en-terreinprofiel") return "EN-terreinprofiel (§4)";
+  if (methode === "handmatig-opgegeven") return "handmatig opgegeven druk";
+  return "drukmethode onbekend (oud bestand)";
 }
 
 function nl(v: number, dec: number): string {
@@ -203,6 +211,7 @@ export function berekenStuwdruk(
     qp_kNm2: qp_Nm2 / 1000,
     ze_m,
     handmatig: false,
+    drukmethode: "en-terreinprofiel",
     afleiding: [
       { symbool: "windgebied", waarde: `${gebied} — v_b,0 = ${nl(g.vb0, 1)} m/s`, bron: g.bron },
       { symbool: "terreincategorie", waarde: `${terrein} — z₀ = ${nl(t.z0, 3)} m, z_min = ${nl(t.zmin, 0)} m`, bron: t.bron },
@@ -220,16 +229,19 @@ export function berekenStuwdruk(
 }
 
 /** Stuwdruk die de gebruiker zelf opgeeft (bijvoorbeeld uit de NB-tabel). */
-export function handmatigeStuwdruk(qp_kNm2: number, ze_m: number): StuwdrukResultaat {
+export function handmatigeStuwdruk(qp_kNm2: number, ze_m: number, opgegevenBron?: string): StuwdrukResultaat {
+  const bron = (typeof opgegevenBron === "string" ? opgegevenBron.trim() : "")
+    || "door de gebruiker opgegeven (bijv. NEN-EN 1991-1-4/NB stuwdruktabel)";
   return {
     qp_kNm2,
     ze_m,
     handmatig: true,
+    drukmethode: "handmatig-opgegeven",
     afleiding: [
       {
         symbool: "q_p(z_e)",
         waarde: `${nl(qp_kNm2, 4)} kN/m² — handmatig ingevoerd op z_e = ${nl(ze_m, 2)} m`,
-        bron: "door de gebruiker opgegeven (bijv. NEN-EN 1991-1-4/NB stuwdruktabel)",
+        bron,
       },
     ],
   };

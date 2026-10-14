@@ -192,50 +192,74 @@ for (const collection of ["displacements", "reactions", "memberForces"]) {
     }
   }
 }
-let bucklingRegression;
-if (process.argv.includes("--buckling-regression")) {
-  const linearRequest = { ...buildOpenFem3DSolveRequest(model, "linear", 1), bucklingModes: 3 };
-  const linearWithBuckling = await invokeSolver(linearRequest);
-  assert.equal(linearWithBuckling.displacements.length, 100,
-    "een upstream-knikfout mag de lineaire raamwerkuitkomst niet laten crashen");
-  assert.ok(["available", "failed", "notApplicable"].includes(linearWithBuckling.buckling.status));
-  const secondOrderRequest = { ...buildOpenFem3DSolveRequest(model, "p-delta", 1), bucklingModes: 3 };
-  const secondOrder = await invokeSolver(secondOrderRequest, true);
-  const lateralSecondOrderRequest = {
-    ...buildOpenFem3DSolveRequest(model, "p-delta", new Map([[1, 1], [2, 1]])),
-    bucklingModes: 3,
-  };
-  const lateralSecondOrder = await invokeSolver(lateralSecondOrderRequest, true, 20_000);
-  if (secondOrder.fout) {
-    assert.match(secondOrder.fout,
-      /stabiliteitscontrole faalde|matrixfactorisatie faalde|instabiliteit|convergeerde niet|numerieke oplossing/,
-      "een afgewezen tweede-orde-uitkomst moet een concrete reden geven");
-  } else {
-    assert.equal(secondOrder.secondOrder?.converged, true);
-    assert.equal(secondOrder.secondOrder?.stable, true);
+// Knik en tweede orde (#60). Tot oktober 2026 stond dit blok achter een
+// opt-in-vlag en mocht de combinatie daklast + wind "geweigerd" worden: de
+// externe kern faalde op dit 235-staafsmodel in de matrixfactorisatie. De
+// adapter factoriseert nu elke iteratie opnieuw, dus een weigering is een fout.
+// Het blok kost op de testmachine 1–2 s en draait daarom altijd.
+const secondOrderStarted = performance.now();
+const linearWithBuckling = await invokeSolver({ ...buildOpenFem3DSolveRequest(model, "linear", 1), bucklingModes: 3 });
+assert.equal(linearWithBuckling.displacements.length, 100, "de lineaire raamwerkuitkomst met knikanalyse is compleet");
+assert.equal(linearWithBuckling.buckling?.status, "available", "eigenwaardeknik bij daklast beschikbaar");
+const solveSecondOrder = async (factor, name, expectedForces) => {
+  const request = { ...buildOpenFem3DSolveRequest(model, "p-delta", factor), bucklingModes: 3 };
+  const started = performance.now();
+  const result = await invokeSolver(request, true, 20_000);
+  const elapsedMs = performance.now() - started;
+  assert.equal(result.fout, undefined, `${name}: de tweede orde moet berekend worden, niet geweigerd (${result.fout})`);
+  assert.equal(result.displacements.length, 100, `${name}: alle knopen`);
+  assert.equal(result.secondOrder?.converged, true, `${name}: tweede-orde-iteraties convergeren`);
+  assert.equal(result.secondOrder?.stable, true, `${name}: stabiel`);
+  assert.equal(result.buckling?.status, "available", `${name}: knikfactor beschikbaar`);
+  // K_G voert bij een starre translatie geen kracht af: de reactiesom is exact
+  // die van de lasten. Het moment om de oorsprong wijkt precies het
+  // tweede-ordemoment Σ N·(e_x × Δu) af; de onafhankelijke balans trekt dat af.
+  for (const [axis, value] of Object.entries(expectedForces)) {
+    close(sum(result.reactions, axis), value, 1e-4, `${name}: reactie ${axis}`);
   }
-  assert.notEqual(lateralSecondOrder.processFailure, true,
-    `de tweede-orde-combinatie mag niet crashen of langer dan 20 s rekenen: ${lateralSecondOrder.fout}`);
-  if (lateralSecondOrder.fout) {
-    assert.match(lateralSecondOrder.fout, /matrixfactorisatie faalde|stabiliteitscontrole faalde|instabiliteit/,
-      "een onbetrouwbare tweede-orde-uitkomst moet expliciet worden geweigerd");
-  }
-  bucklingRegression = {
-    linearStatus: linearWithBuckling.buckling.status,
-    firstBucklingFactor: linearWithBuckling.buckling.status === "available"
-      ? linearWithBuckling.buckling.modes[0]?.loadFactor ?? null : null,
-    secondOrderStatus: secondOrder.fout ? "geweigerd" : "berekend",
-    secondOrderMessage: secondOrder.fout ?? null,
-    ...(secondOrder.fout ? {} : {
-      secondOrderForceBalance: openFem3DGlobalForceBalance(secondOrderRequest, secondOrder),
-    }),
-    lateralSecondOrderStatus: lateralSecondOrder.fout ? "geweigerd" : "berekend",
-    lateralSecondOrderMessage: lateralSecondOrder.fout ?? null,
-    ...(lateralSecondOrder.fout ? {} : {
-      lateralSecondOrderForceBalance: openFem3DGlobalForceBalance(lateralSecondOrderRequest, lateralSecondOrder),
-    }),
-  };
+  const balance = openFem3DGlobalForceBalance(request, result);
+  assert.ok(balance.secondOrderMomentKnm, `${name}: de balans rekent met het tweede-ordemoment`);
+  assert.equal(balance.ok, true,
+    `${name}: onafhankelijke kracht- en momentbalans (ΔF ${balance.maxImbalanceKn} kN, ΔM ${balance.maxMomentImbalanceKnm} kNm)`);
+  return { result, balance, elapsedMs };
+};
+const roofSecondOrder = await solveSecondOrder(1, "daklast P-Δ", { fx: 0, fy: 0, fz: 300 });
+const lateralSecondOrder = await solveSecondOrder(new Map([[1, 1], [2, 1]]), "daklast + wind Y P-Δ",
+  { fx: 0, fy: -100, fz: 300 });
+// Zijwaartse versterking op het dak tegen de lineaire combinatie (som van de
+// losse gevallen; de superpositie is hierboven al getoetst). De benadering
+// 1/(1 − 1/α_cr) geeft een toename B − 1 = 1/(α_cr − 1); zij is zelf niet exact
+// (de doorbuigingsvorm is niet precies de knikvorm), daarom 5 % op de toename.
+const lateralAlpha = lateralSecondOrder.result.buckling.modes[0].loadFactor;
+const linearUy = (solved, id) => solved.result.displacements.find((displacement) => displacement.nodeId === id).uy;
+const swayAmplification = lateralSecondOrder.result.displacements
+  .filter((displacement) => nodes[displacement.nodeId - 1].z === 9)
+  .map((displacement) => displacement.uy / (linearUy(roof, displacement.nodeId) + linearUy(wind, displacement.nodeId)));
+assert.equal(swayAmplification.length, 25, "alle 25 dakknopen");
+const expectedIncrease = 1 / (lateralAlpha - 1);
+for (const amplification of swayAmplification) {
+  close(amplification - 1, expectedIncrease, 0.05 * expectedIncrease, "toename van de zijverplaatsing tegen 1/(α_cr − 1)");
 }
+const secondOrderElapsedMs = performance.now() - secondOrderStarted;
+const secondOrderSummary = (solved) => ({
+  elapsedMs: +solved.elapsedMs.toFixed(1),
+  iterations: solved.result.secondOrder.iterations,
+  maxAmplification: solved.result.secondOrder.maxAmplification,
+  firstBucklingFactor: solved.result.buckling.modes[0].loadFactor,
+  maxForceImbalanceKn: solved.balance.maxImbalanceKn,
+  maxMomentImbalanceKnm: solved.balance.maxMomentImbalanceKnm,
+  secondOrderMomentKnm: solved.balance.secondOrderMomentKnm,
+});
+const secondOrder = {
+  elapsedMs: +secondOrderElapsedMs.toFixed(1),
+  linearFirstBucklingFactor: linearWithBuckling.buckling.modes[0].loadFactor,
+  roof: secondOrderSummary(roofSecondOrder),
+  lateral: {
+    ...secondOrderSummary(lateralSecondOrder),
+    roofSwayAmplification: [Math.min(...swayAmplification), Math.max(...swayAmplification)],
+    approximation: 1 / (1 - 1 / lateralAlpha),
+  },
+};
 console.log(JSON.stringify({
   model: { nodes: 100, beams: 235, supports: 25, nodalLoads: 51, memberLoads: 20, memberPointLoads: 1 },
   analyticRoofShorteningMm: +(roofShorteningPerM * 9 * 1000).toFixed(5),
@@ -249,5 +273,5 @@ console.log(JSON.stringify({
     maxMomentImbalanceKnm: solved.balance.maxMomentImbalanceKnm,
     relativeResidual: solved.result.equilibrium?.relativeResidual,
   })),
-  ...(bucklingRegression ? { bucklingRegression } : {}),
+  secondOrder,
 }, null, 2));

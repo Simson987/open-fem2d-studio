@@ -39,12 +39,45 @@ const dichtbij = (a, b, label, tol = 1e-3) => assert.ok(Math.abs(a - b) <= tol, 
   const r = a.result;
   assert.deepEqual(r.project.model3d, maakStaalhal({}).model, "dezelfde hal als de generator van de app");
   assert.equal(r.project.modelDimension, "3d");
+  assert.deepEqual(r.project.projectInfo.uitgangspunten, {
+    en1993: false, en1995: false, en1992: false, normenHandmatig: [],
+    gevolgklasse: "CC2", levensduurklasse: "4", nationaleBijlage: "NL",
+    windCodeId: "nl-en-1991-1-4-legacy", windgebied: "II", terreincategorie: "II",
+  }, "MCP-project bewaart volledige uitgangspunten en Nederlandse windroute");
   assert.equal(r.project.structuralGrid.xAxes.length, 11, "stramien gaat mee in het projectbestand");
   assert.deepEqual([r.samenvatting.aantallen.knopen, r.samenvatting.aantallen.staven], [165, 340]);
   assert.equal(r.rekenverzoeken, undefined, "zonder `reken` geen rekenverzoeken");
   const zonder = vraag("staalhal_maken", { stramien: false });
   assert.equal(zonder.result.project.structuralGrid, undefined);
   ok("staalhal_maken zonder parameters: de voorbeeldhal, projectbestand met stramien");
+}
+{
+  const a = vraag("staalhal_maken", { hal: { lasten: { dakgebruikKnM2: 0.4 } } });
+  assert.equal(a.ok, true, JSON.stringify(a.error));
+  assert.deepEqual(a.result.project.loadCases.find((item) => item.id === 6),
+    { id: 6, name: "Dakgebruik (Q)", type: "live", categorie: "H" });
+  dichtbij(a.result.samenvatting.belastingsom[6].fz, -0.4 * 60 * 30, "sidecar Q: Σ last");
+  assert.ok(a.result.project.model3d.memberLoads.some((item) => item.caseId === 6));
+  ok("staalhal_maken bewaart dakgebruik Q en de volledige last op de gordingen");
+}
+{
+  const a = vraag("staalhal_maken", { hal: { verbanden: { kopgevels: true, trekAlleen: true } } });
+  assert.equal(a.ok, true, JSON.stringify(a.error));
+  const ids = a.result.samenvatting.groepen.kopgevelverband;
+  assert.equal(ids.length, 4);
+  assert.equal(a.result.project.model3d.tensionOnlyCrossRule, true);
+  assert.ok(ids.every((id) => a.result.project.model3d.beams.find((beam) => beam.id === id)?.tensionOnly));
+  ok("staalhal_maken bewaart trek-alleen kopgevelkruizen in het projectbestand");
+}
+{
+  const a = vraag("staalhal_maken", { hal: { lengteMm: 12000, breedteMm: 12000, aantalVakken: 2,
+    dak: { type: "platdak" }, gordingafstandMm: 3000, aantalOverspanningen: 3,
+    fundering: { type: "balkrooster" } } });
+  assert.equal(a.ok, true, JSON.stringify(a.error));
+  assert.deepEqual(a.result.project.structuralGrid.yAxes.map((as) => as.position), [0, 4000, 8000, 12000]);
+  assert.equal(a.result.samenvatting.groepen.kolom.length, 12);
+  assert.equal(a.result.samenvatting.paalknopen.length, 12);
+  ok("staalhal_maken bewaart drie overspanningen met binnenkolommen en palen");
 }
 {
   const fout = vraag("staalhal_maken", { hal: { profielen: { kolom: { profile: "HEA 400" } } } });
@@ -128,6 +161,30 @@ const reken = (request) => new Promise((resolve, reject) => {
   const ander = vraag("staalhal_uitwerken", { hal: {}, reken: {}, resultaten });
   assert.equal(ander.ok, false, "resultaten van het rooster passen niet bij de hal zonder rooster");
   ok("uitwerken weigert een ontbrekend resultaat en resultaten van een andere hal");
+}
+
+{
+  const hal = { lengteMm: 12000, breedteMm: 8000, aantalVakken: 2,
+    dak: { type: "platdak" }, gordingafstandMm: 2000,
+    profielen: {
+      kolom: { materiaal: "GL28h", profiel: "200x400" },
+      spantligger: { materiaal: "GL28h", profiel: "160x400" },
+      gording: { materiaal: "C24", profiel: "80x200" },
+      randligger: { materiaal: "C24", profiel: "100x200" },
+      verband: { materiaal: "C24", profiel: "100x100" },
+    } };
+  const a = vraag("staalhal_maken", { hal, reken: {} });
+  assert.equal(a.ok, true, JSON.stringify(a.error));
+  const resultaten = {};
+  for (const v of a.result.rekenverzoeken) resultaten[v.sleutel] = await reken(v.verzoek);
+  const u = vraag("staalhal_uitwerken", { hal, reken: {}, resultaten });
+  assert.equal(u.ok, true, JSON.stringify(u.error));
+  assert.equal(u.result.toetsinvoer.length, 0, "geen staaltoets voor houten staven");
+  assert.equal(u.result.houtToetsinvoer.length, a.result.project.model3d.beams.length);
+  assert.ok(u.result.houtToetsinvoer.every((item) => item.forces_envelope?.length > 0));
+  assert.ok(u.result.houtToetsinvoer.some((item) => item.strength_class === "GL28h"));
+  assert.ok(u.result.houtToetsinvoer.some((item) => item.strength_class === "C24"));
+  ok("houten hal: echte 3D-resultaten leveren voor elke staaf EN 1995-toetsinvoer");
 }
 
 console.log(`${geslaagd} geslaagd, 0 gefaald`);

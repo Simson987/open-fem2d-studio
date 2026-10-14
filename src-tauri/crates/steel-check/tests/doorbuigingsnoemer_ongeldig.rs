@@ -61,6 +61,9 @@ fn invoer(klasse: DeflectionClass, noemer: i32, noemer_add: f64) -> BeamCheckInp
         custom_section_end: None,
         tension_only: None,
         a_net_mm2: None,
+        deflection_add_mm: None,
+        deflection_length_m: None,
+        zijdelingse_knik_in_analyse: None,
     }
 }
 
@@ -107,7 +110,9 @@ fn verlopende_staaf_krijgt_dezelfde_weigering() {
 
 #[test]
 fn wat_geen_fout_is_rekent_gewoon() {
-    // Noemer 0 bij klasse Floor: niet gelezen, de klassenoemer 333 geldt.
+    // Noemer 0 bij klasse Floor: niet gelezen, de klassenoemer geldt. Sinds
+    // oktober 2026 is dat ℓ_rep/250 uit NEN-EN 1990:2002/NB:2019 A1.4.3(4) en
+    // niet meer 333 (de grens van w2 + w3; controle 2026-10, punt B15).
     let r = check_beam(invoer(DeflectionClass::Floor, 0, 0.0));
     assert_ne!(r.status, CheckStatus::NotApplicable, "{}", r.governing_check_id);
     let fin = r.checks.iter().find(|c| c.id == "deflection_w_fin").expect("w_fin getoetst");
@@ -115,8 +120,8 @@ fn wat_geen_fout_is_rekent_gewoon() {
         CheckKind::Resistance(c) => {
             assert_eq!(c.status, CheckStatus::Ok);
             let uc = c.uc.as_ref().expect("UC aanwezig");
-            assert!((uc.rd - 2500.0 / 333.0).abs() < 1e-9, "grens {}", uc.rd);
-            assert!((uc.uc - 3.0 / (2500.0 / 333.0)).abs() < 1e-9, "UC {}", uc.uc);
+            assert!((uc.rd - 2500.0 / 250.0).abs() < 1e-9, "grens {}", uc.rd);
+            assert!((uc.uc - 3.0 / (2500.0 / 250.0)).abs() < 1e-9, "UC {}", uc.uc);
         }
         CheckKind::Stability(_) => panic!("w_fin is een weerstandstoets"),
     }

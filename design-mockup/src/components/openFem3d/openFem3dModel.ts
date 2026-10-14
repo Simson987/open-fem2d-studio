@@ -2,11 +2,18 @@ import type { BeamCheckConfig } from "../fem/femTypes";
 import { dichtheidVanMateriaal, G, resolveSection } from "../../lib/sectionResolver";
 import { sampleCircularArc3D, type ArcPoint3D } from "./openFem3dCircularArc";
 import type { OpenFem3DSelection } from "./openFem3dSelection";
+import { OPEN_FEM_3D_DEFAULT_LAYER, parseOpenFem3DLayers, readOpenFem3DLayerId, type OpenFem3DLayer } from "./openFem3dLayers";
 import { resolveOpenFem3DPlateMaterial } from "./openFem3dPlateMaterial";
+import { openFem3DBeamVerloop, openFem3DVerloopDelen } from "./openFem3dVerloop";
+import { splitsVerlopendProfiel, tussenProfielVoorSplitsing } from "../../lib/verloopSplitsen";
+import { readOpenFem3DAnalysisMaterials, type OpenFem3DAnalysisMaterials } from "./openFem3dAnalysisMaterial";
+import type { AfleidingsRegel } from "../../lib/wind/windEurocode";
+import { parseWindSurfacePressurePlan, type WindSurfacePressurePlan } from "../../lib/wind/windSurfacePressurePlan";
 
 /** Geometry for the 3D workspace. Coordinates are metres; Z is vertical, like 2D. */
 export interface OpenFem3DNode {
   id: number;
+  layerId?: number;
   x: number;
   y: number;
   z: number;
@@ -24,15 +31,28 @@ export interface OpenFem3DNode {
 
 export interface OpenFem3DBeam {
   id: number;
+  layerId?: number;
   startNodeId: number;
   endNodeId: number;
   /** Optional model metadata; the centre-line remains valid without it. */
   profileName?: string;
+  /**
+   * Verlopende staaf (issue #73): het profiel aan het EINDE (eindknoop); de
+   * maten verlopen lineair van `profileName` (beginknoop) naar dit profiel.
+   * Dezelfde keuring als een 2D-staaf (`bepaalVerloop`): rechthoek ↔ rechthoek
+   * of I/H ↔ I/H uit de staalcatalogus (gerekend als gelast I-profiel).
+   * Ontbreekt het veld (alle oudere bestanden), dan is de staaf prismatisch.
+   * De rekenkern krijgt de staaf in gelijke delen (`partSectionIds`), zie
+   * openFem3dVerloop.
+   */
+  profileNameEnd?: string;
   material?: string;
   /** Dezelfde materiaal- en norminstellingen als bij een 2D-staaf. */
   checkConfig?: BeamCheckConfig;
   /** Rotatie van de lokale y/z-assen om de staafas, in radialen. */
   rollAngleRad?: number;
+  /** Afschuifvervorming (Timoshenko); zonder dit veld blijft Euler–Bernoulli gelden. */
+  shearDeformation?: boolean;
   /** Moment- en torsiescharnieren aan de staafeinden, in lokale assen. */
   releases?: OpenFem3DEndReleases;
   /**
@@ -112,6 +132,7 @@ export interface OpenFem3DSupportRestraints {
 
 export interface OpenFem3DSupport extends OpenFem3DSupportRestraints {
   nodeId: number;
+  layerId?: number;
   /** Globale oplegveren. Translatie in kN/m, rotatie in kNm/rad. */
   springs?: OpenFem3DSupportSprings;
   /** Opgelegde waarden op geblokkeerde globale DOF's; m en rad. */
@@ -148,9 +169,12 @@ export interface OpenFem3DNodalLoadComponents {
 
 export interface OpenFem3DNodalLoad extends OpenFem3DNodalLoadComponents {
   id: number;
+  layerId?: number;
   nodeId: number;
   /** Belastinggeval uit de gedeelde projectlijst. Ontbrekend in oude bestanden = geval 1. */
   caseId?: number;
+  /** Generated NBC main-system partial wind transfer; manual loads omit this. */
+  generated?: { source: "nbc2025-partial-wind"; key: string; sourceReference: string };
 }
 
 /** Een globale as als richting van een lijnlast (issue #80). */
@@ -160,6 +184,7 @@ export const OPEN_FEM_3D_GLOBAL_DIRECTIONS: readonly OpenFem3DGlobalDirection[] 
 /** Wat elke lijnlast op een staaf heeft: staaf, geval en het belaste deel in m vanaf de beginknoop. */
 interface OpenFem3DMemberLoadBase {
   id: number;
+  layerId?: number;
   beamId: number;
   /** Belastinggeval uit de gedeelde projectlijst. Ontbrekend in oude bestanden = geval 1. */
   caseId?: number;
@@ -252,6 +277,7 @@ export function openFem3DGlobalMemberLoadFactor(
 /** Puntlast op een staaf in lokale y/z-richting; positie in m en krachten in kN. */
 export interface OpenFem3DMemberPointLoad {
   id: number;
+  layerId?: number;
   beamId: number;
   /** Belastinggeval uit de gedeelde projectlijst. Ontbrekend in oude bestanden = geval 1. */
   caseId?: number;
@@ -263,6 +289,7 @@ export interface OpenFem3DMemberPointLoad {
 /** Temperatuurbelasting op een staaf; alle waarden zijn temperatuurverschillen in K. */
 export interface OpenFem3DThermalLoad {
   id: number;
+  layerId?: number;
   beamId: number;
   caseId?: number;
   deltaTUniformK: number;
@@ -287,6 +314,7 @@ export type OpenFem3DPlateBoundarySegment =
 
 export interface OpenFem3DPlate {
   id: number;
+  layerId?: number;
   /** Knoopvolgorde rond de buitenrand, minimaal drie. */
   nodeIds: number[];
   /** Werkelijke getekende rand; ontbreekt bij oudere hoekpuntplaten. */
@@ -310,6 +338,30 @@ export interface OpenFem3DPlate {
   meshSizeM?: number;
   /** Lijnopleggingen langs randen van de buitencontour. */
   edgeSupports?: OpenFem3DPlateEdgeSupport[];
+  /**
+   * Plaat op bedding (Winkler, issue #107): de grond steunt de plaat over haar
+   * hele oppervlak, loodrecht op het plaatvlak. Ontbreekt het veld (ook in
+   * oude bestanden), dan ligt de plaat niet op een bedding. De rekenkern zet
+   * de grondveren zelf op de knopen van het rekennet; zie
+   * {@link OpenFem3DPlateBedding}.
+   */
+  bedding?: OpenFem3DPlateBedding;
+}
+
+/**
+ * Bedding onder een 3D-plaat (issue #107). Dezelfde betekenis als het veld
+ * `bedding` van `Plate3D` in het rekencontract:
+ *  - `kKnPerM3`: beddingsconstante k (kN/m³), loodrecht op het plaatvlak. De
+ *    grond ligt aan de onderzijde van de plaat: tegen de plaatnormaal in (de
+ *    z-as van de plaatassen; bij een vloer globaal −Z, zie
+ *    `openFem3DPlateGroundDirection`);
+ *  - `compressionOnly`: alleen druk; waar de plaat van de grond loskomt,
+ *    vallen de veren weg. Alleen `true` wordt bewaard.
+ * Gekeurd met {@link readOpenFem3DPlateBedding}.
+ */
+export interface OpenFem3DPlateBedding {
+  kKnPerM3: number;
+  compressionOnly?: boolean;
 }
 
 /**
@@ -327,6 +379,7 @@ export interface OpenFem3DPlateEdgeSupport extends OpenFem3DSupportRestraints {
 /** Oppervlaktebelasting in globale assen, kN/m². */
 export interface OpenFem3DSurfaceLoad {
   id: number;
+  layerId?: number;
   plateId: number;
   caseId?: number;
   qx: number;
@@ -340,8 +393,10 @@ export interface OpenFem3DSurfaceLoad {
  *    vloer, dakafwerking). Σ verticaal = q × projectie-oppervlak.
  *  - "normal": q werkt loodrecht op het vlak, per m² VLAK (wind). Positief in
  *    de richting van de vaste vlaknormaal (zie `openFem3dLoadPanels.ts`).
+ *  - "verticalSurface": q werkt in globale −Z per m² WERKELIJK vlak
+ *    (eigen gewicht van gevel- of dakbekleding).
  */
-export type OpenFem3DLoadPanelDirection = "gravity" | "normal";
+export type OpenFem3DLoadPanelDirection = "gravity" | "normal" | "verticalSurface";
 /**
  * Afdracht naar de liggers in het vlak:
  *  - "oneWay": naar de liggers dwars op de overspanningsrichting, elk met de
@@ -365,6 +420,35 @@ export interface OpenFem3DVector {
  */
 export interface OpenFem3DLoadPanel {
   id: number;
+  layerId?: number;
+  /** Herkomst van een gegenereerde gebouwschillast; ontbreekt bij handmatige vlakken. */
+  generated?: {
+    source: "envelope3d";
+    /** Stabiel over opnieuw genereren, ook wanneer id's veranderen. */
+    key: string;
+    panelId: number;
+    zone: string;
+    /** c_pe of μ; bij bekleding 1. */
+    coefficient: number;
+    /** q_p of C_e C_t s_k in kN/m²; bij bekleding de invoerwaarde. */
+    referencePressureKnPerM2: number;
+    /** c_pi bij wind; ontbreekt bij sneeuw en bekleding. */
+    internalPressureCoefficient?: number;
+    /** Herkomst van c_pi; ontbreekt in oudere projectbestanden. */
+    windInternalPressureDerivation?: AfleidingsRegel[];
+    /** Normroute waarmee dit wind- of sneeuwvlak is gegenereerd. */
+    windCodeId?: string;
+    /** Toegepaste constructiefactor c_s·c_d. Ontbreekt bij oudere windvlakken. */
+    windStructuralFactor?: number;
+    /** Gebruikte referentiehoogte en bewaarde afleiding van de winddruk. Ontbreken in oudere bestanden. */
+    windReferenceHeightM?: number;
+    windPressureDerivation?: AfleidingsRegel[];
+    /** EN-terreinprofiel of handmatig opgegeven druk; ontbreekt in oudere windvlakken. */
+    windPressureMethod?: "en-terreinprofiel" | "handmatig-opgegeven" | "nbc-static";
+    /** Separate external/internal pressure balance, retained with NBC load panels. */
+    windPressurePlan?: WindSurfacePressurePlan;
+    sourceReference: string;
+  };
   /** Hoekknopen rond de omtrek, minimaal drie en in één vlak. */
   nodeIds: number[];
   /** Belastinggeval uit de gedeelde projectlijst. Ontbrekend = geval 1. */
@@ -377,11 +461,34 @@ export interface OpenFem3DLoadPanel {
   spanDirection?: OpenFem3DVector;
   /** Staven in het vlak die bewust géén last krijgen (bijvoorbeeld windverbanden). */
   excludedBeamIds?: number[];
+  /** Uitsparingen zonder oppervlaktebelasting; de afdracht rekent met het netto vlak. */
+  openings?: { id: number; nodeIds: number[] }[];
+}
+
+/** Gevel- of dakvlak van de gebouwschil, onafhankelijk van belastinggevallen. */
+export interface OpenFem3DEnvelopePanel {
+  id: number;
+  layerId?: number;
+  nodeIds: number[];
+  type: "facade" | "roof";
+  /** Keert de buitenwaartse normaal om ten opzichte van de knoopvolgorde. */
+  flipOuterSide?: boolean;
+  distribution: OpenFem3DLoadPanelDistribution;
+  spanDirection?: OpenFem3DVector;
+  /** Openingen in dezelfde vlakke geometrie als de buitencontour. */
+  openings?: { id: number; nodeIds: number[] }[];
+  /** Eigen gewicht van de bekleding per werkelijk vlakoppervlak, kN/m². */
+  claddingWeightKnPerM2?: number;
+  name?: string;
 }
 
 export interface OpenFem3DModel {
   nodes: OpenFem3DNode[];
   beams: OpenFem3DBeam[];
+  /** Optional so older project files keep their exact geometry and semantics. */
+  layers?: OpenFem3DLayer[];
+  /** Analyse-E en ν per materiaalnaam; de normtoets blijft de oorspronkelijke klasse gebruiken. */
+  analysisMaterials?: OpenFem3DAnalysisMaterials;
   /** Optional so models made before nodal conditions remain readable. */
   supports?: OpenFem3DSupport[];
   loads?: OpenFem3DNodalLoad[];
@@ -392,6 +499,10 @@ export interface OpenFem3DModel {
   surfaceLoads?: OpenFem3DSurfaceLoad[];
   /** Ontbreekt in bestanden van vóór de belastingvlakken. */
   loadPanels?: OpenFem3DLoadPanel[];
+  /** Gebouwschil zonder stijfheid; geen handmatige belasting per geval. */
+  envelopePanels?: OpenFem3DEnvelopePanel[];
+  /** Hulpknopen van de 3D-belastinggenerator; alleen ongebruikte hulpknopen mogen bij regeneratie weg. */
+  generatedNodeIds?: number[];
   /** Starre horizontale schijven; ontbreekt in bestanden van vóór de schijven. */
   diaphragms?: OpenFem3DDiaphragm[];
   /**
@@ -412,6 +523,7 @@ export interface OpenFem3DModel {
 export const EMPTY_OPEN_FEM_3D: OpenFem3DModel = {
   nodes: [], beams: [], supports: [], loads: [], memberLoads: [], memberPointLoads: [], thermalLoads: [], plates: [], surfaceLoads: [],
   loadPanels: [],
+  envelopePanels: [],
 };
 
 function nextEntityId(items: readonly { id: number }[]): number {
@@ -530,11 +642,14 @@ export function openFem3DLoadCaseId(load: { caseId?: number }): number {
 
 /**
  * Voeg het automatische eigen gewicht toe aan een vluchtige kopie van het
- * 3D-model. Het gewicht werkt altijd in globale -Z. De verdeelde last wordt
- * ontbonden in lokale y/z-componenten; de lokale axiale component (qx), die
- * het huidige contract van de externe kern nog niet rechtstreeks kent, krijgt de exact
- * equivalente halve normaalkracht op beide eindknopen. Een plaat krijgt een
- * vlaklast −ρ·g·t in Z (kN/m²) over haar hele oppervlak.
+ * 3D-model. Het gewicht werkt altijd in globale -Z, als globale lijnlast in Z
+ * per deel van de staaf (#112). De kern ontbindt die zelf in de lokale assen
+ * en verdeelt ook de axiale component over de staaf, met de correctie van de
+ * N-lijn (#80, `globale_lasten.rs`): in een kolom loopt N van 0 aan de top
+ * naar het eigen gewicht aan de voet. Tot oktober 2026 ging de axiale
+ * component als knooplasten naar de staafeinden; de reacties klopten, de
+ * N-lijn week tot het halve kolomgewicht af. Een plaat krijgt een vlaklast
+ * −ρ·g·t in Z (kN/m²) over haar hele oppervlak.
  *
  * Een trek-alleen staaf (strip, staaf) hangt in werkelijkheid door en draagt
  * haar gewicht als kabel naar haar einden; scharnierend gemodelleerd zou zij
@@ -553,19 +668,25 @@ export function withOpenFem3DSelfWeight(model: OpenFem3DModel, caseId: number): 
     const start = model.nodes.find((node) => node.id === beam.startNodeId)!;
     const end = model.nodes.find((node) => node.id === beam.endNodeId)!;
     const length = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
-    const { ex, ey, ez } = openFem3DMemberAxes(start, end, beam.rollAngleRad ?? 0);
 
     const resolved = resolveSection(beam.material?.trim() ?? "", beam.profileName?.trim() ?? "");
     if (resolved.bron === "default") {
       throw new Error(`Staaf ${beam.id}: eigen gewicht kan niet worden bepaald: ${resolved.reden ?? "doorsnede onbekend"}.`);
     }
-    const areaM2 = (resolved.aBruto ?? resolved.A) * 1e-6;
-    const qGlobal: [number, number, number] = [
-      0, 0, -(dichtheidVanMateriaal(beam.material) * areaM2 * G) / 1000,
-    ];
+    // Verlopende staaf (#73): per gelijk deel de A van zijn midden, op
+    // dezelfde deelgrenzen als de kern (zoals `eigenGewichtLasten` in 2D);
+    // prismatisch één deel met de volle doorsnede.
+    const indeling = openFem3DVerloopDelen(beam, length);
+    const delen = indeling
+      ? indeling.delen.map((deel) => ({ tStart: deel.tStart, tEnd: deel.tEnd, areaMm2: deel.doorsnede.areaMm2 }))
+      : [{ tStart: 0, tEnd: 1, areaMm2: resolved.aBruto ?? resolved.A }];
+    const rho = dichtheidVanMateriaal(beam.material);
+    // Dezelfde volgorde van rekenen als voorheen (A eerst naar m²), zodat een
+    // prismatische staaf bit voor bit hetzelfde eigen gewicht houdt.
+    const qVan = (areaMm2: number) => -(rho * (areaMm2 * 1e-6) * G) / 1000;
     if (beam.tensionOnly) {
       // Kabelwerking: het halve gewicht op elk einde, in −Z.
-      const endForce = qGlobal[2] * length / 2;
+      const endForce = delen.reduce((som, deel) => som + qVan(deel.areaMm2) * (deel.tEnd - deel.tStart) * length, 0) / 2;
       if (endForce !== 0) {
         for (const nodeId of [beam.startNodeId, beam.endNodeId]) {
           loads.push({ id: nextLoadId++, nodeId, caseId, fx: 0, fy: 0, fz: endForce, mx: 0, my: 0, mz: 0 });
@@ -573,26 +694,15 @@ export function withOpenFem3DSelfWeight(model: OpenFem3DModel, caseId: number): 
       }
       continue;
     }
-    const dot = (axis: [number, number, number]) =>
-      qGlobal[0] * axis[0] + qGlobal[1] * axis[1] + qGlobal[2] * axis[2];
-    const qx = dot(ex), qy = dot(ey), qz = dot(ez);
-
-    if (Math.abs(qy) > 1e-12 || Math.abs(qz) > 1e-12) {
+    // Per deel een globale lijnlast in Z per staafmeter: de kern ontbindt
+    // haar, ook de axiale component (zie de kop).
+    for (const deel of delen) {
+      const q = qVan(deel.areaMm2);
+      if (q === 0) continue;
       memberLoads.push({
-        id: nextMemberLoadId++, beamId: beam.id, caseId,
-        qyStart: qy, qyEnd: qy, qzStart: qz, qzEnd: qz,
-        startPositionM: 0, endPositionM: length,
+        id: nextMemberLoadId++, beamId: beam.id, caseId, globalDirection: "z", qStart: q, qEnd: q,
+        startPositionM: deel.tStart * length, endPositionM: deel.tEnd * length,
       });
-    }
-    if (Math.abs(qx) > 1e-12) {
-      const endForce = qx * length / 2;
-      for (const nodeId of [beam.startNodeId, beam.endNodeId]) {
-        loads.push({
-          id: nextLoadId++, nodeId, caseId,
-          fx: ex[0] * endForce, fy: ex[1] * endForce, fz: ex[2] * endForce,
-          mx: 0, my: 0, mz: 0,
-        });
-      }
     }
   }
   const surfaceLoads = [...(model.surfaceLoads ?? [])];
@@ -952,11 +1062,32 @@ function validateOpeningInsidePlate(
   }
 }
 
+/**
+ * Het eindprofiel van een staaf uit een bestand (issue #73). Leeg, `null` of
+ * dezelfde doorsnede als het begin is prismatisch: geen veld. Een eindprofiel
+ * dat niet bij het begin past, blijft wél staan: het bestand moet leesbaar
+ * blijven (de eigen doorsnede van een gesplitste staaf kan nog moeten laden),
+ * en het rekenen, de toetsing en de modelcontrole weigeren de staaf dan met
+ * de reden van `bepaalVerloop` — nooit stil prismatisch.
+ */
+function readProfileNameEnd(raw: Record<string, unknown>, id: number): { profileNameEnd?: string } {
+  const value = raw.profileNameEnd;
+  if (value === undefined || value === null) return {};
+  if (typeof value !== "string") throw new Error(`3D-staaf ${id} heeft een ongeldig eindprofiel.`);
+  const profileNameEnd = value.trim();
+  if (!profileNameEnd) return {};
+  const profileName = typeof raw.profileName === "string" ? raw.profileName.trim() : "";
+  if (!profileName) throw new Error(`3D-staaf ${id} heeft een eindprofiel maar geen beginprofiel.`);
+  const material = typeof raw.material === "string" ? raw.material.trim() : undefined;
+  return openFem3DBeamVerloop({ material, profileName, profileNameEnd }).status === "prismatisch" ? {} : { profileNameEnd };
+}
+
 /** Reject malformed geometry at the file boundary instead of showing a partial model. */
 export function parseOpenFem3DModel(value: unknown): OpenFem3DModel {
   if (value === undefined) return { nodes: [], beams: [] };
   if (!value || typeof value !== "object") throw new Error("Het 3D-model is geen object.");
   const raw = value as Record<string, unknown>;
+  const layers = parseOpenFem3DLayers(raw.layers);
   if (!Array.isArray(raw.nodes) || !Array.isArray(raw.beams)) {
     throw new Error("Het 3D-model mist de lijsten nodes en beams.");
   }
@@ -1004,6 +1135,7 @@ export function parseOpenFem3DModel(value: unknown): OpenFem3DModel {
       startNodeId,
       endNodeId,
       ...(typeof beam.profileName === "string" && beam.profileName.trim() ? { profileName: beam.profileName.trim() } : {}),
+      ...readProfileNameEnd(beam, id),
       ...(typeof beam.material === "string" && beam.material.trim() ? { material: beam.material.trim() } : {}),
       ...(beam.checkConfig && typeof beam.checkConfig === "object" && !Array.isArray(beam.checkConfig)
         ? { checkConfig: beam.checkConfig as BeamCheckConfig }
@@ -1012,6 +1144,11 @@ export function parseOpenFem3DModel(value: unknown): OpenFem3DModel {
         ? typeof beam.rollAngleRad === "number" && Number.isFinite(beam.rollAngleRad)
           ? { rollAngleRad: beam.rollAngleRad }
           : (() => { throw new Error("Een 3D-staaf bevat een ongeldige profielrotatie."); })()
+        : {}),
+      ...(beam.shearDeformation !== undefined
+        ? typeof beam.shearDeformation === "boolean"
+          ? (beam.shearDeformation ? { shearDeformation: true } : {})
+          : (() => { throw new Error(`3D-staaf ${id} heeft een ongeldige waarde voor afschuifvervorming.`); })()
         : {}),
       ...(beam.releases !== undefined ? { releases: readEndReleases(beam.releases)! } : {}),
       ...(beam.tensionOnly !== undefined
@@ -1098,13 +1235,17 @@ export function parseOpenFem3DModel(value: unknown): OpenFem3DModel {
       openingIds.add(openingId);
     }
     const levelId = readOptionalLevelId(plate.levelId, `3D-plaat ${id}`);
+    // Plaat op bedding (#107); null in een bestand telt als geen bedding.
+    const bedding = plate.bedding === undefined || plate.bedding === null
+      ? undefined : readOpenFem3DPlateBedding(plate.bedding, `3D-plaat ${id}`);
     plates.push({ id, nodeIds: loop, thicknessM,
       ...(boundary ? { boundary } : {}),
       ...(typeof plate.material === "string" && plate.material.trim() ? { material: plate.material.trim() } : {}),
       ...(cornerRadiusM > 0 ? { cornerRadiusM } : {}), ...(openings.length ? { openings } : {}),
       ...(levelId !== undefined ? { levelId } : {}),
       ...(meshSizeM !== undefined ? { meshSizeM } : {}),
-      ...(edgeSupports.length ? { edgeSupports } : {}) });
+      ...(edgeSupports.length ? { edgeSupports } : {}),
+      ...(bedding ? { bedding } : {}) });
     plateIds.add(id);
   }
   // Een plaat ligt pas op een level als AL haar knopen (ook die van de
@@ -1168,11 +1309,27 @@ export function parseOpenFem3DModel(value: unknown): OpenFem3DModel {
       throw new Error("Het 3D-model bevat een knoopbelasting met ongeldige, dubbele of ontbrekende knoopverwijzing.");
     }
     const caseId = readOptionalCaseId(load.caseId);
-    loads.push({ id, nodeId, ...readNodalLoadComponents(load), ...(caseId !== undefined ? { caseId } : {}) });
+    let generated: OpenFem3DNodalLoad["generated"];
+    if (load.generated !== undefined) {
+      const origin = load.generated as Record<string, unknown>;
+      if (!origin || typeof origin !== "object" || Array.isArray(origin)
+        || origin.source !== "nbc2025-partial-wind"
+        || typeof origin.key !== "string" || !origin.key.trim()
+        || typeof origin.sourceReference !== "string" || !origin.sourceReference.trim()
+        || caseId === undefined) {
+        throw new Error("Knoopbelasting heeft een ongeldige NBC-deelwindherkomst.");
+      }
+      generated = { source: "nbc2025-partial-wind", key: origin.key, sourceReference: origin.sourceReference };
+    }
+    loads.push({ id, nodeId, ...readNodalLoadComponents(load), ...(caseId !== undefined ? { caseId } : {}),
+      ...(generated ? { generated } : {}) });
     loadIds.add(id);
   }
+  const analysisMaterials = readOpenFem3DAnalysisMaterials(raw.analysisMaterials);
   const model: OpenFem3DModel = {
     nodes, beams, ...(raw.plates !== undefined ? { plates } : {}), supports, loads,
+    ...(layers ? { layers } : {}),
+    ...(analysisMaterials ? { analysisMaterials } : {}),
     ...(raw.memberLoads !== undefined ? { memberLoads: [] } : {}),
     ...(raw.memberPointLoads !== undefined ? { memberPointLoads: [] } : {}),
     ...(raw.thermalLoads !== undefined ? { thermalLoads: [] } : {}),
@@ -1261,15 +1418,104 @@ export function parseOpenFem3DModel(value: unknown): OpenFem3DModel {
       return panel;
     });
   }
+  if (raw.envelopePanels !== undefined) {
+    if (!Array.isArray(raw.envelopePanels)) throw new Error("Het 3D-model bevat geen geldige lijst envelopePanels.");
+    const ids = new Set<number>();
+    model.envelopePanels = raw.envelopePanels.map((item: unknown) => {
+      const panel = readEnvelopePanel(item, nodeIds);
+      if (ids.has(panel.id)) throw new Error(`Het 3D-model bevat schilpaneel ${panel.id} twee keer.`);
+      ids.add(panel.id);
+      return panel;
+    });
+  }
   if (raw.diaphragms !== undefined) {
     if (!Array.isArray(raw.diaphragms)) throw new Error("Het 3D-model bevat geen geldige lijst diaphragms.");
     model.diaphragms = readDiaphragms(raw.diaphragms, nodeIds);
   }
+  if (raw.generatedNodeIds !== undefined) {
+    const generatedNodeIds = raw.generatedNodeIds;
+    if (!Array.isArray(generatedNodeIds)
+      || generatedNodeIds.some((id: unknown, index: number) =>
+        !Number.isSafeInteger(id) || !nodeIds.has(Number(id)) || generatedNodeIds.indexOf(id) !== index)) {
+      throw new Error("Het 3D-model bevat ongeldige of dubbele hulpknopen van de belastinggenerator.");
+    }
+    model.generatedNodeIds = generatedNodeIds as number[];
+  }
+  // Laagtoewijzingen zijn uitsluitend model- en weergavemetadata. De
+  // bestaande meetkundige poort hierboven blijft voor oude bestanden gelijk.
+  const layerIndex = layers ?? [OPEN_FEM_3D_DEFAULT_LAYER];
+  for (const key of ["nodes", "beams", "plates", "supports", "loads", "memberLoads",
+    "memberPointLoads", "thermalLoads", "surfaceLoads", "loadPanels", "envelopePanels"] as const) {
+    const parsed = model[key] as Array<{ id?: number; nodeId?: number; layerId?: number }> | undefined;
+    const source = raw[key] as Array<Record<string, unknown>> | undefined;
+    if (!parsed || !source) continue;
+    const idKey = key === "supports" ? "nodeId" : "id";
+    const originals = new Map(source.map((item) => [item[idKey], item]));
+    for (const item of parsed) {
+      const original = originals.get(item[idKey]);
+      const layerId = readOpenFem3DLayerId(original?.layerId, layerIndex, `3D-${key} ${item[idKey]}`);
+      if (layerId !== undefined) item.layerId = layerId;
+    }
+  }
   return model;
 }
 
-const LOAD_PANEL_DIRECTIONS: readonly OpenFem3DLoadPanelDirection[] = ["gravity", "normal"];
+const LOAD_PANEL_DIRECTIONS: readonly OpenFem3DLoadPanelDirection[] = ["gravity", "normal", "verticalSurface"];
 const LOAD_PANEL_DISTRIBUTIONS: readonly OpenFem3DLoadPanelDistribution[] = ["oneWay", "twoWay"];
+
+function readEnvelopePanel(value: unknown, nodeIds: Set<number>): OpenFem3DEnvelopePanel {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Het 3D-model bevat een ongeldig schilpaneel.");
+  const raw = value as Record<string, unknown>;
+  const id = Number(raw.id);
+  if (!Number.isSafeInteger(raw.id) || id <= 0) throw new Error("Het 3D-model bevat een schilpaneel met een ongeldige id.");
+  const label = `3D-schilpaneel ${id}`;
+  const loop = readPlateNodeLoop(raw.nodeIds, nodeIds, label);
+  if (raw.type !== "facade" && raw.type !== "roof") throw new Error(`${label} heeft een ongeldig type.`);
+  if (!LOAD_PANEL_DISTRIBUTIONS.includes(raw.distribution as OpenFem3DLoadPanelDistribution)) {
+    throw new Error(`${label} heeft een ongeldige afdracht.`);
+  }
+  if (raw.flipOuterSide !== undefined && typeof raw.flipOuterSide !== "boolean") {
+    throw new Error(`${label} heeft een ongeldige buitenzijde.`);
+  }
+  const weight = raw.claddingWeightKnPerM2;
+  if (weight !== undefined && (typeof weight !== "number" || !Number.isFinite(weight) || weight < 0)) {
+    throw new Error(`${label} heeft een ongeldig bekledingsgewicht.`);
+  }
+  let spanDirection: OpenFem3DVector | undefined;
+  if (raw.spanDirection !== undefined) {
+    const vector = raw.spanDirection as Record<string, unknown> | null;
+    if (!vector || typeof vector !== "object" || Array.isArray(vector)
+      || !["x", "y", "z"].every((axis) => typeof vector[axis] === "number" && Number.isFinite(vector[axis]))
+      || Math.hypot(Number(vector.x), Number(vector.y), Number(vector.z)) === 0) {
+      throw new Error(`${label} heeft een ongeldige overspanningsrichting.`);
+    }
+    spanDirection = { x: Number(vector.x), y: Number(vector.y), z: Number(vector.z) };
+  }
+  if (raw.distribution === "oneWay" && !spanDirection) throw new Error(`${label} mist de overspanningsrichting.`);
+  let openings: OpenFem3DEnvelopePanel["openings"];
+  if (raw.openings !== undefined) {
+    if (!Array.isArray(raw.openings)) throw new Error(`${label} bevat een ongeldige lijst openingen.`);
+    const openingIds = new Set<number>();
+    openings = raw.openings.map((item: unknown) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(`${label} bevat een ongeldige opening.`);
+      const opening = item as Record<string, unknown>;
+      const openingId = Number(opening.id);
+      if (!Number.isSafeInteger(opening.id) || openingId <= 0 || openingIds.has(openingId)) {
+        throw new Error(`${label} bevat een opening met een ongeldige of dubbele id.`);
+      }
+      openingIds.add(openingId);
+      return { id: openingId, nodeIds: readPlateNodeLoop(opening.nodeIds, nodeIds, `Opening ${openingId} van ${label}`) };
+    });
+  }
+  return {
+    id, nodeIds: loop, type: raw.type, distribution: raw.distribution as OpenFem3DLoadPanelDistribution,
+    ...(raw.flipOuterSide ? { flipOuterSide: true } : {}),
+    ...(spanDirection ? { spanDirection } : {}),
+    ...(openings?.length ? { openings } : {}),
+    ...(weight !== undefined ? { claddingWeightKnPerM2: weight } : {}),
+    ...(readOptionalName(raw.name, label) ? { name: readOptionalName(raw.name, label) } : {}),
+  };
+}
 
 /**
  * Alleen de STRUCTUUR van een belastingvlak wordt hier gekeurd (knopen,
@@ -1293,7 +1539,7 @@ function readLoadPanel(value: unknown, nodeIds: Set<number>, beamIds: Set<number
     throw new Error(`${label} heeft een ongeldige intensiteit q; geef een eindige waarde ongelijk aan 0 in kN/m².`);
   }
   if (!LOAD_PANEL_DIRECTIONS.includes(raw.direction as OpenFem3DLoadPanelDirection)) {
-    throw new Error(`${label} heeft een onbekende lastrichting ${JSON.stringify(raw.direction)}; kies gravity of normal.`);
+    throw new Error(`${label} heeft een onbekende lastrichting ${JSON.stringify(raw.direction)}; kies gravity, normal of verticalSurface.`);
   }
   if (!LOAD_PANEL_DISTRIBUTIONS.includes(raw.distribution as OpenFem3DLoadPanelDistribution)) {
     throw new Error(`${label} heeft een onbekende afdracht ${JSON.stringify(raw.distribution)}; kies oneWay of twoWay.`);
@@ -1321,14 +1567,109 @@ function readLoadPanel(value: unknown, nodeIds: Set<number>, beamIds: Set<number
     if (ids.length > 0) excludedBeamIds = ids;
   }
   const caseId = readOptionalCaseId(raw.caseId);
+  let generated: OpenFem3DLoadPanel["generated"];
+  if (raw.generated !== undefined) {
+    const value = raw.generated;
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} heeft een ongeldige herkomst.`);
+    const origin = value as Record<string, unknown>;
+    if (origin.source !== "envelope3d"
+      || typeof origin.key !== "string" || !origin.key.trim()
+      || !Number.isSafeInteger(origin.panelId) || Number(origin.panelId) <= 0
+      || typeof origin.zone !== "string" || !origin.zone.trim()
+      || typeof origin.coefficient !== "number" || !Number.isFinite(origin.coefficient)
+      || typeof origin.referencePressureKnPerM2 !== "number" || !Number.isFinite(origin.referencePressureKnPerM2)
+      || typeof origin.sourceReference !== "string" || !origin.sourceReference.trim()
+      || (origin.internalPressureCoefficient !== undefined
+        && (typeof origin.internalPressureCoefficient !== "number" || !Number.isFinite(origin.internalPressureCoefficient)))
+      || (origin.windInternalPressureDerivation !== undefined
+        && (origin.internalPressureCoefficient === undefined
+          || !Array.isArray(origin.windInternalPressureDerivation)
+          || origin.windInternalPressureDerivation.length === 0
+          || !origin.windInternalPressureDerivation.every((line: unknown) => line !== null
+            && typeof line === "object" && !Array.isArray(line)
+            && ["symbool", "waarde", "bron"].every((key) =>
+              typeof (line as Record<string, unknown>)[key] === "string"
+              && Boolean((line as Record<string, string>)[key].trim())))))
+      || (origin.windCodeId !== undefined && (typeof origin.windCodeId !== "string" || !origin.windCodeId.trim()))
+      || (origin.windStructuralFactor !== undefined
+        && (typeof origin.windStructuralFactor !== "number" || !Number.isFinite(origin.windStructuralFactor)
+          || origin.windStructuralFactor <= 0 || origin.internalPressureCoefficient === undefined))
+      || (origin.windReferenceHeightM !== undefined
+        && (typeof origin.windReferenceHeightM !== "number" || !Number.isFinite(origin.windReferenceHeightM)
+          || origin.windReferenceHeightM <= 0 || origin.windReferenceHeightM > 200))
+      || (origin.windPressureDerivation !== undefined
+        && (!Array.isArray(origin.windPressureDerivation) || origin.windPressureDerivation.length === 0
+          || !origin.windPressureDerivation.every((line: unknown) => line !== null
+            && typeof line === "object" && !Array.isArray(line)
+            && ["symbool", "waarde", "bron"].every((key) =>
+              typeof (line as Record<string, unknown>)[key] === "string"
+              && Boolean((line as Record<string, string>)[key].trim())))))
+      || (origin.windPressureDerivation !== undefined) !== (origin.windReferenceHeightM !== undefined)
+      || (origin.windPressureMethod !== undefined
+        && ((origin.windPressureMethod !== "en-terreinprofiel"
+          && origin.windPressureMethod !== "handmatig-opgegeven"
+          && origin.windPressureMethod !== "nbc-static")
+          || origin.windPressureDerivation === undefined))
+      || (origin.windPressureMethod === "nbc-static"
+        && (origin.windCodeId !== "ca-nbc-2025" || origin.windPressurePlan === undefined))) {
+      throw new Error(`${label} heeft een ongeldige herkomst van de 3D-belastinggenerator.`);
+    }
+    let windPressurePlan: WindSurfacePressurePlan | undefined;
+    if (origin.windPressurePlan !== undefined) {
+      try {
+        windPressurePlan = parseWindSurfacePressurePlan(origin.windPressurePlan);
+        if (origin.windPressureMethod !== "nbc-static" || windPressurePlan.codeId !== origin.windCodeId
+          || windPressurePlan.zone !== origin.zone || windPressurePlan.basis.kind !== "separate-pressures"
+          || typeof raw.q !== "number"
+          || Math.abs(Math.abs(raw.q) - Math.abs(windPressurePlan.pressure.outwardKnPerM2)) > 1e-8) {
+          throw new Error("Winddrukplan past niet bij de gegenereerde belasting.");
+        }
+      } catch {
+        throw new Error(`${label} heeft een ongeldig winddrukplan.`);
+      }
+    }
+    generated = {
+      source: "envelope3d", key: origin.key, panelId: Number(origin.panelId), zone: origin.zone,
+      coefficient: origin.coefficient, referencePressureKnPerM2: origin.referencePressureKnPerM2,
+      ...(origin.internalPressureCoefficient !== undefined
+        ? { internalPressureCoefficient: origin.internalPressureCoefficient } : {}),
+      ...(origin.windInternalPressureDerivation !== undefined
+        ? { windInternalPressureDerivation: (origin.windInternalPressureDerivation as AfleidingsRegel[])
+          .map((line) => ({ symbool: line.symbool, waarde: line.waarde, bron: line.bron })) } : {}),
+      ...(origin.windCodeId !== undefined ? { windCodeId: origin.windCodeId } : {}),
+      ...(origin.windStructuralFactor !== undefined ? { windStructuralFactor: origin.windStructuralFactor } : {}),
+      ...(origin.windReferenceHeightM !== undefined ? { windReferenceHeightM: origin.windReferenceHeightM } : {}),
+      ...(origin.windPressureMethod !== undefined ? { windPressureMethod: origin.windPressureMethod } : {}),
+      ...(windPressurePlan ? { windPressurePlan } : {}),
+      ...(origin.windPressureDerivation !== undefined
+        ? { windPressureDerivation: (origin.windPressureDerivation as AfleidingsRegel[])
+          .map((line) => ({ symbool: line.symbool, waarde: line.waarde, bron: line.bron })) } : {}),
+      sourceReference: origin.sourceReference,
+    };
+  }
+  let openings: OpenFem3DLoadPanel["openings"];
+  if (raw.openings !== undefined) {
+    if (!Array.isArray(raw.openings)) throw new Error(`${label} bevat een ongeldige lijst openingen.`);
+    const ids = new Set<number>();
+    openings = raw.openings.map((item: unknown) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(`${label} bevat een ongeldige opening.`);
+      const opening = item as Record<string, unknown>;
+      const openingId = Number(opening.id);
+      if (!Number.isSafeInteger(opening.id) || openingId <= 0 || ids.has(openingId)) throw new Error(`${label} bevat een opening met ongeldige of dubbele id.`);
+      ids.add(openingId);
+      return { id: openingId, nodeIds: readPlateNodeLoop(opening.nodeIds, nodeIds, `Opening ${openingId} van ${label}`) };
+    });
+  }
   return {
     id, nodeIds: loop,
     ...(caseId !== undefined ? { caseId } : {}),
+    ...(generated ? { generated } : {}),
     q,
     direction: raw.direction as OpenFem3DLoadPanelDirection,
     distribution: raw.distribution as OpenFem3DLoadPanelDistribution,
     ...(spanDirection ? { spanDirection } : {}),
     ...(excludedBeamIds ? { excludedBeamIds } : {}),
+    ...(openings?.length ? { openings } : {}),
   };
 }
 
@@ -1616,8 +1957,11 @@ export interface OpenFem3DBeamInput {
   startNodeId: number;
   endNodeId: number;
   profileName?: string;
+  /** Eindprofiel van een verlopende staaf; gekeurd met `bepaalVerloop`. */
+  profileNameEnd?: string;
   material?: string;
   rollAngleRad?: number;
+  shearDeformation?: boolean;
   /** Ontbrekende vrijheidsgraden zijn vast (false). */
   releases?: Partial<OpenFem3DEndReleases>;
   tensionOnly?: boolean;
@@ -1632,8 +1976,11 @@ export interface OpenFem3DBeamPatch {
   startNodeId?: number;
   endNodeId?: number;
   profileName?: string | null;
+  /** `null` of leeg maakt de staaf prismatisch. */
+  profileNameEnd?: string | null;
   material?: string | null;
   rollAngleRad?: number | null;
+  shearDeformation?: boolean;
   releases?: Partial<OpenFem3DEndReleases> | null;
   tensionOnly?: boolean;
   bedding?: OpenFem3DBeamBedding | null;
@@ -1710,13 +2057,76 @@ function withBeamFields(beam: OpenFem3DBeam, patch: OpenFem3DBeamPatch): OpenFem
     else next[key] = value;
   };
   if (patch.profileName !== undefined) set("profileName", patch.profileName === null ? undefined : readRequiredText(patch.profileName, `Het profiel van ${label}`));
+  if (patch.profileNameEnd !== undefined) {
+    if (patch.profileNameEnd !== null && typeof patch.profileNameEnd !== "string") throw new Error(`Het eindprofiel van ${label} is ongeldig.`);
+    set("profileNameEnd", patch.profileNameEnd?.trim() || undefined);
+  }
   if (patch.material !== undefined) set("material", patch.material === null ? undefined : readRequiredText(patch.material, `Het materiaal van ${label}`));
   if (patch.rollAngleRad !== undefined) set("rollAngleRad", patch.rollAngleRad === null ? undefined : readCoordinate(patch.rollAngleRad, `De rolhoek van ${label}`));
+  if (patch.shearDeformation !== undefined) {
+    if (typeof patch.shearDeformation !== "boolean") throw new Error(`De afschuifvervorming van ${label} is ongeldig.`);
+    set("shearDeformation", patch.shearDeformation ? true : undefined);
+  }
   if (patch.releases !== undefined) set("releases", patch.releases === null ? undefined : readEndReleases(patch.releases));
   if (patch.tensionOnly !== undefined) set("tensionOnly", patch.tensionOnly ? true : undefined);
   if (patch.name !== undefined) set("name", readOptionalName(patch.name, label));
   if (patch.group !== undefined) set("group", readOptionalName(patch.group, label));
+  // Verloop (issue #73): alleen gekeurd als profiel, eindprofiel of materiaal
+  // verandert. Een begin of materiaal dat niet meer bij het eindprofiel past,
+  // wordt geweigerd met de reden van `bepaalVerloop` — de staaf wordt nooit
+  // stil prismatisch; wie dat wil, haalt het eindprofiel weg (null).
+  const verloopGeraakt = patch.profileName !== undefined || patch.profileNameEnd !== undefined || patch.material !== undefined;
+  if (verloopGeraakt && next.profileNameEnd !== undefined) {
+    if (!next.profileName) throw new Error(`${label} heeft een eindprofiel maar geen beginprofiel.`);
+    const verloop = openFem3DBeamVerloop(next);
+    if (verloop.status === "fout") throw new Error(`${label}: ${verloop.reden}.`);
+    if (verloop.status === "prismatisch") delete next.profileNameEnd;
+  }
   return next;
+}
+
+/** Wat de profielkiezer teruggeeft (`ProfielKeuze`), zonder de React-module. */
+export interface OpenFem3DProfileChoice {
+  material: string;
+  profile: string;
+  /** Eindprofiel van een verlopende staaf; ontbreekt of leeg = prismatisch (een eerder eindprofiel valt weg). */
+  profileEnd?: string;
+  beton?: {
+    korf: NonNullable<BeamCheckConfig["betonKorf"]>;
+    milieuklasse: BeamCheckConfig["betonMilieuklasse"] | null;
+    constructieklasse: BeamCheckConfig["betonConstructieklasse"] | null;
+  };
+}
+
+/**
+ * De keuze uit de profielkiezer op één of meer staven: materiaal, profiel en
+ * het EINDprofiel (verlopend, issue #73) — een prismatische keuze haalt een
+ * eerder eindprofiel weg. Bij beton gaan korf, milieuklasse en
+ * constructieklasse in de toetsinstellingen, de rest daarvan blijft staan.
+ * Een eindprofiel dat niet bij het begin past, wordt met de reden geweigerd.
+ */
+export function applyOpenFem3DProfileChoice(
+  model: OpenFem3DModel, beamIds: readonly number[], choice: OpenFem3DProfileChoice,
+): OpenFem3DModel {
+  const ids = new Set(beamIds);
+  const beams = model.beams.map((beam) => {
+    if (!ids.has(beam.id)) return beam;
+    const next = withBeamFields(beam, {
+      material: choice.material,
+      profileName: choice.profile,
+      profileNameEnd: choice.profileEnd?.trim() ? choice.profileEnd : null,
+    });
+    if (choice.beton) {
+      next.checkConfig = {
+        ...(beam.checkConfig ?? {}),
+        betonKorf: choice.beton.korf,
+        betonMilieuklasse: choice.beton.milieuklasse ?? undefined,
+        betonConstructieklasse: choice.beton.constructieklasse ?? undefined,
+      };
+    }
+    return next;
+  });
+  return assertOpensAfterEdit({ ...model, beams });
 }
 
 /** Een nieuwe staaf tussen twee bestaande knopen, met het volgende vrije id. */
@@ -2098,6 +2508,69 @@ export function setOpenFem3DBeamBedding(
   return changed ? { ...model, beams } : model;
 }
 
+// ── Plaat op bedding (issue #107) ──────────────────────────────────────────
+
+/** De velden van een plaatbedding; een ander veld is een tikfout en wordt geweigerd. */
+const PLATE_BEDDING_KEYS = ["kKnPerM3", "compressionOnly"] as const;
+
+/**
+ * Keur een plaatbedding en geef haar in vaste vorm terug: k een eindig getal
+ * groter dan 0 (kN/m³), "alleen druk" true of false (alleen `true` bewaard),
+ * geen ander veld (ook niet de breedte van de staafbedding: een plaat draagt
+ * over haar eigen oppervlak). Dezelfde regels als de rekenkern, met een
+ * Nederlandse melding vooraf.
+ */
+export function readOpenFem3DPlateBedding(value: unknown, label: string): OpenFem3DPlateBedding {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label}: de bedding moet een object zijn met de beddingsconstante k (kKnPerM3).`);
+  }
+  const raw = value as Record<string, unknown>;
+  const onbekend = Object.keys(raw).filter((key) => raw[key] !== undefined && !(PLATE_BEDDING_KEYS as readonly string[]).includes(key));
+  if (onbekend.length > 0) {
+    throw new Error(`${label}: onbekend veld in de bedding: ${onbekend.join(", ")}. Toegestaan: ${PLATE_BEDDING_KEYS.join(", ")}.`);
+  }
+  if (raw.kKnPerM3 === undefined || raw.kKnPerM3 === null) {
+    throw new Error(`${label}: de bedding mist de beddingsconstante k (kKnPerM3, in kN/m³).`);
+  }
+  if (typeof raw.kKnPerM3 !== "number" || !Number.isFinite(raw.kKnPerM3) || raw.kKnPerM3 <= 0) {
+    throw new Error(`${label}: de beddingsconstante k (kN/m³) moet een eindig getal groter dan 0 zijn.`);
+  }
+  if (raw.compressionOnly !== undefined && typeof raw.compressionOnly !== "boolean") {
+    throw new Error(`${label}: "alleen druk" (compressionOnly) moet true of false zijn.`);
+  }
+  return { kKnPerM3: raw.kKnPerM3, ...(raw.compressionOnly === true ? { compressionOnly: true } : {}) };
+}
+
+const samePlateBedding = (a: OpenFem3DPlateBedding | undefined, b: OpenFem3DPlateBedding | undefined) =>
+  a === b || (a !== undefined && b !== undefined && PLATE_BEDDING_KEYS.every((key) => a[key] === b[key]));
+
+/**
+ * Zet dezelfde bedding op de platen `plateIds`, of haal haar weg (`null`).
+ * Eén modelwijziging, dus één stap ongedaan maken; dezelfde functie voor het
+ * eigenschappenpaneel en de API. Gekeurd met {@link readOpenFem3DPlateBedding}.
+ * Verandert er niets, dan komt hetzelfde model terug.
+ */
+export function setOpenFem3DPlateBedding(
+  model: OpenFem3DModel,
+  plateIds: readonly number[],
+  bedding: OpenFem3DPlateBedding | null,
+): OpenFem3DModel {
+  const ids = new Set(plateIds);
+  for (const id of ids) {
+    if (!(model.plates ?? []).some((plate) => plate.id === id)) throw new Error(`3D-plaat ${id} bestaat niet.`);
+  }
+  let changed = false;
+  const plates = (model.plates ?? []).map((plate) => {
+    if (!ids.has(plate.id)) return plate;
+    const { bedding: _oud, ...rest } = plate;
+    const next = bedding === null ? undefined : readOpenFem3DPlateBedding(bedding, `3D-plaat ${plate.id}`);
+    if (samePlateBedding(plate.bedding, next)) return plate;
+    changed = true;
+    return next === undefined ? rest : { ...rest, bedding: next };
+  });
+  return changed ? { ...model, plates } : model;
+}
+
 /**
  * Waarom "Liggers scharnierend" een liggereind bij een kolom momentvast liet:
  *  - "cantilever": het deel aan de andere kant van de ligger hangt alleen aan
@@ -2395,11 +2868,30 @@ const RIGID_OPEN_FEM_3D_END: OpenFem3DEndReleases = {
  * knippunt geïnterpoleerd, puntlasten worden naar het juiste kind verplaatst
  * en temperatuurbelasting geldt voor beide delen. Alleen de oorspronkelijke
  * buitenste eindvrijgaven blijven bestaan; de nieuwe tussenknoop is star.
+ *
+ * Met `options.nodeId` wordt geknipt op die bestaande knoop (knopen op staven
+ * aansluiten, issue #63): `ratio` is dan zijn projectie op de staafas. Ligt de
+ * knoop net naast de as (binnen de verbindingstolerantie), dan wordt hij niet
+ * verschoven; beide delen lopen naar de knoop en zijn daardoor een fractie
+ * langer dan ratio·L en (1 − ratio)·L. De lastposities schalen per deel mee,
+ * zodat een last die tot het knippunt of het staafeind liep dat nog steeds
+ * doet; de intensiteiten (per meter) blijven gelijk.
+ *
+ * Een lastgrens binnen de afrondingsruis van het knippunt (1e-9·L) telt als
+ * op het knippunt: de last gaat geheel naar één deel, zonder snipper van
+ * ~1e-16 m aan de andere kant en zonder last van lengte 0.
+ *
+ * Een verlopende stalen staaf (#73) krijgt op de knip een gelaste
+ * tussendoorsnede, die standaard in de bibliotheek met eigen doorsneden wordt
+ * bewaard (zoals in 2D). Met `options.bewaarTussendoorsnede: false` gebeurt
+ * dat niet: voor een proefknip (de modelcontrole), die het model weer
+ * weggooit en de bibliotheek dus niet mag vullen.
  */
 export function splitOpenFem3DBeam(
   model: OpenFem3DModel,
   beamId: number,
   ratio: number,
+  options: { nodeId?: number; bewaarTussendoorsnede?: boolean } = {},
 ): OpenFem3DBeamSplitResult {
   const beam = model.beams.find((item) => item.id === beamId);
   if (!beam) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
@@ -2417,7 +2909,12 @@ export function splitOpenFem3DBeam(
     y: start.y + (end.y - start.y) * ratio,
     z: start.z + (end.z - start.z) * ratio,
   };
-  const existingNode = model.nodes.find((node) =>
+  const atNode = options.nodeId === undefined ? undefined : model.nodes.find((node) => node.id === options.nodeId);
+  if (options.nodeId !== undefined) {
+    if (!atNode) throw new Error(`3D-knoop ${options.nodeId} bestaat niet.`);
+    if (atNode.id === start.id || atNode.id === end.id) throw new Error("De subknoop moet binnen de 3D-staaf liggen.");
+  }
+  const existingNode = atNode ?? model.nodes.find((node) =>
     node.id !== start.id && node.id !== end.id &&
     Math.hypot(node.x - splitPoint.x, node.y - splitPoint.y, node.z - splitPoint.z) <= 1e-8);
   const nodeId = existingNode?.id ?? nextEntityId(model.nodes);
@@ -2433,8 +2930,22 @@ export function splitOpenFem3DBeam(
   }
 
   const originalReleases = beam.releases;
+  // Een verlopende staaf (#73) wordt twee verlopende staven met de
+  // geïnterpoleerde doorsnede op de knip als eind van het eerste en begin van
+  // het tweede deel, zoals in 2D (`splitsVerlopendProfiel`, dat een stalen
+  // tussendoorsnede als eigen gelaste doorsnede bewaart). A(x) en I(x)
+  // veranderen daardoor nergens; het letterlijk kopiëren van beide profielen
+  // zou van één verloop twee volle verlopen maken. Een proefknip bewaart
+  // niets (`bewaarTussendoorsnede: false`); de naam wordt wel tegen de
+  // bibliotheek gekeurd, zodat een botsing ook in de proef een fout is.
+  const tussenProfiel = beam.profileNameEnd === undefined
+    ? null
+    : options.bewaarTussendoorsnede === false
+      ? tussenProfielVoorSplitsing(beam.material, beam.profileName, beam.profileNameEnd, ratio)?.tussenProfiel ?? null
+      : splitsVerlopendProfiel(beam.material, beam.profileName, beam.profileNameEnd, ratio);
   const firstBeam: OpenFem3DBeam = {
     ...beam,
+    ...(tussenProfiel !== null ? { profileNameEnd: tussenProfiel } : {}),
     endNodeId: nodeId,
     ...(originalReleases ? {
       releases: {
@@ -2447,6 +2958,7 @@ export function splitOpenFem3DBeam(
   };
   const secondBeam: OpenFem3DBeam = {
     ...beam,
+    ...(tussenProfiel !== null ? { profileName: tussenProfiel } : {}),
     id: secondBeamId,
     startNodeId: nodeId,
     ...(originalReleases ? {
@@ -2460,40 +2972,67 @@ export function splitOpenFem3DBeam(
   };
   const beams = model.beams.flatMap((item) => item.id === beamId ? [firstBeam, secondBeam] : [item]);
   const splitDistance = ratio * length;
+  // Een plek s langs de oorspronkelijke staaf op het eerste of tweede deel.
+  // Zonder `atNode` precies s en s − knipafstand; op een knoop naast de as
+  // geschaald naar de werkelijke deellengte (en daarbinnen gehouden).
+  const firstLength = atNode ? Math.hypot(atNode.x - start.x, atNode.y - start.y, atNode.z - start.z) : splitDistance;
+  const secondLength = atNode ? Math.hypot(end.x - atNode.x, end.y - atNode.y, end.z - atNode.z) : length - splitDistance;
+  const onFirst = (s: number) => atNode ? Math.min(firstLength, s * firstLength / splitDistance) : s;
+  const onSecond = (s: number) => atNode
+    ? Math.min(secondLength, Math.max(0, (s - splitDistance) * secondLength / (length - splitDistance)))
+    : s - splitDistance;
+  // Een lastgrens ligt "op het knippunt" binnen de afrondingsruis van de
+  // knipafstand. Een knooppositie in hele mm is binair niet exact (10,243 +
+  // 7,6 geeft een knipafstand van 7,6000000000000005); een last die op 7,6
+  // eindigt of begint, hoort dan toch bij de knoop. Zonder deze ruimte gaat
+  // zo'n last als een snipper van ~1e-16 m over het knippunt, of komt hij na
+  // het meeschalen op het eerste deel als [L, L] (lengte 0) terecht, en
+  // weigeren opslaan en de kern het model (issue #63).
+  const knipRuis = 1e-9 * Math.max(1, length);
+  const opKnip = (s: number) => Math.abs(s - splitDistance) <= knipRuis;
 
   let nextMemberLoadId = nextEntityId(model.memberLoads ?? []);
   const memberLoads = (model.memberLoads ?? []).flatMap((load): OpenFem3DMemberLoad[] => {
     if (load.beamId !== beamId) return [load];
-    if (load.endPositionM <= splitDistance) return [load];
-    if (load.startPositionM >= splitDistance) {
-      return [{
-        ...load,
-        beamId: secondBeamId,
-        startPositionM: load.startPositionM - splitDistance,
-        endPositionM: load.endPositionM - splitDistance,
-      }];
+    // Eindigt vóór of op het knippunt: geheel op het eerste deel; een eind op
+    // het knippunt valt precies op het eind van dat deel.
+    if (load.endPositionM <= splitDistance + knipRuis) {
+      if (!atNode && load.endPositionM <= splitDistance) return [load];
+      const startPositionM = onFirst(load.startPositionM);
+      const endPositionM = opKnip(load.endPositionM) ? firstLength : onFirst(load.endPositionM);
+      // Een last die geheel binnen de ruis om het knippunt lag, valt weg.
+      return endPositionM > startPositionM ? [{ ...load, startPositionM, endPositionM }] : [];
     }
+    // Begint op of na het knippunt: geheel op het tweede deel; een begin op
+    // het knippunt valt precies op 0.
+    if (load.startPositionM >= splitDistance - knipRuis) {
+      const startPositionM = opKnip(load.startPositionM) ? 0 : onSecond(load.startPositionM);
+      const endPositionM = onSecond(load.endPositionM);
+      return endPositionM > startPositionM ? [{ ...load, beamId: secondBeamId, startPositionM, endPositionM }] : [];
+    }
+    // Over het knippunt heen (begin en eind verder dan de ruis ervan af): twee
+    // stukken, elk langer dan de ruis.
     const loadRatio = (splitDistance - load.startPositionM) /
       (load.endPositionM - load.startPositionM);
     if (isOpenFem3DGlobalMemberLoad(load)) {
       // Globaal (#80): richting en projectie gelden voor beide delen (zelfde e_x).
       const qAtSplit = load.qStart + (load.qEnd - load.qStart) * loadRatio;
       return [
-        { ...load, qEnd: qAtSplit, endPositionM: splitDistance },
+        { ...load, qEnd: qAtSplit, startPositionM: onFirst(load.startPositionM), endPositionM: firstLength },
         {
           ...load,
           id: nextMemberLoadId++,
           beamId: secondBeamId,
           qStart: qAtSplit,
           startPositionM: 0,
-          endPositionM: load.endPositionM - splitDistance,
+          endPositionM: onSecond(load.endPositionM),
         },
       ];
     }
     const qyAtSplit = load.qyStart + (load.qyEnd - load.qyStart) * loadRatio;
     const qzAtSplit = load.qzStart + (load.qzEnd - load.qzStart) * loadRatio;
     return [
-      { ...load, qyEnd: qyAtSplit, qzEnd: qzAtSplit, endPositionM: splitDistance },
+      { ...load, qyEnd: qyAtSplit, qzEnd: qzAtSplit, startPositionM: onFirst(load.startPositionM), endPositionM: firstLength },
       {
         ...load,
         id: nextMemberLoadId++,
@@ -2501,14 +3040,15 @@ export function splitOpenFem3DBeam(
         qyStart: qyAtSplit,
         qzStart: qzAtSplit,
         startPositionM: 0,
-        endPositionM: load.endPositionM - splitDistance,
+        endPositionM: onSecond(load.endPositionM),
       },
     ];
   });
 
   const memberPointLoads = (model.memberPointLoads ?? []).map((load): OpenFem3DMemberPointLoad => {
-    if (load.beamId !== beamId || load.positionM < splitDistance) return load;
-    return { ...load, beamId: secondBeamId, positionM: load.positionM - splitDistance };
+    if (load.beamId !== beamId) return load;
+    if (load.positionM < splitDistance) return atNode ? { ...load, positionM: onFirst(load.positionM) } : load;
+    return { ...load, beamId: secondBeamId, positionM: onSecond(load.positionM) };
   });
 
   let nextThermalLoadId = nextEntityId(model.thermalLoads ?? []);
@@ -2581,7 +3121,11 @@ export function removeOpenFem3DLoadPanel(model: OpenFem3DModel, panelId: number)
 export function addOpenFem3DPlate(
   model: OpenFem3DModel,
   nodeIds: number[],
-  options: { thicknessM?: number; material?: string; cornerRadiusM?: number; boundary?: OpenFem3DPlateBoundarySegment[] } = {},
+  options: {
+    thicknessM?: number; material?: string; cornerRadiusM?: number; boundary?: OpenFem3DPlateBoundarySegment[];
+    /** Plaat op bedding (#107); gekeurd zoals bij het lezen. */
+    bedding?: OpenFem3DPlateBedding;
+  } = {},
 ): OpenFem3DModel {
   const id = nextEntityId(model.plates ?? []);
   const parsed = parseOpenFem3DModel({
@@ -2590,6 +3134,7 @@ export function addOpenFem3DPlate(
       id, nodeIds, thicknessM: options.thicknessM ?? 0.2, material: options.material ?? "C30/37",
       ...(options.boundary?.length ? { boundary: options.boundary } : {}),
       ...(options.cornerRadiusM && options.cornerRadiusM > 0 ? { cornerRadiusM: options.cornerRadiusM } : {}),
+      ...(options.bedding !== undefined ? { bedding: options.bedding } : {}),
     }],
   });
   const addedPlate = parsed.plates?.[parsed.plates.length - 1];
@@ -2606,17 +3151,23 @@ export function addOpenFem3DPlate(
 
 export function updateOpenFem3DPlate(
   model: OpenFem3DModel, plateId: number,
-  patch: Partial<Pick<OpenFem3DPlate, "thicknessM" | "material" | "cornerRadiusM" | "meshSizeM" | "edgeSupports">>,
+  patch: Partial<Pick<OpenFem3DPlate, "thicknessM" | "material" | "cornerRadiusM" | "meshSizeM" | "edgeSupports">>
+    /** Plaat op bedding (#107); `null` haalt de bedding weg. */
+    & { bedding?: OpenFem3DPlateBedding | null },
 ): OpenFem3DModel {
   if (!(model.plates ?? []).some((plate) => plate.id === plateId)) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
   const parsed = parseOpenFem3DModel({
     ...model,
     plates: (model.plates ?? []).map((plate) => {
       if (plate.id !== plateId) return plate;
-      const next: OpenFem3DPlate = { ...plate, ...patch };
+      const { bedding, ...rest } = patch;
+      const next: OpenFem3DPlate = { ...plate, ...rest };
       // `meshSizeM: undefined` zet de elementgrootte terug op automatisch.
       if ("meshSizeM" in patch && patch.meshSizeM === undefined) delete next.meshSizeM;
       if ("edgeSupports" in patch && !patch.edgeSupports?.length) delete next.edgeSupports;
+      // De bedding: een object zet haar (gekeurd door parseOpenFem3DModel), null haalt haar weg.
+      if (bedding === null) delete next.bedding;
+      else if (bedding !== undefined) next.bedding = bedding;
       return next;
     }),
   });
@@ -2693,7 +3244,10 @@ export function removeOpenFem3DNode(model: OpenFem3DModel, nodeId: number): Open
     .map((plate) => plate.id));
   // Een belastingvlak zonder een van zijn hoekknopen bestaat niet meer.
   const loadPanels = withoutExcludedBeams(
-    model.loadPanels?.filter((panel) => !panel.nodeIds.includes(nodeId)), removedBeamIds);
+    model.loadPanels?.filter((panel) => !panel.nodeIds.includes(nodeId)
+      && !(panel.openings ?? []).some((opening) => opening.nodeIds.includes(nodeId))), removedBeamIds);
+  const envelopePanels = model.envelopePanels?.filter((panel) => !panel.nodeIds.includes(nodeId)
+    && !(panel.openings ?? []).some((opening) => opening.nodeIds.includes(nodeId)));
   return {
     ...model,
     nodes: model.nodes.filter((node) => node.id !== nodeId),
@@ -2706,6 +3260,8 @@ export function removeOpenFem3DNode(model: OpenFem3DModel, nodeId: number): Open
     plates: (model.plates ?? []).filter((plate) => !removedPlateIds.has(plate.id)),
     surfaceLoads: (model.surfaceLoads ?? []).filter((load) => !removedPlateIds.has(load.plateId)),
     ...(loadPanels ? { loadPanels } : {}),
+    ...(envelopePanels ? { envelopePanels } : {}),
+    ...(model.generatedNodeIds ? { generatedNodeIds: model.generatedNodeIds.filter((id) => id !== nodeId) } : {}),
     // De knoop verlaat zijn schijf; een schijf met minder dan twee knopen koppelt niets meer.
     ...(model.diaphragms !== undefined
       ? {
@@ -2757,5 +3313,6 @@ export function removeOpenFem3DSelection(model: OpenFem3DModel, selection: OpenF
     case "plate": return removeOpenFem3DPlate(model, selection.id);
     case "surfaceLoad": return removeOpenFem3DSurfaceLoad(model, selection.id);
     case "loadPanel": return removeOpenFem3DLoadPanel(model, selection.id);
+    case "envelopePanel": return { ...model, envelopePanels: (model.envelopePanels ?? []).filter((panel) => panel.id !== selection.id) };
   }
 }

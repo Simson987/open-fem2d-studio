@@ -1,0 +1,347 @@
+{
+  "format": "open-fem-studio-v2",
+  "version": 2,
+  "savedAt": "2026-10-11T16:30:00.000Z",
+  "nodes": [
+    {
+      "id": 1,
+      "x": 0,
+      "z": 0
+    },
+    {
+      "id": 2,
+      "x": 3000,
+      "z": 0
+    },
+    {
+      "id": 3,
+      "x": 6000,
+      "z": 0
+    },
+    {
+      "id": 4,
+      "x": 9000,
+      "z": 0
+    },
+    {
+      "id": 5,
+      "x": 12000,
+      "z": 0
+    },
+    {
+      "id": 6,
+      "x": 3000,
+      "z": 2000
+    },
+    {
+      "id": 7,
+      "x": 6000,
+      "z": 2000
+    },
+    {
+      "id": 8,
+      "x": 9000,
+      "z": 2000
+    }
+  ],
+  "beams": [
+    {
+      "id": 1,
+      "from": 1,
+      "to": 2,
+      "profile": "SHS100x100x5",
+      "material": "S355"
+    },
+    {
+      "id": 2,
+      "from": 2,
+      "to": 3,
+      "profile": "SHS100x100x5",
+      "material": "S355"
+    },
+    {
+      "id": 3,
+      "from": 3,
+      "to": 4,
+      "profile": "SHS100x100x5",
+      "material": "S355"
+    },
+    {
+      "id": 4,
+      "from": 4,
+      "to": 5,
+      "profile": "SHS100x100x5",
+      "material": "S355"
+    },
+    {
+      "id": 5,
+      "from": 1,
+      "to": 6,
+      "profile": "SHS100x100x5",
+      "material": "S355"
+    },
+    {
+      "id": 6,
+      "from": 6,
+      "to": 7,
+      "profile": "SHS100x100x5",
+      "material": "S355",
+      "checkConfig": {
+        "bucklingLengthY_m": 3,
+        "bucklingLengthZ_m": 3
+      }
+    },
+    {
+      "id": 7,
+      "from": 7,
+      "to": 8,
+      "profile": "SHS100x100x5",
+      "material": "S355",
+      "checkConfig": {
+        "bucklingLengthY_m": 3,
+        "bucklingLengthZ_m": 3
+      }
+    },
+    {
+      "id": 8,
+      "from": 8,
+      "to": 5,
+      "profile": "SHS100x100x5",
+      "material": "S355"
+    },
+    {
+      "id": 9,
+      "from": 2,
+      "to": 6,
+      "profile": "SHS80x80x4",
+      "material": "S355",
+      "releases": {
+        "startRy": true,
+        "endRy": true
+      }
+    },
+    {
+      "id": 10,
+      "from": 3,
+      "to": 7,
+      "profile": "SHS80x80x4",
+      "material": "S355",
+      "releases": {
+        "startRy": true,
+        "endRy": true
+      }
+    },
+    {
+      "id": 11,
+      "from": 4,
+      "to": 8,
+      "profile": "SHS80x80x4",
+      "material": "S355",
+      "releases": {
+        "startRy": true,
+        "endRy": true
+      }
+    },
+    {
+      "id": 12,
+      "from": 6,
+      "to": 3,
+      "profile": "SHS80x80x4",
+      "material": "S355",
+      "releases": {
+        "startRy": true,
+        "endRy": true
+      }
+    },
+    {
+      "id": 13,
+      "from": 3,
+      "to": 8,
+      "profile": "SHS80x80x4",
+      "material": "S355",
+      "releases": {
+        "startRy": true,
+        "endRy": true
+      }
+    }
+  ],
+  "supports": [
+    {
+      "nodeId": 1,
+      "type": "pinned"
+    },
+    {
+      "nodeId": 5,
+      "type": "zRoller"
+    }
+  ],
+  "plates": [],
+  "loads": [
+    {
+      "id": 1,
+      "type": "pointForce",
+      "nodeId": 6,
+      "caseId": 1,
+      "fz": -30
+    },
+    {
+      "id": 2,
+      "type": "pointForce",
+      "nodeId": 7,
+      "caseId": 1,
+      "fz": -30
+    },
+    {
+      "id": 3,
+      "type": "pointForce",
+      "nodeId": 8,
+      "caseId": 1,
+      "fz": -30
+    }
+  ],
+  "loadCases": [
+    {
+      "id": 1,
+      "name": "Permanent",
+      "type": "dead"
+    }
+  ],
+  "activeLoadCaseId": 1,
+  "selfWeightEnabled": false,
+  "nonlinearEnabled": false,
+  "analysetype": "eersteOrde",
+  "betonSegmentLengteMm": 400,
+  "betonKruipcoefficient": null,
+  "betonKruipInvoer": null,
+  "idTellers": {
+    "belastinggeval": 2,
+    "combinatie": 1
+  },
+  "structuralGrid": {
+    "enabled": true,
+    "xAxes": [
+      {
+        "id": "A",
+        "label": "A",
+        "position": 0
+      },
+      {
+        "id": "B",
+        "label": "B",
+        "position": 12000
+      }
+    ],
+    "yAxes": [
+      {
+        "id": "Y-A",
+        "label": "1",
+        "position": 0
+      },
+      {
+        "id": "Y-B",
+        "label": "2",
+        "position": 6000
+      }
+    ],
+    "zAxes": [
+      {
+        "id": "1",
+        "label": "1",
+        "position": 0
+      },
+      {
+        "id": "2",
+        "label": "2",
+        "position": 5000
+      }
+    ]
+  },
+  "scheefstandEnabled": false,
+  "scheefstandNoemer": 200,
+  "scheefstandRichting": 1,
+  "scheefstandBron": "vast",
+  "scheefstandHoogteM": null,
+  "scheefstandAantalElementen": null,
+  "eigenDoorsneden": [],
+  "eigenCltOpbouwen": [],
+  "projectInfo": {
+    "company": "",
+    "date": "",
+    "description": "Zelfde vakwerk als 006 met L_cr = 3 m op staaf 6 en 7: knik-UC 0,278 (zonder opgave 0,842).",
+    "engineer": "",
+    "location": "",
+    "name": "K6 – test 006-b (kniklengte 3 m opgegeven)",
+    "notes": "",
+    "projectNumber": "",
+    "reportHeader": "",
+    "uitgangspunten": {
+      "en1992": false,
+      "en1993": false,
+      "en1995": false,
+      "gevolgklasse": "CC2",
+      "levensduurklasse": "4",
+      "nationaleBijlage": "NL",
+      "normenHandmatig": [],
+      "terreincategorie": "II",
+      "windgebied": "II"
+    }
+  },
+  "windInstellingen": {
+    "windgebied": "II",
+    "terreincategorie": "II",
+    "stuwdrukBron": "berekend",
+    "qpHandmatig_kNm2": 1,
+    "richtingLinks": true,
+    "richtingRechts": true,
+    "richtingHaaks": false,
+    "cpiKeuze": "beide",
+    "cpiHandmatig": 0.2,
+    "hohSpant_m": 5,
+    "positieSpant": "tussenspant",
+    "belastingbreedteOverride_m": null,
+    "gebouwlengte_m": 30,
+    "afstandTotKopgevel_m": 15,
+    "cpeDakLoef": null,
+    "cpeDakLij": null,
+    "cpeDakHaaks": null,
+    "combinatiesGenereren": true,
+    "gevelhoogte_m": null,
+    "vorm": "gebouw",
+    "vrijstaandDakvorm": "lessenaar",
+    "blokkering_phi": 0,
+    "vrijstaandHoogte_m": null,
+    "wrijving": "geen",
+    "aantalOverkappingen": 1,
+    "positieOverkapping": 1,
+    "kolomDoorsnede": "geen",
+    "kolomBreedte_mm": 200,
+    "kolomDiepte_mm": 200
+  },
+  "rapport": {
+    "margeBoven": 18,
+    "margeOnder": 20,
+    "margeBinnen": 15,
+    "margeBuiten": 15,
+    "basisLettergrootte": 10,
+    "regelafstand": 1.45,
+    "pageSize": "A4",
+    "orientation": "portrait",
+    "hiddenSections": {
+      "nodes": true,
+      "beams": true,
+      "plates": true,
+      "materials": true,
+      "combinations": true,
+      "plateStresses": true,
+      "checkDetail": true,
+      "clt": true,
+      "betonStijfheid": true,
+      "spanning": true
+    },
+    "rapportType": "beperkt",
+    "toetsingDetail": "beknopt",
+    "verborgenToetsStaven": {},
+    "inhoudsopgaveDiepte": 1
+  },
+  "modelDimension": "2d"
+}

@@ -6,11 +6,16 @@
  * belasting uit eigen gewicht altijd bij elkaar passen. Een staaf telt als
  * staal als zijn materiaal een staalsoort is (S235 … S460).
  *
+ * Een verlopende staaf (#73) weegt met de gemiddelde massa van haar gelijke
+ * delen (elk de A van zijn midden, zoals het eigen gewicht en de kern) en
+ * staat als eigen regel "begin → eind".
+ *
  * Puur: geen React, geen DOM.
  */
 import { dichtheidVanMateriaal, resolveSection } from "../../lib/sectionResolver";
 import { STEEL_GRADES } from "../../lib/steelGrades";
 import type { OpenFem3DModel } from "./openFem3dModel";
+import { openFem3DProfielTekst, openFem3DVerloopDelen } from "./openFem3dVerloop";
 
 export interface OpenFem3DStaalProfiel {
   profiel: string;
@@ -42,11 +47,16 @@ export function openFem3DStaalgewicht(model: Pick<OpenFem3DModel, "nodes" | "bea
   for (const beam of model.beams) {
     if (!isStaal(beam.material)) continue;
     const a = knoop.get(beam.startNodeId), b = knoop.get(beam.endNodeId);
-    const profiel = beam.profileName?.trim() ?? "";
-    const resolved = resolveSection(beam.material!.trim(), profiel);
+    const resolved = resolveSection(beam.material!.trim(), beam.profileName?.trim() ?? "");
     if (!a || !b || resolved.bron === "default") { onbekend.push(beam.id); continue; }
     const lengteM = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
-    const kg = dichtheidVanMateriaal(beam.material) * (resolved.aBruto ?? resolved.A) * 1e-6 * lengteM;
+    let indeling: ReturnType<typeof openFem3DVerloopDelen>;
+    try { indeling = openFem3DVerloopDelen(beam, lengteM); } catch { onbekend.push(beam.id); continue; }
+    const profiel = indeling ? openFem3DProfielTekst(beam) : beam.profileName?.trim() ?? "";
+    const areaMm2 = indeling
+      ? indeling.delen.reduce((som, deel) => som + deel.doorsnede.areaMm2 * (deel.tEnd - deel.tStart), 0)
+      : resolved.aBruto ?? resolved.A;
+    const kg = dichtheidVanMateriaal(beam.material) * areaMm2 * 1e-6 * lengteM;
     totaalKg += kg;
     aantalStaven += 1;
     const staalsoort = beam.material!.trim().toUpperCase();

@@ -1,12 +1,12 @@
 export type OpenFem3DSelectionType =
   | "node" | "beam"
-  | "plate" | "nodalLoad" | "memberLoad" | "memberPointLoad" | "thermalLoad" | "surfaceLoad" | "loadPanel";
+  | "plate" | "envelopePanel" | "nodalLoad" | "memberLoad" | "memberPointLoad" | "thermalLoad" | "surfaceLoad" | "loadPanel";
 export type OpenFem3DSingleSelection = {
   [Type in OpenFem3DSelectionType]: { type: Type; id: number }
 }[OpenFem3DSelectionType];
 
 /** De lastsoorten die een selectie kent; elke soort heeft zijn eigen nummering. */
-export type OpenFem3DLoadSelectionType = Exclude<OpenFem3DSelectionType, "node" | "beam" | "plate">;
+export type OpenFem3DLoadSelectionType = Exclude<OpenFem3DSelectionType, "node" | "beam" | "plate" | "envelopePanel">;
 export const OPEN_FEM_3D_LOAD_SELECTION_TYPES: readonly OpenFem3DLoadSelectionType[] = [
   "nodalLoad", "memberLoad", "memberPointLoad", "thermalLoad", "surfaceLoad", "loadPanel",
 ];
@@ -23,7 +23,7 @@ export type OpenFem3DMultiSelection = {
 export type OpenFem3DSelection = OpenFem3DSingleSelection | OpenFem3DMultiSelection | null;
 
 const isLoadType = (type: OpenFem3DSelectionType): type is OpenFem3DLoadSelectionType =>
-  type !== "node" && type !== "beam" && type !== "plate";
+  type !== "node" && type !== "beam" && type !== "plate" && type !== "envelopePanel";
 
 /** Aantal lasten in een groepsselectie. */
 export function openFem3DSelectionLoadCount(selection: OpenFem3DMultiSelection): number {
@@ -49,6 +49,7 @@ export function openFem3DSelectionContains(
   if (type === "node") return selection.nodeIds.includes(id);
   if (type === "beam") return selection.beamIds.includes(id);
   if (type === "plate") return (selection.plateIds ?? []).includes(id);
+  if (type === "envelopePanel") return false;
   return (selection.loads?.[type] ?? []).includes(id);
 }
 
@@ -101,6 +102,7 @@ export function toggleOpenFem3DSelection(
   additive: boolean,
 ): OpenFem3DSelection {
   if (!additive) return item;
+  if (item.type === "envelopePanel") return item;
   // Belastingen krijgen een eigen, eenduidige eigenschappenselectie. Een
   // gemengde groepsbewerking met geometrie is niet zinvol.
   if (isLoadType(item.type)) return item;

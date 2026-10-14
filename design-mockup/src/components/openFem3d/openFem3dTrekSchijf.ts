@@ -136,14 +136,22 @@ type Vector3 = [number, number, number];
 
 /**
  * Het tweede-ordemoment om de globale oorsprong: Σ N·(e_x × Δu) over alle
- * staven, met N trek positief en Δu = u_eind − u_begin (translaties).
+ * elementen waarmee de kern de geometrische stijfheid K_G rekende, met N trek
+ * positief en Δu = u_eind − u_begin (translaties).
  *
  * Bij een P-Δ-uitkomst zijn de reacties ((K + K_G)·u − F). K voert bij een
  * starre beweging geen kracht af, K_G bij een starre translatie ook niet: de
  * krachtensom sluit dus exact. Bij een starre rotatie a geeft K_G precies
  * a·Σ N·(e_x × Δu). De momentensom van lasten en reacties in de onvervormde
  * stand is daarom exact dit moment: de bijdrage van de normaalkrachten over
- * de verplaatste staafeinden.
+ * de verplaatste elementeinden.
+ *
+ * De kern rekent een gedrukte staaf in vier delen per stuk, elk met zijn
+ * eigen N (controle oktober 2026, K4): bij een last langs de staafas verloopt
+ * N per deel. Die delen staan in `secondOrderParts` (N en Δu per deel); een
+ * staaf die daar staat telt met Σ N_deel·(e_x × Δu_deel). Een staaf zonder
+ * delen (een kern van vóór K4) telt als één element met N̄ = (N_begin + N_eind)/2
+ * en Δu tussen zijn knopen.
  */
 export function openFem3DSecondOrderMomentKnm(
   input: {
@@ -153,24 +161,43 @@ export function openFem3DSecondOrderMomentKnm(
   result: {
     displacements: readonly { nodeId: number; ux: number; uy: number; uz: number }[];
     memberForces: readonly { memberId: number; nStartKn: number; nEndKn: number }[];
+    secondOrderParts?: readonly OpenFem3DSecondOrderMemberParts[];
   },
 ): Vector3 {
   const nodeById = new Map(input.nodes.map((node) => [node.id, node]));
   const displacementById = new Map(result.displacements.map((value) => [value.nodeId, value]));
   const forceById = new Map(result.memberForces.map((value) => [value.memberId, value]));
+  const partsById = new Map((result.secondOrderParts ?? []).map((value) => [value.memberId, value.parts]));
   const sum: Vector3 = [0, 0, 0];
-  for (const member of input.members) {
-    const start = nodeById.get(member.startNodeId), end = nodeById.get(member.endNodeId);
-    const force = forceById.get(member.id);
-    const ua = displacementById.get(member.startNodeId), ub = displacementById.get(member.endNodeId);
-    if (!start || !end || !force || !ua || !ub) continue;
-    const length = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
-    const ex: Vector3 = [(end.x - start.x) / length, (end.y - start.y) / length, (end.z - start.z) / length];
-    const du: Vector3 = [ub.ux - ua.ux, ub.uy - ua.uy, ub.uz - ua.uz];
-    const n = (force.nStartKn + force.nEndKn) / 2;
+  const add = (n: number, ex: Vector3, du: readonly number[]) => {
     sum[0] += n * (ex[1] * du[2] - ex[2] * du[1]);
     sum[1] += n * (ex[2] * du[0] - ex[0] * du[2]);
     sum[2] += n * (ex[0] * du[1] - ex[1] * du[0]);
+  };
+  for (const member of input.members) {
+    const start = nodeById.get(member.startNodeId), end = nodeById.get(member.endNodeId);
+    if (!start || !end) continue;
+    const length = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
+    const ex: Vector3 = [(end.x - start.x) / length, (end.y - start.y) / length, (end.z - start.z) / length];
+    const parts = partsById.get(member.id);
+    if (parts) {
+      for (const part of parts) add(part.nKn, ex, part.duM);
+      continue;
+    }
+    const force = forceById.get(member.id);
+    const ua = displacementById.get(member.startNodeId), ub = displacementById.get(member.endNodeId);
+    if (!force || !ua || !ub) continue;
+    add((force.nStartKn + force.nEndKn) / 2, ex, [ub.ux - ua.ux, ub.uy - ua.uy, ub.uz - ua.uz]);
   }
   return sum;
+}
+
+/**
+ * De delen van één staaf waarmee de kern bij P-Δ de geometrische stijfheid
+ * rekende (`secondOrderParts` in de uitkomst): per deel de normaalkracht (kN,
+ * trek positief) en u_eind − u_begin van zijn eindknopen (globaal, m).
+ */
+export interface OpenFem3DSecondOrderMemberParts {
+  memberId: number;
+  parts: { nKn: number; duM: [number, number, number] }[];
 }

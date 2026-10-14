@@ -29,13 +29,36 @@
  * zonder de sleutel krijgt hem ook aan. `SNAP_SCHAKELAARS_3D` zijn de
  * schakelaars van de 3D-werkruimte (statusbalk en tab Weergave).
  *
- * VERBINDINGSTOLERANTIE (#55)
+ * VERBINDINGSTOLERANTIE (#55, in 3D sinds #63)
  * Ook hier bewaard, maar geen snap: binnen deze afstand (mm) geldt een knoop
  * als "op de staaf" of "op dezelfde plek" voor de modelcontrole, de rekenpoort,
- * het plaatsen van een knoop en het herstel. Alleen het 2D-model; de regels en
- * de grenzen (0,1–25 mm, standaard 5) staan in `lib/modelControle.ts`. Een
- * andere waarde verplaatst niets: alleen de controle en de volgende plaatsing
- * of het volgende herstel gebruiken hem.
+ * het plaatsen van een knoop en het herstel. De regels en de grenzen (0,1–25
+ * mm, standaard 5) staan in `lib/modelControle.ts`. Een andere waarde
+ * verplaatst niets: alleen de controle en de volgende plaatsing of het
+ * volgende herstel gebruiken hem.
+ *
+ * Sinds issue #63 geldt dezelfde waarde ook in 3D: daar bepaalt hij welke
+ * knoop "op een staaf" ligt voor de modelcontrole van het 3D-tekenvlak, de
+ * waarschuwing vóór het rekenen, de knop Knopen aansluiten en het automatisch
+ * aansluiten (`components/openFem3d/openFem3dAansluiten.ts`). Eén instelling
+ * voor beide werkruimten, net als de snaps: het is dezelfde vraag (hoe ver
+ * mag een getekende knoop naast de staaf liggen), en een project dat van 2D
+ * naar 3D gaat, houdt zo dezelfde maat. Anders dan in 2D wordt een knoop in
+ * 3D nooit verschoven: de staaf wordt op de knoop zelf gesplitst. En de
+ * afstand tot een staafeind meet 3D langs de staafas, niet tot de eindknoop:
+ * zo geeft een knoop net naast de as vlak bij een eind geen steil stompje.
+ *
+ * KNOPEN AUTOMATISCH SAMENVOEGEN EN AANSLUITEN (#63 en #75, alleen 3D)
+ * `knopenAansluiten` (standaard aan): na het tekenen, verplaatsen of kopiëren
+ * van knopen en staven, een levelwijziging en na het importeren worden
+ * knopen die dan op een staaf liggen meteen aangesloten (de staaf wordt daar
+ * gesplitst), in dezelfde stap ongedaan maken. Sinds #75 voegt dezelfde
+ * schakelaar eerst een punt binnen de verbindingstolerantie van een bestaande
+ * knoop samen met die knoop (niet na het importeren). Eén schakelaar: het is
+ * dezelfde vraag met dezelfde tolerantie, en de sleutel blijft
+ * `knopenAansluiten`, zodat een bewaarde keuze geldig blijft. Geen snap:
+ * "alle snaps" laat hem staan. Bewaard zoals de snaps, want het is een
+ * tekenhulp en geen modelgegeven.
  */
 import { useSyncExternalStore } from "react";
 import { begrensHoekTolerantie, HOEKSNAP_STANDAARD_TOLERANTIE } from "../lib/tekenhulp";
@@ -68,10 +91,12 @@ export interface SnapInstellingen {
   /** Ook 30°, 45° en 60° (en hun spiegelingen). */
   hoekExtra: boolean;
   /**
-   * Verbindingstolerantie van het 2D-model in mm (0,1–25, #55): binnen deze
-   * afstand ligt een knoop op een staaf of op dezelfde plek als een andere.
+   * Verbindingstolerantie in mm (0,1–25, #55; sinds #63 ook in 3D): binnen
+   * deze afstand ligt een knoop op een staaf of op dezelfde plek als een andere.
    */
   verbindingsTolerantie: number;
+  /** 3D: knopen automatisch samenvoegen (#75) en op staven aansluiten (#63) na een bewerking. */
+  knopenAansluiten: boolean;
 }
 
 /** NL-labels + uitleg voor de knopjes in de statusbalk (terugval als een vertaling ontbreekt). */
@@ -98,6 +123,7 @@ export const SNAP_BEGINSTAND: SnapInstellingen = {
   knoop: true, stramien: true, raster: true,
   hoek: true, spoor: true, hoekTolerantie: HOEKSNAP_STANDAARD_TOLERANTIE, hoekExtra: false,
   verbindingsTolerantie: CONTROLE_TOL_MM,
+  knopenAansluiten: true,
 };
 
 const OPSLAG_SLEUTEL = "open-fem-studio.snapInstellingen";
@@ -128,6 +154,7 @@ export function snapInstellingenUitOpslag(tekst: string | null): SnapInstellinge
     hoekExtra: typeof r.hoekExtra === "boolean" ? r.hoekExtra : SNAP_BEGINSTAND.hoekExtra,
     verbindingsTolerantie: typeof r.verbindingsTolerantie === "number"
       ? begrensVerbindingstolerantie(r.verbindingsTolerantie) : SNAP_BEGINSTAND.verbindingsTolerantie,
+    knopenAansluiten: typeof r.knopenAansluiten === "boolean" ? r.knopenAansluiten : SNAP_BEGINSTAND.knopenAansluiten,
   };
 }
 
@@ -206,11 +233,18 @@ export function zetHoekExtra(aan: boolean): void {
   meld();
 }
 
-/** Verbindingstolerantie van het 2D-model in mm, begrensd op 0,1–25 (#55). */
+/** Verbindingstolerantie in mm (2D en 3D), begrensd op 0,1–25 (#55). */
 export function zetVerbindingsTolerantie(mm: number): void {
   const waarde = begrensVerbindingstolerantie(mm);
   if (stand.verbindingsTolerantie === waarde) return;
   stand = { ...stand, verbindingsTolerantie: waarde };
+  meld();
+}
+
+/** 3D: knopen automatisch samenvoegen en op staven aansluiten aan of uit (#63, #75). */
+export function zetKnopenAansluiten(aan: boolean): void {
+  if (stand.knopenAansluiten === aan) return;
+  stand = { ...stand, knopenAansluiten: aan };
   meld();
 }
 

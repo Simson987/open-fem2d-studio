@@ -1,11 +1,25 @@
 //! `gui_control` — het bedieningskanaal van de app.
 //!
-//! Alleen actief wanneer de app is gestart met `OPENAEC_GUI_CONTROL=1`. Dan
-//! luistert deze module op `127.0.0.1:<vrije poort>`, met een sessietoken, en
-//! schrijft hij `gui-control.json` (`{pid, poort, token, versie}`) in de
-//! app-datamap zodat een client hem kan vinden. Zonder die variabele bestaat
+//! Alleen actief als de gebruiker het toestaat: met de instelling
+//! "Bediening door een AI-assistent toestaan (MCP)" (Instellingen →
+//! AI-assistent (MCP); bewaard in `ai-assistent.json`, zie [`instelling`]),
+//! of als de app is gestart met `OPENAEC_GUI_CONTROL=1` (testscripts,
+//! ontwikkelwerk). Dan luistert deze module op `127.0.0.1:<vrije poort>`, met
+//! een sessietoken, en schrijft hij `gui-control.json` (`{pid, poort, token,
+//! versie}`) in de app-datamap zodat een client hem kan vinden. Anders bestaat
 //! er geen luisteraar, geen bestand en geen token — de commands hieronder
 //! antwoorden dan alleen "niet actief".
+//!
+//! # Aan en uit terwijl de app draait (issue #109)
+//!
+//! De schakelaar in de instellingen roept `gui_kanaal_aan` of `gui_kanaal_uit`
+//! aan: die bewaren de keuze en starten of stoppen het kanaal meteen. Uit
+//! haalt het vindbestand weg en sluit de poort; weer aan geeft een nieuwe poort
+//! en een nieuw token. Elke wijziging gaat als event `gui-control:status` naar
+//! de pagina's (statusbalk, `bediening.ts`, het paneel). Het luisterende deel
+//! zelf staat los van Tauri in [`kanaal`]; de beslissing bij het opstarten en
+//! het aan- en uitzetten staan in [`GuiControl`] los van de `AppHandle`, achter
+//! de trait [`AppKant`], zodat tests/gui_kanaal.rs ze zonder app toetst.
 //!
 //! # Wat het kanaal is, en wat niet
 //!
@@ -40,15 +54,20 @@
 //! en het staat niet standaard aan. Zolang het aanstaat, toont de statusbalk
 //! van de app dat.
 
+pub mod instelling;
+pub mod kanaal;
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::time::{Duration, Instant};
 
-use serde::Deserialize;
+use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
+
+use kanaal::{Luisteraar, Opdracht, Verwerker};
 
 /// De omgevingsvariabele die het kanaal aanzet.
 pub const OMGEVINGSVARIABELE: &str = "OPENAEC_GUI_CONTROL";
@@ -59,6 +78,9 @@ pub const BESTANDSNAAM: &str = "gui-control.json";
 pub const VINDBESTAND_VARIABELE: &str = "OPENAEC_GUI_CONTROL_FILE";
 /// Het event waarmee een paginaopdracht het hoofdvenster in gaat.
 const EVENT_OPDRACHT: &str = "gui-control:opdracht";
+/// Het event waarmee Rust de pagina's laat weten dat het kanaal aan of uit
+/// ging (payload: [`KanaalStatus`]).
+pub const EVENT_STATUS: &str = "gui-control:status";
 /// Het venster waarin `bediening.ts` luistert.
 const HOOFDVENSTER: &str = "main";
 const STANDAARD_TIJDSLIMIET_S: u64 = 60;
@@ -67,37 +89,202 @@ const MAX_TIJDSLIMIET_S: u64 = 600;
 /// Antwoorden van de pagina, op opdracht-id. `None` = nog onderweg.
 type Wachtkamer = Arc<(Mutex<HashMap<u64, Option<Value>>>, Condvar)>;
 
+/// Wat het kanaal van de app nodig heeft: wat een opdracht dóét, en waar een
+/// nieuwe status heen gaat. In de app is dat de [`AppHandle`] (de pagina via
+/// events, een screenshot via het venster); in tests/gui_kanaal.rs een
+/// nabootsing. Zo staan de beslissing bij het opstarten en de volgorde van
+/// aan en uit los van Tauri, en zijn ze zonder app te toetsen.
+pub trait AppKant {
+    /// De verwerker voor een nieuw kanaal. De toestand komt zwak mee: de
+    /// luisterdraad houdt hem niet in leven na het afsluiten.
+    fn verwerker(&self, control: Weak<GuiControl>) -> Verwerker;
+    /// Laat de pagina's de nieuwe status weten.
+    fn meld(&self, status: &KanaalStatus);
+}
+
+impl AppKant for AppHandle {
+    fn verwerker(&self, control: Weak<GuiControl>) -> Verwerker {
+        let app = self.clone();
+        Arc::new(move |o: Opdracht| {
+            let control = control.upgrade().ok_or("de app sluit af")?;
+            voer_uit(&app, &control, o)
+        })
+    }
+
+    fn meld(&self, status: &KanaalStatus) {
+        let _ = self.emit(EVENT_STATUS, status.clone());
+    }
+}
+
 /// De toestand van het kanaal, beheerd door Tauri (`app.manage`).
 pub struct GuiControl {
-    actief: bool,
-    token: String,
-    bestand: Option<PathBuf>,
+    /// Het draaiende kanaal, of `None` als het uit staat.
+    kanaal: Mutex<Option<Luisteraar>>,
+    /// Waar het vindbestand komt: `OPENAEC_GUI_CONTROL_FILE`, anders de
+    /// app-datamap. `None` als de app-datamap onbekend is.
+    vindbestand: Option<PathBuf>,
+    /// Waar de instelling bewaard wordt (`ai-assistent.json`).
+    instelling: Option<PathBuf>,
+    /// Gestart met `OPENAEC_GUI_CONTROL=1`.
+    door_omgeving: bool,
+    /// Waarom het kanaal niet startte, als het niet startte.
+    laatste_fout: Mutex<Option<String>>,
+    versie: String,
     volgende_id: Mutex<u64>,
     wachtkamer: Wachtkamer,
 }
 
+/// Wat het paneel "AI-assistent (MCP)" en de statusbalk over het kanaal weten.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct KanaalStatus {
+    /// De bewaarde instelling.
+    pub toegestaan: bool,
+    /// Luistert er nu een kanaal?
+    pub actief: bool,
+    pub poort: Option<u16>,
+    /// Gestart met `OPENAEC_GUI_CONTROL=1` (ook als de tool `gui_start_app`
+    /// van de MCP-server de app startte): het kanaal stond dan aan voor deze
+    /// sessie, los van de bewaarde instelling.
+    pub door_omgeving: bool,
+    pub vindbestand: Option<String>,
+    /// Waarom het kanaal niet startte.
+    pub fout: Option<String>,
+}
+
 impl GuiControl {
-    /// Een kanaal dat er niet is. De commands antwoorden "niet actief".
-    fn uit() -> Self {
+    fn nieuw(vindbestand: Option<PathBuf>, instelling: Option<PathBuf>, door_omgeving: bool, versie: String) -> Self {
         GuiControl {
-            actief: false,
-            token: String::new(),
-            bestand: None,
+            kanaal: Mutex::new(None),
+            vindbestand,
+            instelling,
+            door_omgeving,
+            laatste_fout: Mutex::new(None),
+            versie,
             volgende_id: Mutex::new(0),
             wachtkamer: Arc::new((Mutex::new(HashMap::new()), Condvar::new())),
         }
     }
 
     pub fn is_actief(&self) -> bool {
-        self.actief
+        self.kanaal.lock().unwrap_or_else(|e| e.into_inner()).is_some()
     }
 
-    /// Verwijder het vindbestand. Bij afsluiten aangeroepen; een achtergebleven
-    /// bestand zou een client naar een poort sturen waar niets meer luistert.
+    /// Zet het kanaal uit en verwijder het vindbestand (als het nog het onze
+    /// is). Bij afsluiten aangeroepen; een achtergebleven bestand zou een
+    /// client naar een poort sturen waar niets meer luistert.
     pub fn opruimen(&self) {
-        if let Some(pad) = &self.bestand {
-            let _ = fs::remove_file(pad);
+        if let Some(l) = self.kanaal.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            l.stop();
         }
+    }
+
+    /// De bewaarde instelling (standaard aan bij een beschikbaar pad).
+    fn instelling_aan(&self) -> bool {
+        self.instelling.as_deref().is_some_and(instelling::lees)
+    }
+
+    pub fn status(&self) -> KanaalStatus {
+        let kanaal = self.kanaal.lock().unwrap_or_else(|e| e.into_inner());
+        KanaalStatus {
+            toegestaan: self.instelling_aan(),
+            actief: kanaal.is_some(),
+            poort: kanaal.as_ref().map(Luisteraar::poort),
+            door_omgeving: self.door_omgeving,
+            vindbestand: kanaal
+                .as_ref()
+                .map(|l| l.bestand().to_string_lossy().into_owned()),
+            fout: self.laatste_fout.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+        }
+    }
+
+    /// Zet de toestand op en start het kanaal als dat bij het opstarten
+    /// gevraagd is: met `OPENAEC_GUI_CONTROL=1` (`door_omgeving`), of omdat de
+    /// bewaarde instelling in `instelling` aanstaat. Anders blijft het uit —
+    /// geen luisteraar, geen vindbestand.
+    ///
+    /// `vindbestand` en `instelling` zijn `None` als de app-datamap onbekend
+    /// is. Een fout bij het starten (poort, bestand, een andere instantie die
+    /// het kanaal al heeft) is geen reden om de app niet te starten: het
+    /// kanaal blijft uit en de reden staat in de status voor het paneel.
+    pub fn opstarten(
+        vindbestand: Option<PathBuf>,
+        instelling: Option<PathBuf>,
+        door_omgeving: bool,
+        versie: String,
+        kant: &dyn AppKant,
+    ) -> Arc<GuiControl> {
+        let control = Arc::new(GuiControl::nieuw(vindbestand, instelling, door_omgeving, versie));
+        if instelling::moet_starten(control.door_omgeving, control.instelling_aan()) {
+            if let Err(e) = control.start_kanaal(kant) {
+                eprintln!("[gui_control] niet gestart: {e}");
+                control.zet_fout(Some(e));
+            }
+        }
+        control
+    }
+
+    /// Start het kanaal als het nog niet draait. Weigert over het levende
+    /// vindbestand van een andere instantie heen te starten.
+    fn start_kanaal(self: &Arc<Self>, kant: &dyn AppKant) -> Result<(), String> {
+        let mut slot = self.kanaal.lock().unwrap_or_else(|e| e.into_inner());
+        if slot.is_some() {
+            return Ok(());
+        }
+        let bestand = self
+            .vindbestand
+            .clone()
+            .ok_or("de app-datamap is onbekend; zet OPENAEC_GUI_CONTROL_FILE")?;
+        if let Some(pid) = kanaal::vindbestand_van_ander(&bestand, std::process::id()) {
+            return Err(format!(
+                "een andere Open FEM Studio (pid {pid}) bedient het kanaal al via {}; sluit die eerst",
+                bestand.display()
+            ));
+        }
+        let l = Luisteraar::start(&bestand, &self.versie, kant.verwerker(Arc::downgrade(self)))?;
+        eprintln!("[gui_control] actief op 127.0.0.1:{}", l.poort());
+        *slot = Some(l);
+        Ok(())
+    }
+
+    fn zet_fout(&self, fout: Option<String>) {
+        *self.laatste_fout.lock().unwrap_or_else(|e| e.into_inner()) = fout;
+    }
+
+    /// De schakelaar aan: bewaar de keuze en start het kanaal. Een fout bij
+    /// het bewaren is een fout (en dan start er niets); lukt het starten niet,
+    /// dan staat de reden in `fout` van de teruggegeven status.
+    pub fn zet_aan(self: &Arc<Self>, kant: &dyn AppKant) -> Result<KanaalStatus, String> {
+        let pad = self
+            .instelling
+            .as_deref()
+            .ok_or("de app-datamap is onbekend: de instelling kan niet bewaard worden")?;
+        instelling::schrijf(pad, true)?;
+        let start = self.start_kanaal(kant);
+        self.zet_fout(start.err());
+        Ok(self.meld(kant))
+    }
+
+    /// De schakelaar uit: zet het kanaal uit (vindbestand weg, poort dicht) en
+    /// bewaar de keuze. Ook een kanaal dat met `OPENAEC_GUI_CONTROL=1` werd
+    /// gestart, gaat uit. Eerst uit, dan bewaren: ook als het bewaren mislukt,
+    /// is het kanaal dicht.
+    pub fn zet_uit(&self, kant: &dyn AppKant) -> Result<KanaalStatus, String> {
+        self.opruimen();
+        self.zet_fout(None);
+        let bewaard = match self.instelling.as_deref() {
+            Some(pad) => instelling::schrijf(pad, false),
+            None => Err("de app-datamap is onbekend: de instelling kan niet bewaard worden".into()),
+        };
+        let status = self.meld(kant);
+        bewaard.map(|_| status)
+    }
+
+    /// Stuur de status naar alle vensters en geef hem terug.
+    fn meld(&self, kant: &dyn AppKant) -> KanaalStatus {
+        let status = self.status();
+        kant.meld(&status);
+        status
     }
 
     fn nieuw_id(&self) -> u64 {
@@ -107,147 +294,48 @@ impl GuiControl {
     }
 }
 
-/// Zet het kanaal op, of niet — afhankelijk van de omgevingsvariabele.
-///
-/// Wordt in `setup` aangeroepen; de teruggegeven waarde gaat in `app.manage`.
-/// Fouten bij het opzetten (poort, bestand) zijn geen reden om de app niet te
-/// starten: ze worden gelogd en het kanaal blijft uit.
-pub fn start(app: &AppHandle) -> Arc<GuiControl> {
-    let aan = std::env::var(OMGEVINGSVARIABELE)
+/// Is deze start met het kanaal gevraagd (`OPENAEC_GUI_CONTROL` op `1` of
+/// `true`)? Ook de bestandskoppeling kijkt hiernaar, samen met
+/// [`eigen_vindbestand`].
+pub fn gevraagd() -> bool {
+    std::env::var(OMGEVINGSVARIABELE)
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
-    if !aan {
-        return Arc::new(GuiControl::uit());
-    }
-    match start_luisteraar(app) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("[gui_control] niet gestart: {e}");
-            Arc::new(GuiControl::uit())
-        }
+        .unwrap_or(false)
+}
+
+/// Het eigen pad voor het vindbestand uit `OPENAEC_GUI_CONTROL_FILE`, als dat
+/// gezet en niet leeg is. Een instantie met kanaal én eigen vindbestand start
+/// bewust naast die van de gebruiker (de testscripts in referentie-gui/); de
+/// bestandskoppeling bewaakt dan geen enkel venster.
+pub fn eigen_vindbestand() -> Option<PathBuf> {
+    match std::env::var(VINDBESTAND_VARIABELE) {
+        Ok(p) if !p.trim().is_empty() => Some(PathBuf::from(p)),
+        _ => None,
     }
 }
 
-fn start_luisteraar(app: &AppHandle) -> Result<Arc<GuiControl>, String> {
-    let server = tiny_http::Server::http("127.0.0.1:0")
-        .map_err(|e| format!("kan niet luisteren op 127.0.0.1: {e}"))?;
-    let poort = match server.server_addr() {
-        tiny_http::ListenAddr::IP(a) => a.port(),
-        #[allow(unreachable_patterns)]
-        _ => return Err("onverwacht luisteradres".into()),
-    };
-
-    let token = maak_token();
-    let versie = app.package_info().version.to_string();
-
+/// Zet de toestand van het kanaal op en start het kanaal als dat gevraagd is:
+/// met `OPENAEC_GUI_CONTROL=1`, of omdat de instelling "Bediening door een
+/// AI-assistent toestaan (MCP)" aanstaat. Hier alleen de paden en de versie
+/// van de app; de beslissing staat in [`GuiControl::opstarten`].
+///
+/// Wordt in `setup` aangeroepen; de teruggegeven waarde gaat in `app.manage`.
+pub fn start(app: &AppHandle) -> Arc<GuiControl> {
+    let datamap = app.path().app_local_data_dir().ok();
     // Het vindbestand staat standaard in de app-datamap. Met
     // OPENAEC_GUI_CONTROL_FILE kan het elders: een test die een tweede
     // app-instantie start terwijl de gebruiker er al één met bediening heeft
     // draaien, zou anders diens vindbestand overschrijven — en daarmee elke
     // client van die gebruiker naar de testinstantie sturen.
-    let bestand = match std::env::var(VINDBESTAND_VARIABELE) {
-        Ok(p) if !p.trim().is_empty() => PathBuf::from(p),
-        _ => app
-            .path()
-            .app_local_data_dir()
-            .map_err(|e| format!("app-datamap onbekend: {e}"))?
-            .join(BESTANDSNAAM),
-    };
-    if let Some(map) = bestand.parent() {
-        fs::create_dir_all(map)
-            .map_err(|e| format!("map van het vindbestand niet aan te maken: {e}"))?;
-    }
-    let inhoud = json!({
-        "pid": std::process::id(),
-        "poort": poort,
-        "token": token,
-        "versie": versie,
-    });
-    fs::write(&bestand, serde_json::to_string_pretty(&inhoud).unwrap())
-        .map_err(|e| format!("vindbestand niet te schrijven: {e}"))?;
-
-    let control = Arc::new(GuiControl {
-        actief: true,
-        token: token.clone(),
-        bestand: Some(bestand),
-        volgende_id: Mutex::new(0),
-        wachtkamer: Arc::new((Mutex::new(HashMap::new()), Condvar::new())),
-    });
-
-    let app = app.clone();
-    let c = Arc::clone(&control);
-    std::thread::Builder::new()
-        .name("gui-control".into())
-        .spawn(move || lus(server, app, c, versie))
-        .map_err(|e| format!("luisterdraad niet te starten: {e}"))?;
-
-    eprintln!("[gui_control] actief op 127.0.0.1:{poort}");
-    Ok(control)
-}
-
-fn maak_token() -> String {
-    use rand::RngCore;
-    let mut bytes = [0u8; 32];
-    rand::rng().fill_bytes(&mut bytes);
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
-// ── De luisterlus ───────────────────────────────────────────────────────────
-
-#[derive(Deserialize)]
-struct Opdracht {
-    naam: String,
-    #[serde(default)]
-    args: Value,
-    /// Per opdracht te verhogen (toetsen kan lang duren); begrensd.
-    #[serde(default)]
-    tijdslimiet_s: Option<u64>,
-}
-
-fn lus(server: tiny_http::Server, app: AppHandle, control: Arc<GuiControl>, versie: String) {
-    for mut req in server.incoming_requests() {
-        let pad = req.url().to_string();
-        let methode = req.method().as_str().to_string();
-
-        let (status, body) = match (methode.as_str(), pad.as_str()) {
-            ("GET", "/status") => (200, json!({ "versie": versie, "gereed": true })),
-            ("POST", "/opdracht") => {
-                if !geautoriseerd(&req, &control.token) {
-                    (401, json!({ "ok": false, "fout": "ontbrekend of onjuist token" }))
-                } else {
-                    let mut tekst = String::new();
-                    if let Err(e) = req.as_reader().read_to_string(&mut tekst) {
-                        (400, json!({ "ok": false, "fout": format!("body onleesbaar: {e}") }))
-                    } else {
-                        match serde_json::from_str::<Opdracht>(&tekst) {
-                            Err(e) => (400, json!({ "ok": false, "fout": format!("opdracht onleesbaar: {e}") })),
-                            Ok(o) => match voer_uit(&app, &control, o) {
-                                Ok(uitkomst) => (200, json!({ "ok": true, "uitkomst": uitkomst })),
-                                Err(fout) => (200, json!({ "ok": false, "fout": fout })),
-                            },
-                        }
-                    }
-                }
-            }
-            _ => (404, json!({ "ok": false, "fout": format!("onbekend: {methode} {pad}") })),
-        };
-
-        let antwoord = tiny_http::Response::from_string(body.to_string())
-            .with_status_code(status)
-            .with_header(
-                tiny_http::Header::from_bytes("Content-Type", "application/json; charset=utf-8")
-                    .expect("geldige header"),
-            );
-        let _ = req.respond(antwoord);
-    }
-}
-
-fn geautoriseerd(req: &tiny_http::Request, token: &str) -> bool {
-    req.headers()
-        .iter()
-        .find(|h| h.field.equiv("Authorization"))
-        .map(|h| h.value.as_str() == format!("Bearer {token}"))
-        .unwrap_or(false)
+    let vindbestand = eigen_vindbestand().or_else(|| datamap.as_ref().map(|m| m.join(BESTANDSNAAM)));
+    let instellingpad = datamap.map(|m| m.join(instelling::BESTANDSNAAM));
+    GuiControl::opstarten(
+        vindbestand,
+        instellingpad,
+        gevraagd(),
+        app.package_info().version.to_string(),
+        app,
+    )
 }
 
 /// Eén opdracht: zelf afhandelen, of doorgeven aan de pagina en wachten.
@@ -360,7 +448,7 @@ fn naar_pagina(
             kamer.remove(&id);
             return Err(format!(
                 "geen antwoord van de pagina op `{naam}` binnen {} s — luistert `bediening.ts` wel \
-                 (is de app met OPENAEC_GUI_CONTROL=1 gestart en volledig geladen)?",
+                 (is de app volledig geladen, en staat het kanaal nog aan)?",
                 tijdslimiet.as_secs()
             ));
         }

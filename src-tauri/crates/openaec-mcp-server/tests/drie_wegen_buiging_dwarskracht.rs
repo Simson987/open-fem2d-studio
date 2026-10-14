@@ -22,8 +22,10 @@ use tokio::time::timeout;
 
 const BIN_PATH: &str = env!("CARGO_BIN_EXE_openaec-mcp-server");
 
-/// IPE 300, S235, L = 4 m. Combinatie 1: q = 60 kN/m; combinatie 2: P = 280 kN
-/// op x = 0,4 m (links V = 252 kN, rechts −28 kN, M = 100,8 kNm).
+/// IPE 300, S235, L = 4 m. Combinatie 1: q = 60 kN/m; combinatie 2: P = 330 kN
+/// op x = 0,4 m (links V = 297 kN, rechts −33 kN, M = 118,8 kNm). Tot oktober
+/// 2026 was P = 280 kN; met (6.30) zou combinatie 1 dan maatgevend zijn (zie
+/// `steel-check/tests/buiging_dwarskracht.rs`).
 fn ligger() -> Value {
     let punt = |c: u32, x_mm: f64, vz: f64, my: f64| {
         json!({
@@ -38,12 +40,12 @@ fn ligger() -> Value {
             punt(1, x * 1000.0, 120.0 - 60.0 * x, 30.0 * x * (4.0 - x))
         })
         .collect();
-    punten.push(punt(2, 0.0, 252.0, 0.0));
-    punten.push(punt(2, 400.0, 252.0, 100.8));
-    punten.push(punt(2, 400.0, -28.0, 100.8));
+    punten.push(punt(2, 0.0, 297.0, 0.0));
+    punten.push(punt(2, 400.0, 297.0, 118.8));
+    punten.push(punt(2, 400.0, -33.0, 118.8));
     for i in 2..=10 {
         let x = 0.4 * i as f64;
-        punten.push(punt(2, x * 1000.0, -28.0, 112.0 - 28.0 * x));
+        punten.push(punt(2, x * 1000.0, -33.0, 132.0 - 33.0 * x));
     }
     json!({
         "beam_id": 8,
@@ -153,8 +155,9 @@ fn variabele(t: &Value, symbool: &str) -> f64 {
         .unwrap_or_else(|| panic!("variabele {symbool} ontbreekt in {t}"))
 }
 
-/// ρ = (2·252/348,2837 − 1)² = 0,199895, M_y,V,Rd = 0,800105·147,58 =
-/// 118,0795 kNm, UC = 100,8/118,0795 = 0,853662 op combinatie 2, x = 400 mm.
+/// ρ = (2·297/348,2837 − 1)² = 0,497739, M_y,V,Rd = (628 000 − 0,497739 ·
+/// 1978,06²/(4·7,1))·235·10⁻⁶ = 131,4650 kNm (6.30), UC = 118,8/131,4650 =
+/// 0,903663 op combinatie 2, x = 400 mm.
 #[tokio::test]
 async fn station_naast_de_puntlast_langs_de_drie_wegen() {
     let (mut child, mut stdin, mut reader) = start_server().await;
@@ -168,9 +171,9 @@ async fn station_naast_de_puntlast_langs_de_drie_wegen() {
     let mv = toets(&tauri, "6.2.8_combined_mv");
     assert_eq!(mv["force_state"]["combination_id"], 2);
     assert!((mv["force_state"]["position_mm"].as_f64().unwrap() - 400.0).abs() < 1e-9);
-    assert!((variabele(mv, r"\rho") - 0.199895).abs() < 1e-6);
-    assert!((mv["value"].as_f64().unwrap() - 118.0795).abs() < 1e-3);
+    assert!((variabele(mv, r"\rho") - 0.497739).abs() < 1e-6);
+    assert!((mv["value"].as_f64().unwrap() - 131.4650).abs() < 1e-3);
     let uc = mv["uc"]["uc"].as_f64().unwrap();
-    assert!((uc - 0.853662).abs() < 1e-5, "UC = {uc}");
+    assert!((uc - 0.903663).abs() < 1e-5, "UC = {uc}");
     let _ = child.kill().await;
 }

@@ -72,7 +72,7 @@ function pauze(ms: number): Promise<void> {
 export function rekenVoorwaardenNu(a: BedieningActies): RekenVoorwaarden {
   if (a.modelDimension === "3d") {
     const f = a.openFem3d;
-    const toetsingCompleet = f.checks !== null && f.concreteChecks !== null;
+    const toetsingCompleet = f.checks !== null && f.concreteChecks !== null && f.timberChecks !== null;
     return {
       heeftModel: f.model.nodes.length > 0 || f.model.beams.length > 0,
       heeftResultaten: f.result !== null,
@@ -83,7 +83,7 @@ export function rekenVoorwaardenNu(a: BedieningActies): RekenVoorwaarden {
       toetsfout: f.checksError,
       toetsingGedraaid: toetsingCompleet,
       toetsingHoortBijResultaten: f.result !== null && toetsingCompleet,
-      // Beide 3D-toetsbouwers geven óók een volledig `skipped`-overzicht
+      // De drie 3D-toetsbouwers geven óók een volledig `skipped`-overzicht
       // terug. Daarom moet iedere staaf door die ronde zijn gegaan, ook als
       // materiaal of profiel uiteindelijk niet toetsbaar blijkt.
       toetsbareStaven: f.model.beams.length > 0,
@@ -188,7 +188,7 @@ let volgnummer = 0;
 
 function momentNu(a: BedieningActies): ExportMoment {
   if (a.modelDimension === "3d") {
-    const toetsingCompleet = a.openFem3d.checks !== null && a.openFem3d.concreteChecks !== null;
+    const toetsingCompleet = a.openFem3d.checks !== null && a.openFem3d.concreteChecks !== null && a.openFem3d.timberChecks !== null;
     return {
       generatie: a.openFem3d.generation(),
       slagen: 0,
@@ -370,6 +370,8 @@ export async function rapportVoorbereiden(
         staalOvergeslagen: a().openFem3d.checks?.skipped.length ?? 0,
         betonGetoetst: a().openFem3d.concreteChecks?.results.length ?? 0,
         betonOvergeslagen: a().openFem3d.concreteChecks?.skipped.length ?? 0,
+        houtGetoetst: a().openFem3d.timberChecks?.results.length ?? 0,
+        houtOvergeslagen: a().openFem3d.timberChecks?.skipped.length ?? 0,
         generatie: a().openFem3d.generation(),
       } : {
         toetsbareStaven: anyCheckableBeams([...f.beams]),

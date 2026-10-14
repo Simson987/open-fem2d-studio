@@ -37,6 +37,7 @@ pub mod section;
 pub mod compression;
 pub mod bending;
 pub mod shear;
+pub mod torsion;
 pub mod stability;
 pub mod deflection;
 pub mod clt; pub mod clt_toets; // kruislaaghout: doorsnedemodel + toetsing per lamel

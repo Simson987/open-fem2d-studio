@@ -134,11 +134,27 @@ fn bedding_schema() -> Value {
     })
 }
 
+/// Plaat op bedding (issue #107): dezelfde velden als `Plate3D.bedding` van
+/// de kern. k verplicht en groter dan 0; een tikfout weigert het schema.
+fn plate_bedding_schema() -> Value {
+    json!({
+        "type": "object", "additionalProperties": false,
+        "required": ["kKnPerM3"],
+        "description": "Plaat op bedding (Winkler), bijvoorbeeld een vloer op zand: de adapter zet op elke knoop van de plaatelementen een veer k·A_trib loodrecht op het plaatvlak (A_trib het tributaire oppervlak uit de elementen van die plaat). De grond ligt aan de onderzijde: tegen de plaatnormaal in (de z-as van de plaatassen; bij een vloer globaal −Z). Bij een wand legt de assenafspraak de grondzijde vast, los van de knoopvolgorde, en is zij niet te kiezen: een wand in het XZ-vlak heeft de grond aan +Y, een wand in het YZ-vlak aan −X (de diagnostics noemen haar). Ligt de grond aan de andere kant, dan zijn zakking en gronddruk van teken omgekeerd en is compressionOnly niet bruikbaar. Het resultaat geeft per plaat op bedding de zakking en de gronddruk per knoop in `plateBedding`; de grondveren staan niet bij de oplegreacties.",
+        "properties": {
+            "kKnPerM3": { "type": "number", "exclusiveMinimum": 0,
+                "description": "Beddingsconstante k in kN/m³, loodrecht op het plaatvlak." },
+            "compressionOnly": { "type": "boolean", "default": false,
+                "description": "Alleen druk: de veren vallen weg waar de plaat van de grond loskomt (de grond trekt niet)." }
+        }
+    })
+}
+
 /// Strikt schema voor het neutrale Open FEM 3D-contract.
 pub(super) fn tool_definitions() -> Vec<Value> {
     vec![json!({
         "name": TOOL,
-        "description": "Analyseer een ruimtelijk 3D-model (staven en vlakke platen) met de vastgezette externe 3D-kern. Staven: standaard directe tweede orde (P-Delta); de adapter itereert daarbij zelf met een verse factorisatie per iteratie en bepaalt de eerste knikfactor alpha_cr (stabiliteitspoort; EN 1993-1-1 5.2.1 vraagt alpha_cr >= 10 voor eerste orde). Trek-alleen staven (tensionOnly) vallen per berekening weg zolang ze op druk staan; staven op bedding (bedding: Winkler-veren k·b over de lengte, optioneel zijdelings en alleen druk) geven per staaf de zakking en gronddruk terug; starre schijven (diaphragms) koppelen X, Y en de rotatie om Z van knopen op één hoogte. Met tensionOnlyFit worden trek-alleen staven gemonteerd onder opgegeven montagelasten (spanningsloze lengte L + Δ0); tensionOnlyCrossRule houdt van elk kruis van twee trek-alleen staven er één actief. Platen (contractversie 2): vierhoekige MITC4-schaalelementen per plaat (plates + shellElements), vlaklasten in globale assen (surfaceLoads) en staven die via intermediateNodeIds aan plaatknopen hangen; een model met platen rekent alleen lineair (analysis: linear). Het resultaat bevat knoopverplaatsingen, oplegreacties, zes snedekrachten per staaf, convergentie, eigenwaarde-knikfactoren, de inactieve trek-alleen staven (inactiveMembers) en per plaat momenten, membraan- en dwarskrachten en spanningen boven/onder in plaatassen. Eenheden: m, kN, kNm en MPa.",
+        "description": "Analyseer een ruimtelijk 3D-model (staven en vlakke platen) met de vastgezette externe 3D-kern. Staven: standaard directe tweede orde (P-Delta); de adapter itereert daarbij zelf met een verse factorisatie per iteratie en bepaalt de eerste knikfactor alpha_cr (stabiliteitspoort; EN 1993-1-1 5.2.1 vraagt alpha_cr >= 10 voor eerste orde). Trek-alleen staven (tensionOnly) vallen per berekening weg zolang ze op druk staan; staven op bedding (bedding: Winkler-veren k·b over de lengte, optioneel zijdelings en alleen druk) geven per staaf de zakking en gronddruk terug; platen op bedding (plates[].bedding: veren k·A_trib loodrecht op de plaat, optioneel alleen druk) per plaat de zakking en gronddruk per knoop (plateBedding); verlopende staven (partSectionIds) rekenen in gelijke delen met elk hun eigen doorsnede en komen als één staaf terug; starre schijven (diaphragms) koppelen X, Y en de rotatie om Z van knopen op één hoogte. Met tensionOnlyFit worden trek-alleen staven gemonteerd onder opgegeven montagelasten (spanningsloze lengte L + Δ0); tensionOnlyCrossRule houdt van elk kruis van twee trek-alleen staven er één actief. Platen (contractversie 2): vierhoekige MITC4-schaalelementen per plaat (plates + shellElements), vlaklasten in globale assen (surfaceLoads) en staven die via intermediateNodeIds aan plaatknopen hangen; een model met platen rekent alleen lineair (analysis: linear). Het resultaat bevat knoopverplaatsingen, oplegreacties, zes snedekrachten per staaf, convergentie, eigenwaarde-knikfactoren, de inactieve trek-alleen staven (inactiveMembers) en per plaat momenten, membraan- en dwarskrachten en spanningen boven/onder in plaatassen. Eenheden: m, kN, kNm en MPa.",
         "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -167,6 +183,7 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                             "name": { "type": "string", "minLength": 1 },
                             "eMpa": { "type": "number", "exclusiveMinimum": 0 },
                             "nu": { "type": "number", "exclusiveMinimum": -1, "exclusiveMaximum": 0.5 },
+                            "gMpa": { "type": ["number", "null"], "exclusiveMinimum": 0, "description": "Onafhankelijke schuifmodulus in MPa, bijvoorbeeld G_mean van hout; de adapter houdt G·J en G·As gelijk." },
                             "alphaPerK": { "type": ["number", "null"], "exclusiveMinimum": 0, "description": "Lineaire uitzettingscoëfficiënt in 1/K; standaard 12e-6." }
                         }
                     }
@@ -199,6 +216,11 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                             "endNodeId": { "type": "integer", "minimum": 1 },
                             "materialId": { "type": "integer", "minimum": 1 },
                             "sectionId": { "type": "integer", "minimum": 1 },
+                            "partSectionIds": {
+                                "type": "array", "minItems": 2, "maxItems": 64,
+                                "description": "Verlopende staaf (issue #73): de staaf in n GELIJKE delen langs haar lengte, n = de lengte van deze lijst (2 ≤ n ≤ 64); deel i (vanaf de beginknoop) rekent met doorsnede partSectionIds[i] (ids uit sections). sectionId blijft de doorsnede van het begin. De adapter knipt de staaf op de deelgrenzen (samen met tussenknopen, bedding en globale lasten) en voegt krachten, snedekrachtlijnen, knikgegevens en resultaten weer samen tot de ene staaf; staaflasten houden hun plaats langs de hele staaf. Ontbreekt het veld, dan is de staaf prismatisch.",
+                                "items": { "type": "integer", "minimum": 1 }
+                            },
                             "rollAngleRad": { "type": ["number", "null"] },
                             "intermediateNodeIds": {
                                 "type": "array", "default": [],
@@ -262,7 +284,8 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                         "properties": {
                             "id": { "type": "integer", "minimum": 1 },
                             "materialId": { "type": "integer", "minimum": 1 },
-                            "thicknessM": { "type": "number", "exclusiveMinimum": 0 }
+                            "thicknessM": { "type": "number", "exclusiveMinimum": 0 },
+                            "bedding": plate_bedding_schema()
                         }
                     }
                 },
@@ -349,6 +372,7 @@ mod tests {
         assert_eq!(thermal["additionalProperties"], false);
         assert_eq!(thermal["required"], json!(["id", "memberId", "deltaTUniformK"]));
         assert_eq!(definition["inputSchema"]["properties"]["materials"]["items"]["properties"]["alphaPerK"]["exclusiveMinimum"], 0);
+        assert_eq!(definition["inputSchema"]["properties"]["materials"]["items"]["properties"]["gMpa"]["exclusiveMinimum"], 0);
     }
 
     #[test]
@@ -432,6 +456,59 @@ mod tests {
                 "bedding": { "kKnPerm3": 50000, "widthM": 0.6 } }]
         }));
         assert!(tikfout.is_err(), "een tikfout in een beddingveld hoort geweigerd te worden");
+    }
+
+    /// Verlopende staaf (#73): `partSectionIds` is een lijst van 2 tot 64
+    /// doorsnede-id's (gehele getallen ≥ 1); de kern leest het veld.
+    #[test]
+    fn schema_kent_verlopende_staaf_strikt() {
+        let definition = &tool_definitions()[0];
+        let delen = &definition["inputSchema"]["properties"]["members"]["items"]["properties"]["partSectionIds"];
+        assert_eq!(delen["type"], "array");
+        assert_eq!((delen["minItems"].clone(), delen["maxItems"].clone()), (json!(2), json!(64)));
+        assert_eq!(delen["items"], json!({ "type": "integer", "minimum": 1 }));
+        assert!(delen["description"].as_str().unwrap().contains("GELIJKE delen"));
+        let gelezen = serde_json::from_value::<open_fem_3d::SolveRequest3D>(json!({
+            "nodes": [{ "id": 1, "x": 0, "y": 0, "z": 0 }, { "id": 2, "x": 6, "y": 0, "z": 0 }],
+            "materials": [{ "id": 1, "name": "S235", "eMpa": 210000, "nu": 0.3 }],
+            "sections": [
+                { "id": 1, "name": "a", "areaM2": 0.01, "iyM4": 1e-4, "izM4": 1e-5, "torsionJM4": 1e-6 },
+                { "id": 2, "name": "b", "areaM2": 0.008, "iyM4": 6e-5, "izM4": 8e-6, "torsionJM4": 8e-7 }
+            ],
+            "members": [{ "id": 1, "startNodeId": 1, "endNodeId": 2, "materialId": 1, "sectionId": 1, "partSectionIds": [1, 2] }]
+        })).unwrap_or_else(|fout| panic!("partSectionIds hoort in het contract: {fout}"));
+        assert_eq!(gelezen.members[0].part_section_ids.as_deref(), Some(&[1usize, 2][..]));
+    }
+
+    /// Plaat op bedding (#107): strikt object met kKnPerM3 verplicht en de
+    /// twee velden van het contract. De kern leest het veld en weigert een
+    /// tikfout.
+    #[test]
+    fn schema_kent_plaat_op_bedding_strikt() {
+        let definition = &tool_definitions()[0];
+        let bedding = &definition["inputSchema"]["properties"]["plates"]["items"]["properties"]["bedding"];
+        assert_eq!(bedding["type"], "object");
+        assert_eq!(bedding["additionalProperties"], false);
+        assert_eq!(bedding["required"], json!(["kKnPerM3"]));
+        let velden: Vec<&str> = bedding["properties"].as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(velden.len(), 2);
+        assert!(velden.contains(&"kKnPerM3") && velden.contains(&"compressionOnly"));
+        assert_eq!(bedding["properties"]["kKnPerM3"]["exclusiveMinimum"], 0);
+        assert_eq!(bedding["properties"]["compressionOnly"]["default"], false);
+        assert_eq!(definition["inputSchema"]["properties"]["plates"]["items"]["required"], json!(["id", "materialId", "thicknessM"]),
+            "bedding blijft optioneel");
+        let verzoek = |bedding: Value| json!({
+            "nodes": [{ "id": 1, "x": 0, "y": 0, "z": 0 }],
+            "materials": [{ "id": 1, "name": "C30/37", "eMpa": 33000, "nu": 0.2 }],
+            "sections": [], "members": [],
+            "plates": [{ "id": 1, "materialId": 1, "thicknessM": 0.25, "bedding": bedding }]
+        });
+        let gelezen = serde_json::from_value::<open_fem_3d::SolveRequest3D>(verzoek(json!({ "kKnPerM3": 20000, "compressionOnly": true })))
+            .unwrap_or_else(|fout| panic!("plates[].bedding hoort in het contract: {fout}"));
+        let bedding = gelezen.plates[0].bedding.as_ref().expect("de kern leest de bedding");
+        assert!(bedding.k_kn_per_m3 == 20000.0 && bedding.compression_only);
+        let tikfout = serde_json::from_value::<open_fem_3d::SolveRequest3D>(verzoek(json!({ "kKnPerm3": 20000 })));
+        assert!(tikfout.is_err(), "een tikfout in een plaatbeddingveld hoort geweigerd te worden");
     }
 
     /// Globale lijnlast (#80): globalDirection (x, y, z), qStartKnPerM,

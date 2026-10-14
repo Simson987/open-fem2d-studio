@@ -22,6 +22,13 @@ import type { OpenFem3DProfileSection } from "./openFem3dProfileGeometry";
  */
 export interface OpenFem3DSweepInput {
   section: OpenFem3DProfileSection;
+  /**
+   * Verlopende staaf (#73): de doorsnede aan het eind. De ringen verlopen dan
+   * lineair van `section` (eerste station) naar deze (laatste station); beide
+   * contouren moeten punt voor punt bij elkaar horen (dezelfde opbouw), anders
+   * telt alleen `section`.
+   */
+  sectionEnd?: OpenFem3DProfileSection;
   /** Stations langs de vervormde staaf (m), van begin naar eind. */
   points: readonly THREE.Vector3[];
   /** Lokale y-as van de onvervormde staaf. */
@@ -145,15 +152,25 @@ function appendSweep(
   if (points.length < 2 || !(points[points.length - 1].distanceTo(points[0]) > 1e-12)) return;
   const contour = contourOf(input.section, curveSegments);
   if (contour.slots.length === 0) return;
+  // Verlopend: een tweede contour met dezelfde opbouw, lineair per station.
+  const eindContour = input.sectionEnd ? contourOf(input.sectionEnd, curveSegments) : null;
+  const zelfdeOpbouw = eindContour !== null && eindContour.slots.length === contour.slots.length
+    && eindContour.cap.points.length === contour.cap.points.length
+    && JSON.stringify(eindContour.walls) === JSON.stringify(contour.walls);
+  const eind = zelfdeOpbouw ? eindContour : null;
   const frames = stationFrames(points, input.referenceY);
   const slotCount = contour.slots.length;
   const base = positions.length / 3;
   frames.forEach(({ y, z }, station) => {
     const p = points[station];
-    for (const slot of contour.slots) {
-      positions.push(p.x + y.x * slot.x + z.x * slot.y, p.y + y.y * slot.x + z.y * slot.y, p.z + y.z * slot.x + z.z * slot.y);
-      normals.push(y.x * slot.nx + z.x * slot.ny, y.y * slot.nx + z.y * slot.ny, y.z * slot.nx + z.z * slot.ny);
-    }
+    const t = station / (points.length - 1);
+    contour.slots.forEach((beginSlot, index) => {
+      const eindSlot = eind?.slots[index];
+      const sx = eindSlot ? beginSlot.x + (eindSlot.x - beginSlot.x) * t : beginSlot.x;
+      const sy = eindSlot ? beginSlot.y + (eindSlot.y - beginSlot.y) * t : beginSlot.y;
+      positions.push(p.x + y.x * sx + z.x * sy, p.y + y.y * sx + z.y * sy, p.z + y.z * sx + z.z * sy);
+      normals.push(y.x * beginSlot.nx + z.x * beginSlot.ny, y.y * beginSlot.nx + z.y * beginSlot.ny, y.z * beginSlot.nx + z.z * beginSlot.ny);
+    });
   });
   for (let station = 0; station < points.length - 1; station += 1) {
     const ring = base + station * slotCount, nextRing = ring + slotCount;
@@ -167,7 +184,7 @@ function appendSweep(
     const { tangent, y, z } = frames[station];
     const p = points[station];
     const capBase = positions.length / 3;
-    for (const q of contour.cap.points) {
+    for (const q of (sign > 0 && eind ? eind : contour).cap.points) {
       positions.push(p.x + y.x * q.x + z.x * q.y, p.y + y.y * q.x + z.y * q.y, p.z + y.z * q.x + z.z * q.y);
       normals.push(tangent.x * sign, tangent.y * sign, tangent.z * sign);
     }

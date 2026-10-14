@@ -36,13 +36,34 @@ fn local_point_load_on_member_matches_simply_supported_closed_form() {
 fn request(nodes: Vec<Node3D>, members: Vec<Member3D>, supports: Vec<Support3D>, nodal_loads: Vec<NodalLoad3D>) -> SolveRequest3D {
     SolveRequest3D {
         schema_version: 1, analysis: AnalysisKind::Linear, nodes,
-        materials: vec![Material3D { id: 1, name: "steel".into(), e_mpa: 210_000.0, nu: 0.3125, alpha_per_k: None }],
+        materials: vec![Material3D { id: 1, name: "steel".into(), e_mpa: 210_000.0, nu: 0.3125, g_mpa: None, alpha_per_k: None }],
         sections: vec![section()], members, supports, nodal_loads, member_loads: vec![], member_point_loads: vec![], thermal_loads: vec![],
         plates: vec![], shell_elements: vec![], surface_loads: vec![],
         diaphragms: vec![],
         tension_only_fit: None, tension_only_cross_rule: false,
         max_iterations: 50, tolerance: 1e-10, buckling_modes: 0,
     }
+}
+
+#[test]
+fn independent_timber_shear_modulus_controls_torsion_without_changing_bending() {
+    let mut input = request(
+        vec![Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 }, Node3D { id: 2, x: 2.0, y: 0.0, z: 0.0 }],
+        vec![member(1, 1, 2)], vec![fixed(1)],
+        vec![NodalLoad3D { id: 1, node_id: 2, fx: 0.0, fy: 0.0, fz: -1.0, mx: 1.0, my: 0.0, mz: 0.0 }],
+    );
+    input.materials[0].e_mpa = 11_000.0;
+    input.materials[0].nu = 0.0;
+    let isotropic = solve(input.clone()).unwrap();
+    input.materials[0].g_mpa = Some(690.0);
+    let timber = solve(input.clone()).unwrap();
+    let iso_end = isotropic.displacements.iter().find(|d| d.node_id == 2).unwrap();
+    let wood_end = timber.displacements.iter().find(|d| d.node_id == 2).unwrap();
+    close(wood_end.rx, 1.0 * 2.0 / (690.0 * 1000.0 * section().torsion_j_m4), 1e-8, 1e-10);
+    close(wood_end.uz, iso_end.uz, 1e-8, 1e-10);
+    assert!(wood_end.rx > iso_end.rx * 7.0);
+    input.materials[0].g_mpa = Some(0.0);
+    assert!(solve(input).unwrap_err().contains("G van materiaal 1"));
 }
 
 #[test]
@@ -224,7 +245,7 @@ fn translational_support_spring_matches_closed_form_and_reports_reaction() {
 
 fn member(id: usize, start: usize, end: usize) -> Member3D {
     Member3D { id, start_node_id: start, end_node_id: end, material_id: 1, section_id: 1,
-        releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false, bedding: None }
+        releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false, bedding: None, part_section_ids: None }
 }
 
 fn fixed(node_id: usize) -> Support3D {
@@ -604,7 +625,7 @@ fn pdelta_accepts_zero_displacement_when_load_is_fully_restrained() {
 }
 
 #[test]
-fn portal_buckling_discards_numerical_zero_mode() {
+fn portal_buckling_rejects_a_free_rigid_body_mode() {
     let mut req = request(
         vec![
             Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 },
@@ -616,28 +637,17 @@ fn portal_buckling_discards_numerical_zero_mode() {
         vec![pinned(1), pinned(2)],
         vec![NodalLoad3D { id: 1, node_id: 3, fx: 0.0, fy: 0.0, fz: -10.0, mx: 0.0, my: 0.0, mz: 0.0 }],
     );
-    // De knikanalyse bij een eerste-ordeberekening: de nulmode (λ ≈ 1e-14) valt
-    // weg, de eerste fysieke knikfactor blijft over.
+    // De vroegere knikanalyse filterde deze nulmode uit en gaf toch een
+    // knikfactor. Het portaal kan als geheel om de lijn door de voeten
+    // omvallen; daarom mag geen knikuitkomst worden gepubliceerd.
     req.buckling_modes = 3;
-    let result = solve(req.clone()).unwrap();
-    match result.buckling {
-        BucklingSummary::Available { modes, members } => {
-            assert_eq!(modes.len(), 2);
-            close(modes[0].load_factor, 17.4767300887, 1e-7, 1e-7);
-            assert!(modes.iter().all(|mode| mode.load_factor > 1e-9));
-            close(members[0].critical_force_kn, 174.767300887, 1e-7, 1e-7);
-            assert!(members[0].effective_length_m.is_finite() && members[0].effective_length_m > 0.0);
-        }
-        other => panic!("knikresultaat verwacht, kreeg {other:?}"),
-    }
-    // Die nulmode is een echte beweging: met scharnierende voeten kan het
-    // portaal als geheel om de lijn door beide voeten buiten zijn vlak
-    // omvallen. Onder de drukkracht in de kolommen is K + K_G daar niet
-    // positief definiet; de tweede orde meldt dat in plaats van een uitkomst
-    // alleen in het vlak te leveren.
+    let error = solve(req.clone()).unwrap_err();
+    assert!(error.contains("draaien om X (as door knoop 1 en 2)") && error.contains("proefbelasting"), "{error}");
+    // Tweede orde hoort dezelfde vrije beweging vóór de P-Delta-iteratie te
+    // melden, ook als de opgegeven last haar niet aanstoot.
     req.analysis = AnalysisKind::PDelta;
     let error = solve(req).unwrap_err();
-    assert!(error.contains("niet positief definiet") && error.contains("buiten zijn vlak"), "{error}");
+    assert!(error.contains("draaien om X (as door knoop 1 en 2)") && error.contains("proefbelasting"), "{error}");
 }
 
 #[test]
@@ -721,15 +731,23 @@ fn mechanism_error_names_the_part_the_free_motions_and_a_remedy() {
 
 #[test]
 fn internal_mechanism_is_reported_as_such_when_supports_are_sufficient() {
-    // Twee ingeklemde einden, maar in knoop 2 zijn beide staafeinden voor
-    // buiging vrijgegeven: knoop 2 kan vrij draaien om Y en Z. De opleggingen
-    // houden het deel vast; de melding zegt dat het een intern mechanisme is.
+    // Twee ingeklemde einden en twee staven die aan beide einden voor buiging
+    // zijn vrijgegeven (vakwerkstaven op één lijn): knoop 2 kan dwars op de
+    // lijn bewegen. De opleggingen houden het deel vast; de melding zegt dat
+    // het een intern mechanisme is. (Tot #96 stond hier het geval met alleen
+    // de einden in knoop 2 vrijgegeven: twee consoles met een scharnier. Dat
+    // rekent nu: de vrije draaiing van knoop 2 vervormt niets en wordt
+    // vastgehouden, zie tests/knoopdraaiing.rs.)
     let mut first = member(1, 1, 2);
+    first.releases.my_start = true;
+    first.releases.mz_start = true;
     first.releases.my_end = true;
     first.releases.mz_end = true;
     let mut second = member(2, 2, 3);
     second.releases.my_start = true;
     second.releases.mz_start = true;
+    second.releases.my_end = true;
+    second.releases.mz_end = true;
     let error = solve(request(
         vec![
             Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 }, Node3D { id: 2, x: 4.0, y: 0.0, z: 0.0 },
@@ -744,10 +762,10 @@ fn internal_mechanism_is_reported_as_such_when_supports_are_sufficient() {
 }
 
 #[test]
-fn a_solved_model_with_insufficient_supports_gets_a_warning_and_a_good_one_does_not() {
+fn an_unexcited_mechanism_is_rejected_and_a_supported_model_is_not() {
     // Portaal met ruimtelijke scharnieren: het kan om de lijn door beide voeten
     // buiten zijn vlak omvallen. Onder een last in zijn vlak lost de kern het
-    // toch op; de uitkomst krijgt dan een melding vooraan.
+    // toch op; de adapter moet de vrije beweging alsnog afwijzen.
     let portal = |foot: fn(usize) -> Support3D| request(
         vec![
             Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 }, Node3D { id: 2, x: 12.0, y: 0.0, z: 0.0 },
@@ -757,11 +775,10 @@ fn a_solved_model_with_insufficient_supports_gets_a_warning_and_a_good_one_does_
         vec![foot(1), foot(2)],
         vec![NodalLoad3D { id: 1, node_id: 3, fx: 1.0, fy: 0.0, fz: -10.0, mx: 0.0, my: 0.0, mz: 0.0 }],
     );
-    let result = solve(portal(pinned)).unwrap();
-    let first = &result.diagnostics[0];
-    assert!(first.starts_with("Opleggingen: Het deel met knopen 1–4 en staven 1–3 is onvoldoende opgelegd"), "{first}");
-    assert!(first.contains("vrij: draaien om X (as door knoop 1 en 2)"), "{first}");
-    assert!(first.contains("toch een oplossing"), "{first}");
+    let error = solve(portal(pinned)).unwrap_err();
+    assert!(error.contains("Het deel met knopen 1–4 en staven 1–3 is onvoldoende opgelegd"), "{error}");
+    assert!(error.contains("vrij: draaien om X (as door knoop 1 en 2)"), "{error}");
+    assert!(error.contains("proefbelasting"), "{error}");
 
     // Een last die de beweging aanstoot: dezelfde bevinding staat in de fout.
     let mut sideways = portal(pinned);
@@ -781,7 +798,7 @@ fn a_tension_only_member_that_drops_out_is_left_out_of_the_support_check() {
     // (5–3) koppelt ze; zolang die meedoet, houdt de inklemming alles vast.
     // De last fx op knoop 5 drukt staaf 5 in; zonder staaf 5 lost de kern het
     // model nog op (de last op het portaal ligt in zijn vlak), maar het portaal
-    // kan dan omvallen: de melding noemt dat deel.
+    // kan dan omvallen: de fout noemt dat deel en de inactieve staaf.
     let mut tie = member(5, 5, 3);
     tie.tension_only = true;
     let input = request(
@@ -797,12 +814,11 @@ fn a_tension_only_member_that_drops_out_is_left_out_of_the_support_check() {
             NodalLoad3D { id: 2, node_id: 4, fx: 0.0, fy: 0.0, fz: -10.0, mx: 0.0, my: 0.0, mz: 0.0 },
         ],
     );
-    let result = solve(input).unwrap();
-    assert_eq!(result.inactive_members, vec![5], "{:?}", result.diagnostics);
-    let first = &result.diagnostics[0];
-    assert!(first.starts_with("Opleggingen: Het deel met knopen 1–4 en staven 1–3 is onvoldoende opgelegd"), "{first}");
-    assert!(first.contains("vrij: draaien om X (as door knoop 1 en 2)"), "{first}");
-    assert!(!first.contains("knopen 1–6"), "met staaf 5 erbij was alles vast: {first}");
+    let error = solve(input).unwrap_err();
+    assert!(error.contains("Het deel met knopen 1–4 en staven 1–3 is onvoldoende opgelegd"), "{error}");
+    assert!(error.contains("vrij: draaien om X (as door knoop 1 en 2)"), "{error}");
+    assert!(error.contains("inactief: staaf 5"), "{error}");
+    assert!(!error.contains("knopen 1–6"), "met staaf 5 erbij was alles vast: {error}");
 }
 
 #[test]
@@ -832,7 +848,7 @@ fn pendulum_columns_under_a_diaphragm_name_the_sway_of_the_diaphragm() {
     assert!(error.contains("toe die schijf 1 in X en Y en tegen draaien om Z vasthouden"), "{error}");
     assert!(!error.contains("kunnen samen nog bewegen"), "{error}");
 
-    // Alleen verticale lasten: de kern lost het op, met de melding vooraan.
-    let result = solve(columns((0..4).map(|i| load(i + 1, 2 * i + 2, 0.0, -10.0)).collect())).unwrap();
-    assert!(result.diagnostics[0].starts_with(&format!("Opleggingen: {sway}")), "{:?}", result.diagnostics);
+    // Alleen verticale lasten: de kern lost het op, maar het mechanisme blijft een fout.
+    let error = solve(columns((0..4).map(|i| load(i + 1, 2 * i + 2, 0.0, -10.0)).collect())).unwrap_err();
+    assert!(error.contains(sway), "{error}");
 }

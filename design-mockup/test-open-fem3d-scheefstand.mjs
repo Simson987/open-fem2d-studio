@@ -10,7 +10,8 @@ const {
   scheefstandVanCombinatie, toepasselijkeScheefstandNormen3D,
 } = await import("./src/components/openFem3d/openFem3dScheefstand.ts");
 const { bepaalScheefstand, scheefstandToelichting } = await import("./src/lib/scheefstandNorm.ts");
-const { parseOpenFem3DModel, withOpenFem3DSelfWeight, openFem3DMemberAxes } = await import("./src/components/openFem3d/openFem3dModel.ts");
+const { parseOpenFem3DModel, withOpenFem3DSelfWeight, openFem3DMemberAxes, openFem3DGlobalDirectionVector, openFem3DGlobalMemberLoadFactor } =
+  await import("./src/components/openFem3d/openFem3dModel.ts");
 const { buildOpenFem3DSolveRequest } = await import("./src/components/openFem3d/openFem3dSolver.ts");
 const { SCHEEFSTAND_COMBO_OFFSET } = await import("./src/components/fem/solver/combinations.ts");
 const HIER = dirname(fileURLToPath(import.meta.url));
@@ -91,8 +92,15 @@ function sommen(v) {
   for (const l of v.memberLoads) {
     const m = staafVan.get(l.memberId);
     const a = knoopVan.get(m.startNodeId), b = knoopVan.get(m.endNodeId);
-    const { ey, ez } = openFem3DMemberAxes(a, b, m.rollAngleRad ?? 0);
+    const { ex, ey, ez } = openFem3DMemberAxes(a, b, m.rollAngleRad ?? 0);
     const lengte = (l.endPositionM ?? Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)) - (l.startPositionM ?? 0);
+    if (l.globalDirection !== undefined) {
+      // Globale lijnlast (#80; sinds #112 ook het eigen gewicht): q langs de globale as, per staafmeter of per projectie.
+      const d = openFem3DGlobalDirectionVector(l.globalDirection);
+      const q = (l.qStartKnPerM + l.qEndKnPerM) / 2 * lengte * openFem3DGlobalMemberLoadFactor(ex, l.globalDirection, l.perProjection);
+      for (let i = 0; i < 3; i++) s[i] += q * d[i];
+      continue;
+    }
     const qy = (l.qyStartKnPerM + l.qyEndKnPerM) / 2 * lengte, qz = (l.qzStartKnPerM + l.qzEndKnPerM) / 2 * lengte;
     for (let i = 0; i < 3; i++) s[i] += qy * ey[i] + qz * ez[i];
   }

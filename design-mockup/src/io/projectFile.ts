@@ -181,6 +181,26 @@ export function voorgesteldeProjectnaam(pad: string | null | undefined): string 
  *      op bedding krijgt versie 5 (ook met belastingvlakken); een 3D-project
  *      zonder bedding houdt versie 3 of 4, en bestanden van versie 3 en 4
  *      laden ongewijzigd.
+ *  6 — `model3d.beams[].profileNameEnd`: verlopende 3D-staven (issue #73).
+ *      Een uitgave zonder verloop leest de staaf veld voor veld en zou het
+ *      eindprofiel stil laten vallen: de staaf rekende dan prismatisch met het
+ *      beginprofiel, en na opslaan was het verloop weg. Alleen een bestand met
+ *      minstens één verlopende staaf krijgt versie 6 (ook met bedding of
+ *      belastingvlakken); de rest houdt versie 3, 4 of 5 en bestanden van die
+ *      versies laden ongewijzigd.
+ *  7 — `model3d.plates[].bedding`: platen op bedding (Winkler, issue #107).
+ *      Om dezelfde reden als bij 5: een uitgave van versie 5 of 6 kent wel de
+ *      staafbedding maar niet die van een plaat; zij zou het veld bij het
+ *      lezen stil overslaan en de vloer rekenen ZONDER de grond (of met alleen
+ *      de grond als oplegging weigeren te rekenen). Alleen een bestand met
+ *      minstens één plaat op bedding krijgt versie 7 (ook met verlopende staven,
+ *      staven op bedding of belastingvlakken); zonder plaatbedding blijft het
+ *      3, 4, 5 of 6.
+ *  8 — `model3d.analysisMaterials`: gekozen E en ν per materiaal voor de
+ *      ruimtelijke analyse (issue #62). Een oudere uitgave zou de instelling
+ *      stil overslaan en met een andere stijfheid rekenen. Alleen een 3D-model
+ *      met zulke instellingen krijgt versie 8; overige bestanden behouden
+ *      hun eerdere versienummer.
  * v1-bestanden blijven leesbaar: de v2-velden zijn optioneel en ontbrekende
  * velden krijgen bij het laden de bestaande defaults (defaultCombinations()
  * en DEFAULT_STRUCTURAL_GRID in useFemStore.loadProjectState).
@@ -218,8 +238,16 @@ export const PROJECT_FORMAT_VERSION_3D = 3;
 export const PROJECT_FORMAT_VERSION_3D_LOAD_PANELS = 4;
 /** Staven op bedding in het 3D-model: eerdere uitgaven moeten weigeren, niet de grond stil laten vallen. */
 export const PROJECT_FORMAT_VERSION_3D_BEDDING = 5;
+/** Verlopende 3D-staven: eerdere uitgaven moeten weigeren, niet het verloop stil laten vallen. */
+export const PROJECT_FORMAT_VERSION_3D_TAPERED = 6;
+/** Platen op bedding in het 3D-model (#107): een uitgave van versie 5 of 6 moet weigeren, niet de vloer zonder grond rekenen. */
+export const PROJECT_FORMAT_VERSION_3D_PLATE_BEDDING = 7;
+/** Afwijkende analyse-E of ν per 3D-materiaal: oude lezers moeten weigeren. */
+export const PROJECT_FORMAT_VERSION_3D_ANALYSIS_MATERIALS = 8;
+/** Gevel- en dakpanelen zonder stijfheid; oudere lezers mogen ze niet stil negeren. */
+export const PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS = 9;
 /** De hoogste versie die deze uitgave kan lezen. */
-export const PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_3D_BEDDING;
+export const PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS;
 
 /** JSON-vorm van één belastingcombinatie: `factors` als { caseId: factor }. */
 export interface ProjectFileCombination {
@@ -509,6 +537,11 @@ export function serializeProject(state: Omit<ProjectFile, "format" | "version" |
   const file: ProjectFile = {
     format: PROJECT_FORMAT_ID,
     version: modelDimension !== "3d" ? PROJECT_FORMAT_VERSION
+      : (model3d?.envelopePanels?.length ?? 0) > 0 || model3d?.loadPanels?.some((panel) => (panel.openings?.length ?? 0) > 0)
+        ? PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS
+      : model3d?.analysisMaterials && Object.keys(model3d.analysisMaterials).length > 0 ? PROJECT_FORMAT_VERSION_3D_ANALYSIS_MATERIALS
+      : model3d?.plates?.some((plate) => plate.bedding !== undefined) ? PROJECT_FORMAT_VERSION_3D_PLATE_BEDDING
+      : model3d?.beams.some((beam) => beam.profileNameEnd !== undefined) ? PROJECT_FORMAT_VERSION_3D_TAPERED
       : model3d?.beams.some((beam) => beam.bedding !== undefined) ? PROJECT_FORMAT_VERSION_3D_BEDDING
       : (model3d?.loadPanels?.length ?? 0) > 0 ? PROJECT_FORMAT_VERSION_3D_LOAD_PANELS : PROJECT_FORMAT_VERSION_3D,
     savedAt: new Date().toISOString(),
@@ -692,17 +725,26 @@ export async function saveProjectTo(path: string, text: string): Promise<void> {
  * file-input. Returns { text, path } — text is the raw JSON, path is the
  * file path (Tauri only) or filename (browser).
  */
-export async function openProject(): Promise<{ text: string; path: string } | null> {
+export async function openProject(importFilters: { name: string; extensions: string[] }[] = []): Promise<
+  { soort: "project"; text: string; path: string } | { soort: "import"; path: string } | null
+> {
   if (isTauri()) {
     const { open } = await import("@tauri-apps/plugin-dialog");
     const { readTextFile } = await import("@tauri-apps/plugin-fs");
     const selected = await open({
       multiple: false,
-      filters: [{ name: "Open FEM Studio project", extensions: [...PROJECT_FILE_EXTS] }],
+      filters: [
+        { name: "Alle ondersteunde bestanden", extensions: [...new Set([...PROJECT_FILE_EXTS, ...importFilters.flatMap((filter) => filter.extensions)])] },
+        { name: "Open FEM Studio project", extensions: [...PROJECT_FILE_EXTS] },
+        ...importFilters,
+      ],
     });
     if (!selected || Array.isArray(selected)) return null;
-    const text = await readTextFile(selected as string);
-    return { text, path: selected as string };
+    const path = selected as string;
+    const type = path.split(".").pop()?.toLowerCase() ?? "";
+    if (!PROJECT_FILE_EXTS.includes(type)) return { soort: "import", path };
+    const text = await readTextFile(path);
+    return { soort: "project", text, path };
   }
   // Browser: hidden <input type=file>
   return await new Promise(resolve => {
@@ -711,7 +753,7 @@ export async function openProject(): Promise<{ text: string; path: string } | nu
     input.accept = `${PROJECT_FILE_EXTS.map((e) => `.${e}`).join(",")},application/json`;
     input.hidden = true;
     document.body.appendChild(input);
-    const finish = (value: { text: string; path: string } | null) => {
+    const finish = (value: { soort: "project"; text: string; path: string } | null) => {
       input.remove();
       resolve(value);
     };
@@ -719,7 +761,7 @@ export async function openProject(): Promise<{ text: string; path: string } | nu
       const file = input.files?.[0];
       if (!file) { finish(null); return; }
       const text = await file.text();
-      finish({ text, path: file.name });
+      finish({ soort: "project", text, path: file.name });
     };
     input.addEventListener("cancel", () => finish(null), { once: true });
     input.click();

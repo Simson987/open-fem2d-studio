@@ -70,6 +70,12 @@ export interface IMatrixProfile {
   maxMagnitude: number;
   /** maxAsymmetry / maxMagnitude; 0 bij een exact symmetrische matrix. */
   relAsymmetry: number;
+  /** Optioneel verzameld voor RCM tijdens dezelfde matrixscan. */
+  /** Vlakke indexparen [i, j, i, j, …] zonder object per niet-nul. */
+  edges?: number[];
+  nodeNeighbours?: number[][];
+  /** Een vrijwel dichte matrix krijgt geen extra RCM-graaf in het geheugen. */
+  graphTruncated?: boolean;
 }
 
 /**
@@ -92,6 +98,8 @@ const ASYMMETRIE_GRENS = 1e-10;
  */
 const PIVOT_ABS_DREMPEL = 1e-12;
 const PIVOT_REL_DREMPEL = 1e-12;
+/** Bij een dichte matrix kost de extra graaf meer geheugen zonder profielwinst. */
+const MAX_GRAAF_RANDEN_PER_VRIJHEIDSGRAAD = 48;
 
 /** Laagste gemeten |d_i| / |A_ii| sinds de laatste reset — diagnostiek. */
 let laagstePivotRatio = Number.POSITIVE_INFINITY;
@@ -116,21 +124,36 @@ export function resetSkylineDiagnostics(): void {
  * asymmetrie. Kost O(n²) leesbewerkingen — dezelfde orde als de dichte
  * opslag zelf, en verwaarloosbaar naast de O(n³) van een dichte oplossing.
  */
-export function analyzeMatrix(A: Matrix): IMatrixProfile {
+export function analyzeMatrix(A: Matrix, collectGraph = false): IMatrixProfile {
   const n = A.rows;
   const first = new Int32Array(n);
   let profileSize = 0;
   let halfBandwidth = 0;
   let maxAsymmetry = 0;
   let maxMagnitude = 0;
+  let edges: number[] | undefined = collectGraph ? [] : undefined;
+  let neighbours: Array<Set<number>> | undefined = collectGraph && n % 3 === 0
+    ? Array.from({ length: n / 3 }, () => new Set<number>()) : undefined;
+  let graphTruncated = false;
 
   for (let i = 0; i < n; i++) {
     const rij = A.data[i];
+    const nodeI = Math.floor(i / 3);
     let fi = i;
     for (let j = 0; j < i; j++) {
       const onder = rij[j];
       const boven = A.data[j][i];
       if (onder !== 0 || boven !== 0) {
+        if (edges) {
+          if (edges.length < 2 * MAX_GRAAF_RANDEN_PER_VRIJHEIDSGRAAD * n) edges.push(i, j);
+          else { edges = undefined; neighbours = undefined; graphTruncated = true; }
+        }
+        if (neighbours) {
+          const nodeJ = Math.floor(j / 3);
+          if (nodeI !== nodeJ) {
+            neighbours[nodeI].add(nodeJ); neighbours[nodeJ].add(nodeI);
+          }
+        }
         if (fi === i) fi = j;
         const verschil = Math.abs(onder - boven);
         if (verschil > maxAsymmetry) maxAsymmetry = verschil;
@@ -153,7 +176,129 @@ export function analyzeMatrix(A: Matrix): IMatrixProfile {
     maxAsymmetry,
     maxMagnitude,
     relAsymmetry: maxMagnitude > 0 ? maxAsymmetry / maxMagnitude : 0,
+    edges,
+    nodeNeighbours: neighbours?.map((s) => [...s]),
+    graphTruncated,
   };
+}
+
+/**
+ * George–Liu-startknoop en reverse Cuthill–McKee op het knoopgraafje.
+ * Een 2D-rekenknoop heeft drie opeenvolgende vrijheidsgraden. De volgorde
+ * binnen een knoop blijft intact, zodat de fysische richtingen gelijk blijven.
+ */
+export function rcmNodeOrder(A: Matrix, knownNeighbours?: number[][]): Int32Array {
+  const nodes = A.rows / 3;
+  if (!Number.isInteger(nodes)) return Int32Array.from({ length: A.rows }, (_, i) => i);
+  const neighbours: number[][] = knownNeighbours ?? Array.from({ length: nodes }, () => []);
+  if (!knownNeighbours) for (let i = 0; i < nodes; i++) {
+    for (let j = 0; j < i; j++) {
+      let connected = false;
+      for (let di = 0; di < 3 && !connected; di++) {
+        for (let dj = 0; dj < 3; dj++) {
+          if (A.data[3 * i + di][3 * j + dj] !== 0 ||
+              A.data[3 * j + dj][3 * i + di] !== 0) {
+            connected = true;
+            break;
+          }
+        }
+      }
+      if (connected) { neighbours[i].push(j); neighbours[j].push(i); }
+    }
+  }
+  const degree = neighbours.map((xs) => xs.length);
+  const done = new Uint8Array(nodes);
+  const order: number[] = [];
+  const byDegree = (a: number, b: number) => degree[a] - degree[b] || a - b;
+
+  const levels = (start: number): number[][] => {
+    const seen = new Uint8Array(nodes);
+    seen[start] = 1;
+    let frontier = [start];
+    const result: number[][] = [];
+    while (frontier.length) {
+      result.push(frontier);
+      const next: number[] = [];
+      for (const node of frontier) {
+        for (const neighbour of neighbours[node]) {
+          if (done[neighbour] || seen[neighbour]) continue;
+          seen[neighbour] = 1;
+          next.push(neighbour);
+        }
+      }
+      frontier = next;
+    }
+    return result;
+  };
+
+  while (order.length < nodes) {
+    let start = -1;
+    for (let i = 0; i < nodes; i++) {
+      if (!done[i] && (start < 0 || byDegree(i, start) < 0)) start = i;
+    }
+    // George–Liu: ga naar de laagste-graadknoop in het diepste niveau,
+    // zolang het aantal niveaus toeneemt.
+    let depth = levels(start).length;
+    for (;;) {
+      const allLevels = levels(start);
+      const last = allLevels[allLevels.length - 1];
+      const candidate = [...last].sort(byDegree)[0];
+      const candidateDepth = levels(candidate).length;
+      if (candidateDepth <= depth) break;
+      start = candidate;
+      depth = candidateDepth;
+    }
+    const seen = new Uint8Array(nodes);
+    seen[start] = 1;
+    const bfs = [start];
+    for (let p = 0; p < bfs.length; p++) {
+      const next = neighbours[bfs[p]].filter((v) => !done[v] && !seen[v]).sort(byDegree);
+      for (const v of next) { seen[v] = 1; bfs.push(v); }
+    }
+    for (let p = bfs.length - 1; p >= 0; p--) {
+      done[bfs[p]] = 1;
+      order.push(bfs[p]);
+    }
+  }
+  return Int32Array.from(order.flatMap((node) => [3 * node, 3 * node + 1, 3 * node + 2]));
+}
+
+/** Herordent alleen als het skyline-profiel daadwerkelijk kleiner wordt. */
+export function reorderForSkyline(A: Matrix, originalProfile = analyzeMatrix(A, true)): {
+  newToOld: Int32Array; first: Int32Array; applied: boolean;
+  originalProfileSize: number; reorderedProfileSize: number;
+} {
+  const n = A.rows;
+  const originalProfileSize = originalProfile.profileSize;
+  if (originalProfile.graphTruncated) {
+    return { newToOld: Int32Array.from({ length: n }, (_, i) => i),
+      first: originalProfile.first, applied: false, originalProfileSize, reorderedProfileSize: originalProfileSize };
+  }
+  const order = rcmNodeOrder(A, originalProfile.nodeNeighbours);
+  const inverse = new Int32Array(n);
+  for (let i = 0; i < n; i++) inverse[order[i]] = i;
+  const first = Int32Array.from({ length: n }, (_, i) => i);
+  const edges = originalProfile.edges ?? (() => {
+    const found: number[] = [];
+    for (let i = 0; i < n; i++) for (let j = 0; j < i; j++) {
+      if (A.data[i][j] !== 0 || A.data[j][i] !== 0) found.push(i, j);
+    }
+    return found;
+  })();
+  for (let edge = 0; edge < edges.length; edge += 2) {
+    const oldI = edges[edge], oldJ = edges[edge + 1];
+    const i = Math.max(inverse[oldI], inverse[oldJ]);
+    const j = Math.min(inverse[oldI], inverse[oldJ]);
+    if (j < first[i]) first[i] = j;
+  }
+  let reorderedProfileSize = 0;
+  for (let i = 0; i < n; i++) reorderedProfileSize += i - first[i] + 1;
+  if (reorderedProfileSize >= originalProfileSize) {
+    return { newToOld: Int32Array.from({ length: n }, (_, i) => i),
+      first: originalProfile.first, applied: false, originalProfileSize, reorderedProfileSize: originalProfileSize };
+  }
+  return { newToOld: order, first, applied: true,
+    originalProfileSize, reorderedProfileSize };
 }
 
 /**
@@ -175,7 +320,7 @@ export function solveSkyline(A: Matrix, b: number[]): number[] {
   }
   if (n === 0) return [];
 
-  const profiel = analyzeMatrix(A);
+  const profiel = analyzeMatrix(A, true);
 
   // Veiligheidsklep: geen symmetrie → geen LDLᵀ.
   if (profiel.relAsymmetry > ASYMMETRIE_GRENS) {
@@ -183,7 +328,29 @@ export function solveSkyline(A: Matrix, b: number[]): number[] {
     return solveGauss(A, b);
   }
 
-  return solveWithProfile(A, b, profiel.first);
+  const reordered = reorderForSkyline(A, profiel);
+  try {
+    const solution = solveWithProfile(A, b,
+      reordered.applied ? reordered.first : profiel.first, reordered.applied ? reordered.newToOld : undefined);
+    const original = new Array<number>(n);
+    for (let i = 0; i < n; i++) original[reordered.newToOld[i]] = solution[i];
+    return original;
+  } catch (error) {
+    // NonlinearSolver interpreteert dit nummer als vrijheidsgraad in het
+    // oorspronkelijke mesh. Die betekenis moet bij hernummering behouden.
+    const match = /^Matrix is singular or nearly singular at column (\d+)$/.exec(
+      error instanceof Error ? error.message : '');
+    if (match) {
+      // Bij meerdere mechanismevrijheden kan de permutatie een andere
+      // singuliere pivot als eerste vinden. Herhaal alleen op dit foutpad in
+      // de oorspronkelijke volgorde voor dezelfde knoopmelding als voorheen.
+      if (reordered.applied) {
+        try { solveWithProfile(A, b, profiel.first); } catch (originalError) { throw originalError; }
+      }
+      throw new Error(`Matrix is singular or nearly singular at column ${reordered.newToOld[Number(match[1])]}`);
+    }
+    throw error;
+  }
 }
 
 /**
@@ -198,7 +365,7 @@ export function solveSkyline(A: Matrix, b: number[]): number[] {
  * Voorwaarde: `first[i] ≤ i` en de envelop moet alle niet-nullen van de
  * onderdriehoek omvatten. `analyzeMatrix` levert de krapst geldige.
  */
-export function solveWithProfile(A: Matrix, b: number[], first: Int32Array): number[] {
+export function solveWithProfile(A: Matrix, b: number[], first: Int32Array, newToOld?: Int32Array): number[] {
   const n = A.rows;
   if (n === 0) return [];
 
@@ -213,9 +380,9 @@ export function solveWithProfile(A: Matrix, b: number[], first: Int32Array): num
   }
   const vals = new Float64Array(offset);
   for (let i = 0; i < n; i++) {
-    const rij = A.data[i];
+    const rij = A.data[newToOld?.[i] ?? i];
     const s = start[i];
-    for (let j = first[i]; j <= i; j++) vals[s + j] = rij[j];
+    for (let j = first[i]; j <= i; j++) vals[s + j] = rij[newToOld?.[j] ?? j];
   }
 
   const d = new Float64Array(n);
@@ -240,7 +407,8 @@ export function solveWithProfile(A: Matrix, b: number[], first: Int32Array): num
     let diag = vals[si + i];
     for (let k = fi; k < i; k++) diag -= vals[si + k] * t[k];
 
-    const oorspronkelijk = Math.abs(A.data[i][i]);
+    const oldI = newToOld?.[i] ?? i;
+    const oorspronkelijk = Math.abs(A.data[oldI][oldI]);
     if (oorspronkelijk > 0) {
       const ratio = Math.abs(diag) / oorspronkelijk;
       if (ratio < laagstePivotRatio) laagstePivotRatio = ratio;
@@ -259,7 +427,7 @@ export function solveWithProfile(A: Matrix, b: number[], first: Int32Array): num
   const x = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     const si = start[i];
-    let som = b[i];
+    let som = b[newToOld?.[i] ?? i];
     for (let k = first[i]; k < i; k++) som -= vals[si + k] * x[k];
     x[i] = som;
   }

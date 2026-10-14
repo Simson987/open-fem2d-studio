@@ -102,11 +102,25 @@
   align-items: stretch;
 }
 
+/* Schuift het lint horizontaal als het niet past (in elke tab). */
 .ribbon-content-panel .ribbon-content {
   display: flex;
   align-items: stretch;
   height: 100%;
   width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.ribbon-content-panel .ribbon-content::-webkit-scrollbar {
+  height: 6px;
+}
+
+.ribbon-content-panel .ribbon-content::-webkit-scrollbar-thumb {
+  background: var(--theme-ribbon-group-separator);
+  border-radius: 3px;
 }
 
 /* Enter from right */
@@ -151,6 +165,7 @@
 
 .ribbon-groups {
   display: flex;
+  flex: 0 0 auto;
   gap: 0;
   align-items: stretch;
   height: 100%;
@@ -161,6 +176,7 @@
   display: flex;
   flex-direction: column;
   padding: 0 8px;
+  flex: 0 0 auto;
   border-right: 1px solid var(--theme-ribbon-group-separator);
   min-width: 50px;
   height: 100%;
@@ -246,6 +262,11 @@
 
 .ribbon-btn:active {
   background: var(--theme-ribbon-btn-hover);
+}
+
+.ribbon-btn:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: -2px;
 }
 
 .ribbon-btn:disabled {
@@ -353,4 +374,73 @@
   text-align: left;
   max-width: none;
   white-space: nowrap;
+}
+
+/* Lint Start: dichter opgezet dan de andere tabs (die blijven zoals ze
+   waren). Kleine knoppen in kolommen van drie naast elkaar, middelgrote in
+   kolommen van twee, minder opvulling. De namen staan er volledig. */
+.ribbon-content-panel:has(> .ribbon-content-home) {
+  padding: 2px 4px 0 2px;
+}
+
+.ribbon-content-home .ribbon-group {
+  padding: 0 3px;
+}
+
+.ribbon-content-home .ribbon-group-content {
+  padding: 0;
+}
+
+.ribbon-content-home .ribbon-group-label {
+  line-height: 11px;
+  flex-shrink: 0;
+  padding: 1px 0;
+}
+
+.ribbon-content-home .ribbon-btn-stack {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(3, 22px);
+  grid-auto-columns: max-content;
+  align-content: start;
+  height: auto;
+}
+
+.ribbon-content-home .ribbon-btn-stack:has(> .ribbon-btn.medium) {
+  grid-template-rows: repeat(2, 33px);
+}
+
+.ribbon-content-home .ribbon-btn.small,
+.ribbon-content-home .ribbon-btn.medium {
+  min-width: 28px;
+  padding: 2px 4px;
+  gap: 3px;
+}
+
+/* Krap lint (useRibbonCompact.ts): past het lint Start met volledige namen
+   niet in het venster, dan eerst de namen van de kleine en middelgrote
+   knoppen ingekort tot 72 px (met …). Alleen dan: met ruimte genoeg blijven
+   de namen heel. */
+.ribbon-content-home.ribbon-tight .ribbon-btn.small .ribbon-btn-label,
+.ribbon-content-home.ribbon-tight .ribbon-btn.medium .ribbon-btn-label {
+  display: block;
+  max-width: 72px;
+  text-overflow: ellipsis;
+}
+
+/* Compact lint (useRibbonCompact.ts): past het lint Start ook met ingekorte
+   namen niet, dan alleen de pictogrammen van de kleine en middelgrote
+   knoppen. De naam blijft in de tooltip en in aria-label. */
+.ribbon-content-home.ribbon-compact .ribbon-btn.small,
+.ribbon-content-home.ribbon-compact .ribbon-btn.medium {
+  width: 26px;
+  min-width: 26px;
+  padding: 2px;
+  gap: 0;
+  justify-content: center;
+}
+
+.ribbon-content-home.ribbon-compact .ribbon-btn.small .ribbon-btn-label,
+.ribbon-content-home.ribbon-compact .ribbon-btn.medium .ribbon-btn-label {
+  display: none;
 }

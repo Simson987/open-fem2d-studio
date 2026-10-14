@@ -28,6 +28,8 @@ pub mod interactie;
 pub mod trek;
 /// Massief rond staal: buiging met normaal- en dwarskracht (§6.2.8–6.2.10).
 pub mod rond;
+/// Klasse 4: effectieve breedtes volgens NEN-EN 1993-1-5 §4.4 (A_eff, W_eff).
+pub mod effectief;
 mod opmaak;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, TS)]

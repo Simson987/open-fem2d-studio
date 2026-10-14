@@ -341,7 +341,9 @@ log("\n[6] Verwijzingen en lasten die niet meetellen");
     ["oplegging op onbekende knoop", (m) => { m.supports[0].nodeId = 99; }, "knoop 99"],
     ["last op onbekend belastinggeval", (m) => { m.loads[0].caseId = 9; }, "belastinggeval 9"],
     ["last op onbekende staaf", (m) => { m.loads[0].beamId = 9; }, "staaf 9"],
-    ["lijnlast zonder q", (m) => { delete m.loads[0].q; }, "telt dus niet mee"],
+    // Sinds de controle van 12 oktober 2026 (punt K2) zegt de melding wat er
+    // mist in plaats van de algemene "levert geen invoer … telt dus niet mee".
+    ["lijnlast zonder q", (m) => { delete m.loads[0].q; }, "heeft geen waarde"],
     ["thermische last zonder deltaT", (m) => {
       m.loads.push({ id: 3, type: "thermal", caseId: 1, beamId: 2 });
     }, "telt dus niet mee"],

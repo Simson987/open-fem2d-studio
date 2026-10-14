@@ -34,6 +34,7 @@ import { NumCell, SelectCell, CheckCell, TextCell, fmtNum } from "./cells";
 import type { TableDataset, TableViewApi } from "./tableTypes";
 import type { EigenGewichtOverzicht } from "../../lib/eigenGewichtOverzicht";
 import { isEigenGewichtGeval } from "../../lib/eigenGewicht";
+import { momentExtremen } from "../fem/solver/veldExtremen";
 import "./TableView.css";
 
 // ── Spec-typen: één uniforme beschrijving per dataset ───────────────────────
@@ -1040,9 +1041,12 @@ export default function TableView(props: TableViewProps) {
       editable: false,
       emptyText: t("table.noRows"),
       rows: entries.map(([bid, e]) => {
-        // |M|max over de stations (veldmoment kan groter zijn dan de eindmomenten).
-        const mAbsMax = e.bendingMoment.length > 0
-          ? e.bendingMoment.reduce((m, v) => Math.max(m, Math.abs(v)), 0)
+        // |M|max over de staaf (veldmoment kan groter zijn dan de eindmomenten),
+        // ook tussen de stations waar V = 0 (`momentExtremen`, controle 12
+        // oktober 2026, punt C8).
+        const veld = e.bendingMoment.length > 0 ? momentExtremen(e) : null;
+        const mAbsMax = veld
+          ? Math.max(Math.abs(veld.max.M), Math.abs(veld.min.M))
           : Math.max(Math.abs(e.M_start), Math.abs(e.M_end));
         // rad → mrad; ontbreekt het veld (resultaat van vóór deze uitbreiding),
         // dan blijft de cel 0 in plaats van NaN.

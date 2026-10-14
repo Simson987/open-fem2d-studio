@@ -45,6 +45,9 @@
     "hoekExtraHint": "The angle snap then also catches 30°, 45° and 60° and their mirror images.",
     "verbindingsTolerantie": "Connection tolerance",
     "verbindingsTolerantieHint": "Within this distance a node counts as “on the member” or “at the same place” as another node: the model check reports it, and a new node is connected or reused. 0.1 to 25 mm, default 5. Comma or point allowed. Existing nodes are not moved; a new node on a member is placed on the member axis.",
+    "knopenAansluiten": "Merge and connect nodes automatically",
+    "knopenAansluitenHint": "3D only. When a point lies within the connection tolerance of an existing node after drawing, inserting, moving or copying, it becomes that node (merged). When a node then lies on a member, or a new member runs through an existing node, the member is split there. In the same undo step, with a message. Connecting also happens after importing a model. An opened project does not change by itself: the model check on the canvas reports such nodes, with the Merge and Connect buttons.",
+    "verbindingsTolerantieHint3d": "Within this distance of the member axis a node counts as ‘on the member’, and within this distance of another node as ‘at the same place’: the model check reports it, Connect nodes splits the member there and Merge nodes makes them one node (also automatically). 0.1 to 25 mm, default 5; the same setting as in 2D. A node within this distance of a member end, measured along the member axis, does not count as ‘on the member’. The node is not moved: the parts of the member run to the node.",
     "groepLabels": "Labels",
     "groepGeometrie": "Geometry",
     "groepResultaten": "Results",
@@ -77,6 +80,9 @@
     "none": "None",
     "legend": "Plate result legend",
     "signNote": "Plate axes: z = plate normal (floor: upwards; wall: y upwards). Moments positive for tension at the bottom face.",
+    "beddingNote": "Plate on elastic foundation: settlement positive into the soil (against the plate normal), ground pressure k·settlement.",
+    "noContactGrey": "Grey with dot: no contact (compression only).",
+    "noContactDots": "Dot: no contact (compression only).",
     "linearNotice": "Plates are solved first order (linear); second order with plates is not yet available in the 3D engine.",
     "meshPending": "Building analysis mesh…",
     "meshFailed": "Analysis mesh: {{message}}",
@@ -91,7 +97,9 @@
       "vx": "Shear force vx",
       "vy": "Shear force vy",
       "vonMisesTop": "Von Mises stress top",
-      "vonMisesBottom": "Von Mises stress bottom"
+      "vonMisesBottom": "Von Mises stress bottom",
+      "groundPressure": "Ground pressure",
+      "settlement": "Settlement (into the soil)"
     }
   },
   "openFem3dVisibility": {
@@ -149,7 +157,8 @@
     "modeLoadCase": "load case",
     "modeCurrent": "current tab state",
     "deleteViewSet": "Delete {{name}}",
-    "loadPanels": "Load panels"
+    "loadPanels": "Load panels",
+    "envelopePanels": "Facade and roof panels"
   },
   "openFem3dDeformation": {
     "scale": "Magnification",
@@ -291,8 +300,8 @@
     "noRecent": "No recent projects yet.",
     "showOnStartup": "Show this screen on startup",
     "skip": "Skip",
-    "steelHall": "Steel hall",
-    "steelHallDesc": "A steel hall as a 3D model, with the wizard"
+    "steelHall": "Hall (steel or timber)",
+    "steelHallDesc": "A steel or timber hall as a 3D model, with the wizard"
   },
   "projectSettings": {
     "title": "Project Settings",
@@ -373,6 +382,9 @@
     "qpSource": "Determination of q_p",
     "qpCalculated": "Calculate per EN 1991-1-4 §4",
     "qpManual": "Enter manually (e.g. from the NA table)",
+    "qpManualShort": "manual",
+    "qpManualSource": "Source of manual wind pressure",
+    "qpManualSourcePlaceholder": "E.g. project calculation, table and edition",
     "qpValue": "q_p [kN/m²]",
     "windLeft": "Wind from the left",
     "windRight": "Wind from the right",
@@ -382,6 +394,8 @@
     "cpiPlus": "Only +0.20",
     "cpiMinus": "Only −0.30",
     "cpiManual": "Manual",
+    "cpiManualSource": "Source of manual internal pressure",
+    "cpiManualSourcePlaceholder": "E.g. opening calculation, document and edition",
     "spacing": "Frame spacing [m]",
     "position": "Position",
     "positionInner": "Internal frame",
@@ -489,7 +503,9 @@
       "unknownFieldsBody": "{{velden}} — these are not loaded and will be lost on the next Save. Keep a copy of the file if you need them.",
       "projectOpened": "Project opened",
       "libraryUpdated": "Library updated by this project",
-      "openFailed": "Cannot open file"
+      "openFailed": "Cannot open file",
+      "notAProjectTitle": "Not an Open FEM Studio project",
+      "notAProjectBody": "{{naam}} is not a project file (.ifcfem or .ifcfem2d) and was not opened."
     },
     "ifc": {
       "exportErrors": "IFC export contains errors",
@@ -566,7 +582,7 @@
       "finish": "Done"
     }
   },
-  "remoteControlHint": "The app was started with OPENAEC_GUI_CONTROL=1 and is being controlled through the control channel.",
+  "remoteControlHint": "The control channel, enabled by default, lets an AI assistant or script control the app (Settings → AI assistant (MCP), or OPENAEC_GUI_CONTROL=1).",
   "remoteControlActive": "remote control active",
   "statusBar": {
     "snapExplain": {
@@ -616,6 +632,9 @@
     "consequenceExplainFavourable": "(favourable permanent action 0.9). This includes",
     "consequenceExplainTail": "; this factor is not applied again to any result. A combination you have modified or added yourself does not follow the consequence class.",
     "windRegion": "Wind region (EN 1991-1-4/NB)",
+    "windCode": "Wind code route",
+    "windCodeDutchLegacy": "Dutch route (existing calculation)",
+    "windCodeUnavailable": "Unavailable wind route: {{code}}",
     "terrainCategory": "Terrain category (EN 1991-1-4 table 4.1)",
     "windExplainRegion": "Wind region {{gebied}} gives a basic wind velocity",
     "windExplainTerrain": "The terrain category gives",
@@ -736,6 +755,7 @@
     },
     "uc": {
       "badgeTitle": "Member {{staaf}}: governing {{toets}} — click for the check",
+      "nietGetoetst": "not checked",
       "plaatBadgeTitle": "Plate {{plaat}}: governing {{toets}} — see the check panel",
       "plaatLegenda": "UC plate element"
     },
@@ -787,6 +807,19 @@
       "splitLine": "Node {{knoop}} connected to member {{staaf}}: it has been split into member {{deel1}} and member {{deel2}}.",
       "splitLineOffset": "Node {{knoop}} connected to member {{staaf}}: it has been split into member {{deel1}} and member {{deel2}}. The node was {{mm}} mm off the member axis; the member now has a kink there.",
       "mergeLine": "Node {{verwijderd}} merged with node {{bewaard}}.",
+      "loadValue": {
+        "lineNone": "Line load {{last}} on member {{staaf}} has no value. Enter `q` (uniformly distributed, kN/m) or `qStart` and `qEnd` (trapezoidal).",
+        "lineNoneWrongField": "Line load {{last}} on member {{staaf}} has no value: {{velden}} is not read for a line load. Enter `q` (uniformly distributed, kN/m) or `qStart` and `qEnd` (trapezoidal).",
+        "lineHalf": "Line load {{last}} on member {{staaf}} has `{{heeft}}` but no `{{mist}}` (and no `q` to fall back on). Enter `{{mist}}`; for a uniform load only `q`.",
+        "lineWrongField": "Line load {{last}} on member {{staaf}}: {{velden}} is not read for a line load and would be lost. Enter a point load or moment as a separate load.",
+        "lineRange": "Line load {{last}} on member {{staaf}}: the loaded part does not start before its end (startFrac {{begin}}, endFrac {{einde}}). An empty or reversed part is not a load and would be lost. Enter 0 ≤ startFrac < endFrac ≤ 1, measured from the start node.",
+        "momentNone": "Moment {{last}} on node {{knoop}} has no value. A moment is entered in `my` (kNm).",
+        "momentWrongField": "Moment {{last}} on node {{knoop}} has no value in `my`: {{velden}} is not read for a moment. A moment is entered in `my` (kNm).",
+        "momentExtraField": "Moment {{last}} on node {{knoop}}: {{velden}} is not read for a moment and would be lost. Enter a force as a separate point load.",
+        "forceNone": "Point load {{last}} has no value. Enter `fz` (vertical) and/or `fx` (horizontal), in kN.",
+        "forceWrongField": "Point load {{last}} has no value in `fx` or `fz`: `my` is not read for a point load. A moment is a separate load (pointMoment).",
+        "forceExtraField": "Point load {{last}}: `my` is not read for a point load and would be lost. A moment is a separate load (pointMoment)."
+      },
       "plateEdge": {
         "openingOnPerimeterRoute": "the load is on the edge of an opening (`openingId`), but it is read here by a route that only knows the perimeter of the plate. Please report this: the address is deliberately rejected rather than silently placed on the perimeter.",
         "nameAndIndex": "the load specifies both a named edge (`edge`) and an edge index (`edgeIndex`). Give only one: with two addresses it cannot be said which edge is meant and from which corner the positions are measured.",
@@ -1013,6 +1046,7 @@
     "undoReplaceTitle": "Restore the combinations as they were in the project file",
     "replaceConfirm": "Replace all combinations (except those of the wind generator) with the standard set? Your own combinations will be lost.",
     "replaceWithStandard": "Replace with standard combinations",
+    "keepCustomFactors": "Keep custom factors",
     "regenerateWind": "Regenerate wind load",
     "originTitle": "Standard = derived from the cases and the consequence class; custom = created or modified by you",
     "origin": "Origin",
@@ -1202,8 +1236,13 @@
     "openingCount_other": "{{count}} openings",
     "loadPanels": "Load panels",
     "loadPanelLabel": "Load panel {{id}}",
+    "envelopePanels": "Panels",
+    "envelopePanelLabel": "Panel {{id}}",
+    "envelopeFacade": "facade",
+    "envelopeRoof": "roof",
     "loadPanelGravity": "gravity",
     "loadPanelNormal": "normal",
+    "loadPanelVerticalSurface": "vertical per panel area",
     "loadPanelOneWay": "1-way",
     "loadPanelTwoWay": "2-way",
     "diaphragms": "Diaphragms",
@@ -1377,5 +1416,13 @@
     },
     "criteriaActief": "Active properties: {{count}}",
     "wissen": "Clear"
+  },
+  "envelopePanel": {
+    "geometry": "Geometry", "name": "Name", "type": "Type", "area": "Net area",
+    "outerSide": "Outside", "flip": "Flip outside", "transfer": "Load transfer",
+    "distribution": "Direction", "span": "Span", "customSpan": "Custom direction",
+    "weight": "Cladding weight", "openings": "Openings", "removeOpening": "Remove",
+    "addOpening": "Add opening", "openingNodes": "Node IDs separated by commas",
+    "invalidOpening": "Enter at least three valid node IDs.", "add": "Add", "delete": "Delete panel"
   }
 }

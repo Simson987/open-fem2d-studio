@@ -271,6 +271,29 @@ async function run() {
   await test("tekenen: in een scheef aanzicht landt een klik in leeg canvas ook op het werkvlak (3 m)", async () => {
     await tekenVlak(TEKEN_SCHEEF, "v1", 3, [[1.5, 1.5], [4.5, 1.5], [4.5, 2.5], [1.5, 2.5]]);
   });
+  await test("schilpaneel: tekenen op knopen, selecteren en zichtbaarheidslaag", async () => {
+    mount(<Werkruimte begin={vak()} camera={BOVEN} geval={2} />);
+    await wacht(300);
+    flushSync(() => zet.tool("addEnvelopePanel"));
+    await wacht(80);
+    for (const point of [[0, 0, 3], [6, 0, 3], [6, 4, 3], [0, 4, 3], [0, 0, 3]] as [number, number, number][]) {
+      klikOp(point);
+      await wacht(65);
+    }
+    gelijk(stand.model.envelopePanels?.length, 1, "één schilpaneel");
+    gelijk(stand.model.envelopePanels?.[0].type, "roof", "horizontaal vlak is dak");
+    gelijk(stand.selectie, { type: "envelopePanel", id: 1 }, "nieuw paneel geselecteerd");
+    flushSync(() => zet.tool("select"));
+    await wacht(80);
+    klikOp([2, 2, 3]);
+    await wacht(80);
+    gelijk(stand.selectie, { type: "envelopePanel", id: 1 }, "vlak aanklikbaar");
+    flushSync(() => zet.zicht({ ...ZICHT, envelopePanels: false }));
+    await wacht(80);
+    klikOp([2, 2, 3]);
+    await wacht(80);
+    ok(stand.selectie?.type !== "envelopePanel", "verborgen paneel niet aanklikbaar");
+  });
 
   // ── Het licht doorzichtige vlak ─────────────────────────────────────────
   const leeg: [number, number, number] = [1.5, 2, 3];

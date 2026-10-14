@@ -16,13 +16,16 @@
 //! veer, met de rolhoek: een last langs d buigt de staaf in lokaal y (I_z) en
 //! lokaal z (I_y), dus I_d = 1/((d·e_y)²/I_z + (d·e_z)²/I_y) voor d loodrecht op
 //! de as. Bij meer veerrichtingen telt de grootste λ (het fijnste net).
-//! Bestaande tussenknopen (plaatknopen) blijven rekenknopen; een deelpunt
-//! binnen een kwart deel van zo'n knoop vervalt. De einden en hun
+//! Bestaande tussenknopen (plaatknopen) en de grensknopen van een verlopende
+//! staaf (#73, module `verloop`) blijven rekenknopen; een deelpunt binnen een
+//! kwart deel van zo'n knoop vervalt. Bij een verlopende staaf bepaalt de
+//! kleinste traagheid van de delen λ. De einden en hun
 //! eindscharnieren blijven zoals ze zijn: `to_engine_input` geeft de
 //! vrijgaven aan het eerste en het laatste deel, behalve een torsievrijgave aan
 //! beide einden: die krijgt alleen het eerste deel, anders draaien de
 //! rekenknopen ertussen vrij om de staafas. Nieuwe rekenknopen krijgen
-//! id's boven de hoogste knoop-id; ze staan niet in de uitvoer, en de adapter
+//! id's boven de hoogste knoop-id (en boven de grensknopen van verlopende
+//! staven); ze staan niet in de uitvoer, en de adapter
 //! voegt krachten en snedekrachtlijnen van de delen weer samen tot de ene
 //! modelstaaf (zoals bij tussenknopen).
 //!
@@ -87,12 +90,59 @@ const GRONDAFSTAND: f64 = 1.0;
 const STATUSGRENS: f64 = 1e-6;
 const Z: V3 = [0.0, 0.0, 1.0];
 
-/// Weggevallen verticale veren bij alleen druk: (staaf-id, index van de
-/// rekenknoop langs de staaf).
-pub(crate) type Los = BTreeSet<(usize, usize)>;
+/// Weggevallen grondveren bij alleen druk: de verticale veren van staven op
+/// bedding (staaf-id, index van de rekenknoop langs de staaf) en de veren van
+/// platen op bedding (plaat-id, knoop-id; module `plaatbedding`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub(crate) struct Los {
+    pub staven: BTreeSet<(usize, usize)>,
+    pub platen: BTreeSet<(usize, usize)>,
+}
+
+impl Los {
+    pub fn new() -> Self { Self::default() }
+
+    pub fn is_empty(&self) -> bool { self.staven.is_empty() && self.platen.is_empty() }
+
+    /// Aantal weggevallen veren.
+    pub fn len(&self) -> usize { self.staven.len() + self.platen.len() }
+
+    /// De veren die in precies één van beide sets los zijn.
+    pub fn verschil(&self, ander: &Los) -> Los {
+        Los {
+            staven: self.staven.symmetric_difference(&ander.staven).copied().collect(),
+            platen: self.platen.symmetric_difference(&ander.platen).copied().collect(),
+        }
+    }
+}
+
+/// Weggevallen veren van staven: (staaf-id, index van de rekenknoop).
+impl FromIterator<(usize, usize)> for Los {
+    fn from_iter<I: IntoIterator<Item = (usize, usize)>>(veren: I) -> Self {
+        Los { staven: veren.into_iter().collect(), platen: BTreeSet::new() }
+    }
+}
 
 fn lijst(ids: impl IntoIterator<Item = usize>) -> String {
     ids.into_iter().map(|id| id.to_string()).collect::<Vec<_>>().join(", ")
+}
+
+/// Waaronder veren los zijn: "staaf 1, 2", "plaat 3" of "staaf 1 en plaat 3".
+pub(crate) fn beschrijf_los(los: &Los) -> String {
+    let platen: BTreeSet<usize> = los.platen.iter().map(|(plaat, _)| *plaat).collect();
+    let mut delen = Vec::new();
+    if !los.staven.is_empty() { delen.push(format!("staaf {}", lijst(staven_met_los(los)))); }
+    if !platen.is_empty() { delen.push(format!("plaat {}", lijst(platen))); }
+    delen.join(" en ")
+}
+
+/// "staaf", "plaat" of "staaf en plaat": wat er in `los` loskomt.
+pub(crate) fn soort_los(los: &Los) -> &'static str {
+    match (los.staven.is_empty(), los.platen.is_empty()) {
+        (false, true) => "staaf",
+        (true, false) => "plaat",
+        _ => "staaf en plaat",
+    }
 }
 
 /// Staafas als eenheidsvector; de knopen zijn al gekeurd.
@@ -170,7 +220,7 @@ fn rondom(ex: V3) -> Vec<V3> {
 }
 
 /// De globale as (0, 1, 2) waarlangs `d` precies ligt, als die er is.
-fn globale_as(d: V3) -> Option<usize> {
+pub(crate) fn globale_as(d: V3) -> Option<usize> {
     (0..3).find(|&as_| (0..3).all(|j| j == as_ || d[j].abs() <= 1e-12))
 }
 
@@ -185,6 +235,16 @@ pub(crate) struct Station {
     pub punt: V3,
     /// Tributaire lengte L_trib in m.
     pub lengte: f64,
+}
+
+/// Herkomst van een rekenknoop bij het knippen.
+enum Punt {
+    /// Begin-, eind- of tussenknoop van het model.
+    Model(usize),
+    /// Grensknoop van een verlopende staaf (`verloop`), al in het kernmodel.
+    Grens(usize, V3),
+    /// Nieuwe rekenknoop van de bedding.
+    Nieuw,
 }
 
 /// Een staaf op bedding zoals de kern haar rekent.
@@ -210,7 +270,7 @@ pub(crate) struct Staaf {
 impl Staaf {
     /// Doet de verticale veer van rekenknoop `index` mee?
     pub fn actief(&self, index: usize, los: &Los) -> bool {
-        !(self.alleen_druk && los.contains(&(self.member_id, index)))
+        !(self.alleen_druk && los.staven.contains(&(self.member_id, index)))
     }
 
     /// De kracht van de grond op de staaf in rekenknoop `index`, globaal (kN):
@@ -278,7 +338,10 @@ impl Plan {
             return Ok(Plan::default());
         }
         let knopen: HashMap<usize, &Node3D> = request.nodes.iter().map(|knoop| (knoop.id, knoop)).collect();
-        let mut volgende = request.nodes.iter().map(|knoop| knoop.id).max().unwrap_or(0) + 1;
+        // De grensknopen van verlopende staven (#73) gaan voor; zonder die
+        // staven is dit de hoogste knoop-id plus één.
+        let verloop = crate::verloop::Plan::bouw(request)?;
+        let mut volgende = verloop.volgende_id;
         let mut plan = Plan::default();
         for staaf in &request.members {
             let Some(bedding) = &staaf.bedding else { continue };
@@ -291,8 +354,8 @@ impl Plan {
             );
             let materiaal = request.materials.iter().find(|m| m.id == staaf.material_id)
                 .ok_or_else(|| format!("staaf {} verwijst naar ontbrekend materiaal {}", staaf.id, staaf.material_id))?;
-            let doorsnede = request.sections.iter().find(|s| s.id == staaf.section_id)
-                .ok_or_else(|| format!("staaf {} verwijst naar ontbrekende doorsnede {}", staaf.id, staaf.section_id))?;
+            // De doorsnede, of bij een verlopende staaf die van elk deel.
+            let doorsneden = crate::verloop::doorsneden(request, staaf)?;
             let e = materiaal.e_mpa * 1000.0;
             let verticaal = ex[2].abs() > VERTICAAL;
             let kb = if verticaal { 0.0 } else { bedding.k_kn_per_m3.unwrap_or(0.0) * bedding.width_m };
@@ -303,40 +366,54 @@ impl Plan {
                 (true, true) => rondom(ex),
                 (true, false) => vec![normaal(ex)],
             };
-            // λ per veerrichting; de grootste bepaalt de deellengte.
-            let lambda = |kb: f64, d: V3| {
+            // λ per veerrichting; de grootste bepaalt de deellengte. Bij een
+            // verlopende staaf telt elk deel: de kleinste traagheid geeft de
+            // grootste λ.
+            let lambda = |kb: f64, d: V3, doorsnede: &crate::Section3D| {
                 let loodrecht = sub(d, scale(ex, dot(d, ex)));
                 let d = scale(loodrecht, 1.0 / norm(loodrecht));
                 (kb / (4.0 * e * traagheid(d, ey, ez, doorsnede.iy_m4, doorsnede.iz_m4))).powf(0.25)
             };
             let mut grootste = 0.0f64;
-            if kb > 0.0 { grootste = grootste.max(lambda(kb, Z)); }
-            for d in &zijdelings { grootste = grootste.max(lambda(kb_zij, *d)); }
+            for doorsnede in &doorsneden {
+                if kb > 0.0 { grootste = grootste.max(lambda(kb, Z, doorsnede)); }
+                for d in &zijdelings { grootste = grootste.max(lambda(kb_zij, *d, doorsnede)); }
+            }
             let delen = ((lengte * grootste / DEELLENGTE).ceil().min(MAX_DELEN as f64) as usize).clamp(MIN_DELEN, MAX_DELEN);
             let h = lengte / delen as f64;
 
             let bestaand = crate::member_stations(staaf, &knopen)?;
-            let mut punten: Vec<(Option<usize>, f64)> = Vec::with_capacity(delen + bestaand.len() + 1);
-            punten.push((Some(staaf.start_node_id), 0.0));
-            punten.extend(bestaand.iter().map(|(id, s)| (Some(*id), *s)));
+            // Nieuwe grensknopen van een verlopende staaf blijven rekenknoop,
+            // net als de tussenknopen; een grens op een tussenknoop zit al in
+            // `bestaand`.
+            let grenzen: Vec<&crate::verloop::Grens> =
+                verloop.grenzen(staaf.id).iter().filter(|grens| grens.nieuw).collect();
+            let mut punten: Vec<(Punt, f64)> = Vec::with_capacity(delen + bestaand.len() + grenzen.len() + 1);
+            punten.push((Punt::Model(staaf.start_node_id), 0.0));
+            punten.extend(bestaand.iter().map(|(id, s)| (Punt::Model(*id), *s)));
+            punten.extend(grenzen.iter().map(|grens| (Punt::Grens(grens.knoop, grens.punt), grens.s)));
             for index in 1..delen {
                 let s = index as f64 * h;
-                if bestaand.iter().all(|(_, t)| (t - s).abs() > SAMENVALLEN * h) { punten.push((None, s)); }
+                let vrij = bestaand.iter().map(|(_, t)| *t).chain(grenzen.iter().map(|grens| grens.s))
+                    .all(|t| (t - s).abs() > SAMENVALLEN * h);
+                if vrij { punten.push((Punt::Nieuw, s)); }
             }
-            punten.push((Some(staaf.end_node_id), lengte));
+            punten.push((Punt::Model(staaf.end_node_id), lengte));
             punten.sort_by(|p, q| p.1.total_cmp(&q.1));
             let mut stations = Vec::with_capacity(punten.len());
             for (index, (knoop, s)) in punten.iter().enumerate() {
                 let vorige = punten[index.saturating_sub(1)].1;
                 let volgende_s = punten[(index + 1).min(punten.len() - 1)].1;
-                let punt = add(begin, scale(ex, *s));
-                let (knoop, nieuw) = match knoop {
-                    Some(id) => (*id, false),
-                    None => {
+                let (knoop, nieuw, punt) = match knoop {
+                    Punt::Model(id) => (*id, false, add(begin, scale(ex, *s))),
+                    // Al in het kernmodel (`verloop`); geen modelknoop.
+                    Punt::Grens(id, punt) => (*id, true, *punt),
+                    Punt::Nieuw => {
                         let id = volgende;
                         volgende += 1;
+                        let punt = add(begin, scale(ex, *s));
                         plan.nieuwe_knopen.push((id, punt));
-                        (id, true)
+                        (id, true, punt)
                     }
                 };
                 stations.push(Station { knoop, nieuw, s: *s, punt, lengte: (volgende_s - vorige) / 2.0 });
@@ -369,7 +446,11 @@ impl Plan {
         volgende_element: &mut usize,
     ) -> Grond {
         let mut grond = Grond::default();
-        let mut volgende_knoop = self.volgende_id;
+        // Na de rekenknopen, en na de knikknopen die de adapter voor de
+        // knikanalyse en de tweede orde aanlegt (`KNIKDELEN`); zonder die
+        // knopen is dat precies `volgende_id`.
+        let mut volgende_knoop = self.volgende_id
+            .max(knopen.values().map(|knoop| knoop.id).max().map_or(0, |id| id + 1));
         let mut oplegveren: BTreeMap<usize, [f64; 3]> = BTreeMap::new();
         for staaf in &self.staven {
             for (index, station) in staaf.stations.iter().enumerate() {
@@ -500,7 +581,7 @@ pub(crate) fn correctie(staaf: &Staaf, krachten: &[V3], deel: usize, x: f64) -> 
 }
 
 /// Een oplegging van de bedding: volledig vast (grondknoop) of met veren in X, Y, Z.
-fn steun(node_id: usize, vast: bool, k: [f64; 3]) -> SolverSupport3D {
+pub(crate) fn steun(node_id: usize, vast: bool, k: [f64; 3]) -> SolverSupport3D {
     let veer = |waarde: f64| (waarde > 0.0).then_some(waarde);
     SolverSupport3D {
         node_id,
@@ -519,7 +600,8 @@ pub(crate) fn met_alleen_druk(request: &SolveRequest3D) -> bool {
         .is_some_and(|bedding| bedding.compression_only && bedding.k_kn_per_m3.is_some()))
 }
 
-/// De nieuwe set weggevallen veren na één berekening (alleen druk).
+/// De nieuwe set weggevallen veren na één berekening (alleen druk), van
+/// staven en van platen op bedding (`plaatbedding::nieuwe_los`).
 pub(crate) fn nieuwe_los(request: &SolveRequest3D, uitkomst: &SolveResult3D, los: &Los) -> Los {
     let druk: HashSet<usize> = request.members.iter()
         .filter(|staaf| staaf.bedding.as_ref().is_some_and(|b| b.compression_only && b.k_kn_per_m3.is_some()))
@@ -527,6 +609,7 @@ pub(crate) fn nieuwe_los(request: &SolveRequest3D, uitkomst: &SolveResult3D, los
         .collect();
     // Ruis in de zakking schaalt met de grootste verplaatsing van het model.
     let schaal = uitkomst.bedding.iter().flat_map(|b| b.points.iter()).map(|p| p.settlement_m.abs())
+        .chain(uitkomst.plate_bedding.iter().flat_map(|b| b.nodes.iter()).map(|n| n.settlement_m.abs()))
         .chain(uitkomst.displacements.iter().flat_map(|d| [d.ux.abs(), d.uy.abs(), d.uz.abs()]))
         .fold(0.0, f64::max);
     let grens = STATUSGRENS * schaal;
@@ -534,16 +617,17 @@ pub(crate) fn nieuwe_los(request: &SolveRequest3D, uitkomst: &SolveResult3D, los
     for staaf in uitkomst.bedding.iter().filter(|b| druk.contains(&b.member_id)) {
         for (index, punt) in staaf.points.iter().enumerate() {
             let sleutel = (staaf.member_id, index);
-            let blijft_los = if los.contains(&sleutel) { punt.settlement_m <= grens } else { punt.settlement_m < -grens };
-            if blijft_los { nieuw.insert(sleutel); }
+            let blijft_los = if los.staven.contains(&sleutel) { punt.settlement_m <= grens } else { punt.settlement_m < -grens };
+            if blijft_los { nieuw.staven.insert(sleutel); }
         }
     }
+    nieuw.platen = crate::plaatbedding::nieuwe_los(request, uitkomst, los, grens);
     nieuw
 }
 
 /// De staven met weggevallen veren, oplopend.
 pub(crate) fn staven_met_los(los: &Los) -> Vec<usize> {
-    los.iter().map(|(staaf, _)| *staaf).collect::<BTreeSet<_>>().into_iter().collect()
+    los.staven.iter().map(|(staaf, _)| *staaf).collect::<BTreeSet<_>>().into_iter().collect()
 }
 
 /// Opleggingsrichtingen van de bedding voor de controle op de opleggingen:
@@ -587,9 +671,10 @@ pub(crate) fn controleer_contact(request: &SolveRequest3D, uitgesloten: &HashSet
         // Het model was met alle veren al onvoldoende opgelegd; de kern beslist.
         return Ok(());
     }
+    let soort = soort_los(los);
     Err(format!(
-        "bedding (alleen druk): staaf {} komt los van de grond en zonder de weggevallen veren is het model niet meer opgelegd. {} De belasting tilt of kantelt de staaf van de grond. Geef de staaf een oplegging die ook trek opneemt, of reken de bedding zonder alleen druk.",
-        lijst(staven_met_los(los)),
+        "bedding (alleen druk): {} komt los van de grond en zonder de weggevallen veren is het model niet meer opgelegd. {} De belasting tilt of kantelt de {soort} van de grond. Geef de {soort} een oplegging die ook trek opneemt, of reken de bedding zonder alleen druk.",
+        beschrijf_los(los),
         crate::opleggingen::beschrijf(&tekort),
     ))
 }
@@ -633,12 +718,12 @@ mod tests {
         nodes.extend(tussen);
         SolveRequest3D {
             schema_version: 2, analysis: AnalysisKind::Linear, nodes,
-            materials: vec![Material3D { id: 1, name: "staal".into(), e_mpa: 210_000.0, nu: 0.3, alpha_per_k: None }],
+            materials: vec![Material3D { id: 1, name: "staal".into(), e_mpa: 210_000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
             sections: vec![Section3D { id: 1, name: "s".into(), area_m2: 0.01, iy_m4: iy, iz_m4: iz,
                 torsion_j_m4: 1e-5, shear_area_y_m2: None, shear_area_z_m2: None }],
             members: vec![Member3D { id: 1, start_node_id: 1, end_node_id: 2, material_id: 1, section_id: 1,
                 releases: Default::default(), roll_angle_rad: rol, intermediate_node_ids: tussenknopen,
-                tension_only: false, bedding: Some(bedding) }],
+                tension_only: false, bedding: Some(bedding), part_section_ids: None }],
             supports: vec![], nodal_loads: vec![], member_loads: vec![], member_point_loads: vec![],
             thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![],
             tension_only_fit: None, tension_only_cross_rule: false, max_iterations: 50, tolerance: 1e-8, buckling_modes: 0,

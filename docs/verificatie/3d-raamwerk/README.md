@@ -3,8 +3,9 @@
 Deze map bevat onafhankelijke referentieberekeningen voor de 3D-raamwerksolver
 van Open FEM Studio. De getallen zijn analytisch of rechtstreeks uit een
 gepubliceerde stijfheidsmatrix afgeleid. De Rust-adapter wordt automatisch
-tegen de gesloten oplossingen getest. Op 26 september 2026 zijn alle eenentwintig
-referentietests geslaagd, inclusief directe tweede orde, knik, staafrotatie en
+tegen de gesloten oplossingen getest. Op 6 oktober 2026 zijn alle zevenentwintig
+referentietests (`reference_cases`) en de elf tests van `trek_schijf_tweede_orde`
+geslaagd, inclusief directe tweede orde, knik, staafrotatie en
 revolute opleggingen om elke globale as. De set bewaakt ook oplegveren, opgelegde
 rotaties, de kritieke-lastgrens en de geldige P-Delta-nultoestand
 waarbij een belasting volledig op een geblokkeerde vrijheidsgraad staat.
@@ -29,12 +30,14 @@ waarbij een belasting volledig op een geblokkeerde vrijheidsgraad staat.
 | Rust `pdelta_amplifies_compression_and_stiffens_tension` | teken van geometrische stijfheid: druk versterkt en trek verstijft | vergelijking met dezelfde lineaire kolom |
 | Rust `pdelta_near_and_beyond_critical_load_is_bounded` | betrouwbare P-Delta-grens bij 90% en 105% van de eerste eigenwaarde-kniklast | onafhankelijke lineaire knikfactor van hetzelfde gesegmenteerde model |
 | Rust `cantilever_buckling_converges_under_mesh_refinement` | convergentie van eigenwaarde-knik bij 1, 2, 4, 8 en 16 elementen | Eulerlast `π²EI/(4L²)` voor een ingeklemde kolom |
+| Rust `tests/trek_schijf_tweede_orde.rs`, de vijf tweede-ordetests (#60) | de eigen P-Δ van de adapter: uitkragende kolom, staafeindscharnier in de knikfactor, portaal met 114 en raamwerk met 600 vrije vrijheidsgraden zonder factorisatiefout, samen met schijven en trek-alleen; krachtensom exact, momentensom = `Σ N·(e_x × Δu)` | `1/(1 − N/N_cr)`, `π²EI/(4L²)`, `(4,4934)²·EI/L²`, `1/(1 − 1/α_cr)` |
 | [`tu-delft-torsion-frame.json`](tu-delft-torsion-frame.json) | samengestelde stijfheidsmatrix van een 3D-raamwerk met buiging en torsie | TU Delft, uitgewerkt 3D-raamwerk |
 | [`revolute-x-request.json`](revolute-x-request.json) | revolute X, torsiestijfheid, vrije rotatie en reactiekoppel via API/MCP | gesloten oplossing `θ = TL/GJ` |
 | [`pdelta-nultoestand-request.json`](pdelta-nultoestand-request.json) | tweede orde bij exact nul vrije verplaatsing; reactie, convergentie en `B2=1` | direct evenwicht op de geblokkeerde vrijheidsgraad |
 | [`groot-vierlaags-raam.ifcfem`](groot-vierlaags-raam.ifcfem) en [verificatie](groot-vierlaags-raam-verificatie.md) | 100 knopen, 235 staven, vier ruimtelijke belastinggevallen, volledige lineaire superpositie en GUI | onafhankelijke globale kracht- en momentbalans |
 | [`staalhal-60x30.ifcfem`](staalhal-60x30.ifcfem), de standaardparameters van de generator `design-mockup/src/components/openFem3d/wizards/staalhal.ts` (wizard "Stalen hal…", MCP `open_fem_3d_staalhal_maken`), bewaakt door `design-mockup/test-open-fem3d-staalhal.mjs` | staalhal 60 × 30 m: 11 spanten (HEA 450 ingeklemd, IPE 600), gordingen IPE 160 en randliggers HEA 160 scharnierend, dak- en wandverbanden CHS 88,9×4; 165 knopen, 340 staven; permanent, sneeuw, wind dwars en wind langs | reacties per geval gelijk aan de handgetallen (540, 1008, 499,2 + 864 en 84 kN), evenwicht, doorbuiging < L/250 en zijverplaatsing goot < h/150 |
 | `design-mockup/test-open-fem3d-staalhal-generator.mjs`, `test-staalhal-sidecar.mjs`, `src-tauri/crates/openaec-mcp-server/tests/staalhal_mcp.rs` | de generator met andere parameters: lessenaarsdak met scharnierende voeten, plat dak met eigen verbandvakken, spantafstand als maximum, helling in graden, wind uit de stuwdruk; het balkrooster op palen (66 palen, 75 balken, 22 poeren) en de statisch bepaalde horizontale oplegging; de keten via MCP | aantallen uit de indeling; ΣR per geval uit last × oppervlak; Σ paalreacties = Σ lasten + eigen gewicht rooster (2500 · 0,4 · 0,6 · 9,81 · 467,6 m = 2752,3 kN); q_p en c_pe met de hand uit NEN-EN 1991-1-4 |
+| `design-mockup/test-open-fem3d-staalhal-pdelta.mjs` (#60) | tweede orde (P-Δ) van de stalen hal uit de wizard door de rekenweg van de app en de echte kern: de 5 gevallen en 14 standaardcombinaties van de standaardhal, de 28 UGT-varianten met scheefstand ±X/±Y (φ = 1/414,9), een lessenaarsdak met scharnierende voeten, een plat dak en de hal op een balkrooster met palen; 104 berekeningen | convergent en stabiel; ΣR per geval gelijk aan de handsom (last × oppervlak, Σ ρ·A·g·L) en per combinatie Σ γ·handsom, met scheefstand nog −richting·φ·ΣR_z; onafhankelijke krachtensom (grootste ΔF 3,1 × 10⁻¹⁰ kN, ΔM 9,6 × 10⁻⁹ kNm) |
 | [3D-tekenbediening en camerafit](tekenbediening-en-camerafit.md) | knoopsnap bij twee getekende staven, selectie, passend beeld en behoud van camerapositie | GUI-proef met gemeten bedieningstijden |
 
 Alle afmetingen, materiaalwaarden, lasten, opleggingen en verwachte knoopresultaten staan in de JSON-bestanden. `cases.json` gebruikt SI-eenheden: m, N, N·m, Pa en rad. Z blijft de verticale as van het bestaande 2D-model; Y is de extra horizontale richting. De TU Delft-referentie gebruikt kN·m voor momenten en kN·m/rad voor rotatiestijfheid.
@@ -101,6 +104,7 @@ Vanuit `src-tauri`:
 ```bash
 cargo test -p open-fem-3d --test reference_cases --offline
 cargo test -p open-fem-3d --test cases_json --offline
+cargo test -p open-fem-3d --test trek_schijf_tweede_orde --offline
 cargo test -p open-fem-3d --test plate_cases --offline
 cargo test -p openaec-mcp-server --test stdio_roundtrip --offline
 ```
@@ -117,7 +121,7 @@ t.o.v. 0,00406·qa⁴/D), een zacht vrij opgelegde rand (alle draaiingen vrij)
 +0,14 %, ingeklemde randen +0,46 % in de doorbuiging en −0,73 % in het
 inklemmoment −0,0513·qa²; alleen Z-rollen wordt als mechanisme geweigerd.
 
-De eerste opdracht voert eenentwintig onafhankelijke adaptertests uit:
+De eerste opdracht voert zevenentwintig onafhankelijke adaptertests uit:
 
 - schuine trekstaaf in X/Y/Z;
 - twee-assige uitkraging met afzonderlijke `Iy` en `Iz`;
@@ -150,6 +154,59 @@ De eerste opdracht voert eenentwintig onafhankelijke adaptertests uit:
 - Eulerknik van een ingeklemde kolom met 1, 2, 4, 8 en 16 elementen; de
   relatieve fout daalt achtereenvolgens van `7,522·10⁻³` naar
   `5,121·10⁻⁴`, `3,277·10⁻⁵`, `2,060·10⁻⁶` en `1,290·10⁻⁷`.
+- geen onterechte melding "nearly vertical" voor een ligger langs Y of een
+  kolom langs Z, terwijl de overige meldingen van de kern blijven staan (#61);
+- een mechanisme: de fout noemt het deel, de vrije bewegingen en wat te doen,
+  ook in tweede orde (#64);
+- een intern mechanisme (twee aan beide einden scharnierende staven op één lijn
+  tussen twee inklemmingen) wordt als intern mechanisme gemeld;
+- een portaal met ruimtelijke scharnieren dat buiten zijn vlak kan omvallen:
+  een oplossing met een melding vooraan, een fout bij een last die die beweging
+  aanstoot en geen melding als het goed is opgelegd;
+- een trek-alleen staaf die uitvalt, telt niet mee in de opleggingscontrole;
+- pendelkolommen onder een starre schijf zonder verband: de melding noemt het
+  zwaaien en draaien van de schijf.
+
+De opdracht `--test trek_schijf_tweede_orde` voert elf tests uit voor
+trek-alleen staven, starre schijven en de eigen tweede orde van de adapter
+(#60). De vijf tweede-ordetests, met de getallen van 6 oktober 2026:
+
+- uitkragende kolom, `L = 4 m` in 8 elementen, `P = 0,3·N_cr` en `H = 1 kN`:
+  de kopverplaatsing versterkt volgens `1/(1 − P/N_cr) = 1,4286` binnen 1 %
+  (de exacte balk-kolomoplossing `3(tan μ − μ)/μ³ = 1,4228` ligt 0,4 % lager),
+  `α_cr = N_cr/P = 3,333` binnen 1 %, `Rz = P`, `M = H·L + P·δ` en
+  momentensom = `Σ N·(e_x × Δu)`;
+- een staafeindscharnier telt mee in de knikfactor:
+  `N_cr = (4,4934)²·EI/L²` (ingeklemd–scharnierend) binnen 1 %;
+- portaal 8 × 5 m met de ligger in 12 elementen (114 vrije vrijheidsgraden,
+  boven de grens van 64 waar de P-Δ van de externe kern faalde):
+  `α_cr = 5,9474`, zijwaartse versterking 1,20064 tegen
+  `1/(1 − 1/α_cr) = 1,20212`, krachtensom binnen `10⁻⁸`;
+- raamwerk van 4 × 4 × 4 vakken met kruisverbanden (125 knopen, 600 vrije
+  vrijheidsgraden): rekent zonder factorisatiefout, `α_cr = 64,08`,
+  versterking 1,01639 in 4 iteraties, krachtensom binnen `10⁻⁷`;
+- schijven, trek-alleen en tweede orde samen: per kruis in de belaste gevel
+  valt de gedrukte diagonaal weg en het evenwicht sluit met het
+  tweede-ordemoment.
+
+Op het niveau van de app bewaken `test-open-fem3d-large-frame.mjs`,
+`test-open-fem3d-campus-frame.mjs` (zie de verificaties van het
+[staalraam](groot-staalraam-verificatie.md) en het
+[vierlaagse raam](groot-vierlaags-raam-verificatie.md)) en
+`test-open-fem3d-staalhal-pdelta.mjs` de tweede orde door de rekenweg van de app.
+Die laatste rekent 104 P-Δ-berekeningen van de stalen hal (vier tegelijk, zoals
+de app ze ook tegelijk rekent; circa 21 s, op een drukke machine tot circa 40 s): kleinste `α_cr` 17,50 (balkrooster,
+UGT 6.10b sneeuw leidend), grootste versterking 1,1796 (scheefstand +X),
+hoogstens 6 iteraties.
+
+**Beperkingen van de tweede orde.** `1/(1 − N/N_cr)`, en zo ook
+`1/(1 − 1/α_cr)`, is zelf een benadering. Voor de uitkragende kolom wijkt de
+exacte versterking `3(tan μ − μ)/μ³`, met `μ = (π/2)·√(N/N_cr)`, er 0,4 % van af
+bij `N/N_cr = 0,3`, 0,99 % bij 0,7 en 1,3 % bij 0,9: vanaf ongeveer 0,7 meer dan
+1 %. De kern onderverdeelt een staaf niet: een kolom die als één staaf is
+ingevoerd, krijgt de P-δ-invloed binnen de staaf alleen via de consistente
+geometrische stijfheid van dat ene element (bij een ingeklemde kolom als één
+element ligt `N_cr` 0,75 % te hoog, zie de Eulerknik hierboven).
 
 De MCP-test stuurt daarnaast een volledig JSON-RPC-verzoek door de
 `solve_open_fem_3d`-tool en herhaalt het revolute-X-geval. De browser-devroute

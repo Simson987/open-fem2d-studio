@@ -12,8 +12,9 @@ import { removeOpenFem3DDiaphragm } from "./openFem3dTrekSchijf";
 import type { OpenFem3DSolveResult } from "./openFem3dSolver";
 import { openFem3DUlsUc, type OpenFem3DSteelChecks } from "./openFem3dSteelCheck";
 import type { OpenFem3DConcreteChecks } from "./openFem3dConcreteCheck";
+import type { OpenFem3DTimberChecks } from "./openFem3dTimberCheck";
 import { OPEN_FEM_3D_RESULT_LAYERS, type OpenFem3DVisibility } from "./openFem3dVisibility";
-import { OPEN_FEM_3D_PLATE_QUANTITIES, isOpenFem3DPlateQuantity, type OpenFem3DPlateQuantity } from "./openFem3dPlateResults";
+import { isOpenFem3DPlateQuantity, openFem3DPlateQuantitiesFor, type OpenFem3DPlateQuantity } from "./openFem3dPlateResults";
 import { OPEN_FEM_3D_PLATES_LINEAR_NOTICE } from "./openFem3dSolver";
 import { openFem3DMaximumDisplacementM } from "./openFem3dDisplacement";
 import { toonMm } from "../../lib/lengthInput";
@@ -35,6 +36,7 @@ import {
   type OpenFem3DDiagramLabels,
 } from "./openFem3dDiagramLabels";
 import "../fem/FemProjectTree.css";
+import { openFem3DProfielTekst } from "./openFem3dVerloop";
 
 interface Props {
   model: OpenFem3DModel;
@@ -44,6 +46,7 @@ interface Props {
   result: OpenFem3DSolveResult | null;
   checks?: OpenFem3DSteelChecks | null;
   concreteChecks?: OpenFem3DConcreteChecks | null;
+  timberChecks?: OpenFem3DTimberChecks | null;
   checksRunning?: boolean;
   checksError?: string | null;
   activeTab?: "project" | "view" | "results";
@@ -236,11 +239,19 @@ export default function OpenFem3DExplorer(props: Props) {
   const toon = props.views && viewsBij === tab ? "views" : tab;
   const maxDisplacement = props.result ? openFem3DMaximumDisplacementM(props.model, props.result) : 0;
   const alphaCr = props.result?.buckling.status === "available" ? props.result.buckling.modes[0]?.loadFactor : undefined;
-  const maxSteelUc = props.checks && props.checks.results.length > 0
-    ? props.checks.results.reduce((maximum, check) => Math.max(maximum, openFem3DUlsUc(check)), 0)
+  // Een staaf met status n.v.t. is niet (volledig) getoetst; haar UC is geen
+  // uitkomst en telt niet mee in het maximum (controle 2026-10, punt B7).
+  const getoetsteStaal = props.checks?.results.filter((check) => check.status !== "NotApplicable") ?? [];
+  const maxSteelUc = getoetsteStaal.length > 0
+    ? getoetsteStaal.reduce((maximum, check) => Math.max(maximum, openFem3DUlsUc(check)), 0)
     : undefined;
   const maxConcreteUc = props.concreteChecks && props.concreteChecks.results.length > 0
     ? props.concreteChecks.results.reduce((maximum, check) => Math.max(maximum, check.uc_max), 0)
+    : undefined;
+  const maxTimberUc = props.timberChecks && props.timberChecks.results.length > 0
+    ? props.timberChecks.results.reduce((maximum, result) => Math.max(maximum, ...result.checks
+      .filter((check) => !check.id.startsWith("deflection_") && !check.id.startsWith("sls_"))
+      .map((check) => check.kind.data.uc?.uc ?? 0)), 0)
     : undefined;
   const activeLoadCaseId = props.activeLoadCaseId ?? 1;
   const conditionModel = props.calculationModel ?? props.model;
@@ -277,7 +288,7 @@ export default function OpenFem3DExplorer(props: Props) {
         <ItemBranch label={t("tree.elements")} items={props.model.beams}
           showNextLabel={(count) => t("tree.showNext", { count })} renderItem={(beam) =>
           <Leaf key={beam.id} label={t("tree.barLabel", { id: beam.id })}
-            value={`${beam.startNodeId}-${beam.endNodeId} · ${beam.profileName ?? "—"}`}
+            value={`${beam.startNodeId}-${beam.endNodeId} · ${beam.profileName ? openFem3DProfielTekst(beam, t) : "—"}`}
             active={openFem3DSelectionContains(props.selection, "beam", beam.id)}
             onClick={(event) => select(event, { type: "beam", id: beam.id })} />
         } />
@@ -385,10 +396,19 @@ export default function OpenFem3DExplorer(props: Props) {
           showNextLabel={(count) => t("tree.showNext", { count })}>
           {loadPanels.map((panel) => <Leaf key={`panel-${panel.id}`}
             label={t("tree.loadPanelLabel", { id: panel.id })}
-            value={`q ${panel.q} kN/m² · ${t(panel.direction === "gravity" ? "tree.loadPanelGravity" : "tree.loadPanelNormal")}`
+            value={`q ${panel.q} kN/m² · ${t(panel.direction === "gravity" ? "tree.loadPanelGravity"
+              : panel.direction === "normal" ? "tree.loadPanelNormal" : "tree.loadPanelVerticalSurface")}`
               + ` · ${t(panel.distribution === "oneWay" ? "tree.loadPanelOneWay" : "tree.loadPanelTwoWay")}`}
             active={openFem3DSelectionContains(props.selection, "loadPanel", panel.id)}
             onClick={(event) => select(event, { type: "loadPanel", id: panel.id })} />)}
+        </Branch>
+        <Branch label={t("tree.envelopePanels")} count={(props.model.envelopePanels ?? []).length}
+          showNextLabel={(count) => t("tree.showNext", { count })}>
+          {(props.model.envelopePanels ?? []).map((panel) => <Leaf key={`envelope-${panel.id}`}
+            label={panel.name || t("tree.envelopePanelLabel", { id: panel.id })}
+            value={t(panel.type === "facade" ? "tree.envelopeFacade" : "tree.envelopeRoof")}
+            active={openFem3DSelectionContains(props.selection, "envelopePanel", panel.id)}
+            onClick={(event) => select(event, { type: "envelopePanel", id: panel.id })} />)}
         </Branch>
       </>}
       {toon === "view" && <ExplorerViewTab
@@ -403,17 +423,21 @@ export default function OpenFem3DExplorer(props: Props) {
           {props.result.analysis === "p-delta" ? "2e orde (P-Δ)" : "1e orde"} · Δmax {(maxDisplacement * 1000).toFixed(3)} mm · αcr {alphaCr?.toFixed(2) ?? "—"}
           {maxSteelUc !== undefined && <> · UC staal {maxSteelUc.toFixed(2)}</>}
           {maxConcreteUc !== undefined && <> · UC UGT beton {maxConcreteUc.toFixed(2)}</>}
+          {maxTimberUc !== undefined && <> · UC EN 1995 {maxTimberUc.toFixed(2)}</>}
           {props.checksRunning && <> · normtoetsing…</>}
           {props.checksError && <><br />Normtoetsing: {props.checksError}</>}
           {props.result.diagnostics.includes(OPEN_FEM_3D_PLATES_LINEAR_NOTICE) && <><br />{t("openFem3dPlate.linearNotice")}</>}
         </div> : <div className="fem-results-hint">{t("tree.clickCalculateBefore")} <strong>{t("tree.calculate")}</strong>.</div>}
-        {(props.result?.shellNodes?.length ?? 0) > 0 && props.setPlateQuantity && <label className="fem-results-scale-row" data-open-fem3d-plate-quantity>
+        {openFem3DPlateQuantitiesFor(props.result).length > 0 && props.setPlateQuantity && <label className="fem-results-scale-row" data-open-fem3d-plate-quantity>
           <span>{t("openFem3dPlate.result")}</span>
           <select className="fem-prop-input" style={{ flex: 1, minWidth: 0 }}
-            value={props.plateQuantity ?? "none"}
+            // Een gekozen grootheid die deze uitkomst niet heeft (Gronddruk zonder platen op bedding): Geen.
+            value={props.plateQuantity && openFem3DPlateQuantitiesFor(props.result).some((quantity) => quantity.key === props.plateQuantity)
+              ? props.plateQuantity : "none"}
             onChange={(event) => props.setPlateQuantity?.(isOpenFem3DPlateQuantity(event.target.value) ? event.target.value : null)}>
             <option value="none">{t("openFem3dPlate.none")}</option>
-            {OPEN_FEM_3D_PLATE_QUANTITIES.map((quantity) => <option key={quantity.key} value={quantity.key}>
+            {/* Gronddruk en Zakking (#107) alleen als er platen op bedding zijn. */}
+            {openFem3DPlateQuantitiesFor(props.result).map((quantity) => <option key={quantity.key} value={quantity.key}>
               {t(`openFem3dPlate.quantity.${quantity.key}`)} ({quantity.unit})
             </option>)}
           </select>

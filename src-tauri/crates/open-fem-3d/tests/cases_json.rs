@@ -91,7 +91,7 @@ fn request_from_case(
             roll_angle_rad: None,
             intermediate_node_ids: vec![],
             tension_only: false,
-            bedding: None,
+            bedding: None, part_section_ids: None,
         })
         .collect();
     let supports = case
@@ -136,7 +136,7 @@ fn request_from_case(
             name: "cases.json reference".into(),
             e_mpa: section.E / 1e6,
             nu: poisson,
-            alpha_per_k: None,
+            g_mpa: None, alpha_per_k: None,
         }],
         sections: vec![Section3D {
             id: 1,

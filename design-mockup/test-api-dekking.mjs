@@ -111,7 +111,7 @@ const handlers = Object.fromEntries([
   "onOpenFem3DToolChange", "onOpenFem3DFit", "onOpenFem3DViewChange", "onToggle3DVisibility", "onOpenFem3DSupportPreset",
   "onOpenFem3DSpringTool", "onOpenFem3DRequestNodalLoad", "onOpenFem3DRequestMemberLoad", "onOpenFem3DRequestMemberPointLoad",
   "onOpenFem3DRequestThermalLoad", "onOpenFem3DRequestSurfaceLoad", "onOpenFem3DConvertPlateToLoadPanel",
-  "onOpenFem3DPinBeamsToColumns", "onOpenFem3DPlateDisplayChange", "onOpenFem3DSectionBoxToggle",
+  "onOpenFem3DPinBeamsToColumns", "onOpenFem3DConnectNodes", "onOpenFem3DMergeNodes", "onOpenFem3DPlateDisplayChange", "onOpenFem3DSectionBoxToggle",
 ].map((naam) => [naam, niets]));
 const html = renderToStaticMarkup(React.createElement(HomeTab, {
   ...handlers, modelDimension: "3d", availableOpenFem3DTools: Object.keys(GEREEDSCHAP_3D),

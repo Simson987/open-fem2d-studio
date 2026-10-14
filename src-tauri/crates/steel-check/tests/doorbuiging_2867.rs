@@ -9,7 +9,9 @@ fn w_fin_hea320() {
     // w_fin = w_z - w_zeeg = -11 - 0 = -11 mm
     let w_fin = deflection::w_fin_mm(-11.0, 0.0);
     assert_relative_eq!(w_fin, -11.0, max_relative = 1e-6);
-    // Grens L/333 = 8000/333 = 24,0 mm → UC = 11/24 = 0,46
+    // Grens L/333 = 8000/333 = 24,0 mm → UC = 11/24 = 0,46, de noemer van de
+    // referentie-uitwerking. De klasse `Floor` toetst sinds oktober 2026 tegen
+    // ℓ_rep/250 = 32 mm (A1.4.3(4)); zie `w_fin_hea320_volgens_de_nb`.
     let grens = deflection::grens_mm(8000.0, 333.0);
     assert_relative_eq!(grens, 24.02, max_relative = 2e-3);
     assert_relative_eq!(w_fin.abs() / grens, 0.46, max_relative = 2e-2);
@@ -47,6 +49,21 @@ fn w_add_hea320_volgens_de_nb_in_plaats_van_de_referentie() {
     assert_relative_eq!(add.uc.clone().unwrap().uc, 0.325, max_relative = 1e-2);
 }
 
+/// Zelfde ligger met de klasse `Floor`: w_fin tegen ℓ_rep/250 uit
+/// NEN-EN 1990:2002/NB:2019 A1.4.3(4) ("bij zowel vloeren als daken") =
+/// 8000/250 = 32 mm → UC = 11/32 = 0,344. De referentie-uitwerking rekent met
+/// L/333 (UC 0,46): strenger dan de NB, de grens van w2 + w3 in plaats van
+/// die van w_max (controle 2026-10, punt B15).
+#[test]
+fn w_fin_hea320_volgens_de_nb() {
+    let (fin, _) = deflection::check_deflection_pair(
+        -11.0, 0.0, -3.2, 8.0, DeflectionClass::Floor, 333, 0.0, false,
+    );
+    assert_relative_eq!(fin.value, 32.0, max_relative = 1e-12);
+    assert_relative_eq!(fin.uc.clone().unwrap().uc, 11.0 / 32.0, max_relative = 1e-12);
+    assert_eq!(fin.article, "NEN-EN 1990:2002/NB:2019 A1.4.3(4)");
+}
+
 #[test]
 fn w_fin_hea400() {
     let w_fin = deflection::w_fin_mm(-11.2, 0.0);
@@ -79,8 +96,10 @@ fn zeeg_omhoog_vergroot_een_opwaartse_zakking() {
 fn zeeg_telt_in_w_fin_maar_niet_in_w_add() {
     // HEA 160 van 6 m, klasse vloer, zakking w_z = -14,435 mm en een zeeg van
     // 10 mm omhoog. Met de hand:
-    //   w_fin = -14,435 + 10 = -4,435 mm; grens L/333 = 6000/333 = 18,018 mm;
-    //   UC = 4,435 / 18,018 = 0,2461.
+    //   w_fin = -14,435 + 10 = -4,435 mm; grens ℓ_rep/250 = 6000/250 = 24 mm
+    //   (NEN-EN 1990:2002/NB:2019 A1.4.3(4)); UC = 4,435 / 24 = 0,1848.
+    //   Tot oktober 2026 stond hier L/333 = 18,018 mm (UC 0,2461): de grens van
+    //   w2 + w3, niet die van w_max (controle 2026-10, punt B15).
     //   w_add = w_2 + w_3 (A1.4.3(3)) staat los van de zeeg: -14,435 mm;
     //   grens 3/1000 · 6000 = 18 mm; UC = 14,435 / 18 = 0,8019.
     let (fin, add) = deflection::check_deflection_pair(
@@ -90,7 +109,7 @@ fn zeeg_telt_in_w_fin_maar_niet_in_w_add() {
         c.variables.iter().find(|v| v.symbol == "w").unwrap().value
     };
     assert_relative_eq!(w(&fin), -4.435, max_relative = 1e-12);
-    assert_relative_eq!(fin.uc.clone().unwrap().uc, 4.435 / (6000.0 / 333.0), max_relative = 1e-12);
+    assert_relative_eq!(fin.uc.clone().unwrap().uc, 4.435 / (6000.0 / 250.0), max_relative = 1e-12);
     assert_relative_eq!(w(&add), -14.435, max_relative = 1e-12);
     assert_relative_eq!(add.uc.clone().unwrap().uc, 14.435 / 18.0, max_relative = 1e-9);
 
@@ -110,10 +129,13 @@ fn zeeg_telt_in_w_fin_maar_niet_in_w_add() {
 #[test]
 fn paar_levert_twee_checks_met_eigen_id_en_grens() {
     use steel_check::DeflectionClass;
-    // Met de referentie-noemer expliciet opgegeven levert de toetsing exact de
+    // Met de referentie-noemers expliciet opgegeven levert de toetsing exact de
     // getallen van de referentie-uitwerking: w_fin op L/333 en w_add op L/150.
+    // Sinds oktober 2026 toetst de klasse `Floor` w_fin tegen ℓ_rep/250
+    // (A1.4.3(4)); de L/333 van de referentie is dan alleen nog via `Custom` te
+    // geven, en de w_add-noemer 150 overschrijft die van Custom.
     let (fin, add) = deflection::check_deflection_pair(
-        -11.0, 0.0, -3.2, 8.0, DeflectionClass::Floor, 333, 150.0, false,
+        -11.0, 0.0, -3.2, 8.0, DeflectionClass::Custom, 333, 150.0, false,
     );
     assert_eq!(fin.id, "deflection_w_fin");
     assert_eq!(add.id, "deflection_w_add");

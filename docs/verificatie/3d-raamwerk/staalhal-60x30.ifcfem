@@ -9808,7 +9808,19 @@
   },
   "projectInfo": {
     "name": "Staalhal 60 × 30 m",
-    "projectNumber": "VB-3D-HAL-01"
+    "projectNumber": "VB-3D-HAL-01",
+    "uitgangspunten": {
+      "en1993": false,
+      "en1995": false,
+      "en1992": false,
+      "normenHandmatig": [],
+      "gevolgklasse": "CC2",
+      "levensduurklasse": "4",
+      "nationaleBijlage": "NL",
+      "windCodeId": "nl-en-1991-1-4-legacy",
+      "windgebied": "II",
+      "terreincategorie": "II"
+    }
   },
   "openFem3dViewSets": []
 }

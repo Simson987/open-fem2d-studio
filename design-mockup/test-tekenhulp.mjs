@@ -200,11 +200,13 @@ log("\n[8] snapinstellingen: hoeksnap, tolerantie en extra hoeken");
   // Sinds #55 draagt de stand ook de verbindingstolerantie (mm, standaard 5);
   // die heeft zijn eigen test in test-verbindingstolerantie. Sinds #84 ook het
   // objectspoor van 3D (standaard aan, ook in een oude stand zonder de
-  // sleutel); dat heeft zijn eigen test in test-open-fem3d-tekenhulp.
+  // sleutel); dat heeft zijn eigen test in test-open-fem3d-tekenhulp. Sinds
+  // #63 ook "knopen op staven aansluiten" in 3D (standaard aan, ook in een
+  // oude stand zonder de sleutel); zie test-open-fem3d-aansluiten.
   check("opslag: de stand gaat als JSON mee", typeof snap.snapInstellingenUitOpslag === "function"
     && json(snap.snapInstellingenUitOpslag(json({ knoop: false, hoek: false, hoekTolerantie: 3.5, hoekExtra: true })))
       === json({ knoop: false, stramien: true, raster: true, hoek: false, spoor: true, hoekTolerantie: 3.5, hoekExtra: true,
-        verbindingsTolerantie: 5 }));
+        verbindingsTolerantie: 5, knopenAansluiten: true }));
   check("opslag: kapotte of vreemde waarden vallen terug op de beginstand",
     json(snap.snapInstellingenUitOpslag("{kapot")) === json(snap.SNAP_BEGINSTAND)
     && snap.snapInstellingenUitOpslag(json({ hoekTolerantie: "veel", raster: "ja" })).hoekTolerantie === 2

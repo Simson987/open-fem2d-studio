@@ -28,6 +28,9 @@ import { DEFAULT_UITGANGSPUNTEN } from "../../project/ProjectSettingsDialog";
 import { kFi, partieleFactoren } from "../../fem/solver/normcombinaties";
 import { hellendDakUitgangspunten, vrijstaandDakUitgangspunten } from "../../../lib/wind/windGenerator";
 import { aanduidingen, bijlageUitBestand, STANDAARD_BIJLAGE } from "../../../lib/normAanduidingen";
+import { NEDERLANDSE_WINDROUTE } from "../../../lib/wind/windCodeRoute";
+import { windPressureReport2d } from "../../../lib/wind/windPressureReport2d";
+import { drukmethodeLabel } from "../../../lib/wind/windEurocode";
 import { datumVoluit } from "../../../lib/rapportDatum";
 
 /**
@@ -46,6 +49,11 @@ function bijlageTekst(t: TFunction, code: string | undefined): string {
   } catch (e) {
     return t("report.bijlageOnbekend", { code: String(code), fout: (e as Error).message });
   }
+}
+
+function windRouteTekst(t: TFunction, code: string | undefined): string {
+  return code === undefined || code === NEDERLANDSE_WINDROUTE
+    ? t("report.windCodeDutchLegacy") : t("report.windCodeUnknown", { code });
 }
 
 /** Dezelfde notatie als de paginakop en de PDF (issue #20, `lib/rapportDatum`). */
@@ -107,6 +115,7 @@ export default function ProjectSection() {
   // Uitgangspunten zet. Hier wordt niets herrekend: stond er geen scheefstand
   // op de lasten, dan is de tekst leeg en zwijgt ook dit blok erover.
   const { beams, scheefstandToelichting, analyseToelichting, combinations, loads, loadCases } = useReportData();
+  const windPressure = windPressureReport2d(loadCases, loads);
 
   // Koptekst-regel: lokale draft tijdens het typen; commit (blur/Enter) →
   // projectinfo-setting. In de browser (zonder Tauri) faalt setSetting stil
@@ -223,9 +232,21 @@ export default function ProjectSection() {
           // bijlage. Een bijlage die deze uitgave niet kent, wordt hier
           // benoemd in plaats van stil op Nederland uit te komen.
           [t("report.fieldNationaleBijlage", "Nationale bijlage"), bijlageTekst(t, u.nationaleBijlage)],
+          [t("report.fieldWindCode"), windRouteTekst(t, u.windCodeId)],
           [t("report.fieldGevolgklasse", "Gevolgklasse"), gevolgklasseTekst],
           [t("report.fieldLevensduur", "Ontwerplevensduur"), levensduur],
         ];
+        const projectWindCodeId = u.windCodeId ?? NEDERLANDSE_WINDROUTE;
+        const gebruikteWindRoutes = [...new Set(loadCases
+          .filter((item) => item.type === "wind"
+            && (item.gegenereerd?.bron === "wind" || item.gegenereerd?.bron === "envelope3d"))
+          .map((item) => item.gegenereerd?.windCodeId ?? NEDERLANDSE_WINDROUTE))];
+        if (gebruikteWindRoutes.length > 0) {
+          const verschil = gebruikteWindRoutes.some((code) => code !== projectWindCodeId);
+          rijen.push([t("report.fieldGeneratedWindCode"),
+            gebruikteWindRoutes.map((code) => windRouteTekst(t, code)).join("; ")
+              + (verschil ? ` — ${t("report.windCodeMismatch")}` : "")]);
+        }
         // De vierde rij: de initiële scheefstand, woordelijk zoals zij is
         // toegepast. Zij hoort hier en niet bij de resultaten — zij is een
         // eigenschap van de constructie en zit als H = φ·V in élke kracht
@@ -282,6 +303,29 @@ export default function ProjectSection() {
                 ))}
               </tbody>
             </table>
+            {(windPressure.sources.length > 0 || windPressure.missingCases.length > 0) &&
+              <div className="rpt-wind-pressure-2d" data-testid="rpt-wind-pressure-2d">
+                <h3 className="rpt-h3">{t("report.windPressure2d", "Winddruk 2D — bewaarde afleiding")}</h3>
+                {windPressure.sources.map((source, index) => <div key={index}>
+                  <p>{source.windCodeId} · z<sub>e</sub> = {source.pressure.ze_m.toFixed(2)} m ·
+                    q<sub>p</sub> = {source.pressure.qp_kNm2.toFixed(4)} kN/m²
+                    {` · ${t(`report.windPressureMethod.${source.pressure.drukmethode ?? "unknown"}`,
+                      drukmethodeLabel(source.pressure.drukmethode))}`}
+                    {source.cases.length > 0 ? ` · ${source.cases.join(", ")}` : ""}
+                    {source.beams.length > 0 ? ` · ${t("report.beamWord", "staaf")} ${source.beams.join(", ")}` : ""}</p>
+                  <table className="rpt-table"><thead><tr>
+                    <th>{t("openFem3d.report.symbol", "Symbool")}</th>
+                    <th>{t("openFem3d.report.value", "Waarde")}</th>
+                    <th>{t("openFem3d.report.source", "Bron")}</th>
+                  </tr></thead><tbody>{source.pressure.afleiding.map((line, lineIndex) => <tr key={lineIndex}>
+                    <td>{line.symbool}</td><td>{line.waarde}</td><td>{line.bron}</td>
+                  </tr>)}</tbody></table>
+                </div>)}
+                {windPressure.missingCases.length > 0 && <p role="alert">{t(
+                  "report.windPressure2dMissing",
+                  "Bij oudere windgevallen ontbreekt de drukafleiding; genereer de windlasten opnieuw.",
+                )} ({windPressure.missingCases.join(", ")})</p>}
+              </div>}
           </>
         );
       })()}

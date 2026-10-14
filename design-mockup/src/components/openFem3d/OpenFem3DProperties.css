@@ -1,5 +1,7 @@
 .open-fem3d-check-ok { color: #15803d; }
 .open-fem3d-check-not-ok { color: #b91c1c; }
+/* Niet (volledig) getoetst: neutraal, nooit de kleur van "voldoet". */
+.open-fem3d-check-na { color: var(--theme-text-secondary, #6b7280); }
 .open-fem3d-check-list { display: grid; gap: 3px; margin-top: 8px; }
 .open-fem3d-check-list > div {
   display: grid;

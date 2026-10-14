@@ -85,8 +85,12 @@ export interface OpenFem3DUcGroep {
   profiel: string;
   staalsoort: string;
   aantal: number;
-  /** Grootste UC in de uiterste grenstoestand (sterkte en stabiliteit). */
-  ucMax: number;
+  /**
+   * Grootste UC in de uiterste grenstoestand (sterkte en stabiliteit), over de
+   * GETOETSTE staven; `null` als geen enkele staaf van de groep (volledig) is
+   * getoetst.
+   */
+  ucMax: number | null;
   maatgevendeStaaf: number;
   maatgevendeStaafNaam?: string;
   maatgevendeToets: string;
@@ -94,6 +98,14 @@ export interface OpenFem3DUcGroep {
   doorbuigingUcMax: number | null;
   /** Aantal staven in de groep met een UGT-UC boven 1. */
   aantalOverschreden: number;
+  /**
+   * Aantal staven met status "n.v.t.": niet (volledig) getoetst — een klasse
+   * 4-doorsnede zonder effectieve breedtes, of een geweigerde lijfplooitoets
+   * bij dwarskracht. Hun UC telt niet mee in `ucMax` en ze zijn nooit
+   * maatgevend: een getal onder 1 zou als "voldoet" lezen (controle 2026-10,
+   * punt B7).
+   */
+  aantalNietGetoetst: number;
 }
 
 /**
@@ -112,6 +124,7 @@ export function openFem3DUcPerGroep(
     const beam = staaf.get(r.beam_id);
     const groep = beam?.group?.trim() || "—";
     const sleutel = `${groep}\u0000${r.profile_name}\u0000${r.steel_grade}`;
+    const nietGetoetst = r.status === "NotApplicable";
     const uc = openFem3DUlsUc(r);
     const toets = openFem3DGoverningUlsCheck(r);
     const doorbuiging = r.checks
@@ -121,24 +134,36 @@ export function openFem3DUcPerGroep(
     const doorbuigingUc = doorbuiging.length > 0 ? Math.max(...doorbuiging) : null;
     const huidig = groepen.get(sleutel);
     if (!huidig) {
-      groepen.set(sleutel, {
-        groep, profiel: r.profile_name, staalsoort: r.steel_grade, aantal: 1,
-        ucMax: uc, maatgevendeStaaf: r.beam_id,
-        ...(beam?.name ? { maatgevendeStaafNaam: beam.name } : {}),
-        maatgevendeToets: toets?.id ?? "—",
-        doorbuigingUcMax: doorbuigingUc, aantalOverschreden: uc > 1 ? 1 : 0,
-      });
+      groepen.set(sleutel, nietGetoetst
+        ? {
+          groep, profiel: r.profile_name, staalsoort: r.steel_grade, aantal: 1,
+          ucMax: null, maatgevendeStaaf: r.beam_id,
+          ...(beam?.name ? { maatgevendeStaafNaam: beam.name } : {}),
+          maatgevendeToets: "—",
+          doorbuigingUcMax: doorbuigingUc, aantalOverschreden: 0, aantalNietGetoetst: 1,
+        }
+        : {
+          groep, profiel: r.profile_name, staalsoort: r.steel_grade, aantal: 1,
+          ucMax: uc, maatgevendeStaaf: r.beam_id,
+          ...(beam?.name ? { maatgevendeStaafNaam: beam.name } : {}),
+          maatgevendeToets: toets?.id ?? "—",
+          doorbuigingUcMax: doorbuigingUc, aantalOverschreden: uc > 1 ? 1 : 0, aantalNietGetoetst: 0,
+        });
       continue;
     }
     huidig.aantal += 1;
-    if (uc > 1) huidig.aantalOverschreden += 1;
     if (doorbuigingUc !== null) huidig.doorbuigingUcMax = Math.max(huidig.doorbuigingUcMax ?? 0, doorbuigingUc);
-    if (uc > huidig.ucMax) {
+    if (nietGetoetst) {
+      huidig.aantalNietGetoetst += 1;
+      continue;
+    }
+    if (uc > 1) huidig.aantalOverschreden += 1;
+    if (huidig.ucMax === null || uc > huidig.ucMax) {
       huidig.ucMax = uc;
       huidig.maatgevendeStaaf = r.beam_id;
       if (beam?.name) huidig.maatgevendeStaafNaam = beam.name; else delete huidig.maatgevendeStaafNaam;
       huidig.maatgevendeToets = toets?.id ?? "—";
     }
   }
-  return [...groepen.values()].sort((a, b) => a.groep.localeCompare(b.groep, "nl") || b.ucMax - a.ucMax);
+  return [...groepen.values()].sort((a, b) => a.groep.localeCompare(b.groep, "nl") || (b.ucMax ?? -1) - (a.ucMax ?? -1));
 }

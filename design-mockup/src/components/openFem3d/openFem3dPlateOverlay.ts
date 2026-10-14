@@ -14,8 +14,14 @@ import { openFem3DPlateEdges } from "./openFem3dPlateEdges";
 import type { OpenFem3DPlateMesh } from "./openFem3dPlateMesh";
 import type { OpenFem3DSolveResult } from "./openFem3dSolver";
 import {
-  openFem3DContourColor, openFem3DPlateQuantity, openFem3DPlateQuantityRange, type OpenFem3DPlateQuantity,
+  openFem3DContourColor, openFem3DPlateQuantity, openFem3DPlateQuantityRange, openFem3DPlateQuantityValues,
+  type OpenFem3DPlateQuantity,
 } from "./openFem3dPlateResults";
+import { buildOpenFem3DPlateBeddingHatch } from "./openFem3dPlateBeddingHatch";
+import type { OpenFem3DPlateDisplay } from "./openFem3dPlateDisplay";
+
+/** Grijs voor een knoop zonder contact in de contour Gronddruk (#107): daar draagt de grond niets. */
+export const OPEN_FEM_3D_PLATE_NO_CONTACT_COLOR: [number, number, number] = [0.62, 0.62, 0.62];
 
 export interface OpenFem3DPlateOverlayInput {
   model: OpenFem3DModel;
@@ -30,6 +36,12 @@ export interface OpenFem3DPlateOverlayInput {
   showSupports?: boolean;
   /** Grootte van de opleggingssymbolen in % van de automatische maat (issue #82); ontbreekt: 100 %. */
   supportSizePercent?: number;
+  /**
+   * De plaatweergave (issue #78): de arcering van een plaat op bedding (#107)
+   * ligt onder de getekende onderzijde (Volume) of onder het middenvlak.
+   * Ontbreekt: "volume".
+   */
+  plateDisplay?: OpenFem3DPlateDisplay;
   deformation: boolean;
   /** Vergroting van de verplaatsingen (dezelfde als de staven). */
   deformationScale: number;
@@ -39,6 +51,8 @@ export interface OpenFem3DPlateOverlay {
   group: THREE.Group;
   /** De contour is getekend: maak de gewone plaatvlakken doorzichtiger. */
   contourShown: boolean;
+  /** Aantal gemarkeerde knopen zonder contact (contour Gronddruk of Zakking, #107). */
+  liftedNodes: number;
 }
 
 type V3 = [number, number, number];
@@ -49,10 +63,13 @@ export function buildOpenFem3DPlateOverlay(input: OpenFem3DPlateOverlayInput): O
   if (input.showSupports) {
     const edgeSupports = buildOpenFem3DPlateEdgeSupports(input.model, input.supportSizePercent);
     if (edgeSupports) group.add(edgeSupports);
+    // Platen op bedding (#107): de gearceerde grond onder de plaat, ook in de laag Opleggingen.
+    const hatch = buildOpenFem3DPlateBeddingHatch(input.model, input.supportSizePercent, input.plateDisplay ?? "volume");
+    if (hatch) group.add(hatch);
   }
   const resultMesh = input.result?.plateMesh && (input.result.shellNodes?.length ?? 0) > 0 ? input.result.plateMesh : null;
   const mesh = resultMesh ?? input.mesh;
-  if (!input.showPlates || !mesh || mesh.elements.length === 0) return { group, contourShown: false };
+  if (!input.showPlates || !mesh || mesh.elements.length === 0) return { group, contourShown: false, liftedNodes: 0 };
   const positions = new Map<number, V3>();
   for (const node of input.model.nodes) positions.set(node.id, [node.x, node.y, node.z]);
   for (const node of mesh.nodes) positions.set(node.id, [node.x, node.y, node.z]);
@@ -73,14 +90,19 @@ export function buildOpenFem3DPlateOverlay(input: OpenFem3DPlateOverlayInput): O
   }
   const definition = contour ? openFem3DPlateQuantity(contour) : null;
   const range = contour ? openFem3DPlateQuantityRange(input.result, contour) : null;
+  let contourShown = false;
+  let liftedNodes = 0;
   for (const [plateId, elements] of byPlate) {
-    if (contour && definition && range) {
-      const values = new Map<number, number>();
-      for (const node of input.result!.shellNodes ?? []) {
-        if (node.plateId !== plateId) continue;
-        const value = definition.read(node);
-        if (value !== undefined && Number.isFinite(value)) values.set(node.nodeId, value);
-      }
+    const values = contour && definition && range ? openFem3DPlateQuantityValues(input.result, contour, plateId) : null;
+    // Gronddruk en Zakking (#107) bestaan alleen bij een plaat op bedding: een andere plaat krijgt geen contour.
+    if (contour && definition && range && values && values.size > 0) {
+      contourShown = true;
+      // Geen contact (alleen druk): in de contour Gronddruk grijs, en bij beide grootheden een stip.
+      const noContact = new Set(definition.bedding
+        ? (input.result!.plateBedding?.find((plate) => plate.plateId === plateId)?.nodes ?? [])
+          .filter((node) => !node.active).map((node) => node.nodeId)
+        : []);
+      const grey = contour === "groundPressure";
       const index = new Map<number, number>();
       const vertexPositions: number[] = [];
       const colors: number[] = [];
@@ -94,7 +116,7 @@ export function buildOpenFem3DPlateOverlay(input: OpenFem3DPlateOverlayInput): O
           vertexPositions.push(...place(id));
           const value = values.get(id);
           const t = value === undefined ? 0.5 : span > 1e-12 ? (value - range.min) / span : 0.5;
-          colors.push(...openFem3DContourColor(t));
+          colors.push(...(grey && noContact.has(id) ? OPEN_FEM_3D_PLATE_NO_CONTACT_COLOR : openFem3DContourColor(t)));
         }
         return k;
       };
@@ -112,6 +134,19 @@ export function buildOpenFem3DPlateOverlay(input: OpenFem3DPlateOverlayInput): O
       }));
       surface.userData = { openFem3dPlateContour: plateId, pickable: false };
       group.add(surface);
+      if (noContact.size > 0) {
+        // Een stip op elke knoop zonder contact; zonder dieptetoets, dus van boven en van onder te zien.
+        const dots: number[] = [];
+        for (const id of noContact) if (index.has(id)) dots.push(...place(id));
+        const points = new THREE.Points(
+          new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(dots, 3)),
+          new THREE.PointsMaterial({ color: 0x374151, size: 5, sizeAttenuation: false, depthTest: false, transparent: true }),
+        );
+        points.renderOrder = 3;
+        points.userData = { openFem3dPlateLifted: plateId, pickable: false };
+        group.add(points);
+        liftedNodes += dots.length / 3;
+      }
     }
     if (input.showMesh) {
       const edges = new Set<string>();
@@ -136,7 +171,7 @@ export function buildOpenFem3DPlateOverlay(input: OpenFem3DPlateOverlayInput): O
       group.add(lines);
     }
   }
-  return { group, contourShown: Boolean(contour && range) };
+  return { group, contourShown, liftedNodes };
 }
 
 /** Naam van de groep met randopleggingen binnen de plaatlaag. */

@@ -54,7 +54,9 @@
 //   Zonder ψ₂·Q (alleen G, wat de selectie in zuiver staal overliet): 3,995 mm.
 //   Staan alleen de quasi-blijvende combinaties in de lijst (de gebruiker
 //   haalde 6.14b en 6.15b weg), dan is 6.16b maatgevend:
-//     w_fin = 5,793 mm → UC = 5,793 / (5000/333) = 0,3858
+//     w_fin = 5,793 mm → UC = 5,793 / (5000/250) = 0,2896 (ℓ_rep/250, NEN-EN
+//       1990:2002/NB:2019 A1.4.3(4); tot oktober 2026 L/333 → 0,3858 — de grens
+//       van w2 + w3, controle 2026-10 punt B15)
 //     w_add = 5,793 − 3,995 = 1,798 mm → UC = 1,798 / 15,0 = 0,1199
 //
 // Draaien met: npx tsx test-blijvende-zakking.mjs
@@ -345,7 +347,7 @@ log("\n[6] Stalen ligger: de volledige 6.16b (met ψ₂·Q) blijft, en de toets 
     const r = kern("check_steel_beams", [invQp])[0];
     const fin = toets(r, "deflection_w_fin"), add = toets(r, "deflection_w_add");
     dicht("kern w_fin = 5,793 mm", fin.uc.ed, sQp, 2e-3);
-    dicht("kern UC w_fin = 5,793 · 333 / 5000 = 0,3858", fin.uc.uc, 0.3858, 2e-4);
+    dicht("kern UC w_fin = 5,793 · 250 / 5000 = 0,2896 (ℓ_rep/250, A1.4.3(4))", fin.uc.uc, sQp * 250 / 5000, 2e-4);
     dicht("kern w_add = 5,793 − 3,995 = 1,798 mm", add.uc.ed, sQp - sPerm, 2e-3);
     dicht("kern UC w_add = 1,798 / 15,0 = 0,1199", add.uc.uc, 0.1199, 2e-4);
   }

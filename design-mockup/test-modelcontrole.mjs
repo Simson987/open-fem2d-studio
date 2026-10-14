@@ -650,10 +650,20 @@ log("\n[9] Lasten die stil wegvallen (basisaudit ruw 30)");
   const goed = met([{ id: 1, type: "lineLoad", caseId: 1, beamId: 1, q: -5 }]);
   check("een gewone lijnlast geeft geen bevinding", goed.length === 0, JSON.stringify(goed));
 
+  // Tot oktober 2026 stond hier "trapeziumlast zonder `q`: fout". Dat was de
+  // bevinding van de gebrekkige mapping, niet van het model: een lijnlast met
+  // qStart en qEnd is een volledige trapeziumlast, het tekenvlak tekende hem
+  // al zo, en sinds de controle van 12 oktober 2026 (punt K2, issue #184)
+  // rekent de mapping hem ook mee. Wat wél een fout blijft: een lijnlast
+  // zonder enige waarde, nu met een melding die zegt wat er mist.
   const zonderQ = met([{ id: 1, type: "lineLoad", caseId: 1, beamId: 1, qStart: -5, qEnd: -10 }]);
-  check("trapeziumlast zonder `q`: fout met de reden",
-    zonderQ.length === 1 && zonderQ[0].ernst === "fout" && /`q` nodig/.test(zonderQ[0].tekst),
-    JSON.stringify(zonderQ));
+  check("trapeziumlast zonder `q`: geen bevinding (een trapezium, punt K2)",
+    zonderQ.length === 0, JSON.stringify(zonderQ));
+  const zonderWaarde = met([{ id: 1, type: "lineLoad", caseId: 1, beamId: 1 }]);
+  check("lijnlast zonder waarde: fout \"Lijnlast 1 op staaf 1 heeft geen waarde\"",
+    zonderWaarde.length === 1 && zonderWaarde[0].ernst === "fout" &&
+      zonderWaarde[0].tekst.startsWith("Lijnlast 1 op staaf 1 heeft geen waarde."),
+    JSON.stringify(zonderWaarde));
 
   const tikfout = met([{ id: 2, type: "lineload", caseId: 1, beamId: 1, q: -5 }]);
   check("tikfout in het lasttype: fout die het type noemt",
@@ -693,8 +703,11 @@ log("\n[9] Lasten die stil wegvallen (basisaudit ruw 30)");
     zonderGevallenWelStaaf.length === 1, JSON.stringify(zonderGevallenWelStaaf));
 
   // BLOKKEREND: de rekenpoort van het multi-LC-pad laat dit model niet door.
+  // Last 1 was tot oktober 2026 een trapezium zonder `q`; die telt nu mee
+  // (punt K2), dus staat hier een lijnlast zonder enige waarde — de vijf
+  // gevallen blijven vijf manieren waarop een last wegvalt.
   const alleVijf = [
-    { id: 1, type: "lineLoad", caseId: 1, beamId: 1, qStart: -5, qEnd: -10 },
+    { id: 1, type: "lineLoad", caseId: 1, beamId: 1 },
     { id: 2, type: "lineload", caseId: 1, beamId: 1, q: -5 },
     { id: 3, type: "lineLoad", caseId: 1, beamId: 99, q: -5 },
     { id: 4, type: "lineLoad", caseId: 7, beamId: 1, q: -5 },
@@ -709,8 +722,8 @@ log("\n[9] Lasten die stil wegvallen (basisaudit ruw 30)");
     controleerVoorRekenen({ ...LIGGER, loads: alleVijf });
   } catch (e) { geweigerd = e; }
   check("de rekenpoort weigert het model met de bevindingen in de melding",
-    geweigerd !== null && /Model niet doorgerekend/.test(geweigerd.message)
-      && /Last 1/.test(geweigerd.message),
+    geweigerd !== null && /Model niet doorgerekend — 5 bevindingen/.test(geweigerd.message)
+      && /Last 3 verwijst naar staaf 99/.test(geweigerd.message),
     geweigerd?.message?.slice(0, 160) ?? "GEEN WEIGERING");
   // De meting waar de bevinding op rust: de mapping levert er inderdaad maar
   // twee, en die twee horen bij staaf 99 en geval 7 - beide onbestaanbaar.

@@ -3,7 +3,7 @@ import type { OpenFem3DMultiSelection, OpenFem3DSingleSelection } from "./openFe
 import { withConsistentOpenFem3DPlateLevels } from "./openFem3dLevels";
 
 export type OpenFem3DTransformSelection =
-  | Extract<OpenFem3DSingleSelection, { type: "node" | "beam" | "plate" }>
+  | Extract<OpenFem3DSingleSelection, { type: "node" | "beam" | "plate" | "envelopePanel" }>
   | OpenFem3DMultiSelection;
 export type OpenFem3DAxis = "x" | "y" | "z";
 export type OpenFem3DTransformCommand =
@@ -21,6 +21,7 @@ interface OpenFem3DTransformIndex {
   nodeIndexById: Map<number, number>;
   beamById: Map<number, OpenFem3DModel["beams"][number]>;
   plateById: Map<number, NonNullable<OpenFem3DModel["plates"]>[number]>;
+  envelopePanelById: Map<number, NonNullable<OpenFem3DModel["envelopePanels"]>[number]>;
 }
 
 function buildTransformIndex(model: OpenFem3DModel): OpenFem3DTransformIndex {
@@ -32,6 +33,7 @@ function buildTransformIndex(model: OpenFem3DModel): OpenFem3DTransformIndex {
     nodeIndexById,
     beamById: new Map(model.beams.map((beam) => [beam.id, beam])),
     plateById: new Map((model.plates ?? []).map((plate) => [plate.id, plate])),
+    envelopePanelById: new Map((model.envelopePanels ?? []).map((panel) => [panel.id, panel])),
   };
 }
 
@@ -89,13 +91,18 @@ function selectedNodeIds(index: OpenFem3DTransformIndex, selection: OpenFem3DTra
     if (!plate) throw new Error(`3D-plaat ${selection.id} bestaat niet.`);
     return [...new Set([...plate.nodeIds, ...(plate.openings ?? []).flatMap((opening) => opening.nodeIds)])];
   }
+  if (selection.type === "envelopePanel") {
+    const panel = index.envelopePanelById.get(selection.id);
+    if (!panel) throw new Error(`3D-schilpaneel ${selection.id} bestaat niet.`);
+    return [...new Set([...panel.nodeIds, ...(panel.openings ?? []).flatMap((opening) => opening.nodeIds)])];
+  }
   const beam = index.beamById.get(selection.id);
   if (!beam) throw new Error(`3D-staaf ${selection.id} bestaat niet.`);
   return [beam.startNodeId, beam.endNodeId];
 }
 
 function selectedBeamIds(index: OpenFem3DTransformIndex, selection: OpenFem3DTransformSelection): number[] {
-  if (selection.type === "node" || selection.type === "plate") return [];
+  if (selection.type === "node" || selection.type === "plate" || selection.type === "envelopePanel") return [];
   const ids = selection.type === "beam" ? [selection.id] : selection.beamIds;
   for (const id of ids) {
     if (!index.beamById.has(id)) throw new Error(`3D-staaf ${id} bestaat niet.`);
@@ -212,6 +219,23 @@ export function transformOpenFem3D(
         })),
       };
     });
+    const panelIds = selection.type === "envelopePanel" ? [selection.id]
+      : (model.envelopePanels ?? []).filter((panel) =>
+        [...panel.nodeIds, ...(panel.openings ?? []).flatMap((opening) => opening.nodeIds)]
+          .every((id) => idSet.has(id))).map((panel) => panel.id);
+    let nextPanel = nextId(model.envelopePanels ?? []);
+    const panelIdMap = new Map<number, number>();
+    const copiedPanels = panelIds.map((panelId) => index.envelopePanelById.get(panelId)!).map((panel) => {
+      const id = nextPanel++;
+      panelIdMap.set(panel.id, id);
+      return {
+        ...panel, id,
+        nodeIds: panel.nodeIds.map((nodeId) => idMap.get(nodeId)!),
+        openings: panel.openings?.map((opening) => ({
+          ...opening, nodeIds: opening.nodeIds.map((nodeId) => idMap.get(nodeId)!),
+        })),
+      };
+    });
     let nextSurfaceLoad = nextId(model.surfaceLoads ?? []);
     const copiedSurfaceLoads = (model.surfaceLoads ?? []).filter((load) => plateIdSet.has(load.plateId))
       .map((load) => ({ ...load, id: nextSurfaceLoad++, plateId: plateIdMap.get(load.plateId)! }));
@@ -230,6 +254,8 @@ export function transformOpenFem3D(
         thermalLoads: copiedThermalLoads.length > 0
           ? [...(model.thermalLoads ?? []), ...copiedThermalLoads] : model.thermalLoads,
         plates: copiedPlates.length > 0 ? [...(model.plates ?? []), ...copiedPlates] : model.plates,
+        envelopePanels: copiedPanels.length > 0
+          ? [...(model.envelopePanels ?? []), ...copiedPanels] : model.envelopePanels,
         surfaceLoads: copiedSurfaceLoads.length > 0
           ? [...(model.surfaceLoads ?? []), ...copiedSurfaceLoads] : model.surfaceLoads,
       }),
@@ -244,6 +270,8 @@ export function transformOpenFem3D(
           ? { type: "beam", id: beamIdMap.get(selection.id)! }
           : selection.type === "plate"
             ? { type: "plate", id: plateIdMap.get(selection.id)! }
+          : selection.type === "envelopePanel"
+            ? { type: "envelopePanel", id: panelIdMap.get(selection.id)! }
           : { type: "node", id: idMap.get(selection.id)! },
     };
   }
@@ -274,7 +302,21 @@ export function transformOpenFem3D(
     nodes[nodeIndex] = keepLevelLink(node, next);
   }
   if (!changed) return { model, selection };
-  const next = withConsistentOpenFem3DPlateLevels({ ...model, nodes });
+  const envelopePanels = command.kind === "mirror" || command.kind === "rotate"
+    ? (model.envelopePanels ?? []).map((panel) => {
+        const allNodeIds = [...panel.nodeIds, ...(panel.openings ?? []).flatMap((opening) => opening.nodeIds)];
+        if (!allNodeIds.every((id) => idSet.has(id))) return panel;
+        const spanDirection = panel.spanDirection && (command.kind === "rotate"
+          ? rotatePoint(panel.spanDirection, { x: 0, y: 0, z: 0 }, command.axis, command.angleDeg * Math.PI / 180)
+          : { ...panel.spanDirection, [command.axis]: -panel.spanDirection[command.axis] });
+        return {
+          ...panel,
+          ...(spanDirection ? { spanDirection } : {}),
+          ...(command.kind === "mirror" ? { flipOuterSide: !panel.flipOuterSide } : {}),
+        };
+      })
+    : model.envelopePanels;
+  const next = withConsistentOpenFem3DPlateLevels({ ...model, nodes, envelopePanels });
   // Draaien, spiegelen of verplaatsen mag een staaf op een verticale bedding
   // (k) niet verticaal zetten (#106): dezelfde regel als bij het lezen.
   assertOpenFem3DBeddingFitsGeometry(next, model.beams

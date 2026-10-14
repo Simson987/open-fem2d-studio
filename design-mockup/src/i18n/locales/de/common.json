@@ -45,6 +45,9 @@
     "hoekExtraHint": "Der Winkelfang greift dann auch bei 30°, 45° und 60° und ihren Spiegelungen.",
     "verbindingsTolerantie": "Verbindungstoleranz",
     "verbindingsTolerantieHint": "Innerhalb dieses Abstands gilt ein Knoten als „auf dem Stab“ oder „an derselben Stelle“ wie ein anderer Knoten: Die Modellprüfung meldet das, und ein neuer Knoten wird angeschlossen oder wiederverwendet. 0,1 bis 25 mm, Standard 5. Komma oder Punkt erlaubt. Bestehende Knoten werden nicht verschoben; ein neuer Knoten auf einem Stab wird auf die Stabachse gesetzt.",
+    "knopenAansluiten": "Knoten zusammenführen und anschließen",
+    "knopenAansluitenHint": "Nur in 3D, automatisch nach jeder Bearbeitung: Liegt nach dem Zeichnen, Einfügen, Verschieben oder Kopieren ein Punkt innerhalb der Verbindungstoleranz eines bestehenden Knotens, wird er dieser Knoten (zusammengeführt). Liegt ein Knoten danach auf einem Stab, oder läuft ein neuer Stab durch einen bestehenden Knoten, wird der Stab dort geteilt. Im selben Rückgängig-Schritt, mit einer Meldung. Das Anschließen auch nach dem Import eines Modells. Ein geöffnetes Projekt ändert sich nicht von selbst: die Modellprüfung auf der Zeichenfläche meldet solche Knoten, mit den Schaltflächen Zusammenführen und Anschließen.",
+    "verbindingsTolerantieHint3d": "Innerhalb dieses Abstands von der Stabachse gilt ein Knoten als „auf dem Stab“, und innerhalb dieses Abstands von einem anderen Knoten als „an derselben Stelle“: die Modellprüfung meldet es, Knoten anschließen teilt den Stab dort und Knoten zusammenführen macht daraus einen Knoten (auch automatisch). 0,1 bis 25 mm, Standard 5; dieselbe Einstellung wie in 2D. Ein Knoten, der entlang der Stabachse innerhalb dieses Abstands von einem Stabende liegt, zählt nicht als „auf dem Stab“. Der Knoten wird nicht verschoben: die Teile des Stabs laufen zum Knoten.",
     "groepLabels": "Beschriftungen",
     "groepGeometrie": "Geometrie",
     "groepResultaten": "Ergebnisse",
@@ -77,6 +80,9 @@
     "none": "Keines",
     "legend": "Legende Plattenergebnis",
     "signNote": "Plattenachsen: z = Plattennormale (Decke: nach oben; Wand: y nach oben). Momente positiv bei Zug an der Unterseite.",
+    "beddingNote": "Platte auf Bettung: Setzung positiv in den Boden (gegen die Plattennormale), Bodenpressung k·Setzung.",
+    "noContactGrey": "Grau mit Punkt: kein Kontakt (nur Druck).",
+    "noContactDots": "Punkt: kein Kontakt (nur Druck).",
     "linearNotice": "Platten werden nach Theorie I. Ordnung (linear) berechnet; II. Ordnung mit Platten ist im 3D-Kern noch nicht verfügbar.",
     "meshPending": "Berechnungsnetz wird erstellt…",
     "meshFailed": "Berechnungsnetz: {{message}}",
@@ -91,7 +97,9 @@
       "vx": "Querkraft vx",
       "vy": "Querkraft vy",
       "vonMisesTop": "Von-Mises-Spannung oben",
-      "vonMisesBottom": "Von-Mises-Spannung unten"
+      "vonMisesBottom": "Von-Mises-Spannung unten",
+      "groundPressure": "Bodenpressung",
+      "settlement": "Setzung (in den Boden)"
     }
   },
   "openFem3dVisibility": {
@@ -149,7 +157,8 @@
     "modeLoadCase": "Lastfall",
     "modeCurrent": "aktueller Registerstand",
     "deleteViewSet": "{{name}} löschen",
-    "loadPanels": "Lastflächen"
+    "loadPanels": "Lastflächen",
+    "envelopePanels": "Fassaden- und Dachpaneele"
   },
   "openFem3dDeformation": {
     "scale": "Überhöhung",
@@ -291,8 +300,8 @@
     "noRecent": "Noch keine zuletzt verwendeten Projekte.",
     "showOnStartup": "Diesen Bildschirm beim Start anzeigen",
     "skip": "Überspringen",
-    "steelHall": "Stahlhalle",
-    "steelHallDesc": "Eine Stahlhalle als 3D-Modell, mit dem Assistenten"
+    "steelHall": "Halle (Stahl oder Holz)",
+    "steelHallDesc": "Eine Halle (Stahl oder Holz) als 3D-Modell, mit dem Assistenten"
   },
   "projectSettings": {
     "title": "Projekteinstellungen",
@@ -373,6 +382,9 @@
     "qpSource": "Ermittlung von q_p",
     "qpCalculated": "Berechnen nach EN 1991-1-4 §4",
     "qpManual": "Manuell eingeben (z. B. aus der NA-Tabelle)",
+    "qpManualShort": "manuell",
+    "qpManualSource": "Herkunft des manuell eingegebenen Winddrucks",
+    "qpManualSourcePlaceholder": "Z. B. Projektberechnung, Tabelle und Ausgabe",
     "qpValue": "q_p [kN/m²]",
     "windLeft": "Wind von links",
     "windRight": "Wind von rechts",
@@ -382,6 +394,8 @@
     "cpiPlus": "Nur +0,20",
     "cpiMinus": "Nur −0,30",
     "cpiManual": "Manuell",
+    "cpiManualSource": "Herkunft des manuell gewählten Innendrucks",
+    "cpiManualSourcePlaceholder": "Z. B. Öffnungsberechnung, Dokument und Ausgabe",
     "spacing": "Rahmenabstand [m]",
     "position": "Position",
     "positionInner": "Innenrahmen",
@@ -489,7 +503,9 @@
       "unknownFieldsBody": "{{velden}} — diese werden nicht geladen und gehen beim nächsten Speichern verloren. Bewahren Sie eine Kopie der Datei auf, wenn Sie sie benötigen.",
       "projectOpened": "Projekt geöffnet",
       "libraryUpdated": "Bibliothek durch dieses Projekt aktualisiert",
-      "openFailed": "Datei kann nicht geöffnet werden"
+      "openFailed": "Datei kann nicht geöffnet werden",
+      "notAProjectTitle": "Kein Open FEM Studio-Projekt",
+      "notAProjectBody": "{{naam}} ist keine Projektdatei (.ifcfem oder .ifcfem2d) und wurde nicht geöffnet."
     },
     "ifc": {
       "exportErrors": "IFC-Export enthält Fehler",
@@ -566,7 +582,7 @@
       "finish": "Fertig"
     }
   },
-  "remoteControlHint": "Die App wurde mit OPENAEC_GUI_CONTROL=1 gestartet und wird über den Steuerkanal gesteuert.",
+  "remoteControlHint": "Der standardmäßig aktivierte Steuerkanal erlaubt einem KI-Assistenten oder Skript die Bedienung der App (Einstellungen → KI-Assistent (MCP) oder OPENAEC_GUI_CONTROL=1).",
   "remoteControlActive": "Fernsteuerung aktiv",
   "statusBar": {
     "snapExplain": {
@@ -616,6 +632,9 @@
     "consequenceExplainFavourable": "(günstig wirkende ständige Einwirkung 0,9). Darin enthalten ist",
     "consequenceExplainTail": "; dieser Faktor wird nicht nochmals auf ein Ergebnis angewendet. Eine von Ihnen selbst geänderte oder hinzugefügte Kombination folgt der Schadensfolgeklasse nicht.",
     "windRegion": "Windzone (EN 1991-1-4/NB)",
+    "windCode": "Windnormverfahren",
+    "windCodeDutchLegacy": "Niederländisches Verfahren (bisherige Berechnung)",
+    "windCodeUnavailable": "Nicht verfügbares Windverfahren: {{code}}",
     "terrainCategory": "Geländekategorie (EN 1991-1-4 Tabelle 4.1)",
     "windExplainRegion": "Windzone {{gebied}} ergibt eine Basiswindgeschwindigkeit",
     "windExplainTerrain": "Die Geländekategorie liefert",
@@ -736,6 +755,7 @@
     },
     "uc": {
       "badgeTitle": "Stab {{staaf}}: maßgebend {{toets}} — klicken Sie für den Nachweis",
+      "nietGetoetst": "nicht geprüft",
       "plaatBadgeTitle": "Platte {{plaat}}: maßgebend {{toets}} — siehe Nachweisbereich",
       "plaatLegenda": "UC Plattenelement"
     },
@@ -787,6 +807,19 @@
       "splitLine": "Knoten {{knoop}} mit Stab {{staaf}} verbunden: Dieser wurde in Stab {{deel1}} und Stab {{deel2}} geteilt.",
       "splitLineOffset": "Knoten {{knoop}} mit Stab {{staaf}} verbunden: Dieser wurde in Stab {{deel1}} und Stab {{deel2}} geteilt. Der Knoten lag {{mm}} mm neben der Stabachse; dort hat der Stab jetzt einen Knick.",
       "mergeLine": "Knoten {{verwijderd}} mit Knoten {{bewaard}} zusammengeführt.",
+      "loadValue": {
+        "lineNone": "Streckenlast {{last}} auf Stab {{staaf}} hat keinen Wert. Geben Sie `q` ein (gleichmäßig verteilt, kN/m) oder `qStart` und `qEnd` (Trapez).",
+        "lineNoneWrongField": "Streckenlast {{last}} auf Stab {{staaf}} hat keinen Wert: {{velden}} wird bei einer Streckenlast nicht gelesen. Geben Sie `q` ein (gleichmäßig verteilt, kN/m) oder `qStart` und `qEnd` (Trapez).",
+        "lineHalf": "Streckenlast {{last}} auf Stab {{staaf}} hat zwar `{{heeft}}`, aber kein `{{mist}}` (und kein `q` als Ersatz). Geben Sie `{{mist}}` ein; bei einer gleichmäßigen Last nur `q`.",
+        "lineWrongField": "Streckenlast {{last}} auf Stab {{staaf}}: {{velden}} wird bei einer Streckenlast nicht gelesen und würde entfallen. Geben Sie eine Einzellast oder ein Moment als eigene Last ein.",
+        "lineRange": "Streckenlast {{last}} auf Stab {{staaf}}: der belastete Bereich beginnt nicht vor seinem Ende (startFrac {{begin}}, endFrac {{einde}}). Ein leerer oder umgekehrter Bereich ist keine Last und würde entfallen. Geben Sie 0 ≤ startFrac < endFrac ≤ 1 ein, gemessen ab dem Anfangsknoten.",
+        "momentNone": "Moment {{last}} auf Knoten {{knoop}} hat keinen Wert. Ein Moment steht in `my` (kNm).",
+        "momentWrongField": "Moment {{last}} auf Knoten {{knoop}} hat keinen Wert in `my`: {{velden}} wird bei einem Moment nicht gelesen. Ein Moment steht in `my` (kNm).",
+        "momentExtraField": "Moment {{last}} auf Knoten {{knoop}}: {{velden}} wird bei einem Moment nicht gelesen und würde entfallen. Geben Sie eine Kraft als eigene Einzellast ein.",
+        "forceNone": "Einzellast {{last}} hat keinen Wert. Geben Sie `fz` (vertikal) und/oder `fx` (horizontal) ein, in kN.",
+        "forceWrongField": "Einzellast {{last}} hat keinen Wert in `fx` oder `fz`: `my` wird bei einer Einzellast nicht gelesen. Ein Moment ist eine eigene Last (pointMoment).",
+        "forceExtraField": "Einzellast {{last}}: `my` wird bei einer Einzellast nicht gelesen und würde entfallen. Ein Moment ist eine eigene Last (pointMoment)."
+      },
       "plateEdge": {
         "openingOnPerimeterRoute": "die Last liegt am Rand einer Öffnung (`openingId`), wird hier aber über einen Weg gelesen, der nur den Umfang der Platte kennt. Bitte melden Sie das: Die Adresse wird bewusst abgelehnt, statt stillschweigend auf den Umfang gelegt zu werden.",
         "nameAndIndex": "die Last nennt sowohl einen benannten Rand (`edge`) als auch einen Randindex (`edgeIndex`). Geben Sie nur einen an: Bei zwei Adressen ist nicht zu sagen, welcher Rand gemeint ist und von welcher Ecke aus die Positionen zählen.",
@@ -1013,6 +1046,7 @@
     "undoReplaceTitle": "Die Kombinationen so wiederherstellen, wie sie in der Projektdatei standen",
     "replaceConfirm": "Alle Kombinationen (außer denen des Windgenerators) durch den Standardsatz ersetzen? Ihre eigenen Kombinationen gehen dabei verloren.",
     "replaceWithStandard": "Durch Standardkombinationen ersetzen",
+    "keepCustomFactors": "Eigene Faktoren beibehalten",
     "regenerateWind": "Windlast neu erzeugen",
     "originTitle": "Standard = aus den Lastfällen und der Schadensfolgeklasse abgeleitet; eigene = von Ihnen erstellt oder angepasst",
     "origin": "Herkunft",
@@ -1202,8 +1236,13 @@
     "openingCount_other": "{{count}} Öffnungen",
     "loadPanels": "Lastflächen",
     "loadPanelLabel": "Lastfläche {{id}}",
+    "envelopePanels": "Paneele",
+    "envelopePanelLabel": "Paneel {{id}}",
+    "envelopeFacade": "Fassade",
+    "envelopeRoof": "Dach",
     "loadPanelGravity": "Schwerkraft",
     "loadPanelNormal": "senkrecht",
+    "loadPanelVerticalSurface": "vertikal je Fläche",
     "loadPanelOneWay": "einachsig",
     "loadPanelTwoWay": "zweiachsig",
     "diaphragms": "Scheiben",
@@ -1377,5 +1416,13 @@
     },
     "criteriaActief": "Aktive Merkmale: {{count}}",
     "wissen": "Leeren"
+  },
+  "envelopePanel": {
+    "geometry": "Geometrie", "name": "Name", "type": "Typ", "area": "Nettofläche",
+    "outerSide": "Außenseite", "flip": "Außenseite umkehren", "transfer": "Lastabtragung",
+    "distribution": "Richtung", "span": "Spannrichtung", "customSpan": "Eigene Richtung",
+    "weight": "Bekleidungsgewicht", "openings": "Öffnungen", "removeOpening": "Entfernen",
+    "addOpening": "Öffnung hinzufügen", "openingNodes": "Knoten-IDs durch Kommas getrennt",
+    "invalidOpening": "Mindestens drei gültige Knoten-IDs eingeben.", "add": "Hinzufügen", "delete": "Paneel löschen"
   }
 }

@@ -45,12 +45,12 @@ import { beamLengthMm, buildForcesEnvelope } from "./steelCheckBuilder";
 import { toetsdataInReferentierichting } from "./referentierichting";
 import {
   houtDoorbuigingsInvoer,
+  houtDoorbuigingsNoemers,
   kCrUitConfig,
   mapLoadDuration,
   mapServiceClass,
   matchSupportedTimberGrade,
   SUPPORTED_TIMBER_GRADES,
-  timberDeflectionNumerators,
   type TimberBuildData,
 } from "./timberCheckBuilder";
 import { belastingduurPerCombinatie, langsteKlasse } from "./belastingduur";
@@ -522,6 +522,13 @@ export interface CltBuildData {
    * doorgeknipte staaf te kunnen onderscheiden; zie `SteelBuildData.supports`.
    */
   supports?: Support[];
+  /**
+   * Alle staven van het model en de platen, voor de herkenning van een vrij
+   * staafeind (uitkraging); zie `TimberBuildData.alleBeams` en `.plates`.
+   * Ontbreekt de lijst, dan geldt `beams` als het hele model.
+   */
+  alleBeams?: Beam[];
+  plates?: TimberBuildData["plates"];
   combinations: LoadCombination[];
   combinationResults: Map<number, SolverResult>;
   /** Runtime-lijst uit `list_timber_grades`; leeg → statische fallback. */
@@ -628,8 +635,12 @@ export function buildCltCheckInputs(ruweData: CltBuildData): CltBuildResult {
         })
       : [];
     // Dezelfde zakkingen en dezelfde verantwoording als bij massief hout.
+    // Een vrij staafeind maakt ook een CLT-ligger een uitkraging: de zakking
+    // vanaf de inklemming en ℓ_rep = 2·L, met dezelfde noemers als massief hout
+    // (`houtDoorbuigingsNoemers`).
     const doorbuiging = houtDoorbuigingsInvoer(beam, data);
-    const defl = timberDeflectionNumerators(cfg.deflectionClass, cfg.deflectionLimitNumerator);
+    const defl = houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm);
+    if (defl.notitie) doorbuiging.notes.push(defl.notitie);
     inputs.push({
       // De nationale bijlage van het project reist mee naar de kern; daar
       // bepaalt zij de nationaal bepaalde parameters van deze toetsing.

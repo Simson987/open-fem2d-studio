@@ -4,11 +4,18 @@
  * knoopresultaat gelezen worden. Alle waarden staan in plaatassen (zie de
  * Rust-adapter): z = plaatnormaal (bij een vloer omhoog, bij een wand staat
  * y omhoog), momenten positief bij trek aan de onderzijde.
+ *
+ * Platen op bedding (issue #107) hebben er twee grootheden bij, Gronddruk en
+ * Zakking; die komen niet uit `shellNodes` maar uit `plateBedding`, en alleen
+ * platen op bedding hebben ze.
  */
-import type { OpenFem3DShellNodeResult, OpenFem3DSolveResult } from "./openFem3dSolver";
+import type {
+  OpenFem3DPlateBeddingNode, OpenFem3DShellNodeResult, OpenFem3DSolveResult,
+} from "./openFem3dSolver";
 
 export type OpenFem3DPlateQuantity =
-  | "w" | "mxx" | "myy" | "mxy" | "nxx" | "nyy" | "nxy" | "vx" | "vy" | "vonMisesTop" | "vonMisesBottom";
+  | "w" | "mxx" | "myy" | "mxy" | "nxx" | "nyy" | "nxy" | "vx" | "vy" | "vonMisesTop" | "vonMisesBottom"
+  | "groundPressure" | "settlement";
 
 export interface OpenFem3DPlateQuantityDefinition {
   key: OpenFem3DPlateQuantity;
@@ -21,6 +28,12 @@ export interface OpenFem3DPlateQuantityDefinition {
   read: (node: OpenFem3DShellNodeResult) => number | undefined;
   /** Omrekening van de kernwaarde in `extremes` naar de getoonde eenheid. */
   factor: number;
+  /**
+   * Een grootheid van de bedding (#107): de knoopwaarde uit `plateBedding` in
+   * de getoonde eenheid. Dan geeft `read` niets en staat de grootheid niet in
+   * de `extremes` van de kern.
+   */
+  bedding?: (node: OpenFem3DPlateBeddingNode) => number;
 }
 
 export const OPEN_FEM_3D_PLATE_QUANTITIES: readonly OpenFem3DPlateQuantityDefinition[] = [
@@ -35,6 +48,11 @@ export const OPEN_FEM_3D_PLATE_QUANTITIES: readonly OpenFem3DPlateQuantityDefini
   { key: "vy", symbol: "vy", unit: "kN/m", extremeKey: "vyKnPerM", factor: 1, read: (n) => n.vyKnPerM },
   { key: "vonMisesTop", symbol: "σvm,boven", unit: "N/mm²", extremeKey: "vonMisesTopMpa", factor: 1, read: (n) => n.vonMisesTopMpa },
   { key: "vonMisesBottom", symbol: "σvm,onder", unit: "N/mm²", extremeKey: "vonMisesBottomMpa", factor: 1, read: (n) => n.vonMisesBottomMpa },
+  // Plaat op bedding (#107): de gronddruk k·s (0 waar geen contact) en de zakking, positief de grond in.
+  { key: "groundPressure", symbol: "p", unit: "kN/m²", extremeKey: "groundPressureKnPerM2", factor: 1, read: () => undefined,
+    bedding: (n) => n.pressureKnPerM2 },
+  { key: "settlement", symbol: "s", unit: "mm", extremeKey: "settlementM", factor: 1000, read: () => undefined,
+    bedding: (n) => n.settlementM * 1000 },
 ];
 
 export function openFem3DPlateQuantity(key: OpenFem3DPlateQuantity): OpenFem3DPlateQuantityDefinition {
@@ -45,16 +63,56 @@ export function isOpenFem3DPlateQuantity(value: unknown): value is OpenFem3DPlat
   return OPEN_FEM_3D_PLATE_QUANTITIES.some((item) => item.key === value);
 }
 
+/**
+ * De knoopwaarden van een grootheid (in de getoonde eenheid) per knoop-id: van
+ * één plaat, of zonder `plateId` van alle platen. De bestaande grootheden uit
+ * `shellNodes`, Gronddruk en Zakking uit `plateBedding` (#107): een plaat
+ * zonder bedding heeft die niet.
+ */
+export function openFem3DPlateQuantityValues(
+  result: Pick<OpenFem3DSolveResult, "shellNodes" | "plateBedding"> | null | undefined,
+  quantity: OpenFem3DPlateQuantity,
+  plateId?: number,
+): Map<number, number> {
+  const definition = openFem3DPlateQuantity(quantity);
+  const values = new Map<number, number>();
+  if (definition.bedding) {
+    for (const plate of result?.plateBedding ?? []) {
+      if (plateId !== undefined && plate.plateId !== plateId) continue;
+      for (const node of plate.nodes) {
+        const value = definition.bedding(node);
+        if (Number.isFinite(value)) values.set(node.nodeId, value);
+      }
+    }
+    return values;
+  }
+  for (const node of result?.shellNodes ?? []) {
+    if (plateId !== undefined && node.plateId !== plateId) continue;
+    const value = definition.read(node);
+    if (value !== undefined && Number.isFinite(value)) values.set(node.nodeId, value);
+  }
+  return values;
+}
+
+/**
+ * De grootheden die een uitkomst heeft (voor de keuzelijst): de bestaande als
+ * er plaatknopen zijn, Gronddruk en Zakking als er platen op bedding zijn.
+ */
+export function openFem3DPlateQuantitiesFor(
+  result: Pick<OpenFem3DSolveResult, "shellNodes" | "plateBedding"> | null | undefined,
+): OpenFem3DPlateQuantityDefinition[] {
+  const shell = (result?.shellNodes?.length ?? 0) > 0;
+  const bedding = (result?.plateBedding ?? []).some((plate) => plate.nodes.length > 0);
+  return OPEN_FEM_3D_PLATE_QUANTITIES.filter((definition) => definition.bedding ? bedding : shell);
+}
+
 /** Bereik van een grootheid over alle plaatknopen van het resultaat (voor één legenda). */
 export function openFem3DPlateQuantityRange(
-  result: Pick<OpenFem3DSolveResult, "shellNodes"> | null | undefined,
+  result: Pick<OpenFem3DSolveResult, "shellNodes" | "plateBedding"> | null | undefined,
   quantity: OpenFem3DPlateQuantity,
 ): { min: number; max: number } | null {
-  const definition = openFem3DPlateQuantity(quantity);
   let min = Infinity, max = -Infinity;
-  for (const node of result?.shellNodes ?? []) {
-    const value = definition.read(node);
-    if (value === undefined || !Number.isFinite(value)) continue;
+  for (const value of openFem3DPlateQuantityValues(result, quantity).values()) {
     if (value < min) min = value;
     if (value > max) max = value;
   }
@@ -98,6 +156,19 @@ export function openFem3DPlateExtremes(
   const summary = result?.plates?.find((plate) => plate.plateId === plateId);
   if (!summary) return [];
   return OPEN_FEM_3D_PLATE_QUANTITIES.flatMap((definition) => {
+    if (definition.bedding) {
+      // Gronddruk en zakking (#107): uit de knopen van plateBedding (de kern zet ze niet in `extremes`).
+      const bedding = result?.plateBedding?.find((plate) => plate.plateId === plateId);
+      if (!bedding || bedding.nodes.length === 0) return [];
+      let min = bedding.nodes[0], max = bedding.nodes[0];
+      for (const node of bedding.nodes) {
+        if (definition.bedding(node) < definition.bedding(min)) min = node;
+        if (definition.bedding(node) > definition.bedding(max)) max = node;
+      }
+      return [{
+        definition, min: definition.bedding(min), minNodeId: min.nodeId, max: definition.bedding(max), maxNodeId: max.nodeId,
+      }];
+    }
     const extreme = summary.extremes.find((item) => item.quantity === definition.extremeKey);
     if (!extreme) return [];
     return [{

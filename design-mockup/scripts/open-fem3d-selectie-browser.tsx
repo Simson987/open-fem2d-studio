@@ -173,10 +173,15 @@ function gelijk(a: unknown, b: unknown, m: string) {
   if (JSON.stringify(a) !== JSON.stringify(b)) throw Error(`${m}: ${JSON.stringify(a)} ≠ ${JSON.stringify(b)}`);
 }
 async function test(name: string, fn: () => void | Promise<void>) {
+  const gekozen = /test=(\d+)/.exec(location.hash)?.[1];
+  if (gekozen && ++testNummer !== Number(gekozen)) return;
+  document.body.dataset.openFem3dCurrentTest = name;
   const start = performance.now();
   try { await fn(); tests.push({ name, ms: Math.round(performance.now() - start) }); }
   catch (e) { tests.push({ name, error: e instanceof Error ? e.message : String(e), ms: Math.round(performance.now() - start) }); }
+  document.body.dataset.openFem3dCompletedTests = String(tests.length);
 }
+let testNummer = 0;
 
 const staalhal: OpenFem3DModel = parseOpenFem3DModel(JSON.parse(staalhalTekst as string).model3d);
 const snel: OpenFem3DVisibility = { ...DEFAULT_OPEN_FEM_3D_VISIBILITY, nodeNumbers: false, grid: false, structuralGrid: false };
@@ -1290,8 +1295,8 @@ async function kubusProeven() {
     // Sinds issue #86 daaronder de section box: een schakelaar, passend op selectie en resetten.
     gelijk([...menuEl().children].map((el) => [el.getAttribute("role"), el.textContent]),
       [["menuitem", "Startaanzicht"], ["menuitem", "Passend beeld"], ["menuitemcheckbox", "Perspectief"],
-        ["menuitemcheckbox", "Section box"], ["menuitem", "Section box passend op selectie"], ["menuitem", "Section box resetten"]],
-      "zes regels (Perspectief en Section box als schakelaar), geen plekhouders");
+        ["menuitemcheckbox", "Exploderen"], ["menuitemcheckbox", "Section box"], ["menuitem", "Section box passend op selectie"], ["menuitem", "Section box resetten"]],
+      "zeven regels (Perspectief, Exploderen en Section box als schakelaar), geen plekhouders");
     gelijk(actiefEl(), menuItemEl("start"), "de focus staat op de eerste regel");
     klikEcht(menuItemEl("start"), "Startaanzicht");
     ok(menuEl().hidden && knop.getAttribute("aria-expanded") === "false", "een keuze sluit het menu");

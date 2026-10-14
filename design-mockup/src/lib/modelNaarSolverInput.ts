@@ -344,6 +344,28 @@ export function plaatNaarSolverInput(p: Plate): NonNullable<MultiInput["plates"]
 }
 
 /**
+ * De waarden van een lijnlast aan begin en eind van het belaste deel (kN/m),
+ * of `null` als er aan een van beide kanten geen waarde is.
+ *
+ * Eén regel, dezelfde die het tekenvlak, het eigenschappenpaneel, het rapport
+ * en de engine al gebruikten: `qStart ?? q` en `qEnd ?? q`. Een lijnlast met
+ * alleen `qStart` en `qEnd` is dus een trapezium, ook zonder `q`; `q` is de
+ * gelijkmatige waarde en de terugval voor een ontbrekend uiteinde. Tot
+ * oktober 2026 eiste de mapping `q` erbij: een driehoekslast 0 → 6 kN/m
+ * zonder `q` werd getekend maar viel uit de berekening, en met een
+ * willekeurige `q` erbij (ook +999) rekende hij exact met qStart/qEnd — `q`
+ * werkte als aan/uit-schakelaar (controle 12 oktober 2026, punt K2).
+ */
+export function lijnlastWaarden(
+  l: Pick<Load, "q" | "qStart" | "qEnd">,
+): { qa: number; qb: number } | null {
+  const qa = l.qStart ?? l.q;
+  const qb = l.qEnd ?? l.q;
+  if (qa === undefined || qb === undefined) return null;
+  return { qa, qb };
+}
+
+/**
  * Een randlast (`edgeLoad`) naar de solver, of `null` als de last geen plaat
  * of geen waarde heeft. Het randadres gaat ONGEWIJZIGD mee: `edge` en
  * `edgeIndex` zoals ingevoerd. Hier werd tot september 2026 een ontbrekende
@@ -502,10 +524,13 @@ export function bouwMultiInput(model: FemModelInvoer): MultiInput {
   }
 
   for (const l of model.loads) {
-    if (l.type === "lineLoad" && l.beamId !== undefined && l.q !== undefined) {
+    if (l.type === "lineLoad" && l.beamId !== undefined && lijnlastWaarden(l) !== null) {
       multiInput.loads.push({
         beamId: l.beamId,
-        q: l.q,
+        // Een trapezium mag zonder `q` (alleen qStart en qEnd, zie
+        // `lijnlastWaarden`): dan staat hier de beginwaarde, en de engine leest
+        // qStart/qEnd zelf. Met `q` blijft de invoer byte-gelijk aan voorheen.
+        q: l.q ?? l.qStart!,
         qStart: l.qStart,
         qEnd: l.qEnd,
         qDir: l.qDir,
@@ -539,7 +564,11 @@ export function bouwMultiInput(model: FemModelInvoer): MultiInput {
         fz: (l.fz ?? 0) * 1000,
         caseId: l.caseId,
       });
-    } else if (l.type === "pointMoment" && l.nodeId !== undefined) {
+    } else if (l.type === "pointMoment" && l.nodeId !== undefined && l.my !== undefined) {
+      // Een koppel zonder `my` is geen koppel van nul: tot oktober 2026 werd
+      // het `my: 0`, ook als de waarde in `fz` of `fx` stond (controle 12
+      // oktober 2026, punt K1). Nu levert het geen invoer op, en de
+      // modelcontrole (`lastWaardeFout`) noemt de reden.
       multiInput.pointLoads!.push({
         nodeId: l.nodeId,
         my: (l.my ?? 0) * 1e6,

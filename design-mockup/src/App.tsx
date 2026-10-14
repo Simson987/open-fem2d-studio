@@ -9,8 +9,12 @@ import DocumentBar from "./components/DocumentBar";
 import StatusBar, { type SolverStatus } from "./components/StatusBar";
 import Backstage from "./components/backstage/Backstage";
 import ToastHost from "./components/feedback/Toast";
+import ImportVerslagVenster, { type ImportVerslag } from "./extensies/ImportVerslagVenster";
+import { MeerdereImporteursFout, useExtensieStore } from "./extensies/extensieStore";
 import { useRecentFiles } from "./hooks/useRecentFiles";
-import SettingsDialog, { applyTheme } from "./components/settings/SettingsDialog";
+import { useBestandskoppeling } from "./hooks/useBestandskoppeling";
+import { maakWachtpoort, type Wachtpoort } from "./io/bestandskoppeling";
+import SettingsDialog, { applyTheme, type SettingsTabId } from "./components/settings/SettingsDialog";
 import FeedbackDialog from "./components/feedback/FeedbackDialog";
 import WelcomeScreen from "./components/welcome/WelcomeScreen";
 import ProjectSettingsDialog, { DEFAULT_UITGANGSPUNTEN } from "./components/project/ProjectSettingsDialog";
@@ -35,11 +39,18 @@ import {
   type OpenFem3DNodeTarget,
 } from "./components/openFem3d/openFem3dNodeTools";
 import { placeOpenFem3DPointLoad, type OpenFem3DPointLoadTarget } from "./components/openFem3d/openFem3dPlaatsen";
+import {
+  findOpenFem3DNodesOnBeams, openFem3DConnectAfterImport, openFem3DConnectButton, openFem3DConnectMessage, openFem3DEditWithAutoConnect,
+  type OpenFem3DAutoEditStep, type OpenFem3DConnectMessagePart, type OpenFem3DConnectResult, type OpenFem3DConnectStep,
+} from "./components/openFem3d/openFem3dAansluiten";
+import {
+  openFem3DMergeButton, openFem3DMergeMessage, openFem3DSelectionAfterMerge, type OpenFem3DMergeMessagePart, type OpenFem3DMergeStep,
+} from "./components/openFem3d/openFem3dSamenvoegen";
 import { readOpenFem3DDeformationDisplay, saveOpenFem3DDeformationDisplay } from "./components/openFem3d/openFem3dDeformationDisplay";
 import { readOpenFem3DDiagramLabels, saveOpenFem3DDiagramLabels } from "./components/openFem3d/openFem3dDiagramLabels";
 import { openFem3dHistoryReducer, openFem3DHistoryExtern, openFem3DHistoryLevelPatch, type OpenFem3DAction, type OpenFem3DEditMeta, type OpenFem3DHistory } from "./components/openFem3d/openFem3dHistory";
-import { applyOpenFem3DLevels, openFem3DLevelRefusalText, openFem3DLevelTransition, withOpenFem3DLevelPatch, withoutUnknownOpenFem3DLevelLinks } from "./components/openFem3d/openFem3dLevels";
-import type { ApiDocument } from "./api/projectDocument";
+import { applyOpenFem3DLevels, openFem3DLevelRefusalText, openFem3DLevelTransition, withOpenFem3DLevelPatch, withoutUnknownOpenFem3DLevelLinks, type OpenFem3DLevel } from "./components/openFem3d/openFem3dLevels";
+import { gebruikteEigenDoorsneden, type ApiDocument } from "./api/projectDocument";
 import { voerApiUitInApp, type ApiAppActies } from "./bediening/apiAdapter";
 import {
   convertOpenFem3DPlateToLoadPanels,
@@ -74,6 +85,10 @@ import {
   type OpenFem3DConcreteChecks,
 } from "./components/openFem3d/openFem3dConcreteCheck";
 import {
+  runOpenFem3DTimberChecks,
+  type OpenFem3DTimberChecks,
+} from "./components/openFem3d/openFem3dTimberCheck";
+import {
   SOLVER_PREFERENCE_KEY,
   normaliseSolverPreference,
   resolveSolver,
@@ -85,11 +100,14 @@ import type { TableDataset, TableViewApi } from "./components/table/tableTypes";
 import LoadCaseTabBar from "./components/fem/LoadCaseTabBar";
 import LoadCasesDialog from "./components/fem/LoadCasesDialog";
 import WindGeneratorDialog from "./lib/wind/WindGeneratorDialog";
+import OpenFem3DEnvelopeLoadsDialog, { type EnvelopeLoadInput } from "./components/openFem3d/OpenFem3DEnvelopeLoadsDialog";
 import StaalhalWizard from "./components/openFem3d/wizards/StaalhalWizard";
-import { metBelastinggevalIds, STAALHAL_GEVAL, type StaalhalResultaat } from "./components/openFem3d/wizards/staalhal";
+import { metBelastinggevalIds, requireStaalhalWindRoute, STAALHAL_GEVAL,
+  type StaalhalResultaat } from "./components/openFem3d/wizards/staalhal";
 import WaterAccumulation2DDialog from "./components/fem/WaterAccumulation2DDialog";
 import { resolveSection } from "./lib/sectionResolver";
 import { windUitgangspunten } from "./lib/wind/windGenerator";
+import { NEDERLANDSE_WINDROUTE, windCodeIdFromProjectInfo, type WindCodeId } from "./lib/wind/windCodeRoute";
 import { useWindGenerator } from "./stores/windStore";
 import { pasRapportSnapshotToe, rapportSnapshot, useReportStore } from "./stores/reportStore";
 import { snoeiCheckFocus } from "./lib/verdwenenStaven";
@@ -181,7 +199,6 @@ import { combinationsToFile, combinationsFromFile, onbekendeTopVelden, deseriali
 import { ifcAnalyseProject, type IfcAnalyseImport } from "./io/ifcAnalyseImport";
 import { useIfcImportStroom } from "./components/ifcImport/useIfcImportStroom";
 import {
-  exporteer as exporteerEigenDoorsneden,
   importeer as importeerEigenDoorsneden,
 } from "./lib/profieleditor/eigenDoorsnedenStore";
 import {
@@ -326,6 +343,45 @@ function bijlageVanProject(waarde: string | null): NationaleBijlageCode | undefi
   }
 }
 
+/**
+ * De melding na knopen op staven aansluiten in 3D (issue #63): hoeveel staven
+ * in hoeveel delen, welke knopen niet aangesloten konden worden, en waar
+ * (selectie, hele model, automatisch, na importeren). Buiten de component:
+ * geen toestand, dus ook bruikbaar in de callbacks zonder afhankelijkheden
+ * (setOpenFem3d, sluitAanNaImport).
+ */
+function meldOpenFem3DAansluiten(stap: OpenFem3DConnectStep<OpenFem3DConnectResult>): void {
+  const message = openFem3DConnectMessage(stap.result, stap.context);
+  const tekst = (part: OpenFem3DConnectMessagePart) =>
+    i18next.t(part.key, { ...(part.values ?? {}), ...(part.count === undefined ? {} : { count: part.count }) });
+  void import("./io/notify").then(({ notifyInfo, notifySuccess, notifyWarning }) => {
+    const meld = message.level === "success" ? notifySuccess : message.level === "warning" ? notifyWarning : notifyInfo;
+    meld(tekst(message.title), message.details.map(tekst).join(" "));
+  }).catch(() => {});
+}
+
+/**
+ * De melding na knopen samenvoegen in 3D (issue #75): welke knopen opgingen
+ * in welke, welke staven verdwenen of samengingen, wat geweigerd is en
+ * waarom, en waar (selectie, hele model, automatisch). Een lijst
+ * vertaalsleutels in een regel (de eigenschappen waarin twee staven
+ * verschillen) wordt vertaald en met komma's ingevuld. `levels` (de levels
+ * van het stramien) noemt een level bij naam en hoogte in plaats van zijn id.
+ * Buiten de component, net als `meldOpenFem3DAansluiten`.
+ */
+function meldOpenFem3DSamenvoegen(stap: OpenFem3DMergeStep, levels: readonly OpenFem3DLevel[]): void {
+  const message = openFem3DMergeMessage(stap.result, stap.context, levels);
+  const tekst = (part: OpenFem3DMergeMessagePart) => i18next.t(part.key, {
+    ...(part.values ?? {}),
+    ...(part.count === undefined ? {} : { count: part.count }),
+    ...Object.fromEntries(Object.entries(part.lists ?? {}).map(([naam, sleutels]) => [naam, sleutels.map((s) => i18next.t(s)).join(", ")])),
+  });
+  void import("./io/notify").then(({ notifyInfo, notifySuccess, notifyWarning }) => {
+    const meld = message.level === "success" ? notifySuccess : message.level === "warning" ? notifyWarning : notifyInfo;
+    meld(tekst(message.title), message.details.map(tekst).join(" "));
+  }).catch(() => {});
+}
+
 function App() {
   // Check if this is a detached window
   const detachedParams = getDetachedParams();
@@ -334,10 +390,18 @@ function App() {
   }
   const { t } = useTranslation();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Met welk tabblad Instellingen opent: het lint "AI-assistent (MCP)" opent
+  // op dat tabblad (issue #109); de andere ingangen op het laatst gebruikte.
+  const [settingsTab, setSettingsTab] = useState<SettingsTabId | undefined>(undefined);
+  const openSettings = useCallback((tab?: SettingsTabId) => {
+    setSettingsTab(tab);
+    setSettingsOpen(true);
+  }, []);
   const [backstageOpen, setBackstageOpen] = useState(false);
   // Currently-open project path (Tauri only; empty string = unsaved).
   // Save → write back to this path; Save As → always opens dialog and updates this.
   const [projectPath, setProjectPath] = useState<string>("");
+  const [importVerslag, setImportVerslag] = useState<ImportVerslag | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
@@ -364,15 +428,45 @@ function App() {
     model: { nodes: [], beams: [] }, past: [], future: [],
   });
   const openFem3dHistoryRef = useRef(openFem3dHistory);
+  const explodeAmountRef = useRef(0);
   const dispatchOpenFem3D = useCallback((action: OpenFem3DAction) => {
+    if (explodeAmountRef.current > 0 && action.type !== "replace") return;
     const next = openFem3dHistoryReducer(openFem3dHistoryRef.current, action);
     if (next === openFem3dHistoryRef.current) return;
     openFem3dHistoryRef.current = next;
     setOpenFem3dHistoryState(next);
   }, []);
   const openFem3d = openFem3dHistory.model;
-  const setOpenFem3d = useCallback((model: OpenFem3DModel, meta?: OpenFem3DEditMeta) =>
-    dispatchOpenFem3D({ type: "edit", model, ...meta }), []);
+  /**
+   * Elke bewerking van het 3D-model uit de app (tekenvlak, eigenschappen,
+   * transformaties, gereedschappen) komt hier langs. Staat "Knopen
+   * automatisch samenvoegen en aansluiten" aan (tab Weergave), dan wordt eerst
+   * een punt dat de bewerking binnen de verbindingstolerantie van een
+   * bestaande knoop legde, die knoop (issue #75), en daarna worden de knopen
+   * die de bewerking op een staaf legde, of de bestaande knopen waar een nieuwe
+   * of verplaatste staaf doorheen loopt, aangesloten (issue #63): in dezelfde
+   * stap ongedaan maken, met een korte melding per soort. Bij een plaat-,
+   * opening- of belastingvlakcontour in aanbouw (tekengroep) pas als de
+   * contour sluit, voor de knopen van die plaat of dat vlak. De commando's van
+   * de API gaan niet hierlangs (`bewerk3D`): die doen precies wat ze zeggen;
+   * samenvoegen en aansluiten zijn daar de commando's model3d.nodes.merge en
+   * model3d.beam.connectNodes. Geeft de stap terug, zodat een transformatie
+   * haar selectie op de knoop zet waarin een verplaatste knoop opging en op
+   * alle delen van een gesplitste staaf.
+   */
+  const setOpenFem3d = useCallback((model: OpenFem3DModel, meta?: OpenFem3DEditMeta): OpenFem3DAutoEditStep => {
+    if (explodeAmountRef.current > 0) {
+      return openFem3DEditWithAutoConnect(openFem3dHistoryRef.current.model, openFem3dHistoryRef.current.model, leesSnapInstellingen());
+    }
+    const stap = openFem3DEditWithAutoConnect(openFem3dHistoryRef.current.model, model, leesSnapInstellingen(), meta?.historyGroup);
+    dispatchOpenFem3D({ type: "edit", model: stap.model, ...meta });
+    if (stap.merge) {
+      meldOpenFem3DSamenvoegen({ model: stap.model, result: stap.merge, context: { scope: "auto", toleranceMm: stap.context.toleranceMm } },
+        femRef.current.structuralGrid.zAxes);
+    }
+    if (stap.result) meldOpenFem3DAansluiten({ ...stap, result: stap.result });
+    return stap;
+  }, []);
   const [openFem3dTool, setOpenFem3dTool] = useState<OpenFem3DTool>("select");
   const [openFem3dSelection, setOpenFem3dSelection] = useState<OpenFem3DSelection>(null);
   const [openFem3dNormFocus, setOpenFem3dNormFocus] = useState<{ beamId: number; serial: number } | null>(null);
@@ -384,6 +478,7 @@ function App() {
       notifyWarning(i18next.t("ribbon:openFem3d.loadPanel.failed"), message)).catch(() => {});
   };
   const handleOpenFem3DToolChange = (next: OpenFem3DTool) => {
+    if (explodeAmountRef.current > 0 && next !== "select") return;
     setOpenFem3dTool(next);
     if (next !== "loadPanelSpan") setOpenFem3dSpanPick(null);
     if (next === "addLoadPanel" || next === "addPointLoad") {
@@ -537,6 +632,42 @@ function App() {
       (message.level === "success" ? notifySuccess : notifyInfo)(tekst(message.title), message.details.map(tekst).join(" "));
     }).catch(() => {});
   };
+  /**
+   * Knopen op staven aansluiten (issue #63): de lintknop werkt op de
+   * geselecteerde knopen en staven (met de eindknopen van die staven), of op
+   * het hele model zonder knoop of staaf in de selectie ("selectie"); de knop
+   * Aansluiten in de modelcontrole altijd op het hele model ("model"). Het
+   * bereik en de tolerantie bepaalt `openFem3DConnectButton`, met dezelfde
+   * zuivere functie als het API-commando model3d.beam.connectNodes; één stap
+   * ongedaan maken, met de melding welke staven in hoeveel delen gesplitst zijn.
+   */
+  const handleOpenFem3DConnectNodes = (bereik: "selectie" | "model") => {
+    const current = openFem3dHistoryRef.current.model;
+    const stap = openFem3DConnectButton(current, openFem3dSelection, leesSnapInstellingen(), bereik);
+    if (stap.model !== current) dispatchOpenFem3D({ type: "edit", model: stap.model });
+    meldOpenFem3DAansluiten(stap);
+  };
+  /**
+   * Knopen samenvoegen (issue #75): de lintknop werkt op de geselecteerde
+   * knopen (met de eindknopen van geselecteerde staven en de hoeken van
+   * geselecteerde platen), of op het hele model zonder selectie ("selectie");
+   * de knop Samenvoegen in de modelcontrole altijd op het hele model
+   * ("model"). Het bereik en de tolerantie (de verbindingstolerantie) bepaalt
+   * `openFem3DMergeButton`, met dezelfde zuivere functie als het API-commando
+   * model3d.nodes.merge; één stap ongedaan maken, met de samenvatting. Een
+   * geselecteerde knoop die opging in een andere, wordt die andere.
+   */
+  const handleOpenFem3DMergeNodes = (bereik: "selectie" | "model") => {
+    const current = openFem3dHistoryRef.current.model;
+    const stap = openFem3DMergeButton(current, openFem3dSelection, leesSnapInstellingen(), bereik);
+    if (stap.model !== current) {
+      dispatchOpenFem3D({ type: "edit", model: stap.model });
+      setOpenFem3dSelection((selectie) => openFem3DSelectionAfterMerge(selectie, stap.result));
+    }
+    meldOpenFem3DSamenvoegen(stap, fem.structuralGrid.zAxes);
+  };
+  // Elke nieuwe waarde klapt de modelcontrole van het 3D-tekenvlak open (Berekenen met losse knopen).
+  const [openFem3dModelCheckToken, setOpenFem3dModelCheckToken] = useState(0);
   const [openFem3dDeleteToken, setOpenFem3dDeleteToken] = useState(0);
   const [openFem3dFitToken, setOpenFem3dFitToken] = useState(0);
   const [openFem3dViewRequest, setOpenFem3dViewRequest] = useState<{ kind: OpenFem3DView; token: number }>({ kind: "iso", token: 0 });
@@ -560,11 +691,16 @@ function App() {
   const [openFem3dSolveError, setOpenFem3dSolveError] = useState<string | null>(null);
   const [openFem3dChecks, setOpenFem3dChecks] = useState<OpenFem3DSteelChecks | null>(null);
   const [openFem3dConcreteChecks, setOpenFem3dConcreteChecks] = useState<OpenFem3DConcreteChecks | null>(null);
+  const [openFem3dTimberChecks, setOpenFem3dTimberChecks] = useState<OpenFem3DTimberChecks | null>(null);
   const [openFem3dChecksRunning, setOpenFem3dChecksRunning] = useState(false);
   const [openFem3dChecksError, setOpenFem3dChecksError] = useState<string | null>(null);
   const openFem3dSolveGenerationRef = useRef(0);
   const [visibility3DOpen, setVisibility3DOpen] = useState(false);
   const [openFem3dVisibility, setOpenFem3dVisibility] = useState(readOpenFem3DVisibility);
+  explodeAmountRef.current = openFem3dVisibility.explode.amountM;
+  useEffect(() => {
+    if (openFem3dVisibility.explode.amountM > 0) setOpenFem3dTool("select");
+  }, [openFem3dVisibility.explode.amountM]);
   // Vergroting van de vervormde vorm en "Origineel tonen": een weergavevoorkeur.
   const [openFem3dDeformationDisplay, setOpenFem3dDeformationDisplay] = useState(readOpenFem3DDeformationDisplay);
   useEffect(() => saveOpenFem3DDeformationDisplay(openFem3dDeformationDisplay), [openFem3dDeformationDisplay]);
@@ -593,6 +729,7 @@ function App() {
     setOpenFem3dSolveError(null);
     setOpenFem3dChecks(null);
     setOpenFem3dConcreteChecks(null);
+    setOpenFem3dTimberChecks(null);
     setOpenFem3dChecksRunning(false);
     setOpenFem3dChecksError(null);
     if (modelDimension === "3d") setSolverStatus({ kind: "ready" });
@@ -641,6 +778,7 @@ function App() {
     setOpenFem3dSolveError(null);
     setOpenFem3dChecks(null);
     setOpenFem3dConcreteChecks(null);
+    setOpenFem3dTimberChecks(null);
     setOpenFem3dChecksRunning(false);
     setOpenFem3dChecksError(null);
     setSolverStatus({ kind: "ready" });
@@ -696,7 +834,7 @@ function App() {
   // in de constructie (idempotent, zie windStore.ts). Staat hier boven de
   // snapshot-opbouw omdat zijn instellingen in het projectbestand gaan.
   const windGenerator = useWindGenerator(fem);
-  const { addRecentFile } = useRecentFiles();
+  const { addRecentFile, loaded: recenteBestandenGeladen } = useRecentFiles();
   // Normtoetsing (EN 1993 staal + EN 1995 hout) — resultaten in checkStore.
   const checkRun = useCheckStore((s) => s.run);
   const checksRunning = useCheckStore((s) => s.isRunning);
@@ -723,6 +861,7 @@ function App() {
   // zetten de levelstand van die stap terug in het stramien.
   const setStructuralGridState = fem.setStructuralGrid;
   const undoRedoOpenFem3D = useCallback((kind: "undo" | "redo") => {
+    if (explodeAmountRef.current > 0) return;
     const patch = openFem3DHistoryLevelPatch(openFem3dHistoryRef.current, kind);
     const extern = openFem3DHistoryExtern(openFem3dHistoryRef.current, kind);
     dispatchOpenFem3D({ type: kind });
@@ -736,6 +875,7 @@ function App() {
    * en komt de vertaalde reden terug. In 2D alleen het stramien, zoals altijd.
    */
   const commitLevels = useCallback((nextLevels: GridAxisLine[]): string | null => {
+    if (modelDimension === "3d" && explodeAmountRef.current > 0) return i18next.t("ribbon:openFem3d.explodeEditBlocked");
     const structural = fem.structuralGrid;
     if (modelDimension !== "3d") {
       setStructuralGridState({ ...structural, zAxes: nextLevels });
@@ -748,7 +888,16 @@ function App() {
       return tRibbon(key, values);
     }
     const levels = openFem3DLevelTransition(structural.zAxes, nextLevels);
-    if (levels || result.model !== model) dispatchOpenFem3D({ type: "edit", model: result.model, levels });
+    // Knopen die met hun level op een andere knoop komen te liggen, voegen in
+    // dezelfde stap samen (issue #75); knopen die op een staaf komen te liggen
+    // (of staven die door een knoop gaan lopen), sluiten aan (issue #63).
+    const stap = openFem3DEditWithAutoConnect(model, result.model, leesSnapInstellingen());
+    if (levels || stap.model !== model) dispatchOpenFem3D({ type: "edit", model: stap.model, levels });
+    if (stap.merge) {
+      meldOpenFem3DSamenvoegen({ model: stap.model, result: stap.merge, context: { scope: "auto", toleranceMm: stap.context.toleranceMm } },
+        nextLevels);
+    }
+    if (stap.result) meldOpenFem3DAansluiten({ ...stap, result: stap.result });
     setStructuralGridState((current) => ({ ...current, zAxes: nextLevels }));
     return null;
   }, [fem.structuralGrid, modelDimension, dispatchOpenFem3D, setStructuralGridState, tRibbon]);
@@ -1038,7 +1187,10 @@ function App() {
     // `EIGEN:<naam>` moet op een andere machine dezelfde doorsnede vinden.
     // Alleen de doorsneden die dit model daadwerkelijk gebruikt — anders
     // draagt elk projectbestand de complete persoonlijke bibliotheek mee.
-    eigenDoorsneden: exporteerEigenDoorsneden(fem.beams),
+    // Ook de 3D-staven: het splitsen van een verlopende stalen 3D-staaf (#73)
+    // laat net als in 2D een eigen gelaste tussendoorsnede achter. Dezelfde
+    // regel als de API-commando's (`gebruikteEigenDoorsneden`).
+    eigenDoorsneden: gebruikteEigenDoorsneden({ beams: fem.beams, modelDimension, model3d: openFem3d }),
     // Idem voor de eigen CLT-vloeropbouwen; die reizen als BIJSCHRIFT mee
     // (de opbouw zelf staat al in de profielnaam van de staaf), en alleen
     // voor de opbouwen die in dit model voorkomen.
@@ -1081,6 +1233,19 @@ function App() {
   // Een tweede actie tijdens een open dialoog mag geen tweede, identieke
   // bevestiging starten (bijvoorbeeld twee sluitverzoeken achter elkaar).
   const unsavedConfirmationPendingRef = useRef(false);
+  // Waar zolang de sluitvraag van het kruisje loopt (onCloseRequested,
+  // verderop), en daarna als de app sluit.
+  const closeRequestPendingRef = useRef(false);
+  // Bestandskoppeling (#90): een bestand dat binnenkomt terwijl er al een vraag
+  // over niet-opgeslagen werk openstaat of het venster sluit, wacht hier tot
+  // die vraag beantwoord is, in plaats van stil weg te vallen. Een ref, zodat
+  // de callbacks hieronder er geen afhankelijkheid bij krijgen.
+  const vraagpoortRef = useRef<Wachtpoort | null>(null);
+  if (vraagpoortRef.current === null) {
+    vraagpoortRef.current = maakWachtpoort(
+      () => unsavedConfirmationPendingRef.current || closeRequestPendingRef.current,
+    );
+  }
 
   /** Opslaan als — retourneert true als er daadwerkelijk is opgeslagen. */
   const handleSaveProjectAs = useCallback(async (): Promise<boolean> => {
@@ -1168,6 +1333,7 @@ function App() {
       return window.confirm(t("unsaved.confirmDiscard"));
     } finally {
       unsavedConfirmationPendingRef.current = false;
+      vraagpoortRef.current?.misschienOpen();
     }
   }, [handleSaveProject, t]);
 
@@ -1297,9 +1463,16 @@ function App() {
       } else if (parsed.projectInfo && typeof parsed.projectInfo === "object") {
         void setSetting("projectInfo", parsed.projectInfo);
       }
-      if (parsed.windInstellingen && typeof parsed.windInstellingen === "object") {
-        windGenerator.setInstellingen(parsed.windInstellingen as Partial<typeof windGenerator.instellingen>);
-      }
+      // De route hoort bij de projectuitgangspunten. Een oud bestand zonder
+      // route kiest expliciet de historische NL-berekening; een onbekende
+      // route blijft intact en wordt bij genereren geweigerd.
+      const projectWindCodeId = (parsed.projectInfo as { uitgangspunten?: { windCodeId?: string } } | undefined)
+        ?.uitgangspunten?.windCodeId ?? NEDERLANDSE_WINDROUTE;
+      windGenerator.setInstellingen({
+        ...(parsed.windInstellingen && typeof parsed.windInstellingen === "object"
+          ? parsed.windInstellingen as Partial<typeof windGenerator.instellingen> : {}),
+        windCodeId: projectWindCodeId as WindCodeId,
+      });
       pasRapportSnapshotToe(parsed.rapport as Parameters<typeof pasRapportSnapshotToe>[0]);
       // Velden die deze versie NIET kent (basisaudit ruw 27). Ze laden niet en
       // ze overleven het volgende Opslaan niet — de opslaroute hierboven bouwt
@@ -1329,9 +1502,39 @@ function App() {
   const handleOpenProject = useCallback(async () => {
     if (!(await confirmUnsavedAction())) return;
     const { openProject, deserializeProject } = await import("./io/projectFile");
-    const opened = await openProject();
-    if (!opened) return;
     try {
+      await useExtensieStore.getState().laden();
+      const filters = useExtensieStore.getState().kaarten.flatMap((kaart) => kaart.ingeschakeld && kaart.manifest
+        ? kaart.manifest.importers.map((importeur) => ({
+          name: `${kaart.manifest!.name}: ${importeur.label}`,
+          extensions: importeur.fileExtensions,
+        })) : []);
+      const opened = await openProject(filters);
+      if (!opened) return;
+      if (opened.soort === "import") {
+        const winkel = useExtensieStore.getState();
+        let gekozen: string | undefined;
+        let uitkomst: Awaited<ReturnType<typeof winkel.importeer>>;
+        try {
+          uitkomst = await winkel.importeer(opened.path);
+        } catch (fout) {
+          if (!(fout instanceof MeerdereImporteursFout)) throw fout;
+          const lijst = fout.keuzes.map((keuze, index) => `${index + 1}. ${keuze.extensie} — ${keuze.label}`).join("\n");
+          const antwoord = window.prompt(`${i18next.t("backstage:extensionManager.chooseImporter")}\n${lijst}`);
+          if (antwoord === null) return;
+          const index = Number(antwoord) - 1;
+          gekozen = fout.keuzes[index]?.id;
+          if (!gekozen) throw new Error(i18next.t("backstage:extensionManager.invalidImporter"));
+          uitkomst = await winkel.importeer(opened.path, gekozen);
+        }
+        const parsed = deserializeProject(uitkomst.uitkomst.projectTekst);
+        const bestand = opened.path.split(/[\\/]/).pop() || opened.path;
+        parsed.projectInfo = { ...parsed.projectInfo, name: bestand.replace(/\.[^.]+$/, "") };
+        pasProjectToe(parsed);
+        setProjectPath("");
+        setImportVerslag({ bestand, extensie: uitkomst.extensie, meldingen: uitkomst.uitkomst.meldingen });
+        return;
+      }
       const overschreven = pasProjectToe(deserializeProject(opened.text), opened.path);
       const { notifySuccess, notifyWarning } = await import("./io/notify");
       notifySuccess(i18next.t("common:app.file.projectOpened"), opened.path.split(/[\\/]/).pop());
@@ -1374,6 +1577,22 @@ function App() {
       notifyWarning(i18next.t("common:app.file.openFailed"), e instanceof Error ? e.message : String(e));
     }
   }, [pasProjectToe, confirmUnsavedAction]);
+
+  // Bestandskoppeling (#90): een dubbelklik op een .ifcfem/.ifcfem2d, ook als
+  // de app al draait, opent langs dezelfde weg als een recent bestand. Eerst
+  // wachten tot een openstaande vraag over niet-opgeslagen werk beantwoord is
+  // (de vraagpoort), dan het welkomstscherm en de backstage dicht, in dezelfde
+  // volgorde als de backstage bij een recent bestand; anders laadt het project
+  // onzichtbaar achter die overlay.
+  const openUitBestandskoppeling = useCallback(async (path: string) => {
+    await vraagpoortRef.current?.wacht();
+    setWelcomeOpen(false);
+    setBackstageOpen(false);
+    await handleOpenFilePath(path);
+  }, [handleOpenFilePath]);
+  // Pas als de recente bestanden geladen zijn: `addRecentFile` bouwt op die
+  // lijst, en zou hem anders overschrijven met alleen dit ene bestand.
+  useBestandskoppeling(openUitBestandskoppeling, recenteBestandenGeladen);
 
   // Bestand → Nieuw: direct een LEEG project (geen confirm, geen reload,
   // geen demo-model). Standaard belastinggevallen blijven beschikbaar zodat
@@ -1657,6 +1876,20 @@ function App() {
   useEffect(() => {
     if (modelDimension === "3d") setTreeTab("project");
   }, [modelDimension]);
+  /**
+   * Na het importeren van een model (een IFC-analysemodel, of 2D omgezet naar
+   * 3D) knopen op staven aansluiten (issue #63), als een eigen stap ongedaan
+   * maken: Ctrl+Z geeft het model terug zoals het binnenkwam. Alleen met de
+   * schakelaar aan (`openFem3DConnectAfterImport`). Openen van een eigen
+   * project doet dit NIET: daar meldt de modelcontrole op het tekenvlak de
+   * losse knopen, met een knop.
+   */
+  const sluitAanNaImport = useCallback(() => {
+    const stap = openFem3DConnectAfterImport(openFem3dHistoryRef.current.model, leesSnapInstellingen());
+    if (!stap.result) return;
+    dispatchOpenFem3D({ type: "edit", model: stap.model });
+    meldOpenFem3DAansluiten({ ...stap, result: stap.result });
+  }, [dispatchOpenFem3D]);
   const handleConvertTo3D = useCallback(() => {
     if (modelDimension === "3d") return;
     const converted = convert2DTo3D({
@@ -1666,6 +1899,7 @@ function App() {
       loads: fem.loads,
     });
     dispatchOpenFem3D({ type: "replace", model: converted.model });
+    sluitAanNaImport();
     setOpenFem3dCameraSnapshot(null);
     // Een ander model: de section box (issue #86) uit, zonder de grenzen van het vorige.
     setOpenFem3dVisibility(openFem3DVisibilityZonderSectionBox);
@@ -1673,7 +1907,7 @@ function App() {
     setModelDimension("3d");
     setActiveView("openFem3d");
     setTreeTab("view");
-  }, [modelDimension, fem.nodes, fem.beams, fem.supports, fem.loads]);
+  }, [modelDimension, fem.nodes, fem.beams, fem.supports, fem.loads, sluitAanNaImport]);
   // De wizard "Stalen hal" en de bedieningsopdracht `staalhal_maken`: de hal
   // vervangt het 3D-model als ÉÉN undo-stap (Ctrl+Z zet het oude model terug).
   // De gevallen van de hal worden aan die van het project gekoppeld: bestaande
@@ -1681,6 +1915,10 @@ function App() {
   // ongedaan gemaakt model nog naar zijn eigen gevallen verwijst.
   const [staalhalOpen, setStaalhalOpen] = useState(false);
   const pasStaalhalToe = useCallback((hal: StaalhalResultaat) => {
+    requireStaalhalWindRoute(projectInfo);
+    // De gelaste tussendoorsneden van een verlopende spantligger (#73): de
+    // staven verwijzen er met EIGEN:<naam> naar, dus eerst in de bibliotheek.
+    if (hal.eigenDoorsneden.length > 0) importeerEigenDoorsneden(hal.eigenDoorsneden);
     const store = femRef.current;
     const ids = store.zorgVoorBelastinggevallen(hal.loadCases);
     const caseIds: Record<number, number> = Object.fromEntries(hal.loadCases.map((c, i) => [c.id, ids[i]]));
@@ -1699,7 +1937,7 @@ function App() {
     setTreeTab("view");
     setOpenFem3dFitToken((token) => token + 1);
     return { caseIds };
-  }, []);
+  }, [projectInfo]);
   const handleStaalhalMaken = useCallback(async (hal: StaalhalResultaat) => {
     if (!(await confirmUnsavedAction())) return;
     pasStaalhalToe(hal);
@@ -1715,11 +1953,12 @@ function App() {
   const pasIfcImportToe = useCallback((imp: IfcAnalyseImport) => {
     const project = ifcAnalyseProject(imp, projectInfo as unknown as Record<string, unknown>);
     pasProjectToe(deserializeProject(serializeProject(project)));
+    sluitAanNaImport();
     setProjectPath("");
     baselineResetRef.current = false;
     lastSavedRef.current = "";
     setOpenFem3dFitToken((token) => token + 1);
-  }, [pasProjectToe, projectInfo]);
+  }, [pasProjectToe, projectInfo, sluitAanNaImport]);
   const meldIfcFout = useCallback((titel: string, tekst: string) => {
     void import("./io/notify").then(({ notifyWarning }) => notifyWarning(titel, tekst));
   }, []);
@@ -1736,6 +1975,7 @@ function App() {
   // Windbelastinggenerator — de hook draait de generator mee met wijzigingen
   // in de constructie (idempotent, zie windStore.ts).
   const [windGeneratorOpen, setWindGeneratorOpen] = useState(false);
+  const [envelopeLoadsOpen, setEnvelopeLoadsOpen] = useState(false);
   const [waterAccumulationOpen, setWaterAccumulationOpen] = useState(false);
   const selectedWaterBeam = useMemo(() => {
     const selection = fem.selection;
@@ -2344,6 +2584,10 @@ function App() {
         analysetype: fem.analysetype,
         alphaCr: opts?.outputs?.stabiliteit ?? fem.stabiliteit ?? [],
         scheefstandAan: fem.scheefstandEnabled,
+        // De φ waarmee is gerekend (de normnoemer, zie de multi-LC-solve):
+        // een kolom met een vrije kop krijgt alleen L als die φ minstens haar
+        // eigen φ is (`zijdelingseKnikInVlakModel`).
+        ...(fem.scheefstandEnabled ? { scheefstandPhi: scheefstandUitkomst.phi } : {}),
       },
       // φ(∞,t₀) van het project, dezelfde bron als `standaardPhiInfT0` van de
       // fysisch niet-lineaire lus: de kolomtoets (§5.8.3.1 A, §5.8.4 (5.19))
@@ -2359,7 +2603,7 @@ function App() {
         perCase, fem.actieveCombinaties, fem.beams,
       ),
     });
-  }, [fem, computeAndStoreSolverOutputs, checkRun]);
+  }, [fem, computeAndStoreSolverOutputs, checkRun, scheefstandUitkomst]);
 
   /**
    * Eén rekengang: multi-LC doorrekenen en de
@@ -2522,6 +2766,19 @@ function App() {
     }
     if (modelDimension === "3d") {
       setActiveView("openFem3d");
+      // Modelcontrole vóór het rekenen (issue #63): ligt er een knoop op een
+      // staaf zonder verbinding, dan een waarschuwing en de modelcontrole op
+      // het tekenvlak open (met de knop Aansluiten). De berekening gaat door:
+      // het kan bedoeld zijn (twee kruisende windverbanden).
+      const losseKnopen = findOpenFem3DNodesOnBeams(openFem3d, leesSnapInstellingen().verbindingsTolerantie);
+      if (losseKnopen.length > 0) {
+        setOpenFem3dModelCheckToken((token) => token + 1);
+        const aantal = new Set(losseKnopen.map((paar) => paar.nodeId)).size;
+        void import("./io/notify").then(({ notifyWarning }) => notifyWarning(
+          i18next.t("ribbon:openFem3d.modelCheck.title", { count: aantal }),
+          i18next.t("ribbon:openFem3d.modelCheck.solveText"),
+        )).catch(() => {});
+      }
       setSolverStatus({ kind: "rekenen" });
       setOpenFem3dSolveError(null);
       const generation = ++openFem3dSolveGenerationRef.current;
@@ -2608,6 +2865,7 @@ function App() {
           const maximumMoment = Math.max(...unbalanced.map((balance) => balance.maxMomentImbalanceKnm ?? 0));
           setOpenFem3dChecks(null);
           setOpenFem3dConcreteChecks(null);
+          setOpenFem3dTimberChecks(null);
           setOpenFem3dChecksError(
             `geblokkeerd — globaal evenwicht in ${unbalanced.length} resultaten wijkt af: ` +
             `kracht maximaal ${maximumForce.toFixed(3)} kN, moment maximaal ${maximumMoment.toFixed(3)} kNm.`,
@@ -2619,15 +2877,20 @@ function App() {
         const combinationSet = {
           combinations, results: combinationResults, loadCases: fem.loadCases,
           ...(fem.gevolgklasse ? { consequenceClass: fem.gevolgklasse } : {}),
+          // De φ van de UGT-varianten: een stalen kolom met een vrije kop krijgt
+          // alleen L als die φ minstens haar eigen φ is (`openFem3DZijdelingseKnik`).
+          ...(scheefstandPhi > 0 ? { scheefstandPhi } : {}),
         };
-        const [steel, concrete] = await Promise.allSettled([
+        const [steel, concrete, timber] = await Promise.allSettled([
           runOpenFem3DSteelChecks(openFem3d, result, combinationSet),
           runOpenFem3DConcreteChecks(openFem3d, result, combinationSet),
+          runOpenFem3DTimberChecks(openFem3d, result, combinationSet),
         ]);
         if (generation !== openFem3dSolveGenerationRef.current) return;
         setOpenFem3dChecks(steel.status === "fulfilled" ? steel.value : null);
         setOpenFem3dConcreteChecks(concrete.status === "fulfilled" ? concrete.value : null);
-        const errors = [steel, concrete]
+        setOpenFem3dTimberChecks(timber.status === "fulfilled" ? timber.value : null);
+        const errors = [steel, concrete, timber]
           .filter((item): item is PromiseRejectedResult => item.status === "rejected")
           .map((item) => item.reason instanceof Error ? item.reason.message : String(item.reason));
         setOpenFem3dChecksError(errors.length > 0 ? errors.join("; ") : null);
@@ -2676,6 +2939,15 @@ function App() {
   // het eigenschappenpaneel niet terug te draaien zolang de cursor in het veld staat.
   const undoRedoRef = useRef({ undo: fem.undo, redo: fem.redo });
   undoRedoRef.current = { undo: fem.undo, redo: fem.redo };
+  // Een klik op de titelbalk of ribbon laat eerst het actieve invoerveld los.
+  // Wacht één event-lus zodat diens onBlur-commit in de historie staat en lees
+  // daarna de nieuwste handlers uit de ref, net als bij Ctrl+Z vanuit een veld.
+  const toolbarUndoRedo = (kind: "undo" | "redo") => {
+    setTimeout(() => {
+      if (modelDimension === "3d") undoRedoOpenFem3D(kind);
+      else undoRedoRef.current[kind]();
+    }, 0);
+  };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return;
@@ -2687,7 +2959,7 @@ function App() {
       if (undoRoute(t as HTMLInputElement | null) === "veld") return;
       e.preventDefault();
       const voerUit = () => {
-        if (activeView === "openFem3d") undoRedoOpenFem3D(isUndo ? "undo" : "redo");
+        if (modelDimension === "3d") undoRedoOpenFem3D(isUndo ? "undo" : "redo");
         else (isUndo ? undoRedoRef.current.undo() : undoRedoRef.current.redo());
       };
       if (moetEerstVastleggen(t)) {
@@ -2701,7 +2973,7 @@ function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeView]);
+  }, [modelDimension, undoRedoOpenFem3D]);
 
   // C1: Ctrl+S / Cmd+S = Opslaan, Ctrl+Shift+S = Opslaan als. Altijd
   // preventDefault zodat de browser-save-dialoog nooit verschijnt; opslaan
@@ -2745,8 +3017,9 @@ function App() {
 
   // C2: sluitbeveiliging. Tauri: onCloseRequested + native dialoog (dekt de
   // titelbalk-sluitknop, Bestand → Afsluiten en Alt+F4). Browser: beforeunload.
+  // `closeRequestPendingRef` staat bij de dirty-vlag: de vraagpoort van de
+  // bestandskoppeling leest hem ook.
   const confirmUnsavedRef = useRef(confirmUnsavedAction);
-  const closeRequestPendingRef = useRef(false);
   useEffect(() => { confirmUnsavedRef.current = confirmUnsavedAction; });
   useEffect(() => {
     if (isTauriApp()) {
@@ -2770,6 +3043,8 @@ function App() {
             if (!proceed) {
               event.preventDefault();
               closeRequestPendingRef.current = false;
+              // Geannuleerd: een bestand dat intussen binnenkwam, mag nu open.
+              vraagpoortRef.current?.misschienOpen();
             }
           })
         )
@@ -3086,6 +3361,9 @@ function App() {
               model={openFem3d}
               calculationModel={openFem3dCalculationModel}
               onChange={setOpenFem3d}
+              onConnectNodes={() => handleOpenFem3DConnectNodes("model")}
+              onMergeNodes={() => handleOpenFem3DMergeNodes("model")}
+              modelCheckToken={openFem3dModelCheckToken}
               tool={openFem3dTool}
               onToolChange={handleOpenFem3DToolChange}
               onPlaceNodeCondition={(target) => applyOpenFem3DNodeTool(target)}
@@ -3123,6 +3401,7 @@ function App() {
               plateQuantity={openFem3dPlateQuantity}
               checks={openFem3dShowLoadCase ? openFem3dChecks : null}
               concreteChecks={openFem3dShowLoadCase ? openFem3dConcreteChecks : null}
+              timberChecks={openFem3dShowLoadCase ? openFem3dTimberChecks : null}
               solving={solverStatus.kind === "rekenen"}
               solveError={openFem3dSolveError}
               activeLoadCaseId={fem.activeLoadCaseId}
@@ -3144,9 +3423,11 @@ function App() {
         if (modelDimension === "3d") {
           return <OpenFem3DReport
             model={openFem3dCalculationModel}
+            levels={fem.structuralGrid.zAxes}
             result={openFem3dResult}
             checks={openFem3dChecks}
             concreteChecks={openFem3dConcreteChecks}
+            timberChecks={openFem3dTimberChecks}
             checksRunning={openFem3dChecksRunning}
             checksError={openFem3dChecksError}
             projectName={projectPath ? projectPath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "") : projectInfo.name}
@@ -3327,6 +3608,7 @@ function App() {
   const apiActies: ApiAppActies = {
     document: () => buildProjectSnapshot() as unknown as ApiDocument,
     bewerk3D: (model, stramien, extern) => {
+      if (explodeAmountRef.current > 0) throw new Error("Schakel Exploderen uit voordat je het 3D-model wijzigt.");
       // Zoals het stramienvenster (`commitLevels`): model en levels in één stap;
       // een wijziging aan de gevallen erbij ook (#91).
       const levels = stramien ? openFem3DLevelTransition(fem.structuralGrid.zAxes, stramien.zAxes) : null;
@@ -3348,8 +3630,14 @@ function App() {
       await laadProjectTekst(tekst);
       setProjectPath("");
     },
-    ongedaanMaken: () => { if (activeView === "openFem3d") undoRedoOpenFem3D("undo"); else fem.undo(); },
-    opnieuw: () => { if (activeView === "openFem3d") undoRedoOpenFem3D("redo"); else fem.redo(); },
+    ongedaanMaken: () => {
+      if (modelDimension === "3d" && explodeAmountRef.current > 0) throw new Error("Schakel Exploderen uit voor Ongedaan maken.");
+      if (modelDimension === "3d") undoRedoOpenFem3D("undo"); else fem.undo();
+    },
+    opnieuw: () => {
+      if (modelDimension === "3d" && explodeAmountRef.current > 0) throw new Error("Schakel Exploderen uit voor Opnieuw.");
+      if (modelDimension === "3d") undoRedoOpenFem3D("redo"); else fem.redo();
+    },
     opslaan: async (pad) => {
       const doel = pad ?? projectPath;
       if (!doel) throw new Error("Het project heeft nog geen bestand; geef `path` mee.");
@@ -3375,9 +3663,26 @@ function App() {
       if (overschreven) notifyWarning(i18next.t("common:app.file.libraryUpdated"), overschreven);
       return pad;
     },
+    importeren: async (pad, importerId) => {
+      await useExtensieStore.getState().laden();
+      const { uitkomst, extensie } = await useExtensieStore.getState().importeer(pad, importerId);
+      const { deserializeProject } = await import("./io/projectFile");
+      const parsed = deserializeProject(uitkomst.projectTekst);
+      parsed.projectInfo = { ...parsed.projectInfo, name: (pad.split(/[\\/]/).pop() || pad).replace(/\.[^.]+$/, "") };
+      pasProjectToe(parsed);
+      setProjectPath("");
+      return { meldingen: uitkomst.meldingen, extensie };
+    },
+    extensies: async () => {
+      await useExtensieStore.getState().laden();
+      return useExtensieStore.getState().kaarten;
+    },
     heeftNietOpgeslagenWerk: () => isDirtyRef.current,
     // model3d.selection.filter met `select` (issue #94): zoals Toepassen in het venster.
     zetSelectie3D: (selectie) => zetGefilterdeSelectie3D(selectie),
+    zetExplode3D: (amountM) => setOpenFem3dVisibility((visibility) => ({
+      ...visibility, explode: { mode: "levels", amountM },
+    })),
   };
 
   /**
@@ -3448,6 +3753,7 @@ function App() {
       solveError: openFem3dSolveError,
       checks: openFem3dChecks,
       concreteChecks: openFem3dConcreteChecks,
+      timberChecks: openFem3dTimberChecks,
       generation: () => openFem3dSolveGenerationRef.current,
       solving: solverStatus.kind === "rekenen",
       checksRunning: openFem3dChecksRunning,
@@ -3476,16 +3782,17 @@ function App() {
   return (
     <>
       <TitleBar
-        onSettingsClick={() => setSettingsOpen(true)}
+        onSettingsClick={() => openSettings()}
         onFeedbackClick={() => setFeedbackOpen(true)}
         onSaveClick={() => { void handleSaveProject(); }}
-        onUndoClick={modelDimension === "3d" ? () => undoRedoOpenFem3D("undo") : fem.undo}
-        onRedoClick={modelDimension === "3d" ? () => undoRedoOpenFem3D("redo") : fem.redo}
+        onUndoClick={() => toolbarUndoRedo("undo")}
+        onRedoClick={() => toolbarUndoRedo("redo")}
         canUndo={modelDimension === "3d" ? openFem3dHistory.past.length > 0 : fem.canUndo}
         canRedo={modelDimension === "3d" ? openFem3dHistory.future.length > 0 : fem.canRedo}
         onPrintClick={() => setActiveView("report")}
       />
       <ToastHost />
+      {importVerslag && <ImportVerslagVenster verslag={importVerslag} sluiten={() => setImportVerslag(null)} />}
       {/* R5 — houdt losgekoppelde rapportvensters synchroon met het model,
           de solver-uitkomsten, de toetsresultaten en de rapportinstellingen.
           Altijd gemonteerd (ook buiten het Rapport-tabblad), zodat het
@@ -3493,11 +3800,12 @@ function App() {
       <ReportWindowSync data={reportData} />
       <Ribbon
         onFileTabClick={() => setBackstageOpen(true)}
-        onSettingsClick={() => setSettingsOpen(true)}
+        onSettingsClick={() => openSettings()}
         onProjectSettingsClick={() => setProjectSettingsOpen(true)}
         theme={theme}
         onThemeSelect={handleThemeSelect}
         onOpenLibrary={(tab) => { setLibraryTab(tab); setLibraryOpen(true); }}
+        onOpenAiAssistant={() => openSettings("aiAssistant")}
         activeView={activeView}
         onViewChange={setActiveView}
         modelDimension={modelDimension}
@@ -3519,6 +3827,10 @@ function App() {
           visibility.plateDisplay === plateDisplay ? visibility : { ...visibility, plateDisplay })}
         // Section box (issue #86): dezelfde schakelaar als in het menu ▾ van de view cube.
         openFem3dSectionBox={openFem3dVisibility.sectionBox.enabled}
+        openFem3dExploded={openFem3dVisibility.explode.amountM > 0}
+        onOpenFem3DExplodeToggle={() => setOpenFem3dVisibility((visibility) => ({
+          ...visibility, explode: { mode: "levels", amountM: visibility.explode.amountM > 0 ? 0 : 2 },
+        }))}
         onOpenFem3DSectionBoxToggle={() => setOpenFem3dVisibility((visibility) => ({
           ...visibility, sectionBox: openFem3DSectionBoxSchakel(visibility.sectionBox, openFem3d),
         }))}
@@ -3530,6 +3842,8 @@ function App() {
           applyOpenFem3DNodeToolToSelection(`support:${preset}`);
         }}
         onOpenFem3DPinBeamsToColumns={handleOpenFem3DPinBeamsToColumns}
+        onOpenFem3DConnectNodes={() => handleOpenFem3DConnectNodes("selectie")}
+        onOpenFem3DMergeNodes={() => handleOpenFem3DMergeNodes("selectie")}
         onOpenFem3DSpringTool={(axis) => {
           // Een gereedschap zoals de opleggingen; een geselecteerde knoop krijgt
           // de veer meteen.
@@ -3585,14 +3899,14 @@ function App() {
         onSolve={handleSolve}
         hasResults={modelDimension === "3d" ? openFem3dResult !== null : solverResult !== null || fem.envelope !== null}
         onDelete={modelDimension === "3d" ? () => setOpenFem3dDeleteToken((token) => token + 1) : fem.deleteSelected}
-        onUndo={modelDimension === "3d" ? () => undoRedoOpenFem3D("undo") : fem.undo}
-        onRedo={modelDimension === "3d" ? () => undoRedoOpenFem3D("redo") : fem.redo}
+        onUndo={() => toolbarUndoRedo("undo")}
+        onRedo={() => toolbarUndoRedo("redo")}
         canUndo={modelDimension === "3d" ? openFem3dHistory.past.length > 0 : fem.canUndo}
         canRedo={modelDimension === "3d" ? openFem3dHistory.future.length > 0 : fem.canRedo}
         onOpenGrids={() => setGridsOpen(true)}
         onOpenLoadCases={() => { setLoadCasesTab("cases"); setLoadCasesOpen(true); }}
         onOpenLoadCombinations={() => { setLoadCasesTab("combos"); setLoadCasesOpen(true); }}
-        onOpenWindGenerator={() => setWindGeneratorOpen(true)}
+        onOpenWindGenerator={() => modelDimension === "3d" ? setEnvelopeLoadsOpen(true) : setWindGeneratorOpen(true)}
         onOpenWaterAccumulation={() => setWaterAccumulationOpen(true)}
         onExportHtml={handleExportHtmlReport}
         // De Rapport-tab zet met deze tekst het hoofdstuk Uitgangspunten in de
@@ -3651,6 +3965,7 @@ function App() {
                     result={openFem3dShowLoadCase ? openFem3dResult : null}
                     checks={openFem3dShowLoadCase ? openFem3dChecks : null}
                     concreteChecks={openFem3dShowLoadCase ? openFem3dConcreteChecks : null}
+                    timberChecks={openFem3dShowLoadCase ? openFem3dTimberChecks : null}
                     checksRunning={openFem3dChecksRunning}
                     checksError={openFem3dChecksError}
                     activeTab={treeTab}
@@ -3690,7 +4005,7 @@ function App() {
                       status: {
                         heeftResultaat: openFem3dCaseResults.size > 0 || openFem3dCombinationResults.size > 0,
                         heeftCombinaties: openFem3dCombinationResults.size > 0,
-                        heeftToetsing: (openFem3dChecks?.results.length ?? 0) + (openFem3dConcreteChecks?.results.length ?? 0) > 0,
+                        heeftToetsing: (openFem3dChecks?.results.length ?? 0) + (openFem3dConcreteChecks?.results.length ?? 0) + (openFem3dTimberChecks?.results.length ?? 0) > 0,
                       },
                       visibility: openFem3dVisibility,
                       actieveSleutel: openFem3dActieveView,
@@ -3807,6 +4122,7 @@ function App() {
                     result={openFem3dShowLoadCase ? openFem3dResult : null}
                     checks={openFem3dShowLoadCase ? openFem3dChecks : null}
                     concreteChecks={openFem3dShowLoadCase ? openFem3dConcreteChecks : null}
+                    timberChecks={openFem3dShowLoadCase ? openFem3dTimberChecks : null}
                     checksRunning={openFem3dChecksRunning}
                     checksError={openFem3dChecksError}
                     loadEditorRequest={openFem3dLoadEditorRequest}
@@ -4082,7 +4398,7 @@ function App() {
       <Backstage
         open={backstageOpen}
         onClose={() => setBackstageOpen(false)}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => openSettings()}
         onOpenFile={(path) => { void handleOpenFilePath(path); }}
         onNew={() => { void handleNewProject(); }}
         onOpen={() => { void handleOpenProject(); }}
@@ -4143,7 +4459,7 @@ function App() {
           onSelect={(next, ids) => zetGefilterdeSelectie2D(next, ids)}
         />
       )}
-      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} onThemeChange={setTheme} />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} onThemeChange={setTheme} initialTab={settingsTab} />
       <LibraryDialog open={libraryOpen} onClose={() => setLibraryOpen(false)} initialTab={libraryTab} />
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
       <ProjectSettingsDialog open={projectSettingsOpen} onClose={() => setProjectSettingsOpen(false)} />
@@ -4153,6 +4469,16 @@ function App() {
         open={windGeneratorOpen}
         onClose={() => setWindGeneratorOpen(false)}
         wind={windGenerator}
+      />
+      <OpenFem3DEnvelopeLoadsDialog
+        open={envelopeLoadsOpen}
+        model={openFem3d}
+        projectInfo={projectInfo}
+        onClose={() => setEnvelopeLoadsOpen(false)}
+        onGenerate={async (input: EnvelopeLoadInput) => {
+          const answer = await voerApiUitInApp(apiActies, "model3d.envelope.generateLoads", input);
+          if (!answer.ok) throw new Error(answer.error.melding);
+        }}
       />
       <WaterAccumulation2DDialog open={waterAccumulationOpen}
         onClose={() => setWaterAccumulationOpen(false)} selectedBeam={selectedWaterBeam} />
@@ -4165,7 +4491,8 @@ function App() {
           onSteelHall={() => setStaalhalOpen(true)}
         />
       )}
-      <StaalhalWizard open={staalhalOpen} onClose={() => setStaalhalOpen(false)} onMaken={handleStaalhalMaken} />
+      <StaalhalWizard open={staalhalOpen} onClose={() => setStaalhalOpen(false)}
+        windCodeId={windCodeIdFromProjectInfo(projectInfo)} onMaken={handleStaalhalMaken} />
       {ifcImportStroom.dialogen}
       {/* Venster "Stramienen en levels" — rechts gedockt: achtergrondraster, stramienassen en levels */}
       {(!isFullWidthView || modelDimension === "3d") && (

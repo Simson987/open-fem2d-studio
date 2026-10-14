@@ -1,7 +1,9 @@
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import RibbonGroup from "./RibbonGroup";
 import RibbonButton from "./RibbonButton";
 import RibbonButtonStack from "./RibbonButtonStack";
+import { useRibbonCompact } from "./useRibbonCompact";
 import type { OpenFem3DSpringAxis, OpenFem3DTool, OpenFem3DView } from "../openFem3d/openFem3dCommands";
 import type { OpenFem3DSupportPreset } from "../openFem3d/openFem3dModel";
 import type { OpenFem3DPlateDisplay } from "../openFem3d/openFem3dPlateDisplay";
@@ -92,6 +94,8 @@ interface HomeTabProps {
   /** Section box in 3D (issue #86): staat hij aan (de knop licht op), en aan/uit zetten. */
   openFem3dSectionBox?: boolean;
   onOpenFem3DSectionBoxToggle?: () => void;
+  openFem3dExploded?: boolean;
+  onOpenFem3DExplodeToggle?: () => void;
   hasOpenFem3DNodeSelection?: boolean;
   hasOpenFem3DBeamSelection?: boolean;
   hasOpenFem3DPlateSelection?: boolean;
@@ -107,6 +111,10 @@ interface HomeTabProps {
   onOpenFem3DConvertPlateToLoadPanel?: () => void;
   /** 3D: liggers scharnierend op kolommen; de geselecteerde staven, of alle staven zonder selectie. */
   onOpenFem3DPinBeamsToColumns?: () => void;
+  /** 3D: knopen op staven aansluiten (issue #63); de geselecteerde knopen en staven, of het hele model. */
+  onOpenFem3DConnectNodes?: () => void;
+  /** 3D: samenvallende knopen samenvoegen (issue #75); de selectie, of het hele model. */
+  onOpenFem3DMergeNodes?: () => void;
 }
 
 const stub = (label: string) => () => console.log(`TODO: ${label}`);
@@ -134,6 +142,10 @@ const beamEndHingeIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24
 const pinBeamsToColumnsIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M5 21V6m14 15V6M5 6h.6m4 0h4.8m4 0H19"/><circle cx="7.6" cy="6" r="2" stroke-width="1.6"/><circle cx="16.4" cy="6" r="2" stroke-width="1.6"/><path stroke-width="1.4" d="M2 21h20"/></svg>`;
 /** Section box: een doos met gestippelde binnenribben en een greep (pijltje) op het voorvlak. */
 const sectionBoxIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.7" stroke-linejoin="round" d="m11 3 8 4.5v9L11 21l-8-4.5v-9z"/><path stroke-width="1.3" stroke-dasharray="2 1.6" d="m3 7.5 8 4.5 8-4.5M11 12v9"/><path stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M19 12h3m-1.4-1.6L22 12l-1.4 1.6"/></svg>`;
+/** Knopen samenvoegen: twee knopen die naar één knoop toe lopen. */
+const mergeNodesIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="5.5" r="2.2" stroke-width="1.6"/><circle cx="5" cy="18.5" r="2.2" stroke-width="1.6"/><path stroke-width="1.6" stroke-linecap="round" d="m7 7.2 6.4 3.6M7 16.8l6.4-3.6"/><circle cx="17.5" cy="12" r="3.2" fill="currentColor" stroke="none"/><path stroke-width="1.6" stroke-linecap="round" d="M20.7 12H23"/></svg>`;
+/** Knopen aansluiten: een staaf met drie knopen erop, de middelste gesplitst. */
+const connectNodesIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M2 14h5.2m3.6 0h2.4m3.6 0H22"/><circle cx="9" cy="14" r="1.8" fill="currentColor" stroke="none"/><circle cx="15" cy="14" r="1.8" fill="currentColor" stroke="none"/><path stroke-width="1.6" stroke-linecap="round" d="M9 11V4m6 7V4"/></svg>`;
 const yRollerIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.8" stroke-linejoin="round" d="M5 12h14l-7-7-7 7Z"/><circle cx="9" cy="16" r="2"/><circle cx="15" cy="16" r="2"/><path stroke-width="1.8" d="M4 20h16"/><text x="20" y="8" text-anchor="middle" fill="currentColor" stroke="none" font-size="6" font-family="sans-serif">Y</text></svg>`;
 
 export default function HomeTab({
@@ -152,9 +164,10 @@ export default function HomeTab({
   onOpenFem3DFit, onOpenFem3DViewChange, openFem3dView = "iso",
   onToggle3DVisibility, visibility3DOpen, openFem3dPlateDisplay = "volume", onOpenFem3DPlateDisplayChange,
   openFem3dSectionBox = false, onOpenFem3DSectionBoxToggle,
+  openFem3dExploded = false, onOpenFem3DExplodeToggle,
   hasOpenFem3DNodeSelection, hasOpenFem3DBeamSelection, hasOpenFem3DPlateSelection, onOpenFem3DSupportPreset, onOpenFem3DSpringTool,
   onOpenFem3DRequestNodalLoad, onOpenFem3DRequestMemberLoad, onOpenFem3DRequestMemberPointLoad, onOpenFem3DRequestThermalLoad, onOpenFem3DRequestSurfaceLoad,
-  onOpenFem3DConvertPlateToLoadPanel, onOpenFem3DPinBeamsToColumns,
+  onOpenFem3DConvertPlateToLoadPanel, onOpenFem3DPinBeamsToColumns, onOpenFem3DConnectNodes, onOpenFem3DMergeNodes,
 }: HomeTabProps) {
   const { t } = useTranslation("ribbon");
   const is3D = modelDimension === "3d";
@@ -183,9 +196,13 @@ export default function HomeTab({
   const springPlacementTitle = t("openFem3d.springPlacementHelp", { defaultValue: t("openFem3d.selectNodeFirst") });
   const beamConditionTitle = hasOpenFem3DBeamSelection ? undefined : t("openFem3d.selectBeamFirst", "Selecteer eerst een 3D-staaf.");
   const drawingOpening3D = openFem3dTool === "addOpening" || openFem3dTool === "addOpeningArc";
+  // Past het lint met namen niet in het venster (het 3D-lint vooral), dan eerst ingekorte namen en
+  // pas daarna alleen pictogrammen bij de kleine knoppen (gemeten, useRibbonCompact).
+  const contentRef = useRef<HTMLDivElement>(null);
+  useRibbonCompact(contentRef);
 
   return (
-    <div className="ribbon-content">
+    <div className="ribbon-content ribbon-content-home" ref={contentRef}>
       <div className="ribbon-groups">
         {/* Berekening — Berekenen (large primary action) */}
         <RibbonGroup label={t("home.calculation")}>
@@ -318,6 +335,15 @@ export default function HomeTab({
                 ? t("home.opening3DHint")
                 : t("home.selectPlate3DFirst")) : undefined}
             />
+            {/* Knopen op staven aansluiten (#63): de selectie, of het hele model. */}
+            {is3D && <RibbonButton
+              icon={connectNodesIcon}
+              label={t("openFem3d.connectNodes")}
+              size="small"
+              onClick={onOpenFem3DConnectNodes}
+              disabled={!onOpenFem3DConnectNodes}
+              title={t("openFem3d.connectNodesHint")}
+            />}
           </RibbonButtonStack>
           <RibbonButtonStack>
             {is3D && <RibbonButton
@@ -510,6 +536,15 @@ export default function HomeTab({
           {is3D && <RibbonButtonStack>
             <RibbonButton
               icon={loadPanelIcon}
+              label={t("home.envelopePanel")}
+              size="small"
+              active={openFem3dTool === "addEnvelopePanel"}
+              onClick={() => onOpenFem3DToolChange?.("addEnvelopePanel")}
+              disabled={!onOpenFem3DToolChange}
+              title={t("home.envelopePanelHint")}
+            />
+            <RibbonButton
+              icon={loadPanelIcon}
               label={t("home.loadPanel")}
               size="small"
               active={openFem3dTool === "addLoadPanel"}
@@ -573,11 +608,10 @@ export default function HomeTab({
             {/* Windbelastinggenerator — EN 1991-1-4 + Nederlandse NB. */}
             <RibbonButton
               icon={windGeneratorIcon}
-              label={t("home.windGenerator")}
+              label={is3D ? t("home.generateEnvelopeLoads", "Schillasten genereren") : t("home.windGenerator")}
               size="small"
               onClick={onOpenWindGenerator ?? stub("Wind generator dialog (no handler)")}
-              disabled={is3D}
-              title={is3D ? unsupported3D : undefined}
+              disabled={!onOpenWindGenerator}
             />
             <RibbonButton
               icon={waterAccumulationIcon}
@@ -653,6 +687,17 @@ export default function HomeTab({
               disabled={is3D && !canOpenFem3DDelete}
             />
           </RibbonButtonStack>
+          {/* Knopen samenvoegen (#75): de selectie, of het hele model zonder selectie. */}
+          {is3D && <RibbonButtonStack>
+            <RibbonButton
+              icon={mergeNodesIcon}
+              label={t("openFem3d.mergeNodes")}
+              size="small"
+              onClick={onOpenFem3DMergeNodes}
+              disabled={!onOpenFem3DMergeNodes}
+              title={t("openFem3d.mergeNodesHint")}
+            />
+          </RibbonButtonStack>}
         </RibbonGroup>
 
         {/* Selectie — Filter (groot): het venster Selectiefilter, in 2D en 3D (issue #94). */}
@@ -687,6 +732,7 @@ export default function HomeTab({
             {/* Section box (issue #86): dezelfde schakelaar als in het menu ▾ van de view cube. */}
             <RibbonButtonStack>
               <RibbonButton icon={sectionBoxIcon} label={t("openFem3d.sectionBox")} title={t("openFem3d.sectionBoxHint")} size="small" active={openFem3dSectionBox} onClick={onOpenFem3DSectionBoxToggle} disabled={!onOpenFem3DSectionBoxToggle} />
+              <RibbonButton icon={cubeIcon} label={t("openFem3d.explode")} size="small" active={openFem3dExploded} onClick={onOpenFem3DExplodeToggle} disabled={!onOpenFem3DExplodeToggle} />
             </RibbonButtonStack>
           </RibbonGroup>
         )}

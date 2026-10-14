@@ -3,10 +3,12 @@
 /**
  * Doorbuigingsklasse van een staaf.
  *
- * De klasse bepaalt twee dingen: de noemer voor de eindzakking `w_fin`
- * ([`crate::deflection::default_numerator`]) en de noemer plus de
- * referentielengte ℓ_rep voor de bijkomende zakking `w_add`
- * ([`crate::deflection::w_add_grens`]).
+ * De klasse bepaalt de referentielengte ℓ_rep (de overspanning, of tweemaal
+ * de uitkraaglengte) voor beide doorbuigingstoetsen, en de noemer voor de
+ * bijkomende zakking `w_add` ([`crate::deflection::w_add_grens`]). De
+ * eindzakking `w_fin` (w_max) toetst elke klasse behalve `Custom` tegen
+ * 1/250 deel van ℓ_rep, A1.4.3(4) "bij zowel vloeren als daken"
+ * ([`crate::deflection::w_fin_grens`]).
  *
  * De indeling volgt de vier gedachtestreepjes van NEN-EN 1990:2002/NB:2019
  * A1.4.3(3), die de grenswaarden voor w2 + w3 (= de bijkomende doorbuiging)

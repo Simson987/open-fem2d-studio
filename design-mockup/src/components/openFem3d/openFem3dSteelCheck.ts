@@ -1,5 +1,8 @@
-import { isSteelProfile, mapDeflectionClass } from "../../lib/steelCheckBuilder";
+import {
+  isSteelProfile, kipBelasting, mapDeflectionClass, profileLookupKey, VERTICAAL_VANAF_GRADEN,
+} from "../../lib/steelCheckBuilder";
 import { STEEL_GRADES } from "../../lib/steelGrades";
+import { STEEL_SECTION_DIMS } from "../../lib/steelSectionDims.generated";
 import type { BeamCheckInput } from "../../lib/types/steel/BeamCheckInput";
 import type { BeamCheckResult } from "../../lib/types/steel/BeamCheckResult";
 import type { ConsequenceClass } from "../../lib/types/steel/ConsequenceClass";
@@ -10,9 +13,14 @@ import type { LoadCombination } from "../fem/solver/combinations";
 import type { OpenFem3DModel, OpenFem3DNode } from "./openFem3dModel";
 import type { OpenFem3DDisplacement, OpenFem3DSolveResult } from "./openFem3dSolver";
 import { openFem3DForceStations } from "./openFem3dForceStations";
-import { openFem3DMemberFieldDeflectionMm } from "./openFem3dDisplacement";
+import { openFem3DMemberFieldChangeMm, openFem3DMemberFieldDeflectionMm } from "./openFem3dDisplacement";
+import { openFem3DEinden, openFem3DUitkragingNotitie, openFem3DZijdelingseKnik } from "./openFem3dUitkraging";
 import { analyseOpenFem3DLoadPanels } from "./openFem3dLoadPanels";
 import { kipsteunenVanStaaf } from "../../lib/kipsteunen";
+import { bepaalVerloop } from "../../lib/sectionResolver";
+import {
+  eigenNaamVan, isEigenProfiel, naarCustomSection, zoekEigenDoorsnede,
+} from "../../lib/profieleditor/eigenDoorsnedenStore";
 
 export interface OpenFem3DCheckSkip { beamId: number; reason: string }
 
@@ -98,11 +106,23 @@ export interface OpenFem3DCombinationSet {
    * combinaties; de kern vermeldt haar in de toets. Zonder opgave: CC2.
    */
   consequenceClass?: ConsequenceClass;
+  /**
+   * De scheefstand φ (rad) waarmee de UGT-varianten ±X en ±Y zijn gerekend; één
+   * waarde voor beide richtingen. Nodig om te beslissen of de zijdelingse knik
+   * van een stalen kolom met een vrije kop in de krachten zit
+   * (`openFem3DZijdelingseKnik`). Ontbreekt → niet bekend, en dan geldt 2·L.
+   */
+  scheefstandPhi?: number;
 }
 
-function isFreeEnd(model: OpenFem3DModel, nodeId: number): boolean {
-  if ((model.supports ?? []).some((support) => support.nodeId === nodeId)) return false;
-  return model.beams.filter((beam) => beam.startNodeId === nodeId || beam.endNodeId === nodeId).length === 1;
+/**
+ * Een staaf die minstens 75° met het horizontale vlak maakt: een kolom of
+ * gevelstijl. Dezelfde grens als in 2D (`VERTICAAL_VANAF_GRADEN`).
+ */
+function overwegendVerticaal(start: OpenFem3DNode, end: OpenFem3DNode): boolean {
+  const lengte = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
+  if (!(lengte > 0)) return false;
+  return Math.abs(end.z - start.z) / lengte >= Math.sin((VERTICAAL_VANAF_GRADEN * Math.PI) / 180);
 }
 
 /** Kipsteunen op de bovenflens om de L/10: een doorgaand gesteunde flens. */
@@ -151,11 +171,56 @@ export function buildOpenFem3DSteelCheckInputs(
   const deflectionCombinations = slsCombinations;
 
   const onderVloerOfDak = liggersOnderVloerOfDak(model);
+  // Vrije einden en de inklemming van een uitkraging: dezelfde herkenning als
+  // de houttoets (`openFem3dUitkraging.ts`) — een knoop op een plaat, een
+  // oplegging, een andere staaf of bedding maakt een eind niet vrij.
+  const einden = openFem3DEinden(model);
+  const zijdelingseKnik = openFem3DZijdelingseKnik(
+    model, ulsCombinations, (id) => combinationSet?.results.get(id)?.analysis, combinationSet?.scheefstandPhi,
+  );
   for (const beam of model.beams) {
     const material = beam.material?.trim().toUpperCase();
     const profile = beam.profileName?.trim();
     if (!profile || !material || !isSteelProfile(profile) || !STEEL_GRADES.includes(material)) {
       skipped.push({ beamId: beam.id, reason: `geen toetsbaar catalogus-staalprofiel (${profile ?? "—"} — ${material ?? "—"})` });
+      continue;
+    }
+    // Een eigen doorsnede (de gelaste tussendoorsnede van een gesplitste
+    // verlopende staaf) reist als geometrie mee, zoals in 2D; een naam die
+    // niet (meer) bewaard is, is een fout in het model en geen stille terugval.
+    const eigen = isEigenProfiel(profile) ? zoekEigenDoorsnede(profile) : undefined;
+    if (isEigenProfiel(profile) && !eigen) {
+      skipped.push({
+        beamId: beam.id,
+        reason: `eigen doorsnede "${eigenNaamVan(profile)}" is niet (meer) bewaard — open de profieleditor en bewaar hem opnieuw`,
+      });
+      continue;
+    }
+    // Verlopend profiel (#73): dezelfde keuring en hetzelfde veld als in 2D
+    // (`profile_end`); de kern toetst dan op elk station met de plaatselijke
+    // doorsnede. Een prismatische staaf houdt een byte-gelijke invoer.
+    const verloop = bepaalVerloop(beam.material, profile, beam.profileNameEnd);
+    if (verloop.status === "fout") {
+      skipped.push({ beamId: beam.id, reason: verloop.reden });
+      continue;
+    }
+    const eigenEind = verloop.status === "verlopend" && isEigenProfiel(beam.profileNameEnd)
+      ? zoekEigenDoorsnede(beam.profileNameEnd)
+      : undefined;
+    if (verloop.status === "verlopend" && isEigenProfiel(beam.profileNameEnd) && !eigenEind) {
+      skipped.push({
+        beamId: beam.id,
+        reason: `eigen doorsnede "${eigenNaamVan(beam.profileNameEnd)}" als eindprofiel is niet (meer) bewaard — open de profieleditor en bewaar hem opnieuw`,
+      });
+      continue;
+    }
+    // Hoogte voor het aangrijpingspunt van de kiplast (z_a = +h/2), zoals in
+    // 2D: bij een verlopende staaf die van het begin.
+    const hMm = eigen
+      ? eigen.motor.z_max_mm - eigen.motor.z_min_mm
+      : STEEL_SECTION_DIMS[profileLookupKey(profile)]?.h;
+    if (hMm === undefined) {
+      skipped.push({ beamId: beam.id, reason: `profiel "${profile}" is niet bekend in de EN 1993-profieldatabase` });
       continue;
     }
     const start = model.nodes.find((node) => node.id === beam.startNodeId);
@@ -167,16 +232,25 @@ export function buildOpenFem3DSteelCheckInputs(
       skipped.push({ beamId: beam.id, reason: "onvolledige geometrie, staafkrachten of eindverplaatsingen" });
       continue;
     }
-    const startFree = isFreeEnd(model, beam.startNodeId);
-    const endFree = isFreeEnd(model, beam.endNodeId);
+    const startFree = einden.vrijEind(beam, beam.startNodeId);
+    const endFree = einden.vrijEind(beam, beam.endNodeId);
+    // Vrij eind van een kolom bij P-Δ met scheefstand: L of 2·L, zie
+    // `openFem3DZijdelingseKnik` (het veld, of een kanttekening waarom niet).
+    // Twee vrije einden: de kern weigert de knik; dan is er niets te beslissen.
+    const zijdelings = (startFree || endFree) && !(startFree && endFree) ? zijdelingseKnik(beam) : {};
+    // Uitkraging (precies één vrij eind, of de klasse "uitkraging" zonder
+    // herkend vrij eind): de zakking vanaf het ingeklemde eind, niet vanaf de
+    // koorde (controle 2026-10, punt K5).
+    const inklemming = einden.inklemming(beam);
     const ulsEnvelope = ulsCombinations.flatMap((combination) => {
       const combinationResult = combinationSet?.results.get(combination.id);
       return combinationResult ? openFem3DForceStations(combinationResult, beam.id, combination.id) : [];
     });
+    const forcesEnvelope = ulsEnvelope.length > 0 ? ulsEnvelope : openFem3DForceStations(result, beam.id);
     const deflectionMm = deflectionCombinations.reduce((maximum, combination) => {
       const combinationResult = combinationSet?.results.get(combination.id);
       return combinationResult
-        ? Math.max(maximum, openFem3DMemberFieldDeflectionMm(model, beam, combinationResult))
+        ? Math.max(maximum, openFem3DMemberFieldDeflectionMm(model, beam, combinationResult, inklemming))
         : maximum;
     }, 0);
     const permanentDeflection = combinationSet
@@ -186,27 +260,70 @@ export function buildOpenFem3DSteelCheckInputs(
           meet: (combination) => {
             const combinationResult = combinationSet.results.get(combination.id);
             return combinationResult
-              ? -openFem3DMemberFieldDeflectionMm(model, beam, combinationResult)
+              ? -openFem3DMemberFieldDeflectionMm(model, beam, combinationResult, inklemming)
               : null;
           },
         })
-      : { mm: 0, notes: [] as string[] };
+      : { mm: 0, combo: null, notes: [] as string[] };
+    // w_add = w2 + w3 als de grootste VERANDERING van het vervormingsveld ten
+    // opzichte van de blijvende combinatie, niet als |w| − |w₁|: de 3D-maat is
+    // een grootte zonder teken, en bij een overstek dat onder de blijvende last
+    // omhoog en onder de veranderlijke omlaag gaat, viel de verandering zo weg
+    // (controle 2026-10, punt K5). Alleen apart naar de kern als het verschilt
+    // van wat de kern uit w − w₁ zou halen.
+    const blijvendResultaat = permanentDeflection.combo
+      ? combinationSet?.results.get(permanentDeflection.combo.id)
+      : undefined;
+    const wAddVerandering = blijvendResultaat && deflectionCombinations.length > 0
+      ? deflectionCombinations.reduce((maximum, combination) => {
+        const combinationResult = combinationSet?.results.get(combination.id);
+        return combinationResult
+          ? Math.max(maximum, openFem3DMemberFieldChangeMm(model, beam, combinationResult, blijvendResultaat, inklemming))
+          : maximum;
+      }, 0)
+      : null;
+    const wAddKern = Math.abs(-deflectionMm - permanentDeflection.mm);
+    const wAddApart = wAddVerandering !== null && Math.abs(wAddVerandering - wAddKern) > 1e-6
+      ? -wAddVerandering
+      : undefined;
     const cfg = beam.checkConfig;
-    const doorbuigingsklasse = cfg?.deflectionClass ? mapDeflectionClass(cfg.deflectionClass) : "Custom";
+    // Zonder opgegeven klasse dezelfde standaard als in 2D en in de 3D-houttoets:
+    // een overwegend horizontale staaf is een vloerligger (w_fin tegen ℓ_rep/250,
+    // w_add tegen 3/1 000 · ℓ_rep, NEN-EN 1990:2002/NB:2019 A1.4.3(3)/(4), met
+    // ℓ_rep = 2·L bij een uitkraging); een kolom of gevelstijl krijgt h/300 uit
+    // A1.4.3(7). Tot oktober 2026 kreeg elke staaf zonder klasse L/300 voor w_fin
+    // én w_add op de staaflengte, ook een uitkraging: geen NB-waarde, en bij een
+    // uitkraging 2,4 keer te streng (controle 2026-10, punten B15 en K5).
+    const verticaal = overwegendVerticaal(start, end);
+    const doorbuigingsklasse = cfg?.deflectionClass
+      ? mapDeflectionClass(cfg.deflectionClass)
+      : verticaal ? "Custom" : "Floor";
     const eigenKipsteunen = cfg?.lateralRestraints !== undefined || cfg?.lateralRestraintsBottom !== undefined;
     const vloerSteunt = !eigenKipsteunen && onderVloerOfDak.has(beam.id);
     const lateralBracing = eigenKipsteunen
       ? kipsteunenVanStaaf(cfg, forces.lengthM * 1000, "staal").lateral_bracing
       : { top_flange_positions: vloerSteunt ? BOVENFLENS_DOORGAAND : [], bottom_flange_positions: [] };
     const inputNotes = [...notes, ...permanentDeflection.notes,
+      ...(inklemming ? [openFem3DUitkragingNotitie(inklemming)] : []),
+      ...(!cfg?.deflectionClass
+        ? [verticaal
+          ? "Geen doorbuigingsklasse opgegeven: de staaf staat (overwegend) verticaal, dus de zijdelingse eis h/300 (NEN-EN 1990:2002/NB:2019 A1.4.3(7))."
+          : "Geen doorbuigingsklasse opgegeven: de staaf ligt (overwegend) horizontaal en is als vloerligger getoetst — w_fin tegen ℓ_rep/250 (A1.4.3(4)) en w_add tegen 3/1 000 · ℓ_rep (A1.4.3(3)), zoals in 2D. Kies in de toetsinstellingen een andere klasse als dat niet past."]
+        : []),
+      ...(wAddApart !== undefined
+        ? [`w_add = ${Math.abs(wAddApart).toFixed(2).replace(".", ",")} mm is de grootste verandering van het vervormingsveld ten opzichte van de blijvende combinatie "${permanentDeflection.combo?.name ?? "—"}" (w2 + w3 = w_tot − w1, figuur NB.1), niet |w| − |w₁| = ${wAddKern.toFixed(2).replace(".", ",")} mm.`]
+        : []),
       ...(vloerSteunt ? [BOVENFLENS_AANNAME] : [])];
     inputs.push({
       bijlage: "NL",
       beam_id: beam.id,
-      profile_name: profile,
+      profile_name: eigen ? eigen.naam : profile,
+      ...(eigen ? { custom_section: naarCustomSection(eigen) } : {}),
+      ...(verloop.status === "verlopend" ? { profile_end: (beam.profileNameEnd ?? "").trim() } : {}),
+      ...(eigenEind ? { custom_section_end: naarCustomSection(eigenEind) } : {}),
       steel_grade: material,
       length_m: forces.lengthM,
-      forces_envelope: ulsEnvelope.length > 0 ? ulsEnvelope : openFem3DForceStations(result, beam.id),
+      forces_envelope: forcesEnvelope,
       lateral_bracing: lateralBracing,
       // 0 = niet opgegeven: de kern neemt dan de staaflengte (om z: de grootste
       // afstand tussen plaatsen met een steun aan beide flenzen) en noemt dat.
@@ -214,24 +331,41 @@ export function buildOpenFem3DSteelCheckInputs(
       buckling_length_z_m: cfg?.bucklingLengthZ_m ?? 0,
       // Doorbuigingsklasse uit de toetsinstellingen van de staaf, zoals in 2D
       // (dak, vloer, vloer met scheurgevoelige wanden, uitkraging of eigen
-      // noemer); de kern leidt de NB-grenzen dan zelf af. Zonder opgave
-      // blijft het L/300 voor w_fin en w_add.
+      // noemer); de kern leidt de NB-grenzen dan zelf af. Zonder opgave: een
+      // vloerligger, of h/300 bij een verticale staaf (zie hierboven).
       deflection_limit_class: doorbuigingsklasse,
-      deflection_limit_numerator: doorbuigingsklasse === "Custom" ? cfg?.deflectionLimitNumerator ?? 300 : 333,
+      // Buiten "Custom" leest de kern de noemer niet; 250 is de w_max-grens
+      // ℓ_rep/250 van NEN-EN 1990:2002/NB:2019 A1.4.3(4) die zij dan toetst.
+      deflection_limit_numerator: doorbuigingsklasse === "Custom" ? cfg?.deflectionLimitNumerator ?? 300 : 250,
       deflection_actual_max_mm: -(deflectionCombinations.length > 0
         ? deflectionMm
-        : openFem3DMemberFieldDeflectionMm(model, beam, result)),
-      is_cantilever: startFree !== endFree,
+        : openFem3DMemberFieldDeflectionMm(model, beam, result, inklemming)),
+      // Uitkraging: ℓ_rep = 2·L voor w_fin én w_add (de kern negeert de vlag bij
+      // "Custom", waar de noemer op de staaflengte staat).
+      is_cantilever: inklemming !== null,
       consequence_class: combinationSet?.consequenceClass ?? "CC2",
       pre_camber_mm: 0,
       deflection_permanent_mm: permanentDeflection.mm,
+      ...(wAddApart !== undefined ? { deflection_add_mm: wAddApart } : {}),
       deflection_add_limit_numerator: cfg?.deflectionAddLimitNumerator
         ?? (doorbuigingsklasse === "Custom" ? cfg?.deflectionLimitNumerator ?? 300 : 0),
       deflection_notes: inputNotes,
-      q_equiv_n_per_mm: 0,
-      z_a_mm: 0,
+      // q_equiv uit de momentenlijn en de last op de bovenflens (z_a = +h/2):
+      // dezelfde regel als in 2D (#111). Met 0 en 0 lag de last in het
+      // dwarskrachtcentrum en kwam de kip-UC te gunstig uit.
+      ...kipBelasting(forcesEnvelope, forces.lengthM * 1000, hMm),
       staafeinden: { begin: startFree ? "Vrij" : "Gaffel", eind: endFree ? "Vrij" : "Gaffel" },
-      staaf_notities: inputNotes,
+      // Een vrij eind van een kolom, P-Δ met scheefstand in X en Y van minstens
+      // de φ van de kolom zelf: de zijdelingse knik zit al in de krachten, en de
+      // kern kiest L in plaats van 2·L (zie `openFem3DZijdelingseKnik`).
+      ...(zijdelings.veld ? { zijdelingse_knik_in_analyse: zijdelings.veld } : {}),
+      // De kanttekening ("blijft 2·L") alleen als de kern om minstens één as
+      // ook echt 2·L neemt: niet als beide kniklengtes zijn opgegeven.
+      staaf_notities: [
+        ...inputNotes,
+        ...(zijdelings.notitie && !((cfg?.bucklingLengthY_m ?? 0) > 0 && (cfg?.bucklingLengthZ_m ?? 0) > 0)
+          ? [zijdelings.notitie] : []),
+      ],
       // Een trek-alleen staaf (windverband) doet alleen mee zolang zij op trek
       // staat: de kern toetst dan alleen trek (6.2.3) en meldt een eventuele
       // drukkracht als speling, niet getoetst.

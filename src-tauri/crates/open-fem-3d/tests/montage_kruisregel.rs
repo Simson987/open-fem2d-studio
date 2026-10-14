@@ -31,7 +31,7 @@ fn doorsnede(id: usize, area: f64, i: f64, j: f64) -> Section3D {
 
 fn staaf(id: usize, begin: usize, eind: usize, sectie: usize) -> Member3D {
     Member3D { id, start_node_id: begin, end_node_id: eind, material_id: 1, section_id: sectie,
-        releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false, bedding: None }
+        releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false, bedding: None, part_section_ids: None }
 }
 
 fn scharnierend(mut staaf: Member3D) -> Member3D {
@@ -58,7 +58,7 @@ fn last(id: usize, node_id: usize, fx: f64, fz: f64) -> NodalLoad3D {
 fn verzoek(nodes: Vec<Node3D>, members: Vec<Member3D>, supports: Vec<Support3D>, nodal_loads: Vec<NodalLoad3D>) -> SolveRequest3D {
     SolveRequest3D {
         schema_version: 1, analysis: AnalysisKind::Linear, nodes,
-        materials: vec![Material3D { id: 1, name: "S235".into(), e_mpa: 210_000.0, nu: 0.3, alpha_per_k: None }],
+        materials: vec![Material3D { id: 1, name: "S235".into(), e_mpa: 210_000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
         sections: vec![doorsnede(1, A_KOLOM, I_KOLOM, I_KOLOM), doorsnede(2, A_STRIP, 1e-8, 1e-8)],
         members, supports, nodal_loads, member_loads: vec![], member_point_loads: vec![],
         thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![],
@@ -300,12 +300,16 @@ fn montage_laat_een_onmisbare_trek_alleen_staaf_haar_kracht_houden() {
 
 /// Tweede orde: met montage doen de strips onder G mee (N ≈ 0), dus ook in de
 /// knikanalyse. Zonder montage vallen ze weg en knikken de ingeklemde kolommen
-/// als uitkragers: met één element per kolom geeft K_G (Przemieniecki) voor de
-/// kop (v, θ) det(K − λ·K_G) = 0 → 135μ² − 156μ + 12 = 0 met μ = λ·P·h²/(30EI),
-/// dus α_cr = 30·μ·EI/(P·h²) = 2,4856·EI/(P·h²) = 6,52. De kolomkoppen zijn
-/// in Y vastgehouden, zodat het vlak van het portaal maatgevend is. Met
-/// actieve strips is de zijdelingse stijfheid ruim tien keer groter
-/// (2·k_d·c² = 20 161 kN/m tegen 2·3EI/h³ = 1 969 kN/m).
+/// als uitkragers: α_cr = π²/4·EI/(P·h²) = 6,477 (Euler, L_cr = 2h). De
+/// adapter rekent de kolommen in de knikanalyse in vier delen (K4, #186); de
+/// eindige-elementenwaarde ligt dan 0,003 % boven de exacte (bovengrens van
+/// Rayleigh–Ritz). Met één element per kolom gaf K_G (Przemieniecki)
+/// det(K − λ·K_G) = 0 → 135μ² − 156μ + 12 = 0 met μ = λ·P·h²/(30EI), dus
+/// α_cr = 2,4856·EI/(P·h²) = 6,526: 0,75 % te hoog; die waarde stond hier
+/// tot oktober 2026. De kolomkoppen zijn in Y vastgehouden, zodat het vlak
+/// van het portaal maatgevend is. Met actieve strips is de zijdelingse
+/// stijfheid ruim tien keer groter (2·k_d·c² = 20 161 kN/m tegen
+/// 2·3EI/h³ = 1 969 kN/m).
 #[test]
 fn montage_houdt_de_strips_in_de_knikanalyse() {
     let p = 500.0;
@@ -321,9 +325,9 @@ fn montage_houdt_de_strips_in_de_knikanalyse() {
     };
     let zonder = tweede_orde(false);
     assert_eq!(zonder.inactive_members, vec![4, 5]);
-    let mu = (156.0 - (156.0f64 * 156.0 - 4.0 * 135.0 * 12.0).sqrt()) / (2.0 * 135.0);
-    let alpha_uitkrager = 30.0 * mu * E * I_KOLOM / (p * H * H);
-    dichtbij(knikfactor(&zonder), alpha_uitkrager, 1e-6, 0.0, "α_cr uitkragende kolommen");
+    let alpha_uitkrager = std::f64::consts::PI.powi(2) / 4.0 * E * I_KOLOM / (p * H * H);
+    assert!(knikfactor(&zonder) >= alpha_uitkrager, "bovengrens: {} < {alpha_uitkrager}", knikfactor(&zonder));
+    dichtbij(knikfactor(&zonder), alpha_uitkrager, 1e-4, 0.0, "α_cr uitkragende kolommen");
 
     let met = tweede_orde(true);
     assert!(met.inactive_members.is_empty());

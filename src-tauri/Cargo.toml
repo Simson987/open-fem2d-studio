@@ -1,6 +1,6 @@
 [package]
 name = "open-fem-studio"
-version = "2026.41.0"
+version = "2026.42.0"
 description = "Open FEM Studio — eindige-elementenprogramma voor constructies (2D en 3D)"
 authors = ["OpenAEC Foundation"]
 license = "AGPL-3.0-or-later"
@@ -34,6 +34,11 @@ tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-opener = "=2.5.3"
 tauri-plugin-os = "=2.3.2"
+# Eén app-venster (issue #90): een tweede start geeft zijn bestanden aan de
+# draaiende app en stopt. Vastgezet op 2.4.3, de laatste die met tauri 2.11
+# werkt: 2.5.x vraagt tauri 2.12, en dan moeten @tauri-apps/api en de
+# JS-plugins mee (test-tauri-plugin-versies.mjs). Geen JS-kant.
+tauri-plugin-single-instance = "=2.4.3"
 serde = { version = "1", features = ["derive"] }
 # float_roundtrip: getallen die de pagina naar Rust stuurt (elk command, en het
 # bedieningskanaal) komen anders 1 ULP verschoven aan — 52,2 wordt 52,199999999999996.
@@ -66,8 +71,17 @@ tiny_http = "0.12"
 rand = "0.9"
 png = "0.17"
 raw-window-handle = "0.6"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+semver = "1"
+
+[dev-dependencies]
+# tests/bestandskoppeling.rs: een nagebootste app (`tauri::test`) met de echte
+# fs-plugin, om de vrijgave van een gemeld bestand te toetsen. Dezelfde crate,
+# alleen de feature erbij en alleen voor testdoelen; de app bouwt zonder.
+tauri = { version = "2", features = ["test"] }
+
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_Storage_Xps", "Win32_System_LibraryLoader"] }
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_Storage_Xps", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_Security", "Win32_Security_Authorization"] }
 # Het standaardrapport als PDF (`gui_control::afdruk`): ICoreWebView2_7::PrintToPdf op
 # de webview die Tauri via `with_webview` geeft. Tauri exporteert webview2_com niet
 # opnieuw, dus om die interface te kunnen noemen is een directe afhankelijkheid

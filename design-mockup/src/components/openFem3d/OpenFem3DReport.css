@@ -30,8 +30,26 @@
 .open-fem3d-report-page tbody th { width:44mm; color:#475569; font-weight:600; }.open-fem3d-report-page tbody th+td { text-align:left; }
 /* Staven op bedding (#106): tot elf kolommen; de koppen breken af zodat de tabel op de pagina past. */
 .open-fem3d-report-page .open-fem3d-report-bedding thead th { white-space:normal; vertical-align:bottom; }
+.open-fem3d-report-envelope-table { margin:3mm 0; }
+.open-fem3d-report-envelope-table th,.open-fem3d-report-envelope-table td { white-space:normal!important; overflow-wrap:anywhere; }
+.open-fem3d-report-envelope-table td:nth-child(4),.open-fem3d-report-envelope-table td:nth-child(6) { text-align:left; }
+.open-fem3d-report-envelope-table.open-fem3d-report-wide td:nth-child(5),
+.open-fem3d-report-envelope-table.open-fem3d-report-wide td:nth-child(7) { text-align:left; }
 .open-fem3d-report-checks th:nth-child(2),.open-fem3d-report-checks td:nth-child(2),
 .open-fem3d-report-checks th:nth-child(3),.open-fem3d-report-checks td:nth-child(3) { text-align:left; white-space:normal; }
+/* Verlopend profiel (#73): het VerloopBlok van de toetsing, zoals in het 2D-rapport (CHECK_REPORT_CSS, #30).
+   Compact gezet zodat de zeven kolommen binnen de tekstbreedte passen; de kolom Reden van "Doorsnede voor de
+   stabiliteitstoetsen" breekt af: zonder die regel wint de nowrap van `.open-fem3d-report-page td` en loopt de
+   zin voorbij de paginarand. */
+.open-fem3d-report-page .rpt-verloop { margin:1.5mm 0 2mm; }
+.open-fem3d-report-page .rpt-verloop-kop { margin:2mm 0 .8mm; font-weight:600; }
+.open-fem3d-report-page .rpt-verloop-tabel { font-size:8pt; }
+.open-fem3d-report-page .rpt-verloop-tabel th,.open-fem3d-report-page .rpt-verloop-tabel td { padding:1mm 1.2mm; }
+.open-fem3d-report-page .rpt-verloop-tabel tr.rpt-verloop-maatgevend td { background:#fef3c7; font-weight:600; }
+.open-fem3d-report-page .rpt-verloop-tabel th.rpt-verloop-reden,
+.open-fem3d-report-page .rpt-verloop-tabel td.rpt-verloop-reden { text-align:left; white-space:normal; overflow-wrap:anywhere; }
+.open-fem3d-report-page .rpt-verloop-tabel td.rpt-verloop-reden { color:#475569; font-size:8pt; }
+.open-fem3d-report-page .rpt-chk-notes { margin:1mm 0 0; padding-left:0; list-style:none; color:#475569; font-size:8pt; }
 .open-fem3d-report-good { color:#15803d; }.open-fem3d-report-bad { color:#b91c1c; }.open-fem3d-report-note { color:#64748b; font-size:8pt; }
 .open-fem3d-report-empty { margin-top:15mm; padding:10mm; border:1px dashed #94a3b8; background:#f8fafc; }
 /* Tab Views: de aangevinkte views als afbeelding met titel, twee per rij. */
@@ -47,6 +65,8 @@
   .open-fem3d-report-toolbar { display:none; }
   .open-fem3d-report-page { width:auto; min-height:0; margin:0; padding:12mm 14mm; box-shadow:none; }
   .open-fem3d-report-page section { break-inside:avoid; }
+  .open-fem3d-report-page .open-fem3d-report-envelope { break-inside:auto; }
+  .open-fem3d-report-envelope-table tr { break-inside:avoid; }
   .open-fem3d-report-page details:not([open]) > :not(summary) { display:block; }
   @page { size:A4 portrait; margin:0; }
 }

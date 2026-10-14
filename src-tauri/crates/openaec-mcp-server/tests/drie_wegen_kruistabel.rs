@@ -162,11 +162,52 @@ const KANAAL_REDEN: &str =
      meldt zij wat een opdracht opleverde. Geen rekenkern; de toetsbrug en de MCP-server hebben \
      er niets aan.";
 
+/// De reden voor de drie commands van de schakelaar (issue #109).
+const SCHAKELAAR_REDEN: &str =
+    "De schakelaar van het bedieningskanaal zelf (Instellingen → AI-assistent (MCP)): de pagina \
+     bewaart hiermee of een AI-assistent de app mag bedienen en zet het kanaal meteen aan of uit. \
+     Programmawerk van de desktop-app; er wordt niets gerekend, en een MCP-client hoort het kanaal \
+     niet zelf aan te kunnen zetten.";
+
+/// De reden voor de twee commands van het koppelpaneel (issue #109).
+const KOPPELING_REDEN: &str =
+    "Programmawerk van de desktop-app: het paneel AI-assistent (MCP) vraagt waar de meegeleverde \
+     MCP-server staat en zet hem op een klik van de gebruiker in de config van Claude Desktop. Er \
+     wordt niets gerekend; de toetsbrug en de MCP-server hebben er niets aan.";
+
+/// De reden voor het command van de bestandskoppeling (issue #90).
+const BESTANDSKOPPELING_REDEN: &str =
+    "Programmawerk van de desktop-app: de pagina haalt hiermee op welke projectbestanden het \
+     besturingssysteem aanreikte (dubbelklik, Openen met, een tweede start). Een browser of een \
+     MCP-client heeft geen bestandskoppeling; er wordt niets gerekend.";
+
+const EXTENSIE_REDEN: &str =
+    "Programmawerk van de desktop-app: lokale extensiemappen scannen, hun scripts en toegestane \
+     importbestanden lezen, ZIP-installatie en verwijderen. Er wordt niets gerekend; de MCP-server \
+     gebruikt zijn eigen extensiepad zonder deze Tauri-commando's.";
+
 const UITZONDERINGEN: &[Rij] = &[
     // ── Het bedieningskanaal (gui_control.rs) en zijn MCP-tools ──────────────
     Rij { tauri: Some("gui_control_actief"), toetsbrug: None, mcp: None, reden: KANAAL_REDEN },
     Rij { tauri: Some("gui_control_antwoord"), toetsbrug: None, mcp: None, reden: KANAAL_REDEN },
+    // De schakelaar van het kanaal (issue #109): Instellingen → AI-assistent (MCP).
+    Rij { tauri: Some("gui_kanaal_status"), toetsbrug: None, mcp: None, reden: SCHAKELAAR_REDEN },
+    Rij { tauri: Some("gui_kanaal_aan"), toetsbrug: None, mcp: None, reden: SCHAKELAAR_REDEN },
+    Rij { tauri: Some("gui_kanaal_uit"), toetsbrug: None, mcp: None, reden: SCHAKELAAR_REDEN },
+    // ── Een AI-assistent koppelen (mcp_koppeling.rs, issue #109) ─────────────
+    Rij { tauri: Some("mcp_koppeling_info"), toetsbrug: None, mcp: None, reden: KOPPELING_REDEN },
+    Rij { tauri: Some("mcp_claude_desktop_toevoegen"), toetsbrug: None, mcp: None, reden: KOPPELING_REDEN },
+    // ── De bestandskoppeling (bestandskoppeling.rs) ──────────────────────────
+    Rij { tauri: Some("bestandskoppeling_ophalen"), toetsbrug: None, mcp: None, reden: BESTANDSKOPPELING_REDEN },
+    Rij { tauri: Some("extensies_lezen"), toetsbrug: None, mcp: None, reden: EXTENSIE_REDEN },
+    Rij { tauri: Some("extensie_script_lezen"), toetsbrug: None, mcp: None, reden: EXTENSIE_REDEN },
+    Rij { tauri: Some("extensie_bestand_lezen"), toetsbrug: None, mcp: None, reden: EXTENSIE_REDEN },
+    Rij { tauri: Some("extensie_zip_installeren"), toetsbrug: None, mcp: None, reden: EXTENSIE_REDEN },
+    Rij { tauri: Some("extensie_verwijderen"), toetsbrug: None, mcp: None, reden: EXTENSIE_REDEN },
+    Rij { tauri: None, toetsbrug: None, mcp: Some("project_import"), reden: EXTENSIE_REDEN },
     Rij { tauri: None, toetsbrug: None, mcp: Some("gui_status"), reden: BEDIENING_REDEN },
+    // Start de geïnstalleerde app met het kanaal aan als hij nog niet draait (issue #109).
+    Rij { tauri: None, toetsbrug: None, mcp: Some("gui_start_app"), reden: BEDIENING_REDEN },
     Rij { tauri: None, toetsbrug: None, mcp: Some("gui_load_model"), reden: BEDIENING_REDEN },
     Rij { tauri: None, toetsbrug: None, mcp: Some("gui_build_model"), reden: BEDIENING_REDEN },
     Rij { tauri: None, toetsbrug: None, mcp: Some("gui_build_3d_model"), reden: BEDIENING_REDEN },

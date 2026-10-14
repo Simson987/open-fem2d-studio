@@ -1277,10 +1277,14 @@ export function computeSelectionMirror(
  * Retourneert null wanneer de selectie niets kopieerbaars bevat. De functie
  * muteert `cur` niet — de aanroepende mutatie pusht het resultaat als één
  * history-snapshot, zodat één Ctrl+Z de hele kopie ongedaan maakt.
+ * `cur` is de bron op het moment van kopiëren; `into` is het huidige doelmodel
+ * bij plakken. Daardoor blijft Ctrl+V werken als het origineel intussen is
+ * verwijderd, en krijgen alle gekopieerde onderdelen vrije doel-id's.
  */
 export function computeSelectionCopy(
   cur: Snapshot,
   sel: Selection, dx: number, dz: number,
+  into: Snapshot = cur,
 ): {
   nodes: Node[]; beams: Beam[]; supports: Support[]; plates: Plate[]; loads: Load[];
   nodeIdMap: Map<number, number>; beamIdMap: Map<number, number>;
@@ -1296,10 +1300,10 @@ export function computeSelectionCopy(
     sel.plateIds.forEach(id => copyPlateIds.add(id));
   }
 
-  let nextNodeId  = cur.nodes.length  === 0 ? 1 : Math.max(...cur.nodes.map(n => n.id)) + 1;
-  let nextBeamId  = cur.beams.length  === 0 ? 1 : Math.max(...cur.beams.map(b => b.id)) + 1;
-  let nextPlateId = cur.plates.length === 0 ? 1 : Math.max(...cur.plates.map(p => p.id)) + 1;
-  let nextLoadId  = cur.loads.length  === 0 ? 1 : Math.max(...cur.loads.map(l => l.id)) + 1;
+  let nextNodeId  = into.nodes.length  === 0 ? 1 : Math.max(...into.nodes.map(n => n.id)) + 1;
+  let nextBeamId  = into.beams.length  === 0 ? 1 : Math.max(...into.beams.map(b => b.id)) + 1;
+  let nextPlateId = into.plates.length === 0 ? 1 : Math.max(...into.plates.map(p => p.id)) + 1;
+  let nextLoadId  = into.loads.length  === 0 ? 1 : Math.max(...into.loads.map(l => l.id)) + 1;
 
   // Knopen — itereren over cur.nodes (niet over de Set) zodat kopieën in
   // modelvolgorde ontstaan en dangling ids in de selectie stil vervallen.
@@ -1363,11 +1367,11 @@ export function computeSelectionCopy(
   }
 
   return {
-    nodes: [...cur.nodes, ...newNodes],
-    beams: [...cur.beams, ...newBeams],
-    supports: [...cur.supports, ...newSupports],
-    plates: [...cur.plates, ...newPlates],
-    loads: [...cur.loads, ...newLoads],
+    nodes: [...into.nodes, ...newNodes],
+    beams: [...into.beams, ...newBeams],
+    supports: [...into.supports, ...newSupports],
+    plates: [...into.plates, ...newPlates],
+    loads: [...into.loads, ...newLoads],
     nodeIdMap, beamIdMap,
   };
 }
@@ -1801,7 +1805,7 @@ export interface FemStore {
   // selectie niets transformeerbaars bevat (lege selectie / lastselectie),
   // zodat de aanroeper feedback kan tonen in plaats van een stille no-op.
   translateSelection: (sel: Selection, dx: number, dz: number) => boolean;
-  copySelection: (sel: Selection, dx: number, dz: number) => boolean;
+  copySelection: (sel: Selection, dx: number, dz: number, source?: Snapshot) => boolean;
   rotateSelection: (sel: Selection, cx: number, cz: number, angleRad: number) => boolean;
   mirrorSelection: (sel: Selection, x1: number, z1: number, x2: number, z2: number) => boolean;
   /**
@@ -2735,12 +2739,12 @@ export function useFemStore(opties?: {
 
   /**
    * Volwaardige kopie van de selectie op offset (dx, dz): alle staafvelden,
-   * opleggingen en lasten gaan mee (zie computeSelectionCopy). Eén history-
-   * push, dus één Ctrl+Z maakt de hele kopie ongedaan.
+   * opleggingen en lasten gaan mee (zie computeSelectionCopy). `source` is
+   * optioneel een bewaarde Ctrl+C-snapshot. Eén history-push per plakactie.
    */
-  const copySelection = useCallback((sel: Selection, dx: number, dz: number): boolean => {
+  const copySelection = useCallback((sel: Selection, dx: number, dz: number, source?: Snapshot): boolean => {
     const cur = latestRef.current;
-    const r = computeSelectionCopy(cur, sel, dx, dz);
+    const r = computeSelectionCopy(source ?? cur, sel, dx, dz, cur);
     if (!r) return false;
     setNodes(r.nodes);
     setBeams(r.beams);
@@ -3313,6 +3317,8 @@ export function useFemStore(opties?: {
         gevolgklasse: klasse,
         bijlage,
         idTellers: p.idTellers,
+        // Voor de melding over wees-factoren: stond er een last in zo'n geval?
+        loads: p.loads,
       });
       pasCombiStaatToe(geopend);
       setCombinatieAfwijking(afwijking);

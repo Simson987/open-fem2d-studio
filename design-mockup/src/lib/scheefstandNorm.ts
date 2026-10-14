@@ -587,6 +587,21 @@ export function phiVolgensNorm(
   return { norm, phi, regels };
 }
 
+/**
+ * De scheefstand die een LOSSE stalen kolom zelf hoort te krijgen: EN 1993-1-1
+ * (5.5) met h = haar eigen hoogte en m = 1 (α_m = 1), dus φ = 1/200 · α_h.
+ *
+ * WAAROM. De φ van het model rekent met de hoogte van het hele gebouw en met
+ * m = alle kolommen: die scheefstanden middelen uit omdat de kolommen aan
+ * elkaar hangen. Een kolom met een vrije kop hangt nergens aan; haar eigen
+ * scheefstand middelt met niets. Alleen als de berekening minstens deze φ op
+ * haar zet, zit haar zijdelingse knik volledig in de krachten en mag de toets
+ * de systeemlengte nemen (NEN-EN 1993-1-1 5.2.2(7)b).
+ */
+export function phiLosseKolom(hoogteM: number): number {
+  return phiVolgensNorm("en1993", hoogteM, 1).phi;
+}
+
 // ── Welke normen gelden hier ────────────────────────────────────────────────
 
 /**

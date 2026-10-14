@@ -13,7 +13,7 @@ export type OpenFem3DSpringAxis = "kx" | "ky" | "kz" | "krx" | "kry" | "krz";
  * `addPointLoad` (Puntlast, issue #77): een klik op een knoop geeft een
  * knooplast, op een staaf een staafpuntlast op die plek (openFem3dPlaatsen).
  */
-export type OpenFem3DTool = "select" | "addNode" | "addBeam" | "addSubNode" | "addPlate" | "addPlateArc" | "addOpening" | "addOpeningArc" | "addMemberLoad" | "addPointLoad" | "addLoadPanel" | "loadPanelSpan" | "beamEndHinge" | "move" | "rotate" | "copy" | "mirror" | `support:${OpenFem3DSupportPreset}` | `spring:${OpenFem3DSpringAxis}`;
+export type OpenFem3DTool = "select" | "addNode" | "addBeam" | "addSubNode" | "addPlate" | "addPlateArc" | "addOpening" | "addOpeningArc" | "addMemberLoad" | "addPointLoad" | "addLoadPanel" | "addEnvelopePanel" | "loadPanelSpan" | "beamEndHinge" | "move" | "rotate" | "copy" | "mirror" | `support:${OpenFem3DSupportPreset}` | `spring:${OpenFem3DSpringAxis}`;
 
 /** Z stays vertical. Top is XY, front is XZ and side is YZ. */
 export type OpenFem3DView = "iso" | "top" | "front" | "side";

@@ -175,8 +175,11 @@ function MemberCard({ result, focusToken, namen, onToon }: {
             </span>
           </div>
         </div>
-        <div className={`cp-card-uc ${ucClass(result.uc_max)}`}>
-          {result.uc_max.toFixed(2)}
+        {/* Status n.v.t.: de staaf is niet (volledig) getoetst. Dan geen UC in
+            de kleur van "voldoet" — een uc_max van 0 hoort niet groen te lezen
+            (controle 2026-10, punt B7). */}
+        <div className={`cp-card-uc ${result.status === "NotApplicable" ? "cp-uc-na" : ucClass(result.uc_max)}`}>
+          {result.status === "NotApplicable" ? "—" : result.uc_max.toFixed(2)}
         </div>
         <div className={`cp-card-badge cp-badge-${result.status.toLowerCase()}`}>
           {result.status === "Ok" ? t("statusOk") : result.status === "NotOk" ? t("statusNotOk") : t("statusNa")}

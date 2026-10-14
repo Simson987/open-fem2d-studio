@@ -81,7 +81,7 @@ fn request(nodes: Vec<Node3D>, e_mpa: f64, nu: f64, thickness: f64, elements: Ve
         schema_version: 2,
         analysis: AnalysisKind::Linear,
         nodes,
-        materials: vec![Material3D { id: 1, name: "plaat".into(), e_mpa, nu, alpha_per_k: None }],
+        materials: vec![Material3D { id: 1, name: "plaat".into(), e_mpa, nu, g_mpa: None, alpha_per_k: None }],
         sections: vec![],
         members: vec![],
         supports: vec![],
@@ -89,7 +89,7 @@ fn request(nodes: Vec<Node3D>, e_mpa: f64, nu: f64, thickness: f64, elements: Ve
         member_loads: vec![],
         member_point_loads: vec![],
         thermal_loads: vec![],
-        plates: vec![Plate3D { id: 1, material_id: 1, thickness_m: thickness }],
+        plates: vec![Plate3D { id: 1, material_id: 1, thickness_m: thickness, bedding: None }],
         shell_elements: elements,
         surface_loads: vec![],
         diaphragms: vec![],
@@ -422,7 +422,7 @@ fn plate_on_edge_beams_is_in_equilibrium_and_shares_nodes() {
             id: index + 1, start_node_id: g.id(start.0, start.1), end_node_id: g.id(end.0, end.1),
             material_id: 1, section_id: 1, releases: Default::default(), roll_angle_rad: None,
             intermediate_node_ids: steps.iter().map(|&(i, j)| g.id(i, j)).collect(), tension_only: false,
-            bedding: None,
+            bedding: None, part_section_ids: None,
         });
     }
     for (i, j) in [(0, 0), (n, 0), (n, n), (0, n)] {
@@ -483,7 +483,7 @@ fn plate_on_bedded_edge_beams_carries_the_load_into_the_ground() {
             id: index + 1, start_node_id: g.id(start.0, start.1), end_node_id: g.id(end.0, end.1),
             material_id: 1, section_id: 1, releases: Default::default(), roll_angle_rad: None,
             intermediate_node_ids: steps.iter().map(|&(i, j)| g.id(i, j)).collect(), tension_only: false,
-            bedding: Some(Bedding3D { k_kn_per_m3: Some(20_000.0), width_m: 0.6, k_lateral_kn_per_m3: None, compression_only: false }),
+            bedding: Some(Bedding3D { k_kn_per_m3: Some(20_000.0), width_m: 0.6, k_lateral_kn_per_m3: None, compression_only: false }), part_section_ids: None,
         });
     }
     input.supports.push(support(g.id(0, 0), [true, true, false, false, false, false]));
@@ -526,11 +526,11 @@ fn split_member_equals_unsplit_member() {
     ];
     let mut base = SolveRequest3D {
         schema_version: 2, analysis: AnalysisKind::Linear, nodes,
-        materials: vec![Material3D { id: 1, name: "staal".into(), e_mpa: 210_000.0, nu: 0.3, alpha_per_k: None }],
+        materials: vec![Material3D { id: 1, name: "staal".into(), e_mpa: 210_000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
         sections: vec![Section3D { id: 1, name: "ref".into(), area_m2: 0.01, iy_m4: 8e-5, iz_m4: 1e-5,
             torsion_j_m4: 1e-6, shear_area_y_m2: None, shear_area_z_m2: None }],
         members: vec![Member3D { id: 7, start_node_id: 1, end_node_id: 2, material_id: 1, section_id: 1,
-            releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false, bedding: None }],
+            releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false, bedding: None, part_section_ids: None }],
         supports: vec![
             support(1, [true, true, true, true, false, false]),
             support(2, [false, true, true, false, false, false]),

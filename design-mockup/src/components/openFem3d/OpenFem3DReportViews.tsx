@@ -2,6 +2,7 @@ import type { OpenFem3DConcreteChecks } from "./openFem3dConcreteCheck";
 import type { OpenFem3DModel, OpenFem3DNode } from "./openFem3dModel";
 import type { OpenFem3DSolveResult } from "./openFem3dSolver";
 import type { OpenFem3DSteelChecks } from "./openFem3dSteelCheck";
+import type { OpenFem3DTimberChecks } from "./openFem3dTimberCheck";
 import {
   buildOpenFem3DUtilizations,
   OPEN_FEM_3D_UTILIZATION_COLORS,
@@ -19,6 +20,7 @@ interface Props {
   result: OpenFem3DSolveResult;
   checks?: OpenFem3DSteelChecks | null;
   concreteChecks?: OpenFem3DConcreteChecks | null;
+  timberChecks?: OpenFem3DTimberChecks | null;
 }
 
 const WIDTH = 560;
@@ -84,11 +86,11 @@ function deformationScale(model: OpenFem3DModel, result: OpenFem3DSolveResult) {
 }
 
 function View({
-  model, result, projection, title, checks, concreteChecks,
+  model, result, projection, title, checks, concreteChecks, timberChecks,
 }: Props & { projection: Projection; title: string }) {
   const nodeById = new Map<number, OpenFem3DNode>();
   for (const node of model.nodes) nodeById.set(node.id, node);
-  const utilization = new Map(buildOpenFem3DUtilizations(checks, concreteChecks).map((value) => [value.beamId, value]));
+  const utilization = new Map(buildOpenFem3DUtilizations(checks, concreteChecks, timberChecks).map((value) => [value.beamId, value]));
   const magnification = deformationScale(model, result);
   const undeformed = model.nodes.map((node) => project(node, projection));
   const deformedBeams = new Map<number, Array<{ x: number; y: number; z: number }>>(model.beams.map((beam) => {

@@ -110,6 +110,9 @@ fn invoer(
         custom_section_end: None,
         tension_only: None,
         a_net_mm2: None,
+        deflection_add_mm: None,
+        deflection_length_m: None,
+        zijdelingse_knik_in_analyse: None,
     }
 }
 
@@ -140,7 +143,13 @@ fn ligger2_hea400_buiging_en_dwarskracht() {
 
 #[test]
 fn doorbuiging_beide_liggers() {
-    // w_fin = -11 mm, grens L/333 = 24,0 → UC = 0,46. Ongewijzigd.
+    // w_fin = -11 mm. Ook hier WIJKT de toetsing sinds oktober 2026 bewust van
+    // de referentie-uitwerking af. Die toetst w_fin tegen L/333 = 24,0 mm
+    // (UC 0,46); NEN-EN 1990:2002/NB:2019 A1.4.3(4) begrenst w_max "bij zowel
+    // vloeren als daken" op 1/250 deel van ℓ_rep = 8000/250 = 32,0 mm, dus
+    // UC = 11/32 = 0,344 (controle 2026-10, punt B15). De L/333 is de grens van
+    // w2 + w3, niet die van w_max; wie de referentie wil nabootsen kiest
+    // `Custom` met noemer 333.
     //
     // w_add = -11 - (-3,2) = -7,8 mm. Hier WIJKT de toetsing bewust van de
     // referentie-uitwerking af. Die rekent met een vaste L/150 = 53,3 mm en
@@ -153,12 +162,12 @@ fn doorbuiging_beide_liggers() {
     // 150 en de toetsing levert weer 0,15, mét een notitie dat de noemer is
     // opgegeven (zie doorbuiging_2867.rs).
     let r1 = ligger1();
-    assert_relative_eq!(uc_van(&r1, "deflection_w_fin"), 0.46, max_relative = 3e-2);
+    assert_relative_eq!(uc_van(&r1, "deflection_w_fin"), 11.0 / 32.0, max_relative = 1e-9);
     assert_relative_eq!(uc_van(&r1, "deflection_w_add"), 0.325, max_relative = 2e-2);
 
-    // w_fin = -11,2 mm → UC = 0,47
+    // w_fin = -11,2 mm → UC = 11,2/32 = 0,35 (referentie: L/333, UC 0,47)
     let r2 = ligger2();
-    assert_relative_eq!(uc_van(&r2, "deflection_w_fin"), 0.47, max_relative = 3e-2);
+    assert_relative_eq!(uc_van(&r2, "deflection_w_fin"), 11.2 / 32.0, max_relative = 1e-9);
 }
 
 #[test]

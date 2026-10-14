@@ -95,6 +95,9 @@ fn run() -> &'static BeamCheckResult {
             custom_section_end: None,
             tension_only: None,
             a_net_mm2: None,
+            deflection_add_mm: None,
+            deflection_length_m: None,
+            zijdelingse_knik_in_analyse: None,
         };
         check_beam(input)
     })

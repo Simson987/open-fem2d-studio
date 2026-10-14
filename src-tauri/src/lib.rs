@@ -25,13 +25,24 @@ use steel_profiles::SteelProfile;
 use timber_check::clt::{CltBeamCheckInput, CltBeamCheckResult};
 use timber_check::{TimberBeamCheckInput, TimberBeamCheckResult};
 
-/// Het bedieningskanaal van de app — alleen actief met `OPENAEC_GUI_CONTROL=1`.
+/// Het bedieningskanaal van de app — alleen actief met de instelling
+/// "Bediening door een AI-assistent toestaan (MCP)" of `OPENAEC_GUI_CONTROL=1`.
 /// Geen rekenkern en dus geen drie-wegen-regel; zie de moduletekst.
 ///
-/// `pub` omdat de unit-tests van `gui_control::rapport` in tests/ staan: de
-/// unit-testharnas van deze lib laadt op Windows niet (zie build.rs).
+/// `pub` omdat de unit-tests van `gui_control::rapport`, `::kanaal` en
+/// `::instelling` in tests/ staan: de unit-testharnas van deze lib laadt op
+/// Windows niet (zie build.rs).
 pub mod gui_control;
 use gui_control::GuiControl;
+/// Een projectbestand openen dat het besturingssysteem aanreikt (dubbelklik,
+/// "Openen met", een tweede start terwijl de app draait; issue #90). `pub`
+/// om dezelfde reden als `gui_control`: de tests staan in tests/.
+pub mod bestandskoppeling;
+/// Een AI-assistent aan de app koppelen (issue #109): de meegeleverde
+/// MCP-server vinden en hem in de config van Claude Desktop zetten. `pub` om
+/// dezelfde reden als `gui_control`: de tests staan in tests/.
+pub mod mcp_koppeling;
+pub mod extensies;
 use std::sync::Arc;
 use tauri::Manager;
 
@@ -373,9 +384,112 @@ fn gui_control_antwoord(
     control.antwoord(id, uitkomst)
 }
 
+// ── Lokale importextensies (issue #83) ────────────────────────────────────
+#[tauri::command]
+fn extensies_lezen(app: tauri::AppHandle, mappen: Vec<String>) -> Result<Vec<extensies::GevondenExtensie>, String> {
+    extensies::lezen(&app, mappen)
+}
+
+#[tauri::command]
+fn extensie_script_lezen(map: String, main: String) -> Result<String, String> {
+    extensies::script_lezen(map, main)
+}
+
+#[tauri::command]
+fn extensie_bestand_lezen(app: tauri::AppHandle, pad: String, mappen: Vec<String>, ingeschakelde_ids: Vec<String>) -> Result<Vec<u8>, String> {
+    extensies::bestand_lezen(&app, pad, mappen, ingeschakelde_ids)
+}
+
+#[tauri::command]
+fn extensie_zip_installeren(app: tauri::AppHandle, zip_pad: String) -> Result<String, String> {
+    extensies::zip_installeren(&app, zip_pad)
+}
+
+#[tauri::command]
+fn extensie_verwijderen(app: tauri::AppHandle, map: String) -> Result<(), String> {
+    extensies::verwijderen(&app, map)
+}
+
+// ── De schakelaar van het kanaal (issue #109) ───────────────────────────────
+// Instellingen → AI-assistent (MCP): de keuze bewaren en het kanaal meteen
+// starten of stoppen. Dun; de logica staat in `gui_control`.
+
+/// Staat de bediening door een AI-assistent toe (bewaard), luistert het
+/// kanaal, op welke poort, en waarom niet.
+#[tauri::command]
+fn gui_kanaal_status(control: tauri::State<'_, Arc<GuiControl>>) -> gui_control::KanaalStatus {
+    control.status()
+}
+
+/// De schakelaar aan: bewaren en het kanaal starten.
+#[tauri::command]
+fn gui_kanaal_aan(
+    app: tauri::AppHandle,
+    control: tauri::State<'_, Arc<GuiControl>>,
+) -> Result<gui_control::KanaalStatus, String> {
+    control.zet_aan(&app)
+}
+
+/// De schakelaar uit: het kanaal stoppen (vindbestand weg) en bewaren.
+#[tauri::command]
+fn gui_kanaal_uit(
+    app: tauri::AppHandle,
+    control: tauri::State<'_, Arc<GuiControl>>,
+) -> Result<gui_control::KanaalStatus, String> {
+    control.zet_uit(&app)
+}
+
+// ── Een AI-assistent koppelen (issue #109) ──────────────────────────────────
+// Geen rekenkern: het paneel AI-assistent (MCP) vraagt waar de meegeleverde
+// MCP-server staat, en zet hem op een klik van de gebruiker in de config van
+// Claude Desktop. De logica staat in `mcp_koppeling`.
+
+/// Het pad van de MCP-server (of waar gezocht is), en de config van Claude Desktop.
+#[tauri::command]
+fn mcp_koppeling_info() -> mcp_koppeling::KoppelInfo {
+    mcp_koppeling::info()
+}
+
+/// Zet de regel `open-fem-studio` in claude_desktop_config.json (met
+/// reservekopie; ongeldige JSON wordt geweigerd). Alleen na een klik. Een
+/// weigering komt als `{code, melding, config, regel, kolom}`, zodat het
+/// paneel haar vertaalt.
+#[tauri::command]
+fn mcp_claude_desktop_toevoegen() -> Result<mcp_koppeling::KoppelUitkomst, mcp_koppeling::KoppelFout> {
+    mcp_koppeling::voeg_toe_aan_claude_desktop()
+}
+
+// ── De bestandskoppeling ────────────────────────────────────────────────────
+// Geen rekenkern: de pagina haalt hiermee op welke bestanden het
+// besturingssysteem aanreikte. De logica staat in `bestandskoppeling`.
+
+/// De paden die klaarstaan om te openen; de wachtrij is daarna leeg. De
+/// pagina vraagt dit bij het laden en na elk event `bestandskoppeling:bestanden`.
+#[tauri::command]
+fn bestandskoppeling_ophalen(wachtrij: tauri::State<'_, bestandskoppeling::Wachtrij>) -> Vec<String> {
+    wachtrij.haal_op()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // EERSTE plugin: in een tweede start stopt hij het proces in zijn eigen
+    // setup, vóór de andere plugins, het bedieningskanaal en een venster er
+    // zijn; de bestanden van die start gaan naar de draaiende app. Niet in een
+    // debugbuild en niet in een instantie met bedieningskanaal én eigen
+    // vindbestand (een testscript); zie `bestandskoppeling::een_instantie_bewaken`.
+    if bestandskoppeling::een_instantie_bewaken(
+        cfg!(debug_assertions),
+        gui_control::gevraagd(),
+        gui_control::eigen_vindbestand().is_some(),
+        bestandskoppeling::in_debug_gevraagd(),
+    ) {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, werkmap| {
+            bestandskoppeling::tweede_start(app, &argv, &werkmap);
+        }));
+    }
+    builder
+        .manage(bestandskoppeling::Wachtrij::default())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -409,23 +523,44 @@ pub fn run() {
             solve_open_fem_3d,
             gui_control_actief,
             gui_control_antwoord,
+            extensies_lezen,
+            extensie_script_lezen,
+            extensie_bestand_lezen,
+            extensie_zip_installeren,
+            extensie_verwijderen,
+            gui_kanaal_status,
+            gui_kanaal_aan,
+            gui_kanaal_uit,
+            mcp_koppeling_info,
+            mcp_claude_desktop_toevoegen,
+            bestandskoppeling_ophalen,
         ])
         .setup(|app| {
             // Zet het bedieningskanaal op, of niet — `start` kijkt zelf naar de
-            // omgevingsvariabele en levert anders een kanaal dat "uit" zegt.
+            // omgevingsvariabele en de bewaarde instelling, en levert anders
+            // een kanaal dat "uit" zegt (en later aan kan).
             let control = gui_control::start(app.handle());
             app.manage(control);
+            // Een bestand waarmee de app gestart is (dubbelklik in de
+            // verkenner): klaarzetten tot de pagina het ophaalt.
+            bestandskoppeling::eerste_start(app.handle());
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
+        .run(|app, event| match &event {
             // Bij afsluiten het vindbestand weghalen: een achtergebleven
             // gui-control.json zou een client naar een dode poort sturen.
-            if let tauri::RunEvent::Exit = event {
+            tauri::RunEvent::Exit => {
                 if let Some(control) = app.try_state::<Arc<GuiControl>>() {
                     control.opruimen();
                 }
             }
+            // macOS: een dubbelklik in Finder komt als URL's, niet via argv.
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Opened { urls } => {
+                bestandskoppeling::geopend(app, urls);
+            }
+            _ => {}
         });
 }

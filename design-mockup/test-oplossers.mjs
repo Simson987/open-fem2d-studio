@@ -51,7 +51,7 @@ const { solveAllCases, solveAllCasesNonlinear } =
   await import("./src/components/fem/solver/engine.ts");
 const { setLinearSolver, getLinearSolver, LINEAR_SOLVER_IDS } =
   await import("./src/core/math/LinearSolver.ts");
-const { solveSkyline, solveWithProfile, analyzeMatrix, getSkylineDiagnostics, resetSkylineDiagnostics } =
+const { solveSkyline, solveWithProfile, analyzeMatrix, reorderForSkyline, getSkylineDiagnostics, resetSkylineDiagnostics } =
   await import("./src/core/math/SkylineSolver.ts");
 const { solveLinearSystem: solveGauss } = await import("./src/core/math/GaussElimination.ts");
 const { Matrix } = await import("./src/core/math/Matrix.ts");
@@ -117,6 +117,44 @@ for (const [n, b] of [[6, 2], [40, 4], [150, 9], [300, 15]]) {
     rel < MARGE,
     `rel.afw = ${rel.toExponential(3)}, b_max = ${profiel.halfBandwidth}, rel.asym = ${profiel.relAsymmetry.toExponential(1)}`,
   );
+}
+
+{
+  // Een keten waarvan de knopen afwisselend aan beide uiteinden zijn
+  // genummerd, zodat buren in de matrix ver uit elkaar liggen.
+  const physical = [0, 11, 1, 10, 2, 9, 3, 8, 4, 7, 5, 6];
+  const storage = new Map(physical.map((v, i) => [v, i]));
+  const A = new Matrix(36, 36);
+  for (let node = 0; node < 12; node++) {
+    for (let dof = 0; dof < 3; dof++) {
+      const i = 3 * storage.get(node) + dof;
+      A.set(i, i, 4);
+      if (node > 0) {
+        const j = 3 * storage.get(node - 1) + dof;
+        A.set(i, j, -1); A.set(j, i, -1);
+      }
+    }
+  }
+  const rhs = Array.from({ length: 36 }, (_, i) => i + 1);
+  const reordered = reorderForSkyline(A);
+  check('RCM verkleint het profiel bij slecht genummerde knopen',
+    reordered.reorderedProfileSize < reordered.originalProfileSize,
+    `${reordered.originalProfileSize} → ${reordered.reorderedProfileSize}`);
+  check('RCM bewaart de uitkomst in oorspronkelijke volgorde',
+    relAfwijking(solveGauss(A, rhs), solveSkyline(A, rhs)) < MARGE);
+}
+
+{
+  // Een dicht stelsel heeft geen kleine skyline; de extra graaf zou zijn
+  // geheugenverbruik onnodig nogmaals laten groeien.
+  const A = new Matrix(300, 300);
+  for (let i = 0; i < 300; i++) for (let j = 0; j < 300; j++) {
+    A.set(i, j, i === j ? 2 : 0.01);
+  }
+  const profiel = analyzeMatrix(A, true);
+  check('dichte matrix bewaart geen grote RCM-graaf',
+    profiel.graphTruncated === true && profiel.edges === undefined
+    && !reorderForSkyline(A, profiel).applied);
 }
 
 {
@@ -505,9 +543,19 @@ log("\n[3] Mechanisme: portaal op een doorgaande ligger, vóór herstel");
     check(`${id}: geeft GEEN getallen terug`, r.ok === false, r.ok ? "het model rekende door" : "");
     check(`${id}: meldt een singuliere matrix`, /singular/i.test(r.fout ?? ""), r.fout ?? "");
   }
+  // Tot oktober 2026 wezen beide oplossers hier dezelfde vrijheidsgraad aan:
+  // de vrije draaiing van een scharnierend kolomeinde, de eerste nulrij in
+  // beide eliminatievolgorden. Sinds de controle van 12 oktober 2026 (punt
+  // B10, issue #191) zet de kern zo'n onbepaalde knoopdraaiing vast; wat
+  // overblijft zijn de echte mechanismen in de translaties, rond de twee
+  // losse knopen 6 en 8 op (6500, 2500). Welke van die vrijheidsgraden het
+  // eerst op nul uitkomt, hangt af van de eliminatievolgorde (Gauss pivoteert
+  // rijen, skyline nummert om) — beide antwoorden zijn juist. De eis blijft
+  // dat beide oplossers dat mechanisme aanwijzen, met knoop en richting.
+  const mechanisme = /knoop [68] op \(6500, 2500\) mm kan vrij (horizontaal|verticaal) verschuiven/;
   check(
-    "beide oplossers wijzen dezelfde vrijheidsgraad aan",
-    (uitslagen.gauss.fout ?? "") === (uitslagen.skyline.fout ?? ""),
+    "beide oplossers wijzen het mechanisme bij de losse knopen 6/8 op (6500, 2500) aan",
+    mechanisme.test(uitslagen.gauss.fout ?? "") && mechanisme.test(uitslagen.skyline.fout ?? ""),
     `${uitslagen.gauss.fout} | ${uitslagen.skyline.fout}`,
   );
 }

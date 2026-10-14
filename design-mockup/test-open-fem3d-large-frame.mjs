@@ -106,10 +106,9 @@ assert.equal(momentOnlyMismatch.ok, false, "een sluitende krachtensom mag een fo
 const solverBinary = process.platform === "win32" ? "open-fem-3d.exe" : "open-fem-3d";
 const solverPath = process.env.OPEN_FEM_3D_SOLVER_PATH
   ?? fileURLToPath(new URL(`../src-tauri/target/debug/${solverBinary}`, import.meta.url));
-if (!existsSync(solverPath)) {
-  console.log("Groot 3D-project en belastingen gevalideerd; bouw de 3D-rekenkern voor de numerieke verificatie.");
-  process.exit(0);
-}
+// Zonder kern is de numerieke verificatie niet gedaan: een fout, geen stille
+// geslaagde test (zoals in de andere 3D-tests).
+assert.ok(existsSync(solverPath), `Bouw eerst de Rust-rekenkern (${solverPath}) of zet OPEN_FEM_3D_SOLVER_PATH.`);
 const invokeSolver = (request) => new Promise((resolve, reject) => {
   const child = spawn(solverPath, [], { stdio: ["pipe", "pipe", "pipe"] });
   const stdout = [], stderr = [];
@@ -232,6 +231,18 @@ assert.ok(combined.result.displacements.every((d) =>
   [d.ux, d.uy, d.uz, d.rx, d.ry, d.rz].every(Number.isFinite)));
 assert.equal(combined.result.secondOrder?.converged, true, "tweede-orde-iteraties convergeren");
 assert.equal(combined.result.secondOrder?.stable, true, "grote raamwerk blijft stabiel onder de gekozen lasten");
+// Tweede orde (#60): K_G voert bij een starre translatie geen kracht af, dus de
+// reactiesom is exact die van de lasten, (−32, 0, +320) kN zoals bij daklast en
+// horizontale last samen. De momentensom om de oorsprong in de onvervormde
+// stand wijkt precies het tweede-ordemoment Σ N·(e_x × Δu) af; de
+// onafhankelijke balans van de app trekt dat af en moet dan sluiten.
+for (const [axis, force] of Object.entries({ fx: -32, fy: 0, fz: 320 })) {
+  close(sum(combined.result.reactions, axis), force, 1e-4, `tweede orde: som reactie ${axis}`);
+}
+assert.ok(combined.balance.secondOrderMomentKnm, "de balans rekent bij P-Δ met het tweede-ordemoment");
+assert.equal(combined.balance.ok, true,
+  `tweede orde: de onafhankelijke kracht- en momentbalans sluit (ΔF ${combined.balance.maxImbalanceKn} kN, `
+  + `ΔM ${combined.balance.maxMomentImbalanceKnm} kNm)`);
 const secondOrderForceImbalanceKn = Object.fromEntries(
   ["fx", "fy", "fz"].map((axis, index) => [axis, combined.balance.imbalanceKn[index]]));
 const secondOrderMomentImbalanceKnm = Object.fromEntries(
@@ -248,5 +259,6 @@ console.log(JSON.stringify({
   })),
   secondOrderForceImbalanceKn,
   secondOrderMomentImbalanceKnm,
+  secondOrderMomentKnm: combined.balance.secondOrderMomentKnm,
   secondOrderForceBalanceOk: combined.balance.ok,
 }, null, 2));

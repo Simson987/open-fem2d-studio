@@ -29,7 +29,9 @@
  * `fout`. Hier wordt niets vertaald en niets verzonnen.
  *
  * In een gewone sessie doet deze module niets: de hook vraagt Rust eenmalig
- * `gui_control_actief` en luistert alleen als dat waar is.
+ * `gui_control_actief` en luistert alleen naar opdrachten als dat waar is, of
+ * zodra de schakelaar Instellingen → AI-assistent (MCP) het kanaal aanzet
+ * (event `gui-control:status`, issue #109).
  */
 import { useEffect, useRef, useState } from "react";
 import { useCheckStore } from "../stores/checkStore";
@@ -61,7 +63,9 @@ import type { OpenFem3DView } from "../components/openFem3d/openFem3dCommands";
 import type { OpenFem3DSolveResult } from "../components/openFem3d/openFem3dSolver";
 import type { OpenFem3DSteelChecks } from "../components/openFem3d/openFem3dSteelCheck";
 import type { OpenFem3DConcreteChecks } from "../components/openFem3d/openFem3dConcreteCheck";
+import type { OpenFem3DTimberChecks } from "../components/openFem3d/openFem3dTimberCheck";
 import type { OpenFem3DSelection } from "../components/openFem3d/openFem3dSelection";
+import { openFem3DEnvelopePanelGeometry } from "../components/openFem3d/openFem3dEnvelopePanels";
 import { openFem3DMaximumDisplacementM } from "../components/openFem3d/openFem3dDisplacement";
 import { maakStaalhal, type StaalhalResultaat } from "../components/openFem3d/wizards/staalhal";
 import { importeerIfcAnalyseModel, type IfcAnalyseImport } from "../io/ifcAnalyseImport";
@@ -75,6 +79,9 @@ import {
   wachtOpRekenrust,
 } from "./rapportExport";
 import { appRegister, voerApiUitInApp, type ApiAppActies } from "./apiAdapter";
+import { openFem3DBeamVerloop } from "../components/openFem3d/openFem3dVerloop";
+// Rust meldt met dit event dat het kanaal aan of uit ging (gui_control::EVENT_STATUS).
+import { EVENT_KANAAL_STATUS } from "../lib/mcpKoppeling";
 
 const EVENT_OPDRACHT = "gui-control:opdracht";
 
@@ -157,6 +164,7 @@ export interface BedieningActies {
     solveError: string | null;
     checks: OpenFem3DSteelChecks | null;
     concreteChecks: OpenFem3DConcreteChecks | null;
+    timberChecks: OpenFem3DTimberChecks | null;
     /** Hoogt op bij iedere 3D-modelwijziging en iedere 3D-rekengang. */
     generation: () => number;
     solving: boolean;
@@ -280,20 +288,15 @@ export function useBediening(acties: BedieningActies): boolean {
 
   useEffect(() => {
     let af: (() => void) | null = null;
+    let afStatus: (() => void) | null = null;
     let gestopt = false;
-    (async () => {
-      let aan = false;
-      try {
-        const { invoke } = await import("@tauri-apps/api/core");
-        aan = await invoke<boolean>("gui_control_actief");
-      } catch {
-        aan = false; // geen Tauri, of een oudere app zonder het command
-      }
-      if (!aan || gestopt) return;
-      setActief(true);
+    // Eén keer luisteren naar opdrachten, ook als het begin (kanaal al aan bij
+    // het starten) en het event van de schakelaar tegelijk komen.
+    let koppeling: Promise<void> | null = null;
+    const koppel = () => (koppeling ??= (async () => {
       const { listen } = await import("@tauri-apps/api/event");
       const { invoke } = await import("@tauri-apps/api/core");
-      af = await listen<Opdracht>(EVENT_OPDRACHT, async (e) => {
+      const afmelder = await listen<Opdracht>(EVENT_OPDRACHT, async (e) => {
         const { id, naam, args } = e.payload;
         let antwoord: { ok: true; uitkomst: unknown } | { ok: false; fout: string };
         try {
@@ -308,8 +311,34 @@ export function useBediening(acties: BedieningActies): boolean {
           console.error("[bediening] antwoord niet afgeleverd:", err);
         }
       });
+      if (gestopt) afmelder(); else af = afmelder;
+    })());
+    (async () => {
+      let aan = false;
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        aan = await invoke<boolean>("gui_control_actief");
+      } catch {
+        return; // geen Tauri, of een oudere app zonder het command
+      }
+      if (gestopt) return;
+      // Aan en uit terwijl de app draait (Instellingen → AI-assistent (MCP),
+      // issue #109): Rust meldt elke wijziging met `gui-control:status`.
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        const afmelder = await listen<{ actief: boolean }>(EVENT_KANAAL_STATUS, (e) => {
+          setActief(e.payload.actief);
+          if (e.payload.actief) void koppel();
+        });
+        if (gestopt) afmelder(); else afStatus = afmelder;
+      } catch {
+        // een app zonder het event: alleen de stand bij het starten
+      }
+      if (!aan || gestopt) return;
+      setActief(true);
+      await koppel();
     })();
-    return () => { gestopt = true; af?.(); };
+    return () => { gestopt = true; af?.(); afStatus?.(); };
   }, []);
 
   return actief;
@@ -335,6 +364,27 @@ function beddingVanKanaal(waarde: unknown, staaf: number): Record<string, unknow
     if (inhoud === undefined) continue;
     const veld = BEDDING_KANAAL[sleutel as keyof typeof BEDDING_KANAAL];
     if (!veld) throw new Error(`3D-staaf ${staaf}: onbekend veld in bedding: ${sleutel} (toegestaan: ${Object.keys(BEDDING_KANAAL).join(", ")})`);
+    uit[veld] = inhoud;
+  }
+  return uit;
+}
+
+/** De velden van `plates[].bedding` in het kanaal en hun naam in het 3D-model (#107). */
+const PLAATBEDDING_KANAAL = { k_kn_per_m3: "kKnPerM3", compression_only: "compressionOnly" } as const;
+
+/**
+ * `plates[].bedding` van model_3d_bouwen in modelvorm (#107). Een onbekend
+ * veld is een tikfout en wordt geweigerd; de waarden keurt parseOpenFem3DModel.
+ */
+function plaatBeddingVanKanaal(waarde: unknown, plaat: number): Record<string, unknown> {
+  if (!waarde || typeof waarde !== "object" || Array.isArray(waarde)) {
+    throw new Error(`3D-plaat ${plaat}: bedding moet een object zijn (k_kn_per_m3, compression_only)`);
+  }
+  const uit: Record<string, unknown> = {};
+  for (const [sleutel, inhoud] of Object.entries(waarde as Record<string, unknown>)) {
+    if (inhoud === undefined) continue;
+    const veld = PLAATBEDDING_KANAAL[sleutel as keyof typeof PLAATBEDDING_KANAAL];
+    if (!veld) throw new Error(`3D-plaat ${plaat}: onbekend veld in bedding: ${sleutel} (toegestaan: ${Object.keys(PLAATBEDDING_KANAAL).join(", ")})`);
     uit[veld] = inhoud;
   }
   return uit;
@@ -504,6 +554,7 @@ export async function voerUit(
       const rawPlates = Array.isArray(args.plates) ? args.plates : [];
       const rawSurfaceLoads = Array.isArray(args.surface_loads) ? args.surface_loads : [];
       const rawLoadPanels = Array.isArray(args.load_panels) ? args.load_panels : [];
+      const rawEnvelopePanels = Array.isArray(args.envelope_panels) ? args.envelope_panels : [];
       const rawDiaphragms = Array.isArray(args.diaphragms) ? args.diaphragms : [];
       // Levels (optioneel): label en hoogte in m. Ze vervangen de levels van
       // het stramien; `level` bij een knoop of plaat is een index (vanaf 1).
@@ -535,6 +586,9 @@ export async function voerUit(
           startNodeId: Number(beam.from),
           endNodeId: Number(beam.to),
           ...(typeof beam.profile_name === "string" ? { profileName: beam.profile_name } : {}),
+          // Verlopende staaf (#73); de modelkeuring weigert een niet-tekst, en
+          // een verloop dat niet klopt wordt hieronder met de reden geweigerd.
+          ...(beam.profile_name_end !== undefined ? { profileNameEnd: beam.profile_name_end } : {}),
           ...(typeof beam.material === "string" ? { material: beam.material } : {}),
           ...(beam.roll_angle_deg !== undefined
             ? { rollAngleRad: typeof beam.roll_angle_deg === "number" ? beam.roll_angle_deg * Math.PI / 180 : beam.roll_angle_deg }
@@ -681,7 +735,9 @@ export async function voerUit(
           ...(typeof plate.material === "string" ? { material: plate.material } : {}),
           ...(plate.corner_radius_m !== undefined ? { cornerRadiusM: plate.corner_radius_m } : {}),
           ...(openings !== undefined ? { openings } : {}),
-          ...(levelId ? { levelId } : {}) };
+          ...(levelId ? { levelId } : {}),
+          // Plaat op bedding (#107); null of weggelaten = geen bedding.
+          ...(plate.bedding !== undefined && plate.bedding !== null ? { bedding: plaatBeddingVanKanaal(plate.bedding, index + 1) } : {}) };
       });
       // Een plaat op een level neemt al haar knopen mee (ook die van de
       // openingen); een knoop die zelf aan een ander level hangt, is strijdig.
@@ -722,6 +778,26 @@ export async function voerUit(
           distribution: panel.distribution,
           ...(panel.span_direction !== undefined ? { spanDirection: panel.span_direction } : {}),
           ...(panel.excluded_beams !== undefined ? { excludedBeamIds: panel.excluded_beams } : {}),
+          ...(panel.openings !== undefined ? { openings: Array.isArray(panel.openings)
+            ? panel.openings.map((opening, openingIndex) => ({
+              id: openingIndex + 1, nodeIds: (opening as Record<string, unknown>)?.nodes,
+            })) : panel.openings } : {}),
+        };
+      });
+      const envelopePanels = rawEnvelopePanels.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-schilpaneel ${index + 1} is ongeldig`);
+        const panel = value as Record<string, unknown>;
+        if (!Array.isArray(panel.nodes)) throw new Error(`3D-schilpaneel ${index + 1}: nodes moet een lijst met knoopindices zijn`);
+        return {
+          id: index + 1, nodeIds: panel.nodes, type: panel.type, distribution: panel.distribution,
+          ...(panel.flip_outer_side !== undefined ? { flipOuterSide: panel.flip_outer_side } : {}),
+          ...(panel.span_direction !== undefined ? { spanDirection: panel.span_direction } : {}),
+          ...(panel.cladding_weight_kn_per_m2 !== undefined ? { claddingWeightKnPerM2: panel.cladding_weight_kn_per_m2 } : {}),
+          ...(panel.name !== undefined ? { name: panel.name } : {}),
+          ...(panel.openings !== undefined ? { openings: Array.isArray(panel.openings)
+            ? panel.openings.map((opening, openingIndex) => ({
+              id: openingIndex + 1, nodeIds: (opening as Record<string, unknown>)?.nodes,
+            })) : panel.openings } : {}),
         };
       });
       // Starre schijven: knopen als 1-gebaseerde knoopindices, net als platen.
@@ -740,6 +816,7 @@ export async function voerUit(
       const gelezen = parseOpenFem3DModel({
         nodes, beams, plates, supports, loads, memberLoads, memberPointLoads, thermalLoads, surfaceLoads,
         ...(loadPanels.length > 0 ? { loadPanels } : {}),
+        ...(envelopePanels.length > 0 ? { envelopePanels } : {}),
         ...(diaphragms.length > 0 ? { diaphragms } : {}),
         // Modelinstellingen voor trek-alleen staven; de modelkeuring weigert
         // een niet-boolean.
@@ -747,6 +824,13 @@ export async function voerUit(
           ? { tensionOnlyFitAfterPermanent: args.tension_only_fit_after_permanent } : {}),
         ...(args.tension_only_cross_rule !== undefined ? { tensionOnlyCrossRule: args.tension_only_cross_rule } : {}),
       });
+      // Een verlopende staaf met een eindprofiel dat niet bij het begin past:
+      // dezelfde weigering als model3d.beam.add, met de reden van bepaalVerloop.
+      for (const beam of gelezen.beams) {
+        if (beam.profileNameEnd === undefined) continue;
+        const verloop = openFem3DBeamVerloop(beam);
+        if (verloop.status === "fout") throw new Error(`3D-staaf ${beam.id}: ${verloop.reden}`);
+      }
       let model = gelezen;
       if (levels) {
         // Een gekoppelde knoop moet op de hoogte van zijn level liggen; daarna
@@ -757,6 +841,7 @@ export async function voerUit(
         if (!opHoogte.ok) throw new Error(`levels: het model klopt niet op de levelhoogtes (${opHoogte.refusal.kind})`);
         model = opHoogte.model;
       }
+      for (const panel of model.envelopePanels ?? []) openFem3DEnvelopePanelGeometry(model, panel);
       a().openFem3d.replaceModel(model, levels);
       await verseRender();
       return {
@@ -775,6 +860,7 @@ export async function voerUit(
         aantalTemperatuurlasten: model.thermalLoads?.length ?? 0,
         aantalOppervlaktelasten: model.surfaceLoads?.length ?? 0,
         loadPanelIds: (model.loadPanels ?? []).map((panel) => panel.id),
+        envelopePanelIds: (model.envelopePanels ?? []).map((panel) => panel.id),
         diaphragmIds: (model.diaphragms ?? []).map((diaphragm) => diaphragm.id),
         aantalTrekAlleen: model.beams.filter((beam) => beam.tensionOnly).length,
         trekAlleenGemonteerdNaPermanent: model.tensionOnlyFitAfterPermanent === true,
@@ -1214,6 +1300,7 @@ function openFem3dUitlezen(a: BedieningActies) {
     })),
     steel: a.openFem3d.checks,
     concrete: a.openFem3d.concreteChecks,
+    timber: a.openFem3d.timberChecks,
     checksRunning: a.openFem3d.checksRunning,
     solveError: a.openFem3d.solveError,
     checksError: a.openFem3d.checksError,

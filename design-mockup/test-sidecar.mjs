@@ -172,9 +172,10 @@ log("\n[1] Kanaal: pipelining, volgorde, exitcode en stdout-hygiëne");
   // staalhal_uitwerken; zie test-staalhal-sidecar.mjs), twee voor de import
   // van IFC-analysemodellen (ifc_importeren, ifc_uitwerken; zie
   // test-ifc-analyse-sidecar.mjs) en twee voor de API-commando's
-  // (api_catalogus, api_uitvoeren; zie test-api-sidecar.mjs).
-  ok("alle elf bewerkingen gemeld", Array.isArray(h.ops) && h.ops.length === 11
-    && ["staalhal_maken", "staalhal_uitwerken", "ifc_importeren", "ifc_uitwerken", "api_catalogus", "api_uitvoeren"]
+  // (api_catalogus, api_uitvoeren; zie test-api-sidecar.mjs) en de lokale
+  // extensie-import (zie test-extensie-sidecar.mjs).
+  ok("alle twaalf bewerkingen gemeld", Array.isArray(h.ops) && h.ops.length === 12
+    && ["staalhal_maken", "staalhal_uitwerken", "ifc_importeren", "ifc_uitwerken", "api_catalogus", "api_uitvoeren", "extensie_importeren"]
       .every((op) => h.ops.includes(op)),
     JSON.stringify(h.ops));
 }

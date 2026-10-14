@@ -22,6 +22,7 @@ import type { Beam, BeamCheckConfig, LoadCase, Node, Support } from "../componen
 import type { SolverResult } from "../components/fem/solver/types";
 import type { LoadCombination } from "../components/fem/solver/combinations";
 import { combinatiesVanSoort, soortVanCombinatie, zonderBgtEindtoestand } from "../components/fem/solver/combinations";
+import { tussenStations, veldPunten, VELD_MARGE } from "../components/fem/solver/veldExtremen";
 import {
   STANDAARD_GEVOLGKLASSE, type CombinatieSoort, type Gevolgklasse,
 } from "../components/fem/solver/normcombinaties";
@@ -43,8 +44,12 @@ import {
   zeegNotities,
   zeegVoorToets,
 } from "./referentierichting";
-import { bepaalStaafeinden, voegDoorgaandeLijnenSamen } from "./doorgaandeLijn";
-import { alphaCrStaafNotitie, type StabiliteitVoorToets } from "../components/fem/solver/alphaCr";
+import { bepaalStaafeinden, steunpuntenOpLijn, voegDoorgaandeLijnenSamen, type PlaatVoorEinden } from "./doorgaandeLijn";
+import {
+  alphaCrStaafNotitie,
+  zijdelingseKnikInVlakModel,
+  type StabiliteitVoorToets,
+} from "../components/fem/solver/alphaCr";
 import { STEEL_SECTIONS } from "./steelSections.generated";
 import { profielAliasSleutel } from "./strip";
 import { bepaalVerloop } from "./sectionResolver";
@@ -52,6 +57,17 @@ import { STEEL_GRADES } from "./steelGrades";
 import { STANDAARD_BIJLAGE, type NationaleBijlageCode } from "./normAanduidingen";
 import { blijvendeZakking } from "./blijvendeZakking";
 import { kipsteunenVanStaaf } from "./kipsteunen";
+import {
+  delenNotitie,
+  doorbuigingsDelen,
+  inklemmingVanStaaf,
+  lRepVanDeelMm,
+  uitkragingNotitie,
+  uitkragingZakkingMm,
+  type DoorbuigingsDeel,
+  type Inklemming,
+} from "./uitkraging";
+import type { Staafeinden } from "./types/steel/Staafeinden";
 
 // ── Per-staaf toetsconfiguratie (Beam.checkConfig) ─────────────────────────
 /** UI-doorbuigingsklasse → ts-rs/Rust-enum. Ontbreekt → "Floor". */
@@ -207,11 +223,21 @@ export function deflectionNotesFor(
   nodes: Node[],
   beams: Beam[],
   supports: Support[] | undefined,
+  inklemming: Inklemming | null = null,
+  deel?: DoorbuigingsDeel,
 ): string[] {
+  // Bij een uitkraging NIET de koorde: zie `lib/uitkraging.ts` (controle
+  // 2026-10, punt K5). Bij een veld van een lijn in delen: de koorde tussen de
+  // eindpunten van dat veld.
   const notes = [
-    "w is gemeten vanaf de koorde tussen de verplaatste staafeinden: de starre " +
-      "zakking en rotatie van de staaf zelf tellen niet mee, alleen de kromming " +
-      "ertussen.",
+    inklemming
+      ? uitkragingNotitie(inklemming, deel)
+      : deel && deel.soort === "veld"
+        ? "w is gemeten vanaf de koorde tussen de verplaatste eindpunten van het veld: de starre " +
+          "zakking en rotatie van het veld tellen niet mee, alleen de kromming ertussen."
+        : "w is gemeten vanaf de koorde tussen de verplaatste staafeinden: de starre " +
+          "zakking en rotatie van de staaf zelf tellen niet mee, alleen de kromming " +
+          "ertussen.",
   ];
   const vervolg = collinearContinuations(beam, nodes, beams, supports);
   if (vervolg.length > 0) {
@@ -253,8 +279,11 @@ export interface SteelBuildData {
    * hele model.
    */
   alleBeams?: Beam[];
-  /** Platen: een hoekknoop van een plaat is geen vrij staafeind. */
-  plates?: { nodeIds: number[] }[];
+  /**
+   * Platen: een knoop in of op een plaat (hoek, rand, binnenin) is geen vrij
+   * staafeind — zie `knoopInPlaat` in `lib/doorgaandeLijn.ts`.
+   */
+  plates?: PlaatVoorEinden[];
   /**
    * Het analysetype en α_cr per combinatie (basisaudit nr 27). Bij eerste
    * orde onder de grens van 5.2.1(3) krijgt elke op druk belaste staaf met een
@@ -306,6 +335,12 @@ export function beamLengthMm(beam: Beam, nodes: Node[]): number {
  * Krachtsverloop van één staaf voor één combinatie → ForcePoint[].
  * Eenheden: solver levert N / N·mm; het EN-contract wil kN / kN·m.
  * 2D-solver: n_ed=N, vz_ed=V, my_ed=M; vy/mt/mz = 0.
+ *
+ * Naast de stations ook het VELDEXTREEM van M waar dat tussen twee stations
+ * ligt (V = 0, controle 12 oktober 2026, punt C8): de toets las anders 25,20
+ * kNm waar 25,3125 kNm hoort. Zo'n punt staat op zijn plaats in de rij, met
+ * V = 0 en N lineair tussen de buurstations. Valt het extreem op een station,
+ * dan komt er niets bij.
  */
 function forcePointsForCombination(
   beamId: number,
@@ -315,19 +350,31 @@ function forcePointsForCombination(
   const ef = result.elements.get(beamId);
   if (!ef || ef.stations_mm.length === 0) return [];
   const pts: ForcePoint[] = [];
+  const punt = (position_mm: number, n: number, v: number, m: number): ForcePoint => ({
+    combination_id: comboId,
+    position_mm,
+    forces: {
+      n_ed: n / 1000,        // N → kN
+      vy_ed: 0,
+      vz_ed: v / 1000,       // N → kN
+      mt_ed: 0,
+      my_ed: m / 1e6,        // N·mm → kN·m
+      mz_ed: 0,
+    },
+  });
+  const extra = veldPunten(ef.stations_mm, ef.bendingMoment, ef.shearForce);
+  const marge = VELD_MARGE * Math.max(0, ...ef.bendingMoment.map((m) => (Number.isFinite(m) ? Math.abs(m) : 0)));
   for (let i = 0; i < ef.stations_mm.length; i++) {
-    pts.push({
-      combination_id: comboId,
-      position_mm: ef.stations_mm[i],
-      forces: {
-        n_ed: (ef.normalForce[i] ?? 0) / 1000,        // N → kN
-        vy_ed: 0,
-        vz_ed: (ef.shearForce[i] ?? 0) / 1000,        // N → kN
-        mt_ed: 0,
-        my_ed: (ef.bendingMoment[i] ?? 0) / 1e6,      // N·mm → kN·m
-        mz_ed: 0,
-      },
-    });
+    pts.push(punt(ef.stations_mm[i], ef.normalForce[i] ?? 0, ef.shearForce[i] ?? 0, ef.bendingMoment[i] ?? 0));
+    for (const p of extra) {
+      if (p.i !== i) continue;
+      // Alleen een echt extreem tussen de stations: groter (in absolute zin)
+      // dan beide buren. Een stationair punt dat daar niet boven uitkomt,
+      // voegt niets toe aan de toets.
+      const buren = Math.max(Math.abs(ef.bendingMoment[i] ?? 0), Math.abs(ef.bendingMoment[i + 1] ?? 0));
+      if (Math.abs(p.waarde) <= buren + marge) continue;
+      pts.push(punt(p.x, tussenStations(ef.normalForce, p.i, p.s), 0, p.waarde));
+    }
   }
   return pts;
 }
@@ -410,10 +457,16 @@ function nodalDeflectionMm(beam: Beam, result: SolverResult): number {
  * veldzakking-uitbreiding), dan het knooppad met een console.warn. Dat pad
  * levert een ABSOLUTE verplaatsing en géén koorde-relatieve doorbuiging; het
  * kan er dus zowel naast zitten als de veldzakking missen.
+ *
+ * UITKRAGING. Met een `inklemming` is de staaf een uitkraging en is de maat
+ * NIET de koorde maar de zakking ten opzichte van het ingeklemde eind,
+ * w(x) − w(inklemming) — zie `lib/uitkraging.ts`. De koorde zou de zakking van
+ * het vrije eind grotendeels wegtrekken (controle 2026-10, punt K5).
  */
 export function extractFieldDeflectionMm(
   beam: Beam,
   result: SolverResult | null,
+  inklemming: Inklemming | DoorbuigingsDeel | null = null,
 ): number {
   if (!result) return 0;
   const ef = result.elements.get(beam.id);
@@ -428,7 +481,49 @@ export function extractFieldDeflectionMm(
     );
     return nodalDeflectionMm(beam, result);
   }
-  return chordRelativeMaxMm(stations, ef.stations_mm);
+  if (inklemming !== null && typeof inklemming === "object") {
+    return zakkingVanDeelMm(stations, ef.stations_mm, inklemming, ef.rotation);
+  }
+  return inklemming
+    ? uitkragingZakkingMm(stations, inklemming)
+    : chordRelativeMaxMm(stations, ef.stations_mm, ef.rotation);
+}
+
+/**
+ * De zakking van één DEEL van de staaf (`lib/uitkraging.ts`,
+ * `DoorbuigingsDeel`), teken behouden: alleen de stations binnen het deel, en
+ * daarop de koorde tussen de eindpunten van het deel, of bij een overstek de
+ * zakking ten opzichte van de inklemming van het deel. Zonder bruikbare
+ * stationsposities is het deel niet af te bakenen; dan de hele staaf. Met
+ * `theta` (dw/dx per station) telt ook het maximum tussen de stations mee,
+ * zoals bij de hele staaf (`chordRelativeMaxMm`).
+ */
+export function zakkingVanDeelMm(
+  w: readonly number[],
+  stationsMm: readonly number[] | undefined,
+  deel: DoorbuigingsDeel,
+  theta?: readonly number[],
+): number {
+  const n = w.length;
+  const xOk = Array.isArray(stationsMm) && stationsMm.length === n;
+  const idx: number[] = [];
+  if (xOk) {
+    for (let i = 0; i < n; i++) {
+      const x = stationsMm![i];
+      if (Number.isFinite(x) && x >= deel.vanMm - 0.5 && x <= deel.totMm + 0.5) idx.push(i);
+    }
+  }
+  const thetaOk = Array.isArray(theta) && theta.length === n;
+  if (!xOk || idx.length < 2) {
+    const ws = [...w];
+    return deel.inklemming
+      ? uitkragingZakkingMm(ws, deel.inklemming)
+      : chordRelativeMaxMm(ws, stationsMm ? [...stationsMm] : undefined, thetaOk ? [...theta!] : undefined);
+  }
+  const ws = idx.map((i) => w[i]);
+  const xs = idx.map((i) => stationsMm![i]);
+  const ts = thetaOk ? idx.map((i) => theta![i]) : undefined;
+  return deel.inklemming ? uitkragingZakkingMm(ws, deel.inklemming) : chordRelativeMaxMm(ws, xs, ts);
 }
 
 /**
@@ -437,10 +532,18 @@ export function extractFieldDeflectionMm(
  * De koorde loopt van `w[0]` naar `w[n−1]`, lineair in x. `stationsMm` mag
  * ontbreken of een andere lengte hebben — dan wordt de index als parameter
  * gebruikt, wat op het vaste 21-stationsraster op hetzelfde neerkomt.
+ *
+ * Met `theta` (= dw/dx per station, `ElementForces.rotation`) telt ook het
+ * maximum TUSSEN de stations mee: waar de helling van w − koorde nul is
+ * (controle 12 oktober 2026, punt C8; zie solver/veldExtremen.ts). Een
+ * ingeklemde ligger 6 m onder 10 kN/m kreeg hier 3,986 mm op station 3600,
+ * terwijl het maximum 3,998 mm op x = 3471 is. Zonder `theta` (of zonder
+ * bruikbare x) blijft het bij de stations.
  */
 export function chordRelativeMaxMm(
   w: number[],
   stationsMm?: number[],
+  theta?: number[],
 ): number {
   const n = w.length;
   if (n === 0) return 0;
@@ -468,6 +571,17 @@ export function chordRelativeMaxMm(
       d = v - (wStart + t * (wEnd - wStart));
     }
     if (Math.abs(d) > Math.abs(max)) max = d;
+  }
+  if (xOk && Array.isArray(theta) && theta.length === n) {
+    // w − koorde en zijn helling θ − (wEind − wBegin)/span per station.
+    const helling = koordeBruikbaar && span !== 0 ? (wEnd - wStart) / span : 0;
+    const t = (i: number) => (stationsMm![i] - x0) / span;
+    const d = w.map((v, i) => (koordeBruikbaar ? v - (wStart + t(i) * (wEnd - wStart)) : v));
+    const dd = theta.map((th) => th - helling);
+    const top = Math.abs(max);
+    for (const p of veldPunten(stationsMm!, d, dd, "zakking")) {
+      if (Math.abs(p.waarde) > top * (1 + VELD_MARGE) && Math.abs(p.waarde) > Math.abs(max)) max = p.waarde;
+    }
   }
   return max;
 }
@@ -504,6 +618,39 @@ export function equivalentUdlFromMoments(env: ForcePoint[], lengthMm: number): n
   const pijlKnm = best.forces.my_ed - (mStart + mEnd) / 2; // kNm
   const qKnPerM = (8 * pijlKnm) / Math.pow(lengthMm / 1000, 2); // kN/m ≡ N/mm
   return Math.abs(qKnPerM);
+}
+
+/**
+ * De belasting voor de kiptoets (6.3.2): de equivalente q en het
+ * aangrijpingspunt. Eén regel voor 2D en 3D (#111); tot oktober 2026 gaf de
+ * 3D-toets hier 0 en 0 mee, de last in het dwarskrachtcentrum, en kwam de
+ * kip-UC daar lager uit dan in 2D.
+ *
+ * - q_equiv uit de momentenlijn van de combinatie met de grootste |My| (het
+ *   kipveld), zie `equivalentUdlFromMoments`.
+ * - z_a = +h/2: de last grijpt aan op de bovenflens. `c2_gecorrigeerd` maakt
+ *   daar een negatieve C₂ van, wat M_cr verlaagt; veilig-zijdig, welke flens
+ *   ook gedrukt is. Bij hogging (gedrukte ONDERflens) grijpt een neerwaartse
+ *   last aan op de getrokken flens en werkt hij in werkelijkheid
+ *   stabiliserend; de aanname is daar conservatief in plaats van juist. Het
+ *   echte aangrijpingspunt staat niet in de invoer; dat hoort een expliciet
+ *   veld te worden.
+ */
+export function kipBelasting(
+  envelope: ForcePoint[],
+  lengthMm: number,
+  hMm: number,
+): { q_equiv_n_per_mm: number; z_a_mm: number } {
+  let govComboId = envelope[0]?.combination_id;
+  let govAbsMy = 0;
+  for (const p of envelope) {
+    if (Math.abs(p.forces.my_ed) > govAbsMy) {
+      govAbsMy = Math.abs(p.forces.my_ed);
+      govComboId = p.combination_id;
+    }
+  }
+  const govPoints = envelope.filter((p) => p.combination_id === govComboId);
+  return { q_equiv_n_per_mm: equivalentUdlFromMoments(govPoints, lengthMm), z_a_mm: hMm / 2 };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -677,6 +824,18 @@ export interface DoorbuigingsInvoer {
    * de reden staat dan in `notes`.
    */
   wPermMm: number;
+  /**
+   * w_add = w₂ + w₃ (mm, teken behouden) als het grootste verschil w_c − w₁
+   * NIET bij de combinatie met de grootste |w| hoort; gaat dan als
+   * `deflection_add_mm` naar de kern. Ontbreekt = de kern rekent w − w₁.
+   */
+  wAddMm?: number;
+  /**
+   * De lengte (mm) van het getoetste DEEL van een doorgaande lijn met een
+   * overstek (`doorbuigingsDelen`); gaat als `deflection_length_m` naar de
+   * kern. Ontbreekt = de hele staaf.
+   */
+  deelLengteMm?: number;
   isUitkraging: boolean;
   /** Welke eis is toegepast: A1.4.3(3)/(4) of A1.4.3(7). */
   eis: "vloerdak" | "zijdelings";
@@ -695,6 +854,12 @@ export function bepaalDoorbuigingsInvoer(
     SteelBuildData,
     "nodes" | "beams" | "supports" | "combinations" | "combinationResults" | "loadCases"
   >,
+  staafeinden?: Staafeinden,
+  /**
+   * De steunpunten op een doorgaande lijn (mm vanaf x = 0), zie
+   * `steunpuntenOpLijn`; leeg of weglaten bij een gewone staaf.
+   */
+  steunpuntenMm: readonly number[] = [],
 ): DoorbuigingsInvoer {
   const cfg = beam.checkConfig ?? {};
   // Zonder de BGT-eindtoestand van hout (EN 1995-1-1 2.2.3(4)): die variant is
@@ -707,7 +872,16 @@ export function bepaalDoorbuigingsInvoer(
   if (cfg.deflectionClass === undefined && isOverwegendVerticaal(beam, data.nodes)) {
     return zijdelingseEis(beam, data, slsCombos);
   }
-  return vloerDakEis(beam, data, slsCombos);
+  // Uitkraging? Een vrij staafeind (geen oplegging, geen aansluitende staaf)
+  // of de klasse "uitkraging". Dan meet de zakking vanaf het ingeklemde eind
+  // en geldt ℓ_rep = 2·L — zie `lib/uitkraging.ts`.
+  // Loopt een doorgaande lijn over een kolomkop door in een overstek, dan zijn
+  // het veld en het overstek twee delen met elk hun eigen ℓ_rep — zie
+  // `doorbuigingsDelen`.
+  const einden = staafeinden ?? bepaalStaafeinden(beam, data.nodes, data.beams, data.supports, new Set());
+  const inklemming = inklemmingVanStaaf(einden, cfg.deflectionClass === "cantilever");
+  const delen = doorbuigingsDelen(beamLengthMm(beam, data.nodes), inklemming, steunpuntenMm);
+  return vloerDakEis(beam, data, slsCombos, delen);
 }
 
 /** A1.4.3(7): horizontale verplaatsing over de hoogte, grens h/300. */
@@ -862,18 +1036,30 @@ function zijdelingseEis(
   };
 }
 
-/** A1.4.3(3)/(4): de vloer- en dakeisen, met de zakking uit de BGT-combinaties. */
-function vloerDakEis(
+/** De zakkingen van één deel van de staaf over de BGT-combinaties. */
+interface DeelMeting {
+  gewogen: { naam: string; uitdrukking: string; w: number }[];
+  ontbreekt: string[];
+  nietHerkend: string[];
+  maatgevend: { naam: string; uitdrukking: string; w: number } | null;
+  wPerm: ReturnType<typeof blijvendeZakking>;
+  /**
+   * w_add per combinatie: het grootste verschil w_c − w₁ (teken behouden), met
+   * de combinatie waarin het optreedt; `null` zonder gemeten combinatie.
+   */
+  wAdd: { w: number; naam: string } | null;
+}
+
+/** Meet de zakkingen van één deel (of van de hele staaf) over de combinaties. */
+function meetVloerDak(
   beam: Beam,
   data: Pick<
     SteelBuildData,
     "nodes" | "beams" | "supports" | "combinations" | "combinationResults" | "loadCases"
   >,
   slsCombos: LoadCombination[],
-): DoorbuigingsInvoer {
-  const cfg = beam.checkConfig ?? {};
-  const klasse = mapDeflectionClass(cfg.deflectionClass);
-
+  meting: Inklemming | DoorbuigingsDeel | null,
+): DeelMeting {
   // ── Welke zakking gaat de kern in ────────────────────────────────────────
   //
   // De kern leidt w_fin én w_add uit ÉÉN zakking af, terwijl de norm er twee
@@ -905,7 +1091,7 @@ function vloerDakEis(
       gewogen.push({
         naam: combo.name,
         uitdrukking: norm.uitdrukking,
-        w: extractFieldDeflectionMm(beam, result),
+        w: extractFieldDeflectionMm(beam, result, meting),
       });
     }
     if (!gevonden) ontbreekt.push(norm.uitdrukking);
@@ -930,7 +1116,7 @@ function vloerDakEis(
     gewogen.push({
       naam: combo.name,
       uitdrukking: "niet herkend als 6.14b/6.15b/6.16b",
-      w: extractFieldDeflectionMm(beam, result),
+      w: extractFieldDeflectionMm(beam, result, meting),
     });
     nietHerkend.push(combo.name);
   }
@@ -939,7 +1125,144 @@ function vloerDakEis(
     if (maatgevend && Math.abs(g.w) > Math.abs(maatgevend.w)) maatgevend = g;
   }
 
-  const notes = deflectionNotesFor(beam, data.nodes, data.beams, data.supports);
+  // w_perm — het blijvende deel w1 uit figuur NB.1 — komt uit de BGT-combinatie
+  // die uitsluitend de blijvende belastinggevallen draagt, elk met factor 1,0.
+  // De standaardset heeft er een: uitdrukking 6.16b in de opstelling zonder
+  // veranderlijke gevallen. Zie `lib/blijvendeZakking.ts` voor de NB-tekst en
+  // voor de eisen aan de kandidaat.
+  //
+  // Tot september 2026 ging hier onvoorwaardelijk 0 naar de kern, en was
+  // w_add dus gelijk aan w_fin: veilig-zijdig (w2 + w3 ≤ w_tot), maar niet de
+  // grootheid die A1.4.3(3) bedoelt, en beide doorbuigingsregels toonden
+  // hetzelfde getal. Gemeten voor IPE 200 S235, L = 5000 mm, G = 2 kN/m naast
+  // Q = 3 kN/m: w_fin 9,99 mm, w1 4,00 mm, dus w_add 5,99 mm in plaats van 9,99.
+  const wPerm = blijvendeZakking({
+    combinations: data.combinations,
+    loadCases: data.loadCases,
+    meet: (combo) => {
+      const r = data.combinationResults.get(combo.id) ?? null;
+      if (!r || !r.elements.has(beam.id)) return null;
+      return extractFieldDeflectionMm(beam, r, meting);
+    },
+  });
+
+  // w_add = w2 + w3 PER COMBINATIE: het grootste verschil w_c − w₁, met teken.
+  // Niet "w − w₁ van de combinatie met de grootste |w|": bij een overstek dat
+  // onder de blijvende last omhoog gaat en onder de veranderlijke omlaag, is de
+  // grootste |w| die van de blijvende last zelf, en werd w_add zo 0 (controle
+  // 2026-10, punt K5: IPE 300, veld 6 m en overstek 2 m, w_add 0 waar
+  // |−9,43 − 15,48| = 24,9 mm hoort).
+  let wAdd: { w: number; naam: string } | null = null;
+  for (const g of gewogen) {
+    const d = g.w - wPerm.mm;
+    if (!wAdd || Math.abs(d) > Math.abs(wAdd.w)) wAdd = { w: d, naam: g.naam };
+  }
+
+  return { gewogen, ontbreekt, nietHerkend, maatgevend, wPerm, wAdd };
+}
+
+/**
+ * De verhouding van de zakkingen van een deel tot zijn grenzen, op de manier
+ * van de kern (deflection.rs: w_fin tegen ℓ_rep/250, w_add tegen de noemer van
+ * de klasse uit A1.4.3(3); bij "Custom" en bij een opgegeven w_add-noemer op de
+ * lengte van het deel zonder verdubbeling). Alleen om het maatgevende deel te
+ * kiezen; de toets zelf rekent de kern.
+ */
+function deelVerhouding(
+  deel: DoorbuigingsDeel,
+  klasse: DeflectionClass,
+  noemerFin: number,
+  noemerAdd: number,
+  wFin: number,
+  wAdd: number,
+): number {
+  const lengte = deel.totMm - deel.vanMm;
+  const lRep = lRepVanDeelMm(deel);
+  const nFin = klasse === "Custom" ? noemerFin : 250;
+  const lFin = klasse === "Custom" ? lengte : lRep;
+  const nAdd =
+    noemerAdd > 0
+      ? noemerAdd
+      : klasse === "Custom"
+        ? noemerFin
+        : klasse === "FloorBrittlePartitions"
+          ? 500
+          : klasse === "Roof"
+            ? 250
+            : 1000 / 3;
+  const lAdd = noemerAdd > 0 || klasse === "Custom" ? lengte : lRep;
+  const r = (w: number, l: number, n: number) => (l > 0 && n > 0 ? Math.abs(w) / (l / n) : 0);
+  return Math.max(r(wFin, lFin, nFin), r(wAdd, lAdd, nAdd));
+}
+
+/** A1.4.3(3)/(4): de vloer- en dakeisen, met de zakking uit de BGT-combinaties. */
+function vloerDakEis(
+  beam: Beam,
+  data: Pick<
+    SteelBuildData,
+    "nodes" | "beams" | "supports" | "combinations" | "combinationResults" | "loadCases"
+  >,
+  slsCombos: LoadCombination[],
+  delen: DoorbuigingsDeel[],
+): DoorbuigingsInvoer {
+  const cfg = beam.checkConfig ?? {};
+  // Een lijn in delen (veld en overstek): de klasse "uitkraging" hoort bij het
+  // overstek alleen, en dat zegt `is_cantilever` al per deel. Met de klasse zelf
+  // zou de kern ook het VELD met ℓ_rep = 2·L toetsen; daarom dan de
+  // vloerklasse, die voor w_add dezelfde categorie heeft (deflection.rs).
+  const klasseOpgegeven = mapDeflectionClass(cfg.deflectionClass);
+  const klasse: DeflectionClass = delen.length > 1 && klasseOpgegeven === "Cantilever" ? "Floor" : klasseOpgegeven;
+  // De kern gebruikt de noemer alleen bij klasse "Custom"
+  // (deflection.rs::default_numerator); anders geldt de klassenoemer, en die
+  // is voor elke klasse 250: w_max ≤ ℓ_rep/250 uit NEN-EN 1990:2002/NB:2019
+  // A1.4.3(4). Hier stond tot oktober 2026 333 — de grens van w2 + w3 — en dat
+  // getal stond dan in de toetsinvoer terwijl de kern er niet mee rekende
+  // (controle 2026-10, punt B15).
+  // `??` en niet `||`, met opzet: alleen een ONTBREKENDE noemer wordt 333. Een
+  // opgegeven 0 of negatief getal gaat ongewijzigd door, en de kern weigert de
+  // staaf dan met reden (deflection.rs::keur_noemers). Tot september 2026 gaf
+  // die 0 daar een oneindige grens en status Ok.
+  const noemerFin = cfg.deflectionClass === "custom" ? cfg.deflectionLimitNumerator ?? 333 : 250;
+  // 0 = de kern leidt de w_add-noemer af uit de klasse volgens
+  // NEN-EN 1990:2002/NB:2019 A1.4.3(3); dat is de normale gang van zaken. Een
+  // getal hier overschrijft die klassewaarde en is alleen bedoeld om een
+  // externe referentie-uitwerking met een vaste noemer na te rekenen.
+  const noemerAdd = cfg.deflectionAddLimitNumerator ?? 0;
+
+  // Eén deel (elke gewone staaf): de hele staaf, met de inklemming van een
+  // uitkraging of vanaf de koorde — precies zoals vóór de delen. Meer delen
+  // (een doorgaande lijn met een overstek, `doorbuigingsDelen`): elk deel apart
+  // gemeten, en het deel met de grootste verhouding tot zijn grens gaat de
+  // kern in, met zijn eigen lengte.
+  const enkel = delen.length === 1;
+  const metingen = delen.map((deel) => meetVloerDak(beam, data, slsCombos, enkel ? deel.inklemming : deel));
+  let m = 0;
+  if (!enkel) {
+    let beste = -1;
+    metingen.forEach((mt, i) => {
+      const v = deelVerhouding(delen[i], klasse, noemerFin, noemerAdd, mt.maatgevend?.w ?? 0, mt.wAdd?.w ?? 0);
+      if (v > beste) {
+        beste = v;
+        m = i;
+      }
+    });
+  }
+  const { gewogen, ontbreekt, nietHerkend, maatgevend, wPerm, wAdd } = metingen[m];
+  const deel = delen[m];
+  const inklemming = deel.inklemming;
+
+  const notes = deflectionNotesFor(beam, data.nodes, data.beams, data.supports, inklemming, enkel ? undefined : deel);
+  if (!enkel) {
+    notes.splice(
+      1,
+      0,
+      delenNotitie(
+        delen,
+        metingen.map((mt) => ({ wFinMm: mt.maatgevend?.w ?? 0, wAddMm: mt.wAdd?.w ?? 0 })),
+        m,
+      ),
+    );
+  }
 
   if (!maatgevend) {
     notes.push(
@@ -982,48 +1305,38 @@ function vloerDakEis(
       );
     }
   }
-
-  // w_perm — het blijvende deel w1 uit figuur NB.1 — komt uit de BGT-combinatie
-  // die uitsluitend de blijvende belastinggevallen draagt, elk met factor 1,0.
-  // De standaardset heeft er een: uitdrukking 6.16b in de opstelling zonder
-  // veranderlijke gevallen. Zie `lib/blijvendeZakking.ts` voor de NB-tekst en
-  // voor de eisen aan de kandidaat.
-  //
-  // Tot september 2026 ging hier onvoorwaardelijk 0 naar de kern, en was
-  // w_add dus gelijk aan w_fin: veilig-zijdig (w2 + w3 ≤ w_tot), maar niet de
-  // grootheid die A1.4.3(3) bedoelt, en beide doorbuigingsregels toonden
-  // hetzelfde getal. Gemeten voor IPE 200 S235, L = 5000 mm, G = 2 kN/m naast
-  // Q = 3 kN/m: w_fin 9,99 mm, w1 4,00 mm, dus w_add 5,99 mm in plaats van 9,99.
-  const wPerm = blijvendeZakking({
-    combinations: data.combinations,
-    loadCases: data.loadCases,
-    meet: (combo) => {
-      const r = data.combinationResults.get(combo.id) ?? null;
-      if (!r || !r.elements.has(beam.id)) return null;
-      return extractFieldDeflectionMm(beam, r);
-    },
-  });
   notes.push(...wPerm.notes);
+
+  // w_add apart naar de kern als het grootste verschil met w₁ NIET bij de
+  // combinatie met de grootste |w| hoort; anders rekent de kern hetzelfde
+  // getal uit w − w₁, en blijft de invoer byte-gelijk aan vroeger.
+  const wMm = maatgevend ? maatgevend.w : 0;
+  const wAddApart =
+    wAdd !== null && Math.abs(wAdd.w - (wMm - wPerm.mm)) > 1e-6 ? wAdd.w : undefined;
+  if (wAddApart !== undefined && wAdd) {
+    notes.push(
+      `w_add = ${nl(wAdd.w, 2)} mm komt uit "${wAdd.naam}": daar is het verschil met w₁ = ` +
+        `${nl(wPerm.mm, 2)} mm het grootst. De combinatie met de grootste |w| ` +
+        `("${maatgevend?.naam ?? "—"}") geeft w − w₁ = ${nl(wMm - wPerm.mm, 2)} mm; w_add gaat ` +
+        "daarom apart naar de kern (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur NB.1: w2 + w3 = " +
+        "w_tot − w1, per combinatie).",
+    );
+  }
 
   return {
     klasse,
-    // De kern gebruikt de noemer alleen bij klasse "Custom"
-    // (deflection.rs::default_numerator); anders geldt de klassenoemer.
-    // `??` en niet `||`, met opzet: alleen een ONTBREKENDE noemer wordt 333.
-    // Een opgegeven 0 of negatief getal gaat ongewijzigd door, en de kern
-    // weigert de staaf dan met reden (deflection.rs::keur_noemers). Tot
-    // september 2026 gaf die 0 daar een oneindige grens en status Ok.
-    noemerFin: cfg.deflectionClass === "custom" ? cfg.deflectionLimitNumerator ?? 333 : 333,
-    // 0 = de kern leidt de w_add-noemer af uit de klasse volgens
-    // NEN-EN 1990:2002/NB:2019 A1.4.3(3); dat is de normale gang van zaken.
-    // Een getal hier overschrijft die klassewaarde en is alleen bedoeld om een
-    // externe referentie-uitwerking met een vaste noemer na te rekenen.
-    noemerAdd: cfg.deflectionAddLimitNumerator ?? 0,
-    wMm: maatgevend ? maatgevend.w : 0,
+    noemerFin,
+    noemerAdd,
+    wMm,
     // 0 wanneer er geen blijvende BGT-combinatie is; `wPerm.notes` zegt dan
     // waarom, en dat w_add daardoor de volledige zakking krijgt.
     wPermMm: wPerm.mm,
-    isUitkraging: cfg.deflectionClass === "cantilever",
+    ...(wAddApart !== undefined ? { wAddMm: wAddApart } : {}),
+    // Bij een lijn in delen: de lengte van het getoetste deel.
+    ...(enkel ? {} : { deelLengteMm: deel.totMm - deel.vanMm }),
+    // De klasse "uitkraging" of een herkend vrij staafeind (van het getoetste
+    // deel): ℓ_rep = 2·L in de kern, voor w_fin én w_add.
+    isUitkraging: inklemming !== null,
     eis: "vloerdak",
     notes,
   };
@@ -1038,8 +1351,8 @@ function vloerDakEis(
  *  - kniklengte: leeg → 0, en de kern kiest (staaflengte, of om z uit
  *    kipsteunen aan beide flenzen) en meldt de herkomst; geen kipsteunen;
  *  - doorbuiging: zie `bepaalDoorbuigingsInvoer` — een overwegend horizontale
- *    staaf krijgt klasse "vloer" (w_fin op L/333, w_add op 3/1 000 · ℓ_rep uit
- *    NEN-EN 1990:2002/NB:2019 A1.4.3(3), tweede gedachtestreepje), een
+ *    staaf krijgt klasse "vloer" (w_fin op ℓ_rep/250 uit NEN-EN 1990:2002/NB:2019
+ *    A1.4.3(4), w_add op 3/1 000 · ℓ_rep uit A1.4.3(3), tweede gedachtestreepje), een
  *    overwegend verticale staaf de zijdelingse eis h/300 uit A1.4.3(7);
  *    geen zeeg;
  *  - gevolgklasse: die van het project (`data.gevolgklasse`, anders CC2),
@@ -1178,33 +1491,47 @@ export function buildSteelCheckInputs(ruweData: SteelBuildData): SteelBuildResul
 
     const forcesEnvelope = buildForcesEnvelope(beam.id, ulsCombos, data.combinationResults);
 
-    // Maatgevende combinatie voor het kipveld: die met de grootste |My|.
-    let govComboId = forcesEnvelope[0].combination_id;
-    let govAbsMy = 0;
-    for (const p of forcesEnvelope) {
-      if (Math.abs(p.forces.my_ed) > govAbsMy) {
-        govAbsMy = Math.abs(p.forces.my_ed);
-        govComboId = p.combination_id;
-      }
-    }
-    const govPoints = forcesEnvelope.filter((p) => p.combination_id === govComboId);
-
     // Per-staaf toetsconfiguratie; ontbrekende velden → defaults hierboven.
     // Bij een staande staaf zonder zeeg: zie `zeegVoorToets`.
     const cfg = zeegVoorToets(beam, data.nodes);
-    const doorbuiging = bepaalDoorbuigingsInvoer(beam, data);
     // Wat er aan de staafeinden zit — een vrij eind (uitkraging) of een
     // doorlopend eind is geen gaffel; de kern handelt daarnaar. Bepaald op de
     // staaf in referentierichting, dus `begin` is x = 0 van de toetsinvoer.
+    // Dezelfde einden bepalen of de doorbuiging als uitkraging gemeten wordt.
     const ledenVanLijn = new Set(lijn.lijnen.get(beam.id)?.delen.map((d) => d.beam.id) ?? []);
     const staafeinden = bepaalStaafeinden(beam, data.nodes, alleBeams, data.supports, ledenVanLijn, ruweData.plates);
+    // De steunpunten op een doorgaande lijn: waar een overstek begint.
+    const steunpunten = steunpuntenOpLijn(beam, data.nodes, lijn.lijnen.get(beam.id));
+    const doorbuiging = bepaalDoorbuigingsInvoer(beam, data, staafeinden, steunpunten);
     const staafNotities = [...(lijn.notities.get(beam.id) ?? [])];
+    // Een vrij eind: de kern neemt 2·L, geen terugval op de systeemlengte; de
+    // α_cr-kanttekening heeft daar een eigen tekst (zie `alphaCrStaafNotitie`).
+    const vrijEind = staafeinden.begin === "Vrij" || staafeinden.eind === "Vrij";
+    const kniklengteYOpgegeven = Number.isFinite(cfg.bucklingLengthY_m) && (cfg.bucklingLengthY_m as number) > 0;
     const alphaNotitie = alphaCrStaafNotitie(
       ruweData.stabiliteit,
       Math.min(...forcesEnvelope.map((p) => p.forces.n_ed)),
-      Number.isFinite(cfg.bucklingLengthY_m) && (cfg.bucklingLengthY_m as number) > 0,
+      kniklengteYOpgegeven,
+      vrijEind,
     );
     if (alphaNotitie) staafNotities.push(alphaNotitie);
+    // Bij een vrij eind: rekent de berekening tweede orde MET scheefstand, staat
+    // de staaf (een kolom) en is de scheefstand minstens die van de kolom zelf,
+    // dan zit haar zijdelingse knik in het vlak in de krachten en kiest de kern
+    // L in plaats van 2·L. Zie `zijdelingseKnikInVlakModel`; scheelt alleen de
+    // φ, dan zegt een kanttekening waarom het 2·L blijft.
+    // Twee vrije einden: de kern weigert de knik; dan is er niets te beslissen.
+    const eenVrijEind = vrijEind && !(staafeinden.begin === "Vrij" && staafeinden.eind === "Vrij");
+    const zijdelings = eenVrijEind
+      ? zijdelingseKnikInVlakModel(
+          ruweData.stabiliteit,
+          referentieVanStaaf(beam, data.nodes).staafstand === "Staand",
+          lengthMm / 1000,
+        )
+      : {};
+    // De kanttekening ("blijft 2·L") alleen als de kern ook echt 2·L neemt:
+    // niet bij een opgegeven L_cr,y.
+    if (zijdelings.notitie && !kniklengteYOpgegeven) staafNotities.push(zijdelings.notitie);
 
     inputs.push({
       // De nationale bijlage van het project reist mee naar de kern; daar
@@ -1248,6 +1575,9 @@ export function buildSteelCheckInputs(ruweData: SteelBuildData): SteelBuildResul
       // van elke gewone staaf byte-gelijk aan vroeger, en zegt een aanwezig
       // veld de lezer meteen dat hier iets bijzonders is.
       ...(staafeinden.begin !== "Gaffel" || staafeinden.eind !== "Gaffel" ? { staafeinden } : {}),
+      // Alleen bij een vrij eind met gedekte zijdelingse knik (zie hierboven),
+      // zodat de invoer van elke andere staaf byte-gelijk blijft.
+      ...(zijdelings.veld ? { zijdelingse_knik_in_analyse: zijdelings.veld } : {}),
       ...(staafNotities.length > 0 ? { staaf_notities: staafNotities } : {}),
       // Kniklengtes: een leeg veld gaat als 0 = "niet opgegeven" naar de kern.
       // De KERN kiest dan — om y de staaflengte, om z de grootste afstand
@@ -1255,8 +1585,10 @@ export function buildSteelCheckInputs(ruweData: SteelBuildData): SteelBuildResul
       // staaflengte — en zet de herkomst in de toets 6.3.1. Hier stond tot
       // september 2026 `?? lengthMm / 1000`: de toets kon een terugval dan niet
       // van een opgave onderscheiden, en het rapport zweeg erover.
-      buckling_length_y_m: cfg.bucklingLengthY_m ?? 0,
-      buckling_length_z_m: cfg.bucklingLengthZ_m ?? 0,
+      // Bij een doorgaande lijn zonder opgave: de kniklengte per vak (KNIK PER
+      // VAK in `lib/doorgaandeLijn.ts`), met de aanname in `staaf_notities`.
+      buckling_length_y_m: cfg.bucklingLengthY_m ?? lijn.kniklengtes.get(beam.id)?.yM ?? 0,
+      buckling_length_z_m: cfg.bucklingLengthZ_m ?? lijn.kniklengtes.get(beam.id)?.zM ?? 0,
       // Welke doorbuigingseis hier geldt, met welke verplaatsing en welke
       // grens — zie `bepaalDoorbuigingsInvoer`. Een overwegend verticale staaf
       // krijgt de zijdelingse eis van A1.4.3(7) in plaats van een vloereis.
@@ -1283,16 +1615,16 @@ export function buildSteelCheckInputs(ruweData: SteelBuildData): SteelBuildResul
       // w_fin op. Is er geen blijvende BGT-combinatie, dan 0 — met de reden in
       // `deflection_notes`, nooit stil.
       deflection_permanent_mm: doorbuiging.wPermMm,
-      q_equiv_n_per_mm: equivalentUdlFromMoments(govPoints, lengthMm),
-      // AANNAME, bewust niet meegenomen in de kipreparatie van sept 2026:
-      // de last grijpt aan op de bovenflens, z_a = +h/2. `c2_gecorrigeerd`
-      // maakt daar een negatieve C₂ van, wat M_cr verlaagt — veilig-zijdig, en
-      // dat blijft zo ongeacht welke flens gedrukt is. Bij hogging (gedrukte
-      // ONDERflens) grijpt een neerwaartse last echter aan op de GETROKKEN
-      // flens en werkt hij in werkelijkheid stabiliserend; de aanname is daar
-      // dus conservatief in plaats van juist. Het echte aangrijpingspunt is nu
-      // niet bekend in de invoer; dit hoort een expliciet veld te worden.
-      z_a_mm: hMm / 2,
+      // w_add per combinatie, als die niet uit w − w₁ volgt, en de lengte van
+      // het getoetste deel van een lijn met een overstek. Alleen als ze er zijn,
+      // zodat de invoer van elke andere staaf byte-gelijk blijft.
+      ...(doorbuiging.wAddMm !== undefined ? { deflection_add_mm: doorbuiging.wAddMm } : {}),
+      ...(doorbuiging.deelLengteMm !== undefined
+        ? { deflection_length_m: doorbuiging.deelLengteMm / 1000 }
+        : {}),
+      // q_equiv en z_a = +h/2 (last op de bovenflens, een AANNAME): zie
+      // `kipBelasting`, dezelfde regel als in de 3D-toets.
+      ...kipBelasting(forcesEnvelope, lengthMm, hMm),
     });
   }
 

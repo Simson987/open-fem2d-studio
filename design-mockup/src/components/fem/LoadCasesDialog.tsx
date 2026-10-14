@@ -280,7 +280,7 @@ export default function LoadCasesDialog({
                   <p>{combinatieAfwijking.samenvatting}</p>
                   <div className="lcd-afwijking-knoppen">
                     <button className="lcd-btn-secondary" onClick={() => onSluitAfwijking?.()}>
-                      {t("close")}
+                      {combinatieAfwijking.blijvend.length > 0 ? t("loadCases.keepCustomFactors") : t("close")}
                     </button>
                   </div>
                 </div>

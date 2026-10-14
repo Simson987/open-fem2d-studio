@@ -762,6 +762,139 @@ function teltLastMee(last: Load, loadCases: LoadCase[]): boolean {
   );
 }
 
+/** De velden van een last die `lastWaardeFout` leest. */
+export type LastWaardeVelden = Pick<
+  Load,
+  "id" | "type" | "beamId" | "nodeId" | "plateId" | "q" | "qStart" | "qEnd" | "fx" | "fz" | "my" |
+  "startFrac" | "endFrac"
+>;
+
+/** Velden met een waarde ≠ 0 die dit lasttype niet leest, in vaste volgorde. */
+function nietGelezenVelden(l: LastWaardeVelden, velden: readonly ("fx" | "fz" | "my")[]): string[] {
+  return velden.filter((v) => typeof l[v] === "number" && l[v] !== 0);
+}
+
+/**
+ * Een last zonder waarde, met zijn waarde in een veld dat dit lasttype niet
+ * leest, of (lijnlast) met een leeg of omgekeerd belast deel. `null` = de
+ * waarde staat goed.
+ *
+ * WAAROM APART VAN `teltLastMee`. Die meet alleen OF de mapping een regel
+ * oplevert, niet of die regel iets doet. Een koppel met zijn waarde in `fz` in
+ * plaats van `my` werd een regel `my: 0`, en een puntlast met alleen `my` een
+ * regel `fx: 0, fz: 0`: "telt mee", maar de last zelf was weg (controle 12
+ * oktober 2026, punt K1). Een lijnlast zonder enige waarde gaf alleen de
+ * algemene melding "levert geen invoer voor de solver op" — een programmeurs-
+ * tekst voor iets wat de gebruiker met één getal herstelt (punt K2).
+ *
+ * Eén regel voor de app (`zoekStilleLasten`, rekenpoort en tekenvlak) en de
+ * MCP-weg (`mcp/valideerModel.ts`, ook vóór elke solve en check). Alleen een
+ * veld met een waarde ≠ 0 telt als "verkeerd veld": een 0 laat niets weg.
+ */
+export function lastWaardeFout(
+  l: LastWaardeVelden,
+): { tekst: string; tekstVertaalbaar: VertaalbareTekst } | null {
+  const maak = (sleutel: string, tekst: string, waarden: Record<string, string | number>) => ({
+    tekst, tekstVertaalbaar: vt(`common:canvas.modelCheck.loadValue.${sleutel}`, tekst, waarden),
+  });
+  if (l.type === "lineLoad") {
+    if (l.beamId === undefined || l.plateId !== undefined) return null;
+    const qa = l.qStart ?? l.q;
+    const qb = l.qEnd ?? l.q;
+    const velden = nietGelezenVelden(l, ["fx", "fz", "my"]);
+    const veldenTekst = velden.map((v) => `\`${v}\``).join(", ");
+    if (qa === undefined && qb === undefined) {
+      return velden.length > 0
+        ? maak("lineNoneWrongField",
+          `Lijnlast ${l.id} op staaf ${l.beamId} heeft geen waarde: ${veldenTekst} wordt bij een ` +
+            "lijnlast niet gelezen. Vul `q` in (gelijkmatig verdeeld, kN/m) of `qStart` en `qEnd` " +
+            "(trapezium).",
+          { last: l.id, staaf: l.beamId, velden: veldenTekst })
+        : maak("lineNone",
+          `Lijnlast ${l.id} op staaf ${l.beamId} heeft geen waarde. Vul \`q\` in (gelijkmatig ` +
+            "verdeeld, kN/m) of `qStart` en `qEnd` (trapezium).",
+          { last: l.id, staaf: l.beamId });
+    }
+    if (qa === undefined || qb === undefined) {
+      const heeft = qa === undefined ? "qEnd" : "qStart";
+      const mist = qa === undefined ? "qStart" : "qEnd";
+      return maak("lineHalf",
+        `Lijnlast ${l.id} op staaf ${l.beamId} heeft wel \`${heeft}\` maar geen \`${mist}\` (en ` +
+          `geen \`q\` als terugval). Vul \`${mist}\` in; bij een gelijkmatige last alleen \`q\`.`,
+        { last: l.id, staaf: l.beamId, heeft, mist });
+    }
+    if (velden.length > 0) {
+      return maak("lineWrongField",
+        `Lijnlast ${l.id} op staaf ${l.beamId}: ${veldenTekst} wordt bij een lijnlast niet ` +
+          "gelezen en zou wegvallen. Zet een puntlast of koppel als aparte last.",
+        { last: l.id, staaf: l.beamId, velden: veldenTekst });
+    }
+    // Het belaste deel. De engine klemt startFrac/endFrac op 0..1 en slaat een
+    // leeg of omgekeerd deel daarna over (`BeamForces`: einde ≤ begin): de last
+    // viel dan in zijn geheel weg, zonder melding (controle 12 oktober 2026,
+    // nagekomen bij K2). Getoetst op de geklemde fracties, dus op precies wat
+    // de engine gebruikt; een deel dat maar gedeeltelijk buiten de staaf valt,
+    // blijft een (ingekorte) last en valt hier niet onder.
+    const klem = (f: number) => Math.min(1, Math.max(0, f));
+    const begin = l.startFrac ?? 0;
+    const einde = l.endFrac ?? 1;
+    if (!(klem(begin) < klem(einde))) {
+      return maak("lineRange",
+        `Lijnlast ${l.id} op staaf ${l.beamId}: het belaste deel begint niet vóór zijn einde ` +
+          `(startFrac ${begin}, endFrac ${einde}). Een leeg of omgekeerd deel is geen last en ` +
+          "zou wegvallen. Geef 0 ≤ startFrac < endFrac ≤ 1, gemeten vanaf de startknoop.",
+        { last: l.id, staaf: l.beamId, begin: String(begin), einde: String(einde) });
+    }
+    return null;
+  }
+  if (l.type === "pointMoment") {
+    // Zonder knoop levert de mapping niets op; dat meldt `teltLastMee`.
+    if (l.nodeId === undefined) return null;
+    const velden = nietGelezenVelden(l, ["fx", "fz"]);
+    const veldenTekst = velden.map((v) => `\`${v}\``).join(", ");
+    if (l.my === undefined) {
+      return velden.length > 0
+        ? maak("momentWrongField",
+          `Koppel ${l.id} op knoop ${l.nodeId} heeft geen waarde in \`my\`: ${veldenTekst} wordt bij ` +
+            "een koppel niet gelezen. Een koppel staat in `my` (kNm).",
+          { last: l.id, knoop: l.nodeId, velden: veldenTekst })
+        : maak("momentNone",
+          `Koppel ${l.id} op knoop ${l.nodeId} heeft geen waarde. Een koppel staat in \`my\` ` +
+            "(kNm).",
+          { last: l.id, knoop: l.nodeId });
+    }
+    if (velden.length > 0) {
+      return maak("momentExtraField",
+        `Koppel ${l.id} op knoop ${l.nodeId}: ${veldenTekst} wordt bij een koppel niet gelezen ` +
+          "en zou wegvallen. Zet een kracht als aparte puntlast.",
+        { last: l.id, knoop: l.nodeId, velden: veldenTekst });
+    }
+    return null;
+  }
+  if (l.type === "pointForce") {
+    const velden = nietGelezenVelden(l, ["my"]);
+    if (l.fx === undefined && l.fz === undefined) {
+      return velden.length > 0
+        ? maak("forceWrongField",
+          `Puntlast ${l.id} heeft geen waarde in \`fx\` of \`fz\`: \`my\` wordt bij een puntlast ` +
+            "niet gelezen. Een koppel is een aparte last (pointMoment).",
+          { last: l.id })
+        : maak("forceNone",
+          `Puntlast ${l.id} heeft geen waarde. Vul \`fz\` (verticaal) en/of \`fx\` (horizontaal) ` +
+            "in, in kN.",
+          { last: l.id });
+    }
+    if (velden.length > 0) {
+      return maak("forceExtraField",
+        `Puntlast ${l.id}: \`my\` wordt bij een puntlast niet gelezen en zou wegvallen. Een ` +
+          "koppel is een aparte last (pointMoment).",
+        { last: l.id });
+    }
+    return null;
+  }
+  return null;
+}
+
 /**
  * Lasten die het projectbestand wél draagt maar die bij het rekenen STIL
  * wegvallen (basisaudit ruw 30).
@@ -769,9 +902,12 @@ function teltLastMee(last: Load, loadCases: LoadCase[]): boolean {
  * Drie manieren waarop dat gebeurt, alle drie gemeten in de audit:
  *
  *  1. De if/else-keten van `bouwMultiInput` neemt een lijnlast alleen mee met
- *     `q`, een thermische last alleen met `deltaT`, en herkent alleen exact
- *     gespelde typen. Een trapeziumlast met alleen `qStart`/`qEnd`, of een
- *     tikfout ("lineload"), levert nul regels op.
+ *     een waarde (`q`, of `qStart` en `qEnd`), een thermische last alleen met
+ *     `deltaT`, een koppel alleen met `my`, en herkent alleen exact gespelde
+ *     typen. Een tikfout ("lineload") levert nul regels op. (Tot oktober 2026
+ *     viel ook een trapezium met alleen `qStart`/`qEnd` hier weg.) Een last
+ *     zonder waarde of met de waarde in een verkeerd veld meldt
+ *     `lastWaardeFout` met een eigen tekst.
  *  2. Een verwijzing naar een staaf, knoop of plaat die niet bestaat gaat wél
  *     de mapping in, maar de engine laat hem vallen.
  *  3. Een verwijzing naar een belastinggeval dat niet bestaat maakt het geval
@@ -821,6 +957,19 @@ export function zoekStilleLasten(model: ControleModel): Bevinding[] {
       });
       continue;
     }
+    // Eerst de waarde: een last zonder waarde, of met zijn waarde in een veld
+    // dat het lasttype niet leest, krijgt een melding die zegt wat er mist.
+    const waardeFout = lastWaardeFout(l);
+    if (waardeFout) {
+      uit.push({
+        soort: "stilleLast",
+        ernst: "fout",
+        ...waardeFout,
+        nodeIds: l.nodeId !== undefined ? [l.nodeId] : [],
+        ...(l.beamId !== undefined ? { beamId: l.beamId } : {}),
+      });
+      continue;
+    }
     if (!teltLastMee(l, model.loadCases ?? [{ id: l.caseId, name: "", type: "dead" }])) {
       uit.push({
         soort: "stilleLast",
@@ -828,11 +977,11 @@ export function zoekStilleLasten(model: ControleModel): Bevinding[] {
         tekst:
           `Last ${l.id} (type "${String(l.type)}") levert geen invoer voor de ` +
           "solver op en telt dus niet mee. Controleer of alle velden voor dit " +
-          "lasttype ingevuld zijn: een lijnlast heeft `beamId` en `q` nodig (ook " +
-          "een trapeziumlast, naast `qStart` en `qEnd`), een puntlast `nodeId` of " +
+          "lasttype ingevuld zijn: een lijnlast heeft `beamId` en `q` nodig (of " +
+          "`qStart` en `qEnd` voor een trapezium), een puntlast `nodeId` of " +
           "`beamId` — of op een plaatrand `plateId`, een rand en `posFrac` —, een " +
-          "thermische last `beamId` en `deltaT`, en een randlast `plateId`, een " +
-          "rand en `q`.",
+          "koppel `nodeId` en `my`, een thermische last `beamId` en `deltaT`, en " +
+          "een randlast `plateId`, een rand en `q`.",
         nodeIds: l.nodeId !== undefined ? [l.nodeId] : [],
         ...(l.beamId !== undefined ? { beamId: l.beamId } : {}),
       });

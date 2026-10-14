@@ -119,7 +119,8 @@ fn verbanden(request: &SolveRequest3D, thermisch: &[ThermalLoad3D]) -> Vec<Verba
         let as_ = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
         let lengte = (as_[0] * as_[0] + as_[1] * as_[1] + as_[2] * as_[2]).sqrt();
         let materiaal = request.materials.iter().find(|m| m.id == staaf.material_id).unwrap();
-        let doorsnede = request.sections.iter().find(|s| s.id == staaf.section_id).unwrap();
+        // Bij een verlopende staaf (#73) de delen in serie: n/Σ(1/A_i).
+        let oppervlakte = crate::verloop::axiale_oppervlakte(request, staaf).expect("doorsnede is gekeurd");
         let alpha = materiaal.alpha_per_k.unwrap_or(12e-6);
         let delta_t: f64 = thermisch.iter()
             .filter(|load| load.member_id == staaf.id)
@@ -131,7 +132,7 @@ fn verbanden(request: &SolveRequest3D, thermisch: &[ThermalLoad3D]) -> Vec<Verba
             eind: staaf.end_node_id,
             ex: [as_[0] / lengte, as_[1] / lengte, as_[2] / lengte],
             lengte,
-            stijfheid: materiaal.e_mpa * 1000.0 * doorsnede.area_m2 / lengte,
+            stijfheid: materiaal.e_mpa * 1000.0 * oppervlakte / lengte,
             alpha,
             eigen: alpha * delta_t * lengte,
         }

@@ -70,6 +70,9 @@ fn windverband(naam: &str, trek_kn: f64, druk_kn: f64, tension_only: Option<bool
         custom_section_end: None,
         tension_only,
         a_net_mm2: None,
+        deflection_add_mm: None,
+        deflection_length_m: None,
+        zijdelingse_knik_in_analyse: None,
     }
 }
 

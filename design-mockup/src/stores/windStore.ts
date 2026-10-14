@@ -38,7 +38,8 @@ import {
   type WindGeneratieResultaat, type WindInstellingen,
 } from "../lib/wind/windGenerator";
 import { windVoorbeeld, type WindVoorbeeld } from "../lib/wind/windVoorbeeld";
-import type { TerreinCategorie, Windgebied } from "../lib/wind/windEurocode";
+import { CPI_BRON, type TerreinCategorie, type Windgebied } from "../lib/wind/windEurocode";
+import { NEDERLANDSE_WINDROUTE, requireWindCodeId, type WindCodeId } from "../lib/wind/windCodeRoute";
 
 const INSTELLINGEN_SLEUTEL = "windGenerator";
 const REGENERATIE_VERTRAGING_MS = 150;
@@ -109,10 +110,11 @@ export function useWindGenerator(fem: FemStore): WindGeneratorApi {
   useEffect(() => {
     let leeft = true;
     const pakProject = (p: unknown): Partial<WindInstellingen> => {
-      const u = (p as { uitgangspunten?: { windgebied?: Windgebied; terreincategorie?: TerreinCategorie } })
+      const u = (p as { uitgangspunten?: { windCodeId?: WindCodeId; windgebied?: Windgebied; terreincategorie?: TerreinCategorie } })
         ?.uitgangspunten;
       if (!u) return {};
       return {
+        windCodeId: u.windCodeId ?? NEDERLANDSE_WINDROUTE,
         ...(u.windgebied ? { windgebied: u.windgebied } : {}),
         ...(u.terreincategorie ? { terreincategorie: u.terreincategorie } : {}),
       };
@@ -131,7 +133,8 @@ export function useWindGenerator(fem: FemStore): WindGeneratorApi {
       const patch = pakProject(p);
       if (Object.keys(patch).length === 0) return;
       setInstellingenState((prev) =>
-        (prev.windgebied === patch.windgebied && prev.terreincategorie === patch.terreincategorie)
+        (prev.windCodeId === (patch.windCodeId ?? prev.windCodeId)
+          && prev.windgebied === patch.windgebied && prev.terreincategorie === patch.terreincategorie)
           ? prev : { ...prev, ...patch });
     }).then((f) => { if (leeft) stop = f; else f(); });
     return () => { leeft = false; stop?.(); };
@@ -161,6 +164,20 @@ export function useWindGenerator(fem: FemStore): WindGeneratorApi {
   const pasToe = useCallback((res: WindGeneratieResultaat): ToepasUitkomst => {
     const f = femRef.current;
     if (!res.ok) return "mislukt";
+    const windCodeId = requireWindCodeId(instRef.current.windCodeId);
+    const structuralFactor = instRef.current.structuralFactor ?? 1;
+    const samenvatting = res.samenvatting;
+    if (!samenvatting) return "mislukt";
+    const regelsPerGeval = new Map(samenvatting.perGeval.map((item) => [item.sleutel, item.regels]));
+    if (res.gevallen.some((geval) => !regelsPerGeval.has(geval.sleutel))) return "mislukt";
+    const cpiPerGeval = new Map(res.gevallen.map((geval) => [geval.sleutel,
+      instRef.current.vorm === "vrijstaandDak" ? undefined : {
+        coefficient: geval.cpi,
+        source: instRef.current.cpiKeuze === "handmatig"
+          ? (geval.cpiBron || "Handmatig ingevoerd; bron niet opgegeven")
+          : instRef.current.cpiKeuze === "beide" ? CPI_BRON
+            : `NEN-EN 1991-1-4 §7.2.9; uitsluitend c_pi = ${geval.cpi >= 0 ? "+" : ""}${geval.cpi.toFixed(1).replace(".", ",")} geselecteerd (te onderbouwen)`,
+      }]));
 
     // Stabiele id's: bestaande sleutel houdt zijn id, nieuwe sleutels krijgen
     // het eerstvolgende vrije id — vanaf de TELLER van de store, zodat ook de
@@ -186,7 +203,14 @@ export function useWindGenerator(fem: FemStore): WindGeneratorApi {
       id: idVan.get(gv.sleutel)!,
       name: gv.naam,
       type: "wind",
-      gegenereerd: { bron: "wind", sleutel: gv.sleutel },
+      gegenereerd: { bron: "wind", sleutel: gv.sleutel, windCodeId,
+        windStuwdruk: samenvatting.stuwdruk,
+        windStructuralFactor: structuralFactor,
+        ...(cpiPerGeval.get(gv.sleutel) ? {
+          windInternalPressureCoefficient: cpiPerGeval.get(gv.sleutel)!.coefficient,
+          windInternalPressureSource: cpiPerGeval.get(gv.sleutel)!.source,
+        } : {}),
+        windRegels: regelsPerGeval.get(gv.sleutel)! },
     }));
     const lasten: Omit<Load, "id">[] = res.lasten.map((l) => ({
       type: "lineLoad" as const,
@@ -201,6 +225,7 @@ export function useWindGenerator(fem: FemStore): WindGeneratorApi {
       // Vrijstaand dak: paragraaf, tabel, α, φ en coëfficiënt voor de
       // lastentabel van het rapport. De gebouwgevallen hebben er geen.
       ...(l.omschrijving !== undefined ? { omschrijving: l.omschrijving } : {}),
+      ...(l.windStuwdruk ? { windStuwdruk: l.windStuwdruk } : {}),
       gegenereerdDoor: "wind" as const,
     }));
     const combinaties: Omit<LoadCombination, "id">[] = res.combinaties.map((c) => ({
@@ -223,7 +248,24 @@ export function useWindGenerator(fem: FemStore): WindGeneratorApi {
       res.combinaties,
     );
     const huidigeHandtekening = handtekeningVanModel(f.loadCases, f.loads, f.combinations);
-    if (nieuweHandtekening === huidigeHandtekening) return "ongewijzigd";
+    const routeOpgeslagen = f.loadCases.filter(isWindGeval)
+      .every((item) => item.gegenereerd?.windCodeId === windCodeId);
+    const drukOpgeslagen = f.loadCases.filter(isWindGeval)
+      .every((item) => JSON.stringify(item.gegenereerd?.windStuwdruk) === JSON.stringify(samenvatting.stuwdruk))
+      && JSON.stringify(f.loads.filter(isWindLast).map((item) => item.windStuwdruk ?? null))
+        === JSON.stringify(lasten.map((item) => item.windStuwdruk ?? null));
+    const factorOpgeslagen = f.loadCases.filter(isWindGeval)
+      .every((item) => item.gegenereerd?.windStructuralFactor === structuralFactor);
+    const cpiOpgeslagen = f.loadCases.filter(isWindGeval)
+      .every((item) => {
+        const actueel = cpiPerGeval.get(item.gegenereerd!.sleutel);
+        return item.gegenereerd?.windInternalPressureCoefficient === actueel?.coefficient
+          && item.gegenereerd?.windInternalPressureSource === actueel?.source;
+      });
+    const regelsOpgeslagen = f.loadCases.filter(isWindGeval)
+      .every((item) => JSON.stringify(item.gegenereerd?.windRegels)
+        === JSON.stringify(regelsPerGeval.get(item.gegenereerd!.sleutel)));
+    if (nieuweHandtekening === huidigeHandtekening && routeOpgeslagen && drukOpgeslagen && factorOpgeslagen && cpiOpgeslagen && regelsOpgeslagen) return "ongewijzigd";
 
     f.vervangGegenereerdeBelasting({
       gevallen, lasten, combinaties,

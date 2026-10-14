@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useRecentFiles, type RecentFile } from "../../hooks/useRecentFiles";
 import { fetchAppVersion, toonVersie } from "../../lib/appVersion";
+import { openExternal } from "../../lib/tauri";
 import ExtensionManagerPanel from "./ExtensionManagerPanel";
 import "./Backstage.css";
 
@@ -240,14 +241,11 @@ function AboutPanel() {
     fetchAppVersion().then(setVersion).catch(() => setVersion(""));
   }, []);
 
-  const openExternal = (url: string) => async (e: React.MouseEvent) => {
+  // Externe links via de gedeelde helper (#38): in de app de standaardbrowser,
+  // anders een nieuw tabblad; nooit een onafgehandelde fout.
+  const openLink = (url: string) => (e: React.MouseEvent) => {
     e.preventDefault();
-    try {
-      const { openUrl } = await import("@tauri-apps/plugin-opener");
-      await openUrl(url);
-    } catch {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
+    void openExternal(url);
   };
 
   return (
@@ -296,7 +294,7 @@ function AboutPanel() {
         <a
           href="https://www.open-aec.com/"
           className="bs-about-link"
-          onClick={openExternal("https://www.open-aec.com/")}
+          onClick={openLink("https://www.open-aec.com/")}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="10" />
@@ -307,7 +305,7 @@ function AboutPanel() {
         <a
           href="https://github.com/OpenAEC-Foundation"
           className="bs-about-link"
-          onClick={openExternal("https://github.com/OpenAEC-Foundation")}
+          onClick={openLink("https://github.com/OpenAEC-Foundation")}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22" />

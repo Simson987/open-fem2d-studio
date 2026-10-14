@@ -30,7 +30,16 @@
 //!   ((K + K_G)·u − F) op de opgelegde vrijheidsgraden. K_G voert bij een starre
 //!   translatie geen kracht af, dus de krachtensom sluit exact. De momentensom
 //!   om de oorsprong in de onvervormde stand wijkt precies af met
-//!   Σ N·(e_x × Δu) over de staven: het tweede-ordemoment.
+//!   Σ N·(e_x × Δu) over de staven: het tweede-ordemoment. De staafkrachten
+//!   krijgen daarna K_G·u erbij (`tweede_orde_staafkrachten`), zodat het moment
+//!   bij een scharnierende oplegging nul is (K4, #186).
+//! - De adapter rekent de tweede orde en de knik met elke gedrukte staaf in
+//!   vier delen per stuk tussen twee echte knopen (`KNIKDELEN` in de
+//!   crate-wortel), zodat N_cr de Euler-waarde benadert en een staaf met twee
+//!   scharnieren een eigen knikvorm heeft. Elk deel rekent in K_G met zijn
+//!   eigen normaalkracht; bij een last langs de staafas verloopt N dus per
+//!   deel, en het tweede-ordemoment is Σ N_deel·(e_x × Δu_deel) over de delen
+//!   (`Tweedeorde::delen`, in de uitkomst `secondOrderParts`).
 //! - Knikfactor: K·φ = λ·(−K_G(N_1))·φ met N_1 de eerste-ordenormaalkrachten,
 //!   opgelost met de eigenwaardesolver van de kern op de gereduceerde matrices.
 
@@ -47,7 +56,7 @@ use rekenkern::{
         assembly::assemble_sparse_3d, constraints::FreeConstraintSystem, dof::DofNumbering,
         linear::solve_3d,
     },
-    types::{AnalysisResults3D, SolverInput3D, SolverLoad3D, SolverNodalLoad3D},
+    types::{AnalysisResults3D, DistributedLoadInfo, SolverInput3D, SolverLoad3D, SolverNodalLoad3D},
 };
 
 use crate::{BucklingModeSummary, BucklingSummary, MemberBucklingData, SecondOrderSummary};
@@ -58,6 +67,11 @@ pub(crate) struct Tweedeorde {
     pub summary: SecondOrderSummary,
     pub buckling: BucklingSummary,
     pub diagnostics: Vec<String>,
+    /// Per kernelement de normaalkracht waarmee K_G in de eindtoestand is
+    /// gerekend (kN, trek positief) en Δu = u_j − u_i van zijn eindknopen
+    /// (globale translaties, m). De momentensom van lasten en reacties in de
+    /// onvervormde stand is Σ N·(e_x × Δu) over deze elementen.
+    pub delen: HashMap<usize, (f64, [f64; 3])>,
 }
 
 /// Staafgegevens die elke iteratie opnieuw nodig zijn.
@@ -179,8 +193,23 @@ impl Stelsel {
         u
     }
 
+    /// De normaalkracht van elk element uit zijn verlenging: bij een last
+    /// langs de staafas het gemiddelde over dat element. Een voor de knik
+    /// onderverdeelde staaf (`KNIKDELEN`) rekent zo in elk deel met zijn eigen
+    /// N; tot de controle van oktober 2026 (K4) kregen de delen van één stuk
+    /// het gemiddelde van het stuk, en dat liet α_cr van een kolom met eigen
+    /// gewicht langs de as tot 20 % te hoog uitvallen.
     fn normaalkrachten(&self, u: &[f64]) -> Vec<f64> {
         self.staven.iter().map(|staaf| staaf.normaalkracht(u)).collect()
+    }
+
+    /// Per element de normaalkracht `normaalkrachten` en de translatie-
+    /// verschillen Δu = u_j − u_i (globaal); zie `Tweedeorde::delen`.
+    fn delen(&self, normaalkrachten: &[f64], u: &[f64]) -> HashMap<usize, (f64, [f64; 3])> {
+        self.staven.iter().zip(normaalkrachten).map(|(staaf, &n)| {
+            let du = [0, 1, 2].map(|as_| u[staaf.dofs[6 + as_]] - u[staaf.dofs[as_]]);
+            (staaf.id, (n, du))
+        }).collect()
     }
 
     /// Element-K_G in globale assen voor elke staaf.
@@ -269,6 +298,57 @@ impl Stelsel {
             return Err("de tangentoplossing bevat geen eindige verplaatsingen".into());
         }
         Ok(Some(u_f))
+    }
+
+    /// De staafkrachten van de tweede orde: (k_e + K_G)·u per staaf, met de
+    /// lijnen in evenwicht in de vervormde stand (K4, #186).
+    ///
+    /// De eindstap lost K·u = F − K_G·u op; de kern geeft per staaf k_e·u
+    /// minus de vaste-eindkrachten. Op een vrije vrijheidsgraad is
+    /// Σ (k_e + K_G)·u = F, dus pas met K_G·u erbij is het moment bij een
+    /// scharnierende oplegging nul en loopt de momentenlijn door over een
+    /// knoop tussen twee delen van een staaf. `normaalkrachten` en `u` zijn
+    /// die van de K_G in de eindstap, zodat dat evenwicht exact is.
+    ///
+    /// Binnen een staaf geldt het evenwicht in de vervormde stand:
+    /// M(x) = M_begin + V·x − N·(v(x) − v_begin) − (lastterm), met v de
+    /// Hermite-kromme van het element (bij een vrijgegeven einde met de
+    /// gecondenseerde einddraaiing, bij twee vrije einden de koorde). De kern
+    /// tekent de lijnen uit de eindkrachten en de staaflasten; het deel N·v''
+    /// gaat daarom als lineair verlopende dwarslast q = N·v''(x) mee, en de
+    /// dwarskracht wordt V = dM/dx: de kracht loodrecht op de vervormde as.
+    /// Bij een staaf zonder normaalkracht verandert er niets.
+    fn tweede_orde_staafkrachten(&self, normaalkrachten: &[f64], u: &[f64], results: &mut AnalysisResults3D) {
+        let plaats: HashMap<usize, usize> = results.element_forces.iter().enumerate()
+            .map(|(index, krachten)| (krachten.element_id, index))
+            .collect();
+        for (staaf, &n) in self.staven.iter().zip(normaalkrachten) {
+            let Some(&index) = plaats.get(&staaf.id) else { continue };
+            let globaal: Vec<f64> = staaf.dofs.iter().map(|&d| u[d]).collect();
+            let lokaal = transform_displacement(&globaal, &staaf.t, 12);
+            let kg = staaf.kg_lokaal(n);
+            let df: Vec<f64> = (0..12).map(|i| (0..12).map(|j| kg[i * 12 + j] * lokaal[j]).sum()).collect();
+            let l = staaf.lengte;
+            let krachten = &mut results.element_forces[index];
+            // x-y-vlak: v op 1 en 7, θz = v' op 5 en 11; M_z = M_z,begin − V_y·x.
+            let [h0, h1, p0, p1] = vorm(&lokaal, [1, 5, 7, 11], 1.0, staaf.vlak_xy, l);
+            krachten.mz_start += df[5];
+            krachten.mz_end -= df[11];
+            krachten.vy_start += df[1] + n * p0;
+            krachten.vy_end += df[1] + n * p1;
+            if n * h0 != 0.0 || n * h1 != 0.0 {
+                krachten.distributed_loads_y.push(DistributedLoadInfo { q_i: n * h0, q_j: n * h1, a: 0.0, b: l });
+            }
+            // x-z-vlak: w op 2 en 8, θy = −w' op 4 en 10; M_y = M_y,begin + V_z·x.
+            let [h0, h1, p0, p1] = vorm(&lokaal, [2, 4, 8, 10], -1.0, staaf.vlak_xz, l);
+            krachten.my_start += df[4];
+            krachten.my_end -= df[10];
+            krachten.vz_start += df[2] + n * p0;
+            krachten.vz_end += df[2] + n * p1;
+            if n * h0 != 0.0 || n * h1 != 0.0 {
+                krachten.distributed_loads_z.push(DistributedLoadInfo { q_i: n * h0, q_j: n * h1, a: 0.0, b: l });
+            }
+        }
     }
 
     /// Eerste knikfactoren λ uit K·φ = λ·(−K_G(N))·φ, oplopend, en of er een
@@ -507,6 +587,38 @@ fn buigblok(k: &mut [f64], n: f64, l: f64, index: [usize; 4], s: f64, vlak: Vlak
     }
 }
 
+/// De kromme van één buigvlak van een element: [v''(0), v''(L), v'(0), v'(L)]
+/// van de Hermite-kromme door (v1, v1', v2, v2'). `index` zijn de lokale
+/// plaatsen van (v1, θ1, v2, θ2) en `s` het teken van θ = s·v' (+1 in het
+/// x-y-vlak, −1 in het x-z-vlak). Bij een vrijgegeven einde is de einddraaiing
+/// die van het momentloze einde (dezelfde betrekking als in `buigblok`); bij
+/// twee vrije einden is de kromme de koorde.
+fn vorm(lokaal: &[f64], index: [usize; 4], s: f64, vlak: Vlak, l: f64) -> [f64; 4] {
+    let (v1, v2) = (lokaal[index[0]], lokaal[index[2]]);
+    let (mut t1, mut t2) = (lokaal[index[1]], lokaal[index[3]]);
+    if vlak.begin_vrij && vlak.eind_vrij {
+        let koorde = s * (v2 - v1) / l;
+        t1 = koorde;
+        t2 = koorde;
+    } else if vlak.begin_vrij || vlak.eind_vrij {
+        let a = -s * 6.0 / (l * (4.0 + vlak.phi));
+        let d = -(2.0 - vlak.phi) / (4.0 + vlak.phi);
+        if vlak.begin_vrij {
+            t1 = a * (v1 - v2) + d * t2;
+        } else {
+            t2 = a * (v1 - v2) + d * t1;
+        }
+    }
+    let (p1, p2) = (s * t1, s * t2);
+    let dv = v2 - v1;
+    [
+        6.0 * dv / (l * l) - (4.0 * p1 + 2.0 * p2) / l,
+        -6.0 * dv / (l * l) + (2.0 * p1 + 4.0 * p2) / l,
+        p1,
+        p2,
+    ]
+}
+
 /// Grootste versterking van een vrije translatie ten opzichte van de eerste
 /// orde. Alleen translaties die minstens 1/1000 van de grootste eerste-orde-
 /// translatie zijn tellen mee: een vrijheidsgraad die lineair vrijwel stil
@@ -549,9 +661,101 @@ pub(crate) fn herstel_residu(input: &SolverInput3D, results: &mut AnalysisResult
     Ok(())
 }
 
+/// Aantal proefbelastingen in `singulier`.
+const PROEVEN: u64 = 2;
+/// Stappen iteratieve verfijning per proefbelasting.
+const VERFIJNINGEN: usize = 3;
+/// Een proefbelasting met een groter relatief residu wijst op een singuliere
+/// stijfheidsmatrix; dezelfde grens als `residual_ok` van de kern.
+const PROEFGRENS: f64 = 1e-6;
+
+/// Een getal in [0, 1) zonder patroon, vast per knoop, richting en proef
+/// (splitmix64): de proefbelasting is reproduceerbaar en heeft geen symmetrie
+/// die een mechanisme net zou missen.
+fn ruis(knoop: usize, lokaal: usize, proef: u64) -> f64 {
+    let mut x = (knoop as u64).wrapping_mul(6).wrapping_add(lokaal as u64)
+        .wrapping_add(proef.wrapping_mul(0xD1B5_4A32_D192_ED03))
+        .wrapping_add(0x9E37_79B9_7F4A_7C15);
+    x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^= x >> 31;
+    (x >> 11) as f64 / (1u64 << 53) as f64
+}
+
+/// Is de stijfheidsmatrix van `input` (met de koppelingen) numeriek singulier?
+/// Dan volgt een toelichting voor de foutmelding (#96).
+///
+/// Een mechanisme dat de belasting niet aanstoot, laat de kern soms door: de
+/// spil langs het mechanisme is afrondingsruis en niet precies nul, en zonder
+/// een lastcomponent langs het mechanisme blijft het residu klein. Daarom twee
+/// proefbelastingen op alle vrije vrijheidsgraden (krachten van grootte tot
+/// 1 kN, momenten tot 1 kN maal de modelafmeting, met een vast pseudo-
+/// willekeurig patroon), opgelost met een verse sparse Cholesky-factorisatie
+/// zonder verschuiving en drie stappen iteratieve verfijning. Is de matrix
+/// regulier, dan komt het relatieve residu op afrondingsniveau. Is zij
+/// singulier, dan blijft de component van de proefbelasting langs het
+/// mechanisme als residu staan, ongeacht de verfijning (K·m ≈ 0), of faalt de
+/// factorisatie al. Een model van raamwerkstaven, veren en platen (met hun
+/// draaiveer) heeft een positief definiete stijfheidsmatrix zodra er geen
+/// mechanisme is; de factorisatie zonder verschuiving hoort dan te slagen.
+pub(crate) fn singulier(input: &SolverInput3D) -> Result<Option<String>, String> {
+    let stelsel = Stelsel::bouw(input)?;
+    let k_s = stelsel.reduceer_matrix(&stelsel.k_ff);
+    if stelsel.nf == 0 || k_s.n == 0 { return Ok(None); }
+    let Some(factor) = factoriseer(&k_s)? else {
+        return Ok(Some(
+            "Controle van de adapter: de stijfheidsmatrix is niet positief definiet (de Cholesky-factorisatie zonder verschuiving faalt)."
+                .into(),
+        ));
+    };
+    let mut laag = [f64::INFINITY; 3];
+    let mut hoog = [f64::NEG_INFINITY; 3];
+    for knoop in input.nodes.values() {
+        for (as_, waarde) in [knoop.x, knoop.y, knoop.z].into_iter().enumerate() {
+            laag[as_] = laag[as_].min(waarde);
+            hoog[as_] = hoog[as_].max(waarde);
+        }
+    }
+    let lengte = (0..3).map(|as_| (hoog[as_] - laag[as_]).powi(2)).sum::<f64>().sqrt().max(1.0);
+    let norm = |v: &[f64]| v.iter().map(|x| x * x).sum::<f64>().sqrt();
+    for proef in 0..PROEVEN {
+        let mut f = vec![0.0; stelsel.nf];
+        for (&(knoop, lokaal), &index) in &stelsel.dof.map {
+            if index >= stelsel.nf { continue; }
+            let schaal = if lokaal < 3 { 1.0 } else { lengte };
+            f[index] = (2.0 * ruis(knoop, lokaal, proef) - 1.0) * schaal;
+        }
+        let f_s = stelsel.reduceer_vector(&f);
+        let maat = norm(&f_s);
+        if !(maat > 0.0) { continue; }
+        let mut q = sparse_cholesky_solve(&factor, &f_s);
+        let mut residu;
+        let mut stap = 0;
+        loop {
+            let kq = k_s.sym_mat_vec(&q);
+            let r: Vec<f64> = f_s.iter().zip(&kq).map(|(f, k)| f - k).collect();
+            residu = norm(&r) / maat;
+            if !residu.is_finite() || residu < 1e-13 || stap == VERFIJNINGEN { break; }
+            stap += 1;
+            let dq = sparse_cholesky_solve(&factor, &r);
+            for (a, b) in q.iter_mut().zip(&dq) { *a += b; }
+        }
+        if !(residu < PROEFGRENS) {
+            return Ok(Some(format!(
+                "Controle van de adapter: een proefbelasting op alle vrije vrijheidsgraden houdt een relatief residu van {residu:.1e} over (grens {PROEFGRENS:.0e}), dus de stijfheidsmatrix is singulier. De belasting van dit model zet geen kracht langs die beweging, maar elke belasting die dat wel doet, maakt het model onoplosbaar.",
+            )));
+        }
+    }
+    Ok(None)
+}
+
 /// Knikanalyse bij een lineaire berekening: de eerste-ordetoestand komt uit
 /// de reeds berekende uitkomst van de kern.
-pub(crate) fn knik_bij_eerste_orde(input: &SolverInput3D, lineair: &AnalysisResults3D, modes: usize) -> BucklingSummary {
+pub(crate) fn knik_bij_eerste_orde(
+    input: &SolverInput3D,
+    lineair: &AnalysisResults3D,
+    modes: usize,
+) -> BucklingSummary {
     if modes == 0 {
         return BucklingSummary::NotApplicable { reason: "knikanalyse is uitgeschakeld".into() };
     }
@@ -613,10 +817,14 @@ pub(crate) fn los_op(
         }
     }
 
+    // Zonder iteratie rekent geen K_G mee: de delen dragen dan N = 0, zodat
+    // Σ N·(e_x × Δu) nul is, zoals bij de lineaire reacties hoort.
+    let zonder_kg = || stelsel.delen(&vec![0.0; stelsel.staven.len()], &u_lineair);
     if stelsel.nf == 0 {
         // Een volledig voorgeschreven model heeft wel geldige verplaatsingen,
         // staafkrachten en reacties, maar geen onbekende om op te itereren.
         return Ok(Tweedeorde {
+            delen: zonder_kg(),
             results: lineair,
             summary: SecondOrderSummary { iterations: 1, converged: true, stable: true, max_amplification: 1.0 },
             buckling,
@@ -630,6 +838,7 @@ pub(crate) fn los_op(
         // Elke last staat op een geblokkeerde vrijheidsgraad: er is geen
         // vervormde stand waaruit een geometrische stijfheid kan ontstaan.
         return Ok(Tweedeorde {
+            delen: zonder_kg(),
             results: lineair,
             summary: SecondOrderSummary { iterations: 1, converged: true, stable: true, max_amplification: 1.0 },
             buckling,
@@ -642,11 +851,13 @@ pub(crate) fn los_op(
 
     let mut u = u_lineair.clone();
     let mut kg_laatst = Vec::new();
+    let mut n_laatst = Vec::new();
     let mut converged = false;
     let mut iterations = 0;
     for iteratie in 1..=max_iterations {
         iterations = iteratie;
-        let kg = stelsel.geometrisch(&stelsel.normaalkrachten(&u));
+        let normaalkrachten = stelsel.normaalkrachten(&u);
+        let kg = stelsel.geometrisch(&normaalkrachten);
         let Some(u_f) = stelsel.los_tangent(&kg)? else {
             if nulmode {
                 return Err(format!(
@@ -665,6 +876,7 @@ pub(crate) fn los_op(
         }
         u[..stelsel.nf].copy_from_slice(&u_f);
         kg_laatst = kg;
+        n_laatst = normaalkrachten;
         if norm.sqrt() > 1e-300 && verschil.sqrt() / norm.sqrt() < tolerance {
             converged = true;
             break;
@@ -708,8 +920,13 @@ pub(crate) fn los_op(
             "tweede-orde 3D-berekening: de eindcontrole K·u = F − K_G·u reproduceert de iteratie niet (afwijking {afwijking:.3e} bij {schaal:.3e})"
         ));
     }
+    // De staafkrachten van de kern zijn k_e·u: de fictieve knooplasten −K_G·u
+    // komen daarin als eindkracht en eindmoment terug, ook als moment bij een
+    // scharnierende oplegging. Tel K_G·u per staaf erbij op.
+    stelsel.tweede_orde_staafkrachten(&n_laatst, &u, &mut results);
     let max_amplification = versterking(&stelsel, &u_lineair, &u);
     Ok(Tweedeorde {
+        delen: stelsel.delen(&n_laatst, &u),
         results,
         summary: SecondOrderSummary { iterations, converged, stable: true, max_amplification },
         buckling,

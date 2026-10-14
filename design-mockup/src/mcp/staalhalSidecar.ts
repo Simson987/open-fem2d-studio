@@ -11,10 +11,10 @@
  *   2. Rust rekent elk verzoek met `open_fem_3d::solve`: dezelfde vastgezette
  *      kern als het Tauri-command `solve_open_fem_3d`.
  *   3. `staalhal_uitwerken` (hier): reactiesommen, evenwicht (kern én de
- *      onafhankelijke krachtensom), verplaatsingen en de EN 1993-toetsinvoer
- *      met `buildOpenFem3DSteelCheckInputs` — weer de functie van de app.
- *   4. Rust toetst met `steel_check::check_all_beams`, de functie achter het
- *      Tauri-command `check_steel_beams`.
+ *      onafhankelijke krachtensom), verplaatsingen en de EN 1993/EN 1995-
+ *      toetsinvoer met dezelfde bouwfuncties als de app.
+ *   4. Rust toetst met `steel_check::check_all_beams` en
+ *      `timber_check::check_all_timber_beams`, dezelfde functies als de app.
  * Er wordt nergens iets tweemaal uitgerekend: de sidecar kent de kern niet,
  * Rust kent de generator niet.
  *
@@ -24,6 +24,7 @@
  * hoort wordt aan de sleutels en de knoopnummers herkend en geweigerd.
  */
 import { eigenGewichtGeval } from "../lib/eigenGewicht";
+import { importeer as importeerEigenDoorsneden } from "../lib/profieleditor/eigenDoorsnedenStore";
 import { defaultCombinations, type LoadCombination } from "../components/fem/solver/combinations";
 import { GEVOLGKLASSEN, STANDAARD_GEVOLGKLASSE, type Gevolgklasse } from "../components/fem/solver/normcombinaties";
 import { openFem3DLoadCaseId, withOpenFem3DSelfWeight, type OpenFem3DModel } from "../components/openFem3d/openFem3dModel";
@@ -35,6 +36,7 @@ import {
 } from "../components/openFem3d/openFem3dSolver";
 import { openFem3DMaximumDisplacementM } from "../components/openFem3d/openFem3dDisplacement";
 import { buildOpenFem3DSteelCheckInputs } from "../components/openFem3d/openFem3dSteelCheck";
+import { buildOpenFem3DTimberCheckInputs } from "../components/openFem3d/openFem3dTimberCheck";
 import {
   maakStaalhal,
   staalhalProject,
@@ -105,6 +107,9 @@ interface Rekenopzet {
  * de standaardcombinaties waarin minstens één belast geval meedoet.
  */
 function rekenopzet(hal: StaalhalResultaat, reken: StaalhalRekeninstellingen): Rekenopzet {
+  // De gelaste tussendoorsneden van een verlopende spantligger (#73) moeten in
+  // de winkel staan vóór de verzoeken en de toetsinvoer worden gebouwd.
+  if (hal.eigenDoorsneden.length > 0) importeerEigenDoorsneden(hal.eigenDoorsneden);
   const egGeval = eigenGewichtGeval(hal.loadCases, hal.selfWeightEnabled);
   const rekenmodel = egGeval ? withOpenFem3DSelfWeight(hal.model, egGeval.id) : hal.model;
   const belast = new Set<number>([
@@ -256,6 +261,10 @@ export function opStaalhalUitwerken(payload: Record<string, unknown>) {
     combinations: opzet.combinaties, results: combinatieResultaten, loadCases: hal.loadCases,
     consequenceClass: reken.gevolgklasse,
   });
+  const houtToets = buildOpenFem3DTimberCheckInputs(hal.model, basis, {
+    combinations: opzet.combinaties, results: combinatieResultaten, loadCases: hal.loadCases,
+    consequenceClass: reken.gevolgklasse,
+  });
   return {
     reken,
     gevallen,
@@ -263,6 +272,9 @@ export function opStaalhalUitwerken(payload: Record<string, unknown>) {
     toetsinvoer: toets.inputs,
     nietGetoetst: toets.skipped,
     notities: toets.notes,
+    houtToetsinvoer: houtToets.inputs,
+    houtNietGetoetst: houtToets.skipped,
+    houtNotities: houtToets.notes,
     // Ter vergelijking, niet als oordeel: L/250 over de overspanning, h/150 op de goot.
     grenzen: {
       doorbuigingMm: hal.parameters.breedteMm / 250,

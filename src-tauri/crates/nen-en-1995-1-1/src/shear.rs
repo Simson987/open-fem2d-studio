@@ -32,6 +32,12 @@ pub fn tau_d_mpa(v_ed_kn: f64, section: &TimberSection, k_cr: f64) -> f64 {
     v_ed_kn.abs() * 1e3 * section.s_y_mm3 / (section.i_y_mm4 * b_ef)
 }
 
+/// Grootte van de schuifspanningsvector in het zwaartepunt van een rechthoek.
+pub fn tau_resultant_rect_mpa(vy_kn: f64, vz_kn: f64, section: &TimberSection, k_cr: f64) -> f64 {
+    if !section.rechthoekig || section.a_mm2 <= 0.0 || k_cr <= 0.0 { return 0.0; }
+    1.5 * vy_kn.hypot(vz_kn) * 1e3 / (k_cr * section.a_mm2)
+}
+
 /// Scheurfactor `k_cr` volgens de Nederlandse nationale bijlage bij 6.1.7,
 /// afgeleid uit de verhouding lijfdikte / flensbreedte.
 ///
@@ -88,10 +94,21 @@ pub fn check_shear(
     k_cr: f64,
     force_state: ForceStateSnapshot,
 ) -> ResistanceCalc {
-    let v_ed = force_state.forces.vz_ed;
-    let tau = tau_d_mpa(v_ed, section, k_cr);
+    let vy_ed = force_state.forces.vy_ed;
+    let vz_ed = force_state.forces.vz_ed;
+    let tau_z = tau_d_mpa(vz_ed, section, k_cr);
+    // Voor een rechthoek vallen de maxima van τ_xy en τ_xz in het
+    // zwaartepunt samen; hun vectorresultante is de schuifspanning van (6.13).
+    // Een eigen doorsnede heeft nog geen S_z en maatgevende breedte voor Vy.
+    let vy_onbepaald = !section.rechthoekig && vy_ed.abs() > 1e-12;
+    let tau_y = if section.rechthoekig && section.a_mm2 > 0.0 && k_cr > 0.0 {
+        1.5 * vy_ed.abs() * 1e3 / (k_cr * section.a_mm2)
+    } else { 0.0 };
+    let tau = if section.rechthoekig {
+        tau_resultant_rect_mpa(vy_ed, vz_ed, section, k_cr)
+    } else { tau_z };
     let uc = if f_vd_mpa > 0.0 { tau / f_vd_mpa } else { 0.0 };
-    let status = if v_ed.abs() < 1e-12 {
+    let status = if vy_onbepaald || (vy_ed.abs() < 1e-12 && vz_ed.abs() < 1e-12) {
         CheckStatus::NotApplicable
     } else if uc <= 1.0 {
         CheckStatus::Ok
@@ -105,6 +122,11 @@ pub fn check_shear(
     // met de NB-waarde 1,0 of met de Europese aanbeveling 0,67 is gerekend,
     // en dat kan niet als 1,0 zwijgt.
     let mut notes = vec![];
+    if vy_onbepaald {
+        notes.push("V_y is NIET getoetst: S_z en de breedte op de maatgevende verticale snede van deze eigen doorsnede ontbreken. De 3D-dwarskrachttoets is daardoor niet volledig.".into());
+    } else if vy_ed.abs() > 1e-12 {
+        notes.push("Art. 6.1.7 (6.13): bij een rechthoek zijn τ_y,d uit V_y en τ_z,d uit V_z maximaal in het zwaartepunt; de toets gebruikt hun vectorresultante. k_cr geldt voor beide richtingen.".into());
+    }
     // Nederlandse komma, zoals de vaste tekst hieronder (1,00 en 0,67).
     let k_cr_txt = format!("{k_cr:.2}").replace('.', ",");
     if !section.rechthoekig {
@@ -146,9 +168,12 @@ pub fn check_shear(
         title: "Dwarskracht".to_string(),
         article: "art. 6.1.7 (6.13)".to_string(),
         force_state,
-        formula_latex: r"\tau_d = \frac{V_{z,Ed} \cdot S_y}{I_y \cdot b_{ef}} \le f_{v,d}".to_string(),
+        formula_latex: r"\tau_d = \sqrt{\tau_{y,d}^2 + \tau_{z,d}^2} \le f_{v,d}".to_string(),
         variables: vec![
-            NamedValue { symbol: r"V_{z,Ed}".to_string(), value: v_ed.abs(), unit: "kN".to_string() },
+            NamedValue { symbol: r"V_{y,Ed}".to_string(), value: vy_ed.abs(), unit: "kN".to_string() },
+            NamedValue { symbol: r"V_{z,Ed}".to_string(), value: vz_ed.abs(), unit: "kN".to_string() },
+            NamedValue { symbol: r"\tau_{y,d}".to_string(), value: tau_y, unit: "N/mm²".to_string() },
+            NamedValue { symbol: r"\tau_{z,d}".to_string(), value: tau_z, unit: "N/mm²".to_string() },
             NamedValue { symbol: "S_y".to_string(), value: section.s_y_mm3, unit: "mm³".to_string() },
             NamedValue { symbol: "I_y".to_string(), value: section.i_y_mm4, unit: "mm⁴".to_string() },
             NamedValue { symbol: "b".to_string(), value: section.b_schuif_mm, unit: "mm".to_string() },
@@ -157,7 +182,7 @@ pub fn check_shear(
         ],
         value: tau,
         unit: "N/mm²".to_string(),
-        uc: Some(UnityCheck {
+        uc: (!vy_onbepaald).then_some(UnityCheck {
             ed: tau,
             rd: f_vd_mpa,
             uc,
@@ -231,6 +256,34 @@ mod tests {
         let v_kn = 75.5676;
         let via_a = 1.5 * v_kn * 1e3 / s.a_mm2;
         assert_relative_eq!(tau_d_mpa(v_kn, &s, 1.0), via_a, max_relative = 1e-12);
+    }
+
+    #[test]
+    fn vy_en_vz_gebruiken_de_resultante_op_een_rechthoek() {
+        let s = TimberSection::rechthoek(100.0, 200.0);
+        let state = ForceStateSnapshot {
+            combination_id: 3,
+            position_mm: 1000.0,
+            forces: InternalForces { vy_ed: 30.0, vz_ed: 40.0, ..Default::default() },
+        };
+        let r = check_shear(&s, 4.0, 1.0, state);
+        assert_relative_eq!(r.value, 1.5 * 50_000.0 / s.a_mm2, max_relative = 1e-12);
+        assert_relative_eq!(r.uc.unwrap().uc, 0.9375, max_relative = 1e-12);
+    }
+
+    #[test]
+    fn vy_op_een_eigen_doorsnede_wordt_niet_stil_genegeerd() {
+        let mut s = TimberSection::rechthoek(100.0, 200.0);
+        s.rechthoekig = false;
+        let state = ForceStateSnapshot {
+            combination_id: 3,
+            position_mm: 1000.0,
+            forces: InternalForces { vy_ed: 30.0, ..Default::default() },
+        };
+        let r = check_shear(&s, 4.0, 1.0, state);
+        assert_eq!(r.status, CheckStatus::NotApplicable);
+        assert!(r.uc.is_none());
+        assert!(r.notes.iter().any(|note| note.contains("NIET getoetst")));
     }
 
     #[test]

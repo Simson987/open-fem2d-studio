@@ -112,8 +112,8 @@ async function sleep(van: { x: number; y: number }, naar: { x: number; y: number
   muis("mouseup", naar, svg());
   await wacht(30);
 }
-function toets(key: string, doel: EventTarget = window) {
-  flushSync(() => { doel.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })); });
+function toets(key: string, doel: EventTarget = window, extra: KeyboardEventInit = {}) {
+  flushSync(() => { doel.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...extra })); });
 }
 const kader = () => container.querySelector<SVGRectElement>("rect.fem-box-select");
 /**
@@ -237,6 +237,41 @@ async function run() {
     flushSync(() => store.undo());
     await wacht();
     gelijk(store.plates.map((p) => p.id), [1], "ongedaan maken zet de plaat terug");
+  });
+
+  await test("oplegging selecteren en met Ctrl+C/V tweemaal plakken: steun mee, elk plakken één undo-stap", async () => {
+    mount(<MetStore />);
+    await klaar();
+    flushSync(() => store.addSupport(1, "pinned"));
+    await wacht();
+    const p = knoop(1);
+    const driehoek = container.querySelector<SVGPolygonElement>('[data-support-node-id="1"] polygon');
+    ok(driehoek, "opleggingssymbool ontbreekt");
+    const symboolPunt = { x: p.x, y: p.y + 16 }; // buiten de knoopstraal
+    muis("mousedown", symboolPunt, driehoek!);
+    muis("mouseup", symboolPunt, driehoek!);
+    muis("click", symboolPunt, driehoek!);
+    gelijk(store.selection, { type: "node", id: 1 }, "klik op de oplegging selecteert de knoop");
+
+    toets("c", window, { ctrlKey: true });
+    toets("v", window, { ctrlKey: true });
+    await wacht();
+    gelijk([store.nodes.length, store.supports.length], [7, 2], "eerste plak bevat knoop en oplegging");
+    const eerste = store.nodes.find((n) => n.x === 1500 && n.z === 5000);
+    ok(eerste && store.supports.some((s) => s.nodeId === eerste.id && s.type === "pinned"),
+      "eerste kopie staat 500 mm verder met dezelfde oplegging");
+
+    toets("v", window, { ctrlKey: true });
+    await wacht();
+    gelijk([store.nodes.length, store.supports.length], [8, 3], "tweede plak bevat opnieuw knoop en oplegging");
+    const tweede = store.nodes.find((n) => n.x === 2000 && n.z === 5000);
+    ok(tweede && store.supports.some((s) => s.nodeId === tweede.id && s.type === "pinned"),
+      "tweede kopie staat 1000 mm verder met dezelfde oplegging");
+
+    flushSync(() => store.undo());
+    gelijk([store.nodes.length, store.supports.length], [7, 2], "één undo haalt alleen de tweede plak weg");
+    flushSync(() => store.undo());
+    gelijk([store.nodes.length, store.supports.length], [6, 1], "tweede undo haalt de eerste plak weg");
   });
 }
 

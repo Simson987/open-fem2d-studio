@@ -186,9 +186,6 @@
 
 .open-fem3d-stage-header,
 .open-fem3d-stage-footer {
-  position: absolute;
-  left: 16px;
-  right: 16px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -196,10 +193,27 @@
   font-size: 12px;
   text-shadow: none;
 }
+.open-fem3d-stage-footer { position: absolute; left: 16px; right: 16px; }
+
+/* De bovenrand: de kopregel met daaronder de modelcontrole (issue #63), in
+   één kolom. Groeit de kopregel (lange uitleg, smal podium, andere taal), dan
+   schuift de modelcontrole mee omlaag in plaats van over de uitleg te liggen.
+   De kolom zelf laat de muis door; alleen de knoppen vangen klikken af. */
+.open-fem3d-stage-top {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+}
 
 /* Bovenaan uitgelijnd: loopt de uitleg op een smal podium over meer regels,
    dan blijven werkvlak, Views en Passend beeld bovenin, boven de view cube. */
-.open-fem3d-stage-header { top: 14px; align-items: flex-start; }
+.open-fem3d-stage-header { align-self: stretch; align-items: flex-start; }
 .open-fem3d-stage-header strong { font-size: 15px; }
 .open-fem3d-stage-header span { color: #64748b; }
 .open-fem3d-views-button {
@@ -208,6 +222,14 @@
   background:#fff; color:#1e40af; cursor:pointer; font:600 11px system-ui,sans-serif;
 }
 .open-fem3d-views-button:hover { background:#eff6ff; }
+.open-fem3d-explode {
+  display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
+  pointer-events: auto; padding: 3px 6px; border: 1px solid #cbd5e1;
+  border-radius: 4px; background: #ffffffe6; color: #334155;
+  font: 600 11px system-ui, sans-serif;
+}
+.open-fem3d-explode input { width: 92px; accent-color: #2563eb; }
+.open-fem3d-explode output { min-width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
 /* Werkvlak voor tekenen (actief level) in de kopregel van het 3D-tekenvlak. */
 .open-fem3d-workplane {
   display: inline-flex;
@@ -233,6 +255,19 @@
   font: 500 11px system-ui, sans-serif;
 }
 .open-fem3d-workplane em { font-style: normal; font-weight: 500; color: #64748b; }
+.open-fem3d-envelope-grid {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+  max-width: min(100%, 900px); pointer-events: auto;
+  padding: 5px 7px; border: 1px solid #cbd5e1; border-radius: 4px;
+  background: #ffffffed; color: #1e293b;
+  font: 600 11px system-ui, sans-serif;
+}
+.open-fem3d-envelope-grid label { display: inline-flex; align-items: center; gap: 3px; }
+.open-fem3d-envelope-grid select, .open-fem3d-envelope-grid button {
+  padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 3px;
+  background: #fff; color: #1e293b; font: 500 11px system-ui, sans-serif;
+}
+.open-fem3d-envelope-grid button { cursor: pointer; color: #1e40af; font-weight: 600; }
 .open-fem3d-draw-error {
   position: absolute;
   z-index: 9;
@@ -852,3 +887,51 @@
    Volume, Vlak en Mesh (ook Volumen, Fläche, Maillage) voluit passen. */
 .open-fem3d-plate-display-dialog .open-fem3d-plate-display-icon { display: none; }
 .open-fem3d-plate-display-dialog .open-fem3d-plate-display-option { padding: 3px 2px; }
+
+/* Modelcontrole (issue #63): knopen die op een staaf liggen zonder verbinding,
+   linksboven direct onder de kopregel (in de kolom .open-fem3d-stage-top),
+   met de knop Aansluiten. Rechts blijft de kolom van de view cube vrij (10 +
+   112 px van de podiumrand; de kolom begint al 16 px van de rand). Het podium
+   is in elk thema wit, dus dezelfde lichte kaart als de legenda's; de knop in
+   de accentkleur, zoals Verbind in de modelcontrole van 2D. Een tekenfout
+   (z-index 9) gaat er even overheen. */
+.open-fem3d-model-check {
+  position: relative; z-index: 8; pointer-events: auto;
+  display: grid; gap: 6px; max-width: min(440px, calc(100% - 128px));
+  padding: 7px 9px; border: 1px solid #f59e0b; border-left-width: 3px; border-radius: 4px;
+  background: #fffffff5; color: #334155; font: 500 11px/1.35 "Inter", system-ui, sans-serif;
+  box-shadow: 0 2px 8px #0f172a1a;
+}
+.open-fem3d-model-check-kop { display: flex; align-items: center; gap: 8px; }
+.open-fem3d-model-check-toggle {
+  display: flex; flex: 1; min-width: 0; align-items: center; gap: 6px; padding: 0;
+  border: 0; background: transparent; color: #1e293b; cursor: pointer;
+  font: 600 11px/1.3 "Inter", system-ui, sans-serif; text-align: left;
+}
+.open-fem3d-model-check-merk {
+  display: inline-flex; flex: none; align-items: center; justify-content: center;
+  width: 15px; height: 15px; border-radius: 50%; background: #d97706; color: #fff; font-size: 10px; font-weight: 700;
+}
+.open-fem3d-model-check-chevron { margin-left: auto; color: #64748b; }
+.open-fem3d-model-check-connect {
+  flex: none; padding: 4px 10px; border: 1px solid var(--theme-accent, #d97706); border-radius: 3px;
+  background: var(--theme-accent, #d97706); color: var(--theme-accent-text, #fff); cursor: pointer;
+  font: 600 11px/1 "Inter", system-ui, sans-serif;
+}
+.open-fem3d-model-check-connect:hover { filter: brightness(1.08); }
+.open-fem3d-model-check-connect:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 1px; }
+/* Niets aan te sluiten (alleen overlappende staven of te dichte knopen): de knop staat uit. */
+.open-fem3d-model-check-connect:disabled { cursor: default; opacity: 0.55; filter: none; }
+.open-fem3d-model-check-lijst {
+  display: grid; gap: 3px; max-height: 180px; overflow-y: auto; margin: 0; padding: 0 0 0 6px;
+  border-left: 2px solid #fcd34d; list-style: none;
+}
+.open-fem3d-model-check-meer { color: #64748b; font-style: italic; }
+/* Een knoop die Aansluiten niet kan aansluiten: de regel met de reden. */
+.open-fem3d-model-check-lijst li[data-reden] { color: #92400e; }
+/* Samenvallende knopen (issue #75): staan er ook knopen op staven, dan een
+   tweede kopregel met de knop Samenvoegen, in dezelfde letter als de eerste. */
+.open-fem3d-model-check-titel {
+  display: flex; flex: 1; min-width: 0; align-items: center; gap: 6px;
+  color: #1e293b; font: 600 11px/1.3 "Inter", system-ui, sans-serif;
+}

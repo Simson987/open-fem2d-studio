@@ -56,7 +56,7 @@
 
 import { Matrix } from "../src/core/math/Matrix.ts";
 import { solveLinearSystem as solveGauss } from "../src/core/math/GaussElimination.ts";
-import { solveSkyline, solveWithProfile, analyzeMatrix } from "../src/core/math/SkylineSolver.ts";
+import { solveSkyline, solveWithProfile, analyzeMatrix, reorderForSkyline } from "../src/core/math/SkylineSolver.ts";
 import { Mesh } from "../src/core/fem/Mesh.ts";
 import { assembleGlobalStiffnessMatrix, getConstrainedDofs } from "../src/core/solver/Assembler.ts";
 
@@ -163,9 +163,9 @@ function bouwMesh(model) {
 }
 
 /** Stijfheidsmatrix mét penalty-randvoorwaarden, precies zoals de solver hem ziet. */
-function bouwStelsel(mesh) {
-  const K = assembleGlobalStiffnessMatrix(mesh, "frame");
-  const { dofs } = getConstrainedDofs(mesh, "frame");
+function bouwStelsel(mesh, analysisType = "frame") {
+  const K = assembleGlobalStiffnessMatrix(mesh, analysisType);
+  const { dofs } = getConstrainedDofs(mesh, analysisType);
   const n = K.rows;
   const F = new Array(n).fill(0);
   // Horizontale eenheidslast op elke vrije knoop — een rechterlid dat elke
@@ -229,8 +229,8 @@ const regels = [];
 // De markdown-regel wordt METEEN geschreven, niet aan het eind. De grootste
 // modellen kunnen op een geheugengrens stuklopen; dan is alles wat daarvóór
 // gemeten is nog steeds bruikbaar.
-console.log("| nummering | segm./staaf | elementen | DOF | dichte K (MB) | b_max | h_gem | Gauss (ms) | band (ms) | skyline (ms) |");
-console.log("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+console.log("| nummering | segm./staaf | elementen | DOF | dichte K (MB) | profiel oud | profiel RCM | Gauss (ms) | band (ms) | skyline oud (ms) | skyline RCM (ms) |");
+console.log("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
 
 for (const volgorde of ["aaneengesloten", "toegevoegd"]) {
   for (const [bays, storeys, nSeg] of REEKS) {
@@ -251,7 +251,7 @@ for (const volgorde of ["aaneengesloten", "toegevoegd"]) {
       continue;
     }
     const { K, F } = stelsel;
-    const profiel = analyzeMatrix(K);
+    const profiel = analyzeMatrix(K, true);
     const bMax = profiel.halfBandwidth;
     const vasteBand = new Int32Array(K.rows);
     for (let i = 0; i < K.rows; i++) vasteBand[i] = Math.max(0, i - bMax);
@@ -267,8 +267,14 @@ for (const volgorde of ["aaneengesloten", "toegevoegd"]) {
       geheugenMB: (K.rows * K.rows * 8) / 1024 / 1024,
     };
 
+    const hernummerd = reorderForSkyline(K, profiel);
+    // De oorspronkelijke solveSkyline scant K bij elke aanroep voor het
+    // profiel. Meet die scan ook mee voor een eerlijke vergelijking.
+    const skyOud = meet(() => solveWithProfile(K, F, analyzeMatrix(K).first));
     const sky = meet(() => solveSkyline(K, F));
     rij.skylineMs = sky.ms;
+    rij.skylineOudMs = skyOud.ms;
+    rij.profielRcm = hernummerd.reorderedProfileSize;
 
     let band = null;
     if (nDofs <= BAND_TOT) {
@@ -287,9 +293,46 @@ for (const volgorde of ["aaneengesloten", "toegevoegd"]) {
     const f = (v, d = 1) => (v === undefined ? "n.v.t." : v.toFixed(d));
     console.log(
       `| ${rij.volgorde} | ${rij.nSeg} | ${rij.elementen} | ${rij.nDofs} | ${rij.geheugenMB.toFixed(1)} | ` +
-        `${rij.bMax} | ${rij.hGem.toFixed(1)} | ${f(rij.gaussMs)} | ${f(rij.bandMs)} | ${f(rij.skylineMs)} |`,
+        `${profiel.profileSize} | ${rij.profielRcm} | ${f(rij.gaussMs)} | ${f(rij.bandMs)} | ${f(rij.skylineOudMs)} | ${f(rij.skylineMs)} |`,
     );
   }
+}
+
+// Een echte DKT-plaatmesh, met ingeklemde rand en verdeelde puntlasten.
+// Meet zowel de gebruikelijke rijvolgorde als achteraf slecht genummerde
+// knopen, zoals bij het raamwerk hierboven.
+for (const volgorde of ["rijgewijs", "afwisselend"]) {
+  const mesh = new Mesh();
+  const size = 12;
+  const ids = Array.from({ length: size }, () => new Array(size));
+  const plekken = Array.from({ length: size * size }, (_, i) => i);
+  if (volgorde === "afwisselend") {
+    const oud = [...plekken];
+    plekken.length = 0;
+    for (let i = 0; i < Math.ceil(oud.length / 2); i++) {
+      plekken.push(oud[i]);
+      if (oud.length - 1 - i !== i) plekken.push(oud[oud.length - 1 - i]);
+    }
+  }
+  for (const plek of plekken) {
+    const x = plek % size, y = Math.floor(plek / size);
+    const node = mesh.addNode(x, y);
+    if (x === 0 || y === 0 || x === size - 1 || y === size - 1) {
+      node.constraints = { x: true, y: true, rotation: true };
+    }
+    ids[y][x] = node.id;
+  }
+  for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++) {
+    mesh.addTriangleElement([ids[y][x], ids[y][x + 1], ids[y + 1][x]]);
+    mesh.addTriangleElement([ids[y + 1][x + 1], ids[y + 1][x], ids[y][x + 1]]);
+  }
+  const { K, F } = bouwStelsel(mesh, "plate_bending");
+  const oud = analyzeMatrix(K, true);
+  const nieuw = reorderForSkyline(K, oud);
+  const oudTijd = meet(() => solveWithProfile(K, F, analyzeMatrix(K).first));
+  const nieuwTijd = meet(() => solveSkyline(K, F));
+  console.log(`| plaat ${size}×${size} ${volgorde} | — | ${mesh.elements.size} | ${K.rows} | ${((K.rows ** 2 * 8) / 1024 / 1024).toFixed(1)} | ${oud.profileSize} | ${nieuw.reorderedProfileSize} | — | — | ${oudTijd.ms.toFixed(1)} | ${nieuwTijd.ms.toFixed(1)} |`);
+  console.log(`  Plaat, maximale relatieve afwijking oud/RCM: ${maxAfwijking(oudTijd.uitkomst, nieuwTijd.uitkomst).toExponential(3)}`);
 }
 
 console.log("");

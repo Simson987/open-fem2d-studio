@@ -20,7 +20,7 @@ import { existsSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, basename, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { startBrowser } from "./scripts/headlessBrowser.mjs";
+import { browserResult, startBrowser } from "./scripts/headlessBrowser.mjs";
 
 const browser = [process.env.OPENAEC_BROWSER,
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -44,18 +44,21 @@ try {
   writeFileSync(html, '<!doctype html><html><head><meta charset="utf-8">' +
     '<link rel="stylesheet" href="test.css"></head><body style="margin:0"><div id="root"></div>' +
     '<pre id="uitslag"></pre><script src="test.js"></script></body></html>');
-  const result = startBrowser(browser, ["--headless=new", "--disable-gpu", "--enable-unsafe-swiftshader", "--no-first-run",
-    "--no-default-browser-check", `--user-data-dir=${join(folder, "profiel")}`, "--window-size=1000,760",
-    "--virtual-time-budget=120000", "--dump-dom", pathToFileURL(html).href,
-  ], { encoding: "utf8", timeout: 180_000, maxBuffer: 32 * 1024 * 1024 });
-  const match = /<pre id="uitslag">([^<]*)<\/pre>/.exec(result.stdout ?? "");
-  assert.ok(match?.[1], result.error?.message ?? result.stderr?.slice(0, 1500) ?? "Geen browserresultaat");
-  const report = JSON.parse(match[1].replace(/&quot;/g, '"').replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&"));
-  for (const item of report.tests) console.log(`  ${item.error ? "FAIL" : "ok"} ${item.name}${item.error ? ": " + item.error : ""}`);
-  for (const regel of report.info ?? []) console.log(`     · ${regel}`);
-  assert.equal(report.error, null, report.error);
-  assert.equal(report.tests.filter((t) => t.error).length, 0, "section-box-UI regressies");
-  assert.ok(report.tests.length >= 14, `te weinig proeven gedraaid: ${report.tests.length}`);
+  // De halproef maakt honderden WebGL-objecten. Beide groepen draaien alle
+  // checks met een eigen proces; CDP leest #uitslag zodra die gevuld is.
+  let totaal = 0;
+  for (const groep of ["basis", "prestatie"]) {
+    const report = await browserResult(browser, ["--headless=new", "--disable-gpu", "--enable-unsafe-swiftshader", "--force-prefers-reduced-motion=reduce", "--no-first-run",
+      "--no-default-browser-check", `--user-data-dir=${join(folder, `profiel-${groep}`)}`, "--window-size=1000,760",
+      `${pathToFileURL(html).href}#groep=${groep}`,
+    ]);
+    for (const item of report.tests) console.log(`  ${item.error ? "FAIL" : "ok"} ${item.name}${item.error ? ": " + item.error : ""}`);
+    for (const regel of report.info ?? []) console.log(`     · ${regel}`);
+    assert.equal(report.error, null, `${groep}: ${report.error}`);
+    assert.equal(report.tests.filter((t) => t.error).length, 0, `${groep}: section-box-UI regressies`);
+    totaal += report.tests.length;
+  }
+  assert.ok(totaal >= 14, `te weinig proeven gedraaid: ${totaal}`);
 
   const map = process.env.OPEN_FEM3D_SCHERMAFBEELDINGEN;
   if (map) {
@@ -70,7 +73,7 @@ try {
       console.log(`  schermafbeelding: ${pad}`);
     }
   }
-  console.log(`${report.tests.length} geslaagd, 0 gefaald (${basename(browser)})`);
+  console.log(`${totaal} geslaagd, 0 gefaald (${basename(browser)})`);
 } finally {
   rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }

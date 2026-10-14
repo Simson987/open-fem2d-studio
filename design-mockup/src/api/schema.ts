@@ -39,6 +39,7 @@ export interface ApiNumberSchema {
   minimum?: number;
   maximum?: number;
   exclusiveMinimum?: number;
+  exclusiveMaximum?: number;
   description?: string;
 }
 export interface ApiStringSchema {
@@ -113,6 +114,9 @@ export function valideer(schema: ApiSchema, waarde: unknown, pad = ""): SchemaPr
       if (schema.maximum !== undefined && waarde > schema.maximum) meld(`mag hoogstens ${schema.maximum} zijn`);
       if (schema.exclusiveMinimum !== undefined && waarde <= schema.exclusiveMinimum) {
         meld(`moet groter zijn dan ${schema.exclusiveMinimum}`);
+      }
+      if (schema.exclusiveMaximum !== undefined && waarde >= schema.exclusiveMaximum) {
+        meld(`moet kleiner zijn dan ${schema.exclusiveMaximum}`);
       }
       break;
     }

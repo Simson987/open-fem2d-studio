@@ -12,6 +12,7 @@ import {
   themeSunIcon,
   themeMoonIcon,
   languageIcon,
+  aiAssistantIcon,
 } from "./icons";
 
 interface SettingsTabProps {
@@ -23,11 +24,13 @@ interface SettingsTabProps {
   onThemeSelect?: (theme: string) => void;
   /** Open de alleen-lezen bibliotheek-dialoog op het gegeven tabblad. */
   onOpenLibrary?: (tab: "sections" | "materials") => void;
+  /** Open Instellingen op het tabblad AI-assistent (MCP) (issue #109). */
+  onOpenAiAssistant?: () => void;
 }
 
 export default function SettingsTab({
   onSettingsClick, onProjectSettingsClick,
-  theme, onThemeSelect, onOpenLibrary,
+  theme, onThemeSelect, onOpenLibrary, onOpenAiAssistant,
 }: SettingsTabProps) {
   const { t, i18n } = useTranslation("ribbon");
   // Actieve taal — resolvedLanguage vangt varianten als "en-US" af.
@@ -74,6 +77,17 @@ export default function SettingsTab({
             label={t("settings.calcSettings")}
             size="large"
             onClick={onSettingsClick}
+          />
+        </RibbonGroup>
+
+        {/* AI-assistent — de bediening door een AI-assistent (MCP) toestaan en
+            koppelen; opent Instellingen op dat tabblad (issue #109). */}
+        <RibbonGroup label={t("settings.aiGroup")}>
+          <RibbonButton
+            icon={aiAssistantIcon}
+            label={t("settings.aiAssistant")}
+            size="large"
+            onClick={onOpenAiAssistant}
           />
         </RibbonGroup>
 

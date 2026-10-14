@@ -43,9 +43,30 @@
 //! eigen punt op de staafas. Bij alleen druk tellen alleen de veren die
 //! meedoen (`controleer_bij`).
 //!
+//! Een plaat op bedding (`plaatbedding`, #107) is in elke knoop opgelegd langs
+//! haar normaal; drie niet-collineaire knopen met een veer die meedoet houden
+//! hetzelfde tegen als alle (per eiland, als één plaat uit losse stukken
+//! bestaat). De bewegingen in het vlak van zo'n plaat (verschuiven in het vlak,
+//! draaien om de normaal) houdt geen veer tegen; heeft een verbonden deel daar
+//! vrije bewegingen, dan houdt de adapter die vast (`vlakvrij`) en telt deze
+//! controle ze niet als vrij: zonder schijf door ze af te splitsen
+//! (`vlak_splits`), met een starre schijf in het deel door de vasthouding als
+//! oplegging mee te tellen (`vasthouding_via_schijf`).
+//!
 //! Buiten deze controle vallen interne mechanismen (scharnieren, vrijgegeven
 //! staafeinden): een model dat hier voldoende is opgelegd, kan toch singulier
 //! zijn. De melding bij een singuliere stijfheidsmatrix zegt dat dan.
+//!
+//! Draaiing om de eigen as (#96). Liggen alle knopen van een deel op één
+//! rechte lijn (een staaf of een rij staven), dan verplaatst de draaiing van
+//! dat deel om die lijn geen enkele knoop: het is alleen een knoopdraaiing,
+//! zonder translatie en zonder vervorming. Zo'n draaiing houdt de adapter vast
+//! (`knoopdraaiing`) en meldt zij als mechanisme zodra de belasting er een
+//! moment op zet. Deze controle telt haar daarom niet als vrije beweging,
+//! behalve als een knoop van het deel in een schijf ligt en de lijn niet
+//! horizontaal is (de schijf koppelt de draaiing om Z aan haar verschuivingen;
+//! die draaiing houdt de regel niet vast). `controleer_zonder_draairegel`
+//! geeft het oude beeld, voor de foutmelding als zo'n draaiing toch belast is.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
@@ -53,7 +74,7 @@ use crate::bedding::{self, Los};
 use crate::shell::{add, cross, dot, norm, scale, sub, V3};
 use crate::{Member3D, Node3D, SolveRequest3D, Support3D};
 
-type V6 = [f64; 6];
+pub(crate) type V6 = [f64; 6];
 
 const ASSEN: [&str; 3] = ["X", "Y", "Z"];
 /// Relatieve grens voor rang (σ/σ_max): een beweging die minder dan een
@@ -215,6 +236,49 @@ struct Schijf {
     knopen: Vec<usize>,
 }
 
+/// Het vlak van een plaat op bedding: drie niet-collineaire plaatknopen (of
+/// minder bij een ontaard net) en de normaal.
+struct Plaatvlak {
+    plate_id: usize,
+    normaal: V3,
+    /// Index van een knoop van de plaat (voor het deel).
+    knoop: usize,
+    punten: Vec<V3>,
+}
+
+/// Eén star deel van een verbonden modeldeel met vrije bewegingen in het vlak
+/// van een plaat op bedding (`Vlakvrij`).
+pub(crate) struct Vlakdeel {
+    /// Zwaartepunt van de knopen van het deel; de bewegingen van het deel
+    /// staan als (t, L·θ) rond dit punt.
+    pub centrum: V3,
+    /// De knopen (id) van het deel: welke lasten erop staan en welke
+    /// plaatknopen de vasthouding kan nemen (`plaatbedding`).
+    pub knopen: BTreeSet<usize>,
+    /// De plaat op bedding van dit deel waarvan het vlak telt (laagste id; bij
+    /// een plaat met losse eilanden het eiland in dit deel), of geen.
+    pub plate_id: Option<usize>,
+}
+
+/// De vrije starrelichaamsbewegingen van een verbonden modeldeel (starre
+/// delen, eventueel via starre schijven samen) in het vlak van zijn platen op
+/// bedding, die de adapter vasthoudt (#107, `plaatbedding`).
+pub(crate) struct Vlakvrij {
+    /// De plaat op bedding van het verbonden deel met de laagste id (voor de meldingen).
+    pub plate_id: usize,
+    /// Zwaartepunt van alle knopen van het verbonden deel.
+    pub centrum: V3,
+    pub lengte: f64,
+    pub delen: Vec<Vlakdeel>,
+    /// Orthonormaal: per deel zes waarden (t, L·θ) rond zijn centrum, dan per
+    /// schijf drie (a, b, L·φ) zoals in `Stelsel`. Zonder schijf zes waarden.
+    pub bewegingen: Vec<Vec<f64>>,
+    /// Hangen de delen via een starre schijf samen? Dan telt de controle de
+    /// vasthouding als oplegging; zonder schijf splitst `vlak_splits` dezelfde
+    /// bewegingen af.
+    pub via_schijf: bool,
+}
+
 /// Het model zoals deze controle het ziet: knopen op index, starre delen en schijven.
 struct Model {
     ids: Vec<usize>,
@@ -223,9 +287,16 @@ struct Model {
     /// Vast in het vlak van een schijf (ux, uy of rz), zoals `schijven` het telt.
     vlak_vast: Vec<bool>,
     in_element: Vec<bool>,
+    /// Ligt de knoop in een schijf die iets koppelt?
+    in_schijf: Vec<bool>,
+    /// Telt de draaiing van een recht deel om zijn eigen as als vastgehouden (#96)?
+    draairegel: bool,
     /// Voorwaarden van de bedding per knoop: (punt, richting), met het punt
     /// ergens op de staafas; de knoop bepaalt alleen het deel.
     extra: Vec<Vec<(V3, V3)>>,
+    /// Platen op bedding (#107), oplopend op plaat-id: hun vlak bepaalt welke
+    /// vrije bewegingen de adapter vasthoudt (`vlak_splits`).
+    plaatvlakken: Vec<Plaatvlak>,
     deel_van: Vec<usize>,
     delen: Vec<Deel>,
     schijven: Vec<Schijf>,
@@ -241,29 +312,123 @@ pub(crate) fn controleer(request: &SolveRequest3D, uitgesloten: &HashSet<usize>)
 
 /// Als `controleer`, met de verticale grondveren in `los` (alleen druk) weggevallen.
 pub(crate) fn controleer_bij(request: &SolveRequest3D, uitgesloten: &HashSet<usize>, los: &Los) -> Vec<Bevinding> {
-    controleer_volledig(request, uitgesloten, GROOTSTE_SCHIJVEN, los)
+    controleer_volledig(request, uitgesloten, GROOTSTE_SCHIJVEN, los, true)
+}
+
+/// Als `controleer`, maar met de draaiing van een recht deel om zijn eigen as
+/// als vrije beweging: voor de foutmelding als de belasting die draaiing
+/// aanstoot (`knoopdraaiing`).
+pub(crate) fn controleer_zonder_draairegel(request: &SolveRequest3D) -> Vec<Bevinding> {
+    controleer_volledig(request, &HashSet::new(), GROOTSTE_SCHIJVEN, &Los::new(), false)
+}
+
+/// Per verbonden modeldeel met een plaat op bedding: de vrije
+/// starrelichaamsbewegingen in het vlak van zijn platen op bedding, die de
+/// adapter vasthoudt (#107). Staven in `uitgesloten` tellen niet mee, zoals in
+/// `controleer`.
+///
+/// Zonder schijf is het verbonden deel één star deel, met dezelfde splitsing
+/// als in de controle (`vlak_splits`): wat daar niet als vrij telt, zit in de
+/// kern ook echt vast. Hangen delen via een starre schijf samen, dan zijn de
+/// vrije bewegingen die van het hele stelsel (`Stelsel`: elk deel bij
+/// stilstaande schijven en de schijfbewegingen waarbij de delen meegaan). Een
+/// schijf koppelt alleen knopen onderling en houdt bij een starre beweging van
+/// het geheel niets tegen; een vloer op bedding met een schijf ergens in
+/// hetzelfde deel heeft dus dezelfde vrije bewegingen in het vlak als zonder.
+/// Vastgehouden worden de vrije bewegingen waarbij geen plaat op bedding uit
+/// haar vlak beweegt (drie punten per plaat, zoals in `vlak_splits`). De
+/// controle telt de vasthouding van zo'n deel als oplegging
+/// (`vasthouding_via_schijf`), omdat de splitsing per star deel daar niet
+/// past. Bij meer dan `GROOTSTE_SCHIJVEN` schijven in één verbonden deel geen
+/// vasthouding (de controle gaat de schijven dan niet volledig na).
+pub(crate) fn vlakvrij(request: &SolveRequest3D, uitgesloten: &HashSet<usize>, los: &Los) -> Vec<Vlakvrij> {
+    let model = Model::bouw(request, uitgesloten, GROOTSTE_SCHIJVEN, los, true);
+    let mut uit = Vec::new();
+    if model.plaatvlakken.is_empty() { return uit; }
+    for (delen, schijven) in model.groepen() {
+        // Per deel het vlak van zijn eerste plaat op bedding (laagste id).
+        let vlakken: Vec<(usize, &Plaatvlak)> = delen.iter().enumerate()
+            .filter_map(|(j, deel)| model.plaatvlakken.iter().find(|vlak| model.deel_van[vlak.knoop] == *deel).map(|vlak| (j, vlak)))
+            .collect();
+        if vlakken.is_empty() { continue; }
+        let knopen: Vec<usize> = delen.iter().flat_map(|d| model.delen[*d].knopen.iter().copied()).collect();
+        if !knopen.iter().any(|k| model.opgelegd(*k)) { continue; }
+        // Centrum en maat zoals in `groep`.
+        let c = model.zwaartepunt(&knopen);
+        let l = knopen.iter().map(|k| norm(sub(model.punt[*k], c))).fold(1.0_f64, f64::max);
+        let via_schijf = !(delen.len() == 1 && schijven.is_empty());
+        let (centra, vast): (Vec<V3>, Vec<Vec<f64>>) = if !via_schijf {
+            let v = model.zonder_eigen_as(&knopen, nulruimte6(&model.groepsrijen(&knopen, &[], c, l)));
+            let Some((_, vast, _)) = model.vlak_splits(delen[0], c, l, &v) else { continue };
+            (vec![c], vast.into_iter().map(|x| x.to_vec()).collect())
+        } else {
+            if schijven.len() > model.grootste_schijven { continue; }
+            let (leden, _) = model.leden(&delen, &schijven, l);
+            let stelsel = Stelsel::bouw(leden, schijven.len());
+            let lengte = stelsel.lengte();
+            let mut basis: Vec<Vec<f64>> = Vec::new();
+            for (j, lid) in stelsel.leden.iter().enumerate() {
+                for u in &lid.lokaal {
+                    let mut x = vec![0.0; lengte];
+                    x[6 * j..6 * j + 6].copy_from_slice(u);
+                    basis.push(x);
+                }
+            }
+            basis.extend(stelsel.g.iter().cloned());
+            let centra: Vec<V3> = stelsel.leden.iter().map(|lid| lid.centrum).collect();
+            let rijen: Vec<Vec<f64>> = vlakken.iter()
+                .flat_map(|(j, vlak)| vlak.punten.iter().map(|p| {
+                    let mut r = vec![0.0; lengte];
+                    r[6 * j..6 * j + 6].copy_from_slice(&rij_langs(vlak.normaal, *p, centra[*j], l));
+                    r
+                }).collect::<Vec<_>>())
+                .collect();
+            (centra, in_de_nulruimte(&rijen, &basis))
+        };
+        if vast.is_empty() { continue; }
+        let plaat_van: BTreeMap<usize, usize> = vlakken.iter().map(|(j, vlak)| (*j, vlak.plate_id)).collect();
+        let vlakdelen = delen.iter().enumerate().map(|(j, deel)| Vlakdeel {
+            centrum: centra[j],
+            knopen: model.delen[*deel].knopen.iter().map(|k| model.ids[*k]).collect(),
+            plate_id: plaat_van.get(&j).copied(),
+        }).collect();
+        let plate_id = vlakken.iter().map(|(_, vlak)| vlak.plate_id).min().expect("minstens één vlak");
+        uit.push(Vlakvrij { plate_id, centrum: c, lengte: l, delen: vlakdelen, bewegingen: vast, via_schijf });
+    }
+    uit
+}
+
+/// De bewegingen in de ruimte van de orthonormale `basis` waarop alle
+/// voorwaarden `rijen` nul zijn: v·a met a in de nulruimte van M = rijen·basis
+/// (eigenvectoren van MᵀM met eigenwaarde onder de rangsgrens), orthonormaal.
+fn in_de_nulruimte(rijen: &[Vec<f64>], basis: &[Vec<f64>]) -> Vec<Vec<f64>> {
+    let q = basis.len();
+    if q == 0 { return vec![]; }
+    let m: Vec<Vec<f64>> = rijen.iter().map(|r| basis.iter().map(|x| dot_n(r, x)).collect()).collect();
+    let gram = (0..q).map(|i| (0..q).map(|j| m.iter().map(|r| r[i] * r[j]).sum()).collect()).collect();
+    let (waarden, vectoren) = eigen(gram);
+    let grens = TOL * TOL * waarden.iter().copied().fold(1.0_f64, f64::max);
+    let n = basis[0].len();
+    waarden.iter().zip(&vectoren)
+        .filter(|(waarde, _)| **waarde <= grens)
+        .map(|(_, a)| (0..n).map(|k| (0..q).map(|i| a[i] * basis[i][k]).sum()).collect())
+        .collect()
 }
 
 fn controleer_met(request: &SolveRequest3D, uitgesloten: &HashSet<usize>, grootste_schijven: usize) -> Vec<Bevinding> {
-    controleer_volledig(request, uitgesloten, grootste_schijven, &Los::new())
+    controleer_volledig(request, uitgesloten, grootste_schijven, &Los::new(), true)
 }
 
-fn controleer_volledig(request: &SolveRequest3D, uitgesloten: &HashSet<usize>, grootste_schijven: usize, los: &Los) -> Vec<Bevinding> {
-    let model = Model::bouw(request, uitgesloten, grootste_schijven, los);
-    let mut groepen = Unie::nieuw(model.delen.len());
-    for schijf in &model.schijven {
-        for paar in schijf.knopen.windows(2) {
-            groepen.verbind(model.deel_van[paar[0]], model.deel_van[paar[1]]);
-        }
-    }
-    let mut per_groep: BTreeMap<usize, (Vec<usize>, Vec<usize>)> = BTreeMap::new();
-    for deel in 0..model.delen.len() {
-        per_groep.entry(groepen.wortel(deel)).or_default().0.push(deel);
-    }
-    for (index, schijf) in model.schijven.iter().enumerate() {
-        per_groep.entry(groepen.wortel(model.deel_van[schijf.knopen[0]])).or_default().1.push(index);
-    }
-    per_groep.values().flat_map(|(delen, schijven)| model.groep(delen, schijven)).collect()
+fn controleer_volledig(
+    request: &SolveRequest3D,
+    uitgesloten: &HashSet<usize>,
+    grootste_schijven: usize,
+    los: &Los,
+    draairegel: bool,
+) -> Vec<Bevinding> {
+    let mut model = Model::bouw(request, uitgesloten, grootste_schijven, los, draairegel);
+    model.vasthouding_via_schijf(request, uitgesloten, los);
+    model.groepen().iter().flat_map(|(delen, schijven)| model.groep(delen, schijven)).collect()
 }
 
 /// Eén star deel in een groep die via schijven samenhangt.
@@ -413,7 +578,7 @@ impl Boek {
 }
 
 impl Model {
-    fn bouw(request: &SolveRequest3D, uitgesloten: &HashSet<usize>, grootste_schijven: usize, los: &Los) -> Self {
+    fn bouw(request: &SolveRequest3D, uitgesloten: &HashSet<usize>, grootste_schijven: usize, los: &Los, draairegel: bool) -> Self {
         let mut knopen: Vec<&Node3D> = request.nodes.iter().collect();
         knopen.sort_by_key(|knoop| knoop.id);
         let ids: Vec<usize> = knopen.iter().map(|knoop| knoop.id).collect();
@@ -432,6 +597,18 @@ impl Model {
         for (knoop, punt, richting) in bedding::steunen(request, los) {
             if let Some(&i) = index.get(&knoop) { extra[i].push((punt, richting)); }
         }
+        // Platen op bedding (#107): de veren die meedoen, als voorwaarden langs
+        // de normaal, en het vlak van elke plaat.
+        let plaatplan = crate::plaatbedding::Plan::bouw(request);
+        for (knoop, punt, richting) in plaatplan.steunen(los) {
+            if let Some(&i) = index.get(&knoop) { extra[i].push((punt, richting)); }
+        }
+        let plaatvlakken: Vec<Plaatvlak> = plaatplan.vlakpunten().into_iter()
+            .filter_map(|(plate_id, normaal, punten)| {
+                let knoop = *index.get(&punten.first()?.0)?;
+                Some(Plaatvlak { plate_id, normaal, knoop, punten: punten.into_iter().map(|(_, p)| p).collect() })
+            })
+            .collect();
 
         let mut unie = Unie::nieuw(ids.len());
         let mut in_element = vec![false; ids.len()];
@@ -482,10 +659,133 @@ impl Model {
             })
             .filter(|schijf| !schijf.knopen.is_empty())
             .collect();
+        let mut in_schijf = vec![false; ids.len()];
         for schijf in &schijven {
-            for &k in &schijf.knopen { delen[deel_van[k]].schijven.insert(schijf.id); }
+            for &k in &schijf.knopen {
+                delen[deel_van[k]].schijven.insert(schijf.id);
+                in_schijf[k] = true;
+            }
         }
-        Self { ids, punt, blok, vlak_vast, in_element, extra, deel_van, delen, schijven, grootste_schijven }
+        Self {
+            ids, punt, blok, vlak_vast, in_element, in_schijf, draairegel, extra, plaatvlakken, deel_van, delen,
+            schijven, grootste_schijven,
+        }
+    }
+
+    /// De verbonden modeldelen: starre delen die via schijven samenhangen, met
+    /// die schijven (indices), op volgorde van het eerste deel.
+    fn groepen(&self) -> Vec<(Vec<usize>, Vec<usize>)> {
+        let mut groepen = Unie::nieuw(self.delen.len());
+        for schijf in &self.schijven {
+            for paar in schijf.knopen.windows(2) {
+                groepen.verbind(self.deel_van[paar[0]], self.deel_van[paar[1]]);
+            }
+        }
+        let mut per_groep: BTreeMap<usize, (Vec<usize>, Vec<usize>)> = BTreeMap::new();
+        for deel in 0..self.delen.len() {
+            per_groep.entry(groepen.wortel(deel)).or_default().0.push(deel);
+        }
+        for (index, schijf) in self.schijven.iter().enumerate() {
+            per_groep.entry(groepen.wortel(self.deel_van[schijf.knopen[0]])).or_default().1.push(index);
+        }
+        per_groep.into_values().collect()
+    }
+
+    /// Een plaat op bedding in een verbonden deel met een starre schijf (#107):
+    /// de vasthouding in het plaatvlak die de adapter daar zet
+    /// (`plaatbedding::vlakvast_via_schijf`) telt als oplegging, zodat de
+    /// controle ziet wat de kern vasthoudt. Zonder schijf splitst
+    /// `vlak_splits` dezelfde bewegingen af. Zonder plaat op bedding of zonder
+    /// schijf verandert er niets.
+    fn vasthouding_via_schijf(&mut self, request: &SolveRequest3D, uitgesloten: &HashSet<usize>, los: &Los) {
+        if self.plaatvlakken.is_empty() || self.schijven.is_empty() { return; }
+        for (knoop, punt, richting) in crate::plaatbedding::vlakvast_via_schijf(request, uitgesloten, los) {
+            if let Ok(i) = self.ids.binary_search(&knoop) { self.extra[i].push((punt, richting)); }
+        }
+    }
+
+    /// De leden van een verbonden deel met schijven (`lid`) en de zwaartepunten
+    /// van die schijven.
+    fn leden(&self, delen: &[usize], schijven: &[usize], l: f64) -> (Vec<Lid>, Vec<V3>) {
+        let centra_schijven: Vec<V3> = schijven.iter().map(|s| self.zwaartepunt(&self.schijven[*s].knopen)).collect();
+        let schijf_van: HashMap<usize, usize> = schijven.iter().enumerate()
+            .flat_map(|(m, s)| self.schijven[*s].knopen.iter().map(move |k| (*k, m)))
+            .collect();
+        let leden = delen.iter().map(|d| self.lid(*d, l, &schijf_van, &centra_schijven)).collect();
+        (leden, centra_schijven)
+    }
+
+    /// De vrije bewegingen `v` (orthonormaal, rond c) van deel `deel` gesplitst
+    /// in die in het vlak van een plaat op bedding van dat deel (bij meer: de
+    /// laagste plaat-id), die de adapter vasthoudt (#107), en de rest; beide
+    /// orthonormaal. `None` zonder plaat op bedding in het deel.
+    ///
+    /// Een beweging x ligt in het plaatvlak als geen knoop van de plaat langs
+    /// de normaal beweegt; voor een vlakke plaat volstaan drie niet-collineaire
+    /// knopen. Met M de voorwaarden van die drie punten op de basis v zijn de
+    /// vastgehouden bewegingen v·a met a in de nulruimte van M, de rest v·a met
+    /// a loodrecht daarop (eigenvectoren van MᵀM).
+    fn vlak_splits(&self, deel: usize, c: V3, l: f64, v: &[V6]) -> Option<(usize, Vec<V6>, Vec<V6>)> {
+        let vlak = self.plaatvlakken.iter().find(|vlak| self.deel_van[vlak.knoop] == deel)?;
+        if v.is_empty() { return Some((vlak.plate_id, vec![], vec![])); }
+        let rijen: Vec<V6> = vlak.punten.iter().map(|p| rij_langs(vlak.normaal, *p, c, l)).collect();
+        let q = v.len();
+        let m: Vec<Vec<f64>> = rijen.iter().map(|r| v.iter().map(|x| dot6(r, x)).collect()).collect();
+        let gram = (0..q).map(|i| (0..q).map(|j| m.iter().map(|r| r[i] * r[j]).sum()).collect()).collect();
+        let (waarden, vectoren) = eigen(gram);
+        let grens = TOL * TOL * waarden.iter().copied().fold(1.0_f64, f64::max);
+        let mut vast = Vec::new();
+        let mut rest = Vec::new();
+        for (waarde, a) in waarden.iter().zip(&vectoren) {
+            let x: V6 = std::array::from_fn(|k| (0..q).map(|i| a[i] * v[i][k]).sum());
+            if *waarde <= grens { vast.push(x) } else { rest.push(x) }
+        }
+        Some((vlak.plate_id, vast, rest))
+    }
+
+    /// Eén deel zonder schijf als star lichaam (rond c): zijn vrije bewegingen
+    /// zonder de draaiing om de eigen as (#96) en zonder de bewegingen in het
+    /// vlak van een plaat op bedding (#107); die twee houdt de adapter vast.
+    fn vrij_als_deel(&self, deel: usize, knopen: &[usize], c: V3, l: f64) -> Vec<V6> {
+        let v = self.zonder_eigen_as(knopen, nulruimte6(&self.groepsrijen(knopen, &[], c, l)));
+        match self.vlak_splits(deel, c, l, &v) {
+            Some((_, _, rest)) => rest,
+            None => v,
+        }
+    }
+
+    /// De as van een recht deel: alle `knopen` op één lijn door minstens twee
+    /// verschillende punten. Ligt een knoop in een schijf, dan alleen een
+    /// horizontale as: de draaiing om Z volgt dan de schijf.
+    fn eigen_as(&self, knopen: &[usize]) -> Option<V3> {
+        let begin = self.punt[*knopen.first()?];
+        let (verst, afstand) = knopen.iter()
+            .map(|k| (*k, norm(sub(self.punt[*k], begin))))
+            .fold((knopen[0], 0.0), |beste, kandidaat| if kandidaat.1 > beste.1 { kandidaat } else { beste });
+        if afstand <= 1e-9 { return None; }
+        let d = scale(sub(self.punt[verst], begin), 1.0 / afstand);
+        if knopen.iter().any(|k| norm(cross(sub(self.punt[*k], begin), d)) > 1e-6 * afstand.max(1.0)) {
+            return None;
+        }
+        if d[2].abs() > 1e-5 && knopen.iter().any(|k| self.in_schijf[*k]) { return None; }
+        Some(d)
+    }
+
+    /// De vrije bewegingen `v` (orthonormaal, (t, L·θ) rond een punt op de
+    /// lijn) zonder de draaiing om de eigen as van een recht deel, die de
+    /// adapter vasthoudt (#96). Alleen als die draaiing hier vrij is.
+    fn zonder_eigen_as(&self, knopen: &[usize], v: Vec<V6>) -> Vec<V6> {
+        if !self.draairegel || v.is_empty() { return v; }
+        let Some(d) = self.eigen_as(knopen) else { return v };
+        let as_: V6 = [0.0, 0.0, 0.0, d[0], d[1], d[2]];
+        if norm6(&rest6(as_, &v)) > TOL_LID { return v; }
+        let mut uit: Vec<V6> = Vec::new();
+        for x in v {
+            let r = rest6(rest6(x, &[as_]), &uit);
+            let grootte = norm6(&r);
+            if grootte > TOL_LID { uit.push(scale6(r, 1.0 / grootte)); }
+        }
+        uit
     }
 
     fn zwaartepunt(&self, knopen: &[usize]) -> V3 {
@@ -535,7 +835,8 @@ impl Model {
         let c = self.zwaartepunt(&knopen);
         let l = knopen.iter().map(|k| norm(sub(self.punt[*k], c))).fold(1.0_f64, f64::max);
         if delen.len() == 1 && schijven.is_empty() {
-            let vrij = self.vrij_als_geheel(&knopen, schijven, c, l);
+            let v = self.vrij_als_deel(delen[0], &knopen, c, l);
+            let vrij: Vec<Beweging> = self.benoem(&knopen, c, l, &v).into_iter().map(|(beweging, _)| beweging).collect();
             return if vrij.is_empty() { vec![] } else { vec![self.bevinding(Soort::Onvoldoende, delen, schijf_ids, vrij)] };
         }
         self.gekoppeld(delen, schijven, &knopen, c, l)
@@ -543,7 +844,7 @@ impl Model {
 
     /// Het verbonden deel als één star lichaam (rond c).
     fn vrij_als_geheel(&self, knopen: &[usize], schijven: &[usize], c: V3, l: f64) -> Vec<Beweging> {
-        let v = nulruimte6(&self.groepsrijen(knopen, schijven, c, l));
+        let v = self.zonder_eigen_as(knopen, nulruimte6(&self.groepsrijen(knopen, schijven, c, l)));
         self.benoem(knopen, c, l, &v).into_iter().map(|(beweging, _)| beweging).collect()
     }
 
@@ -573,7 +874,7 @@ impl Model {
     fn lid(&self, d: usize, l: f64, schijf_van: &HashMap<usize, usize>, centra_schijven: &[V3]) -> Lid {
         let deel = &self.delen[d];
         let centrum = self.zwaartepunt(&deel.knopen);
-        let basis = nulruimte6(&self.steunrijen(&deel.knopen, centrum, l));
+        let basis = self.zonder_eigen_as(&deel.knopen, nulruimte6(&self.steunrijen(&deel.knopen, centrum, l)));
         let schijven: Vec<usize> = deel.knopen.iter()
             .filter_map(|k| schijf_van.get(k).copied())
             .collect::<BTreeSet<_>>()
@@ -628,11 +929,7 @@ impl Model {
     /// en schijven samen, benoemd voor het geheel, per schijf en per deel.
     fn gekoppeld(&self, delen: &[usize], schijven: &[usize], knopen: &[usize], c: V3, l: f64) -> Vec<Bevinding> {
         let schijf_ids: Vec<usize> = schijven.iter().map(|s| self.schijven[*s].id).collect();
-        let centra_schijven: Vec<V3> = schijven.iter().map(|s| self.zwaartepunt(&self.schijven[*s].knopen)).collect();
-        let schijf_van: HashMap<usize, usize> = schijven.iter().enumerate()
-            .flat_map(|(m, s)| self.schijven[*s].knopen.iter().map(move |k| (*k, m)))
-            .collect();
-        let leden: Vec<Lid> = delen.iter().map(|d| self.lid(*d, l, &schijf_van, &centra_schijven)).collect();
+        let (leden, centra_schijven) = self.leden(delen, schijven, l);
         if schijven.len() > self.grootste_schijven {
             return self.niet_volledig(delen, schijven, &leden, knopen, c, l);
         }
@@ -666,7 +963,7 @@ impl Model {
 
         let mut uitkomst = Vec::new();
         // 1. Het verbonden deel als geheel.
-        let geheel = nulruimte6(&self.groepsrijen(knopen, schijven, c, l));
+        let geheel = self.zonder_eigen_as(knopen, nulruimte6(&self.groepsrijen(knopen, schijven, c, l)));
         let vrij: Vec<Beweging> = self.benoem(knopen, c, l, &geheel).into_iter()
             .filter_map(|(beweging, w)| {
                 let t = [w[0], w[1], w[2]];
@@ -1069,7 +1366,7 @@ fn nulruimte(rijen: Vec<Vec<f64>>, n: usize) -> Vec<Vec<f64>> {
 
 /// Eigenwaarden en -vectoren van een symmetrische matrix (Jacobi); vector i
 /// hoort bij waarde i.
-fn eigen(mut a: Vec<Vec<f64>>) -> (Vec<f64>, Vec<Vec<f64>>) {
+pub(crate) fn eigen(mut a: Vec<Vec<f64>>) -> (Vec<f64>, Vec<Vec<f64>>) {
     let n = a.len();
     let mut v: Vec<Vec<f64>> = (0..n).map(|i| (0..n).map(|j| if i == j { 1.0 } else { 0.0 }).collect()).collect();
     let schaal: f64 = a.iter().flatten().map(|x| x * x).sum();
@@ -1161,7 +1458,7 @@ fn reeks(ids: &[usize], min_reeks: usize) -> String {
 }
 
 /// "knoop 7" of "knopen 7–9".
-fn noem(enkelvoud: &str, meervoud: &str, ids: &[usize]) -> String {
+pub(crate) fn noem(enkelvoud: &str, meervoud: &str, ids: &[usize]) -> String {
     if ids.len() == 1 { format!("{enkelvoud} {}", ids[0]) } else { format!("{meervoud} {}", reeks(ids, 2)) }
 }
 
@@ -1188,7 +1485,7 @@ fn onderwerp(b: &Bevinding, met_schijven: bool) -> String {
     opsomming(&delen)
 }
 
-fn hoofdletter(tekst: &str) -> String {
+pub(crate) fn hoofdletter(tekst: &str) -> String {
     let mut tekens = tekst.chars();
     tekens.next().map(|eerste| eerste.to_uppercase().chain(tekens).collect()).unwrap_or_default()
 }
@@ -1330,9 +1627,16 @@ fn specifiek(bevindingen: &[Bevinding]) -> String {
 /// De fout als de kern een singuliere stijfheidsmatrix meldt: welk deel, wat
 /// er vrij is en wat te doen, met de algemene uitleg erachter.
 pub(crate) fn singuliere_fout(request: &SolveRequest3D, context: &str, detail: &str) -> String {
+    mechanismefout(request, context, &format!("Engine: {detail}"))
+}
+
+/// Als `singuliere_fout`, met een eigen toelichting in plaats van de melding
+/// van de kern: voor de controle van de adapter dat de stijfheidsmatrix
+/// regulier is (`knoopdraaiing`, #96).
+pub(crate) fn mechanismefout(request: &SolveRequest3D, context: &str, toelichting: &str) -> String {
     let bevindingen = controleer(request, &HashSet::new());
     format!(
-        "{context}: het model is een mechanisme of onvoldoende opgelegd (singuliere stijfheidsmatrix). {} {} Engine: {detail}",
+        "{context}: het model is een mechanisme of onvoldoende opgelegd (singuliere stijfheidsmatrix). {} {} {toelichting}",
         specifiek(&bevindingen),
         crate::MECHANISME_UITLEG,
     )
@@ -1378,7 +1682,9 @@ pub(crate) fn plaatfout(bevindingen: &[Bevinding]) -> String {
 mod tests {
     use std::collections::HashSet;
 
-    use super::{beschrijf, controleer, controleer_met, specifiek, waarschuwing, Bevinding, Soort};
+    use super::{
+        beschrijf, controleer, controleer_met, controleer_zonder_draairegel, specifiek, waarschuwing, Bevinding, Soort,
+    };
     use crate::{
         AnalysisKind, Diaphragm3D, Material3D, Member3D, Node3D, Section3D, SolveRequest3D, Support3D,
     };
@@ -1393,7 +1699,7 @@ mod tests {
         Member3D {
             id, start_node_id: begin, end_node_id: eind, material_id: 1, section_id: 1,
             releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false,
-            bedding: None,
+            bedding: None, part_section_ids: None,
         }
     }
 
@@ -1404,7 +1710,7 @@ mod tests {
     fn model(nodes: Vec<Node3D>, members: Vec<Member3D>, supports: Vec<Support3D>) -> SolveRequest3D {
         SolveRequest3D {
             schema_version: 2, analysis: AnalysisKind::Linear, nodes,
-            materials: vec![Material3D { id: 1, name: "S235".into(), e_mpa: 210_000.0, nu: 0.3, alpha_per_k: None }],
+            materials: vec![Material3D { id: 1, name: "S235".into(), e_mpa: 210_000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
             sections: vec![Section3D { id: 1, name: "HEA".into(), area_m2: 5e-3, iy_m4: 1e-5, iz_m4: 1e-5,
                 torsion_j_m4: 1e-6, shear_area_y_m2: None, shear_area_z_m2: None }],
             members, supports, nodal_loads: vec![], member_loads: vec![], member_point_loads: vec![],
@@ -1465,12 +1771,17 @@ mod tests {
 
     #[test]
     fn twee_scharnieren_op_een_lijn_langs_x_laten_draaien_om_x_vrij() {
+        // Zonder de draairegel (#96): de ligger kan om haar eigen as draaien.
         let ligger = model(vec![knoop(1, 0.0, 0.0, 0.0), knoop(2, 3.0, 0.0, 0.0)], vec![staaf(1, 1, 2)],
             vec![steun(1, SCHARNIER), steun(2, SCHARNIER)]);
-        let b = bevindingen(&ligger);
+        let b = controleer_zonder_draairegel(&ligger);
         assert_eq!(b.len(), 1, "{b:?}");
         assert_eq!(namen(&b[0]), vec!["draaien om X"]);
         assert!(beschrijf(&b).contains("revolute-oplegging"), "{}", beschrijf(&b));
+        // Die draaiing verplaatst geen knoop; de adapter houdt haar vast en
+        // meldt een mechanisme zodra de belasting er een moment op zet
+        // (`knoopdraaiing`). Voor deze controle is de ligger dan vast.
+        assert!(bevindingen(&ligger).is_empty(), "{:?}", bevindingen(&ligger));
 
         // Dezelfde ligger met een tussenknoop: één deel, dezelfde vrije beweging.
         let mut gesplitst = model(
@@ -1479,10 +1790,21 @@ mod tests {
             vec![steun(1, SCHARNIER), steun(3, SCHARNIER)],
         );
         gesplitst.members[0].intermediate_node_ids = vec![2];
-        let b = bevindingen(&gesplitst);
+        let b = controleer_zonder_draairegel(&gesplitst);
         assert_eq!(b.len(), 1, "{b:?}");
         assert_eq!(b[0].knopen, vec![1, 2, 3]);
         assert_eq!(namen(&b[0]), vec!["draaien om X"]);
+        assert!(bevindingen(&gesplitst).is_empty());
+
+        // Echte vrije bewegingen blijven gemeld: alleen verticaal opgelegd kan
+        // de ligger ook schuiven en om Z draaien; alleen de draaiing om haar
+        // eigen as valt weg.
+        let rollen = model(vec![knoop(1, 0.0, 0.0, 0.0), knoop(2, 3.0, 0.0, 0.0)], vec![staaf(1, 1, 2)],
+            vec![steun(1, VERTICAAL), steun(2, VERTICAAL)]);
+        let b = bevindingen(&rollen);
+        assert_eq!(b.len(), 1, "{b:?}");
+        assert_eq!(namen(&b[0]), vec!["verschuiven in X", "verschuiven in Y", "draaien om Z"]);
+        assert!(namen(&controleer_zonder_draairegel(&rollen)[0]).contains(&"draaien om X"));
     }
 
     #[test]
@@ -1558,10 +1880,13 @@ mod tests {
 
     #[test]
     fn een_deel_dat_alleen_via_een_starre_schijf_vastzit() {
-        // Zonder schijf draait kolom B om haar scharnierende voet.
+        // Zonder schijf draait kolom B om haar scharnierende voet. Haar draaiing
+        // om haar eigen as (Z) houdt de adapter vast (#96).
         let b = bevindingen(&twee_kolommen(SCHARNIER, false));
         assert_eq!(b.len(), 1, "{b:?}");
         assert_eq!(b[0].knopen, vec![3, 4]);
+        assert_eq!(namen(&b[0]), vec!["draaien om X (as door knoop 3)", "draaien om Y (as door knoop 3)"]);
+        let b = controleer_zonder_draairegel(&twee_kolommen(SCHARNIER, false));
         assert_eq!(namen(&b[0]), vec!["draaien om X (as door knoop 3)", "draaien om Y (as door knoop 3)", "draaien om Z"]);
         // De schijf houdt de kop in X, Y en de rotatie om Z vast: niets vrij.
         assert!(bevindingen(&twee_kolommen(SCHARNIER, true)).is_empty());
@@ -1630,13 +1955,17 @@ mod tests {
             vec![op_bedding(staaf(1, 1, 2), Some(1e4), k_lat)],
             vec![],
         );
-        // Alleen verticaal: vrij zijn de bewegingen in het grondvlak en de torsie.
+        // Alleen verticaal: vrij zijn de bewegingen in het grondvlak en de
+        // torsie; die laatste (draaien om de eigen as) houdt de adapter vast (#96).
         let b = bevindingen(&ligger(None));
         assert_eq!(b.len(), 1, "{b:?}");
-        assert_eq!(namen(&b[0]), vec!["verschuiven in X", "verschuiven in Y", "draaien om X", "draaien om Z"]);
-        // Met zijdelingse bedding: alleen langs de staaf schuiven en torsie.
+        assert_eq!(namen(&b[0]), vec!["verschuiven in X", "verschuiven in Y", "draaien om Z"]);
+        assert_eq!(namen(&controleer_zonder_draairegel(&ligger(None))[0]),
+            vec!["verschuiven in X", "verschuiven in Y", "draaien om X", "draaien om Z"]);
+        // Met zijdelingse bedding: alleen langs de staaf schuiven (en torsie).
         let r = ligger(Some(1e4));
-        assert_eq!(namen(&bevindingen(&r)[0]), vec!["verschuiven in X", "draaien om X"]);
+        assert_eq!(namen(&bevindingen(&r)[0]), vec!["verschuiven in X"]);
+        assert_eq!(namen(&controleer_zonder_draairegel(&r)[0]), vec!["verschuiven in X", "draaien om X"]);
         // Alleen druk, alle verticale veren los: de ligger kan ook omhoog.
         let n = crate::bedding::Plan::bouw(&r).unwrap().staven[0].stations.len();
         let alle: Los = (0..n).map(|i| (1, i)).collect();
@@ -1648,13 +1977,14 @@ mod tests {
         assert!(!namen(&b[0]).contains(&"verschuiven in Z"), "{b:?}");
         assert!(namen(&b[0]).iter().any(|naam| naam.starts_with("draaien om Y")), "{b:?}");
         // Een paal met zijdelingse bedding en een verticale oplegging in de voet:
-        // alleen de torsie om de paalas blijft vrij.
+        // alleen de torsie om de paalas blijft vrij, en die houdt de adapter vast.
         let paal = model(
             vec![knoop(1, 0.0, 0.0, -10.0), knoop(2, 0.0, 0.0, 0.0)],
             vec![op_bedding(staaf(1, 1, 2), None, Some(1e4))],
             vec![steun(1, VERTICAAL)],
         );
-        assert_eq!(namen(&bevindingen(&paal)[0]), vec!["draaien om Z"]);
+        assert!(bevindingen(&paal).is_empty(), "{:?}", bevindingen(&paal));
+        assert_eq!(namen(&controleer_zonder_draairegel(&paal)[0]), vec!["draaien om Z"]);
     }
 
     #[test]

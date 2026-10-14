@@ -1,0 +1,134 @@
+{
+ "tool": "open-fem-studio__solve_open_fem_3d",
+ "omschrijving": "061: driepoot, 3 scharnierende poten, 1 element per poot, F=(10;0;-60) kN",
+ "arguments": {
+  "nodes": [
+   {
+    "id": 1,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   {
+    "id": 2,
+    "x": 4,
+    "y": 0,
+    "z": 0
+   },
+   {
+    "id": 3,
+    "x": 2,
+    "y": 3.4641,
+    "z": 0
+   },
+   {
+    "id": 4,
+    "x": 2,
+    "y": 1.1547,
+    "z": 3
+   }
+  ],
+  "materials": [
+   {
+    "id": 1,
+    "name": "staal",
+    "eMpa": 210000,
+    "nu": 0.3
+   }
+  ],
+  "sections": [
+   {
+    "id": 1,
+    "name": "poot",
+    "areaM2": 0.001,
+    "iyM4": 1e-06,
+    "izM4": 1e-06,
+    "torsionJM4": 1e-06
+   }
+  ],
+  "members": [
+   {
+    "id": 1,
+    "startNodeId": 1,
+    "endNodeId": 4,
+    "materialId": 1,
+    "sectionId": 1,
+    "releases": {
+     "myStart": true,
+     "myEnd": true,
+     "mzStart": true,
+     "mzEnd": true
+    }
+   },
+   {
+    "id": 2,
+    "startNodeId": 2,
+    "endNodeId": 4,
+    "materialId": 1,
+    "sectionId": 1,
+    "releases": {
+     "myStart": true,
+     "myEnd": true,
+     "mzStart": true,
+     "mzEnd": true
+    }
+   },
+   {
+    "id": 3,
+    "startNodeId": 3,
+    "endNodeId": 4,
+    "materialId": 1,
+    "sectionId": 1,
+    "releases": {
+     "myStart": true,
+     "myEnd": true,
+     "mzStart": true,
+     "mzEnd": true
+    }
+   }
+  ],
+  "supports": [
+   {
+    "nodeId": 1,
+    "ux": true,
+    "uy": true,
+    "uz": true,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   },
+   {
+    "nodeId": 2,
+    "ux": true,
+    "uy": true,
+    "uz": true,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   },
+   {
+    "nodeId": 3,
+    "ux": true,
+    "uy": true,
+    "uz": true,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   }
+  ],
+  "nodalLoads": [
+   {
+    "id": 1,
+    "nodeId": 4,
+    "fx": 10,
+    "fy": 0,
+    "fz": -60,
+    "mx": 0,
+    "my": 0,
+    "mz": 0
+   }
+  ],
+  "analysis": "linear",
+  "bucklingModes": 1
+ }
+}

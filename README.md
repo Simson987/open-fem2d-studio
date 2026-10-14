@@ -31,8 +31,34 @@
   (NEN-EN 1995-1-1), gewapend beton (NEN-EN 1992-1-1), plus een vrije spanningstoets
 - Toetsing van platen per element
 - Rekenrapport als PDF
-- IFC-export; projectbestanden met de extensie `.ifcfem` (oudere `.ifcfem2d`-bestanden openen ook)
+- IFC-export; projectbestanden met de extensie `.ifcfem` (oudere `.ifcfem2d`-bestanden openen ook). De installer
+  koppelt beide extensies aan de app: een dubbelklik opent het project, ook in een app die al draait (één venster)
+- Lokale importextensies voor extra bestandsformaten; zie [extensies gebruiken en schrijven](docs/extensies.md)
 - Gebruikersinterface in het Nederlands, Engels, Duits en Frans
+- Bediening door een AI-assistent via de meegeleverde MCP-server (zie hieronder)
+
+## Een AI-assistent koppelen
+
+De installer zet een MCP-server naast de app (`openaec-mcp-server`). Een AI-assistent als Claude Desktop of
+Claude Code rekent en toetst daarmee rechtstreeks, en kan de draaiende app bedienen: modellen bouwen, rekenen,
+toetsen, rapporten maken. Alles staat in de app onder **Instellingen → AI-assistent (MCP)**:
+
+- **Bediening door een AI-assistent toestaan (MCP)** — standaard aan bij een nieuwe installatie. De app luistert
+  alleen op deze computer (127.0.0.1); voor iedere opdracht is de sleutel uit het alleen voor de gebruiker leesbare
+  vindbestand `gui-control.json` nodig. Die sleutel is bij elke start nieuw. Uitzetten geldt meteen en blijft na een
+  update bewaard. Een ongeldig of onleesbaar instellingenbestand houdt het kanaal uit; een geldig bestand zonder keuze
+  gebruikt de standaardwaarde aan.
+  Een assistent kan de app ook zelf starten met de tool `gui_start_app`; het kanaal staat dan alleen voor die
+  sessie aan (het paneel toont dat apart van de bewaarde keuze, met een knop om het meteen uit te zetten). Voor
+  ontwikkelaars werkt `OPENAEC_GUI_CONTROL=1` nog steeds.
+- Drie wegen om de server te koppelen, met het pad dat het paneel toont:
+  1. de knop **Toevoegen aan Claude Desktop** — zet de regel `open-fem-studio` in `claude_desktop_config.json`,
+     laat de rest van het bestand staan, maakt eerst een reservekopie en weigert bij ongeldige JSON; start
+     Claude Desktop daarna opnieuw;
+  2. voor Claude Code de opdracht `claude mcp add --scope user open-fem-studio -- "<pad>"`;
+  3. voor andere MCP-clients een JSON-fragment `{ "mcpServers": { "open-fem-studio": { "command": "<pad>", "args": [] } } }`.
+
+Meer, ook over elke tool: [`src-tauri/crates/openaec-mcp-server/README.md`](src-tauri/crates/openaec-mcp-server/README.md).
 
 ## Schermafbeeldingen
 

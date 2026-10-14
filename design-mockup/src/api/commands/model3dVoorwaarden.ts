@@ -30,13 +30,17 @@ import {
   updateOpenFem3DMemberPointLoad, updateOpenFem3DNodalLoad, updateOpenFem3DSurfaceLoad, updateOpenFem3DThermalLoad,
   OPEN_FEM_3D_GLOBAL_DIRECTIONS, isOpenFem3DGlobalMemberLoad,
   type OpenFem3DGlobalDirection, type OpenFem3DMemberLoad, type OpenFem3DMemberLoadValues,
-  type OpenFem3DModel, type OpenFem3DPrescribedDisplacements, type OpenFem3DSupportPreset,
+  type OpenFem3DEnvelopePanel, type OpenFem3DModel, type OpenFem3DPrescribedDisplacements, type OpenFem3DSupportPreset,
   type OpenFem3DSupportRestraints, type OpenFem3DSupportSprings, type OpenFem3DVector,
 } from "../../components/openFem3d/openFem3dModel";
 import {
   addOpenFem3DLoadPanel, convertOpenFem3DPlateToLoadPanels, duplicateOpenFem3DLoadPanel, updateOpenFem3DLoadPanel,
   type OpenFem3DLoadPanelOptions, type OpenFem3DLoadPanelPatch,
 } from "../../components/openFem3d/openFem3dLoadPanels";
+import {
+  addOpenFem3DEnvelopePanel, addOpenFem3DEnvelopePanelLoad, removeOpenFem3DEnvelopePanel,
+  updateOpenFem3DEnvelopePanel,
+} from "../../components/openFem3d/openFem3dEnvelopePanels";
 import {
   addOpenFem3DDiaphragm, removeOpenFem3DDiaphragm, setOpenFem3DTensionOnly, setOpenFem3DTensionOnlySetting,
   type OpenFem3DDiaphragmRefusal,
@@ -175,10 +179,23 @@ const vlakLastVelden = {
 const vector = obj({ x: getal(), y: getal(), z: getal() }, ["x", "y", "z"], "Richting in globale assen.");
 const vlakVelden = {
   q: getal("Belasting op het vlak, kN/m²."),
-  direction: keuze(["gravity", "normal"], "gravity = zwaartekracht per horizontale projectie; normal = loodrecht op het vlak."),
+  direction: keuze(["gravity", "normal", "verticalSurface"], "gravity = verticaal per horizontale projectie; normal = loodrecht op het vlak; verticalSurface = verticaal per werkelijk vlakoppervlak."),
   distribution: keuze(["oneWay", "twoWay"], "Afdracht: oneWay naar de liggers dwars op de overspanning, twoWay naar alle randliggers."),
   spanDirection: vector,
   excludedBeamIds: lijst(staafId, "Liggers in het vlak die geen last krijgen."),
+  openings: lijst(obj({ id: id("Id van de opening."), nodeIds: lijst(knoopId, "Hoekknopen van de opening.", { minItems: 3 }) },
+    ["id", "nodeIds"]), "Openingen zonder vlaklast."),
+};
+
+const schilVelden = {
+  nodeIds: lijst(knoopId, "Hoekknopen van het gevel- of dakpaneel.", { minItems: 3 }),
+  type: keuze(["facade", "roof"], "Gevel of dak."),
+  name: tekst("Naam of groep van het paneel."),
+  flipOuterSide: jaNee("Keer de buitenwaartse normaal om."),
+  distribution: vlakVelden.distribution,
+  spanDirection: vector,
+  openings: vlakVelden.openings,
+  claddingWeightKnPerM2: getal("Bekledingsgewicht per werkelijk vlakoppervlak, kN/m².", { minimum: 0 }),
 };
 
 // ── Opleggingen ───────────────────────────────────────────────────────────
@@ -527,6 +544,7 @@ const vlakWijzigen = documentCommando<{ id: number } & Omit<OpenFem3DLoadPanelPa
     q: vlakVelden.q, direction: vlakVelden.direction, distribution: vlakVelden.distribution,
     spanDirection: ofNull(vector, "Overspanningsrichting; null = de standaard."),
     excludedBeamIds: vlakVelden.excludedBeamIds,
+    openings: vlakVelden.openings,
   }, ["id"]),
   uitvoeren: ({ id: panelId, caseId, spanDirection, ...rest }, document) => {
     const model = model3dVan(document);
@@ -574,6 +592,51 @@ const plaatNaarVlakken = documentCommando<{ plateId: number; caseId?: number }, 
 });
 
 // ── Schijven en trek-alleen ───────────────────────────────────────────────
+
+const schilToevoegen = documentCommando<Omit<OpenFem3DEnvelopePanel, "id">, unknown>({
+  naam: "model3d.panel.add",
+  beschrijving: "Een gevel- of dakpaneel zonder stijfheid toevoegen, onafhankelijk van belastinggevallen.",
+  invoer: obj(schilVelden, ["nodeIds", "type", "distribution"]),
+  uitvoeren: (waarden, document) => {
+    const model = model3dVan(document);
+    const nieuw = addOpenFem3DEnvelopePanel(model, waarden);
+    return { uitkomst: { panel: nieuwElement(model.envelopePanels, nieuw.envelopePanels) }, document: met(document, nieuw) };
+  },
+});
+const schilWijzigen = documentCommando<{ id: number } & Partial<Omit<OpenFem3DEnvelopePanel, "id">>, unknown>({
+  naam: "model3d.panel.update",
+  beschrijving: "Een gevel- of dakpaneel wijzigen, inclusief openingen, buitenzijde en afdracht.",
+  invoer: obj({ id: id("Id van het paneel."), ...schilVelden }, ["id"]),
+  uitvoeren: ({ id: panelId, ...patch }, document) => {
+    const model = model3dVan(document);
+    vindIn(model.envelopePanels, "3D-schilpaneel", panelId);
+    const nieuw = updateOpenFem3DEnvelopePanel(model, panelId, patch);
+    return { uitkomst: { panel: vindIn(nieuw.envelopePanels, "3D-schilpaneel", panelId) }, document: met(document, nieuw) };
+  },
+});
+const schilWeg = documentCommando<{ id: number }, unknown>({
+  naam: "model3d.panel.delete",
+  beschrijving: "Een gevel- of dakpaneel verwijderen; knopen en staven blijven staan.",
+  invoer: obj({ id: id("Id van het paneel.") }, ["id"]),
+  uitvoeren: ({ id: panelId }, document) => {
+    const model = model3dVan(document);
+    vindIn(model.envelopePanels, "3D-schilpaneel", panelId);
+    return { uitkomst: { deletedPanelId: panelId }, document: met(document, removeOpenFem3DEnvelopePanel(model, panelId)) };
+  },
+});
+const schilLastMaken = documentCommando<{ id: number; caseId?: number; q: number; direction: "normal" | "gravity" | "verticalSurface" }, unknown>({
+  naam: "model3d.panel.createLoad",
+  beschrijving: "Een vlaklast uit een gevel- of dakpaneel maken met dezelfde afdracht als een handmatig belastingvlak.",
+  invoer: obj({ id: id("Id van het paneel."), caseId: gevalId,
+    q: getal("Lastintensiteit in kN/m²; bij normal positief naar buiten."),
+    direction: vlakVelden.direction }, ["id", "q", "direction"]),
+  uitvoeren: ({ id: panelId, caseId, q, direction }, document) => {
+    const model = model3dVan(document);
+    vindIn(model.envelopePanels, "3D-schilpaneel", panelId);
+    const nieuw = addOpenFem3DEnvelopePanelLoad(model, panelId, geval(document, caseId), q, direction);
+    return { uitkomst: { loadPanel: nieuwElement(model.loadPanels, nieuw.loadPanels) }, document: met(document, nieuw) };
+  },
+});
 
 function schijfWeigering(refusal: OpenFem3DDiaphragmRefusal): string {
   switch (refusal.kind) {
@@ -644,5 +707,6 @@ export const MODEL3D_VOORWAARDEN_COMMANDOS = [
   temperatuurToevoegen, temperatuurWijzigen, lastVerwijderen("temperatuurbelasting", "thermalLoads", "model3d.load.thermal.delete", removeOpenFem3DThermalLoad),
   vlakLastToevoegen, vlakLastWijzigen, lastVerwijderen("oppervlaktebelasting", "surfaceLoads", "model3d.load.surface.delete", removeOpenFem3DSurfaceLoad),
   vlakToevoegen, vlakWijzigen, vlakWeg, vlakDupliceren, plaatNaarVlakken,
+  schilToevoegen, schilWijzigen, schilWeg, schilLastMaken,
   schijfToevoegen, schijfWeg, trekAlleen, instellingen,
 ];

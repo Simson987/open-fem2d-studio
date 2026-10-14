@@ -11,6 +11,7 @@ type OpenFem3DTransformTool = Extract<OpenFem3DTool, "move" | "rotate" | "copy" 
 interface Props {
   tool: OpenFem3DTransformTool;
   selectionLabel: string;
+  pointHelp?: string;
   onApply: (command: OpenFem3DTransformCommand) => void;
   onCancel: () => void;
 }
@@ -60,7 +61,7 @@ export function openFem3DTransformCommand(
       : { kind: "mirror", axis: fields.axis, offset: lengte(fields.offset, t("openFem3d.transform.planeCoordinate"), t) };
 }
 
-export default function OpenFem3DTransformPanel({ tool, selectionLabel, onApply, onCancel }: Props) {
+export default function OpenFem3DTransformPanel({ tool, selectionLabel, pointHelp, onApply, onCancel }: Props) {
   const { t } = useTranslation("ribbon");
   const title = t(TITLE_KEYS[tool]);
   const [dx, setDx] = useState("0");
@@ -85,6 +86,7 @@ export default function OpenFem3DTransformPanel({ tool, selectionLabel, onApply,
   return <aside className="open-fem3d-transform-panel" aria-label={title}>
     <div className="open-fem3d-transform-title"><strong>{title}</strong><button type="button" onClick={onCancel}>×</button></div>
     <p>{selectionLabel}</p>
+    {pointHelp && <p role="status">{pointHelp}</p>}
     {(tool === "move" || tool === "copy") ? <div className="open-fem3d-transform-grid">
       <label>ΔX (mm)<input value={dx} onChange={(event) => setDx(event.target.value)} inputMode="decimal" /></label>
       <label>ΔY (mm)<input value={dy} onChange={(event) => setDy(event.target.value)} inputMode="decimal" /></label>

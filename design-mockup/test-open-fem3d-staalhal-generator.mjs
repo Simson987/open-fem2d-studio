@@ -26,7 +26,7 @@ import {
 } from "./src/components/openFem3d/wizards/staalhal.ts";
 import { buildOpenFem3DSolveRequest, openFem3DGlobalForceBalance } from "./src/components/openFem3d/openFem3dSolver.ts";
 import { withOpenFem3DSelfWeight } from "./src/components/openFem3d/openFem3dModel.ts";
-import { resolveSection } from "./src/lib/sectionResolver.ts";
+import { dichtheidVanMateriaal, resolveSection } from "./src/lib/sectionResolver.ts";
 import { zorgVoorBelastinggevallen } from "./src/lib/combinatieBeheer.ts";
 import { standaardBelastinggevallen } from "./src/lib/eigenGewicht.ts";
 import { defaultCombinations } from "./src/components/fem/solver/combinations.ts";
@@ -50,7 +50,7 @@ const telGroepen = (hal) => Object.fromEntries(Object.entries(hal.samenvatting.g
   // 2 dakdiagonalen, 2 vakken × 2 gevels × 2 wanddiagonalen.
   assert.deepEqual(aantallen(hal), [165, 340, 22, 0, 13, 412]);
   assert.deepEqual(telGroepen(hal), {
-    kolom: 22, spantligger: 132, gording: 110, randligger: 20, dakverband: 48, wandverband: 8, funderingsbalk: 0, poer: 0,
+    kolom: 22, spantligger: 132, gording: 110, randligger: 20, dakverband: 48, wandverband: 8, kopgevelverband: 0, funderingsbalk: 0, poer: 0,
   });
   const m = hal.samenvatting.maten;
   assert.deepEqual([m.aantalSpanten, m.spantafstandMm, m.aantalGordingvelden, m.gordingafstandMm, m.verbandvakken],
@@ -126,11 +126,15 @@ const LESSENAAR = {
   assert.deepEqual(codes({ lengteMm: -5, breedteMm: "30000" }), ["buitenBereik@lengteMm", "geenGetal@breedteMm"]);
   assert.deepEqual(codes({ aantalVakken: 2.5 }), ["geenGeheelGetal@aantalVakken"]);
   assert.deepEqual(codes({ aantalVakken: 101 }), ["buitenBereik@aantalVakken"]);
+  assert.deepEqual(codes({ aantalOverspanningen: 0 }), ["buitenBereik@aantalOverspanningen"]);
+  assert.deepEqual(codes({ aantalOverspanningen: 2.5 }), ["geenGeheelGetal@aantalOverspanningen"]);
+  assert.deepEqual(codes({ aantalOverspanningen: 11 }), ["buitenBereik@aantalOverspanningen"]);
   assert.deepEqual(codes({ spantafstandMm: 100 }), ["teVeelVakken@spantafstandMm"]);
   assert.deepEqual(codes({ gordingafstandMm: 100 }), ["teVeelGordingvelden@gordingafstandMm"]);
   assert.deepEqual(codes({ kolomvoet: "scharnierend", verbanden: { wanden: false } }), ["instabielLangs@verbanden"]);
   assert.deepEqual(codes({ kolomvoet: "scharnierend", verbanden: { vakken: "geen" } }), ["instabielLangs@verbanden"]);
-  assert.deepEqual(codes({ profielen: { kolom: { materiaal: "C24" } } }), ["geenStaal@profielen.kolom.materiaal"]);
+  assert.deepEqual(codes({ profielen: { kolom: { materiaal: "hout" } } }), ["geenStaal@profielen.kolom.materiaal"]);
+  assert.deepEqual(codes({ profielen: { kolom: { materiaal: "C24", profiel: "IPE 400" } } }), ["profielOnbekend@profielen.kolom.profiel"]);
   assert.deepEqual(codes({ profielen: { gording: { profiel: "IPE 999" } } }), ["profielOnbekend@profielen.gording.profiel"]);
   assert.deepEqual(codes({ verbanden: { vakken: [0, 11] } }), ["verbandVak@verbanden.vakken", "verbandVak@verbanden.vakken"]);
   assert.deepEqual(codes({ verbanden: { vakken: "sommige" } }), ["ongeldigeKeuze@verbanden.vakken"]);
@@ -142,7 +146,8 @@ const LESSENAAR = {
   // De genormaliseerde parameters lezen zichzelf terug (de wizard en de
   // MCP-tool geven ze door): leesStaalhalInvoer ∘ leesStaalhalInvoer = leesStaalhalInvoer.
   for (const invoer of [{}, LESSENAAR, { dak: { type: "platdak" } }, { dak: { hellingGraden: 12 } },
-    { aantalVakken: 7, verbanden: { vakken: [3, 1] }, fundering: { type: "balkrooster" } }]) {
+    { aantalVakken: 7, verbanden: { vakken: [3, 1] }, fundering: { type: "balkrooster" } },
+    { aantalOverspanningen: 3, fundering: { type: "balkrooster" } }]) {
     const eenmaal = leesStaalhalInvoer(invoer);
     assert.deepEqual(leesStaalhalInvoer(eenmaal), eenmaal, `idempotent: ${JSON.stringify(invoer)}`);
   }
@@ -290,10 +295,10 @@ const reken = (request) => new Promise((resolve, reject) => {
   child.stdin.end(JSON.stringify(request));
 });
 const som = (r, k) => r.reactions.reduce((t, x) => t + x[k], 0);
-/** Σ ρ·A·g·L met ρ = 7850 (staal) of 2500 kg/m³ (beton) en g = 9,81 m/s². */
+/** Σ ρ·A·g·L, met ρ uit de materiaaldata en g = 9,81 m/s². */
 const eigenGewicht = (model) => model.beams.reduce((t, b) => {
   const a = model.nodes.find((n) => n.id === b.startNodeId), e = model.nodes.find((n) => n.id === b.endNodeId);
-  const rho = b.material.startsWith("S") ? 7850 : 2500;
+  const rho = dichtheidVanMateriaal(b.material);
   const d = resolveSection(b.material, b.profileName);
   return t + rho * (d.aBruto ?? d.A) * 1e-6 * 9.81 / 1000 * Math.hypot(e.x - a.x, e.y - a.y, e.z - a.z);
 }, 0);
@@ -308,6 +313,131 @@ async function rekenproef(label, hal, verwacht, extra = () => {}) {
     for (const [as, waarde] of Object.entries(waarden)) dichtbij(som(r, as), waarde, `${label} geval ${geval}: ΣR ${as}`);
     extra(Number(geval), r);
   }
+}
+
+{
+  // Een compacte houten hal, met rechthoekige C24- en GL28h-staven in alle
+  // vijf profielgroepen. De steunreacties komen uit de echte 3D-kern.
+  const hal = maakStaalhal({ lengteMm: 12000, breedteMm: 8000, aantalVakken: 2,
+    dak: { type: "platdak" }, gordingafstandMm: 2000,
+    profielen: {
+      kolom: { materiaal: "GL28h", profiel: "200x400" },
+      spantligger: { materiaal: "GL28h", profiel: "160x400" },
+      gording: { materiaal: "C24", profiel: "80x200" },
+      randligger: { materiaal: "C24", profiel: "100x200" },
+      verband: { materiaal: "C24", profiel: "100x100" },
+    },
+  });
+  assert.ok(hal.model.beams.every((beam) => beam.material === "C24" || beam.material === "GL28h"));
+  assert.equal(staalhalProject(hal).projectInfo.name, "Houten hal 12 × 8 m");
+  assert.equal(hal.samenvatting.eigenGewichtKn.staal, 0);
+  assert.equal(hal.samenvatting.eigenGewichtKn.beton, 0);
+  dichtbij(hal.samenvatting.eigenGewichtKn.hout, eigenGewicht(hal.model), "eigen gewicht houten hal", 1e-6);
+  await rekenproef("houten hal", hal, {
+    1: { fz: 28.8 }, 2: { fz: 53.76 },
+    5: { fz: eigenGewicht(hal.model) },
+  });
+  ok("houten hal: C24 en GL28h, eigen gewicht en evenwicht in de 3D-kern");
+}
+
+{
+  // Drie gelijke overspanningen van 4 m. De gevraagde maximale
+  // gordingafstand is 3 m, maar 6 velden van 2 m zijn nodig om de twee
+  // binnenkolommen precies onder een dakknoop te zetten.
+  const invoer = { lengteMm: 12000, breedteMm: 12000, aantalVakken: 2,
+    dak: { type: "platdak" }, gordingafstandMm: 3000, aantalOverspanningen: 3 };
+  const hal = maakStaalhal(invoer);
+  assert.deepEqual(aantallen(hal), [33, 76, 12, 0, 7, 48]);
+  assert.deepEqual(hal.stramien.yAxes.map((as) => [as.label, as.position]),
+    [["A", 0], ["B", 4000], ["C", 8000], ["D", 12000]]);
+  assert.equal(hal.samenvatting.maten.aantalGordingvelden, 6);
+  assert.equal(hal.samenvatting.maten.gordingafstandMm, 2000);
+  assert.equal(hal.samenvatting.groepen.kolom.length, 12);
+  for (const beamId of hal.samenvatting.groepen.kolom) {
+    const beam = hal.model.beams.find((item) => item.id === beamId);
+    const a = hal.model.nodes.find((node) => node.id === beam.startNodeId);
+    const b = hal.model.nodes.find((node) => node.id === beam.endNodeId);
+    assert.equal(a.y, b.y, "binnenkolom sluit op een dakknoop aan");
+  }
+  await rekenproef("drie overspanningen op vaste voeten", hal, {
+    1: { fz: 43.2 }, 2: { fz: 80.64 }, 3: { fy: -99.84, fz: -69.12 },
+  });
+  const rooster = maakStaalhal({ ...invoer, fundering: { type: "balkrooster" } });
+  assert.deepEqual(aantallen(rooster), [45, 105, 12, 12, 7, 48]);
+  assert.equal(new Set(rooster.samenvatting.paalknopen).size, 12, "geen dubbele palen onder kruisingen");
+  await rekenproef("drie overspanningen op balkrooster", rooster, { 1: { fz: 43.2 } });
+  const gevel = maakStaalhal({ ...invoer, verbanden: { kopgevels: true, trekAlleen: true } });
+  assert.equal(gevel.samenvatting.groepen.kopgevelverband.length, 12, "twee diagonalen per vak in twee kopgevels");
+  for (const id of gevel.samenvatting.groepen.kopgevelverband) {
+    const beam = gevel.model.beams.find((item) => item.id === id);
+    const a = gevel.model.nodes.find((node) => node.id === beam.startNodeId);
+    const b = gevel.model.nodes.find((node) => node.id === beam.endNodeId);
+    assert.equal(Math.abs(a.y - b.y), 4, "kopgevelverband blijft binnen één overspanning");
+    assert.equal(beam.tensionOnly, true);
+  }
+  const zadel = maakStaalhal({ ...invoer, dak: { type: "zadeldak", nokhoogteMm: 8600 } });
+  assert.equal(zadel.samenvatting.maten.aantalGordingvelden, 6, "nok en binnenkolommen liggen op dakknooppunten");
+  await rekenproef("drie overspanningen met zadeldak", zadel, { 1: { fz: 43.2 } });
+  ok("drie gelijke overspanningen: binnenkolommen, stramien, balkrooster en echt 3D-evenwicht");
+}
+
+{
+  const hal = maakStaalhal({ lengteMm: 12000, breedteMm: 10000, aantalVakken: 2,
+    gordingafstandMm: 2500, lasten: { dakgebruikKnM2: 0.4 } });
+  const q = hal.loadCases.find((item) => item.id === STAALHAL_GEVAL.dakgebruik);
+  assert.deepEqual(q, { id: 6, name: "Dakgebruik (Q)", type: "live", categorie: "H" });
+  dichtbij(hal.samenvatting.belastingsom[6].fz, -0.4 * 12 * 10, "dakgebruik: ΣQ");
+  assert.ok(hal.model.memberLoads?.filter((item) => item.caseId === 6).length > 0);
+  const combinations = defaultCombinations(hal.loadCases);
+  assert.ok(combinations.some((item) => item.type === "uls" && (item.factors.get(6) ?? 0) > 0));
+  assert.ok(combinations.some((item) => item.type === "sls" && (item.factors.get(6) ?? 0) > 0));
+  const request = { ...buildOpenFem3DSolveRequest(hal.model, "linear", 6), bucklingModes: 0 };
+  const result = await reken(request);
+  assert.equal(result.equilibrium?.equilibriumOk, true);
+  assert.equal(openFem3DGlobalForceBalance(request, result).ok, true);
+  dichtbij(som(result, "fz"), 48, "dakgebruik: ΣR");
+  assert.ok(!maakStaalhal({ lasten: { dakgebruikKnM2: 0 } }).loadCases.some((item) => item.id === 6));
+  ok("dakgebruik Q als eigen categorie-H-geval: krachtensom, UGT/BGT en echte 3D-kern");
+}
+
+{
+  const hal = maakStaalhal({ lengteMm: 12000, breedteMm: 10000, aantalVakken: 2,
+    gordingafstandMm: 2500, verbanden: { trekAlleen: true } });
+  const verbandIds = [...hal.samenvatting.groepen.dakverband, ...hal.samenvatting.groepen.wandverband];
+  assert.ok(verbandIds.length > 0 && verbandIds.every((id) => hal.model.beams.find((beam) => beam.id === id)?.tensionOnly));
+  assert.ok(hal.model.beams.filter((beam) => !verbandIds.includes(beam.id)).every((beam) => !beam.tensionOnly));
+  assert.equal(hal.model.tensionOnlyCrossRule, true);
+  const request = { ...buildOpenFem3DSolveRequest(hal.model, "linear", STAALHAL_GEVAL.windLangs), bucklingModes: 0 };
+  assert.equal(request.tensionOnlyCrossRule, true);
+  assert.equal(request.members.filter((beam) => beam.tensionOnly).length, verbandIds.length);
+  const result = await reken(request);
+  assert.equal(result.equilibrium?.equilibriumOk, true, "trek-alleen hal: kernevenwicht");
+  assert.equal(openFem3DGlobalForceBalance(request, result).ok, true, "trek-alleen hal: onafhankelijk evenwicht");
+  assert.ok(result.diagnostics?.some((line) => line.startsWith("Trek-alleen:")), "kern rekent de trek-alleenstatus");
+  ok("dak- en wandverbanden optioneel trek-alleen: echte 3D-kern, kruisregel en evenwicht");
+}
+
+{
+  const hal = maakStaalhal({ lengteMm: 12000, breedteMm: 10000, aantalVakken: 2,
+    gordingafstandMm: 2500, verbanden: { vakken: "geen", dak: false, wanden: false, kopgevels: true, trekAlleen: true } });
+  const ids = hal.samenvatting.groepen.kopgevelverband;
+  assert.equal(ids.length, 4, "twee diagonalen per kopgevel");
+  assert.equal(hal.samenvatting.groepen.dakverband.length, 0);
+  assert.equal(hal.samenvatting.groepen.wandverband.length, 0);
+  assert.equal(hal.model.tensionOnlyCrossRule, true);
+  for (const id of ids) {
+    const beam = hal.model.beams.find((item) => item.id === id);
+    assert.equal(beam.tensionOnly, true);
+    assert.equal(beam.releases.myStart && beam.releases.myEnd && beam.releases.mzStart && beam.releases.mzEnd, true);
+    const nodes = [beam.startNodeId, beam.endNodeId].map((nodeId) => hal.model.nodes.find((node) => node.id === nodeId));
+    assert.equal(nodes[0].x, nodes[1].x, "verband blijft in kopgevelvlak");
+    assert.ok(nodes.some((node) => node.z === 0) && nodes.some((node) => node.z === 8), "diagonaal van voet naar goot");
+  }
+  const request = { ...buildOpenFem3DSolveRequest(hal.model, "linear", STAALHAL_GEVAL.windDwars), bucklingModes: 0 };
+  const result = await reken(request);
+  assert.equal(result.equilibrium?.equilibriumOk, true);
+  assert.equal(openFem3DGlobalForceBalance(request, result).ok, true);
+  ok("optionele trek-alleen kruizen in beide kopgevels: geometrie en 3D-evenwicht");
 }
 
 {

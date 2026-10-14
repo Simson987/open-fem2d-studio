@@ -46,7 +46,7 @@ export { PROJECT_COMMANDOS } from "../api/commands/project";
 export { STRAMIEN_COMMANDOS } from "../api/commands/stramien";
 // Extensies: het contract en het draaien van een extensiescript zonder app.
 export * from "../extensies/manifest";
-export { laadExtensieScript } from "./extensieSidecar";
+export { laadExtensieScript, opExtensieImporteren } from "./extensieSidecar";
 export * from "./apiSidecar";
 
 export * from "../components/fem/solver/engine";
@@ -108,6 +108,18 @@ export * from "../components/fem/femTypes";
 export * from "../core/fem/PlaatMesher";
 export * from "../lib/wind/windGenerator";
 export * from "../lib/wind/windEurocode";
+export * from "../lib/wind/windCodeRoute";
+export * from "../lib/wind/nbc2025StaticWind";
+export * from "../lib/wind/nbc2025ReferenceHeights";
+export * from "../lib/wind/nbc2025RectangularWindPlan";
+export * from "../lib/wind/nbc2025PartialWind";
+export * from "../lib/wind/nbc2025Combinations";
+export * from "../lib/wind/nbc2025Snow";
+export * from "../components/openFem3d/openFem3dNbc2025Wind";
+export * from "../components/openFem3d/openFem3dNbc2025Snow";
+export * from "../components/openFem3d/openFem3dNbc2025ModelPlan";
+export * from "../lib/wind/windPressureBalance";
+export * from "../lib/wind/windSurfacePressurePlan";
 // De stalen hal (MCP-tool `open_fem_3d_staalhal_maken`): de generator van de
 // wizard en de sidecarbewerkingen erachter. De 3D-rekenverzoeken en de
 // toetsinvoer komen uit dezelfde modules als in de app; die worden hier

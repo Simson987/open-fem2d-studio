@@ -20,8 +20,10 @@ import ProfielKiezer from "../../fem/ProfielKiezer";
 import { toonMm } from "../../../lib/lengthInput";
 import { CONCRETE_E_CM } from "../../../lib/sectionResolver";
 import { TERREIN_CATEGORIEEN, WINDGEBIEDEN } from "../../../lib/wind/windEurocode";
+import { NEDERLANDSE_WINDROUTE } from "../../../lib/wind/windCodeRoute";
 import {
   probeerStaalhal,
+  staalhalProfielUitKeuze,
   STAALHAL_GEVAL,
   STAALHAL_PROFIEL_GROEPEN,
   STAALHAL_STANDAARD,
@@ -33,6 +35,7 @@ import {
   type StaalhalResultaat,
 } from "./staalhal";
 import "./StaalhalWizard.css";
+import { doorsnedeNaamVertaald } from "../../../lib/verloopKeuze";
 
 const STAPPEN = ["afmetingen", "profielen", "verbanden", "fundering", "belastingen", "overzicht"] as const;
 type Stap = (typeof STAPPEN)[number];
@@ -41,6 +44,7 @@ type Stap = (typeof STAPPEN)[number];
 interface Toestand {
   lengteMm: number;
   breedteMm: number;
+  aantalOverspanningen: number;
   goothoogteMm: number;
   vakMaat: "spantafstand" | "aantal";
   spantafstandMm: number;
@@ -56,6 +60,8 @@ interface Toestand {
   eigenVakken: string;
   verbandDak: boolean;
   verbandWanden: boolean;
+  verbandKopgevels: boolean;
+  verbandTrekAlleen: boolean;
   fundering: StaalhalParameters["fundering"];
   lasten: StaalhalParameters["lasten"];
   eigenGewicht: boolean;
@@ -66,6 +72,7 @@ function standaardToestand(): Toestand {
   return {
     lengteMm: s.lengteMm,
     breedteMm: s.breedteMm,
+    aantalOverspanningen: s.aantalOverspanningen,
     goothoogteMm: s.goothoogteMm,
     vakMaat: "spantafstand",
     spantafstandMm: STAALHAL_STANDAARD_SPANTAFSTAND_MM,
@@ -81,6 +88,8 @@ function standaardToestand(): Toestand {
     eigenVakken: "1",
     verbandDak: s.verbanden.dak,
     verbandWanden: s.verbanden.wanden,
+    verbandKopgevels: s.verbanden.kopgevels,
+    verbandTrekAlleen: s.verbanden.trekAlleen,
     fundering: { ...s.fundering },
     lasten: { ...s.lasten, wind: { ...s.lasten.wind } },
     eigenGewicht: s.eigenGewicht,
@@ -96,6 +105,7 @@ export function naarInvoer(t: Toestand): Record<string, unknown> {
   return {
     lengteMm: t.lengteMm,
     breedteMm: t.breedteMm,
+    aantalOverspanningen: t.aantalOverspanningen,
     goothoogteMm: t.goothoogteMm,
     ...(t.vakMaat === "aantal" ? { aantalVakken: t.aantalVakken } : { spantafstandMm: t.spantafstandMm }),
     dak: t.daktype === "platdak"
@@ -110,6 +120,8 @@ export function naarInvoer(t: Toestand): Record<string, unknown> {
       vakken: t.verbandKeuze === "eigen" ? leesVakken(t.eigenVakken) : t.verbandKeuze,
       dak: t.verbandDak,
       wanden: t.verbandWanden,
+      kopgevels: t.verbandKopgevels,
+      trekAlleen: t.verbandTrekAlleen,
     },
     fundering: t.fundering,
     lasten: t.lasten,
@@ -182,6 +194,7 @@ function Voorbeeld({ resultaat }: { resultaat: StaalhalResultaat }) {
     ? m.goothoogteMm + (m.nokhoogteMm - m.goothoogteMm) * Math.min(y, p.breedteMm - y) / (p.breedteMm / 2)
     : m.goothoogteMm + (m.nokhoogteMm - m.goothoogteMm) * y / p.breedteMm;
   const gordingen = Array.from({ length: m.aantalGordingvelden + 1 }, (_, j) => j * m.gordingafstandMm);
+  const kolomlijnen = Array.from({ length: p.aantalOverspanningen + 1 }, (_, j) => j * m.overspanningMm);
   // Plattegrond (x–y)
   const schaalP = Math.min((W - 2 * rand) / p.lengteMm, (H - 2 * rand) / p.breedteMm);
   const px = (x: number) => rand + x * schaalP;
@@ -195,15 +208,21 @@ function Voorbeeld({ resultaat }: { resultaat: StaalhalResultaat }) {
       <svg viewBox={`0 0 ${W} ${H}`} className="shw-svg" role="img" aria-label={t("staalhal.voorbeeld.doorsnede")}>
         <line className="shw-peil" x1={2} x2={W - 2} y1={sz(0)} y2={sz(0)} />
         {rooster && <line className="shw-beton" x1={sx(0)} x2={sx(p.breedteMm)} y1={sz(-diepte)} y2={sz(-diepte)} />}
-        {rooster && diepte > 0 && [0, p.breedteMm].map((y) =>
+        {rooster && diepte > 0 && kolomlijnen.map((y) =>
           <line key={`poer-${y}`} className="shw-beton" x1={sx(y)} x2={sx(y)} y1={sz(-diepte)} y2={sz(0)} />)}
         {rooster && palen.filter((n) => n.x === 0).map((n) =>
           <path key={`paal-${n.id}`} className="shw-paal" d={`M${sx(n.y * 1000)} ${sz(-diepte)} l-3 7 h6 z`} />)}
-        <line className="shw-staal" x1={sx(0)} x2={sx(0)} y1={sz(0)} y2={sz(m.goothoogteMm)} />
-        <line className="shw-staal" x1={sx(p.breedteMm)} x2={sx(p.breedteMm)} y1={sz(0)} y2={sz(hoogteBij(p.breedteMm))} />
+        {kolomlijnen.map((y) => <line key={`kolom-${y}`} className="shw-staal" x1={sx(y)} x2={sx(y)} y1={sz(0)} y2={sz(hoogteBij(y))} />)}
+        {p.verbanden.kopgevels && kolomlijnen.slice(0, -1).map((y, index) => {
+          const volgende = kolomlijnen[index + 1];
+          return <g key={`kopverband-${y}`} className="shw-verband">
+            <line x1={sx(y)} y1={sz(0)} x2={sx(volgende)} y2={sz(hoogteBij(volgende))} />
+            <line x1={sx(volgende)} y1={sz(0)} x2={sx(y)} y2={sz(hoogteBij(y))} />
+          </g>;
+        })}
         <polyline className="shw-staal" points={nok.map(([y, z]) => `${sx(y)},${sz(z)}`).join(" ")} />
         {gordingen.map((y) => <circle key={y} className="shw-gording" cx={sx(y)} cy={sz(hoogteBij(y)) - 2} r={1.6} />)}
-        {!rooster && [0, p.breedteMm].map((y) => p.kolomvoet === "ingeklemd"
+        {!rooster && kolomlijnen.map((y) => p.kolomvoet === "ingeklemd"
           ? <rect key={`opl-${y}`} className="shw-oplegging" x={sx(y) - 5} y={sz(0)} width={10} height={4} />
           : <path key={`opl-${y}`} className="shw-oplegging" d={`M${sx(y)} ${sz(0)} l-4 6 h8 z`} />)}
         <text className="shw-maat" x={sx(p.breedteMm / 2)} y={H - 2} textAnchor="middle">{toonMm(p.breedteMm)}</text>
@@ -212,8 +231,9 @@ function Voorbeeld({ resultaat }: { resultaat: StaalhalResultaat }) {
       <svg viewBox={`0 0 ${W} ${H}`} className="shw-svg" role="img" aria-label={t("staalhal.voorbeeld.plattegrond")}>
         {rooster && <rect className="shw-rooster" x={px(0)} y={py(0)} width={p.lengteMm * schaalP} height={p.breedteMm * schaalP} />}
         {spanten.map((x) => <line key={x} className="shw-staal" x1={px(x)} x2={px(x)} y1={py(0)} y2={py(p.breedteMm)} />)}
-        <line className="shw-rand" x1={px(0)} x2={px(p.lengteMm)} y1={py(0)} y2={py(0)} />
-        <line className="shw-rand" x1={px(0)} x2={px(p.lengteMm)} y1={py(p.breedteMm)} y2={py(p.breedteMm)} />
+        {kolomlijnen.map((y, index) => <line key={`kolomlijn-${y}`}
+          className={index === 0 || index === p.aantalOverspanningen ? "shw-rand" : "shw-staal"}
+          x1={px(0)} x2={px(p.lengteMm)} y1={py(y)} y2={py(y)} />)}
         {p.verbanden.dak && m.verbandvakken.map((vak) => {
           const a = (vak - 1) * m.spantafstandMm, b = vak * m.spantafstandMm;
           return <g key={vak} className="shw-verband">
@@ -233,11 +253,12 @@ function Voorbeeld({ resultaat }: { resultaat: StaalhalResultaat }) {
 interface Props {
   open: boolean;
   onClose: () => void;
+  windCodeId: string;
   /** Het gemaakte model; de app vraagt naar niet-opgeslagen werk en past het toe. */
   onMaken: (hal: StaalhalResultaat) => void | Promise<void>;
 }
 
-export default function StaalhalWizard({ open, onClose, onMaken }: Props) {
+export default function StaalhalWizard({ open, onClose, onMaken, windCodeId }: Props) {
   const { t } = useTranslation("ribbon");
   const [toestand, setToestand] = useState<Toestand>(standaardToestand);
   const [stap, setStap] = useState<Stap>("afmetingen");
@@ -259,7 +280,7 @@ export default function StaalhalWizard({ open, onClose, onMaken }: Props) {
   });
 
   const maken = async () => {
-    if (!uitkomst.ok || bezig) return;
+    if (!uitkomst.ok || bezig || windCodeId !== NEDERLANDSE_WINDROUTE) return;
     setBezig(true);
     try {
       await onMaken(uitkomst.resultaat);
@@ -277,6 +298,7 @@ export default function StaalhalWizard({ open, onClose, onMaken }: Props) {
       <>
         <Veld label={t("staalhal.afmetingen.lengte")} eenheid="mm"><Mm waarde={toestand.lengteMm} onChange={(v) => zet({ lengteMm: v })} /></Veld>
         <Veld label={t("staalhal.afmetingen.breedte")} eenheid="mm"><Mm waarde={toestand.breedteMm} onChange={(v) => zet({ breedteMm: v })} /></Veld>
+        <Veld label={t("staalhal.afmetingen.aantalOverspanningen")}><Getal waarde={toestand.aantalOverspanningen} min={1} onChange={(v) => zet({ aantalOverspanningen: v })} /></Veld>
         <Veld label={t("staalhal.afmetingen.vakindeling")}>
           <Keuze waarde={toestand.vakMaat} onChange={(v) => zet({ vakMaat: v })} opties={[
             { waarde: "spantafstand", label: t("staalhal.afmetingen.perSpantafstand") },
@@ -313,8 +335,12 @@ export default function StaalhalWizard({ open, onClose, onMaken }: Props) {
       <>
         {STAALHAL_PROFIEL_GROEPEN.map((groep) => (
           <Veld key={groep} label={groepLabel(groep)}>
-            <button type="button" className="shw-profielknop" onClick={() => setKiezer(groep)}>
-              <code>{toestand.profielen[groep].profiel}</code> — {toestand.profielen[groep].materiaal}
+            <button type="button" className="shw-profielknop" data-staalhal-profiel={groep} onClick={() => setKiezer(groep)}>
+              {/* Verlopend profiel (#73): "IPE 600 → IPE 400 (verlopend)", zoals overal. */}
+              <code>{doorsnedeNaamVertaald({
+                material: toestand.profielen[groep].materiaal, profile: toestand.profielen[groep].profiel,
+                profileEnd: toestand.profielen[groep].profielEind,
+              }, t)}</code> — {toestand.profielen[groep].materiaal}
             </button>
           </Veld>
         ))}
@@ -343,6 +369,8 @@ export default function StaalhalWizard({ open, onClose, onMaken }: Props) {
           </Veld>}
         <label className="shw-vink"><input type="checkbox" checked={toestand.verbandDak} onChange={(e) => zet({ verbandDak: e.target.checked })} />{t("staalhal.verbanden.dak")}</label>
         <label className="shw-vink"><input type="checkbox" checked={toestand.verbandWanden} onChange={(e) => zet({ verbandWanden: e.target.checked })} />{t("staalhal.verbanden.wanden")}</label>
+        <label className="shw-vink"><input type="checkbox" checked={toestand.verbandKopgevels} onChange={(e) => zet({ verbandKopgevels: e.target.checked })} />{t("staalhal.verbanden.kopgevels")}</label>
+        <label className="shw-vink"><input type="checkbox" checked={toestand.verbandTrekAlleen} onChange={(e) => zet({ verbandTrekAlleen: e.target.checked })} />{t("staalhal.verbanden.trekAlleen")}</label>
         <p className="shw-hint">{t("staalhal.verbanden.hint")}</p>
       </>
     ),
@@ -393,6 +421,9 @@ export default function StaalhalWizard({ open, onClose, onMaken }: Props) {
         <Veld label={t("staalhal.belastingen.sneeuw")} eenheid="kN/m²">
           <Getal waarde={toestand.lasten.sneeuwKnM2} onChange={(v) => zet({ lasten: { ...toestand.lasten, sneeuwKnM2: v } })} />
         </Veld>
+        <Veld label={t("staalhal.belastingen.dakgebruik")} eenheid="kN/m²">
+          <Getal waarde={toestand.lasten.dakgebruikKnM2} onChange={(v) => zet({ lasten: { ...toestand.lasten, dakgebruikKnM2: v } })} />
+        </Veld>
         <Veld label={t("staalhal.belastingen.windBron")}>
           <Keuze waarde={toestand.lasten.wind.bron} onChange={(v) => zetWind({ bron: v })} opties={[
             { waarde: "handmatig", label: t("staalhal.belastingen.handmatig") },
@@ -428,6 +459,9 @@ export default function StaalhalWizard({ open, onClose, onMaken }: Props) {
         <div className="shw-kop">{t("staalhal.overzicht.maten")}</div>
         <ul className="shw-lijst">
           <li>{t("staalhal.overzicht.spanten", { aantal: r.samenvatting.maten.aantalSpanten, afstand: toonMm(r.samenvatting.maten.spantafstandMm) })}</li>
+          {r.samenvatting.maten.aantalOverspanningen > 1 && <li>{t("staalhal.overzicht.overspanningen", {
+            aantal: r.samenvatting.maten.aantalOverspanningen, breedte: toonMm(r.samenvatting.maten.overspanningMm),
+          })}</li>}
           <li>{t("staalhal.overzicht.gordingen", { aantal: r.samenvatting.maten.aantalGordingvelden, afstand: toonMm(r.samenvatting.maten.gordingafstandMm) })}</li>
           <li>{t("staalhal.overzicht.hoogtes", { goot: toonMm(r.samenvatting.maten.goothoogteMm), nok: toonMm(r.samenvatting.maten.nokhoogteMm), helling: getal(r.samenvatting.maten.hellingGraden, 2) })}</li>
         </ul>
@@ -439,7 +473,7 @@ export default function StaalhalWizard({ open, onClose, onMaken }: Props) {
               return <tr key={c.id}><td>{c.name}</td><td>{s ? `${getal(s.fx)} / ${getal(s.fy)} / ${getal(s.fz)} kN` : "—"}</td></tr>;
             })}
             {r.selfWeightEnabled && <tr><td>{r.loadCases.find((c) => c.id === STAALHAL_GEVAL.eigenGewicht)?.name}</td>
-              <td>{`${getal(-(r.samenvatting.eigenGewichtKn.staal + r.samenvatting.eigenGewichtKn.beton))} kN (z)`}</td></tr>}
+              <td>{`${getal(-(r.samenvatting.eigenGewichtKn.staal + r.samenvatting.eigenGewichtKn.hout + r.samenvatting.eigenGewichtKn.beton))} kN (z)`}</td></tr>}
           </tbody>
         </table>
         {r.waarschuwingen.length > 0 && <>
@@ -461,10 +495,14 @@ export default function StaalhalWizard({ open, onClose, onMaken }: Props) {
             <button type="button" className="shw-knop" disabled={index === 0} onClick={() => setStap(STAPPEN[index - 1])}>{t("staalhal.vorige")}</button>
             {index < STAPPEN.length - 1 &&
               <button type="button" className="shw-knop" onClick={() => setStap(STAPPEN[index + 1])}>{t("staalhal.volgende")}</button>}
-            <button type="button" className="shw-knop primair" disabled={!uitkomst.ok || bezig} onClick={() => { void maken(); }}>{t("staalhal.maken")}</button>
+            <button type="button" className="shw-knop primair" disabled={!uitkomst.ok || bezig || windCodeId !== NEDERLANDSE_WINDROUTE}
+              onClick={() => { void maken(); }}>{t("staalhal.maken")}</button>
           </div>
         }>
         <div className="shw-inhoud">
+          {windCodeId !== NEDERLANDSE_WINDROUTE && <div className="shw-problemen" role="alert">
+            {t("openFem3d.envelopeLoads.windCodeUnavailable", { code: windCodeId })}
+          </div>}
           <nav className="shw-stappen">
             {STAPPEN.map((s, i) => (
               <button key={s} type="button" className={`shw-stap${s === stap ? " actief" : ""}`} onClick={() => setStap(s)}>
@@ -494,9 +532,14 @@ export default function StaalhalWizard({ open, onClose, onMaken }: Props) {
       {kiezer && <ProfielKiezer
         open
         onClose={() => setKiezer(null)}
-        huidig={{ material: toestand.profielen[kiezer].materiaal, profile: toestand.profielen[kiezer].profiel }}
+        huidig={{
+          material: toestand.profielen[kiezer].materiaal, profile: toestand.profielen[kiezer].profiel,
+          ...(toestand.profielen[kiezer].profielEind ? { profileEnd: toestand.profielen[kiezer].profielEind } : {}),
+        }}
         onApply={(keuze) => {
-          setToestand((v) => ({ ...v, profielen: { ...v.profielen, [kiezer]: { profiel: keuze.profile, materiaal: keuze.material } } }));
+          // Het eindprofiel (verlopend, #73) gaat mee; een prismatische keuze
+          // haalt een eerder eindprofiel weg. De generator keurt het verloop.
+          setToestand((v) => ({ ...v, profielen: { ...v.profielen, [kiezer]: staalhalProfielUitKeuze(keuze) } }));
           setKiezer(null);
         }}
       />}

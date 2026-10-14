@@ -877,7 +877,11 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
                       </tbody>
                     </table>
                     <div className="bar-props-hint">
-                      {t("barDialog.governingLine", { toets: memberResult.governing_check_id, uc: memberResult.uc_max.toFixed(2) })}
+                      {/* Status n.v.t.: geen UC-getal, de reden staat in governing_check_id. */}
+                      {t("barDialog.governingLine", {
+                        toets: memberResult.governing_check_id,
+                        uc: memberResult.status === "NotApplicable" ? "—" : memberResult.uc_max.toFixed(2),
+                      })}
                     </div>
                     {(isTimber === isSteelCheckResult(memberResult)) && (
                       <div className="bar-props-hint">{t("cfg.staleResultHint")}</div>

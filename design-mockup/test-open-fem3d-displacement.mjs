@@ -47,8 +47,13 @@ const loadedModel = { ...model, beams: [loadedBeam] };
 const iy = resolveSection("S235", "IPE200").I * 1e-12;
 const exact = 5 * q * length ** 4 / (384 * 210_000 * 1000 * iy);
 const integrated = openFem3DMaximumDisplacementM(loadedModel, loadedResult);
-assert.ok(Math.abs(integrated / exact - 1) < 0.002,
-  `M/EI-integratie moet de analytische veldzakking benaderen: ${integrated} versus ${exact}`);
+// Zonder dwarskrachtlijn (oude resultaten) is M lineair tussen de 21 lijnpunten.
+// Bij 20 gelijke stukken en een vrij opgelegde ligger is de zakking in het midden
+// dan precies (1 − 0,8·(1/20)²) = 0,998 maal 5qL⁴/384EI: de fout per stuk is
+// q·h³/12 tegen de eenheidsmomentenlijn, samen q·h²·L²/(96·EI).
+const LINEAIR = 1 - 0.8 / 20 ** 2;
+assert.ok(Math.abs(integrated / exact - LINEAIR) < 1e-12,
+  `M/EI-integratie zonder dwarskracht: 0,998 maal de analytische veldzakking (${integrated / exact})`);
 assert.ok(Math.abs(openFem3DMemberFieldDeflectionMm(loadedModel, loadedBeam, loadedResult) / 1000 - integrated) < 1e-12);
 assert.ok(integrated > rotation * 1.2,
   "de verdeelde belasting moet de door kubische eindinterpolatie gemiste veldkromming toevoegen");
@@ -64,7 +69,63 @@ const iz = STEEL_SECTION_DIMS.IPE200.props.iz * 1e-12;
 const exactLateral = 5 * q * length ** 4 / (384 * 210_000 * 1000 * iz);
 const lateralStations = openFem3DMemberDisplacementStations(loadedModel, loadedBeam, lateralResult);
 assert.ok(lateralStations[10].uy > 0, "positief Mz moet de staaf naar lokale +y laten doorbuigen");
-assert.ok(Math.abs(lateralStations[10].uy / exactLateral - 1) < 0.002,
-  "ook de tweede lokale buigas moet de analytische veldzakking volgen");
+assert.ok(Math.abs(lateralStations[10].uy / exactLateral - LINEAIR) < 1e-12,
+  "ook de tweede lokale buigas volgt de veldzakking (zonder dwarskracht 0,998 maal, zie boven)");
+
+// #113: met de dwarskrachtlijn van de kern (dM_y/dx = V_z, dM_z/dx = −V_y) is M
+// per stuk kubisch en de dubbele integratie exact; de lijn hierboven zonder
+// dwarskracht (oude resultaten) blijft lineair per stuk, 0,2 % te laag.
+const shearPoints = momentPoints.map((point) => ({ ...point, value: q * (length / 2 - point.t * length) }));
+const nul = momentPoints.map((point) => ({ ...point, value: 0 }));
+const exactResult = {
+  ...result,
+  diagrams: {
+    momentY: [{ memberId: 1, points: momentPoints }], shearZ: [{ memberId: 1, points: shearPoints }],
+    momentZ: [{ memberId: 1, points: nul }], shearY: [{ memberId: 1, points: nul }],
+  },
+};
+const exactIntegrated = openFem3DMaximumDisplacementM(loadedModel, exactResult);
+assert.ok(Math.abs(exactIntegrated / exact - 1) < 1e-12,
+  `vrij opgelegd: 5qL⁴/384EI exact (${exactIntegrated} tegen ${exact})`);
+assert.ok(Math.abs(openFem3DMemberFieldDeflectionMm(loadedModel, loadedBeam, exactResult) / 1000 / exact - 1) < 1e-12,
+  "de veldzakking van de staaltoets is exact 5qL⁴/384EI");
+const exactLateralResult = {
+  ...result,
+  diagrams: {
+    momentY: [{ memberId: 1, points: nul }], shearZ: [{ memberId: 1, points: nul }],
+    momentZ: [{ memberId: 1, points: momentPoints }],
+    shearY: [{ memberId: 1, points: shearPoints.map((point) => ({ ...point, value: -point.value })) }],
+  },
+};
+const exactLateralStations = openFem3DMemberDisplacementStations(loadedModel, loadedBeam, exactLateralResult);
+assert.ok(Math.abs(exactLateralStations[10].uy / exactLateral - 1) < 1e-12,
+  `om de zwakke as ook exact, met dM_z/dx = −V_y (${exactLateralStations[10].uy} tegen ${exactLateral})`);
+
+// Ingeklemd bij x = 0, opgelegd bij x = L, gelijkmatige q: M(x) = −qL²/8 + 5qLx/8 − qx²/2,
+// w(x) = q·x²·(L − x)·(3L − 2x)/(48·EI), het maximum bij x ≈ 0,5785·L (geen station).
+const ei = 210_000 * 1000 * iy;
+const propMoment = momentPoints.map(({ t }) => ({ t, value: -q * length ** 2 / 8 + 5 * q * length * t * length / 8 - q * (t * length) ** 2 / 2 }));
+const propShear = momentPoints.map(({ t }) => ({ t, value: 5 * q * length / 8 - q * t * length }));
+const propped = {
+  displacements: [
+    { nodeId: 1, ux: 0, uy: 0, uz: 0, rx: 0, ry: 0, rz: 0 },
+    { nodeId: 2, ux: 0, uy: 0, uz: 0, rx: 0, ry: -q * length ** 3 / (48 * ei), rz: 0 },
+  ],
+  memberForces: [],
+  diagrams: {
+    momentY: [{ memberId: 1, points: propMoment }], shearZ: [{ memberId: 1, points: propShear }],
+    momentZ: [{ memberId: 1, points: nul }], shearY: [{ memberId: 1, points: nul }],
+  },
+};
+const wProp = (x) => q * x ** 2 * (length - x) * (3 * length - 2 * x) / (48 * ei);
+const propStations = openFem3DMemberDisplacementStations(loadedModel, loadedBeam, propped);
+// dw/dx = 0: x·(6L² − 15Lx + 8x²) = 0, dus x* = L·(15 − √33)/16 ≈ 0,5785·L.
+const propMax = wProp(length * (15 - Math.sqrt(33)) / 16);
+const afwijking = Math.max(...propStations.map((s) => Math.abs(Math.abs(s.uz) - wProp(s.t * length))));
+assert.ok(afwijking < 1e-12 * propMax, `ingeklemd–opgelegd: elk station op de analytische lijn (afwijking ${afwijking})`);
+const propVeld = openFem3DMemberFieldDeflectionMm(loadedModel, loadedBeam, propped) / 1000;
+// De top van de parabool door de drie hoogste van 201 stations: restfout orde δ³ (gemeten 5e-8).
+assert.ok(Math.abs(propVeld / propMax - 1) < 1e-7,
+  `ingeklemd–opgelegd: grootste veldzakking qL⁴/184,6EI binnen 1e-7, ook tussen de stations (${propVeld} tegen ${propMax})`);
 
 console.log("3D veldverplaatsing en vervormde lijn: geslaagd");

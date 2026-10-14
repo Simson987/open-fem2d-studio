@@ -1,6 +1,34 @@
 {
   "commands": [
     {
+      "name": "app.project.import",
+      "description": "Een bestand via een ingeschakelde lokale extensie als nieuw project openen. Niet-opgeslagen werk wordt alleen met discardChanges true vervangen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Absoluut pad naar het te importeren bestand."
+          },
+          "importer": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Optionele importeur-id (of extensie-id/importeur-id)."
+          },
+          "discardChanges": {
+            "type": "boolean",
+            "description": "Niet-opgeslagen wijzigingen bewust weggooien."
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "app"
+    },
+    {
       "name": "app.project.open",
       "description": "Een projectbestand openen in de app (zoals Openen). Heeft het huidige project niet-opgeslagen wijzigingen, dan weigert de app, tenzij discardChanges true is.",
       "inputSchema": {
@@ -60,8 +88,42 @@
       "kind": "app"
     },
     {
+      "name": "app.view3d.explode",
+      "description": "De 3D-weergave per level uiteentrekken, zonder het rekenmodel te veranderen. 0 mm zet de normale weergave terug.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "const": "levels"
+          },
+          "amountMm": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "Afstand per level in mm (0–10000)."
+          }
+        },
+        "required": [
+          "mode",
+          "amountMm"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "app"
+    },
+    {
+      "name": "extensions.list",
+      "description": "De lokale extensies, importeurs en hun aan/uit-status opvragen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "kind": "app"
+    },
+    {
       "name": "model3d.beam.add",
-      "description": "Een 3D-staaf tussen twee bestaande knopen toevoegen. Zonder profiel en materiaal: IPE 200 in S235, net als het tekengereedschap.",
+      "description": "Een 3D-staaf tussen twee bestaande knopen toevoegen. Zonder profiel en materiaal: IPE 200 in S235, net als het tekengereedschap. Met profileNameEnd een verlopende staaf (begin → eind, lineair).",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -78,7 +140,12 @@
           "profileName": {
             "type": "string",
             "minLength": 1,
-            "description": "Profielnaam uit de bibliotheek, bijv. \"IPE 200\", \"HEA 300\", \"CHS 88.9x4\", \"Strip 80x10\"."
+            "description": "Profielnaam uit de bibliotheek of een bewaarde eigen doorsnede, bijv. \"IPE 200\", \"HEA 300\", \"CHS 88.9x4\", \"EIGEN:Mijn doorsnede\"."
+          },
+          "profileNameEnd": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Verlopende staaf: het profiel aan het EINDE (eindknoop); de maten verlopen lineair van profileName (beginknoop) naar dit profiel. Dezelfde regels als een 2D-staaf: rechthoek naar rechthoek (\"100x500\" → \"100x300\") of I/H-profiel naar I/H-profiel uit de staalcatalogus (\"IPE 500\" → \"IPE 300\", gerekend als gelast I-profiel zonder afrondingsstraal); kokers, buizen, hoeklijnen, U-profielen, kruislaaghout en beton kennen geen verloop en worden met de reden geweigerd. Gelijk aan profileName = prismatisch. De kern rekent de staaf in gelijke delen met elk de doorsnede van hun midden."
           },
           "material": {
             "type": "string",
@@ -124,6 +191,10 @@
             "type": "boolean",
             "description": "Trek-alleen staaf (bijv. een windverband): valt weg zolang hij op druk staat."
           },
+          "shearDeformation": {
+            "type": "boolean",
+            "description": "Afschuifvervorming (Timoshenko) meenemen; gebruikt Av;y en Av;z. Standaard uit (Euler–Bernoulli)."
+          },
           "bedding": {
             "type": "object",
             "properties": {
@@ -166,6 +237,43 @@
           "startNodeId",
           "endNodeId"
         ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.beam.connectNodes",
+      "description": "Knopen op staven aansluiten (issue #63), zoals de lintknop Knopen aansluiten en de knop Aansluiten in de modelcontrole: elke 3D-staaf waarop een knoop ligt zonder eraan vast te zitten, wordt in één keer op al die knopen gesplitst. Een knoop ligt op een staaf als hij niet haar begin- of eindknoop is, hoogstens toleranceMm van de staafas af ligt, en zijn projectie op de as verder dan toleranceMm van beide staafeinden ligt (langs de as gemeten; geen stompje). De knoop wordt niet verschoven: ligt hij net naast de as, dan lopen de delen naar de knoop. Lijnlasten (lokaal en globaal), puntlasten, temperatuur, scharnieren (begin op het eerste deel, eind op het laatste), profiel, materiaal, rolhoek, trek-alleen, bedding en groep gaan mee; de oorspronkelijke id blijft bij het eerste deel. Zonder beamIds en nodeIds het hele model; anders alleen de paren met een genoemde knoop of een genoemde staaf. Geeft per gesplitste staaf de knopen en de delen (splits, met parts), het aantal gesplitste staven (count) en aangesloten knopen (nodeCount), en wat overgeslagen is (skipped: nearNode = te dicht bij een ander knippunt, met otherNodeId; duplicate = de knip zou een bestaande staaf verdubbelen, want de staven overlappen, met otherBeamId). Eén stap ongedaan maken.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "toleranceMm": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 25,
+            "description": "Verbindingstolerantie in mm (0.1–25); weglaten = 5 mm, de standaard van de app."
+          },
+          "beamIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een staaf."
+            },
+            "minItems": 1,
+            "description": "Alleen deze staven splitsen (op elke knoop die erop ligt)."
+          },
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een bestaande 3D-knoop."
+            },
+            "minItems": 1,
+            "description": "Alleen deze knopen aansluiten (op elke staaf waarop ze liggen)."
+          }
+        },
         "additionalProperties": false
       },
       "kind": "document"
@@ -417,7 +525,7 @@
     },
     {
       "name": "model3d.beam.update",
-      "description": "Eigenschappen of knopen van een 3D-staaf wijzigen. null wist een optioneel veld; lasten en toetsinstellingen blijven.",
+      "description": "Eigenschappen of knopen van een 3D-staaf wijzigen. null wist een optioneel veld; lasten en toetsinstellingen blijven. Een nieuw profiel of materiaal dat niet meer bij het eindprofiel van een verlopende staaf past, wordt geweigerd: geef dan ook profileNameEnd (of null).",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -441,12 +549,25 @@
               {
                 "type": "string",
                 "minLength": 1,
-                "description": "Profielnaam uit de bibliotheek, bijv. \"IPE 200\", \"HEA 300\", \"CHS 88.9x4\", \"Strip 80x10\"."
+                "description": "Profielnaam uit de bibliotheek of een bewaarde eigen doorsnede, bijv. \"IPE 200\", \"HEA 300\", \"CHS 88.9x4\", \"EIGEN:Mijn doorsnede\"."
               },
               {
                 "type": "null"
               }
             ]
+          },
+          "profileNameEnd": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "description": "Verlopende staaf: het profiel aan het EINDE (eindknoop); de maten verlopen lineair van profileName (beginknoop) naar dit profiel. Dezelfde regels als een 2D-staaf: rechthoek naar rechthoek (\"100x500\" → \"100x300\") of I/H-profiel naar I/H-profiel uit de staalcatalogus (\"IPE 500\" → \"IPE 300\", gerekend als gelast I-profiel zonder afrondingsstraal); kokers, buizen, hoeklijnen, U-profielen, kruislaaghout en beton kennen geen verloop en worden met de reden geweigerd. Gelijk aan profileName = prismatisch. De kern rekent de staaf in gelijke delen met elk de doorsnede van hun midden."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Eindprofiel van een verlopende staaf; null maakt de staaf prismatisch."
           },
           "material": {
             "oneOf": [
@@ -512,6 +633,10 @@
           "tensionOnly": {
             "type": "boolean",
             "description": "Trek-alleen staaf (bijv. een windverband): valt weg zolang hij op druk staat."
+          },
+          "shearDeformation": {
+            "type": "boolean",
+            "description": "Afschuifvervorming (Timoshenko) meenemen; gebruikt Av;y en Av;z. Standaard uit (Euler–Bernoulli)."
           },
           "bedding": {
             "oneOf": [
@@ -623,6 +748,84 @@
         "required": [
           "id"
         ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.envelope.generateLoads",
+      "description": "Genereer wind op gevel en dak, sneeuw, bekledingsgewicht en optioneel dakgebruik uit 3D-schilpanelen. Vervangt alleen eerder gegenereerde lasten; handmatige lasten blijven staan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "windCodeId": {
+            "type": "string",
+            "enum": [
+              "nl-en-1991-1-4-legacy"
+            ],
+            "description": "Expliciete windnormroute; ontbrekend betekent de historische Nederlandse route."
+          },
+          "windgebied": {
+            "type": "string",
+            "enum": [
+              "I",
+              "II",
+              "III"
+            ],
+            "description": "Nederlands windgebied. Windgeneratie vraagt ook terreincategorie."
+          },
+          "terreincategorie": {
+            "type": "string",
+            "enum": [
+              "0",
+              "I",
+              "II",
+              "III",
+              "IV"
+            ],
+            "description": "Terreincategorie voor wind. Windgeneratie vraagt ook windgebied."
+          },
+          "manualPressureKnPerM2": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Handmatig onderbouwde stuwdruk q_p in kN/m²; alternatief voor windgebied en terreincategorie."
+          },
+          "manualPressureSource": {
+            "type": "string",
+            "description": "Herleidbare bron van de handmatig ingevoerde stuwdruk."
+          },
+          "structuralFactor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Constructiefactor c_s·c_d; standaard 1."
+          },
+          "backgroundPermeabilityFraction": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.01,
+            "description": "Aangenomen achtergrondlekkage als fractie van het schiloppervlak, standaard 0,001 (0,1%)."
+          },
+          "groundSnowKnPerM2": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Karakteristieke grondsneeuwlast s_k in kN/m²; ontbreekt of 0 slaat sneeuw over."
+          },
+          "snowExposure": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Sneeuwblootstellingsfactor C_e; standaard 1."
+          },
+          "snowThermal": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Sneeuwtemperatuurfactor C_t; standaard 1."
+          },
+          "imposedRoofKnPerM2": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Optionele dakgebruikslast categorie H in kN/m² horizontale projectie."
+          }
+        },
         "additionalProperties": false
       },
       "kind": "document"
@@ -1353,9 +1556,10 @@
             "type": "string",
             "enum": [
               "gravity",
-              "normal"
+              "normal",
+              "verticalSurface"
             ],
-            "description": "gravity = zwaartekracht per horizontale projectie; normal = loodrecht op het vlak."
+            "description": "gravity = verticaal per horizontale projectie; normal = loodrecht op het vlak; verticalSurface = verticaal per werkelijk vlakoppervlak."
           },
           "distribution": {
             "type": "string",
@@ -1394,6 +1598,35 @@
               "description": "Id van een bestaande 3D-staaf."
             },
             "description": "Liggers in het vlak die geen last krijgen."
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "description": "Id van de opening."
+                },
+                "nodeIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "Id van een bestaande 3D-knoop."
+                  },
+                  "minItems": 3,
+                  "description": "Hoekknopen van de opening."
+                }
+              },
+              "required": [
+                "id",
+                "nodeIds"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Openingen zonder vlaklast."
           }
         },
         "required": [
@@ -1471,9 +1704,10 @@
             "type": "string",
             "enum": [
               "gravity",
-              "normal"
+              "normal",
+              "verticalSurface"
             ],
-            "description": "gravity = zwaartekracht per horizontale projectie; normal = loodrecht op het vlak."
+            "description": "gravity = verticaal per horizontale projectie; normal = loodrecht op het vlak; verticalSurface = verticaal per werkelijk vlakoppervlak."
           },
           "distribution": {
             "type": "string",
@@ -1520,10 +1754,250 @@
               "description": "Id van een bestaande 3D-staaf."
             },
             "description": "Liggers in het vlak die geen last krijgen."
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "description": "Id van de opening."
+                },
+                "nodeIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "Id van een bestaande 3D-knoop."
+                  },
+                  "minItems": 3,
+                  "description": "Hoekknopen van de opening."
+                }
+              },
+              "required": [
+                "id",
+                "nodeIds"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Openingen zonder vlaklast."
           }
         },
         "required": [
           "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.material.setAnalysis",
+      "description": "Analyse-E en ν per 3D-materiaal instellen. Beton blijft dezelfde normklasse; ontbrekende E-keuze gebruikt E_cm. null wist de betreffende keuze. De instelling geldt voor alle staven en platen met deze materiaalnaam.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "material": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Bestaande materiaalnaam in het 3D-model, bijvoorbeeld C30/37."
+          },
+          "concreteModulus": {
+            "oneOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "ecm"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Normale E_cm van de betonklasse."
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "creep"
+                      },
+                      "phi": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Kruipcoëfficiënt φ ≥ 0; E_eff = E_cm/(1+φ)."
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "phi"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Effectieve E met kruip."
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "custom"
+                      },
+                      "eMpa": {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "description": "Eigen analyse-E in MPa (= N/mm²)."
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "eMpa"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Eigen analyse-E."
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "E_cm, E_cm/(1+φ), eigen E of null om de keuze te wissen."
+          },
+          "nu": {
+            "oneOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "exclusiveMaximum": 0.5,
+                "description": "Dwarscontractiecoëfficiënt ν van dit materiaal, 0 ≤ ν < 0,5; null gebruikt de standaardwaarde."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "material"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.nbc2025.previewWind",
+      "description": "Bereken een NBC 2025-proefplan voor een rechthoekig laag gebouw met plat dak: UGT/BGT-druk per schilvlak, exacte 3D-driehoeklasten en horizontale §4.1.7.9-acties. Wijzigt het project niet en kiest geen provinciaal geldende norm; bron voor q, Ct, Cpi en eigenfrequentie is verplicht.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "windCodeId": {
+            "type": "string",
+            "enum": [
+              "ca-nbc-2025"
+            ],
+            "description": "Expliciet gekozen norm voor deze proefberekening."
+          },
+          "widthXM": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Buitenmaat X in m."
+          },
+          "widthYM": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Buitenmaat Y in m."
+          },
+          "heightM": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Gebouwhoogte in m; maximaal 20 m en kleiner dan beide plattegrondmaten."
+          },
+          "naturalFrequencyHz": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Laagste eigenfrequentie in Hz; minimaal 1 Hz."
+          },
+          "naturalFrequencySource": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Herleidbare bron van de laagste eigenfrequentie."
+          },
+          "noWakeOrChannelling": {
+            "type": "boolean",
+            "description": "Bevestig dat er geen wake- of kanaaleffect is."
+          },
+          "referencePressureKPa": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Projectspecifieke NBC-referentiedruk q met jaarlijkse overschrijdingskans 1/500 in kPa."
+          },
+          "referencePressureSource": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Herleidbare bron van q, inclusief plaats en kaarteditie."
+          },
+          "importanceCategory": {
+            "type": "string",
+            "enum": [
+              "low",
+              "normal",
+              "high",
+              "post-disaster"
+            ],
+            "description": "NBC-belangcategorie."
+          },
+          "terrain": {
+            "type": "string",
+            "enum": [
+              "open",
+              "rough"
+            ],
+            "description": "NBC-terreinprofiel; overgangsterrein wordt niet ondersteund."
+          },
+          "topographicFactor": {
+            "type": "number",
+            "minimum": 1,
+            "description": "NBC-topografiefactor Ct, minimaal 1."
+          },
+          "topographicFactorSource": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Herleidbare bron van Ct."
+          },
+          "internalPressureCoefficientMin": {
+            "type": "number",
+            "description": "Onderbouwde minimumwaarde van Cpi."
+          },
+          "internalPressureCoefficientMax": {
+            "type": "number",
+            "description": "Onderbouwde maximumwaarde van Cpi."
+          },
+          "internalCoefficientSource": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Herleidbare bron van de Cpi-grenzen."
+          }
+        },
+        "required": [
+          "windCodeId",
+          "widthXM",
+          "widthYM",
+          "heightM",
+          "naturalFrequencyHz",
+          "naturalFrequencySource",
+          "noWakeOrChannelling",
+          "referencePressureKPa",
+          "referencePressureSource",
+          "importanceCategory",
+          "terrain",
+          "topographicFactor",
+          "topographicFactorSource",
+          "internalPressureCoefficientMin",
+          "internalPressureCoefficientMax",
+          "internalCoefficientSource"
         ],
         "additionalProperties": false
       },
@@ -1667,6 +2141,304 @@
       "kind": "document"
     },
     {
+      "name": "model3d.nodes.merge",
+      "description": "Knopen samenvoegen (issue #75), zoals de lintknop Knopen samenvoegen en de knop Samenvoegen in de modelcontrole: 3D-knopen die binnen toleranceMm van elkaar liggen (transitief: een groep), worden één knoop. De knoop met de laagste id blijft op zijn plek; staven, platen (hoeken, getekende randen met boogstuurknopen, openingen), knooplasten, opleggingen, schijven, belastingvlakken en het level gaan naar hem. Een groep breder dan 2 × toleranceMm wordt geweigerd (tooWide): zo ver mag een verbinding niet verschuiven. Opleggingen: de geblokkeerde vrijheidsgraden samen; een veer en een blokkering in dezelfde richting: de blokkering wint (notes: springOverruled); twee veren of verschillende opgelegde verplaatsingen in één richting: geweigerd (springs, prescribed). Een staaf van lengte 0 verdwijnt met haar lasten (removedBeams); een staaf die omhangt houdt haar lasten over dezelfde fractie van haar lengte. Een dubbele staaf (dezelfde eindknopen, in welke volgorde ook) blijft één keer, de laagste id, met de lasten van beide (mergedBeams; reversed: in omgekeerde richting, posities gespiegeld en de lokale componenten volgens de lokale assen: met dezelfde rolhoek qy, py en de temperatuurgradiënt in y van teken om, qz en pz niet; een globale lijnlast houdt zijn richting). Verschillen de staven in profiel, materiaal, stand van de doorsnede, scharnieren, trek-alleen, bedding, toetsinstellingen of groep, of sluit een belastingvlak er maar één uit: geweigerd (beamProperties, beamExcluded). Verder geweigerd: verschillende levels (levels), een plaat op een level waarvan de blijvende knoop niet op die hoogte ligt (levelPlate), twee schijven (diaphragms) of een schijf die niet meer op één hoogte ligt (diaphragmHeight), een plaat, opening of belastingvlak met minder dan drie hoeken, een rand die zichzelf raakt, een ontaarde boog, een niet meer vlakke plaat of een randoplegging op een rand van lengte 0. Weigeren gaat per groep: de rest wordt samengevoegd. Zonder nodeIds het hele model; anders alleen de groepen met een genoemde knoop (de paren met die knoop). Geeft groups (keepNodeId, nodeIds die verdwenen, distanceMm), count (groepen), nodeCount (verdwenen knopen), removedBeams, mergedBeams, plates (hoeken die wegvielen), notes en refused (per groep nodeIds, keepNodeId en reason met kind). Eén stap ongedaan maken.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "toleranceMm": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 25,
+            "description": "Tolerantie in mm (0.1–25); weglaten = 5 mm, de verbindingstolerantie van de app."
+          },
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een bestaande 3D-knoop."
+            },
+            "minItems": 1,
+            "description": "Alleen de groepen rond deze knopen samenvoegen (de paren met een van deze knopen)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.panel.add",
+      "description": "Een gevel- of dakpaneel zonder stijfheid toevoegen, onafhankelijk van belastinggevallen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een bestaande 3D-knoop."
+            },
+            "minItems": 3,
+            "description": "Hoekknopen van het gevel- of dakpaneel."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "facade",
+              "roof"
+            ],
+            "description": "Gevel of dak."
+          },
+          "name": {
+            "type": "string",
+            "description": "Naam of groep van het paneel."
+          },
+          "flipOuterSide": {
+            "type": "boolean",
+            "description": "Keer de buitenwaartse normaal om."
+          },
+          "distribution": {
+            "type": "string",
+            "enum": [
+              "oneWay",
+              "twoWay"
+            ],
+            "description": "Afdracht: oneWay naar de liggers dwars op de overspanning, twoWay naar alle randliggers."
+          },
+          "spanDirection": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "additionalProperties": false,
+            "description": "Richting in globale assen."
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "description": "Id van de opening."
+                },
+                "nodeIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "Id van een bestaande 3D-knoop."
+                  },
+                  "minItems": 3,
+                  "description": "Hoekknopen van de opening."
+                }
+              },
+              "required": [
+                "id",
+                "nodeIds"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Openingen zonder vlaklast."
+          },
+          "claddingWeightKnPerM2": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Bekledingsgewicht per werkelijk vlakoppervlak, kN/m²."
+          }
+        },
+        "required": [
+          "nodeIds",
+          "type",
+          "distribution"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.panel.createLoad",
+      "description": "Een vlaklast uit een gevel- of dakpaneel maken met dezelfde afdracht als een handmatig belastingvlak.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van het paneel."
+          },
+          "caseId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Belastinggeval; ontbreekt = het actieve geval van het project."
+          },
+          "q": {
+            "type": "number",
+            "description": "Lastintensiteit in kN/m²; bij normal positief naar buiten."
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "gravity",
+              "normal",
+              "verticalSurface"
+            ],
+            "description": "gravity = verticaal per horizontale projectie; normal = loodrecht op het vlak; verticalSurface = verticaal per werkelijk vlakoppervlak."
+          }
+        },
+        "required": [
+          "id",
+          "q",
+          "direction"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.panel.delete",
+      "description": "Een gevel- of dakpaneel verwijderen; knopen en staven blijven staan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van het paneel."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.panel.update",
+      "description": "Een gevel- of dakpaneel wijzigen, inclusief openingen, buitenzijde en afdracht.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van het paneel."
+          },
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een bestaande 3D-knoop."
+            },
+            "minItems": 3,
+            "description": "Hoekknopen van het gevel- of dakpaneel."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "facade",
+              "roof"
+            ],
+            "description": "Gevel of dak."
+          },
+          "name": {
+            "type": "string",
+            "description": "Naam of groep van het paneel."
+          },
+          "flipOuterSide": {
+            "type": "boolean",
+            "description": "Keer de buitenwaartse normaal om."
+          },
+          "distribution": {
+            "type": "string",
+            "enum": [
+              "oneWay",
+              "twoWay"
+            ],
+            "description": "Afdracht: oneWay naar de liggers dwars op de overspanning, twoWay naar alle randliggers."
+          },
+          "spanDirection": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "additionalProperties": false,
+            "description": "Richting in globale assen."
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "description": "Id van de opening."
+                },
+                "nodeIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "Id van een bestaande 3D-knoop."
+                  },
+                  "minItems": 3,
+                  "description": "Hoekknopen van de opening."
+                }
+              },
+              "required": [
+                "id",
+                "nodeIds"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Openingen zonder vlaklast."
+          },
+          "claddingWeightKnPerM2": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Bekledingsgewicht per werkelijk vlakoppervlak, kN/m²."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
       "name": "model3d.plate.add",
       "description": "Een vlakke 3D-plaat (schaalelementen) toevoegen op bestaande knopen in één vlak.",
       "inputSchema": {
@@ -1760,6 +2532,25 @@
               ]
             },
             "description": "Getekende contour met rechte stukken en bogen; ontbreekt = rechte randen tussen nodeIds."
+          },
+          "bedding": {
+            "type": "object",
+            "properties": {
+              "kKnPerM3": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Beddingsconstante k in kN/m³, loodrecht op het plaatvlak. De grond ligt aan de onderzijde: tegen de plaatnormaal in (de z-as van de plaatassen; bij een vloer globaal −Z). Bij een wand legt de assenafspraak de grondzijde vast, los van de knoopvolgorde, en is zij niet te kiezen: een wand in het XZ-vlak heeft de grond aan +Y, een wand in het YZ-vlak aan −X (de uitkomst noemt haar in groundSide en waarschuwt in warnings). Ligt de grond aan de andere kant, dan zijn zakking en gronddruk van teken omgekeerd en is alleen druk niet bruikbaar. De rekenkern zet op elke knoop van het rekennet een veer k·A_trib; zonder oplegging in het plaatvlak houdt zij de plaat daar vast zolang de belasting loodrecht op de plaat staat."
+              },
+              "compressionOnly": {
+                "type": "boolean",
+                "description": "Alleen druk: de veren vallen weg waar de plaat van de grond loskomt (de grond trekt niet)."
+              }
+            },
+            "required": [
+              "kKnPerM3"
+            ],
+            "additionalProperties": false,
+            "description": "Plaat op bedding (Winkler), bijvoorbeeld een vloer op zand: de grond steunt de plaat over haar hele oppervlak. Het resultaat geeft per plaat de zakking en de gronddruk per knoop van het rekennet."
           }
         },
         "required": [
@@ -1889,6 +2680,58 @@
       "kind": "document"
     },
     {
+      "name": "model3d.plate.setBedding",
+      "description": "Eén of meer 3D-platen op dezelfde bedding zetten (Winkler, bijvoorbeeld een vloer op zand; zoals het vinkje Op bedding in het eigenschappenpaneel), of de bedding weghalen met null. Eén stap ongedaan maken. De uitkomst noemt per plaat de grondzijde (groundSide, bijv. \"−Z\" onder een vloer) en waarschuwt bij een wand (warnings): daar ligt die zijde vast door de plaatassen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "plateIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een plaat."
+            },
+            "minItems": 1,
+            "description": "De platen."
+          },
+          "bedding": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kKnPerM3": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Beddingsconstante k in kN/m³, loodrecht op het plaatvlak. De grond ligt aan de onderzijde: tegen de plaatnormaal in (de z-as van de plaatassen; bij een vloer globaal −Z). Bij een wand legt de assenafspraak de grondzijde vast, los van de knoopvolgorde, en is zij niet te kiezen: een wand in het XZ-vlak heeft de grond aan +Y, een wand in het YZ-vlak aan −X (de uitkomst noemt haar in groundSide en waarschuwt in warnings). Ligt de grond aan de andere kant, dan zijn zakking en gronddruk van teken omgekeerd en is alleen druk niet bruikbaar. De rekenkern zet op elke knoop van het rekennet een veer k·A_trib; zonder oplegging in het plaatvlak houdt zij de plaat daar vast zolang de belasting loodrecht op de plaat staat."
+                  },
+                  "compressionOnly": {
+                    "type": "boolean",
+                    "description": "Alleen druk: de veren vallen weg waar de plaat van de grond loskomt (de grond trekt niet)."
+                  }
+                },
+                "required": [
+                  "kKnPerM3"
+                ],
+                "additionalProperties": false,
+                "description": "Plaat op bedding (Winkler), bijvoorbeeld een vloer op zand: de grond steunt de plaat over haar hele oppervlak. Het resultaat geeft per plaat de zakking en de gronddruk per knoop van het rekennet."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "De bedding voor alle genoemde platen; null haalt haar weg."
+          }
+        },
+        "required": [
+          "plateIds",
+          "bedding"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
       "name": "model3d.plate.toLoadPanels",
       "description": "Een plaat omzetten in belastingvlakken: de plaat verdwijnt, haar omtrek draagt alleen nog last af. Openingen, bogen of een schuine last worden geweigerd.",
       "inputSchema": {
@@ -1914,7 +2757,7 @@
     },
     {
       "name": "model3d.plate.update",
-      "description": "Dikte, materiaal, afronding, netgrootte of randopleggingen van een 3D-plaat wijzigen.",
+      "description": "Dikte, materiaal, afronding, netgrootte, randopleggingen of bedding van een 3D-plaat wijzigen. bedding: null haalt de bedding weg.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1985,6 +2828,33 @@
               "description": "Lijnoplegging langs één rand; true = verhinderd."
             },
             "description": "Randopleggingen; vervangt de bestaande lijst."
+          },
+          "bedding": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kKnPerM3": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Beddingsconstante k in kN/m³, loodrecht op het plaatvlak. De grond ligt aan de onderzijde: tegen de plaatnormaal in (de z-as van de plaatassen; bij een vloer globaal −Z). Bij een wand legt de assenafspraak de grondzijde vast, los van de knoopvolgorde, en is zij niet te kiezen: een wand in het XZ-vlak heeft de grond aan +Y, een wand in het YZ-vlak aan −X (de uitkomst noemt haar in groundSide en waarschuwt in warnings). Ligt de grond aan de andere kant, dan zijn zakking en gronddruk van teken omgekeerd en is alleen druk niet bruikbaar. De rekenkern zet op elke knoop van het rekennet een veer k·A_trib; zonder oplegging in het plaatvlak houdt zij de plaat daar vast zolang de belasting loodrecht op de plaat staat."
+                  },
+                  "compressionOnly": {
+                    "type": "boolean",
+                    "description": "Alleen druk: de veren vallen weg waar de plaat van de grond loskomt (de grond trekt niet)."
+                  }
+                },
+                "required": [
+                  "kKnPerM3"
+                ],
+                "additionalProperties": false,
+                "description": "Plaat op bedding (Winkler), bijvoorbeeld een vloer op zand: de grond steunt de plaat over haar hele oppervlak. Het resultaat geeft per plaat de zakking en de gronddruk per knoop van het rekennet."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Plaat op bedding; null haalt de bedding weg."
           }
         },
         "required": [

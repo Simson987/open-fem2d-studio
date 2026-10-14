@@ -95,6 +95,8 @@ export interface OpenFem3DLoadPanelGeometry {
   axisV: Vec3;
   /** Hoekpunten in (u, v), tegen de klok in rond de normaal. */
   polygon: Vec2[];
+  /** Openingen in dezelfde vlakcoördinaten; binnen deze veelhoeken is geen last. */
+  holePolygons: Vec2[][];
   /** Knoopnummers in dezelfde volgorde als `polygon`. */
   cornerNodeIds: number[];
   areaM2: number;
@@ -183,7 +185,7 @@ function insideOrOnPolygon(p: Vec2, polygon: readonly Vec2[], tolerance: number)
 
 export function openFem3DLoadPanelGeometry(
   model: Pick<OpenFem3DModel, "nodes">,
-  panel: Pick<OpenFem3DLoadPanel, "id" | "nodeIds" | "distribution" | "spanDirection">,
+  panel: Pick<OpenFem3DLoadPanel, "id" | "nodeIds" | "distribution" | "spanDirection" | "openings">,
   nodeById?: ReadonlyMap<number, OpenFem3DNode>,
 ): OpenFem3DLoadPanelGeometry {
   const label = `3D-belastingvlak ${panel.id}`;
@@ -267,12 +269,48 @@ export function openFem3DLoadPanelGeometry(
       }
     }
   }
-  const areaM2 = Math.abs(signedArea(polygon));
-  const centre2 = polygonCentroid(polygon);
+  const outerAreaM2 = Math.abs(signedArea(polygon));
+  const strict = tolerance * 1e-3;
+  const holePolygons = (panel.openings ?? []).map((opening) => {
+    // Dezelfde keuring op vlakheid, zelfsnijding en oppervlakte als de buitenrand.
+    openFem3DLoadPanelGeometry(model, { id: opening.id, nodeIds: opening.nodeIds, distribution: "twoWay" }, byId);
+    const hole = opening.nodeIds.map((id): Vec2 => {
+      const relative = sub3(vec3(byId.get(id)!), origin);
+      if (Math.abs(dot3(relative, normal)) > tolerance) throw new Error(`${label}: opening ${opening.id} ligt buiten het vlak.`);
+      return [dot3(relative, axisU), dot3(relative, axisV)];
+    });
+    for (let i = 0; i < hole.length; i += 1) {
+      if (!pointInPolygon(hole[i], polygon) || distanceToBoundary(hole[i], polygon) <= strict) {
+        throw new Error(`${label}: opening ${opening.id} ligt niet volledig binnen de buitenrand.`);
+      }
+      for (let j = 0; j < polygon.length; j += 1) {
+        if (segmentsDistance2(hole[i], hole[(i + 1) % hole.length], polygon[j], polygon[(j + 1) % polygon.length]) <= strict) {
+          throw new Error(`${label}: opening ${opening.id} raakt de buitenrand.`);
+        }
+      }
+    }
+    return hole;
+  });
+  for (let i = 0; i < holePolygons.length; i += 1) for (let j = i + 1; j < holePolygons.length; j += 1) {
+    const a = holePolygons[i], b = holePolygons[j];
+    if (pointInPolygon(a[0], b) || pointInPolygon(b[0], a)
+      || a.some((start, index) => b.some((other, otherIndex) =>
+        segmentsDistance2(start, a[(index + 1) % a.length], other, b[(otherIndex + 1) % b.length]) <= strict))) {
+      throw new Error(`${label}: openingen ${panel.openings![i].id} en ${panel.openings![j].id} overlappen.`);
+    }
+  }
+  const areaM2 = outerAreaM2 - holePolygons.reduce((sum, hole) => sum + Math.abs(signedArea(hole)), 0);
+  if (!(areaM2 > tolerance * tolerance)) throw new Error(`${label} heeft geen netto oppervlak.`);
+  const outerCentre = polygonCentroid(polygon);
+  const weightedCentre = holePolygons.reduce<Vec2>((weighted, hole) => {
+    const holeArea = Math.abs(signedArea(hole)), centre = polygonCentroid(hole);
+    return [weighted[0] - holeArea * centre[0], weighted[1] - holeArea * centre[1]];
+  }, [outerAreaM2 * outerCentre[0], outerAreaM2 * outerCentre[1]]);
+  const centre2: Vec2 = [weightedCentre[0] / areaM2, weightedCentre[1] / areaM2];
   const sizeM = Math.max(tolerance, ...polygon.flatMap((a) => polygon.map((b) => norm2(sub2(a, b)))));
   return {
     panelId: panel.id,
-    origin, normal, axisU, axisV, polygon, cornerNodeIds, areaM2,
+    origin, normal, axisU, axisV, polygon, holePolygons, cornerNodeIds, areaM2,
     projectedAreaM2: areaM2 * Math.abs(normal[2]),
     centroid: add3(origin, add3(scale3(axisU, centre2[0]), scale3(axisV, centre2[1]))),
     sizeM,
@@ -294,6 +332,7 @@ export function openFem3DLoadPanelForcePerArea(
     }
     return [0, 0, -panel.q * projection];
   }
+  if (panel.direction === "verticalSurface") return [0, 0, -panel.q];
   return scale3(geometry.normal, panel.q);
 }
 
@@ -346,13 +385,18 @@ function segmentStatus(a: Vec2, b: Vec2, polygon: readonly Vec2[], tolerance: nu
   return !overlap ? "outside" : outside ? "partial" : "inside";
 }
 
-function panelBeams(model: OpenFem3DModel, geometry: OpenFem3DLoadPanelGeometry, byId: ReadonlyMap<number, OpenFem3DNode>) {
+function panelBeams(model: OpenFem3DModel, geometry: OpenFem3DLoadPanelGeometry,
+  byId: ReadonlyMap<number, OpenFem3DNode>, supportGeometry: OpenFem3DLoadPanelGeometry = geometry) {
   const tolerance = OPEN_FEM_3D_LOAD_PANEL_TOLERANCE_M;
   const inPanel: PanelBeam[] = [];
   const partial: number[] = [];
   const project = (point: Vec3): Vec2 => {
     const relative = sub3(point, geometry.origin);
     return [dot3(relative, geometry.axisU), dot3(relative, geometry.axisV)];
+  };
+  const projectSupport = (point: Vec3): Vec2 => {
+    const relative = sub3(point, supportGeometry.origin);
+    return [dot3(relative, supportGeometry.axisU), dot3(relative, supportGeometry.axisV)];
   };
   for (const beam of model.beams) {
     const start = byId.get(beam.startNodeId), end = byId.get(beam.endNodeId);
@@ -363,7 +407,7 @@ function panelBeams(model: OpenFem3DModel, geometry: OpenFem3DLoadPanelGeometry,
     const a = project(s), b = project(e);
     const length2 = norm2(sub2(b, a));
     if (length2 <= tolerance) continue;
-    const status = segmentStatus(a, b, geometry.polygon, tolerance);
+    const status = segmentStatus(projectSupport(s), projectSupport(e), supportGeometry.polygon, tolerance);
     if (status === "inside") {
       inPanel.push({
         beam, a, b, length2, length3: norm3(sub3(e, s)),
@@ -465,10 +509,11 @@ interface UncoveredPiece { areaM2: number; centroid: Vec2 }
 function distributeOneWay(geometry: OpenFem3DLoadPanelGeometry, receivers: readonly PanelBeam[]) {
   const tolerance = OPEN_FEM_3D_LOAD_PANEL_TOLERANCE_M;
   const polygon = geometry.polygon;
-  const edges = polygon.map((p, index) => [p, polygon[(index + 1) % polygon.length]] as const);
+  const edges = [polygon, ...geometry.holePolygons].flatMap((loop) =>
+    loop.map((p, index) => [p, loop[(index + 1) % loop.length]] as const));
   const epsilon = 1e-12 * geometry.sizeM;
   const critical = [
-    ...polygon.map((p) => p[1]),
+    ...[polygon, ...geometry.holePolygons].flatMap((loop) => loop.map((p) => p[1])),
     ...receivers.flatMap((receiver) => [receiver.a[1], receiver.b[1]]),
   ];
   const segments = [...receivers.map((receiver) => [receiver.a, receiver.b] as const), ...edges];
@@ -603,11 +648,11 @@ interface RayInterval {
 /** Delen van de straal p0 + s·m (s > 0) die binnen de veelhoek liggen. */
 function rayIntervals(
   p0: Vec2, m: Vec2, polygon: readonly Vec2[], epsilon: number,
-  origin?: Vec2, along?: Vec2,
+  origin?: Vec2, along?: Vec2, holes: readonly (readonly Vec2[])[] = [],
 ): RayInterval[] {
   const hits: { s: number; key: string; linear: LinearInT | null }[] = [];
-  for (let index = 0; index < polygon.length; index += 1) {
-    const p = polygon[index], q = polygon[(index + 1) % polygon.length];
+  for (const [loopIndex, loop] of [polygon, ...holes].entries()) for (let index = 0; index < loop.length; index += 1) {
+    const p = loop[index], q = loop[(index + 1) % loop.length];
     const r = sub2(q, p);
     const denominator = cross2(m, r);
     if (Math.abs(denominator) < 1e-14 * norm2(r)) continue;
@@ -616,14 +661,15 @@ function rayIntervals(
     const lambda = cross2(w, m) / denominator;
     if (lambda < 0 || lambda > 1 || s <= epsilon) continue;
     hits.push({
-      s, key: `e${index}`,
+      s, key: `${loopIndex}e${index}`,
       linear: origin && along
         ? { c0: cross2(sub2(p, origin), r) / denominator, c1: -cross2(along, r) / denominator }
         : null,
     });
   }
   hits.sort((x, y) => x.s - y.s);
-  let inside = pointInPolygon([p0[0] + epsilon * m[0], p0[1] + epsilon * m[1]], polygon);
+  const probe: Vec2 = [p0[0] + epsilon * m[0], p0[1] + epsilon * m[1]];
+  let inside = pointInPolygon(probe, polygon) && !holes.some((hole) => pointInPolygon(probe, hole));
   let sIn = 0, keyIn = "0";
   let linearIn: LinearInT | null = { c0: 0, c1: 0 };
   const intervals: RayInterval[] = [];
@@ -665,7 +711,7 @@ function twoWayWidths(
     });
     const e = beam.direction;
     const stations = [0, beam.length2];
-    for (const point of [...polygon, ...others.flatMap((other) => [other.a, other.b])]) {
+    for (const point of [...polygon, ...geometry.holePolygons.flat(), ...others.flatMap((other) => [other.a, other.b])]) {
       const t = dot2(sub2(point, beam.a), e);
       if (t > 0 && t < beam.length2) stations.push(t);
     }
@@ -679,7 +725,7 @@ function twoWayWidths(
       const m: Vec2 = [-e[1] * side, e[0] * side];
       const evaluate = (t: number): RaySample => {
         const p0: Vec2 = [beam.a[0] + t * e[0], beam.a[1] + t * e[1]];
-        const intervals = rayIntervals(p0, m, polygon, epsilon, beam.a, e);
+        const intervals = rayIntervals(p0, m, polygon, epsilon, beam.a, e, geometry.holePolygons);
         if (intervals.length === 0) return { t, w: 0, key: "", linear: { c0: 0, c1: 0 } };
         let limit = Infinity, limitKey = "inf";
         let limitLinear: LinearInT | null = null;
@@ -827,13 +873,13 @@ function endCapAreas(receivers: readonly PanelBeam[], geometry: OpenFem3DLoadPan
       angles.add(wrap(theta + Math.PI / 2));
       angles.add(wrap(theta - Math.PI / 2));
     }
-    for (const target of [...geometry.polygon, ...others.flatMap((other) => [other.a, other.b])]) {
+    for (const target of [...geometry.polygon, ...geometry.holePolygons.flat(), ...others.flatMap((other) => [other.a, other.b])]) {
       if (norm2(sub2(target, point)) > tolerance) angles.add(wrap(Math.atan2(target[1] - point[1], target[0] - point[0])));
     }
     const sorted = [...angles].sort((a, b) => a - b);
     const integrand = (phi: number) => {
       const m: Vec2 = [Math.cos(phi), Math.sin(phi)];
-      const intervals = rayIntervals(point, m, geometry.polygon, epsilon);
+      const intervals = rayIntervals(point, m, geometry.polygon, epsilon, undefined, undefined, geometry.holePolygons);
       if (intervals.length === 0) return 0;
       let limit = Infinity;
       for (let index = 0; index < others.length; index += 1) {
@@ -919,7 +965,14 @@ export function analyseOpenFem3DLoadPanel(model: OpenFem3DModel, panel: OpenFem3
   const label = `3D-belastingvlak ${panel.id}`;
   const geometry = openFem3DLoadPanelGeometry(model, panel, byId);
   const forcePerArea = openFem3DLoadPanelForcePerArea(panel, geometry);
-  const { inPanel, partial } = panelBeams(model, geometry, byId);
+  const sourcePanel = panel.generated?.source === "envelope3d"
+    ? (model.envelopePanels ?? []).find((item) => item.id === panel.generated!.panelId) : undefined;
+  if (panel.generated && !sourcePanel) throw new Error(`${label} verwijst naar een ontbrekend schilpaneel.`);
+  const supportGeometry = sourcePanel ? openFem3DLoadPanelGeometry(model, {
+    id: sourcePanel.id, nodeIds: sourcePanel.nodeIds, distribution: sourcePanel.distribution,
+    spanDirection: sourcePanel.spanDirection,
+  }, byId) : geometry;
+  const { inPanel, partial } = panelBeams(model, geometry, byId, supportGeometry);
   const excluded = new Set(panel.excludedBeamIds ?? []);
   const candidates = inPanel.filter((item) => !excluded.has(item.beam.id));
   const warnings: string[] = [];
@@ -969,6 +1022,7 @@ export function analyseOpenFem3DLoadPanel(model: OpenFem3DModel, panel: OpenFem3
     beamPieces = swept.beamPieces;
     for (const [edge, area] of swept.overhangByEdge) {
       if (area <= 1e-9 * geometry.areaM2) continue;
+      if (edge >= corner.length) continue; // openings zijn bewust vrij van vlaklast
       const nodes = edgeNodes(edge);
       unsupportedEdges.push(nodes);
       warnings.push(
@@ -1006,7 +1060,7 @@ export function analyseOpenFem3DLoadPanel(model: OpenFem3DModel, panel: OpenFem3
       pointShares.push({ nodeId, areaM2 });
       notes.push(`${formatArea(areaM2)} m² rond het staafeinde bij knoop ${nodeId} gaat als knooplast naar die knoop.`);
     }
-    geometry.polygon.forEach((p, index) => {
+    if (!panel.generated) geometry.polygon.forEach((p, index) => {
       const q = geometry.polygon[(index + 1) % geometry.polygon.length];
       const edge = sub2(q, p);
       const lengthM = norm2(edge);
@@ -1221,7 +1275,27 @@ export function withOpenFem3DLoadPanels(model: OpenFem3DModel): OpenFem3DLoadPan
     }
     for (const message of result.warnings) warnings.push({ caseId, message });
   }
-  const conversion = { model: { ...rest, loads, memberLoads, memberPointLoads }, results, warnings };
+  // Zonehoeken van de gebouwschil zijn alleen voor de vlakafdracht nodig.
+  // Zonder constructieve verbinding zouden ze in de Rust-kern als vrije
+  // knopen een mechanisme veroorzaken. Behoud ze wel als een gebruiker er
+  // inmiddels een staaf, plaat, oplegging of ander object aan heeft gekoppeld.
+  const helperIds = new Set(rest.generatedNodeIds ?? []);
+  const structuralIds = new Set<number>();
+  for (const beam of rest.beams) { structuralIds.add(beam.startNodeId); structuralIds.add(beam.endNodeId); }
+  for (const support of rest.supports ?? []) structuralIds.add(support.nodeId);
+  for (const load of loads) structuralIds.add(load.nodeId);
+  for (const plate of rest.plates ?? []) {
+    plate.nodeIds.forEach((id) => structuralIds.add(id));
+    plate.openings?.forEach((opening) => opening.nodeIds.forEach((id) => structuralIds.add(id)));
+  }
+  for (const diaphragm of rest.diaphragms ?? []) diaphragm.nodeIds.forEach((id) => structuralIds.add(id));
+  for (const panel of rest.envelopePanels ?? []) {
+    panel.nodeIds.forEach((id) => structuralIds.add(id));
+    panel.openings?.forEach((opening) => opening.nodeIds.forEach((id) => structuralIds.add(id)));
+  }
+  const nodes = helperIds.size
+    ? rest.nodes.filter((node) => !helperIds.has(node.id) || structuralIds.has(node.id)) : rest.nodes;
+  const conversion = { model: { ...rest, nodes, loads, memberLoads, memberPointLoads }, results, warnings };
   conversionCache.set(model, conversion);
   return conversion;
 }
@@ -1235,6 +1309,7 @@ export interface OpenFem3DLoadPanelOptions {
   distribution?: OpenFem3DLoadPanelDistribution;
   spanDirection?: OpenFem3DVector;
   excludedBeamIds?: number[];
+  openings?: { id: number; nodeIds: number[] }[];
 }
 
 function nextPanelId(model: OpenFem3DModel): number {
@@ -1273,6 +1348,7 @@ export function addOpenFem3DLoadPanel(
       ? { spanDirection: options.spanDirection ?? defaultOpenFem3DLoadPanelSpan(model, nodeIds) }
       : {}),
     ...(options.excludedBeamIds?.length ? { excludedBeamIds: [...options.excludedBeamIds] } : {}),
+    ...(options.openings?.length ? { openings: options.openings.map((opening) => ({ id: opening.id, nodeIds: [...opening.nodeIds] })) } : {}),
   };
   const parsed = parseOpenFem3DModel({ ...model, loadPanels: [...(model.loadPanels ?? []), panel] });
   const added = parsed.loadPanels![parsed.loadPanels!.length - 1];
@@ -1282,7 +1358,7 @@ export function addOpenFem3DLoadPanel(
 }
 
 export type OpenFem3DLoadPanelPatch = Partial<Pick<OpenFem3DLoadPanel,
-  "q" | "direction" | "distribution" | "spanDirection" | "excludedBeamIds" | "caseId">>;
+  "q" | "direction" | "distribution" | "spanDirection" | "excludedBeamIds" | "caseId" | "openings">>;
 
 /** Wijzig één belastingvlak; de structuur wordt gekeurd, de meetkunde niet (zie parse). */
 export function updateOpenFem3DLoadPanel(

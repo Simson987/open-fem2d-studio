@@ -158,15 +158,46 @@ pub fn n_b_rd(
     assen: &[Knikas],
     force_state: ForceStateSnapshot,
 ) -> Knikuitkomst {
+    n_b_rd_met(p, grade, assen, force_state, None)
+}
+
+/// §6.3.1 voor een doorsnede in KLASSE 4: `p_eff` draagt A_eff als oppervlak
+/// (NEN-EN 1993-1-5 4.3), `a_bruto_mm2` is de bruto A.
+///
+/// (6.48) N_b,Rd = χ·A_eff·f_y/γ_M1 en (6.51)
+/// λ̄ = (L_cr/i)·(1/λ₁)·√(A_eff/A): de stijfheid (i, N_cr) blijft bruto, de
+/// sterkte is die van de effectieve doorsnede.
+pub fn n_b_rd_klasse4(
+    p_eff: &SectionProperties,
+    grade: &SteelGrade,
+    assen: &[Knikas],
+    force_state: ForceStateSnapshot,
+    a_bruto_mm2: f64,
+) -> Knikuitkomst {
+    n_b_rd_met(p_eff, grade, assen, force_state, Some(a_bruto_mm2))
+}
+
+fn n_b_rd_met(
+    p: &SectionProperties,
+    grade: &SteelGrade,
+    assen: &[Knikas],
+    force_state: ForceStateSnapshot,
+    klasse4_a_bruto: Option<f64>,
+) -> Knikuitkomst {
     let lambda_1 = PI * (E_MPA / grade.fy_mpa).sqrt();
     let n_pl_rd = p.area_mm2 * grade.fy_mpa * 1e-3;
     let n_ed = force_state.forces.n_ed.abs();
+    // (6.51): √(A_eff/A) bij klasse 4, anders 1.
+    let wortel_a = match klasse4_a_bruto {
+        Some(a) if a > 0.0 => (p.area_mm2 / a).sqrt(),
+        _ => 1.0,
+    };
 
     let per_as: Vec<Asuitkomst> = assen
         .iter()
         .map(|a| {
             let lambda = a.kniklengte.l_cr_mm / a.i_mm;
-            let lambda_bar = lambda / lambda_1;
+            let lambda_bar = lambda / lambda_1 * wortel_a;
             let alpha = a.kromme.alpha();
             let chi_a = chi(lambda_bar, alpha);
             let n_b = chi_a * n_pl_rd / grade.gamma_m1;
@@ -203,7 +234,11 @@ pub fn n_b_rd(
     // u en de zwakke v, en dan hoort er in het rapport ook λ_u en χ_v te
     // staan — niet λ_y en χ_z met stilzwijgend andere getallen erin.
     let mut variables = vec![
-        NamedValue { symbol: "A".to_string(), value: p.area_mm2, unit: "mm²".to_string() },
+        NamedValue {
+            symbol: if klasse4_a_bruto.is_some() { "A_{eff}" } else { "A" }.to_string(),
+            value: p.area_mm2,
+            unit: "mm²".to_string(),
+        },
         NamedValue { symbol: "f_y".to_string(), value: grade.fy_mpa, unit: "MPa".to_string() },
         NamedValue { symbol: r"\gamma_{M1}".to_string(), value: grade.gamma_m1, unit: "-".to_string() },
     ];
@@ -232,7 +267,7 @@ pub fn n_b_rd(
         intermediate_values.push(nv(&format!("N_{{b,Rd,{}}}", u.as_naam), u.n_b_rd_kn, "kN"));
     }
 
-    let deelstappen = knik_deelstappen(p, grade, assen, &per_as, maatgevend, lambda_1, n_ed, &force_state);
+    let deelstappen = knik_deelstappen(p, grade, assen, &per_as, maatgevend, lambda_1, n_ed, &force_state, klasse4_a_bruto);
 
     let mut notes: Vec<String> = assen
         .iter()
@@ -281,7 +316,12 @@ pub fn n_b_rd(
         ),
         article: "art. 6.3.1 (6.46)".to_string(),
         force_state,
-        formula_latex: r"N_{b,Rd} = \chi \cdot A \cdot f_y / \gamma_{M1}".to_string(),
+        formula_latex: if klasse4_a_bruto.is_some() {
+            r"N_{b,Rd} = \chi \cdot A_{eff} \cdot f_y / \gamma_{M1}"
+        } else {
+            r"N_{b,Rd} = \chi \cdot A \cdot f_y / \gamma_{M1}"
+        }
+        .to_string(),
         variables,
         intermediate_values,
         deelstappen,
@@ -307,8 +347,13 @@ fn knik_deelstappen(
     lambda_1: f64,
     n_ed: f64,
     force_state: &ForceStateSnapshot,
+    klasse4_a_bruto: Option<f64>,
 ) -> Vec<Deelstap> {
     let mut uit = Vec::with_capacity(2 + 8 * assen.len() + 1);
+    // Klasse 4: `p.area_mm2` is A_eff; de traagheidsstraal blijft bruto.
+    let a_bruto = klasse4_a_bruto.unwrap_or(p.area_mm2);
+    let k4 = klasse4_a_bruto.is_some();
+    let a_sym = if k4 { "A_{eff}" } else { "A" };
 
     uit.push(stap(
         "uitgangspunten",
@@ -319,7 +364,7 @@ fn knik_deelstappen(
         String::new(),
         vec![
             nv("N_{Ed}", n_ed, "kN"),
-            nv("A", p.area_mm2, "mm²"),
+            nv(a_sym, p.area_mm2, "mm²"),
             nv("f_y", grade.fy_mpa, "MPa"),
             nv("E", E_MPA, "MPa"),
             nv(r"\gamma_{M1}", grade.gamma_m1, "-"),
@@ -333,9 +378,19 @@ fn knik_deelstappen(
                 force_state.combination_id,
                 nl(force_state.position_mm, 0)
             ),
-            "(6.47) geldt voor doorsneden van klasse 1, 2 en 3. Een doorsnede van klasse 4 wordt \
-             eerder in de toetsing geweigerd, dus (6.48) komt hier niet voor."
-                .to_string(),
+            if k4 {
+                format!(
+                    "De doorsnede is klasse 4: (6.48) N_b,Rd = χ·A_eff·f_y/γ_M1 met A_eff = {} mm² \
+                     (bruto A = {} mm², NEN-EN 1993-1-5 4.3), en de relatieve slankheid volgens \
+                     (6.51) met √(A_eff/A). De traagheidsstraal en N_cr blijven bruto.",
+                    nl(p.area_mm2, 0),
+                    nl(a_bruto, 0)
+                )
+            } else {
+                "(6.47) geldt voor doorsneden van klasse 1, 2 en 3; bij klasse 4 rekent de toetsing \
+                 met A_eff volgens (6.48)."
+                    .to_string()
+            },
             "Elke as krijgt hieronder een eigen, volledige tak: kniklengte met herkomst, \
              traagheidsstraal, relatieve slankheid, knikkromme, reductiefactor, knikweerstand en \
              unity check. De knikweerstand van de staaf is de kleinste van de takken."
@@ -368,11 +423,11 @@ fn knik_deelstappen(
         // wel en niet ziet.
         uit.push(kniklengte_deelstap(k, "art. 6.3.1.3(1)", NORM_IN_VLAK));
 
-        let i_ingevuld = if a.traagheid_mm4 > 0.0 && p.area_mm2 > 0.0 {
+        let i_ingevuld = if a.traagheid_mm4 > 0.0 && a_bruto > 0.0 {
             format!(
                 r"i_{{{n}}} = \sqrt{{\frac{{{}}}{{{}}}}}",
                 lx(a.traagheid_mm4, 0),
-                lx(p.area_mm2, 1)
+                lx(a_bruto, 1)
             )
         } else {
             String::new()
@@ -384,7 +439,7 @@ fn knik_deelstappen(
             "art. 6.3.1.3(1)",
             format!(r"i_{{{n}}} = \sqrt{{\frac{{I_{{{n}}}}}{{A}}}}"),
             i_ingevuld,
-            vec![nv(&format!("I_{{{n}}}"), a.traagheid_mm4, "mm⁴"), nv("A", p.area_mm2, "mm²")],
+            vec![nv(&format!("I_{{{n}}}"), a.traagheid_mm4, "mm⁴"), nv("A", a_bruto, "mm²")],
             Some(a.i_mm),
             "mm",
             vec!["Bepaald uitgaande van de brutodoorsnede, zoals 6.3.1.3(1) voorschrijft.".to_string()],
@@ -405,14 +460,29 @@ fn knik_deelstappen(
             &format!("lambda_bar_{n}"),
             &format!("Relatieve slankheid om de {n}-as"),
             &format!(r"\bar{{\lambda}}_{{{n}}}"),
-            "art. 6.3.1.3(1) (6.50)",
-            format!(r"\bar{{\lambda}}_{{{n}}} = \frac{{{lcr}}}{{i_{{{n}}}}} \cdot \frac{{1}}{{\lambda_1}}"),
-            format!(
-                r"\bar{{\lambda}}_{{{n}}} = \frac{{{}}}{{{}}} \cdot \frac{{1}}{{{}}}",
-                lx(u.l_cr_mm, 0),
-                lx(a.i_mm, 2),
-                lx(lambda_1, 3)
-            ),
+            if k4 { "art. 6.3.1.3(1) (6.51)" } else { "art. 6.3.1.3(1) (6.50)" },
+            if k4 {
+                format!(r"\bar{{\lambda}}_{{{n}}} = \frac{{{lcr}}}{{i_{{{n}}}}} \cdot \frac{{\sqrt{{A_{{eff}}/A}}}}{{\lambda_1}}")
+            } else {
+                format!(r"\bar{{\lambda}}_{{{n}}} = \frac{{{lcr}}}{{i_{{{n}}}}} \cdot \frac{{1}}{{\lambda_1}}")
+            },
+            if k4 {
+                format!(
+                    r"\bar{{\lambda}}_{{{n}}} = \frac{{{}}}{{{}}} \cdot \frac{{\sqrt{{{}/{}}}}}{{{}}}",
+                    lx(u.l_cr_mm, 0),
+                    lx(a.i_mm, 2),
+                    lx(p.area_mm2, 0),
+                    lx(a_bruto, 0),
+                    lx(lambda_1, 3)
+                )
+            } else {
+                format!(
+                    r"\bar{{\lambda}}_{{{n}}} = \frac{{{}}}{{{}}} \cdot \frac{{1}}{{{}}}",
+                    lx(u.l_cr_mm, 0),
+                    lx(a.i_mm, 2),
+                    lx(lambda_1, 3)
+                )
+            },
             vec![nv(&lcr, u.l_cr_mm, "mm"), nv(&format!("i_{{{n}}}"), a.i_mm, "mm"), nv(r"\lambda_1", lambda_1, "-")],
             Some(u.lambda_bar),
             "-",
@@ -492,8 +562,12 @@ fn knik_deelstappen(
             &format!("n_b_rd_{n}"),
             &format!("Knikweerstand om de {n}-as"),
             &format!("N_{{b,Rd,{n}}}"),
-            "art. 6.3.1.1(3) (6.47)",
-            format!(r"N_{{b,Rd,{n}}} = \frac{{\chi_{{{n}}} \cdot A \cdot f_y}}{{\gamma_{{M1}}}} \cdot 10^{{-3}}"),
+            if k4 { "art. 6.3.1.1(3) (6.48)" } else { "art. 6.3.1.1(3) (6.47)" },
+            if k4 {
+                format!(r"N_{{b,Rd,{n}}} = \frac{{\chi_{{{n}}} \cdot A_{{eff}} \cdot f_y}}{{\gamma_{{M1}}}} \cdot 10^{{-3}}")
+            } else {
+                format!(r"N_{{b,Rd,{n}}} = \frac{{\chi_{{{n}}} \cdot A \cdot f_y}}{{\gamma_{{M1}}}} \cdot 10^{{-3}}")
+            },
             format!(
                 r"N_{{b,Rd,{n}}} = \frac{{{} \cdot {} \cdot {}}}{{{}}} \cdot 10^{{-3}}",
                 lx(u.chi, 4),
@@ -503,7 +577,7 @@ fn knik_deelstappen(
             ),
             vec![
                 nv(&format!(r"\chi_{{{n}}}"), u.chi, "-"),
-                nv("A", p.area_mm2, "mm²"),
+                nv(a_sym, p.area_mm2, "mm²"),
                 nv("f_y", grade.fy_mpa, "MPa"),
                 nv(r"\gamma_{M1}", grade.gamma_m1, "-"),
             ],

@@ -416,8 +416,13 @@ export default function ProfielKiezer({
   const huidigEind = huidig?.profileEnd?.trim() ?? "";
   const [verlopend, setVerlopend] = useState(huidigEind !== "");
   const huidigEindRect = parseRechthoek(huidig?.profileEnd);
+  // De keuzelijst draagt de catalogussleutels ("IPE300"); een eindprofiel dat
+  // als "IPE 300" op de staaf staat (een 3D-model uit de API of een bestand,
+  // #73), staat er anders niet in, en dan opende de kiezer zonder eindprofiel.
   const [staalProfielEind, setStaalProfielEind] = useState(
-    huidigEind !== "" && !huidigEindRect ? huidigEind : "",
+    huidigEind !== "" && !huidigEindRect
+      ? STEEL_SECTION_DIMS[profileLookupKey(huidigEind)] ? profileLookupKey(huidigEind) : huidigEind
+      : "",
   );
 
   // Hout-stap: massief b×h of een CLT-opbouw

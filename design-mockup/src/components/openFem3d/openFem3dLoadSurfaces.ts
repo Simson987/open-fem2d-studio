@@ -113,13 +113,15 @@ export function openFem3DLoadPanelSurface(
     geometry.origin[2] + geometry.axisU[2] * p[0] + geometry.axisV[2] * p[1],
   ];
   const contour = geometry.polygon.map((p) => new THREE.Vector2(p[0], p[1]));
+  const holes = geometry.holePolygons.map((loop) => loop.map((p) => new THREE.Vector2(p[0], p[1])));
+  const points = [geometry.polygon, ...geometry.holePolygons].flat();
   const positions: number[] = [];
-  for (const triangle of THREE.ShapeUtils.triangulateShape(contour, [])) {
-    for (const index of triangle) positions.push(...to3D(geometry.polygon[index]));
+  for (const triangle of THREE.ShapeUtils.triangulateShape(contour, holes)) {
+    for (const index of triangle) positions.push(...to3D(points[index]));
   }
   return {
     positions,
-    outlines: [geometry.polygon.map(to3D)],
+    outlines: [geometry.polygon, ...geometry.holePolygons].map((loop) => loop.map(to3D)),
     areaM2: totalArea(positions),
     normal: geometry.normal,
     anchor: geometry.centroid,
