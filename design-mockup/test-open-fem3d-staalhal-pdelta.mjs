@@ -1,4 +1,5 @@
-// Tweede orde (P-Δ) van de stalen hal uit de wizard (issue #60), van eind tot
+// Tweede orde (P-Δ) van de stalen en de houten hal uit de wizard (issues #60,
+// #202), van eind tot
 // eind: elk belastinggeval en elke standaardcombinatie (defaultCombinations)
 // gaat door de rekenweg van de app (solveOpenFem3D / solveOpenFem3DCombination:
 // eigen gewicht, verzoekopbouw, scheefstand, POST naar /api/openFem3d/solve en
@@ -40,9 +41,12 @@
 // Varianten: de standaardhal (= docs/verificatie/3d-raamwerk/staalhal-60x30.ifcfem),
 // dezelfde hal met scheefstand ±X/±Y (alleen de UGT-varianten: de gevallen en
 // de BGT-combinaties zijn gelijk aan die zonder), een lessenaarsdak met
-// scharnierende voeten, een plat dak en de standaardhal op een balkrooster met
-// palen. Dezelfde handgetallen staan in test-open-fem3d-staalhal.mjs en
-// test-open-fem3d-staalhal-generator.mjs (eerste orde).
+// scharnierende voeten, een plat dak, de standaardhal op een balkrooster met
+// palen, en de houten hal van de wizard (GL28h en C24, dezelfde als in
+// test-open-fem3d-staalhal-generator.mjs en test-staalhal-sidecar.mjs) zonder
+// en met scheefstand volgens EN 1995-1-1 (issue #202). Dezelfde handgetallen
+// staan in test-open-fem3d-staalhal.mjs en test-open-fem3d-staalhal-generator.mjs
+// (eerste orde).
 //
 // Rekenkern: OPEN_FEM_3D_SOLVER_PATH, anders src-tauri/target/debug/open-fem-3d(.exe).
 // Vier berekeningen tegelijk (de app rekent ze allemaal tegelijk).
@@ -59,7 +63,7 @@ import {
 import { maakStaalhal, STAALHAL_GEVAL } from "./src/components/openFem3d/wizards/staalhal.ts";
 import { defaultCombinations } from "./src/components/fem/solver/combinations.ts";
 import { bepaalScheefstand } from "./src/lib/scheefstandNorm.ts";
-import { resolveSection } from "./src/lib/sectionResolver.ts";
+import { dichtheidVanMateriaal, resolveSection } from "./src/lib/sectionResolver.ts";
 
 const solverBinary = process.platform === "win32" ? "open-fem-3d.exe" : "open-fem-3d";
 const solverPath = process.env.OPEN_FEM_3D_SOLVER_PATH
@@ -97,6 +101,13 @@ const staalgewicht = (model) => model.beams.reduce((t, b) => {
   return t + 7850 * (d.aBruto ?? d.A) * 1e-6 * 9.81 / 1000 * Math.hypot(e.x - a.x, e.y - a.y, e.z - a.z);
 }, 0);
 
+/** Σ ρ·A·g·L met ρ van het materiaal (hout: de gemiddelde volumieke massa van de sterkteklasse), g = 9,81 m/s². */
+const houtgewicht = (model) => model.beams.reduce((t, b) => {
+  const a = model.nodes.find((n) => n.id === b.startNodeId), e = model.nodes.find((n) => n.id === b.endNodeId);
+  const d = resolveSection(b.material, b.profileName);
+  return t + dichtheidVanMateriaal(b.material) * (d.aBruto ?? d.A) * 1e-6 * 9.81 / 1000 * Math.hypot(e.x - a.x, e.y - a.y, e.z - a.z);
+}, 0);
+
 /** Het profiel van de wandverbanden van de standaardhal. */
 const VERBAND = "CHS 88.9x4";
 
@@ -132,7 +143,27 @@ const PLATDAK = {
   lengteMm: 40000, breedteMm: 20000, aantalVakken: 5, goothoogteMm: 7000, dak: { type: "platdak" },
   gordingafstandMm: 3000, verbanden: { vakken: [5, 1, 3, 3] },
 };
+// De houten hal van de wizard: 12 × 8 m, plat dak, goot 8 m (standaard), twee
+// vakken, gelamineerde spanten en kolommen, gordingen en verbanden in C24.
+const HOUTHAL = {
+  lengteMm: 12000, breedteMm: 8000, aantalVakken: 2, dak: { type: "platdak" }, gordingafstandMm: 2000,
+  profielen: {
+    kolom: { materiaal: "GL28h", profiel: "200x400" },
+    spantligger: { materiaal: "GL28h", profiel: "160x400" },
+    gording: { materiaal: "C24", profiel: "80x200" },
+    randligger: { materiaal: "C24", profiel: "100x200" },
+    verband: { materiaal: "C24", profiel: "100x100" },
+  },
+};
 const G = STAALHAL_GEVAL;
+// Houten hal 12 × 8 m (96 m²) op 8 m, standaardlasten:
+//   G 0,30 · 96 = 28,8   S 0,56 · 96 = 53,76
+//   W dwars (0,64 + 0,40) · 8 · 12 = 99,84 in +Y, dak 0,48 · 96 = 46,08 omhoog
+//   W langs 0,64 · 8 · 8 / 2 = 20,48 in +X
+const HOUT = (hal) => ({
+  [G.permanent]: [0, 0, 28.8], [G.sneeuw]: [0, 0, 53.76], [G.windDwars]: [0, -99.84, -46.08],
+  [G.windLangs]: [-20.48, 0, 0], [G.eigenGewicht]: [0, 0, houtgewicht(hal.model)],
+});
 
 // Handsommen per geval als ΣR = [fx, fy, fz] in kN (reactie = −last).
 // Standaardhal 60 × 30 m, goot 8 m, nok 9,5 m (projectie 1800 m²):
@@ -180,6 +211,8 @@ const VARIANTEN = [
     naam: "standaardhal op een balkrooster met palen", invoer: { fundering: { type: "balkrooster" } }, knikkendeVerbanden: 3,
     hand: () => STANDAARD(staalgewicht(maakStaalhal({}).model) + 5.886 * (2 * 60 + 11 * 30 + 22 * 0.8)),
   },
+  { naam: "houten hal 12 × 8 m", invoer: HOUTHAL, hand: HOUT },
+  { naam: "houten hal, scheefstand ±X/±Y (EN 1995)", invoer: HOUTHAL, scheefstand: true, norm: "en1995", hand: HOUT },
 ];
 
 /** Voert taken uit met hoogstens `n` tegelijk; de uitkomsten in de volgorde van de taken. */
@@ -210,9 +243,10 @@ for (const variant of VARIANTEN) {
     permanentCaseIds: hal.loadCases.filter((c) => c.type === "dead").map((c) => c.id),
     selfWeightCaseId: G.eigenGewicht,
   };
-  // φ zoals de app hem bij de norm EN 1993-1-1 bepaalt (φ0 = 1/200 met α_h en α_m).
+  // φ zoals de app hem bij de norm bepaalt: staal EN 1993-1-1 (φ0 = 1/200 met α_h en α_m),
+  // hout EN 1995-1-1 (φ = 0,005·√(5/h) boven 5 m).
   const phi = variant.scheefstand
-    ? bepaalScheefstand({ bron: "en1993", noemer: 200 }, leidScheefstandGeometrieAf3D(hal.model),
+    ? bepaalScheefstand({ bron: variant.norm ?? "en1993", noemer: 200 }, leidScheefstandGeometrieAf3D(hal.model),
       toepasselijkeScheefstandNormen3D(hal.model)).phi
     : 0;
   const combinaties = metScheefstandRichtingen3D(defaultCombinations(hal.loadCases), phi > 0)

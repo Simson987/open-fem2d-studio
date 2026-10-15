@@ -80,7 +80,7 @@ const TIJDSLIMIET_MS = 300_000;
 // slaagden alle 87 controles, maar de test had 322 s nodig en werd daarna
 // door de algemene grens afgebroken. Houd ook deze langzame test begrensd.
 const SELECTIE_UI_TIJDSLIMIET_MS = 600_000;
-// De P-Δ-test van de staalhal rekent 104 berekeningen met de debugbouw van de
+// De P-Δ-test van de hallen rekent 151 berekeningen (104 staal, 47 hout) met de debugbouw van de
 // 3D-kern, die gedrukte staven voor de knik en de tweede orde in delen rekent
 // (controle oktober 2026, K4). Alleen: 75 s; naast de rest van de batterij
 // liep hij tot 228 s op, driekwart van de algemene grens. Eigen ruimere grens.
@@ -617,9 +617,10 @@ const ALLEEN_BRON = new Map([
     // Eigen gewicht langs de staafas als verdeelde last (issue #112): een staande kolom, een schuine spant en een
     // verlopende kolom door de rekenweg van de app en de echte kern; de N-lijn op elk punt tegen de hand.
     "open-fem3d-eigen-gewicht-e2e",
-    // Tweede orde (P-Δ) van de stalen hal uit de wizard (issue #60): elk geval en elke standaardcombinatie, ook met
-    // scheefstand ±X/±Y, een lessenaarsdak, een plat dak en een balkrooster, door de rekenweg van de app en de echte
-    // kern: convergent, stabiel, ΣR gelijk aan de handsom en de onafhankelijke krachtensom (104 berekeningen; alleen
+    // Tweede orde (P-Δ) van de stalen en de houten hal uit de wizard (issues #60, #202): elk geval en elke
+    // standaardcombinatie, ook met scheefstand ±X/±Y, een lessenaarsdak, een plat dak en een balkrooster, door de
+    // rekenweg van de app en de echte kern: convergent, stabiel, ΣR gelijk aan de handsom en de onafhankelijke
+    // krachtensom (151 berekeningen, waarvan 47 voor de houten hal van 12 × 8 m, die klein is; alleen
     // ongeveer 75 s, in de batterij tot bijna 4 min, eigen grens 600 s). Sinds de kern gedrukte staven in delen rekent
     // (controle oktober 2026, K4) weigert de stabiliteitspoort bij "Wind langs (W) leidend" in de standaardhal terecht
     // 3 (met scheefstand 8) berekeningen: de wandverbanden knikken zelf (α_cr < 1); de test eist dat waar de hand het
