@@ -76,8 +76,13 @@
 //! stoot de belasting het niet aan, dan vindt de kern een oplossing met een
 //! klein residu. De adapter controleert daarom na iedere 3D-oplossing met
 //! proefbelastingen op alle vrije vrijheidsgraden of de stijfheidsmatrix
-//! regulier is (`tweede_orde::singulier`, #110); zo niet, dan volgt de
-//! mechanismefout van de opleggingen (#64).
+//! regulier is (#110, sinds #195 in `mechanisme`). Zo niet, dan geldt
+//! dezelfde afspraak als voor deze regel: stoot de belasting de vrije
+//! beweging niet aan, dan een uitkomst met een melding die haar noemt (de
+//! verplaatsingen langs haar de kleinste die bij de krachten passen); stoot
+//! zij haar wel aan, dan een fout. Tot #195 was zo'n mechanisme altijd een
+//! fout. `mechanisme` zoekt het in het kernmodel met de blokkeringen van
+//! deze regel erin.
 //!
 //! De blokkeringen verschijnen niet bij de reacties; een melding noemt de
 //! modelknopen met een vastgehouden draaiing. De controle op de opleggingen
@@ -111,7 +116,7 @@ const NUL: f64 = 1e-13;
 /// (maal de modelafmeting) of het grootste moment. Afrondingsruis van de kern
 /// ligt in de orde n·ε ≈ 1e-13; deze grens laat daar ruim marge boven en laat
 /// een klein echt moment op een vrije draaiing niet weg (#96).
-const RUIS: f64 = 1e-10;
+pub(crate) const RUIS: f64 = 1e-10;
 const ASSEN: [&str; 3] = ["X", "Y", "Z"];
 
 fn eenheid(as_: usize) -> V3 {
@@ -141,7 +146,7 @@ fn deel(basis: &[V3], richting: V3) -> f64 {
 }
 
 /// Een vastgehouden draaiing: per knoop-id de draaivector.
-type Vorm = BTreeMap<usize, V3>;
+pub(crate) type Vorm = BTreeMap<usize, V3>;
 
 fn inproduct(a: &Vorm, b: &Vorm) -> f64 {
     a.iter().filter_map(|(knoop, v)| b.get(knoop).map(|w| dot(*v, *w))).sum()
@@ -501,6 +506,11 @@ impl Vastzetting {
         Err(fout(context, request, &belast))
     }
 
+    /// Een orthonormale basis van de vastgehouden draaiingen Z, per knoop de
+    /// draaivector; voor de kleinste oplossing langs een mechanisme
+    /// (`mechanisme`, #195).
+    pub(crate) fn draaivormen(&self) -> &[Vorm] { &self.basis }
+
     /// Haal de kunstmatige blokkeringen uit de uitkomst van de kern: geen
     /// reacties, en knoopdraaiingen zonder het onbepaalde deel.
     pub(crate) fn ruim_op(&self, results: &mut AnalysisResults3D) {
@@ -579,7 +589,7 @@ fn lege_steun(node_id: usize) -> SolverSupport3D {
 
 /// De grootste kracht maal de modelafmeting en het grootste moment in de
 /// uitkomst en de knooplasten: de maat voor afrondingsruis.
-fn schaal(input: &SolverInput3D, results: &AnalysisResults3D) -> f64 {
+pub(crate) fn schaal(input: &SolverInput3D, results: &AnalysisResults3D) -> f64 {
     let mut laag = [f64::INFINITY; 3];
     let mut hoog = [f64::NEG_INFINITY; 3];
     for knoop in input.nodes.values() {

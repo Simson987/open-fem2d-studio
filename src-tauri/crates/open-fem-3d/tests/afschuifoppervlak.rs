@@ -26,7 +26,7 @@ fn verzoek(av_y: Option<f64>, av_z: Option<f64>) -> SolveRequest3D {
         materials: vec![Material3D { id: 1, name: "staal".into(), e_mpa: 210_000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
         sections: vec![Section3D {
             id: 1, name: "proef".into(), area_m2: 0.01, iy_m4: I, iz_m4: I, torsion_j_m4: 5e-6,
-            shear_area_y_m2: av_y, shear_area_z_m2: av_z,
+            shear_area_y_m2: av_y, shear_area_z_m2: av_z, height_m: None, width_m: None,
         }],
         members: vec![Member3D {
             id: 1, start_node_id: 1, end_node_id: 2, material_id: 1, section_id: 1,

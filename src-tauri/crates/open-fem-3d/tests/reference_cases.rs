@@ -625,7 +625,7 @@ fn pdelta_accepts_zero_displacement_when_load_is_fully_restrained() {
 }
 
 #[test]
-fn portal_buckling_rejects_a_free_rigid_body_mode() {
+fn portal_buckling_gives_no_buckling_factor_for_a_free_rigid_body_mode() {
     let mut req = request(
         vec![
             Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 },
@@ -637,17 +637,31 @@ fn portal_buckling_rejects_a_free_rigid_body_mode() {
         vec![pinned(1), pinned(2)],
         vec![NodalLoad3D { id: 1, node_id: 3, fx: 0.0, fy: 0.0, fz: -10.0, mx: 0.0, my: 0.0, mz: 0.0 }],
     );
-    // De vroegere knikanalyse filterde deze nulmode uit en gaf toch een
-    // knikfactor. Het portaal kan als geheel om de lijn door de voeten
-    // omvallen; daarom mag geen knikuitkomst worden gepubliceerd.
+    // Het portaal kan als geheel om de lijn door de voeten omvallen. De
+    // vroegere knikanalyse filterde die nulmode uit en gaf toch een
+    // knikfactor; daarom mag geen knikfactor worden gepubliceerd.
+    // GEWIJZIGD door #195 (mechanisme dat de belasting niet aanstoot: een
+    // uitkomst met een melding in plaats van een fout). De verticale last
+    // werkt loodrecht op het omvallen: lineair een uitkomst met de melding van
+    // de opleggingen, en de knik geweigerd met knikfactor 0 (de drukkracht in
+    // kolom 1 maakt het omvallen instabiel). Tot #195 was dit een fout.
     req.buckling_modes = 3;
-    let error = solve(req.clone()).unwrap_err();
-    assert!(error.contains("draaien om X (as door knoop 1 en 2)") && error.contains("proefbelasting"), "{error}");
-    // Tweede orde hoort dezelfde vrije beweging vóór de P-Delta-iteratie te
-    // melden, ook als de opgegeven last haar niet aanstoot.
+    let result = solve(req.clone()).unwrap_or_else(|error| panic!("{error}"));
+    assert!(result.diagnostics.iter().any(|m| m.starts_with("Opleggingen:") && m.contains("draaien om X (as door knoop 1 en 2)")),
+        "{:?}", result.diagnostics);
+    match &result.buckling {
+        BucklingSummary::Failed { reason } => assert!(reason.contains("knikfactor 0"), "{reason}"),
+        other => panic!("geen knikfactor verwacht: {other:?}"),
+    }
+    // Reacties uit het evenwicht: de last van 10 kN in knoop 3 verdeelt zich
+    // in het vlak over beide voeten (het portaal is in zijn vlak stijf).
+    let fz: f64 = result.reactions.iter().map(|r| r.fz).sum();
+    close(fz, 10.0, 1e-10, 1e-10);
+    // Tweede orde: de drukkracht maakt het omvallen instabiel (K + K_G niet
+    // positief definiet): een fout die dezelfde vrije beweging noemt.
     req.analysis = AnalysisKind::PDelta;
     let error = solve(req).unwrap_err();
-    assert!(error.contains("draaien om X (as door knoop 1 en 2)") && error.contains("proefbelasting"), "{error}");
+    assert!(error.contains("draaien om X (as door knoop 1 en 2)") && error.contains("niet positief definiet"), "{error}");
 }
 
 #[test]
@@ -710,18 +724,32 @@ fn vertical_supports_only() -> SolveRequest3D {
 
 #[test]
 fn mechanism_error_names_the_part_the_free_motions_and_a_remedy() {
-    // #64: de kern meldt een singuliere matrix; de fout zegt nu welk deel,
-    // welke bewegingen vrij zijn en wat te doen, met de algemene uitleg erachter.
-    let error = solve(vertical_supports_only()).unwrap_err();
+    // #64: welk deel, welke bewegingen vrij zijn en wat te doen, met de
+    // algemene uitleg erachter. Sinds #110 rekent de adapter een mechanisme
+    // zelf na: de verticale last op dit alleen verticaal opgelegde raam werkt
+    // loodrecht op de vrije bewegingen (verschuiven in X en Y, draaien om Z)
+    // en geeft nu een uitkomst met de melding van de opleggingen. Tot #110
+    // weigerde de kern dit model ("Engine: Singular ..."). Een horizontale
+    // last stoot de vrije beweging aan: de fout, met dezelfde bevinding en de
+    // kracht langs die beweging in plaats van de melding van de kern.
+    let result = solve(vertical_supports_only()).unwrap();
+    assert!(result.diagnostics[0].starts_with("Opleggingen: Het deel met knopen 1–3 en staven 1–2 is onvoldoende opgelegd"), "{:?}", result.diagnostics);
+    assert!(!result.diagnostics.iter().any(|m| m.starts_with("Mechanisme:")), "geen tweede melding: {:?}", result.diagnostics);
+    let sideways = || {
+        let mut input = vertical_supports_only();
+        input.nodal_loads[0].fx = 1.0;
+        input
+    };
+    let error = solve(sideways()).unwrap_err();
     assert!(error.contains("mechanisme") && error.contains("singuliere stijfheidsmatrix"), "{error}");
     assert!(error.contains("Het deel met knopen 1–3 en staven 1–2 is onvoldoende opgelegd"), "{error}");
     assert!(error.contains("vrij: verschuiven in X, verschuiven in Y en draaien om Z"), "{error}");
     assert!(error.contains("voeg horizontale opleggingen in X en Y toe") && error.contains("blokkeer de rotatie om Z"), "{error}");
     assert!(error.contains("Controleer per verbonden modeldeel"), "de algemene uitleg blijft staan: {error}");
-    assert!(error.contains("Engine: Singular"), "{error}");
+    assert!(error.contains("de belasting stoot die beweging aan") && error.contains("1,000 kN in X"), "{error}");
 
     // Tweede orde: dezelfde melding, met de eigen context.
-    let mut second_order = vertical_supports_only();
+    let mut second_order = sideways();
     second_order.analysis = AnalysisKind::PDelta;
     let error = solve(second_order).unwrap_err();
     assert!(error.starts_with("tweede-orde 3D-berekening: het model is een mechanisme"), "{error}");
@@ -762,10 +790,12 @@ fn internal_mechanism_is_reported_as_such_when_supports_are_sufficient() {
 }
 
 #[test]
-fn an_unexcited_mechanism_is_rejected_and_a_supported_model_is_not() {
+fn an_unexcited_mechanism_gives_a_warning_an_excited_one_an_error() {
     // Portaal met ruimtelijke scharnieren: het kan om de lijn door beide voeten
-    // buiten zijn vlak omvallen. Onder een last in zijn vlak lost de kern het
-    // toch op; de adapter moet de vrije beweging alsnog afwijzen.
+    // buiten zijn vlak omvallen. GEWIJZIGD door #195: onder een last in zijn
+    // vlak (geen component langs het omvallen) een uitkomst met de melding van
+    // de opleggingen; tot #195 wees de adapter het model af. Een last die het
+    // omvallen aanstoot, blijft een fout.
     let portal = |foot: fn(usize) -> Support3D| request(
         vec![
             Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 }, Node3D { id: 2, x: 12.0, y: 0.0, z: 0.0 },
@@ -775,16 +805,20 @@ fn an_unexcited_mechanism_is_rejected_and_a_supported_model_is_not() {
         vec![foot(1), foot(2)],
         vec![NodalLoad3D { id: 1, node_id: 3, fx: 1.0, fy: 0.0, fz: -10.0, mx: 0.0, my: 0.0, mz: 0.0 }],
     );
-    let error = solve(portal(pinned)).unwrap_err();
-    assert!(error.contains("Het deel met knopen 1–4 en staven 1–3 is onvoldoende opgelegd"), "{error}");
-    assert!(error.contains("vrij: draaien om X (as door knoop 1 en 2)"), "{error}");
-    assert!(error.contains("proefbelasting"), "{error}");
+    let result = solve(portal(pinned)).unwrap_or_else(|error| panic!("{error}"));
+    let melding = &result.diagnostics[0];
+    assert!(melding.starts_with("Opleggingen: Het deel met knopen 1–4 en staven 1–3 is onvoldoende opgelegd"), "{melding}");
+    assert!(melding.contains("vrij: draaien om X (as door knoop 1 en 2)"), "{melding}");
+    assert!(!result.diagnostics.iter().any(|m| m.starts_with("Mechanisme:")), "geen tweede melding: {:?}", result.diagnostics);
+    // Kleinste oplossing: geen verplaatsing in Y (het omvallen eraf).
+    assert!(result.displacements.iter().all(|d| d.uy.abs() < 1e-14), "{:?}", result.displacements);
 
     // Een last die de beweging aanstoot: dezelfde bevinding staat in de fout.
     let mut sideways = portal(pinned);
     sideways.nodal_loads[0].fy = 1.0;
     let error = solve(sideways).unwrap_err();
     assert!(error.contains("Opleggingen: Het deel met knopen 1–4") && error.contains("draaien om X (as door knoop 1 en 2)"), "{error}");
+    assert!(error.contains("de belasting stoot die beweging aan"), "{error}");
 
     // Goed opgelegd: geen melding over de opleggingen.
     let good = solve(portal(fixed)).unwrap();
@@ -796,9 +830,10 @@ fn a_tension_only_member_that_drops_out_is_left_out_of_the_support_check() {
     // Portaal 1–4 met ruimtelijke scharnieren in de voeten (kan buiten zijn
     // vlak omvallen) en een ingeklemde kolom 6–5 ernaast. Trek-alleen staaf 5
     // (5–3) koppelt ze; zolang die meedoet, houdt de inklemming alles vast.
-    // De last fx op knoop 5 drukt staaf 5 in; zonder staaf 5 lost de kern het
-    // model nog op (de last op het portaal ligt in zijn vlak), maar het portaal
-    // kan dan omvallen: de fout noemt dat deel en de inactieve staaf.
+    // De last fx op knoop 5 drukt staaf 5 in; zonder staaf 5 kan het portaal
+    // omvallen, maar de last op het portaal ligt in zijn vlak. GEWIJZIGD door
+    // #195: een uitkomst met de melding die dat deel en de inactieve staaf
+    // noemt (tot #195 een fout met dezelfde bevinding).
     let mut tie = member(5, 5, 3);
     tie.tension_only = true;
     let input = request(
@@ -814,11 +849,14 @@ fn a_tension_only_member_that_drops_out_is_left_out_of_the_support_check() {
             NodalLoad3D { id: 2, node_id: 4, fx: 0.0, fy: 0.0, fz: -10.0, mx: 0.0, my: 0.0, mz: 0.0 },
         ],
     );
-    let error = solve(input).unwrap_err();
-    assert!(error.contains("Het deel met knopen 1–4 en staven 1–3 is onvoldoende opgelegd"), "{error}");
-    assert!(error.contains("vrij: draaien om X (as door knoop 1 en 2)"), "{error}");
-    assert!(error.contains("inactief: staaf 5"), "{error}");
-    assert!(!error.contains("knopen 1–6"), "met staaf 5 erbij was alles vast: {error}");
+    let result = solve(input).unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(result.inactive_members, vec![5], "{:?}", result.diagnostics);
+    let melding = result.diagnostics.iter().find(|m| m.starts_with("Opleggingen:"))
+        .unwrap_or_else(|| panic!("{:?}", result.diagnostics));
+    assert!(melding.contains("Het deel met knopen 1–4 en staven 1–3 is onvoldoende opgelegd"), "{melding}");
+    assert!(melding.contains("vrij: draaien om X (as door knoop 1 en 2)"), "{melding}");
+    // Staaf 5 is inactief (zie `inactive_members` hierboven); de melding gaat over het deel zonder haar.
+    assert!(!melding.contains("knopen 1–6"), "met staaf 5 erbij was alles vast: {melding}");
 }
 
 #[test]
@@ -848,9 +886,16 @@ fn pendulum_columns_under_a_diaphragm_name_the_sway_of_the_diaphragm() {
     assert!(error.contains("toe die schijf 1 in X en Y en tegen draaien om Z vasthouden"), "{error}");
     assert!(!error.contains("kunnen samen nog bewegen"), "{error}");
 
-    // Alleen verticale lasten: de kern lost het op, maar het mechanisme blijft een fout.
-    let error = solve(columns((0..4).map(|i| load(i + 1, 2 * i + 2, 0.0, -10.0)).collect())).unwrap_err();
-    assert!(error.contains(sway), "{error}");
+    // Alleen verticale lasten. GEWIJZIGD door #195: de lasten hebben geen
+    // component langs het zwaaien, dus een uitkomst met de melding (tot #195
+    // een fout). Elke kolom draagt haar eigen 10 kN.
+    let result = solve(columns((0..4).map(|i| load(i + 1, 2 * i + 2, 0.0, -10.0)).collect()))
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(result.diagnostics.iter().any(|m| m.contains(sway)), "{:?}", result.diagnostics);
+    for voet in [1, 3, 5, 7] {
+        let reactie = result.reactions.iter().find(|r| r.node_id == voet).unwrap();
+        close(reactie.fz, 10.0, 1e-10, 1e-10);
+    }
 }
 
 #[test]

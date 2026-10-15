@@ -440,7 +440,7 @@ impl Stelsel {
     }
 }
 
-fn factoriseer(matrix: &CscMatrix) -> Result<Option<NumericCholesky>, String> {
+pub(crate) fn factoriseer(matrix: &CscMatrix) -> Result<Option<NumericCholesky>, String> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let symbolisch = Rc::new(symbolic_cholesky(matrix));
         numeric_cholesky(&symbolisch, matrix)
@@ -680,92 +680,51 @@ pub(crate) fn herstel_residu(input: &SolverInput3D, results: &mut AnalysisResult
     Ok(())
 }
 
-/// Aantal proefbelastingen in `singulier`.
-const PROEVEN: u64 = 2;
-/// Stappen iteratieve verfijning per proefbelasting.
-const VERFIJNINGEN: usize = 3;
-/// Een proefbelasting met een groter relatief residu wijst op een singuliere
-/// stijfheidsmatrix; dezelfde grens als `residual_ok` van de kern.
-const PROEFGRENS: f64 = 1e-6;
-
-/// Een getal in [0, 1) zonder patroon, vast per knoop, richting en proef
-/// (splitmix64): de proefbelasting is reproduceerbaar en heeft geen symmetrie
-/// die een mechanisme net zou missen.
-fn ruis(knoop: usize, lokaal: usize, proef: u64) -> f64 {
-    let mut x = (knoop as u64).wrapping_mul(6).wrapping_add(lokaal as u64)
-        .wrapping_add(proef.wrapping_mul(0xD1B5_4A32_D192_ED03))
-        .wrapping_add(0x9E37_79B9_7F4A_7C15);
-    x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    x ^= x >> 31;
-    (x >> 11) as f64 / (1u64 << 53) as f64
-}
-
-/// Is de stijfheidsmatrix van `input` (met de koppelingen) numeriek singulier?
-/// Dan volgt een toelichting voor de foutmelding (#96).
-///
-/// Een mechanisme dat de belasting niet aanstoot, laat de kern soms door: de
-/// spil langs het mechanisme is afrondingsruis en niet precies nul, en zonder
-/// een lastcomponent langs het mechanisme blijft het residu klein. Daarom twee
-/// proefbelastingen op alle vrije vrijheidsgraden (krachten van grootte tot
-/// 1 kN, momenten tot 1 kN maal de modelafmeting, met een vast pseudo-
-/// willekeurig patroon), opgelost met een verse sparse Cholesky-factorisatie
-/// zonder verschuiving en drie stappen iteratieve verfijning. Is de matrix
-/// regulier, dan komt het relatieve residu op afrondingsniveau. Is zij
-/// singulier, dan blijft de component van de proefbelasting langs het
-/// mechanisme als residu staan, ongeacht de verfijning (K·m ≈ 0), of faalt de
-/// factorisatie al. Een model van raamwerkstaven, veren en platen (met hun
-/// draaiveer) heeft een positief definiete stijfheidsmatrix zodra er geen
-/// mechanisme is; de factorisatie zonder verschuiving hoort dan te slagen.
-pub(crate) fn singulier(input: &SolverInput3D) -> Result<Option<String>, String> {
+/// De geometrische stijfheid langs de vrije bewegingen van een mechanisme
+/// (#195): G = Mᵀ·K_G(N)·M, met N uit de eerste-ordeoplossing `lineair` en M
+/// de bewegingen per knoop (ux, uy, uz, rx, ry, rz), en de maat
+/// Σ |N|/L·|m_e|² (draaiingen maal L) waartegen een eigenwaarde van G klein
+/// heet. `None` bij een model met andere elementen dan raamwerkstaven: de
+/// K_G van deze module kent alleen staven.
+pub(crate) fn geometrisch_langs(
+    input: &SolverInput3D,
+    lineair: &AnalysisResults3D,
+    vormen: &[std::collections::BTreeMap<usize, [f64; 6]>],
+) -> Result<Option<(Vec<Vec<f64>>, f64)>, String> {
+    if alleen_staven(input).is_err() { return Ok(None); }
     let stelsel = Stelsel::bouw(input)?;
-    let k_s = stelsel.reduceer_matrix(&stelsel.k_ff);
-    if stelsel.nf == 0 || k_s.n == 0 { return Ok(None); }
-    let Some(factor) = factoriseer(&k_s)? else {
-        return Ok(Some(
-            "Controle van de adapter: de stijfheidsmatrix is niet positief definiet (de Cholesky-factorisatie zonder verschuiving faalt)."
-                .into(),
-        ));
-    };
-    let mut laag = [f64::INFINITY; 3];
-    let mut hoog = [f64::NEG_INFINITY; 3];
-    for knoop in input.nodes.values() {
-        for (as_, waarde) in [knoop.x, knoop.y, knoop.z].into_iter().enumerate() {
-            laag[as_] = laag[as_].min(waarde);
-            hoog[as_] = hoog[as_].max(waarde);
+    let u = stelsel.vector_uit(lineair);
+    let normaalkrachten = stelsel.normaalkrachten(&u);
+    let kg = stelsel.geometrisch(&normaalkrachten);
+    let n = stelsel.dof.n_total;
+    let volledig: Vec<Vec<f64>> = vormen.iter().map(|vorm| {
+        let mut v = vec![0.0; n];
+        for (knoop, waarden) in vorm {
+            for (lokaal, waarde) in waarden.iter().enumerate() {
+                if let Some(&index) = stelsel.dof.map.get(&(*knoop, lokaal)) { v[index] = *waarde; }
+            }
+        }
+        v
+    }).collect();
+    let d = volledig.len();
+    let mut g = vec![vec![0.0; d]; d];
+    let mut maat = 0.0;
+    for ((staaf, matrix), &kracht) in stelsel.staven.iter().zip(&kg).zip(&normaalkrachten) {
+        let delen: Vec<[f64; 12]> = volledig.iter().map(|v| {
+            let mut e = [0.0; 12];
+            for (i, &dof) in staaf.dofs.iter().enumerate() { e[i] = v[dof]; }
+            e
+        }).collect();
+        for (a, ea) in delen.iter().enumerate() {
+            let lengte2: f64 = (0..12).map(|i| if i % 6 < 3 { ea[i] * ea[i] } else { (staaf.lengte * ea[i]).powi(2) }).sum();
+            maat += kracht.abs() / staaf.lengte * lengte2;
+            let kg_a: Vec<f64> = (0..12).map(|i| (0..12).map(|j| matrix[i * 12 + j] * ea[j]).sum()).collect();
+            for (b, eb) in delen.iter().enumerate() {
+                g[b][a] += (0..12).map(|i| eb[i] * kg_a[i]).sum::<f64>();
+            }
         }
     }
-    let lengte = (0..3).map(|as_| (hoog[as_] - laag[as_]).powi(2)).sum::<f64>().sqrt().max(1.0);
-    let norm = |v: &[f64]| v.iter().map(|x| x * x).sum::<f64>().sqrt();
-    for proef in 0..PROEVEN {
-        let mut f = vec![0.0; stelsel.nf];
-        for (&(knoop, lokaal), &index) in &stelsel.dof.map {
-            if index >= stelsel.nf { continue; }
-            let schaal = if lokaal < 3 { 1.0 } else { lengte };
-            f[index] = (2.0 * ruis(knoop, lokaal, proef) - 1.0) * schaal;
-        }
-        let f_s = stelsel.reduceer_vector(&f);
-        let maat = norm(&f_s);
-        if !(maat > 0.0) { continue; }
-        let mut q = sparse_cholesky_solve(&factor, &f_s);
-        let mut residu;
-        let mut stap = 0;
-        loop {
-            let kq = k_s.sym_mat_vec(&q);
-            let r: Vec<f64> = f_s.iter().zip(&kq).map(|(f, k)| f - k).collect();
-            residu = norm(&r) / maat;
-            if !residu.is_finite() || residu < 1e-13 || stap == VERFIJNINGEN { break; }
-            stap += 1;
-            let dq = sparse_cholesky_solve(&factor, &r);
-            for (a, b) in q.iter_mut().zip(&dq) { *a += b; }
-        }
-        if !(residu < PROEFGRENS) {
-            return Ok(Some(format!(
-                "Controle van de adapter: een proefbelasting op alle vrije vrijheidsgraden houdt een relatief residu van {residu:.1e} over (grens {PROEFGRENS:.0e}), dus de stijfheidsmatrix is singulier. De belasting van dit model zet geen kracht langs die beweging, maar elke belasting die dat wel doet, maakt het model onoplosbaar.",
-            )));
-        }
-    }
-    Ok(None)
+    Ok(Some((g, maat)))
 }
 
 /// De nulvorm (mechanismevorm) van de stijfheidsmatrix van `input`, per

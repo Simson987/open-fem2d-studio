@@ -10,6 +10,7 @@ mod bedding;
 mod globale_lasten;
 mod knoopdraaiing;
 mod kruisregel;
+mod mechanisme;
 mod montage;
 mod opleggingen;
 mod plaatbedding;
@@ -2100,15 +2101,19 @@ fn require_usable_solution(context: &str, results: &AnalysisResults3D) -> Result
     Ok(())
 }
 
-/// Een belasting kan loodrecht op een vrije beweging staan. De kern vindt dan
-/// soms een oplossing, hoewel de stijfheidsmatrix singulier is (#110). Test
-/// daarom na elke geslaagde kernoplossing ook onafhankelijke proefbelastingen.
-fn controleer_regulier(request: &SolveRequest3D, context: &str, input: &SolverInput3D) -> Result<(), String> {
-    match tweede_orde::singulier(input) {
-        Ok(None) => Ok(()),
-        Ok(Some(toelichting)) => Err(opleggingen::mechanismefout(request, context, &toelichting)),
-        Err(fout) => Err(format!("{context}: de controle op een mechanisme kon niet worden uitgevoerd: {fout}")),
+/// Per rekenknoop die de adapter langs een staaf aanlegt (niet in het
+/// verzoek): de staaf. Voor de meldingen over een mechanisme (#195).
+fn rekenknopen(request: &SolveRequest3D, model: &EngineModel) -> BTreeMap<usize, usize> {
+    let modelknopen: BTreeSet<usize> = request.nodes.iter().map(|node| node.id).collect();
+    let mut uit = BTreeMap::new();
+    for member in &model.members {
+        for part in &member.parts {
+            for knoop in [part.node_i, part.node_j] {
+                if !modelknopen.contains(&knoop) { uit.insert(knoop, member.member_id); }
+            }
+        }
     }
+    uit
 }
 
 /// Validate, route, solve, and translate one 3D request.
@@ -2268,38 +2273,91 @@ pub(crate) fn solve_fixed(
     };
     // Issue #243 (punt 081): bij een mechanisme ook de knoop en de vrije
     // vrijheidsgraad noemen, uit de nulvorm van K (`mechanismevorm`).
-    let mechanisme = |fout: String, input: &SolverInput3D| mechanismevorm::aanvullen(request, input, fout);
-    let mut results = solve_3d(&model.input)
-        .map_err(|error| mechanisme(engine_error(request, context, error), &model.input))?;
-    tweede_orde::herstel_residu(&model.input, &mut results).map_err(aanvullen)?;
-    require_usable_solution(context, &results)
-        .map_err(|fout| mechanisme(aanvullen(fout), &model.input))?;
-    draaiing.controleer(context, request, &model.input, &results)?;
-    controleer_regulier(request, context, &model.input)
-        .map_err(|fout| mechanisme(fout, &model.input))?;
+    let met_vorm = |fout: String, input: &SolverInput3D| mechanismevorm::aanvullen(request, input, fout);
+    // De eerste-ordeoplossing van de kern, gekeurd.
+    let keur = |invoer: &SolverInput3D| -> Result<AnalysisResults3D, String> {
+        let mut results = solve_3d(invoer).map_err(|error| engine_error(request, context, error))?;
+        tweede_orde::herstel_residu(invoer, &mut results).map_err(aanvullen)?;
+        require_usable_solution(context, &results).map_err(aanvullen)?;
+        Ok(results)
+    };
+    let eerste = keur(&model.input);
+    // Een fout van de kern die niet op een mechanisme wijst (een ongeldige
+    // invoer), hoeft niet langs de proef.
+    if let Err(fout) = &eerste {
+        if !(fout.contains("singuliere stijfheidsmatrix") || fout.contains("solverresidu") || fout.contains("geen eindige verplaatsingen")) {
+            return Err(met_vorm(fout.clone(), &model.input));
+        }
+    }
+    // De proef op een mechanisme (#195, `mechanisme`): dezelfde ene
+    // factorisatie als de proef van #110 die hij vervangt. Een regulier model
+    // rekent verder precies zoals voorheen. Heeft het model een vrije beweging,
+    // dan rekent de kern opnieuw met die beweging vastgehouden; stoot de
+    // belasting haar aan, dan volgt een fout, anders een uitkomst met een
+    // melding. Kan de controle zelf niet rekenen (dat hoort niet te gebeuren),
+    // dan volgt het rekenpad van vóór #195, met een melding.
+    let (mechanisme, niet_gecontroleerd) = match mechanisme::zoek(&model.input) {
+        Ok(mechanisme) => (mechanisme, None),
+        Err(fout) => (None, Some(format!(
+            "Mechanisme: de controle op een mechanisme kon niet worden uitgevoerd ({fout}); de uitkomst is die van de kern zonder deze controle.",
+        ))),
+    };
+    let staaf_van = if mechanisme.is_some() { rekenknopen(request, &model) } else { BTreeMap::new() };
+    let mut results = match &mechanisme {
+        None => eerste.map_err(|fout| met_vorm(fout, &model.input))?,
+        Some(mechanisme) => keur(&mechanisme.invoer).map_err(|fout| met_vorm(fout, &mechanisme.invoer))?,
+    };
+    {
+        let invoer = mechanisme.as_ref().map_or(&model.input, |m| &m.invoer);
+        draaiing.controleer(context, request, invoer, &results)?;
+    }
+    if let Some(mechanisme) = &mechanisme {
+        mechanisme.controleer(context, request, los, &staaf_van, &results, false)?;
+    }
     plaatbedding::controleer_vlak(context, &model.plaat)?;
     let gedrukt = gedrukte_staven(&model, &results);
+    // Maken de drukkrachten een vrije beweging instabiel (knikfactor 0)?
+    let instabiel = match &mechanisme {
+        Some(mechanisme) => mechanisme.instabiel(&model.input, &results)?,
+        None => false,
+    };
     // De grootste kracht in de vasthouding van een plaat op bedding in haar vlak (#107).
     let vlakkracht: f64;
     let mut solved = match analysis {
         AnalysisKind::Linear => {
             vlakkracht = model.plaat.vlakkracht(&results);
             // De knik op het onderverdeelde model, als er iets te verdelen is;
-            // de uitkomst hierboven blijft die van het model zoals het is.
-            let buckling = match knik_onderverdeeld(request, los, buckling_modes, &gedrukt) {
-                Some(buckling) => buckling,
-                None => buckling_per_member(&model, tweede_orde::knik_bij_eerste_orde(&model.input, &results, buckling_modes)),
+            // de uitkomst hierboven blijft die van het model zoals het is. Een
+            // vrije beweging die de drukkrachten instabiel maken, heeft
+            // knikfactor 0: dan geen knikfactoren (de knikanalyse zou die
+            // nulmode weglaten en een te hoge α_cr geven), maar de reden.
+            let buckling = if instabiel && buckling_modes > 0 {
+                BucklingSummary::Failed {
+                    reason: "knikfactor 0: het model heeft een vrije beweging (mechanisme) die de drukkrachten van deze belasting instabiel maken; zie de meldingen over het mechanisme of de opleggingen.".into(),
+                }
+            } else {
+                match knik_onderverdeeld(request, los, buckling_modes, &gedrukt) {
+                    Some(buckling) => buckling,
+                    None => buckling_per_member(&model, tweede_orde::knik_bij_eerste_orde(&model.input, &results, buckling_modes)),
+                }
             };
             draaiing.ruim_op(&mut results);
+            if let Some(mechanisme) = &mechanisme { mechanisme.ruim_op(&mut results, &draaiing); }
             convert_result(request, &model, plate_geometry, results, None, buckling)
         }
         AnalysisKind::PDelta => {
+            if let (Some(mechanisme), true) = (&mechanisme, instabiel) {
+                return Err(mechanisme.fout_instabiel(context, request, los, &staaf_van));
+            }
             // De tweede orde rekent op het model met de gedrukte staven in
             // delen; de eerste orde daarvan is het beginpunt van de iteratie.
-            // Zonder gedrukte staaf blijft het model zoals het is.
+            // Zonder gedrukte staaf blijft het model zoals het is. Met een
+            // mechanisme (dat de drukkrachten niet aanstoten, anders stond hier
+            // al een fout) blijft het ook zo: de blokkeringen horen bij dit
+            // model, en een gedeelde staaf zou een nieuwe proef vragen.
             let mut linear = results;
-            let fijn = to_engine_input(request, los, Some(&gedrukt))?;
-            if !fijn.knikknopen.is_empty() {
+            let fijn = if mechanisme.is_none() { Some(to_engine_input(request, los, Some(&gedrukt))?) } else { None };
+            if let Some(fijn) = fijn.filter(|fijn| !fijn.knikknopen.is_empty()) {
                 model = fijn;
                 draaiing = knoopdraaiing::Vastzetting::bepaal(&model.input);
                 draaiing.pas_toe(&mut model.input);
@@ -2308,14 +2366,18 @@ pub(crate) fn solve_fixed(
                 require_usable_solution(context, &linear).map_err(aanvullen)?;
                 draaiing.controleer(context, request, &model.input, &linear)?;
             }
-            let input = &model.input;
+            let input = mechanisme.as_ref().map_or(&model.input, |m| &m.invoer);
             vlakkracht = model.plaat.vlakkracht(&linear);
             let boven_eulerlast = staven_boven_eulerlast(request, &model, &linear);
             let mut second_order = tweede_orde::los_op(
                 input, linear, request.max_iterations, request.tolerance, buckling_modes,
             ).map_err(|fout| met_eigen_knik(fout, &boven_eulerlast)).map_err(aanvullen)?;
             draaiing.controleer(context, request, input, &second_order.results)?;
+            if let Some(mechanisme) = &mechanisme {
+                mechanisme.controleer(context, request, los, &staaf_van, &second_order.results, true)?;
+            }
             draaiing.ruim_op(&mut second_order.results);
+            if let Some(mechanisme) = &mechanisme { mechanisme.ruim_op(&mut second_order.results, &draaiing); }
             let buckling = buckling_per_member(&model, second_order.buckling);
             let delen = model.tweede_orde_delen(&second_order.delen);
             let mut solved = convert_result(
@@ -2330,5 +2392,9 @@ pub(crate) fn solve_fixed(
     solved.diagnostics.extend(grote_vervorming(request, &solved));
     solved.diagnostics.extend(draaiing.melding(request));
     solved.diagnostics.extend(model.plaat.melding_vlak(vlakkracht));
+    solved.diagnostics.extend(niet_gecontroleerd);
+    if let Some(melding) = mechanisme.as_ref().and_then(|m| m.melding(request, los, &staaf_van, instabiel)) {
+        solved.diagnostics.insert(0, melding);
+    }
     Ok(solved)
 }

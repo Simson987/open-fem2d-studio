@@ -234,11 +234,17 @@ console.log("\n[4] montage na de permanente belasting via de Rust-kern");
   gelijk(kracht(gw.result, 4).nStartKn, kracht(w.result, 4).nStartKn, "G + W = W alleen (superpositie)", 1e-6);
 
   // Zonder de instelling drukt de kolomverkorting beide strips. Het portaal
-  // wordt dan een mechanisme, ook al stoot G de zijdelingse beweging niet aan.
+  // wordt dan een mechanisme, maar G stoot de zijdelingse beweging niet aan.
+  // GEWIJZIGD door issue #195 (een mechanisme dat de belasting niet aanstoot:
+  // een uitkomst met een melding, geen fout). Tot #195 werd het portaal hier
+  // afgekeurd. Nu: beide strips inactief, de melding noemt het zwaaien, en de
+  // kolommen dragen elk P = 100 kN (ΣR_z = 2·P), zonder zijdelingse uitwijking.
   const uitRequest = { ...buildOpenFem3DSolveRequest(portaal({ p, h }), "linear", 1, undefined, { permanentCaseIds: [1] }), bucklingModes: 0 };
   const uit = await reken(uitRequest);
-  ok(uit.fout?.includes("mechanisme") && uit.fout.includes("inactief: staaf 4, 5"),
-    "zonder montage vallen beide strips weg en wordt het portaal afgekeurd");
+  const mechanisme = (uit.diagnostics ?? []).find((m) => m.startsWith("Mechanisme:"));
+  ok(!uit.fout && JSON.stringify(uit.inactiveMembers) === "[4,5]" && /kunnen samen bewegen in X/.test(mechanisme ?? ""),
+    `zonder montage vallen beide strips weg: een uitkomst met de melding over het zwaaien (${uit.fout ?? mechanisme})`);
+  gelijk(uit.reactions.reduce((t, r) => t + r.fz, 0), 2 * p, "zonder montage: ΣR_z = 2·P", 1e-9);
   ok(uitRequest.tensionOnlyFit === undefined && uit.tensionOnlyFit === undefined, "zonder montage geen montagevelden");
 }
 
