@@ -75,7 +75,6 @@ import {
   type ScheefstandBron,
   type ScheefstandGeometrie,
   type ScheefstandNorm,
-  type ScheefstandRichtingen,
   type ScheefstandUitkomst,
 } from "./scheefstandNorm";
 
@@ -214,6 +213,13 @@ export interface ToetsAnalyse {
   phi: number;
   /** 1/φ, om te tonen. */
   noemer: number;
+  /**
+   * Alleen 3D (issue #194): φ_X en φ_Y van de toets, in rad. EN 1993-1-1
+   * 5.3.2(3) telt m per rij in het beschouwde vlak, dus elke richting heeft
+   * haar eigen φ; ±X rekent met `x`, ±Y met `y`. `phi` en `noemer` zijn dan
+   * die van de grootste φ.
+   */
+  phiPerAs?: { x: number; y: number };
   /** De bron van de toets-φ. */
   bron: ScheefstandBron;
   /** De schakelaar Scheefstand van het model; die geldt alleen voor de resultaten. */
@@ -676,10 +682,9 @@ export function scheefstandToelichtingToets(
   project: ScheefstandUitkomst,
   geometrie: ScheefstandGeometrie,
   normen: readonly ScheefstandNorm[],
-  richtingen: ScheefstandRichtingen = "2d",
 ): string {
   const ts = bepaalToetsScheefstand(project, normen);
-  const regels = [scheefstandToelichting(project, geometrie, richtingen)];
+  const regels = [scheefstandToelichting(project, geometrie)];
   if (ts.meldingen.length > 0) regels.push("", ...ts.meldingen.map((m) => `! ${m}`));
   if (ts.noemer !== project.noemer) regels.push(`De toets rekent daarom met φ = 1/${noemerTekst(ts.noemer)}.`);
   return regels.join("\n");

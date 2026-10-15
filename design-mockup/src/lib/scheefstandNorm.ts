@@ -779,14 +779,15 @@ export function bepaalScheefstand(
 /**
  * De hele afleiding als tekstblok — voor de tooltip in de balk en, later, voor
  * het rekenrapport. Eén bron voor "wat staat er op het scherm", zodat het
- * scherm en het rapport niet uit elkaar kunnen lopen.
+ * scherm en het rapport niet uit elkaar kunnen lopen. Alleen 2D: de 3D-module
+ * heeft een eigen toelichting met φ per richting (`scheefstandToelichting3D`
+ * in components/openFem3d/openFem3dScheefstand.ts, issue #194).
  */
 export function scheefstandToelichting(
   uitkomst: ScheefstandUitkomst,
   geometrie: ScheefstandGeometrie,
-  richtingen: ScheefstandRichtingen = "2d",
 ): string {
-  return toelichtingRegels(uitkomst, geometrie, richtingen).map(nederlands).join("\n");
+  return toelichtingRegels(uitkomst, geometrie).map(nederlands).join("\n");
 }
 
 /**
@@ -798,35 +799,37 @@ export function scheefstandToelichtingVertaald(
   uitkomst: ScheefstandUitkomst,
   geometrie: ScheefstandGeometrie,
   t: Vertaalfunctie,
-  richtingen: ScheefstandRichtingen = "2d",
 ): string {
-  return toelichtingRegels(uitkomst, geometrie, richtingen).map((r) => vertaalWaarde(t, r)).join("\n");
+  return toelichtingRegels(uitkomst, geometrie).map((r) => vertaalWaarde(t, r)).join("\n");
 }
 
 /**
- * Welke richtingen de berekening doorloopt: in 2D +x en −x, in 3D om de beurt
- * +X, −X, +Y en −Y (zie components/openFem3d/openFem3dScheefstand.ts).
+ * De kop en de tussenwaarden van één uitkomst, één regel per tekst: de kop
+ * ("Scheefstand volgens …" of "vaste noemer"), en per tussenwaarde het symbool
+ * met waarde en artikel en daaronder de uitleg. Gedeeld met de 3D-toelichting,
+ * die dit blok per richting toont.
  */
-export type ScheefstandRichtingen = "2d" | "3d";
-
-/** De regels van de toelichting, elk als tekst of vertaalbare tekst. */
-function toelichtingRegels(
-  uitkomst: ScheefstandUitkomst,
-  geometrie: ScheefstandGeometrie,
-  richtingen: ScheefstandRichtingen = "2d",
-): TekstWaarde[] {
-  const regels: TekstWaarde[] = [];
-  regels.push(
+export function scheefstandUitkomstRegels(uitkomst: ScheefstandUitkomst): TekstWaarde[] {
+  const regels: TekstWaarde[] = [
     uitkomst.norm === null
       ? vt(`${S}heading.fixed`, "Scheefstand: vaste noemer uit de projectinstellingen.")
       : vt(`${S}heading.norm`, `Scheefstand volgens ${SCHEEFSTAND_BRON_LABEL[uitkomst.norm]}.`,
         { norm: SCHEEFSTAND_BRON_LABEL[uitkomst.norm] }),
-  );
-  regels.push("");
+  ];
   for (const r of uitkomst.regels) {
     regels.push({ lijst: [`${r.symbool} = ${r.waarde}   [`, r.artikelTekst, "]"], scheiding: "" });
     regels.push({ lijst: ["    ", r.uitlegTekst], scheiding: "" });
   }
+  return regels;
+}
+
+/** De regels van de 2D-toelichting, elk als tekst of vertaalbare tekst. */
+function toelichtingRegels(
+  uitkomst: ScheefstandUitkomst,
+  geometrie: ScheefstandGeometrie,
+): TekstWaarde[] {
+  const [kop, ...tussenwaarden] = scheefstandUitkomstRegels(uitkomst);
+  const regels: TekstWaarde[] = [kop, "", ...tussenwaarden];
   if (uitkomst.norm !== null) {
     regels.push("");
     regels.push(
@@ -847,13 +850,7 @@ function toelichtingRegels(
   // De UGT-toets rekent ALTIJD met deze scheefstand (issue #199), ook met de
   // schakelaar uit; de schakelaar geldt alleen voor de resultaten. Daarom is
   // deze toelichting er altijd, en zegt zij dat.
-  if (richtingen === "3d") regels.push(vt(`${S}directions3d`,
-    "In 3D rekent de UGT-toets elke combinatie met de scheefstand in vier richtingen, één " +
-      "tegelijk: +X, −X, +Y en −Y (EN 1993-1-1 §5.3.2(8)). Elke verticale last V krijgt op " +
-      "zijn eigen aangrijpingspunt een horizontale last φ·V (§5.3.2(7)). Dat doet de toets " +
-      "altijd, ook als de schakelaar Scheefstand uit staat; met die schakelaar aan rekenen ook " +
-      "de UGT-resultaten zo. BGT-combinaties rekenen zonder scheefstand."));
-  else regels.push(vt(`${S}directionBoth`,
+  regels.push(vt(`${S}directionBoth`,
     "Richting: beide. De UGT-toets rekent elke combinatie met de scheefstand in +x én in −x, " +
       "als twee varianten met de richting in de naam, en neemt per staaf de ongunstigste van " +
       "de twee (EN 1993-1-1 5.3.2(2): de imperfectie in de meest ongunstige richting; " +

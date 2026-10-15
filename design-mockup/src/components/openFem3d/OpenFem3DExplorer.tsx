@@ -18,7 +18,7 @@ import { isOpenFem3DPlateQuantity, openFem3DPlateQuantitiesFor, type OpenFem3DPl
 import { OPEN_FEM_3D_PLATES_LINEAR_NOTICE } from "./openFem3dSolver";
 import { openFem3DMaximumDisplacementM } from "./openFem3dDisplacement";
 import { toonMm } from "../../lib/lengthInput";
-import { noemerTekst } from "../../lib/scheefstandNorm";
+import { toetsPhiTekst3D } from "./openFem3dScheefstand";
 import {
   DEFAULT_OPEN_FEM_3D_DEFORMATION_DISPLAY,
   OPEN_FEM_3D_DEFORMATION_SLIDER_STEPS,
@@ -54,7 +54,7 @@ interface Props {
    * De toetsanalyse van de laatste rekengang (issue #199): de UGT-toets rekent
    * altijd P-Δ met scheefstand φ = 1/noemer. Leeg = nog geen toets.
    */
-  toetsAnalyse?: { noemer: number } | null;
+  toetsAnalyse?: { noemer: number; phiPerAs?: { x: number; y: number } } | null;
   activeTab?: "project" | "view" | "results";
   setActiveTab?: (tab: "project" | "view" | "results") => void;
   visibility: OpenFem3DVisibility;
@@ -480,7 +480,7 @@ export default function OpenFem3DExplorer(props: Props) {
           {maxConcreteUc !== undefined && <> · {t("tree.ucConcrete", { uc: maxConcreteUc.toFixed(2) })}</>}
           {maxTimberUc !== undefined && <> · {t("tree.ucTimber", { uc: maxTimberUc.toFixed(2) })}</>}
           {props.checksRunning && <> · {t("tree.checksRunning")}</>}
-          {props.toetsAnalyse && <><br />{t("tree.checkForces", { noemer: noemerTekst(props.toetsAnalyse.noemer) })}</>}
+          {props.toetsAnalyse && <><br />{t("tree.checkForces", { phi: toetsPhiTekst3D(props.toetsAnalyse) })}</>}
           {props.checksError && <><br />{t("tree.checksError", { error: props.checksError })}</>}
           {props.result.diagnostics.includes(OPEN_FEM_3D_PLATES_LINEAR_NOTICE) && <><br />{t("openFem3dPlate.linearNotice")}</>}
           {props.result.nativeVolume3D && <><br /><span data-open-fem3d-native-volume-result>{t("tree.nativeVolumeResult", {

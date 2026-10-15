@@ -23,6 +23,7 @@ import {
 } from "../../lib/profieleditor/eigenDoorsnedenStore";
 import type { ToetsAnalyse } from "../../lib/toetsKrachten";
 import { toetsKrachtenNotitie3D } from "./openFem3dToetsKrachten";
+import { toetsPhiTekst3D } from "./openFem3dScheefstand";
 
 /**
  * De reden bij een staaf zonder UGT-toetskrachten: geen enkele UGT-combinatie
@@ -42,12 +43,12 @@ export const GEEN_UGT_TOETSCOMBINATIE =
  * getal. Bij een gedraaide kolom of een hoekprofiel (u/v-assen) werkt de
  * scheefstand langs de hoofdas met een component van φ.
  */
-export function dubbeleSwayZNotitie(lCrZM: number, lengteM: number, noemer: number): string {
+export function dubbeleSwayZNotitie(lCrZM: number, lengteM: number, analyse: Pick<ToetsAnalyse, "noemer" | "phiPerAs">): string {
   const mm = (m: number) => Math.round(m * 1000).toLocaleString("nl-NL");
   return (
     `KANTTEKENING, DUBBELE SWAY OM z: de opgegeven L_cr,z = ${mm(lCrZM)} mm is groter dan de staaflengte ` +
     `L = ${mm(lengteM)} mm, wat op een knikvorm met verplaatsbare knopen (sway) wijst. De UGT-krachten van ` +
-    `deze toets komen uit een tweede-ordeberekening (P-Δ) met scheefstand φ = 1/${Math.round(noemer)} in ` +
+    `deze toets komen uit een tweede-ordeberekening (P-Δ) met scheefstand ${toetsPhiTekst3D(analyse)} in ` +
     "+X, −X, +Y en −Y (NEN-EN 1993-1-1 5.2.2(3)b en 5.3.2): de zijdelingse verplaatsing om de zwakke as en " +
     "haar vergroting zitten dan al in de krachten (bij een gedraaide kolom of een hoekprofiel met de " +
     "component van φ langs die as), en 5.2.2(7)b staat de systeemlengte L toe. Met deze opgave telt de " +
@@ -140,13 +141,14 @@ export interface OpenFem3DCombinationSet {
    */
   consequenceClass?: ConsequenceClass;
   /**
-   * De scheefstand φ (rad) waarmee de UGT-varianten ±X en ±Y zijn gerekend; één
-   * waarde voor beide richtingen. Nodig om te beslissen of de zijdelingse knik
+   * De scheefstand φ (rad) waarmee de UGT-varianten ±X en ±Y zijn gerekend: per
+   * richting (φ_X voor ±X, φ_Y voor ±Y, issue #194), of één waarde voor beide
+   * richtingen. Nodig om te beslissen of de zijdelingse knik
    * van een stalen kolom met een vrije kop in de krachten zit
    * (`openFem3DZijdelingseKnik`). Ontbreekt → niet bekend, en dan geldt 2·L.
    * In de toetsset (`toetsSet3D`, issue #199) altijd de φ van de toets.
    */
-  scheefstandPhi?: number;
+  scheefstandPhi?: number | { x: number; y: number };
   /**
    * De analyse van de UGT-toetskrachten (issue #199): alleen in de toetsset
    * (`toetsSet3D`). Daarmee zetten de bouwers bij elke staaf dat de
@@ -428,7 +430,7 @@ export function buildOpenFem3DSteelCheckInputs(
         // toets in 3D ook in ±Y rekent (in 2D dekt de P-Δ de zwakke as niet).
         ...(combinationSet?.toetsAnalyse && verticaal
           && (cfg?.bucklingLengthZ_m ?? 0) > forces.lengthM * (1 + 1e-6)
-          ? [dubbeleSwayZNotitie(cfg!.bucklingLengthZ_m!, forces.lengthM, combinationSet.toetsAnalyse.noemer)]
+          ? [dubbeleSwayZNotitie(cfg!.bucklingLengthZ_m!, forces.lengthM, combinationSet.toetsAnalyse)]
           : []),
       ],
       // Een trek-alleen staaf (windverband) doet alleen mee zolang zij op trek

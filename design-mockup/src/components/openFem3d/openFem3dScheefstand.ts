@@ -5,8 +5,18 @@
  * ----------------
  * φ zelf komt uit dezelfde normfunctie als in 2D (`bepaalScheefstand` in
  * `lib/scheefstandNorm.ts`); dit bestand levert daarvoor de 3D-geometrie
- * (h en m) en zet φ om in lasten:
+ * (h en m per richting) en zet φ om in lasten:
  *
+ *  - §5.3.2(3): m is "het aantal kolommen in een rij", in het beschouwde
+ *    verticale vlak. In 3D is dat per richting een andere rij: voor de
+ *    scheefstand in X de kolommen in een vlak evenwijdig aan X (gegroepeerd op
+ *    de y van de kolomvoet), voor Y die evenwijdig aan Y (op de x van de voet).
+ *    Per richting geldt de KLEINSTE m over de rijen: die geeft de grootste α_m
+ *    en dus de grootste φ. Zo ontstaan φ_X en φ_Y, elk met dezelfde
+ *    normfunctie als 2D (issue #194). Tot 2026.43 telde de 3D-module alle
+ *    kolomlijnen van het gebouw als één rij: een hal van 4 × 2 kolommen kreeg
+ *    m = 8 en φ = 1/326,6 in beide richtingen, in plaats van φ_X = 1/309,8 en
+ *    φ_Y = 1/282,8 (h = 6 m).
  *  - §5.3.2(7): de scheefstand mag vervangen worden door horizontale
  *    krachten. Hier krijgt ELKE verticale last V een horizontale component
  *    φ·V op zijn eigen aangrijpingspunt: een knooplast op de knoop, een
@@ -14,9 +24,25 @@
  *    gekantelde constructie onder dezelfde zwaartekracht voelt, en de som
  *    over een verdieping is φ·N_Ed van die verdieping.
  *  - §5.3.2(8): de scheefstand werkt in elke horizontale richting, maar in
- *    één richting tegelijk. Een UGT-combinatie ontvouwt daarom in vier
- *    varianten: +X, −X, +Y en −Y. BGT-combinaties blijven zoals ze zijn; de
- *    scheefstand hoort bij de globale analyse voor de uiterste grenstoestand.
+ *    één richting tegelijk. Een combinatie ontvouwt daarom in vier varianten:
+ *    +X en −X met φ_X, +Y en −Y met φ_Y. In de RESULTATEN (schakelaar
+ *    Scheefstand aan) geldt dat voor elke combinatie, ook de BGT, zoals in 2D;
+ *    de UGT-toets (`openFem3dToetsKrachten.ts`) ontvouwt alleen de UGT.
+ *
+ * NIET GEDAAN: §5.3.2(10) en figuur 5.5, de torsie door een antisymmetrische
+ * scheefstand van twee tegenoverliggende gevels. Daarvoor zijn per richting
+ * met twee of meer kolomrijen twee varianten extra nodig, waarin de buitenste
+ * rijen tegengesteld scheefstaan en de scheefstand ertussen lineair verloopt
+ * (een starre verdraaiing van de plattegrond): elke verticale last V krijgt
+ * dan s·φ·V met s = 1 − 2·(p − p_van)/(p_tot − p_van), p de coördinaat haaks
+ * op de richting. Een verdeelde staaflast wordt dan een kwadratisch verloop
+ * (een gelijkwaardig trapezium met dezelfde resultante en werklijn), en een
+ * vlaklast op een plaat moet als knooplasten over het plaatnet (de
+ * consistente verdeling ∫ N_i·q·s dA), omdat het rekencontract per plaat
+ * alleen een uniforme vlaklast kent. Het verdubbelt het aantal varianten (en
+ * de P-Δ-sommen van de toets). De toelichting meldt dat deze varianten
+ * ontbreken; een gebouw dat op torsie gevoelig is, hoort de constructeur daar
+ * apart op te beoordelen.
  *
  * De omzetting werkt op het rekenverzoek NA het samenstellen van de
  * combinatie (factoren, eigen gewicht en belastingvlakken zijn dan al
@@ -30,12 +56,20 @@ import {
   type LoadCombination,
 } from "../fem/solver/combinations";
 import {
+  bepaalScheefstand,
+  noemerTekst,
+  scheefstandUitkomstRegels,
   VERTICAAL_VANAF_GRADEN,
   type Kolomlijn,
   type ScheefstandGeometrie,
+  type ScheefstandKeuze,
   type ScheefstandNorm,
+  type ScheefstandUitkomst,
 } from "../../lib/scheefstandNorm";
-import { vt, type VertaalbareTekst } from "../../lib/vertaalbareTekst";
+import {
+  nederlands, vertaalWaarde, vt,
+  type TekstWaarde, type VertaalbareTekst, type Vertaalfunctie,
+} from "../../lib/vertaalbareTekst";
 import { STEEL_GRADES } from "../../lib/steelGrades";
 import {
   isOpenFem3DGlobalMemberLoad, openFem3DGlobalMemberLoadFactor, openFem3DMemberAxes,
@@ -46,9 +80,15 @@ const S = "common:loadCases.swayDerivation.";
 
 export type OpenFem3DScheefstandAs = "x" | "y";
 
+/** De twee horizontale assen, in de volgorde waarin ze getoond worden. */
+export const OPEN_FEM_3D_SCHEEFSTAND_ASSEN: readonly OpenFem3DScheefstandAs[] = ["x", "y"];
+
+/** φ per horizontale richting, in rad. */
+export type OpenFem3DPhiPerAs = Record<OpenFem3DScheefstandAs, number>;
+
 /** Eén richting van de scheefstand in één berekening. */
 export interface OpenFem3DScheefstand {
-  /** φ in rad. */
+  /** φ in rad: φ_X bij de as x, φ_Y bij de as y. */
   phi: number;
   as: OpenFem3DScheefstandAs;
   richting: 1 | -1;
@@ -59,15 +99,76 @@ function getal(x: number, decimalen: number): string {
   return x.toFixed(decimalen).replace(".", ",");
 }
 
+/** Hoofdletter van een as, voor teksten ("X", "Y"). */
+const AS_LABEL: Record<OpenFem3DScheefstandAs, "X" | "Y"> = { x: "X", y: "Y" };
+/** De coördinaat waarop de rijen van een richting gegroepeerd worden: y voor X, x voor Y. */
+const RIJ_COORDINAAT: Record<OpenFem3DScheefstandAs, "x" | "y"> = { x: "y", y: "x" };
+
+/**
+ * Kolomvoeten die hoogstens dit uit elkaar liggen (in de coördinaat haaks op
+ * de rij) horen bij dezelfde rij. Klein met opzet: een te kleine tolerantie
+ * splitst een rij en geeft een kleinere m, dus een grotere φ (de veilige
+ * kant); een te grote zou rijen samenvoegen en φ verkleinen.
+ */
+export const RIJ_TOLERANTIE_MM = 1;
+
+/** Eén kolomlijn in 3D: als in 2D, met de y van de voet erbij. */
+export interface Kolomlijn3D extends Kolomlijn {
+  voetYmm: number;
+}
+
+/** Eén rij kolommen evenwijdig aan een as. */
+export interface OpenFem3DKolomrij {
+  /** De coördinaat haaks op de rij (y bij een rij evenwijdig aan X), in mm. */
+  coordinaatMm: number;
+  /** Het aantal kolomlijnen in de rij. */
+  aantal: number;
+}
+
+/** De geometrie van één richting: wat `bepaalScheefstand` nodig heeft, plus de rijen. */
+export interface ScheefstandGeometrieAs extends ScheefstandGeometrie {
+  rijen: OpenFem3DKolomrij[];
+}
+
+/**
+ * De 3D-geometrie. De velden van `ScheefstandGeometrie` beschrijven het
+ * geheel (m = de kleinste van m_X en m_Y); `perAs` is wat φ_X en φ_Y rekenen.
+ */
+export interface ScheefstandGeometrie3D extends ScheefstandGeometrie {
+  kolomlijnen: Kolomlijn3D[];
+  /** Per richting: m = de kleinste rij, en de afleiding daarvan. */
+  perAs: Record<OpenFem3DScheefstandAs, ScheefstandGeometrieAs>;
+  /** De opmerkingen die voor beide richtingen gelden (50 %-criterium, wanden, losse rijen). */
+  notities: VertaalbareTekst[];
+}
+
+/** Groepeer de kolomlijnen op één voetcoördinaat (mm) tot rijen, oplopend. */
+function groepeerRijen(lijnen: readonly Kolomlijn3D[], sleutel: "voetXmm" | "voetYmm"): OpenFem3DKolomrij[] {
+  const waarden = lijnen.map((l) => l[sleutel]).sort((a, b) => a - b);
+  const groepen: number[][] = [];
+  for (const w of waarden) {
+    const laatste = groepen[groepen.length - 1];
+    if (laatste && w - laatste[laatste.length - 1] <= RIJ_TOLERANTIE_MM) laatste.push(w);
+    else groepen.push([w]);
+  }
+  return groepen.map((g) => ({ coordinaatMm: g.reduce((som, w) => som + w, 0) / g.length, aantal: g.length }));
+}
+
 /**
  * h en m uit het 3D-model, met dezelfde regels als de 2D-afleiding
  * (`leidScheefstandGeometrieAf`): h van de laagste oplegging tot de hoogste
- * knoop, m = het aantal kolomlijnen. Een kolomlijn is een samenhangende keten
- * van staven die steiler staan dan 75° met het horizontale vlak; een kolom
- * die door drie verdiepingen loopt telt dus één keer. Coördinaten in m.
+ * knoop. Een kolomlijn is een samenhangende keten van staven die steiler staan
+ * dan 75° met het horizontale vlak; een kolom die door drie verdiepingen loopt
+ * telt dus één keer.
+ *
+ * m per richting (§5.3.2(3), "het aantal kolommen in een rij"): de kolomlijnen
+ * gegroepeerd op de y van hun voet (rijen evenwijdig aan X, voor φ_X) en op de
+ * x (rijen evenwijdig aan Y, voor φ_Y); per richting de kleinste rij. Het veld
+ * `aantalElementen` van het geheel is de kleinste van de twee. Coördinaten in m.
  */
-export function leidScheefstandGeometrieAf3D(model: Pick<OpenFem3DModel, "nodes" | "beams" | "supports">): ScheefstandGeometrie {
-  const afleiding: VertaalbareTekst[] = [];
+export function leidScheefstandGeometrieAf3D(
+  model: Pick<OpenFem3DModel, "nodes" | "beams" | "supports"> & Partial<Pick<OpenFem3DModel, "plates">>,
+): ScheefstandGeometrie3D {
   const knoop = new Map(model.nodes.map((n) => [n.id, n]));
   const alleZ = model.nodes.map((n) => n.z);
   const topZ = alleZ.length > 0 ? Math.max(...alleZ) : 0;
@@ -81,13 +182,13 @@ export function leidScheefstandGeometrieAf3D(model: Pick<OpenFem3DModel, "nodes"
   const voet = heeftOpleggingen
     ? vt(`${S}footLowestSupport`, `laagste oplegging, z = ${voetMm} mm`, { z: voetMm })
     : vt(`${S}footLowestNode`, `geen opleggingen in het model, dus de laagste knoop, z = ${voetMm} mm`, { z: voetMm });
-  afleiding.push(vt(`${S}heightDerivation`,
+  const hoogteRegel = vt(`${S}heightDerivation`,
     `h = ${getal(hoogteM, 3)} m — van de voet (${voet.tekst}) tot de bovenkant van de constructie ` +
       `(z = ${getal(topZ * 1000, 0)} mm). ` +
       "EN 1993-1-1 figuur 5.2 meet h vanaf het opleggingsniveau; " +
       "EN 1992-1-1 §5.2(6) noemt het voor de schorende constructie de hoogte " +
       "van het gebouw.",
-    { h: getal(hoogteM, 3), voet, top: getal(topZ * 1000, 0) }));
+    { h: getal(hoogteM, 3), voet, top: getal(topZ * 1000, 0) });
 
   const minSinus = Math.sin((VERTICAAL_VANAF_GRADEN * Math.PI) / 180);
   const verticaal = model.beams.filter((beam) => {
@@ -115,7 +216,7 @@ export function leidScheefstandGeometrieAf3D(model: Pick<OpenFem3DModel, "nodes"
     const r = wortel(beam.startNodeId);
     perWortel.set(r, [...(perWortel.get(r) ?? []), beam.id]);
   }
-  const lijnen: (Kolomlijn & { voetYmm: number })[] = [];
+  const lijnen: Kolomlijn3D[] = [];
   for (const staafIds of perWortel.values()) {
     const punten = staafIds.flatMap((id) => {
       const beam = verticaal.find((v) => v.id === id)!;
@@ -131,45 +232,82 @@ export function leidScheefstandGeometrieAf3D(model: Pick<OpenFem3DModel, "nodes"
     });
   }
   lijnen.sort((a, b) => a.voetXmm - b.voetXmm || a.voetYmm - b.voetYmm || a.voetZmm - b.voetZmm);
-  const aantalElementen = Math.max(1, lijnen.length);
-  if (lijnen.length === 0) {
-    afleiding.push(vt(`${S}membersFallback`,
-      "m = 1 (terugval) — dit model bevat geen enkele staaf die steiler staat " +
-        `dan ${VERTICAAL_VANAF_GRADEN}° met de horizontaal, dus er is geen kolomlijn te tellen. ` +
-        "m = 1 geeft α_m = 1,00: de grootste waarde die de formule kan " +
-        "aannemen, en dus de veilige terugval.",
-      { graden: VERTICAAL_VANAF_GRADEN }));
-  } else {
-    const lijst = {
-      lijst: lijnen.map((k, i) => vt(`${S}columnLine3d`,
-        `(${i + 1}) x = ${getal(k.voetXmm, 0)} mm, y = ${getal(k.voetYmm, 0)} mm`,
-        { n: i + 1, x: getal(k.voetXmm, 0), y: getal(k.voetYmm, 0) })),
-      scheiding: "; ",
-    };
-    afleiding.push(vt(`${S}membersDerived`,
-      `m = ${aantalElementen} — ${aantalElementen} kolomlijn${aantalElementen === 1 ? "" : "en"}: ` +
-        lijst.lijst.map((regel) => regel.tekst).join(lijst.scheiding) +
-        `. Een staaf telt als verticaal vanaf ${VERTICAAL_VANAF_GRADEN}° met de horizontaal; ` +
-        "staven die een knoop delen vormen samen één kolom, zodat een kolom " +
-        "door meerdere verdiepingen éénmaal telt.",
-      { count: aantalElementen, lijst, graden: VERTICAAL_VANAF_GRADEN }));
-  }
-  afleiding.push(vt(`${S}membersNote50Percent`,
+  const afleidbaar = lijnen.length > 0 && hoogteM > 0;
+
+  // Opmerkingen die voor beide richtingen gelden.
+  const notities: VertaalbareTekst[] = [vt(`${S}membersNote50Percent`,
     "LET OP bij m: EN 1993-1-1 5.3.2(3)a telt alleen kolommen mee die " +
       "minstens 50 % van de gemiddelde verticale kolomkracht dragen. Die " +
       "krachten volgen uit de berekening en de berekening heeft φ nodig, dus " +
       "dat criterium is hier niet toegepast — álle kolomlijnen tellen mee. " +
       "Een licht belaste stijl hoort er met de hand uit: kleinere m geeft " +
-      "grotere α_m en dus grotere φ, de veilige kant."));
-  // De richtingen (±X, ±Y) staan niet hier maar in de toelichting zelf:
-  // `scheefstandToelichting(…, "3d")`, zodat ze ook bij een vaste noemer staan.
+      "grotere α_m en dus grotere φ, de veilige kant.")];
+  if ((model.plates?.length ?? 0) > 0) {
+    notities.push(vt(`${S}wallsNotCounted`,
+      "Wandschijven tellen niet mee in m: een schijf schoort meestal in plaats " +
+        "van geschoord te worden, en meetellen zou m verhogen en φ verlagen. " +
+        "Draagt een wand hier wél verticaal mee, verhoog m dan met de hand."));
+  }
+
+  const perAs = {} as Record<OpenFem3DScheefstandAs, ScheefstandGeometrieAs>;
+  let losseRij = false;
+  for (const as of OPEN_FEM_3D_SCHEEFSTAND_ASSEN) {
+    const richting = AS_LABEL[as];
+    const coordinaat = RIJ_COORDINAAT[as];
+    const rijen = groepeerRijen(lijnen, coordinaat === "y" ? "voetYmm" : "voetXmm");
+    const m = rijen.length > 0 ? Math.min(...rijen.map((r) => r.aantal)) : 1;
+    if (lijnen.length > 1 && m === 1) losseRij = true;
+    let mRegel: VertaalbareTekst;
+    if (rijen.length === 0) {
+      mRegel = vt(`${S}membersFallbackAxis`,
+        `m_${richting} = 1 (terugval) — dit model bevat geen enkele staaf die steiler staat ` +
+          `dan ${VERTICAAL_VANAF_GRADEN}° met de horizontaal, dus er is geen kolomrij te tellen. ` +
+          "m = 1 geeft α_m = 1,00: de grootste waarde die de formule kan " +
+          "aannemen, en dus de veilige terugval.",
+        { richting, graden: VERTICAAL_VANAF_GRADEN });
+    } else {
+      const lijst = {
+        lijst: rijen.map((r) => vt(`${S}rowItem3d`,
+          `${coordinaat} = ${getal(r.coordinaatMm, 0)} mm: ${r.aantal}`,
+          { as: coordinaat, c: getal(r.coordinaatMm, 0), aantal: r.aantal })),
+        scheiding: "; ",
+      };
+      mRegel = vt(`${S}membersDerivedAxis`,
+        `m_${richting} = ${m} — de kleinste rij evenwijdig aan ${richting}: EN 1993-1-1 5.3.2(3) telt ` +
+          "de kolommen in een rij, in het beschouwde verticale vlak. " +
+          `Kolommen per rij, op de ${coordinaat} van de kolomvoet: ${nederlands(lijst)}. ` +
+          `Een staaf telt als verticaal vanaf ${VERTICAAL_VANAF_GRADEN}° met de horizontaal; ` +
+          "staven die een knoop delen vormen samen één kolom, en voeten tot " +
+          `${RIJ_TOLERANTIE_MM} mm uit elkaar horen bij dezelfde rij.`,
+        { richting, m, as: coordinaat, lijst, graden: VERTICAAL_VANAF_GRADEN, tolerantie: RIJ_TOLERANTIE_MM });
+    }
+    const teksten = [hoogteRegel, mRegel];
+    perAs[as] = {
+      hoogteM, aantalElementen: m, kolomlijnen: lijnen, rijen, afleidbaar,
+      afleiding: teksten.map((t) => t.tekst), afleidingTeksten: teksten,
+    };
+  }
+  if (losseRij) {
+    notities.push(vt(`${S}rowsSkewNote`,
+      "LET OP bij de rijen: die lopen evenwijdig aan de globale X- en Y-as. Een kolom " +
+        "die alleen in zijn rij staat (een gevelstijl, of een gebouw dat scheef op de " +
+        "assen staat) geeft m = 1 en de grootste φ, de veilige kant. Hoort hij niet bij " +
+        "de dragende rijen, geef m dan met de hand op."));
+  }
+  for (const as of OPEN_FEM_3D_SCHEEFSTAND_ASSEN) {
+    perAs[as].afleidingTeksten.push(...notities);
+    perAs[as].afleiding = perAs[as].afleidingTeksten.map((t) => t.tekst);
+  }
+  const afleidingTeksten = [hoogteRegel, perAs.x.afleidingTeksten[1], perAs.y.afleidingTeksten[1], ...notities];
   return {
     hoogteM,
-    aantalElementen,
-    kolomlijnen: lijnen.map(({ voetYmm: _y, ...lijn }) => lijn),
-    afleidbaar: lijnen.length > 0 && hoogteM > 0,
-    afleiding: afleiding.map((a) => a.tekst),
-    afleidingTeksten: afleiding,
+    aantalElementen: Math.min(perAs.x.aantalElementen, perAs.y.aantalElementen),
+    kolomlijnen: lijnen,
+    afleidbaar,
+    afleiding: afleidingTeksten.map((a) => a.tekst),
+    afleidingTeksten,
+    perAs,
+    notities,
   };
 }
 
@@ -185,6 +323,134 @@ export function toepasselijkeScheefstandNormen3D(model: Pick<OpenFem3DModel, "be
   return (["en1993", "en1992", "en1995"] as const).filter((norm) => normen.has(norm));
 }
 
+/** φ_X en φ_Y: per richting de uitkomst van `bepaalScheefstand`, met de m van die richting. */
+export interface ScheefstandUitkomst3D {
+  x: ScheefstandUitkomst;
+  y: ScheefstandUitkomst;
+  /** φ per richting, zoals de rekenroute ze gebruikt. */
+  phi: OpenFem3DPhiPerAs;
+  /** De waarschuwingen van beide richtingen, elk één keer. */
+  waarschuwingen: string[];
+  waarschuwingTeksten: VertaalbareTekst[];
+}
+
+/**
+ * φ_X en φ_Y uit de projectinstelling: per richting dezelfde normfunctie als
+ * 2D, met de m van die richting. Een handmatige m (`keuze.aantalElementen`)
+ * geldt in beide richtingen; een handmatige h ook. Met de vaste noemer zijn
+ * φ_X en φ_Y gelijk.
+ */
+export function bepaalScheefstand3D(
+  keuze: ScheefstandKeuze,
+  geometrie: ScheefstandGeometrie3D,
+  toepasselijk: ScheefstandNorm[],
+): ScheefstandUitkomst3D {
+  const x = bepaalScheefstand(keuze, geometrie.perAs.x, toepasselijk);
+  const y = bepaalScheefstand(keuze, geometrie.perAs.y, toepasselijk);
+  const gezien = new Set<string>();
+  const waarschuwingTeksten = [...x.waarschuwingTeksten, ...y.waarschuwingTeksten].filter((w) => {
+    if (gezien.has(w.tekst)) return false;
+    gezien.add(w.tekst);
+    return true;
+  });
+  return {
+    x, y, phi: { x: x.phi, y: y.phi },
+    waarschuwingen: waarschuwingTeksten.map((w) => w.tekst),
+    waarschuwingTeksten,
+  };
+}
+
+/** "φ_X = 1/309,8 en φ_Y = 1/282,8", of "φ = 1/200" als ze gelijk zijn. */
+export function phiPerAsTekst(phi: OpenFem3DPhiPerAs): string {
+  const nx = noemerTekst(Math.round((1 / phi.x) * 10) / 10);
+  const ny = noemerTekst(Math.round((1 / phi.y) * 10) / 10);
+  return nx === ny ? `φ = 1/${nx}` : `φ_X = 1/${nx} en φ_Y = 1/${ny}`;
+}
+
+/**
+ * φ van de toets in woorden: per richting als ze verschillen ("φ_X = 1/309,8
+ * en φ_Y = 1/282,8"), anders één φ. Zonder `phiPerAs` (een oudere aanroeper)
+ * de noemer.
+ */
+export function toetsPhiTekst3D(analyse: { noemer: number; phiPerAs?: OpenFem3DPhiPerAs }): string {
+  return analyse.phiPerAs ? phiPerAsTekst(analyse.phiPerAs) : `φ = 1/${noemerTekst(analyse.noemer)}`;
+}
+
+/** De regels van de 3D-toelichting, elk als tekst of vertaalbare tekst. */
+function toelichtingRegels3D(uitkomst: ScheefstandUitkomst3D, geometrie: ScheefstandGeometrie3D): TekstWaarde[] {
+  const regels: TekstWaarde[] = [];
+  if (uitkomst.x.norm === null && uitkomst.y.norm === null) {
+    const [kop, ...tussenwaarden] = scheefstandUitkomstRegels(uitkomst.x);
+    regels.push(kop, "", ...tussenwaarden);
+    regels.push(vt(`${S}fixedBothAxes`, "Deze φ geldt in X en in Y."));
+  } else {
+    regels.push(vt(`${S}heading3d`,
+      "Initiële scheefstand in 3D: per horizontale richting een eigen φ. EN 1993-1-1 " +
+        "5.3.2(3) telt m per rij kolommen in het beschouwde vlak; de kleinste rij geeft " +
+        "de grootste φ."));
+    for (const as of OPEN_FEM_3D_SCHEEFSTAND_ASSEN) {
+      const u = uitkomst[as];
+      const noemer = noemerTekst(Math.round((1 / u.phi) * 10) / 10);
+      regels.push("");
+      regels.push(vt(`${S}axisHeading`, `Richting ${AS_LABEL[as]}: φ_${AS_LABEL[as]} = 1/${noemer}`,
+        { richting: AS_LABEL[as], noemer }));
+      regels.push(...scheefstandUitkomstRegels(u));
+    }
+    regels.push("");
+    regels.push(uitkomst.x.hoogteHandmatig
+      ? vt(`${S}heightManual`, `h is handmatig opgegeven: ${getal(uitkomst.x.hoogteM, 3)} m.`,
+        { h: getal(uitkomst.x.hoogteM, 3) })
+      : geometrie.afleidingTeksten[0]);
+    if (uitkomst.x.aantalHandmatig) {
+      regels.push(vt(`${S}membersManualBoth`,
+        `m is handmatig opgegeven: ${uitkomst.x.aantalElementen}, in X en in Y.`,
+        { m: uitkomst.x.aantalElementen }));
+    } else {
+      for (const as of OPEN_FEM_3D_SCHEEFSTAND_ASSEN) regels.push(geometrie.perAs[as].afleidingTeksten[1]);
+    }
+    for (const r of geometrie.notities) regels.push(r);
+  }
+  regels.push("");
+  // De UGT-toets rekent ALTIJD met deze scheefstand (issue #199), ook met de
+  // schakelaar uit; de schakelaar geldt alleen voor de resultaten.
+  regels.push(vt(`${S}directions3d`,
+    "In 3D rekent de UGT-toets elke UGT-combinatie met de scheefstand in vier richtingen, één " +
+      "tegelijk: +X en −X met φ_X, +Y en −Y met φ_Y (EN 1993-1-1 §5.3.2(8)). Elke verticale last V " +
+      "krijgt op zijn eigen aangrijpingspunt een horizontale last φ·V (§5.3.2(7)). Dat doet de toets " +
+      "altijd, ook als de schakelaar Scheefstand uit staat. Met die schakelaar aan rekenen ook de " +
+      "resultaten zo, en dan elke combinatie, ook de BGT, zoals in 2D: strenger dan de norm vraagt " +
+      "(EN 1992-1-1 §5.2(2)P en (3) plaatsen de imperfectie in de UGT), maar dezelfde keuze in 2D " +
+      "en 3D."));
+  regels.push(vt(`${S}torsionNotIncluded`,
+    "Niet meegenomen: de torsie door een tegengestelde scheefstand van twee tegenoverliggende " +
+      "gevels (EN 1993-1-1 §5.3.2(10), figuur 5.5). Is het gebouw daar gevoelig voor (een " +
+      "plattegrond met de stabiliteit aan één zijde, of een kleine torsiestijfheid), beoordeel dat " +
+      "dan apart."));
+  if (uitkomst.waarschuwingTeksten.length > 0) {
+    regels.push("");
+    for (const w of uitkomst.waarschuwingTeksten) regels.push({ lijst: ["! ", w], scheiding: "" });
+  }
+  return regels;
+}
+
+/**
+ * De 3D-afleiding als tekstblok (Nederlands): voor het rapport. Eén bron met
+ * de tooltip (`scheefstandToelichting3DVertaald`), zodat scherm en rapport niet
+ * uit elkaar kunnen lopen.
+ */
+export function scheefstandToelichting3D(uitkomst: ScheefstandUitkomst3D, geometrie: ScheefstandGeometrie3D): string {
+  return toelichtingRegels3D(uitkomst, geometrie).map(nederlands).join("\n");
+}
+
+/** `scheefstandToelichting3D` in de taal van de interface, voor de tooltip op de φ-knop. */
+export function scheefstandToelichting3DVertaald(
+  uitkomst: ScheefstandUitkomst3D,
+  geometrie: ScheefstandGeometrie3D,
+  t: Vertaalfunctie,
+): string {
+  return toelichtingRegels3D(uitkomst, geometrie).map((r) => vertaalWaarde(t, r)).join("\n");
+}
+
 const RICHTINGEN: readonly { as: OpenFem3DScheefstandAs; richting: 1 | -1; label: string }[] = [
   { as: "x", richting: 1, label: "+X" },
   { as: "x", richting: -1, label: "−X" },
@@ -198,20 +464,35 @@ export function scheefstandRichtingLabel3D(as: OpenFem3DScheefstandAs, richting:
 }
 
 /**
- * Elke UGT-combinatie in vier varianten (+X, −X, +Y, −Y). De variant +X houdt
- * het id van de combinatie; de andere krijgen een veelvoud van
- * `SCHEEFSTAND_COMBO_OFFSET` erbij, net als de tegenrichting in 2D. BGT-
- * combinaties blijven ongewijzigd. Uit = de lijst zoals hij is.
+ * Elke combinatie in vier varianten (+X, −X, +Y, −Y). De variant +X houdt het
+ * id van de combinatie; de andere krijgen een veelvoud van
+ * `SCHEEFSTAND_COMBO_OFFSET` erbij, net als de tegenrichting in 2D.
+ *
+ *  - `phi` = φ_X en φ_Y van de berekening; `null` (scheefstand uit) = de lijst
+ *    zoals hij is. Een richting met φ = 0 krijgt geen varianten.
+ *  - Ontvouwd worden de UGT-combinaties, en met `bgt` ook de BGT (de
+ *    resultaten met de schakelaar aan, zoals 2D: issue #194). De UGT-toets
+ *    geeft alleen UGT-combinaties.
+ *  - Een al ontvouwde combinatie blijft zoals hij is.
  */
-export function metScheefstandRichtingen3D(combinations: readonly LoadCombination[], aan: boolean): LoadCombination[] {
-  if (!aan) return [...combinations];
+export function metScheefstandRichtingen3D(
+  combinations: readonly LoadCombination[],
+  phi: OpenFem3DPhiPerAs | null,
+  opties: { bgt?: boolean } = {},
+): LoadCombination[] {
+  if (!phi) return [...combinations];
   const uit: LoadCombination[] = [];
   for (const combinatie of combinations) {
-    if (combinatie.type !== "uls" || combinatie.scheefstandRichting !== undefined) {
+    if ((combinatie.type !== "uls" && !opties.bgt) || combinatie.scheefstandRichting !== undefined) {
       uit.push(combinatie);
       continue;
     }
-    RICHTINGEN.forEach(({ as, richting, label }, index) => {
+    const varianten = RICHTINGEN.map((r, index) => ({ ...r, index })).filter((r) => phi[r.as] > 0);
+    if (varianten.length === 0) {
+      uit.push(combinatie);
+      continue;
+    }
+    for (const { as, richting, label, index } of varianten) {
       uit.push({
         ...combinatie,
         id: combinatie.id + index * SCHEEFSTAND_COMBO_OFFSET,
@@ -219,15 +500,41 @@ export function metScheefstandRichtingen3D(combinations: readonly LoadCombinatio
         scheefstandRichting: richting,
         scheefstandAs: as,
       });
-    });
+    }
   }
   return uit;
 }
 
-/** De scheefstand van een (ontvouwen) combinatie, of null zonder scheefstand. */
-export function scheefstandVanCombinatie(combinatie: LoadCombination, phi: number): OpenFem3DScheefstand | null {
-  if (combinatie.scheefstandRichting === undefined || !(phi > 0)) return null;
-  return { phi, as: combinatie.scheefstandAs ?? "x", richting: combinatie.scheefstandRichting };
+/**
+ * De basiscombinatie van een ontvouwde variant: zonder richting, met het id
+ * en de naam van vóór het ontvouwen. Een niet-ontvouwde combinatie blijft
+ * zoals hij is.
+ */
+export function zonderScheefstandVariant(combinatie: LoadCombination): LoadCombination {
+  if (combinatie.scheefstandRichting === undefined) return combinatie;
+  const { scheefstandRichting: _r, scheefstandAs: _a, ...rest } = combinatie;
+  const label = scheefstandRichtingLabel3D(combinatie.scheefstandAs ?? "x", combinatie.scheefstandRichting);
+  const achtervoegsel = ` (scheefstand ${label})`;
+  return {
+    ...rest,
+    id: combinatie.id % SCHEEFSTAND_COMBO_OFFSET,
+    name: combinatie.name.endsWith(achtervoegsel) ? combinatie.name.slice(0, -achtervoegsel.length) : combinatie.name,
+  };
+}
+
+/**
+ * De scheefstand van een (ontvouwen) combinatie, of null zonder scheefstand.
+ * `phi` is φ per richting; één getal geldt voor beide richtingen.
+ */
+export function scheefstandVanCombinatie(
+  combinatie: LoadCombination,
+  phi: OpenFem3DPhiPerAs | number | null,
+): OpenFem3DScheefstand | null {
+  if (combinatie.scheefstandRichting === undefined || phi === null) return null;
+  const as = combinatie.scheefstandAs ?? "x";
+  const waarde = typeof phi === "number" ? phi : phi[as];
+  if (!(waarde > 0)) return null;
+  return { phi: waarde, as, richting: combinatie.scheefstandRichting };
 }
 
 type Vec3 = [number, number, number];

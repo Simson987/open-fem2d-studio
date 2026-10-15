@@ -69,7 +69,6 @@ import {
 import {
   SCHEEFSTAND_BRON_LABEL,
   type ScheefstandNorm,
-  type ScheefstandUitkomst,
 } from "../../lib/scheefstandNorm";
 import type { ConsequenceClass } from "../../lib/types/steel/ConsequenceClass";
 import type { OpenFem3DModel } from "./openFem3dModel";
@@ -78,7 +77,19 @@ import {
   type OpenFem3DAnalysisKind,
   type OpenFem3DSolveResult,
 } from "./openFem3dSolver";
-import { metScheefstandRichtingen3D, scheefstandVanCombinatie, type OpenFem3DScheefstand } from "./openFem3dScheefstand";
+import {
+  metScheefstandRichtingen3D,
+  OPEN_FEM_3D_SCHEEFSTAND_ASSEN,
+  phiPerAsTekst,
+  scheefstandToelichting3D,
+  scheefstandVanCombinatie,
+  toetsPhiTekst3D,
+  zonderScheefstandVariant,
+  type OpenFem3DPhiPerAs,
+  type OpenFem3DScheefstand,
+  type ScheefstandGeometrie3D,
+  type ScheefstandUitkomst3D,
+} from "./openFem3dScheefstand";
 import type { OpenFem3DCombinationSet } from "./openFem3dSteelCheck";
 
 /** Een getal in de Nederlandse schrijfwijze. */
@@ -95,8 +106,11 @@ export interface ToetsKrachtenInvoer3D {
    */
   combinaties: readonly LoadCombination[];
   scheefstand: {
-    /** De uitkomst van de projectinstelling (`bepaalScheefstand` met de 3D-geometrie), ook met de schakelaar uit. */
-    project: ScheefstandUitkomst;
+    /**
+     * De uitkomst van de projectinstelling (`bepaalScheefstand3D`: φ_X en φ_Y
+     * met de m van elke richting), ook met de schakelaar uit.
+     */
+    project: ScheefstandUitkomst3D;
     /** De normen van het model (`toepasselijkeScheefstandNormen3D`). */
     normen: readonly ScheefstandNorm[];
     /** De schakelaar Scheefstand van het model (voor de resultaten). */
@@ -114,8 +128,8 @@ export interface ToetsKrachtenInvoer3D {
    */
   resultaten?: {
     combinationResults: ReadonlyMap<number, OpenFem3DSolveResult>;
-    /** De φ waarmee de resultaten zijn gerekend; 0 = zonder scheefstand. */
-    phi: number;
+    /** φ_X en φ_Y waarmee de resultaten zijn gerekend; `null` = zonder scheefstand. */
+    phi: OpenFem3DPhiPerAs | null;
   };
 }
 
@@ -190,29 +204,101 @@ function heeftBetonkolom(model: Pick<OpenFem3DModel, "beams">): boolean {
   return model.beams.some((b) => b.checkConfig?.betonKorf && b.checkConfig?.betonKolom);
 }
 
+/** De toets-φ in 3D: per richting, en samengevat. */
+export interface ToetsScheefstand3D {
+  /** φ_X en φ_Y van de toets, in rad. */
+  phiPerAs: OpenFem3DPhiPerAs;
+  /** De grootste van de twee, en haar noemer en bron: voor één getal in een tekst. */
+  phi: number;
+  noemer: number;
+  bron: ToetsAnalyse["bron"];
+  /** De meldingen van beide richtingen, elk één keer, met de richting erbij als ze verschillen. */
+  meldingen: string[];
+}
+
+/**
+ * De toets-φ in 3D (issue #194): `bepaalToetsScheefstand` per richting, op de
+ * uitkomst met de m van die richting. Zonder verhoging door hout precies de φ
+ * van de projectinstelling (`project.phi`), zodat toets en resultaten met de
+ * schakelaar aan dezelfde lasten hebben. Meldingen die in beide richtingen
+ * gelijk zijn, staan er één keer.
+ */
+export function toetsScheefstand3D(
+  project: ScheefstandUitkomst3D,
+  normen: readonly ScheefstandNorm[],
+): ToetsScheefstand3D {
+  const perAs = {} as Record<"x" | "y", { phi: number; noemer: number; bron: ToetsAnalyse["bron"]; meldingen: string[] }>;
+  for (const as of OPEN_FEM_3D_SCHEEFSTAND_ASSEN) {
+    const u = project[as];
+    const ts = bepaalToetsScheefstand(u, normen);
+    const verhoogd = ts.phi > u.phi * (1 + TOETS_PHI_MARGE);
+    perAs[as] = verhoogd
+      ? { phi: ts.phi, noemer: ts.noemer, bron: ts.bron, meldingen: ts.meldingen }
+      : { phi: u.phi, noemer: u.noemer, bron: ts.bron, meldingen: ts.meldingen };
+  }
+  const meldingen: string[] = [];
+  for (const as of OPEN_FEM_3D_SCHEEFSTAND_ASSEN) {
+    const ander = as === "x" ? perAs.y : perAs.x;
+    for (const m of perAs[as].meldingen) {
+      const tekst = ander.meldingen.includes(m) ? m : `Richting ${as.toUpperCase()}: ${m}`;
+      if (!meldingen.includes(tekst)) meldingen.push(tekst);
+    }
+  }
+  const grootste = perAs.y.phi > perAs.x.phi ? perAs.y : perAs.x;
+  return {
+    phiPerAs: { x: perAs.x.phi, y: perAs.y.phi },
+    phi: grootste.phi,
+    noemer: grootste.noemer,
+    bron: grootste.bron,
+    meldingen,
+  };
+}
+
+/**
+ * De 3D-scheefstand als tekstblok voor het rapport en de MCP-uitvoer: de
+ * afleiding van φ_X en φ_Y (`scheefstandToelichting3D`), en wat de toets daaraan
+ * veranderde of opmerkte (`toetsScheefstand3D`). Nooit leeg: de UGT-toets
+ * rekent altijd met deze scheefstand (issue #199).
+ */
+export function scheefstandToelichtingToets3D(
+  project: ScheefstandUitkomst3D,
+  geometrie: ScheefstandGeometrie3D,
+  normen: readonly ScheefstandNorm[],
+): string {
+  const ts = toetsScheefstand3D(project, normen);
+  const regels = [scheefstandToelichting3D(project, geometrie)];
+  if (ts.meldingen.length > 0) regels.push("", ...ts.meldingen.map((m) => `! ${m}`));
+  const gewijzigd = OPEN_FEM_3D_SCHEEFSTAND_ASSEN.some((as) =>
+    Math.abs(ts.phiPerAs[as] - project.phi[as]) > project.phi[as] * TOETS_PHI_MARGE);
+  if (gewijzigd) regels.push(`De toets rekent daarom met ${phiPerAsTekst(ts.phiPerAs)}.`);
+  return regels.join("\n");
+}
+
+
 /**
  * Stap 1: wat de toets moet rekenen.
  *
- *  - φ: die van de projectinstelling, ook met de schakelaar uit
- *    (`bepaalToetsScheefstand`, B5), met hout minstens de φ van EN 1995 (5.1).
- *    Zonder verhoging door hout precies `project.phi`: de φ waarmee de
- *    3D-resultaten rekenen (App.tsx), zodat toets en resultaten met de
- *    schakelaar aan bit voor bit dezelfde lasten hebben.
- *  - De UGT zonder eindtoestandvarianten, ontvouwd in +X, −X, +Y en −Y.
+ *  - φ per richting (issue #194): φ_X en φ_Y van de projectinstelling, ook
+ *    met de schakelaar uit (`toetsScheefstand3D`, B5), elk met hout minstens
+ *    de φ van EN 1995 (5.1). Zonder verhoging door hout precies
+ *    `project.phi.x` en `project.phi.y`: de φ waarmee de 3D-resultaten rekenen
+ *    (App.tsx), zodat toets en resultaten met de schakelaar aan bit voor bit
+ *    dezelfde lasten hebben.
+ *  - De UGT zonder eindtoestandvarianten, ontvouwd in +X, −X (φ_X), +Y en −Y
+ *    (φ_Y).
  *  - Hergebruik als de resultaten van ELKE variant P-Δ zijn, met dezelfde
- *    scheefstand en dezelfde φ, en de schakelaar aan staat.
+ *    scheefstand en dezelfde φ_X en φ_Y, en de schakelaar aan staat.
  *  - Een model met platen: geweigerd, zonder één berekening.
  */
 export function planToetsKrachten3D(invoer: ToetsKrachtenInvoer3D): ToetsPlan3D {
   const { model, combinaties, scheefstand, resultaten } = invoer;
-  const project = scheefstand.project;
-  const ts = bepaalToetsScheefstand(project, scheefstand.normen);
-  const verhoogd = ts.phi > project.phi * (1 + TOETS_PHI_MARGE);
-  const phi = verhoogd ? ts.phi : project.phi;
+  const ts = toetsScheefstand3D(scheefstand.project, scheefstand.normen);
+  const phiPerAs = ts.phiPerAs;
   const analyse: ToetsAnalyse = {
     soort: "tweedeOrdeGeometrisch",
-    phi,
-    noemer: verhoogd ? ts.noemer : project.noemer,
+    phi: ts.phi,
+    noemer: ts.noemer,
+    phiPerAs,
     bron: ts.bron,
     scheefstandModelAan: scheefstand.modelAan,
     hergebruikt: false,
@@ -227,7 +313,7 @@ export function planToetsKrachten3D(invoer: ToetsKrachtenInvoer3D): ToetsPlan3D 
   // toets rekent zelf met de scheefstand.
   const imperfectie = zetImperfectieGevallenOpNul(ugt.filter((c) => c.eindtoestand === undefined), invoer.loadCases);
   if (imperfectie.melding) meldingen.push(imperfectie.melding);
-  const ugtCombinaties = metScheefstandRichtingen3D(imperfectie.combinaties, true);
+  const ugtCombinaties = metScheefstandRichtingen3D(imperfectie.combinaties, phiPerAs);
 
   if ((model.plates?.length ?? 0) > 0) {
     return {
@@ -242,8 +328,9 @@ export function planToetsKrachten3D(invoer: ToetsKrachtenInvoer3D): ToetsPlan3D 
   }
 
   const resultaatCombinatie = new Map(combinaties.map((c) => [c.id, c]));
-  const zelfdePhi = resultaten !== undefined && resultaten.phi > 0
-    && Math.abs(resultaten.phi - phi) <= phi * TOETS_PHI_MARGE;
+  const resultaatPhi = resultaten?.phi ?? null;
+  const zelfdePhi = resultaatPhi !== null && OPEN_FEM_3D_SCHEEFSTAND_ASSEN.every((as) =>
+    resultaatPhi[as] > 0 && Math.abs(resultaatPhi[as] - phiPerAs[as]) <= phiPerAs[as] * TOETS_PHI_MARGE);
   /** Het resultaat van de resultaatrekengang voor variant `v` met analyse `soort`, als dat bruikbaar is. */
   const bruikbaar = (v: LoadCombination, soort: OpenFem3DAnalysisKind): OpenFem3DSolveResult | undefined => {
     const r = resultaten?.combinationResults.get(v.id);
@@ -266,21 +353,29 @@ export function planToetsKrachten3D(invoer: ToetsKrachtenInvoer3D): ToetsPlan3D 
     }
     runs.push({
       sleutel: `toets:${v.id}`, soort: "toets", combinatie: v, analyse: "p-delta",
-      scheefstand: scheefstandVanCombinatie(v, phi), bucklingModes: 1,
+      scheefstand: scheefstandVanCombinatie(v, phiPerAs), bucklingModes: 1,
     });
   }
 
   let eersteOrde: Map<number, OpenFem3DSolveResult | null> | undefined;
   if (heeftBetonkolom(model)) {
     eersteOrde = new Map();
-    const quasi = combinatiesVanSoort(zonderBgtEindtoestand(combinaties.filter((c) => c.type === "sls")), "6.16b");
+    // De quasi-blijvende combinaties ZONDER scheefstand, ook als de resultaten
+    // de BGT ontvouwd hebben (schakelaar aan, issue #194): §5.8 leest hier de
+    // eerste orde van de combinatie zelf, zoals vóór de BGT-scheefstand.
+    const basisBgt = new Map<number, LoadCombination>();
+    for (const c of combinaties.filter((c) => c.type === "sls")) {
+      const basis = zonderScheefstandVariant(c);
+      if (!basisBgt.has(basis.id)) basisBgt.set(basis.id, basis);
+    }
+    const quasi = combinatiesVanSoort(zonderBgtEindtoestand([...basisBgt.values()]), "6.16b");
     for (const c of [...ugtCombinaties, ...quasi]) {
       const r = bruikbaar(c, "linear");
       eersteOrde.set(c.id, r ?? null);
       if (r) continue;
       runs.push({
         sleutel: `eersteOrde:${c.id}`, soort: "eersteOrde", combinatie: c, analyse: "linear",
-        scheefstand: scheefstandVanCombinatie(c, phi), bucklingModes: 0,
+        scheefstand: scheefstandVanCombinatie(c, phiPerAs), bucklingModes: 0,
       });
     }
   }
@@ -372,7 +467,7 @@ export function stelToetsKrachten3DSamen(
     const weigering: ToetsWeigering = {
       reden:
         `De toetskrachten zijn niet te bepalen: de tweede-ordeberekening (P-Δ) met scheefstand ` +
-        `φ = 1/${nl(plan.analyse.noemer, 0)} in +X, −X, +Y en −Y faalt in ${mislukt.length} van de ` +
+        `${toetsPhiTekst3D(plan.analyse)} in +X, −X, +Y en −Y faalt in ${mislukt.length} van de ` +
         `${aantalToets + (plan.eersteOrde?.size ?? 0)} toetsberekeningen. De toets wordt geweigerd; er wordt ` +
         "niet teruggevallen op eerste orde (NEN-EN 1993-1-1 5.2.2(7)b vraagt krachten uit een " +
         "tweede-ordeberekening met imperfecties). De resultaten van de berekening blijven staan.",
@@ -421,7 +516,7 @@ export async function bepaalToetsKrachten3D(
  * De toetsset voor de 3D-bouwers: de UGT uit de toets (tweede orde met
  * scheefstand), de BGT uit de resultaten (besluit B6), in de volgorde van de
  * resultaatlijst met elke UGT-combinatie vervangen door haar vier
- * toetsvarianten. `scheefstandPhi` is altijd de toets-φ. Alleen voor een toets
+ * toetsvarianten. `scheefstandPhi` is altijd de toets-φ, per richting. Alleen voor een toets
  * zonder weigering.
  */
 export function toetsSet3D(
@@ -465,7 +560,7 @@ export function toetsSet3D(
     results,
     ...(resultaten.loadCases ? { loadCases: resultaten.loadCases } : {}),
     ...(resultaten.consequenceClass ? { consequenceClass: resultaten.consequenceClass } : {}),
-    scheefstandPhi: toets.analyse.phi,
+    scheefstandPhi: toets.analyse.phiPerAs ?? toets.analyse.phi,
     toetsAnalyse: toets.analyse,
     ...(toets.eersteOrdeResultaten ? { eersteOrdeResultaten: toets.eersteOrdeResultaten } : {}),
   };
@@ -483,7 +578,7 @@ export function toetsSet3D(
  */
 export function toetsKrachtenNotitie3D(analyse: ToetsAnalyse, materiaal: "staal" | "beton" = "staal"): string {
   const herkomst =
-    `De UGT-krachten van deze toets zijn tweede orde (P-Δ) met scheefstand φ = 1/${nl(analyse.noemer, 0)} ` +
+    `De UGT-krachten van deze toets zijn tweede orde (P-Δ) met scheefstand ${toetsPhiTekst3D(analyse)} ` +
     `(${SCHEEFSTAND_BRON_LABEL[analyse.bron]}) in +X, −X, +Y en −Y, één richting per berekening ` +
     "(NEN-EN 1993-1-1 5.2.2(3)b en 5.3.2), los van de analyse-instelling van de resultaten" +
     (analyse.hergebruikt ? " (hier dezelfde berekening als de resultaten)" : "") + ".";

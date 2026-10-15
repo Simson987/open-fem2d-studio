@@ -34,7 +34,7 @@
  * Puur: geen React, geen DOM, geen Tauri.
  */
 import type { LoadCase } from "../components/fem/femTypes";
-import { alphaCrLabel, type AlphaCrUitkomst } from "../components/fem/solver/alphaCr";
+import { alphaCrLabel, stabiliteitsMeldingen, type AlphaCrUitkomst } from "../components/fem/solver/alphaCr";
 import type { LoadCombination } from "../components/fem/solver/combinations";
 import type { OpenFem3DModel } from "../components/openFem3d/openFem3dModel";
 import {
@@ -46,7 +46,9 @@ import {
   type OpenFem3DSolveRequestBody,
   type OpenFem3DSolveResult,
 } from "../components/openFem3d/openFem3dSolver";
-import { leidScheefstandGeometrieAf3D, toepasselijkeScheefstandNormen3D } from "../components/openFem3d/openFem3dScheefstand";
+import {
+  bepaalScheefstand3D, leidScheefstandGeometrieAf3D, toepasselijkeScheefstandNormen3D,
+} from "../components/openFem3d/openFem3dScheefstand";
 import type { OpenFem3DCombinationSet } from "../components/openFem3d/openFem3dSteelCheck";
 import {
   planToetsKrachten3D,
@@ -59,9 +61,9 @@ import {
   type ToetsRun3D,
   type ToetsRunUitkomst3D,
 } from "../components/openFem3d/openFem3dToetsKrachten";
-import { bepaalScheefstand, SCHEEFSTAND_BRONNEN, type ScheefstandBron } from "../lib/scheefstandNorm";
+import { SCHEEFSTAND_BRONNEN, type ScheefstandBron } from "../lib/scheefstandNorm";
 import type { ConsequenceClass } from "../lib/types/steel/ConsequenceClass";
-import type { ToetsAnalyse, ToetsWeigering } from "../lib/toetsKrachten";
+import { weigeringTekst, type ToetsAnalyse, type ToetsWeigering } from "../lib/toetsKrachten";
 
 /** De richtingen van de scheefstand in de toets, in de volgorde van de varianten. */
 const RICHTINGEN = ["+X", "−X", "+Y", "−Y"] as const;
@@ -92,9 +94,9 @@ export interface Toets3DOpzet {
  * De scheefstand van de projectinstelling in het projectbestand, zoals de app
  * hem bij het openen van dat bestand bepaalt (`useFemStore`: ontbrekende
  * velden → vast, noemer 200, h en m uit het model) en voor 3D afleidt
- * (`App.tsx`: `bepaalScheefstand` met de 3D-geometrie en de normen van het
- * model). `modelAan` is false: de resultaten van deze tools rekenen zonder
- * scheefstand.
+ * (`App.tsx`: `bepaalScheefstand3D` met de 3D-geometrie en de normen van het
+ * model: φ_X en φ_Y met m per rij en richting, issue #194). `modelAan` is
+ * false: de resultaten van deze tools rekenen zonder scheefstand.
  */
 export function toetsScheefstand3D(
   project: Record<string, unknown>,
@@ -111,7 +113,7 @@ export function toetsScheefstand3D(
     ? Math.floor(project.scheefstandAantalElementen) : null;
   const normen = toepasselijkeScheefstandNormen3D(model);
   return {
-    project: bepaalScheefstand({ bron, noemer, hoogteM, aantalElementen }, leidScheefstandGeometrieAf3D(model), normen),
+    project: bepaalScheefstand3D({ bron, noemer, hoogteM, aantalElementen }, leidScheefstandGeometrieAf3D(model), normen),
     normen,
     modelAan: false,
   };
@@ -195,8 +197,16 @@ export function vormToetsanalyse3D(opzet: Toets3DOpzet, toets?: ToetsKrachten3D)
     model_analysis_type: opzet.modelAnalyse,
     hergebruikt: a.hergebruikt,
     scheefstand: {
+      // De grootste van φ_X en φ_Y, en per richting (issue #194): ±X rekent
+      // met phi_x, ±Y met phi_y.
       phi: a.phi,
       noemer: a.noemer,
+      ...(a.phiPerAs ? {
+        phi_x: a.phiPerAs.x,
+        phi_y: a.phiPerAs.y,
+        noemer_x: Math.round(10 / a.phiPerAs.x) / 10,
+        noemer_y: Math.round(10 / a.phiPerAs.y) / 10,
+      } : {}),
       bron: a.bron,
       // De resultaten van deze tools rekenen zonder scheefstand.
       model_scheefstand_aan: a.scheefstandModelAan,
@@ -211,6 +221,14 @@ export function vormToetsanalyse3D(opzet: Toets3DOpzet, toets?: ToetsKrachten3D)
       // α_cr per UGT-basiscombinatie van de toets (+X): informatief, want de
       // grens α_cr ≥ 10 van 5.2.1(3) geldt alleen voor eerste orde.
       alpha_cr: toets.alphaCr.map(vormAlphaCr),
+      // De stabiliteitspoort per UGT-combinatie (issue #194), dezelfde
+      // meldingen als de app en 2D: informatief over de resultaten (hier
+      // `model_analysis_type`, zonder scheefstand); alleen een geweigerde toets
+      // is een fout.
+      stabiliteitsmeldingen: stabiliteitsMeldingen(
+        toets.alphaCr, opzet.modelAnalyse === "p-delta" ? "tweedeOrdeGeometrisch" : "eersteOrde", false,
+        toets.weigering ? weigeringTekst(toets.weigering) : null,
+      ),
       geweigerd: toets.weigering !== null,
     } : opzet.plan.weigering ? { geweigerd: true } : {}),
   };

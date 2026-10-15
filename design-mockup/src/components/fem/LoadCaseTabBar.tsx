@@ -126,9 +126,16 @@ interface Props {
    * heeft gekregen.
    */
   scheefstandPhiNoemer?: number;
+  /**
+   * Alleen 3D (issue #194): 1/φ_Y. Dan is `scheefstandPhiNoemer` 1/φ_X en toont
+   * de balk beide richtingen.
+   */
+  scheefstandPhiNoemerY?: number;
   /** De uit het model afgeleide h en m — de plaatshouder in de invoervelden. */
   scheefstandAfgeleideHoogteM?: number;
   scheefstandAfgeleidAantal?: number;
+  /** Alleen 3D: de afgeleide m_Y; dan is `scheefstandAfgeleidAantal` m_X. */
+  scheefstandAfgeleidAantalY?: number;
   /** De volledige afleiding met alle tussenwaarden, voor de tooltip. */
   scheefstandToelichting?: string;
   /** Wat er mis kan zijn met de afleiding; leeg = niets. */
@@ -191,8 +198,8 @@ export default function LoadCaseTabBar({
   scheefstandBron = "vast", setScheefstandBron,
   scheefstandHoogteM = null, setScheefstandHoogteM,
   scheefstandAantalElementen = null, setScheefstandAantalElementen,
-  scheefstandPhiNoemer, scheefstandAfgeleideHoogteM = 0,
-  scheefstandAfgeleidAantal = 1, scheefstandToelichting = "",
+  scheefstandPhiNoemer, scheefstandPhiNoemerY, scheefstandAfgeleideHoogteM = 0,
+  scheefstandAfgeleidAantal = 1, scheefstandAfgeleidAantalY, scheefstandToelichting = "",
   scheefstandWaarschuwingen = [],
   showLoads = true, setShowLoads,
   hasResults = false, resultsActive = false, onShowResults,
@@ -892,7 +899,9 @@ export default function LoadCaseTabBar({
             className="lc-tab-phi-input"
             min={1}
             step={1}
-            placeholder={String(scheefstandAfgeleidAantal)}
+            placeholder={scheefstandAfgeleidAantalY !== undefined
+              ? `${scheefstandAfgeleidAantal}/${scheefstandAfgeleidAantalY}`
+              : String(scheefstandAfgeleidAantal)}
             value={scheefstandAantalElementen ?? ""}
             onChange={(e) => {
               const t = e.target.value.trim();
@@ -900,13 +909,15 @@ export default function LoadCaseTabBar({
               const v = Number(t);
               if (Number.isFinite(v) && v >= 1) setScheefstandAantalElementen?.(Math.floor(v));
             }}
-            title={t("loadCases.swayMembersTitle", { aantal: scheefstandAfgeleidAantal })}
+            title={scheefstandAfgeleidAantalY !== undefined
+              ? t("loadCases.swayMembersTitle3d", { x: scheefstandAfgeleidAantal, y: scheefstandAfgeleidAantalY })
+              : t("loadCases.swayMembersTitle", { aantal: scheefstandAfgeleidAantal })}
           />
           <span className="lc-tab-phi-label">
             {scheefstandWaarschuwingen.length > 0 ? "⚠ " : ""}
-            φ = 1/{scheefstandPhiNoemer !== undefined
-              ? scheefstandPhiNoemer.toFixed(0)
-              : "—"}
+            {scheefstandPhiNoemerY !== undefined && scheefstandPhiNoemer !== undefined
+              ? `φ_X = 1/${scheefstandPhiNoemer.toFixed(0)} · φ_Y = 1/${scheefstandPhiNoemerY.toFixed(0)}`
+              : `φ = 1/${scheefstandPhiNoemer !== undefined ? scheefstandPhiNoemer.toFixed(0) : "—"}`}
           </span>
         </span>
       )}

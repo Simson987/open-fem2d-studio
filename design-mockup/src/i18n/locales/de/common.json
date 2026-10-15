@@ -1086,6 +1086,7 @@
     "swayDenominatorTitle": "Schiefstellung φ als 1/x (Standard 1/200)",
     "swayHeightTitle": "Höhe h in mm für α_h = 2/√(h/1000). Leer = aus dem Modell abgeleitet ({{hoogte}} mm): vom tiefsten Auflager bis zur Oberkante des Tragwerks (EN 1993-1-1 Bild 5.2; EN 1992-1-1 §5.2(6) für das aussteifende Tragwerk).",
     "swayMembersTitle": "Anzahl tragender vertikaler Bauteile m für α_m = √(0,5(1+1/m)). Leer = aus dem Modell abgeleitet ({{aantal}}): die Anzahl der Stützenachsen, wobei übereinanderstehende Stäbe eine Stütze bilden. Das 50-%-Kriterium nach EN 1993-1-1 5.3.2(3)a kann hier nicht angewendet werden (es erfordert die Stützenkräfte, die sich erst aus der Berechnung ergeben); nehmen Sie eine gering belastete Stütze von Hand heraus — kleineres m ergibt größeres φ.",
+    "swayMembersTitle3d": "Anzahl tragender vertikaler Bauteile m für α_m = √(0,5(1+1/m)), in 3D je Richtung. Leer = aus dem Modell abgeleitet: m_X = {{x}} und m_Y = {{y}}, die kleinste Stützenreihe parallel zu X und zu Y (EN 1993-1-1 5.3.2(3)). Ein eingegebenes m gilt in X und in Y. Das 50-%-Kriterium nach 5.3.2(3)a kann hier nicht angewendet werden; nehmen Sie eine gering belastete Stütze von Hand heraus — kleineres m ergibt größeres φ.",
     "swayDirectionTitle": "Richtung der Ersatz-Horizontalkräfte: BEIDE. Der GZT-Nachweis rechnet jede Kombination mit der Schiefstellung in +x und in −x (EN 1993-1-1 5.3.2(2): in der ungünstigsten Richtung) und nimmt je Stab die ungünstigere der beiden; mit angehaktem Kästchen Schiefstellung werden auch die Ergebnisse so gerechnet, und der Kombinationsname nennt die Richtung. Die hier gespeicherte Vorzugsrichtung ({{richting}}) bestimmt nur, welche Variante die ursprüngliche Kombinationsnummer behält.",
     "dialogTitle": "Lastfälle & Kombinationen",
     "casesTab": "Lastfälle ({{aantal}})",
@@ -1155,6 +1156,15 @@
       "membersDerived_one": "m = {{count}} — {{count}} Stützenachse: {{lijst}}. Ein Stab gilt ab {{graden}}° zur Horizontalen als vertikal; Stäbe, die einen Knoten teilen, bilden zusammen eine Stütze, sodass eine Stütze über mehrere Geschosse einmal zählt.",
       "membersDerived_other": "m = {{count}} — {{count}} Stützenachsen: {{lijst}}. Ein Stab gilt ab {{graden}}° zur Horizontalen als vertikal; Stäbe, die einen Knoten teilen, bilden zusammen eine Stütze, sodass eine Stütze über mehrere Geschosse einmal zählt.",
       "membersNote50Percent": "ACHTUNG bei m: EN 1993-1-1 5.3.2(3)a zählt nur Stützen, die mindestens 50 % der mittleren vertikalen Stützenkraft tragen. Diese Kräfte ergeben sich aus der Berechnung, und die Berechnung braucht φ, daher ist dieses Kriterium hier nicht angewendet — alle Stützenachsen zählen. Eine gering belastete Stütze gehört von Hand heraus: kleineres m ergibt größeres α_m und damit größeres φ, die sichere Seite.",
+      "membersFallbackAxis": "m_{{richting}} = 1 (Rückfallwert) — dieses Modell enthält keinen Stab, der steiler als {{graden}}° zur Horizontalen steht, es gibt also keine Stützenreihe zu zählen. m = 1 ergibt α_m = 1,00: den größten Wert, den die Formel annehmen kann, und damit den sicheren Rückfallwert.",
+      "rowItem3d": "{{as}} = {{c}} mm: {{aantal}}",
+      "membersDerivedAxis": "m_{{richting}} = {{m}} — die kleinste Reihe parallel zu {{richting}}: EN 1993-1-1 5.3.2(3) zählt die Stützen in einer Reihe, in der betrachteten vertikalen Ebene. Stützen je Reihe, nach dem {{as}} des Stützenfußes: {{lijst}}. Ein Stab gilt ab {{graden}}° zur Horizontalen als vertikal; Stäbe, die einen Knoten teilen, bilden zusammen eine Stütze, und Füße bis {{tolerantie}} mm auseinander gehören zur selben Reihe.",
+      "rowsSkewNote": "ACHTUNG bei den Reihen: Sie verlaufen parallel zur globalen X- und Y-Achse. Eine Stütze, die allein in ihrer Reihe steht (ein Giebelpfosten oder ein Gebäude, das schräg zu den Achsen steht), ergibt m = 1 und das größte φ, die sichere Seite. Gehört sie nicht zu den tragenden Reihen, geben Sie m von Hand ein.",
+      "fixedBothAxes": "Dieses φ gilt in X und in Y.",
+      "heading3d": "Anfangsschiefstellung in 3D: für jede horizontale Richtung ein eigenes φ. EN 1993-1-1 5.3.2(3) zählt m je Stützenreihe in der betrachteten Ebene; die kleinste Reihe ergibt das größte φ.",
+      "axisHeading": "Richtung {{richting}}: φ_{{richting}} = 1/{{noemer}}",
+      "membersManualBoth": "m wurde von Hand eingegeben: {{m}}, in X und in Y.",
+      "torsionNotIncluded": "Nicht berücksichtigt: die Torsion aus einer gegenläufigen Schiefstellung zweier gegenüberliegender Fassaden (EN 1993-1-1 §5.3.2(10), Bild 5.5). Ist das Gebäude dafür empfindlich (ein Grundriss mit der Aussteifung auf einer Seite oder eine geringe Torsionssteifigkeit), beurteilen Sie das gesondert.",
       "wallsNotCounted": "Wandscheiben zählen bei m nicht mit: Eine Scheibe steift meist aus, statt ausgesteift zu werden, und Mitzählen würde m erhöhen und φ senken. Trägt eine Wand hier doch vertikal mit, erhöhen Sie m von Hand.",
       "base": {
         "en1993": "φ₀ ist der Grundwert: φ₀ = 1/200.",
@@ -1200,10 +1210,9 @@
       "heightManual": "h wurde von Hand eingegeben: {{h}} m.",
       "membersManual": "m wurde von Hand eingegeben: {{m}}.",
       "directionBoth": "Richtung: beide. Der GZT-Nachweis rechnet jede Kombination mit der Schiefstellung in +x und in −x, als zwei Varianten mit der Richtung im Namen, und nimmt je Stab die ungünstigere der beiden (EN 1993-1-1 5.3.2(2): die Imperfektion in der ungünstigsten Richtung; 5.3.2(8): in allen maßgebenden Richtungen, jeweils einzeln). Das tut der Nachweis immer, auch wenn der Schalter Schiefstellung aus ist; dieser Schalter gilt nur für die Ergebnisse, und ist er an, rechnen auch diese jede Kombination in +x und −x.",
-      "columnLine3d": "({{n}}) x = {{x}} mm, y = {{y}} mm",
-      "directions3d": "In 3D rechnet der GZT-Nachweis jede Kombination mit der Schiefstellung in vier Richtungen, jeweils eine: +X, −X, +Y und −Y (EN 1993-1-1 §5.3.2(8)). Jede vertikale Last V erhält an ihrem Angriffspunkt eine horizontale Last φ·V (§5.3.2(7)). Das tut der Nachweis immer, auch wenn der Schalter Schiefstellung aus ist; ist dieser Schalter an, werden auch die GZT-Ergebnisse so gerechnet. GZG-Kombinationen werden ohne Schiefstellung berechnet."
+      "directions3d": "In 3D rechnet der GZT-Nachweis jede GZT-Kombination mit der Schiefstellung in vier Richtungen, jeweils eine: +X und −X mit φ_X, +Y und −Y mit φ_Y (EN 1993-1-1 §5.3.2(8)). Jede vertikale Last V erhält an ihrem Angriffspunkt eine horizontale Last φ·V (§5.3.2(7)). Das tut der Nachweis immer, auch wenn der Schalter Schiefstellung aus ist. Ist dieser Schalter an, werden auch die Ergebnisse so gerechnet, und dann jede Kombination, auch die GZG, wie in 2D: strenger als die Norm verlangt (EN 1992-1-1 §5.2(2)P und (3) ordnen die Imperfektion dem GZT zu), aber dieselbe Wahl in 2D und 3D."
     },
-    "swayDirectionTitle3d": "Der GZT-Nachweis rechnet jede GZT-Kombination nacheinander mit der Schiefstellung in +X, −X, +Y und −Y (EN 1993-1-1 §5.3.2(8)); mit angehaktem Kästchen Schiefstellung auch die Ergebnisse. GZG-Kombinationen werden ohne gerechnet.",
+    "swayDirectionTitle3d": "Der GZT-Nachweis rechnet jede GZT-Kombination nacheinander mit der Schiefstellung in +X und −X (φ_X) und +Y und −Y (φ_Y) (EN 1993-1-1 §5.3.2(8)); mit angehaktem Kästchen Schiefstellung auch die Ergebnisse, und dann auch die GZG-Kombinationen, wie in 2D.",
     "analysisDescriptionVolume": {
       "geometric": "Tet4-Volumen: Total-Lagrange-GNL. Andere Volumen- oder Stabelemente werden in diesem Modus abgelehnt.",
       "material": "Tet4-Volumen: J2-Stahlplastizität oder Betonzugschädigung bei kleinen Dehnungen. Nur reine Tet4-Modelle."
@@ -1322,7 +1331,7 @@
     "ucTimber": "UC EN 1995 {{uc}}",
     "checksRunning": "Nachweis…",
     "checksError": "Nachweis: {{error}}",
-    "checkForces": "GZT-Nachweisschnittgrößen: Theorie II. Ordnung (P-Δ) + Schiefstellung φ = 1/{{noemer}}",
+    "checkForces": "GZT-Nachweisschnittgrößen: Theorie II. Ordnung (P-Δ) + Schiefstellung {{phi}}",
     "edgeSegments": "{{n}} Randsegmente",
     "arcCount": "({{n}} Bogen)",
     "openingCount_one": "{{count}} Öffnung",

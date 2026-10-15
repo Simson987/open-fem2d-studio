@@ -106,6 +106,7 @@ import {
 // scheefstand in ±X/±Y, los van de instellingen voor de resultaten.
 import {
   bepaalToetsKrachten3D,
+  scheefstandToelichtingToets3D,
   toetsSet3D,
   type ToetsKrachten3D,
 } from "./components/openFem3d/openFem3dToetsKrachten";
@@ -181,6 +182,7 @@ import {
   analyseToelichting as maakAnalyseToelichting,
   bepaalAlphaCr,
   noemerTekst,
+  stabiliteitsMeldingen,
   type AlphaCrUitkomst,
 } from "./components/fem/solver/alphaCr";
 import { ANALYSETYPE_LABEL, ANALYSETYPE_OMSCHRIJVING } from "./components/fem/femTypes";
@@ -221,11 +223,14 @@ import {
   toepasselijkeScheefstandNormen,
 } from "./lib/scheefstandNorm";
 import {
+  bepaalScheefstand3D,
   leidScheefstandGeometrieAf3D,
   metScheefstandRichtingen3D,
+  scheefstandToelichting3DVertaald,
   scheefstandVanCombinatie,
   toepasselijkeScheefstandNormen3D,
 } from "./components/openFem3d/openFem3dScheefstand";
+import type { Vertaalfunctie } from "./lib/vertaalbareTekst";
 import type { LoadCombination } from "./components/fem/solver/combinations";
 import { useCheckStore, anyCheckableBeams, anyCheckablePlates, roepKern } from "./stores/checkStore";
 import { useMaatgevendMarkeringStore } from "./stores/maatgevendMarkeringStore";
@@ -1051,14 +1056,16 @@ function App() {
 
   /**
    * Dezelfde keuze (bron, noemer, handmatige h en m) voor het 3D-model: h en m
-   * komen uit de 3D-geometrie, φ uit dezelfde normfunctie. Alleen in 3D.
+   * komen uit de 3D-geometrie, φ uit dezelfde normfunctie. Alleen in 3D. Sinds
+   * issue #194 per richting: m_X en m_Y per rij kolommen (EN 1993-1-1
+   * 5.3.2(3)), en dus φ_X en φ_Y.
    */
   const openFem3dScheefstandGeometrie = useMemo(
     () => (modelDimension === "3d" ? leidScheefstandGeometrieAf3D(openFem3d) : null),
     [modelDimension, openFem3d]);
   const openFem3dScheefstandUitkomst = useMemo(
     () => (openFem3dScheefstandGeometrie
-      ? bepaalScheefstand(
+      ? bepaalScheefstand3D(
           {
             bron: fem.scheefstandBron,
             noemer: fem.scheefstandNoemer,
@@ -1075,16 +1082,50 @@ function App() {
   // schakelaar uit (issue #199). Zie `scheefstandTekst` hieronder.
   const openFem3dScheefstandTekst = useMemo(
     () => (openFem3dScheefstandUitkomst && openFem3dScheefstandGeometrie
-      ? scheefstandToelichtingToets(
+      ? scheefstandToelichtingToets3D(
           openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie,
-          toepasselijkeScheefstandNormen3D(openFem3d), "3d",
+          toepasselijkeScheefstandNormen3D(openFem3d),
         )
       : ""),
     [openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie, openFem3d]);
-  /** Wat de balk onder het canvas toont: in 3D de 3D-afleiding, anders die van 2D. */
+  /**
+   * Wat de balk onder het canvas toont. In 3D φ_X en φ_Y, m_X en m_Y en de
+   * 3D-afleiding (issue #194); anders die van 2D.
+   */
   const scheefstandBalk = modelDimension === "3d" && openFem3dScheefstandUitkomst && openFem3dScheefstandGeometrie
-    ? { uitkomst: openFem3dScheefstandUitkomst, geometrie: openFem3dScheefstandGeometrie, richtingen: "3d" as const }
-    : { uitkomst: scheefstandUitkomst, geometrie: scheefstandGeometrie, richtingen: "2d" as const };
+    ? {
+        noemer: openFem3dScheefstandUitkomst.x.noemer,
+        noemerY: openFem3dScheefstandUitkomst.y.noemer,
+        hoogteM: openFem3dScheefstandGeometrie.hoogteM,
+        aantal: openFem3dScheefstandGeometrie.perAs.x.aantalElementen,
+        aantalY: openFem3dScheefstandGeometrie.perAs.y.aantalElementen as number | undefined,
+        toelichting: (vertaal: Vertaalfunctie) =>
+          scheefstandToelichting3DVertaald(openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie, vertaal),
+        waarschuwingen: openFem3dScheefstandUitkomst.waarschuwingen,
+      }
+    : {
+        noemer: scheefstandUitkomst.noemer,
+        noemerY: undefined as number | undefined,
+        hoogteM: scheefstandGeometrie.hoogteM,
+        aantal: scheefstandGeometrie.aantalElementen,
+        aantalY: undefined as number | undefined,
+        toelichting: (vertaal: Vertaalfunctie) =>
+          scheefstandToelichtingVertaald(scheefstandUitkomst, scheefstandGeometrie, vertaal),
+        waarschuwingen: scheefstandUitkomst.waarschuwingen,
+      };
+  /**
+   * De stabiliteitspoort in 3D (issue #194), zoals 2D: α_cr per
+   * UGT-basiscombinatie uit de toets (P-Δ met scheefstand, één knikvorm per
+   * berekening) met de meldingen van `stabiliteitsMeldingen` bij het
+   * analysetype en de scheefstandschakelaar van de resultaten. Informatief
+   * (issue #199, B14); alleen een geweigerde toets is een fout.
+   */
+  const openFem3dStabiliteitsMeldingen = useMemo(
+    () => (openFem3dToets
+      ? stabiliteitsMeldingen(openFem3dToets.alphaCr, fem.analysetype, fem.scheefstandEnabled,
+          openFem3dToets.weigering ? weigeringTekst(openFem3dToets.weigering) : null)
+      : []),
+    [openFem3dToets, fem.analysetype, fem.scheefstandEnabled]);
   /** De combinaties voor de 3D-weergave: zoals gerekend, of anders die van het project. */
   const openFem3dCombinaties = openFem3dSolvedCombinations.length > 0 ? openFem3dSolvedCombinations : fem.combinations;
   // Er is gerekend, maar het actieve belastinggeval heeft geen eigen resultaat
@@ -3464,13 +3505,14 @@ function App() {
           ...(openFem3dCalculation.selfWeightCaseId !== undefined
             ? { selfWeightCaseId: openFem3dCalculation.selfWeightCaseId } : {}),
         };
-        // Initiële scheefstand (EN 1993-1-1 §5.3.2) in de RESULTATEN: elke UGT-
-        // combinatie in +X, −X, +Y en −Y, met φ·V op elke verticale last. Uit =
-        // φ 0, geen varianten. De toets rekent hoe dan ook met scheefstand (zie
-        // de toetskrachten hieronder, issue #199).
-        const scheefstandPhi = fem.scheefstandEnabled ? openFem3dScheefstandUitkomst?.phi ?? 0 : 0;
+        // Initiële scheefstand (EN 1993-1-1 §5.3.2) in de RESULTATEN: elke
+        // combinatie, UGT én BGT zoals in 2D (issue #194), in +X en −X met φ_X
+        // en +Y en −Y met φ_Y, met φ·V op elke verticale last. Uit = geen
+        // varianten. De toets rekent hoe dan ook met scheefstand, alleen in de
+        // UGT (zie de toetskrachten hieronder, issue #199).
+        const scheefstandPhi = fem.scheefstandEnabled ? openFem3dScheefstandUitkomst?.phi ?? null : null;
         const combinations = metScheefstandRichtingen3D(fem.combinations.filter((combination) =>
-          [...loadedCaseIds].some((caseId) => (combination.factors.get(caseId) ?? 0) !== 0)), scheefstandPhi > 0);
+          [...loadedCaseIds].some((caseId) => (combination.factors.get(caseId) ?? 0) !== 0)), scheefstandPhi, { bgt: true });
 
         // Elk geval blijft afzonderlijk beschikbaar voor invoercontrole. Iedere
         // combinatie gaat als één volledige lastvector door de gekozen kern;
@@ -4255,6 +4297,7 @@ function App() {
             combinationResults={openFem3dCombinationResults}
             scheefstandTekst={openFem3dScheefstandTekst}
             toets={openFem3dToets}
+            stabiliteitsMeldingen={openFem3dStabiliteitsMeldingen}
             caseResults={openFem3dCaseResults}
             activeCombinationId={openFem3dActiveCombinationId}
             viewSets={openFem3dViewSets}
@@ -5130,11 +5173,14 @@ function App() {
           setScheefstandHoogteM={fem.setScheefstandHoogteM}
           scheefstandAantalElementen={fem.scheefstandAantalElementen}
           setScheefstandAantalElementen={fem.setScheefstandAantalElementen}
-          scheefstandPhiNoemer={scheefstandBalk.uitkomst.noemer}
-          scheefstandAfgeleideHoogteM={scheefstandBalk.geometrie.hoogteM}
-          scheefstandAfgeleidAantal={scheefstandBalk.geometrie.aantalElementen}
-          scheefstandToelichting={scheefstandToelichtingVertaald(scheefstandBalk.uitkomst, scheefstandBalk.geometrie, t, scheefstandBalk.richtingen)}
-          scheefstandWaarschuwingen={scheefstandBalk.uitkomst.waarschuwingen}
+          // φ_X en φ_Y, m_X en m_Y (issue #194): de balk toont beide richtingen.
+          scheefstandPhiNoemer={scheefstandBalk.noemer}
+          scheefstandPhiNoemerY={scheefstandBalk.noemerY}
+          scheefstandAfgeleideHoogteM={scheefstandBalk.hoogteM}
+          scheefstandAfgeleidAantal={scheefstandBalk.aantal}
+          scheefstandAfgeleidAantalY={scheefstandBalk.aantalY}
+          scheefstandToelichting={scheefstandBalk.toelichting(t)}
+          scheefstandWaarschuwingen={scheefstandBalk.waarschuwingen}
           scheefstandIn3D
           // Trek-alleen staven: montage na de permanente belasting en de
           // kruisregel zijn modelinstellingen van het 3D-model (ongedaan te maken).
@@ -5186,18 +5232,18 @@ function App() {
           // De uitkomst en de afleiding gaan als GEGEVEN mee naar de balk: de
           // balk toont wat er is gerekend en rekent niets zelf, zodat er geen
           // tweede plek is waar φ kan ontstaan.
-          scheefstandPhiNoemer={scheefstandBalk.uitkomst.noemer}
-          scheefstandAfgeleideHoogteM={scheefstandBalk.geometrie.hoogteM}
-          scheefstandAfgeleidAantal={scheefstandBalk.geometrie.aantalElementen}
+          scheefstandPhiNoemer={scheefstandBalk.noemer}
+          scheefstandAfgeleideHoogteM={scheefstandBalk.hoogteM}
+          scheefstandAfgeleidAantal={scheefstandBalk.aantal}
           // De balk toont de afleiding ook wanneer de schakelaar uit staat —
           // daar is zij een vooruitblik op wat aanzetten zou opleveren. Het
           // rapport krijgt `scheefstandTekst`, die dan juist leeg is.
           scheefstandToelichting={
             // In de taal van de interface; het rapport krijgt de Nederlandse
             // `scheefstandTekst` (issue #33).
-            scheefstandToelichtingVertaald(scheefstandBalk.uitkomst, scheefstandBalk.geometrie, t, scheefstandBalk.richtingen)
+            scheefstandBalk.toelichting(t)
           }
-          scheefstandWaarschuwingen={scheefstandBalk.uitkomst.waarschuwingen}
+          scheefstandWaarschuwingen={scheefstandBalk.waarschuwingen}
           showLoads={fem.showLoads}
           setShowLoads={(v) => {
             fem.setShowLoads(v);

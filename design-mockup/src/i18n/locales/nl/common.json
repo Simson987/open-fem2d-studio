@@ -1086,6 +1086,7 @@
     "swayDenominatorTitle": "Scheefstand φ als 1/x (default 1/200)",
     "swayHeightTitle": "Hoogte h in mm voor α_h = 2/√(h/1000). Leeg = uit het model afgeleid ({{hoogte}} mm): van de laagste oplegging tot de bovenkant van de constructie (EN 1993-1-1 figuur 5.2; EN 1992-1-1 §5.2(6) voor de schorende constructie).",
     "swayMembersTitle": "Aantal dragende verticale elementen m voor α_m = √(0,5(1+1/m)). Leeg = uit het model afgeleid ({{aantal}}): het aantal kolomlijnen, waarbij staven die op elkaar staan één kolom vormen. Het 50 %-criterium van EN 1993-1-1 5.3.2(3)a kan hier niet worden toegepast (het vraagt de kolomkrachten, en die volgen pas uit de berekening); haal een licht belaste stijl er met de hand uit — kleinere m geeft grotere φ.",
+    "swayMembersTitle3d": "Aantal dragende verticale elementen m voor α_m = √(0,5(1+1/m)), in 3D per richting. Leeg = uit het model afgeleid: m_X = {{x}} en m_Y = {{y}}, de kleinste rij kolommen evenwijdig aan X en aan Y (EN 1993-1-1 5.3.2(3)). Een ingevulde m geldt in X en in Y. Het 50 %-criterium van 5.3.2(3)a kan hier niet worden toegepast; haal een licht belaste stijl er met de hand uit — kleinere m geeft grotere φ.",
     "swayDirectionTitle": "Richting van de equivalente horizontale krachten: BEIDE. De UGT-toets rekent elke combinatie met de scheefstand in +x én in −x (EN 1993-1-1 5.3.2(2): in de meest ongunstige richting) en neemt per staaf de ongunstigste van de twee; met het vinkje Scheefstand aan rekenen ook de resultaten zo, en noemt de combinatienaam de richting. De hier opgeslagen voorkeursrichting ({{richting}}) bepaalt alleen welke variant het oorspronkelijke combinatienummer houdt.",
     "dialogTitle": "Belastinggevallen & combinaties",
     "casesTab": "Gevallen ({{aantal}})",
@@ -1155,6 +1156,15 @@
       "membersDerived_one": "m = {{count}} — {{count}} kolomlijn: {{lijst}}. Een staaf telt als verticaal vanaf {{graden}}° met de horizontaal; staven die een knoop delen vormen samen één kolom, zodat een kolom door meerdere verdiepingen éénmaal telt.",
       "membersDerived_other": "m = {{count}} — {{count}} kolomlijnen: {{lijst}}. Een staaf telt als verticaal vanaf {{graden}}° met de horizontaal; staven die een knoop delen vormen samen één kolom, zodat een kolom door meerdere verdiepingen éénmaal telt.",
       "membersNote50Percent": "LET OP bij m: EN 1993-1-1 5.3.2(3)a telt alleen kolommen mee die minstens 50 % van de gemiddelde verticale kolomkracht dragen. Die krachten volgen uit de berekening en de berekening heeft φ nodig, dus dat criterium is hier niet toegepast — álle kolomlijnen tellen mee. Een licht belaste stijl hoort er met de hand uit: kleinere m geeft grotere α_m en dus grotere φ, de veilige kant.",
+      "membersFallbackAxis": "m_{{richting}} = 1 (terugval) — dit model bevat geen enkele staaf die steiler staat dan {{graden}}° met de horizontaal, dus er is geen kolomrij te tellen. m = 1 geeft α_m = 1,00: de grootste waarde die de formule kan aannemen, en dus de veilige terugval.",
+      "rowItem3d": "{{as}} = {{c}} mm: {{aantal}}",
+      "membersDerivedAxis": "m_{{richting}} = {{m}} — de kleinste rij evenwijdig aan {{richting}}: EN 1993-1-1 5.3.2(3) telt de kolommen in een rij, in het beschouwde verticale vlak. Kolommen per rij, op de {{as}} van de kolomvoet: {{lijst}}. Een staaf telt als verticaal vanaf {{graden}}° met de horizontaal; staven die een knoop delen vormen samen één kolom, en voeten tot {{tolerantie}} mm uit elkaar horen bij dezelfde rij.",
+      "rowsSkewNote": "LET OP bij de rijen: die lopen evenwijdig aan de globale X- en Y-as. Een kolom die alleen in zijn rij staat (een gevelstijl, of een gebouw dat scheef op de assen staat) geeft m = 1 en de grootste φ, de veilige kant. Hoort hij niet bij de dragende rijen, geef m dan met de hand op.",
+      "fixedBothAxes": "Deze φ geldt in X en in Y.",
+      "heading3d": "Initiële scheefstand in 3D: per horizontale richting een eigen φ. EN 1993-1-1 5.3.2(3) telt m per rij kolommen in het beschouwde vlak; de kleinste rij geeft de grootste φ.",
+      "axisHeading": "Richting {{richting}}: φ_{{richting}} = 1/{{noemer}}",
+      "membersManualBoth": "m is handmatig opgegeven: {{m}}, in X en in Y.",
+      "torsionNotIncluded": "Niet meegenomen: de torsie door een tegengestelde scheefstand van twee tegenoverliggende gevels (EN 1993-1-1 §5.3.2(10), figuur 5.5). Is het gebouw daar gevoelig voor (een plattegrond met de stabiliteit aan één zijde, of een kleine torsiestijfheid), beoordeel dat dan apart.",
       "wallsNotCounted": "Wandschijven tellen niet mee in m: een schijf schoort meestal in plaats van geschoord te worden, en meetellen zou m verhogen en φ verlagen. Draagt een wand hier wél verticaal mee, verhoog m dan met de hand.",
       "base": {
         "en1993": "φ₀ is de basiswaarde: φ₀ = 1/200.",
@@ -1200,10 +1210,9 @@
       "heightManual": "h is handmatig opgegeven: {{h}} m.",
       "membersManual": "m is handmatig opgegeven: {{m}}.",
       "directionBoth": "Richting: beide. De UGT-toets rekent elke combinatie met de scheefstand in +x én in −x, als twee varianten met de richting in de naam, en neemt per staaf de ongunstigste van de twee (EN 1993-1-1 5.3.2(2): de imperfectie in de meest ongunstige richting; 5.3.2(8): in alle relevante richtingen, één per keer). Dat doet de toets altijd, ook als de schakelaar Scheefstand uit staat; die schakelaar geldt alleen voor de resultaten, en met haar aan rekenen ook die elke combinatie in +x en −x.",
-      "columnLine3d": "({{n}}) x = {{x}} mm, y = {{y}} mm",
-      "directions3d": "In 3D rekent de UGT-toets elke combinatie met de scheefstand in vier richtingen, één tegelijk: +X, −X, +Y en −Y (EN 1993-1-1 §5.3.2(8)). Elke verticale last V krijgt op zijn eigen aangrijpingspunt een horizontale last φ·V (§5.3.2(7)). Dat doet de toets altijd, ook als de schakelaar Scheefstand uit staat; met die schakelaar aan rekenen ook de UGT-resultaten zo. BGT-combinaties rekenen zonder scheefstand."
+      "directions3d": "In 3D rekent de UGT-toets elke UGT-combinatie met de scheefstand in vier richtingen, één tegelijk: +X en −X met φ_X, +Y en −Y met φ_Y (EN 1993-1-1 §5.3.2(8)). Elke verticale last V krijgt op zijn eigen aangrijpingspunt een horizontale last φ·V (§5.3.2(7)). Dat doet de toets altijd, ook als de schakelaar Scheefstand uit staat. Met die schakelaar aan rekenen ook de resultaten zo, en dan elke combinatie, ook de BGT, zoals in 2D: strenger dan de norm vraagt (EN 1992-1-1 §5.2(2)P en (3) plaatsen de imperfectie in de UGT), maar dezelfde keuze in 2D en 3D."
     },
-    "swayDirectionTitle3d": "De UGT-toets rekent elke UGT-combinatie om de beurt met de scheefstand in +X, −X, +Y en −Y (EN 1993-1-1 §5.3.2(8)); met het vinkje Scheefstand aan ook de resultaten. BGT-combinaties rekenen zonder.",
+    "swayDirectionTitle3d": "De UGT-toets rekent elke UGT-combinatie om de beurt met de scheefstand in +X en −X (φ_X) en +Y en −Y (φ_Y) (EN 1993-1-1 §5.3.2(8)); met het vinkje Scheefstand aan ook de resultaten, en dan ook de BGT-combinaties, zoals in 2D.",
     "analysisDescriptionVolume": {
       "geometric": "Tet4-volume: totale-Lagrange GNL. Andere volume- of staafelementen worden in deze stand geweigerd.",
       "material": "Tet4-volume: J2-staalplastificatie of betontrekschade bij kleine rek. Alleen zuivere Tet4-modellen."
@@ -1322,7 +1331,7 @@
     "ucTimber": "UC EN 1995 {{uc}}",
     "checksRunning": "normtoetsing…",
     "checksError": "Normtoetsing: {{error}}",
-    "checkForces": "Toetskrachten UGT: 2e orde (P-Δ) + scheefstand φ = 1/{{noemer}}",
+    "checkForces": "Toetskrachten UGT: 2e orde (P-Δ) + scheefstand {{phi}}",
     "edgeSegments": "{{n}} randsegmenten",
     "arcCount": "({{n}} boog)",
     "openingCount_one": "{{count}} opening",

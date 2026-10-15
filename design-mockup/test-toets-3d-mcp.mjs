@@ -37,12 +37,12 @@ const { withOpenFem3DSelfWeight } = await import("./src/components/openFem3d/ope
 const { solveOpenFem3D, solveOpenFem3DCombination } = await import("./src/components/openFem3d/openFem3dSolver.ts");
 const {
   leidScheefstandGeometrieAf3D, metScheefstandRichtingen3D, scheefstandVanCombinatie, toepasselijkeScheefstandNormen3D,
+  bepaalScheefstand3D,
 } = await import("./src/components/openFem3d/openFem3dScheefstand.ts");
 const { bepaalToetsKrachten3D, toetsSet3D } = await import("./src/components/openFem3d/openFem3dToetsKrachten.ts");
 const { buildOpenFem3DSteelCheckInputs } = await import("./src/components/openFem3d/openFem3dSteelCheck.ts");
 const { buildOpenFem3DTimberCheckInputs } = await import("./src/components/openFem3d/openFem3dTimberCheck.ts");
 const { defaultCombinations } = await import("./src/components/fem/solver/combinations.ts");
-const { bepaalScheefstand } = await import("./src/lib/scheefstandNorm.ts");
 const { eigenGewichtGeval } = await import("./src/lib/eigenGewicht.ts");
 
 let geslaagd = 0, gefaald = 0;
@@ -119,9 +119,10 @@ const opties = {
   ...(eg ? { selfWeightCaseId: eg.id } : {}),
 };
 const belast = new Set([...(rekenmodel.loads ?? []), ...(rekenmodel.memberLoads ?? [])].map((l) => l.caseId ?? 1));
-const scheefstandPhi = project.scheefstandEnabled ? 1 : 0;   // de schakelaar staat uit
+// φ per richting (issue #194); de schakelaar staat uit, dus geen scheefstand in de resultaten.
+const scheefstandPhi = project.scheefstandEnabled ? { x: 1, y: 1 } : null;
 const combinaties = metScheefstandRichtingen3D(defaultCombinations(hal.loadCases)
-  .filter((c) => [...belast].some((id) => (c.factors.get(id) ?? 0) !== 0)), scheefstandPhi > 0);
+  .filter((c) => [...belast].some((id) => (c.factors.get(id) ?? 0) !== 0)), scheefstandPhi, { bgt: true });
 const combinationResults = new Map(await Promise.all(combinaties.map(async (c) =>
   [c.id, await solveOpenFem3DCombination(rekenmodel, c.factors, "linear", scheefstandVanCombinatie(c, scheefstandPhi), opties)])));
 // Het resultaat van het actieve geval (Permanent), zoals `result` in handleSolve.
@@ -131,7 +132,7 @@ const toets = await bepaalToetsKrachten3D({
   model: rekenmodel,
   combinaties,
   scheefstand: {
-    project: bepaalScheefstand({ bron: "vast", noemer: 200, hoogteM: null, aantalElementen: null },
+    project: bepaalScheefstand3D({ bron: "vast", noemer: 200, hoogteM: null, aantalElementen: null },
       leidScheefstandGeometrieAf3D(hal.model), normen),
     normen,
     modelAan: false,

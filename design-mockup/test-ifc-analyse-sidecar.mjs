@@ -177,7 +177,11 @@ const kern = (request) => new Promise((resolve, reject) => {
   assert.equal(toetsanalyse.analysis_type, "tweedeOrdeGeometrisch");
   assert.equal(toetsanalyse.model_analysis_type, "linear");
   assert.deepEqual(toetsanalyse.scheefstand,
-    { phi: 1 / 200, noemer: 200, bron: "vast", model_scheefstand_aan: false, afgedwongen: true });
+    {
+      phi: 1 / 200, noemer: 200, bron: "vast", model_scheefstand_aan: false, afgedwongen: true,
+      // Issue #194: φ per richting; met de vaste noemer gelijk aan φ.
+      phi_x: 1 / 200, phi_y: 1 / 200, noemer_x: 200, noemer_y: 200,
+    });
   assert.deepEqual(toetsanalyse.meldingen, [], "geen imperfectiegeval, geen hout");
   const zonderToets = vraag("ifc_importeren", { inhoud, analysemodel: 2, reken: {}, toetsen: false });
   assert.equal(zonderToets.result.toetsverzoeken, undefined);

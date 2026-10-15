@@ -39,7 +39,9 @@ import type { OpenFem3DLevel } from "./openFem3dLevels";
 import { DEFAULT_OPEN_FEM_3D_SECTION_BOX } from "./openFem3dSectionBox";
 import type { ToetsKrachten3D } from "./openFem3dToetsKrachten";
 import { weigeringTekst } from "../../lib/toetsKrachten";
-import { SCHEEFSTAND_BRON_LABEL, noemerTekst } from "../../lib/scheefstandNorm";
+import type { StabiliteitsMelding } from "../fem/solver/alphaCr";
+import { toetsPhiTekst3D } from "./openFem3dScheefstand";
+import { SCHEEFSTAND_BRON_LABEL } from "../../lib/scheefstandNorm";
 
 interface OpenFem3DReportProps {
   model: OpenFem3DModel;
@@ -75,6 +77,12 @@ interface OpenFem3DReportProps {
    * eventuele weigering. Leeg = nog geen toets.
    */
   toets?: ToetsKrachten3D | null;
+  /**
+   * De stabiliteitspoort (issue #194), zoals 2D: `stabiliteitsMeldingen` op α_cr
+   * van de toets, bij het analysetype en de scheefstandschakelaar van de
+   * resultaten. Leeg = niets te melden.
+   */
+  stabiliteitsMeldingen?: readonly StabiliteitsMelding[];
 }
 
 const number = (value: number, digits = 3) =>
@@ -99,7 +107,7 @@ export default function OpenFem3DReport({
   activeLoadCaseId = 1, activeLoadCaseName, activeCombinationName, activeCombinationFactors,
   combinations = [], combinationResults,
   caseResults, activeCombinationId = null, viewSets = [], standaardViewsUitRapport = [],
-  scheefstandTekst = "",
+  scheefstandTekst = "", stabiliteitsMeldingen = [],
   toets = null,
 }: OpenFem3DReportProps) {
   const { t } = useTranslation("ribbon");
@@ -486,7 +494,7 @@ export default function OpenFem3DReport({
             <h2>{t("openFem3d.report.summary")}</h2>
             <div className="open-fem3d-report-cards">
               <div><span>{t("openFem3d.analysis")}</span><strong>{result.analysis === "p-delta" ? t("openFem3d.report.secondOrder") : t("openFem3d.report.firstOrder")}</strong></div>
-              {toets && <div data-open-fem3d-report-check-forces><span>{t("openFem3d.report.checkForces")}</span><strong>{t("openFem3d.report.checkForcesValue", { noemer: noemerTekst(toets.analyse.noemer) })}</strong></div>}
+              {toets && <div data-open-fem3d-report-check-forces><span>{t("openFem3d.report.checkForces")}</span><strong>{t("openFem3d.report.checkForcesValue", { phi: toetsPhiTekst3D(toets.analyse) })}</strong></div>}
               <div><span>{t("openFem3d.report.state")}</span><strong>{activeCombinationName || activeLoadCaseName || t("openFem3d.report.caseN", { id: activeLoadCaseId })}</strong></div>
               <div><span>{t("openFem3d.maxDisplacement")}</span><strong>{number(maxDisplacement * 1000)} mm</strong></div>
               <div><span>{t("openFem3d.report.convergence")}</span><strong>{result.secondOrder ? t("openFem3d.report.iterations", { count: result.secondOrder.iterations }) : t("openFem3d.report.direct")}</strong></div>
@@ -843,7 +851,7 @@ export default function OpenFem3DReport({
               (informatief), de meldingen en een eventuele weigering. */}
           {toets && <section data-open-fem3d-toetskrachten>
             <h2>{t("openFem3d.report.checkForcesTitle")}</h2>
-            <p>{t("openFem3d.report.checkForcesBasis", { noemer: noemerTekst(toets.analyse.noemer), bron: toetsBron })}
+            <p>{t("openFem3d.report.checkForcesBasis", { phi: toetsPhiTekst3D(toets.analyse), bron: toetsBron })}
               {toets.analyse.hergebruikt && <> {t("openFem3d.report.checkForcesReused")}</>}</p>
             {toets.weigering && <p className="open-fem3d-report-bad" data-open-fem3d-toets-geweigerd>
               {t("openFem3d.report.checkForcesRefused", { reden: weigeringTekst(toets.weigering) })}</p>}
@@ -855,6 +863,13 @@ export default function OpenFem3DReport({
                 </tr>)}
               </tbody></table>
             </>}
+            {stabiliteitsMeldingen.length > 0 && <div data-open-fem3d-stabiliteit>
+              <h3>{t("openFem3d.report.stabilityTitle")}</h3>
+              {stabiliteitsMeldingen.map((melding, index) => <p key={index} data-niveau={melding.niveau}
+                className={melding.niveau === "fout" ? "open-fem3d-report-bad" : melding.niveau === "waarschuwing" ? "open-fem3d-report-note" : undefined}>
+                {melding.niveau === "info" ? melding.tekst : `! ${melding.tekst}`}
+              </p>)}
+            </div>}
             {toets.meldingen.length > 0 && <>
               <h3>{t("openFem3d.report.checkForcesNotes")}</h3>
               <ul>{toets.meldingen.map((m, i) => <li key={i}>{m}</li>)}</ul>

@@ -353,6 +353,22 @@ ok("P-Δ, scheefstand X en Y, φ = 1/200, staande staaf: beide assen gedekt",
     JSONg(knik3D(XY, pDelta, 1 / 140, gedraaid)) === JSONg({ veld: { y: true, z: true } }));
   ok("90° gedraaid, φ = 1/200: veld (de assen vallen weer samen met X en Y)",
     JSONg(knik3D(XY, pDelta, 1 / 200, { ...staand3D, rollAngleRad: Math.PI / 2 })) === JSONg({ veld: { y: true, z: true } }));
+  // Issue #194: φ_X en φ_Y apart. Een staande kolom zonder rol heeft haar
+  // lokale z langs X en haar lokale y langs Y (openFem3DMemberAxes). Uitbuigen
+  // om de sterke as y gaat langs z, dus langs X: φ_X telt; om de zwakke as z
+  // langs Y: φ_Y. De eigen φ van deze kolom (h = 3 m, m = 1) is 1/200.
+  const px = knik3D(XY, pDelta, { x: 1 / 200, y: 1 / 346 }, staand3D);
+  ok("φ_X = 1/200, φ_Y = 1/346: as y gedekt (L), as z niet (2·L), met een kanttekening over z",
+    JSONg(px.veld) === JSONg({ y: true, z: false }) && /om de as z 2·L/.test(px.notitie ?? "") && /1\/346/.test(px.notitie ?? "")
+    && /Om de as y is zij gedekt/.test(px.notitie ?? ""), JSONg(px));
+  const py = knik3D(XY, pDelta, { x: 1 / 346, y: 1 / 200 }, staand3D);
+  ok("φ_X = 1/346, φ_Y = 1/200: as z gedekt, as y niet",
+    JSONg(py.veld) === JSONg({ y: false, z: true }) && /om de as y 2·L/.test(py.notitie ?? ""), JSONg(py));
+  ok("φ_X = φ_Y = 1/200 als object: zelfde als één getal",
+    JSONg(knik3D(XY, pDelta, { x: 1 / 200, y: 1 / 200 }, staand3D)) === JSONg({ veld: { y: true, z: true } }));
+  // 90° gedraaid wisselen de assen: lokale z langs Y, lokale y langs X.
+  const p90 = knik3D(XY, pDelta, { x: 1 / 200, y: 1 / 346 }, { ...staand3D, rollAngleRad: Math.PI / 2 });
+  ok("90° gedraaid met φ_X = 1/200, φ_Y = 1/346: nu as z gedekt en as y niet", JSONg(p90.veld) === JSONg({ y: false, z: true }), JSONg(p90));
 }
 ok("liggende staaf: niets", JSONg(knik3D(XY, pDelta, 1 / 200, liggend3D)) === "{}");
 ok("lineair gerekend: niets", JSONg(knik3D(XY, () => "linear", 1 / 200, staand3D)) === "{}");

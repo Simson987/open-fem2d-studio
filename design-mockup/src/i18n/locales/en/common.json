@@ -1086,6 +1086,7 @@
     "swayDenominatorTitle": "Sway imperfection φ as 1/x (default 1/200)",
     "swayHeightTitle": "Height h in mm for α_h = 2/√(h/1000). Empty = derived from the model ({{hoogte}} mm): from the lowest support to the top of the structure (EN 1993-1-1 figure 5.2; EN 1992-1-1 §5.2(6) for the bracing structure).",
     "swayMembersTitle": "Number of load-bearing vertical members m for α_m = √(0.5(1+1/m)). Empty = derived from the model ({{aantal}}): the number of column lines, where members stacked on top of each other form one column. The 50 % criterion of EN 1993-1-1 5.3.2(3)a cannot be applied here (it requires the column forces, which only follow from the analysis); remove a lightly loaded post manually — smaller m gives larger φ.",
+    "swayMembersTitle3d": "Number of load-bearing vertical members m for α_m = √(0.5(1+1/m)), in 3D per direction. Empty = derived from the model: m_X = {{x}} and m_Y = {{y}}, the smallest row of columns parallel to X and to Y (EN 1993-1-1 5.3.2(3)). An entered m applies in X and in Y. The 50 % criterion of 5.3.2(3)a cannot be applied here; remove a lightly loaded post manually — smaller m gives larger φ.",
     "swayDirectionTitle": "Direction of the equivalent horizontal forces: BOTH. The ULS check analyses each combination with the sway imperfection in +x and in −x (EN 1993-1-1 5.3.2(2): in the most unfavourable direction) and takes, per member, the more unfavourable of the two; with the Sway imperfection box ticked the results are calculated the same way, and the combination name states the direction. The preferred direction stored here ({{richting}}) only determines which variant keeps the original combination number.",
     "dialogTitle": "Load cases & combinations",
     "casesTab": "Cases ({{aantal}})",
@@ -1155,6 +1156,15 @@
       "membersDerived_one": "m = {{count}} — {{count}} column line: {{lijst}}. A member counts as vertical from {{graden}}° to the horizontal; members that share a node together form one column, so a column through several storeys counts once.",
       "membersDerived_other": "m = {{count}} — {{count}} column lines: {{lijst}}. A member counts as vertical from {{graden}}° to the horizontal; members that share a node together form one column, so a column through several storeys counts once.",
       "membersNote50Percent": "NOTE on m: EN 1993-1-1 5.3.2(3)a only counts columns carrying at least 50 % of the average vertical column force. Those forces follow from the analysis and the analysis needs φ, so that criterion is not applied here — all column lines count. A lightly loaded post should be removed manually: smaller m gives larger α_m and thus larger φ, the safe side.",
+      "membersFallbackAxis": "m_{{richting}} = 1 (fallback) — this model contains no member steeper than {{graden}}° to the horizontal, so there is no row of columns to count. m = 1 gives α_m = 1.00: the largest value the formula can take, and therefore the safe fallback.",
+      "rowItem3d": "{{as}} = {{c}} mm: {{aantal}}",
+      "membersDerivedAxis": "m_{{richting}} = {{m}} — the smallest row parallel to {{richting}}: EN 1993-1-1 5.3.2(3) counts the columns in a row, in the vertical plane considered. Columns per row, by the {{as}} of the column base: {{lijst}}. A member counts as vertical from {{graden}}° to the horizontal; members that share a node together form one column, and bases up to {{tolerantie}} mm apart belong to the same row.",
+      "rowsSkewNote": "NOTE on the rows: they run parallel to the global X and Y axes. A column that stands alone in its row (a gable post, or a building that is skewed to the axes) gives m = 1 and the largest φ, the safe side. If it does not belong to the load-bearing rows, enter m manually.",
+      "fixedBothAxes": "This φ applies in X and in Y.",
+      "heading3d": "Initial sway imperfection in 3D: a separate φ for each horizontal direction. EN 1993-1-1 5.3.2(3) counts m per row of columns in the plane considered; the smallest row gives the largest φ.",
+      "axisHeading": "Direction {{richting}}: φ_{{richting}} = 1/{{noemer}}",
+      "membersManualBoth": "m was entered manually: {{m}}, in X and in Y.",
+      "torsionNotIncluded": "Not included: the torsion from opposite sway of two opposing faces (EN 1993-1-1 §5.3.2(10), figure 5.5). If the building is sensitive to it (a plan with the bracing on one side, or a low torsional stiffness), assess it separately.",
       "wallsNotCounted": "Shear walls do not count in m: a wall usually braces rather than being braced, and counting it would raise m and lower φ. If a wall does carry vertical load here, raise m manually.",
       "base": {
         "en1993": "φ₀ is the basic value: φ₀ = 1/200.",
@@ -1200,10 +1210,9 @@
       "heightManual": "h was entered manually: {{h}} m.",
       "membersManual": "m was entered manually: {{m}}.",
       "directionBoth": "Direction: both. The ULS check analyses each combination with the sway imperfection in +x and in −x, as two variants with the direction in the name, and takes, per member, the more unfavourable of the two (EN 1993-1-1 5.3.2(2): the imperfection in the most unfavourable direction; 5.3.2(8): in all relevant directions, one at a time). The check always does this, also when the Sway imperfection switch is off; that switch applies only to the results, and with it on they too analyse each combination in +x and −x.",
-      "columnLine3d": "({{n}}) x = {{x}} mm, y = {{y}} mm",
-      "directions3d": "In 3D the ULS check analyses each combination with the sway imperfection in four directions, one at a time: +X, −X, +Y and −Y (EN 1993-1-1 §5.3.2(8)). Every vertical load V receives a horizontal load φ·V at its own point of application (§5.3.2(7)). The check always does this, also when the Sway imperfection switch is off; with that switch on, the ULS results are calculated the same way. SLS combinations are calculated without sway imperfection."
+      "directions3d": "In 3D the ULS check analyses each ULS combination with the sway imperfection in four directions, one at a time: +X and −X with φ_X, +Y and −Y with φ_Y (EN 1993-1-1 §5.3.2(8)). Every vertical load V receives a horizontal load φ·V at its own point of application (§5.3.2(7)). The check always does this, also when the Sway imperfection switch is off. With that switch on, the results are calculated the same way, and then every combination, SLS included, as in 2D: stricter than the standard requires (EN 1992-1-1 §5.2(2)P and (3) place the imperfection in the ULS), but the same choice in 2D and 3D."
     },
-    "swayDirectionTitle3d": "The ULS check analyses each ULS combination in turn with the sway imperfection in +X, −X, +Y and −Y (EN 1993-1-1 §5.3.2(8)); with the Sway imperfection box ticked, the results too. SLS combinations are calculated without.",
+    "swayDirectionTitle3d": "The ULS check analyses each ULS combination in turn with the sway imperfection in +X and −X (φ_X) and +Y and −Y (φ_Y) (EN 1993-1-1 §5.3.2(8)); with the Sway imperfection box ticked, the results too, and then the SLS combinations as well, as in 2D.",
     "analysisDescriptionVolume": {
       "geometric": "Tet4 volume: total Lagrangian GNL. Other volume or bar elements are rejected in this mode.",
       "material": "Tet4 volume: J2 steel plasticity or concrete tension damage at small strain. Pure Tet4 models only."
@@ -1322,7 +1331,7 @@
     "ucTimber": "UC EN 1995 {{uc}}",
     "checksRunning": "code check…",
     "checksError": "Code check: {{error}}",
-    "checkForces": "ULS check forces: 2nd order (P-Δ) + sway φ = 1/{{noemer}}",
+    "checkForces": "ULS check forces: 2nd order (P-Δ) + sway {{phi}}",
     "edgeSegments": "{{n}} edge segments",
     "arcCount": "({{n}} arc)",
     "openingCount_one": "{{count}} opening",

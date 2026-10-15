@@ -23,7 +23,7 @@
  *    (`openFem3dPlateMesh.ts`). Een randoplegging of plaatbedding hoort bij
  *    zo'n plaat en is daarmee ook gedekt.
  */
-import type { OpenFem3DBeam, OpenFem3DModel, OpenFem3DPlate } from "./openFem3dModel";
+import { openFem3DMemberAxes, type OpenFem3DBeam, type OpenFem3DModel, type OpenFem3DPlate } from "./openFem3dModel";
 import { classifyOpenFem3DPlatePoint, openFem3DPlatePlane, type OpenFem3DPlatePlane } from "./openFem3dPlateMesh";
 import type { LoadCombination } from "../fem/solver/combinations";
 import { phiLosseKolom, VERTICAAL_VANAF_GRADEN } from "../../lib/scheefstandNorm";
@@ -152,7 +152,7 @@ export function openFem3DEinden(model: OpenFem3DModel): OpenFem3DEinden {
  * Of de 3D-UGT-krachten de zijdelingse knik van een STALEN staaf met een vrij
  * eind al bevatten: het kernveld `zijdelingse_knik_in_analyse`. Om een gedekte
  * as kiest de kern dan L in plaats van 2·L (NEN-EN 1993-1-1 5.2.2(7)b). Gedekt
- * (beide assen) is het alleen als
+ * is een as alleen als
  *  - ELKE getoetste UGT-combinatie tweede orde (P-Δ) is gerekend: eerste orde
  *    vergroot niets;
  *  - elke UGT-combinatie een scheefstand draagt, en de scheefstand in beide
@@ -165,8 +165,11 @@ export function openFem3DEinden(model: OpenFem3DModel): OpenFem3DEinden {
  *  - de φ van de berekening (`phi`) minstens die van de kolom ZELF is
  *    (`phiLosseKolom`: h = haar lengte, m = 1). De φ van het model middelt
  *    over alle kolommen en de hoogte van het gebouw; een kolom met een vrije
- *    kop hangt nergens aan en middelt met niets. Bij een om haar as gedraaide
- *    kolom telt de component langs haar hoofdassen: φ·max(|cos α|, |sin α|).
+ *    kop hangt nergens aan en middelt met niets. PER AS (issue #194): de
+ *    scheefstand langs een hoofdas e van de kolom is max(φ_X·|e_X|, φ_Y·|e_Y|),
+ *    bij een om haar as gedraaide kolom dus minder dan φ. Om de as y (uitbuigen
+ *    langs de lokale z) en om de as z (langs de lokale y) geldt de eis apart;
+ *    een as die voldoet, is gedekt, ook als de andere dat niet is.
  *
  * Alleen voor staal; hout houdt 2·L (zie `zijdelingseKnikInVlakModel`).
  *
@@ -185,7 +188,7 @@ export function openFem3DZijdelingseKnik(
   model: Pick<OpenFem3DModel, "nodes">,
   uls: readonly LoadCombination[],
   analyseVan: (combinatieId: number) => string | undefined,
-  phi: number | undefined,
+  phi: number | { x: number; y: number } | undefined,
 ): (beam: OpenFem3DBeam) => { veld?: { y: boolean; z: boolean }; notitie?: string } {
   const tweedeOrde = uls.length > 0 && uls.every((c) => analyseVan(c.id) === "p-delta");
   const allemaalScheef = uls.every((c) => c.scheefstandRichting !== undefined);
@@ -193,6 +196,10 @@ export function openFem3DZijdelingseKnik(
   const gedekt = tweedeOrde && allemaalScheef && assen.has("x") && assen.has("y");
   const minSinus = Math.sin((VERTICAAL_VANAF_GRADEN * Math.PI) / 180);
   const getal = (x: number, d: number) => x.toFixed(d).replace(".", ",");
+  // φ_X en φ_Y (issue #194); één getal geldt in beide richtingen.
+  const phiX = typeof phi === "number" ? phi : phi?.x;
+  const phiY = typeof phi === "number" ? phi : phi?.y;
+  const bekend = phiX !== undefined && phiY !== undefined && Number.isFinite(phiX) && Number.isFinite(phiY);
   return (beam) => {
     if (!gedekt) return {};
     const a = model.nodes.find((n) => n.id === beam.startNodeId);
@@ -201,28 +208,54 @@ export function openFem3DZijdelingseKnik(
     const lengte = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
     if (!(lengte > 0) || Math.abs(b.z - a.z) / lengte < minSinus) return {};
     const nodig = phiLosseKolom(lengte);
-    // Een om haar as gedraaide kolom: de scheefstand werkt in ±X en ±Y, dus
-    // langs elke hoofdas met hooguit φ·max(|cos α|, |sin α|) — bij 45° maar
-    // 0,71·φ. Die component moet aan de eis voldoen, niet de globale φ.
+    // De scheefstand werkt in ±X (φ_X) en ±Y (φ_Y), één richting tegelijk.
+    // Langs een hoofdas e van de kolom werkt dus hooguit
+    // max(φ_X·|e_X|, φ_Y·|e_Y|): bij een kolom die 45° om haar as gedraaid is
+    // maar 0,71·φ. Uitbuigen om de sterke as y gaat langs de lokale z, om de
+    // zwakke as z langs de lokale y; elke as krijgt zo haar eigen eis.
     const rol = beam.rollAngleRad ?? 0;
+    let langsY: number | undefined; // langs de lokale y: knik om z
+    let langsZ: number | undefined; // langs de lokale z: knik om y
+    if (bekend && Number.isFinite(rol)) {
+      const { ey, ez } = openFem3DMemberAxes(a, b, rol);
+      langsY = Math.max(phiX! * Math.abs(ey[0]), phiY! * Math.abs(ey[1]));
+      langsZ = Math.max(phiX! * Math.abs(ez[0]), phiY! * Math.abs(ez[1]));
+    }
+    const dektY = langsZ !== undefined && langsZ >= nodig * (1 - 1e-9);
+    const dektZ = langsY !== undefined && langsY >= nodig * (1 - 1e-9);
+    if (dektY && dektZ) return { veld: { y: true, z: true } };
     const factor = Number.isFinite(rol) ? Math.max(Math.abs(Math.cos(rol)), Math.abs(Math.sin(rol))) : 0;
-    const langsAs = phi !== undefined && Number.isFinite(phi) ? phi * factor : undefined;
-    if (langsAs !== undefined && langsAs >= nodig * (1 - 1e-9)) return { veld: { y: true, z: true } };
     const gedraaid = factor < 1 - 1e-9;
+    const noemer = (w: number) => `1/${getal(1 / w, 0)}`;
+    let tekort: string;
+    if (langsY === undefined || langsZ === undefined) {
+      tekort = "scheefstand φ van het model is niet bekend en dus niet aantoonbaar minstens ";
+    } else if (!dektY && !dektZ && Math.abs(langsY - langsZ) <= 1e-12 * Math.max(langsY, langsZ)) {
+      // Beide assen even weinig: één getal, zoals bij één φ voor het hele model.
+      tekort = langsY > 0
+        ? `scheefstand φ = ${noemer(langsY)} ` +
+          (gedraaid
+            ? `langs de hoofdassen van deze kolom (zij is ${getal((rol * 180) / Math.PI, 1)}° om haar as ` +
+              `gedraaid, dus φ_model·${getal(factor, 3)}) is kleiner dan `
+            : "van het model is kleiner dan ")
+        : "scheefstand φ van het model is niet bekend en dus niet aantoonbaar minstens ";
+    } else {
+      const delen = [
+        ...(!dektY ? [`scheefstand langs de lokale z-as van deze kolom (uitbuigen om de sterke as y), φ = ${noemer(langsZ)}`] : []),
+        ...(!dektZ ? [`scheefstand langs de lokale y-as van deze kolom (uitbuigen om de zwakke as z), φ = ${noemer(langsY)}`] : []),
+      ];
+      tekort = `${delen.join(", en de ")}, ${delen.length > 1 ? "zijn" : "is"} kleiner dan `;
+    }
+    const open = !dektY && !dektZ ? "om beide assen" : !dektY ? "om de as y" : "om de as z";
+    const dicht = dektY ? " Om de as y is zij gedekt: daar geldt L." : dektZ ? " Om de as z is zij gedekt: daar geldt L." : "";
     return {
+      ...(dektY || dektZ ? { veld: { y: dektY, z: dektZ } } : {}),
       notitie:
-        "VRIJ STAAFEIND, TWEEDE ORDE: de berekening is P-Δ met scheefstand in X en Y, maar de " +
-        (langsAs !== undefined && langsAs > 0
-          ? `scheefstand φ = 1/${getal(1 / langsAs, 0)} ` +
-            (gedraaid
-              ? `langs de hoofdassen van deze kolom (zij is ${getal((rol * 180) / Math.PI, 1)}° om haar as ` +
-                `gedraaid, dus φ_model·${getal(factor, 3)}) is kleiner dan `
-              : "van het model is kleiner dan ")
-          : "scheefstand φ van het model is niet bekend en dus niet aantoonbaar minstens ") +
+        "VRIJ STAAFEIND, TWEEDE ORDE: de berekening is P-Δ met scheefstand in X en Y, maar de " + tekort +
         `φ = 1/${getal(1 / nodig, 0)} die deze kolom zelf hoort te krijgen (NEN-EN 1993-1-1 (5.5) met ` +
         `h = ${getal(lengte, 3)} m, haar eigen lengte, en m = 1: een kolom met een vrije kop hangt ` +
         "nergens aan en middelt haar scheefstand met niets). Haar zijdelingse knik zit dus niet volledig in " +
-        "de krachten, en de kniklengte blijft om beide assen 2·L. Wie L wil gebruiken, rekent met een " +
+        `de krachten, en de kniklengte blijft ${open} 2·L.${dicht} Wie L wil gebruiken, rekent met een ` +
         "scheefstand van minstens die φ of geeft de kniklengtes zelf op.",
     };
   };

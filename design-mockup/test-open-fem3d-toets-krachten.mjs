@@ -53,6 +53,7 @@ const { solveOpenFem3DCombination, OPEN_FEM_3D_PLATES_NO_SECOND_ORDER } =
   await import("./src/components/openFem3d/openFem3dSolver.ts");
 const {
   leidScheefstandGeometrieAf3D, metScheefstandRichtingen3D, scheefstandVanCombinatie, toepasselijkeScheefstandNormen3D,
+  bepaalScheefstand3D,
 } = await import("./src/components/openFem3d/openFem3dScheefstand.ts");
 const { bepaalToetsKrachten3D, planToetsKrachten3D, toetsSet3D } =
   await import("./src/components/openFem3d/openFem3dToetsKrachten.ts");
@@ -60,7 +61,6 @@ const { buildOpenFem3DSteelCheckInputs, runOpenFem3DSteelChecks, openFem3DUlsUc 
   await import("./src/components/openFem3d/openFem3dSteelCheck.ts");
 const { buildOpenFem3DConcreteCheckInputs } = await import("./src/components/openFem3d/openFem3dConcreteCheck.ts");
 const { SCHEEFSTAND_COMBO_OFFSET } = await import("./src/components/fem/solver/combinations.ts");
-const { bepaalScheefstand } = await import("./src/lib/scheefstandNorm.ts");
 const { resolveSection } = await import("./src/lib/sectionResolver.ts");
 const { STEEL_SECTION_DIMS } = await import("./src/lib/steelSectionDims.generated.ts");
 const { STANDAARD_KORF } = await import("./src/components/beton/wapeningskorf.ts");
@@ -114,19 +114,25 @@ globalThis.fetch = (url, options) => {
 
 // ── Hulpjes ────────────────────────────────────────────────────────────────
 
-/** De scheefstand van de projectinstelling (vast 1/noemer), zoals de app hem afleidt. */
-const projectScheefstand = (model, noemer = 200) => bepaalScheefstand(
+/**
+ * De scheefstand van de projectinstelling (vast 1/noemer), zoals de app hem
+ * afleidt: sinds issue #194 φ_X en φ_Y (`bepaalScheefstand3D`); met de vaste
+ * noemer zijn die gelijk.
+ */
+const projectScheefstand = (model, noemer = 200) => bepaalScheefstand3D(
   { bron: "vast", noemer }, leidScheefstandGeometrieAf3D(model), toepasselijkeScheefstandNormen3D(model));
 
 /**
  * De resultaatrekengang zoals App.tsx hem draait: de combinaties ontvouwd als
- * de schakelaar aan staat (φ > 0), elke combinatie apart door de kern.
+ * de schakelaar aan staat (φ > 0), sinds issue #194 ook de BGT, elke
+ * combinatie apart door de kern. `phi` is één getal voor X en Y.
  */
 async function resultaatRekengang(model, combinaties, { analyse, phi = 0 }) {
-  const lijst = metScheefstandRichtingen3D(combinaties, phi > 0);
+  const perAs = phi > 0 ? { x: phi, y: phi } : null;
+  const lijst = metScheefstandRichtingen3D(combinaties, perAs, { bgt: true });
   const paren = await Promise.all(lijst.map(async (c) =>
-    [c.id, await solveOpenFem3DCombination(model, c.factors, analyse, scheefstandVanCombinatie(c, phi))]));
-  return { combinaties: lijst, combinationResults: new Map(paren), phi };
+    [c.id, await solveOpenFem3DCombination(model, c.factors, analyse, scheefstandVanCombinatie(c, perAs))]));
+  return { combinaties: lijst, combinationResults: new Map(paren), phi: perAs };
 }
 
 /** De rekenfunctie van de toets zoals de app hem geeft, met een teller. */
@@ -141,7 +147,7 @@ function rekenaar(model) {
 }
 
 /** De toets op `model`, met de resultaatrekengang `res`. */
-async function toets(model, res, { noemer = 200, modelAan = res.phi > 0 } = {}) {
+async function toets(model, res, { noemer = 200, modelAan = res.phi !== null } = {}) {
   const { runs, reken } = rekenaar(model);
   const uitkomst = await bepaalToetsKrachten3D({
     model,
@@ -244,7 +250,9 @@ check("toetsset: de vier UGT-varianten en de BGT, in de volgorde van de resultat
   JSON.stringify(set1.combinations.map((c) => c.id)) === JSON.stringify([ID(7, 0), ID(7, 1), ID(7, 2), ID(7, 3), 17]));
 check("… de UGT uit de toets, de BGT is hetzelfde object als in de resultaten",
   set1.results.get(ID(7, 0)) === r1 && set1.results.get(17) === resLin.combinationResults.get(17));
-check("… met de toets-φ voor de φ-eis bij een vrij staafeind", set1.scheefstandPhi === PHI);
+// GEWIJZIGD door issue #194: φ per richting (φ_X, φ_Y); met de vaste noemer gelijk.
+check("… met de toets-φ per richting voor de φ-eis bij een vrij staafeind",
+  JSON.stringify(set1.scheefstandPhi) === JSON.stringify({ x: PHI, y: PHI }), JSON.stringify(set1.scheefstandPhi));
 
 log("\n[3] α_cr één keer per basiscombinatie");
 // α_cr = N_cr,z/N = π²·210 000·13,4·10⁶/(2·4000)²/240 000 = 433,9/240 = 1,808 (de
@@ -255,7 +263,7 @@ check(`één α_cr voor de ene basiscombinatie, ${kn(NCR_Z / N)} (kern ${t1.alph
   && binnen(t1.alphaCr[0].alphaCr, NCR_Z / N, 2e-3), JSON.stringify(t1.alphaCr));
 
 log("\n[4] hergebruik");
-const resPd = await resultaatRekengang(kolom, [UGT, BGT], { analyse: "p-delta", phi: projectScheefstand(kolom).phi });
+const resPd = await resultaatRekengang(kolom, [UGT, BGT], { analyse: "p-delta", phi: projectScheefstand(kolom).phi.x });
 const { uitkomst: t4, runs: runs4 } = await toets(kolom, resPd);
 check("resultaten P-Δ met de schakelaar aan en dezelfde φ: geen enkele toetsberekening",
   runs4.length === 0 && t4.analyse.hergebruikt === true, String(runs4.length));
@@ -586,7 +594,9 @@ log("\n[9] de app: de 3D-tak van handleSolve, uitgevoerd");
   const pdApp = await berekenen(kolom, { analysetype: "tweedeOrdeGeometrisch", scheefstandAan: true });
   check("instelling P-Δ met scheefstand en dezelfde φ: de toets hergebruikt, geen extra kernaanroep",
     pdApp.toestand.openFem3dToets?.analyse?.hergebruikt === true
-    && pdApp.kern.every(([, , , , opties]) => opties?.tweedeOrdeVerplicht !== true) && pdApp.kern.length === 5,
+    // GEWIJZIGD door issue #194: 4 UGT- en nu ook 4 BGT-varianten (de BGT met
+    // scheefstand in de resultaten, zoals 2D) = 8 resultaatruns; was 4 + 1 = 5.
+    && pdApp.kern.every(([, , , , opties]) => opties?.tweedeOrdeVerplicht !== true) && pdApp.kern.length === 8,
     String(pdApp.kern.length));
 }
 
@@ -609,7 +619,8 @@ log("\n[10] het 3D-rapport noemt de toetskrachten (taak 7)");
     tekst(met).slice(0, 400));
   const hoofdstuk = tekst(met.slice(met.indexOf("data-open-fem3d-toetskrachten")));
   check("het hoofdstuk Toetskrachten: P-Δ met φ = 1/200 (vaste noemer) in +X, −X, +Y en −Y, los van de instellingen",
-    /UGT-toets rekent altijd een eigen tweede-ordeberekening \(P-Δ\) met scheefstand φ = 1\/200 \(vaste noemer\), elke UGT-combinatie in \+X, −X, \+Y en −Y/.test(hoofdstuk),
+    // Issue #194: de richtingen met hun φ (φ_X voor ±X, φ_Y voor ±Y).
+    /UGT-toets rekent altijd een eigen tweede-ordeberekening \(P-Δ\) met scheefstand φ = 1\/200 \(vaste noemer\), elke UGT-combinatie in \+X en −X \(φ_X\) en \+Y en −Y \(φ_Y\)/.test(hoofdstuk),
     hoofdstuk.slice(0, 400));
   check("… met α_cr van de toets per basiscombinatie (1,808, uit de +X-berekening)",
     /UGT 6\.10b \(scheefstand \+X\) 1,80\d/.test(hoofdstuk), hoofdstuk.slice(0, 600));

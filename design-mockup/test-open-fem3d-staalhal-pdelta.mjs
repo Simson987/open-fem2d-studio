@@ -59,10 +59,10 @@ import { withOpenFem3DSelfWeight } from "./src/components/openFem3d/openFem3dMod
 import { solveOpenFem3D, solveOpenFem3DCombination } from "./src/components/openFem3d/openFem3dSolver.ts";
 import {
   leidScheefstandGeometrieAf3D, metScheefstandRichtingen3D, scheefstandVanCombinatie, toepasselijkeScheefstandNormen3D,
+  bepaalScheefstand3D,
 } from "./src/components/openFem3d/openFem3dScheefstand.ts";
 import { maakStaalhal, STAALHAL_GEVAL } from "./src/components/openFem3d/wizards/staalhal.ts";
 import { defaultCombinations } from "./src/components/fem/solver/combinations.ts";
-import { bepaalScheefstand } from "./src/lib/scheefstandNorm.ts";
 import { dichtheidVanMateriaal, resolveSection } from "./src/lib/sectionResolver.ts";
 
 const solverBinary = process.platform === "win32" ? "open-fem-3d.exe" : "open-fem-3d";
@@ -243,13 +243,14 @@ for (const variant of VARIANTEN) {
     permanentCaseIds: hal.loadCases.filter((c) => c.type === "dead").map((c) => c.id),
     selfWeightCaseId: G.eigenGewicht,
   };
-  // φ zoals de app hem bij de norm bepaalt: staal EN 1993-1-1 (φ0 = 1/200 met α_h en α_m),
+  // φ zoals de app hem bij de norm bepaalt, sinds issue #194 per richting met m per
+  // rij kolommen (EN 1993-1-1 5.3.2(3)); staal EN 1993-1-1 (φ0 = 1/200 met α_h en α_m),
   // hout EN 1995-1-1 (φ = 0,005·√(5/h) boven 5 m).
   const phi = variant.scheefstand
-    ? bepaalScheefstand({ bron: variant.norm ?? "en1993", noemer: 200 }, leidScheefstandGeometrieAf3D(hal.model),
+    ? bepaalScheefstand3D({ bron: variant.norm ?? "en1993", noemer: 200 }, leidScheefstandGeometrieAf3D(hal.model),
       toepasselijkeScheefstandNormen3D(hal.model)).phi
-    : 0;
-  const combinaties = metScheefstandRichtingen3D(defaultCombinations(hal.loadCases), phi > 0)
+    : null;
+  const combinaties = metScheefstandRichtingen3D(defaultCombinations(hal.loadCases), phi)
     .filter((c) => !variant.scheefstand || c.scheefstandRichting !== undefined);
   const gevallen = variant.scheefstand ? [] : hal.loadCases;
   assert.equal(hal.loadCases.length, 5, `${variant.naam}: vijf belastinggevallen`);
@@ -279,7 +280,7 @@ for (const variant of VARIANTEN) {
   }
   console.log(`\n[${variant.naam}] ${hal.model.nodes.length} knopen, ${hal.model.beams.length} staven, `
     + `${hal.model.supports.length} opleggingen; ${gevallen.length} gevallen, ${combinaties.length} combinaties`
-    + (phi > 0 ? `, φ = 1/${(1 / phi).toFixed(1)}` : ""));
+    + (phi ? `, φ_X = 1/${(1 / phi.x).toFixed(1)}, φ_Y = 1/${(1 / phi.y).toFixed(1)}` : ""));
   const variantGestart = performance.now();
   const uitkomsten = await inPool(taken.map((taak) => async () => {
     const t0 = performance.now();

@@ -523,8 +523,11 @@ check("de windtekening heeft geen vaste Nederlandse titels meer",
   !/Tussenspant op|— leeg|Staaf \$\{|Wind haaks op het spant|Alle windrichtingen|Plattegrond, gebouwlengte|Blokkering onder/.test(bron("lib/wind/WindSchema.tsx")));
 check("de toetshint zet geen spaties rond de toets",
   /\{t\("props\.load\.pressBefore"\)\}<kbd>\{t\("props\.multi\.deleteKey"\)\}<\/kbd>\{t\("props\.load\.pressAfter"\)\}/.test(bron("components/fem/FemProperties.tsx")));
+// Issue #194: in 3D de 3D-toelichting met φ_X en φ_Y (`scheefstandToelichting3DVertaald`).
 check("de φ-knop krijgt de vertaalde toelichting (in 3D die van het 3D-model)",
-  /scheefstandToelichtingVertaald\(scheefstandBalk\.uitkomst, scheefstandBalk\.geometrie, t, scheefstandBalk\.richtingen\)/.test(bron("App.tsx")));
+  /scheefstandToelichting=\{scheefstandBalk\.toelichting\(t\)\}/.test(bron("App.tsx"))
+  && /scheefstandToelichting3DVertaald\(openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie, vertaal\)/.test(bron("App.tsx"))
+  && /scheefstandToelichtingVertaald\(scheefstandUitkomst, scheefstandGeometrie, vertaal\)/.test(bron("App.tsx")));
 
 log(`\n${passed} geslaagd, ${failed} gefaald`);
 process.exit(failed === 0 ? 0 : 1);

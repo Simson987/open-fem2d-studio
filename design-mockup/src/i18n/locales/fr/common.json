@@ -1086,6 +1086,7 @@
     "swayDenominatorTitle": "Défaut d'aplomb φ sous la forme 1/x (par défaut 1/200)",
     "swayHeightTitle": "Hauteur h en mm pour α_h = 2/√(h/1000). Vide = déduite du modèle ({{hoogte}} mm) : de l'appui le plus bas jusqu'au sommet de la structure (EN 1993-1-1 figure 5.2 ; EN 1992-1-1 §5.2(6) pour la structure de contreventement).",
     "swayMembersTitle": "Nombre d'éléments verticaux porteurs m pour α_m = √(0,5(1+1/m)). Vide = déduit du modèle ({{aantal}}) : le nombre de files de colonnes, les barres superposées formant une seule colonne. Le critère des 50 % de l'EN 1993-1-1 5.3.2(3)a ne peut pas être appliqué ici (il requiert les efforts dans les colonnes, qui ne résultent que du calcul) ; retirez manuellement un montant peu chargé — un m plus petit donne un φ plus grand.",
+    "swayMembersTitle3d": "Nombre d'éléments verticaux porteurs m pour α_m = √(0,5(1+1/m)), en 3D par direction. Vide = déduit du modèle : m_X = {{x}} et m_Y = {{y}}, la plus petite rangée de colonnes parallèle à X et à Y (EN 1993-1-1 5.3.2(3)). Un m saisi s'applique en X et en Y. Le critère des 50 % de 5.3.2(3)a ne peut pas être appliqué ici ; retirez manuellement un montant peu chargé — un m plus petit donne un φ plus grand.",
     "swayDirectionTitle": "Direction des forces horizontales équivalentes : LES DEUX. La vérification ELU calcule chaque combinaison avec le défaut d'aplomb en +x et en −x (EN 1993-1-1 5.3.2(2) : dans la direction la plus défavorable) et retient, par barre, la plus défavorable des deux ; lorsque la case Défaut d'aplomb est cochée, les résultats sont calculés de la même façon et le nom de la combinaison indique la direction. La direction préférée enregistrée ici ({{richting}}) détermine seulement quelle variante garde le numéro de combinaison d'origine.",
     "dialogTitle": "Cas de charge & combinaisons",
     "casesTab": "Cas ({{aantal}})",
@@ -1155,6 +1156,15 @@
       "membersDerived_one": "m = {{count}} — {{count}} file de colonnes : {{lijst}}. Une barre compte comme verticale à partir de {{graden}}° sur l'horizontale ; les barres qui partagent un nœud forment ensemble une colonne, de sorte qu'une colonne traversant plusieurs étages compte une fois.",
       "membersDerived_other": "m = {{count}} — {{count}} files de colonnes : {{lijst}}. Une barre compte comme verticale à partir de {{graden}}° sur l'horizontale ; les barres qui partagent un nœud forment ensemble une colonne, de sorte qu'une colonne traversant plusieurs étages compte une fois.",
       "membersNote50Percent": "ATTENTION pour m : l'EN 1993-1-1 5.3.2(3)a ne compte que les colonnes portant au moins 50 % de l'effort vertical moyen dans les colonnes. Ces efforts résultent du calcul et le calcul a besoin de φ, ce critère n'est donc pas appliqué ici — toutes les files de colonnes comptent. Un montant peu chargé doit être retiré manuellement : un m plus petit donne un α_m plus grand et donc un φ plus grand, du côté de la sécurité.",
+      "membersFallbackAxis": "m_{{richting}} = 1 (valeur de repli) — ce modèle ne contient aucune barre inclinée de plus de {{graden}}° sur l'horizontale, il n'y a donc aucune rangée de colonnes à compter. m = 1 donne α_m = 1,00 : la plus grande valeur que la formule peut prendre, et donc la valeur de repli sûre.",
+      "rowItem3d": "{{as}} = {{c}} mm : {{aantal}}",
+      "membersDerivedAxis": "m_{{richting}} = {{m}} — la plus petite rangée parallèle à {{richting}} : l'EN 1993-1-1 5.3.2(3) compte les colonnes d'une rangée, dans le plan vertical considéré. Colonnes par rangée, selon le {{as}} du pied de colonne : {{lijst}}. Une barre compte comme verticale à partir de {{graden}}° sur l'horizontale ; les barres qui partagent un nœud forment ensemble une colonne, et des pieds distants de {{tolerantie}} mm au plus appartiennent à la même rangée.",
+      "rowsSkewNote": "ATTENTION aux rangées : elles sont parallèles aux axes globaux X et Y. Une colonne seule dans sa rangée (un potelet de pignon, ou un bâtiment oblique par rapport aux axes) donne m = 1 et le plus grand φ, du côté de la sécurité. Si elle n'appartient pas aux rangées porteuses, saisissez m manuellement.",
+      "fixedBothAxes": "Ce φ s'applique en X et en Y.",
+      "heading3d": "Défaut d'aplomb initial en 3D : un φ propre à chaque direction horizontale. L'EN 1993-1-1 5.3.2(3) compte m par rangée de colonnes dans le plan considéré ; la plus petite rangée donne le plus grand φ.",
+      "axisHeading": "Direction {{richting}} : φ_{{richting}} = 1/{{noemer}}",
+      "membersManualBoth": "m a été saisi manuellement : {{m}}, en X et en Y.",
+      "torsionNotIncluded": "Non pris en compte : la torsion due à un défaut d'aplomb opposé de deux façades en vis-à-vis (EN 1993-1-1 §5.3.2(10), figure 5.5). Si le bâtiment y est sensible (un plan avec le contreventement d'un seul côté, ou une faible rigidité en torsion), évaluez-la séparément.",
       "wallsNotCounted": "Les voiles ne comptent pas dans m : un voile contrevente généralement au lieu d'être contreventé, et le compter augmenterait m et diminuerait φ. Si un voile porte ici des charges verticales, augmentez m manuellement.",
       "base": {
         "en1993": "φ₀ est la valeur de base : φ₀ = 1/200.",
@@ -1200,10 +1210,9 @@
       "heightManual": "h a été saisi manuellement : {{h}} m.",
       "membersManual": "m a été saisi manuellement : {{m}}.",
       "directionBoth": "Direction : les deux. La vérification ELU calcule chaque combinaison avec le défaut d'aplomb en +x et en −x, sous forme de deux variantes portant la direction dans leur nom, et retient, par barre, la plus défavorable des deux (EN 1993-1-1 5.3.2(2) : l'imperfection dans la direction la plus défavorable ; 5.3.2(8) : dans toutes les directions pertinentes, une à la fois). La vérification le fait toujours, même lorsque l'interrupteur Défaut d'aplomb est désactivé ; cet interrupteur ne concerne que les résultats, et lorsqu'il est activé ceux-ci calculent aussi chaque combinaison en +x et −x.",
-      "columnLine3d": "({{n}}) x = {{x}} mm, y = {{y}} mm",
-      "directions3d": "En 3D, la vérification ELU calcule chaque combinaison avec l’imperfection d’aplomb dans quatre directions, une à la fois : +X, −X, +Y et −Y (EN 1993-1-1 §5.3.2(8)). Chaque charge verticale V reçoit une charge horizontale φ·V à son propre point d’application (§5.3.2(7)). La vérification le fait toujours, même lorsque l’interrupteur Défaut d’aplomb est désactivé ; lorsqu’il est activé, les résultats ELU sont calculés de la même façon. Les combinaisons ELS sont calculées sans imperfection."
+      "directions3d": "En 3D, la vérification ELU calcule chaque combinaison ELU avec l’imperfection d’aplomb dans quatre directions, une à la fois : +X et −X avec φ_X, +Y et −Y avec φ_Y (EN 1993-1-1 §5.3.2(8)). Chaque charge verticale V reçoit une charge horizontale φ·V à son propre point d’application (§5.3.2(7)). La vérification le fait toujours, même lorsque l’interrupteur Défaut d’aplomb est désactivé. Lorsqu’il est activé, les résultats sont calculés de la même façon, et alors chaque combinaison, ELS comprises, comme en 2D : plus sévère que ce qu’exige la norme (l’EN 1992-1-1 §5.2(2)P et (3) placent l’imperfection à l’ELU), mais le même choix en 2D et en 3D."
     },
-    "swayDirectionTitle3d": "La vérification ELU calcule chaque combinaison ELU tour à tour avec le défaut d'aplomb en +X, −X, +Y et −Y (EN 1993-1-1 §5.3.2(8)) ; lorsque la case Défaut d'aplomb est cochée, les résultats aussi. Les combinaisons ELS sont calculées sans.",
+    "swayDirectionTitle3d": "La vérification ELU calcule chaque combinaison ELU tour à tour avec le défaut d'aplomb en +X et −X (φ_X) et +Y et −Y (φ_Y) (EN 1993-1-1 §5.3.2(8)) ; lorsque la case Défaut d'aplomb est cochée, les résultats aussi, et alors également les combinaisons ELS, comme en 2D.",
     "analysisDescriptionVolume": {
       "geometric": "Volume Tet4 : GNL lagrangien total. Les autres éléments volumiques ou de barre sont refusés dans ce mode.",
       "material": "Volume Tet4 : plasticité de l'acier J2 ou endommagement du béton en traction en petites déformations. Modèles purement Tet4 uniquement."
@@ -1322,7 +1331,7 @@
     "ucTimber": "UC EN 1995 {{uc}}",
     "checksRunning": "vérification…",
     "checksError": "Vérification : {{error}}",
-    "checkForces": "Efforts de vérification ELU : second ordre (P-Δ) + défaut d'aplomb φ = 1/{{noemer}}",
+    "checkForces": "Efforts de vérification ELU : second ordre (P-Δ) + défaut d'aplomb {{phi}}",
     "edgeSegments": "{{n}} segments de bord",
     "arcCount": "({{n}} arc)",
     "openingCount_one": "{{count}} ouverture",

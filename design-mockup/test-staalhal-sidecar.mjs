@@ -124,7 +124,11 @@ const dichtbij = (a, b, label, tol = 1e-3) => assert.ok(Math.abs(a - b) <= tol, 
   assert.equal(toetsanalyse.hergebruikt, false);
   // φ: het projectbestand van de hal heeft geen scheefstandvelden → vast 1/200 (useFemStore bij openen).
   assert.deepEqual(toetsanalyse.scheefstand,
-    { phi: 1 / 200, noemer: 200, bron: "vast", model_scheefstand_aan: false, afgedwongen: true });
+    {
+      phi: 1 / 200, noemer: 200, bron: "vast", model_scheefstand_aan: false, afgedwongen: true,
+      // Issue #194: φ per richting; met de vaste noemer gelijk aan φ.
+      phi_x: 1 / 200, phi_y: 1 / 200, noemer_x: 200, noemer_y: 200,
+    });
   assert.deepEqual(toetsanalyse.richtingen, ["+X", "−X", "+Y", "−Y"]);
   assert.equal(toetsanalyse.aantal_berekeningen, 28);
   assert.equal(toetsanalyse.alpha_cr, undefined, "α_cr pas na de berekening");
@@ -373,7 +377,11 @@ function toetsReactiesom(combinaties, hand, id) {
   // Hout: φ volgens NEN-EN 1995-1-1 (5.1) bij h = 8 m is 0,005·√(5/8) = 0,00395 < 1/200,
   // dus de φ van de projectinstelling blijft; de toets meldt dat hij met E_mean rekent (B10).
   const t = u.result.toetsanalyse;
-  assert.deepEqual(t.scheefstand, { phi: 1 / 200, noemer: 200, bron: "vast", model_scheefstand_aan: false, afgedwongen: true });
+  assert.deepEqual(t.scheefstand, {
+      phi: 1 / 200, noemer: 200, bron: "vast", model_scheefstand_aan: false, afgedwongen: true,
+      // Issue #194: φ per richting; met de vaste noemer gelijk aan φ.
+      phi_x: 1 / 200, phi_y: 1 / 200, noemer_x: 200, noemer_y: 200,
+    });
   assert.ok(t.meldingen.some((m) => m.includes("E_mean")), t.meldingen.join("\n"));
   const ids = new Set(u.result.houtToetsinvoer.flatMap((x) => x.forces_envelope.map((p) => p.combination_id)));
   assert.ok([...ids].every((id) => a.result.toetsverzoeken.some((v) => v.id === id)), "de UGT uit de toetsvarianten");

@@ -193,7 +193,9 @@ fn eis_toetsanalyse_van_de_hal(t: &Value, ugt: usize) {
     assert_eq!(t["hergebruikt"], json!(false));
     assert_eq!(
         t["scheefstand"],
-        json!({ "phi": 0.005, "noemer": 200, "bron": "vast", "model_scheefstand_aan": false, "afgedwongen": true })
+        // Issue #194: φ per richting (phi_x voor ±X, phi_y voor ±Y); met de vaste noemer gelijk.
+        json!({ "phi": 0.005, "noemer": 200, "phi_x": 0.005, "phi_y": 0.005, "noemer_x": 200, "noemer_y": 200,
+                "bron": "vast", "model_scheefstand_aan": false, "afgedwongen": true })
     );
     assert_eq!(t["richtingen"], json!(["+X", "−X", "+Y", "−Y"]));
     assert_eq!(t["aantal_berekeningen"], json!(4 * ugt));
