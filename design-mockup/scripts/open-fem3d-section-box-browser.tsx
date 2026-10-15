@@ -286,6 +286,32 @@ async function run() {
     await menu("explode");
     gelijk(stand.zicht.explode.amountM, 0, "normale weergave terug");
   });
+  await test("Exploderen per elementsoort (issue #198): keuze in het paneel, ligger 2 stappen omhoog, kiezen geeft de echte knoop", async () => {
+    // Vooraanzicht: x naar rechts, z omhoog. Kolommen 1 stap (2 m), liggers 2 stappen (4 m).
+    mount(<Werkruimte begin={portalen()} camera={{ position: [3, -40, 4], target: [3, 0, 4], up: [0, 0, 1] }} />);
+    await wacht(300);
+    const original = stand.model;
+    const keuze = container.querySelector<HTMLSelectElement>(".open-fem3d-explode select")!;
+    ok(keuze, "keuze per level / per elementsoort");
+    gelijk([...keuze.options].map((o) => o.value), ["levels", "elementTypes"], "twee standen");
+    flushSync(() => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(keuze, "elementTypes");
+      keuze.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    gelijk(stand.zicht.explode, { mode: "elementTypes", amountM: 0 }, "de stand, nog uit");
+    await menu("explode");
+    await wacht(600);
+    gelijk(stand.zicht.explode, { mode: "elementTypes", amountM: 2 }, "aan via het menu: de stand blijft");
+    gelijk(tekenvlak().closest(".open-fem3d-stage")?.querySelector<HTMLElement>(".open-fem3d-explode")?.dataset.openFem3dExplodeMode,
+      "elementTypes", "het paneel toont de stand");
+    await klik(scherm([3, 0, 3 + 2 * 2]));
+    gelijk(stand.selectie, { type: "beam", id: 2 }, "ligger 2 getekend op z + 2 stappen");
+    await klik(scherm([3, 0, 3]));
+    gelijk(stand.selectie, null, "op de echte hoogte staat de ligger niet meer");
+    await klik(scherm([6, 0, 3 + 2 * 2]));
+    gelijk(stand.selectie, { type: "node", id: 3 }, "de weergaveknoop aan het liggereind kiest de echte knoop 3");
+    ok(stand.model === original, "rekenmodel blijft hetzelfde object");
+  });
   await test("menu ▾: Section box aan — het vinkje, de modelgrenzen plus marge, alleen tekenen (geen opbouw)", async () => {
     await begin();
     const regels = [...menuEl().querySelectorAll<HTMLElement>("[data-open-fem3d-view-cube-menuitem]")].map((el) => el.dataset.openFem3dViewCubeMenuitem);

@@ -89,18 +89,23 @@
     },
     {
       "name": "app.view3d.explode",
-      "description": "De 3D-weergave per level uiteentrekken, zonder het rekenmodel te veranderen. 0 mm zet de normale weergave terug.",
+      "description": "De 3D-weergave uiteentrekken, zonder het rekenmodel te veranderen: per level (levels) of per elementsoort (elementTypes: opleggingen 0, kolommen 1×, liggers 2× en platen 3× de afstand omhoog). 0 mm zet de normale weergave terug.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "mode": {
-            "const": "levels"
+            "type": "string",
+            "enum": [
+              "levels",
+              "elementTypes"
+            ],
+            "description": "levels: per level; elementTypes: per elementsoort."
           },
           "amountMm": {
             "type": "number",
             "minimum": 0,
             "maximum": 10000,
-            "description": "Afstand per level in mm (0–10000)."
+            "description": "Afstand per stap (level of elementsoort) in mm (0–10000)."
           }
         },
         "required": [

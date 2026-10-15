@@ -1242,7 +1242,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "gui_configure_3d_view",
-            "description": format!("{vooraf}Configures the current 3D workspace: camera, visible objects, how plates are drawn (plateDisplay: volume, surface or mesh), the size of nodes and supports (in % of their automatic size), profile volumes, structural grid (grid axes and levels) and the section box. Structural-grid positions are metres. z_levels are the levels: a level whose label already exists keeps its identity, so nodes and plates linked to it move to its new height; the app refuses a change that would leave a member without length or a plate out of plane, and then nothing changes. The section box is an axis-aligned box in global X/Y/Z (metres) that cuts the model: only what lies inside is drawn, selectable and snappable; it belongs to the view (saved with the visibility and in saved views)."),
+            "description": format!("{vooraf}Configures the current 3D workspace: camera, visible objects, how plates are drawn (plateDisplay: volume, surface or mesh), the size of nodes and supports (in % of their automatic size), profile volumes, structural grid (grid axes and levels), the section box and the exploded view. Structural-grid positions are metres. z_levels are the levels: a level whose label already exists keeps its identity, so nodes and plates linked to it move to its new height; the app refuses a change that would leave a member without length or a plate out of plane, and then nothing changes. The section box is an axis-aligned box in global X/Y/Z (metres) that cuts the model: only what lies inside is drawn, selectable and snappable; it belongs to the view (saved with the visibility and in saved views). The exploded view pulls the drawn model apart along global Z, display only: the model, the calculation and the results do not change; it also belongs to the view."),
             "inputSchema": { "type": "object", "additionalProperties": false,
                 "properties": {
                     "view": { "type": "string", "enum": ["iso","top","front","side"] },
@@ -1275,6 +1275,12 @@ pub fn tool_definitions() -> Vec<Value> {
                             "min_m":{"$ref":"#/$defs/pointM"},
                             "max_m":{"$ref":"#/$defs/pointM"},
                             "fit":{"type":"string","enum":["model","selection"]}
+                        } },
+                    "explode": { "type": "object", "additionalProperties": false,
+                        "description": "Exploded view, display only. mode levels: each level moves up amount_mm times its index (lowest level 0; members between levels stretch). mode elementTypes: supports stay, columns move up 1x, beams 2x and plates 3x amount_mm (a column is a mostly vertical member); every element moves as a whole. amount_mm is the distance per step, 0 to 10000 mm; 0 switches the exploded view off. A missing field keeps its value. While it is on, editing in the app is blocked.",
+                        "properties": {
+                            "mode":{"type":"string","enum":["levels","elementTypes"]},
+                            "amount_mm":{"type":"number","minimum":0,"maximum":10000}
                         } }
                 },
                 "$defs": { "axisList": { "type":"array", "items": { "type":"object", "additionalProperties":false,
@@ -1666,6 +1672,12 @@ mod tests {
         for grens in ["min_m", "max_m"] {
             assert_eq!(doos["properties"][grens]["$ref"], json!("#/$defs/pointM"), "{grens}");
         }
+        // De explode (issue #198): strikt, per level of per elementsoort, afstand in mm (0–10 000).
+        let explode = &view["inputSchema"]["properties"]["explode"];
+        assert_eq!(explode["additionalProperties"], json!(false));
+        assert_eq!(explode["properties"]["mode"]["enum"], json!(["levels", "elementTypes"]));
+        assert_eq!(explode["properties"]["amount_mm"]["minimum"], json!(0));
+        assert_eq!(explode["properties"]["amount_mm"]["maximum"], json!(10000));
         let punt = &view["inputSchema"]["$defs"]["pointM"];
         assert_eq!(punt["additionalProperties"], json!(false));
         assert_eq!(punt["required"], json!(["x", "y", "z"]));

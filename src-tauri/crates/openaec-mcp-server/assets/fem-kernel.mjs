@@ -30225,14 +30225,18 @@ function openFem3DLevelRefusalText(refusal, levels) {
 // src/components/openFem3d/openFem3dExplode.ts
 var DEFAULT_OPEN_FEM_3D_EXPLODE = { mode: "levels", amountM: 0 };
 var MAX_OPEN_FEM_3D_EXPLODE_M = 10;
+function isOpenFem3DExplodeMode(value) {
+  return value === "levels" || value === "elementTypes";
+}
 function normalizeOpenFem3DExplode(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return DEFAULT_OPEN_FEM_3D_EXPLODE;
   const raw = value;
   return {
-    mode: "levels",
+    mode: isOpenFem3DExplodeMode(raw.mode) ? raw.mode : "levels",
     amountM: typeof raw.amountM === "number" && Number.isFinite(raw.amountM) ? Math.max(0, Math.min(MAX_OPEN_FEM_3D_EXPLODE_M, raw.amountM)) : 0
   };
 }
+var OPEN_FEM_3D_EXPLODE_TYPE_STEP = Object.freeze({ support: 0, column: 1, beam: 2, plate: 3 });
 
 // src/components/openFem3d/openFem3dSymbolScale.ts
 var OPEN_FEM_3D_SYMBOL_PERCENT_MIN = 25;
@@ -45093,8 +45097,11 @@ function alleenInApp(naam, beschrijving, invoer = obj({})) {
 var APP_COMMANDOS = [
   alleenInApp(
     "app.view3d.explode",
-    "De 3D-weergave per level uiteentrekken, zonder het rekenmodel te veranderen. 0 mm zet de normale weergave terug.",
-    obj({ mode: { const: "levels" }, amountMm: getal5("Afstand per level in mm (0\u201310000).", { minimum: 0, maximum: 1e4 }) }, ["mode", "amountMm"])
+    "De 3D-weergave uiteentrekken, zonder het rekenmodel te veranderen: per level (levels) of per elementsoort (elementTypes: opleggingen 0, kolommen 1\xD7, liggers 2\xD7 en platen 3\xD7 de afstand omhoog). 0 mm zet de normale weergave terug.",
+    obj({
+      mode: keuze(["levels", "elementTypes"], "levels: per level; elementTypes: per elementsoort."),
+      amountMm: getal5("Afstand per stap (level of elementsoort) in mm (0\u201310000).", { minimum: 0, maximum: 1e4 })
+    }, ["mode", "amountMm"])
   ),
   alleenInApp("app.undo", "De laatste modelwijziging ongedaan maken (zoals Ctrl+Z)."),
   alleenInApp("app.redo", "De ongedaan gemaakte wijziging opnieuw doen (zoals Ctrl+Y)."),

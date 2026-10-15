@@ -53,6 +53,7 @@ import {
 import { normalizeOpenFem3DSymbolPercent } from "../components/openFem3d/openFem3dSymbolScale";
 import { isOpenFem3DPlateDisplay } from "../components/openFem3d/openFem3dPlateDisplay";
 import { DEFAULT_OPEN_FEM_3D_SECTION_BOX, openFem3DSectionBoxUitOpdracht } from "../components/openFem3d/openFem3dSectionBox";
+import { DEFAULT_OPEN_FEM_3D_EXPLODE, openFem3DExplodeFromCommand } from "../components/openFem3d/openFem3dExplode";
 import { analyseOpenFem3DLoadPanels } from "../components/openFem3d/openFem3dLoadPanels";
 import {
   applyOpenFem3DLevels,
@@ -949,6 +950,9 @@ export async function voerUit(
       const sectionBox = args.section_box === undefined ? undefined
         : openFem3DSectionBoxUitOpdracht(args.section_box, a().openFem3d.visibility.sectionBox ?? DEFAULT_OPEN_FEM_3D_SECTION_BOX,
           a().openFem3d.model, a().openFem3d.selection ?? null);
+      // De explode (issue #198), alleen weergave: ook eerst keuren.
+      const explode = args.explode === undefined ? undefined
+        : openFem3DExplodeFromCommand(args.explode, a().openFem3d.visibility.explode ?? DEFAULT_OPEN_FEM_3D_EXPLODE);
       if (args.visibility !== undefined) {
         if (!args.visibility || typeof args.visibility !== "object" || Array.isArray(args.visibility)) {
           throw new Error("`visibility` moet een object zijn");
@@ -987,9 +991,12 @@ export async function voerUit(
           next[key as OpenFem3DVisibilityFlag] = value;
         }
         if (sectionBox) next.sectionBox = sectionBox;
+        if (explode) next.explode = explode;
         a().openFem3d.setVisibility(next);
-      } else if (sectionBox) {
-        a().openFem3d.setVisibility({ ...a().openFem3d.visibility, sectionBox });
+      } else if (sectionBox || explode) {
+        a().openFem3d.setVisibility({
+          ...a().openFem3d.visibility, ...(sectionBox ? { sectionBox } : {}), ...(explode ? { explode } : {}),
+        });
       }
       if (args.structural_grid !== undefined) {
         if (!args.structural_grid || typeof args.structural_grid !== "object" || Array.isArray(args.structural_grid)) {

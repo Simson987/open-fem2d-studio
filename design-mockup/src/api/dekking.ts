@@ -170,6 +170,8 @@ export const LINT_3D: Record<string, Dekking> = {
   // Section box (issue #86): hoort bij de weergave (zichtbaarheid en views); via de
   // MCP-tool gui_configure_3d_view (section_box) in de draaiende app, nog geen API-commando.
   "ribbon:openFem3d.sectionBox": WEERGAVE,
+  // Exploderen: per level of per elementsoort (issue #198, veld mode); ook via
+  // gui_configure_3d_view (explode) in de draaiende app.
   "ribbon:openFem3d.explode": { commando: "app.view3d.explode" },
 };
 

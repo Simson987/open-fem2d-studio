@@ -28,6 +28,7 @@ import { combinationsFromFile } from "../io/projectFile";
 import type { OpenFem3DModel } from "../components/openFem3d/openFem3dModel";
 import type { OpenFem3DExternStap } from "../components/openFem3d/openFem3dHistory";
 import type { OpenFem3DSelection } from "../components/openFem3d/openFem3dSelection";
+import type { OpenFem3DExplode, OpenFem3DExplodeMode } from "../components/openFem3d/openFem3dExplode";
 import type { Load, LoadCase, StructuralGrid } from "../components/fem/femTypes";
 import type { LoadCombination } from "../components/fem/solver/combinations";
 import type { ExtensieKaart } from "../extensies/extensieStore";
@@ -78,7 +79,8 @@ export interface ApiAppActies {
    * ApiAppActies; daar heeft het commando geen app en zet het niets.
    */
   zetSelectie3D(selectie: OpenFem3DSelection): void;
-  zetExplode3D(amountM: number): void;
+  /** De explode in de zichtbaarheid (alleen weergave): per level of per elementsoort, afstand in m per stap. */
+  zetExplode3D(explode: OpenFem3DExplode): void;
 }
 
 export type ApiAntwoord =
@@ -147,8 +149,8 @@ function bewaakNietOpgeslagen(acties: ApiAppActies, invoer: unknown): void {
 /** Het register van de app: de app-commando's met hun echte uitvoering. */
 export function appRegister(acties: ApiAppActies): ApiRegister {
   const echt: Record<string, ApiCommando["uitvoeren"]> = {
-    "app.view3d.explode": (invoer: { mode: "levels"; amountMm: number }) => {
-      acties.zetExplode3D(invoer.amountMm / 1000);
+    "app.view3d.explode": (invoer: { mode: OpenFem3DExplodeMode; amountMm: number }) => {
+      acties.zetExplode3D({ mode: invoer.mode, amountM: invoer.amountMm / 1000 });
       return { uitkomst: { mode: invoer.mode, amountMm: invoer.amountMm } };
     },
     // `done: false` met de reden als er niets te doen was; tot oktober 2026

@@ -1270,6 +1270,14 @@ async fn schema_van_de_belastingvlakken_in_het_3d_model_is_strikt() {
     for grens in ["min_m", "max_m"] {
         assert_eq!(doos["properties"][grens]["$ref"], json!("#/$defs/pointM"), "{grens}");
     }
+    // De explode (issue #198): strikt. Een tikfout als `amount` (in plaats van
+    // `amount_mm`) of een andere modus mag niet stil een standaardwaarde geven.
+    let explode = &weergave["inputSchema"]["properties"]["explode"];
+    assert_eq!(explode["additionalProperties"], json!(false), "{explode}");
+    assert_eq!(explode["properties"]["mode"]["enum"], json!(["levels", "elementTypes"]));
+    assert_eq!(explode["properties"]["amount_mm"]["type"], json!("number"));
+    assert_eq!(explode["properties"]["amount_mm"]["minimum"], json!(0));
+    assert_eq!(explode["properties"]["amount_mm"]["maximum"], json!(10000));
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }

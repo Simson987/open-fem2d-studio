@@ -78,6 +78,7 @@ import {
   openFem3DVisibilityForTool, openFem3DVisibilityZonderSectionBox, readOpenFem3DVisibility, saveOpenFem3DVisibility,
 } from "./components/openFem3d/openFem3dVisibility";
 import { openFem3DSectionBoxSchakel } from "./components/openFem3d/openFem3dSectionBox";
+import { toggleOpenFem3DExplode } from "./components/openFem3d/openFem3dExplode";
 import { readOpenFem3DPlateQuantity, saveOpenFem3DPlateQuantity } from "./components/openFem3d/openFem3dPlateResults";
 import { convert2DTo3D } from "./components/openFem3d/convert2DTo3D";
 import { solveOpenFem3D, solveOpenFem3DCombination, type OpenFem3DSolveResult } from "./components/openFem3d/openFem3dSolver";
@@ -4527,9 +4528,7 @@ function App() {
     heeftNietOpgeslagenWerk: () => isDirtyRef.current,
     // model3d.selection.filter met `select` (issue #94): zoals Toepassen in het venster.
     zetSelectie3D: (selectie) => zetGefilterdeSelectie3D(selectie),
-    zetExplode3D: (amountM) => setOpenFem3dVisibility((visibility) => ({
-      ...visibility, explode: { mode: "levels", amountM },
-    })),
+    zetExplode3D: (explode) => setOpenFem3dVisibility((visibility) => ({ ...visibility, explode })),
   };
 
   /**
@@ -4677,7 +4676,7 @@ function App() {
         openFem3dSectionBox={openFem3dVisibility.sectionBox.enabled}
         openFem3dExploded={openFem3dVisibility.explode.amountM > 0}
         onOpenFem3DExplodeToggle={() => setOpenFem3dVisibility((visibility) => ({
-          ...visibility, explode: { mode: "levels", amountM: visibility.explode.amountM > 0 ? 0 : 2 },
+          ...visibility, explode: toggleOpenFem3DExplode(visibility.explode),
         }))}
         onOpenFem3DSectionBoxToggle={() => setOpenFem3dVisibility((visibility) => ({
           ...visibility, sectionBox: openFem3DSectionBoxSchakel(visibility.sectionBox, openFem3d),

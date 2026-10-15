@@ -45,7 +45,10 @@ import { openFem3DWorkLevel, openFem3DWorkPlaneIsHorizontal, openFem3DWorkPlaneO
 import { openFem3DLevelName } from "./openFem3dLevels";
 import OpenFem3DEnvelopeGridPanel from "./OpenFem3DEnvelopeGridPanel";
 import { addOpenFem3DEnvelopePanelFromGrid } from "./openFem3dEnvelopePanels";
-import { openFem3DExplodedGrid, openFem3DExplodedMesh, openFem3DExplodedModel } from "./openFem3dExplode";
+import {
+  OPEN_FEM_3D_EXPLODE_MODES, isOpenFem3DExplodeMode, openFem3DExplodedGrid, openFem3DExplodedMesh, openFem3DExplodedModel,
+  openFem3DExplodedResult, openFem3DExplodeSourceSelection, type OpenFem3DExplode,
+} from "./openFem3dExplode";
 import { DEFAULT_OPEN_FEM_3D_SECTION_BOX } from "./openFem3dSectionBox";
 import { toonMm } from "../../lib/lengthInput";
 import { openFem3DProfielKleuring, profielKleurenActief3d } from "../../lib/profielKleur";
@@ -201,24 +204,25 @@ export default function OpenFem3DEditor({
     return () => clearTimeout(timer);
   }, [visibility.explode.amountM]);
   const exploded = visibility.explode.amountM > 0 || animatedExplodeAmount > 0;
+  // Per level of per elementsoort (issue #198); de animatie loopt over de afstand.
+  const explodeMode = visibility.explode.mode;
+  const animatedExplode = useMemo<OpenFem3DExplode>(
+    () => ({ mode: explodeMode, amountM: animatedExplodeAmount }), [explodeMode, animatedExplodeAmount]);
   // Een ander gereedschap, een andere selectie, een gewijzigd model of de
   // explodeweergave aan of uit: het bronpunt van kopiëren met punten vervalt.
   useEffect(() => { setCopyAnchor(null); }, [tool, selection, model, exploded]);
   const displayModel = useMemo(
-    () => openFem3DExplodedModel(model, levels, { mode: "levels", amountM: animatedExplodeAmount }),
-    [model, levels, animatedExplodeAmount],
+    () => openFem3DExplodedModel(model, levels, animatedExplode),
+    [model, levels, animatedExplode],
   );
   const displayConditionModel = useMemo(
-    () => calculationModel ? openFem3DExplodedModel(calculationModel, levels, { mode: "levels", amountM: animatedExplodeAmount }) : undefined,
-    [calculationModel, levels, animatedExplodeAmount],
+    () => calculationModel ? openFem3DExplodedModel(calculationModel, levels, animatedExplode) : undefined,
+    [calculationModel, levels, animatedExplode],
   );
-  const displayGrid = useMemo(() => openFem3DExplodedGrid(structuralGrid,
-    { mode: "levels", amountM: animatedExplodeAmount }),
-  [structuralGrid, animatedExplodeAmount]);
-  const displayResult = useMemo(() => result && result.plateMesh && animatedExplodeAmount > 0
-    ? { ...result, plateMesh: openFem3DExplodedMesh(result.plateMesh, model, levels,
-      { mode: "levels", amountM: animatedExplodeAmount })! } : result,
-  [result, model, levels, animatedExplodeAmount]);
+  const displayGrid = useMemo(() => openFem3DExplodedGrid(structuralGrid, animatedExplode),
+    [structuralGrid, animatedExplode]);
+  const displayResult = useMemo(() => openFem3DExplodedResult(result, model, displayModel, levels, animatedExplode),
+    [result, model, displayModel, levels, animatedExplode]);
   // Model: geen belastingen. Resultaten: ook geen ingevoerde belastingen, net
   // als in 2D; dan staan alleen de uitkomsten (vervorming, reacties, M/V/N, UC)
   // in beeld. Belastinggeval: de belastingen met hun labels.
@@ -347,8 +351,8 @@ export default function OpenFem3DEditor({
   const [meshMessage, setMeshMessage] = useState<string | null>(null);
   const needsDisplayMesh = visibility.plateDisplay === "mesh" && visibility.plates && (model.plates ?? []).length > 0 && !result?.plateMesh;
   const displayPlateMesh = useMemo(() => openFem3DExplodedMesh(
-    needsDisplayMesh ? displayMesh : null, model, levels, { mode: "levels", amountM: animatedExplodeAmount }),
-  [needsDisplayMesh, displayMesh, model, levels, animatedExplodeAmount]);
+    needsDisplayMesh ? displayMesh : null, model, levels, animatedExplode),
+  [needsDisplayMesh, displayMesh, model, levels, animatedExplode]);
   useEffect(() => {
     if (!needsDisplayMesh) { setMeshMessage(null); return; }
     let cancelled = false;
@@ -463,7 +467,9 @@ export default function OpenFem3DEditor({
           onDrawError={setDrawError}
           tool={exploded ? "select" : tool}
           selection={selection}
-          onSelect={setSelection}
+          // Per elementsoort staat een knoop ook als weergaveknoop bij een
+          // hogere soort: kiezen daarvan selecteert de echte knoop.
+          onSelect={(next) => setSelection(openFem3DExplodeSourceSelection(next))}
           copyAnchor={copyAnchor}
           // Kopiëren met basispunt en doelpunt; in de explodeweergave liggen de
           // levels uit elkaar, dus geen puntkeuze (net als tekenen).
@@ -499,7 +505,7 @@ export default function OpenFem3DEditor({
           // De section box (issue #86) hoort bij de weergave: in de
           // zichtbaarheid, bewaard en in opgeslagen views.
           onSectionBoxChange={(sectionBox) => setVisibility({ ...visibility, sectionBox })}
-          onExplodeChange={(amountM) => setVisibility({ ...visibility, explode: { mode: "levels", amountM } })}
+          onExplodeChange={(amountM) => setVisibility({ ...visibility, explode: { mode: visibility.explode.mode, amountM } })}
         />
         {/* Kopregel en modelcontrole in één kolom: loopt de uitleg over meer
             regels (smal tekenvlak, lange uitleg, andere taal), dan schuift de
@@ -545,11 +551,22 @@ export default function OpenFem3DEditor({
                 setDrawError(cause instanceof Error ? cause.message : String(cause));
               }
             }} />}
-          <label className="open-fem3d-explode" data-open-fem3d-explode={visibility.explode.amountM}>
+          <label className="open-fem3d-explode" data-open-fem3d-explode={visibility.explode.amountM}
+            data-open-fem3d-explode-mode={visibility.explode.mode}>
             <span>{t("openFem3d.explode")}</span>
+            <select value={visibility.explode.mode} aria-label={t("openFem3d.explodeMode")}
+              title={t(visibility.explode.mode === "levels" ? "openFem3d.explodeLevelsHint" : "openFem3d.explodeElementTypesHint")}
+              onChange={(event) => {
+                const mode = event.target.value;
+                if (isOpenFem3DExplodeMode(mode)) setVisibility({ ...visibility, explode: { ...visibility.explode, mode } });
+              }}>
+              {OPEN_FEM_3D_EXPLODE_MODES.map((mode) => <option key={mode} value={mode}>
+                {t(mode === "levels" ? "openFem3d.explodeLevels" : "openFem3d.explodeElementTypes")}
+              </option>)}
+            </select>
             <input type="range" min="0" max="10000" step="100" value={Math.round(visibility.explode.amountM * 1000)}
-              aria-label={t("openFem3d.explodeAmount")}
-              onChange={(event) => setVisibility({ ...visibility, explode: { mode: "levels", amountM: Number(event.target.value) / 1000 } })} />
+              aria-label={t(visibility.explode.mode === "levels" ? "openFem3d.explodeAmount" : "openFem3d.explodeAmountElementTypes")}
+              onChange={(event) => setVisibility({ ...visibility, explode: { mode: visibility.explode.mode, amountM: Number(event.target.value) / 1000 } })} />
             <output>{Math.round(visibility.explode.amountM * 1000)} mm</output>
           </label>
           <OpenFem3DModelCheck findings={modelControle.findings} skipped={modelControle.skipped}
