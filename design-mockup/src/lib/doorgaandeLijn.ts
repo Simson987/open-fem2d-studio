@@ -47,14 +47,27 @@
  *
  * Een tussenknoop waar een andere staaf aansluit die ergens aan vastzit (een
  * wandstaaf van een vakwerk, een ligger naar een oplegging) deelt de lijn
- * voor de KNIK in vakken. Zonder opgave krijgt de lijn als kniklengte de
- * grootste knoopafstand, om beide assen: in het vlak is dat de systeemlengte
- * tussen de knopen, en loodrecht op het vlak een AANNAME (de aansluiting
- * houdt de lijn ook daar vast, bijvoorbeeld via een gording) die per knoop in
- * het rapport staat, met de lengte van de hele lijn als te geven waarde als
- * de aanname niet klopt. De bovenrand van het vakwerk van de controle (SHS
- * 100×100×5, vakken van 3 m) kreeg zo L_cr = 6000 mm en UC 6.3.1 = 0,842 waar
- * de knoopafstand 3000 mm en UC 0,278 geeft (`test-vakwerk-kniklengte.mjs`).
+ * voor de KNIK IN HET VLAK in vakken: zonder opgave krijgt de lijn als L_cr,y
+ * de grootste knoopafstand, de systeemlengte tussen de knopen. De bovenrand
+ * van het vakwerk van de controle (SHS 100×100×5, vakken van 3 m) kreeg zo
+ * L_cr,y = 3000 mm in plaats van 6000 mm (`test-vakwerk-kniklengte.mjs`).
+ *
+ * LOODRECHT OP HET VLAK (om z) IS ZO'N KNOOP GEEN VAKGRENS (issue #201). Een
+ * aansluiting in het vlak van het raamwerk (een ligger, een wandstaaf) houdt
+ * de lijn loodrecht op dat vlak niet vanzelf vast. Tot #201 kreeg de lijn om z
+ * ook de knoopafstand, als AANNAME in het rapport; voor de vakwerkbovenrand
+ * was dat UC 0,278 waar een rand zonder gordingen 0,842 haalt. Om z telt nu
+ * alleen wat de lijn loodrecht op het vlak vasthoudt en in een vlak model te
+ * zien is:
+ *  - een oplegging: die knipt de lijn al (`collinearContinuations`);
+ *  - een zijdelingse steun die als zodanig is opgegeven: een kipsteun aan de
+ *    boven- ÉN de onderflens op die plaats (een gording, een windverband, een
+ *    vloer). De kern leidt L_cr,z daar zelf uit af, net als bij een losse
+ *    staaf (`lib/kniklengte.ts`).
+ * Een staaf loodrecht op het vlak bestaat in 2D niet. Zonder zo'n steun is
+ * L_cr,z de hele lijn; de notitie per knoop zegt dat, en vraagt om een
+ * kipsteun aan beide flenzen of een opgegeven L_cr,z als de aansluiting de
+ * lijn wél vasthoudt.
  *
  * Voor de KIP en de DOORBUIGING blijft zo'n knoop géén steun en géén gaffel:
  * de kipvelden en de koorde lopen over de hele lijn, en de notitie zegt dat
@@ -102,7 +115,7 @@ import type { Staafeinden } from "./types/steel/Staafeinden";
 // functies, gelezen bij de aanroep — dan zijn beide modules geladen.
 import { beamLengthMm, collinearContinuations } from "./steelCheckBuilder";
 import { spiegelElementKrachten, spiegelFracties } from "./referentierichting";
-import { steunpuntenHeleDoorsnede } from "./kniklengte";
+import { steunpuntenHeleDoorsnede, TOLERANTIE_STEUNPAAR_MM } from "./kniklengte";
 
 /** Eén deel van een doorgaande lijn, in de volgorde van begin naar eind. */
 export interface LijnDeel {
@@ -255,14 +268,16 @@ export interface LijnUitkomst<T extends LijnInvoer> {
   /** De delen die niet onder hun eigen nummer worden getoetst, met reden. */
   overgeslagen: CheckSkip[];
   /**
-   * Per virtuele staaf de kniklengte per vak (KNIK PER VAK), in m, alleen om
-   * de as waarvoor de delen geen kniklengte opgeven. De bouwers zetten haar
-   * in `buckling_length_y_m`/`_z_m` als de staaf zelf geen opgave heeft; zij
-   * telt NIET als opgave van de gebruiker. Zij is nooit langer dan de lijn,
-   * dus de kanttekening van de kern over een opgegeven L_cr,y > L (dubbele
-   * sway) komt er niet door.
+   * Per virtuele staaf de kniklengte per vak IN HET VLAK (KNIK PER VAK), in
+   * m, alleen als de delen geen L_cr,y opgeven. De bouwers zetten haar in
+   * `buckling_length_y_m` als de staaf zelf geen opgave heeft; zij telt NIET
+   * als opgave van de gebruiker. Zij is nooit langer dan de lijn, dus de
+   * kanttekening van de kern over een opgegeven L_cr,y > L (dubbele sway)
+   * komt er niet door. Om z zet deze module niets (issue #201): zonder opgave
+   * leidt de kern L_cr,z af uit de kipsteunen aan beide flenzen van de lijn,
+   * anders de hele lijn.
    */
-  kniklengtes: Map<number, { yM?: number; zM?: number }>;
+  kniklengtes: Map<number, { yM: number }>;
 }
 
 const nl = (v: number, d = 3): string => v.toFixed(d).replace(".", ",");
@@ -671,7 +686,7 @@ export function voegDoorgaandeLijnenSamen<T extends LijnInvoer>(invoer: T): Lijn
   const notities = new Map<number, string[]>();
   const lijnPerId = new Map<number, DoorgaandeLijn>();
   const overgeslagen: CheckSkip[] = [];
-  const kniklengtes = new Map<number, { yM?: number; zM?: number }>();
+  const kniklengtes = new Map<number, { yM: number }>();
   const teToetsen = new Set(invoer.beams.map((b) => b.id));
 
   for (const lijn of lijnen) {
@@ -695,14 +710,15 @@ export function voegDoorgaandeLijnenSamen<T extends LijnInvoer>(invoer: T): Lijn
     // de doorbuiging een toets per deel (veld en overstek).
     const einden = bepaalStaafeinden(beam, invoer.nodes, alleBeams, invoer.supports, new Set(ids), invoer.plates);
     const vak = kniklengteVanVakken(lijn, beam, einden);
-    if (vak.yM !== undefined || vak.zM !== undefined) kniklengtes.set(lijn.id, vak);
+    if (vak.yM !== undefined) kniklengtes.set(lijn.id, { yM: vak.yM });
     const splits = splitsKnoopDoorbuiging(lijn, einden);
     const knikZin = !lijn.knopen.some((k) => k.steunend.length > 0)
       ? "De kniklengte zonder opgave is de hele lijn; "
       : vak.nietToegepast
         ? "De kniklengte zonder opgave volgt hier NIET uit de vakken tussen de knopen, omdat een lijneind vrij " +
           "is of doorloopt (zie KNIK PER VAK NIET TOEGEPAST); "
-        : "De kniklengte zonder opgave volgt uit de vakken tussen de knopen waar andere staven aansluiten (zie KNIK PER VAK); ";
+        : "De kniklengte in het vlak zonder opgave volgt uit de vakken tussen de knopen waar andere staven " +
+          "aansluiten; loodrecht op het vlak niet (zie KNIK PER VAK); ";
     const tekst: string[] = [
       `DOORGAANDE LIJN. Deze staaf is de doorgaande lijn van de staven ${ids.join(", ")} ` +
         `(${beam.profile ?? "—"}, ${beam.material ?? "—"}): zij liggen in elkaars verlengde, hebben ` +
@@ -755,10 +771,17 @@ export function voegDoorgaandeLijnenSamen<T extends LijnInvoer>(invoer: T): Lijn
   };
 }
 
-/** KNIK PER VAK van een lijn: de lengtes per as, of waarom er geen zijn. */
+/** KNIK PER VAK van een lijn: de lengte in het vlak en wat er om z geldt, of waarom er geen zijn. */
 interface VakKnik {
+  /** L_cr,y per vak (m), als de delen geen L_cr,y opgeven. */
   yM?: number;
-  zM?: number;
+  /**
+   * Om z, als de delen geen L_cr,z opgeven en er een vakgrens in het vlak is
+   * (issue #201): wat de kern zonder opgave neemt — de grootste afstand
+   * tussen de kipsteunen aan beide flenzen, of de hele lijn — en of dat uit
+   * de steunen komt. Alleen voor de notitie; de bouwers geven de kern 0.
+   */
+  z?: { lCrM: number; uitSteunen: boolean; steunpuntenMm: number[] };
   /**
    * Er zijn vakgrenzen, maar een lijneind is vrij of loopt door: waarom KNIK
    * PER VAK niet is toegepast (leesbaar, zonder hoofdletter vooraan).
@@ -786,11 +809,14 @@ function eindReden(lijn: DoorgaandeLijn, einden: Staafeinden): string | null {
 }
 
 /**
- * KNIK PER VAK: de grootste knoopafstand tussen de vakgrenzen van de lijn
- * (tussenknopen met een `steunend` aansluiting), per as waarvoor de delen
- * geen kniklengte opgeven. Om z tellen daarbij ook de plaatsen met een
- * kipsteun aan beide flenzen, zoals de kern ze zou afleiden. Leeg zonder
- * vakgrens.
+ * KNIK PER VAK: in het vlak de grootste knoopafstand tussen de vakgrenzen
+ * van de lijn (tussenknopen met een `steunend` aansluiting), als de delen
+ * geen L_cr,y opgeven. Leeg zonder vakgrens.
+ *
+ * Om z is zo'n knoop GEEN vakgrens (issue #201): een aansluiting in het vlak
+ * houdt de lijn loodrecht op het vlak niet vanzelf vast. Zonder opgave neemt
+ * de kern de grootste afstand tussen de plaatsen met een kipsteun aan beide
+ * flenzen, anders de hele lijn; `z` zegt welke, voor de notitie.
  *
  * Alleen tussen twee gaffels: is een lijneind VRIJ of DOORLOPEND, dan geen
  * lengtes maar de reden (`nietToegepast`) — zie de kop van deze module.
@@ -803,17 +829,18 @@ function kniklengteVanVakken(lijn: DoorgaandeLijn, beam: Beam, einden: Staafeind
   if (opgegeven(cfg.bucklingLengthY_m) && opgegeven(cfg.bucklingLengthZ_m)) return {};
   const reden = eindReden(lijn, einden);
   if (reden) return { nietToegepast: reden };
-  const grootsteVeld = (punten: number[]): number => {
-    const alle = [0, ...punten, lijn.lengteMm].sort((a, b) => a - b);
+  const uit: VakKnik = {};
+  if (!opgegeven(cfg.bucklingLengthY_m)) {
+    const alle = [0, ...grenzen, lijn.lengteMm].sort((a, b) => a - b);
     let max = 0;
     for (let i = 1; i < alle.length; i++) max = Math.max(max, alle[i] - alle[i - 1]);
-    return max;
-  };
-  const uit: VakKnik = {};
-  if (!opgegeven(cfg.bucklingLengthY_m)) uit.yM = grootsteVeld(grenzen) / 1000;
+    uit.yM = max / 1000;
+  }
   if (!opgegeven(cfg.bucklingLengthZ_m)) {
     const flenzen = steunpuntenHeleDoorsnede(lijn.lengteMm, cfg.lateralRestraints, cfg.lateralRestraintsBottom);
-    uit.zM = grootsteVeld([...grenzen, ...flenzen.steunpuntenMm]) / 1000;
+    uit.z = flenzen.lCrMm !== null
+      ? { lCrM: flenzen.lCrMm / 1000, uitSteunen: true, steunpuntenMm: flenzen.steunpuntenMm }
+      : { lCrM: lijn.lengteMm / 1000, uitSteunen: false, steunpuntenMm: [] };
   }
   return uit;
 }
@@ -842,9 +869,9 @@ function splitsKnoopDoorbuiging(lijn: DoorgaandeLijn, einden: Staafeinden): Tuss
 function knoopNotities(lijn: DoorgaandeLijn, vak: VakKnik, splits: Tussenknoop | undefined): string[] {
   const uit: string[] = [];
   const vakknopen = lijn.knopen.filter((k) => k.steunend.length > 0);
-  const perVak = vak.yM !== undefined || vak.zM !== undefined;
+  const perVak = vak.yM !== undefined || vak.z !== undefined;
   const knikZin = perVak
-    ? "Voor de knik is de knoop een vakgrens (zie KNIK PER VAK)."
+    ? "Voor de knik in het vlak is de knoop een vakgrens; loodrecht op het vlak niet (zie KNIK PER VAK)."
     : vak.nietToegepast
       ? "Voor de knik is de knoop hier GEEN vakgrens, omdat een lijneind vrij is of doorloopt (zie KNIK PER VAK NIET TOEGEPAST)."
       : "Voor de knik is de knoop een vakgrens; de opgegeven kniklengte gaat voor.";
@@ -876,29 +903,49 @@ function knoopNotities(lijn: DoorgaandeLijn, vak: VakKnik, splits: Tussenknoop |
     const grenzen = [0, ...vakknopen.map((k) => k.xMm), lijn.lengteMm];
     const vakken = grenzen.slice(1).map((x, i) => nl((x - grenzen[i]) / 1000));
     const knopen = vakknopen.map((k) => k.knoop).join(", ");
-    const delen: string[] = [];
+    const zinnen: string[] = [];
     if (vak.yM !== undefined) {
-      delen.push(
-        `om de y-as (in het vlak) L_cr,y = ${nl(vak.yM)} m: de knoopafstand als systeemlengte — de ` +
-          "verplaatsing van de knopen zelf zit in de krachten (tweede orde) of is bij α_cr ≥ 10 te verwaarlozen",
+      zinnen.push(
+        `Om de y-as (in het vlak) is zonder opgave de grootste knoopafstand aangehouden: L_cr,y = ${nl(vak.yM)} m, ` +
+          "de systeemlengte — de verplaatsing van de knopen zelf zit in de krachten (tweede orde) of is bij " +
+          "α_cr ≥ 10 te verwaarlozen. In de kniktoets staat deze kniklengte als opgegeven: de toetsing heeft " +
+          "haar gezet, niet de gebruiker.",
       );
+    } else {
+      zinnen.push("Om de y-as (in het vlak) gaat de opgegeven L_cr,y voor.");
     }
-    if (vak.zM !== undefined) {
-      delen.push(
-        `om de z-as (loodrecht op het vlak) L_cr,z = ${nl(vak.zM)} m. Dat laatste is een AANNAME: dat de ` +
-          `aansluiting op knoop ${knopen} de lijn ook loodrecht op het vlak vasthoudt (een gording, een ` +
-          "windverband, een vloer). Een vlak model kan dat niet weten. Geldt het niet, geef dan voor deze " +
-          `staaf L_cr,z op; over de hele lijn is dat ${nl(lijn.lengteMm / 1000)} m`,
+    if (vak.z) {
+      // Een vakknoop met een kipsteun aan beide flenzen op dezelfde plaats is
+      // als zijdelingse steun opgegeven: daar is de lijn ook om z gesteund.
+      const z = vak.z;
+      const gesteund = vakknopen.filter((k) => z.steunpuntenMm.some((x) => Math.abs(x - k.xMm) <= TOLERANTIE_STEUNPAAR_MM));
+      const los = vakknopen.filter((k) => !gesteund.includes(k)).map((k) => k.knoop).join(", ");
+      if (los) {
+        zinnen.push(
+          `Om de z-as (loodrecht op het vlak) is knoop ${los} GEEN vakgrens: een aansluiting in het vlak ` +
+            "(een ligger, een wandstaaf) houdt de lijn loodrecht op het vlak niet vanzelf vast. Houdt zij de " +
+            "lijn daar wél vast (een gording, een windverband, een vloer), geef dan op die plaats een kipsteun " +
+            "aan beide flenzen op, of geef L_cr,z op.",
+        );
+      }
+      if (gesteund.length > 0) {
+        zinnen.push(
+          `Op knoop ${gesteund.map((k) => k.knoop).join(", ")} staat een kipsteun aan beide flenzen: daar is de ` +
+            "lijn als zijdelings gesteund opgegeven, ook voor de knik om de z-as.",
+        );
+      }
+      zinnen.push(
+        `Zonder opgave rekent de kern om de z-as met L_cr,z = ${nl(z.lCrM)} m, ` +
+          (z.uitSteunen
+            ? "de grootste afstand tussen de kipsteunen aan beide flenzen."
+            : "de hele lijn: er is geen kipsteun aan beide flenzen opgegeven."),
       );
+    } else {
+      zinnen.push("Om de z-as (loodrecht op het vlak) gaat de opgegeven L_cr,z voor.");
     }
     uit.push(
-      `KNIK PER VAK. Op knoop ${knopen} sluiten staven aan die de lijn vasthouden; zij delen haar in ` +
-        `vakken van ${vakken.join(" · ")} m. Zonder opgegeven kniklengte is de grootste knoopafstand ` +
-        `aangehouden: ${delen.join("; ")}. In de kniktoets ` +
-        (delen.length > 1
-          ? "staan deze kniklengtes als opgegeven: de toetsing heeft ze gezet, niet de gebruiker. "
-          : "staat deze kniklengte als opgegeven: de toetsing heeft haar gezet, niet de gebruiker. ") +
-        "De kip en de doorbuiging lopen over de hele lijn.",
+      `KNIK PER VAK. Op knoop ${knopen} sluiten staven aan die de lijn in het vlak vasthouden; zij delen haar ` +
+        `in vakken van ${vakken.join(" · ")} m. ${zinnen.join(" ")} De kip en de doorbuiging lopen over de hele lijn.`,
     );
   }
   if (vakknopen.length > 0 && vak.nietToegepast) {
@@ -919,7 +966,7 @@ function knoopNotities(lijn: DoorgaandeLijn, vak: VakKnik, splits: Tussenknoop |
       // Een vakgrens: de aansluiting houdt de knoop vast, de vrijgave of veer
       // zit in de krachten en verandert aan de knik per vak niets.
       const knik = perVak
-        ? "voor de knik is de knoop een vakgrens door de aansluiting daar"
+        ? "voor de knik in het vlak is de knoop een vakgrens door de aansluiting daar, loodrecht op het vlak niet"
         : vak.nietToegepast
           ? "voor de knik is de knoop hier geen vakgrens (zie KNIK PER VAK NIET TOEGEPAST)"
           : "voor de knik gaat de opgegeven kniklengte voor";

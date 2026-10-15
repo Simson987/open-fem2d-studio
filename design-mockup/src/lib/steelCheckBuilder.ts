@@ -1588,10 +1588,13 @@ export function buildSteelCheckInputs(ruweData: SteelBuildData): SteelBuildResul
       // staaflengte — en zet de herkomst in de toets 6.3.1. Hier stond tot
       // september 2026 `?? lengthMm / 1000`: de toets kon een terugval dan niet
       // van een opgave onderscheiden, en het rapport zweeg erover.
-      // Bij een doorgaande lijn zonder opgave: de kniklengte per vak (KNIK PER
-      // VAK in `lib/doorgaandeLijn.ts`), met de aanname in `staaf_notities`.
+      // Bij een doorgaande lijn zonder opgave: in het vlak de kniklengte per
+      // vak (KNIK PER VAK in `lib/doorgaandeLijn.ts`). Om z niet: een
+      // aansluiting in het vlak houdt de lijn loodrecht op het vlak niet
+      // vanzelf vast (issue #201); de kern neemt de kipsteunen aan beide
+      // flenzen of de hele lijn, met de uitleg in `staaf_notities`.
       buckling_length_y_m: cfg.bucklingLengthY_m ?? lijn.kniklengtes.get(beam.id)?.yM ?? 0,
-      buckling_length_z_m: cfg.bucklingLengthZ_m ?? lijn.kniklengtes.get(beam.id)?.zM ?? 0,
+      buckling_length_z_m: cfg.bucklingLengthZ_m ?? 0,
       // Welke doorbuigingseis hier geldt, met welke verplaatsing en welke
       // grens — zie `bepaalDoorbuigingsInvoer`. Een overwegend verticale staaf
       // krijgt de zijdelingse eis van A1.4.3(7) in plaats van een vloereis.

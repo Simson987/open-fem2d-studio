@@ -1124,10 +1124,13 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
       // drukterm van de kiptoets: om y de staaflengte, om z de grootste
       // afstand tussen plaatsen met een steun aan de boven- ÉN onderrand
       // (`lateral_bracing` hieronder), anders de staaflengte.
-      // Bij een doorgaande lijn zonder opgave: de kniklengte per vak (KNIK PER
-      // VAK in `lib/doorgaandeLijn.ts`), met de aanname in `staaf_notities`.
+      // Bij een doorgaande lijn zonder opgave: in het vlak de kniklengte per
+      // vak (KNIK PER VAK in `lib/doorgaandeLijn.ts`). Om z niet: een
+      // aansluiting in het vlak houdt de lijn loodrecht op het vlak niet
+      // vanzelf vast (issue #201); de kern neemt de kipsteunen aan beide
+      // flenzen of de hele lijn, met de uitleg in `staaf_notities`.
       buckling_length_y_m: cfg.bucklingLengthY_m ?? lijn.kniklengtes.get(beam.id)?.yM ?? 0,
-      buckling_length_z_m: cfg.bucklingLengthZ_m ?? lijn.kniklengtes.get(beam.id)?.zM ?? 0,
+      buckling_length_z_m: cfg.bucklingLengthZ_m ?? 0,
       ruimtelijk: false,
       // Een vrij staafeind (uitkraging, vrijstaande kolom): zonder opgegeven
       // kniklengte rekent de kern dan met 2·L, niet met de staaflengte. Tot
