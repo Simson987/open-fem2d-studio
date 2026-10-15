@@ -1219,6 +1219,16 @@
     }
   },
   "tree": {
+    "layers": "Ebenen",
+    "layerAdd": "Neue Ebene",
+    "layerNew": "Ebene {{id}}",
+    "layerSave": "Speichern",
+    "layerName": "Name der Ebene {{id}}",
+    "layerColor": "Farbe der Ebene {{name}}",
+    "layerSelect": "Objekte auf Ebene {{name}} auswählen",
+    "layerSelectShort": "Wählen",
+    "layerAssign": "Auswahl auf Ebene {{name}} verschieben",
+    "layerAssignShort": "Zuordnen",
     "selectAll": "Alle auswählen",
     "showNext": "Nächste {{count}} anzeigen",
     "runToSeeResults": "Führen Sie \"Berechnen\" aus, um Ergebnisse zu sehen.",

@@ -1219,6 +1219,16 @@
     }
   },
   "tree": {
+    "layers": "Layers",
+    "layerAdd": "New layer",
+    "layerNew": "Layer {{id}}",
+    "layerSave": "Save",
+    "layerName": "Name of layer {{id}}",
+    "layerColor": "Color of layer {{name}}",
+    "layerSelect": "Select objects on layer {{name}}",
+    "layerSelectShort": "Select",
+    "layerAssign": "Move selection to layer {{name}}",
+    "layerAssignShort": "Move",
     "selectAll": "Select all",
     "showNext": "Show next {{count}}",
     "runToSeeResults": "Run \"Solve\" to see results.",

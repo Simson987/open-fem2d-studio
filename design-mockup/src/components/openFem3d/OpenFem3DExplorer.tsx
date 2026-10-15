@@ -1,4 +1,4 @@
-import { Children, useState, type Dispatch, type SetStateAction } from "react";
+import { Children, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import OpenFem3DViewsTab, { type OpenFem3DViewsTabProps } from "./OpenFem3DViewsTab";
 import { useTranslation } from "react-i18next";
 import ExplorerViewTab from "../fem/ExplorerViewTab";
@@ -7,6 +7,8 @@ import type { StructuralGrid } from "../fem/femTypes";
 import type { LoadCombination } from "../fem/solver/combinations";
 import { openFem3DSelectionContains, toggleOpenFem3DSelection, type OpenFem3DSelection, type OpenFem3DSingleSelection } from "./openFem3dSelection";
 import { openFem3DSupportPresetOf, type OpenFem3DModel } from "./openFem3dModel";
+import { OPEN_FEM_3D_DEFAULT_LAYER, addOpenFem3DLayer, assignOpenFem3DSelectionToLayer,
+  openFem3DSelectionForLayer, updateOpenFem3DLayer, type OpenFem3DLayer } from "./openFem3dLayers";
 import { openFem3DMemberLoadSummary } from "./OpenFem3DMemberLoads";
 import { removeOpenFem3DDiaphragm } from "./openFem3dTrekSchijf";
 import type { OpenFem3DSolveResult } from "./openFem3dSolver";
@@ -37,6 +39,7 @@ import {
   type OpenFem3DDiagramLabels,
 } from "./openFem3dDiagramLabels";
 import "../fem/FemProjectTree.css";
+import "./OpenFem3DLayers.css";
 import { openFem3DProfielTekst } from "./openFem3dVerloop";
 
 interface Props {
@@ -162,6 +165,43 @@ function Leaf({ label, value, active, onClick }: { label: string; value?: string
   return <button type="button" className={`fem-tree-leaf clickable${active ? " active" : ""}`} onClick={onClick}>
     <span className="fem-tree-leaf-label">{label}</span>{value && <span className="fem-tree-leaf-value">{value}</span>}
   </button>;
+}
+
+function LayerRow({ layer, model, selection, onChange, onSelect }: {
+  layer: OpenFem3DLayer; model: OpenFem3DModel; selection: OpenFem3DSelection;
+  onChange?: (model: OpenFem3DModel) => void;
+  onSelect: (selection: OpenFem3DSelection) => void;
+}) {
+  const { t } = useTranslation("common");
+  const [draft, setDraft] = useState(layer.name);
+  const [colorDraft, setColorDraft] = useState(layer.color);
+  const [error, setError] = useState("");
+  useEffect(() => setDraft(layer.name), [layer.name]);
+  useEffect(() => setColorDraft(layer.color), [layer.color]);
+  const changed = draft.trim() !== layer.name || colorDraft !== layer.color;
+  const save = () => {
+    if (!changed) return;
+    try {
+      onChange?.(updateOpenFem3DLayer(model, layer.id, { name: draft, color: colorDraft }));
+      setError("");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+  };
+  return <div className="open-fem3d-layer-row" data-layer-id={layer.id}>
+    <input type="color" value={colorDraft} disabled={!onChange}
+      aria-label={t("tree.layerColor", { name: layer.name })}
+      onChange={(event) => setColorDraft(event.target.value)} />
+    <input type="text" value={draft} disabled={!onChange}
+      aria-label={t("tree.layerName", { id: layer.id })}
+      onChange={(event) => setDraft(event.target.value)}
+      onKeyDown={(event) => { if (event.key === "Enter") save(); }} />
+    {changed && <button type="button" onClick={save}>{t("tree.layerSave")}</button>}
+    <button type="button" disabled={changed} onClick={() => onSelect(openFem3DSelectionForLayer(model, layer.id))}
+      title={t("tree.layerSelect", { name: layer.name })}>{t("tree.layerSelectShort")}</button>
+    <button type="button" disabled={!onChange || !selection || layer.locked || changed}
+      onClick={() => onChange?.(assignOpenFem3DSelectionToLayer(model, selection, layer.id))}
+      title={t("tree.layerAssign", { name: layer.name })}>{t("tree.layerAssignShort")}</button>
+    {error && <span className="open-fem3d-layer-error" role="alert">{error}</span>}
+  </div>;
 }
 
 /**
@@ -295,6 +335,7 @@ export default function OpenFem3DExplorer(props: Props) {
     props.setSelection(toggleOpenFem3DSelection(props.selection, item, event.shiftKey || event.ctrlKey || event.metaKey));
   // Het sub-blok Waarden staat onder de eerste aangevinkte snedekrachtlijn.
   const firstForceLayer = openFem3DFirstActiveForceLayer(props.visibility);
+  const layerChange = (props.visibility.explode?.amountM ?? 0) > 0 ? undefined : props.onChange;
 
   return <div className="fem-project-tree" data-open-fem3d-explorer>
     <div className={`fem-tree-tabs${props.views ? " open-fem3d-vier-tabs" : ""}`}>
@@ -307,6 +348,19 @@ export default function OpenFem3DExplorer(props: Props) {
     <div className="fem-tree-body">
       {toon === "views" && props.views && <OpenFem3DViewsTab {...props.views} />}
       {toon === "project" && <>
+        <Branch label={t("tree.layers")} count={(props.model.layers ?? [OPEN_FEM_3D_DEFAULT_LAYER]).length}
+          showNextLabel={(count) => t("tree.showNext", { count })}
+          action={layerChange ? { label: t("tree.layerAdd"), onClick: () => {
+            const layers = props.model.layers ?? [OPEN_FEM_3D_DEFAULT_LAYER];
+            const names = new Set(layers.map((layer) => layer.name.toLocaleLowerCase()));
+            let id = Math.max(...layers.map((layer) => layer.id)) + 1;
+            while (names.has(t("tree.layerNew", { id }).toLocaleLowerCase())) id += 1;
+            layerChange(addOpenFem3DLayer(props.model, t("tree.layerNew", { id })));
+          } } : undefined}>
+          {(props.model.layers ?? [OPEN_FEM_3D_DEFAULT_LAYER]).map((layer) => <LayerRow key={layer.id}
+            layer={layer} model={props.model} selection={props.selection}
+            onChange={layerChange} onSelect={props.setSelection} />)}
+        </Branch>
         <ItemBranch label={t("tree.nodes")} items={props.model.nodes}
           showNextLabel={(count) => t("tree.showNext", { count })} renderItem={(node) =>
           <Leaf key={node.id} label={t("tree.nodeLabel", { id: node.id })}

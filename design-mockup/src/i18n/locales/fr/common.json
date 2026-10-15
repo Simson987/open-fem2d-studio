@@ -1219,6 +1219,16 @@
     }
   },
   "tree": {
+    "layers": "Calques",
+    "layerAdd": "Nouveau calque",
+    "layerNew": "Calque {{id}}",
+    "layerSave": "Enregistrer",
+    "layerName": "Nom du calque {{id}}",
+    "layerColor": "Couleur du calque {{name}}",
+    "layerSelect": "Sélectionner les objets du calque {{name}}",
+    "layerSelectShort": "Choisir",
+    "layerAssign": "Déplacer la sélection vers le calque {{name}}",
+    "layerAssignShort": "Placer",
     "selectAll": "Tout sélectionner",
     "showNext": "Afficher les {{count}} suivants",
     "runToSeeResults": "Lancez « Calculer » pour voir les résultats.",

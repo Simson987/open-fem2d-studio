@@ -1219,6 +1219,16 @@
     }
   },
   "tree": {
+    "layers": "Lagen",
+    "layerAdd": "Nieuwe laag",
+    "layerNew": "Laag {{id}}",
+    "layerSave": "Bewaar",
+    "layerName": "Naam van laag {{id}}",
+    "layerColor": "Kleur van laag {{name}}",
+    "layerSelect": "Selecteer objecten op laag {{name}}",
+    "layerSelectShort": "Kies",
+    "layerAssign": "Plaats selectie op laag {{name}}",
+    "layerAssignShort": "Plaats",
     "selectAll": "Alle selecteren",
     "showNext": "Toon volgende {{count}}",
     "runToSeeResults": "Voer \"Berekenen\" uit om resultaten te zien.",
