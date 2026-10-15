@@ -34726,7 +34726,15 @@ function buildOpenFem3DTimberCheckInputs(model, result, combinationSet) {
         const solved = combinationSet.results.get(c.id);
         return solved ? -openFem3DMemberFieldDeflectionMm(model, beam, solved, inklemming) : null;
       }
-    }) : { mm: 0, notes: ["Geen combinatieset: w\u2081 is als nul genomen."] };
+    }) : { mm: 0, combo: null, notes: ["Geen combinatieset: w\u2081 is als nul genomen."] };
+    const instCombinaties = characteristic.length ? characteristic : sls;
+    const blijvendResultaat = permanent.combo ? combinationSet?.results.get(permanent.combo.id) : void 0;
+    const w3Verandering = blijvendResultaat && instCombinaties.length > 0 ? instCombinaties.reduce((maximum, c) => {
+      const solved = combinationSet?.results.get(c.id);
+      return solved ? Math.max(maximum, openFem3DMemberFieldChangeMm(model, beam, solved, blijvendResultaat, inklemming)) : maximum;
+    }, 0) : null;
+    const w3Kern = Math.abs(-inst - permanent.mm);
+    const w3Apart = w3Verandering !== null && Math.abs(w3Verandering - w3Kern) > 1e-6 ? -w3Verandering : void 0;
     const deflectionNotes = [
       ...notes,
       ...permanent.notes,
@@ -34734,7 +34742,8 @@ function buildOpenFem3DTimberCheckInputs(model, result, combinationSet) {
         openFem3DUitkragingNotitie(inklemming) + (vrijEindZonderKlasse ? ` Dus w_fin tegen L/${String(Math.round(limits.fin * 1e3) / 1e3).replace(".", ",")} en w_add tegen L/${String(Math.round(limits.add * 1e3) / 1e3).replace(".", ",")} op de staaflengte.` : "")
       ] : [],
       ...characteristic.length ? [] : ["Karakteristieke BGT-combinatie ontbreekt: w_inst is uit de beschikbare BGT-omhullende genomen."],
-      ...quasi.length ? [] : ["Quasi-blijvende BGT-combinatie ontbreekt: w_qp = w_inst is veilig-zijdig aangehouden."]
+      ...quasi.length ? [] : ["Quasi-blijvende BGT-combinatie ontbreekt: w_qp = w_inst is veilig-zijdig aangehouden."],
+      ...w3Apart !== void 0 ? [`w\u2083 = w_c \u2212 w\u2081 = ${Math.abs(w3Apart).toFixed(2).replace(".", ",")} mm (omlaag) is de grootste verandering van het vervormingsveld ten opzichte van de blijvende combinatie "${permanent.combo?.name ?? "\u2014"}" (w\u2082 + w\u2083 = w_tot \u2212 w\u2081, figuur NB.1), niet |w_inst| \u2212 |w\u2081| = ${w3Kern.toFixed(2).replace(".", ",")} mm; de kern rekent w_add = w\u2082 + w\u2083.`] : []
     ];
     inputs.push({
       bijlage: "NL",
@@ -34773,6 +34782,7 @@ function buildOpenFem3DTimberCheckInputs(model, result, combinationSet) {
       deflection_inst_mm: -inst,
       deflection_quasi_perm_mm: -qp,
       deflection_permanent_mm: permanent.mm,
+      ...w3Apart !== void 0 ? { deflection_add_mm: w3Apart } : {},
       ...deflectionReason ? { deflection_not_applicable_reason: deflectionReason } : {},
       deflection_limit_fin: limits.fin,
       deflection_limit_add: limits.add,

@@ -517,6 +517,7 @@ const ALLEEN_BRON = new Map([
   ["bediening-samenvatting", "#203: de samenvatting van het bedieningskanaal (src/bediening) hoort bij de draaiende app en staat niet in de barrel; het veldmaximum zelf (veldExtremen) loopt in de bundelstand mee via test-veldmaximum"],
   ["vrij-eind-tweede-orde", "vrij staafeind, 2·L of L bij P-Δ met scheefstand: de 3D-houtbouwer (openFem3dTimberCheck) en de taalbestanden met de uitleg in het 3D-eigenschappenpaneel staan buiten de barrel; de MCP-weg (check_fem_model) rekent in deze test al met de bundel, via de MCP-server"],
   ["niet-getoetst-weergave", "B7: de weergave van een niet getoetste staaf zit in het HTML-rapport, de React-panelen en het 3D-rapport; die staan buiten de headless sidecarbundel (de MCP-kant toetst drie_wegen_controle_2026_10.rs)"],
+  ["hout-w-add", "issue #200, w_add = w₂ + w₃ per BGT-combinatie bij hout: de 3D-houtbouwer (openFem3dTimberCheck, openFem3dDisplacement) staat buiten de barrel; de 2D-bouwer en de MCP-weg (check_fem_model, via de MCP-server en dus de bundel) lopen in deze test al mee"],
   ["controle-2026-10-3d", "K5 in 3D: de houttoets en de verplaatsingsstations van de 3D-staaf (openFem3dTimberCheck, openFem3dDisplacement) staan buiten de barrel; de staaltoets in 3D en de 2D-bouwers lopen in de bundelstand mee via test-controle-2026-10"],
   ["open-fem3d-nbc2025-transfer", "de 3D-overdrachtsproef start de afzonderlijke Rust-kern"],
   ["wind-zone-report-2d", "React-rapportweergave en projectbestandsopslag staan buiten de headless sidecarbundel"],

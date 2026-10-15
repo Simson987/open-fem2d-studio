@@ -12,7 +12,7 @@ import type { LtbLoadCase } from "../../lib/types/timber/LtbLoadCase";
 import { combinatiesVanSoort, zonderBgtEindtoestand } from "../fem/solver/combinations";
 import type { OpenFem3DModel } from "./openFem3dModel";
 import type { OpenFem3DSolveResult } from "./openFem3dSolver";
-import { openFem3DMemberFieldDeflectionMm } from "./openFem3dDisplacement";
+import { openFem3DMemberFieldChangeMm, openFem3DMemberFieldDeflectionMm } from "./openFem3dDisplacement";
 import { openFem3DEinden, openFem3DUitkragingNotitie, type OpenFem3DEinden } from "./openFem3dUitkraging";
 import { openFem3DForceStations } from "./openFem3dForceStations";
 import type { OpenFem3DCheckSkip, OpenFem3DCombinationSet } from "./openFem3dSteelCheck";
@@ -211,7 +211,28 @@ export function buildOpenFem3DTimberCheckInputs(
         const solved = combinationSet.results.get(c.id);
         return solved ? -openFem3DMemberFieldDeflectionMm(model, beam, solved, inklemming) : null;
       },
-    }) : { mm: 0, notes: ["Geen combinatieset: w₁ is als nul genomen."] };
+    }) : { mm: 0, combo: null, notes: ["Geen combinatieset: w₁ is als nul genomen."] };
+    // w₃ = w_c − w₁ per BGT-combinatie (issue #200), zoals de 3D-staaltoets: de
+    // grootste VERANDERING van het vervormingsveld ten opzichte van de blijvende
+    // combinatie, niet |w| − |w₁|. De 3D-maat is een grootte zonder teken; bij
+    // een uitkraging die onder de blijvende last omhoog en onder de veranderlijke
+    // omlaag gaat, viel de verandering daarin weg. Over dezelfde combinaties als
+    // w_inst. De kern rekent dan w_add = w₂ + w₃; het kruipdeel w₂ = k_def·w_qp
+    // heeft hier hetzelfde teken (omlaag), dus de grootste verandering geeft ook
+    // de grootste |w₂ + w₃|. Alleen apart naar de kern als het verschilt van wat
+    // de kern uit w_inst − w₁ zou halen.
+    const instCombinaties = characteristic.length ? characteristic : sls;
+    const blijvendResultaat = permanent.combo ? combinationSet?.results.get(permanent.combo.id) : undefined;
+    const w3Verandering = blijvendResultaat && instCombinaties.length > 0
+      ? instCombinaties.reduce((maximum, c) => {
+        const solved = combinationSet?.results.get(c.id);
+        return solved
+          ? Math.max(maximum, openFem3DMemberFieldChangeMm(model, beam, solved, blijvendResultaat, inklemming))
+          : maximum;
+      }, 0)
+      : null;
+    const w3Kern = Math.abs(-inst - permanent.mm);
+    const w3Apart = w3Verandering !== null && Math.abs(w3Verandering - w3Kern) > 1e-6 ? -w3Verandering : undefined;
     const deflectionNotes = [
       ...notes, ...permanent.notes,
       ...(inklemming ? [
@@ -220,6 +241,9 @@ export function buildOpenFem3DTimberCheckInputs(
       ] : []),
       ...(characteristic.length ? [] : ["Karakteristieke BGT-combinatie ontbreekt: w_inst is uit de beschikbare BGT-omhullende genomen."]),
       ...(quasi.length ? [] : ["Quasi-blijvende BGT-combinatie ontbreekt: w_qp = w_inst is veilig-zijdig aangehouden."]),
+      ...(w3Apart !== undefined
+        ? [`w₃ = w_c − w₁ = ${Math.abs(w3Apart).toFixed(2).replace(".", ",")} mm (omlaag) is de grootste verandering van het vervormingsveld ten opzichte van de blijvende combinatie "${permanent.combo?.name ?? "—"}" (w₂ + w₃ = w_tot − w₁, figuur NB.1), niet |w_inst| − |w₁| = ${w3Kern.toFixed(2).replace(".", ",")} mm; de kern rekent w_add = w₂ + w₃.`]
+        : []),
     ];
     inputs.push({
       bijlage: "NL", beam_id: beam.id, width_mm: b, height_mm: h,
@@ -255,6 +279,7 @@ export function buildOpenFem3DTimberCheckInputs(
       deflection_inst_mm: -inst,
       deflection_quasi_perm_mm: -qp,
       deflection_permanent_mm: permanent.mm,
+      ...(w3Apart !== undefined ? { deflection_add_mm: w3Apart } : {}),
       ...(deflectionReason ? { deflection_not_applicable_reason: deflectionReason } : {}),
       deflection_limit_fin: limits.fin,
       deflection_limit_add: limits.add,

@@ -944,6 +944,8 @@ async fn schema_van_de_houttools_is_strikt_op_elk_niveau() {
     );
     // Issue #253: de schuine rand voor 6.4.2 is voor een client op te geven.
     assert_eq!(staaf["properties"]["schuine_rand"]["enum"], json!(["Boven", "Onder", "Beide"]));
+    // Issue #200: w₃ per BGT-combinatie is voor een client op te geven.
+    assert!(staaf["properties"]["deflection_add_mm"].is_object(), "deflection_add_mm ontbreekt");
     // Issue #23: de langeduurzakking van 2.2.3(4) is voor een client op te geven.
     assert!(
         staaf["properties"]["deflection_quasi_perm_fin_mm"].is_object(),
