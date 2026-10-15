@@ -942,6 +942,13 @@ async fn schema_van_de_houttools_is_strikt_op_elk_niveau() {
          + ruimtelijk + deflection_not_applicable_reason + deflection_add_mm + pre_camber_mm + staafeinden);
          de spiegeltest in timber_tools.rs leest de velden uit het type zelf (issue #210)"
     );
+    // Issue #206: zonder deze twee kon een client een staaf niet als deel van
+    // een 3D-raamwerk toetsen.
+    assert!(staaf["properties"]["ruimtelijk"].is_object(), "ruimtelijk ontbreekt");
+    assert!(
+        staaf["properties"]["deflection_not_applicable_reason"].is_object(),
+        "deflection_not_applicable_reason ontbreekt"
+    );
     // Issue #205: de staafeinden, met het doorlopende eind.
     assert_eq!(
         staaf["properties"]["staafeinden"]["properties"]["eind"]["enum"],
@@ -1010,6 +1017,40 @@ async fn geldige_hout_en_cltinvoer_wordt_gewoon_getoetst() {
             "{tool}: er is geen enkele toets uitgevoerd"
         );
     }
+
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+/// Issue #206: `ruimtelijk` en `deflection_not_applicable_reason` zijn langs
+/// de MCP-weg op te geven en doen wat het schema belooft: de staaf rekent als
+/// deel van een 3D-raamwerk, en de doorbuiging wordt met de reden niet
+/// getoetst terwijl de sterktetoetsen doorlopen.
+#[tokio::test]
+async fn ruimtelijk_en_bgt_reden_gaan_door_check_timber_beams() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+
+    let mut invoer = geldige_houtinvoer();
+    invoer["ruimtelijk"] = json!(true);
+    invoer["deflection_not_applicable_reason"] = json!("quasi-blijvende BGT-combinatie ontbreekt (testreden)");
+    let result =
+        roep_tool_aan(&mut stdin, &mut reader, 60, "check_timber_beams", json!({ "inputs": [invoer] })).await;
+    assert_eq!(result["isError"], false, "geldige invoer moet rekenen, kreeg: {}", foutmelding(&result));
+    let checks = result["structuredContent"]["results"][0]["checks"].as_array().expect("checks");
+    let toets = |id: &str| checks.iter().find(|c| c["id"] == id).unwrap_or_else(|| panic!("{id} ontbreekt"));
+    for id in ["deflection_w_fin", "deflection_w_add"] {
+        let data = &toets(id)["kind"]["data"];
+        assert_eq!(data["status"], "NotApplicable", "{id}");
+        assert!(data["uc"].is_null(), "{id}: geen UC zonder toets");
+        assert!(
+            data["notes"].as_array().unwrap().iter().any(|n| n.as_str().unwrap().contains("testreden")),
+            "{id}: de reden staat in de notities"
+        );
+    }
+    assert!(toets("6.1.6_bending")["kind"]["data"]["uc"].is_object(), "de sterktetoets loopt door");
+    // Ruimtelijk: knik om z is uitbuigen in het rekenvlak van een 3D-berekening.
+    let kolom = serde_json::to_string(&toets("6.3.2_column_stability")["kind"]["data"]).unwrap();
+    assert!(!kolom.contains("UIT het vlak van het model"), "ruimtelijk telt: {kolom}");
 
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
