@@ -5270,11 +5270,11 @@ function angleBetween(ax, ay, bx, by, cx, cy) {
   const v1y = ay - by;
   const v2x = cx - bx;
   const v2y = cy - by;
-  const dot8 = v1x * v2x + v1y * v2y;
+  const dot9 = v1x * v2x + v1y * v2y;
   const len1 = Math.sqrt(v1x * v1x + v1y * v1y);
   const len2 = Math.sqrt(v2x * v2x + v2y * v2y);
   if (len1 < 1e-12 || len2 < 1e-12) return 0;
-  const cosA = Math.max(-1, Math.min(1, dot8 / (len1 * len2)));
+  const cosA = Math.max(-1, Math.min(1, dot9 / (len1 * len2)));
   return Math.acos(cosA) * (180 / Math.PI);
 }
 function isConvexQuad(points, a, b, c, d) {
@@ -5919,10 +5919,10 @@ function valideerPlaatPolygoon(punten, tolMm = 1) {
   for (let i = 0; i < n2; i++) {
     const p0 = punten[(i + n2 - 1) % n2], p1 = punten[i], p2 = punten[(i + 1) % n2];
     const cr = kruis(p1, p0, p2);
-    const dot8 = (p0.x - p1.x) * (p2.x - p1.x) + (p0.z - p1.z) * (p2.z - p1.z);
+    const dot9 = (p0.x - p1.x) * (p2.x - p1.x) + (p0.z - p1.z) * (p2.z - p1.z);
     const l1 = Math.hypot(p0.x - p1.x, p0.z - p1.z);
     const l2 = Math.hypot(p2.x - p1.x, p2.z - p1.z);
-    if (l1 > 0 && l2 > 0 && Math.abs(cr) <= tolMm * Math.max(l1, l2) && dot8 > 0) {
+    if (l1 > 0 && l2 > 0 && Math.abs(cr) <= tolMm * Math.max(l1, l2) && dot9 > 0) {
       return `De rand vouwt bij hoek ${i + 1} op zichzelf terug \u2014 teken een echte omtrek.`;
     }
   }
@@ -15819,8 +15819,8 @@ function beschrijfKnoop(knoop, xMm, delen, alleBeams, supports, nodes, plates) {
   };
   const aangesloten = alleBeams.filter((c) => !inLijn.has(c.id) && (c.from === knoop || c.to === knoop)).sort((a, b) => a.id - b.id);
   const steunend = aangesloten.filter((c) => {
-    const ander = c.from === knoop ? c.to : c.from;
-    return opgelegd2.has(ander) || inPlaat(ander) || alleBeams.some((d) => d.id !== c.id && (d.from === ander || d.to === ander));
+    const ander2 = c.from === knoop ? c.to : c.from;
+    return opgelegd2.has(ander2) || inPlaat(ander2) || alleBeams.some((d) => d.id !== c.id && (d.from === ander2 || d.to === ander2));
   });
   const los = delen.flatMap((d) => losOpKnoop(d.beam, knoop));
   return {
@@ -17559,10 +17559,10 @@ function lRepVanDeelMm(deel) {
   return deel.inklemming ? 2 * l : l;
 }
 function delenNotitie(delen, perDeel, maatgevend) {
-  const nl12 = (v, d = 0) => v.toFixed(d).replace(".", ",");
+  const nl13 = (v, d = 0) => v.toFixed(d).replace(".", ",");
   const regels = delen.map((d, i) => {
-    const meetlijn = d.inklemming ? `gemeten vanaf de inklemming op x = ${nl12(d.inklemming === "begin" ? d.vanMm : d.totMm)} mm` : "gemeten vanaf de koorde tussen de eindpunten van het deel";
-    return `${d.soort} x = ${nl12(d.vanMm)}\u2013${nl12(d.totMm)} mm, ${meetlijn}, \u2113_rep = ` + (d.inklemming ? `2 \xD7 ${nl12(d.totMm - d.vanMm)} = ` : "") + `${nl12(lRepVanDeelMm(d))} mm: w = ${nl12(perDeel[i].wFinMm, 2)} mm, w_add = ${nl12(perDeel[i].wAddMm, 2)} mm`;
+    const meetlijn = d.inklemming ? `gemeten vanaf de inklemming op x = ${nl13(d.inklemming === "begin" ? d.vanMm : d.totMm)} mm` : "gemeten vanaf de koorde tussen de eindpunten van het deel";
+    return `${d.soort} x = ${nl13(d.vanMm)}\u2013${nl13(d.totMm)} mm, ${meetlijn}, \u2113_rep = ` + (d.inklemming ? `2 \xD7 ${nl13(d.totMm - d.vanMm)} = ` : "") + `${nl13(lRepVanDeelMm(d))} mm: w = ${nl13(perDeel[i].wFinMm, 2)} mm, w_add = ${nl13(perDeel[i].wAddMm, 2)} mm`;
   });
   return "Doorgaande lijn met een overstek: de doorbuiging is per deel getoetst, want \u2113_rep is de lengte van de overspanning of tweemaal die van de uitkraging (NEN-EN 1990:2002/NB:2019 A1.4.3), niet de lijnlengte. " + regels.join("; ") + `. Maatgevend (de grootste verhouding tot de grens) is het ${delen[maatgevend].soort}; dat deel staat in deze toets, met zijn eigen lengte en \u2113_rep.`;
 }
@@ -25083,17 +25083,17 @@ function alleBlijvendeAfwijkingen(p2) {
         const fo = c.factors.get(o.id) ?? 0;
         return o.id !== g.id && fo !== 0 && !gelijk(fo, f);
       });
-      const ander = anderGeval ? { caseId: anderGeval.id, factor: c.factors.get(anderGeval.id) ?? 0 } : null;
+      const ander2 = anderGeval ? { caseId: anderGeval.id, factor: c.factors.get(anderGeval.id) ?? 0 } : null;
       const pastNiet = f !== 0 && (c.type === "sls" ? !gelijk(f, 1) : !UGT_FACTOREN_BLIJVEND.some((x) => gelijk(x, f)));
-      if (!pastNiet && !ander) continue;
-      const anderTekst = ander ? `blijvend geval ${ander.caseId} heeft daar ${nl9(ander.factor)}` : "";
+      if (!pastNiet && !ander2) continue;
+      const anderTekst = ander2 ? `blijvend geval ${ander2.caseId} heeft daar ${nl9(ander2.factor)}` : "";
       let tekst2;
       if (pastNiet && c.type === "uls") {
-        tekst2 = `"${c.name}" ${duidingBlijvend(f, uitdrukkingVan(c), bijlage)}${ander ? ` \u2014 ${anderTekst}` : ""}`;
+        tekst2 = `"${c.name}" ${duidingBlijvend(f, uitdrukkingVan(c), bijlage)}${ander2 ? ` \u2014 ${anderTekst}` : ""}`;
       } else {
         const waarom = [
           ...pastNiet ? ["in de BGT telt een blijvende belasting met 1,0"] : [],
-          ...ander ? [anderTekst] : []
+          ...ander2 ? [anderTekst] : []
         ];
         tekst2 = `"${c.name}" ${f === 0 ? "geen factor" : nl9(f)} (${waarom.join("; ")})`;
       }
@@ -25103,7 +25103,7 @@ function alleBlijvendeAfwijkingen(p2) {
         factor: f,
         pastNiet,
         bevestigd: isBevestigdeFactor(c, g.id),
-        ander,
+        ander: ander2,
         tekst: tekst2
       });
     }
@@ -32693,7 +32693,7 @@ function metScheefstandLasten(verzoek, scheefstand) {
     }
     return a;
   };
-  const dot8 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const dot9 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   const extraKnoop = /* @__PURE__ */ new Map();
   const telOp = (nodeId, f) => {
     const huidig = extraKnoop.get(nodeId) ?? [0, 0, 0];
@@ -32728,7 +32728,7 @@ function metScheefstandLasten(verzoek, scheefstand) {
     const qZ2 = last.qyEndKnPerM * ey[2] + last.qzEndKnPerM * ez[2];
     if (qZ1 === 0 && qZ2 === 0) continue;
     const h1 = schaal(d, -phi * qZ1), h2 = schaal(d, -phi * qZ2);
-    const qy1 = dot8(h1, ey), qy2 = dot8(h2, ey), qz1 = dot8(h1, ez), qz2 = dot8(h2, ez);
+    const qy1 = dot9(h1, ey), qy2 = dot9(h2, ey), qz1 = dot9(h1, ez), qz2 = dot9(h2, ez);
     if (qy1 !== 0 || qy2 !== 0 || qz1 !== 0 || qz2 !== 0) {
       extraStaaflasten.push({
         ...last,
@@ -32739,7 +32739,7 @@ function metScheefstandLasten(verzoek, scheefstand) {
         qzEndKnPerM: qz2
       });
     }
-    const qx1 = dot8(h1, ex), qx2 = dot8(h2, ex);
+    const qx1 = dot9(h1, ex), qx2 = dot9(h2, ex);
     const resultante = (qx1 + qx2) / 2 * (b - a);
     if (resultante !== 0 && lengte > 0) {
       const som = qx1 + qx2;
@@ -32757,7 +32757,7 @@ function metScheefstandLasten(verzoek, scheefstand) {
     const pZ = last.pyKn * ey[2] + last.pzKn * ez[2];
     if (pZ === 0) continue;
     const h = schaal(d, -phi * pZ);
-    const py = dot8(h, ey), pz = dot8(h, ez), px = dot8(h, ex);
+    const py = dot9(h, ey), pz = dot9(h, ez), px = dot9(h, ex);
     if (py !== 0 || pz !== 0) extraPuntlasten.push({ ...last, id: volgendePuntlastId++, pyKn: py, pzKn: pz });
     if (px !== 0 && lengte > 0) {
       const m = staaf.get(last.memberId);
@@ -34335,9 +34335,9 @@ function toetsScheefstand3D(project, normen) {
   }
   const meldingen = [];
   for (const as3 of OPEN_FEM_3D_SCHEEFSTAND_ASSEN) {
-    const ander = as3 === "x" ? perAs.y : perAs.x;
+    const ander2 = as3 === "x" ? perAs.y : perAs.x;
     for (const m of perAs[as3].meldingen) {
-      const tekst2 = ander.meldingen.includes(m) ? m : `Richting ${as3.toUpperCase()}: ${m}`;
+      const tekst2 = ander2.meldingen.includes(m) ? m : `Richting ${as3.toUpperCase()}: ${m}`;
       if (!meldingen.includes(tekst2)) meldingen.push(tekst2);
     }
   }
@@ -34573,6 +34573,368 @@ function toetsKrachtenNotitie3D(analyse, materiaal = "staal") {
   return `${herkomst} Daarom mag de staaftoets de systeemlengte als kniklengte nemen (5.2.2(7)b). De BGT-toetsen komen uit de resultaten.`;
 }
 
+// src/components/openFem3d/openFem3dDoorgaandeLijn.ts
+init_doorgaandeLijn();
+var nl12 = (v, d = 3) => v.toFixed(d).replace(".", ",");
+var dot5 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+var COS_EVENWIJDIG = 1 - 1e-6;
+var GEEN_VERLENGDE = "geen verlengde";
+var ander = (beam, knoop) => beam.startNodeId === knoop ? beam.endNodeId : beam.startNodeId;
+function heeftVrijgave(beam, knoop) {
+  const r = beam.releases;
+  if (!r) return false;
+  return beam.startNodeId === knoop ? r.myStart || r.mzStart || r.torsionStart : r.myEnd || r.mzEnd || r.torsionEnd;
+}
+function prismatischProfiel(beam) {
+  const begin = beam.profileName?.trim() ?? "";
+  const eind = beam.profileNameEnd?.trim() ?? "";
+  if (eind !== "" && eind !== begin) return null;
+  return begin;
+}
+function nietSamen(model, a, b, knoop) {
+  const k = (id2) => model.nodes.find((n3) => n3.id === id2);
+  const n2 = k(knoop), na2 = k(ander(a, knoop)), nb = k(ander(b, knoop));
+  if (!n2 || !na2 || !nb) return GEEN_VERLENGDE;
+  const richting2 = (p2) => {
+    const v = [p2.x - n2.x, p2.y - n2.y, p2.z - n2.z];
+    const l = Math.hypot(...v);
+    return l > 0 ? [v[0] / l, v[1] / l, v[2] / l] : [0, 0, 0];
+  };
+  if (dot5(richting2(na2), richting2(nb)) > -COS_EVENWIJDIG) return GEEN_VERLENGDE;
+  const pa = prismatischProfiel(a), pb = prismatischProfiel(b);
+  if (pa === null || pb === null) return "een verlopend profiel";
+  if (pa !== pb) return `een andere doorsnede (${pa || "\u2014"} en ${pb || "\u2014"})`;
+  if ((a.material?.trim() ?? "") !== (b.material?.trim() ?? "")) return `een ander materiaal (${a.material ?? "\u2014"} en ${b.material ?? "\u2014"})`;
+  if (a.tensionOnly || b.tensionOnly) return "een trek-alleen staaf";
+  if (a.bedding || b.bedding) return "een staaf op bedding";
+  if (Boolean(a.shearDeformation) !== Boolean(b.shearDeformation)) return "een andere afschuifinstelling";
+  if (heeftVrijgave(a, knoop) || heeftVrijgave(b, knoop)) return "een scharnier (vrijgave) op de knoop";
+  const assen = (beam) => {
+    const s = k(beam.startNodeId), e = k(beam.endNodeId);
+    return openFem3DMemberAxes(s, e, beam.rollAngleRad ?? 0);
+  };
+  const aa = assen(a), ab = assen(b);
+  if (Math.abs(dot5(aa.ey, ab.ey)) < COS_EVENWIJDIG || Math.abs(dot5(aa.ez, ab.ez)) < COS_EVENWIJDIG) {
+    return "een andere stand van de doorsnede (de hoofdassen zijn niet evenwijdig)";
+  }
+  return null;
+}
+function knoopVast(model, einden) {
+  const opgelegd2 = new Set((model.supports ?? []).map((s) => s.nodeId));
+  const schijf = new Set((model.diaphragms ?? []).flatMap((d) => d.nodeIds));
+  return (knoop) => opgelegd2.has(knoop) ? "een oplegging" : schijf.has(knoop) ? "een starre schijf" : einden.knoopInPlaat(knoop) ? "een plaat" : null;
+}
+function stavenPerKnoop(model) {
+  const uit = /* @__PURE__ */ new Map();
+  for (const beam of model.beams) {
+    for (const knoop of /* @__PURE__ */ new Set([beam.startNodeId, beam.endNodeId])) uit.set(knoop, [...uit.get(knoop) ?? [], beam]);
+  }
+  return uit;
+}
+function openFem3DDoorgaandeLijnen(model) {
+  const einden = openFem3DEinden(model);
+  const vast2 = knoopVast(model, einden);
+  const perKnoop = stavenPerKnoop(model);
+  const knoopVan = new Map(model.nodes.map((n2) => [n2.id, n2]));
+  const doorgaand = /* @__PURE__ */ new Set();
+  for (const [knoop, staven] of perKnoop) {
+    if (staven.length !== 2 || staven[0].id === staven[1].id || vast2(knoop)) continue;
+    if (nietSamen(model, staven[0], staven[1], knoop) === null) doorgaand.add(knoop);
+  }
+  const gezien = /* @__PURE__ */ new Set();
+  const lijnen = [];
+  for (const beam of [...model.beams].sort((a, b) => a.id - b.id)) {
+    if (gezien.has(beam.id)) continue;
+    if (!doorgaand.has(beam.startNodeId) && !doorgaand.has(beam.endNodeId)) continue;
+    let begin = beam, beginKnoop = beam.startNodeId;
+    const bezocht = /* @__PURE__ */ new Set([beam.id]);
+    while (doorgaand.has(beginKnoop)) {
+      const volgende = perKnoop.get(beginKnoop).find((b) => b.id !== begin.id);
+      if (bezocht.has(volgende.id)) break;
+      bezocht.add(volgende.id);
+      beginKnoop = ander(volgende, beginKnoop);
+      begin = volgende;
+    }
+    const keten = [];
+    let huidig = begin, van = beginKnoop;
+    const inKeten = /* @__PURE__ */ new Set();
+    for (; ; ) {
+      const naar = ander(huidig, van);
+      keten.push({ beam: huidig, van, naar });
+      inKeten.add(huidig.id);
+      if (!doorgaand.has(naar)) break;
+      const volgende = perKnoop.get(naar).find((b) => b.id !== huidig.id);
+      if (inKeten.has(volgende.id)) break;
+      huidig = volgende;
+      van = naar;
+    }
+    for (const d of keten) gezien.add(d.beam.id);
+    if (keten.length < 2) continue;
+    if (keten[0].beam.startNodeId !== keten[0].van) {
+      keten.reverse();
+      for (const d of keten) [d.van, d.naar] = [d.naar, d.van];
+    }
+    const p2 = (id2) => knoopVan.get(id2);
+    const asVan = (b) => openFem3DMemberAxes(p2(b.startNodeId), p2(b.endNodeId), b.rollAngleRad ?? 0);
+    const lijnAssen = asVan(keten[0].beam);
+    const teken = (v) => v < 0 ? -1 : 1;
+    let x = 0;
+    const delen = keten.map((d) => {
+      const a = p2(d.beam.startNodeId), e = p2(d.beam.endNodeId);
+      const lengteM = Math.hypot(e.x - a.x, e.y - a.y, e.z - a.z);
+      const assen = asVan(d.beam);
+      const deel = {
+        beam: d.beam,
+        lengteM,
+        xStartM: x,
+        sx: teken(dot5(assen.ex, lijnAssen.ex)),
+        sy: teken(dot5(assen.ey, lijnAssen.ey)),
+        sz: teken(dot5(assen.ez, lijnAssen.ez))
+      };
+      x += lengteM;
+      return deel;
+    });
+    lijnen.push({
+      id: Math.min(...delen.map((d) => d.beam.id)),
+      delen,
+      tussenknopen: keten.slice(1).map((d) => d.van),
+      startNodeId: keten[0].van,
+      endNodeId: keten[keten.length - 1].naar,
+      lengteM: x
+    });
+  }
+  return lijnen;
+}
+function openFem3DDoorlopendeEinden(model) {
+  const einden = openFem3DEinden(model);
+  const vast2 = knoopVast(model, einden);
+  const perKnoop = stavenPerKnoop(model);
+  return (beam) => {
+    const redenen = [];
+    const eind = (knoop) => {
+      if (vast2(knoop)) return false;
+      const anderen = (perKnoop.get(knoop) ?? []).filter((b) => b.id !== beam.id);
+      if (anderen.length === 0) return false;
+      const waarom = anderen.map((b) => ({ b, reden: nietSamen(model, beam, b, knoop) }));
+      if (waarom.some((w) => w.reden === GEEN_VERLENGDE)) return false;
+      for (const w of waarom) {
+        redenen.push(`knoop ${knoop}: de staaf loopt door in staaf ${w.b.id}` + (anderen.length > 1 ? " (met nog andere staven in het verlengde)" : "") + (w.reden ? `, met ${w.reden}` : ", die met nog een staaf samenkomt"));
+      }
+      return true;
+    };
+    return { begin: eind(beam.startNodeId), eind: eind(beam.endNodeId), redenen };
+  };
+}
+var COMPONENTEN = [
+  { key: "axial", start: "nStartKn", end: "nEndKn", teken: () => 1 },
+  { key: "torsion", start: "torsionStartKnm", end: "torsionEndKnm", teken: () => 1 },
+  { key: "shearY", start: "vyStartKn", end: "vyEndKn", teken: (d) => d.sx * d.sy },
+  { key: "momentY", start: "myStartKnm", end: "myEndKnm", teken: (d) => d.sx * d.sy },
+  { key: "shearZ", start: "vzStartKn", end: "vzEndKn", teken: (d) => d.sx * d.sz },
+  { key: "momentZ", start: "mzStartKnm", end: "mzEndKnm", teken: (d) => d.sx * d.sz }
+];
+function lijnKrachten(lijn, result) {
+  const leden = lijn.delen.map((d) => result.memberForces.find((m) => m.memberId === d.beam.id));
+  if (leden.some((m) => !m)) return null;
+  const diagrammen = {};
+  const eindwaarden = {};
+  for (const c of COMPONENTEN) {
+    const punten = [];
+    lijn.delen.forEach((d, i) => {
+      const lid = leden[i];
+      const eigen = result.diagrams?.[c.key]?.find((diagram) => diagram.memberId === d.beam.id)?.points;
+      const bron = eigen && eigen.length >= 2 ? eigen : [{ t: 0, value: Number(lid[c.start]) }, { t: 1, value: Number(lid[c.end]) }];
+      const teken = c.teken(d);
+      const geordend = d.sx === 1 ? bron : [...bron].reverse().map((p2) => ({ t: 1 - p2.t, value: p2.value }));
+      for (const p2 of geordend) {
+        punten.push({ t: (d.xStartM + p2.t * d.lengteM) / lijn.lengteM, value: teken * p2.value + 0 });
+      }
+    });
+    const waarden = punten.map((p2) => p2.value);
+    diagrammen[c.key] = {
+      memberId: lijn.id,
+      points: punten,
+      maxValue: Math.max(...waarden),
+      minValue: Math.min(...waarden),
+      maxAbsValue: Math.max(...waarden.map(Math.abs))
+    };
+    eindwaarden[c.start] = punten[0].value;
+    eindwaarden[c.end] = punten[punten.length - 1].value;
+  }
+  return {
+    member: { ...eindwaarden, memberId: lijn.id, lengthM: lijn.lengteM },
+    diagrammen
+  };
+}
+function lijnStaaflast(load, d, lijnId) {
+  const naar = (s) => d.xStartM + (d.sx === 1 ? s : d.lengteM - s);
+  const a = naar(load.startPositionM), b = naar(load.endPositionM);
+  const omgekeerd2 = d.sx === -1;
+  if (load.globalDirection) {
+    return {
+      ...load,
+      beamId: lijnId,
+      startPositionM: Math.min(a, b),
+      endPositionM: Math.max(a, b),
+      ...omgekeerd2 ? { qStart: load.qEnd, qEnd: load.qStart } : {}
+    };
+  }
+  const [qy1, qy2] = omgekeerd2 ? [load.qyEnd, load.qyStart] : [load.qyStart, load.qyEnd];
+  const [qz1, qz2] = omgekeerd2 ? [load.qzEnd, load.qzStart] : [load.qzStart, load.qzEnd];
+  return {
+    ...load,
+    beamId: lijnId,
+    startPositionM: Math.min(a, b),
+    endPositionM: Math.max(a, b),
+    qyStart: d.sy * qy1,
+    qyEnd: d.sy * qy2,
+    qzStart: d.sz * qz1,
+    qzEnd: d.sz * qz2
+  };
+}
+function lijnPuntlast(load, d, lijnId) {
+  return {
+    ...load,
+    beamId: lijnId,
+    positionM: d.xStartM + (d.sx === 1 ? load.positionM : d.lengteM - load.positionM),
+    py: d.sy * load.py,
+    pz: d.sz * load.pz
+  };
+}
+function openFem3DDoorgaandeLijnenSamen(model) {
+  const lijnen = openFem3DDoorgaandeLijnen(model);
+  if (lijnen.length === 0) {
+    return {
+      model,
+      resultaat: (r) => r,
+      lijnen: /* @__PURE__ */ new Map(),
+      notities: /* @__PURE__ */ new Map(),
+      overgeslagen: [],
+      ledenVan: (id2) => [id2],
+      lijnDelen: {}
+    };
+  }
+  const deelVan = /* @__PURE__ */ new Map();
+  for (const lijn of lijnen) for (const deel of lijn.delen) deelVan.set(deel.beam.id, { lijn, deel });
+  const virtueel = [];
+  const notities = /* @__PURE__ */ new Map();
+  const overgeslagen = [];
+  for (const lijn of lijnen) {
+    const eerste = lijn.delen[0], laatste = lijn.delen[lijn.delen.length - 1];
+    const basis = lijn.delen.find((d) => d.beam.id === lijn.id).beam;
+    const { config, notities: configNotities } = voegConfigSamen({
+      lengteMm: lijn.lengteM * 1e3,
+      delen: lijn.delen.map((d) => ({
+        beam: { checkConfig: d.beam.checkConfig },
+        gespiegeld: d.sx === -1,
+        xStartMm: d.xStartM * 1e3,
+        lengteMm: d.lengteM * 1e3
+      }))
+    });
+    const beam = {
+      ...basis,
+      id: lijn.id,
+      startNodeId: lijn.startNodeId,
+      endNodeId: lijn.endNodeId,
+      rollAngleRad: eerste.beam.rollAngleRad
+    };
+    delete beam.releases;
+    delete beam.checkConfig;
+    const beginVrij = eerste.beam.releases;
+    const eindVrij = laatste.beam.releases;
+    const eindVan = (r, kant) => r ? { my: r[`my${kant}`], mz: r[`mz${kant}`], torsion: r[`torsion${kant}`] } : { my: false, mz: false, torsion: false };
+    const b0 = eindVan(beginVrij, "Start");
+    const b1 = eindVan(eindVrij, laatste.sx === 1 ? "End" : "Start");
+    if (b0.my || b0.mz || b0.torsion || b1.my || b1.mz || b1.torsion) {
+      beam.releases = {
+        myStart: b0.my,
+        mzStart: b0.mz,
+        torsionStart: b0.torsion,
+        myEnd: b1.my,
+        mzEnd: b1.mz,
+        torsionEnd: b1.torsion
+      };
+    }
+    if (config) beam.checkConfig = config;
+    virtueel.push(beam);
+    const ids = lijn.delen.map((d) => d.beam.id);
+    for (const id2 of ids) {
+      if (id2 === lijn.id) continue;
+      overgeslagen.push({
+        beamId: id2,
+        reason: `maakt deel uit van de doorgaande lijn die als staaf ${lijn.id} is getoetst (staven ${ids.join(", ")}, samen ${nl12(lijn.lengteM)} m); zie staaf ${lijn.id}`
+      });
+    }
+    notities.set(lijn.id, [
+      `DOORGAANDE LIJN. Deze staaf is de doorgaande lijn van de staven ${ids.join(", ")} (${basis.profileName ?? "\u2014"}, ${basis.material ?? "\u2014"}): zij liggen in elkaars verlengde, hebben dezelfde doorsnede, dezelfde stand en hetzelfde materiaal, en op de tussenknoop ${lijn.tussenknopen.join(", ")} staat geen oplegging en sluit geen andere staaf, plaat of schijf aan (en zit geen scharnier). De toetsing beschouwt de lijn als \xC9\xC9N staaf van ${nl12(lijn.lengteM)} m: de kniklengte zonder opgave, de kipvelden en de koorde van de doorbuiging gelden voor die hele lengte, en een tussenknoop telt niet als steun of als gaffel. Kipsteunen van de delen zijn omgerekend naar de lijn, en een opgegeven kniklengte, kipsteunafstand of klasse van een deel is voor de lijn overgenomen.`,
+      ...configNotities
+    ]);
+  }
+  const lijnVanId = new Map(lijnen.map((l) => [l.id, l]));
+  const samengevoegd = {
+    ...model,
+    beams: model.beams.filter((b) => !deelVan.has(b.id)).concat(virtueel),
+    memberLoads: (model.memberLoads ?? []).map((load) => {
+      const v = deelVan.get(load.beamId);
+      return v ? lijnStaaflast(load, v.deel, v.lijn.id) : load;
+    }),
+    memberPointLoads: (model.memberPointLoads ?? []).map((load) => {
+      const v = deelVan.get(load.beamId);
+      return v ? lijnPuntlast(load, v.deel, v.lijn.id) : load;
+    })
+  };
+  const omgezet = /* @__PURE__ */ new WeakMap();
+  const resultaat = (r) => {
+    const bekend = omgezet.get(r);
+    if (bekend) return bekend;
+    const leden = r.memberForces.filter((m) => !deelVan.has(m.memberId));
+    const diagrams = r.diagrams ? Object.fromEntries(Object.entries(r.diagrams).map(([k, lijst2]) => [k, lijst2.filter((d) => !deelVan.has(d.memberId))])) : void 0;
+    for (const lijn of lijnen) {
+      const k = lijnKrachten(lijn, r);
+      if (!k) continue;
+      leden.push(k.member);
+      if (diagrams) {
+        for (const [key, diagram] of Object.entries(k.diagrammen)) diagrams[key].push(diagram);
+      }
+    }
+    const uit = { ...r, memberForces: leden, ...diagrams ? { diagrams } : {} };
+    omgezet.set(r, uit);
+    return uit;
+  };
+  return {
+    model: samengevoegd,
+    resultaat,
+    lijnen: lijnVanId,
+    notities,
+    overgeslagen,
+    ledenVan: (id2) => lijnVanId.get(id2)?.delen.map((d) => d.beam.id) ?? [id2],
+    lijnDelen: Object.fromEntries(lijnen.map((l) => [l.id, l.delen.map((d) => d.beam.id)]))
+  };
+}
+function openFem3DSamengevoegdeSet(set, samen) {
+  if (!set || samen.lijnen.size === 0) return set;
+  return { ...set, results: new Map([...set.results].map(([id2, r]) => [id2, samen.resultaat(r)])) };
+}
+function openFem3DLijnDelenOvergeslagen(samen, overgeslagen, getoetst) {
+  const uit = [];
+  for (const [id2, lijn] of samen.lijnen) {
+    const eigen = overgeslagen.find((s) => s.beamId === id2);
+    if (!eigen && !getoetst.includes(id2)) continue;
+    for (const deel of lijn.delen) {
+      const reden = samen.overgeslagen.find((s) => s.beamId === deel.beam.id);
+      if (!reden) continue;
+      uit.push(eigen ? { beamId: deel.beam.id, reason: `${reden.reason}; die staaf is overgeslagen: ${eigen.reason}` } : reden);
+    }
+  }
+  return uit;
+}
+function openFem3DDoorlopendNotitie(d, materiaal) {
+  if (!d.begin && !d.eind) return null;
+  const welk = d.begin && d.eind ? "beide einden" : d.begin ? "het begin (de startknoop)" : "het eind (de eindknoop)";
+  const kop = `DOORLOPEND STAAFEIND op ${welk}: ${d.redenen.join("; ")}. Daar staat geen oplegging en sluit geen andere staaf, plaat of schijf aan, maar de staven zijn niet tot \xE9\xE9n lijn samengevoegd. Zo'n eind is geen gaffel.`;
+  return materiaal === "staal" ? `${kop} De kern weigert daarom de kiptoets en, zonder opgegeven kniklengtes, de kniktoets (niet volledig getoetst). Geef de kniklengtes en kipsteunen in de toetsinstellingen op.` : `${kop} De houtkern weigert daarom, zonder opgegeven kniklengtes, de kolomtoets (art. 6.3.2) en, zonder opgegeven kipsteunafstand, de kiptoets (art. 6.3.3) (niet volledig getoetst). Geef de kniklengtes en kipsteunen in de toetsinstellingen op.`;
+}
+
 // src/components/openFem3d/openFem3dSteelCheck.ts
 var GEEN_UGT_TOETSCOMBINATIE = "geen UGT-toetscombinatie \u2014 er is geen UGT-combinatie met een belast geval, dus geen toetskrachten (tweede orde met scheefstand); voeg UGT-combinaties toe";
 function dubbeleSwayZNotitie(lCrZM, lengteM, analyse) {
@@ -34594,7 +34956,12 @@ function liggersOnderVloerOfDak(model) {
   }
   return uit;
 }
-function buildOpenFem3DSteelCheckInputs(model, result, combinationSet) {
+function buildOpenFem3DSteelCheckInputs(origineel, origineelResultaat, origineleSet) {
+  const samen = openFem3DDoorgaandeLijnenSamen(origineel);
+  const model = samen.model;
+  const result = samen.resultaat(origineelResultaat);
+  const combinationSet = openFem3DSamengevoegdeSet(origineleSet, samen);
+  const doorlopend = openFem3DDoorlopendeEinden(model);
   const inputs = [];
   const skipped = [];
   const notes = [
@@ -34609,7 +34976,8 @@ function buildOpenFem3DSteelCheckInputs(model, result, combinationSet) {
   const ulsCombinations = combinationSet?.combinations.filter((combination) => combination.type === "uls" && combinationSet.results.has(combination.id)) ?? [];
   const slsCombinations = combinationSet?.combinations.filter((combination) => combination.type === "sls" && combinationSet.results.has(combination.id)) ?? [];
   const deflectionCombinations = slsCombinations;
-  const onderVloerOfDak = liggersOnderVloerOfDak(model);
+  const onderVloerOfDakDelen = liggersOnderVloerOfDak(origineel);
+  const onderVloerOfDak = new Set(model.beams.map((b) => b.id).filter((id2) => samen.ledenVan(id2).some((deel) => onderVloerOfDakDelen.has(deel))));
   const einden = openFem3DEinden(model);
   const zijdelingseKnik = openFem3DZijdelingseKnik(
     model,
@@ -34697,8 +35065,11 @@ function buildOpenFem3DSteelCheckInputs(model, result, combinationSet) {
     const eigenKipsteunen = cfg?.lateralRestraints !== void 0 || cfg?.lateralRestraintsBottom !== void 0;
     const vloerSteunt = !eigenKipsteunen && onderVloerOfDak.has(beam.id);
     const lateralBracing = eigenKipsteunen ? kipsteunenVanStaaf(cfg, forces.lengthM * 1e3, "staal").lateral_bracing : { top_flange_positions: vloerSteunt ? BOVENFLENS_DOORGAAND : [], bottom_flange_positions: [] };
+    const eindenDoorlopend = doorlopend(beam);
+    const doorlopendNotitie = openFem3DDoorlopendNotitie(eindenDoorlopend, "staal");
     const inputNotes = [
       ...notes,
+      ...samen.notities.get(beam.id) ?? [],
       ...permanentDeflection.notes,
       ...inklemming ? [openFem3DUitkragingNotitie(inklemming)] : [],
       ...!cfg?.deflectionClass ? [verticaal ? "Geen doorbuigingsklasse opgegeven: de staaf staat (overwegend) verticaal, dus de zijdelingse eis h/300 (NEN-EN 1990:2002/NB:2019 A1.4.3(7))." : "Geen doorbuigingsklasse opgegeven: de staaf ligt (overwegend) horizontaal en is als vloerligger getoetst \u2014 w_fin tegen \u2113_rep/250 (A1.4.3(4)) en w_add tegen 3/1 000 \xB7 \u2113_rep (A1.4.3(3)), zoals in 2D. Kies in de toetsinstellingen een andere klasse als dat niet past."] : [],
@@ -34742,7 +35113,13 @@ function buildOpenFem3DSteelCheckInputs(model, result, combinationSet) {
       // dezelfde regel als in 2D (#111). Met 0 en 0 lag de last in het
       // dwarskrachtcentrum en kwam de kip-UC te gunstig uit.
       ...kipBelasting(forcesEnvelope, forces.lengthM * 1e3, hMm),
-      staafeinden: { begin: startFree ? "Vrij" : "Gaffel", eind: endFree ? "Vrij" : "Gaffel" },
+      // Een eind dat zonder oplegging doorloopt in een staaf die niet is
+      // samengevoegd (een andere doorsnede, stand of materiaal, een scharnier):
+      // DOORLOPEND, zoals in 2D (issue #207).
+      staafeinden: {
+        begin: startFree ? "Vrij" : eindenDoorlopend.begin ? "Doorlopend" : "Gaffel",
+        eind: endFree ? "Vrij" : eindenDoorlopend.eind ? "Doorlopend" : "Gaffel"
+      },
       // Een vrij eind van een kolom, P-Δ met scheefstand in X en Y van minstens
       // de φ van de kolom zelf: de zijdelingse knik zit al in de krachten, en de
       // kern kiest L in plaats van 2·L (zie `openFem3DZijdelingseKnik`).
@@ -34751,6 +35128,7 @@ function buildOpenFem3DSteelCheckInputs(model, result, combinationSet) {
       // ook echt 2·L neemt: niet als beide kniklengtes zijn opgegeven.
       staaf_notities: [
         ...inputNotes,
+        ...doorlopendNotitie ? [doorlopendNotitie] : [],
         ...zijdelings.notitie && !((cfg?.bucklingLengthY_m ?? 0) > 0 && (cfg?.bucklingLengthZ_m ?? 0) > 0) ? [zijdelings.notitie] : [],
         // Een opgegeven L_cr,z > L bij een kolom: de kern zet de kanttekening
         // DUBBELE SWAY alleen om y (as 1), want alleen de bouwer weet dat de
@@ -34763,7 +35141,7 @@ function buildOpenFem3DSteelCheckInputs(model, result, combinationSet) {
       ...beam.tensionOnly ? { tension_only: true } : {}
     });
   }
-  return { inputs, skipped, notes };
+  return { inputs, skipped: [...skipped, ...openFem3DLijnDelenOvergeslagen(samen, skipped, inputs.map((i) => i.beam_id))], notes, lijnDelen: samen.lijnDelen };
 }
 
 // src/components/openFem3d/openFem3dTimberCheck.ts
@@ -34816,7 +35194,12 @@ function ltbLoadCase(model, beam, lengthM, einden) {
   }
   return { loadCase: "ConstantMoment", note: "Kip: lastvorm wijkt af van de herkende tabelgevallen; l_ef = L is als conservatieve bovengrens van tabel 6.1 gebruikt, niet als beschrijving van het werkelijke momentverloop." };
 }
-function buildOpenFem3DTimberCheckInputs(model, result, combinationSet) {
+function buildOpenFem3DTimberCheckInputs(origineel, origineelResultaat, origineleSet) {
+  const samen = openFem3DDoorgaandeLijnenSamen(origineel);
+  const model = samen.model;
+  const result = samen.resultaat(origineelResultaat);
+  const combinationSet = openFem3DSamengevoegdeSet(origineleSet, samen);
+  const doorlopend = openFem3DDoorlopendeEinden(model);
   const inputs = [];
   const skipped = [];
   const notes = [
@@ -34918,8 +35301,12 @@ function buildOpenFem3DTimberCheckInputs(model, result, combinationSet) {
     }, 0) : null;
     const w3Kern = Math.abs(-inst - permanent.mm);
     const w3Apart = w3Verandering !== null && Math.abs(w3Verandering - w3Kern) > 1e-6 ? -w3Verandering : void 0;
+    const lijnNotities = samen.notities.get(beam.id) ?? [];
+    const doorlopendeEinden = doorlopend(beam);
+    const doorlopendNotitie = openFem3DDoorlopendNotitie(doorlopendeEinden, "hout");
     const deflectionNotes = [
       ...notes,
+      ...lijnNotities,
       ...permanent.notes,
       ...inklemming ? [
         openFem3DUitkragingNotitie(inklemming) + (vrijEindZonderKlasse ? ` Dus w_fin tegen L/${String(Math.round(limits.fin * 1e3) / 1e3).replace(".", ",")} en w_add tegen L/${String(Math.round(limits.add * 1e3) / 1e3).replace(".", ",")} op de staaflengte.` : "")
@@ -34928,8 +35315,11 @@ function buildOpenFem3DTimberCheckInputs(model, result, combinationSet) {
       ...quasi.length ? [] : ["Quasi-blijvende BGT-combinatie ontbreekt: w_qp = w_inst is veilig-zijdig aangehouden."],
       ...w3Apart !== void 0 ? [`w\u2083 = w_c \u2212 w\u2081 = ${Math.abs(w3Apart).toFixed(2).replace(".", ",")} mm (omlaag) is de grootste verandering van het vervormingsveld ten opzichte van de blijvende combinatie "${permanent.combo?.name ?? "\u2014"}" (w\u2082 + w\u2083 = w_tot \u2212 w\u2081, figuur NB.1), niet |w_inst| \u2212 |w\u2081| = ${w3Kern.toFixed(2).replace(".", ",")} mm; de kern rekent w_add = w\u2082 + w\u2083.`] : []
     ];
-    const eindSoort = (nodeId) => einden.vrijEind(beam, nodeId) ? "Vrij" : einden.doorlopendEind(beam, nodeId) ? "Doorlopend" : "Gaffel";
-    const staafeinden = { begin: eindSoort(beam.startNodeId), eind: eindSoort(beam.endNodeId) };
+    const eindSoort = (nodeId, isDoorlopend) => einden.vrijEind(beam, nodeId) ? "Vrij" : isDoorlopend ? "Doorlopend" : "Gaffel";
+    const staafeinden = {
+      begin: eindSoort(beam.startNodeId, doorlopendeEinden.begin),
+      eind: eindSoort(beam.endNodeId, doorlopendeEinden.eind)
+    };
     inputs.push({
       bijlage: "NL",
       beam_id: beam.id,
@@ -34976,6 +35366,8 @@ function buildOpenFem3DTimberCheckInputs(model, result, combinationSet) {
       staaf_notities: [
         `3D-raamwerk: knik om y en z wordt ruimtelijk getoetst; vrije einden: ${einden.vrijEind(beam, beam.startNodeId) || einden.vrijEind(beam, beam.endNodeId) ? "ja" : "nee"}.`,
         ltb.note,
+        ...lijnNotities,
+        ...doorlopendNotitie ? [doorlopendNotitie] : [],
         // De toetsset (`toetsSet3D`, issue #199, B10): de vaste houtmelding bij
         // elke houtstaaf. Een aanroeper met een eigen combinatieset (zonder
         // `toetsAnalyse`) krijgt haar niet.
@@ -34983,7 +35375,7 @@ function buildOpenFem3DTimberCheckInputs(model, result, combinationSet) {
       ]
     });
   }
-  return { inputs, skipped, notes };
+  return { inputs, skipped: [...skipped, ...openFem3DLijnDelenOvergeslagen(samen, skipped, inputs.map((i) => i.beam_id))], notes, lijnDelen: samen.lijnDelen };
 }
 
 // src/components/openFem3d/wizards/staalhal.ts
@@ -37230,7 +37622,7 @@ function leesEenheden(ifc) {
     omschrijving: `Eenheden in het bestand: lengte ${lengteLabel}, kracht ${krachtLabel}, lijnlast ${lijnlast.label}, vlaklast ${vlaklast.label}, moment ${moment.label}. Omgerekend naar m, kN, kN/m, kN/m\xB2 en kNm.`
   };
 }
-var dot5 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+var dot6 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 var cross4 = (a, b) => [
   a[1] * b[2] - a[2] * b[1],
   a[2] * b[0] - a[0] * b[2],
@@ -37283,7 +37675,7 @@ var Meetkunde = class {
       const o = this.punt(refVan(arg(r, 0))) ?? [0, 0, 0];
       const z = this.richting(refVan(arg(r, 1))) ?? [0, 0, 1];
       const ref = this.richting(refVan(arg(r, 2))) ?? (Math.abs(z[0] - 1) < KLEIN && Math.abs(z[1]) < KLEIN && Math.abs(z[2]) < KLEIN ? [0, 1, 0] : [1, 0, 0]);
-      const x0 = sub4(ref, scale2(z, dot5(ref, z)));
+      const x0 = sub4(ref, scale2(z, dot6(ref, z)));
       const x = norm4(x0) > KLEIN ? unit2(x0) : unit2(cross4([0, 1, 0], z));
       return { x, y: cross4(z, x), z, o };
     }
@@ -37874,14 +38266,14 @@ var Importeur = class {
       const axis = this.meetkunde.richting(refVan(arg(lid, 8)));
       if (axis) {
         const a = draai(trafo, axis);
-        const loodrecht = sub4(a, scale2(basis.ex, dot5(a, basis.ex)));
+        const loodrecht = sub4(a, scale2(basis.ex, dot6(a, basis.ex)));
         if (norm4(loodrecht) > 1e-6) zIfc = unit2(loodrecht);
       }
       if (!zIfc) {
         this.meldingen.voeg("waarschuwing", "Staaf zonder bruikbare Axis (ontbreekt of evenwijdig aan de staaf); rolhoek 0 aangenomen", label);
         zIfc = basis.ez;
       }
-      let roll = Math.atan2(-dot5(zIfc, basis.ey), dot5(zIfc, basis.ez));
+      let roll = Math.atan2(-dot6(zIfc, basis.ey), dot6(zIfc, basis.ez));
       const mat = this.materiaalRecords(lid);
       let material;
       if (mat.materiaal) {
@@ -37998,7 +38390,7 @@ var Importeur = class {
         const label = `${info2.label} bij ${this.connectieLabel(connectieId)}`;
         const k = this.nodeById.get(knoopId3);
         const rel = sub4([k.x, k.y, k.z], [a.x, a.y, a.z]);
-        const s = dot5(rel, ex);
+        const s = dot6(rel, ex);
         if (norm4(sub4(rel, scale2(ex, s))) > KNOOP_TOLERANTIE_M || s < -KNOOP_TOLERANTIE_M || s > info2.lengte + KNOOP_TOLERANTIE_M) {
           this.meldingen.voeg("waarschuwing", "Aansluiting op een knoop die niet op de staaf ligt; genegeerd", label);
           continue;
@@ -38117,7 +38509,7 @@ var Importeur = class {
         if (stelselId !== null) {
           const s = this.meetkunde.plaatsing(stelselId);
           voorwaardeAssen = [draai(trafo, s.x), draai(trafo, s.y), draai(trafo, s.z)];
-          const samen = voorwaardeAssen.every((as3, i) => Math.abs(Math.abs(dot5(as3, ifcAssen[i])) - 1) < 1e-6);
+          const samen = voorwaardeAssen.every((as3, i) => Math.abs(Math.abs(dot6(as3, ifcAssen[i])) - 1) < 1e-6);
           if (!samen) {
             this.meldingen.voeg(
               "waarschuwing",
@@ -38129,7 +38521,7 @@ var Importeur = class {
         const vrij = voorwaardeAssen.filter((_, i) => c[3 + i].soort === "vrij");
         const velden = kant === "Start" ? ["torsionStart", "myStart", "mzStart"] : ["torsionEnd", "myEnd", "mzEnd"];
         [assen.ex, assen.ey, assen.ez].forEach((as3, i) => {
-          const aandeel = vrij.reduce((som, f) => som + dot5(as3, f) ** 2, 0);
+          const aandeel = vrij.reduce((som, f) => som + dot6(as3, f) ** 2, 0);
           if (aandeel > 1e-6 && aandeel < 1 - 1e-6) {
             this.meldingen.voeg(
               "waarschuwing",
@@ -38604,7 +38996,7 @@ var Importeur = class {
       const trafo = heeftPlaatsing ? this.trafoVan(actie) : keten.eerste.trafo;
       const p2 = pas(trafo, (vertex ? this.meetkunde.vertex(vertex.id) : null) ?? [0, 0, 0]);
       const rel = sub4(p2, [a.x, a.y, a.z]);
-      s = dot5(rel, assen.ex);
+      s = dot6(rel, assen.ex);
       if (norm4(sub4(rel, scale2(assen.ex, s))) > KNOOP_TOLERANTIE_M) {
         this.meldingen.voeg("waarschuwing", "Puntlast ligt naast de staafas; loodrecht op de staaf geprojecteerd", label);
       }
@@ -38619,7 +39011,7 @@ var Importeur = class {
     const deel = keten.delen.find((d) => s < d.ketenTot) ?? keten.delen[keten.delen.length - 1];
     const positie = opDeel(deel, s);
     const assenDeel = this.assenVan(deel);
-    const py = dot5(fGlobaal, assenDeel.ey), pz = dot5(fGlobaal, assenDeel.ez), px = dot5(fGlobaal, assenDeel.ex);
+    const py = dot6(fGlobaal, assenDeel.ey), pz = dot6(fGlobaal, assenDeel.ez), px = dot6(fGlobaal, assenDeel.ex);
     const doel = this.doelGeval(caseId);
     if (Math.abs(py) > KLEIN || Math.abs(pz) > KLEIN) {
       this.memberPointLoads.push({ id: this.memberPointLoads.length + 1, beamId: deel.beam.id, caseId: doel, py, pz, positionM: positie });
@@ -38682,7 +39074,7 @@ var Importeur = class {
     const eigenRand = this.meetkunde.topologie(actie).map((item) => this.meetkunde.rand(item)).find((r) => r !== null);
     if (eigenRand) {
       const trafo = refVan(arg(actie, 5)) === null ? keten.eerste.trafo : this.trafoVan(actie);
-      const posities = [eigenRand.start, eigenRand.eind].map((v) => dot5(sub4(pas(trafo, this.meetkunde.vertex(v) ?? [0, 0, 0]), [a.x, a.y, a.z]), assen.ex));
+      const posities = [eigenRand.start, eigenRand.eind].map((v) => dot6(sub4(pas(trafo, this.meetkunde.vertex(v) ?? [0, 0, 0]), [a.x, a.y, a.z]), assen.ex));
       van = Math.max(0, Math.min(...posities));
       tot = Math.min(keten.lengte, Math.max(...posities));
       if (tot - van <= KNOOP_TOLERANTIE_M) {
@@ -38696,7 +39088,7 @@ var Importeur = class {
       if (totS - vanS <= 1e-9) continue;
       const vanDeel = opDeel(deel, vanS), totDeel = opDeel(deel, totS);
       const assenDeel = this.assenVan(deel);
-      const qy = dot5(qGlobaal, assenDeel.ey), qz = dot5(qGlobaal, assenDeel.ez), qx = dot5(qGlobaal, assenDeel.ex);
+      const qy = dot6(qGlobaal, assenDeel.ey), qz = dot6(qGlobaal, assenDeel.ez), qx = dot6(qGlobaal, assenDeel.ex);
       if (Math.abs(qy) > KLEIN || Math.abs(qz) > KLEIN) {
         this.memberLoads.push({
           id: this.memberLoads.length + 1,
@@ -38765,7 +39157,7 @@ var Importeur = class {
       telOp("gravity", geprojecteerd ? -f[2] : -f[2] / nz);
       return;
     }
-    const langsNormaal = dot5(f, vlak.normaal);
+    const langsNormaal = dot6(f, vlak.normaal);
     if (norm4(sub4(f, scale2(vlak.normaal, langsNormaal))) <= 1e-6 * norm4(f)) {
       if (geprojecteerd) this.meldingen.voeg("waarschuwing", "Vlaklast loodrecht op het vlak per geprojecteerde oppervlakte; als per m\xB2 vlak ingelezen", label);
       telOp("normal", langsNormaal);
@@ -38822,7 +39214,7 @@ var Importeur = class {
         const inVlak = (id2) => {
           const k = this.nodeById.get(id2);
           const rel = sub4([k.x, k.y, k.z], g.origin);
-          return Math.abs(dot5(rel, g.normal)) <= KNOOP_TOLERANTIE_M && puntInVeelhoek([dot5(rel, g.axisU), dot5(rel, g.axisV)], g.polygon, KNOOP_TOLERANTIE_M);
+          return Math.abs(dot6(rel, g.normal)) <= KNOOP_TOLERANTIE_M && puntInVeelhoek([dot6(rel, g.axisU), dot6(rel, g.axisV)], g.polygon, KNOOP_TOLERANTIE_M);
         };
         const uitgesloten = this.staven.filter((s) => (s.beam.tensionOnly || s.pendel) && inVlak(s.beam.startNodeId) && inVlak(s.beam.endNodeId)).map((s) => s.beam.id);
         if (uitgesloten.length > 0) panel.excludedBeamIds = uitgesloten;
@@ -39045,8 +39437,8 @@ function opDeel(deel, s) {
 }
 function afstandTotLijnstuk2(p2, a, b) {
   const ab = sub4(b, a);
-  const lengte2 = dot5(ab, ab);
-  const t = lengte2 <= 0 ? 0 : Math.max(0, Math.min(1, dot5(sub4(p2, a), ab) / lengte2));
+  const lengte2 = dot6(ab, ab);
+  const t = lengte2 <= 0 ? 0 : Math.max(0, Math.min(1, dot6(sub4(p2, a), ab) / lengte2));
   return norm4(sub4(p2, add2(a, scale2(ab, t))));
 }
 function hoekpunten(lus, tol) {
@@ -40281,10 +40673,10 @@ function voegGroepSamen(model, groep, keepId) {
   const perAnder = /* @__PURE__ */ new Map();
   for (const beam of beams) {
     if (beam.startNodeId !== keepId && beam.endNodeId !== keepId) continue;
-    const ander = beam.startNodeId === keepId ? beam.endNodeId : beam.startNodeId;
-    const lijst2 = perAnder.get(ander);
+    const ander2 = beam.startNodeId === keepId ? beam.endNodeId : beam.startNodeId;
+    const lijst2 = perAnder.get(ander2);
     if (lijst2) lijst2.push(beam);
-    else perAnder.set(ander, [beam]);
+    else perAnder.set(ander2, [beam]);
   }
   const mergedBeams = [];
   const opgegaan = /* @__PURE__ */ new Set();
@@ -41396,7 +41788,7 @@ var MODEL3D_ANALYSIS_MATERIAL_COMMANDOS = [documentCommando({
 
 // src/components/openFem3d/openFem3dEnvelopePanels.ts
 var subtract = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-var dot6 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+var dot7 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 var cross5 = (a, b) => [
   a[1] * b[2] - a[2] * b[1],
   a[2] * b[0] - a[0] * b[2],
@@ -41443,11 +41835,11 @@ function openFem3DEnvelopePanelGeometry(model, panel) {
     const node = byId.get(nodeId);
     if (!node) throw new Error(`Schilpaneel ${panel.id}: knoop ${nodeId} bestaat niet.`);
     const relative = subtract(position(node), outer.origin);
-    const distance = Math.abs(dot6(relative, outer.normal));
+    const distance = Math.abs(dot7(relative, outer.normal));
     if (distance > OPEN_FEM_3D_LOAD_PANEL_TOLERANCE_M) {
       throw new Error(`Opening van schilpaneel ${panel.id} ligt buiten het vlak.`);
     }
-    return [dot6(relative, outer.axisU), dot6(relative, outer.axisV)];
+    return [dot7(relative, outer.axisU), dot7(relative, outer.axisV)];
   };
   const tolerance = OPEN_FEM_3D_LOAD_PANEL_TOLERANCE_M * 1e-3;
   const holes = (panel.openings ?? []).map((opening) => {
@@ -41500,7 +41892,7 @@ function addOpenFem3DEnvelopePanelLoad(model, panelId, caseId, q, direction) {
   const panel = (model.envelopePanels ?? []).find((candidate) => candidate.id === panelId);
   if (!panel) throw new Error(`Schilpaneel ${panelId} bestaat niet.`);
   const geometry = openFem3DEnvelopePanelGeometry(model, panel);
-  const signedQ = direction === "normal" && dot6(geometry.outwardNormal, geometry.outer.normal) < 0 ? -q : q;
+  const signedQ = direction === "normal" && dot7(geometry.outwardNormal, geometry.outer.normal) < 0 ? -q : q;
   return addOpenFem3DLoadPanel(model, panel.nodeIds, {
     caseId,
     q: signedQ,
@@ -44645,7 +45037,7 @@ function generateNbc2025EnvelopeWindLoadsForLimitStates(model, input) {
 }
 var EPS3 = 1e-7;
 var close = (a, b, scale4) => Math.abs(a - b) <= EPS3 * Math.max(1, scale4);
-var dot7 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+var dot8 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 function generateNbc2025EnvelopeWindLoads(model, input) {
   const cases = nbc2025RectangularWindPlan(input);
   const panels = model.envelopePanels ?? [];
@@ -44719,7 +45111,7 @@ function generateNbc2025EnvelopeWindLoads(model, input) {
       throw new Error(`Schilpaneel ${panel.id} dekt geen uniek volledig rechthoekig NBC-buitenvlak.`);
     }
     const geometry = openFem3DEnvelopePanelGeometry(model, panel);
-    if (!close(geometry.outer.areaM2, faces[faceId].area, faces[faceId].area) || dot7(geometry.outwardNormal, faces[faceId].normal) < 1 - EPS3) {
+    if (!close(geometry.outer.areaM2, faces[faceId].area, faces[faceId].area) || dot8(geometry.outwardNormal, faces[faceId].normal) < 1 - EPS3) {
       throw new Error(`Schilpaneel ${panel.id} heeft een onvolledig vlak of omgekeerde buitenzijde.`);
     }
     matched.set(faceId, {

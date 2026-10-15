@@ -26,11 +26,12 @@
 //       OPEN_FEM3D_SCHERMAFBEELDINGEN (een bestaande map) worden er
 //       schermafbeeldingen van gemaakt.
 //
-// WAAR 3D EN 2D BEWUST VERSCHILLEN (en dus niet gelijk worden geëist; geen
-// van deze verschillen hoort bij het verloop, ze gelden ook prismatisch):
-//   - een 2D-staaf die zonder oplegging doorloopt in een staaf met een
-//     andere doorsnede krijgt geen stabiliteitstoets (de kern weigert met
-//     reden); 3D toetst elke staaf met gaffels aan beide einden;
+// EEN STAAF DIE DOORLOOPT IN EEN ANDERE DOORSNEDE: sinds issue #207 gelijk
+// in 2D en 3D. Een staaf die zonder oplegging doorloopt in een staaf met een
+// andere doorsnede (hier de ligger IPE 600 → IPE 400 → IPE 600 in drie
+// staven) heeft daar een DOORLOPEND eind; de kern weigert de kiptoets met
+// reden. Tot #207 toetste 3D elke staaf met gaffels aan beide einden en gaf
+// het een kip-UC die 2D terecht weigerde.
 //
 // Rekenkern: OPEN_FEM_3D_SOLVER_PATH, anders src-tauri/target/debug/open-fem-3d(.exe);
 // toetsbrug: src-tauri/target/release/toetsbrug(.exe).
@@ -391,8 +392,13 @@ const portaal3D = parseOpenFem3DModel({
       `staaf ${id} (${t3.find((r) => r.beam_id === id).profile_name}): ${kolom ? "doorsnede- en stabiliteitstoetsen" : "doorsnedetoetsen"} gelijk aan 2D — ${ids.map((k) => `${k} ${b[k].toFixed(4)}`).join(", ")}`);
     if (!kolom) {
       const kip2 = t2.find((r) => r.beam_id === id).checks.find((c) => c.id === "6.3.2_ltb");
-      ok(a["6.3.2_ltb"] === null && /loopt .* door in een staaf met een andere/.test(kip2.kind.data.notes.join(" ")) && Number.isFinite(b["6.3.2_ltb"]),
-        `staaf ${id}: 2D weigert de kiptoets van een doorlopende ligger met reden, 3D toetst met gaffels (UC ${b["6.3.2_ltb"].toFixed(3)}; zie de kop)`);
+      // GEWIJZIGD door issue #207: 3D weigert nu net als 2D (was: een kip-UC met gaffels).
+      const kip3 = t3.find((r) => r.beam_id === id).checks.find((c) => c.id === "6.3.2_ltb");
+      const in3d = in3.find((i) => i.beam_id === id);
+      ok(a["6.3.2_ltb"] === null && /loopt .* door in een staaf met een andere/.test(kip2.kind.data.notes.join(" "))
+        && b["6.3.2_ltb"] === null && /loopt .* door in een staaf met een andere/.test((kip3?.kind.data.notes ?? []).join(" "))
+        && (in3d.staafeinden.begin === "Doorlopend" || in3d.staafeinden.eind === "Doorlopend"),
+        `staaf ${id}: 2D én 3D weigeren de kiptoets van een doorlopende ligger met reden (staafeinden 3D ${JSON.stringify(in3d.staafeinden)}; zie de kop)`);
     }
   }
 }

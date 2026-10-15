@@ -24,6 +24,10 @@ import {
 import type { ToetsAnalyse } from "../../lib/toetsKrachten";
 import { toetsKrachtenNotitie3D } from "./openFem3dToetsKrachten";
 import { toetsPhiTekst3D } from "./openFem3dScheefstand";
+import {
+  openFem3DDoorgaandeLijnenSamen, openFem3DDoorlopendeEinden, openFem3DDoorlopendNotitie,
+  openFem3DLijnDelenOvergeslagen, openFem3DSamengevoegdeSet,
+} from "./openFem3dDoorgaandeLijn";
 
 /**
  * De reden bij een staaf zonder UGT-toetskrachten: geen enkele UGT-combinatie
@@ -63,6 +67,11 @@ export interface OpenFem3DSteelChecks {
   skipped: OpenFem3DCheckSkip[];
   /** Assumptions that apply to every generated check input. */
   notes: string[];
+  /**
+   * Doorgaande lijnen (issue #207): per getoetste staaf de staven die zij
+   * samen vormt (zij zelf erbij). De weergave zet de UC van de lijn op elk deel.
+   */
+  lijnDelen?: Record<number, number[]>;
 }
 
 type Vector = [number, number, number];
@@ -199,10 +208,18 @@ export function liggersOnderVloerOfDak(model: OpenFem3DModel): Set<number> {
 }
 
 export function buildOpenFem3DSteelCheckInputs(
-  model: OpenFem3DModel,
-  result: OpenFem3DSolveResult,
-  combinationSet?: OpenFem3DCombinationSet,
-): { inputs: BeamCheckInput[]; skipped: OpenFem3DCheckSkip[]; notes: string[] } {
+  origineel: OpenFem3DModel,
+  origineelResultaat: OpenFem3DSolveResult,
+  origineleSet?: OpenFem3DCombinationSet,
+): { inputs: BeamCheckInput[]; skipped: OpenFem3DCheckSkip[]; notes: string[]; lijnDelen: Record<number, number[]> } {
+  // Doorgaande lijnen (issue #207): staven die op een knoop zonder oplegging,
+  // aansluiting, plaat of schijf zijn geknipt, gaan als één staaf de toets in,
+  // zoals in 2D. Alles hieronder ziet het samengevoegde model.
+  const samen = openFem3DDoorgaandeLijnenSamen(origineel);
+  const model = samen.model;
+  const result = samen.resultaat(origineelResultaat);
+  const combinationSet = openFem3DSamengevoegdeSet(origineleSet, samen);
+  const doorlopend = openFem3DDoorlopendeEinden(model);
   const inputs: BeamCheckInput[] = [];
   const skipped: OpenFem3DCheckSkip[] = [];
   const notes = [
@@ -222,7 +239,11 @@ export function buildOpenFem3DSteelCheckInputs(
     combination.type === "sls" && combinationSet.results.has(combination.id)) ?? [];
   const deflectionCombinations = slsCombinations;
 
-  const onderVloerOfDak = liggersOnderVloerOfDak(model);
+  // Op het oorspronkelijke model (de belastingvlakken wijzen naar de delen);
+  // een lijn ligt onder een vloer als een van haar delen dat doet.
+  const onderVloerOfDakDelen = liggersOnderVloerOfDak(origineel);
+  const onderVloerOfDak = new Set(model.beams.map((b) => b.id)
+    .filter((id) => samen.ledenVan(id).some((deel) => onderVloerOfDakDelen.has(deel))));
   // Vrije einden en de inklemming van een uitkraging: dezelfde herkenning als
   // de houttoets (`openFem3dUitkraging.ts`) — een knoop op een plaat, een
   // oplegging, een andere staaf of bedding maakt een eind niet vrij.
@@ -363,7 +384,9 @@ export function buildOpenFem3DSteelCheckInputs(
     const lateralBracing = eigenKipsteunen
       ? kipsteunenVanStaaf(cfg, forces.lengthM * 1000, "staal").lateral_bracing
       : { top_flange_positions: vloerSteunt ? BOVENFLENS_DOORGAAND : [], bottom_flange_positions: [] };
-    const inputNotes = [...notes, ...permanentDeflection.notes,
+    const eindenDoorlopend = doorlopend(beam);
+    const doorlopendNotitie = openFem3DDoorlopendNotitie(eindenDoorlopend, "staal");
+    const inputNotes = [...notes, ...(samen.notities.get(beam.id) ?? []), ...permanentDeflection.notes,
       ...(inklemming ? [openFem3DUitkragingNotitie(inklemming)] : []),
       ...(!cfg?.deflectionClass
         ? [verticaal
@@ -414,7 +437,13 @@ export function buildOpenFem3DSteelCheckInputs(
       // dezelfde regel als in 2D (#111). Met 0 en 0 lag de last in het
       // dwarskrachtcentrum en kwam de kip-UC te gunstig uit.
       ...kipBelasting(forcesEnvelope, forces.lengthM * 1000, hMm),
-      staafeinden: { begin: startFree ? "Vrij" : "Gaffel", eind: endFree ? "Vrij" : "Gaffel" },
+      // Een eind dat zonder oplegging doorloopt in een staaf die niet is
+      // samengevoegd (een andere doorsnede, stand of materiaal, een scharnier):
+      // DOORLOPEND, zoals in 2D (issue #207).
+      staafeinden: {
+        begin: startFree ? "Vrij" : eindenDoorlopend.begin ? "Doorlopend" : "Gaffel",
+        eind: endFree ? "Vrij" : eindenDoorlopend.eind ? "Doorlopend" : "Gaffel",
+      },
       // Een vrij eind van een kolom, P-Δ met scheefstand in X en Y van minstens
       // de φ van de kolom zelf: de zijdelingse knik zit al in de krachten, en de
       // kern kiest L in plaats van 2·L (zie `openFem3DZijdelingseKnik`).
@@ -423,6 +452,7 @@ export function buildOpenFem3DSteelCheckInputs(
       // ook echt 2·L neemt: niet als beide kniklengtes zijn opgegeven.
       staaf_notities: [
         ...inputNotes,
+        ...(doorlopendNotitie ? [doorlopendNotitie] : []),
         ...(zijdelings.notitie && !((cfg?.bucklingLengthY_m ?? 0) > 0 && (cfg?.bucklingLengthZ_m ?? 0) > 0)
           ? [zijdelings.notitie] : []),
         // Een opgegeven L_cr,z > L bij een kolom: de kern zet de kanttekening
@@ -439,7 +469,7 @@ export function buildOpenFem3DSteelCheckInputs(
       ...(beam.tensionOnly ? { tension_only: true } : {}),
     });
   }
-  return { inputs, skipped, notes };
+  return { inputs, skipped: [...skipped, ...openFem3DLijnDelenOvergeslagen(samen, skipped, inputs.map((i) => i.beam_id))], notes, lijnDelen: samen.lijnDelen };
 }
 
 export async function runOpenFem3DSteelChecks(
@@ -455,7 +485,7 @@ export async function runOpenFem3DSteelChecks(
   const results = built.inputs.length > 0
     ? await roepKern<BeamCheckResult[]>("check_steel_beams", built.inputs)
     : [];
-  return { results, skipped: built.skipped, notes: built.notes };
+  return { results, skipped: built.skipped, notes: built.notes, lijnDelen: built.lijnDelen };
 }
 
 export function checkUc(check: NamedCheck): number | null {

@@ -17,6 +17,10 @@ import { openFem3DEinden, openFem3DUitkragingNotitie, type OpenFem3DEinden } fro
 import { openFem3DForceStations } from "./openFem3dForceStations";
 import type { OpenFem3DCheckSkip, OpenFem3DCombinationSet } from "./openFem3dSteelCheck";
 import {
+  openFem3DDoorgaandeLijnenSamen, openFem3DDoorlopendeEinden, openFem3DDoorlopendNotitie,
+  openFem3DLijnDelenOvergeslagen, openFem3DSamengevoegdeSet,
+} from "./openFem3dDoorgaandeLijn";
+import {
   eigenNaamVan, isEigenProfiel, naarCustomSection, zoekEigenDoorsnede,
 } from "../../lib/profieleditor/eigenDoorsnedenStore";
 
@@ -24,6 +28,8 @@ export interface OpenFem3DTimberChecks {
   results: TimberBeamCheckResult[];
   skipped: OpenFem3DCheckSkip[];
   notes: string[];
+  /** Doorgaande lijnen (issue #207): per getoetste staaf haar delen, voor de weergave. */
+  lijnDelen?: Record<number, number[]>;
 }
 
 export function openFem3DTimberUlsUc(result: TimberBeamCheckResult): number {
@@ -95,10 +101,17 @@ function ltbLoadCase(
 }
 
 export function buildOpenFem3DTimberCheckInputs(
-  model: OpenFem3DModel,
-  result: OpenFem3DSolveResult,
-  combinationSet?: OpenFem3DCombinationSet,
-): { inputs: TimberBeamCheckInput[]; skipped: OpenFem3DCheckSkip[]; notes: string[] } {
+  origineel: OpenFem3DModel,
+  origineelResultaat: OpenFem3DSolveResult,
+  origineleSet?: OpenFem3DCombinationSet,
+): { inputs: TimberBeamCheckInput[]; skipped: OpenFem3DCheckSkip[]; notes: string[]; lijnDelen: Record<number, number[]> } {
+  // Doorgaande lijnen (issue #207): dezelfde samenvoeging als de staaltoets.
+  // Een doorlopend eind gaat als staafeind naar de houtkern (issue #205).
+  const samen = openFem3DDoorgaandeLijnenSamen(origineel);
+  const model = samen.model;
+  const result = samen.resultaat(origineelResultaat);
+  const combinationSet = openFem3DSamengevoegdeSet(origineleSet, samen);
+  const doorlopend = openFem3DDoorlopendeEinden(model);
   const inputs: TimberBeamCheckInput[] = [];
   const skipped: OpenFem3DCheckSkip[] = [];
   const notes = [
@@ -233,8 +246,11 @@ export function buildOpenFem3DTimberCheckInputs(
       : null;
     const w3Kern = Math.abs(-inst - permanent.mm);
     const w3Apart = w3Verandering !== null && Math.abs(w3Verandering - w3Kern) > 1e-6 ? -w3Verandering : undefined;
+    const lijnNotities = samen.notities.get(beam.id) ?? [];
+    const doorlopendeEinden = doorlopend(beam);
+    const doorlopendNotitie = openFem3DDoorlopendNotitie(doorlopendeEinden, "hout");
     const deflectionNotes = [
-      ...notes, ...permanent.notes,
+      ...notes, ...lijnNotities, ...permanent.notes,
       ...(inklemming ? [
         openFem3DUitkragingNotitie(inklemming) +
           (vrijEindZonderKlasse ? ` Dus w_fin tegen L/${String(Math.round(limits.fin * 1000) / 1000).replace(".", ",")} en w_add tegen L/${String(Math.round(limits.add * 1000) / 1000).replace(".", ",")} op de staaflengte.` : ""),
@@ -245,13 +261,19 @@ export function buildOpenFem3DTimberCheckInputs(
         ? [`w₃ = w_c − w₁ = ${Math.abs(w3Apart).toFixed(2).replace(".", ",")} mm (omlaag) is de grootste verandering van het vervormingsveld ten opzichte van de blijvende combinatie "${permanent.combo?.name ?? "—"}" (w₂ + w₃ = w_tot − w₁, figuur NB.1), niet |w_inst| − |w₁| = ${w3Kern.toFixed(2).replace(".", ",")} mm; de kern rekent w_add = w₂ + w₃.`]
         : []),
     ];
-    // De staafeinden zoals bij staal (issue #205): vrij, doorlopend (alleen
-    // staven in het verlengde, zonder steun) of een gaffel. Bij een
-    // doorlopend eind weigert de kern art. 6.3.2 en 6.3.3 zonder opgegeven
-    // kniklengtes in plaats van de lengte van één deel te nemen.
-    const eindSoort = (nodeId: number) => einden.vrijEind(beam, nodeId) ? "Vrij" as const
-      : einden.doorlopendEind(beam, nodeId) ? "Doorlopend" as const : "Gaffel" as const;
-    const staafeinden = { begin: eindSoort(beam.startNodeId), eind: eindSoort(beam.endNodeId) };
+    // De staafeinden zoals bij staal (issue #205): vrij, doorlopend of een
+    // gaffel. Doorlopend volgt uit de lijnherkenning van issue #207 op het
+    // samengevoegde model: staven met dezelfde doorsnede zijn dan al één lijn,
+    // dus alleen een voortzetting in een andere doorsnede, een ander materiaal,
+    // een andere stand of over een scharnier blijft over. Bij een doorlopend
+    // eind weigert de kern art. 6.3.2 en 6.3.3 zonder opgegeven kniklengtes
+    // in plaats van de lengte van één deel te nemen.
+    const eindSoort = (nodeId: number, isDoorlopend: boolean) => einden.vrijEind(beam, nodeId) ? "Vrij" as const
+      : isDoorlopend ? "Doorlopend" as const : "Gaffel" as const;
+    const staafeinden = {
+      begin: eindSoort(beam.startNodeId, doorlopendeEinden.begin),
+      eind: eindSoort(beam.endNodeId, doorlopendeEinden.eind),
+    };
     inputs.push({
       bijlage: "NL", beam_id: beam.id, width_mm: b, height_mm: h,
       ...(custom ? { custom_section: custom } : {}),
@@ -295,6 +317,8 @@ export function buildOpenFem3DTimberCheckInputs(
       staaf_notities: [
         `3D-raamwerk: knik om y en z wordt ruimtelijk getoetst; vrije einden: ${einden.vrijEind(beam, beam.startNodeId) || einden.vrijEind(beam, beam.endNodeId) ? "ja" : "nee"}.`,
         ltb.note,
+        ...lijnNotities,
+        ...(doorlopendNotitie ? [doorlopendNotitie] : []),
         // De toetsset (`toetsSet3D`, issue #199, B10): de vaste houtmelding bij
         // elke houtstaaf. Een aanroeper met een eigen combinatieset (zonder
         // `toetsAnalyse`) krijgt haar niet.
@@ -302,7 +326,7 @@ export function buildOpenFem3DTimberCheckInputs(
       ],
     });
   }
-  return { inputs, skipped, notes };
+  return { inputs, skipped: [...skipped, ...openFem3DLijnDelenOvergeslagen(samen, skipped, inputs.map((i) => i.beam_id))], notes, lijnDelen: samen.lijnDelen };
 }
 
 export async function runOpenFem3DTimberChecks(
@@ -315,5 +339,5 @@ export async function runOpenFem3DTimberChecks(
   const results = built.inputs.length
     ? await roepKern<TimberBeamCheckResult[]>("check_timber_beams", built.inputs)
     : [];
-  return { results, skipped: built.skipped, notes: built.notes };
+  return { results, skipped: built.skipped, notes: built.notes, lijnDelen: built.lijnDelen };
 }

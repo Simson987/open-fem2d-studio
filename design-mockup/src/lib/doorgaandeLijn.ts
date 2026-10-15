@@ -480,10 +480,22 @@ function eindVelden<T extends object>(
   return n > 0 ? (uit as Partial<T>) : undefined;
 }
 
+/**
+ * Wat `voegConfigSamen` van een deel leest: de toetsinstellingen, de richting
+ * en de plaats op de lijn. Een 2D-`LijnDeel` past, en ook een deel van een
+ * 3D-lijn (`openFem3dDoorgaandeLijn.ts`, issue #207).
+ */
+export interface ConfigDeel {
+  beam: { checkConfig?: BeamCheckConfig };
+  gespiegeld: boolean;
+  xStartMm: number;
+  lengteMm: number;
+}
+
 /** Kipsteunfracties van een deel, als fracties van de hele lijn. */
 function fractiesNaarLijn(
   fracties: number[] | undefined,
-  deel: LijnDeel,
+  deel: ConfigDeel,
   lengteMm: number,
 ): number[] {
   if (!Array.isArray(fracties) || lengteMm <= 0) return [];
@@ -494,9 +506,13 @@ function fractiesNaarLijn(
 
 /**
  * De toetsconfiguratie van de virtuele staaf uit die van de delen. Levert
- * ook de zinnen die zeggen waar de delen het oneens waren.
+ * ook de zinnen die zeggen waar de delen het oneens waren. Ook voor 3D
+ * (`openFem3dDoorgaandeLijn.ts`): dezelfde regels in beide.
  */
-function voegConfigSamen(lijn: DoorgaandeLijn): { config: BeamCheckConfig | undefined; notities: string[] } {
+export function voegConfigSamen(lijn: { delen: readonly ConfigDeel[]; lengteMm: number }): {
+  config: BeamCheckConfig | undefined;
+  notities: string[];
+} {
   const configs = lijn.delen.map((d) => d.beam.checkConfig ?? {});
   const notities: string[] = [];
   const uit: BeamCheckConfig = {};
