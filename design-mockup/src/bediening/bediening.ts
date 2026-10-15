@@ -72,6 +72,7 @@ import { openFem3DMaximumDisplacementM } from "../components/openFem3d/openFem3d
 import { maakStaalhal, type StaalhalResultaat } from "../components/openFem3d/wizards/staalhal";
 import { importeerIfcAnalyseModel, type IfcAnalyseImport } from "../io/ifcAnalyseImport";
 import type { SolverResult } from "../components/fem/solver/types";
+import { combinatieSamenvatting } from "./samenvatting";
 import type { ReinforcementCage } from "../lib/types/concrete/ReinforcementCage";
 import { isEigenGewichtGeval } from "../lib/eigenGewicht";
 import {
@@ -1167,7 +1168,7 @@ export async function voerUit(
       }
       const t = useCheckStore.getState();
       return {
-        ...samenvatting(cr, a().fem.rekenCombinaties ?? a().fem.combinations),
+        ...combinatieSamenvatting(cr, a().fem.rekenCombinaties ?? a().fem.combinations),
         // Het analysetype van de RESULTATEN; de toets rekent zelf (`toetsing`).
         analysetype: a().fem.analysetype,
         fysischeRonde: uitkomst.fysisch,
@@ -1368,35 +1369,4 @@ function openFem3dUitlezen(a: BedieningActies) {
     toetsAlphaCr: a.openFem3d.toets?.alphaCr ?? [],
     toetsmeldingen: a.openFem3d.toets?.meldingen ?? [],
   };
-}
-
-/** Per combinatie de uitersten — genoeg om te zien dát er gerekend is, en wat. */
-function samenvatting(
-  cr: Map<number, SolverResult>,
-  combos: readonly { id: number; name: string }[],
-) {
-  const uit: Record<string, unknown>[] = [];
-  for (const [id, r] of cr) {
-    let mMax = 0, vMax = 0, nMax = 0, wMax = 0;
-    // Alleen de reeksen die hier tellen; via `unknown` omdat ElementForces
-    // geen indexsignatuur heeft en de veldnamen per pad kunnen verschillen.
-    const els = (r as unknown as { elements?: Map<number, Record<string, number[] | undefined>> }).elements;
-    if (els) {
-      for (const e of els.values()) {
-        for (const x of e.bendingMoment ?? []) mMax = Math.max(mMax, Math.abs(x));
-        for (const x of e.shearForce ?? []) vMax = Math.max(vMax, Math.abs(x));
-        for (const x of e.axialForce ?? e.normalForce ?? []) nMax = Math.max(nMax, Math.abs(x));
-        for (const x of e.deflection ?? []) wMax = Math.max(wMax, Math.abs(x));
-      }
-    }
-    uit.push({
-      combinatie: id,
-      naam: combos.find((c) => c.id === id)?.name ?? String(id),
-      M_max_kNm: mMax / 1e6,
-      V_max_kN: vMax / 1e3,
-      N_max_kN: nMax / 1e3,
-      w_max_mm: wMax,
-    });
-  }
-  return { combinaties: uit };
 }
