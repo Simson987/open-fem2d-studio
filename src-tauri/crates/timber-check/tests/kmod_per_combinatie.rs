@@ -84,6 +84,7 @@ fn ligger(klasse: &str, b: f64, h: f64, l_m: f64, env: Vec<ForcePoint>) -> Timbe
         deflection_quasi_perm_fin_mm: None,
         deflection_add_mm: None,
         pre_camber_mm: None,
+        staafeinden: None,
         staaf_notities: None,
         width_end_mm: None,
         height_end_mm: None,

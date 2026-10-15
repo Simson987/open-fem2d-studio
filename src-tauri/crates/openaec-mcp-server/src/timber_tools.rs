@@ -216,6 +216,16 @@ fn schema_houten_staaf() -> Value {
                 "description": "Ruimtelijk raamwerk (3D-berekening): de berekening ziet knik om BEIDE doorsnedeassen, dus knik om z is uitbuigen in het rekenvlak en de kolomtoets meldt dat niet als 'uit het vlak van het model'. Default false (2D)." },
             "is_cantilever": { "type": "boolean", "default": false,
                 "description": "Vrij staafeind (uitkraging, vrijstaande kolom): geen oplegging en geen aansluitende staaf aan één eind. Zonder opgegeven kniklengte geldt dan L_cr = 2*L, de ingeklemd-vrije staaf, behalve om een as uit 'zijdelingse_knik_in_analyse' (dan L). Weglaten = false: de terugval op de staaflengte, die beide einden als zijdelings gesteund aanneemt. `check_fem_model` en de app vullen dit uit het model." },
+            "staafeinden": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["begin", "eind"],
+                "description": "Wat er aan de twee staafeinden zit, in de referentierichting (begin = x = 0); hetzelfde veld als bij de staaltoets. 'Gaffel' = oplegging of aansluiting: zijdelings gesteund en torsievast. 'Vrij' = geen oplegging en geen aansluitende staaf; werkt als 'is_cantilever'. 'Doorlopend' = de staaf loopt zonder oplegging in het verlengde door in een staaf met een andere doorsnede of een ander materiaal (een getrapte kolom; in een 3D-model, waar staven niet worden samengevoegd, elke voortzetting in het verlengde zonder steun): art. 6.3.2 wordt dan alleen uitgevoerd als 'buckling_length_y_m' EN 'buckling_length_z_m' zijn opgegeven, en art. 6.3.3 alleen als daarnaast 'ltb_segment_length_m' of 'ltb_effective_length_override_m' is opgegeven; anders wordt de toets geweigerd met reden in plaats van de lengte van één deel te nemen. Ontbreekt zo de kolomtoets bij druk of de kiptoets bij buiging, dan is de status NotApplicable ('NIET VOLLEDIG GETOETST: ...'), tenzij een andere toets boven 1 uitkomt (NotOk). Weglaten = beide 'Gaffel'. `check_fem_model` en de app vullen dit uit het model.",
+                "properties": {
+                    "begin": { "type": "string", "enum": ["Gaffel", "Vrij", "Doorlopend"] },
+                    "eind":  { "type": "string", "enum": ["Gaffel", "Vrij", "Doorlopend"] }
+                }
+            },
             "zijdelingse_knik_in_analyse": {
                 "type": "object",
                 "additionalProperties": false,
@@ -580,6 +590,8 @@ mod tests {
             "deflection_add_mm",
             // Issue #252: de zeeg in de netto eindzakking.
             "pre_camber_mm",
+            // Issue #205: de staafeinden, met het doorlopende eind.
+            "staafeinden",
         ];
         for v in verwacht {
             assert!(velden.contains_key(v), "het staafschema mist `{v}`");

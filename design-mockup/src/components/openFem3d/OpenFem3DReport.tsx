@@ -993,10 +993,13 @@ export default function OpenFem3DReport({
                   const uc = openFem3DTimberUlsUc(check);
                   const governing = openFem3DTimberGoverningUlsCheck(check);
                   const hasUls = governing !== undefined;
-                  return <tr key={check.beam_id}>
+                  // Niet (volledig) getoetst (issue #205, een doorlopend
+                  // staafeind): de reden van de kern, nooit "voldoet".
+                  const nietGetoetst = check.status === "NotApplicable" && uc <= 1;
+                  return <tr key={check.beam_id} data-open-fem3d-niet-getoetst={nietGetoetst ? check.beam_id : undefined}>
                     <td>{check.beam_id}</td><td>{check.section_name}</td><td>{check.strength_class}</td>
-                    <td>{hasUls ? number(uc) : "—"}</td><td>{governing?.kind.data.title ?? "—"}</td>
-                    <td className={hasUls ? uc > 1 ? "open-fem3d-report-bad" : "open-fem3d-report-good" : "open-fem3d-report-note"}>{hasUls ? uc > 1 ? t("openFem3d.check.fail") : t("openFem3d.check.pass") : t("openFem3d.check.notApplicable")}</td>
+                    <td>{hasUls ? number(uc) : "—"}</td><td>{nietGetoetst ? check.governing_check_id : governing?.kind.data.title ?? "—"}</td>
+                    <td className={nietGetoetst ? "open-fem3d-report-note" : hasUls ? uc > 1 ? "open-fem3d-report-bad" : "open-fem3d-report-good" : "open-fem3d-report-note"}>{nietGetoetst ? t("openFem3d.check.notChecked") : hasUls ? uc > 1 ? t("openFem3d.check.fail") : t("openFem3d.check.pass") : t("openFem3d.check.notApplicable")}</td>
                   </tr>;
                 })}
               </tbody></table>

@@ -45,6 +45,11 @@ export interface OpenFem3DEinden {
   knoopInPlaat(nodeId: number): boolean;
   /** Is dit eind van de staaf vrij? */
   vrijEind(beam: OpenFem3DBeam, nodeId: number): boolean;
+  /**
+   * Loopt de staaf aan dit eind zonder steun in het verlengde door (issue
+   * #205)? Zie `doorlopendEind` hieronder.
+   */
+  doorlopendEind(beam: OpenFem3DBeam, nodeId: number): boolean;
   /** De inklemming van de staaf, of `null` voor een gewone overspanning. */
   inklemming(beam: OpenFem3DBeam): OpenFem3DInklemming | null;
 }
@@ -103,6 +108,36 @@ export function openFem3DEinden(model: OpenFem3DModel): OpenFem3DEinden {
     }
     return !knoopInPlaat(nodeId);
   };
+  // DOORLOPEND (issue #205): geen oplegging, geen bedding, niet in een plaat,
+  // en ALLEEN staven in het verlengde op de knoop (binnen 1e-6 op het
+  // uitwendig product van de eenheidsrichtingen). Zo'n eind is geen gaffel en
+  // niet zijdelings gesteund. In 2D voegt de bouwer staven met dezelfde
+  // doorsnede eerst samen tot een doorgaande lijn; in 3D gebeurt dat niet, dus
+  // geldt hier elke voortzetting in het verlengde als doorlopend — ook met
+  // dezelfde doorsnede. Anders kreeg elk deel de eigen lengte als
+  // kniklengte, alsof de tussenknoop gesteund is.
+  const richting = (b: OpenFem3DBeam): { x: number; y: number; z: number } | null => {
+    const a = model.nodes.find((node) => node.id === b.startNodeId);
+    const e = model.nodes.find((node) => node.id === b.endNodeId);
+    if (!a || !e) return null;
+    const d = { x: e.x - a.x, y: e.y - a.y, z: e.z - a.z };
+    const l = Math.hypot(d.x, d.y, d.z);
+    return l > 0 ? { x: d.x / l, y: d.y / l, z: d.z / l } : null;
+  };
+  const doorlopendEind = (beam: OpenFem3DBeam, nodeId: number): boolean => {
+    if ((model.supports ?? []).some((support) => support.nodeId === nodeId)) return false;
+    if (beam.bedding) return false;
+    const anderen = model.beams.filter((other) => other.id !== beam.id
+      && (other.startNodeId === nodeId || other.endNodeId === nodeId));
+    if (anderen.length === 0) return false;
+    const r = richting(beam);
+    if (!r) return false;
+    const inVerlengde = anderen.every((other) => {
+      const d = richting(other);
+      return d !== null && Math.hypot(r.y * d.z - r.z * d.y, r.z * d.x - r.x * d.z, r.x * d.y - r.y * d.x) <= 1e-6;
+    });
+    return inVerlengde && !knoopInPlaat(nodeId);
+  };
   const inklemming = (beam: OpenFem3DBeam): OpenFem3DInklemming | null => {
     const beginVrij = vrijEind(beam, beam.startNodeId);
     const eindVrij = vrijEind(beam, beam.endNodeId);
@@ -110,7 +145,7 @@ export function openFem3DEinden(model: OpenFem3DModel): OpenFem3DEinden {
     if (eindVrij && !beginVrij) return "begin";
     return beam.checkConfig?.deflectionClass === "cantilever" ? "kleinste" : null;
   };
-  return { knoopInPlaat, vrijEind, inklemming };
+  return { knoopInPlaat, vrijEind, doorlopendEind, inklemming };
 }
 
 /**

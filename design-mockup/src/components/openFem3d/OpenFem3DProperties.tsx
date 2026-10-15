@@ -755,6 +755,15 @@ export default function OpenFem3DProperties({
           {!checksRunning && !checksError && !timberCheck && <p className="fem-prop-hint">
             {timberSkip?.reason ?? (result ? t("openFem3d.props.noTimberCheck") : t("openFem3d.props.calculateFirst"))}
           </p>}
+          {timberCheck && timberCheck.status === "NotApplicable" && <>
+            {/* Niet (volledig) getoetst, bijvoorbeeld een doorlopend staafeind
+                zonder opgegeven kniklengtes (issue #205): geen "voldoet", maar
+                de reden van de kern — zoals bij staal. */}
+            <Row label={t("openFem3d.check.status")}><strong className="open-fem3d-check-na" data-open-fem3d-niet-getoetst>
+              {t("openFem3d.check.notChecked")}
+            </strong></Row>
+            <p className="fem-prop-hint">{t("openFem3d.check.notCheckedReason", { reason: timberCheck.governing_check_id })}</p>
+          </>}
           {timberCheck && <>
             <Row label={t("openFem3d.check.ucUls")}><code>{value(openFem3DTimberUlsUc(timberCheck))}</code></Row>
             <Row label={t("openFem3d.check.governing")}><code>{openFem3DTimberGoverningUlsCheck(timberCheck)?.id ?? "—"}</code></Row>

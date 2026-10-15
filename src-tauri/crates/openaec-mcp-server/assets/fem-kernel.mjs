@@ -18785,6 +18785,13 @@ function buildTimberCheckInputs(ruweData) {
       // kolom L_cr = L: een viermaal te hoge kritieke kracht. Dezelfde
       // staafeinden als bij staal en als bij de doorbuiging hierboven.
       is_cantilever: vrijEind,
+      // De staafeinden zoals de staalbouwer ze bepaalt (issue #205). Een
+      // DOORLOPEND eind — de lijn loopt zonder oplegging door in een staaf met
+      // een andere doorsnede of een ander materiaal, zoals bij een getrapte
+      // kolom — is geen gaffel: de kern weigert dan art. 6.3.2 en 6.3.3 zonder
+      // opgegeven kniklengtes, in plaats van de lengte van één deel als
+      // kniklengte te nemen, en meldt de staaf als niet volledig getoetst.
+      staafeinden,
       // `zijdelingse_knik_in_analyse` (L in plaats van 2·L bij tweede orde met
       // scheefstand) gaat bij hout bewust NIET mee: NEN-EN 1995-1-1 eist bij
       // tweede orde E_d = E_mean/γ_M (2.2.2(1)P) en de boogimperfectie van
@@ -34118,6 +34125,27 @@ function openFem3DEinden(model) {
     }
     return !knoopInPlaat2(nodeId);
   };
+  const richting2 = (b) => {
+    const a = model.nodes.find((node) => node.id === b.startNodeId);
+    const e = model.nodes.find((node) => node.id === b.endNodeId);
+    if (!a || !e) return null;
+    const d = { x: e.x - a.x, y: e.y - a.y, z: e.z - a.z };
+    const l = Math.hypot(d.x, d.y, d.z);
+    return l > 0 ? { x: d.x / l, y: d.y / l, z: d.z / l } : null;
+  };
+  const doorlopendEind = (beam, nodeId) => {
+    if ((model.supports ?? []).some((support) => support.nodeId === nodeId)) return false;
+    if (beam.bedding) return false;
+    const anderen = model.beams.filter((other) => other.id !== beam.id && (other.startNodeId === nodeId || other.endNodeId === nodeId));
+    if (anderen.length === 0) return false;
+    const r = richting2(beam);
+    if (!r) return false;
+    const inVerlengde = anderen.every((other) => {
+      const d = richting2(other);
+      return d !== null && Math.hypot(r.y * d.z - r.z * d.y, r.z * d.x - r.x * d.z, r.x * d.y - r.y * d.x) <= 1e-6;
+    });
+    return inVerlengde && !knoopInPlaat2(nodeId);
+  };
   const inklemming = (beam) => {
     const beginVrij = vrijEind(beam, beam.startNodeId);
     const eindVrij = vrijEind(beam, beam.endNodeId);
@@ -34125,7 +34153,7 @@ function openFem3DEinden(model) {
     if (eindVrij && !beginVrij) return "begin";
     return beam.checkConfig?.deflectionClass === "cantilever" ? "kleinste" : null;
   };
-  return { knoopInPlaat: knoopInPlaat2, vrijEind, inklemming };
+  return { knoopInPlaat: knoopInPlaat2, vrijEind, doorlopendEind, inklemming };
 }
 function openFem3DZijdelingseKnik(model, uls, analyseVan, phi) {
   const tweedeOrde = uls.length > 0 && uls.every((c) => analyseVan(c.id) === "p-delta");
@@ -34745,6 +34773,8 @@ function buildOpenFem3DTimberCheckInputs(model, result, combinationSet) {
       ...quasi.length ? [] : ["Quasi-blijvende BGT-combinatie ontbreekt: w_qp = w_inst is veilig-zijdig aangehouden."],
       ...w3Apart !== void 0 ? [`w\u2083 = w_c \u2212 w\u2081 = ${Math.abs(w3Apart).toFixed(2).replace(".", ",")} mm (omlaag) is de grootste verandering van het vervormingsveld ten opzichte van de blijvende combinatie "${permanent.combo?.name ?? "\u2014"}" (w\u2082 + w\u2083 = w_tot \u2212 w\u2081, figuur NB.1), niet |w_inst| \u2212 |w\u2081| = ${w3Kern.toFixed(2).replace(".", ",")} mm; de kern rekent w_add = w\u2082 + w\u2083.`] : []
     ];
+    const eindSoort = (nodeId) => einden.vrijEind(beam, nodeId) ? "Vrij" : einden.doorlopendEind(beam, nodeId) ? "Doorlopend" : "Gaffel";
+    const staafeinden = { begin: eindSoort(beam.startNodeId), eind: eindSoort(beam.endNodeId) };
     inputs.push({
       bijlage: "NL",
       beam_id: beam.id,
@@ -34765,6 +34795,7 @@ function buildOpenFem3DTimberCheckInputs(model, result, combinationSet) {
       buckling_length_z_m: cfg.bucklingLengthZ_m ?? 0,
       ruimtelijk: true,
       is_cantilever: einden.vrijEind(beam, beam.startNodeId) || einden.vrijEind(beam, beam.endNodeId),
+      staafeinden,
       // `zijdelingse_knik_in_analyse` (L in plaats van 2·L bij P-Δ met
       // scheefstand) gaat bij hout bewust NIET mee: NEN-EN 1995-1-1 eist bij
       // tweede orde E_d = E_mean/γ_M (2.2.2(1)P) en de boogimperfectie van

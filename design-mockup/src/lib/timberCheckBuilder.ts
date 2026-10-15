@@ -1138,6 +1138,13 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
       // kolom L_cr = L: een viermaal te hoge kritieke kracht. Dezelfde
       // staafeinden als bij staal en als bij de doorbuiging hierboven.
       is_cantilever: vrijEind,
+      // De staafeinden zoals de staalbouwer ze bepaalt (issue #205). Een
+      // DOORLOPEND eind — de lijn loopt zonder oplegging door in een staaf met
+      // een andere doorsnede of een ander materiaal, zoals bij een getrapte
+      // kolom — is geen gaffel: de kern weigert dan art. 6.3.2 en 6.3.3 zonder
+      // opgegeven kniklengtes, in plaats van de lengte van één deel als
+      // kniklengte te nemen, en meldt de staaf als niet volledig getoetst.
+      staafeinden,
       // `zijdelingse_knik_in_analyse` (L in plaats van 2·L bij tweede orde met
       // scheefstand) gaat bij hout bewust NIET mee: NEN-EN 1995-1-1 eist bij
       // tweede orde E_d = E_mean/γ_M (2.2.2(1)P) en de boogimperfectie van

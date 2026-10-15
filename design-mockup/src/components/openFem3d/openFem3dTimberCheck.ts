@@ -245,6 +245,13 @@ export function buildOpenFem3DTimberCheckInputs(
         ? [`w₃ = w_c − w₁ = ${Math.abs(w3Apart).toFixed(2).replace(".", ",")} mm (omlaag) is de grootste verandering van het vervormingsveld ten opzichte van de blijvende combinatie "${permanent.combo?.name ?? "—"}" (w₂ + w₃ = w_tot − w₁, figuur NB.1), niet |w_inst| − |w₁| = ${w3Kern.toFixed(2).replace(".", ",")} mm; de kern rekent w_add = w₂ + w₃.`]
         : []),
     ];
+    // De staafeinden zoals bij staal (issue #205): vrij, doorlopend (alleen
+    // staven in het verlengde, zonder steun) of een gaffel. Bij een
+    // doorlopend eind weigert de kern art. 6.3.2 en 6.3.3 zonder opgegeven
+    // kniklengtes in plaats van de lengte van één deel te nemen.
+    const eindSoort = (nodeId: number) => einden.vrijEind(beam, nodeId) ? "Vrij" as const
+      : einden.doorlopendEind(beam, nodeId) ? "Doorlopend" as const : "Gaffel" as const;
+    const staafeinden = { begin: eindSoort(beam.startNodeId), eind: eindSoort(beam.endNodeId) };
     inputs.push({
       bijlage: "NL", beam_id: beam.id, width_mm: b, height_mm: h,
       ...(custom ? { custom_section: custom } : {}),
@@ -262,6 +269,7 @@ export function buildOpenFem3DTimberCheckInputs(
       buckling_length_z_m: cfg.bucklingLengthZ_m ?? 0,
       ruimtelijk: true,
       is_cantilever: einden.vrijEind(beam, beam.startNodeId) || einden.vrijEind(beam, beam.endNodeId),
+      staafeinden,
       // `zijdelingse_knik_in_analyse` (L in plaats van 2·L bij P-Δ met
       // scheefstand) gaat bij hout bewust NIET mee: NEN-EN 1995-1-1 eist bij
       // tweede orde E_d = E_mean/γ_M (2.2.2(1)P) en de boogimperfectie van
