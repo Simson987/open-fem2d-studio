@@ -206,6 +206,58 @@ async fn een_doorsnede_die_niet_te_bepalen_is_is_een_invoerfout_met_remedie() {
     }
 }
 
+/// Issue #204: weigert de modelcontrole het model (een last naar een staaf die
+/// niet bestaat, een koppel zonder `my`), dan zegt de remedie dat: herstel de
+/// fouten of roep `validate_fem_model` aan. Tot dan stond er de remedie over
+/// onbekende velden, die bij deze fouten de verkeerde kant op wijst. Een
+/// onbekend veld houdt die algemene remedie.
+#[tokio::test]
+async fn een_weigering_door_de_modelcontrole_heeft_een_eigen_remedie() {
+    eis_node().await;
+
+    let staaf = json!({ "id": 1, "from": 1, "to": 2, "material": "S235", "profile": "IPE 200" });
+    let mut naar_staaf_7 = ligger(staaf.clone());
+    naar_staaf_7["loads"][0]["beamId"] = json!(7);
+    let mut koppel_zonder_my = ligger(staaf.clone());
+    koppel_zonder_my["loads"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({ "id": 2, "type": "pointMoment", "caseId": 1, "nodeId": 1, "fz": -7 }));
+    let gevallen = [
+        ("last naar staaf 7", naar_staaf_7, "staaf 7"),
+        ("koppel zonder my", koppel_zonder_my, "`my`"),
+    ];
+    for tool in ["solve_fem_model", "check_fem_model"] {
+        for (naam, model, kern) in &gevallen {
+            let result = roep_tool(tool, json!({ "model": model })).await;
+            assert_eq!(result["isError"], true, "{tool} / {naam} had moeten weigeren: {result}");
+            let fout = &result["structuredContent"];
+            assert_eq!(fout["error_code"], "INVOER_ONGELDIG", "{tool} / {naam}: {fout}");
+            assert_eq!(fout["detail"]["reden"], "modelcontrole", "{tool} / {naam}: {fout}");
+            let melding = fout["melding"].as_str().unwrap_or("");
+            assert!(melding.contains(kern), "{tool} / {naam}: {melding}");
+            let remedie = fout["remedie"].as_str().unwrap_or("");
+            assert!(
+                remedie.contains("validate_fem_model") && remedie.contains("detail.fouten"),
+                "{tool} / {naam}: remedie {remedie:?}"
+            );
+            assert!(!remedie.contains("Onbekende velden"), "{tool} / {naam}: remedie {remedie:?}");
+            let tekst = result["content"][0]["text"].as_str().unwrap_or("");
+            assert!(tekst.contains("validate_fem_model"), "{tool} / {naam}: {tekst}");
+        }
+
+        // Een onbekend veld: de veldpoort, met de algemene remedie.
+        let mut onbekend = ligger(staaf.clone());
+        onbekend["loads"][0]["fzz"] = json!(1);
+        let result = roep_tool(tool, json!({ "model": onbekend })).await;
+        let fout = &result["structuredContent"];
+        assert_eq!(fout["error_code"], "INVOER_ONGELDIG", "{tool} / onbekend veld: {fout}");
+        assert!(fout["detail"].get("reden").is_none(), "{tool} / onbekend veld: {fout}");
+        let remedie = fout["remedie"].as_str().unwrap_or("");
+        assert!(remedie.contains("Onbekende velden"), "{tool} / onbekend veld: remedie {remedie:?}");
+    }
+}
+
 #[tokio::test]
 async fn een_gevraagd_staafnummer_dat_niet_bestaat_staat_in_skipped_beams() {
     eis_node().await;

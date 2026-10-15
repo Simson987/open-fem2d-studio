@@ -744,12 +744,36 @@ fn ontleed_antwoord(regel: &str, id: i64, op: &str, log: &str) -> Result<Value, 
         .and_then(Value::as_str)
         .unwrap_or("De sidecar meldde een fout zonder tekst.")
         .to_owned();
+    let detail = fout.get("detail").cloned();
     Err(SidecarFout {
-        remedie: Some(remedie_bij(&code)),
-        detail: fout.get("detail").cloned(),
+        remedie: Some(remedie_bij_fout(&code, detail.as_ref())),
+        detail,
         code,
         melding,
     })
+}
+
+/// `detail.reden` waarmee de sidecar een weigering door de modelcontrole
+/// markeert (`REDEN_MODELCONTROLE` in design-mockup/src/mcp/sidecar.ts).
+pub const REDEN_MODELCONTROLE: &str = "modelcontrole";
+
+/// De remedie bij een fout uit de sidecar: per code, en bij INVOER_ONGELDIG
+/// van de modelcontrole een eigen remedie (issue #204). Die weigering gaat
+/// over het model zelf (een last naar een staaf, knoop of belastinggeval dat
+/// niet bestaat, een koppel zonder `my`), niet over onbekende velden; de
+/// algemene remedie van INVOER_ONGELDIG wees dan de verkeerde kant op.
+pub fn remedie_bij_fout(code: &str, detail: Option<&Value>) -> String {
+    let reden = detail.and_then(|d| d.get("reden")).and_then(Value::as_str);
+    if code == "INVOER_ONGELDIG" && reden == Some(REDEN_MODELCONTROLE) {
+        return "Er is niet gerekend: de modelcontrole (dezelfde als `validate_fem_model` en de \
+             app) vond fouten in het model zelf, zoals een last die naar een staaf, knoop of \
+             belastinggeval verwijst dat niet bestaat, of een koppel zonder waarde in `my`. \
+             Herstel de fouten uit `detail.fouten` (de melding noemt de eerste vijf) en reken \
+             opnieuw, of roep `validate_fem_model` aan voor de volledige lijst met fouten en \
+             waarschuwingen."
+            .to_owned();
+    }
+    remedie_bij(code)
 }
 
 /// De remedie bij een foutcode, ook voor fouten die niet uit de sidecar komen
@@ -1049,6 +1073,33 @@ mod tests {
         // Buiten bereik wordt begrensd, niet afgewezen.
         assert_eq!(leeg.klok(Some(0)).as_secs(), 1);
         assert_eq!(leeg.klok(Some(99_999)).as_secs(), MAXIMALE_TIMEOUT_S);
+    }
+
+    /// Issue #204: een weigering door de modelcontrole krijgt een eigen
+    /// remedie (herstel de fouten, of `validate_fem_model`), niet die over
+    /// onbekende velden. Zonder de markering blijft INVOER_ONGELDIG de
+    /// algemene remedie houden, en de markering werkt alleen bij die code.
+    #[test]
+    fn modelcontrole_krijgt_een_eigen_remedie() {
+        let detail = serde_json::json!({
+            "fouten": ["Last 1 verwijst naar staaf 7, die niet bestaat."],
+            "reden": REDEN_MODELCONTROLE,
+        });
+        let remedie = remedie_bij_fout("INVOER_ONGELDIG", Some(&detail));
+        assert!(remedie.contains("validate_fem_model"), "{remedie}");
+        assert!(remedie.contains("detail.fouten"), "{remedie}");
+        assert!(!remedie.contains("Onbekende velden"), "{remedie}");
+
+        let algemeen = remedie_bij("INVOER_ONGELDIG");
+        assert!(algemeen.contains("Onbekende velden"), "{algemeen}");
+        let veldpoort = serde_json::json!({ "fouten": ["model.loads[0]: onbekend veld `fzz`"] });
+        assert_eq!(remedie_bij_fout("INVOER_ONGELDIG", Some(&veldpoort)), algemeen);
+        assert_eq!(remedie_bij_fout("INVOER_ONGELDIG", None), algemeen);
+        assert_eq!(
+            remedie_bij_fout("MODEL_ONOPLOSBAAR", Some(&detail)),
+            remedie_bij("MODEL_ONOPLOSBAAR"),
+            "de markering hoort alleen bij INVOER_ONGELDIG"
+        );
     }
 
     #[test]

@@ -279,6 +279,13 @@ export function invoerHash(payload: unknown): string | null {
 
 // ── Payload lezen ──────────────────────────────────────────────────────────
 
+/**
+ * `detail.reden` bij een INVOER_ONGELDIG van de modelcontrole (een last naar
+ * een staaf, knoop of geval dat niet bestaat, een koppel zonder `my`, …). De
+ * MCP-server kiest er een eigen remedie op (sidecar.rs, REDEN_MODELCONTROLE).
+ */
+export const REDEN_MODELCONTROLE = "modelcontrole";
+
 /** Payload deugt niet (vorm, veld, type) → INVOER_ONGELDIG. */
 class InvoerFout extends Error {
   constructor(
@@ -1177,7 +1184,10 @@ function rekenDoor(payload: Record<string, unknown>, bewerking: Bewerking) {
       `Model niet doorgerekend — de modelcontrole (dezelfde als \`validate_fem_model\` en de ` +
         `app) vindt ${modelFouten.length} fout(en): ${getoond.join(" ")}` +
         (modelFouten.length > getoond.length ? ` En nog ${modelFouten.length - getoond.length}; zie \`detail.fouten\`.` : ""),
-      { fouten: modelFouten },
+      // `reden` onderscheidt deze weigering van de veldpoort hierboven: de
+      // MCP-server geeft er een eigen remedie bij (issue #204), want hier gaat
+      // het om een fout in het model, niet om een onbekend veld.
+      { fouten: modelFouten, reden: REDEN_MODELCONTROLE },
     );
   };
 

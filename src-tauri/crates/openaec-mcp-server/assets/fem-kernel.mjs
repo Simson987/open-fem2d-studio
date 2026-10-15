@@ -47089,6 +47089,7 @@ function invoerHash(payload) {
     return null;
   }
 }
+var REDEN_MODELCONTROLE = "modelcontrole";
 var InvoerFout = class extends Error {
   constructor(melding, detail) {
     super(melding);
@@ -47595,7 +47596,10 @@ function rekenDoor(payload, bewerking) {
     const getoond = modelFouten.slice(0, 5);
     throw new InvoerFout(
       `Model niet doorgerekend \u2014 de modelcontrole (dezelfde als \`validate_fem_model\` en de app) vindt ${modelFouten.length} fout(en): ${getoond.join(" ")}` + (modelFouten.length > getoond.length ? ` En nog ${modelFouten.length - getoond.length}; zie \`detail.fouten\`.` : ""),
-      { fouten: modelFouten }
+      // `reden` onderscheidt deze weigering van de veldpoort hierboven: de
+      // MCP-server geeft er een eigen remedie bij (issue #204), want hier gaat
+      // het om een fout in het model, niet om een onbekend veld.
+      { fouten: modelFouten, reden: REDEN_MODELCONTROLE }
     );
   };
   const klasseGelezen = leesGevolgklasse(payload, gelezen);
@@ -49002,6 +49006,7 @@ export {
   PSI_GEBRUIK,
   PSI_SNEEUW,
   PSI_WIND,
+  REDEN_MODELCONTROLE,
   RHO_BETON,
   RHO_LUCHT,
   RHO_STAAL,
