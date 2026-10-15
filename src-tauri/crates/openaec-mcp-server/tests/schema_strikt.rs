@@ -1982,3 +1982,30 @@ async fn check_fem_model_kent_geen_nonlinear_en_noemt_de_toetsanalyse() {
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }
+
+// ── Eigen factoren, bewust gekozen (issue #196) ──────────────────────────────
+
+/// De combinaties van `solve_fem_model` en `check_fem_model` kennen
+/// `bevestigdeFactoren` (bewust gekozen eigen factoren, zoals `load_fem_project`
+/// ze teruggeeft), en blijven verder strikt: geen ander veld erbij. Zonder het
+/// veld in het schema kon een cliënt die combinaties niet ongewijzigd
+/// teruggeven, en kwam de FOUT terug. Wat de server ermee doet, staat in
+/// `eigen_factoren_mcp.rs` (die vraagt Node; deze test niet).
+#[tokio::test]
+async fn combinaties_kennen_de_bevestigde_eigen_factoren_strikt() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    for (i, naam) in ["solve_fem_model", "check_fem_model"].iter().enumerate() {
+        let tool = tooldefinitie(&mut stdin, &mut reader, 200 + i as u32, naam).await;
+        let item = &tool["inputSchema"]["properties"]["combinations"]["items"];
+        assert_eq!(item["additionalProperties"], json!(false), "{naam}: {item}");
+        let mut velden: Vec<&str> = item["properties"].as_object().unwrap().keys().map(String::as_str).collect();
+        velden.sort_unstable();
+        assert_eq!(velden, ["bevestigdeFactoren", "factors", "formula", "id", "name", "type"], "{naam}");
+        let veld = &item["properties"]["bevestigdeFactoren"];
+        assert_eq!(veld["type"], json!("object"), "{naam}: {veld}");
+        assert_eq!(veld["additionalProperties"], json!({ "type": "number" }), "{naam}: {veld}");
+        assert!(veld["description"].as_str().unwrap_or("").contains("PRECIES"), "{naam}: {veld}");
+    }
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}

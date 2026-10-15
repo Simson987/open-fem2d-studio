@@ -3958,11 +3958,53 @@
       "kind": "document"
     },
     {
+      "name": "project.combinations.confirmOwnFactors",
+      "description": "Eigen factoren bewust houden (de knop \"Behoud eigen factoren\"): de huidige factoren van de genoemde eigen combinaties — zonder ids alle eigen combinaties — worden vastgelegd als bewust gekozen, bijvoorbeeld K_FI × NB tabel NB.4 (1,22 / 1,08). Een blijvend geval met zo'n factor geeft dan geen FOUT meer, en een eigen combinatie met dezelfde gevallen telt als vervanger van de standaardcombinatie waarvan ze alleen in bevestigde factoren afwijkt. De bevestiging geldt per factor en alleen voor precies die waarde: een gewijzigde factor verliest haar. Standaardcombinaties, combinaties van de windgenerator en de standaardset van versie 0.3.11 en ouder worden niet bevestigd (met ids: GEWEIGERD). De berekening verandert niet.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een combinatie."
+            },
+            "minItems": 1,
+            "description": "Welke combinaties; ontbreekt = alle eigen combinaties."
+          }
+        },
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
       "name": "project.combinations.resetToStandard",
       "description": "Alle combinaties vervangen door de standaardset volgens de norm (gevolgklasse en nationale bijlage van het project).",
       "inputSchema": {
         "type": "object",
         "properties": {},
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.combinations.revokeOwnFactors",
+      "description": "De bevestiging van eigen factoren intrekken (zonder ids: van alle combinaties). Daarna meldt de app een blijvend geval met een factor buiten NB tabel NB.4/NB.5 weer als FOUT. De berekening verandert niet.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een combinatie."
+            },
+            "minItems": 1,
+            "description": "Welke combinaties; ontbreekt = alle eigen combinaties."
+          }
+        },
         "additionalProperties": false
       },
       "kind": "document"

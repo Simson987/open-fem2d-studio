@@ -24284,15 +24284,28 @@ function gelijkeFactoren(a, b) {
 function gelijkeInhoud(a, b) {
   return a.name === b.name && a.type === b.type && a.formula === b.formula && gelijkeFactoren(a.factors, b.factors);
 }
+function gelijkeBevestiging(a, b) {
+  const ka = Object.keys(a ?? {});
+  const kb = Object.keys(b ?? {});
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) => b[k] === a[k]);
+}
 function gelijkeCombinatie(a, b) {
-  return gelijkeInhoud(a, b) && a.standaard?.sleutel === b.standaard?.sleutel && a.standaard?.soort === b.standaard?.soort && a.standaard?.gevolgklasse === b.standaard?.gevolgklasse && a.standaard?.bijlage === b.standaard?.bijlage;
+  return gelijkeInhoud(a, b) && a.standaard?.sleutel === b.standaard?.sleutel && a.standaard?.soort === b.standaard?.soort && a.standaard?.gevolgklasse === b.standaard?.gevolgklasse && a.standaard?.bijlage === b.standaard?.bijlage && gelijkeBevestiging(a.bevestigdeFactoren, b.bevestigdeFactoren);
 }
 function gelijkeLijst(a, b) {
   return a.length === b.length && a.every((c, i) => c.id === b[i].id && gelijkeCombinatie(c, b[i]));
 }
 function zonderOnbekendeGevallen(c, ids) {
-  if ([...c.factors.keys()].every((id2) => ids.has(id2))) return c;
-  return { ...c, factors: new Map([...c.factors].filter(([id2]) => ids.has(id2))) };
+  const bevestigd = Object.keys(c.bevestigdeFactoren ?? {}).map(Number);
+  if ([...c.factors.keys()].every((id2) => ids.has(id2)) && bevestigd.every((id2) => ids.has(id2))) return c;
+  const { bevestigdeFactoren: _weg, ...rest } = c;
+  const over = bevestigd.filter((id2) => ids.has(id2));
+  return {
+    ...rest,
+    factors: new Map([...c.factors].filter(([id2]) => ids.has(id2))),
+    ...over.length > 0 ? { bevestigdeFactoren: Object.fromEntries(over.map((id2) => [id2, c.bevestigdeFactoren[id2]])) } : {}
+  };
 }
 function perSleutel(set) {
   return new Map(set.map((c) => [c.standaard.sleutel, c]));
@@ -24549,7 +24562,8 @@ function openCombinatieStaat(p2) {
       combinations: staat.combinations,
       loadCases: p2.loadCases,
       weesFactoren: wees,
-      loads: p2.loads
+      loads: p2.loads,
+      bijlage
     })
   };
 }
@@ -24643,7 +24657,7 @@ function verplaatsEigenGewichtNaarEigenGeval(staat) {
       if (f === 0) return c;
       const factors = new Map(c.factors);
       factors.set(id2, f);
-      return { ...c, factors };
+      return isBevestigdeFactor(c, vanId) ? { ...c, factors, bevestigdeFactoren: { ...c.bevestigdeFactoren, [id2]: f } } : { ...c, factors };
     }),
     volgendGevalId: id2 + 1
   };
@@ -24703,8 +24717,13 @@ function wijzigCombinatie(staat, id2, patch) {
     ...staat,
     combinations: staat.combinations.map((c) => {
       if (c.id !== id2) return c;
-      const { standaard: _weg, ...rest } = { ...c, ...patch };
-      return { ...rest, id: id2 };
+      const { standaard: _weg, bevestigdeFactoren: _bevestigd, ...rest } = { ...c, ...patch };
+      const typeAnders = patch.type !== void 0 && patch.type !== c.type;
+      const over = typeAnders ? [] : Object.entries(c.bevestigdeFactoren ?? {}).filter(([caseId, b]) => {
+        const f = rest.factors.get(Number(caseId)) ?? 0;
+        return f !== 0 && gelijk(f, b);
+      });
+      return { ...rest, id: id2, ...over.length > 0 ? { bevestigdeFactoren: Object.fromEntries(over) } : {} };
     })
   };
 }
@@ -24715,6 +24734,150 @@ function verwijderCombinatie(staat, id2) {
     combinations: staat.combinations.filter((c) => c.id !== id2),
     volgendCombinatieId: Math.max(staat.volgendCombinatieId, id2 + 1)
   };
+}
+function isBevestigdeFactor(c, caseId) {
+  const f = c.factors.get(caseId) ?? 0;
+  const b = c.bevestigdeFactoren?.[caseId];
+  return f !== 0 && typeof b === "number" && gelijk(b, f);
+}
+function heeftBevestigdeFactoren(c) {
+  return Object.keys(c.bevestigdeFactoren ?? {}).some((id2) => isBevestigdeFactor(c, Number(id2)));
+}
+function afwijkingBevestigbaar(a, combinations, gevalIds) {
+  return a.regels.some((r) => {
+    const c = combinations.find((x) => x.id === r.combinatieId);
+    return c !== void 0 && redenNietBevestigbaar(c, gevalIds) === null;
+  });
+}
+function redenNietBevestigbaar(c, gevalIds) {
+  if (c.standaard) {
+    return "een standaardcombinatie: de app houdt haar factoren bij volgens de NB-tabellen. Wijzig haar eerst; dan is het een eigen combinatie";
+  }
+  if (isWindgeneratorCombinatie(c)) {
+    return "een combinatie van de windgenerator: die volgt de gegenereerde windgevallen";
+  }
+  if (isOudeStandaardcombinatie(c, gevalIds)) {
+    return 'een ongewijzigde combinatie van de standaardset van versie 0.3.11 en ouder: kies "Vervang door standaardcombinaties" in plaats van haar te houden';
+  }
+  return null;
+}
+function bevestigEigenFactoren(staat, ids) {
+  const gevalIds = new Set(staat.loadCases.map((c) => c.id));
+  const gevraagd = ids ? new Set(ids) : null;
+  const bevestigd = [];
+  const overgeslagen = [];
+  let veranderd = false;
+  const combinations = staat.combinations.map((c) => {
+    if (gevraagd && !gevraagd.has(c.id)) return c;
+    const reden = redenNietBevestigbaar(c, gevalIds);
+    if (reden) {
+      overgeslagen.push({ id: c.id, naam: c.name, reden });
+      return c;
+    }
+    const bevestigdeFactoren = Object.fromEntries(
+      [...c.factors].filter(([id2, f]) => f !== 0 && gevalIds.has(id2))
+    );
+    if (Object.keys(bevestigdeFactoren).length === 0) return c;
+    bevestigd.push(c.id);
+    if (gelijkeBevestiging(c.bevestigdeFactoren, bevestigdeFactoren)) return c;
+    veranderd = true;
+    return { ...c, bevestigdeFactoren };
+  });
+  return { staat: veranderd ? { ...staat, combinations } : staat, bevestigd, overgeslagen };
+}
+function trekBevestigingIn(staat, ids) {
+  const gevraagd = ids ? new Set(ids) : null;
+  const ingetrokken = [];
+  const combinations = staat.combinations.map((c) => {
+    if (gevraagd && !gevraagd.has(c.id) || c.bevestigdeFactoren === void 0) return c;
+    ingetrokken.push(c.id);
+    const { bevestigdeFactoren: _weg, ...rest } = c;
+    return rest;
+  });
+  return { staat: ingetrokken.length > 0 ? { ...staat, combinations } : staat, ingetrokken };
+}
+var AFRONDING = 5e-3 + 1e-9;
+function nb4Klasse(bijlage) {
+  return GEVOLGKLASSEN.find((k) => gelijk(kFi(k, bijlage), 1)) ?? STANDAARD_GEVOLGKLASSE;
+}
+function tabelVan(klasse, bijlage) {
+  const bron = partieleFactoren(klasse, bijlage).bron;
+  return /NB\.\d+/.exec(bron)?.[0] ?? bron;
+}
+function klasseVanK(k, bijlage) {
+  return GEVOLGKLASSEN.find((x) => gelijk(kFi(x, bijlage), k)) ?? null;
+}
+function uitdrukkingVan(c) {
+  if (c.standaard?.soort === "6.10a" || c.standaard?.soort === "6.10b") return c.standaard.soort;
+  const tekst2 = `${c.name} ${c.formula}`;
+  if (/6\.10a/.test(tekst2)) return "6.10a";
+  if (/6\.10b/.test(tekst2)) return "6.10b";
+  return null;
+}
+var gSup = (u, klasse, bijlage) => u === "6.10a" ? partieleFactoren(klasse, bijlage).gGsup610a : partieleFactoren(klasse, bijlage).gGsup610b;
+function duidingBlijvend(f, u, bijlage) {
+  const basisKlasse = nb4Klasse(bijlage);
+  const nb4 = tabelVan(basisKlasse, bijlage);
+  const kandidaten = [];
+  for (const klasse of GEVOLGKLASSEN) {
+    const k = kFi(klasse, bijlage);
+    if (gelijk(k, 1)) continue;
+    for (const x of ["6.10a", "6.10b"]) {
+      const basis = gSup(x, basisKlasse, bijlage);
+      if (Math.abs(f - k * basis) <= AFRONDING) kandidaten.push({ klasse, k, u: x, basis });
+    }
+  }
+  const kfi = kandidaten.find((x) => x.u === u) ?? kandidaten[0];
+  if (kfi) {
+    const exact = gelijk(f, Math.round(kfi.k * kfi.basis * 1e9) / 1e9);
+    return `${nl9(f)} ${exact ? "=" : "\u2248"} ${nl9(kfi.k)} \xD7 ${nl9(kfi.basis)} (K_FI ${kfi.klasse} op ${nb4} ${kfi.u}; ${tabelVan(kfi.klasse, bijlage)} ${kfi.klasse} geeft ${nl9(gSup(kfi.u, kfi.klasse, bijlage))})`;
+  }
+  const reeks = (x) => `\u03B3_G,sup in ${x}: ${GEVOLGKLASSEN.map((k) => `${nl9(gSup(x, k, bijlage))} (${k})`).join(", ")}`;
+  const nbs = [...new Set(GEVOLGKLASSEN.map((k) => tabelVan(k, bijlage)))].sort().join("/");
+  return `${nl9(f)} (eigen factor, niet uit ${nbs}; ` + (u ? reeks(u) : `${reeks("6.10a")}; ${reeks("6.10b")}`) + (f < 1 ? `; gunstig \u03B3_G,inf ${nl9(partieleFactoren(basisKlasse, bijlage).gGinf)}` : "") + ")";
+}
+function schaalOpNB4(p2) {
+  const bijlage = p2.bijlage ?? STANDAARD_BIJLAGE;
+  const nb4 = partieleFactoren(nb4Klasse(bijlage), bijlage);
+  const alleK = [...new Set(GEVOLGKLASSEN.map((k) => kFi(k, bijlage)))];
+  let g = alleK;
+  let q = alleK;
+  let gGezien = false;
+  let qGezien = false;
+  const past = (f, waarden) => (k) => waarden.some((w) => Math.abs(f - k * w) <= AFRONDING);
+  for (const c of p2.combinations) {
+    if (c.type !== "uls") continue;
+    for (const [id2, f] of c.factors) {
+      if (f === 0) continue;
+      const geval2 = p2.loadCases.find((x) => x.id === id2);
+      if (!geval2) continue;
+      if (geval2.type === "dead") {
+        if (gelijk(f, nb4.gGinf) || gelijk(f, 1)) continue;
+        gGezien = true;
+        g = g.filter(past(f, [nb4.gGsup610a, nb4.gGsup610b]));
+      } else if (geval2.type === "live" || geval2.type === "snow" || geval2.type === "wind") {
+        const psi0 = geval2.type === "live" ? psiGebruik(geval2.categorie ?? STANDAARD_CATEGORIE, bijlage).psi0 : psiKlimaat(geval2.type === "wind" ? "wind" : "sneeuw", bijlage).psi0;
+        qGezien = true;
+        q = q.filter(past(f, psi0 > 0 ? [nb4.gQ, nb4.gQ * psi0] : [nb4.gQ]));
+      }
+    }
+  }
+  return {
+    g: gGezien && g.length === 1 ? g[0] : null,
+    q: qGezien && q.length === 1 ? q[0] : null
+  };
+}
+function tekstSchaal(s, bijlage) {
+  if (s.g === null || gelijk(s.g, 1)) return "";
+  const klasse = klasseVanK(s.g, bijlage);
+  const nb4 = tabelVan(nb4Klasse(bijlage), bijlage);
+  const kTekst2 = (k) => `K_FI = ${nl9(k)}${klasseVanK(k, bijlage) ? ` (${klasseVanK(k, bijlage)})` : ""}`;
+  if (s.q !== null && gelijk(s.q, s.g)) {
+    const eigen = klasse ? partieleFactoren(klasse, bijlage) : null;
+    return `De UGT-factoren zijn consequent ${kTekst2(s.g)} maal ${nb4}, voor G \xE9n Q.` + (eigen && klasse ? ` ${tabelVan(klasse, bijlage)} geeft voor ${klasse} eigen waarden: \u03B3_G,sup ${nl9(eigen.gGsup610a)} (6.10a) en ${nl9(eigen.gGsup610b)} (6.10b), \u03B3_Q ${nl9(eigen.gQ)}.` : "");
+  }
+  const qTekst = s.q === null ? `volgen geen vaste schaal van ${nb4}` : gelijk(s.q, 1) ? `zijn ${nb4} zelf (K_FI = 1${klasseVanK(1, bijlage) ? `, ${klasseVanK(1, bijlage)}` : ""})` : `zijn ${kTekst2(s.q)} maal ${nb4}`;
+  return `De G-factoren zijn ${kTekst2(s.g)} maal ${nb4}, de Q-factoren ${qTekst}: G en Q zijn niet met dezelfde factor geschaald.`;
 }
 var TYPE_TEKST = {
   dead: "blijvend",
@@ -24729,15 +24892,31 @@ function isAfgeleidVanStandaard(c) {
 }
 function ontbrekendeStandaardcombinaties(p2) {
   const gevuld = p2.gevuld ?? (() => true);
-  const inhoud = (factors) => [...factors].filter(([id2, f]) => f !== 0 && gevuld(id2)).sort((a, b) => a[0] - b[0]).map(([id2, f]) => `${id2}:${Math.round(f * 1e9) / 1e9}`).join(",");
+  const werkzaam = (factors) => [...factors].filter(([id2, f]) => f !== 0 && gevuld(id2)).sort((a, b) => a[0] - b[0]);
+  const inhoud = (factors) => werkzaam(factors).map(([id2, f]) => `${id2}:${Math.round(f * 1e9) / 1e9}`).join(",");
   const soortDeel = (type, soort) => type === "sls" ? soort ?? "?" : "";
-  const aanwezig = new Set(
-    p2.combinations.map((c) => `${c.type}|${soortDeel(c.type, soortVanCombinatie(c))}|${inhoud(c.factors)}`)
-  );
-  return genereerStandaardCombinaties(p2.loadCases, p2.gevolgklasse, p2.bijlage).filter((n2) => {
-    const eigen = inhoud(n2.factors);
-    if (eigen === "") return false;
-    return !aanwezig.has(`${n2.type}|${soortDeel(n2.type, n2.standaard.soort)}|${eigen}`);
+  const sleutel = (c) => `${c.type}|${soortDeel(c.type, soortVanCombinatie(c))}|${inhoud(c.factors)}`;
+  const nSleutel = (n2) => `${n2.type}|${soortDeel(n2.type, n2.standaard.soort)}|${inhoud(n2.factors)}`;
+  const aanwezig = new Set(p2.combinations.map(sleutel));
+  const set = genereerStandaardCombinaties(p2.loadCases, p2.gevolgklasse, p2.bijlage).filter((n2) => inhoud(n2.factors) !== "");
+  const ontbrekend = set.filter((n2) => !aanwezig.has(nSleutel(n2)));
+  if (ontbrekend.length === 0) return ontbrekend;
+  const exact = new Set(set.map(nSleutel));
+  const vrij = p2.combinations.filter((c) => heeftBevestigdeFactoren(c) && !exact.has(sleutel(c)));
+  const formuleBasis = (f) => f.split("   [")[0];
+  return ontbrekend.filter((n2) => {
+    const nWerkzaam = werkzaam(n2.factors);
+    const past = (c) => {
+      if (c.type !== n2.type) return false;
+      if (n2.type === "sls" && soortVanCombinatie(c) !== n2.standaard.soort) return false;
+      const cWerkzaam = werkzaam(c.factors);
+      if (cWerkzaam.length !== nWerkzaam.length) return false;
+      return nWerkzaam.every(([id2, f], i) => cWerkzaam[i][0] === id2 && (gelijk(cWerkzaam[i][1], f) || isBevestigdeFactor(c, id2)));
+    };
+    const keuze2 = vrij.find((c) => formuleBasis(c.formula) === formuleBasis(n2.formula) && past(c));
+    if (!keuze2) return true;
+    vrij.splice(vrij.indexOf(keuze2), 1);
+    return false;
   });
 }
 function tekstOntbrekend(ontbrekend, klasse) {
@@ -24852,47 +25031,80 @@ function oudeKolomVan(caseId, combinations) {
   if (oud.length < 3) return null;
   return oud.every(({ c, o }) => gelijk(c.factors.get(caseId) ?? 0, o.factoren[caseId] ?? 0)) ? caseId : null;
 }
-function blijvendeFactorAfwijkingen(p2) {
+function alleBlijvendeAfwijkingen(p2) {
+  const bijlage = p2.bijlage ?? STANDAARD_BIJLAGE;
   const blijvend = p2.loadCases.filter((c) => c.type === "dead");
   const uit = [];
+  let schaal = null;
   for (const g of blijvend) {
     const regels = [];
     for (const c of p2.combinations) {
       const f = c.factors.get(g.id) ?? 0;
-      const ander = blijvend.find((o) => {
+      const anderGeval = blijvend.find((o) => {
         const fo = c.factors.get(o.id) ?? 0;
         return o.id !== g.id && fo !== 0 && !gelijk(fo, f);
       });
+      const ander = anderGeval ? { caseId: anderGeval.id, factor: c.factors.get(anderGeval.id) ?? 0 } : null;
       const pastNiet = f !== 0 && (c.type === "sls" ? !gelijk(f, 1) : !UGT_FACTOREN_BLIJVEND.some((x) => gelijk(x, f)));
       if (!pastNiet && !ander) continue;
-      const waarom = [];
-      if (pastNiet) {
-        waarom.push(c.type === "sls" ? "in de BGT telt een blijvende belasting met 1,0" : "geen \u03B3_G uit NB tabel NB.4/NB.5 en geen 1,0");
+      const anderTekst = ander ? `blijvend geval ${ander.caseId} heeft daar ${nl9(ander.factor)}` : "";
+      let tekst2;
+      if (pastNiet && c.type === "uls") {
+        tekst2 = `"${c.name}" ${duidingBlijvend(f, uitdrukkingVan(c), bijlage)}${ander ? ` \u2014 ${anderTekst}` : ""}`;
+      } else {
+        const waarom = [
+          ...pastNiet ? ["in de BGT telt een blijvende belasting met 1,0"] : [],
+          ...ander ? [anderTekst] : []
+        ];
+        tekst2 = `"${c.name}" ${f === 0 ? "geen factor" : nl9(f)} (${waarom.join("; ")})`;
       }
-      if (ander) waarom.push(`blijvend geval ${ander.id} heeft daar ${nl9(c.factors.get(ander.id) ?? 0)}`);
       regels.push({
         combinatieId: c.id,
         combinatie: c.name,
         factor: f,
         pastNiet,
-        tekst: `"${c.name}" ${f === 0 ? "geen factor" : nl9(f)} (${waarom.join("; ")})`
+        bevestigd: isBevestigdeFactor(c, g.id),
+        ander,
+        tekst: tekst2
       });
     }
     if (regels.some((r) => r.pastNiet)) {
-      uit.push({ caseId: g.id, naam: g.name, regels, oudeKolom: oudeKolomVan(g.id, p2.combinations) });
+      schaal ??= schaalOpNB4({ loadCases: p2.loadCases, combinations: p2.combinations, bijlage });
+      uit.push({ caseId: g.id, naam: g.name, regels, oudeKolom: oudeKolomVan(g.id, p2.combinations), schaal });
     }
   }
   return uit;
 }
-function regelsEnHerkomst(a) {
-  const MAX = 8;
-  const lijst2 = a.regels.slice(0, MAX).map((r) => r.tekst).join("; ") + (a.regels.length > MAX ? `; en nog ${a.regels.length - MAX}` : "");
-  const herkomst = a.oudeKolom !== null ? `Deze factoren komen overeen met de oude standaardkolom voor belastinggeval ${a.oudeKolom}, ${OUDE_GEVALLEN[a.oudeKolom]}. Controleer of dit een bewust gekozen eigen combinatie is; uit de factoren alleen is de leeftijd of herkomst van het project niet af te leiden.` : "De factoren kunnen bewust gekozen zijn. Uit deze afwijking is de leeftijd of herkomst van het project niet af te leiden.";
-  return { lijst: lijst2, herkomst };
+function blijvendeFactorAfwijkingen(p2) {
+  return alleBlijvendeAfwijkingen(p2).filter((a) => a.regels.some((r) => r.pastNiet && !r.bevestigd)).map((a) => ({ ...a, regels: a.regels.filter((r) => !r.bevestigd) }));
 }
-function tekstBlijvendeAfwijking(a) {
-  const { lijst: lijst2, herkomst } = regelsEnHerkomst(a);
-  return `Belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren die niet bij een blijvende belasting passen: ${lijst2}. Alle blijvende gevallen samen zijn \xE9\xE9n blijvende belasting G, met in elke combinatie dezelfde factor: \u03B3_G uit NEN-EN 1990 NB tabel NB.4/NB.5 in de UGT (0,9 waar zij gunstig werkt), 1,0 in de BGT (6.14b\u20136.16b). ${herkomst} De berekening gebruikt de getoonde factoren. Controleer of ze voor dit project bedoeld zijn; behoud ze als eigen factoren of kies "Vervang door standaardcombinaties" in Belastinggevallen & combinaties.`;
+function bevestigdeEigenFactoren(p2) {
+  return alleBlijvendeAfwijkingen(p2).map((a) => ({ ...a, regels: a.regels.filter((r) => r.pastNiet && r.bevestigd) })).filter((a) => a.regels.length > 0);
+}
+function tekstBevestigdeEigenFactoren(lijst2, bijlage = STANDAARD_BIJLAGE) {
+  if (lijst2.length === 0) return "";
+  const delen = lijst2.map((a) => `belastinggeval ${a.caseId} ("${a.naam}") ${lijstVan(a)}`);
+  const schaal = tekstSchaal(lijst2[0].schaal, bijlage);
+  return `Eigen factoren, bewust gekozen ("Behoud eigen factoren"): ${delen.join("; ")}.` + (schaal ? ` ${schaal}` : "") + " Ze wijken af van NB tabel NB.4/NB.5, zijn bevestigd en worden niet als fout gemeld zolang ze niet veranderen; er wordt gewoon mee gerekend.";
+}
+function lijstVan(a) {
+  const MAX = 8;
+  return a.regels.slice(0, MAX).map((r) => r.tekst).join("; ") + (a.regels.length > MAX ? `; en nog ${a.regels.length - MAX}` : "");
+}
+function herkomstVan(a, spoor) {
+  if (a.oudeKolom !== null) {
+    return `Deze factoren komen overeen met de oude standaardkolom voor belastinggeval ${a.oudeKolom}, ${OUDE_GEVALLEN[a.oudeKolom]}. Controleer of dit een bewust gekozen eigen combinatie is; uit de factoren alleen is de leeftijd of herkomst van het project niet af te leiden.`;
+  }
+  if (spoor.wees) {
+    return "In hetzelfde bestand stonden ook factoren voor belastinggevallen die niet (meer) bestaan (zie hieronder): een spoor van een eerdere versie, waarin een nieuw geval het id \xE9n de factoren van een verwijderd geval kon erven. Ga na of dat bij dit geval is gebeurd.";
+  }
+  return (a.regels.some((r) => r.ander !== null) ? "Een blijvend geval met een andere factor dan een ander blijvend geval in dezelfde combinatie ontstaat als zijn type later is gewijzigd zonder dat de factoren meegingen, of als een factor met de hand is aangepast. " : "") + "De factoren kunnen bewust gekozen zijn. Uit deze afwijking is de leeftijd of herkomst van het project niet af te leiden.";
+}
+var ADVIES_EIGEN = 'De berekening gebruikt de getoonde factoren. Zijn ze bewust gekozen, kies dan "Behoud eigen factoren" in Belastinggevallen & combinaties: de bevestiging wordt opgeslagen, de melding vervalt zolang de factoren niet veranderen, en het rapport noemt ze als bewust gekozen. Anders: kies "Vervang door standaardcombinaties", of corrigeer de factoren.';
+function tekstBlijvendeAfwijking(a, bijlage) {
+  const kop = `Belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren die niet bij een blijvende belasting passen: ${lijstVan(a)}.`;
+  const regel2 = "Alle blijvende gevallen samen zijn \xE9\xE9n blijvende belasting G, met in elke combinatie dezelfde factor: \u03B3_G uit NEN-EN 1990 NB tabel NB.4/NB.5 in de UGT (0,9 waar zij gunstig werkt), 1,0 in de BGT (6.14b\u20136.16b).";
+  return [kop, regel2, tekstSchaal(a.schaal, bijlage), herkomstVan(a, { wees: false }), ADVIES_EIGEN].filter((x) => x !== "").join(" ");
 }
 function meldingenBelastinggevallen(p2) {
   const meldingen = [];
@@ -24944,11 +25156,27 @@ function meldingenBelastinggevallen(p2) {
       gevuld
     });
     if (ontbrekend.length > 0) {
+      const naHouden = oud.length > 0 ? ontbrekend : ontbrekendeStandaardcombinaties({
+        combinations: bevestigEigenFactoren({
+          loadCases: p2.loadCases,
+          combinations: [...alle],
+          gevolgklasse: klasse,
+          bijlage,
+          volgendGevalId: 1,
+          volgendCombinatieId: 1
+        }).staat.combinations,
+        loadCases: p2.loadCases,
+        gevolgklasse: klasse,
+        bijlage,
+        gevuld
+      });
+      const houden = naHouden.length === 0;
       meldingen.push({
         niveau: "fout",
         caseId: null,
         vervangAdvies: true,
-        tekst: (oud.length > 0 ? `${tekstOudeSetInProject(oud, klasse)} ` : "") + tekstOntbrekend(ontbrekend, klasse)
+        ...houden ? { bevestigAdvies: true } : {},
+        tekst: (oud.length > 0 ? `${tekstOudeSetInProject(oud, klasse)} ` : "") + tekstOntbrekend(ontbrekend, klasse) + (houden ? ' De eigen combinaties van dit project hebben wel dezelfde gevallen als de ontbrekende, maar andere factoren. Zijn die bewust gekozen (bijvoorbeeld K_FI maal NB.4), kies dan "Behoud eigen factoren": een eigen combinatie met bevestigde factoren telt dan als vervanger.' : "")
       });
     }
   }
@@ -25002,7 +25230,7 @@ function meldingenBelastinggevallen(p2) {
     }
   }
   const blijvendAfwijkend = new Map(
-    blijvendeFactorAfwijkingen({ loadCases: p2.loadCases, combinations: p2.combinations }).map((a) => [a.caseId, a])
+    blijvendeFactorAfwijkingen({ loadCases: p2.loadCases, combinations: p2.combinations, bijlage }).map((a) => [a.caseId, a])
   );
   if (p2.combinations.some((c) => c.standaard)) {
     const eigen = p2.loadCases.filter((c) => c.gegenereerd?.bron !== "wind");
@@ -25048,7 +25276,12 @@ function meldingenBelastinggevallen(p2) {
         niveau: metLast ? "fout" : "waarschuwing",
         caseId: c.id,
         vervangAdvies: true,
-        tekst: tekstBlijvendeAfwijking(afwijking)
+        // Eigen factoren behouden mag (PR #126, issue #196), ook bij de kolom
+        // van de oude standaardset: uit de factoren alleen is niet af te
+        // leiden of ze bewust zijn. Alleen niet als geen enkele betrokken
+        // combinatie bevestigd kan worden (de ongewijzigde oude standaardset).
+        ...afwijkingBevestigbaar(afwijking, p2.combinations, new Set(p2.loadCases.map((x) => x.id))) ? { bevestigAdvies: true } : {},
+        tekst: tekstBlijvendeAfwijking(afwijking, bijlage)
       });
     }
     if (metLast && heeftBgt && !heeftFactor(c.id, "sls")) {
@@ -25072,15 +25305,33 @@ function weesLastenTekst(weesIds, loads) {
   return `LET OP: er ${getroffen.length === 1 ? "staat" : "staan"} w\xE9l ${getroffen.length === 1 ? "een last" : `${getroffen.length} lasten`} in een geval dat niet bestaat: ${lijst2}. ${getroffen.length === 1 ? "Die last telt" : "Die lasten tellen"} in geen enkele berekening mee; de modelcontrole weigert het model tot ${getroffen.length === 1 ? "hij in een bestaand belastinggeval staat" : "ze in een bestaand belastinggeval staan"}. `;
 }
 function beoordeelCombinatiesBijOpenen(p2) {
+  const bijlage = p2.bijlage ?? STANDAARD_BIJLAGE;
   const weesFactoren = [...p2.weesFactoren ?? []];
-  const blijvend = blijvendeFactorAfwijkingen({ loadCases: p2.loadCases, combinations: p2.combinations });
+  const blijvend = blijvendeFactorAfwijkingen({ loadCases: p2.loadCases, combinations: p2.combinations, bijlage });
   if (weesFactoren.length === 0 && blijvend.length === 0) return null;
+  const spoor = { wees: weesFactoren.length > 0 };
   const weesIds = [...new Set(weesFactoren.flatMap((w) => w.caseIds))].sort((a, b) => a - b);
-  const samenvatting = blijvend.map((a) => {
-    const { lijst: lijst2, herkomst } = regelsEnHerkomst(a);
-    return `LET OP: belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren die niet bij een blijvende belasting passen: ${lijst2}. Een blijvende belasting telt in de BGT met 1,0 en heeft in elke combinatie dezelfde factor als de andere blijvende gevallen. ${herkomst} De berekening gebruikt de getoonde factoren. De app laat deze eigen combinaties staan: kies "Behoud eigen factoren" als dit uw bedoeling is, corrigeer de factoren, of kies "Vervang door standaardcombinaties" in Belastinggevallen & combinaties. `;
-  }).join("") + (weesFactoren.length > 0 ? `In ${weesFactoren.length} belastingcombinatie(s) (${weesFactoren.map((w) => `"${w.naam}"`).join(", ")}) stonden factoren voor ` + (weesIds.length === 1 ? `belastinggeval ${weesIds[0]}, dat in dit project niet (meer) bestaat` : `belastinggevallen ${weesIds.join(", ")}, die in dit project niet (meer) bestaan`) + ": een rest van een verwijderd geval. Die factoren zijn bij het openen weggehaald. " + weesLastenTekst(weesIds, p2.loads) + `Een nieuw belastinggeval krijgt een id boven ${weesIds[weesIds.length - 1]} en kan ze niet meer erven.` : "");
-  return { weesFactoren, blijvend, samenvatting: samenvatting.trim() };
+  const delen = [];
+  for (const a of blijvend) {
+    const kop = `LET OP: belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren die niet bij een blijvende belasting passen: ${lijstVan(a)}.`;
+    const regel2 = "Een blijvende belasting telt in de BGT met 1,0 en heeft in elke combinatie dezelfde factor als de andere blijvende gevallen.";
+    delen.push([kop, regel2, herkomstVan(a, spoor)].filter((x) => x !== "").join(" "));
+  }
+  if (blijvend.length > 0) {
+    delen.push([tekstSchaal(blijvend[0].schaal, bijlage), "De app laat deze eigen combinaties staan.", ADVIES_EIGEN].filter((x) => x !== "").join(" "));
+  }
+  if (weesFactoren.length > 0) {
+    delen.push(
+      `In ${weesFactoren.length} belastingcombinatie(s) (${weesFactoren.map((w) => `"${w.naam}"`).join(", ")}) stonden factoren voor ` + (weesIds.length === 1 ? `belastinggeval ${weesIds[0]}, dat in dit project niet (meer) bestaat` : `belastinggevallen ${weesIds.join(", ")}, die in dit project niet (meer) bestaan`) + ": een rest van een verwijderd geval. Die factoren zijn bij het openen weggehaald. " + weesLastenTekst(weesIds, p2.loads) + `Een nieuw belastinggeval krijgt een id boven ${weesIds[weesIds.length - 1]} en kan ze niet meer erven.`
+    );
+  }
+  const gevalIds = new Set(p2.loadCases.map((x) => x.id));
+  return {
+    weesFactoren,
+    blijvend,
+    bevestigbaar: blijvend.some((a) => afwijkingBevestigbaar(a, p2.combinations, gevalIds)),
+    samenvatting: delen.join(" ").trim()
+  };
 }
 function zorgVoorBelastinggevallen(staat, gevraagd) {
   let volgend = staat;
@@ -30475,8 +30726,18 @@ function combinationsToFile(combos) {
     type: c.type,
     formula: c.formula,
     factors: Object.fromEntries([...c.factors].map(([caseId, f]) => [String(caseId), f])),
-    ...c.standaard ? { standaard: { ...c.standaard } } : {}
+    ...c.standaard ? { standaard: { ...c.standaard } } : {},
+    ...c.bevestigdeFactoren && Object.keys(c.bevestigdeFactoren).length > 0 ? { bevestigdeFactoren: Object.fromEntries(Object.entries(c.bevestigdeFactoren)) } : {}
   }));
+}
+function bevestigingUitBestand(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return void 0;
+  const uit = {};
+  for (const [sleutel, f] of Object.entries(raw)) {
+    const id2 = Number(sleutel);
+    if (Number.isInteger(id2) && typeof f === "number" && Number.isFinite(f) && f !== 0) uit[id2] = f;
+  }
+  return Object.keys(uit).length > 0 ? uit : void 0;
 }
 function kenmerkUitBestand(raw) {
   if (!raw || typeof raw !== "object") return void 0;
@@ -30524,13 +30785,15 @@ function combinationsFromFile(raw) {
       }
       factors.set(Number(caseId), getal6);
     }
+    const bevestigdeFactoren = bevestigingUitBestand(c.bevestigdeFactoren);
     return {
       id: c.id,
       name: c.name,
       type: c.type === "sls" ? "sls" : "uls",
       formula: c.formula ?? "",
       factors,
-      ...standaard ? { standaard } : {}
+      ...standaard ? { standaard } : {},
+      ...bevestigdeFactoren ? { bevestigdeFactoren } : {}
     };
   });
   if (redenen.length > 0) throw new ProjectBestandFout(redenen);
@@ -43249,8 +43512,17 @@ function combinatieStaatVan(document2) {
   });
   return {
     staat,
-    meldingen: [vervanging?.samenvatting, afwijking?.samenvatting].filter((x) => typeof x === "string" && x !== "")
+    meldingen: [vervanging?.samenvatting, afwijking?.samenvatting].filter((x) => typeof x === "string" && x !== ""),
+    vervanging
   };
+}
+function meldingenNa(staat, vervanging) {
+  const afwijking = beoordeelCombinatiesBijOpenen({
+    combinations: staat.combinations,
+    loadCases: staat.loadCases,
+    bijlage: staat.bijlage
+  });
+  return [vervanging?.samenvatting, afwijking?.samenvatting].filter((x) => typeof x === "string" && x !== "");
 }
 function metCombinatieStaat(document2, staat) {
   return {
@@ -43473,6 +43745,55 @@ var standaardHerstellen = documentCommando({
     return { uitkomst: { combinations: combinationsToFile(nieuw.combinations), meldingen }, document: metCombinatieStaat(document2, nieuw) };
   }
 });
+function eisCombinaties(staat, ids) {
+  for (const combinationId of ids ?? []) {
+    if (!staat.combinations.some((c) => c.id === combinationId)) throw nietGevonden("Combinatie", combinationId, "ids");
+  }
+}
+var combinatieIds = lijst(id("Id van een combinatie."), "Welke combinaties; ontbreekt = alle eigen combinaties.", { minItems: 1 });
+var eigenFactorenHouden = documentCommando({
+  naam: "project.combinations.confirmOwnFactors",
+  beschrijving: `Eigen factoren bewust houden (de knop "Behoud eigen factoren"): de huidige factoren van de genoemde eigen combinaties \u2014 zonder ids alle eigen combinaties \u2014 worden vastgelegd als bewust gekozen, bijvoorbeeld K_FI \xD7 NB tabel NB.4 (1,22 / 1,08). Een blijvend geval met zo'n factor geeft dan geen FOUT meer, en een eigen combinatie met dezelfde gevallen telt als vervanger van de standaardcombinatie waarvan ze alleen in bevestigde factoren afwijkt. De bevestiging geldt per factor en alleen voor precies die waarde: een gewijzigde factor verliest haar. Standaardcombinaties, combinaties van de windgenerator en de standaardset van versie 0.3.11 en ouder worden niet bevestigd (met ids: GEWEIGERD). De berekening verandert niet.`,
+  invoer: obj({ ids: combinatieIds }),
+  uitvoeren: ({ ids }, document2) => {
+    const { staat, vervanging } = combinatieStaatVan(document2);
+    eisCombinaties(staat, ids);
+    const uit = bevestigEigenFactoren(staat, ids);
+    if (ids && uit.overgeslagen.length > 0) {
+      throw new ApiFout(
+        "GEWEIGERD",
+        uit.overgeslagen.map((o) => `Combinatie ${o.id} ("${o.naam}") is ${o.reden}.`).join(" ")
+      );
+    }
+    return {
+      uitkomst: {
+        confirmedCombinationIds: uit.bevestigd,
+        skipped: uit.overgeslagen.map((o) => ({ id: o.id, name: o.naam, reason: o.reden })),
+        combinations: combinationsToFile(uit.staat.combinations),
+        meldingen: meldingenNa(uit.staat, vervanging)
+      },
+      document: metCombinatieStaat(document2, uit.staat)
+    };
+  }
+});
+var eigenFactorenIntrekken = documentCommando({
+  naam: "project.combinations.revokeOwnFactors",
+  beschrijving: "De bevestiging van eigen factoren intrekken (zonder ids: van alle combinaties). Daarna meldt de app een blijvend geval met een factor buiten NB tabel NB.4/NB.5 weer als FOUT. De berekening verandert niet.",
+  invoer: obj({ ids: combinatieIds }),
+  uitvoeren: ({ ids }, document2) => {
+    const { staat, vervanging } = combinatieStaatVan(document2);
+    eisCombinaties(staat, ids);
+    const uit = trekBevestigingIn(staat, ids);
+    return {
+      uitkomst: {
+        revokedCombinationIds: uit.ingetrokken,
+        combinations: combinationsToFile(uit.staat.combinations),
+        meldingen: meldingenNa(uit.staat, vervanging)
+      },
+      document: metCombinatieStaat(document2, uit.staat)
+    };
+  }
+});
 var PROJECT_COMMANDOS = [
   projectLezen,
   projectNieuw,
@@ -43482,7 +43803,9 @@ var PROJECT_COMMANDOS = [
   combinatieToevoegen,
   combinatieWijzigen,
   combinatieVerwijderen,
-  standaardHerstellen
+  standaardHerstellen,
+  eigenFactorenHouden,
+  eigenFactorenIntrekken
 ];
 
 // src/api/commands/model3dEnvelopeLoads.ts
@@ -46890,6 +47213,14 @@ function valideerModel(rauw, opties = {}) {
   for (const mld of gevalMeldingen) {
     (mld.niveau === "fout" ? errors : warnings).push(mld.tekst);
   }
+  if (opties.combinaties !== void 0) {
+    const bevestigd = tekstBevestigdeEigenFactoren(bevestigdeEigenFactoren({
+      loadCases,
+      combinations: opties.combinaties,
+      bijlage: opties.bijlage
+    }), opties.bijlage);
+    if (bevestigd) warnings.push(bevestigd);
+  }
   return { ok: errors.length === 0, errors, warnings };
 }
 
@@ -47774,6 +48105,11 @@ function rekenDoor(payload, bewerking) {
   })) {
     waarschuwingenNa.push(m.niveau === "fout" ? `FOUT: ${m.tekst}` : m.tekst);
   }
+  const bevestigd = tekstBevestigdeEigenFactoren(
+    bevestigdeEigenFactoren({ loadCases: gelezen.model.loadCases, combinations: combinaties, bijlage }),
+    bijlage
+  );
+  if (bevestigd) waarschuwingenNa.push(bevestigd);
   return {
     gelezen,
     gevolgklasse,
@@ -48193,6 +48529,11 @@ function opLoadProject(payload) {
   })) {
     warnings.push(mld.niveau === "fout" ? `FOUT: ${mld.tekst}` : mld.tekst);
   }
+  const bevestigd = tekstBevestigdeEigenFactoren(
+    bevestigdeEigenFactoren({ loadCases: m.loadCases, combinations: lijst2, bijlage }),
+    bijlage
+  );
+  if (bevestigd) warnings.push(bevestigd);
   return {
     path: typeof payload.path === "string" ? payload.path : null,
     format_version: gelezen.formatVersion,
@@ -48206,7 +48547,10 @@ function opLoadProject(payload) {
       name: c.name,
       type: c.type,
       formula: c.formula,
-      factors: Object.fromEntries([...c.factors].map(([k, v]) => [String(k), v]))
+      factors: Object.fromEntries([...c.factors].map(([k, v]) => [String(k), v])),
+      // Bewust gekozen eigen factoren (issue #196) gaan mee: wie de combinaties
+      // ongewijzigd teruggeeft aan solve of validate, houdt de bevestiging.
+      ...c.bevestigdeFactoren && Object.keys(c.bevestigdeFactoren).length > 0 ? { bevestigdeFactoren: Object.fromEntries(Object.entries(c.bevestigdeFactoren)) } : {}
     })),
     combinations_source: bron,
     gevolgklasse: klasse.klasse,
@@ -49129,6 +49473,8 @@ export {
   berekenE,
   berekenPlaatMeshSignatuur,
   berekenStuwdruk,
+  bevestigEigenFactoren,
+  bevestigdeEigenFactoren,
   bijlageUitBestand,
   bijlageUitKenmerk,
   blijvendeFactorAfwijkingen,
@@ -49212,6 +49558,7 @@ export {
   handmatigeStuwdruk,
   handtekeningVanGeneratie,
   handtekeningVanModel,
+  heeftBevestigdeFactoren,
   heeftTrekAlleen,
   hellendDakBron,
   hellendDakCpe,
@@ -49229,6 +49576,7 @@ export {
   invoerHash,
   isAfgeleidVanStandaard,
   isAsgelijndeRechthoek,
+  isBevestigdeFactor,
   isBgtEindtoestand,
   isEigenGewichtGeval,
   isOudeStandaardcombinatie,
@@ -49356,6 +49704,7 @@ export {
   rijVoorBijlage,
   rolVanStaaf,
   sanitizeRestraintFractions,
+  schaalOpNB4,
   scheefstandRichtingLabel,
   scheefstandToelichtingToets,
   segmentenVoorVerloop,
@@ -49388,6 +49737,7 @@ export {
   stelToetsKrachten3DSamen,
   synchroniseerStandaard,
   synchroniseerWindCombinaties,
+  tekstBevestigdeEigenFactoren,
   timberDeflectionNumerators,
   toepasselijkeScheefstandNormen,
   toets3DOpzet,
@@ -49402,6 +49752,7 @@ export {
   toetsSet3D,
   toetsdataInReferentierichting,
   trekAlleenCombinatieResultaat,
+  trekBevestigingIn,
   tweedeOrdePerCombinatie,
   valideer,
   valideerModel,

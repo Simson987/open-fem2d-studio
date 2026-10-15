@@ -39,6 +39,20 @@ app*). In het 2D-model nog niet: `solve_fem_model` en `check_fem_model` nemen
 `gui_build_model` bouwt ze in de draaiende app op. Een 2D-last erbij betekent
 het model opnieuw sturen.
 
+**Eigen factoren, bewust gekozen.** Een blijvend geval met een factor die niet
+uit NEN-EN 1990 NB tabel NB.4/NB.5 komt, staat als `FOUT:` in `warnings` (en
+`validate_fem_model` geeft `ok: false`), met per factor wat de NB geeft en of de
+set een schaal K_FI maal NB.4 volgt (`1,22 ≈ 0,9 × 1,35 (K_FI CC1 op NB.4 6.10a;
+NB.5 CC1 geeft 1,2)`). De herkomst "projectbestand van vóór september 2026"
+staat er alleen bij een echt spoor (de kolom van de oude standaardset, of
+factoren voor gevallen die niet bestaan). Zijn de factoren bewust gekozen, dan
+legt `project_combinations_confirmOwnFactors` (of de knop *Behoud eigen
+factoren* in de app) ze vast in `combinations[].bevestigdeFactoren`; intrekken
+met `project_combinations_revokeOwnFactors`. Een bevestiging geldt per factor en
+alleen voor precies die waarde, rekent niet mee, en staat daarna als vermelding
+in `warnings` in plaats van als `FOUT:`. `load_fem_project` geeft het veld mee;
+geef de combinaties ongewijzigd terug aan `solve_fem_model`.
+
 **De drie wegen.** Elke rekenkern in dit project hoort langs drie wegen
 bereikbaar te zijn: een Tauri-command (de desktop-app), een opdracht in
 `crates/toetsbrug` (de dev-server) en deze MCP-server.
@@ -1027,7 +1041,8 @@ cargo test -p openaec-mcp-server
 | test | what it pins down |
 |---|---|
 | `stdio_roundtrip.rs` | the full handshake against the real binary: `initialize` → `notifications/initialized` → `tools/list` → `tools/call`, and the complete tool roster |
-| `schema_strikt.rs` | the input schemas of `check_steel_beam`, `check_concrete_beam` and `concrete_mn_kappa` (and of the timber, steel-hall, IFC-import and `gui_start_app` tools) are complete and strict; a typo in a field name is refused, not silently defaulted |
+| `schema_strikt.rs` | the input schemas of `check_steel_beam`, `check_concrete_beam` and `concrete_mn_kappa` (and of the timber, steel-hall, IFC-import and `gui_start_app` tools) are complete and strict; a typo in a field name is refused, not silently defaulted; the `combinations` of `solve_fem_model` and `check_fem_model` know `bevestigdeFactoren` and nothing else besides the five combination fields |
+| `eigen_factoren_mcp.rs` | deliberately chosen custom factors (issue #196) end to end: reference project P01 (K_FI = 0.9 × NB.4) through `validate_fem_model` with `project_path` is `ok: false` with the scale in the error and no "before September 2026" origin; the same file with `bevestigdeFactoren` is `ok: true` with the confirmed factors as a note; `load_fem_project` returns the confirmation and `solve_fem_model` with exactly those combinations has no `FOUT:` and the same results as without it (needs Node ≥ 20) |
 | `drie_wegen_beton.rs` | **the three ways give the same answer**: the same JSON through the Tauri command's engine call, through `toetsbrug::behandel` and through the real MCP binary, compared field by field, plus anchor values so all three cannot drift together |
 | `drie_wegen_dekkingslijn.rs` | the same for `concrete_dekkingslijn` (§9.2.1.3 / figure 9.2 and §6.2): one member through all three ways, plus anchor values that follow from the norm — two bar bundles for a 3/5/3 curtailment, two points on every zone boundary (left and right of the jump), and the full tensile force jumping by 5/3 there. Also pins that an axial force without a supplied `z_mm` fails on ALL three ways with 6.2.3(1) in the reason, and that a typo in a field name is refused |
 | `beton_in_check_fem_model.rs` | a concrete beam in a mixed model is reported in `skipped_beams` instead of vanishing; `beam_ids` is respected; a model carrying a reinforcement cage is refused by the field gate |

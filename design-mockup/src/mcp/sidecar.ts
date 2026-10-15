@@ -86,9 +86,11 @@ import {
   type OvergeslagenCombinatie,
 } from "../lib/combinatieSelectie";
 import {
+  bevestigdeEigenFactoren,
   gevolgklasseBijOpenen,
   meldingenBelastinggevallen,
   openCombinatieStaat,
+  tekstBevestigdeEigenFactoren,
   type KlasseBron,
 } from "../lib/combinatieBeheer";
 import {
@@ -1453,6 +1455,11 @@ function rekenDoor(payload: Record<string, unknown>, bewerking: Bewerking) {
   })) {
     waarschuwingenNa.push(m.niveau === "fout" ? `FOUT: ${m.tekst}` : m.tekst);
   }
+  // Bewust gekozen eigen factoren (issue #196): geen FOUT, wel vermeld.
+  const bevestigd = tekstBevestigdeEigenFactoren(
+    bevestigdeEigenFactoren({ loadCases: gelezen.model.loadCases, combinations: combinaties, bijlage }), bijlage,
+  );
+  if (bevestigd) waarschuwingenNa.push(bevestigd);
 
   return {
     gelezen,
@@ -2058,6 +2065,11 @@ function opLoadProject(payload: Record<string, unknown>) {
   })) {
     warnings.push(mld.niveau === "fout" ? `FOUT: ${mld.tekst}` : mld.tekst);
   }
+  // Bewust gekozen eigen factoren (issue #196): geen FOUT, wel vermeld.
+  const bevestigd = tekstBevestigdeEigenFactoren(
+    bevestigdeEigenFactoren({ loadCases: m.loadCases, combinations: lijst, bijlage }), bijlage,
+  );
+  if (bevestigd) warnings.push(bevestigd);
   return {
     path: typeof payload.path === "string" ? payload.path : null,
     format_version: gelezen.formatVersion,
@@ -2072,6 +2084,11 @@ function opLoadProject(payload: Record<string, unknown>) {
       type: c.type,
       formula: c.formula,
       factors: Object.fromEntries([...c.factors].map(([k, v]) => [String(k), v])),
+      // Bewust gekozen eigen factoren (issue #196) gaan mee: wie de combinaties
+      // ongewijzigd teruggeeft aan solve of validate, houdt de bevestiging.
+      ...(c.bevestigdeFactoren && Object.keys(c.bevestigdeFactoren).length > 0
+        ? { bevestigdeFactoren: Object.fromEntries(Object.entries(c.bevestigdeFactoren)) }
+        : {}),
     })),
     combinations_source: bron,
     gevolgklasse: klasse.klasse,

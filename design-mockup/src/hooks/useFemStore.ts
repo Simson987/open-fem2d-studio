@@ -39,7 +39,8 @@ import {
 // lib/combinatieBeheer (puur, zodat de tests precies deze code aanroepen).
 import {
   gevolgklasseBijOpenen, type KlasseBron,
-  herstelCombinaties, meldingenBelastinggevallen, openCombinatieStaat, synchroniseerStandaard,
+  bevestigEigenFactoren, herstelCombinaties, meldingenBelastinggevallen, openCombinatieStaat, synchroniseerStandaard,
+  trekBevestigingIn,
   vervangDoorStandaard, vervangVerouderdeCombinaties, verwijderBelastinggeval, verwijderCombinatie,
   voegBelastinggevalToe, voegCombinatieToe, volgendVrijId, wijzigBelastinggeval, wijzigCombinatie,
   zetBijlage, zetGevolgklasse, bijlageUitKenmerk, verplaatsEigenGewichtNaarEigenGeval,
@@ -2048,6 +2049,15 @@ export interface FemStore {
   /** Sluit de melding van `combinatieAfwijking` zonder iets te veranderen. */
   sluitCombinatieAfwijking: () => void;
   /**
+   * "Behoud eigen factoren" (issue #196): de huidige factoren van alle eigen
+   * combinaties gelden als bewust gekozen (`bevestigEigenFactoren`). De
+   * berekening verandert niet; de FOUT over die factoren vervalt zolang ze
+   * niet veranderen, en de melding bij het openen gaat dicht.
+   */
+  bevestigEigenFactoren: () => void;
+  /** De bevestiging van alle eigen factoren intrekken (`trekBevestigingIn`). */
+  trekBevestigingEigenFactorenIn: () => void;
+  /**
    * Maak de vervanging bij het openen ongedaan: de combinaties uit het bestand
    * terug, precies zoals ze waren. Werkt ook als er na het openen al andere
    * bewerkingen zijn gedaan.
@@ -3311,6 +3321,13 @@ export function useFemStore(opties?: {
       setActiveCombinationId(null);
     },
     sluitCombinatieAfwijking: () => setCombinatieAfwijking(null),
+    bevestigEigenFactoren: () => {
+      pasCombiStaatToe(bevestigEigenFactoren(combiRef.current).staat);
+      setCombinatieAfwijking(null);
+    },
+    trekBevestigingEigenFactorenIn: () => {
+      pasCombiStaatToe(trekBevestigingIn(combiRef.current).staat);
+    },
     maakCombinatieVervangingOngedaan: () => {
       const v = vervangingRef.current;
       if (!v) return;

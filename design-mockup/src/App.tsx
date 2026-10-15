@@ -1527,15 +1527,16 @@ function App() {
       // routes stil te lage getallen door (zie lib/combinatieBeheer). Daarom nu:
       // vervangen, duidelijk melden, en "Ongedaan maken" direct in de melding.
       // Dezelfde melding en knop staan in Belastinggevallen & combinaties.
+      // Eigen factoren die bewust gekozen kunnen zijn (issue #196): de knop
+      // "Behoud eigen factoren" staat direct in de melding, net als in
+      // Belastinggevallen & combinaties (io/combinatieMeldingen).
       if (vervanging || afwijking) {
-        void import("./io/notify").then(({ notifyWarning }) => {
-          if (vervanging) {
-            notifyWarning(i18next.t("common:app.file.combosReplacedTitle"), vervanging.samenvatting, {
-              actie: { label: i18next.t("common:undo"), onClick: fem.maakCombinatieVervangingOngedaan },
-              duur: 30000,
-            });
-          }
-          if (afwijking) notifyWarning(i18next.t("common:app.file.combosNoticeTitle"), afwijking.samenvatting);
+        void import("./io/combinatieMeldingen").then(({ meldCombinatiesBijOpenen }) => {
+          meldCombinatiesBijOpenen({
+            vervanging, afwijking,
+            maakOngedaan: fem.maakCombinatieVervangingOngedaan,
+            houdEigenFactoren: fem.bevestigEigenFactoren,
+          });
         });
       }
       // Issue #42: een project dat het eigen gewicht nog in het eerste
@@ -5277,6 +5278,8 @@ function App() {
         onMaakVervangingOngedaan={fem.maakCombinatieVervangingOngedaan}
         onVervangDoorStandaard={fem.vervangDoorStandaardCombinaties}
         onSluitAfwijking={fem.sluitCombinatieAfwijking}
+        onBevestigEigenFactoren={fem.bevestigEigenFactoren}
+        onTrekBevestigingIn={fem.trekBevestigingEigenFactorenIn}
         onWindOpnieuw={() => { setLoadCasesOpen(false); setWindGeneratorOpen(true); }}
         gevolgklasse={fem.gevolgklasse}
         bijlage={fem.combinatieBijlage}

@@ -136,6 +136,14 @@ const BUNDEL_TESTS = new Set([
   // en juist de sidecar gebruikt deze afleiding voor zijn standaardset — dus
   // hoort hij ook tegen de bundel te bewijzen dat die dezelfde factoren geeft.
   "belastingcombinaties",
+  // Eigen factoren, bewust gekozen (issue #196): de melding bij het openen van
+  // P01, P03 en P04 onder elke klasse (geen "vóór september 2026" zonder spoor,
+  // wel de schaal K_FI op NB.4 en de NB-waarde), "Behoud eigen factoren" en
+  // intrekken, de bevestiging door opslaan en heropenen, en de MCP- en API-weg.
+  // Praat met `combinatieBeheer`, `projectFile`, de sidecar en de
+  // projectcommando's: allemaal in de barrel, dus ook tegen de bundel — de
+  // MCP-server leest de bevestiging met precies die code.
+  "eigen-factoren",
   // De stalen hal langs de MCP-weg: `staalhal_maken` en `staalhal_uitwerken`
   // in de sidecar, met de 3D-kern ertussen. Importeert alleen de barrel en
   // hoort juist tegen de bundel: die voert de MCP-server uit.
@@ -759,6 +767,7 @@ const ALLEEN_BRON = new Map([
   ["bestandskoppeling-recent", "Bestandskoppeling (#90): de echte useRecentFiles en useBestandskoppeling in React in Chromium, met de native IPC-grens nagebootst; meerdere paden in één ophaalronde komen alle in de recente bestanden. Geen solvercode en niet in de sidecarbundel."],
   ["mcp-koppeling-ui", "Een AI-assistent koppelen (#109): het paneel Instellingen → AI-assistent (MCP) in React in Chromium (schakelaar, status, pad van de MCP-server, Toevoegen aan Claude Desktop, opdracht voor Claude Code, JSON-fragment, vier talen, lint en tabblad), met de native IPC-grens nagebootst, plus broncontroles op lib.rs, gui_control.rs en mcp_koppeling.rs. Geen solvercode en niet in de sidecarbundel; de Rust-kant toetsen src-tauri/tests/gui_kanaal.rs en mcp_koppeling.rs."],
   ["eigen-gewicht-ui", "Echte tabbalk en tekenvlak (React, CSS, thema's) in Chromium met het geval \"Eigen gewicht\" (issue #42); geen solvercode en niet in de sidecarbundel. De rekenkant bewaakt test-eigen-gewicht-geval in beide standen."],
+  ["eigen-factoren-ui", "Eigen factoren, bewust gekozen (issue #196): de echte melding bij het openen (io/combinatieMeldingen, ToastHost), het venster Belastinggevallen & combinaties en de rapportsectie in React in Chromium, met de knoppen Behoud eigen factoren en Bevestiging intrekken. UI en niet in de sidecarbundel; de regels bewaakt test-eigen-factoren in beide standen."],
   ["window-controls","Echte React-titelbalk en native IPC-grens in Chromium, met de Tauri-windowcapability; geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["beton-ui", "Echte React-interactie, async-resultaatverversing en containerlayout in Chromium; geen solverwijziging."],
   ["plaat-wapening-ui", "React/CSS-browsertests voor bereikbare wandwapeningsvelden, veldvalidatie en responsieve indeling."],

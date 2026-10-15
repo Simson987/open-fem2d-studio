@@ -18,11 +18,18 @@
  * van versie 0.3.11 of ouder), dan staat dat hier ook: wie het rapport naast
  * een eerdere berekening legt, moet kunnen zien waarom de combinaties anders
  * zijn dan in het bestand.
+ *
+ * Eigen factoren die de gebruiker bewust heeft gekozen en bevestigd (issue
+ * #196, bijvoorbeeld K_FI × NB.4) zijn geen fout meer, maar het rapport zwijgt
+ * er niet over: de combinatie heet "eigen factoren, bewust gekozen", en de
+ * afwijkende factoren staan ter vermelding onder de tabel, met wat de NB geeft.
  */
 import { useTranslation } from "react-i18next";
 import { useReportData } from "../ReportDataContext";
 import { fmtFactor } from "../reportFormat";
-import { meldingenBelastinggevallen } from "../../../lib/combinatieBeheer";
+import {
+  bevestigdeEigenFactoren, heeftBevestigdeFactoren, meldingenBelastinggevallen, tekstBevestigdeEigenFactoren,
+} from "../../../lib/combinatieBeheer";
 import { matchSupportedTimberGrade } from "../../../lib/timberCheckBuilder";
 import { partieleFactoren } from "../../fem/solver/normcombinaties";
 
@@ -46,7 +53,13 @@ export default function CombinationsSection() {
   const bronnen = [...new Set(combinations.flatMap((c) => (
     c.standaard ? [partieleFactoren(c.standaard.gevolgklasse, c.standaard.bijlage).bron] : []
   )))];
-  const aantalEigen = combinations.filter((c) => !c.standaard).length;
+  // Een bevestigde combinatie heet "eigen factoren, bewust gekozen" en staat
+  // in de vermelding hieronder; de noot over "(eigen)" telt haar niet mee.
+  const aantalEigen = combinations.filter((c) => !c.standaard && !heeftBevestigdeFactoren(c)).length;
+  // Bewust gekozen eigen factoren (issue #196): geen fout, wel vermeld.
+  const bevestigd = tekstBevestigdeEigenFactoren(
+    bevestigdeEigenFactoren({ loadCases, combinations: actief }),
+  );
 
   return (
     <div className="rpt-block">
@@ -75,7 +88,9 @@ export default function CombinationsSection() {
                   <tr key={c.id} className={weg ? "rpt-rij-gedempt" : undefined}>
                     <td>
                       {c.name}
-                      {c.standaard ? "" : ` (${t("report.comboEigen")})`}
+                      {c.standaard
+                        ? ""
+                        : ` (${heeftBevestigdeFactoren(c) ? t("report.comboEigenBevestigd") : t("report.comboEigen")})`}
                       {weg ? ` — ${weg.label}` : ""}
                     </td>
                     <td>
@@ -113,6 +128,12 @@ export default function CombinationsSection() {
               ? ` ${t("report.comboEigenNoot", { aantal: aantalEigen, eigen: t("report.comboEigen") })}`
               : ""}
           </p>
+
+          {bevestigd && (
+            <p className="rpt-note" data-rapport-eigen-factoren="bevestigd">
+              {t("report.meldingInfo")}: {bevestigd}
+            </p>
+          )}
 
           {meldingen.length > 0 && (
             <div className="rpt-note rpt-melding-fout">

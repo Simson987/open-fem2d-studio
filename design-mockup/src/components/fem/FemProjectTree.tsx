@@ -826,8 +826,10 @@ export default function FemProjectTree(props: FemProjectTreeProps) {
                       {(fout || waarschuwing) && <span style={{ marginRight: 4 }}>⚠</span>}
                       {lc.name}
                       {fout && lc.type === "other" && ` — ${t("tree.chooseType")}`}
+                      {/* Eigen factoren die bewust gekozen kunnen zijn (issue #196) zijn niet "verkeerd". */}
                       {fout && lc.type !== "other" &&
-                        (/draagt factoren die niet/.test(fout.tekst) ? ` — ${t("tree.wrongFactors")}` : ` — ${t("tree.notCounted")}`)}
+                        (fout.bevestigAdvies ? ` — ${t("tree.ownFactors")}`
+                          : /draagt factoren die niet/.test(fout.tekst) ? ` — ${t("tree.wrongFactors")}` : ` — ${t("tree.notCounted")}`)}
                     </span>
                     <span className="fem-tree-leaf-value">{count}</span>
                   </div>

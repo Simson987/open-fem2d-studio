@@ -15,6 +15,11 @@
  * combinaties (besluit van september 2026; tot dan: melden, niet
  * overschrijven). Dit venster zegt dan wat er is vervangen, en draagt de knop
  * "Ongedaan maken" zolang dat kan.
+ *
+ * Eigen factoren die bewust gekozen zijn (issue #196, bijvoorbeeld K_FI × NB.4)
+ * houdt de knop "Behoud eigen factoren": de melding vervalt zolang de factoren
+ * niet veranderen. De kolom Herkomst zegt welke combinaties bevestigd zijn, en
+ * de bevestiging kan hier ook weer worden ingetrokken.
  */
 import { Fragment, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -27,8 +32,9 @@ import {
 import { STANDAARD_BIJLAGE, type NationaleBijlageCode } from "../../lib/normAanduidingen";
 import type { OvergeslagenCombinatie } from "../../lib/combinatieSelectie";
 import { isEigenGewichtGeval } from "../../lib/eigenGewicht";
-import type {
-  CombinatieAfwijking, CombinatieVervanging, GevalMelding,
+import {
+  heeftBevestigdeFactoren, isBevestigdeFactor,
+  type CombinatieAfwijking, type CombinatieVervanging, type GevalMelding,
 } from "../../lib/combinatieBeheer";
 import "./LoadCasesDialog.css";
 
@@ -58,6 +64,10 @@ interface Props {
   onVervangDoorStandaard?: () => void;
   /** Sluit de melding bij het openen zonder iets te veranderen. */
   onSluitAfwijking?: () => void;
+  /** "Behoud eigen factoren": de huidige eigen factoren gelden als bewust gekozen (issue #196). */
+  onBevestigEigenFactoren?: () => void;
+  /** De bevestiging van de eigen factoren intrekken. */
+  onTrekBevestigingIn?: () => void;
   /** Open de windbelastinggenerator om verouderde windcombinaties opnieuw te maken. */
   onWindOpnieuw?: () => void;
   /** Gevolgklasse van het project, voor de uitleg bij de combinaties. */
@@ -81,7 +91,8 @@ export default function LoadCasesDialog({
   open, onClose, initialTab = "cases",
   loadCases, combinations, overgeslagenCombinaties = [],
   belastingMeldingen = [], combinatieAfwijking = null, combinatieVervanging = null,
-  onMaakVervangingOngedaan, onVervangDoorStandaard, onSluitAfwijking, onWindOpnieuw,
+  onMaakVervangingOngedaan, onVervangDoorStandaard, onSluitAfwijking, onBevestigEigenFactoren, onTrekBevestigingIn,
+  onWindOpnieuw,
   gevolgklasse = "CC2",
   bijlage = STANDAARD_BIJLAGE,
   addLoadCase, updateLoadCase, removeLoadCase,
@@ -106,6 +117,16 @@ export default function LoadCasesDialog({
   const aantalFouten = belastingMeldingen.filter((m) => m.niveau === "fout").length;
   // Meldingen over de combinaties zelf, met de actie die ze oplost.
   const adviesMeldingen = belastingMeldingen.filter((m) => m.vervangAdvies || m.windOpnieuwAdvies);
+  const aantalBevestigd = combinations.filter((c) => heeftBevestigdeFactoren(c)).length;
+  const knopEigenFactoren = onBevestigEigenFactoren && (
+    <button
+      className="lcd-btn-primary"
+      title={t("loadCases.keepCustomFactorsTitle")}
+      onClick={() => onBevestigEigenFactoren()}
+    >
+      {t("loadCases.keepCustomFactors")}
+    </button>
+  );
 
   const handleAddCase = () => {
     const name = newCaseName.trim() || t("loadCases.defaultCaseName", { n: loadCases.length + 1 });
@@ -279,8 +300,9 @@ export default function LoadCasesDialog({
                 <div className="lcd-afwijking">
                   <p>{combinatieAfwijking.samenvatting}</p>
                   <div className="lcd-afwijking-knoppen">
+                    {combinatieAfwijking.bevestigbaar && knopEigenFactoren}
                     <button className="lcd-btn-secondary" onClick={() => onSluitAfwijking?.()}>
-                      {combinatieAfwijking.blijvend.length > 0 ? t("loadCases.keepCustomFactors") : t("close")}
+                      {t("close")}
                     </button>
                   </div>
                 </div>
@@ -297,6 +319,7 @@ export default function LoadCasesDialog({
                     <p key={`v-${i}`} className={`lcd-melding lcd-melding-${m.niveau}`}>{m.tekst}</p>
                   ))}
                   <div className="lcd-afwijking-knoppen">
+                    {adviesMeldingen.some((m) => m.bevestigAdvies) && knopEigenFactoren}
                     {adviesMeldingen.some((m) => m.vervangAdvies) && (
                       <button
                         className="lcd-btn-primary"
@@ -323,7 +346,8 @@ export default function LoadCasesDialog({
                     <th style={{ width: 36 }}>#</th>
                     <th>{t("loadCases.name")}</th>
                     <th style={{ width: 80 }}>{t("loadCases.type")}</th>
-                    <th style={{ width: 70 }} title={t("loadCases.originTitle")}>{t("loadCases.origin")}</th>
+                    {/* Breder als er een bevestigde combinatie is: "eigen, bevestigd" (issue #196). */}
+                    <th style={{ width: aantalBevestigd > 0 ? 100 : 70 }} title={t("loadCases.originTitle")}>{t("loadCases.origin")}</th>
                     {loadCases.map(lc => (
                       <th key={lc.id} style={{ width: 70 }} title={lc.name}>
                         γ·{lc.name}
@@ -357,8 +381,20 @@ export default function LoadCasesDialog({
                           <option value="sls">{t("loadCases.sls")}</option>
                         </select>
                       </td>
-                      <td className="lcd-td-id" title={c.formula}>
-                        {c.standaard ? t("loadCases.originStandard") : t("loadCases.originCustom")}
+                      <td
+                        className="lcd-td-id"
+                        title={heeftBevestigdeFactoren(c)
+                          ? [c.formula, t("loadCases.originConfirmedTitle", {
+                              factoren: loadCases
+                                .filter((lc) => isBevestigdeFactor(c, lc.id))
+                                .map((lc) => `${lc.name} ${String(c.factors.get(lc.id)).replace(".", ",")}`)
+                                .join(", "),
+                            })].join("\n")
+                          : c.formula}
+                      >
+                        {c.standaard
+                          ? t("loadCases.originStandard")
+                          : heeftBevestigdeFactoren(c) ? t("loadCases.originConfirmed") : t("loadCases.originCustom")}
                       </td>
                       {loadCases.map(lc => {
                         const f = c.factors.get(lc.id) ?? 0;
@@ -414,6 +450,17 @@ export default function LoadCasesDialog({
                 />
                 <button className="lcd-btn-primary" onClick={handleAddCombo}>+ {t("loadCases.add")}</button>
               </div>
+
+              {aantalBevestigd > 0 && (
+                <div className="lcd-add-row lcd-bevestigd">
+                  <span className="lcd-hint">{t("loadCases.confirmedNote", { count: aantalBevestigd })}</span>
+                  {onTrekBevestigingIn && (
+                    <button className="lcd-btn-secondary" onClick={() => onTrekBevestigingIn()}>
+                      {t("loadCases.revokeOwnFactors")}
+                    </button>
+                  )}
+                </div>
+              )}
 
               <p className="lcd-hint">
                 {t("loadCases.combosHint", { klasse: gevolgklasse, bron })}{" "}

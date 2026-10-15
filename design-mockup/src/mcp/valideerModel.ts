@@ -87,7 +87,9 @@ import type { Gevolgklasse } from "../components/fem/solver/normcombinaties";
 import type { NationaleBijlageCode } from "../lib/normAanduidingen";
 // Eén regel voor "telt dit geval mee": dezelfde functie voedt de projectboom,
 // het rapport en de solve-waarschuwingen van de sidecar.
-import { meldingenBelastinggevallen } from "../lib/combinatieBeheer";
+import {
+  bevestigdeEigenFactoren, meldingenBelastinggevallen, tekstBevestigdeEigenFactoren,
+} from "../lib/combinatieBeheer";
 import { matchSupportedTimberGrade } from "../lib/timberCheckBuilder";
 // "C30" is hout én de korte naam van C30/37 — dezelfde melding als de
 // modelcontrole in de app (basisaudit nr 16).
@@ -1991,6 +1993,17 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
   }).filter((mld) => opties.combinaties !== undefined || mld.caseId === null);
   for (const mld of gevalMeldingen) {
     (mld.niveau === "fout" ? errors : warnings).push(mld.tekst);
+  }
+  // Bewust gekozen eigen factoren (issue #196): geen fout, maar wel vermeld.
+  // Zonder deze regel gaf een bevestigde set ok:true zonder dat een cliënt kon
+  // zien dat er met factoren buiten NB.4/NB.5 wordt gerekend.
+  if (opties.combinaties !== undefined) {
+    const bevestigd = tekstBevestigdeEigenFactoren(bevestigdeEigenFactoren({
+      loadCases: loadCases as unknown as Pick<LoadCase, "id" | "name" | "type">[],
+      combinations: opties.combinaties,
+      bijlage: opties.bijlage,
+    }), opties.bijlage);
+    if (bevestigd) warnings.push(bevestigd);
   }
 
   return { ok: errors.length === 0, errors, warnings };
