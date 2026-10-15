@@ -199,10 +199,14 @@ log("\n[4] 3D getrapte kolom");
     dicht("3D met kniklengtes van 6 m: 6.3.2 UC = 0,8916", toets(r, "6.3.2_column_stability").uc.uc, UC_6000, 2e-4);
     ok("3D met kniklengtes: status Ok", r.status === "Ok", `${r.status}: ${r.governing_check_id}`);
   }
-  // In 3D worden staven niet samengevoegd: ook met dezelfde doorsnede loopt
-  // de staaf door, en de tussenknoop is geen steun.
-  const gelijk = buildOpenFem3DTimberCheckInputs(model3D("120x120"), resultaat, set).inputs.find((i) => i.beam_id === 1);
-  ok("3D, dezelfde doorsnede: ook doorlopend", gelijk?.staafeinden?.eind === "Doorlopend", JSON.stringify(gelijk?.staafeinden));
+  // Sinds issue #207 voegt 3D staven met dezelfde doorsnede tot één lijn samen,
+  // zoals 2D: de lijn van 6 m is één staaf, zonder doorlopend eind. De
+  // tussenknoop is dan geen steun, want de kniklengte is de hele lijn.
+  const gelijkUit = buildOpenFem3DTimberCheckInputs(model3D("120x120"), resultaat, set);
+  const gelijk = gelijkUit.inputs.find((i) => i.beam_id === 1);
+  ok("3D, dezelfde doorsnede: één lijn van 6 m, geen doorlopend eind (#207)",
+    gelijkUit.inputs.length === 1 && gelijk?.length_m === 6 && gelijk?.staafeinden?.eind !== "Doorlopend",
+    JSON.stringify([gelijkUit.inputs.map((i) => [i.beam_id, i.length_m]), gelijk?.staafeinden]));
   // Een aansluitende staaf onder een hoek maakt de knoop een gaffel.
   const metLigger = model3D("100x100");
   metLigger.nodes.push({ id: 4, x: 4, y: 0, z: 3 });
