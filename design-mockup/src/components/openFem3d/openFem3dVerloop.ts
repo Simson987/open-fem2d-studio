@@ -33,6 +33,7 @@ import {
   type VerloopUitkomst,
 } from "../../lib/sectionResolver";
 import { aantalVerloopSegmenten } from "../../lib/modelNaarSolverInput";
+import { rechthoekTorsieconstante } from "../../lib/betonDoorsnedeGrootheden";
 import { gelasteIEigenschappen, gelasteINaam } from "../../lib/verloopSplitsen";
 import { eigenNaamVan } from "../../lib/profieleditor/eigenDoorsnedenStore";
 import { profielNaamTekst } from "../../lib/verloopKeuze";
@@ -65,16 +66,11 @@ export function isOpenFem3DBeamVerlopend(beam: OpenFem3DVerloopStaaf): boolean {
 }
 
 /**
- * Torsieconstante I_t van een massieve rechthoek b × h (mm⁴), de reeks van
- * Saint-Venant zoals in de literatuur (Roark): l·k³·(1/3 − 0,21·k/l·(1 − k⁴/(12·l⁴)))
- * met l de lange en k de korte zijde. Dezelfde formule voor een prismatische
- * en een verlopende rechthoek.
+ * Torsieconstante I_t van een massieve rechthoek b × h (mm⁴): dezelfde
+ * formule voor een prismatische en een verlopende rechthoek en voor de
+ * deelrechthoeken van een betonnen T of L (`lib/betonDoorsnedeGrootheden`).
  */
-export function rechthoekTorsieconstante(bMm: number, hMm: number): number {
-  const long = Math.max(bMm, hMm);
-  const short = Math.min(bMm, hMm);
-  return long * short ** 3 * (1 / 3 - 0.21 * (short / long) * (1 - short ** 4 / (12 * long ** 4)));
-}
+export { rechthoekTorsieconstante };
 
 /** De grootheden van één doorsnede van een verloop, in mm. */
 export interface OpenFem3DVerloopDoorsnede {

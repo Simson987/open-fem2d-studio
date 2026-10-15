@@ -14,6 +14,8 @@ import { STEEL_SECTION_DIMS } from "../../lib/steelSectionDims.generated";
 import { isEigenProfiel, zoekEigenDoorsnede } from "../../lib/profieleditor/eigenDoorsnedenStore";
 import { profielSleutel } from "../../lib/strip";
 import { thermalAlphaForMaterial } from "../../lib/thermalAlpha";
+import { betonDoorsnedeGrootheden } from "../../lib/betonDoorsnedeGrootheden";
+import { parseConcreteSection } from "../../lib/betonCheckBuilder";
 import {
   OPEN_FEM_3D_BEDDING_ALL_ROUND_COSINE, isOpenFem3DGlobalMemberLoad, openFem3DGlobalDirectionVector, openFem3DGlobalMemberLoadFactor,
   openFem3DLoadCaseId, openFem3DMemberAxes, readOpenFem3DBeamBedding, readOpenFem3DPlateBedding, type OpenFem3DBeamBedding,
@@ -852,10 +854,21 @@ export function buildOpenFem3DSolveRequest(
         shearAreaYMm2 = shearAreaZMm2 = 5 / 6 * rectangle.b * rectangle.h;
         heightMm = rectangle.h;
         widthMm = rectangle.b;
+      } else if (resolved.bron === "beton-vorm") {
+        // Betonnen T of L (issue #197): I_z, I_t en de afschuifoppervlakken
+        // uit dezelfde hulpfunctie als A en I_y (`lib/betonDoorsnedeGrootheden`).
+        const vorm = parseConcreteSection(profile);
+        const g = vorm.ok ? betonDoorsnedeGrootheden(vorm.doorsnede) : null;
+        if (!g) throw new Error(`Staaf ${beam.id}: betondoorsnede "${profile}" levert geen geldige grootheden.`);
+        iyMm4 = g.Iy;
+        izMm4 = g.Iz;
+        torsionJMm4 = g.It;
+        shearAreaYMm2 = g.AvY;
+        shearAreaZMm2 = g.AvZ;
       } else {
         throw new Error(
           `Staaf ${beam.id}: profiel "${profile}" mist Iz en J voor een ruimtelijke berekening. ` +
-          "Kies een bewaarde eigen doorsnede, catalogusprofiel of rechthoek b×h.",
+          "Kies een bewaarde eigen doorsnede, catalogusprofiel, rechthoek b×h of betonnen T/L (\"T 400x450 bw=200 hf=50\").",
         );
       }
       if (![resolved.A, iyMm4, izMm4, torsionJMm4].every((value) => Number.isFinite(value) && value > 0)) {

@@ -22,6 +22,7 @@ import { buildOpenFem3DUtilizations } from "./openFem3dUtilization";
 import { openFem3DMeldingen } from "./openFem3dMeldingen";
 import { openFem3DHorizontaleVerplaatsingen, openFem3DUcPerGroep } from "./openFem3dRapportSamenvatting";
 import { openFem3DDoorlopendeOmhullenden, openFem3DRapportOmhullenden, type OmhullendeGroep, type OmhullendeSoort } from "./openFem3dRapportOmhullenden";
+import { openFem3DPlaatOmhullenden, openFem3DPlaatRandreactieOmhullenden } from "./openFem3dPlaatOmhullenden";
 import { openFem3DStabilityRow, openFem3DTensionOnlySummary } from "./openFem3dTrekSchijf";
 import type { OpenFem3DStandaardViewId, OpenFem3DViewSet } from "./openFem3dViewSets";
 import { formatOpenFem3DPlateValue, openFem3DPlateExtremes } from "./openFem3dPlateResults";
@@ -120,6 +121,9 @@ export default function OpenFem3DReport({
   const horizontaal = combinationResults ? openFem3DHorizontaleVerplaatsingen(model, combinations, combinationResults) : [];
   const omhullenden = combinationResults ? openFem3DRapportOmhullenden(combinations, combinationResults) : [];
   const doorlopendeRijen = openFem3DDoorlopendeOmhullenden(model, omhullenden);
+  // Platen over alle combinaties (issue #197).
+  const plaatOmhullenden = combinationResults ? openFem3DPlaatOmhullenden(combinations, combinationResults) : [];
+  const plaatRandreacties = combinationResults ? openFem3DPlaatRandreactieOmhullenden(model, combinations, combinationResults) : [];
   const ucPerGroep = checks ? openFem3DUcPerGroep(model, checks.results) : [];
   const rapportViews = openFem3DRapportViews({
     model, viewSets, standaardUitRapport: standaardViewsUitRapport, result, caseResults, combinationResults,
@@ -581,6 +585,53 @@ export default function OpenFem3DReport({
                 </tr>)}
               </tbody></table>
             </div>}
+          </section>}
+
+          {/* Platen over alle combinaties (issue #197): omhullende per grootheid en randreacties. */}
+          {(plaatOmhullenden.length > 0 || plaatRandreacties.length > 0) && <section className="open-fem3d-report-envelope" data-open-fem3d-report-plate-envelopes>
+            <h2>{t("openFem3d.report.plateEnvelopeTitle")}</h2>
+            <p className="open-fem3d-report-note">{t("openFem3d.report.plateEnvelopeNote")}</p>
+            {(["uls", "sls"] as const).map((soort) => {
+              const rijen = plaatOmhullenden.filter((rij) => rij.soort === soort);
+              if (rijen.length === 0) return null;
+              return <div key={`plaat-${soort}`} className="open-fem3d-report-envelope-table">
+                <h3>{t("openFem3d.report.plateEnvelopeGroup")} · {t(soort === "uls" ? "openFem3d.report.uls" : "openFem3d.report.sls")}</h3>
+                <table className="open-fem3d-report-wide"><thead><tr>
+                  <th>{t("openFem3d.report.plate")}</th><th>{t("openFem3d.report.quantity")}</th>
+                  <th>{t("openFem3d.report.envelopeMin")}</th><th>{t("openFem3d.report.envelopeCombination")}</th>
+                  <th>{t("openFem3d.report.envelopeMax")}</th><th>{t("openFem3d.report.envelopeCombination")}</th>
+                </tr></thead><tbody>
+                  {rijen.map((rij) => <tr key={`${rij.plateId}-${rij.grootheid}`} data-open-fem3d-report-plate-envelope-row={`${soort}-${rij.plateId}-${rij.grootheid}`}>
+                    <td>{rij.plateId}</td><td>{rij.symbool} [{rij.eenheid}]</td>
+                    <td>{formatOpenFem3DPlateValue(rij.min.waarde)} · {t("openFem3d.report.node")} {rij.min.knoopId}</td>
+                    <td>#{rij.min.combinatieId} {rij.min.combinatie}</td>
+                    <td>{formatOpenFem3DPlateValue(rij.max.waarde)} · {t("openFem3d.report.node")} {rij.max.knoopId}</td>
+                    <td>#{rij.max.combinatieId} {rij.max.combinatie}</td>
+                  </tr>)}
+                </tbody></table>
+              </div>;
+            })}
+            {(["uls", "sls"] as const).map((soort) => {
+              const rijen = plaatRandreacties.filter((rij) => rij.soort === soort);
+              if (rijen.length === 0) return null;
+              return <div key={`rand-${soort}`} className="open-fem3d-report-envelope-table">
+                <h3>{t("openFem3d.report.plateEdgeReactionsTitle")} · {t(soort === "uls" ? "openFem3d.report.uls" : "openFem3d.report.sls")}</h3>
+                <table className="open-fem3d-report-wide"><thead><tr>
+                  <th>{t("openFem3d.report.plate")}</th><th>{t("openFem3d.report.edge")}</th><th>{t("openFem3d.report.quantity")}</th>
+                  <th>{t("openFem3d.report.envelopeMin")}</th><th>{t("openFem3d.report.envelopeCombination")}</th>
+                  <th>{t("openFem3d.report.envelopeMax")}</th><th>{t("openFem3d.report.envelopeCombination")}</th>
+                </tr></thead><tbody>
+                  {rijen.map((rij) => <tr key={`${rij.plateId}-${rij.rand ?? "plaat"}-${rij.grootheid}`} data-open-fem3d-report-plate-edge-row={`${soort}-${rij.plateId}-${rij.rand ?? "plaat"}-${rij.grootheid}`}>
+                    <td>{rij.plateId}</td>
+                    <td>{rij.rand === null ? t("openFem3d.report.plateEdgeTotal") : rij.rand + 1}</td>
+                    <td>{rij.grootheid} [kN]</td>
+                    <td>{signed(rij.min.waarde)}</td><td>#{rij.min.combinatieId} {rij.min.combinatie}</td>
+                    <td>{signed(rij.max.waarde)}</td><td>#{rij.max.combinatieId} {rij.max.combinatie}</td>
+                  </tr>)}
+                </tbody></table>
+              </div>;
+            })}
+            {plaatRandreacties.length > 0 && <p className="open-fem3d-report-note">{t("openFem3d.report.plateEdgeReactionsNote")}</p>}
           </section>}
 
           {horizontaal.length > 0 && <section data-open-fem3d-horizontaal>

@@ -18937,6 +18937,53 @@ var init_timberCheckBuilder = __esm({
   }
 });
 
+// src/lib/betonDoorsnedeGrootheden.ts
+function rechthoekTorsieconstante(bMm, hMm) {
+  const long = Math.max(bMm, hMm);
+  const short = Math.min(bMm, hMm);
+  return long * short ** 3 * (1 / 3 - 0.21 * (short / long) * (1 - short ** 4 / (12 * long ** 4)));
+}
+function betonDoorsnedeGrootheden(d) {
+  if (d.shape === "Rectangle") {
+    const b = d.b_mm, h = d.h_mm;
+    if (!(b > 0 && h > 0)) return null;
+    const A2 = b * h;
+    return {
+      A: A2,
+      Iy: b * h ** 3 / 12,
+      Iz: h * b ** 3 / 12,
+      Iyz: 0,
+      It: rechthoekTorsieconstante(b, h),
+      AvY: 5 / 6 * A2,
+      AvZ: 5 / 6 * A2
+    };
+  }
+  const bF = d.b_mm;
+  const hF = d.h_f_mm ?? 0;
+  const bW = d.b_w_mm ?? 0;
+  const hW = d.h_mm - hF;
+  if (!(bF > 0 && hF > 0 && bW > 0 && hW > 0)) return null;
+  const aF = bF * hF;
+  const aW = bW * hW;
+  const A = aF + aW;
+  const zF = hW + hF / 2;
+  const zW = hW / 2;
+  const zG = (aF * zF + aW * zW) / A;
+  const Iy = bF * hF ** 3 / 12 + aF * (zF - zG) ** 2 + bW * hW ** 3 / 12 + aW * (zW - zG) ** 2;
+  const yF = bF / 2;
+  const yW = d.shape === "Tee" ? bF / 2 : bW / 2;
+  const yG = (aF * yF + aW * yW) / A;
+  const Iz = hF * bF ** 3 / 12 + aF * (yF - yG) ** 2 + hW * bW ** 3 / 12 + aW * (yW - yG) ** 2;
+  const Iyz = aF * (yF - yG) * (zF - zG) + aW * (yW - yG) * (zW - zG);
+  const It = rechthoekTorsieconstante(bF, hF) + rechthoekTorsieconstante(bW, hW);
+  return { A, Iy, Iz, Iyz, It, AvY: 5 / 6 * A, AvZ: 5 / 6 * bW * d.h_mm };
+}
+var init_betonDoorsnedeGrootheden = __esm({
+  "src/lib/betonDoorsnedeGrootheden.ts"() {
+    "use strict";
+  }
+});
+
 // src/lib/aluminiumMateriaal.ts
 function isAluminiumMateriaal(naam) {
   return /^\s*ALU:/i.test(naam ?? "");
@@ -18974,24 +19021,9 @@ function normaliseer(naam) {
 function betonDoorsnede(profile) {
   const uit = parseConcreteSection(profile);
   if (!uit.ok) return null;
-  const d = uit.doorsnede;
-  if (d.shape === "Rectangle") {
-    const A2 = d.b_mm * d.h_mm;
-    return { A: A2, I: d.b_mm * d.h_mm ** 3 / 12, bron: "beton-bxh" };
-  }
-  const bF = d.b_mm;
-  const hF = d.h_f_mm ?? 0;
-  const bW = d.b_w_mm ?? 0;
-  const hW = d.h_mm - hF;
-  const aF = bF * hF;
-  const aW = bW * hW;
-  const A = aF + aW;
-  if (!(A > 0)) return null;
-  const zF = hW + hF / 2;
-  const zW = hW / 2;
-  const zG = (aF * zF + aW * zW) / A;
-  const I = bF * hF ** 3 / 12 + aF * (zF - zG) ** 2 + bW * hW ** 3 / 12 + aW * (zW - zG) ** 2;
-  return { A, I, bron: "beton-vorm" };
+  const g = betonDoorsnedeGrootheden(uit.doorsnede);
+  if (!g) return null;
+  return { A: g.A, I: g.Iy, bron: uit.doorsnede.shape === "Rectangle" ? "beton-bxh" : "beton-vorm" };
 }
 function eVanMateriaal(material) {
   const vrij = parseVrijMateriaal(material);
@@ -19314,6 +19346,7 @@ var init_sectionResolver = __esm({
     init_cltCheckBuilder();
     init_eigenDoorsnedenStore();
     init_betonCheckBuilder();
+    init_betonDoorsnedeGrootheden();
     init_vrijMateriaal();
     init_aluminiumMateriaal();
     init_steelGrades();
@@ -26804,6 +26837,7 @@ function resolveOpenFem3DPlateMaterial(plate) {
 
 // src/components/openFem3d/openFem3dVerloop.ts
 init_sectionResolver();
+init_betonDoorsnedeGrootheden();
 
 // src/lib/verloopSplitsen.ts
 init_eigenDoorsnedenStore();
@@ -26966,11 +27000,6 @@ init_vertaalbareTekst();
 init_vertaalbareTekst();
 function openFem3DBeamVerloop(beam) {
   return bepaalVerloop(beam.material?.trim(), beam.profileName?.trim(), beam.profileNameEnd?.trim());
-}
-function rechthoekTorsieconstante(bMm, hMm) {
-  const long = Math.max(bMm, hMm);
-  const short = Math.min(bMm, hMm);
-  return long * short ** 3 * (1 / 3 - 0.21 * (short / long) * (1 - short ** 4 / (12 * long ** 4)));
 }
 var maat = (v) => String(Math.round(v * 1e6) / 1e6);
 function openFem3DVerloopDoorsnede(v, t) {
@@ -31183,6 +31212,8 @@ init_steelGrades();
 init_steelSectionDims_generated();
 init_eigenDoorsnedenStore();
 init_strip();
+init_betonDoorsnedeGrootheden();
+init_betonCheckBuilder();
 
 // src/components/openFem3d/openFem3dBedding.ts
 function openFem3DBeddingResultOf(result, memberId) {
@@ -33465,9 +33496,18 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
         shearAreaYMm2 = shearAreaZMm2 = 5 / 6 * rectangle.b * rectangle.h;
         heightMm = rectangle.h;
         widthMm = rectangle.b;
+      } else if (resolved.bron === "beton-vorm") {
+        const vorm = parseConcreteSection(profile);
+        const g = vorm.ok ? betonDoorsnedeGrootheden(vorm.doorsnede) : null;
+        if (!g) throw new Error(`Staaf ${beam.id}: betondoorsnede "${profile}" levert geen geldige grootheden.`);
+        iyMm4 = g.Iy;
+        izMm4 = g.Iz;
+        torsionJMm4 = g.It;
+        shearAreaYMm2 = g.AvY;
+        shearAreaZMm2 = g.AvZ;
       } else {
         throw new Error(
-          `Staaf ${beam.id}: profiel "${profile}" mist Iz en J voor een ruimtelijke berekening. Kies een bewaarde eigen doorsnede, catalogusprofiel of rechthoek b\xD7h.`
+          `Staaf ${beam.id}: profiel "${profile}" mist Iz en J voor een ruimtelijke berekening. Kies een bewaarde eigen doorsnede, catalogusprofiel, rechthoek b\xD7h of betonnen T/L ("T 400x450 bw=200 hf=50").`
         );
       }
       if (![resolved.A, iyMm4, izMm4, torsionJMm4].every((value) => Number.isFinite(value) && value > 0)) {
@@ -33656,6 +33696,8 @@ function metOpenFem3DKrachtensom(input, result) {
 init_sectionResolver();
 init_steelSectionDims_generated();
 init_eigenDoorsnedenStore();
+init_betonDoorsnedeGrootheden();
+init_betonCheckBuilder();
 init_strip();
 var dot4 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 function profileKey2(value) {
@@ -33690,12 +33732,14 @@ function bendingStiffness(model, beam, lengthM) {
   const catalogue = STEEL_SECTION_DIMS[profileKey2(profile)]?.props;
   const rectangle = parseRechthoek(profile);
   const eigen = isEigenProfiel(profile) ? zoekEigenDoorsnede(profile) : void 0;
-  const izMm4 = eigen?.eigenschappen.iz_mm4 ?? catalogue?.iz ?? (rectangle ? rectangle.h * rectangle.b ** 3 / 12 : null);
+  const betonVorm = resolved.bron === "beton-vorm" ? parseConcreteSection(profile) : null;
+  const beton = betonVorm?.ok ? betonDoorsnedeGrootheden(betonVorm.doorsnede) : null;
+  const izMm4 = eigen?.eigenschappen.iz_mm4 ?? catalogue?.iz ?? (rectangle ? rectangle.h * rectangle.b ** 3 / 12 : null) ?? beton?.Iz ?? null;
   if (!(izMm4 && izMm4 > 0)) return null;
   const iyM4 = resolved.I * 1e-12, izM4 = izMm4 * 1e-12;
   const areaMm2 = eigen?.eigenschappen.area_mm2 ?? (rectangle ? rectangle.b * rectangle.h : null);
-  const shearAreaYMm2 = eigen?.eigenschappen.av_y_mm2 ?? catalogue?.avY ?? (areaMm2 ? 5 / 6 * areaMm2 : null);
-  const shearAreaZMm2 = eigen?.eigenschappen.av_z_mm2 ?? catalogue?.avZ ?? (areaMm2 ? 5 / 6 * areaMm2 : null);
+  const shearAreaYMm2 = eigen?.eigenschappen.av_y_mm2 ?? catalogue?.avY ?? (areaMm2 ? 5 / 6 * areaMm2 : null) ?? beton?.AvY ?? null;
+  const shearAreaZMm2 = eigen?.eigenschappen.av_z_mm2 ?? catalogue?.avZ ?? (areaMm2 ? 5 / 6 * areaMm2 : null) ?? beton?.AvZ ?? null;
   const shear = beam.shearDeformation && shearAreaYMm2 && shearAreaYMm2 > 0 && shearAreaZMm2 && shearAreaZMm2 > 0 ? {
     gKnM2: analysis.eMpa * 1e3 / (2 * (1 + analysis.nu)),
     shearAreaYM2: shearAreaYMm2 * 1e-6,

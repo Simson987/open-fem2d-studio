@@ -878,6 +878,16 @@ fn validate(request: &SolveRequest3D) -> Result<HashMap<usize, shell::PlateGeome
         positive(section.torsion_j_m4, &format!("J van doorsnede {}", section.id))?;
         if let Some(h) = section.height_m { positive(h, &format!("hoogte van doorsnede {}", section.id))?; }
         if let Some(b) = section.width_m { positive(b, &format!("breedte van doorsnede {}", section.id))?; }
+        // Afschuifoppervlakken (issue #197): ontbreken mag (Euler-Bernoulli),
+        // maar een opgegeven waarde moet eindig en positief zijn. Av = 0 gaf
+        // anders een singuliere matrix met een misleidende melding over een
+        // mechanisme, en NaN een uitkomst zonder getallen.
+        if let Some(av) = section.shear_area_y_m2 {
+            positive(av, &format!("Av,y (shearAreaYM2) van doorsnede {}", section.id))?;
+        }
+        if let Some(av) = section.shear_area_z_m2 {
+            positive(av, &format!("Av,z (shearAreaZM2) van doorsnede {}", section.id))?;
+        }
     }
     let node_by_id: HashMap<_, _> = request.nodes.iter().map(|node| (node.id, node)).collect();
     for member in &request.members {

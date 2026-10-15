@@ -3,6 +3,8 @@ import type { OpenFem3DDiagramPoint, OpenFem3DDisplacement, OpenFem3DSolveResult
 import { CONCRETE_E_CM, NU_BETON, NU_STAAL, parseRechthoek, resolveSection } from "../../lib/sectionResolver";
 import { STEEL_SECTION_DIMS } from "../../lib/steelSectionDims.generated";
 import { isEigenProfiel, zoekEigenDoorsnede } from "../../lib/profieleditor/eigenDoorsnedenStore";
+import { betonDoorsnedeGrootheden } from "../../lib/betonDoorsnedeGrootheden";
+import { parseConcreteSection } from "../../lib/betonCheckBuilder";
 import { profielSleutel } from "../../lib/strip";
 import { openFem3DBeddingResultOf, openFem3DBeddingSettlementAt } from "./openFem3dBedding";
 import { openFem3DVerloopDelen } from "./openFem3dVerloop";
@@ -46,15 +48,18 @@ function bendingStiffness(
   const catalogue = STEEL_SECTION_DIMS[profileKey(profile)]?.props;
   const rectangle = parseRechthoek(profile);
   const eigen = isEigenProfiel(profile) ? zoekEigenDoorsnede(profile) : undefined;
+  // Betonnen T of L (issue #197): dezelfde grootheden als de 3D-adapter.
+  const betonVorm = resolved.bron === "beton-vorm" ? parseConcreteSection(profile) : null;
+  const beton = betonVorm?.ok ? betonDoorsnedeGrootheden(betonVorm.doorsnede) : null;
   const izMm4 = eigen?.eigenschappen.iz_mm4 ?? catalogue?.iz
-    ?? (rectangle ? rectangle.h * rectangle.b ** 3 / 12 : null);
+    ?? (rectangle ? rectangle.h * rectangle.b ** 3 / 12 : null) ?? beton?.Iz ?? null;
   if (!(izMm4 && izMm4 > 0)) return null;
   const iyM4 = resolved.I * 1e-12, izM4 = izMm4 * 1e-12;
   const areaMm2 = eigen?.eigenschappen.area_mm2 ?? (rectangle ? rectangle.b * rectangle.h : null);
   const shearAreaYMm2 = eigen?.eigenschappen.av_y_mm2 ?? catalogue?.avY
-    ?? (areaMm2 ? 5 / 6 * areaMm2 : null);
+    ?? (areaMm2 ? 5 / 6 * areaMm2 : null) ?? beton?.AvY ?? null;
   const shearAreaZMm2 = eigen?.eigenschappen.av_z_mm2 ?? catalogue?.avZ
-    ?? (areaMm2 ? 5 / 6 * areaMm2 : null);
+    ?? (areaMm2 ? 5 / 6 * areaMm2 : null) ?? beton?.AvZ ?? null;
   const shear = beam.shearDeformation && shearAreaYMm2 && shearAreaYMm2 > 0
     && shearAreaZMm2 && shearAreaZMm2 > 0
     ? { gKnM2: analysis.eMpa * 1000 / (2 * (1 + analysis.nu)),
