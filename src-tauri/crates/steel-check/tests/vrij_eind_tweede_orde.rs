@@ -19,6 +19,13 @@
 //!
 //! In 2D blijft z (uit het vlak) op 2·L: de vlakke berekening ziet die richting
 //! niet, ook niet in tweede orde.
+//!
+//! Een OPGEGEVEN L_cr,y groter dan de staaflengte (hier 4500 mm) blijft staan,
+//! met de sway-regel C_my = 0,9 van tabel B.3. De toetskrachten van een model
+//! in deze app zijn altijd tweede orde met scheefstand; de kern zegt er dan bij
+//! dat 5.2.2(7)b de systeemlengte toestaat en dat de opgave de sway dubbel
+//! telt. Geen rekenwijziging: χ_y(4500 mm, kromme b) = 0,8476 met de hand
+//! (λ̄_y = 4500/(82,8·93,9) = 0,5788, Φ = 0,7319).
 
 use mechanics::{ForcePoint, InternalForces};
 use nen_en_1990::ConsequenceClass;
@@ -147,6 +154,67 @@ fn een_opgegeven_kniklengte_gaat_voor() {
     let s = knik(&r);
     assert_eq!(waarde(s, "l_cr_y"), 4500.0);
     assert_eq!(waarde(s, "l_cr_z"), 3000.0);
+}
+
+/// De 6.3.3-toets (6.61) van een kolom met M_y van 20 kNm aan de voet naar 0
+/// aan de kop (ψ = 0, uit het momentenverloop C_my = 0,6), als JSON-tekst.
+fn interactie_met_moment(inv: BeamCheckInput) -> (BeamCheckResult, String) {
+    let mut inv = inv;
+    for p in inv.forces_envelope.iter_mut() {
+        p.forces.my_ed = 20.0 * (1.0 - p.position_mm / L_MM);
+    }
+    let r = check_beam(inv);
+    let c = r.checks.iter().find(|c| c.id == "6.3.3_eq_6_61").expect("6.3.3 (6.61) ontbreekt");
+    let tekst = serde_json::to_string(c).unwrap();
+    (r, tekst)
+}
+
+/// Een opgegeven L_cr,y > L blijft staan, met de sway-regel C_my = 0,9, maar
+/// met de kanttekening dat de sway dan dubbel telt: de toetskrachten van een
+/// model in deze app zijn tweede orde met scheefstand, en 5.2.2(7)b staat dan
+/// de systeemlengte toe. Met een vrij eind en zonder; geen rekenwijziging.
+#[test]
+fn opgegeven_kniklengte_boven_l_krijgt_de_kanttekening_over_dubbele_sway() {
+    let gaffels = Staafeinden { begin: Staafeind::Gaffel, eind: Staafeind::Gaffel };
+    for einden in [KOP_VRIJ, gaffels] {
+        let (r, interactie) =
+            interactie_met_moment(BeamCheckInput { buckling_length_y_m: 4.5, ..invoer(einden, None) });
+        let s = knik(&r);
+        // Geen rekenwijziging: de opgave blijft de kniklengte.
+        assert_eq!(waarde(s, "l_cr_y"), 4500.0);
+        dichtbij(waarde(s, "chi_y"), chi(4500.0, I_Y_MM, 0.34), TOL, "χ_y bij de opgave");
+        dichtbij(chi(4500.0, I_Y_MM, 0.34), 0.8476, 2e-4, "hand: χ_y bij 4500 mm");
+        let notitie = stap(s, "l_cr_y")
+            .notes
+            .iter()
+            .find(|n| n.contains("DUBBELE SWAY"))
+            .unwrap_or_else(|| panic!("kanttekening ontbreekt bij L_cr,y: {:?}", stap(s, "l_cr_y").notes));
+        assert!(
+            notitie.contains("4500 mm")
+                && notitie.contains("3000 mm")
+                && notitie.contains("tweede-ordeberekening (P-Δ) met scheefstand")
+                && notitie.contains("5.2.2(7)b")
+                && notitie.contains("dubbel"),
+            "{notitie}"
+        );
+        // De sway-regel blijft (C_my = 0,9), met dezelfde kanttekening in het kort.
+        assert!(
+            interactie.contains("C_my = 0,9") && interactie.contains("telt deze ondergrens de sway dubbel"),
+            "C_my: {interactie}"
+        );
+    }
+    // Een opgave ≤ L: geen sway-regel en geen kanttekening.
+    let (r, interactie) =
+        interactie_met_moment(BeamCheckInput { buckling_length_y_m: 3.0, ..invoer(gaffels, None) });
+    assert!(!stap(knik(&r), "l_cr_y").notes.iter().any(|n| n.contains("DUBBELE SWAY")));
+    assert!(!interactie.contains("sway dubbel"), "{interactie}");
+    // 2·L van de kern bij een vrij eind is geen opgave: de sway-regel geldt,
+    // maar de zijdelingse knik zit dan niet in de krachten, dus geen
+    // kanttekening over dubbel tellen.
+    let (r, interactie) = interactie_met_moment(invoer(KOP_VRIJ, None));
+    assert_eq!(waarde(knik(&r), "l_cr_y"), 6000.0);
+    assert!(!stap(knik(&r), "l_cr_y").notes.iter().any(|n| n.contains("DUBBELE SWAY")));
+    assert!(interactie.contains("C_my = 0,9") && !interactie.contains("sway dubbel"), "{interactie}");
 }
 
 /// Een vrij eind met L uit de tweede orde houdt C_my = 0,9 als ondergrens

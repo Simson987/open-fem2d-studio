@@ -243,7 +243,10 @@ export default function BetonStaafVenster({ beam, nodes, supports, updateBeam, b
       stirrups: liveZonesRef?.stirrups.length ? liveZonesRef.stirrups : basis.stirrups };
   }, [korf, lengteMm, liveZonesRef]);
   const zichtZones = previewZones ?? bewerkZones;
-  const krachtenActueel = !!actueleCombinatieResultaten && actueleCombinatieResultaten === lastRunData?.combinationResults &&
+  // De toetsset is een eigen Map (de UGT tweede orde met scheefstand, de BGT
+  // uit de resultaten; issue #199). Hij hoort bij de getoonde resultaten als
+  // hij uit DEZE resultaatrekengang is samengesteld (`resultaten`).
+  const krachtenActueel = !!actueleCombinatieResultaten && actueleCombinatieResultaten === lastRunData?.resultaten &&
     JSON.stringify(gerekendeStaaf) === JSON.stringify(beam) && JSON.stringify(lastRunData.nodes) === JSON.stringify(nodes);
   const restKorf: Omit<Wapeningskorf, "korf" | "doorsnede"> = {
     betonklasse: beam.material ?? STANDAARD_KORF.betonklasse,
@@ -665,12 +668,16 @@ export default function BetonStaafVenster({ beam, nodes, supports, updateBeam, b
   };
   const geselecteerdeZone = zoneSelectie ? (zoneSelectie.soort === "langs" ? zichtZones.longitudinal : zichtZones.stirrups)[zoneSelectie.index] : undefined;
   const geselecteerdeNaam = geselecteerdeZone && t(`concrete.zoneInteraction.${"side" in geselecteerdeZone ? geselecteerdeZone.side === "Top" ? "top" : "bottom" : "stirrups"}`);
+  // De punten komen uit de toetsset (`forces_envelope` van de bouwer); hun
+  // combinaties, ook de toetsvariant in −x (id + 1 000 000), staan in díe Map
+  // en niet per se in de resultaten.
+  const toetsResultaten = lastRunData?.combinationResults;
   const mnKrachten = useMemo(() => krachtenActueel ? (verzoek?.verzoek?.beam.forces_envelope ?? []).filter(p => {
-    const element = actueleCombinatieResultaten?.get(p.combination_id)?.elements.get(beam.id);
+    const element = toetsResultaten?.get(p.combination_id)?.elements.get(beam.id);
     // De algemene toetsbouwer kent een nulpunt-terugval. Die is geen gemeten N.
     return element && element.stations_mm.length > 0 && element.normalForce.length === element.stations_mm.length &&
       element.bendingMoment.length === element.stations_mm.length && element.normalForce.every(Number.isFinite) && element.bendingMoment.every(Number.isFinite);
-  }) : [], [krachtenActueel, verzoek, actueleCombinatieResultaten, beam.id]);
+  }) : [], [krachtenActueel, verzoek, toetsResultaten, beam.id]);
   const kiesCursor = (x: number) => {
     setCursorXMm(x); setBewerkRij(null);
     setZoneSelectie(sel => {

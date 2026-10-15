@@ -159,6 +159,7 @@ fn de_pdf_toont_de_richtingssprong_bij_staal_en_beton() {
         scheefstand_toelichting: None,
         analyse_toelichting: None,
         wind_toelichting: None,
+        toetskrachten: None,
         plate_results: Vec::new(),
         plate_inputs: Vec::new(),
         plate_skipped: Vec::new(),

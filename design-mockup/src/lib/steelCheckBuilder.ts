@@ -46,7 +46,6 @@ import {
 } from "./referentierichting";
 import { bepaalStaafeinden, steunpuntenOpLijn, voegDoorgaandeLijnenSamen, type PlaatVoorEinden } from "./doorgaandeLijn";
 import {
-  alphaCrStaafNotitie,
   zijdelingseKnikInVlakModel,
   type StabiliteitVoorToets,
 } from "../components/fem/solver/alphaCr";
@@ -285,9 +284,12 @@ export interface SteelBuildData {
    */
   plates?: PlaatVoorEinden[];
   /**
-   * Het analysetype en α_cr per combinatie (basisaudit nr 27). Bij eerste
-   * orde onder de grens van 5.2.1(3) krijgt elke op druk belaste staaf met een
-   * teruggevallen kniklengte een kanttekening in `staaf_notities`.
+   * Het analysetype, de scheefstand en α_cr van de krachten (basisaudit nr 27).
+   * In de app en via MCP de stabiliteit van de TOETS (`toetsSet2D`, issue
+   * #199): altijd tweede orde met scheefstand. Daarmee beslist
+   * `zijdelingseKnikInVlakModel` over L of 2·L bij een vrij eind. (De
+   * kanttekening bij eerste orde onder de grens van 5.2.1(3) bestaat sinds
+   * issue #199 niet meer: de toets rekent nooit eerste orde.)
    */
   stabiliteit?: StabiliteitVoorToets;
   combinations: LoadCombination[];
@@ -1504,22 +1506,18 @@ export function buildSteelCheckInputs(ruweData: SteelBuildData): SteelBuildResul
     const steunpunten = steunpuntenOpLijn(beam, data.nodes, lijn.lijnen.get(beam.id));
     const doorbuiging = bepaalDoorbuigingsInvoer(beam, data, staafeinden, steunpunten);
     const staafNotities = [...(lijn.notities.get(beam.id) ?? [])];
-    // Een vrij eind: de kern neemt 2·L, geen terugval op de systeemlengte; de
-    // α_cr-kanttekening heeft daar een eigen tekst (zie `alphaCrStaafNotitie`).
+    // Een vrij eind: de kern neemt 2·L, geen terugval op de systeemlengte.
+    // (Tot 2026.42 kwam hier bij eerste orde met α_cr < 10 een α_cr-kanttekening
+    // bij; de toets rekent sinds issue #199 nooit eerste orde, en die is weg.)
     const vrijEind = staafeinden.begin === "Vrij" || staafeinden.eind === "Vrij";
     const kniklengteYOpgegeven = Number.isFinite(cfg.bucklingLengthY_m) && (cfg.bucklingLengthY_m as number) > 0;
-    const alphaNotitie = alphaCrStaafNotitie(
-      ruweData.stabiliteit,
-      Math.min(...forcesEnvelope.map((p) => p.forces.n_ed)),
-      kniklengteYOpgegeven,
-      vrijEind,
-    );
-    if (alphaNotitie) staafNotities.push(alphaNotitie);
     // Bij een vrij eind: rekent de berekening tweede orde MET scheefstand, staat
     // de staaf (een kolom) en is de scheefstand minstens die van de kolom zelf,
     // dan zit haar zijdelingse knik in het vlak in de krachten en kiest de kern
     // L in plaats van 2·L. Zie `zijdelingseKnikInVlakModel`; scheelt alleen de
-    // φ, dan zegt een kanttekening waarom het 2·L blijft.
+    // φ, dan zegt een kanttekening waarom het 2·L blijft. De toetsset is altijd
+    // tweede orde met scheefstand (issue #199), dus daar beslissen alleen de
+    // stand van de staaf en de φ-eis.
     // Twee vrije einden: de kern weigert de knik; dan is er niets te beslissen.
     const eenVrijEind = vrijEind && !(staafeinden.begin === "Vrij" && staafeinden.eind === "Vrij");
     const zijdelings = eenVrijEind

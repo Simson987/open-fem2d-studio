@@ -258,7 +258,9 @@ export interface LijnUitkomst<T extends LijnInvoer> {
    * Per virtuele staaf de kniklengte per vak (KNIK PER VAK), in m, alleen om
    * de as waarvoor de delen geen kniklengte opgeven. De bouwers zetten haar
    * in `buckling_length_y_m`/`_z_m` als de staaf zelf geen opgave heeft; zij
-   * telt NIET als opgave van de gebruiker (de α_cr-kanttekening blijft).
+   * telt NIET als opgave van de gebruiker. Zij is nooit langer dan de lijn,
+   * dus de kanttekening van de kern over een opgegeven L_cr,y > L (dubbele
+   * sway) komt er niet door.
    */
   kniklengtes: Map<number, { yM?: number; zM?: number }>;
 }

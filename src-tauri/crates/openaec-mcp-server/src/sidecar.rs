@@ -802,6 +802,13 @@ fn remedie_bij(code: &str) -> String {
              samenhang van het raamwerk; `validate_fem_model` benoemt losse knopen, \
              mechanismen en staven met lengte nul."
             .to_owned(),
+        "TOETSING_GEWEIGERD" => "Het model is wel doorgerekend, maar de UGT-toets heeft geen \
+             krachten: de tweede-ordeberekening (P-Δ) met scheefstand divergeert, de belasting \
+             ligt op of boven de kniklast (α_cr ≤ 1, per combinatie in `detail.per_combinatie`). \
+             Verstijf de constructie (verbanden, inklemmingen), kies zwaardere profielen of maak \
+             slanke verbanden trek-alleen. `solve_fem_model` geeft de krachtsverdeling van de \
+             resultaten; er wordt nooit op eerste orde getoetst."
+            .to_owned(),
         "PROTOCOL_MISMATCH" => "Server en solverbundel horen niet bij elkaar. Herbouw de \
              MCP-server, of haal OPENAEC_FEM_KERNEL weg."
             .to_owned(),

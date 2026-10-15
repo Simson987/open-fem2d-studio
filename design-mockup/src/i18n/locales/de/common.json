@@ -2,8 +2,10 @@
   "resultView": {
     "busy": "Berechnung läuft…",
     "emptyCase": "{{name}}: keine wirksame Last; kein Lastfallergebnis.",
-    "ucCombinations": "UC zeigt den maßgebenden Nachweis über Lastkombinationen, nicht nur den gewählten Lastfall.",
-    "ucLabel": "UC (Kombinationen)"
+    "ucCombinations": "UC zeigt den maßgebenden Nachweis über Lastkombinationen, nicht nur den gewählten Lastfall. Die GZT-Nachweisschnittgrößen sind immer Theorie II. Ordnung (P-Δ) mit Schiefstellung.",
+    "ucLabel": "UC (Kombinationen)",
+    "checkForces": "GZT-Nachweisschnittgrößen: {{analyse}} mit Schiefstellung φ = 1/{{noemer}} ({{bron}}), immer, unabhängig von den Einstellungen Berechnung und Schiefstellung. GZG-Nachweise verwenden die Ergebnisse.",
+    "checkForcesReused": "Die Ergebnisse sind bereits diese Berechnung; der Nachweis hat nichts zusätzlich gerechnet."
   },
   "checkPanelControls": {
     "open": "Nachweise",
@@ -553,9 +555,6 @@
       "validationPassed": "IFC-Validierung bestanden",
       "notExpressed": "{{punten}} Punkt(e) nicht in IFC abgebildet — siehe Registerkarte IFC."
     },
-    "stability": {
-      "firstOrderNotAllowed": "Stabilität: Theorie I. Ordnung nicht zulässig"
-    },
     "solve": {
       "fieldPatternsLimited": "Feldweise Lastanordnung begrenzt",
       "failed": "Berechnung fehlgeschlagen",
@@ -603,7 +602,12 @@
       "notChecked": "Kein Nachweis: Die Berechnung ist fehlgeschlagen. {{reden}}",
       "seeInsightsErrors": "Siehe Einblick → Fehler.",
       "noneYetTitle": "Noch kein Nachweis",
-      "noneYetBody": "Berechnen Sie zuerst das Modell; der Normnachweis läuft dann mit und kann anschließend exportiert werden."
+      "noneYetBody": "Berechnen Sie zuerst das Modell; der Normnachweis läuft dann mit und kann anschließend exportiert werden.",
+      "refused": "Nachweis verweigert",
+      "refusedNonlinear": "Die physikalisch nichtlineare Runde der Nachweisschnittgrößen ist nicht konvergiert: {{reden}} Der Nachweis wird verweigert; die Ergebnisse der Analyse bleiben erhalten.",
+      "otherForcesTitle": "Nicht auf der Zeichenfläche",
+      "otherForcesBody": "Kombination \"{{naam}}\" des Nachweises steht nicht mit denselben Schnittgrößen auf der Zeichenfläche. Die Nachweisschnittgrößen sind Theorie II. Ordnung (P-Δ) mit Schiefstellung φ = 1/{{noemer}}; die Ergebnisse auf der Zeichenfläche folgen den Einstellungen Berechnung und Schiefstellung. Stellen Sie die Berechnung auf Theorie II. Ordnung und schalten Sie die Schiefstellung mit φ = 1/{{noemer}} ein, um die maßgebende Stelle dort zu sehen.",
+      "otherForcesBodySame": "Kombination \"{{naam}}\" des Nachweises steht nicht mit denselben Schnittgrößen auf der Zeichenfläche, obwohl die Ergebnisse nach Theorie II. Ordnung mit derselben Schiefstellung φ = 1/{{noemer}} gerechnet sind. Der Nachweis wurde hier separat gerechnet, zum Beispiel ohne die GZT-Endzustandsvarianten des Holzes (E_mean,fin). Die Schnittgrößen auf der Zeichenfläche sind deshalb nicht die des Nachweises."
     },
     "layout": {
       "dragCheckSplit": "Ziehen, um die Aufteilung Modell/Nachweis anzupassen",
@@ -1043,6 +1047,7 @@
     "selfWeightOfferTitle": "Das Eigengewicht steht derzeit zwischen den Lasten des ersten ständigen Lastfalls. Den Lastfall „Eigengewicht“ hinzufügen und das Eigengewicht dorthin verschieben. Die Ergebnisse der Kombinationen ändern sich nicht; ein Schritt, rückgängig mit Strg+Z.",
     "selfWeight": "Eigengewicht",
     "analysis": "Berechnung",
+    "analysisResultsNote": "Diese Wahl gilt für die Ergebnisse (Momentenlinien, Verformungen, Auflagerkräfte) und die GZG-Nachweise. Der GZT-Nachweis rechnet immer selbst nach Theorie II. Ordnung (P-Δ) mit Schiefstellung (EN 1993-1-1 5.2.2(3)b und (7)b).",
     "analysisType": {
       "eersteOrde": "Theorie I. Ordnung",
       "tweedeOrdeGeometrisch": "Theorie II. Ordnung (P-Δ)",
@@ -1066,7 +1071,7 @@
     "noConcreteBarsTitle": "Physikalisch nichtlinear wirkt auf Betonstäbe mit Bewehrungskorb: Werkstoff eine Festigkeitsklasse (z. B. C30/37), Profil ein Rechteck (z. B. 300x500) und ein Korb in den Stabeigenschaften. Ohne solche Stäbe entspricht das Ergebnis Theorie II. Ordnung (P-Δ).",
     "noConcreteBars": "keine Betonstäbe mit Korb",
     "modelLarge": "Modell groß — siehe Segmentlänge",
-    "swayTitle": "Schiefstellung (Anfangsimperfektion) berücksichtigen: jede vertikale Last erhält eine horizontale Ersatzlast H = φ·V. Woher φ stammt, wählen Sie daneben — der feste Nenner (der Grundwert und die Einstellung jedes bestehenden Projekts) oder die Normformel nach EN 1993-1-1 (5.5), EN 1992-1-1 (5.1) oder EN 1995-1-1 (5.1).",
+    "swayTitle": "Schiefstellung (Anfangsimperfektion) in den Ergebnissen berücksichtigen: jede vertikale Last erhält eine horizontale Ersatzlast H = φ·V. Der GZT-Nachweis rechnet immer mit dieser Schiefstellung, auch wenn dieses Kästchen nicht angehakt ist; deshalb sind die φ-Felder daneben immer sichtbar. Woher φ stammt, wählen Sie daneben — der feste Nenner (der Grundwert und die Einstellung jedes bestehenden Projekts) oder die Normformel nach EN 1993-1-1 (5.5), EN 1992-1-1 (5.1) oder EN 1995-1-1 (5.1).",
     "sway": "Schiefstellung",
     "tensionOnlyFit": "Zugstäbe nach G montiert",
     "tensionOnlyFitTitle": "Zugstäbe nach der ständigen Last montiert: ihre spannungslose Länge folgt der Verformung unter den ständigen Lastfällen (Faktor 1,0, einschließlich Eigengewicht und Lastflächen). Unter dieser Last allein tragen sie dann nichts; was danach kommt, tragen sie.",
@@ -1081,7 +1086,7 @@
     "swayDenominatorTitle": "Schiefstellung φ als 1/x (Standard 1/200)",
     "swayHeightTitle": "Höhe h in mm für α_h = 2/√(h/1000). Leer = aus dem Modell abgeleitet ({{hoogte}} mm): vom tiefsten Auflager bis zur Oberkante des Tragwerks (EN 1993-1-1 Bild 5.2; EN 1992-1-1 §5.2(6) für das aussteifende Tragwerk).",
     "swayMembersTitle": "Anzahl tragender vertikaler Bauteile m für α_m = √(0,5(1+1/m)). Leer = aus dem Modell abgeleitet ({{aantal}}): die Anzahl der Stützenachsen, wobei übereinanderstehende Stäbe eine Stütze bilden. Das 50-%-Kriterium nach EN 1993-1-1 5.3.2(3)a kann hier nicht angewendet werden (es erfordert die Stützenkräfte, die sich erst aus der Berechnung ergeben); nehmen Sie eine gering belastete Stütze von Hand heraus — kleineres m ergibt größeres φ.",
-    "swayDirectionTitle": "Richtung der Ersatzhorizontalkräfte: BEIDE. Jede Kombination wird mit der Schiefstellung in +x und in −x gerechnet (EN 1993-1-1 5.3.2(2): in der ungünstigsten Richtung); Umhüllende und Nachweis nehmen je Stab die ungünstigere der beiden, und der Kombinationsname nennt die Richtung. Die hier gespeicherte Vorzugsrichtung ({{richting}}) bestimmt nur, welche Variante die ursprüngliche Kombinationsnummer behält.",
+    "swayDirectionTitle": "Richtung der Ersatz-Horizontalkräfte: BEIDE. Der GZT-Nachweis rechnet jede Kombination mit der Schiefstellung in +x und in −x (EN 1993-1-1 5.3.2(2): in der ungünstigsten Richtung) und nimmt je Stab die ungünstigere der beiden; mit angehaktem Kästchen Schiefstellung werden auch die Ergebnisse so gerechnet, und der Kombinationsname nennt die Richtung. Die hier gespeicherte Vorzugsrichtung ({{richting}}) bestimmt nur, welche Variante die ursprüngliche Kombinationsnummer behält.",
     "dialogTitle": "Lastfälle & Kombinationen",
     "casesTab": "Lastfälle ({{aantal}})",
     "errorCount_one": "{{count}} Fehler",
@@ -1188,11 +1193,11 @@
       },
       "heightManual": "h wurde von Hand eingegeben: {{h}} m.",
       "membersManual": "m wurde von Hand eingegeben: {{m}}.",
-      "directionBoth": "Richtung: beide. Jede Lastkombination wird mit der Schiefstellung in +x und in −x gerechnet, als zwei Varianten mit der Richtung im Namen; Umhüllende und Nachweis nehmen je Stab die ungünstigere der beiden (EN 1993-1-1 5.3.2(2): die Imperfektion in der ungünstigsten Richtung; 5.3.2(8): in allen maßgebenden Richtungen, jeweils einzeln).",
+      "directionBoth": "Richtung: beide. Der GZT-Nachweis rechnet jede Kombination mit der Schiefstellung in +x und in −x, als zwei Varianten mit der Richtung im Namen, und nimmt je Stab die ungünstigere der beiden (EN 1993-1-1 5.3.2(2): die Imperfektion in der ungünstigsten Richtung; 5.3.2(8): in allen maßgebenden Richtungen, jeweils einzeln). Das tut der Nachweis immer, auch wenn der Schalter Schiefstellung aus ist; dieser Schalter gilt nur für die Ergebnisse, und ist er an, rechnen auch diese jede Kombination in +x und −x.",
       "columnLine3d": "({{n}}) x = {{x}} mm, y = {{y}} mm",
-      "directions3d": "In 3D wirkt die Schiefstellung je GZT-Kombination in vier Richtungen, jeweils eine: +X, −X, +Y und −Y (EN 1993-1-1 §5.3.2(8)). Jede vertikale Last V erhält an ihrem Angriffspunkt eine horizontale Last φ·V (§5.3.2(7)). GZG-Kombinationen werden ohne Schiefstellung berechnet."
+      "directions3d": "In 3D rechnet der GZT-Nachweis jede Kombination mit der Schiefstellung in vier Richtungen, jeweils eine: +X, −X, +Y und −Y (EN 1993-1-1 §5.3.2(8)). Jede vertikale Last V erhält an ihrem Angriffspunkt eine horizontale Last φ·V (§5.3.2(7)). Das tut der Nachweis immer, auch wenn der Schalter Schiefstellung aus ist; ist dieser Schalter an, werden auch die GZT-Ergebnisse so gerechnet. GZG-Kombinationen werden ohne Schiefstellung berechnet."
     },
-    "swayDirectionTitle3d": "Die Schiefstellung wirkt in jeder GZT-Kombination nacheinander in +X, −X, +Y und −Y (EN 1993-1-1 §5.3.2(8)); GZG-Kombinationen werden ohne sie berechnet.",
+    "swayDirectionTitle3d": "Der GZT-Nachweis rechnet jede GZT-Kombination nacheinander mit der Schiefstellung in +X, −X, +Y und −Y (EN 1993-1-1 §5.3.2(8)); mit angehaktem Kästchen Schiefstellung auch die Ergebnisse. GZG-Kombinationen werden ohne gerechnet.",
     "analysisDescriptionVolume": {
       "geometric": "Tet4-Volumen: Total-Lagrange-GNL. Andere Volumen- oder Stabelemente werden in diesem Modus abgelehnt.",
       "material": "Tet4-Volumen: J2-Stahlplastizität oder Betonzugschädigung bei kleinen Dehnungen. Nur reine Tet4-Modelle."
@@ -1303,6 +1308,14 @@
       "calculatedSls": "Endsteifigkeit des Holzes berechnet (GZG)"
     },
     "combinationNotUsed": "nicht verwendet",
+    "resultsSecondOrder": "Theorie II. Ordnung (P-Δ)",
+    "resultsFirstOrder": "Theorie I. Ordnung",
+    "ucSteel": "UC Stahl {{uc}}",
+    "ucConcrete": "UC GZT Beton {{uc}}",
+    "ucTimber": "UC EN 1995 {{uc}}",
+    "checksRunning": "Nachweis…",
+    "checksError": "Nachweis: {{error}}",
+    "checkForces": "GZT-Nachweisschnittgrößen: Theorie II. Ordnung (P-Δ) + Schiefstellung φ = 1/{{noemer}}",
     "edgeSegments": "{{n}} Randsegmente",
     "arcCount": "({{n}} Bogen)",
     "openingCount_one": "{{count}} Öffnung",

@@ -792,9 +792,16 @@ export default function OpenFem3DProperties({
             </div>
           </>}
         </Section>}
+        {/* De grondslag van de toets: de toetskrachten zijn altijd tweede orde
+            met scheefstand (issue #199). `normBasis` beschrijft de EN 1993-toets
+            (kniklengtes, kipsteunen, α_cr); een houten staaf krijgt haar eigen
+            tekst (E_mean in de P-Δ, 2·L bij een vrij eind). De teksten staan
+            alleen in de taalbestanden. */}
         <p className="fem-prop-hint">{beamIsConcrete
           ? t("openFem3d.props.concreteNormBasis")
-          : t("openFem3d.normBasis", "De EN 1993-toets gebruikt alle zes lokale staafkrachten. Kniklengtes vallen terug op L en expliciete 3D-kipsteunen ontbreken nog. De eigenwaarde-knikfactor hierboven controleert apart de globale stabiliteit.")}</p>
+          : beamIsTimber
+            ? t("openFem3d.props.timberNormBasis")
+            : t("openFem3d.normBasis")}</p>
       </>}
     </div>
   </div>;

@@ -90,7 +90,7 @@ import {
 } from "./uitkraging";
 import type { Staafeinden } from "./types/steel/Staafeinden";
 import { kipsteunenVanStaaf } from "./kipsteunen";
-import { alphaCrStaafNotitie, type StabiliteitVoorToets } from "../components/fem/solver/alphaCr";
+import type { StabiliteitVoorToets } from "../components/fem/solver/alphaCr";
 import {
   eigenNaamVan,
   isEigenProfiel,
@@ -101,6 +101,34 @@ import { toetsdataInReferentierichting, zeegNotities, zeegVoorToets } from "./re
 import { bepaalVerloop } from "./sectionResolver";
 import type { CustomSection } from "./types/steel/CustomSection";
 import { STANDAARD_BIJLAGE, type NationaleBijlageCode } from "./normAanduidingen";
+
+// ── Hout in de tweede-ordetoets (issue #199, B10) ──────────────────────────
+/**
+ * De vaste melding bij ELKE houtstaaf in de toets, in `staaf_notities` (de kern
+ * zet haar bij de kolomtoets 6.3.2, de kiptoets 6.3.3 en w_fin). De UGT-
+ * toetskrachten zijn altijd tweede orde met scheefstand, en daarin rekent het
+ * hout met E_mean: niet de volledige route van NEN-EN 1995-1-1 (E_d, de
+ * boogimperfectie). Daarom zetten de houtbouwers `zijdelingse_knik_in_analyse`
+ * niet, en houdt een vrij houten eind 2·L. Gedeeld met de houttoets in 3D
+ * (`openFem3dTimberCheck.ts`); de melding op modelniveau is `TOETS_HOUT_MELDING`
+ * (`toetsKrachten.ts`).
+ */
+export const HOUT_TOETS_STAAFNOTITIE =
+  "HOUT IN DE TOETS: de UGT-krachten van deze staaf komen uit een tweede-ordeberekening (P-Δ) met " +
+  "scheefstand, waarin het hout met E_mean meedoet. De route van NEN-EN 1995-1-1 voor zo'n berekening — " +
+  "rekenstijfheden E_d = E_mean/γ_M (2.2.2(1)P) en de boogimperfectie van 5.4.4(2) — zit daar nog niet " +
+  "in. Daarom telt de zijdelingse knik van een houten staaf niet als gedekt: een vrij staafeind zonder " +
+  "opgegeven kniklengte houdt L_cr = 2·L, en de knik wordt getoetst met k_c volgens 6.3.2.";
+
+/**
+ * Of de krachten die een houtbouwer krijgt de toetskrachten zijn: tweede orde
+ * met scheefstand. In de app en via MCP altijd (`toetsSet2D`); een aanroeper met
+ * eigen, eerste-ordegegevens krijgt de houtmelding niet, want die zou over zijn
+ * krachten iets onwaars zeggen.
+ */
+export function isTweedeOrdeToets(stabiliteit: StabiliteitVoorToets | undefined): boolean {
+  return stabiliteit !== undefined && stabiliteit.analysetype !== "eersteOrde" && stabiliteit.scheefstandAan;
+}
 
 // ── Per-staaf toetsconfiguratie (Beam.checkConfig) ─────────────────────────
 /** UI-klimaatklasse (1/2/3) → ts-rs/Rust-enum. Ontbreekt → Sc1. */
@@ -820,7 +848,11 @@ export interface TimberBuildData {
   alleBeams?: Beam[];
   /** Platen; zie `SteelBuildData.plates`. */
   plates?: PlaatVoorEinden[];
-  /** Analysetype en α_cr; zie `SteelBuildData.stabiliteit`. */
+  /**
+   * Analysetype, scheefstand en α_cr; zie `SteelBuildData.stabiliteit`. Is dit
+   * de toets (tweede orde met scheefstand), dan krijgt elke houtstaaf de vaste
+   * melding `HOUT_TOETS_STAAFNOTITIE`.
+   */
   stabiliteit?: StabiliteitVoorToets;
   combinations: LoadCombination[];
   combinationResults: Map<number, SolverResult>;
@@ -1031,14 +1063,11 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
         })
       : [];
     const staafNotities = [...(lijn.notities.get(beam.id) ?? [])];
-    const alphaNotitie = alphaCrStaafNotitie(
-      ruweData.stabiliteit,
-      Math.min(...forcesEnvelope.map((p) => p.forces.n_ed)),
-      Number.isFinite(cfg.bucklingLengthY_m) && (cfg.bucklingLengthY_m as number) > 0,
-      // Een vrij eind: de kern neemt 2·L; de kanttekening heeft daar een eigen tekst.
-      vrijEind,
-    );
-    if (alphaNotitie) staafNotities.push(alphaNotitie);
+    // In de toets (tweede orde met scheefstand) de vaste houtmelding: E_mean,
+    // niet de volledige EN 1995-route, dus 2·L bij een vrij eind (issue #199,
+    // B10). De EC3-kanttekening over α_cr (`alphaCrStaafNotitie`) die hier tot
+    // 2026.42 stond, is weg: de toets rekent nooit eerste orde.
+    if (isTweedeOrdeToets(ruweData.stabiliteit)) staafNotities.push(HOUT_TOETS_STAAFNOTITIE);
 
     inputs.push({
       // De nationale bijlage van het project reist mee naar de kern; daar
@@ -1110,7 +1139,9 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
       // scheefstand) gaat bij hout bewust NIET mee: NEN-EN 1995-1-1 eist bij
       // tweede orde E_d = E_mean/γ_M (2.2.2(1)P) en de boogimperfectie van
       // 5.4.4(2), en de P-Δ van deze app rekent met E_mean en zonder
-      // boogimperfectie. Een vrij houten eind houdt dus 2·L.
+      // boogimperfectie. Een vrij houten eind houdt dus 2·L, ook nu de
+      // toetskrachten altijd tweede orde met scheefstand zijn (issue #199); dat
+      // zegt `HOUT_TOETS_STAAFNOTITIE` bij de staaf.
       // Zijdelingse steunen per rand — ALLEEN voor de kniklengte om z. Dezelfde
       // twee lijsten als bij staal (boven = bovenrand, onder = onderrand). De
       // kipsteunafstand hieronder blijft er uitdrukkelijk los van.

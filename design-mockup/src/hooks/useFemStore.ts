@@ -3205,6 +3205,11 @@ export function useFemStore(opties?: {
     setCombinationResults(null);
     setEnvelope(null);
     setVeldpatronen(null);
+    // α_cr hoort net zo goed bij het oude model: bleef hij staan, dan kreeg het
+    // rapport de analysetoelichting van het vorige model, en de toets via het
+    // API-pad (zonder verse rekengang) de α_cr van vóór de wijziging. Dezelfde
+    // vier velden die `setSolverOutputs(null)` wist.
+    setStabiliteit(null);
     // We deliberately depend on the model-bearing state, not on the setters.
     // `plates` doet mee sinds platen meerekenen (P2): zonder die dependency
     // zou een dikte- of meshSize-wijziging verouderde resultaten laten staan.

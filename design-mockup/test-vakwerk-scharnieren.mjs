@@ -21,7 +21,8 @@
 //      de staaftoets dekt (6.3.1, L_cr = L), geen globale vorm (5.2.1(3)).
 //  [1b] α_cr telt een pendelkolom wél mee in de zijwaartse vorm (koordterm
 //      van K_g): een ingeklemde kolom die een belaste pendelkolom stabiliseert,
-//      P_cr = 3EI/h² (hand), en de melding blijft.
+//      P_cr = 3EI/h² (hand), en de melding over die globale vorm blijft — sinds
+//      issue #199 informatief (B14), zonder "FOUT:".
 //  [2] Een driescharnierspant en een pendelstaaf op een scharnieroplegging,
 //      ook op het gemengde pad (met een schijf erbij). Een koppel op de nok
 //      van het spant (alleen scharnierende einden) wordt op beide paden
@@ -169,8 +170,15 @@ log("\n[1b] α_cr: een belaste pendelkolom telt mee in de zijwaartse vorm");
   const ac = s.result?.stability?.alpha_cr?.[0];
   ok(`α_cr = 3EI/(h²·P) = ${alphaHand.toFixed(3)} (±1 %): ${ac?.alpha_cr}`,
     ac?.status === "bepaald" && Math.abs(ac.alpha_cr - alphaHand) <= 0.01 * alphaHand, JSON.stringify(ac));
-  ok("de melding \"EERSTE ORDE NIET TOEGESTAAN\" blijft (een globale vorm)",
-    (s.result?.warnings ?? []).some((m) => /EERSTE ORDE NIET TOEGESTAAN/.test(m)), JSON.stringify(s.result?.warnings));
+  // GEWIJZIGD door issue #199 (B14). Tot 2026.42 was dit de FOUT "EERSTE ORDE
+  // NIET TOEGESTAAN" (α_cr = 6,57 < 10 bij eerste orde). De toets rekent nu
+  // altijd zelf P-Δ met scheefstand; de melding over de globale vorm blijft,
+  // maar informatief en over de resultaten. Hetzelfde α_cr, dezelfde combinatie.
+  const w = s.result?.warnings ?? [];
+  ok("de melding over de globale vorm blijft: α_cr < 10, over de eerste-orderesultaten",
+    w.some((m) => /^α_cr = \d+,\d+ in combinatie .* \(< 10\): de resultaten zijn eerste orde/.test(m)), JSON.stringify(w));
+  ok("… informatief: geen \"FOUT:\" en geen \"EERSTE ORDE NIET TOEGESTAAN\" meer (B14)",
+    !w.some((m) => m.startsWith("FOUT:") || /EERSTE ORDE NIET TOEGESTAAN/.test(m)), JSON.stringify(w));
 }
 
 // ─────────────────────────────────────────────────────────────────────────

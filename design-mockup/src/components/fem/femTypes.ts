@@ -1758,6 +1758,15 @@ export interface LoadCase {
    * valt. De aan/uit-schakelaar blijft `selfWeightEnabled`.
    */
   eigenGewicht?: true;
+  /**
+   * Dit geval draagt een initiële scheefstand als knooplasten (een
+   * imperfectiegeval, in IFC `SYSTEM_IMPERFECTION`; issue #199). De UGT-toets
+   * rekent altijd met de scheefstand van de projectinstelling; zo'n geval telt
+   * in de UGT-toetscombinaties daarom met factor 0, anders telde de
+   * scheefstand dubbel (`zetImperfectieGevallenOpNul`). De resultaten en de
+   * BGT rekenen het zoals het in de combinatie staat. Alleen `true`.
+   */
+  imperfectie?: true;
 }
 
 /**

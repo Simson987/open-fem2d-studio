@@ -97,6 +97,7 @@ fn de_pdf_toont_het_draadeind_en_kip_als_niet_van_toepassing() {
         scheefstand_toelichting: None,
         analyse_toelichting: None,
         wind_toelichting: None,
+        toetskrachten: None,
         plate_results: Vec::new(),
         plate_inputs: Vec::new(),
         plate_skipped: Vec::new(),

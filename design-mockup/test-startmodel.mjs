@@ -34,8 +34,10 @@
 //      slaan er geen enkele over; de korf komt 1-op-1 door, beugelafstand en
 //      aantal beugelbenen incluis.
 //  (h) OMSCHRIJVINGEN — elke last draagt een ingevulde omschrijving.
-//  (i) ECHTE TOETSING, STAAL — het stalen portaal door de Rust-rekenkern heen:
-//      alle drie de staven Ok, met een marge die noch nipt noch absurd ruim is.
+//  (i) ECHTE TOETSING, STAAL — het stalen portaal door de Rust-rekenkern heen,
+//      op de toetsset zoals de app hem maakt (UGT tweede orde met scheefstand,
+//      BGT uit de resultaten; issue #199): alle drie de staven Ok, met een
+//      marge die noch nipt noch absurd ruim is.
 //  (j) ECHTE TOETSING, BETON — de betonbalk door dezelfde kern: vijftien
 //      toetsen, en de dwarskrachttoets die WERKELIJK iets doet (V_Ed > V_Rd,c,
 //      dus het vakwerkmodel van 6.2.3 is echt nodig). Ook de tegenproef:
@@ -75,6 +77,9 @@ const { resolveSection } = await import("./src/lib/sectionResolver.ts");
 const { buildSteelCheckInputs, profileLookupKey } =
   await import("./src/lib/steelCheckBuilder.ts");
 const { selecteerCombinaties } = await import("./src/lib/combinatieSelectie.ts");
+const { bepaalToetsKrachten2D, toetsSet2D } = await import("./src/lib/toetsKrachten.ts");
+const { bepaalScheefstand, leidScheefstandGeometrieAf, toepasselijkeScheefstandNormen } =
+  await import("./src/lib/scheefstandNorm.ts");
 const { buildTimberCheckInputs } = await import("./src/lib/timberCheckBuilder.ts");
 const { buildBetonCheckInputs } = await import("./src/lib/betonCheckBuilder.ts");
 const { korvenUitStaven } = await import("./src/stores/checkStore.ts");
@@ -457,6 +462,26 @@ const { actief: actieveCombos } =
 const actieveResultaten = new Map(
   actieveCombos.map((c) => [c.id, combineResults(c, perCase.perCase)]),
 );
+// DE TOETSSET, ZOALS DE APP HEM MAAKT (issue #199): de UGT uit de eigen
+// toetsrekengang (altijd P-Δ met scheefstand φ = 1/200 van de projectinstelling,
+// in +x en −x, met de stabiliteit van de toets), de BGT uit de resultaten.
+// [i] en [j] toetsen daarop, niet op de eerste-orderesultaten: een weigering of
+// een UC die door P-Δ buiten de band valt, moet hier opvallen.
+const toetsNormen = toepasselijkeScheefstandNormen(s.beams);
+const toetsUitkomst = bepaalToetsKrachten2D({
+  basis: multi,
+  combinaties: actieveCombos,
+  scheefstand: {
+    project: bepaalScheefstand({ bron: "vast", noemer: 200, hoogteM: null, aantalElementen: null },
+      leidScheefstandGeometrieAf(model), toetsNormen),
+    normen: toetsNormen, richting: 1, modelAan: false,
+  },
+  analysetype: "eersteOrde",
+  resultaten: { perCase: perCase.perCase, combinationResults: actieveResultaten },
+});
+const toetsset = toetsUitkomst.weigering
+  ? null
+  : toetsSet2D(toetsUitkomst, { combinaties: actieveCombos, combinationResults: actieveResultaten, perCase: perCase.perCase }, s.beams);
 
 // ─────────────────────────────────────────────────────────────────────────
 log("\n[i] Echte rekenkern: het stalen portaal komt door de toetsing");
@@ -484,9 +509,14 @@ log("\n[i] Echte rekenkern: het stalen portaal komt door de toetsing");
       const sleutel = profileLookupKey(p.name);
       if (!profileDb.has(sleutel)) profileDb.set(sleutel, p);
     }
+    ok("de toets van het startmodel heeft krachten (geen weigering)", toetsset !== null,
+      toetsUitkomst.weigering?.reden ?? "");
     const { inputs } = buildSteelCheckInputs({
       nodes: s.nodes, beams: s.beams, supports: s.supports,
-      combinations: actieveCombos, combinationResults: actieveResultaten, profileDb,
+      combinations: toetsset?.combinaties ?? actieveCombos,
+      combinationResults: toetsset?.combinationResults ?? actieveResultaten,
+      ...(toetsset ? { stabiliteit: toetsset.stabiliteit } : {}),
+      profileDb,
     });
     check("staal: invoeren die de kern in gaan", inputs.length, 3);
 
@@ -587,7 +617,10 @@ log("\n[j] Echte rekenkern: de betonbalk, en wat de beugels daar doen");
   } else {
     const { inputs } = buildBetonCheckInputs({
       nodes: s.nodes, beams: s.beams, supports: s.supports,
-      combinations: actieveCombos, combinationResults: actieveResultaten,
+      // De toetsset, zoals de app (zie boven [i]).
+      combinations: toetsset?.combinaties ?? actieveCombos,
+      combinationResults: toetsset?.combinationResults ?? actieveResultaten,
+      ...(toetsset?.eersteOrdeResultaten ? { eersteOrdeResultaten: toetsset.eersteOrdeResultaten } : {}),
       korven: korvenUitStaven(s.beams),
     });
     check("beton: invoeren die de kern in gaan", inputs.length, 1);

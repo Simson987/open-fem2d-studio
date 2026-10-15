@@ -2,8 +2,10 @@
   "resultView": {
     "busy": "Calculating…",
     "emptyCase": "{{name}}: no effective load; no case result.",
-    "ucCombinations": "UC shows the governing check across load combinations, not just the selected load case.",
-    "ucLabel": "UC (combinations)"
+    "ucCombinations": "UC shows the governing check across load combinations, not just the selected load case. The ULS check forces are always second order (P-Δ) with sway imperfection.",
+    "ucLabel": "UC (combinations)",
+    "checkForces": "ULS check forces: {{analyse}} with sway imperfection φ = 1/{{noemer}} ({{bron}}), always, independent of the Analysis and Sway imperfection settings. SLS checks use the results.",
+    "checkForcesReused": "The results already are this analysis; the check did not compute anything extra."
   },
   "checkPanelControls": {
     "open": "Checks",
@@ -553,9 +555,6 @@
       "validationPassed": "IFC validation passed",
       "notExpressed": "{{punten}} item(s) not expressed in IFC — see the IFC tab."
     },
-    "stability": {
-      "firstOrderNotAllowed": "Stability: first-order analysis not permitted"
-    },
     "solve": {
       "fieldPatternsLimited": "Span-by-span load placement limited",
       "failed": "Calculation failed",
@@ -603,7 +602,12 @@
       "notChecked": "Not checked: the analysis failed. {{reden}}",
       "seeInsightsErrors": "See Insights → Errors.",
       "noneYetTitle": "No check yet",
-      "noneYetBody": "Analyse the model first; the code check runs along with it and can then be exported."
+      "noneYetBody": "Analyse the model first; the code check runs along with it and can then be exported.",
+      "refused": "Check refused",
+      "refusedNonlinear": "The physically non-linear round of the check forces did not converge: {{reden}} The check is refused; the results of the analysis remain.",
+      "otherForcesTitle": "Not on the canvas",
+      "otherForcesBody": "Combination \"{{naam}}\" of the check is not shown on the canvas with the same forces. The check forces are second order (P-Δ) with sway imperfection φ = 1/{{noemer}}; the results on the canvas follow the Analysis and Sway settings. Set Analysis to second order and switch Sway on, with φ = 1/{{noemer}}, to see the governing location there.",
+      "otherForcesBodySame": "Combination \"{{naam}}\" of the check is not shown on the canvas with the same forces, even though the results are second order with the same sway imperfection φ = 1/{{noemer}}. The check was calculated separately here, for example without the ULS final-state variants of timber (E_mean,fin). The forces on the canvas are therefore not those of the check."
     },
     "layout": {
       "dragCheckSplit": "Drag to adjust the model/check split",
@@ -1043,6 +1047,7 @@
     "selfWeightOfferTitle": "Self-weight currently sits among the loads of the first permanent load case. Add the “Self-weight” case and move the self-weight there. The combination results do not change; one step, undo with Ctrl+Z.",
     "selfWeight": "Self-weight",
     "analysis": "Analysis",
+    "analysisResultsNote": "This choice applies to the results (moment diagrams, displacements, reactions) and the SLS checks. The ULS check always performs its own second-order analysis (P-Δ) with sway imperfection (EN 1993-1-1 5.2.2(3)b and (7)b).",
     "analysisType": {
       "eersteOrde": "1st order",
       "tweedeOrdeGeometrisch": "2nd order (P-Δ)",
@@ -1066,7 +1071,7 @@
     "noConcreteBarsTitle": "Material non-linearity applies to concrete members with a reinforcement cage: material a strength class (e.g. C30/37), section a rectangle (e.g. 300x500) and a cage in the member properties. Without such members the result equals 2nd order (P-Δ).",
     "noConcreteBars": "no concrete members with cage",
     "modelLarge": "large model — see segment length",
-    "swayTitle": "Include sway imperfection (initial imperfection): each vertical load gets a horizontal companion H = φ·V. Choose where φ comes from next to this — the fixed denominator (the basic value, and the setting of every existing project) or the code formula of EN 1993-1-1 (5.5), EN 1992-1-1 (5.1) or EN 1995-1-1 (5.1).",
+    "swayTitle": "Include the sway imperfection (initial imperfection) in the results: each vertical load gets a horizontal companion H = φ·V. The ULS check always uses this sway imperfection, also when this box is unticked; that is why the φ fields next to it are always visible. Choose where φ comes from next to this — the fixed denominator (the basic value, and the setting of every existing project) or the code formula of EN 1993-1-1 (5.5), EN 1992-1-1 (5.1) or EN 1995-1-1 (5.1).",
     "sway": "Sway imperfection",
     "tensionOnlyFit": "Tension-only fitted after G",
     "tensionOnlyFitTitle": "Tension-only members fitted after the permanent load: their stress-free length follows the deformation under the permanent load cases (factor 1.0, including self-weight and load panels). Under that load alone they then carry nothing; whatever comes after, they do carry.",
@@ -1081,7 +1086,7 @@
     "swayDenominatorTitle": "Sway imperfection φ as 1/x (default 1/200)",
     "swayHeightTitle": "Height h in mm for α_h = 2/√(h/1000). Empty = derived from the model ({{hoogte}} mm): from the lowest support to the top of the structure (EN 1993-1-1 figure 5.2; EN 1992-1-1 §5.2(6) for the bracing structure).",
     "swayMembersTitle": "Number of load-bearing vertical members m for α_m = √(0.5(1+1/m)). Empty = derived from the model ({{aantal}}): the number of column lines, where members stacked on top of each other form one column. The 50 % criterion of EN 1993-1-1 5.3.2(3)a cannot be applied here (it requires the column forces, which only follow from the analysis); remove a lightly loaded post manually — smaller m gives larger φ.",
-    "swayDirectionTitle": "Direction of the equivalent horizontal forces: BOTH. Each combination is analysed with the sway imperfection in +x and in −x (EN 1993-1-1 5.3.2(2): in the most unfavourable direction); the envelope and the code check take, per member, the more unfavourable of the two, and the combination name states the direction. The preferred direction stored here ({{richting}}) only determines which variant keeps the original combination number.",
+    "swayDirectionTitle": "Direction of the equivalent horizontal forces: BOTH. The ULS check analyses each combination with the sway imperfection in +x and in −x (EN 1993-1-1 5.3.2(2): in the most unfavourable direction) and takes, per member, the more unfavourable of the two; with the Sway imperfection box ticked the results are calculated the same way, and the combination name states the direction. The preferred direction stored here ({{richting}}) only determines which variant keeps the original combination number.",
     "dialogTitle": "Load cases & combinations",
     "casesTab": "Cases ({{aantal}})",
     "errorCount_one": "{{count}} error",
@@ -1188,11 +1193,11 @@
       },
       "heightManual": "h was entered manually: {{h}} m.",
       "membersManual": "m was entered manually: {{m}}.",
-      "directionBoth": "Direction: both. Each load combination is analysed with the sway imperfection in +x and in −x, as two variants with the direction in the name; the envelope and the code check take, per member, the more unfavourable of the two (EN 1993-1-1 5.3.2(2): the imperfection in the most unfavourable direction; 5.3.2(8): in all relevant directions, one at a time).",
+      "directionBoth": "Direction: both. The ULS check analyses each combination with the sway imperfection in +x and in −x, as two variants with the direction in the name, and takes, per member, the more unfavourable of the two (EN 1993-1-1 5.3.2(2): the imperfection in the most unfavourable direction; 5.3.2(8): in all relevant directions, one at a time). The check always does this, also when the Sway imperfection switch is off; that switch applies only to the results, and with it on they too analyse each combination in +x and −x.",
       "columnLine3d": "({{n}}) x = {{x}} mm, y = {{y}} mm",
-      "directions3d": "In 3D the sway imperfection acts per ULS combination in four directions, one at a time: +X, −X, +Y and −Y (EN 1993-1-1 §5.3.2(8)). Every vertical load V receives a horizontal load φ·V at its own point of application (§5.3.2(7)). SLS combinations are calculated without sway imperfection."
+      "directions3d": "In 3D the ULS check analyses each combination with the sway imperfection in four directions, one at a time: +X, −X, +Y and −Y (EN 1993-1-1 §5.3.2(8)). Every vertical load V receives a horizontal load φ·V at its own point of application (§5.3.2(7)). The check always does this, also when the Sway imperfection switch is off; with that switch on, the ULS results are calculated the same way. SLS combinations are calculated without sway imperfection."
     },
-    "swayDirectionTitle3d": "The sway imperfection acts in every ULS combination in turn in +X, −X, +Y and −Y (EN 1993-1-1 §5.3.2(8)); SLS combinations are calculated without it.",
+    "swayDirectionTitle3d": "The ULS check analyses each ULS combination in turn with the sway imperfection in +X, −X, +Y and −Y (EN 1993-1-1 §5.3.2(8)); with the Sway imperfection box ticked, the results too. SLS combinations are calculated without.",
     "analysisDescriptionVolume": {
       "geometric": "Tet4 volume: total Lagrangian GNL. Other volume or bar elements are rejected in this mode.",
       "material": "Tet4 volume: J2 steel plasticity or concrete tension damage at small strain. Pure Tet4 models only."
@@ -1303,6 +1308,14 @@
       "calculatedSls": "Final stiffness of timber analysed (SLS)"
     },
     "combinationNotUsed": "not used",
+    "resultsSecondOrder": "2nd order (P-Δ)",
+    "resultsFirstOrder": "1st order",
+    "ucSteel": "UC steel {{uc}}",
+    "ucConcrete": "UC ULS concrete {{uc}}",
+    "ucTimber": "UC EN 1995 {{uc}}",
+    "checksRunning": "code check…",
+    "checksError": "Code check: {{error}}",
+    "checkForces": "ULS check forces: 2nd order (P-Δ) + sway φ = 1/{{noemer}}",
     "edgeSegments": "{{n}} edge segments",
     "arcCount": "({{n}} arc)",
     "openingCount_one": "{{count}} opening",

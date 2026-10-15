@@ -292,7 +292,7 @@ const LOAD_VELDEN = [
   "plateId", "edge", "edgeIndex", "openingId", "gegenereerdDoor", "omschrijving",
 ] as const;
 
-const LOADCASE_VELDEN = ["id", "name", "type", "categorie", "gegenereerd", "eigenGewicht"] as const;
+const LOADCASE_VELDEN = ["id", "name", "type", "categorie", "gegenereerd", "eigenGewicht", "imperfectie"] as const;
 
 const SUPPORT_TYPES = [
   "pinned", "fixed", "xRoller", "zRoller", "zSpring", "xSpring", "rotSpring",
@@ -1131,6 +1131,14 @@ export function controleerVelden(rauw: unknown): string[] {
     // "geen kenmerk" betekenen en het eigen gewicht naar het eerste blijvende
     // geval sturen; een kenmerk op een veranderlijk geval zou het eigen
     // gewicht ψ₂ = 0,3 geven. Beide worden geweigerd, met reden.
+    // Het kenmerk van een imperfectiegeval (issue #199): alleen `true`. Een
+    // `false` of tekst zou stil "geen imperfectiegeval" betekenen, en dan telt
+    // de scheefstand in de UGT-toets dubbel.
+    if (lc.imperfectie !== undefined && lc.imperfectie !== true) {
+      fouten.push(
+        `${pad}.imperfectie: alleen de waarde true is toegestaan (laat het veld weg voor een ` +
+        "gewoon belastinggeval).");
+    }
     if (lc.eigenGewicht !== undefined) {
       if (lc.eigenGewicht !== true) {
         fouten.push(

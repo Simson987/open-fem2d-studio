@@ -118,7 +118,12 @@ const LEEG = {
   selfWeightEnabled: false, scheefstandEnabled: false, scheefstandNoemer: 200, scheefstandRichting: 1,
 };
 
-/** Doorrekenen met de standaardcombinaties, zoals de toetsstore dat doet. */
+/**
+ * Doorrekenen met de standaardcombinaties: de RESULTATEN, eerste orde. Niet
+ * de toetsset van de app (sinds issue #199 rekent die de UGT tweede orde met
+ * scheefstand); voor wat deze test bewijst, de onafhankelijkheid van de
+ * tekenrichting, maakt dat niet uit.
+ */
 function reken(model) {
   const perCase = solveAllCases(bouwMultiInput(model)).perCase;
   const { actief } = selecteerCombinaties(defaultCombinations(), model.beams, model.plates);

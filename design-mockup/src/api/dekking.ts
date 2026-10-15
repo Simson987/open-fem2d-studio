@@ -454,6 +454,7 @@ export const VELDEN_3D = {
     categorie: veld(["project.loadCase.add", "project.loadCase.update"], "categorie"),
     gegenereerd: { afgeleid: "de windgenerator markeert de gevallen die hij maakt (fase 2)" },
     eigenGewicht: { afgeleid: "het standaardgeval Eigen gewicht draagt het kenmerk" },
+    imperfectie: { afgeleid: "de import van een IFC-analysemodel markeert zijn imperfectiegevallen (SYSTEM_IMPERFECTION)" },
   } satisfies Record<keyof LoadCase, Dekking>,
   combinatie: {
     id: ID,

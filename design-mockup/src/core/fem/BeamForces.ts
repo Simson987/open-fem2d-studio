@@ -3,6 +3,7 @@ import {
   calculateBeamLength,
   calculateBeamAngle,
   calculateBeamLocalStiffness,
+  telGeometrischeStijfheidOp,
   transformGlobalToLocal,
   calculateTrapezoidalLoadVector,
   calculatePartialTrapezoidalLoadVector,
@@ -152,13 +153,33 @@ function makePartialParticular(
  * - V positive: causes clockwise rotation of element
  * - M positive: trek in de lokale ondervezel (de −y-zijde). Welke WERELDzijde
  *   dat is, hangt aan de tekenrichting; zie `lib/referentierichting.ts`.
+ *
+ * TWEEDE ORDE (`nGeometrisch`). Na een P-Δ-oplossing staat het evenwicht in
+ * het stelsel met K = K_E + K_G(N). De staafeindkrachten horen dan uit
+ * DEZELFDE matrix te komen: f = (K_E + K_G)·u − F_eq. Tot oktober 2026 werd hier
+ * alleen K_E·u gerekend. Dan sluit het knoopevenwicht niet: aan de vrije kop
+ * van een gedrukte console stond een moment waar 0 hoort (−0,154 kNm bij
+ * P = 500 kN, H = 2 kN, h = 3 m), het voetmoment lag 3 % boven de reactie, en
+ * bij trek kreeg een staaf met een knoopmoment op het scharnier 2,831 kNm waar
+ * 3,000 kNm aangrijpt (de onveilige kant). Met K_G vóór de condensatie (zoals
+ * `telGeometrischeStijfheidOp` in de assemblage) zijn eindkrachten en
+ * reacties gelijk. `nGeometrisch` is de normaalkracht waarmee K_G in het
+ * stelsel zat, TREK-positief (de conventie van `calculateGeometricStiffness`);
+ * weglaten = eerste orde, bit-gelijk aan vroeger.
+ *
+ * Langs de staaf telt dan ook het P-δ-moment mee: M(x) = M₁ + V₁·x + ∫q +
+ * N·(w(x) − w(0)), met w de lokale doorbuiging op dezelfde stations. Uit de
+ * consistente K_G volgt precies M₂ = M₁ + V₁·L + N·(v₂ − v₁) (de momentenrij
+ * van K_G sluit op N·(v₂ − v₁)); de term met w(x) is het evenwicht van het
+ * vervormde deel [0, x] en valt op de staafeinden samen met de eindkrachten.
  */
 export function calculateBeamInternalForces(
   element: IBeamElement,
   n1: INode,
   n2: INode,
   material: IMaterial,
-  globalDisplacements: number[]
+  globalDisplacements: number[],
+  nGeometrisch?: number,
 ): IBeamForces {
   const L = calculateBeamLength(n1, n2);
   const angle = calculateBeamAngle(n1, n2);
@@ -176,6 +197,10 @@ export function calculateBeamInternalForces(
 
   // Calculate local stiffness matrix
   const Kl = calculateBeamLocalStiffness(L, material.E, element.section.A, element.section.I);
+  // Tweede orde: K_G erbij, vóór de terugrekening van de scharnierrotaties en
+  // vóór de condensatie, net als in de assemblage (zie de kop van deze functie).
+  const metKg = nGeometrisch !== undefined && nGeometrisch !== 0 && Number.isFinite(nGeometrisch);
+  if (metKg) telGeometrischeStijfheidOp(Kl, L, nGeometrisch);
 
   // Equivalente knoopkrachten: SOM over alle lasten, per last dezelfde
   // dispatch (uniform / trapezium / partieel) als voorheen.
@@ -449,6 +474,15 @@ export function calculateBeamInternalForces(
     deflection.push(w);
     axialDisp.push(u);
     rotation.push(th);
+  }
+
+  // Tweede orde: het P-δ-moment langs de staaf, N·(w(x) − w(0)) met N
+  // trek-positief (zie de kop). Op x = L is dat N·(v₂ − v₁): precies het
+  // verschil tussen M₁ + V₁·L en de eindkracht M₂ uit (K_E + K_G)·u.
+  if (metKg) {
+    for (let i = 0; i < NUM_STATIONS; i++) {
+      bendingMoment[i] += nGeometrisch * (deflection[i] - deflection[0]);
+    }
   }
 
   // Find maximum absolute values for scaling

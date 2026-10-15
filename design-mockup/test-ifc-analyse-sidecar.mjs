@@ -11,6 +11,14 @@
 // Verwachte reacties van de luifel (zie test-ifc-analyse-import.mjs):
 //   G 2,0 kN/m per geprojecteerde lengte over 3 m = 6 kN; S 0,8 · √9,25 kN;
 //   Q 5 + 3 = 8 kN; W 0,5 · 3 = 1,5 kN in +X.
+//
+// DE TOETSKRACHTEN (issue #199, B9). `reken.analyse` geldt alleen voor de
+// resultaten. De UGT-toets rekent altijd zelf P-Δ met scheefstand in +X, −X,
+// +Y en −Y (`toetsverzoeken`), met φ van het projectbestand van de import
+// (geen scheefstandvelden: vast 1/200). Handcontrole voor "Luifel UGT"
+// (1,35·G + 1,5·S): ΣR_z = 1,35·6 + 1,5·0,8·√9,25 = 11,7497 kN, en in de
+// scheefstandrichting ΣR = −richting·φ·ΣR_z = ∓0,05875 kN (de luifel heeft
+// verder geen horizontale last in deze combinatie).
 // Rekenkern: OPEN_FEM_3D_SOLVER_PATH, anders src-tauri/target/debug/open-fem-3d(.exe).
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -25,6 +33,8 @@ let geslaagd = 0;
 const ok = (label) => { geslaagd += 1; console.log(`  ✓ ${label}`); };
 let volgnummer = 0;
 const vraag = (op, payload) => verwerkVerzoek({ v: 1, id: ++volgnummer, op, payload });
+/** De φ van de toets: het projectbestand van de import heeft geen scheefstandvelden → vast 1/200. */
+const PHI_VAST = 1 / 200;
 const dichtbij = (a, b, label, tol = 1e-6) => assert.ok(Math.abs(a - b) <= tol, `${label}: verwacht ${b}, berekend ${a}`);
 const inhoud = readFileSync(fileURLToPath(new URL("../docs/verificatie/ifc-analyse/ifc-analyse-m-n.ifc", import.meta.url)), "utf8");
 
@@ -121,7 +131,17 @@ const inhoud = readFileSync(fileURLToPath(new URL("../docs/verificatie/ifc-analy
   } else {
     assert.equal(a.result.rekenen.mogelijk, true);
     assert.ok(a.result.rekenverzoeken.length > 0);
-    ok("de hal wordt gerekend (de kern kent trek-alleen en schijven)");
+    // De hal draagt de scheefstand als imperfectiegeval ("Imp G +X"), maar
+    // alleen in de BGT-combinaties; "UGT 1" bevat het niet. De toets (alleen
+    // UGT) telt de scheefstand dus niet dubbel, en zegt daar niets over. Tot
+    // oktober 2026 meldde de toets hier "dubbel" voor elk imperfectiegeval
+    // in het bestand; nu zet zij een imperfectiegeval in een UGT-combinatie op
+    // factor 0 (dat geval: test-open-fem3d-toets-krachten [11]).
+    assert.equal(a.result.verslag.aantallen.imperfectieGevallen, 1);
+    assert.equal(a.result.toetsverzoeken.length, 4, "één UGT-combinatie in vier richtingen");
+    assert.ok(!a.result.toetsanalyse.meldingen.some((m) => m.includes("op factor 0") || m.includes("dubbel")),
+      a.result.toetsanalyse.meldingen.join("\n"));
+    ok("de hal wordt gerekend (de kern kent trek-alleen en schijven); het imperfectiegeval zit niet in de UGT, dus geen melding");
   }
 }
 
@@ -143,7 +163,7 @@ const kern = (request) => new Promise((resolve, reject) => {
 {
   const a = vraag("ifc_importeren", { inhoud, analysemodel: 2, reken: {} });
   assert.equal(a.ok, true, JSON.stringify(a.error));
-  const { rekenverzoeken, combinaties, reken, rekenen } = a.result;
+  const { rekenverzoeken, toetsverzoeken, toetsanalyse, combinaties, reken, rekenen } = a.result;
   assert.deepEqual(reken, { analyse: "linear", gevolgklasse: "CC2" });
   assert.deepEqual(rekenen, { mogelijk: true, combinatiebron: "bestand" });
   assert.deepEqual(rekenverzoeken.map((v) => v.sleutel), ["geval:1", "geval:2", "geval:3", "geval:4", "combinatie:1", "combinatie:2"]);
@@ -151,10 +171,25 @@ const kern = (request) => new Promise((resolve, reject) => {
     ["Luifel UGT", "uls", { 1: 1.35, 2: 1.5 }], ["Luifel BGT", "sls", { 1: 1, 3: 1 }],
   ]);
   assert.ok(rekenverzoeken.every((v) => v.verzoek.analysis === "linear" && v.verzoek.bucklingModes === 0));
+  // De toets: "Luifel UGT" in +X, −X, +Y en −Y, P-Δ met één knikvorm; φ = 1/200 (vast).
+  assert.deepEqual(toetsverzoeken.map((v) => v.sleutel), ["toets:1", "toets:1000001", "toets:2000001", "toets:3000001"]);
+  assert.ok(toetsverzoeken.every((v) => v.soort === "toets" && v.verzoek.analysis === "p-delta" && v.verzoek.bucklingModes === 1));
+  assert.equal(toetsanalyse.analysis_type, "tweedeOrdeGeometrisch");
+  assert.equal(toetsanalyse.model_analysis_type, "linear");
+  assert.deepEqual(toetsanalyse.scheefstand,
+    { phi: 1 / 200, noemer: 200, bron: "vast", model_scheefstand_aan: false, afgedwongen: true });
+  assert.deepEqual(toetsanalyse.meldingen, [], "geen imperfectiegeval, geen hout");
+  const zonderToets = vraag("ifc_importeren", { inhoud, analysemodel: 2, reken: {}, toetsen: false });
+  assert.equal(zonderToets.result.toetsverzoeken, undefined);
+  const fout = vraag("ifc_importeren", { inhoud, analysemodel: 2, reken: {}, toetsen: 1 });
+  assert.equal(fout.error.detail.veld, "toetsen");
+  ok("ifc_importeren met reken: 6 resultaatverzoeken (lineair) en 4 toetsverzoeken (P-Δ, φ = 1/200, ±X/±Y)");
 
   const resultaten = {};
   for (const v of rekenverzoeken) resultaten[v.sleutel] = await kern(v.verzoek);
-  const u = vraag("ifc_uitwerken", { inhoud, analysemodel: 2, reken: {}, resultaten });
+  const toetsresultaten = {};
+  for (const v of toetsverzoeken) toetsresultaten[v.sleutel] = { resultaat: await kern(v.verzoek) };
+  const u = vraag("ifc_uitwerken", { inhoud, analysemodel: 2, reken: {}, resultaten, toetsresultaten });
   assert.equal(u.ok, true, JSON.stringify(u.error));
   const perGeval = Object.fromEntries(u.result.gevallen.map((g) => [g.id, g]));
   const hand = { 1: [0, 0, 6], 2: [0, 0, 0.8 * Math.sqrt(9.25)], 3: [0, 0, 8], 4: [-1.5, 0, 0] };
@@ -170,21 +205,57 @@ const kern = (request) => new Promise((resolve, reject) => {
     dichtbij(g.belastingsomKn.fz, -g.reactiesomKn.fz, `${g.naam}: Σ last = −Σ reactie`);
   }
   // UGT: 1,35 · 6 + 1,5 · 0,8 · √9,25.
-  dichtbij(u.result.combinaties[0].reactiesomKn.fz, 1.35 * 6 + 1.5 * 0.8 * Math.sqrt(9.25), "Luifel UGT ΣRz");
+  const ugtZ = 1.35 * 6 + 1.5 * 0.8 * Math.sqrt(9.25);
+  dichtbij(u.result.combinaties[0].reactiesomKn.fz, ugtZ, "Luifel UGT ΣRz");
   assert.equal(u.result.toetsinvoer.length, 2, "beide stalen staven krijgen toetsinvoer");
   assert.deepEqual(u.result.nietGetoetst, []);
   assert.deepEqual(u.result.groepen, { Kolom: [1], Luifelligger: [2] });
   ok(`keten voor de luifel: ${rekenverzoeken.length} verzoeken, ΣR = hand, evenwicht overal, 2 toetsinvoeren`);
 
+  // De toets: ΣR per richting volgens de hand (zie de kop), evenwicht, α_cr > 1,
+  // en de UGT-krachten van de toetsinvoer zijn die van de vier toetsvarianten.
+  const t = u.result.toetsanalyse;
+  assert.equal(t.geweigerd, false);
+  const verwacht = { 1: [-PHI_VAST * ugtZ, 0], 1000001: [PHI_VAST * ugtZ, 0], 2000001: [0, -PHI_VAST * ugtZ], 3000001: [0, PHI_VAST * ugtZ] };
+  for (const b of t.berekeningen) {
+    dichtbij(b.reactiesomKn.fx, verwacht[b.id][0], `${b.naam} ΣRx`, 1e-6);
+    dichtbij(b.reactiesomKn.fy, verwacht[b.id][1], `${b.naam} ΣRy`, 1e-6);
+    dichtbij(b.reactiesomKn.fz, ugtZ, `${b.naam} ΣRz`, 1e-6);
+    assert.equal(b.evenwicht.kern, true, b.naam);
+    assert.equal(b.evenwicht.onafhankelijk, true, b.naam);
+    assert.ok(b.alphaCr > 1, `${b.naam}: α_cr ${b.alphaCr}`);
+  }
+  assert.deepEqual(t.alpha_cr.map((x) => [x.combination_id, x.status]), [[1, "bepaald"]]);
+  const ids = new Set(u.result.toetsinvoer.flatMap((x) => x.forces_envelope.map((p) => p.combination_id)));
+  assert.deepEqual([...ids].sort((p, q) => p - q), [1, 1000001, 2000001, 3000001]);
+  assert.ok(u.result.notities.some((n) => n.includes("tweede orde (P-Δ) met scheefstand φ = 1/200")));
+  ok("toets van de luifel: 4 berekeningen, ΣR_x/ΣR_y = ∓φ·ΣR_z volgens de hand, toetsinvoer uit de toetsvarianten");
+
   const zonder = { ...resultaten };
   delete zonder["geval:1"];
-  const mis = vraag("ifc_uitwerken", { inhoud, analysemodel: 2, reken: {}, resultaten: zonder });
+  const mis = vraag("ifc_uitwerken", { inhoud, analysemodel: 2, reken: {}, resultaten: zonder, toetsresultaten });
   assert.equal(mis.ok, false);
   assert.equal(mis.error.detail.veld, "resultaten.geval:1");
-  const ander = vraag("ifc_uitwerken", { inhoud, analysemodel: 2, reken: {}, resultaten: { ...resultaten, "geval:9": resultaten["geval:1"] } });
+  const ander = vraag("ifc_uitwerken", { inhoud, analysemodel: 2, reken: {}, resultaten: { ...resultaten, "geval:9": resultaten["geval:1"] }, toetsresultaten });
   assert.equal(ander.ok, false);
   assert.equal(ander.error.detail.veld, "resultaten");
-  ok("uitwerken weigert een ontbrekend resultaat en een onbekende sleutel");
+  const geenToets = vraag("ifc_uitwerken", { inhoud, analysemodel: 2, reken: {}, resultaten });
+  assert.equal(geenToets.error.detail.veld, "toetsresultaten");
+  const uit = vraag("ifc_uitwerken", { inhoud, analysemodel: 2, reken: {}, resultaten, toetsen: false });
+  assert.equal(uit.ok, true, JSON.stringify(uit.error));
+  assert.equal(uit.result.toetsinvoer, undefined, "zonder toets geen toetsinvoer (ook niet op de resultaten)");
+  ok("uitwerken weigert een ontbrekend resultaat, een onbekende sleutel en een ontbrekende toets");
+
+  // Een mislukte toetsberekening: de toets wordt geweigerd met de reden, de resultaten blijven.
+  const geweigerd = vraag("ifc_uitwerken", { inhoud, analysemodel: 2, reken: {}, resultaten,
+    toetsresultaten: { ...toetsresultaten, "toets:2000001": { fout: "proef: instabiel" } } });
+  assert.equal(geweigerd.ok, true, JSON.stringify(geweigerd.error));
+  assert.equal(geweigerd.result.toetsinvoer, undefined);
+  assert.equal(geweigerd.result.gevallen.length, 4);
+  assert.deepEqual(geweigerd.result.toetsweigering.per_combinatie,
+    [{ combination_id: 2000001, name: "Luifel UGT (scheefstand +Y)", reason: `P-Δ: proef: instabiel (${t.alpha_cr[0].label})` }]);
+  assert.match(geweigerd.result.toetsweigering.suggestie, /Verstijf het model/);
+  ok("een mislukte toetsberekening: weigering met de reden per combinatie, geen toetsinvoer, de resultaten blijven");
 }
 
 console.log(`${geslaagd} geslaagd, 0 gefaald`);

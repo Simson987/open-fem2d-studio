@@ -135,6 +135,13 @@ export function openFem3DEinden(model: OpenFem3DModel): OpenFem3DEinden {
  *
  * Alleen voor staal; hout houdt 2·L (zie `zijdelingseKnikInVlakModel`).
  *
+ * In de app krijgt deze functie de TOETSSET (`toetsSet3D`, issue #199): die
+ * is altijd P-Δ met scheefstand in X en Y, met de φ van de toets.
+ * De eerste twee voorwaarden zijn daar dus altijd waar; ze blijven staan als
+ * bewaking voor een aanroeper met een eigen combinatieset. De voorwaarde
+ * "staand" en de φ-eis blijven echte voorwaarden (tot de eigen φ per losse
+ * kolom er is).
+ *
  * `analyseVan` geeft de analyse van de berekende combinatie ("p-delta" of
  * "linear"). Uitkomst per staaf: het veld, of — als alles klopt behalve de
  * φ-eis — een kanttekening die zegt waarom het 2·L blijft.

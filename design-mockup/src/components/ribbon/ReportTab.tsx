@@ -62,9 +62,9 @@ interface ReportTabProps {
    *
    * Komt uit App.tsx, waar φ op één plaats wordt bepaald — dezelfde tekst die
    * de balk onder het canvas als tooltip toont en die het live rapport bij de
-   * uitgangspunten zet. Leeg of afwezig betekent: er is GEEN scheefstand in de
-   * rekengang gezet, en dan hoort de PDF erover te zwijgen in plaats van een
-   * aanname te noemen die nergens is toegepast.
+   * uitgangspunten zet. Sinds issue #199 nooit leeg in de app: de UGT-toets
+   * rekent altijd met deze scheefstand, ook met de schakelaar uit. Leeg of
+   * afwezig (een andere aanroeper) laat de PDF erover zwijgen.
    */
   scheefstandToelichting?: string;
   /** Het analysetype en α_cr per combinatie, zoals App.tsx het opstelt (basisaudit nr 27). */
@@ -112,6 +112,11 @@ export default function ReportTab({ scheefstandToelichting, analyseToelichting, 
   // DEZELFDE meewerkende flensbreedte rekenen als de toetsing ernaast, anders
   // gaan de twee over een andere doorsnede.
   const beff = useCheckStore((s) => s.beff);
+  // De toetsanalyse en de combinaties waarop getoetst is (issue #199): de
+  // krachtregel van de PDF noemt daarmee "2e orde + scheefstand" of
+  // "resultaten" bij elke toets.
+  const toets = useCheckStore((s) => s.toets);
+  const toetsCombinaties = useCheckStore((s) => s.toetsCombinaties);
 
   // De Rapport-tab is alleen actief wanneer de rapportview getoond wordt
   // (Ribbon koppelt tab ↔ view), dus window.print() print het rapport.
@@ -233,12 +238,14 @@ export default function ReportTab({ scheefstandToelichting, analyseToelichting, 
         // is of als de kern ze alle geweigerd heeft (dat laatste wordt gemeld).
         dekkingslijnen: dekkingslijnen.lijnen.length > 0 ? dekkingslijnen.lijnen : undefined,
         betonInvoer: lastRunInputs?.beton,
-        // De scheefstand die deze berekening IN is gegaan. App.tsx levert hem
-        // alleen als hij werkelijk is toegepast; een lege tekst laat het
-        // hoofdstuk Uitgangspunten vanzelf weg.
+        // De scheefstand die deze berekening IN is gegaan: in de UGT-toets
+        // altijd (issue #199), in de resultaten met de schakelaar aan. Een lege
+        // tekst laat het hoofdstuk Uitgangspunten vanzelf weg.
         scheefstandToelichting,
         analyseToelichting,
         windToelichting,
+        toets,
+        toetsCombinaties,
       });
       const bytes = await genereerRapportPdf(invoer);
       const { save } = await import("@tauri-apps/plugin-dialog");

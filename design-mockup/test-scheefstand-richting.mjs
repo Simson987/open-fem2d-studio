@@ -10,7 +10,7 @@
 //      — het meetgeval: ingeklemde kolom 6 m met een console van 100 mm en
 //      P = 400 kN geeft 70,20 kNm (+x) tegen 54,00 kNm (−x); de omhullende
 //      hoort 70,20 te geven, ook als de instelling −x is;
-//   5. het tweede-orde-pad kiest per variant dezelfde richting (86,52 kNm);
+//   5. het tweede-orde-pad kiest per variant dezelfde richting (84,24 kNm);
 //   6. zonder scheefstand verandert er niets.
 // Praat alleen met engine en combinations, dus draait ook tegen de bundel.
 // Uitvoeren: npx tsx test-scheefstand-richting.mjs
@@ -106,11 +106,21 @@ for (const richting of [1, -1]) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-log("\n[4] Tweede orde (P-Δ): per variant de eigen richting; omhullende 86,52 kNm bij beide instellingen");
+log("\n[4] Tweede orde (P-Δ): per variant de eigen richting; omhullende 84,24 kNm bij beide instellingen");
+// VERANDERD GETAL (oktober 2026): 86,52 → 84,24 kNm (−2,6 %). Oorzaak: de kern
+// rekende de staafeindkrachten na P-Δ met alleen K_E·u; nu met (K_E + K_G)·u,
+// zodat het staafmoment in evenwicht is met de reactie (zie BeamForces.ts).
+// HAND, 1,35·G in +x: P = 540 kN, M₀ = 540·0,1 = 54 kNm aan de kop,
+// H = φ·P = 2,7 kN; EI = 210 000·2,517·10⁸ = 5,286·10¹³ Nmm²,
+// k = √(P/EI) = 1,0108·10⁻⁴ /mm, kL = 0,6065.
+//   M_voet = M₀/cos(kL) + H·tan(kL)/k = 54/0,8216 + 2,7·0,6953/1,0108·10⁻⁴ m
+//          = 65,73 + 18,57 = 84,30 kNm (exact elastisch).
+// De kern (één element, P-Δ met consistente K_G) geeft 84,24: 0,07 % onder de
+// exacte waarde. Het oude 86,52 lag 2,6 % erboven.
 for (const richting of [1, -1]) {
   const { perCase } = solveAllCasesNonlinear(kolom(richting));
   const env = computeEnvelope(combos, perCase);
-  check(`instelling ${richting > 0 ? "+x" : "−x"}: omhullende kolom 86,52 kNm`, dicht(maxM(env, 1), 86.52, 5e-3), `${maxM(env, 1)}`);
+  check(`instelling ${richting > 0 ? "+x" : "−x"}: omhullende kolom 84,24 kNm (hand exact 84,30)`, dicht(maxM(env, 1), 84.24, 5e-3), `${maxM(env, 1)}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

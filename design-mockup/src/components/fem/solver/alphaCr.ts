@@ -71,7 +71,7 @@ import { buildMesh } from "./engine";
 import type { LoadCombination } from "./combinations";
 import type { ElementForces, MultiInput, SolverResult } from "./types";
 import type { Analysetype } from "../femTypes";
-import { phiLosseKolom } from "../../../lib/scheefstandNorm";
+import { noemerTekst, phiLosseKolom } from "../../../lib/scheefstandNorm";
 
 /** De grens van EN 1993-1-1 5.2.1(3): eerste orde alleen bij α_cr ≥ 10. */
 export const ALPHA_CR_GRENS_EERSTE_ORDE = 10;
@@ -262,54 +262,70 @@ export interface StabiliteitsMelding {
 }
 
 /**
- * Wat de gebruiker over α_cr hoort te horen, gegeven het analysetype en of de
- * scheefstand aanstaat. Een FOUT is de blokkerende melding: eerste orde waar
- * de norm dat niet toestaat.
+ * Wat de gebruiker over α_cr hoort te horen, gegeven het analysetype en de
+ * scheefstandschakelaar van de RESULTATEN.
+ *
+ * INFORMATIEF (issue #199, besluit B14). Tot 2026.42 was eerste orde met
+ * α_cr < 10 een FOUT ("EERSTE ORDE NIET TOEGESTAAN … unity checks NIET
+ * bruikbaar"), met een melding op het scherm en een rood vak in Inzichten. De
+ * UGT-toets rekent sindsdien altijd zelf tweede orde (P-Δ) met scheefstand
+ * (NEN-EN 1993-1-1 5.2.2(3)b en (7)b), dus de grens α_cr ≥ 10 van 5.2.1(3)
+ * beslist niet meer of de unity checks bruikbaar zijn. Wat α_cr nog zegt,
+ * gaat over de resultaten op het scherm: eerste orde toont de
+ * tweede-ordevergroting niet, tweede orde zonder scheefstand mist de
+ * imperfectie. Daarom zijn die regels "info".
+ *
+ * De enige FOUT is een geweigerde toets (B7): de tweede-ordeberekening van de
+ * toets faalt, en er zijn geen toetskrachten. `weigering` is die reden als
+ * tekst (`weigeringTekst`); leeg = de toets heeft krachten.
  */
 export function stabiliteitsMeldingen(
   uitkomsten: AlphaCrUitkomst[],
   analysetype: Analysetype,
   scheefstandAan: boolean,
+  weigering?: string | null,
 ): StabiliteitsMelding[] {
   const meldingen: StabiliteitsMelding[] = [];
   const eersteOrde = analysetype === "eersteOrde";
+  if (weigering && weigering.trim() !== "") {
+    meldingen.push({ niveau: "fout", tekst: `TOETSING GEWEIGERD: ${weigering}` });
+  }
   const teLaag = uitkomsten.filter(
     (u) => u.status === "bepaald" && (u.alphaCr ?? Infinity) < ALPHA_CR_GRENS_EERSTE_ORDE,
   );
   if (teLaag.length > 0) {
     const laagste = teLaag.reduce((a, b) => ((b.alphaCr ?? Infinity) < (a.alphaCr ?? Infinity) ? b : a));
     const lijst = teLaag.map((u) => `${nl(u.alphaCr ?? NaN)} ("${u.naam}")`).join(", ");
+    const kop =
+      `α_cr = ${nl(laagste.alphaCr ?? NaN)} in combinatie "${laagste.naam}" (< ${ALPHA_CR_GRENS_EERSTE_ORDE})` +
+      (teLaag.length > 1 ? ` (alle combinaties onder de grens: ${lijst})` : "") +
+      ": ";
     if (eersteOrde) {
       meldingen.push({
-        niveau: "fout",
+        niveau: "info",
         tekst:
-          `EERSTE ORDE NIET TOEGESTAAN: α_cr = ${nl(laagste.alphaCr ?? NaN)} in combinatie ` +
-          `"${laagste.naam}" is kleiner dan ${ALPHA_CR_GRENS_EERSTE_ORDE}` +
-          (teLaag.length > 1 ? ` (alle combinaties onder de grens: ${lijst})` : "") +
-          ". NEN-EN 1993-1-1 5.2.1(3) staat een eerste-orde-berekening dan niet toe: de " +
-          "tweede-orde-effecten (P-Δ) zijn niet verwaarloosbaar, en de terugval van de " +
-          "kniklengte op de systeemlengte in de staaftoets veronderstelt juist krachten uit een " +
-          "tweede-orde-berekening met imperfecties (5.2.2(7)b). De krachten en de unity checks " +
-          "van deze berekening zijn daarom NIET bruikbaar als toetsing. Kies het analysetype " +
-          "tweede orde (P-Δ) met de scheefstand aan, of geef per op druk belaste staaf de " +
-          "kniklengte uit de zijdelingse knikvorm op (5.2.2(8)).",
+          kop +
+          "de resultaten zijn eerste orde en tonen de tweede-orde-effecten (P-Δ) niet; NEN-EN 1993-1-1 " +
+          "5.2.1(3) staat eerste orde alleen toe bij α_cr ≥ 10. De toetskrachten hangen daar niet van " +
+          "af: de UGT-toets rekent altijd tweede orde (P-Δ) met scheefstand (5.2.2(3)b en (7)b). Kies " +
+          "tweede orde (P-Δ) als ook de momentenlijnen, zakkingen en reacties de vergroting moeten tonen.",
       });
     } else if (!scheefstandAan) {
       meldingen.push({
-        niveau: "waarschuwing",
+        niveau: "info",
         tekst:
-          `α_cr = ${nl(laagste.alphaCr ?? NaN)} in combinatie "${laagste.naam}" (< ${ALPHA_CR_GRENS_EERSTE_ORDE}): ` +
-          "de tweede-orde-berekening dekt de vergroting, maar zij rekent ZONDER scheefstand. " +
-          "NEN-EN 1993-1-1 5.2.2(3) en 5.3.2 eisen de imperfecties in de tweede-orde-berekening; " +
-          "zet de scheefstand aan.",
+          kop +
+          "de resultaten zijn tweede orde, maar zonder scheefstand (NEN-EN 1993-1-1 5.2.2(3) en 5.3.2 " +
+          "vragen de imperfecties in de tweede-ordeberekening). De UGT-toets rekent altijd met " +
+          "scheefstand; zet de scheefstand aan als ook de resultaten haar moeten tonen.",
       });
     } else {
       meldingen.push({
         niveau: "info",
         tekst:
-          `α_cr = ${nl(laagste.alphaCr ?? NaN)} in combinatie "${laagste.naam}" (< ${ALPHA_CR_GRENS_EERSTE_ORDE}): ` +
-          "tweede orde met scheefstand — de route van NEN-EN 1993-1-1 5.2.2(3)a/5.2.2(7)b; de " +
-          "kniklengte-terugval op de systeemlengte in de staaftoets is dan toegestaan.",
+          kop +
+          "tweede orde met scheefstand — de route van NEN-EN 1993-1-1 5.2.2(3)b en (7)b; de " +
+          "staaftoets mag dan de systeemlengte als kniklengte nemen.",
       });
     }
   }
@@ -317,30 +333,105 @@ export function stabiliteitsMeldingen(
   if (nietBepaald.length > 0 && eersteOrde) {
     const redenen = [...new Set(nietBepaald.map((u) => u.reden ?? "onbekende reden"))].join("; ");
     meldingen.push({
-      niveau: "waarschuwing",
+      niveau: "info",
       tekst:
-        `α_cr is voor ${nietBepaald.length} combinatie(s) niet bepaald (${redenen}). De voorwaarde ` +
-        `α_cr ≥ ${ALPHA_CR_GRENS_EERSTE_ORDE} voor een eerste-orde-berekening (NEN-EN 1993-1-1 ` +
-        "5.2.1(3)) is daar dus niet gecontroleerd.",
+        `α_cr is voor ${nietBepaald.length} combinatie(s) niet bepaald (${redenen}). Of eerste orde ` +
+        `voor de resultaten volstaat (α_cr ≥ ${ALPHA_CR_GRENS_EERSTE_ORDE}, NEN-EN 1993-1-1 5.2.1(3)), ` +
+        "is daar dus niet gecontroleerd; de toetskrachten zijn altijd tweede orde met scheefstand.",
     });
   }
   return meldingen;
 }
 
+// Een noemer om te tonen (200, 230,9); staat bij de scheefstand zelf, zodat ook
+// de rapportweergave hem kan gebruiken zonder de rekenkern mee te laden.
+export { noemerTekst };
+
 /**
- * Het tekstblok voor het rapport en de tooltip: analysetype, α_cr per
- * combinatie en de meldingen — één bron, zodat scherm en rapport niet uiteen
- * kunnen lopen. Regels die met "!" beginnen zijn waarschuwingen of fouten.
+ * De toetskrachten in woorden (issue #199): de UGT-toets rekent altijd tweede
+ * orde met scheefstand, los van de instellingen van de resultaten.
  */
-export function analyseToelichting(
-  analysetype: Analysetype,
-  label: string,
-  omschrijving: string,
-  uitkomsten: AlphaCrUitkomst[],
-  scheefstandAan: boolean,
-): string {
+export interface ToetsKrachtenOmschrijving {
+  /** Het label van de toetsanalyse: "2e orde (P-Δ)" of "2e orde + fysisch". */
+  label: string;
+  /** 1/φ van de toets. */
+  noemer: number;
+  /** Waar de φ vandaan komt ("vaste noemer", "EN 1993-1-1 (5.5)", …). */
+  bronLabel: string;
+  /** In 2D +x en −x, in 3D +X, −X, +Y en −Y. */
+  richtingen: "2d" | "3d";
+  /** De resultaten waren al deze berekening; de toets rekende niets extra. */
+  hergebruikt: boolean;
+  /**
+   * Er zit beton in het model. De systeemlengte van 5.2.2(7)b is een
+   * staalregel; voor beton rekent de P-Δ met de ongescheurde elastische
+   * stijfheid en blijft §5.8 ongewijzigd. `toetsKrachtenRegel` zegt dat dan.
+   */
+  metBeton?: boolean;
+}
+
+/** De invoer van `analyseToelichting`. */
+export interface AnalyseToelichtingInvoer {
+  /** De resultaten: het analysetype en de scheefstandschakelaar van het model. */
+  resultaten: {
+    analysetype: Analysetype;
+    label: string;
+    omschrijving: string;
+    scheefstandAan: boolean;
+    /** 1/φ van de resultaten; alleen van belang met de schakelaar aan. */
+    scheefstandNoemer?: number;
+  };
+  toets: ToetsKrachtenOmschrijving;
+  /** α_cr per UGT-combinatie: die van de toets, of zolang die er niet is die van de resultaten. */
+  alphaCr: AlphaCrUitkomst[];
+  /** Wat er verder te melden is (de meldingen van de toets, de eindstijfheid van hout). */
+  meldingen?: readonly string[];
+  /** De weigering van de toets (`weigeringTekst`); leeg = de toets heeft krachten. */
+  weigering?: string | null;
+}
+
+/** De regel over de toetskrachten, ook los te gebruiken (MCP, 3D). */
+export function toetsKrachtenRegel(toets: ToetsKrachtenOmschrijving): string {
+  return (
+    `Toetskrachten (UGT): ${toets.label} met scheefstand φ = 1/${noemerTekst(toets.noemer)} ` +
+    `(${toets.bronLabel}), elke UGT-combinatie in ${toets.richtingen === "3d" ? "+X, −X, +Y en −Y" : "+x en −x"}, ` +
+    "los van de keuze voor de resultaten; de staaftoets mag dan de systeemlengte als kniklengte " +
+    "nemen (NEN-EN 1993-1-1 5.2.2(3)b en (7)b)." +
+    (toets.metBeton
+      ? " Voor beton geldt dat niet: daar rekent de P-Δ met de ongescheurde elastische stijfheid, wat " +
+        "geen tweede orde volgens NEN-EN 1992-1-1 §5.8 is; de poort λ/λ_lim en §5.8 blijven ongewijzigd " +
+        "en l₀ volgt §5.8.3.2 uit de kolominvoer."
+      : "") +
+    (toets.hergebruikt
+      ? " De resultaten zijn al deze berekening; de toets gebruikt ze zonder nieuwe som."
+      : "")
+  );
+}
+
+/**
+ * Het tekstblok voor het rapport, de PDF en de MCP-uitvoer: welke berekening
+ * er is gedaan, α_cr per combinatie en de meldingen — één bron, zodat scherm,
+ * papier en MCP niet uiteen kunnen lopen. Regels die met "!" beginnen zijn
+ * waarschuwingen of fouten.
+ *
+ * TWEE BEREKENINGEN (issue #199). De eerste regel gaat over de RESULTATEN:
+ * het gekozen analysetype, met of zonder scheefstand; zij gelden ook voor de
+ * BGT-toetsen. De tweede over de TOETSKRACHTEN: altijd tweede orde (P-Δ) met
+ * scheefstand φ = 1/…, met de systeemlengte volgens 5.2.2(7)b. De grens
+ * α_cr ≥ 10 van 5.2.1(3) gaat alleen over de resultaten.
+ */
+export function analyseToelichting(invoer: AnalyseToelichtingInvoer): string {
+  const { resultaten: r, toets, alphaCr: uitkomsten } = invoer;
   const regels: string[] = [];
-  regels.push(`Analysetype: ${label}. ${omschrijving}`);
+  regels.push(
+    `Resultaten: ${r.label}, ` +
+      (r.scheefstandAan
+        ? `met scheefstand${r.scheefstandNoemer !== undefined ? ` φ = 1/${noemerTekst(r.scheefstandNoemer)}` : ""}`
+        : "zonder scheefstand") +
+      `. ${r.omschrijving} Deze keuze geldt voor de resultaten (krachtsverdeling, zakkingen en ` +
+      "reacties) en voor de BGT-toetsen (doorbuiging, h/300, scheurwijdte).",
+  );
+  regels.push(toetsKrachtenRegel(toets));
   regels.push("");
   if (uitkomsten.length === 0) {
     regels.push("Kritieke lastfactor α_cr: geen UGT-combinaties doorgerekend.");
@@ -354,19 +445,32 @@ export function analyseToelichting(
     );
     for (const u of uitkomsten) regels.push(`    ${alphaCrLabel(u)}   [${u.naam}]`);
     regels.push(
-      `Eerste orde is toegestaan wanneer α_cr ≥ ${ALPHA_CR_GRENS_EERSTE_ORDE} (5.2.1(3)); daaronder ` +
-        "moeten de tweede-orde-effecten in de berekening zitten, met de imperfecties van 5.3.",
+      `Eerste orde is voor de resultaten toegestaan wanneer α_cr ≥ ${ALPHA_CR_GRENS_EERSTE_ORDE} ` +
+        "(5.2.1(3)); daaronder tonen eerste-orderesultaten de tweede-orde-effecten niet. Voor de " +
+        "toets is α_cr informatief: de toetskrachten zijn altijd tweede orde met scheefstand.",
     );
   }
-  const meldingen = stabiliteitsMeldingen(uitkomsten, analysetype, scheefstandAan);
-  if (meldingen.length > 0) {
+  const meldingen = stabiliteitsMeldingen(uitkomsten, r.analysetype, r.scheefstandAan, invoer.weigering);
+  const overig = (invoer.meldingen ?? []).filter((t) => t.trim() !== "");
+  if (meldingen.length > 0 || overig.length > 0) {
     regels.push("");
     for (const m of meldingen) regels.push(m.niveau === "info" ? m.tekst : `! ${m.tekst}`);
+    for (const t of overig) regels.push(`! ${t}`);
   }
   return regels.join("\n");
 }
 
-/** Wat de toetsbouwers over de stabiliteit van de berekening meekrijgen. */
+/**
+ * Wat de toetsbouwers over de stabiliteit van de berekening meekrijgen. In de
+ * app en via MCP is dat altijd de stabiliteit van de TOETS (`toetsSet2D`,
+ * issue #199): tweede orde met scheefstand, de toets-φ en α_cr van de
+ * toetsrekengang.
+ *
+ * Tot 2026.42 zette `alphaCrStaafNotitie` bij eerste orde met α_cr < 10 een
+ * kanttekening bij elke gedrukte staaf (de terugval op de systeemlengte of 2·L
+ * zonder zijdelingse knikvorm). Die is weg (B14): de toets rekent nooit eerste
+ * orde, dus de grens α_cr ≥ 10 van 5.2.1(3) geldt voor de toets niet.
+ */
 export interface StabiliteitVoorToets {
   analysetype: Analysetype;
   alphaCr: AlphaCrUitkomst[];
@@ -376,55 +480,9 @@ export interface StabiliteitVoorToets {
    * horizontale metgezel H = φ·V gaf. Nodig om te beslissen of de zijdelingse
    * knik van een losse kolom met een vrije kop in de krachten zit
    * (`zijdelingseKnikInVlakModel`). Ontbreekt → niet bekend, en dan geldt 2·L.
+   * In de toetsset altijd de toets-φ.
    */
   scheefstandPhi?: number;
-}
-
-/**
- * De kanttekening bij een op DRUK belaste staaf waarvan de kniklengte in het
- * vlak niet uit de zijdelingse knikvorm is bepaald, terwijl de berekening
- * eerste orde is en α_cr < 10 (5.2.1(3)). `null` als er niets te melden is.
- *
- * Twee gevallen:
- *  - een gewone staaf zonder opgegeven L_cr,y valt terug op de systeemlengte;
- *    5.2.2(7)b staat dat alleen toe na een tweede-orde-berekening met
- *    imperfecties, dus de knikweerstand om y is NIET normconform bepaald;
- *  - een staaf met een VRIJ eind (`vrijEind`) krijgt van de kern 2·L, de
- *    zijdelingse knikvorm van de ingeklemd-vrije staaf (5.2.2(8)). Dat
- *    veronderstelt een volledig ingeklemde voet; bij een verende voet of een
- *    voet op een ligger is de knikvorm langer, en dan volgt L_cr,y uit α_cr.
- */
-export function alphaCrStaafNotitie(
-  stabiliteit: StabiliteitVoorToets | undefined,
-  nEdMinKn: number,
-  kniklengteYOpgegeven: boolean,
-  vrijEind = false,
-): string | null {
-  if (!stabiliteit || stabiliteit.analysetype !== "eersteOrde") return null;
-  if (!(nEdMinKn < 0) || kniklengteYOpgegeven) return null;
-  const teLaag = stabiliteit.alphaCr.filter(
-    (u) => u.status === "bepaald" && (u.alphaCr ?? Infinity) < ALPHA_CR_GRENS_EERSTE_ORDE,
-  );
-  if (teLaag.length === 0) return null;
-  const laagste = teLaag.reduce((a, b) => ((b.alphaCr ?? Infinity) < (a.alphaCr ?? Infinity) ? b : a));
-  const kop = `EERSTE ORDE MET α_cr = ${nl(laagste.alphaCr ?? NaN)} (combinatie "${laagste.naam}") < ` +
-    `${ALPHA_CR_GRENS_EERSTE_ORDE}: deze staaf staat onder druk`;
-  if (vrijEind) {
-    return (
-      kop + " en heeft een vrij eind. De kern neemt L_cr,y = 2·L, de zijdelingse knikvorm van de " +
-      "ingeklemd-vrije staaf (NEN-EN 1993-1-1 5.2.2(8)). Dat veronderstelt een volledig ingeklemde voet; " +
-      "bij een verende voet of een voet op een ligger is de zijdelingse knikvorm langer. Bepaal L_cr,y " +
-      "dan uit α_cr, L_cr,y = π·√(EI/(α_cr·N_Ed)) met de N_Ed van die combinatie, en geef haar op als zij " +
-      "groter is dan 2·L — of kies tweede orde (P-Δ) met scheefstand."
-    );
-  }
-  return (
-    kop + " en de kniklengte in het vlak valt terug op de systeemlengte. NEN-EN 1993-1-1 5.2.2(7)b " +
-    "staat die terugval alleen toe bij krachten uit een tweede-orde-berekening met imperfecties, en " +
-    "5.2.1(3) staat eerste orde bij α_cr < 10 niet toe. De knikweerstand om de y-as hieronder is daarom " +
-    "NIET normconform bepaald: kies tweede orde (P-Δ) met scheefstand, of geef L_cr,y uit de zijdelingse " +
-    "knikvorm op (5.2.2(8))."
-  );
 }
 
 /** Wat `zijdelingseKnikInVlakModel` beslist voor één staaf met een vrij eind. */
@@ -456,7 +514,15 @@ export interface ZijdelingseKnikBesluit {
  *
  * Alleen voor staal. Hout houdt 2·L: NEN-EN 1995-1-1 eist bij tweede orde
  * E_d = E_mean/γ_M (2.2.2(1)P) en de boogimperfectie van 5.4.4(2), en de
- * P-Δ van deze app rekent met E_mean en zonder boogimperfectie.
+ * P-Δ van deze app rekent met E_mean en zonder boogimperfectie. Dat zegt de
+ * vaste houtmelding bij elke houtstaaf (`HOUT_TOETS_STAAFNOTITIE`).
+ *
+ * In de app en via MCP krijgt deze functie de stabiliteit van de TOETS
+ * (`toetsSet2D`, issue #199): altijd tweede orde met scheefstand, met de φ van
+ * de toets. De eerste twee voorwaarden zijn daar dus altijd waar; ze blijven
+ * staan als bewaking voor een aanroeper met eigen stabiliteitsgegevens. De
+ * voorwaarde "staand" en de φ-eis blijven echte voorwaarden, tot de eigen φ
+ * per losse kolom in de berekening zit.
  *
  * Geldt alles behalve de φ-eis, dan komt er een kanttekening die zegt waarom
  * het toch 2·L is.

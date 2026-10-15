@@ -3,7 +3,7 @@ import { blijvendeZakking } from "../../lib/blijvendeZakking";
 import { kipsteunenVanStaaf } from "../../lib/kipsteunen";
 import { bepaalVerloop } from "../../lib/sectionResolver";
 import {
-  kCrUitConfig, mapLoadDuration, mapLtbLoadPosition, mapServiceClass,
+  HOUT_TOETS_STAAFNOTITIE, kCrUitConfig, mapLoadDuration, mapLtbLoadPosition, mapServiceClass,
   matchSupportedTimberGrade, parseTimberRectMm, timberDeflectionNumerators,
 } from "../../lib/timberCheckBuilder";
 import type { TimberBeamCheckInput } from "../../lib/types/timber/TimberBeamCheckInput";
@@ -242,6 +242,8 @@ export function buildOpenFem3DTimberCheckInputs(
       // scheefstand) gaat bij hout bewust NIET mee: NEN-EN 1995-1-1 eist bij
       // tweede orde E_d = E_mean/γ_M (2.2.2(1)P) en de boogimperfectie van
       // 5.4.4(2), en de 3D-P-Δ rekent met E_mean en zonder boogimperfectie.
+      // Ook in de toetsset (altijd P-Δ met scheefstand, issue #199) niet; dat
+      // zegt `HOUT_TOETS_STAAFNOTITIE` hieronder bij de staaf.
       lateral_bracing: kip.lateral_bracing,
       ltb_segment_length_m: kip.ltb_segment_length_m,
       ltb_load_case: ltb.loadCase,
@@ -260,6 +262,10 @@ export function buildOpenFem3DTimberCheckInputs(
       staaf_notities: [
         `3D-raamwerk: knik om y en z wordt ruimtelijk getoetst; vrije einden: ${einden.vrijEind(beam, beam.startNodeId) || einden.vrijEind(beam, beam.endNodeId) ? "ja" : "nee"}.`,
         ltb.note,
+        // De toetsset (`toetsSet3D`, issue #199, B10): de vaste houtmelding bij
+        // elke houtstaaf. Een aanroeper met een eigen combinatieset (zonder
+        // `toetsAnalyse`) krijgt haar niet.
+        ...(combinationSet?.toetsAnalyse ? [HOUT_TOETS_STAAFNOTITIE] : []),
       ],
     });
   }

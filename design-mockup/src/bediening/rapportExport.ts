@@ -53,6 +53,8 @@ import {
   type RekenVoorwaarden,
 } from "./rapportVoorwaarden";
 import type { BedieningActies } from "./bediening";
+import type { Analysetype } from "../components/fem/femTypes";
+import type { OpenFem3DAnalysisKind } from "../components/openFem3d/openFem3dSolver";
 
 /**
  * Hoe vaak een toestand opnieuw bekeken wordt. Dit is geen wachttijd maar een
@@ -66,6 +68,24 @@ type Acties = () => BedieningActies;
 
 function pauze(ms: number): Promise<void> {
   return new Promise((los) => window.setTimeout(los, ms));
+}
+
+/**
+ * Het analysetype waarmee de resultaten in het rapport berekend zijn. In 2D de
+ * instelling: de resultaten volgen haar, en een andere instelling wist ze
+ * (`lib/rekenInstellingen`). In 3D wat de kern WERKELIJK rekende
+ * (`result.analysis`): bij de instelling eerste orde lineair, en bij een model
+ * met platen ook bij de instelling P-Δ lineair (`openFem3dSolver`, de 3D-kern
+ * kent voor platen geen P-Δ). Hier stond voor 3D vast "tweedeOrdeGeometrisch".
+ * Zonder 3D-resultaat is er niets berekend; dan de instelling zelf.
+ */
+export function analysetypeVanExport(a: Pick<BedieningActies, "modelDimension" | "fem"> & {
+  openFem3d?: { result: { analysis: OpenFem3DAnalysisKind } | null };
+}): Analysetype {
+  if (a.modelDimension !== "3d") return a.fem.analysetype;
+  const gerekend = a.openFem3d?.result?.analysis;
+  if (gerekend === undefined) return a.fem.analysetype;
+  return gerekend === "p-delta" ? "tweedeOrdeGeometrisch" : "eersteOrde";
 }
 
 /** De rekenvoorwaarden zoals ze NU in de app staan (render-toestand via de acties). */
@@ -87,7 +107,7 @@ export function rekenVoorwaardenNu(a: BedieningActies): RekenVoorwaarden {
       // terug. Daarom moet iedere staaf door die ronde zijn gegaan, ook als
       // materiaal of profiel uiteindelijk niet toetsbaar blijkt.
       toetsbareStaven: f.model.beams.length > 0,
-      analysetype: "tweedeOrdeGeometrisch",
+      analysetype: analysetypeVanExport(a),
       resultatenUitVolledigeRekengang: true,
     };
   }
@@ -103,12 +123,16 @@ export function rekenVoorwaardenNu(a: BedieningActies): RekenVoorwaarden {
     toetsingLoopt: c.isRunning,
     toetsfout: c.error,
     toetsingGedraaid: c.lastRunAt !== null,
+    // De toetsset is een EIGEN Map (UGT tweede orde met scheefstand, BGT uit de
+    // resultaten; issue #199). Of hij bij de resultaten van nu hoort, zegt de
+    // Map van de resultaatrekengang waaruit hij is samengesteld: elke
+    // rekengang maakt een nieuwe.
     toetsingHoortBijResultaten:
-      f.combinationResults !== null && c.lastRunData?.combinationResults === f.combinationResults,
+      f.combinationResults !== null && c.lastRunData?.resultaten === f.combinationResults,
     // Platen tellen mee: een ontbrekende of verouderde plaattoets hoort de
     // export net zo te weigeren als een ontbrekende staaftoets.
     toetsbareStaven: anyCheckableBeams([...f.beams]) || anyCheckablePlates(f.plates),
-    analysetype: f.analysetype,
+    analysetype: analysetypeVanExport(a),
     resultatenUitVolledigeRekengang:
       f.combinationResults !== null && r.volledigeRekengang === f.combinationResults,
   };
@@ -363,7 +387,7 @@ export async function rapportVoorbereiden(
         datum: kop.date,
         bron: opties.kop ? "argument" : "projectgegevens",
       },
-      analysetype: driedimensionaal ? "tweedeOrdeGeometrisch" : f.analysetype,
+      analysetype: analysetypeVanExport(a()),
       toetsing: driedimensionaal ? {
         toetsbareStaven: a().openFem3d.model.beams.length > 0,
         staalGetoetst: a().openFem3d.checks?.results.length ?? 0,

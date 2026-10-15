@@ -16,9 +16,11 @@
 //  [1] De versie van de rekeninstellingen verandert bij ELK veld, en de lijst
 //      velden in de test dekt ELK veld van `RekenInstellingen` — een nieuw veld
 //      zonder testgeval laat deze test falen.
-//  [2] Beide invalidatie-effecten (App.tsx en useFemStore.ts) lezen die versie.
-//      De afhankelijkheidslijsten worden gecontroleerd; het echte App-effect
-//      en de resultaatselectie worden uitgevoerd zonder DOM.
+//  [2] Beide invalidatie-effecten (App.tsx en useFemStore.ts) lezen die versie
+//      en wissen wat bij het oude model hoort — in de store ook α_cr
+//      (`stabiliteit`). Effecten, afhankelijkheden, de versie-memo en de
+//      resultaatselectie worden in de AST opgezocht en UITGEVOERD zonder DOM
+//      (scripts/bron-uitvoeren.mjs); er wordt geen broncodetekst vergeleken.
 //  [3] Een mislukte toetsronde wist dezelfde velden als `clear()` — met een
 //      nagebootste onbereikbare kern, dus zonder binary.
 //  [4] Hetzelfde met de echte toetsbrug: na een geslaagde ronde en een
@@ -28,11 +30,13 @@
 // Uitvoeren: npx tsx test-verouderd.mjs   (vanuit design-mockup/)
 
 import { spawn } from "node:child_process";
-import ts from "typescript";
-import vm from "node:vm";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  argumentVan, context, declaratie, declaratieDeps, effect, evalueer, importNaam, leesBron, merktekenNaden, noemt,
+  stateNaden, voerUitIn,
+} from "./scripts/bron-uitvoeren.mjs";
 
 const HIER = dirname(fileURLToPath(import.meta.url));
 const TOETSBRUG = join(
@@ -135,62 +139,113 @@ log("\n[1] Elke rekeninstelling verandert de versie");
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-log("\n[2] Beide invalidatie-effecten lezen de versie");
+log("\n[2] Beide invalidatie-effecten lezen de versie — uitgevoerd, niet gelezen");
 {
-  const app = readFileSync(join(HIER, "src", "App.tsx"), "utf8");
-  const store = readFileSync(join(HIER, "src", "hooks", "useFemStore.ts"), "utf8");
-  const ast = ts.createSourceFile("App.tsx", app, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  let invalidatie, selectie;
-  function visit(n) {
-    if (ts.isCallExpression(n) && n.expression.getText(ast) === "useEffect" &&
-      n.arguments[1]?.getText(ast).includes("fem.rekenInstellingenVersie") &&
-      n.arguments[0]?.getText(ast).includes("checkClear()")) invalidatie = n.arguments[0];
-    if (ts.isVariableDeclaration(n) && n.name.getText(ast) === "solverResult") selectie = n.initializer;
-    ts.forEachChild(n, visit);
-  }
-  visit(ast);
+  // De effecten en de waarden worden in de AST opgezocht en UITGEVOERD
+  // (scripts/bron-uitvoeren.mjs): de test kijkt naar wat ze doen, niet naar
+  // hoe de broncode eruitziet.
+  const app = leesBron("src/App.tsx");
+  const store = leesBron("src/hooks/useFemStore.ts");
+  const ref = (current) => ({ current });
+  /** Verandert de afhankelijkhedenlijst als `wijzig` iets wijzigt? Zo beslist React of een effect opnieuw draait. */
+  const reageertOp = (deps, ctx, wijzig) => {
+    const voor = evalueer(deps, ctx);
+    wijzig();
+    const na = evalueer(deps, ctx);
+    return voor.length !== na.length || na.some((v, i) => !Object.is(v, voor[i]));
+  };
+
+  // ── App.tsx: het effect dat bij een modelwijziging de toetsing wist ──
+  const appEffect = effect(app, ({ body, deps }) => noemt(deps, "rekenInstellingenVersie") && noemt(body, "checkClear"));
   let gewist = 0;
-  const ref = current => ({ current });
-  const context = {
-    fem: { setEnvelopeView() {}, setActiveCombinationId() {} },
-    checkClear() { gewist++; }, stijfheidClear() {}, setSolverStatus() {},
-    setSolverErrorText() {}, setStabiliteitsMelding() {},
+  const femApp = {
+    nodes: [], beams: [], supports: [], loads: [], plates: [], rekenInstellingenVersie: "v1",
+    setEnvelopeView() {}, setActiveCombinationId() {},
+  };
+  const appToestand = { solverErrorText: "oud", stabiliteitsMelding: "oud", solverStatus: { kind: "solved" } };
+  const ctxApp = await context(app, stateNaden(app, appToestand, {
+    fem: femApp,
+    checkClear() { gewist++; }, stijfheidClear() {},
     rekenGeneratieRef: ref(1), lopendeRekengangenRef: ref(1),
     rapportRekenPogingRef: ref(true), volledigeRekengangRef: ref(new Map()),
     rekenFoutRef: ref("oud"), liveRekenenRef: ref(false),
-  };
-  vm.runInNewContext(ts.transpile(`(${invalidatie.getText(ast)})`, { target: ts.ScriptTarget.ES2022 }), context)();
+  }), [appEffect.body, appEffect.deps]);
+  for (const veld of ["nodes", "beams", "supports", "loads", "plates"]) {
+    check(`App.tsx: het invalidatie-effect draait opnieuw na een andere fem.${veld}`,
+      reageertOp(appEffect.deps, ctxApp, () => { femApp[veld] = []; }));
+  }
+  check("App.tsx: … en na een andere versie van de rekeninstellingen",
+    reageertOp(appEffect.deps, ctxApp, () => { femApp.rekenInstellingenVersie = "v2"; }));
+  evalueer(appEffect.body, ctxApp)();
+  check(
+    "App.tsx: dat effect wist de toetsuitslagen, de rekenfout en de stabiliteitsmelding",
+    gewist === 1 && ctxApp.rekenGeneratieRef.current === 2 && ctxApp.volledigeRekengangRef.current === null
+      && ctxApp.rekenFoutRef.current === null && appToestand.solverErrorText === null
+      && appToestand.stabiliteitsMelding === null,
+  );
 
-  check(
-    "App.tsx: het invalidatie-effect hangt aan fem.rekenInstellingenVersie",
-    /\[fem\.nodes, fem\.beams, fem\.supports, fem\.loads, fem\.plates, fem\.rekenInstellingenVersie\]/.test(app),
-  );
-  check(
-    "App.tsx: dat effect wist de toetsuitslagen",
-    gewist === 1 && context.rekenGeneratieRef.current === 2 && context.volledigeRekengangRef.current === null,
-  );
-  check(
-    "useFemStore.ts: het store-effect hangt aan rekenInstellingenVersie",
-    /setCombinationResults\(null\);[\s\S]{0,900}?\}, \[nodes, beams, supports, plates, loads, rekenInstellingenVersie\]\);/.test(store),
-  );
-  const aanroep = /bepaalRekenInstellingenVersie\(\{([\s\S]*?)\}\)/.exec(store)?.[1] ?? "";
-  const ontbreekt = REKENINSTELLINGEN_VELDEN.filter((v) => !new RegExp(`\\b${v}\\b`).test(aanroep));
-  check(
-    "useFemStore.ts: de versie wordt uit elk veld opgebouwd",
-    aanroep !== "" && ontbreekt.length === 0,
-    `ontbreekt: ${ontbreekt.join(", ")}`,
-  );
-  check(
-    "App.tsx: de gevolgklasse uit de uitgangspunten gaat de store in",
-    /gevolgklasse: projectInfo\.uitgangspunten\?\.gevolgklasse/.test(app),
-  );
-  check(
-    "App.tsx: de nationale bijlage uit de uitgangspunten gaat de store in",
-    /nationaleBijlage: projectInfo\.uitgangspunten\?\.nationaleBijlage/.test(app),
-  );
+  // ── useFemStore.ts: het store-effect wist ELKE solveruitvoer ──
+  // De vier uitvoervelden die `setSolverOutputs` samen zet. Ook α_cr hoort bij
+  // het oude model: bleef `stabiliteit` staan, dan kreeg het rapport de
+  // analysetoelichting van het vorige model, en de toets via het API-pad de
+  // α_cr van vóór de wijziging.
+  const storeEffect = effect(store, ({ deps }) => noemt(deps, "rekenInstellingenVersie"));
+  const OUD = "uitvoer van het oude model";
+  const storeToestand = {
+    nodes: [], beams: [], supports: [], plates: [], loads: [],
+    multiLcResult: OUD, combinationResults: OUD, envelope: OUD, stabiliteit: OUD,
+  };
+  const ctxStore = await context(store, stateNaden(store, storeToestand, { rekenInstellingenVersie: "v1" }),
+    [storeEffect.body, storeEffect.deps]);
+  for (const veld of ["nodes", "beams", "supports", "plates", "loads"]) {
+    check(`useFemStore.ts: het store-effect draait opnieuw na andere ${veld}`,
+      reageertOp(storeEffect.deps, ctxStore, () => { storeToestand[veld] = []; }));
+  }
+  check("useFemStore.ts: … en na een andere versie van de rekeninstellingen",
+    reageertOp(storeEffect.deps, ctxStore, () => { ctxStore.rekenInstellingenVersie = "v2"; }));
+  evalueer(storeEffect.body, ctxStore)();
+  for (const veld of ["multiLcResult", "combinationResults", "envelope", "stabiliteit"]) {
+    check(`useFemStore.ts: na een modelwijziging is ${veld} gewist`, storeToestand[veld] === null, String(storeToestand[veld]));
+  }
+
+  // ── useFemStore.ts: de versie komt uit ELK veld van de rekeninstellingen ──
+  // De fabriek van de useMemo draait met een spion op de versiefunctie en een
+  // eigen merkteken per stuk storetoestand: elk veld moet een eigen stuk
+  // toestand dragen, en de memo moet op elk daarvan opnieuw rekenen.
+  const versieFabriek = declaratie(store, "rekenInstellingenVersie");
+  const versieDeps = declaratieDeps(store, "rekenInstellingenVersie");
+  const spion = importNaam(store, "lib/rekenInstellingen", "rekenInstellingenVersie");
+  const merk = merktekenNaden(versieFabriek, [spion]);
+  let gevraagd = null;
+  const ctxVersie = await context(store, {
+    ...merk, [spion]: (instellingen) => { gevraagd = instellingen; return "versie"; },
+  }, [versieFabriek, versieDeps]);
+  evalueer(versieFabriek, ctxVersie)();
+  const merktekens = Object.values(merk);
+  const zonderToestand = REKENINSTELLINGEN_VELDEN.filter((v) => !gevraagd || !merktekens.includes(gevraagd[v]));
+  check("useFemStore.ts: de versie krijgt elk veld uit een eigen stuk storetoestand",
+    gevraagd !== null && zonderToestand.length === 0
+      && new Set(REKENINSTELLINGEN_VELDEN.map((v) => gevraagd[v])).size === REKENINSTELLINGEN_VELDEN.length,
+    `zonder toestand: ${zonderToestand.join(", ")}`);
+  const memoDeps = evalueer(versieDeps, ctxVersie);
+  const nietInDeps = REKENINSTELLINGEN_VELDEN.filter((v) => gevraagd && !memoDeps.includes(gevraagd[v]));
+  check("useFemStore.ts: de versie rekent opnieuw bij een wijziging van elk veld",
+    gevraagd !== null && nietInDeps.length === 0, `niet in de afhankelijkheden: ${nietInDeps.join(", ")}`);
+
+  // ── App.tsx → store: de uitgangspunten van het project gaan de store in ──
+  const opties = await voerUitIn(app, argumentVan(app, "useFemStore"), {
+    projectInfo: { uitgangspunten: { gevolgklasse: "CC3", nationaleBijlage: "NL" } },
+  });
+  check("App.tsx: de gevolgklasse uit de uitgangspunten gaat de store in", opties.gevolgklasse === "CC3", JSON.stringify(opties));
+  check("App.tsx: de nationale bijlage uit de uitgangspunten gaat de store in", opties.nationaleBijlage === "NL", JSON.stringify(opties));
+  const zonder = await voerUitIn(app, argumentVan(app, "useFemStore"), { projectInfo: {} });
+  check("App.tsx: zonder uitgangspunten geen klasse en geen bijlage (de store laat de combinaties dan ongemoeid)",
+    zonder.gevolgklasse === null && zonder.nationaleBijlage === null, JSON.stringify(zonder));
+
+  // ── App.tsx: tijdens het herberekenen geen oude resultaten in de eigenschappen ──
   check(
     "App.tsx: eigenschappen lezen geen oude resultaten tijdens herberekenen",
-    vm.runInNewContext(ts.transpile(`(${selectie.getText(ast)})`, { target: ts.ScriptTarget.ES2022 }), {
+    await voerUitIn(app, declaratie(app, "solverResult"), {
       solverStatus: { kind: "rekenen" }, fem: { multiLcResult: new Map([[1, { oud: true }]]), activeLoadCaseId: 1 },
     }) === null,
   );
@@ -239,6 +294,7 @@ log("\n[3] Een mislukte toetsronde wist de vorige uitslag");
     beff: [],
     lastRunAt: 123,
     lastRunData: { nodes: [], beams: [], combinations: [], combinationResults: new Map() },
+    toetsCombinaties: [{ id: 1_000_003, name: "oud (scheefstand −x)" }],
     lastRunInputs: { steel: [], timber: [], clt: [], beton: [], spanning: [] },
     error: null,
   });
@@ -252,6 +308,9 @@ log("\n[3] Een mislukte toetsronde wist de vorige uitslag");
   check("geen oude overgeslagen staven", s.skipped.length === 0);
   check("geen oude run-tijd", s.lastRunAt === null);
   check("geen oude modelinvoer", s.lastRunData === null && s.lastRunInputs === null);
+  // Issue #199: de namen van de toetscombinaties (voor het rapport) horen bij
+  // de oude ronde.
+  check("geen oude namen van toetscombinaties", s.toetsCombinaties.length === 0);
   check("de ronde is afgesloten", s.isRunning === false);
 }
 

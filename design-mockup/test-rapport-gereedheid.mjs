@@ -29,8 +29,14 @@
 //   [4] argumenten    — leesExportOpties: strikt, kop zonder lekken.
 //   [5] na de afdruk  — vergelijkExportMoment.
 //   [6] de kop        — kopMetOverschrijving: niets van een vorig project.
-//   [7] bronteksten   — `rekenen` via het kanaal IS de knop (rekenDoor), en de
-//                       zijbalk en de export delen pasRapportTypeToe.
+//   [7] één weg       — `rekenen` via het kanaal IS de knop (rekenDoor): het
+//                       commando, de bedrading in App.tsx en de geplande
+//                       herberekening worden UITGEVOERD (scripts/bron-uitvoeren.mjs).
+//                       Vier bronteksttoetsen blijven, met de reden erbij: zij
+//                       gaan over DOM-gedrag (zijbalkknop, paginering) dat
+//                       alleen in een browser draait.
+//   [8] analysetype   — de export noemt het analysetype van de resultaten; in
+//                       3D wat de kern werkelijk rekende (met platen lineair).
 //
 // Uitvoeren: npx tsx test-rapport-gereedheid.mjs   (vanuit design-mockup/)
 //        of: node scripts/run-tests.mjs --filter=rapport-gereedheid
@@ -38,6 +44,11 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+// Eerst de hulp: die maakt van stylesheets een lege module, en bediening.ts en
+// rapportExport.ts trekken via de rapportmodules KaTeX-stylesheets mee.
+import {
+  argumentVan, context, effect, evalueer, leesBron, merktekenNaden, noemt, voerUitIn,
+} from "./scripts/bron-uitvoeren.mjs";
 
 const HIER = dirname(fileURLToPath(import.meta.url));
 
@@ -277,25 +288,121 @@ log("\n[6] kopMetOverschrijving — de kop van één export");
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-log("\n[7] Bronteksten — kanaal en knop zijn één weg");
+log("\n[7] Kanaal en knop zijn één weg — uitgevoerd, niet gelezen");
 {
-  const bediening = readFileSync(join(HIER, "src", "bediening", "bediening.ts"), "utf8");
-  const app = readFileSync(join(HIER, "src", "App.tsx"), "utf8");
+  // ── `rekenen` via het bedieningskanaal, met nagebootste acties ──
+  // Dezelfde rekengang als de knop Berekenen (`rekenDoor`, met de fysisch
+  // niet-lineaire ronde en de toetsing), en pas terug als die klaar is. De
+  // acties hebben geen `computeAndStoreSolverOutputs`: wie dat nog aanriep,
+  // faalt hier.
+  const { voerUit } = await import("./src/bediening/bediening.ts");
+  const { useCheckStore } = await import("./src/stores/checkStore.ts");
+  // De toetsing die de rekengang achterliet (issue #199): de analyse van de
+  // UGT-toetskrachten staat in `lastRunData.toets`.
+  const toetsanalyse = {
+    soort: "tweedeOrdeGeometrisch", phi: 1 / 200, noemer: 200, bron: "vast",
+    scheefstandModelAan: false, hergebruikt: false,
+  };
+  useCheckStore.setState({ lastRunData: { toets: { analyse: toetsanalyse, meldingen: ["een toetsmelding"] } } });
+  let rekengangen = 0;
+  let klaar = false;
+  const acties = {
+    modelDimension: "2d",
+    fem: {
+      combinationResults: new Map([[1, {}]]), combinations: [{ id: 1, name: "UGT" }],
+      analysetype: "tweedeOrdeGeometrisch",
+    },
+    rekenDoor: async () => { rekengangen++; await Promise.resolve(); klaar = true; return { gelukt: true, fysisch: "nvt" }; },
+    rekenToestand: () => ({ herberekeningGepland: false, lopendeRekengangen: 0, generatie: 0, volledigeRekengang: null }),
+    laatsteRekenfout: () => null,
+  };
+  let uit, fout = null;
+  try {
+    uit = await voerUit("rekenen", {}, { current: acties }, () => new Promise(() => {}), async () => {});
+  } catch (e) { fout = e instanceof Error ? e.message : String(e); }
+  check("`rekenen` via het kanaal draait rekenDoor (de knop Berekenen), één keer",
+    fout === null && rekengangen === 1, fout ?? `${rekengangen} keer`);
+  check("… en komt pas terug als die rekengang klaar is, met het analysetype van de store",
+    klaar && uit?.analysetype === "tweedeOrdeGeometrisch" && uit?.fysischeRonde === "nvt", JSON.stringify(uit));
+  check("… en met de analyse van de toetskrachten (tweede orde met scheefstand, issue #199)",
+    uit?.toetsing?.toetsanalyse === toetsanalyse, JSON.stringify(uit?.toetsing));
+  const gelezen = await voerUit("toetsen_uitlezen", {}, { current: acties }, () => new Promise(() => {}), async () => {});
+  check("`toetsen_uitlezen` geeft de toetsanalyse en de toetsmeldingen mee",
+    gelezen?.toetsanalyse === toetsanalyse && JSON.stringify(gelezen?.toetsmeldingen) === JSON.stringify(["een toetsmelding"]),
+    JSON.stringify({ toetsanalyse: gelezen?.toetsanalyse, toetsmeldingen: gelezen?.toetsmeldingen }));
+  useCheckStore.getState().clear();
+  const leeg = await voerUit("toetsen_uitlezen", {}, { current: acties }, () => new Promise(() => {}), async () => {});
+  check("… en zonder toetsronde geen toetsanalyse", leeg?.toetsanalyse === null && leeg?.toetsmeldingen?.length === 0,
+    JSON.stringify({ toetsanalyse: leeg?.toetsanalyse }));
+
+  // ── App.tsx: wat de bediening van de app krijgt ──
+  // Het object voor `useBediening` uitgevoerd met een merkteken per naam uit
+  // het component: rekenDoor en de toetsing gaan ongewijzigd door, en de
+  // rekentoestand leest de refs OP HET MOMENT van vragen (niet bij de render).
+  const app = leesBron("src/App.tsx");
+  const bedieningArg = argumentVan(app, "useBediening");
+  const ref = (current) => ({ current });
+  const naden = {
+    ...merktekenNaden(bedieningArg),
+    rekenDoor: async () => ({ gelukt: true, fysisch: "nvt" }),
+    herberekeningGeplandRef: ref(false), lopendeRekengangenRef: ref(0),
+    rekenGeneratieRef: ref(3), volledigeRekengangRef: ref(null), rekenFoutRef: ref(null),
+  };
+  const gegeven = await voerUitIn(app, bedieningArg, naden);
+  check("App.tsx: de bediening krijgt de rekengang van de knop (rekenDoor) en dezelfde toetsing",
+    gegeven.rekenDoor === naden.rekenDoor && gegeven.handleRunMemberChecks === naden.handleRunMemberChecks);
+  const VOLLEDIG = new Map();
+  Object.assign(naden.herberekeningGeplandRef, { current: true });
+  Object.assign(naden.lopendeRekengangenRef, { current: 1 });
+  Object.assign(naden.rekenGeneratieRef, { current: 8 });
+  Object.assign(naden.volledigeRekengangRef, { current: VOLLEDIG });
+  naden.rekenFoutRef.current = "kolom knikt";
+  const t = gegeven.rekenToestand();
+  check("App.tsx: de rekentoestand van de bediening leest de refs live",
+    t.herberekeningGepland === true && t.lopendeRekengangen === 1 && t.generatie === 8 && t.volledigeRekengang === VOLLEDIG,
+    JSON.stringify(t));
+  check("App.tsx: … en de laatste rekenfout ook", gegeven.laatsteRekenfout() === "kolom knikt");
+
+  // ── App.tsx: de geplande herberekening is leesbaar ──
+  // Het invalidatie-effect na een modelwijziging, met live rekenen aan: zolang
+  // de timer staat, zegt de ref "gepland" (het rapport is dan gewist en nog
+  // niet opnieuw gevuld); als hij afloopt, start de rekengang en is het weg.
+  const invalidatie = effect(app, ({ body, deps }) => noemt(deps, "rekenInstellingenVersie") && noemt(body, "checkClear"));
+  const timers = [];
+  let gestart = 0;
+  const ctx = await context(app, {
+    fem: { setEnvelopeView() {}, setActiveCombinationId() {} },
+    checkClear() {}, stijfheidClear() {}, setSolverStatus() {}, setSolverErrorText() {}, setStabiliteitsMelding() {},
+    rekenGeneratieRef: ref(1), lopendeRekengangenRef: ref(0), rapportRekenPogingRef: ref(true),
+    volledigeRekengangRef: ref(null), rekenFoutRef: ref(null), liveRekenenRef: ref(true),
+    herberekeningGeplandRef: ref(false), herberekenTimerRef: ref(null),
+    rekenDoorRef: ref(() => { gestart++; }),
+    window: {
+      setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+      clearTimeout: () => {},
+    },
+  }, [invalidatie.body]);
+  const opruimen = evalueer(invalidatie.body, ctx)();
+  check("App.tsx: na een modelwijziging staat de herberekening gepland, met een timer",
+    ctx.herberekeningGeplandRef.current === true && timers.length === 1 && ctx.herberekenTimerRef.current === 1
+      && timers[0].ms > 0, JSON.stringify(timers.map((t) => t.ms)));
+  timers[0].fn();
+  check("App.tsx: … die bij aflopen de rekengang start en 'gepland' weghaalt",
+    gestart === 1 && ctx.herberekeningGeplandRef.current === false && ctx.herberekenTimerRef.current === null);
+  ctx.herberekeningGeplandRef.current = true;
+  if (typeof opruimen === "function") opruimen();
+  check("App.tsx: een volgende wijziging ruimt de geplande herberekening op",
+    ctx.herberekeningGeplandRef.current === false);
+
+  // ── Wat alleen in een browser te zien is ──
+  // De zijbalkknop (React-klik in ReportPreview), het wisselen van type tijdens
+  // een export die op de echte paginering wacht, de kop in ReportShell en het
+  // meten van px/mm vergen een DOM met lay-out. Die keten doet de
+  // referentie-GUI-test (referentie-gui/rapport-pdf.mjs) door de echte app;
+  // hier blijft een bronteksttoets als vangnet. Geen van deze vier bestanden
+  // hoort bij de rekenregie.
   const preview = readFileSync(join(HIER, "src", "components", "panels", "ReportPreview.tsx"), "utf8");
   const shell = readFileSync(join(HIER, "src", "components", "report", "ReportShell.tsx"), "utf8");
-  const bedieningHook = /const bedieningActief = useBediening\(\{([\s\S]*?)\n  \}\);/.exec(app)?.[1] ?? "";
-
-  const rekenen = /case "rekenen": \{([\s\S]*?)\n    \}/.exec(bediening)?.[1] ?? "";
-  check("`rekenen` via het kanaal roept rekenDoor aan (de knop Berekenen)",
-    /a\(\)\.rekenDoor\(\)/.test(rekenen), "geen a().rekenDoor() in case rekenen");
-  check("… en niet meer alleen computeAndStoreSolverOutputs",
-    !/computeAndStoreSolverOutputs\s*\(/.test(rekenen) && !/computeAndStoreSolverOutputs\s*:/.test(bediening));
-  check("App.tsx: rekenDoor geeft een belofte (Promise<RekengangUitkomst>)",
-    /const rekenDoor = useCallback\(\(selectedEngine\?: SolverEngineId\): Promise<RekengangUitkomst> =>/.test(app));
-  check("App.tsx: de bediening krijgt rekenDoor en de rekentoestand",
-    /\brekenDoor,/.test(bedieningHook) && /rekenToestand:/.test(bedieningHook));
-  check("App.tsx: de geplande herberekening is leesbaar (herberekeningGeplandRef)",
-    /herberekeningGeplandRef\.current = true;[\s\S]{0,200}?window\.setTimeout/.test(app));
   check("zijbalk en export delen pasRapportTypeToe",
     /pasRapportTypeToe\(type\)/.test(preview) && /pasRapportTypeToe\(opties\.type\)/.test(
       readFileSync(join(HIER, "src", "bediening", "rapportExport.ts"), "utf8")));
@@ -306,6 +413,42 @@ log("\n[7] Bronteksten — kanaal en knop zijn één weg");
   const paginate = readFileSync(join(HIER, "src", "components", "report", "paginate.ts"), "utf8");
   check("paginate.ts meet px/mm buiten de geobserveerde meetcontainer (anders eeuwig herpagineren)",
     /pxPerMm\(o\.meet\.parentElement \?\? document\.body\)/.test(paginate) && !/pxPerMm\(o\.meet\)/.test(paginate));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+log("\n[8] De export noemt het analysetype waarmee de resultaten berekend zijn");
+{
+  // In 3D stond hier vast "tweedeOrdeGeometrisch", ook als de kern lineair
+  // rekende: bij de instelling eerste orde, en bij een model met platen (de
+  // 3D-kern kent voor platen geen P-Δ en rekent dan lineair). De export noemt
+  // nu wat de kern rekende: `result.analysis`.
+  const { analysetypeVanExport, rekenVoorwaardenNu } = await import("./src/bediening/rapportExport.ts");
+  const acties3d = (analysis, instelling) => ({
+    modelDimension: "3d",
+    fem: { analysetype: instelling, nodes: [], beams: [], combinationResults: null },
+    openFem3d: {
+      model: { nodes: [{ id: 1, x: 0, y: 0, z: 0 }], beams: [] },
+      result: analysis === null ? null : { analysis },
+      solveError: null, solving: false, checksRunning: false, checksError: null,
+      checks: null, concreteChecks: null, timberChecks: null,
+    },
+  });
+  const gevallen = [
+    ["P-Δ gerekend", "p-delta", "tweedeOrdeGeometrisch", "tweedeOrdeGeometrisch"],
+    ["lineair gerekend bij de instelling eerste orde", "linear", "eersteOrde", "eersteOrde"],
+    ["lineair gerekend ondanks de instelling P-Δ (model met platen)", "linear", "tweedeOrdeGeometrisch", "eersteOrde"],
+    ["nog niet gerekend: de instelling zelf", null, "eersteOrde", "eersteOrde"],
+  ];
+  for (const [naam, analysis, instelling, verwacht] of gevallen) {
+    const a = acties3d(analysis, instelling);
+    const type = typeof analysetypeVanExport === "function" ? analysetypeVanExport(a) : undefined;
+    check(`3D, ${naam} → ${verwacht}`, type === verwacht, String(type));
+    check(`3D, ${naam}: de rekenvoorwaarden noemen hetzelfde`, rekenVoorwaardenNu(a).analysetype === verwacht,
+      String(rekenVoorwaardenNu(a).analysetype));
+  }
+  const a2d = { modelDimension: "2d", fem: { analysetype: "tweedeOrdeFysisch" } };
+  check("2D: de instelling (de resultaten volgen haar; een andere instelling wist ze)",
+    typeof analysetypeVanExport === "function" && analysetypeVanExport(a2d) === "tweedeOrdeFysisch");
 }
 
 log(`\nrapport-gereedheid: ${passed} geslaagd, ${failed} gefaald`);

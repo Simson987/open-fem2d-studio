@@ -90,6 +90,7 @@ import OpenFem3DExplorer from "./components/openFem3d/OpenFem3DExplorer";
 import OpenFem3DProperties from "./components/openFem3d/OpenFem3DProperties";
 import {
   runOpenFem3DSteelChecks,
+  type OpenFem3DCombinationSet,
   type OpenFem3DSteelChecks,
 } from "./components/openFem3d/openFem3dSteelCheck";
 import {
@@ -100,6 +101,13 @@ import {
   runOpenFem3DTimberChecks,
   type OpenFem3DTimberChecks,
 } from "./components/openFem3d/openFem3dTimberCheck";
+// De toetskrachten in 3D (issue #199): de UGT-toets rekent altijd P-Δ met
+// scheefstand in ±X/±Y, los van de instellingen voor de resultaten.
+import {
+  bepaalToetsKrachten3D,
+  toetsSet3D,
+  type ToetsKrachten3D,
+} from "./components/openFem3d/openFem3dToetsKrachten";
 import {
   SOLVER_PREFERENCE_KEY,
   SOLVER_REGISTRY,
@@ -144,10 +152,23 @@ import {
   eersteOrdeCombinatieResultaat,
   getSecondOrderInput,
   heeftTrekAlleen,
+  getSecondOrderState,
   zetCombinatieResultaat,
   zetSolverLogOpvanger,
 } from "./components/fem/solver/engine";
-import { eersteOrdeResultatenVoorKolomtoets } from "./lib/eersteOrdeResultaten";
+// De UGT-toets rekent altijd zelf tweede orde met scheefstand (issue #199); de
+// BGT komt uit de resultaten. Dezelfde functies als de sidecar.
+import {
+  bepaalToetsKrachten2D,
+  bepaalToetsScheefstand,
+  scheefstandToelichtingToets,
+  toetsOmschrijving,
+  toetsScheefstandNormen,
+  toetsSet2D,
+  TOETS_PHI_MARGE,
+  weigeringTekst,
+  type ToetsKrachten2D,
+} from "./lib/toetsKrachten";
 import { maakSolverLogOpvanger } from "./stores/solverLogStore";
 import {
   combinatiesVanSoort,
@@ -158,7 +179,7 @@ import {
 import {
   analyseToelichting as maakAnalyseToelichting,
   bepaalAlphaCr,
-  stabiliteitsMeldingen,
+  noemerTekst,
   type AlphaCrUitkomst,
 } from "./components/fem/solver/alphaCr";
 import { ANALYSETYPE_LABEL, ANALYSETYPE_OMSCHRIJVING } from "./components/fem/femTypes";
@@ -171,6 +192,7 @@ import {
   losCombinatieFysischOp,
   schatVrijheidsgraden,
   segmentWaarschuwing,
+  type BetonSegmentStaaf,
 } from "./lib/betonStijfheid";
 import { bepaalKruipPerStaaf, kruipWaardenPerStaaf, modelHeeftBetonstaaf } from "./lib/kruipcoefficient";
 import { bepaalOnbepaaldheid } from "./lib/statischeOnbepaaldheid";
@@ -194,7 +216,6 @@ import { leesSnapInstellingen, SNAP_SCHAKELAARS_3D, SNAP_SOORTEN } from "./hooks
 import {
   bepaalScheefstand,
   leidScheefstandGeometrieAf,
-  scheefstandToelichting,
   scheefstandToelichtingVertaald,
   toepasselijkeScheefstandNormen,
 } from "./lib/scheefstandNorm";
@@ -716,6 +737,9 @@ function App() {
   const [openFem3dTimberChecks, setOpenFem3dTimberChecks] = useState<OpenFem3DTimberChecks | null>(null);
   const [openFem3dChecksRunning, setOpenFem3dChecksRunning] = useState(false);
   const [openFem3dChecksError, setOpenFem3dChecksError] = useState<string | null>(null);
+  // De toets van de laatste 3D-rekengang (issue #199): analyse, φ, α_cr per
+  // basiscombinatie, meldingen en een eventuele weigering. Leeg = geen toets.
+  const [openFem3dToets, setOpenFem3dToets] = useState<ToetsKrachten3D | null>(null);
   const openFem3dSolveGenerationRef = useRef(0);
   const [visibility3DOpen, setVisibility3DOpen] = useState(false);
   const [openFem3dVisibility, setOpenFem3dVisibility] = useState(readOpenFem3DVisibility);
@@ -754,6 +778,7 @@ function App() {
     setOpenFem3dTimberChecks(null);
     setOpenFem3dChecksRunning(false);
     setOpenFem3dChecksError(null);
+    setOpenFem3dToets(null);
     if (modelDimension === "3d") setSolverStatus({ kind: "ready" });
   }, [openFem3d, modelDimension]);
   // FEM tool state — shared between Ribbon (active highlight) + FemCanvas (action)
@@ -814,6 +839,7 @@ function App() {
     setOpenFem3dTimberChecks(null);
     setOpenFem3dChecksRunning(false);
     setOpenFem3dChecksError(null);
+    setOpenFem3dToets(null);
     setSolverStatus({ kind: "ready" });
   }, [fem.rekenInstellingenVersie, modelDimension]);
   // Altijd de verse store, ook vanuit een meldingsknop die in een eerder event
@@ -872,6 +898,12 @@ function App() {
   const checkRun = useCheckStore((s) => s.run);
   const checksRunning = useCheckStore((s) => s.isRunning);
   const checkClear = useCheckStore((s) => s.clear);
+  // Een toets zonder krachten (issue #199, B7): de reden in de toetsing, de
+  // resultaten blijven staan.
+  const checkWeiger = useCheckStore((s) => s.weiger);
+  // De toetsanalyse van de laatste ronde (issue #199): voor de toelichting in
+  // het rapport, ook bij een geweigerde toets.
+  const toetsVanRonde = useCheckStore((s) => s.toets);
   // Toetsingsuitkomst voor de CSV-export en het losse HTML-rapport: exact
   // wat het toetsingspaneel toont, zodat er nooit twee verschillende unity
   // checks voor hetzelfde model in omloop zijn.
@@ -1038,11 +1070,16 @@ function App() {
       : null),
     [fem.scheefstandBron, fem.scheefstandNoemer, fem.scheefstandHoogteM,
      fem.scheefstandAantalElementen, openFem3dScheefstandGeometrie, openFem3d]);
+  // Nooit leeg: de UGT-toets rekent altijd met deze scheefstand, ook met de
+  // schakelaar uit (issue #199). Zie `scheefstandTekst` hieronder.
   const openFem3dScheefstandTekst = useMemo(
-    () => (fem.scheefstandEnabled && openFem3dScheefstandUitkomst && openFem3dScheefstandGeometrie
-      ? scheefstandToelichting(openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie, "3d")
+    () => (openFem3dScheefstandUitkomst && openFem3dScheefstandGeometrie
+      ? scheefstandToelichtingToets(
+          openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie,
+          toepasselijkeScheefstandNormen3D(openFem3d), "3d",
+        )
       : ""),
-    [fem.scheefstandEnabled, openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie]);
+    [openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie, openFem3d]);
   /** Wat de balk onder het canvas toont: in 3D de 3D-afleiding, anders die van 2D. */
   const scheefstandBalk = modelDimension === "3d" && openFem3dScheefstandUitkomst && openFem3dScheefstandGeometrie
     ? { uitkomst: openFem3dScheefstandUitkomst, geometrie: openFem3dScheefstandGeometrie, richtingen: "3d" as const }
@@ -1061,40 +1098,65 @@ function App() {
    * rapport en het hoofdstuk Uitgangspunten van de PDF-uitdraai. Eén bron, dus
    * de drie kunnen niet uit elkaar lopen.
    *
-   * LEEG zolang de schakelaar uit staat. Dat is geen bezuiniging maar de
-   * bedoeling: staat er geen scheefstand op de lasten, dan zit zij in geen
-   * enkele kracht waarop is getoetst, en dan hoort het rapport erover te
-   * zwijgen. Een uitgangspunt noemen dat de rekengang niet heeft gebruikt, is
-   * erger dan het niet noemen.
+   * NOOIT LEEG (issue #199). Tot 2026.42 zweeg deze tekst zolang de schakelaar
+   * uit stond: de scheefstand zat dan in geen enkele kracht waarop getoetst
+   * was. De UGT-toets rekent sindsdien altijd met deze φ, ook met de schakelaar
+   * uit; de schakelaar geldt alleen voor de resultaten. Dezelfde functie als
+   * `scheefstand_toelichting` van de MCP-toets.
    */
   const scheefstandTekst = useMemo(
-    () => (fem.scheefstandEnabled
-      ? scheefstandToelichting(scheefstandUitkomst, scheefstandGeometrie)
-      : ""),
-    [fem.scheefstandEnabled, scheefstandUitkomst, scheefstandGeometrie]);
+    () => scheefstandToelichtingToets(scheefstandUitkomst, scheefstandGeometrie, toetsScheefstandNormen(fem.beams, fem.plates)),
+    [scheefstandUitkomst, scheefstandGeometrie, fem.beams, fem.plates]);
   /**
    * Het analysetype en α_cr per combinatie, als tekstblok voor het rapport
-   * (basisaudit nr 27): welke berekening er is gedaan en of de norm die
-   * toestaat. Leeg zolang er niet gerekend is; het rapport zwijgt dan.
+   * (basisaudit nr 27): welke berekening er is gedaan. Leeg zolang er niet
+   * gerekend is; het rapport zwijgt dan.
+   *
+   * TWEE BEREKENINGEN (issue #199): de resultaten volgen de instellingen
+   * Analyse en Scheefstand, de UGT-toetskrachten zijn altijd tweede orde (P-Δ)
+   * met scheefstand. De toets komt uit de laatste toetsronde (ook een
+   * geweigerde); zolang die er niet is, staat er de regel zelf, met de φ die de
+   * toets zal gebruiken. α_cr is die van de toets, anders die van de
+   * resultaten. Dezelfde functie als `analyse_toelichting` van de MCP-toets.
    */
-  const analyseTekst = useMemo(
-    () => (fem.stabiliteit
-      ? maakAnalyseToelichting(
-          fem.analysetype,
-          ANALYSETYPE_LABEL[fem.analysetype],
-          ANALYSETYPE_OMSCHRIJVING[fem.analysetype],
-          fem.stabiliteit,
-          fem.scheefstandEnabled,
-        ) +
+  const analyseTekst = useMemo(() => {
+    // Zonder resultaten geen tekst. (Niet `fem.stabiliteit`: die bepaalt
+    // `rekenDoor` alleen nog als de toets geen α_cr opleverde.)
+    if (!fem.combinationResults) return "";
+    const toetsNormen = toetsScheefstandNormen(fem.beams, fem.plates);
+    const plan = bepaalToetsScheefstand(scheefstandUitkomst, toetsNormen);
+    const analyse = toetsVanRonde?.analyse ?? {
+      soort: fem.analysetype === "tweedeOrdeFysisch" ? "tweedeOrdeFysisch" as const : "tweedeOrdeGeometrisch" as const,
+      noemer: plan.noemer,
+      bron: plan.bron,
+      hergebruikt: false,
+    };
+    return maakAnalyseToelichting({
+      resultaten: {
+        analysetype: fem.analysetype,
+        label: ANALYSETYPE_LABEL[fem.analysetype],
+        omschrijving: ANALYSETYPE_OMSCHRIJVING[fem.analysetype],
+        scheefstandAan: fem.scheefstandEnabled,
+        scheefstandNoemer: scheefstandUitkomst.noemer,
+      },
+      toets: toetsOmschrijving(analyse, "2d", toetsNormen.includes("en1992")),
+      alphaCr: toetsVanRonde ? toetsVanRonde.alphaCr : (fem.stabiliteit ?? []),
+      meldingen: [
         // De eindstijfheid van hout (NEN-EN 1995-1-1 2.2.3(5), 2.3.2.2): welke
         // eindtoestand er naast de gewone berekening is gedaan, en wat niet.
         // In dit blok omdat het net als het analysetype zegt WELKE berekening
         // er is gedaan; zo staat het in het rapport én in de PDF.
-        (fem.eindstijfheid.meldingen.length > 0
-          ? "\n\n" + fem.eindstijfheid.meldingen.map((m) => `! ${m.tekst}`).join("\n")
-          : "")
-      : ""),
-    [fem.stabiliteit, fem.analysetype, fem.scheefstandEnabled, fem.eindstijfheid]);
+        ...fem.eindstijfheid.meldingen.map((m) => m.tekst),
+        // Wat de toets te melden had: hout met E_mean en 2·L, vervallen
+        // eindtoestandvarianten. De meldingen over de toets-φ zelf (door hout
+        // verhoogd, een vaste noemer onder de normwaarde) staan al in het
+        // scheefstandblok (`scheefstandToelichtingToets`); hier niet nog eens.
+        ...(toetsVanRonde?.meldingen ?? []).filter((m) => !plan.meldingen.includes(m)),
+      ],
+      weigering: toetsVanRonde?.weigering ?? null,
+    });
+  }, [fem.stabiliteit, fem.combinationResults, fem.analysetype, fem.scheefstandEnabled, fem.eindstijfheid, fem.beams, fem.plates,
+      scheefstandUitkomst, toetsVanRonde]);
   /**
    * De omschrijving van de gegenereerde windlasten voor de PDF (issue #16):
    * dezelfde functie waarmee het live rapport haar bij de uitgangspunten zet
@@ -2092,6 +2154,14 @@ function App() {
    * doorbuigingstoetsen bijvoorbeeld — dan blijft het bij selecteren en gaat
    * een oude markering weg: liever geen markering dan een plek die bij een
    * andere toets hoort.
+   *
+   * DEZELFDE KRACHTEN (issue #199, B4). De UGT-toets rekent altijd tweede orde
+   * met scheefstand; het tekenvlak toont de resultaten, die de instellingen
+   * Analyse en Scheefstand volgen. Een markering op het tekenvlak klopt alleen
+   * als de combinatie daar met DEZELFDE krachten staat als in de toetsing: het
+   * resultaat van de toetsset is dan hetzelfde object als dat van de
+   * resultaten (hergebruik, en de BGT). Anders volgt een melding in plaats van
+   * een plek op een diagram met andere krachten.
    */
   const handleToonMaatgevend = useCallback((doel: {
     beamId?: number; plateId?: number; combinatieId: number | null; positieMm: number | null;
@@ -2100,7 +2170,27 @@ function App() {
     else if (doel.plateId !== undefined) fem.setSelection({ type: "plate", id: doel.plateId });
     const markering = useMaatgevendMarkeringStore.getState();
     const id = doel.combinatieId;
-    if (id === null || !fem.combinationResults?.has(id)) { markering.wis(); return; }
+    if (id === null) { markering.wis(); return; }
+    const toetsing = useCheckStore.getState().lastRunData;
+    const getoond = fem.combinationResults?.get(id);
+    if (!getoond || toetsing?.combinationResults.get(id) !== getoond) {
+      markering.wis();
+      const naam = toetsing?.combinations.find((c) => c.id === id)?.name ?? String(id);
+      // Het advies noemt de φ van de TOETS (die kan door hout hoger liggen dan
+      // de projectinstelling). Staan Analyse en Scheefstand al goed, met die φ,
+      // dan helpt het advies niet: de toets rekende apart (bijvoorbeeld zonder
+      // de UGT-eindtoestandvarianten van hout) en dat zegt de tweede tekst.
+      const analyse = useCheckStore.getState().toets?.analyse;
+      const noemer = analyse ? noemerTekst(analyse.noemer) : noemerTekst(scheefstandUitkomst.noemer);
+      const instellingenGelijk = analyse !== undefined && fem.analysetype !== "eersteOrde" && fem.scheefstandEnabled
+        && Math.abs(scheefstandUitkomst.noemer - analyse.noemer) <= analyse.noemer * TOETS_PHI_MARGE;
+      void import("./io/notify").then(({ notifyInfo }) => notifyInfo(
+        i18next.t("common:app.check.otherForcesTitle"),
+        i18next.t(instellingenGelijk ? "common:app.check.otherForcesBodySame" : "common:app.check.otherForcesBody",
+          { naam, noemer }),
+      )).catch(() => {});
+      return;
+    }
     fem.setActiveCombinationId(id);
     fem.setEnvelopeView(false);
     fem.setShowLoads(true);
@@ -2115,7 +2205,8 @@ function App() {
     } else {
       markering.wis();
     }
-  }, [fem.setSelection, fem.combinationResults, fem.setActiveCombinationId, fem.setEnvelopeView, fem.setShowLoads]);
+  }, [fem.setSelection, fem.combinationResults, fem.setActiveCombinationId, fem.setEnvelopeView, fem.setShowLoads,
+    fem.analysetype, fem.scheefstandEnabled, scheefstandUitkomst]);
   // Normtoetsing draait ALTIJD mee met een berekening: de toetsing hoort bij
   // het resultaat en is geen losse handeling. Er is bewust geen schakelaar —
   // een model waarvan je de krachten ziet maar de unity checks niet, nodigt
@@ -2154,12 +2245,24 @@ function App() {
   // een kolom die in tweede orde knikte.
   const [solverErrorText, setSolverErrorText] = useState<string | null>(null);
   /**
-   * De blokkerende stabiliteitsmelding van de laatste rekengang: eerste orde
-   * waar α_cr < 10 dat niet toestaat (basisaudit nr 27). Rood in Inzichten,
-   * als melding op het scherm, en in het rapport. null = niets aan de hand.
+   * De blokkerende stabiliteitsmelding van de laatste rekengang: de toets is
+   * geweigerd, want haar tweede-ordeberekening (P-Δ met scheefstand) faalt
+   * (issue #199, B7). Rood in Inzichten en in het rapport; de melding op het
+   * scherm geeft `weigerToets`. null = niets aan de hand.
+   *
+   * Tot 2026.42 stond hier "eerste orde niet toegestaan" (α_cr < 10 bij eerste
+   * orde, basisaudit nr 27). Die is informatief geworden (B14): de toets rekent
+   * nooit eerste orde, dus de grens van 5.2.1(3) beslist niet meer of de unity
+   * checks bruikbaar zijn. Zij staat nog in de analysetoelichting.
    */
   const [stabiliteitsMelding, setStabiliteitsMelding] = useState<string | null>(null);
-  const gemeldeStabiliteitRef = useRef<string | null>(null);
+  /**
+   * De laatst gemelde weigering van de toets (issue #199, B7). Live
+   * herberekenen na elke modelwijziging zou dezelfde weigering telkens opnieuw
+   * als melding geven; een andere reden wél. De reden zelf staat altijd in de
+   * toetsing.
+   */
+  const gemeldeWeigeringRef = useRef<string | null>(null);
   /** De solverinvoer van de laatste rekengang, voor α_cr na de fysisch niet-lineaire ronde. */
   const laatsteMultiInputRef = useRef<MultiInput | null>(null);
   /**
@@ -2181,30 +2284,16 @@ function App() {
     }).catch(() => {});
   }, []);
   /**
-   * α_cr per UGT-combinatie bepalen en de meldingen tonen. Aangeroepen na
-   * elke rekengang; de blokkerende melding wordt niet bij elke live
-   * herberekening opnieuw als toast gemeld, wel bij een andere tekst.
+   * α_cr per UGT-combinatie van de RESULTATEN bepalen. Aangeroepen na elke
+   * rekengang. Geen melding meer (issue #199, B14): wat α_cr over de
+   * resultaten zegt, is informatief en staat in de analysetoelichting; de
+   * toets rekent altijd zelf tweede orde met scheefstand.
    */
   const bepaalStabiliteit = useCallback((
     multiInput: MultiInput,
     combinationResults: Map<number, SolverResult>,
-    generatie = rekenGeneratieRef.current,
-  ): AlphaCrUitkomst[] => {
-    const uitkomsten = bepaalAlphaCr(multiInput, fem.actieveCombinaties, combinationResults);
-    const meldingen = stabiliteitsMeldingen(uitkomsten, fem.analysetype, fem.scheefstandEnabled);
-    const fouten = meldingen.filter((m) => m.niveau === "fout").map((m) => m.tekst);
-    const tekst = fouten.length > 0 ? fouten.join("\n\n") : null;
-    setStabiliteitsMelding(tekst);
-    if (tekst !== null && gemeldeStabiliteitRef.current !== tekst) {
-      gemeldeStabiliteitRef.current = tekst;
-      void import("./io/notify").then(({ notifyWarning }) => {
-        if (generatie === rekenGeneratieRef.current)
-          notifyWarning(i18next.t("common:app.stability.firstOrderNotAllowed"), tekst);
-      }).catch(() => {});
-    }
-    if (tekst === null) gemeldeStabiliteitRef.current = null;
-    return uitkomsten;
-  }, [fem.actieveCombinaties, fem.analysetype, fem.scheefstandEnabled]);
+  ): AlphaCrUitkomst[] => bepaalAlphaCr(multiInput, fem.actieveCombinaties, combinationResults),
+  [fem.actieveCombinaties]);
   const [loadCasesTab, setLoadCasesTab] = useState<"cases" | "combos">("cases");
   /**
    * Draai de multi-LC pipeline (alle belastinggevallen + combinaties +
@@ -2212,7 +2301,16 @@ function App() {
    * outputs zodat aanroepers (normtoetsing) niet op een React re-render
    * hoeven te wachten. Fouten zijn non-fataal → null.
    */
-  const computeAndStoreSolverOutputs = useCallback(() => {
+  const computeAndStoreSolverOutputs = useCallback((opties?: {
+    /**
+     * α_cr van de resultaten NIET nu bepalen. `rekenDoor` toetst direct
+     * hierna, en de toets bepaalt α_cr zelf (bij hergebruik op precies deze
+     * invoer en krachten). Twee keer dezelfde bisectie kostte bij een portaal
+     * van 170 staven seconden op de UI-thread. Lukt de toets niet tot α_cr,
+     * dan vult `rekenDoor` die van de resultaten alsnog aan.
+     */
+    stabiliteitLater?: boolean;
+  }) => {
     const generatie = rekenGeneratieRef.current;
     try {
       if (fem.analysetype === "axiaalFysischRust") {
@@ -2289,13 +2387,15 @@ function App() {
         rekenCombinaties.map(c => [c.id, combineResults(c, perCase)])
       );
       const envelope = computeEnvelope(rekenCombinaties, perCase);
-      // De kritieke lastfactor per combinatie (basisaudit nr 27): bepaald ná de
-      // rekengang, met de normaalkrachten van de combinatie. Bij eerste orde en
-      // α_cr < 10 volgt de rode melding; zonder deze stap zou een instabiel
-      // portaal met een groene kolom worden getoond.
+      // De kritieke lastfactor per combinatie (basisaudit nr 27), met de
+      // normaalkrachten van de combinatie. Informatief (issue #199, B14): de
+      // toets rekent altijd zelf tweede orde. Met `stabiliteitLater` niet hier
+      // (zie daar): de toets die volgt bepaalt hem.
       laatsteMultiInputRef.current = multiInput;
-      const stabiliteit = bepaalStabiliteit(multiInput, combinationResults);
-      const outputs = { perCase, combinationResults, envelope, stabiliteit, veldpatronen: veld.uitkomst };
+      const stabiliteit = opties?.stabiliteitLater ? undefined : bepaalStabiliteit(multiInput, combinationResults);
+      // De invoer gaat mee naar de toetsing: daarop rekent zij haar eigen
+      // tweede orde met scheefstand (issue #199).
+      const outputs = { perCase, combinationResults, envelope, stabiliteit, multiInput, veldpatronen: veld.uitkomst };
       fem.setSolverOutputs(outputs);
       meldVeldpatronen(veld.uitkomst, generatie);
       rekenFoutRef.current = null;
@@ -2392,7 +2492,9 @@ function App() {
       analysis === "linear" && !perCombinatie ? undefined : combinationResults);
     laatsteMultiInputRef.current = multiInput;
     const stabiliteit = bepaalStabiliteit(multiInput, combinationResults);
-    const outputs = { perCase, combinationResults, envelope, stabiliteit, veldpatronen: veld.uitkomst };
+    // De invoer gaat mee naar de toetsing (issue #199): die rekent op dezelfde
+    // invoer haar eigen tweede orde met scheefstand.
+    const outputs = { perCase, combinationResults, envelope, stabiliteit, veldpatronen: veld.uitkomst, multiInput };
     fem.setSolverOutputs(outputs);
     meldVeldpatronen(veld.uitkomst, generatie);
     rekenFoutRef.current = null;
@@ -2400,6 +2502,121 @@ function App() {
     setSolverErrorText(null);
     return outputs;
   }, [fem, scheefstandUitkomst.noemer, bepaalStabiliteit, meldVeldpatronen]);
+
+  /**
+   * De fysisch niet-lineaire LUS over één rekengang: per combinatie de lus uit
+   * `lib/betonStijfheid.ts`, met het resultaat via `zetCombinatieResultaat` in
+   * de cache van `perCase`, waar `combineResults` het daarna leest.
+   *
+   * Gedeeld door de resultaten (`rekenFysischNietlineair`, alle actieve
+   * combinaties) en de toetsing (`rekenToetsFysisch`, de UGT-toetscombinaties
+   * op de eigen toetsrekengang; issue #199, B11). Gooit als een combinatie
+   * vastloopt; wat er dan weg moet, beslist de aanroeper.
+   */
+  const fysischeLus = useCallback(async (o: {
+    /** De rekengang (met tweede-orde-status) waarin de uitkomst landt. */
+    perCase: Map<number, SolverResult>;
+    /** De invoer van die rekengang (`getSecondOrderInput`). */
+    input: MultiInput;
+    /** De combinaties waarover de lus gaat. */
+    combinaties: readonly LoadCombination[];
+    staven: BetonSegmentStaaf[];
+    roep: typeof roepKern;
+    bewaak: () => void;
+    /** De combinaties waaruit de quasi-blijvende (6.16b) voor M₀Eqp komen. */
+    quasiBlijvendCombinaties: readonly LoadCombination[];
+    /** De eerste orde van een quasi-blijvende combinatie (M₀Eqp in (5.19)). */
+    losQuasiBlijvend: (input: MultiInput, c: Parameters<typeof eersteOrdeCombinatieResultaat>[1]) => SolverResult | null;
+    /** De eerste orde per UGT-combinatie voor (5.19); standaard uit de cache van `perCase`. */
+    losEersteOrde?: (input: MultiInput, c: Parameters<typeof eersteOrdeCombinatieResultaat>[1]) => SolverResult | null;
+    /** Eigen oplossing per iteratie (de Rust-route); standaard de TypeScript-kern. */
+    losOp?: (input: MultiInput, c: Parameters<typeof eersteOrdeCombinatieResultaat>[1]) => Promise<SolverResult | null>;
+    /** Waar de uitkomst van een combinatie heen gaat; standaard `zetCombinatieResultaat` in `perCase`. */
+    zet?: (combo: LoadCombination, resultaat: SolverResult) => void;
+    /** Een combinatie zonder lasten (er valt niets te verfijnen). */
+    zonderLasten?: (combo: LoadCombination) => void;
+  }): Promise<{ spoor: StijfheidCombinatie[]; zonderKruip: Set<number> }> => {
+    const { perCase, input, staven, bewaak } = o;
+    const spoor: StijfheidCombinatie[] = [];
+    const zonderKruip = new Set<number>();
+    // ── (5.19): EERST de eerste orde ─────────────────────────────────────
+    // EN 1992-1-1 5.8.4(2) φ_ef = φ(∞,t₀)·M₀Eqp/M₀Ed met EERSTE-ORDE-momenten
+    // (issue #24). De quasi-blijvende combinaties (6.16b) worden hier één
+    // keer lineair opgelost; per UGT-combinatie volgt hieronder haar eigen
+    // eerste-orde-oplossing, en pas dán de fysisch niet-lineaire lus. Zonder
+    // staaf met φ(∞,t₀) valt er niets te verhouden en wordt er niets extra
+    // gerekend. De hout-eindtoestandvarianten horen niet bij 6.16b van beton.
+    const metKruip = staven.some((s) => s.phiInfT0 !== undefined);
+    // De eerste-orde-oplossingen gaan in de cache van deze rekengang
+    // (`eersteOrdeCombinatieResultaat`): de kolomtoets (§5.8.3.1, (5.19);
+    // issue #35) leest daarna dezelfde oplossingen in plaats van ze opnieuw
+    // te rekenen. `input` is precies de invoer van die cache.
+    const losEersteOrde = o.losEersteOrde ?? ((_input: MultiInput, c: Parameters<typeof eersteOrdeCombinatieResultaat>[1]) =>
+      eersteOrdeCombinatieResultaat(perCase, c) ?? null);
+    const quasiBlijvend = metKruip
+      ? eersteOrdeQuasiBlijvend(
+          input,
+          combinatiesVanSoort(
+            zonderBgtEindtoestand(o.quasiBlijvendCombinaties.filter((c) => c.type === "sls")),
+            "6.16b",
+          ),
+          o.losQuasiBlijvend,
+        )
+      : [];
+    for (const combo of o.combinaties) {
+      // Besluit B2: in de UGT rekenwaarden zonder betontrek (5.8.6(3)/(5)),
+      // in de BGT gemiddelde waarden mét tension stiffening (7.4.3). De
+      // grenstoestand van de combinatie bepaalt dus welk diagram de kern
+      // gebruikt; nooit impliciet, en de gebruikte variant staat per
+      // segment in het antwoord.
+      const grenstoestand = combo.type === "sls" ? "MeanValues" : "DesignValues";
+      // β van (7.19) volgt uit de COMBINATIE en niet uit de doorsnede —
+      // 7.4.3(3) hangt hem aan de duur van de belasting. Zonder deze regel
+      // ging elke BGT-combinatie met β = 1,0 de kern in, de waarde voor
+      // "één enkele kortdurende belasting", ook in de quasi-blijvende
+      // combinatie; dat gaf een te hoge stijfheid en een te kleine zakking.
+      const duur = belastingduurVanCombinatie(combo);
+      // Alleen de UGT krijgt de werkelijke verhouding M₀Eqp/M₀Ed; alle drie
+      // de BGT-combinaties houden φ(∞,t₀) (7.4.3(5), veilige kant).
+      const kruip519 =
+        metKruip && grenstoestand === "DesignValues"
+          ? kruipInvoerVoorCombinatie(input, combo, quasiBlijvend, staven, losEersteOrde)
+          : undefined;
+      bewaak();
+      const uit = await losCombinatieFysischOp(input, combo, staven, {
+        roep: o.roep,
+        segmentLengteMm: fem.betonSegmentLengteMm,
+        grenstoestand,
+        belastingduur: duur.duur,
+        kruip519,
+        // De bijlage van het project gaat de kromme van 5.8.6(3) in (normnaad).
+        bijlage: bijlageVanProject(fem.nationaleBijlage),
+        ...(o.losOp ? { losOp: o.losOp } : {}),
+      });
+      bewaak();
+      if (uit.zonderLasten) {
+        o.zonderLasten?.(combo);
+        continue;
+      }
+      for (const id of uit.zonderKruipcoefficient) zonderKruip.add(id);
+      if (o.zet) o.zet(combo, uit.resultaat);
+      else zetCombinatieResultaat(perCase, combo, uit.resultaat);
+      spoor.push({
+        combinatieId: combo.id,
+        combinatieNaam: combo.name,
+        grenstoestand,
+        belastingduurReden: duur.reden,
+        ronden: uit.ronden,
+        verloop: uit.geschiedenis.map((g) => ({
+          ronde: g.ronde,
+          maxRelatieveVerandering: g.maxRelatieveVerandering,
+          geconvergeerd: g.geconvergeerd,
+        })),
+        staven: [...uit.laatsteRonde.values()],
+      });
+    }
+    return { spoor, zonderKruip };
+  }, [fem.betonSegmentLengteMm, fem.nationaleBijlage]);
 
   /**
    * De fysisch niet-lineaire ronde over de zojuist berekende uitkomsten.
@@ -2518,114 +2735,56 @@ function App() {
       ? await solveAllCasesNativeFrame2D(input, "linear")
       : outputs.perCase;
     bewaak();
-    // Het spoor voor het rapporthoofdstuk: per combinatie de segmenttabel van
-    // de laatste ronde plus het convergentieverloop. Wordt pas weggeschreven
-    // als ALLE combinaties gelukt zijn — een half spoor hoort bij een
+    // Het spoor voor het rapporthoofdstuk (per combinatie de segmenttabel van
+    // de laatste ronde plus het convergentieverloop) en de staven die zonder
+    // kruipcoëfficiënt zijn gerekend. Het spoor wordt pas weggeschreven als
+    // ALLE combinaties gelukt zijn — een half spoor hoort bij een
     // krachtsverdeling die er niet is.
-    const spoor: StijfheidCombinatie[] = [];
+    let lus: { spoor: StijfheidCombinatie[]; zonderKruip: Set<number> };
     const nativeCombinationResults = new Map<number, SolverResult>();
-    // De staven die zonder kruipcoëfficiënt zijn gerekend (art. 3.1.4 niet
-    // opgegeven). Verzameld over ALLE combinaties, want de melding erna moet
-    // de staaf noemen en niet de combinatie.
-    const zonderKruip = new Set<number>();
     const nativeIterationAnalysis = nativeRust && fem.plates.some(plate =>
       !!plate.nonlinearLaw || (plate.modulusCurve?.length ?? 0) > 0)
       ? "combined" : "geometric";
     try {
-      // ── (5.19): EERST de eerste orde ─────────────────────────────────────
-      // EN 1992-1-1 5.8.4(2) φ_ef = φ(∞,t₀)·M₀Eqp/M₀Ed met EERSTE-ORDE-momenten
-      // (issue #24). De quasi-blijvende combinaties (6.16b) worden hier één
-      // keer lineair opgelost; per UGT-combinatie volgt hieronder haar eigen
-      // eerste-orde-oplossing, en pas dán de fysisch niet-lineaire lus. Zonder
-      // staaf met φ(∞,t₀) valt er niets te verhouden en wordt er niets extra
-      // gerekend. De hout-eindtoestandvarianten horen niet bij 6.16b van beton.
-      const metKruip = staven.some((s) => s.phiInfT0 !== undefined);
-      // De eerste-orde-oplossingen gaan in de cache van deze rekengang
-      // (`eersteOrdeCombinatieResultaat`): de kolomtoets (§5.8.3.1, (5.19);
-      // issue #35) leest daarna dezelfde oplossingen in plaats van ze opnieuw
-      // te rekenen. `input` is precies de invoer van die cache.
-      const losEersteOrde = (_input: MultiInput, c: Parameters<typeof eersteOrdeCombinatieResultaat>[1]) =>
-        nativeRust
-          ? combineResults(c as Parameters<typeof combineResults>[0], firstOrderPerCase)
-          : eersteOrdeCombinatieResultaat(outputs.perCase, c) ?? null;
-      const quasiBlijvend = metKruip
-        ? eersteOrdeQuasiBlijvend(
-            input,
-            combinatiesVanSoort(
-              zonderBgtEindtoestand(fem.actieveCombinaties.filter((c) => c.type === "sls")),
-              "6.16b",
-            ),
-            losEersteOrde,
-          )
-        : [];
       // Dezelfde lijst als het lineaire pad: een niet-doorgerekende combinatie
       // hoort ook geen fysisch niet-lineaire ronde te krijgen. In een model
       // met beton valt er trouwens niets weg — de selectie grijpt alleen bij
-      // een zuivere staalconstructie.
-      for (const combo of fem.actieveCombinaties) {
-        // Besluit B2: in de UGT rekenwaarden zonder betontrek (5.8.6(3)/(5)),
-        // in de BGT gemiddelde waarden mét tension stiffening (7.4.3). De
-        // grenstoestand van de combinatie bepaalt dus welk diagram de kern
-        // gebruikt; nooit impliciet, en de gebruikte variant staat per
-        // segment in het antwoord.
-        const grenstoestand = combo.type === "sls" ? "MeanValues" : "DesignValues";
-        // β van (7.19) volgt uit de COMBINATIE en niet uit de doorsnede —
-        // 7.4.3(3) hangt hem aan de duur van de belasting. Zonder deze regel
-        // ging elke BGT-combinatie met β = 1,0 de kern in, de waarde voor
-        // "één enkele kortdurende belasting", ook in de quasi-blijvende
-        // combinatie; dat gaf een te hoge stijfheid en een te kleine zakking.
-        const duur = belastingduurVanCombinatie(combo);
-        // Alleen de UGT krijgt de werkelijke verhouding M₀Eqp/M₀Ed; alle drie
-        // de BGT-combinaties houden φ(∞,t₀) (7.4.3(5), veilige kant).
-        const kruip519 =
-          metKruip && grenstoestand === "DesignValues"
-            ? kruipInvoerVoorCombinatie(input, combo, quasiBlijvend, staven, losEersteOrde)
-            : undefined;
-        bewaak();
-        const uit = await losCombinatieFysischOp(input, combo, staven, {
-          roep: roepActueel,
-          segmentLengteMm: fem.betonSegmentLengteMm,
-          grenstoestand,
-          belastingduur: duur.duur,
-          kruip519,
-          // De bijlage van het project gaat de kromme van 5.8.6(3) in (normnaad).
-          bijlage: bijlageVanProject(fem.nationaleBijlage),
-          ...(nativeRust ? {
-            losOp: async (iterationInput, iterationCombo) => {
-              const solved = await solveAllCombinationsNativeFrame2D(iterationInput, [{
-                id: iterationCombo.id,
-                name: iterationCombo.name,
-                type: "uls",
-                formula: "",
-                factors: iterationCombo.factors,
-                scheefstandRichting: iterationCombo.scheefstandRichting,
-              }], nativeIterationAnalysis);
-              return solved.get(iterationCombo.id) ?? null;
-            },
-          } : {}),
-        });
-        bewaak();
-        if (uit.zonderLasten) {
-          if (nativeRust) nativeCombinationResults.set(combo.id, combineResults(combo, outputs.perCase));
-          continue;
-        }
-        for (const id of uit.zonderKruipcoefficient) zonderKruip.add(id);
-        if (nativeRust) nativeCombinationResults.set(combo.id, uit.resultaat);
-        else zetCombinatieResultaat(outputs.perCase, combo, uit.resultaat);
-        spoor.push({
-          combinatieId: combo.id,
-          combinatieNaam: combo.name,
-          grenstoestand,
-          belastingduurReden: duur.reden,
-          ronden: uit.ronden,
-          verloop: uit.geschiedenis.map((g) => ({
-            ronde: g.ronde,
-            maxRelatieveVerandering: g.maxRelatieveVerandering,
-            geconvergeerd: g.geconvergeerd,
-          })),
-          staven: [...uit.laatsteRonde.values()],
-        });
-      }
+      // een zuivere staalconstructie. M₀Eqp van (5.19) uit de eerste orde van
+      // DEZE rekengang; de eerste-orde-oplossingen gaan in haar cache, waar de
+      // kolomtoets (§5.8.3.1, (5.19); issue #35) ze daarna leest.
+      lus = await fysischeLus({
+        perCase: outputs.perCase,
+        input,
+        combinaties: fem.actieveCombinaties,
+        staven,
+        roep: roepActueel,
+        bewaak,
+        quasiBlijvendCombinaties: fem.actieveCombinaties,
+        losQuasiBlijvend: (_input, c) => nativeRust
+          ? combineResults(c as Parameters<typeof combineResults>[0], firstOrderPerCase)
+          : eersteOrdeCombinatieResultaat(outputs.perCase, c) ?? null,
+        // De Rust-route (2D-raamwerk): de eerste orde van (5.19) uit de Rust-
+        // gevallen, elke iteratie via Rust, en de uitkomst in een eigen Map.
+        ...(nativeRust ? {
+          losEersteOrde: (_input: MultiInput, c: Parameters<typeof eersteOrdeCombinatieResultaat>[1]) =>
+            combineResults(c as Parameters<typeof combineResults>[0], firstOrderPerCase),
+          losOp: async (iterationInput: MultiInput, iterationCombo: Parameters<typeof eersteOrdeCombinatieResultaat>[1]) => {
+            const solved = await solveAllCombinationsNativeFrame2D(iterationInput, [{
+              id: iterationCombo.id,
+              name: iterationCombo.name,
+              type: "uls",
+              formula: "",
+              factors: iterationCombo.factors,
+              scheefstandRichting: iterationCombo.scheefstandRichting,
+            }], nativeIterationAnalysis);
+            return solved.get(iterationCombo.id) ?? null;
+          },
+          zet: (combo: LoadCombination, resultaat: SolverResult) => { nativeCombinationResults.set(combo.id, resultaat); },
+          zonderLasten: (combo: LoadCombination) => {
+            nativeCombinationResults.set(combo.id, combineResults(combo, outputs.perCase));
+          },
+        } : {}),
+      });
     } catch (e) {
       bewaak();
       console.warn("[FEM fysisch niet-lineair]", e);
@@ -2643,6 +2802,7 @@ function App() {
       );
       return null;
     }
+    const { spoor, zonderKruip } = lus;
     // ── DE KRUIPMELDING ────────────────────────────────────────────────────
     // Zonder φ(∞,t₀) heeft de kern met φ_ef = 0 gerekend. Dat is geen neutrale
     // keuze: 5.8.6(4) en 7.4.3(5) laten kruip de effectieve elasticiteits-
@@ -2693,13 +2853,95 @@ function App() {
     );
     const envelope = computeEnvelope(fem.actieveCombinaties, outputs.perCase,
       nativeRust ? combinationResults : undefined);
-    const stabiliteit = multiInput
-      ? bepaalStabiliteit(multiInput, combinationResults, generatie)
-      : undefined;
-    const verse = { perCase: outputs.perCase, combinationResults, envelope, stabiliteit };
+    // α_cr van deze resultaten niet hier: `rekenDoor` toetst direct hierna en
+    // de toets bepaalt α_cr; lukt die niet zover, dan vult `rekenDoor` hem aan.
+    const verse = { perCase: outputs.perCase, combinationResults, envelope, multiInput };
     fem.setSolverOutputs(verse);
     return verse;
-  }, [fem, stijfheidZet, stijfheidClear, bepaalStabiliteit]);
+  }, [fem, stijfheidZet, stijfheidClear, fysischeLus]);
+
+  /**
+   * De fysisch niet-lineaire ronde over de TOETSrekengang (issue #199, B11).
+   *
+   * Bij het analysetype tweedeOrdeFysisch rekent de toets de betonstaven met de
+   * gescheurde stijfheid, net als de resultaten — maar op haar eigen
+   * rekengang (P-Δ met de toets-φ, in +x en −x) en alleen voor de
+   * UGT-toetscombinaties, met rekenwaarden (DesignValues, 5.8.6(3)). M₀Eqp van
+   * (5.19) komt uit de RESULTATEN: de quasi-blijvende combinatie is BGT, en de
+   * BGT komt uit de resultaten (B6). Zijn de toetskrachten de resultaten zelf
+   * (`hergebruikt`), dan had de ronde van de resultaten ze al en draait dit
+   * niet.
+   *
+   * Stil, behalve de reden: de meldingen over kruip en segmenten kwamen al uit
+   * de ronde van de resultaten, en het spoor van het rapporthoofdstuk blijft
+   * dat van de resultaten. Retourneert de reden als de ronde vastloopt (de
+   * toets wordt dan geweigerd en de resultaten blijven staan, B7), anders null
+   * — ook als er geen betonstaaf met korf is.
+   */
+  const rekenToetsFysisch = useCallback(async (
+    toets: ToetsKrachten2D,
+    resultaten: { perCase: Map<number, SolverResult> | null; combinationResults: Map<number, SolverResult> },
+    generatie: number,
+  ): Promise<string | null> => {
+    const bewaak = () => {
+      if (generatie !== rekenGeneratieRef.current) throw new Error("Verouderde rekengang");
+    };
+    const roepActueel: typeof roepKern = async <T,>(opdracht: string, inputs?: unknown): Promise<T> => {
+      bewaak();
+      const antwoord = await roepKern<T>(opdracht, inputs);
+      bewaak();
+      return antwoord;
+    };
+    // Dezelfde staven, kruip en b_eff als de ronde van de resultaten.
+    const kruipBerekening = await bepaalKruipPerStaaf(
+      fem.beams,
+      fem.betonKruipInvoer,
+      fem.betonKruipcoefficient,
+      roepActueel,
+      bijlageVanProject(fem.nationaleBijlage),
+    );
+    bewaak();
+    const { staven } = betonStavenUitModel({
+      nodes: fem.nodes,
+      beams: fem.beams,
+      standaardPhiInfT0: fem.betonKruipcoefficient ?? undefined,
+      berekendePhiPerStaaf: kruipWaardenPerStaaf(kruipBerekening),
+      bEffPerStaaf: bEffWaardenPerStaaf(
+        await bepaalBeffPerStaaf(
+          { nodes: fem.nodes, beams: fem.beams, supports: fem.supports },
+          roepActueel,
+        ),
+      ),
+    });
+    bewaak();
+    if (staven.length === 0) return null;
+    const input = getSecondOrderInput(toets.perCase);
+    if (!input) return i18next.t("common:app.nonlinear.missingSecondOrder");
+    // M₀Eqp uit de resultaten: hun eerste orde na een tweede-orde-rekengang,
+    // anders de resultaten zelf (dan zijn ze eerste orde).
+    const resultaatTweedeOrde = resultaten.perCase && getSecondOrderState(resultaten.perCase)
+      ? resultaten.perCase
+      : null;
+    try {
+      await fysischeLus({
+        perCase: toets.perCase,
+        input,
+        combinaties: toets.ugtCombinaties,
+        staven,
+        roep: roepActueel,
+        bewaak,
+        quasiBlijvendCombinaties: fem.actieveCombinaties,
+        losQuasiBlijvend: (_input, c) => (resultaatTweedeOrde
+          ? eersteOrdeCombinatieResultaat(resultaatTweedeOrde, c) ?? null
+          : resultaten.combinationResults.get(c.id) ?? null),
+      });
+    } catch (e) {
+      bewaak();
+      console.warn("[toets fysisch niet-lineair]", e);
+      return leesbareRekenfout(e);
+    }
+    return null;
+  }, [fem, fysischeLus]);
 
   /**
    * Eén run voor staal én hout: zorgt eerst voor verse combinatieresultaten
@@ -2707,12 +2949,37 @@ function App() {
    * check-inputs en invoket beide Rust-commands parallel (checkStore.run).
    * In de browser (zonder Tauri) volgt een nette melding i.p.v. een kale
    * invoke-fout.
+   *
+   * DE TOETSKRACHTEN (issue #199). De UGT-toets rekent altijd zelf tweede orde
+   * (P-Δ) met scheefstand, met de φ van de projectinstelling, in +x en −x
+   * (`bepaalToetsKrachten2D`), los van de instellingen Analyse en Scheefstand:
+   * die bepalen alleen de resultaten. De BGT-toetsen (doorbuiging, h/300,
+   * scheurwijdte) lezen de resultaten (B6). Beide komen in één toetsset
+   * (`toetsSet2D`). Zijn de resultaten al P-Δ met de scheefstand aan en
+   * dezelfde φ, dan zijn de toetskrachten die resultaten zelf en kost de toets
+   * niets extra. Faalt de tweede orde van de toets in een UGT-combinatie, of de
+   * fysisch niet-lineaire ronde van de toets, dan wordt de toets geweigerd met
+   * de reden, en blijven de resultaten staan (B7). Nooit eerste orde.
    */
   const handleRunMemberChecks = useCallback(async (opts?: {
     openPanel?: boolean;
     generatie?: number;
-    outputs?: { combinationResults: Map<number, SolverResult>; perCase?: Map<number, SolverResult>; stabiliteit?: AlphaCrUitkomst[];
-      veldpatronen?: VeldpatroonOutputs | null } | null;
+    outputs?: {
+      combinationResults: Map<number, SolverResult>;
+      perCase?: Map<number, SolverResult>;
+      /** De invoer van de resultaatrekengang; ontbreekt = die van de laatste rekengang. */
+      multiInput?: MultiInput | null;
+      /**
+       * Hebben deze resultaten de fysisch niet-lineaire ronde al gehad (of viel
+       * er niets te verfijnen)? Alleen dan mag de toets ze bij tweedeOrdeFysisch
+       * hergebruiken.
+       */
+      fysischeRondeGehad?: boolean;
+      /** α_cr van deze resultaten, als die al bepaald is (dan neemt de toets hem bij hergebruik over). */
+      stabiliteit?: AlphaCrUitkomst[];
+      /** De veldpatroonvarianten (issue #219) van deze uitkomsten. */
+      veldpatronen?: VeldpatroonOutputs | null;
+    } | null;
   }) => {
     const generatie = opts?.generatie ?? rekenGeneratieRef.current;
     const openPanel = opts?.openPanel ?? true;
@@ -2740,13 +3007,32 @@ function App() {
     // De veldpatroonvarianten (issue #219) van DEZE uitkomsten: verse
     // uitkomsten dragen ze zelf; de store loopt één render achter.
     let veldpatronen = opts?.outputs ? opts.outputs.veldpatronen ?? null : fem.veldpatronen;
+    // De invoer van DEZELFDE rekengang als de resultaten: de meegegeven
+    // uitkomst, de laatste rekengang (de store zet en wist de resultaten samen
+    // met die rekengang) of de verse doorrekening hieronder. Daarop rekent de
+    // toets haar eigen tweede orde.
+    let basis = opts?.outputs?.multiInput ?? laatsteMultiInputRef.current;
+    // Zonder meegegeven uitkomst (het bedieningscommando `toetsen`): de
+    // resultaten in de store zijn die van de laatste VOLTOOIDE `rekenDoor` als
+    // het hetzelfde object is. Die heeft bij tweedeOrdeFysisch de fysische
+    // ronde gehad (een ander analysetype wist de resultaten). Dan mag de toets
+    // ze hergebruiken in plaats van P-Δ en de hele ronde opnieuw te draaien.
+    let fysischeRondeGehad = opts?.outputs
+      ? opts.outputs.fysischeRondeGehad === true
+      : combinationResults !== null && combinationResults === volledigeRekengangRef.current;
+    // α_cr van dezelfde resultaten, als die er al is (de store wist hem samen
+    // met de resultaten): bij hergebruik neemt de toets hem over.
+    let alphaCrResultaten = opts?.outputs ? opts.outputs.stabiliteit : fem.stabiliteit ?? undefined;
     if (!combinationResults) {
       const vers = computeAndStoreSolverOutputs();
       combinationResults = vers?.combinationResults ?? null;
       perCase = vers?.perCase ?? null;
       veldpatronen = vers?.veldpatronen ?? null;
+      basis = vers?.multiInput ?? null;
+      fysischeRondeGehad = false;
+      alphaCrResultaten = vers?.stabiliteit;
     }
-    if (!combinationResults) {
+    if (!combinationResults || !basis) {
       // De ECHTE reden. "Controleer het model (opleggingen, belastingen)" stond
       // hier ook bij een onbekende doorsnede of een kolom die knikt, en stuurde
       // de gebruiker naar de verkeerde plek.
@@ -2757,6 +3043,100 @@ function App() {
       return;
     }
     if (openPanel) setActiveView("check");
+    const resultaten = combinationResults;
+    /**
+     * Geen toetskrachten: de reden in de toetsing, de resultaten blijven (B7).
+     * Met de toets erbij (analyse, meldingen, α_cr) zegt het rapport welke
+     * berekening er faalde. De FOUT staat ook in Inzichten → Fouten.
+     */
+    const weigerToets = (reden: string, geweigerd?: ToetsKrachten2D) => {
+      checkWeiger(reden, geweigerd
+        ? { analyse: geweigerd.analyse, meldingen: geweigerd.meldingen, alphaCr: geweigerd.alphaCr }
+        : undefined);
+      // In Inzichten → Fouten de reden zelf: het (vertaalde) label erboven zegt
+      // al "Toetsing geweigerd". Het voorvoegsel "TOETSING GEWEIGERD:" blijft in
+      // de analysetoelichting van het rapport en de PDF (`analyseToelichting`).
+      setStabiliteitsMelding(reden);
+      if (gemeldeWeigeringRef.current === reden) return;
+      gemeldeWeigeringRef.current = reden;
+      notifyWarning(i18next.t("common:app.check.refused"), reden);
+    };
+    // ── De UGT-toetskrachten: altijd tweede orde met scheefstand ──
+    // Bij tweedeOrdeFysisch hergebruikt de toets alleen resultaten waarover de
+    // fysisch niet-lineaire ronde al ging; anders rekent zij zelf (en draait de
+    // ronde hieronder op haar eigen rekengang).
+    const hergebruikMag = fem.analysetype !== "tweedeOrdeFysisch" || fysischeRondeGehad;
+    let toets: ToetsKrachten2D;
+    try {
+      toets = bepaalToetsKrachten2D({
+        basis,
+        combinaties: fem.actieveCombinaties,
+        scheefstand: {
+          project: scheefstandUitkomst,
+          normen: toetsScheefstandNormen(fem.beams, fem.plates),
+          richting: fem.scheefstandRichting,
+          modelAan: fem.scheefstandEnabled,
+        },
+        analysetype: fem.analysetype,
+        resultaten: perCase && hergebruikMag
+          ? { perCase, combinationResults: resultaten, ...(alphaCrResultaten ? { alphaCr: alphaCrResultaten } : {}) }
+          : undefined,
+      });
+    } catch (e) {
+      // `bepaalToetsKrachten2D` weigert zelf; dit is het vangnet voor een fout
+      // vóór de som (een onbruikbare invoer).
+      weigerToets(leesbareRekenfout(e));
+      return;
+    }
+    if (toets.weigering) {
+      weigerToets(weigeringTekst(toets.weigering), toets);
+      return;
+    }
+    if (toets.analyse.soort === "tweedeOrdeFysisch" && !toets.analyse.hergebruikt) {
+      // B11: de betonronde op de toetsset, niet op de resultaten.
+      let reden: string | null;
+      try {
+        reden = await rekenToetsFysisch(toets, { perCase, combinationResults: resultaten }, generatie);
+      } catch (e) {
+        if (generatie !== rekenGeneratieRef.current) return;
+        reden = leesbareRekenfout(e);
+      }
+      if (generatie !== rekenGeneratieRef.current) return;
+      if (reden !== null) {
+        weigerToets(i18next.t("common:app.check.refusedNonlinear", { reden }), toets);
+        return;
+      }
+      // De ronde zette haar uitkomst in de cache van de toetsrekengang.
+      const fysisch = toets;
+      toets = {
+        ...fysisch,
+        combinationResults: new Map(fysisch.ugtCombinaties.map((c) => [c.id, combineResults(c, fysisch.perCase)])),
+      };
+    }
+    // ── De toetsset: UGT uit de toets, BGT uit de resultaten ──
+    // Ook hier wist een fout (de eerste orde voor §5.8 is een eigen som) alleen
+    // de toets, nooit de resultaten.
+    let set: ReturnType<typeof toetsSet2D>;
+    try {
+      set = toetsSet2D(
+        toets,
+        {
+          combinaties: veldpatronen
+            ? voegVeldpatronenIn(fem.actieveCombinaties, veldpatronen.combinaties)
+            : fem.actieveCombinaties,
+          combinationResults: resultaten,
+          perCase,
+        },
+        fem.beams,
+      );
+    } catch (e) {
+      weigerToets(leesbareRekenfout(e), toets);
+      return;
+    }
+    // De toets heeft weer krachten: een volgende weigering is weer nieuws, en
+    // de fout in Inzichten verdwijnt.
+    gemeldeWeigeringRef.current = null;
+    setStabiliteitsMelding(null);
     await checkRun({
       nodes: fem.nodes,
       beams: fem.beams,
@@ -2766,15 +3146,16 @@ function App() {
       // Een staafeind in een plaat is geen vrij eind (`lib/doorgaandeLijn.ts`).
       plates: fem.plates,
       // De toetsbouwers zoeken hun combinaties in deze lijst (de karakteristieke
-      // BGT voor de doorbuiging, de quasi-blijvende voor de kruip). Ze moet dus
-      // gelijklopen met de sleutels van `combinationResults`; een combinatie
-      // noemen die niet is doorgerekend levert een lege zakking op. Met de
-      // veldpatroonvarianten (issue #219): de toetsen lezen de veldsgewijs
-      // geplaatste veranderlijke vloerbelasting als gewone combinaties.
-      combinations: veldpatronen
-        ? voegVeldpatronenIn(fem.actieveCombinaties, veldpatronen.combinaties)
-        : fem.actieveCombinaties,
-      combinationResults,
+      // BGT voor de doorbuiging, de quasi-blijvende voor de kruip). Ze loopt
+      // gelijk met de sleutels van `combinationResults`: de UGT-toetsvarianten
+      // en de BGT-combinaties van de resultaten, met de veldpatroonvarianten
+      // (issue #219) van de BGT erbij.
+      combinations: set.combinaties,
+      combinationResults: set.combinationResults,
+      // De resultaten waaruit de toetsset is samengesteld: daaraan zien de
+      // export en het betonvenster of de toetsing bij het scherm hoort.
+      resultaten,
+      toets: { analyse: toets.analyse, meldingen: toets.meldingen },
       // Ter vermelding in de staalkern; de factoren zitten al in de combinaties.
       gevolgklasse: fem.gevolgklasse,
       // De nationale bijlage gaat als `bijlage` mee naar elke rekenkern
@@ -2784,19 +3165,12 @@ function App() {
       // UGT-combinatie af (k_mod, EN 1995-1-1 3.1.3(2)).
       // Met de deelgevallen per veld erbij (zelfde type en categorie).
       loadCases: veldpatronen ? [...fem.loadCases, ...veldpatronen.gevallen] : fem.loadCases,
+      // Uit de RESULTATEN: de toetsrekengang lost geen gevallen los op.
       gevallenMetLast: perCase ? [...perCase.keys()] : undefined,
-      // α_cr en het analysetype: bij eerste orde onder de grens zet de bouwer
-      // een kanttekening bij elke op druk belaste staaf met een teruggevallen
-      // kniklengte (basisaudit nr 27).
-      stabiliteit: {
-        analysetype: fem.analysetype,
-        alphaCr: opts?.outputs?.stabiliteit ?? fem.stabiliteit ?? [],
-        scheefstandAan: fem.scheefstandEnabled,
-        // De φ waarmee is gerekend (de normnoemer, zie de multi-LC-solve):
-        // een kolom met een vrije kop krijgt alleen L als die φ minstens haar
-        // eigen φ is (`zijdelingseKnikInVlakModel`).
-        ...(fem.scheefstandEnabled ? { scheefstandPhi: scheefstandUitkomst.phi } : {}),
-      },
+      // De TOETSanalyse: tweede orde met scheefstand, de toets-φ en haar α_cr.
+      // Een kolom met een vrije kop krijgt alleen L als die φ minstens haar
+      // eigen φ is (`zijdelingseKnikInVlakModel`).
+      stabiliteit: set.stabiliteit,
       // φ(∞,t₀) van het project, dezelfde bron als `standaardPhiInfT0` van de
       // fysisch niet-lineaire lus: de kolomtoets (§5.8.3.1 A, §5.8.4 (5.19))
       // leest hem voor elke staaf zonder eigen waarde in het §5.8-blok.
@@ -2804,14 +3178,13 @@ function App() {
       // De invoer voor φ(∞,t₀) volgens bijlage B; de toetsingsstore rekent hem
       // per staaf uit met dezelfde functie als de BGT-stijfheidslus.
       kruipInvoer: fem.betonKruipInvoer,
-      // EN 1992-1-1 §5.8.3.1(1) en (5.19): r_m en φ_ef uit EERSTE-ORDE-momenten,
-      // ook na een tweede-orde- of fysisch niet-lineaire rekengang (issue #35).
-      // Bij eerste orde, of zonder kolom, `undefined` — dan verandert er niets.
-      eersteOrdeResultaten: eersteOrdeResultatenVoorKolomtoets(
-        perCase, fem.actieveCombinaties, fem.beams,
-      ),
+      // EN 1992-1-1 §5.8.3.1(1) en (5.19): r_m en φ_ef uit EERSTE-ORDE-momenten
+      // (issue #35). De toets is altijd tweede orde, dus gaat dit altijd mee
+      // zodra er een kolom is: de UGT uit de toetsrekengang, de quasi-blijvende
+      // uit de resultaten.
+      eersteOrdeResultaten: set.eersteOrdeResultaten,
     });
-  }, [fem, computeAndStoreSolverOutputs, checkRun, scheefstandUitkomst]);
+  }, [fem, computeAndStoreSolverOutputs, checkRun, checkWeiger, scheefstandUitkomst, rekenToetsFysisch]);
 
   /**
    * Eén rekengang: multi-LC doorrekenen en de
@@ -2830,6 +3203,24 @@ function App() {
    * `lopendeRekengangenRef` zolang hij loopt. Het begin (doorrekenen, status)
    * blijft synchroon: een async functie loopt tot haar eerste `await` meteen.
    */
+  /**
+   * α_cr van de RESULTATEN, alleen als de toets er geen heeft opgeleverd (geen
+   * toetsbare staven, of een weigering vóór de α_cr-bepaling). Anders toont
+   * de analysetoelichting die van de toets en zou deze bepaling dode rekentijd
+   * zijn (zie `computeAndStoreSolverOutputs`).
+   */
+  const vulStabiliteitAan = useCallback((o: {
+    perCase: Map<number, SolverResult>;
+    combinationResults: Map<number, SolverResult>;
+    envelope: ReturnType<typeof computeEnvelope>;
+    multiInput?: MultiInput | null;
+  }) => {
+    if (useCheckStore.getState().toets !== null) return;
+    const mi = o.multiInput ?? laatsteMultiInputRef.current;
+    if (!mi) return;
+    fem.setSolverOutputs({ ...o, stabiliteit: bepaalStabiliteit(mi, o.combinationResults) });
+  }, [fem, bepaalStabiliteit]);
+
   const rekenDoor = useCallback((selectedEngine?: SolverEngineId): Promise<RekengangUitkomst> => {
     const generatie = ++rekenGeneratieRef.current;
     const actueel = () => generatie === rekenGeneratieRef.current;
@@ -2850,7 +3241,7 @@ function App() {
       if (!actueel()) return verouderd();
       const outputs = preference === "openaec-native-fem"
         ? await computeAndStoreNativePlateOutputs(generatie)
-        : computeAndStoreSolverOutputs();
+        : computeAndStoreSolverOutputs({ stabiliteitLater: true });
       if (!actueel()) return verouderd();
       if (!outputs) {
         setSolverStatus({ kind: "error" });
@@ -2883,8 +3274,11 @@ function App() {
           return { gelukt: false, fysisch: "mislukt" };
         }
         const eind = verse ?? outputs;
-        await handleRunMemberChecks({ openPanel: false, outputs: eind, generatie });
+        // De resultaten hebben de ronde gehad (of er viel niets te verfijnen):
+        // de toets mag ze hergebruiken als ze ook P-Δ met haar φ zijn.
+        await handleRunMemberChecks({ openPanel: false, outputs: { ...eind, fysischeRondeGehad: true }, generatie });
         if (!actueel()) return verouderd();
+        vulStabiliteitAan(eind);
         volledigeRekengangRef.current = eind.combinationResults;
         setSolverStatus({ kind: "solved", at: Date.now() });
         return { gelukt: true, fysisch: verse ? "gedraaid" : "niets-te-doen" };
@@ -2897,6 +3291,7 @@ function App() {
       // De normtoetsing hoort bij het resultaat en loopt altijd mee.
       await handleRunMemberChecks({ openPanel: false, outputs, generatie });
       if (!actueel()) return verouderd();
+      vulStabiliteitAan(outputs);
       volledigeRekengangRef.current = outputs.combinationResults;
       setSolverStatus({ kind: "solved", at: Date.now() });
       return { gelukt: true, fysisch: "nvt" };
@@ -2926,7 +3321,7 @@ function App() {
       });
   }, [
     fem.analysetype, computeAndStoreSolverOutputs, computeAndStoreNativePlateOutputs, handleRunMemberChecks,
-    rekenFysischNietlineair, stijfheidClear, checkClear,
+    rekenFysischNietlineair, stijfheidClear, checkClear, vulStabiliteitAan,
   ]);
 
   const handleExportChecks = useCallback(async () => {
@@ -3067,8 +3462,10 @@ function App() {
           ...(openFem3dCalculation.selfWeightCaseId !== undefined
             ? { selfWeightCaseId: openFem3dCalculation.selfWeightCaseId } : {}),
         };
-        // Initiële scheefstand (EN 1993-1-1 §5.3.2): elke UGT-combinatie in +X,
-        // −X, +Y en −Y, met φ·V op elke verticale last. Uit = φ 0, geen varianten.
+        // Initiële scheefstand (EN 1993-1-1 §5.3.2) in de RESULTATEN: elke UGT-
+        // combinatie in +X, −X, +Y en −Y, met φ·V op elke verticale last. Uit =
+        // φ 0, geen varianten. De toets rekent hoe dan ook met scheefstand (zie
+        // de toetskrachten hieronder, issue #199).
         const scheefstandPhi = fem.scheefstandEnabled ? openFem3dScheefstandUitkomst?.phi ?? 0 : 0;
         const combinations = metScheefstandRichtingen3D(fem.combinations.filter((combination) =>
           [...loadedCaseIds].some((caseId) => (combination.factors.get(caseId) ?? 0) !== 0)), scheefstandPhi > 0);
@@ -3166,13 +3563,59 @@ function App() {
         }
         setOpenFem3dChecksRunning(true);
         setOpenFem3dChecksError(null);
-        const combinationSet = {
-          combinations, results: combinationResults, loadCases: fem.loadCases,
-          ...(fem.gevolgklasse ? { consequenceClass: fem.gevolgklasse } : {}),
-          // De φ van de UGT-varianten: een stalen kolom met een vrije kop krijgt
-          // alleen L als die φ minstens haar eigen φ is (`openFem3DZijdelingseKnik`).
-          ...(scheefstandPhi > 0 ? { scheefstandPhi } : {}),
-        };
+        setOpenFem3dToets(null);
+        // DE TOETSKRACHTEN (issue #199, bouwsteen B). De resultaten hierboven
+        // volgen de instellingen Analyse en Scheefstand; de UGT-toets rekent
+        // altijd zelf P-Δ met de scheefstand van de projectinstelling (ook met
+        // de schakelaar uit) in +X, −X, +Y en −Y, met één knikvorm per run.
+        // Zijn de resultaten al precies dat, dan hergebruikt hij ze. Een
+        // mislukte toetsrun, of een model met platen (geen P-Δ in de kern),
+        // blokkeert ALLEEN de toets, met de reden; de resultaten blijven staan.
+        let combinationSet: OpenFem3DCombinationSet;
+        try {
+          if (!openFem3dScheefstandUitkomst) {
+            throw new Error("de scheefstand van het 3D-model is niet bepaald; de toets rekent altijd met scheefstand.");
+          }
+          const toets = await bepaalToetsKrachten3D({
+            model: openFem3dCalculationModel,
+            combinaties: combinations,
+            scheefstand: {
+              project: openFem3dScheefstandUitkomst,
+              normen: toepasselijkeScheefstandNormen3D(openFem3d),
+              modelAan: fem.scheefstandEnabled,
+            },
+            // Imperfectiegevallen (bijvoorbeeld uit een IFC-analysemodel) tellen
+            // in de UGT-toets met factor 0, met een melding (dezelfde functie als MCP).
+            loadCases: fem.loadCases,
+            resultaten: { combinationResults, phi: scheefstandPhi },
+          }, (run) => solveOpenFem3DCombination(
+            openFem3dCalculationModel, run.combinatie.factors, run.analyse, run.scheefstand,
+            { ...openFem3dOptions, bucklingModes: run.bucklingModes, tweedeOrdeVerplicht: run.analyse === "p-delta" }));
+          if (generation !== openFem3dSolveGenerationRef.current) return;
+          setOpenFem3dToets(toets);
+          if (toets.weigering) {
+            setOpenFem3dChecks(null);
+            setOpenFem3dConcreteChecks(null);
+            setOpenFem3dTimberChecks(null);
+            // Het voorvoegsel in de taal van de app; de reden zelf is (zoals elke
+            // kernmelding) Nederlands.
+            setOpenFem3dChecksError(i18next.t("ribbon:openFem3d.report.checksRefusedShort", { reden: weigeringTekst(toets.weigering) }));
+            return;
+          }
+          combinationSet = toetsSet3D(toets, {
+            combinaties: combinations, combinationResults, loadCases: fem.loadCases,
+            ...(fem.gevolgklasse ? { consequenceClass: fem.gevolgklasse } : {}),
+          });
+        } catch (cause) {
+          if (generation !== openFem3dSolveGenerationRef.current) return;
+          setOpenFem3dChecks(null);
+          setOpenFem3dConcreteChecks(null);
+          setOpenFem3dTimberChecks(null);
+          setOpenFem3dChecksError(i18next.t("ribbon:openFem3d.report.checksRefusedShort", {
+            reden: cause instanceof Error ? cause.message : String(cause),
+          }));
+          return;
+        }
         const [steel, concrete, timber] = await Promise.allSettled([
           runOpenFem3DSteelChecks(openFem3d, result, combinationSet),
           runOpenFem3DConcreteChecks(openFem3d, result, combinationSet),
@@ -3809,6 +4252,7 @@ function App() {
             combinations={openFem3dCombinaties}
             combinationResults={openFem3dCombinationResults}
             scheefstandTekst={openFem3dScheefstandTekst}
+            toets={openFem3dToets}
             caseResults={openFem3dCaseResults}
             activeCombinationId={openFem3dActiveCombinationId}
             viewSets={openFem3dViewSets}
@@ -4161,6 +4605,7 @@ function App() {
       solving: solverStatus.kind === "rekenen",
       checksRunning: openFem3dChecksRunning,
       checksError: openFem3dChecksError,
+      toets: openFem3dToets,
     },
     activeView,
     selection: fem.selection,
@@ -4373,6 +4818,7 @@ function App() {
                     timberChecks={openFem3dShowLoadCase ? openFem3dTimberChecks : null}
                     checksRunning={openFem3dChecksRunning}
                     checksError={openFem3dChecksError}
+                    toetsAnalyse={openFem3dToets?.analyse ?? null}
                     activeTab={treeTab}
                     setActiveTab={setTreeTab}
                     visibility={openFem3dVisibility}

@@ -23,6 +23,23 @@
 //   Klimaatklasse 3, combinatie 2: k_mod = 0,65 → f_c,0,d = 10,5 → UC 0,657143
 //   (6.2.2 geeft bij α = 0 dezelfde waarde als 6.1.4.)
 //
+// DE TOETS REKENT MET SCHEEFSTAND (issue #199). De UGT-toetskrachten van
+// `check` zijn altijd tweede orde met scheefstand φ = 1/200, elke combinatie in
+// +x en −x, ook zonder scheefstandschakelaar. De randlast krijgt een metgezel
+// H = φ·V langs de bovenrand, opgenomen door het scharnier in het midden van de
+// onderrand, en de wand buigt in zijn vlak (I = 100·2000³/12 = 6,6667·10¹⁰ mm⁴;
+// onderste randelement x = 750 mm uit het midden, z = 250 mm, arm 2750 mm):
+//   Combinatie 1: ΣH = 1,35·200·2/200 = 2,7 kN, σ_b = 0,0835 → σ = −2,7835
+//     N/mm² → UC = 2,7835/9,692308 = 0,287190 (was 0,278571, +3,1 %)
+//   Combinatie 2: ΣH = 690·2/200 = 6,9 kN, σ_b = 0,2135 → σ = −7,1135 N/mm²
+//     → UC = 7,1135/12,923077 = 0,550444 (was 0,533929, +3,1 %)
+//   Klimaatklasse 3, combinatie 2: UC = 7,1135/10,5 = 0,677476 (was 0,657143)
+// Het spreiden van de horizontale reactie in het scharnier geeft bovendien
+// een kleine trek loodrecht op de vezel (orde ΣH/(t·B/2) = 6,9·10³/(100·1000)
+// = 0,07 N/mm²). Die is volgens 6.1.3 niet toetsbaar (de kern meldt hem met
+// reden), dus de wand heet NotApplicable in plaats van Ok: een zuivere
+// drukwand zonder schuif bestaat in de toets niet meer.
+//
 // Uitvoeren: npx tsx test-plaat-toets-hout.mjs   (vanuit design-mockup/)
 
 import { spawn } from "node:child_process";
@@ -117,11 +134,22 @@ checkTrue("notitie over de aangehouden klimaatklasse",
 const duur = Object.fromEntries((p1?.load_duration_per_combination ?? []).map((d) => [d.combination_id, d.load_duration]));
 checkTrue("combinatie 1 blijvend, combinatie 2 middellang",
   duur[1] === "Permanent" && duur[2] === "MediumTerm", JSON.stringify(duur));
-checkTrue("spanningen van beide combinaties mee", p1?.combinations?.length === 2);
-checkTrue(
-  "combinatie 2: σ_y = −6,9 N/mm² binnen 2 % in elk element",
-  (p1?.combinations?.[1]?.elements ?? []).every((e) => Math.abs(e.sigma_y_mpa + 6.9) <= 0.02 * 6.9),
-);
+// Tot issue #199 twee combinaties; de toets rekent elke UGT-combinatie in +x en −x.
+checkTrue("spanningen van beide combinaties mee, elk in +x en −x",
+  JSON.stringify(p1?.combinations?.map((c) => c.combination_id)) === "[1,1000001,2,1000002]",
+  JSON.stringify(p1?.combinations?.map((c) => c.combination_id)));
+{
+  const els = p1?.combinations?.find((c) => c.combination_id === 2)?.elements ?? [];
+  const gem = els.reduce((s, e) => s + e.sigma_y_mpa, 0) / Math.max(1, els.length);
+  checkRel("combinatie 2: gemiddelde σ_y = −6,9 N/mm² (verticaal evenwicht)", gem, -6.9, 0.02);
+  // Was: −6,9 binnen 2 % in elk element; met de buiging uit de scheefstand
+  // wijkt een randelement tot σ_b = 0,2135 N/mm² (3,1 %) af.
+  checkTrue(
+    "combinatie 2: elk element binnen σ_b = 0,2135 N/mm² (+ 2 %) van −6,9 N/mm²",
+    els.every((e) => Math.abs(e.sigma_y_mpa + 6.9) <= 0.2135 + 0.02 * 6.9),
+    String(Math.max(...els.map((e) => Math.abs(e.sigma_y_mpa + 6.9)))),
+  );
+}
 
 log("\n[c] de kern via de toetsbrug");
 if (!existsSync(TOETSBRUG)) {
@@ -131,20 +159,27 @@ if (!existsSync(TOETSBRUG)) {
   checkTrue("niet geweigerd", u && u.geweigerd === undefined, u?.geweigerd ?? JSON.stringify(u).slice(0, 200));
   const c1 = u?.combinaties?.find((c) => c.combination_id === 1);
   const c2 = u?.combinaties?.find((c) => c.combination_id === 2);
-  checkRel("combinatie 1: UC = 2,7/9,692308 (k_mod 0,60)", c1?.uc, 0.278571, 0.02);
-  checkRel("combinatie 2: UC = 6,9/12,923077 (k_mod 0,80)", c2?.uc, 0.533929, 0.02);
+  // Met de buiging uit de scheefstand (zie de kop); was 2,7/9,692308 =
+  // 0,278571 en 6,9/12,923077 = 0,533929.
+  checkRel("combinatie 1: UC = 2,7835/9,692308 (k_mod 0,60)", c1?.uc, 0.287190, 0.02);
+  checkRel("combinatie 2: UC = 7,1135/12,923077 (k_mod 0,80)", c2?.uc, 0.550444, 0.02);
   checkTrue("maatgevend combinatie 2", u?.governing_combination_id === 2);
   const druk = u?.checks?.find((c) => c.id === "6.1.4_druk_evenwijdig")?.kind?.data;
   checkTrue("afleiding 6.1.4 (6.2)", druk?.article === "art. 6.1.4 (6.2)", druk?.article);
+  // Was: geen trek loodrecht op de vezel en status Ok. De schuif uit H = φ·V
+  // geeft bij het scharnier een kleine trek loodrecht op de vezel (zie de kop);
+  // 6.1.3 is niet toetsbaar, dus de kern meldt hem als niet getoetst.
   const tr90 = (u?.niet_getoetst ?? []).find((n) => n.id === "6.1.3_trek_loodrecht");
-  checkTrue("geen trek loodrecht op de vezel in een zuivere drukwand", tr90 === undefined, tr90?.reden ?? "");
-  checkTrue("status Ok", u?.status === "Ok", u?.status);
+  checkTrue("trek loodrecht op de vezel uit de scheefstand: niet getoetst, met reden (6.1.3)",
+    tr90 !== undefined && /6\.1\.3/.test(tr90.reden ?? ""), tr90?.reden?.slice(0, 120) ?? "");
+  checkTrue("status NotApplicable (de trek loodrecht op de vezel is niet toetsbaar)", u?.status === "NotApplicable", u?.status);
 
   const sc3 = check(model({ klimaatklasse: 3 })).result?.plate_check_inputs?.[0];
   checkTrue("klimaatklasse 3 → Sc3", sc3?.service_class === "Sc3");
   const [u3] = await kern([sc3]);
-  checkRel("klimaatklasse 3, combinatie 2: UC = 6,9/10,5 (k_mod 0,65)",
-    u3?.combinaties?.find((c) => c.combination_id === 2)?.uc, 0.657143, 0.02);
+  // Was 6,9/10,5 = 0,657143; met de buiging uit de scheefstand 7,1135/10,5.
+  checkRel("klimaatklasse 3, combinatie 2: UC = 7,1135/10,5 (k_mod 0,65)",
+    u3?.combinaties?.find((c) => c.combination_id === 2)?.uc, 0.677476, 0.02);
 }
 
 log("\n[d] modelpoort");

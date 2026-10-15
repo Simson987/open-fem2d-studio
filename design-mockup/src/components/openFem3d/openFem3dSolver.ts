@@ -559,6 +559,21 @@ export interface OpenFem3DSolveOptions {
    * de uitkomst dat hun eigen gewicht als knooplasten werkt (kabelwerking).
    */
   selfWeightCaseId?: number;
+  /**
+   * Hoeveel knikvormen de kern bij P-Δ rapporteert; zonder opgave 3 (de
+   * weergave). De toetsruns (issue #199, `openFem3dToetsKrachten.ts`) vragen
+   * er één: alleen α_cr van de eerste vorm wordt gemeld, en de
+   * stabiliteitspoort van de kern rekent er hoe dan ook minstens één. Een
+   * lineaire berekening rekent er altijd geen.
+   */
+  bucklingModes?: number;
+  /**
+   * De toets (issue #199): P-Δ is verplicht. Kan de kern dit model alleen
+   * lineair rekenen (platen), dan een fout met de reden
+   * (`OPEN_FEM_3D_PLATES_NO_SECOND_ORDER`) in plaats van de terugval naar
+   * eerste orde die de resultaten wel krijgen.
+   */
+  tweedeOrdeVerplicht?: boolean;
 }
 
 /** De lasten van één lastkeuze, met de factoren toegepast, in modelvorm. */
@@ -1028,20 +1043,49 @@ export function openFem3DPlateMeshFor(model: OpenFem3DModel): Promise<OpenFem3DP
 export const OPEN_FEM_3D_PLATES_LINEAR_NOTICE =
   "Tweede orde (P-Δ) is voor platen in de 3D-kern nog niet beschikbaar; dit resultaat is eerste orde (lineair) berekend.";
 
-async function solveWithPlates(
+/**
+ * De reden waarom de toets (issue #199, besluit B8) een model met platen
+ * weigert: de toets rekent altijd P-Δ met scheefstand, en voor platen kan de
+ * 3D-kern dat niet. Een terugval op eerste orde is voor de toets uitgesloten.
+ */
+export const OPEN_FEM_3D_PLATES_NO_SECOND_ORDER =
+  "Geen tweede-ordeberekening met platen: de 3D-rekenkern kent voor plaatelementen geen geometrische " +
+  "stijfheid (K_G), dus de P-Δ-berekening met scheefstand waarop de toets rust, is voor dit model niet " +
+  "uit te voeren.";
+
+/** Eén rekenverzoek aan de 3D-kern, met wat nodig is om de uitkomst te lezen. */
+export interface OpenFem3DRekenverzoek {
+  /** Het verzoek zoals het naar de kern gaat (met scheefstand en knikvormen). */
+  input: OpenFem3DSolveRequestBody;
+  /** Per staaf de hoek tussen de hoofdassen en de modelassen; leeg als die overal samenvallen. */
+  principalAngles: ReadonlyMap<number, number>;
+  /** De analyse die de kern werkelijk rekent: lineair bij een model met platen. */
+  effective: OpenFem3DAnalysisKind;
+}
+
+/**
+ * Het rekenverzoek van één lastkeuze, precies zoals de knop Berekenen het naar
+ * de 3D-kern stuurt: de analyse (lineair bij platen), het verzoek van
+ * `buildOpenFem3DSolveRequest`, de scheefstand (`metScheefstandLasten`) en het
+ * aantal knikvormen. De app rekent ermee (`solveOpenFem3DCombination`), de
+ * 3D-MCP-paden (`mcp/toets3dSidecar.ts`) geven het verzoek aan Rust; zo rekent
+ * de toets langs beide wegen met hetzelfde verzoek.
+ */
+export function openFem3DRekenverzoek(
   model: OpenFem3DModel,
   selection: OpenFem3DLoadSelection | undefined,
   analysis: OpenFem3DAnalysisKind,
   /** Initiële scheefstand in één richting (EN 1993-1-1 §5.3.2); null = zonder. */
   scheefstand: OpenFem3DScheefstand | null = null,
   options: OpenFem3DSolveOptions = {},
-): Promise<OpenFem3DSolveResult> {
-  const meshPromise = openFem3DPlateMeshFor(model);
-  const mesh = meshPromise ? await meshPromise : undefined;
+  mesh?: OpenFem3DPlateMesh,
+): OpenFem3DRekenverzoek {
   // De externe 3D-kern kent voor plaatelementen geen geometrische stijfheid
   // in de P-Delta-iteratie; een model met platen rekent daarom lineair, en
   // het resultaat zegt dat zichtbaar.
   const effective: OpenFem3DAnalysisKind = mesh && mesh.elements.length > 0 ? "linear" : analysis;
+  // De toets vraagt P-Δ en weigert de terugval (issue #199, B8).
+  if (options.tweedeOrdeVerplicht && effective !== analysis) throw new Error(OPEN_FEM_3D_PLATES_NO_SECOND_ORDER);
   const opgebouwd = buildOpenFem3DSolveRequest(model, effective, selection, mesh, options);
   // De hoofdashoek wordt uit het gebouwde verzoek afgeleid, zodat een wijziging
   // in de profielbibliotheek tijdens de asynchrone solvercall de uitkomst niet
@@ -1052,7 +1096,40 @@ async function solveWithPlates(
     return Math.abs(offset) > 1e-12 ? [[beam.id, offset] as const] : [];
   }));
   const request = scheefstand ? metScheefstandLasten(opgebouwd, scheefstand) : opgebouwd;
-  const input = effective === "linear" ? { ...request, bucklingModes: 0 } : request;
+  const input = effective === "linear"
+    ? { ...request, bucklingModes: 0 }
+    : options.bucklingModes !== undefined ? { ...request, bucklingModes: options.bucklingModes } : request;
+  return { input, principalAngles, effective };
+}
+
+/**
+ * Een uitkomst van de 3D-kern voor een model zonder platen, zoals de app hem
+ * na `solveOpenFem3DCombination` heeft: met de onafhankelijke krachtensom,
+ * terug in de modelassen, en met de meldingen van de belastingvlakken en de
+ * kabelwerking. Voor de 3D-MCP-paden, die de kern via Rust aanroepen.
+ */
+export function openFem3DUitkomstVanKern(
+  model: OpenFem3DModel,
+  selection: OpenFem3DLoadSelection | undefined,
+  verzoek: Pick<OpenFem3DRekenverzoek, "input" | "principalAngles">,
+  ruw: OpenFem3DSolveResult,
+  options: OpenFem3DSolveOptions = {},
+): OpenFem3DSolveResult {
+  const result = fromOpenFem3DPrincipalResult(metOpenFem3DKrachtensom(verzoek.input, ruw), verzoek.principalAngles);
+  return withOpenFem3DCableSelfWeightNotice(withLoadPanelDiagnostics(result, model, selection), model, selection, options);
+}
+
+async function solveWithPlates(
+  model: OpenFem3DModel,
+  selection: OpenFem3DLoadSelection | undefined,
+  analysis: OpenFem3DAnalysisKind,
+  /** Initiële scheefstand in één richting (EN 1993-1-1 §5.3.2); null = zonder. */
+  scheefstand: OpenFem3DScheefstand | null = null,
+  options: OpenFem3DSolveOptions = {},
+): Promise<OpenFem3DSolveResult> {
+  const meshPromise = openFem3DPlateMeshFor(model);
+  const mesh = meshPromise ? await meshPromise : undefined;
+  const { input, principalAngles, effective } = openFem3DRekenverzoek(model, selection, analysis, scheefstand, options, mesh);
   const result = fromOpenFem3DPrincipalResult(await callOpenFem3DSolver(input), principalAngles);
   if (!mesh) return result;
   const notices = [...mesh.notices];
@@ -1188,17 +1265,25 @@ export interface OpenFem3DTensionOnlyFitBody {
   surfaceLoads?: NonNullable<OpenFem3DSolveRequestBody["surfaceLoads"]>;
 }
 
+/**
+ * De onafhankelijke krachtensom bij een uitkomst van de kern (`forceBalance`),
+ * zoals elke berekening van de app hem krijgt.
+ */
+export function metOpenFem3DKrachtensom(
+  input: OpenFem3DSolveRequestBody, result: OpenFem3DSolveResult,
+): OpenFem3DSolveResult {
+  // Met zijdelingse grondkrachten op een paal sluit de onafhankelijke som
+  // niet (hun richting staat niet in het resultaat); zeg dat in plaats van
+  // een afwijking te melden die er niet is.
+  if (openFem3DBeddingPileLateralForces(input, result)) {
+    const { forceBalance: _niet, ...rest } = result;
+    return { ...rest, diagnostics: [...result.diagnostics, OPEN_FEM_3D_BEDDING_LATERAL_BALANCE_NOTICE] };
+  }
+  return { ...result, forceBalance: openFem3DGlobalForceBalance(input, result) };
+}
+
 async function callOpenFem3DSolver(input: OpenFem3DSolveRequestBody): Promise<OpenFem3DSolveResult> {
-  const checked = (result: OpenFem3DSolveResult): OpenFem3DSolveResult => {
-    // Met zijdelingse grondkrachten op een paal sluit de onafhankelijke som
-    // niet (hun richting staat niet in het resultaat); zeg dat in plaats van
-    // een afwijking te melden die er niet is.
-    if (openFem3DBeddingPileLateralForces(input, result)) {
-      const { forceBalance: _niet, ...rest } = result;
-      return { ...rest, diagnostics: [...result.diagnostics, OPEN_FEM_3D_BEDDING_LATERAL_BALANCE_NOTICE] };
-    }
-    return { ...result, forceBalance: openFem3DGlobalForceBalance(input, result) };
-  };
+  const checked = (result: OpenFem3DSolveResult): OpenFem3DSolveResult => metOpenFem3DKrachtensom(input, result);
   const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
   const usesLegacyCompatibleLoads = input.schemaVersion === 1
     && input.memberLoads.length === 0

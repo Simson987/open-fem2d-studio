@@ -2,8 +2,10 @@
   "resultView": {
     "busy": "Calcul en cours…",
     "emptyCase": "{{name}} : aucune charge effective ; aucun résultat pour ce cas.",
-    "ucCombinations": "UC indique la vérification déterminante parmi les combinaisons de charges, et non uniquement le cas sélectionné.",
-    "ucLabel": "UC (combinaisons)"
+    "ucCombinations": "UC indique la vérification déterminante parmi les combinaisons de charges, et non uniquement le cas sélectionné. Les efforts de vérification ELU sont toujours au second ordre (P-Δ) avec défaut d'aplomb.",
+    "ucLabel": "UC (combinaisons)",
+    "checkForces": "Efforts de vérification ELU : {{analyse}} avec défaut d'aplomb φ = 1/{{noemer}} ({{bron}}), toujours, indépendamment des réglages Analyse et Défaut d'aplomb. Les vérifications ELS utilisent les résultats.",
+    "checkForcesReused": "Les résultats sont déjà ce calcul ; la vérification n'a rien calculé de plus."
   },
   "checkPanelControls": {
     "open": "Vérifications",
@@ -553,9 +555,6 @@
       "validationPassed": "Validation IFC réussie",
       "notExpressed": "{{punten}} point(s) non exprimé(s) en IFC — voir l'onglet IFC."
     },
-    "stability": {
-      "firstOrderNotAllowed": "Stabilité : calcul au premier ordre non admis"
-    },
     "solve": {
       "fieldPatternsLimited": "Disposition travée par travée limitée",
       "failed": "Échec du calcul",
@@ -603,7 +602,12 @@
       "notChecked": "Non vérifié : le calcul a échoué. {{reden}}",
       "seeInsightsErrors": "Voir Analyse → Erreurs.",
       "noneYetTitle": "Pas encore de vérification",
-      "noneYetBody": "Calculez d'abord le modèle ; la vérification normative est effectuée en même temps et peut ensuite être exportée."
+      "noneYetBody": "Calculez d'abord le modèle ; la vérification normative est effectuée en même temps et peut ensuite être exportée.",
+      "refused": "Vérification refusée",
+      "refusedNonlinear": "Le calcul physiquement non linéaire des efforts de vérification n'a pas convergé : {{reden}} La vérification est refusée ; les résultats de l'analyse sont conservés.",
+      "otherForcesTitle": "Pas sur la zone de dessin",
+      "otherForcesBody": "La combinaison « {{naam}} » de la vérification ne figure pas avec les mêmes efforts sur la zone de dessin. Les efforts de vérification sont du second ordre (P-Δ) avec défaut d'aplomb φ = 1/{{noemer}} ; les résultats sur la zone de dessin suivent les réglages Analyse et Défaut d'aplomb. Choisissez l'analyse au second ordre et activez le défaut d'aplomb, avec φ = 1/{{noemer}}, pour y voir l'emplacement déterminant.",
+      "otherForcesBodySame": "La combinaison « {{naam}} » de la vérification ne figure pas avec les mêmes efforts sur la zone de dessin, bien que les résultats soient du second ordre avec le même défaut d'aplomb φ = 1/{{noemer}}. La vérification a été calculée séparément ici, par exemple sans les variantes d'état final ELU du bois (E_mean,fin). Les efforts sur la zone de dessin ne sont donc pas ceux de la vérification."
     },
     "layout": {
       "dragCheckSplit": "Faites glisser pour ajuster la répartition modèle/vérification",
@@ -1043,6 +1047,7 @@
     "selfWeightOfferTitle": "Le poids propre se trouve actuellement parmi les charges du premier cas de charge permanent. Ajouter le cas « Poids propre » et y déplacer le poids propre. Les résultats des combinaisons ne changent pas ; une seule étape, annulable avec Ctrl+Z.",
     "selfWeight": "Poids propre",
     "analysis": "Analyse",
+    "analysisResultsNote": "Ce choix s'applique aux résultats (diagrammes de moments, déplacements, réactions) et aux vérifications ELS. La vérification ELU effectue toujours son propre calcul au second ordre (P-Δ) avec défaut d'aplomb (EN 1993-1-1 5.2.2(3)b et (7)b).",
     "analysisType": {
       "eersteOrde": "Premier ordre",
       "tweedeOrdeGeometrisch": "Second ordre (P-Δ)",
@@ -1066,7 +1071,7 @@
     "noConcreteBarsTitle": "Le calcul non linéaire matériel s'applique aux barres en béton avec cage d'armatures : matériau une classe de résistance (p. ex. C30/37), profilé un rectangle (p. ex. 300x500) et une cage dans les propriétés de la barre. Sans de telles barres, le résultat est identique au second ordre (P-Δ).",
     "noConcreteBars": "aucune barre en béton avec cage",
     "modelLarge": "modèle volumineux — voir longueur de segment",
-    "swayTitle": "Prendre en compte le défaut d'aplomb (imperfection initiale) : chaque charge verticale reçoit une charge horizontale associée H = φ·V. Vous choisissez à côté d'où vient φ — le dénominateur fixe (la valeur de base, et le réglage de tout projet existant) ou la formule normative de l'EN 1993-1-1 (5.5), l'EN 1992-1-1 (5.1) ou l'EN 1995-1-1 (5.1).",
+    "swayTitle": "Prendre en compte le défaut d'aplomb (imperfection initiale) dans les résultats : chaque charge verticale reçoit une charge horizontale associée H = φ·V. La vérification ELU utilise toujours ce défaut d'aplomb, même lorsque cette case est décochée ; c'est pourquoi les champs φ à côté sont toujours visibles. Vous choisissez à côté d'où vient φ — le dénominateur fixe (la valeur de base, et le réglage de tout projet existant) ou la formule normative de l'EN 1993-1-1 (5.5), l'EN 1992-1-1 (5.1) ou l'EN 1995-1-1 (5.1).",
     "sway": "Défaut d'aplomb",
     "tensionOnlyFit": "Tirants montés après G",
     "tensionOnlyFitTitle": "Barres en traction seule montées après la charge permanente : leur longueur libre suit la déformation sous les cas de charge permanents (facteur 1,0, poids propre et surfaces de charge compris). Sous cette charge seule, elles ne portent alors rien ; ce qui vient ensuite, elles le portent.",
@@ -1081,7 +1086,7 @@
     "swayDenominatorTitle": "Défaut d'aplomb φ sous la forme 1/x (par défaut 1/200)",
     "swayHeightTitle": "Hauteur h en mm pour α_h = 2/√(h/1000). Vide = déduite du modèle ({{hoogte}} mm) : de l'appui le plus bas jusqu'au sommet de la structure (EN 1993-1-1 figure 5.2 ; EN 1992-1-1 §5.2(6) pour la structure de contreventement).",
     "swayMembersTitle": "Nombre d'éléments verticaux porteurs m pour α_m = √(0,5(1+1/m)). Vide = déduit du modèle ({{aantal}}) : le nombre de files de colonnes, les barres superposées formant une seule colonne. Le critère des 50 % de l'EN 1993-1-1 5.3.2(3)a ne peut pas être appliqué ici (il requiert les efforts dans les colonnes, qui ne résultent que du calcul) ; retirez manuellement un montant peu chargé — un m plus petit donne un φ plus grand.",
-    "swayDirectionTitle": "Direction des forces horizontales équivalentes : LES DEUX. Chaque combinaison est calculée avec le défaut d'aplomb en +x et en −x (EN 1993-1-1 5.3.2(2) : dans la direction la plus défavorable) ; l'enveloppe et la vérification retiennent, par barre, la plus défavorable des deux, et le nom de la combinaison indique la direction. La direction préférée enregistrée ici ({{richting}}) détermine seulement quelle variante conserve le numéro de combinaison d'origine.",
+    "swayDirectionTitle": "Direction des forces horizontales équivalentes : LES DEUX. La vérification ELU calcule chaque combinaison avec le défaut d'aplomb en +x et en −x (EN 1993-1-1 5.3.2(2) : dans la direction la plus défavorable) et retient, par barre, la plus défavorable des deux ; lorsque la case Défaut d'aplomb est cochée, les résultats sont calculés de la même façon et le nom de la combinaison indique la direction. La direction préférée enregistrée ici ({{richting}}) détermine seulement quelle variante garde le numéro de combinaison d'origine.",
     "dialogTitle": "Cas de charge & combinaisons",
     "casesTab": "Cas ({{aantal}})",
     "errorCount_one": "{{count}} erreur",
@@ -1188,11 +1193,11 @@
       },
       "heightManual": "h a été saisi manuellement : {{h}} m.",
       "membersManual": "m a été saisi manuellement : {{m}}.",
-      "directionBoth": "Direction : les deux. Chaque combinaison de charges est calculée avec le défaut d'aplomb en +x et en −x, sous forme de deux variantes portant la direction dans leur nom ; l'enveloppe et la vérification retiennent, par barre, la plus défavorable des deux (EN 1993-1-1 5.3.2(2) : l'imperfection dans la direction la plus défavorable ; 5.3.2(8) : dans toutes les directions pertinentes, une à la fois).",
+      "directionBoth": "Direction : les deux. La vérification ELU calcule chaque combinaison avec le défaut d'aplomb en +x et en −x, sous forme de deux variantes portant la direction dans leur nom, et retient, par barre, la plus défavorable des deux (EN 1993-1-1 5.3.2(2) : l'imperfection dans la direction la plus défavorable ; 5.3.2(8) : dans toutes les directions pertinentes, une à la fois). La vérification le fait toujours, même lorsque l'interrupteur Défaut d'aplomb est désactivé ; cet interrupteur ne concerne que les résultats, et lorsqu'il est activé ceux-ci calculent aussi chaque combinaison en +x et −x.",
       "columnLine3d": "({{n}}) x = {{x}} mm, y = {{y}} mm",
-      "directions3d": "En 3D, l’imperfection d’aplomb agit pour chaque combinaison ELU dans quatre directions, une à la fois : +X, −X, +Y et −Y (EN 1993-1-1 §5.3.2(8)). Chaque charge verticale V reçoit une charge horizontale φ·V à son propre point d’application (§5.3.2(7)). Les combinaisons ELS sont calculées sans imperfection."
+      "directions3d": "En 3D, la vérification ELU calcule chaque combinaison avec l’imperfection d’aplomb dans quatre directions, une à la fois : +X, −X, +Y et −Y (EN 1993-1-1 §5.3.2(8)). Chaque charge verticale V reçoit une charge horizontale φ·V à son propre point d’application (§5.3.2(7)). La vérification le fait toujours, même lorsque l’interrupteur Défaut d’aplomb est désactivé ; lorsqu’il est activé, les résultats ELU sont calculés de la même façon. Les combinaisons ELS sont calculées sans imperfection."
     },
-    "swayDirectionTitle3d": "L’imperfection d’aplomb agit dans chaque combinaison ELU tour à tour en +X, −X, +Y et −Y (EN 1993-1-1 §5.3.2(8)) ; les combinaisons ELS sont calculées sans.",
+    "swayDirectionTitle3d": "La vérification ELU calcule chaque combinaison ELU tour à tour avec le défaut d'aplomb en +X, −X, +Y et −Y (EN 1993-1-1 §5.3.2(8)) ; lorsque la case Défaut d'aplomb est cochée, les résultats aussi. Les combinaisons ELS sont calculées sans.",
     "analysisDescriptionVolume": {
       "geometric": "Volume Tet4 : GNL lagrangien total. Les autres éléments volumiques ou de barre sont refusés dans ce mode.",
       "material": "Volume Tet4 : plasticité de l'acier J2 ou endommagement du béton en traction en petites déformations. Modèles purement Tet4 uniquement."
@@ -1303,6 +1308,14 @@
       "calculatedSls": "Rigidité finale du bois calculée (ELS)"
     },
     "combinationNotUsed": "non utilisée",
+    "resultsSecondOrder": "Second ordre (P-Δ)",
+    "resultsFirstOrder": "Premier ordre",
+    "ucSteel": "UC acier {{uc}}",
+    "ucConcrete": "UC ELU béton {{uc}}",
+    "ucTimber": "UC EN 1995 {{uc}}",
+    "checksRunning": "vérification…",
+    "checksError": "Vérification : {{error}}",
+    "checkForces": "Efforts de vérification ELU : second ordre (P-Δ) + défaut d'aplomb φ = 1/{{noemer}}",
     "edgeSegments": "{{n}} segments de bord",
     "arcCount": "({{n}} arc)",
     "openingCount_one": "{{count}} ouverture",

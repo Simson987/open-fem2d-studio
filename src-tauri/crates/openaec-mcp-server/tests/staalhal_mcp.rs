@@ -8,11 +8,23 @@
 //!   eigen gewicht staal Σ ρ·A·g·L = 809,947 kN (test-open-fem3d-staalhal.mjs),
 //!   beton 2500 · 0,4 · 0,6 · 9,81 / 1000 = 5,886 kN/m over 2·60 + 11·30 + 22·0,8 m.
 //!
+//! DE TOETSKRACHTEN (issue #199, B9). `analyse` geldt alleen voor de
+//! resultaten; de UGT-toets rekent altijd P-Δ met scheefstand φ = 1/200 (het
+//! projectbestand van de hal heeft geen scheefstandvelden) in +X, −X, +Y en
+//! −Y. Handcontrole per toetsberekening: de varianten +X en −X van één
+//! combinatie hebben dezelfde lasten op φ·V na, dus
+//! ΣR_x(+X) − ΣR_x(−X) = −2·φ·ΣR_z (en net zo in Y); K_G voert bij een
+//! starre translatie geen kracht af. De standaardhal wordt geweigerd: zijn
+//! wandverbanden CHS 88,9×4 knikken onder "Wind langs" zelf (8 van de 28
+//! toetsberekeningen, α_cr 0,66–0,75; test-open-fem3d-staalhal-pdelta.mjs).
+//! Met trek-alleen verbanden is elke toetsberekening stabiel.
+//!
 //! LET OP: dit meet de INGEBAKKEN solverbundel. Na een wijziging in
 //! `design-mockup/src` eerst `npm run build:sidecar`. Node ≥ 20 is een harde eis.
 
 use openaec_mcp_server::sidecar::{self, SidecarOpties};
 use serde_json::{json, Value};
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -35,12 +47,21 @@ async fn eis_node() {
 
 /// Eén JSON-RPC-verzoek op een verse server (na `initialize`); geeft `result`.
 async fn verzoek(methode: &str, params: Value) -> Value {
-    let mut kind = Command::new(BIN_PATH)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("de MCP-server starten");
+    verzoek_met(methode, params, &[]).await
+}
+
+/// Als [`verzoek`], met extra omgevingsvariabelen (een andere solverbundel).
+async fn verzoek_met(methode: &str, params: Value, omgeving: &[(&str, &Path)]) -> Value {
+    let mut cmd = Command::new(BIN_PATH);
+    cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    for (sleutel, waarde) in omgeving {
+        cmd.env(sleutel, waarde);
+    }
+    if !omgeving.is_empty() {
+        // Een aangewezen bundel met een andere hash mag alleen bewust draaien.
+        cmd.env("OPENAEC_FEM_STA_DRIFT_TOE", "1");
+    }
+    let mut kind = cmd.spawn().expect("de MCP-server starten");
     let mut stdin = kind.stdin.take().expect("stdin");
     let mut reader = BufReader::new(kind.stdout.take().expect("stdout"));
     for bericht in [
@@ -164,16 +185,67 @@ async fn standaardwaarden_van_het_schema_zijn_die_van_de_generator() {
     dichtbij(&parameters["dak"]["nokhoogteMm"], 9500.0, "nok bij helling 1:10", 1e-9);
 }
 
-/// Rekenen en toetsen: ΣR per geval volgens de hand, evenwicht in de kern én
-/// in de onafhankelijke krachtensom, verplaatsingen binnen L/250 en h/150, en
-/// een UC per groep uit de staaltoets.
+/// De toetsanalyse van een hal: tweede orde geometrisch met φ = 1/200 (vast),
+/// de resultaten lineair zonder scheefstand, 4 berekeningen per UGT-combinatie.
+fn eis_toetsanalyse_van_de_hal(t: &Value, ugt: usize) {
+    assert_eq!(t["analysis_type"], json!("tweedeOrdeGeometrisch"), "{t}");
+    assert_eq!(t["model_analysis_type"], json!("linear"));
+    assert_eq!(t["hergebruikt"], json!(false));
+    assert_eq!(
+        t["scheefstand"],
+        json!({ "phi": 0.005, "noemer": 200, "bron": "vast", "model_scheefstand_aan": false, "afgedwongen": true })
+    );
+    assert_eq!(t["richtingen"], json!(["+X", "−X", "+Y", "−Y"]));
+    assert_eq!(t["aantal_berekeningen"], json!(4 * ugt));
+    assert_eq!(t["alpha_cr"].as_array().map(Vec::len), Some(ugt), "α_cr één keer per UGT-basiscombinatie");
+}
+
+/// De handcontrole van de toetsberekeningen: per paar varianten
+/// ΣR(+) − ΣR(−) = −2·φ·ΣR_z in de scheefstandas, gelijke ΣR_z, evenwicht.
+fn eis_toets_reactiesommen(t: &Value) -> usize {
+    let berekeningen = t["berekeningen"].as_array().expect("berekeningen");
+    let van = |id: i64| berekeningen.iter().find(|b| b["id"] == id);
+    let mut paren = 0;
+    for b in berekeningen.iter().filter(|b| b["fout"].is_null()) {
+        assert_eq!(b["evenwicht"]["kern"], json!(true), "{}", b["naam"]);
+        assert_eq!(b["evenwicht"]["onafhankelijk"], json!(true), "{}", b["naam"]);
+        let id = b["id"].as_i64().unwrap();
+        if id % 2_000_000 >= 1_000_000 {
+            continue; // de −X- en −Y-variant: tegenhanger van de + hieronder
+        }
+        let Some(min) = van(id + 1_000_000).filter(|m| m["fout"].is_null()) else { continue };
+        let as_ = if id >= 2_000_000 { "fy" } else { "fx" };
+        let fz = b["reactiesomKn"]["fz"].as_f64().unwrap();
+        dichtbij(&min["reactiesomKn"]["fz"], fz, &format!("{} ΣRz", min["naam"]), 1e-6);
+        let verschil = b["reactiesomKn"][as_].as_f64().unwrap() - min["reactiesomKn"][as_].as_f64().unwrap();
+        assert!(
+            (verschil + 2.0 * 0.005 * fz).abs() <= 1e-3,
+            "{}: ΣR{as_}(+) − ΣR{as_}(−) = {verschil}, verwacht −2·φ·ΣR_z = {}",
+            b["naam"],
+            -2.0 * 0.005 * fz
+        );
+        paren += 1;
+    }
+    paren
+}
+
+/// Rekenen: ΣR per geval volgens de hand, evenwicht in de kern én in de
+/// onafhankelijke krachtensom, verplaatsingen binnen L/250 en h/150. De toets
+/// van de standaardhal wordt geweigerd: onder "Wind langs" knikken de
+/// wandverbanden zelf (8 van de 28 toetsberekeningen). De resultaten blijven,
+/// er is geen UC, en de suggestie is trek-alleen of zwaardere verbanden.
+///
+/// Tot issue #199 toetste deze tool met de eerste-orderesultaten en gaf hij
+/// voor de standaardhal een UC per groep (uc_max 1,77, wandverband); die
+/// toetsing rustte op krachten zonder scheefstand en zonder tweede orde.
 #[tokio::test]
-async fn standaardhal_gerekend_en_getoetst() {
+async fn standaardhal_gerekend_en_de_toets_geweigerd() {
     eis_node().await;
     let uit = hal(json!({ "reken": true })).await;
     let b = &uit["berekening"];
     assert_eq!(b["analyse"], json!("linear"));
     assert_eq!(b["gevolgklasse"], json!("CC2"));
+    assert_eq!(b["aantal_berekeningen"], json!(19), "de resultaten: 5 gevallen en 14 combinaties");
     for (id, [fx, fy, fz]) in [(1, [0.0, 0.0, 540.0]), (2, [0.0, 0.0, 1008.0]), (3, [0.0, -499.2, -864.0]), (4, [-84.0, 0.0, 0.0])] {
         let g = geval(&uit, id);
         dichtbij(&g["reactiesomKn"]["fx"], fx, &format!("geval {id} ΣRx"), 1e-3);
@@ -189,6 +261,59 @@ async fn standaardhal_gerekend_en_getoetst() {
         assert!(g["maxVerplaatsingMm"].as_f64().unwrap() < 30000.0 / 250.0, "{}: u_max ≥ L/250", g["naam"]);
         assert!(g["maxGootverplaatsingMm"].as_f64().unwrap() < 8000.0 / 150.0, "{}: goot ≥ h/150", g["naam"]);
     }
+
+    let ta = &b["toetsanalyse"];
+    eis_toetsanalyse_van_de_hal(ta, 7);
+    assert_eq!(ta["geweigerd"], json!(true));
+    // De stabiele varianten rekenen gewoon, met de handcontrole op φ.
+    assert!(eis_toets_reactiesommen(ta) >= 10, "te weinig paren nagerekend");
+    let t = &b["toetsing"];
+    assert_eq!(t["geweigerd"], json!(true), "{t}");
+    assert!(t["uc_max"].is_null(), "geen UC bij een geweigerde toets");
+    assert!(b.get("hout_toetsing").is_none(), "ook geen houttoetsing");
+    let reden = t["reden"].as_str().unwrap();
+    assert!(reden.contains("faalt in 8 van de 28 toetsberekeningen") && reden.contains("niet teruggevallen op eerste orde"), "{reden}");
+    let per: Vec<i64> = t["per_combinatie"].as_array().unwrap().iter().map(|c| c["combination_id"].as_i64().unwrap()).collect();
+    let mut verwacht: Vec<i64> = [4, 7].iter().flat_map(|id| (0..4).map(move |k| id + k * 1_000_000)).collect();
+    verwacht.sort_unstable();
+    let mut gekregen = per.clone();
+    gekregen.sort_unstable();
+    assert_eq!(gekregen, verwacht, "de varianten van \"Wind langs (W) leidend\"");
+    for c in t["per_combinatie"].as_array().unwrap() {
+        let r = c["reason"].as_str().unwrap();
+        assert!(r.contains("alpha_cr=0.") && r.contains("eigen knikkracht") && r.contains("CHS 88.9x4"), "{r}");
+    }
+    let suggestie = t["suggestie"].as_str().unwrap();
+    assert!(
+        suggestie.contains("wandverband") && suggestie.contains("trek-alleen") && suggestie.contains("zwaardere verbanden"),
+        "{suggestie}"
+    );
+    for a in ta["alpha_cr"].as_array().unwrap() {
+        let id = a["combination_id"].as_i64().unwrap();
+        if id == 4 || id == 7 {
+            assert_eq!(a["status"], json!("niet_bepaald"), "{a}");
+        } else {
+            assert!(a["alpha_cr"].as_f64().is_some_and(|x| x > 1.0), "{a}");
+        }
+    }
+}
+
+/// Met trek-alleen verbanden is elke toetsberekening stabiel: de toets rekent
+/// P-Δ met φ = 1/200 in vier richtingen (ΣR volgens de hand), en de staaltoets
+/// geeft een UC per groep, met de toetsvarianten als UGT-combinaties.
+#[tokio::test]
+async fn hal_met_trek_alleen_verbanden_getoetst_met_tweede_orde_en_scheefstand() {
+    eis_node().await;
+    let uit = hal(json!({ "hal": { "verbanden": { "trekAlleen": true } }, "reken": true })).await;
+    let b = &uit["berekening"];
+    let ta = &b["toetsanalyse"];
+    eis_toetsanalyse_van_de_hal(ta, 7);
+    assert_eq!(ta["geweigerd"], json!(false));
+    assert_eq!(eis_toets_reactiesommen(ta), 14, "7 combinaties × 2 assen");
+    for a in ta["alpha_cr"].as_array().unwrap() {
+        assert_eq!(a["status"], json!("bepaald"), "{a}");
+        assert!(a["alpha_cr"].as_f64().is_some_and(|x| x > 1.0), "{a}");
+    }
     let t = &b["toetsing"];
     let uc = t["uc_max"].as_f64().expect("uc_max");
     assert!(uc.is_finite() && uc > 0.0, "uc_max {uc}");
@@ -200,7 +325,12 @@ async fn standaardhal_gerekend_en_getoetst() {
     let getoetst: u64 = t["status_telling"].as_object().unwrap().values().map(|v| v.as_u64().unwrap()).sum();
     assert_eq!(getoetst, 340);
     assert_eq!(t["niet_getoetst"], json!([]));
-    eprintln!("staalhal: uc_max {uc:.3} ({})", t["maatgevend"]);
+    assert!(
+        t["notities"].as_array().unwrap().iter().any(|n| n.as_str().unwrap().contains("tweede orde (P-Δ) met scheefstand φ = 1/200")),
+        "{}",
+        t["notities"]
+    );
+    eprintln!("staalhal (trek-alleen verbanden, toets P-Δ): uc_max {uc:.3} ({})", t["maatgevend"]);
 }
 
 #[tokio::test]
@@ -223,6 +353,13 @@ async fn houten_hal_gerekend_en_volgens_en_1995_getoetst() {
     assert!(uit["samenvatting"]["eigenGewichtKn"]["hout"].as_f64().is_some_and(|v| v > 0.0));
     dichtbij(&geval(&uit, 1)["reactiesomKn"]["fz"], 28.8, "G op houten hal", 1e-3);
     assert!(uit["berekening"]["toetsing"]["uc_max"].is_null());
+    // De toets: P-Δ met φ = 1/200. Hout: φ volgens NEN-EN 1995-1-1 (5.1) bij
+    // h = 8 m is 0,005·√(5/8) = 0,00395 < 1/200, dus de vaste noemer blijft;
+    // de toets meldt dat hij met E_mean rekent en 2·L houdt (B10).
+    let ta = &uit["berekening"]["toetsanalyse"];
+    eis_toetsanalyse_van_de_hal(ta, 7);
+    assert_eq!(eis_toets_reactiesommen(ta), 14);
+    assert!(ta["meldingen"].as_array().unwrap().iter().any(|m| m.as_str().unwrap().contains("E_mean")), "{}", ta["meldingen"]);
     let hout = &uit["berekening"]["hout_toetsing"];
     assert_eq!(hout["norm"], json!("NEN-EN 1995-1-1"));
     assert!(hout["uc_max"].as_f64().is_some_and(|v| v.is_finite() && v > 0.0));
@@ -239,6 +376,7 @@ async fn balkrooster_draagt_af_op_de_palen() {
     let uit = hal(json!({ "hal": { "fundering": { "type": "balkrooster" } }, "reken": true, "toetsen": false })).await;
     assert_eq!(uit["samenvatting"]["aantallen"]["palen"], json!(66));
     assert!(uit["berekening"].get("toetsing").is_none(), "toetsen: false");
+    assert!(uit["berekening"].get("toetsanalyse").is_none(), "toetsen: false: geen toetsberekeningen");
     for (id, fz) in [(1, 540.0), (2, 1008.0), (3, -864.0)] {
         let g = geval(&uit, id);
         assert_eq!(g["paalreacties"]["aantal"], json!(66));
@@ -275,4 +413,65 @@ async fn hal_fout(hal: Value) -> Value {
     let uit = verzoek("tools/call", json!({ "name": TOOL, "arguments": { "hal": hal } })).await;
     assert_eq!(uit["isError"], json!(true), "{uit}");
     uit["structuredContent"].clone()
+}
+
+// ── Een oude bundel: TOETSING_ONMOGELIJK ─────────────────────────────────────
+
+/// Een nagemaakte bundel van vóór de toets van issue #199: hij praat het
+/// protocol en antwoordt op `staalhal_maken` met rekenverzoeken, maar zonder
+/// `toetsanalyse` en `toetsverzoeken` — zoals een bundel die de toets nog op
+/// de resultaten deed.
+fn schrijf_oude_bundel(map: &Path) -> PathBuf {
+    let pad = map.join("oude-bundel.mjs");
+    let script = r#"let buffer = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (brok) => {
+  buffer += brok;
+  let grens;
+  while ((grens = buffer.indexOf("\n")) >= 0) {
+    const regel = buffer.slice(0, grens);
+    buffer = buffer.slice(grens + 1);
+    if (!regel.trim()) continue;
+    const v = JSON.parse(regel);
+    const result = v.op === "handshake"
+      ? { protocol: 1, node_version: "v0.0.0", bundle_version: "0.0.0-oud", bundle_hash: null }
+      : { parameters: {}, project: {}, samenvatting: { groepen: {} }, waarschuwingen: [],
+          reken: { analyse: "linear", gevolgklasse: "CC2" }, combinaties: [], rekenverzoeken: [] };
+    process.stdout.write(JSON.stringify({ v: 1, id: v.id, ok: true, result }) + "\n");
+  }
+});
+process.stdin.resume();
+"#;
+    std::fs::write(&pad, script).expect("oude bundel schrijven");
+    pad
+}
+
+#[tokio::test]
+async fn een_bundel_zonder_toetsanalyse_geeft_toetsing_onmogelijk() {
+    eis_node().await;
+    let map = std::env::temp_dir().join(format!("openaec-staalhal-oude-bundel-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&map);
+    std::fs::create_dir_all(&map).expect("tijdelijke map");
+    let bundel = schrijf_oude_bundel(&map);
+    let uit = verzoek_met(
+        "tools/call",
+        json!({ "name": TOOL, "arguments": { "reken": true } }),
+        &[("OPENAEC_FEM_KERNEL", bundel.as_path())],
+    )
+    .await;
+    assert_eq!(uit["isError"], json!(true), "{uit}");
+    let s = &uit["structuredContent"];
+    assert_eq!(s["error_code"], json!("TOETSING_ONMOGELIJK"), "{s}");
+    let melding = s["melding"].as_str().unwrap_or("");
+    assert!(melding.contains("`toetsanalyse.analysis_type` = ontbreekt") && melding.contains("Er is niet getoetst"), "{melding}");
+    // Zonder toets bewaakt de server niets: dan komt de nagemaakte bundel door
+    // (een echte oude bundel weigert het onbekende veld `toetsen` zelf).
+    let zonder = verzoek_met(
+        "tools/call",
+        json!({ "name": TOOL, "arguments": { "reken": true, "toetsen": false } }),
+        &[("OPENAEC_FEM_KERNEL", bundel.as_path())],
+    )
+    .await;
+    assert_eq!(zonder["isError"], json!(false), "{zonder}");
+    let _ = std::fs::remove_dir_all(&map);
 }

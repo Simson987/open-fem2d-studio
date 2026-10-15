@@ -1038,6 +1038,69 @@ fn een_slanke_kolom_heeft_een_moment_om_z_door_imperfectie_en_tweede_orde() {
         .any(|n| n.contains("Geen verdere controle nodig")));
 }
 
+/// M_z UIT EEN RUIMTELIJKE TWEEDE-ORDEBEREKENING TELT NIET DUBBEL. In 3D komt
+/// de UGT-omhullende uit een P-Δ-berekening met scheefstand in ±X en ±Y: daar
+/// zit de globale imperfectie om z, vergroot door P-Δ, al in M_z. De toets om z
+/// telt N·e_i en N·e₂ zelf op. Met `first_order_envelope` komt M₀Ed,z daarom
+/// uit de eerste orde (zonder globale scheefstand); N_Ed blijft uit de
+/// omhullende.
+///
+/// ```text
+///   l = 3 m, scharnierend, N_Ed = 150 kN, M_y = 30 kNm (beide lijsten)
+///   M_z: tweede orde met scheefstand 12,0 kNm; eerste orde zonder 4,0 kNm
+///   e_i = θ_i·l₀/2 = 3000/600 = 5,0 mm; λ_z = 34,64 < λ_lim,z = 40,0 → e₂ = 0
+///   met de eerste orde:  M_Edz = 4,0 + 150·5,0/1000 = 4,75 kNm  (> N·e₀ = 3,0)
+///   zonder (de oude route): 12,0 + 0,75 = 12,75 kNm: imperfectie en tweede
+///   orde om z dubbel
+/// ```
+#[test]
+fn moment_om_z_komt_met_eerste_orde_omhullende_uit_de_eerste_orde() {
+    let k = kolomgegevens(Schoring::Geschoord, Knikgeval::ScharnierendScharnierend);
+    let mut met = verzoek_z(3.0, k.clone(), ugt_z(3000.0, 150.0, 30.0, 12.0));
+    met.first_order_envelope = Some(ugt_z(3000.0, 150.0, 30.0, 4.0));
+    let a = column_check(met).unwrap();
+    assert_eq!(a.tweede_orde_verwaarloosbaar_z, Some(true));
+    assert_relative_eq!(a.e_i_z_mm.unwrap(), 5.0, max_relative = 1e-12);
+    assert_relative_eq!(a.m_edz_knm.unwrap(), 4.75, max_relative = 1e-12);
+    let mz = toets(&a.checks, MOMENT_Z_ID);
+    assert_relative_eq!(var(mz, "M_0Edz"), 4.0, max_relative = 1e-12);
+    // N_Ed blijft uit de omhullende.
+    assert_relative_eq!(var(mz, "N_Ed"), 150.0, max_relative = 1e-12);
+    let tekst = mz.notes.join(" ");
+    assert!(tekst.contains("M_z OM DE z-AS UIT DE EERSTE ORDE"), "{tekst}");
+    assert!(tekst.contains("tegen 12,00 kNm in de tweede-ordeberekening"), "{tekst}");
+    assert!(toets(&a.checks, SLANKHEIDSGRENS_Z_ID).notes.iter().any(|n| n.contains("UIT DE EERSTE ORDE")));
+
+    // TEGENPROEF: zonder eerste-orde-omhullende de oude route.
+    let zonder = column_check(verzoek_z(3.0, k, ugt_z(3000.0, 150.0, 30.0, 12.0))).unwrap();
+    assert_relative_eq!(zonder.m_edz_knm.unwrap(), 12.75, max_relative = 1e-12);
+    assert!(!toets(&zonder.checks, MOMENT_Z_ID).notes.join(" ").contains("UIT DE EERSTE ORDE"));
+}
+
+/// Staat een combinatie niet in de eerste-orde-omhullende, dan geldt voor die
+/// sneden M_z uit de omhullende zelf (groter, de veilige kant), met het aantal
+/// in de toelichting. De maatgevende combinatie moet er wel in staan: anders
+/// weigert de poort om y al (zie hierboven).
+#[test]
+fn moment_om_z_zonder_eerste_orde_voor_een_combinatie_valt_veilig_terug() {
+    let k = kolomgegevens(Schoring::Geschoord, Knikgeval::ScharnierendScharnierend);
+    let mut ugt = ugt_z(3000.0, 150.0, 30.0, 12.0);
+    // Combinatie 2: minder druk (niet maatgevend voor de poort), M_z = 20 kNm.
+    ugt.extend([0.0, 1500.0, 3000.0].iter().map(|&x| ForcePoint {
+        combination_id: 2,
+        position_mm: x,
+        forces: InternalForces { n_ed: -100.0, my_ed: 30.0, mz_ed: 20.0, ..Default::default() },
+    }));
+    let mut v = verzoek_z(3.0, k, ugt);
+    v.first_order_envelope = Some(ugt_z(3000.0, 150.0, 30.0, 4.0));
+    let a = column_check(v).unwrap();
+    let mz = toets(&a.checks, MOMENT_Z_ID);
+    let tekst = mz.notes.join(" ");
+    assert!(tekst.contains("Voor 3 van de 6 sneden"), "{tekst}");
+    // Combinatie 2 houdt M_z = 20 kNm uit de omhullende: 20 + 100·5/1000 = 20,5 kNm.
+    assert_relative_eq!(a.m_edz_knm.unwrap(), 20.5, max_relative = 1e-12);
+}
+
 /// (5.38a) NET WEL EN NET NIET. l₀,y = l = 3 m (figuur 5.7 a); l₀,z rechtstreeks
 /// opgegeven als 6,000 m → λ_z/λ_y = 2,000 precies: vervuld. Als 6,003 m →
 /// 2,001: niet vervuld, en dan is de interactie (5.39) vereist.

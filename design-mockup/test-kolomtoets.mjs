@@ -34,6 +34,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { declaratie, leesBron, voerUitIn } from "./scripts/bron-uitvoeren.mjs";
 
 const HIER = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HIER, "..");
@@ -249,10 +250,46 @@ log("\n[3] korvenUitStaven en de bouwer dragen het §5.8-blok door");
     bouw(KOLOM_GESCHOORD, 1.8).inputs[0].column.phi_inf_t0, 1.8);
 
   // De app geeft de projectwaarde aan de toetsing mee, uit DEZELFDE bron als
-  // aan de stijfheidslus. Een brontekstcontrole, omdat App.tsx React is.
-  const app = readFileSync(join(HIER, "src", "App.tsx"), "utf8");
-  ok("App.tsx geeft φ(∞,t₀) van het project aan de stijfheidslus én de toetsing",
-    (app.match(/standaardPhiInfT0:\s*fem\.betonKruipcoefficient/g) ?? []).length === 2);
+  // aan de stijfheidslus: die van de resultaten en die van de toets (issue
+  // #199, de fysisch niet-lineaire ronde op de toetsrekengang). UITGEVOERD uit
+  // de AST van App.tsx (scripts/bron-uitvoeren.mjs), niet als brontekst: een
+  // derde plek met dezelfde regel liet de oude telling zonder reden vallen.
+  const appBron = leesBron("src/App.tsx");
+  const aanStaven = [];
+  const fem = {
+    nodes, beams: model(KOLOM_GESCHOORD).beams, supports: [], plates: [], loadCases: [],
+    actieveCombinaties: [], analysetype: "eersteOrde", scheefstandEnabled: false, scheefstandRichting: 1,
+    betonKruipcoefficient: 1.8, betonKruipInvoer: null, nationaleBijlage: "NL", gevolgklasse: "CC2",
+    betonSegmentLengteMm: 400, setSolverOutputs() {},
+  };
+  const naden = {
+    fem, rekenGeneratieRef: { current: 0 }, rekenFoutRef: { current: null },
+    dynamischeImport: async () => ({ notifyInfo() {}, notifyWarning() {} }), i18next: { t: (k) => k },
+    roepKern: async () => { throw new Error("de kern hoort hier niet aangeroepen te worden"); },
+    bepaalKruipPerStaaf: async () => ({ mislukt: [], perStaaf: new Map() }), bepaalBeffPerStaaf: async () => [], stijfheidClear() {},
+    // De lus zelf is hier geen onderwerp: zonder staven stopt hij meteen.
+    betonStavenUitModel: (invoer) => { aanStaven.push(invoer.standaardPhiInfT0); return { staven: [], overgeslagen: [] }; },
+  };
+  await (await voerUitIn(appBron, declaratie(appBron, "rekenFysischNietlineair"), naden))(
+    { perCase: new Map(), combinationResults: new Map(), envelope: null }, 0, null);
+  await (await voerUitIn(appBron, declaratie(appBron, "rekenToetsFysisch"), naden))(
+    { perCase: new Map(), ugtCombinaties: [] }, { perCase: null, combinationResults: new Map() }, 0);
+  let toetsdata = null;
+  Object.assign(naden, {
+    laatsteMultiInputRef: { current: null }, gemeldeWeigeringRef: { current: null },
+    // De FOUT in Inzichten bij een geweigerde toets (taak 7); hier geen onderwerp.
+    setStabiliteitsMelding() {},
+    setActiveView() {}, checkWeiger() {}, checkRun: async (d) => { toetsdata = d; },
+    computeAndStoreSolverOutputs: () => null, scheefstandUitkomst: {}, rekenToetsFysisch: async () => null,
+    // De toetskrachten zijn hier geen onderwerp.
+    bepaalToetsKrachten2D: () => ({ analyse: { soort: "tweedeOrdeGeometrisch", hergebruikt: false }, weigering: null, meldingen: [] }),
+    toetsSet2D: () => ({ combinaties: [], combinationResults: new Map(), stabiliteit: {} }),
+  });
+  await (await voerUitIn(appBron, declaratie(appBron, "handleRunMemberChecks"), naden))(
+    { openPanel: false, outputs: { combinationResults: new Map(), perCase: new Map(), multiInput: {} } });
+  eq("App.tsx geeft φ(∞,t₀) van het project aan de stijfheidslus van de resultaten én van de toets",
+    aanStaven, [1.8, 1.8]);
+  eq("… en aan de toetsing", toetsdata?.standaardPhiInfT0, 1.8);
   // HET PROJECTVELD IS ZICHTBAAR ZODRA ER BETON IS, BIJ ELK ANALYSETYPE. De
   // waarde voedt de kolomtoets, die altijd loopt; een veld dat alleen bij de
   // fysisch niet-lineaire stand verschijnt, zou bij eerste of geometrisch
@@ -274,6 +311,7 @@ log("\n[3] korvenUitStaven en de bouwer dragen het §5.8-blok door");
     veldBlok.length > 0 && !/analysetype/.test(veldBlok.split("\n")[0]));
   ok("de toelichting zegt dat het veld BGT-stijfheid én kolomtoets voedt",
     veldBlok.includes('t("loadCases.creepFeedsBoth")'));
+  const app = readFileSync(join(HIER, "src", "App.tsx"), "utf8");
   ok("App.tsx geeft heeftBetonstaaf uit modelHeeftBetonstaaf door",
     /modelHeeftBetonstaaf\(fem\.beams\)/.test(app) && /heeftBetonstaaf=\{heeftBetonstaaf\}/.test(app));
   for (const taal of ["nl", "en", "de", "fr"]) {

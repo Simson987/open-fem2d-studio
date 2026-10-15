@@ -21,6 +21,39 @@ import { bepaalVerloop } from "../../lib/sectionResolver";
 import {
   eigenNaamVan, isEigenProfiel, naarCustomSection, zoekEigenDoorsnede,
 } from "../../lib/profieleditor/eigenDoorsnedenStore";
+import type { ToetsAnalyse } from "../../lib/toetsKrachten";
+import { toetsKrachtenNotitie3D } from "./openFem3dToetsKrachten";
+
+/**
+ * De reden bij een staaf zonder UGT-toetskrachten: geen enkele UGT-combinatie
+ * raakt een belast geval (alleen BGT, of de UGT-combinaties zijn verwijderd).
+ * Gedeeld met de beton- en de houtbouwer.
+ */
+export const GEEN_UGT_TOETSCOMBINATIE =
+  "geen UGT-toetscombinatie — er is geen UGT-combinatie met een belast geval, dus geen toetskrachten " +
+  "(tweede orde met scheefstand); voeg UGT-combinaties toe";
+
+/**
+ * De kanttekening bij een opgegeven L_cr,z groter dan de staaflengte (B13 van
+ * #199, om de zwakke as). De UGT-toets rekent in 3D P-Δ met scheefstand in +X,
+ * −X, +Y en −Y: de zijdelingse verplaatsing van een kolom om z zit dan al in
+ * de krachten, en 5.2.2(7)b staat de systeemlengte toe. De opgave telt de
+ * sway dus nog een keer in χ_z. Dat ligt aan de veilige kant; er verandert geen
+ * getal. Bij een gedraaide kolom of een hoekprofiel (u/v-assen) werkt de
+ * scheefstand langs de hoofdas met een component van φ.
+ */
+export function dubbeleSwayZNotitie(lCrZM: number, lengteM: number, noemer: number): string {
+  const mm = (m: number) => Math.round(m * 1000).toLocaleString("nl-NL");
+  return (
+    `KANTTEKENING, DUBBELE SWAY OM z: de opgegeven L_cr,z = ${mm(lCrZM)} mm is groter dan de staaflengte ` +
+    `L = ${mm(lengteM)} mm, wat op een knikvorm met verplaatsbare knopen (sway) wijst. De UGT-krachten van ` +
+    `deze toets komen uit een tweede-ordeberekening (P-Δ) met scheefstand φ = 1/${Math.round(noemer)} in ` +
+    "+X, −X, +Y en −Y (NEN-EN 1993-1-1 5.2.2(3)b en 5.3.2): de zijdelingse verplaatsing om de zwakke as en " +
+    "haar vergroting zitten dan al in de krachten (bij een gedraaide kolom of een hoekprofiel met de " +
+    "component van φ langs die as), en 5.2.2(7)b staat de systeemlengte L toe. Met deze opgave telt de " +
+    "sway dus dubbel, in χ_z. Dat ligt aan de veilige kant; de opgave blijft staan."
+  );
+}
 
 export interface OpenFem3DCheckSkip { beamId: number; reason: string }
 
@@ -111,8 +144,23 @@ export interface OpenFem3DCombinationSet {
    * waarde voor beide richtingen. Nodig om te beslissen of de zijdelingse knik
    * van een stalen kolom met een vrije kop in de krachten zit
    * (`openFem3DZijdelingseKnik`). Ontbreekt → niet bekend, en dan geldt 2·L.
+   * In de toetsset (`toetsSet3D`, issue #199) altijd de φ van de toets.
    */
   scheefstandPhi?: number;
+  /**
+   * De analyse van de UGT-toetskrachten (issue #199): alleen in de toetsset
+   * (`toetsSet3D`). Daarmee zetten de bouwers bij elke staaf dat de
+   * UGT-krachten tweede orde met scheefstand zijn (`toetsKrachtenNotitie3D`).
+   * Ontbreekt = een aanroeper met zijn eigen combinatieset; dan geen notitie.
+   */
+  toetsAnalyse?: ToetsAnalyse;
+  /**
+   * De eerste orde van de toetsvarianten en de quasi-blijvende combinaties,
+   * voor de betonkolomtoets (§5.8.3.1 r_m, (5.19) M₀Ed en M₀Eqp; issue #199,
+   * B11). Alleen met een betonstaaf met kolomblok (`toetsSet3D`); ontbreekt =
+   * de UGT-krachten gelden zelf als eerste orde, zoals vóór dit veld.
+   */
+  eersteOrdeResultaten?: ReadonlyMap<number, OpenFem3DSolveResult>;
 }
 
 /**
@@ -161,6 +209,8 @@ export function buildOpenFem3DSteelCheckInputs(
       : "De EN 1993-krachten komen op alle solverstations uit de actuele 3D-rekentoestand; er is geen combinatieset meegegeven.",
     "Kniklengtes en kipsteunen komen uit de toetsinstellingen van de staaf; zonder opgave neemt de kern de staaflengte.",
     "De BGT-doorbuiging volgt uit de geïntegreerde solvermomentlijn M/EI en past exact op beide eindtranslaties; oude solverresultaten vallen terug op Hermite-interpolatie.",
+    // De toetsset (issue #199): de UGT-krachten zijn tweede orde met scheefstand.
+    ...(combinationSet?.toetsAnalyse ? [toetsKrachtenNotitie3D(combinationSet.toetsAnalyse)] : []),
   ];
   const displacements = new Map(result.displacements.map((value) => [value.nodeId, value]));
   const memberForces = new Map(result.memberForces.map((value) => [value.memberId, value]));
@@ -246,6 +296,14 @@ export function buildOpenFem3DSteelCheckInputs(
       const combinationResult = combinationSet?.results.get(combination.id);
       return combinationResult ? openFem3DForceStations(combinationResult, beam.id, combination.id) : [];
     });
+    // Met een toetsset (issue #199) nooit terug naar `result`: dat is het
+    // actieve geval, ongefactoreerd en volgens de instelling van de resultaten
+    // (eerste orde, zonder scheefstand), terwijl de notitie tweede orde met
+    // scheefstand zegt. Zonder UGT-toetscombinatie is er niets te toetsen.
+    if (ulsEnvelope.length === 0 && combinationSet?.toetsAnalyse) {
+      skipped.push({ beamId: beam.id, reason: GEEN_UGT_TOETSCOMBINATIE });
+      continue;
+    }
     const forcesEnvelope = ulsEnvelope.length > 0 ? ulsEnvelope : openFem3DForceStations(result, beam.id);
     const deflectionMm = deflectionCombinations.reduce((maximum, combination) => {
       const combinationResult = combinationSet?.results.get(combination.id);
@@ -365,6 +423,13 @@ export function buildOpenFem3DSteelCheckInputs(
         ...inputNotes,
         ...(zijdelings.notitie && !((cfg?.bucklingLengthY_m ?? 0) > 0 && (cfg?.bucklingLengthZ_m ?? 0) > 0)
           ? [zijdelings.notitie] : []),
+        // Een opgegeven L_cr,z > L bij een kolom: de kern zet de kanttekening
+        // DUBBELE SWAY alleen om y (as 1), want alleen de bouwer weet dat de
+        // toets in 3D ook in ±Y rekent (in 2D dekt de P-Δ de zwakke as niet).
+        ...(combinationSet?.toetsAnalyse && verticaal
+          && (cfg?.bucklingLengthZ_m ?? 0) > forces.lengthM * (1 + 1e-6)
+          ? [dubbeleSwayZNotitie(cfg!.bucklingLengthZ_m!, forces.lengthM, combinationSet.toetsAnalyse.noemer)]
+          : []),
       ],
       // Een trek-alleen staaf (windverband) doet alleen mee zolang zij op trek
       // staat: de kern toetst dan alleen trek (6.2.3) en meldt een eventuele

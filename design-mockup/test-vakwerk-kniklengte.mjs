@@ -51,7 +51,10 @@
 // Drie wegen: de bouwer zoals de toetsstore hem aanroept, de kern via de
 // toetsbrug, en `check_fem_model` via de MCP-server met de exacte aanroep van
 // de controle (`testdata/controle-2026-10/k6/invoer-006-*.json`) en de
-// gevallen van de review.
+// gevallen van de review. Sinds issue #199 rekent `check_fem_model` de
+// UGT-toetskrachten altijd P-Δ met scheefstand φ = 1/200; de bouwerroute
+// hierboven voedt de kern nog met eerste-ordekrachten. Waar de MCP-getallen
+// daardoor verschuiven, staat de verantwoording in [10].
 //
 // Uitvoeren: npx tsx test-vakwerk-kniklengte.mjs
 
@@ -568,7 +571,7 @@ if (!existsSync(MCP_SERVER)) {
     ...["invoer-006-a.json", "invoer-006-b.json"].map((n) => JSON.parse(readFileSync(join(DATA, n), "utf8"))),
     { tool, arguments: { model: model(kolomMetLigger(null)), beam_ids: [1, 2] } },
     { tool, arguments: { model: model(liggerMetPaal()), beam_ids: [1, 2] } },
-    { tool, arguments: { model: model(houtKolom(20)), nonlinear: true } },
+    { tool, arguments: { model: model(houtKolom(20)) } },
     { tool, arguments: { model: model(kolomVrijeTop()), beam_ids: [1, 2] } },
   ];
   const [a, b, kolom, paal, hout, vrijeTop] = await mcp(aanroepen);
@@ -582,6 +585,11 @@ if (!existsSync(MCP_SERVER)) {
     const k = knikToets(d.results.find((r) => r.beam_id === 6) ?? { checks: [] });
     dicht(`MCP ${naam}: bovenrand L_cr,y = 3000 mm`, variabele(k, "L_{cr,y}"), 3000, 1e-9);
     dicht(`MCP ${naam}: bovenrand L_cr,z = 3000 mm`, variabele(k, "L_{cr,z}"), 3000, 1e-9);
+    // Issue #199: de toets rekent P-Δ met scheefstand φ = 1/200. H = φ·V op de
+    // drie bovenrandknopen is samen 1,35·90/200 = 0,6075 kN, dus |ΔN| in de
+    // bovenrand ≤ 0,61 kN en |ΔUC| ≤ 0,61/434,8 = 0,0014. Gemeten 0,2788
+    // tegen 0,2784 in eerste orde (de bouwerroute hierboven): +0,0004, binnen
+    // de bestaande 0,0015.
     dicht(`MCP ${naam}: bovenrand UC 6.3.1 = 0,278`, k?.uc?.uc, 0.278, 0.0015);
   }
   const dk = inhoud(kolom);
@@ -591,18 +599,37 @@ if (!existsSync(MCP_SERVER)) {
     (knikToets(rk)?.notes ?? []).some((n) => /^KNIK PER VAK/.test(n) && /AANNAME/.test(n)));
   const dp = inhoud(paal);
   const rp = dp?.results?.find((r) => r.beam_id === 1);
-  dicht("MCP ligger met paal: kip UC 2,235", toets(rp, "6.3.2_ltb")?.uc?.uc, 2.235, 2e-3);
+  // Issue #199: de toets rekent altijd P-Δ met scheefstand φ = 1/200. De
+  // paallast 1,35·50 = 67,5 kN krijgt H = 0,3375 kN op de vrije paalkop
+  // (h = 3 m): M_I = 1,0125 kNm, vergroot met 1/(1 − 67,5/963,2) = 1,0754
+  // (N_cr van de ingeklemd-vrije HEA 160, I_y = 16,73·10⁶ mm⁴, L_cr = 6 m) tot
+  // 1,089 kNm. Dat moment grijpt midden op de ligger aan en tilt het
+  // veldmoment aan één kant op met 1,089/2 = 0,544 kNm: 162,0 → 162,544 kNm
+  // (+0,34 %), dus kip 2,235 · 162,544/162,0 = 2,2425 (de bouwerroute hierboven,
+  // eerste orde, houdt 2,2354). Gemeten 2,2431; de tolerantie 2e-3 blijft.
+  dicht("MCP ligger met paal: kip UC 2,2425 (P-Δ met scheefstand; eerste orde 2,235)",
+    toets(rp, "6.3.2_ltb")?.uc?.uc, 2.235 * 162.544 / 162.0, 2e-3);
   dicht("MCP ligger met paal: w_fin UC 22,43/24,0 = 0,935 (ℓ_rep/250, #192)", toets(rp, "deflection_w_fin")?.uc?.uc, 22.43 / 24.0, 2e-3);
   ok("MCP ligger met paal: status NotOk", rp?.status === "NotOk");
   const dh = inhoud(hout);
   const rh = dh?.timber_results?.find((r) => r.beam_id === 1);
   ok("MCP hout met veer (P-Δ): één lijn, staaf 2 overgeslagen",
     (dh?.skipped_beams ?? []).some((s) => s.beam_id === 2 && /doorgaande lijn/.test(s.reason)));
+  // De aanroep stuurde tot issue #199 `nonlinear: true` mee (P-Δ zonder
+  // scheefstand); dat argument bestaat niet meer, de toets rekent altijd P-Δ
+  // met φ = 1/200. De kop hangt aan een rol, dus H = φ·V gaat rechtstreeks
+  // naar de oplegging en buigt de kolom niet: de UC blijft 1,321 (gemeten 1,3209).
   dicht("MCP hout met veer (P-Δ, N_d = 20 kN): UC 1,321 (L_cr = 6000 mm)", rh?.uc_max, 1.321, 2e-3);
   ok("MCP hout met veer: status NotOk", rh?.status === "NotOk");
   const rv = inhoud(vrijeTop)?.results?.find((r) => r.beam_id === 1);
-  dicht("MCP kolom met vrije top: L_cr,y = 14 000 mm (2·L, geen kniklengte per vak)",
-    variabele(knikToets(rv), "L_{cr,y}"), 14000, 1e-9);
+  // Issue #199: L_cr,y = 7000 mm waar het 14 000 mm (2·L) was. De toets rekent
+  // altijd P-Δ met scheefstand φ = 1/200, en die is minstens de eigen φ van
+  // deze vrijstaande lijn (EN 1993-1-1 (5.5), h = 7 m, m = 1: α_h = 2/√7 =
+  // 0,756, φ_eigen = 1/265), dus de systeemlengte L van de hele lijn
+  // (5.2.2(7)b) — nog steeds niet per vak (dat was 4000 mm). De UC verandert
+  // niet: knik om z met 2·L = 14 m blijft maatgevend (1,671, hieronder).
+  dicht("MCP kolom met vrije top: L_cr,y = 7 000 mm (L met P-Δ en scheefstand, geen kniklengte per vak)",
+    variabele(knikToets(rv), "L_{cr,y}"), 7000, 1e-9);
   dicht("MCP kolom met vrije top: UC 6.3.1 = 1,671", knikToets(rv)?.uc?.uc, knikS235(14000, -202.5, HEA200).uc, 2e-3);
   ok("MCP kolom met vrije top: status NotOk", rv?.status === "NotOk", rv?.status);
 }

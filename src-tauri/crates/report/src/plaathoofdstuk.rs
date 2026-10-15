@@ -142,7 +142,19 @@ pub fn extend_with_plaathoofdstuk(flow: &mut Vec<Box<dyn Flowable>>, input: &Rep
     flow.push(Box::new(Spacer::from_mm(2.0)));
 
     // ── 1. Overzicht ──
-    let mut rijen: Vec<Vec<String>> = input.plate_results.iter().map(overzichtsregel).collect();
+    // De combinatie met haar naam: de toetsvarianten (id + 1 000 000) staan in
+    // geen combinatielijst van het model.
+    let mut rijen: Vec<Vec<String>> = input
+        .plate_results
+        .iter()
+        .map(|r| {
+            let mut rij = overzichtsregel(r);
+            if let Some(c) = r.governing_combination_id {
+                rij[6] = input.combinatie_label(c);
+            }
+            rij
+        })
+        .collect();
     for s in &input.plate_skipped {
         rijen.push(vec![
             s.plate_id.to_string(),
@@ -238,14 +250,14 @@ pub fn extend_with_plaathoofdstuk(flow: &mut Vec<Box<dyn Flowable>>, input: &Rep
                 style_note(),
             )));
         }
-        extend_met_plaat(flow, r);
+        extend_met_plaat(flow, r, input);
     }
     for p in &input.plate_inputs {
         let resultaat = input
             .plate_results
             .iter()
             .find(|r| r.plate_id == p.plate_id);
-        extend_met_invoer(flow, p, resultaat);
+        extend_met_invoer(flow, p, resultaat, input);
     }
 }
 
@@ -256,6 +268,7 @@ fn extend_met_invoer(
     flow: &mut Vec<Box<dyn Flowable>>,
     p: &PlateCheckInput,
     r: Option<&PlateCheckResult>,
+    input: &ReportInput,
 ) {
     flow.push(Box::new(
         Paragraph::new(format!("Plaat {} — toetsinvoer", p.plate_id), style_h3()).kop(),
@@ -283,7 +296,7 @@ fn extend_met_invoer(
             flow.push(Box::new(Paragraph::new(
                 format!(
                     "Combinatie {}: belastingduur {}. {}",
-                    d.combination_id,
+                    input.combinatie_label(d.combination_id),
                     timber_check::belastingduur::duurklasse_naam(d.load_duration),
                     d.basis
                 ),
@@ -298,7 +311,7 @@ fn extend_met_invoer(
         )));
     }
     extend_met_wandinvoer(flow, p);
-    extend_met_meshdekking(flow, p);
+    extend_met_meshdekking(flow, p, input);
     if p.combinations.is_empty() && p.frequente_combinaties.is_empty() {
         flow.push(Box::new(Paragraph::new(
             "Geen combinaties aangeleverd.",
@@ -324,7 +337,7 @@ fn extend_met_invoer(
             let spanning =
                 maatgevend.and_then(|u| c.elements.iter().find(|e| e.element_id == u.element_id));
             vec![
-                format!("{soort} {}", c.combination_id),
+                format!("{soort} {}", input.combinatie_label(c.combination_id)),
                 c.elements.len().to_string(),
                 maatgevend.map_or("—".into(), |u| u.element_id.to_string()),
                 spanning.map_or("—".into(), |e| crate::getal_tekst(e.sigma_x_mpa, 3)),
@@ -366,7 +379,7 @@ fn extend_met_invoer(
         };
         if let Some(tekst) = melding {
             flow.push(Box::new(Paragraph::new(
-                format!("Combinatie {}: {}.", c.combination_id, tekst),
+                format!("Combinatie {}: {}.", input.combinatie_label(c.combination_id), tekst),
                 style_note(),
             )));
         }
@@ -458,7 +471,7 @@ fn extend_met_wandinvoer(flow: &mut Vec<Box<dyn Flowable>>, p: &PlateCheckInput)
 
 /// Vergelijk alleen de aangeleverde element-ID's; dit is geen normtoets of bewijs
 /// dat de aanroeper alle belastingcombinaties heeft meegestuurd.
-fn extend_met_meshdekking(flow: &mut Vec<Box<dyn Flowable>>, p: &PlateCheckInput) {
+fn extend_met_meshdekking(flow: &mut Vec<Box<dyn Flowable>>, p: &PlateCheckInput, input: &ReportInput) {
     use std::collections::BTreeSet;
     if let Some(fout) = &p.mesh_fout {
         flow.push(Box::new(Paragraph::new(
@@ -497,7 +510,7 @@ fn extend_met_meshdekking(flow: &mut Vec<Box<dyn Flowable>>, p: &PlateCheckInput
         flow.push(Box::new(Paragraph::new(
             format!(
                 "Meshdekking {soort} {}: {} ontbrekend, {} extra, {} dubbel.",
-                c.combination_id,
+                input.combinatie_label(c.combination_id),
                 verwacht.difference(&aanwezig).count(),
                 aanwezig.difference(&verwacht).count(),
                 c.elements.len() - aanwezig.len()
@@ -507,7 +520,7 @@ fn extend_met_meshdekking(flow: &mut Vec<Box<dyn Flowable>>, p: &PlateCheckInput
     }
 }
 
-fn extend_met_plaat(flow: &mut Vec<Box<dyn Flowable>>, r: &PlateCheckResult) {
+fn extend_met_plaat(flow: &mut Vec<Box<dyn Flowable>>, r: &PlateCheckResult, input: &ReportInput) {
     flow.push(Box::new(
         Paragraph::new(
             format!(
@@ -616,7 +629,7 @@ fn extend_met_plaat(flow: &mut Vec<Box<dyn Flowable>>, r: &PlateCheckResult) {
                     titel.clone(),
                     artikel.clone(),
                     uc.map_or("—".into(), uc_tekst),
-                    comb.to_string(),
+                    input.combinatie_label(comb),
                     status_label(status).into(),
                 ]
             })
@@ -645,7 +658,7 @@ fn extend_met_plaat(flow: &mut Vec<Box<dyn Flowable>>, r: &PlateCheckResult) {
                     .iter()
                     .map(|c| {
                         vec![
-                            c.combination_id.to_string(),
+                            input.combinatie_label(c.combination_id),
                             uc_tekst(c.uc),
                             c.element_id.to_string(),
                             c.check_id.clone(),
@@ -667,7 +680,8 @@ fn extend_met_plaat(flow: &mut Vec<Box<dyn Flowable>>, r: &PlateCheckResult) {
 
     let regel = |comb: u32| {
         format!(
-            "Combinatie {comb}  ·  elementgemiddelde spanningen; het element staat in de toelichting"
+            "Combinatie {}  ·  elementgemiddelde spanningen; het element staat in de toelichting",
+            input.combinatie_label(comb)
         )
     };
     for nc in &r.checks {

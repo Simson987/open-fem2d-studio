@@ -618,15 +618,17 @@ export default function LoadCaseTabBar({
       )}
 
       {/* Analysetype — drie standen, want de derde (fysisch niet-lineair) past
-          niet in de booleaan die hier eerst stond. Zie femTypes.Analysetype. */}
+          niet in de booleaan die hier eerst stond. Zie femTypes.Analysetype.
+          Het geldt voor de RESULTATEN (issue #199): de UGT-toets rekent altijd
+          zelf tweede orde met scheefstand, en de tooltip zegt dat. */}
       {setAnalysetype && (
         <span
           className={`lc-tab-phi${analysetype !== "eersteOrde" ? " active" : ""}`}
-          title={analysetype === "tweedeOrdeGeometrisch" && geometricAnalysisLabel
+          title={`${analysetype === "tweedeOrdeGeometrisch" && geometricAnalysisLabel
             ? t("loadCases.analysisDescriptionVolume.geometric")
             : analysetype === "tweedeOrdeFysisch" && materialAnalysisLabel
               ? materialAnalysisDescription ?? t("loadCases.analysisDescriptionVolume.material")
-            : t(`loadCases.analysisDescription.${analysetype}`)}
+            : t(`loadCases.analysisDescription.${analysetype}`)}\n\n${t("loadCases.analysisResultsNote")}`}
         >
           <span className="lc-tab-phi-label">{t("loadCases.analysis")}</span>
           <select
@@ -810,8 +812,10 @@ export default function LoadCaseTabBar({
         </span>
       )}
 
-      {/* Scheefstand — zelfde toggle-patroon; bij aan verschijnen φ (1/x) en
-          de richtingskeuze inline. */}
+      {/* Scheefstand — zelfde toggle-patroon. Het vinkje geldt voor de
+          RESULTATEN; de UGT-toets rekent altijd met deze φ (issue #199, B4).
+          Daarom staan φ (bron, 1/x of h en m) en de richting er ALTIJD, ook
+          met het vinkje uit: het zijn gegevens van de toets. */}
       {setScheefstandEnabled && (
         <label
           className={`lc-tab-toggle${scheefstandEnabled ? " active" : ""}`}
@@ -830,7 +834,7 @@ export default function LoadCaseTabBar({
           reductiefactoren van de norm. Kiest de gebruiker een norm, dan
           verdwijnt het noemerveld en verschijnen h en m — de twee grootheden
           die (5.5)/(5.1) nodig hebben. */}
-      {setScheefstandEnabled && scheefstandEnabled && setScheefstandBron && (
+      {setScheefstandEnabled && setScheefstandBron && (
         <span
           className="lc-tab-phi"
           title={t("loadCases.swaySourceTitle")}
@@ -852,7 +856,7 @@ export default function LoadCaseTabBar({
         </span>
       )}
 
-      {setScheefstandEnabled && scheefstandEnabled && scheefstandBron === "vast" && (
+      {setScheefstandEnabled && scheefstandBron === "vast" && (
         <span className="lc-tab-phi" title={t("loadCases.swayDenominatorTitle")}>
           <span className="lc-tab-phi-label">φ = 1/</span>
           <input
@@ -873,7 +877,7 @@ export default function LoadCaseTabBar({
           de uitkomst van (5.5)/(5.1) ernaast, en de hele afleiding met alle
           tussenwaarden in de tooltip. Leeg laten = de afleiding gebruiken;
           een getal invullen overschrijft haar. */}
-      {setScheefstandEnabled && scheefstandEnabled && scheefstandBron !== "vast" && (
+      {setScheefstandEnabled && scheefstandBron !== undefined && scheefstandBron !== "vast" && (
         <span className="lc-tab-phi" title={scheefstandToelichting}>
           <span className="lc-tab-phi-label">h =</span>
           <LengthInput className="lc-tab-phi-input" positive storedUnit="m"
@@ -907,7 +911,7 @@ export default function LoadCaseTabBar({
         </span>
       )}
 
-      {setScheefstandEnabled && scheefstandEnabled && (
+      {setScheefstandEnabled && (
         <span
           className="lc-tab-phi"
           title={scheefstandIn3D

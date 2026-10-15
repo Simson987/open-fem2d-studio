@@ -252,6 +252,12 @@ export const useVariantStore = create<VariantState>((set, get) => ({
           // k_mod per combinatie afleidt (EN 1995-1-1 3.1.3(2)).
           loadCases: data.loadCases,
           gevallenMetLast: data.gevallenMetLast,
+          // De stabiliteit van de toetsing ernaast (issue #199): haar
+          // UGT-krachten zijn altijd tweede orde met scheefstand, dus krijgt een
+          // vrije kop dezelfde kniklengte als bij de toetsing (L, 5.2.2(7)b) en
+          // een houtstaaf dezelfde vaste melding. Zonder dit veld rekende een
+          // variant met 2·L naast een toetsing met L.
+          stabiliteit: data.stabiliteit,
         };
 
         if (soort === "staal") {

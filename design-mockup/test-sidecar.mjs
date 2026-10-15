@@ -178,6 +178,30 @@ log("\n[1] Kanaal: pipelining, volgorde, exitcode en stdout-hygiëne");
       .every((op) => h.ops.includes(op)),
     JSON.stringify(h.ops));
 }
+{
+  // Eén regel in vele stukken: een uitwerkverzoek van de staalhal met zijn
+  // toetsresultaten (issue #199) is ongeveer 100 MB en komt in duizenden
+  // stukken binnen. De lus zoekt alleen in het nieuwe stuk naar "\n" en voegt
+  // de stukken pas bij het regeleinde samen. Hier: 3 MB in stukken van 7 919
+  // tekens, twee korte verzoeken die een stuk delen, en een laatste regel
+  // zonder afsluitende "\n".
+  const kind = spawn(process.execPath, [TSX_CLI, SIDECAR_TS, "--sidecar"], { cwd: HIER });
+  let uit = "";
+  kind.stdout.on("data", (d) => (uit += d));
+  const tekst = JSON.stringify(verzoek(21, "handshake", { opvulling: "x".repeat(3_000_000) })) + "\n"
+    + JSON.stringify(verzoek(22, "handshake")) + "\n" + JSON.stringify(verzoek(23, "handshake"));
+  const code = await new Promise((klaar) => {
+    kind.on("close", klaar);
+    for (let i = 0; i < tekst.length; i += 7_919) kind.stdin.write(tekst.slice(i, i + 7_919));
+    kind.stdin.end();
+  });
+  const antwoorden = uit.split("\n").filter((r) => r.trim().length > 0).map((r) => {
+    try { return JSON.parse(r); } catch { return { onparsebaar: r.slice(0, 200) }; }
+  });
+  ok("een regel van 3 MB in vele stukken: exitcode 0, drie antwoorden in volgorde, alle geslaagd",
+    code === 0 && antwoorden.map((a) => a.id).join(",") === "21,22,23" && antwoorden.every((a) => a.ok === true),
+    JSON.stringify(antwoorden.map((a) => [a.id, a.ok, a.error?.code ?? a.onparsebaar])));
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 log("\n[2] Foutpaden — elk met zijn eigen code, proces blijft exitcode 0");
@@ -383,10 +407,18 @@ const R = solveAntwoord.antwoorden[0]?.result ?? {};
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-log("\n[4] steel_check_inputs — de invoer voor check_steel_beam");
+log("\n[4] steel_check_inputs — de invoer voor check_steel_beam, alleen bij `check`");
 {
-  ok("drie staalstaven getoetst", R.steel_check_inputs?.length === 3, String(R.steel_check_inputs?.length));
-  const ligger = (R.steel_check_inputs ?? []).find((i) => i.beam_id === 2);
+  // Sinds issue #199 levert `solve` geen toetsinvoer meer: die rustte op de
+  // resultaatkrachten, terwijl de toets altijd zelf tweede orde met scheefstand
+  // rekent. De invoer komt van `check`.
+  ok("solve: geen steel_check_inputs en geen skipped_beams",
+    !("steel_check_inputs" in R) && !("skipped_beams" in R), Object.keys(R).join(", "));
+  const C = (await roepAan([
+    verzoek(1, "check", { model: PORTAAL, combinations: COMBI_12G_15Q, profiles: PROFIELEN }),
+  ])).antwoorden[0]?.result ?? {};
+  ok("drie staalstaven getoetst", C.steel_check_inputs?.length === 3, String(C.steel_check_inputs?.length));
+  const ligger = (C.steel_check_inputs ?? []).find((i) => i.beam_id === 2);
   ok("ligger aanwezig", !!ligger);
   ok("profielnaam doorgegeven", ligger?.profile_name === "IPE300", ligger?.profile_name);
   dichtbij("ligger length_m", ligger?.length_m ?? 0, 6.0, 1e-9);
@@ -399,7 +431,7 @@ log("\n[4] steel_check_inputs — de invoer voor check_steel_beam");
 
   // Zonder profieldatabase blijft de toetsinvoer leeg — mét waarschuwing.
   const zonder = await roepAan([
-    verzoek(1, "solve", { model: PORTAAL, combinations: COMBI_12G_15Q }),
+    verzoek(1, "check", { model: PORTAAL, combinations: COMBI_12G_15Q }),
   ]);
   const Z = zonder.antwoorden[0]?.result ?? {};
   ok("zonder `profiles`: geen toetsinvoer", (Z.steel_check_inputs ?? []).length === 0);
@@ -503,6 +535,31 @@ log("\n[5b] Het ANALYSETYPE uit het projectbestand (basisaudit 3.2 punt 2)");
     /tweedeOrdeFysisch/.test(fysisch.error?.melding ?? "")
       && /5\.8\.6/.test(fysisch.error?.melding ?? ""),
     fysisch.error?.melding ?? "");
+
+  // `check` (issue #199): de UGT-toets rekent altijd tweede orde met
+  // scheefstand, los van het analysetype van het bestand, dat alleen de
+  // resultaten bepaalt. Fysisch blijft geweigerd: de toets zou de betonronde
+  // op haar eigen tweede orde draaien, en die ronde draait alleen in de app.
+  const check = async (extra, payload = {}) => (await roepAan([
+    verzoek(1, "check", { project: { path: "proef.ifcfem2d", inhoud: bestand(extra) }, profiles: PROFIELEN, ...payload }),
+  ])).antwoorden[0];
+  const checkEerste = await check({ nonlinearEnabled: false, analysetype: "eersteOrde" });
+  ok("check op een eerste-ordebestand: de toetsanalyse is tweede orde met scheefstand, de resultaten eerste orde",
+    checkEerste.ok === true && checkEerste.result?.stability?.analysis_type === "tweedeOrdeGeometrisch"
+      && checkEerste.result?.stability?.model_analysis_type === "eersteOrde"
+      && checkEerste.result?.stability?.scheefstand?.afgedwongen === true
+      && checkEerste.result?.solve_summary?.nonlinear_used === false,
+    JSON.stringify(checkEerste.result?.stability ?? checkEerste.error));
+  const checkFysisch = await check({ nonlinearEnabled: true, analysetype: "tweedeOrdeFysisch" });
+  ok("check op tweedeOrdeFysisch: geweigerd, met de reden voor de toets",
+    checkFysisch.ok === false && /tweedeOrdeFysisch/.test(checkFysisch.error?.melding ?? "")
+      && /5\.8\.6/.test(checkFysisch.error?.melding ?? "") && /toets/.test(checkFysisch.error?.melding ?? ""),
+    checkFysisch.error?.melding ?? "TOCH GETOETST");
+  const checkNonlinear = await check({ nonlinearEnabled: false, analysetype: "eersteOrde" }, { nonlinear: true });
+  ok("check met `nonlinear`: geweigerd als invoerfout (de toets rekent altijd tweede orde)",
+    checkNonlinear.ok === false && checkNonlinear.error?.code === "INVOER_ONGELDIG"
+      && /nonlinear/.test(checkNonlinear.error?.melding ?? ""),
+    JSON.stringify(checkNonlinear.error ?? "TOCH GETOETST"));
 
   // Een analysetype dat deze versie niet kent wordt aan de bestandspoort
   // geweigerd - niet geraden.

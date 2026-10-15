@@ -66,6 +66,8 @@ sls_quasi_permanent_envelope: Array<ForcePoint>,
 /**
  * UGT-krachtsverloop uit een EERSTE-ORDE-berekening, voor M₀Ed, M₀₁ en
  * M₀₂ (§5.8.3.1(1), (5.19)) wanneer `forces_envelope` tweede orde is.
+ * Om z ook M₀Ed,z en r_m,z; daar hoort M_z zonder globale scheefstand te
+ * zijn, want de toets voegt e_i en e₂ om z zelf toe.
  * `None` = `forces_envelope` is eerste orde. Zie hetzelfde veld in
  * `ConcreteBeamCheckInput`.
  */

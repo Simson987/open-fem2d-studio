@@ -30,6 +30,90 @@ export function calculateBeamAngle(n1: INode, n2: INode): number {
 }
 
 /**
+ * Calculate geometric stiffness matrix for a beam element
+ * This accounts for the P-Delta effect (second-order effects)
+ */
+export function calculateGeometricStiffness(
+  L: number,
+  N: number  // Axial force (positive = tension)
+): Matrix {
+  const Kg = new Matrix(6, 6);
+
+  const factor = N / L;
+
+  // Geometric stiffness for transverse DOFs
+  // Based on consistent geometric stiffness matrix
+  const a = 6 / 5;
+  const b = L / 10;
+  const c = 2 * L * L / 15;
+  const d = -L / 10;
+  const e = -L * L / 30;
+
+  // v1, v1
+  Kg.set(1, 1, a * factor);
+  // v1, θ1
+  Kg.set(1, 2, b * factor);
+  Kg.set(2, 1, b * factor);
+  // v1, v2
+  Kg.set(1, 4, -a * factor);
+  Kg.set(4, 1, -a * factor);
+  // v1, θ2
+  Kg.set(1, 5, b * factor);
+  Kg.set(5, 1, b * factor);
+
+  // θ1, θ1
+  Kg.set(2, 2, c * factor);
+  // θ1, v2
+  Kg.set(2, 4, d * factor);
+  Kg.set(4, 2, d * factor);
+  // θ1, θ2
+  Kg.set(2, 5, e * factor);
+  Kg.set(5, 2, e * factor);
+
+  // v2, v2
+  Kg.set(4, 4, a * factor);
+  // v2, θ2
+  Kg.set(4, 5, d * factor);
+  Kg.set(5, 4, d * factor);
+
+  // θ2, θ2
+  Kg.set(5, 5, c * factor);
+
+  return Kg;
+}
+
+/**
+ * Tel de geometrische stijfheid Kg(N) op bij de LOKALE elastische matrix,
+ * vóórdat de scharnieren worden gecondenseerd.
+ *
+ * WAAROM VÓÓR DE CONDENSATIE. Statische condensatie van een scharnier
+ * elimineert de rotatie θ_c uit de raakstijfheid van het element: uit
+ * (Ke + Kg)·u = f volgt θ_c uit de rij van θ_c, en die rij bevat óók de
+ * Kg-termen (N·L/10 en 2·N·L/15). Tot september 2026 werd eerst Ke
+ * gecondenseerd en daarna de ongecondenseerde Kg opgeteld. Dan blijft op het
+ * losgelaten DOF een fictieve rotatiestijfheid 2·N·L/15 staan, en de
+ * koppeltermen N·L/10 tussen die rotatie en de dwarsverplaatsingen worden
+ * nooit weggewerkt. Gemeten (hallenspant met ingeklemde kolom en pendelkolom,
+ * referentie P_cr = k·h = 1307,9 kN): scharnier op de pendeltop gaf
+ * P_cr = 934,1 kN (−28,6 %), hetzelfde scharnier op het regeleind 1317 kN
+ * (+0,7 %) — de uitkomst hing af van de staaf die het scharnier droeg. Op de
+ * scharnierknoop van een spant stond een fictief moment van 56 kNm
+ * (referentie 0,6), en het steunmoment van een doorgaande ligger boven een
+ * gedrukte pendelkolom was 6 % te gunstig. Met Kg vóór de condensatie is de
+ * eliminatie exact en maakt de plek van het scharnier niet meer uit.
+ *
+ * N is trek-positief (de conventie van `calculateGeometricStiffness`).
+ */
+export function telGeometrischeStijfheidOp(Kl: Matrix, L: number, N: number): void {
+  const Kg = calculateGeometricStiffness(L, N);
+  for (let i = 0; i < 6; i++) {
+    for (let j = 0; j < 6; j++) {
+      Kl.addAt(i, j, Kg.get(i, j));
+    }
+  }
+}
+
+/**
  * Calculate the local stiffness matrix for a 2D beam element
  * Using Euler-Bernoulli beam theory
  *

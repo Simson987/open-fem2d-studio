@@ -54,6 +54,13 @@ use crate::opmaak::{lx, nl, nv, stap};
 /// uitkraging met druk; en de φ van een heel model middelt over al zijn
 /// kolommen, terwijl een kolom met een vrije kop nergens aan hangt.
 ///
+/// Sinds oktober 2026 zijn de UGT-toetskrachten van deze app altijd tweede
+/// orde (P-Δ) met scheefstand, met de φ van de projectinstelling (2D, 3D en
+/// `check_fem_model`), los van de analyse-instelling van de resultaten. De
+/// voorwaarden op de berekening zijn bij de toets dus altijd vervuld; of het
+/// veld gezet wordt, hangt alleen nog af van het vlak van het model, de stand
+/// van de staaf en de φ-eis.
+///
 /// Hout zetten de bouwers het niet: NEN-EN 1995-1-1 eist bij tweede orde
 /// E_d = E_mean/γ_M (2.2.2(1)P) en de boogimperfectie van 5.4.4(2), en de
 /// tweede-orde-berekening van deze app rekent met E_mean.
@@ -233,11 +240,14 @@ impl Kniklengte {
                  kniklengte van de ingeklemd-vrije staaf (Euler-geval met vrije top), waarbij het \
                  andere staafeind als volledig ingeklemd is aangenomen — bij een scharnierend \
                  eind is zo'n staaf een mechanisme. Wie een andere kniklengte kan onderbouwen, \
-                 geeft haar op. De staaflengte geldt alleen als de zijdelingse knik om de \
-                 {as_naam}-as al in de krachten zit: een tweede-orde-berekening die aan de \
-                 voorwaarden van de norm voldoet (bij staal een scheefstand die deze staaf zelf \
-                 aanstoot, met minstens haar eigen φ; bij hout bovendien rekenstijfheden E_d en de \
-                 boogimperfectie van NEN-EN 1995-1-1 5.4.4). Dat is voor deze staaf niet aangegeven.",
+                 geeft haar op. Bij de toetsing van een model in deze app komen de UGT-krachten \
+                 altijd uit een tweede-ordeberekening (P-Δ) met scheefstand, maar de staaflengte \
+                 geldt pas als de zijdelingse knik om de {as_naam}-as volledig in die krachten \
+                 zit: de berekening laat de staaf om deze as uitbuigen (een vlak model niet uit \
+                 het vlak), en de scheefstand stoot haar zijdelingse knikvorm aan (bij staal een \
+                 staande staaf, met minstens haar eigen φ; bij hout bovendien met \
+                 rekenstijfheden E_d en de boogimperfectie van NEN-EN 1995-1-1 5.4.4). Dat is voor \
+                 deze staaf niet aangegeven.",
                 nl(l_cr_mm, 0)
             )],
         }
@@ -262,7 +272,8 @@ impl Kniklengte {
                 "Er is geen kniklengte om de {as_naam}-as opgegeven, en {plaats} \
                  is VRIJ: geen oplegging en geen aansluitende staaf. Op zich zou dat \
                  L_cr,{as_naam} = 2·L = {} mm geven, de zijdelingse knik van de ingeklemd-vrije \
-                 staaf. De globale berekening is echter tweede orde (P-Δ) MET scheefstand, en de \
+                 staaf. De UGT-krachten van deze toets komen echter uit een tweede-ordeberekening \
+                 (P-Δ) MET scheefstand — bij de toetsing van een model in deze app altijd — en de \
                  staaf kan daarin om de {as_naam}-as uitbuigen: de zijdelingse uitbuiging van het \
                  vrije eind, vergroot door de normaalkracht, zit al in de krachten van deze toets. \
                  Dan wordt de staaf getoetst met de systeemlengte ({grond}): \
@@ -608,10 +619,15 @@ pub fn vlaknotitie(k: &Kniklengte, norm_in_vlak: &str) -> String {
         } else {
             format!(" ({norm_in_vlak})")
         };
+        // De toetskrachten van een model in deze app zijn altijd tweede orde
+        // met scheefstand (P-Δ), maar zonder staafimperfecties (P-δ, de
+        // boogimperfectie van 5.3.2(3)): daarom blijft de staaftoets nodig.
         format!(
             "Knik om de {a}-as is uitbuigen IN het vlak van het model. De raamwerkberekening ziet \
-             die richting; rekent zij tweede orde, dan zit het globale effect in de krachten. Deze \
-             toets blijft nodig zolang de staafimperfecties niet in die berekening zitten{grond}."
+             die richting; bij de toetsing van een model in deze app komen de UGT-krachten altijd \
+             uit een tweede-ordeberekening (P-Δ) met scheefstand, en dan zit het globale effect in \
+             de krachten. Deze toets blijft nodig zolang de staafimperfecties niet in die \
+             berekening zitten{grond}; in de berekening van deze app zitten zij niet."
         )
     } else if a == "z" {
         format!(
@@ -800,10 +816,16 @@ mod tests {
             .any(|n| n.contains("UIT het vlak") && n.contains("P-Δ")));
         let y = bepaal_kniklengte("y", true, 3.0, L, None);
         let dy = kniklengte_deelstap(&y, "art. 6.3.1.3(1)", "NEN-EN 1993-1-1 5.2.2(7)");
-        assert!(dy
-            .notes
-            .iter()
-            .any(|n| n.contains("IN het vlak") && n.contains("5.2.2(7)")));
+        assert!(dy.notes.iter().any(|n| n.contains("IN het vlak") && n.contains("5.2.2(7)")));
+        // De toetskrachten van een model in deze app zijn altijd tweede orde met
+        // scheefstand; de staafimperfecties zitten er niet in.
+        assert!(
+            dy.notes.iter().any(|n| n.contains("IN het vlak")
+                && n.contains("altijd uit een tweede-ordeberekening (P-Δ) met scheefstand")
+                && n.contains("staafimperfecties")),
+            "{:?}",
+            dy.notes
+        );
     }
 
     #[test]
@@ -814,6 +836,15 @@ mod tests {
         assert_eq!(k.herkomst, KniklengteHerkomst::VrijEind);
         assert_eq!(k.l_cr_mm, 6000.0);
         assert!(k.toelichting[0].contains("eigen φ") && k.toelichting[0].contains("niet aangegeven"), "{:?}", k.toelichting);
+        // Ook bij 2·L: de toetskrachten van een model in deze app zijn altijd
+        // tweede orde met scheefstand, maar dat dekt deze knik pas onder de
+        // voorwaarden (as in de berekening, staande staaf, eigen φ, bij hout E_d).
+        assert!(
+            k.toelichting[0].contains("altijd uit een tweede-ordeberekening (P-Δ) met scheefstand")
+                && k.toelichting[0].contains("E_d"),
+            "{:?}",
+            k.toelichting
+        );
         // Uit het vlak blijft het vlak-label en 2·L, ook als y gedekt is.
         let z = Kniklengte::vrij_eind_volgens_analyse("z", 3000.0, false, "het eind", false, grond);
         assert_eq!(z.l_cr_mm, 6000.0);
@@ -825,6 +856,12 @@ mod tests {
         assert_eq!(t.staaflengte_mm, 3000.0);
         assert!(t.in_rekenvlak);
         assert!(t.toelichting[0].contains("6000 mm") && t.toelichting[0].contains(grond), "{:?}", t.toelichting);
+        assert!(
+            t.toelichting[0].contains("tweede-ordeberekening (P-Δ) MET scheefstand")
+                && t.toelichting[0].contains("bij de toetsing van een model in deze app altijd"),
+            "{:?}",
+            t.toelichting
+        );
         let d = kniklengte_deelstap(&t, "art. 6.3.1.3(1)", grond);
         assert_eq!(d.formula_latex, r"L_{cr,y} = L");
         assert_eq!(d.notes[0], format!("Herkomst: {}.", HERKOMST_VRIJ_EIND_TWEEDE_ORDE));

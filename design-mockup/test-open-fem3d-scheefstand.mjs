@@ -1,10 +1,13 @@
 // Initiële scheefstand in 3D (NEN-EN 1993-1-1 §5.3.2): h en m uit het
 // 3D-model, φ uit dezelfde normfunctie als 2D, UGT-combinaties in vier
-// richtingen, en op elke verticale last V een horizontale last φ·V.
+// richtingen, en op elke verticale last V een horizontale last φ·V. Blok [4]
+// voert de rekenroute van de app uit (scripts/bron-uitvoeren.mjs) in plaats
+// van de broncode te lezen.
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { declaratie, jsxAttribuut, leesBron, stateNaden, voerUitIn } from "./scripts/bron-uitvoeren.mjs";
 const {
   leidScheefstandGeometrieAf3D, metScheefstandRichtingen3D, metScheefstandLasten,
   scheefstandVanCombinatie, toepasselijkeScheefstandNormen3D,
@@ -127,15 +130,113 @@ check("unieke id's in elke lastlijst", ["nodalLoads", "memberLoads", "memberPoin
   .every((lijst) => new Set(ids(eenStaaf[lijst])).size === eenStaaf[lijst].length));
 check("het oorspronkelijke verzoek blijft onaangeroerd", verzoek.nodalLoads.length < eenStaaf.nodalLoads.length && sommen(verzoek)[0] === voor[0]);
 
-log("\n[4] de app gebruikt de scheefstand in de 3D-rekenroute");
-const app = readFileSync(join(HIER, "src", "App.tsx"), "utf8");
-check("UGT-combinaties ontvouwen met φ uit de 3D-geometrie",
-  /const scheefstandPhi = fem\.scheefstandEnabled \? openFem3dScheefstandUitkomst\?\.phi \?\? 0 : 0;/.test(app)
-  && /metScheefstandRichtingen3D\(fem\.combinations\.filter/.test(app));
-check("elke combinatie rekent met haar eigen richting",
-  /scheefstandVanCombinatie\(combination, scheefstandPhi\), openFem3dOptions\)\] as const\)\)/.test(app));
-check("rapport en verkenner tonen de gerekende varianten",
-  /combinations=\{openFem3dCombinaties\}[\s\S]{0,120}scheefstandTekst=\{openFem3dScheefstandTekst\}/.test(app));
+log("\n[4] de app gebruikt de scheefstand in de 3D-rekenroute — uitgevoerd, niet gelezen");
+{
+  // De knop Berekenen (`handleSolve`, 3D-tak) uit App.tsx, in de AST opgezocht
+  // en uitgevoerd (scripts/bron-uitvoeren.mjs). De 3D-kern en de toetsen zijn
+  // naden die vastleggen WAT de app ze vraagt; ontvouwen en scheefstand per
+  // combinatie zijn de echte functies. Geen broncodetekst.
+  const app = leesBron("src/App.tsx");
+  const PHI = 0.004;
+  const UGT = { id: 1, name: "UGT 6.10b", type: "uls", formula: "", factors: new Map([[2, 1.35]]) };
+  const BGT = { id: 2, name: "BGT kar.", type: "sls", formula: "", factors: new Map([[2, 1]]) };
+  const LEEG = { id: 3, name: "UGT zonder last", type: "uls", formula: "", factors: new Map([[9, 1.5]]) };
+  async function berekenen({ scheefstandAan, analysetype = "tweedeOrdeGeometrisch" }) {
+    const kern = [];
+    const toetsSets = [];
+    const toestand = { openFem3dSolvedCombinations: [], openFem3dCombinationResults: new Map(), openFem3dVisibility: {} };
+    const naden = stateNaden(app, toestand, {
+      modelDimension: "3d",
+      getSetting: async (_sleutel, standaard) => standaard,
+      resolveSolver: () => ({}),
+      leesSnapInstellingen: () => ({ verbindingsTolerantie: 5 }),
+      openFem3d: model, openFem3dCalculationModel: model,
+      openFem3dCalculation: { selfWeightError: undefined, selfWeightCaseId: undefined },
+      openFem3dSolveGenerationRef: { current: 0 },
+      // De projectinstelling: vast 1/250 (de toets leest er sinds #199 ook de
+      // noemer, bron, h en m uit, voor de φ van de toets).
+      openFem3dScheefstandUitkomst: { phi: PHI, noemer: 1 / PHI, bron: "vast", hoogteM: 7, aantalElementen: 4 },
+      fem: {
+        analysetype, scheefstandEnabled: scheefstandAan, activeLoadCaseId: 2,
+        combinations: [UGT, BGT, LEEG], loadCases: [{ id: 2, name: "Q", type: "live" }], gevolgklasse: "CC2",
+      },
+      setActiveView() {},
+      solveOpenFem3D: async (_m, caseId, analysis) => ({ caseId, analysis, forceBalance: { ok: true } }),
+      solveOpenFem3DCombination: async (_m, factors, analysis, scheefstand, opties) => {
+        // `toets`: een run van de UGT-toets (issue #199), die P-Δ verplicht stelt.
+        kern.push({ factors, analysis, scheefstand, toets: opties?.tweedeOrdeVerplicht === true });
+        return { analysis, forceBalance: { ok: true } };
+      },
+      runOpenFem3DSteelChecks: async (_m, _r, set) => { toetsSets.push(set); return { results: [], skipped: [] }; },
+      runOpenFem3DConcreteChecks: async () => ({ results: [], skipped: [] }),
+      runOpenFem3DTimberChecks: async () => ({ results: [], skipped: [] }),
+    });
+    const handleSolve = await voerUitIn(app, declaratie(app, "handleSolve"), naden);
+    await handleSolve();
+    return { kern, toetsSet: toetsSets[0], toestand, naden };
+  }
+
+  const aan = await berekenen({ scheefstandAan: true });
+  const ugt = aan.kern.filter((k) => k.factors === UGT.factors);
+  check("UGT-combinaties ontvouwen met φ uit de 3D-geometrie: vier rekengangen, elk met φ",
+    ugt.length === 4 && ugt.every((k) => k.scheefstand?.phi === PHI), JSON.stringify(ugt.map((k) => k.scheefstand)));
+  check("elke combinatie rekent met haar eigen richting (+X, −X, +Y, −Y)",
+    ugt.map((k) => `${k.scheefstand?.richting > 0 ? "+" : "−"}${k.scheefstand?.as}`).sort().join(" ") === "+x +y −x −y",
+    ugt.map((k) => JSON.stringify(k.scheefstand)).join(" "));
+  const bgt = aan.kern.filter((k) => k.factors === BGT.factors);
+  check("de BGT-combinatie één keer, zonder scheefstand", bgt.length === 1 && bgt[0].scheefstand === null);
+  check("een combinatie zonder last in het model wordt niet gerekend", !aan.kern.some((k) => k.factors === LEEG.factors));
+  check("P-Δ bij de instelling tweede orde", aan.kern.every((k) => k.analysis === "p-delta"));
+  check("de toetsing krijgt de varianten en de φ (voor de φ-eis bij een vrij staafeind)",
+    aan.toetsSet?.scheefstandPhi === PHI && aan.toetsSet?.combinations?.length === 5,
+    JSON.stringify({ phi: aan.toetsSet?.scheefstandPhi, n: aan.toetsSet?.combinations?.length }));
+
+  const uit = await berekenen({ scheefstandAan: false, analysetype: "eersteOrde" });
+  // GEWIJZIGD door issue #199 (besluiten B1 en B2). Tot 2026.42 rekende de app
+  // hier alleen de twee resultaatcombinaties, lineair en zonder scheefstand, en
+  // kreeg de toetsing die krachten zonder φ (2·L bij een vrij staafeind). Nu
+  // blijven de RESULTATEN zo (2 runs, lineair, zonder scheefstand), en rekent
+  // de UGT-toets zelf P-Δ met de φ van de projectinstelling (hier 1/250) in
+  // +X, −X, +Y en −Y: 4 runs erbij, en de toetsing krijgt die φ.
+  const resultaatRuns = uit.kern.filter((k) => !k.toets);
+  const toetsRuns = uit.kern.filter((k) => k.toets);
+  check("scheefstand uit: de resultaten rekenen elke combinatie één keer, zonder scheefstand",
+    resultaatRuns.length === 2 && resultaatRuns.every((k) => k.scheefstand === null),
+    JSON.stringify(resultaatRuns.map((k) => k.scheefstand)));
+  check("… lineair bij de instelling eerste orde",
+    resultaatRuns.every((k) => k.analysis === "linear"));
+  check("… de UGT-toets rekent zelf P-Δ met φ in +X, −X, +Y en −Y, en de toetsing krijgt die φ (issue #199)",
+    toetsRuns.length === 4 && toetsRuns.every((k) => k.analysis === "p-delta" && k.scheefstand?.phi === PHI
+      && k.factors === UGT.factors)
+    && toetsRuns.map((k) => `${k.scheefstand.richting > 0 ? "+" : "−"}${k.scheefstand.as}`).sort().join(" ") === "+x +y −x −y"
+    && uit.toetsSet?.scheefstandPhi === PHI && uit.toetsSet.combinations.length === 5,
+    JSON.stringify({ runs: toetsRuns.map((k) => k.scheefstand), phi: uit.toetsSet?.scheefstandPhi }));
+
+  // Rapport en verkenner tonen de GEREKENDE varianten, met de toelichting in
+  // vier richtingen: de combinatielijst en de scheefstandtekst van App.tsx.
+  const naden = { ...aan.naden, openFem3dSolvedCombinations: aan.toestand.openFem3dSolvedCombinations };
+  const lijst = await voerUitIn(app, declaratie(app, "openFem3dCombinaties"), naden);
+  check("de combinatielijst van de 3D-weergave zijn de gerekende varianten",
+    lijst.length === 5 && lijst.filter((c) => c.scheefstandAs !== undefined).length === 4, String(lijst.length));
+  for (const tag of ["OpenFem3DReport", "OpenFem3DExplorer"]) {
+    const gegeven = await voerUitIn(app, jsxAttribuut(app, tag, "combinations"), { ...naden, openFem3dCombinaties: lijst });
+    check(`${tag} krijgt die lijst`, gegeven === lijst);
+  }
+  const tekstNaden = (scheefstandEnabled) => ({
+    fem: { scheefstandEnabled }, openFem3d: model,
+    openFem3dScheefstandUitkomst: uitkomst, openFem3dScheefstandGeometrie: geo,
+  });
+  const tekst = (await voerUitIn(app, declaratie(app, "openFem3dScheefstandTekst"), tekstNaden(true)))();
+  const inRapport = await voerUitIn(app, jsxAttribuut(app, "OpenFem3DReport", "scheefstandTekst"), { openFem3dScheefstandTekst: tekst });
+  check("het 3D-rapport krijgt de toelichting in de vier richtingen",
+    inRapport === tekst && /\+X, −X, \+Y en −Y/.test(tekst), tekst);
+  // GEWIJZIGD door issue #199 (taak 7): tot 2026.42 was deze tekst LEEG met de
+  // schakelaar uit (de scheefstand zat dan in geen toetskracht). De UGT-toets
+  // rekent nu altijd met deze φ, dus het rapport noemt haar altijd, en zegt dat.
+  const tekstUit = (await voerUitIn(app, declaratie(app, "openFem3dScheefstandTekst"), tekstNaden(false)))();
+  check("met de schakelaar uit: dezelfde toelichting, niet leeg (de toets rekent er altijd mee)",
+    tekstUit === tekst && /ook als de schakelaar Scheefstand uit staat/.test(tekstUit), tekstUit);
+}
 
 log("\n[5] met de kern: de reacties nemen φ·ΣV op");
 const solverBinary = process.platform === "win32" ? "open-fem-3d.exe" : "open-fem-3d";

@@ -121,6 +121,7 @@ fn de_pdf_noemt_de_kniklengte_uit_het_vlak_met_haar_herkomst() {
         scheefstand_toelichting: None,
         analyse_toelichting: None,
         wind_toelichting: None,
+        toetskrachten: None,
         plate_results: Vec::new(),
         plate_inputs: Vec::new(),
         plate_skipped: Vec::new(),

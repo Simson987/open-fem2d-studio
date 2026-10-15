@@ -2260,13 +2260,33 @@ fn check_beam_kern(input: BeamCheckInput) -> BeamCheckResult {
             _ => bepaal_kniklengte(as_naam, in_vlak, opgegeven_m, l_staaf_mm, steunen),
         }
     };
-    let kniklengte_1 = kniklengte_of_vrij(
-        assen_info.naam_1,
-        eigen_assen,
-        input.buckling_length_y_m,
-        None,
-        gedekt_1,
-    );
+    let mut kniklengte_1 = kniklengte_of_vrij(assen_info.naam_1, eigen_assen, input.buckling_length_y_m, None, gedekt_1);
+    // Een OPGEGEVEN L_cr,y groter dan de staaflengte wijst op een knikvorm met
+    // verplaatsbare knopen (sway). De opgave blijft staan, en stap 8 houdt er
+    // C_my = 0,9 bij (tabel B.3). Maar de toetskrachten van een model in deze
+    // app zijn altijd tweede orde met scheefstand: dan zit de sway al in de
+    // krachten, staat 5.2.2(7)b de systeemlengte toe, en telt de opgave de sway
+    // dubbel. Dat zegt de kanttekening; er verandert geen getal. Een 2·L van de
+    // kern bij een vrij eind is geen opgave: daar zit de zijdelingse knik juist
+    // niet in de krachten.
+    let opgegeven_boven_l_1 = kniklengte_1.herkomst == KniklengteHerkomst::Opgegeven
+        && kniklengte_1.l_cr_mm > l_staaf_mm * (1.0 + 1e-6);
+    if opgegeven_boven_l_1 {
+        let a = kniklengte_1.as_naam.clone();
+        kniklengte_1.toelichting.push(format!(
+            "KANTTEKENING, DUBBELE SWAY: de opgegeven L_cr,{a} = {} mm is groter dan de staaflengte \
+             L = {} mm, wat op een knikvorm met verplaatsbare knopen (sway) wijst. Bij de toetsing van \
+             een model in deze app komen de UGT-krachten altijd uit een tweede-ordeberekening (P-Δ) met \
+             scheefstand (NEN-EN 1993-1-1 5.2.2(3)b en 5.3.2): de zijdelingse verplaatsing en haar \
+             vergroting zitten dan al in de krachten, en 5.2.2(7)b staat de systeemlengte L als \
+             kniklengte toe. Met deze opgave telt de sway dus dubbel: in χ_{a}, en in de interactie \
+             van 6.3.3 via de ondergrens C_my = 0,9 van tabel B.3 waar die maatgevend is. Dat ligt \
+             aan de veilige kant; de opgave blijft staan. Alleen wie de krachten zelf uit een \
+             eerste-ordeberekening aanlevert, heeft deze kniklengte wel nodig.",
+            nl_getal(kniklengte_1.l_cr_mm),
+            nl_getal(l_staaf_mm)
+        ));
+    }
     let kniklengte_2 = kniklengte_of_vrij(
         assen_info.naam_2,
         false,
@@ -2926,6 +2946,10 @@ fn check_beam_kern(input: BeamCheckInput) -> BeamCheckResult {
             // erop. Dan is de grootste van beide waarden aangehouden, zodat de
             // sway-regel nooit stilzwijgend een lagere C_m oplevert dan het
             // momentenverloop zelf.
+            // Bij een OPGEGEVEN L_cr,y > L blijft de regel staan, met de
+            // kanttekening dat zij na een tweede-ordeberekening met scheefstand
+            // (de toetskrachten van deze app) de sway dubbel telt; zie de
+            // kanttekening bij de kniklengte.
             if l_cr_y_mm > l_staaf_mm * (1.0 + 1e-6) && cm_y.cm < 0.9 {
                 cm_y.toelichting.push_str(&format!(
                     " L_cr,y = {} mm is groter dan de staaflengte {} mm, wat op een knikvorm met \
@@ -2934,6 +2958,15 @@ fn check_beam_kern(input: BeamCheckInput) -> BeamCheckResult {
                     nl_getal(l_cr_y_mm),
                     nl_getal(l_staaf_mm)
                 ));
+                if opgegeven_boven_l_1 {
+                    cm_y.toelichting.push_str(
+                        " L_cr,y is opgegeven. Komen de krachten uit een tweede-ordeberekening (P-Δ) met \
+                         scheefstand, zoals bij de toetsing van een model in deze app altijd, dan zit de \
+                         sway al in de krachten en telt deze ondergrens de sway dubbel; NEN-EN 1993-1-1 \
+                         5.2.2(7)b staat dan L als kniklengte toe. De ondergrens blijft staan, aan de \
+                         veilige kant.",
+                    );
+                }
                 cm_y.cm = 0.9;
             } else if zijdelings_l_1 && cm_y.cm < 0.9 {
                 // Tabel B.3, onder de tabel: een staaf met een knikvorm met

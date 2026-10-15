@@ -2,8 +2,10 @@
   "resultView": {
     "busy": "Berekenen…",
     "emptyCase": "{{name}}: geen werkzame belasting; geen gevalresultaat.",
-    "ucCombinations": "UC toont de maatgevende toets over belastingcombinaties, niet alleen het gekozen belastinggeval.",
-    "ucLabel": "UC (combinaties)"
+    "ucCombinations": "UC toont de maatgevende toets over belastingcombinaties, niet alleen het gekozen belastinggeval. De UGT-toetskrachten zijn altijd tweede orde (P-Δ) met scheefstand.",
+    "ucLabel": "UC (combinaties)",
+    "checkForces": "Toetskrachten UGT: {{analyse}} met scheefstand φ = 1/{{noemer}} ({{bron}}), altijd, los van de instellingen Analyse en Scheefstand. BGT-toetsen lezen de resultaten.",
+    "checkForcesReused": "De resultaten zijn al deze berekening; de toets rekende niets extra."
   },
   "checkPanelControls": {
     "open": "Toetsing",
@@ -553,9 +555,6 @@
       "validationPassed": "IFC-validatie geslaagd",
       "notExpressed": "{{punten}} punt(en) niet in IFC uitgedrukt — zie het IFC-tabblad."
     },
-    "stability": {
-      "firstOrderNotAllowed": "Stabiliteit: eerste orde niet toegestaan"
-    },
     "solve": {
       "fieldPatternsLimited": "Veldsgewijze plaatsing beperkt",
       "failed": "Berekening mislukt",
@@ -603,7 +602,12 @@
       "notChecked": "Niet getoetst: het doorrekenen mislukte. {{reden}}",
       "seeInsightsErrors": "Zie Inzichten → Fouten.",
       "noneYetTitle": "Nog geen toetsing",
-      "noneYetBody": "Reken het model eerst door; de normtoetsing loopt dan mee en is daarna te exporteren."
+      "noneYetBody": "Reken het model eerst door; de normtoetsing loopt dan mee en is daarna te exporteren.",
+      "refused": "Toetsing geweigerd",
+      "refusedNonlinear": "De fysisch niet-lineaire ronde van de toetskrachten liep vast: {{reden}} De toetsing is geweigerd; de resultaten van de berekening blijven staan.",
+      "otherForcesTitle": "Niet op het tekenvlak",
+      "otherForcesBody": "Combinatie \"{{naam}}\" van de toetsing staat niet met dezelfde krachten op het tekenvlak. De toetskrachten zijn tweede orde (P-Δ) met scheefstand φ = 1/{{noemer}}; de resultaten op het tekenvlak volgen de instellingen Analyse en Scheefstand. Zet Analyse op tweede orde en de Scheefstand aan, met φ = 1/{{noemer}}, om de maatgevende plek daar te zien.",
+      "otherForcesBodySame": "Combinatie \"{{naam}}\" van de toetsing staat niet met dezelfde krachten op het tekenvlak, ook al rekenen de resultaten tweede orde met dezelfde scheefstand φ = 1/{{noemer}}. De toets rekende hier apart, bijvoorbeeld zonder de UGT-eindtoestandvarianten van hout (E_mean,fin). De krachten op het tekenvlak zijn daarom niet die van de toets."
     },
     "layout": {
       "dragCheckSplit": "Sleep om de verdeling model/toetsing aan te passen",
@@ -1043,6 +1047,7 @@
     "selfWeightOfferTitle": "Het eigen gewicht staat nu tussen de lasten van het eerste permanente belastinggeval. Voeg het geval “Eigen gewicht” toe en verplaats het eigen gewicht daarheen. De uitkomsten van de combinaties veranderen niet; één stap, ongedaan te maken met Ctrl+Z.",
     "selfWeight": "Eigen gewicht",
     "analysis": "Analyse",
+    "analysisResultsNote": "Deze keuze geldt voor de resultaten (momentenlijnen, zakkingen, reacties) en de BGT-toetsen. De UGT-toets rekent altijd zelf tweede orde (P-Δ) met scheefstand (NEN-EN 1993-1-1 5.2.2(3)b en (7)b).",
     "analysisType": {
       "eersteOrde": "1e orde",
       "tweedeOrdeGeometrisch": "2e orde (P-Δ)",
@@ -1066,7 +1071,7 @@
     "noConcreteBarsTitle": "Fysisch niet-lineair werkt op betonstaven met een wapeningskorf: materiaal een sterkteklasse (bijv. C30/37), profiel een rechthoek (bijv. 300x500) en een korf bij de staafeigenschappen. Zonder die staven is de uitkomst gelijk aan 2e orde (P-Δ).",
     "noConcreteBars": "geen betonstaven met korf",
     "modelLarge": "model groot — zie segmentlengte",
-    "swayTitle": "Scheefstand (initiële imperfectie) meenemen: elke verticale last krijgt een horizontale metgezel H = φ·V. Waar φ vandaan komt kies je hiernaast — de vaste noemer (de basiswaarde, en de stand van elk bestaand project) of de normformule van EN 1993-1-1 (5.5), EN 1992-1-1 (5.1) of EN 1995-1-1 (5.1).",
+    "swayTitle": "Scheefstand (initiële imperfectie) in de resultaten meenemen: elke verticale last krijgt een horizontale metgezel H = φ·V. De UGT-toets rekent altijd met deze scheefstand, ook als dit vinkje uit staat; daarom zijn de φ-velden hiernaast altijd zichtbaar. Waar φ vandaan komt kies je hiernaast — de vaste noemer (de basiswaarde, en de stand van elk bestaand project) of de normformule van EN 1993-1-1 (5.5), EN 1992-1-1 (5.1) of EN 1995-1-1 (5.1).",
     "sway": "Scheefstand",
     "tensionOnlyFit": "Trek-alleen gemonteerd na G",
     "tensionOnlyFitTitle": "Trek-alleen staven gemonteerd na de permanente belasting: hun spanningsloze lengte volgt de vervorming onder de blijvende belastinggevallen (factor 1,0, met eigen gewicht en belastingvlakken). Onder alleen die belasting dragen ze dan niets; wat daarna komt, dragen ze wel.",
@@ -1081,7 +1086,7 @@
     "swayDenominatorTitle": "Scheefstand φ als 1/x (default 1/200)",
     "swayHeightTitle": "Hoogte h in mm voor α_h = 2/√(h/1000). Leeg = uit het model afgeleid ({{hoogte}} mm): van de laagste oplegging tot de bovenkant van de constructie (EN 1993-1-1 figuur 5.2; EN 1992-1-1 §5.2(6) voor de schorende constructie).",
     "swayMembersTitle": "Aantal dragende verticale elementen m voor α_m = √(0,5(1+1/m)). Leeg = uit het model afgeleid ({{aantal}}): het aantal kolomlijnen, waarbij staven die op elkaar staan één kolom vormen. Het 50 %-criterium van EN 1993-1-1 5.3.2(3)a kan hier niet worden toegepast (het vraagt de kolomkrachten, en die volgen pas uit de berekening); haal een licht belaste stijl er met de hand uit — kleinere m geeft grotere φ.",
-    "swayDirectionTitle": "Richting van de equivalente horizontale krachten: BEIDE. Elke combinatie wordt met de scheefstand in +x én in −x doorgerekend (EN 1993-1-1 5.3.2(2): in de meest ongunstige richting); de omhullende en de toetsing nemen per staaf de ongunstigste van de twee, en de combinatienaam noemt de richting. De hier opgeslagen voorkeursrichting ({{richting}}) bepaalt alleen welke variant het oorspronkelijke combinatienummer houdt.",
+    "swayDirectionTitle": "Richting van de equivalente horizontale krachten: BEIDE. De UGT-toets rekent elke combinatie met de scheefstand in +x én in −x (EN 1993-1-1 5.3.2(2): in de meest ongunstige richting) en neemt per staaf de ongunstigste van de twee; met het vinkje Scheefstand aan rekenen ook de resultaten zo, en noemt de combinatienaam de richting. De hier opgeslagen voorkeursrichting ({{richting}}) bepaalt alleen welke variant het oorspronkelijke combinatienummer houdt.",
     "dialogTitle": "Belastinggevallen & combinaties",
     "casesTab": "Gevallen ({{aantal}})",
     "errorCount_one": "{{count}} fout",
@@ -1188,11 +1193,11 @@
       },
       "heightManual": "h is handmatig opgegeven: {{h}} m.",
       "membersManual": "m is handmatig opgegeven: {{m}}.",
-      "directionBoth": "Richting: beide. Elke belastingcombinatie is doorgerekend met de scheefstand in +x én in −x, als twee varianten met de richting in de naam; de omhullende en de toetsing nemen per staaf de ongunstigste van de twee (EN 1993-1-1 5.3.2(2): de imperfectie in de meest ongunstige richting; 5.3.2(8): in alle relevante richtingen, één per keer).",
+      "directionBoth": "Richting: beide. De UGT-toets rekent elke combinatie met de scheefstand in +x én in −x, als twee varianten met de richting in de naam, en neemt per staaf de ongunstigste van de twee (EN 1993-1-1 5.3.2(2): de imperfectie in de meest ongunstige richting; 5.3.2(8): in alle relevante richtingen, één per keer). Dat doet de toets altijd, ook als de schakelaar Scheefstand uit staat; die schakelaar geldt alleen voor de resultaten, en met haar aan rekenen ook die elke combinatie in +x en −x.",
       "columnLine3d": "({{n}}) x = {{x}} mm, y = {{y}} mm",
-      "directions3d": "In 3D werkt de scheefstand per UGT-combinatie in vier richtingen, één tegelijk: +X, −X, +Y en −Y (EN 1993-1-1 §5.3.2(8)). Elke verticale last V krijgt op zijn eigen aangrijpingspunt een horizontale last φ·V (§5.3.2(7)). BGT-combinaties rekenen zonder scheefstand."
+      "directions3d": "In 3D rekent de UGT-toets elke combinatie met de scheefstand in vier richtingen, één tegelijk: +X, −X, +Y en −Y (EN 1993-1-1 §5.3.2(8)). Elke verticale last V krijgt op zijn eigen aangrijpingspunt een horizontale last φ·V (§5.3.2(7)). Dat doet de toets altijd, ook als de schakelaar Scheefstand uit staat; met die schakelaar aan rekenen ook de UGT-resultaten zo. BGT-combinaties rekenen zonder scheefstand."
     },
-    "swayDirectionTitle3d": "De scheefstand werkt in elke UGT-combinatie om de beurt in +X, −X, +Y en −Y (EN 1993-1-1 §5.3.2(8)); BGT-combinaties rekenen zonder.",
+    "swayDirectionTitle3d": "De UGT-toets rekent elke UGT-combinatie om de beurt met de scheefstand in +X, −X, +Y en −Y (EN 1993-1-1 §5.3.2(8)); met het vinkje Scheefstand aan ook de resultaten. BGT-combinaties rekenen zonder.",
     "analysisDescriptionVolume": {
       "geometric": "Tet4-volume: totale-Lagrange GNL. Andere volume- of staafelementen worden in deze stand geweigerd.",
       "material": "Tet4-volume: J2-staalplastificatie of betontrekschade bij kleine rek. Alleen zuivere Tet4-modellen."
@@ -1303,6 +1308,14 @@
       "calculatedSls": "Eindstijfheid hout doorgerekend (BGT)"
     },
     "combinationNotUsed": "niet gebruikt",
+    "resultsSecondOrder": "2e orde (P-Δ)",
+    "resultsFirstOrder": "1e orde",
+    "ucSteel": "UC staal {{uc}}",
+    "ucConcrete": "UC UGT beton {{uc}}",
+    "ucTimber": "UC EN 1995 {{uc}}",
+    "checksRunning": "normtoetsing…",
+    "checksError": "Normtoetsing: {{error}}",
+    "checkForces": "Toetskrachten UGT: 2e orde (P-Δ) + scheefstand φ = 1/{{noemer}}",
     "edgeSegments": "{{n}} randsegmenten",
     "arcCount": "({{n}} boog)",
     "openingCount_one": "{{count}} opening",

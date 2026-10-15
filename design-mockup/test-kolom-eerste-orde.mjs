@@ -12,7 +12,13 @@
 //       omhullende uit de eerste orde, `forces_envelope` uit de gekozen
 //       berekening; zonder eerste-orde-resultaten precies de oude invoer; een
 //       gespiegeld getekende kolom geeft hetzelfde;
-//   [4] de doorvoer in App.tsx, checkStore en variantStore (bronbestanden);
+//   [4] de doorvoer in de app, UITGEVOERD (geen broncodetekst): de toetsing uit
+//       App.tsx krijgt de eerste-orde-oplossingen van de TOETSrekengang (de
+//       UGT, tweede orde met scheefstand in ±x; issue #199) en van de
+//       resultaten (de quasi-blijvende), de (5.19)-stap van de fysisch
+//       niet-lineaire lus rekent via dezelfde cache, en checkStore en
+//       variantStore geven ze aan de betonbouwer en zo aan de kern (dat
+//       laatste met de toetsbrug, anders luid overgeslagen);
 //   [5] met de ECHTE rekenkern (toetsbrug): φ_ef, A, C en λ_lim tegen de
 //       handberekening uit de eerste-orde-momenten, en de TEGENPROEF dat de
 //       oude route (tweede-orde-momenten) andere getallen gaf.
@@ -20,10 +26,11 @@
 // Draaien met: npx tsx test-kolom-eerste-orde.mjs
 //          of: node scripts/run-tests.mjs --filter=kolom-eerste-orde
 
-import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { declaratie, leesBron, voerUitIn } from "./scripts/bron-uitvoeren.mjs";
 
 const HIER = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HIER, "..");
@@ -33,13 +40,17 @@ const TOETSBRUG = join(
 );
 
 const { buildBetonCheckInputs } = await import("./src/lib/betonCheckBuilder.ts");
-const { korvenUitStaven } = await import("./src/stores/checkStore.ts");
+const { korvenUitStaven, useCheckStore } = await import("./src/stores/checkStore.ts");
+const { useVariantStore } = await import("./src/stores/variantStore.ts");
 const { kruipInvoerVoorCombinatie, eersteOrdeQuasiBlijvend, betonStavenUitModel } =
   await import("./src/lib/betonStijfheid.ts");
 const { eersteOrdeResultatenVoorKolomtoets } = await import("./src/lib/eersteOrdeResultaten.ts");
 const { solveAllCases, solveAllCasesNonlinear, eersteOrdeCombinatieResultaat, getSecondOrderInput } =
   await import("./src/components/fem/solver/engine.ts");
-const { combineResults } = await import("./src/components/fem/solver/combinations.ts");
+const { combineResults, SCHEEFSTAND_COMBO_OFFSET } = await import("./src/components/fem/solver/combinations.ts");
+const { bepaalToetsKrachten2D } = await import("./src/lib/toetsKrachten.ts");
+const { bepaalScheefstand, leidScheefstandGeometrieAf, toepasselijkeScheefstandNormen } =
+  await import("./src/lib/scheefstandNorm.ts");
 
 let passed = 0, failed = 0, overgeslagen = 0;
 const log = (s) => process.stdout.write(s + "\n");
@@ -52,7 +63,6 @@ function dicht(naam, gemeten, verwacht, tolRel = 1e-6) {
   const rel = Math.abs(gemeten - verwacht) / schaal;
   ok(`${naam}: ${gemeten} ≈ ${verwacht}`, rel <= tolRel, `afwijking ${rel.toExponential(2)}`);
 }
-const leesBron = (...pad) => readFileSync(join(HIER, ...pad), "utf8").replace(/\r\n/g, "\n");
 
 // ═══════════════════════════════════════════════════════════════════════════
 log("[1] Het model: ingeklemde kolom 300 × 300, l = 3 m, met N, H en kopmoment");
@@ -126,7 +136,15 @@ const m2VoetQp = Math.abs(voet(res2.get(4)));
 ok(`tweede orde vergroot het UGT-voetmoment merkbaar: ${m2Voet.toFixed(2)} kNm (> 1,05·60)`, m2Voet > 63);
 ok(`… en het quasi-blijvende: ${m2VoetQp.toFixed(2)} kNm (> 50)`, m2VoetQp > 50.5);
 const m2Kop = Math.abs(kop(res2.get(1)));
-ok(`ook het kopmoment verschuift in tweede orde: ${m2Kop.toFixed(2)} kNm (≠ 24)`, Math.abs(m2Kop - 24) > 0.1);
+// VERANDERD GETAL (oktober 2026). Hier stond "ook het kopmoment verschuift in
+// tweede orde (≠ 24)". Dat was het evenwichtsgebrek van de krachtterugrekening:
+// na P-Δ rekende de kern de staafeindkrachten met alleen K_E·u, en dan week het
+// kopmoment af van het knoopmoment dat er aangrijpt (de K_G-term
+// N/L·(−L/10·v₂ + 2L²/15·θ₂) ≈ 1,9 kNm bij N = 1200 kN, v₂ = 12,1 mm,
+// θ₂ = 6,9 mrad). Met (K_E + K_G)·u sluit het evenwicht: aan de vrije kop staat
+// precies het opgelegde moment 1,2·20 = 24 kNm, ook in tweede orde. Alleen het
+// voetmoment groeit (74,50 tegen 60 kNm).
+dicht("tweede orde UGT: |M_kop| = het knoopmoment 1,2·20 = 24 kNm (evenwicht aan de vrije kop)", m2Kop, 24, 1e-9);
 
 // ═══════════════════════════════════════════════════════════════════════════
 log("\n[2] De eerste-orde-oplossing: één keer gerekend, gedeeld met (5.19)");
@@ -206,23 +224,209 @@ const absMax = (env) => Math.max(...env.map((p) => Math.abs(p.forces.my_ed)));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-log("\n[4] De doorvoer in de app (bronbestanden)");
+log("\n[4] De doorvoer in de app — uitgevoerd, niet gelezen");
 // ═══════════════════════════════════════════════════════════════════════════
+// De callbacks van App.tsx worden in de AST opgezocht en UITGEVOERD
+// (scripts/bron-uitvoeren.mjs), met de echte lib-functies; checkStore en
+// variantStore draaien echt, met de toetsbrug als kern. Er wordt geen
+// broncodetekst vergeleken.
+const app = leesBron("src/App.tsx");
+const DE_KOLOM = uiModel(CONSOLE);
+const appFem = {
+  nodes: DE_KOLOM.nodes, beams: DE_KOLOM.beams, supports: [{ nodeId: 1, type: "fixed" }], plates: [],
+  actieveCombinaties: COMBOS, gevolgklasse: "CC2", nationaleBijlage: "NL",
+  loadCases: [{ id: 1, name: "G", type: "dead" }],
+  analysetype: "tweedeOrdeGeometrisch", scheefstandEnabled: false, scheefstandRichting: 1, stabiliteit: null,
+  betonKruipcoefficient: 2.0, betonKruipInvoer: null, betonSegmentLengteMm: 400,
+  combinationResults: null, multiLcResult: null,
+  setSolverOutputs() {},
+};
+/** De scheefstand van de projectinstelling, zoals App.tsx hem bepaalt: vast 1/200 (de beginstand). */
+const appScheefstand = bepaalScheefstand(
+  { bron: "vast", noemer: 200, hoogteM: null, aantalElementen: null },
+  leidScheefstandGeometrieAf({ nodes: appFem.nodes, beams: appFem.beams, supports: appFem.supports }),
+  toepasselijkeScheefstandNormen(appFem.beams),
+);
+const stil = { notifyInfo() {}, notifyWarning() {} };
+/** De toetsdata die App.tsx aan de toetsing geeft, na een rekengang `rekengang`. */
+let appToetsdata = null;
 {
-  const app = leesBron("src", "App.tsx");
-  ok("App.tsx geeft de eerste-orde-resultaten aan de toetsing",
-    /eersteOrdeResultaten:\s*eersteOrdeResultatenVoorKolomtoets\(\s*perCase,\s*fem\.actieveCombinaties,\s*fem\.beams,?\s*\)/.test(app));
-  ok("de (5.19)-stap van de lus rekent via de gedeelde cache (quasi-blijvend)",
-    /"6\.16b",\s*\),\s*losEersteOrde,\s*\)/.test(app));
-  ok("… en per UGT-combinatie",
-    /kruipInvoerVoorCombinatie\(input, combo, quasiBlijvend, staven, losEersteOrde\)/.test(app));
-  const store = leesBron("src", "stores", "checkStore.ts");
-  ok("checkStore draagt het veld (en geeft het via ...data aan de betonbouwer)",
-    /eersteOrdeResultaten\?: Map<number, SolverResult>;/.test(store) &&
-      /buildBetonCheckInputs\(\{\s*\.\.\.data,/.test(store));
-  const varianten = leesBron("src", "stores", "variantStore.ts");
-  ok("de profielvarianten gebruiken dezelfde eerste-orde-momenten",
-    /eersteOrdeResultaten: data\.eersteOrdeResultaten/.test(varianten));
+  // ── 4a. handleRunMemberChecks: de eerste orde van de TOETSrekengang ──
+  // Issue #199: de UGT-toets rekent altijd zelf P-Δ met scheefstand, hier
+  // φ = 1/200 in +x en −x (de resultaten zijn tweede orde ZONDER scheefstand,
+  // dus niet herbruikbaar). De eerste orde van de UGT komt daarom uit de
+  // toetsrekengang, die van de quasi-blijvende uit de resultaten (BGT, B6).
+  const rekengang = solveAllCasesNonlinear(solverInvoer()).perCase;
+  const resultaten = new Map(COMBOS.map((c) => [c.id, combineResults(c, rekengang)]));
+  let toets = null;
+  const handle = await voerUitIn(app, declaratie(app, "handleRunMemberChecks"), {
+    fem: appFem, rekenGeneratieRef: { current: 0 }, rekenFoutRef: { current: null },
+    laatsteMultiInputRef: { current: null }, gemeldeWeigeringRef: { current: null },
+    // De FOUT in Inzichten bij een geweigerde toets (taak 7); hier geen onderwerp.
+    setStabiliteitsMelding() {},
+    dynamischeImport: async () => stil, setActiveView() {},
+    checkRun: async (d) => { appToetsdata = d; },
+    checkWeiger: (reden) => { throw new Error(`onverwacht geweigerd: ${reden}`); },
+    rekenToetsFysisch: async () => { throw new Error("geen fysisch niet-lineaire ronde bij P-Δ"); },
+    computeAndStoreSolverOutputs: () => null, scheefstandUitkomst: appScheefstand,
+    // De echte functie; alleen de uitkomst wordt bewaard.
+    bepaalToetsKrachten2D: (invoer) => (toets = bepaalToetsKrachten2D(invoer)),
+  });
+  await handle({ openPanel: false, outputs: { combinationResults: resultaten, perCase: rekengang, multiInput: solverInvoer() } });
+  const eo = appToetsdata?.eersteOrdeResultaten;
+  const tegen = 1 + SCHEEFSTAND_COMBO_OFFSET;
+  ok("de toets rekende zelf: P-Δ met φ = 1/200, niet hergebruikt", toets?.analyse.phi === 1 / 200
+    && toets?.analyse.hergebruikt === false && toets?.weigering === null, JSON.stringify(toets?.analyse));
+  ok("App.tsx geeft de toetsing de eerste-orde-oplossingen voor UGT (+x en −x) én quasi-blijvend",
+    eo?.has(1) && eo?.has(tegen) && eo?.has(4), eo ? [...eo.keys()].join(",") : "geen");
+  const ugt = (id) => toets.ugtCombinaties.find((c) => c.id === id);
+  ok("… de UGT precies die uit de cache van de toetsrekengang (geen tweede som)",
+    eo?.get(1) === eersteOrdeCombinatieResultaat(toets.perCase, ugt(1))
+      && eo?.get(tegen) === eersteOrdeCombinatieResultaat(toets.perCase, ugt(tegen)));
+  ok("… de quasi-blijvende die uit de cache van de resultaten (de BGT)",
+    eo?.get(4) === eersteOrdeCombinatieResultaat(rekengang, COMBOS[1]));
+  // VERANDERD GETAL (issue #199). Was 60 kNm (1,2·(10·3 + 20), eerste orde van
+  // de resultaten, zonder scheefstand). Nu de eerste orde van de UGT-toets, met
+  // scheefstand φ·N = 1/200 · 1200 kN = 6 kN op de kop, over h = 3 m: ±18 kNm.
+  // Handcontrole: +x 60 + 18 = 78 kNm (H en scheefstand dezelfde kant op),
+  // −x 60 − 18 = 42 kNm.
+  dicht("… het eerste-orde-voetmoment in +x: |M| = 60 + φ·N·h = 60 + 18 = 78 kNm",
+    eo?.get(1) ? Math.abs(voet(eo.get(1))) : NaN, 78, 1e-9);
+  dicht("… en in −x: |M| = 60 − 18 = 42 kNm", eo?.get(tegen) ? Math.abs(voet(eo.get(tegen))) : NaN, 42, 1e-9);
+  dicht("… de quasi-blijvende blijft 50 kNm (geen imperfectie in de BGT)",
+    eo?.get(4) ? Math.abs(voet(eo.get(4))) : NaN, 50, 1e-9);
+  ok("de toetsset: UGT uit de toets (+x, −x), BGT uit de resultaten, in die volgorde",
+    appToetsdata?.combinations.map((c) => c.id).join(",") === `1,${tegen},4`
+      && appToetsdata.combinationResults.get(1) === toets.combinationResults.get(1)
+      && appToetsdata.combinationResults.get(4) === resultaten.get(4),
+    appToetsdata?.combinations.map((c) => c.id).join(","));
+  ok("… en zegt uit welke resultaten hij komt", appToetsdata?.resultaten === resultaten);
+}
+{
+  // ── 4b. De (5.19)-stap van de fysisch niet-lineaire lus: dezelfde cache ──
+  // De lus vraagt per UGT-combinatie de kruipinvoer met een `losOp`; die moet
+  // de eerste-orde-oplossing uit de cache van de rekengang geven — dezelfde
+  // die de kolomtoets daarna leest. De lus zelf (de kern per segment) is een
+  // naad: hier gaat het om wat er IN gaat.
+  const rekengang = solveAllCasesNonlinear(solverInvoer()).perCase;
+  const gezien = [];
+  const kruipPerCombinatie = new Map();
+  // De lus zelf is een eigen callback (gedeeld met de ronde van de toets,
+  // issue #199); hij draait echt, in dezelfde context.
+  const naden = {
+    fem: appFem, rekenGeneratieRef: { current: 0 }, rekenFoutRef: { current: null },
+    dynamischeImport: async () => stil,
+    roepKern: async () => { throw new Error("de kern hoort hier niet aangeroepen te worden"); },
+    bepaalKruipPerStaaf: async () => ({ mislukt: [] }), kruipWaardenPerStaaf: () => new Map(),
+    bepaalBeffPerStaaf: async () => [], bEffWaardenPerStaaf: () => new Map(),
+    stijfheidClear() {}, stijfheidZet() {}, setSolverErrorText() {}, setSolverStatus() {},
+    bepaalStabiliteit: () => [],
+    kruipInvoerVoorCombinatie: (input, combo, qp, staven, losOp) => {
+      gezien.push({ combo, losOp, input });
+      return kruipInvoerVoorCombinatie(input, combo, qp, staven, losOp);
+    },
+    losCombinatieFysischOp: async (_input, combo, _staven, opts) => {
+      kruipPerCombinatie.set(combo.id, opts.kruip519);
+      return { zonderLasten: true };
+    },
+  };
+  naden.fysischeLus = await voerUitIn(app, declaratie(app, "fysischeLus"), naden);
+  const rondje = await voerUitIn(app, declaratie(app, "rekenFysischNietlineair"), naden);
+  const verse = await rondje(
+    { perCase: rekengang, combinationResults: new Map(), envelope: null }, 0, null);
+  ok("de fysisch niet-lineaire ronde liep door", verse !== null);
+  ok("(5.19) alleen voor de UGT-combinatie", gezien.length === 1 && gezien[0].combo.id === 1
+    && kruipPerCombinatie.get(4) === undefined, gezien.map((g) => g.combo.id).join(","));
+  const k = kruipPerCombinatie.get(1)?.get(1);
+  dicht("(5.19) in de lus: |M₀Ed| = 60 kNm (eerste orde)", Math.abs(k?.m0_ed_knm), 60, 1e-9);
+  dicht("(5.19) in de lus: |M₀Eqp| = 50 kNm (eerste orde, quasi-blijvend)", Math.abs(k?.quasi_blijvend?.[0]?.m0_eqp_knm), 50, 1e-9);
+  const viaLus = typeof gezien[0]?.losOp === "function" ? gezien[0].losOp(gezien[0].input, COMBOS[0]) : undefined;
+  ok("de lus rekent via de gedeelde cache: zijn eerste orde IS die van de rekengang",
+    viaLus !== undefined && viaLus === eersteOrdeCombinatieResultaat(rekengang, COMBOS[0]));
+  ok("… en de kolomtoets leest daarna hetzelfde object",
+    eersteOrdeResultatenVoorKolomtoets(rekengang, COMBOS, DE_KOLOM.beams).get(1) === viaLus);
+}
+{
+  // ── 4b'. De ronde van de TOETS (issue #199, B11): dezelfde lus op de
+  // toetsrekengang. M₀Ed komt uit de eerste orde van de UGT-toetscombinatie
+  // (met scheefstand), M₀Eqp uit de resultaten (de BGT, zonder imperfectie).
+  const rekengang = solveAllCasesNonlinear(solverInvoer()).perCase;
+  const resultaten = new Map(COMBOS.map((c) => [c.id, combineResults(c, rekengang)]));
+  const toets = bepaalToetsKrachten2D({
+    basis: solverInvoer(), combinaties: COMBOS, analysetype: "tweedeOrdeFysisch",
+    scheefstand: { project: appScheefstand, normen: toepasselijkeScheefstandNormen(appFem.beams), richting: 1, modelAan: false },
+    resultaten: { perCase: rekengang, combinationResults: resultaten },
+  });
+  const kruipPerCombinatie = new Map();
+  const gezet = [];
+  const naden = {
+    fem: appFem, rekenGeneratieRef: { current: 0 },
+    roepKern: async () => { throw new Error("de kern hoort hier niet aangeroepen te worden"); },
+    bepaalKruipPerStaaf: async () => ({ mislukt: [] }), kruipWaardenPerStaaf: () => new Map(),
+    bepaalBeffPerStaaf: async () => [], bEffWaardenPerStaaf: () => new Map(),
+    losCombinatieFysischOp: async (_input, combo, _staven, opts) => {
+      kruipPerCombinatie.set(combo.id, { kruip: opts.kruip519, grenstoestand: opts.grenstoestand });
+      return { zonderLasten: false, zonderKruipcoefficient: [], resultaat: { ronde: combo.id }, ronden: 1,
+        geschiedenis: [], laatsteRonde: new Map() };
+    },
+    zetCombinatieResultaat: (perCase, combo) => { gezet.push({ perCase, id: combo.id }); return true; },
+  };
+  naden.fysischeLus = await voerUitIn(app, declaratie(app, "fysischeLus"), naden);
+  const ronde = await voerUitIn(app, declaratie(app, "rekenToetsFysisch"), naden);
+  const reden = await ronde(toets, { perCase: rekengang, combinationResults: resultaten }, 0);
+  const tegen = 1 + SCHEEFSTAND_COMBO_OFFSET;
+  ok("de ronde van de toets liep door (geen reden)", reden === null, String(reden));
+  ok("alleen de UGT-toetscombinaties, in +x en −x, met rekenwaarden (DesignValues)",
+    [...kruipPerCombinatie.keys()].join(",") === `1,${tegen}`
+      && [...kruipPerCombinatie.values()].every((k) => k.grenstoestand === "DesignValues"),
+    [...kruipPerCombinatie.keys()].join(","));
+  ok("de uitkomst landt in de cache van de TOETSrekengang, niet in die van de resultaten",
+    gezet.length === 2 && gezet.every((g) => g.perCase === toets.perCase));
+  const k1 = kruipPerCombinatie.get(1)?.kruip?.get(1);
+  const k2 = kruipPerCombinatie.get(tegen)?.kruip?.get(1);
+  // M₀Ed = 60 ± φ·N·h = 60 ± 18 kNm (zie 4a); M₀Eqp = 50 kNm uit de resultaten.
+  dicht("(5.19) +x: |M₀Ed| = 78 kNm (eerste orde van de toets)", Math.abs(k1?.m0_ed_knm), 78, 1e-9);
+  dicht("(5.19) −x: |M₀Ed| = 42 kNm", Math.abs(k2?.m0_ed_knm), 42, 1e-9);
+  dicht("(5.19): |M₀Eqp| = 50 kNm uit de resultaten (BGT, zonder imperfectie)",
+    Math.abs(k1?.quasi_blijvend?.[0]?.m0_eqp_knm), 50, 1e-9);
+}
+
+// ── 4c en 4d. checkStore en variantStore, met de toetsbrug als kern ─────────
+// De dev-brug (`/api/toetsing`) nagebootst met de echte toetsbrug.
+const verzoeken = [];
+if (!existsSync(TOETSBRUG)) {
+  overgeslagen++;
+  log(`  (4c/4d overgeslagen: ${TOETSBRUG} ontbreekt — bouw hem met`);
+  log("   cargo build --release -p toetsbrug  vanuit src-tauri)");
+} else {
+  globalThis.fetch = async (_url, init) => {
+    verzoeken.push(JSON.parse(init.body));
+    const r = spawnSync(TOETSBRUG, [], { input: init.body, maxBuffer: 1 << 28 });
+    return { ok: r.status === 0, status: r.status === 0 ? 200 : 400, text: async () => r.stdout.toString() };
+  };
+  const max = (env) => Math.max(...(env ?? []).map((p) => Math.abs(p.forces.my_ed)));
+  await useCheckStore.getState().run(appToetsdata);
+  const s = useCheckStore.getState();
+  ok("checkStore: de toetsing liep zonder fout", s.error === null, String(s.error));
+  // VERANDERD GETAL (issue #199). Was 60 kNm: de eerste orde van de resultaten
+  // zonder scheefstand. De toets rekent de UGT nu altijd met scheefstand in
+  // ±x; de grootste eerste-orde-|M| is die van +x: 60 + φ·N·h = 60 + 1/200 ·
+  // 1200 kN · 3 m = 78 kNm (zie 4a).
+  dicht("checkStore: de betonbouwer kreeg de eerste-orde-momenten van de toets (first_order_envelope max 78 kNm)",
+    max(s.lastRunInputs?.beton?.[0]?.first_order_envelope), 78, 1e-9);
+  const betonVerzoek = verzoeken.find((v) => v.opdracht === "check_concrete_beams");
+  dicht("… en dat ging zo naar de kern", max(betonVerzoek?.inputs?.[0]?.first_order_envelope), 78, 1e-9);
+  dicht("… de quasi-blijvende (M₀Eqp) blijft uit de resultaten: 50 kNm",
+    max(s.lastRunInputs?.beton?.[0]?.sls_quasi_permanent_envelope), 50, 1e-9);
+
+  verzoeken.length = 0;
+  await useVariantStore.getState().bereken(1);
+  const varianten = verzoeken.filter((v) => v.opdracht === "check_concrete_beams").flatMap((v) => v.inputs);
+  ok("variantStore: de varianten gingen naar de kern", varianten.length > 0, `${varianten.length} invoer(en)`);
+  // VERANDERD GETAL (issue #199), dezelfde oorzaak als hierboven: 60 → 78 kNm.
+  ok("variantStore: elke variant draagt dezelfde eerste-orde-momenten (78 kNm)",
+    varianten.length > 0 && varianten.every((i) => Math.abs(max(i.first_order_envelope) - 78) <= 78e-9),
+    varianten.map((i) => max(i.first_order_envelope)).join(", "));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

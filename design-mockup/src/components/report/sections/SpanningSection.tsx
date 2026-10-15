@@ -18,6 +18,7 @@
  */
 import { useTranslation } from "react-i18next";
 import { useCheckStore } from "../../../stores/checkStore";
+import { useToetsCombinatieNamen } from "../useToetsCombinatieNamen";
 import { isToetsStaafZichtbaar, useReportStore } from "../../../stores/reportStore";
 import type { SpanningBeamCheckResult } from "../../../lib/types/spanning/SpanningBeamCheckResult";
 import { isStressCheckResult } from "../../../lib/checkTypes";
@@ -41,6 +42,7 @@ function maatgevendeVezel(r: SpanningBeamCheckResult) {
 }
 
 function SpanningStaafBlok({ r }: { r: SpanningBeamCheckResult }) {
+  const combinatieLabel = useToetsCombinatieNamen();
   const { t } = useTranslation("ribbon");
   const v = r.verloop;
   const vezel = maatgevendeVezel(r);
@@ -91,7 +93,7 @@ function SpanningStaafBlok({ r }: { r: SpanningBeamCheckResult }) {
                 defaultValue:
                   "Doorsnede met het spanningsverloop bij de maatgevende snede (x = {{x}} mm, combinatie {{combo}}): N = {{n}} kN, Vz = {{v}} kN, My = {{m}} kNm. Trek positief; de streeplijn in het rechterpaneel is fd = {{fd}} N/mm².",
                 x: fmtValue(v!.position_mm, 0),
-                combo: v!.combination_id,
+                combo: combinatieLabel(v!.combination_id),
                 n: fmtValue(v!.n_ed_kn, 2),
                 v: fmtValue(v!.vz_ed_kn, 2),
                 m: fmtValue(v!.my_ed_knm, 2),

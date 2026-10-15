@@ -68,9 +68,13 @@ import {
   splitsArtikel,
   statusClass,
   statusLabel,
+  toetsCombinatieNamen,
+  toetsKrachtLabel,
   unityCheckLatex,
   type CheckCalc,
 } from "../checkReportUtils";
+import { useReportData } from "../ReportDataContext";
+import { useToetsCombinatieNamen } from "../useToetsCombinatieNamen";
 
 /**
  * VERLOPEND PROFIEL — de toetsdoorsneden van één staaf (ontwerp 15-09-2026, §6).
@@ -261,6 +265,15 @@ export function DerivationBlock({
   const { artikel, vergelijking } = splitsArtikel(check.article);
   const { latex, ongebruikt } = afleidingLatex(check);
   const f = check.force_state.forces;
+  // De combinatie bij naam en de herkomst van haar krachten (issue #199): de
+  // UGT-toets rekent ook in −x, met een id dat het model niet kent, en altijd
+  // tweede orde met scheefstand; de BGT leest de resultaten.
+  const toetsCombinaties = useCheckStore((s) => s.toetsCombinaties);
+  const noemer = useCheckStore((s) => s.toets?.analyse.noemer);
+  const { combinations } = useReportData();
+  const combinatieId = check.force_state.combination_id;
+  const combinatieNaam = toetsCombinatieNamen(combinations, toetsCombinaties).get(combinatieId) ?? String(combinatieId);
+  const herkomst = toetsKrachtLabel(t, combinatieId, toetsCombinaties, noemer);
 
   return (
     <div className="rpt-chk-block">
@@ -283,7 +296,8 @@ export function DerivationBlock({
         <div className="rpt-chk-forces">{krachtregel}</div>
       ) : (
       <div className="rpt-chk-forces">
-        {t("report.combination", "Combinatie")} {check.force_state.combination_id}
+        {t("report.combination", "Combinatie")} {combinatieNaam}
+        {herkomst !== null && ` (${herkomst})`}
         {"   x = "}
         {fmtValue(check.force_state.position_mm, 0)} mm
         {"   N = "}
@@ -379,6 +393,7 @@ function MemberBlock({
   const { t } = useTranslation("ribbon");
   const { t: tCheck } = useTranslation("check");
   const steel = isSteelCheckResult(result);
+  const combinatieLabel = useToetsCombinatieNamen();
 
   // De regel onder de staafkop: per materiaal wat de toetsing bepaalt —
   // doorsnedeklasse (staal), korf en rekensterkten (beton), klimaatklasse en
@@ -390,7 +405,7 @@ function MemberBlock({
       ? `EN 1992 · ${result.reinforcement_summary} · f_cd = ${result.f_cd_mpa.toFixed(1)} N/mm² · f_yd = ${result.f_yd_mpa.toFixed(0)} N/mm²`
       : isStressCheckResult(result)
         ? `${t("report.spanningGeenNorm", "vrije spanningstoets (geen norm)")} · f_toel = ${fmtValue(result.f_toel_mpa, 2)} N/mm² · γ_M = ${fmtValue(result.gamma_m, 2)} · f_d = ${fmtValue(result.f_d_mpa, 2)} N/mm²`
-        : `EN 1995 · ${t("report.serviceClass", "klimaatklasse")} ${serviceClassLabel(result.service_class)} · ${belastingduurTekst(result, t, tCheck)}`;
+        : `EN 1995 · ${t("report.serviceClass", "klimaatklasse")} ${serviceClassLabel(result.service_class)} · ${belastingduurTekst(result, t, tCheck, combinatieLabel)}`;
 
   // Beknopt: alleen de maatgevende toets — de UC die telt, met dezelfde
   // volledige afleiding, maar zonder de toetsen die niet maatgevend waren.

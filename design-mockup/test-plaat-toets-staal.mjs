@@ -24,6 +24,22 @@
 //   Elementgemiddelde spanning: binnen 2 % van de analytische waarde, zoals
 //   test-plaat-randlast dat voor σ_y al vastlegt.
 //
+// DE TOETS REKENT MET SCHEEFSTAND (issue #199). De UGT-toetskrachten van
+// `check` zijn altijd tweede orde met scheefstand φ = 1/200, elke combinatie in
+// +x en −x (id en id + 1 000 000), ook zonder scheefstandschakelaar. De randlast
+// krijgt dan een metgezel H = φ·V langs de bovenrand en de wand buigt in zijn
+// vlak (Bernoulli, I = t·B³/12 = 20·2000³/12 = 1,3333·10¹⁰ mm⁴):
+//   combinatie 2: ΣH = 3,0·1000·2/200 = 30 kN; onderste randelement (hart
+//   x = 750 mm uit het midden, z = 250 mm; een lineair verloop middelt naar de
+//   waarde in het hart): σ_b = 30·10³·2750·750/1,3333·10¹⁰ = 4,64 N/mm² →
+//   σ_y = 154,64 N/mm², UC = 0,6580 (was 0,638298, +3,1 %);
+//   combinatie 1: de helft, σ_b = 2,32 → σ_y = 77,32, UC = 0,3290 (was
+//   0,319149, +3,1 %).
+// Het gemiddelde van σ_y over alle elementen blijft f·p/t (verticaal evenwicht;
+// de buiging is antisymmetrisch en middelt weg), en geen element wijkt meer af
+// dan σ_b van het randelement. σ_x en τ blijven klein: τ_gem = ΣH/(B·t) =
+// 0,5 % van σ_y. P-Δ speelt bij deze trekwand geen rol.
+//
 // Uitvoeren: npx tsx test-plaat-toets-staal.mjs   (vanuit design-mockup/)
 
 import { spawn } from "node:child_process";
@@ -87,20 +103,28 @@ log("\n[a] de invoer: materiaal, dikte, alleen UGT, spanningen ongewijzigd");
 checkTrue("soort Staal, materiaal S235", p1?.soort === "Staal" && p1?.materiaal === "S235", `${p1?.soort} ${p1?.materiaal}`);
 checkTrue("dikte 20 mm", p1?.thickness_mm === T);
 checkTrue("bijlage NL", p1?.bijlage === "NL");
+// Tot issue #199 "[1,2]": de toets rekent nu elke UGT-combinatie in +x en −x.
 checkTrue(
-  "alleen de UGT-combinaties 1 en 2",
-  JSON.stringify(p1?.combinations.map((c) => c.combination_id)) === "[1,2]",
+  "alleen de UGT-combinaties 1 en 2, elk in +x en −x",
+  JSON.stringify(p1?.combinations.map((c) => c.combination_id)) === "[1,1000001,2,1000002]",
   JSON.stringify(p1?.combinations.map((c) => c.combination_id)),
 );
-for (const [i, factor] of [[0, 1.5], [1, 3.0]]) {
-  const els = p1?.combinations[i]?.elements ?? [];
-  checkTrue(`combinatie ${i + 1}: 16 of meer elementen`, els.length >= 16, String(els.length));
+/** σ_b van het onderste randelement bij factor f (Bernoulli, zie de kop). */
+const sigmaB = (f) => ((f * P * B) / 200) * (H - S / 2) * (B / 2 - S / 2) / ((T * B ** 3) / 12);
+for (const [id, factor] of [[1, 1.5], [1_000_001, 1.5], [2, 3.0], [1_000_002, 3.0]]) {
+  const els = p1?.combinations.find((c) => c.combination_id === id)?.elements ?? [];
+  checkTrue(`combinatie ${id}: 16 of meer elementen`, els.length >= 16, String(els.length));
+  const gem = els.reduce((s, e) => s + e.sigma_y_mpa, 0) / Math.max(1, els.length);
+  checkRel(`combinatie ${id}: gemiddelde σ_y = ${factor}·p/t (verticaal evenwicht)`, gem, factor * SIGMA, 0.02);
+  // Tot issue #199 lag elk element binnen 2 % van f·p/t; met de buiging uit de
+  // scheefstand wijkt een randelement tot σ_b (3,1 %) af.
   checkTrue(
-    `combinatie ${i + 1}: σ_y = ${factor}·p/t binnen 2 % in elk element`,
-    els.every((e) => Math.abs(e.sigma_y_mpa - factor * SIGMA) <= 0.02 * factor * SIGMA),
+    `combinatie ${id}: elk element binnen σ_b = ${sigmaB(factor).toFixed(2)} N/mm² (+ 2 %) van ${factor}·p/t`,
+    els.every((e) => Math.abs(e.sigma_y_mpa - factor * SIGMA) <= sigmaB(factor) + 0.02 * factor * SIGMA),
+    String(Math.max(...els.map((e) => Math.abs(e.sigma_y_mpa - factor * SIGMA)))),
   );
   checkTrue(
-    `combinatie ${i + 1}: σ_x en τ klein (< 2 % van σ_y)`,
+    `combinatie ${id}: σ_x en τ klein (< 2 % van σ_y)`,
     els.every((e) => Math.abs(e.sigma_x_mpa) < 0.02 * factor * SIGMA && Math.abs(e.tau_xy_mpa) < 0.02 * factor * SIGMA),
   );
 }
@@ -151,10 +175,12 @@ if (!existsSync(TOETSBRUG)) {
   checkTrue("toetsbrug antwoordt met een lijst", Array.isArray(res), antwoord.slice(0, 200));
   const u = Array.isArray(res) ? res[0] : null;
   checkTrue("niet geweigerd", u && u.geweigerd === undefined, u?.geweigerd ?? "");
-  checkRel("UC_max = 150/235 (combinatie 2)", u?.uc_max, (3.0 * SIGMA) / F_Y, 0.02);
+  // Met de buiging uit de scheefstand (zie de kop); was 150/235 = 0,638298.
+  checkRel("UC_max = (150 + 4,64)/235 = 0,6580 (combinatie 2)", u?.uc_max, (3.0 * SIGMA + sigmaB(3.0)) / F_Y, 0.02);
   checkTrue("maatgevende combinatie 2", u?.governing_combination_id === 2, String(u?.governing_combination_id));
   const c1 = u?.combinaties?.find((c) => c.combination_id === 1);
-  checkRel("combinatie 1: UC = 75/235", c1?.uc, (1.5 * SIGMA) / F_Y, 0.02);
+  // Was 75/235 = 0,319149; met σ_b = 2,32 N/mm² 0,3290.
+  checkRel("combinatie 1: UC = (75 + 2,32)/235 = 0,3290", c1?.uc, (1.5 * SIGMA + sigmaB(1.5)) / F_Y, 0.02);
   checkTrue("omhullende per element aanwezig", (u?.elementen?.length ?? 0) === p1.combinations[0].elements.length);
   checkTrue("status Ok", u?.status === "Ok");
   checkTrue("plooi staat als niet getoetst", (u?.niet_getoetst ?? []).some((n) => n.id === "en1993_1_5_plooi"));

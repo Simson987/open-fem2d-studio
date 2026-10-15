@@ -81,6 +81,8 @@
   color: var(--theme-danger-color, #dc2626);
   font-size: 12.5px;
   background: rgba(220, 38, 38, 0.06);
+  /* Een geweigerde toets (issue #199) noemt de reden per combinatie op een eigen regel. */
+  white-space: pre-line;
 }
 
 .cp-desktop-note {
@@ -451,6 +453,12 @@
 .cp-export-btn { font-size: 12px; }
 .cp-export-btn:disabled { opacity: .55; cursor: default; }
 .cp-provenance { padding: 6px 12px; font-size: 11px; color: var(--theme-text-muted); }
+/* De toetskrachten (issue #199): direct onder de herkomst van de UC. */
+.cp-toetskrachten { padding-top: 0; }
+.cp-toets-meldingen summary { cursor: pointer; }
+.cp-toets-meldingen ul { margin: 4px 0 0; padding-left: 16px; }
+/* De herkomst in de krachtregel van een toets: "2e orde + scheefstand φ = 1/200". */
+.check-force-basis { font-style: italic; }
 .properties-check-toggle { display: flex; justify-content: space-between; width: 100%; margin-bottom: 8px; }
 
 /* ── Wat maatgevend is (issue #41) ───────────────────────────────────────

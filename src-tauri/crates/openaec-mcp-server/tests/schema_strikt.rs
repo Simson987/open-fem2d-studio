@@ -1115,6 +1115,26 @@ async fn rapportschema_noemt_de_windomschrijving() {
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }
 
+/// Het rapportschema noemt de herkomst van de toetskrachten (issue #199):
+/// `toetskrachten` uit `check_fem_model`, streng (`additionalProperties:
+/// false`, net als `report::ToetskrachtenRapport` met `deny_unknown_fields`).
+#[tokio::test]
+async fn rapportschema_noemt_de_toetskrachten() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let rapport = tooldefinitie(&mut stdin, &mut reader, 43, "generate_steel_report_pdf").await;
+    let veld = &rapport["inputSchema"]["properties"]["toetskrachten"];
+    assert_eq!(veld["type"], "object", "toetskrachten ontbreekt in het schema van generate_steel_report_pdf");
+    assert_eq!(veld["additionalProperties"], json!(false));
+    assert_eq!(veld["required"], json!(["noemer", "tweede_orde_combinaties"]));
+    let check = tooldefinitie(&mut stdin, &mut reader, 44, "check_fem_model").await;
+    assert!(
+        check["description"].as_str().unwrap_or("").contains("`toetskrachten`"),
+        "check_fem_model noemt het veld toetskrachten in zijn beschrijving"
+    );
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
 /// Het rapportschema noemt de taal van de datum (issue #20), met precies de
 /// vier codes die `report::RapportTaal` bij het lezen aanneemt.
 #[tokio::test]
@@ -1612,6 +1632,51 @@ async fn schema_van_de_staalhal_is_strikt_op_elk_niveau() {
     assert_eq!(p["fundering"]["properties"]["type"]["enum"], json!(["opleggingen", "balkrooster"]));
     assert_eq!(p["lasten"]["properties"]["wind"]["properties"]["bron"]["enum"], json!(["handmatig", "stuwdruk"]));
     assert_eq!(tool["inputSchema"]["properties"]["analyse"]["enum"], json!(["linear", "p-delta"]));
+    // Issue #199: `analyse` geldt alleen voor de resultaten; de toets rekent
+    // altijd P-Delta met scheefstand, en de beschrijvingen zeggen dat.
+    eis_toetsbeschrijving(&tool);
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+/// De beschrijvingen van een 3D-tool met toets (staalhal, IFC-import): de
+/// toets rekent altijd tweede orde met scheefstand in vier richtingen, los van
+/// `analyse`, en weigert bij divergentie zonder terugval op eerste orde.
+fn eis_toetsbeschrijving(tool: &Value) {
+    let tekst = tool["description"].as_str().unwrap_or("");
+    for woord in [
+        "ALTIJD zelf tweede orde (P-Delta) met scheefstand",
+        "+X, −X, +Y en −Y",
+        "toetsanalyse",
+        "geweigerd",
+        "nooit teruggevallen op eerste orde",
+    ] {
+        assert!(tekst.contains(woord), "de toolbeschrijving noemt \"{woord}\" niet: {tekst}");
+    }
+    let analyse = tool["inputSchema"]["properties"]["analyse"]["description"].as_str().unwrap_or("");
+    assert!(analyse.contains("RESULTATEN") && analyse.contains("P-Delta met scheefstand"), "{analyse}");
+    let toetsen = tool["inputSchema"]["properties"]["toetsen"]["description"].as_str().unwrap_or("");
+    assert!(toetsen.contains("P-Delta") && toetsen.contains("scheefstand"), "{toetsen}");
+}
+
+/// De gui-tools voor rekenen en toetsen zeggen dat de toetskrachten ook in 3D
+/// altijd tweede orde met scheefstand zijn (issue #199), dat de resultaten in
+/// 3D het analysetype volgen, en welke velden de toets beschrijven.
+#[tokio::test]
+async fn gui_toolbeschrijvingen_noemen_de_toets_in_2d_en_3d() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let analyse = tooldefinitie(&mut stdin, &mut reader, 160, "gui_set_analysis").await;
+    let a = analyse["description"].as_str().unwrap_or("");
+    assert!(a.contains("in 2D and in 3D alike") && a.contains("+X, −X, +Y and −Y"), "{a}");
+    for (id, naam) in [(161, "gui_solve"), (162, "gui_run_checks")] {
+        let t = tooldefinitie(&mut stdin, &mut reader, id, naam).await;
+        let d = t["description"].as_str().unwrap_or("");
+        for woord in ["+X, −X, +Y and −Y", "`toetsanalyse`", "`toetsAlphaCr`", "`toetsmeldingen`", "TOETSING_ONMOGELIJK"] {
+            assert!(d.contains(woord), "{naam} noemt {woord:?} niet: {d}");
+        }
+        assert!(d.contains("linear"), "{naam}: de 3D-resultaten volgen het analysetype: {d}");
+        assert!(!d.contains("For 3D it runs the P-Delta frame analysis"), "{naam}: {d}");
+    }
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }
@@ -1796,6 +1861,7 @@ async fn schema_van_de_ifc_import_is_strikt_op_elk_niveau() {
     assert_eq!(keuze[1]["minimum"], json!(1));
     assert_eq!(tool["inputSchema"]["properties"]["analyse"]["enum"], json!(["linear", "p-delta"]));
     assert_eq!(tool["inputSchema"]["properties"]["gevolgklasse"]["enum"], json!(["CC1", "CC2", "CC3"]));
+    eis_toetsbeschrijving(&tool);
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }
@@ -1858,6 +1924,53 @@ async fn schema_van_gui_start_app_is_strikt() {
         assert_eq!(uit["isError"], json!(true), "{buiten}: {uit}");
         assert_eq!(uit["structuredContent"]["error_code"], json!("ARGUMENT_ONGELDIG"), "{buiten}");
     }
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+/// `check_fem_model` kent geen `nonlinear` meer (issue #199): de UGT-toets
+/// rekent altijd tweede orde (P-Δ) met scheefstand. Het schema biedt het
+/// veld niet aan, en een client die het toch stuurt krijgt ARGUMENT_ONGELDIG in
+/// plaats van een stil genegeerde vlag — wie hem stuurt, verwacht er iets van.
+/// `solve_fem_model` houdt `nonlinear`: daar gaat het om de resultaten. De
+/// beschrijving van `check_fem_model` noemt de toetsanalyse en de nieuwe
+/// uitvoervelden, zodat een client weet waar hij ze leest.
+#[tokio::test]
+async fn check_fem_model_kent_geen_nonlinear_en_noemt_de_toetsanalyse() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let check = tooldefinitie(&mut stdin, &mut reader, 120, "check_fem_model").await;
+    let s = &check["inputSchema"];
+    assert_eq!(s["additionalProperties"], json!(false));
+    assert!(s["properties"].get("nonlinear").is_none(), "check_fem_model biedt `nonlinear` aan: {s}");
+    let beschrijving = check["description"].as_str().unwrap_or("");
+    for woord in [
+        "TOETSKRACHTEN", "P-Delta", "scheefstand", "model_analysis_type", "afgedwongen",
+        "analyse_toelichting", "scheefstand_toelichting", "TOETSING_GEWEIGERD", "detail.toets_geweigerd",
+    ] {
+        assert!(beschrijving.contains(woord), "de beschrijving van check_fem_model noemt {woord:?} niet");
+    }
+    let solve = tooldefinitie(&mut stdin, &mut reader, 121, "solve_fem_model").await;
+    assert!(
+        solve["inputSchema"]["properties"]["nonlinear"].is_object(),
+        "solve_fem_model hoort `nonlinear` te houden (de resultaten)"
+    );
+    assert!(
+        !solve["description"].as_str().unwrap_or("").contains("Sluitstuk is `steel_check_inputs`"),
+        "solve_fem_model levert geen toetsinvoer meer"
+    );
+
+    // De argumenten worden vóór de sidecar gelezen: hier is geen Node nodig.
+    let uit = roep_tool_aan(
+        &mut stdin,
+        &mut reader,
+        122,
+        "check_fem_model",
+        json!({ "model": { "nodes": [], "beams": [], "supports": [], "loadCases": [] }, "nonlinear": true }),
+    )
+    .await;
+    assert_eq!(uit["isError"], json!(true), "{uit}");
+    assert_eq!(uit["structuredContent"]["error_code"], json!("ARGUMENT_ONGELDIG"), "{uit}");
+    assert!(foutmelding(&uit).contains("nonlinear"), "{}", foutmelding(&uit));
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }

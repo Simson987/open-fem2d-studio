@@ -21,9 +21,62 @@ import type { CrossSectionClass } from "../../lib/types/steel/CrossSectionClass"
 import type { CheckStatus } from "../../lib/types/steel/CheckStatus";
 import type { ServiceClass } from "../../lib/types/timber/ServiceClass";
 import type { LoadDurationClass } from "../../lib/types/timber/LoadDurationClass";
+import { noemerTekst } from "../../lib/scheefstandNorm";
 
 /** Eén toetsberekening — weerstand of stabiliteit, staal of hout. */
 export type CheckCalc = ResistanceCalc | StabilityCalc;
+
+/**
+ * De naam van elke combinatie op id, voor de herkomst van een toets: die van de
+ * toetsing (`checkStore.toetsCombinaties`) gaan voor die van het model.
+ *
+ * WAAROM (issue #199). De toets rekent de UGT altijd in +x en −x, ook als de
+ * scheefstandschakelaar van de resultaten uit staat. De variant −x heeft dan
+ * een id (id + 1 000 000) dat de combinatielijst van het model niet kent, en
+ * zonder de namen van de toetsing stond er "comb. 1000003".
+ */
+export function toetsCombinatieNamen(
+  model: readonly { id: number; name: string }[],
+  toets: readonly { id: number; name: string }[],
+): Map<number, string> {
+  const namen = new Map(model.map((c) => [c.id, c.name] as const));
+  for (const c of toets) namen.set(c.id, c.name);
+  return namen;
+}
+
+/**
+ * Waar de krachten van een toets vandaan komen (issue #199): een
+ * UGT-toetscombinatie is tweede orde (P-Δ) met scheefstand, een BGT-combinatie
+ * komt uit de resultaten. `null` = onbekend (geen toetsanalyse, of een
+ * snapshot van een ouder hoofdvenster); dan staat er geen label.
+ */
+export function toetsKrachtHerkomst(
+  combinatieId: number,
+  toetsCombinaties: readonly { id: number; tweedeOrde?: boolean }[],
+): "tweedeOrde" | "resultaten" | null {
+  const c = toetsCombinaties.find((x) => x.id === combinatieId);
+  if (!c || c.tweedeOrde === undefined) return null;
+  return c.tweedeOrde ? "tweedeOrde" : "resultaten";
+}
+
+/**
+ * Het label bij de krachtregel van een toets: "2e orde + scheefstand
+ * φ = 1/200" of "resultaten" (issue #199, B4), in de taal van de interface.
+ * Gedeeld door het toetsingspaneel (`CheckBlock`) en het live rapport
+ * (`DerivationBlock`); de PDF zet dezelfde woorden (`report::ToetskrachtenRapport`).
+ * `null` = geen label (de herkomst is onbekend).
+ */
+export function toetsKrachtLabel(
+  t: TFunction,
+  combinatieId: number,
+  toetsCombinaties: readonly { id: number; tweedeOrde?: boolean }[],
+  noemer: number | undefined,
+): string | null {
+  const herkomst = toetsKrachtHerkomst(combinatieId, toetsCombinaties);
+  if (herkomst === null) return null;
+  if (herkomst === "resultaten") return t("block.forcesResults", { ns: "check" });
+  return t("block.forcesSecondOrder", { ns: "check" }) + (noemer !== undefined ? ` φ = 1/${noemerTekst(noemer)}` : "");
+}
 
 /** Stabiliteitstoetsen dragen tussenwaarden (kniklengtes, chi, kip, …). */
 export function isStabilityCalc(c: CheckCalc): c is StabilityCalc {
@@ -590,6 +643,12 @@ export function belastingduurTekst(
   },
   t: TFunction,
   tCheck: TFunction,
+  /**
+   * De naam van een combinatie-id (`useToetsCombinatieNamen`): de toets rekent
+   * ook in −x onder id + 1 000 000, en dat id staat in geen lijst. Zonder:
+   * het kale id.
+   */
+  label: (id: number) => string = String,
 ): string {
   const naam = (d: LoadDurationClass) =>
     tCheck(LOAD_DURATION_LABELS[d].key, LOAD_DURATION_LABELS[d].fallback).toLowerCase();
@@ -597,11 +656,11 @@ export function belastingduurTekst(
   if (lijst.length === 0) return `${t("report.loadDuration", "belastingduur")} ${naam(r.load_duration)}`;
   const comb = t("report.combinationShort", "comb.");
   const delen = lijst.map(
-    (k) => `${naam(k.load_duration)} (k_mod ${k.k_mod.toFixed(2).replace(".", ",")}) ${comb} ${k.combination_ids.join(", ")}`,
+    (k) => `${naam(k.load_duration)} (k_mod ${k.k_mod.toFixed(2).replace(".", ",")}) ${comb} ${k.combination_ids.map((id) => label(id)).join(", ")}`,
   );
   const maatgevend =
     r.governing_combination_id !== undefined && r.governing_combination_id !== null
-      ? ` · ${t("report.governingLoadDuration", "maatgevend")}: ${naam(r.load_duration)}, ${comb} ${r.governing_combination_id}`
+      ? ` · ${t("report.governingLoadDuration", "maatgevend")}: ${naam(r.load_duration)}, ${comb} ${label(r.governing_combination_id)}`
       : "";
   return `${t("report.loadDurationPerCombination", "belastingduur per combinatie")}: ${delen.join("; ")}${maatgevend}`;
 }

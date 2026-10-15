@@ -12,8 +12,10 @@ import {
   calculateBeamLength,
   calculateBeamAngle,
   calculateBeamLocalStiffness,
+  calculateGeometricStiffness,
   createTransformationMatrix,
   calculateDistributedLoadLocalForces,
+  telGeometrischeStijfheidOp,
 } from '../fem/Beam';
 import { calculateBeamInternalForces } from '../fem/BeamForces';
 import { calculateBeamThermalLocalForces } from '../fem/ThermalLoad';
@@ -403,89 +405,9 @@ const DEFAULT_OPTIONS: NonlinearSolverOptions = {
   loadSteps: 1
 };
 
-/**
- * Calculate geometric stiffness matrix for a beam element
- * This accounts for the P-Delta effect (second-order effects)
- */
-function calculateGeometricStiffness(
-  L: number,
-  N: number  // Axial force (positive = tension)
-): Matrix {
-  const Kg = new Matrix(6, 6);
-
-  const factor = N / L;
-
-  // Geometric stiffness for transverse DOFs
-  // Based on consistent geometric stiffness matrix
-  const a = 6 / 5;
-  const b = L / 10;
-  const c = 2 * L * L / 15;
-  const d = -L / 10;
-  const e = -L * L / 30;
-
-  // v1, v1
-  Kg.set(1, 1, a * factor);
-  // v1, θ1
-  Kg.set(1, 2, b * factor);
-  Kg.set(2, 1, b * factor);
-  // v1, v2
-  Kg.set(1, 4, -a * factor);
-  Kg.set(4, 1, -a * factor);
-  // v1, θ2
-  Kg.set(1, 5, b * factor);
-  Kg.set(5, 1, b * factor);
-
-  // θ1, θ1
-  Kg.set(2, 2, c * factor);
-  // θ1, v2
-  Kg.set(2, 4, d * factor);
-  Kg.set(4, 2, d * factor);
-  // θ1, θ2
-  Kg.set(2, 5, e * factor);
-  Kg.set(5, 2, e * factor);
-
-  // v2, v2
-  Kg.set(4, 4, a * factor);
-  // v2, θ2
-  Kg.set(4, 5, d * factor);
-  Kg.set(5, 4, d * factor);
-
-  // θ2, θ2
-  Kg.set(5, 5, c * factor);
-
-  return Kg;
-}
-
-/**
- * Tel de geometrische stijfheid Kg(N) op bij de LOKALE elastische matrix,
- * vóórdat de scharnieren worden gecondenseerd.
- *
- * WAAROM VÓÓR DE CONDENSATIE. Statische condensatie van een scharnier
- * elimineert de rotatie θ_c uit de raakstijfheid van het element: uit
- * (Ke + Kg)·u = f volgt θ_c uit de rij van θ_c, en die rij bevat óók de
- * Kg-termen (N·L/10 en 2·N·L/15). Tot september 2026 werd eerst Ke
- * gecondenseerd en daarna de ongecondenseerde Kg opgeteld. Dan blijft op het
- * losgelaten DOF een fictieve rotatiestijfheid 2·N·L/15 staan, en de
- * koppeltermen N·L/10 tussen die rotatie en de dwarsverplaatsingen worden
- * nooit weggewerkt. Gemeten (hallenspant met ingeklemde kolom en pendelkolom,
- * referentie P_cr = k·h = 1307,9 kN): scharnier op de pendeltop gaf
- * P_cr = 934,1 kN (−28,6 %), hetzelfde scharnier op het regeleind 1317 kN
- * (+0,7 %) — de uitkomst hing af van de staaf die het scharnier droeg. Op de
- * scharnierknoop van een spant stond een fictief moment van 56 kNm
- * (referentie 0,6), en het steunmoment van een doorgaande ligger boven een
- * gedrukte pendelkolom was 6 % te gunstig. Met Kg vóór de condensatie is de
- * eliminatie exact en maakt de plek van het scharnier niet meer uit.
- *
- * N is trek-positief (de conventie van `calculateGeometricStiffness`).
- */
-function telGeometrischeStijfheidOp(Kl: Matrix, L: number, N: number): void {
-  const Kg = calculateGeometricStiffness(L, N);
-  for (let i = 0; i < 6; i++) {
-    for (let j = 0; j < 6; j++) {
-      Kl.addAt(i, j, Kg.get(i, j));
-    }
-  }
-}
+// `calculateGeometricStiffness` en `telGeometrischeStijfheidOp` staan in
+// `fem/Beam.ts`: ook de krachtterugrekening (`calculateBeamInternalForces`)
+// heeft ze nodig, en daar mag NonlinearSolver niet vandaan importeren.
 
 /**
  * Assemble global stiffness matrix including geometric stiffness
@@ -1133,10 +1055,16 @@ export function zoekFrameMechanisme(mesh: Mesh): SingulierStelselFout | null {
 
 /**
  * Calculate internal forces for all beam elements
+ *
+ * `kgNormaalkrachten`: na een P-Δ-oplossing de normaalkrachten (druk-positief,
+ * de vorm van `axialForces`) waarmee K_G in het stelsel zat. De eindkrachten
+ * komen dan uit (K_E + K_G)·u, zodat ze in evenwicht zijn met de reacties uit
+ * dezelfde matrix (zie `calculateBeamInternalForces`). Weglaten = K_E·u.
  */
 function calculateAllInternalForces(
   mesh: Mesh,
-  displacements: number[]
+  displacements: number[],
+  kgNormaalkrachten?: Map<number, number>,
 ): { beamForces: Map<number, IBeamForces>; axialForces: Map<number, number> } {
   const beamForces = new Map<number, IBeamForces>();
   const axialForces = new Map<number, number>();
@@ -1168,7 +1096,10 @@ function calculateAllInternalForces(
       displacements[idx2 * 3 + 2]
     ];
 
-    const forces = calculateBeamInternalForces(beam, n1, n2, material, globalDisp);
+    // K_G verwacht N trek-positief; `axialForces` is druk-positief (zie
+    // `assembleGlobalStiffnessWithGeometric`).
+    const nKg = kgNormaalkrachten ? -(kgNormaalkrachten.get(beam.id) || 0) : undefined;
+    const forces = calculateBeamInternalForces(beam, n1, n2, material, globalDisp, nKg);
     beamForces.set(beam.id, forces);
 
     // Average axial force for geometric stiffness
@@ -1761,6 +1692,14 @@ function solveNonlinearKern(
     );
   } else {
     K = assembleGlobalStiffnessWithGeometric(mesh, axialForces, opts.geometricNonlinear);
+  }
+
+  // Tweede orde: de staafkrachten uit DEZELFDE K_E + K_G(N) als de reacties
+  // hieronder, met dezelfde N. Met alleen K_E·u sloot het knoopevenwicht niet
+  // (zie `calculateBeamInternalForces`). De normaalkrachten zelf veranderen
+  // niet: K_G heeft geen axiale termen.
+  if (opts.geometricNonlinear) {
+    beamForces = calculateAllInternalForces(mesh, displacements, axialForces).beamForces;
   }
 
   // Stabiliteitscheck: boven de kniklast "convergeert" de geïtereerde P-Δ
@@ -2704,7 +2643,16 @@ function solveMixed(
       displacements[idx2 * dofsPerNode + 2],  // θ2
     ];
 
-    const forces = calculateBeamInternalForces(beam, n1, n2, material, globalDisp);
+    // Tweede orde: K_G met dezelfde N als `assembleGeometricStiffnessMixed`
+    // (EA/L·Δu, trek-positief), zodat de eindkrachten in evenwicht zijn met
+    // de reacties uit Ke + Kg (zie `calculateBeamInternalForces`).
+    let nKg: number | undefined;
+    if (opts.geometricNonlinear) {
+      const L = calculateBeamLength(n1, n2);
+      const ul = createTransformationMatrix(calculateBeamAngle(n1, n2)).multiplyVector(globalDisp);
+      nKg = L > 1e-10 ? (material.E * beam.section.A / L) * (ul[3] - ul[0]) : undefined;
+    }
+    const forces = calculateBeamInternalForces(beam, n1, n2, material, globalDisp, nKg);
     beamForces.set(beam.id, forces);
   }
 

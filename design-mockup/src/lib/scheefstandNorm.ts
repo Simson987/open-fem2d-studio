@@ -250,6 +250,15 @@ function getal(x: number, decimalen: number): string {
 }
 
 /**
+ * Een noemer 1/φ om te tonen: een geheel getal kaal (200), anders op één
+ * decimaal met een komma (230,9). Gedeeld door de analysetoelichting, de
+ * MCP-uitvoer en de labels bij de toetskrachten (issue #199).
+ */
+export function noemerTekst(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(".", ",");
+}
+
+/**
  * h en m uit het model afleiden.
  *
  * ─────────────────────────────────────────────────────────────────────────
@@ -835,17 +844,22 @@ function toelichtingRegels(
     for (const r of geometrie.afleidingTeksten.slice(2)) regels.push(r);
   }
   regels.push("");
+  // De UGT-toets rekent ALTIJD met deze scheefstand (issue #199), ook met de
+  // schakelaar uit; de schakelaar geldt alleen voor de resultaten. Daarom is
+  // deze toelichting er altijd, en zegt zij dat.
   if (richtingen === "3d") regels.push(vt(`${S}directions3d`,
-    "In 3D werkt de scheefstand per UGT-combinatie in vier richtingen, één tegelijk: " +
-      "+X, −X, +Y en −Y (EN 1993-1-1 §5.3.2(8)). Elke verticale last V krijgt op zijn " +
-      "eigen aangrijpingspunt een horizontale last φ·V (§5.3.2(7)). BGT-combinaties " +
-      "rekenen zonder scheefstand."));
+    "In 3D rekent de UGT-toets elke combinatie met de scheefstand in vier richtingen, één " +
+      "tegelijk: +X, −X, +Y en −Y (EN 1993-1-1 §5.3.2(8)). Elke verticale last V krijgt op " +
+      "zijn eigen aangrijpingspunt een horizontale last φ·V (§5.3.2(7)). Dat doet de toets " +
+      "altijd, ook als de schakelaar Scheefstand uit staat; met die schakelaar aan rekenen ook " +
+      "de UGT-resultaten zo. BGT-combinaties rekenen zonder scheefstand."));
   else regels.push(vt(`${S}directionBoth`,
-    "Richting: beide. Elke belastingcombinatie is doorgerekend met de scheefstand in +x " +
-      "én in −x, als twee varianten met de richting in de naam; de omhullende en de " +
-      "toetsing nemen per staaf de ongunstigste van de twee (EN 1993-1-1 5.3.2(2): de " +
-      "imperfectie in de meest ongunstige richting; 5.3.2(8): in alle relevante " +
-      "richtingen, één per keer)."));
+    "Richting: beide. De UGT-toets rekent elke combinatie met de scheefstand in +x én in −x, " +
+      "als twee varianten met de richting in de naam, en neemt per staaf de ongunstigste van " +
+      "de twee (EN 1993-1-1 5.3.2(2): de imperfectie in de meest ongunstige richting; " +
+      "5.3.2(8): in alle relevante richtingen, één per keer). Dat doet de toets altijd, ook " +
+      "als de schakelaar Scheefstand uit staat; die schakelaar geldt alleen voor de " +
+      "resultaten, en met haar aan rekenen ook die elke combinatie in +x en −x."));
   if (uitkomst.waarschuwingTeksten.length > 0) {
     regels.push("");
     for (const w of uitkomst.waarschuwingTeksten) regels.push({ lijst: ["! ", w], scheiding: "" });

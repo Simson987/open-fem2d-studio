@@ -18,6 +18,7 @@ import { isOpenFem3DPlateQuantity, openFem3DPlateQuantitiesFor, type OpenFem3DPl
 import { OPEN_FEM_3D_PLATES_LINEAR_NOTICE } from "./openFem3dSolver";
 import { openFem3DMaximumDisplacementM } from "./openFem3dDisplacement";
 import { toonMm } from "../../lib/lengthInput";
+import { noemerTekst } from "../../lib/scheefstandNorm";
 import {
   DEFAULT_OPEN_FEM_3D_DEFORMATION_DISPLAY,
   OPEN_FEM_3D_DEFORMATION_SLIDER_STEPS,
@@ -49,6 +50,11 @@ interface Props {
   timberChecks?: OpenFem3DTimberChecks | null;
   checksRunning?: boolean;
   checksError?: string | null;
+  /**
+   * De toetsanalyse van de laatste rekengang (issue #199): de UGT-toets rekent
+   * altijd P-Δ met scheefstand φ = 1/noemer. Leeg = nog geen toets.
+   */
+  toetsAnalyse?: { noemer: number } | null;
   activeTab?: "project" | "view" | "results";
   setActiveTab?: (tab: "project" | "view" | "results") => void;
   visibility: OpenFem3DVisibility;
@@ -465,13 +471,17 @@ export default function OpenFem3DExplorer(props: Props) {
       />}
       {toon === "results" && <div className="fem-results-tab" data-open-fem3d-results-tab>
         <div className="fem-results-section-title">{t("tree.resultsTab")}</div>
+        {/* De analyse van de RESULTATEN, en daaronder die van de toetskrachten
+            (issue #199): altijd tweede orde met scheefstand. In de taal van de
+            interface; hier stond vaste Nederlandse tekst. */}
         {props.result ? <div className="fem-results-hint">
-          {props.result.analysis === "p-delta" ? "2e orde (P-Δ)" : "1e orde"} · Δmax {(maxDisplacement * 1000).toFixed(3)} mm · αcr {alphaCr?.toFixed(2) ?? "—"}
-          {maxSteelUc !== undefined && <> · UC staal {maxSteelUc.toFixed(2)}</>}
-          {maxConcreteUc !== undefined && <> · UC UGT beton {maxConcreteUc.toFixed(2)}</>}
-          {maxTimberUc !== undefined && <> · UC EN 1995 {maxTimberUc.toFixed(2)}</>}
-          {props.checksRunning && <> · normtoetsing…</>}
-          {props.checksError && <><br />Normtoetsing: {props.checksError}</>}
+          {t(props.result.analysis === "p-delta" ? "tree.resultsSecondOrder" : "tree.resultsFirstOrder")} · Δmax {(maxDisplacement * 1000).toFixed(3)} mm · αcr {alphaCr?.toFixed(2) ?? "—"}
+          {maxSteelUc !== undefined && <> · {t("tree.ucSteel", { uc: maxSteelUc.toFixed(2) })}</>}
+          {maxConcreteUc !== undefined && <> · {t("tree.ucConcrete", { uc: maxConcreteUc.toFixed(2) })}</>}
+          {maxTimberUc !== undefined && <> · {t("tree.ucTimber", { uc: maxTimberUc.toFixed(2) })}</>}
+          {props.checksRunning && <> · {t("tree.checksRunning")}</>}
+          {props.toetsAnalyse && <><br />{t("tree.checkForces", { noemer: noemerTekst(props.toetsAnalyse.noemer) })}</>}
+          {props.checksError && <><br />{t("tree.checksError", { error: props.checksError })}</>}
           {props.result.diagnostics.includes(OPEN_FEM_3D_PLATES_LINEAR_NOTICE) && <><br />{t("openFem3dPlate.linearNotice")}</>}
           {props.result.nativeVolume3D && <><br /><span data-open-fem3d-native-volume-result>{t("tree.nativeVolumeResult", {
             count: props.result.nativeVolume3D.elements.length,
@@ -500,7 +510,7 @@ export default function OpenFem3DExplorer(props: Props) {
           </select>
         </label>}
         {(props.combinations?.length ?? 0) > 0 && (props.combinationResults?.size ?? 0) > 0 && <Branch
-          label="Belastingcombinaties"
+          label={t("tree.combinations")}
           count={props.combinationResults?.size ?? 0}
           defaultOpen={false}
           showNextLabel={(count) => t("tree.showNext", { count })}

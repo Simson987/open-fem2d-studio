@@ -58,6 +58,21 @@ export * from "../components/fem/solver/veldpatronen";
 // De kritieke lastfactor α_cr en de meldingen erbij (basisaudit nr 27): de
 // sidecar zet ze in `warnings`, dus horen ze in de bundel en in de bundeltest.
 export * from "../components/fem/solver/alphaCr";
+// De toetsrekengang (issue #199): de UGT-toets rekent altijd tweede orde met
+// scheefstand. De app en de sidecar roepen dezelfde functie aan, dus hoort zij
+// in de bundel en draait haar test ook daartegen.
+export * from "../lib/toetsKrachten";
+// De scheefstand volgens de norm: zit al in de bundel via `sidecar.ts`, maar
+// zonder deze regel is hij in de bundelstand van de regressierunner niet
+// aanroepbaar, en de test van de toetsrekengang bepaalt er de φ van de
+// projectinstelling mee, net als de app. Benoemd, niet `export *`: het type
+// `ScheefstandRichtingen` bestaat ook in `engine.ts`.
+export {
+  bepaalScheefstand,
+  leidScheefstandGeometrieAf,
+  phiVolgensNorm,
+  toepasselijkeScheefstandNormen,
+} from "../lib/scheefstandNorm";
 // De afleiding van de standaardcombinaties (NB-tabellen, gevolgklasse) en het
 // bijhouden van gevallen en combinaties: de sidecar gebruikt ze voor zijn
 // standaardset en zijn meldingen, en hun tests horen óók tegen de bundel te
@@ -138,8 +153,26 @@ export * from "./staalhalSidecar";
 export * from "../io/stepLezer";
 export * from "../io/ifcAnalyseImport";
 export * from "./ifcImportSidecar";
-export { buildOpenFem3DSolveRequest, openFem3DGlobalForceBalance } from "../components/openFem3d/openFem3dSolver";
+// De UGT-toets van de staalhal en de IFC-import (issue #199, B9): plan en
+// verzoeken voor Rust, en het samenstellen van zijn uitkomsten.
+export * from "./toets3dSidecar";
+export {
+  buildOpenFem3DSolveRequest,
+  openFem3DGlobalForceBalance,
+  openFem3DRekenverzoek,
+  openFem3DUitkomstVanKern,
+} from "../components/openFem3d/openFem3dSolver";
 export { buildOpenFem3DSteelCheckInputs } from "../components/openFem3d/openFem3dSteelCheck";
+// De toetskrachten in 3D (issue #199): de UGT-toets altijd P-Δ met scheefstand
+// in ±X/±Y. De app en de 3D-MCP-paden gebruiken dezelfde functies; de kern zit
+// achter een rekenfunctie (de app) of achter Rust (plan, verzoeken, samenstellen).
+export {
+  bepaalToetsKrachten3D,
+  planToetsKrachten3D,
+  stelToetsKrachten3DSamen,
+  toetsKrachtenNotitie3D,
+  toetsSet3D,
+} from "../components/openFem3d/openFem3dToetsKrachten";
 export { parseOpenFem3DModel, withOpenFem3DSelfWeight } from "../components/openFem3d/openFem3dModel";
 
 // Benoemd, NIET `export *`: dat trekt de Tauri- en DOM-glue mee (gemeten:
