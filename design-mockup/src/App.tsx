@@ -57,6 +57,7 @@ import {
 import { readOpenFem3DDeformationDisplay, saveOpenFem3DDeformationDisplay } from "./components/openFem3d/openFem3dDeformationDisplay";
 import { readOpenFem3DDiagramLabels, saveOpenFem3DDiagramLabels } from "./components/openFem3d/openFem3dDiagramLabels";
 import { openFem3dHistoryReducer, openFem3DHistoryExtern, openFem3DHistoryLevelPatch, type OpenFem3DAction, type OpenFem3DEditMeta, type OpenFem3DHistory } from "./components/openFem3d/openFem3dHistory";
+import { changedLockedOpenFem3DLayer } from "./components/openFem3d/openFem3dLayers";
 import { applyOpenFem3DLevels, openFem3DLevelRefusalText, openFem3DLevelTransition, withOpenFem3DLevelPatch, withoutUnknownOpenFem3DLevelLinks, type OpenFem3DLevel } from "./components/openFem3d/openFem3dLevels";
 import { gebruikteEigenDoorsneden, type ApiDocument } from "./api/projectDocument";
 import { voerApiUitInApp, type ApiAppActies } from "./bediening/apiAdapter";
@@ -430,6 +431,13 @@ function meldOpenFem3DSamenvoegen(stap: OpenFem3DMergeStep, levels: readonly Ope
   }).catch(() => {});
 }
 
+function meldVergrendeldeLaag(name: string): void {
+  void import("./io/notify").then(({ notifyWarning }) => notifyWarning(
+    i18next.t("common:tree.layerLockedTitle"),
+    i18next.t("common:tree.layerLockedEdit", { name }),
+  )).catch(() => {});
+}
+
 function App() {
   // Check if this is a detached window
   const detachedParams = getDetachedParams();
@@ -504,10 +512,23 @@ function App() {
    * alle delen van een gesplitste staaf.
    */
   const setOpenFem3d = useCallback((model: OpenFem3DModel, meta?: OpenFem3DEditMeta): OpenFem3DAutoEditStep => {
+    const current = openFem3dHistoryRef.current.model;
+    const snap = leesSnapInstellingen();
+    const unchanged = (): OpenFem3DAutoEditStep => ({
+      model: current, result: null, merge: null,
+      context: { scope: "auto", toleranceMm: snap.verbindingsTolerantie },
+    });
     if (explodeAmountRef.current > 0) {
-      return openFem3DEditWithAutoConnect(openFem3dHistoryRef.current.model, openFem3dHistoryRef.current.model, leesSnapInstellingen());
+      return unchanged();
     }
-    const stap = openFem3DEditWithAutoConnect(openFem3dHistoryRef.current.model, model, leesSnapInstellingen(), meta?.historyGroup);
+    const blockedBefore = changedLockedOpenFem3DLayer(current, model);
+    const stap = blockedBefore ? null : openFem3DEditWithAutoConnect(current, model, snap, meta?.historyGroup);
+    const blocked = blockedBefore ?? (stap ? changedLockedOpenFem3DLayer(current, stap.model) : null);
+    if (blocked) {
+      meldVergrendeldeLaag(blocked.name);
+      return unchanged();
+    }
+    if (!stap) return unchanged();
     dispatchOpenFem3D({ type: "edit", model: stap.model, ...meta });
     if (stap.merge) {
       meldOpenFem3DSamenvoegen({ model: stap.model, result: stap.merge, context: { scope: "auto", toleranceMm: stap.context.toleranceMm } },
@@ -693,6 +714,8 @@ function App() {
   const handleOpenFem3DConnectNodes = (bereik: "selectie" | "model") => {
     const current = openFem3dHistoryRef.current.model;
     const stap = openFem3DConnectButton(current, openFem3dSelection, leesSnapInstellingen(), bereik);
+    const blocked = changedLockedOpenFem3DLayer(current, stap.model);
+    if (blocked) { meldVergrendeldeLaag(blocked.name); return; }
     if (stap.model !== current) dispatchOpenFem3D({ type: "edit", model: stap.model });
     meldOpenFem3DAansluiten(stap);
   };
@@ -709,6 +732,8 @@ function App() {
   const handleOpenFem3DMergeNodes = (bereik: "selectie" | "model") => {
     const current = openFem3dHistoryRef.current.model;
     const stap = openFem3DMergeButton(current, openFem3dSelection, leesSnapInstellingen(), bereik);
+    const blocked = changedLockedOpenFem3DLayer(current, stap.model);
+    if (blocked) { meldVergrendeldeLaag(blocked.name); return; }
     if (stap.model !== current) {
       dispatchOpenFem3D({ type: "edit", model: stap.model });
       setOpenFem3dSelection((selectie) => openFem3DSelectionAfterMerge(selectie, stap.result));
@@ -963,6 +988,8 @@ function App() {
     // dezelfde stap samen (issue #75); knopen die op een staaf komen te liggen
     // (of staven die door een knoop gaan lopen), sluiten aan (issue #63).
     const stap = openFem3DEditWithAutoConnect(model, result.model, leesSnapInstellingen());
+    const blocked = changedLockedOpenFem3DLayer(model, stap.model);
+    if (blocked) return i18next.t("common:tree.layerLockedEdit", { name: blocked.name });
     if (levels || stap.model !== model) dispatchOpenFem3D({ type: "edit", model: stap.model, levels });
     if (stap.merge) {
       meldOpenFem3DSamenvoegen({ model: stap.model, result: stap.merge, context: { scope: "auto", toleranceMm: stap.context.toleranceMm } },
@@ -2037,8 +2064,11 @@ function App() {
    * losse knopen, met een knop.
    */
   const sluitAanNaImport = useCallback(() => {
-    const stap = openFem3DConnectAfterImport(openFem3dHistoryRef.current.model, leesSnapInstellingen());
+    const current = openFem3dHistoryRef.current.model;
+    const stap = openFem3DConnectAfterImport(current, leesSnapInstellingen());
     if (!stap.result) return;
+    const blocked = changedLockedOpenFem3DLayer(current, stap.model);
+    if (blocked) { meldVergrendeldeLaag(blocked.name); return; }
     dispatchOpenFem3D({ type: "edit", model: stap.model });
     meldOpenFem3DAansluiten({ ...stap, result: stap.result });
   }, [dispatchOpenFem3D]);
@@ -2079,7 +2109,7 @@ function App() {
     store.setStructuralGrid(hal.stramien);
     const actief = caseIds[STAALHAL_GEVAL.permanent];
     if (actief !== undefined) store.setActiveLoadCaseId(actief);
-    dispatchOpenFem3D({ type: "edit", model });
+    dispatchOpenFem3D({ type: "edit", model, ignoreLayerLocks: true });
     setOpenFem3dCameraSnapshot(null);
     // Een ander model: de section box (issue #86) uit, zonder de grenzen van het vorige.
     setOpenFem3dVisibility(openFem3DVisibilityZonderSectionBox);
@@ -4485,6 +4515,8 @@ function App() {
     document: () => buildProjectSnapshot() as unknown as ApiDocument,
     bewerk3D: (model, stramien, extern) => {
       if (explodeAmountRef.current > 0) throw new Error("Schakel Exploderen uit voordat je het 3D-model wijzigt.");
+      const blocked = changedLockedOpenFem3DLayer(openFem3dHistoryRef.current.model, model);
+      if (blocked) throw new Error(i18next.t("common:tree.layerLockedEdit", { name: blocked.name }));
       // Zoals het stramienvenster (`commitLevels`): model en levels in één stap;
       // een wijziging aan de gevallen erbij ook (#91).
       const levels = stramien ? openFem3DLevelTransition(fem.structuralGrid.zAxes, stramien.zAxes) : null;

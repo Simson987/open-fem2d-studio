@@ -699,7 +699,9 @@ log("\n[6] de instelling en de bedrading");
   // zelf aansluit.
   const setter = app.slice(app.indexOf("const setOpenFem3d = useCallback"), app.indexOf("const [openFem3dTool, setOpenFem3dTool]"));
   check("App: elke bewerking via setOpenFem3d sluit automatisch aan (de stap van de app, met de snapinstellingen), in dezelfde stap",
-    setter.includes("openFem3DEditWithAutoConnect(openFem3dHistoryRef.current.model, model, leesSnapInstellingen(), meta?.historyGroup)")
+    setter.includes("openFem3DEditWithAutoConnect(current, model, snap, meta?.historyGroup)")
+    && setter.includes("changedLockedOpenFem3DLayer(current, model)")
+    && setter.includes("changedLockedOpenFem3DLayer(current, stap.model)")
     && setter.includes('dispatchOpenFem3D({ type: "edit", model: stap.model, ...meta })')
     // Sinds #75 de hele stap terug (met ook het samenvoegen); het verslag van het aansluiten is stap.result.
     && setter.includes("return stap;"), setter.slice(0, 900));
@@ -710,7 +712,8 @@ log("\n[6] de instelling en de bedrading");
     && levelCommit.includes('explodeAmountRef.current > 0'));
   const naImport = app.slice(app.indexOf("const sluitAanNaImport = useCallback"), app.indexOf("const handleConvertTo3D = useCallback"));
   check("App: na importeren (IFC-analysemodel, 2D omzetten) aansluiten als eigen stap, met de guard van de stap; openen van een project niet",
-    naImport.includes("openFem3DConnectAfterImport(openFem3dHistoryRef.current.model, leesSnapInstellingen())")
+    naImport.includes("openFem3DConnectAfterImport(current, leesSnapInstellingen())")
+    && naImport.includes("changedLockedOpenFem3DLayer(current, stap.model)")
     && naImport.includes("if (!stap.result) return;") && naImport.includes('dispatchOpenFem3D({ type: "edit", model: stap.model })')
     && /const pasIfcImportToe = useCallback[\s\S]{0,700}sluitAanNaImport\(/.test(app)
     && /const handleConvertTo3D = useCallback[\s\S]{0,700}sluitAanNaImport\(/.test(app)

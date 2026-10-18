@@ -195,6 +195,10 @@ function LayerRow({ layer, model, selection, onChange, onSelect }: {
       onChange={(event) => setDraft(event.target.value)}
       onKeyDown={(event) => { if (event.key === "Enter") save(); }} />
     {changed && <button type="button" onClick={save}>{t("tree.layerSave")}</button>}
+    <button type="button" disabled={!onChange || changed}
+      onClick={() => onChange?.(updateOpenFem3DLayer(model, layer.id, { locked: !layer.locked }))}
+      title={t(layer.locked ? "tree.layerUnlock" : "tree.layerLock", { name: layer.name })}
+      aria-pressed={layer.locked}>{t(layer.locked ? "tree.layerUnlockShort" : "tree.layerLockShort")}</button>
     <button type="button" disabled={changed} onClick={() => onSelect(openFem3DSelectionForLayer(model, layer.id))}
       title={t("tree.layerSelect", { name: layer.name })}>{t("tree.layerSelectShort")}</button>
     <button type="button" disabled={!onChange || !selection || layer.locked || changed}

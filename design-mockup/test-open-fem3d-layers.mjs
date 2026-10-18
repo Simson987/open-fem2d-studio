@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { parseOpenFem3DModel } from "./src/components/openFem3d/openFem3dModel.ts";
-import { addOpenFem3DLayer, assignOpenFem3DSelectionToLayer, openFem3DSelectionForLayer,
+import { addOpenFem3DLayer, assignOpenFem3DSelectionToLayer, changedLockedOpenFem3DLayer, openFem3DSelectionForLayer,
   removeOpenFem3DLayer, updateOpenFem3DLayer } from "./src/components/openFem3d/openFem3dLayers.ts";
+import { openFem3dHistoryReducer } from "./src/components/openFem3d/openFem3dHistory.ts";
 import { buildOpenFem3DSolveRequest } from "./src/components/openFem3d/openFem3dSolver.ts";
 import { documentNaarTekst, documentUitTekst, leegDocument, metModel3d } from "./src/api/projectDocument.ts";
 
@@ -31,6 +32,29 @@ assert.deepEqual(openFem3DSelectionForLayer(onLayer, 1), {
 const hidden = updateOpenFem3DLayer(onLayer, 1, { visible: false, locked: true });
 assert.equal(hidden.layers[1].visible, false);
 assert.equal(hidden.layers[1].locked, true);
+const beamEdit = { ...hidden, beams: [{ ...hidden.beams[0], profileName: "IPE 220" }] };
+assert.equal(changedLockedOpenFem3DLayer(hidden, beamEdit)?.id, 1);
+const state = { model: hidden, past: [], future: [] };
+assert.equal(openFem3dHistoryReducer(state, { type: "edit", model: beamEdit }), state,
+  "een wijziging aan een vergrendelde staaf komt niet in de geschiedenis");
+assert.equal(openFem3dHistoryReducer(state, { type: "edit", model: beamEdit, ignoreLayerLocks: true }).model, beamEdit,
+  "een expliciete vervanging van het hele model blijft mogelijk");
+assert.equal(changedLockedOpenFem3DLayer(hidden, { ...hidden,
+  beams: [{ ...hidden.beams[0], layerId: undefined }] })?.id, 1,
+"ook verplaatsen uit een vergrendelde laag wordt geweigerd");
+assert.equal(changedLockedOpenFem3DLayer(hidden, { ...hidden,
+  nodes: hidden.nodes.map((node) => node.id === 1 ? { ...node, x: 1 } : node) }), null,
+"objecten op een andere laag blijven bewerkbaar");
+assert.equal(changedLockedOpenFem3DLayer(hidden, { ...hidden,
+  nodes: hidden.nodes.map((node) => node.id === 1 ? { ...node, layerId: 1 } : node) })?.id, 1,
+"ook toevoegen aan een vergrendelde laag wordt geweigerd");
+assert.equal(changedLockedOpenFem3DLayer(hidden, updateOpenFem3DLayer(hidden, 1, { locked: false })), null,
+"ontgrendelen blijft mogelijk");
+const unlockedState = openFem3dHistoryReducer(state, {
+  type: "edit", model: updateOpenFem3DLayer(hidden, 1, { locked: false }),
+});
+assert.equal(unlockedState.model.layers[1].locked, false);
+assert.equal(openFem3dHistoryReducer(unlockedState, { type: "undo" }).model.layers[1].locked, true);
 const saved = documentUitTekst(documentNaarTekst(metModel3d(leegDocument(), hidden)));
 assert.deepEqual(saved.model3d, hidden, "lagen en toewijzingen overleven het projectbestand");
 assert.deepEqual(buildOpenFem3DSolveRequest(hidden, "linear", 1), buildOpenFem3DSolveRequest(old, "linear", 1),
