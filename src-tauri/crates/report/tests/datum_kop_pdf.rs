@@ -167,13 +167,21 @@ fn de_notatie_volgt_de_gedeelde_proeftabel() {
 #[test]
 fn nederlands_op_titelblad_en_elke_paginakop() {
     let pdf = generate_report_pdf(invoer("2026-09-16", RapportTaal::Nl));
-    datum_op_elke_pagina(&pdf, "16 september 2026", &["2026-09-16", "September 16, 2026"]);
+    datum_op_elke_pagina(
+        &pdf,
+        "16 september 2026",
+        &["2026-09-16", "September 16, 2026"],
+    );
 }
 
 #[test]
 fn engels_op_titelblad_en_elke_paginakop() {
     let pdf = generate_report_pdf(invoer("2026-09-16", RapportTaal::En));
-    datum_op_elke_pagina(&pdf, "September 16, 2026", &["2026-09-16", "16 september 2026"]);
+    datum_op_elke_pagina(
+        &pdf,
+        "September 16, 2026",
+        &["2026-09-16", "16 september 2026"],
+    );
 }
 
 #[test]
@@ -188,7 +196,11 @@ fn zonder_taal_nederlands_en_een_onbekende_taal_geweigerd() {
     json.as_object_mut().unwrap().remove("taal");
     let zonder: ReportInput = serde_json::from_value(json.clone()).expect("taal is optioneel");
     assert_eq!(zonder.taal, RapportTaal::Nl);
-    datum_op_elke_pagina(&generate_report_pdf(zonder), "16 september 2026", &["2026-09-16"]);
+    datum_op_elke_pagina(
+        &generate_report_pdf(zonder),
+        "16 september 2026",
+        &["2026-09-16"],
+    );
 
     json["taal"] = "es".into();
     assert!(

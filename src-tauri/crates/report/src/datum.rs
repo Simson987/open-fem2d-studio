@@ -57,20 +57,60 @@ impl RapportTaal {
     fn maanden(self) -> [&'static str; 12] {
         match self {
             Self::Nl => [
-                "januari", "februari", "maart", "april", "mei", "juni", "juli",
-                "augustus", "september", "oktober", "november", "december",
+                "januari",
+                "februari",
+                "maart",
+                "april",
+                "mei",
+                "juni",
+                "juli",
+                "augustus",
+                "september",
+                "oktober",
+                "november",
+                "december",
             ],
             Self::En => [
-                "January", "February", "March", "April", "May", "June", "July",
-                "August", "September", "October", "November", "December",
+                "January",
+                "February",
+                "March",
+                "April",
+                "May",
+                "June",
+                "July",
+                "August",
+                "September",
+                "October",
+                "November",
+                "December",
             ],
             Self::De => [
-                "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
-                "August", "September", "Oktober", "November", "Dezember",
+                "Januar",
+                "Februar",
+                "März",
+                "April",
+                "Mai",
+                "Juni",
+                "Juli",
+                "August",
+                "September",
+                "Oktober",
+                "November",
+                "Dezember",
             ],
             Self::Fr => [
-                "janvier", "février", "mars", "avril", "mai", "juin", "juillet",
-                "août", "septembre", "octobre", "novembre", "décembre",
+                "janvier",
+                "février",
+                "mars",
+                "avril",
+                "mai",
+                "juin",
+                "juillet",
+                "août",
+                "septembre",
+                "octobre",
+                "novembre",
+                "décembre",
             ],
         }
     }
@@ -135,11 +175,27 @@ mod tests {
 
     #[test]
     fn alleen_een_bestaande_kalenderdatum_wordt_omgezet() {
-        assert_eq!(datum_voluit("2024-02-29", RapportTaal::Nl), "29 februari 2024");
-        for ruw in ["2026-02-29", "2026-13-01", "2026-00-10", "2026-09-31", "2026-9-16",
-            "16-09-2026", "sept 2026", " 2026-09-16", "2026-09-16T10:00", ""]
-        {
-            assert_eq!(datum_voluit(ruw, RapportTaal::De), ruw, "{ruw:?} hoort woordelijk te blijven");
+        assert_eq!(
+            datum_voluit("2024-02-29", RapportTaal::Nl),
+            "29 februari 2024"
+        );
+        for ruw in [
+            "2026-02-29",
+            "2026-13-01",
+            "2026-00-10",
+            "2026-09-31",
+            "2026-9-16",
+            "16-09-2026",
+            "sept 2026",
+            " 2026-09-16",
+            "2026-09-16T10:00",
+            "",
+        ] {
+            assert_eq!(
+                datum_voluit(ruw, RapportTaal::De),
+                ruw,
+                "{ruw:?} hoort woordelijk te blijven"
+            );
         }
     }
 

@@ -10,8 +10,8 @@
 use nationale_bijlage::NationaleBijlage;
 use nen_en_1992_1_1::ExposureClass;
 use nen_en_1995_1_1::ServiceClass;
-use timber_check::CombinationLoadDuration;
 use serde::{Deserialize, Serialize};
+use timber_check::CombinationLoadDuration;
 use ts_rs::TS;
 
 /// De materiaalsoort van een plaat — dezelfde vijf soorten als in

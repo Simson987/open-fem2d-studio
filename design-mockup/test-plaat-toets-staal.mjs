@@ -26,7 +26,7 @@
 //
 // Uitvoeren: npx tsx test-plaat-toets-staal.mjs   (vanuit design-mockup/)
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -131,14 +131,24 @@ log("\n[d] de kern via de toetsbrug");
 if (!existsSync(TOETSBRUG)) {
   checkTrue(`toetsbrug aanwezig (${TOETSBRUG}) — bouw hem met cargo build --release -p toetsbrug`, false);
 } else {
-  const r = spawnSync(TOETSBRUG, [], {
-    input: JSON.stringify({ opdracht: "check_plates", inputs: invoer }),
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
+  const antwoord = await new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code !== 0) reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+      else resolve(out);
+    });
+    child.stdin.end(JSON.stringify({ opdracht: "check_plates", inputs: invoer }));
   });
   let res = null;
-  try { res = JSON.parse(r.stdout); } catch { /* hieronder gemeld */ }
-  checkTrue("toetsbrug antwoordt met een lijst", Array.isArray(res), r.stderr || r.stdout.slice(0, 200));
+  try { res = JSON.parse(antwoord); } catch { /* hieronder gemeld */ }
+  checkTrue("toetsbrug antwoordt met een lijst", Array.isArray(res), antwoord.slice(0, 200));
   const u = Array.isArray(res) ? res[0] : null;
   checkTrue("niet geweigerd", u && u.geweigerd === undefined, u?.geweigerd ?? "");
   checkRel("UC_max = 150/235 (combinatie 2)", u?.uc_max, (3.0 * SIGMA) / F_Y, 0.02);

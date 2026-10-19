@@ -371,7 +371,7 @@ log("\n[8] Spiegeltest: de houttabellen naast de kern (data.rs)");
   const pad = join(hier, "..", "src-tauri", "crates", "nen-en-1995-1-1", "src", "data.rs");
   const bron = readFileSync(pad, "utf8");
   // softwood("C24", f_mk, f_t0k, f_t90k, f_c0k, f_c90k, f_vk, e0, e005, e90, g, rho_k, rho_mean)
-  const regels = [...bron.matchAll(/(?:softwood|glulam)\("([^"]+)",((?:\s*[\d.]+,){11}\s*[\d.]+)\)/g)];
+  const regels = [...bron.matchAll(/(?:softwood|glulam)\(\s*"([^"]+)"\s*,((?:\s*[\d.]+,){11}\s*[\d.]+)\s*,?\s*\)/g)];
   checkTrue("data.rs gelezen (13 sterkteklassen)", regels.length === 13, `${regels.length}`);
   // ρ_mean wijkt bij GL32h en GL36h bewust af: data.rs meldt dat zelf als een
   // openstaand punt waarvoor EN 14080 nodig is (480/490 daar, 490/500 hier).

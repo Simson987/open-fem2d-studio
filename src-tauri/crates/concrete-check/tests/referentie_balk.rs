@@ -3,7 +3,9 @@
 //! dekking 30, beugel Ø8, onder 3Ø16, boven 2Ø12.
 
 use approx::assert_relative_eq;
-use concrete_check::{check_concrete_beam, mn_kappa, CheckKind, CheckStatus, ConcreteBeamCheckInput, MnKappaRequest};
+use concrete_check::{
+    check_concrete_beam, mn_kappa, CheckKind, CheckStatus, ConcreteBeamCheckInput, MnKappaRequest,
+};
 use mechanics::{ForcePoint, InternalForces};
 use nen_en_1992_1_1::{ConcreteSectionInput, RebarRow, ReinforcementCage, ReinforcementZones};
 
@@ -11,8 +13,14 @@ fn korf(boven: u32) -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: boven, diameter_mm: 12.0 },
-        bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+        top: RebarRow {
+            count: boven,
+            diameter_mm: 12.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
         ..ReinforcementCage::default()
     }
 }
@@ -21,7 +29,11 @@ fn punt(combi: u32, x_mm: f64, n: f64, m: f64) -> ForcePoint {
     ForcePoint {
         combination_id: combi,
         position_mm: x_mm,
-        forces: InternalForces { n_ed: n, my_ed: m, ..Default::default() },
+        forces: InternalForces {
+            n_ed: n,
+            my_ed: m,
+            ..Default::default()
+        },
     }
 }
 
@@ -66,7 +78,11 @@ fn invoer(boven: u32, envelop: Vec<ForcePoint>) -> ConcreteBeamCheckInput {
 }
 
 fn uc(r: &concrete_check::ConcreteBeamCheckResult, id: &str) -> f64 {
-    let c = r.checks.iter().find(|c| c.id == id).expect("toets aanwezig");
+    let c = r
+        .checks
+        .iter()
+        .find(|c| c.id == id)
+        .expect("toets aanwezig");
     match &c.kind {
         CheckKind::Resistance(rc) => rc.uc.as_ref().unwrap().uc,
         CheckKind::Stability(_) => unreachable!(),
@@ -77,7 +93,11 @@ fn uc(r: &concrete_check::ConcreteBeamCheckResult, id: &str) -> f64 {
 /// UC buiging = 100 / 113,33 = 0,88 (handberekening 1).
 #[test]
 fn vrij_opgelegde_balk() {
-    let env = vec![punt(1, 0.0, 0.0, 0.0), punt(1, 2500.0, 0.0, 100.0), punt(1, 5000.0, 0.0, 0.0)];
+    let env = vec![
+        punt(1, 0.0, 0.0, 0.0),
+        punt(1, 2500.0, 0.0, 100.0),
+        punt(1, 5000.0, 0.0, 0.0),
+    ];
     let r = check_concrete_beam(invoer(0, env));
     assert_eq!(r.status, CheckStatus::Ok);
     assert_eq!(r.section_name, "300 x 500");
@@ -85,7 +105,11 @@ fn vrij_opgelegde_balk() {
     assert_eq!(r.reinforcement_grade, "B500B");
     assert_relative_eq!(r.f_cd_mpa, 20.0);
     assert_relative_eq!(r.d_mm, 454.0);
-    assert_relative_eq!(uc(&r, "6.1_bending_stress_block"), 100.0 / 113.33, max_relative = 1e-3);
+    assert_relative_eq!(
+        uc(&r, "6.1_bending_stress_block"),
+        100.0 / 113.33,
+        max_relative = 1e-3
+    );
     // M-N-κ met parabool-rechthoek: binnen 2 % van het spanningsblok.
     assert_relative_eq!(uc(&r, "6.1_mn_kappa"), 100.0 / 113.33, max_relative = 0.02);
     assert!(r.uc_max > 0.85 && r.uc_max < 0.92);
@@ -108,7 +132,9 @@ fn kolom_met_minimale_excentriciteit() {
     ];
     let r = check_concrete_beam(invoer(2, env));
     let mn = r.checks.iter().find(|c| c.id == "6.1_mn_kappa").unwrap();
-    let CheckKind::Resistance(rc) = &mn.kind else { unreachable!() };
+    let CheckKind::Resistance(rc) = &mn.kind else {
+        unreachable!()
+    };
     // Twee kandidaten: (N = −800, M = 60) en (N = −2000, M = max(25; 40)).
     // Welke wint hangt van M_Rd(N) af; in elk geval is de toets geldig en
     // vermeldt hij bij het drukpunt de minimale excentriciteit.
@@ -132,7 +158,10 @@ fn fouten_worden_gemeld() {
     assert!(r.checks.is_empty());
 
     let mut i = invoer(2, env);
-    i.cage.bottom = RebarRow { count: 30, diameter_mm: 25.0 };
+    i.cage.bottom = RebarRow {
+        count: 30,
+        diameter_mm: 25.0,
+    };
     let r = check_concrete_beam(i);
     assert!(r.governing_check_id.contains("past niet"));
 }
@@ -156,10 +185,17 @@ fn mn_kappa_verzoek() {
     };
     let r = mn_kappa(req).expect("geldig verzoek");
     assert_relative_eq!(r.n_rd_compression_kn, 3331.75, max_relative = 1e-3);
-    assert_relative_eq!(r.n_rd_tension_kn, (603.186 + 226.195) * 434.7826 * 1e-3, max_relative = 1e-3);
+    assert_relative_eq!(
+        r.n_rd_tension_kn,
+        (603.186 + 226.195) * 434.7826 * 1e-3,
+        max_relative = 1e-3
+    );
     assert!(r.diagram.m_max_knm > 110.0 && r.diagram.m_max_knm < 125.0);
     assert_eq!(r.interaction_positive.len(), 11);
-    assert_eq!(r.reinforcement_summary, "onder 3Ø16, boven 2Ø12, beugel Ø8, dekking 30 mm");
+    assert_eq!(
+        r.reinforcement_summary,
+        "onder 3Ø16, boven 2Ø12, beugel Ø8, dekking 30 mm"
+    );
 }
 
 /// JSON-contract: de invoer zoals de frontend hem stuurt, met weglaatbare velden.
@@ -223,7 +259,10 @@ fn de_vormaannamen_staan_woordelijk_in_het_resultaat() {
     let l = check_concrete_beam(i);
     assert_eq!(l.shape_assumptions.len(), 3);
     assert!(l.shape_assumptions.iter().any(|a| a.contains("VERHINDERD")));
-    assert!(l.shape_assumptions.iter().any(|a| a.contains("geen apart artikel")));
+    assert!(l
+        .shape_assumptions
+        .iter()
+        .any(|a| a.contains("geen apart artikel")));
 
     // Dezelfde teksten staan WOORDELIJK vooraan in de notes van de toetsen die
     // de doorsnedevorm zelf gebruiken — één bron, geen tweede versie.
@@ -235,7 +274,11 @@ fn de_vormaannamen_staan_woordelijk_in_het_resultaat() {
     // per staaf, en het rapport drukt het één keer af (zie de doc van dat
     // veld).
     for id in ["6.1_bending_stress_block", "6.1_mn_kappa", "6.2_shear"] {
-        let c = l.checks.iter().find(|c| c.id == id).expect("toets aanwezig");
+        let c = l
+            .checks
+            .iter()
+            .find(|c| c.id == id)
+            .expect("toets aanwezig");
         let notes = match &c.kind {
             CheckKind::Resistance(rc) => &rc.notes,
             CheckKind::Stability(_) => unreachable!(),

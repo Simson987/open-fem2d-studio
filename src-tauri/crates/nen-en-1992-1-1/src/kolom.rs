@@ -171,7 +171,10 @@ use crate::{CheckStatus, Deelstap, NamedValue, ResistanceCalc, UnityCheck};
 /// λ_lim, [`Schoring::Geschoord`] geeft de gunstigere kniklengteformule. Wie
 /// niets invult, hoort een lege invoer te zien en geen aangenomen antwoord.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum Schoring {
     /// GESCHOORD — "waarvan in de berekeningen het ontwerp is aangenomen dat ze
     /// niet bijdragen aan de totale horizontale stabiliteit" (§5.8.1). De
@@ -244,7 +247,10 @@ pub const K_MIN_AANBEVOLEN: f64 = 0.1;
 /// samen met het bereik van (5.15), maar dat volgt uit die formule en niet uit
 /// de figuur.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum Knikgeval {
     /// **a)** Beide einden scharnierend en zijdelings gesteund. l₀ = l.
     ScharnierendScharnierend,
@@ -486,8 +492,9 @@ pub fn traagheidsstraal_mm(i_mm4: f64, a_mm2: f64) -> Result<f64, String> {
         return Err("i = √(I/A): de oppervlakte A moet groter dan nul zijn".to_string());
     }
     if !(i_mm4 >= 0.0) {
-        return Err("i = √(I/A): het kwadratisch oppervlaktemoment I mag niet negatief zijn"
-            .to_string());
+        return Err(
+            "i = √(I/A): het kwadratisch oppervlaktemoment I mag niet negatief zijn".to_string(),
+        );
     }
     Ok((i_mm4 / a_mm2).sqrt())
 }
@@ -591,9 +598,17 @@ pub fn factor_a_met_grondslag(phi_ef: Option<f64>, phi_inf_t0: Option<f64>) -> (
         (_, Some(phi)) if phi.is_finite() && phi >= 0.0 => {
             let a_bovengrens = 1.0 / (1.0 + 0.2 * phi);
             if a_bovengrens < 0.7 {
-                (a_bovengrens, AGrondslag::BovengrensKruip { phi_inf_t0: phi })
+                (
+                    a_bovengrens,
+                    AGrondslag::BovengrensKruip { phi_inf_t0: phi },
+                )
             } else {
-                (0.7, AGrondslag::Standaardwaarde { phi_inf_t0: Some(phi) })
+                (
+                    0.7,
+                    AGrondslag::Standaardwaarde {
+                        phi_inf_t0: Some(phi),
+                    },
+                )
             }
         }
         _ => (0.7, AGrondslag::Standaardwaarde { phi_inf_t0: None }),
@@ -634,7 +649,9 @@ pub fn a_toelichting(
             nl(phi_inf_t0, 2),
             nl(1.0 / (1.0 + 0.2 * phi_inf_t0), 3)
         )),
-        AGrondslag::Standaardwaarde { phi_inf_t0: Some(phi) } => Some(format!(
+        AGrondslag::Standaardwaarde {
+            phi_inf_t0: Some(phi),
+        } => Some(format!(
             "A = 0,7 (§5.8.3.1(1): \"als φ_ef onbekend is mag A = 0,7 zijn gebruikt\"): φ(∞,t₀) = \
              {} is gegeven, maar {}. De voorwaarde waaronder 0,7 aan de veilige kant ligt — \
              φ_ef ≤ 2,14 — is hier vervuld: φ_ef = φ(∞,t₀)·M₀Eqp/M₀Ed is niet groter dan \
@@ -669,10 +686,17 @@ pub fn factor_b(omega: Option<f64>) -> (f64, bool) {
 /// Waarom C zijn waarde heeft — dit is de plek waar geschoord/ongeschoord
 /// rechtstreeks in het getal doorwerkt.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum Cgrondslag {
     /// C = 1,7 − r_m met r_m = M₀₁/M₀₂ uit de twee eerste-orde-eindmomenten.
-    UitEindmomenten { m01_knm: f64, m02_knm: f64, r_m: f64 },
+    UitEindmomenten {
+        m01_knm: f64,
+        m02_knm: f64,
+        r_m: f64,
+    },
     /// §5.8.3.1(1): "In de volgende gevallen behoort r_m gelijk aan 1,0 te zijn
     /// genomen (dat wil zeggen C = 0,7): … voor geschoorde elementen waarin de
     /// eerste-orde-effecten alleen of voornamelijk zijn veroorzaakt door
@@ -698,7 +722,11 @@ impl Cgrondslag {
 
     pub fn toelichting(&self) -> String {
         match self {
-            Cgrondslag::UitEindmomenten { m01_knm, m02_knm, r_m } => format!(
+            Cgrondslag::UitEindmomenten {
+                m01_knm,
+                m02_knm,
+                r_m,
+            } => format!(
                 "C = 1,7 − r_m met r_m = M₀₁/M₀₂ = {}/{} = {}. Het teken volgt uit §5.8.3.1(1): \
                  geven M₀₁ en M₀₂ aan dezelfde zijde trek, dan is r_m positief (C ≤ 1,7), anders \
                  negatief (C > 1,7).",
@@ -769,7 +797,11 @@ pub fn grondslag_c(
                     nl(m02.abs(), 2)
                 ));
             }
-            Ok(Cgrondslag::UitEindmomenten { m01_knm: m01, m02_knm: m02, r_m: m01 / m02 })
+            Ok(Cgrondslag::UitEindmomenten {
+                m01_knm: m01,
+                m02_knm: m02,
+                r_m: m01 / m02,
+            })
         }
         None => Ok(Cgrondslag::Onbekend),
     }
@@ -953,7 +985,10 @@ pub fn phi_ef_5_19_begrensd(
 
 /// Het antwoord op §5.8.4(4): mag φ_ef = 0 worden aangehouden?
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct KruipVerwaarlozing {
     /// Alle drie de voorwaarden vervuld?
     pub toegestaan: bool,
@@ -1008,9 +1043,11 @@ pub fn kruip_verwaarloosbaar_5_8_4_4(
         );
     }
     if !(h_mm > 0.0) {
-        return Err("§5.8.4(4): de doorsnedehoogte h in de beschouwde richting moet groter dan \
+        return Err(
+            "§5.8.4(4): de doorsnedehoogte h in de beschouwde richting moet groter dan \
                     nul zijn"
-            .to_string());
+                .to_string(),
+        );
     }
     // M₀Ed in kNm → N·mm is ×1e6; N_Ed in kN → N is ×1e3. De verhouding is dus
     // ×1e3 en komt in mm uit, dezelfde eenheid als h.
@@ -1051,7 +1088,10 @@ pub fn kruip_verwaarloosbaar_5_8_4_4(
 
 /// Hoe l₀ tot stand komt.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum Kniklengtebepaling {
     /// Een vast geval uit figuur 5.7: l₀ = factor · l.
     Standaardgeval(Knikgeval),
@@ -1228,8 +1268,10 @@ pub fn kolomslankheid(inv: &KolomInvoer) -> Result<Kolomslankheid, String> {
         }
         Kniklengtebepaling::Raamwerk { k1, k2 } => {
             if !(k1 >= 0.0 && k2 >= 0.0) {
-                return Err("k₁ en k₂ zijn relatieve flexibiliteiten en kunnen niet negatief zijn"
-                    .to_string());
+                return Err(
+                    "k₁ en k₂ zijn relatieve flexibiliteiten en kunnen niet negatief zijn"
+                        .to_string(),
+                );
             }
             let (k1g, op1) = k_begrensd(k1);
             let (k2g, op2) = k_begrensd(k2);
@@ -1303,9 +1345,14 @@ pub fn kolomslankheid(inv: &KolomInvoer) -> Result<Kolomslankheid, String> {
 
     // ── §5.8.4(4): mag φ_ef = 0? ──────────────────────────────────────────
     let kruip = match (inv.phi_inf_t0, inv.m0_ed_knm, inv.h_mm) {
-        (Some(p), Some(m0), Some(h)) => {
-            Some(kruip_verwaarloosbaar_5_8_4_4(p, lambda, m0, n_ed_druk_kn, h, Some(w))?)
-        }
+        (Some(p), Some(m0), Some(h)) => Some(kruip_verwaarloosbaar_5_8_4_4(
+            p,
+            lambda,
+            m0,
+            n_ed_druk_kn,
+            h,
+            Some(w),
+        )?),
         _ => {
             kanttekeningen.push(
                 "§5.8.4(4) — of φ_ef = 0 mag worden aangehouden — is NIET nagegaan: daarvoor zijn \
@@ -1473,7 +1520,11 @@ pub fn kolom_deelstappen(k: &Kolomslankheid) -> Vec<Deelstap> {
                 lx(k.l0_mm, 0)
             ),
             "art. 5.8.3.2(2), figuur 5.7".to_string(),
-            vec![format!("{} — bijschrift: {}", geval.omschrijving(), geval.bijschrift())],
+            vec![format!(
+                "{} — bijschrift: {}",
+                geval.omschrijving(),
+                geval.bijschrift()
+            )],
         ),
         Kniklengtebepaling::Raamwerk { .. } => {
             let (k1, k2) = k.k_gebruikt.unwrap_or((f64::NAN, f64::NAN));
@@ -1542,8 +1593,10 @@ pub fn kolom_deelstappen(k: &Kolomslankheid) -> Vec<Deelstap> {
             r"l_0".to_string(),
             format!(r"l_0 = {}\ \mathrm{{mm}}", lx(k.l0_mm, 0)),
             "art. 5.8.3.2".to_string(),
-            vec!["l₀ is rechtstreeks opgegeven; de herkomst staat niet in deze afleiding."
-                .to_string()],
+            vec![
+                "l₀ is rechtstreeks opgegeven; de herkomst staat niet in deze afleiding."
+                    .to_string(),
+            ],
         ),
     };
     stappen.push(stap(
@@ -1590,11 +1643,7 @@ pub fn kolom_deelstappen(k: &Kolomslankheid) -> Vec<Deelstap> {
         "n,\\ \\omega",
         "art. 5.8.3.1(1)",
         r"n = \frac{N_{Ed}}{A_c f_{cd}} \qquad \omega = \frac{A_s f_{yd}}{A_c f_{cd}}".to_string(),
-        format!(
-            r"n = {} \qquad \omega = {}",
-            lx(k.n, 3),
-            lx(k.omega, 3)
-        ),
+        format!(r"n = {} \qquad \omega = {}", lx(k.n, 3), lx(k.omega, 3)),
         vec![nv("n", k.n, "-"), nv("ω", k.omega, "-")],
         Some(k.n),
         "-",
@@ -1632,10 +1681,26 @@ pub fn kolom_deelstappen(k: &Kolomslankheid) -> Vec<Deelstap> {
         notes_phi.push(format!(
             "§5.8.4(4) — φ_ef = 0 mag {}: φ(∞,t₀) ≤ 2 {}, λ ≤ 75 {}, M₀Ed/N_Ed ≥ h {} \
              (e₀ = {} mm).",
-            if kr.toegestaan { "worden aangehouden" } else { "NIET worden aangehouden" },
-            if kr.kruipcoefficient_ten_hoogste_2 { "✓" } else { "✗" },
-            if kr.slankheid_ten_hoogste_75 { "✓" } else { "✗" },
-            if kr.excentriciteit_ten_minste_h { "✓" } else { "✗" },
+            if kr.toegestaan {
+                "worden aangehouden"
+            } else {
+                "NIET worden aangehouden"
+            },
+            if kr.kruipcoefficient_ten_hoogste_2 {
+                "✓"
+            } else {
+                "✗"
+            },
+            if kr.slankheid_ten_hoogste_75 {
+                "✓"
+            } else {
+                "✗"
+            },
+            if kr.excentriciteit_ten_minste_h {
+                "✓"
+            } else {
+                "✗"
+            },
             nl(kr.e0_mm, 0)
         ));
         if let Some(w) = &kr.waarschuwing {
@@ -1674,7 +1739,9 @@ pub fn kolom_deelstappen(k: &Kolomslankheid) -> Vec<Deelstap> {
             nl(k.a, 3),
             nl(phi_inf_t0, 2)
         )),
-        AGrondslag::Standaardwaarde { phi_inf_t0: Some(phi) } => notes_abc.push(format!(
+        AGrondslag::Standaardwaarde {
+            phi_inf_t0: Some(phi),
+        } => notes_abc.push(format!(
             "A = 0,7 is de standaardwaarde die §5.8.3.1(1) toestaat als φ_ef onbekend is. Zij ligt \
              hier aan de veilige kant: φ(∞,t₀) = {} ≤ 2,14 en φ_ef is niet groter dan φ(∞,t₀) \
              zolang |M₀Eqp| ≤ |M₀Ed|.",
@@ -1805,7 +1872,9 @@ pub struct Scheefstand {
 /// (5.1): θ_i = θ₀·α_h·α_m, met θ₀ = 1/300 uit de nationale bijlage.
 pub fn scheefstand_5_1(l_m: f64, m: u32) -> Result<Scheefstand, String> {
     if !(l_m > 0.0) {
-        return Err(format!("de lengte l voor α_h moet groter dan nul zijn, kreeg {l_m} m"));
+        return Err(format!(
+            "de lengte l voor α_h moet groter dan nul zijn, kreeg {l_m} m"
+        ));
     }
     if m == 0 {
         return Err("het aantal elementen m voor α_m moet ten minste 1 zijn".to_string());
@@ -1837,7 +1906,9 @@ pub fn e_i_5_2_mm(theta_i: f64, l0_mm: f64) -> Result<f64, String> {
         return Err(format!("θ_i kan niet negatief zijn, kreeg {theta_i}"));
     }
     if !(l0_mm > 0.0) {
-        return Err(format!("l₀ moet groter dan nul zijn voor e_i = θ_i·l₀/2, kreeg {l0_mm} mm"));
+        return Err(format!(
+            "l₀ moet groter dan nul zijn voor e_i = θ_i·l₀/2, kreeg {l0_mm} mm"
+        ));
     }
     Ok(theta_i * l0_mm / 2.0)
 }
@@ -1897,7 +1968,12 @@ pub enum ExponentAGrondslag {
 
 /// N_Rd = A_c·f_cd + A_s·f_yd — de rekenwaarde van de opneembare
 /// normaalkracht in §5.8.9(4), in N. A_c is de BRUTO betondoorsnede.
-pub fn n_rd_5_39_n(a_c_mm2: f64, f_cd_mpa: f64, a_s_mm2: f64, f_yd_mpa: f64) -> Result<f64, String> {
+pub fn n_rd_5_39_n(
+    a_c_mm2: f64,
+    f_cd_mpa: f64,
+    a_s_mm2: f64,
+    f_yd_mpa: f64,
+) -> Result<f64, String> {
     if !(a_c_mm2 > 0.0 && f_cd_mpa > 0.0) {
         return Err(format!(
             "N_Rd vraagt A_c > 0 en f_cd > 0, kreeg A_c = {a_c_mm2} mm² en f_cd = {f_cd_mpa} N/mm²"
@@ -2023,7 +2099,15 @@ pub fn voorwaarde_5_38b(
     let h_eq_mm = i_z_mm * sqrt12;
     let e_y_rel = e_y / h_eq_mm;
     let e_z_rel = e_z / b_eq_mm;
-    let deel = |t: f64, n: f64| if n > 0.0 { t / n } else if t > 0.0 { f64::INFINITY } else { 0.0 };
+    let deel = |t: f64, n: f64| {
+        if n > 0.0 {
+            t / n
+        } else if t > 0.0 {
+            f64::INFINITY
+        } else {
+            0.0
+        }
+    };
     Ok(Voorwaarde538b {
         e_y_mm: e_y,
         e_z_mm: e_z,
@@ -2056,7 +2140,9 @@ pub fn interactie_5_39(
         ));
     }
     if !(a >= 1.0) {
-        return Err(format!("de exponent a van (5.39) is ten minste 1,0, kreeg {a}"));
+        return Err(format!(
+            "de exponent a van (5.39) is ten minste 1,0, kreeg {a}"
+        ));
     }
     Ok((m_edz_knm.abs() / m_rdz_knm).powf(a) + (m_edy_knm.abs() / m_rdy_knm).powf(a))
 }
@@ -2145,12 +2231,12 @@ pub fn moment_tweede_as_deelstappen(m: &MomentTweedeAs) -> Vec<Deelstap> {
         ),
     ];
     match s.alpha_h_grens {
-        Some(AlphaHGrens::Boven) => notes_theta.push(
-            "2/√l ligt boven 1; α_h is op de bovengrens 1 gezet.".to_string(),
-        ),
-        Some(AlphaHGrens::Onder) => notes_theta.push(
-            "2/√l ligt onder 2/3; α_h is op de ondergrens 2/3 gezet.".to_string(),
-        ),
+        Some(AlphaHGrens::Boven) => {
+            notes_theta.push("2/√l ligt boven 1; α_h is op de bovengrens 1 gezet.".to_string())
+        }
+        Some(AlphaHGrens::Onder) => {
+            notes_theta.push("2/√l ligt onder 2/3; α_h is op de ondergrens 2/3 gezet.".to_string())
+        }
         None => {}
     }
     stappen.push(stap(
@@ -2190,7 +2276,11 @@ pub fn moment_tweede_as_deelstappen(m: &MomentTweedeAs) -> Vec<Deelstap> {
             lx(m.l0_mm, 0),
             lx(m.e_i_mm, 2)
         ),
-        vec![nv("θ_i", s.theta_i, "rad"), nv("l_0", m.l0_mm, "mm"), nv("e_i", m.e_i_mm, "mm")],
+        vec![
+            nv("θ_i", s.theta_i, "rad"),
+            nv("l_0", m.l0_mm, "mm"),
+            nv("e_i", m.e_i_mm, "mm"),
+        ],
         Some(m.e_i_mm),
         "mm",
         vec![
@@ -2225,7 +2315,15 @@ pub fn moment_tweede_as_deelstappen(m: &MomentTweedeAs) -> Vec<Deelstap> {
                 nl(lambda_lim, 1)
             )],
         )),
-        TweedeOrdeDeel::Gerekend { e_2_mm, kappa_per_m, c, iteraties, phi_ef, lambda, lambda_lim } => {
+        TweedeOrdeDeel::Gerekend {
+            e_2_mm,
+            kappa_per_m,
+            c,
+            iteraties,
+            phi_ef,
+            lambda,
+            lambda_lim,
+        } => {
             stappen.push(stap(
                 "e_2",
                 "Tweede-orde-uitbuiging (algemene methode)",
@@ -2286,7 +2384,14 @@ pub fn moment_tweede_as_deelstappen(m: &MomentTweedeAs) -> Vec<Deelstap> {
                 ],
             ));
         }
-        TweedeOrdeDeel::Instabiel { laatste_m_knm, c, iteraties, phi_ef, lambda, lambda_lim } => {
+        TweedeOrdeDeel::Instabiel {
+            laatste_m_knm,
+            c,
+            iteraties,
+            phi_ef,
+            lambda,
+            lambda_lim,
+        } => {
             stappen.push(stap(
                 "e_2",
                 "Tweede-orde-uitbuiging (algemene methode) — GEEN EVENWICHT",
@@ -2714,7 +2819,10 @@ pub fn l0_ondergrens_8_11_mm(phi_mm: f64) -> f64 {
 
 /// Waar in de kolom bevindt de beschouwde doorsnede zich? §9.5.3(4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum Beugelzone {
     /// Gewone kolomdoorsnede: de volle s_cl,tmax van §9.5.3(3).
     Regulier,
@@ -2755,7 +2863,10 @@ impl Beugelzone {
 /// Komen er overlappingslassen in de kolom voor? Bepaalt A_s,max volgens de NB
 /// bij §9.5.2(3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum Overlappingssituatie {
     /// Geen overlappingslassen in deze kolom: A_s,max = 0,08·A_c.
     GeenLassen,
@@ -2805,9 +2916,7 @@ pub fn as_min_9_5_2_mm2(n_ed_druk_n: f64, f_yd_mpa: f64, a_c_mm2: f64) -> Result
 /// overslaat, keurt zo'n kolom ten onrechte af.
 pub fn as_max_9_5_2_mm2(a_c_mm2: f64, situatie: Overlappingssituatie) -> f64 {
     match situatie {
-        Overlappingssituatie::GeenLassen | Overlappingssituatie::TerPlaatseVanLas => {
-            0.08 * a_c_mm2
-        }
+        Overlappingssituatie::GeenLassen | Overlappingssituatie::TerPlaatseVanLas => 0.08 * a_c_mm2,
         Overlappingssituatie::LassenBuitenDezeDoorsnede => 0.04 * a_c_mm2,
     }
 }
@@ -2822,7 +2931,10 @@ pub fn min_diameter_dwarswapening_9_5_3_mm(phi_l_max_mm: f64) -> f64 {
 
 /// De drie takken van s_cl,tmax, zodat de afleiding kan tonen wélke wint.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum ScltmaxTak {
     /// 20 × de minimumdiameter van de langsstaven.
     TwintigMaalDiameter,
@@ -2868,24 +2980,27 @@ pub fn s_cl_tmax_9_5_3_mm(
         );
     }
     if !(kleinste_kolomafmeting_mm > 0.0) {
-        return Err("s_cl,tmax volgens §9.5.3(3): de kleinste kolomafmeting moet groter dan nul \
+        return Err(
+            "s_cl,tmax volgens §9.5.3(3): de kleinste kolomafmeting moet groter dan nul \
                     zijn"
-            .to_string());
+                .to_string(),
+        );
     }
     let takken = [
         (20.0 * phi_l_min_mm, ScltmaxTak::TwintigMaalDiameter),
         (kleinste_kolomafmeting_mm, ScltmaxTak::KleinsteKolomafmeting),
         (S_CL_TMAX_PLAFOND_MM, ScltmaxTak::Plafond400),
     ];
-    let (waarde, tak) = takken
-        .into_iter()
-        .fold((f64::INFINITY, ScltmaxTak::Plafond400), |acc, kandidaat| {
-            if kandidaat.0 < acc.0 {
-                kandidaat
-            } else {
-                acc
-            }
-        });
+    let (waarde, tak) =
+        takken
+            .into_iter()
+            .fold((f64::INFINITY, ScltmaxTak::Plafond400), |acc, kandidaat| {
+                if kandidaat.0 < acc.0 {
+                    kandidaat
+                } else {
+                    acc
+                }
+            });
     Ok((waarde * zone.factor(), tak))
 }
 
@@ -3019,10 +3134,23 @@ fn eis(
 
 /// Unity check voor een MAXIMUM-eis: aanwezig ≤ grens.
 fn uc_maximum(aanwezig: f64, grens: f64, formule: &str) -> (UnityCheck, CheckStatus) {
-    let uc = if grens > 0.0 { aanwezig / grens } else { f64::INFINITY };
+    let uc = if grens > 0.0 {
+        aanwezig / grens
+    } else {
+        f64::INFINITY
+    };
     (
-        UnityCheck { ed: aanwezig, rd: grens, uc, formula_latex: formule.to_string() },
-        if uc <= 1.0 + 1e-9 { CheckStatus::Ok } else { CheckStatus::NotOk },
+        UnityCheck {
+            ed: aanwezig,
+            rd: grens,
+            uc,
+            formula_latex: formule.to_string(),
+        },
+        if uc <= 1.0 + 1e-9 {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::NotOk
+        },
     )
 }
 
@@ -3031,17 +3159,34 @@ fn uc_maximum(aanwezig: f64, grens: f64, formule: &str) -> (UnityCheck, CheckSta
 /// `ed` en `rd` staan om, zodat "te weinig" opnieuw uc > 1 oplevert — dezelfde
 /// afspraak als in [`crate::detaillering`].
 fn uc_minimum(aanwezig: f64, vereist: f64, formule: &str) -> (UnityCheck, CheckStatus) {
-    let uc = if aanwezig > 0.0 { vereist / aanwezig } else { f64::INFINITY };
+    let uc = if aanwezig > 0.0 {
+        vereist / aanwezig
+    } else {
+        f64::INFINITY
+    };
     (
-        UnityCheck { ed: vereist, rd: aanwezig, uc, formula_latex: formule.to_string() },
-        if uc <= 1.0 + 1e-9 { CheckStatus::Ok } else { CheckStatus::NotOk },
+        UnityCheck {
+            ed: vereist,
+            rd: aanwezig,
+            uc,
+            formula_latex: formule.to_string(),
+        },
+        if uc <= 1.0 + 1e-9 {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::NotOk
+        },
     )
 }
 
 /// NB bij §9.5.1(2) — de kleinste dwarsafmeting van de kolom ≥ 200 mm.
 pub fn min_dwarsafmeting_9_5_1(inv: &KolomdetailleringInvoer) -> ResistanceCalc {
     let kleinste = inv.h_mm.min(inv.b_mm);
-    let (uc, status) = uc_minimum(kleinste, MIN_DWARSAFMETING_KOLOM_MM, r"b_{\min,eis} / b_{\min}");
+    let (uc, status) = uc_minimum(
+        kleinste,
+        MIN_DWARSAFMETING_KOLOM_MM,
+        r"b_{\min,eis} / b_{\min}",
+    );
     eis(
         "9.5.1_min_dwarsafmeting",
         "Kleinste dwarsafmeting van de kolom",
@@ -3077,7 +3222,11 @@ pub fn toepassingsgebied_9_5_1(inv: &KolomdetailleringInvoer) -> ResistanceCalc 
         "art. 9.5.1(1)",
         r"h \ \le\ 4\,b",
         inv.force_state,
-        vec![nv("h", grootste, "mm"), nv("b", kleinste, "mm"), nv("4b", grens, "mm")],
+        vec![
+            nv("h", grootste, "mm"),
+            nv("b", kleinste, "mm"),
+            nv("4b", grens, "mm"),
+        ],
         grootste,
         "mm",
         Some(uc),
@@ -3123,7 +3272,11 @@ pub fn min_diameter_langsstaaf_9_5_2(inv: &KolomdetailleringInvoer) -> Resistanc
 /// NB bij §9.5.2(2) — A_s ≥ A_s,min = max{0,10·N_Ed/f_yd ; 0,002·A_c}.
 pub fn as_min_9_5_2(inv: &KolomdetailleringInvoer) -> ResistanceCalc {
     let n_ed_n = inv.n_ed_druk_kn * 1.0e3;
-    let tak_kracht = if inv.f_yd_mpa > 0.0 { 0.10 * n_ed_n / inv.f_yd_mpa } else { f64::NAN };
+    let tak_kracht = if inv.f_yd_mpa > 0.0 {
+        0.10 * n_ed_n / inv.f_yd_mpa
+    } else {
+        f64::NAN
+    };
     let tak_opp = 0.002 * inv.a_c_mm2;
     let vereist = match as_min_9_5_2_mm2(n_ed_n, inv.f_yd_mpa, inv.a_c_mm2) {
         Ok(v) => v,
@@ -3163,9 +3316,17 @@ pub fn as_min_9_5_2(inv: &KolomdetailleringInvoer) -> ResistanceCalc {
         vec![
             format!(
                 "Maatgevend is {}: {} mm² tegen {} mm².",
-                if tak_kracht >= tak_opp { "de krachtterm 0,10·N_Ed/f_yd" } else { "0,002·A_c" },
+                if tak_kracht >= tak_opp {
+                    "de krachtterm 0,10·N_Ed/f_yd"
+                } else {
+                    "0,002·A_c"
+                },
                 g(vereist),
-                g(if tak_kracht >= tak_opp { tak_opp } else { tak_kracht })
+                g(if tak_kracht >= tak_opp {
+                    tak_opp
+                } else {
+                    tak_kracht
+                })
             ),
             "De NB heeft de EN-aanbeveling doorgehaald en met dezelfde inhoud als eis teruggezet. \
              N_Ed is hier de aangrijpende normaalDRUKkracht; de norm schrijft dat woordelijk zo."
@@ -3609,8 +3770,11 @@ pub fn hoekstaven_9_5_2(inv: &KolomdetailleringInvoer) -> ResistanceCalc {
         );
     }
     let hoekstaven = inv.staafposities.iter().filter(|s| s.in_hoek).count() as u32;
-    let (uc, status) =
-        uc_minimum(hoekstaven as f64, MIN_HOEKSTAVEN_9_5_2 as f64, r"n_{\text{hoek,eis}} / n_{\text{hoek}}");
+    let (uc, status) = uc_minimum(
+        hoekstaven as f64,
+        MIN_HOEKSTAVEN_9_5_2 as f64,
+        r"n_{\text{hoek,eis}} / n_{\text{hoek}}",
+    );
     notes.push(format!(
         "Van de {} langsstaven in de doorsnede bezetten er {hoekstaven} een hoek.",
         inv.staafposities.len()
@@ -3758,7 +3922,10 @@ pub fn opgesloten_staven_9_5_3(inv: &KolomdetailleringInvoer) -> ResistanceCalc 
         .staafposities
         .iter()
         .map(|s| {
-            opgesloten.iter().map(|h| s.afstand_mm(h)).fold(f64::INFINITY, f64::min)
+            opgesloten
+                .iter()
+                .map(|h| s.afstand_mm(h))
+                .fold(f64::INFINITY, f64::min)
         })
         .fold(0.0_f64, f64::max);
     notes.push(format!(
@@ -3803,7 +3970,11 @@ pub fn opgesloten_staven_9_5_3(inv: &KolomdetailleringInvoer) -> ResistanceCalc 
             notes,
         );
     }
-    let (uc, status) = uc_maximum(a_max, MAX_AFSTAND_TOT_OPGESLOTEN_STAAF_MM, r"a_{\max} / 150");
+    let (uc, status) = uc_maximum(
+        a_max,
+        MAX_AFSTAND_TOT_OPGESLOTEN_STAAF_MM,
+        r"a_{\max} / 150",
+    );
     eis(
         id,
         titel,
@@ -3952,8 +4123,14 @@ mod tests {
         let l = 3000.0;
         let geschoord = l0_geschoord_5_15(0.1, 0.1, l);
         let ongeschoord = l0_ongeschoord_5_16(0.1, 0.1, l);
-        assert!((geschoord - 0.590909 * l).abs() < 1e-3, "geschoord {geschoord}");
-        assert!((ongeschoord - 1.224745 * l).abs() < 1e-3, "ongeschoord {ongeschoord}");
+        assert!(
+            (geschoord - 0.590909 * l).abs() < 1e-3,
+            "geschoord {geschoord}"
+        );
+        assert!(
+            (ongeschoord - 1.224745 * l).abs() < 1e-3,
+            "ongeschoord {ongeschoord}"
+        );
         assert!(ongeschoord / geschoord > 2.0);
     }
 

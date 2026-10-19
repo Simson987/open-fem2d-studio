@@ -20,7 +20,11 @@ use crate::section::{RebarLayer, RectConcreteSection, ReinforcementCage};
 use crate::stress_strain::DesignMaterial;
 
 fn nv(symbol: &str, value: f64, unit: &str) -> NamedValue {
-    NamedValue { symbol: symbol.to_string(), value, unit: unit.to_string() }
+    NamedValue {
+        symbol: symbol.to_string(),
+        value,
+        unit: unit.to_string(),
+    }
 }
 
 fn status_for(uc: f64, applicable: bool) -> CheckStatus {
@@ -140,7 +144,11 @@ pub fn check_bending_stress_block(
             // rekent `stress_block` op de omgeklapte doorsnede, dus die moet
             // hier ook worden bekeken — anders zou er bij een T de
             // flensbreedte staan waar het lijf wordt gedrukt.
-            let werk = if sign < 0.0 { section.mirrored() } else { *section };
+            let werk = if sign < 0.0 {
+                section.mirrored()
+            } else {
+                *section
+            };
             match werk.uniform_top_width(r.lambda * r.x_mm) {
                 Some(b) => notes.push(format!(
                     "F_c = η·f_cd·b·λ·x = {:.3}·{:.2}·{:.0}·{:.2}·{:.2} = {:.1} kN; x uit N_c + ΣF_s = −N_Ed.",
@@ -167,7 +175,11 @@ pub fn check_bending_stress_block(
                     l.label,
                     l.eps * 1e3,
                     l.sigma,
-                    if l.yields { " (vloeit)" } else { " (elastisch)" }
+                    if l.yields {
+                        " (vloeit)"
+                    } else {
+                        " (elastisch)"
+                    }
                 ));
             }
             let m_rd = r.m_rd_knm;
@@ -333,7 +345,11 @@ pub fn check_mn_kappa(
         } else {
             axial_tension_capacity_kn(&layers, mat)
         };
-        let uc = if n_rd > 0.0 { n_ed.abs() / n_rd } else { f64::INFINITY };
+        let uc = if n_rd > 0.0 {
+            n_ed.abs() / n_rd
+        } else {
+            f64::INFINITY
+        };
         variables.push(nv(r"N_{Rd}", n_rd, "kN"));
         let reden = if n_ed < 0.0 {
             format!(
@@ -402,7 +418,11 @@ pub fn check_mn_kappa(
         ),
         _ => String::new(),
     });
-    let uc = if m_rd > 0.0 { m_ed_eff / m_rd } else { f64::INFINITY };
+    let uc = if m_rd > 0.0 {
+        m_ed_eff / m_rd
+    } else {
+        f64::INFINITY
+    };
     let applicable = m_ed_eff > 1e-9 || n_ed.abs() > 1e-9;
     let stappen = deelstappen::mn_kappa_deelstappen(&g, &diagram, opts, e0_bindend);
     MnKappaCheck {
@@ -443,7 +463,11 @@ mod tests {
         ForceStateSnapshot {
             combination_id: 1,
             position_mm: 2500.0,
-            forces: InternalForces { n_ed: n, my_ed: m, ..Default::default() },
+            forces: InternalForces {
+                n_ed: n,
+                my_ed: m,
+                ..Default::default()
+            },
         }
     }
 
@@ -453,8 +477,14 @@ mod tests {
             ReinforcementCage {
                 cover_mm: 30.0,
                 stirrup_diameter_mm: 8.0,
-                top: RebarRow { count: 0, diameter_mm: 12.0 },
-                bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+                top: RebarRow {
+                    count: 0,
+                    diameter_mm: 12.0,
+                },
+                bottom: RebarRow {
+                    count: 3,
+                    diameter_mm: 16.0,
+                },
                 ..ReinforcementCage::default()
             },
             DesignMaterial::new(
@@ -472,7 +502,11 @@ mod tests {
         let (s, k, m) = opzet();
         let r = check_bending_stress_block(&s, &k, &m, snap(0.0, 100.0));
         assert_relative_eq!(r.value, 113.33, max_relative = 1e-3);
-        assert_relative_eq!(r.uc.as_ref().unwrap().uc, 100.0 / 113.33, max_relative = 1e-3);
+        assert_relative_eq!(
+            r.uc.as_ref().unwrap().uc,
+            100.0 / 113.33,
+            max_relative = 1e-3
+        );
         assert_eq!(r.status, CheckStatus::Ok);
         // Negatief moment zonder bovenwapening: de enige laag (3Ø16) ligt
         // vlak bij de gedrukte rand en levert een kleine weerstand → NotOk.
@@ -486,7 +520,14 @@ mod tests {
         let (s, k, m) = opzet();
         assert_relative_eq!(minimum_eccentricity_mm(500.0), 20.0);
         assert_relative_eq!(minimum_eccentricity_mm(900.0), 30.0);
-        let r = check_mn_kappa(&s, &k, &m, &MnKappaOptions { n_strips: 20 }, true, snap(-500.0, 2.0));
+        let r = check_mn_kappa(
+            &s,
+            &k,
+            &m,
+            &MnKappaOptions { n_strips: 20 },
+            true,
+            snap(-500.0, 2.0),
+        );
         // M_Ed,eff = 500 · 0,020 = 10 kNm.
         assert_relative_eq!(r.calc.uc.as_ref().unwrap().ed, 10.0, max_relative = 1e-9);
         assert!(r.calc.notes.iter().any(|n| n.contains("6.1(4)")));
@@ -495,9 +536,19 @@ mod tests {
     #[test]
     fn overschreden_drukcapaciteit_toetst_op_n() {
         let (s, k, m) = opzet();
-        let r = check_mn_kappa(&s, &k, &m, &MnKappaOptions { n_strips: 20 }, true, snap(-5000.0, 0.0));
+        let r = check_mn_kappa(
+            &s,
+            &k,
+            &m,
+            &MnKappaOptions { n_strips: 20 },
+            true,
+            snap(-5000.0, 0.0),
+        );
         assert_eq!(r.calc.status, CheckStatus::NotOk);
-        assert_eq!(r.calc.uc.as_ref().unwrap().formula_latex, r"N_{Ed} / N_{Rd}");
+        assert_eq!(
+            r.calc.uc.as_ref().unwrap().formula_latex,
+            r"N_{Ed} / N_{Rd}"
+        );
         assert!(r.calc.uc.as_ref().unwrap().uc > 1.0);
     }
 }

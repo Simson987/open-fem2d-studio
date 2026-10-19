@@ -1,18 +1,18 @@
 //! NEN-EN 1993-1-1 §6.3 — member stability checks.
 
+use mechanics::ForceStateSnapshot;
+use nen_en_1993_1_1_section::{CheckStatus, NamedValue, UnityCheck};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-use mechanics::ForceStateSnapshot;
-use nen_en_1993_1_1_section::{NamedValue, UnityCheck, CheckStatus};
 
 pub mod buckling_curve;
 pub mod column_buckling;
+pub mod combined_n_m;
+pub mod interaction_factors;
 /// De kniklengte per as mét haar herkomst; gedeeld door staal en hout.
 pub mod kniklengte;
 /// Opmaakhulpjes voor deelstappen; gedeeld door staal en hout.
 pub mod opmaak;
-pub mod interaction_factors;
-pub mod combined_n_m;
 
 /// Eén stap uit de afleiding die aan een toets voorafgaat.
 ///

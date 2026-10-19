@@ -239,7 +239,11 @@ async fn afwijkende_kernel_wordt_geweigerd_voordat_node_start() {
 
     assert_eq!(fout.code, BUNDEL_AFWIJKEND, "melding: {}", fout.melding);
     // De melding noemt beide hashes, zodat te zien is WAT er anders is.
-    assert!(fout.melding.contains(sidecar::ingebakken_hash()), "{}", fout.melding);
+    assert!(
+        fout.melding.contains(sidecar::ingebakken_hash()),
+        "{}",
+        fout.melding
+    );
     let remedie = fout.remedie.clone().unwrap_or_default();
     assert!(
         remedie.contains("OPENAEC_FEM_STA_DRIFT_TOE"),
@@ -413,7 +417,9 @@ async fn referentieportaal_geeft_de_gouden_getallen() {
     // te staan.
     let waarschuwingen = r["warnings"].as_array().cloned().unwrap_or_default();
     assert!(
-        !waarschuwingen.iter().any(|w| w.as_str().unwrap_or("").contains("NaN")),
+        !waarschuwingen
+            .iter()
+            .any(|w| w.as_str().unwrap_or("").contains("NaN")),
         "onverwachte NaN-waarschuwing: {waarschuwingen:?}"
     );
 }
@@ -499,7 +505,10 @@ async fn status_meldt_een_werkende_keten() {
     assert_eq!(status.reason, None);
     assert_eq!(status.protocol_version, sidecar::SIDECAR_PROTOCOL);
     assert_eq!(status.bundle_hash, sidecar::ingebakken_hash());
-    assert_eq!(status.loaded_bundle_hash.as_deref(), Some(sidecar::ingebakken_hash()));
+    assert_eq!(
+        status.loaded_bundle_hash.as_deref(),
+        Some(sidecar::ingebakken_hash())
+    );
     assert_eq!(status.bundle_source, Some(Bundelbron::Ingebakken));
     assert!(status.bundle_version.is_some(), "bundle_version ontbreekt");
 

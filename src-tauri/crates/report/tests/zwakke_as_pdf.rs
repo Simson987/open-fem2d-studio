@@ -26,7 +26,9 @@ fn inhoudsstromen(pdf: &[u8]) -> String {
     let doc = lopdf::Document::load_mem(pdf).expect("de PDF moet te lezen zijn");
     let mut uit = String::new();
     for (_, id) in doc.get_pages() {
-        let inhoud = doc.get_page_content(id).expect("de inhoudsstroom moet uit te pakken zijn");
+        let inhoud = doc
+            .get_page_content(id)
+            .expect("de inhoudsstroom moet uit te pakken zijn");
         uit.push_str(&String::from_utf8_lossy(&inhoud).to_uppercase());
     }
     uit
@@ -47,7 +49,9 @@ fn glief_hex(font: &[u8], woord: &str) -> String {
 
 fn eis_erin(stroom: &str, woord: &str) {
     assert!(
-        [FONT_REGULAR, FONT_BOLD].iter().any(|f| stroom.contains(&glief_hex(f, woord))),
+        [FONT_REGULAR, FONT_BOLD]
+            .iter()
+            .any(|f| stroom.contains(&glief_hex(f, woord))),
         "{woord:?} staat niet in de inhoudsstroom van de PDF"
     );
 }
@@ -81,10 +85,22 @@ fn de_pdf_noemt_de_kniklengte_uit_het_vlak_met_haar_herkomst() {
     assert_eq!(invoer.buckling_length_z_m, 0.0);
 
     let resultaat = check_beam(invoer);
-    assert_eq!(resultaat.governing_check_id, "6.3.1_buckling", "de proef rekent op een maatgevende knikcontrole");
-    let knik = resultaat.checks.iter().find(|c| c.id == "6.3.1_buckling").unwrap();
-    let CheckKind::Stability(k) = &knik.kind else { panic!("stabiliteit") };
-    assert!(k.notes.iter().any(|n| n.contains("L_cr,z = 4000 mm (staaflengte (terugval))")));
+    assert_eq!(
+        resultaat.governing_check_id, "6.3.1_buckling",
+        "de proef rekent op een maatgevende knikcontrole"
+    );
+    let knik = resultaat
+        .checks
+        .iter()
+        .find(|c| c.id == "6.3.1_buckling")
+        .unwrap();
+    let CheckKind::Stability(k) = &knik.kind else {
+        panic!("stabiliteit")
+    };
+    assert!(k
+        .notes
+        .iter()
+        .any(|n| n.contains("L_cr,z = 4000 mm (staaflengte (terugval))")));
 
     let pdf = generate_report_pdf(ReportInput {
         bijlage: Default::default(),

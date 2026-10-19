@@ -14,7 +14,12 @@ use plaat_check::{
 };
 
 fn el(id: u32, sx: f64, sz: f64, t: f64) -> PlaatElementSpanning {
-    PlaatElementSpanning { element_id: id, sigma_x_mpa: sx, sigma_y_mpa: sz, tau_xy_mpa: t }
+    PlaatElementSpanning {
+        element_id: id,
+        sigma_x_mpa: sx,
+        sigma_y_mpa: sz,
+        tau_xy_mpa: t,
+    }
 }
 
 fn plaat(klasse: &str, elementen: Vec<PlaatElementSpanning>) -> PlateCheckInput {
@@ -29,7 +34,10 @@ fn plaat(klasse: &str, elementen: Vec<PlaatElementSpanning>) -> PlateCheckInput 
         service_class: None,
         load_duration_per_combination: vec![],
         notities: vec![],
-        combinations: vec![PlaatCombinatie { combination_id: 3, elements: elementen }],
+        combinations: vec![PlaatCombinatie {
+            combination_id: 3,
+            elements: elementen,
+        }],
         wapening_aanwezig: None,
         expected_element_ids: Some(vec![1]),
         mesh_fout: None,
@@ -57,12 +65,19 @@ fn zuivere_afschuiving() {
     assert_relative_eq!(w.max_z.n_td_z_kn_per_m, 600.0, max_relative = 1e-12);
     // Wapening nodig en niet getoetst → niet "voldoet".
     assert_eq!(r.status, CheckStatus::NotApplicable);
-    assert!(r.niet_getoetst.iter().any(|n| n.id == "wapening_aanwezig" && n.bepaalt_status));
+    assert!(r
+        .niet_getoetst
+        .iter()
+        .any(|n| n.id == "wapening_aanwezig" && n.bepaalt_status));
     let calc = match &r.checks[0].kind {
         steel_check::CheckKind::Resistance(c) => c,
         _ => panic!(),
     };
-    let rd = calc.deelstappen.iter().find(|d| d.id == "sigma_rd_max").unwrap();
+    let rd = calc
+        .deelstappen
+        .iter()
+        .find(|d| d.id == "sigma_rd_max")
+        .unwrap();
     assert_relative_eq!(rd.value.unwrap(), 10.56, max_relative = 1e-12);
     let fcd = calc.deelstappen.iter().find(|d| d.id == "f_cd").unwrap();
     assert_relative_eq!(fcd.value.unwrap(), 20.0, max_relative = 1e-12);
@@ -102,7 +117,11 @@ fn druk_in_x_trek_in_z() {
     let r = check_plate(&plaat("C30/37", vec![el(1, -6.0, 1.0, 2.0)]));
     assert_relative_eq!(r.uc_max, 0.631_313, max_relative = 1e-5);
     let w = r.wapening.as_ref().unwrap();
-    assert_relative_eq!(w.elementen[0].n_td_z_kn_per_m, 333.333_3, max_relative = 1e-6);
+    assert_relative_eq!(
+        w.elementen[0].n_td_z_kn_per_m,
+        333.333_3,
+        max_relative = 1e-6
+    );
     assert_eq!(w.elementen[0].n_td_x_kn_per_m, 0.0);
 }
 
@@ -160,5 +179,9 @@ fn drukdiagonaal_boven_de_sterkte() {
 #[test]
 fn korte_klassenaam_wordt_geweigerd() {
     let r = check_plate(&plaat("C30", vec![el(1, 0.0, 0.0, 1.0)]));
-    assert!(r.geweigerd.as_deref().unwrap().contains("C30/37"), "{:?}", r.geweigerd);
+    assert!(
+        r.geweigerd.as_deref().unwrap().contains("C30/37"),
+        "{:?}",
+        r.geweigerd
+    );
 }

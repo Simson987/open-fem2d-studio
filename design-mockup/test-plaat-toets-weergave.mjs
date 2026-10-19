@@ -21,7 +21,7 @@
 //
 // Uitvoeren: npx tsx test-plaat-toets-weergave.mjs   (vanuit design-mockup/)
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { register } from "node:module";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -85,9 +85,25 @@ const invoer = [
       { element_id: 2, sigma_x_mpa: 0.2, sigma_y_mpa: -1, tau_xy_mpa: 0 },
     ] }] },
 ];
-const r = spawnSync(TOETSBRUG, [], { input: JSON.stringify({ opdracht: "check_plates", inputs: invoer }), encoding: "utf8" });
-const res = JSON.parse(r.stdout);
-checkTrue("kern antwoordt met vier platen", Array.isArray(res) && res.length === 4, r.stdout.slice(0, 200));
+async function toetsbrug(inputs) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code !== 0) reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+      else resolve(JSON.parse(out));
+    });
+    child.stdin.end(JSON.stringify({ opdracht: "check_plates", inputs }));
+  });
+}
+const res = await toetsbrug(invoer);
+checkTrue("kern antwoordt met vier platen", Array.isArray(res) && res.length === 4, JSON.stringify(res).slice(0, 200));
 
 log("\n[a] kaart van een getoetste plaat");
 {
@@ -125,10 +141,7 @@ log("\n[b3] gewapende wand met maatgevende detaillering");
       verticaal: { zijde_1: laag(42), zijde_2: laag(42) },
     },
   };
-  const antwoord = spawnSync(TOETSBRUG, [], {
-    input: JSON.stringify({ opdracht: "check_plates", inputs: [wand] }), encoding: "utf8",
-  });
-  const [result] = JSON.parse(antwoord.stdout);
+  const [result] = await toetsbrug([wand]);
   checkTrue("kern heeft aanwezige wapening per zijde getoetst", result.checks.some((c) => c.id === "F_wapening_x_zijde_1"));
   checkTrue("maatgevende wanddetaillering heeft geen element of combinatie", result.governing_element_id == null && result.governing_combination_id == null);
   const t = tekst(renderToStaticMarkup(React.createElement(PlaatToetsKaart, { result })));

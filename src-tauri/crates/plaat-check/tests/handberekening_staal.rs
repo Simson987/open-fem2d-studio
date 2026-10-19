@@ -13,10 +13,19 @@ use plaat_check::{
 use steel_check::CheckKind;
 
 fn el(id: u32, sx: f64, sy: f64, t: f64) -> PlaatElementSpanning {
-    PlaatElementSpanning { element_id: id, sigma_x_mpa: sx, sigma_y_mpa: sy, tau_xy_mpa: t }
+    PlaatElementSpanning {
+        element_id: id,
+        sigma_x_mpa: sx,
+        sigma_y_mpa: sy,
+        tau_xy_mpa: t,
+    }
 }
 
-fn plaat(materiaal: &str, t_mm: f64, combinaties: Vec<(u32, Vec<PlaatElementSpanning>)>) -> PlateCheckInput {
+fn plaat(
+    materiaal: &str,
+    t_mm: f64,
+    combinaties: Vec<(u32, Vec<PlaatElementSpanning>)>,
+) -> PlateCheckInput {
     PlateCheckInput {
         bijlage: Default::default(),
         plate_id: 3,
@@ -30,7 +39,10 @@ fn plaat(materiaal: &str, t_mm: f64, combinaties: Vec<(u32, Vec<PlaatElementSpan
         load_duration_per_combination: vec![],
         combinations: combinaties
             .into_iter()
-            .map(|(id, elements)| PlaatCombinatie { combination_id: id, elements })
+            .map(|(id, elements)| PlaatCombinatie {
+                combination_id: id,
+                elements,
+            })
             .collect(),
         wapening_aanwezig: None,
         expected_element_ids: None,
@@ -40,8 +52,14 @@ fn plaat(materiaal: &str, t_mm: f64, combinaties: Vec<(u32, Vec<PlaatElementSpan
 }
 
 fn vloei(r: &PlateCheckResult) -> &ResistanceCalc {
-    let c = r.checks.iter().find(|c| c.id == VLOEI_ID).expect("vloeicriterium aanwezig");
-    let CheckKind::Resistance(calc) = &c.kind else { panic!("geen weerstandstoets") };
+    let c = r
+        .checks
+        .iter()
+        .find(|c| c.id == VLOEI_ID)
+        .expect("vloeicriterium aanwezig");
+    let CheckKind::Resistance(calc) = &c.kind else {
+        panic!("geen weerstandstoets")
+    };
     calc
 }
 
@@ -61,7 +79,11 @@ fn deelstap_waarde(calc: &ResistanceCalc, id: &str) -> f64 {
 //   σ_eq = 200 → UC = 200/235 = 0,851064
 #[test]
 fn zuivere_trek() {
-    let r = check_plate(&plaat("S235", 15.0, vec![(1, vec![el(1, 200.0, 0.0, 0.0)])]));
+    let r = check_plate(&plaat(
+        "S235",
+        15.0,
+        vec![(1, vec![el(1, 200.0, 0.0, 0.0)])],
+    ));
     assert!(r.geweigerd.is_none(), "{:?}", r.geweigerd);
     assert_relative_eq!(r.uc_max, 0.851_064, max_relative = 1e-6);
     assert_eq!(r.status, CheckStatus::Ok);
@@ -69,7 +91,11 @@ fn zuivere_trek() {
     assert_relative_eq!(calc.value, 200.0, max_relative = 1e-12);
     assert_relative_eq!(deelstap_waarde(calc, "f_y"), 235.0);
     assert_relative_eq!(deelstap_waarde(calc, "f_d"), 235.0);
-    assert_relative_eq!(deelstap_waarde(calc, "criterium_6_1"), 0.724_310, max_relative = 1e-5);
+    assert_relative_eq!(
+        deelstap_waarde(calc, "criterium_6_1"),
+        0.724_310,
+        max_relative = 1e-5
+    );
     assert_eq!(calc.article, "art. 6.2.1(5) (6.1)");
 }
 
@@ -81,16 +107,32 @@ fn zuivere_trek() {
 // Dat is de grens τ = f_y,d/√3 = 135,68 N/mm² bij UC 1.
 #[test]
 fn zuivere_afschuiving() {
-    let r = check_plate(&plaat("S235", 15.0, vec![(1, vec![el(1, 0.0, 0.0, 100.0)])]));
+    let r = check_plate(&plaat(
+        "S235",
+        15.0,
+        vec![(1, vec![el(1, 0.0, 0.0, 100.0)])],
+    ));
     assert_relative_eq!(r.uc_max, 0.737_043, max_relative = 1e-6);
     let calc = vloei(&r);
     assert_relative_eq!(calc.value, 173.205_08, max_relative = 1e-6);
-    assert_relative_eq!(deelstap_waarde(calc, "criterium_6_1"), 0.543_232, max_relative = 1e-5);
+    assert_relative_eq!(
+        deelstap_waarde(calc, "criterium_6_1"),
+        0.543_232,
+        max_relative = 1e-5
+    );
     // Op de grens: τ = 235/√3.
-    let grens = check_plate(&plaat("S235", 15.0, vec![(1, vec![el(1, 0.0, 0.0, 235.0 / 3f64.sqrt())])]));
+    let grens = check_plate(&plaat(
+        "S235",
+        15.0,
+        vec![(1, vec![el(1, 0.0, 0.0, 235.0 / 3f64.sqrt())])],
+    ));
     assert_relative_eq!(grens.uc_max, 1.0, max_relative = 1e-12);
     // Negatieve schuifspanning: zelfde UC.
-    let neg = check_plate(&plaat("S235", 15.0, vec![(1, vec![el(1, 0.0, 0.0, -100.0)])]));
+    let neg = check_plate(&plaat(
+        "S235",
+        15.0,
+        vec![(1, vec![el(1, 0.0, 0.0, -100.0)])],
+    ));
     assert_relative_eq!(neg.uc_max, r.uc_max, max_relative = 1e-12);
 }
 
@@ -105,18 +147,34 @@ fn zuivere_afschuiving() {
 //   UC = 227,3763/335 = 0,678735
 #[test]
 fn combinatie_in_de_dikteklasse_40_tot_80() {
-    let r = check_plate(&plaat("S355", 50.0, vec![(4, vec![el(9, 150.0, -80.0, 60.0)])]));
+    let r = check_plate(&plaat(
+        "S355",
+        50.0,
+        vec![(4, vec![el(9, 150.0, -80.0, 60.0)])],
+    ));
     assert_relative_eq!(r.uc_max, 0.678_735, max_relative = 1e-6);
     let calc = vloei(&r);
     assert_relative_eq!(calc.value, 227.376_3, max_relative = 1e-6);
     assert_relative_eq!(deelstap_waarde(calc, "f_y"), 335.0);
-    assert_relative_eq!(deelstap_waarde(calc, "criterium_6_1"), 0.460_682, max_relative = 1e-5);
+    assert_relative_eq!(
+        deelstap_waarde(calc, "criterium_6_1"),
+        0.460_682,
+        max_relative = 1e-5
+    );
     // De dikteklasse staat bij f_y.
     let fy = calc.deelstappen.iter().find(|d| d.id == "f_y").unwrap();
     assert!(fy.notes[0].contains("40 mm < t ≤ 80 mm"), "{:?}", fy.notes);
     // Het negatieve getal staat tussen haakjes in de ingevulde regel.
-    let seq = calc.deelstappen.iter().find(|d| d.id == "sigma_eq").unwrap();
-    assert!(seq.ingevuld_latex.contains("(-80)^2"), "{}", seq.ingevuld_latex);
+    let seq = calc
+        .deelstappen
+        .iter()
+        .find(|d| d.id == "sigma_eq")
+        .unwrap();
+    assert!(
+        seq.ingevuld_latex.contains("(-80)^2"),
+        "{}",
+        seq.ingevuld_latex
+    );
     assert_eq!(r.governing_element_id, Some(9));
     assert_eq!(r.governing_combination_id, Some(4));
 }
@@ -127,7 +185,11 @@ fn combinatie_in_de_dikteklasse_40_tot_80() {
 // zuivere trek (0,851064). Zonder de kruisterm kwam er √2 · 200 uit.
 #[test]
 fn gelijke_trek_in_twee_richtingen() {
-    let r = check_plate(&plaat("S235", 10.0, vec![(1, vec![el(1, 200.0, 200.0, 0.0)])]));
+    let r = check_plate(&plaat(
+        "S235",
+        10.0,
+        vec![(1, vec![el(1, 200.0, 200.0, 0.0)])],
+    ));
     assert_relative_eq!(r.uc_max, 0.851_064, max_relative = 1e-6);
 }
 
@@ -153,27 +215,50 @@ fn maatgevend_per_combinatie_en_omhullende() {
     ));
     assert_eq!(r.status, CheckStatus::NotOk);
     assert_relative_eq!(r.uc_max, 1.105_564, max_relative = 1e-6);
-    assert_eq!((r.governing_element_id, r.governing_combination_id), (Some(2), Some(1)));
+    assert_eq!(
+        (r.governing_element_id, r.governing_combination_id),
+        (Some(2), Some(1))
+    );
 
     assert_eq!(r.combinaties.len(), 2);
-    assert_eq!((r.combinaties[0].combination_id, r.combinaties[0].element_id), (1, 2));
+    assert_eq!(
+        (r.combinaties[0].combination_id, r.combinaties[0].element_id),
+        (1, 2)
+    );
     assert_relative_eq!(r.combinaties[0].uc, 1.105_564, max_relative = 1e-6);
-    assert_eq!((r.combinaties[1].combination_id, r.combinaties[1].element_id), (2, 1));
+    assert_eq!(
+        (r.combinaties[1].combination_id, r.combinaties[1].element_id),
+        (2, 1)
+    );
     assert_relative_eq!(r.combinaties[1].uc, 1.063_830, max_relative = 1e-6);
 
     assert_eq!(r.elementen.len(), 2);
-    assert_eq!((r.elementen[0].element_id, r.elementen[0].combination_id), (1, 2));
+    assert_eq!(
+        (r.elementen[0].element_id, r.elementen[0].combination_id),
+        (1, 2)
+    );
     assert_relative_eq!(r.elementen[0].uc, 1.063_830, max_relative = 1e-6);
-    assert_eq!((r.elementen[1].element_id, r.elementen[1].combination_id), (2, 1));
+    assert_eq!(
+        (r.elementen[1].element_id, r.elementen[1].combination_id),
+        (2, 1)
+    );
     assert_relative_eq!(r.elementen[1].uc, 1.105_564, max_relative = 1e-6);
 }
 
 // ── 6. Plooi staat als niet getoetst, bepaalt de status niet ─────────────
 #[test]
 fn plooi_staat_als_niet_getoetst() {
-    let r = check_plate(&plaat("S235", 15.0, vec![(1, vec![el(1, -100.0, 0.0, 0.0)])]));
+    let r = check_plate(&plaat(
+        "S235",
+        15.0,
+        vec![(1, vec![el(1, -100.0, 0.0, 0.0)])],
+    ));
     assert_eq!(r.status, CheckStatus::Ok);
-    let plooi = r.niet_getoetst.iter().find(|n| n.id == "en1993_1_5_plooi").expect("plooi vermeld");
+    let plooi = r
+        .niet_getoetst
+        .iter()
+        .find(|n| n.id == "en1993_1_5_plooi")
+        .expect("plooi vermeld");
     assert!(!plooi.bepaalt_status);
     assert!(plooi.reden.contains("NEN-EN 1993-1-5"));
     assert!(plooi.reden.contains("6.2.1(2)"));
@@ -184,7 +269,10 @@ fn plooi_staat_als_niet_getoetst() {
 #[test]
 fn weigeringen_met_reden() {
     let geweigerd = |r: PlateCheckResult, woord: &str| {
-        let reden = r.geweigerd.clone().unwrap_or_else(|| panic!("niet geweigerd: {r:?}"));
+        let reden = r
+            .geweigerd
+            .clone()
+            .unwrap_or_else(|| panic!("niet geweigerd: {r:?}"));
         assert!(reden.contains(woord), "{reden}");
         assert_eq!(r.status, CheckStatus::NotApplicable);
         assert!(r.checks.is_empty());
@@ -195,8 +283,18 @@ fn weigeringen_met_reden() {
     geweigerd(check_plate(&plaat("S355", 81.0, e())), "80 mm");
     geweigerd(check_plate(&plaat("S500", 10.0, e())), "S500");
     geweigerd(check_plate(&plaat("S235", 0.0, e())), "dikte");
-    geweigerd(check_plate(&plaat("S235", 10.0, vec![])), "geen elementspanningen");
-    geweigerd(check_plate(&plaat("S235", 10.0, vec![(1, vec![el(1, f64::NAN, 0.0, 0.0)])])), "geen getal");
+    geweigerd(
+        check_plate(&plaat("S235", 10.0, vec![])),
+        "geen elementspanningen",
+    );
+    geweigerd(
+        check_plate(&plaat(
+            "S235",
+            10.0,
+            vec![(1, vec![el(1, f64::NAN, 0.0, 0.0)])],
+        )),
+        "geen getal",
+    );
     for (soort, woord) in [
         (PlaatMateriaalSoort::Kruislaaghout, "kruislaaghout"),
         // Beton wordt sinds stap 3 getoetst; een onbekende klasse weigert.
@@ -216,9 +314,10 @@ fn json_is_streng_en_rondreis_is_gelijk() {
     let tekst = serde_json::to_string(&invoer).unwrap();
     let terug: PlateCheckInput = serde_json::from_str(&tekst).unwrap();
     assert_eq!(terug, invoer);
-    let fout = serde_json::from_str::<PlateCheckInput>(&tekst.replace("\"thickness_mm\"", "\"dikte\""))
-        .unwrap_err()
-        .to_string();
+    let fout =
+        serde_json::from_str::<PlateCheckInput>(&tekst.replace("\"thickness_mm\"", "\"dikte\""))
+            .unwrap_err()
+            .to_string();
     assert!(fout.contains("unknown field"), "{fout}");
     let lijst = check_all_plates(vec![invoer.clone(), invoer]);
     assert_eq!(lijst.len(), 2);

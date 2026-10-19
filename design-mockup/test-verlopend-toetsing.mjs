@@ -45,7 +45,7 @@
 // Draaien met: npx tsx test-verlopend-toetsing.mjs
 //         of : node scripts/run-tests.mjs --filter=verlopend-toetsing
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -226,18 +226,29 @@ const STAAL_VERLOPEND = {
 const ucVan = (res, id) => res.checks.find((c) => c.id === id)?.kind?.data?.uc?.uc;
 const posVan = (res, id) => res.checks.find((c) => c.id === id)?.kind?.data?.force_state?.position_mm;
 
-function kern(opdracht, inputs) {
-  const r = spawnSync(TOETSBRUG, [], {
-    input: JSON.stringify({ opdracht, inputs }), encoding: "utf8", maxBuffer: 256 << 20,
+async function kern(opdracht, inputs) {
+  const antwoord = await new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code !== 0) reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+      else resolve(out);
+    });
+    child.stdin.end(JSON.stringify({ opdracht, inputs }));
   });
-  if (r.status !== 0 || !r.stdout) throw new Error(`toetsbrug ${opdracht} faalde: ${(r.stderr ?? "").slice(0, 300)}`);
-  return JSON.parse(r.stdout);
+  return JSON.parse(antwoord);
 }
 
 if (!existsSync(TOETSBRUG)) {
   ok("toetsbrug gevonden — bouw hem met `cargo build --release -p toetsbrug`", false, TOETSBRUG);
 } else {
-  const hout = kern("check_timber_beams", [HOUT_VERLOPEND])[0];
+  const hout = (await kern("check_timber_beams", [HOUT_VERLOPEND]))[0];
   ok("hout: het maatgevende punt ligt op x = L/3 = 1000 mm, niet bij de inklemming",
     posVan(hout, "6.1.6_bending") === 1000, String(posVan(hout, "6.1.6_bending")));
   rel("hout: UC buiging = 7,5/14,76923", ucVan(hout, "6.1.6_bending"), 0.507813, 1e-4);
@@ -252,13 +263,13 @@ if (!existsSync(TOETSBRUG)) {
 
   // Prismatisch blijft prismatisch, ook door de kern heen.
   const { height_end_mm: _weg, ...prismatisch } = HOUT_VERLOPEND;
-  const prism = kern("check_timber_beams", [{ ...prismatisch, height_mm: 500 }])[0];
+  const prism = (await kern("check_timber_beams", [{ ...prismatisch, height_mm: 500 }]))[0];
   ok("hout prismatisch: geen verloopveld in het antwoord", prism.verloop === undefined || prism.verloop === null);
-  const gelijk = kern("check_timber_beams", [{ ...prismatisch, height_mm: 500, height_end_mm: 500 }])[0];
+  const gelijk = (await kern("check_timber_beams", [{ ...prismatisch, height_mm: 500, height_end_mm: 500 }]))[0];
   ok("hout: eindhoogte gelijk aan de beginhoogte geeft een byte-gelijk antwoord",
     JSON.stringify(gelijk) === JSON.stringify(prism));
 
-  const staal = kern("check_steel_beams", [STAAL_VERLOPEND])[0];
+  const staal = (await kern("check_steel_beams", [STAAL_VERLOPEND]))[0];
   ok("staal: het maatgevende punt ligt op x = 2400 mm, niet bij de inklemming",
     posVan(staal, "6.2.5_bending_y") === 2400, String(posVan(staal, "6.2.5_bending_y")));
   rel("staal: UC buiging = 120/161,74", ucVan(staal, "6.2.5_bending_y"), 0.741936, 5e-4);
@@ -275,13 +286,13 @@ if (!existsSync(TOETSBRUG)) {
   ok("staal: de stabiliteitsdoorsnede staat in het rapport met reden",
     staal.verloop.stabiliteit.length >= 2 && staal.verloop.stabiliteit.every((s) => /KLEINSTE doorsnede/.test(s.reden)));
   const { profile_end: _weg2, ...staalPrism } = STAAL_VERLOPEND;
-  const sp = kern("check_steel_beams", [staalPrism])[0];
-  const sg = kern("check_steel_beams", [{ ...staalPrism, profile_end: "IPE 400" }])[0];
+  const sp = (await kern("check_steel_beams", [staalPrism]))[0];
+  const sg = (await kern("check_steel_beams", [{ ...staalPrism, profile_end: "IPE 400" }]))[0];
   ok("staal: eindprofiel gelijk aan het beginprofiel geeft een byte-gelijk antwoord",
     JSON.stringify(sg) === JSON.stringify(sp));
   ok("staal prismatisch: geen verloopveld in het antwoord", sp.verloop === undefined || sp.verloop === null);
 
-  const weiger = kern("check_steel_beams", [{ ...STAAL_VERLOPEND, profile_end: "SHS100x100x5" }])[0];
+  const weiger = (await kern("check_steel_beams", [{ ...STAAL_VERLOPEND, profile_end: "SHS100x100x5" }]))[0];
   ok("staal: een koker als eindprofiel wordt geweigerd mét reden",
     weiger.checks.length === 0 && /geen I\/H-profiel/.test(weiger.governing_check_id ?? ""),
     (weiger.governing_check_id ?? "").slice(0, 120));

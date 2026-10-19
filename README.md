@@ -17,7 +17,7 @@
 ## Wat het programma doet
 
 - Staven en platen (wandschijven, belast in het vlak) in 2D: lineair, tweede orde en fysisch niet-lineair
-- 3D-tab voor het modelleren van knopen en staven; 3D-berekening is nog niet beschikbaar
+- 3D-raamwerken via de Rust-kern; afzonderlijke experimentele routes voor platen en Tet4-/Hex8-volumes. De volledige gekoppelde 3D-modelworkflow en constructieve validatie zijn nog in ontwikkeling
 - Belastinggevallen, belastingcombinaties en omhullenden
 - Normtoetsing per staaf: staal (NEN-EN 1993-1-1, langslassen NEN-EN 1993-1-8), hout en kruislaaghout
   (NEN-EN 1995-1-1), gewapend beton (NEN-EN 1992-1-1), plus een vrije spanningstoets

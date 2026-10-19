@@ -505,13 +505,15 @@ export interface FysischOpties {
    * zodat de testbatterij dezelfde lus met een eerste-orde-oplossing of met
    * een geteld aantal aanroepen kan draaien.
    */
-  losOp?: (input: MultiInput, combo: SecondOrderCombo) => SolverResult | null;
+  losOp?: (input: MultiInput, combo: SecondOrderCombo) => SolverResult | null
+    | Promise<SolverResult | null>;
 }
 
 interface Ingevuld extends Required<Omit<FysischOpties, "losOp" | "roep" | "kruip519">> {
   kruip519: ReadonlyMap<number, Kruip519Invoer> | undefined;
   roep: RoepKern;
-  losOp: (input: MultiInput, combo: SecondOrderCombo) => SolverResult | null;
+  losOp: (input: MultiInput, combo: SecondOrderCombo) => SolverResult | null
+    | Promise<SolverResult | null>;
 }
 
 function vulAan(o: FysischOpties | undefined): Ingevuld {
@@ -965,7 +967,7 @@ export async function losCombinatieFysischOp(
   // ── Ronde 1..n: oplossen, krachten heen, stijfheden terug ───────────────
   let laatste: Map<number, SegmentStiffnessResponse> = new Map();
   for (let ronde = 1; ronde <= o.maxRonden; ronde++) {
-    const resultaat = o.losOp(metSegmenten(input, segmenten), combo);
+    const resultaat = await o.losOp(metSegmenten(input, segmenten), combo);
     if (!resultaat) {
       // Deze combinatie activeert geen enkele last; de aanroeper valt terug
       // op superpositie (die dan triviaal nul is).

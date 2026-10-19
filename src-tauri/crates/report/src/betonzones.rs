@@ -60,7 +60,10 @@ use crate::{style_h3, style_note, C_DEEP};
 /// De lengte staat er in MILLIMETER in, want de zonegrenzen staan dat ook; een
 /// tabel waarin de ene kolom meters en de andere millimeters is, leest verkeerd.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct BetonStaafZones {
     pub beam_id: u32,
     /// Staaflengte, mm — waar de laatste zone uiterlijk ophoudt.
@@ -78,7 +81,8 @@ pub struct BetonStaafZones {
 /// Een meegestuurde maar lege indeling telt als "geen zones": `is_empty()` op
 /// [`ReinforcementZones`] betekent letterlijk dat overal dezelfde korf geldt.
 pub fn zones_van(alle: &[BetonStaafZones], beam_id: u32) -> Option<&BetonStaafZones> {
-    alle.iter().find(|z| z.beam_id == beam_id && !z.zones.is_empty())
+    alle.iter()
+        .find(|z| z.beam_id == beam_id && !z.zones.is_empty())
 }
 
 /// De twee hoofdwapeningsrijen van een korf op één regel, in de schrijfwijze
@@ -142,21 +146,35 @@ pub fn extend_met_zoneblok(
             // (tabel 8.2 alpha_1 en (8.2) eta_1). Zonder die twee in het rapport
             // is de verankeringslengte — en daarmee de schuine tak van
             // figuur 9.2 — niet na te rekenen.
-            format!("{} · {}", vorm_woord(z.bar_shape), stort_woord(z.casting_position)),
+            format!(
+                "{} · {}",
+                vorm_woord(z.bar_shape),
+                stort_woord(z.casting_position)
+            ),
         ]);
     }
     for z in &zones.zones.stirrups {
         rijen.push(vec![
             "beugels".to_string(),
             format!("{} - {}", nl(z.x_start_mm, 0), nl(z.x_end_mm, 0)),
-            format!("Ø{} — {}-benig, s = {} mm", nl(z.diameter_mm, 0), z.legs, nl(z.spacing_mm, 0)),
+            format!(
+                "Ø{} — {}-benig, s = {} mm",
+                nl(z.diameter_mm, 0),
+                z.legs,
+                nl(z.spacing_mm, 0)
+            ),
             String::new(),
         ]);
     }
 
     flow.push(Box::new(
         Table::new(
-            vec!["Zijde".into(), "x [mm]".into(), "Wapening".into(), "Uitvoering".into()],
+            vec![
+                "Zijde".into(),
+                "x [mm]".into(),
+                "Wapening".into(),
+                "Uitvoering".into(),
+            ],
             rijen,
         )
         .with_col_widths(vec![

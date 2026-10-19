@@ -35,8 +35,14 @@ fn korf() -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 0.0,
-        top: RebarRow { count: 5, diameter_mm: 10.0 },
-        bottom: RebarRow { count: 5, diameter_mm: 12.0 },
+        top: RebarRow {
+            count: 5,
+            diameter_mm: 10.0,
+        },
+        bottom: RebarRow {
+            count: 5,
+            diameter_mm: 12.0,
+        },
         ..ReinforcementCage::default()
     }
 }
@@ -45,7 +51,12 @@ fn punt(x_mm: f64, m_knm: f64) -> ForcePoint {
     ForcePoint {
         combination_id: 1,
         position_mm: x_mm,
-        forces: InternalForces { n_ed: 0.0, vz_ed: 0.0, my_ed: m_knm, ..Default::default() },
+        forces: InternalForces {
+            n_ed: 0.0,
+            vz_ed: 0.0,
+            my_ed: m_knm,
+            ..Default::default()
+        },
     }
 }
 
@@ -90,9 +101,18 @@ fn een_bestaand_projectbestand_geeft_exact_dezelfde_uitkomst() {
     // Dezelfde korf, maar nu met alle drie de zijden EXPLICIET op de dekking
     // van het element. Dat is hetzelfde bouwwerk, dus hetzelfde antwoord.
     let expliciet = ReinforcementCage {
-        cover_top: Some(FaceCover { cover_mm: Some(30.0), exposure_class: None }),
-        cover_bottom: Some(FaceCover { cover_mm: Some(30.0), exposure_class: None }),
-        cover_sides: Some(FaceCover { cover_mm: Some(30.0), exposure_class: None }),
+        cover_top: Some(FaceCover {
+            cover_mm: Some(30.0),
+            exposure_class: None,
+        }),
+        cover_bottom: Some(FaceCover {
+            cover_mm: Some(30.0),
+            exposure_class: None,
+        }),
+        cover_sides: Some(FaceCover {
+            cover_mm: Some(30.0),
+            exposure_class: None,
+        }),
         ..korf()
     };
     let nieuw = check_concrete_beam(invoer(expliciet));
@@ -105,9 +125,8 @@ fn een_bestaand_projectbestand_geeft_exact_dezelfde_uitkomst() {
     assert_eq!(oud.reinforcement_summary, nieuw.reinforcement_summary);
     // Elke afzonderlijke toets, niet alleen de maatgevende: één stille
     // verschuiving in een niet-maatgevende toets is net zo goed een verschil.
-    let json = |r: &concrete_check::ConcreteBeamCheckResult| {
-        serde_json::to_value(&r.checks).unwrap()
-    };
+    let json =
+        |r: &concrete_check::ConcreteBeamCheckResult| serde_json::to_value(&r.checks).unwrap();
     assert_eq!(json(&oud), json(&nieuw));
 
     // En de invoer zonder de nieuwe velden komt uit JSON precies zo terug.
@@ -135,7 +154,11 @@ fn boven_25_en_onder_40_geven_twee_nuttige_hoogtes() {
     // Geen beugel: de staafas ligt op c_nom + Ø/2 van de rand.
     // d  = 250 − (40 + 12/2) = 204 mm
     // d₂ =        25 + 10/2  =  30 mm
-    assert!((cage.d_mm(250.0) - 204.0).abs() < 1e-9, "{}", cage.d_mm(250.0));
+    assert!(
+        (cage.d_mm(250.0) - 204.0).abs() < 1e-9,
+        "{}",
+        cage.d_mm(250.0)
+    );
     assert!((cage.d2_mm() - 30.0).abs() < 1e-9, "{}", cage.d2_mm());
 
     // Met één dekking van 30 mm rondom zouden het 214 en 35 mm zijn geweest —
@@ -182,9 +205,16 @@ fn de_drie_dekkingsverzoeken_dragen_elk_hun_eigen_zijde() {
 
     let zijkant = &verzoeken[2];
     assert_eq!(zijkant.side, Some(CoverSide::Sides));
-    assert_eq!(zijkant.exposure_class, ExposureClass::XC3, "valt terug op het element");
+    assert_eq!(
+        zijkant.exposure_class,
+        ExposureClass::XC3,
+        "valt terug op het element"
+    );
     assert_eq!(zijkant.cover_mm, 30.0, "valt terug op het element");
-    assert_eq!(zijkant.max_bar_diameter_mm, 12.0, "de dikste van de twee rijen");
+    assert_eq!(
+        zijkant.max_bar_diameter_mm, 12.0,
+        "de dikste van de twee rijen"
+    );
 
     // En de norm rekent ze door: XC1/S4 → c_min,dur 15, c_nom 20 ≤ 25 → in
     // orde; XC4/S4 → c_min,dur 30, c_nom 35 ≤ 40 → in orde.
@@ -197,7 +227,10 @@ fn de_drie_dekkingsverzoeken_dragen_elk_hun_eigen_zijde() {
     // Zou de onderzijde de 25 mm van de bovenzijde krijgen, dan is hij te dun.
     let mut te_dun = onder.clone();
     te_dun.cover_mm = 25.0;
-    assert_eq!(concrete_cover_request(te_dun).unwrap().status, CheckStatus::NotOk);
+    assert_eq!(
+        concrete_cover_request(te_dun).unwrap().status,
+        CheckStatus::NotOk
+    );
 }
 
 /// Zonder milieuklasse — nergens — is er niets te toetsen, en wordt er ook

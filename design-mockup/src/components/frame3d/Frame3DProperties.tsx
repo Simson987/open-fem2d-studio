@@ -5,8 +5,10 @@ import Frame3DNodeConditions, { type Frame3DLoadEditorRequest, type Frame3DSprin
 import Frame3DMemberLoads from "./Frame3DMemberLoads";
 import Frame3DNonlinearLawEditor from "./Frame3DNonlinearLawEditor";
 import Frame3DPlateReinforcementEditor from "./Frame3DPlateReinforcementEditor";
+import Frame3DPlateThreeLayerEditor from "./Frame3DPlateThreeLayerEditor";
 import type { Frame3DSelection } from "./frame3dSelection";
-import { removeFrame3DSurfaceLoad, setFrame3DBeamNodes, updateFrame3DPlate, updateFrame3DSurfaceLoad, type Frame3DModel } from "./frame3dModel";
+import { addFrame3DPlateEdgeLoad, addFrame3DVolumeBodyLoad, addFrame3DVolumeFaceLoad, FRAME3D_VOLUME_BACKENDS, frame3DLoadCaseId, parseFrame3DModel, removeFrame3DPlateEdgeLoad, removeFrame3DSurfaceLoad, removeFrame3DVolumeBodyLoad, removeFrame3DVolumeFaceLoad, setFrame3DBeamNodes, updateFrame3DPlate, updateFrame3DPlateEdgeLoad, updateFrame3DSurfaceLoad, updateFrame3DVolume, updateFrame3DVolumeBodyLoad, updateFrame3DVolumeFaceLoad, type Frame3DModel, type Frame3DVolume, type Frame3DVolumeBackend, type Frame3DVolumeFaceLoad, type Frame3DVolumeMaterialLaw } from "./frame3dModel";
+import { frame3DVolumeFaces } from "./frame3dVolumeFaces";
 import type { Frame3DAnalysisKind, Frame3DSolveResult } from "./frame3dSolver";
 import {
   checkUc,
@@ -15,7 +17,7 @@ import {
   type Frame3DSteelChecks,
 } from "./frame3dSteelCheck";
 import { matchSupportedConcreteClass } from "../../lib/betonCheckBuilder";
-import { CONCRETE_E_CM, eVanMateriaal } from "../../lib/sectionResolver";
+import { CONCRETE_E_CM, TIMBER_E90_MEAN, TIMBER_G_MEAN, TIMBER_RHO_MEAN, eVanMateriaal } from "../../lib/sectionResolver";
 import type { Frame3DConcreteChecks } from "./frame3dConcreteCheck";
 import KolomVelden from "../beton/KolomVelden";
 import "../fem/FemProperties.css";
@@ -41,11 +43,24 @@ interface Props {
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="fem-prop-row"><span className="fem-prop-label">{label}</span><span className="fem-prop-value">{children}</span></div>;
+  return <div className="fem-prop-row"><span className="fem-prop-row-label">{label}</span><span className="fem-prop-row-value">{children}</span></div>;
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section className="fem-prop-section"><div className="fem-prop-section-title">{title}</div>{children}</section>;
+function Section({ title, children, badge, collapsible = false, defaultOpen = true }: {
+  title: string;
+  children: React.ReactNode;
+  badge?: string | number;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const heading = <>{title}{badge !== undefined && <span className="frame3d-volume-section-badge">{badge}</span>}</>;
+  if (collapsible) return <details className="fem-prop-section frame3d-volume-fold" open={open}
+    onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <summary className="fem-prop-section-header">{heading}<span className="frame3d-volume-fold-chevron" aria-hidden="true" /></summary>
+    <div className="fem-prop-section-body">{children}</div>
+  </details>;
+  return <section className="fem-prop-section"><div className="fem-prop-section-header">{heading}</div><div className="fem-prop-section-body">{children}</div></section>;
 }
 
 const value = (number: number, digits = 3) => Number.isFinite(number) ? number.toFixed(digits) : "—";
@@ -73,13 +88,52 @@ export default function Frame3DProperties({
   const plate = selection?.type === "plate"
     ? model.plates?.find((item) => item.id === selection.id)
     : surfaceLoad ? model.plates?.find((item) => item.id === surfaceLoad.plateId) : undefined;
+  const selectedVolumeId = selection?.type === "volume" ? selection.id : undefined;
+  const volume = useMemo(() => selectedVolumeId === undefined ? undefined
+    : model.volumes?.find((item) => item.id === selectedVolumeId), [model.volumes, selectedVolumeId]);
+  const volumeStats = useMemo(() => {
+    let tet4 = 0;
+    let hex8 = 0;
+    let position = 0;
+    model.volumes?.forEach((item, index) => {
+      if (item.kind === "tet4") tet4 += 1;
+      else hex8 += 1;
+      if (item.id === selectedVolumeId) position = index + 1;
+    });
+    return { total: (model.volumes ?? []).length, tet4, hex8, position };
+  }, [model.volumes, selectedVolumeId]);
+  const volumeBodyLoads = useMemo(() => selectedVolumeId === undefined ? []
+    : (model.volumeBodyLoads ?? []).filter((load) => load.volumeId === selectedVolumeId),
+  [model.volumeBodyLoads, selectedVolumeId]);
+  const volumeFaceLoads = useMemo(() => selectedVolumeId === undefined ? []
+    : (model.volumeFaceLoads ?? []).filter((load) => load.volumeId === selectedVolumeId),
+  [model.volumeFaceLoads, selectedVolumeId]);
   const plateResult = plate && result?.plateBending?.plateId === plate.id ? result.plateBending : undefined;
+  const membraneResult = plate ? result?.volume3D?.membranes?.find((item) => item.plateId === plate.id) : undefined;
+  const coupledBendingResult = plate ? result?.volume3D?.bendingPlates?.find((item) => item.plateId === plate.id) : undefined;
+  const volumeResult = useMemo(() => selectedVolumeId === undefined ? undefined
+    : result?.volume3D?.elements.find((item) => item.elementId === selectedVolumeId),
+  [result?.volume3D?.elements, selectedVolumeId]);
+  const volumeSummary = useMemo(() => {
+    if (!result?.volume3D) return null;
+    return {
+      maxDisplacementMm: result.displacements.reduce((maximum, item) =>
+        Math.max(maximum, Math.hypot(item.ux, item.uy, item.uz) * 1_000), 0),
+      maxVonMisesMpa: result.volume3D.elements.reduce((maximum, item) =>
+        Math.max(maximum, item.vonMisesMpa), 0),
+      backend: result.volume3D.backendUsed,
+    };
+  }, [result]);
   const [coordinates, setCoordinates] = useState({ x: "", y: "", z: "" });
   const [rollDegrees, setRollDegrees] = useState("0");
   const [loadPathText, setLoadPathText] = useState("");
   const [loadPathError, setLoadPathError] = useState("");
   const [plateCurveText, setPlateCurveText] = useState("");
   const [plateCurveError, setPlateCurveError] = useState("");
+  const [volumeError, setVolumeError] = useState("");
+  const [membraneError, setMembraneError] = useState("");
+  const [coordinateError, setCoordinateError] = useState("");
+  const [beamNodeError, setBeamNodeError] = useState("");
 
   useEffect(() => {
     setLoadPathText(model.materialLoadPath?.join(", ") ?? "");
@@ -93,10 +147,14 @@ export default function Frame3DProperties({
 
   useEffect(() => {
     if (node) setCoordinates({ x: String(node.x), y: String(node.y), z: String(node.z) });
+    setCoordinateError("");
   }, [node?.id, node?.x, node?.y, node?.z]);
   useEffect(() => {
     if (beam) setRollDegrees(String((beam.rollAngleRad ?? 0) * 180 / Math.PI));
   }, [beam?.id, beam?.rollAngleRad]);
+  useEffect(() => { setVolumeError(""); }, [volume?.id]);
+  useEffect(() => { setBeamNodeError(""); }, [beam?.id]);
+  useEffect(() => { setMembraneError(""); }, [plate?.id]);
   const selectionId = selection && selection.type !== "multi" ? selection.id : undefined;
   useEffect(() => { setTab("general"); }, [selection?.type, selectionId]);
   useEffect(() => {
@@ -139,28 +197,47 @@ export default function Frame3DProperties({
     </p></div></div>;
   }
 
-  if (!selection || (!node && !beam && !plate)) {
+  if (!selection || (!node && !beam && !plate && !volume)) {
     const applyLoadPath = () => {
       const pieces = loadPathText.trim().split(/[;,\s]+/);
       const factors = pieces.map(Number);
       if (!loadPathText.trim() || factors.length > 100 || factors.some((factor) => !Number.isFinite(factor))) {
-        setLoadPathError("Voer 1–100 eindige getallen in, gescheiden door komma's. Voorbeeld: 1, 0, 0.5");
+        setLoadPathError(t("frame3d.fnlLoadPathInvalid"));
         return;
       }
       setLoadPathError("");
       onChange({ ...model, materialLoadPath: factors });
     };
-    return <div className="fem-properties"><div className="fem-prop-body">
-      <p className="fem-prop-hint">{t("frame3d.selectForProperties", "Selecteer een 3D-knoop, staaf, plaat of belasting om de eigenschappen te bekijken.")}</p>
-      <Section title="FNL-lastpad · Rust 3D">
-        <p className="fem-prop-hint">Absolute lastfactoren voor belastingen en opgelegde verplaatsingen. Het resultaat hoort bij de laatste factor. Gebruik een punt als decimaalteken. Staven bewaren axiale geschiedenis; platen bewaren maximale vezelrek per element.</p>
-        <Row label="Factoren"><input className="fem-prop-input" type="text" aria-label="FNL-lastfactoren" placeholder="1, 0, 0.5"
+    return <div className={`fem-properties${volumeStats.total > 0 ? " frame3d-volume-properties" : ""}`}>
+      {volumeStats.total > 0 && <div className="frame3d-volume-overview" aria-label="Volumemodel overzicht">
+        <div className="frame3d-volume-overview-main">
+          <span className="frame3d-volume-overview-eyebrow">VOLUMEMODEL</span>
+          <strong>{volumeStats.total.toLocaleString("nl-NL")} elementen</strong>
+          <span className="frame3d-volume-overview-position">{model.nodes.length.toLocaleString("nl-NL")} knopen</span>
+        </div>
+        <div className="frame3d-volume-overview-types">
+          {volumeStats.tet4 > 0 && <span>Tet4 <strong>{volumeStats.tet4.toLocaleString("nl-NL")}</strong></span>}
+          {volumeStats.hex8 > 0 && <span>Hex8 <strong>{volumeStats.hex8.toLocaleString("nl-NL")}</strong></span>}
+        </div>
+      </div>}
+      <div className="fem-prop-body">
+      <p className="fem-prop-hint">Selecteer een 3D-knoop, staaf, plaat, volume-element of belasting om de eigenschappen te bekijken.</p>
+      {volumeStats.total > 0 && volumeSummary && <section className="frame3d-volume-model-result" aria-label="Berekeningssamenvatting">
+        <span className="frame3d-volume-overview-eyebrow">BEREKEND MODEL</span>
+        <div className="frame3d-volume-model-result-grid">
+          <div><span>Max. verplaatsing</span><strong>{value(volumeSummary.maxDisplacementMm, 3)} <small>mm</small></strong></div>
+          <div><span>Max. von Mises</span><strong>{value(volumeSummary.maxVonMisesMpa, 2)} <small>MPa</small></strong></div>
+        </div>
+        <span className="frame3d-volume-overview-position">Oplosser: {volumeSummary.backend}</span>
+      </section>}
+      {(analysis === "material" || analysis === "combined") && <Section title={t("frame3d.fnlLoadPathTitle")}>
+        <p className="fem-prop-hint">{t("frame3d.fnlLoadPathDescription")}</p>
+        <Row label={t("frame3d.fnlLoadPathFactors")}><input className="fem-prop-input" type="text" aria-label={t("frame3d.fnlLoadPathFactors")} placeholder="1, 0, 0.5"
           value={loadPathText} onChange={(event) => setLoadPathText(event.target.value)} /></Row>
-        <div className="fem-prop-kiezer-row"><button className="fem-prop-kiezer-btn" type="button" onClick={applyLoadPath}>Lastpad toepassen</button></div>
-        <div className="fem-prop-kiezer-row"><button className="fem-prop-kiezer-btn" type="button" onClick={() => { setLoadPathText(""); setLoadPathError(""); onChange({ ...model, materialLoadPath: undefined }); }}>Lastpad wissen</button></div>
+        <div className="fem-prop-kiezer-row"><button className="fem-prop-kiezer-btn" type="button" onClick={applyLoadPath}>{t("frame3d.fnlLoadPathApply")}</button></div>
+        <div className="fem-prop-kiezer-row"><button className="fem-prop-kiezer-btn" type="button" onClick={() => { setLoadPathText(""); setLoadPathError(""); onChange({ ...model, materialLoadPath: undefined }); }}>{t("frame3d.fnlLoadPathClear")}</button></div>
         {loadPathError && <p className="frame3d-check-not-ok" role="alert">{loadPathError}</p>}
-        {analysis !== "material" && <p className="fem-prop-hint">Kies FNL-analyse om dit lastpad te gebruiken.</p>}
-      </Section>
+      </Section>}
     </div></div>;
   }
 
@@ -174,12 +251,33 @@ export default function Frame3DProperties({
       const a = byId.get(item.startNodeId), b = byId.get(item.endNodeId);
       return a && b && a.x === b.x && a.y === b.y && a.z === b.z;
     })) return;
-    onChange({ ...model, nodes });
+    try {
+      const nextModel = { ...model, nodes };
+      if ((model.volumes ?? []).some((volume) => volume.nodeIds.includes(node.id))) parseFrame3DModel(nextModel);
+      onChange(nextModel);
+      setCoordinateError("");
+    } catch (error) {
+      setCoordinateError(error instanceof Error ? error.message : String(error));
+    }
   };
 
   const updateBeam = (patch: Partial<NonNullable<typeof beam>>) => {
     if (!beam) return;
     onChange({ ...model, beams: model.beams.map((item) => item.id === beam.id ? { ...item, ...patch } : item) });
+  };
+
+  const changeBeamNode = (end: "start" | "end", nodeId: number): boolean => {
+    if (!beam) return false;
+    try {
+      onChange(setFrame3DBeamNodes(model, beam.id,
+        end === "start" ? nodeId : beam.startNodeId,
+        end === "end" ? nodeId : beam.endNodeId));
+      setBeamNodeError("");
+      return true;
+    } catch (error) {
+      setBeamNodeError(error instanceof Error ? error.message : String(error));
+      return false;
+    }
   };
 
   const applyRoll = () => {
@@ -189,6 +287,44 @@ export default function Frame3DProperties({
       return;
     }
     updateBeam({ rollAngleRad: degrees * Math.PI / 180 });
+  };
+
+  const updateVolume = (patch: Partial<Omit<Frame3DVolume, "id">>): boolean => {
+    if (!volume) return false;
+    try {
+      onChange(updateFrame3DVolume(model, volume.id, patch));
+      setVolumeError("");
+      return true;
+    } catch (error) {
+      setVolumeError(error instanceof Error ? error.message : String(error));
+      return false;
+    }
+  };
+  const updateVolumeLawField = (field: string, raw: string): boolean => {
+    if (!volume?.materialLaw) return false;
+    return updateVolume({ materialLaw: { ...volume.materialLaw, [field]: Number(raw) } as Frame3DVolumeMaterialLaw });
+  };
+
+  const changeVolumeBodyLoad = (loadId: number, forceKnPerM3: [number, number, number]): boolean => {
+    try {
+      onChange(updateFrame3DVolumeBodyLoad(model, loadId, forceKnPerM3));
+      setVolumeError("");
+      return true;
+    } catch (error) {
+      setVolumeError(error instanceof Error ? error.message : String(error));
+      return false;
+    }
+  };
+
+  const changeVolumeFaceLoad = (loadId: number, patch: Pick<Frame3DVolumeFaceLoad, "faceIndex" | "tractionKnPerM2">): boolean => {
+    try {
+      onChange(updateFrame3DVolumeFaceLoad(model, loadId, patch));
+      setVolumeError("");
+      return true;
+    } catch (error) {
+      setVolumeError(error instanceof Error ? error.message : String(error));
+      return false;
+    }
   };
 
   const flipLocalAxes = () => {
@@ -218,14 +354,26 @@ export default function Frame3DProperties({
     : selection.type === "thermalLoad" ? `Temperatuurbelasting ${selection.id}`
     : selection.type === "surfaceLoad" ? `Oppervlaktebelasting ${selection.id}`
     : selection.type === "plate" ? `Plaat ${selection.id}`
+    : selection.type === "volume" ? `Volume-element ${selection.id}`
     : selection.type === "node" ? t("frame3d.editNode", { id: selection.id })
     : t("frame3d.editBeam", { id: selection.id });
 
-  return <div className="fem-properties" data-frame3d-properties={selection.id}>
+  return <div className={`fem-properties${volume ? " frame3d-volume-properties" : ""}${beam ? " frame3d-member-properties" : ""}`} data-frame3d-properties={selection.id}>
     <div className="fem-prop-selection">
       <span className="fem-prop-selection-label">{t("frame3d.selection", "Selectie")}</span>
       <span className="fem-prop-selection-value">{selectionLabel}</span>
     </div>
+    {volume && <div className="frame3d-volume-overview" aria-label="Volumemodel overzicht">
+      <div className="frame3d-volume-overview-main">
+        <span className="frame3d-volume-overview-eyebrow">VOLUMEMODEL</span>
+        <strong>{volumeStats.total.toLocaleString("nl-NL")} elementen</strong>
+        <span className="frame3d-volume-overview-position">Selectie {volumeStats.position.toLocaleString("nl-NL")} van {volumeStats.total.toLocaleString("nl-NL")}</span>
+      </div>
+      <div className="frame3d-volume-overview-types">
+        {volumeStats.tet4 > 0 && <span>Tet4 <strong>{volumeStats.tet4.toLocaleString("nl-NL")}</strong></span>}
+        {volumeStats.hex8 > 0 && <span>Hex8 <strong>{volumeStats.hex8.toLocaleString("nl-NL")}</strong></span>}
+      </div>
+    </div>}
     <div className="fem-prop-tabs">
       <button className={`fem-prop-tab${tab === "general" ? " active" : ""}`} onClick={() => setTab("general")}>{t("frame3d.general", "Algemeen")}</button>
       <button className={`fem-prop-tab${tab === "results" ? " active" : ""}`} onClick={() => setTab("results")}>{t("frame3d.results")}</button>
@@ -233,6 +381,246 @@ export default function Frame3DProperties({
     </div>
 
     <div className="fem-prop-body" key={`${selection.type}:${selection.id}:${tab}`}>
+      {tab === "general" && volume && <>
+        <Section title="Geometrie">
+          <div className="frame3d-volume-identity">
+            <span className="frame3d-volume-kind">{volume.kind === "tet4" ? "Tet4" : "Hex8"}</span>
+            <span>Element {volume.id}</span>
+            <small>{volume.nodeIds.length} knopen</small>
+          </div>
+          <div className="frame3d-volume-node-preview" aria-label="Knoopvolgorde">
+            {volume.nodeIds.map((nodeId, index) => <span key={index} title={`Knoop ${index + 1}: ${nodeId}`}>
+              <small>{index + 1}</small>K{nodeId}
+            </span>)}
+          </div>
+          <details className="frame3d-volume-node-editor">
+            <summary>Knoopvolgorde bewerken</summary>
+            <div className="frame3d-volume-node-grid">
+          {volume.nodeIds.map((nodeId, index) => <label key={index} className="frame3d-volume-node-field">
+            <span>Knoop {index + 1}</span>
+            {model.nodes.length > 500
+              ? <input key={`${volume.id}:${index}:${nodeId}`} className="fem-prop-input" type="number" min="1" step="1"
+                  aria-label={`Volume-element knoop ${index + 1}`} defaultValue={nodeId}
+                  onBlur={(event) => {
+                    const nextId = Number(event.currentTarget.value);
+                    if (nextId === nodeId) return;
+                    const valid = updateVolume({ nodeIds: volume.nodeIds.map((id, current) => current === index ? nextId : id) });
+                    if (!valid) event.currentTarget.value = String(nodeId);
+                  }}
+                  onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
+              : <select className="fem-prop-input" aria-label={`Volume-element knoop ${index + 1}`} value={nodeId}
+                  onChange={(event) => updateVolume({ nodeIds: volume.nodeIds.map((id, current) => current === index ? Number(event.target.value) : id) })}>
+                  {model.nodes.map((candidate) => <option key={candidate.id} value={candidate.id}>K{candidate.id} ({candidate.x}, {candidate.y}, {candidate.z})</option>)}
+                </select>}
+          </label>)}
+            </div>
+          </details>
+        </Section>
+        <Section title="Materiaal">
+          <Row label="E (MPa)"><input key={`e-${volume.id}-${volume.eMpa}`} className="fem-prop-input" type="number" min="0" step="any"
+            aria-label="Volume-element elasticiteitsmodulus" defaultValue={volume.eMpa}
+            onBlur={(event) => updateVolume({ eMpa: Number(event.target.value) })}
+            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></Row>
+          <Row label="Poisson ν"><input key={`nu-${volume.id}-${volume.poisson}`} className="fem-prop-input" type="number" min="0" max="0.499999" step="any"
+            aria-label="Volume-element Poissongetal" defaultValue={volume.poisson}
+            onBlur={(event) => updateVolume({ poisson: Number(event.target.value) })}
+            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></Row>
+          {volume.kind === "tet4" && <Row label="Rekafhankelijk β"><input
+            key={`beta-${volume.id}-${volume.energyBeta ?? 0}`} className="fem-prop-input"
+            type="number" step="any" aria-label="Tet4 rekafhankelijke beta"
+            defaultValue={volume.energyBeta ?? 0}
+            onBlur={(event) => {
+              const raw = event.currentTarget.value.trim();
+              if (!updateVolume({ energyBeta: raw === "" ? undefined : Number(raw) }))
+                event.currentTarget.value = String(volume.energyBeta ?? 0);
+            }}
+            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></Row>}
+          <Row label="Dichtheid (kg/m³)"><input key={`rho-${volume.id}-${volume.densityKgPerM3 ?? ""}`} className="fem-prop-input"
+            type="number" min="0" step="any" aria-label="Volume-element dichtheid" placeholder="Voor eigen gewicht"
+            defaultValue={volume.densityKgPerM3 ?? ""}
+            onBlur={(event) => {
+              const raw = event.currentTarget.value.trim();
+              if (!updateVolume({ densityKgPerM3: raw === "" ? undefined : Number(raw) })) {
+                event.currentTarget.value = String(volume.densityKgPerM3 ?? "");
+              }
+            }}
+            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></Row>
+          {volumeError && <p className="frame3d-check-not-ok" role="alert">{volumeError}</p>}
+          <details className="frame3d-volume-help"><summary>Over het materiaalmodel</summary>
+            <p>Lineair bij 1e orde. Tet4-GNL: W = W₀ + β·W₀²/(2E); β = 0 geeft St Venant–Kirchhoff. Negatieve β kan bij hoge rek een ongeldige tangent geven.</p>
+          </details>
+        </Section>
+        {volume.kind === "tet4" && <Section title="Materiaal-FNL · Tet4" collapsible defaultOpen={!!volume.materialLaw || analysis === "material" || analysis === "combined"}>
+          <Row label="Vervorming"><select className="fem-prop-input" aria-label="Tet4 materiaal-FNL-kinematica"
+            value={model.volumeMaterialKinematics ?? "smallStrain"} onChange={(event) => {
+              try {
+                onChange(parseFrame3DModel({ ...model, volumeMaterialKinematics: event.target.value }));
+                setVolumeError("");
+              } catch (error) { setVolumeError(error instanceof Error ? error.message : String(error)); }
+            }}>
+            <option value="smallStrain">Kleine rek</option>
+            <option value="finiteStrain">Eindige vervorming · staal-J2</option>
+          </select></Row>
+          <Row label="Materiaalwet"><select className="fem-prop-input" aria-label="Tet4 materiaal-FNL-wet"
+            value={volume.materialLaw?.kind ?? "elastic"} onChange={(event) => {
+              const kind = event.target.value;
+              updateVolume({ materialLaw: kind === "steelJ2"
+                ? { kind: "steelJ2", yieldMpa: 235, hardeningMpa: 1_000 }
+                : kind === "concreteTensionDamage"
+                  ? { kind: "concreteTensionDamage", tensileStrengthMpa: 3,
+                    fractureEnergyNPerM: 100, crackBandWidthM: 0.1 }
+                  : undefined });
+            }}>
+            <option value="elastic">Elastisch / GNL-β</option>
+            <option value="steelJ2">Staal · J2-plastificatie</option>
+            <option value="concreteTensionDamage">Beton · trekschade</option>
+          </select></Row>
+          {volume.materialLaw?.kind === "steelJ2" && ([
+            ["yieldMpa", "Vloeigrens (MPa)"], ["hardeningMpa", "Verharding H (MPa)"],
+          ] as const).map(([field, label]) => <Row key={field} label={label}><input
+            key={`${volume.id}:${field}:${volume.materialLaw?.kind === "steelJ2" ? volume.materialLaw[field] : ""}`}
+            className="fem-prop-input" type="number" min="0" step="any" aria-label={label}
+            defaultValue={volume.materialLaw?.kind === "steelJ2" ? volume.materialLaw[field] : 0}
+            onBlur={(event) => { if (!updateVolumeLawField(field, event.currentTarget.value))
+              event.currentTarget.value = String(volume.materialLaw?.kind === "steelJ2" ? volume.materialLaw[field] : 0); }}
+            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></Row>)}
+          {volume.materialLaw?.kind === "concreteTensionDamage" && ([
+            ["tensileStrengthMpa", "Treksterkte (MPa)"],
+            ["fractureEnergyNPerM", "Breukenergie (N/m)"],
+            ["crackBandWidthM", "Scheurband h (m)"],
+          ] as const).map(([field, label]) => <Row key={field} label={label}><input
+            key={`${volume.id}:${field}:${volume.materialLaw?.kind === "concreteTensionDamage" ? volume.materialLaw[field] : ""}`}
+            className="fem-prop-input" type="number" min="0" step="any" aria-label={label}
+            defaultValue={volume.materialLaw?.kind === "concreteTensionDamage" ? volume.materialLaw[field] : 0}
+            onBlur={(event) => { if (!updateVolumeLawField(field, event.currentTarget.value))
+              event.currentTarget.value = String(volume.materialLaw?.kind === "concreteTensionDamage" ? volume.materialLaw[field] : 0); }}
+            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></Row>)}
+          {volume.materialLaw && model.volumes?.every((item) => item.kind === "tet4") && <div className="fem-prop-kiezer-row">
+            <button className="fem-prop-kiezer-btn" type="button" onClick={() => {
+              try {
+                onChange(parseFrame3DModel({ ...model, volumes: model.volumes?.map((item) => ({ ...item,
+                  energyBeta: undefined, materialLaw: volume.materialLaw })) }));
+                setVolumeError("");
+              } catch (error) { setVolumeError(error instanceof Error ? error.message : String(error)); }
+            }}>Deze wet op alle Tet4 toepassen</button>
+          </div>}
+          <details className="frame3d-volume-help"><summary>Geldigheid van deze materiaalroute</summary>
+            <p>Alle Tet4-elementen in één FNL-berekening moeten dezelfde wetfamilie hebben. Eindige vervorming is voorlopig alleen beschikbaar voor J2-staal; de lasten zijn vast in de referentieconfiguratie. Voor beton is de scheurbandbreedte expliciete invoer; algemene 3D-meshobjectiviteit en constructieve toetsing zijn niet gevalideerd.</p>
+          </details>
+          {analysis !== "material" && <p className="fem-prop-hint">Kies onderaan Materiaal-FNL (Tet4) om deze wet te gebruiken.</p>}
+        </Section>}
+        <Section title="Volumekrachten" badge={volumeBodyLoads.length} collapsible>
+          <details className="frame3d-volume-help"><summary>Eenheden en verdeling</summary>
+            <p>Uniforme kracht per m³ in globale X, Y en Z. De Rust-kern verdeelt deze consistent over de elementknopen.</p>
+          </details>
+          {volumeBodyLoads.map((load) => <div key={load.id} className="frame3d-volume-load-card">
+            <Row label={`Last ${load.id} · geval ${frame3DLoadCaseId(load)}`}><button className="fem-prop-kiezer-btn" type="button"
+              onClick={() => onChange(removeFrame3DVolumeBodyLoad(model, load.id))}>Verwijderen</button></Row>
+            {(["X", "Y", "Z"] as const).map((axis, index) => <Row key={axis} label={`${axis} (kN/m³)`}>
+              <input key={`${load.id}:${index}:${load.forceKnPerM3[index]}`} className="fem-prop-input" type="number" step="any"
+                aria-label={`Volumekracht ${load.id} ${axis}`} defaultValue={load.forceKnPerM3[index]}
+                onBlur={(event) => {
+                  const next = Number(event.currentTarget.value);
+                  if (next === load.forceKnPerM3[index]) return;
+                  const values = load.forceKnPerM3.map((component, current) => current === index ? next : component) as [number, number, number];
+                  if (!changeVolumeBodyLoad(load.id, values)) event.currentTarget.value = String(load.forceKnPerM3[index]);
+                }}
+                onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
+            </Row>)}
+          </div>)}
+          <div className="fem-prop-kiezer-row"><button className="fem-prop-kiezer-btn" type="button" onClick={() => {
+            try {
+              onChange(addFrame3DVolumeBodyLoad(model, volume.id, [0, 0, -1], activeLoadCaseId));
+              setVolumeError("");
+            } catch (error) { setVolumeError(error instanceof Error ? error.message : String(error)); }
+          }}>Volumekracht toevoegen aan actief geval</button></div>
+        </Section>
+        <Section title="Volumevlaktracties" badge={volumeFaceLoads.length} collapsible>
+          <details className="frame3d-volume-help"><summary>Eenheden en vlakvolgorde</summary>
+            <p>Uniforme tractie in globale X, Y en Z (kN/m²) op één elementvlak. Het vlaknummer volgt de getoonde knoopvolgorde.</p>
+          </details>
+          {volumeFaceLoads.map((load) => <div key={load.id} className="frame3d-volume-load-card">
+            <Row label={`Last ${load.id} · geval ${frame3DLoadCaseId(load)}`}><button className="fem-prop-kiezer-btn" type="button"
+              onClick={() => onChange(removeFrame3DVolumeFaceLoad(model, load.id))}>Verwijderen</button></Row>
+            <Row label="Vlak"><select className="fem-prop-input" aria-label={`Volumevlaktractie ${load.id} vlak`}
+              value={load.faceIndex} onChange={(event) => changeVolumeFaceLoad(load.id,
+                { faceIndex: Number(event.target.value), tractionKnPerM2: load.tractionKnPerM2 })}>
+              {frame3DVolumeFaces(volume.kind).map((face, index) => <option key={index} value={index}>
+                {index + 1}: {face.map((local) => `K${volume.nodeIds[local]}`).join("–")}
+              </option>)}
+            </select></Row>
+            {(["X", "Y", "Z"] as const).map((axis, index) => <Row key={axis} label={`${axis} (kN/m²)`}>
+              <input key={`${load.id}:${index}:${load.tractionKnPerM2[index]}`} className="fem-prop-input" type="number" step="any"
+                aria-label={`Volumevlaktractie ${load.id} ${axis}`} defaultValue={load.tractionKnPerM2[index]}
+                onBlur={(event) => {
+                  const next = Number(event.currentTarget.value);
+                  if (next === load.tractionKnPerM2[index]) return;
+                  const values = load.tractionKnPerM2.map((component, current) => current === index ? next : component) as [number, number, number];
+                  if (!changeVolumeFaceLoad(load.id, { faceIndex: load.faceIndex, tractionKnPerM2: values })) {
+                    event.currentTarget.value = String(load.tractionKnPerM2[index]);
+                  }
+                }}
+                onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
+            </Row>)}
+          </div>)}
+          <div className="fem-prop-kiezer-row"><button className="fem-prop-kiezer-btn" type="button" onClick={() => {
+            try {
+              onChange(addFrame3DVolumeFaceLoad(model, volume.id, 0, [0, 0, -1], activeLoadCaseId));
+              setVolumeError("");
+            } catch (error) { setVolumeError(error instanceof Error ? error.message : String(error)); }
+          }}>Vlaktractie toevoegen aan actief geval</button></div>
+        </Section>
+        <Section title="Volume- en raamwerkoplosser" collapsible defaultOpen={false}>
+          <details className="frame3d-volume-help"><summary>Wanneer gebruik je welke methode?</summary>
+            <p>Lineair: gedeeld Tet4/Hex8/staafmodel, met matrixvrije of directe oplosser. Tet4-GNL gebruikt een Newton-tangent. Bij eindige J2-staalvervorming zijn ook Sparse, Frontaal en Matrixvrij GMRES beschikbaar. Threads gelden voor matrixvrije PCG en GMRES.</p>
+          </details>
+          <Row label="Strategie"><select className="fem-prop-input" aria-label="Volume-oplosstrategie"
+            value={model.volumeBackend ?? "automatic"}
+            onChange={(event) => {
+              try {
+                onChange(parseFrame3DModel({ ...model, volumeBackend: event.target.value as Frame3DVolumeBackend }));
+                setVolumeError("");
+              } catch (error) { setVolumeError(error instanceof Error ? error.message : String(error)); }
+            }}>
+            {FRAME3D_VOLUME_BACKENDS.map((backend) => <option key={backend} value={backend}>{({
+              automatic: "Automatisch", matrixFreePcg: "Matrixvrij PCG", sparsePcg: "Sparse PCG",
+              sparseDirect: "Sparse direct", frontalWave: "Frontale wavefront", dense: "Dicht (referentie)",
+              sparseGmres: "Sparse GMRES · materiaal-FNL",
+              matrixFreeGmres: "Matrixvrij GMRES · eindige J2",
+              matrixFreeGmresLarge: "Matrixvrij GMRES groot · eindige J2",
+            } as Record<Frame3DVolumeBackend, string>)[backend]}</option>)}
+          </select></Row>
+          <Row label="Threads"><input key={`volume-threads-${model.volumeThreads ?? 4}`} className="fem-prop-input"
+            type="number" min="1" max="32" step="1" aria-label="Volume-solverthreads"
+            defaultValue={model.volumeThreads ?? 4}
+            onBlur={(event) => {
+              try {
+                onChange(parseFrame3DModel({ ...model, volumeThreads: Number(event.currentTarget.value) }));
+                setVolumeError("");
+              } catch (error) {
+                setVolumeError(error instanceof Error ? error.message : String(error));
+                event.currentTarget.value = String(model.volumeThreads ?? 4);
+              }
+            }}
+            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></Row>
+          <Row label="Newton-residu"><input
+            key={`volume-residual-${model.volumeResidualTolerance ?? 1e-9}`}
+            className="fem-prop-input" type="number" min="1e-12" max="1e-4" step="any"
+            aria-label="Volume-FNL Newton-tolerantie"
+            defaultValue={model.volumeResidualTolerance ?? 1e-9}
+            onBlur={(event) => {
+              try {
+                onChange(parseFrame3DModel({ ...model,
+                  volumeResidualTolerance: Number(event.currentTarget.value) }));
+                setVolumeError("");
+              } catch (error) {
+                setVolumeError(error instanceof Error ? error.message : String(error));
+                event.currentTarget.value = String(model.volumeResidualTolerance ?? 1e-9);
+              }
+            }}
+            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></Row>
+        </Section>
+      </>}
       {tab === "general" && node && <>
         <Section title={t("frame3d.geometry", "Geometrie")}>
           <Row label="ID"><code>{node.id}</code></Row>
@@ -242,6 +630,7 @@ export default function Frame3DProperties({
               onBlur={applyCoordinates}
               onKeyDown={(event) => { if (event.key === "Enter") { applyCoordinates(); event.currentTarget.blur(); } }} />
           </Row>)}
+          {coordinateError && <p className="frame3d-check-not-ok" role="alert">{coordinateError}</p>}
         </Section>
         <Frame3DNodeConditions model={model} nodeId={node.id} onChange={onChange}
           loadEditorRequest={loadEditorRequest} springEditorRequest={springEditorRequest}
@@ -252,24 +641,62 @@ export default function Frame3DProperties({
       {tab === "general" && beam && <>
         <Section title={t("frame3d.geometry", "Geometrie")}>
           <Row label="ID"><code>{beam.id}</code></Row>
-          <Row label={t("frame3d.startNode")}><select className="fem-prop-input" value={beam.startNodeId}
-            onChange={(event) => onChange(setFrame3DBeamNodes(model, beam.id, Number(event.target.value), beam.endNodeId))}>
-            {model.nodes.map((candidate) => <option key={candidate.id} value={candidate.id}
-              disabled={candidate.id === beam.endNodeId || (
-                candidate.x === beamGeometry?.end.x && candidate.y === beamGeometry?.end.y && candidate.z === beamGeometry?.end.z
-              )}>K{candidate.id} ({candidate.x}, {candidate.y}, {candidate.z})</option>)}
-          </select></Row>
-          <Row label={t("frame3d.endNode")}><select className="fem-prop-input" value={beam.endNodeId}
-            onChange={(event) => onChange(setFrame3DBeamNodes(model, beam.id, beam.startNodeId, Number(event.target.value)))}>
-            {model.nodes.map((candidate) => <option key={candidate.id} value={candidate.id}
-              disabled={candidate.id === beam.startNodeId || (
-                candidate.x === beamGeometry?.start.x && candidate.y === beamGeometry?.start.y && candidate.z === beamGeometry?.start.z
-              )}>K{candidate.id} ({candidate.x}, {candidate.y}, {candidate.z})</option>)}
-          </select></Row>
+          {(model.volumes?.length ?? 0) > 0 && <div className="frame3d-member-kind">
+            <label htmlFor={`frame3d-member-kind-${beam.id}`}>Staafwerking</label>
+            <select id={`frame3d-member-kind-${beam.id}`} className="fem-prop-input"
+            aria-label="3D-staafwerking" value={beam.axialOnly ? "axial" : "frame"}
+            onChange={(event) => updateBeam(event.target.value === "axial"
+              ? { axialOnly: true, releases: undefined, nonlinearLaw: undefined }
+              : { axialOnly: undefined })}>
+            <option value="frame">Raamwerk · buiging en normaalkracht</option>
+            <option value="axial" disabled={(model.memberLoads ?? []).some((load) => load.beamId === beam.id)
+              || (model.memberPointLoads ?? []).some((load) => load.beamId === beam.id)
+              || (model.thermalLoads ?? []).some((load) => load.beamId === beam.id)
+              || (model.loads ?? []).some((load) => (load.nodeId === beam.startNodeId || load.nodeId === beam.endNodeId)
+                && [load.mx, load.my, load.mz].some((moment) => moment !== 0))}>
+              Trekstaaf · alleen normaalkracht</option>
+          </select></div>}
+          {beam.axialOnly && <details className="frame3d-volume-help"><summary>Wat berekent een trekstaaf?</summary>
+            <p>Alleen translatievrijheidsgraden en normaalkracht. Staalplastificatie is beschikbaar met eindige-rek J2-Tet4/Hex8-volumes; staaflasten, torsie en buiging blijven uitgesloten.</p>
+          </details>}
+          <Row label={t("frame3d.startNode")}>{model.nodes.length > 500
+            ? <input key={`start-${beam.id}-${beam.startNodeId}`} className="fem-prop-input" type="number" min="1" step="1"
+                aria-label="Beginknoop ID" defaultValue={beam.startNodeId}
+                onBlur={(event) => { if (!changeBeamNode("start", Number(event.currentTarget.value))) event.currentTarget.value = String(beam.startNodeId); }}
+                onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
+            : <select className="fem-prop-input" value={beam.startNodeId}
+                onChange={(event) => changeBeamNode("start", Number(event.target.value))}>
+                {model.nodes.map((candidate) => <option key={candidate.id} value={candidate.id}
+                  disabled={candidate.id === beam.endNodeId || (
+                    candidate.x === beamGeometry?.end.x && candidate.y === beamGeometry?.end.y && candidate.z === beamGeometry?.end.z
+                  )}>K{candidate.id} ({candidate.x}, {candidate.y}, {candidate.z})</option>)}
+              </select>}</Row>
+          <Row label={t("frame3d.endNode")}>{model.nodes.length > 500
+            ? <input key={`end-${beam.id}-${beam.endNodeId}`} className="fem-prop-input" type="number" min="1" step="1"
+                aria-label="Eindknoop ID" defaultValue={beam.endNodeId}
+                onBlur={(event) => { if (!changeBeamNode("end", Number(event.currentTarget.value))) event.currentTarget.value = String(beam.endNodeId); }}
+                onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
+            : <select className="fem-prop-input" value={beam.endNodeId}
+                onChange={(event) => changeBeamNode("end", Number(event.target.value))}>
+                {model.nodes.map((candidate) => <option key={candidate.id} value={candidate.id}
+                  disabled={candidate.id === beam.startNodeId || (
+                    candidate.x === beamGeometry?.start.x && candidate.y === beamGeometry?.start.y && candidate.z === beamGeometry?.start.z
+                  )}>K{candidate.id} ({candidate.x}, {candidate.y}, {candidate.z})</option>)}
+              </select>}</Row>
+          {beamNodeError && <p className="frame3d-check-not-ok" role="alert">{beamNodeError}</p>}
           <Row label={t("frame3d.length", "Lengte")}><code>{value(beamGeometry?.length ?? 0)} m</code></Row>
         </Section>
         <Section title={t("frame3d.crossSection", "Profiel en materiaal")}>
-          <Row label={t("frame3d.profile")}><code>{beam.profileName || "—"} — {beam.material || "—"}</code></Row>
+          <div className="frame3d-beam-material">
+            <div><span>{t("frame3d.profile")}</span><strong>{beam.profileName || "—"}</strong></div>
+            <div><span>Materiaal</span><strong>{beam.material || "—"}</strong></div>
+            {beam.material && beam.material in TIMBER_G_MEAN && <>
+              <div><span>E₀,mean</span><strong>{eVanMateriaal(beam.material).E.toLocaleString("nl-NL")} N/mm²</strong></div>
+              <div><span>E₉₀,mean</span><strong>{TIMBER_E90_MEAN[beam.material].toLocaleString("nl-NL")} N/mm²</strong></div>
+              <div><span>Gmean</span><strong>{TIMBER_G_MEAN[beam.material].toLocaleString("nl-NL")} N/mm²</strong></div>
+              <div><span>ρmean</span><strong>{TIMBER_RHO_MEAN[beam.material].toLocaleString("nl-NL")} kg/m³</strong></div>
+            </>}
+          </div>
           <div className="fem-prop-kiezer-row"><button className="fem-prop-kiezer-btn" onClick={() => setProfileOpen(true)}>{t("frame3d.chooseProfile", "Profiel kiezen…")}</button></div>
           {profileOpen && <ProfielKiezer
             open
@@ -299,11 +726,14 @@ export default function Frame3DProperties({
               setProfileOpen(false);
             }}
           />}
-          <Frame3DNonlinearLawEditor key={beam.id} law={beam.nonlinearLaw}
+          {(!beam.axialOnly || (model.volumes?.length ?? 0) > 0) && <Frame3DNonlinearLawEditor key={beam.id} law={beam.nonlinearLaw}
+            steelOnly={beam.axialOnly} hint={beam.axialOnly
+              ? "Alleen bij eindige-rek J2-Tet4 materiaal-FNL. De verhouding voor na vloeien moet kleiner dan 1 zijn."
+              : undefined}
             onApply={(law) => onChange({ ...model, beams: model.beams.map((item) => item.id === beam.id
-              ? { ...item, nonlinearLaw: law } : item) })} />
+              ? { ...item, nonlinearLaw: law } : item) })} />}
         </Section>
-        <Section title={t("frame3d.localAxesAndReleases", "Lokale assen en eindscharnieren")}>
+        {!beam.axialOnly && <Section title={t("frame3d.localAxesAndReleases", "Lokale assen en eindscharnieren")}>
           <Row label={t("frame3d.rollAngle", "Profielrotatie")}>
             <span className="frame3d-roll-input"><input className="fem-prop-input" type="number" step="any"
               value={rollDegrees} onChange={(event) => setRollDegrees(event.target.value)}
@@ -331,14 +761,14 @@ export default function Frame3DProperties({
               <span>{label}</span>
             </label>)}
           </div>
-        </Section>
-        <Frame3DMemberLoads model={model} beamId={beam.id} lengthM={beamGeometry?.length ?? 0}
+        </Section>}
+        {!beam.axialOnly && <Frame3DMemberLoads model={model} beamId={beam.id} lengthM={beamGeometry?.length ?? 0}
           onChange={onChange} editorRequest={memberLoadEditorRequest} pointEditorRequest={memberPointLoadEditorRequest}
           thermalEditorRequest={thermalLoadEditorRequest}
           selectedLoad={selection.type === "memberLoad" || selection.type === "memberPointLoad" || selection.type === "thermalLoad"
             ? { kind: selection.type, id: selection.id }
             : undefined}
-          activeLoadCaseId={activeLoadCaseId} />
+          activeLoadCaseId={activeLoadCaseId} />}
       </>}
 
       {tab === "general" && plate && <>
@@ -352,14 +782,50 @@ export default function Frame3DProperties({
           <Row label="Dikte (m)"><input className="fem-prop-input" type="number" min="0.001" step="0.01"
             defaultValue={plate.thicknessM} key={`thickness-${plate.id}-${plate.thicknessM}`}
             onBlur={(event) => { const next = Number(event.currentTarget.value); if (next > 0) onChange(updateFrame3DPlate(model, plate.id, { thicknessM: next })); }} /></Row>
-          <Row label="Randstraal (m)"><input className="fem-prop-input" type="number" min="0" step="0.01"
+          {!plate.membraneOnly && <Row label="Randstraal (m)"><input className="fem-prop-input" type="number" min="0" step="0.01"
             defaultValue={plate.cornerRadiusM ?? 0} key={`radius-${plate.id}-${plate.cornerRadiusM ?? 0}`}
-            onBlur={(event) => { const next = Number(event.currentTarget.value); if (next >= 0) onChange(updateFrame3DPlate(model, plate.id, { cornerRadiusM: next })); }} /></Row>
+            onBlur={(event) => { const next = Number(event.currentTarget.value); if (next >= 0) onChange(updateFrame3DPlate(model, plate.id, { cornerRadiusM: next })); }} /></Row>}
           <Row label="Materiaal"><input className="fem-prop-input" defaultValue={plate.material ?? "C30/37"}
             key={`material-${plate.id}-${plate.material}`}
             onBlur={(event) => onChange(updateFrame3DPlate(model, plate.id, { material: event.currentTarget.value.trim() || "C30/37" }))} /></Row>
           <Row label="Openingen"><code>{plate.openings?.length ?? 0}</code></Row>
         </Section>
+        {plate.nodeIds.length === 3 && <Section title="Gekoppeld Tri3-membraan">
+          <p className="fem-prop-hint">Vlakspanning in het plaatvlak, elastisch of met bilineaire staalwet bij eindige-rek J2-analyse. Bij gedeelde knopen draagt dit element samen met Tet4 de drie translaties; het draagt geen buiging.</p>
+          <Row label="Membraan"><input type="checkbox" aria-label="Tri3-membraan koppelen aan volumes"
+            checked={plate.membraneOnly === true} onChange={(event) => {
+              try {
+                const enabled = event.currentTarget.checked;
+                const eMpa = eVanMateriaal(plate.material ?? "C30/37").E;
+                onChange(updateFrame3DPlate(model, plate.id, enabled
+                  ? { membraneOnly: true, membraneEMpa: eMpa,
+                    membranePoisson: plate.material?.startsWith("C") ? 0.2 : 0.3 }
+                  : { membraneOnly: undefined, membraneEMpa: undefined, membranePoisson: undefined }));
+                setMembraneError("");
+              } catch (error) { setMembraneError(error instanceof Error ? error.message : String(error)); }
+            }} /></Row>
+          {plate.membraneOnly && <>
+            <Row label="E (MPa)"><input className="fem-prop-input" type="number" min="0" step="any"
+              aria-label="Tri3-membraan elasticiteitsmodulus" key={`mem-e-${plate.id}-${plate.membraneEMpa}`}
+              defaultValue={plate.membraneEMpa} onBlur={(event) => {
+                try { onChange(updateFrame3DPlate(model, plate.id, { membraneEMpa: Number(event.currentTarget.value) })); setMembraneError(""); }
+                catch (error) { setMembraneError(error instanceof Error ? error.message : String(error)); event.currentTarget.value = String(plate.membraneEMpa); }
+              }} /></Row>
+            <Row label="Poisson ν"><input className="fem-prop-input" type="number" min="0" max="0.499999" step="any"
+              aria-label="Tri3-membraan Poissongetal" key={`mem-nu-${plate.id}-${plate.membranePoisson}`}
+              defaultValue={plate.membranePoisson} onBlur={(event) => {
+                try { onChange(updateFrame3DPlate(model, plate.id, { membranePoisson: Number(event.currentTarget.value) })); setMembraneError(""); }
+                catch (error) { setMembraneError(error instanceof Error ? error.message : String(error)); event.currentTarget.value = String(plate.membranePoisson); }
+              }} /></Row>
+            <Frame3DNonlinearLawEditor law={plate.nonlinearLaw} steelOnly
+              hint="Bilineaire staalwet bij eindige-rek J2-analyse met Tet4/Hex8-volumes. Zonder wet blijft het membraan elastisch."
+              onApply={(nonlinearLaw) => {
+                try { onChange(updateFrame3DPlate(model, plate.id, { nonlinearLaw })); setMembraneError(""); }
+                catch (error) { setMembraneError(error instanceof Error ? error.message : String(error)); }
+              }} />
+          </>}
+          {membraneError && <p className="frame3d-check-not-ok" role="alert">{membraneError}</p>}
+        </Section>}
         {plate.nodeIds.length === 4 && <Section title="Plaat­randen · Rust Q4">
           <p className="fem-prop-hint">Voor de rechthoekige Rust-plaatroute: rand 1–4 volgt de contourknopen. Scharnierend zet de zakking op nul; ingeklemd zet ook beide plaatrotaties vast. De oplegging geldt voor alle roosterknopen langs die rand.</p>
           <Row label="Max. celmaat (m)"><input className="fem-prop-input" type="number" min="0.001" step="0.05"
@@ -377,32 +843,42 @@ export default function Frame3DProperties({
               <option value="free">Vrij</option><option value="simplySupported">Scharnierend</option><option value="clamped">Ingeklemd</option>
             </select></Row>)}
         </Section>}
-        <Section title="FNL-plaat · secant-E(rek)">
-          <p className="fem-prop-hint">Geef 2–100 punten als rek:E(MPa), gescheiden door puntkomma's. Begin bij 0 met de E van het materiaal
-            {Number.isFinite(eVanMateriaal(plate.material ?? "").E) ? ` (${eVanMateriaal(plate.material ?? "").E} MPa)` : ""}; rek moet stijgen en E mag niet stijgen. Deze omhulling bewaart de grootste vezelrek en modelleert geen plastische doorsnede of expliciete scheurwet.</p>
-          <Row label="E-rekcurve"><textarea className="fem-prop-input" aria-label="FNL E-rekcurve plaat" rows={3}
-            placeholder="0:33000; 0.0001:20000; 0.0005:5000"
+        {!plate.membraneOnly && <Section title={t("frame3d.fnlPlateCurveTitle")}>
+          <p className="fem-prop-hint">{t("frame3d.fnlPlateCurveDescription", {
+            materialE: Number.isFinite(eVanMateriaal(plate.material ?? "").E) ? eVanMateriaal(plate.material ?? "").E : "—",
+          })}</p>
+          <Row label={t("frame3d.fnlPlateCurveLabel")}><textarea className="fem-prop-input" aria-label={t("frame3d.fnlPlateCurveLabel")} rows={3}
+            placeholder={t("frame3d.fnlPlateCurvePlaceholder")}
             value={plateCurveText} onChange={(event) => setPlateCurveText(event.target.value)} /></Row>
           <div className="fem-prop-kiezer-row"><button className="fem-prop-kiezer-btn" type="button" onClick={() => {
             try {
               const points = plateCurveText.trim().split(/[;\n]+/).map((piece) => {
                 const parts = piece.trim().split(":");
-                if (parts.length !== 2 || !parts[0].trim() || !parts[1].trim()) throw new Error("Gebruik per punt rek:E, bijvoorbeeld 0.0001:20000.");
+                if (parts.length !== 2 || !parts[0].trim() || !parts[1].trim()) throw new Error(t("frame3d.fnlPlateCurveInvalid"));
                 return { strain: Number(parts[0].trim()), eMpa: Number(parts[1].trim()) };
               });
               onChange(updateFrame3DPlate(model, plate.id, { modulusCurve: points }));
               setPlateCurveError("");
             } catch (error) { setPlateCurveError(error instanceof Error ? error.message : String(error)); }
-          }}>E-rekcurve toepassen</button>
+          }}>{t("frame3d.fnlPlateCurveApply")}</button>
             <button className="fem-prop-kiezer-btn" type="button" onClick={() => {
               onChange(updateFrame3DPlate(model, plate.id, { modulusCurve: undefined }));
               setPlateCurveText(""); setPlateCurveError("");
-            }}>Wissen</button></div>
+            }}>{t("frame3d.fnlPlateCurveClear")}</button></div>
           {plateCurveError && <p className="frame3d-check-not-ok" role="alert">{plateCurveError}</p>}
-          {analysis !== "material" && <p className="fem-prop-hint">Kies FNL-analyse om de E-rekcurve te gebruiken.</p>}
-        </Section>
-        {plate.material && plate.material in CONCRETE_E_CM
+        {analysis !== "material" && analysis !== "combined" && <p className="fem-prop-hint">{t("frame3d.fnlPlateCurveChooseAnalysis")}</p>}
+        </Section>}
+        {!plate.membraneOnly && <Section title={t("props.frame3dNonlinear.shellTitle")}>
+          <p className="fem-prop-hint">{t("props.frame3dNonlinear.shellDescription")}</p>
+          <Frame3DNonlinearLawEditor law={plate.nonlinearLaw}
+            hint={t("props.frame3dNonlinear.shellHint")}
+            onApply={(nonlinearLaw) => onChange(updateFrame3DPlate(model, plate.id, { nonlinearLaw }))} />
+          {analysis !== "p-delta" && <p className="fem-prop-hint">{t("props.frame3dNonlinear.shellAnalysisHint")}</p>}
+        </Section>}
+        {!plate.membraneOnly && plate.material && plate.material in CONCRETE_E_CM
           && <Frame3DPlateReinforcementEditor model={model} plate={plate} onChange={onChange} />}
+        {!plate.membraneOnly && plate.material && plate.material in CONCRETE_E_CM
+          && <Frame3DPlateThreeLayerEditor model={model} plate={plate} onChange={onChange} />}
         <Section title="Oppervlaktebelastingen">
           {(model.surfaceLoads ?? []).filter((load) => load.plateId === plate.id).length === 0 && <p className="fem-prop-hint">Selecteer de plaat en kies Oppervlaktelast in het lint.</p>}
           {surfaceLoad && <>
@@ -417,10 +893,99 @@ export default function Frame3DProperties({
             <button className="frame3d-delete" type="button" onClick={() => onChange(removeFrame3DSurfaceLoad(model, surfaceLoad.id))}>Oppervlaktebelasting verwijderen</button>
           </>}
         </Section>
+        {!plate.membraneOnly && <Section title="Randlijnlasten · normaal op plaat">
+          <p className="fem-prop-hint">Perimeterzijde 1–4 volgens de knoopvolgorde van de plaat. Intensiteiten in kN/m, positief in de plaatnormaal.</p>
+          {(model.plateEdgeLoads ?? []).filter((load) => load.plateId === plate.id).map((edgeLoad) => <div key={edgeLoad.id} className="fem-prop-edge-load">
+            <Row label={`Randlast ${edgeLoad.id}`}><select className="fem-prop-input" aria-label={`Plaat ${plate.id} randlast ${edgeLoad.id} zijde`}
+              value={edgeLoad.edgeIndex} onChange={(event) => onChange(updateFrame3DPlateEdgeLoad(model, edgeLoad.id, { edgeIndex: Number(event.currentTarget.value), startKnPerM: edgeLoad.startKnPerM, endKnPerM: edgeLoad.endKnPerM }))}>
+              {[0, 1, 2, 3].map((edge) => <option key={edge} value={edge}>{edge + 1}</option>)}
+            </select></Row>
+            {(["startKnPerM", "endKnPerM"] as const).map((key) => <Row key={key} label={`${key === "startKnPerM" ? "Begin" : "Eind"} (kN/m)`}>
+              <input className="fem-prop-input" type="number" step="any" defaultValue={edgeLoad[key]} key={`${edgeLoad.id}-${key}-${edgeLoad[key]}`}
+                onBlur={(event) => { const next = Number(event.currentTarget.value); if (Number.isFinite(next)) onChange(updateFrame3DPlateEdgeLoad(model, edgeLoad.id, { edgeIndex: edgeLoad.edgeIndex, startKnPerM: key === "startKnPerM" ? next : edgeLoad.startKnPerM, endKnPerM: key === "endKnPerM" ? next : edgeLoad.endKnPerM })); }} />
+            </Row>)}
+            <button className="frame3d-delete" type="button" onClick={() => onChange(removeFrame3DPlateEdgeLoad(model, edgeLoad.id))}>Randlast verwijderen</button>
+          </div>)}
+          <button className="fem-prop-kiezer-btn" type="button" onClick={() => onChange(addFrame3DPlateEdgeLoad(model, plate.id, 0, -1, -1, activeLoadCaseId))}>Randlijnlast toevoegen</button>
+        </Section>}
       </>}
 
       {tab === "results" && <>
         {!result && <p className="fem-prop-hint">{t("frame3d.readyToCalculate")}</p>}
+        {coupledBendingResult && <Section title={`Gekoppelde DKT-buigplaat ${coupledBendingResult.plateId}`}>
+          <Row label="XY-driehoeken"><code>{coupledBendingResult.triangleCount}</code></Row>
+          <Row label="Max. |w|"><code>{value(coupledBendingResult.maxAbsWm * 1000)} mm</code></Row>
+          <Row label="Max. |rotatie|"><code>{value(coupledBendingResult.maxAbsRotationRad * 1000)} mrad</code></Row>
+          {coupledBendingResult.maxAbsMomentKnmPerM && <Row label="Max. |Mx| / |My| / |Mxy|"><code>{coupledBendingResult.maxAbsMomentKnmPerM.map((moment) => value(moment)).join(" / ")} kNm/m</code></Row>}
+          {coupledBendingResult.centroidMoments?.slice(0, 100).map((triangle) => <Row key={triangle.triangleIndex}
+            label={`Tri3 ${triangle.triangleIndex} · Mx / My / Mxy`}>
+            <code>{triangle.momentKnmPerM.map((moment) => value(moment)).join(" / ")} kNm/m</code>
+          </Row>)}
+          {(coupledBendingResult.centroidMoments?.length ?? 0) > 100 && <p className="fem-prop-hint">
+            Eerste 100 van {coupledBendingResult.centroidMoments?.length ?? 0} driehoeken getoond; {(coupledBendingResult.centroidMoments?.length ?? 0) - 100} overige blijven in het berekeningsresultaat.
+          </p>}
+          <p className="fem-prop-hint">{coupledBendingResult.centroidMoments
+            ? "Elastische globale XY-buigmomenten in het zwaartepunt van elke driehoek, uit de laatste verplaatsingen met vaste referentiestijfheid. Eigen plaat-GNL/FNL is niet berekend."
+            : "Deze plaat behoudt elastische referentiestijfheid in de volume-GNL/J2-berekening; plaat-GNL/FNL en plaatmomenten zijn niet herleid."} Geen plaatmembraan, dwarskrachtresultanten, oppervlaktespanning of constructieve plaattoetsing.</p>
+        </Section>}
+        {membraneResult && <Section title={`Tri3-membraan ${membraneResult.plateId} · lokaal`}>
+          <p className="fem-prop-hint">{membraneResult.stressMeasure === "cauchy"
+            ? "Cauchy-spanning en membraankracht per huidige lengte; lokale as 1 volgt de vervormde zijde van knoop 1 naar 2."
+            : "Tweede Piola–Kirchhoff-spanning en membraankracht per referentielengte; lokale as 1 volgt knoop 1 naar 2."}</p>
+          {(["σ11", "σ22", "τ12"] as const).map((label, index) => <Row key={label} label={label}>
+            <code>{value(membraneResult.stressMpa[index])} MPa</code></Row>)}
+          {(["N11", "N22", "N12"] as const).map((label, index) => <Row key={label} label={label}>
+            <code>{value(membraneResult.resultantsKnPerM[index])} kN/m</code></Row>)}
+          {membraneResult.equivalentPlasticStrain !== undefined &&
+            <Row label="Equiv. plastische rek"><code>{value(membraneResult.equivalentPlasticStrain, 7)}</code></Row>}
+          {membraneResult.thicknessStretch !== undefined &&
+            <Row label="Dikterekfactor"><code>{value(membraneResult.thicknessStretch, 7)}</code></Row>}
+          <p className="fem-prop-hint">Lokale as 2 ligt in het membraanvlak. Geen buigresultaten.</p>
+        </Section>}
+        {volume && result && !volumeResult && <p className="fem-prop-hint">Voor dit volume-element is geen spanning beschikbaar.</p>}
+        {volumeResult && <>
+          <div className="frame3d-volume-result-summary">
+            <div><span>VON MISES</span><strong>{value(volumeResult.vonMisesMpa)}</strong><small>MPa</small></div>
+            <p>{volumeResult.kind === "tet4" ? "Tet4" : "Hex8"} #{volumeResult.elementId}
+              {result?.volume3D?.formulation === "totalLagrangianJ2" ? " · Cauchy, GNL + J2-staal"
+                : result?.volume3D?.formulation === "totalLagrangian" ? " · Cauchy, eindgeometrie"
+                : result?.volume3D?.formulation === "smallStrainMaterial" ? " · materiaal-FNL, kleine rek" : " · lineaire spanning"}</p>
+          </div>
+          <Section title="Spanningscomponenten">
+          {(["σx", "σy", "σz", "τxy", "τyz", "τzx"] as const).map((label, index) =>
+            <Row key={label} label={label}><code>{value(volumeResult.stressMpa[index])} MPa</code></Row>)}
+          </Section>
+          {volumeResult.gaussStressMpa && <Section title={`Hex8 Gauss-punten (${volumeResult.gaussStressMpa.length})`} collapsible defaultOpen={false}>
+            <p className="fem-prop-hint">Cauchy-spanning per integratiepunt in MPa; de hoofdwaarden hierboven zijn het gemiddelde van acht punten.</p>
+            {volumeResult.gaussStressMpa.map((stress, index) =>
+              <Row key={index} label={`Punt ${index + 1}`}><code>
+                σ {stress.slice(0, 3).map((part) => value(part)).join(" / ")} · τ {stress.slice(3).map((part) => value(part)).join(" / ")}
+                {volumeResult.gaussEquivalentPlasticStrain && ` · εp,eq ${value(volumeResult.gaussEquivalentPlasticStrain[index], 7)}`}
+              </code></Row>)}
+          </Section>}
+          {volumeResult.firstPiolaMpa && <Section title="Eerste Piola-spanning P" collapsible defaultOpen={false}>
+            <p className="fem-prop-hint">Nominale spanning per referentieoppervlak; de componenten hierboven zijn Cauchy-spanningen in de eindgeometrie.</p>
+            {(["11", "12", "13", "21", "22", "23", "31", "32", "33"] as const).map((name) =>
+              <Row key={name} label={`P${name}`}><code>{value(volumeResult.firstPiolaMpa![Number(name[0]) - 1][Number(name[1]) - 1])} MPa</code></Row>)}
+          </Section>}
+          {(volumeResult.greenStrain || volumeResult.effectiveEMpa !== undefined
+            || volumeResult.equivalentPlasticStrain !== undefined || volumeResult.tensileDamage !== undefined)
+            && <Section title="Rek en materiaal">
+          {volumeResult.greenStrain && (["E11", "E22", "E33", "E12", "E23", "E31"] as const).map((label, index) => {
+            const [i, j] = ([[0, 0], [1, 1], [2, 2], [0, 1], [1, 2], [2, 0]] as const)[index];
+            return <Row key={label} label={`Green ${label}`}><code>{value(volumeResult.greenStrain![i][j], 7)}</code></Row>;
+          })}
+          {volumeResult.effectiveEMpa !== undefined && <Row label="Effectieve E"><code>{value(volumeResult.effectiveEMpa)} MPa</code></Row>}
+          {volumeResult.equivalentPlasticStrain !== undefined && <Row label="Equiv. plastische rek"><code>{value(volumeResult.equivalentPlasticStrain, 7)}</code></Row>}
+          {volumeResult.tensileDamage !== undefined && <Row label="Trekschade"><code>{value(volumeResult.tensileDamage, 5)}</code></Row>}
+          </Section>}
+          {result?.volume3D && <Section title="Oplosser">
+            <Row label="Methode"><code>{result.volume3D.backendUsed}</code></Row>
+            {result.volume3D.formulation !== "totalLagrangian" && <Row label="Iteraties"><code>{result.volume3D.linearIterations}</code></Row>}
+            <Row label="Relatief residu"><code>{result.volume3D.relativeResidual.toExponential(2)}</code></Row>
+            {result.volume3D.newtonIterations !== undefined && <Row label="Newton-iteraties"><code>{result.volume3D.newtonIterations}</code></Row>}
+          </Section>}
+        </>}
         {plateResult && <Section title={`Buigplaat ${plateResult.plateId}`}>
           <Row label="Rooster"><code>{plateResult.nodes.length} knopen · {plateResult.elements.length} Q4-elementen</code></Row>
           <Row label="Reactieknooppunten"><code>{plateResult.reactions.length}</code></Row>
@@ -431,6 +996,10 @@ export default function Frame3DProperties({
           <Row label="Max. |M|"><code>{value(Math.max(...plateResult.elements.flatMap((element) => element.momentKnmPerM.map(Math.abs))))} kNm/m</code></Row>
           <Row label="Max. |V|"><code>{value(Math.max(...plateResult.elements.flatMap((element) => element.shearKnPerM.map(Math.abs))))} kN/m</code></Row>
           <Row label="Min. Eeff"><code>{value(Math.min(...plateResult.elements.map((element) => element.effectiveEMpa)))} MPa</code></Row>
+          {plate?.nonlinearLaw && <>
+            <Row label={t("frame3d.maxPlasticStrain")}><code>{value(Math.max(...plateResult.elements.map((element) => element.maxEquivalentPlasticStrain ?? 0)), 6)}</code></Row>
+            <Row label={t("frame3d.maxTensileDamage")}><code>{value(Math.max(...plateResult.elements.map((element) => element.maxTensileDamage ?? 0)), 4)}</code></Row>
+          </>}
           {result?.materialIterations !== undefined && <Row label="FNL-iteraties"><code>{result.materialIterations}</code></Row>}
           {plateResult.elements.some((element) => element.reinforcement?.shear) && <Row label="Max. Asw,req"><code>{value(Math.max(...plateResult.elements.map((element) =>
             element.reinforcement?.shear?.check.requiredShearMm2PerM2 ?? 0)), 1)} mm²/m²</code></Row>}
@@ -446,13 +1015,18 @@ export default function Frame3DProperties({
           <Row label="Mx"><code>{value(reaction.mx)} kNm</code></Row><Row label="My"><code>{value(reaction.my)} kNm</code></Row><Row label="Mz"><code>{value(reaction.mz)} kNm</code></Row>
         </Section>}
         {beam && memberForces && <Section title={t("frame3d.memberForces", "Staafkrachten begin / eind")}>
-          {result?.analysis === "material" && memberForces.effectiveEMpa !== undefined
+          {(result?.analysis === "material" || result?.analysis === "combined") && memberForces.effectiveEMpa !== undefined
             && <Row label="E effectief"><code>{value(memberForces.effectiveEMpa, 0)} MPa</code></Row>}
           {memberForces.axialHistory && <>
             <Row label="Plastische rek"><code>{value(memberForces.axialHistory.plasticStrain, 6)}</code></Row>
             <Row label="Equiv. plastische rek"><code>{value(memberForces.axialHistory.equivalentPlasticStrain, 6)}</code></Row>
             <Row label="Trekschade"><code>{value(memberForces.axialHistory.tensileDamage, 4)}</code></Row>
             <Row label="E tangent axiaal"><code>{value(memberForces.axialHistory.tangentEMpa, 0)} MPa</code></Row>
+          </>}
+          {memberForces.sectionHistory && <>
+            <Row label="Max. plastische doorsnederek"><code>{value(memberForces.sectionHistory.maximumAbsPlasticStrain, 6)}</code></Row>
+            <Row label="Max. equivalente plastische doorsnederek"><code>{value(memberForces.sectionHistory.maximumEquivalentPlasticStrain, 6)}</code></Row>
+            <Row label="Max. trekschade doorsnede"><code>{value(memberForces.sectionHistory.maximumTensileDamage, 4)}</code></Row>
           </>}
           <Row label="N"><code>{value(memberForces.nStartKn)} / {value(memberForces.nEndKn)} kN</code></Row>
           <Row label="Vy"><code>{value(memberForces.vyStartKn)} / {value(memberForces.vyEndKn)} kN</code></Row>

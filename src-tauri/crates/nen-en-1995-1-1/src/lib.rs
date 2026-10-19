@@ -31,20 +31,21 @@
 pub(crate) const NDP: nationale_bijlage::Ndp1995 =
     nationale_bijlage::Ndp1995::voor(nationale_bijlage::NationaleBijlage::NL);
 
+pub mod bending;
+pub mod clt;
+pub mod clt_toets;
+pub mod compression;
 pub mod data;
+pub mod deflection;
 pub mod factors;
 pub mod section;
-pub mod compression;
-pub mod bending;
 pub mod shear;
-pub mod stability;
-pub mod deflection;
-pub mod clt; pub mod clt_toets; // kruislaaghout: doorsnedemodel + toetsing per lamel
+pub mod stability; // kruislaaghout: doorsnedemodel + toetsing per lamel
 
 pub use data::{strength_class_by_name, strength_class_names, StrengthClass};
 pub use factors::{
-    beta_c, design_strength, gamma_m, k_def, k_h, k_m, k_mod, k_sys,
-    LoadDurationClass, ServiceClass, TimberType,
+    beta_c, design_strength, gamma_m, k_def, k_h, k_m, k_mod, k_sys, LoadDurationClass,
+    ServiceClass, TimberType,
 };
 pub use section::TimberSection;
 

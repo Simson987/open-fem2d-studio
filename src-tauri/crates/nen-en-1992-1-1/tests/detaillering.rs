@@ -51,8 +51,14 @@ fn referentiekorf() -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 35.0,
         stirrup_diameter_mm: 10.0,
-        top: RebarRow { count: 2, diameter_mm: 12.0 },
-        bottom: RebarRow { count: 4, diameter_mm: 20.0 },
+        top: RebarRow {
+            count: 2,
+            diameter_mm: 12.0,
+        },
+        bottom: RebarRow {
+            count: 4,
+            diameter_mm: 20.0,
+        },
         stirrup_spacing_mm: Some(200.0),
         stirrup_legs: Some(2),
         ..ReinforcementCage::default()
@@ -63,7 +69,11 @@ fn krachten(n_kn: f64, m_knm: f64) -> ForceStateSnapshot {
     ForceStateSnapshot {
         combination_id: 3,
         position_mm: 3000.0,
-        forces: InternalForces { n_ed: n_kn, my_ed: m_knm, ..Default::default() },
+        forces: InternalForces {
+            n_ed: n_kn,
+            my_ed: m_knm,
+            ..Default::default()
+        },
     }
 }
 
@@ -113,7 +123,9 @@ fn kale_invoer(o: &Opzet) -> DetailleringInvoer<'_> {
 }
 
 fn uc(c: &ResistanceCalc) -> f64 {
-    c.uc.as_ref().unwrap_or_else(|| panic!("{} hoort een unity check te hebben", c.id)).uc
+    c.uc.as_ref()
+        .unwrap_or_else(|| panic!("{} hoort een unity check te hebben", c.id))
+        .uc
 }
 
 // ===========================================================================
@@ -178,7 +190,10 @@ fn referentiebalk_s_t_max() {
     assert_eq!(c.status, CheckStatus::Ok);
     assert_relative_eq!(c.value, 500.0);
     assert_relative_eq!(uc(&c), 0.44, max_relative = 1e-12);
-    assert!(c.variables.iter().any(|v| v.symbol == "s_t" && v.value == 220.0));
+    assert!(c
+        .variables
+        .iter()
+        .any(|v| v.symbol == "s_t" && v.value == 220.0));
 }
 
 /// A_s,max — §9.2.1.1(3) met de NB-waarde.
@@ -230,15 +245,28 @@ fn referentiebalk_as_min_neemt_de_kleinste_kandidaat() {
     let o = referentiebalk();
     let c = as_min_9_2_1_1(&volledige_invoer(&o));
     assert_eq!(c.status, CheckStatus::Ok);
-    let a1 = c.variables.iter().find(|v| v.symbol.contains(r"\min 1")).unwrap().value;
-    let a2 = c.variables.iter().find(|v| v.symbol.contains(r"\min 2")).unwrap().value;
+    let a1 = c
+        .variables
+        .iter()
+        .find(|v| v.symbol.contains(r"\min 1"))
+        .unwrap()
+        .value;
+    let a2 = c
+        .variables
+        .iter()
+        .find(|v| v.symbol.contains(r"\min 2"))
+        .unwrap()
+        .value;
     assert_relative_eq!(a1, 214.21, max_relative = 2e-3);
     assert_relative_eq!(a2, 1416.47, max_relative = 2e-3);
     assert_relative_eq!(c.value, 214.21, max_relative = 2e-3);
     assert_relative_eq!(uc(&c), 0.170461, max_relative = 3e-3);
     // De omgekeerde lezing zou 1 416 mm² eisen; die valt hier ruim boven de
     // aanwezige 1 257 mm² en zou de balk ten onrechte afkeuren.
-    assert!(a2 > 1256.637, "de valkuil 'min als max lezen' is hier voelbaar");
+    assert!(
+        a2 > 1256.637,
+        "de valkuil 'min als max lezen' is hier voelbaar"
+    );
 }
 
 /// Vrije staafafstand — §8.2(2) met de NB-waarden k₁ = 1 en k₂ = 5.
@@ -269,8 +297,16 @@ fn referentiebalk_vrije_staafafstand() {
 fn referentiebalk_diameters_en_balkbreedte() {
     let o = referentiebalk();
     let inv = volledige_invoer(&o);
-    assert_relative_eq!(uc(&min_diameter_beugel_9_2_2(&inv)), 0.5, max_relative = 1e-12);
-    assert_relative_eq!(uc(&min_diameter_langsstaaf_9_2_1_1(&inv)), 0.5, max_relative = 1e-12);
+    assert_relative_eq!(
+        uc(&min_diameter_beugel_9_2_2(&inv)),
+        0.5,
+        max_relative = 1e-12
+    );
+    assert_relative_eq!(
+        uc(&min_diameter_langsstaaf_9_2_1_1(&inv)),
+        0.5,
+        max_relative = 1e-12
+    );
     let c = min_balkbreedte_9_2(&inv);
     assert_relative_eq!(c.value, 100.0, max_relative = 1e-12);
     assert_relative_eq!(uc(&c), 1.0 / 3.0, max_relative = 1e-9);
@@ -306,7 +342,10 @@ fn nb_afwijking_1_de_doorgehaalde_9_1n_wordt_niet_toegepast() {
         c.notes.iter().any(|n| n.contains("(9.1N)")),
         "de toets moet vermelden dat (9.1N) in NL niet geldt"
     );
-    assert_eq!(c.article, "NB bij art. 9.2.1.1(1) — (9.1N) is in de Nederlandse uitgave doorgehaald");
+    assert_eq!(
+        c.article,
+        "NB bij art. 9.2.1.1(1) — (9.1N) is in de Nederlandse uitgave doorgehaald"
+    );
 }
 
 /// **Afwijking 2 — §9.2.2(5)/(9.5N).** ρ_w,min = (0,08·√f_ck)/f_yk.
@@ -318,7 +357,11 @@ fn nb_afwijking_1_de_doorgehaalde_9_1n_wordt_niet_toegepast() {
 fn nb_afwijking_2_rho_w_min_is_0_08_wortel_fck_gedeeld_door_fyk() {
     let o = referentiebalk();
     let c = rho_w_min_9_2_2(&volledige_invoer(&o));
-    assert_relative_eq!(c.value, 0.08 * 30.0_f64.sqrt() / 500.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        c.value,
+        0.08 * 30.0_f64.sqrt() / 500.0,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(c.value, 0.000876356, max_relative = 1e-5);
 
     // Een afwijkende beugelkwaliteit verandert ρ_w,min NIET: (9.5N) schrijft
@@ -343,9 +386,16 @@ fn nb_afwijking_2_rho_w_min_is_0_08_wortel_fck_gedeeld_door_fyk() {
 #[test]
 fn nb_afwijking_3_s_l_max_krijgt_een_plafond_van_300_mm() {
     let mut cage = referentiekorf();
-    cage.bottom = RebarRow { count: 4, diameter_mm: 25.0 };
+    cage.bottom = RebarRow {
+        count: 4,
+        diameter_mm: 25.0,
+    };
     cage.stirrup_spacing_mm = Some(350.0);
-    let o = Opzet { section: ConcreteSection::new(400.0, 900.0), cage, mat: materiaal() };
+    let o = Opzet {
+        section: ConcreteSection::new(400.0, 900.0),
+        cage,
+        mat: materiaal(),
+    };
     let mut inv = volledige_invoer(&o);
     inv.dwarskrachtwapening_vereist = Some(true);
     let c = s_l_max_9_2_2(&inv);
@@ -353,14 +403,21 @@ fn nb_afwijking_3_s_l_max_krijgt_een_plafond_van_300_mm() {
     // De EN-waarde die hier NIET geldt.
     let en_waarde = 0.75 * 842.5;
     assert_relative_eq!(en_waarde, 631.875, max_relative = 1e-12);
-    assert!(350.0 <= en_waarde, "met de EN-waarde zou 350 mm nog net mogen");
+    assert!(
+        350.0 <= en_waarde,
+        "met de EN-waarde zou 350 mm nog net mogen"
+    );
 
     assert_eq!(c.status, CheckStatus::NotOk, "de NB kapt af op 300 mm");
     assert_relative_eq!(c.value, 300.0);
     assert_relative_eq!(uc(&c), 350.0 / 300.0, max_relative = 1e-12);
     // 0,75·d staat er als tussenwaarde bij, zodat de constructeur ziet dat
     // niet de formule maar het plafond bindend is.
-    let f = c.variables.iter().find(|v| v.symbol.contains("0{,}75")).unwrap();
+    let f = c
+        .variables
+        .iter()
+        .find(|v| v.symbol.contains("0{,}75"))
+        .unwrap();
     assert_relative_eq!(f.value, 631.875, max_relative = 1e-12);
 }
 
@@ -375,7 +432,11 @@ fn nb_afwijking_3_s_l_max_krijgt_een_plafond_van_300_mm() {
 fn nb_afwijking_4_s_t_max_is_500_mm_en_niet_600_mm() {
     let mut cage = referentiekorf();
     cage.stirrup_leg_spacing_mm = Some(550.0);
-    let o = Opzet { section: ConcreteSection::new(700.0, 800.0), cage, mat: materiaal() };
+    let o = Opzet {
+        section: ConcreteSection::new(700.0, 800.0),
+        cage,
+        mat: materiaal(),
+    };
     let mut inv = volledige_invoer(&o);
     inv.v_ed_kn = Some(100.0);
     inv.v_rd_max_kn = Some(900.0); // 0,5·900 = 450 kN > 100 kN → ruime tak
@@ -410,8 +471,14 @@ fn nb_afwijking_5_eisen_die_alleen_de_nationale_bijlage_kent() {
     let cage = ReinforcementCage {
         cover_mm: 10.0,
         stirrup_diameter_mm: 4.0,
-        top: RebarRow { count: 0, diameter_mm: 0.0 },
-        bottom: RebarRow { count: 2, diameter_mm: 5.0 },
+        top: RebarRow {
+            count: 0,
+            diameter_mm: 0.0,
+        },
+        bottom: RebarRow {
+            count: 2,
+            diameter_mm: 5.0,
+        },
         stirrup_spacing_mm: Some(100.0),
         stirrup_legs: Some(2),
         ..ReinforcementCage::default()
@@ -458,7 +525,13 @@ fn de_referentiebalk_levert_negen_groene_narekenbare_toetsen() {
     let alle = detailleringstoetsen(&volledige_invoer(&o));
     assert_eq!(alle.len(), 9);
     for c in &alle {
-        assert_eq!(c.status, CheckStatus::Ok, "{} is niet groen: {:?}", c.id, c.notes);
+        assert_eq!(
+            c.status,
+            CheckStatus::Ok,
+            "{} is niet groen: {:?}",
+            c.id,
+            c.notes
+        );
         assert!(uc(c) <= 1.0, "{} heeft uc = {}", c.id, uc(c));
         assert!(!c.article.is_empty(), "{} zonder artikel", c.id);
         assert!(!c.formula_latex.is_empty(), "{} zonder formule", c.id);
@@ -467,7 +540,11 @@ fn de_referentiebalk_levert_negen_groene_narekenbare_toetsen() {
         // De unity check draagt de aanwezige én de vereiste waarde, zodat de
         // lezer ziet wat er is gemeten en wat er werd geëist.
         let u = c.uc.as_ref().unwrap();
-        assert!(u.ed.is_finite() && u.rd.is_finite(), "{} heeft geen leesbare uc", c.id);
+        assert!(
+            u.ed.is_finite() && u.rd.is_finite(),
+            "{} heeft geen leesbare uc",
+            c.id
+        );
         assert!(!u.formula_latex.is_empty(), "{} zonder uc-formule", c.id);
     }
 }
@@ -487,13 +564,24 @@ fn zonder_projectgegevens_zwijgt_geen_enkele_toets_zich_groen() {
     for c in &alle {
         match c.status {
             CheckStatus::NotApplicable => {
-                assert!(c.uc.is_none(), "{} is NotApplicable maar draagt een uc", c.id);
-                assert!(!c.notes.is_empty(), "{} is NotApplicable zonder reden", c.id);
+                assert!(
+                    c.uc.is_none(),
+                    "{} is NotApplicable maar draagt een uc",
+                    c.id
+                );
+                assert!(
+                    !c.notes.is_empty(),
+                    "{} is NotApplicable zonder reden",
+                    c.id
+                );
             }
             _ => assert!(c.uc.is_some(), "{} heeft een oordeel maar geen uc", c.id),
         }
     }
-    let staaf = alle.iter().find(|c| c.id == "8.2_vrije_staafafstand").unwrap();
+    let staaf = alle
+        .iter()
+        .find(|c| c.id == "8.2_vrije_staafafstand")
+        .unwrap();
     assert_eq!(staaf.status, CheckStatus::NotApplicable);
     assert!(staaf.notes[0].contains("d_g"), "{:?}", staaf.notes);
 
@@ -510,8 +598,11 @@ fn zonder_projectgegevens_zwijgt_geen_enkele_toets_zich_groen() {
     // overgeslagen; ze verdwijnen niet stilletjes.
     let breedte = alle.iter().find(|c| c.id == "9.2_min_balkbreedte").unwrap();
     let tekst = breedte.notes.join(" ");
-    for deel in ["9.2(1)b is NIET getoetst", "9.2(1)c is NIET getoetst", "9.2(1)e is NIET getoetst"]
-    {
+    for deel in [
+        "9.2(1)b is NIET getoetst",
+        "9.2(1)c is NIET getoetst",
+        "9.2(1)e is NIET getoetst",
+    ] {
         assert!(tekst.contains(deel), "ontbrekende melding: {deel}");
     }
 }
@@ -527,7 +618,12 @@ fn een_korf_zonder_beugels_laat_alleen_de_beugeltoetsen_uitvallen() {
     o.cage.stirrup_legs = None;
     let alle = detailleringstoetsen(&volledige_invoer(&o));
 
-    for id in ["9.2.2_rho_w_min", "9.2.2_sl_max", "9.2.2_st_max", "9.2.2_min_diameter_beugel"] {
+    for id in [
+        "9.2.2_rho_w_min",
+        "9.2.2_sl_max",
+        "9.2.2_st_max",
+        "9.2.2_min_diameter_beugel",
+    ] {
         let c = alle.iter().find(|c| c.id == id).unwrap();
         assert_eq!(c.status, CheckStatus::NotApplicable, "{id}");
         assert!(c.uc.is_none(), "{id} draagt een uc terwijl hij niets weet");
@@ -541,11 +637,18 @@ fn een_korf_zonder_beugels_laat_alleen_de_beugeltoetsen_uitvallen() {
         "8.2_vrije_staafafstand",
     ] {
         let c = alle.iter().find(|c| c.id == id).unwrap();
-        assert_ne!(c.status, CheckStatus::NotApplicable, "{id} zou wél te toetsen moeten zijn");
+        assert_ne!(
+            c.status,
+            CheckStatus::NotApplicable,
+            "{id} zou wél te toetsen moeten zijn"
+        );
     }
     // De diametertoets wijst op 6.2.1(4): ook zonder rekenkundige noodzaak
     // hoort er minimale dwarskrachtwapening in een balk te zitten.
-    let beugel = alle.iter().find(|c| c.id == "9.2.2_min_diameter_beugel").unwrap();
+    let beugel = alle
+        .iter()
+        .find(|c| c.id == "9.2.2_min_diameter_beugel")
+        .unwrap();
     assert!(beugel.notes[0].contains("6.2.1(4)"));
 }
 
@@ -564,12 +667,18 @@ fn bij_een_t_ligger_telt_de_lijfbreedte_voor_rho_w() {
         mat: materiaal(),
     };
     let c = rho_w_min_9_2_2(&volledige_invoer(&o));
-    assert!(c.variables.iter().any(|v| v.symbol == "b_w" && v.value == 250.0));
+    assert!(c
+        .variables
+        .iter()
+        .any(|v| v.symbol == "b_w" && v.value == 250.0));
     assert_relative_eq!(c.uc.as_ref().unwrap().rd, 0.00314159, max_relative = 1e-5);
     assert_eq!(c.status, CheckStatus::Ok);
 
     let met_flens = 157.0796 / (200.0 * 900.0);
-    assert!(met_flens < c.value, "met de flensbreedte zou de toets afkeuren: {met_flens}");
+    assert!(
+        met_flens < c.value,
+        "met de flensbreedte zou de toets afkeuren: {met_flens}"
+    );
 }
 
 /// Elke toets draagt het krachtenpunt waarop hij is uitgevoerd mee. Voor de
@@ -597,7 +706,12 @@ fn bij_een_negatief_moment_ligt_de_trekzijde_boven() {
     let mut inv = volledige_invoer(&o);
     inv.force_state = krachten(0.0, -60.0);
     let c = as_min_9_2_1_1(&inv);
-    let a_trek = c.variables.iter().find(|v| v.symbol.contains("A_{s,trek}")).unwrap().value;
+    let a_trek = c
+        .variables
+        .iter()
+        .find(|v| v.symbol.contains("A_{s,trek}"))
+        .unwrap()
+        .value;
     assert_relative_eq!(a_trek, 226.19467, max_relative = 1e-5);
 
     let st = s_t_max_9_2_2(&inv);

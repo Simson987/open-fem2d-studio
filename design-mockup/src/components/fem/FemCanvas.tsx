@@ -2402,6 +2402,7 @@ export default function FemCanvas(props: FemCanvasProps) {
     const n = nodes.find(nn => nn.id === s.nodeId);
     if (!n) return null;
     const p = worldToScreen(n.x, n.z);
+    const supportTransform = `translate(${p.x} ${p.y}) scale(${displayFlags.supportScale ?? 1}) translate(${-p.x} ${-p.y})`;
     if (s.type === "pinned") {
       // Klassieke scharnier-support: driehoek + grondlijn direct onder de
       // driehoek + grond-hatching (6 schuine streepjes onder de lijn).
@@ -2413,7 +2414,7 @@ export default function FemCanvas(props: FemCanvasProps) {
       const hatchBot = groundY + 7.5;
       const hatchXs = [-14, -8, -2, 4, 10, 16];
       return (
-        <g key={`sup${s.nodeId}`}>
+        <g key={`sup${s.nodeId}`} transform={supportTransform}>
           <polygon points={`${p.x},${p.y} ${p.x - 12},${triBase} ${p.x + 12},${triBase}`} className="fem-support" />
           <line x1={p.x - 16} y1={groundY} x2={p.x + 16} y2={groundY} className="fem-support-ground" />
           {hatchXs.map((dx, i) => (
@@ -2443,7 +2444,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         );
       }
       return (
-        <g key={`sup${s.nodeId}`}>
+        <g key={`sup${s.nodeId}`} transform={supportTransform}>
           <line
             x1={p.x - halveBreedte} y1={p.y}
             x2={p.x + halveBreedte} y2={p.y}
@@ -2455,7 +2456,7 @@ export default function FemCanvas(props: FemCanvasProps) {
     }
     if (s.type === "xRoller") {
       return (
-        <g key={`sup${s.nodeId}`}>
+        <g key={`sup${s.nodeId}`} transform={supportTransform}>
           <polygon points={`${p.x},${p.y} ${p.x - 20},${p.y - 12} ${p.x - 20},${p.y + 12}`} className="fem-support" />
           <line x1={p.x - 25} y1={p.y - 16} x2={p.x - 25} y2={p.y + 16} className="fem-support-ground" />
         </g>
@@ -2463,7 +2464,7 @@ export default function FemCanvas(props: FemCanvasProps) {
     }
     if (s.type === "zRoller") {
       return (
-        <g key={`sup${s.nodeId}`}>
+        <g key={`sup${s.nodeId}`} transform={supportTransform}>
           <polygon points={`${p.x},${p.y} ${p.x - 12},${p.y + 20} ${p.x + 12},${p.y + 20}`} className="fem-support" />
           <circle cx={p.x - 6} cy={p.y + 22} r={2.5} className="fem-support" />
           <circle cx={p.x + 6} cy={p.y + 22} r={2.5} className="fem-support" />
@@ -2478,7 +2479,7 @@ export default function FemCanvas(props: FemCanvasProps) {
       const ys = [top, top + 4, top + 8, top + 12, top + 16, bot];
       const points = xs.map((x, i) => `${x},${ys[i]}`).join(" ");
       return (
-        <g key={`sup${s.nodeId}`}>
+        <g key={`sup${s.nodeId}`} transform={supportTransform}>
           <polyline points={points} className="fem-spring" />
           <line x1={p.x - 16} y1={p.y + 32} x2={p.x + 16} y2={p.y + 32} className="fem-support-ground" />
           {s.k !== undefined && <text x={p.x + 18} y={p.y + 22} className="fem-spring-label">k={s.k}</text>}
@@ -2491,7 +2492,7 @@ export default function FemCanvas(props: FemCanvasProps) {
       const xs = [left, left + 4, left + 8, left + 12, left + 16, right];
       const points = xs.map((x, i) => `${x},${ys[i]}`).join(" ");
       return (
-        <g key={`sup${s.nodeId}`}>
+        <g key={`sup${s.nodeId}`} transform={supportTransform}>
           <polyline points={points} className="fem-spring" />
           <line x1={p.x - 32} y1={p.y - 12} x2={p.x - 32} y2={p.y + 12} className="fem-support-ground" />
           {s.k !== undefined && <text x={p.x + 12} y={p.y + 4} className="fem-spring-label">k={s.k}</text>}
@@ -2528,7 +2529,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         punten.push(`${(p.x + r * Math.sin(hoek)).toFixed(2)},${(p.y + 12 - r * Math.cos(hoek)).toFixed(2)}`);
       }
       return (
-        <g key={`sup${s.nodeId}`}>
+        <g key={`sup${s.nodeId}`} transform={supportTransform}>
           {/* aansluiting knoop → spiraal en spiraal → grondlijn */}
           <line x1={p.x} y1={p.y} x2={p.x} y2={p.y + 12 - rMax} className="fem-spring" />
           <polyline points={punten.join(" ")} fill="none" className="fem-spring" />
@@ -4638,7 +4639,8 @@ export default function FemCanvas(props: FemCanvasProps) {
             </>);
           }
           return (
-            <g className="fem-support-preview" pointerEvents="none" opacity={0.55}>
+            <g className="fem-support-preview" pointerEvents="none" opacity={0.55}
+              transform={`translate(${p.x} ${p.y}) scale(${displayFlags.supportScale ?? 1}) translate(${-p.x} ${-p.y})`}>
               {shape}
             </g>
           );

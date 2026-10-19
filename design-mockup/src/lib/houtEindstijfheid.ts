@@ -689,3 +689,19 @@ export function losEindtoestandOp(
     zetEindtoestandGevallen(perCase, sleutel, fin);
   }
 }
+
+/** Native equivalent of `losEindtoestandOp`, supplied with the selected Rust route. */
+export async function losEindtoestandNativeOp(
+  input: MultiInput,
+  perCase: Map<number, SolverResult>,
+  combinaties: readonly LoadCombination[],
+  uitkomst: Pick<EindstijfheidUitkomst, "kDefPerStaaf"> & Partial<Pick<EindstijfheidUitkomst, "betonPhiPerStaaf">>,
+  solveCases: (input: MultiInput) => Promise<Map<number, SolverResult>>,
+): Promise<void> {
+  const sleutels = [...new Set(combinaties.flatMap((c): EindtoestandSleutel[] =>
+    c.eindtoestand ? [isBgtEindtoestand(c) ? "bgt" : c.eindtoestand.psi2] : []))];
+  for (const sleutel of sleutels) {
+    const fin = await solveCases(eindstijfheidInvoer(input, uitkomst, sleutel));
+    zetEindtoestandGevallen(perCase, sleutel, fin);
+  }
+}

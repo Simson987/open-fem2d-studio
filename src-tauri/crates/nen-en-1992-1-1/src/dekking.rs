@@ -99,7 +99,10 @@ use ts_rs::TS;
 /// De volgorde is die van de tabel: eerst X0, dan de carbonatatieklassen, de
 /// chlorideklassen, de zeewaterklassen, vorst/dooi en chemische aantasting.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum ExposureClass {
     X0,
     XC1,
@@ -128,7 +131,10 @@ pub enum ExposureClass {
 /// voordoen"; beide woordelijk uit de tabel. `group` is het tussenkopje
 /// waaronder de klasse in de tabel staat.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct ExposureClassInfo {
     pub class: ExposureClass,
     /// "XC4" — de klasseaanduiding als tekst, voor labels en het rapport.
@@ -373,7 +379,10 @@ impl ExposureClass {
 /// De volgorde is die van de tekening: eerst boven, dan onder, dan de
 /// zijkanten.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum CoverSide {
     /// De bovenzijde, z = h — de rand waar [`crate::section::ReinforcementCage::top`]
     /// tegenaan ligt.
@@ -418,7 +427,10 @@ impl CoverSide {
 /// tegenspraak opmerkt.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct FaceCover {
     /// De nominale dekking c_nom van DEZE zijde, in mm. `None` = de dekking van
     /// het element.
@@ -475,7 +487,10 @@ impl FaceCover {
 /// wie de aanpassing wél zelf doet, weet dat hij hem zelf per zijde moet
 /// invullen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum StructuralClass {
     S1,
     S2,
@@ -538,7 +553,9 @@ pub fn standaard_constructieklasse(bijlage: NationaleBijlage) -> StructuralClass
         // dan hoort dit te falen en niet stil S4 te worden. De test
         // `elke_bijlage_heeft_een_bestaande_constructieklasse` vangt het vóór
         // het ooit een gebruiker bereikt.
-        None => panic!("de nationale bijlage {bijlage} geeft een constructieklasse die niet bestaat"),
+        None => {
+            panic!("de nationale bijlage {bijlage} geeft een constructieklasse die niet bestaat")
+        }
     }
 }
 
@@ -587,7 +604,10 @@ pub fn c_min_dur_mm(
 
 /// Welke van de drie termen van (4.2) de maat gaf.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum CoverGovernedBy {
     /// c_min,b — de aanhechtingseis van tabel 4.2.
     Bond,
@@ -605,7 +625,10 @@ pub enum CoverGovernedBy {
 /// hoofdstaaf terwijl er wél een beugel zit.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct ConcreteCoverRequest {
     /// De nationale bijlage waarmee getoetst wordt.
     ///
@@ -661,7 +684,10 @@ pub struct ConcreteCoverRequest {
 /// Het antwoord: de hele keten van (4.2) en (4.1), met de vindplaats van elke
 /// term, plus het oordeel over de opgegeven dekking.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct ConcreteCoverResponse {
     pub beam_id: u32,
     /// De zijde uit het verzoek, onveranderd terug; `None` als er geen is
@@ -709,9 +735,7 @@ pub struct ConcreteCoverResponse {
 /// c_nom + Ø_beugel ≥ Ø_hoofd nodig; die eis wordt apart gecontroleerd en
 /// alleen maatgevend gemaakt als hij zwaarder is dan de beugeleis.
 /// Zonder beugel is de hoofdwapening zélf de buitenste wapening.
-pub fn concrete_cover_request(
-    req: ConcreteCoverRequest,
-) -> Result<ConcreteCoverResponse, String> {
+pub fn concrete_cover_request(req: ConcreteCoverRequest) -> Result<ConcreteCoverResponse, String> {
     if !req.cover_mm.is_finite() || req.cover_mm < 0.0 {
         return Err("De dekking c_nom moet een eindig, niet-negatief getal zijn.".into());
     }
@@ -923,7 +947,11 @@ mod tests {
             Some(10.0)
         );
         assert_eq!(
-            c_min_dur_mm(NationaleBijlage::NL, ExposureClass::XD3, StructuralClass::S1),
+            c_min_dur_mm(
+                NationaleBijlage::NL,
+                ExposureClass::XD3,
+                StructuralClass::S1
+            ),
             Some(25.0)
         );
         assert_eq!(
@@ -931,7 +959,11 @@ mod tests {
             Some(20.0)
         );
         assert_eq!(
-            c_min_dur_mm(NationaleBijlage::NL, ExposureClass::XS3, StructuralClass::S6),
+            c_min_dur_mm(
+                NationaleBijlage::NL,
+                ExposureClass::XS3,
+                StructuralClass::S6
+            ),
             Some(50.0)
         );
         // XD3/XS3 is in de NB gelijk aan XD2/XS2 — in de EN was hij 5 mm hoger.
@@ -1031,7 +1063,10 @@ mod tests {
             assert_eq!(i.class.info().name, i.name);
             assert!(!i.description.is_empty());
             assert!(!i.examples.is_empty());
-            assert_eq!(i.cover_column.is_some(), i.class.cover_column_index().is_some());
+            assert_eq!(
+                i.cover_column.is_some(),
+                i.class.cover_column_index().is_some()
+            );
         }
     }
 
@@ -1055,8 +1090,14 @@ mod tests {
         assert!(met.notes.iter().any(|n| n.contains("4.4.1.1(1)P")));
         // De uitleg over de constructieklasse komt er alleen bij als er een
         // zijde is; zonder zijde is er niets om over te verwarren.
-        assert!(met.notes.iter().any(|n| n.contains("hoort bij het ELEMENT")));
-        assert!(!zonder.notes.iter().any(|n| n.contains("hoort bij het ELEMENT")));
+        assert!(met
+            .notes
+            .iter()
+            .any(|n| n.contains("hoort bij het ELEMENT")));
+        assert!(!zonder
+            .notes
+            .iter()
+            .any(|n| n.contains("hoort bij het ELEMENT")));
     }
 
     #[test]
@@ -1101,7 +1142,10 @@ mod tests {
         let leeg = FaceCover::default();
         assert!(leeg.is_empty());
         assert!(!leeg.heeft_eigen_dekking());
-        let met_dekking = FaceCover { cover_mm: Some(40.0), exposure_class: None };
+        let met_dekking = FaceCover {
+            cover_mm: Some(40.0),
+            exposure_class: None,
+        };
         assert!(!met_dekking.is_empty());
         assert!(met_dekking.heeft_eigen_dekking());
         // Een JSON zonder de velden — een projectbestand van vóór deze

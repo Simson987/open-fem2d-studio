@@ -203,6 +203,9 @@ export function transformFrame3D(
     let nextSurfaceLoad = nextId(model.surfaceLoads ?? []);
     const copiedSurfaceLoads = (model.surfaceLoads ?? []).filter((load) => plateIdSet.has(load.plateId))
       .map((load) => ({ ...load, id: nextSurfaceLoad++, plateId: plateIdMap.get(load.plateId)! }));
+    let nextPlateEdgeLoad = nextId(model.plateEdgeLoads ?? []);
+    const copiedPlateEdgeLoads = (model.plateEdgeLoads ?? []).filter((load) => plateIdSet.has(load.plateId))
+      .map((load) => ({ ...load, id: nextPlateEdgeLoad++, plateId: plateIdMap.get(load.plateId)! }));
     return {
       model: {
         ...model,
@@ -218,6 +221,8 @@ export function transformFrame3D(
         plates: copiedPlates.length > 0 ? [...(model.plates ?? []), ...copiedPlates] : model.plates,
         surfaceLoads: copiedSurfaceLoads.length > 0
           ? [...(model.surfaceLoads ?? []), ...copiedSurfaceLoads] : model.surfaceLoads,
+        plateEdgeLoads: copiedPlateEdgeLoads.length > 0
+          ? [...(model.plateEdgeLoads ?? []), ...copiedPlateEdgeLoads] : model.plateEdgeLoads,
       },
       selection: selection.type === "multi"
         ? {

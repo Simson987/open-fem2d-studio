@@ -163,7 +163,10 @@ async fn tooldefinitie(
 
 /// De foutmelding zoals de client hem te zien krijgt.
 fn foutmelding(result: &Value) -> String {
-    result["content"][0]["text"].as_str().unwrap_or("").to_string()
+    result["content"][0]["text"]
+        .as_str()
+        .unwrap_or("")
+        .to_string()
 }
 
 // ── 1. Het schema zelf ──────────────────────────────────────────────────────
@@ -178,7 +181,9 @@ async fn schema_van_check_steel_beam_is_volledig_en_strikt() {
     )
     .await;
     let resp = lees_bericht(&mut reader).await;
-    let tools = resp["result"]["tools"].as_array().expect("tools is een array");
+    let tools = resp["result"]["tools"]
+        .as_array()
+        .expect("tools is een array");
     let tool = tools
         .iter()
         .find(|t| t["name"] == "check_steel_beam")
@@ -238,9 +243,18 @@ async fn schema_van_check_steel_beam_is_volledig_en_strikt() {
     // scheidingswanden dragen, w2 + w3 ≤ ℓ_rep/500).
     assert_eq!(
         props["deflection_limit_class"]["enum"],
-        json!(["Floor", "FloorBrittlePartitions", "Roof", "Cantilever", "Custom"])
+        json!([
+            "Floor",
+            "FloorBrittlePartitions",
+            "Roof",
+            "Cantilever",
+            "Custom"
+        ])
     );
-    assert_eq!(props["consequence_class"]["enum"], json!(["CC1", "CC2", "CC3"]));
+    assert_eq!(
+        props["consequence_class"]["enum"],
+        json!(["CC1", "CC2", "CC3"])
+    );
     assert_eq!(
         props["steel_grade"]["enum"],
         json!(["S235", "S275", "S355", "S420", "S460"])
@@ -268,7 +282,8 @@ async fn geldige_invoer_wordt_gewoon_getoetst() {
 
     let result = roep_check_aan(&mut stdin, &mut reader, 10, geldige_invoer()).await;
     assert_eq!(
-        result["isError"], false,
+        result["isError"],
+        false,
         "geldige invoer moet gewoon rekenen, kreeg: {}",
         foutmelding(&result)
     );
@@ -410,12 +425,24 @@ async fn schema_van_check_concrete_beam_is_volledig_en_strikt() {
     // ander gevolg: die client wordt stilzwijgend met EEN korf over de hele
     // staaf doorgerekend terwijl hij de wapening per zone heeft opgegeven.
     for veld in [
-        "beam_id", "section", "concrete_class",
-        "reinforcement_grade", "cage", "length_m", "forces_envelope",
-        "n_strips", "steel_branch", "design_situation", "apply_min_eccentricity",
-        "sls_frequent_envelope", "exposure_class", "structural_class",
+        "beam_id",
+        "section",
+        "concrete_class",
+        "reinforcement_grade",
+        "cage",
+        "length_m",
+        "forces_envelope",
+        "n_strips",
+        "steel_branch",
+        "design_situation",
+        "apply_min_eccentricity",
+        "sls_frequent_envelope",
+        "exposure_class",
+        "structural_class",
         "aggregate_size_mm",
-        "structural_system", "bar_spacing_mm", "reinforcement_zones",
+        "structural_system",
+        "bar_spacing_mm",
+        "reinforcement_zones",
         // §5.8. `column` draagt het ontwerpbesluit geschoord/ongeschoord en de
         // kniklengte; ontbreekt het in het schema, dan stuurt een client het
         // nooit mee en blijft de slankheidsgrens ongetoetst bij een staaf die
@@ -423,7 +450,8 @@ async fn schema_van_check_concrete_beam_is_volledig_en_strikt() {
         // tweede-orde-berekening moet volgen. `sls_quasi_permanent_envelope`
         // is de DERDE omhullende, alleen voor M₀Eqp in (5.19); zonder haar
         // blijft φ_ef onbekend en valt λ_lim terug op A = 0,7.
-        "sls_quasi_permanent_envelope", "column",
+        "sls_quasi_permanent_envelope",
+        "column",
         // De eerste-orde-momenten voor §5.8 na een tweede-orde-berekening
         // (r_m, M₀Ed van (5.19)); zonder dit veld weigert
         // `additionalProperties: false` het en rekent een client na een
@@ -458,7 +486,10 @@ async fn schema_van_check_concrete_beam_is_volledig_en_strikt() {
     let kolom = &props["column"];
     assert_eq!(kolom["additionalProperties"], false);
     assert_eq!(kolom["required"], json!(["bracing", "buckling_length"]));
-    assert_eq!(kolom["properties"]["bracing"]["enum"], json!(["Geschoord", "Ongeschoord"]));
+    assert_eq!(
+        kolom["properties"]["bracing"]["enum"],
+        json!(["Geschoord", "Ongeschoord"])
+    );
     // De twee wegen naar l₀, en niet meer dan twee: de gevallen f) en g) van
     // figuur 5.7 vragen k = (θ/M)·(EI/l) en staan er bewust niet in.
     let l0 = &kolom["properties"]["buckling_length"]["oneOf"];
@@ -486,16 +517,26 @@ async fn schema_van_check_concrete_beam_is_volledig_en_strikt() {
             "veld '{veld}' ontbreekt in het schema van `column`"
         );
     }
-    assert_eq!(kolom["properties"]["bracing_z"]["enum"], json!(["Geschoord", "Ongeschoord"]));
-    let l0z = &kolom["properties"]["buckling_length_z"]["oneOf"];
-    assert_eq!(l0z.as_array().unwrap().len(), 2, "om z dezelfde twee wegen naar l₀");
     assert_eq!(
-        l0z[0]["properties"]["geval"]["enum"],
-        l0[0]["properties"]["geval"]["enum"],
+        kolom["properties"]["bracing_z"]["enum"],
+        json!(["Geschoord", "Ongeschoord"])
+    );
+    let l0z = &kolom["properties"]["buckling_length_z"]["oneOf"];
+    assert_eq!(
+        l0z.as_array().unwrap().len(),
+        2,
+        "om z dezelfde twee wegen naar l₀"
+    );
+    assert_eq!(
+        l0z[0]["properties"]["geval"]["enum"], l0[0]["properties"]["geval"]["enum"],
         "beide assen kennen dezelfde vakjes van figuur 5.7"
     );
     assert!(
-        !kolom["required"].as_array().unwrap().iter().any(|v| v.as_str().unwrap().ends_with("_z")),
+        !kolom["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v.as_str().unwrap().ends_with("_z")),
         "de velden om z zijn optioneel: leeg = de keuze van het rekenvlak, met melding"
     );
 
@@ -516,7 +557,10 @@ async fn schema_van_check_concrete_beam_is_volledig_en_strikt() {
         json!(["side", "row", "x_start_mm", "x_end_mm"]),
         "zijde, rij en de twee maten zijn de dragende gegevens van een langswapeningszone"
     );
-    assert_eq!(langs["properties"]["side"]["enum"], json!(["Bottom", "Top"]));
+    assert_eq!(
+        langs["properties"]["side"]["enum"],
+        json!(["Bottom", "Top"])
+    );
     // De twee UITVOERINGSgegevens van 8.4 die niemand kan afleiden.
     assert_eq!(
         langs["properties"]["bar_shape"]["enum"],
@@ -524,13 +568,24 @@ async fn schema_van_check_concrete_beam_is_volledig_en_strikt() {
     );
     assert_eq!(
         langs["properties"]["casting_position"]["enum"],
-        json!(["Onderzijde", "Bovenzijde", "Glijbekisting", "GoedAangetoond"])
+        json!([
+            "Onderzijde",
+            "Bovenzijde",
+            "Glijbekisting",
+            "GoedAangetoond"
+        ])
     );
     let beugel = &zones["properties"]["stirrups"]["items"];
     assert_eq!(beugel["additionalProperties"], false);
     assert_eq!(
         beugel["required"],
-        json!(["x_start_mm", "x_end_mm", "spacing_mm", "legs", "diameter_mm"]),
+        json!([
+            "x_start_mm",
+            "x_end_mm",
+            "spacing_mm",
+            "legs",
+            "diameter_mm"
+        ]),
         "in een beugelzone zijn alle vijf de gegevens verplicht - anders zou de \
          dwarskrachttoets op dat stuk stilzwijgend uitvallen"
     );
@@ -541,7 +596,10 @@ async fn schema_van_check_concrete_beam_is_volledig_en_strikt() {
     let bgt = props["sls_frequent_envelope"]["description"]
         .as_str()
         .expect("sls_frequent_envelope heeft een beschrijving");
-    assert!(bgt.contains("6.15"), "de beschrijving noemt uitdrukking (6.15) niet: {bgt}");
+    assert!(
+        bgt.contains("6.15"),
+        "de beschrijving noemt uitdrukking (6.15) niet: {bgt}"
+    );
     assert!(
         bgt.contains("NIET de UGT"),
         "de beschrijving waarschuwt niet voor de verwisseling met de UGT-omhullende"
@@ -554,8 +612,18 @@ async fn schema_van_check_concrete_beam_is_volledig_en_strikt() {
     let sec = &props["section"];
     assert_eq!(sec["additionalProperties"], false);
     assert_eq!(sec["required"], json!(["b_mm", "h_mm"]));
-    assert_eq!(sec["properties"]["shape"]["enum"], json!(["Rectangle", "Tee", "Ell"]));
-    for veld in ["shape", "b_mm", "h_mm", "b_w_mm", "h_f_mm", "flange_at_bottom"] {
+    assert_eq!(
+        sec["properties"]["shape"]["enum"],
+        json!(["Rectangle", "Tee", "Ell"])
+    );
+    for veld in [
+        "shape",
+        "b_mm",
+        "h_mm",
+        "b_w_mm",
+        "h_f_mm",
+        "flange_at_bottom",
+    ] {
         assert!(
             sec["properties"][veld].is_object(),
             "veld '{veld}' ontbreekt in het doorsnedeschema"
@@ -564,7 +632,10 @@ async fn schema_van_check_concrete_beam_is_volledig_en_strikt() {
     assert_eq!(sec["properties"].as_object().unwrap().len(), 6);
 
     // De enums die de kern werkelijk kent (serde schrijft de varianten uit).
-    assert_eq!(props["steel_branch"]["enum"], json!(["Horizontal", "Inclined"]));
+    assert_eq!(
+        props["steel_branch"]["enum"],
+        json!(["Horizontal", "Inclined"])
+    );
     assert_eq!(
         props["design_situation"]["enum"],
         json!(["PersistentTransient", "Accidental"])
@@ -603,7 +674,10 @@ async fn schema_van_check_concrete_beam_is_volledig_en_strikt() {
     // velden zijn gemaakt.
     for veld in ["cover_top", "cover_bottom", "cover_sides"] {
         let zijde = &cage["properties"][veld];
-        assert!(zijde.is_object(), "veld '{veld}' ontbreekt in het korfschema");
+        assert!(
+            zijde.is_object(),
+            "veld '{veld}' ontbreekt in het korfschema"
+        );
         assert_eq!(zijde["additionalProperties"], false, "{veld}");
         // `null` moet toegestaan blijven: zo zegt een client "deze zijde volgt
         // het element".
@@ -620,7 +694,10 @@ async fn schema_van_check_concrete_beam_is_volledig_en_strikt() {
     // kolom die de helft van zijn wapening mist. Dat is geen veilige kant —
     // A_s,max van §9.5.2(3) wordt daarmee te ruim.
     let zijstaven = &cage["properties"]["sides"];
-    assert!(zijstaven.is_object(), "veld 'sides' ontbreekt in het korfschema");
+    assert!(
+        zijstaven.is_object(),
+        "veld 'sides' ontbreekt in het korfschema"
+    );
     assert_eq!(zijstaven["additionalProperties"], false);
     assert_eq!(zijstaven["type"], json!(["object", "null"]));
     assert_eq!(zijstaven["required"], json!(["count", "diameter_mm"]));
@@ -640,9 +717,17 @@ async fn schema_van_concrete_mn_kappa_is_volledig_en_strikt() {
 
     assert_eq!(schema["additionalProperties"], false);
     for veld in [
-        "bijlage", "section", "concrete_class", "reinforcement_grade",
-        "cage", "n_ed_kn", "moment_sign", "n_strips", "steel_branch",
-        "design_situation", "interaction_points",
+        "bijlage",
+        "section",
+        "concrete_class",
+        "reinforcement_grade",
+        "cage",
+        "n_ed_kn",
+        "moment_sign",
+        "n_strips",
+        "steel_branch",
+        "design_situation",
+        "interaction_points",
     ] {
         assert!(
             props[veld].is_object(),
@@ -672,7 +757,8 @@ async fn geldige_betoninvoer_wordt_gewoon_getoetst() {
     )
     .await;
     assert_eq!(
-        result["isError"], false,
+        result["isError"],
+        false,
         "geldige invoer moet gewoon rekenen, kreeg: {}",
         foutmelding(&result)
     );
@@ -692,7 +778,10 @@ async fn tikfout_in_een_betonveld_wordt_geweigerd() {
     // n_stripes in plaats van n_strips: zonder deny_unknown_fields zou de
     // toetsing doorlopen met 50 stroken terwijl de aanroeper er 200 vroeg.
     let mut invoer = geldige_betoninvoer();
-    invoer.as_object_mut().unwrap().insert("n_stripes".into(), json!(200));
+    invoer
+        .as_object_mut()
+        .unwrap()
+        .insert("n_stripes".into(), json!(200));
 
     let result = roep_tool_aan(&mut stdin, &mut reader, 23, "check_concrete_beam", invoer).await;
     let melding = foutmelding(&result);
@@ -811,10 +900,16 @@ async fn schema_van_de_houttools_is_strikt_op_elk_niveau() {
     );
     // Met `additionalProperties: false` is een veld dat het schema niet noemt
     // voor een client niet meer op te geven — `custom_section` ontbrak.
-    assert!(staaf["properties"]["custom_section"].is_object(), "custom_section ontbreekt");
+    assert!(
+        staaf["properties"]["custom_section"].is_object(),
+        "custom_section ontbreekt"
+    );
     // De nationale bijlage hoort erbij (normnaad, september 2026): zij bepaalt
     // gamma_M, k_cr en de doorbuigingsnoemers van deze toetsing.
-    assert!(staaf["properties"]["bijlage"].is_object(), "bijlage ontbreekt");
+    assert!(
+        staaf["properties"]["bijlage"].is_object(),
+        "bijlage ontbreekt"
+    );
     assert_eq!(
         staaf["properties"].as_object().unwrap().len(),
         31,
@@ -835,7 +930,10 @@ async fn schema_van_de_houttools_is_strikt_op_elk_niveau() {
         cstaaf["properties"]["deflection_quasi_perm_fin_mm"].is_object(),
         "CLT: deflection_quasi_perm_fin_mm ontbreekt"
     );
-    assert_eq!(cstaaf["properties"]["layup"]["additionalProperties"], false, "opbouw");
+    assert_eq!(
+        cstaaf["properties"]["layup"]["additionalProperties"], false,
+        "opbouw"
+    );
     assert_eq!(
         cstaaf["properties"]["layup"]["properties"]["layers"]["items"]["additionalProperties"],
         false,
@@ -854,17 +952,27 @@ async fn geldige_hout_en_cltinvoer_wordt_gewoon_getoetst() {
         (32, "check_timber_beams", geldige_houtinvoer()),
         (33, "check_clt_beams", geldige_cltinvoer()),
     ] {
-        let result =
-            roep_tool_aan(&mut stdin, &mut reader, id, tool, json!({ "inputs": [invoer] })).await;
+        let result = roep_tool_aan(
+            &mut stdin,
+            &mut reader,
+            id,
+            tool,
+            json!({ "inputs": [invoer] }),
+        )
+        .await;
         assert_eq!(
-            result["isError"], false,
+            result["isError"],
+            false,
             "{tool}: geldige invoer moet gewoon rekenen, kreeg: {}",
             foutmelding(&result)
         );
         let checks = result["structuredContent"]["results"][0]["checks"]
             .as_array()
             .unwrap_or_else(|| panic!("{tool}: geen checks-array in {result}"));
-        assert!(!checks.is_empty(), "{tool}: er is geen enkele toets uitgevoerd");
+        assert!(
+            !checks.is_empty(),
+            "{tool}: er is geen enkele toets uitgevoerd"
+        );
     }
 
     drop(stdin);
@@ -882,13 +990,23 @@ async fn tikfout_in_een_houtveld_wordt_geweigerd_in_plaats_van_stil_genegeerd() 
         (2, "perform_ltb_chek", json!(false)),
     ] {
         let mut invoer = geldige_houtinvoer();
-        invoer.as_object_mut().unwrap().insert(tikfout.into(), waarde);
+        invoer
+            .as_object_mut()
+            .unwrap()
+            .insert(tikfout.into(), waarde);
         let result = roep_tool_aan(
-            &mut stdin, &mut reader, 40 + i, "check_timber_beams", json!({ "inputs": [invoer] }),
+            &mut stdin,
+            &mut reader,
+            40 + i,
+            "check_timber_beams",
+            json!({ "inputs": [invoer] }),
         )
         .await;
         let melding = foutmelding(&result);
-        assert_eq!(result["isError"], true, "`{tikfout}` gaf een resultaat: {result}");
+        assert_eq!(
+            result["isError"], true,
+            "`{tikfout}` gaf een resultaat: {result}"
+        );
         assert!(
             melding.contains(tikfout) && melding.contains("unknown field"),
             "de melding moet het onbekende veld `{tikfout}` noemen, kreeg: {melding}"
@@ -897,20 +1015,36 @@ async fn tikfout_in_een_houtveld_wordt_geweigerd_in_plaats_van_stil_genegeerd() 
 
     // CLT: op de staaf én diep in de opbouw.
     let mut op_staaf = geldige_cltinvoer();
-    op_staaf.as_object_mut().unwrap().insert("kcr".into(), json!(0.67));
+    op_staaf
+        .as_object_mut()
+        .unwrap()
+        .insert("kcr".into(), json!(0.67));
     let mut in_laag = geldige_cltinvoer();
-    in_laag["layup"]["layers"][0].as_object_mut().unwrap().insert("orientatie".into(), json!("Longitudinal"));
+    in_laag["layup"]["layers"][0]
+        .as_object_mut()
+        .unwrap()
+        .insert("orientatie".into(), json!("Longitudinal"));
     for (i, (wat, invoer, veld)) in [("staaf", op_staaf, "kcr"), ("laag", in_laag, "orientatie")]
         .into_iter()
         .enumerate()
     {
         let result = roep_tool_aan(
-            &mut stdin, &mut reader, 50 + i as u32, "check_clt_beams", json!({ "inputs": [invoer] }),
+            &mut stdin,
+            &mut reader,
+            50 + i as u32,
+            "check_clt_beams",
+            json!({ "inputs": [invoer] }),
         )
         .await;
         let melding = foutmelding(&result);
-        assert_eq!(result["isError"], true, "CLT {wat}: kreeg een resultaat: {result}");
-        assert!(melding.contains(veld), "CLT {wat}: de melding moet `{veld}` noemen: {melding}");
+        assert_eq!(
+            result["isError"], true,
+            "CLT {wat}: kreeg een resultaat: {result}"
+        );
+        assert!(
+            melding.contains(veld),
+            "CLT {wat}: de melding moet `{veld}` noemen: {melding}"
+        );
     }
 
     drop(stdin);
@@ -925,8 +1059,14 @@ async fn rapportschema_noemt_de_nationale_bijlage() {
     let (mut child, mut stdin, mut reader) = start_server().await;
     let rapport = tooldefinitie(&mut stdin, &mut reader, 41, "generate_steel_report_pdf").await;
     let veld = &rapport["inputSchema"]["properties"]["bijlage"];
-    assert_eq!(veld["type"], "string", "bijlage ontbreekt in het schema van generate_steel_report_pdf");
-    assert_eq!(veld["enum"], serde_json::json!(nationale_bijlage::BIJLAGEN_GEVULD));
+    assert_eq!(
+        veld["type"], "string",
+        "bijlage ontbreekt in het schema van generate_steel_report_pdf"
+    );
+    assert_eq!(
+        veld["enum"],
+        serde_json::json!(nationale_bijlage::BIJLAGEN_GEVULD)
+    );
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }
@@ -953,7 +1093,10 @@ async fn rapportschema_noemt_de_taal_van_de_datum() {
     let (mut child, mut stdin, mut reader) = start_server().await;
     let rapport = tooldefinitie(&mut stdin, &mut reader, 42, "generate_steel_report_pdf").await;
     let veld = &rapport["inputSchema"]["properties"]["taal"];
-    assert_eq!(veld["type"], "string", "taal ontbreekt in het schema van generate_steel_report_pdf");
+    assert_eq!(
+        veld["type"], "string",
+        "taal ontbreekt in het schema van generate_steel_report_pdf"
+    );
     let codes: Vec<&str> = report::RapportTaal::ALLE.iter().map(|t| t.code()).collect();
     assert_eq!(veld["enum"], serde_json::json!(codes));
     assert_eq!(veld["default"], report::RapportTaal::default().code());
@@ -984,9 +1127,18 @@ async fn schema_van_de_belastinggevallen_kent_het_kenmerk_eigen_gewicht_strikt()
             "{naam}: het schema van een belastinggeval hoort strikt te zijn: {geval}"
         );
         let veld = &geval["properties"]["eigenGewicht"];
-        assert_eq!(veld["type"], json!("boolean"), "{naam}: eigenGewicht ontbreekt: {geval}");
-        assert_eq!(veld["enum"], json!([true]), "{naam}: alleen true is toegestaan: {veld}");
-        let zelf_gewicht = &tool["inputSchema"]["properties"]["model"]["properties"]["selfWeightEnabled"];
+        assert_eq!(
+            veld["type"],
+            json!("boolean"),
+            "{naam}: eigenGewicht ontbreekt: {geval}"
+        );
+        assert_eq!(
+            veld["enum"],
+            json!([true]),
+            "{naam}: alleen true is toegestaan: {veld}"
+        );
+        let zelf_gewicht =
+            &tool["inputSchema"]["properties"]["model"]["properties"]["selfWeightEnabled"];
         assert!(
             zelf_gewicht["description"]
                 .as_str()

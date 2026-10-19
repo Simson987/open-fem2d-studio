@@ -61,8 +61,14 @@ fn korf(onder: (u32, f64), boven: (u32, f64)) -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: boven.0, diameter_mm: boven.1 },
-        bottom: RebarRow { count: onder.0, diameter_mm: onder.1 },
+        top: RebarRow {
+            count: boven.0,
+            diameter_mm: boven.1,
+        },
+        bottom: RebarRow {
+            count: onder.0,
+            diameter_mm: onder.1,
+        },
         ..ReinforcementCage::default()
     }
 }
@@ -112,7 +118,10 @@ fn drukzone_in_de_flens_is_exact_een_rechthoek_met_de_flensbreedte() {
 
     // Het lijf mag dan wél smaller worden zonder dat er iets verandert.
     let smal = ConcreteSection::tee(600.0, 150.0, 150.0, 600.0).unwrap();
-    assert_eq!(stress_block(&smal, &lagen, &m, 0.0, 1.0).unwrap().m_rd_knm, r_r.m_rd_knm);
+    assert_eq!(
+        stress_block(&smal, &lagen, &m, 0.0, 1.0).unwrap().m_rd_knm,
+        r_r.m_rd_knm
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -151,7 +160,10 @@ fn drukzone_in_het_lijf_handberekening() {
     let f_s = a_s * f_yd();
     let a_blok = f_s / F_CD;
     let flens = 400.0 * 50.0;
-    assert!(a_blok > flens, "het blok blijft in de flens; dan toetst deze test niets");
+    assert!(
+        a_blok > flens,
+        "het blok blijft in de flens; dan toetst deze test niets"
+    );
     let lijfdiepte = (a_blok - flens) / 200.0;
     let lambda_x = 50.0 + lijfdiepte;
     let x_hand = lambda_x / LAMBDA;
@@ -171,7 +183,10 @@ fn drukzone_in_het_lijf_handberekening() {
 
     // ── de kern ───────────────────────────────────────────────────────────
     let r = stress_block(&s, &lagen, &m, 0.0, 1.0).unwrap();
-    assert!(s.uniform_top_width(LAMBDA * r.x_mm).is_none(), "het blok loopt over de bandgrens");
+    assert!(
+        s.uniform_top_width(LAMBDA * r.x_mm).is_none(),
+        "het blok loopt over de bandgrens"
+    );
     assert_relative_eq!(r.x_mm, x_hand, max_relative = 1e-9);
     assert_relative_eq!(r.f_c_kn, f_s * 1e-3, max_relative = 1e-9);
     // De arm van F_c om het midden: h/2 − d_c.
@@ -180,10 +195,12 @@ fn drukzone_in_het_lijf_handberekening() {
     assert!(r.layers[0].yields);
 
     // ── de twee naïeve antwoorden liggen eromheen ─────────────────────────
-    let met_flensbreedte =
-        stress_block(&ConcreteSection::new(400.0, 450.0), &lagen, &m, 0.0, 1.0).unwrap().m_rd_knm;
-    let met_lijfbreedte =
-        stress_block(&ConcreteSection::new(200.0, 450.0), &lagen, &m, 0.0, 1.0).unwrap().m_rd_knm;
+    let met_flensbreedte = stress_block(&ConcreteSection::new(400.0, 450.0), &lagen, &m, 0.0, 1.0)
+        .unwrap()
+        .m_rd_knm;
+    let met_lijfbreedte = stress_block(&ConcreteSection::new(200.0, 450.0), &lagen, &m, 0.0, 1.0)
+        .unwrap()
+        .m_rd_knm;
     println!(
         "T 400/50-200/450, onder 4Ø20:\n  \
          met b_f = 400 overal : {met_flensbreedte:.2} kNm  (ONVEILIG — het lijfdeel te breed)\n  \
@@ -191,8 +208,14 @@ fn drukzone_in_het_lijf_handberekening() {
          met b_w = 200 overal : {met_lijfbreedte:.2} kNm  (conservatief — de flens te smal)",
         r.m_rd_knm
     );
-    assert!(r.m_rd_knm < met_flensbreedte, "de flensbreedte overal is niet onveilig?");
-    assert!(r.m_rd_knm > met_lijfbreedte, "de lijfbreedte overal is niet conservatief?");
+    assert!(
+        r.m_rd_knm < met_flensbreedte,
+        "de flensbreedte overal is niet onveilig?"
+    );
+    assert!(
+        r.m_rd_knm > met_lijfbreedte,
+        "de lijfbreedte overal is niet conservatief?"
+    );
     // Het verschil met de onveilige aanname is klein maar echt; met de
     // conservatieve aanname loopt het op tot ruim 8 %.
     assert!((met_flensbreedte - r.m_rd_knm) / r.m_rd_knm > 5e-3);
@@ -229,7 +252,10 @@ fn scheurmoment_verschilt_voor_positief_en_negatief_moment() {
 
     // Bij een rechthoek zijn ze wél elkaars tegengestelde.
     let r = ConcreteSection::new(400.0, 450.0);
-    assert_eq!(m_cr_knm(&r, F_CTM, 0.0, -1.0), -m_cr_knm(&r, F_CTM, 0.0, 1.0));
+    assert_eq!(
+        m_cr_knm(&r, F_CTM, 0.0, -1.0),
+        -m_cr_knm(&r, F_CTM, 0.0, 1.0)
+    );
 
     // De normaalkracht zit er in beide richtingen in (σ = N/A_c).
     let met_druk = m_cr_knm(&s, F_CTM, -500.0, 1.0);
@@ -254,8 +280,16 @@ fn gescheurd_in_de_ene_richting_en_niet_in_de_andere() {
     // M_cr(+) = 22,26 kNm, |M_cr(−)| = 26,61 kNm; 24 kNm ligt ertussenin.
     let plus = ei_secant(&s, &lagen, &m, 0.0, 24.0, &o).unwrap();
     let min = ei_secant(&s, &lagen, &m, 0.0, -24.0, &o).unwrap();
-    assert!(plus.cracked, "+24 kNm zou boven M_cr(+) = {:.2} moeten liggen", plus.m_cr_knm);
-    assert!(!min.cracked, "−24 kNm zou onder |M_cr(−)| = {:.2} moeten liggen", min.m_cr_knm);
+    assert!(
+        plus.cracked,
+        "+24 kNm zou boven M_cr(+) = {:.2} moeten liggen",
+        plus.m_cr_knm
+    );
+    assert!(
+        !min.cracked,
+        "−24 kNm zou onder |M_cr(−)| = {:.2} moeten liggen",
+        min.m_cr_knm
+    );
     assert!(plus.tension_stiffening.unwrap().zeta > 0.0);
     assert_relative_eq!(min.tension_stiffening.unwrap().zeta, 0.0);
     println!(
@@ -283,14 +317,22 @@ fn spiegelen_zet_de_drukzone_in_het_lijf() {
     let lagen = korf((0, 0.0), (4, 20.0)).layers(450.0);
 
     let r_t = stress_block(&t, &lagen, &m, 0.0, -1.0).unwrap();
-    let als_lijf = stress_block(&ConcreteSection::new(200.0, 450.0), &lagen, &m, 0.0, -1.0).unwrap();
-    let als_flens = stress_block(&ConcreteSection::new(400.0, 450.0), &lagen, &m, 0.0, -1.0).unwrap();
+    let als_lijf =
+        stress_block(&ConcreteSection::new(200.0, 450.0), &lagen, &m, 0.0, -1.0).unwrap();
+    let als_flens =
+        stress_block(&ConcreteSection::new(400.0, 450.0), &lagen, &m, 0.0, -1.0).unwrap();
 
     // De drukzone blijft binnen het lijf (400 mm hoog).
     assert!(LAMBDA * r_t.x_mm < 400.0, "λ·x = {}", LAMBDA * r_t.x_mm);
-    assert_eq!(r_t.m_rd_knm, als_lijf.m_rd_knm, "negatief moment ⇒ lijfbreedte");
+    assert_eq!(
+        r_t.m_rd_knm, als_lijf.m_rd_knm,
+        "negatief moment ⇒ lijfbreedte"
+    );
     assert_eq!(r_t.f_c_kn, als_lijf.f_c_kn);
-    assert!(r_t.m_rd_knm < als_flens.m_rd_knm, "de oude fout zou hier een hogere M_Rd geven");
+    assert!(
+        r_t.m_rd_knm < als_flens.m_rd_knm,
+        "de oude fout zou hier een hogere M_Rd geven"
+    );
     println!(
         "T 400/50-200/450, boven 4Ø20, negatief moment: M_Rd = {:.2} kNm (lijf 200 mm) — \
          met de flensbreedte zou er {:.2} kNm uitkomen, {:.1} % te hoog",
@@ -370,20 +412,27 @@ fn bandenintegratie_convergeert_kwadratisch() {
     println!("stroken   fout N_c [rel]   verhouding   1/(8n²)");
     let mut vorige: Option<f64> = None;
     for n in [10usize, 20, 40, 80, 160, 320] {
-        let fout = ((internal_forces(&s, &[], &m, eps_c2 / 2.0, eps_c2 / 450.0, n).n_c - referentie)
+        let fout = ((internal_forces(&s, &[], &m, eps_c2 / 2.0, eps_c2 / 450.0, n).n_c
+            - referentie)
             / referentie)
             .abs();
         let rechthoek = 1.0 / (8.0 * (n * n) as f64);
         let verhouding = vorige.map(|v: f64| v / fout).unwrap_or(f64::NAN);
         println!("{n:>7}   {fout:.3e}       {verhouding:.2}     {rechthoek:.3e}");
         if let Some(v) = vorige {
-            assert!(fout < v / 3.0, "n = {n}: {fout} tegen {v} — niet kwadratisch");
+            assert!(
+                fout < v / 3.0,
+                "n = {n}: {fout} tegen {v} — niet kwadratisch"
+            );
         }
         // De rechthoek haalt met de middelpuntregel op de parabool precies
         // 1/(8n²). De T mag daar niet noemenswaardig bij achterblijven: bleef
         // er één strook óver de sprong in b(z) heen liggen, dan zou de fout
         // daar eerste-orde worden en deze grens ruim overschrijden.
-        assert!(fout < 1.5 * rechthoek, "n = {n}: {fout} tegen 1/(8n²) = {rechthoek}");
+        assert!(
+            fout < 1.5 * rechthoek,
+            "n = {n}: {fout} tegen 1/(8n²) = {rechthoek}"
+        );
         vorige = Some(fout);
     }
 }
@@ -448,14 +497,24 @@ fn de_aannamen_staan_in_elke_toets() {
     let snap = ForceStateSnapshot {
         combination_id: 1,
         position_mm: 2500.0,
-        forces: InternalForces { n_ed: 0.0, my_ed: 100.0, ..Default::default() },
+        forces: InternalForces {
+            n_ed: 0.0,
+            my_ed: 100.0,
+            ..Default::default()
+        },
     };
     let o = MnKappaOptions { n_strips: 20 };
 
     for (vorm, s) in [
         ("rechthoek", ConcreteSection::new(400.0, 450.0)),
-        ("T", ConcreteSection::tee(400.0, 50.0, 200.0, 450.0).unwrap()),
-        ("L", ConcreteSection::ell(400.0, 50.0, 200.0, 450.0).unwrap()),
+        (
+            "T",
+            ConcreteSection::tee(400.0, 50.0, 200.0, 450.0).unwrap(),
+        ),
+        (
+            "L",
+            ConcreteSection::ell(400.0, 50.0, 200.0, 450.0).unwrap(),
+        ),
     ] {
         let blok = check_bending_stress_block(&s, &k, &m, snap);
         let mnk = check_mn_kappa(&s, &k, &m, &o, true, snap);
@@ -480,8 +539,16 @@ fn de_aannamen_staan_in_elke_toets() {
         }
         // b_w en h_f staan als variabele in de tabel zodra er een flens is.
         let heeft = |v: &[nen_en_1992_1_1::NamedValue], s: &str| v.iter().any(|n| n.symbol == s);
-        assert_eq!(heeft(&blok.variables, "b_w"), s.shape.has_flange(), "{vorm}");
-        assert_eq!(heeft(&mnk.calc.variables, "h_f"), s.shape.has_flange(), "{vorm}");
+        assert_eq!(
+            heeft(&blok.variables, "b_w"),
+            s.shape.has_flange(),
+            "{vorm}"
+        );
+        assert_eq!(
+            heeft(&mnk.calc.variables, "h_f"),
+            s.shape.has_flange(),
+            "{vorm}"
+        );
     }
 }
 
@@ -506,7 +573,11 @@ fn de_afleiding_toont_dezelfde_x_als_de_toets() {
     let snap = ForceStateSnapshot {
         combination_id: 1,
         position_mm: 2500.0,
-        forces: InternalForces { n_ed: 0.0, my_ed: 150.0, ..Default::default() },
+        forces: InternalForces {
+            n_ed: 0.0,
+            my_ed: 150.0,
+            ..Default::default()
+        },
     };
     let stap = |calc: &ResistanceCalc, id: &str| -> Deelstap {
         calc.deelstappen
@@ -519,20 +590,39 @@ fn de_afleiding_toont_dezelfde_x_als_de_toets() {
     // ── Blok in het lijf: geen gesloten vorm, wel dezelfde x ──────────────
     let s = ConcreteSection::tee(400.0, 50.0, 200.0, 450.0).unwrap();
     let r = stress_block(&s, &k.layers(450.0), &m, 0.0, 1.0).unwrap();
-    assert!(s.uniform_top_width(LAMBDA * r.x_mm).is_none(), "het blok blijft in de flens");
+    assert!(
+        s.uniform_top_width(LAMBDA * r.x_mm).is_none(),
+        "het blok blijft in de flens"
+    );
     assert_relative_eq!(r.x_mm, 108.239, max_relative = 1e-5);
 
     let calc = check_bending_stress_block(&s, &k, &m, snap);
     let ev = stap(&calc, "evenwicht_x");
-    assert_eq!(ev.value, Some(r.x_mm), "de afleiding toont een andere x dan de toets");
+    assert_eq!(
+        ev.value,
+        Some(r.x_mm),
+        "de afleiding toont een andere x dan de toets"
+    );
     // De formule is de integraal en niet η·f_cd·b·λ·x — er is hier geen b die
     // klopt, dus mag er ook geen in staan.
-    assert!(ev.formula_latex.contains(r"A_c(\lambda x)"), "{}", ev.formula_latex);
-    assert!(!ev.formula_latex.contains(r"f_{cd} \cdot b \cdot"), "{}", ev.formula_latex);
+    assert!(
+        ev.formula_latex.contains(r"A_c(\lambda x)"),
+        "{}",
+        ev.formula_latex
+    );
+    assert!(
+        !ev.formula_latex.contains(r"f_{cd} \cdot b \cdot"),
+        "{}",
+        ev.formula_latex
+    );
     // De naïeve gesloten vorm met de flensbreedte zou een ANDERE x geven; dat
     // is precies waarom hij hier niet mag staan.
     let x_naief = k.a_s_bottom_mm2() * f_yd() / (1.0 * F_CD * 400.0 * LAMBDA);
-    assert!((x_naief - r.x_mm).abs() > 20.0, "x_naief = {x_naief}, x = {}", r.x_mm);
+    assert!(
+        (x_naief - r.x_mm).abs() > 20.0,
+        "x_naief = {x_naief}, x = {}",
+        r.x_mm
+    );
     let tekst = ev.notes.join(" ");
     assert!(tekst.contains("LOOPT DE FLENS UIT"), "{tekst}");
     assert!(!tekst.contains("de bekende handformule"), "{tekst}");
@@ -545,7 +635,11 @@ fn de_afleiding_toont_dezelfde_x_als_de_toets() {
         (diepte - LAMBDA * r.x_mm / 2.0).abs() > 5.0,
         "het zwaartepunt valt toevallig op λx/2; dan toetst dit niets"
     );
-    assert!(fc.notes.join(" ").contains("over twee breedten"), "{:?}", fc.notes);
+    assert!(
+        fc.notes.join(" ").contains("over twee breedten"),
+        "{:?}",
+        fc.notes
+    );
 
     // ── Blok in de flens: dan geldt de gesloten vorm wél, met b_f ─────────
     let dun = korf((2, 12.0), (0, 0.0));
@@ -554,10 +648,17 @@ fn de_afleiding_toont_dezelfde_x_als_de_toets() {
     let calc2 = check_bending_stress_block(&s, &dun, &m, snap);
     let ev2 = stap(&calc2, "evenwicht_x");
     assert_eq!(ev2.value, Some(r2.x_mm));
-    assert!(ev2.formula_latex.contains(r"f_{cd} \cdot b \cdot"), "{}", ev2.formula_latex);
+    assert!(
+        ev2.formula_latex.contains(r"f_{cd} \cdot b \cdot"),
+        "{}",
+        ev2.formula_latex
+    );
     // De breedte in de variabelentabel is de FLENSbreedte, want die ziet het
     // blok — en de gesloten handformule wordt genoemd omdat hij hier klopt.
-    assert!(ev2.variables.iter().any(|v| v.symbol == "b" && v.value == 400.0));
+    assert!(ev2
+        .variables
+        .iter()
+        .any(|v| v.symbol == "b" && v.value == 400.0));
     let tekst2 = ev2.notes.join(" ");
     assert!(tekst2.contains("de bekende handformule"), "{tekst2}");
     assert!(tekst2.contains("binnen de gedrukte band"), "{tekst2}");
@@ -565,7 +666,11 @@ fn de_afleiding_toont_dezelfde_x_als_de_toets() {
     // ── Negatief moment: de flens klapt naar onderen, dus het blok ziet het
     //    LIJF. De afleiding moet dan 200 mm noemen en geen 400 mm ──────────
     let neg = ForceStateSnapshot {
-        forces: InternalForces { n_ed: 0.0, my_ed: -40.0, ..Default::default() },
+        forces: InternalForces {
+            n_ed: 0.0,
+            my_ed: -40.0,
+            ..Default::default()
+        },
         ..snap
     };
     let boven = korf((0, 0.0), (2, 12.0));
@@ -574,7 +679,9 @@ fn de_afleiding_toont_dezelfde_x_als_de_toets() {
     let r3 = stress_block(&s, &boven.layers(450.0), &m, 0.0, -1.0).unwrap();
     assert_eq!(ev3.value, Some(r3.x_mm));
     assert!(
-        ev3.variables.iter().any(|v| v.symbol == "b" && v.value == 200.0),
+        ev3.variables
+            .iter()
+            .any(|v| v.symbol == "b" && v.value == 200.0),
         "bij een negatief moment hoort de LIJFbreedte in de afleiding: {:?}",
         ev3.variables
     );

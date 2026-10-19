@@ -31,7 +31,9 @@
 //! blad met het oog te bekijken is; het pad staat in de uitvoer van
 //! `cargo test -- --nocapture`.
 
-use concrete_check::segments::{segment_stiffness, SegmentStiffnessRequest, SegmentStiffnessResponse};
+use concrete_check::segments::{
+    segment_stiffness, SegmentStiffnessRequest, SegmentStiffnessResponse,
+};
 use concrete_check::{mn_kappa, ConcreteBeamCheckResult, MnKappaRequest, MnKappaResponse};
 use mechanics::{ForceStateSnapshot, InternalForces};
 use nen_en_1992_1_1::section::{ConcreteSectionInput, RebarRow, ReinforcementCage};
@@ -111,8 +113,14 @@ fn proefkorf() -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: 2, diameter_mm: 12.0 },
-        bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+        top: RebarRow {
+            count: 2,
+            diameter_mm: 12.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
         ..ReinforcementCage::default()
     }
 }
@@ -153,7 +161,10 @@ fn reken_segmenten() -> SegmentStiffnessResponse {
     let vorige: Vec<f64> = ronde1
         .segments
         .iter()
-        .map(|s| s.ei_knm2.expect("ronde 1 hoort overal een stijfheid te geven"))
+        .map(|s| {
+            s.ei_knm2
+                .expect("ronde 1 hoort overal een stijfheid te geven")
+        })
         .collect();
     reken_ronde(vorige)
 }
@@ -262,7 +273,11 @@ fn spoor(respons: SegmentStiffnessResponse) -> BetonStijfheidSpoor {
             grenstoestand: respons.limit_state,
             ronden: 3,
             verloop: vec![
-                StijfheidRonde { ronde: 1, max_relatieve_verandering: None, geconvergeerd: false },
+                StijfheidRonde {
+                    ronde: 1,
+                    max_relatieve_verandering: None,
+                    geconvergeerd: false,
+                },
                 StijfheidRonde {
                     ronde: 2,
                     max_relatieve_verandering: Some(0.084),
@@ -335,10 +350,7 @@ fn staalstaaf() -> BeamCheckResult {
     }
 }
 
-fn invoer(
-    beton: Vec<ConcreteBeamCheckResult>,
-    trace: Option<BetonStijfheidSpoor>,
-) -> ReportInput {
+fn invoer(beton: Vec<ConcreteBeamCheckResult>, trace: Option<BetonStijfheidSpoor>) -> ReportInput {
     ReportInput {
         bijlage: Default::default(),
         project_name: "Betonportaal".into(),
@@ -414,7 +426,7 @@ fn het_betonhoofdstuk_staat_woordelijk_in_de_pdf() {
 
     // ── 2. De uitgangspunten per combinatie ──────────────────────────────
     for woord in [
-        "BGT-kar",                 // de combinatienaam
+        "BGT-kar", // de combinatienaam
         "Analysetype",
         "Segmentlengte",
         "Convergentiecriterium",
@@ -425,7 +437,13 @@ fn het_betonhoofdstuk_staat_woordelijk_in_de_pdf() {
     }
 
     // ── 3. De segmenttabel: koppen én een gerekende waarde ───────────────
-    for woord in ["Toestand", "Onderrelaxatie", "gescheurd", "ongescheurd", &ei_tekst] {
+    for woord in [
+        "Toestand",
+        "Onderrelaxatie",
+        "gescheurd",
+        "ongescheurd",
+        &ei_tekst,
+    ] {
         eis_erin(&stroom, woord);
     }
 
@@ -457,7 +475,12 @@ fn het_betonhoofdstuk_staat_woordelijk_in_de_pdf() {
     // De KOP "Segmentstijfheden per combinatie" blijft wel staan: er is beton,
     // dus het hoofdstuk hoort te bestaan met zijn eerlijke melding. Wat weg
     // hoort te zijn, is alles wat uit het SPOOR komt.
-    for woord in ["Convergentiecriterium", "BGT-kar", "Onderrelaxatie", "Toestand"] {
+    for woord in [
+        "Convergentiecriterium",
+        "BGT-kar",
+        "Onderrelaxatie",
+        "Toestand",
+    ] {
         assert!(
             !staat_erin(&stroom_zonder, woord),
             "{woord:?} staat in de PDF ZONDER segmentspoor — de tabellen komen dan ergens \
@@ -473,7 +496,10 @@ fn het_betonhoofdstuk_staat_woordelijk_in_de_pdf() {
 
     // ── 7. Omvang en bladzijden ─────────────────────────────────────────
     let bladzijden_met = lopdf::Document::load_mem(&met).unwrap().get_pages().len();
-    let bladzijden_zonder = lopdf::Document::load_mem(&zonder).unwrap().get_pages().len();
+    let bladzijden_zonder = lopdf::Document::load_mem(&zonder)
+        .unwrap()
+        .get_pages()
+        .len();
     assert!(
         bladzijden_met > bladzijden_zonder,
         "het spoor levert geen enkele extra bladzijde op ({bladzijden_met} tegen \

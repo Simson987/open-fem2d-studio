@@ -1,0 +1,22 @@
+{
+  "kind": "crackWidth",
+  "input": {
+    "sigmaSMpa": 120.0,
+    "widthMm": 300.0,
+    "heightMm": 600.0,
+    "effectiveDepthMm": 540.0,
+    "neutralAxisMm": 120.0,
+    "bondedReinforcementAreaMm2": 0.0,
+    "effectiveBondedPrestressingAreaMm2": 588.0,
+    "coverToLongitudinalSteelMm": 60.0,
+    "barOrTendonDiameterMm": 15.2,
+    "spacingMm": 100.0,
+    "fCkMpa": 40.0,
+    "fCtEffMpa": 3.5,
+    "eCmMpa": 35220.0,
+    "kT": 0.4,
+    "k1": 1.6,
+    "k2": 0.5,
+    "wMaxMm": 0.2
+  }
+}

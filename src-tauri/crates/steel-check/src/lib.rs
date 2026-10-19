@@ -9,15 +9,15 @@
 pub(crate) const NDP_1990: nationale_bijlage::Ndp1990 =
     nationale_bijlage::Ndp1990::voor(nationale_bijlage::NationaleBijlage::NL);
 
-pub mod input;
-pub mod result;
-pub mod orchestrator;
 pub mod deflection;
+pub mod input;
+pub mod orchestrator;
+pub mod result;
 pub mod verlopend;
 
 pub use input::*;
-pub use result::*;
 pub use orchestrator::check_beam;
+pub use result::*;
 pub use verlopend::{bepaal_verloop, Maten, Verloop};
 
 pub fn check_all_beams(inputs: Vec<input::BeamCheckInput>) -> Vec<result::BeamCheckResult> {

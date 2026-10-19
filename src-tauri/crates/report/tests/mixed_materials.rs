@@ -87,7 +87,12 @@ fn steel_beam(beam_id: u32, uc: f64) -> BeamCheckResult {
         profile_name: "HEB160".into(),
         steel_grade: "S235".into(),
         classification: CrossSectionClass::Class1,
-        checks: vec![dummy_check("comp", "Compression resistance", "EN 1993-1-1 §6.2.4", uc)],
+        checks: vec![dummy_check(
+            "comp",
+            "Compression resistance",
+            "EN 1993-1-1 §6.2.4",
+            uc,
+        )],
         uc_max: uc,
         status: CheckStatus::Ok,
         governing_check_id: "comp".into(),
@@ -129,7 +134,12 @@ fn concrete_beam(beam_id: u32, uc: f64) -> ConcreteBeamCheckResult {
         d_mm: 454.0,
         f_cd_mpa: 20.0,
         f_yd_mpa: 435.0,
-        checks: vec![dummy_check("6.1_mn_kappa", "Moment-normaalkracht (M-N-κ)", "art. 6.1 en 3.1.7(1) (3.17)", uc)],
+        checks: vec![dummy_check(
+            "6.1_mn_kappa",
+            "Moment-normaalkracht (M-N-κ)",
+            "art. 6.1 en 3.1.7(1) (3.17)",
+            uc,
+        )],
         uc_max: uc,
         status: CheckStatus::Ok,
         niet_uitgevoerd: Vec::new(),
@@ -312,9 +322,9 @@ fn staat_op_papier(pdf: &[u8], woord: &str) -> bool {
         let hex: String = woord
             .chars()
             .map(|ch| {
-                let gid = face
-                    .glyph_index(ch)
-                    .unwrap_or_else(|| panic!("geen glief voor {ch:?} — kies een ander proefwoord"));
+                let gid = face.glyph_index(ch).unwrap_or_else(|| {
+                    panic!("geen glief voor {ch:?} — kies een ander proefwoord")
+                });
                 format!("{:04X}", gid.0)
             })
             .collect();
@@ -329,7 +339,11 @@ fn report_members_bevat_staal_en_hout_gesorteerd_op_staaf_id() {
     let inp = input(vec![steel_beam(4, 0.42)], vec![timber_beam(2, 0.81)]);
     let members = report_members(&inp);
 
-    assert_eq!(members.len(), 2, "beide staven moeten in het rapport zitten");
+    assert_eq!(
+        members.len(),
+        2,
+        "beide staven moeten in het rapport zitten"
+    );
 
     // Gesorteerd op staaf-id: hout-staaf 2 vóór staal-staaf 4.
     assert_eq!(members[0].beam_id, 2);
@@ -362,7 +376,10 @@ fn norms_line_toont_alleen_aanwezige_normen() {
     assert_eq!(norms_line(&hout_alleen), "EN 1995-1-1");
     assert_eq!(norms_line(&beide), "EN 1993-1-1 / EN 1995-1-1");
     assert_eq!(norms_line(&beton_alleen), "EN 1992-1-1");
-    assert_eq!(norms_line(&alle_drie), "EN 1993-1-1 / EN 1995-1-1 / EN 1992-1-1");
+    assert_eq!(
+        norms_line(&alle_drie),
+        "EN 1993-1-1 / EN 1995-1-1 / EN 1992-1-1"
+    );
 }
 
 /// De kern van dit bestand: een model zonder staal krijgt nergens "EN 1993-1-1"
@@ -498,7 +515,11 @@ fn de_staalnorm_staat_niet_op_het_papier_van_een_model_zonder_staal() {
     });
     let leeg_pdf = generate_report_pdf(leeg_rapport());
 
-    for (naam, pdf) in [("CLT", &clt_pdf), ("vrij materiaal", &vrij_pdf), ("leeg", &leeg_pdf)] {
+    for (naam, pdf) in [
+        ("CLT", &clt_pdf),
+        ("vrij materiaal", &vrij_pdf),
+        ("leeg", &leeg_pdf),
+    ] {
         assert!(
             !staat_op_papier(pdf, "1993"),
             "het rapport van een model met {naam} noemt de staalnorm"
@@ -512,7 +533,10 @@ fn de_staalnorm_staat_niet_op_het_papier_van_een_model_zonder_staal() {
         "een CLT-rapport hoort EN 1995-1-1 te noemen"
     );
     assert!(
-        staat_op_papier(&generate_report_pdf(input(vec![steel_beam(1, 0.5)], vec![])), "1993"),
+        staat_op_papier(
+            &generate_report_pdf(input(vec![steel_beam(1, 0.5)], vec![])),
+            "1993"
+        ),
         "een staalrapport hoort de staalnorm juist wél te noemen"
     );
 }
@@ -560,7 +584,10 @@ fn betonrapport_rendert_geldige_pdf() {
     let bytes = generate_report_pdf(input_alle(vec![], vec![], vec![concrete_beam(1, 0.63)]));
 
     assert!(bytes.starts_with(b"%PDF-"), "PDF-magic ontbreekt");
-    assert!(bytes.windows(5).any(|w| w == b"%%EOF"), "%%EOF-trailer ontbreekt");
+    assert!(
+        bytes.windows(5).any(|w| w == b"%%EOF"),
+        "%%EOF-trailer ontbreekt"
+    );
     // Cover (1) + samenvatting (1) + één betonstaaf (1) + het betonhoofdstuk
     // (1). Dat laatste hoort erbij zodra er beton in het rapport zit, óók
     // zonder segmentspoor: het MODEL kan dit hoofdstuk vullen, en dat het nu
@@ -579,7 +606,11 @@ fn gemengd_rapport_rendert_geldige_pdf_met_pagina_per_staaf() {
     let bytes_zonder = generate_report_pdf(zonder_hout);
 
     // Geldige PDF-omhulling
-    assert!(bytes_met.len() > 1000, "PDF te klein: {} bytes", bytes_met.len());
+    assert!(
+        bytes_met.len() > 1000,
+        "PDF te klein: {} bytes",
+        bytes_met.len()
+    );
     assert!(bytes_met.starts_with(b"%PDF-"), "PDF-magic ontbreekt");
     assert!(
         bytes_met.windows(5).any(|w| w == b"%%EOF"),
@@ -602,7 +633,11 @@ fn gemengd_rapport_rendert_geldige_pdf_met_pagina_per_staaf() {
     let pid = std::process::id();
     let out = std::env::temp_dir().join(format!("openaec_mixed_report_{}.pdf", pid));
     std::fs::write(&out, &bytes_met).expect("write mixed PDF");
-    eprintln!("[mixed] wrote {} bytes to {}", bytes_met.len(), out.display());
+    eprintln!(
+        "[mixed] wrote {} bytes to {}",
+        bytes_met.len(),
+        out.display()
+    );
 }
 
 #[test]
@@ -658,7 +693,10 @@ fn de_normenregel_op_het_omslag_past_op_het_papier() {
         ..leeg_rapport()
     };
     let vier = norms_line(&alle_vier);
-    assert_eq!(vier, format!("EN 1993-1-1 / EN 1995-1-1 / EN 1992-1-1 / {GEEN_NORM}"));
+    assert_eq!(
+        vier,
+        format!("EN 1993-1-1 / EN 1995-1-1 / EN 1992-1-1 / {GEEN_NORM}")
+    );
 
     // De vondst zelf, nagemeten: ongebroken past deze regel niet op het vel.
     // Zou hij ooit tóch passen (kortere aanduidingen, kleinere letter), dan
@@ -688,10 +726,11 @@ fn de_normenregel_op_het_omslag_past_op_het_papier() {
     ];
 
     for bron in &gevallen {
-        let regels = omslag_normregels(bron, max, &mut |s| {
-            reg.text_width(vet, s, OMSLAG_NORM_PT)
-        });
-        assert!(!regels.is_empty(), "een gevulde normenregel levert regels op");
+        let regels = omslag_normregels(bron, max, &mut |s| reg.text_width(vet, s, OMSLAG_NORM_PT));
+        assert!(
+            !regels.is_empty(),
+            "een gevulde normenregel levert regels op"
+        );
         for regel in &regels {
             let breedte = reg.text_width(vet, regel, OMSLAG_NORM_PT);
             assert!(
@@ -709,18 +748,22 @@ fn de_normenregel_op_het_omslag_past_op_het_papier() {
 
     // Drie kaders paste al en moet op één regel BLIJVEN staan: het omslag van
     // een bestaand rapport hoort er niet anders uit te gaan zien.
-    let drie_regels = omslag_normregels(&drie, max, &mut |s| {
-        reg.text_width(vet, s, OMSLAG_NORM_PT)
-    });
+    let drie_regels =
+        omslag_normregels(&drie, max, &mut |s| reg.text_width(vet, s, OMSLAG_NORM_PT));
     assert_eq!(drie_regels.len(), 1, "drie kaders passen op één regel");
 
     // Vier kaders gaan over twee regels, en de eerste toont dat de opsomming
     // doorloopt.
-    let vier_regels = omslag_normregels(&vier, max, &mut |s| {
-        reg.text_width(vet, s, OMSLAG_NORM_PT)
-    });
-    assert!(vier_regels.len() >= 2, "vier kaders passen niet op één regel");
-    assert!(vier_regels[0].ends_with(" /"), "een afgesloten regel houdt zijn scheidingsteken");
+    let vier_regels =
+        omslag_normregels(&vier, max, &mut |s| reg.text_width(vet, s, OMSLAG_NORM_PT));
+    assert!(
+        vier_regels.len() >= 2,
+        "vier kaders passen niet op één regel"
+    );
+    assert!(
+        vier_regels[0].ends_with(" /"),
+        "een afgesloten regel houdt zijn scheidingsteken"
+    );
 
     // Zonder toetsresultaten blijft de regel helemaal weg — geen lege regel
     // die als een weggevallen norm leest.
@@ -743,7 +786,10 @@ fn de_houtnorm_heet_op_het_omslag_hetzelfde_als_in_de_notitie() {
     use nen_en_1995_1_1::clt_toets::{rolling_shear_info, NORM_HOUT_AANDUIDING};
 
     // Het omslag draagt de aanduiding van de norm plus de taal, en niets anders.
-    assert_eq!(report::NORM_TIMBER_FULL, format!("{NORM_HOUT_AANDUIDING} nl"));
+    assert_eq!(
+        report::NORM_TIMBER_FULL,
+        format!("{NORM_HOUT_AANDUIDING} nl")
+    );
 
     let mech = CltLayup::alternating(1000.0, &[40.0, 20.0, 40.0], "C24")
         .mechanics()
@@ -755,7 +801,10 @@ fn de_houtnorm_heet_op_het_omslag_hetzelfde_als_in_de_notitie() {
         ForceStateSnapshot {
             combination_id: 1,
             position_mm: 2500.0,
-            forces: InternalForces { vz_ed: 10.0, ..Default::default() },
+            forces: InternalForces {
+                vz_ed: 10.0,
+                ..Default::default()
+            },
         },
     );
     let notitie = info.notes.join(" ");
@@ -777,11 +826,7 @@ fn de_houtnorm_heet_op_het_omslag_hetzelfde_als_in_de_notitie() {
 /// geweigerd en een weggelaten veld de enige gevulde rij is.
 #[test]
 fn de_normaanduidingen_volgen_de_bijlage_van_de_invoer() {
-    let inp = input_alle(
-        vec![steel_beam(1, 0.5)],
-        vec![timber_beam(2, 0.5)],
-        vec![],
-    );
+    let inp = input_alle(vec![steel_beam(1, 0.5)], vec![timber_beam(2, 0.5)], vec![]);
     let a = nationale_bijlage::Aanduidingen::voor(inp.bijlage);
     assert_eq!(
         norms_line(&inp),
@@ -795,8 +840,13 @@ fn de_normaanduidingen_volgen_de_bijlage_van_de_invoer() {
     let mut json = serde_json::to_value(&inp).unwrap();
     assert_eq!(json["bijlage"], "NL");
     json["bijlage"] = serde_json::json!("DE");
-    let fout = serde_json::from_value::<ReportInput>(json.clone()).unwrap_err().to_string();
-    assert!(fout.contains("nationale bijlage \"DE\" is niet gevuld"), "{fout}");
+    let fout = serde_json::from_value::<ReportInput>(json.clone())
+        .unwrap_err()
+        .to_string();
+    assert!(
+        fout.contains("nationale bijlage \"DE\" is niet gevuld"),
+        "{fout}"
+    );
     json.as_object_mut().unwrap().remove("bijlage");
     let zonder: ReportInput = serde_json::from_value(json).unwrap();
     assert_eq!(zonder.bijlage, nationale_bijlage::NationaleBijlage::NL);

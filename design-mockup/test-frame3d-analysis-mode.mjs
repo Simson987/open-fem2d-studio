@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { solveFrame3D, solveFrame3DCombination } from "./src/components/frame3d/frame3dSolver.ts";
+import { frame3DAnalysisForProject, solveFrame3D, solveFrame3DCombination } from "./src/components/frame3d/frame3dSolver.ts";
 import { deserializeProject } from "./src/io/projectFile.ts";
 
 const fixture = fileURLToPath(new URL("../docs/verificatie/3d-raamwerk/groot-vierlaags-raam.ifcfem2d", import.meta.url));
 const model = deserializeProject(readFileSync(fixture, "utf8")).model3d;
 assert.ok(model);
+assert.equal(frame3DAnalysisForProject(model, "eersteOrde"), "linear");
+assert.equal(frame3DAnalysisForProject(model, "tweedeOrdeGeometrisch"), "p-delta");
+assert.equal(frame3DAnalysisForProject(model, "tweedeOrdeFysisch"), "combined",
+  "de bestaande projectkeuze moet geometrische én materiaalniet-lineariteit activeren voor 3D-ramen");
+assert.equal(frame3DAnalysisForProject(model, "axiaalFysischRust"), "combined",
+  "de Rust axiale FNL-keuze moet voor een 3D-raamwerk ook de geometrische stijfheid activeren");
 const requests = [];
 const previousFetch = globalThis.fetch;
 globalThis.fetch = async (_url, options) => {

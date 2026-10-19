@@ -1,0 +1,20 @@
+{
+  "analysis": "material",
+  "nodes": [
+    { "id": 1, "x": 0, "y": 0 },
+    { "id": 2, "x": 4, "y": 0 }
+  ],
+  "materials": [{
+    "id": 1,
+    "eMpa": 210000,
+    "law": { "kind": "steelBilinear", "yield_mpa": 250, "hardening_ratio": 0.02 }
+  }],
+  "sections": [{ "id": 1, "areaM2": 0.01, "inertiaM4": 0.00001673 }],
+  "members": [{ "id": 1, "startNodeId": 1, "endNodeId": 2, "materialId": 1, "sectionId": 1 }],
+  "supports": [
+    { "nodeId": 1, "ux": true, "uy": true, "rz": true },
+    { "nodeId": 2, "ux": true, "uy": true, "rz": true }
+  ],
+  "memberPointLoads": [{ "memberId": 1, "pxKn": 6000, "pyKn": 0, "positionM": 2 }],
+  "loadPath": [1]
+}

@@ -23,9 +23,7 @@ use concrete_check::{check_concrete_beam, ConcreteBeamCheckInput, ConcreteBeamCh
 use mechanics::{ForcePoint, InternalForces};
 use nen_en_1992_1_1::{ConcreteSectionInput, RebarRow, ReinforcementCage, ReinforcementZones};
 use nen_en_1993_1_1_section::CheckStatus;
-use report::{
-    generate_report_pdf, niet_uitgevoerd_overzicht, niet_uitgevoerd_tekst, ReportInput,
-};
+use report::{generate_report_pdf, niet_uitgevoerd_overzicht, niet_uitgevoerd_tekst, ReportInput};
 use steel_check::result::BeamCheckResult;
 
 const FONT_REGULAR: &[u8] = include_bytes!("../fonts/LiberationSans-Regular.ttf");
@@ -69,7 +67,12 @@ fn punt(x_mm: f64, v: f64, m: f64) -> ForcePoint {
     ForcePoint {
         combination_id: 1,
         position_mm: x_mm,
-        forces: InternalForces { n_ed: 0.0, vz_ed: v, my_ed: m, ..Default::default() },
+        forces: InternalForces {
+            n_ed: 0.0,
+            vz_ed: v,
+            my_ed: m,
+            ..Default::default()
+        },
     }
 }
 
@@ -85,8 +88,14 @@ fn balk_zonder_beugels(beam_id: u32) -> ConcreteBeamCheckResult {
         cage: ReinforcementCage {
             cover_mm: 20.0,
             stirrup_diameter_mm: 8.0,
-            top: RebarRow { count: 2, diameter_mm: 12.0 },
-            bottom: RebarRow { count: 4, diameter_mm: 20.0 },
+            top: RebarRow {
+                count: 2,
+                diameter_mm: 12.0,
+            },
+            bottom: RebarRow {
+                count: 4,
+                diameter_mm: 20.0,
+            },
             ..ReinforcementCage::default()
         },
         reinforcement_zones: ReinforcementZones::default(),
@@ -175,7 +184,11 @@ fn de_kern_levert_een_niet_uitgevoerde_dwarskrachttoets() {
 fn het_overzicht_noemt_de_staaf_en_de_toets() {
     let inp = invoer(vec![balk_zonder_beugels(7)]);
     let regels = niet_uitgevoerd_overzicht(&inp);
-    assert_eq!(regels.len(), 1, "alleen de betonstaaf heeft een overgeslagen toets");
+    assert_eq!(
+        regels.len(),
+        1,
+        "alleen de betonstaaf heeft een overgeslagen toets"
+    );
     let r = &regels[0];
     assert_eq!(r.beam_id, 7);
     assert_eq!(r.section_label, inp.concrete_check_results[0].section_name);
@@ -191,9 +204,9 @@ fn het_overzicht_noemt_de_staaf_en_de_toets() {
     // Elke toets uit de lijst staat in de regel, in de volgorde van de kern.
     let mut vanaf = 0;
     for t in r.toetsen {
-        let pos = tekst[vanaf..]
-            .find(&t.titel)
-            .unwrap_or_else(|| panic!("{:?} ontbreekt of staat niet op volgorde: {tekst}", t.titel));
+        let pos = tekst[vanaf..].find(&t.titel).unwrap_or_else(|| {
+            panic!("{:?} ontbreekt of staat niet op volgorde: {tekst}", t.titel)
+        });
         vanaf += pos + t.titel.len();
     }
 }
@@ -213,7 +226,11 @@ fn een_detailleringseis_wordt_zo_genoemd_en_de_regels_staan_op_staaf_id() {
     let inp = invoer(vec![hoog, zonder, laag]);
     let regels = niet_uitgevoerd_overzicht(&inp);
     let ids: Vec<u32> = regels.iter().map(|r| r.beam_id).collect();
-    assert_eq!(ids, vec![3, 9], "op staaf-id, en staaf 5 zonder overgeslagen toets niet");
+    assert_eq!(
+        ids,
+        vec![3, 9],
+        "op staaf-id, en staaf 5 zonder overgeslagen toets niet"
+    );
     assert_eq!(
         niet_uitgevoerd_tekst(&regels[1]),
         "Staaf 9 (300 x 600, C30/37): Minimumwapening (detailleringseis)"
@@ -238,7 +255,10 @@ fn het_overzicht_staat_woordelijk_in_de_pdf_en_alleen_als_er_iets_is() {
     let stroom_zonder = inhoudsstromen(&generate_report_pdf(invoer(vec![zonder])));
 
     // De toelichting: "afgerekend;" (met puntkomma) staat alleen in dit overzicht.
-    assert!(staat_erin(&stroom_met, "afgerekend;"), "de toelichting ontbreekt in de PDF");
+    assert!(
+        staat_erin(&stroom_met, "afgerekend;"),
+        "de toelichting ontbreekt in de PDF"
+    );
     assert!(
         !staat_erin(&stroom_zonder, "afgerekend;"),
         "de toelichting staat in de PDF zonder overgeslagen toets — het overzicht hoort weg te blijven"
@@ -251,7 +271,10 @@ fn het_overzicht_staat_woordelijk_in_de_pdf_en_alleen_als_er_iets_is() {
     let tel = |stroom: &str, woord: &str| {
         let mut reeksen = vec![glief_hex(FONT_REGULAR, woord), glief_hex(FONT_BOLD, woord)];
         reeksen.dedup();
-        reeksen.iter().map(|r| stroom.matches(r.as_str()).count()).sum::<usize>()
+        reeksen
+            .iter()
+            .map(|r| stroom.matches(r.as_str()).count())
+            .sum::<usize>()
     };
     for woord in ["uitgevoerd", "Dwarskracht", "Staaf"] {
         assert_eq!(

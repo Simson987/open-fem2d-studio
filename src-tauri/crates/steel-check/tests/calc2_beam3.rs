@@ -33,13 +33,13 @@
 //! variabelen en tussenwaarden zijn gelijk gebleven — bij het bijwerken per veld
 //! nagelopen.
 
-use steel_check::*;
-use mechanics::{InternalForces, ForcePoint};
-use nen_en_1993_1_1_ltb::LateralBracing;
-use nen_en_1990::ConsequenceClass;
-use nen_en_1993_1_1_section::{CheckStatus, classification::CrossSectionClass};
 use approx::assert_relative_eq;
+use mechanics::{ForcePoint, InternalForces};
+use nen_en_1990::ConsequenceClass;
+use nen_en_1993_1_1_ltb::LateralBracing;
+use nen_en_1993_1_1_section::{classification::CrossSectionClass, CheckStatus};
 use std::sync::OnceLock;
+use steel_check::*;
 
 fn run() -> &'static BeamCheckResult {
     static RESULT: OnceLock<BeamCheckResult> = OnceLock::new();
@@ -55,23 +55,47 @@ fn run() -> &'static BeamCheckResult {
                 ForcePoint {
                     combination_id: 2,
                     position_mm: 2431.0,
-                    forces: InternalForces { n_ed: -48.329, vy_ed: 0.0, vz_ed: 0.0, mt_ed: 0.0, my_ed: 187.1, mz_ed: 0.0 },
+                    forces: InternalForces {
+                        n_ed: -48.329,
+                        vy_ed: 0.0,
+                        vz_ed: 0.0,
+                        mt_ed: 0.0,
+                        my_ed: 187.1,
+                        mz_ed: 0.0,
+                    },
                 },
                 // Combination 2, x=2402 mm: bending/governing location
                 ForcePoint {
                     combination_id: 2,
                     position_mm: 2402.0,
-                    forces: InternalForces { n_ed: -48.228, vy_ed: 0.0, vz_ed: 0.0, mt_ed: 0.0, my_ed: 187.327, mz_ed: 0.0 },
+                    forces: InternalForces {
+                        n_ed: -48.228,
+                        vy_ed: 0.0,
+                        vz_ed: 0.0,
+                        mt_ed: 0.0,
+                        my_ed: 187.327,
+                        mz_ed: 0.0,
+                    },
                 },
                 // Combination 2, x=5000 mm: shear location
                 ForcePoint {
                     combination_id: 2,
                     position_mm: 5000.0,
-                    forces: InternalForces { n_ed: -48.228, vy_ed: 0.0, vz_ed: -241.739, mt_ed: 0.0, my_ed: -126.675, mz_ed: 0.0 },
+                    forces: InternalForces {
+                        n_ed: -48.228,
+                        vy_ed: 0.0,
+                        vz_ed: -241.739,
+                        mt_ed: 0.0,
+                        my_ed: -126.675,
+                        mz_ed: 0.0,
+                    },
                 },
             ],
             // Hollow section has no LTB per EN 1993-1-1 §6.3.2 — but bracing still empty
-            lateral_bracing: LateralBracing { top_flange_positions: vec![], bottom_flange_positions: vec![] },
+            lateral_bracing: LateralBracing {
+                top_flange_positions: vec![],
+                bottom_flange_positions: vec![],
+            },
             // Reference: Lcr,z = 1666.7 mm => 1.667 m, Lcr,y = 5000 mm => 5.0 m
             buckling_length_y_m: 5.0,
             buckling_length_z_m: 1.6667,
@@ -99,9 +123,21 @@ fn run() -> &'static BeamCheckResult {
 }
 
 fn find_check<'a>(result: &'a BeamCheckResult, id: &str) -> &'a NamedCheck {
-    result.checks.iter().find(|c| c.id == id)
-        .unwrap_or_else(|| panic!("check '{}' not found; available: {:?}", id,
-            result.checks.iter().map(|c| c.id.as_str()).collect::<Vec<_>>()))
+    result
+        .checks
+        .iter()
+        .find(|c| c.id == id)
+        .unwrap_or_else(|| {
+            panic!(
+                "check '{}' not found; available: {:?}",
+                id,
+                result
+                    .checks
+                    .iter()
+                    .map(|c| c.id.as_str())
+                    .collect::<Vec<_>>()
+            )
+        })
 }
 
 fn resistance_value(result: &BeamCheckResult, id: &str) -> f64 {
@@ -126,10 +162,18 @@ fn calc2_beam3_compression() {
     // A gaat van 11280 naar 11501,3 mm² en komt daarmee op de referentiewaarde
     // uit; de TODO uit fase 13 is daarmee opgelost.
     // Reference: N_c,Rd = 2702.808 kN (A=11501.3 mm²), UC = 0.02
-    assert_relative_eq!(resistance_value(r, "6.2.4_compression"), 2702.81, max_relative = 1e-3);
+    assert_relative_eq!(
+        resistance_value(r, "6.2.4_compression"),
+        2702.81,
+        max_relative = 1e-3
+    );
     // De referentie drukt deze UC op twee decimalen af (0,02); exact is
     // 48,329 / 2702,808 = 0,01788, en daar komen we nu ook op uit.
-    assert_relative_eq!(uc_value(r, "6.2.4_compression"), 0.01788, max_relative = 5e-3);
+    assert_relative_eq!(
+        uc_value(r, "6.2.4_compression"),
+        0.01788,
+        max_relative = 5e-3
+    );
 }
 
 #[test]
@@ -138,10 +182,16 @@ fn calc2_beam3_bending() {
     // Sept 2026: Wpl;y volgt nu uit dezelfde EN 10210-2-meetkunde en gaat van
     // 768000 naar 785472 mm³ — 0,004% van de referentiewaarde 785442 mm³.
     // Reference: M_y,c,Rd = 184.579 kNm (Wpl=785442 mm³), UC = 1.01 NOT OK
-    assert_relative_eq!(resistance_value(r, "6.2.5_bending_y"), 184.586, max_relative = 1e-3);
+    assert_relative_eq!(
+        resistance_value(r, "6.2.5_bending_y"),
+        184.586,
+        max_relative = 1e-3
+    );
     // UC = 187.327 / 184.586 = 1.015 ≥ 1.0 — nog steeds NOT OK (referentie: 1,01)
-    assert!(uc_value(r, "6.2.5_bending_y") >= 1.0,
-        "UC should be >= 1.0 with our section properties");
+    assert!(
+        uc_value(r, "6.2.5_bending_y") >= 1.0,
+        "UC should be >= 1.0 with our section properties"
+    );
     let bend = find_check(r, "6.2.5_bending_y");
     if let CheckKind::Resistance(rc) = &bend.kind {
         assert_eq!(rc.status, CheckStatus::NotOk);
@@ -156,7 +206,11 @@ fn calc2_beam3_shear() {
     // kwam uit het te lage oppervlak.
     // Reference: V_c,z,Rd = 780.2 kN (Av=5751 mm²), UC = 0.31 (at x=5000 mm where Vz=-241.739 kN)
     // Phase 13-A fix: orchestrator now picks max |Vz| as governing for shear check.
-    assert_relative_eq!(resistance_value(r, "6.2.6_shear_z"), 780.23, max_relative = 1e-3);
+    assert_relative_eq!(
+        resistance_value(r, "6.2.6_shear_z"),
+        780.23,
+        max_relative = 1e-3
+    );
     // UC = 241.739 / 780.23 ≈ 0.310 — gelijk aan de referentie 0,31
     assert_relative_eq!(uc_value(r, "6.2.6_shear_z"), 0.310, max_relative = 0.02);
 }
@@ -166,7 +220,11 @@ fn calc2_beam3_governing_not_ok() {
     let r = run();
     // Reference governing: 6.3.3 with UC 1.05 (not just bending UC 1.01, but also interaction)
     // We just assert >= 1.0 since interaction details depend on our 6.3.3 implementation.
-    assert!(r.uc_max >= 1.0, "expected uc_max >= 1.0 (reference: 1.05 via 6.3.3), got {}", r.uc_max);
+    assert!(
+        r.uc_max >= 1.0,
+        "expected uc_max >= 1.0 (reference: 1.05 via 6.3.3), got {}",
+        r.uc_max
+    );
     assert_eq!(r.status, CheckStatus::NotOk);
 }
 

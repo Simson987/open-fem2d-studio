@@ -23,7 +23,7 @@
 //
 // Uitvoeren: npx tsx test-plaat-toets-beton.mjs   (vanuit design-mockup/)
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,17 +68,27 @@ function invoer(p) {
   checkTrue(`check slaagt (p = ${p})`, antw.ok === true, antw.error?.melding ?? "");
   return antw.result?.plate_check_inputs ?? [];
 }
-function kern(inputs) {
-  const r = spawnSync(TOETSBRUG, [], {
-    input: JSON.stringify({ opdracht: "check_plates", inputs }),
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
+async function kern(inputs) {
+  const antwoord = await new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code !== 0) reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+      else resolve(out);
+    });
+    child.stdin.end(JSON.stringify({ opdracht: "check_plates", inputs }));
   });
   try {
-    const uit = JSON.parse(r.stdout);
+    const uit = JSON.parse(antwoord);
     return Array.isArray(uit) ? uit : [uit];
   } catch {
-    return [{ fout: r.stdout || r.stderr }];
+    return [{ fout: antwoord }];
   }
 }
 
@@ -91,7 +101,7 @@ log("\n[b] de kern via de toetsbrug");
 if (!existsSync(TOETSBRUG)) {
   checkTrue(`toetsbrug aanwezig (${TOETSBRUG}) — bouw hem met cargo build --release -p toetsbrug`, false);
 } else {
-  const [u] = kern(trek);
+  const [u] = await kern(trek);
   checkTrue("trekwand niet geweigerd", u && u.geweigerd === undefined, u?.geweigerd ?? JSON.stringify(u).slice(0, 200));
   checkRel("trekwand: n_td,z = 1,5·1000 = 1500 kN/m", u?.wapening?.max_z?.n_td_z_kn_per_m, 1500, 0.02);
   checkTrue("trekwand: n_td,x ≈ 0 (< 2 % van n_td,z)", Math.abs(u?.wapening?.max_x?.n_td_x_kn_per_m ?? NaN) < 30);
@@ -100,7 +110,7 @@ if (!existsSync(TOETSBRUG)) {
     (u?.niet_getoetst ?? []).some((n) => n.id === "wapening_aanwezig" && n.bepaalt_status));
   checkTrue("norm NEN-EN 1992-1-1", String(u?.norm).includes("1992-1-1"));
 
-  const [d] = kern(invoer(-1000));
+  const [d] = await kern(invoer(-1000));
   checkRel("drukwand: UC = 7,5/20 (6.55)", d?.uc_max, 0.375, 0.02);
   checkTrue("drukwand: status Ok", d?.status === "Ok", d?.status);
   const calc = d?.checks?.find((c) => c.id === "F.1(3)_betondruk")?.kind?.data;

@@ -63,6 +63,11 @@ interface Props {
   /** Analysetype: lineair, P-Δ, gescheurde buiging of Rust axiale FNL. */
   analysetype?: Analysetype;
   setAnalysetype?: (v: Analysetype) => void;
+  /** Context-specific label for the geometric analysis option in the 3D volume editor. */
+  geometricAnalysisLabel?: string;
+  /** Small-strain material option for pure Tet4 volume projects. */
+  materialAnalysisLabel?: string;
+  materialAnalysisDescription?: string;
   axialMaterialLoadPath?: number[];
   setAxialMaterialLoadPath?: (v: number[]) => void;
   /** Gewenste segmentlengte in mm (besluit B3) — alleen zichtbaar bij fysisch. */
@@ -161,7 +166,8 @@ function typeTag(type: LoadCase["type"]): string {
 export default function LoadCaseTabBar({
   loadCases, activeLoadCaseId, setActiveLoadCaseId, addLoadCase, loads,
   selfWeightEnabled, setSelfWeightEnabled, eigenGewicht, onVerplaatsEigenGewicht,
-  analysetype = "eersteOrde", setAnalysetype,
+  analysetype = "eersteOrde", setAnalysetype, geometricAnalysisLabel, materialAnalysisLabel,
+  materialAnalysisDescription,
   axialMaterialLoadPath = [1], setAxialMaterialLoadPath,
   betonSegmentLengteMm = 400, setBetonSegmentLengteMm,
   betonKruipcoefficient = null, setBetonKruipcoefficient, heeftBetonstaaf = false,
@@ -604,7 +610,11 @@ export default function LoadCaseTabBar({
       {setAnalysetype && (
         <span
           className={`lc-tab-phi${analysetype !== "eersteOrde" ? " active" : ""}`}
-          title={t(`loadCases.analysisDescription.${analysetype}`)}
+          title={analysetype === "tweedeOrdeGeometrisch" && geometricAnalysisLabel
+            ? "Tet4-volume: totale-Lagrange GNL. Andere volume- of staafelementen worden in deze stand geweigerd."
+            : analysetype === "tweedeOrdeFysisch" && materialAnalysisLabel
+              ? materialAnalysisDescription ?? "Tet4-volume: J2-staalplastificatie of betontrekschade bij kleine rek. Alleen zuivere Tet4-modellen."
+            : t(`loadCases.analysisDescription.${analysetype}`)}
         >
           <span className="lc-tab-phi-label">{t("loadCases.analysis")}</span>
           <select
@@ -613,7 +623,9 @@ export default function LoadCaseTabBar({
             onChange={(e) => setAnalysetype(e.target.value as Analysetype)}
           >
             {ANALYSETYPEN.map((a) => (
-              <option key={a} value={a}>{t(`loadCases.analysisType.${a}`)}</option>
+              <option key={a} value={a}>{a === "tweedeOrdeGeometrisch" && geometricAnalysisLabel
+                ? geometricAnalysisLabel : a === "tweedeOrdeFysisch" && materialAnalysisLabel
+                  ? materialAnalysisLabel : t(`loadCases.analysisType.${a}`)}</option>
             ))}
           </select>
         </span>
@@ -634,7 +646,7 @@ export default function LoadCaseTabBar({
       {/* De segmentlengte is de knop die de gebruiker in handen heeft bij een
           fysisch niet-lineaire berekening (besluit B3): instelbaar, 400 mm als
           beginwaarde, geen automatische vergroving. */}
-      {setAnalysetype && analysetype === "tweedeOrdeFysisch" && (
+      {setAnalysetype && analysetype === "tweedeOrdeFysisch" && !materialAnalysisLabel && (
         <span
           className="lc-tab-phi"
           title={t("loadCases.segmentTitle")}

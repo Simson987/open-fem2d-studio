@@ -1,0 +1,14 @@
+{
+  "nodes": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+  "materials": [{ "eMpa": 200000, "poisson": 0 }],
+  "elements": [{ "nodes": [0, 1, 2, 3], "material": 0 }],
+  "loads": [{ "node": 1, "forceKn": [1, 0, 0] }],
+  "supports": [
+    { "node": 0, "displacementM": [0, 0, 0] },
+    { "node": 1, "displacementM": [null, 0, 0] },
+    { "node": 2, "displacementM": [null, null, 0] }
+  ],
+  "threads": 2,
+  "tolerance": 1e-12,
+  "maxIterations": 100
+}

@@ -90,7 +90,11 @@ fn staaf(
 }
 
 fn uc_van(r: &TimberBeamCheckResult, id: &str) -> f64 {
-    let c = r.checks.iter().find(|c| c.id == id).expect("toets ontbreekt");
+    let c = r
+        .checks
+        .iter()
+        .find(|c| c.id == id)
+        .expect("toets ontbreekt");
     match &c.kind {
         CheckKind::Resistance(x) => x.uc.as_ref().expect("UC").uc,
         CheckKind::Stability(x) => x.uc.as_ref().expect("UC").uc,
@@ -98,7 +102,11 @@ fn uc_van(r: &TimberBeamCheckResult, id: &str) -> f64 {
 }
 
 fn positie_van(r: &TimberBeamCheckResult, id: &str) -> f64 {
-    let c = r.checks.iter().find(|c| c.id == id).expect("toets ontbreekt");
+    let c = r
+        .checks
+        .iter()
+        .find(|c| c.id == id)
+        .expect("toets ontbreekt");
     match &c.kind {
         CheckKind::Resistance(x) => x.force_state.position_mm,
         CheckKind::Stability(x) => x.force_state.position_mm,
@@ -113,13 +121,23 @@ fn positie_van(r: &TimberBeamCheckResult, id: &str) -> f64 {
 fn eindmaten_gelijk_aan_het_begin_geeft_byte_gelijke_uitkomst() {
     let punten = [(0.0, 30.0), (1500.0, 20.0), (3000.0, 0.0)];
     let zonder = check_timber_beam(staaf(100.0, 300.0, None, None, 3000.0, &punten));
-    let met = check_timber_beam(staaf(100.0, 300.0, Some(100.0), Some(300.0), 3000.0, &punten));
+    let met = check_timber_beam(staaf(
+        100.0,
+        300.0,
+        Some(100.0),
+        Some(300.0),
+        3000.0,
+        &punten,
+    ));
     assert_eq!(
         serde_json::to_string(&zonder).unwrap(),
         serde_json::to_string(&met).unwrap(),
         "eindmaten gelijk aan het begin horen langs het prismatische pad te gaan"
     );
-    assert!(zonder.verloop.is_none(), "een prismatische staaf krijgt geen verloopgegevens");
+    assert!(
+        zonder.verloop.is_none(),
+        "een prismatische staaf krijgt geen verloopgegevens"
+    );
     // En het veld hoort dan ook niet in de JSON te staan.
     assert!(!serde_json::to_string(&zonder).unwrap().contains("verloop"));
 }
@@ -134,8 +152,12 @@ fn uitkrager_met_verlopende_hoogte_vindt_het_maximum_van_m_over_w() {
     // L = 3000 mm, M(x) = 30·(1 − x/L) kNm. Rekenpunten om de 500 mm, zodat
     // x = L/3 = 1000 mm er precies bij zit.
     let l = 3000.0;
-    let punten: Vec<(f64, f64)> =
-        (0..=6).map(|i| { let x = i as f64 * 500.0; (x, 30.0 * (1.0 - x / l)) }).collect();
+    let punten: Vec<(f64, f64)> = (0..=6)
+        .map(|i| {
+            let x = i as f64 * 500.0;
+            (x, 30.0 * (1.0 - x / l))
+        })
+        .collect();
     let r = check_timber_beam(staaf(100.0, 500.0, None, Some(200.0), l, &punten));
 
     // HANDBEREKENING per rekenpunt (h = 500 − 0,1·x; W = 100·h²/6; f_m,d = 14,76923):
@@ -150,7 +172,10 @@ fn uitkrager_met_verlopende_hoogte_vindt_het_maximum_van_m_over_w() {
         "het maatgevende punt hoort op x = L/3 te liggen, niet bij de inklemming"
     );
     let uc = uc_van(&r, "6.1.6_bending");
-    assert!((uc - 0.507813).abs() < 5e-6, "UC = {uc}, hand: 7,5/14,76923 = 0,507813");
+    assert!(
+        (uc - 0.507813).abs() < 5e-6,
+        "UC = {uc}, hand: 7,5/14,76923 = 0,507813"
+    );
 
     // De inklemming, waar M het grootst is, geeft een LAGERE unity check.
     let v = r.verloop.as_ref().expect("verlooprapport");
@@ -165,22 +190,39 @@ fn uitkrager_met_verlopende_hoogte_vindt_het_maximum_van_m_over_w() {
         .find(|t| t.id == "6.1.6_bending")
         .and_then(|t| t.uc)
         .expect("UC bij x = 0");
-    assert!((uc0 - 0.487500).abs() < 5e-6, "UC(x=0) = {uc0}, hand: 7,2/14,76923 = 0,487500");
-    assert!(uc > uc0, "het maximum van M/W ligt niet bij het grootste moment");
+    assert!(
+        (uc0 - 0.487500).abs() < 5e-6,
+        "UC(x=0) = {uc0}, hand: 7,2/14,76923 = 0,487500"
+    );
+    assert!(
+        uc > uc0,
+        "het maximum van M/W ligt niet bij het grootste moment"
+    );
     // 25/24 = 1,041667: (1−1/3)/(0,8)² gedeeld door 1/1² — puur meetkunde.
-    assert!((uc / uc0 - 25.0 / 24.0).abs() < 1e-5, "verhouding {}", uc / uc0);
+    assert!(
+        (uc / uc0 - 25.0 / 24.0).abs() < 1e-5,
+        "verhouding {}",
+        uc / uc0
+    );
 
     // Het rapport: zes toetsdoorsneden en het maatgevende punt.
     assert_eq!(v.begin_naam, "100 x 500");
     assert_eq!(v.eind_naam, "100 x 200");
     assert_eq!(v.aantal_rekenpunten, 7);
-    assert_eq!(v.toetsdoorsneden.len(), 6, "x = 0, L/5, 2L/5, 3L/5, 4L/5, L");
+    assert_eq!(
+        v.toetsdoorsneden.len(),
+        6,
+        "x = 0, L/5, 2L/5, 3L/5, 4L/5, L"
+    );
     let m = v.maatgevend.as_ref().expect("maatgevend punt");
     assert_eq!(m.toets_id, "6.1.6_bending");
     assert_eq!(m.doorsnede.x_mm, 1000.0);
     assert!((m.doorsnede.maten.h_mm - 400.0).abs() < 1e-9);
     assert!((m.doorsnede.w_y_mm3 - 100.0 * 400.0 * 400.0 / 6.0).abs() < 1e-6);
-    assert!(m.doorsnede.klasse.is_none(), "hout kent geen doorsnedeklasse");
+    assert!(
+        m.doorsnede.klasse.is_none(),
+        "hout kent geen doorsnedeklasse"
+    );
     assert!(m.doorsnede.maten.tw_mm.is_none() && m.doorsnede.maten.tf_mm.is_none());
 }
 
@@ -205,11 +247,17 @@ fn k_h_volgt_de_hoogte_per_rekenpunt() {
     //                    (150/100)^0,2 = 1,5^0,2 = 1,084472.
     assert_eq!(positie_van(&r, "6.1.6_bending"), 3000.0);
     let uc = uc_van(&r, "6.1.6_bending");
-    assert!((uc - 1.873066).abs() < 5e-5, "UC = {uc}, hand: 30,0/(1,084472·14,76923) = 1,873066");
+    assert!(
+        (uc - 1.873066).abs() < 5e-5,
+        "UC = {uc}, hand: 30,0/(1,084472·14,76923) = 1,873066"
+    );
     // ZONDER k_h zou de uitkomst 30,0/14,76923 = 2,031250 zijn geweest; dat de
     // kern lager uitkomt, bewijst dat k_h met h = 100 mm is bepaald en niet met
     // de beginhoogte h = 200 mm (waar k_h = 1,0 is).
-    assert!(uc < 2.03125 - 0.1, "k_h is niet met de plaatselijke hoogte bepaald");
+    assert!(
+        uc < 2.03125 - 0.1,
+        "k_h is niet met de plaatselijke hoogte bepaald"
+    );
 
     let v = r.verloop.as_ref().expect("verlooprapport");
     let uc_op = |x: f64| -> f64 {
@@ -224,7 +272,10 @@ fn k_h_volgt_de_hoogte_per_rekenpunt() {
     assert!((uc_op(1500.0) - 0.902778).abs() < 5e-6);
     assert!((uc_op(2250.0) - 1.253450).abs() < 5e-5, "{}", uc_op(2250.0));
     assert!((uc_op(3000.0) - 1.873066).abs() < 5e-5);
-    assert!(matches!(r.status, CheckStatus::NotOk), "UC > 1 hoort NotOk te geven");
+    assert!(
+        matches!(r.status, CheckStatus::NotOk),
+        "UC > 1 hoort NotOk te geven"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -242,13 +293,20 @@ fn stabiliteit_rekent_met_de_kleinste_doorsnede_en_noemt_haar() {
     }
     let r = check_timber_beam(invoer);
     let v = r.verloop.as_ref().expect("verlooprapport");
-    assert_eq!(v.stabiliteit.len(), 2, "6.3.2 en 6.3.3 elk met hun doorsnede");
+    assert_eq!(
+        v.stabiliteit.len(),
+        2,
+        "6.3.2 en 6.3.3 elk met hun doorsnede"
+    );
     for s in &v.stabiliteit {
         // De kandidaten zijn de staafeinden; de kleinste is x = L (h = 200).
         assert_eq!(s.x_mm, 3000.0, "toets {} koos x = {}", s.toets_id, s.x_mm);
         assert!((s.maten.h_mm - 200.0).abs() < 1e-9);
         assert!((s.area_mm2 - 100.0 * 200.0).abs() < 1e-9);
-        assert!(s.reden.contains("KLEINSTE doorsnede"), "de reden hoort in het rapport te staan");
+        assert!(
+            s.reden.contains("KLEINSTE doorsnede"),
+            "de reden hoort in het rapport te staan"
+        );
     }
 }
 
@@ -286,5 +344,9 @@ fn samengestelde_doorsnede_met_eindmaten_wordt_geweigerd_met_reden() {
 fn eindhoogte_nul_wordt_geweigerd_met_reden() {
     let r = check_timber_beam(staaf(100.0, 300.0, None, Some(0.0), 3000.0, &[(0.0, 10.0)]));
     assert!(r.checks.is_empty());
-    assert!(r.governing_check_id.contains("groter dan nul"), "reden: {}", r.governing_check_id);
+    assert!(
+        r.governing_check_id.contains("groter dan nul"),
+        "reden: {}",
+        r.governing_check_id
+    );
 }

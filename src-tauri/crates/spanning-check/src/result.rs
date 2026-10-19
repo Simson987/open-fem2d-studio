@@ -18,7 +18,10 @@ use crate::doorsnede::SpanningLaag;
 /// breedte erboven en één keer met die eronder. Zo staat de sprong in τ in de
 /// gegevens en hoeft de tekening hem niet te raden.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/spanning/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/spanning/"
+)]
 pub struct SpanningVezel {
     /// Hoogte vanaf de bovenkant van de doorsnede (mm).
     pub z_mm: f64,
@@ -36,7 +39,10 @@ pub struct SpanningVezel {
 
 /// Het spanningsverloop bij één snedekrachtenset (de maatgevende).
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/spanning/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/spanning/"
+)]
 pub struct SpanningVerloop {
     pub combination_id: u32,
     /// Plaats langs de staaf (mm vanaf de startknoop).
@@ -53,7 +59,10 @@ pub struct SpanningVerloop {
 
 /// De uitgewerkte doorsnede: lagenmodel plus de gebruikte grootheden.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/spanning/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/spanning/"
+)]
 pub struct SpanningDoorsnedeResultaat {
     pub naam: String,
     pub hoogte_mm: f64,
@@ -74,7 +83,10 @@ pub struct SpanningDoorsnedeResultaat {
 
 /// Volledig toetsresultaat van één staaf op vergelijkspanning.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/spanning/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/spanning/"
+)]
 pub struct SpanningBeamCheckResult {
     pub beam_id: u32,
     /// Doorsnedenaam voor de kopregel, bijv. "HEA 200" of "300 × 500 mm".

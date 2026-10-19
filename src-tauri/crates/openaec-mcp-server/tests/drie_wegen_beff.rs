@@ -96,8 +96,7 @@ fn tauri_lib_bron() -> String {
         .join("..")
         .join("src")
         .join("lib.rs");
-    std::fs::read_to_string(&pad)
-        .unwrap_or_else(|e| panic!("{} niet leesbaar: {e}", pad.display()))
+    std::fs::read_to_string(&pad).unwrap_or_else(|e| panic!("{} niet leesbaar: {e}", pad.display()))
 }
 
 // ── Weg 2: de toetsbrug ─────────────────────────────────────────────────────
@@ -257,7 +256,9 @@ fn weg_1_het_tauri_command_is_geregistreerd() {
         .find("generate_handler![")
         .expect("`generate_handler!` staat niet in src-tauri/src/lib.rs");
     let handler = &bron[handler_start..];
-    let handler_eind = handler.find(']').expect("`generate_handler!` is niet gesloten");
+    let handler_eind = handler
+        .find(']')
+        .expect("`generate_handler!` is niet gesloten");
     let handler = &handler[..handler_eind];
 
     assert!(
@@ -321,7 +322,11 @@ async fn de_uitkomst_zelf_staat_vast() {
         ("Cantilever", 2750.0, 1250.0),
     ];
     for (i, (geval, l0, b_eff)) in verwacht.iter().enumerate() {
-        assert_eq!(zones[i]["zone"]["case"], json!(geval), "geval van gebied {i}");
+        assert_eq!(
+            zones[i]["zone"]["case"],
+            json!(geval),
+            "geval van gebied {i}"
+        );
         let gemeten_l0 = zones[i]["zone"]["l0_mm"].as_f64().expect("l0_mm");
         let gemeten_b = zones[i]["b_eff_mm"].as_f64().expect("b_eff_mm");
         assert!(
@@ -363,7 +368,10 @@ async fn de_uitgeschreven_afleiding_gaat_langs_alle_drie_de_wegen_mee() {
     eis_gelijk("toetsbrug", &brug, "MCP-server", &mcp);
 
     let toegepast = &mcp["applied"];
-    assert!(!toegepast.is_null(), "`applied` ontbreekt terwijl x_mm meeging");
+    assert!(
+        !toegepast.is_null(),
+        "`applied` ontbreekt terwijl x_mm meeging"
+    );
     assert_eq!(toegepast["x_mm"], json!(6000.0));
     let b_eff = toegepast["b_eff_mm"].as_f64().expect("b_eff_mm");
     assert!((b_eff - 2780.0).abs() < 1e-9, "b_eff {b_eff} ≠ 2780");

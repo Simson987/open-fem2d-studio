@@ -97,10 +97,19 @@ fn tussen_gaffel_en_kipsteun_geldt_de_formule_met_beta() {
 fn tabel_6_5_gewalste_i_profielen() {
     // h/b ≤ 2 → kromme b (α_LT = 0,34); h/b > 2 → kromme c (0,49).
     // HEB 300: 300/300 = 1,0 → b. IPE 330: 330/160 = 2,0625 → c.
-    assert_eq!(kipkromme_tabel_6_5(Kipprofiel::GewalsteI, 300.0, 300.0), BucklingCurve::B);
-    assert_eq!(kipkromme_tabel_6_5(Kipprofiel::GewalsteI, 330.0, 160.0), BucklingCurve::C);
+    assert_eq!(
+        kipkromme_tabel_6_5(Kipprofiel::GewalsteI, 300.0, 300.0),
+        BucklingCurve::B
+    );
+    assert_eq!(
+        kipkromme_tabel_6_5(Kipprofiel::GewalsteI, 330.0, 160.0),
+        BucklingCurve::C
+    );
     // Precies op de grens h/b = 2 telt nog als "≤ 2".
-    assert_eq!(kipkromme_tabel_6_5(Kipprofiel::GewalsteI, 320.0, 160.0), BucklingCurve::B);
+    assert_eq!(
+        kipkromme_tabel_6_5(Kipprofiel::GewalsteI, 320.0, 160.0),
+        BucklingCurve::B
+    );
     assert_relative_eq!(
         kipkromme_tabel_6_5(Kipprofiel::GewalsteI, 330.0, 160.0).alpha(),
         0.49,
@@ -111,8 +120,14 @@ fn tabel_6_5_gewalste_i_profielen() {
 #[test]
 fn tabel_6_5_gelaste_i_profielen_zijn_een_kromme_ongunstiger() {
     // h/b ≤ 2 → kromme c (0,49); h/b > 2 → kromme d (0,76).
-    assert_eq!(kipkromme_tabel_6_5(Kipprofiel::GelasteI, 300.0, 300.0), BucklingCurve::C);
-    assert_eq!(kipkromme_tabel_6_5(Kipprofiel::GelasteI, 430.0, 200.0), BucklingCurve::D);
+    assert_eq!(
+        kipkromme_tabel_6_5(Kipprofiel::GelasteI, 300.0, 300.0),
+        BucklingCurve::C
+    );
+    assert_eq!(
+        kipkromme_tabel_6_5(Kipprofiel::GelasteI, 430.0, 200.0),
+        BucklingCurve::D
+    );
     assert_relative_eq!(
         kipkromme_tabel_6_5(Kipprofiel::GelasteI, 430.0, 200.0).alpha(),
         0.76,
@@ -124,8 +139,14 @@ fn tabel_6_5_gelaste_i_profielen_zijn_een_kromme_ongunstiger() {
 fn tabel_6_5_kent_geen_rij_voor_overige_doorsneden() {
     // Kokers en buizen staan niet in tabel 6.5. Aangehouden is kromme d, de
     // ongunstigste rij van de tabel — een expliciete keuze buiten de tabel om.
-    assert_eq!(kipkromme_tabel_6_5(Kipprofiel::Overig, 200.0, 200.0), BucklingCurve::D);
-    assert_eq!(kipkromme_tabel_6_5(Kipprofiel::Overig, 350.0, 100.0), BucklingCurve::D);
+    assert_eq!(
+        kipkromme_tabel_6_5(Kipprofiel::Overig, 200.0, 200.0),
+        BucklingCurve::D
+    );
+    assert_eq!(
+        kipkromme_tabel_6_5(Kipprofiel::Overig, 350.0, 100.0),
+        BucklingCurve::D
+    );
 }
 
 #[test]

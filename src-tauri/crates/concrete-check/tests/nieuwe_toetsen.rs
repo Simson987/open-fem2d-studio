@@ -33,8 +33,14 @@ fn korf_kaal() -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: 2, diameter_mm: 12.0 },
-        bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+        top: RebarRow {
+            count: 2,
+            diameter_mm: 12.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
         ..ReinforcementCage::default()
     }
 }
@@ -52,7 +58,12 @@ fn punt(combi: u32, x_mm: f64, n: f64, v: f64, m: f64) -> ForcePoint {
     ForcePoint {
         combination_id: combi,
         position_mm: x_mm,
-        forces: InternalForces { n_ed: n, vz_ed: v, my_ed: m, ..Default::default() },
+        forces: InternalForces {
+            n_ed: n,
+            vz_ed: v,
+            my_ed: m,
+            ..Default::default()
+        },
     }
 }
 
@@ -129,7 +140,10 @@ fn var(rc: &ResistanceCalc, symbool: &str) -> f64 {
 }
 
 fn uc(rc: &ResistanceCalc) -> f64 {
-    rc.uc.as_ref().unwrap_or_else(|| panic!("toets {} heeft geen unity check", rc.id)).uc
+    rc.uc
+        .as_ref()
+        .unwrap_or_else(|| panic!("toets {} heeft geen unity check", rc.id))
+        .uc
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -181,7 +195,11 @@ fn dwarskracht_referentiebalk_handberekend() {
     // DE DWARSKRACHT KOMT VAN HET STEUNPUNT, NIET VAN HET BUIGPUNT. In het
     // midden van deze balk is V = 0; wie daar zou toetsen, toetst de gunstigste
     // doorsnede.
-    assert_relative_eq!(rc.force_state.forces.vz_ed.abs(), 80.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        rc.force_state.forces.vz_ed.abs(),
+        80.0,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(rc.force_state.position_mm, 0.0, max_relative = 1e-12);
 }
 
@@ -208,7 +226,10 @@ fn zonder_beugelgegevens_meldt_de_dwarskrachttoets_dat_hij_niet_kan() {
     let mut inp = invoer(korf_kaal(), ugt(99.0, 150.0));
     inp.section = ConcreteSectionInput::rectangle(300.0, 600.0);
     inp.cage.cover_mm = 20.0;
-    inp.cage.bottom = RebarRow { count: 4, diameter_mm: 20.0 };
+    inp.cage.bottom = RebarRow {
+        count: 4,
+        diameter_mm: 20.0,
+    };
     let r = check_concrete_beam(inp);
     let rc = toets(&r, "6.2_shear");
 
@@ -220,7 +241,10 @@ fn zonder_beugelgegevens_meldt_de_dwarskrachttoets_dat_hij_niet_kan() {
     );
 
     assert_eq!(rc.status, CheckStatus::NotApplicable);
-    assert!(rc.uc.is_none(), "een toets die niet kon, mag geen unity check tonen");
+    assert!(
+        rc.uc.is_none(),
+        "een toets die niet kon, mag geen unity check tonen"
+    );
     let reden = rc.notes.join(" ");
     assert!(
         reden.contains("niet afgerekend"),
@@ -254,7 +278,10 @@ fn zonder_beugelgegevens_meldt_de_dwarskrachttoets_dat_hij_niet_kan() {
         .iter()
         .find(|n| n.check_id == "6.2_shear")
         .expect("de dwarskrachttoets hoort in niet_uitgevoerd te staan");
-    assert!(!shear.detaillering, "§6.2 is een draagkrachttoets, geen detailleringseis");
+    assert!(
+        !shear.detaillering,
+        "§6.2 is een draagkrachttoets, geen detailleringseis"
+    );
     assert_eq!(shear.titel, "Dwarskracht");
     // De reden staat waar de kern hem neerzet: in de notes van die toets. De
     // verwijzing hierboven maakt hem vindbaar zonder hem te kopiëren.
@@ -269,7 +296,10 @@ fn zonder_beugelgegevens_meldt_de_dwarskrachttoets_dat_hij_niet_kan() {
     let mut goed = invoer(korf_met_beugels(150.0), ugt(99.0, 150.0));
     goed.section = ConcreteSectionInput::rectangle(300.0, 600.0);
     goed.cage.cover_mm = 20.0;
-    goed.cage.bottom = RebarRow { count: 4, diameter_mm: 20.0 };
+    goed.cage.bottom = RebarRow {
+        count: 4,
+        diameter_mm: 20.0,
+    };
     let r2 = check_concrete_beam(goed);
     assert!(
         !r2.niet_uitgevoerd.iter().any(|n| n.check_id == "6.2_shear"),
@@ -293,8 +323,15 @@ fn een_toets_zonder_iets_te_toetsen_telt_niet_als_niet_uitgevoerd() {
     // Alleen een moment, geen dwarskracht: `ugt` zet V_Ed op 0.
     let r = check_concrete_beam(invoer(korf_met_beugels(150.0), ugt(0.0, 60.0)));
     let rc = toets(&r, "6.2_shear");
-    assert_eq!(rc.status, CheckStatus::NotApplicable, "zonder V_Ed is er niets te toetsen");
-    assert!(rc.uc.is_some(), "de toets is wél gedraaid en draagt een unity check");
+    assert_eq!(
+        rc.status,
+        CheckStatus::NotApplicable,
+        "zonder V_Ed is er niets te toetsen"
+    );
+    assert!(
+        rc.uc.is_some(),
+        "de toets is wél gedraaid en draagt een unity check"
+    );
     assert!(
         !r.niet_uitgevoerd.iter().any(|n| n.check_id == "6.2_shear"),
         "een toets die gedraaid heeft is niet 'niet uitgevoerd'"
@@ -321,7 +358,11 @@ fn de_maatgevende_toets_kan_de_dwarskracht_zijn() {
 
     assert_eq!(r.governing_check_id, "6.2_shear");
     assert_eq!(r.status, CheckStatus::NotOk);
-    assert_relative_eq!(uc(toets(&r, "6.2_shear")), 250.0 / 148.830, max_relative = 1e-3);
+    assert_relative_eq!(
+        uc(toets(&r, "6.2_shear")),
+        250.0 / 148.830,
+        max_relative = 1e-3
+    );
     assert!(uc(toets(&r, "6.1_bending_stress_block")) < 0.2);
     assert_relative_eq!(r.uc_max, 250.0 / 148.830, max_relative = 1e-3);
 }
@@ -362,7 +403,11 @@ fn sigma_s_uit_de_gescheurde_doorsnede_handberekend() {
     let r = check_concrete_beam(inp);
     let rc = toets(&r, "7.3.4_scheurwijdte");
 
-    assert_relative_eq!(var(rc, r"\alpha_e"), 200_000.0 / 33_000.0, max_relative = 1e-6);
+    assert_relative_eq!(
+        var(rc, r"\alpha_e"),
+        200_000.0 / 33_000.0,
+        max_relative = 1e-6
+    );
     assert_relative_eq!(var(rc, r"\sigma_s"), 235.3, max_relative = 0.01);
     assert_relative_eq!(var(rc, "x"), 91.96, max_relative = 0.01);
 }
@@ -440,8 +485,14 @@ fn scheurwijdte_handberekend() {
     // De afgeleide staafafstand staat in de afleiding, mét de mededeling dat
     // hij meetkunde is en geen normregel.
     let notes = rc.notes.join(" ");
-    assert!(notes.contains("104 mm"), "de gebruikte staafafstand staat er niet: {notes}");
-    assert!(notes.contains("meetkunde"), "de herkomst van de staafafstand ontbreekt");
+    assert!(
+        notes.contains("104 mm"),
+        "de gebruikte staafafstand staat er niet: {notes}"
+    );
+    assert!(
+        notes.contains("meetkunde"),
+        "de herkomst van de staafafstand ontbreekt"
+    );
 }
 
 /// De milieuklasse stuurt w_max en dus de unity check. XC1 geeft 0,40 mm in
@@ -479,7 +530,10 @@ fn zonder_frequente_combinatie_staan_de_scheurtoetsen_er_met_reden() {
         assert_eq!(rc.status, CheckStatus::NotApplicable, "{id}");
         assert!(rc.uc.is_none(), "{id} toont een unity check die er niet is");
         let reden = rc.notes.join(" ");
-        assert!(reden.contains("6.15"), "{id}: de reden noemt (6.15) niet: {reden}");
+        assert!(
+            reden.contains("6.15"),
+            "{id}: de reden noemt (6.15) niet: {reden}"
+        );
         assert!(
             reden.contains("frequente"),
             "{id}: de reden noemt de frequente combinatie niet"
@@ -573,7 +627,11 @@ fn slankheid_met_constructievorm() {
     assert_relative_eq!(var(rc, "l"), 5000.0, max_relative = 1e-12);
     assert_relative_eq!(var(rc, "d"), 454.0, max_relative = 1e-12);
     assert_relative_eq!(var(rc, r"\rho_0"), 1e-3 * 30f64.sqrt(), max_relative = 1e-9);
-    assert_relative_eq!(var(rc, r"(l/d)_{werkelijk}"), 5000.0 / 454.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        var(rc, r"(l/d)_{werkelijk}"),
+        5000.0 / 454.0,
+        max_relative = 1e-9
+    );
     assert_relative_eq!(uc(rc), (5000.0 / 454.0) / rc.value, max_relative = 1e-9);
 
     // ρ' = 0 en de herkomst van ρ staan in de afleiding — anders is niet te
@@ -639,7 +697,11 @@ fn de_detaillering_leunt_op_de_uitkomst_van_de_dwarskrachttoets() {
 
     let rho_w = toets(&r, "9.2.2_rho_w_min");
     assert_relative_eq!(var(rho_w, r"\rho_w"), 0.00223402, max_relative = 1e-5);
-    assert_relative_eq!(var(rho_w, r"\rho_{w,\min}"), 0.00087636, max_relative = 1e-5);
+    assert_relative_eq!(
+        var(rho_w, r"\rho_{w,\min}"),
+        0.00087636,
+        max_relative = 1e-5
+    );
     assert_relative_eq!(uc(rho_w), 0.39229, max_relative = 1e-4);
 
     let sl = toets(&r, "9.2.2_sl_max");
@@ -689,7 +751,10 @@ fn de_korrelafmeting_wordt_niet_aangenomen() {
 fn een_toets_die_niet_kon_zwijgt_niet_en_meldt_niet_groen() {
     let gevallen: Vec<(&str, ConcreteBeamCheckInput)> = vec![
         ("niets ingevuld", invoer(korf_kaal(), ugt(80.0, 100.0))),
-        ("alleen beugels", invoer(korf_met_beugels(150.0), ugt(80.0, 100.0))),
+        (
+            "alleen beugels",
+            invoer(korf_met_beugels(150.0), ugt(80.0, 100.0)),
+        ),
         ("alles ingevuld", {
             let mut i = invoer(korf_met_beugels(150.0), ugt(80.0, 100.0));
             i.sls_frequent_envelope = bgt(60.0);
@@ -748,8 +813,16 @@ fn de_t_ligger_gebruikt_b_w_waar_de_norm_b_w_vraagt() {
     inp.structural_system = Some(StructuralSystem::SimplySupported);
     let r = check_concrete_beam(inp);
 
-    assert_relative_eq!(var(toets(&r, "6.2_shear"), "b_w"), 300.0, max_relative = 1e-12);
-    assert_relative_eq!(var(toets(&r, "9.2.2_rho_w_min"), "b_w"), 300.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        var(toets(&r, "6.2_shear"), "b_w"),
+        300.0,
+        max_relative = 1e-12
+    );
+    assert_relative_eq!(
+        var(toets(&r, "9.2.2_rho_w_min"), "b_w"),
+        300.0,
+        max_relative = 1e-12
+    );
     // 7.4.2 kent beide breedten: de flenscorrectie 0,8 geldt zodra
     // b_flens/b_rib > 3. Hier is 600/300 = 2 en geldt zij dus niet.
     let slank = toets(&r, "7.4.2_slankheid");
@@ -816,11 +889,18 @@ fn een_vervulde_detailleringseis_wordt_niet_de_maatgevende_toets() {
     assert_eq!(beugel.status, CheckStatus::Ok, "de eis hoort te VOLDOEN");
     assert_relative_eq!(uc(beugel), 5.0 / 8.0, max_relative = 1e-12);
     let (top_id, top_uc) = hoogste_uc(&r);
-    assert_eq!(top_id, "9.2.2_min_diameter_beugel", "de opzet is verschoven: {top_id} = {top_uc}");
+    assert_eq!(
+        top_id, "9.2.2_min_diameter_beugel",
+        "de opzet is verschoven: {top_id} = {top_uc}"
+    );
 
     // En tóch is de maatgevende toets een STERKTEtoets, met de bijbehorende UC.
     assert_eq!(r.governing_check_id, "6.1_mn_kappa");
-    assert_relative_eq!(r.uc_max, uc(toets(&r, "6.1_mn_kappa")), max_relative = 1e-12);
+    assert_relative_eq!(
+        r.uc_max,
+        uc(toets(&r, "6.1_mn_kappa")),
+        max_relative = 1e-12
+    );
     assert!(
         r.uc_max < uc(beugel),
         "uc_max {} zou onder de vervulde detailleringseis {} moeten liggen",
@@ -834,8 +914,11 @@ fn een_vervulde_detailleringseis_wordt_niet_de_maatgevende_toets() {
     // 2026 als `niet_uitgevoerd` in het resultaat, met de reden uit de toets
     // zelf (basisaudit ruw 55). Zo is "Ok" een uitspraak over wat er getoetst
     // is, en is zichtbaar wat er niet getoetst is.
-    let onuitgevoerd: Vec<&str> =
-        r.niet_uitgevoerd.iter().map(|n| n.check_id.as_str()).collect();
+    let onuitgevoerd: Vec<&str> = r
+        .niet_uitgevoerd
+        .iter()
+        .map(|n| n.check_id.as_str())
+        .collect();
     assert!(
         onuitgevoerd.contains(&"7.4.2_slankheid"),
         "de slankheidscontrole kon niet en hoort in niet_uitgevoerd: {onuitgevoerd:?}"

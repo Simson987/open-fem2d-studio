@@ -315,6 +315,7 @@ export function plaatNaarSolverInput(p: Plate): NonNullable<MultiInput["plates"]
   const d = withPlateDefaults(p);
   return {
     id: d.id, nodeIds: d.nodeIds,
+    ...(d.threeLayer ? { threeLayer: d.threeLayer } : {}),
     ...(d.nonlinearLaw ? { nonlinearLaw: d.nonlinearLaw } : {}),
     ...(d.modulusCurve?.length ? { modulusCurve: d.modulusCurve } : {}),
     thickness: d.thickness!,

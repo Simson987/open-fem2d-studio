@@ -1,12 +1,12 @@
 //! Input types for steel-check orchestrator.
 
-use serde::{Deserialize, Serialize};
-use ts_rs::TS;
 use mechanics::{ForcePoint, Staafstand};
 use nen_en_1990::ConsequenceClass;
 use nen_en_1993_1_1_ltb::LateralBracing;
-use section_properties::SectionProperties;
 use section_properties::composite::{CompositeSection, GeslotenCel, Lamella};
+use section_properties::SectionProperties;
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// Doorbuigingsklasse van een staaf.
 ///
@@ -529,18 +529,26 @@ impl CustomSection {
     /// Vertaalt de invoer naar de rekenkern van `section-properties`.
     pub fn naar_composite(&self) -> CompositeSection {
         let mut sec = CompositeSection::nieuw();
-        sec.lamellen = self.lamellen.iter().map(|l| Lamella {
-            b_mm: l.b_mm,
-            t_mm: l.t_mm,
-            y_mm: l.y_mm,
-            z_mm: l.z_mm,
-            alpha_rad: l.alpha_rad,
-        }).collect();
-        sec.cellen = self.gesloten_cellen.iter().map(|c| GeslotenCel {
-            midlijn_mm: c.midlijn.iter().map(|p| (p.y_mm, p.z_mm)).collect(),
-            dikte_mm: c.dikte_mm.clone(),
-            lamellen: c.lamellen.clone(),
-        }).collect();
+        sec.lamellen = self
+            .lamellen
+            .iter()
+            .map(|l| Lamella {
+                b_mm: l.b_mm,
+                t_mm: l.t_mm,
+                y_mm: l.y_mm,
+                z_mm: l.z_mm,
+                alpha_rad: l.alpha_rad,
+            })
+            .collect();
+        sec.cellen = self
+            .gesloten_cellen
+            .iter()
+            .map(|c| GeslotenCel {
+                midlijn_mm: c.midlijn.iter().map(|p| (p.y_mm, p.z_mm)).collect(),
+                dikte_mm: c.dikte_mm.clone(),
+                lamellen: c.lamellen.clone(),
+            })
+            .collect();
         sec
     }
 
@@ -559,10 +567,16 @@ impl CustomSection {
         let schaal = self.lamellen.iter().fold(1.0_f64, |m, l| m.max(l.b_mm));
         let tol = 1e-6 * schaal;
 
-        let liggend: Vec<&CustomLamella> =
-            self.lamellen.iter().filter(|l| l.alpha_rad.sin().abs() < 1e-9).collect();
-        let staand: Vec<&CustomLamella> =
-            self.lamellen.iter().filter(|l| l.alpha_rad.cos().abs() < 1e-9).collect();
+        let liggend: Vec<&CustomLamella> = self
+            .lamellen
+            .iter()
+            .filter(|l| l.alpha_rad.sin().abs() < 1e-9)
+            .collect();
+        let staand: Vec<&CustomLamella> = self
+            .lamellen
+            .iter()
+            .filter(|l| l.alpha_rad.cos().abs() < 1e-9)
+            .collect();
         if liggend.len() != 2 || staand.len() != 1 {
             return false;
         }
@@ -604,7 +618,9 @@ impl CustomSection {
         let p = self.eigenschappen?;
         match self.vorm {
             CustomDoorsnedevorm::GelasteIDubbelsymmetrisch
-            | CustomDoorsnedevorm::GelasteIMonosymmetrisch if p.tw_mm > 0.0 => {
+            | CustomDoorsnedevorm::GelasteIMonosymmetrisch
+                if p.tw_mm > 0.0 =>
+            {
                 Some((p.h_mm - 2.0 * p.tf_mm) / p.tw_mm)
             }
             _ => None,
@@ -657,8 +673,10 @@ fn lussen_in_middellijnnet(lamellen: &[CustomLamella]) -> usize {
     };
     // Per lamel de parameters `u` (mm langs de as, vanaf het zwaartepunt) waar
     // een knooppunt ligt: te beginnen met de twee fysieke uiteinden.
-    let mut u_op: Vec<Vec<f64>> =
-        lamellen.iter().map(|l| vec![-l.b_mm / 2.0, l.b_mm / 2.0]).collect();
+    let mut u_op: Vec<Vec<f64>> = lamellen
+        .iter()
+        .map(|l| vec![-l.b_mm / 2.0, l.b_mm / 2.0])
+        .collect();
 
     for i in 0..n {
         for j in (i + 1)..n {

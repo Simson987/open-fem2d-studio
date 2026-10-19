@@ -1,0 +1,102 @@
+{
+  "kind": "mixed3d",
+  "input": {
+    "mesh": {
+      "nodes": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [1, 1, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [1, 0, 1],
+        [1, 1, 1],
+        [0, 1, 1],
+        [2, 0, 0],
+        [1, -1, 0],
+        [1, 0, -1],
+        [3, 0, 0]
+      ],
+      "tets": [[1, 8, 9, 10]]
+    },
+    "solidMaterial": { "eMpa": 1200, "poisson": 0.2 },
+    "hexes": [
+      {
+        "nodes": [0, 1, 2, 3, 4, 5, 6, 7],
+        "eMpa": 1200,
+        "poisson": 0.2
+      }
+    ],
+    "trusses": [],
+    "frames": [
+      {
+        "nodes": [1, 11],
+        "eMpa": 20000,
+        "poisson": 0.3,
+        "areaM2": 0.02,
+        "iyM4": 0.005,
+        "izM4": 0.005,
+        "torsionJM4": 0.01,
+        "rollAngleRad": 0
+      }
+    ],
+    "loadsKn": [
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 10]
+    ],
+    "momentsKnm": [
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0]
+    ],
+    "prescribedM": [
+      [0, 0, 0],
+      [0, 0, null],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      [null, null, null]
+    ],
+    "prescribedRotationsRad": [
+      [null, null, null],
+      [0, 0, 0],
+      [null, null, null],
+      [null, null, null],
+      [null, null, null],
+      [null, null, null],
+      [null, null, null],
+      [null, null, null],
+      [null, null, null],
+      [null, null, null],
+      [null, null, null],
+      [null, null, null]
+    ],
+    "backend": "matrixFreePcg",
+    "threads": 4,
+    "maxPcgIterations": 10000
+  }
+}

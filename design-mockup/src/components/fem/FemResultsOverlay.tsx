@@ -122,6 +122,8 @@ export interface DisplayFlags {
   maatlijnen: boolean;
   /** Oplegsymbolen. */
   opleggingen: boolean;
+  /** Weergaveschaal van 2D-oplegsymbolen; verandert de opleggingen in de berekening niet. */
+  supportScale: number;
   /** Scharnieren en veren aan de staafeinden. */
   scharnieren: boolean;
 }
@@ -159,6 +161,7 @@ export const DEFAULT_DISPLAY_FLAGS: DisplayFlags = {
   peilmaten: true,
   maatlijnen: true,
   opleggingen: true,
+  supportScale: 1,
   scharnieren: true,
 };
 

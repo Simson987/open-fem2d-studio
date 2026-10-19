@@ -27,7 +27,9 @@ use openaec_layout::{
     types::{Color, Pt, Rect, A4},
 };
 
-use concrete_check::segments::{segment_stiffness, SegmentStiffnessRequest, SegmentStiffnessResponse};
+use concrete_check::segments::{
+    segment_stiffness, SegmentStiffnessRequest, SegmentStiffnessResponse,
+};
 use concrete_check::{mn_kappa, MnKappaRequest, MnKappaResponse};
 use nen_en_1992_1_1::section::{ConcreteSection, RebarRow, ReinforcementCage};
 use report::betonfiguren::{
@@ -42,8 +44,14 @@ fn proefkorf() -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: 2, diameter_mm: 12.0 },
-        bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+        top: RebarRow {
+            count: 2,
+            diameter_mm: 12.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
         ..ReinforcementCage::default()
     }
 }
@@ -172,7 +180,12 @@ fn bouw_pdf(met_figuren: bool) -> (Vec<u8>, usize) {
         let breedte = 482.0;
         teken_ei_verloop(
             &mut dl,
-            Rect::new(Pt(56.7), Pt(600.0), Pt(breedte), Pt(breedte * KADER_EI.1 / KADER_EI.0)),
+            Rect::new(
+                Pt(56.7),
+                Pt(600.0),
+                Pt(breedte),
+                Pt(breedte * KADER_EI.1 / KADER_EI.0),
+            ),
             &ei,
             &stijl,
         );
@@ -191,10 +204,17 @@ fn bouw_pdf(met_figuren: bool) -> (Vec<u8>, usize) {
     let mut doc = DocTemplate::new("Betonfiguren proefblad", fonts.clone());
     let frame = Frame::new(Rect::new(Pt(56.7), Pt(56.7), Pt(481.9), Pt(728.5)));
     doc.add_page_template(PageTemplate::new("content", A4, frame));
-    doc.add_pre_page(RawPage { page_size: A4, draw_list: dl });
+    doc.add_pre_page(RawPage {
+        page_size: A4,
+        draw_list: dl,
+    });
 
     let leeg: Vec<Box<dyn Flowable>> = Vec::new();
-    (doc.build_to_bytes(leeg).expect("de PDF moet gebouwd kunnen worden"), aantal_ops)
+    (
+        doc.build_to_bytes(leeg)
+            .expect("de PDF moet gebouwd kunnen worden"),
+        aantal_ops,
+    )
 }
 
 #[test]
@@ -254,16 +274,25 @@ fn de_vier_figuren_komen_door_de_tekenmotor() {
 /// — een rapport dat halverwege afbreekt is erger dan een lege figuur.
 #[test]
 fn lege_gegevens_leveren_een_lege_figuur_en_geen_paniek() {
-    let stijl = Figuurstijl { kleuren: RAPPORT_KLEUREN, font: "LiberationSans-Regular".into() };
+    let stijl = Figuurstijl {
+        kleuren: RAPPORT_KLEUREN,
+        font: "LiberationSans-Regular".into(),
+    };
     let vlak = Rect::new(Pt(0.0), Pt(0.0), Pt(300.0), Pt(200.0));
 
     let mut dl = DrawList::new();
     teken_mn_kappa(&mut dl, vlak, None, None, &stijl);
-    assert!(!dl.ops.is_empty(), "zelfs een leeg diagram krijgt assen en een melding");
+    assert!(
+        !dl.ops.is_empty(),
+        "zelfs een leeg diagram krijgt assen en een melding"
+    );
 
     let mut dl = DrawList::new();
     teken_interactie(&mut dl, vlak, &[], &[], None, None, None, &stijl);
-    assert!(!dl.ops.is_empty(), "zelfs een leeg interactiediagram krijgt assen");
+    assert!(
+        !dl.ops.is_empty(),
+        "zelfs een leeg interactiediagram krijgt assen"
+    );
 
     // Ronde 0: de indeling zonder krachten, dus segmenten zonder EI.
     let req: SegmentStiffnessRequest = serde_json::from_value(serde_json::json!({
@@ -285,14 +314,26 @@ fn lege_gegevens_leveren_een_lege_figuur_en_geen_paniek() {
     assert!(ronde0.segments.iter().all(|s| s.ei_knm2.is_none()));
     let mut dl = DrawList::new();
     teken_ei_verloop(&mut dl, vlak, &ronde0, &stijl);
-    assert!(!dl.ops.is_empty(), "de assen en de referentielijn staan er ook in ronde 0");
+    assert!(
+        !dl.ops.is_empty(),
+        "de assen en de referentielijn staan er ook in ronde 0"
+    );
 
     // Een korf zonder bovenwapening: de d-maat en het bovenlabel horen dan weg
     // te blijven, en de figuur moet gewoon getekend worden.
     let mut korf = proefkorf();
-    korf.top = RebarRow { count: 0, diameter_mm: 0.0 };
+    korf.top = RebarRow {
+        count: 0,
+        diameter_mm: 0.0,
+    };
     let mut dl = DrawList::new();
-    teken_doorsnede(&mut dl, vlak, &ConcreteSection::new(300.0, 500.0), &korf, &stijl);
+    teken_doorsnede(
+        &mut dl,
+        vlak,
+        &ConcreteSection::new(300.0, 500.0),
+        &korf,
+        &stijl,
+    );
     assert!(!dl.ops.is_empty());
 }
 
@@ -313,18 +354,28 @@ fn een_brede_t_krijgt_een_kader_op_ware_verhouding() {
     // ondergrens als vangnet.
     let teken_h = kh - 22.0 - 18.0;
     let gewenst = (kw - 30.0 - 34.0) * 450.0 / 2780.0;
-    assert!((teken_h - gewenst.max(40.0)).abs() < 1e-4, "tekenvlak {teken_h}, gewenst {gewenst}");
+    assert!(
+        (teken_h - gewenst.max(40.0)).abs() < 1e-4,
+        "tekenvlak {teken_h}, gewenst {gewenst}"
+    );
 
     // En hij is te tekenen zonder dat er iets omvalt.
     let mut dl = DrawList::new();
     let korf = ReinforcementCage {
         cover_mm: 35.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: 6, diameter_mm: 12.0 },
-        bottom: RebarRow { count: 4, diameter_mm: 20.0 },
+        top: RebarRow {
+            count: 6,
+            diameter_mm: 12.0,
+        },
+        bottom: RebarRow {
+            count: 4,
+            diameter_mm: 20.0,
+        },
         ..ReinforcementCage::default()
     };
-    korf.validate(&breed).expect("de proefkorf moet in deze T passen");
+    korf.validate(&breed)
+        .expect("de proefkorf moet in deze T passen");
     teken_doorsnede(
         &mut dl,
         Rect::new(Pt(0.0), Pt(0.0), Pt(480.0), Pt(480.0 * kh / kw)),
@@ -332,5 +383,8 @@ fn een_brede_t_krijgt_een_kader_op_ware_verhouding() {
         &korf,
         &Figuurstijl::default(),
     );
-    assert!(dl.ops.len() > 40, "een T met korf hoort meer dan een paar lijnen op te leveren");
+    assert!(
+        dl.ops.len() > 40,
+        "een T met korf hoort meer dan een paar lijnen op te leveren"
+    );
 }

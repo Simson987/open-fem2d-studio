@@ -50,6 +50,8 @@
     "aanzichtBreedteHint": "De breedte b van het profiel als label bij het aanzicht: het aanzicht toont de hoogte h, de breedte staat loodrecht op de tekening.",
     "opleggingen": "Opleggingen",
     "opleggingenHint": "De oplegsymbolen.",
+    "supportScale": "Grootte opleggingen",
+    "supportScaleHint": "Alleen de weergave; de opleggingen in de berekening blijven gelijk.",
     "scharnieren": "Scharnieren en veren",
     "scharnierenHint": "De scharnieren en veren aan de staafeinden.",
     "stramien": "Stramien",

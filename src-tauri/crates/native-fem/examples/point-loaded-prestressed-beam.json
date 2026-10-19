@@ -1,0 +1,23 @@
+{
+  "spanM": 10.0,
+  "section": {
+    "areaM2": 0.5,
+    "inertiaM4": 0.02,
+    "topFibreM": 0.3,
+    "bottomFibreM": 0.3,
+    "eMpa": 30000.0
+  },
+  "tendon": {
+    "kind": "straight",
+    "eccentricityM": 0.0
+  },
+  "initialForceKn": 1000.0,
+  "lossFraction": 0.0,
+  "transferUniformDownwardKnPerM": 0.0,
+  "serviceUniformDownwardKnPerM": 0.0,
+  "transferPointLoads": [],
+  "servicePointLoads": [
+    { "positionM": 5.0, "downwardKn": 12.0 }
+  ],
+  "stationsXM": [5.0]
+}

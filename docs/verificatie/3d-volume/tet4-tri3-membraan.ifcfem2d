@@ -1,0 +1,55 @@
+{
+  "format": "open-fem2d-studio-v2",
+  "version": 3,
+  "savedAt": "2026-10-08T00:00:00.000Z",
+  "nodes": [],
+  "beams": [],
+  "supports": [],
+  "plates": [],
+  "loads": [],
+  "loadCases": [
+    { "id": 1, "name": "Knooplast 10 kN", "type": "live" },
+    { "id": 2, "name": "Membraanvlaklast 6 kN/m²", "type": "live" }
+  ],
+  "activeLoadCaseId": 1,
+  "selfWeightEnabled": false,
+  "nonlinearEnabled": false,
+  "analysetype": "eersteOrde",
+  "modelDimension": "3d",
+  "model3d": {
+    "nodes": [
+      { "id": 10, "x": 0, "y": 0, "z": 0 },
+      { "id": 20, "x": 1, "y": 0, "z": 0 },
+      { "id": 30, "x": 0, "y": 1, "z": 0 },
+      { "id": 40, "x": 0, "y": 0, "z": 1 }
+    ],
+    "beams": [],
+    "volumes": [
+      { "id": 1, "kind": "tet4", "nodeIds": [10, 20, 30, 40],
+        "eMpa": 1200, "poisson": 0.2, "densityKgPerM3": 2500 }
+    ],
+    "plates": [
+      { "id": 2, "nodeIds": [10, 20, 30], "thicknessM": 0.08,
+        "material": "C30/37", "membraneOnly": true,
+        "membraneEMpa": 3000, "membranePoisson": 0.25 }
+    ],
+    "supports": [
+      { "nodeId": 10, "ux": true, "uy": true, "uz": true, "rx": false, "ry": false, "rz": false },
+      { "nodeId": 20, "ux": false, "uy": true, "uz": true, "rx": false, "ry": false, "rz": false },
+      { "nodeId": 30, "ux": true, "uy": true, "uz": true, "rx": false, "ry": false, "rz": false },
+      { "nodeId": 40, "ux": true, "uy": true, "uz": true, "rx": false, "ry": false, "rz": false }
+    ],
+    "loads": [
+      { "id": 1, "nodeId": 20, "caseId": 1,
+        "fx": 10, "fy": 0, "fz": 0, "mx": 0, "my": 0, "mz": 0 }
+    ],
+    "surfaceLoads": [
+      { "id": 2, "plateId": 2, "caseId": 2, "qx": 6, "qy": 0, "qz": 0 }
+    ]
+  },
+  "projectInfo": {
+    "name": "Tet4 met gekoppeld Tri3-membraan",
+    "projectNumber": "VF-3D-MEMBRANE-01"
+  },
+  "frame3dViewSets": []
+}

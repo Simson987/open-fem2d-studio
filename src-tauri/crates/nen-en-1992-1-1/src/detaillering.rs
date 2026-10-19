@@ -218,7 +218,11 @@ pub struct DetailleringInvoer<'a> {
 // ---------------------------------------------------------------------------
 
 fn nv(symbol: &str, value: f64, unit: &str) -> NamedValue {
-    NamedValue { symbol: symbol.to_string(), value, unit: unit.to_string() }
+    NamedValue {
+        symbol: symbol.to_string(),
+        value,
+        unit: unit.to_string(),
+    }
 }
 
 /// Getal zonder overbodige komma's: "300" in plaats van "300,0".
@@ -332,8 +336,16 @@ impl Eis {
 
     /// MAXIMUM-eis: de aanwezige maat mag de grens niet overschrijden.
     fn maximum(self, aanwezig: f64, grens: f64, unit: &str, uc_formula: &str) -> ResistanceCalc {
-        let uc = if grens > 0.0 { aanwezig / grens } else { f64::INFINITY };
-        let status = if uc <= 1.0 + 1e-9 { CheckStatus::Ok } else { CheckStatus::NotOk };
+        let uc = if grens > 0.0 {
+            aanwezig / grens
+        } else {
+            f64::INFINITY
+        };
+        let status = if uc <= 1.0 + 1e-9 {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::NotOk
+        };
         self.afronden(
             grens,
             unit,
@@ -350,8 +362,16 @@ impl Eis {
     /// MINIMUM-eis: de aanwezige maat moet de vereiste waarde halen. `ed` is
     /// hier de VEREISTE en `rd` de AANWEZIGE waarde — zie de moduledoc.
     fn minimum(self, aanwezig: f64, vereist: f64, unit: &str, uc_formula: &str) -> ResistanceCalc {
-        let uc = if aanwezig > 0.0 { vereist / aanwezig } else { f64::INFINITY };
-        let status = if uc <= 1.0 + 1e-9 { CheckStatus::Ok } else { CheckStatus::NotOk };
+        let uc = if aanwezig > 0.0 {
+            vereist / aanwezig
+        } else {
+            f64::INFINITY
+        };
+        let status = if uc <= 1.0 + 1e-9 {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::NotOk
+        };
         self.afronden(
             vereist,
             unit,
@@ -452,7 +472,11 @@ pub fn minimum_belasting(
     // W hoort bij de MEEST GETROKKEN vezel: onder bij een positief moment,
     // boven bij een negatief. Bij een rechthoek zijn die gelijk; bij een T
     // schelen ze een factor.
-    let w = if m_ed_knm < 0.0 { section.w_top_mm3() } else { section.w_bottom_mm3() };
+    let w = if m_ed_knm < 0.0 {
+        section.w_top_mm3()
+    } else {
+        section.w_bottom_mm3()
+    };
     let a_c = section.area_mm2();
     if !(w > 0.0 && a_c > 0.0 && f_ctm_mpa > 0.0) {
         return Err("W, A_c en f_ctm moeten positief zijn om M_E,min te kunnen bepalen".into());
@@ -522,8 +546,11 @@ pub fn benodigde_trekwapening_mm2(
 ) -> Result<f64, String> {
     let sign = if m_knm < 0.0 { -1.0 } else { 1.0 };
     let h = section.h_mm;
-    let (trekrij, drukrij) =
-        if sign > 0.0 { (&cage.bottom, &cage.top) } else { (&cage.top, &cage.bottom) };
+    let (trekrij, drukrij) = if sign > 0.0 {
+        (&cage.bottom, &cage.top)
+    } else {
+        (&cage.top, &cage.bottom)
+    };
     if trekrij.diameter_mm <= 0.0 {
         return Err(
             "aan de trekzijde is geen staafdiameter opgegeven, dus de LIGGING van de benodigde \
@@ -559,7 +586,9 @@ pub fn benodigde_trekwapening_mm2(
                 label: "drukzijde".to_string(),
             });
         }
-        stress_block(section, &lagen, mat, n_kn, sign).ok().map(|r| r.m_rd_knm)
+        stress_block(section, &lagen, mat, n_kn, sign)
+            .ok()
+            .map(|r| r.m_rd_knm)
     };
 
     // Een oppervlakte van precies nul zou de laag laten verdwijnen; 10⁻³ mm²
@@ -692,9 +721,7 @@ pub fn as_min_9_2_1_1(inv: &DetailleringInvoer) -> ResistanceCalc {
     } else {
         eis = eis.note(format!(
             "Zuivere buiging (N_Ed = 0): M_E,min = f_ctm·W = {:.2}·{:.0} = {:.1} kNm.",
-            inv.f_ctm_mpa,
-            mb.w_mm3,
-            mb.m_e_min_knm
+            inv.f_ctm_mpa, mb.w_mm3, mb.m_e_min_knm
         ));
     }
 
@@ -710,13 +737,11 @@ pub fn as_min_9_2_1_1(inv: &DetailleringInvoer) -> ResistanceCalc {
         .map(|a| A_S_MIN2_FACTOR_UGT * a);
 
     let mut eis = match &a_min1 {
-        Ok(a) => eis
-            .var(r"A_{s,\min 1}", *a, "mm²")
-            .note(format!(
-                "A_s,min1 = de volgens 6.1 benodigde oppervlakte voor (M_E,min = {:.1} kNm; \
+        Ok(a) => eis.var(r"A_{s,\min 1}", *a, "mm²").note(format!(
+            "A_s,min1 = de volgens 6.1 benodigde oppervlakte voor (M_E,min = {:.1} kNm; \
                  N_E,min = {:.1} kN) = {a:.0} mm².",
-                mb.m_e_min_knm, mb.n_e_min_kn
-            )),
+            mb.m_e_min_knm, mb.n_e_min_kn
+        )),
         Err(r) => eis.note(format!("A_s,min1 is niet bepaald: {r}")),
     };
     eis = match &a_min2 {
@@ -1039,17 +1064,16 @@ pub fn s_t_max_9_2_2(inv: &DetailleringInvoer) -> ResistanceCalc {
         g(S_T_MAX_PLAFOND_MM)
     ));
 
-    let (s_t, herkomst) = match inv.cage.leg_spacing_mm(inv.section) {
-        Some(v) => v,
-        None => {
-            return eis.niet_te_toetsen(
+    let (s_t, herkomst) =
+        match inv.cage.leg_spacing_mm(inv.section) {
+            Some(v) => v,
+            None => return eis.niet_te_toetsen(
                 "de dwarsafstand s_t van de beugelbenen is niet opgegeven en niet af te leiden. \
                  Afleiden kan alleen bij een gesloten TWEEbenige beugel (s_t = b_w − 2·c_nom − Ø); \
                  bij meer benen hangt s_t af van de verdeling over de breedte en zou elke waarde \
                  een aanname zijn.",
-            )
-        }
-    };
+            ),
+        };
     let eis = eis.var("s_t", s_t, "mm").note(match herkomst {
         LegSpacingSource::Given => format!("s_t = {} mm is opgegeven.", g(s_t)),
         LegSpacingSource::DerivedTwoLeg => format!(
@@ -1181,7 +1205,12 @@ pub fn min_diameter_langsstaaf_9_2_1_1(inv: &DetailleringInvoer) -> ResistanceCa
             inv.cage.bottom.label(),
             inv.cage.top.label()
         ))
-        .minimum(kleinste, MIN_DIAMETER_LANGSSTAAF_MM, "mm", r"\phi_{l,\min} / \phi_{l}")
+        .minimum(
+            kleinste,
+            MIN_DIAMETER_LANGSSTAAF_MM,
+            "mm",
+            r"\phi_{l,\min} / \phi_{l}",
+        )
 }
 
 // ---------------------------------------------------------------------------
@@ -1251,12 +1280,10 @@ pub fn min_balkbreedte_9_2(inv: &DetailleringInvoer) -> ResistanceCalc {
         Some(n) => {
             let toeslag = BALKBREEDTE_TOESLAG_PER_BEKIST_VLAK_MM * n as f64;
             basis += toeslag;
-            eis = eis
-                .var("n_{bekist}", n as f64, "-")
-                .note(format!(
-                    "9.2(1)b: {n} blijvend bekiste oppervlakken, dus +{} mm toeslag.",
-                    g(toeslag)
-                ));
+            eis = eis.var("n_{bekist}", n as f64, "-").note(format!(
+                "9.2(1)b: {n} blijvend bekiste oppervlakken, dus +{} mm toeslag.",
+                g(toeslag)
+            ));
         }
         None => {
             eis = eis.note(
@@ -1323,7 +1350,10 @@ fn vrije_afstand_mm(
     }
     let breedte = section.width_at_mm(z_mm);
     let binnen = breedte - 2.0 * (cage.cover_mm + cage.stirrup_diameter_mm);
-    Some(((binnen - rij.count as f64 * rij.diameter_mm) / (rij.count as f64 - 1.0), breedte))
+    Some((
+        (binnen - rij.count as f64 * rij.diameter_mm) / (rij.count as f64 - 1.0),
+        breedte,
+    ))
 }
 
 /// §8.2(2) — de vrije afstand tussen evenwijdige staven.
@@ -1384,15 +1414,21 @@ pub fn vrije_staafafstand_8_2(inv: &DetailleringInvoer) -> ResistanceCalc {
     };
     let mut maatgevend: Option<Kandidaat> = None;
     for (naam, rij, z) in [
-        ("onderwapening", &inv.cage.bottom, inv.cage.axis_offset_mm(&inv.cage.bottom)),
-        ("bovenwapening", &inv.cage.top, h - inv.cage.axis_offset_mm(&inv.cage.top)),
+        (
+            "onderwapening",
+            &inv.cage.bottom,
+            inv.cage.axis_offset_mm(&inv.cage.bottom),
+        ),
+        (
+            "bovenwapening",
+            &inv.cage.top,
+            h - inv.cage.axis_offset_mm(&inv.cage.top),
+        ),
     ] {
         if let Some((a_vrij, breedte)) = vrije_afstand_mm(inv.section, inv.cage, rij, z) {
             let scherper = match maatgevend {
                 None => true,
-                Some((_, a0, phi0, _, _, _)) => {
-                    marge(a_vrij, rij.diameter_mm) < marge(a0, phi0)
-                }
+                Some((_, a0, phi0, _, _, _)) => marge(a_vrij, rij.diameter_mm) < marge(a0, phi0),
             };
             if scherper {
                 maatgevend = Some((naam, a_vrij, rij.diameter_mm, rij.count, breedte, z));
@@ -1572,8 +1608,14 @@ mod tests {
         ReinforcementCage {
             cover_mm: 30.0,
             stirrup_diameter_mm: 8.0,
-            top: RebarRow { count: 2, diameter_mm: 12.0 },
-            bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+            top: RebarRow {
+                count: 2,
+                diameter_mm: 12.0,
+            },
+            bottom: RebarRow {
+                count: 3,
+                diameter_mm: 16.0,
+            },
             stirrup_spacing_mm: Some(150.0),
             stirrup_legs: Some(2),
             ..ReinforcementCage::default()
@@ -1584,7 +1626,12 @@ mod tests {
         ForceStateSnapshot {
             combination_id: 1,
             position_mm: 2500.0,
-            forces: InternalForces { n_ed: n, my_ed: m, vz_ed: v, ..Default::default() },
+            forces: InternalForces {
+                n_ed: n,
+                my_ed: m,
+                vz_ed: v,
+                ..Default::default()
+            },
         }
     }
 
@@ -1595,7 +1642,11 @@ mod tests {
     }
 
     fn opzet() -> Opzet {
-        Opzet { section: ConcreteSection::new(300.0, 500.0), cage: korf(), mat: materiaal() }
+        Opzet {
+            section: ConcreteSection::new(300.0, 500.0),
+            cage: korf(),
+            mat: materiaal(),
+        }
     }
 
     fn invoer(o: &Opzet) -> DetailleringInvoer<'_> {
@@ -1616,7 +1667,9 @@ mod tests {
     }
 
     fn uc_van(c: &ResistanceCalc) -> f64 {
-        c.uc.as_ref().expect("deze toets hoort een unity check te hebben").uc
+        c.uc.as_ref()
+            .expect("deze toets hoort een unity check te hebben")
+            .uc
     }
 
     // -----------------------------------------------------------------
@@ -1642,7 +1695,10 @@ mod tests {
         assert_relative_eq!(uc.rd, 0.00223402, max_relative = 1e-6);
         assert_relative_eq!(uc.uc, 0.392274, max_relative = 1e-5);
         // De lijfbreedte, niet de flensbreedte.
-        assert!(c.variables.iter().any(|v| v.symbol == "b_w" && v.value == 300.0));
+        assert!(c
+            .variables
+            .iter()
+            .any(|v| v.symbol == "b_w" && v.value == 300.0));
     }
 
     /// Bij een T-ligger telt b_w (het lijf) en niet de flensbreedte. Met een
@@ -1651,7 +1707,11 @@ mod tests {
     #[test]
     fn rho_w_gebruikt_de_lijfbreedte_van_een_t() {
         let t = ConcreteSection::tee(600.0, 120.0, 200.0, 500.0).unwrap();
-        let o = Opzet { section: t, cage: korf(), mat: materiaal() };
+        let o = Opzet {
+            section: t,
+            cage: korf(),
+            mat: materiaal(),
+        };
         let c = rho_w_min_9_2_2(&invoer(&o));
         assert_relative_eq!(c.uc.as_ref().unwrap().rd, 0.00335103, max_relative = 1e-6);
     }
@@ -1665,7 +1725,11 @@ mod tests {
         let c = rho_w_min_9_2_2(&invoer(&o));
         assert_eq!(c.status, CheckStatus::NotApplicable);
         assert!(c.uc.is_none());
-        assert!(c.notes[0].contains("hart-op-hartafstand"), "reden ontbreekt: {:?}", c.notes);
+        assert!(
+            c.notes[0].contains("hart-op-hartafstand"),
+            "reden ontbreekt: {:?}",
+            c.notes
+        );
     }
 
     /// Een te ruime beugel valt af. Ø6 tweebenig h.o.h. 400 mm in 300 mm lijf:
@@ -1701,7 +1765,11 @@ mod tests {
         assert_relative_eq!(c.value, 300.0);
         assert_relative_eq!(uc_van(&c), 0.5, max_relative = 1e-12);
         // 0,75·d = 340,5 mm staat er als tussenwaarde bij.
-        let f = c.variables.iter().find(|v| v.symbol.contains("0{,}75")).unwrap();
+        let f = c
+            .variables
+            .iter()
+            .find(|v| v.symbol.contains("0{,}75"))
+            .unwrap();
         assert_relative_eq!(f.value, 340.5, max_relative = 1e-12);
     }
 
@@ -1734,7 +1802,11 @@ mod tests {
         let mut o2 = opzet();
         o2.cage.stirrup_spacing_mm = Some(320.0);
         let c2 = s_l_max_9_2_2(&invoer(&o2));
-        assert_eq!(c2.status, CheckStatus::NotOk, "320 mm valt buiten beide takken");
+        assert_eq!(
+            c2.status,
+            CheckStatus::NotOk,
+            "320 mm valt buiten beide takken"
+        );
 
         let mut o3 = Opzet {
             section: ConcreteSection::new(300.0, 300.0),
@@ -1743,8 +1815,14 @@ mod tests {
         };
         o3.cage.stirrup_spacing_mm = Some(250.0);
         let c3 = s_l_max_9_2_2(&invoer(&o3));
-        assert_eq!(c3.status, CheckStatus::NotApplicable, "250 mm ligt tussen 190,5 en 300");
-        assert!(c3.notes[0].contains("V_Ed > V_Rd,c") || c3.notes[0].contains("dwarskrachtwapening"));
+        assert_eq!(
+            c3.status,
+            CheckStatus::NotApplicable,
+            "250 mm ligt tussen 190,5 en 300"
+        );
+        assert!(
+            c3.notes[0].contains("V_Ed > V_Rd,c") || c3.notes[0].contains("dwarskrachtwapening")
+        );
     }
 
     // -----------------------------------------------------------------
@@ -1766,7 +1844,10 @@ mod tests {
         assert_eq!(c.status, CheckStatus::Ok);
         assert_relative_eq!(c.value, 500.0);
         assert_relative_eq!(uc_van(&c), 0.464, max_relative = 1e-12);
-        assert!(c.variables.iter().any(|v| v.symbol == "s_t" && v.value == 232.0));
+        assert!(c
+            .variables
+            .iter()
+            .any(|v| v.symbol == "s_t" && v.value == 232.0));
     }
 
     /// Boven 0,5·V_Rd,max geldt 0,75·d ≤ 500 mm. V_Ed = 250 kN > 200 kN:
@@ -1798,7 +1879,11 @@ mod tests {
         inv.v_ed_kn = Some(10.0);
         inv.v_rd_max_kn = Some(400.0);
         let c = s_t_max_9_2_2(&inv);
-        assert_eq!(c.status, CheckStatus::NotOk, "550 mm > 500 mm (NB), maar < 600 mm (EN)");
+        assert_eq!(
+            c.status,
+            CheckStatus::NotOk,
+            "550 mm > 500 mm (NB), maar < 600 mm (EN)"
+        );
         assert_relative_eq!(uc_van(&c), 1.1, max_relative = 1e-12);
     }
 
@@ -1846,7 +1931,10 @@ mod tests {
 
         // Ø5 langsstaaf valt af: UC = 6/5 = 1,2.
         let mut o3 = opzet();
-        o3.cage.top = RebarRow { count: 2, diameter_mm: 5.0 };
+        o3.cage.top = RebarRow {
+            count: 2,
+            diameter_mm: 5.0,
+        };
         let c = min_diameter_langsstaaf_9_2_1_1(&invoer(&o3));
         assert_eq!(c.status, CheckStatus::NotOk);
         assert_relative_eq!(uc_van(&c), 1.2, max_relative = 1e-12);
@@ -1862,7 +1950,10 @@ mod tests {
         o.cage.stirrup_legs = None;
         let c = min_diameter_beugel_9_2_2(&invoer(&o));
         assert_eq!(c.status, CheckStatus::NotApplicable);
-        assert!(c.notes[0].contains("6.2.1(4)"), "de 6.2.1(4)-waarschuwing ontbreekt");
+        assert!(
+            c.notes[0].contains("6.2.1(4)"),
+            "de 6.2.1(4)-waarschuwing ontbreekt"
+        );
     }
 
     // -----------------------------------------------------------------
@@ -1887,7 +1978,10 @@ mod tests {
     #[test]
     fn te_veel_wapening_valt_af_op_as_max() {
         let mut o = opzet();
-        o.cage.bottom = RebarRow { count: 20, diameter_mm: 25.0 };
+        o.cage.bottom = RebarRow {
+            count: 20,
+            diameter_mm: 25.0,
+        };
         let c = as_max_9_2_1_1(&invoer(&o));
         assert_eq!(c.status, CheckStatus::NotOk);
         assert_relative_eq!(uc_van(&c), 1.636246, max_relative = 1e-5);
@@ -1918,7 +2012,11 @@ mod tests {
 
         // Een lijf van 90 mm valt al op 9.2(1)a af: UC = 100/90 = 1,111111.
         let smal = ConcreteSection::tee(600.0, 120.0, 90.0, 500.0).unwrap();
-        let o2 = Opzet { section: smal, cage: korf(), mat: materiaal() };
+        let o2 = Opzet {
+            section: smal,
+            cage: korf(),
+            mat: materiaal(),
+        };
         let c = min_balkbreedte_9_2(&invoer(&o2));
         assert_eq!(c.status, CheckStatus::NotOk);
         assert_relative_eq!(uc_van(&c), 100.0 / 90.0, max_relative = 1e-9);
@@ -1964,7 +2062,10 @@ mod tests {
     #[test]
     fn zonder_korrelafmeting_geen_groene_staafafstand() {
         let mut o = opzet();
-        o.cage.bottom = RebarRow { count: 6, diameter_mm: 20.0 };
+        o.cage.bottom = RebarRow {
+            count: 6,
+            diameter_mm: 20.0,
+        };
         let c = vrije_staafafstand_8_2(&invoer(&o));
         assert_eq!(c.status, CheckStatus::NotApplicable);
         assert!(c.uc.is_none());
@@ -1990,7 +2091,10 @@ mod tests {
             cage: korf(),
             mat: materiaal(),
         };
-        o.cage.bottom = RebarRow { count: 7, diameter_mm: 25.0 };
+        o.cage.bottom = RebarRow {
+            count: 7,
+            diameter_mm: 25.0,
+        };
         let c = vrije_staafafstand_8_2(&invoer(&o));
         assert_eq!(c.status, CheckStatus::NotOk);
         assert_relative_eq!(c.uc.as_ref().unwrap().rd, 149.0 / 6.0, max_relative = 1e-9);
@@ -2001,8 +2105,14 @@ mod tests {
     #[test]
     fn een_staaf_per_rij_levert_geen_staafafstandstoets() {
         let mut o = opzet();
-        o.cage.bottom = RebarRow { count: 1, diameter_mm: 16.0 };
-        o.cage.top = RebarRow { count: 0, diameter_mm: 12.0 };
+        o.cage.bottom = RebarRow {
+            count: 1,
+            diameter_mm: 16.0,
+        };
+        o.cage.top = RebarRow {
+            count: 0,
+            diameter_mm: 12.0,
+        };
         let c = vrije_staafafstand_8_2(&invoer(&o));
         assert_eq!(c.status, CheckStatus::NotApplicable);
     }
@@ -2092,7 +2202,10 @@ mod tests {
     #[test]
     fn omkering_van_6_1_met_de_hand_nagerekend() {
         let mut cage = korf();
-        cage.top = RebarRow { count: 0, diameter_mm: 12.0 };
+        cage.top = RebarRow {
+            count: 0,
+            diameter_mm: 12.0,
+        };
         let s = ConcreteSection::new(300.0, 500.0);
         let a = benodigde_trekwapening_mm2(&s, &cage, &materiaal(), 36.25, 0.0).unwrap();
         assert_relative_eq!(a, 186.42, max_relative = 2e-3);
@@ -2134,8 +2247,18 @@ mod tests {
         let o = opzet();
         let c = as_min_9_2_1_1(&invoer(&o));
         assert_eq!(c.status, CheckStatus::Ok);
-        let a1 = c.variables.iter().find(|v| v.symbol.contains(r"\min 1")).unwrap().value;
-        let a2 = c.variables.iter().find(|v| v.symbol.contains(r"\min 2")).unwrap().value;
+        let a1 = c
+            .variables
+            .iter()
+            .find(|v| v.symbol.contains(r"\min 1"))
+            .unwrap()
+            .value;
+        let a2 = c
+            .variables
+            .iter()
+            .find(|v| v.symbol.contains(r"\min 2"))
+            .unwrap()
+            .value;
         assert_relative_eq!(a1, 177.2, max_relative = 2e-3);
         assert_relative_eq!(a2, 661.5, max_relative = 2e-3);
         // De MINIMUM-lezing: A_s,min is de kleinste, dus 177 en niet 661.
@@ -2152,9 +2275,17 @@ mod tests {
     #[test]
     fn as_min1_zonder_bovenwapening_volgt_de_gesloten_vorm() {
         let mut o = opzet();
-        o.cage.top = RebarRow { count: 0, diameter_mm: 12.0 };
+        o.cage.top = RebarRow {
+            count: 0,
+            diameter_mm: 12.0,
+        };
         let c = as_min_9_2_1_1(&invoer(&o));
-        let a1 = c.variables.iter().find(|v| v.symbol.contains(r"\min 1")).unwrap().value;
+        let a1 = c
+            .variables
+            .iter()
+            .find(|v| v.symbol.contains(r"\min 1"))
+            .unwrap()
+            .value;
         assert_relative_eq!(a1, 186.42, max_relative = 2e-3);
     }
 
@@ -2177,7 +2308,10 @@ mod tests {
     #[test]
     fn te_weinig_trekwapening_valt_af_op_as_min() {
         let mut o = opzet();
-        o.cage.bottom = RebarRow { count: 2, diameter_mm: 6.0 };
+        o.cage.bottom = RebarRow {
+            count: 2,
+            diameter_mm: 6.0,
+        };
         let c = as_min_9_2_1_1(&invoer(&o));
         assert_eq!(c.status, CheckStatus::NotOk);
         assert!(uc_van(&c) > 1.0);
@@ -2192,7 +2326,10 @@ mod tests {
         // A_s,min2 niet te bepalen. A_s,min1 (uit 36,25 kNm) wel, en 2Ø6
         // haalt die niet.
         let mut o = opzet();
-        o.cage.bottom = RebarRow { count: 2, diameter_mm: 6.0 };
+        o.cage.bottom = RebarRow {
+            count: 2,
+            diameter_mm: 6.0,
+        };
         let mut inv = invoer(&o);
         inv.force_state = snap(0.0, 5000.0, 0.0);
         let c = as_min_9_2_1_1(&inv);
@@ -2235,16 +2372,33 @@ mod tests {
         let alle = detailleringstoetsen(&invoer(&o));
         for c in &alle {
             if c.status == CheckStatus::NotApplicable {
-                assert!(c.uc.is_none(), "{} is NotApplicable maar heeft een uc", c.id);
-                assert!(!c.notes.is_empty(), "{} is NotApplicable zonder reden", c.id);
+                assert!(
+                    c.uc.is_none(),
+                    "{} is NotApplicable maar heeft een uc",
+                    c.id
+                );
+                assert!(
+                    !c.notes.is_empty(),
+                    "{} is NotApplicable zonder reden",
+                    c.id
+                );
             } else {
                 assert!(c.uc.is_some(), "{} heeft een status maar geen uc", c.id);
             }
         }
         // De drie beugeltoetsen kunnen zonder beugel niets.
-        for id in ["9.2.2_rho_w_min", "9.2.2_sl_max", "9.2.2_st_max", "9.2.2_min_diameter_beugel"] {
+        for id in [
+            "9.2.2_rho_w_min",
+            "9.2.2_sl_max",
+            "9.2.2_st_max",
+            "9.2.2_min_diameter_beugel",
+        ] {
             let c = alle.iter().find(|c| c.id == id).unwrap();
-            assert_eq!(c.status, CheckStatus::NotApplicable, "{id} hoort NotApplicable te zijn");
+            assert_eq!(
+                c.status,
+                CheckStatus::NotApplicable,
+                "{id} hoort NotApplicable te zijn"
+            );
         }
     }
 
@@ -2258,13 +2412,26 @@ mod tests {
     #[test]
     fn de_lijst_dekt_alle_detailleringstoetsen() {
         let o = opzet();
-        let alle: Vec<String> = detailleringstoetsen(&invoer(&o)).iter().map(|c| c.id.clone()).collect();
-        assert_eq!(alle.len(), DETAILLERINGSTOETS_IDS.len(), "aantal eisen gewijzigd: {alle:?}");
+        let alle: Vec<String> = detailleringstoetsen(&invoer(&o))
+            .iter()
+            .map(|c| c.id.clone())
+            .collect();
+        assert_eq!(
+            alle.len(),
+            DETAILLERINGSTOETS_IDS.len(),
+            "aantal eisen gewijzigd: {alle:?}"
+        );
         for id in &alle {
-            assert!(is_detailleringstoets(id), "{id} ontbreekt in DETAILLERINGSTOETS_IDS");
+            assert!(
+                is_detailleringstoets(id),
+                "{id} ontbreekt in DETAILLERINGSTOETS_IDS"
+            );
         }
         for id in DETAILLERINGSTOETS_IDS {
-            assert!(alle.iter().any(|a| a == id), "{id} staat in de lijst maar wordt niet meer getoetst");
+            assert!(
+                alle.iter().any(|a| a == id),
+                "{id} staat in de lijst maar wordt niet meer getoetst"
+            );
         }
     }
 }

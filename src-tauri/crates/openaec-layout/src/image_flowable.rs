@@ -39,7 +39,10 @@ impl ImageFlowable {
     }
 
     /// Create from file path with specified width; height auto-calculated from aspect ratio.
-    pub fn from_path(path: impl Into<PathBuf>, width: Pt) -> Result<Self, crate::error::LayoutError> {
+    pub fn from_path(
+        path: impl Into<PathBuf>,
+        width: Pt,
+    ) -> Result<Self, crate::error::LayoutError> {
         let path = path.into();
         let img_data = std::fs::read(&path).map_err(|e| {
             crate::error::LayoutError::ImageError(format!("{}: {}", path.display(), e))

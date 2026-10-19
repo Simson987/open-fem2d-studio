@@ -74,6 +74,7 @@ interface HomeTabProps {
   availableFrame3DTools?: readonly Frame3DTool[];
   onFrame3DToolChange?: (tool: Frame3DTool) => void;
   canFrame3DDelete?: boolean;
+  canFrame3DTransform?: boolean;
   onFrame3DFit?: () => void;
   onFrame3DViewChange?: (view: Frame3DView) => void;
   frame3dView?: Frame3DView;
@@ -119,8 +120,8 @@ export default function HomeTab({
   onSaveProject, onSaveProjectAs,
   onFilterSelection,
   modelDimension = "2d", onConvertTo3D,
-  frame3dTool = "select", availableFrame3DTools = ["select", "addNode", "addBeam", "addSubNode", "addPlate", "addPlateArc", "addOpening", "addOpeningArc", "move", "rotate", "copy", "mirror"],
-  onFrame3DToolChange, canFrame3DDelete,
+  frame3dTool = "select", availableFrame3DTools = ["select", "addNode", "addBeam", "addSubNode", "addPlate", "addPlateArc", "addOpening", "addOpeningArc", "addTet4", "addHex8", "move", "rotate", "copy", "mirror"],
+  onFrame3DToolChange, canFrame3DDelete, canFrame3DTransform,
   onFrame3DFit, onFrame3DViewChange, frame3dView = "iso",
   onToggle3DVisibility, visibility3DOpen,
   hasFrame3DNodeSelection, hasFrame3DBeamSelection, hasFrame3DPlateSelection, onFrame3DSupportPreset, onFrame3DRequestSpring,
@@ -278,6 +279,18 @@ export default function HomeTab({
                 : "Klik een stuurpunt en daarna het boogeindpunt. Wissel tijdens dezelfde plaat tussen Plaat en Boogrand."}
             />}
           </RibbonButtonStack>
+          {is3D && <RibbonButtonStack>
+            <RibbonButton icon={cubeIcon} label="Tet4" size="small"
+              active={frame3dTool === "addTet4"}
+              onClick={() => onFrame3DToolChange?.("addTet4")}
+              disabled={!availableFrame3DTools.includes("addTet4")}
+              title="Klik vier bestaande knopen in Tet4-volgorde." />
+            <RibbonButton icon={cubeIcon} label="Hex8" size="small"
+              active={frame3dTool === "addHex8"}
+              onClick={() => onFrame3DToolChange?.("addHex8")}
+              disabled={!availableFrame3DTools.includes("addHex8")}
+              title="Klik vier ondervlakknopen en daarna de vier bijbehorende bovenvlakknopen." />
+          </RibbonButtonStack>}
           <RibbonButtonStack>
             <RibbonButton
               icon={openingIcon}
@@ -503,7 +516,7 @@ export default function HomeTab({
             size="large"
             active={toolActive("move")}
             onClick={() => setTool("move")}
-            disabled={is3D && (!frameToolAvailable("move") || !canFrame3DDelete)}
+            disabled={is3D && (!frameToolAvailable("move") || !canFrame3DTransform)}
             title={is3D && !frameToolAvailable("move") ? unsupported3D : undefined}
           />
           <RibbonButtonStack>
@@ -513,7 +526,7 @@ export default function HomeTab({
               size="small"
               active={toolActive("rotate")}
               onClick={() => setTool("rotate")}
-              disabled={is3D && (!frameToolAvailable("rotate") || !canFrame3DDelete)}
+              disabled={is3D && (!frameToolAvailable("rotate") || !canFrame3DTransform)}
               title={is3D && !frameToolAvailable("rotate") ? unsupported3D : undefined}
             />
             <RibbonButton
@@ -522,7 +535,7 @@ export default function HomeTab({
               size="small"
               active={toolActive("copy")}
               onClick={() => setTool("copy")}
-              disabled={is3D && (!frameToolAvailable("copy") || !canFrame3DDelete)}
+              disabled={is3D && (!frameToolAvailable("copy") || !canFrame3DTransform)}
               title={is3D && !frameToolAvailable("copy") ? unsupported3D : undefined}
             />
             <RibbonButton
@@ -531,7 +544,7 @@ export default function HomeTab({
               size="small"
               active={toolActive("mirror")}
               onClick={() => setTool("mirror")}
-              disabled={is3D && (!frameToolAvailable("mirror") || !canFrame3DDelete)}
+              disabled={is3D && (!frameToolAvailable("mirror") || !canFrame3DTransform)}
               title={is3D && !frameToolAvailable("mirror") ? unsupported3D : undefined}
             />
           </RibbonButtonStack>

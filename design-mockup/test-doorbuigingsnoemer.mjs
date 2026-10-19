@@ -24,7 +24,7 @@
 // Draaien met: npx tsx test-doorbuigingsnoemer.mjs
 //         of : node scripts/run-tests.mjs --filter=doorbuigingsnoemer
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -113,12 +113,23 @@ log("\n[2] De MCP-modelkeuring");
 // ─────────────────────────────────────────────────────────────────────────
 log("\n[3] De echte kern via de toetsbrug");
 // ─────────────────────────────────────────────────────────────────────────
-function kern(opdracht, inputs) {
-  const r = spawnSync(TOETSBRUG, [], {
-    input: JSON.stringify({ opdracht, inputs }), encoding: "utf8", maxBuffer: 256 << 20,
+async function kern(opdracht, inputs) {
+  const antwoord = await new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code !== 0) reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+      else resolve(out);
+    });
+    child.stdin.end(JSON.stringify({ opdracht, inputs }));
   });
-  if (r.status !== 0 || !r.stdout) throw new Error(`toetsbrug faalde: ${(r.stdout || r.stderr || "").slice(0, 300)}`);
-  const uit = JSON.parse(r.stdout);
+  const uit = JSON.parse(antwoord);
   if (uit.fout) throw new Error(uit.fout);
   return uit;
 }
@@ -131,7 +142,7 @@ if (!existsSync(TOETSBRUG)) {
   ok("toetsbrug gevonden — bouw hem met `cargo build --release -p toetsbrug`", false, TOETSBRUG);
 } else {
   // Eén aanroep met alle staven: een foute staaf mag de rest niet meenemen.
-  const staal = kern("check_steel_beams", [
+  const staal = await kern("check_steel_beams", [
     staalInvoer({ deflectionClass: "custom", deflectionLimitNumerator: 0 }),
     staalInvoer({ deflectionClass: "custom", deflectionLimitNumerator: -300 }),
     staalInvoer({ deflectionAddLimitNumerator: -150 }),
@@ -145,7 +156,7 @@ if (!existsSync(TOETSBRUG)) {
   ok("staal custom 250: getoetst met grens 24 mm", staal[3]?.status !== "NotApplicable" &&
     fin && fin.status !== "NotApplicable" && Math.abs(fin.uc.rd - 24) < 1e-9, String(fin?.uc?.rd));
 
-  const hout = kern("check_timber_beams", [
+  const hout = await kern("check_timber_beams", [
     houtInvoer({ deflectionClass: "custom", deflectionLimitNumerator: 0 }),
     houtInvoer({ deflectionClass: "custom", deflectionLimitNumerator: -250 }),
     houtInvoer({ deflectionClass: "custom", deflectionLimitNumerator: 300 }),
@@ -167,7 +178,7 @@ if (!existsSync(TOETSBRUG)) {
     deflection_inst_mm: -5, deflection_quasi_perm_mm: -3, deflection_permanent_mm: -3,
     deflection_limit_fin: n, deflection_limit_add: n,
   });
-  const c = kern("check_clt_beams", [clt(0), clt(-250)]);
+  const c = await kern("check_clt_beams", [clt(0), clt(-250)]);
   ok("CLT noemer 0: geweigerd met reden", geweigerd(c[0], "w_fin"), c[0]?.governing_check_id);
   ok("CLT noemer -250: geweigerd met reden", geweigerd(c[1], "w_fin"), c[1]?.governing_check_id);
 }

@@ -1,0 +1,22 @@
+{
+  "nodes": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]],
+  "materials": [
+    { "eMpa": 100000, "poisson": 0 },
+    { "eMpa": 200000, "poisson": 0 }
+  ],
+  "elements": [
+    { "nodes": [0, 1, 2, 3], "material": 0 },
+    { "nodes": [1, 2, 3, 4], "material": 1 }
+  ],
+  "loads": [],
+  "supports": [
+    { "node": 0, "displacementM": [0, 0, 0] },
+    { "node": 1, "displacementM": [0.0001, 0, 0] },
+    { "node": 2, "displacementM": [0, 0, 0] },
+    { "node": 3, "displacementM": [0, 0, 0] },
+    { "node": 4, "displacementM": [0.0001, 0, 0] }
+  ],
+  "threads": 2,
+  "tolerance": 1e-12,
+  "maxIterations": 100
+}

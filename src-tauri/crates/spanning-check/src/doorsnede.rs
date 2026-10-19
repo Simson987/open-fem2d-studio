@@ -41,7 +41,10 @@ const CHS_STROKEN: usize = 80;
 /// Eén laag van het vezelmodel: constante breedte tussen twee hoogten.
 /// `z` loopt vanaf de bovenkant van de doorsnede naar beneden (mm).
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/spanning/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/spanning/"
+)]
 pub struct SpanningLaag {
     /// Bovenkant van de laag vanaf de bovenkant van de doorsnede (mm).
     pub z_top_mm: f64,
@@ -69,7 +72,10 @@ impl SpanningLaag {
 /// verloop kunnen leveren; die vorm zit hier bewust niet in. Wie toch een
 /// vrije doorsnede wil, geeft hem als `Lagen`.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/spanning/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/spanning/"
+)]
 #[serde(tag = "vorm", content = "maten")]
 pub enum SpanningDoorsnede {
     /// Massieve rechthoek b × h (mm).
@@ -81,14 +87,20 @@ pub enum SpanningDoorsnede {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/spanning/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/spanning/"
+)]
 pub struct Rechthoek {
     pub b_mm: f64,
     pub h_mm: f64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/spanning/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/spanning/"
+)]
 pub struct Catalogus {
     /// Profielnaam; dezelfde zoeksleutel als de staaltoetsing ("HEA200",
     /// "HEA 200" en "hea-200" vinden hetzelfde profiel).
@@ -96,7 +108,10 @@ pub struct Catalogus {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/spanning/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/spanning/"
+)]
 pub struct Lagenmodel {
     /// Lagen van boven naar beneden; aaneengesloten, dus `z_bot` van laag i
     /// is `z_top` van laag i+1.
@@ -274,7 +289,10 @@ fn lagen_profiel(p: &SteelProfile) -> Result<Vec<SpanningLaag>, String> {
     let tw = p.properties.tw_mm;
     let tf = p.properties.tf_mm;
     if !(h > 0.0) || !(b > 0.0) {
-        return Err(format!("profiel \"{}\" heeft geen bruikbare hoofdmaten", p.name));
+        return Err(format!(
+            "profiel \"{}\" heeft geen bruikbare hoofdmaten",
+            p.name
+        ));
     }
     match p.kind {
         // Flens — lijf — flens. Voor een U-profiel is dat om de sterke as
@@ -287,9 +305,21 @@ fn lagen_profiel(p: &SteelProfile) -> Result<Vec<SpanningLaag>, String> {
                 ));
             }
             Ok(vec![
-                SpanningLaag { z_top_mm: 0.0, z_bot_mm: tf, breedte_mm: b },
-                SpanningLaag { z_top_mm: tf, z_bot_mm: h - tf, breedte_mm: tw },
-                SpanningLaag { z_top_mm: h - tf, z_bot_mm: h, breedte_mm: b },
+                SpanningLaag {
+                    z_top_mm: 0.0,
+                    z_bot_mm: tf,
+                    breedte_mm: b,
+                },
+                SpanningLaag {
+                    z_top_mm: tf,
+                    z_bot_mm: h - tf,
+                    breedte_mm: tw,
+                },
+                SpanningLaag {
+                    z_top_mm: h - tf,
+                    z_bot_mm: h,
+                    breedte_mm: b,
+                },
             ])
         }
         // Koker: boven- en onderwand over de volle breedte, daartussen twee
@@ -303,9 +333,21 @@ fn lagen_profiel(p: &SteelProfile) -> Result<Vec<SpanningLaag>, String> {
                 ));
             }
             Ok(vec![
-                SpanningLaag { z_top_mm: 0.0, z_bot_mm: t, breedte_mm: b },
-                SpanningLaag { z_top_mm: t, z_bot_mm: h - t, breedte_mm: 2.0 * t },
-                SpanningLaag { z_top_mm: h - t, z_bot_mm: h, breedte_mm: b },
+                SpanningLaag {
+                    z_top_mm: 0.0,
+                    z_bot_mm: t,
+                    breedte_mm: b,
+                },
+                SpanningLaag {
+                    z_top_mm: t,
+                    z_bot_mm: h - t,
+                    breedte_mm: 2.0 * t,
+                },
+                SpanningLaag {
+                    z_top_mm: h - t,
+                    z_bot_mm: h,
+                    breedte_mm: b,
+                },
             ])
         }
         // Buis: de wandbreedte verloopt continu over de hoogte. Stroken met
@@ -332,10 +374,17 @@ fn lagen_profiel(p: &SteelProfile) -> Result<Vec<SpanningLaag>, String> {
                 if breedte <= 1e-9 {
                     continue;
                 }
-                lagen.push(SpanningLaag { z_top_mm: z_top, z_bot_mm: z_bot, breedte_mm: breedte });
+                lagen.push(SpanningLaag {
+                    z_top_mm: z_top,
+                    z_bot_mm: z_bot,
+                    breedte_mm: breedte,
+                });
             }
             if lagen.is_empty() {
-                return Err(format!("profiel \"{}\" leverde geen bruikbare stroken op", p.name));
+                return Err(format!(
+                    "profiel \"{}\" leverde geen bruikbare stroken op",
+                    p.name
+                ));
             }
             // De eerste en laatste strook kunnen wegvallen; de resterende
             // stroken moeten wel aansluiten, dus de randen bijtrekken.
@@ -460,8 +509,11 @@ mod tests {
     fn rechthoek_grootheden() {
         // b = 100, h = 300: A = 30 000 mm², I = 100·300³/12 = 2,25·10⁸ mm⁴,
         // z_c = 150 mm, S(z_c) = 100·150·75 = 1,125·10⁶ mm³.
-        let d = maak_doorsnede(&SpanningDoorsnede::Rechthoek(Rechthoek { b_mm: 100.0, h_mm: 300.0 }))
-            .expect("geldige rechthoek");
+        let d = maak_doorsnede(&SpanningDoorsnede::Rechthoek(Rechthoek {
+            b_mm: 100.0,
+            h_mm: 300.0,
+        }))
+        .expect("geldige rechthoek");
         assert_relative_eq!(d.a_mm2, 30_000.0);
         assert_relative_eq!(d.iy_mm4, 2.25e8);
         assert_relative_eq!(d.model.z_c_mm, 150.0);
@@ -503,8 +555,16 @@ mod tests {
     #[test]
     fn lagen_moeten_aansluiten() {
         let fout = Vezelmodel::nieuw(vec![
-            SpanningLaag { z_top_mm: 0.0, z_bot_mm: 10.0, breedte_mm: 100.0 },
-            SpanningLaag { z_top_mm: 20.0, z_bot_mm: 30.0, breedte_mm: 100.0 },
+            SpanningLaag {
+                z_top_mm: 0.0,
+                z_bot_mm: 10.0,
+                breedte_mm: 100.0,
+            },
+            SpanningLaag {
+                z_top_mm: 20.0,
+                z_bot_mm: 30.0,
+                breedte_mm: 100.0,
+            },
         ])
         .unwrap_err();
         assert!(fout.contains("aansluiten"), "melding was: {fout}");
@@ -519,7 +579,11 @@ mod tests {
         let v = d.model.vezels(21);
         let grens = d.model.lagen[0].z_bot_mm;
         let op_grens: Vec<_> = v.iter().filter(|p| (p.z_mm - grens).abs() < 1e-9).collect();
-        assert_eq!(op_grens.len(), 2, "de flens/lijf-grens hoort twee breedtes te hebben");
+        assert_eq!(
+            op_grens.len(),
+            2,
+            "de flens/lijf-grens hoort twee breedtes te hebben"
+        );
         assert!(op_grens[0].breedte_mm > op_grens[1].breedte_mm);
     }
 }

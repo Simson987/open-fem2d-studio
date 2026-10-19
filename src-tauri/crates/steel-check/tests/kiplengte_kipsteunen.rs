@@ -50,7 +50,10 @@ fn envelop(m_knm: impl Fn(f64) -> f64) -> Vec<ForcePoint> {
             ForcePoint {
                 combination_id: 1,
                 position_mm: x_mm,
-                forces: InternalForces { my_ed: m_knm(x_mm), ..Default::default() },
+                forces: InternalForces {
+                    my_ed: m_knm(x_mm),
+                    ..Default::default()
+                },
             }
         })
         .collect()
@@ -135,7 +138,9 @@ fn stap<'a>(s: &'a StabilityCalc, id: &str) -> &'a Deelstap {
 
 /// De toelichting "Waarom L_kip groter is dan de steunafstand", als die er is.
 fn waarom(notes: &[String]) -> Option<&String> {
-    notes.iter().find(|n| n.starts_with("Waarom L_kip groter is dan de steunafstand"))
+    notes
+        .iter()
+        .find(|n| n.starts_with("Waarom L_kip groter is dan de steunafstand"))
 }
 
 // ── De handberekening ─────────────────────────────────────────────────────────
@@ -154,7 +159,13 @@ struct Handveld {
     m_cr: f64,
 }
 
-fn handveld(l_st: f64, m1_knm: f64, m2_knm: f64, c1_raster: (f64, f64), c2_raster: (f64, f64)) -> Handveld {
+fn handveld(
+    l_st: f64,
+    m1_knm: f64,
+    m2_knm: f64,
+    c1_raster: (f64, f64),
+    c2_raster: (f64, f64),
+) -> Handveld {
     use std::f64::consts::PI;
     let (e, g, iz, it, h, tf, l_g): (f64, f64, f64, f64, f64, f64, f64) =
         (210_000.0, 80_769.0, 6.04e6, 2.01e5, 300.0, 10.7, 6000.0);
@@ -162,7 +173,10 @@ fn handveld(l_st: f64, m1_knm: f64, m2_knm: f64, c1_raster: (f64, f64), c2_raste
     // NB.NB.4.3(3): B* = 8·M/(8·|M| + q·L_st²), M in N·mm.
     let b_ster = 8.0 * m2_knm * 1e6 / (8.0 * m2_knm.abs() * 1e6 + Q * l_st * l_st);
     let t = (b_ster - 0.85) / 0.05;
-    assert!((0.0..=1.0).contains(&t), "B* = {b_ster} valt buiten de rasterkolommen 0,85–0,90");
+    assert!(
+        (0.0..=1.0).contains(&t),
+        "B* = {b_ster} valt buiten de rasterkolommen 0,85–0,90"
+    );
     let c1 = c1_raster.0 + t * (c1_raster.1 - c1_raster.0);
     let c2_tabel = c2_raster.0 + t * (c2_raster.1 - c2_raster.0);
     // NB.NB.4.3(1): lineair naar het aangrijpingspunt; boven het zwaartepunt negatief.
@@ -172,10 +186,18 @@ fn handveld(l_st: f64, m1_knm: f64, m2_knm: f64, c1_raster: (f64, f64), c2_raste
     // NB.NB.13 en NB.NB.11.
     let s = h / 2.0 * (e * iz / (g * it)).sqrt();
     let c = PI * c1 * l_g / l_kip
-        * ((1.0 + PI * PI * s * s / (l_kip * l_kip) * (c2 * c2 + 1.0)).sqrt() + PI * c2 * s / l_kip);
+        * ((1.0 + PI * PI * s * s / (l_kip * l_kip) * (c2 * c2 + 1.0)).sqrt()
+            + PI * c2 * s / l_kip);
     // NB.148 met k_red = 1 (h/t_w = 300/7,1 = 42,3 ≤ 75, NB.NB.7).
     let m_cr = c / l_g * (e * iz * g * it).sqrt() * 1e-6;
-    Handveld { b_ster, c1, c2, l_kip, c, m_cr }
+    Handveld {
+        b_ster,
+        c1,
+        c2,
+        l_kip,
+        c,
+        m_cr,
+    }
 }
 
 #[test]
@@ -210,7 +232,10 @@ fn derdepunten_ipe300_het_eindveld_krijgt_l_kip_1_4_maal_de_steunafstand() {
     assert_relative_eq!(eind.m_cr, 411.3549, max_relative = 1e-5);
     assert_relative_eq!(midden.l_kip, 2000.0, max_relative = 1e-12);
     assert_relative_eq!(midden.m_cr, 507.0640, max_relative = 1e-5);
-    assert!(eind.m_cr < midden.m_cr, "het eindveld hoort maatgevend te zijn");
+    assert!(
+        eind.m_cr < midden.m_cr,
+        "het eindveld hoort maatgevend te zijn"
+    );
 
     let lambda = (628_000.0 * 235.0 / (eind.m_cr * 1e6)).sqrt();
     let phi = 0.5 * (1.0 + 0.34 * (lambda - 0.4) + 0.75 * lambda * lambda);
@@ -227,7 +252,11 @@ fn derdepunten_ipe300_het_eindveld_krijgt_l_kip_1_4_maal_de_steunafstand() {
     assert_relative_eq!(waarde(s, "L_{st}"), 2000.0, max_relative = 1e-9);
     assert_relative_eq!(waarde(s, "L_{kip}"), 2800.0, max_relative = 1e-9);
     // 1,4 × L/3 = 0,4667·L — de waargenomen vaste fractie.
-    assert_relative_eq!(waarde(s, "L_{kip}") / waarde(s, "L_g"), 1.4 / 3.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        waarde(s, "L_{kip}") / waarde(s, "L_g"),
+        1.4 / 3.0,
+        max_relative = 1e-9
+    );
     assert_relative_eq!(waarde(s, r"\beta"), 0.0, epsilon = 1e-9);
     assert_relative_eq!(waarde(s, "B^*"), eind.b_ster, max_relative = 1e-6);
     assert_relative_eq!(waarde(s, "C_1"), eind.c1, max_relative = 1e-6);
@@ -235,7 +264,11 @@ fn derdepunten_ipe300_het_eindveld_krijgt_l_kip_1_4_maal_de_steunafstand() {
     assert_relative_eq!(waarde(s, "S"), 1325.864, max_relative = 1e-6);
     assert_relative_eq!(waarde(s, "C"), eind.c, max_relative = 1e-6);
     assert_relative_eq!(waarde(s, "M_{cr}"), eind.m_cr, max_relative = 1e-6);
-    assert_relative_eq!(waarde(s, r"\bar{\lambda}_{LT}"), lambda, max_relative = 1e-6);
+    assert_relative_eq!(
+        waarde(s, r"\bar{\lambda}_{LT}"),
+        lambda,
+        max_relative = 1e-6
+    );
     assert_relative_eq!(waarde(s, r"\chi_{LT}"), chi, max_relative = 1e-6);
     let uc = s.uc.as_ref().expect("de kiptoets heeft een UC");
     assert_relative_eq!(uc.rd, m_b_rd, max_relative = 1e-6);
@@ -252,12 +285,16 @@ fn de_afleiding_schrijft_uit_waarom_l_kip_groter_is_dan_de_steunafstand() {
     let d = stap(s, "l_kip");
     assert_eq!(d.article, "NB.NB.4.3");
     assert!(
-        d.ingevuld_latex.contains(r"0{,}8 \cdot 0 \right) \cdot 2000"),
+        d.ingevuld_latex
+            .contains(r"0{,}8 \cdot 0 \right) \cdot 2000"),
         "de ingevulde regel hoort β = 0 en L_st = 2000 te tonen: {}",
         d.ingevuld_latex
     );
     let tekst = waarom(&d.notes).unwrap_or_else(|| {
-        panic!("de deelstap L_kip hoort uit te leggen waarom L_kip > L_st: {:?}", d.notes)
+        panic!(
+            "de deelstap L_kip hoort uit te leggen waarom L_kip > L_st: {:?}",
+            d.notes
+        )
     });
     for deel in [
         "L_kip = 2800 mm tegen L_st = 2000 mm, L_kip/L_st = 1,400.",
@@ -301,7 +338,10 @@ fn de_afleiding_schrijft_uit_waarom_l_kip_groter_is_dan_de_steunafstand() {
         "laagste M_cr",
         "NB.NB.2(1)",
     ] {
-        assert!(overzicht.contains(deel), "ontbreekt: {deel:?}\nin: {overzicht}");
+        assert!(
+            overzicht.contains(deel),
+            "ontbreekt: {deel:?}\nin: {overzicht}"
+        );
     }
 }
 
@@ -312,7 +352,10 @@ fn zonder_kipsteun_geen_toelichting_en_geen_overzicht() {
     assert_relative_eq!(waarde(s, "L_{kip}"), 6000.0, max_relative = 1e-12);
     assert!(waarom(&s.notes).is_none(), "{:?}", s.notes);
     assert!(waarom(&stap(s, "l_kip").notes).is_none());
-    assert!(!stap(s, "uitgangspunten").notes.iter().any(|n| n.starts_with("Overzicht per kipveld")));
+    assert!(!stap(s, "uitgangspunten")
+        .notes
+        .iter()
+        .any(|n| n.starts_with("Overzicht per kipveld")));
 }
 
 // ── Varianten ─────────────────────────────────────────────────────────────────
@@ -334,7 +377,9 @@ fn kwartpunten_en_middensteun_volgen_dezelfde_regel() {
     let s = kip(&r);
     assert_relative_eq!(waarde(s, "L_{st}"), 3000.0, max_relative = 1e-9);
     assert_relative_eq!(waarde(s, "L_{kip}"), 4200.0, max_relative = 1e-9);
-    assert!(waarom(&s.notes).unwrap().contains("Het moment op die gaffel is nul"));
+    assert!(waarom(&s.notes)
+        .unwrap()
+        .contains("Het moment op die gaffel is nul"));
 }
 
 #[test]
@@ -350,7 +395,11 @@ fn bij_een_constant_moment_is_l_kip_gelijk_aan_de_steunafstand() {
         assert_relative_eq!(waarde(s, r"\beta"), 1.0, max_relative = 1e-9);
         assert_relative_eq!(waarde(s, "L_{st}"), l_st, max_relative = 1e-9);
         assert_relative_eq!(waarde(s, "L_{kip}"), l_st, max_relative = 1e-9);
-        assert!(waarom(&s.notes).is_none(), "steunen {steunen:?}: {:?}", s.notes);
+        assert!(
+            waarom(&s.notes).is_none(),
+            "steunen {steunen:?}: {:?}",
+            s.notes
+        );
         assert!(waarom(&stap(s, "l_kip").notes).is_none());
     }
 }
@@ -394,10 +443,28 @@ fn beide_tekenrichtingen_geven_dezelfde_kiplengte() {
     let a = ligger(heen, Q, vec![0.25], vec![]);
     let b = ligger(terug, Q, vec![0.75], vec![]);
     let (sa, sb) = (kip(&a), kip(&b));
-    for sym in ["L_{st}", "L_{kip}", r"\beta", "B^*", "C_1", "C_2", "M_{cr}", r"\chi_{LT}"] {
-        assert_relative_eq!(waarde(sa, sym), waarde(sb, sym), max_relative = 1e-9, epsilon = 1e-12);
+    for sym in [
+        "L_{st}",
+        "L_{kip}",
+        r"\beta",
+        "B^*",
+        "C_1",
+        "C_2",
+        "M_{cr}",
+        r"\chi_{LT}",
+    ] {
+        assert_relative_eq!(
+            waarde(sa, sym),
+            waarde(sb, sym),
+            max_relative = 1e-9,
+            epsilon = 1e-12
+        );
     }
-    assert_relative_eq!(sa.uc.as_ref().unwrap().uc, sb.uc.as_ref().unwrap().uc, max_relative = 1e-9);
+    assert_relative_eq!(
+        sa.uc.as_ref().unwrap().uc,
+        sb.uc.as_ref().unwrap().uc,
+        max_relative = 1e-9
+    );
 
     // Handcontrole van de uitkomst: het veld van 1500 mm tegen de gaffel met
     // M = 0 heeft β = 0 en L_kip = 2100; het veld van 4500 mm heeft

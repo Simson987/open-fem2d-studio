@@ -30,14 +30,14 @@
 //! daar wel leesbaar. Er is hier dan ook geen formule bijgekomen — alleen
 //! opgeschreven wat `chi` en deze functie al deden.
 
-use std::f64::consts::PI;
-use section_properties::SectionProperties;
-use mechanics::ForceStateSnapshot;
-use nen_en_1993_1_1_section::{SteelGrade, NamedValue, UnityCheck, CheckStatus, Deelstap};
-use crate::buckling_curve::{BucklingCurve, chi, phi};
+use crate::buckling_curve::{chi, phi, BucklingCurve};
 use crate::kniklengte::{kniklengte_deelstap, vlak_label, Kniklengte};
 use crate::opmaak::{lx, nl, nv, stap};
 use crate::StabilityCalc;
+use mechanics::ForceStateSnapshot;
+use nen_en_1993_1_1_section::{CheckStatus, Deelstap, NamedValue, SteelGrade, UnityCheck};
+use section_properties::SectionProperties;
+use std::f64::consts::PI;
 
 const E_MPA: f64 = 210000.0;
 
@@ -196,16 +196,36 @@ pub fn n_b_rd(
     let (n_b_rd_kn, chi_used) = maatgevend
         .map(|m| (per_as[m].n_b_rd_kn, per_as[m].chi))
         .unwrap_or((0.0, 1.0));
-    let uc = if n_b_rd_kn > 0.0 { n_ed / n_b_rd_kn } else { 0.0 };
-    let status = if uc <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk };
+    let uc = if n_b_rd_kn > 0.0 {
+        n_ed / n_b_rd_kn
+    } else {
+        0.0
+    };
+    let status = if uc <= 1.0 {
+        CheckStatus::Ok
+    } else {
+        CheckStatus::NotOk
+    };
 
     // De asnaam staat in élk symbool: bij een hoekprofiel heet de sterke as
     // u en de zwakke v, en dan hoort er in het rapport ook λ_u en χ_v te
     // staan — niet λ_y en χ_z met stilzwijgend andere getallen erin.
     let mut variables = vec![
-        NamedValue { symbol: "A".to_string(), value: p.area_mm2, unit: "mm²".to_string() },
-        NamedValue { symbol: "f_y".to_string(), value: grade.fy_mpa, unit: "MPa".to_string() },
-        NamedValue { symbol: r"\gamma_{M1}".to_string(), value: grade.gamma_m1, unit: "-".to_string() },
+        NamedValue {
+            symbol: "A".to_string(),
+            value: p.area_mm2,
+            unit: "mm²".to_string(),
+        },
+        NamedValue {
+            symbol: "f_y".to_string(),
+            value: grade.fy_mpa,
+            unit: "MPa".to_string(),
+        },
+        NamedValue {
+            symbol: r"\gamma_{M1}".to_string(),
+            value: grade.gamma_m1,
+            unit: "-".to_string(),
+        },
     ];
     for a in assen {
         variables.push(nv(&format!("i_{}", a.kniklengte.as_naam), a.i_mm, "mm"));
@@ -222,7 +242,11 @@ pub fn n_b_rd(
         intermediate_values.push(nv(&format!(r"\lambda_{}", u.as_naam), u.lambda, "-"));
     }
     for u in &per_as {
-        intermediate_values.push(nv(&format!(r"\bar{{\lambda}}_{}", u.as_naam), u.lambda_bar, "-"));
+        intermediate_values.push(nv(
+            &format!(r"\bar{{\lambda}}_{}", u.as_naam),
+            u.lambda_bar,
+            "-",
+        ));
     }
     for u in &per_as {
         intermediate_values.push(nv(&format!(r"\chi_{}", u.as_naam), u.chi, "-"));
@@ -232,7 +256,16 @@ pub fn n_b_rd(
         intermediate_values.push(nv(&format!("N_{{b,Rd,{}}}", u.as_naam), u.n_b_rd_kn, "kN"));
     }
 
-    let deelstappen = knik_deelstappen(p, grade, assen, &per_as, maatgevend, lambda_1, n_ed, &force_state);
+    let deelstappen = knik_deelstappen(
+        p,
+        grade,
+        assen,
+        &per_as,
+        maatgevend,
+        lambda_1,
+        n_ed,
+        &force_state,
+    );
 
     let mut notes: Vec<String> = assen
         .iter()
@@ -275,7 +308,11 @@ pub fn n_b_rd(
             "Kolomknik — {}",
             assen
                 .iter()
-                .map(|a| format!("om {} ({})", a.kniklengte.as_naam, vlak_label(&a.kniklengte)))
+                .map(|a| format!(
+                    "om {} ({})",
+                    a.kniklengte.as_naam,
+                    vlak_label(&a.kniklengte)
+                ))
                 .collect::<Vec<_>>()
                 .join(" en ")
         ),
@@ -287,7 +324,12 @@ pub fn n_b_rd(
         deelstappen,
         value: n_b_rd_kn,
         unit: "kN".to_string(),
-        uc: Some(UnityCheck { ed: n_ed, rd: n_b_rd_kn, uc, formula_latex: r"N_{Ed} / N_{b,Rd}".to_string() }),
+        uc: Some(UnityCheck {
+            ed: n_ed,
+            rd: n_b_rd_kn,
+            uc,
+            formula_latex: r"N_{Ed} / N_{b,Rd}".to_string(),
+        }),
         status,
         notes,
     };
@@ -349,7 +391,11 @@ fn knik_deelstappen(
         r"\lambda_1",
         "art. 6.3.1.3(1)",
         r"\lambda_1 = \pi \sqrt{\frac{E}{f_y}}".to_string(),
-        format!(r"\lambda_1 = \pi \sqrt{{\frac{{{}}}{{{}}}}}", lx(E_MPA, 0), lx(grade.fy_mpa, 0)),
+        format!(
+            r"\lambda_1 = \pi \sqrt{{\frac{{{}}}{{{}}}}}",
+            lx(E_MPA, 0),
+            lx(grade.fy_mpa, 0)
+        ),
         vec![nv("E", E_MPA, "MPa"), nv("f_y", grade.fy_mpa, "MPa")],
         Some(lambda_1),
         "-",
@@ -384,10 +430,16 @@ fn knik_deelstappen(
             "art. 6.3.1.3(1)",
             format!(r"i_{{{n}}} = \sqrt{{\frac{{I_{{{n}}}}}{{A}}}}"),
             i_ingevuld,
-            vec![nv(&format!("I_{{{n}}}"), a.traagheid_mm4, "mm⁴"), nv("A", p.area_mm2, "mm²")],
+            vec![
+                nv(&format!("I_{{{n}}}"), a.traagheid_mm4, "mm⁴"),
+                nv("A", p.area_mm2, "mm²"),
+            ],
             Some(a.i_mm),
             "mm",
-            vec!["Bepaald uitgaande van de brutodoorsnede, zoals 6.3.1.3(1) voorschrijft.".to_string()],
+            vec![
+                "Bepaald uitgaande van de brutodoorsnede, zoals 6.3.1.3(1) voorschrijft."
+                    .to_string(),
+            ],
         ));
 
         let mut notes_lb = vec![format!(
@@ -424,7 +476,10 @@ fn knik_deelstappen(
             &format!("Knikkromme en imperfectiefactor om de {n}-as"),
             &format!(r"\alpha_{{{n}}}"),
             "tabel 6.2 en tabel 6.1",
-            format!(r"\text{{knikkromme {}}} \;\Rightarrow\; \alpha_{{{n}}}", a.kromme.letter()),
+            format!(
+                r"\text{{knikkromme {}}} \;\Rightarrow\; \alpha_{{{n}}}",
+                a.kromme.letter()
+            ),
             String::new(),
             vec![nv(&format!(r"\alpha_{{{n}}}"), u.alpha, "-")],
             Some(u.alpha),
@@ -459,7 +514,11 @@ fn knik_deelstappen(
 
         let chi_ruw = {
             let d = u.phi + (u.phi.powi(2) - u.lambda_bar.powi(2)).sqrt();
-            if d > 0.0 { 1.0 / d } else { f64::INFINITY }
+            if d > 0.0 {
+                1.0 / d
+            } else {
+                f64::INFINITY
+            }
         };
         let mut notes_chi = Vec::new();
         if chi_ruw > 1.0 {
@@ -518,8 +577,15 @@ fn knik_deelstappen(
             &format!("UC_{{{n}}}"),
             "art. 6.3.1.1(1) (6.46)",
             format!(r"UC_{{{n}}} = \frac{{N_{{Ed}}}}{{N_{{b,Rd,{n}}}}} \le 1{{,}}0"),
-            format!(r"UC_{{{n}}} = \frac{{{}}}{{{}}}", lx(n_ed, 2), lx(u.n_b_rd_kn, 2)),
-            vec![nv("N_{Ed}", n_ed, "kN"), nv(&format!("N_{{b,Rd,{n}}}"), u.n_b_rd_kn, "kN")],
+            format!(
+                r"UC_{{{n}}} = \frac{{{}}}{{{}}}",
+                lx(n_ed, 2),
+                lx(u.n_b_rd_kn, 2)
+            ),
+            vec![
+                nv("N_{Ed}", n_ed, "kN"),
+                nv(&format!("N_{{b,Rd,{n}}}"), u.n_b_rd_kn, "kN"),
+            ],
             Some(u.uc),
             "-",
             vec![if u.uc <= 1.0 {
@@ -531,16 +597,28 @@ fn knik_deelstappen(
     }
 
     if let Some(m) = maatgevend {
-        let namen: Vec<String> = per_as.iter().map(|u| format!("N_{{b,Rd,{}}}", u.as_naam)).collect();
+        let namen: Vec<String> = per_as
+            .iter()
+            .map(|u| format!("N_{{b,Rd,{}}}", u.as_naam))
+            .collect();
         let waarden: Vec<String> = per_as.iter().map(|u| lx(u.n_b_rd_kn, 2)).collect();
         uit.push(stap(
             "maatgevend",
             "Knikweerstand van de staaf — de kleinste van de takken",
             "N_{b,Rd}",
             "art. 6.3.1.1(1)",
-            format!(r"N_{{b,Rd}} = \min\left( {} \right)", namen.join(r" \,;\, ")),
-            format!(r"N_{{b,Rd}} = \min\left( {} \right)", waarden.join(r" \,;\, ")),
-            per_as.iter().map(|u| nv(&format!("N_{{b,Rd,{}}}", u.as_naam), u.n_b_rd_kn, "kN")).collect(),
+            format!(
+                r"N_{{b,Rd}} = \min\left( {} \right)",
+                namen.join(r" \,;\, ")
+            ),
+            format!(
+                r"N_{{b,Rd}} = \min\left( {} \right)",
+                waarden.join(r" \,;\, ")
+            ),
+            per_as
+                .iter()
+                .map(|u| nv(&format!("N_{{b,Rd,{}}}", u.as_naam), u.n_b_rd_kn, "kN"))
+                .collect(),
             Some(per_as[m].n_b_rd_kn),
             "kN",
             vec![format!(

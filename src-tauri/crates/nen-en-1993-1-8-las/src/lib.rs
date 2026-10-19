@@ -355,7 +355,11 @@ mod tests {
     /// Voor S355: (510/√3)/(0,90·1,25) = 294,449/1,125 = 261,73 N/mm².
     #[test]
     fn schuifsterkte_van_de_las() {
-        assert_relative_eq!(f_vw_d(360.0, 0.80, 1.25), 360.0 / 3f64.sqrt(), max_relative = 1e-12);
+        assert_relative_eq!(
+            f_vw_d(360.0, 0.80, 1.25),
+            360.0 / 3f64.sqrt(),
+            max_relative = 1e-12
+        );
         assert_relative_eq!(f_vw_d(360.0, 0.80, 1.25), 207.846, max_relative = 1e-5);
         assert_relative_eq!(f_vw_d(510.0, 0.90, 1.25), 261.732, max_relative = 1e-5);
     }
@@ -377,7 +381,11 @@ mod tests {
         assert_relative_eq!(r.f_w_rd_n_per_mm, 1662.7687752661223, max_relative = 1e-9);
         assert_relative_eq!(r.uc, 800.0 / 1662.7687752661223, max_relative = 1e-9);
         assert_relative_eq!(r.tau_mpa, 100.0);
-        assert!(r.meldingen.is_empty(), "onverwachte melding: {:?}", r.meldingen);
+        assert!(
+            r.meldingen.is_empty(),
+            "onverwachte melding: {:?}",
+            r.meldingen
+        );
     }
 
     /// Eén las in plaats van twee halveert de weerstand precies.
@@ -394,7 +402,11 @@ mod tests {
         let enkel = toets_las(&maak(Lassoort::HoeklasEnkel));
         let dubbel = toets_las(&maak(Lassoort::HoeklasDubbel));
         assert_relative_eq!(enkel.uc, 2.0 * dubbel.uc, max_relative = 1e-12);
-        assert_relative_eq!(enkel.f_w_rd_n_per_mm * 2.0, dubbel.f_w_rd_n_per_mm, max_relative = 1e-12);
+        assert_relative_eq!(
+            enkel.f_w_rd_n_per_mm * 2.0,
+            dubbel.f_w_rd_n_per_mm,
+            max_relative = 1e-12
+        );
     }
 
     /// Een stompe las met volledige doorlassing krijgt geen unity check, maar

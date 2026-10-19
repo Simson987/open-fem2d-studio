@@ -23,14 +23,14 @@ fn comctl32_v6_is_actief_in_de_testbinary() {
     // namen; de module wordt niet ontladen zolang het proces leeft.
     let (aanwezig, fout) = unsafe {
         match LoadLibraryW(w!("comctl32.dll")) {
-            Ok(module) => (GetProcAddress(module, s!("TaskDialogIndirect")).is_some(), None),
+            Ok(module) => (
+                GetProcAddress(module, s!("TaskDialogIndirect")).is_some(),
+                None,
+            ),
             Err(e) => (false, Some(e)),
         }
     };
-    assert!(
-        fout.is_none(),
-        "comctl32.dll niet te laden: {fout:?}"
-    );
+    assert!(fout.is_none(), "comctl32.dll niet te laden: {fout:?}");
     assert!(
         aanwezig,
         "comctl32 heeft geen TaskDialogIndirect: de testbinary draait zonder het \

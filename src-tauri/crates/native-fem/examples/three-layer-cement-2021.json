@@ -1,0 +1,30 @@
+{
+  "kind": "threeLayer",
+  "input": {
+    "forces": {
+      "nx": 0,
+      "ny": 0,
+      "nxy": 0,
+      "mx": 0,
+      "my": 0,
+      "mxy": 0,
+      "vx": 0,
+      "vy": 240
+    },
+    "thicknessMm": 600,
+    "topSkinMm": 100,
+    "bottomSkinMm": 100,
+    "topReinforcement": { "asX": 2000, "asY": 2000 },
+    "bottomReinforcement": { "asX": 2000, "asY": 2000 },
+    "fcdMpa": 20,
+    "fydMpa": 435,
+    "nuPrime": 0.8,
+    "compressionModel": "blaauwendraad2021",
+    "core": {
+      "vRdcKnPerM": 205.34,
+      "tanTheta": 1,
+      "providedShearMm2PerM2": 1103.448275862069,
+      "diagonalLimitMpa": 7.36
+    }
+  }
+}

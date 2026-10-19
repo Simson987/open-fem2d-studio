@@ -140,8 +140,19 @@ fn de_omschrijving_van_de_windlasten_staat_in_de_pdf() {
         assert!(staat_erin(&stroom, woord), "{woord:?} ontbreekt in de PDF");
     }
     // Per geval: de naam, de tabel, α, φ en de coëfficiënt zelf.
-    for woord in ["neerwaarts:", "lessenaarsdak", "10,0°,", "0,50):", "+1,60;", "−1,15,", "loefrand"] {
-        assert!(staat_erin(&stroom, woord), "{woord:?} uit de windomschrijving ontbreekt in de PDF");
+    for woord in [
+        "neerwaarts:",
+        "lessenaarsdak",
+        "10,0°,",
+        "0,50):",
+        "+1,60;",
+        "−1,15,",
+        "loefrand",
+    ] {
+        assert!(
+            staat_erin(&stroom, woord),
+            "{woord:?} uit de windomschrijving ontbreekt in de PDF"
+        );
     }
 }
 
@@ -149,9 +160,15 @@ fn de_omschrijving_van_de_windlasten_staat_in_de_pdf() {
 fn zonder_windomschrijving_zwijgt_de_pdf_erover() {
     for wind in [None, Some("  \n ".to_string())] {
         let stroom = inhoudsstromen(&generate_report_pdf(invoer(wind)));
-        assert!(!staat_erin(&stroom, "Windbelasting"), "een kop zonder windlasten");
+        assert!(
+            !staat_erin(&stroom, "Windbelasting"),
+            "een kop zonder windlasten"
+        );
         // En zonder scheefstand en analyse ook geen leeg hoofdstuk.
-        assert!(!staat_erin(&stroom, "Uitgangspunten"), "een leeg hoofdstuk Uitgangspunten");
+        assert!(
+            !staat_erin(&stroom, "Uitgangspunten"),
+            "een leeg hoofdstuk Uitgangspunten"
+        );
     }
 }
 

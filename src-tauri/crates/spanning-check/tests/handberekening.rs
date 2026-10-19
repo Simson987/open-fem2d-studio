@@ -42,18 +42,30 @@ fn rechthoek(b: f64, h: f64) -> SpanningDoorsnede {
     SpanningDoorsnede::Rechthoek(Rechthoek { b_mm: b, h_mm: h })
 }
 
-fn toets<'a>(r: &'a SpanningBeamCheckResult, id: &str) -> &'a nen_en_1993_1_1_section::ResistanceCalc {
+fn toets<'a>(
+    r: &'a SpanningBeamCheckResult,
+    id: &str,
+) -> &'a nen_en_1993_1_1_section::ResistanceCalc {
     for c in &r.checks {
         if c.id == id {
-            let CheckKind::Resistance(res) = &c.kind else { continue };
+            let CheckKind::Resistance(res) = &c.kind else {
+                continue;
+            };
             return res;
         }
     }
-    panic!("toets {id} ontbreekt in {:?}", r.checks.iter().map(|c| &c.id).collect::<Vec<_>>());
+    panic!(
+        "toets {id} ontbreekt in {:?}",
+        r.checks.iter().map(|c| &c.id).collect::<Vec<_>>()
+    );
 }
 
 fn uc(r: &SpanningBeamCheckResult, id: &str) -> f64 {
-    toets(r, id).uc.as_ref().expect("elke spanningstoets heeft een UC").uc
+    toets(r, id)
+        .uc
+        .as_ref()
+        .expect("elke spanningstoets heeft een UC")
+        .uc
 }
 
 // ── 1. Rechthoek, zuivere buiging ────────────────────────────────────────
@@ -64,12 +76,24 @@ fn uc(r: &SpanningBeamCheckResult, id: &str) -> f64 {
 // f_toel = 100 → UC = 0,20.
 #[test]
 fn rechthoek_zuivere_buiging() {
-    let r = check_spanning_beam(invoer(rechthoek(100.0, 300.0), 100.0, vec![punt(0.0, 0.0, 30.0)]));
+    let r = check_spanning_beam(invoer(
+        rechthoek(100.0, 300.0),
+        100.0,
+        vec![punt(0.0, 0.0, 30.0)],
+    ));
     assert_relative_eq!(r.section.a_mm2, 30_000.0);
     assert_relative_eq!(r.section.iy_mm4, 2.25e8);
     assert_relative_eq!(r.section.wel_bot_mm3, 1.5e6, max_relative = 1e-12);
-    assert_relative_eq!(toets(&r, "spanning_normaal").value.abs(), 20.0, max_relative = 1e-12);
-    assert_relative_eq!(toets(&r, "spanning_vergelijk").value, 20.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        toets(&r, "spanning_normaal").value.abs(),
+        20.0,
+        max_relative = 1e-12
+    );
+    assert_relative_eq!(
+        toets(&r, "spanning_vergelijk").value,
+        20.0,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(r.uc_max, 0.20, max_relative = 1e-12);
     assert_eq!(r.governing_check_id, "spanning_vergelijk");
     assert_eq!(r.status, nen_en_1993_1_1_section::CheckStatus::Ok);
@@ -88,17 +112,37 @@ fn rechthoek_zuivere_buiging() {
 // UC_eq = 5,196/100.
 #[test]
 fn rechthoek_zuivere_afschuiving() {
-    let r = check_spanning_beam(invoer(rechthoek(100.0, 300.0), 100.0, vec![punt(0.0, 60.0, 0.0)]));
-    assert_relative_eq!(toets(&r, "spanning_schuif").value, 3.0, max_relative = 1e-12);
+    let r = check_spanning_beam(invoer(
+        rechthoek(100.0, 300.0),
+        100.0,
+        vec![punt(0.0, 60.0, 0.0)],
+    ));
+    assert_relative_eq!(
+        toets(&r, "spanning_schuif").value,
+        3.0,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(
         toets(&r, "spanning_vergelijk").value,
         3f64.sqrt() * 3.0,
         max_relative = 1e-12
     );
-    assert_relative_eq!(uc(&r, "spanning_schuif"), 3.0 / (100.0 / 3f64.sqrt()), max_relative = 1e-12);
-    assert_relative_eq!(uc(&r, "spanning_vergelijk"), uc(&r, "spanning_schuif"), max_relative = 1e-12);
+    assert_relative_eq!(
+        uc(&r, "spanning_schuif"),
+        3.0 / (100.0 / 3f64.sqrt()),
+        max_relative = 1e-12
+    );
+    assert_relative_eq!(
+        uc(&r, "spanning_vergelijk"),
+        uc(&r, "spanning_schuif"),
+        max_relative = 1e-12
+    );
     // Het maximum ligt op de zwaartelijn (z = 150 mm).
-    assert_relative_eq!(r.verloop.as_ref().unwrap().z_maatgevend_mm, 150.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        r.verloop.as_ref().unwrap().z_maatgevend_mm,
+        150.0,
+        max_relative = 1e-9
+    );
     // De randvezels zijn schuifspanningsvrij.
     let v = &r.verloop.as_ref().unwrap().vezels;
     assert_relative_eq!(v.first().unwrap().tau_mpa, 0.0, epsilon = 1e-9);
@@ -121,9 +165,17 @@ fn rechthoek_normaalkracht_moment_en_dwarskracht() {
         100.0,
         vec![punt(300.0, 60.0, 30.0)],
     ));
-    assert_relative_eq!(toets(&r, "spanning_vergelijk").value, 30.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        toets(&r, "spanning_vergelijk").value,
+        30.0,
+        max_relative = 1e-9
+    );
     assert_relative_eq!(r.uc_max, 0.30, max_relative = 1e-9);
-    assert_relative_eq!(r.verloop.as_ref().unwrap().z_maatgevend_mm, 300.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        r.verloop.as_ref().unwrap().z_maatgevend_mm,
+        300.0,
+        max_relative = 1e-9
+    );
     // Controle van het verloop op de zwaartelijn.
     let mid = r
         .verloop
@@ -156,7 +208,9 @@ fn rechthoek_normaalkracht_moment_en_dwarskracht() {
 #[test]
 fn ipe300_overgang_flens_lijf_is_maatgevend() {
     let r = check_spanning_beam(invoer(
-        SpanningDoorsnede::Catalogus(Catalogus { naam: "IPE 300".to_string() }),
+        SpanningDoorsnede::Catalogus(Catalogus {
+            naam: "IPE 300".to_string(),
+        }),
         235.0,
         vec![punt(0.0, 100.0, 100.0)],
     ));
@@ -181,13 +235,21 @@ fn ipe300_overgang_flens_lijf_is_maatgevend() {
         .min_by(|a, b| a.breedte_mm.partial_cmp(&b.breedte_mm).unwrap())
         .expect("de flens/lijf-grens hoort in het verloop te staan");
     assert_relative_eq!(overgang.breedte_mm, 7.1, max_relative = 1e-12);
-    assert_relative_eq!(overgang.s_mm3, 150.0 * 10.7 * (150.0 - 5.35), max_relative = 1e-9);
+    assert_relative_eq!(
+        overgang.s_mm3,
+        150.0 * 10.7 * (150.0 - 5.35),
+        max_relative = 1e-9
+    );
     assert_relative_eq!(overgang.tau_mpa, 39.114, max_relative = 1e-3);
     assert_relative_eq!(overgang.sigma_x_mpa, -166.627, max_relative = 1e-4);
     assert_relative_eq!(overgang.sigma_eq_mpa, 179.873, max_relative = 1e-4);
 
     // En de toets pikt die vezel als maatgevend op.
-    assert_relative_eq!(toets(&r, "spanning_vergelijk").value, 179.873, max_relative = 1e-4);
+    assert_relative_eq!(
+        toets(&r, "spanning_vergelijk").value,
+        179.873,
+        max_relative = 1e-4
+    );
     assert_relative_eq!(r.uc_max, 179.873 / 235.0, max_relative = 1e-4);
     // De doorsnede is symmetrisch, dus beide overgangen (z = 10,7 en
     // z = 289,3 mm) leveren dezelfde vergelijkspanning; welke van de twee als
@@ -212,12 +274,31 @@ fn dwarsspanning_sigma_z_verschuift_het_maximum() {
     let mut inv = invoer(rechthoek(100.0, 300.0), 200.0, vec![punt(0.0, 0.0, 75.0)]);
     inv.sigma_z_mpa = 50.0;
     let r = check_spanning_beam(inv);
-    assert_relative_eq!(toets(&r, "spanning_vergelijk").value, 7500f64.sqrt(), max_relative = 1e-9);
-    assert_relative_eq!(r.verloop.as_ref().unwrap().z_maatgevend_mm, 0.0, epsilon = 1e-9);
-    assert!(r.notes.iter().any(|n| n.contains("σ_z")), "de aanname hoort in de notities");
+    assert_relative_eq!(
+        toets(&r, "spanning_vergelijk").value,
+        7500f64.sqrt(),
+        max_relative = 1e-9
+    );
+    assert_relative_eq!(
+        r.verloop.as_ref().unwrap().z_maatgevend_mm,
+        0.0,
+        epsilon = 1e-9
+    );
+    assert!(
+        r.notes.iter().any(|n| n.contains("σ_z")),
+        "de aanname hoort in de notities"
+    );
     // Zonder σ_z zou het maximum 50,0 zijn en onderaan liggen.
-    let zonder = check_spanning_beam(invoer(rechthoek(100.0, 300.0), 200.0, vec![punt(0.0, 0.0, 75.0)]));
-    assert_relative_eq!(toets(&zonder, "spanning_vergelijk").value, 50.0, max_relative = 1e-9);
+    let zonder = check_spanning_beam(invoer(
+        rechthoek(100.0, 300.0),
+        200.0,
+        vec![punt(0.0, 0.0, 75.0)],
+    ));
+    assert_relative_eq!(
+        toets(&zonder, "spanning_vergelijk").value,
+        50.0,
+        max_relative = 1e-9
+    );
 }
 
 // ── 6. De materiaalfactor deelt de toelaatbare spanning ──────────────────
@@ -238,13 +319,20 @@ fn envelop_kiest_de_zwaarste_combinatie() {
         ForcePoint {
             combination_id: 2,
             position_mm: 2000.0,
-            forces: InternalForces { my_ed: 45.0, ..Default::default() },
+            forces: InternalForces {
+                my_ed: 45.0,
+                ..Default::default()
+            },
         },
         punt(0.0, 0.0, -20.0),
     ];
     let r = check_spanning_beam(invoer(rechthoek(100.0, 300.0), 100.0, env));
     // 45 kNm / 1,5·10⁶ mm³ = 30,0 N/mm².
-    assert_relative_eq!(toets(&r, "spanning_vergelijk").value, 30.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        toets(&r, "spanning_vergelijk").value,
+        30.0,
+        max_relative = 1e-9
+    );
     let v = r.verloop.as_ref().unwrap();
     assert_eq!(v.combination_id, 2);
     assert_relative_eq!(v.position_mm, 2000.0);
@@ -261,8 +349,16 @@ fn envelop_kiest_de_zwaarste_combinatie() {
 fn vrij_lagenmodel_t_vorm() {
     let d = SpanningDoorsnede::Lagen(Lagenmodel {
         lagen: vec![
-            SpanningLaag { z_top_mm: 0.0, z_bot_mm: 20.0, breedte_mm: 200.0 },
-            SpanningLaag { z_top_mm: 20.0, z_bot_mm: 200.0, breedte_mm: 20.0 },
+            SpanningLaag {
+                z_top_mm: 0.0,
+                z_bot_mm: 20.0,
+                breedte_mm: 200.0,
+            },
+            SpanningLaag {
+                z_top_mm: 20.0,
+                z_bot_mm: 200.0,
+                breedte_mm: 20.0,
+            },
         ],
     });
     let r = check_spanning_beam(invoer(d, 100.0, vec![punt(0.0, 0.0, 20.0)]));
@@ -278,21 +374,38 @@ fn vrij_lagenmodel_t_vorm() {
 #[test]
 fn onbekend_profiel_levert_een_melding() {
     let r = check_spanning_beam(invoer(
-        SpanningDoorsnede::Catalogus(Catalogus { naam: "HEZ 999".to_string() }),
+        SpanningDoorsnede::Catalogus(Catalogus {
+            naam: "HEZ 999".to_string(),
+        }),
         100.0,
         vec![punt(0.0, 0.0, 10.0)],
     ));
     assert!(r.checks.is_empty());
-    assert_eq!(r.status, nen_en_1993_1_1_section::CheckStatus::NotApplicable);
+    assert_eq!(
+        r.status,
+        nen_en_1993_1_1_section::CheckStatus::NotApplicable
+    );
     assert!(r.verloop.is_none());
-    assert!(r.notes[0].contains("profieldatabase"), "melding was: {}", r.notes[0]);
+    assert!(
+        r.notes[0].contains("profieldatabase"),
+        "melding was: {}",
+        r.notes[0]
+    );
 }
 
 #[test]
 fn niet_positieve_toelaatbare_spanning_wordt_gemeld() {
-    let r = check_spanning_beam(invoer(rechthoek(100.0, 300.0), 0.0, vec![punt(0.0, 0.0, 10.0)]));
+    let r = check_spanning_beam(invoer(
+        rechthoek(100.0, 300.0),
+        0.0,
+        vec![punt(0.0, 0.0, 10.0)],
+    ));
     assert!(r.checks.is_empty());
-    assert!(r.notes[0].contains("toelaatbare spanning"), "melding was: {}", r.notes[0]);
+    assert!(
+        r.notes[0].contains("toelaatbare spanning"),
+        "melding was: {}",
+        r.notes[0]
+    );
 }
 
 // ── 10. Meerdere staven achter elkaar ────────────────────────────────────
@@ -326,7 +439,8 @@ fn json_contract_van_de_doorsnede() {
           "forces": { "n_ed": 0, "vy_ed": 0, "vz_ed": 0, "mt_ed": 0, "my_ed": 6, "mz_ed": 0 } }
       ]
     }"#;
-    let inv: SpanningBeamCheckInput = serde_json::from_str(json).expect("invoer moet inleesbaar zijn");
+    let inv: SpanningBeamCheckInput =
+        serde_json::from_str(json).expect("invoer moet inleesbaar zijn");
     // Weggelaten velden krijgen hun gedocumenteerde standaard.
     assert_relative_eq!(inv.gamma_m, 1.0);
     assert_relative_eq!(inv.sigma_z_mpa, 0.0);

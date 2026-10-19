@@ -59,7 +59,10 @@ pub fn sigma_eq(sigma_x: f64, sigma_z: f64, tau: f64) -> f64 {
         let x = sigma_x / scale;
         let z = sigma_z / scale;
         let t = tau / scale;
-        return (x - 0.5 * z).hypot(3.0_f64.sqrt() * 0.5 * z).hypot(3.0_f64.sqrt() * t) * scale;
+        return (x - 0.5 * z)
+            .hypot(3.0_f64.sqrt() * 0.5 * z)
+            .hypot(3.0_f64.sqrt() * t)
+            * scale;
     }
     (sigma_x * sigma_x + sigma_z * sigma_z - sigma_x * sigma_z + 3.0 * tau * tau)
         .max(0.0)
@@ -109,11 +112,20 @@ pub fn toets(input: &PlateCheckInput) -> PlateCheckResult {
     let gamma_m0 = Ndp1993::voor(input.bijlage).gamma_m0;
     let f_y = soort_dik.fy_mpa;
     let f_d = f_y / gamma_m0;
-    if input.combinations.iter().flat_map(|c| &c.elements).any(|e| {
-        let eq = sigma_eq(e.sigma_x_mpa, e.sigma_y_mpa, e.tau_xy_mpa);
-        !eq.is_finite() || !linkerlid_6_1(e.sigma_x_mpa, e.sigma_y_mpa, e.tau_xy_mpa, f_d).is_finite()
-    }) {
-        return geweigerd(input, "staalplaat: spanningen leveren een niet-representeerbaar vloeicriterium op".into());
+    if input
+        .combinations
+        .iter()
+        .flat_map(|c| &c.elements)
+        .any(|e| {
+            let eq = sigma_eq(e.sigma_x_mpa, e.sigma_y_mpa, e.tau_xy_mpa);
+            !eq.is_finite()
+                || !linkerlid_6_1(e.sigma_x_mpa, e.sigma_y_mpa, e.tau_xy_mpa, f_d).is_finite()
+        })
+    {
+        return geweigerd(
+            input,
+            "staalplaat: spanningen leveren een niet-representeerbaar vloeicriterium op".into(),
+        );
     }
 
     let plooi = if input.plooi.is_some() {
@@ -121,10 +133,17 @@ pub fn toets(input: &PlateCheckInput) -> PlateCheckResult {
             Ok(v) => Some(v),
             Err(reden) => return geweigerd(input, reden),
         }
-    } else { None };
+    } else {
+        None
+    };
     let v = verzamel(input, |comb, el| {
-        let mut checks = vec![(VLOEI_ID.to_string(), sigma_eq(el.sigma_x_mpa, el.sigma_y_mpa, el.tau_xy_mpa) / f_d)];
-        if let Some(p) = &plooi { checks.push((crate::staal_plooi::PLOOI_ID.into(), p[&comb].uc)); }
+        let mut checks = vec![(
+            VLOEI_ID.to_string(),
+            sigma_eq(el.sigma_x_mpa, el.sigma_y_mpa, el.tau_xy_mpa) / f_d,
+        )];
+        if let Some(p) = &plooi {
+            checks.push((crate::staal_plooi::PLOOI_ID.into(), p[&comb].uc));
+        }
         checks
     });
     let Some(maatgevend) = v.per_toets.first() else {
@@ -137,16 +156,37 @@ pub fn toets(input: &PlateCheckInput) -> PlateCheckResult {
     };
 
     let mut calc = afleiding(&maatgevend.punt, f_y, gamma_m0, &naam, &dikte_notitie);
-    if plooi.is_some() { calc.notes.pop(); }
-    let mut checks = vec![NamedCheck { id: VLOEI_ID.to_string(), kind: CheckKind::Resistance(calc) }];
+    if plooi.is_some() {
+        calc.notes.pop();
+    }
+    let mut checks = vec![NamedCheck {
+        id: VLOEI_ID.to_string(),
+        kind: CheckKind::Resistance(calc),
+    }];
     let niet_getoetst = if let Some(p) = &plooi {
-        let m = v.per_toets.iter().find(|m| m.check_id == crate::staal_plooi::PLOOI_ID).unwrap();
-        checks.push(NamedCheck { id: crate::staal_plooi::PLOOI_ID.into(), kind: CheckKind::Resistance(
-            crate::staal_plooi::afleiding(input, m.punt.combination_id, f_y, &p[&m.punt.combination_id])) });
+        let m = v
+            .per_toets
+            .iter()
+            .find(|m| m.check_id == crate::staal_plooi::PLOOI_ID)
+            .unwrap();
+        checks.push(NamedCheck {
+            id: crate::staal_plooi::PLOOI_ID.into(),
+            kind: CheckKind::Resistance(crate::staal_plooi::afleiding(
+                input,
+                m.punt.combination_id,
+                f_y,
+                &p[&m.punt.combination_id],
+            )),
+        });
         vec![PlaatNietGetoetst { id:"plooi_steunontwerp".into(), titel:"Steunconstructie en globale stabiliteit".into(),
             reden:"De opgegeven steun uit het vlak is een expliciete ontwerpvoorwaarde. Sterkte/stijfheid van steunen en verbindingen (§9), globale stabiliteit en buiging uit het vlak vallen buiten deze veldtoets.".into(), bepaalt_status:false }]
-    } else { vec![niet_getoetst_plooi()] };
-    let best = v.per_toets.iter().fold(maatgevend, |best, m| if m.punt.uc > best.punt.uc { m } else { best });
+    } else {
+        vec![niet_getoetst_plooi()]
+    };
+    let best = v.per_toets.iter().fold(
+        maatgevend,
+        |best, m| if m.punt.uc > best.punt.uc { m } else { best },
+    );
     let uc_max = best.punt.uc;
     let mut notes = input.notities.clone();
     notes.push(format!(
@@ -162,7 +202,14 @@ pub fn toets(input: &PlateCheckInput) -> PlateCheckResult {
         soort: input.soort,
         materiaal: naam,
         thickness_mm: input.thickness_mm,
-        norm: if plooi.is_some() { format!("{}; NEN-EN 1993-1-5+C1:2012 §10 + NB:2011", Aanduidingen::voor(input.bijlage).norm_staal_vol) } else { Aanduidingen::voor(input.bijlage).norm_staal_vol.to_string() },
+        norm: if plooi.is_some() {
+            format!(
+                "{}; NEN-EN 1993-1-5+C1:2012 §10 + NB:2011",
+                Aanduidingen::voor(input.bijlage).norm_staal_vol
+            )
+        } else {
+            Aanduidingen::voor(input.bijlage).norm_staal_vol.to_string()
+        },
         status: status_uit(uc_max, &niet_getoetst),
         checks,
         uc_max,
@@ -178,7 +225,13 @@ pub fn toets(input: &PlateCheckInput) -> PlateCheckResult {
     }
 }
 
-fn afleiding(p: &Punt, f_y: f64, gamma_m0: f64, soort: &str, dikte_notitie: &str) -> ResistanceCalc {
+fn afleiding(
+    p: &Punt,
+    f_y: f64,
+    gamma_m0: f64,
+    soort: &str,
+    dikte_notitie: &str,
+) -> ResistanceCalc {
     let sx = p.element.sigma_x_mpa;
     let sz = p.element.sigma_y_mpa;
     let t = p.element.tau_xy_mpa;
@@ -298,7 +351,11 @@ fn afleiding(p: &Punt, f_y: f64, gamma_m0: f64, soort: &str, dikte_notitie: &str
             uc,
             formula_latex: "\\sigma_{eq,Ed} / f_{y,d}".to_string(),
         }),
-        status: if uc <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk },
+        status: if uc <= 1.0 {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::NotOk
+        },
         notes: vec![
             format!(
                 "Plaat van {soort}: element {} in combinatie {} is maatgevend.",

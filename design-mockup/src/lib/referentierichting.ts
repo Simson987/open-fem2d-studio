@@ -216,6 +216,7 @@ export function spiegelElementKrachten(ef: ElementForces): ElementForces {
   };
   if (ef.rotation) uit.rotation = omgekeerd(ef.rotation);
   if (ef.axialHistory) uit.axialHistory = { ...ef.axialHistory };
+  if (ef.sectionHistory) uit.sectionHistory = { ...ef.sectionHistory };
   if (ef.segmenten) uit.segmenten = omgekeerd(ef.segmenten).map((s) => spiegelSegment(s, L));
   return uit;
 }
@@ -555,6 +556,7 @@ export function zeegNotities(beam: Beam, nodes: Node[]): string[] {
 export const SPIEGELREGELS_ELEMENTKRACHTEN: { [K in keyof Required<ElementForces>]: string } = {
   N: "de normaalkracht aan het nieuwe begin (het oude eind); trek blijft trek",
   axialHistory: "axiale rek, plastische rek en schade blijven gelijk bij omkering van de staafrichting",
+  sectionHistory: "maxima over de doorsnede blijven gelijk bij omkering van de staafrichting",
   V: "de dwarskracht aan het nieuwe begin; V = dM/dx en x én M klappen om, dus geen tekenwissel",
   M_start: "−M_end: het moment aan het oude eind, met omgekeerd teken",
   M_end: "−M_start",

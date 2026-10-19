@@ -82,7 +82,10 @@ impl ConcreteDesignCurve {
 ///   algemeen zal de beste schatting van het gedrag zijn verkregen indien
 ///   f_ctm is gebruikt", 7.4.3(4)).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum NonlinearBasis {
     /// Rekenwaarden f_cd en E_cd = E_cm/γ_cE — uiterste grenstoestand, 5.8.6(3).
     #[default]
@@ -253,13 +256,15 @@ impl ConcreteNonlinearCurve {
                 ConcreteTension::None,
             ),
             // 7.4.3(4): trek tot f_ctm, "de beste schatting van het gedrag".
-            NonlinearBasis::MeanValues => {
-                (concrete.f_cm, concrete.e_cm, ConcreteTension::UpToFctm)
-            }
+            NonlinearBasis::MeanValues => (concrete.f_cm, concrete.e_cm, ConcreteTension::UpToFctm),
         };
         // k met de ongeschaalde ε_c1 van tabel 3.1 (5.8.6(4) rekt de rekas op,
         // niet de definitie van k).
-        let k = if f_c > 0.0 { 1.05 * e_c * concrete.eps_c1.abs() / f_c } else { 0.0 };
+        let k = if f_c > 0.0 {
+            1.05 * e_c * concrete.eps_c1.abs() / f_c
+        } else {
+            0.0
+        };
         let stretch = 1.0 + phi_ef.max(0.0);
         Self {
             basis,
@@ -352,7 +357,10 @@ impl ConcreteNonlinearCurve {
 
 /// Keuze van de bovenste tak van het staaldiagram, 3.2.7(2), figuur 3.8.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum SteelBranch {
     /// 3.2.7(2)b: horizontale bovenste tak op f_yd, zonder rekgrens.
     #[default]
@@ -531,7 +539,9 @@ impl DesignMaterial {
         phi_ef: f64,
     ) -> Self {
         let mut m = Self::new(bijlage, concrete, steel, situation, branch);
-        m.nonlinear = Some(ConcreteNonlinearCurve::new(bijlage, concrete, basis, situation, phi_ef));
+        m.nonlinear = Some(ConcreteNonlinearCurve::new(
+            bijlage, concrete, basis, situation, phi_ef,
+        ));
         m
     }
 
@@ -593,7 +603,7 @@ mod tests {
         assert_relative_eq!(c.sigma(-0.001), 0.0); // trek: geen spanning (6.1(2))
         assert_relative_eq!(c.sigma(0.002), 20.0); // ε_c2 → f_cd
         assert_relative_eq!(c.sigma(0.0035), 20.0); // plateau tot ε_cu2
-        // Halverwege de parabool: 1 − (1 − 0,5)² = 0,75 → 15 N/mm².
+                                                    // Halverwege de parabool: 1 − (1 − 0,5)² = 0,75 → 15 N/mm².
         assert_relative_eq!(c.sigma(0.001), 15.0);
         // Gladde overgang: de helling bij ε_c2 is verwaarloosbaar ten opzichte
         // van de beginhelling f_cd·n/ε_c2 = 20 000 N/mm² per eenheid rek.
@@ -624,7 +634,13 @@ mod tests {
     #[test]
     fn vgl_3_14_piek_en_begintangens() {
         for basis in [NonlinearBasis::DesignValues, NonlinearBasis::MeanValues] {
-            let c = ConcreteNonlinearCurve::new(NationaleBijlage::NL, c30(), basis, DesignSituation::PersistentTransient, 0.0);
+            let c = ConcreteNonlinearCurve::new(
+                NationaleBijlage::NL,
+                c30(),
+                basis,
+                DesignSituation::PersistentTransient,
+                0.0,
+            );
             assert_relative_eq!(c.sigma(c.eps_c1), c.f_c, max_relative = 1e-12);
             // Begintangens uit een differentiequotiënt, niet uit e_c0().
             let d = c.sigma(1e-9) / 1e-9;
@@ -644,7 +660,13 @@ mod tests {
         let sit = DesignSituation::PersistentTransient;
         // UGT: f_cd = 1,0·30/1,5 = 20; E_cd = 33 000/1,2 = 27 500;
         //      k = 1,05·27 500·0,0022/20 = 3,17625.
-        let ugt = ConcreteNonlinearCurve::new(NationaleBijlage::NL, c30(), NonlinearBasis::DesignValues, sit, 0.0);
+        let ugt = ConcreteNonlinearCurve::new(
+            NationaleBijlage::NL,
+            c30(),
+            NonlinearBasis::DesignValues,
+            sit,
+            0.0,
+        );
         assert_relative_eq!(ugt.f_c, 20.0);
         assert_relative_eq!(ugt.e_c, 27_500.0);
         assert_relative_eq!(ugt.k, 1.05 * 27_500.0 * 0.0022 / 20.0, max_relative = 1e-12);
@@ -655,7 +677,13 @@ mod tests {
         assert_relative_eq!(ugt.f_ctm, 2.9); // tabel 3.1, wel bekend
 
         // BGT: f_cm = 38; E_cm = 33 000; k = 1,05·33 000·0,0022/38 = 2,00605…
-        let bgt = ConcreteNonlinearCurve::new(NationaleBijlage::NL, c30(), NonlinearBasis::MeanValues, sit, 0.0);
+        let bgt = ConcreteNonlinearCurve::new(
+            NationaleBijlage::NL,
+            c30(),
+            NonlinearBasis::MeanValues,
+            sit,
+            0.0,
+        );
         assert_relative_eq!(bgt.f_c, 38.0);
         assert_relative_eq!(bgt.e_c, 33_000.0);
         assert_relative_eq!(bgt.k, 1.05 * 33_000.0 * 0.0022 / 38.0, max_relative = 1e-12);
@@ -681,8 +709,20 @@ mod tests {
     #[test]
     fn kruip_rekt_de_rekas_op_5_8_6_4() {
         let sit = DesignSituation::PersistentTransient;
-        let zonder = ConcreteNonlinearCurve::new(NationaleBijlage::NL, c30(), NonlinearBasis::DesignValues, sit, 0.0);
-        let met = ConcreteNonlinearCurve::new(NationaleBijlage::NL, c30(), NonlinearBasis::DesignValues, sit, 2.0);
+        let zonder = ConcreteNonlinearCurve::new(
+            NationaleBijlage::NL,
+            c30(),
+            NonlinearBasis::DesignValues,
+            sit,
+            0.0,
+        );
+        let met = ConcreteNonlinearCurve::new(
+            NationaleBijlage::NL,
+            c30(),
+            NonlinearBasis::DesignValues,
+            sit,
+            2.0,
+        );
         assert_relative_eq!(met.phi_ef, 2.0);
         assert_relative_eq!(met.eps_c1, 3.0 * zonder.eps_c1, max_relative = 1e-12);
         assert_relative_eq!(met.eps_cu1, 3.0 * zonder.eps_cu1, max_relative = 1e-12);
@@ -699,7 +739,13 @@ mod tests {
     #[test]
     fn geldigheidsgrens_en_trektak() {
         let sit = DesignSituation::PersistentTransient;
-        let bgt = ConcreteNonlinearCurve::new(NationaleBijlage::NL, c30(), NonlinearBasis::MeanValues, sit, 0.0);
+        let bgt = ConcreteNonlinearCurve::new(
+            NationaleBijlage::NL,
+            c30(),
+            NonlinearBasis::MeanValues,
+            sit,
+            0.0,
+        );
         // Boven ε_cu1 wordt de waarde bij ε_cu1 vastgehouden (numerieke
         // afspraak; de overschrijding is elders een vlag).
         assert_relative_eq!(bgt.sigma(2.0 * bgt.eps_cu1), bgt.sigma(bgt.eps_cu1));
@@ -721,8 +767,14 @@ mod tests {
         assert_relative_eq!(i.sigma(-eps_ct), -2.9, max_relative = 1e-9);
         assert_relative_eq!(i.sigma(-3.0 * eps_ct), -3.0 * 2.9, max_relative = 1e-9);
         assert_relative_eq!(i.eps_ct(), 0.0); // geen afkap, dus geen scheurrek
-        // De UGT kent geen trektak (5.8.6(5)).
-        let ugt = ConcreteNonlinearCurve::new(NationaleBijlage::NL, c30(), NonlinearBasis::DesignValues, sit, 0.0);
+                                              // De UGT kent geen trektak (5.8.6(5)).
+        let ugt = ConcreteNonlinearCurve::new(
+            NationaleBijlage::NL,
+            c30(),
+            NonlinearBasis::DesignValues,
+            sit,
+            0.0,
+        );
         assert_relative_eq!(ugt.eps_ct(), 0.0);
         assert_relative_eq!(ugt.sigma(-0.0001), 0.0);
     }
@@ -760,11 +812,16 @@ mod tests {
         assert!(nl.sigma_c(0.0002) > 1.3 * m.sigma_c(0.0002));
         assert_relative_eq!(nl.f_ctm().unwrap(), 2.9);
         assert_relative_eq!(
-            nl.with_concrete_tension(ConcreteTension::LinearUncracked).sigma_c(-1e-5),
+            nl.with_concrete_tension(ConcreteTension::LinearUncracked)
+                .sigma_c(-1e-5),
             -1e-5 * nl.nonlinear.unwrap().e_c0(),
             max_relative = 1e-9
         );
-        assert_relative_eq!(nl.with_concrete_tension(ConcreteTension::None).sigma_c(-1e-5), 0.0);
+        assert_relative_eq!(
+            nl.with_concrete_tension(ConcreteTension::None)
+                .sigma_c(-1e-5),
+            0.0
+        );
     }
 
     #[test]

@@ -147,11 +147,17 @@ async fn weg_mcp(
     let resp = lees_bericht(reader).await;
     assert_eq!(resp["id"], id);
     if !resp["error"].is_null() {
-        return Err(resp["error"]["message"].as_str().unwrap_or_default().to_string());
+        return Err(resp["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string());
     }
     let result = &resp["result"];
     if result["isError"] == json!(true) {
-        return Err(result["content"][0]["text"].as_str().unwrap_or_default().to_string());
+        return Err(result["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string());
     }
     Ok(result["structuredContent"].clone())
 }
@@ -164,7 +170,10 @@ fn weg_1_het_tauri_command_is_geregistreerd() {
     let start = bron.find("generate_handler![").expect("generate_handler!");
     let handler = &bron[start..];
     let handler = &handler[..handler.find(']').unwrap()];
-    assert!(handler.contains(TOOL), "`{TOOL}` staat niet in generate_handler!");
+    assert!(
+        handler.contains(TOOL),
+        "`{TOOL}` staat niet in generate_handler!"
+    );
 }
 
 #[tokio::test]
@@ -173,7 +182,9 @@ async fn de_drie_wegen_leveren_hetzelfde_antwoord() {
     for (id, invoer) in [(900, invoer_doorsnede()), (901, invoer_h0_met_tijdstip())] {
         let tauri = weg_tauri(&invoer).expect("Tauri-weg");
         let brug = weg_toetsbrug(invoer.clone()).expect("toetsbrug");
-        let mcp = weg_mcp(&mut stdin, &mut reader, id, invoer.clone()).await.expect("MCP");
+        let mcp = weg_mcp(&mut stdin, &mut reader, id, invoer.clone())
+            .await
+            .expect("MCP");
         assert_eq!(tauri, brug, "Tauri en toetsbrug lopen uiteen");
         assert_eq!(tauri, mcp, "Tauri en MCP lopen uiteen");
     }
@@ -183,14 +194,20 @@ async fn de_drie_wegen_leveren_hetzelfde_antwoord() {
     let h0 = uit["uitkomst"]["h0_mm"].as_f64().unwrap();
     let phi = uit["uitkomst"]["phi_inf_t0"].as_f64().unwrap();
     assert!((h0 - 187.5).abs() < 1e-9, "h₀ = {h0}");
-    assert!(((phi - 2.389397) / 2.389397).abs() < 1e-5, "φ(∞,t₀) = {phi}");
+    assert!(
+        ((phi - 2.389397) / 2.389397).abs() < 1e-5,
+        "φ(∞,t₀) = {phi}"
+    );
 
     // De tweede invoer draagt t: β_c en φ(t,t₀) moeten er zijn; 1,472752 uit
     // de handberekening van C45/55 in de kern-tests.
     let uit = weg_tauri(&invoer_h0_met_tijdstip()).unwrap();
     assert_eq!(uit["beam_id"], 4);
     let phi_t = uit["uitkomst"]["phi_t_t0"].as_f64().unwrap();
-    assert!(((phi_t - 1.472752) / 1.472752).abs() < 1e-5, "φ(t,t₀) = {phi_t}");
+    assert!(
+        ((phi_t - 1.472752) / 1.472752).abs() < 1e-5,
+        "φ(t,t₀) = {phi_t}"
+    );
 
     child.kill().await.ok();
 }
@@ -209,7 +226,10 @@ async fn weigeringen_zijn_langs_alle_drie_de_wegen_gelijk() {
         let mcp = weg_mcp(&mut stdin, &mut reader, id, invoer).await;
         // Het strikte schema mag RH = 120 al vóór de kern weigeren; dan is de
         // melding anders maar blijft het een weigering.
-        assert!(mcp.is_err(), "MCP gaf een getal op onzinnige invoer: {mcp:?}");
+        assert!(
+            mcp.is_err(),
+            "MCP gaf een getal op onzinnige invoer: {mcp:?}"
+        );
     }
     // Een onbekend veld wordt geweigerd, niet stil genegeerd.
     let mut tik = invoer_doorsnede();

@@ -87,9 +87,8 @@ impl FontRegistry {
 
     /// Register a TTF/OTF font from file.
     pub fn register_ttf(&mut self, name: &str, path: &Path) -> Result<FontId, LayoutError> {
-        let data = std::fs::read(path).map_err(|e| {
-            LayoutError::FontNotFound(format!("{}: {}", path.display(), e))
-        })?;
+        let data = std::fs::read(path)
+            .map_err(|e| LayoutError::FontNotFound(format!("{}: {}", path.display(), e)))?;
         self.register_ttf_bytes(name, data)
     }
 
@@ -134,7 +133,10 @@ impl FontRegistry {
         let data_clone = entry.data.clone();
 
         let entry = &mut self.fonts[id.0];
-        let total: f32 = text.chars().map(|ch| entry.char_advance(ch, &data_clone)).sum();
+        let total: f32 = text
+            .chars()
+            .map(|ch| entry.char_advance(ch, &data_clone))
+            .sum();
         Pt(total * size.0 / upem)
     }
 

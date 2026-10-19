@@ -27,10 +27,12 @@ const H_MM: f64 = 450.0;
 const L_M: f64 = 6.0;
 
 fn toets<'a>(r: &'a TimberBeamCheckResult, id: &str) -> &'a NamedCheck {
-    r.checks
-        .iter()
-        .find(|c| c.id == id)
-        .unwrap_or_else(|| panic!("toets {id} ontbreekt in {:?}", r.checks.iter().map(|c| &c.id).collect::<Vec<_>>()))
+    r.checks.iter().find(|c| c.id == id).unwrap_or_else(|| {
+        panic!(
+            "toets {id} ontbreekt in {:?}",
+            r.checks.iter().map(|c| &c.id).collect::<Vec<_>>()
+        )
+    })
 }
 
 fn notes(c: &NamedCheck) -> &Vec<String> {
@@ -84,12 +86,18 @@ fn ligger(kip: bool, positie: LtbLoadPosition, k_cr: f64) -> TimberBeamCheckResu
             ForcePoint {
                 combination_id: 1,
                 position_mm: 0.0,
-                forces: InternalForces { vz_ed: 30.0, ..Default::default() },
+                forces: InternalForces {
+                    vz_ed: 30.0,
+                    ..Default::default()
+                },
             },
             ForcePoint {
                 combination_id: 1,
                 position_mm: 3000.0,
-                forces: InternalForces { my_ed: 40.0, ..Default::default() },
+                forces: InternalForces {
+                    my_ed: 40.0,
+                    ..Default::default()
+                },
             },
         ],
         buckling_length_y_m: L_M,
@@ -124,7 +132,11 @@ fn kiptoets_uit_staat_als_niet_van_toepassing_met_reden() {
     let uit = ligger(false, LtbLoadPosition::CentreOfGravity, 1.0);
 
     let kip = toets(&uit, "6.3.3_beam_stability");
-    assert!(matches!(status(kip), CheckStatus::NotApplicable), "{:?}", status(kip));
+    assert!(
+        matches!(status(kip), CheckStatus::NotApplicable),
+        "{:?}",
+        status(kip)
+    );
     assert!(uc(kip).is_none(), "een overgeslagen toets heeft geen UC");
     let tekst = notes(kip).join(" ");
     assert!(tekst.contains("overgeslagen"), "{tekst}");
@@ -137,7 +149,12 @@ fn kiptoets_uit_staat_als_niet_van_toepassing_met_reden() {
     assert_eq!(aan.governing_check_id, "6.3.3_beam_stability");
     assert_ne!(uit.governing_check_id, "6.3.3_beam_stability");
     assert_eq!(aan.checks.len(), uit.checks.len());
-    assert!(uit.uc_max > 0.0 && uit.uc_max < aan.uc_max, "{} < {}", uit.uc_max, aan.uc_max);
+    assert!(
+        uit.uc_max > 0.0 && uit.uc_max < aan.uc_max,
+        "{} < {}",
+        uit.uc_max,
+        aan.uc_max
+    );
 }
 
 /// Tabel 6.1, voetnoot a: drukzijde l_ef + 2h, trekzijde l_ef − 0,5h.
@@ -156,8 +173,18 @@ fn lastpositie_verschuift_l_ef_en_de_uc_in_de_verwachte_richting() {
     assert_relative_eq!(l(&trek), 5175.0, max_relative = 1e-9);
 
     let u = |r: &TimberBeamCheckResult| uc(toets(r, "6.3.3_beam_stability")).expect("UC");
-    assert!(u(&druk) > u(&zp), "drukzijde hoort zwaarder te toetsen: {} > {}", u(&druk), u(&zp));
-    assert!(u(&trek) < u(&zp), "trekzijde hoort lichter te toetsen: {} < {}", u(&trek), u(&zp));
+    assert!(
+        u(&druk) > u(&zp),
+        "drukzijde hoort zwaarder te toetsen: {} > {}",
+        u(&druk),
+        u(&zp)
+    );
+    assert!(
+        u(&trek) < u(&zp),
+        "trekzijde hoort lichter te toetsen: {} < {}",
+        u(&trek),
+        u(&zp)
+    );
 
     // De notitie zegt hoe l_ef tot stand kwam, mét het aangrijpingspunt.
     let n = notes(toets(&druk, "6.3.3_beam_stability")).join(" ");
@@ -182,7 +209,11 @@ fn k_cr_schaalt_de_dwarskracht_uc_en_staat_met_bron_in_de_notitie() {
     let uc_eu = uc(toets(&eu, "6.1.7_shear")).expect("UC");
     assert!(uc_nb > 0.0);
     assert_relative_eq!(uc_eu / uc_nb, 1.0 / 0.67, max_relative = 1e-9);
-    assert_relative_eq!(grootheid(toets(&eu, "6.1.7_shear"), "k_{cr}"), 0.67, max_relative = 1e-12);
+    assert_relative_eq!(
+        grootheid(toets(&eu, "6.1.7_shear"), "k_{cr}"),
+        0.67,
+        max_relative = 1e-12
+    );
 
     let n_nb = notes(toets(&nb, "6.1.7_shear")).join(" ");
     assert!(n_nb.contains("k_cr = 1,00"), "{n_nb}");

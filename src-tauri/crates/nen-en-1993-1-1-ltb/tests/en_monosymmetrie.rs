@@ -42,7 +42,11 @@ use section_properties::SectionProperties;
 /// `flens_boven = true` legt de flens bovenin; `false` zet hem onderin, wat
 /// fysiek hetzelfde profiel is maar omgekeerd geplaatst.
 fn t_profiel(flens_boven: bool) -> (SectionProperties, f64) {
-    let (z_flens, z_lijf) = if flens_boven { (190.0, 90.0) } else { (10.0, 110.0) };
+    let (z_flens, z_lijf) = if flens_boven {
+        (190.0, 90.0)
+    } else {
+        (10.0, 110.0)
+    };
     let sec = CompositeSection {
         lamellen: vec![
             Lamella::liggend(150.0, 20.0, 0.0, z_flens),
@@ -104,8 +108,12 @@ fn krachten(my_knm: f64) -> ForceStateSnapshot {
         combination_id: 1,
         position_mm: L_MM / 2.0,
         forces: InternalForces {
-            n_ed: 0.0, vy_ed: 0.0, vz_ed: 0.0, mt_ed: 0.0,
-            my_ed: my_knm, mz_ed: 0.0,
+            n_ed: 0.0,
+            vy_ed: 0.0,
+            vz_ed: 0.0,
+            mt_ed: 0.0,
+            my_ed: my_knm,
+            mz_ed: 0.0,
         },
     }
 }
@@ -125,23 +133,37 @@ fn toets_velden(
     z_a_mm: f64,
 ) -> StabilityCalc {
     m_b_rd_monosymmetrisch(
-        p, &S235, L_MM, velden,
+        p,
+        &S235,
+        L_MM,
+        velden,
         // q = 0: de momentenlijn komt volledig uit het middenmoment, en B*
         // blijft nul omdat de eindmomenten nul zijn.
         0.0,
         z_a_mm,
-        &Monosymmetrieinvoer { z_j_geometrisch_mm: z_j, bepaald: true, psi_f: None },
+        &Monosymmetrieinvoer {
+            z_j_geometrisch_mm: z_j,
+            bepaald: true,
+            psi_f: None,
+        },
         Kipprofiel::Overig,
         krachten(m_ed_knm),
     )
 }
 
 fn m_cr_van(s: &StabilityCalc) -> f64 {
-    s.intermediate_values.iter().find(|v| v.symbol == "M_{cr}").expect("M_cr").value
+    s.intermediate_values
+        .iter()
+        .find(|v| v.symbol == "M_{cr}")
+        .expect("M_cr")
+        .value
 }
 
 fn stap<'a>(s: &'a StabilityCalc, id: &str) -> &'a nen_en_1993_1_1_stability::Deelstap {
-    s.deelstappen.iter().find(|d| d.id == id).unwrap_or_else(|| panic!("stap {id} ontbreekt"))
+    s.deelstappen
+        .iter()
+        .find(|d| d.id == id)
+        .unwrap_or_else(|| panic!("stap {id} ontbreekt"))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -159,7 +181,15 @@ fn reduceert_exact_naar_de_dubbelsymmetrische_vorm() {
         for l in [3000.0, 6000.0, 12000.0] {
             let oud = en_general::m_cr_algemeen(c1, l, 69852972.0, iw, 1084313.0);
             let nieuw = en_general::m_cr_monosymmetrisch(
-                c1, 0.45, en_general::c3_bovengrens(None), l, 69852972.0, iw, 1084313.0, 0.0, 0.0,
+                c1,
+                0.45,
+                en_general::c3_bovengrens(None),
+                l,
+                69852972.0,
+                iw,
+                1084313.0,
+                0.0,
+                0.0,
             );
             assert_eq!(
                 oud, nieuw,
@@ -175,8 +205,12 @@ fn c2_doet_niets_zolang_z_g_nul_is() {
     // Extra grendel op dezelfde eigenschap: C₂ komt in de formule alleen voor
     // als het product C₂·z_g. Een andere C₂ mag bij z_g = 0 niets veranderen.
     let iw = nb_annex::i_w_nb(310.0, 300.0, 15.5);
-    let a = en_general::m_cr_monosymmetrisch(1.13, 0.0, 1.0, 6000.0, 69852972.0, iw, 1084313.0, 0.0, 0.0);
-    let b = en_general::m_cr_monosymmetrisch(1.13, 0.45, 1.0, 6000.0, 69852972.0, iw, 1084313.0, 0.0, 0.0);
+    let a = en_general::m_cr_monosymmetrisch(
+        1.13, 0.0, 1.0, 6000.0, 69852972.0, iw, 1084313.0, 0.0, 0.0,
+    );
+    let b = en_general::m_cr_monosymmetrisch(
+        1.13, 0.45, 1.0, 6000.0, 69852972.0, iw, 1084313.0, 0.0, 0.0,
+    );
     assert_eq!(a, b);
 }
 
@@ -184,7 +218,9 @@ fn c2_doet_niets_zolang_z_g_nul_is() {
 fn ongeldige_invoer_geeft_nul() {
     let iw = nb_annex::i_w_nb(310.0, 300.0, 15.5);
     assert_eq!(
-        en_general::m_cr_monosymmetrisch(1.0, 0.45, 1.0, 0.0, 69852972.0, iw, 1084313.0, 50.0, -10.0),
+        en_general::m_cr_monosymmetrisch(
+            1.0, 0.45, 1.0, 0.0, 69852972.0, iw, 1084313.0, 50.0, -10.0
+        ),
         0.0
     );
     assert_eq!(
@@ -201,20 +237,28 @@ fn ongeldige_invoer_geeft_nul() {
 fn m_cr_daalt_monotoon_in_d() {
     let iw = nb_annex::i_w_nb(310.0, 300.0, 15.5);
     let m_cr = |z_g: f64, z_j: f64| {
-        en_general::m_cr_monosymmetrisch(1.13, 0.45, 1.0, 6000.0, 69852972.0, iw, 1084313.0, z_g, z_j)
+        en_general::m_cr_monosymmetrisch(
+            1.13, 0.45, 1.0, 6000.0, 69852972.0, iw, 1084313.0, z_g, z_j,
+        )
     };
     // Hoger aangrijpingspunt → grotere D → lagere M_cr.
     let mut vorige = f64::INFINITY;
     for z_g in [-200.0, -100.0, 0.0, 100.0, 200.0] {
         let m = m_cr(z_g, 0.0);
-        assert!(m < vorige, "M_cr hoort te dalen bij een hoger aangrijpingspunt: {m} ≥ {vorige}");
+        assert!(
+            m < vorige,
+            "M_cr hoort te dalen bij een hoger aangrijpingspunt: {m} ≥ {vorige}"
+        );
         vorige = m;
     }
     // Positievere z_j → kleinere D → hogere M_cr.
     let mut vorige = 0.0;
     for z_j in [-100.0, -50.0, 0.0, 50.0, 100.0] {
         let m = m_cr(0.0, z_j);
-        assert!(m > vorige, "M_cr hoort te stijgen bij een positievere z_j: {m} ≤ {vorige}");
+        assert!(
+            m > vorige,
+            "M_cr hoort te stijgen bij een positievere z_j: {m} ≤ {vorige}"
+        );
         vorige = m;
     }
 }
@@ -227,12 +271,24 @@ fn m_cr_daalt_monotoon_in_d() {
 fn het_teken_volgt_de_gedrukte_flens() {
     let z_j = 67.458_359_037_631_08;
     // Veldmoment: bovenflens gedrukt, teken ongewijzigd.
-    assert_relative_eq!(en_general::z_j_gedrukte_flens(z_j, 120.0), z_j, max_relative = 1e-12);
+    assert_relative_eq!(
+        en_general::z_j_gedrukte_flens(z_j, 120.0),
+        z_j,
+        max_relative = 1e-12
+    );
     // Steunmoment: onderflens gedrukt, teken omgeklapt.
-    assert_relative_eq!(en_general::z_j_gedrukte_flens(z_j, -120.0), -z_j, max_relative = 1e-12);
+    assert_relative_eq!(
+        en_general::z_j_gedrukte_flens(z_j, -120.0),
+        -z_j,
+        max_relative = 1e-12
+    );
     // Ook andersom: een profiel met een negatieve meetkundige z_j wordt bij een
     // steunmoment positief.
-    assert_relative_eq!(en_general::z_j_gedrukte_flens(-z_j, -120.0), z_j, max_relative = 1e-12);
+    assert_relative_eq!(
+        en_general::z_j_gedrukte_flens(-z_j, -120.0),
+        z_j,
+        max_relative = 1e-12
+    );
 }
 
 #[test]
@@ -241,7 +297,10 @@ fn zonder_moment_wordt_de_ongunstige_tak_genomen() {
     // is. Dan hoort er GEEN gunstige aanname te vallen.
     for z_j in [67.5_f64, -67.5] {
         let uit = en_general::z_j_gedrukte_flens(z_j, 0.0);
-        assert!(uit <= 0.0, "onbekend teken hoort de ongunstige tak te geven, kreeg {uit}");
+        assert!(
+            uit <= 0.0,
+            "onbekend teken hoort de ongunstige tak te geven, kreeg {uit}"
+        );
         assert_relative_eq!(uit, -z_j.abs(), max_relative = 1e-12);
     }
 }
@@ -262,7 +321,10 @@ fn steunmoment_geeft_een_lagere_m_cr_dan_veldmoment() {
     // Bij een veldmoment is de grote flens gedrukt (gunstig, niet
     // gecrediteerd); bij een steunmoment de lijftip (ongunstig, telt mee).
     let (p, z_j) = t_profiel(true);
-    assert!(z_j > 60.0, "de flens boven hoort een positieve z_j te geven: {z_j}");
+    assert!(
+        z_j > 60.0,
+        "de flens boven hoort een positieve z_j te geven: {z_j}"
+    );
 
     let veld_moment = toets(&p, z_j, 120.0, 47.5);
     let steun_moment = toets(&p, z_j, -120.0, 47.5);
@@ -275,8 +337,16 @@ fn steunmoment_geeft_een_lagere_m_cr_dan_veldmoment() {
     );
 
     // En de gebruikte z_j staat er met het juiste teken bij.
-    assert_relative_eq!(stap(&veld_moment, "z_j").value.unwrap(), 0.0, epsilon = 1e-12);
-    assert_relative_eq!(stap(&steun_moment, "z_j").value.unwrap(), -z_j, max_relative = 1e-9);
+    assert_relative_eq!(
+        stap(&veld_moment, "z_j").value.unwrap(),
+        0.0,
+        epsilon = 1e-12
+    );
+    assert_relative_eq!(
+        stap(&steun_moment, "z_j").value.unwrap(),
+        -z_j,
+        max_relative = 1e-9
+    );
 }
 
 #[test]
@@ -304,14 +374,25 @@ fn het_omgekeerde_profiel_bij_veldmoment_is_hetzelfde_geval_als_het_steunmoment(
     let steun_boven = toets(&p_boven, z_j_boven, -120.0, z_s_rel_boven);
     let veld_onder = toets(&p_onder, z_j_onder, 120.0, z_s_rel_onder);
     for s in [&steun_boven, &veld_onder] {
-        let z_g = s.intermediate_values.iter().find(|v| v.symbol == "z_g").unwrap().value;
+        let z_g = s
+            .intermediate_values
+            .iter()
+            .find(|v| v.symbol == "z_g")
+            .unwrap()
+            .value;
         assert_relative_eq!(z_g, 0.0, epsilon = 1e-9);
         // In beide gevallen is de LIJFTIP de gedrukte flens, dus dezelfde
         // negatieve rekenwaarde.
-        assert_relative_eq!(stap(s, "z_j").value.unwrap(), -z_j_boven, max_relative = 1e-9);
+        assert_relative_eq!(
+            stap(s, "z_j").value.unwrap(),
+            -z_j_boven,
+            max_relative = 1e-9
+        );
     }
     assert_relative_eq!(
-        m_cr_van(&steun_boven), m_cr_van(&veld_onder), max_relative = 1e-9
+        m_cr_van(&steun_boven),
+        m_cr_van(&veld_onder),
+        max_relative = 1e-9
     );
 }
 
@@ -326,16 +407,25 @@ fn de_afleiding_toont_z_j_en_laat_de_nb_keten_weg() {
     let ids: Vec<&str> = s.deelstappen.iter().map(|d| d.id.as_str()).collect();
 
     // z_j staat er, ná L_kip en vóór M_cr.
-    assert!(ids.contains(&"z_j"), "de afleiding hoort een z_j-stap te bevatten: {ids:?}");
+    assert!(
+        ids.contains(&"z_j"),
+        "de afleiding hoort een z_j-stap te bevatten: {ids:?}"
+    );
     let i_zj = ids.iter().position(|x| *x == "z_j").unwrap();
     let i_lkip = ids.iter().position(|x| *x == "l_kip").unwrap();
     let i_mcr = ids.iter().position(|x| *x == "m_cr").unwrap();
-    assert!(i_lkip < i_zj && i_zj < i_mcr, "volgorde klopt niet: {ids:?}");
+    assert!(
+        i_lkip < i_zj && i_zj < i_mcr,
+        "volgorde klopt niet: {ids:?}"
+    );
 
     // S, C en de C₂-correctie horen hier NIET: die zijn van de NB-vorm, die
     // deze doorsnede niet dekt.
     for weg in ["s", "c", "c2"] {
-        assert!(!ids.contains(&weg), "stap {weg} hoort niet op de algemene route: {ids:?}");
+        assert!(
+            !ids.contains(&weg),
+            "stap {weg} hoort niet op de algemene route: {ids:?}"
+        );
     }
     // De ongecorrigeerde C₂ staat er wél — de algemene formule gebruikt hem.
     assert!(ids.contains(&"c2_tabel"));
@@ -348,13 +438,21 @@ fn de_afleiding_noemt_de_c3_keuze_en_de_normgrens() {
 
     let m_cr = stap(&s, "m_cr");
     let tekst = m_cr.notes.join(" ");
-    assert!(tekst.contains("KEUZE"), "de C₃-keuze hoort in de afleiding te staan: {tekst}");
+    assert!(
+        tekst.contains("KEUZE"),
+        "de C₃-keuze hoort in de afleiding te staan: {tekst}"
+    );
     assert!(tekst.contains("geen normwaarde") || tekst.contains("NIET de vorm"));
-    assert!(m_cr.notes.iter().any(|n| n.contains("NB.NB.1(1)")),
-            "de afleiding hoort de normgrens NB.NB.1(1) te noemen");
+    assert!(
+        m_cr.notes.iter().any(|n| n.contains("NB.NB.1(1)")),
+        "de afleiding hoort de normgrens NB.NB.1(1) te noemen"
+    );
 
     // En de toets zelf zegt dat dit geen NB-waarde is.
-    assert!(s.notes.iter().any(|n| n.contains("GEEN Nederlandse NB-waarde")));
+    assert!(s
+        .notes
+        .iter()
+        .any(|n| n.contains("GEEN Nederlandse NB-waarde")));
 }
 
 #[test]
@@ -365,15 +463,30 @@ fn de_getoonde_d_is_de_d_die_gerekend_is() {
     let (p, z_j) = t_profiel(true);
     let s = toets(&p, z_j, -120.0, 47.5);
     let waarde = |sym: &str| {
-        s.intermediate_values.iter().find(|v| v.symbol == sym).unwrap().value
+        s.intermediate_values
+            .iter()
+            .find(|v| v.symbol == sym)
+            .unwrap()
+            .value
     };
     let m_cr = stap(&s, "m_cr");
-    let d_getoond = m_cr.variables.iter().find(|v| v.symbol == "D").unwrap().value;
+    let d_getoond = m_cr
+        .variables
+        .iter()
+        .find(|v| v.symbol == "D")
+        .unwrap()
+        .value;
     let d_verwacht = en_general::d_parameter(
-        waarde("C_{2,tabel}"), waarde("z_g"), waarde("C_3"), waarde("z_j"),
+        waarde("C_{2,tabel}"),
+        waarde("z_g"),
+        waarde("C_3"),
+        waarde("z_j"),
     );
     assert_eq!(d_getoond, d_verwacht);
-    assert!(d_getoond > 0.0, "een gedrukte kleine flens hoort D te verhogen: {d_getoond}");
+    assert!(
+        d_getoond > 0.0,
+        "een gedrukte kleine flens hoort D te verhogen: {d_getoond}"
+    );
 }
 
 #[test]
@@ -381,14 +494,20 @@ fn bij_een_symmetrische_doorsnede_zegt_de_stap_dat_z_j_nul_is() {
     // Requirement uit de opdracht: de stap moet ook kunnen zeggen "nul omdat de
     // doorsnede symmetrisch is".
     let (p, z_j) = gelaste_i_dubbelsymmetrisch();
-    assert!(z_j.abs() < 1e-6, "een dubbelsymmetrische I hoort z_j = 0 te geven: {z_j}");
+    assert!(
+        z_j.abs() < 1e-6,
+        "een dubbelsymmetrische I hoort z_j = 0 te geven: {z_j}"
+    );
 
     let s = toets(&p, z_j, 300.0, 207.5);
     let zj = stap(&s, "z_j");
     assert_relative_eq!(zj.value.unwrap(), 0.0, epsilon = 1e-9);
     assert!(
-        zj.notes.iter().any(|n| n.contains("symmetrisch is om de buigingsas")),
-        "de reden hoort erbij te staan: {:?}", zj.notes
+        zj.notes
+            .iter()
+            .any(|n| n.contains("symmetrisch is om de buigingsas")),
+        "de reden hoort erbij te staan: {:?}",
+        zj.notes
     );
 }
 
@@ -402,8 +521,15 @@ fn een_symmetrische_doorsnede_krijgt_langs_deze_route_de_algemene_vorm_zonder_z_
     let k_red = nb_annex::k_red(p.h_mm, p.tf_mm, p.tw_mm, p.b_mm, L_MM);
     let verwacht = k_red
         * en_general::m_cr_algemeen(
-            s.intermediate_values.iter().find(|v| v.symbol == "C_1").unwrap().value,
-            L_MM, p.iz_mm4, p.iw_mm6, p.it_mm4,
+            s.intermediate_values
+                .iter()
+                .find(|v| v.symbol == "C_1")
+                .unwrap()
+                .value,
+            L_MM,
+            p.iz_mm4,
+            p.iw_mm6,
+            p.it_mm4,
         );
     assert_relative_eq!(m_cr_van(&s), verwacht, max_relative = 1e-12);
 }
@@ -416,7 +542,9 @@ fn een_symmetrische_doorsnede_krijgt_langs_deze_route_de_algemene_vorm_zonder_z_
 fn de_toets_levert_een_unity_check_met_een_status() {
     let (p, z_j) = t_profiel(true);
     let s = toets(&p, z_j, -120.0, 47.5);
-    let uc = s.uc.as_ref().expect("de monosymmetrische kiptoets hoort een UC te leveren");
+    let uc =
+        s.uc.as_ref()
+            .expect("de monosymmetrische kiptoets hoort een UC te leveren");
     assert!(uc.rd > 0.0, "M_b,Rd hoort positief te zijn: {}", uc.rd);
     assert_relative_eq!(uc.uc, uc.ed / uc.rd, max_relative = 1e-12);
     assert!(matches!(s.status, CheckStatus::Ok | CheckStatus::NotOk));
@@ -439,7 +567,14 @@ fn c3_ligt_boven_een_en_is_op_de_psi_f_band_gesleuteld() {
     // Via `c3_bovengrens` en niet via de constanten zelf: dit is de functie
     // die de toetsing werkelijk aanroept, en een assertie op twee constanten
     // zou de compiler al kunnen wegstrepen.
-    for psi_f in [None, Some(-1.0), Some(-0.95), Some(-0.5), Some(0.0), Some(1.0)] {
+    for psi_f in [
+        None,
+        Some(-1.0),
+        Some(-0.95),
+        Some(-0.5),
+        Some(0.0),
+        Some(1.0),
+    ] {
         let c3 = en_general::c3_bovengrens(psi_f);
         assert!(
             c3 > 1.0,
@@ -449,11 +584,26 @@ fn c3_ligt_boven_een_en_is_op_de_psi_f_band_gesleuteld() {
     // De band ψ_f = −1 is de ongunstigste van de twee, en geldt zodra ψ_f
     // onbekend is.
     assert!(en_general::c3_bovengrens(Some(-1.0)) > en_general::c3_bovengrens(Some(0.0)));
-    assert_eq!(en_general::c3_bovengrens(None), en_general::C3_BAND_PSI_F_MIN_EEN);
-    assert_eq!(en_general::c3_bovengrens(Some(-1.0)), en_general::C3_BAND_PSI_F_MIN_EEN);
-    assert_eq!(en_general::c3_bovengrens(Some(-0.95)), en_general::C3_BAND_PSI_F_MIN_EEN);
-    assert_eq!(en_general::c3_bovengrens(Some(-0.5)), en_general::C3_BAND_PSI_F_NUL);
-    assert_eq!(en_general::c3_bovengrens(Some(0.0)), en_general::C3_BAND_PSI_F_NUL);
+    assert_eq!(
+        en_general::c3_bovengrens(None),
+        en_general::C3_BAND_PSI_F_MIN_EEN
+    );
+    assert_eq!(
+        en_general::c3_bovengrens(Some(-1.0)),
+        en_general::C3_BAND_PSI_F_MIN_EEN
+    );
+    assert_eq!(
+        en_general::c3_bovengrens(Some(-0.95)),
+        en_general::C3_BAND_PSI_F_MIN_EEN
+    );
+    assert_eq!(
+        en_general::c3_bovengrens(Some(-0.5)),
+        en_general::C3_BAND_PSI_F_NUL
+    );
+    assert_eq!(
+        en_general::c3_bovengrens(Some(0.0)),
+        en_general::C3_BAND_PSI_F_NUL
+    );
 }
 
 #[test]
@@ -573,14 +723,22 @@ fn een_veld_met_wisselende_kromming_krijgt_de_ongunstige_tak() {
     let z_s_rel = p.z_s_mm - p.z_c_mm;
 
     let wisselend = toets_velden(&p, z_j, &veld_met(100.0, 0.0, -99.0), 100.0, z_s_rel);
-    assert_relative_eq!(stap(&wisselend, "z_j").value.unwrap(), -z_j, max_relative = 1e-9);
+    assert_relative_eq!(
+        stap(&wisselend, "z_j").value.unwrap(),
+        -z_j,
+        max_relative = 1e-9
+    );
 
     // Zonder tekenwisseling is de bovenflens overal gedrukt en valt de straf
     // door de afkapping weg. Let op: dit veld heeft een ándere β en dus een
     // andere C₁, dus de M_cr's van deze twee velden zijn NIET vergelijkbaar —
     // alleen de z_j-tak is dat.
     let enkel_teken = toets_velden(&p, z_j, &veld_met(100.0, 50.0, 99.0), 100.0, z_s_rel);
-    assert_relative_eq!(stap(&enkel_teken, "z_j").value.unwrap(), 0.0, epsilon = 1e-12);
+    assert_relative_eq!(
+        stap(&enkel_teken, "z_j").value.unwrap(),
+        0.0,
+        epsilon = 1e-12
+    );
 
     // De vergelijking die het gebrek wél isoleert: hetzelfde veld, dezelfde β,
     // B*, C₁, C₂ en L_kip — alleen z_j verschilt. Met z_j = 0 komt er precies
@@ -588,7 +746,11 @@ fn een_veld_met_wisselende_kromming_krijgt_de_ongunstige_tak() {
     // afkapping op nul zette). De nieuwe regel hoort daar strikt onder te
     // liggen.
     let oude_regel = toets_velden(&p, 0.0, &veld_met(100.0, 0.0, -99.0), 100.0, z_s_rel);
-    assert_relative_eq!(stap(&oude_regel, "z_j").value.unwrap(), 0.0, epsilon = 1e-12);
+    assert_relative_eq!(
+        stap(&oude_regel, "z_j").value.unwrap(),
+        0.0,
+        epsilon = 1e-12
+    );
     assert!(
         m_cr_van(&wisselend) < m_cr_van(&oude_regel),
         "de wisselende kromming hoort M_cr te VERLAGEN ten opzichte van de oude regel: \
@@ -638,8 +800,16 @@ fn de_flensbepaling_kijkt_naar_alle_drie_de_momenten() {
 
     // z_j volgt die bepaling, en "beide" en "onbekend" geven allebei −|z_j|.
     for momenten in [[100.0, 0.0, -99.0], [-100.0, 0.0, 99.0], [0.0, 0.0, 0.0]] {
-        assert_relative_eq!(en_general::z_j_kipveld(67.5, momenten), -67.5, max_relative = 1e-12);
-        assert_relative_eq!(en_general::z_j_kipveld(-67.5, momenten), -67.5, max_relative = 1e-12);
+        assert_relative_eq!(
+            en_general::z_j_kipveld(67.5, momenten),
+            -67.5,
+            max_relative = 1e-12
+        );
+        assert_relative_eq!(
+            en_general::z_j_kipveld(-67.5, momenten),
+            -67.5,
+            max_relative = 1e-12
+        );
     }
 }
 
@@ -656,8 +826,17 @@ fn een_onbepaalde_monosymmetrie_wordt_geweigerd_en_niet_als_symmetrisch_gerappor
     // procenten te hoog kon zijn.
     let (p, _) = t_profiel(true);
     let s = m_b_rd_monosymmetrisch(
-        &p, &S235, L_MM, &veld(-120.0), 0.0, 47.5,
-        &Monosymmetrieinvoer { z_j_geometrisch_mm: 0.0, bepaald: false, psi_f: None },
+        &p,
+        &S235,
+        L_MM,
+        &veld(-120.0),
+        0.0,
+        47.5,
+        &Monosymmetrieinvoer {
+            z_j_geometrisch_mm: 0.0,
+            bepaald: false,
+            psi_f: None,
+        },
         Kipprofiel::Overig,
         krachten(-120.0),
     );
@@ -667,7 +846,10 @@ fn een_onbepaalde_monosymmetrie_wordt_geweigerd_en_niet_als_symmetrisch_gerappor
         "een onbepaalde monosymmetrie hoort de toets te weigeren, kreeg {:?}",
         s.status
     );
-    assert!(s.uc.is_none(), "een geweigerde toets hoort geen unity check te leveren");
+    assert!(
+        s.uc.is_none(),
+        "een geweigerde toets hoort geen unity check te leveren"
+    );
 
     let tekst = s.notes.join(" ");
     assert!(
@@ -682,7 +864,10 @@ fn een_onbepaalde_monosymmetrie_wordt_geweigerd_en_niet_als_symmetrisch_gerappor
         "een geweigerde toets mag NIET beweren dat de doorsnede symmetrisch is: {tekst}"
     );
     // En er hangt geen afleiding onder die een berekening suggereert.
-    assert!(s.deelstappen.is_empty(), "een geweigerde toets hoort geen afleiding te tonen");
+    assert!(
+        s.deelstappen.is_empty(),
+        "een geweigerde toets hoort geen afleiding te tonen"
+    );
 }
 
 #[test]
@@ -708,7 +893,10 @@ fn de_doorsnedemotor_meldt_zelf_wanneer_z_j_niet_bepaald_is() {
         ..Default::default()
     };
     let r = sec.bereken();
-    assert!(r.monosymmetrie_bepaald, "een T uit lamellen hoort z_j te kunnen bepalen");
+    assert!(
+        r.monosymmetrie_bepaald,
+        "een T uit lamellen hoort z_j te kunnen bepalen"
+    );
     assert!(r.monosymmetrie.z_j_mm.abs() > 60.0);
 }
 
@@ -719,7 +907,12 @@ fn z_g_wordt_vanaf_het_schuifmiddelpunt_gemeten() {
     // 47,5. Verwar je die twee, dan is C₂·z_g bijna vijf keer te groot.
     let (p, z_j) = t_profiel(true);
     let s = toets(&p, z_j, 120.0, 47.5);
-    let z_g = s.intermediate_values.iter().find(|v| v.symbol == "z_g").unwrap().value;
+    let z_g = s
+        .intermediate_values
+        .iter()
+        .find(|v| v.symbol == "z_g")
+        .unwrap()
+        .value;
     assert_relative_eq!(z_g, 10.0, max_relative = 1e-9);
     assert_relative_eq!(p.z_s_mm - p.z_c_mm, 37.5, max_relative = 1e-9);
 }

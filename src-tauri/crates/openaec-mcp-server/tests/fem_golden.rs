@@ -245,7 +245,10 @@ fn herkomst_de_profielcatalogus_is_niet_gedrift() {
     let profielen = g["herkomst"]["profielen"]
         .as_object()
         .expect("herkomst.profielen");
-    assert!(!profielen.is_empty(), "de herkomst noemt geen enkel profiel");
+    assert!(
+        !profielen.is_empty(),
+        "de herkomst noemt geen enkel profiel"
+    );
 
     for (naam, verwacht) in profielen {
         let record = steel_profiles::db().find(naam).unwrap_or_else(|| {
@@ -312,7 +315,10 @@ fn herkomst_solverdoorsnede_en_toetsingsdoorsnede_zijn_dezelfde() {
     let doorsneden = g["herkomst"]["doorsneden"]
         .as_object()
         .expect("herkomst.doorsneden");
-    assert!(!doorsneden.is_empty(), "de herkomst noemt geen enkele staaf");
+    assert!(
+        !doorsneden.is_empty(),
+        "de herkomst noemt geen enkele staaf"
+    );
 
     for (staaf, d) in doorsneden {
         assert_eq!(
@@ -410,7 +416,9 @@ async fn solve_fem_model_levert_het_gouden_resultaat() {
     // elke herbouw van de bundel ook als er geen getal verschuift. De
     // bundelidentiteit wordt bewaakt door `build.rs` en de handshake, niet hier.
     let mut kaal = gemeten.clone();
-    let map = kaal.as_object_mut().expect("structuredContent is een object");
+    let map = kaal
+        .as_object_mut()
+        .expect("structuredContent is een object");
     for vluchtig in ["solve_ms", "bundle_hash", "solver_version"] {
         assert!(
             map.remove(vluchtig).is_some(),
@@ -491,7 +499,10 @@ async fn load_fem_project_leest_het_gouden_model_ongewijzigd() {
     assert_eq!(p["counts"]["plates"], 0, "het portaal heeft geen platen");
     assert_eq!(p["counts"]["load_cases"], 2, "belastinggevallen G en Q");
     assert_eq!(p["counts"]["loads"], 2, "één lijnlast per belastinggeval");
-    assert_eq!(p["counts"]["combinations"], 1, "één combinatie: 1,2·G + 1,5·Q");
+    assert_eq!(
+        p["counts"]["combinations"], 1,
+        "één combinatie: 1,2·G + 1,5·Q"
+    );
     assert_eq!(
         p["nonlinear_enabled"],
         json!(false),

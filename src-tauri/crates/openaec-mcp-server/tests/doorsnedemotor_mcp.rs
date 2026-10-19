@@ -21,8 +21,19 @@ use tokio::time::timeout;
 const BIN_PATH: &str = env!("CARGO_BIN_EXE_openaec-mcp-server");
 
 const VELDEN: [&str; 13] = [
-    "area_mm2", "iy_mm4", "iz_mm4", "wel_y_mm3", "wel_z_mm3", "wpl_y_mm3", "wpl_z_mm3",
-    "av_y_mm2", "av_z_mm2", "it_mm4", "iw_mm6", "iy_radius_mm", "iz_radius_mm",
+    "area_mm2",
+    "iy_mm4",
+    "iz_mm4",
+    "wel_y_mm3",
+    "wel_z_mm3",
+    "wpl_y_mm3",
+    "wpl_z_mm3",
+    "av_y_mm2",
+    "av_z_mm2",
+    "it_mm4",
+    "iw_mm6",
+    "iy_radius_mm",
+    "iz_radius_mm",
 ];
 
 async fn lees<R: tokio::io::AsyncBufRead + Unpin>(r: &mut R) -> Value {
@@ -57,7 +68,10 @@ async fn roep(namen: &[&str]) -> Vec<Value> {
     let init = json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
         "protocolVersion": "2024-11-05", "capabilities": {},
         "clientInfo": { "name": "doorsnedemotor-test", "version": "0" } } });
-    stdin.write_all(format!("{init}\n").as_bytes()).await.unwrap();
+    stdin
+        .write_all(format!("{init}\n").as_bytes())
+        .await
+        .unwrap();
     lees(&mut stdout).await;
     stdin
         .write_all(b"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n")
@@ -69,8 +83,15 @@ async fn roep(namen: &[&str]) -> Vec<Value> {
             "params": { "name": "compute_section_properties", "arguments": { "profile_name": naam } } });
         stdin.write_all(format!("{v}\n").as_bytes()).await.unwrap();
         let antwoord = lees(&mut stdout).await;
-        assert!(antwoord["error"].is_null(), "JSON-RPC-fout voor {naam}: {antwoord}");
-        assert_ne!(antwoord["result"]["isError"], json!(true), "toolfout voor {naam}: {antwoord}");
+        assert!(
+            antwoord["error"].is_null(),
+            "JSON-RPC-fout voor {naam}: {antwoord}"
+        );
+        assert_ne!(
+            antwoord["result"]["isError"],
+            json!(true),
+            "toolfout voor {naam}: {antwoord}"
+        );
         uit.push(antwoord["result"]["structuredContent"].clone());
     }
     drop(stdin);
@@ -84,10 +105,14 @@ async fn unp_200_en_inp_200_binnen_een_half_procent_van_de_catalogus() {
     let uit = roep(&namen).await;
     let mut fouten = Vec::new();
     for (naam, sc) in namen.iter().zip(uit.iter()) {
-        let cat = steel_profiles::db().find(naam).unwrap_or_else(|| panic!("{naam} in catalogus"));
+        let cat = steel_profiles::db()
+            .find(naam)
+            .unwrap_or_else(|| panic!("{naam} in catalogus"));
         let catv = serde_json::to_value(&cat.properties).unwrap();
         for veld in VELDEN {
-            let a = sc[veld].as_f64().unwrap_or_else(|| panic!("{naam}: veld {veld} ontbreekt in {sc}"));
+            let a = sc[veld]
+                .as_f64()
+                .unwrap_or_else(|| panic!("{naam}: veld {veld} ontbreekt in {sc}"));
             let c = catv[veld].as_f64().unwrap();
             // Iw van een gesloten doorsnede is in beide bronnen 0.
             if c == 0.0 && a.abs() < 1e-9 {
@@ -104,12 +129,18 @@ async fn unp_200_en_inp_200_binnen_een_half_procent_van_de_catalogus() {
             // contourgrootheden de harde 0,5 %.
             let torsie = veld == "it_mm4" || veld == "iw_mm6";
             let grens = if naam.starts_with("UNP") || naam.starts_with("INP") {
-                if torsie { 1.5 } else { 0.5 }
+                if torsie {
+                    1.5
+                } else {
+                    0.5
+                }
             } else {
                 4.0
             };
             if afw.abs() > grens {
-                fouten.push(format!("{naam} {veld}: motor {a} tegen catalogus {c} ({afw:+.2} %)"));
+                fouten.push(format!(
+                    "{naam} {veld}: motor {a} tegen catalogus {c} ({afw:+.2} %)"
+                ));
             }
         }
         // UNP en INP horen zonder kanttekening door de motor te komen. Een
@@ -117,8 +148,16 @@ async fn unp_200_en_inp_200_binnen_een_half_procent_van_de_catalogus() {
         // vierkant liggen de hoofdassen willekeurig); dat is een eigenschap
         // van de motor, niet van dit gereedschap.
         if naam.starts_with("UNP") || naam.starts_with("INP") {
-            assert!(sc["meldingen"].as_array().map_or(true, |m| m.is_empty()), "{naam}: {}", sc["meldingen"]);
+            assert!(
+                sc["meldingen"].as_array().map_or(true, |m| m.is_empty()),
+                "{naam}: {}",
+                sc["meldingen"]
+            );
         }
     }
-    assert!(fouten.is_empty(), "afwijkingen boven de grens:\n{}", fouten.join("\n"));
+    assert!(
+        fouten.is_empty(),
+        "afwijkingen boven de grens:\n{}",
+        fouten.join("\n")
+    );
 }

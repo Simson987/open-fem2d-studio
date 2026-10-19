@@ -42,13 +42,13 @@
 //! Veld 1 heeft de laagste M_cr (10 062,4 kNm) en blijft maatgevend; L_kip,
 //! M_cr, χ_LT, de unity check en alle overige velden zijn ongewijzigd.
 
-use steel_check::*;
-use mechanics::{InternalForces, ForcePoint};
-use nen_en_1993_1_1_ltb::LateralBracing;
-use nen_en_1990::ConsequenceClass;
-use nen_en_1993_1_1_section::{CheckStatus, classification::CrossSectionClass};
 use approx::assert_relative_eq;
+use mechanics::{ForcePoint, InternalForces};
+use nen_en_1990::ConsequenceClass;
+use nen_en_1993_1_1_ltb::LateralBracing;
+use nen_en_1993_1_1_section::{classification::CrossSectionClass, CheckStatus};
 use std::sync::OnceLock;
+use steel_check::*;
 
 fn run() -> &'static BeamCheckResult {
     static RESULT: OnceLock<BeamCheckResult> = OnceLock::new();
@@ -64,19 +64,40 @@ fn run() -> &'static BeamCheckResult {
                 ForcePoint {
                     combination_id: 21,
                     position_mm: 2491.0,
-                    forces: InternalForces { n_ed: 18.479, vy_ed: 0.0, vz_ed: 0.0, mt_ed: 0.0, my_ed: 273.135, mz_ed: 0.0 },
+                    forces: InternalForces {
+                        n_ed: 18.479,
+                        vy_ed: 0.0,
+                        vz_ed: 0.0,
+                        mt_ed: 0.0,
+                        my_ed: 273.135,
+                        mz_ed: 0.0,
+                    },
                 },
                 // Combination 2.1 (id=21), x=5000 mm: shear check
                 ForcePoint {
                     combination_id: 21,
                     position_mm: 5000.0,
-                    forces: InternalForces { n_ed: 18.479, vy_ed: 0.0, vz_ed: -234.164, mt_ed: 0.0, my_ed: -20.602, mz_ed: 0.0 },
+                    forces: InternalForces {
+                        n_ed: 18.479,
+                        vy_ed: 0.0,
+                        vz_ed: -234.164,
+                        mt_ed: 0.0,
+                        my_ed: -20.602,
+                        mz_ed: 0.0,
+                    },
                 },
                 // Combination 1.1 (id=11), x=2491 mm: used for LTB check
                 ForcePoint {
                     combination_id: 11,
                     position_mm: 2491.0,
-                    forces: InternalForces { n_ed: 16.042, vy_ed: 0.0, vz_ed: 134.475, mt_ed: 0.0, my_ed: 237.241, mz_ed: 0.0 },
+                    forces: InternalForces {
+                        n_ed: 16.042,
+                        vy_ed: 0.0,
+                        vz_ed: 134.475,
+                        mt_ed: 0.0,
+                        my_ed: 237.241,
+                        mz_ed: 0.0,
+                    },
                 },
             ],
             // 2 lateral restraints at 1667 mm and 3333 mm from start (5000 mm beam)
@@ -113,9 +134,21 @@ fn run() -> &'static BeamCheckResult {
 }
 
 fn find_check<'a>(result: &'a BeamCheckResult, id: &str) -> &'a NamedCheck {
-    result.checks.iter().find(|c| c.id == id)
-        .unwrap_or_else(|| panic!("check '{}' not found; available: {:?}", id,
-            result.checks.iter().map(|c| c.id.as_str()).collect::<Vec<_>>()))
+    result
+        .checks
+        .iter()
+        .find(|c| c.id == id)
+        .unwrap_or_else(|| {
+            panic!(
+                "check '{}' not found; available: {:?}",
+                id,
+                result
+                    .checks
+                    .iter()
+                    .map(|c| c.id.as_str())
+                    .collect::<Vec<_>>()
+            )
+        })
 }
 
 fn resistance_value(result: &BeamCheckResult, id: &str) -> f64 {
@@ -138,12 +171,13 @@ fn uc_value(result: &BeamCheckResult, id: &str) -> f64 {
 /// (M_b,Rd in kNm) en niet langer χ_LT; die staat in de tussenwaarden.
 fn intermediate(result: &BeamCheckResult, id: &str, symbool: &str) -> f64 {
     match &find_check(result, id).kind {
-        CheckKind::Stability(s) => s
-            .intermediate_values
-            .iter()
-            .find(|v| v.symbol == symbool)
-            .unwrap_or_else(|| panic!("tussenwaarde {symbool} ontbreekt bij {id}"))
-            .value,
+        CheckKind::Stability(s) => {
+            s.intermediate_values
+                .iter()
+                .find(|v| v.symbol == symbool)
+                .unwrap_or_else(|| panic!("tussenwaarde {symbool} ontbreekt bij {id}"))
+                .value
+        }
         CheckKind::Resistance(_) => panic!("{id} is geen stabiliteitstoets"),
     }
 }
@@ -152,7 +186,11 @@ fn intermediate(result: &BeamCheckResult, id: &str, symbool: &str) -> f64 {
 fn portal_beam4_bending() {
     let r = run();
     // Reference: M_y,c,Rd = 439.199 kNm, UC = 0.62
-    assert_relative_eq!(resistance_value(r, "6.2.5_bending_y"), 439.199, max_relative = 1e-3);
+    assert_relative_eq!(
+        resistance_value(r, "6.2.5_bending_y"),
+        439.199,
+        max_relative = 1e-3
+    );
     assert_relative_eq!(uc_value(r, "6.2.5_bending_y"), 0.62, max_relative = 0.02);
 }
 
@@ -163,7 +201,11 @@ fn portal_beam4_shear() {
     // Our profile DB: Av_z=4742 mm² → V_c,z,Rd = 643.4 kN
     // Phase 13-A fix: orchestrator now picks max |Vz| as governing for shear check.
     // → position x=5000 mm, Vz=-234.164 kN, UC = 234.164 / 643.4 ≈ 0.364
-    assert_relative_eq!(resistance_value(r, "6.2.6_shear_z"), 643.4, max_relative = 1e-2);
+    assert_relative_eq!(
+        resistance_value(r, "6.2.6_shear_z"),
+        643.4,
+        max_relative = 1e-2
+    );
     // UC close to reference 0.36 (small delta due to profile DB Av_z: 4742 vs reference 4745 mm²)
     assert_relative_eq!(uc_value(r, "6.2.6_shear_z"), 0.364, max_relative = 0.02);
 }
@@ -188,17 +230,29 @@ fn portal_beam4_ltb_chi_is_one() {
     // onveranderd — alleen het veld waaruit χ_LT komt is verhuisd: `value` van
     // de kiptoets is nu de uitkomst van háár eigen formule (M_b,Rd in kNm),
     // zoals de kniktoets van 6.3.1 N_b,Rd in kN levert.
-    assert_relative_eq!(intermediate(r, "6.3.2_ltb", r"\chi_{LT}"), 1.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        intermediate(r, "6.3.2_ltb", r"\chi_{LT}"),
+        1.0,
+        max_relative = 1e-12
+    );
     // En `value` is dan ook werkelijk M_b,Rd: bij χ_LT = 1 valt die samen met
     // de doorsnedeweerstand M_y,c,Rd van 6.2.5 — 439,199 kNm.
-    assert_relative_eq!(resistance_value(r, "6.3.2_ltb"), 439.199, max_relative = 1e-3);
+    assert_relative_eq!(
+        resistance_value(r, "6.3.2_ltb"),
+        439.199,
+        max_relative = 1e-3
+    );
 }
 
 #[test]
 fn portal_beam4_governing_ok() {
     let r = run();
     // Reference: all checks OK, UC_max = 0.62 (bending governs)
-    assert!(r.uc_max < 1.0, "expected uc_max < 1.0 (reference: 0.62), got {}", r.uc_max);
+    assert!(
+        r.uc_max < 1.0,
+        "expected uc_max < 1.0 (reference: 0.62), got {}",
+        r.uc_max
+    );
     assert_eq!(r.status, CheckStatus::Ok);
 }
 

@@ -63,9 +63,7 @@
 use nen_en_1993_1_1_section::{Deelstap, NamedValue};
 
 use crate::bending::StressBlockResult;
-use crate::mnkappa::{
-    solve_state, FailureMode, MnKappaDiagram, MnKappaOptions, SectionState,
-};
+use crate::mnkappa::{solve_state, FailureMode, MnKappaDiagram, MnKappaOptions, SectionState};
 use crate::section::{ConcreteSection, RebarLayer, RectConcreteSection, ReinforcementCage};
 use crate::stress_strain::{DesignMaterial, SteelBranch};
 
@@ -92,7 +90,10 @@ pub(crate) fn lx(v: f64, decimalen: usize) -> String {
         }
     }
     // "-0" is geen getal maar een afrondingsartefact.
-    if s.trim_start_matches('-').chars().all(|c| c == '0' || c == '.') {
+    if s.trim_start_matches('-')
+        .chars()
+        .all(|c| c == '0' || c == '.')
+    {
         s = s.trim_start_matches('-').to_string();
     }
     s.replace('.', "{,}")
@@ -131,7 +132,11 @@ pub(crate) fn nl(x: f64, decimalen: usize) -> String {
 }
 
 pub(crate) fn nv(symbol: &str, value: f64, unit: &str) -> NamedValue {
-    NamedValue { symbol: symbol.to_string(), value, unit: unit.to_string() }
+    NamedValue {
+        symbol: symbol.to_string(),
+        value,
+        unit: unit.to_string(),
+    }
 }
 
 /// Bouwt één deelstap. Alle velden expliciet, zodat er geen stap kan ontstaan
@@ -289,24 +294,28 @@ fn uitgangspunten(g: &Betongegevens, route: Route) -> Deelstap {
          scheuren."
             .to_string(),
     ];
-    notes.push(match route {
-        Route::Spanningsblok =>
-            "Deze toets rekent met de RECHTHOEKIGE SPANNINGSVERDELING die 3.1.7(3) toestaat \
+    notes.push(
+        match route {
+            Route::Spanningsblok => {
+                "Deze toets rekent met de RECHTHOEKIGE SPANNINGSVERDELING die 3.1.7(3) toestaat \
              (figuur 3.5): de werkelijke, gekromde drukspanningsverdeling wordt vervangen door \
              een blok van hoogte λ·x met spanning η·f_cd. Dat is een toegestane \
              vereenvoudiging, geen exacte weergave; de M-N-κ-toets op hetzelfde krachtspunt \
              integreert het parabool-rechthoekdiagram van 3.1.7(1) wél voluit, en het verschil \
-             tussen beide uitkomsten is de prijs van deze vereenvoudiging.",
-        Route::MnKappa =>
-            "Deze toets integreert het PARABOOL-RECHTHOEKDIAGRAM van 3.1.7(1) — vergelijkingen \
+             tussen beide uitkomsten is de prijs van deze vereenvoudiging."
+            }
+            Route::MnKappa => {
+                "Deze toets integreert het PARABOOL-RECHTHOEKDIAGRAM van 3.1.7(1) — vergelijkingen \
              (3.17) en (3.18) — over de hoogte van de doorsnede, en neemt als momentweerstand \
              het grootste moment op het M-κ-diagram bij deze normaalkracht. Er is dus GEEN \
              gesloten formule: de uitkomst komt uit een iteratie. Wat hieronder navertelbaar \
              wordt gemaakt, is de doorsnedetoestand waarin die iteratie eindigt — de \
              rekverdeling, de drukzonehoogte, de spanning per wapeningslaag en het evenwicht \
-             dat daarop sluit.",
-    }
-    .to_string());
+             dat daarop sluit."
+            }
+        }
+        .to_string(),
+    );
     notes.push(format!(
         "Tekenafspraak. Aan de buitengrens geldt de conventie van de krachtsverdeling: N_Ed \
          positief is TREK, M_y,Ed positief is trek in de onderste vezel. Inwendig rekent de \
@@ -336,7 +345,11 @@ fn uitgangspunten(g: &Betongegevens, route: Route) -> Deelstap {
             vorm = g.section.shape.label(),
             bf = nl(g.section.b_mm, 0),
             hf = nl(g.section.h_f_mm(), 0),
-            kant = if g.section.flange_on_top() { "bovenzijde" } else { "onderzijde" },
+            kant = if g.section.flange_on_top() {
+                "bovenzijde"
+            } else {
+                "onderzijde"
+            },
             bw = nl(g.section.b_w_mm(), 0),
         ));
     }
@@ -516,7 +529,11 @@ fn nuttige_hoogte_stap(g: &Betongegevens) -> Option<Deelstap> {
     // moment de bovenwapening — tenzij die rij leeg is; het label van de laag
     // zegt het zonder gissen.
     let uit_onder = leg.label.starts_with("onder");
-    let rij = if uit_onder { &g.cage.bottom } else { &g.cage.top };
+    let rij = if uit_onder {
+        &g.cage.bottom
+    } else {
+        &g.cage.top
+    };
     let offset = g.cage.axis_offset_mm(rij);
     // Ligt de trekwapening aan de tegenoverliggende rand, dan is d = h − offset;
     // ligt zij aan de gedrukte rand zelf (een korf met maar één rij, aan de
@@ -543,11 +560,18 @@ fn nuttige_hoogte_stap(g: &Betongegevens) -> Option<Deelstap> {
          De staven van één rij liggen in deze berekening op één lijn, op de hoogte van hun \
          gezamenlijke zwaartepunt; een korf met staven in twee lagen boven elkaar wordt dus \
          niet als zodanig gerekend.",
-        if uit_onder { "onderwapening" } else { "bovenwapening" },
+        if uit_onder {
+            "onderwapening"
+        } else {
+            "bovenwapening"
+        },
         g.gedrukte_rand()
     ));
     if g.layers.len() > 1 {
-        let druk = g.layers.iter().min_by(|a, b| g.diepte(a).total_cmp(&g.diepte(b)));
+        let druk = g
+            .layers
+            .iter()
+            .min_by(|a, b| g.diepte(a).total_cmp(&g.diepte(b)));
         if let Some(dl) = druk {
             // Bij twee lagen is de andere laag DE andere; bij een kolomkorf met
             // zijstaven zijn het er meer, en dan mag deze regel niet doen alsof
@@ -630,10 +654,7 @@ fn nuttige_hoogte_stap(g: &Betongegevens) -> Option<Deelstap> {
 
 /// De volledige afleiding van de buigtoets met de rechthoekige
 /// spanningsverdeling, in de volgorde waarin het rapport haar toont.
-pub(crate) fn spanningsblok_deelstappen(
-    g: &Betongegevens,
-    r: &StressBlockResult,
-) -> Vec<Deelstap> {
+pub(crate) fn spanningsblok_deelstappen(g: &Betongegevens, r: &StressBlockResult) -> Vec<Deelstap> {
     let mut uit = Vec::with_capacity(11);
     uit.push(uitgangspunten(g, Route::Spanningsblok));
     uit.push(f_cd_stap(g));
@@ -718,7 +739,13 @@ fn evenwicht_stap(g: &Betongegevens, r: &StressBlockResult) -> Deelstap {
         .layers
         .iter()
         .enumerate()
-        .map(|(i, l)| format!(r"{a}\,\sigma_{{s,{n}}}(x)", a = lx(l.area_mm2, 2), n = i + 1))
+        .map(|(i, l)| {
+            format!(
+                r"{a}\,\sigma_{{s,{n}}}(x)",
+                a = lx(l.area_mm2, 2),
+                n = i + 1
+            )
+        })
         .collect();
 
     let mut notes = vec![
@@ -805,7 +832,11 @@ fn evenwicht_stap(g: &Betongegevens, r: &StressBlockResult) -> Deelstap {
         }
     }
 
-    let staaltermen = if termen.is_empty() { "0".to_string() } else { termen.join(" + ") };
+    let staaltermen = if termen.is_empty() {
+        "0".to_string()
+    } else {
+        termen.join(" + ")
+    };
     // Twee schrijfwijzen van dezelfde vergelijking. Welke er staat, hangt af
     // van wat de toets werkelijk heeft gedaan: b·λ·x als het blok één breedte
     // ziet, en A_c(λ·x) als het over een bandgrens loopt.
@@ -996,10 +1027,7 @@ fn rekverdeling_stap(g: &Betongegevens, r: &StressBlockResult) -> Deelstap {
     );
 
     // Bezwijkt het staal eerder dan het beton? Dat toetst deze route niet.
-    let eps_trek_max = r
-        .layers
-        .iter()
-        .fold(0.0_f64, |acc, l| acc.max(-l.eps));
+    let eps_trek_max = r.layers.iter().fold(0.0_f64, |acc, l| acc.max(-l.eps));
     if eps_trek_max > m.steel.eps_ud {
         notes.push(format!(
             "EEN GRENS DIE DEZE ROUTE NIET BEWAAKT. De trekrek in de wapening komt op {} ‰ uit, \
@@ -1222,7 +1250,10 @@ fn wapeningskrachten_stap(g: &Betongegevens, r: &StressBlockResult) -> Deelstap 
             z = nl(l.z_m * 1e3, 1),
         ));
     }
-    if r.layers.iter().any(|l| l.f_kn > 0.0 && l.sigma > 435.0 + 1e-9) {
+    if r.layers
+        .iter()
+        .any(|l| l.f_kn > 0.0 && l.sigma > 435.0 + 1e-9)
+    {
         notes.push(
             "LET OP: een laag in de drukzone staat op meer dan 435 N/mm². De door A1/NB \
              gewijzigde vijfde opsommingsregel van 6.1(2)P laat voor de drukspanning in \
@@ -1354,7 +1385,11 @@ fn m_rd_stap(g: &Betongegevens, r: &StressBlockResult) -> Deelstap {
     )];
     let mut staaltekst = String::new();
     for l in &r.layers {
-        termen.push(format!(r"{f} \cdot {z}", f = lxh(l.f_kn, 2), z = lxh(l.z_m, 4)));
+        termen.push(format!(
+            r"{f} \cdot {z}",
+            f = lxh(l.f_kn, 2),
+            z = lxh(l.z_m, 4)
+        ));
         staaltekst.push_str(&format!(
             "{} levert {} · {} = {} kNm; ",
             l.label,
@@ -1417,7 +1452,11 @@ fn m_rd_stap(g: &Betongegevens, r: &StressBlockResult) -> Deelstap {
 /// hem heeft opgetild — en wat de breuk wel en niet betekent. Dat staat nergens
 /// anders in het rapport.
 fn unity_check_stap(g: &Betongegevens, m_rd_knm: f64, verhoogd_door_e0: Option<f64>) -> Deelstap {
-    let uc = if m_rd_knm > 0.0 { g.m_ed_knm / m_rd_knm } else { f64::INFINITY };
+    let uc = if m_rd_knm > 0.0 {
+        g.m_ed_knm / m_rd_knm
+    } else {
+        f64::INFINITY
+    };
     let mut notes = vec![format!(
         "M_Ed is de grootste waarde uit de omhullende van de UGT-combinaties op deze staaf, in \
          absolute waarde genomen: |M_y,Ed| = {} kNm. M_Rd is de momentweerstand BIJ DE \
@@ -1471,7 +1510,11 @@ fn unity_check_stap(g: &Betongegevens, m_rd_knm: f64, verhoogd_door_e0: Option<f
 /// Een toets die niet doorgaat verdient evengoed een verantwoording: de lezer
 /// moet kunnen zien wat er is geprobeerd en waarom het strandde.
 pub(crate) fn spanningsblok_afgebroken(g: &Betongegevens, reden: &str) -> Vec<Deelstap> {
-    let mut uit = vec![uitgangspunten(g, Route::Spanningsblok), f_cd_stap(g), f_yd_stap(g)];
+    let mut uit = vec![
+        uitgangspunten(g, Route::Spanningsblok),
+        f_cd_stap(g),
+        f_yd_stap(g),
+    ];
     uit.extend(nuttige_hoogte_stap(g));
     uit.push(stap(
         "geen_evenwicht",
@@ -1480,7 +1523,10 @@ pub(crate) fn spanningsblok_afgebroken(g: &Betongegevens, reden: &str) -> Vec<De
         "art. 6.1(3)P, figuur 6.1",
         String::new(),
         String::new(),
-        vec![nv("N_{Ed}", g.n_ed_kn, "kN"), nv("M_{y,Ed}", g.m_y_ed_knm, "kNm")],
+        vec![
+            nv("N_{Ed}", g.n_ed_kn, "kN"),
+            nv("M_{y,Ed}", g.m_y_ed_knm, "kNm"),
+        ],
         None,
         "",
         vec![
@@ -1536,7 +1582,11 @@ pub(crate) fn mn_kappa_deelstappen(
 
 /// De afleiding als er bij κ = 0 al geen evenwicht is.
 pub(crate) fn mn_kappa_afgebroken(g: &Betongegevens, n_rd_kn: f64, reden: String) -> Vec<Deelstap> {
-    let mut uit = vec![uitgangspunten(g, Route::MnKappa), f_cd_stap(g), f_yd_stap(g)];
+    let mut uit = vec![
+        uitgangspunten(g, Route::MnKappa),
+        f_cd_stap(g),
+        f_yd_stap(g),
+    ];
     uit.push(betondiagram_stap(g));
     uit.push(stap(
         "geen_evenwicht",
@@ -1610,7 +1660,14 @@ fn doorsnedetoestand_bij_bezwijken(
     } else {
         g.layers
     };
-    solve_state(g.section, lagen, g.mat, g.n_ed_kn, diagram.kappa_u_per_m, opts)
+    solve_state(
+        g.section,
+        lagen,
+        g.mat,
+        g.n_ed_kn,
+        diagram.kappa_u_per_m,
+        opts,
+    )
 }
 
 /// De twee spanning-rekrelaties waarmee deze route rekent.
@@ -2032,8 +2089,22 @@ fn bezwijktoestand_stap(
                  maar met {} % toeneemt.",
                 nl(ky * 1e3, 2),
                 nl(my, 2),
-                nl(if ky > 0.0 { diagram.kappa_u_per_m / ky } else { f64::NAN }, 1),
-                nl(if my > 0.0 { 100.0 * (diagram.m_u_knm / my - 1.0) } else { f64::NAN }, 1)
+                nl(
+                    if ky > 0.0 {
+                        diagram.kappa_u_per_m / ky
+                    } else {
+                        f64::NAN
+                    },
+                    1
+                ),
+                nl(
+                    if my > 0.0 {
+                        100.0 * (diagram.m_u_knm / my - 1.0)
+                    } else {
+                        f64::NAN
+                    },
+                    1
+                )
             ));
         } else {
             notes.push(
@@ -2194,8 +2265,14 @@ mod tests {
             ReinforcementCage {
                 cover_mm: 30.0,
                 stirrup_diameter_mm: 8.0,
-                top: RebarRow { count: 2, diameter_mm: 12.0 },
-                bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+                top: RebarRow {
+                    count: 2,
+                    diameter_mm: 12.0,
+                },
+                bottom: RebarRow {
+                    count: 3,
+                    diameter_mm: 16.0,
+                },
                 ..ReinforcementCage::default()
             },
             DesignMaterial::new(
@@ -2245,7 +2322,10 @@ mod tests {
             "hefboomsarm",
             "m_rd",
         ] {
-            let d = stappen.iter().find(|d| d.id == id).unwrap_or_else(|| panic!("stap {id} ontbreekt"));
+            let d = stappen
+                .iter()
+                .find(|d| d.id == id)
+                .unwrap_or_else(|| panic!("stap {id} ontbreekt"));
             assert!(!d.article.is_empty(), "stap {id} zonder vindplaats");
             assert!(!d.titel.is_empty(), "stap {id} zonder titel");
         }
@@ -2285,22 +2365,40 @@ mod tests {
         let lagen = k.layers(s.h_mm);
         let r = stress_block(&s, &lagen, &m, 0.0, 1.0).unwrap();
         let g = Betongegevens {
-            section: &s, cage: &k, mat: &m, layers: &lagen,
-            sign: 1.0, n_ed_kn: 0.0, m_ed_knm: 100.0, m_y_ed_knm: 100.0,
+            section: &s,
+            cage: &k,
+            mat: &m,
+            layers: &lagen,
+            sign: 1.0,
+            n_ed_kn: 0.0,
+            m_ed_knm: 100.0,
+            m_y_ed_knm: 100.0,
         };
         assert!(klassieke_x(&g, &r).is_none());
 
         // Zonder drukwapening en zonder normaalkracht: wél.
-        k.top = RebarRow { count: 0, diameter_mm: 12.0 };
+        k.top = RebarRow {
+            count: 0,
+            diameter_mm: 12.0,
+        };
         let lagen = k.layers(s.h_mm);
         let r = stress_block(&s, &lagen, &m, 0.0, 1.0).unwrap();
         let g = Betongegevens {
-            section: &s, cage: &k, mat: &m, layers: &lagen,
-            sign: 1.0, n_ed_kn: 0.0, m_ed_knm: 100.0, m_y_ed_knm: 100.0,
+            section: &s,
+            cage: &k,
+            mat: &m,
+            layers: &lagen,
+            sign: 1.0,
+            n_ed_kn: 0.0,
+            m_ed_knm: 100.0,
+            m_y_ed_knm: 100.0,
         };
         let (x, a_s, b_blok) = klassieke_x(&g, &r).expect("gesloten vorm hoort hier te gelden");
         assert_eq!(a_s, k.a_s_bottom_mm2());
-        assert_eq!(b_blok, s.b_mm, "bij een rechthoek is de blokbreedte gewoon b");
+        assert_eq!(
+            b_blok, s.b_mm,
+            "bij een rechthoek is de blokbreedte gewoon b"
+        );
         // Niet exact gelijk en dat hoort ook niet: de kern vindt x met bisectie
         // en stopt bij een intervalbreedte van 10⁻¹⁰·h, dus ongeveer 5·10⁻⁸ mm.
         // De gesloten vorm mag daar niet meer dan die zoekfout van afwijken —
@@ -2314,8 +2412,14 @@ mod tests {
         // Met normaalkracht: niet meer.
         let r_n = stress_block(&s, &lagen, &m, -200.0, 1.0).unwrap();
         let g_n = Betongegevens {
-            section: &s, cage: &k, mat: &m, layers: &lagen,
-            sign: 1.0, n_ed_kn: -200.0, m_ed_knm: 100.0, m_y_ed_knm: 100.0,
+            section: &s,
+            cage: &k,
+            mat: &m,
+            layers: &lagen,
+            sign: 1.0,
+            n_ed_kn: -200.0,
+            m_ed_knm: 100.0,
+            m_y_ed_knm: 100.0,
         };
         assert!(klassieke_x(&g_n, &r_n).is_none());
     }
@@ -2330,11 +2434,20 @@ mod tests {
         for sign in [1.0_f64, -1.0] {
             let diagram = mn_kappa_diagram(&s, &lagen, &m, 0.0, sign, &o);
             let g = Betongegevens {
-                section: &s, cage: &k, mat: &m, layers: &lagen,
-                sign, n_ed_kn: 0.0, m_ed_knm: 50.0, m_y_ed_knm: 50.0 * sign,
+                section: &s,
+                cage: &k,
+                mat: &m,
+                layers: &lagen,
+                sign,
+                n_ed_kn: 0.0,
+                m_ed_knm: 50.0,
+                m_y_ed_knm: 50.0 * sign,
             };
             let t = doorsnedetoestand_bij_bezwijken(&g, &diagram, &o).expect("toestand");
-            assert_eq!(t.m_knm, diagram.m_u_knm, "moment bij bezwijken, teken {sign}");
+            assert_eq!(
+                t.m_knm, diagram.m_u_knm,
+                "moment bij bezwijken, teken {sign}"
+            );
             assert_eq!(t.x_mm.unwrap_or(0.0), diagram.x_u_mm, "x_u, teken {sign}");
             assert_eq!(t.kappa_per_m, diagram.kappa_u_per_m, "κ_u, teken {sign}");
         }
@@ -2349,8 +2462,14 @@ mod tests {
         let diagram = mn_kappa_diagram(&s, &lagen, &m, 0.0, 1.0, &o);
         assert_eq!(diagram.m_max_knm, 113.12286139035288);
         let g = Betongegevens {
-            section: &s, cage: &k, mat: &m, layers: &lagen,
-            sign: 1.0, n_ed_kn: 0.0, m_ed_knm: 100.0, m_y_ed_knm: 100.0,
+            section: &s,
+            cage: &k,
+            mat: &m,
+            layers: &lagen,
+            sign: 1.0,
+            n_ed_kn: 0.0,
+            m_ed_knm: 100.0,
+            m_y_ed_knm: 100.0,
         };
         let stappen = mn_kappa_deelstappen(&g, &diagram, &o, None);
         let m_rd = stappen.iter().find(|d| d.id == "m_rd_max").unwrap();
@@ -2368,7 +2487,10 @@ mod tests {
             "m_rd_max",
             "unity_check",
         ] {
-            let d = stappen.iter().find(|d| d.id == id).unwrap_or_else(|| panic!("stap {id} ontbreekt"));
+            let d = stappen
+                .iter()
+                .find(|d| d.id == id)
+                .unwrap_or_else(|| panic!("stap {id} ontbreekt"));
             assert!(!d.article.is_empty(), "stap {id} zonder vindplaats");
         }
     }
@@ -2382,8 +2504,14 @@ mod tests {
         let r = stress_block(&s, &lagen, &m, 0.0, 1.0).unwrap();
         let diagram = mn_kappa_diagram(&s, &lagen, &m, 0.0, 1.0, &o);
         let g = Betongegevens {
-            section: &s, cage: &k, mat: &m, layers: &lagen,
-            sign: 1.0, n_ed_kn: 0.0, m_ed_knm: 100.0, m_y_ed_knm: 100.0,
+            section: &s,
+            cage: &k,
+            mat: &m,
+            layers: &lagen,
+            sign: 1.0,
+            n_ed_kn: 0.0,
+            m_ed_knm: 100.0,
+            m_y_ed_knm: 100.0,
         };
         for d in spanningsblok_deelstappen(&g, &r)
             .iter()

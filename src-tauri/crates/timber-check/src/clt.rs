@@ -262,7 +262,11 @@ where
     F: Fn(&InternalForces) -> f64,
 {
     if env.is_empty() {
-        return ForcePoint { combination_id: 0, position_mm: 0.0, forces: Default::default() };
+        return ForcePoint {
+            combination_id: 0,
+            position_mm: 0.0,
+            forces: Default::default(),
+        };
     }
     let mut best = env[0];
     let mut best_score = score(&best.forces);
@@ -278,8 +282,12 @@ where
 
 fn uc_of(c: &NamedCheck) -> Option<f64> {
     match &c.kind {
-        CheckKind::Resistance(r) if !matches!(r.status, CheckStatus::NotApplicable) => r.uc.as_ref().map(|u| u.uc),
-        CheckKind::Stability(s) if !matches!(s.status, CheckStatus::NotApplicable) => s.uc.as_ref().map(|u| u.uc),
+        CheckKind::Resistance(r) if !matches!(r.status, CheckStatus::NotApplicable) => {
+            r.uc.as_ref().map(|u| u.uc)
+        }
+        CheckKind::Stability(s) if !matches!(s.status, CheckStatus::NotApplicable) => {
+            s.uc.as_ref().map(|u| u.uc)
+        }
         _ => None,
     }
 }
@@ -340,7 +348,10 @@ fn doorbuiging_niet_getoetst(id: &str, titel: &str, reden: &str) -> NamedCheck {
         status: CheckStatus::NotApplicable,
         notes: vec![format!("Niet getoetst: {reden}")],
     };
-    NamedCheck { id: calc.id.clone(), kind: CheckKind::Resistance(calc) }
+    NamedCheck {
+        id: calc.id.clone(),
+        kind: CheckKind::Resistance(calc),
+    }
 }
 
 /// w_fin en w_add van een CLT-plaatstrook (§7.2 + NB), of twee weigeringen
@@ -373,8 +384,14 @@ fn doorbuiging_toetsen(input: &CltBeamCheckInput) -> Vec<NamedCheck> {
             ));
             fin.notes.extend(input.deflection_notes.iter().cloned());
             vec![
-                NamedCheck { id: fin.id.clone(), kind: CheckKind::Resistance(fin) },
-                NamedCheck { id: add.id.clone(), kind: CheckKind::Resistance(add) },
+                NamedCheck {
+                    id: fin.id.clone(),
+                    kind: CheckKind::Resistance(fin),
+                },
+                NamedCheck {
+                    id: add.id.clone(),
+                    kind: CheckKind::Resistance(add),
+                },
             ]
         }
     }
@@ -458,14 +475,23 @@ fn lagen_toetsen(
                 let uc_v = v.uc.as_ref().map(|u| u.uc);
                 ids.push(b.id.clone());
                 ids.push(v.id.clone());
-                checks.push(NamedCheck { id: b.id.clone(), kind: CheckKind::Resistance(b) });
-                checks.push(NamedCheck { id: v.id.clone(), kind: CheckKind::Resistance(v) });
+                checks.push(NamedCheck {
+                    id: b.id.clone(),
+                    kind: CheckKind::Resistance(b),
+                });
+                checks.push(NamedCheck {
+                    id: v.id.clone(),
+                    kind: CheckKind::Resistance(v),
+                });
                 (f_md, f_vd, uc_b, uc_v)
             }
             CltLayerOrientation::Transverse => {
                 let r = rolling_shear_info(mech, l.index, input.k_cr, shear_state);
                 ids.push(r.id.clone());
-                checks.push(NamedCheck { id: r.id.clone(), kind: CheckKind::Resistance(r) });
+                checks.push(NamedCheck {
+                    id: r.id.clone(),
+                    kind: CheckKind::Resistance(r),
+                });
                 (0.0, 0.0, None, None)
             }
         };
@@ -508,7 +534,11 @@ struct PerKlasse {
 /// hij de grootste spanning toont. Bij gelijkstand wint de langste klasse.
 /// De regel per lamel volgt dezelfde keuze: buigspanning en f_m,d uit de klasse
 /// van de buigtoets, schuifspanning en f_v,d uit die van de dwarskrachttoets.
-fn toets_per_klasse(input: &CltBeamCheckInput, mech: &CltMechanics, groepen: &[Groep]) -> PerKlasse {
+fn toets_per_klasse(
+    input: &CltBeamCheckInput,
+    mech: &CltMechanics,
+    groepen: &[Groep],
+) -> PerKlasse {
     let service = input.service_class;
     // k_mod hangt in tabel 3.1 niet van het materiaaltype af; de klasse van de
     // eerste lengtelaag volstaat voor de regel in het rapport.
@@ -518,9 +548,14 @@ fn toets_per_klasse(input: &CltBeamCheckInput, mech: &CltMechanics, groepen: &[G
         .find(|l| l.orientation == CltLayerOrientation::Longitudinal)
         .map(|l| l.class.timber_type)
         .unwrap_or(mech.layers[0].class.timber_type);
-    let kmods: Vec<f64> = groepen.iter().map(|g| k_mod(type_voor_kmod, service, g.duur)).collect();
-    let uitkomsten: Vec<(Vec<NamedCheck>, Vec<CltLayerResult>)> =
-        groepen.iter().map(|g| lagen_toetsen(input, mech, &g.punten, g.duur)).collect();
+    let kmods: Vec<f64> = groepen
+        .iter()
+        .map(|g| k_mod(type_voor_kmod, service, g.duur))
+        .collect();
+    let uitkomsten: Vec<(Vec<NamedCheck>, Vec<CltLayerResult>)> = groepen
+        .iter()
+        .map(|g| lagen_toetsen(input, mech, &g.punten, g.duur))
+        .collect();
 
     let n = uitkomsten[0].0.len();
     let mut gekozen_klasse: Vec<usize> = Vec::with_capacity(n);
@@ -614,7 +649,13 @@ fn toets_per_klasse(input: &CltBeamCheckInput, mech: &CltMechanics, groepen: &[G
         Some((u, gi, combinatie)) if u > 0.0 => (Some(combinatie), groepen[gi].duur),
         _ => (None, groepen[0].duur),
     };
-    PerKlasse { checks, layers, k_mod_per_load_duration, governing_combination_id, maatgevende_duur }
+    PerKlasse {
+        checks,
+        layers,
+        k_mod_per_load_duration,
+        governing_combination_id,
+        maatgevende_duur,
+    }
 }
 
 pub fn check_clt_beam(input: CltBeamCheckInput) -> CltBeamCheckResult {
@@ -643,12 +684,19 @@ pub fn check_clt_beam(input: CltBeamCheckInput) -> CltBeamCheckResult {
     let (mut checks, mut layers, k_mod_per_load_duration, governing_combination_id, load_duration) =
         match &groepen {
             None => {
-                let (c, l) = lagen_toetsen(&input, &mech, &input.forces_envelope, input.load_duration);
+                let (c, l) =
+                    lagen_toetsen(&input, &mech, &input.forces_envelope, input.load_duration);
                 (c, l, Vec::new(), None, input.load_duration)
             }
             Some(g) => {
                 let pk = toets_per_klasse(&input, &mech, g);
-                (pk.checks, pk.layers, pk.k_mod_per_load_duration, pk.governing_combination_id, pk.maatgevende_duur)
+                (
+                    pk.checks,
+                    pk.layers,
+                    pk.k_mod_per_load_duration,
+                    pk.governing_combination_id,
+                    pk.maatgevende_duur,
+                )
             }
         };
 
@@ -671,7 +719,8 @@ pub fn check_clt_beam(input: CltBeamCheckInput) -> CltBeamCheckResult {
     }
     let mut governing_layer = None;
     for lr in &mut layers {
-        if !governing_check_id.is_empty() && lr.check_ids.iter().any(|id| *id == governing_check_id) {
+        if !governing_check_id.is_empty() && lr.check_ids.iter().any(|id| *id == governing_check_id)
+        {
             lr.governing = true;
             governing_layer = Some(lr.index);
         }
@@ -685,7 +734,11 @@ pub fn check_clt_beam(input: CltBeamCheckInput) -> CltBeamCheckResult {
     };
 
     // Notities: methode, aannamen en wat niet is meegenomen.
-    let slenderness = if mech.height_mm > 0.0 { input.length_m * 1e3 / mech.height_mm } else { 0.0 };
+    let slenderness = if mech.height_mm > 0.0 {
+        input.length_m * 1e3 / mech.height_mm
+    } else {
+        0.0
+    };
     let mut notes = vec![
         "Methode: samengestelde doorsnede met starre verbinding — bijlage B met γ_i = 1: alleen de lengtelagen dragen in de spanrichting (E = E_0,mean), dwarslagen vormen de schuifverbinding (E = 0). Spanningen lineair per laag: σ_i = E_i·M·(z − z_0)/(EI)_ef; τ = V·(ES)/((EI)_ef·b_ef).".to_string(),
         format!(
@@ -715,7 +768,11 @@ pub fn check_clt_beam(input: CltBeamCheckInput) -> CltBeamCheckResult {
                     "{} (k_mod {}): combinatie {}",
                     duurklasse_naam(k.load_duration),
                     nl(k.k_mod, 2),
-                    k.combination_ids.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")
+                    k.combination_ids
+                        .iter()
+                        .map(|i| i.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 )
             })
             .collect();
@@ -811,7 +868,11 @@ mod tests {
         ForcePoint {
             combination_id: 1,
             position_mm: x_mm,
-            forces: InternalForces { vz_ed: v, my_ed: my, ..Default::default() },
+            forces: InternalForces {
+                vz_ed: v,
+                my_ed: my,
+                ..Default::default()
+            },
         }
     }
 
@@ -826,7 +887,11 @@ mod tests {
             load_duration: LoadDurationClass::MediumTerm,
             load_duration_per_combination: vec![],
             length_m: 5.0,
-            forces_envelope: vec![punt(0.0, 10.0, 0.0), punt(2500.0, 0.0, 20.0), punt(5000.0, -10.0, 0.0)],
+            forces_envelope: vec![
+                punt(0.0, 10.0, 0.0),
+                punt(2500.0, 0.0, 20.0),
+                punt(5000.0, -10.0, 0.0),
+            ],
             k_cr: 1.0,
             load_sharing: false,
             // Zonder k_def geen doorbuigingstoets: de twee regels komen als
@@ -859,7 +924,10 @@ mod tests {
             .collect();
         assert_eq!(doorbuiging.len(), 2);
         for c in &doorbuiging {
-            assert!(uc_of(c).is_none(), "zonder k_def telt de doorbuiging niet mee in uc_max");
+            assert!(
+                uc_of(c).is_none(),
+                "zonder k_def telt de doorbuiging niet mee in uc_max"
+            );
         }
         assert_eq!(r.layup.layers.len(), 5);
         assert_relative_eq!(r.layup.ei_ef_knm2, 3344.0, max_relative = 1e-9);
@@ -872,7 +940,10 @@ mod tests {
         assert!(r.layup.layers[0].governing);
         assert!(!r.layup.layers[4].governing);
         assert_eq!(r.status, CheckStatus::Ok);
-        assert_eq!(r.section_name, "CLT 40/20/40/20/40 (h = 160 mm, b = 1000 mm)");
+        assert_eq!(
+            r.section_name,
+            "CLT 40/20/40/20/40 (h = 160 mm, b = 1000 mm)"
+        );
         assert_eq!(r.strength_class, "C24");
         // Per laag: rekenwaarden en spanningen.
         let l1 = &r.layup.layers[0];
@@ -908,7 +979,10 @@ mod tests {
         assert_eq!(r.status, CheckStatus::NotOk);
         assert!(r.uc_max > 1.0);
         assert_eq!(r.layup.governing_layer, Some(1));
-        assert!(r.layup.layers[0].sigma_top_mpa > 0.0, "trek boven bij negatief moment");
+        assert!(
+            r.layup.layers[0].sigma_top_mpa > 0.0,
+            "trek boven bij negatief moment"
+        );
     }
 
     #[test]
@@ -918,10 +992,16 @@ mod tests {
         i.forces_envelope.push(ForcePoint {
             combination_id: 1,
             position_mm: 1000.0,
-            forces: InternalForces { n_ed: -15.0, ..Default::default() },
+            forces: InternalForces {
+                n_ed: -15.0,
+                ..Default::default()
+            },
         });
         let r = check_clt_beam(i);
-        assert!(r.notes.iter().any(|n| n.contains("L/h = 12,5") || n.contains("L/h = 12.5")));
+        assert!(r
+            .notes
+            .iter()
+            .any(|n| n.contains("L/h = 12,5") || n.contains("L/h = 12.5")));
         assert!(r.notes.iter().any(|n| n.contains("Normaalkracht")));
     }
 
@@ -940,8 +1020,17 @@ mod tests {
         let r = check_clt_beam(invoer());
         let json = serde_json::to_value(&r).unwrap();
         for veld in [
-            "beam_id", "section_name", "strength_class", "service_class", "load_duration",
-            "checks", "uc_max", "status", "governing_check_id", "layup", "notes",
+            "beam_id",
+            "section_name",
+            "strength_class",
+            "service_class",
+            "load_duration",
+            "checks",
+            "uc_max",
+            "status",
+            "governing_check_id",
+            "layup",
+            "notes",
         ] {
             assert!(json.get(veld).is_some(), "veld {veld} ontbreekt");
         }

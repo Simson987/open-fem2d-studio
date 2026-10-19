@@ -275,6 +275,15 @@ const rollerModel = {
   ],
 };
 addFrame3DConditionMarkers(rollerOnly, rollerModel, { supports: true, loads: false });
+const enlargedRollers = new THREE.Group();
+addFrame3DConditionMarkers(enlargedRollers, rollerModel, { supports: true, loads: false }, undefined, 2);
+const normalCone = rollerOnly.children.find((child) => child.userData.id === 1 && child.geometry?.type === "ConeGeometry");
+const enlargedCone = enlargedRollers.children.find((child) => child.userData.id === 1 && child.geometry?.type === "ConeGeometry");
+assert.equal(enlargedCone.geometry.parameters.radius, normalCone.geometry.parameters.radius * 2,
+  "support scale changes the visible support geometry");
+assert.equal(enlargedCone.position.distanceTo(rollerModel.nodes[0]),
+  normalCone.position.distanceTo(rollerModel.nodes[0]) * 2,
+  "support scale also changes the symbol offset from its node");
 for (const [nodeId, expectedAxis] of [[1, new THREE.Vector3(1, 0, 0)], [2, new THREE.Vector3(0, 1, 0)], [3, new THREE.Vector3(0, 0, 1)]]) {
   const cone = rollerOnly.children.find((child) => child.userData.id === nodeId && child.geometry?.type === "ConeGeometry");
   assert.ok(cone, `rol ${nodeId} heeft een zichtbaar 3D-kegelsymbool`);

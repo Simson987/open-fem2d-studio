@@ -40,7 +40,7 @@
 // Draaien met: npx tsx test-clt-doorbuiging.mjs
 //         of : node scripts/run-tests.mjs --filter=clt-doorbuiging
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -107,12 +107,23 @@ function bouw(m) {
   });
 }
 
-function kern(inputs) {
-  const r = spawnSync(TOETSBRUG, [], {
-    input: JSON.stringify({ opdracht: "check_clt_beams", inputs }), encoding: "utf8", maxBuffer: 256 << 20,
+async function kern(inputs) {
+  const antwoord = await new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code !== 0) reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+      else resolve(out);
+    });
+    child.stdin.end(JSON.stringify({ opdracht: "check_clt_beams", inputs }));
   });
-  if (r.status !== 0 || !r.stdout) throw new Error(`toetsbrug faalde: ${(r.stderr ?? "").slice(0, 300)}`);
-  const uit = JSON.parse(r.stdout);
+  const uit = JSON.parse(antwoord);
   if (uit.fout) throw new Error(uit.fout);
   return uit;
 }
@@ -145,7 +156,7 @@ if (heeftKern && metKdef && zonderKdef) {
   // ─────────────────────────────────────────────────────────────────────────
   log("\n[2] De kern MET k_def");
   // ─────────────────────────────────────────────────────────────────────────
-  const r = kern([metKdef])[0];
+  const r = (await kern([metKdef]))[0];
   const fin = toets(r, "deflection_w_fin"), add = toets(r, "deflection_w_add");
   ok("w_fin en w_add aanwezig", fin !== undefined && add !== undefined);
   if (fin && add) {
@@ -164,7 +175,7 @@ if (heeftKern && metKdef && zonderKdef) {
   // ─────────────────────────────────────────────────────────────────────────
   log("\n[3] De kern ZONDER k_def: weigering met reden");
   // ─────────────────────────────────────────────────────────────────────────
-  const z = kern([zonderKdef])[0];
+  const z = (await kern([zonderKdef]))[0];
   const zf = toets(z, "deflection_w_fin"), za = toets(z, "deflection_w_add");
   ok("w_fin en w_add staan er, niet weggelaten", zf !== undefined && za !== undefined);
   ok("beide 'niet van toepassing'", zf?.status === "NotApplicable" && za?.status === "NotApplicable");
@@ -182,11 +193,11 @@ if (heeftKern && metKdef && zonderKdef) {
   // ─────────────────────────────────────────────────────────────────────────
   log("\n[4] k_def zonder bron, en een negatieve k_def");
   // ─────────────────────────────────────────────────────────────────────────
-  const geenBron = kern([{ ...metKdef, k_def_bron: "   " }])[0];
+  const geenBron = (await kern([{ ...metKdef, k_def_bron: "   " }]))[0];
   ok("zonder bron: niet van toepassing, reden noemt de bron",
     toets(geenBron, "deflection_w_fin")?.status === "NotApplicable" &&
     toets(geenBron, "deflection_w_fin").notes.some((n) => /bron ervan niet/.test(n)));
-  const negatief = kern([{ ...metKdef, k_def: -0.2 }])[0];
+  const negatief = (await kern([{ ...metKdef, k_def: -0.2 }]))[0];
   ok("negatieve k_def: niet van toepassing met reden",
     toets(negatief, "deflection_w_fin")?.status === "NotApplicable" &&
     toets(negatief, "deflection_w_fin").notes.some((n) => /geen bruikbare vervormingsfactor/.test(n)));
@@ -194,7 +205,7 @@ if (heeftKern && metKdef && zonderKdef) {
   // ─────────────────────────────────────────────────────────────────────────
   log("\n[5] k_def = 0 (geen kruip) mag");
   // ─────────────────────────────────────────────────────────────────────────
-  const nul = kern([{ ...metKdef, k_def: 0 }])[0];
+  const nul = (await kern([{ ...metKdef, k_def: 0 }]))[0];
   dicht("w_fin = w_inst", toets(nul, "deflection_w_fin")?.uc?.ed, wInst, 2e-3);
   dicht("w_add = w_inst − w₁", toets(nul, "deflection_w_add")?.uc?.ed, wInst - wPerm, 2e-3);
 }

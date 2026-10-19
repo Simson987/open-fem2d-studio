@@ -10,6 +10,7 @@ import {
   type SnapSoort,
 } from "../../hooks/useSnapInstellingen";
 import type { Frame3DVisibility } from "../frame3d/frame3dVisibility";
+import SupportScaleControl from "./SupportScaleControl";
 import {
   arrowIcon,
   barIcon,
@@ -120,6 +121,9 @@ export default function ExplorerViewTab({
         {row2d("staven", t("zichtbaarheid.staven"), barIcon, t("zichtbaarheid.stavenHint"))}
         {row2d("platen", t("zichtbaarheid.platen"), plateIcon, t("zichtbaarheid.platenHint"))}
         {row2d("opleggingen", t("zichtbaarheid.opleggingen"), bcPinnedIcon, t("zichtbaarheid.opleggingenHint"))}
+        {(matches(t("zichtbaarheid.opleggingen")) || matches(t("zichtbaarheid.supportScale"))) &&
+          <SupportScaleControl value={displayFlags.supportScale ?? 1}
+            onChange={(supportScale) => setDisplayFlags((flags) => ({ ...flags, supportScale }))} />}
         {row2d("belastingen", t("zichtbaarheid.belastingen"), loadPointIcon, t("zichtbaarheid.belastingenHint"))}
         {row2d("lastWaarden", t("zichtbaarheid.lastWaarden"), loadCasesIcon, t("zichtbaarheid.lastWaardenHint"), true)}
         {row2d("scharnieren", t("zichtbaarheid.scharnieren"), linkIcon, t("zichtbaarheid.scharnierenHint"))}
@@ -147,15 +151,18 @@ export default function ExplorerViewTab({
         {t("zichtbaarheid.view3d")}{workspace === "3d" ? ` · ${t("zichtbaarheid.activeWorkspace")}` : ""}
       </div>
       <div className="fem-results-toggle-list">
-        {(Object.keys(frame3dVisibility) as (keyof Frame3DVisibility)[]).filter((key) => matches(t(`frame3dVisibility.${key}`))).map((key) => (
+        {(Object.keys(frame3dVisibility).filter((key) => key !== "supportScale") as (keyof Omit<Frame3DVisibility, "supportScale">)[]).filter((key) => matches(key === "volumes" ? "Volume-elementen" : t(`frame3dVisibility.${key}`))).map((key) => (
           <ToggleRow
             key={key}
-            label={t(`frame3dVisibility.${key}`)}
+            label={key === "volumes" ? "Volume-elementen" : t(`frame3dVisibility.${key}`)}
             icon={FRAME_3D_ICONS[key]}
             value={frame3dVisibility[key]}
             onChange={(value) => setFrame3DVisibility({ ...frame3dVisibility, [key]: value })}
           />
         ))}
+        {(matches(t("frame3dVisibility.supports")) || matches(t("zichtbaarheid.supportScale"))) &&
+          <SupportScaleControl value={frame3dVisibility.supportScale ?? 1}
+            onChange={(supportScale) => setFrame3DVisibility({ ...frame3dVisibility, supportScale })} />}
       </div>
     </section>
   );
@@ -199,10 +206,11 @@ export default function ExplorerViewTab({
   );
 }
 
-const FRAME_3D_ICONS: Record<keyof Frame3DVisibility, string> = {
+const FRAME_3D_ICONS: Record<keyof Omit<Frame3DVisibility, "supportScale">, string> = {
   nodes: nodeIcon,
   beams: barIcon,
   plates: plateIcon,
+  volumes: plateIcon,
   profiles: sectionsIcon,
   nodeNumbers: tableNodesIcon,
   beamNumbers: tableElementsIcon,

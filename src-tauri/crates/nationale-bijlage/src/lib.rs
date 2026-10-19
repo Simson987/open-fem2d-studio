@@ -153,7 +153,10 @@ mod tests {
     #[test]
     fn een_niet_gevulde_bijlage_wordt_geweigerd_met_reden() {
         let fout = NationaleBijlage::uit_code("DE").unwrap_err();
-        assert!(fout.contains("nationale bijlage \"DE\" is niet gevuld"), "{fout}");
+        assert!(
+            fout.contains("nationale bijlage \"DE\" is niet gevuld"),
+            "{fout}"
+        );
         assert!(fout.contains("NL"), "{fout}");
         // Een tikfout in de code is óók een weigering, geen stille NL.
         assert!(NationaleBijlage::uit_code("nl").is_err());
@@ -165,7 +168,9 @@ mod tests {
     /// toetsinvoer, de toetsbrug en de MCP-server werkelijk nemen.
     #[test]
     fn json_weigert_een_niet_gevulde_bijlage() {
-        let fout = serde_json::from_str::<NationaleBijlage>("\"DE\"").unwrap_err().to_string();
+        let fout = serde_json::from_str::<NationaleBijlage>("\"DE\"")
+            .unwrap_err()
+            .to_string();
         assert!(fout.contains("niet gevuld"), "{fout}");
         let goed: NationaleBijlage = serde_json::from_str("\"NL\"").unwrap();
         assert_eq!(goed, NationaleBijlage::NL);

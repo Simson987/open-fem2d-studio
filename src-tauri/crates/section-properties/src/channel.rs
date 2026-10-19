@@ -125,7 +125,7 @@ pub fn channel_section_props_taps(
     let m0 = t0 * l - s * l * l / 2.0; // ∫t du       (oppervlak)
     let m1 = t0 * l * l / 2.0 - s * l.powi(3) / 3.0; // ∫u·t du
     let m2 = t0 * l.powi(3) / 3.0 - s * l.powi(4) / 4.0; // ∫u²·t du
-    // ∫t² du en ∫t³ du: gesloten vorm via substitutie w = t₀ − s·u.
+                                                         // ∫t² du en ∫t³ du: gesloten vorm via substitutie w = t₀ − s·u.
     let (it2, it3) = if s.abs() > 1e-12 {
         (
             (t0.powi(3) - t1.powi(3)) / (3.0 * s),
@@ -167,9 +167,7 @@ pub fn channel_section_props_taps(
     // Per flens: ∫[H³ − (H − t)³]/3 dy, met H = h/2.
     let iy_flens_blok = tw * (hh.powi(3) - (hh - t0).powi(3)) / 3.0;
     let iy_flens_taps = hh * hh * m0 - hh * it2 + it3 / 3.0;
-    let iy = 2.0 * (iy_flens_blok + iy_flens_taps)
-        + tw * hw.powi(3) / 12.0
-        + a_afr * z_afr * z_afr;
+    let iy = 2.0 * (iy_flens_blok + iy_flens_taps) + tw * hw.powi(3) / 12.0 + a_afr * z_afr * z_afr;
 
     let wel_y = iy / hh;
 
@@ -328,7 +326,11 @@ fn schrijf(c: ChannelRuw) -> SectionProperties {
         wel_y_top_mm3: c.wel_y,
         wel_y_bot_mm3: c.wel_y,
         wel_z_left_mm3: if c.y_c > 0.0 { c.iz / c.y_c } else { 0.0 },
-        wel_z_right_mm3: if c.b - c.y_c > 0.0 { c.iz / (c.b - c.y_c) } else { 0.0 },
+        wel_z_right_mm3: if c.b - c.y_c > 0.0 {
+            c.iz / (c.b - c.y_c)
+        } else {
+            0.0
+        },
         // De y-as is symmetrieas, dus Iyz = 0 en de hoofdassen vallen samen
         // met y en z.
         iyz_mm4: 0.0,
@@ -424,7 +426,11 @@ mod tests {
     #[test]
     fn dubbelsymmetrische_vormen_hebben_gelijke_vezels() {
         let ipe = i_section_props(300.0, 150.0, 7.1, 10.7, 15.0);
-        assert_relative_eq!(ipe.wel_z_left_mm3, ipe.wel_z_right_mm3, max_relative = 1e-12);
+        assert_relative_eq!(
+            ipe.wel_z_left_mm3,
+            ipe.wel_z_right_mm3,
+            max_relative = 1e-12
+        );
         assert_relative_eq!(ipe.wel_y_top_mm3, ipe.wel_y_bot_mm3, max_relative = 1e-12);
         assert_relative_eq!(ipe.y_c_mm, 75.0, max_relative = 1e-12);
         assert_relative_eq!(ipe.z_c_mm, 150.0, max_relative = 1e-12);
@@ -432,12 +438,20 @@ mod tests {
         assert_eq!(ipe.alpha_hoofdas_rad, 0.0);
 
         let shs = rhs_section_props(200.0, 200.0, 8.0, 12.0);
-        assert_relative_eq!(shs.wel_z_left_mm3, shs.wel_z_right_mm3, max_relative = 1e-12);
+        assert_relative_eq!(
+            shs.wel_z_left_mm3,
+            shs.wel_z_right_mm3,
+            max_relative = 1e-12
+        );
         assert_relative_eq!(shs.wel_y_top_mm3, shs.wel_y_bot_mm3, max_relative = 1e-12);
         assert_relative_eq!(shs.y_s_mm, shs.y_c_mm, max_relative = 1e-12);
 
         let rhs = rhs_section_props(200.0, 100.0, 8.0, 12.0);
-        assert_relative_eq!(rhs.wel_z_left_mm3, rhs.wel_z_right_mm3, max_relative = 1e-12);
+        assert_relative_eq!(
+            rhs.wel_z_left_mm3,
+            rhs.wel_z_right_mm3,
+            max_relative = 1e-12
+        );
         assert_relative_eq!(rhs.y_c_mm, 50.0, max_relative = 1e-12);
         assert_relative_eq!(rhs.z_c_mm, 100.0, max_relative = 1e-12);
     }

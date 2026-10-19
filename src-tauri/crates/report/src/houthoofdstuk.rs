@@ -325,7 +325,13 @@ struct Toetskrachten {
 
 impl Toetskrachten {
     fn van(r: &CltBeamCheckResult) -> Self {
-        let mut uit = Self { m_knm: 0.0, m_x_mm: None, v_kn: 0.0, v_x_mm: None, k_cr: 1.0 };
+        let mut uit = Self {
+            m_knm: 0.0,
+            m_x_mm: None,
+            v_kn: 0.0,
+            v_x_mm: None,
+            k_cr: 1.0,
+        };
         for c in &r.checks {
             let CheckKind::Resistance(res) = &c.kind else {
                 continue;
@@ -378,11 +384,7 @@ fn figuur_bijschrift(r: &CltBeamCheckResult, k: &Toetskrachten) -> String {
 /// velden, dus twee getallen uit één bron. τ wordt wél bemonsterd — een
 /// verloop over de hoogte staat niet in het resultaat — maar uit dezelfde
 /// [`CltMechanics`] waarmee de toets zelf gerekend heeft.
-fn bouw_figuur(
-    r: &CltBeamCheckResult,
-    mech: &CltMechanics,
-    k: &Toetskrachten,
-) -> CltOpbouwFiguur {
+fn bouw_figuur(r: &CltBeamCheckResult, mech: &CltMechanics, k: &Toetskrachten) -> CltOpbouwFiguur {
     let sigma = Verloop {
         segmenten: r
             .layup
@@ -458,7 +460,11 @@ fn tabel_opbouw_iy(r: &CltBeamCheckResult, mech: &CltMechanics) -> Table {
             nl(l.i_own_mm4 / 1e6, 3),
             nl(l.arm_mm, 1),
             nl(steiner / 1e6, 1),
-            if draagt { nl(i_totaal / 1e6, 1) } else { "—".into() },
+            if draagt {
+                nl(i_totaal / 1e6, 1)
+            } else {
+                "—".into()
+            },
             nl(l.e_mpa, 0),
             if draagt {
                 nl(l.ei_contribution_nmm2() * 1e-9, 0)
@@ -569,10 +575,18 @@ fn tabel_per_lamel(r: &CltBeamCheckResult) -> Table {
                 } else {
                     format!("{} / {}", nl(l.sigma_top_mpa, 2), nl(l.sigma_bot_mpa, 2))
                 },
-                if dwars { "—".into() } else { nl(l.f_md_mpa, 2) },
+                if dwars {
+                    "—".into()
+                } else {
+                    nl(l.f_md_mpa, 2)
+                },
                 uc_tekst(l.uc_bending),
                 nl(l.tau_max_mpa, 3),
-                if dwars { "n.b.".into() } else { nl(l.f_vd_mpa, 2) },
+                if dwars {
+                    "n.b.".into()
+                } else {
+                    nl(l.f_vd_mpa, 2)
+                },
                 uc_tekst(l.uc_shear),
                 laagstatus(l).to_string(),
             ]
@@ -651,13 +665,20 @@ fn belastingduur_regel(r: &CltBeamCheckResult) -> String {
                 "{} (k_mod {}) comb. {}",
                 belastingduur(k.load_duration),
                 nl(k.k_mod, 2),
-                k.combination_ids.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")
+                k.combination_ids
+                    .iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )
         })
         .collect();
     let mut regel = format!("belastingduur per combinatie: {}", delen.join("; "));
     if let Some(c) = r.governing_combination_id {
-        regel.push_str(&format!(" · maatgevend: {}, comb. {c}", belastingduur(r.load_duration)));
+        regel.push_str(&format!(
+            " · maatgevend: {}, comb. {c}",
+            belastingduur(r.load_duration)
+        ));
     }
     regel
 }

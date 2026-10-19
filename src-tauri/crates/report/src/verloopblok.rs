@@ -120,7 +120,9 @@ fn tabel_toetsdoorsneden(v: &VerloopRapport) -> Table {
             maten_cel(&d.maten),
             nl(d.area_mm2, 0),
             nl(d.w_y_mm3, 0),
-            d.klasse.map(|k| format!("{k:?}")).unwrap_or_else(|| "\u{2013}".into()),
+            d.klasse
+                .map(|k| format!("{k:?}"))
+                .unwrap_or_else(|| "\u{2013}".into()),
             match hoogste_uc(d) {
                 Some((id, uc)) => format!("{} ({})", nl(uc, 2), artikel(id)),
                 None => "\u{2013}".into(),
@@ -128,8 +130,11 @@ fn tabel_toetsdoorsneden(v: &VerloopRapport) -> Table {
         ]
     };
     let hoort_erbij = |x: f64| maat_x.is_some_and(|m| (m - x).abs() < 1e-9);
-    let mut rijen: Vec<Vec<String>> =
-        v.toetsdoorsneden.iter().map(|d| rij(d, hoort_erbij(d.x_mm))).collect();
+    let mut rijen: Vec<Vec<String>> = v
+        .toetsdoorsneden
+        .iter()
+        .map(|d| rij(d, hoort_erbij(d.x_mm)))
+        .collect();
     // HET MAATGEVENDE PUNT ERBIJ, als het niet toevallig op een van de zes
     // ligt. Dat is bij een verlopende staaf eerder regel dan uitzondering: de
     // toetsing zoekt over ALLE rekenpunten en de hoogste verhouding van kracht
@@ -137,7 +142,11 @@ fn tabel_toetsdoorsneden(v: &VerloopRapport) -> Table {
     // lengte. Zonder deze regel zou de tabel de zes gevraagde plaatsen tonen en
     // de plaats die het ontwerp begrenst juist niet.
     if let Some(m) = &v.maatgevend {
-        if !v.toetsdoorsneden.iter().any(|d| (d.x_mm - m.doorsnede.x_mm).abs() < 1e-9) {
+        if !v
+            .toetsdoorsneden
+            .iter()
+            .any(|d| (d.x_mm - m.doorsnede.x_mm).abs() < 1e-9)
+        {
             let mut extra = rij(&m.doorsnede, true);
             // Op deze regel is de unity check die van de maatgevende toets
             // zelf; die staat niet per se als hoogste in `toetsen` wanneer de

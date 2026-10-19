@@ -111,7 +111,12 @@ async fn start_server() -> (Child, ChildStdin, BufReader<ChildStdout>) {
     (child, stdin, reader)
 }
 
-async fn roep(stdin: &mut ChildStdin, reader: &mut BufReader<ChildStdout>, id: u32, args: Value) -> Value {
+async fn roep(
+    stdin: &mut ChildStdin,
+    reader: &mut BufReader<ChildStdout>,
+    id: u32,
+    args: Value,
+) -> Value {
     schrijf(
         stdin,
         json!({
@@ -135,8 +140,14 @@ async fn de_drie_wegen_toetsen_dezelfde_platen_gelijk() {
     let mcp = resp["result"]["structuredContent"]["results"].clone();
 
     // Byte voor byte: dezelfde functie, dezelfde serialisatie.
-    assert_eq!(serde_json::to_string(&tauri).unwrap(), serde_json::to_string(&brug).unwrap());
-    assert_eq!(serde_json::to_string(&tauri).unwrap(), serde_json::to_string(&mcp).unwrap());
+    assert_eq!(
+        serde_json::to_string(&tauri).unwrap(),
+        serde_json::to_string(&brug).unwrap()
+    );
+    assert_eq!(
+        serde_json::to_string(&tauri).unwrap(),
+        serde_json::to_string(&mcp).unwrap()
+    );
 
     // Het anker uit de handberekening.
     let staal = &mcp[0];
@@ -148,7 +159,11 @@ async fn de_drie_wegen_toetsen_dezelfde_platen_gelijk() {
     assert_eq!(staal["elementen"].as_array().unwrap().len(), 2);
     let uc1 = staal["elementen"][1]["uc"].as_f64().unwrap();
     assert!((uc1 - 0.517_030).abs() < 1e-6, "UC element 1 {uc1}");
-    assert!(staal["niet_getoetst"].as_array().unwrap().iter().any(|n| n["id"] == "en1993_1_5_plooi"));
+    assert!(staal["niet_getoetst"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|n| n["id"] == "en1993_1_5_plooi"));
 
     // Kruislaaghout: geweigerd, met reden, zonder UC die als "voldoet" leest.
     let clt = &mcp[1];
@@ -170,6 +185,9 @@ async fn een_onbekend_veld_wordt_langs_alle_wegen_geweigerd() {
     let resp = roep(&mut stdin, &mut reader, 3, json!({ "inputs": fout })).await;
     let tekst = resp.to_string();
     assert!(tekst.contains("dikte_mm"), "{tekst}");
-    assert!(resp["result"]["structuredContent"]["results"].is_null(), "{resp}");
+    assert!(
+        resp["result"]["structuredContent"]["results"].is_null(),
+        "{resp}"
+    );
     let _ = child.kill().await;
 }

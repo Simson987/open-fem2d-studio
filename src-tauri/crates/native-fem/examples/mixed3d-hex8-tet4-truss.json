@@ -1,0 +1,31 @@
+{
+  "kind": "mixed3d",
+  "input": {
+    "mesh": {
+      "nodes": [
+        [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
+        [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1],
+        [2, 0.5, 0.5]
+      ],
+      "tets": [[1, 2, 6, 8], [1, 6, 5, 8]]
+    },
+    "solidMaterial": { "eMpa": 30000, "poisson": 0.2 },
+    "hexes": [
+      { "nodes": [0, 1, 2, 3, 4, 5, 6, 7], "eMpa": 30000, "poisson": 0.2 }
+    ],
+    "trusses": [
+      { "nodes": [0, 8], "eMpa": 210000, "areaM2": 0.0002 }
+    ],
+    "loadsKn": [
+      [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0],
+      [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0],
+      [10, 0, 0]
+    ],
+    "prescribedM": [
+      [0, 0, 0], [null, null, null], [null, null, null], [0, 0, 0],
+      [0, 0, 0], [null, null, null], [null, null, null], [0, 0, 0],
+      [null, null, null]
+    ],
+    "backend": "dense"
+  }
+}

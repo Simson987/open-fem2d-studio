@@ -25,16 +25,21 @@
 //! kortere weg niet: daar loopt [`classify_composite`] tabel 5.2 per plaatdeel
 //! af en geeft de ongunstigste klasse terug, inclusief het bepalende plaatdeel.
 
+use crate::SteelGrade;
+use mechanics::InternalForces;
+use section_properties::composite::{CompositeSection, Lamella};
+use section_properties::SectionProperties;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-use section_properties::SectionProperties;
-use section_properties::composite::{CompositeSection, Lamella};
-use mechanics::InternalForces;
-use crate::SteelGrade;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../../design-mockup/src/lib/types/steel/")]
-pub enum CrossSectionClass { Class1, Class2, Class3, Class4 }
+pub enum CrossSectionClass {
+    Class1,
+    Class2,
+    Class3,
+    Class4,
+}
 
 /// Doorsnedevorm, voor zover tabel 5.2 er onderscheid tussen maakt.
 ///
@@ -111,7 +116,12 @@ pub fn classify_section(
             // Blad 3: klasse 1 bij d/t ≤ 50ε², klasse 2 ≤ 70ε², klasse 3 ≤ 90ε².
             // h_mm is bij een ronde buis de uitwendige diameter d.
             let d_over_t = p.h_mm / p.tw_mm.max(1e-9);
-            klasse_uit(d_over_t, 50.0 * eps * eps, 70.0 * eps * eps, 90.0 * eps * eps)
+            klasse_uit(
+                d_over_t,
+                50.0 * eps * eps,
+                70.0 * eps * eps,
+                90.0 * eps * eps,
+            )
         }
 
         SectionShape::Angle => {
@@ -320,7 +330,10 @@ const TAK_TOL: f64 = 1e-9;
 fn grenzen_inwendig_algemeen(eps: f64, alpha: f64, psi: f64) -> (f64, f64, f64) {
     let a = alpha.clamp(1e-6, 1.0);
     let (g1, g2) = if a > 0.5 + TAK_TOL {
-        (396.0 * eps / (13.0 * a - 1.0), 456.0 * eps / (13.0 * a - 1.0))
+        (
+            396.0 * eps / (13.0 * a - 1.0),
+            456.0 * eps / (13.0 * a - 1.0),
+        )
     } else {
         (36.0 * eps / a, 41.5 * eps / a)
     };
@@ -417,11 +430,23 @@ pub fn classify_composite(
     // Richting waarin de drukspanning toeneemt: de gradiënt van σ_c. Loodrecht
     // daarop staat zowel de elastische als de plastische neutrale lijn.
     let g = (
-        if iz > 0.0 { -forces.mz_ed * 1.0e6 / iz } else { 0.0 },
-        if iy > 0.0 { forces.my_ed * 1.0e6 / iy } else { 0.0 },
+        if iz > 0.0 {
+            -forces.mz_ed * 1.0e6 / iz
+        } else {
+            0.0
+        },
+        if iy > 0.0 {
+            forces.my_ed * 1.0e6 / iy
+        } else {
+            0.0
+        },
     );
     let gn = (g.0 * g.0 + g.1 * g.1).sqrt();
-    let n_druk = if gn > 1.0e-9 { Some((g.0 / gn, g.1 / gn)) } else { None };
+    let n_druk = if gn > 1.0e-9 {
+        Some((g.0 / gn, g.1 / gn))
+    } else {
+        None
+    };
 
     // ── Plastische neutrale lijn ─────────────────────────────────────────────
     // Volplastisch: alles boven de lijn op +f_y (druk), alles eronder op −f_y.
@@ -527,7 +552,9 @@ pub fn classify_composite(
         .cloned();
 
     CompositeClassification {
-        klasse: bepalend.as_ref().map_or(CrossSectionClass::Class1, |d| d.klasse),
+        klasse: bepalend
+            .as_ref()
+            .map_or(CrossSectionClass::Class1, |d| d.klasse),
         bepalend,
         delen,
         epsilon: eps,
@@ -584,7 +611,8 @@ fn aansluitingen(lamellen: &[Lamella], i: usize) -> Vec<Aansluiting> {
         // middellijn van de ander ligt, telt als aansluiting.
         let tol = 0.5 * (li.t_mm + lj.t_mm) * 1.05 + 1e-9;
         let mid_j = lj.middellijn();
-        let raakt = uiteinde_bij_segment(mid_i, mid_j, tol) || uiteinde_bij_segment(mid_j, mid_i, tol);
+        let raakt =
+            uiteinde_bij_segment(mid_i, mid_j, tol) || uiteinde_bij_segment(mid_j, mid_i, tol);
         if !raakt {
             continue;
         }
@@ -598,10 +626,17 @@ fn aansluitingen(lamellen: &[Lamella], i: usize) -> Vec<Aansluiting> {
         if u.abs() > hi + li.t_mm + lj.t_mm {
             continue;
         }
-        gevonden.push(Aansluiting { u_mm: u, t_mm: lj.t_mm });
+        gevonden.push(Aansluiting {
+            u_mm: u,
+            t_mm: lj.t_mm,
+        });
     }
 
-    gevonden.sort_by(|a, b| a.u_mm.partial_cmp(&b.u_mm).unwrap_or(std::cmp::Ordering::Equal));
+    gevonden.sort_by(|a, b| {
+        a.u_mm
+            .partial_cmp(&b.u_mm)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let mut samen: Vec<Aansluiting> = Vec::new();
     for a in gevonden {
         match samen.last_mut() {
@@ -777,24 +812,35 @@ fn polygoon_oppervlak(poly: &[(f64, f64)]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use section_properties::i_section::i_section_props;
     use crate::{S235, S355};
+    use section_properties::i_section::i_section_props;
 
     /// Doorsnede-eigenschappen waarbij alleen de maten voor de classificatie
     /// ertoe doen. area_mm2 wordt gebruikt voor de n_ratio-schakelaar.
     fn maten(h: f64, b: f64, tw: f64, tf: f64, r: f64, a: f64) -> SectionProperties {
         SectionProperties {
-            h_mm: h, b_mm: b, tw_mm: tw, tf_mm: tf, r_mm: r, area_mm2: a,
+            h_mm: h,
+            b_mm: b,
+            tw_mm: tw,
+            tf_mm: tf,
+            r_mm: r,
+            area_mm2: a,
             ..Default::default()
         }
     }
 
     fn buiging() -> InternalForces {
-        InternalForces { my_ed: 80.0, ..Default::default() }
+        InternalForces {
+            my_ed: 80.0,
+            ..Default::default()
+        }
     }
 
     fn druk(n_kn: f64) -> InternalForces {
-        InternalForces { n_ed: -n_kn, ..Default::default() }
+        InternalForces {
+            n_ed: -n_kn,
+            ..Default::default()
+        }
     }
 
     // ── I-profiel: ongewijzigd gedrag ────────────────────────────────────────
@@ -1013,14 +1059,24 @@ mod tests {
     /// De profielen die vóór de correctie ten onrechte klasse 3 werden.
     #[test]
     fn catalogus_kokers_en_buizen_zijn_klasse1_in_buiging() {
-        for naam in ["SHS 120x120x5", "SHS 150x150x6", "SHS 200x200x8",
-                     "SHS 250x250x10", "SHS 300x300x10",
-                     "CHS 168.3x8.0", "CHS 219.1x10", "CHS 273x10",
-                     "CHS 323.9x12.5", "CHS 406.4x16"] {
+        for naam in [
+            "SHS 120x120x5",
+            "SHS 150x150x6",
+            "SHS 200x200x8",
+            "SHS 250x250x10",
+            "SHS 300x300x10",
+            "CHS 168.3x8.0",
+            "CHS 219.1x10",
+            "CHS 273x10",
+            "CHS 323.9x12.5",
+            "CHS 406.4x16",
+        ] {
             let prof = steel_profiles::db().find(naam).expect(naam);
             let shape = match prof.kind {
                 steel_profiles::ProfileKind::Chs => SectionShape::CircularHollow,
-                steel_profiles::ProfileKind::Shs | steel_profiles::ProfileKind::Rhs => SectionShape::BoxSection,
+                steel_profiles::ProfileKind::Shs | steel_profiles::ProfileKind::Rhs => {
+                    SectionShape::BoxSection
+                }
                 steel_profiles::ProfileKind::Channel => SectionShape::Channel,
                 steel_profiles::ProfileKind::ISection => SectionShape::ISection,
                 steel_profiles::ProfileKind::Angle => SectionShape::Angle,

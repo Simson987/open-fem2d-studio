@@ -46,15 +46,24 @@ fn ligger(teken: f64, aan_de_bovenflens: bool) -> BeamCheckResult {
             ForcePoint {
                 combination_id: 1,
                 position_mm: x,
-                forces: InternalForces { my_ed: my, ..Default::default() },
+                forces: InternalForces {
+                    my_ed: my,
+                    ..Default::default()
+                },
             }
         })
         .collect();
 
     let bracing = if aan_de_bovenflens {
-        LateralBracing { top_flange_positions: vec![0.5], bottom_flange_positions: vec![] }
+        LateralBracing {
+            top_flange_positions: vec![0.5],
+            bottom_flange_positions: vec![],
+        }
     } else {
-        LateralBracing { top_flange_positions: vec![], bottom_flange_positions: vec![0.5] }
+        LateralBracing {
+            top_flange_positions: vec![],
+            bottom_flange_positions: vec![0.5],
+        }
     };
 
     check_beam(BeamCheckInput {
@@ -90,8 +99,14 @@ fn ligger(teken: f64, aan_de_bovenflens: bool) -> BeamCheckResult {
 }
 
 fn tussenwaarde(r: &BeamCheckResult, sym: &str) -> f64 {
-    let c = r.checks.iter().find(|c| c.id == "6.3.2_ltb").expect("kiptoets");
-    let CheckKind::Stability(s) = &c.kind else { panic!("kip hoort stabiliteit te zijn") };
+    let c = r
+        .checks
+        .iter()
+        .find(|c| c.id == "6.3.2_ltb")
+        .expect("kiptoets");
+    let CheckKind::Stability(s) = &c.kind else {
+        panic!("kip hoort stabiliteit te zijn")
+    };
     s.intermediate_values
         .iter()
         .find(|v| v.symbol == sym)
@@ -100,8 +115,14 @@ fn tussenwaarde(r: &BeamCheckResult, sym: &str) -> f64 {
 }
 
 fn kip_uc(r: &BeamCheckResult) -> f64 {
-    let c = r.checks.iter().find(|c| c.id == "6.3.2_ltb").expect("kiptoets");
-    let CheckKind::Stability(s) = &c.kind else { unreachable!() };
+    let c = r
+        .checks
+        .iter()
+        .find(|c| c.id == "6.3.2_ltb")
+        .expect("kiptoets");
+    let CheckKind::Stability(s) = &c.kind else {
+        unreachable!()
+    };
     s.uc.as_ref().expect("UC").uc
 }
 
@@ -177,8 +198,16 @@ fn een_gesteunde_ligger_krijgt_de_l_kip_formule_en_niet_l_st() {
 
     // Het ongesteunde geval daarentegen ligt tussen twee gaffels: L_kip = L_st.
     let ongesteund = ligger(-1.0, true);
-    assert_relative_eq!(tussenwaarde(&ongesteund, "L_{kip}"), 10_000.0, max_relative = 1e-9);
-    assert_relative_eq!(tussenwaarde(&ongesteund, "L_{st}"), 10_000.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        tussenwaarde(&ongesteund, "L_{kip}"),
+        10_000.0,
+        max_relative = 1e-9
+    );
+    assert_relative_eq!(
+        tussenwaarde(&ongesteund, "L_{st}"),
+        10_000.0,
+        max_relative = 1e-9
+    );
 }
 
 // ── De doorgaande ligger: hogging én sagging op één staaf ──────────────────
@@ -201,7 +230,10 @@ fn doorgaande_ligger_met(m_eind_knm: f64, top: Vec<f64>, bot: Vec<f64>) -> BeamC
             ForcePoint {
                 combination_id: 1,
                 position_mm: x,
-                forces: InternalForces { my_ed: my, ..Default::default() },
+                forces: InternalForces {
+                    my_ed: my,
+                    ..Default::default()
+                },
             }
         })
         .collect();
@@ -289,14 +321,26 @@ fn in_de_hoggingzone_telt_de_onderflenssteun_en_niet_de_bovenflenssteun() {
 
     // Bovenflens in de hoggingzone: geen veldgrens, dus één veld van 9000 mm
     // tussen twee gaffels.
-    assert_relative_eq!(tussenwaarde(&alleen_boven, "L_{st}"), 9000.0, max_relative = 1e-9);
-    assert_relative_eq!(tussenwaarde(&alleen_boven, "L_{kip}"), 9000.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        tussenwaarde(&alleen_boven, "L_{st}"),
+        9000.0,
+        max_relative = 1e-9
+    );
+    assert_relative_eq!(
+        tussenwaarde(&alleen_boven, "L_{kip}"),
+        9000.0,
+        max_relative = 1e-9
+    );
 
     // Onderflens in de hoggingzone: wél een veldgrens op 900 mm. Het
     // maatgevende (laagste M_cr) veld is dan het lange restveld van 8100 mm,
     // en dat ligt tussen een kipsteun en een gaffel, dus geldt de formule met
     // β en NIET meer L_kip = L_st.
-    assert_relative_eq!(tussenwaarde(&alleen_onder, "L_{st}"), 8100.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        tussenwaarde(&alleen_onder, "L_{st}"),
+        8100.0,
+        max_relative = 1e-9
+    );
     let beta = tussenwaarde(&alleen_onder, r"\beta");
     let verwacht_l_kip = (1.4 - 0.8 * beta).clamp(1.0, 1.4) * 8100.0;
     assert_relative_eq!(
@@ -315,10 +359,18 @@ fn een_kipsteun_vlak_naast_een_gaffel_wordt_gemeld_en_niet_stilzwijgend_verwerkt
     // norm, dus er wordt niets afgekapt; het rapport hoort het wel te melden.
     let r = doorgaande_ligger_met(-85.0, vec![], vec![0.1]);
     assert!(tussenwaarde(&r, "L_{kip}") > 9000.0);
-    let kip = r.checks.iter().find(|c| c.id == "6.3.2_ltb").expect("kiptoets");
-    let CheckKind::Stability(s) = &kip.kind else { unreachable!() };
+    let kip = r
+        .checks
+        .iter()
+        .find(|c| c.id == "6.3.2_ltb")
+        .expect("kiptoets");
+    let CheckKind::Stability(s) = &kip.kind else {
+        unreachable!()
+    };
     assert!(
-        s.notes.iter().any(|n| n.contains("groter dan de afstand tussen de gaffels")),
+        s.notes
+            .iter()
+            .any(|n| n.contains("groter dan de afstand tussen de gaffels")),
         "verwachtte een melding dat L_kip > L_g; genoteerd: {:?}",
         s.notes
     );
@@ -345,7 +397,10 @@ fn staafstandnotities_staan_letterlijk_bij_de_kiptoets_en_rekenen_niet_mee() {
         let met = check_beam(invoer);
 
         assert_eq!(
-            kipnotities(&met).iter().filter(|n| n.as_str() == PROEF).count(),
+            kipnotities(&met)
+                .iter()
+                .filter(|n| n.as_str() == PROEF)
+                .count(),
             1,
             "de kanttekening hoort één keer bij de kiptoets ({stand:?})"
         );
@@ -354,9 +409,17 @@ fn staafstandnotities_staan_letterlijk_bij_de_kiptoets_en_rekenen_niet_mee() {
                 CheckKind::Resistance(r) => &r.notes,
                 CheckKind::Stability(s) => &s.notes,
             };
-            assert!(notes.iter().all(|n| n.as_str() != PROEF), "toets {} kreeg de kanttekening ook", c.id);
+            assert!(
+                notes.iter().all(|n| n.as_str() != PROEF),
+                "toets {} kreeg de kanttekening ook",
+                c.id
+            );
         }
-        assert_relative_eq!(tussenwaarde(&met, "L_{st}"), tussenwaarde(&zonder, "L_{st}"), max_relative = 1e-12);
+        assert_relative_eq!(
+            tussenwaarde(&met, "L_{st}"),
+            tussenwaarde(&zonder, "L_{st}"),
+            max_relative = 1e-12
+        );
         assert_relative_eq!(kip_uc(&met), kip_uc(&zonder), max_relative = 1e-12);
         assert_relative_eq!(met.uc_max, zonder.uc_max, max_relative = 1e-12);
     }
@@ -364,7 +427,10 @@ fn staafstandnotities_staan_letterlijk_bij_de_kiptoets_en_rekenen_niet_mee() {
     // Een lege lijst is geen kanttekening: hetzelfde resultaat als weglaten.
     let mut leeg = invoer_met_stand(-1.0, None);
     leeg.staafstand_notities = Some(vec![]);
-    assert_eq!(kipnotities(&check_beam(leeg)), kipnotities(&ligger_met_stand(-1.0, None)));
+    assert_eq!(
+        kipnotities(&check_beam(leeg)),
+        kipnotities(&ligger_met_stand(-1.0, None))
+    );
 }
 
 /// De invoer van [`ligger_met_stand`].
@@ -376,7 +442,10 @@ fn invoer_met_stand(teken: f64, stand: Option<mechanics::Staafstand>) -> BeamChe
             ForcePoint {
                 combination_id: 1,
                 position_mm: x,
-                forces: InternalForces { my_ed: my, ..Default::default() },
+                forces: InternalForces {
+                    my_ed: my,
+                    ..Default::default()
+                },
             }
         })
         .collect();
@@ -387,7 +456,10 @@ fn invoer_met_stand(teken: f64, stand: Option<mechanics::Staafstand>) -> BeamChe
         steel_grade: "S235".to_string(),
         length_m: L_MM / 1000.0,
         forces_envelope: envelop,
-        lateral_bracing: LateralBracing { top_flange_positions: vec![], bottom_flange_positions: vec![0.5] },
+        lateral_bracing: LateralBracing {
+            top_flange_positions: vec![],
+            bottom_flange_positions: vec![0.5],
+        },
         buckling_length_y_m: 10.0,
         buckling_length_z_m: 10.0,
         deflection_limit_class: DeflectionClass::Floor,
@@ -412,8 +484,14 @@ fn invoer_met_stand(teken: f64, stand: Option<mechanics::Staafstand>) -> BeamChe
 }
 
 fn kipnotities(r: &BeamCheckResult) -> Vec<String> {
-    let c = r.checks.iter().find(|c| c.id == "6.3.2_ltb").expect("kiptoets");
-    let CheckKind::Stability(s) = &c.kind else { unreachable!() };
+    let c = r
+        .checks
+        .iter()
+        .find(|c| c.id == "6.3.2_ltb")
+        .expect("kiptoets");
+    let CheckKind::Stability(s) = &c.kind else {
+        unreachable!()
+    };
     s.notes.clone()
 }
 
@@ -435,7 +513,11 @@ fn staande_staaf_noemt_de_gedrukte_flens_in_wereldtermen() {
     // Rekenen doet de staafstand niet: dezelfde steun, dezelfde L_st, dezelfde UC.
     let liggend = ligger_met_stand(-1.0, None);
     assert_relative_eq!(tussenwaarde(&staand, "L_{st}"), 5000.0, max_relative = 1e-9);
-    assert_relative_eq!(tussenwaarde(&liggend, "L_{st}"), 5000.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        tussenwaarde(&liggend, "L_{st}"),
+        5000.0,
+        max_relative = 1e-9
+    );
     assert_relative_eq!(kip_uc(&staand), kip_uc(&liggend), max_relative = 1e-12);
     assert_relative_eq!(staand.uc_max, liggend.uc_max, max_relative = 1e-12);
 }
@@ -446,6 +528,8 @@ fn liggende_staaf_krijgt_geen_zijdenkanttekening() {
     // regel zou daar alleen ruis zijn. Weglaten en Liggend opgeven zijn gelijk.
     for stand in [None, Some(mechanics::Staafstand::Liggend)] {
         let r = ligger_met_stand(1.0, stand);
-        assert!(kipnotities(&r).iter().all(|n| !n.starts_with("Flenzen in wereldtermen")));
+        assert!(kipnotities(&r)
+            .iter()
+            .all(|n| !n.starts_with("Flenzen in wereldtermen")));
     }
 }

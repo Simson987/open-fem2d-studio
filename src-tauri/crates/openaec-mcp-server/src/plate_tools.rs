@@ -41,9 +41,10 @@ pub async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError> {
                 .map_err(|e| RpcError::invalid_params(format!("PlateCheckInput: {e}")))?;
             // Blokkerend werk: een wand kan duizenden elementen hebben, maal het
             // aantal combinaties.
-            let uit = tokio::task::spawn_blocking(move || plaat_check::check_all_plates(args.inputs))
-                .await
-                .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?;
+            let uit =
+                tokio::task::spawn_blocking(move || plaat_check::check_all_plates(args.inputs))
+                    .await
+                    .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?;
             serde_json::to_value(uit)
                 .map(|v| json!({ "results": v }))
                 .map_err(|e| RpcError::tool_exec(format!("serialize result: {e}")))
@@ -76,7 +77,10 @@ pub fn schema_plooi(model: bool) -> Value {
         props.remove("rechthoek_zonder_openingen");
         props.remove("geometrie_fout");
         props.remove("expected_element_ids");
-        schema["required"].as_array_mut().unwrap().retain(|v| v != "rechthoek_zonder_openingen" && v != "expected_element_ids");
+        schema["required"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|v| v != "rechthoek_zonder_openingen" && v != "expected_element_ids");
     }
     schema
 }
@@ -242,20 +246,29 @@ mod tests {
 
     #[tokio::test]
     async fn gewapende_wand_json_via_dispatch_is_dezelfde_kern() {
-        let h=json!({"diameter_mm":12.0,"hoh_mm":100.0,"dekking_mm":30.0});
-        let v=json!({"diameter_mm":12.0,"hoh_mm":100.0,"dekking_mm":42.0});
-        let inputs=json!([{"plate_id":1,"soort":"Beton","materiaal":"C30/37","thickness_mm":200.0,
+        let h = json!({"diameter_mm":12.0,"hoh_mm":100.0,"dekking_mm":30.0});
+        let v = json!({"diameter_mm":12.0,"hoh_mm":100.0,"dekking_mm":42.0});
+        let inputs = json!([{"plate_id":1,"soort":"Beton","materiaal":"C30/37","thickness_mm":200.0,
             "expected_element_ids":[7],
             "combinations":[{"combination_id":1,"elements":[{"element_id":7,"sigma_x_mpa":2.0,"sigma_y_mpa":0.0,"tau_xy_mpa":0.0}]}],
             "frequente_combinaties":[{"combination_id":2,"elements":[{"element_id":7,"sigma_x_mpa":1.5,"sigma_y_mpa":0.0,"tau_xy_mpa":0.0}]}],
             "wapening_aanwezig":{"staalsoort":"B500B","horizontaal":{"zijde_1":h,"zijde_2":h},
                 "verticaal":{"zijde_1":v,"zijde_2":v},"milieuklasse":"XC3","f_ct_eff_mpa":2.9,
                 "langdurend":true,"hoge_aanhechting":true}}]);
-        let verwacht=serde_json::to_value(plaat_check::check_all_plates(serde_json::from_value(inputs.clone()).unwrap())).unwrap();
-        let antwoord=dispatch("check_plates",json!({"inputs":inputs})).await.unwrap();
-        assert_eq!(antwoord["results"],verwacht);
-        assert!(antwoord["results"][0]["checks"].as_array().unwrap().iter().any(|c|c["id"]=="7.3.4_x_zijde_1"));
-        assert_eq!(antwoord["results"][0]["status"],"NotApplicable");
+        let verwacht = serde_json::to_value(plaat_check::check_all_plates(
+            serde_json::from_value(inputs.clone()).unwrap(),
+        ))
+        .unwrap();
+        let antwoord = dispatch("check_plates", json!({"inputs":inputs}))
+            .await
+            .unwrap();
+        assert_eq!(antwoord["results"], verwacht);
+        assert!(antwoord["results"][0]["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["id"] == "7.3.4_x_zijde_1"));
+        assert_eq!(antwoord["results"][0]["status"], "NotApplicable");
     }
 
     #[test]
@@ -278,16 +291,25 @@ mod tests {
                 {"element_id":1,"sigma_x_mpa":-100,"sigma_y_mpa":0,"tau_xy_mpa":50}
             ]}]
         });
-        let r = dispatch("check_plates",json!({"inputs":[p.clone()]})).await.unwrap();
+        let r = dispatch("check_plates", json!({"inputs":[p.clone()]}))
+            .await
+            .unwrap();
         assert!((r["results"][0]["uc_max"].as_f64().unwrap() - 1.083729230553457).abs() < 1e-12);
-        assert_eq!(r["results"][0]["checks"].as_array().unwrap().len(),2);
+        assert_eq!(r["results"][0]["checks"].as_array().unwrap().len(), 2);
         p["plooi"]["randvoorwaarden"] = json!("");
-        let r = dispatch("check_plates",json!({"inputs":[p.clone()]})).await.unwrap();
-        assert_eq!(r["results"][0]["status"],"NotApplicable");
-        assert!(r["results"][0]["geweigerd"].as_str().unwrap().contains("UIT HET VLAK"));
+        let r = dispatch("check_plates", json!({"inputs":[p.clone()]}))
+            .await
+            .unwrap();
+        assert_eq!(r["results"][0]["status"], "NotApplicable");
+        assert!(r["results"][0]["geweigerd"]
+            .as_str()
+            .unwrap()
+            .contains("UIT HET VLAK"));
         p.as_object_mut().unwrap().remove("plooi");
-        let r = dispatch("check_plates",json!({"inputs":[p]})).await.unwrap();
-        assert_eq!(r["results"][0]["checks"].as_array().unwrap().len(),1);
+        let r = dispatch("check_plates", json!({"inputs":[p]}))
+            .await
+            .unwrap();
+        assert_eq!(r["results"][0]["checks"].as_array().unwrap().len(), 1);
     }
 
     /// Het schema noemt precies de velden van het invoertype, op elk niveau:
@@ -295,8 +317,18 @@ mod tests {
     /// invoer laten weigeren door een client die het schema volgt.
     #[test]
     fn schema_noemt_elk_veld_van_het_invoertype() {
-        let laag = plaat_check::PlaatWapeningLaag { diameter_mm: Some(10.0), hoh_mm: Some(150.0), as_mm2_per_m: None, dekking_mm: 30.0 };
-        let laag_as = plaat_check::PlaatWapeningLaag { diameter_mm: None, hoh_mm: None, as_mm2_per_m: Some(524.0), dekking_mm: 30.0 };
+        let laag = plaat_check::PlaatWapeningLaag {
+            diameter_mm: Some(10.0),
+            hoh_mm: Some(150.0),
+            as_mm2_per_m: None,
+            dekking_mm: 30.0,
+        };
+        let laag_as = plaat_check::PlaatWapeningLaag {
+            diameter_mm: None,
+            hoh_mm: None,
+            as_mm2_per_m: Some(524.0),
+            dekking_mm: 30.0,
+        };
         let invoer = plaat_check::PlateCheckInput {
             bijlage: Default::default(),
             plate_id: 1,
@@ -306,15 +338,24 @@ mod tests {
             expected_element_ids: Some(vec![0]),
             mesh_fout: Some("controle".into()),
             plooi: Some(plaat_check::input::PlaatPlooiInput {
-                expected_element_ids:vec![0],
-                a_mm:2000.0, b_mm:1000.0, randvoorwaarden:"vierzijdig_scharnierend".into(),
-                steun_bron:"tekening".into(), onverstijfd:true, uniforme_spanning:true,
-                rechthoek_zonder_openingen:true, geometrie_fout:Some("controle".into()),
+                expected_element_ids: vec![0],
+                a_mm: 2000.0,
+                b_mm: 1000.0,
+                randvoorwaarden: "vierzijdig_scharnierend".into(),
+                steun_bron: "tekening".into(),
+                onverstijfd: true,
+                uniforme_spanning: true,
+                rechthoek_zonder_openingen: true,
+                geometrie_fout: Some("controle".into()),
             }),
             notities: vec!["x".into()],
             hoofdrichting_graden: 30.0,
             service_class: Some(nen_en_1995_1_1::ServiceClass::Sc1),
-            load_duration_per_combination: vec![timber_check::CombinationLoadDuration { combination_id: 1, load_duration: nen_en_1995_1_1::LoadDurationClass::MediumTerm, basis: "b".into() }],
+            load_duration_per_combination: vec![timber_check::CombinationLoadDuration {
+                combination_id: 1,
+                load_duration: nen_en_1995_1_1::LoadDurationClass::MediumTerm,
+                basis: "b".into(),
+            }],
             combinations: vec![plaat_check::PlaatCombinatie {
                 combination_id: 1,
                 elements: vec![plaat_check::PlaatElementSpanning {
@@ -326,14 +367,23 @@ mod tests {
             }],
             wapening_aanwezig: Some(plaat_check::PlaatWapeningInvoer {
                 staalsoort: "B500B".into(),
-                horizontaal: plaat_check::PlaatWapeningRichting { zijde_1: Some(laag), zijde_2: Some(laag_as) },
-                verticaal: plaat_check::PlaatWapeningRichting { zijde_1: Some(laag), zijde_2: None },
+                horizontaal: plaat_check::PlaatWapeningRichting {
+                    zijde_1: Some(laag),
+                    zijde_2: Some(laag_as),
+                },
+                verticaal: plaat_check::PlaatWapeningRichting {
+                    zijde_1: Some(laag),
+                    zijde_2: None,
+                },
                 milieuklasse: Some(nen_en_1992_1_1::ExposureClass::XC3),
                 f_ct_eff_mpa: Some(2.9),
                 langdurend: Some(true),
                 hoge_aanhechting: Some(true),
             }),
-            frequente_combinaties: vec![plaat_check::PlaatCombinatie { combination_id: 2, elements: vec![] }],
+            frequente_combinaties: vec![plaat_check::PlaatCombinatie {
+                combination_id: 2,
+                elements: vec![],
+            }],
         };
         let waarde = serde_json::to_value(&invoer).unwrap();
         let sleutels = |v: &Value| {
@@ -343,26 +393,46 @@ mod tests {
         };
         let schema = schema_plaat();
         assert_eq!(sleutels(&schema["properties"]), sleutels(&waarde));
-        assert_eq!(sleutels(&schema["properties"]["plooi"]["properties"]), sleutels(&waarde["plooi"]));
+        assert_eq!(
+            sleutels(&schema["properties"]["plooi"]["properties"]),
+            sleutels(&waarde["plooi"])
+        );
         let comb = &schema["properties"]["combinations"]["items"];
-        assert_eq!(sleutels(&comb["properties"]), sleutels(&waarde["combinations"][0]));
+        assert_eq!(
+            sleutels(&comb["properties"]),
+            sleutels(&waarde["combinations"][0])
+        );
         let el = &comb["properties"]["elements"]["items"];
-        assert_eq!(sleutels(&el["properties"]), sleutels(&waarde["combinations"][0]["elements"][0]));
+        assert_eq!(
+            sleutels(&el["properties"]),
+            sleutels(&waarde["combinations"][0]["elements"][0])
+        );
         for niveau in [&schema, comb, el] {
             assert_eq!(niveau["additionalProperties"], false);
         }
         let w = &schema["properties"]["wapening_aanwezig"];
-        assert_eq!(sleutels(&w["properties"]), sleutels(&waarde["wapening_aanwezig"]));
+        assert_eq!(
+            sleutels(&w["properties"]),
+            sleutels(&waarde["wapening_aanwezig"])
+        );
         let r = &w["properties"]["horizontaal"];
-        assert_eq!(sleutels(&r["properties"]), sleutels(&waarde["wapening_aanwezig"]["horizontaal"]));
+        assert_eq!(
+            sleutels(&r["properties"]),
+            sleutels(&waarde["wapening_aanwezig"]["horizontaal"])
+        );
         let l = &r["properties"]["zijde_1"];
         let mut beide = sleutels(&waarde["wapening_aanwezig"]["horizontaal"]["zijde_1"]);
-        beide.extend(sleutels(&waarde["wapening_aanwezig"]["horizontaal"]["zijde_2"]));
+        beide.extend(sleutels(
+            &waarde["wapening_aanwezig"]["horizontaal"]["zijde_2"],
+        ));
         beide.sort();
         beide.dedup();
         assert_eq!(sleutels(&l["properties"]), beide);
         let fc = &schema["properties"]["frequente_combinaties"]["items"];
-        assert_eq!(sleutels(&fc["properties"]), sleutels(&waarde["frequente_combinaties"][0]));
+        assert_eq!(
+            sleutels(&fc["properties"]),
+            sleutels(&waarde["frequente_combinaties"][0])
+        );
         for niveau in [w, r, l, fc] {
             assert_eq!(niveau["additionalProperties"], false);
         }

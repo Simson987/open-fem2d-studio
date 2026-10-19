@@ -44,8 +44,14 @@ fn korf(beugelafstand: Option<f64>) -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: 2, diameter_mm: 12.0 },
-        bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+        top: RebarRow {
+            count: 2,
+            diameter_mm: 12.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
         stirrup_spacing_mm: beugelafstand,
         stirrup_legs: beugelafstand.map(|_| 2),
         ..ReinforcementCage::default()
@@ -56,7 +62,12 @@ fn punt(combi: u32, x_mm: f64, n: f64, v: f64, m: f64) -> ForcePoint {
     ForcePoint {
         combination_id: combi,
         position_mm: x_mm,
-        forces: InternalForces { n_ed: n, vz_ed: v, my_ed: m, ..Default::default() },
+        forces: InternalForces {
+            n_ed: n,
+            vz_ed: v,
+            my_ed: m,
+            ..Default::default()
+        },
     }
 }
 
@@ -109,7 +120,10 @@ fn toets<'a>(r: &'a ConcreteBeamCheckResult, id: &str) -> &'a ResistanceCalc {
 }
 
 fn uc(rc: &ResistanceCalc) -> f64 {
-    rc.uc.as_ref().unwrap_or_else(|| panic!("toets {} heeft geen unity check", rc.id)).uc
+    rc.uc
+        .as_ref()
+        .unwrap_or_else(|| panic!("toets {} heeft geen unity check", rc.id))
+        .uc
 }
 
 /// De toetsing van één losse snede: een omhullende van precies dat ene punt.
@@ -184,7 +198,10 @@ fn de_dwarskracht_kiest_de_snede_met_de_hoogste_unity_check() {
     assert_relative_eq!(uc(rc_b), 55.0 / 56.204, max_relative = 1e-4);
 
     // A is zwaarder BELAST, B is zwaarder BENUT.
-    assert!(a.forces.vz_ed > b.forces.vz_ed, "A draagt de grootste dwarskracht");
+    assert!(
+        a.forces.vz_ed > b.forces.vz_ed,
+        "A draagt de grootste dwarskracht"
+    );
     assert!(uc(rc_b) > uc(rc_a), "B heeft de hoogste unity check");
 
     // En dan de volle omhullende: B moet winnen.
@@ -201,7 +218,10 @@ fn de_dwarskracht_kiest_de_snede_met_de_hoogste_unity_check() {
     // De afleiding vertelt WAAROM er niet op |V_Ed| is gezocht, en noemt de
     // grootste |V_Ed| van de staaf, zodat de lezer het verschil kan zien.
     let notes = rc.notes.join(" ");
-    assert!(notes.contains("UNITY CHECK"), "de afleiding noemt het criterium niet: {notes}");
+    assert!(
+        notes.contains("UNITY CHECK"),
+        "de afleiding noemt het criterium niet: {notes}"
+    );
     assert!(
         notes.contains("60,0 kN") || notes.contains("60.0 kN"),
         "de grootste |V_Ed| van de staaf staat niet in de afleiding: {notes}"
@@ -238,7 +258,11 @@ fn een_snede_zonder_uitkomst_verdringt_een_snede_met_een_lage_unity_check() {
 
     let r = check_concrete_beam(invoer(korf(None), vec![a, b]));
     let rc = toets(&r, "6.2_shear");
-    assert_eq!(rc.status, CheckStatus::NotApplicable, "de onbepaalde snede hoort te winnen");
+    assert_eq!(
+        rc.status,
+        CheckStatus::NotApplicable,
+        "de onbepaalde snede hoort te winnen"
+    );
     assert!(rc.uc.is_none());
     assert_relative_eq!(rc.force_state.position_mm, 2500.0, max_relative = 1e-12);
     assert!(rc.notes.join(" ").contains("niet afgerekend"));
@@ -295,14 +319,21 @@ fn de_buiging_kiest_de_snede_met_de_hoogste_unity_check() {
     // 45,96 kNm is met de hand uitgerekend via een iteratie op x; een halve
     // procent ruimte dekt het afronden in die iteratie en niets meer.
     assert_relative_eq!(los_b.value, 45.96, max_relative = 5e-3);
-    assert!(uc(&los_b) > uc(&los_a), "B is zwaarder benut ondanks het kleinere moment");
+    assert!(
+        uc(&los_b) > uc(&los_a),
+        "B is zwaarder benut ondanks het kleinere moment"
+    );
 
     let r = check_concrete_beam(invoer(korf(Some(150.0)), vec![a, b]));
     for id in ["6.1_bending_stress_block", "6.1_mn_kappa"] {
         let rc = toets(&r, id);
         assert_relative_eq!(rc.force_state.forces.my_ed, -45.0, max_relative = 1e-12);
         assert_relative_eq!(rc.force_state.position_mm, 0.0, max_relative = 1e-12);
-        assert!(uc(rc) > 0.95, "{id}: UC = {} hoort rond 0,98 te liggen", uc(rc));
+        assert!(
+            uc(rc) > 0.95,
+            "{id}: UC = {} hoort rond 0,98 te liggen",
+            uc(rc)
+        );
     }
     // Het spanningsblok: 45/45,96 = 0,9791, met dezelfde halve procent ruimte.
     assert_relative_eq!(
@@ -312,12 +343,19 @@ fn de_buiging_kiest_de_snede_met_de_hoogste_unity_check() {
     );
     // De M-N-κ-tak rekent met het parabool-rechthoekdiagram en komt daar
     // binnen 2 % bij uit — dezelfde marge als in `referentie_balk.rs`.
-    assert_relative_eq!(uc(toets(&r, "6.1_mn_kappa")), 45.0 / 45.96, max_relative = 0.02);
+    assert_relative_eq!(
+        uc(toets(&r, "6.1_mn_kappa")),
+        45.0 / 45.96,
+        max_relative = 0.02
+    );
 
     // En de afleiding zegt uit hoeveel sneden er is gekozen.
     let notes = toets(&r, "6.1_bending_stress_block").notes.join(" ");
     assert!(notes.contains("UNITY CHECK"), "{notes}");
-    assert!(notes.contains("2 sneden"), "het aantal sneden staat er niet: {notes}");
+    assert!(
+        notes.contains("2 sneden"),
+        "het aantal sneden staat er niet: {notes}"
+    );
 }
 
 /// De M-N-κ-toets houdt zijn oude tweede kandidaat: het punt met de grootste
@@ -336,8 +374,16 @@ fn het_drukpunt_blijft_een_eigen_snede() {
     let rc = toets(&r, "6.1_mn_kappa");
     // Drie punten, twee groepen: (M > 0; N = −2000) en (M > 0; N = −800). In
     // de tweede groep wint 60 kNm van 20 kNm.
-    assert!(rc.notes.iter().any(|n| n.contains("3 sneden")), "{:?}", rc.notes);
-    assert!(rc.notes.iter().any(|n| n.contains("blijven er 2 over")), "{:?}", rc.notes);
+    assert!(
+        rc.notes.iter().any(|n| n.contains("3 sneden")),
+        "{:?}",
+        rc.notes
+    );
+    assert!(
+        rc.notes.iter().any(|n| n.contains("blijven er 2 over")),
+        "{:?}",
+        rc.notes
+    );
     assert!(uc(rc).is_finite());
     // Welke van de twee wint hangt van M_Rd(N) af; in beide gevallen komt de
     // toets uit een van de twee groepsafgevaardigden.
@@ -434,8 +480,10 @@ fn het_drukpunt_blijft_een_eigen_snede() {
 fn de_scheurtoetsen_kiezen_hun_eigen_snede() {
     let mut inp = invoer(korf(Some(150.0)), vec![punt(1, 0.0, 0.0, 20.0, 60.0)]);
     inp.exposure_class = Some(ExposureClass::XC3);
-    inp.sls_frequent_envelope =
-        vec![punt(7, 2500.0, 0.0, 0.0, 60.0), punt(7, 0.0, 0.0, 0.0, -30.0)];
+    inp.sls_frequent_envelope = vec![
+        punt(7, 2500.0, 0.0, 0.0, 60.0),
+        punt(7, 0.0, 0.0, 0.0, -30.0),
+    ];
     let r = check_concrete_beam(inp);
 
     let wijdte = toets(&r, "7.3.4_scheurwijdte");
@@ -446,7 +494,11 @@ fn de_scheurtoetsen_kiezen_hun_eigen_snede() {
     // σ_s komt uit de niet-lineaire kromme (3.14) en niet uit de lineaire
     // omrekening hierboven.
     let var = |rc: &ResistanceCalc, s: &str| {
-        rc.variables.iter().find(|v| v.symbol == s).unwrap_or_else(|| panic!("{s} ontbreekt")).value
+        rc.variables
+            .iter()
+            .find(|v| v.symbol == s)
+            .unwrap_or_else(|| panic!("{s} ontbreekt"))
+            .value
     };
     assert_relative_eq!(var(wijdte, r"\sigma_s"), 305.0, max_relative = 0.015);
     assert_relative_eq!(var(wijdte, "x"), 58.20, max_relative = 0.015);
@@ -456,13 +508,20 @@ fn de_scheurtoetsen_kiezen_hun_eigen_snede() {
     assert_relative_eq!(uc(wijdte), 0.28548 / 0.30, max_relative = 0.02);
 
     let minimum = toets(&r, "7.3.2_minimumwapening");
-    assert_relative_eq!(minimum.force_state.forces.my_ed, -30.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        minimum.force_state.forces.my_ed,
+        -30.0,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(minimum.value, 149.64, max_relative = 1e-3);
     assert_relative_eq!(uc(minimum), 149.64 / A_S_BOVEN, max_relative = 1e-3);
 
     // De afleiding vertelt dat er per toets is gezocht.
     assert!(
-        wijdte.notes.iter().any(|n| n.contains("UNITY CHECK van DEZE toets")),
+        wijdte
+            .notes
+            .iter()
+            .any(|n| n.contains("UNITY CHECK van DEZE toets")),
         "{:?}",
         wijdte.notes
     );
@@ -602,7 +661,10 @@ fn de_vraag_of_er_dwarskrachtwapening_vereist_is_geldt_voor_de_hele_staaf() {
     let los_b = toets(&los_punt(korf(Some(400.0)), b), "6.2_shear").clone();
     assert_relative_eq!(los_b.value, 112.1139, max_relative = 1e-4);
     assert_relative_eq!(uc(&los_b), 57.0 / 112.1139, max_relative = 1e-3);
-    assert!(uc(&los_b) < uc(dwars), "B is minder benut dan A, en tóch beslist B hier");
+    assert!(
+        uc(&los_b) < uc(dwars),
+        "B is minder benut dan A, en tóch beslist B hier"
+    );
 
     // En de detailleringseis leest de STRENGE tak.
     let sl = toets(&r, "9.2.2_sl_max");
@@ -639,7 +701,10 @@ fn de_slankheidstoets_blijft_op_het_grootste_moment() {
     use nen_en_1992_1_1::slankheid::StructuralSystem;
     let mut inp = invoer(
         korf(Some(150.0)),
-        vec![punt(1, 2500.0, 0.0, 0.0, 100.0), punt(1, 0.0, 0.0, 0.0, -45.0)],
+        vec![
+            punt(1, 2500.0, 0.0, 0.0, 100.0),
+            punt(1, 0.0, 0.0, 0.0, -45.0),
+        ],
     );
     inp.structural_system = Some(StructuralSystem::SimplySupported);
     let r = check_concrete_beam(inp);
@@ -648,13 +713,21 @@ fn de_slankheidstoets_blijft_op_het_grootste_moment() {
     assert_relative_eq!(slank.force_state.forces.my_ed, 100.0, max_relative = 1e-12);
     assert_relative_eq!(slank.force_state.position_mm, 2500.0, max_relative = 1e-12);
     // d hoort dan ook bij de onderwapening: 454 mm, niet 456 mm.
-    let d = slank.variables.iter().find(|v| v.symbol == "d").expect("d").value;
+    let d = slank
+        .variables
+        .iter()
+        .find(|v| v.symbol == "d")
+        .expect("d")
+        .value;
     assert_relative_eq!(d, 454.0, max_relative = 1e-12);
 
     // Terwijl de buigtoetsen op dezelfde omhullende wél naar de andere snede
     // zijn verhuisd — het verschil is dus een keuze en geen toeval.
     assert_relative_eq!(
-        toets(&r, "6.1_bending_stress_block").force_state.forces.my_ed,
+        toets(&r, "6.1_bending_stress_block")
+            .force_state
+            .forces
+            .my_ed,
         -45.0,
         max_relative = 1e-12
     );
@@ -668,8 +741,14 @@ fn bij_een_symmetrische_korf_verandert_er_niets() {
     let symmetrisch = ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: 3, diameter_mm: 16.0 },
-        bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+        top: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
         stirrup_spacing_mm: Some(150.0),
         stirrup_legs: Some(2),
         ..ReinforcementCage::default()

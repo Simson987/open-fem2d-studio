@@ -162,7 +162,10 @@ fn nl(v: f64, cijfers: usize) -> String {
 /// **N positief = trek**, M positief = trek in de onderste vezel.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct SegmentForces {
     /// Normaalkracht in kN; trek positief, druk dus negatief.
     pub n_ed_kn: f64,
@@ -174,7 +177,10 @@ pub struct SegmentForces {
 /// doorsnede van [`Kruip519Invoer::x_mm`].
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct QuasiBlijvendMoment {
     /// Naam van de quasi-blijvende combinatie, voor het rapport.
     pub combinatie: String,
@@ -199,7 +205,10 @@ pub struct QuasiBlijvendMoment {
 /// met `limit_state = MeanValues` én dit blok wordt geweigerd.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct Kruip519Invoer {
     /// De eindwaarde van de kruipcoëfficiënt φ(∞,t₀) van de staaf (3.1.4).
     pub phi_inf_t0: f64,
@@ -216,7 +225,10 @@ pub struct Kruip519Invoer {
 
 /// Hoe φ_ef uit (5.19) is bepaald — de afleiding voor het rapport.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct Kruip519Afleiding {
     pub phi_inf_t0: f64,
     pub ugt_combinatie: String,
@@ -243,7 +255,10 @@ pub struct Kruip519Afleiding {
 /// slankheidspoort van §5.8.3.1.
 pub fn kruip_5_19(k: &Kruip519Invoer) -> Result<Kruip519Afleiding, String> {
     if !k.x_mm.is_finite() {
-        return Err(format!("kruip_5_19.x_mm moet een eindig getal zijn, kreeg {}", k.x_mm));
+        return Err(format!(
+            "kruip_5_19.x_mm moet een eindig getal zijn, kreeg {}",
+            k.x_mm
+        ));
     }
     let kop = format!(
         "φ_ef volgens (5.19) φ_ef = φ(∞,t₀)·M₀Eqp/M₀Ed (5.8.4(2)) voor UGT-combinatie \"{}\": \
@@ -334,7 +349,10 @@ pub fn kruip_5_19(k: &Kruip519Invoer) -> Result<Kruip519Afleiding, String> {
 /// standaard terugvallen — met een andere stijfheid als gevolg.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct SegmentStiffnessRequest {
     /// De nationale bijlage waarmee gerekend wordt (normnaad).
     ///
@@ -444,7 +462,10 @@ pub struct SegmentStiffnessRequest {
 /// Toestand van één segment. De volgorde is oplopend in ernst; het antwoord
 /// van de hele ronde neemt de zwaarste over.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum SegmentStatus {
     /// Alleen de indeling; er zijn geen krachten aangeleverd (ronde 0).
     Layout,
@@ -462,7 +483,10 @@ pub enum SegmentStatus {
 
 /// Toestand van de hele ronde.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum SegmentRunStatus {
     /// Alleen de indeling teruggegeven (ronde 0).
     Layout,
@@ -483,7 +507,10 @@ pub enum SegmentRunStatus {
 /// leveren. Een nul of een NaN op die plek zou als antwoord kunnen worden
 /// gelezen.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct SegmentStiffness {
     /// Volgnummer, 0-gebaseerd; dezelfde volgorde als `segment_forces`.
     pub index: u32,
@@ -543,7 +570,10 @@ pub struct SegmentStiffness {
 
 /// Antwoord op [`SegmentStiffnessRequest`].
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct SegmentStiffnessResponse {
     pub beam_id: u32,
     /// Doorsnedenaam, bijv. "300 x 500".
@@ -653,7 +683,9 @@ pub fn segment_layout(
     max_segments: u32,
 ) -> Result<Vec<SegmentSpan>, String> {
     if !length_mm.is_finite() || length_mm <= 0.0 {
-        return Err(format!("staaflengte moet groter dan nul zijn, kreeg {length_mm} mm"));
+        return Err(format!(
+            "staaflengte moet groter dan nul zijn, kreeg {length_mm} mm"
+        ));
     }
     if !target_mm.is_finite() || target_mm <= 0.0 {
         return Err(format!(
@@ -709,9 +741,7 @@ fn creep_note(phi_ef: f64) -> String {
 /// krachten die niet bij de indeling hoort. Een segment dat niet convergeert
 /// is géén `Err`: dat is een uitkomst per segment, met status `Failed`, zonder
 /// getal en met de reden erbij, zodat de rest van de tabel bruikbaar blijft.
-pub fn segment_stiffness(
-    req: SegmentStiffnessRequest,
-) -> Result<SegmentStiffnessResponse, String> {
+pub fn segment_stiffness(req: SegmentStiffnessRequest) -> Result<SegmentStiffnessResponse, String> {
     let length_mm = req.length_m * 1000.0;
     let spans = segment_layout(length_mm, req.target_segment_length_mm, req.max_segments)?;
     let n_seg = spans.len();
@@ -723,7 +753,10 @@ pub fn segment_stiffness(
         .ok_or_else(|| format!("wapeningsstaal {} onbekend", req.reinforcement_grade))?;
     req.cage.validate(&section)?;
     if !(req.phi_ef.is_finite() && req.phi_ef >= 0.0) {
-        return Err(format!("φ_ef moet nul of positief zijn, kreeg {}", req.phi_ef));
+        return Err(format!(
+            "φ_ef moet nul of positief zijn, kreeg {}",
+            req.phi_ef
+        ));
     }
     // ── φ_ef: vast, of uit (5.19) ─────────────────────────────────────────
     let kruip_afleiding = match &req.kruip_5_19 {
@@ -792,7 +825,9 @@ pub fn segment_stiffness(
         .expect("DesignMaterial::nonlinear levert altijd een (3.14)-kromme");
     let layers = req.cage.layers(section.h_mm);
     let opts = StiffnessOptions {
-        mnk: MnKappaOptions { n_strips: req.n_strips.max(1) as usize },
+        mnk: MnKappaOptions {
+            n_strips: req.n_strips.max(1) as usize,
+        },
         load_duration: req.load_duration,
     };
 
@@ -900,7 +935,11 @@ pub fn segment_stiffness(
                     // voorwenden.
                     if let Some(p) = vorig {
                         let noemer = raw.abs().max(p.abs());
-                        let r_rel = if noemer > 0.0 { (raw - p).abs() / noemer } else { 0.0 };
+                        let r_rel = if noemer > 0.0 {
+                            (raw - p).abs() / noemer
+                        } else {
+                            0.0
+                        };
                         s.relative_change = Some(r_rel);
                         if max_change.map(|(m, _)| r_rel > m).unwrap_or(true) {
                             max_change = Some((r_rel, i as u32));
@@ -960,7 +999,9 @@ pub fn segment_stiffness(
     let converged_op_maat = has_forces
         && has_previous
         && failed_count == 0
-        && max_change.map(|(m, _)| m <= req.convergence_tolerance).unwrap_or(false);
+        && max_change
+            .map(|(m, _)| m <= req.convergence_tolerance)
+            .unwrap_or(false);
     let converged = converged_op_maat && clamped_count == 0;
 
     if has_forces {
@@ -1064,7 +1105,9 @@ mod tests {
     /// de gewenste.
     #[test]
     fn een_niet_deelbare_lengte_levert_even_lange_segmenten() {
-        for l in [237.0_f64, 500.0, 599.0, 601.0, 1234.0, 3333.0, 4300.0, 12_345.0] {
+        for l in [
+            237.0_f64, 500.0, 599.0, 601.0, 1234.0, 3333.0, 4300.0, 12_345.0,
+        ] {
             let s = segment_layout(l, 400.0, DEFAULT_MAX_SEGMENTS).unwrap();
             let len = s[0].length_mm();
             for seg in &s {

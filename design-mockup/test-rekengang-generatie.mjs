@@ -78,6 +78,9 @@ function fixture(seam, fails) {
   const c = {
     console:{warn(){}}, Map, Set, Date, Error, Promise,
     modelDimension:'2d',
+    normaliseSolverPreference:value=>value,
+    getSetting:async (_key,fallback)=>fallback,
+    SOLVER_PREFERENCE_KEY:'solverPreference',
     rekenGeneratieRef:ref(0), lopendeRekengangenRef:ref(0), volledigeRekengangRef:ref(null),
     liveRekenenRef:ref(false), rekenFoutRef:ref(null), laatsteMultiInputRef:ref({snapshot:true}),
     herberekeningGeplandRef:ref(false), herberekenTimerRef:ref(null), rapportRekenPogingRef:ref(false),
@@ -112,7 +115,7 @@ for (const seam of ['notify','creep','beff','physical','kernel','checks']) {
   for (const fails of [false,true]) test(`oude ${seam} ${fails?'fout':'succes'} schrijft niet na nieuwe rekengang`, async()=>{
     const f=fixture(seam,fails);
     const a=f.run(); await tick();
-    const b=await f.run(); assert.equal(b.gelukt,true);
+    const b=await f.run(); assert.equal(b.gelukt,true, JSON.stringify(f.events));
     const completed=f.c.volledigeRekengangRef.current;
     const count=f.events.length;
     f.barrier.resolve();

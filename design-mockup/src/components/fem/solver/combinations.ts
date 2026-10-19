@@ -594,13 +594,29 @@ export function combineResults(
               || bron.elements[i]?.elementId !== id || referentie!.elements[i]?.elementId !== id)) volledigeMesh = false;
       }
       const n = referentie.elements.length;
-      const gecombineerd: PlateElementStress[] = referentie.elements.map(el => ({
-        elementId: el.elementId,
-        corners: el.corners,
-        sigmaX: 0, sigmaY: 0, tauXY: 0,
-        vonMises: 0, sigma1: 0, sigma2: 0, angle: 0,
-        nx: 0, ny: 0, nxy: 0,
-      }));
+      const actieveBijdragen = [...combo.factors]
+        .filter(([, factor]) => factor !== 0)
+        .map(([caseId]) => perCase.get(idVan(caseId))?.plateElements?.find(p => p.plateId === pid));
+      const gecombineerd: PlateElementStress[] = referentie.elements.map(el => {
+        const basis = el.threeLayerSamples;
+        const samplesVolledig = !!basis?.length && actieveBijdragen.every(bron => {
+          const samples = bron?.elements.find(item => item.elementId === el.elementId)?.threeLayerSamples;
+          return !!samples && samples.length === basis.length
+            && basis.every((sample, i) => samples[i]?.id === sample.id
+              && samples[i]?.positionM[0] === sample.positionM[0]
+              && samples[i]?.positionM[1] === sample.positionM[1]);
+        });
+        return {
+          elementId: el.elementId,
+          corners: el.corners,
+          sigmaX: 0, sigmaY: 0, tauXY: 0,
+          vonMises: 0, sigma1: 0, sigma2: 0, angle: 0,
+          nx: 0, ny: 0, nxy: 0,
+          ...(samplesVolledig ? { threeLayerSamples: basis.map(sample => ({
+            ...sample, nx: 0, ny: 0, nxy: 0,
+          })) } : {}),
+        };
+      });
       for (const [caseId, factor] of combo.factors) {
         const bron = perCase.get(idVan(caseId))?.plateElements?.find(p => p.plateId === pid);
         if (!bron) continue;
@@ -613,6 +629,17 @@ export function combineResults(
           d.nx     += factor * s.nx;
           d.ny     += factor * s.ny;
           d.nxy    += factor * s.nxy;
+          if (d.threeLayerSamples && s.threeLayerSamples) {
+            const samples = new Map(s.threeLayerSamples.map(sample => [sample.id, sample]));
+            for (const sample of d.threeLayerSamples) {
+              const contribution = samples.get(sample.id);
+              if (contribution) {
+                sample.nx += factor * contribution.nx;
+                sample.ny += factor * contribution.ny;
+                sample.nxy += factor * contribution.nxy;
+              }
+            }
+          }
         }
       }
       const ranges = {

@@ -131,13 +131,20 @@ pub struct TorsieOpties {
 
 impl Default for TorsieOpties {
     fn default() -> Self {
-        TorsieOpties { h_mm: 1.0, tolerantie: 1e-12, max_iteraties: 50_000 }
+        TorsieOpties {
+            h_mm: 1.0,
+            tolerantie: 1e-12,
+            max_iteraties: 50_000,
+        }
     }
 }
 
 impl TorsieOpties {
     pub fn met_h(h_mm: f64) -> Self {
-        TorsieOpties { h_mm, ..Default::default() }
+        TorsieOpties {
+            h_mm,
+            ..Default::default()
+        }
     }
 }
 
@@ -206,7 +213,9 @@ pub fn aanbevolen_h(d: &Doorsnede, per_wand: f64) -> f64 {
         return diameter / 25.0;
     }
     let t_eff = 2.0 * a / l;
-    (t_eff / per_wand.max(1.0)).min(diameter / 25.0).max(diameter / 2000.0)
+    (t_eff / per_wand.max(1.0))
+        .min(diameter / 25.0)
+        .max(diameter / 2000.0)
 }
 
 /// Totale randlengte van de doorsnede (mm), exact per segment.
@@ -216,7 +225,12 @@ pub fn randlengte(d: &Doorsnede) -> f64 {
         .flat_map(|c| c.segmenten.iter())
         .map(|s| match *s {
             Segment::Lijn { van, naar } => (naar.0 - van.0).hypot(naar.1 - van.1),
-            Segment::Boog { straal, theta1, theta2, .. } => straal * (theta2 - theta1).abs(),
+            Segment::Boog {
+                straal,
+                theta1,
+                theta2,
+                ..
+            } => straal * (theta2 - theta1).abs(),
         })
         .sum()
 }
@@ -253,13 +267,20 @@ pub fn bereken_met(d: &Doorsnede, opties: TorsieOpties) -> TorsieResultaat {
 pub fn bereken_op_mesh(mesh: &Mesh2D, opties: TorsieOpties) -> TorsieResultaat {
     let start = Instant::now();
     if mesh.driehoeken.is_empty() {
-        return TorsieResultaat { h_mm: mesh.h_mm, ..Default::default() };
+        return TorsieResultaat {
+            h_mm: mesh.h_mm,
+            ..Default::default()
+        };
     }
     let (a, sy, sz, ..) = mesh.momenten();
     let (y_c, z_c) = (sz / a, sy / a);
     // Alles in zwaartepuntscoördinaten: de pool van ω zit dan in het
     // zwaartepunt, precies zoals de formules voor het schuifmiddelpunt vragen.
-    let p: Vec<[f64; 2]> = mesh.punten.iter().map(|q| [q[0] - y_c, q[1] - z_c]).collect();
+    let p: Vec<[f64; 2]> = mesh
+        .punten
+        .iter()
+        .map(|q| [q[0] - y_c, q[1] - z_c])
+        .collect();
 
     let (it_prandtl, it_iter) = los_prandtl_op(mesh, &p, &opties);
     let w = los_welving_op(mesh, &p, a, &opties);
@@ -272,7 +293,11 @@ pub fn bereken_op_mesh(mesh: &Mesh2D, opties: TorsieOpties) -> TorsieResultaat {
         it_ondergrens_mm4: onder,
         it_bovengrens_mm4: boven,
         it_beste_mm4: mid,
-        it_onzekerheid: if mid > 0.0 { 0.5 * (boven - onder) / mid } else { 0.0 },
+        it_onzekerheid: if mid > 0.0 {
+            0.5 * (boven - onder) / mid
+        } else {
+            0.0
+        },
         iw_mm6: w.iw,
         y_s_mm: y_c + w.y_p,
         z_s_mm: z_c + w.z_p,
@@ -336,7 +361,12 @@ impl Ijl {
         for i in 1..=n {
             rij[i] = rij[i].max(rij[i - 1]);
         }
-        Ijl { n, rij, kol, waarde }
+        Ijl {
+            n,
+            rij,
+            kol,
+            waarde,
+        }
     }
 
     fn maal(&self, x: &[f64], uit: &mut [f64]) {
@@ -399,7 +429,10 @@ fn cg(
 ) -> (Vec<f64>, usize) {
     let n = a.n;
     let diag = a.diagonaal();
-    let minv: Vec<f64> = diag.iter().map(|&d| if d.abs() > 0.0 { 1.0 / d } else { 1.0 }).collect();
+    let minv: Vec<f64> = diag
+        .iter()
+        .map(|&d| if d.abs() > 0.0 { 1.0 / d } else { 1.0 })
+        .collect();
     let proj = |v: &mut [f64]| {
         if let Some((d, k)) = deel {
             projecteer(v, d, k);
@@ -611,8 +644,13 @@ fn los_welving_op(mesh: &Mesh2D, p: &[[f64; 2]], a_tot: f64, opties: &TorsieOpti
 
     let (deel, aantal) = delen(n, &mesh.driehoeken);
     let a = Ijl::uit_tripletten(n, trip);
-    let (omega, iteraties) =
-        cg(&a, &f, opties.tolerantie, opties.max_iteraties, Some((&deel, aantal)));
+    let (omega, iteraties) = cg(
+        &a,
+        &f,
+        opties.tolerantie,
+        opties.max_iteraties,
+        Some((&deel, aantal)),
+    );
 
     // ── Integralen over de mesh ─────────────────────────────────────────────
     let bilineair = |opp: f64, u: [f64; 3], v: [f64; 3]| {
@@ -628,9 +666,21 @@ fn los_welving_op(mesh: &Mesh2D, p: &[[f64; 2]], a_tot: f64, opties: &TorsieOpti
         if opp <= 0.0 {
             continue;
         }
-        let ys = [p[t[0] as usize][0], p[t[1] as usize][0], p[t[2] as usize][0]];
-        let zs = [p[t[0] as usize][1], p[t[1] as usize][1], p[t[2] as usize][1]];
-        let ws = [omega[t[0] as usize], omega[t[1] as usize], omega[t[2] as usize]];
+        let ys = [
+            p[t[0] as usize][0],
+            p[t[1] as usize][0],
+            p[t[2] as usize][0],
+        ];
+        let zs = [
+            p[t[0] as usize][1],
+            p[t[1] as usize][1],
+            p[t[2] as usize][1],
+        ];
+        let ws = [
+            omega[t[0] as usize],
+            omega[t[1] as usize],
+            omega[t[2] as usize],
+        ];
         iy += bilineair(opp, zs, zs);
         iz += bilineair(opp, ys, ys);
         iyz += bilineair(opp, ys, zs);
@@ -644,20 +694,25 @@ fn los_welving_op(mesh: &Mesh2D, p: &[[f64; 2]], a_tot: f64, opties: &TorsieOpti
     // ── Schuifmiddelpunt ────────────────────────────────────────────────────
     let det = iy * iz - iyz * iyz;
     let (y_p, z_p) = if det.abs() > 1e-14 * (iy * iz).abs().max(1.0) {
-        ((iyz * s_wy - iz * s_wz) / det, (s_wy * iy - iyz * s_wz) / det)
+        (
+            (iyz * s_wy - iz * s_wz) / det,
+            (s_wy * iy - iyz * s_wz) / det,
+        )
     } else {
         (0.0, 0.0)
     };
 
     // ── ω om het schuifmiddelpunt, op nulgemiddelde ─────────────────────────
-    let omega_s: Vec<f64> =
-        omega.iter().enumerate().map(|(i, w)| w - z_p * p[i][0] + y_p * p[i][1]).collect();
+    let omega_s: Vec<f64> = omega
+        .iter()
+        .enumerate()
+        .map(|(i, w)| w - z_p * p[i][0] + y_p * p[i][1])
+        .collect();
     let mut som = 0.0;
     for t in &mesh.driehoeken {
         let opp = mesh.oppervlak_van(*t);
-        som += opp
-            * (omega_s[t[0] as usize] + omega_s[t[1] as usize] + omega_s[t[2] as usize])
-            / 3.0;
+        som +=
+            opp * (omega_s[t[0] as usize] + omega_s[t[1] as usize] + omega_s[t[2] as usize]) / 3.0;
     }
     let gem = if a_tot > 0.0 { som / a_tot } else { 0.0 };
     let mut iw = 0.0;
@@ -775,14 +830,22 @@ mod tests {
         let exact = PI * a.powi(3) * b.powi(3) / (a * a + b * b);
         let h = 2.0;
         let res = bereken_met(&ellips(a, b, 240), TorsieOpties::met_h(h));
-        assert!(rel(res.it_mm4, exact).abs() < 5e-3, "It = {} vs {exact}", res.it_mm4);
+        assert!(
+            rel(res.it_mm4, exact).abs() < 5e-3,
+            "It = {} vs {exact}",
+            res.it_mm4
+        );
     }
 
     // ── 3. Rechthoeken: de β-reeks ──────────────────────────────────────────
 
     #[test]
     fn rechthoek_it_volgt_de_reeks() {
-        for (bb, tt, beta) in [(60.0, 60.0, 0.1406), (120.0, 60.0, 0.229), (300.0, 30.0, 0.312)] {
+        for (bb, tt, beta) in [
+            (60.0, 60.0, 0.1406),
+            (120.0, 60.0, 0.229),
+            (300.0, 30.0, 0.312),
+        ] {
             let exact = rechthoek_it_exact(bb, tt);
             // De klassieke β-tabel als extra controle op onze eigen reeks.
             assert!(
@@ -817,11 +880,31 @@ mod tests {
         let (ro, ri) = (d_b / 2.0, d_b / 2.0 - t);
         let gevallen: Vec<(&str, Doorsnede, f64)> = vec![
             ("cirkel r=50", cirkel(50.0), PI * 50.0_f64.powi(4) / 2.0),
-            ("ellips 60×30", ellips(a, b, 240), PI * a.powi(3) * b.powi(3) / (a * a + b * b)),
-            ("rechthoek b/t=1", rechthoek(60.0, 60.0), rechthoek_it_exact(60.0, 60.0)),
-            ("rechthoek b/t=2", rechthoek(60.0, 120.0), rechthoek_it_exact(120.0, 60.0)),
-            ("rechthoek b/t=10", rechthoek(30.0, 300.0), rechthoek_it_exact(300.0, 30.0)),
-            ("buis 219,1×8", buis(d_b, t), PI * (ro.powi(4) - ri.powi(4)) / 2.0),
+            (
+                "ellips 60×30",
+                ellips(a, b, 240),
+                PI * a.powi(3) * b.powi(3) / (a * a + b * b),
+            ),
+            (
+                "rechthoek b/t=1",
+                rechthoek(60.0, 60.0),
+                rechthoek_it_exact(60.0, 60.0),
+            ),
+            (
+                "rechthoek b/t=2",
+                rechthoek(60.0, 120.0),
+                rechthoek_it_exact(120.0, 60.0),
+            ),
+            (
+                "rechthoek b/t=10",
+                rechthoek(30.0, 300.0),
+                rechthoek_it_exact(300.0, 30.0),
+            ),
+            (
+                "buis 219,1×8",
+                buis(d_b, t),
+                PI * (ro.powi(4) - ri.powi(4)) / 2.0,
+            ),
         ];
         for (naam, d, exact) in gevallen {
             let r = bereken(&d);
@@ -846,7 +929,12 @@ mod tests {
         let d = buis(d_buiten, t);
         let res = bereken_met(&d, TorsieOpties::met_h(1.5));
         let f = rel(res.it_mm4, exact).abs();
-        assert!(f < 5e-3, "It = {} vs {exact} ({:.3}%)", res.it_mm4, f * 100.0);
+        assert!(
+            f < 5e-3,
+            "It = {} vs {exact} ({:.3}%)",
+            res.it_mm4,
+            f * 100.0
+        );
     }
 
     // ── 5. Gesloten koker: Bredt ────────────────────────────────────────────
@@ -862,7 +950,12 @@ mod tests {
         let f = rel(res.it_mm4, bredt).abs();
         // Bredt is zelf de benadering (dunwandig, scherpe hoeken); de FEM is de
         // exacte waarde. Enkele procenten verschil hoort erbij.
-        assert!(f < 0.05, "It = {} vs Bredt {bredt} ({:.2}%)", res.it_mm4, f * 100.0);
+        assert!(
+            f < 0.05,
+            "It = {} vs Bredt {bredt} ({:.2}%)",
+            res.it_mm4,
+            f * 100.0
+        );
     }
 
     // ── 6. I-profiel: It en Iw tegen de catalogus ───────────────────────────
@@ -1024,7 +1117,12 @@ mod tests {
         let a = bereken_met(&d, o);
         let b = bereken_met(&d.gedraaid(0.7), o);
         // Andere mesh, dus geen machineprecisie; wel dezelfde grootheid.
-        assert!(rel(b.it_mm4, a.it_mm4).abs() < 5e-3, "{} vs {}", b.it_mm4, a.it_mm4);
+        assert!(
+            rel(b.it_mm4, a.it_mm4).abs() < 5e-3,
+            "{} vs {}",
+            b.it_mm4,
+            a.it_mm4
+        );
         assert!(rel(b.iw_mm6, a.iw_mm6).abs() < 5e-3);
     }
 
@@ -1046,7 +1144,11 @@ mod tests {
                 TorsieOpties::met_h(aanbevolen_h(&d, 2.0 * ELEMENTEN_PER_WAND)),
             );
             let f = rel(grof.it_beste_mm4, fijn.it_beste_mm4);
-            assert!(f.abs() < 5e-3, "{naam}: {:+.3}% t.o.v. de fijne mesh", f * 100.0);
+            assert!(
+                f.abs() < 5e-3,
+                "{naam}: {:+.3}% t.o.v. de fijne mesh",
+                f * 100.0
+            );
             let fw = rel(grof.iw_mm6, fijn.iw_mm6);
             assert!(fw.abs() < 5e-3, "{naam}: Iw {:+.3}%", fw * 100.0);
         }
@@ -1074,7 +1176,9 @@ mod tests {
             for &h in hs {
                 let r = bereken_met(d, TorsieOpties::met_h(h));
                 let f = |v: f64| {
-                    exact.map(|e| format!("{:+.3e}", (v - e) / e)).unwrap_or_else(|| "-".into())
+                    exact
+                        .map(|e| format!("{:+.3e}", (v - e) / e))
+                        .unwrap_or_else(|| "-".into())
                 };
                 println!(
                     "{:>8.3} {:>8} {:>9} {:>15.6e} {:>15.6e} {:>11} {:>11} {:>9.0}",
@@ -1091,9 +1195,12 @@ mod tests {
         }
 
         let r: f64 = 50.0;
-        tabel("cirkel r=50, It=πr⁴/2", &cirkel(r), Some(PI * r.powi(4) / 2.0), &[
-            16.0, 8.0, 4.0, 2.0, 1.0,
-        ]);
+        tabel(
+            "cirkel r=50, It=πr⁴/2",
+            &cirkel(r),
+            Some(PI * r.powi(4) / 2.0),
+            &[16.0, 8.0, 4.0, 2.0, 1.0],
+        );
 
         let (a, b): (f64, f64) = (60.0, 30.0);
         tabel(
@@ -1122,20 +1229,29 @@ mod tests {
         );
 
         let ipe = i_profiel(200.0, 100.0, 5.6, 8.5, 12.0);
-        tabel("IPE 200 (catalogus It = 69 800)", &ipe, Some(69_800.0), &[
-            2.8, 1.4, 0.7, 0.35,
-        ]);
+        tabel(
+            "IPE 200 (catalogus It = 69 800)",
+            &ipe,
+            Some(69_800.0),
+            &[2.8, 1.4, 0.7, 0.35],
+        );
 
         let unp = u_profiel(200.0, 75.0, 8.5, 11.5, 11.5);
-        tabel("UNP 200 (catalogus It = 127 258)", &unp, Some(127_258.0), &[
-            3.0, 1.5, 0.75, 0.4,
-        ]);
+        tabel(
+            "UNP 200 (catalogus It = 127 258)",
+            &unp,
+            Some(127_258.0),
+            &[3.0, 1.5, 0.75, 0.4],
+        );
 
         let ko = koker(200.0, 100.0, 5.0, 0.0);
         let am = 95.0 * 195.0;
-        tabel("koker 200×100×5 (Bredt)", &ko, Some(4.0 * am * am / (2.0 * (95.0 + 195.0) / 5.0)), &[
-            2.5, 1.25, 0.6, 0.3,
-        ]);
+        tabel(
+            "koker 200×100×5 (Bredt)",
+            &ko,
+            Some(4.0 * am * am / (2.0 * (95.0 + 195.0) / 5.0)),
+            &[2.5, 1.25, 0.6, 0.3],
+        );
 
         // ── Standaarddichtheid: wat kost het en wat levert het op ────────────
         println!("\n=== standaarddichtheid ({ELEMENTEN_PER_WAND} elem. per wand) ===");
@@ -1172,11 +1288,22 @@ mod tests {
 
         println!("\n=== welving en schuifmiddelpunt ===");
         for (naam, d, h) in [
-            ("IPE 200", i_profiel(200.0, 100.0, 5.6, 8.5, 12.0), &[2.8, 1.4, 0.7, 0.35][..]),
-            ("UNP 200", u_profiel(200.0, 75.0, 8.5, 11.5, 11.5), &[3.0, 1.5, 0.75, 0.4][..]),
+            (
+                "IPE 200",
+                i_profiel(200.0, 100.0, 5.6, 8.5, 12.0),
+                &[2.8, 1.4, 0.7, 0.35][..],
+            ),
+            (
+                "UNP 200",
+                u_profiel(200.0, 75.0, 8.5, 11.5, 11.5),
+                &[3.0, 1.5, 0.75, 0.4][..],
+            ),
         ] {
             println!("\n-- {naam} --");
-            println!("{:>8} {:>9} {:>16} {:>12} {:>12}", "h", "elem.", "Iw [mm⁶]", "y_s", "z_s");
+            println!(
+                "{:>8} {:>9} {:>16} {:>12} {:>12}",
+                "h", "elem.", "Iw [mm⁶]", "y_s", "z_s"
+            );
             for &hh in h {
                 let r = bereken_met(&d, TorsieOpties::met_h(hh));
                 println!(

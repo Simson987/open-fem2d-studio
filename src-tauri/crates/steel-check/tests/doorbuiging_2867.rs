@@ -41,7 +41,14 @@ fn w_add_hea320_volgens_de_nb_in_plaats_van_de_referentie() {
     // De referentie-uitwerking keurde deze ligger op UC 0,15; de norm is hier
     // ruim twee keer zo streng.
     let (_, add) = deflection::check_deflection_pair(
-        -11.0, 0.0, -3.2, 8.0, DeflectionClass::Floor, 333, 0.0, false,
+        -11.0,
+        0.0,
+        -3.2,
+        8.0,
+        DeflectionClass::Floor,
+        333,
+        0.0,
+        false,
     );
     assert_relative_eq!(add.value, 24.0, max_relative = 1e-9);
     assert_relative_eq!(add.uc.clone().unwrap().uc, 0.325, max_relative = 1e-2);
@@ -72,7 +79,11 @@ fn zeeg_omhoog_vergroot_een_opwaartse_zakking() {
     // = 1,389; de oude kern gaf met een zeeg "+10 volgens de hint" 30/36 = 0,833.
     let w_fin = deflection::w_fin_mm(40.0, 10.0);
     assert_relative_eq!(w_fin, 50.0, max_relative = 1e-12);
-    assert_relative_eq!(w_fin.abs() / (9000.0 / 250.0), 50.0 / 36.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        w_fin.abs() / (9000.0 / 250.0),
+        50.0 / 36.0,
+        max_relative = 1e-12
+    );
 }
 
 #[test]
@@ -84,25 +95,51 @@ fn zeeg_telt_in_w_fin_maar_niet_in_w_add() {
     //   w_add = w_2 + w_3 (A1.4.3(3)) staat los van de zeeg: -14,435 mm;
     //   grens 3/1000 · 6000 = 18 mm; UC = 14,435 / 18 = 0,8019.
     let (fin, add) = deflection::check_deflection_pair(
-        -14.435, 10.0, 0.0, 6.0, DeflectionClass::Floor, 333, 0.0, false,
+        -14.435,
+        10.0,
+        0.0,
+        6.0,
+        DeflectionClass::Floor,
+        333,
+        0.0,
+        false,
     );
     let w = |c: &nen_en_1993_1_1_section::ResistanceCalc| {
         c.variables.iter().find(|v| v.symbol == "w").unwrap().value
     };
     assert_relative_eq!(w(&fin), -4.435, max_relative = 1e-12);
-    assert_relative_eq!(fin.uc.clone().unwrap().uc, 4.435 / (6000.0 / 333.0), max_relative = 1e-12);
+    assert_relative_eq!(
+        fin.uc.clone().unwrap().uc,
+        4.435 / (6000.0 / 333.0),
+        max_relative = 1e-12
+    );
     assert_relative_eq!(w(&add), -14.435, max_relative = 1e-12);
-    assert_relative_eq!(add.uc.clone().unwrap().uc, 14.435 / 18.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        add.uc.clone().unwrap().uc,
+        14.435 / 18.0,
+        max_relative = 1e-9
+    );
 
     // De zeeg staat in de afleiding van w_fin, met beide tekens uitgeschreven.
-    let zeeg = fin.variables.iter().find(|v| v.symbol == "w_{zeeg}").expect("zeeg als variabele");
+    let zeeg = fin
+        .variables
+        .iter()
+        .find(|v| v.symbol == "w_{zeeg}")
+        .expect("zeeg als variabele");
     assert_relative_eq!(zeeg.value, 10.0);
     assert!(fin.notes.iter().any(|n| n.contains("positief omhoog")));
     assert_eq!(fin.formula_latex, r"w_{fin,z} = w_z + w_{zeeg,z}");
 
     // Zonder zeeg verandert er niets aan de variabelen: geen lege zeegregel.
     let (zonder, _) = deflection::check_deflection_pair(
-        -14.435, 0.0, 0.0, 6.0, DeflectionClass::Floor, 333, 0.0, false,
+        -14.435,
+        0.0,
+        0.0,
+        6.0,
+        DeflectionClass::Floor,
+        333,
+        0.0,
+        false,
     );
     assert!(zonder.variables.iter().all(|v| v.symbol != "w_{zeeg}"));
 }
@@ -113,7 +150,14 @@ fn paar_levert_twee_checks_met_eigen_id_en_grens() {
     // Met de referentie-noemer expliciet opgegeven levert de toetsing exact de
     // getallen van de referentie-uitwerking: w_fin op L/333 en w_add op L/150.
     let (fin, add) = deflection::check_deflection_pair(
-        -11.0, 0.0, -3.2, 8.0, DeflectionClass::Floor, 333, 150.0, false,
+        -11.0,
+        0.0,
+        -3.2,
+        8.0,
+        DeflectionClass::Floor,
+        333,
+        150.0,
+        false,
     );
     assert_eq!(fin.id, "deflection_w_fin");
     assert_eq!(add.id, "deflection_w_add");

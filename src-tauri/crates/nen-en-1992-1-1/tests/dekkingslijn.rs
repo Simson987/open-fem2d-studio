@@ -73,8 +73,8 @@ use nen_en_1992_1_1::dekkingslijn::{
 };
 use nen_en_1992_1_1::dwarskracht::{ShearOptions, Weerstandsroute};
 use nen_en_1992_1_1::section::{
-    ConcreteSection, LongitudinalZone, RebarRow, RebarSide, ReinforcementCage,
-    ReinforcementZones, StirrupZone,
+    ConcreteSection, LongitudinalZone, RebarRow, RebarSide, ReinforcementCage, ReinforcementZones,
+    StirrupZone,
 };
 use nen_en_1992_1_1::stress_strain::{DesignMaterial, SteelBranch};
 use nen_en_1992_1_1::verankering::{Staafvorm, Stortpositie, BETA_2};
@@ -124,8 +124,14 @@ fn korf() -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        bottom: RebarRow { count: 3, diameter_mm: 16.0 },
-        top: RebarRow { count: 2, diameter_mm: 12.0 },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
+        top: RebarRow {
+            count: 2,
+            diameter_mm: 12.0,
+        },
         stirrup_spacing_mm: Some(150.0),
         stirrup_legs: Some(2),
         ..Default::default()
@@ -135,7 +141,10 @@ fn korf() -> ReinforcementCage {
 fn langs(count: u32, x_start_mm: f64, x_end_mm: f64) -> LongitudinalZone {
     LongitudinalZone {
         side: RebarSide::Bottom,
-        row: RebarRow { count, diameter_mm: 16.0 },
+        row: RebarRow {
+            count,
+            diameter_mm: 16.0,
+        },
         x_start_mm,
         x_end_mm,
         bar_shape: Staafvorm::Recht,
@@ -171,7 +180,13 @@ struct Opzet {
 
 impl Opzet {
     fn nieuw(zones: ReinforcementZones, env: Vec<ForcePoint>) -> Self {
-        Opzet { section: sectie(), cage: korf(), zones, mat: mat(), env }
+        Opzet {
+            section: sectie(),
+            cage: korf(),
+            zones,
+            mat: mat(),
+            env,
+        }
     }
 
     fn reken(&self, opts: ShearOptions) -> Dekkingslijn {
@@ -232,7 +247,11 @@ fn l_bd_van_de_referentiestaaf() {
     for b in &d.onder.bundels {
         assert_relative_eq!(b.l_bd_mm, L_BD_16, max_relative = TOL);
         // De ondergrens (8.6) is 0,3·579,71 = 173,9 mm en dus niet maatgevend.
-        assert!(!b.verankering.ondergrens_maatgevend, "{:?}", b.verankering.l_b_min_term);
+        assert!(
+            !b.verankering.ondergrens_maatgevend,
+            "{:?}",
+            b.verankering.l_b_min_term
+        );
         assert_relative_eq!(b.verankering.f_bd_mpa, 3.0, max_relative = TOL);
         assert_relative_eq!(b.verankering.alfa.product, 1.0, max_relative = TOL);
     }
@@ -285,10 +304,22 @@ fn lineair_krachtverloop_binnen_de_verankeringslengte() {
     let d = Opzet::nieuw(zones_3_5_3(1500.0), omhullende()).reken(ShearOptions::default());
     let bijleg = &d.onder.bundels[1];
     assert_relative_eq!(bijleg.ontwikkeling_op(1500.0), 0.0, epsilon = 1e-12);
-    assert_relative_eq!(bijleg.ontwikkeling_op(1500.0 + L_BD_16 / 2.0), 0.5, max_relative = TOL);
-    assert_relative_eq!(bijleg.ontwikkeling_op(1500.0 + L_BD_16), 1.0, max_relative = TOL);
+    assert_relative_eq!(
+        bijleg.ontwikkeling_op(1500.0 + L_BD_16 / 2.0),
+        0.5,
+        max_relative = TOL
+    );
+    assert_relative_eq!(
+        bijleg.ontwikkeling_op(1500.0 + L_BD_16),
+        1.0,
+        max_relative = TOL
+    );
     assert_relative_eq!(bijleg.ontwikkeling_op(4500.0), 0.0, epsilon = 1e-12);
-    assert_relative_eq!(bijleg.ontwikkeling_op(4500.0 - L_BD_16), 1.0, max_relative = TOL);
+    assert_relative_eq!(
+        bijleg.ontwikkeling_op(4500.0 - L_BD_16),
+        1.0,
+        max_relative = TOL
+    );
     // Buiten de bundel telt zij niet mee.
     assert_relative_eq!(bijleg.ontwikkeling_op(1000.0), 0.0, epsilon = 1e-12);
     assert_relative_eq!(bijleg.ontwikkeling_op(5000.0), 0.0, epsilon = 1e-12);
@@ -307,8 +338,16 @@ fn afgekorte_staaf_geeft_een_schuine_weerstandslijn() {
     let p = &d.onder.punten;
 
     let bij_knip = punt_op(p, 1500.0, Snedezijde::Rechts);
-    assert_relative_eq!(bij_knip.aanwezig_kn, 3.0 * F_STAAF_16_KN, max_relative = TOL);
-    assert_relative_eq!(bij_knip.aanwezig_volledig_kn, 5.0 * F_STAAF_16_KN, max_relative = TOL);
+    assert_relative_eq!(
+        bij_knip.aanwezig_kn,
+        3.0 * F_STAAF_16_KN,
+        max_relative = TOL
+    );
+    assert_relative_eq!(
+        bij_knip.aanwezig_volledig_kn,
+        5.0 * F_STAAF_16_KN,
+        max_relative = TOL
+    );
     assert_eq!(bij_knip.bewijs, MomentBewijs::BinnenVerankeringslengte);
 
     let vol = punt_op(p, 1500.0 + L_BD_16, Snedezijde::Enkel);
@@ -430,7 +469,10 @@ fn eindzones_blijven_buiten_de_keuze() {
     let bij_nul = punt_op(&d.onder.punten, 0.0, Snedezijde::Enkel);
     assert_relative_eq!(bij_nul.aanwezig_kn, 0.0, epsilon = 1e-12);
     assert!(bij_nul.in_eindzone);
-    assert!(bij_nul.uc.is_none(), "zonder weerstand is er geen verhouding");
+    assert!(
+        bij_nul.uc.is_none(),
+        "zonder weerstand is er geen verhouding"
+    );
 
     // De eindzone loopt tot l_bd van het staafeinde.
     assert!(punt_op(&d.onder.punten, L_BD_16, Snedezijde::Enkel).in_eindzone);
@@ -518,11 +560,17 @@ fn dwarskracht_leest_de_beugelzone_ter_plaatse() {
         .map(|&x| ForcePoint {
             combination_id: 1,
             position_mm: x,
-            forces: InternalForces { vz_ed: 200.0, ..Default::default() },
+            forces: InternalForces {
+                vz_ed: 200.0,
+                ..Default::default()
+            },
         })
         .collect();
     let opzet = Opzet::nieuw(zones, env);
-    let d = opzet.reken(ShearOptions { cot_theta: Some(2.5), ..ShearOptions::default() });
+    let d = opzet.reken(ShearOptions {
+        cot_theta: Some(2.5),
+        ..ShearOptions::default()
+    });
 
     let links = dwarspunt_op(&d.dwarskracht.punten, 1000.0, Snedezijde::Links);
     let rechts = dwarspunt_op(&d.dwarskracht.punten, 1000.0, Snedezijde::Rechts);
@@ -531,7 +579,11 @@ fn dwarskracht_leest_de_beugelzone_ter_plaatse() {
     let a_sw = 2.0 * std::f64::consts::PI / 4.0 * 64.0;
     let v_rd_s_250 = (a_sw / 250.0) * Z_MM * (500.0 / 1.15) * 2.5 / 1000.0;
 
-    assert_relative_eq!(links.aanwezig_kn.expect("V_Rd links"), v_rd_max, max_relative = 1e-9);
+    assert_relative_eq!(
+        links.aanwezig_kn.expect("V_Rd links"),
+        v_rd_max,
+        max_relative = 1e-9
+    );
     assert_relative_eq!(
         rechts.aanwezig_kn.expect("V_Rd rechts"),
         v_rd_s_250,
@@ -540,7 +592,11 @@ fn dwarskracht_leest_de_beugelzone_ter_plaatse() {
     assert_relative_eq!(links.benodigd_kn, 200.0, max_relative = TOL);
     assert_eq!(links.route, Some(Weerstandsroute::Dwarskrachtwapening));
     assert_eq!(rechts.route, Some(Weerstandsroute::Dwarskrachtwapening));
-    assert_relative_eq!(rechts.uc.expect("uc"), 200.0 / v_rd_s_250, max_relative = 1e-9);
+    assert_relative_eq!(
+        rechts.uc.expect("uc"),
+        200.0 / v_rd_s_250,
+        max_relative = 1e-9
+    );
 }
 
 /// De weerstand van een punt is nooit V_Rd,c + V_Rd,s.
@@ -579,11 +635,16 @@ fn geen_enkel_punt_telt_de_twee_bewijzen_op() {
         .map(|&x| ForcePoint {
             combination_id: 1,
             position_mm: x,
-            forces: InternalForces { vz_ed: 200.0, ..Default::default() },
+            forces: InternalForces {
+                vz_ed: 200.0,
+                ..Default::default()
+            },
         })
         .collect();
-    let d = Opzet::nieuw(zones, env)
-        .reken(ShearOptions { cot_theta: Some(2.5), ..ShearOptions::default() });
+    let d = Opzet::nieuw(zones, env).reken(ShearOptions {
+        cot_theta: Some(2.5),
+        ..ShearOptions::default()
+    });
 
     let a_sw = 2.0 * std::f64::consts::PI / 4.0 * 64.0;
     let v_rd_s = (a_sw / 250.0) * Z_MM * (500.0 / 1.15) * 2.5 / 1000.0;
@@ -610,7 +671,11 @@ fn geen_enkel_punt_telt_de_twee_bewijzen_op() {
     }
     // En dit is de weerstand die er wél staat.
     let midden = dwarspunt_op(&d.dwarskracht.punten, 3000.0, Snedezijde::Enkel);
-    assert_relative_eq!(midden.aanwezig_kn.expect("V_Rd"), v_rd_s, max_relative = 1e-9);
+    assert_relative_eq!(
+        midden.aanwezig_kn.expect("V_Rd"),
+        v_rd_s,
+        max_relative = 1e-9
+    );
 }
 
 /// 6.2.1(8) is niet gebouwd: de lijn begint op x = 0 en loopt tot x = L.
@@ -669,7 +734,11 @@ fn steunpunteis_oppervlakte_en_te_verankeren_kracht() {
         assert_relative_eq!(eis.a_l_mm, A_L_MM, max_relative = TOL);
         assert_relative_eq!(eis.l_bd_mm.expect("l_bd"), L_BD_16, max_relative = TOL);
         // §9.2.1.5(2): 10Φ voor rechte staven.
-        assert_relative_eq!(eis.min_lengte_recht_mm.expect("10Φ"), 160.0, max_relative = TOL);
+        assert_relative_eq!(
+            eis.min_lengte_recht_mm.expect("10Φ"),
+            160.0,
+            max_relative = TOL
+        );
     }
     assert_eq!(d.steunpunten[0].uiteinde, Staafeinde::Begin);
     assert_eq!(d.steunpunten[1].uiteinde, Staafeinde::Eind);
@@ -794,7 +863,11 @@ fn normaalkracht_zonder_z_levert_z_uit_het_evenwicht() {
             "{:?}",
             p.z_bepaling.grondslag
         );
-        assert!(p.z_mm <= Z_MM + TOL, "z = {} mm hoort ≤ 0,9·d = {Z_MM} te zijn", p.z_mm);
+        assert!(
+            p.z_mm <= Z_MM + TOL,
+            "z = {} mm hoort ≤ 0,9·d = {Z_MM} te zijn",
+            p.z_mm
+        );
         assert_relative_eq!(p.z_bepaling.d_mm, 554.0, max_relative = TOL);
     }
     assert!(midden_trek.omhullende_kn >= 180_000.0 / Z_MM + 75.0 - TOL);
@@ -807,7 +880,10 @@ fn normaalkracht_zonder_z_levert_z_uit_het_evenwicht() {
     // moduletekst van `hefboomsarm`. Beide armen liggen boven 0,9·d en zijn
     // dus begrensd.)
     let x_van = |p: &Momentpunt| match &p.z_bepaling.grondslag {
-        ZGrondslag::Evenwicht { werkelijk, begrensd } => {
+        ZGrondslag::Evenwicht {
+            werkelijk,
+            begrensd,
+        } => {
             assert!(*begrensd, "x = {}: {:?}", p.x_mm, p.z_bepaling.grondslag);
             werkelijk.x_mm
         }
@@ -830,7 +906,10 @@ fn normaalkracht_zonder_z_levert_z_uit_het_evenwicht() {
     assert!(matches!(zb.grondslag, ZGrondslag::Evenwicht { .. }));
     assert!(zb.z_mm <= Z_MM + TOL);
 
-    assert!(trek.toelichting.iter().any(|t| t.contains("doorsnede-evenwicht")));
+    assert!(trek
+        .toelichting
+        .iter()
+        .any(|t| t.contains("doorsnede-evenwicht")));
 }
 
 /// Een niet-positieve z wordt geweigerd: op z wordt gedeeld.
@@ -889,8 +968,8 @@ fn een_gat_in_de_zones_wordt_afgekeurd() {
 /// l_bd van de uiteinden.
 #[test]
 fn lege_zones_geven_het_oude_gedrag() {
-    let d = Opzet::nieuw(ReinforcementZones::default(), omhullende())
-        .reken(ShearOptions::default());
+    let d =
+        Opzet::nieuw(ReinforcementZones::default(), omhullende()).reken(ShearOptions::default());
     assert_eq!(d.onder.bundels.len(), 1);
     assert_eq!(d.boven.bundels.len(), 1);
     let midden = punt_op(&d.onder.punten, 3000.0, Snedezijde::Enkel);

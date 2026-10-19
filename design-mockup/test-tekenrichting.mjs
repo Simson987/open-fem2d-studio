@@ -49,7 +49,7 @@
 // Uitvoeren: npx tsx test-tekenrichting.mjs   (vanuit design-mockup/)
 //        of: node scripts/run-tests.mjs --filter=tekenrichting
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -86,13 +86,23 @@ function dicht(naam, gemeten, verwacht, tol = 1e-9, absoluut = 1e-9) {
 const fmt = (v) => (typeof v === "number" ? (Math.abs(v) < 1e-12 ? "0" : v.toPrecision(6)) : String(v));
 
 const heeftBrug = existsSync(TOETSBRUG);
-function kern(opdracht, inputs) {
-  const r = spawnSync(TOETSBRUG, [], {
-    input: JSON.stringify(inputs === undefined ? { opdracht } : { opdracht, inputs }),
-    encoding: "utf8", maxBuffer: 256e6,
+async function kern(opdracht, inputs) {
+  const antwoord = await new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code !== 0) reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+      else resolve(out);
+    });
+    child.stdin.end(JSON.stringify(inputs === undefined ? { opdracht } : { opdracht, inputs }));
   });
-  if (r.error) throw r.error;
-  const d = JSON.parse(r.stdout);
+  const d = JSON.parse(antwoord);
   if (d && !Array.isArray(d) && typeof d === "object" && "fout" in d) throw new Error(d.fout);
   return d;
 }
@@ -350,9 +360,9 @@ else {
         korven: new Map([[1, { korf, constructievorm: g.systeem, milieuklasse: "XC1" }]]) };
       const bouw = buildBetonCheckInputs(data);
       const inp = bouw.inputs[0];
-      const res = kern("check_concrete_beams", [inp])[0];
+      const res = (await kern("check_concrete_beams", [inp]))[0];
       const verzoek = bouwDekkingslijnVerzoeken(data).verzoeken[0];
-      const lijn = kern("concrete_dekkingslijn", verzoek);
+      const lijn = await kern("concrete_dekkingslijn", verzoek);
       uit[om ? "terug" : "heen"] = { inp, res, lijn };
     }
     const { heen, terug } = uit;
@@ -397,7 +407,7 @@ log("\n[c] Kip: welke steunen aan de gedrukte flens zitten, in beide richtingen"
 if (!heeftBrug) slaOver("[c]");
 else {
   const profileDb = new Map();
-  for (const pr of kern("list_steel_profiles")) {
+  for (const pr of await kern("list_steel_profiles")) {
     const k = profileLookupKey(pr.name);
     if (!profileDb.has(k)) profileDb.set(k, pr);
   }
@@ -407,7 +417,7 @@ else {
     const waarde = (re) => vars.find((v) => re.test(v.symbol))?.value;
     return { uc: c.uc.uc, lSt: waarde(/^L_\{st\}$/), n: waarde(/n_\{kipsteunen\}/), notes: c.notes };
   };
-  function ipe330(naam, { om, q, steunen, boven, onder, verwacht }) {
+  async function ipe330(naam, { om, q, steunen, boven, onder, verwacht }) {
     const model = {
       ...LEEG,
       nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 9000, z: 0 }],
@@ -419,7 +429,7 @@ else {
     const r = reken(model);
     const inp = buildSteelCheckInputs({ nodes: model.nodes, beams: model.beams, supports: model.supports,
       combinations: r.combinations, combinationResults: r.combinationResults, profileDb }).inputs[0];
-    const res = kern("check_steel_beams", [inp])[0];
+    const res = (await kern("check_steel_beams", [inp]))[0];
     return { inp, res, k: kip(res) };
   }
   const vrij = [{ id: 1, nodeId: 1, type: "pinned" }, { id: 2, nodeId: 2, type: "zRoller" }];
@@ -437,8 +447,8 @@ else {
     { naam: "ingeklemd links, boven 0,2 en onder 0,1", q: -6, steunen: ingeklemd, boven: [0.2], onder: [0.1], n: 1, lSt: 8100, mEd: -91.125 },
   ];
   for (const g of gevallen) {
-    const heen = ipe330(g.naam, { om: false, ...g });
-    const terug = ipe330(g.naam, { om: true, ...g });
+    const heen = await ipe330(g.naam, { om: false, ...g });
+    const terug = await ipe330(g.naam, { om: true, ...g });
     log(`  — ${g.naam}`);
     gelijkeOmhullende(`${g.naam}: dezelfde omhullende`, heen.inp, terug.inp);
     ok(`${g.naam}: dezelfde kipsteunen naar de kern`, zelfdeSteunen(heen.inp, terug.inp),
@@ -484,27 +494,27 @@ log("\n[d] Doorbuiging en zeeg: in beide richtingen, omlaag en omhoog");
   }
   if (!heeftBrug) slaOver("[d] (kern)");
   else {
-    const wFin = (om, q, zeeg) => {
-      const res = kern("check_steel_beams", [invoer(om, q, zeeg)])[0];
+    const wFin = async (om, q, zeeg) => {
+      const res = (await kern("check_steel_beams", [invoer(om, q, zeeg)]))[0];
       const fin = toetsVan(res, "deflection_w_fin").kind.data;
       const add = toetsVan(res, "deflection_w_add").kind.data;
       return { w: fin.variables.find((v) => v.symbol === "w").value, uc: fin.uc.uc, addUc: add.uc.uc };
     };
     for (const om of [false, true]) {
       const richting = om ? "rechts→links" : "links→rechts";
-      const omlaag = wFin(om, -3, 10);
+      const omlaag = await wFin(om, -3, 10);
       // w_fin = w_z + w_zeeg = −14,4 + 10: kleiner in grootte.
       dicht(`${richting}, zakking omlaag, zeeg 10 omhoog: w_fin = −w + 10`, omlaag.w, -wHand + 10, 1e-6);
       ok(`${richting}, zakking omlaag, zeeg omhoog: |w_fin| < |w_z|`, Math.abs(omlaag.w) < wHand);
-      dicht(`${richting}: w_add zonder zeeg (A1.4.3(3): w_2 + w_3)`, omlaag.addUc, wFin(om, -3).addUc, 1e-12);
+      dicht(`${richting}: w_add zonder zeeg (A1.4.3(3): w_2 + w_3)`, omlaag.addUc, (await wFin(om, -3)).addUc, 1e-12);
       // Opwaarts: dezelfde zeeg omhoog vergroot de uitslag, +14,4 + 10. Een zeeg
       // OMLAAG (−10) is dan wat de uitslag verkleint.
-      const omhoog = wFin(om, 3, 10);
+      const omhoog = await wFin(om, 3, 10);
       dicht(`${richting}, zakking omhoog, zeeg 10 omhoog: w_fin = +w + 10 (de ligger stond al hoger)`, omhoog.w, wHand + 10, 1e-6);
-      const tegen = wFin(om, 3, -10);
+      const tegen = await wFin(om, 3, -10);
       ok(`${richting}, zakking omhoog, zeeg 10 omlaag: |w_fin| < |w_z|`, Math.abs(tegen.w) < wHand, `w_fin = ${fmt(tegen.w)} mm`);
     }
-    dicht("zeeg: UC gelijk in beide richtingen", wFin(true, -3, 10).uc, wFin(false, -3, 10).uc, 1e-9);
+    dicht("zeeg: UC gelijk in beide richtingen", (await wFin(true, -3, 10)).uc, (await wFin(false, -3, 10)).uc, 1e-9);
   }
 }
 
@@ -531,7 +541,7 @@ else {
     const r = reken(m);
     const inp = buildBetonCheckInputs({ nodes: m.nodes, beams: m.beams, combinations: r.combinations, combinationResults: r.combinationResults,
       korven: new Map([[1, { korf, milieuklasse: "XC1" }]]) }).inputs[0];
-    beton[om ? "terug" : "heen"] = { inp, res: kern("check_concrete_beams", [inp])[0] };
+    beton[om ? "terug" : "heen"] = { inp, res: (await kern("check_concrete_beams", [inp]))[0] };
   }
   gelijkeOmhullende("beton: dezelfde omhullende", beton.heen.inp, beton.terug.inp);
   for (const [richting, u] of [["voet→kop", beton.heen], ["kop→voet", beton.terug]]) {
@@ -553,7 +563,7 @@ else {
 
   // ── Staal ───────────────────────────────────────────────────────────────
   const profileDb = new Map();
-  for (const pr of kern("list_steel_profiles")) {
+  for (const pr of await kern("list_steel_profiles")) {
     const k = profileLookupKey(pr.name);
     if (!profileDb.has(k)) profileDb.set(k, pr);
   }
@@ -565,7 +575,7 @@ else {
     const r = reken(m);
     const inp = buildSteelCheckInputs({ nodes: m.nodes, beams: m.beams, supports: m.supports,
       combinations: r.combinations, combinationResults: r.combinationResults, profileDb }).inputs[0];
-    staal[om ? "terug" : "heen"] = { inp, res: kern("check_steel_beams", [inp])[0] };
+    staal[om ? "terug" : "heen"] = { inp, res: (await kern("check_steel_beams", [inp]))[0] };
   }
   gelijkeOmhullende("staal: dezelfde omhullende", staal.heen.inp, staal.terug.inp);
   ok("staal: dezelfde kipsteunen naar de kern", zelfdeSteunen(staal.heen.inp, staal.terug.inp),
@@ -667,7 +677,7 @@ log("\n[f] De sprong bij 75°: een naar links hellende staaf dicht bij de grens 
   if (!heeftBrug) slaOver("[f] (kern)");
   else {
     const profileDb = new Map();
-    for (const pr of kern("list_steel_profiles")) {
+    for (const pr of await kern("list_steel_profiles")) {
       const k = profileLookupKey(pr.name);
       if (!profileDb.has(k)) profileDb.set(k, pr);
     }
@@ -676,7 +686,7 @@ log("\n[f] De sprong bij 75°: een naar links hellende staaf dicht bij de grens 
     // ── Staal: de meting van de verificatie ────────────────────────────────
     // IPE 330 S235, 9 m, scharnierend, zuiging q = +6 kN/m (globaal omhoog),
     // kipsteunen aan de bovenflens op ¼, ½ en ¾.
-    const staalToets = (g, h, om) => {
+    const staalToets = async (g, h, om) => {
       const m = {
         ...LEEG, nodes: knopen(g, h), supports: scharnieren,
         beams: [staaf(1, 1, 2, om, { material: "S235", profile: "IPE330", checkConfig: { lateralRestraints: [0.25, 0.5, 0.75] } })],
@@ -685,7 +695,7 @@ log("\n[f] De sprong bij 75°: een naar links hellende staaf dicht bij de grens 
       const r = reken(m);
       const inp = buildSteelCheckInputs({ nodes: m.nodes, beams: m.beams, supports: m.supports,
         combinations: r.combinations, combinationResults: r.combinationResults, profileDb }).inputs[0];
-      const c = toetsVan(kern("check_steel_beams", [inp])[0], "6.3.2_ltb").kind.data;
+      const c = toetsVan((await kern("check_steel_beams", [inp]))[0], "6.3.2_ltb").kind.data;
       const vars = (c.deelstappen ?? []).flatMap((d) => d.variables ?? []);
       return { inp, n: vars.find((v) => /n_\{kipsteunen\}/.test(v.symbol))?.value, notes: c.notes ?? [], uc: c.uc.uc };
     };
@@ -696,7 +706,7 @@ log("\n[f] De sprong bij 75°: een naar links hellende staaf dicht bij de grens 
     // fysiek het ondervlak — is gedrukt: alle drie tellen. Naar rechts hellend
     // staat +y aan beide kanten van 75° linksboven (−sin θ, cos θ): M < 0, 0.
     for (const [g, h, n, waarschuwing] of [[74.9, -1, 0, true], [75.1, -1, 3, true], [74.9, 1, 0, false], [75.1, 1, 0, false]]) {
-      const uit = [false, true].map((om) => staalToets(g, h, om));
+      const uit = await Promise.all([false, true].map((om) => staalToets(g, h, om)));
       const wat = `staal ${g}° naar ${h < 0 ? "links" : "rechts"}`;
       uit.forEach((u, i) => {
         const richting = i ? "kop→voet" : "voet→kop";
@@ -713,7 +723,7 @@ log("\n[f] De sprong bij 75°: een naar links hellende staaf dicht bij de grens 
       dicht(`${wat}: kip-UC gelijk in beide tekenrichtingen`, uit[1].uc, uit[0].uc, 1e-9);
     }
     for (const g of [75 - BAND - 0.1, 75 + BAND + 0.1]) {
-      const u = staalToets(g, -1, false);
+      const u = await staalToets(g, -1, false);
       ok(`staal ${g.toFixed(1)}° naar links, buiten de band: geen waarschuwing in invoer of afleiding`,
         u.inp.staafstand_notities === undefined && !u.notes.some((t) => t.startsWith(WAARSCHUWING)));
     }
@@ -723,7 +733,7 @@ log("\n[f] De sprong bij 75°: een naar links hellende staaf dicht bij de grens 
       cover_mm: 35, stirrup_diameter_mm: 8, stirrup_spacing_mm: 150, stirrup_legs: 2,
       top: { count: 2, diameter_mm: 12 }, bottom: { count: 4, diameter_mm: 20 },
     };
-    const betonToets = (g, h, om) => {
+    const betonToets = async (g, h, om) => {
       const m = {
         ...LEEG, nodes: knopen(g, h, 6000), supports: scharnieren,
         beams: [staaf(1, 1, 2, om, { material: "C30/37", profile: "300x500" })],
@@ -732,14 +742,14 @@ log("\n[f] De sprong bij 75°: een naar links hellende staaf dicht bij de grens 
       const r = reken(m);
       const inp = buildBetonCheckInputs({ nodes: m.nodes, beams: m.beams, combinations: r.combinations,
         combinationResults: r.combinationResults, korven: new Map([[1, { korf, milieuklasse: "XC1" }]]) }).inputs[0];
-      return { inp, blok: toetsVan(kern("check_concrete_beams", [inp])[0], "6.1_bending_stress_block") };
+      return { inp, blok: toetsVan((await kern("check_concrete_beams", [inp]))[0], "6.1_bending_stress_block") };
     };
     // Hand. De last (0, −q) werkt onder 75° naar links naar −y: M > 0, trek aan
     // de onderwapening 4Ø20. Vanaf 75° werkt hij naar +y: M < 0, trek aan de
     // bovenwapening 2Ø12 — die bij deze helling fysiek onder ligt.
     for (const [g, trek] of [[74.9, "onderwapening"], [75.1, "bovenwapening"]]) {
       for (const om of [false, true]) {
-        const { inp, blok } = betonToets(g, -1, om);
+        const { inp, blok } = await betonToets(g, -1, om);
         const wat = `beton ${g}° naar links, ${om ? "kop→voet" : "voet→kop"}`;
         ok(`${wat}: de trekwapening is de ${trek}`, JSON.stringify(blok).includes(`De trekwapening is hier de ${trek}`));
         const inv = inp.staafstand_notities ?? [];
@@ -749,7 +759,7 @@ log("\n[f] De sprong bij 75°: een naar links hellende staaf dicht bij de grens 
       }
     }
     {
-      const { inp, blok } = betonToets(75 + BAND + 0.1, -1, false);
+      const { inp, blok } = await betonToets(75 + BAND + 0.1, -1, false);
       ok("beton 85,1° naar links, buiten de band: geen waarschuwing",
         inp.staafstand_notities === undefined && !notitiesVan(blok).some((t) => t.startsWith(WAARSCHUWING)));
     }

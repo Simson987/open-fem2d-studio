@@ -1,0 +1,19 @@
+{
+  "nodes": [[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]],
+  "materials": [{"eMpa":210000,"poisson":0.3}],
+  "elements": [{"nodes":[0,1,2,3,4,5,6,7],"material":0}],
+  "loads": [
+    {"node":1,"forceKn":[52500,0,0]},
+    {"node":2,"forceKn":[52500,0,0]},
+    {"node":5,"forceKn":[52500,0,0]},
+    {"node":6,"forceKn":[52500,0,0]}
+  ],
+  "supports": [
+    {"node":0,"displacementM":[0,0,0]},
+    {"node":3,"displacementM":[0,null,0]},
+    {"node":4,"displacementM":[0,null,null]},
+    {"node":7,"displacementM":[0,null,null]}
+  ],
+  "tolerance":1e-9,
+  "maxIterations":2000
+}

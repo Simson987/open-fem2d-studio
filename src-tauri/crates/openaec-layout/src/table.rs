@@ -138,9 +138,8 @@ impl Table {
     ///
     /// Uses approximate character width (0.5 × font_size for proportional fonts).
     fn wrap_text(&self, text: &str, col_width: Pt, font_size: Pt) -> Vec<String> {
-        let usable_width = col_width.0
-            - self.style.cell_padding.left.0
-            - self.style.cell_padding.right.0;
+        let usable_width =
+            col_width.0 - self.style.cell_padding.left.0 - self.style.cell_padding.right.0;
 
         if usable_width <= 0.0 || text.is_empty() {
             return vec![text.to_string()];
@@ -191,11 +190,7 @@ impl Table {
     }
 
     /// Compute wrapped row layout: wrap all cells and calculate row height.
-    fn compute_row_layout(
-        &self,
-        cells: &[String],
-        is_header: bool,
-    ) -> RowLayout {
+    fn compute_row_layout(&self, cells: &[String], is_header: bool) -> RowLayout {
         let font_size = if is_header {
             self.style.header_font_size
         } else {
@@ -230,14 +225,7 @@ impl Table {
     }
 
     /// Draw a single row with multi-line text wrapping support.
-    fn draw_row(
-        &self,
-        row: &RowLayout,
-        x: Pt,
-        y: Pt,
-        draw_list: &mut DrawList,
-        row_index: usize,
-    ) {
+    fn draw_row(&self, row: &RowLayout, x: Pt, y: Pt, draw_list: &mut DrawList, row_index: usize) {
         let bg_color = if row.is_header {
             self.style.header_background
         } else {
@@ -338,8 +326,7 @@ impl Flowable for Table {
 
         // Data rows
         for row in self.rows.clone() {
-            self.row_layouts
-                .push(self.compute_row_layout(&row, false));
+            self.row_layouts.push(self.compute_row_layout(&row, false));
         }
 
         self.wrapped_height = Pt(self.row_layouts.iter().map(|r| r.height.0).sum());
@@ -366,12 +353,7 @@ impl Flowable for Table {
         }
     }
 
-    fn split(
-        &self,
-        available_width: Pt,
-        available_height: Pt,
-        ctx: &LayoutContext,
-    ) -> SplitResult {
+    fn split(&self, available_width: Pt, available_height: Pt, ctx: &LayoutContext) -> SplitResult {
         if self.wrapped_height.0 <= available_height.0 {
             return SplitResult::Fits;
         }
@@ -408,8 +390,8 @@ impl Flowable for Table {
             .map(|r| r.cells.clone())
             .collect();
 
-        let mut first = Table::new(self.headers.clone(), first_data_rows)
-            .with_style(self.style.clone());
+        let mut first =
+            Table::new(self.headers.clone(), first_data_rows).with_style(self.style.clone());
         if let Some(ref widths) = self.col_widths {
             first = first.with_col_widths(widths.clone());
         }

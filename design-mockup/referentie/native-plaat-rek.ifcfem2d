@@ -1,0 +1,38 @@
+{
+  "format": "open-fem2d-studio-v2",
+  "version": 2,
+  "savedAt": "2026-10-08T00:00:00.000Z",
+  "modelDimension": "2d",
+  "nodes": [
+    { "id": 1, "x": 0, "z": 0 },
+    { "id": 2, "x": 2000, "z": 0 },
+    { "id": 3, "x": 2000, "z": 1000 },
+    { "id": 4, "x": 0, "z": 1000 }
+  ],
+  "beams": [],
+  "supports": [
+    { "nodeId": 1, "type": "pinned" },
+    { "nodeId": 4, "type": "xRoller" }
+  ],
+  "plates": [
+    {
+      "id": 1,
+      "nodeIds": [1, 2, 3, 4],
+      "thickness": 20,
+      "E": 210000,
+      "nu": 0.3,
+      "rho": 7850,
+      "meshSize": 1000
+    }
+  ],
+  "loads": [
+    { "id": 1, "type": "edgeLoad", "caseId": 1, "plateId": 1, "edgeIndex": 1, "q": 10, "qDir": "x" }
+  ],
+  "loadCases": [{ "id": 1, "name": "Rek", "type": "live" }],
+  "activeLoadCaseId": 1,
+  "selfWeightEnabled": false,
+  "nonlinearEnabled": false,
+  "scheefstandEnabled": false,
+  "scheefstandNoemer": 200,
+  "scheefstandRichting": 1
+}

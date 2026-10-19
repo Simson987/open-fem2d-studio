@@ -54,6 +54,8 @@ interface RibbonProps {
   onExportMatrixCsv?: () => void;
   /** Opent het venster Zichtbaarheid (tab Inzicht, issue #47). */
   onOpenZichtbaarheid?: () => void;
+  onOpenPrestressedBeam?: () => void;
+  onOpenVolumeWorkbench?: () => void;
   onFilterSelection?: () => void;
   /** Export standalone HTML report (browser + Tauri). */
   onExportHtml?: () => void;
@@ -87,6 +89,7 @@ interface RibbonProps {
   availableFrame3DTools?: readonly Frame3DTool[];
   onFrame3DToolChange?: (tool: Frame3DTool) => void;
   canFrame3DDelete?: boolean;
+  canFrame3DTransform?: boolean;
   onFrame3DFit?: () => void;
   onFrame3DViewChange?: (view: Frame3DView) => void;
   frame3dView?: Frame3DView;
@@ -134,12 +137,12 @@ export default function Ribbon({
   onDelete, onUndo, onRedo, canUndo, canRedo, onOpenGrids,
   onOpenLoadCases, onOpenLoadCombinations, onOpenWindGenerator, onOpenWaterAccumulation, onNewProject, onOpenProject,
   onSaveProject, onSaveProjectAs,
-  frame3dTool, availableFrame3DTools, onFrame3DToolChange, canFrame3DDelete,
+  frame3dTool, availableFrame3DTools, onFrame3DToolChange, canFrame3DDelete, canFrame3DTransform,
   onFrame3DFit, onFrame3DViewChange, frame3dView,
   onToggle3DVisibility, visibility3DOpen, hasFrame3DNodeSelection, hasFrame3DBeamSelection, hasFrame3DPlateSelection,
   onFrame3DSupportPreset, onFrame3DRequestSpring, onFrame3DRequestNodalLoad, onFrame3DRequestMemberLoad,
   onFrame3DRequestMemberPointLoad, onFrame3DRequestThermalLoad, onFrame3DRequestSurfaceLoad,
-  onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid,
+  onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid, onOpenPrestressedBeam, onOpenVolumeWorkbench,
   onFilterSelection,
   onExportHtml, scheefstandToelichting, analyseToelichting, windToelichting,
   onExportIfc, onExportIfcStructural, onValidateIfc, onOpenIfcView,
@@ -270,6 +273,7 @@ export default function Ribbon({
           availableFrame3DTools={availableFrame3DTools}
           onFrame3DToolChange={onFrame3DToolChange}
           canFrame3DDelete={canFrame3DDelete}
+          canFrame3DTransform={canFrame3DTransform}
           onFrame3DFit={onFrame3DFit}
           onFrame3DViewChange={onFrame3DViewChange}
           frame3dView={frame3dView}
@@ -303,7 +307,7 @@ export default function Ribbon({
           onOpenLibrary={onOpenLibrary}
         />;
       case "insights":
-        return <InsightsTab onShowInsights={() => onViewChange("insights")} onShowInsightsMode={onShowInsightsMode} onExportMatrixCsv={onExportMatrixCsv} onOpenZichtbaarheid={onOpenZichtbaarheid} />;
+        return <InsightsTab onShowInsights={() => onViewChange("insights")} onShowInsightsMode={onShowInsightsMode} onExportMatrixCsv={onExportMatrixCsv} onOpenZichtbaarheid={onOpenZichtbaarheid} onOpenPrestressedBeam={onOpenPrestressedBeam} onOpenVolumeWorkbench={onOpenVolumeWorkbench} />;
       case "ifc":
         return <IfcTab
           onExportIfc={onExportIfc}

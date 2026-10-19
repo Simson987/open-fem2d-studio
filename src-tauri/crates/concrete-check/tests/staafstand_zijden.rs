@@ -46,8 +46,14 @@ fn korf() -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: 2, diameter_mm: 12.0 },
-        bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+        top: RebarRow {
+            count: 2,
+            diameter_mm: 12.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
         stirrup_spacing_mm: Some(150.0),
         stirrup_legs: Some(2),
         ..ReinforcementCage::default()
@@ -108,7 +114,11 @@ fn invoer(stand: Option<Staafstand>, m: f64) -> ConcreteBeamCheckInput {
 }
 
 fn notities(r: &ConcreteBeamCheckResult, id: &str) -> Vec<String> {
-    let c = r.checks.iter().find(|c| c.id == id).expect("toets aanwezig");
+    let c = r
+        .checks
+        .iter()
+        .find(|c| c.id == id)
+        .expect("toets aanwezig");
     match &c.kind {
         CheckKind::Resistance(rc) => rc.notes.clone(),
         CheckKind::Stability(s) => s.notes.clone(),
@@ -116,7 +126,11 @@ fn notities(r: &ConcreteBeamCheckResult, id: &str) -> Vec<String> {
 }
 
 fn uc(r: &ConcreteBeamCheckResult, id: &str) -> Option<f64> {
-    let c = r.checks.iter().find(|c| c.id == id).expect("toets aanwezig");
+    let c = r
+        .checks
+        .iter()
+        .find(|c| c.id == id)
+        .expect("toets aanwezig");
     match &c.kind {
         CheckKind::Resistance(rc) => rc.uc.as_ref().map(|u| u.uc),
         CheckKind::Stability(s) => s.uc.as_ref().map(|u| u.uc),
@@ -138,7 +152,9 @@ fn elke_toets_die_een_zijde_noemt_zegt_bij_een_staande_staaf_welke_kant_dat_is()
             // in, dus alles wat hier een zijde noemt komt uit de afleiding zelf.
             let tekst = serde_json::to_string(c).unwrap().to_lowercase();
             let noemt_zijde = ZIJDEWOORDEN.iter().any(|w| tekst.contains(w));
-            let heeft = notities(&staand, &c.id).iter().any(|n| n.starts_with(KANTTEKENING));
+            let heeft = notities(&staand, &c.id)
+                .iter()
+                .any(|n| n.starts_with(KANTTEKENING));
             if noemt_zijde {
                 met_zijde += 1;
                 assert!(
@@ -149,18 +165,31 @@ fn elke_toets_die_een_zijde_noemt_zegt_bij_een_staande_staaf_welke_kant_dat_is()
                 );
             }
             assert!(
-                notities(&liggend, &c.id).iter().all(|n| !n.starts_with(KANTTEKENING)),
+                notities(&liggend, &c.id)
+                    .iter()
+                    .all(|n| !n.starts_with(KANTTEKENING)),
                 "een liggende staaf hoort geen zijdenkanttekening te krijgen ({})",
                 c.id
             );
             // Rekenen doet de staafstand niet.
-            assert_eq!(uc(&liggend, &c.id), uc(&staand, &c.id), "UC van {} veranderde", c.id);
+            assert_eq!(
+                uc(&liggend, &c.id),
+                uc(&staand, &c.id),
+                "UC van {} veranderde",
+                c.id
+            );
         }
-        assert!(met_zijde >= 3, "de proef moet toetsen raken die een zijde noemen (M = {m})");
+        assert!(
+            met_zijde >= 3,
+            "de proef moet toetsen raken die een zijde noemen (M = {m})"
+        );
 
         // De kanttekening zegt het met zoveel woorden.
         let buiging = notities(&staand, "6.1_bending_stress_block");
-        let tekst = buiging.iter().find(|n| n.starts_with(KANTTEKENING)).expect("kanttekening bij 6.1");
+        let tekst = buiging
+            .iter()
+            .find(|n| n.starts_with(KANTTEKENING))
+            .expect("kanttekening bij 6.1");
         assert!(tekst.contains("RECHTERzijde"));
         assert!(tekst.contains("LINKERzijde"));
         assert_eq!(liggend.uc_max, staand.uc_max);
@@ -205,7 +234,9 @@ fn staafstandnotities_staan_bij_de_toetsen_die_een_zijde_kiezen_en_rekenen_niet_
 
             let mut geraakt = 0;
             for c in &kiezers.checks {
-                let kiest = notities(&kiezers, &c.id).iter().any(|n| n.starts_with(KANTTEKENING));
+                let kiest = notities(&kiezers, &c.id)
+                    .iter()
+                    .any(|n| n.starts_with(KANTTEKENING));
                 let aantal = notities(&met, &c.id).iter().filter(|n| *n == PROEF).count();
                 assert_eq!(
                     aantal,
@@ -214,9 +245,17 @@ fn staafstandnotities_staan_bij_de_toetsen_die_een_zijde_kiezen_en_rekenen_niet_
                     c.id
                 );
                 geraakt += aantal;
-                assert_eq!(uc(&met, &c.id), uc(&zonder, &c.id), "UC van {} veranderde", c.id);
+                assert_eq!(
+                    uc(&met, &c.id),
+                    uc(&zonder, &c.id),
+                    "UC van {} veranderde",
+                    c.id
+                );
             }
-            assert!(geraakt >= 3, "de proef moet toetsen raken die een zijde kiezen");
+            assert!(
+                geraakt >= 3,
+                "de proef moet toetsen raken die een zijde kiezen"
+            );
             assert_eq!(met.uc_max, zonder.uc_max);
             assert_eq!(met.governing_check_id, zonder.governing_check_id);
         }
@@ -270,11 +309,21 @@ fn rekenruis_aan_de_oplegging_kiest_geen_trekzijde_in_de_scheurtoets() {
     };
     let nul = met_ruis(0.0);
     let scheur_nul = uc(&nul, "7.3.4_scheurwijdte");
-    assert!(scheur_nul.is_some(), "zonder ruis heeft de scheurwijdte een unity check");
+    assert!(
+        scheur_nul.is_some(),
+        "zonder ruis heeft de scheurwijdte een unity check"
+    );
     for ruis in [1e-13, -1e-13] {
         let r = met_ruis(ruis);
-        assert_eq!(uc(&r, "7.3.4_scheurwijdte"), scheur_nul, "scheurwijdte bij ruis {ruis}");
-        assert_eq!(uc(&r, "7.3.2_minimumwapening"), uc(&nul, "7.3.2_minimumwapening"));
+        assert_eq!(
+            uc(&r, "7.3.4_scheurwijdte"),
+            scheur_nul,
+            "scheurwijdte bij ruis {ruis}"
+        );
+        assert_eq!(
+            uc(&r, "7.3.2_minimumwapening"),
+            uc(&nul, "7.3.2_minimumwapening")
+        );
         assert_eq!(r.uc_max, nul.uc_max);
     }
 }

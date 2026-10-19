@@ -13,10 +13,16 @@ use serde_json::json;
 /// Een minimale PDF zoals Chromium hem schrijft: losse objecten, een
 /// paginaboom en per pagina een `/Type /Page`.
 fn pdf_met(paginas: usize, scheiding: &str) -> Vec<u8> {
-    let mut s = String::from("%PDF-1.4\n%\u{e2}\u{e3}\n1 0 obj\n<</Type /Catalog /Pages 2 0 R>>\nendobj\n");
-    s.push_str(&format!("2 0 obj\n<</Type /Pages /Count {paginas} /Kids []>>\nendobj\n"));
+    let mut s =
+        String::from("%PDF-1.4\n%\u{e2}\u{e3}\n1 0 obj\n<</Type /Catalog /Pages 2 0 R>>\nendobj\n");
+    s.push_str(&format!(
+        "2 0 obj\n<</Type /Pages /Count {paginas} /Kids []>>\nendobj\n"
+    ));
     for i in 0..paginas {
-        s.push_str(&format!("{} 0 obj\n<</Type{scheiding}/Page\n/Parent 2 0 R>>\nendobj\n", 3 + i));
+        s.push_str(&format!(
+            "{} 0 obj\n<</Type{scheiding}/Page\n/Parent 2 0 R>>\nendobj\n",
+            3 + i
+        ));
     }
     s.push_str("%%EOF\n");
     s.into_bytes()
@@ -44,14 +50,20 @@ fn geen_paginaobjecten_is_geen_telling() {
 fn controle_eist_pdf_kop_en_een_pagina_per_vel() {
     assert_eq!(controleer_pdf(&pdf_met(5, " "), 5), Ok(5));
     let fout = controleer_pdf(&pdf_met(6, " "), 5).unwrap_err();
-    assert!(fout.contains("6 pagina's") && fout.contains("5 vellen"), "{fout}");
+    assert!(
+        fout.contains("6 pagina's") && fout.contains("5 vellen"),
+        "{fout}"
+    );
     let geen_pdf = controleer_pdf(b"<html>niet</html>", 1).unwrap_err();
     assert!(geen_pdf.contains("%PDF-"), "{geen_pdf}");
 }
 
 #[test]
 fn dynamisch_3d_rapport_gebruikt_werkelijk_paginatal() {
-    assert_eq!(controleer_pdf_met_verwacht_aantal(&pdf_met(7, " "), None), Ok(7));
+    assert_eq!(
+        controleer_pdf_met_verwacht_aantal(&pdf_met(7, " "), None),
+        Ok(7)
+    );
     let geen_pdf = controleer_pdf_met_verwacht_aantal(b"geen pdf", None).unwrap_err();
     assert!(geen_pdf.contains("%PDF-"), "{geen_pdf}");
 }
@@ -59,14 +71,19 @@ fn dynamisch_3d_rapport_gebruikt_werkelijk_paginatal() {
 #[test]
 fn doelpad_moet_absoluut_zijn_en_op_pdf_eindigen() {
     assert!(doelpad(&json!({})).is_err());
-    assert!(doelpad(&json!({ "pad": "rapport.pdf" })).unwrap_err().contains("absoluut"));
+    assert!(doelpad(&json!({ "pad": "rapport.pdf" }))
+        .unwrap_err()
+        .contains("absoluut"));
     let tmp = std::env::temp_dir().join("gui-control-doelpad-test");
     let geen_pdf = tmp.join("rapport.png");
     assert!(doelpad(&json!({ "pad": geen_pdf.to_string_lossy() }))
         .unwrap_err()
         .contains(".pdf"));
     let goed = tmp.join("rapport.PDF");
-    assert_eq!(doelpad(&json!({ "pad": goed.to_string_lossy() })).unwrap(), goed);
+    assert_eq!(
+        doelpad(&json!({ "pad": goed.to_string_lossy() })).unwrap(),
+        goed
+    );
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
@@ -96,8 +113,19 @@ fn papier_uit_het_antwoord_van_de_pagina() {
     let p = papier_uit_antwoord(&v).unwrap();
     assert!(p.liggend);
     assert_eq!((p.vel_breedte_mm, p.vel_hoogte_mm), (297.0, 210.0));
-    assert_eq!((p.marge_boven_mm, p.marge_onder_mm, p.marge_links_mm, p.marge_rechts_mm), (18.0, 20.0, 15.0, 15.0));
+    assert_eq!(
+        (
+            p.marge_boven_mm,
+            p.marge_onder_mm,
+            p.marge_links_mm,
+            p.marge_rechts_mm
+        ),
+        (18.0, 20.0, 15.0, 15.0)
+    );
     assert!(papier_uit_antwoord(&json!({ "orientatie": "schuin" })).is_err());
-    let zonder_marge = json!({ "orientatie": "portrait", "velMm": { "breedte": 210, "hoogte": 297 } });
-    assert!(papier_uit_antwoord(&zonder_marge).unwrap_err().contains("margesMm"));
+    let zonder_marge =
+        json!({ "orientatie": "portrait", "velMm": { "breedte": 210, "hoogte": 297 } });
+    assert!(papier_uit_antwoord(&zonder_marge)
+        .unwrap_err()
+        .contains("margesMm"));
 }

@@ -306,8 +306,7 @@ fn tauri_lib_bron() -> String {
         .join("..")
         .join("src")
         .join("lib.rs");
-    std::fs::read_to_string(&pad)
-        .unwrap_or_else(|e| panic!("{} niet leesbaar: {e}", pad.display()))
+    std::fs::read_to_string(&pad).unwrap_or_else(|e| panic!("{} niet leesbaar: {e}", pad.display()))
 }
 
 // ── Weg 2: de toetsbrug ─────────────────────────────────────────────────────
@@ -394,7 +393,8 @@ async fn weg_mcp(
     assert_eq!(resp["id"], id);
     let result = &resp["result"];
     assert_eq!(
-        result["isError"], false,
+        result["isError"],
+        false,
         "MCP-tool {tool} gaf een fout: {}",
         result["content"][0]["text"].as_str().unwrap_or("")
     );
@@ -430,11 +430,7 @@ fn verschil(a: &Value, b: &Value, pad: &str) -> Option<String> {
         }
         (Value::Array(la), Value::Array(lb)) => {
             if la.len() != lb.len() {
-                return Some(format!(
-                    "{pad}: lengte {} tegen {}",
-                    la.len(),
-                    lb.len()
-                ));
+                return Some(format!("{pad}: lengte {} tegen {}", la.len(), lb.len()));
             }
             for (i, (va, vb)) in la.iter().zip(lb).enumerate() {
                 if let Some(v) = verschil(va, vb, &format!("{pad}[{i}]")) {
@@ -481,7 +477,9 @@ fn weg_1_de_tauri_commands_zijn_geregistreerd() {
         .find("generate_handler![")
         .expect("`generate_handler!` staat niet in src-tauri/src/lib.rs");
     let handler = &bron[handler_start..];
-    let handler_eind = handler.find(']').expect("`generate_handler!` is niet gesloten");
+    let handler_eind = handler
+        .find(']')
+        .expect("`generate_handler!` is niet gesloten");
     let handler = &handler[..handler_eind];
 
     for command in [
@@ -589,7 +587,11 @@ async fn de_drie_wegen_leveren_dezelfde_segmentstijfheden() {
     let (mut child, mut stdin, mut reader) = start_server().await;
 
     for (naam, invoer, id) in [
-        ("ronde 0 (alleen de indeling)", invoer_segmenten_ronde0(), 500),
+        (
+            "ronde 0 (alleen de indeling)",
+            invoer_segmenten_ronde0(),
+            500,
+        ),
         ("ronde 1 (met krachten)", invoer_segmenten_ronde1(), 501),
     ] {
         let tauri = weg_tauri_segmenten(&invoer);
@@ -603,7 +605,12 @@ async fn de_drie_wegen_leveren_dezelfde_segmentstijfheden() {
         )
         .await;
 
-        eis_gelijk(&format!("{naam}: Tauri-command"), &tauri, "toetsbrug", &brug);
+        eis_gelijk(
+            &format!("{naam}: Tauri-command"),
+            &tauri,
+            "toetsbrug",
+            &brug,
+        );
         eis_gelijk(&format!("{naam}: toetsbrug"), &brug, "MCP-server", &mcp);
     }
 
@@ -689,7 +696,11 @@ async fn de_segmentstijfheden_zelf_staan_vast() {
     // (2,9 + 800 000/150 000)·12,5·10⁶ = 98,916… kNm.
     let m_cr = 2.9 * 12.5e6 * 1e-6 + 800_000.0 / 150_000.0 * 12.5e6 * 1e-6;
     for s in segs {
-        assert!((getal(s, &["m_cr_knm"]) - m_cr).abs() < 1e-6, "M_cr = {}", s["m_cr_knm"]);
+        assert!(
+            (getal(s, &["m_cr_knm"]) - m_cr).abs() < 1e-6,
+            "M_cr = {}",
+            s["m_cr_knm"]
+        );
         // Alle momenten liggen onder M_cr, dus geen enkel segment is gescheurd.
         assert_eq!(s["cracked"], false);
         assert_eq!(s["status"], "Uncracked");
@@ -716,7 +727,11 @@ async fn de_segmentstijfheden_zelf_staan_vast() {
     // En hij blijft onder de ongescheurde vergelijkingswaarde: de doorsnede is
     // niet stijver dan beton dat is.
     for i in 0..11 {
-        assert!(ei(i) > 0.0 && ei(i) < 1.1 * 85_937.5, "segment {i}: EI = {}", ei(i));
+        assert!(
+            ei(i) > 0.0 && ei(i) < 1.1 * 85_937.5,
+            "segment {i}: EI = {}",
+            ei(i)
+        );
     }
 
     drop(stdin);
@@ -732,7 +747,14 @@ async fn de_t_ligger_rekent_als_een_t_en_niet_als_een_rechthoek() {
     let (mut child, mut stdin, mut reader) = start_server().await;
 
     // ── De toetsing ─────────────────────────────────────────────────────────
-    let mcp = weg_mcp(&mut stdin, &mut reader, 600, "check_concrete_beam", invoer_t_ligger()).await;
+    let mcp = weg_mcp(
+        &mut stdin,
+        &mut reader,
+        600,
+        "check_concrete_beam",
+        invoer_t_ligger(),
+    )
+    .await;
     // DEZE STAAF IS SINDS FASE 3 NotOk, EN TERECHT — de korf past niet.
     //
     // Tot de detailleringstoetsen erbij kwamen werd deze T alleen op buiging
@@ -800,7 +822,10 @@ async fn de_t_ligger_rekent_als_een_t_en_niet_als_een_rechthoek() {
             < 1e-9
     );
 
-    assert_eq!(mcp["section_name"], "T 400 x 450 (flens 400 x 50, lijf 200)");
+    assert_eq!(
+        mcp["section_name"],
+        "T 400 x 450 (flens 400 x 50, lijf 200)"
+    );
     // d = 450 − 30 − 8 − 20/2 = 402 mm.
     assert!((getal(&mcp, &["d_mm"]) - 402.0).abs() < 1e-9);
 
@@ -829,7 +854,10 @@ async fn de_t_ligger_rekent_als_een_t_en_niet_als_een_rechthoek() {
     // lijfdeel van het blok zou 400 mm breed zijn) en de UC dus LAGER — de
     // onveilige kant. Het verschil is klein maar het is er, en het moet de
     // goede kant op staan.
-    assert!(uc_blok > 150.0 / 201.0, "de T rekent als een rechthoek van 400 mm breed");
+    assert!(
+        uc_blok > 150.0 / 201.0,
+        "de T rekent als een rechthoek van 400 mm breed"
+    );
 
     // De MODELKEUZE achter de splitsing reist mee als tekst.
     //
@@ -883,7 +911,10 @@ async fn de_t_ligger_rekent_als_een_t_en_niet_als_een_rechthoek() {
     // 3,0375·10⁹ mm⁴ geven en dus 83 531 kNm² — ruim 60 % te stijf. Dat getal
     // stuurde niet alleen de vergelijkingswaarde maar ook de klemdrempel.
     let ei_fout = 27_500.0 * 400.0 * 450.0_f64.powi(3) / 12.0 * 1e-9;
-    assert!(ei_fout / ei_t > 1.6, "de vergelijking bewijst niets: {ei_fout} tegen {ei_t}");
+    assert!(
+        ei_fout / ei_t > 1.6,
+        "de vergelijking bewijst niets: {ei_fout} tegen {ei_t}"
+    );
     assert!((getal(&seg, &["ei_uncracked_knm2"]) - ei_fout).abs() > 1.0);
     // De klemdrempel hangt aan diezelfde I.
     assert!((getal(&seg, &["min_ei_knm2"]) - 0.01 * ei_t).abs() < 1e-6);
@@ -1039,7 +1070,10 @@ async fn de_drie_wegen_kennen_dezelfde_sterkteklassen() {
             "MCP-server",
             &mcp[sleutel],
         );
-        assert!(!brug.as_array().expect("lijst").is_empty(), "{tool} is leeg");
+        assert!(
+            !brug.as_array().expect("lijst").is_empty(),
+            "{tool} is leeg"
+        );
     }
 
     // Weg 1: de bron van de lijsten is dezelfde constante uit `nen-en-1992-1-1`
@@ -1083,12 +1117,22 @@ async fn de_beugelgegevens_komen_door_alle_drie_de_wegen() {
     // Ø8 h.o.h. 150 mm, 2-benig — precies wat er is ingevoerd.
     let verwacht = "onder 3Ø16, boven 2Ø12, beugel Ø8 h.o.h. 150 mm, 2-benig, dekking 30 mm";
     for (naam, r) in [("Tauri", &tauri), ("toetsbrug", &brug), ("MCP", &mcp)] {
-        assert_eq!(r["reinforcement_summary"], verwacht, "{naam} verloor de beugelgegevens");
+        assert_eq!(
+            r["reinforcement_summary"], verwacht,
+            "{naam} verloor de beugelgegevens"
+        );
     }
 
     // En zónder die velden blijft de regel letterlijk de oude: een korf zonder
     // beugelafstand mag niet als een korf mét gaan lezen.
-    let zonder = weg_mcp(&mut stdin, &mut reader, 501, "check_concrete_beam", invoer_balk()).await;
+    let zonder = weg_mcp(
+        &mut stdin,
+        &mut reader,
+        501,
+        "check_concrete_beam",
+        invoer_balk(),
+    )
+    .await;
     assert_eq!(
         zonder["reinforcement_summary"],
         "onder 3Ø16, boven 2Ø12, beugel Ø8, dekking 30 mm"
@@ -1189,7 +1233,10 @@ async fn de_bgt_combinatie_en_de_nieuwe_gegevens_komen_door_alle_drie_de_wegen()
 
         // §7.3.4 — de frequente combinatie is werkelijk gebruikt.
         let wk = toets(r, "7.3.4_scheurwijdte");
-        assert_eq!(wk["status"], "Ok", "{naam}: de scheurwijdtetoets is niet uitgevoerd");
+        assert_eq!(
+            wk["status"], "Ok",
+            "{naam}: de scheurwijdtetoets is niet uitgevoerd"
+        );
         assert_eq!(
             wk["force_state"]["combination_id"], 7,
             "{naam}: de scheurwijdte hangt aan de verkeerde combinatie"
@@ -1213,23 +1260,49 @@ async fn de_bgt_combinatie_en_de_nieuwe_gegevens_komen_door_alle_drie_de_wegen()
 
         // §7.4.2 — de constructievorm is doorgekomen: K = 1,0, vrij opgelegd.
         let slank = toets(r, "7.4.2_slankheid");
-        assert_eq!(slank["status"], "Ok", "{naam}: de slankheidstoets is niet uitgevoerd");
-        assert!((variabele(slank, "K") - 1.0).abs() < 1e-9, "{naam}: K is niet 1,0");
+        assert_eq!(
+            slank["status"], "Ok",
+            "{naam}: de slankheidstoets is niet uitgevoerd"
+        );
+        assert!(
+            (variabele(slank, "K") - 1.0).abs() < 1e-9,
+            "{naam}: K is niet 1,0"
+        );
 
         // §8.2(2) — de korrelafmeting is doorgekomen: zonder d_g doet die
         // toets géén uitspraak.
         let vrij = toets(r, "8.2_vrije_staafafstand");
         assert_eq!(vrij["status"], "Ok", "{naam}: d_g is niet doorgekomen");
-        assert!((variabele(vrij, "d_g") - 32.0).abs() < 1e-9, "{naam}: d_g is verschoven");
+        assert!(
+            (variabele(vrij, "d_g") - 32.0).abs() < 1e-9,
+            "{naam}: d_g is verschoven"
+        );
     }
 
     // EN ZONDER DIE VELDEN: dezelfde drie toetsen komen als "niet uitgevoerd"
     // terug, met een reden. Niet weggelaten en niet groen.
-    let zonder = weg_mcp(&mut stdin, &mut reader, 601, "check_concrete_beam", invoer_balk()).await;
-    for id in ["7.3.2_minimumwapening", "7.3.4_scheurwijdte", "7.4.2_slankheid"] {
+    let zonder = weg_mcp(
+        &mut stdin,
+        &mut reader,
+        601,
+        "check_concrete_beam",
+        invoer_balk(),
+    )
+    .await;
+    for id in [
+        "7.3.2_minimumwapening",
+        "7.3.4_scheurwijdte",
+        "7.4.2_slankheid",
+    ] {
         let rc = toets(&zonder, id);
-        assert_eq!(rc["status"], "NotApplicable", "{id} meldt iets zonder de gegevens te hebben");
-        assert!(rc["uc"].is_null(), "{id} toont een unity check die er niet is");
+        assert_eq!(
+            rc["status"], "NotApplicable",
+            "{id} meldt iets zonder de gegevens te hebben"
+        );
+        assert!(
+            rc["uc"].is_null(),
+            "{id} toont een unity check die er niet is"
+        );
         assert!(
             !rc["notes"].as_array().expect("notes").is_empty(),
             "{id} noemt geen reden"
@@ -1312,9 +1385,7 @@ async fn weg_mcp_fout(
 /// De Tauri-weg met de verwachting dat het LEZEN van de invoer faalt.
 fn weg_tauri_fout(invoer: &Value) -> String {
     match serde_json::from_value::<Vec<concrete_check::ConcreteBeamCheckInput>>(json!([invoer])) {
-        Ok(_) => panic!(
-            "de Tauri-weg accepteerde invoer die geweigerd hoort te worden: {invoer}"
-        ),
+        Ok(_) => panic!("de Tauri-weg accepteerde invoer die geweigerd hoort te worden: {invoer}"),
         Err(e) => e.to_string(),
     }
 }
@@ -1390,14 +1461,27 @@ async fn de_wapeningszones_komen_door_alle_drie_de_wegen() {
         .first()
         .expect("één staaf erin, één resultaat eruit")
         .clone();
-    let mcp = weg_mcp(&mut stdin, &mut reader, 700, "check_concrete_beam", met.clone()).await;
+    let mcp = weg_mcp(
+        &mut stdin,
+        &mut reader,
+        700,
+        "check_concrete_beam",
+        met.clone(),
+    )
+    .await;
     eis_gelijk("Tauri-command", &tauri, "toetsbrug", &brug);
     eis_gelijk("toetsbrug", &brug, "MCP-server", &mcp);
 
     // 2 — en het VERSCHILT van het antwoord zonder zones, op de plaatsen waar
     // het hoort te verschillen.
-    let mcp_zonder =
-        weg_mcp(&mut stdin, &mut reader, 701, "check_concrete_beam", zonder.clone()).await;
+    let mcp_zonder = weg_mcp(
+        &mut stdin,
+        &mut reader,
+        701,
+        "check_concrete_beam",
+        zonder.clone(),
+    )
+    .await;
     assert!(
         verschil(&mcp, &mcp_zonder, "").is_some(),
         "met en zonder zones leveren hetzelfde antwoord — de toetsing leest de zones dus niet"
@@ -1568,7 +1652,14 @@ async fn de_wapeningszones_komen_door_alle_drie_de_wegen() {
 #[tokio::test]
 async fn de_uitkomst_zelf_staat_vast() {
     let (mut child, mut stdin, mut reader) = start_server().await;
-    let mcp = weg_mcp(&mut stdin, &mut reader, 400, "check_concrete_beam", invoer_balk()).await;
+    let mcp = weg_mcp(
+        &mut stdin,
+        &mut reader,
+        400,
+        "check_concrete_beam",
+        invoer_balk(),
+    )
+    .await;
 
     // Rekenwaarden: f_cd = alpha_cc · f_ck / gamma_C = 1,0 · 30 / 1,5 = 20,0
     // N/mm² (alpha_cc = 1,0 volgens de NB bij 3.1.6(1)P); f_yd = 500 / 1,15 =
@@ -1605,8 +1696,18 @@ async fn de_uitkomst_zelf_staat_vast() {
     // aan een nieuwe drempel.
     let mut met_beugels = invoer_balk();
     met_beugels["cage"] = korf_met_beugels();
-    let heel = weg_mcp(&mut stdin, &mut reader, 401, "check_concrete_beam", met_beugels).await;
-    assert_eq!(heel["status"], "Ok", "met beugelgegevens hoort §6.2 te draaien");
+    let heel = weg_mcp(
+        &mut stdin,
+        &mut reader,
+        401,
+        "check_concrete_beam",
+        met_beugels,
+    )
+    .await;
+    assert_eq!(
+        heel["status"], "Ok",
+        "met beugelgegevens hoort §6.2 te draaien"
+    );
     assert!(
         heel["niet_uitgevoerd"]
             .as_array()
@@ -1686,7 +1787,11 @@ async fn de_maatgevende_snede_staat_vast() {
     };
     assert!((var("d") - 456.0).abs() < 1e-9, "d = {}", var("d"));
     assert!((var(r"A_{sl}") - 226.194671).abs() < 1e-3);
-    assert!((var(r"V_{Rd,c}") - 56.204).abs() < 1e-2, "V_Rd,c = {}", var(r"V_{Rd,c}"));
+    assert!(
+        (var(r"V_{Rd,c}") - 56.204).abs() < 1e-2,
+        "V_Rd,c = {}",
+        var(r"V_{Rd,c}")
+    );
 
     // En de unity check van de hele staaf is die van deze snede.
     assert!((getal(&dwars, &["uc", "uc"]) - 55.0 / 56.204).abs() < 1e-4);

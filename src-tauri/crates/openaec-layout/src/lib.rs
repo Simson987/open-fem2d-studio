@@ -32,29 +32,29 @@
 //! let pdf_bytes = doc.build_to_bytes(flowables).unwrap();
 //! ```
 
-pub mod types;
-pub mod error;
-pub mod fonts;
-pub mod draw;
-pub mod flowable;
-pub mod spacer;
-pub mod paragraph;
-pub mod table;
-pub mod image_flowable;
-pub mod frame;
-pub mod page_template;
 pub mod doc_template;
+pub mod draw;
+pub mod error;
+pub mod flowable;
+pub mod fonts;
+pub mod frame;
+pub mod image_flowable;
+pub mod page_template;
+pub mod paragraph;
+pub mod spacer;
+pub mod table;
+pub mod types;
 
 // Re-exports
-pub use types::{Pt, Mm, Size, Rect, Color, Alignment, Padding, A4, A3};
-pub use error::LayoutError;
-pub use fonts::{FontId, FontRegistry, SharedFontRegistry, shared_font_registry};
-pub use draw::{DrawOp, DrawList};
-pub use flowable::{Flowable, LayoutContext, SplitResult};
-pub use spacer::{Spacer, PageBreak};
-pub use paragraph::{Paragraph, ParagraphStyle};
-pub use table::{Table, TableStyleConfig, CellContent};
-pub use image_flowable::{ImageFlowable, ImageData};
-pub use frame::{Frame, FrameResult};
-pub use page_template::{PageTemplate, PageCallback};
 pub use doc_template::{DocTemplate, RawPage};
+pub use draw::{DrawList, DrawOp};
+pub use error::LayoutError;
+pub use flowable::{Flowable, LayoutContext, SplitResult};
+pub use fonts::{FontId, FontRegistry, SharedFontRegistry, shared_font_registry};
+pub use frame::{Frame, FrameResult};
+pub use image_flowable::{ImageData, ImageFlowable};
+pub use page_template::{PageCallback, PageTemplate};
+pub use paragraph::{Paragraph, ParagraphStyle};
+pub use spacer::{PageBreak, Spacer};
+pub use table::{CellContent, Table, TableStyleConfig};
+pub use types::{A3, A4, Alignment, Color, Mm, Padding, Pt, Rect, Size};

@@ -41,7 +41,7 @@
 use mechanics::ForcePoint;
 use nen_en_1993_1_1_section::CheckStatus;
 use steel_check::{
-    CheckKind, MaatgevendPunt, NamedCheck, StabiliteitsDoorsnede, Toetsdoorsnede, ToetsUc,
+    CheckKind, MaatgevendPunt, NamedCheck, StabiliteitsDoorsnede, ToetsUc, Toetsdoorsnede,
     VerloopMaten, VerloopRapport,
 };
 
@@ -63,8 +63,12 @@ const VOLGORDE: [&str; 8] = [
 ];
 
 /// De vier doorsnedetoetsen van §6.1, per rekenpunt met de plaatselijke maten.
-const DOORSNEDETOETSEN: [&str; 4] =
-    ["6.1.2_tension", "6.1.4_compression", "6.1.6_bending", "6.1.7_shear"];
+const DOORSNEDETOETSEN: [&str; 4] = [
+    "6.1.2_tension",
+    "6.1.4_compression",
+    "6.1.6_bending",
+    "6.1.7_shear",
+];
 
 /// De twee stabiliteitstoetsen, met de kleinste doorsnede in het veld.
 const STABILITEITSTOETSEN: [&str; 2] = ["6.3.2_column_stability", "6.3.3_beam_stability"];
@@ -83,7 +87,12 @@ impl Maten {
     fn naar_rapport(self) -> VerloopMaten {
         // t_w en t_f bestaan niet bij een rechthoek; ze blijven leeg in plaats
         // van 0,0 — een nul zou als "een plaat van nul dik" gelezen worden.
-        VerloopMaten { h_mm: self.h_mm, b_mm: self.b_mm, tw_mm: None, tf_mm: None }
+        VerloopMaten {
+            h_mm: self.h_mm,
+            b_mm: self.b_mm,
+            tw_mm: None,
+            tf_mm: None,
+        }
     }
     fn area_mm2(self) -> f64 {
         self.b_mm * self.h_mm
@@ -143,7 +152,10 @@ pub fn bepaal_verloop(input: &TimberBeamCheckInput) -> Result<Option<Verloop>, S
         );
     }
     // Eén opgegeven maat betekent: de andere verloopt niet.
-    let begin = Maten { b_mm: input.width_mm, h_mm: input.height_mm };
+    let begin = Maten {
+        b_mm: input.width_mm,
+        h_mm: input.height_mm,
+    };
     let eind = Maten {
         b_mm: input.width_end_mm.unwrap_or(input.width_mm),
         h_mm: input.height_end_mm.unwrap_or(input.height_mm),
@@ -179,7 +191,11 @@ fn uc_of(c: &NamedCheck) -> f64 {
             matches!(s.status, CheckStatus::NotApplicable),
         ),
     };
-    if skip { 0.0 } else { uc.unwrap_or(0.0) }
+    if skip {
+        0.0
+    } else {
+        uc.unwrap_or(0.0)
+    }
 }
 
 fn uc_optie(c: &NamedCheck) -> Option<f64> {
@@ -229,7 +245,11 @@ fn deelvraag(
     x_mm: f64,
     envelope: Vec<ForcePoint>,
 ) -> Deelvraag {
-    let t = if l_mm > 0.0 { (x_mm / l_mm).clamp(0.0, 1.0) } else { 0.0 };
+    let t = if l_mm > 0.0 {
+        (x_mm / l_mm).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     let maten = v.maten_op(t);
     let mut deel = input.clone();
     deel.width_end_mm = None;
@@ -237,7 +257,12 @@ fn deelvraag(
     deel.width_mm = maten.b_mm;
     deel.height_mm = maten.h_mm;
     deel.forces_envelope = envelope;
-    Deelvraag { x_mm, t, maten, resultaat: check_timber_beam(deel) }
+    Deelvraag {
+        x_mm,
+        t,
+        maten,
+        resultaat: check_timber_beam(deel),
+    }
 }
 
 fn niet_getoetst(
@@ -279,7 +304,11 @@ pub fn check_timber_beam_verlopend(
     }
 
     // ── 1. Doorsnedetoetsen §6.1, per rekenpunt ─────────────────────────────
-    let mut punten: Vec<f64> = input.forces_envelope.iter().map(|p| p.position_mm).collect();
+    let mut punten: Vec<f64> = input
+        .forces_envelope
+        .iter()
+        .map(|p| p.position_mm)
+        .collect();
     punten.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     punten.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
     if punten.is_empty() {
@@ -316,7 +345,11 @@ pub fn check_timber_beam_verlopend(
     // ── 2. Stabiliteit §6.3.2 en §6.3.3, per kandidaatdoorsnede ─────────────
     let mut grenzen: Vec<f64> = vec![0.0, l_mm];
     if let Some(b) = input.lateral_bracing.as_ref() {
-        for f in b.top_flange_positions.iter().chain(b.bottom_flange_positions.iter()) {
+        for f in b
+            .top_flange_positions
+            .iter()
+            .chain(b.bottom_flange_positions.iter())
+        {
             if f.is_finite() && *f > 0.0 && *f < 1.0 {
                 grenzen.push(f * l_mm);
             }
@@ -349,7 +382,9 @@ pub fn check_timber_beam_verlopend(
     let mut stabiliteit: Vec<StabiliteitsDoorsnede> = Vec::new();
     for id in VOLGORDE {
         if DOORSNEDETOETSEN.contains(&id) {
-            let Some((i, mut c)) = kies(&per_punt, id) else { continue };
+            let Some((i, mut c)) = kies(&per_punt, id) else {
+                continue;
+            };
             let d = &per_punt[i];
             plak_notitie(
                 &mut c,
@@ -370,9 +405,12 @@ pub fn check_timber_beam_verlopend(
             herkomst.push(i);
             uit_punt.push(true);
         } else if STABILITEITSTOETSEN.contains(&id) {
-            let Some((i, mut c)) = kies(&per_grens, id) else { continue };
+            let Some((i, mut c)) = kies(&per_grens, id) else {
+                continue;
+            };
             let d = &per_grens[i];
-            let reden = format!(
+            let reden =
+                format!(
                 "VERLOPEND PROFIEL. Stabiliteit wordt veilig-zijdig met de KLEINSTE doorsnede in \
                  het beschouwde veld gerekend (ontwerpbesluit 15-09-2026). Alle {} \
                  kandidaatdoorsneden op de veldgrenzen (x = {}) zijn doorgerekend; maatgevend is \
@@ -396,7 +434,9 @@ pub fn check_timber_beam_verlopend(
             herkomst.push(i);
             uit_punt.push(false);
         } else if DOORBUIGING.contains(&id) {
-            let Some(c) = per_grens.first().and_then(|d| d.toets(id)) else { continue };
+            let Some(c) = per_grens.first().and_then(|d| d.toets(id)) else {
+                continue;
+            };
             checks.push(c.clone());
             herkomst.push(0);
             uit_punt.push(false);
@@ -416,7 +456,10 @@ pub fn check_timber_beam_verlopend(
             toetsen: DOORSNEDETOETSEN
                 .iter()
                 .filter_map(|id| {
-                    d.toets(id).map(|c| ToetsUc { id: (*id).to_string(), uc: uc_optie(c) })
+                    d.toets(id).map(|c| ToetsUc {
+                        id: (*id).to_string(),
+                        uc: uc_optie(c),
+                    })
                 })
                 .collect(),
         }
@@ -432,7 +475,10 @@ pub fn check_timber_beam_verlopend(
         }) else {
             continue;
         };
-        if toetsdoorsneden.iter().any(|t| (t.x_mm - d.x_mm).abs() < 1e-9) {
+        if toetsdoorsneden
+            .iter()
+            .any(|t| (t.x_mm - d.x_mm).abs() < 1e-9)
+        {
             continue;
         }
         toetsdoorsneden.push(doorsnede_van(d));
@@ -443,8 +489,11 @@ pub fn check_timber_beam_verlopend(
             let Some(c) = d.toets(id) else { continue };
             let uc = uc_of(c);
             if uc > 0.0 && maatgevend.as_ref().map_or(true, |m| uc > m.uc) {
-                maatgevend =
-                    Some(MaatgevendPunt { toets_id: id.to_string(), uc, doorsnede: doorsnede_van(d) });
+                maatgevend = Some(MaatgevendPunt {
+                    toets_id: id.to_string(),
+                    uc,
+                    doorsnede: doorsnede_van(d),
+                });
             }
         }
     }
@@ -492,7 +541,11 @@ pub fn check_timber_beam_verlopend(
             governing_check_id = c.id.clone();
         }
     }
-    let status = if uc_max <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk };
+    let status = if uc_max <= 1.0 {
+        CheckStatus::Ok
+    } else {
+        CheckStatus::NotOk
+    };
     // De belastingduurklasse en de maatgevende combinatie komen van de
     // deelvraag die de maatgevende toets leverde; de k_mod-tabel van een
     // deelvraag met de VOLLE omhullende, want die kent alle combinaties.

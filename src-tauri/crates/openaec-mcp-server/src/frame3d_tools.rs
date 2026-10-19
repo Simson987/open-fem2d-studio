@@ -213,15 +213,34 @@ mod tests {
         let point = &definition["inputSchema"]["properties"]["memberPointLoads"];
         assert_eq!(point["type"], "array");
         assert_eq!(point["items"]["additionalProperties"], false);
-        assert_eq!(point["items"]["required"], json!(["id", "memberId", "pyKn", "pzKn", "positionM"]));
+        assert_eq!(
+            point["items"]["required"],
+            json!(["id", "memberId", "pyKn", "pzKn", "positionM"])
+        );
         let support = &definition["inputSchema"]["properties"]["supports"]["items"];
         assert_eq!(support["properties"]["kzKnPerM"]["exclusiveMinimum"], 0);
-        assert_eq!(support["properties"]["kryKnmPerRad"]["type"], json!(["number", "null"]));
-        assert_eq!(support["properties"]["uxPrescribedM"]["type"], json!(["number", "null"]));
-        assert_eq!(support["properties"]["rzPrescribedRad"]["type"], json!(["number", "null"]));
+        assert_eq!(
+            support["properties"]["kryKnmPerRad"]["type"],
+            json!(["number", "null"])
+        );
+        assert_eq!(
+            support["properties"]["uxPrescribedM"]["type"],
+            json!(["number", "null"])
+        );
+        assert_eq!(
+            support["properties"]["rzPrescribedRad"]["type"],
+            json!(["number", "null"])
+        );
         let thermal = &definition["inputSchema"]["properties"]["thermalLoads"]["items"];
         assert_eq!(thermal["additionalProperties"], false);
-        assert_eq!(thermal["required"], json!(["id", "memberId", "deltaTUniformK"]));
-        assert_eq!(definition["inputSchema"]["properties"]["materials"]["items"]["properties"]["alphaPerK"]["exclusiveMinimum"], 0);
+        assert_eq!(
+            thermal["required"],
+            json!(["id", "memberId", "deltaTUniformK"])
+        );
+        assert_eq!(
+            definition["inputSchema"]["properties"]["materials"]["items"]["properties"]
+                ["alphaPerK"]["exclusiveMinimum"],
+            0
+        );
     }
 }

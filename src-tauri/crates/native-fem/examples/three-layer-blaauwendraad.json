@@ -1,0 +1,24 @@
+{
+  "kind": "threeLayer",
+  "input": {
+    "forces": {
+      "nx": 495,
+      "ny": 400,
+      "nxy": -330,
+      "mx": 0,
+      "my": 0,
+      "mxy": 0,
+      "vx": 0,
+      "vy": 0
+    },
+    "thicknessMm": 300,
+    "topSkinMm": 100,
+    "bottomSkinMm": 100,
+    "topReinforcement": { "asX": 5000, "asY": 5000 },
+    "bottomReinforcement": { "asX": 5000, "asY": 5000 },
+    "fcdMpa": 20,
+    "fydMpa": 400,
+    "nuPrime": 0.8,
+    "compressionModel": "blaauwendraad2021"
+  }
+}

@@ -88,7 +88,11 @@ async fn verzoek(methode: &str, params: Value) -> Value {
 }
 
 async fn tool(naam: &str, argumenten: Value) -> Value {
-    verzoek("tools/call", json!({ "name": naam, "arguments": argumenten })).await
+    verzoek(
+        "tools/call",
+        json!({ "name": naam, "arguments": argumenten }),
+    )
+    .await
 }
 
 /// Vrij opgelegde houten balk van 3 m met eigen gewicht; `eind` is het eindprofiel.
@@ -132,10 +136,18 @@ async fn verlopende_balk_rekent_met_het_plaatselijke_eigen_gewicht() {
     assert_eq!(val["structuredContent"]["ok"], json!(true), "{val}");
 
     let uit = tool("solve_fem_model", json!({ "model": model })).await;
-    assert_eq!(uit["isError"], json!(false), "de berekening hoort te slagen: {uit}");
+    assert_eq!(
+        uit["isError"],
+        json!(false),
+        "de berekening hoort te slagen: {uit}"
+    );
     let reacties = &uit["structuredContent"]["per_case"]["1"]["reactions"];
-    let r1 = reacties["1"]["fz"].as_f64().unwrap_or_else(|| panic!("geen reactie op knoop 1: {uit}"));
-    let r2 = reacties["2"]["fz"].as_f64().unwrap_or_else(|| panic!("geen reactie op knoop 2: {uit}"));
+    let r1 = reacties["1"]["fz"]
+        .as_f64()
+        .unwrap_or_else(|| panic!("geen reactie op knoop 1: {uit}"));
+    let r2 = reacties["2"]["fz"]
+        .as_f64()
+        .unwrap_or_else(|| panic!("geen reactie op knoop 2: {uit}"));
     let gewicht_kn = 420.0 * 9.81 * (0.1 * 0.3) * 3.0 / 1000.0; // 0,370818 kN
     assert!(
         (r1 + r2 - gewicht_kn).abs() < 1e-9,
@@ -143,7 +155,10 @@ async fn verlopende_balk_rekent_met_het_plaatselijke_eigen_gewicht() {
         r1 + r2
     );
     // Prismatisch met het beginprofiel zou 0,494 kN wegen en symmetrisch dragen.
-    assert!(r1 > r2 + 0.01, "de zware kant (h = 400, knoop 1) hoort meer te dragen: R1 {r1}, R2 {r2}");
+    assert!(
+        r1 > r2 + 0.01,
+        "de zware kant (h = 400, knoop 1) hoort meer te dragen: R1 {r1}, R2 {r2}"
+    );
 }
 
 /// Een eindprofiel van een andere doorsnedesoort is een invoerfout met reden —
@@ -154,14 +169,31 @@ async fn eindprofiel_van_een_andere_soort_wordt_geweigerd_met_reden() {
     let model = balk("IPE200");
 
     let val = tool("validate_fem_model", json!({ "model": model.clone() })).await;
-    assert_eq!(val["structuredContent"]["ok"], json!(false), "de droogloop hoort het te melden: {val}");
+    assert_eq!(
+        val["structuredContent"]["ok"],
+        json!(false),
+        "de droogloop hoort het te melden: {val}"
+    );
     let fouten = val["structuredContent"]["errors"].to_string();
-    assert!(fouten.contains("Staaf 1") && fouten.contains("rechthoek"), "{fouten}");
+    assert!(
+        fouten.contains("Staaf 1") && fouten.contains("rechthoek"),
+        "{fouten}"
+    );
 
     let uit = tool("solve_fem_model", json!({ "model": model })).await;
-    assert_eq!(uit["isError"], json!(true), "hoort geweigerd te worden: {uit}");
+    assert_eq!(
+        uit["isError"],
+        json!(true),
+        "hoort geweigerd te worden: {uit}"
+    );
     let fout = &uit["structuredContent"];
-    assert_eq!(fout["error_code"], "DOORSNEDE_ONBEKEND", "een invoerfout, geen INTERN: {fout}");
+    assert_eq!(
+        fout["error_code"], "DOORSNEDE_ONBEKEND",
+        "een invoerfout, geen INTERN: {fout}"
+    );
     let melding = fout["melding"].as_str().unwrap_or("");
-    assert!(melding.contains("staaf 1") && melding.contains("rechthoek"), "{melding}");
+    assert!(
+        melding.contains("staaf 1") && melding.contains("rechthoek"),
+        "{melding}"
+    );
 }

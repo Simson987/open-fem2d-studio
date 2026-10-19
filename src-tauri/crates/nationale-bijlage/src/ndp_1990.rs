@@ -158,7 +158,10 @@ mod tests {
         for (a, b) in [n.uls_cc1, n.uls_cc2, n.uls_cc3] {
             assert_eq!((a.gamma_g_inf, b.gamma_g_inf), (0.9, 0.9));
         }
-        assert_eq!((n.equ.gamma_g_sup, n.equ.gamma_g_inf, n.equ.gamma_q), (1.1, 0.9, 1.5));
+        assert_eq!(
+            (n.equ.gamma_g_sup, n.equ.gamma_g_inf, n.equ.gamma_q),
+            (1.1, 0.9, 1.5)
+        );
         assert_eq!(n.k_fi, (0.9, 1.0, 1.1));
     }
 
@@ -167,8 +170,14 @@ mod tests {
     fn psi_volgens_nb2() {
         let n = Ndp1990::voor(NationaleBijlage::NL);
         let rij = |c: &str| *n.psi.iter().find(|p| p.category == c).expect(c);
-        assert_eq!((rij("D").psi0, rij("D").psi1, rij("D").psi2), (0.4, 0.7, 0.6));
-        assert_eq!((rij("F").psi0, rij("F").psi1, rij("F").psi2), (0.7, 0.7, 0.6));
+        assert_eq!(
+            (rij("D").psi0, rij("D").psi1, rij("D").psi2),
+            (0.4, 0.7, 0.6)
+        );
+        assert_eq!(
+            (rij("F").psi0, rij("F").psi1, rij("F").psi2),
+            (0.7, 0.7, 0.6)
+        );
         assert_eq!((rij("C").psi0, rij("C-menigte").psi0), (0.4, 0.6));
         assert_eq!((rij("Wind").psi1, rij("Sneeuw").psi1), (0.2, 0.2));
         assert_eq!(n.psi.len(), 13);

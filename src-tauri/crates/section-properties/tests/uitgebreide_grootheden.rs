@@ -101,7 +101,12 @@ fn rechthoek_levert_elke_nieuwe_grootheid_met_de_hand() {
     dicht(getal(&v, "v_pna_mm"), 0.0, 1e-6, "v_pna");
     dicht(getal(&v, "wpl_u_mm3"), b * h * h / 4.0, 1e-6, "W_pl,u");
     dicht(getal(&v, "wpl_v_mm3"), h * b * b / 4.0, 1e-6, "W_pl,v");
-    for veld in ["vormfactor_y", "vormfactor_z", "vormfactor_u", "vormfactor_v"] {
+    for veld in [
+        "vormfactor_y",
+        "vormfactor_z",
+        "vormfactor_u",
+        "vormfactor_v",
+    ] {
         dicht(getal(&v, veld), 1.5, 1e-9, veld);
     }
 
@@ -112,7 +117,12 @@ fn rechthoek_levert_elke_nieuwe_grootheid_met_de_hand() {
     assert!(vlag(&v, "monosymmetrie_bepaald"));
     dicht(getal(&v, "z_j_mm"), 0.0, 0.02, "z_j");
     dicht(getal(&v, "y_j_mm"), 0.0, 0.02, "y_j");
-    dicht(getal(&v, "beta_y_mm"), -2.0 * getal(&v, "z_j_mm"), 1e-12, "β_y = −2·z_j");
+    dicht(
+        getal(&v, "beta_y_mm"),
+        -2.0 * getal(&v, "z_j_mm"),
+        1e-12,
+        "β_y = −2·z_j",
+    );
 
     // Afschuiving in de hoofdrichtingen: α = 0, dus letterlijk Av;y en Av;z.
     assert!(vlag(&v, "av_hoofdas_bepaald"));
@@ -166,9 +176,19 @@ fn ipe300_tegen_de_catalogus() {
 
     // Hoofdassen vallen samen met y en z.
     dicht(getal(&v, "alpha_hoofdas_rad"), 0.0, 1e-12, "α");
-    dicht(getal(&v, "wel_u_plus_mm3"), getal(&v, "wel_y_mm3"), 1e-6, "W_u = W_y");
+    dicht(
+        getal(&v, "wel_u_plus_mm3"),
+        getal(&v, "wel_y_mm3"),
+        1e-6,
+        "W_u = W_y",
+    );
     dicht(getal(&v, "wpl_u_mm3"), wpl_y, 1e-6, "W_pl;u = W_pl;y");
-    dicht(getal(&v, "iu_radius_mm"), getal(&v, "iy_radius_mm"), 1e-9, "i_u = i_y");
+    dicht(
+        getal(&v, "iu_radius_mm"),
+        getal(&v, "iy_radius_mm"),
+        1e-9,
+        "i_u = i_y",
+    );
     assert!(vlag(&v, "av_hoofdas_bepaald"));
 
     // Plastisch zwaartepunt op halve hoogte, samen met het elastische.
@@ -178,7 +198,12 @@ fn ipe300_tegen_de_catalogus() {
     // z_j is nul; de marge is die van de mesh onder het schuifmiddelpunt.
     assert!(vlag(&v, "monosymmetrie_bepaald"));
     dicht(getal(&v, "z_j_mm"), 0.0, 0.5, "z_j");
-    dicht(getal(&v, "beta_y_mm"), -2.0 * getal(&v, "z_j_mm"), 1e-9, "β_y = −2·z_j");
+    dicht(
+        getal(&v, "beta_y_mm"),
+        -2.0 * getal(&v, "z_j_mm"),
+        1e-9,
+        "β_y = −2·z_j",
+    );
 }
 
 /// Een IPE 300 met een rond langsgat van 40 mm in het lijf: de gatomtrek is
@@ -234,7 +259,10 @@ fn losse_delen_geven_geen_zj_maar_wel_een_omtrek() {
                           "hoek_graden": 0 }] }"#,
     );
     assert!(vlag(&v, "losse_delen"));
-    assert!(!vlag(&v, "monosymmetrie_bepaald"), "z_j hoort niet bepaald te zijn");
+    assert!(
+        !vlag(&v, "monosymmetrie_bepaald"),
+        "z_j hoort niet bepaald te zijn"
+    );
     dicht(getal(&v, "z_j_mm"), 0.0, 0.0, "z_j staat op nul");
     assert!(vlag(&v, "omtrek_bepaald"));
     let vol = 2.0 * 150.0
@@ -265,7 +293,11 @@ fn losse_delen_geven_geen_zj_maar_wel_een_omtrek() {
 fn t_profiel_json(spiegel: bool) -> String {
     // `spiegel = true` zet de flens onderaan: alles wat met z te maken heeft
     // klapt om, dus z_j hoort van teken te wisselen.
-    let (z_lijf, z_flens) = if spiegel { (110.0, 10.0) } else { (90.0, 190.0) };
+    let (z_lijf, z_flens) = if spiegel {
+        (110.0, 10.0)
+    } else {
+        (90.0, 190.0)
+    };
     format!(
         r#"{{ "naam": "T", "soort": "Samenstelling",
                "lamellen": [
@@ -296,7 +328,12 @@ fn t_profiel_heeft_een_plastisch_zwaartepunt_naast_het_elastische() {
         "de PNA hoort boven het elastische zwaartepunt te liggen"
     );
     // Om de z-as is het T-profiel symmetrisch, dus daar vallen ze samen.
-    dicht(getal(&v, "y_pna_mm"), getal(&v, "y_c_mm"), 1e-6, "y_pna = y_c");
+    dicht(
+        getal(&v, "y_pna_mm"),
+        getal(&v, "y_c_mm"),
+        1e-6,
+        "y_pna = y_c",
+    );
 }
 
 #[test]
@@ -313,7 +350,12 @@ fn t_profiel_heeft_een_zj_met_het_juiste_teken() {
 
     // Zelfde profiel, ondersteboven: exact het tegengestelde teken.
     let onder = draai(&t_profiel_json(true));
-    dicht(getal(&onder, "z_j_mm"), -z_j, 1e-6, "z_j met de flens onder");
+    dicht(
+        getal(&onder, "z_j_mm"),
+        -z_j,
+        1e-6,
+        "z_j met de flens onder",
+    );
 }
 
 /// Draai hetzelfde T-profiel een kwartslag tegen de klok in. Dan geldt
@@ -346,7 +388,12 @@ fn kwartslag_verwisselt_zj_en_yj() {
         1e-9,
         "α",
     );
-    dicht(getal(&gedraaid, "iu_mm4"), getal(&recht, "iu_mm4"), 1.0, "I_u invariant");
+    dicht(
+        getal(&gedraaid, "iu_mm4"),
+        getal(&recht, "iu_mm4"),
+        1.0,
+        "I_u invariant",
+    );
 
     assert!(vlag(&gedraaid, "monosymmetrie_bepaald"));
     dicht(
@@ -355,7 +402,12 @@ fn kwartslag_verwisselt_zj_en_yj() {
         1e-6,
         "y_j na een kwartslag",
     );
-    dicht(getal(&gedraaid, "z_j_mm"), 0.0, 1e-6, "z_j na een kwartslag");
+    dicht(
+        getal(&gedraaid, "z_j_mm"),
+        0.0,
+        1e-6,
+        "z_j na een kwartslag",
+    );
 
     // α = π/2: de afschuifoppervlakken wisselen van as, maar zijn bepaald.
     assert!(vlag(&gedraaid, "av_hoofdas_bepaald"));
@@ -386,10 +438,17 @@ fn catalogusdeel_maakt_zj_niet_bepaald() {
     dicht(getal(&v, "z_j_mm"), 0.0, 0.0, "z_j staat op nul");
     dicht(getal(&v, "wpl_u_mm3"), 0.0, 0.0, "W_pl;u staat op nul");
     // De massa is er wél: die volgt alleen uit het oppervlak.
-    dicht(getal(&v, "massa_kg_per_m"), 13_808.0 * 1e-6 * 7850.0, 0.05, "massa");
+    dicht(
+        getal(&v, "massa_kg_per_m"),
+        13_808.0 * 1e-6 * 7850.0,
+        0.05,
+        "massa",
+    );
     let meldingen = v["meldingen"].as_array().unwrap();
     assert!(
-        meldingen.iter().any(|m| m.as_str().unwrap().contains("z_j")),
+        meldingen
+            .iter()
+            .any(|m| m.as_str().unwrap().contains("z_j")),
         "er hoort een melding over z_j te staan: {meldingen:?}"
     );
 }
@@ -439,11 +498,19 @@ fn gedraaid_profiel_houdt_dezelfde_hoofdasgrootheden() {
     );
     for veld in ["area_mm2", "iu_mm4", "iv_mm4", "it_mm4"] {
         let (a, b) = (getal(&recht, veld), getal(&scheef, veld));
-        assert!((a - b).abs() <= 1e-6 * a.abs().max(1.0), "{veld}: {a} tegen {b}");
+        assert!(
+            (a - b).abs() <= 1e-6 * a.abs().max(1.0),
+            "{veld}: {a} tegen {b}"
+        );
     }
 
     // α draait mee van 0° naar 30°.
-    dicht(getal(&recht, "alpha_hoofdas_rad"), 0.0, 1e-12, "α ongedraaid");
+    dicht(
+        getal(&recht, "alpha_hoofdas_rad"),
+        0.0,
+        1e-12,
+        "α ongedraaid",
+    );
     dicht(
         getal(&scheef, "alpha_hoofdas_rad"),
         30f64.to_radians(),

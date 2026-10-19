@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use frame3d_solver::{
-    solve, AnalysisKind, Material3D, Member3D, NodalLoad3D, Node3D, Section3D,
-    SolveRequest3D, Support3D,
+    solve, AnalysisKind, Material3D, Member3D, NodalLoad3D, Node3D, Section3D, SolveRequest3D,
+    Support3D,
 };
 use serde::Deserialize;
 

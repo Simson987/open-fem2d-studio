@@ -89,7 +89,11 @@ async fn verzoek(methode: &str, params: Value) -> Value {
 }
 
 async fn tool(naam: &str, argumenten: Value) -> Value {
-    verzoek("tools/call", json!({ "name": naam, "arguments": argumenten })).await
+    verzoek(
+        "tools/call",
+        json!({ "name": naam, "arguments": argumenten }),
+    )
+    .await
 }
 
 // ── De L-schijf ─────────────────────────────────────────────────────────────
@@ -97,7 +101,14 @@ async fn tool(naam: &str, argumenten: Value) -> Value {
 // meshSize 500: 21 punten en 24 driehoeken, randconform — dezelfde schijf als
 // `design-mockup/test-plaat-polygoon.mjs`.
 
-const HOEKEN: [(i64, i64); 6] = [(0, 0), (2000, 0), (2000, 1000), (1000, 1000), (1000, 2000), (0, 2000)];
+const HOEKEN: [(i64, i64); 6] = [
+    (0, 0),
+    (2000, 0),
+    (2000, 1000),
+    (1000, 1000),
+    (1000, 2000),
+    (0, 2000),
+];
 const S: i64 = 500;
 
 fn meshcache(met_randknopen: bool) -> Value {
@@ -132,13 +143,22 @@ fn meshcache(met_randknopen: bool) -> Value {
         let n = (lengte / S as f64).round() as i64;
         randen.push(
             (0..=n)
-                .map(|s| punt((ax + s * (bx - ax) / n, az + s * (bz - az) / n), &mut punten))
+                .map(|s| {
+                    punt(
+                        (ax + s * (bx - ax) / n, az + s * (bz - az) / n),
+                        &mut punten,
+                    )
+                })
                 .collect(),
         );
     }
     let handtekening = format!(
         "m{S}|{}",
-        HOEKEN.iter().map(|(x, z)| format!("{x},{z}")).collect::<Vec<_>>().join(";")
+        HOEKEN
+            .iter()
+            .map(|(x, z)| format!("{x},{z}"))
+            .collect::<Vec<_>>()
+            .join(";")
     );
     let mut cache = json!({
         "signature": handtekening,
@@ -152,7 +172,8 @@ fn meshcache(met_randknopen: bool) -> Value {
 }
 
 fn l_schijf(last: Value, met_randknopen: bool) -> Value {
-    let mut randlast = json!({ "id": 1, "type": "edgeLoad", "caseId": 1, "plateId": 1, "q": -10, "qDir": "z" });
+    let mut randlast =
+        json!({ "id": 1, "type": "edgeLoad", "caseId": 1, "plateId": 1, "q": -10, "qDir": "z" });
     for (k, v) in last.as_object().unwrap() {
         randlast[k] = v.clone();
     }
@@ -188,14 +209,18 @@ async fn schema_van_de_meshcache_eist_randknopen() {
         .find(|t| t["name"] == "solve_fem_model")
         .expect("solve_fem_model staat in tools/list")
         .clone();
-    let cache = &solve["inputSchema"]["properties"]["model"]["properties"]["plates"]["items"]["properties"]["meshCache"];
+    let cache = &solve["inputSchema"]["properties"]["model"]["properties"]["plates"]["items"]
+        ["properties"]["meshCache"];
     let verplicht: Vec<&str> = cache["required"]
         .as_array()
         .expect("required")
         .iter()
         .filter_map(Value::as_str)
         .collect();
-    assert!(verplicht.contains(&"edgeNodeIndices"), "required: {verplicht:?}");
+    assert!(
+        verplicht.contains(&"edgeNodeIndices"),
+        "required: {verplicht:?}"
+    );
 }
 
 /// Geldige polygoonplaat met cache en `edgeIndex`: de droogloop keurt hem goed
@@ -210,7 +235,11 @@ async fn polygoonplaat_met_rand_index_rekent_de_randlast_mee() {
     assert_eq!(val["structuredContent"]["ok"], json!(true), "{val}");
 
     let uit = tool("solve_fem_model", json!({ "model": model })).await;
-    assert_eq!(uit["isError"], json!(false), "de berekening hoort te slagen: {uit}");
+    assert_eq!(
+        uit["isError"],
+        json!(false),
+        "de berekening hoort te slagen: {uit}"
+    );
     let reacties = uit["structuredContent"]["per_case"]["1"]["reactions"]
         .as_object()
         .unwrap_or_else(|| panic!("geen reacties: {uit}"));
@@ -225,8 +254,16 @@ async fn polygoonplaat_met_rand_index_rekent_de_randlast_mee() {
 #[tokio::test]
 async fn benoemde_rand_op_een_polygoon_wordt_geweigerd_met_reden() {
     eis_node().await;
-    let uit = tool("solve_fem_model", json!({ "model": l_schijf(json!({ "edge": "top" }), true) })).await;
-    assert_eq!(uit["isError"], json!(true), "hoort geweigerd te worden, niet stil zonder last: {uit}");
+    let uit = tool(
+        "solve_fem_model",
+        json!({ "model": l_schijf(json!({ "edge": "top" }), true) }),
+    )
+    .await;
+    assert_eq!(
+        uit["isError"],
+        json!(true),
+        "hoort geweigerd te worden, niet stil zonder last: {uit}"
+    );
     let fout = &uit["structuredContent"];
     assert_eq!(fout["error_code"], json!("MODEL_ONOPLOSBAAR"), "{fout}");
     let melding = fout["melding"].as_str().unwrap_or_default();
@@ -235,8 +272,16 @@ async fn benoemde_rand_op_een_polygoon_wordt_geweigerd_met_reden() {
         "de melding hoort de oorzaak en de remedie te noemen: {melding}"
     );
 
-    let val = tool("validate_fem_model", json!({ "model": l_schijf(json!({ "edge": "top" }), true) })).await;
-    assert_eq!(val["structuredContent"]["ok"], json!(false), "de droogloop hoort het ook te melden: {val}");
+    let val = tool(
+        "validate_fem_model",
+        json!({ "model": l_schijf(json!({ "edge": "top" }), true) }),
+    )
+    .await;
+    assert_eq!(
+        val["structuredContent"]["ok"],
+        json!(false),
+        "de droogloop hoort het ook te melden: {val}"
+    );
 }
 
 /// Deel-/trapeziumrandlast en een puntlast op de plaatrand over de echte
@@ -259,7 +304,11 @@ async fn deellast_trapezium_en_randpuntlast_rekenen_mee() {
     assert_eq!(val["structuredContent"]["ok"], json!(true), "{val}");
 
     let uit = tool("solve_fem_model", json!({ "model": model.clone() })).await;
-    assert_eq!(uit["isError"], json!(false), "de berekening hoort te slagen: {uit}");
+    assert_eq!(
+        uit["isError"],
+        json!(false),
+        "de berekening hoort te slagen: {uit}"
+    );
     let reacties = uit["structuredContent"]["per_case"]["1"]["reactions"]
         .as_object()
         .unwrap_or_else(|| panic!("geen reacties: {uit}"));
@@ -272,21 +321,38 @@ async fn deellast_trapezium_en_randpuntlast_rekenen_mee() {
     // Een puntlast op de plaatrand ZONDER positie is een invoerfout, geen
     // last op de beginhoek.
     let mut zonder_pos = model.clone();
-    zonder_pos["loads"][1].as_object_mut().unwrap().remove("posFrac");
+    zonder_pos["loads"][1]
+        .as_object_mut()
+        .unwrap()
+        .remove("posFrac");
     let val = tool("validate_fem_model", json!({ "model": zonder_pos.clone() })).await;
     assert_eq!(val["structuredContent"]["ok"], json!(false), "{val}");
-    assert!(val.to_string().contains("posFrac"), "de melding hoort het veld te noemen: {val}");
+    assert!(
+        val.to_string().contains("posFrac"),
+        "de melding hoort het veld te noemen: {val}"
+    );
     let uit = tool("solve_fem_model", json!({ "model": zonder_pos })).await;
-    assert_eq!(uit["isError"], json!(true), "hoort geweigerd te worden: {uit}");
+    assert_eq!(
+        uit["isError"],
+        json!(true),
+        "hoort geweigerd te worden: {uit}"
+    );
 }
 
 /// Een meshcache zonder randknopen: invoerfout vóór het rekenen, geen crash.
 #[tokio::test]
 async fn meshcache_zonder_randknopen_is_een_invoerfout() {
     eis_node().await;
-    let uit = tool("solve_fem_model", json!({ "model": l_schijf(json!({ "edgeIndex": 4 }), false) })).await;
+    let uit = tool(
+        "solve_fem_model",
+        json!({ "model": l_schijf(json!({ "edgeIndex": 4 }), false) }),
+    )
+    .await;
     assert_eq!(uit["isError"], json!(true), "{uit}");
     let fout = &uit["structuredContent"];
     assert_eq!(fout["error_code"], json!("INVOER_ONGELDIG"), "{fout}");
-    assert!(fout.to_string().contains("edgeNodeIndices"), "de melding hoort het veld te noemen: {fout}");
+    assert!(
+        fout.to_string().contains("edgeNodeIndices"),
+        "de melding hoort het veld te noemen: {fout}"
+    );
 }

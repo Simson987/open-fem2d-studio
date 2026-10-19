@@ -1,0 +1,20 @@
+{
+  "kind": "mixed3d",
+  "input": {
+    "mesh": {
+      "nodes": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+      "tets": [[0, 1, 2, 3]]
+    },
+    "solidMaterial": { "eMpa": 1200, "poisson": 0.2 },
+    "hexes": [],
+    "trusses": [],
+    "membranes": [
+      { "nodes": [0, 1, 2], "eMpa": 2000, "nu": 0.25, "thicknessM": 0.1 }
+    ],
+    "loadsKn": [[0, 0, 0], [10, 0, 0], [0, 0, 0], [0, 0, 0]],
+    "prescribedM": [[0, 0, 0], [null, 0, 0], [0, 0, 0], [0, 0, 0]],
+    "backend": "matrixFreePcg",
+    "threads": 4,
+    "maxPcgIterations": 1000
+  }
+}

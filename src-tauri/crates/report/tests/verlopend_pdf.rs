@@ -39,7 +39,9 @@ fn inhoudsstromen(pdf: &[u8]) -> String {
     let doc = lopdf::Document::load_mem(pdf).expect("de PDF moet te lezen zijn");
     let mut uit = String::new();
     for (_, id) in doc.get_pages() {
-        let inhoud = doc.get_page_content(id).expect("de inhoudsstroom moet uit te pakken zijn");
+        let inhoud = doc
+            .get_page_content(id)
+            .expect("de inhoudsstroom moet uit te pakken zijn");
         uit.push_str(&String::from_utf8_lossy(&inhoud).to_uppercase());
     }
     uit
@@ -59,7 +61,9 @@ fn glief_hex(font: &[u8], woord: &str) -> String {
 }
 
 fn staat_erin(stroom: &str, woord: &str) -> bool {
-    [FONT_REGULAR, FONT_BOLD].iter().any(|f| stroom.contains(&glief_hex(f, woord)))
+    [FONT_REGULAR, FONT_BOLD]
+        .iter()
+        .any(|f| stroom.contains(&glief_hex(f, woord)))
 }
 
 /// Ligger op twee steunpunten, L = 6 m, q = 15 kN/m, S235.
@@ -165,7 +169,10 @@ fn de_pdf_toont_de_zes_toetsdoorsneden_en_de_maatgevende_plaats() {
 
     let stroom = pdf_van(verlopend, "verlopend_met_eindprofiel.pdf");
     for woord in PROEFWOORDEN {
-        assert!(staat_erin(&stroom, woord), "{woord:?} staat niet in de PDF van de verlopende staaf");
+        assert!(
+            staat_erin(&stroom, woord),
+            "{woord:?} staat niet in de PDF van de verlopende staaf"
+        );
     }
     // De plaats van ELKE toetsdoorsnede, als getal in de tabel.
     for d in &v.toetsdoorsneden {
@@ -183,8 +190,14 @@ fn de_pdf_toont_de_zes_toetsdoorsneden_en_de_maatgevende_plaats() {
     );
     // De begin- en eindnaam van het verloop, zodat de lezer ziet waar het
     // verloop vandaan komt en waarheen het gaat.
-    assert!(staat_erin(&stroom, "IPE 300"), "het beginprofiel staat niet in de PDF");
-    assert!(staat_erin(&stroom, "IPE 200"), "het eindprofiel staat niet in de PDF");
+    assert!(
+        staat_erin(&stroom, "IPE 300"),
+        "het beginprofiel staat niet in de PDF"
+    );
+    assert!(
+        staat_erin(&stroom, "IPE 200"),
+        "het eindprofiel staat niet in de PDF"
+    );
 }
 
 #[test]

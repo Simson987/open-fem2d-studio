@@ -22,7 +22,10 @@ pub fn lx(v: f64, decimalen: usize) -> String {
             s = geheel.to_string();
         }
     }
-    if s.trim_start_matches('-').chars().all(|c| c == '0' || c == '.') {
+    if s.trim_start_matches('-')
+        .chars()
+        .all(|c| c == '0' || c == '.')
+    {
         s = s.trim_start_matches('-').to_string();
     }
     s.replace('.', "{,}")

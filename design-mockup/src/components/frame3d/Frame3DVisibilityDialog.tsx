@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Modal from "../Modal";
+import SupportScaleControl from "../fem/SupportScaleControl";
 import { DEFAULT_FRAME_3D_VISIBILITY, type Frame3DVisibility } from "./frame3dVisibility";
 import "./Frame3DEditor.css";
 import { newFrame3DViewSetId, type Frame3DCameraState, type Frame3DViewSet } from "./frame3dViewSets";
@@ -23,8 +24,8 @@ interface Props {
   onApplyViewSet?: (viewSet: Frame3DViewSet) => void;
 }
 
-const GROUPS: { title: string; keys: (keyof Frame3DVisibility)[] }[] = [
-  { title: "geometry", keys: ["nodes", "beams", "plates", "profiles", "supports", "loads"] },
+const GROUPS: { title: string; keys: (keyof Omit<Frame3DVisibility, "supportScale">)[] }[] = [
+  { title: "geometry", keys: ["nodes", "beams", "plates", "volumes", "profiles", "supports", "loads"] },
   { title: "labels", keys: ["nodeNumbers", "beamNumbers", "nodeCoordinates"] },
   { title: "workspace", keys: ["grid", "structuralGrid", "axes", "memberAxes"] },
   { title: "results", keys: ["deformation", "reactions", "utilization", "axialForce", "shearY", "shearZ", "torsion", "momentY", "momentZ"] },
@@ -110,10 +111,14 @@ export default function Frame3DVisibilityDialog({
                 data-vlag={key}
                 onClick={() => onChange({ ...visibility, [key]: !visibility[key] })}
               >
-                <span>{t(`frame3dVisibility.${key}`)}</span>
+                <span>{key === "volumes" ? "Volume-elementen" : t(`frame3dVisibility.${key}`)}</span>
                 <span className={`frame3d-visibility-switch${visibility[key] ? " on" : ""}`} aria-hidden="true" />
               </button>
             ))}
+            {group.title === "geometry" && <div className="frame3d-support-scale">
+              <SupportScaleControl value={visibility.supportScale ?? 1}
+                onChange={(supportScale) => onChange({ ...visibility, supportScale })} showHint />
+            </div>}
           </section>
         ))}
       </div>

@@ -1,0 +1,51 @@
+.fem-support-scale-control {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 12px;
+  color: var(--theme-text);
+  font: 500 11px/1.3 "Inter", system-ui, sans-serif;
+}
+
+.fem-support-scale-fields {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fem-support-scale-fields > input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--theme-accent);
+}
+
+.fem-support-scale-number {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--theme-text-secondary);
+}
+
+.fem-support-scale-number input {
+  width: 48px;
+  padding: 3px 5px;
+  border: 1px solid var(--theme-border);
+  border-radius: 4px;
+  background: var(--theme-surface);
+  color: var(--theme-text);
+  text-align: right;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.fem-support-scale-number input:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 1px;
+}
+
+.fem-support-scale-control small {
+  color: var(--theme-text-secondary);
+  font-size: 10px;
+  font-weight: 400;
+}

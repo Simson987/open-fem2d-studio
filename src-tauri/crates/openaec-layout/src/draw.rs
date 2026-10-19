@@ -43,12 +43,7 @@ pub enum DrawOp {
     },
 
     /// Draw a line.
-    DrawLine {
-        x1: Pt,
-        y1: Pt,
-        x2: Pt,
-        y2: Pt,
-    },
+    DrawLine { x1: Pt, y1: Pt, x2: Pt, y2: Pt },
 
     /// Draw an image from bytes.
     DrawImage {

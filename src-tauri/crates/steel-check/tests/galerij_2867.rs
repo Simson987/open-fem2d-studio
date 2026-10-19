@@ -14,16 +14,12 @@ use nen_en_1993_1_1_ltb::LateralBracing;
 use steel_check::*;
 
 fn uc_van(r: &BeamCheckResult, id: &str) -> f64 {
-    let check = r
-        .checks
-        .iter()
-        .find(|c| c.id == id)
-        .unwrap_or_else(|| {
-            panic!(
-                "toets '{id}' ontbreekt; aanwezig: {:?}",
-                r.checks.iter().map(|c| c.id.as_str()).collect::<Vec<_>>()
-            )
-        });
+    let check = r.checks.iter().find(|c| c.id == id).unwrap_or_else(|| {
+        panic!(
+            "toets '{id}' ontbreekt; aanwezig: {:?}",
+            r.checks.iter().map(|c| c.id.as_str()).collect::<Vec<_>>()
+        )
+    });
     match &check.kind {
         CheckKind::Resistance(x) => x.uc.as_ref().expect("UC aanwezig").uc,
         CheckKind::Stability(x) => x.uc.as_ref().expect("UC aanwezig").uc,
@@ -188,7 +184,9 @@ fn toelichtingen_van_de_aanroeper_komen_bij_w_fin_terecht() {
         deflection_notes: vec!["w is gemeten vanaf de koorde.".to_string()],
         ..basisinvoer()
     };
-    input.deflection_notes.push("Staaf loopt door in staaf 2.".to_string());
+    input
+        .deflection_notes
+        .push("Staaf loopt door in staaf 2.".to_string());
     let r = check_beam(input);
     let fin = r
         .checks
@@ -288,7 +286,9 @@ fn de_nb_tussenwaarden_staan_in_het_resultaat() {
 fn het_eindveld_is_maatgevend_met_beta_nul_en_l_kip_3733() {
     let r = ligger1();
     let ltb = r.checks.iter().find(|c| c.id == "6.3.2_ltb").unwrap();
-    let CheckKind::Stability(s) = &ltb.kind else { unreachable!() };
+    let CheckKind::Stability(s) = &ltb.kind else {
+        unreachable!()
+    };
     let waarde = |sym: &str| {
         s.intermediate_values
             .iter()

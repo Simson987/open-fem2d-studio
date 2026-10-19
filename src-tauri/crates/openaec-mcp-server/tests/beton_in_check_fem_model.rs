@@ -32,8 +32,7 @@ use tokio::time::timeout;
 const BIN_PATH: &str = env!("CARGO_BIN_EXE_openaec-mcp-server");
 
 /// Het gouden portaal: drie STALEN staven. Zie `fem_golden.rs`.
-const STAAL_MODELPAD: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/portaal.ifcfem2d");
+const STAAL_MODELPAD: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/portaal.ifcfem2d");
 
 async fn eis_node() {
     // Respect OPENAEC_NODE just like the production server does. Using
@@ -140,7 +139,8 @@ async fn betonstaven_verdwijnen_niet_meer_stil_uit_check_fem_model() {
 
     let result = roep_tool("check_fem_model", json!({ "model": gemengd_portaal() })).await;
     assert_eq!(
-        result["isError"], false,
+        result["isError"],
+        false,
         "check_fem_model gaf een fout: {}",
         result["content"][0]["text"].as_str().unwrap_or("")
     );
@@ -153,7 +153,11 @@ async fn betonstaven_verdwijnen_niet_meer_stil_uit_check_fem_model() {
         .iter()
         .filter_map(|r| r["beam_id"].as_i64())
         .collect();
-    assert_eq!(getoetst, vec![2], "alleen de stalen ligger hoort getoetst te zijn");
+    assert_eq!(
+        getoetst,
+        vec![2],
+        "alleen de stalen ligger hoort getoetst te zijn"
+    );
 
     // De twee betonnen kolommen staan met reden bij de overgeslagen staven.
     for id in [1, 3] {
@@ -177,9 +181,17 @@ async fn betonstaven_verdwijnen_niet_meer_stil_uit_check_fem_model() {
         .iter()
         .filter_map(|s| s["beam_id"].as_i64())
         .collect();
-    let mut alle: Vec<i64> = getoetst.iter().chain(overgeslagen.iter()).copied().collect();
+    let mut alle: Vec<i64> = getoetst
+        .iter()
+        .chain(overgeslagen.iter())
+        .copied()
+        .collect();
     alle.sort_unstable();
-    assert_eq!(alle, vec![1, 2, 3], "niet elke staaf is precies één keer verantwoord");
+    assert_eq!(
+        alle,
+        vec![1, 2, 3],
+        "niet elke staaf is precies één keer verantwoord"
+    );
 }
 
 /// Een volledig stalen model uit een PROJECTBESTAND krijgt geen enkele
@@ -190,13 +202,10 @@ async fn betonstaven_verdwijnen_niet_meer_stil_uit_check_fem_model() {
 async fn een_staalmodel_uit_een_projectbestand_krijgt_geen_betonmelding() {
     eis_node().await;
 
-    let result = roep_tool(
-        "check_fem_model",
-        json!({ "project_path": STAAL_MODELPAD }),
-    )
-    .await;
+    let result = roep_tool("check_fem_model", json!({ "project_path": STAAL_MODELPAD })).await;
     assert_eq!(
-        result["isError"], false,
+        result["isError"],
+        false,
         "check_fem_model gaf een fout: {}",
         result["content"][0]["text"].as_str().unwrap_or("")
     );
@@ -238,7 +247,8 @@ async fn een_model_met_een_wapeningskorf_komt_door_de_veldpoort() {
 
     let result = roep_tool("check_fem_model", json!({ "model": model })).await;
     assert_eq!(
-        result["isError"], false,
+        result["isError"],
+        false,
         "een model met een wapeningskorf hoort erdoor te komen: {}",
         result["content"][0]["text"].as_str().unwrap_or("")
     );
@@ -307,7 +317,10 @@ async fn buiten_de_beam_ids_selectie_wordt_niets_gemeld() {
     assert_eq!(result["isError"], false);
     let uit = &result["structuredContent"];
 
-    assert!(reden(uit, 1).is_some(), "staaf 1 is gevraagd en moet gemeld zijn");
+    assert!(
+        reden(uit, 1).is_some(),
+        "staaf 1 is gevraagd en moet gemeld zijn"
+    );
     assert!(
         reden(uit, 3).is_none(),
         "staaf 3 viel buiten `beam_ids` en hoort niet in skipped_beams te staan"

@@ -49,7 +49,7 @@
 // Uitvoeren: npx tsx test-bgvloer-referentie.mjs   (vanuit design-mockup/)
 //        of: node scripts/run-tests.mjs --filter=bgvloer
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -550,13 +550,26 @@ const { inputs, skipped } = bouwInvoer(model, res, actief);
 // DE REKENKERN
 // ═══════════════════════════════════════════════════════════════════════════
 const KERN_AANWEZIG = existsSync(TOETSBRUG);
-function kern(opdracht, invoer) {
-  const r = spawnSync(TOETSBRUG, [], {
-    input: JSON.stringify({ opdracht, inputs: invoer }),
-    maxBuffer: 256 * 1024 * 1024, encoding: "utf8",
+async function kern(opdracht, invoer) {
+  const antwoord = await new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code !== 0) {
+        reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+        return;
+      }
+      resolve(out);
+    });
+    child.stdin.end(JSON.stringify({ opdracht, inputs: invoer }));
   });
-  if (r.error) throw r.error;
-  const data = JSON.parse(r.stdout);
+  const data = JSON.parse(antwoord);
   if (data && !Array.isArray(data) && typeof data === "object" && "fout" in data) {
     throw new Error(data.fout);
   }
@@ -583,7 +596,7 @@ let uitkomst = null;
 if (!KERN_AANWEZIG) {
   meldKernOntbreekt();
 } else {
-  uitkomst = kern("check_concrete_beams", inputs);
+  uitkomst = await kern("check_concrete_beams", inputs);
   const [r1, r2] = uitkomst;
 
   ok("de kern levert een resultaat per staaf", uitkomst.length === 2);
@@ -903,7 +916,7 @@ if (!KERN_AANWEZIG) {
     const m = bouwModel({ onderStaven: n });
     const { actief: a, res: rr } = rekenDoor(m);
     const { inputs: inv } = bouwInvoer(m, rr, a);
-    const r = kern("check_concrete_beams", inv)[1];   // staaf 2
+    const r = (await kern("check_concrete_beams", inv))[1];   // staaf 2
     const bui = toets(r, "6.1_bending_stress_block");
     const scheur = toets(r, "7.3.4_scheurwijdte");
     uitslagen.push({ n, bui, scheur, status: r.status });

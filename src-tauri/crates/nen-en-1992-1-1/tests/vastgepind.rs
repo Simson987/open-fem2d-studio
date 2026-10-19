@@ -35,8 +35,14 @@ fn korf(boven: u32) -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: boven, diameter_mm: 12.0 },
-        bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+        top: RebarRow {
+            count: boven,
+            diameter_mm: 12.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
         ..ReinforcementCage::default()
     }
 }
@@ -155,9 +161,16 @@ fn m0_en_normaalkrachtcapaciteiten_zijn_bit_identiek() {
         (-200.0, -0.9808796482167925),
         (-800.0, -4.127887365409146),
     ] {
-        assert_eq!(solve_state(&s, &lagen, &m, n, 0.0, &o).unwrap().m_knm, verwacht, "M₀ bij N = {n}");
+        assert_eq!(
+            solve_state(&s, &lagen, &m, n, 0.0, &o).unwrap().m_knm,
+            verwacht,
+            "M₀ bij N = {n}"
+        );
     }
-    assert_eq!(axial_compression_capacity_kn(&s, &lagen, &m, &o), 3331.7521842190818);
+    assert_eq!(
+        axial_compression_capacity_kn(&s, &lagen, &m, &o),
+        3331.7521842190818
+    );
     assert_eq!(axial_tension_capacity_kn(&lagen, &m), 360.6002002381328);
 }
 
@@ -188,7 +201,10 @@ fn interactiediagram_is_bit_identiek() {
 #[test]
 fn scheurmoment_is_bit_identiek() {
     let s = doorsnede();
-    let f_ctm = stijfheidsmateriaal(NonlinearBasis::DesignValues).nonlinear.unwrap().f_ctm;
+    let f_ctm = stijfheidsmateriaal(NonlinearBasis::DesignValues)
+        .nonlinear
+        .unwrap()
+        .f_ctm;
     assert_eq!(f_ctm, 2.9);
     for (n, verwacht) in [
         (0.0, 36.25),
@@ -196,7 +212,11 @@ fn scheurmoment_is_bit_identiek() {
         (300.0, 11.249999999999998),
     ] {
         assert_eq!(m_cr_knm(&s, f_ctm, n, 1.0), verwacht, "M_cr(+) bij N = {n}");
-        assert_eq!(m_cr_knm(&s, f_ctm, n, -1.0), -verwacht, "M_cr(−) bij N = {n}");
+        assert_eq!(
+            m_cr_knm(&s, f_ctm, n, -1.0),
+            -verwacht,
+            "M_cr(−) bij N = {n}"
+        );
     }
 }
 
@@ -217,7 +237,10 @@ fn secante_stijfheid_is_bit_identiek() {
         (-800.0, 100.0, 0.001654836888209048, 62294.576146675645, -3.087362542866315,  102.91666666666666,  0.001654836888209048),
     ];
     let m_ugt = stijfheidsmateriaal(NonlinearBasis::DesignValues);
-    assert_eq!(m0_knm(&s, &lagen, &m_ugt, -800.0, 1.0, &o).unwrap(), -3.087362542866315);
+    assert_eq!(
+        m0_knm(&s, &lagen, &m_ugt, -800.0, 1.0, &o).unwrap(),
+        -3.087362542866315
+    );
     for &(n, mm, kappa, ei, m0, m_cr, kappa_los) in ugt {
         let r = ei_secant(&s, &lagen, &m_ugt, n, mm, &so).unwrap();
         assert_eq!(r.kappa_per_m, kappa, "κ UGT bij N = {n}, M = {mm}");
@@ -226,7 +249,12 @@ fn secante_stijfheid_is_bit_identiek() {
         assert_eq!(r.m_cr_knm, m_cr, "M_cr UGT bij N = {n}, M = {mm}");
         assert_eq!(r.ei_uncracked_knm2, 85937.5);
         assert!(r.tension_stiffening.is_none());
-        assert_eq!(kappa_from_nm(&s, &lagen, &m_ugt, n, mm, &o).unwrap().kappa_per_m, kappa_los);
+        assert_eq!(
+            kappa_from_nm(&s, &lagen, &m_ugt, n, mm, &o)
+                .unwrap()
+                .kappa_per_m,
+            kappa_los
+        );
     }
 
     #[rustfmt::skip]
@@ -237,7 +265,10 @@ fn secante_stijfheid_is_bit_identiek() {
         (-800.0, 100.0, 0.0009571983416619928, 106938.97341657535, -2.361808013381848,  102.91666666666666,  0.0,                0.0009571983416309275),
     ];
     let m_bgt = stijfheidsmateriaal(NonlinearBasis::MeanValues);
-    assert_eq!(m0_knm(&s, &lagen, &m_bgt, -800.0, 1.0, &o).unwrap(), -2.361808013381848);
+    assert_eq!(
+        m0_knm(&s, &lagen, &m_bgt, -800.0, 1.0, &o).unwrap(),
+        -2.361808013381848
+    );
     for &(n, mm, kappa, ei, m0, m_cr, zeta, kappa_los) in bgt {
         let r = ei_secant(&s, &lagen, &m_bgt, n, mm, &so).unwrap();
         assert_eq!(r.kappa_per_m, kappa, "κ BGT bij N = {n}, M = {mm}");
@@ -245,7 +276,16 @@ fn secante_stijfheid_is_bit_identiek() {
         assert_eq!(r.m0_knm, m0, "M₀ BGT bij N = {n}, M = {mm}");
         assert_eq!(r.m_cr_knm, m_cr, "M_cr BGT bij N = {n}, M = {mm}");
         assert_eq!(r.ei_uncracked_knm2, 103125.0);
-        assert_eq!(r.tension_stiffening.unwrap().zeta, zeta, "ζ bij N = {n}, M = {mm}");
-        assert_eq!(kappa_from_nm(&s, &lagen, &m_bgt, n, mm, &o).unwrap().kappa_per_m, kappa_los);
+        assert_eq!(
+            r.tension_stiffening.unwrap().zeta,
+            zeta,
+            "ζ bij N = {n}, M = {mm}"
+        );
+        assert_eq!(
+            kappa_from_nm(&s, &lagen, &m_bgt, n, mm, &o)
+                .unwrap()
+                .kappa_per_m,
+            kappa_los
+        );
     }
 }

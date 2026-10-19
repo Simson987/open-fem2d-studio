@@ -65,7 +65,10 @@ pub const MAX_N_STRIPS: usize = 2000;
 
 /// Wijze van bezwijken (einde van het M-κ-diagram).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum FailureMode {
     /// Beton bereikt ε_cu2 (of ε_c2 bij een geheel gedrukte doorsnede), 6.1(3)/(4).
     ConcreteCrushing,
@@ -121,7 +124,10 @@ impl SectionState {
 
 /// Eén punt van het M-κ-diagram.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct MnKappaPoint {
     pub kappa_per_m: f64,
     pub m_knm: f64,
@@ -134,7 +140,10 @@ pub struct MnKappaPoint {
 
 /// Het M-κ-diagram bij vaste N, tot bezwijken.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct MnKappaDiagram {
     /// Normaalkracht waarbij het diagram is bepaald (kN, trek positief).
     pub n_kn: f64,
@@ -160,7 +169,10 @@ pub struct MnKappaDiagram {
 
 /// Eén punt van het N-M-interactiediagram (bezwijkomhullende).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct InteractionPoint {
     /// Normaalkracht in kN (trek positief).
     pub n_kn: f64,
@@ -177,7 +189,9 @@ pub struct MnKappaOptions {
 
 impl Default for MnKappaOptions {
     fn default() -> Self {
-        Self { n_strips: DEFAULT_N_STRIPS }
+        Self {
+            n_strips: DEFAULT_N_STRIPS,
+        }
     }
 }
 
@@ -265,7 +279,15 @@ pub fn internal_forces(
         sigma_s.push(s);
         f_s.push(f);
     }
-    InternalForces { n_c, m_c, n_s, m_s, eps_s, sigma_s, f_s }
+    InternalForces {
+        n_c,
+        m_c,
+        n_s,
+        m_s,
+        eps_s,
+        sigma_s,
+        f_s,
+    }
 }
 
 /// Uitkomst van [`internal_forces`], in N en N·mm, druk positief.
@@ -349,7 +371,14 @@ pub fn solve_state(
     let n_target = -n_ed_kn * 1e3; // trek+ → druk+
     let kappa_per_mm = kappa_per_m * 1e-3;
     let eps_0 = solve_eps0(section, layers, mat, n_target, kappa_per_mm, opts.strips())?;
-    Some(state_from(section, layers, mat, eps_0, kappa_per_mm, opts.strips()))
+    Some(state_from(
+        section,
+        layers,
+        mat,
+        eps_0,
+        kappa_per_mm,
+        opts.strips(),
+    ))
 }
 
 /// De volledige toestand bij een **al bekende** rek ε₀ en kromming (1/mm) —
@@ -381,7 +410,11 @@ fn state_from(
     let eps_bottom = eps_0 - kappa_per_mm * h / 2.0;
     let x_mm = neutral_axis_depth(eps_top, eps_bottom, h);
     let f_c_kn = fi.n_c * 1e-3;
-    let z_c_mm = if fi.n_c.abs() > 1e-9 { fi.m_c / fi.n_c } else { 0.0 };
+    let z_c_mm = if fi.n_c.abs() > 1e-9 {
+        fi.m_c / fi.n_c
+    } else {
+        0.0
+    };
     SectionState {
         kappa_per_m: kappa_per_mm * 1e3,
         eps_0,
@@ -400,7 +433,11 @@ fn state_from(
 
 /// Hoogte van de drukzone vanaf de meest gedrukte rand.
 fn neutral_axis_depth(eps_top: f64, eps_bottom: f64, h: f64) -> Option<f64> {
-    let (hi, lo) = if eps_top >= eps_bottom { (eps_top, eps_bottom) } else { (eps_bottom, eps_top) };
+    let (hi, lo) = if eps_top >= eps_bottom {
+        (eps_top, eps_bottom)
+    } else {
+        (eps_bottom, eps_top)
+    };
     if hi <= 0.0 {
         None
     } else if lo >= 0.0 {
@@ -412,7 +449,11 @@ fn neutral_axis_depth(eps_top: f64, eps_bottom: f64, h: f64) -> Option<f64> {
 
 /// Toets de toestand aan de rekgrenzen van 6.1(3)–(4)/figuur 6.1 en
 /// 3.2.7(2). `None` = binnen de grenzen.
-pub fn exceeded_limit(state: &SectionState, mat: &DesignMaterial, h_mm: f64) -> Option<FailureMode> {
+pub fn exceeded_limit(
+    state: &SectionState,
+    mat: &DesignMaterial,
+    h_mm: f64,
+) -> Option<FailureMode> {
     let c = &mat.concrete;
     let tol = 1e-9;
     let eps_hi = state.eps_top.max(state.eps_bottom);
@@ -547,8 +588,7 @@ pub fn mn_kappa_diagram(
         }
     }
     let kappa_u = kappa_ok;
-    let su = solve_state(section, lagen, mat, n_ed_kn, kappa_u, opts)
-        .unwrap_or_else(|| s0.clone());
+    let su = solve_state(section, lagen, mat, n_ed_kn, kappa_u, opts).unwrap_or_else(|| s0.clone());
 
     // 4. Diagram uitschrijven.
     let mut points = Vec::with_capacity(DIAGRAM_POINTS + 1);
@@ -622,13 +662,25 @@ pub fn axial_compression_capacity_kn(
     mat: &DesignMaterial,
     opts: &MnKappaOptions,
 ) -> f64 {
-    internal_forces(section, layers, mat, mat.concrete.eps_c2, 0.0, opts.strips()).n() * 1e-3
+    internal_forces(
+        section,
+        layers,
+        mat,
+        mat.concrete.eps_c2,
+        0.0,
+        opts.strips(),
+    )
+    .n() * 1e-3
 }
 
 /// Normaalkrachtcapaciteit onder zuivere trek (kN, positief getal):
 /// N_Rd,t = Σ A_s·σ_s(ε_ud) — beton draagt geen trek.
 pub fn axial_tension_capacity_kn(layers: &[RebarLayer], mat: &DesignMaterial) -> f64 {
-    layers.iter().map(|l| l.area_mm2 * mat.steel.sigma(mat.steel.eps_ud)).sum::<f64>() * 1e-3
+    layers
+        .iter()
+        .map(|l| l.area_mm2 * mat.steel.sigma(mat.steel.eps_ud))
+        .sum::<f64>()
+        * 1e-3
 }
 
 /// N-M-interactiediagram: de momentweerstand M_Rd(N) voor `n_points`
@@ -651,7 +703,10 @@ pub fn interaction_diagram(
         // Van trek (+n_t) naar druk (−n_c) in de mechanics-conventie.
         let n_kn = n_t - t * (n_t + n_c);
         let d = mn_kappa_diagram(section, layers, mat, n_kn, moment_sign, opts);
-        uit.push(InteractionPoint { n_kn, m_rd_knm: d.m_max_knm.max(0.0) });
+        uit.push(InteractionPoint {
+            n_kn,
+            m_rd_knm: d.m_max_knm.max(0.0),
+        });
     }
     uit
 }
@@ -670,8 +725,14 @@ mod tests {
         let k = ReinforcementCage {
             cover_mm: 30.0,
             stirrup_diameter_mm: 8.0,
-            top: RebarRow { count: 2, diameter_mm: 12.0 },
-            bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+            top: RebarRow {
+                count: 2,
+                diameter_mm: 12.0,
+            },
+            bottom: RebarRow {
+                count: 3,
+                diameter_mm: 16.0,
+            },
             ..ReinforcementCage::default()
         };
         let m = DesignMaterial::new(
@@ -726,7 +787,14 @@ mod tests {
     fn te_grote_druk_geeft_axial_capacity_exceeded() {
         let (s, lagen, m) = opzet();
         let n_c = axial_compression_capacity_kn(&s, &lagen, &m, &MnKappaOptions::default());
-        let d = mn_kappa_diagram(&s, &lagen, &m, -(n_c * 1.01), 1.0, &MnKappaOptions::default());
+        let d = mn_kappa_diagram(
+            &s,
+            &lagen,
+            &m,
+            -(n_c * 1.01),
+            1.0,
+            &MnKappaOptions::default(),
+        );
         assert_eq!(d.failure_mode, FailureMode::AxialCapacityExceeded);
         assert!(d.points.is_empty());
     }
@@ -740,7 +808,10 @@ mod tests {
         assert!(pts[0].m_rd_knm < 1.0 && pts[8].m_rd_knm < 1.0);
         assert!(pts[4].m_rd_knm > 50.0);
         // Maximale M ligt bij matige druk, niet bij N = 0.
-        let m_bij_nul = pts.iter().min_by(|a, b| a.n_kn.abs().partial_cmp(&b.n_kn.abs()).unwrap()).unwrap();
+        let m_bij_nul = pts
+            .iter()
+            .min_by(|a, b| a.n_kn.abs().partial_cmp(&b.n_kn.abs()).unwrap())
+            .unwrap();
         let m_max = pts.iter().map(|p| p.m_rd_knm).fold(0.0, f64::max);
         assert!(m_max >= m_bij_nul.m_rd_knm);
     }

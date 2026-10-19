@@ -6,7 +6,7 @@
 
 use mechanics::InternalForces;
 use nen_en_1993_1_1_section::classification::{
-    classify_composite, classify_section, CrossSectionClass, Plaatdeelsoort, PlaatdeelKlasse,
+    classify_composite, classify_section, CrossSectionClass, PlaatdeelKlasse, Plaatdeelsoort,
     SectionShape,
 };
 use nen_en_1993_1_1_section::{S235, S355};
@@ -58,12 +58,18 @@ fn koker_props(h: f64, b: f64, t: f64) -> SectionProperties {
 }
 
 fn buiging(my_knm: f64) -> InternalForces {
-    InternalForces { my_ed: my_knm, ..Default::default() }
+    InternalForces {
+        my_ed: my_knm,
+        ..Default::default()
+    }
 }
 
 /// `n_ed` is negatief bij druk, net als in de rest van de rekenkern.
 fn druk(n_kn: f64) -> InternalForces {
-    InternalForces { n_ed: -n_kn, ..Default::default() }
+    InternalForces {
+        n_ed: -n_kn,
+        ..Default::default()
+    }
 }
 
 /// Het (enige) inwendige plaatdeel van lamel `i`.
@@ -99,12 +105,24 @@ fn gelaste_i_s235_zuivere_buiging_is_klasse1() {
     assert_eq!(r.klasse, CrossSectionClass::Class1);
 
     let lijf = inwendig(&r.delen, 2);
-    assert!((lijf.c_mm - 400.0).abs() < 1e-9, "c_lijf = 415 − 15 = 400, gemeten {}", lijf.c_mm);
-    assert!((lijf.c_over_t - 40.0).abs() < 1e-9, "c/t = 40, gemeten {}", lijf.c_over_t);
+    assert!(
+        (lijf.c_mm - 400.0).abs() < 1e-9,
+        "c_lijf = 415 − 15 = 400, gemeten {}",
+        lijf.c_mm
+    );
+    assert!(
+        (lijf.c_over_t - 40.0).abs() < 1e-9,
+        "c/t = 40, gemeten {}",
+        lijf.c_over_t
+    );
     assert_eq!(lijf.klasse, CrossSectionClass::Class1);
 
     let flens = uitkraging(&r.delen, 1);
-    assert!((flens.c_mm - 95.0).abs() < 1e-9, "c_flens = (200 − 10)/2 = 95, gemeten {}", flens.c_mm);
+    assert!(
+        (flens.c_mm - 95.0).abs() < 1e-9,
+        "c_flens = (200 − 10)/2 = 95, gemeten {}",
+        flens.c_mm
+    );
     assert!(
         (flens.c_over_t - 95.0 / 15.0).abs() < 1e-9,
         "c/t = 95/15 = 6,333, gemeten {}",
@@ -121,10 +139,30 @@ fn trekflens_wordt_niet_geclassificeerd() {
     let sec = gelaste_i(200.0, 15.0, 400.0, 10.0);
     let r = classify_composite(&sec, &S235, &buiging(80.0));
 
-    assert!(r.delen.iter().all(|d| d.lamel_index != 0), "onderflens staat op trek");
-    assert_eq!(r.delen.len(), 3, "lijf + twee flensuitkragingen: {:#?}", r.delen);
-    assert_eq!(r.delen.iter().filter(|d| d.soort == Plaatdeelsoort::Inwendig).count(), 1);
-    assert_eq!(r.delen.iter().filter(|d| d.soort == Plaatdeelsoort::Uitkraging).count(), 2);
+    assert!(
+        r.delen.iter().all(|d| d.lamel_index != 0),
+        "onderflens staat op trek"
+    );
+    assert_eq!(
+        r.delen.len(),
+        3,
+        "lijf + twee flensuitkragingen: {:#?}",
+        r.delen
+    );
+    assert_eq!(
+        r.delen
+            .iter()
+            .filter(|d| d.soort == Plaatdeelsoort::Inwendig)
+            .count(),
+        1
+    );
+    assert_eq!(
+        r.delen
+            .iter()
+            .filter(|d| d.soort == Plaatdeelsoort::Uitkraging)
+            .count(),
+        2
+    );
     assert!(!r.catalogusdelen_overgeslagen);
 }
 
@@ -139,13 +177,20 @@ fn slank_lijf_wordt_klasse4_en_is_bepalend() {
     let r = classify_composite(&sec, &S235, &buiging(80.0));
 
     let lijf = inwendig(&r.delen, 2);
-    assert!((lijf.c_mm - 800.0).abs() < 1e-9, "c = 815 − 15 = 800, gemeten {}", lijf.c_mm);
+    assert!(
+        (lijf.c_mm - 800.0).abs() < 1e-9,
+        "c = 815 − 15 = 800, gemeten {}",
+        lijf.c_mm
+    );
     assert!(
         (lijf.c_over_t - 800.0 / 6.0).abs() < 1e-9,
         "c/t = 800/6 = 133,33, gemeten {}",
         lijf.c_over_t
     );
-    assert!((lijf.grens_klasse3 - 124.0).abs() < 1e-9, "124ε = 124 bij S235");
+    assert!(
+        (lijf.grens_klasse3 - 124.0).abs() < 1e-9,
+        "124ε = 124 bij S235"
+    );
     assert_eq!(lijf.klasse, CrossSectionClass::Class4);
 
     assert_eq!(uitkraging(&r.delen, 1).klasse, CrossSectionClass::Class1);
@@ -169,16 +214,31 @@ fn slanke_flens_wordt_klasse4_en_is_bepalend() {
     let r = classify_composite(&sec, &S235, &buiging(80.0));
 
     let flens = uitkraging(&r.delen, 1);
-    assert!((flens.c_mm - 145.0).abs() < 1e-9, "c = (300 − 10)/2 = 145, gemeten {}", flens.c_mm);
-    assert!((flens.c_over_t - 14.5).abs() < 1e-9, "c/t = 145/10 = 14,5, gemeten {}", flens.c_over_t);
-    assert!((flens.psi - 1.0).abs() < 1e-12, "de flens is gelijkmatig gedrukt: ψ = 1");
+    assert!(
+        (flens.c_mm - 145.0).abs() < 1e-9,
+        "c = (300 − 10)/2 = 145, gemeten {}",
+        flens.c_mm
+    );
+    assert!(
+        (flens.c_over_t - 14.5).abs() < 1e-9,
+        "c/t = 145/10 = 14,5, gemeten {}",
+        flens.c_over_t
+    );
+    assert!(
+        (flens.psi - 1.0).abs() < 1e-12,
+        "de flens is gelijkmatig gedrukt: ψ = 1"
+    );
     assert!((flens.grens_klasse1 - 9.0).abs() < 1e-9, "9ε = 9");
     assert!((flens.grens_klasse2 - 10.0).abs() < 1e-9, "10ε = 10");
     assert!((flens.grens_klasse3 - 14.0).abs() < 1e-9, "14ε = 14");
     assert_eq!(flens.klasse, CrossSectionClass::Class4);
 
     let lijf = inwendig(&r.delen, 2);
-    assert!((lijf.c_over_t - 40.0).abs() < 1e-9, "c/t = 400/10 = 40, gemeten {}", lijf.c_over_t);
+    assert!(
+        (lijf.c_over_t - 40.0).abs() < 1e-9,
+        "c/t = 400/10 = 40, gemeten {}",
+        lijf.c_over_t
+    );
     assert_eq!(lijf.klasse, CrossSectionClass::Class1);
 
     assert_eq!(r.klasse, CrossSectionClass::Class4);
@@ -200,11 +260,23 @@ fn slanke_flens_wordt_klasse4_en_is_bepalend() {
 #[test]
 fn s355_lijfgrenzen_schuiven_mee_met_epsilon() {
     let eps = (235.0f64 / 355.0).sqrt();
-    assert!((eps - 0.8136165_f64).abs() < 1e-7, "ε = √(235/355) = 0,8136165, gemeten {eps}");
+    assert!(
+        (eps - 0.8136165_f64).abs() < 1e-7,
+        "ε = √(235/355) = 0,8136165, gemeten {eps}"
+    );
     let (g1, g2, g3) = (72.0 * eps, 83.0 * eps, 124.0 * eps);
-    assert!((g1 - 58.580_f64).abs() < 0.01, "72ε = 58,58 (≈58,6), gemeten {g1}");
-    assert!((g2 - 67.530_f64).abs() < 0.01, "83ε = 67,53 (≈67,5), gemeten {g2}");
-    assert!((g3 - 100.888_f64).abs() < 0.01, "124ε = 100,89 (≈100,9), gemeten {g3}");
+    assert!(
+        (g1 - 58.580_f64).abs() < 0.01,
+        "72ε = 58,58 (≈58,6), gemeten {g1}"
+    );
+    assert!(
+        (g2 - 67.530_f64).abs() < 0.01,
+        "83ε = 67,53 (≈67,5), gemeten {g2}"
+    );
+    assert!(
+        (g3 - 100.888_f64).abs() < 0.01,
+        "124ε = 100,89 (≈100,9), gemeten {g3}"
+    );
 
     let gevallen = [
         (400.0, 40.0, CrossSectionClass::Class1),
@@ -229,8 +301,16 @@ fn s355_lijfgrenzen_schuiven_mee_met_epsilon() {
             lijf.c_over_t
         );
         // Zuivere buiging over een dubbelsymmetrisch lijf: ψ = −1, α = 0,5.
-        assert!((lijf.psi + 1.0).abs() < 1e-9, "lijf {hw}: ψ = −1, gemeten {}", lijf.psi);
-        assert!((lijf.alpha - 0.5).abs() < 1e-6, "lijf {hw}: α = 0,5, gemeten {}", lijf.alpha);
+        assert!(
+            (lijf.psi + 1.0).abs() < 1e-9,
+            "lijf {hw}: ψ = −1, gemeten {}",
+            lijf.psi
+        );
+        assert!(
+            (lijf.alpha - 0.5).abs() < 1e-6,
+            "lijf {hw}: α = 0,5, gemeten {}",
+            lijf.alpha
+        );
         // En de drie grenzen zijn exact 72ε / 83ε / 124ε.
         assert!(
             (lijf.grens_klasse1 - g1).abs() < 1e-6,
@@ -255,7 +335,10 @@ fn s355_lijfgrenzen_schuiven_mee_met_epsilon() {
         assert!((flens.grens_klasse1 - 9.0 * eps).abs() < 1e-9, "9ε = 7,323");
         assert_eq!(flens.klasse, CrossSectionClass::Class1);
 
-        assert_eq!(r.klasse, verwacht, "de doorsnedeklasse volgt het lijf bij lijf {hw}");
+        assert_eq!(
+            r.klasse, verwacht,
+            "de doorsnedeklasse volgt het lijf bij lijf {hw}"
+        );
         if verwacht != CrossSectionClass::Class1 {
             // Zodra het lijf uit klasse 1 loopt is het onbetwist bepalend; in
             // het eerste geval zijn lijf én flens klasse 1 en wijst het
@@ -303,10 +386,23 @@ fn gelijkmatige_druk_gebruikt_de_drukgrenzen() {
     let lijf = inwendig(&r.delen, 2);
     assert!((lijf.psi - 1.0).abs() < 1e-12, "gelijkmatige druk: ψ = 1");
     assert!((lijf.alpha - 1.0).abs() < 1e-12, "volledig gedrukt: α = 1");
-    assert!((lijf.grens_klasse1 - 33.0).abs() < 1e-9, "396/(13·1 − 1) = 33");
-    assert!((lijf.grens_klasse2 - 38.0).abs() < 1e-9, "456/(13·1 − 1) = 38");
-    assert!((lijf.grens_klasse3 - 42.0).abs() < 1e-9, "42/(0,67 + 0,33) = 42");
-    assert_eq!(lijf.klasse, CrossSectionClass::Class3, "c/t = 40 valt tussen 38 en 42");
+    assert!(
+        (lijf.grens_klasse1 - 33.0).abs() < 1e-9,
+        "396/(13·1 − 1) = 33"
+    );
+    assert!(
+        (lijf.grens_klasse2 - 38.0).abs() < 1e-9,
+        "456/(13·1 − 1) = 38"
+    );
+    assert!(
+        (lijf.grens_klasse3 - 42.0).abs() < 1e-9,
+        "42/(0,67 + 0,33) = 42"
+    );
+    assert_eq!(
+        lijf.klasse,
+        CrossSectionClass::Class3,
+        "c/t = 40 valt tussen 38 en 42"
+    );
 
     // Nu staan béíde flenzen op druk, dus vier uitkragingen plus het lijf.
     assert_eq!(r.delen.len(), 5, "{:#?}", r.delen);
@@ -346,13 +442,55 @@ fn gelijkmatige_druk_gebruikt_de_drukgrenzen() {
 #[test]
 fn koker_uit_lamellen_geeft_dezelfde_klasse_als_box_pad() {
     let matrix = [
-        (200.0, 200.0, 10.0, CrossSectionClass::Class1, CrossSectionClass::Class1),
-        (420.0, 200.0, 10.0, CrossSectionClass::Class1, CrossSectionClass::Class3),
-        (800.0, 200.0, 10.0, CrossSectionClass::Class2, CrossSectionClass::Class4),
-        (1000.0, 200.0, 10.0, CrossSectionClass::Class3, CrossSectionClass::Class4),
-        (1300.0, 200.0, 10.0, CrossSectionClass::Class4, CrossSectionClass::Class4),
-        (200.0, 380.0, 10.0, CrossSectionClass::Class2, CrossSectionClass::Class2),
-        (200.0, 600.0, 10.0, CrossSectionClass::Class4, CrossSectionClass::Class4),
+        (
+            200.0,
+            200.0,
+            10.0,
+            CrossSectionClass::Class1,
+            CrossSectionClass::Class1,
+        ),
+        (
+            420.0,
+            200.0,
+            10.0,
+            CrossSectionClass::Class1,
+            CrossSectionClass::Class3,
+        ),
+        (
+            800.0,
+            200.0,
+            10.0,
+            CrossSectionClass::Class2,
+            CrossSectionClass::Class4,
+        ),
+        (
+            1000.0,
+            200.0,
+            10.0,
+            CrossSectionClass::Class3,
+            CrossSectionClass::Class4,
+        ),
+        (
+            1300.0,
+            200.0,
+            10.0,
+            CrossSectionClass::Class4,
+            CrossSectionClass::Class4,
+        ),
+        (
+            200.0,
+            380.0,
+            10.0,
+            CrossSectionClass::Class2,
+            CrossSectionClass::Class2,
+        ),
+        (
+            200.0,
+            600.0,
+            10.0,
+            CrossSectionClass::Class4,
+            CrossSectionClass::Class4,
+        ),
     ];
 
     for (h, b, t, klasse_buiging, klasse_druk) in matrix {
@@ -367,9 +505,7 @@ fn koker_uit_lamellen_geeft_dezelfde_klasse_als_box_pad() {
             props.area_mm2
         );
 
-        for (belasting, verwacht) in
-            [(buiging(80.0), klasse_buiging), (druk(500.0), klasse_druk)]
-        {
+        for (belasting, verwacht) in [(buiging(80.0), klasse_buiging), (druk(500.0), klasse_druk)] {
             let via_lamellen = classify_composite(&sec, &S235, &belasting);
             let via_box = classify_section(&props, &S235, &belasting, SectionShape::BoxSection);
             assert_eq!(
@@ -377,10 +513,7 @@ fn koker_uit_lamellen_geeft_dezelfde_klasse_als_box_pad() {
                 "koker {h}×{b}×{t}, lamellenpad: {:#?}",
                 via_lamellen.delen
             );
-            assert_eq!(
-                via_box, verwacht,
-                "koker {h}×{b}×{t}, Box-pad"
-            );
+            assert_eq!(via_box, verwacht, "koker {h}×{b}×{t}, Box-pad");
         }
     }
 }
@@ -393,11 +526,24 @@ fn kokerwanden_zijn_allemaal_inwendige_delen() {
     let sec = koker(200.0, 200.0, 10.0);
     let r = classify_composite(&sec, &S235, &druk(500.0));
 
-    assert_eq!(r.delen.len(), 4, "vier wanden, alle vier gedrukt: {:#?}", r.delen);
+    assert_eq!(
+        r.delen.len(),
+        4,
+        "vier wanden, alle vier gedrukt: {:#?}",
+        r.delen
+    );
     for d in &r.delen {
         assert_eq!(d.soort, Plaatdeelsoort::Inwendig, "{}", d.omschrijving);
-        assert!((d.c_mm - 180.0).abs() < 1e-9, "c = 190 − 10 = 180, gemeten {}", d.c_mm);
-        assert!((d.c_over_t - 18.0).abs() < 1e-9, "c/t = 18, gemeten {}", d.c_over_t);
+        assert!(
+            (d.c_mm - 180.0).abs() < 1e-9,
+            "c = 190 − 10 = 180, gemeten {}",
+            d.c_mm
+        );
+        assert!(
+            (d.c_over_t - 18.0).abs() < 1e-9,
+            "c/t = 18, gemeten {}",
+            d.c_over_t
+        );
     }
 }
 
@@ -411,16 +557,26 @@ fn koker_in_buiging_scheidt_lijf_en_flensgrenzen() {
     assert_eq!(r.delen.len(), 3, "twee lijven + bovenflens: {:#?}", r.delen);
 
     let lijf = inwendig(&r.delen, 0);
-    assert!((lijf.psi + 1.0).abs() < 1e-9, "lijf: ψ = −1, gemeten {}", lijf.psi);
+    assert!(
+        (lijf.psi + 1.0).abs() < 1e-9,
+        "lijf: ψ = −1, gemeten {}",
+        lijf.psi
+    );
     assert!((lijf.grens_klasse1 - 72.0).abs() < 1e-9);
     assert!((lijf.grens_klasse2 - 83.0).abs() < 1e-9);
     assert!((lijf.grens_klasse3 - 124.0).abs() < 1e-9);
 
     let flens = inwendig(&r.delen, 3); // lamel 3 = bovenflens
-    assert!((flens.psi - 1.0).abs() < 1e-12, "bovenflens: gelijkmatig gedrukt, ψ = 1");
+    assert!(
+        (flens.psi - 1.0).abs() < 1e-12,
+        "bovenflens: gelijkmatig gedrukt, ψ = 1"
+    );
     assert!((flens.grens_klasse1 - 33.0).abs() < 1e-9);
     assert!((flens.grens_klasse2 - 38.0).abs() < 1e-9);
     assert!((flens.grens_klasse3 - 42.0).abs() < 1e-9);
 
-    assert!(r.delen.iter().all(|d| d.lamel_index != 2), "onderflens staat op trek");
+    assert!(
+        r.delen.iter().all(|d| d.lamel_index != 2),
+        "onderflens staat op trek"
+    );
 }

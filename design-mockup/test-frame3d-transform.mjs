@@ -19,6 +19,7 @@ const model = {
   memberPointLoads: [{ id: 1, beamId: 1, py: 0, pz: -10, positionM: 2 }],
   plates: [{ id: 1, nodeIds: [1, 2, 3], thicknessM: 0.2, cornerRadiusM: 0.1 }],
   surfaceLoads: [{ id: 1, plateId: 1, qx: 0, qy: 0, qz: -5 }],
+  plateEdgeLoads: [{ id: 1, plateId: 1, edgeIndex: 0, startKnPerM: -2, endKnPerM: -3 }],
 };
 
 const moved = transformFrame3D(model, { type: "beam", id: 1 }, { kind: "move", dx: 1, dy: 2, dz: 3 });
@@ -83,6 +84,9 @@ const copiedPlate = transformFrame3D(model, { type: "plate", id: 1 }, { kind: "c
 assert.deepEqual(copiedPlate.selection, { type: "plate", id: 2 });
 assert.deepEqual(copiedPlate.model.plates.at(-1).nodeIds, [4, 5, 6]);
 assert.equal(copiedPlate.model.surfaceLoads.at(-1).plateId, 2, "oppervlaktebelasting reist mee met een gekopieerde plaat");
+assert.deepEqual(copiedPlate.model.plateEdgeLoads.at(-1), {
+  id: 2, plateId: 2, edgeIndex: 0, startKnPerM: -2, endKnPerM: -3,
+}, "randlijnlast reist mee met een gekopieerde plaat");
 
 const curved = parseFrame3DModel({
   nodes: [

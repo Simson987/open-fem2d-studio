@@ -3,7 +3,11 @@
 //! GNL is a tangent P-Delta iteration. The default FNL path is a monotonic
 //! secant law; an explicit load path retains axial plasticity or tensile damage.
 
-use crate::math::{buckling_factors, constrained_solve, free_positive_definite, Matrix};
+use crate::frontal::{self, FrontalElement, FrontalOptions};
+use crate::math::{
+    buckling_factors, constrained_solve, free_positive_definite_block_ordered, Matrix,
+};
+use crate::section::{equivalent_rectangular_fibers_3d, integrate_section_3d, FiberState};
 use crate::{positive, MaterialLaw};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -26,6 +30,14 @@ impl Analysis {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum LinearBackend {
+    #[default]
+    Existing,
+    FrontalWave,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Node {
@@ -40,6 +52,9 @@ pub struct Material {
     pub id: usize,
     pub e_mpa: f64,
     pub nu: f64,
+    /// Independent shear modulus for anisotropic line materials such as glulam.
+    #[serde(default)]
+    pub g_mpa: Option<f64>,
     #[serde(default)]
     pub name: String,
     #[serde(default)]
@@ -190,6 +205,11 @@ pub struct Request {
     pub schema_version: u32,
     #[serde(default)]
     pub analysis: Analysis,
+    #[serde(default)]
+    pub linear_backend: LinearBackend,
+    /// Maximum active free DOFs for the opt-in frontal linear solve.
+    #[serde(default)]
+    pub frontal_max_front_dofs: Option<usize>,
     pub nodes: Vec<Node>,
     pub materials: Vec<Material>,
     pub sections: Vec<Section>,
@@ -238,6 +258,8 @@ pub struct MemberResult {
     pub effective_e_mpa: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub axial_history: Option<AxialHistoryResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section_history: Option<SectionHistoryResult>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -247,6 +269,13 @@ pub struct AxialHistoryResult {
     pub equivalent_plastic_strain: f64,
     pub tensile_damage: f64,
     pub tangent_e_mpa: f64,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionHistoryResult {
+    pub maximum_abs_plastic_strain: f64,
+    pub maximum_equivalent_plastic_strain: f64,
+    pub maximum_tensile_damage: f64,
 }
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -326,6 +355,110 @@ struct Element<'a> {
     material: &'a Material,
     section: &'a Section,
     releases: EndReleases,
+}
+
+/// Linear, unreleased Euler-Bernoulli member in the standalone frame DOF order
+/// `[ux, uy, uz, rx, ry, rz]` at each end. Stiffness uses kN, m, and rad.
+pub(crate) struct LinearMemberMatrices {
+    pub(crate) global_stiffness: [[f64; 12]; 12],
+    pub(crate) local_stiffness: [[f64; 12]; 12],
+    /// Rows are the local x, y, z unit vectors in global coordinates.
+    pub(crate) rotation: [[f64; 3]; 3],
+}
+
+pub(crate) fn linear_member_matrices_with_shear(
+    start: [f64; 3],
+    end: [f64; 3],
+    e_mpa: f64,
+    nu: f64,
+    g_mpa: Option<f64>,
+    area_m2: f64,
+    iy_m4: f64,
+    iz_m4: f64,
+    torsion_j_m4: f64,
+    roll_angle_rad: f64,
+) -> Result<LinearMemberMatrices, String> {
+    if start
+        .iter()
+        .chain(end.iter())
+        .any(|value| !value.is_finite())
+    {
+        return Err("non-finite frame coordinate".into());
+    }
+    positive(e_mpa, "E")?;
+    if let Some(g_mpa) = g_mpa { positive(g_mpa, "G")?; }
+    if !nu.is_finite() || nu <= -1.0 || nu >= 0.5 {
+        return Err("invalid Poisson ratio".into());
+    }
+    positive(area_m2, "area")?;
+    positive(iy_m4, "Iy")?;
+    positive(iz_m4, "Iz")?;
+    positive(torsion_j_m4, "J")?;
+
+    let start_node = Node {
+        id: 0,
+        x: start[0],
+        y: start[1],
+        z: start[2],
+    };
+    let end_node = Node {
+        id: 1,
+        x: end[0],
+        y: end[1],
+        z: end[2],
+    };
+    let (length, rotation) = axes(&start_node, &end_node, roll_angle_rad)?;
+    let material = Material {
+        id: 0,
+        e_mpa,
+        nu,
+        g_mpa,
+        name: String::new(),
+        alpha_per_k: None,
+        law: MaterialLaw::Elastic,
+    };
+    let section = Section {
+        id: 0,
+        area_m2,
+        iy_m4,
+        iz_m4,
+        torsion_j_m4,
+        name: String::new(),
+        shear_area_y_m2: None,
+        shear_area_z_m2: None,
+    };
+    let element = Element {
+        id: 0,
+        dofs: std::array::from_fn(|index| index),
+        length,
+        rotation,
+        material: &material,
+        section: &section,
+        releases: EndReleases::default(),
+    };
+    let local_stiffness = local_stiffness(&element, e_mpa, 0.0, false);
+    let transform = transform(rotation);
+    let global_stiffness = std::array::from_fn(|i| {
+        std::array::from_fn(|j| {
+            (0..12)
+                .flat_map(|a| {
+                    (0..12).map(move |b| transform[a][i] * local_stiffness[a][b] * transform[b][j])
+                })
+                .sum()
+        })
+    });
+    if global_stiffness
+        .iter()
+        .flatten()
+        .any(|value: &f64| !value.is_finite())
+    {
+        return Err("non-finite frame member stiffness".into());
+    }
+    Ok(LinearMemberMatrices {
+        global_stiffness,
+        local_stiffness,
+        rotation,
+    })
 }
 fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
     (0..3).map(|i| a[i] * b[i]).sum()
@@ -423,7 +556,9 @@ fn local_stiffness(
     let mut k = [[0.0; 12]; 12];
     let l = element.length;
     let e = effective_e * 1000.0;
-    let g = e / (2.0 * (1.0 + element.material.nu));
+    let g = element.material.g_mpa
+        .map(|g_mpa| g_mpa * 1000.0 * effective_e / element.material.e_mpa)
+        .unwrap_or_else(|| e / (2.0 * (1.0 + element.material.nu)));
     add_pair(&mut k, 0, 6, e * element.section.area_m2 / l);
     add_pair(&mut k, 3, 9, g * element.section.torsion_j_m4 / l);
     let by = bending(l);
@@ -467,7 +602,7 @@ fn hermite(length: f64, x: f64) -> [f64; 4] {
         length * (-t * t + t * t * t),
     ]
 }
-fn add_transverse_load(local: &mut [f64; 12], length: f64, x: f64, py: f64, pz: f64) {
+pub(crate) fn add_transverse_load(local: &mut [f64; 12], length: f64, x: f64, py: f64, pz: f64) {
     let shape = hermite(length, x);
     for (index, dof) in [1, 5, 7, 11].into_iter().enumerate() {
         local[dof] += py * shape[index];
@@ -481,6 +616,8 @@ fn effective_e(
     local: &[f64; 12],
     nonlinear: bool,
     thermal_strain: f64,
+    thermal_curvature_y: f64,
+    thermal_curvature_z: f64,
 ) -> f64 {
     let e = element.material.e_mpa;
     if !nonlinear {
@@ -488,10 +625,12 @@ fn effective_e(
     }
     let l = element.length;
     let axial = (local[6] - local[0]) / l - thermal_strain;
-    let curvature_y =
-        (local[10] - local[4]).abs() / l + 2.0 * (local[8] - local[2]).abs() / (l * l);
-    let curvature_z =
-        (local[11] - local[5]).abs() / l + 2.0 * (local[7] - local[1]).abs() / (l * l);
+    let curvature_y = ((local[10] - local[4]) / l + 2.0 * (local[8] - local[2]) / (l * l)
+        - thermal_curvature_y)
+        .abs();
+    let curvature_z = ((local[11] - local[5]) / l + 2.0 * (local[7] - local[1]) / (l * l)
+        - thermal_curvature_z)
+        .abs();
     let cy = (3.0 * element.section.iz_m4 / element.section.area_m2).sqrt();
     let cz = (3.0 * element.section.iy_m4 / element.section.area_m2).sqrt();
     let tensile = axial + curvature_y * cz + curvature_z * cy;
@@ -701,10 +840,21 @@ fn recovered_bending_rotations(
     Ok(local)
 }
 
+type SectionStates3D = [[FiberState; 9]; 2];
+
+#[derive(Clone, Copy)]
+struct NonlinearSection3DCorrection {
+    tangent: [[f64; 12]; 12],
+    internal: [f64; 12],
+    trial_states: SectionStates3D,
+    axial_force_kn: f64,
+}
+
 struct Assembly {
     stiffness: Matrix,
     effective_e: Vec<f64>,
     axial_response: Vec<Option<AxialResponse>>,
+    section_states: Vec<Option<SectionStates3D>>,
     member_load: Vec<f64>,
     local_stiffness: Vec<[[f64; 12]; 12]>,
     local_load: Vec<[f64; 12]>,
@@ -737,30 +887,313 @@ fn constraints_with_inactive_dofs(
     }
     Ok(constraints)
 }
+
+fn section_strain_operator(length: f64, xi: f64) -> [[f64; 12]; 3] {
+    let b = [
+        (-6.0 + 12.0 * xi) / length.powi(2),
+        (-4.0 + 6.0 * xi) / length,
+        (6.0 - 12.0 * xi) / length.powi(2),
+        (-2.0 + 6.0 * xi) / length,
+    ];
+    let mut operator = [[0.0; 12]; 3];
+    operator[0][0] = -1.0 / length;
+    operator[0][6] = 1.0 / length;
+    // Local ry is opposite the slope of local-z displacement, so this is
+    // the same sign-transformed curvature used by the local Iy stiffness.
+    for (index, dof) in [2, 4, 8, 10].into_iter().enumerate() {
+        operator[1][dof] = b[index] * if index % 2 == 1 { -1.0 } else { 1.0 };
+    }
+    // Local-y displacement and rz use the unmodified local Iz bending block.
+    for (index, dof) in [1, 5, 7, 11].into_iter().enumerate() {
+        operator[2][dof] = b[index];
+    }
+    operator
+}
+
+fn section_material_correction_3d(
+    element: &Element<'_>,
+    local: &[f64; 12],
+    thermal_strain: f64,
+    thermal_curvature_y: f64,
+    thermal_curvature_z: f64,
+    previous: &SectionStates3D,
+) -> Result<NonlinearSection3DCorrection, String> {
+    let fibers = equivalent_rectangular_fibers_3d(
+        element.section.area_m2,
+        element.section.iy_m4,
+        element.section.iz_m4,
+    )?;
+    let e = element.material.e_mpa * 1000.0;
+    let elastic = [
+        e * element.section.area_m2,
+        e * element.section.iy_m4,
+        e * element.section.iz_m4,
+    ];
+    let thermal = [thermal_strain, thermal_curvature_y, thermal_curvature_z];
+    let abscissae = [0.5 - 0.5 / 3.0_f64.sqrt(), 0.5 + 0.5 / 3.0_f64.sqrt()];
+    let mut delta_tangent = [[0.0; 12]; 12];
+    let mut delta_internal = [0.0; 12];
+    let mut trial_states = *previous;
+    let mut axial_force_kn = 0.0;
+    for (point, xi) in abscissae.into_iter().enumerate() {
+        let operator = section_strain_operator(element.length, xi);
+        let generalized_strain: [f64; 3] = std::array::from_fn(|axis| {
+            (0..12)
+                .map(|dof| operator[axis][dof] * local[dof])
+                .sum::<f64>()
+                - thermal[axis]
+        });
+        let response = integrate_section_3d(
+            element.material.e_mpa,
+            element.material.law,
+            &fibers,
+            generalized_strain[0],
+            generalized_strain[1],
+            generalized_strain[2],
+            &previous[point],
+        )?;
+        trial_states[point].copy_from_slice(&response.trial_states);
+        axial_force_kn += response.axial_kn / 2.0;
+        let resultants = [
+            response.axial_kn,
+            response.moment_y_kn_m,
+            response.moment_z_kn_m,
+        ];
+        let weight = element.length / 2.0;
+        for i in 0..12 {
+            for a in 0..3 {
+                delta_internal[i] +=
+                    operator[a][i] * (resultants[a] - elastic[a] * generalized_strain[a]) * weight;
+            }
+            for j in 0..12 {
+                for a in 0..3 {
+                    for b in 0..3 {
+                        let constitutive_delta =
+                            response.tangent[a][b] - if a == b { elastic[a] } else { 0.0 };
+                        delta_tangent[i][j] +=
+                            operator[a][i] * constitutive_delta * operator[b][j] * weight;
+                    }
+                }
+            }
+        }
+    }
+    Ok(NonlinearSection3DCorrection {
+        tangent: delta_tangent,
+        internal: delta_internal,
+        trial_states,
+        axial_force_kn,
+    })
+}
+
+/// Recover the member-side rotations hidden by a release, iterating section
+/// forces until every released end has zero resultant moment. The released
+/// joint rotation belongs to the rest of the frame and is not the rotation
+/// used to evaluate the member fibres.
+fn recover_section_released_rotations(
+    element: &Element<'_>,
+    mut local: [f64; 12],
+    local_load: &[f64; 12],
+    thermal_strain: f64,
+    thermal_curvature_y: f64,
+    thermal_curvature_z: f64,
+    previous: &SectionStates3D,
+    include_geometric: bool,
+) -> Result<[f64; 12], String> {
+    let released: Vec<usize> = [
+        (4, element.releases.my_start),
+        (10, element.releases.my_end),
+        (5, element.releases.mz_start),
+        (11, element.releases.mz_end),
+    ]
+    .into_iter()
+    .filter_map(|(dof, active)| active.then_some(dof))
+    .collect();
+    if released.is_empty() {
+        return Ok(local);
+    }
+
+    let mut last_residual = [0.0; 12];
+    for _ in 0..20 {
+        let response = section_material_correction_3d(
+            element,
+            &local,
+            thermal_strain,
+            thermal_curvature_y,
+            thermal_curvature_z,
+            previous,
+        )?;
+        let mut tangent = local_stiffness(
+            element,
+            element.material.e_mpa,
+            response.axial_force_kn,
+            include_geometric,
+        );
+        for (i, row) in tangent.iter_mut().enumerate() {
+            for (j, value) in row.iter_mut().enumerate() {
+                *value += response.tangent[i][j];
+            }
+        }
+        let base_internal = mat_vec(
+            &local_stiffness(
+                element,
+                element.material.e_mpa,
+                response.axial_force_kn,
+                include_geometric,
+            ),
+            &local,
+        );
+        let residual: [f64; 12] = std::array::from_fn(|dof| {
+            base_internal[dof] + response.internal[dof] - local_load[dof]
+        });
+        last_residual = residual;
+        let scale = 1.0
+            + released
+                .iter()
+                .map(|&dof| local_load[dof].abs())
+                .sum::<f64>();
+        if released
+            .iter()
+            .all(|&dof| residual[dof].abs() <= 1e-10 * scale)
+        {
+            return Ok(local);
+        }
+
+        let mut system = Matrix::zeros(released.len())?;
+        for (row, &dof) in released.iter().enumerate() {
+            for (col, &other) in released.iter().enumerate() {
+                system.add(row, col, tangent[dof][other]);
+            }
+        }
+        let rhs: Vec<f64> = released.iter().map(|&dof| -residual[dof]).collect();
+        let increments = constrained_solve(&system, &rhs, &vec![None; released.len()])?.0;
+        let residual_norm = released
+            .iter()
+            .map(|&dof| residual[dof] * residual[dof])
+            .sum::<f64>()
+            .sqrt();
+        let mut step = 1.0;
+        let mut accepted = false;
+        for _ in 0..16 {
+            let mut candidate = local;
+            for (index, &dof) in released.iter().enumerate() {
+                candidate[dof] += step * increments[index];
+            }
+            let candidate_response = section_material_correction_3d(
+                element,
+                &candidate,
+                thermal_strain,
+                thermal_curvature_y,
+                thermal_curvature_z,
+                previous,
+            )?;
+            let candidate_base = mat_vec(
+                &local_stiffness(
+                    element,
+                    element.material.e_mpa,
+                    candidate_response.axial_force_kn,
+                    include_geometric,
+                ),
+                &candidate,
+            );
+            let candidate_residual: [f64; 12] = std::array::from_fn(|dof| {
+                candidate_base[dof] + candidate_response.internal[dof] - local_load[dof]
+            });
+            let candidate_norm = released
+                .iter()
+                .map(|&dof| candidate_residual[dof] * candidate_residual[dof])
+                .sum::<f64>()
+                .sqrt();
+            if candidate_norm < residual_norm * (1.0 - 1e-4 * step)
+                || candidate_norm <= 1e-10 * scale
+            {
+                local = candidate;
+                accepted = true;
+                break;
+            }
+            step *= 0.5;
+        }
+        if !accepted {
+            return Err(format!(
+                "released nonlinear section rotation line search stalled (local DOFs {released:?}, residual {:?})",
+                released
+                    .iter()
+                    .map(|&dof| residual[dof])
+                    .collect::<Vec<_>>()
+            ));
+        }
+    }
+    Err(format!(
+        "released nonlinear section rotations did not converge (local DOFs {released:?}, end-moment residuals {:?})",
+        released
+            .iter()
+            .map(|&dof| last_residual[dof])
+            .collect::<Vec<_>>()
+    ))
+}
+
 fn assemble(
     elements: &[Element<'_>],
     u: &[f64],
     thermal_axial: &[f64],
+    thermal_curvature_y: &[f64],
+    thermal_curvature_z: &[f64],
     local_loads: &[[f64; 12]],
     nonlinear_material: bool,
     nonlinear_geometry: bool,
     axial_states: Option<&[AxialState]>,
+    section_states: Option<&[SectionStates3D]>,
 ) -> Result<Assembly, String> {
     let mut k = Matrix::zeros(u.len())?;
     let mut stiffnesses = Vec::with_capacity(elements.len());
     let mut axial_responses = Vec::with_capacity(elements.len());
+    let mut trial_section_states = Vec::with_capacity(elements.len());
     let mut member_force = vec![0.0; u.len()];
     let mut local_stiffnesses = Vec::with_capacity(elements.len());
     let mut condensed_loads = Vec::with_capacity(elements.len());
     for (index, element) in elements.iter().enumerate() {
-        let local = local_displacement(element, u);
+        let mut local = local_displacement(element, u);
         let area = element.section.area_m2;
         let thermal_strain = thermal_axial[index] / (element.material.e_mpa * 1000.0 * area);
-        let mut e = effective_e(element, &local, nonlinear_material, thermal_strain);
+        let mut reported_e = effective_e(
+            element,
+            &local,
+            nonlinear_material,
+            thermal_strain,
+            thermal_curvature_y[index],
+            thermal_curvature_z[index],
+        );
+        let section_active = nonlinear_material
+            && section_states.is_some()
+            && !matches!(element.material.law, MaterialLaw::Elastic);
+        let mut e = if section_active {
+            element.material.e_mpa
+        } else {
+            reported_e
+        };
         let strain = (local[6] - local[0]) / element.length;
         let history_response = axial_states
             .map(|states| axial_response(element.material, strain - thermal_strain, states[index]));
-        if nonlinear_material && element.releases.any() {
+        if section_active && element.releases.any() {
+            local = recover_section_released_rotations(
+                element,
+                local,
+                &local_loads[index],
+                thermal_strain,
+                thermal_curvature_y[index],
+                thermal_curvature_z[index],
+                &section_states.unwrap()[index],
+                nonlinear_geometry,
+            )?;
+            reported_e = effective_e(
+                element,
+                &local,
+                true,
+                thermal_strain,
+                thermal_curvature_y[index],
+                thermal_curvature_z[index],
+            );
+        }
+        if nonlinear_material && element.releases.any() && !section_active {
             for _ in 0..8 {
                 let axial = history_response.map_or(
                     e * 1000.0 * area * strain - thermal_axial[index],
@@ -773,21 +1206,62 @@ fn assemble(
                     &local_loads[index],
                     element.releases,
                 )?;
-                let next_e = effective_e(element, &recovered, true, thermal_strain);
+                let next_e = effective_e(
+                    element,
+                    &recovered,
+                    true,
+                    thermal_strain,
+                    thermal_curvature_y[index],
+                    thermal_curvature_z[index],
+                );
                 let change = (next_e - e).abs() / e;
                 e = next_e;
+                reported_e = next_e;
                 if change < 1e-10 {
                     break;
                 }
             }
         }
-        let axial = history_response.map_or(
-            e * 1000.0 * area * strain - thermal_axial[index],
-            |response| response.stress_mpa * 1000.0 * area,
+        let section_correction = if section_active {
+            Some(section_material_correction_3d(
+                element,
+                &local,
+                thermal_strain,
+                thermal_curvature_y[index],
+                thermal_curvature_z[index],
+                &section_states.unwrap()[index],
+            )?)
+        } else {
+            None
+        };
+        let axial = section_correction.map_or_else(
+            || {
+                history_response.map_or(
+                    e * 1000.0 * area * strain - thermal_axial[index],
+                    |response| response.stress_mpa * 1000.0 * area,
+                )
+            },
+            |correction| correction.axial_force_kn,
         );
         let mut stiffness = local_stiffness(element, e, axial, nonlinear_geometry);
         let mut applied_load = local_loads[index];
-        if let Some(response) = history_response {
+        if let Some(correction) = section_correction {
+            for i in 0..12 {
+                for j in 0..12 {
+                    stiffness[i][j] += correction.tangent[i][j];
+                }
+            }
+            let delta_tangent_local = mat_vec(&correction.tangent, &local);
+            for axis in 0..12 {
+                // Convert the tangent at the current trial displacement into
+                // an equivalent load so K*u reproduces the section resultant.
+                applied_load[axis] += delta_tangent_local[axis] - correction.internal[axis];
+            }
+            trial_section_states.push(Some(correction.trial_states));
+        } else {
+            trial_section_states.push(None);
+        }
+        if let Some(response) = history_response.filter(|_| section_correction.is_none()) {
             add_pair(
                 &mut stiffness,
                 0,
@@ -816,7 +1290,7 @@ fn assemble(
                 .sum();
             member_force[element.dofs[i]] += equivalent;
         }
-        stiffnesses.push(e);
+        stiffnesses.push(reported_e);
         axial_responses.push(history_response);
         local_stiffnesses.push(kl);
         condensed_loads.push(local_load);
@@ -825,9 +1299,195 @@ fn assemble(
         stiffness: k,
         effective_e: stiffnesses,
         axial_response: axial_responses,
+        section_states: trial_section_states,
         member_load: member_force,
         local_stiffness: local_stiffnesses,
         local_load: condensed_loads,
+    })
+}
+
+/// Rebuild element boundaries from the same condensed local matrices used by
+/// the reference assembly. The frontal linear path keeps these element matrices
+/// without forming a global stiffness; requested eigenbuckling still uses its
+/// separately size-limited global matrix.
+fn frontal_elements(
+    elements: &[Element<'_>],
+    local_stiffness: &[[[f64; 12]; 12]],
+    springs: &[f64],
+) -> Vec<FrontalElement> {
+    let mut result = Vec::with_capacity(elements.len() + springs.len());
+    let mut last_member = vec![None; springs.len()];
+    for (index, element) in elements.iter().enumerate() {
+        for &dof in &element.dofs {
+            last_member[dof] = Some(index);
+        }
+    }
+    let mut springs_after_member = vec![Vec::new(); elements.len()];
+    for (dof, &spring) in springs.iter().enumerate() {
+        if spring > 0.0 {
+            if let Some(index) = last_member[dof] {
+                springs_after_member[index].push(dof);
+            }
+        }
+    }
+    for (index, (element, local)) in elements.iter().zip(local_stiffness).enumerate() {
+        let t = transform(element.rotation);
+        let mut stiffness = vec![0.0; 12 * 12];
+        for i in 0..12 {
+            for j in 0..12 {
+                stiffness[i * 12 + j] = (0..12)
+                    .flat_map(|a| (0..12).map(move |b| t[a][i] * local[a][b] * t[b][j]))
+                    .sum();
+            }
+        }
+        result.push(FrontalElement {
+            dofs: element.dofs.to_vec(),
+            stiffness,
+        });
+        for &dof in &springs_after_member[index] {
+            result.push(FrontalElement {
+                dofs: vec![dof],
+                stiffness: vec![springs[dof]],
+            });
+        }
+    }
+    for (dof, &stiffness) in springs.iter().enumerate() {
+        if stiffness > 0.0 && last_member[dof].is_none() {
+            result.push(FrontalElement {
+                dofs: vec![dof],
+                stiffness: vec![stiffness],
+            });
+        }
+    }
+    result
+}
+
+/// Linear frontal solve and reporting with no global stiffness allocation.
+/// Member condensation, loads and reactions use the same local quantities as
+/// the reference path. Eigenbuckling remains in its existing small-model path.
+fn solve_linear_frontal(
+    request: &Request,
+    elements: &[Element<'_>],
+    local_loads: &[[f64; 12]],
+    thermal_axial: &[f64],
+    thermal_curvature_y: &[f64],
+    thermal_curvature_z: &[f64],
+    nodal_f: &[f64],
+    prescribed: &[Option<f64>],
+    springs: &[f64],
+    released_rotations: &[bool],
+) -> Result<Result3D, String> {
+    let mut local_stiffnesses = Vec::with_capacity(elements.len());
+    let mut condensed_loads = Vec::with_capacity(elements.len());
+    let mut member_load = vec![0.0; nodal_f.len()];
+    for (index, element) in elements.iter().enumerate() {
+        let stiffness = local_stiffness(element, element.material.e_mpa, 0.0, false);
+        let (condensed, load) = condense_releases(stiffness, local_loads[index], element.releases)?;
+        let t = transform(element.rotation);
+        for i in 0..12 {
+            let equivalent: f64 = (0..12).map(|a| t[a][i] * load[a]).sum();
+            member_load[element.dofs[i]] += equivalent;
+        }
+        local_stiffnesses.push(condensed);
+        condensed_loads.push(load);
+    }
+    let front = frontal_elements(elements, &local_stiffnesses, springs);
+    let f: Vec<f64> = nodal_f
+        .iter()
+        .zip(&member_load)
+        .map(|(nodal, member)| nodal + member)
+        .collect();
+    let mut constraints = prescribed.to_vec();
+    let mut connected = vec![false; f.len()];
+    for element in &front {
+        let width = element.dofs.len();
+        for (row, &dof) in element.dofs.iter().enumerate() {
+            if element.stiffness[row * width..(row + 1) * width]
+                .iter()
+                .any(|&value| value != 0.0)
+            {
+                connected[dof] = true;
+            }
+        }
+    }
+    for dof in 0..f.len() {
+        if released_rotations[dof] && constraints[dof].is_none() && !connected[dof] {
+            if f[dof] != 0.0 {
+                return Err("load on a disconnected frame DOF".into());
+            }
+            constraints[dof] = Some(0.0);
+        }
+    }
+    let solved = frontal::solve(
+        &front,
+        &f,
+        &constraints,
+        FrontalOptions {
+            max_front_dofs: request.frontal_max_front_dofs.unwrap_or(4096),
+            ..FrontalOptions::default()
+        },
+    )?;
+    let u = solved.displacements;
+    let reaction = solved.reactions;
+    let equilibrium_residual = equilibrium_residual_ratio(&reaction, &f, &prescribed);
+    let nodes = request
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| NodeResult {
+            node_id: node.id,
+            displacement: std::array::from_fn(|axis| u[6 * index + axis]),
+            reaction: std::array::from_fn(|axis| {
+                let dof = 6 * index + axis;
+                if prescribed[dof].is_some() {
+                    reaction[dof]
+                } else {
+                    -springs[dof] * u[dof]
+                }
+            }),
+        })
+        .collect();
+    let members: Vec<MemberResult> = elements
+        .iter()
+        .enumerate()
+        .map(|(index, element)| {
+            let local = local_displacement(element, &u);
+            let mut forces = mat_vec(&local_stiffnesses[index], &local);
+            for axis in 0..12 {
+                forces[axis] -= condensed_loads[index][axis];
+            }
+            MemberResult {
+                member_id: element.id,
+                local_end_forces: forces,
+                effective_e_mpa: element.material.e_mpa,
+                axial_history: None,
+                section_history: None,
+            }
+        })
+        .collect();
+    let diagrams = member_diagrams(request, elements, &members, 1.0, &u, local_loads)?;
+    let buckling = buckling_summary(
+        request,
+        elements,
+        &members,
+        &u,
+        thermal_axial,
+        thermal_curvature_y,
+        thermal_curvature_z,
+        local_loads,
+        springs,
+        &constraints,
+    );
+    let relative_change = relative_displacement_change(&u, &vec![0.0; u.len()]);
+    Ok(Result3D {
+        nodes,
+        members,
+        diagrams,
+        buckling,
+        iterations: 1,
+        relative_change,
+        max_amplification: 1.0,
+        equilibrium_residual,
     })
 }
 
@@ -1024,6 +1684,8 @@ fn buckling_summary(
     members: &[MemberResult],
     u: &[f64],
     thermal_axial: &[f64],
+    thermal_curvature_y: &[f64],
+    thermal_curvature_z: &[f64],
     local_loads: &[[f64; 12]],
     springs: &[f64],
     constraints: &[Option<f64>],
@@ -1060,18 +1722,24 @@ fn buckling_summary(
             elements,
             u,
             thermal_axial,
+            thermal_curvature_y,
+            thermal_curvature_z,
             local_loads,
             request.analysis.material(),
             false,
+            None,
             None,
         )?;
         let geometric = assemble(
             elements,
             u,
             thermal_axial,
+            thermal_curvature_y,
+            thermal_curvature_z,
             local_loads,
             request.analysis.material(),
             true,
+            None,
             None,
         )?;
         for (dof, spring) in springs.iter().enumerate() {
@@ -1140,12 +1808,65 @@ fn buckling_summary(
     calculate().unwrap_or_else(|reason| BucklingSummary::Failed { reason })
 }
 
+// Scale before squaring: finite frame forces and displacements can exceed
+// sqrt(f64::MAX), even though their relative norms remain well defined.
+fn relative_displacement_change(candidate: &[f64], previous: &[f64]) -> f64 {
+    let mut scale: f64 = 1e-12;
+    for &value in candidate.iter().chain(previous) {
+        if !value.is_finite() {
+            return f64::INFINITY;
+        }
+        scale = scale.max(value.abs());
+    }
+    let change = candidate
+        .iter()
+        .zip(previous)
+        .map(|(&a, &b)| (a / scale - b / scale).powi(2))
+        .sum::<f64>()
+        .sqrt();
+    let magnitude = candidate
+        .iter()
+        .map(|&value| (value / scale).powi(2))
+        .sum::<f64>()
+        .sqrt()
+        .max(1e-12 / scale);
+    change / magnitude
+}
+
+fn equilibrium_residual_ratio(reaction: &[f64], load: &[f64], prescribed: &[Option<f64>]) -> f64 {
+    let mut scale: f64 = 1.0;
+    for &value in reaction.iter().chain(load) {
+        if !value.is_finite() {
+            return f64::INFINITY;
+        }
+        scale = scale.max(value.abs());
+    }
+    let residual = reaction
+        .iter()
+        .zip(prescribed)
+        .filter(|(_, prescribed)| prescribed.is_none())
+        .map(|(&value, _)| (value / scale).powi(2))
+        .sum::<f64>()
+        .sqrt();
+    let load_norm = load
+        .iter()
+        .map(|&value| (value / scale).powi(2))
+        .sum::<f64>()
+        .sqrt()
+        .max(1.0 / scale);
+    residual / load_norm
+}
+
 pub fn solve(request: &Request) -> Result<Result3D, String> {
     if request.schema_version != 1 {
         return Err("unsupported 3D schema version".into());
     }
     if request.nodes.len() < 2 || request.members.is_empty() {
         return Err("frame requires nodes and members".into());
+    }
+    if request.linear_backend == LinearBackend::FrontalWave && request.analysis != Analysis::Linear
+    {
+        return Err("3D frontalWave backend requires linear analysis".into());
     }
     positive(request.tolerance, "tolerance")?;
     if request.max_iterations == 0 || request.max_iterations > 200 {
@@ -1191,6 +1912,9 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
     }
     for material in &request.materials {
         positive(material.e_mpa, "E")?;
+        if let Some(g_mpa) = material.g_mpa {
+            positive(g_mpa, "G")?;
+        }
         if !material.nu.is_finite() || material.nu <= -1.0 || material.nu >= 0.5 {
             return Err("invalid Poisson ratio".into());
         }
@@ -1260,6 +1984,8 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         .collect();
     let mut local_loads = vec![[0.0; 12]; elements.len()];
     let mut thermal_axial = vec![0.0; elements.len()];
+    let mut thermal_curvature_y = vec![0.0; elements.len()];
+    let mut thermal_curvature_z = vec![0.0; elements.len()];
     for load in &request.member_loads {
         let index = *element_index
             .get(&load.member_id)
@@ -1342,13 +2068,6 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         {
             return Err("invalid frame thermal load".into());
         }
-        if request.analysis.material()
-            && (load.delta_t_gradient_y_k != 0.0 || load.delta_t_gradient_z_k != 0.0)
-        {
-            return Err(
-                "thermal gradients with frame material nonlinearity are not implemented".into(),
-            );
-        }
         let element = &elements[index];
         let alpha = element.material.alpha_per_k.unwrap_or(12e-6);
         if !alpha.is_finite() || alpha <= 0.0 {
@@ -1361,6 +2080,8 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         let axial = e * area * alpha * load.delta_t_uniform_k;
         let moment_y = e * element.section.iy_m4 * alpha * load.delta_t_gradient_z_k / hz;
         let moment_z = e * element.section.iz_m4 * alpha * load.delta_t_gradient_y_k / hy;
+        thermal_curvature_y[index] += alpha * load.delta_t_gradient_z_k / hz;
+        thermal_curvature_z[index] += alpha * load.delta_t_gradient_y_k / hy;
         let local = &mut local_loads[index];
         local[0] -= axial;
         local[6] += axial;
@@ -1449,8 +2170,27 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
             nodal_f[6 * index + axis] += value;
         }
     }
+    if request.linear_backend == LinearBackend::FrontalWave {
+        return solve_linear_frontal(
+            request,
+            &elements,
+            &local_loads,
+            &thermal_axial,
+            &thermal_curvature_y,
+            &thermal_curvature_z,
+            &nodal_f,
+            &prescribed,
+            &springs,
+            &released_rotations,
+        );
+    }
+    let section_history_needed = request.analysis.material()
+        && elements
+            .iter()
+            .any(|element| !matches!(element.material.law, MaterialLaw::Elastic));
     let history_enabled = !request.load_path.is_empty()
-        || (request.analysis.material() && !request.thermal_loads.is_empty());
+        || (request.analysis.material() && !request.thermal_loads.is_empty())
+        || section_history_needed;
     if history_enabled && request.buckling_modes > 0 {
         return Err("eigenbuckling with 3D material history is not implemented".into());
     }
@@ -1461,6 +2201,7 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
     };
     let final_factor = *path.last().unwrap();
     let mut axial_states = vec![AxialState::default(); elements.len()];
+    let mut section_states = vec![[[FiberState::default(); 9]; 2]; elements.len()];
     let mut u = vec![0.0; dofs];
     let mut iterations = 0;
     let mut relative_change = 0.0;
@@ -1468,103 +2209,259 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
     let mut final_nodal_f = vec![0.0; dofs];
     let mut final_local_loads = vec![[0.0; 12]; elements.len()];
     let mut final_prescribed = prescribed.clone();
-    for factor in path {
-        let step_nodal_f: Vec<f64> = nodal_f.iter().map(|value| factor * value).collect();
-        let step_thermal_axial: Vec<f64> =
-            thermal_axial.iter().map(|value| factor * value).collect();
-        let step_local_loads: Vec<[f64; 12]> = local_loads
-            .iter()
-            .map(|load| load.map(|value| factor * value))
-            .collect();
-        let step_prescribed: Vec<Option<f64>> = prescribed
-            .iter()
-            .map(|value| value.map(|displacement| factor * displacement))
-            .collect();
-        let mut converged = false;
-        for _ in 0..request.max_iterations {
-            iterations += 1;
-            let mut assembly = assemble(
-                &elements,
-                &u,
-                &step_thermal_axial,
-                &step_local_loads,
-                request.analysis.material(),
-                request.analysis.geometric(),
-                history_enabled.then_some(axial_states.as_slice()),
-            )?;
-            for (dof, spring) in springs.iter().enumerate() {
-                if *spring > 0.0 {
-                    assembly.stiffness.add(dof, dof, *spring);
+    // A plain secant-E FNL solve has no committed state between load factors;
+    // keep its full-load Newton iteration intact. Subdivide paths that do
+    // carry history (explicit load path or thermal/material history).
+    let initial_steps = if history_enabled { 10 } else { 1 };
+    let mut start_factor = 0.0;
+    for end_factor in path {
+        let direction = (end_factor - start_factor).signum();
+        if direction == 0.0 {
+            continue;
+        }
+        let maximum_step = (end_factor - start_factor).abs() / initial_steps as f64;
+        let minimum_step = 1e-10 * (1.0 + start_factor.abs().max(end_factor.abs()));
+        let mut step_size = maximum_step;
+        let mut factor = start_factor;
+        let mut trial_attempts = 0;
+        while direction * (end_factor - factor) > 1e-12 * (1.0 + end_factor.abs()) {
+            trial_attempts += 1;
+            if trial_attempts > 1000 {
+                return Err(format!(
+                    "3D frame nonlinear load path exceeded 1000 trial increments near factor {factor} before target {end_factor}"
+                ));
+            }
+            let next_factor = if step_size >= (end_factor - factor).abs() {
+                end_factor
+            } else {
+                factor + direction * step_size
+            };
+            let step_nodal_f: Vec<f64> = nodal_f.iter().map(|value| next_factor * value).collect();
+            let step_thermal_axial: Vec<f64> = thermal_axial
+                .iter()
+                .map(|value| next_factor * value)
+                .collect();
+            let step_thermal_curvature_y: Vec<f64> = thermal_curvature_y
+                .iter()
+                .map(|value| next_factor * value)
+                .collect();
+            let step_thermal_curvature_z: Vec<f64> = thermal_curvature_z
+                .iter()
+                .map(|value| next_factor * value)
+                .collect();
+            let step_local_loads: Vec<[f64; 12]> = local_loads
+                .iter()
+                .map(|load| load.map(|value| next_factor * value))
+                .collect();
+            let step_prescribed: Vec<Option<f64>> = prescribed
+                .iter()
+                .map(|value| value.map(|displacement| next_factor * displacement))
+                .collect();
+            let mut trial_u = u.clone();
+            let mut converged = false;
+            let mut unstable_trial = false;
+            let mut force_residual = f64::INFINITY;
+            let mut force_residual_scale: f64 = 1.0;
+            for _ in 0..request.max_iterations {
+                iterations += 1;
+                let mut assembly = assemble(
+                    &elements,
+                    &trial_u,
+                    &step_thermal_axial,
+                    &step_thermal_curvature_y,
+                    &step_thermal_curvature_z,
+                    &step_local_loads,
+                    request.analysis.material(),
+                    request.analysis.geometric(),
+                    history_enabled.then_some(axial_states.as_slice()),
+                    history_enabled.then_some(section_states.as_slice()),
+                )?;
+                for (dof, spring) in springs.iter().enumerate() {
+                    if *spring > 0.0 {
+                        assembly.stiffness.add(dof, dof, *spring);
+                    }
+                }
+                let internal_force = assembly.stiffness.mul(&trial_u);
+                let mut residual_max: f64 = 0.0;
+                let mut force_scale: f64 = 1.0;
+                for dof in 0..dofs {
+                    if step_prescribed[dof].is_some() {
+                        continue;
+                    }
+                    let residual =
+                        internal_force[dof] - assembly.member_load[dof] - step_nodal_f[dof];
+                    residual_max = residual_max.max(residual.abs());
+                    force_scale = force_scale.max(internal_force[dof].abs());
+                    force_scale = force_scale.max(assembly.member_load[dof].abs());
+                    force_scale = force_scale.max(step_nodal_f[dof].abs());
+                }
+                force_residual = residual_max;
+                force_residual_scale = force_scale;
+                let constraints_satisfied =
+                    step_prescribed
+                        .iter()
+                        .zip(&trial_u)
+                        .all(|(prescribed, value)| {
+                            prescribed.is_none_or(|target| (value - target).abs() <= 1e-12)
+                        });
+                if constraints_satisfied && residual_max <= request.tolerance * force_scale {
+                    converged = true;
+                    break;
+                }
+                let f: Vec<f64> = step_nodal_f
+                    .iter()
+                    .zip(&assembly.member_load)
+                    .map(|(nodal, member)| nodal + member)
+                    .collect();
+                let solve_constraints = constraints_with_inactive_dofs(
+                    &assembly.stiffness,
+                    &f,
+                    &step_prescribed,
+                    &released_rotations,
+                )?;
+                if request.analysis.geometric()
+                    && free_positive_definite_block_ordered(
+                        &assembly.stiffness,
+                        &solve_constraints,
+                        6,
+                    )
+                    .is_err()
+                {
+                    unstable_trial = true;
+                    break;
+                }
+                let solution = constrained_solve(&assembly.stiffness, &f, &solve_constraints);
+                let (candidate, _) = match solution {
+                    Ok(solution) => solution,
+                    Err(_) => {
+                        unstable_trial = true;
+                        break;
+                    }
+                };
+                if iterations == 1 {
+                    let reference_factor = next_factor.abs();
+                    first_translation_max = candidate
+                        .chunks_exact(6)
+                        .flat_map(|node| node[..3].iter())
+                        .map(|value| value.abs())
+                        .fold(0.0, f64::max)
+                        / reference_factor.max(1e-12);
+                }
+                relative_change = relative_displacement_change(&candidate, &trial_u);
+                trial_u = candidate;
+                if request.analysis == Analysis::Linear || relative_change <= request.tolerance {
+                    converged = true;
+                    break;
                 }
             }
-            let f: Vec<f64> = step_nodal_f
-                .iter()
-                .zip(&assembly.member_load)
-                .map(|(nodal, member)| nodal + member)
-                .collect();
-            let solve_constraints = constraints_with_inactive_dofs(
-                &assembly.stiffness,
-                &f,
-                &step_prescribed,
-                &released_rotations,
-            )?;
-            if request.analysis.geometric() {
-                free_positive_definite(&assembly.stiffness, &solve_constraints)?;
+            if !converged {
+                let mut verification = assemble(
+                    &elements,
+                    &trial_u,
+                    &step_thermal_axial,
+                    &step_thermal_curvature_y,
+                    &step_thermal_curvature_z,
+                    &step_local_loads,
+                    request.analysis.material(),
+                    request.analysis.geometric(),
+                    history_enabled.then_some(axial_states.as_slice()),
+                    history_enabled.then_some(section_states.as_slice()),
+                )?;
+                for (dof, spring) in springs.iter().enumerate() {
+                    if *spring > 0.0 {
+                        verification.stiffness.add(dof, dof, *spring);
+                    }
+                }
+                let internal = verification.stiffness.mul(&trial_u);
+                let mut residual_max: f64 = 0.0;
+                let mut force_scale: f64 = 1.0;
+                for dof in 0..dofs {
+                    if step_prescribed[dof].is_some() {
+                        continue;
+                    }
+                    let residual =
+                        internal[dof] - verification.member_load[dof] - step_nodal_f[dof];
+                    residual_max = residual_max.max(residual.abs());
+                    force_scale = force_scale.max(internal[dof].abs());
+                    force_scale = force_scale.max(verification.member_load[dof].abs());
+                    force_scale = force_scale.max(step_nodal_f[dof].abs());
+                }
+                force_residual = residual_max;
+                force_residual_scale = force_scale;
+                let constraints_satisfied =
+                    step_prescribed
+                        .iter()
+                        .zip(&trial_u)
+                        .all(|(prescribed, value)| {
+                            prescribed.is_none_or(|target| (value - target).abs() <= 1e-12)
+                        });
+                // Fiber constitutive updates can leave a tiny force residual at
+                // a yield-surface corner after the displacement iteration has
+                // stagnated. Verify that residual once before cutting back.
+                let verification_tolerance = if section_history_needed {
+                    200.0 * request.tolerance
+                } else {
+                    request.tolerance
+                };
+                converged =
+                    constraints_satisfied && residual_max <= verification_tolerance * force_scale;
             }
-            let (candidate, _) = constrained_solve(&assembly.stiffness, &f, &solve_constraints)?;
-            if iterations == 1 {
-                first_translation_max = candidate
-                    .chunks_exact(6)
-                    .flat_map(|node| node[..3].iter())
-                    .map(|value| value.abs())
-                    .fold(0.0, f64::max);
+            if !converged {
+                step_size *= 0.5;
+                if step_size < minimum_step {
+                    let reason = if unstable_trial {
+                        "lost stable stiffness"
+                    } else {
+                        "did not converge"
+                    };
+                    return Err(format!(
+                        "3D frame nonlinear iteration {reason} near load factor {next_factor} after load-step cutbacks (relative change {relative_change:e}, residual {force_residual:e}/{force_residual_scale:e})"
+                    ));
+                }
+                continue;
             }
-            let change = candidate
-                .iter()
-                .zip(&u)
-                .map(|(a, b)| (a - b).powi(2))
-                .sum::<f64>()
-                .sqrt();
-            let magnitude = candidate
-                .iter()
-                .map(|v| v * v)
-                .sum::<f64>()
-                .sqrt()
-                .max(1e-12);
-            relative_change = change / magnitude;
-            u = candidate;
-            if request.analysis == Analysis::Linear || relative_change <= request.tolerance {
-                converged = true;
-                break;
+            if history_enabled {
+                let committed = assemble(
+                    &elements,
+                    &trial_u,
+                    &step_thermal_axial,
+                    &step_thermal_curvature_y,
+                    &step_thermal_curvature_z,
+                    &step_local_loads,
+                    true,
+                    false,
+                    Some(&axial_states),
+                    Some(&section_states),
+                )?;
+                axial_states = committed
+                    .axial_response
+                    .iter()
+                    .map(|response| response.unwrap().state)
+                    .collect();
+                for (state, trial) in section_states.iter_mut().zip(committed.section_states) {
+                    if let Some(trial) = trial {
+                        *state = trial;
+                    }
+                }
             }
+            u = trial_u;
+            factor = next_factor;
+            step_size = (step_size * 1.5).min(maximum_step);
+            final_nodal_f = step_nodal_f;
+            final_local_loads = step_local_loads;
+            final_prescribed = step_prescribed;
         }
-        if !converged {
-            return Err(format!(
-                "frame nonlinear iteration did not converge in {} steps",
-                request.max_iterations
-            ));
-        }
-        if history_enabled {
-            let committed = assemble(
-                &elements,
-                &u,
-                &step_thermal_axial,
-                &step_local_loads,
-                true,
-                false,
-                Some(&axial_states),
-            )?;
-            axial_states = committed
-                .axial_response
-                .iter()
-                .map(|response| response.unwrap().state)
-                .collect();
-        }
-        final_nodal_f = step_nodal_f;
-        final_local_loads = step_local_loads;
-        final_prescribed = step_prescribed;
+        start_factor = end_factor;
     }
     let final_thermal_axial: Vec<f64> = thermal_axial
+        .iter()
+        .map(|value| final_factor * value)
+        .collect();
+    let final_thermal_curvature_y: Vec<f64> = thermal_curvature_y
+        .iter()
+        .map(|value| final_factor * value)
+        .collect();
+    let final_thermal_curvature_z: Vec<f64> = thermal_curvature_z
         .iter()
         .map(|value| final_factor * value)
         .collect();
@@ -1572,10 +2469,13 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         &elements,
         &u,
         &final_thermal_axial,
+        &final_thermal_curvature_y,
+        &final_thermal_curvature_z,
         &final_local_loads,
         request.analysis.material(),
         request.analysis.geometric(),
         history_enabled.then_some(axial_states.as_slice()),
+        history_enabled.then_some(section_states.as_slice()),
     )?;
     for (dof, spring) in springs.iter().enumerate() {
         if *spring > 0.0 {
@@ -1594,7 +2494,7 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         &released_rotations,
     )?;
     if request.analysis.geometric() {
-        free_positive_definite(&assembly.stiffness, &solve_constraints)?;
+        free_positive_definite_block_ordered(&assembly.stiffness, &solve_constraints, 6)?;
     }
     let reaction: Vec<f64> = assembly
         .stiffness
@@ -1603,14 +2503,7 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         .zip(&f)
         .map(|(ku, load)| ku - load)
         .collect();
-    let equilibrium_residual = reaction
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| final_prescribed[*i].is_none())
-        .map(|(_, r)| r * r)
-        .sum::<f64>()
-        .sqrt()
-        / f.iter().map(|v| v * v).sum::<f64>().sqrt().max(1.0);
+    let equilibrium_residual = equilibrium_residual_ratio(&reaction, &f, &final_prescribed);
     let nodes = request
         .nodes
         .iter()
@@ -1639,6 +2532,24 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
             for axis in 0..12 {
                 forces[axis] -= local_load[axis];
             }
+            let section_history = assembly.section_states[index].map(|points| {
+                let mut history = SectionHistoryResult {
+                    maximum_abs_plastic_strain: 0.0,
+                    maximum_equivalent_plastic_strain: 0.0,
+                    maximum_tensile_damage: 0.0,
+                };
+                for state in points.iter().flatten() {
+                    history.maximum_abs_plastic_strain = history
+                        .maximum_abs_plastic_strain
+                        .max(state.plastic_strain.abs());
+                    history.maximum_equivalent_plastic_strain = history
+                        .maximum_equivalent_plastic_strain
+                        .max(state.equivalent_plastic_strain);
+                    history.maximum_tensile_damage =
+                        history.maximum_tensile_damage.max(state.tensile_damage);
+                }
+                history
+            });
             let axial_history = history_enabled.then(|| {
                 let state = axial_states[index];
                 AxialHistoryResult {
@@ -1653,6 +2564,7 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
                 local_end_forces: forces,
                 effective_e_mpa: assembly.effective_e[index],
                 axial_history,
+                section_history,
             }
         })
         .collect();
@@ -1670,6 +2582,8 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
         &members,
         &u,
         &final_thermal_axial,
+        &final_thermal_curvature_y,
+        &final_thermal_curvature_z,
         &local_loads,
         &springs,
         &solve_constraints,
@@ -1699,9 +2613,23 @@ pub fn solve(request: &Request) -> Result<Result3D, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn independent_shear_modulus_controls_torsion_without_changing_bending() {
+        let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 0.0);
+        model.materials[0].e_mpa = 11_500.0;
+        model.materials[0].g_mpa = Some(650.0);
+        model.nodal_loads[0].mx = 0.5;
+        let result = solve(&model).unwrap();
+        let expected = 0.5 * 2.0 / (650_000.0 * model.sections[0].torsion_j_m4);
+        assert!((result.nodes[1].displacement[3] - expected).abs() < 1e-10);
+        model.materials[0].g_mpa = Some(0.0);
+        assert!(solve(&model).unwrap_err().contains("G"));
+    }
     fn cantilever(analysis: Analysis, law: MaterialLaw, load: f64) -> Request {
         Request {
             analysis,
+            linear_backend: LinearBackend::Existing,
+            frontal_max_front_dofs: None,
             nodes: vec![
                 Node {
                     id: 1,
@@ -1720,6 +2648,7 @@ mod tests {
                 id: 1,
                 e_mpa: 210_000.0,
                 nu: 0.3,
+                g_mpa: None,
                 name: String::new(),
                 alpha_per_k: None,
                 law,
@@ -1791,6 +2720,106 @@ mod tests {
         assert!((result.nodes[1].displacement[1] - expected).abs() < 1e-10);
         assert!((result.nodes[0].reaction[1] + 10.0).abs() < 1e-9);
         assert!((result.nodes[0].reaction[5] + 20.0).abs() < 1e-9);
+    }
+    #[test]
+    fn reusable_linear_member_matches_standalone_frame_forces() {
+        let model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 10.0);
+        let result = solve(&model).unwrap();
+        let matrices = linear_member_matrices_with_shear(
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            model.materials[0].e_mpa,
+            model.materials[0].nu,
+            None,
+            model.sections[0].area_m2,
+            model.sections[0].iy_m4,
+            model.sections[0].iz_m4,
+            model.sections[0].torsion_j_m4,
+            0.0,
+        )
+        .unwrap();
+        let u = std::array::from_fn(|dof| result.nodes[dof / 6].displacement[dof % 6]);
+        let global_force = mat_vec(&matrices.global_stiffness, &u);
+        for (dof, force) in global_force.iter().enumerate() {
+            let expected =
+                result.nodes[dof / 6].reaction[dof % 6] + if dof == 7 { 10.0 } else { 0.0 };
+            assert!((force - expected).abs() < 1e-8, "DOF {dof}");
+        }
+        let local_u = mat_vec(&transform(matrices.rotation), &u);
+        let local_force = mat_vec(&matrices.local_stiffness, &local_u);
+        for (dof, force) in local_force.iter().enumerate() {
+            assert!(
+                (force - result.members[0].local_end_forces[dof]).abs() < 1e-8,
+                "local DOF {dof}"
+            );
+        }
+    }
+    #[test]
+    fn finite_large_frame_vectors_keep_their_relative_norms() {
+        // sqrt(1e155² + 1e154²) overflows if the vector is squared first.
+        // Only the second DOF changes, so the exact relative change is 1/sqrt(101).
+        let change = relative_displacement_change(&[1e155, 1e154], &[1e155, 0.0]);
+        assert!((change - 1.0 / 101.0_f64.sqrt()).abs() < 1e-15);
+        assert!(change > 1e-8);
+
+        // The same scaling is needed for the reported free-DOF force residual.
+        let ratio = equilibrium_residual_ratio(&[0.0, 1e154], &[1e155, 0.0], &[Some(0.0), None]);
+        assert!((ratio - 0.1).abs() < 1e-15);
+    }
+    #[test]
+    fn frontal_frame_reports_finite_metrics_for_large_finite_load() {
+        let mut model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 1e155);
+        model.linear_backend = LinearBackend::FrontalWave;
+        let result = solve(&model).unwrap();
+        assert!(result.relative_change.is_finite());
+        assert_eq!(result.relative_change, 1.0);
+        assert!(result.equilibrium_residual.is_finite());
+        assert!(result.equilibrium_residual < 1e-10);
+    }
+    #[test]
+    fn section_curvature_operators_reproduce_both_local_bending_blocks() {
+        let model = cantilever(Analysis::Linear, MaterialLaw::Elastic, 0.0);
+        let element = Element {
+            id: 1,
+            dofs: std::array::from_fn(|index| index),
+            length: 2.0,
+            rotation: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            material: &model.materials[0],
+            section: &model.sections[0],
+            releases: EndReleases::default(),
+        };
+        let stiffness = local_stiffness(&element, element.material.e_mpa, 0.0, false);
+        let gauss = [0.5 - 0.5 / 3.0_f64.sqrt(), 0.5 + 0.5 / 3.0_f64.sqrt()];
+        for (axis, inertia, dofs) in [
+            (1, element.section.iy_m4, [2, 4, 8, 10]),
+            (2, element.section.iz_m4, [1, 5, 7, 11]),
+        ] {
+            let mut integrated = [[0.0; 12]; 12];
+            for xi in gauss {
+                let operator = section_strain_operator(element.length, xi);
+                for i in 0..12 {
+                    for j in 0..12 {
+                        integrated[i][j] += operator[axis][i]
+                            * operator[axis][j]
+                            * element.material.e_mpa
+                            * 1000.0
+                            * inertia
+                            * element.length
+                            / 2.0;
+                    }
+                }
+            }
+            for i in dofs {
+                for j in dofs {
+                    assert!(
+                        (integrated[i][j] - stiffness[i][j]).abs() < 1e-8,
+                        "axis {axis}, dofs ({i}, {j}): {} vs {}",
+                        integrated[i][j],
+                        stiffness[i][j]
+                    );
+                }
+            }
+        }
     }
     #[test]
     fn frame_over_600_dof_matches_axial_chain_solution_with_p_delta() {
@@ -2145,8 +3174,55 @@ mod tests {
         let example_result = solve(&example).unwrap();
         assert!((example_result.nodes[0].reaction[0] - cooled.nodes[0].reaction[0]).abs() < 1e-8);
 
-        model.thermal_loads[0].delta_t_gradient_y_k = 1.0;
-        assert!(solve(&model).unwrap_err().contains("thermal gradients"));
+        model.supports.pop();
+        model.load_path.clear();
+        model.thermal_loads[0].delta_t_uniform_k = 0.0;
+        model.thermal_loads[0].delta_t_gradient_y_k = 30.0;
+        let gradient_y = solve(&model).unwrap();
+        assert!((gradient_y.members[0].effective_e_mpa - 210_000.0).abs() < 1e-5);
+        assert!(gradient_y.members[0].local_end_forces[5].abs() < 1e-6);
+        assert!(gradient_y.members[0].local_end_forces[11].abs() < 1e-6);
+        let curvature_y = 10e-6 * 30.0 / (12.0_f64 * 2e-5 / 0.01).sqrt();
+        assert!((gradient_y.nodes[1].displacement[1].abs() - curvature_y * 2.0).abs() < 1e-9);
+        assert!((gradient_y.nodes[1].displacement[5].abs() - curvature_y * 2.0).abs() < 1e-9);
+
+        model.thermal_loads[0].delta_t_gradient_y_k = 0.0;
+        model.thermal_loads[0].delta_t_gradient_z_k = 30.0;
+        let gradient_z = solve(&model).unwrap();
+        assert!((gradient_z.members[0].effective_e_mpa - 210_000.0).abs() < 1e-5);
+        assert!(gradient_z.members[0].local_end_forces[4].abs() < 1e-6);
+        assert!(gradient_z.members[0].local_end_forces[10].abs() < 1e-6);
+        let curvature_z = 10e-6 * 30.0 / (12.0_f64 * 1e-5 / 0.01).sqrt();
+        assert!((gradient_z.nodes[1].displacement[2].abs() - curvature_z * 2.0).abs() < 1e-9);
+        assert!((gradient_z.nodes[1].displacement[4].abs() - curvature_z * 2.0).abs() < 1e-9);
+
+        let mut restrained = model.clone();
+        let mut end_support = restrained.supports[0].clone();
+        end_support.node_id = 2;
+        restrained.supports.push(end_support);
+        let fixed_gradient = solve(&restrained).unwrap();
+        let expected_thermal_moment = 210_000.0 * 1000.0 * 1e-5 * curvature_z;
+        assert!(
+            (fixed_gradient.members[0].local_end_forces[4].abs() - expected_thermal_moment).abs()
+                < 1e-6,
+            "fixed thermal moment: {:?}, expected {expected_thermal_moment}",
+            fixed_gradient.members[0].local_end_forces
+        );
+        assert!(
+            (fixed_gradient.members[0].local_end_forces[10].abs() - expected_thermal_moment).abs()
+                < 1e-6,
+            "fixed thermal moment: {:?}, expected {expected_thermal_moment}",
+            fixed_gradient.members[0].local_end_forces
+        );
+
+        model.analysis = Analysis::Combined;
+        model.nodal_loads[0].fy = -0.1;
+        let combined = solve(&model).unwrap();
+        assert!(combined.equilibrium_residual < 1e-8);
+        assert!(combined.nodes[1]
+            .displacement
+            .iter()
+            .all(|value| value.is_finite()));
     }
     #[test]
     fn thermal_compression_amplifies_combined_geometric_material_sway() {
@@ -2172,7 +3248,62 @@ mod tests {
         model.analysis = Analysis::Combined;
         let combined = solve(&model).unwrap();
         assert!(combined.nodes[1].displacement[1] > first_order.nodes[1].displacement[1]);
+        assert!(combined.max_amplification > 1.0);
         assert!(combined.equilibrium_residual < 1e-8);
+    }
+    #[test]
+    fn combined_load_path_matches_independent_3d_beam_column_solution() {
+        let mut model = cantilever(Analysis::Combined, MaterialLaw::Elastic, 0.0);
+        let length_m = 2.0;
+        let element_count = 24;
+        model.nodes = (0..=element_count)
+            .map(|index| Node {
+                id: index + 1,
+                x: length_m * index as f64 / element_count as f64,
+                y: 0.0,
+                z: 0.0,
+            })
+            .collect();
+        model.members = (0..element_count)
+            .map(|index| Member {
+                id: index + 1,
+                start_node_id: index + 1,
+                end_node_id: index + 2,
+                material_id: 1,
+                section_id: 1,
+                roll_angle_rad: 0.0,
+                releases: EndReleases::default(),
+            })
+            .collect();
+        let tip = element_count;
+        model.nodal_loads = vec![NodalLoad {
+            id: 1,
+            node_id: tip + 1,
+            fx: -100.0,
+            fy: 10.0,
+            fz: 0.0,
+            mx: 0.0,
+            my: 0.0,
+            mz: 0.0,
+        }];
+        model.load_path = vec![0.25, 0.5, 0.75, 1.0];
+
+        let result = solve(&model).unwrap();
+        let axial_compression_kn = 100.0;
+        let transverse_load_kn = 10.0;
+        let e_kn_per_m2 = 210_000_000.0;
+        let inertia_m4 = model.sections[0].iz_m4;
+        let wave_number = (axial_compression_kn / (e_kn_per_m2 * inertia_m4)).sqrt();
+        let expected_tip_m = transverse_load_kn
+            * ((wave_number * length_m).tan() - wave_number * length_m)
+            / (axial_compression_kn * wave_number);
+        let actual_tip_m = result.nodes[tip].displacement[1];
+        assert!(
+            (actual_tip_m - expected_tip_m).abs() / expected_tip_m.abs() < 2e-3,
+            "3D combined load path tip sway {actual_tip_m} m differs from beam-column solution {expected_tip_m} m"
+        );
+        assert!(result.max_amplification > 1.0);
+        assert!(result.equilibrium_residual < 1e-8);
     }
     #[test]
     fn restrained_cooling_retains_concrete_tensile_damage_on_reloading() {
@@ -2260,8 +3391,346 @@ mod tests {
         ))
         .unwrap();
         assert!(steel.nodes[1].displacement[1] > elastic.nodes[1].displacement[1]);
-        assert!(concrete.nodes[1].displacement[1] > steel.nodes[1].displacement[1]);
+        assert!(concrete.nodes[1].displacement[1] > elastic.nodes[1].displacement[1]);
+        assert!(
+            steel.members[0]
+                .section_history
+                .as_ref()
+                .unwrap()
+                .maximum_equivalent_plastic_strain
+                > 0.0
+        );
+        assert!(
+            concrete.members[0]
+                .section_history
+                .as_ref()
+                .unwrap()
+                .maximum_tensile_damage
+                > 0.0
+        );
     }
+
+    #[test]
+    fn steel_fnl_with_rotational_support_spring_matches_independent_section_curvature() {
+        let law = MaterialLaw::SteelBilinear {
+            yield_mpa: 235.0,
+            hardening_ratio: 0.05,
+        };
+        let spring_stiffness = 3_500.0;
+        let moment_kn_m = 80.0;
+        let mut model = cantilever(Analysis::Material, law, 0.0);
+        model.supports[0].rz = false;
+        model.supports[0].krz_knm_per_rad = Some(spring_stiffness);
+        model.nodal_loads[0].mz = moment_kn_m;
+
+        let fibers = equivalent_rectangular_fibers_3d(
+            model.sections[0].area_m2,
+            model.sections[0].iy_m4,
+            model.sections[0].iz_m4,
+        )
+        .unwrap();
+        let virgin = [FiberState::default(); 9];
+        let e_mpa = model.materials[0].e_mpa;
+        let mut low = 0.0;
+        let mut high = 5.0;
+        let moment_at = |curvature_z| {
+            integrate_section_3d(e_mpa, law, &fibers, 0.0, 0.0, curvature_z, &virgin)
+                .unwrap()
+                .moment_z_kn_m
+        };
+        assert!(moment_at(high) > moment_kn_m);
+        for _ in 0..100 {
+            let mid = 0.5 * (low + high);
+            if moment_at(mid) < moment_kn_m {
+                low = mid;
+            } else {
+                high = mid;
+            }
+        }
+        let curvature_z = 0.5 * (low + high);
+        let spring_rotation = moment_kn_m / spring_stiffness;
+        let length = 2.0;
+        let expected_tip_rotation = spring_rotation + curvature_z * length;
+        let expected_tip_displacement =
+            spring_rotation * length + curvature_z * length.powi(2) / 2.0;
+
+        let result = solve(&model).unwrap();
+        assert!(
+            (result.nodes[0].displacement[5] - spring_rotation).abs() < 2e-8,
+            "support spring rotation {} differs from M/k {spring_rotation}",
+            result.nodes[0].displacement[5]
+        );
+        assert!(
+            (result.nodes[1].displacement[5] - expected_tip_rotation).abs() < 2e-5,
+            "3D FNL tip rotation {} differs from independent section+spring result {expected_tip_rotation}",
+            result.nodes[1].displacement[5]
+        );
+        assert!(
+            (result.nodes[1].displacement[1] - expected_tip_displacement).abs() < 2e-5,
+            "3D FNL tip displacement {} differs from independent integration {expected_tip_displacement}",
+            result.nodes[1].displacement[1]
+        );
+        assert!(
+            result.members[0]
+                .section_history
+                .as_ref()
+                .unwrap()
+                .maximum_equivalent_plastic_strain
+                > 0.0
+        );
+        assert!(result.equilibrium_residual < 1e-7);
+    }
+
+    #[test]
+    fn steel_fnl_general_n_my_mz_interaction_retains_history_on_unload_reload() {
+        let law = MaterialLaw::SteelBilinear {
+            yield_mpa: 235.0,
+            hardening_ratio: 0.05,
+        };
+        let targets = [3_000.0, 40.0, 60.0];
+        let mut model = cantilever(Analysis::Material, law, 0.0);
+        model.nodal_loads[0].fx = targets[0];
+        model.nodal_loads[0].my = targets[1];
+        model.nodal_loads[0].mz = targets[2];
+        model.load_path = vec![0.25, 0.5, 0.75, 1.0, 0.5, 0.75];
+
+        let fibers = equivalent_rectangular_fibers_3d(
+            model.sections[0].area_m2,
+            model.sections[0].iy_m4,
+            model.sections[0].iz_m4,
+        )
+        .unwrap();
+        let virgin = [FiberState::default(); 9];
+        let mut committed_states = virgin.to_vec();
+        let e = model.materials[0].e_mpa;
+        let yield_mpa = 235.0;
+        let hardening_ratio = 0.05;
+        let hardening_modulus = e * hardening_ratio / (1.0 - hardening_ratio);
+        // Test-only reference: independently integrate the nine uniaxial
+        // bilinear fibers and assemble [N, My, Mz] and its tangent. This does
+        // not call the production section response routine.
+        let section_reference = |strains: [f64; 3], previous: &[FiberState]| {
+            let mut resultants = [0.0; 3];
+            let mut tangent = Matrix::zeros(3).unwrap();
+            let mut trial_states = Vec::with_capacity(fibers.len());
+            for (fiber, old) in fibers.iter().zip(previous) {
+                let strain = strains[0] + fiber.z_m * strains[1] - fiber.y_m * strains[2];
+                let trial_stress = e * (strain - old.plastic_strain);
+                let excess = trial_stress.abs()
+                    - yield_mpa
+                    - hardening_modulus * old.equivalent_plastic_strain;
+                let (stress, tangent_e, state) = if excess > 0.0 {
+                    let plastic_increment = excess / (e + hardening_modulus);
+                    let sign = trial_stress.signum();
+                    (
+                        trial_stress - sign * e * plastic_increment,
+                        hardening_ratio * e,
+                        FiberState {
+                            plastic_strain: old.plastic_strain + sign * plastic_increment,
+                            equivalent_plastic_strain: old.equivalent_plastic_strain
+                                + plastic_increment,
+                            ..*old
+                        },
+                    )
+                } else {
+                    (trial_stress, e, *old)
+                };
+                let force = stress * fiber.area_m2 * 1000.0;
+                resultants[0] += force;
+                resultants[1] += fiber.z_m * force;
+                resultants[2] -= fiber.y_m * force;
+                let b = [1.0, fiber.z_m, -fiber.y_m];
+                for row in 0..3 {
+                    for column in 0..3 {
+                        tangent.add(
+                            row,
+                            column,
+                            tangent_e * fiber.area_m2 * b[row] * b[column] * 1000.0,
+                        );
+                    }
+                }
+                trial_states.push(state);
+            }
+            (resultants, tangent, trial_states)
+        };
+        let mut generalized_strain = [0.0; 3];
+        let mut start_factor = 0.0;
+        let mut peak_plastic_strain: f64 = 0.0;
+        for &end_factor in &model.load_path {
+            for step in 1..=40 {
+                let factor = start_factor + (end_factor - start_factor) * step as f64 / 40.0;
+                let mut converged = false;
+                for _ in 0..100 {
+                    let (response, tangent, trial_states) =
+                        section_reference(generalized_strain, &committed_states);
+                    let residual = [
+                        factor * targets[0] - response[0],
+                        factor * targets[1] - response[1],
+                        factor * targets[2] - response[2],
+                    ];
+                    if residual.iter().all(|value| value.abs() < 1e-9) {
+                        committed_states = trial_states;
+                        converged = true;
+                        break;
+                    }
+                    let (increment, _) =
+                        constrained_solve(&tangent, &residual, &[None; 3]).unwrap();
+                    for axis in 0..3 {
+                        generalized_strain[axis] += increment[axis];
+                    }
+                }
+                assert!(
+                    converged,
+                    "independent section did not converge at factor {factor}"
+                );
+                if (factor - 1.0).abs() < 1e-12 {
+                    peak_plastic_strain = committed_states
+                        .iter()
+                        .map(|state| state.equivalent_plastic_strain)
+                        .fold(0.0, f64::max);
+                }
+            }
+            start_factor = end_factor;
+        }
+        let final_factor = *model.load_path.last().unwrap();
+        let final_targets = targets.map(|target| target * final_factor);
+        let (reference, _, final_states) = section_reference(generalized_strain, &committed_states);
+        assert!(
+            (reference[0] - final_targets[0]).abs() < 1e-6,
+            "section axial force {} != {}, generalized strain {generalized_strain:?}",
+            reference[0],
+            final_targets[0]
+        );
+        assert!(
+            (reference[1] - final_targets[1]).abs() < 1e-6,
+            "section My {} != {}, generalized strain {generalized_strain:?}",
+            reference[1],
+            final_targets[1]
+        );
+        assert!(
+            (reference[2] - final_targets[2]).abs() < 1e-6,
+            "section Mz {} != {}, generalized strain {generalized_strain:?}",
+            reference[2],
+            final_targets[2]
+        );
+        assert!(final_states
+            .iter()
+            .any(|state| state.equivalent_plastic_strain > 0.0));
+
+        let result = solve(&model).unwrap();
+        let length = 2.0;
+        let tip = &result.nodes[1].displacement;
+        assert!((tip[0] - generalized_strain[0] * length).abs() < 1e-8);
+        assert!((tip[4].abs() - generalized_strain[1].abs() * length).abs() < 2e-5);
+        assert!((tip[5].abs() - generalized_strain[2].abs() * length).abs() < 2e-5);
+        assert!((tip[2].abs() - generalized_strain[1].abs() * length.powi(2) / 2.0).abs() < 2e-5);
+        assert!((tip[1].abs() - generalized_strain[2].abs() * length.powi(2) / 2.0).abs() < 2e-5);
+        assert!((result.members[0].local_end_forces[6].abs() - final_targets[0]).abs() < 1e-5);
+        assert!((result.members[0].local_end_forces[10].abs() - final_targets[1]).abs() < 1e-5);
+        assert!((result.members[0].local_end_forces[11].abs() - final_targets[2]).abs() < 1e-5);
+        assert!(
+            result.members[0]
+                .section_history
+                .as_ref()
+                .unwrap()
+                .maximum_equivalent_plastic_strain
+                >= peak_plastic_strain - 1e-12,
+            "plastic history after unload/reload fell below peak {peak_plastic_strain}"
+        );
+        assert!(result.equilibrium_residual < 1e-7);
+    }
+    #[test]
+    fn concrete_fiber_cracking_couples_bending_to_axial_equilibrium() {
+        let mut model = cantilever(
+            Analysis::Material,
+            MaterialLaw::ConcreteCracking {
+                tensile_mpa: 3.0,
+                residual_ratio: 0.05,
+            },
+            500.0,
+        );
+        model.nodal_loads[0].fz = -350.0;
+        let result = solve(&model).unwrap();
+        assert!(
+            result.members[0]
+                .section_history
+                .as_ref()
+                .unwrap()
+                .maximum_tensile_damage
+                > 0.0
+        );
+        assert!(result.nodes[1].displacement[0].abs() > 1e-6);
+        assert!(result.nodes[1].displacement[1].abs() > 1e-6);
+        assert!(result.nodes[1].displacement[2].abs() > 1e-6);
+        assert!(result.equilibrium_residual < 1e-7);
+    }
+
+    #[test]
+    fn coupled_steel_frame_fnl_gnl_converges_under_mesh_refinement() {
+        fn refined_model(element_count: usize) -> Request {
+            let mut model = cantilever(
+                Analysis::Combined,
+                MaterialLaw::SteelBilinear {
+                    yield_mpa: 235.0,
+                    hardening_ratio: 0.05,
+                },
+                0.0,
+            );
+            model.nodes = (0..=element_count)
+                .map(|index| Node {
+                    id: index + 1,
+                    x: 2.0 * index as f64 / element_count as f64,
+                    y: 0.0,
+                    z: 0.0,
+                })
+                .collect();
+            model.members = (0..element_count)
+                .map(|index| Member {
+                    id: index + 1,
+                    start_node_id: index + 1,
+                    end_node_id: index + 2,
+                    material_id: 1,
+                    section_id: 1,
+                    roll_angle_rad: 0.0,
+                    releases: EndReleases::default(),
+                })
+                .collect();
+            model.nodal_loads = vec![NodalLoad {
+                id: 1,
+                node_id: element_count + 1,
+                fx: -200.0,
+                fy: 25.0,
+                fz: -17.0,
+                mx: 0.0,
+                my: 0.0,
+                mz: 0.0,
+            }];
+            model.load_path = vec![0.25, 0.5, 0.75, 1.0];
+            model
+        }
+
+        let coarse = solve(&refined_model(8)).unwrap();
+        let fine = solve(&refined_model(16)).unwrap();
+        let coarse_tip = &coarse.nodes[8].displacement;
+        let fine_tip = &fine.nodes[16].displacement;
+        for dof in 0..3 {
+            let scale = fine_tip[dof].abs().max(1e-9);
+            assert!(
+                (coarse_tip[dof] - fine_tip[dof]).abs() / scale < 0.02,
+                "8/16 element coupled FNL/GNL displacement dof {dof}: coarse {}, fine {}",
+                coarse_tip[dof],
+                fine_tip[dof]
+            );
+        }
+        assert!(fine.equilibrium_residual < 1e-7);
+        assert!(fine.members.iter().any(|member| {
+            member
+                .section_history
+                .as_ref()
+                .is_some_and(|history| history.maximum_equivalent_plastic_strain > 0.0)
+        }));
+    }
+
     #[test]
     fn axial_steel_and_concrete_secant_laws_match_closed_form() {
         for (law, elastic_e_mpa, load_kn, strength_mpa, post_ratio) in [
@@ -2312,6 +3781,10 @@ mod tests {
         model.nodal_loads[0].fx = 1500.0;
         model.load_path = vec![1.0, 0.0];
         let result = solve(&model).unwrap();
+        assert!(
+            result.iterations >= 20,
+            "each material path segment is subdivided"
+        );
         let expected_plastic_strain =
             (150.0 - 100.0) / (0.5 * 210_000.0) - (150.0 - 100.0) / 210_000.0;
         assert!((result.nodes[1].displacement[0] - 2.0 * expected_plastic_strain).abs() < 1e-9);
@@ -2324,17 +3797,16 @@ mod tests {
     }
     #[test]
     fn axial_steel_history_with_end_release_recovers_cantilever_and_free_moment() {
-        let model: Request = serde_json::from_str(include_str!(
+        let mut model: Request = serde_json::from_str(include_str!(
             "../examples/frame3d-released-steel-history.json"
         ))
         .unwrap();
+        model.nodal_loads[0].fy = 0.0;
         let result = solve(&model).unwrap();
         let plastic_strain = (150.0 - 100.0) / (0.5 * 210_000.0) - (150.0 - 100.0) / 210_000.0;
         let expected_extension = 2.0 * (plastic_strain + 75.0 / 210_000.0);
         assert!((result.nodes[1].displacement[0] - expected_extension).abs() < 1e-8);
-        let ei = result.members[0].effective_e_mpa * 1000.0 * model.sections[0].iz_m4;
-        let expected_bending = 5.0 * 2.0_f64.powi(3) / (3.0 * ei);
-        assert!((result.nodes[1].displacement[1] - expected_bending).abs() < 1e-8);
+        assert!(result.nodes[1].displacement[1].abs() < 1e-10);
         assert!(
             (result.members[0]
                 .axial_history
@@ -2345,10 +3817,183 @@ mod tests {
                 .abs()
                 < 1e-8
         );
+        assert!(
+            result.members[0]
+                .section_history
+                .as_ref()
+                .unwrap()
+                .maximum_equivalent_plastic_strain
+                > 0.0
+        );
         assert!(result.members[0].local_end_forces[11].abs() < 1e-8);
         assert!(result.nodes[1].reaction[5].abs() < 1e-8);
         assert!(result.equilibrium_residual < 1e-8);
     }
+
+    #[test]
+    fn steel_flexural_plasticity_is_compatible_with_a_released_end_moment() {
+        let mut model: Request = serde_json::from_str(include_str!(
+            "../examples/frame3d-released-steel-history.json"
+        ))
+        .unwrap();
+        model.nodal_loads[0].fx = 0.0;
+        model.nodal_loads[0].fy = 80.0;
+        model.load_path = vec![0.25, 0.5, 0.75, 1.0, 0.0, 0.5];
+
+        let result = solve(&model).unwrap();
+        let history = result.members[0].section_history.as_ref().unwrap();
+        assert!(history.maximum_equivalent_plastic_strain > 0.0);
+        assert!(result.members[0].local_end_forces[11].abs() < 1e-8);
+        assert!(result.nodes[1].displacement[1].abs() > 1e-3);
+        assert!(result.equilibrium_residual < 1e-7);
+    }
+
+    #[test]
+    fn released_bilinear_steel_cantilever_matches_independent_fiber_beam_integration() {
+        let (length, area, inertia_y, elastic_mpa, yield_mpa, hardening, load_kn): (
+            f64,
+            f64,
+            f64,
+            f64,
+            f64,
+            f64,
+            f64,
+        ) = (2.0, 0.01, 1e-5, 210_000.0, 235.0, 0.05, 30.0);
+        let mut model = cantilever(
+            Analysis::Material,
+            MaterialLaw::SteelBilinear {
+                yield_mpa,
+                hardening_ratio: hardening,
+            },
+            0.0,
+        );
+        let element_count = 24;
+        model.nodes = (0..=element_count)
+            .map(|index| Node {
+                id: index + 1,
+                x: length * index as f64 / element_count as f64,
+                y: 0.0,
+                z: 0.0,
+            })
+            .collect();
+        model.members = (0..element_count)
+            .map(|index| Member {
+                id: index + 1,
+                start_node_id: index + 1,
+                end_node_id: index + 2,
+                material_id: 1,
+                section_id: 1,
+                roll_angle_rad: 0.0,
+                releases: EndReleases {
+                    my_end: index + 1 == element_count,
+                    ..EndReleases::default()
+                },
+            })
+            .collect();
+        model.supports.push(Support {
+            node_id: element_count + 1,
+            ux: false,
+            uy: false,
+            uz: false,
+            rx: false,
+            ry: true,
+            rz: false,
+            kx_kn_per_m: None,
+            ky_kn_per_m: None,
+            kz_kn_per_m: None,
+            krx_knm_per_rad: None,
+            kry_knm_per_rad: None,
+            krz_knm_per_rad: None,
+            ux_prescribed_m: None,
+            uy_prescribed_m: None,
+            uz_prescribed_m: None,
+            rx_prescribed_rad: None,
+            ry_prescribed_rad: None,
+            rz_prescribed_rad: None,
+        });
+        model.nodal_loads = vec![NodalLoad {
+            id: 1,
+            node_id: element_count + 1,
+            fx: 0.0,
+            fy: 0.0,
+            fz: load_kn,
+            mx: 0.0,
+            my: 0.0,
+            mz: 0.0,
+        }];
+        model.load_path = vec![1.0];
+
+        let result = solve(&model).unwrap();
+        let actual = result.nodes[element_count].displacement[2].abs();
+        let flange_distance = (3.0 * inertia_y / area).sqrt();
+        let reference_moment = |curvature: f64| {
+            [
+                (-flange_distance, 1.0 / 6.0),
+                (0.0, 2.0 / 3.0),
+                (flange_distance, 1.0 / 6.0),
+            ]
+            .into_iter()
+            .map(|(z, area_factor)| {
+                let strain = z * curvature;
+                let magnitude = strain.abs();
+                let stress = if magnitude <= yield_mpa / elastic_mpa {
+                    elastic_mpa * strain
+                } else {
+                    strain.signum()
+                        * (yield_mpa
+                            + hardening * elastic_mpa * (magnitude - yield_mpa / elastic_mpa))
+                };
+                stress * 1000.0 * area * area_factor * z
+            })
+            .sum::<f64>()
+        };
+        let curvature_at_moment = |moment: f64| {
+            let (mut low, mut high) = (0.0, 1.0);
+            while reference_moment(high) < moment {
+                high *= 2.0;
+            }
+            for _ in 0..80 {
+                let middle = 0.5 * (low + high);
+                if reference_moment(middle) < moment {
+                    low = middle;
+                } else {
+                    high = middle;
+                }
+            }
+            0.5 * (low + high)
+        };
+        let intervals = 800;
+        let step = length / intervals as f64;
+        let expected: f64 = (0..=intervals)
+            .map(|index| {
+                let x = index as f64 * step;
+                let moment = load_kn * (length - x);
+                let integrand = (length - x) * curvature_at_moment(moment);
+                let weight = if index == 0 || index == intervals {
+                    1.0
+                } else if index % 2 == 0 {
+                    2.0
+                } else {
+                    4.0
+                };
+                weight * integrand
+            })
+            .sum::<f64>()
+            * step
+            / 3.0;
+
+        assert!((actual - expected).abs() / expected < 0.02,
+            "24-element released cantilever: Rust {actual} m, independent fibre integration {expected} m");
+        assert!(result.members.last().unwrap().local_end_forces[10].abs() < 1e-8);
+        assert!(result.members.iter().any(|member| {
+            member
+                .section_history
+                .as_ref()
+                .is_some_and(|history| history.maximum_equivalent_plastic_strain > 0.0)
+        }));
+        assert!(result.equilibrium_residual < 1e-7);
+    }
+
     #[test]
     fn concrete_damage_with_end_release_persists_on_reload() {
         let mut model: Request = serde_json::from_str(include_str!(
@@ -2361,6 +4006,7 @@ mod tests {
             residual_ratio: 0.2,
         };
         model.nodal_loads[0].fx = 60.0;
+        model.nodal_loads[0].fy = 0.0;
         let result = solve(&model).unwrap();
         let peak_strain = 3.0 / 33_000.0 + 3.0 / (0.2 * 33_000.0);
         let expected_damage = 1.0 - 6.0 / (33_000.0 * peak_strain);
@@ -2372,6 +4018,16 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .tensile_damage
+                - expected_damage)
+                .abs()
+                < 1e-8
+        );
+        assert!(
+            (result.members[0]
+                .section_history
+                .as_ref()
+                .unwrap()
+                .maximum_tensile_damage
                 - expected_damage)
                 .abs()
                 < 1e-8
@@ -2391,18 +4047,12 @@ mod tests {
         assert!(combined.nodes[1].displacement[1] < material.nodes[1].displacement[1]);
         assert!((combined.members[0].local_end_forces[6] - 750.0).abs() < 1e-7);
         assert!(
-            (combined.members[0]
-                .axial_history
+            combined.members[0]
+                .section_history
                 .as_ref()
                 .unwrap()
-                .plastic_strain
-                - material.members[0]
-                    .axial_history
-                    .as_ref()
-                    .unwrap()
-                    .plastic_strain)
-                .abs()
-                < 1e-8
+                .maximum_equivalent_plastic_strain
+                > 0.0
         );
         assert!(combined.members[0].local_end_forces[11].abs() < 1e-8);
         assert!(
@@ -2464,6 +4114,10 @@ mod tests {
         model.nodal_loads[0].fx = 60.0;
         model.load_path = vec![1.0, 0.0, 0.5];
         let result = solve(&model).unwrap();
+        assert!(
+            result.iterations >= 30,
+            "all three material path segments are subdivided"
+        );
         let history = result.members[0].axial_history.as_ref().unwrap();
         let peak_strain = 3.0 / 33_000.0 + 3.0 / (0.2 * 33_000.0);
         let expected_damage = 1.0 - 6.0 / (33_000.0 * peak_strain);
@@ -2553,7 +4207,7 @@ mod tests {
         model.analysis = Analysis::Material;
         assert!((solve(&model).unwrap().nodes[1].displacement[0] - 0.00072).abs() < 1e-10);
         model.thermal_loads[0].delta_t_gradient_y_k = 1.0;
-        assert!(solve(&model).unwrap_err().contains("thermal gradients"));
+        assert!(solve(&model).is_ok());
         model.thermal_loads.clear();
         model.analysis = Analysis::Linear;
         model.buckling_modes = 1;

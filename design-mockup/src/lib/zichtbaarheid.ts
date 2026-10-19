@@ -103,10 +103,18 @@ export function zetVlag(flags: DisplayFlags, k: AanUitVlag, aan: boolean): Displ
 }
 
 /** Wat er onthouden wordt: de model-lagen, als platte booleans. */
-export function voorkeurenVan(flags: DisplayFlags): Record<string, boolean> {
-  const uit: Record<string, boolean> = {};
+export function voorkeurenVan(flags: DisplayFlags): Record<string, boolean | number> {
+  const uit: Record<string, boolean | number> = {};
   for (const k of WEERGAVE_VOORKEUREN) uit[k] = vlagAan(flags, k);
+  uit.supportScale = geldigeOpleggingSchaal(flags.supportScale);
   return uit;
+}
+
+/** Begrens oude of beschadigde gebruikersvoorkeuren tot het bereik van de regelaar. */
+export function geldigeOpleggingSchaal(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0.25, Math.min(3, value))
+    : 1;
 }
 
 /**
@@ -121,5 +129,7 @@ export function metVoorkeuren(flags: DisplayFlags, opgeslagen: unknown): Display
   for (const k of WEERGAVE_VOORKEUREN) {
     if (typeof o[k] === "boolean") uit = zetVlag(uit, k, o[k] as boolean);
   }
+  if (typeof o.supportScale === "number" && Number.isFinite(o.supportScale))
+    uit = { ...uit, supportScale: geldigeOpleggingSchaal(o.supportScale) };
   return uit;
 }

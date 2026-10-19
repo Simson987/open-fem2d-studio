@@ -325,7 +325,10 @@ pub enum ZGrondslag {
     /// Uit het spanningsblok bij N_Ed, want er werkt een normaalkracht.
     /// `begrensd` zegt of de werkelijke arm boven 0,9·d lag en dus op 0,9·d
     /// is gehouden; zie de moduletekst.
-    Evenwicht { werkelijk: Hefboomsarm, begrensd: bool },
+    Evenwicht {
+        werkelijk: Hefboomsarm,
+        begrensd: bool,
+    },
     /// Er werkt een normaalkracht maar het spanningsblok leverde geen
     /// hefboomsarm; 0,9·d is aangehouden met deze reden.
     Terugval { fout: HefboomsarmFout },
@@ -347,7 +350,10 @@ pub struct ZBepaling {
 impl ZBepaling {
     /// Is z = 0,9·d aangehouden — als benadering of als terugval?
     pub fn is_0_9d(&self) -> bool {
-        matches!(self.grondslag, ZGrondslag::Benadering | ZGrondslag::Terugval { .. })
+        matches!(
+            self.grondslag,
+            ZGrondslag::Benadering | ZGrondslag::Terugval { .. }
+        )
     }
 
     /// De werkelijke, onbegrensde hefboomsarm uit het spanningsblok, als die
@@ -364,7 +370,9 @@ impl ZBepaling {
         match &self.grondslag {
             ZGrondslag::Opgegeven => "opgegeven",
             ZGrondslag::Benadering => "0,9·d",
-            ZGrondslag::Evenwicht { begrensd: false, .. } => "evenwicht",
+            ZGrondslag::Evenwicht {
+                begrensd: false, ..
+            } => "evenwicht",
             ZGrondslag::Evenwicht { begrensd: true, .. } => "evenwicht, begrensd op 0,9·d",
             ZGrondslag::Terugval { .. } => "terugval op 0,9·d",
         }
@@ -385,7 +393,10 @@ impl ZBepaling {
                 nl(self.d_mm, 0),
                 nl(self.z_mm, 1)
             ),
-            ZGrondslag::Evenwicht { werkelijk: w, begrensd } => {
+            ZGrondslag::Evenwicht {
+                werkelijk: w,
+                begrensd,
+            } => {
                 let kern = format!(
                     "Er werkt een normaalkracht (N_Ed = {} kN), dus de benadering z = 0,9·d van \
                      6.2.3(1) is niet toegestaan en is z de inwendige hefboomsarm van het \
@@ -444,7 +455,10 @@ pub fn z_uit_uitkomst(uitkomst: HefboomsarmUitkomst, d_mm: f64, n_ed_kn: f64) ->
                 z_mm: w.z_mm.min(grens),
                 d_mm,
                 n_ed_kn,
-                grondslag: ZGrondslag::Evenwicht { werkelijk: w, begrensd },
+                grondslag: ZGrondslag::Evenwicht {
+                    werkelijk: w,
+                    begrensd,
+                },
             }
         }
         Err(fout) => ZBepaling {
@@ -480,7 +494,12 @@ pub fn bepaal_z(
     vooraf: Option<HefboomsarmUitkomst>,
 ) -> ZBepaling {
     if let Some(z) = z_opgegeven.filter(|z| *z > 0.0) {
-        return ZBepaling { z_mm: z, d_mm, n_ed_kn, grondslag: ZGrondslag::Opgegeven };
+        return ZBepaling {
+            z_mm: z,
+            d_mm,
+            n_ed_kn,
+            grondslag: ZGrondslag::Opgegeven,
+        };
     }
     if n_ed_kn.abs() <= N_NUMERIEK_NUL_KN {
         return ZBepaling {
@@ -525,8 +544,14 @@ mod tests {
             ReinforcementCage {
                 cover_mm: 30.0,
                 stirrup_diameter_mm: 8.0,
-                bottom: RebarRow { count: 3, diameter_mm: 16.0 },
-                top: RebarRow { count: 2, diameter_mm: 12.0 },
+                bottom: RebarRow {
+                    count: 3,
+                    diameter_mm: 16.0,
+                },
+                top: RebarRow {
+                    count: 2,
+                    diameter_mm: 12.0,
+                },
                 ..Default::default()
             },
         )
@@ -541,8 +566,14 @@ mod tests {
             ReinforcementCage {
                 cover_mm: 30.0,
                 stirrup_diameter_mm: 8.0,
-                bottom: RebarRow { count: 6, diameter_mm: 25.0 },
-                top: RebarRow { count: 2, diameter_mm: 12.0 },
+                bottom: RebarRow {
+                    count: 6,
+                    diameter_mm: 25.0,
+                },
+                top: RebarRow {
+                    count: 2,
+                    diameter_mm: 12.0,
+                },
                 ..Default::default()
             },
         )
@@ -565,8 +596,14 @@ mod tests {
         let k = ReinforcementCage {
             cover_mm: 30.0,
             stirrup_diameter_mm: 8.0,
-            top: RebarRow { count: 0, diameter_mm: 12.0 },
-            bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+            top: RebarRow {
+                count: 0,
+                diameter_mm: 12.0,
+            },
+            bottom: RebarRow {
+                count: 3,
+                diameter_mm: 16.0,
+            },
             ..Default::default()
         };
         let a_s = 3.0 * std::f64::consts::PI * 64.0;
@@ -600,10 +637,30 @@ mod tests {
             let druk = arm(&s, &k, -150.0);
             let klein_trek = arm(&s, &k, 0.486);
             let trek = arm(&s, &k, 60.0);
-            assert!(druk.z_mm < klein_druk.z_mm, "{} < {}", druk.z_mm, klein_druk.z_mm);
-            assert!(klein_druk.z_mm < nul.z_mm, "{} < {}", klein_druk.z_mm, nul.z_mm);
-            assert!(nul.z_mm < klein_trek.z_mm, "{} < {}", nul.z_mm, klein_trek.z_mm);
-            assert!(klein_trek.z_mm < trek.z_mm, "{} < {}", klein_trek.z_mm, trek.z_mm);
+            assert!(
+                druk.z_mm < klein_druk.z_mm,
+                "{} < {}",
+                druk.z_mm,
+                klein_druk.z_mm
+            );
+            assert!(
+                klein_druk.z_mm < nul.z_mm,
+                "{} < {}",
+                klein_druk.z_mm,
+                nul.z_mm
+            );
+            assert!(
+                nul.z_mm < klein_trek.z_mm,
+                "{} < {}",
+                nul.z_mm,
+                klein_trek.z_mm
+            );
+            assert!(
+                klein_trek.z_mm < trek.z_mm,
+                "{} < {}",
+                klein_trek.z_mm,
+                trek.z_mm
+            );
             // De drukzone groeit bij druk en krimpt bij trek — dát is de
             // reden van de richting.
             assert!(druk.x_mm > klein_druk.x_mm && klein_druk.x_mm > nul.x_mm);
@@ -636,10 +693,13 @@ mod tests {
         let (s, k) = licht_gewapend();
         let m = mat();
         let d_boven = s.h_mm - k.d2_mm();
-        let boven =
-            hefboomsarm_bij_normaalkracht(&s, &k.layers(s.h_mm), &m, -20.0, false, d_boven)
-                .unwrap();
-        let gespiegeld = ReinforcementCage { bottom: k.top, top: k.bottom, ..k };
+        let boven = hefboomsarm_bij_normaalkracht(&s, &k.layers(s.h_mm), &m, -20.0, false, d_boven)
+            .unwrap();
+        let gespiegeld = ReinforcementCage {
+            bottom: k.top,
+            top: k.bottom,
+            ..k
+        };
         let onder = arm(&s, &gespiegeld, -20.0);
         assert_relative_eq!(boven.z_mm, onder.z_mm, max_relative = 1e-9);
         assert!(!boven.trek_onder && onder.trek_onder);
@@ -655,8 +715,14 @@ mod tests {
         let k = ReinforcementCage {
             cover_mm: 30.0,
             stirrup_diameter_mm: 8.0,
-            bottom: RebarRow { count: 5, diameter_mm: 16.0 },
-            top: RebarRow { count: 2, diameter_mm: 12.0 },
+            bottom: RebarRow {
+                count: 5,
+                diameter_mm: 16.0,
+            },
+            top: RebarRow {
+                count: 2,
+                diameter_mm: 12.0,
+            },
             ..Default::default()
         };
         let d_boven = s.h_mm - k.d2_mm();
@@ -665,7 +731,12 @@ mod tests {
         // 2Ø12·f_yd = 98,3 kN; alles daarboven komt uit de onderwapening, die
         // onder de neutrale lijn (x_u ≈ 40 mm < 46 mm) licht op trek staat.
         assert!(w.f_t_kn > 150.0, "de onderwapening trekt hier mee: {w:?}");
-        assert!(w.z_mm > 0.9 * d_boven, "z = {} hoort boven 0,9·d = {} te liggen", w.z_mm, 0.9 * d_boven);
+        assert!(
+            w.z_mm > 0.9 * d_boven,
+            "z = {} hoort boven 0,9·d = {} te liggen",
+            w.z_mm,
+            0.9 * d_boven
+        );
         assert!(w.z_mm < d_boven);
         assert_relative_eq!(w.z_mm, d_boven - w.a_c_mm, max_relative = 1e-12);
     }
@@ -691,7 +762,11 @@ mod tests {
         assert_eq!(ruis.grondslag, ZGrondslag::Benadering);
 
         let ev = bepaal_z(&s, &k, &m, true, -0.486, d, None, None);
-        assert!(matches!(ev.grondslag, ZGrondslag::Evenwicht { .. }), "{:?}", ev.grondslag);
+        assert!(
+            matches!(ev.grondslag, ZGrondslag::Evenwicht { .. }),
+            "{:?}",
+            ev.grondslag
+        );
         assert!(!ev.is_0_9d());
         assert!(ev.z_mm <= 0.9 * d + 1e-12);
         assert!(ev.z_werkelijk_mm().is_some());
@@ -701,7 +776,9 @@ mod tests {
         let terug = bepaal_z(&s, &k, &m, true, -5000.0, d, None, None);
         assert_eq!(
             terug.grondslag,
-            ZGrondslag::Terugval { fout: HefboomsarmFout::GeheelGedrukt }
+            ZGrondslag::Terugval {
+                fout: HefboomsarmFout::GeheelGedrukt
+            }
         );
         assert_relative_eq!(terug.z_mm, 0.9 * d);
         assert!(terug.is_0_9d());
@@ -718,16 +795,31 @@ mod tests {
         let (s, k) = licht_gewapend();
         let d = k.d_mm(s.h_mm);
         let z = bepaal_z(&s, &k, &m, true, -0.486, d, None, None);
-        assert!(z.z_werkelijk_mm().unwrap() > 0.9 * d, "licht gewapend: werkelijke arm > 0,9·d");
+        assert!(
+            z.z_werkelijk_mm().unwrap() > 0.9 * d,
+            "licht gewapend: werkelijke arm > 0,9·d"
+        );
         assert_relative_eq!(z.z_mm, 0.9 * d, max_relative = 1e-12);
-        assert!(matches!(z.grondslag, ZGrondslag::Evenwicht { begrensd: true, .. }));
+        assert!(matches!(
+            z.grondslag,
+            ZGrondslag::Evenwicht { begrensd: true, .. }
+        ));
 
         let (s, k) = zwaar_gewapend();
         let d = k.d_mm(s.h_mm);
         let z = bepaal_z(&s, &k, &m, true, -0.486, d, None, None);
-        assert!(z.z_werkelijk_mm().unwrap() < 0.9 * d, "zwaar gewapend: werkelijke arm < 0,9·d");
+        assert!(
+            z.z_werkelijk_mm().unwrap() < 0.9 * d,
+            "zwaar gewapend: werkelijke arm < 0,9·d"
+        );
         assert_relative_eq!(z.z_mm, z.z_werkelijk_mm().unwrap(), max_relative = 1e-12);
-        assert!(matches!(z.grondslag, ZGrondslag::Evenwicht { begrensd: false, .. }));
+        assert!(matches!(
+            z.grondslag,
+            ZGrondslag::Evenwicht {
+                begrensd: false,
+                ..
+            }
+        ));
 
         // Trek maakt de werkelijke arm groter, maar de gebruikte z blijft
         // onder 0,9·d — de veilige kant voor elke grootheid waarin z staat.
@@ -761,7 +853,10 @@ mod tests {
         let e = hefboomsarm_bij_normaalkracht(&s, &lagen, &m, -3000.0, true, d)
             .expect_err("x_u ≥ d hoort geen arm te geven");
         assert!(
-            matches!(e, HefboomsarmFout::GeenTrekgordel | HefboomsarmFout::GeheelGedrukt),
+            matches!(
+                e,
+                HefboomsarmFout::GeenTrekgordel | HefboomsarmFout::GeheelGedrukt
+            ),
             "{e:?}"
         );
         for f in [

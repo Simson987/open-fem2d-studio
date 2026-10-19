@@ -121,7 +121,10 @@ impl Paragraph {
         } else {
             self.style.font_name.clone()
         };
-        let font_id = match fonts.get(&lookup_name).or_else(|| fonts.get(&self.style.font_name)) {
+        let font_id = match fonts
+            .get(&lookup_name)
+            .or_else(|| fonts.get(&self.style.font_name))
+        {
             Some(id) => id,
             None => {
                 // Fallback: return single unwrapped line
@@ -154,8 +157,13 @@ impl Paragraph {
             }
 
             let is_first_line = lines.is_empty();
-            let indent = if is_first_line { leading_indent } else { Pt::ZERO };
-            let effective_width = Pt(max_width.0 - indent.0 - self.style.left_indent.0 - self.style.right_indent.0);
+            let indent = if is_first_line {
+                leading_indent
+            } else {
+                Pt::ZERO
+            };
+            let effective_width =
+                Pt(max_width.0 - indent.0 - self.style.left_indent.0 - self.style.right_indent.0);
 
             let mut current_line = String::new();
             let mut current_width = Pt::ZERO;
@@ -209,7 +217,8 @@ impl Flowable for Paragraph {
             Pt(self.lines.len() as f32 * self.style.leading.0)
         };
 
-        self.wrapped_height = Pt(self.style.space_before.0 + text_height.0 + self.style.space_after.0);
+        self.wrapped_height =
+            Pt(self.style.space_before.0 + text_height.0 + self.style.space_after.0);
 
         Size::new(available_width, self.wrapped_height)
     }
@@ -260,12 +269,7 @@ impl Flowable for Paragraph {
         }
     }
 
-    fn split(
-        &self,
-        available_width: Pt,
-        available_height: Pt,
-        ctx: &LayoutContext,
-    ) -> SplitResult {
+    fn split(&self, available_width: Pt, available_height: Pt, ctx: &LayoutContext) -> SplitResult {
         if self.wrapped_height.0 <= available_height.0 {
             return SplitResult::Fits;
         }
@@ -333,10 +337,7 @@ mod tests {
 
     #[test]
     fn test_strip_tags() {
-        assert_eq!(
-            Paragraph::strip_tags("Hello <b>world</b>"),
-            "Hello world"
-        );
+        assert_eq!(Paragraph::strip_tags("Hello <b>world</b>"), "Hello world");
         assert_eq!(
             Paragraph::strip_tags("<i>italic</i> and <b>bold</b>"),
             "italic and bold"

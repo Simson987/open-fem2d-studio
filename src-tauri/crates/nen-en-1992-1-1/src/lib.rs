@@ -147,17 +147,17 @@ pub use dekking::{
 };
 // De kruipcoëfficiënt volgens bijlage B. Op crate-niveau om dezelfde reden als
 // `beff` en `dekking`: de drie wegen roepen hem alle drie rechtstreeks aan.
+pub use factors::{DesignSituation, E_S};
 pub use kruip::{
     creep_coefficient_request, kruip_deelstappen, kruipcoefficient_bijlage_b, CementClass,
     CreepCoefficientRequest, CreepCoefficientResponse, KruipUitkomst,
 };
-pub use factors::{DesignSituation, E_S};
 // De inwendige hefboomsarm van 6.2.3(1): de dwarskrachttoets en de
 // dekkingslijn bepalen hem allebei hiermee, en de vertaallaag van de
 // betontoetsing heeft de grondslag nodig om hem door te geven.
 pub use hefboomsarm::{
-    bepaal_z, hefboomsarm_bij_normaalkracht, z_0_9d, z_uit_uitkomst, Hefboomsarm,
-    HefboomsarmFout, HefboomsarmUitkomst, ZBepaling, ZGrondslag, N_NUMERIEK_NUL_KN,
+    bepaal_z, hefboomsarm_bij_normaalkracht, z_0_9d, z_uit_uitkomst, Hefboomsarm, HefboomsarmFout,
+    HefboomsarmUitkomst, ZBepaling, ZGrondslag, N_NUMERIEK_NUL_KN,
 };
 // De M-N-κ-motor op crate-niveau: `solve_state`, `internal_forces`,
 // `exceeded_limit` en `MnKappaOptions` waren alleen via `mnkappa::…`
@@ -183,7 +183,6 @@ pub use section::{
 pub use section::{
     LongitudinalZone, RebarSide, ReinforcementZones, StirrupZone, ZONE_TOLERANCE_MM,
 };
-pub use verankering::{Staafvorm, Stortpositie};
 pub use stiffness::{
     ei_secant, kappa_from_nm, m0_knm, m_cr_knm, KappaSolution, LoadDuration, SecantStiffness,
     SolveMethod, StiffnessError, StiffnessOptions, TensionStiffening,
@@ -191,10 +190,9 @@ pub use stiffness::{
 pub use stress_strain::{
     ConcreteNonlinearCurve, ConcreteTension, DesignMaterial, NonlinearBasis, SteelBranch,
 };
+pub use verankering::{Staafvorm, Stortpositie};
 
 // Hergebruikte resultaattypen (zie TODO in de crate-doc). `Deelstap` hoort in
 // dat rijtje thuis: hij is materiaal-neutraal en draagt bij zowel de kipketen
 // van EN 1993 als de doorsnedeketen van EN 1992 één stap van een afleiding.
-pub use nen_en_1993_1_1_section::{
-    CheckStatus, Deelstap, NamedValue, ResistanceCalc, UnityCheck,
-};
+pub use nen_en_1993_1_1_section::{CheckStatus, Deelstap, NamedValue, ResistanceCalc, UnityCheck};

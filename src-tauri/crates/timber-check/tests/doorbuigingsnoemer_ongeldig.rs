@@ -49,9 +49,7 @@ fn hout() -> Value {
 /// De vijflaagse CLT-plaat uit `clt.rs`, met k_def zodat de doorbuiging ook
 /// werkelijk getoetst zou worden.
 fn clt() -> Value {
-    let laag = |t: f64, richting: &str| {
-        json!({ "thickness_mm": t, "orientation": richting, "strength_class": "C24" })
-    };
+    let laag = |t: f64, richting: &str| json!({ "thickness_mm": t, "orientation": richting, "strength_class": "C24" });
     json!({
         "beam_id": 7,
         "layup": {
@@ -89,25 +87,45 @@ fn eis_geweigerd(status: CheckStatus, leeg: bool, id: &str, veld: &str, wat: &st
 
 #[test]
 fn massief_hout_weigert_noemer_nul_en_negatief() {
-    for (veld, naam) in [("deflection_limit_fin", "w_fin"), ("deflection_limit_add", "w_add")] {
+    for (veld, naam) in [
+        ("deflection_limit_fin", "w_fin"),
+        ("deflection_limit_add", "w_add"),
+    ] {
         for n in [0.0, -250.0] {
-            let invoer: TimberBeamCheckInput = serde_json::from_value(met(hout(), veld, n)).unwrap();
+            let invoer: TimberBeamCheckInput =
+                serde_json::from_value(met(hout(), veld, n)).unwrap();
             let r = check_timber_beam(invoer);
-            eis_geweigerd(r.status, r.checks.is_empty(), &r.governing_check_id, naam,
-                &format!("hout, {veld} = {n}"));
+            eis_geweigerd(
+                r.status,
+                r.checks.is_empty(),
+                &r.governing_check_id,
+                naam,
+                &format!("hout, {veld} = {n}"),
+            );
         }
     }
 }
 
 #[test]
 fn clt_weigert_noemer_nul_en_negatief() {
-    for (veld, naam) in [("deflection_limit_fin", "w_fin"), ("deflection_limit_add", "w_add")] {
+    for (veld, naam) in [
+        ("deflection_limit_fin", "w_fin"),
+        ("deflection_limit_add", "w_add"),
+    ] {
         for n in [0.0, -250.0] {
             let invoer: CltBeamCheckInput = serde_json::from_value(met(clt(), veld, n)).unwrap();
             let r = check_clt_beam(invoer);
-            eis_geweigerd(r.status, r.checks.is_empty(), &r.governing_check_id, naam,
-                &format!("CLT, {veld} = {n}"));
-            assert!(r.notes.iter().any(|t| t.contains(naam)), "CLT: reden ook in de notities");
+            eis_geweigerd(
+                r.status,
+                r.checks.is_empty(),
+                &r.governing_check_id,
+                naam,
+                &format!("CLT, {veld} = {n}"),
+            );
+            assert!(
+                r.notes.iter().any(|t| t.contains(naam)),
+                "CLT: reden ook in de notities"
+            );
         }
     }
 }
@@ -118,19 +136,40 @@ fn clt_weigert_noemer_nul_en_negatief() {
 fn weglaten_rekent_met_de_nb_waarden() {
     let invoer: TimberBeamCheckInput = serde_json::from_value(hout()).unwrap();
     let r = check_timber_beam(invoer);
-    assert_ne!(r.status, CheckStatus::NotApplicable, "{}", r.governing_check_id);
+    assert_ne!(
+        r.status,
+        CheckStatus::NotApplicable,
+        "{}",
+        r.governing_check_id
+    );
     let invoer: CltBeamCheckInput = serde_json::from_value(clt()).unwrap();
     let c = check_clt_beam(invoer);
-    assert_ne!(c.status, CheckStatus::NotApplicable, "{}", c.governing_check_id);
+    assert_ne!(
+        c.status,
+        CheckStatus::NotApplicable,
+        "{}",
+        c.governing_check_id
+    );
     for (checks, soort) in [(&r.checks, "hout"), (&c.checks, "CLT")] {
-        for (id, grens) in [("deflection_w_fin", 20.0), ("deflection_w_add", 5000.0 / 333.0)] {
-            let t = checks.iter().find(|t| t.id == id).unwrap_or_else(|| panic!("{soort}: {id}"));
+        for (id, grens) in [
+            ("deflection_w_fin", 20.0),
+            ("deflection_w_add", 5000.0 / 333.0),
+        ] {
+            let t = checks
+                .iter()
+                .find(|t| t.id == id)
+                .unwrap_or_else(|| panic!("{soort}: {id}"));
             match &t.kind {
                 steel_check::CheckKind::Resistance(x) => {
                     assert_ne!(x.status, CheckStatus::NotApplicable, "{soort}: {id}");
-                    assert!((x.uc.as_ref().unwrap().rd - grens).abs() < 1e-6, "{soort}: {id}");
+                    assert!(
+                        (x.uc.as_ref().unwrap().rd - grens).abs() < 1e-6,
+                        "{soort}: {id}"
+                    );
                 }
-                steel_check::CheckKind::Stability(_) => panic!("{soort}: {id} is een weerstandstoets"),
+                steel_check::CheckKind::Stability(_) => {
+                    panic!("{soort}: {id} is een weerstandstoets")
+                }
             }
         }
     }

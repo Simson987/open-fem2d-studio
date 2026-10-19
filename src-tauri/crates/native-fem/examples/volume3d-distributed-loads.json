@@ -1,0 +1,17 @@
+{
+  "nodes": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+  "materials": [{ "eMpa": 12000, "poisson": 0.25 }],
+  "elements": [{ "nodes": [0, 1, 2, 3], "material": 0 }],
+  "bodyForces": [{ "element": 0, "forceKnPerM3": [24, 0, 0] }],
+  "faceTractions": [{ "element": 0, "nodes": [1, 2, 3], "tractionKnPerM2": [3.4641016151377544, 0, 0] }],
+  "supports": [
+    { "node": 0, "displacementM": [0, 0, 0] },
+    { "node": 1, "displacementM": [0, 0, 0] },
+    { "node": 2, "displacementM": [0, 0, 0] },
+    { "node": 3, "displacementM": [null, 0, 0] }
+  ],
+  "threads": 2,
+  "tolerance": 1e-10,
+  "maxIterations": 100,
+  "solverStrategy": "automatic"
+}

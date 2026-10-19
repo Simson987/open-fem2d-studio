@@ -69,8 +69,14 @@ fn korf_3x16_2x12() -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: 2, diameter_mm: 12.0 },
-        bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+        top: RebarRow {
+            count: 2,
+            diameter_mm: 12.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
         ..ReinforcementCage::default()
     }
 }
@@ -78,7 +84,13 @@ fn korf_3x16_2x12() -> ReinforcementCage {
 /// Dezelfde korf met vier staven boven — voor de flensdoorsneden, waar de
 /// bovenrij in de brede flens ligt.
 fn korf_3x16_4x12() -> ReinforcementCage {
-    ReinforcementCage { top: RebarRow { count: 4, diameter_mm: 12.0 }, ..korf_3x16_2x12() }
+    ReinforcementCage {
+        top: RebarRow {
+            count: 4,
+            diameter_mm: 12.0,
+        },
+        ..korf_3x16_2x12()
+    }
 }
 
 /// Vergelijkt punten op de millimeter nauwkeurig; de maten zijn hele
@@ -100,7 +112,11 @@ fn gelijk(werkelijk: &[(f64, f64)], verwacht: &[(f64, f64)]) {
 
 #[track_caller]
 fn staven_gelijk(werkelijk: &[StaafPositie], verwacht: &[(f64, f64, f64, Rij)]) {
-    assert_eq!(werkelijk.len(), verwacht.len(), "aantal staven: {werkelijk:?}");
+    assert_eq!(
+        werkelijk.len(),
+        verwacht.len(),
+        "aantal staven: {werkelijk:?}"
+    );
     for (i, (w, v)) in werkelijk.iter().zip(verwacht).enumerate() {
         assert!(
             (w.x_mm - v.0).abs() < 1e-9
@@ -131,7 +147,10 @@ fn staven_gelijk(werkelijk: &[StaafPositie], verwacht: &[(f64, f64, f64, Rij)]) 
 #[test]
 fn rechthoek_300x500() {
     let s = ConcreteSection::new(300.0, 500.0);
-    gelijk(&omtrek_punten(&s), &[(0.0, 0.0), (300.0, 0.0), (300.0, 500.0), (0.0, 500.0)]);
+    gelijk(
+        &omtrek_punten(&s),
+        &[(0.0, 0.0), (300.0, 0.0), (300.0, 500.0), (0.0, 500.0)],
+    );
 
     staven_gelijk(
         &staaf_posities(&korf_3x16_2x12(), &s),
@@ -157,12 +176,21 @@ fn een_staaf_staat_in_het_midden() {
     let korf = ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: 0, diameter_mm: 0.0 },
-        bottom: RebarRow { count: 1, diameter_mm: 20.0 },
+        top: RebarRow {
+            count: 0,
+            diameter_mm: 0.0,
+        },
+        bottom: RebarRow {
+            count: 1,
+            diameter_mm: 20.0,
+        },
         ..ReinforcementCage::default()
     };
     // Asafstand = 30 + 8 + 10 = 48 mm.
-    staven_gelijk(&staaf_posities(&korf, &s), &[(150.0, 48.0, 20.0, Rij::Onder)]);
+    staven_gelijk(
+        &staaf_posities(&korf, &s),
+        &[(150.0, 48.0, 20.0, Rij::Onder)],
+    );
 }
 
 // ── 2. De T, flens boven ──────────────────────────────────────────────────────
@@ -198,9 +226,21 @@ fn t_vorm_400x450_flens_boven() {
     );
 
     // De breedte op de hoogte van elke rij — de maat die de verdeling stuurt.
-    assert_eq!(breedte_op_hoogte_mm(&s, 46.0), 200.0, "onderrij ligt in het lijf");
-    assert_eq!(breedte_op_hoogte_mm(&s, 406.0), 400.0, "bovenrij ligt in de flens");
-    assert_eq!(hart_x_mm(&s, 46.0), 200.0, "bij een T ligt het lijf in het midden");
+    assert_eq!(
+        breedte_op_hoogte_mm(&s, 46.0),
+        200.0,
+        "onderrij ligt in het lijf"
+    );
+    assert_eq!(
+        breedte_op_hoogte_mm(&s, 406.0),
+        400.0,
+        "bovenrij ligt in de flens"
+    );
+    assert_eq!(
+        hart_x_mm(&s, 46.0),
+        200.0,
+        "bij een T ligt het lijf in het midden"
+    );
 
     staven_gelijk(
         &staaf_posities(&korf_3x16_4x12(), &s),
@@ -254,10 +294,15 @@ fn omgekeerde_t_flens_onder() {
     // is geen toeval maar de eis: de tekening leest de banden, en de kern klapt
     // de banden om.
     let rechtop = omtrek_punten(&ConcreteSection::tee(400.0, 50.0, 200.0, 450.0).unwrap());
-    let omgeklapt: Vec<(f64, f64)> = omtrek_punten(&s).iter().map(|(x, z)| (*x, 450.0 - z)).collect();
+    let omgeklapt: Vec<(f64, f64)> = omtrek_punten(&s)
+        .iter()
+        .map(|(x, z)| (*x, 450.0 - z))
+        .collect();
     for p in &rechtop {
         assert!(
-            omgeklapt.iter().any(|q| (q.0 - p.0).abs() < 1e-9 && (q.1 - p.1).abs() < 1e-9),
+            omgeklapt
+                .iter()
+                .any(|q| (q.0 - p.0).abs() < 1e-9 && (q.1 - p.1).abs() < 1e-9),
             "omgeklapt punt {p:?} ontbreekt in {omgeklapt:?}"
         );
     }
@@ -312,8 +357,16 @@ fn l_vorm_lijf_tegen_de_linkerrand() {
         ],
     );
 
-    assert_eq!(hart_x_mm(&s, 46.0), 100.0, "bij een L staat het lijf tegen de linkerrand");
-    assert_eq!(hart_x_mm(&s, 425.0), 200.0, "de flens beslaat de volle breedte");
+    assert_eq!(
+        hart_x_mm(&s, 46.0),
+        100.0,
+        "bij een L staat het lijf tegen de linkerrand"
+    );
+    assert_eq!(
+        hart_x_mm(&s, 425.0),
+        200.0,
+        "de flens beslaat de volle breedte"
+    );
 
     staven_gelijk(
         &staaf_posities(&korf_3x16_4x12(), &s),
@@ -380,10 +433,26 @@ fn l_vorm_flens_onder() {
         ],
     );
 
-    assert_eq!(breedte_op_hoogte_mm(&s, 46.0), 400.0, "de onderrij ligt in de flens");
-    assert_eq!(hart_x_mm(&s, 46.0), 200.0, "de flens beslaat de volle breedte");
-    assert_eq!(breedte_op_hoogte_mm(&s, 406.0), 200.0, "de bovenrij ligt in het lijf");
-    assert_eq!(hart_x_mm(&s, 406.0), 100.0, "en dat lijf staat tegen de linkerrand");
+    assert_eq!(
+        breedte_op_hoogte_mm(&s, 46.0),
+        400.0,
+        "de onderrij ligt in de flens"
+    );
+    assert_eq!(
+        hart_x_mm(&s, 46.0),
+        200.0,
+        "de flens beslaat de volle breedte"
+    );
+    assert_eq!(
+        breedte_op_hoogte_mm(&s, 406.0),
+        200.0,
+        "de bovenrij ligt in het lijf"
+    );
+    assert_eq!(
+        hart_x_mm(&s, 406.0),
+        100.0,
+        "en dat lijf staat tegen de linkerrand"
+    );
 
     staven_gelijk(
         &staaf_posities(&korf_3x16_2x12(), &s),
@@ -423,11 +492,20 @@ fn een_staaf_staat_in_het_midden_van_zijn_eigen_band() {
     let korf = ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: 0, diameter_mm: 0.0 },
-        bottom: RebarRow { count: 1, diameter_mm: 20.0 },
+        top: RebarRow {
+            count: 0,
+            diameter_mm: 0.0,
+        },
+        bottom: RebarRow {
+            count: 1,
+            diameter_mm: 20.0,
+        },
         ..ReinforcementCage::default()
     };
-    staven_gelijk(&staaf_posities(&korf, &s), &[(75.0, 48.0, 20.0, Rij::Onder)]);
+    staven_gelijk(
+        &staaf_posities(&korf, &s),
+        &[(75.0, 48.0, 20.0, Rij::Onder)],
+    );
 
     // Op de bandgrens telt de KLEINSTE breedte, en dus ook het hart van het
     // lijf. Eén millimeter hoger springt het naar de flens.
@@ -448,23 +526,36 @@ fn een_staaf_staat_in_het_midden_van_zijn_eigen_band() {
 fn geen_staaf_valt_buiten_het_beton() {
     let gevallen: Vec<(ConcreteSection, ReinforcementCage)> = vec![
         (ConcreteSection::new(300.0, 500.0), korf_3x16_2x12()),
-        (ConcreteSection::tee(400.0, 50.0, 200.0, 450.0).unwrap(), korf_3x16_4x12()),
-        (ConcreteSection::ell(400.0, 50.0, 200.0, 450.0).unwrap(), korf_3x16_4x12()),
         (
-            ConcreteSectionInput { flange_at_bottom: true, ..ConcreteSectionInput::tee(400.0, 450.0, 200.0, 50.0) }
-                .build()
-                .unwrap(),
+            ConcreteSection::tee(400.0, 50.0, 200.0, 450.0).unwrap(),
+            korf_3x16_4x12(),
+        ),
+        (
+            ConcreteSection::ell(400.0, 50.0, 200.0, 450.0).unwrap(),
+            korf_3x16_4x12(),
+        ),
+        (
+            ConcreteSectionInput {
+                flange_at_bottom: true,
+                ..ConcreteSectionInput::tee(400.0, 450.0, 200.0, 50.0)
+            }
+            .build()
+            .unwrap(),
             korf_3x16_2x12(),
         ),
         (
-            ConcreteSectionInput { flange_at_bottom: true, ..ConcreteSectionInput::ell(400.0, 450.0, 200.0, 50.0) }
-                .build()
-                .unwrap(),
+            ConcreteSectionInput {
+                flange_at_bottom: true,
+                ..ConcreteSectionInput::ell(400.0, 450.0, 200.0, 50.0)
+            }
+            .build()
+            .unwrap(),
             korf_3x16_2x12(),
         ),
     ];
     for (s, korf) in gevallen {
-        korf.validate(&s).expect("de proefkorven moeten door de kerncontrole komen");
+        korf.validate(&s)
+            .expect("de proefkorven moeten door de kerncontrole komen");
         for st in staaf_posities(&korf, &s) {
             let breedte = breedte_op_hoogte_mm(&s, st.z_mm);
             let hart = hart_x_mm(&s, st.z_mm);
@@ -476,7 +567,10 @@ fn geen_staaf_valt_buiten_het_beton() {
                 "staaf {st:?} steekt buiten het beton ({links}..{rechts}) van {}",
                 s.name()
             );
-            assert!(st.z_mm > 0.0 && st.z_mm < s.h_mm, "staaf {st:?} ligt buiten de hoogte");
+            assert!(
+                st.z_mm > 0.0 && st.z_mm < s.h_mm,
+                "staaf {st:?} ligt buiten de hoogte"
+            );
         }
     }
 }
@@ -497,7 +591,10 @@ fn asstappen_volgen_dezelfde_regel_als_het_scherm() {
     // Een leeg of negatief bereik levert een stap van 1 en geen deling door nul.
     assert_eq!(mooie_stap(0.0, 5.0), 1.0);
 
-    assert_eq!(ticks(120.0), vec![0.0, 20.0, 40.0, 60.0, 80.0, 100.0, 120.0]);
+    assert_eq!(
+        ticks(120.0),
+        vec![0.0, 20.0, 40.0, 60.0, 80.0, 100.0, 120.0]
+    );
     assert_eq!(ticks(87.0), vec![0.0, 20.0, 40.0, 60.0, 80.0, 100.0]);
     // Een as die precies op een veelvoud van de stap eindigt, krijgt er geen
     // lege stap bij — daar is de tolerantie van 1e-9 voor.
@@ -542,9 +639,18 @@ fn kolomkorf_met_zijstaven_wordt_volledig_getekend() {
     let korf = ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: 2, diameter_mm: 20.0 },
-        bottom: RebarRow { count: 2, diameter_mm: 20.0 },
-        sides: Some(RebarRow { count: 2, diameter_mm: 16.0 }),
+        top: RebarRow {
+            count: 2,
+            diameter_mm: 20.0,
+        },
+        bottom: RebarRow {
+            count: 2,
+            diameter_mm: 20.0,
+        },
+        sides: Some(RebarRow {
+            count: 2,
+            diameter_mm: 16.0,
+        }),
         ..ReinforcementCage::default()
     };
     staven_gelijk(
@@ -561,7 +667,10 @@ fn kolomkorf_met_zijstaven_wordt_volledig_getekend() {
         ],
     );
     // Zonder zijstaven blijven het er vier, op precies dezelfde plaatsen.
-    let zonder = ReinforcementCage { sides: None, ..korf };
+    let zonder = ReinforcementCage {
+        sides: None,
+        ..korf
+    };
     staven_gelijk(
         &staaf_posities(&zonder, &s),
         &[

@@ -1,0 +1,23 @@
+{
+  "analysis": "material",
+  "nodes": [
+    { "id": 1, "x": 0.0, "y": 0.0 },
+    { "id": 2, "x": 3.0, "y": 0.0 }
+  ],
+  "materials": [
+    {
+      "id": 1,
+      "eMpa": 30000.0,
+      "law": { "kind": "concreteCracking", "tensileMpa": 3.0, "residualRatio": 0.02 }
+    }
+  ],
+  "sections": [{ "id": 1, "areaM2": 0.01, "inertiaM4": 0.000008 }],
+  "members": [
+    { "id": 1, "startNodeId": 1, "endNodeId": 2, "materialId": 1, "sectionId": 1 }
+  ],
+  "supports": [
+    { "nodeId": 1, "ux": true, "uy": true, "rz": true }
+  ],
+  "nodalLoads": [{ "nodeId": 2, "fx": 0.0, "fy": 0.0, "mz": 0.6 }],
+  "loadPath": [1.0]
+}

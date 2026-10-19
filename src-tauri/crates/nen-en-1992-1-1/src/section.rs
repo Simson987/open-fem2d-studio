@@ -92,7 +92,10 @@ use ts_rs::TS;
 /// Dit etiket is óók het eerste veld van [`ConcreteSectionInput`] en reist
 /// daarmee over alle drie de wegen mee; vandaar de ts-export.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum ConcreteShape {
     /// Rechthoek b × h.
     #[default]
@@ -143,7 +146,11 @@ impl Band {
     }
 }
 
-const LEGE_BAND: Band = Band { z0_mm: 0.0, z1_mm: 0.0, b_mm: 0.0 };
+const LEGE_BAND: Band = Band {
+    z0_mm: 0.0,
+    z1_mm: 0.0,
+    b_mm: 0.0,
+};
 
 /// Betondoorsnede: rechthoek, T of L.
 ///
@@ -176,7 +183,14 @@ impl ConcreteSection {
             shape: ConcreteShape::Rectangle,
             b_mm,
             h_mm,
-            bands: [Band { z0_mm: 0.0, z1_mm: h_mm, b_mm }, LEGE_BAND],
+            bands: [
+                Band {
+                    z0_mm: 0.0,
+                    z1_mm: h_mm,
+                    b_mm,
+                },
+                LEGE_BAND,
+            ],
             n_bands: 1,
         }
     }
@@ -226,8 +240,16 @@ impl ConcreteSection {
             b_mm: b_f_mm.max(b_w_mm),
             h_mm,
             bands: [
-                Band { z0_mm: 0.0, z1_mm: h_mm - h_f_mm, b_mm: b_w_mm },
-                Band { z0_mm: h_mm - h_f_mm, z1_mm: h_mm, b_mm: b_f_mm },
+                Band {
+                    z0_mm: 0.0,
+                    z1_mm: h_mm - h_f_mm,
+                    b_mm: b_w_mm,
+                },
+                Band {
+                    z0_mm: h_mm - h_f_mm,
+                    z1_mm: h_mm,
+                    b_mm: b_f_mm,
+                },
             ],
             n_bands: 2,
         })
@@ -241,7 +263,10 @@ impl ConcreteSection {
     /// Lijfbreedte: de kleinste breedte in de doorsnede. Bij een rechthoek
     /// gelijk aan `b_mm`.
     pub fn b_w_mm(&self) -> f64 {
-        self.bands().iter().map(|b| b.b_mm).fold(f64::INFINITY, f64::min)
+        self.bands()
+            .iter()
+            .map(|b| b.b_mm)
+            .fold(f64::INFINITY, f64::min)
     }
 
     /// Flensdikte: de hoogte van de band met de grootste breedte. 0 bij een
@@ -348,8 +373,10 @@ impl ConcreteSection {
                 if a <= 0.0 {
                     return 0.5 * self.h_mm;
                 }
-                let s: f64 =
-                    banden.iter().map(|b| b.area_mm2() * 0.5 * (b.z0_mm + b.z1_mm)).sum();
+                let s: f64 = banden
+                    .iter()
+                    .map(|b| b.area_mm2() * 0.5 * (b.z0_mm + b.z1_mm))
+                    .sum();
                 s / a
             }
         }
@@ -440,7 +467,13 @@ impl ConcreteSection {
                 b_mm: band.b_mm,
             };
         }
-        Self { shape: self.shape, b_mm: self.b_mm, h_mm: self.h_mm, bands, n_bands: self.n_bands }
+        Self {
+            shape: self.shape,
+            b_mm: self.b_mm,
+            h_mm: self.h_mm,
+            bands,
+            n_bands: self.n_bands,
+        }
     }
 
     /// Naam zoals in het rapport: "300 x 500", of
@@ -452,7 +485,11 @@ impl ConcreteSection {
             }
             ConcreteShape::Tee | ConcreteShape::Ell => format!(
                 "{} {} x {} (flens {} x {}{}, lijf {})",
-                if self.shape == ConcreteShape::Tee { "T" } else { "L" },
+                if self.shape == ConcreteShape::Tee {
+                    "T"
+                } else {
+                    "L"
+                },
                 fmt_mm(self.b_mm),
                 fmt_mm(self.h_mm),
                 fmt_mm(self.b_mm),
@@ -559,7 +596,10 @@ fn fmt_mm(v: f64) -> String {
 /// meelevert.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct ConcreteSectionInput {
     /// De vorm. Bepaalt welke maten verplicht zijn en welke verboden.
     /// Ontbreekt hij, dan is het een rechthoek.
@@ -614,7 +654,10 @@ impl ConcreteSectionInput {
 
     /// L-vorm met de flens boven.
     pub fn ell(b_f_mm: f64, h_mm: f64, b_w_mm: f64, h_f_mm: f64) -> Self {
-        Self { shape: ConcreteShape::Ell, ..Self::tee(b_f_mm, h_mm, b_w_mm, h_f_mm) }
+        Self {
+            shape: ConcreteShape::Ell,
+            ..Self::tee(b_f_mm, h_mm, b_w_mm, h_f_mm)
+        }
     }
 
     /// Woordelijke aanduiding van de INVOER, ook wanneer die geen doorsnede
@@ -631,7 +674,11 @@ impl ConcreteSectionInput {
             ConcreteShape::Rectangle => format!("{} x {}", fmt_mm(self.b_mm), fmt_mm(self.h_mm)),
             ConcreteShape::Tee | ConcreteShape::Ell => format!(
                 "{} {} x {} (flens {} x {}{}, lijf {})",
-                if self.shape == ConcreteShape::Tee { "T" } else { "L" },
+                if self.shape == ConcreteShape::Tee {
+                    "T"
+                } else {
+                    "L"
+                },
                 fmt_mm(self.b_mm),
                 fmt_mm(self.h_mm),
                 fmt_mm(self.b_mm),
@@ -692,7 +739,11 @@ impl ConcreteSectionInput {
             ConcreteShape::Ell => ConcreteSection::ell(self.b_mm, h_f, b_w, self.h_mm)?,
             ConcreteShape::Rectangle => unreachable!("hierboven al afgehandeld"),
         };
-        Ok(if self.flange_at_bottom { s.mirrored() } else { s })
+        Ok(if self.flange_at_bottom {
+            s.mirrored()
+        } else {
+            s
+        })
     }
 }
 
@@ -702,7 +753,10 @@ impl ConcreteSectionInput {
 /// wel wat [`ReinforcementCage::default`] nodig heeft om te bestaan.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct RebarRow {
     pub count: u32,
     pub diameter_mm: f64,
@@ -767,7 +821,10 @@ pub const STIRRUP_ALPHA_DEG: f64 = 90.0;
 /// een standaardkorf, en die zou hier ook niet mogen ontstaan.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct ReinforcementCage {
     /// Nominale betondekking c_nom op de beugel, in mm (§4.4.1) — de dekking
     /// van het ELEMENT.
@@ -1000,7 +1057,11 @@ impl Staafpositie {
 pub fn mirrored_layers(layers: &[RebarLayer], h_mm: f64) -> Vec<RebarLayer> {
     layers
         .iter()
-        .map(|l| RebarLayer { z_mm: h_mm - l.z_mm, area_mm2: l.area_mm2, label: l.label.clone() })
+        .map(|l| RebarLayer {
+            z_mm: h_mm - l.z_mm,
+            area_mm2: l.area_mm2,
+            label: l.label.clone(),
+        })
         .collect()
 }
 
@@ -1198,7 +1259,13 @@ impl ReinforcementCage {
     /// de dekking van die rand toelaat, en dus het juiste eindpunt van de
     /// verdeling.
     fn zijstaaf_span_mm(&self, h_mm: f64, zij: &RebarRow) -> (f64, f64) {
-        let diameter = |r: &RebarRow| if r.is_empty() { zij.diameter_mm } else { r.diameter_mm };
+        let diameter = |r: &RebarRow| {
+            if r.is_empty() {
+                zij.diameter_mm
+            } else {
+                r.diameter_mm
+            }
+        };
         let z_onder = self.cover_at_mm(CoverSide::Bottom)
             + self.stirrup_diameter_mm
             + diameter(&self.bottom) / 2.0;
@@ -1317,8 +1384,7 @@ impl ReinforcementCage {
                 let x = if rij.count == 1 {
                     0.0
                 } else {
-                    -halve_binnenmaat
-                        + 2.0 * halve_binnenmaat * i as f64 / (rij.count - 1) as f64
+                    -halve_binnenmaat + 2.0 * halve_binnenmaat * i as f64 / (rij.count - 1) as f64
                 };
                 uit.push(Staafpositie {
                     x_mm: x,
@@ -1399,7 +1465,12 @@ impl ReinforcementCage {
             lagen.push(RebarLayer {
                 z_mm: x + section.b_mm / 2.0,
                 area_mm2: opp,
-                label: format!("x = {}{} mm: {n}Ø{}", if x >= 0.0 { "+" } else { "" }, fmt_mm(x), fmt_mm(d)),
+                label: format!(
+                    "x = {}{} mm: {n}Ø{}",
+                    if x >= 0.0 { "+" } else { "" },
+                    fmt_mm(x),
+                    fmt_mm(d)
+                ),
             });
         };
         for st in &staven {
@@ -1505,8 +1576,8 @@ impl ReinforcementCage {
         if self.stirrup_legs != Some(2) || !(self.stirrup_diameter_mm > 0.0) {
             return None;
         }
-        let s_t = section.b_w_mm() - 2.0 * self.cover_at_mm(CoverSide::Sides)
-            - self.stirrup_diameter_mm;
+        let s_t =
+            section.b_w_mm() - 2.0 * self.cover_at_mm(CoverSide::Sides) - self.stirrup_diameter_mm;
         if s_t > 0.0 {
             Some((s_t, LegSpacingSource::DerivedTwoLeg))
         } else {
@@ -1657,10 +1728,12 @@ impl ReinforcementCage {
             // eist juist in iedere hoek een staaf. Dit is een aparte melding
             // en niet "geen hoofdwapening", want er staat wél iets — het staat
             // alleen op een plaats die zonder hoekstaven geen betekenis heeft.
-            return Err("de korf heeft alleen zijstaven en geen boven- of onderwapening; \
+            return Err(
+                "de korf heeft alleen zijstaven en geen boven- of onderwapening; \
                         de zijstaven worden verdeeld tussen de onder- en de bovenrij, en \
                         §9.5.2(4) eist bovendien in iedere hoek een staaf"
-                .into());
+                    .into(),
+            );
         }
         if self.side_row().count > 0 && !(self.side_row().diameter_mm > 0.0) {
             return Err(format!(
@@ -1675,8 +1748,14 @@ impl ReinforcementCage {
         // die het nodig heeft (zie `shear_reinforcement`).
         for (naam, waarde) in [
             ("de beugelafstand s", self.stirrup_spacing_mm),
-            ("de dwarsafstand s_t van de beugelbenen", self.stirrup_leg_spacing_mm),
-            ("de vloeigrens f_ywk van de dwarskrachtwapening", self.stirrup_fywk_mpa),
+            (
+                "de dwarsafstand s_t van de beugelbenen",
+                self.stirrup_leg_spacing_mm,
+            ),
+            (
+                "de vloeigrens f_ywk van de dwarskrachtwapening",
+                self.stirrup_fywk_mpa,
+            ),
         ] {
             if let Some(v) = waarde {
                 if !(v > 0.0) {
@@ -1688,18 +1767,22 @@ impl ReinforcementCage {
             }
         }
         if self.stirrup_legs == Some(0) {
-            return Err("het aantal beugelbenen is 0 opgegeven; laat het veld leeg als er \
+            return Err(
+                "het aantal beugelbenen is 0 opgegeven; laat het veld leeg als er \
                         geen beugels zijn, of geef het werkelijke aantal benen"
-                .into());
+                    .into(),
+            );
         }
         let beugelgegeven = self.stirrup_spacing_mm.is_some()
             || self.stirrup_legs.is_some()
             || self.stirrup_leg_spacing_mm.is_some();
         if beugelgegeven && !(self.stirrup_diameter_mm > 0.0) {
-            return Err("er zijn beugelgegevens (afstand, benen of dwarsafstand) opgegeven \
+            return Err(
+                "er zijn beugelgegevens (afstand, benen of dwarsafstand) opgegeven \
                         terwijl de beugeldiameter 0 is; kies een beugeldiameter of laat de \
                         beugelgegevens leeg"
-                .into());
+                    .into(),
+            );
         }
         // s_t is een afstand tussen benen die beide binnen het lijf liggen; de
         // buitenste twee liggen op c_nom + Ø_beugel/2 van hun eigen zijkant.
@@ -1723,7 +1806,11 @@ impl ReinforcementCage {
         // dezelfde te zijn; met één dekking rondom staat er precies wat er
         // altijd stond.
         for (naam, rij, z) in [
-            ("onderwapening", &self.bottom, self.axis_offset_side_mm(RebarSide::Bottom)),
+            (
+                "onderwapening",
+                &self.bottom,
+                self.axis_offset_side_mm(RebarSide::Bottom),
+            ),
             (
                 "bovenwapening",
                 &self.top,
@@ -1743,10 +1830,16 @@ impl ReinforcementCage {
                 ));
             }
         }
-        let onder =
-            if self.bottom.is_empty() { 0.0 } else { self.axis_offset_side_mm(RebarSide::Bottom) };
-        let boven =
-            if self.top.is_empty() { 0.0 } else { self.axis_offset_side_mm(RebarSide::Top) };
+        let onder = if self.bottom.is_empty() {
+            0.0
+        } else {
+            self.axis_offset_side_mm(RebarSide::Bottom)
+        };
+        let boven = if self.top.is_empty() {
+            0.0
+        } else {
+            self.axis_offset_side_mm(RebarSide::Top)
+        };
         if onder + boven >= section.h_mm {
             return Err("boven- en onderwapening overlappen elkaar in de hoogte".into());
         }
@@ -1861,7 +1954,10 @@ pub const ZONE_TOLERANCE_MM: f64 = 1e-6;
 /// elkaar inkorten — bij een doorgaande ligger loopt de bovenwapening juist
 /// dóór waar de onderwapening ophoudt.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum RebarSide {
     /// Onderwapening, de zijde z = 0 — vult [`ReinforcementCage::bottom`].
     #[default]
@@ -1935,7 +2031,10 @@ impl RebarSide {
 /// UITVOERINGSgegevens.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct LongitudinalZone {
     /// Boven- of onderwapening.
     pub side: RebarSide,
@@ -2012,7 +2111,10 @@ impl LongitudinalZone {
 /// mogen wél leeg zijn.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct StirrupZone {
     /// Begin van de zone langs de staaf, in mm vanaf het beginknoop.
     pub x_start_mm: f64,
@@ -2060,7 +2162,10 @@ impl StirrupZone {
 /// waarom het er twee zijn en geen één.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct ReinforcementZones {
     /// De langswapening per stuk — §9.2.1.3. Leeg = de rijen `top` en `bottom`
     /// van de korf gelden over de hele staaf.
@@ -2140,7 +2245,11 @@ impl ReinforcementZones {
             .longitudinal
             .iter()
             .flat_map(|z| [z.x_start_mm, z.x_end_mm])
-            .chain(self.stirrups.iter().flat_map(|z| [z.x_start_mm, z.x_end_mm]))
+            .chain(
+                self.stirrups
+                    .iter()
+                    .flat_map(|z| [z.x_start_mm, z.x_end_mm]),
+            )
             .collect();
         uit.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         uit.dedup_by(|a, b| (*a - *b).abs() <= ZONE_TOLERANCE_MM);
@@ -2193,7 +2302,13 @@ impl ReinforcementZones {
 
         // Regel 2 en 4 — de losse zones.
         for (i, z) in self.longitudinal.iter().enumerate() {
-            controleer_bereik(&format!("langswapeningszone {}", i + 1), &z.label(), z.x_start_mm, z.x_end_mm, length_mm)?;
+            controleer_bereik(
+                &format!("langswapeningszone {}", i + 1),
+                &z.label(),
+                z.x_start_mm,
+                z.x_end_mm,
+                length_mm,
+            )?;
             if z.row.count > 0 && !(z.row.diameter_mm > 0.0) {
                 return Err(format!(
                     "langswapeningszone {} ({}) heeft {} staven met diameter {} mm; \
@@ -2213,7 +2328,13 @@ impl ReinforcementZones {
             }
         }
         for (i, z) in self.stirrups.iter().enumerate() {
-            controleer_bereik(&format!("beugelzone {}", i + 1), &z.label(), z.x_start_mm, z.x_end_mm, length_mm)?;
+            controleer_bereik(
+                &format!("beugelzone {}", i + 1),
+                &z.label(),
+                z.x_start_mm,
+                z.x_end_mm,
+                length_mm,
+            )?;
             let mut ontbreekt: Vec<String> = Vec::new();
             if !(z.spacing_mm > 0.0) {
                 ontbreekt.push(format!("de beugelafstand s is {} mm", z.spacing_mm));
@@ -2262,9 +2383,9 @@ impl ReinforcementZones {
         let grenzen = self.boundaries_mm();
         for paar in grenzen.windows(2) {
             let x = 0.5 * (paar[0] + paar[1]);
-            self.cage_at_mm(base, x).validate(section).map_err(|e| {
-                format!("op x = {} mm past de wapening niet: {e}", fmt_mm(x))
-            })?;
+            self.cage_at_mm(base, x)
+                .validate(section)
+                .map_err(|e| format!("op x = {} mm past de wapening niet: {e}", fmt_mm(x)))?;
         }
         Ok(())
     }
@@ -2308,7 +2429,9 @@ fn controleer_bereik(
     length_mm: f64,
 ) -> Result<(), String> {
     if !x_start_mm.is_finite() || !x_end_mm.is_finite() {
-        return Err(format!("{aanduiding} ({omschrijving}) heeft een begin of einde dat geen getal is"));
+        return Err(format!(
+            "{aanduiding} ({omschrijving}) heeft een begin of einde dat geen getal is"
+        ));
     }
     if x_end_mm <= x_start_mm + ZONE_TOLERANCE_MM {
         return Err(format!(
@@ -2401,8 +2524,14 @@ mod tests {
         ReinforcementCage {
             cover_mm: 30.0,
             stirrup_diameter_mm: 8.0,
-            top: RebarRow { count: 2, diameter_mm: 12.0 },
-            bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+            top: RebarRow {
+                count: 2,
+                diameter_mm: 12.0,
+            },
+            bottom: RebarRow {
+                count: 3,
+                diameter_mm: 16.0,
+            },
             ..ReinforcementCage::default()
         }
     }
@@ -2421,7 +2550,10 @@ mod tests {
         assert_relative_eq!(lagen[0].z_mm, 46.0);
         assert_relative_eq!(lagen[1].z_mm, 456.0);
         assert_eq!(lagen[0].label, "onder 3Ø16");
-        assert_eq!(k.summary(), "onder 3Ø16, boven 2Ø12, beugel Ø8, dekking 30 mm");
+        assert_eq!(
+            k.summary(),
+            "onder 3Ø16, boven 2Ø12, beugel Ø8, dekking 30 mm"
+        );
         assert_eq!(ConcreteSection::new(300.0, 500.0).name(), "300 x 500");
     }
 
@@ -2445,8 +2577,14 @@ mod tests {
         assert_relative_eq!(k.d2_mm(), 44.0);
         assert_relative_eq!(k.axis_offset_mm(&k.bottom), 46.0);
         assert_relative_eq!(k.axis_offset_mm(&k.top), 44.0);
-        assert_eq!(k.summary(), "onder 3Ø16, boven 2Ø12, beugel Ø8, dekking 30 mm");
-        assert!(k.assumptions().iter().all(|a| !a.contains("verschilt per zijde")));
+        assert_eq!(
+            k.summary(),
+            "onder 3Ø16, boven 2Ø12, beugel Ø8, dekking 30 mm"
+        );
+        assert!(k
+            .assumptions()
+            .iter()
+            .all(|a| !a.contains("verschilt per zijde")));
         // En de JSON van een oud projectbestand — zonder de nieuwe velden —
         // levert diezelfde korf op.
         let oud = r#"{"cover_mm": 30, "stirrup_diameter_mm": 8,
@@ -2463,8 +2601,14 @@ mod tests {
     #[test]
     fn dekking_per_zijde_verplaatst_de_juiste_wapeningslaag() {
         let k = ReinforcementCage {
-            cover_top: Some(FaceCover { cover_mm: Some(25.0), ..FaceCover::default() }),
-            cover_bottom: Some(FaceCover { cover_mm: Some(40.0), ..FaceCover::default() }),
+            cover_top: Some(FaceCover {
+                cover_mm: Some(25.0),
+                ..FaceCover::default()
+            }),
+            cover_bottom: Some(FaceCover {
+                cover_mm: Some(40.0),
+                ..FaceCover::default()
+            }),
             ..korf()
         };
         assert!(!k.dekking_is_rondom_gelijk());
@@ -2483,8 +2627,13 @@ mod tests {
         let lagen = k.layers(500.0);
         assert_relative_eq!(lagen[0].z_mm, 56.0);
         assert_relative_eq!(lagen[1].z_mm, 461.0);
-        assert!(k.summary().contains("dekking boven 25 / onder 40 / opzij 30 mm"));
-        assert!(k.assumptions().iter().any(|a| a.contains("verschilt per zijde")));
+        assert!(k
+            .summary()
+            .contains("dekking boven 25 / onder 40 / opzij 30 mm"));
+        assert!(k
+            .assumptions()
+            .iter()
+            .any(|a| a.contains("verschilt per zijde")));
     }
 
     /// De zijkantdekking gaat naar de breedte en niet naar de hoogte: s_t
@@ -2502,7 +2651,10 @@ mod tests {
         // Alleen de zijkanten naar 45 mm: s_t = 300 − 2·45 − 8 = 202 mm,
         // terwijl d ongemoeid blijft.
         let breed = ReinforcementCage {
-            cover_sides: Some(FaceCover { cover_mm: Some(45.0), ..FaceCover::default() }),
+            cover_sides: Some(FaceCover {
+                cover_mm: Some(45.0),
+                ..FaceCover::default()
+            }),
             ..basis
         };
         assert_relative_eq!(breed.leg_spacing_mm(&s).unwrap().0, 202.0);
@@ -2521,13 +2673,25 @@ mod tests {
             ..korf()
         };
         let element = Some(ExposureClass::XC1);
-        assert_eq!(k.exposure_at(CoverSide::Bottom, element), Some(ExposureClass::XC4));
-        assert_eq!(k.exposure_at(CoverSide::Top, element), Some(ExposureClass::XC1));
-        assert_eq!(k.exposure_at(CoverSide::Sides, element), Some(ExposureClass::XC1));
+        assert_eq!(
+            k.exposure_at(CoverSide::Bottom, element),
+            Some(ExposureClass::XC4)
+        );
+        assert_eq!(
+            k.exposure_at(CoverSide::Top, element),
+            Some(ExposureClass::XC1)
+        );
+        assert_eq!(
+            k.exposure_at(CoverSide::Sides, element),
+            Some(ExposureClass::XC1)
+        );
         // Zonder klasse op het element én zonder klasse op de zijde is er
         // niets — dan meldt de dekkingstoets dat hij niet kan.
         assert_eq!(k.exposure_at(CoverSide::Top, None), None);
-        assert_eq!(k.exposure_at(CoverSide::Bottom, None), Some(ExposureClass::XC4));
+        assert_eq!(
+            k.exposure_at(CoverSide::Bottom, None),
+            Some(ExposureClass::XC4)
+        );
     }
 
     /// Een LOSSE rij — een kopie in plaats van een verwijzing naar de korf —
@@ -2536,8 +2700,14 @@ mod tests {
     #[test]
     fn een_losse_rij_krijgt_de_zwaarste_dekking() {
         let k = ReinforcementCage {
-            cover_top: Some(FaceCover { cover_mm: Some(25.0), ..FaceCover::default() }),
-            cover_bottom: Some(FaceCover { cover_mm: Some(40.0), ..FaceCover::default() }),
+            cover_top: Some(FaceCover {
+                cover_mm: Some(25.0),
+                ..FaceCover::default()
+            }),
+            cover_bottom: Some(FaceCover {
+                cover_mm: Some(40.0),
+                ..FaceCover::default()
+            }),
             ..korf()
         };
         let los = k.bottom; // kopie, geen verwijzing in de korf
@@ -2553,13 +2723,19 @@ mod tests {
     fn een_onzinnige_zijdedekking_wordt_geweigerd() {
         let s = ConcreteSection::new(300.0, 500.0);
         let fout = ReinforcementCage {
-            cover_top: Some(FaceCover { cover_mm: Some(-5.0), ..FaceCover::default() }),
+            cover_top: Some(FaceCover {
+                cover_mm: Some(-5.0),
+                ..FaceCover::default()
+            }),
             ..korf()
         };
         let melding = fout.validate(&s).unwrap_err();
         assert!(melding.contains("bovenzijde"), "{melding}");
         let nul = ReinforcementCage {
-            cover_sides: Some(FaceCover { cover_mm: Some(0.0), ..FaceCover::default() }),
+            cover_sides: Some(FaceCover {
+                cover_mm: Some(0.0),
+                ..FaceCover::default()
+            }),
             ..korf()
         };
         assert!(nul.validate(&s).is_ok());
@@ -2570,7 +2746,10 @@ mod tests {
         let s = ConcreteSection::new(300.0, 500.0);
         assert!(korf().validate(&s).is_ok());
         let mut te_breed = korf();
-        te_breed.bottom = RebarRow { count: 20, diameter_mm: 16.0 };
+        te_breed.bottom = RebarRow {
+            count: 20,
+            diameter_mm: 16.0,
+        };
         assert!(te_breed.validate(&s).is_err());
         let mut leeg = korf();
         leeg.top.count = 0;
@@ -2587,7 +2766,14 @@ mod tests {
     fn rechthoek_is_een_band() {
         let s = ConcreteSection::new(300.0, 500.0);
         assert_eq!(s.shape, ConcreteShape::Rectangle);
-        assert_eq!(s.bands(), &[Band { z0_mm: 0.0, z1_mm: 500.0, b_mm: 300.0 }]);
+        assert_eq!(
+            s.bands(),
+            &[Band {
+                z0_mm: 0.0,
+                z1_mm: 500.0,
+                b_mm: 300.0
+            }]
+        );
         assert_eq!(s.area_mm2(), 150_000.0);
         assert_eq!(s.b_w_mm(), 300.0);
         assert_eq!(s.h_f_mm(), 0.0);
@@ -2615,8 +2801,16 @@ mod tests {
         assert_eq!(
             s.bands(),
             &[
-                Band { z0_mm: 0.0, z1_mm: 400.0, b_mm: 200.0 },
-                Band { z0_mm: 400.0, z1_mm: 450.0, b_mm: 400.0 },
+                Band {
+                    z0_mm: 0.0,
+                    z1_mm: 400.0,
+                    b_mm: 200.0
+                },
+                Band {
+                    z0_mm: 400.0,
+                    z1_mm: 450.0,
+                    b_mm: 400.0
+                },
             ]
         );
         assert_eq!(s.b_mm, 400.0);
@@ -2625,9 +2819,21 @@ mod tests {
         assert!(s.flange_on_top());
         assert_relative_eq!(s.area_mm2(), 100_000.0);
         assert_relative_eq!(s.centroid_z_mm(), 245.0);
-        assert_relative_eq!(s.i_centroid_mm4(), 1_880_833_333.3333333, max_relative = 1e-12);
-        assert_relative_eq!(s.w_bottom_mm3(), 1_880_833_333.3333333 / 245.0, max_relative = 1e-12);
-        assert_relative_eq!(s.w_top_mm3(), 1_880_833_333.3333333 / 205.0, max_relative = 1e-12);
+        assert_relative_eq!(
+            s.i_centroid_mm4(),
+            1_880_833_333.3333333,
+            max_relative = 1e-12
+        );
+        assert_relative_eq!(
+            s.w_bottom_mm3(),
+            1_880_833_333.3333333 / 245.0,
+            max_relative = 1e-12
+        );
+        assert_relative_eq!(
+            s.w_top_mm3(),
+            1_880_833_333.3333333 / 205.0,
+            max_relative = 1e-12
+        );
         // Twee VERSCHILLENDE weerstandsmomenten — dat is precies het punt.
         assert!(s.w_bottom_mm3() < s.w_top_mm3());
         assert_eq!(s.name(), "T 400 x 450 (flens 400 x 50, lijf 200)");
@@ -2669,8 +2875,16 @@ mod tests {
         assert_eq!(
             g.bands(),
             &[
-                Band { z0_mm: 0.0, z1_mm: 50.0, b_mm: 400.0 },
-                Band { z0_mm: 50.0, z1_mm: 450.0, b_mm: 200.0 },
+                Band {
+                    z0_mm: 0.0,
+                    z1_mm: 50.0,
+                    b_mm: 400.0
+                },
+                Band {
+                    z0_mm: 50.0,
+                    z1_mm: 450.0,
+                    b_mm: 200.0
+                },
             ]
         );
         assert!(!g.flange_on_top());
@@ -2678,7 +2892,11 @@ mod tests {
         // Oppervlak en traagheidsmoment veranderen niet; het zwaartepunt klapt mee.
         assert_relative_eq!(g.area_mm2(), s.area_mm2());
         assert_relative_eq!(g.i_centroid_mm4(), s.i_centroid_mm4(), max_relative = 1e-12);
-        assert_relative_eq!(g.centroid_z_mm(), 450.0 - s.centroid_z_mm(), max_relative = 1e-12);
+        assert_relative_eq!(
+            g.centroid_z_mm(),
+            450.0 - s.centroid_z_mm(),
+            max_relative = 1e-12
+        );
         assert_relative_eq!(g.w_top_mm3(), s.w_bottom_mm3(), max_relative = 1e-12);
         // Twee keer spiegelen is de identiteit.
         assert_eq!(g.mirrored().bands(), s.bands());
@@ -2699,7 +2917,10 @@ mod tests {
         assert_eq!(t.assumptions().len(), 2);
         assert_eq!(l.assumptions().len(), 3);
         assert!(l.assumptions().iter().any(|a| a.contains("VERHINDERD")));
-        assert!(l.assumptions().iter().any(|a| a.contains("geen apart artikel")));
+        assert!(l
+            .assumptions()
+            .iter()
+            .any(|a| a.contains("geen apart artikel")));
         assert!(t.assumptions().iter().any(|a| a.contains("MODELKEUZE")));
         assert!(t.assumptions().iter().any(|a| a.contains("5.3.2.1(3)")));
     }
@@ -2723,21 +2944,32 @@ mod tests {
             cover_mm: 30.0,
             stirrup_diameter_mm: 8.0,
             // Boven, in de flens: 8Ø20 = 160 mm ≤ 524 mm → past.
-            top: RebarRow { count: 8, diameter_mm: 20.0 },
+            top: RebarRow {
+                count: 8,
+                diameter_mm: 20.0,
+            },
             // Onder, in het lijf: 5Ø20 = 100 mm ≤ 124 mm → past.
-            bottom: RebarRow { count: 5, diameter_mm: 20.0 },
+            bottom: RebarRow {
+                count: 5,
+                diameter_mm: 20.0,
+            },
             ..ReinforcementCage::default()
         };
         assert!(k.validate(&s).is_ok());
         // Dezelfde rij van 8Ø20 onderin het lijf past NIET, terwijl hij tegen
         // de grootste breedte (600 mm) getoetst wél door zou komen.
         let mut te_veel = k;
-        te_veel.bottom = RebarRow { count: 8, diameter_mm: 20.0 };
+        te_veel.bottom = RebarRow {
+            count: 8,
+            diameter_mm: 20.0,
+        };
         let fout = te_veel.validate(&s).unwrap_err();
         assert!(fout.contains("onderwapening"), "{fout}");
         assert!(fout.contains("200 mm breed"), "{fout}");
         // In een rechthoek van 600 mm zou diezelfde korf wél passen.
-        assert!(te_veel.validate(&ConcreteSection::new(600.0, 500.0)).is_ok());
+        assert!(te_veel
+            .validate(&ConcreteSection::new(600.0, 500.0))
+            .is_ok());
     }
 
     // ── Het invoercontract ────────────────────────────────────────────────
@@ -2745,7 +2977,9 @@ mod tests {
     /// De rechthoek uit de invoer is dezelfde doorsnede als `new(b, h)`.
     #[test]
     fn invoer_rechthoek_is_new() {
-        let s = ConcreteSectionInput::rectangle(300.0, 500.0).build().unwrap();
+        let s = ConcreteSectionInput::rectangle(300.0, 500.0)
+            .build()
+            .unwrap();
         assert_eq!(s, ConcreteSection::new(300.0, 500.0));
         assert_eq!(s.name(), "300 x 500");
     }
@@ -2755,9 +2989,13 @@ mod tests {
     /// staat (b_f, h, b_w, h_f), in de kern (b_f, h_f, b_w, h).
     #[test]
     fn invoer_t_en_l_leveren_dezelfde_banden_als_de_constructors() {
-        let t = ConcreteSectionInput::tee(400.0, 450.0, 200.0, 50.0).build().unwrap();
+        let t = ConcreteSectionInput::tee(400.0, 450.0, 200.0, 50.0)
+            .build()
+            .unwrap();
         assert_eq!(t, ConcreteSection::tee(400.0, 50.0, 200.0, 450.0).unwrap());
-        let l = ConcreteSectionInput::ell(400.0, 450.0, 200.0, 50.0).build().unwrap();
+        let l = ConcreteSectionInput::ell(400.0, 450.0, 200.0, 50.0)
+            .build()
+            .unwrap();
         assert_eq!(l, ConcreteSection::ell(400.0, 50.0, 200.0, 450.0).unwrap());
     }
 
@@ -2768,15 +3006,31 @@ mod tests {
         let mut invoer = ConcreteSectionInput::tee(400.0, 450.0, 200.0, 50.0);
         invoer.flange_at_bottom = true;
         let s = invoer.build().unwrap();
-        assert_eq!(s.bands(), ConcreteSection::tee(400.0, 50.0, 200.0, 450.0).unwrap().mirrored().bands());
+        assert_eq!(
+            s.bands(),
+            ConcreteSection::tee(400.0, 50.0, 200.0, 450.0)
+                .unwrap()
+                .mirrored()
+                .bands()
+        );
         assert!(!s.flange_on_top());
         assert_eq!(s.shape, ConcreteShape::Tee);
         // Oppervlak en traagheidsmoment veranderen niet door het omklappen;
         // het zwaartepunt wel.
-        let rechtop = ConcreteSectionInput::tee(400.0, 450.0, 200.0, 50.0).build().unwrap();
+        let rechtop = ConcreteSectionInput::tee(400.0, 450.0, 200.0, 50.0)
+            .build()
+            .unwrap();
         assert_relative_eq!(s.area_mm2(), rechtop.area_mm2());
-        assert_relative_eq!(s.i_centroid_mm4(), rechtop.i_centroid_mm4(), max_relative = 1e-12);
-        assert_relative_eq!(s.centroid_z_mm(), 450.0 - rechtop.centroid_z_mm(), max_relative = 1e-12);
+        assert_relative_eq!(
+            s.i_centroid_mm4(),
+            rechtop.i_centroid_mm4(),
+            max_relative = 1e-12
+        );
+        assert_relative_eq!(
+            s.centroid_z_mm(),
+            450.0 - rechtop.centroid_z_mm(),
+            max_relative = 1e-12
+        );
     }
 
     /// Een maat die bij de vorm hoort mag niet ontbreken, en een maat die er
@@ -2799,13 +3053,21 @@ mod tests {
         t.h_f_mm = None;
         assert!(t.build().unwrap_err().contains("h_f_mm"));
         // Een lijf dat even breed of breder is dan de flens is geen T.
-        assert!(ConcreteSectionInput::tee(400.0, 450.0, 400.0, 50.0).build().is_err());
-        assert!(ConcreteSectionInput::tee(400.0, 450.0, 500.0, 50.0).build().is_err());
+        assert!(ConcreteSectionInput::tee(400.0, 450.0, 400.0, 50.0)
+            .build()
+            .is_err());
+        assert!(ConcreteSectionInput::tee(400.0, 450.0, 500.0, 50.0)
+            .build()
+            .is_err());
         // Een flens die de hele hoogte opeet: de kern weigert hem al.
-        assert!(ConcreteSectionInput::tee(400.0, 450.0, 200.0, 450.0).build().is_err());
+        assert!(ConcreteSectionInput::tee(400.0, 450.0, 200.0, 450.0)
+            .build()
+            .is_err());
         // Nulmaten.
         assert!(ConcreteSectionInput::rectangle(0.0, 500.0).build().is_err());
-        assert!(ConcreteSectionInput::rectangle(300.0, -1.0).build().is_err());
+        assert!(ConcreteSectionInput::rectangle(300.0, -1.0)
+            .build()
+            .is_err());
     }
 
     /// De JSON-vorm van het contract: `shape` mag weg (dan rechthoek), een
@@ -2821,7 +3083,10 @@ mod tests {
             r#"{"shape": "Tee", "b_mm": 400, "h_mm": 450, "b_w_mm": 200, "h_f_mm": 50}"#,
         )
         .unwrap();
-        assert_eq!(t.build().unwrap().name(), "T 400 x 450 (flens 400 x 50, lijf 200)");
+        assert_eq!(
+            t.build().unwrap().name(),
+            "T 400 x 450 (flens 400 x 50, lijf 200)"
+        );
 
         // Een tikfout in een veldnaam is een fout en geen standaardwaarde.
         assert!(serde_json::from_str::<ConcreteSectionInput>(
@@ -2853,7 +3118,9 @@ mod tests {
     ///   A_sw/s     = 100,530965 / 150 = 0,6702064 mm²/mm
     #[test]
     fn dwarskrachtwapening_uit_diameter_afstand_en_benen() {
-        let b = korf_met_beugels().shear_reinforcement().expect("volledig opgegeven");
+        let b = korf_met_beugels()
+            .shear_reinforcement()
+            .expect("volledig opgegeven");
         assert_relative_eq!(b.a_sw_mm2, 100.530965, max_relative = 1e-8);
         assert_relative_eq!(b.a_sw_per_s_mm, 0.6702064327, max_relative = 1e-8);
         assert_eq!(b.legs, 2);
@@ -2864,7 +3131,10 @@ mod tests {
         assert_eq!(b.f_ywk_mpa, None);
 
         // Vier benen is exact het dubbele: A_sw = 4 · 50,265482 = 201,061930 mm².
-        let vier = ReinforcementCage { stirrup_legs: Some(4), ..korf_met_beugels() };
+        let vier = ReinforcementCage {
+            stirrup_legs: Some(4),
+            ..korf_met_beugels()
+        };
         let b4 = vier.shear_reinforcement().unwrap();
         assert_relative_eq!(b4.a_sw_mm2, 201.061930, max_relative = 1e-8);
 
@@ -2892,14 +3162,23 @@ mod tests {
         assert!(fout.contains("aantal beugelbenen"), "kreeg: {fout}");
 
         // Alleen s, geen benen.
-        let alleen_s = ReinforcementCage { stirrup_spacing_mm: Some(150.0), ..korf() };
+        let alleen_s = ReinforcementCage {
+            stirrup_spacing_mm: Some(150.0),
+            ..korf()
+        };
         let fout = alleen_s.shear_reinforcement().unwrap_err();
         assert!(!fout.contains("hart-op-hartafstand"), "kreeg: {fout}");
         assert!(fout.contains("aantal beugelbenen"), "kreeg: {fout}");
 
         // Geen beugel: dan is de diameter het eerste dat ontbreekt.
-        let zonder = ReinforcementCage { stirrup_diameter_mm: 0.0, ..korf() };
-        assert!(zonder.shear_reinforcement().unwrap_err().contains("beugeldiameter"));
+        let zonder = ReinforcementCage {
+            stirrup_diameter_mm: 0.0,
+            ..korf()
+        };
+        assert!(zonder
+            .shear_reinforcement()
+            .unwrap_err()
+            .contains("beugeldiameter"));
     }
 
     /// s_t bij een gesloten tweebenige beugel is meetkunde, geen invoer:
@@ -2918,13 +3197,21 @@ mod tests {
         assert_relative_eq!(s_t_t, 132.0);
 
         // Opgegeven gaat vóór afgeleid.
-        let opgegeven =
-            ReinforcementCage { stirrup_leg_spacing_mm: Some(180.0), ..korf_met_beugels() };
-        assert_eq!(opgegeven.leg_spacing_mm(&rechthoek), Some((180.0, LegSpacingSource::Given)));
+        let opgegeven = ReinforcementCage {
+            stirrup_leg_spacing_mm: Some(180.0),
+            ..korf_met_beugels()
+        };
+        assert_eq!(
+            opgegeven.leg_spacing_mm(&rechthoek),
+            Some((180.0, LegSpacingSource::Given))
+        );
 
         // Vier benen: de verdeling over de breedte is een ontwerpkeuze, dus er
         // wordt niets afgeleid.
-        let vier = ReinforcementCage { stirrup_legs: Some(4), ..korf_met_beugels() };
+        let vier = ReinforcementCage {
+            stirrup_legs: Some(4),
+            ..korf_met_beugels()
+        };
         assert_eq!(vier.leg_spacing_mm(&rechthoek), None);
     }
 
@@ -2936,11 +3223,17 @@ mod tests {
         assert!(korf_met_beugels().validate(&s).is_ok());
 
         // Nul is geen afstand; leeglaten is de manier om "niet opgegeven" te zeggen.
-        let nul = ReinforcementCage { stirrup_spacing_mm: Some(0.0), ..korf() };
+        let nul = ReinforcementCage {
+            stirrup_spacing_mm: Some(0.0),
+            ..korf()
+        };
         assert!(nul.validate(&s).unwrap_err().contains("beugelafstand"));
 
         // Nul benen evenmin.
-        let geen_benen = ReinforcementCage { stirrup_legs: Some(0), ..korf() };
+        let geen_benen = ReinforcementCage {
+            stirrup_legs: Some(0),
+            ..korf()
+        };
         assert!(geen_benen.validate(&s).unwrap_err().contains("beugelbenen"));
 
         // Beugelgegevens zonder beugel is tegenstrijdig.
@@ -2949,12 +3242,21 @@ mod tests {
             stirrup_spacing_mm: Some(150.0),
             ..korf()
         };
-        assert!(zonder_beugel.validate(&s).unwrap_err().contains("beugeldiameter"));
+        assert!(zonder_beugel
+            .validate(&s)
+            .unwrap_err()
+            .contains("beugeldiameter"));
 
         // s_t past hoogstens tussen de buitenste beenassen: 300 − 60 − 8 = 232 mm.
-        let precies = ReinforcementCage { stirrup_leg_spacing_mm: Some(232.0), ..korf() };
+        let precies = ReinforcementCage {
+            stirrup_leg_spacing_mm: Some(232.0),
+            ..korf()
+        };
         assert!(precies.validate(&s).is_ok());
-        let teveel = ReinforcementCage { stirrup_leg_spacing_mm: Some(233.0), ..korf() };
+        let teveel = ReinforcementCage {
+            stirrup_leg_spacing_mm: Some(233.0),
+            ..korf()
+        };
         assert!(teveel.validate(&s).unwrap_err().contains("232"));
     }
 
@@ -2962,12 +3264,18 @@ mod tests {
     /// korf zonder beugelafstand mag niet als een korf mét gaan lezen.
     #[test]
     fn samenvatting_noemt_de_beugelgegevens_alleen_als_ze_er_zijn() {
-        assert_eq!(korf().summary(), "onder 3Ø16, boven 2Ø12, beugel Ø8, dekking 30 mm");
+        assert_eq!(
+            korf().summary(),
+            "onder 3Ø16, boven 2Ø12, beugel Ø8, dekking 30 mm"
+        );
         assert_eq!(
             korf_met_beugels().summary(),
             "onder 3Ø16, boven 2Ø12, beugel Ø8 h.o.h. 150 mm, 2-benig, dekking 30 mm"
         );
-        let alleen_benen = ReinforcementCage { stirrup_legs: Some(4), ..korf() };
+        let alleen_benen = ReinforcementCage {
+            stirrup_legs: Some(4),
+            ..korf()
+        };
         assert_eq!(
             alleen_benen.summary(),
             "onder 3Ø16, boven 2Ø12, beugel Ø8, 4-benig, dekking 30 mm"
@@ -2984,11 +3292,17 @@ mod tests {
         assert!(a[0].contains("9.2.2(1)"), "kreeg: {}", a[0]);
 
         // Geen beugel: dan valt er over de beugelhoek niets te melden.
-        let zonder = ReinforcementCage { stirrup_diameter_mm: 0.0, ..korf() };
+        let zonder = ReinforcementCage {
+            stirrup_diameter_mm: 0.0,
+            ..korf()
+        };
         assert!(zonder.assumptions().is_empty());
 
         // Een eigen beugelkwaliteit is óók een gegeven dat zichtbaar hoort te zijn.
-        let eigen = ReinforcementCage { stirrup_fywk_mpa: Some(500.0), ..korf() };
+        let eigen = ReinforcementCage {
+            stirrup_fywk_mpa: Some(500.0),
+            ..korf()
+        };
         assert_eq!(eigen.assumptions().len(), 2);
         assert!(eigen.assumptions()[1].contains("f_ywk"));
     }
@@ -3051,7 +3365,13 @@ mod tests {
     }
 
     fn beugel(x_start_mm: f64, x_end_mm: f64, spacing_mm: f64) -> StirrupZone {
-        StirrupZone { x_start_mm, x_end_mm, spacing_mm, legs: 2, diameter_mm: 8.0 }
+        StirrupZone {
+            x_start_mm,
+            x_end_mm,
+            spacing_mm,
+            legs: 2,
+            diameter_mm: 8.0,
+        }
     }
 
     /// De onderwapening kort in het veld af van 5Ø16 naar 3Ø16, en de beugels
@@ -3097,11 +3417,23 @@ mod tests {
 
         // Bij het steunpunt: 3Ø16 onder, beugels om de 150.
         let bij_steunpunt = z.cage_at_mm(&basis, 500.0);
-        assert_eq!(bij_steunpunt.bottom, RebarRow { count: 3, diameter_mm: 16.0 });
+        assert_eq!(
+            bij_steunpunt.bottom,
+            RebarRow {
+                count: 3,
+                diameter_mm: 16.0
+            }
+        );
         assert_eq!(bij_steunpunt.stirrup_spacing_mm, Some(150.0));
         // In het veld: 5Ø16 onder, beugels om de 250.
         let in_het_veld = z.cage_at_mm(&basis, 2500.0);
-        assert_eq!(in_het_veld.bottom, RebarRow { count: 5, diameter_mm: 16.0 });
+        assert_eq!(
+            in_het_veld.bottom,
+            RebarRow {
+                count: 5,
+                diameter_mm: 16.0
+            }
+        );
         assert_eq!(in_het_veld.stirrup_spacing_mm, Some(250.0));
 
         // Wat geen zone raakt, blijft van de korf: de bovenwapening (geen
@@ -3134,7 +3466,13 @@ mod tests {
         };
         let basis = korf_met_beugels();
         assert!(z.validate(&basis, &doorsnede(), L).is_ok());
-        assert_eq!(z.cage_at_mm(&basis, 500.0).top, RebarRow { count: 2, diameter_mm: 12.0 });
+        assert_eq!(
+            z.cage_at_mm(&basis, 500.0).top,
+            RebarRow {
+                count: 2,
+                diameter_mm: 12.0
+            }
+        );
         assert!(z.cage_at_mm(&basis, 3000.0).top.is_empty());
         // De onderwapening heeft geen zones en blijft dus die van de korf —
         // anders zou de korf op x = 3000 helemaal geen hoofdwapening hebben.
@@ -3232,11 +3570,32 @@ mod tests {
         let basis = korf_met_beugels();
         let sec = doorsnede();
         for kapot in [
-            StirrupZone { x_start_mm: 0.0, x_end_mm: L, spacing_mm: 0.0, legs: 2, diameter_mm: 8.0 },
-            StirrupZone { x_start_mm: 0.0, x_end_mm: L, spacing_mm: 150.0, legs: 0, diameter_mm: 8.0 },
-            StirrupZone { x_start_mm: 0.0, x_end_mm: L, spacing_mm: 150.0, legs: 2, diameter_mm: 0.0 },
+            StirrupZone {
+                x_start_mm: 0.0,
+                x_end_mm: L,
+                spacing_mm: 0.0,
+                legs: 2,
+                diameter_mm: 8.0,
+            },
+            StirrupZone {
+                x_start_mm: 0.0,
+                x_end_mm: L,
+                spacing_mm: 150.0,
+                legs: 0,
+                diameter_mm: 8.0,
+            },
+            StirrupZone {
+                x_start_mm: 0.0,
+                x_end_mm: L,
+                spacing_mm: 150.0,
+                legs: 2,
+                diameter_mm: 0.0,
+            },
         ] {
-            let z = ReinforcementZones { longitudinal: vec![], stirrups: vec![kapot] };
+            let z = ReinforcementZones {
+                longitudinal: vec![],
+                stirrups: vec![kapot],
+            };
             let m = z.validate(&basis, &sec, L).unwrap_err();
             assert!(m.contains("beugelzone 1"), "{m}");
         }
@@ -3289,7 +3648,10 @@ mod tests {
         ]}"#;
         let z2: ReinforcementZones = serde_json::from_str(j2).unwrap();
         assert_eq!(z2.longitudinal[0].bar_shape, Staafvorm::AndersDanRecht);
-        assert_eq!(z2.longitudinal[0].casting_position, Stortpositie::Bovenzijde);
+        assert_eq!(
+            z2.longitudinal[0].casting_position,
+            Stortpositie::Bovenzijde
+        );
 
         // Een tikfout in een veldnaam is een fout en geen stille standaard.
         let fout = r#"{"longitudinal": [
@@ -3310,9 +3672,18 @@ mod tests {
             cover_mm: 30.0,
             stirrup_diameter_mm: 8.0,
             stirrup_legs: Some(2),
-            top: RebarRow { count: 2, diameter_mm: 20.0 },
-            bottom: RebarRow { count: 2, diameter_mm: 20.0 },
-            sides: Some(RebarRow { count: 2, diameter_mm: 16.0 }),
+            top: RebarRow {
+                count: 2,
+                diameter_mm: 20.0,
+            },
+            bottom: RebarRow {
+                count: 2,
+                diameter_mm: 20.0,
+            },
+            sides: Some(RebarRow {
+                count: 2,
+                diameter_mm: 16.0,
+            }),
             ..ReinforcementCage::default()
         }
     }
@@ -3327,7 +3698,10 @@ mod tests {
         assert_relative_eq!(k.a_s_sides_mm2(), 0.0);
         assert_relative_eq!(k.a_s_total_mm2(), k.a_s_bottom_mm2() + k.a_s_top_mm2());
         assert_eq!(k.layers(500.0).len(), 2);
-        assert_eq!(k.summary(), "onder 3Ø16, boven 2Ø12, beugel Ø8, dekking 30 mm");
+        assert_eq!(
+            k.summary(),
+            "onder 3Ø16, boven 2Ø12, beugel Ø8, dekking 30 mm"
+        );
         let oud = r#"{"cover_mm": 30, "stirrup_diameter_mm": 8,
                       "top": {"count": 2, "diameter_mm": 12},
                       "bottom": {"count": 3, "diameter_mm": 16}}"#;
@@ -3408,7 +3782,12 @@ mod tests {
         let hoeken: Vec<&Staafpositie> = staven.iter().filter(|p| p.in_hoek).collect();
         let verste = staven
             .iter()
-            .map(|p| hoeken.iter().map(|h| p.afstand_mm(h)).fold(f64::INFINITY, f64::min))
+            .map(|p| {
+                hoeken
+                    .iter()
+                    .map(|h| p.afstand_mm(h))
+                    .fold(f64::INFINITY, f64::min)
+            })
             .fold(0.0_f64, f64::max);
         assert_relative_eq!(verste, 68.029_405_0, max_relative = 1e-8);
     }
@@ -3418,8 +3797,14 @@ mod tests {
     #[test]
     fn een_enkele_staaf_in_een_rij_bezet_geen_hoek() {
         let k = ReinforcementCage {
-            top: RebarRow { count: 1, diameter_mm: 20.0 },
-            bottom: RebarRow { count: 1, diameter_mm: 20.0 },
+            top: RebarRow {
+                count: 1,
+                diameter_mm: 20.0,
+            },
+            bottom: RebarRow {
+                count: 1,
+                diameter_mm: 20.0,
+            },
             sides: None,
             ..kolomkorf()
         };
@@ -3438,7 +3823,10 @@ mod tests {
         // Twintig zijstaven per zijkant in 204 mm hoogte: de steek wordt
         // 204/21 = 9,7 mm, minder dan hun eigen Ø16.
         let dicht = ReinforcementCage {
-            sides: Some(RebarRow { count: 20, diameter_mm: 16.0 }),
+            sides: Some(RebarRow {
+                count: 20,
+                diameter_mm: 16.0,
+            }),
             ..kolomkorf()
         };
         let fout = dicht.validate(&s).unwrap_err();
@@ -3452,9 +3840,18 @@ mod tests {
         // zijstaven.
         let smal = ConcreteSection::new(110.0, 300.0);
         let dik_opzij = ReinforcementCage {
-            top: RebarRow { count: 2, diameter_mm: 12.0 },
-            bottom: RebarRow { count: 2, diameter_mm: 12.0 },
-            sides: Some(RebarRow { count: 1, diameter_mm: 20.0 }),
+            top: RebarRow {
+                count: 2,
+                diameter_mm: 12.0,
+            },
+            bottom: RebarRow {
+                count: 2,
+                diameter_mm: 12.0,
+            },
+            sides: Some(RebarRow {
+                count: 1,
+                diameter_mm: 20.0,
+            }),
             ..kolomkorf()
         };
         let fout = dik_opzij.validate(&smal).unwrap_err();
@@ -3476,10 +3873,15 @@ mod tests {
     fn de_verdeling_van_de_zijstaven_staat_in_de_aannames() {
         let aannames = kolomkorf().assumptions();
         assert!(
-            aannames.iter().any(|a| a.contains("GELIJKMATIG") && a.contains("6.1(2)P")),
+            aannames
+                .iter()
+                .any(|a| a.contains("GELIJKMATIG") && a.contains("6.1(2)P")),
             "{aannames:?}"
         );
         // Zonder zijstaven staat die zin er niet.
-        assert!(korf().assumptions().iter().all(|a| !a.contains("zijstaven")));
+        assert!(korf()
+            .assumptions()
+            .iter()
+            .all(|a| !a.contains("zijstaven")));
     }
 }

@@ -52,9 +52,8 @@ pub use kolom::{
 pub use orchestrator::{check_all_concrete_beams, check_concrete_beam, mn_kappa};
 pub use result::{ConcreteBeamCheckResult, MnKappaResponse};
 pub use segments::{
-    segment_layout, segment_stiffness, SegmentForces, SegmentRunStatus, SegmentSpan,
-    SegmentStatus, SegmentStiffness, SegmentStiffnessRequest, SegmentStiffnessResponse,
-    DEFAULT_SEGMENT_LENGTH_MM,
+    segment_layout, segment_stiffness, SegmentForces, SegmentRunStatus, SegmentSpan, SegmentStatus,
+    SegmentStiffness, SegmentStiffnessRequest, SegmentStiffnessResponse, DEFAULT_SEGMENT_LENGTH_MM,
 };
 
 pub use nen_en_1993_1_1_section::CheckStatus;

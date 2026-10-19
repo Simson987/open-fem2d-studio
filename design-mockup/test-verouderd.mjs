@@ -27,7 +27,7 @@
 //
 // Uitvoeren: npx tsx test-verouderd.mjs   (vanuit design-mockup/)
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import ts from "typescript";
 import vm from "node:vm";
 import { existsSync, readFileSync } from "node:fs";
@@ -208,8 +208,21 @@ globalThis.fetch = async (_url, init) => {
   if (brug === "503") {
     return antwoord(503, JSON.stringify({ fout: "De rekenkern is nog niet gebouwd (nagebootst)." }));
   }
-  const r = spawnSync(TOETSBRUG, [], { input: body, maxBuffer: 1 << 28 });
-  return antwoord(r.status === 0 ? 200 : 400, r.stdout.toString());
+  const r = await new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => resolve({
+      code: code ?? signal,
+      stdout: Buffer.concat(stdout).toString("utf8"),
+      stderr: Buffer.concat(stderr).toString("utf8"),
+    }));
+    child.stdin.end(body);
+  });
+  return antwoord(typeof r.code === "number" && r.code === 0 ? 200 : 400, r.stdout || r.stderr);
 };
 
 log("\n[3] Een mislukte toetsronde wist de vorige uitslag");

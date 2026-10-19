@@ -30,16 +30,26 @@ const NB_B_STAP: f64 = 0.05;
 /// tegen 1,529 in de referentie (1,0% afwijking — de aflezingsnauwkeurigheid
 /// van de figuur).
 const NB_C1_UDL: [[f64; 21]; 5] = [
-    [1.130, 1.145, 1.159, 1.174, 1.189, 1.203, 1.218, 1.233, 1.247, 1.262, 1.276,
-     1.333, 1.422, 1.558, 1.787, 1.982, 2.187, 2.298, 2.297, 2.297, 2.300],
-    [1.130, 1.135, 1.140, 1.145, 1.150, 1.155, 1.160, 1.165, 1.170, 1.176, 1.181,
-     1.208, 1.252, 1.310, 1.402, 1.556, 1.734, 1.902, 2.073, 2.238, 2.300],
-    [1.130, 1.129, 1.128, 1.127, 1.127, 1.126, 1.125, 1.124, 1.123, 1.122, 1.122,
-     1.128, 1.137, 1.153, 1.186, 1.239, 1.312, 1.423, 1.547, 1.673, 1.750],
-    [1.130, 1.125, 1.121, 1.116, 1.111, 1.106, 1.102, 1.097, 1.092, 1.087, 1.083,
-     1.077, 1.077, 1.073, 1.073, 1.077, 1.088, 1.115, 1.162, 1.234, 1.300],
-    [1.130, 1.124, 1.118, 1.112, 1.106, 1.100, 1.094, 1.088, 1.082, 1.076, 1.070,
-     1.064, 1.060, 1.051, 1.046, 1.037, 1.032, 1.024, 1.015, 1.010, 1.000],
+    [
+        1.130, 1.145, 1.159, 1.174, 1.189, 1.203, 1.218, 1.233, 1.247, 1.262, 1.276, 1.333, 1.422,
+        1.558, 1.787, 1.982, 2.187, 2.298, 2.297, 2.297, 2.300,
+    ],
+    [
+        1.130, 1.135, 1.140, 1.145, 1.150, 1.155, 1.160, 1.165, 1.170, 1.176, 1.181, 1.208, 1.252,
+        1.310, 1.402, 1.556, 1.734, 1.902, 2.073, 2.238, 2.300,
+    ],
+    [
+        1.130, 1.129, 1.128, 1.127, 1.127, 1.126, 1.125, 1.124, 1.123, 1.122, 1.122, 1.128, 1.137,
+        1.153, 1.186, 1.239, 1.312, 1.423, 1.547, 1.673, 1.750,
+    ],
+    [
+        1.130, 1.125, 1.121, 1.116, 1.111, 1.106, 1.102, 1.097, 1.092, 1.087, 1.083, 1.077, 1.077,
+        1.073, 1.073, 1.077, 1.088, 1.115, 1.162, 1.234, 1.300,
+    ],
+    [
+        1.130, 1.124, 1.118, 1.112, 1.106, 1.100, 1.094, 1.088, 1.082, 1.076, 1.070, 1.064, 1.060,
+        1.051, 1.046, 1.037, 1.032, 1.024, 1.015, 1.010, 1.000,
+    ],
 ];
 
 /// Figuur NB.NB.6 — C₂ voor gelijkmatig verdeelde belasting met eindmomenten.
@@ -51,16 +61,26 @@ const NB_C1_UDL: [[f64; 21]; 5] = [
 /// De waarden zijn positief; de tekenomkering voor een destabiliserend
 /// aangrijpingspunt gebeurt in [`c2_gecorrigeerd`].
 const NB_C2_UDL: [[f64; 21]; 5] = [
-    [0.450, 0.450, 0.450, 0.449, 0.449, 0.449, 0.444, 0.438, 0.429, 0.418, 0.408,
-     0.378, 0.350, 0.315, 0.285, 0.245, 0.202, 0.160, 0.109, 0.054, 0.000],
-    [0.450, 0.446, 0.442, 0.437, 0.433, 0.421, 0.411, 0.392, 0.374, 0.356, 0.336,
-     0.310, 0.287, 0.260, 0.231, 0.198, 0.163, 0.128, 0.089, 0.044, 0.000],
-    [0.450, 0.440, 0.430, 0.420, 0.410, 0.388, 0.375, 0.354, 0.334, 0.314, 0.290,
-     0.264, 0.240, 0.214, 0.185, 0.159, 0.132, 0.100, 0.067, 0.034, 0.000],
-    [0.450, 0.433, 0.416, 0.399, 0.383, 0.364, 0.346, 0.326, 0.300, 0.281, 0.255,
-     0.235, 0.211, 0.186, 0.160, 0.134, 0.111, 0.082, 0.056, 0.028, 0.000],
-    [0.450, 0.428, 0.405, 0.383, 0.360, 0.338, 0.313, 0.292, 0.265, 0.245, 0.221,
-     0.195, 0.172, 0.151, 0.128, 0.107, 0.086, 0.059, 0.043, 0.021, 0.000],
+    [
+        0.450, 0.450, 0.450, 0.449, 0.449, 0.449, 0.444, 0.438, 0.429, 0.418, 0.408, 0.378, 0.350,
+        0.315, 0.285, 0.245, 0.202, 0.160, 0.109, 0.054, 0.000,
+    ],
+    [
+        0.450, 0.446, 0.442, 0.437, 0.433, 0.421, 0.411, 0.392, 0.374, 0.356, 0.336, 0.310, 0.287,
+        0.260, 0.231, 0.198, 0.163, 0.128, 0.089, 0.044, 0.000,
+    ],
+    [
+        0.450, 0.440, 0.430, 0.420, 0.410, 0.388, 0.375, 0.354, 0.334, 0.314, 0.290, 0.264, 0.240,
+        0.214, 0.185, 0.159, 0.132, 0.100, 0.067, 0.034, 0.000,
+    ],
+    [
+        0.450, 0.433, 0.416, 0.399, 0.383, 0.364, 0.346, 0.326, 0.300, 0.281, 0.255, 0.235, 0.211,
+        0.186, 0.160, 0.134, 0.111, 0.082, 0.056, 0.028, 0.000,
+    ],
+    [
+        0.450, 0.428, 0.405, 0.383, 0.360, 0.338, 0.313, 0.292, 0.265, 0.245, 0.221, 0.195, 0.172,
+        0.151, 0.128, 0.107, 0.086, 0.059, 0.043, 0.021, 0.000,
+    ],
 ];
 
 /// NB.NB.13 — S = (h/2)·√(E·I_z / (G·I_t)), in mm.
@@ -107,7 +127,9 @@ pub fn c1_c2_factors(beta: f64, b_ster: f64) -> (f64, f64) {
 }
 
 /// Ondersteunt tests en aanroepers die willen weten welke β-rijen de tabel kent.
-pub fn nb_beta_raster() -> [f64; 5] { NB_BETAS }
+pub fn nb_beta_raster() -> [f64; 5] {
+    NB_BETAS
+}
 
 /// NB.NB.11 — C-coëfficiënt.
 ///
@@ -117,7 +139,9 @@ pub fn nb_beta_raster() -> [f64; 5] { NB_BETAS }
 /// negatief wanneer de belasting boven het zwaartepunt aangrijpt (C₂ < 0) en
 /// verlaagt dan de C-waarde, en daarmee M_cr.
 pub fn c_coefficient(c1: f64, l_g_mm: f64, l_kip_mm: f64, s_mm: f64, c2: f64) -> f64 {
-    if l_kip_mm <= 0.0 { return 0.0; }
+    if l_kip_mm <= 0.0 {
+        return 0.0;
+    }
     let voorfactor = (PI * c1 * l_g_mm) / l_kip_mm;
     let onder_wortel = 1.0 + (PI.powi(2) * s_mm.powi(2) / l_kip_mm.powi(2)) * (c2.powi(2) + 1.0);
     let losse_term = (PI * c2 * s_mm) / l_kip_mm;
@@ -132,7 +156,9 @@ pub fn c_coefficient(c1: f64, l_g_mm: f64, l_kip_mm: f64, s_mm: f64, c2: f64) ->
 /// opzichte van de liggerlengte, en hoe sterker M_cr gereduceerd moet worden.
 pub fn alpha_nb9(h_mm: f64, tf_mm: f64, tw_mm: f64, b_mm: f64, l_g_mm: f64) -> f64 {
     let noemer = tw_mm.powi(3) * b_mm * l_g_mm.powi(2);
-    if noemer.abs() < 1e-9 { return 0.0; }
+    if noemer.abs() < 1e-9 {
+        return 0.0;
+    }
     (h_mm * tf_mm * 1e12) / noemer
 }
 
@@ -144,7 +170,13 @@ pub const ALPHA_MAX: f64 = 5000.0;
 /// en buiging uit het vlak van het lijf.
 ///
 /// De gedrukte rand is dan de flens plus 1/6 van de lijfhoogte.
-pub fn vereist_toets_gedrukte_rand(h_mm: f64, tf_mm: f64, tw_mm: f64, b_mm: f64, l_g_mm: f64) -> bool {
+pub fn vereist_toets_gedrukte_rand(
+    h_mm: f64,
+    tf_mm: f64,
+    tw_mm: f64,
+    b_mm: f64,
+    l_g_mm: f64,
+) -> bool {
     h_mm / tw_mm.max(1e-9) > 75.0 && alpha_nb9(h_mm, tf_mm, tw_mm, b_mm, l_g_mm) > ALPHA_MAX
 }
 
@@ -234,7 +266,9 @@ pub fn l_kip(beta: f64, l_st_mm: f64) -> f64 {
 /// dus die waarde kan van elke aanroeper komen.
 pub fn b_ster(m_nmm: f64, q_n_per_mm: f64, l_st_mm: f64) -> f64 {
     let noemer = 8.0 * m_nmm.abs() + q_n_per_mm.abs() * l_st_mm.powi(2);
-    if noemer < 1e-9 { return 0.0; }
+    if noemer < 1e-9 {
+        return 0.0;
+    }
     (8.0 * m_nmm / noemer).clamp(-1.0, 1.0)
 }
 
@@ -265,7 +299,9 @@ pub fn b_ster(m_nmm: f64, q_n_per_mm: f64, l_st_mm: f64) -> f64 {
 /// veilig-zijdige richting, en de aanroeper meldt de overschrijding.
 pub fn c2_gecorrigeerd(c2_tabel: f64, z_a_mm: f64, h_mm: f64, tf_mm: f64) -> f64 {
     let arm = (h_mm - tf_mm) / 2.0;
-    if arm.abs() < 1e-9 { return 0.0; }
+    if arm.abs() < 1e-9 {
+        return 0.0;
+    }
     let schaal = (z_a_mm / arm).max(-1.0);
     -c2_tabel * schaal
 }
@@ -309,8 +345,16 @@ mod tests {
         // BOVENflens, mét plusteken op dat van de ONDERflens, lineair ertussen,
         // en nul in het zwaartepunt van de doorsnede.
         let arm = (H - TF) / 2.0;
-        assert_relative_eq!(c2_gecorrigeerd(0.45, arm, H, TF), -0.45, max_relative = 1e-12);
-        assert_relative_eq!(c2_gecorrigeerd(0.45, -arm, H, TF), 0.45, max_relative = 1e-12);
+        assert_relative_eq!(
+            c2_gecorrigeerd(0.45, arm, H, TF),
+            -0.45,
+            max_relative = 1e-12
+        );
+        assert_relative_eq!(
+            c2_gecorrigeerd(0.45, -arm, H, TF),
+            0.45,
+            max_relative = 1e-12
+        );
         assert_relative_eq!(c2_gecorrigeerd(0.45, 0.0, H, TF), 0.0, epsilon = 1e-12);
         assert_relative_eq!(
             c2_gecorrigeerd(0.45, arm / 2.0, H, TF),
@@ -326,8 +370,16 @@ mod tests {
         // crediteren dat de bijlage niet toekent: bij z_a = −165 mm gaf de
         // ongeklemde schaling C₂ = +0,4662 in plaats van +0,45, en daarmee een
         // 0,96 % te hoge M_cr — onveilig.
-        assert_relative_eq!(c2_gecorrigeerd(0.45, -165.0, H, TF), 0.45, max_relative = 1e-12);
-        assert_relative_eq!(c2_gecorrigeerd(0.45, -1e6, H, TF), 0.45, max_relative = 1e-12);
+        assert_relative_eq!(
+            c2_gecorrigeerd(0.45, -165.0, H, TF),
+            0.45,
+            max_relative = 1e-12
+        );
+        assert_relative_eq!(
+            c2_gecorrigeerd(0.45, -1e6, H, TF),
+            0.45,
+            max_relative = 1e-12
+        );
     }
 
     #[test]
@@ -337,7 +389,10 @@ mod tests {
         // veilig-zijdige richting. De aanroeper meldt de overschrijding.
         assert_relative_eq!(z_a_max_nb(H, TF), 192.25, max_relative = 1e-12);
         let c2 = c2_gecorrigeerd(0.45, 250.0, H, TF);
-        assert!(c2 < -0.45, "verder boven de bovenflens hoort C₂ verder te dalen: {c2}");
+        assert!(
+            c2 < -0.45,
+            "verder boven de bovenflens hoort C₂ verder te dalen: {c2}"
+        );
         assert_relative_eq!(c2, -0.45 * 250.0 / 159.25, max_relative = 1e-12);
     }
 
@@ -361,7 +416,13 @@ mod tests {
         let c = c_coefficient(c1, 5000.0, 5000.0, 100.0, 0.0);
         let m_cr_iso = m_cr_i_section(c, 5000.0, 5703000.0, 605000.0, 1.0);
         let m_cr_chan = m_cr_channel_section(c, 5000.0, 5703000.0, 605000.0, 1.0);
-        assert!(m_cr_chan < m_cr_iso, "channel Mcr should be reduced vs I-section");
-        assert!((m_cr_chan / m_cr_iso - 0.7).abs() < 0.01, "channel Mcr ≈ 0.7 × isection");
+        assert!(
+            m_cr_chan < m_cr_iso,
+            "channel Mcr should be reduced vs I-section"
+        );
+        assert!(
+            (m_cr_chan / m_cr_iso - 0.7).abs() < 0.01,
+            "channel Mcr ≈ 0.7 × isection"
+        );
     }
 }

@@ -158,7 +158,10 @@ fn extend_met_lijn(
     // ── De uitgangspunten van deze lijn ──────────────────────────────────
     let rijen: Vec<Vec<String>> = vec![
         vec!["Wapening".into(), lijn.reinforcement_summary.clone()],
-        vec!["Staaflengte".into(), format!("{} mm", nl(lijn.lengte_mm, 0))],
+        vec![
+            "Staaflengte".into(),
+            format!("{} mm", nl(lijn.lengte_mm, 0)),
+        ],
         vec![
             "Rekenwaarden".into(),
             format!(
@@ -184,8 +187,12 @@ fn extend_met_lijn(
             "Hoogste unity check".into(),
             format!(
                 "momentendekking {} · dwarskrachtdekking {}",
-                lijn.uc_moment_max.map(|v| nl(v, 2)).unwrap_or_else(|| "—".into()),
-                lijn.uc_dwarskracht_max.map(|v| nl(v, 2)).unwrap_or_else(|| "—".into()),
+                lijn.uc_moment_max
+                    .map(|v| nl(v, 2))
+                    .unwrap_or_else(|| "—".into()),
+                lijn.uc_dwarskracht_max
+                    .map(|v| nl(v, 2))
+                    .unwrap_or_else(|| "—".into()),
             ),
         ],
     ];
@@ -305,12 +312,17 @@ fn extend_met_zijde(
     // te weten dat 6.2.3(1) dat mét normaalkracht ook vraagt. Geteld over de
     // HELE lijn, niet alleen over de afgedrukte kritieke plaatsen.
     let (n_ev, n_begrensd, n_terug) =
-        dekking.punten.iter().fold((0usize, 0usize, 0usize), |(e, b, t), p| match p.z_grondslag {
-            ZGrondslag::Evenwicht => (e + 1, b, t),
-            ZGrondslag::EvenwichtBegrensd => (e, b + 1, t),
-            ZGrondslag::Terugval => (e, b, t + 1),
-            ZGrondslag::Opgegeven | ZGrondslag::Benadering => (e, b, t),
-        });
+        dekking
+            .punten
+            .iter()
+            .fold((0usize, 0usize, 0usize), |(e, b, t), p| {
+                match p.z_grondslag {
+                    ZGrondslag::Evenwicht => (e + 1, b, t),
+                    ZGrondslag::EvenwichtBegrensd => (e, b + 1, t),
+                    ZGrondslag::Terugval => (e, b, t + 1),
+                    ZGrondslag::Opgegeven | ZGrondslag::Benadering => (e, b, t),
+                }
+            });
     if n_ev + n_begrensd + n_terug > 0 {
         flow.push(Box::new(Paragraph::new(
             format!(
@@ -359,10 +371,18 @@ fn extend_met_zijde(
                     nl(v.sigma_sd_mpa, 1),
                     nl(v.l_b_rqd_mm, 0),
                     nl(v.alpha_product, 3),
-                    if v.begrensd_door_8_5 { " (door (8.5) opgetrokken tot 0,7)" } else { "" },
+                    if v.begrensd_door_8_5 {
+                        " (door (8.5) opgetrokken tot 0,7)"
+                    } else {
+                        ""
+                    },
                     nl(v.l_bd_berekend_mm, 0),
                     nl(v.l_b_min_mm, 0),
-                    if v.ondergrens_maatgevend { " — de ondergrens is maatgevend" } else { "" },
+                    if v.ondergrens_maatgevend {
+                        " — de ondergrens is maatgevend"
+                    } else {
+                        ""
+                    },
                 ),
                 style_note(),
             )));
@@ -390,7 +410,9 @@ fn extend_met_zijde(
 /// reden als bij het aanwijzen van het maatgevende punt — daar geldt
 /// art. 9.2.1.4/art. 9.2.1.5 en niet deze lijn.
 fn kritieke_punten(dekking: &Momentdekking) -> (Vec<&Momentpunt>, usize) {
-    let maatgevend = dekking.maatgevend.and_then(|i| dekking.punten.get(i as usize));
+    let maatgevend = dekking
+        .maatgevend
+        .and_then(|i| dekking.punten.get(i as usize));
     let mut kandidaten: Vec<&Momentpunt> = dekking
         .punten
         .iter()
@@ -402,7 +424,9 @@ fn kritieke_punten(dekking: &Momentdekking) -> (Vec<&Momentpunt>, usize) {
     // Zwaarste eerst: een tekort weegt boven een hoge unity check, want zonder
     // wapening is er geen verhouding maar wel een tekort.
     kandidaten.sort_by(|a, b| {
-        sleutel(b).partial_cmp(&sleutel(a)).unwrap_or(std::cmp::Ordering::Equal)
+        sleutel(b)
+            .partial_cmp(&sleutel(a))
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
 
     let mut uit: Vec<&Momentpunt> = Vec::with_capacity(MAX_RIJEN);
@@ -415,7 +439,11 @@ fn kritieke_punten(dekking: &Momentdekking) -> (Vec<&Momentpunt>, usize) {
     // Op volgorde van de staaf afdrukken: een tabel die van links naar rechts
     // langs de staaf loopt is naast de figuur te leggen, een tabel op zwaarte
     // niet.
-    uit.sort_by(|a, b| a.x_mm.partial_cmp(&b.x_mm).unwrap_or(std::cmp::Ordering::Equal));
+    uit.sort_by(|a, b| {
+        a.x_mm
+            .partial_cmp(&b.x_mm)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     (uit, weggelaten)
 }
 
@@ -486,7 +514,11 @@ fn momenttabel(punten: &[&Momentpunt]) -> Table {
                 nl(p.omhullende_kn, 1),
                 nl(p.benodigd_kn, 1),
                 nl(p.aanwezig_kn, 1),
-                if p.tekort_kn > 0.0 { nl(p.tekort_kn, 1) } else { "—".to_string() },
+                if p.tekort_kn > 0.0 {
+                    nl(p.tekort_kn, 1)
+                } else {
+                    "—".to_string()
+                },
                 p.uc.map(|u| nl(u, 2)).unwrap_or_else(|| "—".to_string()),
                 bewijs_woord(p.bewijs).to_string(),
             ]
@@ -603,7 +635,11 @@ fn extend_met_dwarskracht(flow: &mut Vec<Box<dyn Flowable>>, d: &Dwarskrachtdekk
     if punten.is_empty() {
         return;
     }
-    punten.sort_by(|a, b| a.x_mm.partial_cmp(&b.x_mm).unwrap_or(std::cmp::Ordering::Equal));
+    punten.sort_by(|a, b| {
+        a.x_mm
+            .partial_cmp(&b.x_mm)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     flow.push(Box::new(Paragraph::new(
         format!(
@@ -625,7 +661,9 @@ fn extend_met_dwarskracht(flow: &mut Vec<Box<dyn Flowable>>, d: &Dwarskrachtdekk
                 snede_woord(p.zijde).to_string(),
                 p.combinatie_id.to_string(),
                 nl(p.benodigd_kn, 1),
-                p.aanwezig_kn.map(|v| nl(v, 1)).unwrap_or_else(|| "—".to_string()),
+                p.aanwezig_kn
+                    .map(|v| nl(v, 1))
+                    .unwrap_or_else(|| "—".to_string()),
                 p.uc.map(|v| nl(v, 2)).unwrap_or_else(|| "—".to_string()),
                 route_woord(p.route).to_string(),
                 spoor_woord(p.spoor).to_string(),
@@ -720,7 +758,11 @@ fn extend_met_steunpunten(flow: &mut Vec<Box<dyn Flowable>>, eisen: &[SteunpuntE
                     nl(e.a_s_aanwezig_mm2, 0),
                     nl(e.a_s_vereist_mm2, 0)
                 ),
-                if e.voldoet_oppervlakte { "voldoet".to_string() } else { "VOLDOET NIET".to_string() },
+                if e.voldoet_oppervlakte {
+                    "voldoet".to_string()
+                } else {
+                    "VOLDOET NIET".to_string()
+                },
                 format!(
                     "{} kN uit |V_Ed| = {} kN en N_Ed = {} kN (a_l = {} mm, z = {} mm)",
                     nl(e.f_ed_kn, 1),
@@ -731,7 +773,9 @@ fn extend_met_steunpunten(flow: &mut Vec<Box<dyn Flowable>>, eisen: &[SteunpuntE
                 ),
                 format!(
                     "l_bd = {} · 10Φ = {}",
-                    e.l_bd_mm.map(|v| format!("{} mm", nl(v, 0))).unwrap_or_else(|| "—".into()),
+                    e.l_bd_mm
+                        .map(|v| format!("{} mm", nl(v, 0)))
+                        .unwrap_or_else(|| "—".into()),
                     e.min_lengte_recht_mm
                         .map(|v| format!("{} mm", nl(v, 0)))
                         .unwrap_or_else(|| "—".into()),
@@ -778,7 +822,10 @@ fn extend_met_steunpunten(flow: &mut Vec<Box<dyn Flowable>>, eisen: &[SteunpuntE
 /// Een melding waar de lezer overheen moet struikelen — rood, dezelfde keuze
 /// als in `betonhoofdstuk`.
 fn let_op_stijl() -> openaec_layout::paragraph::ParagraphStyle {
-    openaec_layout::paragraph::ParagraphStyle { text_color: C_FAIL, ..style_note() }
+    openaec_layout::paragraph::ParagraphStyle {
+        text_color: C_FAIL,
+        ..style_note()
+    }
 }
 
 fn stijl_uitgangspunten() -> TableStyleConfig {

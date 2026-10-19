@@ -116,9 +116,7 @@ fn invoer_kolom() -> Value {
 /// De vijflaagse CLT-plaat 40/20/40/20/40 in C24, strook van 1000 mm,
 /// M_max = 20 kNm in het veld en V_max = 10 kN bij de oplegging, L = 5 m.
 fn invoer_clt() -> Value {
-    let laag = |t: f64, richting: &str| {
-        json!({ "thickness_mm": t, "orientation": richting, "strength_class": "C24" })
-    };
+    let laag = |t: f64, richting: &str| json!({ "thickness_mm": t, "orientation": richting, "strength_class": "C24" });
     json!({
         "beam_id": 7,
         "layup": {
@@ -168,8 +166,7 @@ fn weg_toetsbrug(opdracht: &str, inputs: Option<Value>) -> Value {
     if let Some(i) = inputs {
         verzoek["inputs"] = i;
     }
-    let verzoek: toetsbrug::Verzoek =
-        serde_json::from_value(verzoek).expect("toetsbrug-verzoek");
+    let verzoek: toetsbrug::Verzoek = serde_json::from_value(verzoek).expect("toetsbrug-verzoek");
     toetsbrug::behandel(verzoek).unwrap_or_else(|e| panic!("toetsbrug {opdracht}: {e}"))
 }
 
@@ -257,7 +254,8 @@ async fn weg_mcp(
     assert_eq!(resp["id"], id);
     let result = &resp["result"];
     assert_eq!(
-        result["isError"], false,
+        result["isError"],
+        false,
         "MCP-gereedschap {tool} gaf een fout: {}",
         result["content"][0]["text"].as_str().unwrap_or("")
     );
@@ -399,15 +397,40 @@ async fn de_drie_wegen_nemen_de_langeduurzakking_gelijk_mee() {
     clt["deflection_inst_mm"] = json!(-2.0);
     clt["deflection_quasi_perm_mm"] = json!(-1.5);
     clt["deflection_quasi_perm_fin_mm"] = json!(-3.0);
-    for (i, (naam, tool, invoer)) in
-        [("hout", "check_timber_beams", hout), ("CLT", "check_clt_beams", clt)].into_iter().enumerate()
+    for (i, (naam, tool, invoer)) in [
+        ("hout", "check_timber_beams", hout),
+        ("CLT", "check_clt_beams", clt),
+    ]
+    .into_iter()
+    .enumerate()
     {
-        let tauri = if tool == "check_timber_beams" { weg_tauri_hout(&invoer) } else { weg_tauri_clt(&invoer) };
+        let tauri = if tool == "check_timber_beams" {
+            weg_tauri_hout(&invoer)
+        } else {
+            weg_tauri_clt(&invoer)
+        };
         let brug = eerste(&weg_toetsbrug(tool, Some(json!([invoer]))));
-        let mcp = weg_mcp(&mut stdin, &mut reader, 60 + i as u32, tool, json!({ "inputs": [invoer] })).await;
+        let mcp = weg_mcp(
+            &mut stdin,
+            &mut reader,
+            60 + i as u32,
+            tool,
+            json!({ "inputs": [invoer] }),
+        )
+        .await;
         let mcp = mcp["results"][0].clone();
-        eis_gelijk(&format!("{naam}: het Tauri-command"), &tauri, "de toetsbrug", &brug);
-        eis_gelijk(&format!("{naam}: het Tauri-command"), &tauri, "de MCP-server", &mcp);
+        eis_gelijk(
+            &format!("{naam}: het Tauri-command"),
+            &tauri,
+            "de toetsbrug",
+            &brug,
+        );
+        eis_gelijk(
+            &format!("{naam}: het Tauri-command"),
+            &tauri,
+            "de MCP-server",
+            &mcp,
+        );
         let fin = mcp["checks"]
             .as_array()
             .expect("checks")
@@ -416,14 +439,19 @@ async fn de_drie_wegen_nemen_de_langeduurzakking_gelijk_mee() {
             .unwrap_or_else(|| panic!("{naam}: geen w_fin"))
             .clone();
         let tekst = fin.to_string();
-        assert!(tekst.contains("w_{qp,fin,z}") && tekst.contains("2.2.3(4)"), "{naam}: {tekst}");
+        assert!(
+            tekst.contains("w_{qp,fin,z}") && tekst.contains("2.2.3(4)"),
+            "{naam}: {tekst}"
+        );
         if naam == "hout" {
-            let ed = fin["kind"]["data"]["uc"]["ed"].as_f64()
+            let ed = fin["kind"]["data"]["uc"]["ed"]
+                .as_f64()
                 .unwrap_or_else(|| panic!("hout: geen ed in {tekst}"));
             assert!((ed - 42.0).abs() < 1e-9, "hout: w_fin {ed}");
         } else {
             // −2,0 + (−3,0 + 1,5) = −3,5 mm.
-            let ed = fin["kind"]["data"]["uc"]["ed"].as_f64()
+            let ed = fin["kind"]["data"]["uc"]["ed"]
+                .as_f64()
                 .unwrap_or_else(|| panic!("CLT: geen ed in {tekst}"));
             assert!((ed - 3.5).abs() < 1e-9, "CLT: w_fin {ed}");
         }
@@ -495,7 +523,9 @@ async fn de_drie_wegen_toetsen_de_belastingduur_per_combinatie_gelijk() {
     let (mut child, mut stdin, mut reader) = start_server().await;
 
     let mut invoer = invoer_ligger();
-    let punten = invoer["forces_envelope"].as_array_mut().expect("omhullende");
+    let punten = invoer["forces_envelope"]
+        .as_array_mut()
+        .expect("omhullende");
     punten[2]["combination_id"] = json!(13);
     punten[3]["combination_id"] = json!(13);
     invoer["load_duration_per_combination"] = json!([
@@ -505,7 +535,14 @@ async fn de_drie_wegen_toetsen_de_belastingduur_per_combinatie_gelijk() {
 
     let tauri = weg_tauri_hout(&invoer);
     let brug = eerste(&weg_toetsbrug("check_timber_beams", Some(json!([invoer]))));
-    let mcp = weg_mcp(&mut stdin, &mut reader, 15, "check_timber_beams", json!({ "inputs": [invoer] })).await;
+    let mcp = weg_mcp(
+        &mut stdin,
+        &mut reader,
+        15,
+        "check_timber_beams",
+        json!({ "inputs": [invoer] }),
+    )
+    .await;
     let mcp = mcp["results"][0].clone();
     eis_gelijk("het Tauri-command", &tauri, "de toetsbrug", &brug);
     eis_gelijk("het Tauri-command", &tauri, "de MCP-server", &mcp);
@@ -514,10 +551,25 @@ async fn de_drie_wegen_toetsen_de_belastingduur_per_combinatie_gelijk() {
         .as_array()
         .expect("k_mod_per_load_duration")
         .iter()
-        .map(|k| (k["load_duration"].as_str().unwrap().to_owned(), getal(k, "k_mod")))
+        .map(|k| {
+            (
+                k["load_duration"].as_str().unwrap().to_owned(),
+                getal(k, "k_mod"),
+            )
+        })
         .collect();
-    assert_eq!(kmod, vec![("Permanent".to_owned(), 0.60), ("ShortTerm".to_owned(), 0.90)]);
-    assert!(mcp["governing_combination_id"].is_u64(), "{}", mcp["governing_combination_id"]);
+    assert_eq!(
+        kmod,
+        vec![
+            ("Permanent".to_owned(), 0.60),
+            ("ShortTerm".to_owned(), 0.90)
+        ]
+    );
+    assert!(
+        mcp["governing_combination_id"].is_u64(),
+        "{}",
+        mcp["governing_combination_id"]
+    );
 
     // Ook CLT: dezelfde lijst, drie wegen.
     let mut clt = invoer_clt();
@@ -528,11 +580,21 @@ async fn de_drie_wegen_toetsen_de_belastingduur_per_combinatie_gelijk() {
     ]);
     let tauri = weg_tauri_clt(&clt);
     let brug = eerste(&weg_toetsbrug("check_clt_beams", Some(json!([clt]))));
-    let mcp = weg_mcp(&mut stdin, &mut reader, 16, "check_clt_beams", json!({ "inputs": [clt] })).await;
+    let mcp = weg_mcp(
+        &mut stdin,
+        &mut reader,
+        16,
+        "check_clt_beams",
+        json!({ "inputs": [clt] }),
+    )
+    .await;
     let mcp = mcp["results"][0].clone();
     eis_gelijk("CLT: het Tauri-command", &tauri, "de toetsbrug", &brug);
     eis_gelijk("CLT: het Tauri-command", &tauri, "de MCP-server", &mcp);
-    assert_eq!(mcp["k_mod_per_load_duration"].as_array().map(|l| l.len()), Some(2));
+    assert_eq!(
+        mcp["k_mod_per_load_duration"].as_array().map(|l| l.len()),
+        Some(2)
+    );
 
     let _ = child.kill().await;
 }
@@ -565,7 +627,12 @@ async fn de_drie_wegen_leveren_dezelfde_lijsten() {
     let brug = weg_toetsbrug("list_clt_presets", None);
     let mcp = weg_mcp(&mut stdin, &mut reader, 31, "list_clt_presets", json!({})).await;
     eis_gelijk("het Tauri-command", &tauri, "de toetsbrug", &brug);
-    eis_gelijk("het Tauri-command", &tauri, "de MCP-server", &mcp["presets"]);
+    eis_gelijk(
+        "het Tauri-command",
+        &tauri,
+        "de MCP-server",
+        &mcp["presets"],
+    );
     assert!(!tauri.as_array().unwrap().is_empty());
 
     let _ = child.kill().await;

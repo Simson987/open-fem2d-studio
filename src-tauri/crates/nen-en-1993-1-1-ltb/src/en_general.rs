@@ -77,8 +77,8 @@
 //! γ_M1, de doorsnedeklasse — blijft onverkort uit de staalnorm komen; alleen
 //! de elastische vorm van M_cr komt hiervandaan.
 
-use std::f64::consts::PI;
 use crate::nb_annex::{E_MPA, G_MPA};
+use std::f64::consts::PI;
 
 /// Kritiek kipmoment voor een dubbelsymmetrisch profiel, belast op het
 /// zwaartepunt, met vorkopleggingen:
@@ -92,10 +92,12 @@ use crate::nb_annex::{E_MPA, G_MPA};
 ///
 /// Resultaat in kNm.
 pub fn m_cr_algemeen(c1: f64, l_cr_mm: f64, iz_mm4: f64, iw_mm6: f64, it_mm4: f64) -> f64 {
-    if l_cr_mm <= 0.0 || iz_mm4 <= 0.0 { return 0.0; }
+    if l_cr_mm <= 0.0 || iz_mm4 <= 0.0 {
+        return 0.0;
+    }
     let voorfactor = c1 * PI.powi(2) * E_MPA * iz_mm4 / l_cr_mm.powi(2);
-    let onder_wortel = iw_mm6 / iz_mm4
-        + l_cr_mm.powi(2) * G_MPA * it_mm4 / (PI.powi(2) * E_MPA * iz_mm4);
+    let onder_wortel =
+        iw_mm6 / iz_mm4 + l_cr_mm.powi(2) * G_MPA * it_mm4 / (PI.powi(2) * E_MPA * iz_mm4);
     voorfactor * onder_wortel.sqrt() * 1e-6
 }
 
@@ -416,7 +418,9 @@ pub fn m_cr_monosymmetrisch(
     z_g_mm: f64,
     z_j_mm: f64,
 ) -> f64 {
-    if l_cr_mm <= 0.0 || iz_mm4 <= 0.0 { return 0.0; }
+    if l_cr_mm <= 0.0 || iz_mm4 <= 0.0 {
+        return 0.0;
+    }
     let d = d_parameter(c2, z_g_mm, c3, z_j_mm);
     let voorfactor = c1 * PI.powi(2) * E_MPA * iz_mm4 / l_cr_mm.powi(2);
     let onder_wortel = iw_mm6 / iz_mm4

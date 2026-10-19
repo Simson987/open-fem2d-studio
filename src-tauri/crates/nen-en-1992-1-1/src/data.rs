@@ -23,7 +23,10 @@ use ts_rs::TS;
 ///
 /// Sterkten in N/mm², E_cm in N/mm², rekken dimensieloos.
 #[derive(Clone, Copy, Debug, Serialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct ConcreteClass {
     /// Aanduiding "C30/37": cilinder-/kubusdruksterkte.
     pub name: &'static str,
@@ -100,20 +103,48 @@ const fn klasse(
 /// f_ck, f_ck,cube, f_ctm, f_ctk,0,05, f_ctk,0,95, E_cm [GPa], ε_c1, ε_cu1,
 /// ε_c2, ε_cu2, n, ε_c3, ε_cu3 (rekken in ‰).
 pub const CONCRETE_CLASSES: &[ConcreteClass] = &[
-    klasse("C12/15", 12.0, 15.0, 1.6, 1.1, 2.0, 27.0, 1.8, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5),
-    klasse("C16/20", 16.0, 20.0, 1.9, 1.3, 2.5, 29.0, 1.9, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5),
-    klasse("C20/25", 20.0, 25.0, 2.2, 1.5, 2.9, 30.0, 2.0, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5),
-    klasse("C25/30", 25.0, 30.0, 2.6, 1.8, 3.3, 31.0, 2.1, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5),
-    klasse("C30/37", 30.0, 37.0, 2.9, 2.0, 3.8, 33.0, 2.2, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5),
-    klasse("C35/45", 35.0, 45.0, 3.2, 2.2, 4.2, 34.0, 2.25, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5),
-    klasse("C40/50", 40.0, 50.0, 3.5, 2.5, 4.6, 35.0, 2.3, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5),
-    klasse("C45/55", 45.0, 55.0, 3.8, 2.7, 4.9, 36.0, 2.4, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5),
-    klasse("C50/60", 50.0, 60.0, 4.1, 2.9, 5.3, 37.0, 2.45, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5),
-    klasse("C55/67", 55.0, 67.0, 4.2, 3.0, 5.5, 38.0, 2.5, 3.2, 2.2, 3.1, 1.75, 1.8, 3.1),
-    klasse("C60/75", 60.0, 75.0, 4.4, 3.1, 5.7, 39.0, 2.6, 3.0, 2.3, 2.9, 1.6, 1.9, 2.9),
-    klasse("C70/85", 70.0, 85.0, 4.6, 3.2, 6.0, 41.0, 2.7, 2.8, 2.4, 2.7, 1.45, 2.0, 2.7),
-    klasse("C80/95", 80.0, 95.0, 4.8, 3.4, 6.3, 42.0, 2.8, 2.8, 2.5, 2.6, 1.4, 2.2, 2.6),
-    klasse("C90/105", 90.0, 105.0, 5.0, 3.5, 6.6, 44.0, 2.8, 2.8, 2.6, 2.6, 1.4, 2.3, 2.6),
+    klasse(
+        "C12/15", 12.0, 15.0, 1.6, 1.1, 2.0, 27.0, 1.8, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5,
+    ),
+    klasse(
+        "C16/20", 16.0, 20.0, 1.9, 1.3, 2.5, 29.0, 1.9, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5,
+    ),
+    klasse(
+        "C20/25", 20.0, 25.0, 2.2, 1.5, 2.9, 30.0, 2.0, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5,
+    ),
+    klasse(
+        "C25/30", 25.0, 30.0, 2.6, 1.8, 3.3, 31.0, 2.1, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5,
+    ),
+    klasse(
+        "C30/37", 30.0, 37.0, 2.9, 2.0, 3.8, 33.0, 2.2, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5,
+    ),
+    klasse(
+        "C35/45", 35.0, 45.0, 3.2, 2.2, 4.2, 34.0, 2.25, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5,
+    ),
+    klasse(
+        "C40/50", 40.0, 50.0, 3.5, 2.5, 4.6, 35.0, 2.3, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5,
+    ),
+    klasse(
+        "C45/55", 45.0, 55.0, 3.8, 2.7, 4.9, 36.0, 2.4, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5,
+    ),
+    klasse(
+        "C50/60", 50.0, 60.0, 4.1, 2.9, 5.3, 37.0, 2.45, 3.5, 2.0, 3.5, 2.0, 1.75, 3.5,
+    ),
+    klasse(
+        "C55/67", 55.0, 67.0, 4.2, 3.0, 5.5, 38.0, 2.5, 3.2, 2.2, 3.1, 1.75, 1.8, 3.1,
+    ),
+    klasse(
+        "C60/75", 60.0, 75.0, 4.4, 3.1, 5.7, 39.0, 2.6, 3.0, 2.3, 2.9, 1.6, 1.9, 2.9,
+    ),
+    klasse(
+        "C70/85", 70.0, 85.0, 4.6, 3.2, 6.0, 41.0, 2.7, 2.8, 2.4, 2.7, 1.45, 2.0, 2.7,
+    ),
+    klasse(
+        "C80/95", 80.0, 95.0, 4.8, 3.4, 6.3, 42.0, 2.8, 2.8, 2.5, 2.6, 1.4, 2.2, 2.6,
+    ),
+    klasse(
+        "C90/105", 90.0, 105.0, 5.0, 3.5, 6.6, 44.0, 2.8, 2.8, 2.6, 2.6, 1.4, 2.3, 2.6,
+    ),
 ];
 
 /// Zoek een betonsterkteklasse op naam ("C30/37"; ook "C30" wordt herkend).
@@ -131,7 +162,10 @@ pub fn concrete_class_by_name(name: &str) -> Option<&'static ConcreteClass> {
 
 /// Ductiliteitsklasse van betonstaal — bijlage C, tabel C.1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum DuctilityClass {
     A,
     B,
@@ -141,7 +175,10 @@ pub enum DuctilityClass {
 /// Eén wapeningsstaalsoort: vloeigrens plus de ductiliteitseigenschappen
 /// van tabel C.1.
 #[derive(Clone, Copy, Debug, Serialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct ReinforcementGrade {
     /// Aanduiding, bijv. "B500B".
     pub name: &'static str,
@@ -160,9 +197,27 @@ pub struct ReinforcementGrade {
 /// De drie B500-klassen. Tabel C.1 geeft per klasse ondergrenzen; hier zijn
 /// die ondergrenzen als rekenwaarde genomen (veilig-zijdig).
 pub const REINFORCEMENT_GRADES: &[ReinforcementGrade] = &[
-    ReinforcementGrade { name: "B500A", f_yk: 500.0, ductility_class: DuctilityClass::A, k: 1.05, eps_uk: 0.025 },
-    ReinforcementGrade { name: "B500B", f_yk: 500.0, ductility_class: DuctilityClass::B, k: 1.08, eps_uk: 0.050 },
-    ReinforcementGrade { name: "B500C", f_yk: 500.0, ductility_class: DuctilityClass::C, k: 1.15, eps_uk: 0.075 },
+    ReinforcementGrade {
+        name: "B500A",
+        f_yk: 500.0,
+        ductility_class: DuctilityClass::A,
+        k: 1.05,
+        eps_uk: 0.025,
+    },
+    ReinforcementGrade {
+        name: "B500B",
+        f_yk: 500.0,
+        ductility_class: DuctilityClass::B,
+        k: 1.08,
+        eps_uk: 0.050,
+    },
+    ReinforcementGrade {
+        name: "B500C",
+        f_yk: 500.0,
+        ductility_class: DuctilityClass::C,
+        k: 1.15,
+        eps_uk: 0.075,
+    },
 ];
 
 /// Zoek een wapeningsstaalsoort op naam ("B500B"; "B500" → B500B, de in
@@ -172,7 +227,9 @@ pub fn reinforcement_grade_by_name(name: &str) -> Option<&'static ReinforcementG
     if gezocht.eq_ignore_ascii_case("B500") {
         return REINFORCEMENT_GRADES.iter().find(|g| g.name == "B500B");
     }
-    REINFORCEMENT_GRADES.iter().find(|g| g.name.eq_ignore_ascii_case(gezocht))
+    REINFORCEMENT_GRADES
+        .iter()
+        .find(|g| g.name.eq_ignore_ascii_case(gezocht))
 }
 
 #[cfg(test)]
@@ -212,10 +269,22 @@ mod tests {
             let n = 1.4 + 23.4 * t;
             let eps_c3 = 1.75 + 0.55 * (c.f_ck - 50.0) / 40.0;
             // De tabel rondt af op twee decimalen (resp. 0,05 voor n).
-            assert!((c.eps_c2 * 1000.0 - eps_c2).abs() < 0.06, "{}: ε_c2", c.name);
-            assert!((c.eps_cu2 * 1000.0 - eps_cu2).abs() < 0.06, "{}: ε_cu2", c.name);
+            assert!(
+                (c.eps_c2 * 1000.0 - eps_c2).abs() < 0.06,
+                "{}: ε_c2",
+                c.name
+            );
+            assert!(
+                (c.eps_cu2 * 1000.0 - eps_cu2).abs() < 0.06,
+                "{}: ε_cu2",
+                c.name
+            );
             assert!((c.n - n).abs() < 0.03, "{}: n", c.name);
-            assert!((c.eps_c3 * 1000.0 - eps_c3).abs() < 0.06, "{}: ε_c3", c.name);
+            assert!(
+                (c.eps_c3 * 1000.0 - eps_c3).abs() < 0.06,
+                "{}: ε_c3",
+                c.name
+            );
             assert_relative_eq!(c.eps_cu3, c.eps_cu2);
         }
     }
@@ -233,8 +302,16 @@ mod tests {
                 2.12 * (1.0 + c.f_cm / 10.0).ln()
             };
             assert!((c.f_ctm - f_ctm).abs() <= 0.06, "{}: f_ctm {f_ctm}", c.name);
-            assert!((c.f_ctk_005 - 0.7 * f_ctm).abs() <= 0.06, "{}: f_ctk,0,05", c.name);
-            assert!((c.f_ctk_095 - 1.3 * f_ctm).abs() <= 0.06, "{}: f_ctk,0,95", c.name);
+            assert!(
+                (c.f_ctk_005 - 0.7 * f_ctm).abs() <= 0.06,
+                "{}: f_ctk,0,05",
+                c.name
+            );
+            assert!(
+                (c.f_ctk_095 - 1.3 * f_ctm).abs() <= 0.06,
+                "{}: f_ctk,0,95",
+                c.name
+            );
         }
     }
 

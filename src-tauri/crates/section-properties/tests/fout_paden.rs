@@ -51,7 +51,11 @@ fn referentie_ipe200_komt_gewoon_door() {
     let a = v["area_mm2"].as_f64().unwrap();
     // Catalogus: A = 2848 mm² (afgerond); de contour geeft 2848,4.
     assert!((a - 2848.0).abs() < 2.0, "A = {a}");
-    assert!(v["meldingen"].as_array().unwrap().is_empty(), "onverwachte meldingen: {}", v["meldingen"]);
+    assert!(
+        v["meldingen"].as_array().unwrap().is_empty(),
+        "onverwachte meldingen: {}",
+        v["meldingen"]
+    );
 }
 
 #[test]
@@ -81,7 +85,10 @@ fn negatieve_of_nul_maten() {
         r#"{ "soort": "ISection", "h": 0, "b": 0, "tw": 0, "tf": 0, "r": 0 }"#,
         "positief",
     );
-    weigert(r#"{ "soort": "Shs", "h": 100, "b": -100, "t": 5 }"#, "b = -100");
+    weigert(
+        r#"{ "soort": "Shs", "h": 100, "b": -100, "t": 5 }"#,
+        "b = -100",
+    );
     weigert(r#"{ "soort": "Rechthoek", "h": 300, "b": 0 }"#, "b = 0");
 }
 
@@ -103,11 +110,23 @@ fn uitronding_die_niet_past() {
 
 #[test]
 fn holle_doorsneden_zonder_holte() {
-    weigert(r#"{ "soort": "Shs", "h": 30, "b": 30, "t": 16 }"#, "laat geen holte over");
-    weigert(r#"{ "soort": "Chs", "h": 100, "t": 60 }"#, "laat geen holte over");
-    weigert(r#"{ "soort": "Chs", "h": 100, "t": 50 }"#, "laat geen holte over");
+    weigert(
+        r#"{ "soort": "Shs", "h": 30, "b": 30, "t": 16 }"#,
+        "laat geen holte over",
+    );
+    weigert(
+        r#"{ "soort": "Chs", "h": 100, "t": 60 }"#,
+        "laat geen holte over",
+    );
+    weigert(
+        r#"{ "soort": "Chs", "h": 100, "t": 50 }"#,
+        "laat geen holte over",
+    );
     // Wand die de hoekafronding 1,5·t niet toelaat.
-    weigert(r#"{ "soort": "Shs", "h": 30, "b": 30, "t": 12 }"#, "hoekafronding");
+    weigert(
+        r#"{ "soort": "Shs", "h": 30, "b": 30, "t": 12 }"#,
+        "hoekafronding",
+    );
 }
 
 #[test]
@@ -132,9 +151,21 @@ fn catalogusdeel_in_een_samenstelling_wordt_ook_gecontroleerd() {
 /// zelf aanroepen — en de mesher hangt ook zónder die controle niet meer.
 #[test]
 fn controleer_maten_op_de_vorm_zelf_en_begrensd_randherstel() {
-    let fout = Profielvorm::IProfiel { h: 100.0, b: 100.0, tw: 10.0, tf: 60.0, r: 10.0 };
+    let fout = Profielvorm::IProfiel {
+        h: 100.0,
+        b: 100.0,
+        tw: 10.0,
+        tf: 60.0,
+        r: 10.0,
+    };
     assert!(fout.controleer_maten().is_err());
-    let goed = Profielvorm::IProfiel { h: 200.0, b: 100.0, tw: 5.6, tf: 8.5, r: 12.0 };
+    let goed = Profielvorm::IProfiel {
+        h: 200.0,
+        b: 100.0,
+        tw: 5.6,
+        tf: 8.5,
+        r: 12.0,
+    };
     assert!(goed.controleer_maten().is_ok());
 
     // De zelfsnijdende contour van de foute vorm door de mesher: vóór de

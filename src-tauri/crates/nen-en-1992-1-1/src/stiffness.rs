@@ -106,7 +106,10 @@ use ts_rs::TS;
 /// terugmeldt. Welke β is gebruikt mag niet impliciet blijven; het scheelt in
 /// de BGT rechtstreeks stijfheid (zie `beta_van_7_19_werkt_de_goede_kant_op`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum LoadDuration {
     /// "= 1,0 voor een enkele kortdurende belasting" — 7.4.3(3).
     #[default]
@@ -180,7 +183,10 @@ impl std::error::Error for StiffnessError {}
 /// teruggevallen op de insluiting. Dat is de vroegste zichtbare aanwijzing dat
 /// een segment tegen de top van zijn M-κ-diagram aanloopt.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum SolveMethod {
     /// Newton op (ε₀, κ), binnen de bewaakte insluiting.
     Newton,
@@ -339,16 +345,15 @@ pub fn m0_knm(
 ///
 /// Bij zoveel normaaltrek dat de doorsnede al zonder moment scheurt, is de
 /// uitkomst 0.
-pub fn m_cr_knm(
-    section: &RectConcreteSection,
-    f_ctm: f64,
-    n_ed_kn: f64,
-    moment_sign: f64,
-) -> f64 {
+pub fn m_cr_knm(section: &RectConcreteSection, f_ctm: f64, n_ed_kn: f64, moment_sign: f64) -> f64 {
     let a_c = section.area_mm2();
     // Positief moment = trek in de ONDERSTE vezel (mechanics-conventie), dus
     // W van de onderzijde; negatief moment scheurt de bovenzijde.
-    let w_c = if moment_sign < 0.0 { section.w_top_mm3() } else { section.w_bottom_mm3() };
+    let w_c = if moment_sign < 0.0 {
+        section.w_top_mm3()
+    } else {
+        section.w_bottom_mm3()
+    };
     if a_c <= 0.0 {
         return 0.0;
     }
@@ -391,11 +396,22 @@ fn eps0_at(
 ) -> Option<f64> {
     let n_of = |e: f64| internal_forces(section, layers, mat, e, kappa_per_mm, n_strips).n();
     // Referentiestijfheid voor het beginschatje en de tolerantie.
-    let e_c0 = mat.nonlinear.map(|c| c.e_c0()).unwrap_or(mat.concrete.f_cd * mat.concrete.n / mat.concrete.eps_c2);
+    let e_c0 = mat
+        .nonlinear
+        .map(|c| c.e_c0())
+        .unwrap_or(mat.concrete.f_cd * mat.concrete.n / mat.concrete.eps_c2);
     // Bandsgewijs opgeteld, zodat de rechthoek letterlijk e_c0·b·h houdt.
-    let ea = section.bands().iter().map(|b| e_c0 * b.b_mm * b.height_mm()).sum::<f64>()
+    let ea = section
+        .bands()
+        .iter()
+        .map(|b| e_c0 * b.b_mm * b.height_mm())
+        .sum::<f64>()
         + crate::factors::E_S * layers.iter().map(|l| l.area_mm2).sum::<f64>();
-    let n_ref = section.bands().iter().map(|b| mat.f_cd().max(1.0) * b.b_mm * b.height_mm()).sum::<f64>();
+    let n_ref = section
+        .bands()
+        .iter()
+        .map(|b| mat.f_cd().max(1.0) * b.b_mm * b.height_mm())
+        .sum::<f64>();
     let tol = 1e-10 * n_ref.max(n_target.abs());
 
     let mut e = seed.unwrap_or(if ea > 0.0 { n_target / ea } else { 0.0 });
@@ -486,7 +502,12 @@ fn solve_branch(
     let m_ref = mat.f_cd().max(1.0) * section.w_bottom_mm3().min(section.w_top_mm3());
     let tol_m = 1e-9 * m_ref.max(m_target.abs());
     if (m_target - m_0).abs() <= tol_m {
-        return Ok(Branch { eps_0: eps0_0, kappa_per_mm: 0.0, iterations: 0, method: SolveMethod::Newton });
+        return Ok(Branch {
+            eps_0: eps0_0,
+            kappa_per_mm: 0.0,
+            iterations: 0,
+            method: SolveMethod::Newton,
+        });
     }
     if m_target < m_0 {
         // De aanroeper hoort het frame zo te kiezen dat m_target ≥ M₀.
@@ -494,20 +515,33 @@ fn solve_branch(
     }
 
     // Bovengrens voor de kromming: ruim voorbij elke bereikbare bezwijkrek.
-    let eps_c_lim = mat.nonlinear.map(|c| c.eps_cu1).unwrap_or(mat.concrete.eps_cu2);
+    let eps_c_lim = mat
+        .nonlinear
+        .map(|c| c.eps_cu1)
+        .unwrap_or(mat.concrete.eps_cu2);
     let kappa_max = 3.0 * (eps_c_lim + mat.steel.eps_ud) / h;
 
     // M(κ) met continuatie van ε₀ (het vorige antwoord als beginschatje).
     let mut eps_seed = eps0_0;
     let moment = |kap: f64, seed: f64| -> Option<(f64, f64)> {
         let e = eps0_at(section, layers, mat, n_target, kap, n_strips, Some(seed))?;
-        Some((internal_forces(section, layers, mat, e, kap, n_strips).m(), e))
+        Some((
+            internal_forces(section, layers, mat, e, kap, n_strips).m(),
+            e,
+        ))
     };
 
     // Beginschatje uit de ongescheurde stijfheid: κ₀ = (M − M₀)/(E_c0·I_c).
-    let e_c0 = mat.nonlinear.map(|c| c.e_c0()).unwrap_or(mat.concrete.f_cd * mat.concrete.n / mat.concrete.eps_c2);
+    let e_c0 = mat
+        .nonlinear
+        .map(|c| c.e_c0())
+        .unwrap_or(mat.concrete.f_cd * mat.concrete.n / mat.concrete.eps_c2);
     let ei_0 = e_c0 * section.i_centroid_mm4();
-    let mut k = if ei_0 > 0.0 { ((m_target - m_0) / ei_0).min(kappa_max) } else { kappa_max * 0.01 };
+    let mut k = if ei_0 > 0.0 {
+        ((m_target - m_0) / ei_0).min(kappa_max)
+    } else {
+        kappa_max * 0.01
+    };
     // Vangt ook NaN en oneindig af: een onbruikbaar beginschatje wordt een
     // kleine, zeker positieve kromming.
     if !k.is_finite() || k <= 0.0 {
@@ -532,16 +566,30 @@ fn solve_branch(
         let Some((m_k, e_k)) = moment(k, eps_seed) else {
             // Geen evenwicht meer bij deze kromming: sluit van boven af.
             k_hi = k_hi.min(k);
-            k = 0.5 * (k_lo + if k_hi.is_finite() { k_hi } else { k_lo + kappa_max });
+            k = 0.5
+                * (k_lo
+                    + if k_hi.is_finite() {
+                        k_hi
+                    } else {
+                        k_lo + kappa_max
+                    });
             via_newton = false;
             continue;
         };
         eps_seed = e_k;
         let r = m_k - m_target;
         if r.abs() <= tol_m {
-            let method =
-                if via_newton { SolveMethod::Newton } else { SolveMethod::Bisection };
-            return Ok(Branch { eps_0: e_k, kappa_per_mm: k, iterations: iter, method });
+            let method = if via_newton {
+                SolveMethod::Newton
+            } else {
+                SolveMethod::Bisection
+            };
+            return Ok(Branch {
+                eps_0: e_k,
+                kappa_per_mm: k,
+                iterations: iter,
+                method,
+            });
         }
         if r < 0.0 {
             k_lo = k_lo.max(k);
@@ -710,7 +758,10 @@ pub fn kappa_from_nm(
         &MnKappaOptions { n_strips },
     );
 
-    let eps_cu1 = mat.nonlinear.map(|c| c.eps_cu1).unwrap_or(mat.concrete.eps_cu2);
+    let eps_cu1 = mat
+        .nonlinear
+        .map(|c| c.eps_cu1)
+        .unwrap_or(mat.concrete.eps_cu2);
     Ok(KappaSolution {
         kappa_per_m: kappa_per_mm * 1e3,
         eps_0: br.eps_0,
@@ -747,7 +798,12 @@ pub fn ei_secant(
     // E_c·I_c in kNm²: N/mm² · mm⁴ = N·mm² = 10⁻⁹ kN·m².
     let ei_uncracked = curve.e_c * i_c * 1e-9;
 
-    let m_cr = m_cr_knm(section, curve.f_ctm, n_ed_kn, if m_ed_knm < 0.0 { -1.0 } else { 1.0 });
+    let m_cr = m_cr_knm(
+        section,
+        curve.f_ctm,
+        n_ed_kn,
+        if m_ed_knm < 0.0 { -1.0 } else { 1.0 },
+    );
 
     // Kromming waarbij de uiterste vezel 10⁻⁶ rek krijgt: klein genoeg om de
     // raaklijn te benaderen, groot genoeg om ruim boven het oplosresidu uit
@@ -769,14 +825,8 @@ pub fn ei_secant(
         let ei = if kappa.abs() > kappa_eps * 1e-3 {
             (m_ed_knm - m0) / kappa
         } else {
-            match crate::mnkappa::solve_state(
-                section,
-                layers,
-                limiet_mat,
-                n_ed_kn,
-                kappa_eps,
-                mnk,
-            ) {
+            match crate::mnkappa::solve_state(section, layers, limiet_mat, n_ed_kn, kappa_eps, mnk)
+            {
                 Some(st) => (st.m_knm - m0) / kappa_eps,
                 None => f64::INFINITY,
             }
@@ -891,8 +941,14 @@ mod tests {
         ReinforcementCage {
             cover_mm: 30.0,
             stirrup_diameter_mm: 8.0,
-            top: RebarRow { count: 2, diameter_mm: 12.0 },
-            bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+            top: RebarRow {
+                count: 2,
+                diameter_mm: 12.0,
+            },
+            bottom: RebarRow {
+                count: 3,
+                diameter_mm: 16.0,
+            },
             ..ReinforcementCage::default()
         }
     }
@@ -903,8 +959,14 @@ mod tests {
         ReinforcementCage {
             cover_mm: 30.0,
             stirrup_diameter_mm: 8.0,
-            top: RebarRow { count: 3, diameter_mm: 16.0 },
-            bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+            top: RebarRow {
+                count: 3,
+                diameter_mm: 16.0,
+            },
+            bottom: RebarRow {
+                count: 3,
+                diameter_mm: 16.0,
+            },
             ..ReinforcementCage::default()
         }
     }
@@ -1079,7 +1141,10 @@ mod tests {
                 }
             }
         }
-        assert!(meerdere_wortels > 0, "de sweep raakte geen enkele meervoudige wortel");
+        assert!(
+            meerdere_wortels > 0,
+            "de sweep raakte geen enkele meervoudige wortel"
+        );
         println!("{meerdere_wortels} gevallen hadden meer dan één wortel");
     }
 
@@ -1137,7 +1202,11 @@ mod tests {
         for n in [0.0_f64, -800.0] {
             let m0 = m0_knm(&s, &lagen, &m, n, 1.0, &o).unwrap();
             let k = kappa_from_nm(&s, &lagen, &m, n, m0, &o).unwrap();
-            assert!(k.kappa_per_m.abs() < 1e-12, "N = {n}: κ = {}", k.kappa_per_m);
+            assert!(
+                k.kappa_per_m.abs() < 1e-12,
+                "N = {n}: κ = {}",
+                k.kappa_per_m
+            );
         }
     }
 
@@ -1165,11 +1234,19 @@ mod tests {
         assert!(top.1 > 0.0, "geen top gevonden");
         // Een moment net onder de top; er is dan een wortel vóór en een ná de top.
         let doel = 0.995 * top.1;
-        let na_de_top =
-            crate::mnkappa::solve_state(&s, &lagen, &m, -400.0, top.0 + 0.02, &o).map(|st| st.m_knm);
-        assert!(na_de_top.map(|v| v < doel).unwrap_or(true), "diagram daalt niet: {na_de_top:?}");
+        let na_de_top = crate::mnkappa::solve_state(&s, &lagen, &m, -400.0, top.0 + 0.02, &o)
+            .map(|st| st.m_knm);
+        assert!(
+            na_de_top.map(|v| v < doel).unwrap_or(true),
+            "diagram daalt niet: {na_de_top:?}"
+        );
         let k = kappa_from_nm(&s, &lagen, &m, -400.0, doel, &o).unwrap();
-        assert!(k.kappa_per_m < top.0, "κ = {} ≥ top {}", k.kappa_per_m, top.0);
+        assert!(
+            k.kappa_per_m < top.0,
+            "κ = {} ≥ top {}",
+            k.kappa_per_m,
+            top.0
+        );
         assert_relative_eq!(k.state.m_knm, doel, max_relative = 1e-6);
     }
 
@@ -1209,7 +1286,11 @@ mod tests {
         // Zoveel trek dat de doorsnede al zonder moment scheurt: 0.
         assert_relative_eq!(m_cr_knm(&s, 2.9, 600.0, 1.0), 0.0);
         // Het teken volgt het frame.
-        assert_relative_eq!(m_cr_knm(&s, 2.9, -750.0, -1.0), -98.75, max_relative = 1e-12);
+        assert_relative_eq!(
+            m_cr_knm(&s, 2.9, -750.0, -1.0),
+            -98.75,
+            max_relative = 1e-12
+        );
     }
 
     // ── EI ────────────────────────────────────────────────────────────────
@@ -1235,7 +1316,11 @@ mod tests {
             33_000.0 * i_c * 1e-9 * 1e-3
         );
         assert!(r.ei_knm2 < 0.5 * r.ei_uncracked_knm2, "EI = {}", r.ei_knm2);
-        assert_relative_eq!(r.ei_uncracked_knm2, 27_500.0 * i_c * 1e-9, max_relative = 1e-12);
+        assert_relative_eq!(
+            r.ei_uncracked_knm2,
+            27_500.0 * i_c * 1e-9,
+            max_relative = 1e-12
+        );
         assert_eq!(r.basis, NonlinearBasis::DesignValues);
         assert_relative_eq!(r.phi_ef, 0.0);
         assert!(r.tension_stiffening.is_none()); // 5.8.6(5)
@@ -1302,7 +1387,10 @@ mod tests {
         ] {
             let ei_pr = ei(&pr, n, mm);
             let ei_nl = ei(&nl, n, mm);
-            println!("{n:>8.0} {mm:>9.1} {ei_pr:>17.1} {ei_nl:>18.1} {:>12.3}", ei_nl / ei_pr);
+            println!(
+                "{n:>8.0} {mm:>9.1} {ei_pr:>17.1} {ei_nl:>18.1} {:>12.3}",
+                ei_nl / ei_pr
+            );
             assert!(ei_nl > ei_pr, "N = {n}, M = {mm}: (3.14) is niet stijver");
             grootste = grootste.max(ei_nl / ei_pr);
         }
@@ -1369,7 +1457,12 @@ mod tests {
         // het verschil verwaarloosbaar — daar zou zo'n eis niets betekenen.
         let plus = ei_secant(&s, &lagen, &m, 0.0, 30.0, &opts()).unwrap();
         let min = ei_secant(&s, &lagen, &m, 0.0, -30.0, &opts()).unwrap();
-        assert!(min.ei_knm2 < 0.85 * plus.ei_knm2, "{} vs {}", min.ei_knm2, plus.ei_knm2);
+        assert!(
+            min.ei_knm2 < 0.85 * plus.ei_knm2,
+            "{} vs {}",
+            min.ei_knm2,
+            plus.ei_knm2
+        );
     }
 
     /// Een kolom met normaalkracht en zonder moment valt precies op M = M₀:
@@ -1387,7 +1480,10 @@ mod tests {
             // Symmetrisch: M₀ = 0, dus M = 0 is het ontaarde punt.
             let sym = korf_sym().layers(s.h_mm);
             let r = ei_secant(&s, &sym, &m, -800.0, 0.0, &opts()).unwrap();
-            println!("{basis:?} symmetrisch, N = −800, M = 0: EI = {:.1} MNm²", r.ei_mnm2());
+            println!(
+                "{basis:?} symmetrisch, N = −800, M = 0: EI = {:.1} MNm²",
+                r.ei_mnm2()
+            );
             assert_relative_eq!(r.kappa_per_m, 0.0);
             assert!(r.ei_knm2.is_finite() && r.ei_knm2 > 0.0);
             assert!(r.ei_knm2 < 1.1 * r.ei_uncracked_knm2);
@@ -1428,7 +1524,12 @@ mod tests {
             zonder * 1e-3
         );
         assert!(r.m0_knm < -1.0);
-        assert!(r.ei_knm2 > zonder * 1.15, "verschil te klein: {} vs {}", r.ei_knm2, zonder);
+        assert!(
+            r.ei_knm2 > zonder * 1.15,
+            "verschil te klein: {} vs {}",
+            r.ei_knm2,
+            zonder
+        );
     }
 
     // ── BGT: betontrek en tension stiffening ──────────────────────────────
@@ -1447,7 +1548,11 @@ mod tests {
         assert_relative_eq!(ts.zeta, 0.0);
         // Ongescheurd ligt de stijfheid dicht bij E_cm·I_c (103,1 MNm²), iets
         // hoger door de wapening en de begintangens 1,05·E_cm.
-        println!("BGT ongescheurd: EI = {:.1} MNm² (E_cm·I_c = {:.1})", r.ei_mnm2(), r.ei_uncracked_knm2 * 1e-3);
+        println!(
+            "BGT ongescheurd: EI = {:.1} MNm² (E_cm·I_c = {:.1})",
+            r.ei_mnm2(),
+            r.ei_uncracked_knm2 * 1e-3
+        );
         assert!(r.ei_mnm2() > 103.1 && r.ei_mnm2() < 125.0);
     }
 
@@ -1474,7 +1579,11 @@ mod tests {
         assert!(ts.sigma_sr > 0.0 && ts.sigma_s > ts.sigma_sr);
         println!(
             "BGT M = 60 kNm: ζ = {:.3}, κ_I = {:.3e}, κ_II = {:.3e}, κ = {:.3e}, EI = {:.1} MNm²",
-            ts.zeta, ts.kappa_uncracked_per_m, ts.kappa_cracked_per_m, r.kappa_per_m, r.ei_mnm2()
+            ts.zeta,
+            ts.kappa_uncracked_per_m,
+            ts.kappa_cracked_per_m,
+            r.kappa_per_m,
+            r.ei_mnm2()
         );
     }
 
@@ -1495,7 +1604,10 @@ mod tests {
             &m,
             0.0,
             60.0,
-            &StiffnessOptions { load_duration: LoadDuration::ShortTerm, ..opts() },
+            &StiffnessOptions {
+                load_duration: LoadDuration::ShortTerm,
+                ..opts()
+            },
         )
         .unwrap();
         let lang = ei_secant(
@@ -1504,7 +1616,10 @@ mod tests {
             &m,
             0.0,
             60.0,
-            &StiffnessOptions { load_duration: LoadDuration::Sustained, ..opts() },
+            &StiffnessOptions {
+                load_duration: LoadDuration::Sustained,
+                ..opts()
+            },
         )
         .unwrap();
         assert_relative_eq!(kort.tension_stiffening.unwrap().beta, 1.0);
@@ -1524,14 +1639,39 @@ mod tests {
     fn ugt_en_bgt_verschillen_zoals_de_tabel_zegt() {
         let s = doorsnede();
         let lagen = korf_asym().layers(s.h_mm);
-        let ugt = ei_secant(&s, &lagen, &mat(NonlinearBasis::DesignValues, 0.0), 0.0, 60.0, &opts()).unwrap();
-        let bgt = ei_secant(&s, &lagen, &mat(NonlinearBasis::MeanValues, 0.0), 0.0, 60.0, &opts()).unwrap();
+        let ugt = ei_secant(
+            &s,
+            &lagen,
+            &mat(NonlinearBasis::DesignValues, 0.0),
+            0.0,
+            60.0,
+            &opts(),
+        )
+        .unwrap();
+        let bgt = ei_secant(
+            &s,
+            &lagen,
+            &mat(NonlinearBasis::MeanValues, 0.0),
+            0.0,
+            60.0,
+            &opts(),
+        )
+        .unwrap();
         assert_eq!(ugt.basis, NonlinearBasis::DesignValues);
         assert_eq!(bgt.basis, NonlinearBasis::MeanValues);
         assert!(ugt.tension_stiffening.is_none());
         assert!(bgt.tension_stiffening.is_some());
-        assert!(bgt.ei_knm2 > ugt.ei_knm2, "BGT {} vs UGT {}", bgt.ei_knm2, ugt.ei_knm2);
-        println!("M = 60 kNm: EI_UGT = {:.1} MNm², EI_BGT = {:.1} MNm²", ugt.ei_mnm2(), bgt.ei_mnm2());
+        assert!(
+            bgt.ei_knm2 > ugt.ei_knm2,
+            "BGT {} vs UGT {}",
+            bgt.ei_knm2,
+            ugt.ei_knm2
+        );
+        println!(
+            "M = 60 kNm: EI_UGT = {:.1} MNm², EI_BGT = {:.1} MNm²",
+            ugt.ei_mnm2(),
+            bgt.ei_mnm2()
+        );
     }
 
     /// Kruip: φ_ef staat in de uitvoer, ook als hij nul is, en een grotere
@@ -1540,11 +1680,32 @@ mod tests {
     fn kruip_staat_in_de_uitvoer_en_verslapt() {
         let s = doorsnede();
         let lagen = korf_sym().layers(s.h_mm);
-        let zonder = ei_secant(&s, &lagen, &mat(NonlinearBasis::DesignValues, 0.0), 0.0, 40.0, &opts()).unwrap();
-        let met = ei_secant(&s, &lagen, &mat(NonlinearBasis::DesignValues, 2.0), 0.0, 40.0, &opts()).unwrap();
+        let zonder = ei_secant(
+            &s,
+            &lagen,
+            &mat(NonlinearBasis::DesignValues, 0.0),
+            0.0,
+            40.0,
+            &opts(),
+        )
+        .unwrap();
+        let met = ei_secant(
+            &s,
+            &lagen,
+            &mat(NonlinearBasis::DesignValues, 2.0),
+            0.0,
+            40.0,
+            &opts(),
+        )
+        .unwrap();
         assert_relative_eq!(zonder.phi_ef, 0.0);
         assert_relative_eq!(met.phi_ef, 2.0);
-        assert!(met.ei_knm2 < zonder.ei_knm2, "{} vs {}", met.ei_knm2, zonder.ei_knm2);
+        assert!(
+            met.ei_knm2 < zonder.ei_knm2,
+            "{} vs {}",
+            met.ei_knm2,
+            zonder.ei_knm2
+        );
     }
 
     /// Zonder (3.14)-kromme weigert `ei_secant`: het parabool-rechthoek-

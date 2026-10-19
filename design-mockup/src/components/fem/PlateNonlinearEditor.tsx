@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Plate, PlateModulusPoint, PlateNonlinearLaw } from "./femTypes";
 
 type Kind = "elastic" | "steelBilinear" | "concreteCracking" | "modulusCurve";
@@ -8,6 +9,7 @@ export default function PlateNonlinearEditor({ plate, baseEMpa, onApply }: {
   baseEMpa: number | undefined;
   onApply: (patch: Pick<Plate, "nonlinearLaw" | "modulusCurve">) => void;
 }) {
+  const { t } = useTranslation("check");
   const initialKind = (): Kind => plate.modulusCurve?.length ? "modulusCurve"
     : plate.nonlinearLaw?.kind ?? "elastic";
   const [kind, setKind] = useState<Kind>(initialKind);
@@ -34,7 +36,7 @@ export default function PlateNonlinearEditor({ plate, baseEMpa, onApply }: {
     }
     if (kind === "modulusCurve") {
       if (!Number.isFinite(baseEMpa) || !(baseEMpa! > 0)) {
-        setError("De basis-E van de plaat is niet beschikbaar.");
+        setError(t("props.plate.nonlinear.baseUnavailable"));
         return;
       }
       const lines = curve.trim().split(/\r?\n/).map(line => line.trim()).filter(Boolean);
@@ -47,7 +49,7 @@ export default function PlateNonlinearEditor({ plate, baseEMpa, onApply }: {
         const eMpa = Number(columns[1]);
         if (columns.length !== 2 || !Number.isFinite(strain) || strain <= previousStrain
           || !Number.isFinite(eMpa) || eMpa <= 0 || eMpa > previousE) {
-          setError("Geef per regel rek en E in MPa; rek stijgt en E blijft gelijk of daalt.");
+          setError(t("props.plate.nonlinear.invalidCurveRow"));
           return;
         }
         points.push({ strain, eMpa });
@@ -55,7 +57,7 @@ export default function PlateNonlinearEditor({ plate, baseEMpa, onApply }: {
         previousE = eMpa;
       }
       if (points.length === 0) {
-        setError("Geef ten minste één punt na rek 0 op.");
+        setError(t("props.plate.nonlinear.needCurvePoint"));
         return;
       }
       onApply({ nonlinearLaw: undefined, modulusCurve: points });
@@ -66,7 +68,7 @@ export default function PlateNonlinearEditor({ plate, baseEMpa, onApply }: {
     const stiffnessRatio = Number(ratio);
     if (!strength.trim() || !ratio.trim() || !Number.isFinite(strengthMpa) || strengthMpa <= 0
       || !Number.isFinite(stiffnessRatio) || stiffnessRatio < 0 || stiffnessRatio > 1) {
-      setError("Geef een sterkte > 0 MPa en een stijfheidsverhouding tussen 0 en 1 op.");
+      setError(t("props.plate.nonlinear.invalidStrengthRatio"));
       return;
     }
     const law: PlateNonlinearLaw = kind === "steelBilinear"
@@ -77,29 +79,29 @@ export default function PlateNonlinearEditor({ plate, baseEMpa, onApply }: {
   };
 
   return <>
-    <div className="fem-prop-row"><span className="fem-prop-label">FNL-model</span>
+    <div className="fem-prop-row"><span className="fem-prop-label">{t("props.plate.nonlinear.model")}</span>
       <span className="fem-prop-value"><select className="fem-prop-input" value={kind}
         onChange={event => { setKind(event.target.value as Kind); setError(null); }}>
-        <option value="elastic">Elastisch</option>
-        <option value="steelBilinear">Staal: bilineair</option>
-        <option value="concreteCracking">Beton: scheurvorming</option>
-        <option value="modulusCurve">Afnemende E-curve</option>
+        <option value="elastic">{t("props.plate.nonlinear.elastic")}</option>
+        <option value="steelBilinear">{t("props.plate.nonlinear.steelBilinear")}</option>
+        <option value="concreteCracking">{t("props.plate.nonlinear.concreteCracking")}</option>
+        <option value="modulusCurve">{t("props.plate.nonlinear.modulusCurve")}</option>
       </select></span></div>
     {(kind === "steelBilinear" || kind === "concreteCracking") && <>
-      <div className="fem-prop-row"><span className="fem-prop-label">{kind === "steelBilinear" ? "Vloeigrens" : "Treksterkte"}</span>
+      <div className="fem-prop-row"><span className="fem-prop-label">{kind === "steelBilinear" ? t("props.plate.nonlinear.yieldStrength") : t("props.plate.nonlinear.tensileStrength")}</span>
         <span className="fem-prop-value"><input className="fem-prop-input" type="number" min="0" step="any"
           value={strength} onChange={event => setStrength(event.target.value)} /> MPa</span></div>
-      <div className="fem-prop-row"><span className="fem-prop-label">{kind === "steelBilinear" ? "Verharding" : "Reststijfheid"}</span>
+      <div className="fem-prop-row"><span className="fem-prop-label">{kind === "steelBilinear" ? t("props.plate.nonlinear.hardening") : t("props.plate.nonlinear.residualStiffness")}</span>
         <span className="fem-prop-value"><input className="fem-prop-input" type="number" min="0" max="1" step="any"
           value={ratio} onChange={event => setRatio(event.target.value)} /> E/E₀</span></div>
     </>}
     {kind === "modulusCurve" && <>
-      <p className="fem-prop-hint">E₀ = {baseEMpa?.toFixed(1) ?? "—"} MPa bij rek 0. Per volgende regel: absolute hoofdrek en E in MPa.</p>
+      <p className="fem-prop-hint">{t("props.plate.nonlinear.curveHint", { e: baseEMpa?.toFixed(1) ?? "—" })}</p>
       <textarea className="fem-prop-input fem-prop-input-mono" rows={4} value={curve}
-        onChange={event => setCurve(event.target.value)} placeholder={"0.0005 180000\n0.002 120000"} />
+        onChange={event => setCurve(event.target.value)} placeholder={t("props.plate.nonlinear.curvePlaceholder")} />
     </>}
-    <div className="fem-prop-kiezer-row"><button type="button" className="fem-prop-kiezer-btn" onClick={apply}>FNL-invoer toepassen</button></div>
+    <div className="fem-prop-kiezer-row"><button type="button" className="fem-prop-kiezer-btn" onClick={apply}>{t("props.plate.nonlinear.apply")}</button></div>
     {error && <p className="fem-prop-hint" role="alert">{error}</p>}
-    <p className="fem-prop-hint">Experimentele Rust CST-/Quad4-kern. De E-curve volgt de grootste bereikte absolute hoofdrek.</p>
+    <p className="fem-prop-hint">{t("props.plate.nonlinear.experimentalHint")}</p>
   </>;
 }

@@ -73,8 +73,14 @@ fn korf() -> ReinforcementCage {
         stirrup_diameter_mm: 8.0,
         stirrup_spacing_mm: Some(200.0),
         stirrup_legs: Some(2),
-        top: RebarRow { count: 2, diameter_mm: 16.0 },
-        bottom: RebarRow { count: 2, diameter_mm: 16.0 },
+        top: RebarRow {
+            count: 2,
+            diameter_mm: 16.0,
+        },
+        bottom: RebarRow {
+            count: 2,
+            diameter_mm: 16.0,
+        },
         ..ReinforcementCage::default()
     }
 }
@@ -83,7 +89,11 @@ fn punt(combi: u32, x_mm: f64, n: f64, m: f64) -> ForcePoint {
     ForcePoint {
         combination_id: combi,
         position_mm: x_mm,
-        forces: InternalForces { n_ed: n, my_ed: m, ..Default::default() },
+        forces: InternalForces {
+            n_ed: n,
+            my_ed: m,
+            ..Default::default()
+        },
     }
 }
 
@@ -203,7 +213,10 @@ fn geschoorde_kolom_handberekend() {
 
     let poort = toets(&a.checks, SLANKHEIDSGRENS);
     assert_eq!(poort.status, CheckStatus::Ok);
-    let uc = poort.uc.as_ref().expect("de poort hoort een unity check te hebben");
+    let uc = poort
+        .uc
+        .as_ref()
+        .expect("de poort hoort een unity check te hebben");
     assert_relative_eq!(uc.ed, 34.6410162, max_relative = 1e-6);
     assert_relative_eq!(uc.rd, 62.86201, max_relative = 1e-6);
     assert_relative_eq!(uc.uc, 34.6410162 / 62.86201, max_relative = 1e-6);
@@ -211,7 +224,10 @@ fn geschoorde_kolom_handberekend() {
     // C = 2,2 is de enige manier waarop λ_lim boven 40 uitkomt; de afleiding
     // hoort de twee eindmomenten dus met naam en toenaam te noemen.
     let tekst = poort.notes.join(" ");
-    assert!(tekst.contains("M₀₁"), "de afleiding noemt de eindmomenten niet: {tekst}");
+    assert!(
+        tekst.contains("M₀₁"),
+        "de afleiding noemt de eindmomenten niet: {tekst}"
+    );
     assert!(
         tekst.contains("geen dwarsbelasting"),
         "de afleiding hoort te melden dat er geen veldmoment groter dan de einden is"
@@ -265,7 +281,10 @@ fn geschoord_en_ongeschoord_geven_een_andere_uitkomst() {
     ))
     .unwrap();
     let o = column_check(verzoek(
-        kolomgegevens(Schoring::Ongeschoord, Knikgeval::TweezijdigIngeklemdOngeschoord),
+        kolomgegevens(
+            Schoring::Ongeschoord,
+            Knikgeval::TweezijdigIngeklemdOngeschoord,
+        ),
         ugt_geschoord(),
     ))
     .unwrap();
@@ -417,7 +436,10 @@ fn zonder_kruipcoefficient_meldt_de_toets_dat_hij_niet_kan() {
     let kruip = toets(&a.checks, KRUIP);
     assert_eq!(kruip.status, CheckStatus::NotApplicable);
     let tekst = kruip.notes.join(" ");
-    assert!(tekst.contains("3.1.4"), "de reden hoort naar §3.1.4 te wijzen: {tekst}");
+    assert!(
+        tekst.contains("3.1.4"),
+        "de reden hoort naar §3.1.4 te wijzen: {tekst}"
+    );
     assert!(
         tekst.contains("geen veilige kant"),
         "A = 0,7 is de waarde bij φ_ef ≈ 2,14 en dat hoort er te staan"
@@ -510,11 +532,17 @@ fn na_tweede_orde_komen_r_m_en_phi_ef_uit_de_eerste_orde_handberekend() {
     // N_Ed blijft uit de gekozen berekening: n = 600/(90·20) = 1/3.
     assert_relative_eq!(var(poort, "n"), 1.0 / 3.0, max_relative = 1e-12);
     let tekst = poort.notes.join(" ");
-    assert!(tekst.contains("EERSTE-ORDE-MOMENTEN"), "het rapport hoort de herkomst te noemen: {tekst}");
+    assert!(
+        tekst.contains("EERSTE-ORDE-MOMENTEN"),
+        "het rapport hoort de herkomst te noemen: {tekst}"
+    );
     assert!(tekst.contains("M₀Ed = 40,0 kNm"), "{tekst}");
     assert!(tekst.contains("M_Ed = 46,0 kNm"), "{tekst}");
     assert!(
-        toets(&a.checks, KRUIP).notes.join(" ").contains("EERSTE-ORDE-oplossing"),
+        toets(&a.checks, KRUIP)
+            .notes
+            .join(" ")
+            .contains("EERSTE-ORDE-oplossing"),
         "de kruiptoets hoort te zeggen dat (5.19) eerste-orde-momenten kreeg"
     );
 
@@ -524,9 +552,16 @@ fn na_tweede_orde_komen_r_m_en_phi_ef_uit_de_eerste_orde_handberekend() {
     oud.first_order_envelope = None;
     let b = column_check(oud).unwrap();
     assert_relative_eq!(b.phi_ef.unwrap(), 2.0 * 20.0 / 46.0, max_relative = 1e-12);
-    assert_relative_eq!(var(toets(&b.checks, SLANKHEIDSGRENS), "C"), 1.7 + 14.0 / 46.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        var(toets(&b.checks, SLANKHEIDSGRENS), "C"),
+        1.7 + 14.0 / 46.0,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(b.lambda_lim.unwrap(), 69.69549, max_relative = 1e-6);
-    assert!(!toets(&b.checks, SLANKHEIDSGRENS).notes.join(" ").contains("EERSTE-ORDE-MOMENTEN"));
+    assert!(!toets(&b.checks, SLANKHEIDSGRENS)
+        .notes
+        .join(" ")
+        .contains("EERSTE-ORDE-MOMENTEN"));
 
     // De volledige staaftoetsing loopt dezelfde rekengang.
     let mut s = staaf(Some(nieuw.column), ugt_tweede_orde());
@@ -562,7 +597,10 @@ fn eerste_orde_omhullende_zonder_de_maatgevende_combinatie_weigert() {
         kolomgegevens(Schoring::Geschoord, Knikgeval::ScharnierendScharnierend),
         ugt_tweede_orde(),
     );
-    v.first_order_envelope = Some(vec![punt(2, 0.0, -600.0, 40.0), punt(2, 3000.0, -600.0, -20.0)]);
+    v.first_order_envelope = Some(vec![
+        punt(2, 0.0, -600.0, 40.0),
+        punt(2, 3000.0, -600.0, -20.0),
+    ]);
     let a = column_check(v).unwrap();
     assert!(a.lambda_lim.is_none());
     let poort = toets(&a.checks, SLANKHEIDSGRENS);
@@ -617,12 +655,18 @@ fn de_negen_kolomdetailleringseisen_staan_in_het_resultaat() {
     // z en §5.8.9) plus negen van §9.5.
     assert_eq!(a.checks.len(), 14);
 
-    assert_eq!(toets(&a.checks, "9.5.2_as_max").status, CheckStatus::NotApplicable);
+    assert_eq!(
+        toets(&a.checks, "9.5.2_as_max").status,
+        CheckStatus::NotApplicable
+    );
     assert!(toets(&a.checks, "9.5.2_as_max")
         .notes
         .join(" ")
         .contains("overlappingssituatie"));
-    assert_eq!(toets(&a.checks, "9.5.3_s_cl_tmax").status, CheckStatus::NotApplicable);
+    assert_eq!(
+        toets(&a.checks, "9.5.3_s_cl_tmax").status,
+        CheckStatus::NotApplicable
+    );
     assert!(toets(&a.checks, "9.5.3_s_cl_tmax")
         .notes
         .join(" ")
@@ -739,7 +783,10 @@ fn een_vervulde_kolomdetailleringseis_wordt_niet_maatgevend() {
 
     let dwars = toets_van_staaf(&r, "9.5.3_min_diameter_dwars");
     assert_eq!(dwars.status, CheckStatus::Ok);
-    assert!(dwars.uc.is_some(), "de unity check blijft gewoon in het rapport staan");
+    assert!(
+        dwars.uc.is_some(),
+        "de unity check blijft gewoon in het rapport staan"
+    );
     assert_ne!(
         r.governing_check_id, "9.5.3_min_diameter_dwars",
         "een vervulde detailleringseis begrenst het ontwerp niet"
@@ -758,12 +805,18 @@ fn een_vervulde_kolomdetailleringseis_wordt_niet_maatgevend() {
 #[test]
 fn de_ontbrekende_9_5_eisen_staan_met_reden_in_het_rapport() {
     let r = check_concrete_beam(staaf(
-        Some(kolomgegevens(Schoring::Geschoord, Knikgeval::ScharnierendScharnierend)),
+        Some(kolomgegevens(
+            Schoring::Geschoord,
+            Knikgeval::ScharnierendScharnierend,
+        )),
         ugt_geschoord(),
     ));
     let tekst = toets_van_staaf(&r, SLANKHEIDSGRENS).notes.join(" ");
     for artikel in ["§9.5.3(2)", "§9.5.3(4)ii", "§9.5.3(5)"] {
-        assert!(tekst.contains(artikel), "{artikel} hoort genoemd te worden: {tekst}");
+        assert!(
+            tekst.contains(artikel),
+            "{artikel} hoort genoemd te worden: {tekst}"
+        );
     }
     for artikel in ["§9.5.2(4)", "§9.5.3(6)"] {
         assert!(
@@ -816,13 +869,25 @@ fn ugt_z(l_mm: f64, n_druk: f64, my: f64, mz: f64) -> Vec<ForcePoint> {
         .map(|&x| ForcePoint {
             combination_id: 1,
             position_mm: x,
-            forces: InternalForces { n_ed: -n_druk, my_ed: my, mz_ed: mz, ..Default::default() },
+            forces: InternalForces {
+                n_ed: -n_druk,
+                my_ed: my,
+                mz_ed: mz,
+                ..Default::default()
+            },
         })
         .collect()
 }
 
-fn verzoek_z(l_m: f64, kolom: ConcreteColumnInput, envelop: Vec<ForcePoint>) -> ConcreteColumnCheckRequest {
-    ConcreteColumnCheckRequest { length_m: l_m, ..verzoek(kolom, envelop) }
+fn verzoek_z(
+    l_m: f64,
+    kolom: ConcreteColumnInput,
+    envelop: Vec<ForcePoint>,
+) -> ConcreteColumnCheckRequest {
+    ConcreteColumnCheckRequest {
+        length_m: l_m,
+        ..verzoek(kolom, envelop)
+    }
 }
 
 fn uc_van(c: &ResistanceCalc) -> f64 {
@@ -865,12 +930,22 @@ fn geschoord_met_kruip(phi: f64) -> ConcreteColumnInput {
 fn zonder_normaaldruk_geen_tweede_as() {
     let a = column_check(verzoek(
         kolomgegevens(Schoring::Geschoord, Knikgeval::ScharnierendScharnierend),
-        vec![punt(1, 0.0, 0.0, 30.0), punt(1, 1500.0, 0.0, 30.0), punt(1, 3000.0, 0.0, 30.0)],
+        vec![
+            punt(1, 0.0, 0.0, 30.0),
+            punt(1, 1500.0, 0.0, 30.0),
+            punt(1, 3000.0, 0.0, 30.0),
+        ],
     ))
     .unwrap();
-    assert_eq!(toets(&a.checks, SLANKHEIDSGRENS).status, CheckStatus::NotApplicable);
+    assert_eq!(
+        toets(&a.checks, SLANKHEIDSGRENS).status,
+        CheckStatus::NotApplicable
+    );
     for id in [SLANKHEIDSGRENS_Z_ID, MOMENT_Z_ID, DUBBELE_BUIGING_ID] {
-        assert!(!a.checks.iter().any(|c| c.id == id), "{id} hoort er zonder druk niet te zijn");
+        assert!(
+            !a.checks.iter().any(|c| c.id == id),
+            "{id} hoort er zonder druk niet te zijn"
+        );
     }
     assert!(a.lambda_z.is_none() && a.m_edz_knm.is_none() && a.interactie_5_39.is_none());
 
@@ -907,7 +982,10 @@ fn een_slanke_kolom_heeft_een_moment_om_z_door_imperfectie_en_tweede_orde() {
     ))
     .unwrap();
     let db = toets(&klein_my.checks, DUBBELE_BUIGING_ID);
-    assert!(db.uc.is_some(), "bij M_y = 20 kNm is e_y/e_z ≈ 0,45 > 0,2: (5.39) is vereist");
+    assert!(
+        db.uc.is_some(),
+        "bij M_y = 20 kNm is e_y/e_z ≈ 0,45 > 0,2: (5.39) is vereist"
+    );
 
     let a = column_check(verzoek_z(
         12.0,
@@ -920,21 +998,37 @@ fn een_slanke_kolom_heeft_een_moment_om_z_door_imperfectie_en_tweede_orde() {
     let e_2 = a.e_2_z_mm.expect("e₂ om z is gerekend");
     assert!(e_2 > 0.0, "e₂ = {e_2}");
     let m_edz = a.m_edz_knm.unwrap();
-    assert!(m_edz > 8.0, "M_Edz = {m_edz} hoort boven N_Ed·e₀ = 8,0 kNm te liggen");
-    assert_relative_eq!(m_edz, 400.0 * (12_000.0 / 900.0 + e_2) * 1e-3, max_relative = 1e-12);
+    assert!(
+        m_edz > 8.0,
+        "M_Edz = {m_edz} hoort boven N_Ed·e₀ = 8,0 kNm te liggen"
+    );
+    assert_relative_eq!(
+        m_edz,
+        400.0 * (12_000.0 / 900.0 + e_2) * 1e-3,
+        max_relative = 1e-12
+    );
 
     let mz = toets(&a.checks, MOMENT_Z_ID);
     assert_eq!(mz.status, CheckStatus::Ok);
     assert_relative_eq!(var(mz, "e_i"), 12_000.0 / 900.0, max_relative = 1e-12);
-    assert!(mz.deelstappen.iter().any(|d| d.id == "e_2" && d.value == Some(e_2)));
-    assert!(mz.notes.iter().any(|n| n.contains("betekent dus NIET M_Edz = 0")));
+    assert!(mz
+        .deelstappen
+        .iter()
+        .any(|d| d.id == "e_2" && d.value == Some(e_2)));
+    assert!(mz
+        .notes
+        .iter()
+        .any(|n| n.contains("betekent dus NIET M_Edz = 0")));
 
     // Met alleen M_y en een kleine M_Edz is (5.38b) vervuld: apart toetsen
     // mag, en de interactie is geen unity check.
     let db = toets(&a.checks, DUBBELE_BUIGING_ID);
     assert_eq!(db.status, CheckStatus::Ok);
     assert!(db.uc.is_none());
-    assert!(db.notes.iter().any(|n| n.contains("Geen verdere controle nodig")));
+    assert!(db
+        .notes
+        .iter()
+        .any(|n| n.contains("Geen verdere controle nodig")));
 }
 
 /// (5.38a) NET WEL EN NET NIET. l₀,y = l = 3 m (figuur 5.7 a); l₀,z rechtstreeks
@@ -950,20 +1044,34 @@ fn voorwaarde_5_38a_net_wel_en_net_niet() {
     let mut k = geschoord_met_kruip(PHI_Z);
     k.buckling_length_z = Some(Kniklengtekeuze::Opgegeven { l0_m: 6.0 });
     let wel = column_check(verzoek_z(3.0, k, ugt_z(3000.0, 600.0, 60.0, 0.0))).unwrap();
-    assert_relative_eq!(wel.lambda_z.unwrap() / wel.lambda.unwrap(), 2.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        wel.lambda_z.unwrap() / wel.lambda.unwrap(),
+        2.0,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(wel.e_i_z_mm.unwrap(), 10.0, max_relative = 1e-12);
     let db = toets(&wel.checks, DUBBELE_BUIGING_ID);
     assert_eq!(db.status, CheckStatus::Ok);
-    assert!(db.uc.is_none(), "op de grens is (5.38a) vervuld en mag het apart");
+    assert!(
+        db.uc.is_none(),
+        "op de grens is (5.38a) vervuld en mag het apart"
+    );
     assert_relative_eq!(var(db, "λ_z") / var(db, "λ_y"), 2.0, max_relative = 1e-12);
     assert!(wel.interactie_5_39.is_none());
 
     k.buckling_length_z = Some(Kniklengtekeuze::Opgegeven { l0_m: 6.003 });
     let niet = column_check(verzoek_z(3.0, k, ugt_z(3000.0, 600.0, 60.0, 0.0))).unwrap();
-    assert_relative_eq!(niet.lambda_z.unwrap() / niet.lambda.unwrap(), 2.001, max_relative = 1e-12);
+    assert_relative_eq!(
+        niet.lambda_z.unwrap() / niet.lambda.unwrap(),
+        2.001,
+        max_relative = 1e-12
+    );
     let db = toets(&niet.checks, DUBBELE_BUIGING_ID);
     assert!(db.uc.is_some(), "net boven de grens is (5.39) vereist");
-    assert!(db.notes.iter().any(|n| n.contains("(5.38a)") && n.contains("factor 2")));
+    assert!(db
+        .notes
+        .iter()
+        .any(|n| n.contains("(5.38a)") && n.contains("factor 2")));
     assert_eq!(niet.interactie_5_39.map(|s| s > 0.0), Some(true));
 }
 
@@ -1008,8 +1116,10 @@ fn interactie_5_39_maatgevend_met_a_1_0() {
     assert_relative_eq!(som, 60.75 / m_rdz, max_relative = 1e-12);
     assert!(som > 1.0);
     assert_eq!(db.status, CheckStatus::NotOk);
-    assert!(db.deelstappen.iter().any(|d| d.id == "exponent_a"
-        && d.notes.iter().any(|n| n.contains("N_Ed/N_Rd ≤ 0,1"))));
+    assert!(db
+        .deelstappen
+        .iter()
+        .any(|d| d.id == "exponent_a" && d.notes.iter().any(|n| n.contains("N_Ed/N_Rd ≤ 0,1"))));
 
     // In de volledige staaftoetsing is dit de MAATGEVENDE toets: de
     // afzonderlijke richtingen halen het (30/58 en 30,75/58), samen niet.
@@ -1041,8 +1151,9 @@ fn interactie_5_39_met_a_1_5() {
     let som = (var(db, "M_Edz") / var(db, "M_Rdz")).powf(1.5)
         + (var(db, "M_Edy") / var(db, "M_Rdy")).powf(1.5);
     assert_relative_eq!(uc_van(db), som, max_relative = 1e-12);
-    assert!(db.deelstappen.iter().any(|d| d.id == "exponent_a"
-        && d.notes.iter().any(|n| n.contains("lineaire interpolatie"))));
+    assert!(db.deelstappen.iter().any(
+        |d| d.id == "exponent_a" && d.notes.iter().any(|n| n.contains("lineaire interpolatie"))
+    ));
 }
 
 /// (5.39) MET EEN GEÏNTERPOLEERDE a: N_Ed = 600 kN.
@@ -1074,14 +1185,26 @@ fn interactie_5_39_met_geinterpoleerde_a() {
 fn de_tweede_as_heeft_een_eigen_schoring_en_kniklengte() {
     let mut k = kolomgegevens(Schoring::Geschoord, Knikgeval::ScharnierendScharnierend);
     k.bracing_z = Some(Schoring::Ongeschoord);
-    k.buckling_length_z = Some(Kniklengtekeuze::Figuur57 { geval: Knikgeval::Console });
+    k.buckling_length_z = Some(Kniklengtekeuze::Figuur57 {
+        geval: Knikgeval::Console,
+    });
     let eigen = column_check(verzoek(k, ugt_geschoord())).unwrap();
     assert_relative_eq!(eigen.l0_z_mm.unwrap(), 6000.0, max_relative = 1e-12);
-    assert_relative_eq!(eigen.lambda_z.unwrap(), 2.0 * eigen.lambda.unwrap(), max_relative = 1e-12);
+    assert_relative_eq!(
+        eigen.lambda_z.unwrap(),
+        2.0 * eigen.lambda.unwrap(),
+        max_relative = 1e-12
+    );
     let poort_z = toets(&eigen.checks, SLANKHEIDSGRENS_Z_ID);
     assert_eq!(poort_z.status, CheckStatus::Ok);
-    assert!(poort_z.uc.is_none(), "de poort om z keurt niets af: e₂ wordt zelf verwerkt");
-    assert!(poort_z.notes.iter().any(|n| n.contains("apart opgegeven voor deze as")));
+    assert!(
+        poort_z.uc.is_none(),
+        "de poort om z keurt niets af: e₂ wordt zelf verwerkt"
+    );
+    assert!(poort_z
+        .notes
+        .iter()
+        .any(|n| n.contains("apart opgegeven voor deze as")));
     assert!(poort_z.notes.iter().any(|n| n.contains("C = 0,7")));
 
     // DE AFLEIDING OM Z DRAAGT DE ASNAAM. Dezelfde keten als om y, maar met
@@ -1096,13 +1219,34 @@ fn de_tweede_as_heeft_een_eigen_schoring_en_kniklengte() {
             .unwrap_or_else(|| panic!("stap {id} ontbreekt in de afleiding om z"))
     };
     assert_eq!(stap("l0").symbol, "l_{0,z}");
-    assert_relative_eq!(stap("l0").value.unwrap(), eigen.l0_z_mm.unwrap(), max_relative = 1e-12);
-    assert!(stap("l0").formula_latex.contains("l_{0,z}"), "{}", stap("l0").formula_latex);
+    assert_relative_eq!(
+        stap("l0").value.unwrap(),
+        eigen.l0_z_mm.unwrap(),
+        max_relative = 1e-12
+    );
+    assert!(
+        stap("l0").formula_latex.contains("l_{0,z}"),
+        "{}",
+        stap("l0").formula_latex
+    );
     assert_eq!(stap("lambda").symbol, r"\lambda_{z}");
-    assert_relative_eq!(stap("lambda").value.unwrap(), eigen.lambda_z.unwrap(), max_relative = 1e-12);
-    assert!(stap("lambda").formula_latex.contains(r"\frac{l_{0,z}}{i_z}"), "{}", stap("lambda").formula_latex);
+    assert_relative_eq!(
+        stap("lambda").value.unwrap(),
+        eigen.lambda_z.unwrap(),
+        max_relative = 1e-12
+    );
+    assert!(
+        stap("lambda")
+            .formula_latex
+            .contains(r"\frac{l_{0,z}}{i_z}"),
+        "{}",
+        stap("lambda").formula_latex
+    );
     assert_eq!(stap("lambda_lim").symbol, r"\lambda_{lim,z}");
-    assert!(poort_z.deelstappen.iter().all(|d| d.titel.ends_with("om de z-as")));
+    assert!(poort_z
+        .deelstappen
+        .iter()
+        .all(|d| d.titel.ends_with("om de z-as")));
     // En het model ziet deze richting niet — dat staat bij de toets.
     assert!(poort_z.notes.iter().any(|n| n.contains("UIT het vlak")));
 
@@ -1111,19 +1255,32 @@ fn de_tweede_as_heeft_een_eigen_schoring_en_kniklengte() {
         ugt_geschoord(),
     ))
     .unwrap();
-    assert_relative_eq!(overgenomen.lambda_z.unwrap(), overgenomen.lambda.unwrap(), max_relative = 1e-12);
+    assert_relative_eq!(
+        overgenomen.lambda_z.unwrap(),
+        overgenomen.lambda.unwrap(),
+        max_relative = 1e-12
+    );
     let poort_z = toets(&overgenomen.checks, SLANKHEIDSGRENS_Z_ID);
-    assert!(poort_z.notes.iter().any(|n| n.contains("overgenomen van het rekenvlak")));
+    assert!(poort_z
+        .notes
+        .iter()
+        .any(|n| n.contains("overgenomen van het rekenvlak")));
 
     // Een vakje dat niet bij de schoring om z past: de reden en geen getal.
     let mut fout = kolomgegevens(Schoring::Geschoord, Knikgeval::ScharnierendScharnierend);
     fout.bracing_z = Some(Schoring::Geschoord);
-    fout.buckling_length_z = Some(Kniklengtekeuze::Figuur57 { geval: Knikgeval::Console });
+    fout.buckling_length_z = Some(Kniklengtekeuze::Figuur57 {
+        geval: Knikgeval::Console,
+    });
     let a = column_check(verzoek(fout, ugt_geschoord())).unwrap();
     for id in [SLANKHEIDSGRENS_Z_ID, MOMENT_Z_ID, DUBBELE_BUIGING_ID] {
         let c = toets(&a.checks, id);
         assert_eq!(c.status, CheckStatus::NotApplicable, "{id}");
-        assert!(c.notes.iter().any(|n| n.contains("ontwerpbesluit")), "{id}: {:?}", c.notes);
+        assert!(
+            c.notes.iter().any(|n| n.contains("ontwerpbesluit")),
+            "{id}: {:?}",
+            c.notes
+        );
     }
     assert!(a.lambda_z.is_none());
     // De poort om y blijft gewoon staan.
@@ -1163,7 +1320,11 @@ fn de_staaftoetsing_en_het_losse_verzoek_geven_dezelfde_tweede_as() {
         let b = toets_van_staaf(&staaftoets, id);
         assert_eq!(a.status, b.status, "{id}");
         assert_relative_eq!(a.value, b.value, max_relative = 1e-12);
-        assert_eq!(a.uc.as_ref().map(|u| u.uc), b.uc.as_ref().map(|u| u.uc), "{id}");
+        assert_eq!(
+            a.uc.as_ref().map(|u| u.uc),
+            b.uc.as_ref().map(|u| u.uc),
+            "{id}"
+        );
     }
 }
 
@@ -1211,25 +1372,41 @@ fn zonder_kruipcoefficient_geen_stille_nul_om_z() {
             tekst.contains("WAARSCHUWING — A = 0,7 zonder kruipgegevens"),
             "{id}: de terugval op 0,7 hoort met waarschuwing te staan: {tekst}"
         );
-        assert!(tekst.contains("φ_ef ≈ 2,14"), "{id}: de voorwaarde hoort erbij te staan");
+        assert!(
+            tekst.contains("φ_ef ≈ 2,14"),
+            "{id}: de voorwaarde hoort erbij te staan"
+        );
     }
 
     // Om z: geen getal dat een rekenwaarde lijkt.
     assert!(a.phi_ef_z.is_none());
-    assert!(a.e_2_z_mm.is_none(), "e₂ zonder kruip is een ondergrens, geen rekenwaarde");
+    assert!(
+        a.e_2_z_mm.is_none(),
+        "e₂ zonder kruip is een ondergrens, geen rekenwaarde"
+    );
     assert!(a.m_edz_knm.is_none());
     assert!(a.interactie_5_39.is_none());
 
     for id in [MOMENT_Z_ID, DUBBELE_BUIGING_ID] {
         let c = toets(&a.checks, id);
-        assert_eq!(c.status, CheckStatus::NotApplicable, "{id} mag zonder kruip niet groen");
-        assert!(c.uc.is_none(), "{id}: een ondergrens-uc hoort niet in uc_max");
+        assert_eq!(
+            c.status,
+            CheckStatus::NotApplicable,
+            "{id} mag zonder kruip niet groen"
+        );
+        assert!(
+            c.uc.is_none(),
+            "{id}: een ondergrens-uc hoort niet in uc_max"
+        );
         let tekst = c.notes.join(" ");
         assert!(tekst.contains("NIET UITGEVOERD"), "{id}: {tekst}");
         assert!(tekst.contains("ONDERGRENS"), "{id}: {tekst}");
     }
     let mz = toets(&a.checks, MOMENT_Z_ID).notes.join(" ");
-    assert!(mz.contains("§5.8.4(1)P") && mz.contains("projectwaarde"), "{mz}");
+    assert!(
+        mz.contains("§5.8.4(1)P") && mz.contains("projectwaarde"),
+        "{mz}"
+    );
 
     // De kruiptoets om y noemt geen φ_ef = 0 als grootheid en waarschuwt.
     let kruip = toets(&a.checks, KRUIP);
@@ -1265,8 +1442,10 @@ fn zonder_kruipcoefficient_blijft_een_afkeuring_op_de_ondergrens_staan() {
     let a = column_check(verzoek_z(12.0, k, ugt_z(12_000.0, 400.0, 60.0, 0.0))).unwrap();
     let db = toets(&a.checks, DUBBELE_BUIGING_ID);
     let mz = toets(&a.checks, MOMENT_Z_ID);
-    let afgekeurd: Vec<&ResistanceCalc> =
-        [db, mz].into_iter().filter(|c| c.status == CheckStatus::NotOk).collect();
+    let afgekeurd: Vec<&ResistanceCalc> = [db, mz]
+        .into_iter()
+        .filter(|c| c.status == CheckStatus::NotOk)
+        .collect();
     assert!(
         !afgekeurd.is_empty(),
         "dit geval hoort al zonder kruip te falen: {:?} {:?}",
@@ -1308,11 +1487,22 @@ fn kruipcoefficient_zonder_quasi_blijvende_combinatie_als_bovengrens() {
     assert!(a.phi_ef.is_none(), "(5.19) is niet ingevuld");
     assert_relative_eq!(a.lambda_lim.unwrap(), 56.12680, max_relative = 1e-6);
     assert_relative_eq!(a.lambda_lim_z.unwrap(), 17.85853, max_relative = 1e-6);
-    assert_relative_eq!(var(toets(&a.checks, SLANKHEIDSGRENS), "A"), 0.625, max_relative = 1e-12);
-    assert_relative_eq!(var(toets(&a.checks, SLANKHEIDSGRENS_Z_ID), "A"), 0.625, max_relative = 1e-12);
+    assert_relative_eq!(
+        var(toets(&a.checks, SLANKHEIDSGRENS), "A"),
+        0.625,
+        max_relative = 1e-12
+    );
+    assert_relative_eq!(
+        var(toets(&a.checks, SLANKHEIDSGRENS_Z_ID), "A"),
+        0.625,
+        max_relative = 1e-12
+    );
     for id in [SLANKHEIDSGRENS, SLANKHEIDSGRENS_Z_ID] {
         let tekst = toets(&a.checks, id).notes.join(" ");
-        assert!(tekst.contains("WAARSCHUWING — A niet uit (5.19)"), "{id}: {tekst}");
+        assert!(
+            tekst.contains("WAARSCHUWING — A niet uit (5.19)"),
+            "{id}: {tekst}"
+        );
     }
 
     assert_eq!(a.tweede_orde_verwaarloosbaar_z, Some(false));
@@ -1334,7 +1524,10 @@ fn kruipcoefficient_zonder_quasi_blijvende_combinatie_als_bovengrens() {
     let b = column_check(verzoek(twee, ugt_geschoord())).unwrap();
     assert_relative_eq!(b.lambda_lim.unwrap(), 62.86201, max_relative = 1e-6);
     let tekst = toets(&b.checks, SLANKHEIDSGRENS).notes.join(" ");
-    assert!(tekst.contains("A = 0,7 (§5.8.3.1(1)") && tekst.contains("is hier vervuld"), "{tekst}");
+    assert!(
+        tekst.contains("A = 0,7 (§5.8.3.1(1)") && tekst.contains("is hier vervuld"),
+        "{tekst}"
+    );
 }
 
 /// φ(∞,t₀) = 2,0 MET quasi-blijvende combinatie — (5.19) om BEIDE assen,
@@ -1364,7 +1557,11 @@ fn phi_ef_om_beide_assen_uit_5_19_handberekend() {
     let a = column_check(v).unwrap();
     assert_relative_eq!(a.phi_ef.unwrap(), 1.0, max_relative = 1e-12);
     assert_relative_eq!(a.lambda_lim.unwrap(), 74.83572, max_relative = 1e-6);
-    assert_relative_eq!(a.phi_ef_z.unwrap(), 2.0 * 350.0 / 600.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        a.phi_ef_z.unwrap(),
+        2.0 * 350.0 / 600.0,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(
         var(toets(&a.checks, SLANKHEIDSGRENS_Z_ID), "A"),
         0.810_810_81,
@@ -1374,7 +1571,10 @@ fn phi_ef_om_beide_assen_uit_5_19_handberekend() {
     assert_eq!(a.tweede_orde_verwaarloosbaar_z, Some(false));
     for id in [SLANKHEIDSGRENS, SLANKHEIDSGRENS_Z_ID] {
         let tekst = toets(&a.checks, id).notes.join(" ");
-        assert!(!tekst.contains("WAARSCHUWING — A"), "{id}: A komt uit (5.19): {tekst}");
+        assert!(
+            !tekst.contains("WAARSCHUWING — A"),
+            "{id}: A komt uit (5.19): {tekst}"
+        );
     }
     let mz = toets(&a.checks, MOMENT_Z_ID);
     assert!(mz.notes.join(" ").contains("uit (5.19) om de z-as"));

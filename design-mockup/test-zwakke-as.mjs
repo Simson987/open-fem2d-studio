@@ -35,7 +35,7 @@
 // Uitvoeren: npx tsx test-zwakke-as.mjs   (vanuit design-mockup/)
 //        of: node scripts/run-tests.mjs --filter=zwakke-as
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -174,14 +174,23 @@ log("\n[1] De bouwers geven een leeg veld als 0 door — de kern kiest");
 
 // ─────────────────────────────────────────────────────────────────────────
 const KERN_AANWEZIG = existsSync(TOETSBRUG);
-const kern = (opdracht, inputs) => {
-  const r = spawnSync(TOETSBRUG, [], {
-    input: JSON.stringify({ opdracht, inputs }),
-    maxBuffer: 256 * 1024 * 1024,
-    encoding: "utf8",
+const kern = async (opdracht, inputs) => {
+  const antwoord = await new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code !== 0) reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+      else resolve(out);
+    });
+    child.stdin.end(JSON.stringify({ opdracht, inputs }));
   });
-  if (r.error) throw r.error;
-  const data = JSON.parse(r.stdout);
+  const data = JSON.parse(antwoord);
   if (data && !Array.isArray(data) && typeof data === "object" && "fout" in data) {
     throw new Error(data.fout);
   }
@@ -199,7 +208,7 @@ if (!KERN_AANWEZIG) {
   // ───────────────────────────────────────────────────────────────────────
   log("\n[2] Staal: de kern kiest L_cr,z zoals de spiegel voorspelt, en toont beide takken");
   for (const [naam, cfg, verwachtMm, verwachteHerkomst] of GEVALLEN) {
-    const [r] = kern("check_steel_beams", [metDruk(staal(cfg), -50)]);
+    const [r] = await kern("check_steel_beams", [metDruk(staal(cfg), -50)]);
     const knik = toets(r, "6.3.1_buckling");
     const lz = stap(knik, "l_cr_z");
     const v = voorspelKniklengte(cfg.bucklingLengthZ_m, L, {
@@ -221,7 +230,7 @@ if (!KERN_AANWEZIG) {
   log("\n[3] Hout: dezelfde keuze in de kolomtoets én in de drukterm van de kiptoets");
   let lefEerste = null;
   for (const [naam, cfg, verwachtMm, verwachteHerkomst] of GEVALLEN) {
-    const [r] = kern("check_timber_beams", [metDruk(hout(cfg), -20)]);
+    const [r] = await kern("check_timber_beams", [metDruk(hout(cfg), -20)]);
     const kolom = toets(r, "6.3.2_column_stability");
     const kip = toets(r, "6.3.3_beam_stability");
     const lz = stap(kolom, "l_cr_z");
@@ -245,7 +254,7 @@ if (!KERN_AANWEZIG) {
     const s = metDruk(staal(undefined), -50);
     delete s.buckling_length_y_m;
     delete s.buckling_length_z_m;
-    const [rs] = kern("check_steel_beams", [s]);
+    const [rs] = await kern("check_steel_beams", [s]);
     const lz = stap(toets(rs, "6.3.1_buckling"), "l_cr_z");
     ok("staal zonder velden → staaflengte (terugval)",
       lz?.value === L && lz.notes[0] === `Herkomst: ${HERKOMST_STAAFLENGTE}.`, lz?.notes?.[0]);
@@ -254,7 +263,7 @@ if (!KERN_AANWEZIG) {
     delete h.buckling_length_y_m;
     delete h.buckling_length_z_m;
     delete h.lateral_bracing;
-    const [rh] = kern("check_timber_beams", [h]);
+    const [rh] = await kern("check_timber_beams", [h]);
     const hz = stap(toets(rh, "6.3.2_column_stability"), "l_cr_z");
     ok("hout zonder velden en zonder steunen → staaflengte (terugval)",
       hz?.value === L && hz.notes[0] === `Herkomst: ${HERKOMST_STAAFLENGTE}.`, hz?.notes?.[0]);

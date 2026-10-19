@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "id": "cantilever-deck-column-foundation-v1",
+  "units": "m, kN, MPa",
+  "assembly": {
+    "plateToFrame": "The clamped x=0 deck edge lies at z=3 m; the column head is at (0,0,3). Line-to-point compatibility and force transfer are acceptance gates, not implemented constraints.",
+    "frameToSolid": "The column foot is at (0,0,0); the solid block top is z=0. Contact or a distributed footing constraint is an acceptance gate."
+  },
+  "plate": {
+    "originM": [0.0, 0.0, 3.0],
+    "sizeM": [2.0, 1.0],
+    "coarseCells": [4, 2],
+    "refinedCells": [8, 4],
+    "thicknessM": 0.2,
+    "referenceEMpa": 30000.0,
+    "nu": 0.2,
+    "layersBottomToTop": [
+      {
+        "name": "concrete",
+        "thicknessM": 0.18,
+        "eMpa": 30000.0,
+        "nu": 0.2,
+        "baselineLaw": { "kind": "elastic" },
+        "targetLaw": { "kind": "concreteCracking", "tensileMpa": 3.0, "residualRatio": 0.1 },
+        "targetLawStatus": "input placeholder only: residual-ratio concreteCracking has no plate crack-band length or fracture-energy calibration and must be rejected by global plate FNL"
+      },
+      {
+        "name": "top-steel",
+        "thicknessM": 0.02,
+        "eMpa": 200000.0,
+        "nu": 0.2,
+        "baselineLaw": { "kind": "elastic" },
+        "targetLaw": { "kind": "steelBilinear", "yieldMpa": 500.0, "hardeningRatio": 0.01 }
+      }
+    ],
+    "pressureKnM2": -4.0,
+    "patch": { "xMinM": 1.0, "yMinM": 0.5, "extraPressureKnM2": -12.0 },
+    "freeEdgeLoadKnPerM": [-2.0, -6.0],
+    "freeEdgeMembraneFxKn": 10.0,
+    "expectedTransverseForceKn": -18.0,
+    "expectedTransverseXFirstMomentKnm": -25.0,
+    "expectedTransverseYFirstMomentKnm": -10.833333333333334,
+    "requiredConcretePlateRegularization": {
+      "fractureEnergyNPerM": 100.0,
+      "characteristicLengthM": null,
+      "status": "pending source-backed definition and mesh-objectivity study"
+    }
+  },
+  "frame": {
+    "baseM": [0.0, 0.0, 0.0],
+    "headM": [0.0, 0.0, 3.0],
+    "eMpa": 210000.0,
+    "nu": 0.3,
+    "areaM2": 0.02,
+    "iyM4": 0.0002,
+    "izM4": 0.0002,
+    "torsionJm4": 0.0001,
+    "headLateralFxKn": 10.0,
+    "headCompressionFzKn": -100.0
+  },
+  "solid": {
+    "originM": [-0.5, -0.5, -1.0],
+    "sizeM": [1.0, 1.0, 1.0],
+    "cells": [2, 2, 2],
+    "eMpa": 30000.0,
+    "poisson": 0.2,
+    "topShearGamma": 0.04,
+    "finiteJ2Coupon": {
+      "youngsMpa": 210000.0,
+      "poisson": 0.3,
+      "yieldMpa": 250.0,
+      "hardeningMpa": 2000.0,
+      "peakHenckyStrain": 0.003,
+      "unloadFactor": 0.9
+    },
+    "damageCoupon": {
+      "cells": [2, 1, 1],
+      "eMpa": 30000.0,
+      "poisson": 0.0,
+      "weakTensileMpa": 3.0,
+      "strongTensileMpa": 12.0,
+      "fractureEnergyNPerM": 100.0,
+      "strongFractureEnergyNPerM": 2000.0,
+      "crackBandWidthM": 0.5,
+      "peakAxialStrain": 0.0002,
+      "unloadAxialStrain": 0.00005
+    }
+  },
+  "loadPathFactors": [0.0, 0.5, 1.0, 0.25, 0.0, 1.0],
+  "separateReferenceExamples": {
+    "frame2d": "frame2d-p-delta-cantilever.json",
+    "prestressedBeam": "parabolic-prestressed-beam.json",
+    "shearWithoutLinks": "ec2-prestressed-shear-example-6-3.json",
+    "shearLinks": "ec2-prestressed-shear-links-example-6-4.json",
+    "crackWidth": "ec2-bonded-prestress-crack-width.json"
+  },
+  "largeModelReleaseTests": [
+    "volume_finite_j2_250k_validation",
+    "volume_hex8_250k_general_validation",
+    "volume_hex8_250k_cavity_validation",
+    "volume_hex8_250k_five_valent_validation"
+  ],
+  "acceptanceGates": [
+    { "id": "plate-elastic-layered", "status": "executable", "criterion": "A/B/D section stiffness, two linear backends, pressure/edge resultant and first moment, and mesh refinement" },
+    { "id": "shell-geometric-membrane", "status": "executable-separate", "criterion": "Homogeneous shell with membrane force and transverse pressure satisfies reaction equilibrium; does not use the asymmetric layer stack" },
+    { "id": "frame-p-delta", "status": "executable-separate", "criterion": "Compressed frame amplifies lateral displacement and balances head forces" },
+    { "id": "solid-geometric", "status": "executable-separate", "criterion": "Tet4 finite shear matches Green strain and nominal traction including quadratic and cubic terms" },
+    { "id": "solid-finite-strain-j2", "status": "executable-separate", "criterion": "Tet4 simultaneous finite strain and J2 steel yielding follows a closed isochoric Hencky return through unloading and reloading" },
+    { "id": "solid-concrete-damage", "status": "executable-separate", "criterion": "Weak-zone damage and strong-zone intact response persist through unloading and reloading" },
+    { "id": "frame2d-p-delta", "status": "executable-separate", "criterion": "Existing 2D frame example balances support forces and amplifies lateral deflection under compression" },
+    { "id": "prestressed-beam", "status": "executable-separate", "criterion": "Parabolic tendon resultant, prestress loss, transfer/service moment and deflection; not connected to this plate" },
+    { "id": "shear-reinforcement", "status": "executable-separate", "criterion": "Existing EC2 shear-without-links and vertical-link examples; no force transfer from the combined model" },
+    { "id": "crack-width", "status": "executable-separate", "criterion": "Existing bonded-prestress EC2 7.3.4 postprocessor with supplied cracked-section stress; not obtained from the plate solver" },
+    { "id": "plate-steel-plastic-global", "status": "pending", "criterion": "Layerwise steel yield under patch bending, committed Gauss-point history, unloading and reloading, mesh study" },
+    { "id": "plate-concrete-crack-global", "status": "pending", "criterion": "Crack-band-regularized layerwise concrete damage, crack width and dissipated-energy mesh study" },
+    { "id": "plate-membrane-bending-fnl", "status": "pending", "criterion": "Asymmetric A/B/D coupling with shared in-plane displacement and bending, GNL, simultaneous plastic/crack zones" },
+    { "id": "plate-frame-solid-interface", "status": "pending", "criterion": "Compatible displacement, equal-and-opposite interface forces, one global nonlinear path with rollback" },
+    { "id": "large-model-multithread", "status": "explicit-scale-test", "criterion": "Run existing ignored 250k+ Tet4 and Hex8 release benchmarks; regular default suite stays small" }
+  ]
+}

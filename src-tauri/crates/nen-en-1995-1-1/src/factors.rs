@@ -157,7 +157,13 @@ pub fn beta_c(timber: TimberType) -> f64 {
 /// Rekenwaarde van een sterkte-eigenschap (vergelijking 2.14):
 /// f_d = k_h · k_sys · k_mod · f_k / gamma_M.
 /// Geef `k_h_factor`/`k_sys_factor` = 1,0 waar niet van toepassing.
-pub fn design_strength(f_k: f64, k_mod_factor: f64, gamma_m_value: f64, k_h_factor: f64, k_sys_factor: f64) -> f64 {
+pub fn design_strength(
+    f_k: f64,
+    k_mod_factor: f64,
+    gamma_m_value: f64,
+    k_h_factor: f64,
+    k_sys_factor: f64,
+) -> f64 {
     k_h_factor * k_sys_factor * k_mod_factor * f_k / gamma_m_value
 }
 
@@ -169,16 +175,79 @@ mod tests {
     #[test]
     fn k_mod_tabel_3_1_referentierijen() {
         // Referentie-uitwerking: "0,60(0,50) / 0,80(0,65) / 0,90(0,80)".
-        assert_relative_eq!(k_mod(TimberType::Solid, ServiceClass::Sc1, LoadDurationClass::Permanent), 0.60);
-        assert_relative_eq!(k_mod(TimberType::Solid, ServiceClass::Sc1, LoadDurationClass::MediumTerm), 0.80);
-        assert_relative_eq!(k_mod(TimberType::Solid, ServiceClass::Sc1, LoadDurationClass::ShortTerm), 0.90);
-        assert_relative_eq!(k_mod(TimberType::Solid, ServiceClass::Sc3, LoadDurationClass::Permanent), 0.50);
-        assert_relative_eq!(k_mod(TimberType::Solid, ServiceClass::Sc3, LoadDurationClass::MediumTerm), 0.65);
-        assert_relative_eq!(k_mod(TimberType::Solid, ServiceClass::Sc3, LoadDurationClass::ShortTerm), 0.70);
+        assert_relative_eq!(
+            k_mod(
+                TimberType::Solid,
+                ServiceClass::Sc1,
+                LoadDurationClass::Permanent
+            ),
+            0.60
+        );
+        assert_relative_eq!(
+            k_mod(
+                TimberType::Solid,
+                ServiceClass::Sc1,
+                LoadDurationClass::MediumTerm
+            ),
+            0.80
+        );
+        assert_relative_eq!(
+            k_mod(
+                TimberType::Solid,
+                ServiceClass::Sc1,
+                LoadDurationClass::ShortTerm
+            ),
+            0.90
+        );
+        assert_relative_eq!(
+            k_mod(
+                TimberType::Solid,
+                ServiceClass::Sc3,
+                LoadDurationClass::Permanent
+            ),
+            0.50
+        );
+        assert_relative_eq!(
+            k_mod(
+                TimberType::Solid,
+                ServiceClass::Sc3,
+                LoadDurationClass::MediumTerm
+            ),
+            0.65
+        );
+        assert_relative_eq!(
+            k_mod(
+                TimberType::Solid,
+                ServiceClass::Sc3,
+                LoadDurationClass::ShortTerm
+            ),
+            0.70
+        );
         // Overige cellen conform tabel 3.1.
-        assert_relative_eq!(k_mod(TimberType::Glulam, ServiceClass::Sc2, LoadDurationClass::LongTerm), 0.70);
-        assert_relative_eq!(k_mod(TimberType::Glulam, ServiceClass::Sc2, LoadDurationClass::Instantaneous), 1.10);
-        assert_relative_eq!(k_mod(TimberType::Solid, ServiceClass::Sc3, LoadDurationClass::Instantaneous), 0.90);
+        assert_relative_eq!(
+            k_mod(
+                TimberType::Glulam,
+                ServiceClass::Sc2,
+                LoadDurationClass::LongTerm
+            ),
+            0.70
+        );
+        assert_relative_eq!(
+            k_mod(
+                TimberType::Glulam,
+                ServiceClass::Sc2,
+                LoadDurationClass::Instantaneous
+            ),
+            1.10
+        );
+        assert_relative_eq!(
+            k_mod(
+                TimberType::Solid,
+                ServiceClass::Sc3,
+                LoadDurationClass::Instantaneous
+            ),
+            0.90
+        );
     }
 
     #[test]
@@ -215,7 +284,11 @@ mod tests {
     #[test]
     fn k_h_glulam_normtekst() {
         assert_relative_eq!(k_h(TimberType::Glulam, 600.0), 1.0);
-        assert_relative_eq!(k_h(TimberType::Glulam, 300.0), (600.0_f64 / 300.0).powf(0.1), max_relative = 1e-9);
+        assert_relative_eq!(
+            k_h(TimberType::Glulam, 300.0),
+            (600.0_f64 / 300.0).powf(0.1),
+            max_relative = 1e-9
+        );
         // Afkapping op 1,1.
         assert_relative_eq!(k_h(TimberType::Glulam, 100.0), 1.1);
     }
@@ -224,15 +297,47 @@ mod tests {
     fn rekenwaarden_c24_middellang_referentie() {
         // Referentietabel: f_m,d = 14,77; f_c,0,d = 12,92; f_v,d = 2,46 N/mm2.
         let g = gamma_m(TimberType::Solid);
-        let km = k_mod(TimberType::Solid, ServiceClass::Sc1, LoadDurationClass::MediumTerm);
-        assert_relative_eq!(design_strength(24.0, km, g, 1.0, 1.0), 14.77, max_relative = 1e-3);
-        assert_relative_eq!(design_strength(21.0, km, g, 1.0, 1.0), 12.92, max_relative = 1e-3);
-        assert_relative_eq!(design_strength(4.0, km, g, 1.0, 1.0), 2.46, max_relative = 2e-3);
+        let km = k_mod(
+            TimberType::Solid,
+            ServiceClass::Sc1,
+            LoadDurationClass::MediumTerm,
+        );
+        assert_relative_eq!(
+            design_strength(24.0, km, g, 1.0, 1.0),
+            14.77,
+            max_relative = 1e-3
+        );
+        assert_relative_eq!(
+            design_strength(21.0, km, g, 1.0, 1.0),
+            12.92,
+            max_relative = 1e-3
+        );
+        assert_relative_eq!(
+            design_strength(4.0, km, g, 1.0, 1.0),
+            2.46,
+            max_relative = 2e-3
+        );
         // Permanent: f_m,d = 11,08; kort: f_m,d = 16,62.
-        let kp = k_mod(TimberType::Solid, ServiceClass::Sc1, LoadDurationClass::Permanent);
-        let ks = k_mod(TimberType::Solid, ServiceClass::Sc1, LoadDurationClass::ShortTerm);
-        assert_relative_eq!(design_strength(24.0, kp, g, 1.0, 1.0), 11.08, max_relative = 1e-3);
-        assert_relative_eq!(design_strength(24.0, ks, g, 1.0, 1.0), 16.62, max_relative = 1e-3);
+        let kp = k_mod(
+            TimberType::Solid,
+            ServiceClass::Sc1,
+            LoadDurationClass::Permanent,
+        );
+        let ks = k_mod(
+            TimberType::Solid,
+            ServiceClass::Sc1,
+            LoadDurationClass::ShortTerm,
+        );
+        assert_relative_eq!(
+            design_strength(24.0, kp, g, 1.0, 1.0),
+            11.08,
+            max_relative = 1e-3
+        );
+        assert_relative_eq!(
+            design_strength(24.0, ks, g, 1.0, 1.0),
+            16.62,
+            max_relative = 1e-3
+        );
     }
 
     #[test]

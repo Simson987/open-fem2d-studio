@@ -113,8 +113,8 @@ function roepBundelAan(verzoeken) {
       }
       klaar({ code, antwoorden, stderr: fout });
     });
-    kind.stdin.write(verzoeken.map((v) => JSON.stringify(v)).join("\n") + "\n");
-    kind.stdin.end();
+    kind.stdin.on("error", (err) => { fout += `\nstdin: ${err.message}`; });
+    kind.stdin.end(verzoeken.map((v) => JSON.stringify(v)).join("\n") + "\n");
   });
 }
 

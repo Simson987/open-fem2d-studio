@@ -1,6 +1,9 @@
 import type { Mesh } from './Mesh';
+import type { INode } from './types';
 
 export type NativePlateAnalysis = 'linear' | 'geometric' | 'material' | 'combined';
+/** The sparse direct mixed CST/Q4 backend is currently validated for linear analysis only. */
+export type NativeMixed2DLinearBackend = 'existing' | 'sparseDirect' | 'frontalWave';
 export type NativeMaterialLaw =
   | { kind: 'elastic' }
   | { kind: 'steelBilinear'; yield_mpa: number; hardening_ratio: number }
@@ -13,6 +16,13 @@ export interface NativeQuadPressure {
   quadId: number;
   /** Additional pressure at the four corners in the quad's node order, kN/m². */
   nodalPressureKnM2: [number, number, number, number];
+}
+export interface NativeEdgeLoad {
+  quadId: number;
+  /** Quad edge 0–3, from local node i to (i + 1) % 4. */
+  edgeIndex: number;
+  startKnPerM: number;
+  endKnPerM: number;
 }
 export interface NativeReinforcementSpec {
   limitState: 'ultimate' | 'service';
@@ -35,6 +45,29 @@ export interface NativeReinforcementSpec {
   cRdc?: number;
   longTerm?: boolean;
   crackLimitMm?: number;
+}
+
+function nativeMembraneSupports(nodes: INode[]) {
+  return nodes.filter(node => node.constraints.x || node.constraints.y
+    || node.constraints.springX != null || node.constraints.springY != null).map(node => {
+    const kx = node.constraints.springX;
+    const ky = node.constraints.springY;
+    if (node.constraints.springRot != null) {
+      throw new Error(`Knoop ${node.id}: rotatieveren zijn geen vlakspanningsrandvoorwaarden.`);
+    }
+    for (const [axis, stiffness] of [['x', kx], ['y', ky]] as const) {
+      if (stiffness != null && (!Number.isFinite(stiffness) || stiffness <= 0)) {
+        throw new Error(`Knoop ${node.id}: de ${axis}-veerstijfheid moet eindig en positief zijn.`);
+      }
+    }
+    return {
+      nodeId: node.id,
+      ux: node.constraints.x && kx == null,
+      uy: node.constraints.y && ky == null,
+      ...(kx == null ? {} : { kxKnPerM: kx / 1000 }),
+      ...(ky == null ? {} : { kyKnPerM: ky / 1000 }),
+    };
+  });
 }
 
 /** Invoercontract van openaec-native-fem/native-plate2d: m, kN en MPa. */
@@ -64,7 +97,8 @@ export function buildNativePlate2DRequest(
   const nodes = [...mesh.nodes.values()].filter(node => usedNodes.has(node.id));
   for (const node of mesh.nodes.values()) {
     if (usedNodes.has(node.id)) continue;
-    if (node.constraints.x || node.constraints.y || node.loads.fx || node.loads.fy) {
+    if (node.constraints.x || node.constraints.y || node.constraints.springX != null
+        || node.constraints.springY != null || node.loads.fx || node.loads.fy) {
       throw new Error(`Knoop ${node.id} heeft een last of oplegging buiten het driehoeksrooster.`);
     }
   }
@@ -72,12 +106,20 @@ export function buildNativePlate2DRequest(
   const materials = [...usedMaterials].map(id => {
     const material = mesh.materials.get(id);
     if (!material) throw new Error(`Onbekend plaatmateriaal ${id}.`);
-    if (material.orthotroop) throw new Error(`Materiaal ${id}: orthotropie is nog niet ondersteund door de native 2D-plaatkern.`);
+    if (material.orthotroop && laws.get(id) && laws.get(id)!.kind !== 'elastic') {
+      throw new Error(`Materiaal ${id}: de native orthotrope driehoekskern vereist een elastische materiaalwet.`);
+    }
     return { id, eMpa: material.E / 1e6, nu: material.nu, law: laws.get(id) ?? { kind: 'elastic' as const } };
   });
+  const orthotropicMaterials = [...usedMaterials].flatMap(id => {
+    const orthotropic = mesh.materials.get(id)?.orthotroop;
+    if (!orthotropic) return [];
+    return [{ materialId: id, e1Mpa: orthotropic.E1 / 1e6, e2Mpa: orthotropic.E2 / 1e6,
+      nu12: orthotropic.nu12, g12Mpa: orthotropic.G12 / 1e6, angleRad: orthotropic.hoek }];
+  });
   for (const node of nodes) {
-    if (node.constraints.springX || node.constraints.springY || node.constraints.springRot) {
-      throw new Error(`Knoop ${node.id}: veren zijn nog niet ondersteund door de native 2D-plaatkern.`);
+    if (node.constraints.springRot != null) {
+      throw new Error(`Knoop ${node.id}: rotatieveren zijn geen vlakspanningsrandvoorwaarden.`);
     }
     if (node.loads.moment || node.loads.fz) {
       throw new Error(`Knoop ${node.id}: momenten en dwarslasten zijn geen vlakspanningslasten.`);
@@ -87,14 +129,13 @@ export function buildNativePlate2DRequest(
     analysis,
     nodes: nodes.map(node => ({ id: node.id, x: node.x, y: node.y })),
     materials,
+    orthotropicMaterials,
     modulusCurves: modulusCurves.map(curve => ({
       materialId: curve.materialId,
       points: curve.points.map(point => ({ strain: point.strain, eMpa: point.eMpa })),
     })),
     triangles,
-    supports: nodes.filter(node => node.constraints.x || node.constraints.y).map(node => ({
-      nodeId: node.id, ux: node.constraints.x, uy: node.constraints.y,
-    })),
+    supports: nativeMembraneSupports(nodes),
     loads: nodes.filter(node => node.loads.fx || node.loads.fy).map(node => ({
       nodeId: node.id, fx: node.loads.fx / 1000, fy: node.loads.fy / 1000,
     })),
@@ -102,8 +143,17 @@ export function buildNativePlate2DRequest(
   };
 }
 
-/** Zet een bestaand driehoeksrooster om naar de lineaire Rust DKT-kern. */
-export function buildNativePlateBendingRequest(mesh: Mesh) {
+/** Zet een bestaand driehoeksrooster om naar de Rust DKT-buigkern. */
+export function buildNativePlateBendingRequest(
+  mesh: Mesh,
+  modulusCurves: readonly NativeModulusCurve[] = [],
+  loadPath: readonly number[] = [],
+  linearBackend: 'existing' | 'frontalWave' = 'existing',
+  frontalMaxFrontDofs?: number,
+) {
+  if (linearBackend === 'frontalWave' && modulusCurves.length > 0) {
+    throw new Error('De frontale DKT-oplosser ondersteunt alleen lineaire elasticiteit zonder E-rekcurve.');
+  }
   if (mesh.beamElements.size > 0) {
     throw new Error('De native DKT-kern ondersteunt geen gekoppelde staaf-plaatmodellen.');
   }
@@ -122,18 +172,24 @@ export function buildNativePlateBendingRequest(mesh: Mesh) {
   const materials = [...new Set(triangles.map(triangle => triangle.materialId))].map(id => {
     const material = mesh.materials.get(id);
     if (!material) throw new Error(`Onbekend plaatmateriaal ${id}.`);
-    if (material.orthotroop) throw new Error(`Materiaal ${id}: orthotropie is nog niet ondersteund door de native DKT-kern.`);
     return { id, eMpa: material.E / 1e6, nu: material.nu };
+  });
+  const orthotropicMaterials = [...new Set(triangles.map(triangle => triangle.materialId))].flatMap(id => {
+    const orthotropic = mesh.materials.get(id)?.orthotroop;
+    if (!orthotropic) return [];
+    return [{ materialId: id, e1Mpa: orthotropic.E1 / 1e6, e2Mpa: orthotropic.E2 / 1e6,
+      nu12: orthotropic.nu12, g12Mpa: orthotropic.G12 / 1e6, angleRad: orthotropic.hoek }];
   });
   for (const node of mesh.nodes.values()) {
     if (!usedNodes.has(node.id)) {
-      if (node.constraints.y || node.constraints.rotation || node.loads.fz || node.loads.fy) {
+      if (node.constraints.y || node.constraints.rotation || node.constraints.springY != null
+          || node.constraints.springRot != null || node.loads.fz || node.loads.fy) {
         throw new Error(`Knoop ${node.id} heeft een dwarslast of oplegging buiten het DKT-rooster.`);
       }
       continue;
     }
-    if (node.constraints.springX != null || node.constraints.springY != null || node.constraints.springRot != null) {
-      throw new Error(`Knoop ${node.id}: veren zijn nog niet ondersteund door de native DKT-kern.`);
+    if (node.constraints.springX != null) {
+      throw new Error(`Knoop ${node.id}: een x-veer werkt niet op een DKT-buigvrijheidsgraad.`);
     }
     if (node.loads.fx || node.loads.moment) {
       throw new Error(`Knoop ${node.id}: vlaklasten en éénassige momenten zijn geen DKT-invoer.`);
@@ -142,12 +198,26 @@ export function buildNativePlateBendingRequest(mesh: Mesh) {
   return {
     nodes: nodes.map(node => ({ id: node.id, x: node.x, y: node.y })),
     materials,
+    orthotropicMaterials,
+    modulusCurves: modulusCurves.map(curve => ({
+      materialId: curve.materialId,
+      points: curve.points.map(point => ({ strain: point.strain, eMpa: point.eMpa })),
+    })),
+    loadPath: [...loadPath],
+    linearBackend,
+    ...(frontalMaxFrontDofs === undefined ? {} : { frontalMaxFrontDofs }),
     triangles,
-    supports: nodes.filter(node => node.constraints.y || node.constraints.rotation).map(node => ({
+    supports: nodes.filter(node => node.constraints.y || node.constraints.rotation
+      || node.constraints.springY != null || node.constraints.springRot != null).map(node => ({
       nodeId: node.id,
-      w: node.constraints.y,
-      thetaX: node.constraints.rotation,
-      thetaY: node.constraints.rotation,
+      w: node.constraints.y && node.constraints.springY == null,
+      thetaX: node.constraints.rotation && node.constraints.springRot == null,
+      thetaY: node.constraints.rotation && node.constraints.springRot == null,
+      ...(node.constraints.springY == null ? {} : { kwKnPerM: node.constraints.springY / 1000 }),
+      ...(node.constraints.springRot == null ? {} : {
+        kthetaXKnmPerRad: node.constraints.springRot / 1000,
+        kthetaYKnmPerRad: node.constraints.springRot / 1000,
+      }),
     })),
     loads: nodes.filter(node => (node.loads.fz ?? node.loads.fy) !== 0).map(node => ({
       nodeId: node.id,
@@ -181,19 +251,29 @@ export function buildNativeQuad2DRequest(
   const nodes = [...mesh.nodes.values()].filter(node => usedNodes.has(node.id));
   for (const node of mesh.nodes.values()) {
     if (usedNodes.has(node.id)) continue;
-    if (node.constraints.x || node.constraints.y || node.loads.fx || node.loads.fy) {
+    if (node.constraints.x || node.constraints.y || node.constraints.springX != null
+        || node.constraints.springY != null || node.loads.fx || node.loads.fy) {
       throw new Error(`Knoop ${node.id} heeft een last of oplegging buiten het vierhoeksrooster.`);
     }
   }
   const materials = [...new Set(quads.map(quad => quad.materialId))].map(id => {
     const material = mesh.materials.get(id);
     if (!material) throw new Error(`Onbekend plaatmateriaal ${id}.`);
-    if (material.orthotroop) throw new Error(`Materiaal ${id}: orthotropie is nog niet ondersteund door de native Quad4-kern.`);
+    if (material.orthotroop && laws.get(id) && laws.get(id)!.kind !== 'elastic') {
+      throw new Error(`Materiaal ${id}: de native orthotrope Quad4-kern vereist een elastische materiaalwet.`);
+    }
     return { id, eMpa: material.E / 1e6, nu: material.nu, law: laws.get(id) ?? { kind: 'elastic' as const } };
   });
+  const orthotropicMaterials = [...new Set(quads.map(quad => quad.materialId))].flatMap(id => {
+    const material = mesh.materials.get(id);
+    if (!material?.orthotroop) return [];
+    const orthotropic = material.orthotroop;
+    return [{ materialId: id, e1Mpa: orthotropic.E1 / 1e6, e2Mpa: orthotropic.E2 / 1e6,
+      nu12: orthotropic.nu12, g12Mpa: orthotropic.G12 / 1e6, angleRad: orthotropic.hoek }];
+  });
   for (const node of nodes) {
-    if (node.constraints.springX != null || node.constraints.springY != null || node.constraints.springRot != null) {
-      throw new Error(`Knoop ${node.id}: veren zijn nog niet ondersteund door de native Quad4-kern.`);
+    if (node.constraints.springRot != null) {
+      throw new Error(`Knoop ${node.id}: rotatieveren zijn geen vlakspanningsrandvoorwaarden.`);
     }
     if (node.loads.moment || node.loads.fz) {
       throw new Error(`Knoop ${node.id}: momenten en dwarslasten zijn geen vlakspanningslasten.`);
@@ -203,18 +283,100 @@ export function buildNativeQuad2DRequest(
     analysis,
     nodes: nodes.map(node => ({ id: node.id, x: node.x, y: node.y })),
     materials,
+    orthotropicMaterials,
     modulusCurves: modulusCurves.map(curve => ({
       materialId: curve.materialId,
       points: curve.points.map(point => ({ strain: point.strain, eMpa: point.eMpa })),
     })),
     quads,
-    supports: nodes.filter(node => node.constraints.x || node.constraints.y).map(node => ({
-      nodeId: node.id, ux: node.constraints.x, uy: node.constraints.y,
-    })),
+    supports: nativeMembraneSupports(nodes),
     loads: nodes.filter(node => node.loads.fx || node.loads.fy).map(node => ({
       nodeId: node.id, fx: node.loads.fx / 1000, fy: node.loads.fy / 1000,
     })),
     loadPath: [...loadPath],
+  };
+}
+
+/** Build a shared-node CST/Q4 request for linear, geometric, or material-nonlinear analysis. */
+export function buildNativeMixed2DRequest(
+  mesh: Mesh,
+  analysis: NativePlateAnalysis = 'linear',
+  laws: ReadonlyMap<number, NativeMaterialLaw> = new Map(),
+  loadPath: readonly number[] = [],
+  modulusCurves: readonly NativeModulusCurve[] = [],
+  linearBackend?: NativeMixed2DLinearBackend,
+) {
+  if (linearBackend !== undefined && linearBackend !== 'existing' && analysis !== 'linear') {
+    throw new Error(`De ${linearBackend}-kern voor gemengde CST/Q4-platen ondersteunt alleen lineaire analyse.`);
+  }
+  if (mesh.beamElements.size > 0) {
+    throw new Error('De native gemengde vlakspanningskern ondersteunt geen gekoppelde staven.');
+  }
+  const triangles = [...mesh.elements.values()].filter(element => element.nodeIds.length === 3).map(element => ({
+    id: element.id,
+    nodeIds: element.nodeIds as [number, number, number],
+    materialId: element.materialId,
+    thicknessM: element.thickness,
+  }));
+  const quads = [...mesh.elements.values()].filter(element => element.nodeIds.length === 4).map(element => ({
+    id: element.id,
+    nodeIds: element.nodeIds as [number, number, number, number],
+    materialId: element.materialId,
+    thicknessM: element.thickness,
+  }));
+  if (!triangles.length || !quads.length
+      || triangles.length + quads.length !== mesh.elements.size) {
+    throw new Error('De native gemengde vlakspanningskern vereist uitsluitend CST- en Q4-elementen.');
+  }
+  const usedNodeIds = new Set([...triangles, ...quads].flatMap(element => element.nodeIds));
+  const nodes = [...mesh.nodes.values()].filter(node => usedNodeIds.has(node.id));
+  for (const node of mesh.nodes.values()) {
+    if (usedNodeIds.has(node.id)) continue;
+    if (node.constraints.x || node.constraints.y || node.constraints.springX != null
+        || node.constraints.springY != null || node.constraints.springRot != null
+        || node.loads.fx || node.loads.fy || node.loads.fz || node.loads.moment) {
+      throw new Error(`Knoop ${node.id} heeft een last of oplegging buiten het gemengde plaatrooster.`);
+    }
+  }
+  for (const node of nodes) {
+    if (node.constraints.springRot != null) {
+      throw new Error(`Knoop ${node.id}: rotatieveren zijn geen vlakspanningsrandvoorwaarden.`);
+    }
+    if (node.loads.moment || node.loads.fz) {
+      throw new Error(`Knoop ${node.id}: momenten en dwarslasten zijn geen vlakspanningslasten.`);
+    }
+  }
+  const materialIds = new Set([...triangles, ...quads].map(element => element.materialId));
+  const materials = [...materialIds].map(id => {
+    const material = mesh.materials.get(id);
+    if (!material) throw new Error(`Onbekend plaatmateriaal ${id}.`);
+    return { id, eMpa: material.E / 1e6, nu: material.nu, law: laws.get(id) ?? { kind: 'elastic' as const } };
+  });
+  const orthotropicMaterials = [...materialIds].flatMap(id => {
+    const orthotropic = mesh.materials.get(id)?.orthotroop;
+    if (!orthotropic) return [];
+    return [{ materialId: id, e1Mpa: orthotropic.E1 / 1e6, e2Mpa: orthotropic.E2 / 1e6,
+      nu12: orthotropic.nu12, g12Mpa: orthotropic.G12 / 1e6, angleRad: orthotropic.hoek }];
+  });
+  return {
+    analysis,
+    nodes: nodes.map(node => ({ id: node.id, x: node.x, y: node.y })),
+    materials,
+    orthotropicMaterials,
+    modulusCurves: modulusCurves.map(curve => ({
+      materialId: curve.materialId,
+      points: curve.points.map(point => ({ strain: point.strain, eMpa: point.eMpa })),
+    })),
+    triangles,
+    quads,
+    supports: nativeMembraneSupports(nodes),
+    loads: nodes.filter(node => node.loads.fx || node.loads.fy).map(node => ({
+      nodeId: node.id, fx: node.loads.fx / 1000, fy: node.loads.fy / 1000,
+    })),
+    loadPath: [...loadPath],
+    tolerance: 1e-8,
+    maxIterations: 40,
+    ...(linearBackend === undefined ? {} : { linearBackend }),
   };
 }
 
@@ -226,7 +388,13 @@ export function buildNativeHybridPlateRequest(
   loadPath: readonly number[] = [],
   reinforcement?: NativeReinforcementSpec,
   quadPressures: readonly NativeQuadPressure[] = [],
+  edgeLoads: readonly NativeEdgeLoad[] = [],
+  linearBackend: 'existing' | 'frontalWave' = 'existing',
+  frontalMaxFrontDofs?: number,
 ) {
+  if (linearBackend === 'frontalWave' && modulusCurves.length > 0) {
+    throw new Error('De frontale hybride plaatoplosser ondersteunt alleen lineaire elasticiteit zonder E-rekcurve.');
+  }
   if (mesh.beamElements.size > 0) {
     throw new Error('De hybride plaatkern ondersteunt geen gekoppelde staaf-plaatmodellen.');
   }
@@ -249,23 +417,35 @@ export function buildNativeHybridPlateRequest(
     }
     pressureIds.add(pressure.quadId);
   }
+  for (const load of edgeLoads) {
+    if (!quadIds.has(load.quadId) || !Number.isInteger(load.edgeIndex) || load.edgeIndex < 0
+      || load.edgeIndex > 3 || !Number.isFinite(load.startKnPerM) || !Number.isFinite(load.endKnPerM)) {
+      throw new Error(`Vierhoek ${load.quadId}: ongeldige randlijnlast.`);
+    }
+  }
   const usedNodes = new Set(quads.flatMap(quad => quad.nodeIds));
   const nodes = [...mesh.nodes.values()].filter(node => usedNodes.has(node.id));
   for (const node of mesh.nodes.values()) {
     if (usedNodes.has(node.id)) continue;
-    if (node.constraints.y || node.constraints.rotation || node.loads.fz || node.loads.fy) {
+    if (node.constraints.y || node.constraints.rotation || node.constraints.springY != null
+        || node.constraints.springRot != null || node.loads.fz || node.loads.fy) {
       throw new Error(`Knoop ${node.id} heeft een buiglast of oplegging buiten het vierhoeksrooster.`);
     }
   }
   const materials = [...new Set(quads.map(quad => quad.materialId))].map(id => {
     const material = mesh.materials.get(id);
     if (!material) throw new Error(`Onbekend plaatmateriaal ${id}.`);
-    if (material.orthotroop) throw new Error(`Materiaal ${id}: orthotropie is nog niet ondersteund door de hybride plaatkern.`);
     return { id, eMpa: material.E / 1e6, nu: material.nu };
   });
+  const orthotropicMaterials = [...new Set(quads.map(quad => quad.materialId))].flatMap(id => {
+    const orthotropic = mesh.materials.get(id)?.orthotroop;
+    if (!orthotropic) return [];
+    return [{ materialId: id, e1Mpa: orthotropic.E1 / 1e6, e2Mpa: orthotropic.E2 / 1e6,
+      nu12: orthotropic.nu12, g12Mpa: orthotropic.G12 / 1e6, angleRad: orthotropic.hoek }];
+  });
   for (const node of nodes) {
-    if (node.constraints.springX != null || node.constraints.springY != null || node.constraints.springRot != null) {
-      throw new Error(`Knoop ${node.id}: veren zijn nog niet ondersteund door de hybride plaatkern.`);
+    if (node.constraints.springX != null) {
+      throw new Error(`Knoop ${node.id}: een x-veer werkt niet op een hybride buigvrijheidsgraad.`);
     }
     if (node.loads.fx || node.loads.moment) {
       throw new Error(`Knoop ${node.id}: vlaklasten en éénassige momenten zijn geen hybride-plaatinvoer.`);
@@ -274,10 +454,19 @@ export function buildNativeHybridPlateRequest(
   return {
     nodes: nodes.map(node => ({ id: node.id, x: node.x, y: node.y })),
     materials,
+    orthotropicMaterials,
     quads,
-    supports: nodes.filter(node => node.constraints.y || node.constraints.rotation).map(node => ({
-      nodeId: node.id, w: node.constraints.y,
-      thetaX: node.constraints.rotation, thetaY: node.constraints.rotation,
+    supports: nodes.filter(node => node.constraints.y || node.constraints.rotation
+      || node.constraints.springY != null || node.constraints.springRot != null).map(node => ({
+      nodeId: node.id,
+      w: node.constraints.y && node.constraints.springY == null,
+      thetaX: node.constraints.rotation && node.constraints.springRot == null,
+      thetaY: node.constraints.rotation && node.constraints.springRot == null,
+      ...(node.constraints.springY == null ? {} : { kwKnPerM: node.constraints.springY / 1000 }),
+      ...(node.constraints.springRot == null ? {} : {
+        kthetaXKnmPerRad: node.constraints.springRot / 1000,
+        kthetaYKnmPerRad: node.constraints.springRot / 1000,
+      }),
     })),
     loads: nodes.filter(node => (node.loads.fz ?? node.loads.fy) !== 0).map(node => ({
       nodeId: node.id, fz: (node.loads.fz ?? node.loads.fy) / 1000, mx: 0, my: 0,
@@ -287,11 +476,14 @@ export function buildNativeHybridPlateRequest(
       quadId: pressure.quadId,
       nodalPressureKnM2: [...pressure.nodalPressureKnM2],
     })),
+    edgeLoads: edgeLoads.map(load => ({ ...load })),
     modulusCurves: modulusCurves.map(curve => ({
       materialId: curve.materialId,
       points: curve.points.map(point => ({ strain: point.strain, eMpa: point.eMpa })),
     })),
     loadPath: [...loadPath],
     reinforcement,
+    linearBackend,
+    ...(frontalMaxFrontDofs === undefined ? {} : { frontalMaxFrontDofs }),
   };
 }

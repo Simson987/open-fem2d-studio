@@ -173,15 +173,13 @@ use crate::dwarskracht::{
 use crate::hefboomsarm::{
     bepaal_z, hefboomsarm_bij_normaalkracht, HefboomsarmUitkomst, ZBepaling, N_NUMERIEK_NUL_KN,
 };
-use crate::section::{
-    ConcreteSection, RebarRow, RebarSide, ReinforcementCage, ReinforcementZones,
-};
+use crate::section::{ConcreteSection, RebarRow, RebarSide, ReinforcementCage, ReinforcementZones};
 use crate::stress_strain::DesignMaterial;
 use crate::verankering::{
-    aanhechting, as_steunpunt_vereist_mm2, f_ed_eindoplegging_kn, min_verankering_tussensteunpunt_mm,
-    opneembare_krachtfractie, verankeringslengte, verschuiving, Staafvorm, Stortpositie,
-    Tussensteunpuntvorm, Verankering, VerankeringInvoer, Verankeringssoort, Verschuiving,
-    Verschuivingsgrondslag, BETA_2,
+    aanhechting, as_steunpunt_vereist_mm2, f_ed_eindoplegging_kn,
+    min_verankering_tussensteunpunt_mm, opneembare_krachtfractie, verankeringslengte, verschuiving,
+    Staafvorm, Stortpositie, Tussensteunpuntvorm, Verankering, VerankeringInvoer,
+    Verankeringssoort, Verschuiving, Verschuivingsgrondslag, BETA_2,
 };
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -411,7 +409,11 @@ pub struct Staafbundel {
 impl Staafbundel {
     /// A_s van de bundel, mm².
     pub fn a_s_mm2(&self) -> f64 {
-        RebarRow { count: self.aantal, diameter_mm: self.diameter_mm }.area_mm2()
+        RebarRow {
+            count: self.aantal,
+            diameter_mm: self.diameter_mm,
+        }
+        .area_mm2()
     }
 
     /// De volle trekkracht A_s·f_yd van de bundel, kN.
@@ -657,9 +659,7 @@ pub fn dekkingslijn(inv: &DekkingslijnInvoer<'_>) -> Result<Dekkingslijn, String
         ));
     }
     if inv.omhullende.is_empty() {
-        return Err(
-            "de omhullende is leeg; zonder krachten is er niets te dekken".to_string()
-        );
+        return Err("de omhullende is leeg; zonder krachten is er niets te dekken".to_string());
     }
     inv.zones
         .validate(inv.cage, inv.section, inv.lengte_mm)
@@ -716,8 +716,7 @@ pub fn dekkingslijn(inv: &DekkingslijnInvoer<'_>) -> Result<Dekkingslijn, String
         d_max = d_max.max(d_zijde(&korf, h, RebarSide::Top));
     }
 
-    let heeft_beugels =
-        !inv.zones.stirrups.is_empty() || inv.cage.shear_reinforcement().is_ok();
+    let heeft_beugels = !inv.zones.stirrups.is_empty() || inv.cage.shear_reinforcement().is_ok();
     let z_voor_a_l = inv.z_mm.unwrap_or(0.9 * d_max);
     let a_l = if heeft_beugels {
         // cot θ: de door de aanroeper gekozen waarde, anders de bovengrens van
@@ -820,8 +819,7 @@ pub fn dekkingslijn(inv: &DekkingslijnInvoer<'_>) -> Result<Dekkingslijn, String
         bouw_dwarskrachtdekking(inv, &xs, &reeksen, &armen, &onder.bundels, &boven.bundels);
 
     // ── §9.2.1.4 en §9.2.1.5 ────────────────────────────────────────────────
-    let steunpunten =
-        bouw_steunpunteisen(inv, &onder.bundels, &reeksen, a_l.a_l_mm, z_voor_a_l);
+    let steunpunten = bouw_steunpunteisen(inv, &onder.bundels, &reeksen, a_l.a_l_mm, z_voor_a_l);
 
     toelichting.push(
         "6.2.1(8) is NIET toegepast: die verlichting geldt binnen een afstand d vanaf de \
@@ -868,14 +866,19 @@ impl Reeksen {
     fn nieuw(omhullende: &[ForcePoint]) -> Self {
         let mut per_combinatie: Vec<(u32, Vec<ForcePoint>)> = Vec::new();
         for p in omhullende {
-            match per_combinatie.iter_mut().find(|(id, _)| *id == p.combination_id) {
+            match per_combinatie
+                .iter_mut()
+                .find(|(id, _)| *id == p.combination_id)
+            {
                 Some((_, lijst)) => lijst.push(*p),
                 None => per_combinatie.push((p.combination_id, vec![*p])),
             }
         }
         for (_, lijst) in per_combinatie.iter_mut() {
             lijst.sort_by(|a, b| {
-                a.position_mm.partial_cmp(&b.position_mm).unwrap_or(std::cmp::Ordering::Equal)
+                a.position_mm
+                    .partial_cmp(&b.position_mm)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             });
         }
         Reeksen { per_combinatie }
@@ -883,8 +886,11 @@ impl Reeksen {
 
     /// Alle stationsposities, oplopend en zonder doublures.
     fn posities(&self) -> Vec<f64> {
-        let mut uit: Vec<f64> =
-            self.per_combinatie.iter().flat_map(|(_, l)| l.iter().map(|p| p.position_mm)).collect();
+        let mut uit: Vec<f64> = self
+            .per_combinatie
+            .iter()
+            .flat_map(|(_, l)| l.iter().map(|p| p.position_mm))
+            .collect();
         sorteer_uniek(&mut uit);
         uit
     }
@@ -908,8 +914,10 @@ impl Reeksen {
             if lijst.is_empty() {
                 continue;
             }
-            let treffers: Vec<&ForcePoint> =
-                lijst.iter().filter(|p| (p.position_mm - x_mm).abs() <= X_TOLERANTIE_MM).collect();
+            let treffers: Vec<&ForcePoint> = lijst
+                .iter()
+                .filter(|p| (p.position_mm - x_mm).abs() <= X_TOLERANTIE_MM)
+                .collect();
             if !treffers.is_empty() {
                 for p in treffers {
                     uit.push((*id, p.forces));
@@ -930,7 +938,11 @@ impl Reeksen {
                 let (a, b) = (&paar[0], &paar[1]);
                 if x_mm >= a.position_mm && x_mm <= b.position_mm {
                     let breedte = b.position_mm - a.position_mm;
-                    let t = if breedte > 0.0 { (x_mm - a.position_mm) / breedte } else { 0.0 };
+                    let t = if breedte > 0.0 {
+                        (x_mm - a.position_mm) / breedte
+                    } else {
+                        0.0
+                    };
                     uit.push((*id, meng(&a.forces, &b.forces, t)));
                     break;
                 }
@@ -965,7 +977,10 @@ struct Hefboomsarmen<'a> {
 
 impl<'a> Hefboomsarmen<'a> {
     fn nieuw(inv: &'a DekkingslijnInvoer<'a>) -> Self {
-        Hefboomsarmen { inv, geheugen: RefCell::new(HashMap::new()) }
+        Hefboomsarmen {
+            inv,
+            geheugen: RefCell::new(HashMap::new()),
+        }
     }
 
     /// Is het spanningsblok bij deze krachtstoestand nodig? Alleen zonder
@@ -992,7 +1007,11 @@ impl<'a> Hefboomsarmen<'a> {
         let korf = self.inv.zones.cage_at_mm(self.inv.cage, monster_x);
         let h = self.inv.section.h_mm;
         let lagen = korf.layers(h);
-        let side = if trek_onder { RebarSide::Bottom } else { RebarSide::Top };
+        let side = if trek_onder {
+            RebarSide::Bottom
+        } else {
+            RebarSide::Top
+        };
         let u = hefboomsarm_bij_normaalkracht(
             self.inv.section,
             &lagen,
@@ -1144,7 +1163,9 @@ fn sprongen(inv: &DekkingslijnInvoer<'_>, xs: &[f64]) -> Vec<(usize, f64)> {
         // De monsterplaats mag nooit vóór het vorige rasterpunt vallen; bij
         // zeer korte zones wordt de offset daarom gehalveerd tot hij past.
         let vorige = if i > 0 { xs[i - 1] } else { 0.0 };
-        let offset = SPRONG_OFFSET_MM.min((x - vorige) * 0.5).max(f64::MIN_POSITIVE);
+        let offset = SPRONG_OFFSET_MM
+            .min((x - vorige) * 0.5)
+            .max(f64::MIN_POSITIVE);
         let links = x - offset;
         if inv.zones.cage_at_mm(inv.cage, links) != inv.zones.cage_at_mm(inv.cage, x) {
             uit.push((i, links));
@@ -1208,10 +1229,7 @@ struct GeslotenBundel {
 /// in het veld ligt binnen de doorgaande staven — en het maakt de doorgaande
 /// bundel zo lang mogelijk, wat met de knip-bij-diameterwissel hierboven
 /// meebeweegt.
-fn bouw_bundels(
-    inv: &DekkingslijnInvoer<'_>,
-    side: RebarSide,
-) -> Result<Vec<Staafbundel>, String> {
+fn bouw_bundels(inv: &DekkingslijnInvoer<'_>, side: RebarSide) -> Result<Vec<Staafbundel>, String> {
     let l = inv.lengte_mm;
 
     // De zones van deze zijde, op volgorde. Zonder zones: één pseudo-zone over
@@ -1221,7 +1239,15 @@ fn bouw_bundels(
         .longitudinal
         .iter()
         .filter(|z| z.side == side)
-        .map(|z| (z.row, z.x_start_mm, z.x_end_mm, z.bar_shape, z.casting_position))
+        .map(|z| {
+            (
+                z.row,
+                z.x_start_mm,
+                z.x_end_mm,
+                z.bar_shape,
+                z.casting_position,
+            )
+        })
         .collect();
     if zones.is_empty() {
         let rij = match side {
@@ -1281,7 +1307,10 @@ fn bouw_bundels(
             } else {
                 // Deels afkorten: `teveel` staven van deze bundel houden hier
                 // op, de rest loopt door.
-                let deel = OpenBundel { aantal: teveel, ..laatste.clone() };
+                let deel = OpenBundel {
+                    aantal: teveel,
+                    ..laatste.clone()
+                };
                 laatste.aantal -= teveel;
                 huidig -= teveel;
                 sluit(&deel, teveel, x, &mut klaar);
@@ -1349,7 +1378,11 @@ fn bouw_bundels(
             ..VerankeringInvoer::default()
         };
         let verankering = verankeringslengte(&invoer).map_err(|e| {
-            format!("l_bd van {}Ø{} is niet te bepalen: {e}", aantal, nl(diameter_mm, 0))
+            format!(
+                "l_bd van {}Ø{} is niet te bepalen: {e}",
+                aantal,
+                nl(diameter_mm, 0)
+            )
         })?;
         let mut toelichting = verankering.toelichting.clone();
         if strijdig {
@@ -1383,7 +1416,9 @@ fn bouw_bundels(
         });
     }
     uit.sort_by(|a, b| {
-        a.x_start_mm.partial_cmp(&b.x_start_mm).unwrap_or(std::cmp::Ordering::Equal)
+        a.x_start_mm
+            .partial_cmp(&b.x_start_mm)
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
     Ok(uit)
 }
@@ -1594,10 +1629,14 @@ fn bouw_momentdekking(
                 MomentBewijs::VolledigOntwikkeld
             };
 
-            let uc = if aanwezig > 0.0 { Some(f_s / aanwezig) } else { None };
+            let uc = if aanwezig > 0.0 {
+                Some(f_s / aanwezig)
+            } else {
+                None
+            };
             let tekort = (f_s - aanwezig).max(0.0);
-            let in_eindzone = x <= eindzone_begin + X_TOLERANTIE_MM
-                || x >= l - eindzone_eind - X_TOLERANTIE_MM;
+            let in_eindzone =
+                x <= eindzone_begin + X_TOLERANTIE_MM || x >= l - eindzone_eind - X_TOLERANTIE_MM;
 
             punten.push(Momentpunt {
                 x_mm: x,
@@ -1659,7 +1698,13 @@ fn bouw_momentdekking(
             .to_string(),
     );
 
-    Momentdekking { side, punten, maatgevend, bundels, toelichting }
+    Momentdekking {
+        side,
+        punten,
+        maatgevend,
+        bundels,
+        toelichting,
+    }
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -1722,8 +1767,11 @@ fn bouw_dwarskrachtdekking(
             // opleggingsgeometrie is vast te stellen: de bundels die naar BEIDE
             // kanten ≥ (l_bd + d) voorbij deze doorsnede doorlopen. Alleen de
             // zijde die op TREK staat telt mee.
-            let trek_zijde =
-                if r.trek_onder { RebarSide::Bottom } else { RebarSide::Top };
+            let trek_zijde = if r.trek_onder {
+                RebarSide::Bottom
+            } else {
+                RebarSide::Top
+            };
             let bundels = match trek_zijde {
                 RebarSide::Bottom => bundels_onder,
                 RebarSide::Top => bundels_boven,
@@ -1753,7 +1801,11 @@ fn bouw_dwarskrachtdekking(
                 combinatie_id: comb,
                 z_bepaling: r.vakwerk.as_ref().map(|v| v.z_bepaling.clone()),
             };
-            let maat = (punt.uc, (punt.benodigd_kn - punt.aanwezig_kn.unwrap_or(0.0)).max(0.0), punt.benodigd_kn);
+            let maat = (
+                punt.uc,
+                (punt.benodigd_kn - punt.aanwezig_kn.unwrap_or(0.0)).max(0.0),
+                punt.benodigd_kn,
+            );
             let neem = match &beste_maat {
                 None => true,
                 Some(b) => zwaarder_maat(&maat, b),
@@ -1804,7 +1856,11 @@ fn bouw_dwarskrachtdekking(
 /// worden afgerekend.
 fn zwaarder_dwarskracht(nieuw: &ShearResistance, huidig: &ShearResistance) -> bool {
     let maat = |r: &ShearResistance| {
-        (r.uc, (r.v_ed_kn - r.v_rd_kn.unwrap_or(0.0)).max(0.0), r.v_ed_kn)
+        (
+            r.uc,
+            (r.v_ed_kn - r.v_rd_kn.unwrap_or(0.0)).max(0.0),
+            r.v_ed_kn,
+        )
     };
     zwaarder_maat(&maat(nieuw), &maat(huidig))
 }
@@ -1882,8 +1938,11 @@ fn bouw_steunpunteisen(
     // langs de staaf ligt.
     let mut a_s_veld = 0.0_f64;
     for g in geef_monsterplaatsen(inv, bundels_onder) {
-        let som: f64 =
-            bundels_onder.iter().filter(|b| b.dekt(g)).map(|b| b.a_s_mm2()).sum();
+        let som: f64 = bundels_onder
+            .iter()
+            .filter(|b| b.dekt(g))
+            .map(|b| b.a_s_mm2())
+            .sum();
         a_s_veld = a_s_veld.max(som);
     }
     let a_s_vereist = as_steunpunt_vereist_mm2(a_s_veld);
@@ -2026,8 +2085,14 @@ mod tests {
         ReinforcementCage {
             cover_mm: 30.0,
             stirrup_diameter_mm: 8.0,
-            bottom: RebarRow { count: 3, diameter_mm: 16.0 },
-            top: RebarRow { count: 2, diameter_mm: 12.0 },
+            bottom: RebarRow {
+                count: 3,
+                diameter_mm: 16.0,
+            },
+            top: RebarRow {
+                count: 2,
+                diameter_mm: 12.0,
+            },
             stirrup_spacing_mm: Some(150.0),
             stirrup_legs: Some(2),
             ..Default::default()
@@ -2038,7 +2103,11 @@ mod tests {
         ForcePoint {
             combination_id: 1,
             position_mm: x_mm,
-            forces: InternalForces { my_ed: my, vz_ed: vz, ..Default::default() },
+            forces: InternalForces {
+                my_ed: my,
+                vz_ed: vz,
+                ..Default::default()
+            },
         }
     }
 
@@ -2055,7 +2124,11 @@ mod tests {
             mat: &mat(),
             f_ctk_005_mpa: f_ctk(),
             lengte_mm: 6000.0,
-            omhullende: &[punt(0.0, 0.0, 60.0), punt(3000.0, 90.0, 0.0), punt(6000.0, 0.0, -60.0)],
+            omhullende: &[
+                punt(0.0, 0.0, 60.0),
+                punt(3000.0, 90.0, 0.0),
+                punt(6000.0, 0.0, -60.0),
+            ],
             z_mm: None,
             c_d_mm: None,
             shear_opts: ShearOptions::default(),
@@ -2091,7 +2164,11 @@ mod tests {
             mat: &mat(),
             f_ctk_005_mpa: f_ctk(),
             lengte_mm: l,
-            omhullende: &[punt(0.0, 0.0, 60.0), punt(3000.0, 90.0, 0.0), punt(l, 0.0, -60.0)],
+            omhullende: &[
+                punt(0.0, 0.0, 60.0),
+                punt(3000.0, 90.0, 0.0),
+                punt(l, 0.0, -60.0),
+            ],
             z_mm: None,
             c_d_mm: None,
             shear_opts: ShearOptions::default(),
@@ -2145,7 +2222,11 @@ mod tests {
             mat: &mat(),
             f_ctk_005_mpa: f_ctk(),
             lengte_mm: l,
-            omhullende: &[punt(0.0, 0.0, 40.0), punt(2000.0, 60.0, 0.0), punt(l, 0.0, -40.0)],
+            omhullende: &[
+                punt(0.0, 0.0, 40.0),
+                punt(2000.0, 60.0, 0.0),
+                punt(l, 0.0, -40.0),
+            ],
             z_mm: None,
             c_d_mm: None,
             shear_opts: ShearOptions::default(),
@@ -2206,7 +2287,11 @@ mod tests {
             .iter()
             .filter(|p| (p.x_mm - 1000.0).abs() < 1e-6)
             .collect();
-        assert_eq!(op_grens.len(), 2, "op de zonegrens horen twee punten te staan");
+        assert_eq!(
+            op_grens.len(),
+            2,
+            "op de zonegrens horen twee punten te staan"
+        );
         assert_eq!(op_grens[0].zijde, Snedezijde::Links);
         assert_eq!(op_grens[1].zijde, Snedezijde::Rechts);
         let links = op_grens[0].aanwezig_kn.expect("V_Rd links");
@@ -2233,13 +2318,21 @@ mod tests {
             mat: &mat(),
             f_ctk_005_mpa: f_ctk(),
             lengte_mm: l,
-            omhullende: &[punt(0.0, 0.0, 150.0), punt(3000.0, 200.0, 0.0), punt(l, 0.0, -150.0)],
+            omhullende: &[
+                punt(0.0, 0.0, 150.0),
+                punt(3000.0, 200.0, 0.0),
+                punt(l, 0.0, -150.0),
+            ],
             z_mm: None,
             c_d_mm: None,
             shear_opts: ShearOptions::default(),
         };
         let d = dekkingslijn(&inv).expect("dekkingslijn");
-        let r = d.dwarskracht.maatgevende_weerstand.as_ref().expect("afleiding");
+        let r = d
+            .dwarskracht
+            .maatgevende_weerstand
+            .as_ref()
+            .expect("afleiding");
         let v_rd_c = r.vrd_c.v_rd_c_kn;
         let v_rd_s = r.vakwerk.as_ref().and_then(|v| v.v_rd_s_kn).unwrap_or(0.0);
         let v_rd = r.v_rd_kn.expect("V_Rd");
@@ -2259,7 +2352,11 @@ mod tests {
         let s = sectie();
         let c = korf();
         let z = ReinforcementZones::default();
-        let mut env = [punt(0.0, 0.0, 60.0), punt(3000.0, 90.0, 0.0), punt(6000.0, 0.0, -60.0)];
+        let mut env = [
+            punt(0.0, 0.0, 60.0),
+            punt(3000.0, 90.0, 0.0),
+            punt(6000.0, 0.0, -60.0),
+        ];
         for p in env.iter_mut() {
             p.forces.n_ed = -120.0;
         }
@@ -2288,7 +2385,11 @@ mod tests {
             "{:?}",
             midden.z_bepaling.grondslag
         );
-        assert!(midden.z_mm <= 0.9 * d_onder + 1e-9, "z = {} > 0,9·d", midden.z_mm);
+        assert!(
+            midden.z_mm <= 0.9 * d_onder + 1e-9,
+            "z = {} > 0,9·d",
+            midden.z_mm
+        );
         assert!(midden.z_mm > 0.5 * d_onder);
         assert_relative_eq!(midden.z_mm, midden.z_bepaling.z_mm);
         // Ook bij het steunpunt (M = 0) komt z uit het spanningsblok: de arm
@@ -2296,14 +2397,20 @@ mod tests {
         // gewapend ligt hij boven 0,9·d en is hij dus begrensd.
         let begin = d.onder.punten.first().expect("x = 0");
         assert!(
-            matches!(begin.z_bepaling.grondslag, ZGrondslag::Evenwicht { begrensd: true, .. }),
+            matches!(
+                begin.z_bepaling.grondslag,
+                ZGrondslag::Evenwicht { begrensd: true, .. }
+            ),
             "{:?}",
             begin.z_bepaling.grondslag
         );
         assert_relative_eq!(begin.z_mm, 0.9 * d_onder);
         // De dwarskrachtlijn draagt dezelfde grondslag mee.
         let dw_begin = d.dwarskracht.punten.first().expect("x = 0");
-        let zb = dw_begin.z_bepaling.as_ref().expect("het vakwerk hoort er te zijn");
+        let zb = dw_begin
+            .z_bepaling
+            .as_ref()
+            .expect("het vakwerk hoort er te zijn");
         assert!(!zb.is_0_9d());
         assert!(matches!(zb.grondslag, ZGrondslag::Evenwicht { .. }));
         // Elk punt heeft z uit het spanningsblok, en nooit boven 0,9·d.
@@ -2316,6 +2423,9 @@ mod tests {
             );
             assert!(p.z_mm <= p.z_bepaling.d_mm * 0.9 + 1e-9);
         }
-        assert!(d.toelichting.iter().any(|t| t.contains("doorsnede-evenwicht")));
+        assert!(d
+            .toelichting
+            .iter()
+            .any(|t| t.contains("doorsnede-evenwicht")));
     }
 }

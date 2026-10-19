@@ -27,7 +27,6 @@ import { fileURLToPath } from "node:url";
 
 const HIER = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HIER, "..");
-const TSX_CLI = join(HIER, "node_modules", "tsx", "dist", "cli.mjs");
 const SIDECAR_TS = join(HIER, "src", "mcp", "sidecar.ts");
 const BUNDEL = join(
   REPO,
@@ -72,7 +71,7 @@ function roepAan(verzoeken, { bundel = false } = {}) {
   const commando = process.execPath;
   const argumenten = bundel
     ? [BUNDEL, "--sidecar"]
-    : [TSX_CLI, SIDECAR_TS, "--sidecar"];
+    : ["--import", "tsx/esm", SIDECAR_TS, "--sidecar"];
 
   return new Promise((klaar) => {
     const kind = spawn(commando, argumenten, { cwd: HIER });
@@ -91,8 +90,8 @@ function roepAan(verzoeken, { bundel = false } = {}) {
       });
       klaar({ code, antwoorden, regels, stderr: fout });
     });
-    kind.stdin.write(verzoeken.map((v) => JSON.stringify(v)).join("\n") + "\n");
-    kind.stdin.end();
+    kind.stdin.on("error", (err) => { fout += `\nstdin: ${err.message}`; });
+    kind.stdin.end(verzoeken.map((v) => JSON.stringify(v)).join("\n") + "\n");
   });
 }
 
@@ -179,13 +178,12 @@ log("\n[2] Foutpaden — elk met zijn eigen code, proces blijft exitcode 0");
 }
 {
   // Kapotte JSON kan niet als object worden meegegeven; rechtstreeks schrijven.
-  const kind = spawn(process.execPath, [TSX_CLI, SIDECAR_TS, "--sidecar"], { cwd: HIER });
+  const kind = spawn(process.execPath, ["--import", "tsx/esm", SIDECAR_TS, "--sidecar"], { cwd: HIER });
   let uit = "";
   kind.stdout.on("data", (d) => (uit += d));
   const code = await new Promise((klaar) => {
     kind.on("close", klaar);
-    kind.stdin.write('{ "v": 1, "id": 3, "op": "solve"\n');
-    kind.stdin.end();
+    kind.stdin.end('{ "v": 1, "id": 3, "op": "solve"\n');
   });
   const a = JSON.parse(uit.trim());
   ok("kapotte JSON: exitcode 0", code === 0, `code ${code}`);

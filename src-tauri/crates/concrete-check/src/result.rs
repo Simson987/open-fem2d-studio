@@ -8,7 +8,10 @@ use ts_rs::TS;
 
 /// Volledig toetsresultaat van één betonnen staaf.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct ConcreteBeamCheckResult {
     pub beam_id: u32,
     /// Doorsnedenaam, bijv. "300 x 500".
@@ -83,7 +86,10 @@ pub struct ConcreteBeamCheckResult {
 /// eerst de vormaannamen en er achteraf de getoetste snede omheen. Deze lijst
 /// is dus een VERWIJZING: zoek `check_id` op in `checks` en toon zijn notes.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct NietUitgevoerdeToets {
     /// De `id` van de toets, bijvoorbeeld "6.2_shear".
     pub check_id: String,
@@ -98,7 +104,10 @@ pub struct NietUitgevoerdeToets {
 
 /// Antwoord op [`crate::MnKappaRequest`].
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct MnKappaResponse {
     pub section_name: String,
     pub reinforcement_summary: String,

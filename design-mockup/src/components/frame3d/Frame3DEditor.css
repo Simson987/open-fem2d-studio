@@ -89,7 +89,8 @@
 .frame3d-utilization-high { color:#b45309; }
 .frame3d-utilization-fail { color:#b91c1c; }
 .frame3d-utilization-not-applicable { color:#64748b; }
-.frame3d-tool-addNode,.frame3d-tool-addBeam,.frame3d-tool-addPlate,.frame3d-tool-addPlateArc,.frame3d-tool-addOpening,.frame3d-tool-addOpeningArc { cursor:crosshair; }
+.frame3d-tool-addNode,.frame3d-tool-addBeam,.frame3d-tool-addPlate,.frame3d-tool-addPlateArc,.frame3d-tool-addOpening,.frame3d-tool-addOpeningArc,.frame3d-tool-addTet4,.frame3d-tool-addHex8 { cursor:crosshair; }
+.frame3d-volume-draft { position:absolute; z-index:3; top:54px; left:12px; padding:5px 9px; border:1px solid #0284c7; border-radius:5px; background:#f0f9ffec; color:#075985; font:600 12px/1.3 system-ui,sans-serif; pointer-events:none; }
 .frame3d-tool-support { cursor:crosshair; }
 .frame3d-snap-label,
 .frame3d-snap-hint {
@@ -255,6 +256,19 @@
   text-align: center;
   pointer-events: none;
 }
+.frame3d-empty p { margin: 0 0 12px; }
+.frame3d-example-options { display: grid; gap: 7px; }
+.frame3d-volume-example-button {
+  pointer-events: auto;
+  border: 1px solid #0f766e;
+  border-radius: 5px;
+  padding: 7px 10px;
+  background: #0f766e;
+  color: #fff;
+  font: 600 12px/1.3 "Inter", system-ui, sans-serif;
+  cursor: pointer;
+}
+.frame3d-volume-example-button:hover { background: #115e59; }
 
 .frame3d-sidebar {
   width: 315px;
@@ -379,6 +393,10 @@
 }
 .frame3d-visibility-row:hover { background: var(--theme-hover); }
 .frame3d-visibility-row:focus-visible { outline: 2px solid var(--theme-accent); outline-offset: -2px; }
+.frame3d-support-scale {
+  margin: 10px 4px 2px;
+  border-top: 1px solid var(--theme-border);
+}
 .frame3d-visibility-switch {
   position: relative;
   flex: 0 0 28px;

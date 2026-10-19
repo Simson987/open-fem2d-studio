@@ -264,8 +264,7 @@ impl DocTemplate {
                 // dan moet de hele kopketen plus MIN_VERVOLG nog passen.
                 if cursor_y.0 > 0.0
                     && flowables[idx].keep_with_next()
-                    && kopketen_hoogte(&mut flowables, idx, inner_w, remaining, ctx).0
-                        > remaining.0
+                    && kopketen_hoogte(&mut flowables, idx, inner_w, remaining, ctx).0 > remaining.0
                 {
                     break;
                 }
@@ -381,7 +380,12 @@ impl DocTemplate {
             };
 
             let layer = doc.get_page(page_ref).get_layer(layer_ref);
-            self.render_draw_list(&layer, &rendered_page.draw_list, rendered_page.page_size.height, &pdf_fonts);
+            self.render_draw_list(
+                &layer,
+                &rendered_page.draw_list,
+                rendered_page.page_size.height,
+                &pdf_fonts,
+            );
         }
 
         // Save to bytes
@@ -427,7 +431,8 @@ impl DocTemplate {
                 DrawOp::SetFont { name, size } => {
                     current_font_size = size.0;
                     current_font_name = name.clone();
-                    current_font = fonts.get(name.as_str())
+                    current_font = fonts
+                        .get(name.as_str())
                         .or_else(|| {
                             // Fallback 1: try with -Regular suffix
                             fonts.get(&format!("{}-Regular", name))
@@ -435,7 +440,8 @@ impl DocTemplate {
                         .or_else(|| {
                             // Fallback 2: try base name without variant suffix
                             let base = name.split('-').next().unwrap_or(name);
-                            fonts.get(base)
+                            fonts
+                                .get(base)
                                 .or_else(|| fonts.get(&format!("{}-Regular", base)))
                         })
                         .or_else(|| {
@@ -452,7 +458,8 @@ impl DocTemplate {
                             // Fallback 4: try any font containing the base family name
                             let base = name.split('-').next().unwrap_or(name);
                             let base_lower = base.to_lowercase();
-                            fonts.keys()
+                            fonts
+                                .keys()
                                 .find(|k| k.to_lowercase().starts_with(&base_lower))
                                 .and_then(|k| fonts.get(k.as_str()))
                         });
@@ -474,11 +481,8 @@ impl DocTemplate {
 
                 DrawOp::DrawTextCenter { x, y, text } => {
                     if let Some(font) = current_font {
-                        let tw = self.measure_text_width(
-                            &current_font_name,
-                            text,
-                            current_font_size,
-                        );
+                        let tw =
+                            self.measure_text_width(&current_font_name, text, current_font_size);
                         let adjusted_x = Pt(x.0 - tw.0 / 2.0);
                         let pdf_y = page_height.0 - y.0;
                         layer.begin_text_section();
@@ -491,11 +495,8 @@ impl DocTemplate {
 
                 DrawOp::DrawTextRight { x, y, text } => {
                     if let Some(font) = current_font {
-                        let tw = self.measure_text_width(
-                            &current_font_name,
-                            text,
-                            current_font_size,
-                        );
+                        let tw =
+                            self.measure_text_width(&current_font_name, text, current_font_size);
                         let adjusted_x = Pt(x.0 - tw.0);
                         let pdf_y = page_height.0 - y.0;
                         layer.begin_text_section();
@@ -509,16 +510,13 @@ impl DocTemplate {
                 DrawOp::SetFillColor(color) => {
                     current_fill_rgb = (color.r, color.g, color.b);
                     let (r, g, b) = color.to_pdf_rgb();
-                    layer.set_fill_color(printpdf::Color::Rgb(printpdf::Rgb::new(
-                        r, g, b, None,
-                    )));
+                    layer.set_fill_color(printpdf::Color::Rgb(printpdf::Rgb::new(r, g, b, None)));
                 }
 
                 DrawOp::SetStrokeColor(color) => {
                     let (r, g, b) = color.to_pdf_rgb();
-                    layer.set_outline_color(printpdf::Color::Rgb(printpdf::Rgb::new(
-                        r, g, b, None,
-                    )));
+                    layer
+                        .set_outline_color(printpdf::Color::Rgb(printpdf::Rgb::new(r, g, b, None)));
                 }
 
                 DrawOp::SetLineWidth(width) => {
@@ -542,9 +540,21 @@ impl DocTemplate {
                     };
                     let ring = vec![
                         (printpdf::Point::new(to_pdf_mm(*x), to_pdf_mm(pdf_y)), false),
-                        (printpdf::Point::new(to_pdf_mm(Pt(x.0 + width.0)), to_pdf_mm(pdf_y)), false),
-                        (printpdf::Point::new(to_pdf_mm(Pt(x.0 + width.0)), to_pdf_mm(Pt(pdf_y.0 + height.0))), false),
-                        (printpdf::Point::new(to_pdf_mm(*x), to_pdf_mm(Pt(pdf_y.0 + height.0))), false),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x.0 + width.0)), to_pdf_mm(pdf_y)),
+                            false,
+                        ),
+                        (
+                            printpdf::Point::new(
+                                to_pdf_mm(Pt(x.0 + width.0)),
+                                to_pdf_mm(Pt(pdf_y.0 + height.0)),
+                            ),
+                            false,
+                        ),
+                        (
+                            printpdf::Point::new(to_pdf_mm(*x), to_pdf_mm(Pt(pdf_y.0 + height.0))),
+                            false,
+                        ),
                     ];
                     let polygon = printpdf::Polygon {
                         rings: vec![ring],
@@ -560,17 +570,11 @@ impl DocTemplate {
 
                     let points = vec![
                         (
-                            printpdf::Point::new(
-                                to_pdf_mm(*x1),
-                                to_pdf_mm(Pt(pdf_y1)),
-                            ),
+                            printpdf::Point::new(to_pdf_mm(*x1), to_pdf_mm(Pt(pdf_y1))),
                             false,
                         ),
                         (
-                            printpdf::Point::new(
-                                to_pdf_mm(*x2),
-                                to_pdf_mm(Pt(pdf_y2)),
-                            ),
+                            printpdf::Point::new(to_pdf_mm(*x2), to_pdf_mm(Pt(pdf_y2))),
                             false,
                         ),
                     ];
@@ -696,26 +700,74 @@ impl DocTemplate {
 
                     let points = vec![
                         // Bottom-left corner start
-                        (printpdf::Point::new(to_pdf_mm(Pt(x0)), to_pdf_mm(Pt(y0 + r))), false),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x0)), to_pdf_mm(Pt(y0 + r))),
+                            false,
+                        ),
                         // Bottom-left arc
-                        (printpdf::Point::new(to_pdf_mm(Pt(x0)), to_pdf_mm(Pt(y0 + r - kr))), true),
-                        (printpdf::Point::new(to_pdf_mm(Pt(x0 + r - kr)), to_pdf_mm(Pt(y0))), true),
-                        (printpdf::Point::new(to_pdf_mm(Pt(x0 + r)), to_pdf_mm(Pt(y0))), false),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x0)), to_pdf_mm(Pt(y0 + r - kr))),
+                            true,
+                        ),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x0 + r - kr)), to_pdf_mm(Pt(y0))),
+                            true,
+                        ),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x0 + r)), to_pdf_mm(Pt(y0))),
+                            false,
+                        ),
                         // Bottom-right corner
-                        (printpdf::Point::new(to_pdf_mm(Pt(x1 - r)), to_pdf_mm(Pt(y0))), false),
-                        (printpdf::Point::new(to_pdf_mm(Pt(x1 - r + kr)), to_pdf_mm(Pt(y0))), true),
-                        (printpdf::Point::new(to_pdf_mm(Pt(x1)), to_pdf_mm(Pt(y0 + r - kr))), true),
-                        (printpdf::Point::new(to_pdf_mm(Pt(x1)), to_pdf_mm(Pt(y0 + r))), false),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x1 - r)), to_pdf_mm(Pt(y0))),
+                            false,
+                        ),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x1 - r + kr)), to_pdf_mm(Pt(y0))),
+                            true,
+                        ),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x1)), to_pdf_mm(Pt(y0 + r - kr))),
+                            true,
+                        ),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x1)), to_pdf_mm(Pt(y0 + r))),
+                            false,
+                        ),
                         // Top-right corner
-                        (printpdf::Point::new(to_pdf_mm(Pt(x1)), to_pdf_mm(Pt(y1 - r))), false),
-                        (printpdf::Point::new(to_pdf_mm(Pt(x1)), to_pdf_mm(Pt(y1 - r + kr))), true),
-                        (printpdf::Point::new(to_pdf_mm(Pt(x1 - r + kr)), to_pdf_mm(Pt(y1))), true),
-                        (printpdf::Point::new(to_pdf_mm(Pt(x1 - r)), to_pdf_mm(Pt(y1))), false),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x1)), to_pdf_mm(Pt(y1 - r))),
+                            false,
+                        ),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x1)), to_pdf_mm(Pt(y1 - r + kr))),
+                            true,
+                        ),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x1 - r + kr)), to_pdf_mm(Pt(y1))),
+                            true,
+                        ),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x1 - r)), to_pdf_mm(Pt(y1))),
+                            false,
+                        ),
                         // Top-left corner
-                        (printpdf::Point::new(to_pdf_mm(Pt(x0 + r)), to_pdf_mm(Pt(y1))), false),
-                        (printpdf::Point::new(to_pdf_mm(Pt(x0 + r - kr)), to_pdf_mm(Pt(y1))), true),
-                        (printpdf::Point::new(to_pdf_mm(Pt(x0)), to_pdf_mm(Pt(y1 - r + kr))), true),
-                        (printpdf::Point::new(to_pdf_mm(Pt(x0)), to_pdf_mm(Pt(y1 - r))), false),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x0 + r)), to_pdf_mm(Pt(y1))),
+                            false,
+                        ),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x0 + r - kr)), to_pdf_mm(Pt(y1))),
+                            true,
+                        ),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x0)), to_pdf_mm(Pt(y1 - r + kr))),
+                            true,
+                        ),
+                        (
+                            printpdf::Point::new(to_pdf_mm(Pt(x0)), to_pdf_mm(Pt(y1 - r))),
+                            false,
+                        ),
                     ];
 
                     let mode = match (fill, stroke) {
@@ -752,7 +804,7 @@ mod tests {
     use crate::frame::Frame;
     use crate::paragraph::{Paragraph, ParagraphStyle};
     use crate::spacer::{PageBreak, Spacer};
-    use crate::types::{Rect, A4};
+    use crate::types::{A4, Rect};
 
     /// Een document met één vel van `hoogte` punten aan inhoudsruimte.
     fn doc(hoogte: f32) -> DocTemplate {
@@ -813,7 +865,9 @@ mod tests {
     #[test]
     fn een_kop_met_ruimte_eronder_blijft_gewoon_staan() {
         let d = doc(200.0);
-        let ctx = LayoutContext { fonts: d.fonts.clone() };
+        let ctx = LayoutContext {
+            fonts: d.fonts.clone(),
+        };
         let vellen = d.layout_pages(
             vec![
                 Box::new(Spacer::new(Pt(140.0))),
@@ -833,7 +887,9 @@ mod tests {
     #[test]
     fn een_kop_zonder_ruimte_eronder_verhuist_mee_naar_het_volgende_vel() {
         let d = doc(200.0);
-        let ctx = LayoutContext { fonts: d.fonts.clone() };
+        let ctx = LayoutContext {
+            fonts: d.fonts.clone(),
+        };
         let vellen = d.layout_pages(
             vec![
                 Box::new(Spacer::new(Pt(175.0))),
@@ -848,14 +904,22 @@ mod tests {
             !t[0].contains(&"KOP".to_string()),
             "de kop bleef alleen onderaan vel 1 achter: {t:?}"
         );
-        assert!(t[1].contains(&"KOP".to_string()), "de kop hoort op vel 2: {t:?}");
-        assert!(t[1].contains(&"inhoud".to_string()), "en zijn inhoud erbij: {t:?}");
+        assert!(
+            t[1].contains(&"KOP".to_string()),
+            "de kop hoort op vel 2: {t:?}"
+        );
+        assert!(
+            t[1].contains(&"inhoud".to_string()),
+            "en zijn inhoud erbij: {t:?}"
+        );
     }
 
     #[test]
     fn een_hele_kopketen_verhuist_en_niet_alleen_de_laatste() {
         let d = doc(200.0);
-        let ctx = LayoutContext { fonts: d.fonts.clone() };
+        let ctx = LayoutContext {
+            fonts: d.fonts.clone(),
+        };
         let vellen = d.layout_pages(
             vec![
                 Box::new(Spacer::new(Pt(150.0))),
@@ -879,7 +943,9 @@ mod tests {
         // vrij — maar het blok van 120 pt kan niet splitsen. Kop én blok horen
         // dus naar het volgende vel, en niet de kop alleen.
         let d = doc(200.0);
-        let ctx = LayoutContext { fonts: d.fonts.clone() };
+        let ctx = LayoutContext {
+            fonts: d.fonts.clone(),
+        };
         let vellen = d.layout_pages(
             vec![
                 Box::new(Spacer::new(Pt(100.0))),
@@ -904,11 +970,20 @@ mod tests {
         // Het blok is hoger dan een heel vel. De vooruitblik mag dan niet
         // ingrijpen, anders schuift de kop eindeloos door.
         let d = doc(200.0);
-        let ctx = LayoutContext { fonts: d.fonts.clone() };
+        let ctx = LayoutContext {
+            fonts: d.fonts.clone(),
+        };
         let vellen = d.layout_pages(vec![kop("KOP"), Box::new(Blok(Pt(400.0)))], &ctx);
         let t = teksten_per_vel(&vellen);
-        assert!(t[0].contains(&"KOP".to_string()), "de kop hoort op vel 1: {t:?}");
-        assert!(vellen.len() <= 3, "onverwacht veel vellen: {}", vellen.len());
+        assert!(
+            t[0].contains(&"KOP".to_string()),
+            "de kop hoort op vel 1: {t:?}"
+        );
+        assert!(
+            vellen.len() <= 3,
+            "onverwacht veel vellen: {}",
+            vellen.len()
+        );
     }
 
     // ── Paginaovergangen: TEL de vellen ───────────────────────────────────
@@ -919,13 +994,17 @@ mod tests {
     #[test]
     fn een_gewone_paginaovergang_levert_precies_twee_vellen() {
         let d = doc(200.0);
-        let ctx = LayoutContext { fonts: d.fonts.clone() };
-        let vellen = d.layout_pages(
-            vec![regel("A"), Box::new(PageBreak), regel("B")],
-            &ctx,
-        );
+        let ctx = LayoutContext {
+            fonts: d.fonts.clone(),
+        };
+        let vellen = d.layout_pages(vec![regel("A"), Box::new(PageBreak), regel("B")], &ctx);
         let t = teksten_per_vel(&vellen);
-        assert_eq!(vellen.len(), 2, "verwacht twee vellen, kreeg {}: {t:?}", vellen.len());
+        assert_eq!(
+            vellen.len(),
+            2,
+            "verwacht twee vellen, kreeg {}: {t:?}",
+            vellen.len()
+        );
         assert!(t[0].contains(&"A".to_string()), "A hoort op vel 1: {t:?}");
         assert!(t[1].contains(&"B".to_string()), "B hoort op vel 2: {t:?}");
     }
@@ -933,7 +1012,9 @@ mod tests {
     #[test]
     fn een_paginaovergang_als_eerste_element_levert_geen_leeg_vel() {
         let d = doc(200.0);
-        let ctx = LayoutContext { fonts: d.fonts.clone() };
+        let ctx = LayoutContext {
+            fonts: d.fonts.clone(),
+        };
         let vellen = d.layout_pages(vec![Box::new(PageBreak), regel("A")], &ctx);
         let t = teksten_per_vel(&vellen);
         assert_eq!(
@@ -947,7 +1028,9 @@ mod tests {
     #[test]
     fn twee_paginaovergangen_achter_elkaar_leveren_geen_leeg_vel() {
         let d = doc(200.0);
-        let ctx = LayoutContext { fonts: d.fonts.clone() };
+        let ctx = LayoutContext {
+            fonts: d.fonts.clone(),
+        };
         let vellen = d.layout_pages(
             vec![
                 regel("A"),
@@ -963,7 +1046,10 @@ mod tests {
             2,
             "de tweede overgang gaf een leeg vel: {t:?}"
         );
-        assert!(t[0].contains(&"A".to_string()) && t[1].contains(&"B".to_string()), "{t:?}");
+        assert!(
+            t[0].contains(&"A".to_string()) && t[1].contains(&"B".to_string()),
+            "{t:?}"
+        );
     }
 
     #[test]
@@ -974,7 +1060,9 @@ mod tests {
         // Stond de maatstaf op `cursor_y`, dan zou de overgang hier alsnog
         // breken en vel 2 leeg de PDF in gaan.
         let d = doc(200.0);
-        let ctx = LayoutContext { fonts: d.fonts.clone() };
+        let ctx = LayoutContext {
+            fonts: d.fonts.clone(),
+        };
         let vellen = d.layout_pages(
             vec![
                 regel("A"),

@@ -96,7 +96,6 @@
 //!
 //! Zonder argumenten leest hij van stdin en schrijft naar stdout.
 
-
 use std::time::Instant;
 
 use crate::composite::{CatalogusDeel, CompositeSection, GeslotenCel, Lamella};
@@ -572,7 +571,13 @@ fn vorm_van_maten(
         // stand van NEN-EN 1993-1-1 par. 1.7(2). `r` is de walsuitronding en
         // `r2` de teenafronding; beide staan in de maattabel, dus geen van
         // beide wordt uit de ander afgeleid.
-        "Angle" => Profielvorm::Hoeklijn { h, b, t: dikte, r1: r, r2 },
+        "Angle" => Profielvorm::Hoeklijn {
+            h,
+            b,
+            t: dikte,
+            r1: r,
+            r2,
+        },
         anders => return Err(format!("onbekende soort: {anders}")),
     };
     // Onmogelijke maten worden hier geweigerd, vóór er een contour of mesh
@@ -627,7 +632,9 @@ fn gat_contour(g: &GatInvoer) -> Result<Contour, String> {
                 .gedraaid(hoek)
                 .verschoven(g.y, g.z))
         }
-        anders => Err(format!("onbekende gatvorm: {anders} (verwacht \"rond\" of \"rechthoek\")")),
+        anders => Err(format!(
+            "onbekende gatvorm: {anders} (verwacht \"rond\" of \"rechthoek\")"
+        )),
     }
 }
 
@@ -681,7 +688,12 @@ fn kruisingen(s: &Segment, p: (f64, f64)) -> i32 {
             }
             0
         }
-        Segment::Boog { centrum, straal, theta1, theta2 } => {
+        Segment::Boog {
+            centrum,
+            straal,
+            theta1,
+            theta2,
+        } => {
             let dz = p.1 - centrum.1;
             if straal <= 0.0 || dz.abs() >= straal {
                 return 0;
@@ -718,7 +730,12 @@ fn hoek_in_bereik(t: f64, lo: f64, hi: f64) -> bool {
 fn middelpunt(s: &Segment) -> (f64, f64) {
     match *s {
         Segment::Lijn { van, naar } => ((van.0 + naar.0) / 2.0, (van.1 + naar.1) / 2.0),
-        Segment::Boog { centrum, straal, theta1, theta2 } => {
+        Segment::Boog {
+            centrum,
+            straal,
+            theta1,
+            theta2,
+        } => {
             let t = 0.5 * (theta1 + theta2);
             (centrum.0 + straal * t.cos(), centrum.1 + straal * t.sin())
         }
@@ -770,13 +787,21 @@ fn splits_op_rechthoeklijnen(s: &Segment, y1: f64, y2: f64, z1: f64, z2: f64) ->
             let mut vorige = van;
             for t in ts {
                 let p = (van.0 + t * a, van.1 + t * b);
-                uit.push(Segment::Lijn { van: vorige, naar: p });
+                uit.push(Segment::Lijn {
+                    van: vorige,
+                    naar: p,
+                });
                 vorige = p;
             }
             uit.push(Segment::Lijn { van: vorige, naar });
             uit
         }
-        Segment::Boog { centrum, straal, theta1, theta2 } => {
+        Segment::Boog {
+            centrum,
+            straal,
+            theta1,
+            theta2,
+        } => {
             let (lo, hi) = (theta1.min(theta2), theta1.max(theta2));
             let mut ts: Vec<f64> = Vec::new();
             let mut voeg_toe = |t0: f64| {
@@ -813,10 +838,20 @@ fn splits_op_rechthoeklijnen(s: &Segment, y1: f64, y2: f64, z1: f64, z2: f64) ->
             let mut uit = Vec::with_capacity(ts.len() + 1);
             let mut vorige = theta1;
             for t in ts {
-                uit.push(Segment::Boog { centrum, straal, theta1: vorige, theta2: t });
+                uit.push(Segment::Boog {
+                    centrum,
+                    straal,
+                    theta1: vorige,
+                    theta2: t,
+                });
                 vorige = t;
             }
-            uit.push(Segment::Boog { centrum, straal, theta1: vorige, theta2 });
+            uit.push(Segment::Boog {
+                centrum,
+                straal,
+                theta1: vorige,
+                theta2,
+            });
             uit
         }
     }
@@ -841,9 +876,18 @@ fn snijpunten_met_lijn(s: &Segment, c: f64, verticaal: bool) -> Vec<f64> {
                 }
             }
         }
-        Segment::Boog { centrum, straal, theta1, theta2 } => {
+        Segment::Boog {
+            centrum,
+            straal,
+            theta1,
+            theta2,
+        } => {
             let (lo, hi) = (theta1.min(theta2), theta1.max(theta2));
-            let k = if verticaal { (c - centrum.0) / straal } else { (c - centrum.1) / straal };
+            let k = if verticaal {
+                (c - centrum.0) / straal
+            } else {
+                (c - centrum.1) / straal
+            };
             if k.abs() < 1.0 {
                 let kandidaten = if verticaal {
                     let a = k.acos();
@@ -879,7 +923,12 @@ fn afstand_tot_segment(s: &Segment, p: (f64, f64)) -> f64 {
             let t = (((p.0 - van.0) * ay + (p.1 - van.1) * az) / l2).clamp(0.0, 1.0);
             (p.0 - van.0 - t * ay).hypot(p.1 - van.1 - t * az)
         }
-        Segment::Boog { centrum, straal, theta1, theta2 } => {
+        Segment::Boog {
+            centrum,
+            straal,
+            theta1,
+            theta2,
+        } => {
             let (dy, dz) = (p.0 - centrum.0, p.1 - centrum.1);
             let t = dz.atan2(dy);
             let (lo, hi) = (theta1.min(theta2), theta1.max(theta2));
@@ -888,7 +937,9 @@ fn afstand_tot_segment(s: &Segment, p: (f64, f64)) -> f64 {
             } else {
                 let a = s.beginpunt();
                 let b = s.eindpunt();
-                (p.0 - a.0).hypot(p.1 - a.1).min((p.0 - b.0).hypot(p.1 - b.1))
+                (p.0 - a.0)
+                    .hypot(p.1 - a.1)
+                    .min((p.0 - b.0).hypot(p.1 - b.1))
             }
         }
     }
@@ -912,7 +963,12 @@ fn schaal_van(d: &Doorsnede) -> f64 {
 fn lengte(s: &Segment) -> f64 {
     match *s {
         Segment::Lijn { van, naar } => (naar.0 - van.0).hypot(naar.1 - van.1),
-        Segment::Boog { straal, theta1, theta2, .. } => straal * (theta2 - theta1).abs(),
+        Segment::Boog {
+            straal,
+            theta1,
+            theta2,
+            ..
+        } => straal * (theta2 - theta1).abs(),
     }
 }
 
@@ -924,7 +980,8 @@ fn lengte(s: &Segment) -> f64 {
 /// elk als "gesloten contour" op zichzelf worden gezien.
 fn rijg(mut stukken: Vec<Segment>, tol: f64) -> Result<Vec<Contour>, String> {
     stukken.retain(|s| lengte(s) > tol);
-    let dichtbij = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() <= tol && (a.1 - b.1).abs() <= tol;
+    let dichtbij =
+        |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() <= tol && (a.1 - b.1).abs() <= tol;
     let mut contouren = Vec::new();
     while let Some(eerste) = stukken.pop() {
         let start = eerste.beginpunt();
@@ -934,7 +991,10 @@ fn rijg(mut stukken: Vec<Segment>, tol: f64) -> Result<Vec<Contour>, String> {
             let idx = stukken.iter().position(|s| dichtbij(s.beginpunt(), huidig));
             let Some(idx) = idx else {
                 if std::env::var_os("DOORSNEDEMOTOR_DEBUG").is_some() {
-                    eprintln!("open eind op ({:.6}, {:.6}); lus tot nu toe:", huidig.0, huidig.1);
+                    eprintln!(
+                        "open eind op ({:.6}, {:.6}); lus tot nu toe:",
+                        huidig.0, huidig.1
+                    );
                     for s in &lus {
                         eprintln!("  {:?} -> {:?}", s.beginpunt(), s.eindpunt());
                     }
@@ -1004,7 +1064,11 @@ fn uitsnede_asgelijnd(d: &Doorsnede, hb: f64, hh: f64) -> Result<Doorsnede, Stri
                 }
             }
         }
-        let (p0, p1) = if verticaal { (van.1, naar.1) } else { (van.0, naar.0) };
+        let (p0, p1) = if verticaal {
+            (van.1, naar.1)
+        } else {
+            (van.0, naar.0)
+        };
         let (lo, hi) = (p0.min(p1), p0.max(p1));
         punten.retain(|&p| p > lo && p < hi);
         if p1 >= p0 {
@@ -1021,7 +1085,11 @@ fn uitsnede_asgelijnd(d: &Doorsnede, hb: f64, hh: f64) -> Result<Doorsnede, Stri
             if (b - a).abs() <= delta {
                 continue;
             }
-            let (pa, pb) = if verticaal { ((c, a), (c, b)) } else { ((a, c), (b, c)) };
+            let (pa, pb) = if verticaal {
+                ((c, a), (c, b))
+            } else {
+                ((a, c), (b, c))
+            };
             let seg = Segment::Lijn { van: pa, naar: pb };
             let m = middelpunt(&seg);
             // Een stuk dat samenvalt met een bestaande rand hoort er niet nóg
@@ -1062,7 +1130,12 @@ fn gat_binnen_materiaal(basis: &Doorsnede, gat: &Contour) -> bool {
                     (van.0 + t * (naar.0 - van.0), van.1 + t * (naar.1 - van.1))
                 })
                 .collect(),
-            Segment::Boog { centrum, straal, theta1, theta2 } => (0..=8)
+            Segment::Boog {
+                centrum,
+                straal,
+                theta1,
+                theta2,
+            } => (0..=8)
                 .map(|k| {
                     let t = theta1 + (theta2 - theta1) * k as f64 / 8.0;
                     (centrum.0 + straal * t.cos(), centrum.1 + straal * t.sin())
@@ -1091,7 +1164,10 @@ fn reken_contour(i: &Invoer) -> Result<Uitvoer, String> {
     }
     for g in i.gaten.iter().filter(|g| g.plaats != "uitsnede") {
         if g.plaats != "vlak" {
-            return Err(format!("onbekende gatplaats: {} (verwacht \"vlak\" of \"uitsnede\")", g.plaats));
+            return Err(format!(
+                "onbekende gatplaats: {} (verwacht \"vlak\" of \"uitsnede\")",
+                g.plaats
+            ));
         }
         let c = gat_contour(g)?;
         if !gat_binnen_materiaal(&d, &c) {
@@ -1101,17 +1177,22 @@ fn reken_contour(i: &Invoer) -> Result<Uitvoer, String> {
     }
     let a_gaten = (a_basis - d.bereken().a_mm2).max(0.0);
     if d.bereken().a_mm2 <= 0.0 {
-        return Err("de doorsnede heeft geen oppervlak over: de gaten zijn groter dan het profiel".into());
+        return Err(
+            "de doorsnede heeft geen oppervlak over: de gaten zijn groter dan het profiel".into(),
+        );
     }
 
-    let per_wand = i.elementen_per_wand.unwrap_or(crate::torsie::ELEMENTEN_PER_WAND);
+    let per_wand = i
+        .elementen_per_wand
+        .unwrap_or(crate::torsie::ELEMENTEN_PER_WAND);
     let opties = TorsieOpties::met_h(aanbevolen_h(&d, per_wand));
 
     let m = if i.gaten.is_empty() {
         // Letterlijk het oude pad, zodat de generator bit-identiek blijft.
         motor::bereken_uitgebreid(&vorm, Some(opties))
     } else {
-        let mut m = motor::bereken_doorsnede_uitgebreid(&d, Afschuiving::AlsVorm(vorm), Some(opties));
+        let mut m =
+            motor::bereken_doorsnede_uitgebreid(&d, Afschuiving::AlsVorm(vorm), Some(opties));
         // Zelfde administratie als `bereken_uitgebreid`: de maatvelden
         // beschrijven de invoergeometrie (nodig voor de classificatie
         // volgens tabel 5.2 in de toetsing), en een gesloten vorm krijgt
@@ -1134,7 +1215,11 @@ fn reken_contour(i: &Invoer) -> Result<Uitvoer, String> {
     // mesh, want `genereer` is deterministisch in `h`.
     let mesh = crate::mesh2d::genereer(&d, t.h_mm);
 
-    let a_mesh_afwijking = if p.area_mm2 > 0.0 { (t.a_mesh_mm2 - p.area_mm2) / p.area_mm2 } else { 0.0 };
+    let a_mesh_afwijking = if p.area_mm2 > 0.0 {
+        (t.a_mesh_mm2 - p.area_mm2) / p.area_mm2
+    } else {
+        0.0
+    };
 
     let mut meldingen = Vec::new();
     if !i.gaten.is_empty() && a_mesh_afwijking.abs() > 0.01 {
@@ -1289,7 +1374,9 @@ fn reken_samenstelling(i: &Invoer) -> Result<Uitvoer, String> {
     }
     for c in &i.gesloten_cellen {
         if c.midlijn.len() < 3 || c.dikte_mm.len() != c.midlijn.len() {
-            return Err("gesloten cel: minstens drie middellijnpunten en per zijde één dikte".into());
+            return Err(
+                "gesloten cel: minstens drie middellijnpunten en per zijde één dikte".into(),
+            );
         }
         sec = sec.met_cel(GeslotenCel {
             midlijn_mm: c.midlijn.iter().map(|p| (p[0], p[1])).collect(),
@@ -1312,7 +1399,8 @@ fn reken_samenstelling(i: &Invoer) -> Result<Uitvoer, String> {
         meldingen.push("Iw is niet sectorieel bepaald (gesloten cel, catalogusdeel of niet-samenhangende middellijn); 0 aangehouden".into());
     }
     if !r.schuifmiddelpunt_bepaald {
-        meldingen.push("het schuifmiddelpunt is niet bepaald; het zwaartepunt is aangehouden".into());
+        meldingen
+            .push("het schuifmiddelpunt is niet bepaald; het zwaartepunt is aangehouden".into());
     }
     if !sec.lamellen.is_empty() && sec.cellen.is_empty() && !r.iw_bepaald && sec.delen.is_empty() {
         meldingen.push("de lamellen sluiten mogelijk een cel zonder dat die is gedeclareerd: It is met de open formule ⅓·Σb·t³ bepaald".into());
@@ -1358,8 +1446,7 @@ fn reken_samenstelling(i: &Invoer) -> Result<Uitvoer, String> {
     );
     if !uitbreiding.av_hoofdas_bepaald {
         meldingen.push(
-            "Av;u en Av;v zijn niet bepaald: de hoofdassen vallen niet met y en z samen"
-                .into(),
+            "Av;u en Av;v zijn niet bepaald: de hoofdassen vallen niet met y en z samen".into(),
         );
     }
 
@@ -1457,10 +1544,16 @@ mod tests {
         for c in &d.contouren {
             let a = c.segmenten[0].beginpunt();
             let b = c.segmenten.last().unwrap().eindpunt();
-            assert!((a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9, "contour sluit niet");
+            assert!(
+                (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9,
+                "contour sluit niet"
+            );
             for w in c.segmenten.windows(2) {
                 let (p, q) = (w[0].eindpunt(), w[1].beginpunt());
-                assert!((p.0 - q.0).abs() < 1e-9 && (p.1 - q.1).abs() < 1e-9, "segmenten sluiten niet aan");
+                assert!(
+                    (p.0 - q.0).abs() < 1e-9 && (p.1 - q.1).abs() < 1e-9,
+                    "segmenten sluiten niet aan"
+                );
             }
         }
     }
@@ -1475,7 +1568,11 @@ mod tests {
         gesloten(&d);
         assert_eq!(d.contouren.len(), 2, "verwacht twee losse T's");
         let e = d.bereken();
-        assert!(rel(e.a_mm2, b0.a_mm2 - 7.1 * 80.0) < 1e-12, "A = {}", e.a_mm2);
+        assert!(
+            rel(e.a_mm2, b0.a_mm2 - 7.1 * 80.0) < 1e-12,
+            "A = {}",
+            e.a_mm2
+        );
         assert!(rel(e.iy_mm4, b0.iy_mm4 - 7.1 * 80f64.powi(3) / 12.0) < 1e-12);
         assert!(rel(e.iz_mm4, b0.iz_mm4 - 80.0 * 7.1f64.powi(3) / 12.0) < 1e-12);
         // Zelfde Wpl als het samenvallende gat via `met_gat` (dat is exact voor
@@ -1532,7 +1629,11 @@ mod tests {
         assert_eq!(d.contouren.len(), 1);
         let seg = |r: f64, y: f64| 0.5 * (y * (r * r - y * y).sqrt() + r * r * (y / r).asin());
         let weg = (seg(rr, 20.0) - seg(rr, -20.0)) - (seg(ri, 20.0) - seg(ri, -20.0));
-        assert!(rel(d.bereken().a_mm2, a0 - weg) < 1e-9, "A = {}", d.bereken().a_mm2);
+        assert!(
+            rel(d.bereken().a_mm2, a0 - weg) < 1e-9,
+            "A = {}",
+            d.bereken().a_mm2
+        );
     }
 
     /// Lijfgat in een UNP met schuine flenzen: de flensgeometrie blijft
@@ -1560,22 +1661,42 @@ mod tests {
         let lijfstrook = 7.1 * 100.0;
         let uitrondingen = 2.0 * 15f64.powi(2) * (1.0 - PI / 4.0);
         assert!(a < a0 - lijfstrook + 1e-9, "minstens de lijfstrook is weg");
-        assert!(a > a0 - lijfstrook - uitrondingen, "hoogstens de uitrondingen erbij");
+        assert!(
+            a > a0 - lijfstrook - uitrondingen,
+            "hoogstens de uitrondingen erbij"
+        );
         let nogmaals = uitsnede(&d, 75.0, 70.0, 7.1 + 2.0, 100.0, 0.0).unwrap();
         assert!(rel(nogmaals.bereken().a_mm2, a) < 1e-12);
         // En de torsiemesh hoort er gewoon op te passen.
         let t = crate::torsie::bereken(&d);
-        assert!(rel(t.a_mesh_mm2, a) < 2e-3, "meshoppervlak {} tegen {}", t.a_mesh_mm2, a);
+        assert!(
+            rel(t.a_mesh_mm2, a) < 2e-3,
+            "meshoppervlak {} tegen {}",
+            t.a_mesh_mm2,
+            a
+        );
     }
 
     #[test]
     fn langsgat_buiten_materiaal_wordt_geweigerd() {
         let basis = i_profiel(300.0, 150.0, 7.1, 10.7, 15.0);
-        assert!(!gat_binnen_materiaal(&basis, &Contour::cirkel((75.0, 150.0), 40.0)));
-        assert!(gat_binnen_materiaal(&basis, &Contour::cirkel((75.0, 150.0), 3.0)));
+        assert!(!gat_binnen_materiaal(
+            &basis,
+            &Contour::cirkel((75.0, 150.0), 40.0)
+        ));
+        assert!(gat_binnen_materiaal(
+            &basis,
+            &Contour::cirkel((75.0, 150.0), 3.0)
+        ));
         let massief = rechthoek(300.0, 100.0);
-        assert!(gat_binnen_materiaal(&massief, &Contour::cirkel((50.0, 150.0), 20.0)));
-        assert!(!gat_binnen_materiaal(&massief, &Contour::cirkel((50.0, 150.0), 60.0)));
+        assert!(gat_binnen_materiaal(
+            &massief,
+            &Contour::cirkel((50.0, 150.0), 20.0)
+        ));
+        assert!(!gat_binnen_materiaal(
+            &massief,
+            &Contour::cirkel((50.0, 150.0), 60.0)
+        ));
     }
 
     #[test]
@@ -1583,6 +1704,11 @@ mod tests {
         let d = rechthoek(300.0, 100.0).met_gat(Contour::cirkel((50.0, 150.0), 20.0));
         let e = d.bereken();
         assert!(rel(e.a_mm2, 30_000.0 - PI * 400.0) < 1e-12);
-        assert!(rel(e.iy_mm4, 100.0 * 300f64.powi(3) / 12.0 - PI * 20f64.powi(4) / 4.0) < 1e-12);
+        assert!(
+            rel(
+                e.iy_mm4,
+                100.0 * 300f64.powi(3) / 12.0 - PI * 20f64.powi(4) / 4.0
+            ) < 1e-12
+        );
     }
 }

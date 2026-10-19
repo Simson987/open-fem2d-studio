@@ -21,21 +21,24 @@
 //! afgeleid.
 
 use approx::assert_relative_eq;
+use nen_en_1992_1_1::factors::{f_yd, gamma_s};
 use nen_en_1992_1_1::verankering::{
     aanhechting_figuur_8_2, alpha_1, alpha_2, alpha_3, alpha_5, alpha_6, as_steunpunt_vereist_mm2,
     c_d_mm, f_ed_eindoplegging_kn, lambda_8_2, min_verankering_opgebogen_staaf_mm,
-    min_verankering_tussensteunpunt_mm, opneembare_krachtfractie, overlappingslengte, verschuiving,
-    verankering_deelstappen, verankeringslengte, Aanhechting, Dekkingsgeval, Elementtype, KWaarde,
-    OndergrensTerm, Staafvorm, Stortpositie, Tussensteunpuntvorm, VerankeringInvoer,
-    Verankeringssoort, Verschuivingsgrondslag, BETA_2,
+    min_verankering_tussensteunpunt_mm, opneembare_krachtfractie, overlappingslengte,
+    verankering_deelstappen, verankeringslengte, verschuiving, Aanhechting, Dekkingsgeval,
+    Elementtype, KWaarde, OndergrensTerm, Staafvorm, Stortpositie, Tussensteunpuntvorm,
+    VerankeringInvoer, Verankeringssoort, Verschuivingsgrondslag, BETA_2,
 };
-use nen_en_1992_1_1::factors::{f_yd, gamma_s};
 use nen_en_1992_1_1::{concrete_class_by_name, reinforcement_grade_by_name, DesignSituation};
 
 /// γ_S = 1,15 (tabel 2.1N, blijvend en tijdelijk) → f_yd = 500/1,15 = 434,7826.
 fn f_yd_b500() -> f64 {
     let staal = reinforcement_grade_by_name("B500B").unwrap();
-    let gamma_s = gamma_s(nationale_bijlage::NationaleBijlage::NL, DesignSituation::PersistentTransient);
+    let gamma_s = gamma_s(
+        nationale_bijlage::NationaleBijlage::NL,
+        DesignSituation::PersistentTransient,
+    );
     assert_relative_eq!(gamma_s, 1.15, max_relative = 1e-12);
     f_yd(staal.f_yk, gamma_s)
 }
@@ -148,7 +151,11 @@ fn bovenwapening_is_een_factor_1_over_0_7_langer() {
     assert_relative_eq!(boven.l_b_rqd_mm, 2000.0 / 2.415, max_relative = 1e-12);
     assert_relative_eq!(boven.l_bd_mm, 1530.625 / 2.415, max_relative = 1e-12);
     assert_relative_eq!(boven.l_bd_mm, 633.7991718, max_relative = 1e-8);
-    assert_relative_eq!(boven.l_bd_mm / onder.l_bd_mm, 1.0 / 0.7, max_relative = 1e-12);
+    assert_relative_eq!(
+        boven.l_bd_mm / onder.l_bd_mm,
+        1.0 / 0.7,
+        max_relative = 1e-12
+    );
 }
 
 /// De sprong in figuur 8.2 tussen geval c en geval d is echt.
@@ -270,11 +277,11 @@ fn ondergrens_10_diameters_kan_maatgevend_worden() {
         f_ctk_005_mpa: f_ctk("C90/105"), // 3,5 → begrensd op 3,1
         soort: Verankeringssoort::Trek,
         vorm: Staafvorm::AndersDanRecht,
-        c_d_mm: 100.0,              // > 3Φ = 36 → α₁ = 0,7; α₂ = 0,2 → 0,7
+        c_d_mm: 100.0,               // > 3Φ = 36 → α₁ = 0,7; α₂ = 0,2 → 0,7
         k_waarde: KWaarde::InDeHoek, // K = 0,1
-        lambda: 3.0,                // α₃ = 0,7
-        p_mpa: 7.5,                 // α₅ = 1 − 0,3 = 0,7
-        phi_t_mm: Some(12.0),       // α₄ = 0,7
+        lambda: 3.0,                 // α₃ = 0,7
+        p_mpa: 7.5,                  // α₅ = 1 − 0,3 = 0,7
+        phi_t_mm: Some(12.0),        // α₄ = 0,7
         ..onderstaaf(12.0)
     })
     .unwrap();
@@ -286,7 +293,11 @@ fn ondergrens_10_diameters_kan_maatgevend_worden() {
     assert_relative_eq!(v.alfa.product_235_berekend, 0.343, max_relative = 1e-12);
     assert!(v.alfa.begrensd_door_8_5);
     assert_relative_eq!(v.alfa.product, 0.7 * 0.7 * 0.7, max_relative = 1e-12);
-    assert_relative_eq!(v.l_bd_berekend_mm, 0.343 * 1500.0 / 5.3475, max_relative = 1e-12);
+    assert_relative_eq!(
+        v.l_bd_berekend_mm,
+        0.343 * 1500.0 / 5.3475,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(v.l_bd_berekend_mm, 96.2131836, max_relative = 1e-7);
     assert!(v.ondergrens_maatgevend);
     assert_eq!(v.l_b_min_term, OndergrensTerm::TienDiameters);
@@ -448,7 +459,11 @@ fn tabel_nb_8_3_geeft_drukoverlappingen_alfa_6_gelijk_1() {
     assert_eq!(druk.l_0_min_term, OndergrensTerm::TienDiameters);
 
     // De EN-tabel zou hier 1,4 hebben gegeven; de NB maakt het 1,0.
-    assert_relative_eq!(trek.l_0_mm / druk.l_0_mm, 2.0_f64.sqrt(), max_relative = 1e-12);
+    assert_relative_eq!(
+        trek.l_0_mm / druk.l_0_mm,
+        2.0_f64.sqrt(),
+        max_relative = 1e-12
+    );
 }
 
 /// β₂ = 0,25 — de NB bij §9.2.1.4(1) schrijft dezelfde waarde voor als de
@@ -527,13 +542,21 @@ fn verschuivingsregel_en_lineair_krachtverloop_samen() {
 fn f_ed_bij_een_eindoplegging_volgens_9_3() {
     let a_l = 618.75;
     let z = 495.0;
-    assert_relative_eq!(f_ed_eindoplegging_kn(120.0, a_l, z, 0.0), 150.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        f_ed_eindoplegging_kn(120.0, a_l, z, 0.0),
+        150.0,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(
         f_ed_eindoplegging_kn(120.0, a_l, z, 0.0),
         0.5 * 120.0 * 2.5,
         max_relative = 1e-12
     );
-    assert_relative_eq!(f_ed_eindoplegging_kn(120.0, a_l, z, -40.0), 110.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        f_ed_eindoplegging_kn(120.0, a_l, z, -40.0),
+        110.0,
+        max_relative = 1e-12
+    );
     // Het teken van V_Ed doet niet ter zake: (9.3) neemt de absolute waarde.
     assert_relative_eq!(
         f_ed_eindoplegging_kn(-120.0, a_l, z, 0.0),
@@ -613,7 +636,11 @@ fn c_d_uit_figuur_8_3() {
     assert_relative_eq!(a, 84.6666667, max_relative = 1e-8);
 
     assert_relative_eq!(
-        c_d_mm(Dekkingsgeval::RechteStaven { a_mm: a, c1_mm: c1, c_mm: c }),
+        c_d_mm(Dekkingsgeval::RechteStaven {
+            a_mm: a,
+            c1_mm: c1,
+            c_mm: c
+        }),
         35.0,
         max_relative = 1e-12
     );
@@ -634,12 +661,22 @@ fn c_d_uit_figuur_8_3() {
 fn tabel_8_2_punt_voor_punt() {
     // α₁ = 0,7 bij een ombuiging met c_d > 3Φ; 1,0 zodra c_d dat niet haalt.
     assert_relative_eq!(
-        alpha_1(Staafvorm::AndersDanRecht, Verankeringssoort::Trek, 49.0, 16.0),
+        alpha_1(
+            Staafvorm::AndersDanRecht,
+            Verankeringssoort::Trek,
+            49.0,
+            16.0
+        ),
         0.7,
         max_relative = 1e-12
     );
     assert_relative_eq!(
-        alpha_1(Staafvorm::AndersDanRecht, Verankeringssoort::Trek, 48.0, 16.0),
+        alpha_1(
+            Staafvorm::AndersDanRecht,
+            Verankeringssoort::Trek,
+            48.0,
+            16.0
+        ),
         1.0,
         max_relative = 1e-12
     );
@@ -667,11 +704,23 @@ fn tabel_8_2_punt_voor_punt() {
         max_relative = 1e-12
     );
     // α₅ = 1 − 0,04·p: p = 5 → 0,8; p = 10 → 0,6 → 0,7.
-    assert_relative_eq!(alpha_5(Verankeringssoort::Trek, 5.0), 0.8, max_relative = 1e-12);
-    assert_relative_eq!(alpha_5(Verankeringssoort::Trek, 10.0), 0.7, max_relative = 1e-12);
+    assert_relative_eq!(
+        alpha_5(Verankeringssoort::Trek, 5.0),
+        0.8,
+        max_relative = 1e-12
+    );
+    assert_relative_eq!(
+        alpha_5(Verankeringssoort::Trek, 10.0),
+        0.7,
+        max_relative = 1e-12
+    );
     // α₆ trek: (33/25)^0,5 = 1,14891 — de NB-tabel geeft 1,15.
     assert_relative_eq!(
-        alpha_6(nationale_bijlage::NationaleBijlage::NL, 33.0, Verankeringssoort::Trek),
+        alpha_6(
+            nationale_bijlage::NationaleBijlage::NL,
+            33.0,
+            Verankeringssoort::Trek
+        ),
         1.1489125,
         max_relative = 1e-7
     );
@@ -694,12 +743,19 @@ fn de_afleiding_is_compleet_en_rekent_niets_opnieuw_uit() {
     let stappen = verankering_deelstappen(&v);
 
     let ids: Vec<&str> = stappen.iter().map(|s| s.id.as_str()).collect();
-    assert_eq!(ids, vec!["f_ctd", "f_bd", "l_b_rqd", "alfa", "l_b_min", "l_bd"]);
+    assert_eq!(
+        ids,
+        vec!["f_ctd", "f_bd", "l_b_rqd", "alfa", "l_b_min", "l_bd"]
+    );
 
     for s in &stappen {
         assert!(!s.article.is_empty(), "{} draagt geen vindplaats", s.id);
         assert!(!s.formula_latex.is_empty(), "{} draagt geen formule", s.id);
-        assert!(!s.ingevuld_latex.is_empty(), "{} draagt geen ingevulde regel", s.id);
+        assert!(
+            !s.ingevuld_latex.is_empty(),
+            "{} draagt geen ingevulde regel",
+            s.id
+        );
         assert!(s.value.is_some(), "{} levert geen waarde", s.id);
     }
 
@@ -737,5 +793,9 @@ fn onvolledige_invoer_levert_geen_stil_antwoord() {
     })
     .is_err());
     // Zonder f_yd is er geen σ_sd.
-    assert!(verankeringslengte(&VerankeringInvoer { f_yd_mpa: 0.0, ..onderstaaf(16.0) }).is_err());
+    assert!(verankeringslengte(&VerankeringInvoer {
+        f_yd_mpa: 0.0,
+        ..onderstaaf(16.0)
+    })
+    .is_err());
 }

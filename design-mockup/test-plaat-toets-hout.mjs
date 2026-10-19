@@ -25,7 +25,7 @@
 //
 // Uitvoeren: npx tsx test-plaat-toets-hout.mjs   (vanuit design-mockup/)
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -79,19 +79,29 @@ function check(m) {
   const antw = verwerkVerzoek({ v: 1, id: 1, op: "check", payload: { model: m, combinations: COMBINATIES } });
   return antw;
 }
-function kern(invoer) {
-  const r = spawnSync(TOETSBRUG, [], {
-    input: JSON.stringify({ opdracht: "check_plates", inputs: invoer }),
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
+async function kern(invoer) {
+  const antwoord = await new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code !== 0) reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+      else resolve(out);
+    });
+    child.stdin.end(JSON.stringify({ opdracht: "check_plates", inputs: invoer }));
   });
   // Altijd een lijst: een foutantwoord ({ fout }) wordt zo een mislukte check
   // in plaats van een crash die de andere checks verbergt.
   try {
-    const uit = JSON.parse(r.stdout);
+    const uit = JSON.parse(antwoord);
     return Array.isArray(uit) ? uit : [uit];
   } catch {
-    return [{ fout: r.stdout || r.stderr }];
+    return [{ fout: antwoord }];
   }
 }
 
@@ -117,7 +127,7 @@ log("\n[c] de kern via de toetsbrug");
 if (!existsSync(TOETSBRUG)) {
   checkTrue(`toetsbrug aanwezig (${TOETSBRUG}) — bouw hem met cargo build --release -p toetsbrug`, false);
 } else {
-  const [u] = kern([p1]);
+  const [u] = await kern([p1]);
   checkTrue("niet geweigerd", u && u.geweigerd === undefined, u?.geweigerd ?? JSON.stringify(u).slice(0, 200));
   const c1 = u?.combinaties?.find((c) => c.combination_id === 1);
   const c2 = u?.combinaties?.find((c) => c.combination_id === 2);
@@ -132,7 +142,7 @@ if (!existsSync(TOETSBRUG)) {
 
   const sc3 = check(model({ klimaatklasse: 3 })).result?.plate_check_inputs?.[0];
   checkTrue("klimaatklasse 3 → Sc3", sc3?.service_class === "Sc3");
-  const [u3] = kern([sc3]);
+  const [u3] = await kern([sc3]);
   checkRel("klimaatklasse 3, combinatie 2: UC = 6,9/10,5 (k_mod 0,65)",
     u3?.combinaties?.find((c) => c.combination_id === 2)?.uc, 0.657143, 0.02);
 }

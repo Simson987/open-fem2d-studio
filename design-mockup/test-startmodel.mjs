@@ -48,7 +48,7 @@
 // Uitvoeren: npx tsx test-startmodel.mjs   (vanuit design-mockup/)
 //        of: node scripts/run-tests.mjs --filter=startmodel
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -424,14 +424,23 @@ log("\n[h] Lastomschrijvingen: elke last draagt een ingevulde naam");
 // bewijzen deze blokken iets over een model dat de gebruiker niet voor zich
 // heeft.
 const KERN_AANWEZIG = existsSync(TOETSBRUG);
-const kern = (opdracht, inputs) => {
-  const r = spawnSync(TOETSBRUG, [], {
-    input: JSON.stringify({ opdracht, inputs }),
-    maxBuffer: 256 * 1024 * 1024,
-    encoding: "utf8",
+const kern = async (opdracht, inputs) => {
+  const antwoord = await new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code !== 0) reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+      else resolve(out);
+    });
+    child.stdin.end(JSON.stringify({ opdracht, inputs }));
   });
-  if (r.error) throw r.error;
-  const data = JSON.parse(r.stdout);
+  const data = JSON.parse(antwoord);
   if (data && !Array.isArray(data) && typeof data === "object" && "fout" in data) {
     throw new Error(data.fout);
   }
@@ -471,7 +480,7 @@ log("\n[i] Echte rekenkern: het stalen portaal komt door de toetsing");
     meldKernOntbreekt();
   } else {
     const profileDb = new Map();
-    for (const p of kern("list_steel_profiles")) {
+    for (const p of await kern("list_steel_profiles")) {
       const sleutel = profileLookupKey(p.name);
       if (!profileDb.has(sleutel)) profileDb.set(sleutel, p);
     }
@@ -481,7 +490,7 @@ log("\n[i] Echte rekenkern: het stalen portaal komt door de toetsing");
     });
     check("staal: invoeren die de kern in gaan", inputs.length, 3);
 
-    const resultaten = kern("check_steel_beams", inputs);
+    const resultaten = await kern("check_steel_beams", inputs);
     check("staal: resultaten uit de kern", resultaten.length, 3);
 
     // De band. 0,85 is de bovengrens uit de opdracht; 0,35 de ondergrens —
@@ -535,7 +544,7 @@ log("\n[i] Echte rekenkern: het stalen portaal komt door de toetsing");
     // staat het hier zwart op wit in plaats van alleen in een commentaarregel.
     const zonderSteun = JSON.parse(JSON.stringify(inputs.find((i) => i.beam_id === 3)));
     zonderSteun.lateral_bracing = { top_flange_positions: [], bottom_flange_positions: [] };
-    const kaal = kern("check_steel_beams", [zonderSteun])[0];
+    const kaal = (await kern("check_steel_beams", [zonderSteun]))[0];
     const kipKaal = (kaal.checks ?? []).find((c) => c.id === "6.3.2_ltb");
     const ucKaal = (kipKaal?.kind?.data ?? kipKaal)?.uc?.uc;
     ok("regel zónder de aangenomen kipsteunen: kip keurt af",
@@ -575,7 +584,7 @@ log("\n[j] Echte rekenkern: de betonbalk, en wat de beugels daar doen");
     });
     check("beton: invoeren die de kern in gaan", inputs.length, 1);
 
-    const res = kern("check_concrete_beams", inputs)[0];
+    const res = (await kern("check_concrete_beams", inputs))[0];
     // De kern verpakt elke deeltoets in een `kind`-omhulsel; hier één keer
     // uitgepakt, zodat de regels hieronder over de toets zelf gaan.
     const toets = (id) => {
@@ -712,7 +721,7 @@ log("\n[j] Echte rekenkern: de betonbalk, en wat de beugels daar doen");
     const zonderBeugels = JSON.parse(JSON.stringify(inputs[0]));
     delete zonderBeugels.cage.stirrup_spacing_mm;
     delete zonderBeugels.cage.stirrup_legs;
-    const kaal = kern("check_concrete_beams", [zonderBeugels])[0];
+    const kaal = (await kern("check_concrete_beams", [zonderBeugels]))[0];
     const kaalStatus = (id) => {
       const c = (kaal.checks ?? []).find((x) => x.id === id);
       return (c?.kind?.data ?? c)?.status;

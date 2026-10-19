@@ -1,9 +1,11 @@
-import { solveNativeFem } from "../../../lib/nativeFemClient";
+import { solveNativeFem, type NativeMixed2DResult } from "../../../lib/nativeFemClient";
 import { beddingSplitsFracties, MIN_SEGMENT_MM, normaliseerSegmenten,
-  registreerScheefstandRichtingen, SCHEEFSTAND_ID_OFFSET } from "./engine";
+  buildMesh, registreerScheefstandRichtingen, SCHEEFSTAND_ID_OFFSET } from "./engine";
 import { grootsteVerplaatsing } from "./grootsteVerplaatsing";
 import type { LoadCombination } from "./combinations";
 import type { ElementForces, MultiInput, SolverResult } from "./types";
+import { materialOptions, nativeMembraneResultToSolverResult, voegNativeDrieLagencontroleToe } from "./nativeMembraneRoute";
+import type { NativeMaterialLaw, NativeModulusCurve } from "../../../core/fem/nativePlate2DAdapter";
 
 type FrameAnalysis = "linear" | "geometric" | "material" | "combined";
 type NativeAxialLaw =
@@ -22,8 +24,13 @@ interface NativeFrame2DResult {
     deflectionM: number[]; axialDispM: number[]; rotationRad: number[];
     axialHistory?: { plasticStrain: number; equivalentPlasticStrain: number;
       tensileDamage: number; tangentEMpa: number };
+    sectionHistory?: { maximumAbsPlasticStrain: number; maximumEquivalentPlasticStrain: number;
+      maximumTensileDamage: number };
   }>;
   equilibriumResidual: number;
+  frontalMaximumFrontDofs?: number | null;
+  membraneTriangles?: NativeMixed2DResult["triangles"];
+  membraneQuads?: NativeMixed2DResult["quads"];
 }
 
 interface FrameSegment {
@@ -50,9 +57,28 @@ function finite(value: number, label: string): number {
   return value;
 }
 
+function distanceToSegment(point: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }): number {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const length2 = dx * dx + dy * dy;
+  const t = length2 ? Math.max(0, Math.min(1,
+    ((point.x - a.x) * dx + (point.y - a.y) * dy) / length2)) : 0;
+  return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
+}
+
+function pointInPolygon(point: { x: number; y: number }, polygon: readonly { x: number; y: number }[]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i], b = polygon[j];
+    if ((a.y > point.y) !== (b.y > point.y)
+        && point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
 /** App plane X/Z in mm, N, Nmm -> Rust plane X/Y in m, kN, kNm. */
 export function buildNativeFrame2DRequest(
   input: MultiInput, factor: (caseId: number) => number, analysis: FrameAnalysis = "linear",
+  allowMaterialWithoutBeamLaw = false,
 ) {
   if (input.plates?.length || !input.beams.length) {
     throw new Error("De Rust 2D-raamwerkroute vereist uitsluitend staven, zonder gekoppelde platen.");
@@ -79,7 +105,8 @@ export function buildNativeFrame2DRequest(
     return [beam.id, { lengthM: lengthMm / 1000,
       c: (end.x - start.x) / lengthMm, s: (end.z - start.z) / lengthMm }] as const;
   }));
-  if (isMaterialAnalysis(analysis) && !input.beams.some(beam => beam.axialMaterialLaw)) {
+  if (isMaterialAnalysis(analysis) && !allowMaterialWithoutBeamLaw
+      && !input.beams.some(beam => beam.axialMaterialLaw)) {
     throw new Error("Geef minstens één staaf een axiale FNL-materiaalwet voor de Rust 2D-raamwerkroute.");
   }
   const materials = input.beams.map(beam => {
@@ -116,11 +143,6 @@ export function buildNativeFrame2DRequest(
     const kETx = spring(beam.veren?.endTx, "endTx-veer", !!beam.releases?.endTx);
     const kETz = spring(beam.veren?.endTz, "endTz-veer", !!beam.releases?.endTz);
     const kERy = spring(beam.veren?.endRy, "endRy-veer", rzEnd, true);
-    if (isMaterialAnalysis(analysis)
-        && ((beam.releases?.startTx && kSTx === undefined)
-          || (beam.releases?.endTx && kETx === undefined))) {
-      throw new Error(`Staaf ${beam.id}: axiale translatievrijgave met FNL is nog niet gekoppeld aan de Rust 2D-raamwerkkern.`);
-    }
     const axes = geometry.get(beam.id)!;
     const lengthMm = axes.lengthM * 1000;
     const definitions = normaliseerSegmenten(beam.id, beam.segmenten, lengthMm);
@@ -131,8 +153,26 @@ export function buildNativeFrame2DRequest(
     const partialLoad = input.loads.some(load => load.beamId === beam.id
       && ((load.qStart ?? load.q) !== 0 || (load.qEnd ?? load.q) !== 0)
       && ((load.startFrac ?? 0) > 0 || (load.endFrac ?? 1) < 1));
+    const axialFnlDistributedLoad = isMaterialAnalysis(analysis) && input.loads.some(load => {
+      if (load.beamId !== beam.id) return false;
+      const projectedAxial = (value: number) => {
+        const q = value;
+        const [qx, qy] = load.qCoord === "local"
+          ? load.qDir === "x" ? [q, 0] : [0, q]
+          : load.qDir === "x" ? [axes.c * q, -axes.s * q] : [axes.s * q, axes.c * q];
+        return qx - schFactor * axes.c * (axes.s * qx + axes.c * qy);
+      };
+      return Math.abs(projectedAxial(load.qStart ?? load.q)) > 1e-12
+        || Math.abs(projectedAxial(load.qEnd ?? load.q)) > 1e-12;
+    });
+    const axialFnlSubdivisions = Math.max(1, Math.ceil(lengthMm / 100));
+    const internalPointMoment = (input.beamPointLoads ?? []).some(load =>
+      load.beamId === beam.id && Number.isFinite(load.posFrac)
+      && load.posFrac > 1e-6 && load.posFrac < 1 - 1e-6
+      && Number.isFinite(load.my) && load.my !== 0);
     const meshNeeded = kLijn !== undefined || definitions !== undefined
-      || !!beam.extraSneden?.length || partialLoad;
+      || !!beam.extraSneden?.length || partialLoad
+      || axialFnlDistributedLoad || internalPointMoment;
     const forced = meshNeeded ? (input.beamPointLoads ?? [])
       .filter(load => load.beamId === beam.id && Number.isFinite(load.posFrac)
         && load.posFrac > 1e-6 && load.posFrac < 1 - 1e-6)
@@ -150,6 +190,10 @@ export function buildNativeFrame2DRequest(
         ...input.loads.filter(load => load.beamId === beam.id
           && ((load.qStart ?? load.q) !== 0 || (load.qEnd ?? load.q) !== 0))
           .flatMap(load => [load.startFrac ?? 0, load.endFrac ?? 1]),
+        ...(axialFnlDistributedLoad
+          ? Array.from({ length: axialFnlSubdivisions - 1 },
+            (_, index) => (index + 1) / axialFnlSubdivisions)
+          : []),
         ...(kLijn === undefined ? [] : beddingSplitsFracties(lengthMm,
           beam.E ?? 210000, beam.I ?? 1.673e7, kLijn))];
       const start = byId.get(beam.from)!, end = byId.get(beam.to)!;
@@ -296,7 +340,6 @@ export function buildNativeFrame2DRequest(
       if (fx || fz || mz) nodalLoads.push({ nodeId: position === 0 ? beam.from : beam.to, fx, fy: fz, mz });
       return [];
     }
-    if (mz) throw new Error(`Staaf ${load.beamId}: een puntmoment binnen de staaf is nog niet gekoppeld aan Rust.`);
     // Ook bij factor nul blijft dit station bestaan. Alle belastinggevallen
     // moeten hetzelfde raster hebben voordat combineResults ze superponeert.
     const segment = segmentsByBeam.get(load.beamId)?.find(item =>
@@ -307,6 +350,7 @@ export function buildNativeFrame2DRequest(
         ? segment.startNodeId : segment.endNodeId, fx, fy: fz, mz });
       return [];
     }
+    if (mz) throw new Error(`Staaf ${load.beamId}: een puntmoment binnen de staaf kon niet naar een Rust-knoop worden gesplitst.`);
     return [{ memberId: segment.id, pxKn: axes.c * fx + axes.s * fz,
       pyKn: -axes.s * fx + axes.c * fz,
       positionM: (position - segment.t0) * axes.lengthM }];
@@ -341,15 +385,234 @@ export function buildNativeFrame2DRequest(
   return request;
 }
 
+/** Build one app request for a directly conforming frame/membrane mesh. */
+function buildNativeConformingFrame2DRequest(
+  input: MultiInput,
+  factor: (caseId?: number) => number,
+  analysis: FrameAnalysis,
+) {
+  if (!input.plates?.length || !input.beams.length) {
+    throw new Error("Gekoppelde Rust-invoer vereist minstens één plaat en één staaf.");
+  }
+  const plateInput: MultiInput = {
+    ...input,
+    beams: [], loads: [], pointLoads: [], beamPointLoads: [], thermalLoads: [],
+  };
+  const built = buildMesh(plateInput, factor, { solverCapacity: "native" });
+  if (built.randKoppelingen.length) {
+    throw new Error("De gekoppelde Rust-route ondersteunt nog geen niet-conforme randkoppelingen.");
+  }
+  const plateNodeIds = new Set<number>();
+  const plateElements = [...built.mesh.elements.values()];
+  if (!plateElements.length) throw new Error("Het plaatmesh bevat geen CST- of Q4-elementen.");
+  for (const element of plateElements) {
+    if (element.nodeIds.length !== 3 && element.nodeIds.length !== 4) {
+      throw new Error(`Plaatmesh-element ${element.id} is geen CST- of Q4-element.`);
+    }
+    element.nodeIds.forEach((id: number) => plateNodeIds.add(id));
+  }
+
+  const plateNodes = [...plateNodeIds].map(id => {
+    const node = built.mesh.getNode(id);
+    if (!node || !Number.isFinite(node.x) || !Number.isFinite(node.y)) {
+      throw new Error(`Plaatmesh-knoop ${id} heeft ongeldige coördinaten.`);
+    }
+    return node;
+  });
+  const elementPolygons: Array<Array<{ x: number; y: number }>> = plateElements.map(element => element.nodeIds.map((id: number) => {
+    const node = built.mesh.getNode(id);
+    if (!node) throw new Error(`Plaatmesh-element ${element.id} mist knoop ${id}.`);
+    return { x: node.x, y: node.y };
+  }));
+  for (const beam of input.beams) {
+    const start = input.nodes.find(node => node.id === beam.from);
+    const end = input.nodes.find(node => node.id === beam.to);
+    if (!start || !end) throw new Error(`Staaf ${beam.id} verwijst naar een onbekende knoop.`);
+    const a = { x: start.x / 1000, y: start.z / 1000 };
+    const b = { x: end.x / 1000, y: end.z / 1000 };
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const length2 = dx * dx + dy * dy;
+    if (!(length2 > 0)) throw new Error(`Staaf ${beam.id} heeft geen lengte.`);
+    const stations = [0, 1];
+    for (const polygon of elementPolygons) for (let index = 0; index < polygon.length; index++) {
+      const c = polygon[index], d = polygon[(index + 1) % polygon.length];
+      const ex = d.x - c.x, ey = d.y - c.y;
+      const denominator = dx * ey - dy * ex;
+      const qx = c.x - a.x, qy = c.y - a.y;
+      if (Math.abs(denominator) < 1e-14) {
+        if (Math.abs(qx * dy - qy * dx) < 1e-10) {
+          for (const point of [c, d]) {
+            const t = ((point.x - a.x) * dx + (point.y - a.y) * dy) / length2;
+            if (t > 0 && t < 1) stations.push(t);
+          }
+        }
+      } else {
+        const t = (qx * ey - qy * ex) / denominator;
+        const u = (qx * dy - qy * dx) / denominator;
+        if (t > 0 && t < 1 && u >= 0 && u <= 1) stations.push(t);
+      }
+    }
+    stations.sort((x, y) => x - y);
+    const uniqueStations = stations.filter((t, index) => index === 0 || t - stations[index - 1] > 1e-9);
+    for (const t of uniqueStations) {
+      const point = { x: a.x + t * dx, y: a.y + t * dy };
+      const touchesPlateEdge = elementPolygons.some(polygon => polygon.some((vertex: { x: number; y: number }, edgeIndex: number) =>
+        distanceToSegment(point, vertex, polygon[(edgeIndex + 1) % polygon.length]) <= 1e-8));
+      if (touchesPlateEdge && !plateNodes.some(node => Math.hypot(node.x - point.x, node.y - point.y) <= 0.001 + 1e-12)) {
+        throw new Error(`Staaf ${beam.id} raakt een plaatelement tussen rekenknopen; stem de mesh af of gebruik MPC-koppeling.`);
+      }
+    }
+    for (let index = 0; index + 1 < uniqueStations.length; index++) {
+      if (uniqueStations[index + 1] - uniqueStations[index] < 1e-10) continue;
+      const t = (uniqueStations[index] + uniqueStations[index + 1]) / 2;
+      const point = { x: a.x + t * dx, y: a.y + t * dy };
+      const crossesAnElementInterior = elementPolygons.some(polygon => pointInPolygon(point, polygon)
+        && polygon.reduce((minimum: number, vertex: { x: number; y: number }, edgeIndex: number) => Math.min(minimum,
+          distanceToSegment(point, vertex, polygon[(edgeIndex + 1) % polygon.length])), Infinity) > 1e-8);
+      if (crossesAnElementInterior) {
+        throw new Error(`Staaf ${beam.id} loopt door het binnenvlak van een plaat; daarvoor is een niet-conforme MPC-koppeling nodig.`);
+      }
+    }
+  }
+  // The common FEM Studio mesher shares all coincident frame/plate nodes. Give
+  // the Rust frame the same edge stations so both element families use those
+  // exact shared translations.
+  const beams = input.beams.map(beam => {
+    const start = input.nodes.find(node => node.id === beam.from);
+    const end = input.nodes.find(node => node.id === beam.to);
+    if (!start || !end) throw new Error(`Staaf ${beam.id} verwijst naar een onbekende knoop.`);
+    const dx = (end.x - start.x) / 1000, dy = (end.z - start.z) / 1000;
+    const length2 = dx * dx + dy * dy;
+    const edgeStations = plateNodes.flatMap(node => {
+      const px = node.x - start.x / 1000, py = node.y - start.z / 1000;
+      const t = (px * dx + py * dy) / length2;
+      const distance = Math.abs(px * dy - py * dx) / Math.sqrt(length2);
+      return t > 1e-9 && t < 1 - 1e-9 && distance <= 0.001
+        ? [t] : [];
+    });
+    const extraSneden = [...(beam.extraSneden ?? []), ...edgeStations]
+      .sort((a, b) => a - b)
+      .filter((value, index, values) => index === 0 || value - values[index - 1] > 1e-9);
+    return { ...beam, extraSneden };
+  });
+  const frameInput: MultiInput = {
+    ...input, beams, plates: undefined, edgeLoads: undefined, edgePointLoads: undefined,
+  };
+  const request = buildNativeFrame2DRequest(frameInput, factor, analysis, true) as ReturnType<typeof buildNativeFrame2DRequest> & {
+    membrane: {
+      materials: Array<{ id: number; eMpa: number; nu: number; law: NativeMaterialLaw }>;
+      triangles: Array<{ id: number; nodeIds: [number, number, number]; materialId: number; thicknessM: number }>;
+      quads: Array<{ id: number; nodeIds: [number, number, number, number]; materialId: number; thicknessM: number }>;
+      orthotropicMaterials: Array<{ materialId: number; e1Mpa: number; e2Mpa: number; nu12: number; g12Mpa: number; angleRad: number }>;
+      modulusCurves: NativeModulusCurve[];
+    };
+  };
+
+  const nextNodeId = Math.max(0, ...request.nodes.map(node => node.id)) + 1;
+  let next = nextNodeId;
+  const coupledNodeId = new Map<number, number>();
+  for (const plateNode of plateNodes) {
+    const matches = request.nodes.map(node => ({ node,
+      distance: Math.hypot(node.x - plateNode.x, node.y - plateNode.y),
+    })).filter(match => match.distance <= 0.001 + 1e-12)
+      .sort((a, b) => a.distance - b.distance);
+    if (matches.length > 1 && Math.abs(matches[0].distance - matches[1].distance) < 1e-9) {
+      throw new Error("Een plaatknoop valt binnen 1 mm van twee verschillende raamwerknodes.");
+    }
+    const id = matches[0]?.node.id ?? next++;
+    if (!matches.length) request.nodes.push({ id, x: plateNode.x, y: plateNode.y });
+    coupledNodeId.set(plateNode.id, id);
+  }
+
+  // Keep the UI node → mesh node map aligned with the IDs used in the Rust
+  // request. The plate result adapter uses it to restore the original node IDs.
+  built.nodeIdMap = new Map([...built.nodeIdMap].map(([uiId, meshId]) => {
+    const oldNode = built.mesh.getNode(meshId);
+    const uiNode = input.nodes.find(node => node.id === uiId);
+    if (!oldNode || !uiNode) throw new Error(`UI-knoop ${uiId} ontbreekt in het plaatmesh.`);
+    const match = request.nodes.find(node =>
+      Math.hypot(node.x - uiNode.x / 1000, node.y - uiNode.z / 1000) <= 0.001 + 1e-12);
+    if (!match) throw new Error(`UI-knoop ${uiId} ontbreekt in het gekoppelde Rust-mesh.`);
+    return [uiId, match.id];
+  }));
+
+  const materials = new Map<number, { id: number; eMpa: number; nu: number; law: NativeMaterialLaw }>();
+  const orthotropicMaterials: Array<{ materialId: number; e1Mpa: number; e2Mpa: number; nu12: number; g12Mpa: number; angleRad: number }> = [];
+  for (const info of built.plateInfo) {
+    const id = info.region.materialId;
+    if (materials.has(id)) continue;
+    const material = built.mesh.getMaterial(id);
+    if (!material || !(material.E > 0) || !(material.nu > -1 && material.nu < 0.5)) {
+      throw new Error(`Plaat ${info.plateId}: ongeldige elastische materiaalparameters.`);
+    }
+    materials.set(id, { id, eMpa: material.E / 1e6, nu: material.nu, law: { kind: "elastic" } });
+    if (material.orthotroop) orthotropicMaterials.push({
+      materialId: id,
+      e1Mpa: material.orthotroop.E1 / 1e6,
+      e2Mpa: material.orthotroop.E2 / 1e6,
+      nu12: material.orthotroop.nu12,
+      g12Mpa: material.orthotroop.G12 / 1e6,
+      angleRad: material.orthotroop.hoek,
+    });
+  }
+  const { laws, curves } = materialOptions(input, built, analysis, false);
+  if (isMaterialAnalysis(analysis)
+      && !input.beams.some(beam => beam.axialMaterialLaw)
+      && laws.size === 0 && curves.length === 0) {
+    throw new Error("Geef minstens één staaf of plaat een FNL-materiaalwet of afnemende E-curve.");
+  }
+  for (const [id, material] of materials) material.law = laws.get(id) ?? { kind: "elastic" };
+  const triangles: NonNullable<typeof request.membrane>["triangles"] = [];
+  const quads: NonNullable<typeof request.membrane>["quads"] = [];
+  for (const element of plateElements) {
+    const nodeIds = element.nodeIds.map((id: number) => {
+      const coupled = coupledNodeId.get(id);
+      if (coupled === undefined) throw new Error(`Plaatmesh-element ${element.id} mist gekoppelde knoop ${id}.`);
+      return coupled;
+    });
+    const thicknessM = element.thickness;
+    if (!(Number.isFinite(thicknessM) && thicknessM > 0)) {
+      throw new Error(`Plaatmesh-element ${element.id} heeft een ongeldige dikte.`);
+    }
+    if (nodeIds.length === 3) triangles.push({ id: element.id,
+      nodeIds: nodeIds as [number, number, number], materialId: element.materialId, thicknessM });
+    else quads.push({ id: element.id,
+      nodeIds: nodeIds as [number, number, number, number], materialId: element.materialId, thicknessM });
+  }
+  request.membrane = { materials: [...materials.values()], triangles, quads, orthotropicMaterials,
+    modulusCurves: curves };
+
+  const frameMemberNodeIds = new Set(request.members.flatMap(member => [member.startNodeId, member.endNodeId]));
+  for (const plateNode of plateNodes) {
+    const load = plateNode.loads;
+    if (!load.fx && !load.fy && !load.moment) continue;
+    const nodeId = coupledNodeId.get(plateNode.id)!;
+    if (load.moment && !frameMemberNodeIds.has(nodeId)) {
+      throw new Error("Een plaatrandmoment op een membraanknoop zonder raamwerkrotatie wordt niet ondersteund.");
+    }
+    request.nodalLoads.push({ nodeId, fx: load.fx / 1000, fy: load.fy / 1000, mz: load.moment / 1000 });
+  }
+  return { request, built };
+}
+
 export function nativeFrame2DResultToSolverResult(
   request: ReturnType<typeof buildNativeFrame2DRequest>, native: NativeFrame2DResult,
 ): SolverResult {
-  if (!Number.isFinite(native.equilibriumResidual) || native.equilibriumResidual > 1e-8
-      || native.nodes?.length !== request.nodes.length || native.members?.length !== request.members.length) {
-    throw new Error("De Rust 2D-raamwerkkern leverde geen volledig evenwichtig resultaat.");
+  const residualLimit = isMaterialAnalysis(request.analysis) ? 1e-5 : 1e-8;
+  if (!native || typeof native !== "object" || !Array.isArray(native.nodes)
+      || !Array.isArray(native.members) || native.nodes.length !== request.nodes.length
+      || native.members.length !== request.members.length
+      || native.nodes.some(node => !node || typeof node !== "object")
+      || native.members.some(member => !member || typeof member !== "object")
+      || !Number.isFinite(native.equilibriumResidual) || native.equilibriumResidual < 0
+      || native.equilibriumResidual > residualLimit) {
+    throw new Error(`De Rust 2D-raamwerkkern leverde geen volledig evenwichtig resultaat `
+      + `(residu ${native.equilibriumResidual}, knopen ${native.nodes?.length}/${request.nodes.length}, `
+      + `staven ${native.members?.length}/${request.members.length}).`);
   }
   const nodeIds = new Set(request.nodes.map(node => node.id));
   const memberIds = new Set(request.members.map(member => member.id));
+  const requestNodes = new Map(request.nodes.map(node => [node.id, node]));
   const mesh = frameMeshes.get(request);
   if (!mesh) throw new Error("De Rust 2D-raamwerkroute mist de bijbehorende staafindeling.");
   const supported = new Set(request.supports.map(support => support.nodeId));
@@ -358,7 +621,8 @@ export function nativeFrame2DResultToSolverResult(
   const seenNodes = new Set<number>();
   for (const node of native.nodes) {
     if (!nodeIds.has(node.nodeId) || seenNodes.has(node.nodeId)
-        || node.displacement?.length !== 3 || node.reaction?.length !== 3
+        || !Array.isArray(node.displacement) || node.displacement.length !== 3
+        || !Array.isArray(node.reaction) || node.reaction.length !== 3
         || [...node.displacement, ...node.reaction].some(value => !Number.isFinite(value))) {
       throw new Error("De Rust 2D-raamwerkkern leverde ongeldige knoopwaarden.");
     }
@@ -374,11 +638,22 @@ export function nativeFrame2DResultToSolverResult(
   for (const member of native.members) {
     const arrays = [member.stationsM, member.normalForceKn, member.shearForceKn,
       member.bendingMomentKnm, member.deflectionM, member.axialDispM, member.rotationRad];
-    const count = member.stationsM?.length ?? 0;
+    const count = Array.isArray(member.stationsM) ? member.stationsM.length : 0;
+    const requestedMember = request.members.find(entry => entry.id === member.memberId);
+    const start = requestedMember && requestNodes.get(requestedMember.startNodeId);
+    const end = requestedMember && requestNodes.get(requestedMember.endNodeId);
+    const expectedLengthM = start && end ? Math.hypot(end.x - start.x, end.y - start.y) : NaN;
+    const stationToleranceM = Math.max(1e-9, expectedLengthM * 1e-9);
     if (!memberIds.has(member.memberId) || segmentElements.has(member.memberId)
-        || member.localEndForces?.length !== 6 || count < 2
+        || !Array.isArray(member.localEndForces) || member.localEndForces.length !== 6 || count < 2
         || arrays.some(array => !Array.isArray(array) || array.length !== count
           || array.some(value => !Number.isFinite(value)))
+        || !Number.isFinite(expectedLengthM) || !(expectedLengthM > 0)
+        || Math.abs(member.stationsM[0]) > stationToleranceM
+        || Math.abs(member.stationsM[count - 1] - expectedLengthM) > stationToleranceM
+        // Repeated abscissae are valid at concentrated-load jumps; a reversal is not.
+        || member.stationsM.some((station, index) => index > 0
+          && station < member.stationsM[index - 1] - stationToleranceM)
         || member.localEndForces.some(value => !Number.isFinite(value))) {
       throw new Error("De Rust 2D-raamwerkkern leverde ongeldige staafdiagrammen.");
     }
@@ -389,9 +664,18 @@ export function nativeFrame2DResultToSolverResult(
         throw new Error("De Rust 2D-raamwerkkern leverde geen geldige axiale materiaaltoestand.");
       }
     }
+    if (member.sectionHistory) {
+      const history = member.sectionHistory;
+      if ([history.maximumAbsPlasticStrain, history.maximumEquivalentPlasticStrain,
+        history.maximumTensileDamage].some(value => !Number.isFinite(value) || value < 0)
+          || history.maximumTensileDamage > 1) {
+        throw new Error("De Rust 2D-raamwerkkern leverde een ongeldige doorsnedegeschiedenis.");
+      }
+    }
     segmentElements.set(member.memberId, {
       N: member.normalForceKn[0] * 1000, V: member.shearForceKn[0] * 1000,
       ...(member.axialHistory ? { axialHistory: { ...member.axialHistory } } : {}),
+      ...(member.sectionHistory ? { sectionHistory: { ...member.sectionHistory } } : {}),
       M_start: member.bendingMomentKnm[0] * 1e6,
       M_end: member.bendingMomentKnm[count - 1] * 1e6,
       L_mm: member.stationsM[count - 1] * 1000,
@@ -448,11 +732,121 @@ export function nativeFrame2DResultToSolverResult(
           || current.tensileDamage === worst.tensileDamage
             && current.equivalentPlasticStrain > worst.equivalentPlasticStrain
           ? current : worst) };
+      const sectionHistories = segments.map(segment => segmentElements.get(segment.id)!.sectionHistory)
+        .filter((history): history is NonNullable<ElementForces["sectionHistory"]> => !!history);
+      if (sectionHistories.length) merged.sectionHistory = {
+        maximumAbsPlasticStrain: Math.max(...sectionHistories.map(history => history.maximumAbsPlasticStrain)),
+        maximumEquivalentPlasticStrain: Math.max(...sectionHistories.map(history => history.maximumEquivalentPlasticStrain)),
+        maximumTensileDamage: Math.max(...sectionHistories.map(history => history.maximumTensileDamage)),
+      };
     }
     elements.set(beamId, merged);
   }
   return { displacements, reactions, elements,
     maxDisplacement: grootsteVerplaatsing(displacements.values(), elements.values()) };
+}
+
+async function nativeConformingFrameResultToSolverResult(
+  input: MultiInput,
+  request: ReturnType<typeof buildNativeFrame2DRequest> & { membrane: NonNullable<ReturnType<typeof buildNativeConformingFrame2DRequest>["request"]["membrane"]> },
+  built: ReturnType<typeof buildMesh>,
+  native: NativeFrame2DResult,
+  supports: MultiInput["supports"],
+): Promise<SolverResult> {
+  const frameResult = nativeFrame2DResultToSolverResult(request, native);
+  const expectedTriangles = [...built.mesh.elements.values()].filter(element => element.nodeIds.length === 3).length;
+  const expectedQuads = [...built.mesh.elements.values()].filter(element => element.nodeIds.length === 4).length;
+  const triangles = native.membraneTriangles ?? [];
+  const quads = native.membraneQuads ?? [];
+  if (triangles.length !== expectedTriangles || quads.length !== expectedQuads) {
+    throw new Error(`De Rust-kern leverde geen volledig gekoppeld plaatresultaat terug `
+      + `(CST ${triangles.length}/${expectedTriangles}, Q4 ${quads.length}/${expectedQuads}).`);
+  }
+  if (expectedTriangles && input.plates?.some(plate => plate.threeLayer)) {
+    throw new Error("De Blaauwendraad drie-lagencontrole vereist een uitsluitend Q4-plaatmesh.");
+  }
+  const membraneResult = nativeMembraneResultToSolverResult(built, {
+    nodes: native.nodes.map(node => ({
+      nodeId: node.nodeId,
+      uxM: node.displacement[0],
+      uyM: node.displacement[1],
+      rxKn: node.reaction[0],
+      ryKn: node.reaction[1],
+    })),
+  }, [
+    ...triangles.map(element => ({
+      elementId: element.triangleId,
+      stressMpa: element.stressMpa,
+      effectiveEMpa: element.effectiveEMpa,
+      maxEquivalentStrain: element.maxEquivalentStrain,
+      equivalentPlasticStrain: element.equivalentPlasticStrain,
+      tensileDamage: element.tensileDamage,
+    })),
+    ...quads.map(quad => ({
+      elementId: quad.quadId,
+      stressMpa: quad.averageStressMpa,
+      effectiveEMpa: quad.gaussPoints.reduce((sum, point) => sum + point.effectiveEMpa, 0) / 4,
+      maxEquivalentStrain: Math.max(...quad.gaussPoints.map(point => point.maxEquivalentStrain)),
+      equivalentPlasticStrain: Math.max(...quad.gaussPoints.map(point => point.equivalentPlasticStrain)),
+      tensileDamage: Math.max(...quad.gaussPoints.map(point => point.tensileDamage)),
+      threeLayerSamples: quad.gaussPoints.map((point, index) => {
+        const element = built.mesh.getElement(quad.quadId)!;
+        const nodeCoordinates = element.nodeIds.map((id: number) => built.mesh.getNode(id)!);
+        const a = 1 / Math.sqrt(3);
+        const positions = [[-a, -a], [a, -a], [a, a], [-a, a]] as const;
+        const [xi, eta] = positions[index];
+        const weights = [(1 - xi) * (1 - eta) / 4, (1 + xi) * (1 - eta) / 4,
+          (1 + xi) * (1 + eta) / 4, (1 - xi) * (1 + eta) / 4];
+        const positionM: [number, number] = [
+          weights.reduce((sum, weight, i) => sum + weight * nodeCoordinates[i].x, 0),
+          weights.reduce((sum, weight, i) => sum + weight * nodeCoordinates[i].y, 0),
+        ];
+        return {
+          id: `quad-${quad.quadId}-gauss-${index + 1}`,
+          positionM,
+          nx: point.stressMpa[0] * element.thickness * 1000,
+          ny: point.stressMpa[1] * element.thickness * 1000,
+          nxy: point.stressMpa[2] * element.thickness * 1000,
+        };
+      }),
+    })),
+  ], supports, {
+    required: new Set(built.nodeIdMap.values()),
+    allowed: new Set(request.nodes.map(node => node.id)),
+  });
+  frameResult.plateElements = membraneResult.plateElements;
+  frameResult.maxDisplacement = Math.max(frameResult.maxDisplacement, membraneResult.maxDisplacement);
+  return input.plates?.some(plate => plate.threeLayer)
+    ? voegNativeDrieLagencontroleToe(input, frameResult)
+    : frameResult;
+}
+
+async function solveNativeFrame2DWithRecovery(
+  request: ReturnType<typeof buildNativeFrame2DRequest> & { membrane?: unknown },
+): Promise<NativeFrame2DResult> {
+  // The ordinary assembled matrix has a hard 20,000-DOF cap. The linear
+  // frontal path assembles members directly and can handle a narrow front
+  // above that global size. Its own front-width limit remains explicit.
+  const largeLinearFrame = request.analysis === "linear" && !request.membrane
+    && request.nodes.length * 3 > 20_000;
+  try {
+    return await solveNativeFem<NativeFrame2DResult>("frame2d", largeLinearFrame
+      ? { ...request, linearBackend: "frontalWave", frontalMaxFrontDofs: 256 }
+      : request);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    const iterativeFailure = /sparse solver did not converge within|sparse solve lost residual accuracy/.test(reason);
+    if (largeLinearFrame || request.analysis !== "linear" || request.membrane || request.members.length > 2500
+        || !iterativeFailure) throw error;
+    try {
+      return await solveNativeFem<NativeFrame2DResult>("frame2d", {
+        ...request, linearBackend: "frontalWave", frontalMaxFrontDofs: 256,
+      });
+    } catch (frontalError) {
+      const secondReason = frontalError instanceof Error ? frontalError.message : String(frontalError);
+      throw new Error(`2D-raamwerk: de iteratieve en frontale oplossers faalden: ${reason}; ${secondReason}`);
+    }
+  }
 }
 
 export async function solveAllCasesNativeFrame2D(
@@ -466,13 +860,19 @@ export async function solveAllCasesNativeFrame2D(
     const directionalInput = richting === undefined ? input
       : { ...input, scheefstand: { ...input.scheefstand!, richting } };
     for (const loadCase of input.cases) {
-      const request = buildNativeFrame2DRequest(directionalInput,
-        caseId => caseId === loadCase.id ? 1 : 0, analysis);
+      const factor = (caseId?: number) => caseId === loadCase.id ? 1 : 0;
+      const coupled = input.plates?.length
+        ? buildNativeConformingFrame2DRequest(directionalInput, factor, analysis)
+        : undefined;
+      const request = coupled?.request ?? buildNativeFrame2DRequest(directionalInput, factor, analysis);
       if (!request.nodalLoads.length && !request.memberLoads.length
           && !request.memberPointLoads.some(load => load.pxKn !== 0 || load.pyKn !== 0)
           && !request.thermalLoads.length) continue;
-      const result = await solveNativeFem<NativeFrame2DResult>("frame2d", request);
-      perCase.set(loadCase.id + offset, nativeFrame2DResultToSolverResult(request, result));
+      const result = await solveNativeFrame2DWithRecovery(request);
+      perCase.set(loadCase.id + offset, coupled
+        ? await nativeConformingFrameResultToSolverResult(directionalInput, coupled.request, coupled.built, result,
+          directionalInput.supports)
+        : nativeFrame2DResultToSolverResult(request, result));
     }
   };
   await solveDirection(input.scheefstand?.richting, 0);
@@ -496,10 +896,16 @@ export async function solveAllCombinationsNativeFrame2D(
     const directionalInput = input.scheefstand && combination.scheefstandRichting !== undefined
       ? { ...input, scheefstand: { ...input.scheefstand, richting: combination.scheefstandRichting } }
       : input;
-    const request = buildNativeFrame2DRequest(directionalInput,
-      caseId => combination.factors.get(caseId) ?? 0, analysis);
-    const result = await solveNativeFem<NativeFrame2DResult>("frame2d", request);
-    results.set(combination.id, nativeFrame2DResultToSolverResult(request, result));
+    const factor = (caseId?: number) => caseId === undefined ? 0 : combination.factors.get(caseId) ?? 0;
+    const coupled = input.plates?.length
+      ? buildNativeConformingFrame2DRequest(directionalInput, factor, analysis)
+      : undefined;
+    const request = coupled?.request ?? buildNativeFrame2DRequest(directionalInput, factor, analysis);
+    const result = await solveNativeFrame2DWithRecovery(request);
+    results.set(combination.id, coupled
+      ? await nativeConformingFrameResultToSolverResult(directionalInput, coupled.request, coupled.built, result,
+        directionalInput.supports)
+      : nativeFrame2DResultToSolverResult(request, result));
   }
   return results;
 }

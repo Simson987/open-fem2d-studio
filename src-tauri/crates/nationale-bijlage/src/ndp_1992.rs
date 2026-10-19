@@ -131,7 +131,11 @@ mod tests {
         assert_eq!(n.constructieklasse_50_jaar, 4);
         assert_eq!(n.delta_c_dev_mm, 5.0);
         assert_eq!(
-            (n.delta_c_dur_gamma_mm, n.delta_c_dur_st_mm, n.delta_c_dur_add_mm),
+            (
+                n.delta_c_dur_gamma_mm,
+                n.delta_c_dur_st_mm,
+                n.delta_c_dur_add_mm
+            ),
             (0.0, 0.0, 0.0)
         );
         // De kolom die werkelijk van de EN-versie afwijkt: XD3/XS3 (index 6)
@@ -139,12 +143,18 @@ mod tests {
         for rij in n.c_min_dur_betonstaal {
             assert_eq!(rij[6], rij[5]);
         }
-        assert_eq!(n.c_min_dur_betonstaal[3], [10.0, 15.0, 25.0, 30.0, 35.0, 40.0, 40.0]);
+        assert_eq!(
+            n.c_min_dur_betonstaal[3],
+            [10.0, 15.0, 25.0, 30.0, 35.0, 40.0, 40.0]
+        );
         // 5.8.3.1 en 8.7.3.
         assert_eq!(n.lambda_lim_coefficient, 20.0);
         assert!(n.lambda_lim_is_eis);
         assert_eq!(n.alpha_6_druk, 1.0);
         assert_eq!(n.nu_accent_noemer, 250.0);
-        assert_eq!((n.wand_rho_v_min, n.wand_rho_h_min, n.wand_rho_v_max), (0.0, 0.0, 0.04));
+        assert_eq!(
+            (n.wand_rho_v_min, n.wand_rho_h_min, n.wand_rho_v_max),
+            (0.0, 0.0, 0.04)
+        );
     }
 }

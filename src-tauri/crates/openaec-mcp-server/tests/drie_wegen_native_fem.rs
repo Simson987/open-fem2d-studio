@@ -101,18 +101,25 @@ async fn all_three_routes_return_identical_native_results() {
     }
     let mut invalid = quad_input();
     invalid["input"]["quads"][0]["unknownField"] = json!(1);
-    assert!(serde_json::from_value::<openaec_native_fem::dispatch::NativeFemRequest>(
-        invalid.clone()
-    ).is_err());
+    assert!(
+        serde_json::from_value::<openaec_native_fem::dispatch::NativeFemRequest>(invalid.clone())
+            .is_err()
+    );
     let bridge: toetsbrug::Verzoek = serde_json::from_value(json!({
         "opdracht":"solve_native_fem","inputs":invalid
-    })).unwrap();
+    }))
+    .unwrap();
     assert!(toetsbrug::behandel(bridge).is_err());
-    let rejected = exchange(&mut stdin, &mut stdout, json!({
-        "jsonrpc":"2.0","id":4,"method":"tools/call","params":{
-            "name":"solve_native_fem","arguments":{"inputs":invalid}
-        }
-    })).await;
+    let rejected = exchange(
+        &mut stdin,
+        &mut stdout,
+        json!({
+            "jsonrpc":"2.0","id":4,"method":"tools/call","params":{
+                "name":"solve_native_fem","arguments":{"inputs":invalid}
+            }
+        }),
+    )
+    .await;
     assert_eq!(rejected["result"]["isError"], true, "{rejected}");
     let _ = child.kill().await;
 }

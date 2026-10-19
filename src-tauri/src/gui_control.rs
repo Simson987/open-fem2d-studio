@@ -212,14 +212,23 @@ fn lus(server: tiny_http::Server, app: AppHandle, control: Arc<GuiControl>, vers
             ("GET", "/status") => (200, json!({ "versie": versie, "gereed": true })),
             ("POST", "/opdracht") => {
                 if !geautoriseerd(&req, &control.token) {
-                    (401, json!({ "ok": false, "fout": "ontbrekend of onjuist token" }))
+                    (
+                        401,
+                        json!({ "ok": false, "fout": "ontbrekend of onjuist token" }),
+                    )
                 } else {
                     let mut tekst = String::new();
                     if let Err(e) = req.as_reader().read_to_string(&mut tekst) {
-                        (400, json!({ "ok": false, "fout": format!("body onleesbaar: {e}") }))
+                        (
+                            400,
+                            json!({ "ok": false, "fout": format!("body onleesbaar: {e}") }),
+                        )
                     } else {
                         match serde_json::from_str::<Opdracht>(&tekst) {
-                            Err(e) => (400, json!({ "ok": false, "fout": format!("opdracht onleesbaar: {e}") })),
+                            Err(e) => (
+                                400,
+                                json!({ "ok": false, "fout": format!("opdracht onleesbaar: {e}") }),
+                            ),
                             Ok(o) => match voer_uit(&app, &control, o) {
                                 Ok(uitkomst) => (200, json!({ "ok": true, "uitkomst": uitkomst })),
                                 Err(fout) => (200, json!({ "ok": false, "fout": fout })),
@@ -228,7 +237,10 @@ fn lus(server: tiny_http::Server, app: AppHandle, control: Arc<GuiControl>, vers
                     }
                 }
             }
-            _ => (404, json!({ "ok": false, "fout": format!("onbekend: {methode} {pad}") })),
+            _ => (
+                404,
+                json!({ "ok": false, "fout": format!("onbekend: {methode} {pad}") }),
+            ),
         };
 
         let antwoord = tiny_http::Response::from_string(body.to_string())
@@ -327,8 +339,12 @@ fn naar_pagina(
         let (slot, _) = &*control.wachtkamer;
         slot.lock().unwrap().insert(id, None);
     }
-    app.emit_to(HOOFDVENSTER, EVENT_OPDRACHT, json!({ "id": id, "naam": naam, "args": args }))
-        .map_err(|e| format!("event naar het hoofdvenster mislukt: {e}"))?;
+    app.emit_to(
+        HOOFDVENSTER,
+        EVENT_OPDRACHT,
+        json!({ "id": id, "naam": naam, "args": args }),
+    )
+    .map_err(|e| format!("event naar het hoofdvenster mislukt: {e}"))?;
 
     let (slot, wekker) = &*control.wachtkamer;
     let deadline = Instant::now() + tijdslimiet;
@@ -396,7 +412,10 @@ fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
             _ => return Err(format!("ongeldig base64-teken {c}")),
         })
     }
-    let schoon: Vec<u8> = s.bytes().filter(|b| !b.is_ascii_whitespace() && *b != b'=').collect();
+    let schoon: Vec<u8> = s
+        .bytes()
+        .filter(|b| !b.is_ascii_whitespace() && *b != b'=')
+        .collect();
     let mut uit = Vec::with_capacity(schoon.len() * 3 / 4);
     for blok in schoon.chunks(4) {
         let mut acc = 0u32;
@@ -404,9 +423,15 @@ fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
             acc |= waarde(c)? << (18 - 6 * i);
         }
         let n = blok.len();
-        if n >= 2 { uit.push((acc >> 16) as u8); }
-        if n >= 3 { uit.push((acc >> 8) as u8); }
-        if n == 4 { uit.push(acc as u8); }
+        if n >= 2 {
+            uit.push((acc >> 16) as u8);
+        }
+        if n >= 3 {
+            uit.push((acc >> 8) as u8);
+        }
+        if n == 4 {
+            uit.push(acc as u8);
+        }
     }
     Ok(uit)
 }
@@ -508,7 +533,9 @@ mod capture {
             ReleaseDC(None, hdc_scherm);
 
             if !ok {
-                return Err("PrintWindow gaf false — het venster is mogelijk geminimaliseerd".into());
+                return Err(
+                    "PrintWindow gaf false — het venster is mogelijk geminimaliseerd".into(),
+                );
             }
             (w as u32, h as u32, rgba)
         };
@@ -607,9 +634,9 @@ pub mod rapport {
         // hetzelfde document geeft als Afdrukken in beeld.
         let geminimaliseerd = venster.is_minimized().unwrap_or(false);
         if geminimaliseerd {
-            venster
-                .unminimize()
-                .map_err(|e| format!("het geminimaliseerde hoofdvenster is niet te herstellen: {e}"))?;
+            venster.unminimize().map_err(|e| {
+                format!("het geminimaliseerde hoofdvenster is niet te herstellen: {e}")
+            })?;
         }
         let uitkomst = exporteer(app, control, args, &doel, tijdslimiet, begin);
         if geminimaliseerd {
@@ -641,7 +668,10 @@ pub mod rapport {
                 pagina_args.insert(k.to_string(), v.clone());
             }
         }
-        pagina_args.insert("tijdslimiet_ms".into(), json!(pagina_tijd.as_millis() as u64));
+        pagina_args.insert(
+            "tijdslimiet_ms".into(),
+            json!(pagina_tijd.as_millis() as u64),
+        );
         let voor = naar_pagina(
             app,
             control,
@@ -655,11 +685,15 @@ pub mod rapport {
             .ok_or("rapport_voorbereiden gaf geen exportId terug")?;
 
         let tijdelijk = tijdelijk_pad(doel);
-        let opgegeven_vellen = voor.get("aantalVellen").and_then(Value::as_u64).map(|n| n as usize);
+        let opgegeven_vellen = voor
+            .get("aantalVellen")
+            .and_then(Value::as_u64)
+            .map(|n| n as usize);
         // Het 3D-rapport wordt door de browser zelf over pagina's verdeeld en
         // heeft daarom vóór het afdrukken nog geen betrouwbaar vel-aantal. Bij
         // 2D blijven de vaste rapportvellen leidend en eisen we exacte gelijkheid.
-        let dynamisch_3d_rapport = voor.get("rapportDimensie").and_then(Value::as_str) == Some("3d");
+        let dynamisch_3d_rapport =
+            voor.get("rapportDimensie").and_then(Value::as_str) == Some("3d");
         let print = papier_uit_antwoord(&voor).and_then(|papier| {
             let rest = tijdslimiet
                 .saturating_sub(begin.elapsed())
@@ -712,7 +746,10 @@ pub mod rapport {
             Ok(b) => b,
             Err(e) => {
                 weg();
-                return Err(format!("de geprinte PDF is niet te lezen ({}): {e}", tijdelijk.display()));
+                return Err(format!(
+                    "de geprinte PDF is niet te lezen ({}): {e}",
+                    tijdelijk.display()
+                ));
             }
         };
         let paginas = match controleer_pdf_met_verwacht_aantal(&bytes, verwacht_vellen) {
@@ -817,7 +854,11 @@ pub mod rapport {
         let liggend = match v.get("orientatie").and_then(Value::as_str) {
             Some("landscape") => true,
             Some("portrait") => false,
-            anders => return Err(format!("rapport_voorbereiden gaf een onbekende oriëntatie {anders:?}")),
+            anders => {
+                return Err(format!(
+                    "rapport_voorbereiden gaf een onbekende oriëntatie {anders:?}"
+                ))
+            }
         };
         Ok(Papier {
             vel_breedte_mm: getal(&["velMm", "breedte"])?,

@@ -32,7 +32,10 @@ fn default_true() -> bool {
 /// stilzwijgend een rechthoek blijven. Zie [`ConcreteSectionInput`].
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct ConcreteBeamCheckInput {
     /// De nationale bijlage waarmee getoetst wordt.
     ///
@@ -329,7 +332,10 @@ impl ConcreteBeamCheckInput {
 /// Verzoek om het M-N-κ-diagram van een korf, los van een staaf.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct MnKappaRequest {
     /// De nationale bijlage waarmee gerekend wordt (normnaad).
     ///

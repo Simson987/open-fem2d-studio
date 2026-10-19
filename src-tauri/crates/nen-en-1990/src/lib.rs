@@ -60,16 +60,28 @@ pub const PSI_SNOW: PsiFactors = NDP.psi[12];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../../design-mockup/src/lib/types/steel/")]
-pub enum ConsequenceClass { CC1, CC2, CC3 }
+pub enum ConsequenceClass {
+    CC1,
+    CC2,
+    CC3,
+}
 
 impl ConsequenceClass {
     /// K_FI uit de opmerking bij NB tabel NB.4: 0,9 / 1,0 / 1,1. Ter
     /// vermelding — de factor zit al in `uls_factoren`.
     pub fn k_fi(self) -> f64 {
-        match self { Self::CC1 => NDP.k_fi.0, Self::CC2 => NDP.k_fi.1, Self::CC3 => NDP.k_fi.2 }
+        match self {
+            Self::CC1 => NDP.k_fi.0,
+            Self::CC2 => NDP.k_fi.1,
+            Self::CC3 => NDP.k_fi.2,
+        }
     }
     pub fn name(self) -> &'static str {
-        match self { Self::CC1 => "CC1", Self::CC2 => "CC2", Self::CC3 => "CC3" }
+        match self {
+            Self::CC1 => "CC1",
+            Self::CC2 => "CC2",
+            Self::CC3 => "CC3",
+        }
     }
     /// De partiële factoren (6.10a, 6.10b) voor deze klasse: NB tabel NB.4
     /// voor CC2 en NB tabel NB.5 voor CC1 en CC3 (STR/GEO, groep B).
@@ -90,12 +102,25 @@ mod tests {
     #[test]
     fn partiele_factoren_per_gevolgklasse_volgens_nb4_en_nb5() {
         let (a, b) = ConsequenceClass::CC2.uls_factoren();
-        assert_eq!((a.gamma_g_sup, a.gamma_q, b.gamma_g_sup, b.gamma_q), (1.35, 1.5, 1.2, 1.5));
+        assert_eq!(
+            (a.gamma_g_sup, a.gamma_q, b.gamma_g_sup, b.gamma_q),
+            (1.35, 1.5, 1.2, 1.5)
+        );
         let (a, b) = ConsequenceClass::CC1.uls_factoren();
-        assert_eq!((a.gamma_g_sup, a.gamma_q, b.gamma_g_sup, b.gamma_q), (1.2, 1.35, 1.1, 1.35));
+        assert_eq!(
+            (a.gamma_g_sup, a.gamma_q, b.gamma_g_sup, b.gamma_q),
+            (1.2, 1.35, 1.1, 1.35)
+        );
         let (a, b) = ConsequenceClass::CC3.uls_factoren();
-        assert_eq!((a.gamma_g_sup, a.gamma_q, b.gamma_g_sup, b.gamma_q), (1.5, 1.65, 1.3, 1.65));
-        for cc in [ConsequenceClass::CC1, ConsequenceClass::CC2, ConsequenceClass::CC3] {
+        assert_eq!(
+            (a.gamma_g_sup, a.gamma_q, b.gamma_g_sup, b.gamma_q),
+            (1.5, 1.65, 1.3, 1.65)
+        );
+        for cc in [
+            ConsequenceClass::CC1,
+            ConsequenceClass::CC2,
+            ConsequenceClass::CC3,
+        ] {
             let (a, b) = cc.uls_factoren();
             assert_eq!((a.gamma_g_inf, b.gamma_g_inf), (0.9, 0.9), "{}", cc.name());
         }
@@ -104,7 +129,10 @@ mod tests {
     /// NB tabel NB.3: EQU met 1,1 ongunstig en 0,9 gunstig.
     #[test]
     fn equ_volgens_nb3() {
-        assert_eq!((EQU.gamma_g_sup, EQU.gamma_g_inf, EQU.gamma_q), (1.1, 0.9, 1.5));
+        assert_eq!(
+            (EQU.gamma_g_sup, EQU.gamma_g_inf, EQU.gamma_q),
+            (1.1, 0.9, 1.5)
+        );
     }
 
     /// De rijen van tabel NB.2 die tot september 2026 afweken.
@@ -113,8 +141,14 @@ mod tests {
         assert_eq!((PSI_D.psi0, PSI_D.psi1, PSI_D.psi2), (0.4, 0.7, 0.6));
         assert_eq!((PSI_F.psi0, PSI_F.psi1, PSI_F.psi2), (0.7, 0.7, 0.6));
         assert_eq!((PSI_C.psi0, PSI_C_MENIGTE.psi0), (0.4, 0.6));
-        assert_eq!((PSI_WIND.psi0, PSI_WIND.psi1, PSI_WIND.psi2), (0.0, 0.2, 0.0));
-        assert_eq!((PSI_SNOW.psi0, PSI_SNOW.psi1, PSI_SNOW.psi2), (0.0, 0.2, 0.0));
+        assert_eq!(
+            (PSI_WIND.psi0, PSI_WIND.psi1, PSI_WIND.psi2),
+            (0.0, 0.2, 0.0)
+        );
+        assert_eq!(
+            (PSI_SNOW.psi0, PSI_SNOW.psi1, PSI_SNOW.psi2),
+            (0.0, 0.2, 0.0)
+        );
     }
 
     /// Elke ψ-rij en elke γ-rij komt UIT DE NAAD en niet uit een losse
@@ -123,18 +157,38 @@ mod tests {
     #[test]
     fn elke_waarde_komt_uit_de_normnaad() {
         let bron = Ndp1990::voor(NationaleBijlage::NL);
-        let rijen = [PSI_A, PSI_B, PSI_C, PSI_C_MENIGTE, PSI_D, PSI_E, PSI_F, PSI_G, PSI_H,
-                     PSI_INDUSTRIE_KORT, PSI_INDUSTRIE_LANG, PSI_WIND, PSI_SNOW];
+        let rijen = [
+            PSI_A,
+            PSI_B,
+            PSI_C,
+            PSI_C_MENIGTE,
+            PSI_D,
+            PSI_E,
+            PSI_F,
+            PSI_G,
+            PSI_H,
+            PSI_INDUSTRIE_KORT,
+            PSI_INDUSTRIE_LANG,
+            PSI_WIND,
+            PSI_SNOW,
+        ];
         assert_eq!(rijen.len(), bron.psi.len());
         for (hier, daar) in rijen.iter().zip(bron.psi.iter()) {
             assert_eq!(hier.category, daar.category);
-            assert_eq!((hier.psi0, hier.psi1, hier.psi2), (daar.psi0, daar.psi1, daar.psi2));
+            assert_eq!(
+                (hier.psi0, hier.psi1, hier.psi2),
+                (daar.psi0, daar.psi1, daar.psi2)
+            );
         }
         assert_eq!(ULS_6_10A.gamma_g_sup, bron.uls_cc2.0.gamma_g_sup);
         assert_eq!(ULS_6_10B.gamma_g_sup, bron.uls_cc2.1.gamma_g_sup);
         assert_eq!(EQU.gamma_g_sup, bron.equ.gamma_g_sup);
         assert_eq!(
-            (ConsequenceClass::CC1.k_fi(), ConsequenceClass::CC2.k_fi(), ConsequenceClass::CC3.k_fi()),
+            (
+                ConsequenceClass::CC1.k_fi(),
+                ConsequenceClass::CC2.k_fi(),
+                ConsequenceClass::CC3.k_fi()
+            ),
             bron.k_fi
         );
     }

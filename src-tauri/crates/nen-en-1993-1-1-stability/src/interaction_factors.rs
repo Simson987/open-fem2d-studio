@@ -154,8 +154,16 @@ pub fn cm_uit_momentenlijn(punten: &[(f64, f64)]) -> CmUitkomst {
     // M_h is het eindmoment met de grootste absolute waarde; ψ het andere
     // gedeeld door M_h. Beide nul → ψ = 1 (rekent alleen in rij 3 mee, en daar
     // valt de ψ-term dan weg omdat α_h = 0).
-    let (m_h, m_ander) = if m1.abs() >= m2.abs() { (m1, m2) } else { (m2, m1) };
-    let psi = if m_h.abs() > 1e-12 * m_max.max(1.0) { m_ander / m_h } else { 1.0 };
+    let (m_h, m_ander) = if m1.abs() >= m2.abs() {
+        (m1, m2)
+    } else {
+        (m2, m1)
+    };
+    let psi = if m_h.abs() > 1e-12 * m_max.max(1.0) {
+        m_ander / m_h
+    } else {
+        1.0
+    };
 
     // Afwijking van de rechte lijn tussen de eindmomenten.
     let lineair_op = |x: f64| m1 + (m2 - m1) * (x - x0) / l;
@@ -348,9 +356,13 @@ fn lastvorm_uit_afwijking(afwijking: &[(f64, f64)]) -> Lastvorm {
     if afwijking.len() < 4 {
         return Lastvorm::Verdeeld;
     }
-    let (xi_top, d_top) = afwijking
-        .iter()
-        .fold((0.5_f64, 0.0_f64), |acc, &(xi, d)| if d.abs() > acc.1.abs() { (xi, d) } else { acc });
+    let (xi_top, d_top) = afwijking.iter().fold((0.5_f64, 0.0_f64), |acc, &(xi, d)| {
+        if d.abs() > acc.1.abs() {
+            (xi, d)
+        } else {
+            acc
+        }
+    });
     if d_top == 0.0 || xi_top <= 0.0 || xi_top >= 1.0 {
         return Lastvorm::Verdeeld;
     }
@@ -358,7 +370,11 @@ fn lastvorm_uit_afwijking(afwijking: &[(f64, f64)]) -> Lastvorm {
     let mut rss_tri = 0.0;
     for &(xi, d) in afwijking {
         let par = d_top * 4.0 * xi * (1.0 - xi);
-        let tri = if xi <= xi_top { d_top * xi / xi_top } else { d_top * (1.0 - xi) / (1.0 - xi_top) };
+        let tri = if xi <= xi_top {
+            d_top * xi / xi_top
+        } else {
+            d_top * (1.0 - xi) / (1.0 - xi_top)
+        };
         rss_par += (d - par).powi(2);
         rss_tri += (d - tri).powi(2);
     }
@@ -431,12 +447,16 @@ pub fn interaction_factors_method_2(
     let (cmy, cmz, cmlt) = (cm_y.cm, cm_z.cm, cm_lt.cm);
 
     let (k_yy, k_yz, k_zy_b1, k_zz) = if is_class_1_or_2 {
-        let k_yy = (cmy * (1.0 + (lambda_bar_y - 0.2) * n_ratio_y)).min(cmy * (1.0 + 0.8 * n_ratio_y));
-        let k_zz = (cmz * (1.0 + (2.0 * lambda_bar_z - 0.6) * n_ratio_z)).min(cmz * (1.0 + 1.4 * n_ratio_z));
+        let k_yy =
+            (cmy * (1.0 + (lambda_bar_y - 0.2) * n_ratio_y)).min(cmy * (1.0 + 0.8 * n_ratio_y));
+        let k_zz = (cmz * (1.0 + (2.0 * lambda_bar_z - 0.6) * n_ratio_z))
+            .min(cmz * (1.0 + 1.4 * n_ratio_z));
         (k_yy, 0.6 * k_zz, 0.6 * k_yy, k_zz)
     } else {
-        let k_yy = (cmy * (1.0 + 0.6 * lambda_bar_y * n_ratio_y)).min(cmy * (1.0 + 0.6 * n_ratio_y));
-        let k_zz = (cmz * (1.0 + 0.6 * lambda_bar_z * n_ratio_z)).min(cmz * (1.0 + 0.6 * n_ratio_z));
+        let k_yy =
+            (cmy * (1.0 + 0.6 * lambda_bar_y * n_ratio_y)).min(cmy * (1.0 + 0.6 * n_ratio_y));
+        let k_zz =
+            (cmz * (1.0 + 0.6 * lambda_bar_z * n_ratio_z)).min(cmz * (1.0 + 0.6 * n_ratio_z));
         (k_yy, k_zz, 0.8 * k_yy, k_zz)
     };
 
@@ -487,7 +507,17 @@ pub fn interaction_factors_method_2(
         k_zy_b1
     };
 
-    InteractionFactors { k_yy, k_yz, k_zy, k_zz, cm_y: cmy, cm_z: cmz, cm_lt: cmlt, torsiegevoelig, toelichting }
+    InteractionFactors {
+        k_yy,
+        k_yz,
+        k_zy,
+        k_zz,
+        cm_y: cmy,
+        cm_z: cmz,
+        cm_lt: cmlt,
+        torsiegevoelig,
+        toelichting,
+    }
 }
 
 #[cfg(test)]
@@ -539,7 +569,9 @@ mod tests {
 
     #[test]
     fn driehoek_zonder_eindmomenten_geeft_0_90() {
-        let u = cm_uit_momentenlijn(&lijn(21, 4000.0, |xi| 40.0 * (1.0 - (2.0 * xi - 1.0).abs())));
+        let u = cm_uit_momentenlijn(&lijn(21, 4000.0, |xi| {
+            40.0 * (1.0 - (2.0 * xi - 1.0).abs())
+        }));
         assert_eq!(u.rij, CmRij::Veldmoment);
         assert_eq!(u.lastvorm, Lastvorm::Geconcentreerd);
         assert_relative_eq!(u.cm, 0.90);
@@ -548,7 +580,9 @@ mod tests {
     #[test]
     fn ingeklemde_ligger_onder_q_last() {
         // M(ξ) = q L²/12 · (−1 + 6ξ − 6ξ²): eindmomenten −1, veldmoment +0,5.
-        let u = cm_uit_momentenlijn(&lijn(41, 6000.0, |xi| 100.0 * (-1.0 + 6.0 * xi - 6.0 * xi * xi)));
+        let u = cm_uit_momentenlijn(&lijn(41, 6000.0, |xi| {
+            100.0 * (-1.0 + 6.0 * xi - 6.0 * xi * xi)
+        }));
         assert_eq!(u.rij, CmRij::Eindmomenten);
         assert_relative_eq!(u.psi, 1.0, epsilon = 1e-9);
         assert_relative_eq!(u.alpha, -0.5, epsilon = 1e-9);
@@ -559,7 +593,9 @@ mod tests {
     #[test]
     fn eindmomenten_met_klein_veldmoment_zelfde_teken() {
         // Eindmomenten −100/−100, veldmoment −80: α_s = 0,8 → 0,2 + 0,64 = 0,84.
-        let u = cm_uit_momentenlijn(&lijn(21, 4000.0, |xi| -100.0 + 20.0 * 4.0 * xi * (1.0 - xi)));
+        let u = cm_uit_momentenlijn(&lijn(21, 4000.0, |xi| {
+            -100.0 + 20.0 * 4.0 * xi * (1.0 - xi)
+        }));
         assert_eq!(u.rij, CmRij::Eindmomenten);
         assert_relative_eq!(u.alpha, 0.8, epsilon = 1e-9);
         assert_relative_eq!(u.cm, 0.84, epsilon = 1e-9);
@@ -570,14 +606,22 @@ mod tests {
         // Van 0 naar −100 met een bolling die het moment vermindert: het
         // gemiddelde is −50 + ⅔·20 = −36,7, α_s = 0,367 → 0,49; rij 1 geeft
         // 0,6 en wint.
-        let u = cm_uit_momentenlijn(&lijn(201, 4000.0, |xi| -100.0 * xi + 20.0 * 4.0 * xi * (1.0 - xi)));
+        let u = cm_uit_momentenlijn(&lijn(201, 4000.0, |xi| {
+            -100.0 * xi + 20.0 * 4.0 * xi * (1.0 - xi)
+        }));
         assert_eq!(u.rij, CmRij::Lineair);
         assert_relative_eq!(u.cm, 0.6);
         // Bolling die het moment vergroot: gemiddelde −50 − 13,3 = −63,3,
         // α_s = 0,633 → 0,2 + 0,507 = 0,707 > 0,6; rij 2 wint.
-        let u = cm_uit_momentenlijn(&lijn(201, 4000.0, |xi| -100.0 * xi - 20.0 * 4.0 * xi * (1.0 - xi)));
+        let u = cm_uit_momentenlijn(&lijn(201, 4000.0, |xi| {
+            -100.0 * xi - 20.0 * 4.0 * xi * (1.0 - xi)
+        }));
         assert_eq!(u.rij, CmRij::Eindmomenten);
-        assert_relative_eq!(u.cm, 0.2 + 0.8 * (50.0 + 20.0 * 2.0 / 3.0) / 100.0, epsilon = 1e-4);
+        assert_relative_eq!(
+            u.cm,
+            0.2 + 0.8 * (50.0 + 20.0 * 2.0 / 3.0) / 100.0,
+            epsilon = 1e-4
+        );
         // Een kleine knik vlak bij het begin (187,33 → 187,10 op 1 % van de
         // lengte → −126,68) is nagenoeg lineair: C_m blijft op de ondergrens
         // 0,4 en springt niet naar 1,0.
@@ -609,8 +653,16 @@ mod tests {
     fn hea200_constant_moment_tabel_b2() {
         let cm = cm_uit_momentenlijn(&lijn(21, 4000.0, |_| 40.0));
         let f = interaction_factors_method_2(
-            300.0, 1109.8386545, 794.8358063, 0.5142950652, 0.8534402890,
-            &cm, &cm, &cm, true, true,
+            300.0,
+            1109.8386545,
+            794.8358063,
+            0.5142950652,
+            0.8534402890,
+            &cm,
+            &cm,
+            &cm,
+            true,
+            true,
         );
         // k_yy = 1,0·(1 + (0,5143 − 0,2)·0,2703) = 1,0850 ≤ 1,0·(1 + 0,8·0,2703) = 1,2162
         assert_relative_eq!(f.k_yy, 1.0850, epsilon = 1e-3);

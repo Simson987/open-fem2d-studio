@@ -35,7 +35,7 @@
 //
 // Uitvoeren: npx tsx test-maatgevend.mjs   (vanuit design-mockup/)
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { register } from "node:module";
 import { dirname, join, resolve } from "node:path";
@@ -248,9 +248,23 @@ if (!existsSync(TOETSBRUG)) {
   const combinations = defaultCombinations();
   const ugt = new Set(combinations.filter((c) => c.type === "uls").map((c) => c.id));
   const combinationResults = new Map(combinations.map((c) => [c.id, combineResults(c, perCase)]));
-  const kern = (opdracht, inputs) => {
-    const r = spawnSync(TOETSBRUG, [], { input: JSON.stringify({ opdracht, inputs }), encoding: "utf8", maxBuffer: 256 << 20 });
-    return JSON.parse(r.stdout);
+  const kern = async (opdracht, inputs) => {
+    const antwoord = await new Promise((resolve, reject) => {
+      const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+      const stdout = [];
+      const stderr = [];
+      child.stdout.on("data", (chunk) => stdout.push(chunk));
+      child.stderr.on("data", (chunk) => stderr.push(chunk));
+      child.on("error", reject);
+      child.on("close", (code, signal) => {
+        const out = Buffer.concat(stdout).toString("utf8");
+        const err = Buffer.concat(stderr).toString("utf8");
+        if (code !== 0) reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+        else resolve(out);
+      });
+      child.stdin.end(JSON.stringify({ opdracht, inputs }));
+    });
+    return JSON.parse(antwoord);
   };
   const staalInvoer = buildSteelCheckInputs({
     nodes, combinations, combinationResults, profileDb: new Map([["HEA160", { geometry: { h: 152 } }]]),
@@ -261,8 +275,8 @@ if (!existsSync(TOETSBRUG)) {
     beams: [{ id: 1, from: 1, to: 2, material: "C24", profile: "96x450" }],
   }).inputs;
   for (const [naam, r, buigId, dwarsId] of [
-    ["staal", kern("check_steel_beams", staalInvoer)[0], "6.2.5_bending_y", "6.2.6_shear_z"],
-    ["hout", kern("check_timber_beams", houtInvoer)[0], "6.1.6_bending", "6.1.7_shear"],
+    ["staal", (await kern("check_steel_beams", staalInvoer))[0], "6.2.5_bending_y", "6.2.6_shear_z"],
+    ["hout", (await kern("check_timber_beams", houtInvoer))[0], "6.1.6_bending", "6.1.7_shear"],
   ]) {
     const o = maatgevendVanStaaf(r);
     check(`${naam}: maatgevend is de toets die de kern noemt, met de UC van de kern`,

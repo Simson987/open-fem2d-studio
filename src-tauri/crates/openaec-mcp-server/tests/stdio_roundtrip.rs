@@ -100,13 +100,21 @@ async fn stdio_roundtrip_initialize_list_call() {
     // iemand hem hier noemt, hoort op te vallen. De namenlijst hieronder is
     // niet uitputtend, dus zonder deze telling zou zo'n tool ongemerkt
     // meeliften.
-    // 27 rekenkern-/FEM-tools (inclusief solve_frame3d) + 20 gui_*-tools (het
-    // bedieningskanaal van de desktop-app, zie gui_tools.rs) = 47.
-    assert_eq!(tools.len(), 47, "expected 47 tools, got {}", tools.len());
-    let names: Vec<&str> = tools
+    // 28 rekenkern-/FEM-tools (inclusief solve_frame3d en solve_native_fem) +
+    // 20 gui_*-tools (het bedieningskanaal van de desktop-app, zie gui_tools.rs) = 48.
+    assert_eq!(tools.len(), 48, "expected 48 tools, got {}", tools.len());
+    let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    let native_fem = tools
         .iter()
-        .map(|t| t["name"].as_str().unwrap())
-        .collect();
+        .find(|tool| tool["name"] == "solve_native_fem")
+        .unwrap();
+    assert!(
+        native_fem["inputSchema"]["properties"]["inputs"]["properties"]["kind"]["enum"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|kind| kind == "geometricShell")
+    );
     for expected in [
         "list_steel_profiles",
         "gui_status",
@@ -130,6 +138,8 @@ async fn stdio_roundtrip_initialize_list_call() {
         "check_fem_model",
         // Ruimtelijke raamwerken: dezelfde Rust-adapter als het Tauri-command.
         "solve_frame3d",
+        // Experimentele onafhankelijke Rust FEM-kernels via de gedeelde dispatcher.
+        "solve_native_fem",
         // De betontools (NEN-EN 1992-1-1). Dezelfde rekengang als het
         // Tauri-command en de toetsbrug; zie `tests/drie_wegen_beton.rs`,
         // `tests/drie_wegen_beff.rs` en `tests/drie_wegen_dekking.rs`.
@@ -167,7 +177,10 @@ async fn stdio_roundtrip_initialize_list_call() {
         // De plaattoets (wandschijven); zie `tests/drie_wegen_plaat.rs`.
         "check_plates",
     ] {
-        assert!(names.contains(&expected), "missing tool: {expected} (have {names:?})");
+        assert!(
+            names.contains(&expected),
+            "missing tool: {expected} (have {names:?})"
+        );
     }
 
     // ── 4. tools/call list_steel_profiles ────────────────────────────────
@@ -205,7 +218,10 @@ async fn stdio_roundtrip_initialize_list_call() {
         .expect("content[0].text must be a string");
     let parsed: Value = serde_json::from_str(text).expect("content text must be parseable JSON");
     assert!(
-        parsed["profiles"].as_array().map(|a| !a.is_empty()).unwrap_or(false),
+        parsed["profiles"]
+            .as_array()
+            .map(|a| !a.is_empty())
+            .unwrap_or(false),
         "embedded text profiles must be a non-empty array"
     );
 
@@ -376,11 +392,23 @@ async fn stdio_roundtrip_initialize_list_call() {
     assert_eq!(resp["id"], 7);
     assert_eq!(resp["result"]["isError"], false, "resp: {resp:?}");
     let solved = &resp["result"]["structuredContent"];
-    let rx = solved["displacements"].as_array().unwrap().iter()
-        .find(|value| value["nodeId"] == 1).unwrap()["rx"].as_f64().unwrap();
+    let rx = solved["displacements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|value| value["nodeId"] == 1)
+        .unwrap()["rx"]
+        .as_f64()
+        .unwrap();
     assert!((rx - 0.018571428571428572).abs() < 1e-10, "rx={rx}");
-    let mx = solved["reactions"].as_array().unwrap().iter()
-        .find(|value| value["nodeId"] == 2).unwrap()["mx"].as_f64().unwrap();
+    let mx = solved["reactions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|value| value["nodeId"] == 2)
+        .unwrap()["mx"]
+        .as_f64()
+        .unwrap();
     assert!((mx.abs() - 5.0).abs() < 1e-10, "mx={mx}");
 
     // Cleanup: drop stdin → server sees EOF → exits.

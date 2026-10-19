@@ -111,7 +111,10 @@ use crate::input::ConcreteBeamCheckInput;
 /// bij een staaf zonder normaalkracht 0,9·d in plaats van de opgegeven waarde.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct DekkingslijnVerzoek {
     /// De betonstaaf, in HETZELFDE type dat `check_concrete_beams` krijgt.
     ///
@@ -189,7 +192,10 @@ pub struct DekkingslijnVerzoek {
 /// dezelfde `x_mm`, met deze aanduiding erbij. Wie de lijn tekent, moet die
 /// twee punten met een verticaal stuk verbinden en niet met een schuine lijn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum Snedezijde {
     /// Er is hier geen sprong; één punt volstaat.
     Enkel,
@@ -212,7 +218,10 @@ impl From<kern::Snedezijde> for Snedezijde {
 /// Welk bewijs de weerstandbiedende trekkracht op een plaats levert —
 /// §9.2.1.3(1) of §9.2.1.3(3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum MomentBewijs {
     /// Aan deze zijde ligt hier geen langswapening.
     GeenWapening,
@@ -229,9 +238,7 @@ impl From<kern::MomentBewijs> for MomentBewijs {
         match b {
             kern::MomentBewijs::GeenWapening => MomentBewijs::GeenWapening,
             kern::MomentBewijs::VolledigOntwikkeld => MomentBewijs::VolledigOntwikkeld,
-            kern::MomentBewijs::BinnenVerankeringslengte => {
-                MomentBewijs::BinnenVerankeringslengte
-            }
+            kern::MomentBewijs::BinnenVerankeringslengte => MomentBewijs::BinnenVerankeringslengte,
         }
     }
 }
@@ -239,7 +246,10 @@ impl From<kern::MomentBewijs> for MomentBewijs {
 /// Waar de inwendige hefboomsarm z van een punt vandaan komt — 6.2.3(1), zie
 /// `nen_en_1992_1_1::hefboomsarm`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum ZGrondslag {
     /// Door de aanroeper opgegeven (`z_mm` in het verzoek).
     Opgegeven,
@@ -265,9 +275,9 @@ impl From<&nen_en_1992_1_1::ZGrondslag> for ZGrondslag {
         match g {
             nen_en_1992_1_1::ZGrondslag::Opgegeven => ZGrondslag::Opgegeven,
             nen_en_1992_1_1::ZGrondslag::Benadering => ZGrondslag::Benadering,
-            nen_en_1992_1_1::ZGrondslag::Evenwicht { begrensd: false, .. } => {
-                ZGrondslag::Evenwicht
-            }
+            nen_en_1992_1_1::ZGrondslag::Evenwicht {
+                begrensd: false, ..
+            } => ZGrondslag::Evenwicht,
             nen_en_1992_1_1::ZGrondslag::Evenwicht { begrensd: true, .. } => {
                 ZGrondslag::EvenwichtBegrensd
             }
@@ -279,7 +289,10 @@ impl From<&nen_en_1992_1_1::ZGrondslag> for ZGrondslag {
 /// Welke van de twee door de norm toegelaten bewijsvoeringen de
 /// dwarskrachtweerstand op een plaats levert.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum Weerstandsroute {
     /// 6.2.2(1): V_Rd = V_Rd,c — de doorsnede draagt de dwarskracht zonder dat
     /// er dwarskrachtwapening voor nodig is.
@@ -309,7 +322,10 @@ impl From<nen_en_1992_1_1::dwarskracht::Weerstandsroute> for Weerstandsroute {
 /// [`Spoor::GeenBerekendeWapening`] en kan niettemin
 /// [`Weerstandsroute::Dwarskrachtwapening`] zijn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum Spoor {
     /// V_Ed ≤ V_Rd,c — geen berekende dwarskrachtwapening nodig (6.2.1(3)).
     GeenBerekendeWapening,
@@ -331,7 +347,10 @@ impl From<nen_en_1992_1_1::dwarskracht::Spoor> for Spoor {
 
 /// Welk uiteinde van de staaf.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum Staafeinde {
     /// x = 0.
     Begin,
@@ -353,7 +372,10 @@ impl From<kern::Staafeinde> for Staafeinde {
 /// Dit is figuur 9.2 als getallen. `omhullende_kn` is regel A, `benodigd_kn`
 /// regel B (A ná de verschuiving over a_l) en `aanwezig_kn` regel C.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct Momentpunt {
     /// Plaats langs de staaf, mm vanaf de beginknoop.
     pub x_mm: f64,
@@ -411,7 +433,10 @@ pub struct Momentpunt {
 /// kleinste waarde van" (6.8) en (6.9), en 6.2.1(3) is een tweede, losstaande
 /// bewijsvoering.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct Dwarskrachtpunt {
     /// Plaats langs de staaf, mm vanaf de beginknoop.
     pub x_mm: f64,
@@ -464,7 +489,10 @@ pub struct Dwarskrachtpunt {
 /// deze lengte, dus zij bepaalt rechtstreeks waar de weerstandslijn schuin
 /// gaat lopen.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct Verankeringsafleiding {
     /// η₁ volgens 8.4.2(2) — 1,0 bij 'goede' omstandigheden, 0,7 bij "alle
     /// andere gevallen".
@@ -521,7 +549,10 @@ pub struct Verankeringsafleiding {
 /// over de hele lengte en 2Ø16 in het veld. Alleen die tweede bundel heeft
 /// staafeinden in het veld, en alleen dáár loopt de weerstandslijn schuin.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct Staafbundel {
     /// Boven- of onderwapening.
     pub side: RebarSide,
@@ -550,7 +581,10 @@ pub struct Staafbundel {
 
 /// De momentendekking van één zijde van de doorsnede.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct Momentdekking {
     /// Boven- of onderwapening.
     pub side: RebarSide,
@@ -573,7 +607,10 @@ pub struct Momentdekking {
 
 /// De dwarskrachtdekking van de staaf.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct Dwarskrachtdekking {
     /// De lijn, oplopend in x. Op een sprong staan twee punten met dezelfde x.
     pub punten: Vec<Dwarskrachtpunt>,
@@ -598,7 +635,10 @@ pub struct Dwarskrachtdekking {
 /// maat die dit model niet heeft. Beide kandidaten worden daarom GEMELD en er
 /// wordt geen oordeel over de lengte geveld.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct SteunpuntEis {
     /// Welk uiteinde.
     pub uiteinde: Staafeinde,
@@ -637,7 +677,10 @@ pub struct SteunpuntEis {
 
 /// Het antwoord op [`DekkingslijnVerzoek`]: de hele dekkingslijn van één staaf.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct DekkingslijnAntwoord {
     /// Staafnummer; komt onveranderd terug uit het verzoek.
     pub beam_id: u32,
@@ -756,7 +799,9 @@ pub fn dekkingslijn(verzoek: DekkingslijnVerzoek) -> Result<DekkingslijnAntwoord
         .iter()
         .filter_map(|m| m.maatgevend.and_then(|i| m.punten.get(i as usize)))
         .filter_map(|p| p.uc)
-        .fold(None::<f64>, |acc, uc| Some(acc.map_or(uc, |a: f64| a.max(uc))));
+        .fold(None::<f64>, |acc, uc| {
+            Some(acc.map_or(uc, |a: f64| a.max(uc)))
+        });
     let uc_dwarskracht_max = dwarskracht
         .maatgevend
         .and_then(|i| dwarskracht.punten.get(i as usize))
@@ -786,7 +831,9 @@ pub fn dekkingslijn(verzoek: DekkingslijnVerzoek) -> Result<DekkingslijnAntwoord
             .toelichting
             .iter()
             .cloned()
-            .chain(crate::orchestrator::zijden_in_wereldtermen(b.staafstand.unwrap_or_default()))
+            .chain(crate::orchestrator::zijden_in_wereldtermen(
+                b.staafstand.unwrap_or_default(),
+            ))
             // En de waarschuwing van de bouwer dat "boven" hier dicht bij zijn
             // sprong ligt: de dekkingslijn noemt de onder- en de bovenwapening.
             .chain(b.staafstand_notities.iter().flatten().cloned())
@@ -942,8 +989,14 @@ mod tests {
         ReinforcementCage {
             cover_mm: 30.0,
             stirrup_diameter_mm: 8.0,
-            bottom: RebarRow { count: 3, diameter_mm: 16.0 },
-            top: RebarRow { count: 2, diameter_mm: 12.0 },
+            bottom: RebarRow {
+                count: 3,
+                diameter_mm: 16.0,
+            },
+            top: RebarRow {
+                count: 2,
+                diameter_mm: 12.0,
+            },
             stirrup_spacing_mm: Some(150.0),
             stirrup_legs: Some(2),
             ..Default::default()
@@ -954,7 +1007,11 @@ mod tests {
         ForcePoint {
             combination_id: 1,
             position_mm: x_mm,
-            forces: InternalForces { my_ed: my, vz_ed: vz, ..Default::default() },
+            forces: InternalForces {
+                my_ed: my,
+                vz_ed: vz,
+                ..Default::default()
+            },
         }
     }
 
@@ -1027,8 +1084,14 @@ mod tests {
         assert_eq!(a.boven.bundels.len(), 1);
         assert_eq!(a.boven.bundels[0].aantal, 2);
         assert!((a.lengte_mm - L_MM).abs() < 1e-9);
-        assert!(a.f_yd_mpa > 400.0, "B500B levert f_yd = 500/1,15 ≈ 435 N/mm²");
-        assert!(a.f_ctk_005_mpa > 0.0, "zonder f_ctk;0,05 is er geen f_bd en dus geen l_bd");
+        assert!(
+            a.f_yd_mpa > 400.0,
+            "B500B levert f_yd = 500/1,15 ≈ 435 N/mm²"
+        );
+        assert!(
+            a.f_ctk_005_mpa > 0.0,
+            "zonder f_ctk;0,05 is er geen f_bd en dus geen l_bd"
+        );
     }
 
     /// De lijn draagt punten en de beide unity checks komen uit de MAATGEVENDE
@@ -1040,7 +1103,10 @@ mod tests {
         assert!(!a.onder.punten.is_empty());
         assert!(!a.dwarskracht.punten.is_empty());
         let i = a.onder.maatgevend.expect("een maatgevend momentpunt") as usize;
-        assert!(!a.onder.punten[i].in_eindzone, "de eindzones blijven buiten de keuze");
+        assert!(
+            !a.onder.punten[i].in_eindzone,
+            "de eindzones blijven buiten de keuze"
+        );
         let uc_boven = a
             .boven
             .maatgevend
@@ -1052,7 +1118,10 @@ mod tests {
             (None, b) => b,
         };
         assert_eq!(a.uc_moment_max, verwacht);
-        let j = a.dwarskracht.maatgevend.expect("een maatgevend dwarskrachtpunt") as usize;
+        let j = a
+            .dwarskracht
+            .maatgevend
+            .expect("een maatgevend dwarskrachtpunt") as usize;
         assert_eq!(a.uc_dwarskracht_max, a.dwarskracht.punten[j].uc);
     }
 
@@ -1065,7 +1134,10 @@ mod tests {
             longitudinal: vec![
                 LongitudinalZone {
                     side: RebarSide::Bottom,
-                    row: RebarRow { count: 3, diameter_mm: 16.0 },
+                    row: RebarRow {
+                        count: 3,
+                        diameter_mm: 16.0,
+                    },
                     x_start_mm: 0.0,
                     x_end_mm: 1500.0,
                     bar_shape: Default::default(),
@@ -1073,7 +1145,10 @@ mod tests {
                 },
                 LongitudinalZone {
                     side: RebarSide::Bottom,
-                    row: RebarRow { count: 5, diameter_mm: 16.0 },
+                    row: RebarRow {
+                        count: 5,
+                        diameter_mm: 16.0,
+                    },
                     x_start_mm: 1500.0,
                     x_end_mm: 4500.0,
                     bar_shape: Default::default(),
@@ -1081,7 +1156,10 @@ mod tests {
                 },
                 LongitudinalZone {
                     side: RebarSide::Bottom,
-                    row: RebarRow { count: 3, diameter_mm: 16.0 },
+                    row: RebarRow {
+                        count: 3,
+                        diameter_mm: 16.0,
+                    },
                     x_start_mm: 4500.0,
                     x_end_mm: L_MM,
                     bar_shape: Default::default(),
@@ -1091,7 +1169,11 @@ mod tests {
             stirrups: vec![],
         };
         let a = dekkingslijn(verzoek(zones)).expect("dekkingslijn");
-        assert_eq!(a.onder.bundels.len(), 2, "doorgaande 3Ø16 plus bijgelegde 2Ø16");
+        assert_eq!(
+            a.onder.bundels.len(),
+            2,
+            "doorgaande 3Ø16 plus bijgelegde 2Ø16"
+        );
         let bij = a
             .onder
             .bundels
@@ -1100,7 +1182,10 @@ mod tests {
             .expect("de bijgelegde bundel");
         assert!((bij.x_start_mm - 1500.0).abs() < 1.0);
         assert!((bij.x_end_mm - 4500.0).abs() < 1.0);
-        assert!(bij.l_bd_mm > 0.0, "zonder l_bd loopt de schuine tak van figuur 9.2 niet");
+        assert!(
+            bij.l_bd_mm > 0.0,
+            "zonder l_bd loopt de schuine tak van figuur 9.2 niet"
+        );
         assert!(bij.f_rs_vol_kn > 0.0);
 
         for grens in [1500.0_f64, 4500.0] {
@@ -1136,10 +1221,24 @@ mod tests {
         let a = dekkingslijn(v).expect("mét normaalkracht hoort er nu een lijn te komen");
         let d = 600.0 - 30.0 - 8.0 - 8.0;
         for p in &a.onder.punten {
-            assert_eq!(p.z_grondslag, ZGrondslag::EvenwichtBegrensd, "x = {}", p.x_mm);
-            assert!((p.z_mm - 0.9 * d).abs() < 1e-9, "x = {}: z = {}", p.x_mm, p.z_mm);
+            assert_eq!(
+                p.z_grondslag,
+                ZGrondslag::EvenwichtBegrensd,
+                "x = {}",
+                p.x_mm
+            );
+            assert!(
+                (p.z_mm - 0.9 * d).abs() < 1e-9,
+                "x = {}: z = {}",
+                p.x_mm,
+                p.z_mm
+            );
             let werkelijk = p.z_werkelijk_mm.expect("de werkelijke arm reist mee");
-            assert!(werkelijk > 0.9 * d && werkelijk < d, "x = {}: z_u = {werkelijk}", p.x_mm);
+            assert!(
+                werkelijk > 0.9 * d && werkelijk < d,
+                "x = {}: z_u = {werkelijk}",
+                p.x_mm
+            );
         }
         // De dwarskrachtlijn draagt z en zijn grondslag ook.
         let dw = a.dwarskracht.punten.first().expect("x = 0");
@@ -1148,7 +1247,11 @@ mod tests {
         // En de JSON-vorm noemt de grondslag bij naam, zodat de frontend hem
         // kan tonen.
         let json = serde_json::to_string(&a).unwrap();
-        assert!(json.contains("\"z_grondslag\":\"EvenwichtBegrensd\""), "{}", &json[..200]);
+        assert!(
+            json.contains("\"z_grondslag\":\"EvenwichtBegrensd\""),
+            "{}",
+            &json[..200]
+        );
         assert!(a.notes.iter().any(|n| n.contains("doorsnede-evenwicht")));
     }
 
@@ -1162,7 +1265,12 @@ mod tests {
             assert!(p.z_werkelijk_mm.is_none());
         }
         for p in &a.dwarskracht.punten {
-            assert_eq!(p.z_grondslag, Some(ZGrondslag::Benadering), "x = {}", p.x_mm);
+            assert_eq!(
+                p.z_grondslag,
+                Some(ZGrondslag::Benadering),
+                "x = {}",
+                p.x_mm
+            );
         }
     }
 

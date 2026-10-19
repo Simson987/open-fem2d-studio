@@ -82,7 +82,8 @@ async fn check_fem_model(model: Value) -> Value {
     drop(stdin);
     let _ = timeout(Duration::from_secs(10), kind.wait()).await;
     assert_eq!(
-        antwoord["isError"], false,
+        antwoord["isError"],
+        false,
         "check_fem_model gaf een fout: {}",
         antwoord["content"][0]["text"].as_str().unwrap_or("")
     );
@@ -95,7 +96,11 @@ async fn check_fem_model(model: Value) -> Value {
 fn schuine_ligger(helling: f64, naar_links: bool) -> Value {
     let t = helling.to_radians();
     let l = 9000.0;
-    let x = if naar_links { -l * t.cos() } else { l * t.cos() };
+    let x = if naar_links {
+        -l * t.cos()
+    } else {
+        l * t.cos()
+    };
     json!({
         "nodes": [ { "id": 1, "x": 0, "z": 0 }, { "id": 2, "x": x, "z": l * t.sin() } ],
         "beams": [ {
@@ -123,11 +128,19 @@ fn waarschuwingen(uit: &Value) -> (usize, usize) {
         .unwrap_or_else(|| panic!("geen kiptoets in {resultaat}"));
     let in_kip = kip["kind"]["data"]["notes"]
         .as_array()
-        .map(|n| n.iter().filter(|t| t.as_str().is_some_and(|t| t.starts_with(WAARSCHUWING))).count())
+        .map(|n| {
+            n.iter()
+                .filter(|t| t.as_str().is_some_and(|t| t.starts_with(WAARSCHUWING)))
+                .count()
+        })
         .unwrap_or(0);
     let in_invoer = uit["steel_check_inputs"][0]["staafstand_notities"]
         .as_array()
-        .map(|n| n.iter().filter(|t| t.as_str().is_some_and(|t| t.starts_with(WAARSCHUWING))).count())
+        .map(|n| {
+            n.iter()
+                .filter(|t| t.as_str().is_some_and(|t| t.starts_with(WAARSCHUWING)))
+                .count()
+        })
         .unwrap_or(0);
     (in_kip, in_invoer)
 }
@@ -147,11 +160,26 @@ async fn een_naar_links_hellende_staaf_bij_75_graden_krijgt_de_waarschuwing_in_d
     ] {
         let uit = check_fem_model(schuine_ligger(helling, naar_links)).await;
         let (in_kip, in_invoer) = waarschuwingen(&uit);
-        let wat = format!("{helling}° {}", if naar_links { "naar links" } else { "naar rechts" });
+        let wat = format!(
+            "{helling}° {}",
+            if naar_links {
+                "naar links"
+            } else {
+                "naar rechts"
+            }
+        );
         if verwacht {
-            assert_eq!((in_kip, in_invoer), (1, 1), "{wat}: de waarschuwing hoort er één keer te staan");
+            assert_eq!(
+                (in_kip, in_invoer),
+                (1, 1),
+                "{wat}: de waarschuwing hoort er één keer te staan"
+            );
         } else {
-            assert_eq!((in_kip, in_invoer), (0, 0), "{wat}: hier hoort geen waarschuwing: {uit}");
+            assert_eq!(
+                (in_kip, in_invoer),
+                (0, 0),
+                "{wat}: hier hoort geen waarschuwing: {uit}"
+            );
         }
     }
 }

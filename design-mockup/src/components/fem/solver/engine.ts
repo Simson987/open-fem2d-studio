@@ -347,7 +347,11 @@ function applySupportToMesh(mesh: AnyMesh, meshNodeId: number, support: SolverIn
  * hetzelfde pad zowel één-geval-meshes (factor 1/0) als GEFACTOREERDE
  * combinatie-meshes voor de 2e-orde-berekening.
  */
-export function buildMesh(input: SolverInput | MultiInput, loadFactor?: (caseId?: number) => number): {
+export function buildMesh(
+  input: SolverInput | MultiInput,
+  loadFactor?: (caseId?: number) => number,
+  options: { solverCapacity?: "dense" | "native" } = {},
+): {
   mesh: AnyMesh;
   nodeIdMap: Map<number, number>;
   beamIdMap: Map<number, number>;
@@ -1493,7 +1497,7 @@ export function buildMesh(input: SolverInput | MultiInput, loadFactor?: (caseId?
     // voor beide checks.
     const actieveKnopen = buildNodeIdToIndex(mesh, "mixed_beam_plate");
     const nDof = actieveKnopen.size * 3;
-    if (nDof > MAX_MIXED_DOFS) {
+    if (options.solverCapacity !== "native" && nDof > MAX_MIXED_DOFS) {
       throw new Error(
         `Model te groot voor de ingebouwde solver: ${nDof} vrijheidsgraden ` +
         `(maximum ±${MAX_MIXED_DOFS}). Vergroot de meshSize van de platen ` +

@@ -4,14 +4,14 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub mod i_section;
-pub mod rhs;
 pub mod channel;
 pub mod composite;
 pub mod contour;
+pub mod i_section;
 pub mod mesh2d;
 pub mod motor;
 pub mod opdracht;
+pub mod rhs;
 pub mod torsie;
 pub mod uitgebreid;
 

@@ -52,12 +52,21 @@ fn sfb_uit_de_editor() {
 
     let hoogte = json["z_max_mm"].as_f64().unwrap() - json["z_min_mm"].as_f64().unwrap();
     let breedte = json["y_max_mm"].as_f64().unwrap() - json["y_min_mm"].as_f64().unwrap();
-    assert!((hoogte - 215.0).abs() < 0.5, "hoogte hoort 215 mm te zijn, kreeg {hoogte}");
-    assert!((breedte - 400.0).abs() < 0.5, "breedte hoort 400 mm te zijn, kreeg {breedte}");
+    assert!(
+        (hoogte - 215.0).abs() < 0.5,
+        "hoogte hoort 215 mm te zijn, kreeg {hoogte}"
+    );
+    assert!(
+        (breedte - 400.0).abs() < 0.5,
+        "breedte hoort 400 mm te zijn, kreeg {breedte}"
+    );
 
     // Het zwaartepunt zakt door de onderplaat onder het hart van de HEB.
     let z_c = json["z_c_mm"].as_f64().unwrap();
-    assert!(z_c < -30.0 && z_c > -60.0, "zwaartepunt hoort rond −47 mm te liggen, kreeg {z_c}");
+    assert!(
+        z_c < -30.0 && z_c > -60.0,
+        "zwaartepunt hoort rond −47 mm te liggen, kreeg {z_c}"
+    );
 
     // De plaat is een los stuk plaatwerk: W_pl kan de motor dan niet bepalen,
     // en dat hoort hij te zeggen in plaats van een nul te leveren.
@@ -148,5 +157,8 @@ fn hoeklijn_uit_de_editor() {
     );
     let s = serde_json::to_value(&reken(&scherp).unwrap()).unwrap();
     let a_scherp = s["area_mm2"].as_f64().unwrap();
-    assert!(a_scherp > a, "zonder teenafronding hoort A groter te zijn: {a_scherp} tegen {a}");
+    assert!(
+        a_scherp > a,
+        "zonder teenafronding hoort A groter te zijn: {a_scherp} tegen {a}"
+    );
 }

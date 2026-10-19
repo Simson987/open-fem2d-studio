@@ -59,7 +59,9 @@ use crate::result::{
 /// Vergelijkspanning volgens von Mises voor een vlakke spanningstoestand.
 /// Zie de moduledocumentatie voor de onderbouwing van de kruisterm.
 pub fn sigma_eq(sigma_x: f64, sigma_z: f64, tau: f64) -> f64 {
-    (sigma_x * sigma_x - sigma_x * sigma_z + sigma_z * sigma_z + 3.0 * tau * tau).max(0.0).sqrt()
+    (sigma_x * sigma_x - sigma_x * sigma_z + sigma_z * sigma_z + 3.0 * tau * tau)
+        .max(0.0)
+        .sqrt()
 }
 
 /// Eén beoordeeld rekenpunt: plaats langs de staaf én hoogte in de doorsnede.
@@ -86,15 +88,14 @@ impl Punt {
     }
 }
 
-fn spanningen_in(
-    p: &ForcePoint,
-    v: &Vezelpositie,
-    d: &Doorsnedegegevens,
-    sigma_z: f64,
-) -> Punt {
+fn spanningen_in(p: &ForcePoint, v: &Vezelpositie, d: &Doorsnedegegevens, sigma_z: f64) -> Punt {
     let s = d.model.s_boven_mm3(v.z_mm);
     // N in kN → N; M in kNm → N·mm; V in kN → N.
-    let sigma_n = if d.a_mm2 > 0.0 { p.forces.n_ed * 1e3 / d.a_mm2 } else { 0.0 };
+    let sigma_n = if d.a_mm2 > 0.0 {
+        p.forces.n_ed * 1e3 / d.a_mm2
+    } else {
+        0.0
+    };
     let sigma_m = if d.iy_mm4 > 0.0 {
         p.forces.my_ed * 1e6 * (v.z_mm - d.model.z_c_mm) / d.iy_mm4
     } else {
@@ -137,7 +138,10 @@ pub fn check_spanning_beam(input: SpanningBeamCheckInput) -> SpanningBeamCheckRe
     if !(input.gamma_m > 0.0) {
         return leeg_resultaat(
             &input,
-            format!("de materiaalfactor γ_M is {} — vul een positieve waarde in", input.gamma_m),
+            format!(
+                "de materiaalfactor γ_M is {} — vul een positieve waarde in",
+                input.gamma_m
+            ),
         );
     }
 
@@ -198,7 +202,9 @@ pub fn check_spanning_beam(input: SpanningBeamCheckInput) -> SpanningBeamCheckRe
     let mut uc_max = 0.0;
     let mut governing = String::new();
     for c in &checks {
-        let CheckKind::Resistance(r) = &c.kind else { continue };
+        let CheckKind::Resistance(r) = &c.kind else {
+            continue;
+        };
         if let Some(u) = &r.uc {
             if u.uc > uc_max {
                 uc_max = u.uc;
@@ -267,8 +273,16 @@ pub fn check_spanning_beam(input: SpanningBeamCheckInput) -> SpanningBeamCheckRe
 
     let hoogte = doorsnede.model.hoogte_mm;
     let z_c = doorsnede.model.z_c_mm;
-    let wel_top = if z_c > 0.0 { doorsnede.iy_mm4 / z_c } else { 0.0 };
-    let wel_bot = if hoogte - z_c > 0.0 { doorsnede.iy_mm4 / (hoogte - z_c) } else { 0.0 };
+    let wel_top = if z_c > 0.0 {
+        doorsnede.iy_mm4 / z_c
+    } else {
+        0.0
+    };
+    let wel_bot = if hoogte - z_c > 0.0 {
+        doorsnede.iy_mm4 / (hoogte - z_c)
+    } else {
+        0.0
+    };
 
     SpanningBeamCheckResult {
         beam_id: input.beam_id,
@@ -279,7 +293,11 @@ pub fn check_spanning_beam(input: SpanningBeamCheckInput) -> SpanningBeamCheckRe
         f_d_mpa: f_d,
         checks,
         uc_max,
-        status: if uc_max <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk },
+        status: if uc_max <= 1.0 {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::NotOk
+        },
         governing_check_id: governing,
         section: SpanningDoorsnedeResultaat {
             naam: doorsnede.naam,
@@ -327,8 +345,9 @@ fn toets_vergelijkspanning(
         title: "Vergelijkspanning (von Mises)".to_string(),
         article: "vrije spanningstoets".to_string(),
         force_state: p.snapshot(),
-        formula_latex: r"\sigma_{eq} = \sqrt{\sigma_x^2 + \sigma_z^2 - \sigma_x \sigma_z + 3 \tau^2}"
-            .to_string(),
+        formula_latex:
+            r"\sigma_{eq} = \sqrt{\sigma_x^2 + \sigma_z^2 - \sigma_x \sigma_z + 3 \tau^2}"
+                .to_string(),
         variables: vec![
             nv(r"\sigma_x", p.sigma_x, "N/mm²"),
             nv(r"\sigma_z", sigma_z, "N/mm²"),
@@ -346,7 +365,11 @@ fn toets_vergelijkspanning(
             uc,
             formula_latex: r"\sigma_{eq} / f_d".to_string(),
         }),
-        status: if uc <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk },
+        status: if uc <= 1.0 {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::NotOk
+        },
         notes: vec![format!(
             "Maatgevend op x = {:.0} mm, vezel z = {:.1} mm vanaf de bovenkant \
              (combinatie {}).",
@@ -356,15 +379,19 @@ fn toets_vergelijkspanning(
 }
 
 fn toets_normaalspanning(p: &Punt, d: &Doorsnedegegevens, f_d: f64) -> ResistanceCalc {
-    let uc = if f_d > 0.0 { p.sigma_x.abs() / f_d } else { 0.0 };
+    let uc = if f_d > 0.0 {
+        p.sigma_x.abs() / f_d
+    } else {
+        0.0
+    };
     ResistanceCalc {
         deelstappen: Vec::new(),
         id: "spanning_normaal".to_string(),
         title: "Normaalspanning σ_x".to_string(),
         article: "vrije spanningstoets".to_string(),
         force_state: p.snapshot(),
-        formula_latex:
-            r"\sigma_x = \frac{N_{Ed}}{A} + \frac{M_{y,Ed} \cdot (z - z_c)}{I_y}".to_string(),
+        formula_latex: r"\sigma_x = \frac{N_{Ed}}{A} + \frac{M_{y,Ed} \cdot (z - z_c)}{I_y}"
+            .to_string(),
         variables: vec![
             nv("N_{Ed}", p.forces.n_ed * 1e3, "N"),
             nv("A", d.a_mm2, "mm²"),
@@ -381,7 +408,11 @@ fn toets_normaalspanning(p: &Punt, d: &Doorsnedegegevens, f_d: f64) -> Resistanc
             uc,
             formula_latex: r"|\sigma_x| / f_d".to_string(),
         }),
-        status: if uc <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk },
+        status: if uc <= 1.0 {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::NotOk
+        },
         notes: vec![
             "Trek positief. z wordt vanaf de bovenkant van de doorsnede gemeten; \
              M_y positief geeft trek in de onderste vezel."
@@ -415,7 +446,11 @@ fn toets_schuifspanning(p: &Punt, d: &Doorsnedegegevens, f_vd: f64, f_d: f64) ->
             uc,
             formula_latex: r"\tau / f_{v,d}".to_string(),
         }),
-        status: if uc <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk },
+        status: if uc <= 1.0 {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::NotOk
+        },
         notes: vec![format!(
             "Zuivere afschuiving bereikt de vergelijkspanning bij τ = f_d/√3; \
              daarom f_v,d = {f_vd:.2} N/mm². Formule van Jourawski, met S(z) het \
@@ -425,7 +460,11 @@ fn toets_schuifspanning(p: &Punt, d: &Doorsnedegegevens, f_vd: f64, f_d: f64) ->
 }
 
 fn nv(symbol: &str, value: f64, unit: &str) -> NamedValue {
-    NamedValue { symbol: symbol.to_string(), value, unit: unit.to_string() }
+    NamedValue {
+        symbol: symbol.to_string(),
+        value,
+        unit: unit.to_string(),
+    }
 }
 
 /// Resultaat zonder toetsen, met de reden expliciet in `notes` — dezelfde
@@ -437,7 +476,11 @@ fn leeg_resultaat(input: &SpanningBeamCheckInput, reden: String) -> SpanningBeam
         material_name: input.material_name.clone(),
         f_toel_mpa: input.f_toel_mpa,
         gamma_m: input.gamma_m,
-        f_d_mpa: if input.gamma_m > 0.0 { input.f_toel_mpa / input.gamma_m } else { 0.0 },
+        f_d_mpa: if input.gamma_m > 0.0 {
+            input.f_toel_mpa / input.gamma_m
+        } else {
+            0.0
+        },
         checks: vec![],
         uc_max: 0.0,
         status: CheckStatus::NotApplicable,
@@ -467,7 +510,11 @@ mod tests {
     #[test]
     fn von_mises_vereenvoudigt_bij_sigma_z_nul() {
         assert_relative_eq!(sigma_eq(100.0, 0.0, 0.0), 100.0);
-        assert_relative_eq!(sigma_eq(0.0, 0.0, 10.0), 3f64.sqrt() * 10.0, max_relative = 1e-12);
+        assert_relative_eq!(
+            sigma_eq(0.0, 0.0, 10.0),
+            3f64.sqrt() * 10.0,
+            max_relative = 1e-12
+        );
         assert_relative_eq!(
             sigma_eq(60.0, 0.0, 40.0),
             (60.0f64 * 60.0 + 3.0 * 40.0 * 40.0).sqrt(),

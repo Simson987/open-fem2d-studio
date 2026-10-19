@@ -176,7 +176,10 @@ impl Default for Figuurstijl {
     /// De rapportstijl: papierkleuren en de Liberation Sans die het rapport
     /// zelf registreert.
     fn default() -> Self {
-        Self { kleuren: RAPPORT_KLEUREN, font: "LiberationSans-Regular".to_string() }
+        Self {
+            kleuren: RAPPORT_KLEUREN,
+            font: "LiberationSans-Regular".to_string(),
+        }
     }
 }
 
@@ -319,8 +322,7 @@ pub struct StaafPositie {
 /// mét die staven getekend. Een korf zonder zijstaven levert onveranderd de
 /// twee rijen op, in dezelfde volgorde als voorheen — onder eerst.
 pub fn staaf_posities(korf: &ReinforcementCage, section: &ConcreteSection) -> Vec<StaafPositie> {
-    korf
-        .staafposities(section)
+    korf.staafposities(section)
         .into_iter()
         .map(|p| StaafPositie {
             x_mm: hart_x_mm(section, p.z_mm) + p.x_mm,
@@ -653,7 +655,10 @@ pub fn teken_doorsnede(
     let sy = |z: f64| k.y(y0 + (h_mm - z) as f32 * s);
 
     // ── Beton: de werkelijke omtrek, dus ook de flens van een T of een L.
-    let omtrek: Vec<(Pt, Pt)> = omtrek_punten(section).into_iter().map(|(x, z)| (sx(x), sy(z))).collect();
+    let omtrek: Vec<(Pt, Pt)> = omtrek_punten(section)
+        .into_iter()
+        .map(|(x, z)| (sx(x), sy(z)))
+        .collect();
     dl.set_fill_color(kl.beton_vlak);
     dl.set_stroke_color(kl.beton_lijn);
     dl.set_line_width(k.l(1.0));
@@ -710,7 +715,8 @@ pub fn teken_doorsnede(
     let y_label_onder = y0 + (h_mm - korf.axis_offset_mm(&korf.bottom)) as f32 * s
         - 3.0f32.max(korf.bottom.diameter_mm as f32 / 2.0 * s)
         - 2.5;
-    let y_label_boven = y0 + korf.axis_offset_mm(&korf.top) as f32 * s
+    let y_label_boven = y0
+        + korf.axis_offset_mm(&korf.top) as f32 * s
         + 3.0f32.max(korf.top.diameter_mm as f32 / 2.0 * s)
         + 8.0;
     const LABEL_H: f32 = 9.0;
@@ -744,18 +750,48 @@ pub fn teken_doorsnede(
     dl.set_line_width(k.l(0.6));
     // b
     dl.draw_line(k.x(x0), k.y(y_maat_b), k.x(x0 + w), k.y(y_maat_b));
-    dl.draw_line(k.x(x0), k.y(y_maat_b - D_TICK), k.x(x0), k.y(y_maat_b + D_TICK));
-    dl.draw_line(k.x(x0 + w), k.y(y_maat_b - D_TICK), k.x(x0 + w), k.y(y_maat_b + D_TICK));
+    dl.draw_line(
+        k.x(x0),
+        k.y(y_maat_b - D_TICK),
+        k.x(x0),
+        k.y(y_maat_b + D_TICK),
+    );
+    dl.draw_line(
+        k.x(x0 + w),
+        k.y(y_maat_b - D_TICK),
+        k.x(x0 + w),
+        k.y(y_maat_b + D_TICK),
+    );
     // h
     dl.draw_line(k.x(x_maat_h), k.y(y0), k.x(x_maat_h), k.y(y0 + h));
-    dl.draw_line(k.x(x_maat_h - D_TICK), k.y(y0), k.x(x_maat_h + D_TICK), k.y(y0));
-    dl.draw_line(k.x(x_maat_h - D_TICK), k.y(y0 + h), k.x(x_maat_h + D_TICK), k.y(y0 + h));
+    dl.draw_line(
+        k.x(x_maat_h - D_TICK),
+        k.y(y0),
+        k.x(x_maat_h + D_TICK),
+        k.y(y0),
+    );
+    dl.draw_line(
+        k.x(x_maat_h - D_TICK),
+        k.y(y0 + h),
+        k.x(x_maat_h + D_TICK),
+        k.y(y0 + h),
+    );
     // d: van de bovenrand tot de as van de onderwapening.
     if heeft_onder {
         let y_d = y0 + (h_mm - (h_mm - d_nuttig)) as f32 * s;
         dl.draw_line(k.x(x_maat_d), k.y(y0), k.x(x_maat_d), k.y(y_d));
-        dl.draw_line(k.x(x_maat_d - D_TICK), k.y(y0), k.x(x_maat_d + D_TICK), k.y(y0));
-        dl.draw_line(k.x(x_maat_d - D_TICK), k.y(y_d), k.x(x_maat_d + D_TICK), k.y(y_d));
+        dl.draw_line(
+            k.x(x_maat_d - D_TICK),
+            k.y(y0),
+            k.x(x_maat_d + D_TICK),
+            k.y(y0),
+        );
+        dl.draw_line(
+            k.x(x_maat_d - D_TICK),
+            k.y(y_d),
+            k.x(x_maat_d + D_TICK),
+            k.y(y_d),
+        );
         streeplijn(
             dl,
             k.x(x0 + w),
@@ -785,7 +821,11 @@ pub fn teken_doorsnede(
 
     dl.set_font(&stijl.font, k.l(7.5));
     dl.set_fill_color(kl.tekst_maat);
-    let b_naam = if section.shape.has_flange() { "b_eff" } else { "b" };
+    let b_naam = if section.shape.has_flange() {
+        "b_eff"
+    } else {
+        "b"
+    };
     dl.draw_text_center(
         k.x(x0 + w / 2.0),
         k.y(y_maat_b - 3.0),
@@ -827,7 +867,11 @@ pub fn teken_doorsnede(
     // Onderschrift.
     let mut delen: Vec<String> = Vec::new();
     if !labels_in_de_doorsnede {
-        delen.push(format!("{} onder, {} boven", korf.bottom.label(), korf.top.label()));
+        delen.push(format!(
+            "{} onder, {} boven",
+            korf.bottom.label(),
+            korf.top.label()
+        ));
     }
     if section.shape.has_flange() {
         delen.push(format!("h_f {}", maat(section.h_f_mm())));
@@ -868,7 +912,11 @@ pub fn punt_bij_moment(diagram: &MnKappaDiagram, m_knm: f64) -> Option<(f64, f64
             continue;
         }
         let span = b.m_knm - a.m_knm;
-        let t = if span.abs() < 1e-12 { 0.0 } else { (doel - a.m_knm) / span };
+        let t = if span.abs() < 1e-12 {
+            0.0
+        } else {
+            (doel - a.m_knm) / span
+        };
         return Some((a.kappa_per_m + t * (b.kappa_per_m - a.kappa_per_m), doel));
     }
     None
@@ -910,7 +958,9 @@ pub fn teken_mn_kappa(
     let leeg = punten.len() < 2;
 
     // Assen: dezelfde stappenregel als op het scherm.
-    let kappa_max = punten.iter().fold(0.0f64, |m, p| m.max(p.kappa_per_m * 1e3));
+    let kappa_max = punten
+        .iter()
+        .fold(0.0f64, |m, p| m.max(p.kappa_per_m * 1e3));
     let m_max_data = punten.iter().fold(0.0f64, |m, p| m.max(p.m_knm));
     let m_max = m_max_data.max(m_ed_knm.map(f64::abs).unwrap_or(0.0));
     let x_ticks = ticks(if kappa_max > 0.0 { kappa_max } else { 1.0 });
@@ -925,7 +975,12 @@ pub fn teken_mn_kappa(
     dl.set_stroke_color(kl.raster);
     dl.set_line_width(k.l(0.6));
     for t in &y_ticks {
-        dl.draw_line(k.x(MK_MARGE_LINKS), k.y(sy(*t)), k.x(MK_MARGE_LINKS + plot_w), k.y(sy(*t)));
+        dl.draw_line(
+            k.x(MK_MARGE_LINKS),
+            k.y(sy(*t)),
+            k.x(MK_MARGE_LINKS + plot_w),
+            k.y(sy(*t)),
+        );
     }
     for t in &x_ticks {
         let x = MK_MARGE_LINKS + (t / x_as_max) as f32 * plot_w;
@@ -933,8 +988,18 @@ pub fn teken_mn_kappa(
     }
     dl.set_stroke_color(kl.maatlijn);
     dl.set_line_width(k.l(0.8));
-    dl.draw_line(k.x(MK_MARGE_LINKS), k.y(y_basis), k.x(MK_MARGE_LINKS + plot_w), k.y(y_basis));
-    dl.draw_line(k.x(MK_MARGE_LINKS), k.y(MK_MARGE_BOVEN), k.x(MK_MARGE_LINKS), k.y(y_basis));
+    dl.draw_line(
+        k.x(MK_MARGE_LINKS),
+        k.y(y_basis),
+        k.x(MK_MARGE_LINKS + plot_w),
+        k.y(y_basis),
+    );
+    dl.draw_line(
+        k.x(MK_MARGE_LINKS),
+        k.y(MK_MARGE_BOVEN),
+        k.x(MK_MARGE_LINKS),
+        k.y(y_basis),
+    );
 
     // Astekst.
     dl.set_font(&stijl.font, k.l(8.0));
@@ -946,7 +1011,11 @@ pub fn teken_mn_kappa(
     // "0,0  1  2" op één as. Dat is de regel die `EiVerloopGrafiek` hanteert
     // en met zoveel woorden toelicht; hier volgen beide figuren in de PDF hem,
     // zodat twee grafieken in één document hun as niet verschillend verdelen.
-    let x_dec = if x_ticks.len() > 1 && x_ticks[1] - x_ticks[0] < 1.0 { 1 } else { 0 };
+    let x_dec = if x_ticks.len() > 1 && x_ticks[1] - x_ticks[0] < 1.0 {
+        1
+    } else {
+        0
+    };
     for t in &x_ticks {
         let x = MK_MARGE_LINKS + (t / x_as_max) as f32 * plot_w;
         dl.draw_text_center(k.x(x), k.y(y_basis + 11.0), &nl(*t, x_dec));
@@ -1030,13 +1099,24 @@ pub fn teken_mn_kappa(
     // Bezwijkpunt: dicht bolletje op het laatste diagrampunt.
     let laatste = &punten[punten.len() - 1];
     dl.set_fill_color(kl.reeks);
-    cirkel(dl, k.x(sx(laatste.kappa_per_m)), k.y(sy(laatste.m_knm)), k.l(4.5), true, false);
+    cirkel(
+        dl,
+        k.x(sx(laatste.kappa_per_m)),
+        k.y(sy(laatste.m_knm)),
+        k.l(4.5),
+        true,
+        false,
+    );
     dl.set_font(&stijl.font, k.l(8.0));
     dl.set_fill_color(kl.tekst_zwak);
     dl.draw_text_right(
         k.x(sx(laatste.kappa_per_m) - 7.0),
         k.y(sy(laatste.m_knm) - 6.0),
-        &format!("{} {} kNm", bezwijk_label(d.failure_mode), nl(laatste.m_knm, 1)),
+        &format!(
+            "{} {} kNm",
+            bezwijk_label(d.failure_mode),
+            nl(laatste.m_knm, 1)
+        ),
     );
 
     // Het maatgevende punt: waar de kromme M_Ed snijdt. Ruitvorm, zodat het ook
@@ -1141,25 +1221,53 @@ pub fn teken_interactie(
     dl.set_stroke_color(kl.raster);
     dl.set_line_width(k.l(0.6));
     for t in &n_ticks {
-        dl.draw_line(k.x(IA_MARGE_LINKS), k.y(sy(*t)), k.x(IA_MARGE_LINKS + plot_w), k.y(sy(*t)));
+        dl.draw_line(
+            k.x(IA_MARGE_LINKS),
+            k.y(sy(*t)),
+            k.x(IA_MARGE_LINKS + plot_w),
+            k.y(sy(*t)),
+        );
     }
     for t in &m_ticks {
-        dl.draw_line(k.x(sx(*t)), k.y(IA_MARGE_BOVEN), k.x(sx(*t)), k.y(IA_MARGE_BOVEN + plot_h));
+        dl.draw_line(
+            k.x(sx(*t)),
+            k.y(IA_MARGE_BOVEN),
+            k.x(sx(*t)),
+            k.y(IA_MARGE_BOVEN + plot_h),
+        );
     }
     // De nul-assen zwaarder: M = 0 en N = 0 zijn betekenisvolle lijnen.
     dl.set_stroke_color(kl.maatlijn);
     dl.set_line_width(k.l(0.9));
-    dl.draw_line(k.x(sx(0.0)), k.y(IA_MARGE_BOVEN), k.x(sx(0.0)), k.y(IA_MARGE_BOVEN + plot_h));
-    dl.draw_line(k.x(IA_MARGE_LINKS), k.y(sy(0.0)), k.x(IA_MARGE_LINKS + plot_w), k.y(sy(0.0)));
+    dl.draw_line(
+        k.x(sx(0.0)),
+        k.y(IA_MARGE_BOVEN),
+        k.x(sx(0.0)),
+        k.y(IA_MARGE_BOVEN + plot_h),
+    );
+    dl.draw_line(
+        k.x(IA_MARGE_LINKS),
+        k.y(sy(0.0)),
+        k.x(IA_MARGE_LINKS + plot_w),
+        k.y(sy(0.0)),
+    );
 
     // Astekst.
     dl.set_font(&stijl.font, k.l(8.0));
     dl.set_fill_color(kl.tekst_maat);
     for t in &n_ticks {
-        dl.draw_text_right(k.x(IA_MARGE_LINKS - 5.0), k.y(sy(*t) + 2.8), &nul_schoon(*t, 0));
+        dl.draw_text_right(
+            k.x(IA_MARGE_LINKS - 5.0),
+            k.y(sy(*t) + 2.8),
+            &nul_schoon(*t, 0),
+        );
     }
     for t in &m_ticks {
-        dl.draw_text_center(k.x(sx(*t)), k.y(IA_MARGE_BOVEN + plot_h + 11.0), &nul_schoon(*t, 0));
+        dl.draw_text_center(
+            k.x(sx(*t)),
+            k.y(IA_MARGE_BOVEN + plot_h + 11.0),
+            &nul_schoon(*t, 0),
+        );
     }
     dl.set_font(&stijl.font, k.l(8.5));
     dl.draw_text_center(
@@ -1167,7 +1275,11 @@ pub fn teken_interactie(
         k.y(kh - 6.0),
         "moment M [kNm] — positief: trek onder",
     );
-    dl.draw_text(k.x(6.0), k.y(IA_MARGE_BOVEN - 4.0), "normaalkracht N [kN] — trek +, druk −");
+    dl.draw_text(
+        k.x(6.0),
+        k.y(IA_MARGE_BOVEN - 4.0),
+        "normaalkracht N [kN] — trek +, druk −",
+    );
 
     if leeg {
         dl.set_font(&stijl.font, k.l(9.0));
@@ -1186,13 +1298,18 @@ pub fn teken_interactie(
     dl.set_stroke_color(kl.reeks);
     dl.set_line_width(k.l(1.6));
     dl.draw_polygon(
-        omtrek.iter().map(|(m, n)| (k.x(sx(*m)), k.y(sy(*n)))).collect(),
+        omtrek
+            .iter()
+            .map(|(m, n)| (k.x(sx(*m)), k.y(sy(*n))))
+            .collect(),
         true,
         true,
     );
 
     // Het rekenpunt met de horizontale snede die de unity check is.
-    let (Some(n_ed), Some(m_ed)) = (n_ed_kn, m_ed_knm) else { return };
+    let (Some(n_ed), Some(m_ed)) = (n_ed_kn, m_ed_knm) else {
+        return;
+    };
 
     // M_Rd bij N_Ed: bij voorkeur het getal van de toets zelf; anders lineair
     // geïnterpoleerd uit de tak die bij het teken van M_Ed hoort.
@@ -1209,7 +1326,11 @@ pub fn teken_interactie(
                     continue;
                 }
                 let span = b.n_kn - a.n_kn;
-                let t = if span.abs() < 1e-12 { 0.0 } else { (n_ed - a.n_kn) / span };
+                let t = if span.abs() < 1e-12 {
+                    0.0
+                } else {
+                    (n_ed - a.n_kn) / span
+                };
                 let m = a.m_rd_knm + t * (b.m_rd_knm - a.m_rd_knm);
                 gevonden = Some(if m_ed < 0.0 { -m } else { m });
                 break;
@@ -1312,7 +1433,11 @@ pub fn teken_ei_verloop(
     // Decimalen van de x-as uit de STAP, niet uit de waarde: anders staat er
     // "0,0  1  2" op één as. Bij een korte staaf is de stap een halve meter en
     // is één decimaal nodig.
-    let x_dec = if x_ticks.len() > 1 && x_ticks[1] - x_ticks[0] < 1.0 { 1 } else { 0 };
+    let x_dec = if x_ticks.len() > 1 && x_ticks[1] - x_ticks[0] < 1.0 {
+        1
+    } else {
+        0
+    };
 
     let sx = |x_mm: f64| EI_MARGE_LINKS + (x_mm / 1000.0 / x_as_max) as f32 * plot_w;
     let sy = |ei: f64| EI_MARGE_BOVEN + plot_h - (ei.max(0.0) / y_as_max) as f32 * plot_h;
@@ -1321,7 +1446,12 @@ pub fn teken_ei_verloop(
     dl.set_stroke_color(kl.raster);
     dl.set_line_width(k.l(0.6));
     for t in &y_ticks {
-        dl.draw_line(k.x(EI_MARGE_LINKS), k.y(sy(*t)), k.x(EI_MARGE_LINKS + plot_w), k.y(sy(*t)));
+        dl.draw_line(
+            k.x(EI_MARGE_LINKS),
+            k.y(sy(*t)),
+            k.x(EI_MARGE_LINKS + plot_w),
+            k.y(sy(*t)),
+        );
     }
     for t in &x_ticks {
         let x = EI_MARGE_LINKS + (t / x_as_max) as f32 * plot_w;
@@ -1329,8 +1459,18 @@ pub fn teken_ei_verloop(
     }
     dl.set_stroke_color(kl.maatlijn);
     dl.set_line_width(k.l(0.8));
-    dl.draw_line(k.x(EI_MARGE_LINKS), k.y(y_basis), k.x(EI_MARGE_LINKS + plot_w), k.y(y_basis));
-    dl.draw_line(k.x(EI_MARGE_LINKS), k.y(EI_MARGE_BOVEN), k.x(EI_MARGE_LINKS), k.y(y_basis));
+    dl.draw_line(
+        k.x(EI_MARGE_LINKS),
+        k.y(y_basis),
+        k.x(EI_MARGE_LINKS + plot_w),
+        k.y(y_basis),
+    );
+    dl.draw_line(
+        k.x(EI_MARGE_LINKS),
+        k.y(EI_MARGE_BOVEN),
+        k.x(EI_MARGE_LINKS),
+        k.y(y_basis),
+    );
 
     dl.set_font(&stijl.font, k.l(8.0));
     dl.set_fill_color(kl.tekst_maat);
@@ -1342,7 +1482,11 @@ pub fn teken_ei_verloop(
         dl.draw_text_center(k.x(x), k.y(y_basis + 11.0), &nl(*t, x_dec));
     }
     dl.set_font(&stijl.font, k.l(8.5));
-    dl.draw_text_center(k.x(EI_MARGE_LINKS + plot_w / 2.0), k.y(kh - 6.0), "plaats langs de staaf x [m]");
+    dl.draw_text_center(
+        k.x(EI_MARGE_LINKS + plot_w / 2.0),
+        k.y(kh - 6.0),
+        "plaats langs de staaf x [m]",
+    );
     // De titel van de verticale as staat op het scherm gedraaid langs de as.
     // Hier staat hij horizontaal in de bovenste band; de legenda schuift
     // daarvoor naar rechts op (zie EI_LEGENDA_X).
@@ -1367,22 +1511,40 @@ pub fn teken_ei_verloop(
         let x0 = sx(s.x_start_mm);
         let x1 = sx(s.x_end_mm);
         let y = sy(ei);
-        dl.set_fill_color(if s.cracked == Some(true) { vul_gescheurd } else { vul_ongescheurd });
+        dl.set_fill_color(if s.cracked == Some(true) {
+            vul_gescheurd
+        } else {
+            vul_ongescheurd
+        });
         dl.set_stroke_color(rand);
         dl.set_line_width(k.l(0.7));
-        dl.draw_rect(k.x(x0), k.y(y), k.l((x1 - x0).max(0.2)), k.l(y_basis - y), true, true);
+        dl.draw_rect(
+            k.x(x0),
+            k.y(y),
+            k.l((x1 - x0).max(0.2)),
+            k.l(y_basis - y),
+            true,
+            true,
+        );
     }
 
     // De bovenrand als doorlopende stapfiguur — dat is de EI-lijn zelf.
     dl.set_stroke_color(kl.reeks);
     dl.set_line_width(k.l(1.8));
     for (i, s) in respons.segments.iter().enumerate() {
-        let Some(ei) = s.ei_knm2.filter(|v| v.is_finite()) else { continue };
+        let Some(ei) = s.ei_knm2.filter(|v| v.is_finite()) else {
+            continue;
+        };
         let y = sy(ei);
         dl.draw_line(k.x(sx(s.x_start_mm)), k.y(y), k.x(sx(s.x_end_mm)), k.y(y));
         if i > 0 {
             if let Some(vorige) = respons.segments[i - 1].ei_knm2.filter(|v| v.is_finite()) {
-                dl.draw_line(k.x(sx(s.x_start_mm)), k.y(sy(vorige)), k.x(sx(s.x_start_mm)), k.y(y));
+                dl.draw_line(
+                    k.x(sx(s.x_start_mm)),
+                    k.y(sy(vorige)),
+                    k.x(sx(s.x_start_mm)),
+                    k.y(y),
+                );
             }
         }
     }
@@ -1391,7 +1553,9 @@ pub fn teken_ei_verloop(
     // niet onzichtbaar blijven.
     dl.set_fill_color(kl.rekenpunt);
     for s in &respons.segments {
-        let Some(ei) = s.ei_knm2.filter(|v| v.is_finite()) else { continue };
+        let Some(ei) = s.ei_knm2.filter(|v| v.is_finite()) else {
+            continue;
+        };
         if s.clamped {
             cirkel(
                 dl,
@@ -1431,7 +1595,14 @@ pub fn teken_ei_verloop(
     dl.set_fill_color(vul_gescheurd);
     dl.draw_rect(k.x(EI_LEGENDA_X), k.y(7.0), k.l(9.0), k.l(9.0), true, true);
     dl.set_fill_color(vul_ongescheurd);
-    dl.draw_rect(k.x(EI_LEGENDA_X + 72.0), k.y(7.0), k.l(9.0), k.l(9.0), true, true);
+    dl.draw_rect(
+        k.x(EI_LEGENDA_X + 72.0),
+        k.y(7.0),
+        k.l(9.0),
+        k.l(9.0),
+        true,
+        true,
+    );
     dl.set_stroke_color(kl.lijn);
     dl.set_line_width(k.l(1.0));
     streeplijn(
@@ -1447,7 +1618,11 @@ pub fn teken_ei_verloop(
     dl.set_fill_color(kl.tekst_zwak);
     dl.draw_text(k.x(EI_LEGENDA_X + 12.0), k.y(14.5), "gescheurd");
     dl.draw_text(k.x(EI_LEGENDA_X + 84.0), k.y(14.5), "ongescheurd");
-    dl.draw_text(k.x(EI_LEGENDA_X + 178.0), k.y(14.5), "E_c·I_c (vergelijkingswaarde)");
+    dl.draw_text(
+        k.x(EI_LEGENDA_X + 178.0),
+        k.y(14.5),
+        "E_c·I_c (vergelijkingswaarde)",
+    );
 }
 
 // ── Figuur 5: de momentendekkingslijn van één zijde ───────────────────────────
@@ -1521,7 +1696,11 @@ pub fn teken_dekkingslijn(
     let x_as_max = *x_ticks.last().unwrap();
     // Decimalen van de x-as uit de STAP en niet uit de waarde; zelfde reden als
     // bij het EI-verloop.
-    let x_dec = if x_ticks.len() > 1 && x_ticks[1] - x_ticks[0] < 1.0 { 1 } else { 0 };
+    let x_dec = if x_ticks.len() > 1 && x_ticks[1] - x_ticks[0] < 1.0 {
+        1
+    } else {
+        0
+    };
 
     let sx = |x_mm: f64| DEK_MARGE_LINKS + (x_mm / 1000.0 / x_as_max) as f32 * plot_w;
     let sy = |f: f64| DEK_MARGE_BOVEN + plot_h - (f.max(0.0) / y_as_max) as f32 * plot_h;
@@ -1562,8 +1741,18 @@ pub fn teken_dekkingslijn(
     }
     dl.set_stroke_color(kl.maatlijn);
     dl.set_line_width(k.l(0.8));
-    dl.draw_line(k.x(DEK_MARGE_LINKS), k.y(y_basis), k.x(DEK_MARGE_LINKS + plot_w), k.y(y_basis));
-    dl.draw_line(k.x(DEK_MARGE_LINKS), k.y(DEK_MARGE_BOVEN), k.x(DEK_MARGE_LINKS), k.y(y_basis));
+    dl.draw_line(
+        k.x(DEK_MARGE_LINKS),
+        k.y(y_basis),
+        k.x(DEK_MARGE_LINKS + plot_w),
+        k.y(y_basis),
+    );
+    dl.draw_line(
+        k.x(DEK_MARGE_LINKS),
+        k.y(DEK_MARGE_BOVEN),
+        k.x(DEK_MARGE_LINKS),
+        k.y(y_basis),
+    );
 
     dl.set_font(&stijl.font, k.l(8.0));
     dl.set_fill_color(kl.tekst_maat);
@@ -1646,7 +1835,10 @@ pub fn teken_dekkingslijn(
 
     // Het maatgevende punt als ruitje — dezelfde vorm als het rekenpunt in het
     // interactiediagram, en dus ook in grijstinten te herkennen.
-    if let Some(i) = dekking.maatgevend.and_then(|i| dekking.punten.get(i as usize)) {
+    if let Some(i) = dekking
+        .maatgevend
+        .and_then(|i| dekking.punten.get(i as usize))
+    {
         dl.set_fill_color(kl.rekenpunt);
         ruit(dl, k.x(sx(i.x_mm)), k.y(sy(i.benodigd_kn)), k.l(3.2));
         dl.set_font(&stijl.font, k.l(7.5));
@@ -1670,17 +1862,43 @@ pub fn teken_dekkingslijn(
     // van de drie.
     dl.set_stroke_color(kl.tekst_zwak);
     dl.set_line_width(k.l(0.8));
-    streeplijn(dl, k.x(DEK_LEGENDA_X), k.y(11.5), k.x(DEK_LEGENDA_X + 18.0), k.y(11.5), k.l(4.0), k.l(3.0));
+    streeplijn(
+        dl,
+        k.x(DEK_LEGENDA_X),
+        k.y(11.5),
+        k.x(DEK_LEGENDA_X + 18.0),
+        k.y(11.5),
+        k.l(4.0),
+        k.l(3.0),
+    );
     dl.set_stroke_color(kl.beton_lijn);
     dl.set_line_width(k.l(1.3));
-    dl.draw_line(k.x(DEK_LEGENDA_X + 130.0), k.y(11.5), k.x(DEK_LEGENDA_X + 148.0), k.y(11.5));
+    dl.draw_line(
+        k.x(DEK_LEGENDA_X + 130.0),
+        k.y(11.5),
+        k.x(DEK_LEGENDA_X + 148.0),
+        k.y(11.5),
+    );
     dl.set_stroke_color(kl.reeks);
     dl.set_line_width(k.l(1.8));
-    dl.draw_line(k.x(DEK_LEGENDA_X + 256.0), k.y(11.5), k.x(DEK_LEGENDA_X + 274.0), k.y(11.5));
+    dl.draw_line(
+        k.x(DEK_LEGENDA_X + 256.0),
+        k.y(11.5),
+        k.x(DEK_LEGENDA_X + 274.0),
+        k.y(11.5),
+    );
     dl.set_font(&stijl.font, k.l(7.5));
     dl.set_fill_color(kl.tekst_zwak);
-    dl.draw_text(k.x(DEK_LEGENDA_X + 22.0), k.y(14.5), "A: M_Ed/z op de plaats zelf");
-    dl.draw_text(k.x(DEK_LEGENDA_X + 152.0), k.y(14.5), "B: F_s na verschuiving a_l");
+    dl.draw_text(
+        k.x(DEK_LEGENDA_X + 22.0),
+        k.y(14.5),
+        "A: M_Ed/z op de plaats zelf",
+    );
+    dl.draw_text(
+        k.x(DEK_LEGENDA_X + 152.0),
+        k.y(14.5),
+        "B: F_s na verschuiving a_l",
+    );
     dl.draw_text(k.x(DEK_LEGENDA_X + 278.0), k.y(14.5), "C: F_Rs aanwezig");
 
     // De zijde waar deze lijn over gaat, linksboven — twee gelijk ogende

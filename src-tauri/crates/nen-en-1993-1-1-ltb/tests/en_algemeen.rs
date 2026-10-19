@@ -42,17 +42,29 @@ fn kortere_kiplengte_geeft_hogere_m_cr() {
     let iw = nb_annex::i_w_nb(310.0, 300.0, 15.5);
     let lang = en_general::m_cr_algemeen(1.0, 8000.0, 69852972.0, iw, 1084313.0);
     let kort = en_general::m_cr_algemeen(1.0, 4000.0, 69852972.0, iw, 1084313.0);
-    assert!(kort > lang, "kortere kiplengte hoort een hoger M_cr te geven: {kort} vs {lang}");
+    assert!(
+        kort > lang,
+        "kortere kiplengte hoort een hoger M_cr te geven: {kort} vs {lang}"
+    );
 }
 
 #[test]
 fn ongeldige_invoer_geeft_nul() {
     let iw = nb_annex::i_w_nb(310.0, 300.0, 15.5);
-    assert_eq!(en_general::m_cr_algemeen(1.0, 0.0, 69852972.0, iw, 1084313.0), 0.0);
-    assert_eq!(en_general::m_cr_algemeen(1.0, 8000.0, 0.0, iw, 1084313.0), 0.0);
+    assert_eq!(
+        en_general::m_cr_algemeen(1.0, 0.0, 69852972.0, iw, 1084313.0),
+        0.0
+    );
+    assert_eq!(
+        en_general::m_cr_algemeen(1.0, 8000.0, 0.0, iw, 1084313.0),
+        0.0
+    );
 }
 
 #[test]
 fn standaardmethode_is_de_nederlandse_bijlage() {
-    assert_eq!(en_general::McrMethode::default(), en_general::McrMethode::NederlandseBijlage);
+    assert_eq!(
+        en_general::McrMethode::default(),
+        en_general::McrMethode::NederlandseBijlage
+    );
 }

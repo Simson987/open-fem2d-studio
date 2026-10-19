@@ -60,10 +60,17 @@ use crate::stress_strain::DesignMaterial;
 /// tekst met elk resultaat meegeeft.
 fn concrete_block(section: &ConcreteSection, mat: &DesignMaterial, x: f64) -> (f64, f64) {
     match section.uniform_top_width(mat.lambda * x) {
-        Some(b) => (mat.eta * mat.concrete.f_cd * b * mat.lambda * x, mat.lambda * x / 2.0),
+        Some(b) => (
+            mat.eta * mat.concrete.f_cd * b * mat.lambda * x,
+            mat.lambda * x / 2.0,
+        ),
         None => {
             let (a, statisch) = section.top_strip(mat.lambda * x);
-            let arm = if a > 0.0 { statisch / a } else { mat.lambda * x / 2.0 };
+            let arm = if a > 0.0 {
+                statisch / a
+            } else {
+                mat.lambda * x / 2.0
+            };
             (mat.eta * mat.concrete.f_cd * a, arm)
         }
     }
@@ -122,7 +129,12 @@ pub enum StressBlockError {
 /// Inwendige normaalkracht (N, druk positief) bij drukzonehoogte `x` (mm),
 /// gemeten vanaf de gedrukte rand; `depth` per laag is de afstand van de
 /// staafas tot de gedrukte rand.
-fn n_internal(section: &ConcreteSection, depths: &[(f64, f64)], mat: &DesignMaterial, x: f64) -> f64 {
+fn n_internal(
+    section: &ConcreteSection,
+    depths: &[(f64, f64)],
+    mat: &DesignMaterial,
+    x: f64,
+) -> f64 {
     let (f_c, _) = concrete_block(section, mat, x);
     let f_s: f64 = depths
         .iter()
@@ -257,8 +269,14 @@ mod tests {
         let k = ReinforcementCage {
             cover_mm: 30.0,
             stirrup_diameter_mm: 8.0,
-            top: RebarRow { count: 0, diameter_mm: 12.0 },
-            bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+            top: RebarRow {
+                count: 0,
+                diameter_mm: 12.0,
+            },
+            bottom: RebarRow {
+                count: 3,
+                diameter_mm: 16.0,
+            },
             ..ReinforcementCage::default()
         };
         let r = stress_block(&s, &k.layers(500.0), &mat(), 0.0, 1.0).unwrap();
@@ -269,7 +287,10 @@ mod tests {
         assert_relative_eq!(r.x_mm, x, max_relative = 1e-6);
         assert_relative_eq!(r.m_rd_knm, m_rd, max_relative = 1e-6);
         assert!(r.layers[0].yields);
-        assert!(r.layers[0].f_kn < 0.0, "trekwapening: kracht negatief (druk positief)");
+        assert!(
+            r.layers[0].f_kn < 0.0,
+            "trekwapening: kracht negatief (druk positief)"
+        );
     }
 
     #[test]
@@ -278,8 +299,14 @@ mod tests {
         let k = ReinforcementCage {
             cover_mm: 30.0,
             stirrup_diameter_mm: 8.0,
-            top: RebarRow { count: 2, diameter_mm: 12.0 },
-            bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+            top: RebarRow {
+                count: 2,
+                diameter_mm: 12.0,
+            },
+            bottom: RebarRow {
+                count: 3,
+                diameter_mm: 16.0,
+            },
             ..ReinforcementCage::default()
         };
         let r = stress_block(&s, &k.layers(500.0), &mat(), -3000.0, 1.0);

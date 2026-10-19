@@ -228,14 +228,22 @@ struct Zwaarte {
 impl Zwaarte {
     /// De toets is afgerekend en levert `uc`.
     fn bepaald(uc: f64, belasting: f64) -> Self {
-        Zwaarte { onbepaald: false, waarde: schoon(uc), belasting: schoon(belasting) }
+        Zwaarte {
+            onbepaald: false,
+            waarde: schoon(uc),
+            belasting: schoon(belasting),
+        }
     }
 
     /// De toets kon op deze snede niet worden afgerekend. `maat` zegt hoe erg
     /// dat is — bij de dwarskracht V_Ed/V_Rd,c, de verhouding die de doorsnede
     /// überhaupt in het vakwerkspoor duwde.
     fn onbepaald(maat: f64, belasting: f64) -> Self {
-        Zwaarte { onbepaald: true, waarde: schoon(maat), belasting: schoon(belasting) }
+        Zwaarte {
+            onbepaald: true,
+            waarde: schoon(maat),
+            belasting: schoon(belasting),
+        }
     }
 
     fn zwaarder_dan(&self, ander: &Zwaarte) -> bool {
@@ -332,7 +340,11 @@ where
     F: Fn(&InternalForces) -> f64,
 {
     if env.is_empty() {
-        return ForcePoint { combination_id: 0, position_mm: 0.0, forces: Default::default() };
+        return ForcePoint {
+            combination_id: 0,
+            position_mm: 0.0,
+            forces: Default::default(),
+        };
     }
     let mut best = env[0];
     let mut best_score = score(&best.forces);
@@ -495,7 +507,10 @@ fn sneden_met_korf(vakken: &[Wapeningsvak], env: &[ForcePoint]) -> Vec<Snede> {
             if uit[begin..].iter().any(|s| s.korf == vak.korf) {
                 continue;
             }
-            uit.push(Snede { punt: *p, korf: vak.korf });
+            uit.push(Snede {
+                punt: *p,
+                korf: vak.korf,
+            });
         }
     }
     uit
@@ -564,7 +579,10 @@ fn zonemelding(
     let mut gemist: Vec<String> = Vec::new();
     for v in &vakken[..vakken.len() - 1] {
         let Some((_, g)) = v.bereik else { continue };
-        if !env.iter().any(|p| (p.position_mm - g).abs() <= ZONE_TOLERANCE_MM) {
+        if !env
+            .iter()
+            .any(|p| (p.position_mm - g).abs() <= ZONE_TOLERANCE_MM)
+        {
             gemist.push(format!("{}", g.round() as i64));
         }
     }
@@ -791,14 +809,21 @@ fn buigoverzicht(
         let sign = if m_ed < 0.0 { -1.0 } else { 1.0 };
         match stress_block(section, &layers, mat, s.punt.forces.n_ed, sign) {
             Ok(r) => {
-                let uc = if r.m_rd_knm > 0.0 { m_ed.abs() / r.m_rd_knm } else { 0.0 };
+                let uc = if r.m_rd_knm > 0.0 {
+                    m_ed.abs() / r.m_rd_knm
+                } else {
+                    0.0
+                };
                 beste.bied(Zwaarte::bepaald(uc, m_ed.abs()), *s);
             }
             Err(_) => aantal_niet_toepasbaar += 1,
         }
     }
 
-    BuigOverzicht { snede: beste.uitkomst().unwrap_or(terugval), aantal_niet_toepasbaar }
+    BuigOverzicht {
+        snede: beste.uitkomst().unwrap_or(terugval),
+        aantal_niet_toepasbaar,
+    }
 }
 
 /// Bovengrens op het aantal sneden waarop de M-N-κ-toets volledig wordt
@@ -1148,7 +1173,10 @@ fn as_min_over_sneden(
 }
 
 fn make_resistance(check: ResistanceCalc) -> NamedCheck {
-    NamedCheck { id: check.id.clone(), kind: CheckKind::Resistance(check) }
+    NamedCheck {
+        id: check.id.clone(),
+        kind: CheckKind::Resistance(check),
+    }
 }
 
 fn uc_of(c: &NamedCheck) -> f64 {
@@ -1187,8 +1215,7 @@ fn uc_of(c: &NamedCheck) -> f64 {
 /// die horen bij een bruikbaarheidsvraag die de aanroeper niet stelde.
 /// Ze staan wél alle in `niet_uitgevoerd`, mét reden, zodat het rapport ze kan
 /// tonen; ze veranderen alleen de staafstatus niet.
-const DRAAGKRACHTTOETSEN: [&str; 3] =
-    ["6.1_bending_stress_block", "6.1_mn_kappa", "6.2_shear"];
+const DRAAGKRACHTTOETSEN: [&str; 3] = ["6.1_bending_stress_block", "6.1_mn_kappa", "6.2_shear"];
 
 /// Kon deze toets NIET worden uitgevoerd?
 ///
@@ -1506,7 +1533,9 @@ fn bgt_toestand_op(
     .with_concrete_tension(ConcreteTension::None);
 
     let layers = cage.layers(section.h_mm);
-    let opts = MnKappaOptions { n_strips: input.n_strips.max(1) as usize };
+    let opts = MnKappaOptions {
+        n_strips: input.n_strips.max(1) as usize,
+    };
     let k = kappa_from_nm(section, &layers, &mat_bgt, n_kn, m_knm, &opts).map_err(|e| {
         format!(
             "de gescheurde doorsnede is onder de frequente combinatie (M = {m_knm:.1} kNm, \
@@ -1618,9 +1647,14 @@ pub fn check_concrete_beam(input: ConcreteBeamCheckInput) -> ConcreteBeamCheckRe
             .reinforcement_zones
             .validate(&input.cage, &section, input.length_m * 1000.0)
     {
-        return error_result(&input, format!("de wapeningszones zijn niet bruikbaar: {e}"));
+        return error_result(
+            &input,
+            format!("de wapeningszones zijn niet bruikbaar: {e}"),
+        );
     }
-    let opts = MnKappaOptions { n_strips: input.n_strips.max(1) as usize };
+    let opts = MnKappaOptions {
+        n_strips: input.n_strips.max(1) as usize,
+    };
     let layers = input.cage.layers(section.h_mm);
 
     // ── De sneden ──────────────────────────────────────────────────────────
@@ -1640,7 +1674,9 @@ pub fn check_concrete_beam(input: ConcreteBeamCheckInput) -> ConcreteBeamCheckRe
     // CHECK — zie de moduledoc en de zoekers hierboven.
     let vakken = wapeningsvakken(&input.reinforcement_zones, &input.cage);
     let ugt_sneden = sneden_met_korf(&vakken, &input.forces_envelope);
-    let gov_bending = governing_for(&input.forces_envelope, |f| f.my_ed.abs() + f.n_ed.abs() * 0.01);
+    let gov_bending = governing_for(&input.forces_envelope, |f| {
+        f.my_ed.abs() + f.n_ed.abs() * 0.01
+    });
     let bend_state = ForceStateSnapshot::from_point(&gov_bending);
     // De korf ter plaatse van die snede. Zonder zones is dat de korf van de
     // invoer, en bij §7.4.2 hieronder verandert er dus niets.
@@ -1714,7 +1750,10 @@ pub fn check_concrete_beam(input: ConcreteBeamCheckInput) -> ConcreteBeamCheckRe
         // Alleen bij een lege omhullende. Dan is er niets te kiezen en levert
         // het nulpunt de toets met M_Ed = 0.
         None => {
-            let s = Snede { punt: gov_bending, korf: bend_korf };
+            let s = Snede {
+                punt: gov_bending,
+                korf: bend_korf,
+            };
             (
                 check_mn_kappa(
                     &section,
@@ -1780,8 +1819,7 @@ pub fn check_concrete_beam(input: ConcreteBeamCheckInput) -> ConcreteBeamCheckRe
     let dwars = dwarskrachtoverzicht(&section, &input.cage, &mat, &ugt_sneden, &shear_opts);
     let gov_shear = dwars.snede.punt;
     let shear_state = ForceStateSnapshot::from_point(&gov_shear);
-    let mut shear_calc =
-        check_shear(&section, &dwars.snede.korf, &mat, shear_state, &shear_opts);
+    let mut shear_calc = check_shear(&section, &dwars.snede.korf, &mat, shear_state, &shear_opts);
     // WELK PUNT ER IS GETOETST, MET HET MOMENT ERBIJ — en dat laatste is geen
     // opsmuk. De dwarskrachtmodule leest aan het TEKEN van M_Ed af welke rij op
     // trek staat, en daarmee zowel d als A_sl. Bij een vrij opgelegde ligger is
@@ -2200,8 +2238,12 @@ pub fn check_concrete_beam(input: ConcreteBeamCheckInput) -> ConcreteBeamCheckRe
     // kern; ze worden hier aan de slankheidstoets gehangen omdat dat de toets
     // is die zegt dat deze staaf als kolom is behandeld.
     if kolom_getoetst {
-        if let Some(NamedCheck { kind: CheckKind::Resistance(r), .. }) =
-            checks.iter_mut().find(|c| c.id == crate::kolom::SLANKHEIDSGRENS_ID)
+        if let Some(NamedCheck {
+            kind: CheckKind::Resistance(r),
+            ..
+        }) = checks
+            .iter_mut()
+            .find(|c| c.id == crate::kolom::SLANKHEIDSGRENS_ID)
         {
             r.notes.push(
                 "LET OP DE TWEE DETAILLERINGSREEKSEN. Deze staaf krijgt hieronder zowel de \
@@ -2290,11 +2332,19 @@ pub fn check_concrete_beam(input: ConcreteBeamCheckInput) -> ConcreteBeamCheckRe
     #[allow(clippy::type_complexity)]
     let vaktoetsen: [(&str, bool, fn(&DetailleringInvoer) -> ResistanceCalc); 7] = [
         ("9.2.1.1_as_max", false, as_max_9_2_1_1),
-        ("9.2.1.1_min_diameter_langs", false, min_diameter_langsstaaf_9_2_1_1),
+        (
+            "9.2.1.1_min_diameter_langs",
+            false,
+            min_diameter_langsstaaf_9_2_1_1,
+        ),
         ("9.2.2_rho_w_min", false, rho_w_min_9_2_2),
         ("9.2.2_sl_max", true, s_l_max_9_2_2),
         ("9.2.2_st_max", true, s_t_max_9_2_2),
-        ("9.2.2_min_diameter_beugel", false, min_diameter_beugel_9_2_2),
+        (
+            "9.2.2_min_diameter_beugel",
+            false,
+            min_diameter_beugel_9_2_2,
+        ),
         // De balkbreedte zit hier NIET bij: zij leest de korf niet en hoort
         // daarom bij het element. Zij komt hieronder één keer, op haar vaste
         // plaats in de volgorde.
@@ -2375,7 +2425,9 @@ pub fn check_concrete_beam(input: ConcreteBeamCheckInput) -> ConcreteBeamCheckRe
     }
 
     // 7. Interactiediagrammen voor de weergave (grover: 21 punten).
-    let inter_opts = MnKappaOptions { n_strips: opts.n_strips.min(50) };
+    let inter_opts = MnKappaOptions {
+        n_strips: opts.n_strips.min(50),
+    };
     let interaction_positive = interaction_diagram(&section, &layers, &mat, 1.0, 21, &inter_opts);
     let interaction_negative = interaction_diagram(&section, &layers, &mat, -1.0, 21, &inter_opts);
 
@@ -2390,7 +2442,10 @@ pub fn check_concrete_beam(input: ConcreteBeamCheckInput) -> ConcreteBeamCheckRe
         .chain(input.staafstand_notities.iter().flatten().cloned())
         .collect();
     if !zijdentekst.is_empty() {
-        for c in checks.iter_mut().filter(|c| KIEZEN_EEN_TREKZIJDE.contains(&c.id.as_str())) {
+        for c in checks
+            .iter_mut()
+            .filter(|c| KIEZEN_EEN_TREKZIJDE.contains(&c.id.as_str()))
+        {
             let notes = match &mut c.kind {
                 CheckKind::Resistance(r) => &mut r.notes,
                 CheckKind::Stability(s) => &mut s.notes,
@@ -2449,7 +2504,10 @@ pub fn check_concrete_beam(input: ConcreteBeamCheckInput) -> ConcreteBeamCheckRe
         .collect();
     let status = if checks.iter().any(faalt) {
         CheckStatus::NotOk
-    } else if niet_uitgevoerd.iter().any(|n| DRAAGKRACHTTOETSEN.contains(&n.check_id.as_str())) {
+    } else if niet_uitgevoerd
+        .iter()
+        .any(|n| DRAAGKRACHTTOETSEN.contains(&n.check_id.as_str()))
+    {
         CheckStatus::NotApplicable
     } else if uc_max <= 1.0 {
         CheckStatus::Ok
@@ -2482,7 +2540,9 @@ pub fn check_concrete_beam(input: ConcreteBeamCheckInput) -> ConcreteBeamCheckRe
     }
 }
 
-pub fn check_all_concrete_beams(inputs: Vec<ConcreteBeamCheckInput>) -> Vec<ConcreteBeamCheckResult> {
+pub fn check_all_concrete_beams(
+    inputs: Vec<ConcreteBeamCheckInput>,
+) -> Vec<ConcreteBeamCheckResult> {
     inputs.into_iter().map(check_concrete_beam).collect()
 }
 
@@ -2542,14 +2602,32 @@ pub fn mn_kappa(req: MnKappaRequest) -> Result<MnKappaResponse, String> {
         req.design_situation,
         req.steel_branch,
     )?;
-    let opts = MnKappaOptions { n_strips: req.n_strips.max(1) as usize };
+    let opts = MnKappaOptions {
+        n_strips: req.n_strips.max(1) as usize,
+    };
     let layers = req.cage.layers(section.h_mm);
     let diagram = mn_kappa_diagram(&section, &layers, &mat, req.n_ed_kn, req.moment_sign, &opts);
     let (interaction_positive, interaction_negative) = if req.interaction_points >= 3 {
-        let inter_opts = MnKappaOptions { n_strips: opts.n_strips.min(50) };
+        let inter_opts = MnKappaOptions {
+            n_strips: opts.n_strips.min(50),
+        };
         (
-            interaction_diagram(&section, &layers, &mat, 1.0, req.interaction_points as usize, &inter_opts),
-            interaction_diagram(&section, &layers, &mat, -1.0, req.interaction_points as usize, &inter_opts),
+            interaction_diagram(
+                &section,
+                &layers,
+                &mat,
+                1.0,
+                req.interaction_points as usize,
+                &inter_opts,
+            ),
+            interaction_diagram(
+                &section,
+                &layers,
+                &mat,
+                -1.0,
+                req.interaction_points as usize,
+                &inter_opts,
+            ),
         )
     } else {
         (vec![], vec![])

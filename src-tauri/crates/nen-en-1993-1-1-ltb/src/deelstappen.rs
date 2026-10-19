@@ -62,7 +62,10 @@ fn lx(v: f64, decimalen: usize) -> String {
             s = geheel.to_string();
         }
     }
-    if s.trim_start_matches('-').chars().all(|c| c == '0' || c == '.') {
+    if s.trim_start_matches('-')
+        .chars()
+        .all(|c| c == '0' || c == '.')
+    {
         s = s.trim_start_matches('-').to_string();
     }
     s.replace('.', "{,}")
@@ -581,7 +584,11 @@ fn c2_tabel_stap(g: &Kipgegevens) -> Deelstap {
 fn c2_stap(g: &Kipgegevens) -> Deelstap {
     let p = g.p;
     let arm = (p.h_mm - p.tf_mm) / 2.0;
-    let schaal_ruw = if arm.abs() > 1e-9 { g.z_a_mm / arm } else { 0.0 };
+    let schaal_ruw = if arm.abs() > 1e-9 {
+        g.z_a_mm / arm
+    } else {
+        0.0
+    };
 
     let mut notes = vec![
         "De tabelwaarde geldt bij een belasting op het zwaartepunt van de bovenflens, en \
@@ -1149,7 +1156,8 @@ fn m_cr_stap_algemeen(g: &Kipgegevens, m: &Monogegevens) -> Deelstap {
     let v = g.v;
     let d = m.d_mm;
 
-    let notes = vec![
+    let notes =
+        vec![
         "Dit is NIET de vorm van bijlage NB.NB. NB.NB.1(1) begrenst die bijlage tot \
          dubbelsymmetrische I-vormige doorsneden en buisprofielen met h/b > 3; deze doorsnede \
          valt daarbuiten. Gerekend is de algemene elastische formule — NEN-EN 1999-1-1 bijlage I \

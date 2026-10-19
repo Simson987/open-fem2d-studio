@@ -1,0 +1,64 @@
+.prestressed-beam-view {
+  box-sizing: border-box;
+  height: 100%;
+  overflow: auto;
+  padding: 28px clamp(20px, 4vw, 56px) 48px;
+  color: var(--text-primary, #20242b);
+  background: var(--surface-primary, #f5f6f8);
+}
+
+.prestressed-beam-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 0 auto 22px;
+  max-width: 1160px;
+}
+
+.prestressed-beam-header h1 { margin: 0 0 6px; font-size: 24px; }
+.prestressed-beam-header p, .prestressed-beam-help { margin: 0; color: var(--text-secondary, #606775); }
+
+.prestressed-beam-card {
+  box-sizing: border-box;
+  max-width: 1160px;
+  margin: 0 auto 16px;
+  padding: 20px;
+  border: 1px solid var(--border-color, #d9dce2);
+  border-radius: 10px;
+  background: var(--surface-secondary, #fff);
+}
+
+.prestressed-beam-card h2 { margin: 0 0 16px; font-size: 16px; }
+.prestressed-beam-crack-width summary { cursor: pointer; font-size: 16px; font-weight: 600; }
+.prestressed-beam-crack-width[open] summary { margin-bottom: 14px; }
+.prestressed-beam-crack-width form { display: grid; gap: 14px; }
+.prestressed-beam-crack-result { display: grid; gap: 8px; margin: 16px 0 0; }
+.prestressed-beam-crack-result div { display: flex; justify-content: space-between; gap: 16px; }
+.prestressed-beam-crack-result dt { color: var(--text-secondary, #606775); }
+.prestressed-beam-crack-result dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
+.prestressed-beam-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px 18px; }
+.prestressed-beam-field { display: grid; gap: 6px; font-size: 13px; }
+.prestressed-beam-load-list { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); align-items: end; gap: 14px 18px; }
+.prestressed-beam-load-add, .prestressed-beam-load-remove { justify-self: start; min-height: 36px; padding: 7px 12px; border: 1px solid var(--border-color, #c8ccd3); border-radius: 6px; color: var(--text-primary, #20242b); background: var(--surface-primary, #fff); cursor: pointer; }
+.prestressed-beam-input-wrap { display: flex; align-items: center; gap: 8px; color: var(--text-secondary, #606775); }
+.prestressed-beam-input-wrap input { min-width: 0; width: 100%; box-sizing: border-box; padding: 8px 10px; color: var(--text-primary, #20242b); border: 1px solid var(--border-color, #c8ccd3); border-radius: 6px; background: var(--surface-primary, #fff); }
+.prestressed-beam-help { margin-top: 12px; font-size: 12px; }
+.prestressed-beam-calculate { flex: 0 0 auto; border: 0; border-radius: 6px; padding: 10px 16px; color: white; background: var(--accent-color, #2563eb); font-weight: 600; cursor: pointer; }
+.prestressed-beam-calculate:disabled { opacity: .6; cursor: wait; }
+.prestressed-beam-error { max-width: 1120px; margin: 0 auto 16px; padding: 12px 18px; color: #8c1d18; border: 1px solid #e4a9a5; border-radius: 8px; background: #fff1f0; }
+.prestressed-beam-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; max-width: 1160px; margin: 0 auto; }
+.prestressed-beam-summary { width: 100%; }
+.prestressed-beam-summary dl { display: grid; gap: 8px; margin: 0; }
+.prestressed-beam-summary dl div { display: flex; justify-content: space-between; gap: 16px; }
+.prestressed-beam-summary dt { color: var(--text-secondary, #606775); }
+.prestressed-beam-summary dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
+.prestressed-beam-table-scroll { overflow-x: auto; }
+.prestressed-beam-table-card table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.prestressed-beam-table-card th, .prestressed-beam-table-card td { padding: 9px 10px; border-bottom: 1px solid var(--border-color, #e1e3e8); text-align: right; white-space: nowrap; }
+.prestressed-beam-table-card th:first-child, .prestressed-beam-table-card td:first-child { text-align: left; }
+
+@media (max-width: 680px) {
+  .prestressed-beam-view { padding: 18px 12px 32px; }
+  .prestressed-beam-header { flex-direction: column; }
+}

@@ -118,7 +118,11 @@ fn ids(uit: &Value, veld: &str) -> Vec<i64> {
 fn eis_sluitend(uit: &Value, gevraagd: &[i64]) {
     let getoetst = ids(uit, "results");
     let overgeslagen = ids(uit, "skipped_beams");
-    let mut alle: Vec<i64> = getoetst.iter().chain(overgeslagen.iter()).copied().collect();
+    let mut alle: Vec<i64> = getoetst
+        .iter()
+        .chain(overgeslagen.iter())
+        .copied()
+        .collect();
     alle.sort_unstable();
     assert_eq!(
         alle, gevraagd,
@@ -132,7 +136,11 @@ async fn een_doorsnede_die_niet_te_bepalen_is_is_een_invoerfout_met_remedie() {
 
     // (naam, staaf, woorden die de reden in de melding én in `detail` noemt)
     let gevallen = [
-        ("geen materiaal", json!({ "id": 1, "from": 1, "to": 2, "profile": "HEA 200" }), "geen materiaal"),
+        (
+            "geen materiaal",
+            json!({ "id": 1, "from": 1, "to": 2, "profile": "HEA 200" }),
+            "geen materiaal",
+        ),
         (
             "leeg materiaal",
             json!({ "id": 1, "from": 1, "to": 2, "material": "", "profile": "HEA 200" }),
@@ -153,7 +161,10 @@ async fn een_doorsnede_die_niet_te_bepalen_is_is_een_invoerfout_met_remedie() {
     for tool in ["check_fem_model", "solve_fem_model"] {
         for (naam, staaf, reden) in &gevallen {
             let result = roep_tool(tool, json!({ "model": ligger(staaf.clone()) })).await;
-            assert_eq!(result["isError"], true, "{tool} / {naam} had moeten weigeren: {result}");
+            assert_eq!(
+                result["isError"], true,
+                "{tool} / {naam} had moeten weigeren: {result}"
+            );
             let fout = &result["structuredContent"];
             assert_eq!(
                 fout["error_code"], "DOORSNEDE_ONBEKEND",
@@ -161,7 +172,10 @@ async fn een_doorsnede_die_niet_te_bepalen_is_is_een_invoerfout_met_remedie() {
             );
 
             let melding = fout["melding"].as_str().unwrap_or("");
-            assert!(melding.contains("staaf 1") && melding.contains(reden), "{tool} / {naam}: {melding}");
+            assert!(
+                melding.contains("staaf 1") && melding.contains(reden),
+                "{tool} / {naam}: {melding}"
+            );
 
             // De remedie zegt wat de gebruiker doet — niet "meld deze fout".
             let remedie = fout["remedie"].as_str().unwrap_or("");
@@ -170,17 +184,24 @@ async fn een_doorsnede_die_niet_te_bepalen_is_is_een_invoerfout_met_remedie() {
                 "{tool} / {naam}: remedie {remedie:?}"
             );
 
-            let staven = fout["detail"]["staven"].as_array().unwrap_or_else(|| panic!("{fout}"));
+            let staven = fout["detail"]["staven"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{fout}"));
             assert_eq!(staven.len(), 1, "{tool} / {naam}: {fout}");
             assert_eq!(staven[0]["beam_id"], 1, "{tool} / {naam}: {fout}");
             assert!(
-                staven[0]["reason"].as_str().is_some_and(|r| r.contains(reden)),
+                staven[0]["reason"]
+                    .as_str()
+                    .is_some_and(|r| r.contains(reden)),
                 "{tool} / {naam}: {fout}"
             );
 
             // De leesbare regel noemt de code ook.
             let tekst = result["content"][0]["text"].as_str().unwrap_or("");
-            assert!(tekst.contains("DOORSNEDE_ONBEKEND"), "{tool} / {naam}: {tekst}");
+            assert!(
+                tekst.contains("DOORSNEDE_ONBEKEND"),
+                "{tool} / {naam}: {tekst}"
+            );
         }
     }
 }
@@ -189,15 +210,25 @@ async fn een_doorsnede_die_niet_te_bepalen_is_is_een_invoerfout_met_remedie() {
 async fn een_gevraagd_staafnummer_dat_niet_bestaat_staat_in_skipped_beams() {
     eis_node().await;
 
-    let model = ligger(json!({ "id": 1, "from": 1, "to": 2, "material": "S235", "profile": "IPE 200" }));
-    let result = roep_tool("check_fem_model", json!({ "model": model, "beam_ids": [1, 99] })).await;
+    let model =
+        ligger(json!({ "id": 1, "from": 1, "to": 2, "material": "S235", "profile": "IPE 200" }));
+    let result = roep_tool(
+        "check_fem_model",
+        json!({ "model": model, "beam_ids": [1, 99] }),
+    )
+    .await;
     assert_eq!(
-        result["isError"], false,
+        result["isError"],
+        false,
         "check_fem_model gaf een fout: {}",
         result["content"][0]["text"].as_str().unwrap_or("")
     );
     let uit = &result["structuredContent"];
-    assert_eq!(ids(uit, "results"), vec![1], "staaf 1 hoort getoetst te zijn: {uit}");
+    assert_eq!(
+        ids(uit, "results"),
+        vec![1],
+        "staaf 1 hoort getoetst te zijn: {uit}"
+    );
     let reden = uit["skipped_beams"]
         .as_array()
         .and_then(|l| l.iter().find(|s| s["beam_id"] == 99))
@@ -211,10 +242,15 @@ async fn een_gevraagd_staafnummer_dat_niet_bestaat_staat_in_skipped_beams() {
 async fn lege_beam_ids_toetst_alle_staven() {
     eis_node().await;
 
-    let model = ligger(json!({ "id": 1, "from": 1, "to": 2, "material": "S235", "profile": "IPE 200" }));
+    let model =
+        ligger(json!({ "id": 1, "from": 1, "to": 2, "material": "S235", "profile": "IPE 200" }));
     let result = roep_tool("check_fem_model", json!({ "model": model, "beam_ids": [] })).await;
     assert_eq!(result["isError"], false, "{result}");
     let uit = &result["structuredContent"];
-    assert_eq!(ids(uit, "results"), vec![1], "leeg = alle staalstaven: {uit}");
+    assert_eq!(
+        ids(uit, "results"),
+        vec![1],
+        "leeg = alle staalstaven: {uit}"
+    );
     eis_sluitend(uit, &[1]);
 }

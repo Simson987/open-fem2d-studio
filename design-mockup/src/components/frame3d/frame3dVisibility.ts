@@ -3,12 +3,15 @@ export interface Frame3DVisibility {
   nodes: boolean;
   beams: boolean;
   plates: boolean;
+  volumes: boolean;
   /** Volumetric member representation; off shows slender analytical axes. */
   profiles: boolean;
   nodeNumbers: boolean;
   beamNumbers: boolean;
   nodeCoordinates: boolean;
   supports: boolean;
+  /** Visual scale of 3D support symbols; does not affect restraints or loads. */
+  supportScale: number;
   loads: boolean;
   grid: boolean;
   axes: boolean;
@@ -31,11 +34,13 @@ export const DEFAULT_FRAME_3D_VISIBILITY: Frame3DVisibility = {
   nodes: true,
   beams: true,
   plates: true,
+  volumes: true,
   profiles: false,
   nodeNumbers: true,
   beamNumbers: false,
   nodeCoordinates: false,
   supports: true,
+  supportScale: 1,
   loads: true,
   grid: true,
   axes: true,
@@ -60,9 +65,11 @@ export function readFrame3DVisibility(): Frame3DVisibility {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") as Record<string, unknown> | null;
     if (!saved || typeof saved !== "object" || Array.isArray(saved)) return { ...DEFAULT_FRAME_3D_VISIBILITY };
     const result = { ...DEFAULT_FRAME_3D_VISIBILITY };
-    for (const key of Object.keys(result) as (keyof Frame3DVisibility)[]) {
+    for (const key of Object.keys(result).filter((key) => key !== "supportScale") as (keyof Omit<Frame3DVisibility, "supportScale">)[]) {
       if (typeof saved[key] === "boolean") result[key] = saved[key];
     }
+    if (typeof saved.supportScale === "number" && Number.isFinite(saved.supportScale))
+      result.supportScale = Math.max(0.25, Math.min(3, saved.supportScale));
     return result;
   } catch {
     return { ...DEFAULT_FRAME_3D_VISIBILITY };

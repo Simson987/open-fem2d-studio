@@ -119,16 +119,30 @@ pub fn check_deflection(
         id: "sls_deflection".to_string(),
         title: "Doorbuiging (BGT)".to_string(),
         article: "NEN-EN 1990 (SLS)".to_string(),
-        force_state: ForceStateSnapshot { combination_id: 0, position_mm: 0.0, forces: InternalForces::default() },
+        force_state: ForceStateSnapshot {
+            combination_id: 0,
+            position_mm: 0.0,
+            forces: InternalForces::default(),
+        },
         formula_latex: format!(r"\delta_{{lim}} = L / {}", numerator),
         variables: vec![
-            NamedValue { symbol: "L".to_string(), value: length_m * 1000.0, unit: "mm".to_string() },
-            NamedValue { symbol: "L_{type}".to_string(), value: numerator as f64, unit: format!("({})", class_label(class)) },
+            NamedValue {
+                symbol: "L".to_string(),
+                value: length_m * 1000.0,
+                unit: "mm".to_string(),
+            },
+            NamedValue {
+                symbol: "L_{type}".to_string(),
+                value: numerator as f64,
+                unit: format!("({})", class_label(class)),
+            },
         ],
         value: limit_mm,
         unit: "mm".to_string(),
         uc: getoetst.then(|| UnityCheck {
-            ed: actual_mm, rd: limit_mm, uc,
+            ed: actual_mm,
+            rd: limit_mm,
+            uc,
             formula_latex: r"\delta / \delta_{lim}".to_string(),
         }),
         status: if !getoetst {
@@ -138,7 +152,11 @@ pub fn check_deflection(
         } else {
             CheckStatus::NotOk
         },
-        notes: if getoetst { vec![] } else { vec![niet_getoetst(numerator as f64)] },
+        notes: if getoetst {
+            vec![]
+        } else {
+            vec![niet_getoetst(numerator as f64)]
+        },
     }
 }
 
@@ -191,7 +209,9 @@ pub fn w_add_mm(w_z_mm: f64, w_sls_permanent_mm: f64) -> f64 {
 /// uitkomst oneindig; wie dat getal gebruikt, moet de toets als niet
 /// uitgevoerd melden en niet als voldaan.
 pub fn grens_mm(lengte_mm: f64, noemer: f64) -> f64 {
-    if !noemer.is_finite() || noemer < 1e-9 { return f64::INFINITY; }
+    if !noemer.is_finite() || noemer < 1e-9 {
+        return f64::INFINITY;
+    }
     lengte_mm / noemer
 }
 
@@ -375,7 +395,11 @@ pub fn w_add_grens(
     // losse vlag `is_cantilever` mag dat aanzetten; ze horen hetzelfde te
     // zeggen, maar één van beide vergeten mag niet stil goed gaan.
     let uitkraging = is_cantilever || class == DeflectionClass::Cantilever;
-    let l_rep_mm = if uitkraging { 2.0 * lengte_mm } else { lengte_mm };
+    let l_rep_mm = if uitkraging {
+        2.0 * lengte_mm
+    } else {
+        lengte_mm
+    };
 
     let mut toelichting = vec![
         definitie,
@@ -433,7 +457,13 @@ pub fn check_deflection_pair(
     let w_fin = w_fin_mm(w_z_mm, w_pre_camber_mm);
     // Uit w_z en niet uit w_fin: de zeeg hoort niet in w_2 + w_3; zie w_add_mm.
     let w_add = w_add_mm(w_z_mm, w_sls_permanent_mm);
-    let add = w_add_grens(lengte_mm, class, limit_numerator, w_add_limit_numerator, is_cantilever);
+    let add = w_add_grens(
+        lengte_mm,
+        class,
+        limit_numerator,
+        w_add_limit_numerator,
+        is_cantilever,
+    );
 
     let calc = |id: &str,
                 titel: &str,
@@ -458,18 +488,34 @@ pub fn check_deflection_pair(
             title: titel.to_string(),
             article: artikel.to_string(),
             force_state: ForceStateSnapshot {
-                combination_id: 0, position_mm: 0.0, forces: InternalForces::default(),
+                combination_id: 0,
+                position_mm: 0.0,
+                forces: InternalForces::default(),
             },
             formula_latex: latex.to_string(),
             variables: vec![
-                NamedValue { symbol: "L".to_string(), value: referentie_mm, unit: "mm".to_string() },
-                NamedValue { symbol: "w".to_string(), value: w, unit: "mm".to_string() },
-                NamedValue { symbol: "L/n".to_string(), value: noemer, unit: "-".to_string() },
+                NamedValue {
+                    symbol: "L".to_string(),
+                    value: referentie_mm,
+                    unit: "mm".to_string(),
+                },
+                NamedValue {
+                    symbol: "w".to_string(),
+                    value: w,
+                    unit: "mm".to_string(),
+                },
+                NamedValue {
+                    symbol: "L/n".to_string(),
+                    value: noemer,
+                    unit: "-".to_string(),
+                },
             ],
             value: grens,
             unit: "mm".to_string(),
             uc: getoetst.then(|| UnityCheck {
-                ed: w.abs(), rd: grens, uc,
+                ed: w.abs(),
+                rd: grens,
+                uc,
                 formula_latex: r"|w| / w_{max}".to_string(),
             }),
             status: if !getoetst {
@@ -484,8 +530,12 @@ pub fn check_deflection_pair(
     };
 
     let mut fin = calc(
-        "deflection_w_fin", "Doorbuiging w_fin (BGT)", "NEN-EN 1990 (BGT)",
-        w_fin, noemer_fin, lengte_mm,
+        "deflection_w_fin",
+        "Doorbuiging w_fin (BGT)",
+        "NEN-EN 1990 (BGT)",
+        w_fin,
+        noemer_fin,
+        lengte_mm,
         r"w_{fin,z} = w_z + w_{zeeg,z}",
         vec![],
     );
@@ -493,8 +543,16 @@ pub fn check_deflection_pair(
     // de zeeg er als eigen regels bij, met het teken van beide uitgeschreven.
     if w_pre_camber_mm != 0.0 {
         let nl2 = |v: f64| format!("{v:.2}").replace('.', ",");
-        fin.variables.push(NamedValue { symbol: "w_z".to_string(), value: w_z_mm, unit: "mm".to_string() });
-        fin.variables.push(NamedValue { symbol: "w_{zeeg}".to_string(), value: w_pre_camber_mm, unit: "mm".to_string() });
+        fin.variables.push(NamedValue {
+            symbol: "w_z".to_string(),
+            value: w_z_mm,
+            unit: "mm".to_string(),
+        });
+        fin.variables.push(NamedValue {
+            symbol: "w_{zeeg}".to_string(),
+            value: w_pre_camber_mm,
+            unit: "mm".to_string(),
+        });
         fin.notes.push(format!(
             "Zeeg verrekend: w_fin = w_z + w_zeeg = {} + {} = {} mm. De zakking w_z is negatief \
              omlaag, de zeeg positief omhoog (NEN-EN 1990 A1.4.3(2), figuur A1.1: w_max = w_tot − \
@@ -508,8 +566,12 @@ pub fn check_deflection_pair(
     (
         fin,
         calc(
-            "deflection_w_add", "Doorbuiging w_add (BGT)", add.artikel,
-            w_add, add.noemer, add.l_rep_mm,
+            "deflection_w_add",
+            "Doorbuiging w_add (BGT)",
+            add.artikel,
+            w_add,
+            add.noemer,
+            add.l_rep_mm,
             r"w_{add,z} = w_z - w_{BGT,perm,z}",
             add.toelichting,
         ),
@@ -570,7 +632,10 @@ mod tests {
         assert_relative_eq!(g.noemer, 150.0);
         assert_relative_eq!(g.l_rep_mm, 6000.0);
         assert_relative_eq!(g.grens_mm, 40.0);
-        assert!(g.toelichting.iter().any(|n| n.contains("expliciet opgegeven")));
+        assert!(g
+            .toelichting
+            .iter()
+            .any(|n| n.contains("expliciet opgegeven")));
 
         // Ook bij een uitkraging blijft de opgegeven noemer op de staaflengte
         // staan: wie zelf een getal geeft, krijgt geen stille verdubbeling.
@@ -599,11 +664,17 @@ mod tests {
     fn keur_noemers_weigert_nul_en_negatief() {
         for n in [0, -1, -333] {
             let fout = keur_noemers(DeflectionClass::Custom, n, 0.0).unwrap_err();
-            assert!(fout.contains("'Custom'") && fout.contains("niet getoetst"), "{fout}");
+            assert!(
+                fout.contains("'Custom'") && fout.contains("niet getoetst"),
+                "{fout}"
+            );
         }
         for n in [-1.0, -150.0, f64::NAN, f64::INFINITY] {
             let fout = keur_noemers(DeflectionClass::Floor, 333, n).unwrap_err();
-            assert!(fout.contains("w_add") && fout.contains("niet getoetst"), "{fout}");
+            assert!(
+                fout.contains("w_add") && fout.contains("niet getoetst"),
+                "{fout}"
+            );
         }
         // Geen fout: de klassenoemer bij een andere klasse wordt niet gelezen,
         // en w_add = 0 betekent "afleiden uit de klasse".
@@ -617,13 +688,16 @@ mod tests {
     #[test]
     fn noemer_zonder_grens_is_nooit_ok() {
         for n in [0, -300] {
-            let (fin, add) = check_deflection_pair(
-                -5.0, 0.0, 0.0, 6.0, DeflectionClass::Custom, n, 0.0, false,
-            );
+            let (fin, add) =
+                check_deflection_pair(-5.0, 0.0, 0.0, 6.0, DeflectionClass::Custom, n, 0.0, false);
             for c in [&fin, &add] {
                 assert_eq!(c.status, CheckStatus::NotApplicable, "{} bij n = {n}", c.id);
                 assert!(c.uc.is_none(), "{} bij n = {n}", c.id);
-                assert!(c.notes.iter().any(|t| t.starts_with("Niet getoetst")), "{}", c.id);
+                assert!(
+                    c.notes.iter().any(|t| t.starts_with("Niet getoetst")),
+                    "{}",
+                    c.id
+                );
             }
             let los = check_deflection(-5.0, 6.0, DeflectionClass::Custom, n);
             assert_eq!(los.status, CheckStatus::NotApplicable);
@@ -634,9 +708,8 @@ mod tests {
     /// De reden staat in het rapport: categorie, artikel en combinatie.
     #[test]
     fn toelichting_noemt_categorie_artikel_en_combinatie() {
-        let (_, add) = check_deflection_pair(
-            -20.0, 0.0, 0.0, 6.0, DeflectionClass::Roof, 333, 0.0, false,
-        );
+        let (_, add) =
+            check_deflection_pair(-20.0, 0.0, 0.0, 6.0, DeflectionClass::Roof, 333, 0.0, false);
         assert_eq!(add.article, "NEN-EN 1990:2002/NB:2019 A1.4.3(3)");
         let tekst = add.notes.join(" ");
         assert!(tekst.contains("overige daken"));
@@ -651,7 +724,14 @@ mod tests {
     #[test]
     fn vloerligger_was_ruim_twee_keer_te_ruim() {
         let (_, add) = check_deflection_pair(
-            -20.0, 0.0, 0.0, 6.0, DeflectionClass::Floor, 333, 0.0, false,
+            -20.0,
+            0.0,
+            0.0,
+            6.0,
+            DeflectionClass::Floor,
+            333,
+            0.0,
+            false,
         );
         let uc = add.uc.as_ref().unwrap();
         assert_relative_eq!(uc.rd, 18.0);

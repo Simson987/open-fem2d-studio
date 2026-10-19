@@ -79,7 +79,11 @@ async fn check_fem_model(argumenten: Value) -> Value {
         if bericht["id"] == 2 {
             assert!(bericht["error"].is_null(), "JSON-RPC-fout: {bericht}");
             let result = &bericht["result"];
-            assert_eq!(result["isError"], false, "toolfout: {}", result["content"][0]["text"]);
+            assert_eq!(
+                result["isError"], false,
+                "toolfout: {}",
+                result["content"][0]["text"]
+            );
             antwoord = result["structuredContent"].clone();
         }
     }
@@ -89,7 +93,9 @@ async fn check_fem_model(argumenten: Value) -> Value {
 }
 
 fn wand(materiaal: Option<&str>) -> Value {
-    let mut nodes: Vec<Value> = (0..=4).map(|i| json!({ "id": 1 + i, "x": i * 500, "z": 0 })).collect();
+    let mut nodes: Vec<Value> = (0..=4)
+        .map(|i| json!({ "id": 1 + i, "x": i * 500, "z": 0 }))
+        .collect();
     nodes.push(json!({ "id": 6, "x": 0, "z": 3000 }));
     nodes.push(json!({ "id": 7, "x": 2000, "z": 3000 }));
     let supports: Vec<Value> = (1..=5)
@@ -124,9 +130,13 @@ fn combinaties() -> Value {
 #[tokio::test]
 async fn stalen_wand_wordt_doorgerekend_en_getoetst() {
     eis_node().await;
-    let uit = check_fem_model(json!({ "model": wand(Some("S235")), "combinations": combinaties() })).await;
+    let uit =
+        check_fem_model(json!({ "model": wand(Some("S235")), "combinations": combinaties() }))
+            .await;
 
-    let invoer = uit["plate_check_inputs"].as_array().expect("plate_check_inputs");
+    let invoer = uit["plate_check_inputs"]
+        .as_array()
+        .expect("plate_check_inputs");
     assert_eq!(invoer.len(), 1);
     assert_eq!(invoer[0]["materiaal"], "S235");
     assert_eq!(uit["skipped_plates"], json!([]));
@@ -135,15 +145,22 @@ async fn stalen_wand_wordt_doorgerekend_en_getoetst() {
     assert!(r["geweigerd"].is_null(), "{r}");
     let uc = r["uc_max"].as_f64().unwrap();
     let hand = 150.0 / 235.0;
-    assert!((uc - hand).abs() <= 0.02 * hand, "UC {uc} tegen hand {hand}");
+    assert!(
+        (uc - hand).abs() <= 0.02 * hand,
+        "UC {uc} tegen hand {hand}"
+    );
     assert_eq!(r["governing_combination_id"], 2);
     assert_eq!(r["status"], "Ok");
 
     // Zelfde antwoord als het losse gereedschap met dezelfde invoer: de plaattoets
     // in `check_fem_model` is geen tweede rekengang.
-    let los: Vec<plaat_check::PlateCheckInput> = serde_json::from_value(uit["plate_check_inputs"].clone()).unwrap();
+    let los: Vec<plaat_check::PlateCheckInput> =
+        serde_json::from_value(uit["plate_check_inputs"].clone()).unwrap();
     let los = serde_json::to_value(plaat_check::check_all_plates(los)).unwrap();
-    assert_eq!(serde_json::to_string(&los).unwrap(), serde_json::to_string(&uit["plate_results"]).unwrap());
+    assert_eq!(
+        serde_json::to_string(&los).unwrap(),
+        serde_json::to_string(&uit["plate_results"]).unwrap()
+    );
 
     let g = &uit["governing_plate"];
     assert_eq!(g["plate_id"], 1);
@@ -160,7 +177,14 @@ async fn plaat_zonder_materiaal_staat_met_reden_in_skipped_plates() {
     let skip = uit["skipped_plates"].as_array().expect("skipped_plates");
     assert_eq!(skip.len(), 1);
     assert_eq!(skip[0]["plate_id"], 1);
-    assert!(skip[0]["reason"].as_str().unwrap().contains("geen materiaal"), "{}", skip[0]);
+    assert!(
+        skip[0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("geen materiaal"),
+        "{}",
+        skip[0]
+    );
 }
 
 /// Betonnen trekwand: C30/37, t = 20 mm, UGT 3,0·Q → σ_y = +150 N/mm² (trek).
@@ -170,14 +194,20 @@ async fn plaat_zonder_materiaal_staat_met_reden_in_skipped_plates() {
 #[tokio::test]
 async fn betonnen_wand_geeft_benodigde_wapening_en_heet_niet_voldoet() {
     eis_node().await;
-    let uit = check_fem_model(json!({ "model": wand(Some("C30/37")), "combinations": combinaties() })).await;
+    let uit =
+        check_fem_model(json!({ "model": wand(Some("C30/37")), "combinations": combinaties() }))
+            .await;
     let r = &uit["plate_results"][0];
     assert_eq!(r["soort"], "Beton");
     assert!(r["geweigerd"].is_null(), "{r}");
     assert_eq!(r["status"], "NotApplicable");
     let nz = r["wapening"]["max_z"]["n_td_z_kn_per_m"].as_f64().unwrap();
     assert!((nz - 3000.0).abs() <= 0.02 * 3000.0, "n_td,z {nz}");
-    assert!(r["niet_getoetst"].as_array().unwrap().iter().any(|n| n["id"] == "wapening_aanwezig"));
+    assert!(r["niet_getoetst"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|n| n["id"] == "wapening_aanwezig"));
 }
 
 /// Houten drukwand — dezelfde handberekening als
@@ -208,11 +238,25 @@ async fn houten_wand_toetst_met_k_mod_per_combinatie() {
     assert!(r["geweigerd"].is_null(), "{r}");
     assert_eq!(r["soort"], "Hout");
     let uc = |id: u64| {
-        r["combinaties"].as_array().unwrap().iter()
-            .find(|c| c["combination_id"] == id).unwrap()["uc"].as_f64().unwrap()
+        r["combinaties"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["combination_id"] == id)
+            .unwrap()["uc"]
+            .as_f64()
+            .unwrap()
     };
-    assert!((uc(1) - 0.278_571).abs() <= 0.02 * 0.278_571, "UC 1: {}", uc(1));
-    assert!((uc(2) - 0.533_929).abs() <= 0.02 * 0.533_929, "UC 2: {}", uc(2));
+    assert!(
+        (uc(1) - 0.278_571).abs() <= 0.02 * 0.278_571,
+        "UC 1: {}",
+        uc(1)
+    );
+    assert!(
+        (uc(2) - 0.533_929).abs() <= 0.02 * 0.533_929,
+        "UC 2: {}",
+        uc(2)
+    );
     assert_eq!(r["governing_combination_id"], 2);
     let invoer = &uit["plate_check_inputs"][0];
     assert_eq!(invoer["service_class"], "Sc1");

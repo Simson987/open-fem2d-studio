@@ -92,8 +92,8 @@ export const TIMBER_E90_MEAN: Record<string, number> = {
  * G_mean in N/mm² per sterkteklasse — EN 338 (C) en EN 14080 (GL), dezelfde
  * getallen als de kern (`nen-en-1995-1-1/src/data.rs`, kolom `g_mean`).
  * Stuurt de schuifstijfheid G_12 van een houten of kruislaaghouten
- * wandschijf; bij een isotroop materiaal volgt G uit E en ν en staat hij
- * dus nergens apart.
+ * wandschijf en de torsiestijfheid GJ van een 3D-houten staaf. Bij een
+ * isotroop materiaal volgt G uit E en ν en staat hij nergens apart.
  */
 export const TIMBER_G_MEAN: Record<string, number> = {
   C14: 440, C16: 500, C18: 560, C20: 590, C22: 630,

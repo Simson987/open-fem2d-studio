@@ -25,7 +25,10 @@ use nationale_bijlage::{NationaleBijlage, Ndp1992};
 
 /// Ontwerpsituatie voor tabel 2.1N.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum DesignSituation {
     /// Blijvend en tijdelijk: γ_C = 1,5; γ_S = 1,15.
     #[default]
@@ -151,10 +154,22 @@ mod tests {
     #[test]
     fn elke_ndp_komt_uit_de_normnaad() {
         let bron = Ndp1992::voor(NL);
-        assert_eq!(gamma_c(NL, DesignSituation::PersistentTransient), bron.gamma_c_blijvend);
-        assert_eq!(gamma_c(NL, DesignSituation::Accidental), bron.gamma_c_buitengewoon);
-        assert_eq!(gamma_s(NL, DesignSituation::PersistentTransient), bron.gamma_s_blijvend);
-        assert_eq!(gamma_s(NL, DesignSituation::Accidental), bron.gamma_s_buitengewoon);
+        assert_eq!(
+            gamma_c(NL, DesignSituation::PersistentTransient),
+            bron.gamma_c_blijvend
+        );
+        assert_eq!(
+            gamma_c(NL, DesignSituation::Accidental),
+            bron.gamma_c_buitengewoon
+        );
+        assert_eq!(
+            gamma_s(NL, DesignSituation::PersistentTransient),
+            bron.gamma_s_blijvend
+        );
+        assert_eq!(
+            gamma_s(NL, DesignSituation::Accidental),
+            bron.gamma_s_buitengewoon
+        );
         assert_eq!(alpha_cc(NL), bron.alpha_cc);
         assert_eq!(gamma_ce(NL), bron.gamma_ce);
         // ε_ud = f·ε_uk: de factor terugrekenen uit de functie zelf.

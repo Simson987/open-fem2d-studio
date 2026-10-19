@@ -97,7 +97,11 @@ fn envelop() -> Vec<ForcePoint> {
             ForcePoint {
                 combination_id: 1,
                 position_mm: x_mm,
-                forces: InternalForces { my_ed: my, vz_ed: vz, ..Default::default() },
+                forces: InternalForces {
+                    my_ed: my,
+                    vz_ed: vz,
+                    ..Default::default()
+                },
             }
         })
         .collect()
@@ -173,7 +177,9 @@ fn r16_krachtsverdeling_klopt_met_de_bron() {
     let m_ed = kip().uc.as_ref().expect("UC").ed;
     assert_relative_eq!(m_ed, 90.48, max_relative = 1e-2);
     let schuif = r.checks.iter().find(|c| c.id == "6.2.6_shear_z").unwrap();
-    let CheckKind::Resistance(s) = &schuif.kind else { unreachable!() };
+    let CheckKind::Resistance(s) = &schuif.kind else {
+        unreachable!()
+    };
     assert_relative_eq!(s.uc.as_ref().unwrap().ed, 63.50, max_relative = 1e-2);
     // V_pl,Rd = A_v,z·(f_y/√3) = 3080,3·135,67 = 417,9 kN (bron: 417,9 kN).
     assert_relative_eq!(s.value, 417.9, max_relative = 1e-2);
@@ -229,7 +235,11 @@ fn r16_kip_unity_check_volgt_de_referentie() {
     // λ_LT = 1,288, M_b,Rd = 92,24 kNm, UC = 0,981.
     // Toleranties uit het dossier §1.5: 2 % op grootheden, 0,02 op een UC.
     assert_relative_eq!(tussenwaarde("M_{cr}"), 113.90, max_relative = 2e-2);
-    assert_relative_eq!(tussenwaarde(r"\bar{\lambda}_{LT}"), 1.288, max_relative = 2e-2);
+    assert_relative_eq!(
+        tussenwaarde(r"\bar{\lambda}_{LT}"),
+        1.288,
+        max_relative = 2e-2
+    );
 
     let uc = kip().uc.as_ref().expect("UC");
     assert_relative_eq!(uc.rd, 92.24, max_relative = 2e-2);

@@ -27,12 +27,12 @@
 //! variabelen en tussenwaarden zijn gelijk gebleven — bij het bijwerken per veld
 //! nagelopen.
 
-use steel_check::*;
-use mechanics::{InternalForces, ForcePoint};
-use nen_en_1993_1_1_ltb::LateralBracing;
-use nen_en_1990::ConsequenceClass;
 use approx::assert_relative_eq;
+use mechanics::{ForcePoint, InternalForces};
+use nen_en_1990::ConsequenceClass;
+use nen_en_1993_1_1_ltb::LateralBracing;
 use std::sync::OnceLock;
+use steel_check::*;
 
 fn run() -> &'static BeamCheckResult {
     static RESULT: OnceLock<BeamCheckResult> = OnceLock::new();
@@ -48,16 +48,33 @@ fn run() -> &'static BeamCheckResult {
                 ForcePoint {
                     combination_id: 21,
                     position_mm: 0.0,
-                    forces: InternalForces { n_ed: -18.479, vy_ed: 0.0, vz_ed: -232.736, mt_ed: 0.0, my_ed: 66.036, mz_ed: 0.0 },
+                    forces: InternalForces {
+                        n_ed: -18.479,
+                        vy_ed: 0.0,
+                        vz_ed: -232.736,
+                        mt_ed: 0.0,
+                        my_ed: 66.036,
+                        mz_ed: 0.0,
+                    },
                 },
                 // Combination 2.1 (id=21), x=3900 mm: decisive for bending + shear + 6.3.3
                 ForcePoint {
                     combination_id: 21,
                     position_mm: 3900.0,
-                    forces: InternalForces { n_ed: -18.479, vy_ed: 0.0, vz_ed: 235.084, mt_ed: 0.0, my_ed: -194.796, mz_ed: 0.0 },
+                    forces: InternalForces {
+                        n_ed: -18.479,
+                        vy_ed: 0.0,
+                        vz_ed: 235.084,
+                        mt_ed: 0.0,
+                        my_ed: -194.796,
+                        mz_ed: 0.0,
+                    },
                 },
             ],
-            lateral_bracing: LateralBracing { top_flange_positions: vec![], bottom_flange_positions: vec![] },
+            lateral_bracing: LateralBracing {
+                top_flange_positions: vec![],
+                bottom_flange_positions: vec![],
+            },
             // the reference: Lcr,y=5000 mm, Lcr,z=5000 mm
             buckling_length_y_m: 5.0,
             buckling_length_z_m: 5.0,
@@ -85,9 +102,21 @@ fn run() -> &'static BeamCheckResult {
 }
 
 fn find_check<'a>(result: &'a BeamCheckResult, id: &str) -> &'a NamedCheck {
-    result.checks.iter().find(|c| c.id == id)
-        .unwrap_or_else(|| panic!("check '{}' not found; available: {:?}", id,
-            result.checks.iter().map(|c| c.id.as_str()).collect::<Vec<_>>()))
+    result
+        .checks
+        .iter()
+        .find(|c| c.id == id)
+        .unwrap_or_else(|| {
+            panic!(
+                "check '{}' not found; available: {:?}",
+                id,
+                result
+                    .checks
+                    .iter()
+                    .map(|c| c.id.as_str())
+                    .collect::<Vec<_>>()
+            )
+        })
 }
 
 fn resistance_value(result: &BeamCheckResult, id: &str) -> f64 {
@@ -109,8 +138,13 @@ fn portal_beam1_compression() {
     let r = run();
     // Phase 13-G: UNP350 area aligned with the reference (A=7665.7 mm²)
     // N_c,Rd = 7665.7 × 235 / 1.0 / 1000 = 1801.44 kN — matches the reference exactly
-    assert_relative_eq!(resistance_value(r, "6.2.4_compression"), 1801.44, max_relative = 1e-3);
-    assert_relative_eq!(uc_value(r, "6.2.4_compression"), 0.01, max_relative = 0.15); // very small UC, wider tolerance
+    assert_relative_eq!(
+        resistance_value(r, "6.2.4_compression"),
+        1801.44,
+        max_relative = 1e-3
+    );
+    assert_relative_eq!(uc_value(r, "6.2.4_compression"), 0.01, max_relative = 0.15);
+    // very small UC, wider tolerance
 }
 
 #[test]
@@ -118,7 +152,11 @@ fn portal_beam1_bending() {
     let r = run();
     // Phase 13-F: UNP350 Wpl,y corrected to 889763 mm³ (the reference catalog value)
     // M_y,c,Rd = 889763 × 235 / 1.0 / 1e6 = 209.094 kNm — now matches the reference exactly
-    assert_relative_eq!(resistance_value(r, "6.2.5_bending_y"), 209.094, max_relative = 1e-3);
+    assert_relative_eq!(
+        resistance_value(r, "6.2.5_bending_y"),
+        209.094,
+        max_relative = 1e-3
+    );
     // UC = 194.796 / 209.094 = 0.932 (reference: 0.93 — now aligned)
     assert_relative_eq!(uc_value(r, "6.2.5_bending_y"), 0.932, max_relative = 0.025);
 }
@@ -128,7 +166,11 @@ fn portal_beam1_shear() {
     let r = run();
     // Phase 13-G: UNP350 Av_z aligned with the reference (Av=4946 mm²)
     // V_c,z,Rd = 4946 × (235/√3) / 1.0 / 1000 = 671.06 kN — matches the reference 671.1 kN
-    assert_relative_eq!(resistance_value(r, "6.2.6_shear_z"), 671.06, max_relative = 1e-3);
+    assert_relative_eq!(
+        resistance_value(r, "6.2.6_shear_z"),
+        671.06,
+        max_relative = 1e-3
+    );
     // UC = 235.084 / 671.06 = 0.350 (reference: 0.35)
     assert_relative_eq!(uc_value(r, "6.2.6_shear_z"), 0.350, max_relative = 0.025);
 }
@@ -139,7 +181,11 @@ fn portal_beam1_channel_ltb() {
     // Phase 13-E: UNP350 LTB is now computed (no longer NotApplicable).
     // Uses conservative monosym Mcr (× 0.7) with buckling curve c (alpha_LT=0.49).
     let ltb_uc = uc_value(r, "6.3.2_ltb_channel");
-    assert!(ltb_uc > 0.0 && ltb_uc < 5.0, "LTB UC should be a finite positive value, got {}", ltb_uc);
+    assert!(
+        ltb_uc > 0.0 && ltb_uc < 5.0,
+        "LTB UC should be a finite positive value, got {}",
+        ltb_uc
+    );
     eprintln!("portal_beam1 channel LTB UC (Phase 13-E) = {}", ltb_uc);
 }
 

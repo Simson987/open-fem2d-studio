@@ -130,9 +130,27 @@ fn gelaste_ligger(l_m: f64, q: f64) -> BeamCheckResult {
     input.custom_section = Some(CustomSection {
         naam: "Gelaste ligger 900x10 + 400x25".to_string(),
         lamellen: vec![
-            CustomLamella { b_mm: hw, t_mm: tw, y_mm: 0.0, z_mm: 0.0, alpha_rad: std::f64::consts::FRAC_PI_2 },
-            CustomLamella { b_mm: bf, t_mm: tf, y_mm: 0.0, z_mm: -z, alpha_rad: 0.0 },
-            CustomLamella { b_mm: bf, t_mm: tf, y_mm: 0.0, z_mm: z, alpha_rad: 0.0 },
+            CustomLamella {
+                b_mm: hw,
+                t_mm: tw,
+                y_mm: 0.0,
+                z_mm: 0.0,
+                alpha_rad: std::f64::consts::FRAC_PI_2,
+            },
+            CustomLamella {
+                b_mm: bf,
+                t_mm: tf,
+                y_mm: 0.0,
+                z_mm: -z,
+                alpha_rad: 0.0,
+            },
+            CustomLamella {
+                b_mm: bf,
+                t_mm: tf,
+                y_mm: 0.0,
+                z_mm: z,
+                alpha_rad: 0.0,
+            },
         ],
         gesloten_cellen: vec![],
         eigenschappen: None,
@@ -167,7 +185,10 @@ fn stap<'a>(s: &'a StabilityCalc, id: &str) -> &'a Deelstap {
         .unwrap_or_else(|| {
             panic!(
                 "deelstap '{id}' ontbreekt; aanwezig: {:?}",
-                s.deelstappen.iter().map(|d| d.id.as_str()).collect::<Vec<_>>()
+                s.deelstappen
+                    .iter()
+                    .map(|d| d.id.as_str())
+                    .collect::<Vec<_>>()
             )
         })
 }
@@ -231,8 +252,20 @@ fn de_keten_staat_er_in_de_volgorde_van_de_norm() {
     assert_eq!(
         ids(s),
         vec![
-            "uitgangspunten", "b_ster", "beta", "c1", "c2_tabel", "c2",
-            "l_kip", "s", "c", "k_red", "m_cr", "lambda_lt", "phi_lt", "chi_lt",
+            "uitgangspunten",
+            "b_ster",
+            "beta",
+            "c1",
+            "c2_tabel",
+            "c2",
+            "l_kip",
+            "s",
+            "c",
+            "k_red",
+            "m_cr",
+            "lambda_lt",
+            "phi_lt",
+            "chi_lt",
         ]
     );
 }
@@ -335,7 +368,10 @@ fn de_uitgangspunten_dragen_de_lengtes_en_de_drie_momenten() {
     assert_relative_eq!(w("q"), Q_N_PER_MM, max_relative = 1e-12);
     assert_relative_eq!(w("z_a"), 165.0, max_relative = 1e-12);
 
-    assert!(u.value.is_none(), "de uitgangspunten leveren geen grootheid op");
+    assert!(
+        u.value.is_none(),
+        "de uitgangspunten leveren geen grootheid op"
+    );
     assert!(
         u.formula_latex.is_empty() && u.ingevuld_latex.is_empty(),
         "de uitgangspunten hebben geen formule"
@@ -584,7 +620,10 @@ fn het_kanaalpad_deelt_de_keten_tot_en_met_c() {
     // paden lopen door dezelfde bouwer.
     for id in ["b_ster", "beta", "c1", "c2_tabel", "c2", "l_kip", "s", "c"] {
         let (x, y) = (stap(a, id), stap(b, id));
-        assert_eq!(x.formula_latex, y.formula_latex, "formule van '{id}' wijkt af");
+        assert_eq!(
+            x.formula_latex, y.formula_latex,
+            "formule van '{id}' wijkt af"
+        );
         assert_eq!(x.article, y.article, "vindplaats van '{id}' wijkt af");
         assert_eq!(x.titel, y.titel, "kop van '{id}' wijkt af");
     }
@@ -684,8 +723,20 @@ fn de_tussenwaarden_blijven_volledig_bestaan() {
     let r = r16();
     let s = kip(&r);
     for sym in [
-        "L_g", "L_{st}", "L_{kip}", r"\beta", "B^*", "C_1", "C_2", "S", "C",
-        "k_{red}", "M_{cr}", r"\bar{\lambda}_{LT}", r"\alpha_{LT}", r"\chi_{LT}",
+        "L_g",
+        "L_{st}",
+        "L_{kip}",
+        r"\beta",
+        "B^*",
+        "C_1",
+        "C_2",
+        "S",
+        "C",
+        "k_{red}",
+        "M_{cr}",
+        r"\bar{\lambda}_{LT}",
+        r"\alpha_{LT}",
+        r"\chi_{LT}",
     ] {
         assert!(
             s.intermediate_values.iter().any(|v| v.symbol == sym),

@@ -26,13 +26,13 @@
 //! variabelen en tussenwaarden zijn gelijk gebleven — bij het bijwerken per veld
 //! nagelopen.
 
-use steel_check::*;
-use mechanics::{InternalForces, ForcePoint};
-use nen_en_1993_1_1_ltb::LateralBracing;
-use nen_en_1990::ConsequenceClass;
-use nen_en_1993_1_1_section::{CheckStatus, classification::CrossSectionClass};
 use approx::assert_relative_eq;
+use mechanics::{ForcePoint, InternalForces};
+use nen_en_1990::ConsequenceClass;
+use nen_en_1993_1_1_ltb::LateralBracing;
+use nen_en_1993_1_1_section::{classification::CrossSectionClass, CheckStatus};
 use std::sync::OnceLock;
+use steel_check::*;
 
 fn run() -> &'static BeamCheckResult {
     static RESULT: OnceLock<BeamCheckResult> = OnceLock::new();
@@ -48,22 +48,46 @@ fn run() -> &'static BeamCheckResult {
                 ForcePoint {
                     combination_id: 2,
                     position_mm: 0.0,
-                    forces: InternalForces { n_ed: -241.496, vy_ed: 0.0, vz_ed: 50.669, mt_ed: 0.0, my_ed: 0.0, mz_ed: 0.0 },
+                    forces: InternalForces {
+                        n_ed: -241.496,
+                        vy_ed: 0.0,
+                        vz_ed: 50.669,
+                        mt_ed: 0.0,
+                        my_ed: 0.0,
+                        mz_ed: 0.0,
+                    },
                 },
                 // Combination 2, x=2500 mm: Nx=-241.496, Vz=50.669, My=126.672 kNm (governing for bending)
                 ForcePoint {
                     combination_id: 2,
                     position_mm: 2500.0,
-                    forces: InternalForces { n_ed: -241.496, vy_ed: 0.0, vz_ed: 50.669, mt_ed: 0.0, my_ed: 126.672, mz_ed: 0.0 },
+                    forces: InternalForces {
+                        n_ed: -241.496,
+                        vy_ed: 0.0,
+                        vz_ed: 50.669,
+                        mt_ed: 0.0,
+                        my_ed: 126.672,
+                        mz_ed: 0.0,
+                    },
                 },
                 // Combination 1, x=2500 mm: used for LTB
                 ForcePoint {
                     combination_id: 1,
                     position_mm: 2500.0,
-                    forces: InternalForces { n_ed: -205.954, vy_ed: 0.0, vz_ed: 40.291, mt_ed: 0.0, my_ed: 100.727, mz_ed: 0.0 },
+                    forces: InternalForces {
+                        n_ed: -205.954,
+                        vy_ed: 0.0,
+                        vz_ed: 40.291,
+                        mt_ed: 0.0,
+                        my_ed: 100.727,
+                        mz_ed: 0.0,
+                    },
                 },
             ],
-            lateral_bracing: LateralBracing { top_flange_positions: vec![], bottom_flange_positions: vec![] },
+            lateral_bracing: LateralBracing {
+                top_flange_positions: vec![],
+                bottom_flange_positions: vec![],
+            },
             buckling_length_y_m: 5.0,
             buckling_length_z_m: 5.0,
             deflection_limit_class: DeflectionClass::Floor,
@@ -90,9 +114,21 @@ fn run() -> &'static BeamCheckResult {
 }
 
 fn find_check<'a>(result: &'a BeamCheckResult, id: &str) -> &'a NamedCheck {
-    result.checks.iter().find(|c| c.id == id)
-        .unwrap_or_else(|| panic!("check '{}' not found; available: {:?}", id,
-            result.checks.iter().map(|c| c.id.as_str()).collect::<Vec<_>>()))
+    result
+        .checks
+        .iter()
+        .find(|c| c.id == id)
+        .unwrap_or_else(|| {
+            panic!(
+                "check '{}' not found; available: {:?}",
+                id,
+                result
+                    .checks
+                    .iter()
+                    .map(|c| c.id.as_str())
+                    .collect::<Vec<_>>()
+            )
+        })
 }
 
 fn resistance_value(result: &BeamCheckResult, id: &str) -> f64 {
@@ -113,7 +149,11 @@ fn uc_value(result: &BeamCheckResult, id: &str) -> f64 {
 fn calc2_beam2_compression() {
     let r = run();
     // Reference: N_c,Rd = 1275.472 kN, UC = 0.19
-    assert_relative_eq!(resistance_value(r, "6.2.4_compression"), 1275.472, max_relative = 1e-3);
+    assert_relative_eq!(
+        resistance_value(r, "6.2.4_compression"),
+        1275.472,
+        max_relative = 1e-3
+    );
     assert_relative_eq!(uc_value(r, "6.2.4_compression"), 0.19, max_relative = 0.025);
 }
 
@@ -121,7 +161,11 @@ fn calc2_beam2_compression() {
 fn calc2_beam2_bending() {
     let r = run();
     // Reference: M_y,c,Rd = 83.217 kNm, UC = 1.52 NOT OK
-    assert_relative_eq!(resistance_value(r, "6.2.5_bending_y"), 83.217, max_relative = 1e-3);
+    assert_relative_eq!(
+        resistance_value(r, "6.2.5_bending_y"),
+        83.217,
+        max_relative = 1e-3
+    );
     assert_relative_eq!(uc_value(r, "6.2.5_bending_y"), 1.52, max_relative = 0.02);
     let bend = find_check(r, "6.2.5_bending_y");
     if let CheckKind::Resistance(rc) = &bend.kind {
@@ -133,7 +177,11 @@ fn calc2_beam2_bending() {
 fn calc2_beam2_shear() {
     let r = run();
     // Reference: V_c,z,Rd = 239.1 kN, UC = 0.21
-    assert_relative_eq!(resistance_value(r, "6.2.6_shear_z"), 239.1, max_relative = 1e-3);
+    assert_relative_eq!(
+        resistance_value(r, "6.2.6_shear_z"),
+        239.1,
+        max_relative = 1e-3
+    );
     assert_relative_eq!(uc_value(r, "6.2.6_shear_z"), 0.21, max_relative = 0.025);
 }
 
@@ -147,7 +195,11 @@ fn calc2_beam2_classification_class1() {
 fn calc2_beam2_governing_not_ok() {
     let r = run();
     // Reference governing: 6.2.9.1 (bending+axial) with UC 1.52 (same as pure bending since M >> limit)
-    assert!(r.uc_max >= 1.0, "expected uc_max >= 1.0 (reference: 1.52), got {}", r.uc_max);
+    assert!(
+        r.uc_max >= 1.0,
+        "expected uc_max >= 1.0 (reference: 1.52), got {}",
+        r.uc_max
+    );
     assert_eq!(r.status, CheckStatus::NotOk);
 }
 

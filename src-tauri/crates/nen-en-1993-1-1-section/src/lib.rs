@@ -1,9 +1,9 @@
 //! NEN-EN 1993-1-1 cross-section resistance checks (article 6.2).
 //! All check functions return ResistanceCalc with derivation steps.
 
+use mechanics::ForceStateSnapshot;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-use mechanics::ForceStateSnapshot;
 
 /// De nationaal bepaalde parameters bij NEN-EN 1993-1-1, uit de normnaad.
 ///
@@ -15,13 +15,13 @@ use mechanics::ForceStateSnapshot;
 pub(crate) const NDP: nationale_bijlage::Ndp1993 =
     nationale_bijlage::Ndp1993::voor(nationale_bijlage::NationaleBijlage::NL);
 
-pub mod classification;
-pub mod compression;
 pub mod bending;
-pub mod shear;
-pub mod combined_mv;
+pub mod classification;
 pub mod combined_mn;
 pub mod combined_mnv;
+pub mod combined_mv;
+pub mod compression;
+pub mod shear;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../../design-mockup/src/lib/types/steel/")]
@@ -45,11 +45,46 @@ pub struct SteelGrade {
 // van EN 10025-2 geeft tabel 3.1 490 N/mm². De lastoets (NEN-EN 1993-1-8,
 // f_vw,d = f_u/√3/(β_w·γ_M2)) was daarmee 4 % te gunstig. Zie basisaudit
 // §3.2 punt 1.
-pub const S235: SteelGrade = SteelGrade { name: "S235", fy_mpa: 235.0, fu_mpa: 360.0, gamma_m0: NDP.gamma_m0, gamma_m1: NDP.gamma_m1, gamma_m2: NDP.gamma_m2 };
-pub const S275: SteelGrade = SteelGrade { name: "S275", fy_mpa: 275.0, fu_mpa: 430.0, gamma_m0: NDP.gamma_m0, gamma_m1: NDP.gamma_m1, gamma_m2: NDP.gamma_m2 };
-pub const S355: SteelGrade = SteelGrade { name: "S355", fy_mpa: 355.0, fu_mpa: 490.0, gamma_m0: NDP.gamma_m0, gamma_m1: NDP.gamma_m1, gamma_m2: NDP.gamma_m2 };
-pub const S420: SteelGrade = SteelGrade { name: "S420", fy_mpa: 420.0, fu_mpa: 520.0, gamma_m0: NDP.gamma_m0, gamma_m1: NDP.gamma_m1, gamma_m2: NDP.gamma_m2 };
-pub const S460: SteelGrade = SteelGrade { name: "S460", fy_mpa: 460.0, fu_mpa: 540.0, gamma_m0: NDP.gamma_m0, gamma_m1: NDP.gamma_m1, gamma_m2: NDP.gamma_m2 };
+pub const S235: SteelGrade = SteelGrade {
+    name: "S235",
+    fy_mpa: 235.0,
+    fu_mpa: 360.0,
+    gamma_m0: NDP.gamma_m0,
+    gamma_m1: NDP.gamma_m1,
+    gamma_m2: NDP.gamma_m2,
+};
+pub const S275: SteelGrade = SteelGrade {
+    name: "S275",
+    fy_mpa: 275.0,
+    fu_mpa: 430.0,
+    gamma_m0: NDP.gamma_m0,
+    gamma_m1: NDP.gamma_m1,
+    gamma_m2: NDP.gamma_m2,
+};
+pub const S355: SteelGrade = SteelGrade {
+    name: "S355",
+    fy_mpa: 355.0,
+    fu_mpa: 490.0,
+    gamma_m0: NDP.gamma_m0,
+    gamma_m1: NDP.gamma_m1,
+    gamma_m2: NDP.gamma_m2,
+};
+pub const S420: SteelGrade = SteelGrade {
+    name: "S420",
+    fy_mpa: 420.0,
+    fu_mpa: 520.0,
+    gamma_m0: NDP.gamma_m0,
+    gamma_m1: NDP.gamma_m1,
+    gamma_m2: NDP.gamma_m2,
+};
+pub const S460: SteelGrade = SteelGrade {
+    name: "S460",
+    fy_mpa: 460.0,
+    fu_mpa: 540.0,
+    gamma_m0: NDP.gamma_m0,
+    gamma_m1: NDP.gamma_m1,
+    gamma_m2: NDP.gamma_m2,
+};
 
 /// Bovengrens van de dikteklasse t ≤ 40 mm in tabel 3.1.
 pub const DIKTE_GRENS_40_MM: f64 = 40.0;
@@ -119,7 +154,10 @@ impl SteelGrade {
                 format!(
                     "Tabel 3.1: dikste element t = {} mm ≤ 40 mm, dus f_y = {} N/mm² en \
                      f_u = {} N/mm² ({}).",
-                    nl_mm(t_mm), self.fy_mpa, self.fu_mpa, self.name
+                    nl_mm(t_mm),
+                    self.fy_mpa,
+                    self.fu_mpa,
+                    self.name
                 ),
             ));
         }
@@ -131,12 +169,21 @@ impl SteelGrade {
                 )
             })?;
             return Ok((
-                SteelGrade { fy_mpa: fy, fu_mpa: fu, ..*self },
+                SteelGrade {
+                    fy_mpa: fy,
+                    fu_mpa: fu,
+                    ..*self
+                },
                 Dikteklasse::Van40Tot80,
                 format!(
                     "Tabel 3.1: dikste element t = {} mm ligt in de klasse 40 mm < t ≤ 80 mm, dus \
                      f_y = {} N/mm² en f_u = {} N/mm² in plaats van {} en {} ({}).",
-                    nl_mm(t_mm), fy, fu, self.fy_mpa, self.fu_mpa, self.name
+                    nl_mm(t_mm),
+                    fy,
+                    fu,
+                    self.fy_mpa,
+                    self.fu_mpa,
+                    self.name
                 ),
             ));
         }
@@ -156,8 +203,12 @@ fn nl_mm(v: f64) -> String {
 
 pub fn grade_by_name(name: &str) -> Option<SteelGrade> {
     match name {
-        "S235" => Some(S235), "S275" => Some(S275), "S355" => Some(S355),
-        "S420" => Some(S420), "S460" => Some(S460), _ => None,
+        "S235" => Some(S235),
+        "S275" => Some(S275),
+        "S355" => Some(S355),
+        "S420" => Some(S420),
+        "S460" => Some(S460),
+        _ => None,
     }
 }
 
@@ -173,11 +224,19 @@ mod dikte_tests {
     fn gamma_m_komt_uit_de_normnaad() {
         let bron = nationale_bijlage::Ndp1993::voor(nationale_bijlage::NationaleBijlage::NL);
         for g in [S235, S275, S355, S420, S460] {
-            assert_eq!((g.gamma_m0, g.gamma_m1, g.gamma_m2),
-                       (bron.gamma_m0, bron.gamma_m1, bron.gamma_m2), "{}", g.name);
+            assert_eq!(
+                (g.gamma_m0, g.gamma_m1, g.gamma_m2),
+                (bron.gamma_m0, bron.gamma_m1, bron.gamma_m2),
+                "{}",
+                g.name
+            );
             let (dik, _, _) = g.voor_dikte(50.0).unwrap();
-            assert_eq!((dik.gamma_m0, dik.gamma_m1, dik.gamma_m2),
-                       (bron.gamma_m0, bron.gamma_m1, bron.gamma_m2), "{} dik", g.name);
+            assert_eq!(
+                (dik.gamma_m0, dik.gamma_m1, dik.gamma_m2),
+                (bron.gamma_m0, bron.gamma_m1, bron.gamma_m2),
+                "{} dik",
+                g.name
+            );
         }
     }
 
@@ -209,7 +268,11 @@ mod dikte_tests {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../../design-mockup/src/lib/types/steel/")]
-pub enum CheckStatus { Ok, NotOk, NotApplicable }
+pub enum CheckStatus {
+    Ok,
+    NotOk,
+    NotApplicable,
+}
 
 // `PartialEq`: een antwoordtype dat deelstappen draagt moet vergelijkbaar
 // blijven — de drie-wegen-tests zetten twee antwoorden naast elkaar. Puur

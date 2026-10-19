@@ -7,6 +7,144 @@ de app. De CLI-programma's lezen één JSON-verzoek van stdin en schrijven
 `{"error":"..."}`-resultaat. Een solver die invoer niet ondersteunt, weigert
 die expliciet.
 
+De nieuwe getypeerde `volume3d`-route rekent lineaire Tet4-volumes met
+knoop-, uniforme lichaams- en vlaklasten, opleggingen, per-element E/ν, verplaatsingen, reacties en
+constante elementspanningen. `solverStrategy` kiest matrixvrije parallelle
+PCG, gecomprimeerde CSR/PCG, directe sparse LDLᵀ of de directe frontale
+wavefront-oplosser;
+`automatic` kan op een klein stabiel model bij PCG-nietconvergentie naar de
+frontale route overschakelen. `volume3dJ2` biedt een begrensde experimentele
+globale Tet4-Newtonroute met J2-staalplasticiteit en lastpadgeschiedenis.
+Optioneel vervangt `elementSteels` de globale staalwet per Tet4 in meshvolgorde,
+met eigen E, ν, vloeigrens en isotrope verharding. Een onafhankelijke
+drie-lagenstaaf controleert de elastische seriespanning, alle
+knoopverplaatsingen en reacties; een afschuifproef controleert per laag de
+plastische consistentie en ontlasting. De materiaaltoestand blijft per
+element bewaard tijdens het lastpad.
+De J2-Newtonstap biedt `options.linearBackend: "sparseDirect"` (standaard) of
+`"frontalWave"`. De frontale route elimineert rechtstreeks uit de actuele
+elementtangenten zonder globale CSR-opbouw; `maxFrontDofs` is begrensd op
+256. Beide routes controleren ook bij nulresidu de actuele tangent op een
+mechanisme. Frontaal vereist een symmetrische positief-definiete
+geremde tangent en vervangt geen lastpad- of materiaalstabiliteitsanalyse.
+Met `options.linearBackend: "automatic"` probeert de J2-route eerst sparse
+direct; alleen een expliciete LDLᵀ-factoropslaglimietfout laat haar binnen
+dezelfde laststap naar frontaal overschakelen. `linearBackendUsed` noemt de
+oplosser van de laatste geaccepteerde stap en `frontalFallbacks` telt
+geaccepteerde overschakelingen. Een mechanisme, ongeldige tangent of
+Newton-convergentiefout krijgt geen automatische omweg.
+De J2-residunorm gebruikt nu geschaalde `hypot`-accumulatie en weigert
+niet-eindige normen. Een regressie met een eindige maar zeer grote vrije
+kracht mag geen nulverplaatsing als evenwicht accepteren. J2, betonschade en
+Tet4-GNL mengen opeenvolgende eindige lastdoelen gewogen; zo blijft een
+omkering tussen grote krachten zonder overloop representabel. Niet-eindige
+geïnterpoleerde waarden en reacties worden als fout gemeld.
+`volume3dConcreteDamage` biedt een nog kleinere Tet4-proef met expliciete
+scheurbandbreedte, breukenergie en betontrekschade tijdens trek en ontlasten.
+In het onbeschadigde elastische bereik gebruikt de Newton-stap de exacte
+elastische tangent. Zo kruist de numerieke tangentverstoring niet onbedoeld
+een kleine maar geldige treksterkte; een onafhankelijke lage-treksterkteproef
+controleert één Newton-stap, verplaatsing en vrij residu. Na schade gebruikt
+de route nog een numerieke tangent en een begrensde dichte LU-oplosser.
+Optioneel geeft `elementMaterials` voor elk Tet4 een eigen E, ν, treksterkte,
+breukenergie en expliciet opgegeven scheurbandbreedte; ieder element bewaart
+zijn eigen piekrek- en schadehistorie. De breedte wordt niet automatisch uit
+de mesh afgeleid en algemene 3D mesh-objectiviteit blijft onbewezen.
+Een tweelagen-Tet4-coupon met vrij axiaal grensvlak is tegen een onafhankelijk
+opgeloste tweeverenwet gecontroleerd bij beschadiging en ontlasting. Ook de
+grensvlak- en eindreacties sluiten; dit blijft een eendimensionaal lastpad.
+Beide routes accepteren per lastdoel ook `bodyForces` (kN/m³) en
+`faceTractions` (kN/m²) op de referentiegeometrie; dit zijn vaste krachten,
+geen vervormingsvolgende druk. Hun consistente Tet4-knooplasten zijn
+V·b/4 en A·t/3. De exacte knoopreacties onder gecombineerde lasten en het
+leegmaken van deze lasten over een lastpad worden apart gecontroleerd.
+`volume3dGnl` is een begrensde totale-Lagrangiaanse Tet4-route met
+Green-Lagrange-rek, St Venant–Kirchhoff-elasticiteit en analytische consistente
+tangent. Optioneel geeft `elementMaterials` per Tet4 een eigen E en ν in
+meshvolgorde; de bestaande globale waarden blijven de standaard. Een
+drie-lagenproef controleert eindige trek, belastingomkering en ontlasting
+tegen een onafhankelijke nominale-spanningoplossing. Optioneel kiest
+`elementEnergyBeta` per Tet4 een experimentele, omkeerbare
+rekafhankelijke elasticiteit: `W = W₀ + βW₀²/(2E₀)` met W₀ de
+St Venant–Kirchhoff-energie. De consistente Newton-tangent en de uitvoer
+`elementEffectiveEMpa = E₀(1 + βW₀/E₀)` zijn gecontroleerd. Positieve β
+verstijft; matig negatieve β verweekt maar kan bij grotere rek een
+instabiele tangent geven. Een onafhankelijke krachtgestuurde kubusproef
+controleert beide tekens, belastingomkering en ontlasting. Dit is een
+gedefinieerde toetsmateriaalwet, geen gekalibreerd staal- of betonmodel.
+`options.linearBackend` kiest de Newton-matrixoplosser: `dense` (standaard,
+maximaal 180 DOF en 300 Tet4), `sparseDirect` via CSR-LDLᵀ of
+`frontalWave` via elementtangenten. `automatic` begint sparse direct en
+schakelt alleen bij een vastgestelde LDLᵀ-factoropslaglimiet binnen de
+laststap over naar frontaal. `maxFactorEntries` en `maxFrontDofs` begrenzen
+de twee routes; `linearBackendUsed` en `frontalFallbacks` melden de
+daadwerkelijke keuze. Een mechanisme krijgt geen herstelpoging.
+Een niet-lineaire kubus en een tweemateriaalligger geven voor alle drie
+dezelfde analytische oplossing; een mechanisme wordt door alle drie
+afgewezen. Sparse en frontaal assembleren geen globale dichte tangent en
+zijn begrensd op 900 DOF en 1.200 Tet4; de directe sparse factor telt
+maximaal 500.000 items en de frontbreedte maximaal 256 vrije DOF. Een
+onafhankelijke affiene proef met 750 Tet4, 648 DOF en 192 vrije DOF toetst
+beide routes bij β=0 en β=24 op alle verplaatsingen, spanningen, effectieve
+E-waarden en afzonderlijke steunreacties. Dit is nog geen grote-modelroute.
+Per `targets`-lastdoel zijn `bodyForces` in kN/m³ en `faceTractions` in kN/m² beschikbaar. Dit zijn
+vaste belastingen op de referentiegeometrie: de equivalente knooplast is
+respectievelijk V·b/4 per Tet4-knoop en A·t/3 per gekozen vlaknode. Een
+zes-Tet kubus met nominale vlaktractie volgt de analytische eindige rek bij
+belasten, omkeren en ontlasten; een volledig gefixeerde tetra controleert
+de afzonderlijke knoopreacties uit volume- en vlaklast. De drie niet-lineaire
+volumeroutes zijn experimenteel en geen ontwerpcontrole; algemene,
+gekalibreerde gecombineerde volume-GNL/FNL is nog niet beschikbaar.
+De aparte `volumeHex8`-route assembleert lineaire achtknoops hexaëders met
+2×2×2-integratie, consistente lichaams-/vlaklasten, CSR/PCG, optionele
+directe sparse LDLᵀ, begrensde frontale eliminatie en Gauss-puntspanningen.
+`linearBackend: "sparseDirect"` is begrensd op 6.000 DOF, vier miljoen
+assemblagetriplets en één miljoen factoritems. Met expliciete
+`structuredGridCells` gebruikt zij de parallelle matrixvrije route voor exact
+regelmatige rechthoekige dozen met E/ν per element; de uniforme
+250.047-elementenproef en een afzonderlijke tweemateriaalproef van dezelfde
+omvang draaien op vier threads. Met `linearBackend: "matrixFreeGeneral"`
+rekent zij ook geldige, scheve of vervormde Hex8-netten matrixvrij, tot
+68.061 elementen en 480.000 DOF. De symmetrische lokale stijfheid en
+Gauss-gradiënten kosten 3.944 bytes per element; de cache heeft een expliciete
+grens van 256 MiB. De grens is een geheugenbudget en geen aangetoonde
+grootschalige acceptatie. Een analytische acht-elementenpatch en een
+heterogene, vervormde CSR-vergelijking slagen. Een onafhankelijke
+L-vormige lagenproef met verwisselde knoop- en elementvolgorde vergelijkt
+ook één en vier threads met CSR. Een afzonderlijke 64.000-elementenproef
+op een vervormd geëxtrudeerd net sluit op een onafhankelijke lagenberekening.
+De afzonderlijke opt-in `linearBackend: "matrixFreeGeneralLarge"` gebruikt
+dezelfde elementformulering met maximaal 1 GiB lokale elementcache en
+1.000.000 DOF; de standaard- en automatische route behouden hun kleinere
+grenzen. De daadwerkelijke modelallocaties en resultaatarrays komen bovenop
+het cachebudget.
+Een aparte releaseproef met deze grote optie lost 250.047 vervormde,
+heterogeen gelaagde Hex8-elementen en 786.432 DOF op vier threads op,
+met onafhankelijk gecontroleerde verplaatsingen, spanningen en reacties.
+Een tweede grote proef rekent 257.250 Hex8-elementen in een geëxtrudeerde
+L-vormige doorsnede met vervormde geometrie en herschikte knoop- en
+elementvolgorde door. De analytische lagenberekening controleert opnieuw
+alle verplaatsingen, Gauss-spanningen en eindreacties. Een kleine conforme
+Hex8-vijfhoekige ster met vijfwaardig binnenknooppunt controleert daarnaast
+een niet-roosterachtige topologie tegen onafhankelijke Hooke-vlaktracties,
+reacties en Gauss-spanningen, met één en vier threads en CSR-pariteit.
+Grootschalige willekeurige 3D-connectiviteit en gekoppelde GNL/FNL zijn nog
+niet gevalideerd.
+Een derde genegeerde releaseproef heeft een gesloten interne 3D-holte in
+een vervormd Hex8-net: 260.416 elementen, 819.882 DOF, herschikte knoop- en
+elementvolgorde en vier threads. De affiene elastische referentie controleert
+alle verplaatsingen en Gauss-spanningen; onafhankelijke 2×2-oppervlakte-
+integratie van σ·n controleert bovendien iedere randknoopreactie. Deze
+voxel-holte blijft een gestructureerde topologie, geen willekeurig
+ongestructureerd volume.
+Voor invoer, analytische controles en schaalproeven: zie
+[`VOLUME3D_EXAMPLES.md`](VOLUME3D_EXAMPLES.md).
+Met `linearBackend: "automatic"` kiest de Hex8-route CSR binnen het
+assemblagebudget en anders de begrensde algemene matrixvrije route. Alleen
+na een herkende PCG-convergentie- of residufout probeert zij voor een klein
+model frontaal te herstellen, na controle van de frontbreedte. Ongeldige
+geometrie en ontoereikende opleggingen worden als fout gerapporteerd.
+
 De `frame2d`-route is nu ook vanuit de app te kiezen voor een model
 met uitsluitend staven. Zij vertaalt bestaande knopen, doorsneden, opleggingen
 en belastingen en geeft staafdiagrammen in het bestaande resultaatformaat
@@ -38,9 +176,65 @@ Bij axiale FNL toont de staafhistorie het stuk met de meeste trekschade of
 plastische rek. Een traptrede-ligger is tegen de analytische doorbuiging en
 de bestaande solver gecontroleerd; ook wisselende A, P-Delta en FNL zijn
 getest.
-Translatiehulzen, eindveren en gekoppelde
-staaf-plaatmodellen worden in deze route nog expliciet geweigerd. De app
-behoudt de bestaande solver als automatische keuze.
+Translatiehulzen en eindveren zijn gekoppeld. Een axiale eindveer werkt bij
+FNL in serie met de axiale staafrespons; een axiale translatievrijgave draagt
+geen normaalkracht over en laat de staaf vrij uitzetten. De bestaande solver
+blijft de automatische keuze.
+
+Voor een zuiver lineair 2D-raamwerk accepteert de Rust-invoer ook
+`linearBackend: "frontalWave"` met een optionele `frontalMaxFrontDofs`.
+De app probeert deze route bij een specifieke iteratieve convergentiefout
+op een begrensd model en kiest haar direct boven 20.000 globale DOF.
+Gekoppelde membranen en niet-lineaire analyses
+blijven op hun eigen route. De expliciet frontale lineaire route bouwt geen
+globale matrix op. Een smal-front-proef met 7.000 staven en 21.003 globale
+DOF slaagt; de maximale actieve frontbreedte blijft afhankelijk van de
+elementvolgorde en modeltopologie.
+
+Axiale verdeelde lijnlasten zijn in de
+FNL-route beschikbaar; de app verdeelt zo'n staaf automatisch in stukken van
+maximaal 0,1 m, zodat de veranderende normaalkracht en plastische toestand
+ruimtelijk worden benaderd. Een interne axiale staafpuntlast blijft in de
+aanvraag een staaflast. De Rust-kern maakt op de lastpositie een interne
+knoop, splitst de materiaalstaaf en voegt het diagram daarna weer samen onder
+de oorspronkelijke staafidentiteit. Zo worden de normaalkrachtsprong en
+plastische toestand aan weerszijden apart berekend zonder dat de app de staaf
+vooraf hoeft te splitsen. In de vezelgeïntegreerde buig-FNL wordt ook een
+axiale eindveer of vrijgave meegenomen: de staafzijde-DOF's worden iteratief
+teruggevonden en het geassembleerde evenwicht houdt rekening met het verschil
+tussen ruwe en gecondenseerde equivalente elementlasten. Gecombineerde N-M-
+staalplastificatie en betonscheurvorming met axiale veer, en vrije thermische
+rek bij axiale vrijgave zijn onafhankelijk tegen sectie-evenwicht en
+reactiekrachten gecontroleerd. Gekoppelde staaf-plaatmodellen zijn nog niet
+aangesloten.
+Een tweeledige staal-FNL-ligger met E=210 en 170 GPa vergelijkt de
+tipverplaatsing en -rotatie met afzonderlijke moment-krommingsoplossingen
+voor beide staven; de app-route controleert dat de verschillende E-moduli
+per staaf en de plastische historie behouden blijven.
+De app-routeproef voor een middenlast gebruikt `E=210 GPa`, `A=0,01 m²`,
+`fᵧ=250 MPa`, `Eₜ/E=0,02` en `L=4 m`. Bij `6000 kN` op het midden wordt
+de staaf opgedeeld in twee stukken met `N=±3000 kN` en `σ=300 MPa`.
+De app stuurt de puntlast op de ongesplitste staaf naar Rust. De kern maakt
+intern de twee stukken en geeft één staafdiagram terug met twee stations op de
+lastpositie. De bilineaire rekformule geeft
+`2 m·(250/210000 + 50/(0,02·210000))` oftewel `26,1905 mm`
+middenverplaatsing; de app-route vergelijkt deze waarde, de normaalkrachtsprong
+en de reacties met de berekende uitkomst. Afzonderlijke Rust-proeven controleren
+ook een verlopende gedeeltelijke lijnlast, thermische uitzetting en een schuine
+staafas op dezelfde interne splitsing.
+Dezelfde routeproef controleert een 4 m vrij uitkragende staaf met een axiale
+lijnlast van `700 kN/m`. De piekspanning is `280 MPa`; integratie van de
+bilineaire rek over de lengte geeft `4,1667 mm` tipverlenging. De app splitst
+de staaf in 40 stukken en de Rust-uitkomst wijkt minder dan `0,02 mm` af.
+De Rust-proeven controleren de seriestijfheid en `N/k`-veeruitrekking bij
+staalplastificatie en betonscheurvorming, inclusief ontlasten en uniforme
+thermiek. Een vrijgegeven thermisch staafeinde geeft nul normaalkracht en de
+vrije lengteverandering `α·ΔT·L`; de app-route toetst hetzelfde geval.
+Het 2D-FNL-lastpad begint met tien increments per padsegment. Bij een niet-
+convergerende iteratie of een tijdelijk verlies van positieve tangentstijfheid
+halveert de solver de proefstap; de plastische rek en betonschade worden pas na
+een geconvergeerde stap vastgelegd. De gecombineerde staalproef met
+belasten/ontlasten/herbelasten controleert deze cutback-route.
 Uniforme temperatuurbelasting per staaf loopt wel via Rust, met een
 lastspecifieke uitzettingscoëfficiënt. De kern kan die belasting ook combineren
 met axiale staalplastificatie, betontrekschade en P-Δ. De getypeerde 2D-adapter
@@ -49,6 +243,13 @@ neemt hiervoor per staaf `axialMaterialLaw` en een modelbreed
 resultaat. De 2D-werkbalk toont bij axiale FNL het lastpad, bijvoorbeeld
 `1, 0, 0.5` voor belasten, ontlasten en herbelasten. Buiging blijft elastisch;
 EN 1992/1993-toetsen worden voor deze gedeeltelijke FNL-uitkomst niet uitgevoerd.
+
+Dezelfde projectfactoren gaan bij `material` en `combined` ook mee naar de
+2D-plaatkern: CST en Q4 voeren het hele pad per materiaalpunt uit en bewaren
+staalplastificatie, betonschade en de maximale rek voor de volgende stap.
+Mislukte stappen worden gehalveerd. De app-route-tests controleren dat `[1, 0, 0.5]`
+daadwerkelijk bij beide elementtypen aankomt. De gebruikte modelveldnaam
+`axialMaterialLoadPath` is historisch; het pad geldt ook voor platen.
 
 Voor een ligger op bedding controleert de app-route een puntlast in het midden
 van een ligger van `20/λ` tegen de gesloten oplossing voor een oneindig lange
@@ -72,12 +273,17 @@ Opleggingen kunnen op plaat- en openingshoekknopen en langs de buitenranden
 zitten. Alleen normaalgerichte belastingen en eenduidig naar lokale buigvrijheden
 te vertalen globale opleggingen zijn toegestaan. Het rapport toont
 roosteruitvoer en de 3D-weergave toont de vervormde plaat. Schijfwerking,
-gekoppelde staven, plaatveren, opgelegde verplaatsingen,
-GNL en FNL zonder expliciete E-rekcurve worden in deze route expliciet geweigerd.
+gekoppelde staven en opgelegde verplaatsingen worden in deze losse-plaatroute
+expliciet geweigerd.
 De opgegeven E-rekcurve is een onomkeerbare secant-E-omhulling op maximale
 vezelrek per element. Het FNL-lastpad kan ook ontlasten; de daling van E blijft
-bewaard. Dit is geen expliciete beton-scheurwet of staalplastificatie van de
-plaatdoorsnede.
+bewaard. Voor P-Δ-shellberekeningen is aanvullend een materiaalwet per plaat
+instelbaar: bilineair J2-staal of onomkeerbare betontrekbeschadiging werkt op
+de 4×4 shellmembraanpunten, met blijvende toestand en gerapporteerde maximale
+plastische rek/beschadiging. Per analyse kies je óf deze wet óf de secant-E-curve;
+de combinatie is nog niet gevalideerd. De plaatbuiging blijft elastisch of
+gebruikt de secant-E-envelop; het materiaalmodel is dus nog geen plastische of
+gescheurde buigdoorsnede.
 
 Een controleerbaar voorbeeld staat in
 [`examples/frame2d-cantilever.json`](examples/frame2d-cantilever.json):
@@ -103,8 +309,19 @@ verharding `E_t/E=0,02` tot `3000 kN`, gevolgd door ontlasten. De analytische
 totale rek op de piek is `f_y/E + (300−250)/E_t = 0,0130952`; de plastische
 rek na ontlasten is `0,0116667`, dus de blijvende verlenging over `3 m` is
 `0,035 m`. De Rust-test controleert die waarden en de nulkracht na ontlasten.
-De materiaalwet verandert hier de **axiale** stijfheid; buiging blijft elastisch.
-Axiale lijn- en staafpuntlasten zijn voor deze materiaalroute nog niet geldig.
+Dit voorbeeld isoleert de axiale respons.
+Axiale verdeelde lijnlasten lopen via het app-mesh van maximaal 0,1 m.
+De test `combined_gnl_fnl_cantilever_matches_independent_beam_column_solution`
+controleert de gecombineerde GNL/FNL-route met een elastische uitkraging onder
+druk en dwarskracht, parallel aan een rotatievrije staalstaaf die axiaal
+plastificeert. De tipverplaatsing wordt op 4, 8 en 16 elementen vergeleken met
+de gesloten beam-column-oplossing
+`w(L) = Q/N · (tan(kL)/k − L)`, `k = √(N/EI)`; op het fijnste rooster is de
+afwijking kleiner dan 1% en de evenwichtsrest kleiner dan `10⁻⁷`.
+[`examples/frame2d-internal-axial-point-load.json`](examples/frame2d-internal-axial-point-load.json)
+laat zien hoe Rust zelf een ongesplitste staaf bij een interne axiale puntlast
+splitst, de plastische verlenging berekent en het resultaat onder één staaf
+teruggeeft.
 
 [`examples/frame2d-thermal-steel-unload.json`](examples/frame2d-thermal-steel-unload.json)
 verwarmt een aan beide uiteinden vastgehouden staaf met 100 K. Voor
@@ -128,6 +345,31 @@ ingeklemd blijft de vervorming nul en ontstaat een constant moment
 met axiale staalplastificatie. In de app staan temperatuurverschil en afstand bij de
 temperatuurlast. Zonder opgegeven positieve afstand wordt de gradiënt
 geweigerd; de bestaande TypeScript-solver verwerkt dit veld niet.
+
+De materiaalwet werkt nu ook op de 2D-raamwerkbuiging van staven zonder
+eindveren of releases. De doorsnede gebruikt drie equivalente vezels die de
+opgegeven `A` en `I` exact reproduceren voor een lineaire rekverdeling; langs de
+staaf wordt met twee Gauss-punten geïntegreerd. Staalvezels bewaren plastische
+rek en betonvezels onomkeerbare trekschade door het opgegeven lastpad. De
+sectieresultante en volledige N-M-tangent sturen de Newton-stap; de maximale
+vezelgeschiedenis wordt per staaf aan de app doorgegeven. Dit is een
+equivalente doorsnede, geen integratie van de werkelijke flens-/lijfgeometrie;
+bij eindveren of releases blijft de buiging elastisch.
+
+[`examples/frame2d-fiber-steel-bending.json`](examples/frame2d-fiber-steel-bending.json)
+is een uitkraging van 3 m met `A=0,01 m²`, `I=8·10⁻⁶ m⁴`, `E=210 000 MPa`,
+`f_y=250 MPa`, `E_t/E=0,01` en een eindmoment van `41 kNm`. Voor de equivalente
+vezelafstand `y=√(3I/A)=0,04899 m` is het eerste-vloeimoment
+`M_y=f_y I/y≈40,82 kNm`. Rust berekent een tiprotatie van `0,104182 rad` en
+maximale equivalente plastische rek `0,0005057`; het moment blijft `41 kNm` en
+de evenwichtsrest is `5,2·10⁻¹⁶ kN`. De Rust-test vergelijkt de tiprotatie met
+een onafhankelijke scalaire moment-krommingsoplossing.
+
+[`examples/frame2d-fiber-concrete-bending.json`](examples/frame2d-fiber-concrete-bending.json)
+gebruikt `E=30 000 MPa`, `f_t=3 MPa`, restverhouding `0,02` en `M=0,6 kNm`.
+De berekende tiprotatie is `0,009445 rad`, de maximale vezeltrekschade `0,38545`
+en de evenwichtsrest `3,1·10⁻¹⁵ kN`. De Rust-proef ontlast daarna naar nul en
+controleert dat de schadegeschiedenis behouden blijft.
 
 [`examples/frame2d-released-cantilever.json`](examples/frame2d-released-cantilever.json)
 laat een uitkraging met een buigscharnier bij de tip zien. De knooprotatie is
@@ -154,15 +396,25 @@ src-tauri/target/debug/native-frame2d \
 
 | Kern | Element | GNL | FNL | Lasten en opleggingen |
 | --- | --- | --- | --- | --- |
-| `native-frame2d` | 6-DOF Euler-Bernoulli raamwerk, 3 DOF/knoop | iteratieve P-Δ, dichte of sparse LDLᵀ-stabiliteitscontrole | axiale staalplastificatie en betontrekschade met belastingpad; elastische buiging | knoop-, verdeelde, staafpunt- en uniforme thermische lasten; vaste DOF, globale veren, Winkler-bedding, opgelegde verplaatsingen/rotaties en lineaire buigscharnieren |
+| `native-frame2d` | 6-DOF Euler-Bernoulli raamwerk, 3 DOF/knoop | iteratieve P-Δ, dichte of sparse LDLᵀ-stabiliteitscontrole | axiale staal-/beton-FNL met lastpad; bij stijve staafeinden ook vezelgeïntegreerde N-M-buiging en blijvende vezelgeschiedenis | knoop-, verdeelde, staafpunt- en uniforme thermische lasten; vaste DOF, globale veren, Winkler-bedding, opgelegde verplaatsingen/rotaties en lineaire buigscharnieren |
 | `native-frame3d` | 12-DOF Euler-Bernoulli raamwerk, 6 DOF/knoop | iteratieve P-Δ-stijfheid en sparse stabiliteitscontrole; eigenknik tot 120 vrije/600 totale DOF | monotone effectieve-E-envelop; met expliciet `loadPath` axiale staalplastificatie en blijvende betontrekschade | knoop-, lijn-, staafpunt- en thermische lasten; vaste DOF, globale veren, opgelegde verplaatsingen/rotaties en staafeindscharnieren |
 | `native-plate2d` | 3-knoops CST-vlakspanning/membraan, 2 DOF/knoop | Green-Lagrange-rek met Newton-iteratie | J2-staalplastificatie met isotrope verharding en onomkeerbare betonschade per element | knoopkrachten en vaste x/y-DOF |
-| `native-plate-bending` | 3-knoops DKT-plaatbuiging, 3 DOF/knoop | nog niet | nog niet | dwarsknoopkrachten, knoopmomenten en vaste w/rotatie-DOF |
+| `native-plate-bending` | 3-knoops DKT-plaatbuiging, 3 DOF/knoop | nog niet | nog niet | dwarsknoopkrachten, knoopmomenten, vaste w/rotatie-DOF en verticale/rotatieve knoopveren met reacties |
 | `native-square-mesh` | exact vierkant Q4-rooster met randknoop-ID's | n.v.t. | n.v.t. | `widthM`, `heightM`, `cellSizeM` |
 | `native-quad-mesh` | gestructureerd Q4-rooster voor willekeurige rechthoekmaten, met randknoop-ID's | n.v.t. | n.v.t. | `widthM`, `heightM`, `maxCellSizeM` |
-| `native-quad2d` | 4-knoops Q4-schijfelement, 2 DOF/knoop | Green-Lagrange | J2-staal en betonschade per Gauss-punt; afnemende E(rek)-curve | vlakke knoopkrachten en x/y-opleggingen |
-| `native-hybrid-plate` | 4-knoops hybride Kirchhoff-buiging, 12 DOF en 17 momentparameters | nog niet | afnemende secant-E per element en belastingpad | dwarsknoopkrachten, momenten, uniforme en per vierhoek bilineaire druk, w/rotatie-opleggingen; optionele UGT-wapenings- en BGT-scheurcontrole |
-| `native-prestressed-beam` | vrij opgelegde elastische ligger met rechte of parabolische kabel | n.v.t. | opgegeven voorspanverlies | uniforme last en fases overdracht/gebruiksfase |
+| `native-quad2d` | 4-knoops Q4-schijfelement, 2 DOF/knoop | Green-Lagrange | J2-staal en betonschade per Gauss-punt; afnemende E(rek)-curve | vlakke knoopkrachten, x/y-opleggingen en translatieveren per richting |
+| `mixed2d` | gekoppeld CST/Q4-vlakspanningsmesh, 2 DOF/knoop | Green-Lagrange-rek en gezamenlijke Newton-laststappen | J2-staal, betontrekschade en afnemende secant-E; CST-status per element en Q4-status per Gauss-punt met commit na geaccepteerde stap | gedeelde knopen, vlakke knoopkrachten, vaste x/y-DOF en translatieveren |
+| `native-hybrid-plate` | 4-knoops hybride Kirchhoff-buiging, 12 DOF en 17 momentparameters | nog niet | afnemende secant-E per element en belastingpad, met cutbacks bij niet-convergerende E-updates | dwarsknoopkrachten, momenten, uniforme en per vierhoek bilineaire druk, lineaire lijnlasten op mesh-uitgelijnde elementranden, w/rotatie-opleggingen en verticale/rotatieve knoopveren met reacties; optionele UGT-wapenings- en BGT-scheurcontrole |
+| `native-geometric-shell` / `geometricShell` | 4-knoops von-Kármán schaal, 5 DOF/knoop; hybride Kirchhoff-buiging gekoppeld aan Green-Lagrange Q4-membraan | Newton-tangent, sparse inertiecontrole en lastpad | afnemende secant-E op gecombineerde hoofdrek; optioneel staal-J2 of betontrekbeschadiging per 4×4 membraanpunt, toestand vastgelegd na geaccepteerde stap | membraan-/buigknooplasten, uniforme/bilineaire druk, elementrandlijnlasten, aparte membraan- en buigopleggingen, lokale translatie-/rotatieveerknopen met reacties; 21 membraan-/moment-/dwarskrachtresultaatpunten en toestand op alle 16 membraan-Gauss-punten per element |
+| `native-prestressed-beam` | vrij opgelegde lineair-elastische ligger met rechte of parabolische kabel en optioneel stukgewijs constante E per spansegment | n.v.t. | opgegeven voorspanverlies | uniforme last, lineaire gedeeltelijke lastsegmenten en puntlasten per fase; stations, kritieke sneden en EC2-dwarskrachtpostprocessen; doorsnede-I blijft constant langs de ligger |
+| gedeelde dispatch `crackWidth` | EC2 §7.3.4 postprocessor voor betonstaal en gebonden voorspanning | n.v.t. | n.v.t. | spanning uit de gescheurde doorsnede, rechthoekgeometrie, materiaalwaarden en effectieve voorspanstaalbijdrage; uitvoer `wk`, `sr,max` en benutting |
+| `native-three-layer` | Blaauwendraad drie-lagen postprocessor voor schaalresultanten | n.v.t. | n.v.t. | membraan-/momentresultanten, huidwapening en optionele kernschuifwapening; getypeerd `threeLayer`-verzoek |
+
+`crackWidth` gebruikt expliciet de spanning uit de gescheurde doorsnede. Bij
+voorspanning is dat voor voorgespannen strengen de spanningsverandering vanaf
+de rekloze betontoestand. De liggerkern leidt deze waarden nog niet af uit de
+belastingen; zie [`PRESTRESSED_BEAM.md`](PRESTRESSED_BEAM.md) en het
+[controlefixture](examples/ec2-bonded-prestress-crack-width.json).
 
 De invoer gebruikt **m, kN en MPa**. Voor 3D volgt het JSON-schema de
 veldnamen van `frame3d-solver` (`schemaVersion: 1`); een materiaal kan een
@@ -174,7 +426,9 @@ eenheden expliciet. `buildNativePlate2DRequest` en
 `buildNativeHybridPlateRequest` in
 `design-mockup/src/core/fem/nativePlate2DAdapter.ts` zet een bestaand `Mesh`
 om naar de betreffende kern en weigert onder meer gemengde elementtypes,
-gekoppelde balken, orthotropie en veren.
+gekoppelde balken, orthotropie en rotatieveren. Translatieveren worden als
+`kxKnPerM`/`kyKnPerM` in kN/m doorgegeven; het native resultaat rapporteert de
+veerreactie mee met de oplegreacties.
 
 ## Gedeelde aanroep uit de app
 
@@ -188,7 +442,7 @@ gekoppelde balken, orthotropie en veren.
 ```
 
 Andere `kind`-waarden zijn `frame2d`, `frame3d`, `plate2d`, `plateBending`, `quad2d`,
-`quadMesh`, `hybridPlate` en `prestressedBeam`. Het antwoord heeft dezelfde `kind` en een
+`mixed2d`, `quadMesh`, `hybridPlate`, `hybridPlateLayered`, `prestressedBeam` en `threeLayer`. Het antwoord heeft dezelfde `kind` en een
 `result` met het bestaande resultaatcontract van die kern. De desktop roept
 dit aan met Tauri-command `solve_native_fem({ inputs })`, de ontwikkelbrowser
 met toetsbrug-opdracht `solve_native_fem`, en MCP met het gelijknamige
@@ -196,22 +450,118 @@ gereedschap. `design-mockup/src/lib/nativeFemClient.ts` kiest vanuit de app
 automatisch Tauri of de ontwikkelbrug. Een drie-wegen-test vergelijkt de
 gehele JSON-uitvoer voor een mesh en een Q4-trekproef.
 
+`hybridPlateLayered` accepteert `input.bending` met het bestaande
+`hybridPlate`-verzoek en `input.elasticLayeredSections` met per `quadId` een
+onder-naar-boven geordende lijst `layers` (`thicknessM`, `eMpa`, `nu`,
+`law: {"kind":"elastic"}`). De som van de laagdikten moet de plaatdikte zijn.
+De buigstijfheid wordt per element uit de vezeldoorsnede bij lokaal `N=0`
+gecondenseerd; dit is geen volledige membraan-buiging gekoppelde laminaatplaat.
+`solveNativeHybridPlateLayered` bereikt dezelfde route via de apptransportlaag.
+Moduluscurven, niet-elastische vezels, orthotropie en wapeningscontrole worden
+in deze experimentele route afgewezen. `effectiveEMpa` in het bestaande
+resultaatcontract is hier alleen de opgegeven referentie-E waarmee de hybride
+matrix is genormaliseerd; de werkelijke gelaagde buigstijfheid is `D_eff` en
+kan niet door één effectieve E worden weergegeven.
+
+### Blaauwendraad drie-lagencontrole
+
+`threeLayer` is een postprocessor voor opgegeven schaalresultanten in kN/m en
+kNm/m. Hij verdeelt membraankrachten en momenten over boven- en onderschil met
+behoud van krachtenevenwicht en moment, toetst de drie Annex F-membraantakken,
+en kan optioneel een expliciet opgegeven kern-vakwerkmodel met vergelijking
+(22) voor de extra schilkrachten controleren. Per huid rapporteert de uitvoer
+ook het maatgevende membraangeval (`both-directions`, `x-only`, `y-only` of
+`compression-only`); de 3D-plaatberekening en het rapport geven dat geval
+zichtbaar door. De berekening is vergeleken met
+de [artikelwaarden op pp. 7–8 van Blaauwendraad en Braam (2021)](https://struct4u.com/app/uploads/2022/11/struct4u_2021_cement_artikel.pdf)
+en de gepubliceerde EC2-voorbeelden 648 en 93 voor de krachtsverdeling. De
+publicatie is de lange versie van het [Cement-artikel *Wapenen van schijven en
+platen*](https://www.cementonline.nl/artikelen/wapenen-van-schijven-en-platen-lang);
+de korte versie verscheen in Cement 2021/8. Het artikel baseert de
+wapeningsafleiding op elastische EEM-resultanten en lokale plastische
+herverdeling. De hybride Kirchhoff-plaat is de elementkeuze voor betrouwbare
+plaatmomenten en dwarskrachten; deze `threeLayer`-postprocessor vervangt dat
+plaatelement niet.
+
+De aanroeper kiest expliciet `compressionModel` (`blaauwendraad2021` of
+`ec2AnnexF`), `fcdMpa`, `fydMpa` en `nuPrime`. `core` is optioneel; zonder die
+waarden wordt de kern niet getoetst. Voorbeeldinvoer:
+
+De volledige invoer staat in
+[`examples/three-layer-blaauwendraad.json`](examples/three-layer-blaauwendraad.json).
+Het Cement-2021-uitkragingsreferentieverzoek staat in
+[`examples/three-layer-cement-2021.json`](examples/three-layer-cement-2021.json)
+en is rechtstreeks uit te voeren met `native-three-layer`.
+
+Gebruik `threeLayerBatch` wanneer een andere solver meerdere element- of
+integratiepuntresultanten aanlevert. Eén gedeelde `configuration` bevat
+doorsnede, wapening en normwaarden; `samples` bevat per unieke ID de positie en
+de acht resultanten. De batch geeft elk puntresultaat terug en meldt of ten
+minste één deelcontrole is overschreden.
+
+De app-client biedt `solveNativeThreeLayerFromSolverResults` als losse adapter
+voor bestaande Rust-Q4-membraan- en hybride plaatresultaten met dezelfde mesh.
+De huidige 3D-plaatroute doet de uitgebreidere controle afzonderlijk: bij
+in-vlakse belasting rekent hij het Rust-Q4-membraanelement en combineert de
+resultaten met hybride buigresultanten op de 21 resultaatpunten per vierhoek.
+De spanningen op de 2×2 membraan-Gauss-punten worden naar deze punten
+geïnterpoleerd. Membraanreacties komen mee in de app-krachtenbalans; FNL
+gebruikt de opgegeven `E(ε)`-curve voor beide oplossers. De membraan- en
+buigoplossingen blijven geometrisch ontkoppeld, zodat deze route geen
+GNL-schaalelement vormt. De adapter weigert afwijkende element-/knoopsets,
+ongelijke plaatdikten en upstream-restresiduen boven `1e-7`.
+
+In de FEM Studio-eigenschappen zijn er twee gebruikersroutes: een expliciet als
+beton herkende 2D-Q4-schijf, met membraankrachten op alle vier Gauss-punten en
+zonder kernschuifcontrole, en de losse 3D-plaatroute met hybride momenten en
+dwarskrachten plus optionele membraankrachten. Bij lineaire combinaties worden
+de Q4-Gauss-puntresultanten eerst gesuperponeerd en daarna opnieuw getoetst; de
+UI toont per element de grootste benutting en de locatie van het maatgevende
+resultaatpunt. In 3D worden de membraan- en buigresultaten op 21 punten per
+vierhoek getoetst, maar niet geometrisch gekoppeld.
+
+Dit is een deelcontrole: scheurtoestand, automatische laagdimensionering,
+excentriciteit, verankering, detaillering en Nationale Bijlage worden niet
+afgeleid of goedgekeurd. Het resultaat is geen volledige schaalberekening.
+
 In **Instellingen → Berekening** kan de gebruiker nu `Open FEM Rust
 (experimenteel)` kiezen voor een eerste-orde, P-Δ of fysisch niet-lineair
-3D-raamwerk. Voor FNL stelt de gebruiker per staaf in de eigenschappen expliciet
+3D-raamwerk. De projectkeuze `2e orde + fysisch` wordt voor een zuiver
+3D-raamwerk naar Rust `combined` gestuurd: P-Δ en de expliciete staal- of
+betonwet worden samen iteratief opgelost. Zonder opgeslagen lastpad gebruikt
+deze stand standaard `[1]`, zodat ook een monotone belasting de materiaalgeschiedenis
+bijhoudt.
+
+Voor een lineair 3D-raamwerk kan de Rust-invoer optioneel
+`linearBackend: "frontalWave"` en `frontalMaxFrontDofs` opgeven. De app probeert
+deze frontale methode op een begrensd model wanneer de iteratieve solve
+expliciet niet convergeert of haar residunauwkeurigheid verliest. De
+expliciet frontale lineaire route bouwt geen globale matrix op. Boven
+20.000 globale DOF kiest de app deze route direct; een 20.010-DOF-proef
+met een smal front is via de app en Rust-CLI doorgerekend. Eigenknik blijft
+een afzonderlijke, op 600 totale DOF begrensde berekening.
+
+Voor FNL stelt de gebruiker per staaf in de eigenschappen expliciet
 een vloeigrens en verhardingsverhouding (staal) of treksterkte en
 reststijfheidsverhouding (beton) in. Staven zonder FNL-wet blijven elastisch;
 minstens één staaf moet een wet hebben. De automatische solverkeuze schakelt
-de experimentele FNL-route niet zelf in. Uniforme thermische lasten kunnen met
-axiale FNL worden gecombineerd; thermische gradiënten nog niet.
+de experimentele FNL-route niet zelf in. Uniforme thermische lasten en beide
+doorsnedegradiënten kunnen met de FNL-laststappen worden gecombineerd. De
+gradiënten krijgen hun vrije thermische kromming mee in de secant-E-schatting;
+plastische rek en betonschade zijn nog alleen axiaal geformuleerd, dus dit is
+geen vezel- of doorsnede-FNL voor buiging. Gesloten-vormige vrije uitkragingen
+controleren de thermische kromming om beide lokale assen.
 Eindscharnieren worden ook bij FNL per iteratie
 gecondenseerd. In de 3D-eigenschappen zonder
 selectie kan de gebruiker een FNL-lastpad invoeren, bijvoorbeeld `1, 0, 0.5`.
 De app bewaart het pad in het project, stuurt het als `loadPath` naar Rust en
 toont de axiale materiaaltoestand per staaf. Zonder lastpad gebruikt de
-app meestal de monotone secant-E-benadering; bij uniforme temperatuur met
-FNL wordt één impliciete laststap met axiale materiaalgeschiedenis gebruikt. Voor
-een vrijgegeven eindmoment herstelt de kern de interne staafrotatie voordat
+app meestal de monotone secant-E-benadering. Een FNL-lastpad start in 3D met
+tien increments per padsegment; bij niet-convergentie of verlies van positieve
+tangentstijfheid wordt de proefstap gehalveerd. Axiale plastische rek en
+betonschade worden pas na een geconvergeerde stap vastgelegd. Uniforme
+temperatuur wordt op dezelfde stappen met de axiale materiaalgeschiedenis
+gecombineerd. Voor een vrijgegeven eindmoment herstelt de kern de interne staafrotatie voordat
 zij de vezelrek en secante E schat. Bij P-Δ bevat de momentlijn de bijdrage
 van de axiale kracht over de vervormde staaflijn; haar eindwaarde sluit aan
 op het berekende staafeindmoment.
@@ -366,10 +716,41 @@ equivalente plastische rek en de trekschade. De materiaaltoestand leeft binnen
   roosters met de bestaande TypeScript-kern vergeleken. De hybride
   buigplaat doorstaat starre modes, een constante-krommingspatch en een
   Navier-plaatbenchmark (4,1% middenzakkingverschil op 6×6 vierhoeken).
+  De hybride plaat geeft nu ook momenten en herleide dwarskrachten terug op
+  alle 4×4 Gauss-punten plus de vier hoeken en het middelpunt. De Cement-
+  uitkraging controleert op die Gauss-punten de analytische lineaire
+  dwarskrachtverdeling, naast de totaalsom van de reacties.
+- Een slanke hybride plaatstrook met verdeelde tipveren is onafhankelijk
+  vergeleken met de Euler–Bernoulli-cantileverstijfheid
+  `3 EI / L³` en de seriestijfheid van ligger en tipveer; gemiddelde
+  tipdoorbuiging wijkt maximaal 1,5% af en de reacties sluiten. De gebruikte
+  tipstijfheid volgt uit [MIT OpenCourseWare, tip-loaded cantilever](https://ocw.mit.edu/courses/2-002-mechanics-and-materials-ii-spring-2004/bc25a56b5a91ad29ca5c7419616686f7_lec2.pdf).
+- `geometricShell` koppelt de hybride buigplaat aan von-Kármán membraanrek met
+  vijf vrijheidsgraden per knoop en een consistente geometrische tangent.
+  Secant-E-rekhistorie per element bewaart de piekrek bij ontlasten.
+  `examples/geometric-shell-uniaxial.json` controleert membraantrek; de
+  tangent is met eindige verschillen vergeleken. De secant-E-curve gebruikt
+  de grootste gecombineerde hoofdrek uit beide plaatzijden op elk membraan-
+  Gauss-punt; deze rekreconstructie vraagt nog onafhankelijke validatie. Dit
+  blijft experimenteel. Optionele staal-J2-plastificatie en
+  betontrekbeschadiging werken op membraanpunten; geaccepteerde laststappen
+  bewaren de geschiedenis. Uitvoer geeft locatie, Green-Lagrange membraanrek,
+  equivalente plastische rek en trekbeschadiging van alle 16 integratiepunten;
+  voor staal- en beton-FNL wordt dit via het 3D-plaatrapport gecontroleerd.
+  Shellbuiging zelf gebruikt nog elastische of secant-E-stijfheid, geen
+  constitutieve buigdoorsnede. Optionele wapeningspostprocessing
+  gebruikt de 21 shellresultantpunten per element; membraankracht wordt gelijk
+  verdeeld over beide vlakken voor langsstaal- en scheurwijdtetoetsen. Dit
+  koppelt gescheurde stijfheid niet terug naar de solve, en de volledige
+  axiaal-dwarskrachtinteractie moet nog onafhankelijk gevalideerd worden.
+  Variabele drukvelden en
+  mesh-uitgelijnde randlijnlasten worden verwerkt, maar zijn nog niet
+  onafhankelijk gevalideerd onder GNL/FNL.
 - De optionele plaatwapeningscontrole toetst de dwarskracht en de benodigde
   verticale en langsgerichte wapening in een UGT-verzoek. Een apart
   BGT-verzoek rapporteert scheurwijdten in vier wapeningsrichtingen. De
-  scheurformule is ook tegen een gepubliceerd EC2-brugvoorbeeld getoetst;
+  scheurformule is op formule- en volledige sectiecontrole tegen twee
+  gepubliceerde EC2-brugvoorbeelden getoetst (Sétra en JRC);
   de Cement-uitkraging geeft aan de steun 240 kN/m. Zie de
   [plaatvoorbeelden](PLATE_EXAMPLES.md) voor invoer, uitkomsten en aannames.
 - **Beperkingen FNL:** de 3D-raamwerkkern gebruikt zonder `loadPath` een monotone
@@ -380,10 +761,16 @@ equivalente plastische rek en de trekschade. De materiaaltoestand leeft binnen
   breukenergie-regularisatie; het resultaat kan daarom van de mesh afhangen.
   Ook de 2D-staalwet en het betonmodel zijn nog niet extern gevalideerd voor
   ontwerpbeslissingen.
-- De DKT-kern rekent alleen lineaire plaatbuiging. De hybride buigplaat
-  gebruikt een secant-E-omhulling per element; dat is geen geregelde
-  beton-scheurwet of doorsnedeplastificatie. Vlakvervorming,
-  orthotropie en gekoppelde staaf-plaatmodellen zijn nog niet
+- De DKT-kern ondersteunt lineaire elastische buiging, orthotropie en
+  secans-E-curven per materiaal. Voor lineaire DKT kan
+  `linearBackend: "frontalWave"` elementgewijs frontaal oplossen met
+  `frontalMaxFrontDofs` als begrenzing; dit accepteert geen E-rekcurve.
+  De lineaire hybride Q4-buigplaat heeft dezelfde optionele frontale
+  keuze, inclusief variabele plaatdruk, randlijnlasten en oplegveren;
+  geometrische of materiaalniet-lineariteit gebruikt die route niet.
+  Zowel DKT als de hybride buigplaat gebruiken bij wisselende E een
+  secans-E-benadering; dat is geen geregelde beton-scheurwet of
+  doorsnedeplastificatie. Gekoppelde staaf-plaatmodellen zijn nog niet
   geïmplementeerd. Thermische lasten of staafeindscharnieren samen met
   materiaalniet-lineariteit, en eigenwaarde-knik worden in de 3D-kern geweigerd.
 - De plaatwapeningsuitvoer gebruikt herleide dwarskracht, aangenomen
@@ -393,14 +780,20 @@ equivalente plastische rek en de trekschade. De materiaaltoestand leeft binnen
   en geen vrijgave voor constructief ontwerp.
 - Tot 600 DOF gebruikt de kern dichte eliminatie. Grotere Q4-, CST-, DKT- en
   hybride plaatmatrices gebruiken nu een ijle symmetrische Jacobi-PCG-oplosser
-  met een grens van 20.000 DOF. Een Q4-rekproef met 882 DOF en een hybride
-  Navier-plaat met 675 DOF staan in de Rust-tests. De ijle oplosser weigert
+  met een grens van 20.000 DOF. Vóór PCG controleert sparse LDLᵀ ook de
+  volledige vrije stijfheidsinertie. Bij FNL/GNL wordt dit voor iedere nieuwe
+  tangent herhaald, zolang de factor binnen twee miljoen opgeslagen waarden
+  blijft; bij grotere fill blijft PCG de iteratieve route.
+  Een mechanisme loodrecht op de vaste PCG-proeflast is als regressie getest.
+  Een Q4-rekproef met 882 DOF en een hybride Navier-plaat met 675 DOF staan in
+  de Rust-tests. De ijle oplosser weigert
   asymmetrische matrices en niet-positieve kromming tijdens de iteratie. Bij
   nulbelasting wordt de vrije stijfheid ook met een niet-nul proeflast
   aangesproken, zodat een onbelast mechanisme niet zonder meer als nuloplossing
-  slaagt. Dit is geen volledige traagheids- of eigenwaardecontrole; een
-  mechanisme dat orthogonaal is aan de proeflast kan onopgemerkt blijven. De
-  2D- en 3D-raamwerken gebruiken nu daarnaast sparse LDLᵀ-eliminatie als
+  slaagt. Bij plaatmodellen waar de sparse factor binnen het geheugenbudget
+  past is dit wel een volledige inertiecontrole; bij grotere fill blijft een
+  mechanisme buiten de PCG-krommingstoets mogelijk onopgemerkt. De
+  2D- en 3D-raamwerken gebruiken sparse LDLᵀ-eliminatie als
   expliciete stabiliteitstoets; een 2D-beddingraam met 603 DOF en een
   3D-axiale keten met 606 DOF zijn getest. De 3D-eigenknik blijft beperkt
   tot 120 vrije en 600 totale DOF. De sparse stabiliteitsfactor heeft een

@@ -158,7 +158,12 @@ pub(crate) fn groepeer(
         let idx = match groepen.iter().position(|g| g.duur == duur) {
             Some(i) => i,
             None => {
-                groepen.push(Groep { duur, punten: Vec::new(), combinaties: Vec::new(), bases: Vec::new() });
+                groepen.push(Groep {
+                    duur,
+                    punten: Vec::new(),
+                    combinaties: Vec::new(),
+                    bases: Vec::new(),
+                });
                 groepen.len() - 1
             }
         };
@@ -174,8 +179,12 @@ pub(crate) fn groepeer(
         }
     }
     for g in &mut groepen {
-        let mut paren: Vec<(u32, String)> =
-            g.combinaties.iter().copied().zip(g.bases.iter().cloned()).collect();
+        let mut paren: Vec<(u32, String)> = g
+            .combinaties
+            .iter()
+            .copied()
+            .zip(g.bases.iter().cloned())
+            .collect();
         paren.sort_by_key(|(id, _)| *id);
         g.combinaties = paren.iter().map(|(id, _)| *id).collect();
         g.bases = paren.into_iter().map(|(_, b)| b).collect();
@@ -185,7 +194,10 @@ pub(crate) fn groepeer(
 }
 
 fn lijst_ids(ids: &[u32]) -> String {
-    ids.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")
+    ids.iter()
+        .map(|i| i.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Wat één toets in één klasse opleverde, voor de notitie bij de maatgevende.
@@ -254,11 +266,22 @@ mod tests {
     use mechanics::InternalForces;
 
     fn p(id: u32, my: f64) -> ForcePoint {
-        ForcePoint { combination_id: id, position_mm: 0.0, forces: InternalForces { my_ed: my, ..Default::default() } }
+        ForcePoint {
+            combination_id: id,
+            position_mm: 0.0,
+            forces: InternalForces {
+                my_ed: my,
+                ..Default::default()
+            },
+        }
     }
 
     fn c(id: u32, d: LoadDurationClass) -> CombinationLoadDuration {
-        CombinationLoadDuration { combination_id: id, load_duration: d, basis: format!("b{id}") }
+        CombinationLoadDuration {
+            combination_id: id,
+            load_duration: d,
+            basis: format!("b{id}"),
+        }
     }
 
     #[test]
@@ -294,7 +317,10 @@ mod tests {
 
     #[test]
     fn dubbel_genoemde_combinatie_krijgt_de_langste_klasse() {
-        let lijst = [c(3, LoadDurationClass::ShortTerm), c(3, LoadDurationClass::Permanent)];
+        let lijst = [
+            c(3, LoadDurationClass::ShortTerm),
+            c(3, LoadDurationClass::Permanent),
+        ];
         let g = groepeer(&[p(3, 1.0)], &lijst, LoadDurationClass::MediumTerm).unwrap();
         assert_eq!(g.len(), 1);
         assert_eq!(g[0].duur, LoadDurationClass::Permanent);

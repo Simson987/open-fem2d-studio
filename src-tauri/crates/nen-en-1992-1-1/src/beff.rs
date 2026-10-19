@@ -133,7 +133,10 @@ const RATIO_TOL: f64 = 1e-9;
 /// De steunpunten TUSSEN twee overspanningen zijn impliciet; alleen de twee
 /// buitenste uiteinden hebben een keuze.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum LineEnd {
     /// Buitensteunpunt dat de hoekverdraaiing niet verhindert — het linker
     /// steunpunt van figuur 5.2. Het moment is er nul, dus het momentnulpunt
@@ -172,7 +175,10 @@ pub enum LineEnd {
 /// De lengtemaat is mm; de coördinaat x loopt vanaf het uiteinde `start`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct BeamLine {
     /// Overspanningen in mm, op volgorde van `start` naar `end`.
     pub spans_mm: Vec<f64>,
@@ -203,7 +209,10 @@ impl BeamLine {
 /// bij een rand. b = b_w + Σ b_i.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct FlangeGeometry {
     /// Lijfbreedte b_w in mm.
     pub b_w_mm: f64,
@@ -224,7 +233,10 @@ impl FlangeGeometry {
 
 /// Welk geval uit figuur 5.2 een gebied is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum L0Case {
     /// Veldgebied van een eindveld: één uiteinde vrij opgelegd, het andere een
     /// steunpunt. l₀ = 0,85·l.
@@ -252,7 +264,9 @@ impl L0Case {
     /// De vindplaats van dit geval, voor het rapport.
     pub fn source(&self) -> &'static str {
         match self {
-            L0Case::EndSpan | L0Case::InteriorSpan | L0Case::InteriorSupport
+            L0Case::EndSpan
+            | L0Case::InteriorSpan
+            | L0Case::InteriorSupport
             | L0Case::Cantilever => "NEN-EN 1992-1-1, figuur 5.2",
             L0Case::SingleSpan => "NEN-EN 1992-1-1, 5.3.2.1(2)",
             L0Case::RestrainedEnd => {
@@ -272,7 +286,10 @@ impl L0Case {
 
 /// Eén gebied uit figuur 5.2, met zijn plaats langs de liggerlijn en zijn l₀.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct L0Zone {
     /// Begin van het gebied langs de liggerlijn, mm vanaf `BeamLine::start`.
     pub x_start_mm: f64,
@@ -292,7 +309,10 @@ pub struct L0Zone {
 
 /// Welke van de drie grenzen van (5.7a)/(5.7b) een b_eff,i bepaalde.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum BeffBound {
     /// 0,2·b_i + 0,1·l₀ is maatgevend (5.7a, eerste lid).
     Formula,
@@ -306,7 +326,10 @@ pub enum BeffBound {
 /// b_eff,i van één uitkragend flensdeel, met alle drie de kandidaten erbij
 /// zodat het rapport kan laten zien welke won.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct BeffPart {
     /// Het uitkragende flensdeel b_i, mm.
     pub b_i_mm: f64,
@@ -321,7 +344,10 @@ pub struct BeffPart {
 
 /// De meewerkende flensbreedte bij één l₀, met de hele afleiding erbij.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct BeffAtL0 {
     /// De gebruikte afstand tussen de momentnulpunten, mm.
     pub l0_mm: f64,
@@ -337,7 +363,10 @@ pub struct BeffAtL0 {
 
 /// Eén gebied mét zijn meewerkende flensbreedte.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct BeffZone {
     pub zone: L0Zone,
     /// Σ b_eff,i + b_w, begrensd op b (5.7), mm.
@@ -355,7 +384,10 @@ pub struct BeffZone {
 
 /// De meewerkende flensbreedte over de hele liggerlijn, per gebied.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct BeffDistribution {
     /// De gebieden op volgorde; ze sluiten aan en beslaan samen de hele lijn.
     pub zones: Vec<BeffZone>,
@@ -405,9 +437,7 @@ impl BeffDistribution {
     pub fn constant_for_span(&self, span_index: usize) -> Option<f64> {
         self.zones
             .iter()
-            .find(|z| {
-                z.zone.case.is_span_region() && z.zone.span_index == Some(span_index as u32)
-            })
+            .find(|z| z.zone.case.is_span_region() && z.zone.span_index == Some(span_index as u32))
             .map(|z| z.b_eff_mm)
     }
 
@@ -428,7 +458,10 @@ impl BeffDistribution {
 /// Waarom er geen b_eff is. Elke variant draagt zijn eigen reden; er komt
 /// nooit een getal terug dat op een aanname berust.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum BeffError {
     /// Geen enkele overspanning: er is geen liggerlijn.
     NoSpans,
@@ -560,10 +593,7 @@ impl std::error::Error for BeffError {}
 /// tussen momentnulpunten werkt er geen flens mee. Dat geval kan uit
 /// [`beff_distribution`] niet komen (die eist positieve overspanningen) maar
 /// is hier vastgelegd zodat de losse functie geen NaN kan opleveren.
-pub fn effective_flange_width(
-    flange: &FlangeGeometry,
-    l0_mm: f64,
-) -> Result<BeffAtL0, BeffError> {
+pub fn effective_flange_width(flange: &FlangeGeometry, l0_mm: f64) -> Result<BeffAtL0, BeffError> {
     validate_flange(flange)?;
     let l0 = l0_mm.max(0.0);
 
@@ -659,11 +689,7 @@ pub fn l0_zones(line: &BeamLine) -> Result<Vec<L0Zone>, BeffError> {
             l0_mm: lengte,
             case: L0Case::RestrainedEnd,
             span_index: Some(0),
-            expression: format!(
-                "l0 = 0,15·l1 = 0,15·{} = {} mm",
-                fmt_mm(l1),
-                fmt_mm(lengte)
-            ),
+            expression: format!("l0 = 0,15·l1 = 0,15·{} = {} mm", fmt_mm(l1), fmt_mm(lengte)),
         });
     }
 
@@ -881,8 +907,7 @@ fn validate_line(line: &BeamLine) -> Result<(), BeffError> {
         let a = line.spans_mm[i];
         let b = line.spans_mm[i + 1];
         let ratio = a / b;
-        if ratio < SPAN_RATIO_MIN * (1.0 - RATIO_TOL)
-            || ratio > SPAN_RATIO_MAX * (1.0 + RATIO_TOL)
+        if ratio < SPAN_RATIO_MIN * (1.0 - RATIO_TOL) || ratio > SPAN_RATIO_MAX * (1.0 + RATIO_TOL)
         {
             return Err(BeffError::SpanRatioOutOfRange {
                 first_index: i as u32,
@@ -978,7 +1003,10 @@ pub fn beff_distribution(
 /// werkelijkheid.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct EffectiveFlangeWidthRequest {
     /// Vrij te kiezen nummer; komt onveranderd terug. 0 als het niet om een
     /// staaf uit een model gaat.
@@ -1008,7 +1036,10 @@ pub struct EffectiveFlangeWidthRequest {
 
 /// Het gebied dat werkelijk is aangehouden, met de afleiding uitgeschreven.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct BeffApplied {
     /// Index in [`BeffDistribution::zones`] van het gebied waarin `x_mm` valt.
     pub zone_index: u32,
@@ -1023,7 +1054,10 @@ pub struct BeffApplied {
 
 /// Het antwoord: het staafnummer terug plus de verdeling.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct EffectiveFlangeWidthResponse {
     pub beam_id: u32,
     pub distribution: BeffDistribution,
@@ -1036,8 +1070,7 @@ pub struct EffectiveFlangeWidthResponse {
 pub fn effective_flange_width_request(
     req: EffectiveFlangeWidthRequest,
 ) -> Result<EffectiveFlangeWidthResponse, String> {
-    let distribution =
-        beff_distribution(&req.line, &req.flange).map_err(|e| e.to_string())?;
+    let distribution = beff_distribution(&req.line, &req.flange).map_err(|e| e.to_string())?;
     // Het gebied wordt met dezelfde regel gezocht als `zone_at_mm`: op een
     // gebiedsgrens wint het linker gebied. Een plaats buiten de lijn levert
     // geen afleiding — dan hoort de staaf niet bij deze liggerlijn, en een
@@ -1268,10 +1301,7 @@ mod tests {
             v.zone_at_mm(6000.0).unwrap().zone.case,
             L0Case::InteriorSupport
         );
-        assert_eq!(
-            v.zone_at_mm(13000.0).unwrap().zone.case,
-            L0Case::Cantilever
-        );
+        assert_eq!(v.zone_at_mm(13000.0).unwrap().zone.case, L0Case::Cantilever);
         assert!(v.zone_at_mm(-1.0).is_none());
         assert!(v.zone_at_mm(20000.0).is_none());
     }

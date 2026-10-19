@@ -36,9 +36,9 @@ test("drie groepen in de volgorde Labels, Geometrie, Resultaten", () => {
 test("Labels: knoopnummers, staafnummers, profielnaam, belastingwaarden, peilmaten, maatlijnen", () => {
   assert.deepEqual(rijen("labels"), ["knoopnummers", "staafnummers", "profielLabels", "lastWaarden", "peilmaten", "maatlijnen"]);
 });
-test("Geometrie: aanzicht, profielbreedte (onder het aanzicht), kipsteunen, opleggingen, scharnieren, stramien", () => {
-  assert.deepEqual(rijen("geometrie"), ["aanzicht", "aanzichtBreedte", "kipsteunen", "opleggingen", "scharnieren", "stramien"]);
-  assert.equal(Z.ZICHTBAARHEID.geometrie[1].onder, "aanzicht");
+test("Geometrie: modelonderdelen, belastingen, aanzicht en steunpunten", () => {
+  assert.deepEqual(rijen("geometrie"), ["knopen", "staven", "platen", "belastingen", "assenstelsel", "aanzicht", "aanzichtBreedte", "kipsteunen", "opleggingen", "scharnieren", "stramien"]);
+  assert.equal(Z.ZICHTBAARHEID.geometrie[6].onder, "aanzicht");
 });
 test("Resultaten: de bestaande vlaggen van de verkenner", () => {
   const verkenner = readFileSync(new URL("./src/components/fem/FemProjectTree.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n");
@@ -54,8 +54,9 @@ test("elke rij (behalve het stramien) is een aan/uit-vlag van displayFlags met e
     }
   }
 });
-test("nieuwe vlaggen: knoopnummers aan (zoals altijd), staafnummers en profielbreedte uit, de rest aan", () => {
+test("nieuwe vlaggen: modelgeometrie standaard aan; nummering en profielbreedte standaard uit", () => {
   const d = DEFAULT_DISPLAY_FLAGS;
+  assert.deepEqual([d.knopen, d.staven, d.platen, d.belastingen, d.assenstelsel], [true, true, true, true, true]);
   assert.deepEqual(
     [d.knoopnummers, d.staafnummers, d.aanzichtBreedte, d.lastWaarden, d.peilmaten, d.maatlijnen, d.opleggingen, d.scharnieren],
     [true, false, false, true, true, true, true, true]);
@@ -81,17 +82,25 @@ console.log("\n[3] onthouden per gebruiker");
 test("onthouden: Labels en Geometrie (zonder het stramien), geen resultaatlagen", () => {
   assert.deepEqual(Z.WEERGAVE_VOORKEUREN, [
     "knoopnummers", "staafnummers", "profielLabels", "lastWaarden", "peilmaten", "maatlijnen",
-    "aanzicht", "aanzichtBreedte", "kipsteunen", "opleggingen", "scharnieren",
+    "knopen", "staven", "platen", "belastingen", "assenstelsel", "aanzicht", "aanzichtBreedte", "kipsteunen", "opleggingen", "scharnieren",
   ]);
   for (const k of ["M", "V", "N", "deflection", "reactions", "uc"]) assert.ok(!Z.WEERGAVE_VOORKEUREN.includes(k), k);
 });
 test("voorkeurenVan → metVoorkeuren: dezelfde keuze terug", () => {
   const f = { ...DEFAULT_DISPLAY_FLAGS, knoopnummers: false, staafnummers: true, aanzicht: true, M: false };
   const bewaard = JSON.parse(JSON.stringify(Z.voorkeurenVan(f)));
-  assert.equal(Object.keys(bewaard).length, 11);
+  assert.equal(Object.keys(bewaard).length, 17);
   assert.equal("M" in bewaard, false, "geen resultaatlaag in de voorkeur");
   const terug = Z.metVoorkeuren({ ...DEFAULT_DISPLAY_FLAGS, M: true }, bewaard);
   assert.deepEqual([terug.knoopnummers, terug.staafnummers, terug.aanzicht, terug.M], [false, true, true, true]);
+});
+test("grootte van opleggingen wordt bewaard en ongeldige schalen worden begrensd", () => {
+  const bewaard = Z.voorkeurenVan({ ...DEFAULT_DISPLAY_FLAGS, supportScale: 1.75 });
+  assert.equal(bewaard.supportScale, 1.75);
+  assert.equal(Z.metVoorkeuren(DEFAULT_DISPLAY_FLAGS, bewaard).supportScale, 1.75);
+  assert.equal(Z.metVoorkeuren(DEFAULT_DISPLAY_FLAGS, { supportScale: 10 }).supportScale, 3);
+  assert.equal(Z.metVoorkeuren(DEFAULT_DISPLAY_FLAGS, { supportScale: 0 }).supportScale, 0.25);
+  assert.equal(Z.metVoorkeuren(DEFAULT_DISPLAY_FLAGS, { supportScale: "groot" }).supportScale, 1);
 });
 test("beschadigde of oude opslag: genegeerd, de standaard blijft", () => {
   for (const x of [null, undefined, 3, "tekst", [true], {}]) {
@@ -118,7 +127,8 @@ test("elke label- en toelichtingssleutel bestaat in nl, en, de en fr", () => {
   const sleutels = new Set(["zichtbaarheid.titel", "zichtbaarheid.onthouden", "zichtbaarheid.standaard",
     "zichtbaarheid.groepLabels", "zichtbaarheid.groepGeometrie", "zichtbaarheid.groepResultaten",
     "zichtbaarheid.alleenMetAanzicht", "zichtbaarheid.stramienProject", "zichtbaarheid.resultatenNoot",
-    "tree.openZichtbaarheid", "canvas.aanzicht.breedte", "canvas.aanzicht.breedteVerloop"]);
+    "tree.openZichtbaarheid", "canvas.aanzicht.breedte", "canvas.aanzicht.breedteVerloop",
+    "zichtbaarheid.supportScale", "zichtbaarheid.supportScaleHint"]);
   for (const g of Z.ZICHTBAARHEID_GROEPEN) {
     for (const r of Z.ZICHTBAARHEID[g]) { if (!r.letterlijk) sleutels.add(r.label); sleutels.add(r.hint); }
   }

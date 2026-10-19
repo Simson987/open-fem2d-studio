@@ -54,7 +54,12 @@ pub const NORM_HOUT_AANDUIDING: &str =
 
 fn laagnaam(mech: &CltMechanics, idx: usize) -> String {
     let l = &mech.layers[idx];
-    format!("laag {} ({}, {})", idx + 1, l.orientation.label_nl(), l.class.name)
+    format!(
+        "laag {} ({}, {})",
+        idx + 1,
+        l.orientation.label_nl(),
+        l.class.name
+    )
 }
 
 fn laagligging(mech: &CltMechanics, idx: usize) -> String {
@@ -108,7 +113,11 @@ pub fn check_layer_bending(
     };
     let z_i = (z_vezel - mech.z0_mm).abs();
     let sigma_abs = sigma.abs();
-    let uc = if f_md_mpa > 0.0 { sigma_abs / f_md_mpa } else { 0.0 };
+    let uc = if f_md_mpa > 0.0 {
+        sigma_abs / f_md_mpa
+    } else {
+        0.0
+    };
     let status = if m_ed.abs() < 1e-12 {
         CheckStatus::NotApplicable
     } else if uc <= 1.0 {
@@ -138,11 +147,31 @@ pub fn check_layer_bending(
             r"\sigma_{{m,{i},d}} = \frac{{E_{{{i}}} \cdot M_{{y,Ed}} \cdot z_{{{i}}}}}{{(EI)_{{ef}} \cdot 10^{{3}}}} \le f_{{m,d}}"
         ),
         variables: vec![
-            NamedValue { symbol: format!("E_{{{i}}}"), value: l.e_mpa, unit: "N/mm²".to_string() },
-            NamedValue { symbol: r"M_{y,Ed}".to_string(), value: m_ed.abs(), unit: "kNm".to_string() },
-            NamedValue { symbol: format!("z_{{{i}}}"), value: z_i, unit: "mm".to_string() },
-            NamedValue { symbol: r"(EI)_{ef}".to_string(), value: mech.ei_ef_knm2(), unit: "kNm²".to_string() },
-            NamedValue { symbol: r"f_{m,d}".to_string(), value: f_md_mpa, unit: "N/mm²".to_string() },
+            NamedValue {
+                symbol: format!("E_{{{i}}}"),
+                value: l.e_mpa,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"M_{y,Ed}".to_string(),
+                value: m_ed.abs(),
+                unit: "kNm".to_string(),
+            },
+            NamedValue {
+                symbol: format!("z_{{{i}}}"),
+                value: z_i,
+                unit: "mm".to_string(),
+            },
+            NamedValue {
+                symbol: r"(EI)_{ef}".to_string(),
+                value: mech.ei_ef_knm2(),
+                unit: "kNm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"f_{m,d}".to_string(),
+                value: f_md_mpa,
+                unit: "N/mm²".to_string(),
+            },
         ],
         value: sigma_abs,
         unit: "N/mm²".to_string(),
@@ -178,7 +207,11 @@ pub fn check_layer_shear(
     let v_ed = force_state.forces.vz_ed;
     let sh = mech.layer_max_shear(idx, v_ed, k_cr);
     let b_ef = k_cr * mech.width_mm;
-    let uc = if f_vd_mpa > 0.0 { sh.tau_mpa / f_vd_mpa } else { 0.0 };
+    let uc = if f_vd_mpa > 0.0 {
+        sh.tau_mpa / f_vd_mpa
+    } else {
+        0.0
+    };
     let status = if v_ed.abs() < 1e-12 {
         CheckStatus::NotApplicable
     } else if uc <= 1.0 {
@@ -189,7 +222,10 @@ pub fn check_layer_shear(
 
     let mut notes = vec![
         laagligging(mech, idx),
-        format!("τ maximaal op z = {:.1} mm (E-gewogen statisch moment van het deel daarboven).", sh.z_mm),
+        format!(
+            "τ maximaal op z = {:.1} mm (E-gewogen statisch moment van het deel daarboven).",
+            sh.z_mm
+        ),
     ];
     if (k_cr - 1.0).abs() > 1e-9 {
         notes.push(format!("b_ef = k_cr · b met k_cr = {k_cr:.2} (6.13a)"));
@@ -208,12 +244,36 @@ pub fn check_layer_shear(
             r"\tau_{{{i},d}} = \frac{{V_{{z,Ed}} \cdot (ES)_{{{i}}}}}{{(EI)_{{ef}} \cdot b_{{ef}}}} \le f_{{v,d}}"
         ),
         variables: vec![
-            NamedValue { symbol: r"V_{z,Ed}".to_string(), value: v_ed.abs(), unit: "kN".to_string() },
-            NamedValue { symbol: format!("(ES)_{{{i}}}"), value: sh.es_nmm * 1e-6, unit: "kNm".to_string() },
-            NamedValue { symbol: r"(EI)_{ef}".to_string(), value: mech.ei_ef_knm2(), unit: "kNm²".to_string() },
-            NamedValue { symbol: r"b_{ef}".to_string(), value: b_ef, unit: "mm".to_string() },
-            NamedValue { symbol: r"k_{cr}".to_string(), value: k_cr, unit: "-".to_string() },
-            NamedValue { symbol: r"f_{v,d}".to_string(), value: f_vd_mpa, unit: "N/mm²".to_string() },
+            NamedValue {
+                symbol: r"V_{z,Ed}".to_string(),
+                value: v_ed.abs(),
+                unit: "kN".to_string(),
+            },
+            NamedValue {
+                symbol: format!("(ES)_{{{i}}}"),
+                value: sh.es_nmm * 1e-6,
+                unit: "kNm".to_string(),
+            },
+            NamedValue {
+                symbol: r"(EI)_{ef}".to_string(),
+                value: mech.ei_ef_knm2(),
+                unit: "kNm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"b_{ef}".to_string(),
+                value: b_ef,
+                unit: "mm".to_string(),
+            },
+            NamedValue {
+                symbol: r"k_{cr}".to_string(),
+                value: k_cr,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: r"f_{v,d}".to_string(),
+                value: f_vd_mpa,
+                unit: "N/mm²".to_string(),
+            },
         ],
         value: sh.tau_mpa,
         unit: "N/mm²".to_string(),
@@ -290,12 +350,18 @@ mod tests {
         ForceStateSnapshot {
             combination_id: 1,
             position_mm: 2500.0,
-            forces: InternalForces { vz_ed: v, my_ed: my, ..Default::default() },
+            forces: InternalForces {
+                vz_ed: v,
+                my_ed: my,
+                ..Default::default()
+            },
         }
     }
 
     fn vijflaags() -> CltMechanics {
-        CltLayup::alternating(1000.0, &[40.0, 20.0, 40.0, 20.0, 40.0], "C24").mechanics().unwrap()
+        CltLayup::alternating(1000.0, &[40.0, 20.0, 40.0, 20.0, 40.0], "C24")
+            .mechanics()
+            .unwrap()
     }
 
     #[test]
@@ -309,9 +375,24 @@ mod tests {
         assert_eq!(r.status, CheckStatus::Ok);
         assert_eq!(r.id, "clt_6.1.6_laag_1");
         // De ingevulde formule moet dimensioneel sluiten: E·M·z/(EI·10³).
-        let e = r.variables.iter().find(|v| v.symbol == "E_{1}").unwrap().value;
-        let z = r.variables.iter().find(|v| v.symbol == "z_{1}").unwrap().value;
-        let ei = r.variables.iter().find(|v| v.symbol == "(EI)_{ef}").unwrap().value;
+        let e = r
+            .variables
+            .iter()
+            .find(|v| v.symbol == "E_{1}")
+            .unwrap()
+            .value;
+        let z = r
+            .variables
+            .iter()
+            .find(|v| v.symbol == "z_{1}")
+            .unwrap()
+            .value;
+        let ei = r
+            .variables
+            .iter()
+            .find(|v| v.symbol == "(EI)_{ef}")
+            .unwrap()
+            .value;
         assert_relative_eq!(e * 20.0 * z / (ei * 1e3), r.value, max_relative = 1e-9);
         assert_relative_eq!(z, 80.0);
     }
@@ -321,7 +402,12 @@ mod tests {
         let m = vijflaags();
         let r = check_layer_bending(&m, 2, 14.769, snap(0.0, 20.0));
         assert_relative_eq!(r.value, 1.316, max_relative = 1e-3);
-        let z = r.variables.iter().find(|v| v.symbol == "z_{3}").unwrap().value;
+        let z = r
+            .variables
+            .iter()
+            .find(|v| v.symbol == "z_{3}")
+            .unwrap()
+            .value;
         assert_relative_eq!(z, 20.0);
     }
 
@@ -341,9 +427,24 @@ mod tests {
         assert_relative_eq!(r.uc.as_ref().unwrap().uc, 0.03475, max_relative = 1e-3);
         assert_eq!(r.status, CheckStatus::Ok);
         // Dimensioneel: V·ES/(EI·b) met V kN, ES kNm, EI kNm², b mm.
-        let es = r.variables.iter().find(|v| v.symbol == "(ES)_{3}").unwrap().value;
-        let ei = r.variables.iter().find(|v| v.symbol == "(EI)_{ef}").unwrap().value;
-        let b = r.variables.iter().find(|v| v.symbol == "b_{ef}").unwrap().value;
+        let es = r
+            .variables
+            .iter()
+            .find(|v| v.symbol == "(ES)_{3}")
+            .unwrap()
+            .value;
+        let ei = r
+            .variables
+            .iter()
+            .find(|v| v.symbol == "(EI)_{ef}")
+            .unwrap()
+            .value;
+        let b = r
+            .variables
+            .iter()
+            .find(|v| v.symbol == "b_{ef}")
+            .unwrap()
+            .value;
         assert_relative_eq!(10.0 * es / (ei * b), r.value, max_relative = 1e-9);
         assert_relative_eq!(es, 2.86e4, max_relative = 1e-9);
     }

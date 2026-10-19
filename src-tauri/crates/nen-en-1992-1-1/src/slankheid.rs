@@ -271,7 +271,10 @@ const N_ED_ROUNDING_TOLERANCE_KN: f64 = 1e-9;
 /// richtingen draagt is een ontwerpgegeven. Tussen K = 1,0 en K = 1,5 zit
 /// 50 % verschil, dus een gok is hier duurder dan een vraag.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum StructuralSystem {
     /// Vrij opgelegde balk, in één of twee richtingen dragende vrij opgelegde
     /// plaat. K = 1,0.
@@ -292,7 +295,10 @@ pub enum StructuralSystem {
 
 /// Eén regel uit tabel 7.4N, zoals een keuzelijst hem nodig heeft.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct StructuralSystemInfo {
     pub system: StructuralSystem,
     /// De kolom "Constructief systeem", woordelijk uit de tabel.
@@ -388,13 +394,15 @@ impl StructuralSystem {
     /// zelf kan nagaan.
     pub fn span_note(self) -> &'static str {
         match self {
-            StructuralSystem::FlatSlab =>
+            StructuralSystem::FlatSlab => {
                 "OPMERKING 2 bij tabel 7.4N: voor vlakke plaatvloeren behoort de LANGSTE \
-                 overspanning te zijn genomen. Controleer dat de ingevulde overspanning die is.",
-            _ =>
+                 overspanning te zijn genomen. Controleer dat de ingevulde overspanning die is."
+            }
+            _ => {
                 "OPMERKING 2 bij tabel 7.4N: voor in twee richtingen dragende platen behoort de \
                  controle te zijn uitgevoerd op basis van de KORTSTE overspanning. Bij een balk \
-                 of een in één richting dragende plaat is er maar één overspanning.",
+                 of een in één richting dragende plaat is er maar één overspanning."
+            }
         }
     }
 }
@@ -413,7 +421,10 @@ pub fn rho_0(f_ck_mpa: f64) -> f64 {
 
 /// Welke tak van (7.16) is gebruikt.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum SlendernessEquation {
     /// (7.16.a) — geldt als ρ ≤ ρ₀. Bevat ρ' NIET.
     Eq716a,
@@ -432,10 +443,12 @@ impl SlendernessEquation {
     /// De formule symbolisch, voor het rapport.
     pub fn formula_latex(self) -> &'static str {
         match self {
-            SlendernessEquation::Eq716a =>
-                r"\frac{l}{d} = K\left[11 + 1{,}5\sqrt{f_{ck}}\,\frac{\rho_0}{\rho} + 3{,}2\sqrt{f_{ck}}\left(\frac{\rho_0}{\rho}-1\right)^{3/2}\right]",
-            SlendernessEquation::Eq716b =>
-                r"\frac{l}{d} = K\left[11 + 1{,}5\sqrt{f_{ck}}\,\frac{\rho_0}{\rho-\rho'} + \frac{1}{12}\sqrt{f_{ck}}\sqrt{\frac{\rho'}{\rho_0}}\right]",
+            SlendernessEquation::Eq716a => {
+                r"\frac{l}{d} = K\left[11 + 1{,}5\sqrt{f_{ck}}\,\frac{\rho_0}{\rho} + 3{,}2\sqrt{f_{ck}}\left(\frac{\rho_0}{\rho}-1\right)^{3/2}\right]"
+            }
+            SlendernessEquation::Eq716b => {
+                r"\frac{l}{d} = K\left[11 + 1{,}5\sqrt{f_{ck}}\,\frac{\rho_0}{\rho-\rho'} + \frac{1}{12}\sqrt{f_{ck}}\sqrt{\frac{\rho'}{\rho_0}}\right]"
+            }
         }
     }
 }
@@ -453,7 +466,10 @@ impl SlendernessEquation {
 /// mis. Een niet toegepaste correctie staat er dus in met `factor = 1,0`,
 /// `applied = false` en een reden.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct SlendernessCorrection {
     /// Stabiele sleutel: `"sigma_s"`, `"flens"`, `"lange_overspanning"`.
     pub id: String,
@@ -506,7 +522,10 @@ impl LongSpanCorrection {
 /// meegeleverd zonder zelf te worden getoetst — er is in deze weg geen
 /// berekende doorbuiging om ze mee te vergelijken.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct DeflectionLimits {
     /// De overspanning waarop de grenzen betrekking hebben, mm.
     pub span_mm: f64,
@@ -550,7 +569,10 @@ pub fn deflection_limits(span_mm: f64) -> DeflectionLimits {
 /// gegeven zichtbaar is in plaats van weggemoffeld.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct SlendernessRequest {
     /// Vrij te kiezen nummer; komt onveranderd terug. 0 als het niet om een
     /// staaf uit een model gaat.
@@ -630,7 +652,10 @@ pub struct SlendernessRequest {
 /// Het antwoord: de hele keten van (7.16) en de correcties, met per stap de
 /// vindplaats, plus het oordeel en de grenswaarden waar het voor staat.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct SlendernessResponse {
     pub beam_id: u32,
     pub system: StructuralSystem,
@@ -682,7 +707,9 @@ pub fn span_depth_limit(req: &SlendernessRequest) -> Result<SlendernessResponse,
     // ── Invoercontrole ────────────────────────────────────────────────────
     let eis = |naam: &str, v: f64| -> Result<(), String> {
         if !v.is_finite() || v <= 0.0 {
-            Err(format!("{naam} moet een eindig, positief getal zijn (nu {v})."))
+            Err(format!(
+                "{naam} moet een eindig, positief getal zijn (nu {v})."
+            ))
         } else {
             Ok(())
         }
@@ -843,8 +870,16 @@ pub fn span_depth_limit(req: &SlendernessRequest) -> Result<SlendernessResponse,
     // sluit ze nergens uit elkaar uit.
     let limit = corrections.iter().fold(base, |acc, c| acc * c.factor);
     let actual = req.span_mm / req.d_mm;
-    let unity_check = if limit > 0.0 { actual / limit } else { f64::INFINITY };
-    let status = if unity_check <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk };
+    let unity_check = if limit > 0.0 {
+        actual / limit
+    } else {
+        f64::INFINITY
+    };
+    let status = if unity_check <= 1.0 {
+        CheckStatus::Ok
+    } else {
+        CheckStatus::NotOk
+    };
 
     let limits = deflection_limits(req.span_mm);
     if status == CheckStatus::Ok {
@@ -932,8 +967,8 @@ pub fn span_depth_limit(req: &SlendernessRequest) -> Result<SlendernessResponse,
 /// verzonnen. Wel volgt een aantekening zodra hij ruim boven 1 uitkomt: dan
 /// leunt de hele toets op de meerwapening.
 fn sigma_s_correction(req: &SlendernessRequest) -> SlendernessCorrection {
-    let maak = |factor: f64, applied: bool, filled_latex: String, reason: String| {
-        SlendernessCorrection {
+    let maak =
+        |factor: f64, applied: bool, filled_latex: String, reason: String| SlendernessCorrection {
             id: "sigma_s".to_string(),
             label: "Staalspanning 310/σ_s".to_string(),
             article: "art. 7.4.2(2), (7.17)".to_string(),
@@ -941,8 +976,7 @@ fn sigma_s_correction(req: &SlendernessRequest) -> SlendernessCorrection {
             applied,
             filled_latex,
             reason,
-        }
-    };
+        };
 
     if let Some(sigma) = req.sigma_s_mpa {
         if sigma.is_finite() && sigma > 0.0 {
@@ -1050,8 +1084,8 @@ fn sigma_s_correction(req: &SlendernessRequest) -> SlendernessCorrection {
 /// de grenswaarde kleiner en de toets dus strenger.
 fn flange_correction(req: &SlendernessRequest) -> SlendernessCorrection {
     let verhouding = req.b_flange_mm / req.b_web_mm;
-    let maak = |factor: f64, applied: bool, filled_latex: String, reason: String| {
-        SlendernessCorrection {
+    let maak =
+        |factor: f64, applied: bool, filled_latex: String, reason: String| SlendernessCorrection {
             id: "flens".to_string(),
             label: "Brede flens (0,8)".to_string(),
             article: "art. 7.4.2(2)".to_string(),
@@ -1059,16 +1093,23 @@ fn flange_correction(req: &SlendernessRequest) -> SlendernessCorrection {
             applied,
             filled_latex,
             reason,
-        }
-    };
+        };
     let ingevuld = format!(
         r"\frac{{b_{{flens}}}}{{b_{{rib}}}} = \frac{{{bf}}}{{{bw}}} = {v} \;{teken}\; 3 \;\Rightarrow\; k_{{flens}} = {f}",
         bf = lx(req.b_flange_mm, 0),
         bw = lx(req.b_web_mm, 0),
         v = lx(verhouding, 2),
-        teken = if verhouding > FLANGE_RATIO_THRESHOLD { ">" } else { r"\le" },
+        teken = if verhouding > FLANGE_RATIO_THRESHOLD {
+            ">"
+        } else {
+            r"\le"
+        },
         f = lx(
-            if verhouding > FLANGE_RATIO_THRESHOLD { FLANGE_CORRECTION_FACTOR } else { 1.0 },
+            if verhouding > FLANGE_RATIO_THRESHOLD {
+                FLANGE_CORRECTION_FACTOR
+            } else {
+                1.0
+            },
             4
         )
     );
@@ -1148,12 +1189,15 @@ fn long_span_correction(req: &SlendernessRequest, l_eff_mm: f64) -> SlendernessC
         l_eff_m: l_eff_mm / 1000.0,
     };
     let (id, label) = if vlak {
-        ("lange_overspanning", "Lange overspanning vlakke plaatvloer (8,5/l_eff)")
+        (
+            "lange_overspanning",
+            "Lange overspanning vlakke plaatvloer (8,5/l_eff)",
+        )
     } else {
         ("lange_overspanning", "Lange overspanning (7/l_eff)")
     };
-    let maak = |factor: f64, applied: bool, filled_latex: String, reason: String| {
-        SlendernessCorrection {
+    let maak =
+        |factor: f64, applied: bool, filled_latex: String, reason: String| SlendernessCorrection {
             id: id.to_string(),
             label: label.to_string(),
             article: "art. 7.4.2(2)".to_string(),
@@ -1161,8 +1205,7 @@ fn long_span_correction(req: &SlendernessRequest, l_eff_mm: f64) -> SlendernessC
             applied,
             filled_latex,
             reason,
-        }
-    };
+        };
     // De ingevulde regel toont de drempelvergelijking én de factor, allebei
     // in METERS — dat is de enige plek waar de lezer de eenhedenval kan zien.
     let ingevuld = |factor: f64| {
@@ -1186,7 +1229,11 @@ fn long_span_correction(req: &SlendernessRequest, l_eff_mm: f64) -> SlendernessC
                  hier {} opleveren en de grenswaarde dus verhogen, en dat staat er niet.",
                 nl(corr.l_eff_m, 3),
                 nl(corr.threshold_m, 1),
-                if vlak { "vlakke plaatvloeren" } else { "balken en platen" },
+                if vlak {
+                    "vlakke plaatvloeren"
+                } else {
+                    "balken en platen"
+                },
                 nl(corr.threshold_m, 1),
                 nl(corr.factor(), 3)
             ),
@@ -1400,7 +1447,10 @@ fn slankheid_deelstappen(r: &SlendernessResponse) -> Vec<Deelstap> {
             fck = lx(r.f_ck_mpa, 0),
             r0 = lx(r.rho_0, 6)
         ),
-        vec![nv("f_{ck}", r.f_ck_mpa, "N/mm²"), nv(r"\sqrt{f_{ck}}", sqrt_f_ck, "-")],
+        vec![
+            nv("f_{ck}", r.f_ck_mpa, "N/mm²"),
+            nv(r"\sqrt{f_{ck}}", sqrt_f_ck, "-"),
+        ],
         Some(r.rho_0),
         "-",
         vec![
@@ -1469,7 +1519,11 @@ fn slankheid_deelstappen(r: &SlendernessResponse) -> Vec<Deelstap> {
         Some(r.k),
         "-",
         vec![
-            format!("Gekozen regel: \"{}\" → K = {}.", r.system_label, nl(r.k, 1)),
+            format!(
+                "Gekozen regel: \"{}\" → K = {}.",
+                r.system_label,
+                nl(r.k, 1)
+            ),
             "De Nederlandse bijlage haalt de aanbevolen OPMERKING met tabel 7.4N door en bepaalt: \
              \"De waarde van K moet aan tabel 7.4N zijn ontleend, welke tabel als normatief moet \
              zijn gelezen.\" De getallen zijn dezelfde; de status is dat niet — K is dus geen \
@@ -1637,7 +1691,8 @@ fn slankheid_deelstappen(r: &SlendernessResponse) -> Vec<Deelstap> {
         "Toetsing van de slankheid",
         "UC",
         "art. 7.4.2(2)",
-        r"UC = \frac{(l/d)_{werkelijk}}{(l/d)_{grens}} = \frac{l/d}{(l/d)_{grens}} \le 1".to_string(),
+        r"UC = \frac{(l/d)_{werkelijk}}{(l/d)_{grens}} = \frac{l/d}{(l/d)_{grens}} \le 1"
+            .to_string(),
         format!(
             r"UC = \frac{{{l}/{d}}}{{{g}}} = \frac{{{a}}}{{{g}}} = {uc}",
             l = lx(r.span_mm, 0),
@@ -1655,16 +1710,16 @@ fn slankheid_deelstappen(r: &SlendernessResponse) -> Vec<Deelstap> {
         Some(r.unity_check),
         "-",
         vec![match r.status {
-            CheckStatus::Ok =>
+            CheckStatus::Ok => {
                 "De werkelijke slankheid blijft binnen de grenswaarde; volgens 7.4.2(2) mag ervan \
                  zijn uitgegaan dat de doorbuigingen de grenzen van 7.4.1(4) en (5) niet \
                  overschrijden."
-                    .to_string(),
-            _ =>
-                "De werkelijke slankheid overschrijdt de grenswaarde. 7.4.2(1)P: dat is geen \
+                    .to_string()
+            }
+            _ => "De werkelijke slankheid overschrijdt de grenswaarde. 7.4.2(1)P: dat is geen \
                  afkeuring, maar er zijn dan zorgvuldigere controles nodig — een \
                  doorbuigingsberekening volgens 7.4.3."
-                    .to_string(),
+                .to_string(),
         }],
     ));
 
@@ -1789,8 +1844,16 @@ mod tests {
         let req = kaal(25.0, 0.025, 0.020, StructuralSystem::SimplySupported);
         let r = span_depth_limit(&req).unwrap();
         assert_eq!(r.equation, SlendernessEquation::Eq716b);
-        assert_relative_eq!(r.base_l_over_d, 11.0 + 7.5 + 10.0 / 12.0, max_relative = 1e-12);
-        assert_relative_eq!(r.base_l_over_d, 19.333_333_333_333_332, max_relative = 1e-12);
+        assert_relative_eq!(
+            r.base_l_over_d,
+            11.0 + 7.5 + 10.0 / 12.0,
+            max_relative = 1e-12
+        );
+        assert_relative_eq!(
+            r.base_l_over_d,
+            19.333_333_333_333_332,
+            max_relative = 1e-12
+        );
     }
 
     /// De takgrens. Bij ρ = ρ₀ geldt "als ρ ≤ ρ₀", dus (7.16.a), en dan is
@@ -1802,12 +1865,18 @@ mod tests {
     /// 3/2 een NaN — vandaar dat dit apart wordt vastgepind.
     #[test]
     fn takkeuze_op_de_grens() {
-        let r = span_depth_limit(&kaal(25.0, 0.005, 0.0, StructuralSystem::SimplySupported)).unwrap();
+        let r =
+            span_depth_limit(&kaal(25.0, 0.005, 0.0, StructuralSystem::SimplySupported)).unwrap();
         assert_eq!(r.equation, SlendernessEquation::Eq716a);
         assert_relative_eq!(r.base_l_over_d, 18.5, max_relative = 1e-12);
 
-        let r = span_depth_limit(&kaal(25.0, 0.005_000_001, 0.0, StructuralSystem::SimplySupported))
-            .unwrap();
+        let r = span_depth_limit(&kaal(
+            25.0,
+            0.005_000_001,
+            0.0,
+            StructuralSystem::SimplySupported,
+        ))
+        .unwrap();
         assert_eq!(r.equation, SlendernessEquation::Eq716b);
         assert!(r.base_l_over_d.is_finite());
     }
@@ -1914,7 +1983,11 @@ mod tests {
         req.a_s_req_mm2 = Some(800.0);
         req.a_s_prov_mm2 = Some(1000.0);
         let c = span_depth_limit(&req).unwrap();
-        let c = c.corrections.into_iter().find(|c| c.id == "sigma_s").unwrap();
+        let c = c
+            .corrections
+            .into_iter()
+            .find(|c| c.id == "sigma_s")
+            .unwrap();
         assert_relative_eq!(c.factor, 310.0 / 400.0, max_relative = 1e-12);
         assert!(c.reason.contains("gaat vóór"));
     }
@@ -1923,7 +1996,8 @@ mod tests {
     /// maar dan MOET de reden vertellen dat dat de aanname σ_s = 310 MPa is.
     #[test]
     fn zonder_sigma_s_staat_de_aanname_in_de_reden() {
-        let r = span_depth_limit(&kaal(25.0, 0.004, 0.0, StructuralSystem::SimplySupported)).unwrap();
+        let r =
+            span_depth_limit(&kaal(25.0, 0.004, 0.0, StructuralSystem::SimplySupported)).unwrap();
         let c = r.corrections.iter().find(|c| c.id == "sigma_s").unwrap();
         assert!(!c.applied);
         assert_relative_eq!(c.factor, 1.0);
@@ -1964,10 +2038,18 @@ mod tests {
         req.l_eff_mm = Some(9000.0);
         req.carries_brittle_partitions = Some(true);
         let c = span_depth_limit(&req).unwrap();
-        let c = c.corrections.into_iter().find(|c| c.id == "lange_overspanning").unwrap();
+        let c = c
+            .corrections
+            .into_iter()
+            .find(|c| c.id == "lange_overspanning")
+            .unwrap();
         assert!(c.applied);
         assert_relative_eq!(c.factor, 7.0 / 9.0, max_relative = 1e-12);
-        assert!(c.factor > 0.7 && c.factor < 0.8, "factor {} — mm/m verwisseld?", c.factor);
+        assert!(
+            c.factor > 0.7 && c.factor < 0.8,
+            "factor {} — mm/m verwisseld?",
+            c.factor
+        );
     }
 
     /// Onder de drempel geldt de correctie niet, en al helemaal niet als
@@ -1978,7 +2060,11 @@ mod tests {
         req.l_eff_mm = Some(5000.0);
         req.carries_brittle_partitions = Some(true);
         let c = span_depth_limit(&req).unwrap();
-        let c = c.corrections.into_iter().find(|c| c.id == "lange_overspanning").unwrap();
+        let c = c
+            .corrections
+            .into_iter()
+            .find(|c| c.id == "lange_overspanning")
+            .unwrap();
         assert!(!c.applied);
         assert_relative_eq!(c.factor, 1.0);
     }
@@ -1991,7 +2077,11 @@ mod tests {
         req.l_eff_mm = Some(9000.0);
         req.carries_brittle_partitions = Some(false);
         let c = span_depth_limit(&req).unwrap();
-        let c = c.corrections.into_iter().find(|c| c.id == "lange_overspanning").unwrap();
+        let c = c
+            .corrections
+            .into_iter()
+            .find(|c| c.id == "lange_overspanning")
+            .unwrap();
         assert!(!c.applied);
         assert_relative_eq!(c.factor, 1.0);
     }
@@ -2004,7 +2094,11 @@ mod tests {
         req.l_eff_mm = Some(9000.0);
         req.carries_brittle_partitions = None;
         let c = span_depth_limit(&req).unwrap();
-        let c = c.corrections.into_iter().find(|c| c.id == "lange_overspanning").unwrap();
+        let c = c
+            .corrections
+            .into_iter()
+            .find(|c| c.id == "lange_overspanning")
+            .unwrap();
         assert!(c.applied);
         assert_relative_eq!(c.factor, 7.0 / 9.0, max_relative = 1e-12);
         assert!(c.reason.contains("NIET opgegeven"));
@@ -2019,21 +2113,36 @@ mod tests {
         req.l_eff_mm = Some(8000.0);
         req.carries_brittle_partitions = Some(true);
         let c = span_depth_limit(&req).unwrap();
-        let c = c.corrections.into_iter().find(|c| c.id == "lange_overspanning").unwrap();
-        assert!(!c.applied, "8 m ligt onder de drempel van 8,5 m voor een vlakke plaatvloer");
+        let c = c
+            .corrections
+            .into_iter()
+            .find(|c| c.id == "lange_overspanning")
+            .unwrap();
+        assert!(
+            !c.applied,
+            "8 m ligt onder de drempel van 8,5 m voor een vlakke plaatvloer"
+        );
 
         let mut balk = kaal(25.0, 0.004, 0.0, StructuralSystem::InteriorSpan);
         balk.l_eff_mm = Some(8000.0);
         balk.carries_brittle_partitions = Some(true);
         let c = span_depth_limit(&balk).unwrap();
-        let c = c.corrections.into_iter().find(|c| c.id == "lange_overspanning").unwrap();
+        let c = c
+            .corrections
+            .into_iter()
+            .find(|c| c.id == "lange_overspanning")
+            .unwrap();
         assert!(c.applied);
         assert_relative_eq!(c.factor, 7.0 / 8.0, max_relative = 1e-12);
 
         // 10 m bij een vlakke plaatvloer: 8,5/10 = 0,85.
         req.l_eff_mm = Some(10_000.0);
         let c = span_depth_limit(&req).unwrap();
-        let c = c.corrections.into_iter().find(|c| c.id == "lange_overspanning").unwrap();
+        let c = c
+            .corrections
+            .into_iter()
+            .find(|c| c.id == "lange_overspanning")
+            .unwrap();
         assert!(c.applied);
         assert_relative_eq!(c.factor, 0.85, max_relative = 1e-12);
     }
@@ -2061,7 +2170,10 @@ mod tests {
         // Niet opgegeven → wél doorrekenen, maar met de waarschuwing erbij.
         req.n_ed_kn = None;
         let r = span_depth_limit(&req).unwrap();
-        assert!(r.notes.iter().any(|n| n.contains("NORMAALKRACHT IS NIET OPGEGEVEN")));
+        assert!(r
+            .notes
+            .iter()
+            .any(|n| n.contains("NORMAALKRACHT IS NIET OPGEGEVEN")));
     }
 
     /// Ongeldige invoer levert een reden, geen getal.
@@ -2077,12 +2189,16 @@ mod tests {
 
         let mut req = kaal(25.0, 0.004, 0.0, StructuralSystem::SimplySupported);
         req.d_mm = -10.0;
-        assert!(span_depth_limit(&req).unwrap_err().contains("nuttige hoogte"));
+        assert!(span_depth_limit(&req)
+            .unwrap_err()
+            .contains("nuttige hoogte"));
 
         let mut req = kaal(25.0, 0.004, 0.0, StructuralSystem::SimplySupported);
         req.b_flange_mm = 200.0;
         req.b_web_mm = 300.0;
-        assert!(span_depth_limit(&req).unwrap_err().contains("kleiner dan de ribbreedte"));
+        assert!(span_depth_limit(&req)
+            .unwrap_err()
+            .contains("kleiner dan de ribbreedte"));
     }
 
     /// De grenswaarden van 7.4.1(4) en (5): 9000/250 = 36,0 mm en
@@ -2138,7 +2254,11 @@ mod tests {
         assert_relative_eq!(r.unity_check, 0.964_097_636, max_relative = 1e-9);
         assert_eq!(r.status, CheckStatus::Ok);
         assert_eq!(r.beam_id, 7);
-        assert_relative_eq!(r.deflection_limits.appearance_mm, 36.0, max_relative = 1e-12);
+        assert_relative_eq!(
+            r.deflection_limits.appearance_mm,
+            36.0,
+            max_relative = 1e-12
+        );
         // Alle drie de correcties staan erin, ook als ze zouden zijn vervallen.
         assert_eq!(r.corrections.len(), 3);
         assert!(r.corrections.iter().all(|c| c.applied));
@@ -2201,7 +2321,11 @@ mod tests {
         req.n_ed_kn = Some(-250.0);
         let calc = check_span_depth_ratio(
             &req,
-            ForceStateSnapshot { combination_id: 1, position_mm: 0.0, forces: Default::default() },
+            ForceStateSnapshot {
+                combination_id: 1,
+                position_mm: 0.0,
+                forces: Default::default(),
+            },
         );
         assert_eq!(calc.status, CheckStatus::NotApplicable);
         assert!(calc.uc.is_none());

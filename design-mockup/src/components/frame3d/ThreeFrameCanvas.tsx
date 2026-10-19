@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-import { addFrame3DPlate, addFrame3DPlateOpening, frame3DLoadCaseId, splitFrame3DBeam, type Frame3DModel, type Frame3DPlateBoundarySegment } from "./frame3dModel";
+import { addFrame3DPlate, addFrame3DPlateOpening, addFrame3DVolume, frame3DLoadCaseId, splitFrame3DBeam, type Frame3DModel, type Frame3DNode, type Frame3DPlateBoundarySegment, type Frame3DVolume } from "./frame3dModel";
 import type { Frame3DVisibility } from "./frame3dVisibility";
 import type { Frame3DView } from "./frame3dCommands";
 import { addFrame3DConditionMarkers, frame3DConditionMarkerSize } from "./frame3dMarkers";
@@ -29,6 +29,7 @@ import {
 } from "./frame3dSelection";
 import { frame3DViewFromCamera, type Frame3DCameraState } from "./frame3dViewSets";
 import { createFrame3DPlateGeometry } from "./frame3dPlateGeometry";
+import { createFrame3DVolumeBatches, createFrame3DVolumeGeometry } from "./frame3dVolumeGeometry";
 import { sampleCircularArc3D } from "./frame3dCircularArc";
 import { selectFrame3DInScreenBox } from "./frame3dBoxSelection";
 import { findFrame3DBeamNearScreenPoint } from "./frame3dBeamScreenPick";
@@ -317,6 +318,7 @@ interface Props {
   conditionModel?: Frame3DModel;
   onChange: (model: Frame3DModel, meta?: Frame3DEditMeta) => void;
   onDrawError?: (message: string | null) => void;
+  onVolumeDraftChange?: (count: number) => void;
   tool: Frame3DTool;
   selection: Frame3DSelection;
   onSelect: (selection: Frame3DSelection) => void;
@@ -512,7 +514,7 @@ function hidePreview(group: THREE.Group) {
 }
 
 const SELECTABLE_TYPES = new Set<Frame3DSelectionType>([
-  "node", "beam", "plate", "nodalLoad", "memberLoad", "memberPointLoad", "thermalLoad", "surfaceLoad",
+  "node", "beam", "plate", "volume", "nodalLoad", "memberLoad", "memberPointLoad", "thermalLoad", "surfaceLoad",
 ]);
 const LOAD_SELECTION_TYPES = new Set<Frame3DSelectionType>([
   "nodalLoad", "memberLoad", "memberPointLoad", "thermalLoad", "surfaceLoad",
@@ -533,6 +535,33 @@ function applySelectionHighlight(group: THREE.Group, selection: Frame3DSelection
   group.traverse((object) => {
     const type = object.userData.type as Frame3DSelectionType | undefined;
     if (!type || !SELECTABLE_TYPES.has(type)) return;
+    if (type === "volume" && Array.isArray(object.userData.volumeIdByFace)) {
+      const volumesById = object.userData.volumesById as Map<number, Frame3DVolume>;
+      const nodeById = object.userData.nodeById as Map<number, Frame3DNode>;
+      const overlay = object.userData.selectionOverlay as THREE.Group;
+      const selectedId = selectedIdsForType(selection, "volume").find((id) => volumesById.has(id));
+      if (object.userData.selectedVolumeId === selectedId) return;
+      overlay.children.slice().forEach((child) => {
+        overlay.remove(child);
+        disposeObject3D(child);
+      });
+      if (selectedId !== undefined) {
+        const built = createFrame3DVolumeGeometry(volumesById.get(selectedId)!, nodeById);
+        if (built) {
+          const faces = new THREE.Mesh(built.faces, new THREE.MeshBasicMaterial({
+            color: 0xffa31a, transparent: true, opacity: 0.4, depthWrite: false, side: THREE.DoubleSide,
+          }));
+          faces.userData.pickable = false;
+          const edges = new THREE.LineSegments(built.edges, new THREE.LineBasicMaterial({
+            color: 0xd97706, transparent: false, depthTest: false,
+          }));
+          edges.userData.pickable = false;
+          overlay.add(faces, edges);
+        }
+      }
+      object.userData.selectedVolumeId = selectedId;
+      return;
+    }
     if (object instanceof THREE.InstancedMesh && Array.isArray(object.userData.instanceIds)) {
       if (object.userData.selectionHighlight === false) return;
       const ids = object.userData.instanceIds as number[];
@@ -865,7 +894,7 @@ function resultScale(model: Frame3DModel, result: Frame3DSolveResult): number {
   return maxDisplacement > 1e-15 ? Math.min(10_000, modelSize * 0.12 / maxDisplacement) : 1;
 }
 
-export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDrawError, tool, selection, onSelect, onOpenCheckForBeam, fitToken, visibility, viewRequest, currentView = "iso", structuralGrid, gridSpacingM = 0.5, result, utilizations = [], activeLoadCaseId, cameraRequest, onCameraChange, onCameraViewChange }: Props) {
+export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDrawError, onVolumeDraftChange, tool, selection, onSelect, onOpenCheckForBeam, fitToken, visibility, viewRequest, currentView = "iso", structuralGrid, gridSpacingM = 0.5, result, utilizations = [], activeLoadCaseId, cameraRequest, onCameraChange, onCameraViewChange }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneState | null>(null);
   const selectRef = useRef(onSelect);
@@ -934,6 +963,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
   changeRef.current = onChange;
   const drawErrorRef = useRef(onDrawError);
   drawErrorRef.current = onDrawError;
+  const volumeDraftChangeRef = useRef(onVolumeDraftChange);
+  volumeDraftChangeRef.current = onVolumeDraftChange;
   const toolRef = useRef(tool);
   toolRef.current = tool;
   const visibilityRef = useRef(visibility);
@@ -981,6 +1012,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
   const plateHistoryGroupRef = useRef<string | null>(null);
   const openingHistoryGroupRef = useRef<string | null>(null);
   const beamStartRef = useRef<number | null>(null);
+  const volumeDraftRef = useRef<number[]>([]);
   const beamPlaneRef = useRef<THREE.Plane | null>(null);
   const platePlaneRef = useRef<THREE.Plane | null>(null);
   const openingPlateRef = useRef<number | null>(null);
@@ -1007,6 +1039,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     resetMissingSketch(plateDraftRef, plateDraftCreatedNodesRef, plateHistoryGroupRef);
     if (plateDraftRef.current.firstNodeId === null) platePlaneRef.current = null;
     resetMissingSketch(openingDraftRef, openingDraftCreatedNodesRef, openingHistoryGroupRef);
+    if (volumeDraftRef.current.some((id) => !existing.has(id))) {
+      volumeDraftRef.current = [];
+      volumeDraftChangeRef.current?.(0);
+    }
   }, [model.nodes]);
   const cameraChangeRef = useRef(onCameraChange);
   cameraChangeRef.current = onCameraChange;
@@ -1034,6 +1070,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       plate.nodeIds.forEach((id) => referenced.add(id));
       plate.openings?.forEach((opening) => opening.nodeIds.forEach((id) => referenced.add(id)));
     });
+    (current.volumes ?? []).forEach((volume) => volume.nodeIds.forEach((id) => referenced.add(id)));
     current.supports?.forEach((support) => referenced.add(support.nodeId));
     current.loads?.forEach((load) => referenced.add(load.nodeId));
     const removable = new Set([...createdNodeIds].filter((id) => !referenced.has(id)));
@@ -1069,6 +1106,10 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
   useEffect(() => {
     const previousTool = previousToolRef.current;
     if (previousTool !== tool) drawErrorRef.current?.(null);
+    if (previousTool !== tool && volumeDraftRef.current.length > 0) {
+      volumeDraftRef.current = [];
+      volumeDraftChangeRef.current?.(0);
+    }
     const plateTools: Frame3DTool[] = ["addPlate", "addPlateArc"];
     const openingTools: Frame3DTool[] = ["addOpening", "addOpeningArc"];
     if (previousTool === "addPlateArc" && tool === "addPlate") {
@@ -1844,10 +1885,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       while (hit && hit !== geometry && typeof hit.userData.type !== "string") hit = hit.parent ?? undefined;
       const type = nodeHit && !loadIntersection ? "node" : beamScreenHit ? "beam" : hit?.userData.type;
       const instanceIds = hit?.userData.instanceIds as number[] | undefined;
+      const volumeIdByFace = hit?.userData.volumeIdByFace as number[] | undefined;
       const id = nodeHit && !loadIntersection ? nodeHit.point.id
         : beamScreenHit ? beamScreenHit.beamId
         : instanceIds && intersection?.instanceId !== undefined
         ? instanceIds[intersection.instanceId]
+        : volumeIdByFace && intersection?.faceIndex != null
+        ? volumeIdByFace[intersection.faceIndex]
         : hit?.userData.id;
       container.dataset.frame3dPickMs = (performance.now() - pickStartedAt).toFixed(2);
       container.dataset.frame3dPickType = String(type ?? "none");
@@ -1973,6 +2017,39 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       if (activeTool === "addNode") {
         const nodeId = ensureDrawingNode();
         if (nodeId !== null) selectRef.current({ type: "node", id: nodeId });
+      } else if (activeTool === "addTet4" || activeTool === "addHex8") {
+        const required = activeTool === "addTet4" ? 4 : 8;
+        if (type !== "node" || typeof id !== "number" || !current.nodes.some((node) => node.id === id)) {
+          drawErrorRef.current?.("Klik op een bestaande knoop voor dit volume-element.");
+        } else if (volumeDraftRef.current.includes(id)) {
+          drawErrorRef.current?.(`Knoop ${id} is al gekozen. Kies een andere knoop.`);
+        } else {
+          drawErrorRef.current?.(null);
+          volumeDraftRef.current = [...volumeDraftRef.current, id];
+          volumeDraftChangeRef.current?.(volumeDraftRef.current.length);
+          if (volumeDraftRef.current.length === required) {
+            try {
+              const next = addFrame3DVolume(current, {
+                kind: activeTool === "addTet4" ? "tet4" : "hex8",
+                nodeIds: volumeDraftRef.current,
+                eMpa: 30_000,
+                poisson: 0.2,
+              });
+              const added = next.volumes?.[next.volumes.length - 1];
+              commitModel(next);
+              if (added) selectRef.current({ type: "volume", id: added.id });
+              volumeDraftRef.current = [];
+              volumeDraftChangeRef.current?.(0);
+            } catch (error) {
+              drawErrorRef.current?.(error instanceof Error ? error.message : String(error));
+              volumeDraftRef.current = [];
+              volumeDraftChangeRef.current?.(0);
+              selectRef.current(null);
+            }
+          } else {
+            selectRef.current({ type: "multi", nodeIds: [...volumeDraftRef.current], beamIds: [] });
+          }
+        }
       } else if (activeTool === "addBeam") {
         const nodeId = ensureDrawingNode();
         if (nodeId !== null) {
@@ -2166,7 +2243,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           selectRef.current({ type: "beam", id });
         }
       } else {
-        const selectable = (["node", "beam", "plate", "nodalLoad", "memberLoad", "memberPointLoad", "thermalLoad", "surfaceLoad"] as const)
+        const selectable = (["node", "beam", "plate", "volume", "nodalLoad", "memberLoad", "memberPointLoad", "thermalLoad", "surfaceLoad"] as const)
           .includes(type) && typeof id === "number"
           ? { type, id }
           : null;
@@ -2196,6 +2273,8 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       platePlaneRef.current = null;
       openingDraftRef.current = emptyPlateSketch();
       beamStartRef.current = null;
+      volumeDraftRef.current = [];
+      volumeDraftChangeRef.current?.(0);
       beamPlaneRef.current = null;
       drawDraftContour(null);
       hidePreview(preview);
@@ -2690,7 +2769,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       return;
     }
     const supportVisibilityOnly = previousModel === model
-      && visibilityChangedOnly("supports")
+      && visibilityChangedOnly("supports", "supportScale")
       && structuralGrid === previousPresentation?.structuralGrid
       && result === previousPresentation?.result
       && utilizations === previousPresentation?.utilizations
@@ -2707,6 +2786,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       && model.nodes === previousModel.nodes
       && model.beams === previousModel.beams
       && model.plates === previousModel.plates
+      && model.volumes === previousModel.volumes
       && model.supports === previousModel.supports
       && model.surfaceLoads === previousModel.surfaceLoads
       && (model.loads !== previousModel.loads || model.memberLoads !== previousModel.memberLoads
@@ -2781,7 +2861,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         .filter((target) => !removedConditionObjects.has(target));
       const nextConditions = new THREE.Group();
       nextConditions.userData.frame3dConditions = true;
-      addFrame3DConditionMarkers(nextConditions, conditionModel ?? model, visibility, activeLoadCaseId);
+      addFrame3DConditionMarkers(nextConditions, conditionModel ?? model, visibility, activeLoadCaseId, visibility.supportScale ?? 1);
       geometry.add(nextConditions);
       let addedLabelCount = 0;
       nextConditions.traverse((object) => {
@@ -2821,6 +2901,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       && sameFrame3DNodes(model.nodes, previousModel.nodes)
       && sameFrame3DEntities(model.beams, previousModel.beams)
       && sameFrame3DEntities(model.plates, previousModel.plates)
+      && sameFrame3DEntities(model.volumes, previousModel.volumes)
       && sameFrame3DEntities(model.supports, previousModel.supports)
       && sameFrame3DEntities(model.loads, previousModel.loads)
       && sameFrame3DEntities(model.memberLoads, previousModel.memberLoads)
@@ -2899,6 +2980,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       && model.beams[model.beams.length - 1] === pendingAppend.beam;
     const unchangedCollections = previousModel !== null
       && model.plates === previousModel.plates
+      && model.volumes === previousModel.volumes
       && model.supports === previousModel.supports
       && model.loads === previousModel.loads
       && model.memberLoads === previousModel.memberLoads
@@ -2936,6 +3018,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       && (hasValidatedPlateHint || (
         sameFrame3DNodes(model.nodes, previousModel.nodes)
         && sameFrame3DEntities(model.beams, previousModel.beams)
+        && sameFrame3DEntities(model.volumes, previousModel.volumes)
         && sameFrame3DEntities(model.supports, previousModel.supports)
         && sameFrame3DEntities(model.loads, previousModel.loads)
         && sameFrame3DEntities(model.memberLoads, previousModel.memberLoads)
@@ -4150,6 +4233,45 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       mesh.computeBoundingSphere();
       geometry.add(mesh);
     }
+    if (visibility.volumes) {
+      const volumes = model.volumes ?? [];
+      if (volumes.length >= 128) {
+        for (const batch of createFrame3DVolumeBatches(volumes, byId)) {
+          const mesh = new THREE.Mesh(batch.faces, new THREE.MeshStandardMaterial({
+            color: batch.kind === "tet4" ? 0x0ea5e9 : 0x8b5cf6,
+            transparent: true, opacity: 0.2, depthWrite: false,
+            side: THREE.DoubleSide, roughness: 0.8, metalness: 0,
+          }));
+          const overlay = new THREE.Group();
+          overlay.userData.pickable = false;
+          mesh.userData = { type: "volume", volumeIdByFace: batch.volumeIdByFace,
+            volumesById: batch.volumesById, nodeById: byId, selectionOverlay: overlay };
+          const edges = new THREE.LineSegments(batch.edges, new THREE.LineBasicMaterial({
+            color: batch.kind === "tet4" ? 0x0369a1 : 0x6d28d9,
+            transparent: true, opacity: 0.85, depthTest: true,
+          }));
+          edges.userData.pickable = false;
+          mesh.add(edges, overlay);
+          geometry.add(mesh);
+        }
+      } else for (const volume of volumes) {
+        const built = createFrame3DVolumeGeometry(volume, byId);
+        if (!built) continue;
+        const mesh = new THREE.Mesh(built.faces, new THREE.MeshStandardMaterial({
+          color: volume.kind === "tet4" ? 0x0ea5e9 : 0x8b5cf6,
+          transparent: true, opacity: 0.2, depthWrite: false,
+          side: THREE.DoubleSide, roughness: 0.8, metalness: 0,
+        }));
+        mesh.userData = { type: "volume", id: volume.id, baseOpacity: 0.2, selectionOpacity: 0.42 };
+        const edges = new THREE.LineSegments(built.edges, new THREE.LineBasicMaterial({
+          color: volume.kind === "tet4" ? 0x0369a1 : 0x6d28d9,
+          transparent: true, opacity: 0.85, depthTest: true,
+        }));
+        edges.userData = { type: "volume", id: volume.id, pickable: false, selectionColor: 0xd97706 };
+        mesh.add(edges);
+        geometry.add(mesh);
+      }
+    }
     const plateLayerStartedAt = performance.now();
     const plateBatchOwnedGeometries = new Set<THREE.BufferGeometry>();
     if (visibility.plates) {
@@ -4354,7 +4476,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     }
     const conditionGroup = new THREE.Group();
     conditionGroup.userData.frame3dConditions = true;
-    addFrame3DConditionMarkers(conditionGroup, conditionModel ?? model, visibility, activeLoadCaseId);
+    addFrame3DConditionMarkers(conditionGroup, conditionModel ?? model, visibility, activeLoadCaseId, visibility.supportScale ?? 1);
     geometry.add(conditionGroup);
 
     const surfaceLoadGroup = new THREE.Group();
@@ -4399,6 +4521,42 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           geometry.add(deformedPlate);
           geometry.add(new THREE.LineSegments(
             new THREE.BufferGeometry().setFromPoints(edges),
+            new THREE.LineBasicMaterial({ color: 0xb91c1c, transparent: true, opacity: 0.85 }),
+          ));
+        }
+      }
+      if (result.volume3D?.bendingPlates?.length) {
+        const resultById = new Map(result.displacements.map((node) => [node.nodeId, node]));
+        const plateIds = new Set(result.volume3D.bendingPlates.map((plate) => plate.plateId));
+        for (const plate of model.plates ?? []) {
+          if (!plateIds.has(plate.id)) continue;
+          const corners = plate.nodeIds.map((id) => {
+            const node = byId.get(id), displacement = resultById.get(id);
+            return node && displacement ? new THREE.Vector3(
+              node.x + scale * displacement.ux,
+              node.y + scale * displacement.uy,
+              node.z + scale * displacement.uz,
+            ) : null;
+          });
+          if (corners.length < 3 || corners.some((point) => point === null)) continue;
+          const points = corners as THREE.Vector3[];
+          const surface = new THREE.BufferGeometry();
+          surface.setAttribute("position", new THREE.Float32BufferAttribute(
+            points.flatMap((point) => [point.x, point.y, point.z]), 3));
+          const triangles: number[] = [];
+          for (let index = 1; index < points.length - 1; index++) triangles.push(0, index, index + 1);
+          surface.setIndex(triangles);
+          surface.computeVertexNormals();
+          const deformedPlate = new THREE.Mesh(surface, new THREE.MeshStandardMaterial({
+            color: 0xdc2626, side: THREE.DoubleSide, transparent: true,
+            opacity: 0.32, depthWrite: false, roughness: 0.72,
+          }));
+          deformedPlate.userData.frame3dPlateDeformation = true;
+          geometry.add(deformedPlate);
+          const perimeter: THREE.Vector3[] = [];
+          points.forEach((point, index) => perimeter.push(point, points[(index + 1) % points.length]));
+          geometry.add(new THREE.LineSegments(
+            new THREE.BufferGeometry().setFromPoints(perimeter),
             new THREE.LineBasicMaterial({ color: 0xb91c1c, transparent: true, opacity: 0.85 }),
           ));
         }
@@ -4457,9 +4615,11 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     }
 
     if (result && visibility.reactions) {
+      const supportedNodeIds = new Set((model.supports ?? []).map((support) => support.nodeId));
       const reactionMarkers = result.plateBending
         ? result.plateBending.reactions
         : result.reactions.flatMap((reaction) => {
+          if (!supportedNodeIds.has(reaction.nodeId)) return [];
           const node = byId.get(reaction.nodeId);
           return node ? [{ ...reaction, x: node.x, y: node.y, z: node.z }] : [];
         });

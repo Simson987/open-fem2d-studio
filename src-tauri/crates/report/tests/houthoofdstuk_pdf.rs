@@ -204,7 +204,10 @@ fn geweigerde_cltstaaf() -> CltBeamCheckResult {
         deflection_notes: vec![],
         deflection_quasi_perm_fin_mm: None,
     });
-    assert!(r.checks.is_empty(), "deze proefstaaf hoort geweigerd te worden");
+    assert!(
+        r.checks.is_empty(),
+        "deze proefstaaf hoort geweigerd te worden"
+    );
     r
 }
 
@@ -224,13 +227,21 @@ fn staalstaaf() -> BeamCheckResult {
                 force_state: ForceStateSnapshot {
                     combination_id: 1,
                     position_mm: 0.0,
-                    forces: InternalForces { n_ed: -120.0, ..Default::default() },
+                    forces: InternalForces {
+                        n_ed: -120.0,
+                        ..Default::default()
+                    },
                 },
                 formula_latex: "N_Rd = A · f_y / g_M0".into(),
                 variables: vec![],
                 value: 1000.0,
                 unit: "kN".into(),
-                uc: Some(UnityCheck { ed: 120.0, rd: 1000.0, uc: 0.12, formula_latex: "UC".into() }),
+                uc: Some(UnityCheck {
+                    ed: 120.0,
+                    rd: 1000.0,
+                    uc: 0.12,
+                    formula_latex: "UC".into(),
+                }),
                 status: CheckStatus::Ok,
                 notes: vec![],
             }),
@@ -441,7 +452,10 @@ fn elk_bijzonder_teken_van_het_houthoofdstuk_heeft_een_glief() {
         ('\u{2014}', "kastlijn, het gedachtestreepje in koppen"),
         ('\u{2013}', "half kastlijntje, het bereik 'z 40–60'"),
         ('\u{2212}', "minteken, in de formule (z − z_0)"),
-        ('\u{2190}', "linkerpijl, de verwijzing '← maatgevend' in de figuur"),
+        (
+            '\u{2190}',
+            "linkerpijl, de verwijzing '← maatgevend' in de figuur",
+        ),
     ] {
         for (naam, font) in [("regular", FONT_REGULAR), ("bold", FONT_BOLD)] {
             let face = ttf_parser::Face::parse(font, 0).expect("het lettertype moet te lezen zijn");

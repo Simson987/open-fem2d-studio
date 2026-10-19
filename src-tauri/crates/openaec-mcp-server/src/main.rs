@@ -92,13 +92,25 @@ struct RpcError {
 
 impl RpcError {
     fn invalid_params(msg: impl Into<String>) -> Self {
-        Self { code: -32602, message: msg.into(), data: None }
+        Self {
+            code: -32602,
+            message: msg.into(),
+            data: None,
+        }
     }
     fn tool_exec(msg: impl Into<String>) -> Self {
-        Self { code: -32000, message: msg.into(), data: None }
+        Self {
+            code: -32000,
+            message: msg.into(),
+            data: None,
+        }
     }
     fn method_not_found(method: &str) -> Self {
-        Self { code: -32601, message: format!("Method not found: {method}"), data: None }
+        Self {
+            code: -32601,
+            message: format!("Method not found: {method}"),
+            data: None,
+        }
     }
 
     /// De fout als machineleesbaar object, voor `structuredContent` op het
@@ -159,10 +171,20 @@ fn afgeleide_foutcode(code: i32) -> &'static str {
 }
 
 fn ok(id: Value, result: Value) -> Response {
-    Response { jsonrpc: "2.0", id, result: Some(result), error: None }
+    Response {
+        jsonrpc: "2.0",
+        id,
+        result: Some(result),
+        error: None,
+    }
 }
 fn err(id: Value, error: RpcError) -> Response {
-    Response { jsonrpc: "2.0", id, result: None, error: Some(error) }
+    Response {
+        jsonrpc: "2.0",
+        id,
+        result: None,
+        error: Some(error),
+    }
 }
 
 // ── Tool registry ────────────────────────────────────────────────────────────
@@ -484,11 +506,9 @@ fn tool_definitions() -> Value {
 async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
     match name {
         "list_steel_profiles" => {
-            let profiles = tokio::task::spawn_blocking(|| {
-                steel_profiles::db().all().to_vec()
-            })
-            .await
-            .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?;
+            let profiles = tokio::task::spawn_blocking(|| steel_profiles::db().all().to_vec())
+                .await
+                .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?;
             Ok(json!({ "profiles": profiles }))
         }
         "list_steel_grades" => {
@@ -499,11 +519,9 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
         "check_steel_beam" => {
             let input: steel_check::BeamCheckInput = serde_json::from_value(args)
                 .map_err(|e| RpcError::invalid_params(format!("BeamCheckInput: {e}")))?;
-            let result = tokio::task::spawn_blocking(move || {
-                steel_check::check_beam(input)
-            })
-            .await
-            .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?;
+            let result = tokio::task::spawn_blocking(move || steel_check::check_beam(input))
+                .await
+                .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?;
             serde_json::to_value(result)
                 .map_err(|e| RpcError::tool_exec(format!("serialize result: {e}")))
         }
@@ -522,11 +540,9 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
         "generate_steel_report_pdf" => {
             let input: report::ReportInput = serde_json::from_value(args)
                 .map_err(|e| RpcError::invalid_params(format!("ReportInput: {e}")))?;
-            let bytes = tokio::task::spawn_blocking(move || {
-                report::generate_report_pdf(input)
-            })
-            .await
-            .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?;
+            let bytes = tokio::task::spawn_blocking(move || report::generate_report_pdf(input))
+                .await
+                .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?;
             let byte_count = bytes.len();
             let pdf_b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
             Ok(json!({ "pdf_base64": pdf_b64, "byte_count": byte_count }))
@@ -565,7 +581,9 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
     }
 }
 
-fn compute_section_props(profile_name: &str) -> Result<section_properties::opdracht::Uitvoer, RpcError> {
+fn compute_section_props(
+    profile_name: &str,
+) -> Result<section_properties::opdracht::Uitvoer, RpcError> {
     use steel_profiles::ProfileKind;
     // Tot september 2026 rekende dit gereedschap met oude handboekformules
     // (basisaudit nr 34): zonder flenshelling (UNP: I_z +15 %, W_pl,z −32 %),
@@ -603,11 +621,17 @@ fn compute_section_props(profile_name: &str) -> Result<section_properties::opdra
 async fn handle_request(req: Request) -> Option<Response> {
     if req.jsonrpc != "2.0" {
         if let Some(id) = req.id {
-            return Some(err(id, RpcError {
-                code: -32600,
-                message: format!("Invalid Request: jsonrpc must be '2.0', got '{}'", req.jsonrpc),
-                data: None,
-            }));
+            return Some(err(
+                id,
+                RpcError {
+                    code: -32600,
+                    message: format!(
+                        "Invalid Request: jsonrpc must be '2.0', got '{}'",
+                        req.jsonrpc
+                    ),
+                    data: None,
+                },
+            ));
         }
         return None;
     }
@@ -638,7 +662,10 @@ async fn handle_request(req: Request) -> Option<Response> {
                     return Some(resp);
                 }
             };
-            let arguments = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+            let arguments = params
+                .get("arguments")
+                .cloned()
+                .unwrap_or_else(|| json!({}));
             match dispatch_tool(&name, arguments).await {
                 Ok(value) => {
                     // Per MCP spec: tool result is wrapped as { content: [{type: "text", text: <json>}], isError: false }
@@ -691,7 +718,9 @@ async fn run_stdio() -> std::io::Result<()> {
     let mut reader = BufReader::new(stdin).lines();
     while let Some(line) = reader.next_line().await? {
         let line = line.trim().to_string();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
 
         let stdout = stdout.clone();
         tokio::spawn(async move {
@@ -699,11 +728,14 @@ async fn run_stdio() -> std::io::Result<()> {
                 Ok(req) => handle_request(req).await,
                 Err(e) => {
                     tracing::warn!(error = %e, raw = %line, "failed to parse request");
-                    Some(err(Value::Null, RpcError {
-                        code: -32700,
-                        message: format!("Parse error: {e}"),
-                        data: None,
-                    }))
+                    Some(err(
+                        Value::Null,
+                        RpcError {
+                            code: -32700,
+                            message: format!("Parse error: {e}"),
+                            data: None,
+                        },
+                    ))
                 }
             };
             if let Some(resp) = resp {
@@ -737,7 +769,10 @@ async fn main() -> std::io::Result<()> {
         )
         .init();
 
-    tracing::info!(version = SERVER_VERSION, "openaec-mcp-server starting on stdio");
+    tracing::info!(
+        version = SERVER_VERSION,
+        "openaec-mcp-server starting on stdio"
+    );
     run_stdio().await?;
     tracing::info!("openaec-mcp-server shutting down (stdin closed)");
     Ok(())

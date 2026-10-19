@@ -20,7 +20,7 @@
 //
 // Uitvoeren: npx tsx test-staalherkenning.mjs   (vanuit design-mockup/)
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -146,14 +146,25 @@ if (!existsSync(TOETSBRUG)) {
     deflection_limit_class: "Floor", deflection_limit_numerator: 333,
     deflection_actual_max_mm: 0, is_cantilever: false, consequence_class: "CC1",
   }));
-  const r = spawnSync(TOETSBRUG, [], {
-    input: JSON.stringify({ opdracht: "check_steel_beams", inputs: invoer }),
-    maxBuffer: 1 << 28,
+  const resultaat = await new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code !== 0) reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+      else resolve(out);
+    });
+    child.stdin.end(JSON.stringify({ opdracht: "check_steel_beams", inputs: invoer }));
   });
   let uit = null;
-  try { uit = JSON.parse(r.stdout.toString()); } catch { /* hieronder gemeld */ }
+  try { uit = JSON.parse(resultaat); } catch { /* hieronder gemeld */ }
   check("de toetsbrug antwoordt met drie resultaten", Array.isArray(uit) && uit.length === 3,
-    r.stdout.toString().slice(0, 200) + r.stderr.toString().slice(0, 200));
+    resultaat.slice(0, 200));
   for (const res of Array.isArray(uit) ? uit : []) {
     check(`${res.profile_name}: getoetst, geen ERROR`,
       res.checks.length > 0 && !String(res.governing_check_id).startsWith("ERROR"),

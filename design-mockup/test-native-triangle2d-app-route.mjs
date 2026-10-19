@@ -22,13 +22,22 @@ const invoke = input => new Promise((resolve, reject) => {
 });
 const originalFetch = globalThis.fetch;
 let nativeCalls = 0;
+let corruptNextTriangleResult = null;
+const nativeInputs = [];
 globalThis.fetch = async (url, options) => {
   assert.equal(url, "/api/toetsing");
   const body = JSON.parse(options.body);
   assert.equal(body.opdracht, "solve_native_fem");
   assert.equal(body.inputs.kind, "plate2d");
   nativeCalls++;
+  nativeInputs.push(body.inputs.input);
   const result = await invoke(body.inputs.input);
+  if (corruptNextTriangleResult) {
+    const corruption = corruptNextTriangleResult;
+    corruptNextTriangleResult = null;
+    if (corruption === "null-node-record") result.nodes[0] = null;
+    else if (corruption === "null-element-record") result.elements[0] = null;
+  }
   return new Response(JSON.stringify({ kind: "plate2d", result }), { status: 200 });
 };
 const close = (actual, expected, tolerance, label) => assert.ok(
@@ -110,6 +119,51 @@ try {
         close(element[key], other[key], 0.002, `geval ${caseId} element ${element.elementId} ${key}`);
     }
   }
+  const orthotropicInput = bouwMultiInput(model({
+    materiaal: "C24", hoofdrichting: 23, E: undefined, nu: undefined, rho: undefined,
+  }));
+  const orthotropicNative = await solveAllCasesNativeMembrane2D(orthotropicInput);
+  const orthotropicReference = solveAllCases(orthotropicInput).perCase;
+  const materialId = nativeInputs.at(-1).materials[0].id;
+  const mappedOrthotropic = nativeInputs.at(-1).orthotropicMaterials.find(material => material.materialId === materialId);
+  assert.ok(mappedOrthotropic, "app-adapter moet de orthotrope materiaalconstanten naar Rust sturen");
+  close(mappedOrthotropic.angleRad, 23 * Math.PI / 180, 1e-12, "C24-hoofdrichting");
+  for (const caseId of [1, 2]) {
+    const actual = orthotropicNative.get(caseId), expected = orthotropicReference.get(caseId);
+    assert.ok(actual && expected);
+    close(actual.maxDisplacement, expected.maxDisplacement, 1e-5,
+      `orthotroop geval ${caseId} max u`);
+    for (const [id, displacement] of actual.displacements) {
+      const other = expected.displacements.get(id);
+      assert.ok(other);
+      close(displacement.ux, other.ux, 1e-5, `orthotroop geval ${caseId} knoop ${id} ux`);
+      close(displacement.uz, other.uz, 1e-5, `orthotroop geval ${caseId} knoop ${id} uz`);
+    }
+    for (const [id, reaction] of actual.reactions) {
+      const other = expected.reactions.get(id);
+      assert.ok(other);
+      close(reaction.fx, other.fx, 0.1, `orthotroop geval ${caseId} knoop ${id} Rx`);
+      close(reaction.fz, other.fz, 0.1, `orthotroop geval ${caseId} knoop ${id} Rz`);
+    }
+  }
+  const springModel = model({});
+  springModel.supports = [...springModel.supports, { nodeId: 2, type: "xSpring", k: 4200 }];
+  const springInput = bouwMultiInput(springModel);
+  const springNative = await solveAllCasesNativeMembrane2D(springInput);
+  const springReference = solveAllCases(springInput).perCase;
+  const mappedSpring = nativeInputs.at(-1).supports.find(support => support.nodeId === 2);
+  assert.equal(mappedSpring.kxKnPerM, 4_200_000,
+    "modelNaarSolverInput en de meshadapter moeten dezelfde kN/m-eenheid opleveren");
+  for (const caseId of [1, 2]) {
+    const actual = springNative.get(caseId), expected = springReference.get(caseId);
+    assert.ok(actual && expected);
+    close(actual.displacements.get(2).ux, expected.displacements.get(2).ux, 1e-5,
+      `CST x-veer knoop 2 ux, geval ${caseId}`);
+    close(actual.reactions.get(2).fx, expected.reactions.get(2).fx, 0.1,
+      `CST x-veerreactie, geval ${caseId}`);
+  }
+  assert.ok(springNative.get(1).reactions.get(2).fx < 0,
+    "de CST-route moet de weerstandskracht van de translatieve veer rapporteren");
   const patch = native.get(1);
   close(patch.displacements.get(2).ux, 5 / 210000 * 2000, 1e-6, "onafhankelijke CST-patchverplaatsing");
   close(patch.plateElements[0].ranges.sigmaX.max, 5, 1e-6, "onafhankelijke CST-patchspanning");
@@ -120,8 +174,21 @@ try {
   assert.ok(curved.get(1).plateElements[0].elements.some(element => element.effectiveEMpa < 210000));
   const direct = await solveAllCombinationsNativeMembrane2D(curveInput, [combo], "material");
   assert.ok(direct.get(11)?.maxDisplacement > 0);
+  const historyInput = { ...curveInput, axialMaterialLoadPath: [1, 0, 0.5] };
+  await solveAllCombinationsNativeMembrane2D(historyInput, [combo], "material");
+  assert.deepEqual(nativeInputs.at(-1).loadPath, [1, 0, 0.5],
+    "CST FNL moet het ingestelde belasten-ontlasten-herbelastenpad aan Rust doorgeven");
+  await assert.rejects(solveAllCombinationsNativeMembrane2D({ ...curveInput,
+    axialMaterialLoadPath: [1, Number.NaN] }, [combo], "material"), /eindige factoren/);
   const envelope = computeEnvelope([combo], curved, direct);
   close(envelope.maxDisplacement, direct.get(11).maxDisplacement, 1e-9, "directe CST-FNL-omhullende");
+  for (const [corruption, message] of [
+    ["null-node-record", /geldige knoop- of elementrecords/],
+    ["null-element-record", /CST-resultaat mist geldige knoop- of elementrecords/],
+  ]) {
+    corruptNextTriangleResult = corruption;
+    await assert.rejects(solveAllCasesNativeMembrane2D(input), message);
+  }
   console.log("Rust CST-app-route: L-polygoon, analytische patchtest, lineaire pariteit en FNL E-curve slagen.");
 } finally {
   globalThis.fetch = originalFetch;

@@ -1,0 +1,277 @@
+{
+  "format": "open-fem2d-studio-v2",
+  "version": 3,
+  "savedAt": "2026-10-08T00:00:00.000Z",
+  "nodes": [],
+  "beams": [],
+  "supports": [],
+  "plates": [],
+  "loads": [],
+  "loadCases": [
+    {
+      "id": 1,
+      "name": "Opgelegde rek, laden en ontlasten",
+      "type": "live"
+    }
+  ],
+  "activeLoadCaseId": 1,
+  "selfWeightEnabled": false,
+  "nonlinearEnabled": true,
+  "analysetype": "tweedeOrdeFysisch",
+  "modelDimension": "3d",
+  "model3d": {
+    "nodes": [
+      {
+        "id": 101,
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 205,
+        "x": 1,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 306,
+        "x": 0,
+        "y": 1,
+        "z": 0
+      },
+      {
+        "id": 407,
+        "x": 1,
+        "y": 1,
+        "z": 0
+      },
+      {
+        "id": 508,
+        "x": 0,
+        "y": 0,
+        "z": 1
+      },
+      {
+        "id": 609,
+        "x": 1,
+        "y": 0,
+        "z": 1
+      },
+      {
+        "id": 710,
+        "x": 0,
+        "y": 1,
+        "z": 1
+      },
+      {
+        "id": 811,
+        "x": 1,
+        "y": 1,
+        "z": 1
+      }
+    ],
+    "beams": [],
+    "volumes": [
+      {
+        "id": 21,
+        "kind": "tet4",
+        "nodeIds": [
+          101,
+          205,
+          407,
+          811
+        ],
+        "eMpa": 200000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 22,
+        "kind": "tet4",
+        "nodeIds": [
+          101,
+          407,
+          306,
+          811
+        ],
+        "eMpa": 200000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 23,
+        "kind": "tet4",
+        "nodeIds": [
+          101,
+          306,
+          710,
+          811
+        ],
+        "eMpa": 200000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 24,
+        "kind": "tet4",
+        "nodeIds": [
+          101,
+          710,
+          508,
+          811
+        ],
+        "eMpa": 200000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 25,
+        "kind": "tet4",
+        "nodeIds": [
+          101,
+          508,
+          609,
+          811
+        ],
+        "eMpa": 200000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 26,
+        "kind": "tet4",
+        "nodeIds": [
+          101,
+          609,
+          205,
+          811
+        ],
+        "eMpa": 200000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      }
+    ],
+    "plates": [],
+    "supports": [
+      {
+        "nodeId": 101,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 205,
+        "ux": true,
+        "uy": false,
+        "uz": false,
+        "rx": false,
+        "ry": false,
+        "rz": false,
+        "prescribed": {
+          "uxM": 0.0035
+        }
+      },
+      {
+        "nodeId": 306,
+        "ux": true,
+        "uy": false,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 407,
+        "ux": true,
+        "uy": false,
+        "uz": false,
+        "rx": false,
+        "ry": false,
+        "rz": false,
+        "prescribed": {
+          "uxM": 0.0035
+        }
+      },
+      {
+        "nodeId": 508,
+        "ux": true,
+        "uy": false,
+        "uz": false,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 609,
+        "ux": true,
+        "uy": false,
+        "uz": false,
+        "rx": false,
+        "ry": false,
+        "rz": false,
+        "prescribed": {
+          "uxM": 0.0035
+        }
+      },
+      {
+        "nodeId": 710,
+        "ux": true,
+        "uy": false,
+        "uz": false,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 811,
+        "ux": true,
+        "uy": false,
+        "uz": false,
+        "rx": false,
+        "ry": false,
+        "rz": false,
+        "prescribed": {
+          "uxM": 0.0035
+        }
+      }
+    ],
+    "loads": [],
+    "materialLoadPath": [
+      1.1428571428571428,
+      1
+    ],
+    "volumeBackend": "automatic"
+  },
+  "projectInfo": {
+    "name": "Tet4 materiaal-FNL: staal J2 coupon",
+    "projectNumber": "VF-3D-MAT-J2-01"
+  },
+  "frame3dViewSets": []
+}

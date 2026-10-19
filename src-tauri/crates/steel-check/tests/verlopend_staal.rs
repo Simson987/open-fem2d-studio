@@ -39,12 +39,27 @@ struct Maten {
     tw: f64,
     tf: f64,
 }
-const IPE400: Maten = Maten { h: 400.0, b: 180.0, tw: 8.6, tf: 13.5 };
-const IPE200: Maten = Maten { h: 200.0, b: 100.0, tw: 5.6, tf: 8.5 };
+const IPE400: Maten = Maten {
+    h: 400.0,
+    b: 180.0,
+    tw: 8.6,
+    tf: 13.5,
+};
+const IPE200: Maten = Maten {
+    h: 200.0,
+    b: 100.0,
+    tw: 5.6,
+    tf: 8.5,
+};
 
 fn lineair(a: Maten, b: Maten, u: f64) -> Maten {
     let l = |p: f64, q: f64| p + (q - p) * u;
-    Maten { h: l(a.h, b.h), b: l(a.b, b.b), tw: l(a.tw, b.tw), tf: l(a.tf, b.tf) }
+    Maten {
+        h: l(a.h, b.h),
+        b: l(a.b, b.b),
+        tw: l(a.tw, b.tw),
+        tf: l(a.tf, b.tf),
+    }
 }
 
 /// W_pl,y van een gelast, dubbelsymmetrisch I-profiel zonder afronding (mm³).
@@ -67,7 +82,11 @@ fn staaf(
         length_m: l_mm / 1000.0,
         forces_envelope: punten
             .iter()
-            .map(|&(x, f)| ForcePoint { combination_id: 1, position_mm: x, forces: f })
+            .map(|&(x, f)| ForcePoint {
+                combination_id: 1,
+                position_mm: x,
+                forces: f,
+            })
             .collect(),
         lateral_bracing: LateralBracing {
             top_flange_positions: vec![],
@@ -97,12 +116,22 @@ fn staaf(
 }
 
 fn buiging(my_knm: f64) -> InternalForces {
-    InternalForces { n_ed: 0.0, vy_ed: 0.0, vz_ed: 0.0, mt_ed: 0.0, my_ed: my_knm, mz_ed: 0.0 }
+    InternalForces {
+        n_ed: 0.0,
+        vy_ed: 0.0,
+        vz_ed: 0.0,
+        mt_ed: 0.0,
+        my_ed: my_knm,
+        mz_ed: 0.0,
+    }
 }
 
 fn toets<'a>(r: &'a BeamCheckResult, id: &str) -> &'a NamedCheck {
     r.checks.iter().find(|c| c.id == id).unwrap_or_else(|| {
-        panic!("toets {id} ontbreekt; aanwezig: {:?}", r.checks.iter().map(|c| &c.id).collect::<Vec<_>>())
+        panic!(
+            "toets {id} ontbreekt; aanwezig: {:?}",
+            r.checks.iter().map(|c| &c.id).collect::<Vec<_>>()
+        )
     })
 }
 
@@ -123,13 +152,14 @@ fn positie(r: &BeamCheckResult, id: &str) -> f64 {
 /// Een tussenwaarde van een stabiliteitstoets, op symbool.
 fn tussenwaarde(r: &BeamCheckResult, id: &str, symbool: &str) -> f64 {
     match &toets(r, id).kind {
-        CheckKind::Stability(s) => s
-            .variables
-            .iter()
-            .chain(s.intermediate_values.iter())
-            .find(|v| v.symbol == symbool)
-            .unwrap_or_else(|| panic!("symbool {symbool} ontbreekt in {id}"))
-            .value,
+        CheckKind::Stability(s) => {
+            s.variables
+                .iter()
+                .chain(s.intermediate_values.iter())
+                .find(|v| v.symbol == symbool)
+                .unwrap_or_else(|| panic!("symbool {symbool} ontbreekt in {id}"))
+                .value
+        }
         _ => panic!("{id} is geen stabiliteitstoets"),
     }
 }
@@ -153,11 +183,17 @@ fn eindprofiel_gelijk_of_leeg_geeft_byte_gelijke_uitkomst() {
     ];
     let kaal = serde_json::to_string(&check_beam(staaf("IPE300", None, 5000.0, &punten))).unwrap();
     for eind in ["IPE300", "IPE 300", "  IPE300  ", ""] {
-        let met =
-            serde_json::to_string(&check_beam(staaf("IPE300", Some(eind), 5000.0, &punten))).unwrap();
-        assert_eq!(kaal, met, "eindprofiel {eind:?} hoort prismatisch te blijven");
+        let met = serde_json::to_string(&check_beam(staaf("IPE300", Some(eind), 5000.0, &punten)))
+            .unwrap();
+        assert_eq!(
+            kaal, met,
+            "eindprofiel {eind:?} hoort prismatisch te blijven"
+        );
     }
-    assert!(!kaal.contains("verloop"), "een prismatische staaf krijgt geen verloopveld in de JSON");
+    assert!(
+        !kaal.contains("verloop"),
+        "een prismatische staaf krijgt geen verloopveld in de JSON"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -187,7 +223,11 @@ fn uitkrager_ipe400_naar_ipe200_vindt_het_maximum_van_m_over_wpl() {
             (u, m_ed / m_rd)
         })
         .fold((0.0, 0.0), |beste, kandidaat| {
-            if kandidaat.1 > beste.1 { kandidaat } else { beste }
+            if kandidaat.1 > beste.1 {
+                kandidaat
+            } else {
+                beste
+            }
         });
     // u* = 0,4: W_pl = 148·11,5·308,5 + 7,4·297²/4 = 525 067 + 163 186,65
     //           = 688 253,65 mm³ → M_c,Rd = 161,74 kNm → UC = 120/161,74 = 0,74194.
@@ -219,7 +259,11 @@ fn uitkrager_ipe400_naar_ipe200_vindt_het_maximum_van_m_over_wpl() {
             .and_then(|t| t.uc)
             .unwrap_or_else(|| panic!("geen UC op x = {x}"))
     };
-    assert_relative_eq!(uc_op(0.0), 200.0 / (w_pl_y(IPE400) * 235.0 * 1e-6), max_relative = 2e-4);
+    assert_relative_eq!(
+        uc_op(0.0),
+        200.0 / (w_pl_y(IPE400) * 235.0 * 1e-6),
+        max_relative = 2e-4
+    );
     assert!(uc_op(0.0) < uc(&r, "6.2.5_bending_y"));
 
     // Het rapport: zes toetsdoorsneden (x = 0, L/5, …, L), maten en klasse.
@@ -230,7 +274,12 @@ fn uitkrager_ipe400_naar_ipe200_vindt_het_maximum_van_m_over_wpl() {
     assert_relative_eq!(v.toetsdoorsneden[5].maten.h_mm, 200.0, epsilon = 1e-9);
     assert_eq!(v.toetsdoorsneden[5].maten.tw_mm, Some(5.6));
     for d in &v.toetsdoorsneden {
-        assert_eq!(d.klasse, Some(CrossSectionClass::Class1), "op x = {}", d.x_mm);
+        assert_eq!(
+            d.klasse,
+            Some(CrossSectionClass::Class1),
+            "op x = {}",
+            d.x_mm
+        );
         // W_pl uit de doorsnedemotor tegen de gesloten formule.
         let hand = w_pl_y(lineair(IPE400, IPE200, d.t));
         assert_relative_eq!(d.w_y_mm3, hand, max_relative = 1e-6);
@@ -251,7 +300,10 @@ fn uitkrager_ipe400_naar_ipe200_vindt_het_maximum_van_m_over_wpl() {
         .iter()
         .find(|s| s.toets_id == "6.3.2_ltb")
         .expect("kipdoorsnede");
-    assert_eq!(kip.x_mm, l, "de kleinste doorsnede in het kipveld ligt aan de tip");
+    assert_eq!(
+        kip.x_mm, l,
+        "de kleinste doorsnede in het kipveld ligt aan de tip"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -305,7 +357,10 @@ fn verlopende_staaf_krijgt_de_gelaste_knikkromme_en_dus_een_lagere_chi() {
         .iter()
         .find(|s| s.toets_id == "6.3.1_buckling")
         .expect("knikdoorsnede");
-    assert_eq!(knik.x_mm, 0.0, "de kleinste doorsnede ligt aan het IPE 200-einde");
+    assert_eq!(
+        knik.x_mm, 0.0,
+        "de kleinste doorsnede ligt aan het IPE 200-einde"
+    );
     assert_relative_eq!(knik.maten.h_mm, 200.0, epsilon = 1e-9);
     assert!(knik.reden.contains("KLEINSTE doorsnede"));
 }
@@ -359,7 +414,11 @@ fn eigen_doorsnede_met_eindprofiel_wordt_geweigerd() {
         vorm: CustomDoorsnedevorm::Onbekend,
     });
     let r = check_beam(invoer);
-    assert!(r.governing_check_id.contains("eigen doorsnede"), "reden: {}", r.governing_check_id);
+    assert!(
+        r.governing_check_id.contains("eigen doorsnede"),
+        "reden: {}",
+        r.governing_check_id
+    );
 }
 
 /// Het EIND van een verloop mag ook een GELASTE dubbelsymmetrische I uit drie
@@ -377,7 +436,11 @@ fn eigen_doorsnede_met_eindprofiel_wordt_geweigerd() {
 /// er is: gelijk, niet "ongeveer gelijk".
 #[test]
 fn een_gelaste_i_als_eindprofiel_geeft_dezelfde_uitkomst_als_het_catalogusprofiel() {
-    let punten = [(0.0, buiging(0.0)), (3000.0, buiging(60.0)), (6000.0, buiging(0.0))];
+    let punten = [
+        (0.0, buiging(0.0)),
+        (3000.0, buiging(60.0)),
+        (6000.0, buiging(0.0)),
+    ];
     let uit_catalogus = check_beam(staaf("IPE300", Some("IPE200"), 6000.0, &punten));
 
     // IPE 200: h 200, b 100, t_w 5,6, t_f 8,5 (dezelfde maten die de kern uit
@@ -396,8 +459,20 @@ fn een_gelaste_i_als_eindprofiel_geeft_dezelfde_uitkomst_als_het_catalogusprofie
                 z_mm: 0.0,
                 alpha_rad: std::f64::consts::FRAC_PI_2,
             },
-            CustomLamella { b_mm: b, t_mm: tf, y_mm: 0.0, z_mm: -z_flens, alpha_rad: 0.0 },
-            CustomLamella { b_mm: b, t_mm: tf, y_mm: 0.0, z_mm: z_flens, alpha_rad: 0.0 },
+            CustomLamella {
+                b_mm: b,
+                t_mm: tf,
+                y_mm: 0.0,
+                z_mm: -z_flens,
+                alpha_rad: 0.0,
+            },
+            CustomLamella {
+                b_mm: b,
+                t_mm: tf,
+                y_mm: 0.0,
+                z_mm: z_flens,
+                alpha_rad: 0.0,
+            },
         ],
         gesloten_cellen: vec![],
         eigenschappen: None,
@@ -413,7 +488,11 @@ fn een_gelaste_i_als_eindprofiel_geeft_dezelfde_uitkomst_als_het_catalogusprofie
         uit_platen.governing_check_id, uit_catalogus.governing_check_id,
         "dezelfde maatgevende toets"
     );
-    assert_relative_eq!(uit_platen.uc_max, uit_catalogus.uc_max, max_relative = 1e-12);
+    assert_relative_eq!(
+        uit_platen.uc_max,
+        uit_catalogus.uc_max,
+        max_relative = 1e-12
+    );
 
     let a = uit_platen.verloop.as_ref().expect("verlooprapport");
     let c = uit_catalogus.verloop.as_ref().expect("verlooprapport");

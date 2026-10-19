@@ -38,8 +38,14 @@ fn korf(boven: u32) -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: boven, diameter_mm: 12.0 },
-        bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+        top: RebarRow {
+            count: boven,
+            diameter_mm: 12.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
         ..ReinforcementCage::default()
     }
 }
@@ -75,7 +81,11 @@ fn handberekening_1_enkelvoudig_gewapende_balk_spanningsblok() {
     assert_relative_eq!(r.f_c_kn, a_s * f_yd * 1e-3, max_relative = 1e-6);
     assert_relative_eq!(r.m_rd_knm, m_rd, max_relative = 1e-6);
     assert!(r.layers[0].yields);
-    assert_relative_eq!(r.layers[0].eps, -0.0035 * (454.0 - x) / x, max_relative = 1e-6);
+    assert_relative_eq!(
+        r.layers[0].eps,
+        -0.0035 * (454.0 - x) / x,
+        max_relative = 1e-6
+    );
 }
 
 /// Handberekening 2 — punt van het M-N-diagram: zuivere druk (6.1(4), rek
@@ -101,7 +111,14 @@ fn handberekening_2_zuivere_druk() {
     assert_relative_eq!(n_rd_3, hand, max_relative = 1e-6);
 
     // Boven N_Rd is het M-κ-diagram leeg: geen evenwicht meer mogelijk.
-    let d = mn_kappa_diagram(&s, &lagen, &m, -n_rd * 1.0001, 1.0, &MnKappaOptions::default());
+    let d = mn_kappa_diagram(
+        &s,
+        &lagen,
+        &m,
+        -n_rd * 1.0001,
+        1.0,
+        &MnKappaOptions::default(),
+    );
     assert_eq!(d.failure_mode, FailureMode::AxialCapacityExceeded);
 
     // Bij zuivere druk (κ = 0) is het moment om het midden van de doorsnede
@@ -110,14 +127,29 @@ fn handberekening_2_zuivere_druk() {
     //   boven 2Ø12: 226,19·400 = 90,48 kN op +206 mm → +18,64 kNm
     //   onder 3Ø16: 603,19·400 = 241,27 kN op −204 mm → −49,22 kNm
     //   M(κ = 0) = −30,58 kNm.
-    let st = solve_state(&s, &lagen, &m, -n_rd * 0.9999, 0.0, &MnKappaOptions::default()).unwrap();
+    let st = solve_state(
+        &s,
+        &lagen,
+        &m,
+        -n_rd * 0.9999,
+        0.0,
+        &MnKappaOptions::default(),
+    )
+    .unwrap();
     let m_hand = (226.195 * 400.0 * 206.0 - 603.186 * 400.0 * 204.0) * 1e-6;
     assert_relative_eq!(m_hand, -30.58, max_relative = 1e-3);
     assert_relative_eq!(st.m_knm, m_hand, max_relative = 2e-3);
 
     // Net onder N_Rd kan de doorsnede dus geen positief moment dragen: de
     // weerstand voor een positief moment is negatief, de toets meldt dat.
-    let d = mn_kappa_diagram(&s, &lagen, &m, -n_rd * 0.999, 1.0, &MnKappaOptions::default());
+    let d = mn_kappa_diagram(
+        &s,
+        &lagen,
+        &m,
+        -n_rd * 0.999,
+        1.0,
+        &MnKappaOptions::default(),
+    );
     println!(
         "M_Rd bij 0,999·N_Rd = {:.2} kNm (om het midden), κ_u = {:.3e} /m, bezwijken {:?}",
         d.m_max_knm, d.kappa_u_per_m, d.failure_mode
@@ -170,10 +202,15 @@ fn handberekening_3_punt_van_het_mn_diagram_x_gelijk_h() {
     let fijn = MnKappaOptions { n_strips: 400 };
     let st = solve_state(&s, &lagen, &m, -n_hand, 0.007, &fijn).expect("evenwicht");
     assert_relative_eq!(st.eps_top, 0.0035, max_relative = 1e-4);
-    assert!(st.eps_bottom.abs() < 1e-6, "onderrand ε = {}", st.eps_bottom);
+    assert!(
+        st.eps_bottom.abs() < 1e-6,
+        "onderrand ε = {}",
+        st.eps_bottom
+    );
     assert_relative_eq!(st.m_knm, m_hand, max_relative = 1e-4);
     assert_relative_eq!(st.x_mm.unwrap(), 500.0, max_relative = 1e-3);
-    let st50 = solve_state(&s, &lagen, &m, -n_hand, 0.007, &MnKappaOptions::default()).expect("evenwicht");
+    let st50 =
+        solve_state(&s, &lagen, &m, -n_hand, 0.007, &MnKappaOptions::default()).expect("evenwicht");
     assert_relative_eq!(st50.m_knm, m_hand, max_relative = 6e-4);
 
     // En dit is ook het bezwijkpunt op het M-κ-diagram bij deze N.
@@ -216,8 +253,22 @@ fn hellende_tak_geeft_iets_hogere_weerstand() {
     let s = doorsnede();
     let k = korf(0);
     let lagen = k.layers(s.h_mm);
-    let d_h = mn_kappa_diagram(&s, &lagen, &materiaal(SteelBranch::Horizontal), 0.0, 1.0, &MnKappaOptions::default());
-    let d_i = mn_kappa_diagram(&s, &lagen, &materiaal(SteelBranch::Inclined), 0.0, 1.0, &MnKappaOptions::default());
+    let d_h = mn_kappa_diagram(
+        &s,
+        &lagen,
+        &materiaal(SteelBranch::Horizontal),
+        0.0,
+        1.0,
+        &MnKappaOptions::default(),
+    );
+    let d_i = mn_kappa_diagram(
+        &s,
+        &lagen,
+        &materiaal(SteelBranch::Inclined),
+        0.0,
+        1.0,
+        &MnKappaOptions::default(),
+    );
     assert!(d_i.m_max_knm > d_h.m_max_knm);
     assert!(d_i.m_max_knm < 1.08 * d_h.m_max_knm);
 }
@@ -264,7 +315,8 @@ fn stroken_convergentie_bezwijkmoment() {
     let k = korf(2);
     let m = materiaal(SteelBranch::Horizontal);
     let lagen: Vec<RebarLayer> = k.layers(s.h_mm);
-    let referentie = mn_kappa_diagram(&s, &lagen, &m, 0.0, 1.0, &MnKappaOptions { n_strips: 800 }).m_max_knm;
+    let referentie =
+        mn_kappa_diagram(&s, &lagen, &m, 0.0, 1.0, &MnKappaOptions { n_strips: 800 }).m_max_knm;
     println!("stroken   M_Rd [kNm]   afwijking t.o.v. 800 stroken");
     let mut vorige = f64::INFINITY;
     for n in [5usize, 10, 20, 50, 100, 200, 400] {

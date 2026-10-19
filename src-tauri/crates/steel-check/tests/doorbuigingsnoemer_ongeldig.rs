@@ -36,9 +36,19 @@ fn invoer(klasse: DeflectionClass, noemer: i32, noemer_add: f64) -> BeamCheckInp
         forces_envelope: vec![ForcePoint {
             combination_id: 22,
             position_mm: 0.0,
-            forces: InternalForces { n_ed: -233.911, vy_ed: 0.0, vz_ed: 17.357, mt_ed: 0.0, my_ed: -63.139, mz_ed: 0.0 },
+            forces: InternalForces {
+                n_ed: -233.911,
+                vy_ed: 0.0,
+                vz_ed: 17.357,
+                mt_ed: 0.0,
+                my_ed: -63.139,
+                mz_ed: 0.0,
+            },
         }],
-        lateral_bracing: LateralBracing { top_flange_positions: vec![], bottom_flange_positions: vec![] },
+        lateral_bracing: LateralBracing {
+            top_flange_positions: vec![],
+            bottom_flange_positions: vec![],
+        },
         buckling_length_y_m: 2.5,
         buckling_length_z_m: 2.5,
         deflection_limit_class: klasse,
@@ -71,7 +81,11 @@ fn eis_geweigerd(r: &BeamCheckResult, trefwoord: &str, wat: &str) {
         "{wat}: reden ontbreekt of is onduidelijk: {}",
         r.governing_check_id
     );
-    assert!(r.governing_check_id.contains("niet getoetst"), "{wat}: {}", r.governing_check_id);
+    assert!(
+        r.governing_check_id.contains("niet getoetst"),
+        "{wat}: {}",
+        r.governing_check_id
+    );
 }
 
 #[test]
@@ -85,7 +99,11 @@ fn custom_met_noemer_nul_of_negatief_wordt_geweigerd() {
 
 #[test]
 fn negatieve_of_ongeldige_w_add_noemer_wordt_geweigerd() {
-    for klasse in [DeflectionClass::Floor, DeflectionClass::Roof, DeflectionClass::Custom] {
+    for klasse in [
+        DeflectionClass::Floor,
+        DeflectionClass::Roof,
+        DeflectionClass::Custom,
+    ] {
         let r = check_beam(invoer(klasse, 400, -150.0));
         eis_geweigerd(&r, "w_add", &format!("{klasse:?} met w_add-noemer -150"));
     }
@@ -107,14 +125,27 @@ fn verlopende_staaf_krijgt_dezelfde_weigering() {
 fn wat_geen_fout_is_rekent_gewoon() {
     // Noemer 0 bij klasse Floor: niet gelezen, de klassenoemer 333 geldt.
     let r = check_beam(invoer(DeflectionClass::Floor, 0, 0.0));
-    assert_ne!(r.status, CheckStatus::NotApplicable, "{}", r.governing_check_id);
-    let fin = r.checks.iter().find(|c| c.id == "deflection_w_fin").expect("w_fin getoetst");
+    assert_ne!(
+        r.status,
+        CheckStatus::NotApplicable,
+        "{}",
+        r.governing_check_id
+    );
+    let fin = r
+        .checks
+        .iter()
+        .find(|c| c.id == "deflection_w_fin")
+        .expect("w_fin getoetst");
     match &fin.kind {
         CheckKind::Resistance(c) => {
             assert_eq!(c.status, CheckStatus::Ok);
             let uc = c.uc.as_ref().expect("UC aanwezig");
             assert!((uc.rd - 2500.0 / 333.0).abs() < 1e-9, "grens {}", uc.rd);
-            assert!((uc.uc - 3.0 / (2500.0 / 333.0)).abs() < 1e-9, "UC {}", uc.uc);
+            assert!(
+                (uc.uc - 3.0 / (2500.0 / 333.0)).abs() < 1e-9,
+                "UC {}",
+                uc.uc
+            );
         }
         CheckKind::Stability(_) => panic!("w_fin is een weerstandstoets"),
     }
@@ -126,7 +157,10 @@ fn wat_geen_fout_is_rekent_gewoon() {
         match &c.kind {
             CheckKind::Resistance(c) => {
                 assert_eq!(c.status, CheckStatus::Ok, "{id}");
-                assert!((c.uc.as_ref().unwrap().rd - 10.0).abs() < 1e-9, "{id}: 2500/250 = 10 mm");
+                assert!(
+                    (c.uc.as_ref().unwrap().rd - 10.0).abs() < 1e-9,
+                    "{id}: 2500/250 = 10 mm"
+                );
             }
             CheckKind::Stability(_) => panic!("{id} is een weerstandstoets"),
         }

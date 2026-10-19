@@ -101,21 +101,31 @@ fn knik(r: &BeamCheckResult) -> &StabilityCalc {
         .iter()
         .find(|c| c.id == "6.3.1_buckling")
         .expect("6.3.1_buckling hoort in de lijst te staan");
-    let CheckKind::Stability(s) = &c.kind else { panic!("knik is een stabiliteitstoets") };
+    let CheckKind::Stability(s) = &c.kind else {
+        panic!("knik is een stabiliteitstoets")
+    };
     s
 }
 
 fn stap<'a>(s: &'a StabilityCalc, id: &str) -> &'a Deelstap {
-    s.deelstappen.iter().find(|d| d.id == id).unwrap_or_else(|| {
-        panic!(
-            "stap {id} ontbreekt; wel aanwezig: {:?}",
-            s.deelstappen.iter().map(|d| d.id.as_str()).collect::<Vec<_>>()
-        )
-    })
+    s.deelstappen
+        .iter()
+        .find(|d| d.id == id)
+        .unwrap_or_else(|| {
+            panic!(
+                "stap {id} ontbreekt; wel aanwezig: {:?}",
+                s.deelstappen
+                    .iter()
+                    .map(|d| d.id.as_str())
+                    .collect::<Vec<_>>()
+            )
+        })
 }
 
 fn waarde(s: &StabilityCalc, id: &str) -> f64 {
-    stap(s, id).value.unwrap_or_else(|| panic!("stap {id} heeft geen uitkomst"))
+    stap(s, id)
+        .value
+        .unwrap_or_else(|| panic!("stap {id} heeft geen uitkomst"))
 }
 
 fn herkomst(s: &StabilityCalc, id: &str) -> String {
@@ -188,16 +198,28 @@ fn kolom_ipe200_knikt_om_z_en_de_afleiding_toont_beide_takken() {
     // stap zet ze tegen elkaar.
     let ids: Vec<&str> = s.deelstappen.iter().map(|d| d.id.as_str()).collect();
     for a in ["y", "z"] {
-        let posities: Vec<usize> = ["l_cr", "i", "lambda_bar", "kromme", "phi", "chi", "n_b_rd", "uc"]
-            .iter()
-            .map(|k| {
-                let id = format!("{k}_{a}");
-                ids.iter()
-                    .position(|i| *i == id)
-                    .unwrap_or_else(|| panic!("{id} ontbreekt in {ids:?}"))
-            })
-            .collect();
-        assert!(posities.windows(2).all(|w| w[0] < w[1]), "tak {a} niet op volgorde: {ids:?}");
+        let posities: Vec<usize> = [
+            "l_cr",
+            "i",
+            "lambda_bar",
+            "kromme",
+            "phi",
+            "chi",
+            "n_b_rd",
+            "uc",
+        ]
+        .iter()
+        .map(|k| {
+            let id = format!("{k}_{a}");
+            ids.iter()
+                .position(|i| *i == id)
+                .unwrap_or_else(|| panic!("{id} ontbreekt in {ids:?}"))
+        })
+        .collect();
+        assert!(
+            posities.windows(2).all(|w| w[0] < w[1]),
+            "tak {a} niet op volgorde: {ids:?}"
+        );
     }
     assert_eq!(ids.last(), Some(&"maatgevend"));
 
@@ -207,48 +229,92 @@ fn kolom_ipe200_knikt_om_z_en_de_afleiding_toont_beide_takken() {
     assert_relative_eq!(waarde(s, "maatgevend"), n_z, max_relative = 1e-12);
     assert!(stap(s, "maatgevend").notes[0].contains("z-as (uit het vlak)"));
     assert!(
-        s.notes.iter().any(|n| n.starts_with("Om de z-as (uit het vlak): L_cr,z = 4000 mm (opgegeven)")),
+        s.notes
+            .iter()
+            .any(|n| n.starts_with("Om de z-as (uit het vlak): L_cr,z = 4000 mm (opgegeven)")),
         "{:?}",
         s.notes
     );
     assert!(s.title.contains("om z (uit het vlak)"), "{}", s.title);
 
     // Herkomst en vlak in de kniklengtestap.
-    assert_eq!(herkomst(s, "l_cr_z"), format!("Herkomst: {HERKOMST_OPGEGEVEN}."));
-    assert!(stap(s, "l_cr_z").notes.iter().any(|n| n.contains("UIT het vlak") && n.contains("nooit")));
-    assert!(stap(s, "l_cr_y").notes.iter().any(|n| n.contains("IN het vlak") && n.contains("5.2.2(7)")));
+    assert_eq!(
+        herkomst(s, "l_cr_z"),
+        format!("Herkomst: {HERKOMST_OPGEGEVEN}.")
+    );
+    assert!(stap(s, "l_cr_z")
+        .notes
+        .iter()
+        .any(|n| n.contains("UIT het vlak") && n.contains("nooit")));
+    assert!(stap(s, "l_cr_y")
+        .notes
+        .iter()
+        .any(|n| n.contains("IN het vlak") && n.contains("5.2.2(7)")));
 
     // De gebruikte kniklengten staan bij de grootheden, zodat ze ook zonder de
     // afleiding te lezen zijn (de PDF toont bij een niet-maatgevende toets
     // alleen de grootheden en de kanttekeningen).
-    assert!(s.variables.iter().any(|v| v.symbol == "L_{cr,y}" && v.value == 2000.0));
-    assert!(s.variables.iter().any(|v| v.symbol == "L_{cr,z}" && v.value == 4000.0));
+    assert!(s
+        .variables
+        .iter()
+        .any(|v| v.symbol == "L_{cr,y}" && v.value == 2000.0));
+    assert!(s
+        .variables
+        .iter()
+        .any(|v| v.symbol == "L_{cr,z}" && v.value == 4000.0));
 }
 
 #[test]
 fn kipsteunen_aan_een_flens_verkorten_lcr_z_niet_aan_beide_flenzen_wel() {
     let l = 6000.0;
     let derde = vec![1.0 / 3.0, 2.0 / 3.0];
-    let alleen_boven = staaf(l, -60.0, 20.0, 0.0, 0.0, LateralBracing {
-        top_flange_positions: derde.clone(),
-        bottom_flange_positions: vec![],
-    });
-    let beide = staaf(l, -60.0, 20.0, 0.0, 0.0, LateralBracing {
-        top_flange_positions: derde.clone(),
-        bottom_flange_positions: derde.clone(),
-    });
-    let opgegeven = staaf(l, -60.0, 20.0, 0.0, 3.0, LateralBracing {
-        top_flange_positions: derde.clone(),
-        bottom_flange_positions: derde.clone(),
-    });
+    let alleen_boven = staaf(
+        l,
+        -60.0,
+        20.0,
+        0.0,
+        0.0,
+        LateralBracing {
+            top_flange_positions: derde.clone(),
+            bottom_flange_positions: vec![],
+        },
+    );
+    let beide = staaf(
+        l,
+        -60.0,
+        20.0,
+        0.0,
+        0.0,
+        LateralBracing {
+            top_flange_positions: derde.clone(),
+            bottom_flange_positions: derde.clone(),
+        },
+    );
+    let opgegeven = staaf(
+        l,
+        -60.0,
+        20.0,
+        0.0,
+        3.0,
+        LateralBracing {
+            top_flange_positions: derde.clone(),
+            bottom_flange_positions: derde.clone(),
+        },
+    );
 
     // (a) Gordingen op alleen de bovenflens: goed voor de kip, niet voor knik
     //     om z. De staaflengte blijft, en de afleiding zegt waarom.
     let s_a = knik(&alleen_boven);
     assert_eq!(waarde(s_a, "l_cr_z"), 6000.0);
-    assert_eq!(herkomst(s_a, "l_cr_z"), format!("Herkomst: {HERKOMST_STAAFLENGTE}."));
+    assert_eq!(
+        herkomst(s_a, "l_cr_z"),
+        format!("Herkomst: {HERKOMST_STAAFLENGTE}.")
+    );
     assert!(
-        stap(s_a, "l_cr_z").notes.iter().any(|n| n.contains("alleen de bovenflens (2)")),
+        stap(s_a, "l_cr_z")
+            .notes
+            .iter()
+            .any(|n| n.contains("alleen de bovenflens (2)")),
         "{:?}",
         stap(s_a, "l_cr_z").notes
     );
@@ -256,9 +322,15 @@ fn kipsteunen_aan_een_flens_verkorten_lcr_z_niet_aan_beide_flenzen_wel() {
     // (b) Boven- én onderflens gesteund op 1/3 en 2/3: drie velden van 2000 mm.
     let s_b = knik(&beide);
     assert_relative_eq!(waarde(s_b, "l_cr_z"), 2000.0, max_relative = 1e-12);
-    assert_eq!(herkomst(s_b, "l_cr_z"), format!("Herkomst: {HERKOMST_KIPSTEUNEN}."));
+    assert_eq!(
+        herkomst(s_b, "l_cr_z"),
+        format!("Herkomst: {HERKOMST_KIPSTEUNEN}.")
+    );
     assert!(stap(s_b, "l_cr_z").ingevuld_latex.contains(r"\max"));
-    assert!(stap(s_b, "l_cr_z").notes.iter().any(|n| n.contains("REGEL") && n.contains("6.3.5.2(2)")));
+    assert!(stap(s_b, "l_cr_z")
+        .notes
+        .iter()
+        .any(|n| n.contains("REGEL") && n.contains("6.3.5.2(2)")));
 
     // De handberekening van beide gevallen om z (kromme b, α = 0,34):
     //  6000 mm: λ̄_z = 2,8622 → Φ_z = 5,0488 → χ_z = 0,1086 → N_b,Rd,z = 72,74 kN
@@ -283,8 +355,14 @@ fn kipsteunen_aan_een_flens_verkorten_lcr_z_niet_aan_beide_flenzen_wel() {
     //     hadden gegeven.
     let s_c = knik(&opgegeven);
     assert_eq!(waarde(s_c, "l_cr_z"), 3000.0);
-    assert_eq!(herkomst(s_c, "l_cr_z"), format!("Herkomst: {HERKOMST_OPGEGEVEN}."));
-    assert!(stap(s_c, "l_cr_z").notes.iter().any(|n| n.contains("uit de kipsteunen gevolgd: 2000 mm")));
+    assert_eq!(
+        herkomst(s_c, "l_cr_z"),
+        format!("Herkomst: {HERKOMST_OPGEGEVEN}.")
+    );
+    assert!(stap(s_c, "l_cr_z")
+        .notes
+        .iter()
+        .any(|n| n.contains("uit de kipsteunen gevolgd: 2000 mm")));
 }
 
 #[test]
@@ -293,10 +371,15 @@ fn zonder_opgave_valt_de_kern_hoorbaar_terug_op_de_staaflengte() {
     let s = knik(&r);
     for a in ["y", "z"] {
         assert_eq!(waarde(s, &format!("l_cr_{a}")), L_KOLOM_MM);
-        assert_eq!(herkomst(s, &format!("l_cr_{a}")), format!("Herkomst: {HERKOMST_STAAFLENGTE}."));
+        assert_eq!(
+            herkomst(s, &format!("l_cr_{a}")),
+            format!("Herkomst: {HERKOMST_STAAFLENGTE}.")
+        );
     }
     assert!(
-        s.notes.iter().any(|n| n.contains("L_cr,z = 4000 mm (staaflengte (terugval))")),
+        s.notes
+            .iter()
+            .any(|n| n.contains("L_cr,z = 4000 mm (staaflengte (terugval))")),
         "{:?}",
         s.notes
     );
@@ -307,8 +390,18 @@ fn zonder_opgave_valt_de_kern_hoorbaar_terug_op_de_staaflengte() {
     assert_eq!(knik(&expliciet).value, s.value);
 
     // Een onzinwaarde wordt niet stil een knikweerstand zonder knikreductie.
-    let fout = staaf(L_KOLOM_MM, -100.0, 0.0, 0.0, -1.0, LateralBracing::default());
+    let fout = staaf(
+        L_KOLOM_MM,
+        -100.0,
+        0.0,
+        0.0,
+        -1.0,
+        LateralBracing::default(),
+    );
     let s_f = knik(&fout);
     assert_eq!(waarde(s_f, "l_cr_z"), L_KOLOM_MM);
-    assert!(stap(s_f, "l_cr_z").notes.iter().any(|n| n.contains("genegeerd")));
+    assert!(stap(s_f, "l_cr_z")
+        .notes
+        .iter()
+        .any(|n| n.contains("genegeerd")));
 }

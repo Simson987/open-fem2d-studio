@@ -230,8 +230,7 @@ fn de_afgekeurde_formule_valt_buiten_de_insluiting() {
         }
         let q = tw / tf;
         let pp = r / tf;
-        let alpha =
-            -0.042 + 0.2204 * q + 0.1355 * pp - 0.0865 * pp * q - 0.0725 * q * q;
+        let alpha = -0.042 + 0.2204 * q + 0.1355 * pp - 0.0865 * pp * q - 0.0725 * q * q;
         let d = ((tf + r).powi(2) + tw * (r + tw / 4.0)) / (2.0 * r + tf);
         basis + alpha * d.powi(4) - 0.21 * tf.powi(4)
     }

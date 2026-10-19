@@ -1,11 +1,11 @@
 //! NEN-EN 1993-1-1 §6.3.2 — lateral-torsional buckling + NB-annex Mcr.
 
+use mechanics::ForceStateSnapshot;
+use nen_en_1993_1_1_section::{CheckStatus, NamedValue, SteelGrade, UnityCheck};
+use nen_en_1993_1_1_stability::{buckling_curve::BucklingCurve, StabilityCalc};
+use section_properties::SectionProperties;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-use mechanics::ForceStateSnapshot;
-use nen_en_1993_1_1_section::{SteelGrade, NamedValue, UnityCheck, CheckStatus};
-use nen_en_1993_1_1_stability::{StabilityCalc, buckling_curve::BucklingCurve};
-use section_properties::SectionProperties;
 
 /// De nationaal bepaalde parameters bij NEN-EN 1993-1-1, uit de normnaad.
 ///
@@ -17,10 +17,10 @@ use section_properties::SectionProperties;
 pub(crate) const NDP: nationale_bijlage::Ndp1993 =
     nationale_bijlage::Ndp1993::voor(nationale_bijlage::NationaleBijlage::NL);
 
-pub mod nb_annex;
-pub mod lambda_chi;
-pub mod en_general;
 mod deelstappen;
+pub mod en_general;
+pub mod lambda_chi;
+pub mod nb_annex;
 
 use deelstappen::{kip_deelstappen, Kipgegevens, McrVorm};
 
@@ -390,9 +390,10 @@ fn maatgevend_kipveld(
         // Alleen voor het rapport: hoe zwaar is dit veld belast. Welke flens
         // gedrukt is, volgt uit de TEKENS van alle drie de momenten samen en
         // niet uit dit ene getal — zie `en_general::z_j_kipveld`.
-        let m_maatgevend_knm = momenten_knm
-            .into_iter()
-            .fold(0.0_f64, |m, x| if x.abs() > m.abs() { x } else { m });
+        let m_maatgevend_knm =
+            momenten_knm
+                .into_iter()
+                .fold(0.0_f64, |m, x| if x.abs() > m.abs() { x } else { m });
         Veldresultaat {
             index,
             aantal_velden,
@@ -412,7 +413,13 @@ fn maatgevend_kipveld(
             m_maatgevend_knm,
             momenten_knm,
             gedrukte_flens: en_general::gedrukte_flens_in_kipveld(momenten_knm),
-            m_cr_knm: m_cr(&McrInvoer { c, c1, c2_tabel, l_kip_mm, momenten_knm }),
+            m_cr_knm: m_cr(&McrInvoer {
+                c,
+                c1,
+                c2_tabel,
+                l_kip_mm,
+                momenten_knm,
+            }),
         }
     };
 
@@ -427,7 +434,11 @@ fn maatgevend_kipveld(
     let alle: Vec<Veldresultaat> = if velden.is_empty() {
         vec![bereken(0, &leeg)]
     } else {
-        velden.iter().enumerate().map(|(i, veld)| bereken(i, veld)).collect()
+        velden
+            .iter()
+            .enumerate()
+            .map(|(i, veld)| bereken(i, veld))
+            .collect()
     };
     // Zelfde keuze als voorheen: strikt lager wint, bij gelijke M_cr blijft
     // het eerste veld staan.
@@ -532,15 +543,51 @@ pub(crate) fn l_kip_toelichting(v: &Veldresultaat) -> Option<String> {
 /// waarin het rapport ze toont.
 fn nb_tussenwaarden(l_g_mm: f64, v: &Veldresultaat, s_mm: f64) -> Vec<NamedValue> {
     vec![
-        NamedValue { symbol: "L_g".to_string(), value: l_g_mm, unit: "mm".to_string() },
-        NamedValue { symbol: "L_{st}".to_string(), value: v.l_st_mm, unit: "mm".to_string() },
-        NamedValue { symbol: "L_{kip}".to_string(), value: v.l_kip_mm, unit: "mm".to_string() },
-        NamedValue { symbol: r"\beta".to_string(), value: v.beta, unit: "-".to_string() },
-        NamedValue { symbol: "B^*".to_string(), value: v.b_ster, unit: "-".to_string() },
-        NamedValue { symbol: "C_1".to_string(), value: v.c1, unit: "-".to_string() },
-        NamedValue { symbol: "C_2".to_string(), value: v.c2, unit: "-".to_string() },
-        NamedValue { symbol: "S".to_string(), value: s_mm, unit: "mm".to_string() },
-        NamedValue { symbol: "C".to_string(), value: v.c, unit: "-".to_string() },
+        NamedValue {
+            symbol: "L_g".to_string(),
+            value: l_g_mm,
+            unit: "mm".to_string(),
+        },
+        NamedValue {
+            symbol: "L_{st}".to_string(),
+            value: v.l_st_mm,
+            unit: "mm".to_string(),
+        },
+        NamedValue {
+            symbol: "L_{kip}".to_string(),
+            value: v.l_kip_mm,
+            unit: "mm".to_string(),
+        },
+        NamedValue {
+            symbol: r"\beta".to_string(),
+            value: v.beta,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "B^*".to_string(),
+            value: v.b_ster,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "C_1".to_string(),
+            value: v.c1,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "C_2".to_string(),
+            value: v.c2,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "S".to_string(),
+            value: s_mm,
+            unit: "mm".to_string(),
+        },
+        NamedValue {
+            symbol: "C".to_string(),
+            value: v.c,
+            unit: "-".to_string(),
+        },
     ]
 }
 
@@ -603,14 +650,24 @@ fn nb_waarschuwingen(
 /// monosymmetriereductie van [`nb_annex::m_cr_channel_section`] en α_LT komt
 /// niet uit tabel 6.5, die voor U-profielen geen rij heeft (zie onder).
 pub fn m_b_rd_channel(
-    p: &SectionProperties, grade: &SteelGrade,
+    p: &SectionProperties,
+    grade: &SteelGrade,
     l_g_mm: f64,
     velden: &[Kipveld],
     q_equiv_n_per_mm: f64,
     z_a_mm: f64,
     force_state: ForceStateSnapshot,
 ) -> StabilityCalc {
-    m_b_rd_channel_met_veld(p, grade, l_g_mm, velden, q_equiv_n_per_mm, z_a_mm, force_state).0
+    m_b_rd_channel_met_veld(
+        p,
+        grade,
+        l_g_mm,
+        velden,
+        q_equiv_n_per_mm,
+        z_a_mm,
+        force_state,
+    )
+    .0
 }
 
 /// Als [`m_b_rd_channel`], plus de index (vanaf 0 bij het staafbegin) van het
@@ -618,7 +675,8 @@ pub fn m_b_rd_channel(
 /// nodig: C_mLT (bijlage B, tabel B.3) hoort bij het momentenverloop van het
 /// kipveld waaruit χ_LT komt, niet bij dat van de hele staaf.
 pub fn m_b_rd_channel_met_veld(
-    p: &SectionProperties, grade: &SteelGrade,
+    p: &SectionProperties,
+    grade: &SteelGrade,
     l_g_mm: f64,
     velden: &[Kipveld],
     q_equiv_n_per_mm: f64,
@@ -639,7 +697,13 @@ pub fn m_b_rd_channel_met_veld(
     let s_mm = nb_annex::s_parameter(p.h_mm, nb_annex::E_MPA, p.iz_mm4, nb_annex::G_MPA, p.it_mm4);
     let k_red = nb_annex::k_red(p.h_mm, p.tf_mm, p.tw_mm, p.b_mm, l_g_mm);
     let (v, alle_velden) = maatgevend_kipveld(
-        velden, l_g_mm, q_equiv_n_per_mm, z_a_mm, p.h_mm, p.tf_mm, s_mm,
+        velden,
+        l_g_mm,
+        q_equiv_n_per_mm,
+        z_a_mm,
+        p.h_mm,
+        p.tf_mm,
+        s_mm,
         |i| nb_annex::m_cr_channel_section(i.c, l_g_mm, p.iz_mm4, p.it_mm4, k_red),
     );
 
@@ -667,15 +731,39 @@ pub fn m_b_rd_channel_met_veld(
 
     let m_b_rd_knm = chi_lt * p.wpl_y_mm3 * grade.fy_mpa / grade.gamma_m1 * 1e-6;
     let m_y_ed_abs = force_state.forces.my_ed.abs();
-    let uc = if m_b_rd_knm > 0.0 { m_y_ed_abs / m_b_rd_knm } else { 0.0 };
+    let uc = if m_b_rd_knm > 0.0 {
+        m_y_ed_abs / m_b_rd_knm
+    } else {
+        0.0
+    };
 
     let mut intermediate_values = nb_tussenwaarden(l_g_mm, &v, s_mm);
     intermediate_values.extend([
-        NamedValue { symbol: "k_{red}".to_string(), value: k_red, unit: "-".to_string() },
-        NamedValue { symbol: "M_{cr}".to_string(), value: v.m_cr_knm, unit: "kNm".to_string() },
-        NamedValue { symbol: r"\bar{\lambda}_{LT}".to_string(), value: lambda_lt, unit: "-".to_string() },
-        NamedValue { symbol: r"\alpha_{LT}".to_string(), value: alpha_lt, unit: "-".to_string() },
-        NamedValue { symbol: r"\chi_{LT}".to_string(), value: chi_lt, unit: "-".to_string() },
+        NamedValue {
+            symbol: "k_{red}".to_string(),
+            value: k_red,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "M_{cr}".to_string(),
+            value: v.m_cr_knm,
+            unit: "kNm".to_string(),
+        },
+        NamedValue {
+            symbol: r"\bar{\lambda}_{LT}".to_string(),
+            value: lambda_lt,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: r"\alpha_{LT}".to_string(),
+            value: alpha_lt,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: r"\chi_{LT}".to_string(),
+            value: chi_lt,
+            unit: "-".to_string(),
+        },
     ]);
 
     let calc = StabilityCalc {
@@ -686,15 +774,36 @@ pub fn m_b_rd_channel_met_veld(
         force_state,
         formula_latex: r"M_{b,Rd} = \chi_{LT} \cdot W_{pl,y} \cdot f_y / \gamma_{M1}".to_string(),
         variables: vec![
-            NamedValue { symbol: "W_{pl,y}".to_string(), value: p.wpl_y_mm3, unit: "mm³".to_string() },
-            NamedValue { symbol: "f_y".to_string(), value: grade.fy_mpa, unit: "MPa".to_string() },
-            NamedValue { symbol: r"\gamma_{M1}".to_string(), value: grade.gamma_m1, unit: "-".to_string() },
+            NamedValue {
+                symbol: "W_{pl,y}".to_string(),
+                value: p.wpl_y_mm3,
+                unit: "mm³".to_string(),
+            },
+            NamedValue {
+                symbol: "f_y".to_string(),
+                value: grade.fy_mpa,
+                unit: "MPa".to_string(),
+            },
+            NamedValue {
+                symbol: r"\gamma_{M1}".to_string(),
+                value: grade.gamma_m1,
+                unit: "-".to_string(),
+            },
         ],
         intermediate_values,
         deelstappen: kip_deelstappen(&Kipgegevens {
-            p, grade, l_g_mm, v: &v, alle_velden: &alle_velden,
-            q_equiv_n_per_mm, z_a_mm, s_mm, k_red,
-            lambda_lt, alpha_lt, chi_lt,
+            p,
+            grade,
+            l_g_mm,
+            v: &v,
+            alle_velden: &alle_velden,
+            q_equiv_n_per_mm,
+            z_a_mm,
+            s_mm,
+            k_red,
+            lambda_lt,
+            alpha_lt,
+            chi_lt,
             vorm: McrVorm::Kanaal,
             alpha_lt_herkomst,
             mono: None,
@@ -704,10 +813,16 @@ pub fn m_b_rd_channel_met_veld(
         value: m_b_rd_knm,
         unit: "kNm".to_string(),
         uc: Some(UnityCheck {
-            ed: m_y_ed_abs, rd: m_b_rd_knm, uc,
+            ed: m_y_ed_abs,
+            rd: m_b_rd_knm,
+            uc,
             formula_latex: r"M_{y,Ed} / M_{b,Rd}".to_string(),
         }),
-        status: if uc <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk },
+        status: if uc <= 1.0 {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::NotOk
+        },
         notes: {
             let mut n = vec![
                 // Deze notitie noemde tot september 2026 "bijlage F". Die
@@ -870,7 +985,8 @@ fn kip_geweigerd_onbepaalde_monosymmetrie(force_state: ForceStateSnapshot) -> St
 /// [`en_general::z_j_kipveld`] en [`en_general::z_j_rekenwaarde`].
 #[allow(clippy::too_many_arguments)]
 pub fn m_b_rd_monosymmetrisch(
-    p: &SectionProperties, grade: &SteelGrade,
+    p: &SectionProperties,
+    grade: &SteelGrade,
     l_g_mm: f64,
     velden: &[Kipveld],
     q_equiv_n_per_mm: f64,
@@ -879,7 +995,11 @@ pub fn m_b_rd_monosymmetrisch(
     profielsoort: Kipprofiel,
     force_state: ForceStateSnapshot,
 ) -> StabilityCalc {
-    let Monosymmetrieinvoer { z_j_geometrisch_mm, bepaald, psi_f } = *mono_invoer;
+    let Monosymmetrieinvoer {
+        z_j_geometrisch_mm,
+        bepaald,
+        psi_f,
+    } = *mono_invoer;
     if !bepaald {
         return kip_geweigerd_onbepaalde_monosymmetrie(force_state);
     }
@@ -902,14 +1022,18 @@ pub fn m_b_rd_monosymmetrisch(
         let z_j_reken = en_general::z_j_rekenwaarde(z_j_norm);
         k_red
             * en_general::m_cr_monosymmetrisch(
-                i.c1, i.c2_tabel, c3,
-                i.l_kip_mm,
-                p.iz_mm4, p.iw_mm6, p.it_mm4,
-                z_g_mm, z_j_reken,
+                i.c1, i.c2_tabel, c3, i.l_kip_mm, p.iz_mm4, p.iw_mm6, p.it_mm4, z_g_mm, z_j_reken,
             )
     };
     let (v, alle_velden) = maatgevend_kipveld(
-        velden, l_g_mm, q_equiv_n_per_mm, z_a_mm, p.h_mm, p.tf_mm, s_mm, m_cr_van,
+        velden,
+        l_g_mm,
+        q_equiv_n_per_mm,
+        z_a_mm,
+        p.h_mm,
+        p.tf_mm,
+        s_mm,
+        m_cr_van,
     );
 
     // Dezelfde twee stappen nog eens, nu op het veld dat gewonnen heeft, zodat
@@ -928,7 +1052,14 @@ pub fn m_b_rd_monosymmetrisch(
     let alpha_lt_herkomst = {
         let a = nl(alpha_lt, 2);
         let letter = kromme_letter(kromme);
-        let h_b = nl(if p.b_mm > 0.0 { p.h_mm / p.b_mm } else { f64::NAN }, 3);
+        let h_b = nl(
+            if p.b_mm > 0.0 {
+                p.h_mm / p.b_mm
+            } else {
+                f64::NAN
+            },
+            3,
+        );
         match profielsoort {
             Kipprofiel::GelasteI => format!(
                 "Gelast I-profiel met h/b = {h_b} → kipkromme {letter} volgens tabel 6.5; \
@@ -951,7 +1082,11 @@ pub fn m_b_rd_monosymmetrisch(
 
     let m_b_rd_knm = chi_lt * p.wpl_y_mm3 * grade.fy_mpa / grade.gamma_m1 * 1e-6;
     let m_y_ed_abs = force_state.forces.my_ed.abs();
-    let uc = if m_b_rd_knm > 0.0 { m_y_ed_abs / m_b_rd_knm } else { 0.0 };
+    let uc = if m_b_rd_knm > 0.0 {
+        m_y_ed_abs / m_b_rd_knm
+    } else {
+        0.0
+    };
 
     let mono = deelstappen::Monogegevens {
         z_j_geometrisch_mm,
@@ -969,21 +1104,81 @@ pub fn m_b_rd_monosymmetrisch(
     };
 
     let intermediate_values = vec![
-        NamedValue { symbol: "L_g".to_string(), value: l_g_mm, unit: "mm".to_string() },
-        NamedValue { symbol: "L_{st}".to_string(), value: v.l_st_mm, unit: "mm".to_string() },
-        NamedValue { symbol: "L_{kip}".to_string(), value: v.l_kip_mm, unit: "mm".to_string() },
-        NamedValue { symbol: r"\beta".to_string(), value: v.beta, unit: "-".to_string() },
-        NamedValue { symbol: "B^*".to_string(), value: v.b_ster, unit: "-".to_string() },
-        NamedValue { symbol: "C_1".to_string(), value: v.c1, unit: "-".to_string() },
-        NamedValue { symbol: "C_{2,tabel}".to_string(), value: v.c2_tabel, unit: "-".to_string() },
-        NamedValue { symbol: "C_3".to_string(), value: mono.c3, unit: "-".to_string() },
-        NamedValue { symbol: "z_g".to_string(), value: z_g_mm, unit: "mm".to_string() },
-        NamedValue { symbol: "z_j".to_string(), value: z_j_reken_mm, unit: "mm".to_string() },
-        NamedValue { symbol: "k_{red}".to_string(), value: k_red, unit: "-".to_string() },
-        NamedValue { symbol: "M_{cr}".to_string(), value: v.m_cr_knm, unit: "kNm".to_string() },
-        NamedValue { symbol: r"\bar{\lambda}_{LT}".to_string(), value: lambda_lt, unit: "-".to_string() },
-        NamedValue { symbol: r"\alpha_{LT}".to_string(), value: alpha_lt, unit: "-".to_string() },
-        NamedValue { symbol: r"\chi_{LT}".to_string(), value: chi_lt, unit: "-".to_string() },
+        NamedValue {
+            symbol: "L_g".to_string(),
+            value: l_g_mm,
+            unit: "mm".to_string(),
+        },
+        NamedValue {
+            symbol: "L_{st}".to_string(),
+            value: v.l_st_mm,
+            unit: "mm".to_string(),
+        },
+        NamedValue {
+            symbol: "L_{kip}".to_string(),
+            value: v.l_kip_mm,
+            unit: "mm".to_string(),
+        },
+        NamedValue {
+            symbol: r"\beta".to_string(),
+            value: v.beta,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "B^*".to_string(),
+            value: v.b_ster,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "C_1".to_string(),
+            value: v.c1,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "C_{2,tabel}".to_string(),
+            value: v.c2_tabel,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "C_3".to_string(),
+            value: mono.c3,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "z_g".to_string(),
+            value: z_g_mm,
+            unit: "mm".to_string(),
+        },
+        NamedValue {
+            symbol: "z_j".to_string(),
+            value: z_j_reken_mm,
+            unit: "mm".to_string(),
+        },
+        NamedValue {
+            symbol: "k_{red}".to_string(),
+            value: k_red,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "M_{cr}".to_string(),
+            value: v.m_cr_knm,
+            unit: "kNm".to_string(),
+        },
+        NamedValue {
+            symbol: r"\bar{\lambda}_{LT}".to_string(),
+            value: lambda_lt,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: r"\alpha_{LT}".to_string(),
+            value: alpha_lt,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: r"\chi_{LT}".to_string(),
+            value: chi_lt,
+            unit: "-".to_string(),
+        },
     ];
 
     StabilityCalc {
@@ -995,15 +1190,36 @@ pub fn m_b_rd_monosymmetrisch(
         force_state,
         formula_latex: r"M_{b,Rd} = \chi_{LT} \cdot W_{pl,y} \cdot f_y / \gamma_{M1}".to_string(),
         variables: vec![
-            NamedValue { symbol: "W_{pl,y}".to_string(), value: p.wpl_y_mm3, unit: "mm³".to_string() },
-            NamedValue { symbol: "f_y".to_string(), value: grade.fy_mpa, unit: "MPa".to_string() },
-            NamedValue { symbol: r"\gamma_{M1}".to_string(), value: grade.gamma_m1, unit: "-".to_string() },
+            NamedValue {
+                symbol: "W_{pl,y}".to_string(),
+                value: p.wpl_y_mm3,
+                unit: "mm³".to_string(),
+            },
+            NamedValue {
+                symbol: "f_y".to_string(),
+                value: grade.fy_mpa,
+                unit: "MPa".to_string(),
+            },
+            NamedValue {
+                symbol: r"\gamma_{M1}".to_string(),
+                value: grade.gamma_m1,
+                unit: "-".to_string(),
+            },
         ],
         intermediate_values,
         deelstappen: kip_deelstappen(&Kipgegevens {
-            p, grade, l_g_mm, v: &v, alle_velden: &alle_velden,
-            q_equiv_n_per_mm, z_a_mm, s_mm, k_red,
-            lambda_lt, alpha_lt, chi_lt,
+            p,
+            grade,
+            l_g_mm,
+            v: &v,
+            alle_velden: &alle_velden,
+            q_equiv_n_per_mm,
+            z_a_mm,
+            s_mm,
+            k_red,
+            lambda_lt,
+            alpha_lt,
+            chi_lt,
             vorm: McrVorm::AlgemeenMonosymmetrisch,
             alpha_lt_herkomst: alpha_lt_herkomst.clone(),
             mono: Some(mono),
@@ -1011,11 +1227,16 @@ pub fn m_b_rd_monosymmetrisch(
         value: m_b_rd_knm,
         unit: "kNm".to_string(),
         uc: Some(UnityCheck {
-            ed: m_y_ed_abs, rd: m_b_rd_knm,
+            ed: m_y_ed_abs,
+            rd: m_b_rd_knm,
             formula_latex: r"M_{y,Ed} / M_{b,Rd}".to_string(),
             uc,
         }),
-        status: if uc <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk },
+        status: if uc <= 1.0 {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::NotOk
+        },
         notes: {
             let mut n = vec![
                 "Deze doorsnede is monosymmetrisch om de buigingsas. NB.NB.1(1) verklaart de \
@@ -1081,7 +1302,8 @@ pub fn m_b_rd_monosymmetrisch(
 /// positief = boven het zwaartepunt, destabiliserend).
 /// `profielsoort`: welke rij van tabel 6.5 geldt, zie [`kipkromme_tabel_6_5`].
 pub fn m_b_rd(
-    p: &SectionProperties, grade: &SteelGrade,
+    p: &SectionProperties,
+    grade: &SteelGrade,
     l_g_mm: f64,
     velden: &[Kipveld],
     q_equiv_n_per_mm: f64,
@@ -1089,14 +1311,25 @@ pub fn m_b_rd(
     profielsoort: Kipprofiel,
     force_state: ForceStateSnapshot,
 ) -> StabilityCalc {
-    m_b_rd_met_veld(p, grade, l_g_mm, velden, q_equiv_n_per_mm, z_a_mm, profielsoort, force_state).0
+    m_b_rd_met_veld(
+        p,
+        grade,
+        l_g_mm,
+        velden,
+        q_equiv_n_per_mm,
+        z_a_mm,
+        profielsoort,
+        force_state,
+    )
+    .0
 }
 
 /// Als [`m_b_rd`], plus de index (vanaf 0 bij het staafbegin) van het
 /// maatgevende kipveld in `velden`; zie [`m_b_rd_channel_met_veld`].
 #[allow(clippy::too_many_arguments)]
 pub fn m_b_rd_met_veld(
-    p: &SectionProperties, grade: &SteelGrade,
+    p: &SectionProperties,
+    grade: &SteelGrade,
     l_g_mm: f64,
     velden: &[Kipveld],
     q_equiv_n_per_mm: f64,
@@ -1118,7 +1351,13 @@ pub fn m_b_rd_met_veld(
     let s_mm = nb_annex::s_parameter(p.h_mm, nb_annex::E_MPA, p.iz_mm4, nb_annex::G_MPA, p.it_mm4);
     let k_red = nb_annex::k_red(p.h_mm, p.tf_mm, p.tw_mm, p.b_mm, l_g_mm);
     let (v, alle_velden) = maatgevend_kipveld(
-        velden, l_g_mm, q_equiv_n_per_mm, z_a_mm, p.h_mm, p.tf_mm, s_mm,
+        velden,
+        l_g_mm,
+        q_equiv_n_per_mm,
+        z_a_mm,
+        p.h_mm,
+        p.tf_mm,
+        s_mm,
         |i| nb_annex::m_cr_i_section(i.c, l_g_mm, p.iz_mm4, p.it_mm4, k_red),
     );
 
@@ -1140,7 +1379,14 @@ pub fn m_b_rd_met_veld(
     // 6.4, bij de algemene methode 6.3.2.2. Eén onvoorwaardelijke zin "volgens
     // tabel 6.5" zou voor een koker dus een tabelrij aanhalen die niet bestaat.
     let alpha_lt_herkomst = {
-        let h_b = nl(if p.b_mm > 0.0 { p.h_mm / p.b_mm } else { f64::NAN }, 3);
+        let h_b = nl(
+            if p.b_mm > 0.0 {
+                p.h_mm / p.b_mm
+            } else {
+                f64::NAN
+            },
+            3,
+        );
         let a = nl(alpha_lt, 2);
         let letter = kromme_letter(kromme);
         match profielsoort {
@@ -1164,15 +1410,39 @@ pub fn m_b_rd_met_veld(
     let m_b_rd_knm = chi_lt * p.wpl_y_mm3 * grade.fy_mpa / grade.gamma_m1 * 1e-6;
 
     let m_y_ed_abs = force_state.forces.my_ed.abs();
-    let uc = if m_b_rd_knm > 0.0 { m_y_ed_abs / m_b_rd_knm } else { 0.0 };
+    let uc = if m_b_rd_knm > 0.0 {
+        m_y_ed_abs / m_b_rd_knm
+    } else {
+        0.0
+    };
 
     let mut intermediate_values = nb_tussenwaarden(l_g_mm, &v, s_mm);
     intermediate_values.extend([
-        NamedValue { symbol: "k_{red}".to_string(), value: k_red, unit: "-".to_string() },
-        NamedValue { symbol: "M_{cr}".to_string(), value: v.m_cr_knm, unit: "kNm".to_string() },
-        NamedValue { symbol: r"\bar{\lambda}_{LT}".to_string(), value: lambda_lt, unit: "-".to_string() },
-        NamedValue { symbol: r"\alpha_{LT}".to_string(), value: alpha_lt, unit: "-".to_string() },
-        NamedValue { symbol: r"\chi_{LT}".to_string(), value: chi_lt, unit: "-".to_string() },
+        NamedValue {
+            symbol: "k_{red}".to_string(),
+            value: k_red,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "M_{cr}".to_string(),
+            value: v.m_cr_knm,
+            unit: "kNm".to_string(),
+        },
+        NamedValue {
+            symbol: r"\bar{\lambda}_{LT}".to_string(),
+            value: lambda_lt,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: r"\alpha_{LT}".to_string(),
+            value: alpha_lt,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: r"\chi_{LT}".to_string(),
+            value: chi_lt,
+            unit: "-".to_string(),
+        },
     ]);
 
     let calc = StabilityCalc {
@@ -1182,15 +1452,36 @@ pub fn m_b_rd_met_veld(
         force_state,
         formula_latex: r"M_{b,Rd} = \chi_{LT} \cdot W_{pl,y} \cdot f_y / \gamma_{M1}".to_string(),
         variables: vec![
-            NamedValue { symbol: "W_{pl,y}".to_string(), value: p.wpl_y_mm3, unit: "mm³".to_string() },
-            NamedValue { symbol: "f_y".to_string(), value: grade.fy_mpa, unit: "MPa".to_string() },
-            NamedValue { symbol: r"\gamma_{M1}".to_string(), value: grade.gamma_m1, unit: "-".to_string() },
+            NamedValue {
+                symbol: "W_{pl,y}".to_string(),
+                value: p.wpl_y_mm3,
+                unit: "mm³".to_string(),
+            },
+            NamedValue {
+                symbol: "f_y".to_string(),
+                value: grade.fy_mpa,
+                unit: "MPa".to_string(),
+            },
+            NamedValue {
+                symbol: r"\gamma_{M1}".to_string(),
+                value: grade.gamma_m1,
+                unit: "-".to_string(),
+            },
         ],
         intermediate_values,
         deelstappen: kip_deelstappen(&Kipgegevens {
-            p, grade, l_g_mm, v: &v, alle_velden: &alle_velden,
-            q_equiv_n_per_mm, z_a_mm, s_mm, k_red,
-            lambda_lt, alpha_lt, chi_lt,
+            p,
+            grade,
+            l_g_mm,
+            v: &v,
+            alle_velden: &alle_velden,
+            q_equiv_n_per_mm,
+            z_a_mm,
+            s_mm,
+            k_red,
+            lambda_lt,
+            alpha_lt,
+            chi_lt,
             vorm: McrVorm::DubbelsymmetrischeI,
             alpha_lt_herkomst: alpha_lt_herkomst.clone(),
             mono: None,
@@ -1211,10 +1502,16 @@ pub fn m_b_rd_met_veld(
         value: m_b_rd_knm,
         unit: "kNm".to_string(),
         uc: Some(UnityCheck {
-            ed: m_y_ed_abs, rd: m_b_rd_knm, uc,
+            ed: m_y_ed_abs,
+            rd: m_b_rd_knm,
+            uc,
             formula_latex: r"M_{y,Ed} / M_{b,Rd}".to_string(),
         }),
-        status: if uc <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk },
+        status: if uc <= 1.0 {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::NotOk
+        },
         notes: {
             let mut n = vec![alpha_lt_herkomst];
             // Vgl. (6.58) hoort bij 6.3.2.3(2) en is niet geïmplementeerd. Het

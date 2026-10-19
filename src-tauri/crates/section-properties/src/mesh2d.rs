@@ -179,7 +179,12 @@ fn discretiseer(seg: &Segment, h: f64, uit: &mut Vec<[f64; 2]>) {
                 uit.push([van.0 + t * (naar.0 - van.0), van.1 + t * (naar.1 - van.1)]);
             }
         }
-        Segment::Boog { centrum, straal, theta1, theta2 } => {
+        Segment::Boog {
+            centrum,
+            straal,
+            theta1,
+            theta2,
+        } => {
             let dt = theta2 - theta1;
             let n_lengte = ((straal * dt.abs()) / h).ceil() as usize;
             let n_hoek = (dt.abs() / (PI / 8.0)).ceil() as usize;
@@ -204,7 +209,10 @@ fn polylijnen(d: &Doorsnede, h: f64) -> Vec<Poly> {
         let tol = 1e-9 * h;
         let mut schoon: Vec<[f64; 2]> = Vec::with_capacity(p.len());
         for q in p {
-            if schoon.last().map_or(true, |l: &[f64; 2]| (l[0] - q[0]).hypot(l[1] - q[1]) > tol) {
+            if schoon
+                .last()
+                .map_or(true, |l: &[f64; 2]| (l[0] - q[0]).hypot(l[1] - q[1]) > tol)
+            {
                 schoon.push(q);
             }
         }
@@ -226,7 +234,10 @@ fn polylijnen(d: &Doorsnede, h: f64) -> Vec<Poly> {
             let b = schoon[(i + 1) % schoon.len()];
             opp += a[0] * b[1] - b[0] * a[1];
         }
-        uit.push(Poly { punten: schoon, opp: 0.5 * opp });
+        uit.push(Poly {
+            punten: schoon,
+            opp: 0.5 * opp,
+        });
     }
     uit
 }
@@ -310,7 +321,15 @@ impl Randrooster {
                 }
             }
         }
-        Randrooster { cel, y0, z0, nx, ny, bakken, segmenten }
+        Randrooster {
+            cel,
+            y0,
+            z0,
+            nx,
+            ny,
+            bakken,
+            segmenten,
+        }
     }
 
     fn kol(&self, y: f64) -> usize {
@@ -490,7 +509,9 @@ impl Delaunay {
                         continue;
                     }
                     let terug = if nb >= 0 {
-                        (0..3).find(|&j| self.buur[nb as usize][j] == t as i32).unwrap_or(0)
+                        (0..3)
+                            .find(|&j| self.buur[nb as usize][j] == t as i32)
+                            .unwrap_or(0)
                     } else {
                         0
                     };
@@ -578,7 +599,10 @@ pub fn genereer(d: &Doorsnede, h: f64) -> Mesh2D {
     let h = h.max(1e-9);
     let mut polys = polylijnen(d, h);
     if polys.is_empty() {
-        return Mesh2D { h_mm: h, ..Default::default() };
+        return Mesh2D {
+            h_mm: h,
+            ..Default::default()
+        };
     }
     // Alles met de klok mee ingevoerd? Eén keer omkeren, net als in `contour`.
     let totaal: f64 = polys.iter().map(|p| p.opp).sum();
@@ -590,8 +614,12 @@ pub fn genereer(d: &Doorsnede, h: f64) -> Mesh2D {
     }
 
     // ── Omhullende + normalisatie ───────────────────────────────────────────
-    let (mut y0, mut y1, mut z0, mut z1) =
-        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    let (mut y0, mut y1, mut z0, mut z1) = (
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+    );
     for p in &polys {
         for q in &p.punten {
             y0 = y0.min(q[0]);
@@ -618,7 +646,11 @@ pub fn genereer(d: &Doorsnede, h: f64) -> Mesh2D {
         for i in 0..n {
             randsegmenten.push((p.punten[i], p.punten[(i + 1) % n]));
         }
-        lussen.push(((start..punten.len() as u32).collect(), p.opp < 0.0, p.opp.abs()));
+        lussen.push((
+            (start..punten.len() as u32).collect(),
+            p.opp < 0.0,
+            p.opp.abs(),
+        ));
     }
     let rooster_index = Randrooster::nieuw(randsegmenten, h, (y0, y1, z0, z1));
 
@@ -815,8 +847,18 @@ pub fn genereer(d: &Doorsnede, h: f64) -> Mesh2D {
         })
         .collect();
 
-    let mut mesh = Mesh2D { punten: nieuwe_punten, driehoeken, lussen, h_mm: h, randherstel_onvolledig };
-    let op_rand: HashSet<u32> = mesh.lussen.iter().flat_map(|l| l.knopen.iter().copied()).collect();
+    let mut mesh = Mesh2D {
+        punten: nieuwe_punten,
+        driehoeken,
+        lussen,
+        h_mm: h,
+        randherstel_onvolledig,
+    };
+    let op_rand: HashSet<u32> = mesh
+        .lussen
+        .iter()
+        .flat_map(|l| l.knopen.iter().copied())
+        .collect();
     strijk_glad(&mut mesh, &op_rand, 4);
     mesh
 }
@@ -879,8 +921,12 @@ fn slangvolgorde(p: &[[f64; 2]]) -> Vec<u32> {
         return Vec::new();
     }
     let cellen = ((n as f64).sqrt() / 2.0).ceil().max(1.0) as usize;
-    let (mut y0, mut y1, mut z0, mut z1) =
-        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    let (mut y0, mut y1, mut z0, mut z1) = (
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+    );
     for q in p {
         y0 = y0.min(q[0]);
         y1 = y1.max(q[0]);
@@ -935,7 +981,10 @@ fn strijk_glad(mesh: &mut Mesh2D, op_rand: &HashSet<u32>, sweeps: usize) {
             let k = buren[i].len() as f64;
             doel = [doel[0] / k, doel[1] / k];
             let oud = mesh.punten[i];
-            let nieuw = [oud[0] + 0.6 * (doel[0] - oud[0]), oud[1] + 0.6 * (doel[1] - oud[1])];
+            let nieuw = [
+                oud[0] + 0.6 * (doel[0] - oud[0]),
+                oud[1] + 0.6 * (doel[1] - oud[1]),
+            ];
             mesh.punten[i] = nieuw;
             let ok = driehoeken_van[i].iter().all(|&t| {
                 let d = mesh.driehoeken[t as usize];
@@ -1016,7 +1065,11 @@ mod tests {
         let d = i_profiel(200.0, 100.0, 5.6, 8.5, 12.0);
         let m = genereer(&d, 1.2);
         controleer(&m, d.bereken().a_mm2, 0.005, "IPE 200");
-        assert!(m.kleinste_hoek_graden() > 8.0, "hoek {}", m.kleinste_hoek_graden());
+        assert!(
+            m.kleinste_hoek_graden() > 8.0,
+            "hoek {}",
+            m.kleinste_hoek_graden()
+        );
     }
 
     #[test]

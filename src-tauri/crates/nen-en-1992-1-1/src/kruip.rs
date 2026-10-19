@@ -75,7 +75,10 @@ pub const F_CM_GRENS_MPA: f64 = 35.0;
 
 /// De cementklasse van §3.1.2(6), die via α in (B.9) de ouderdom t₀ aanpast.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum CementClass {
     /// Klasse S — langzaam verhardend; α = −1.
     S,
@@ -106,7 +109,10 @@ impl CementClass {
 
 /// Alle tussenwaarden van bijlage B, in de volgorde van de norm.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct KruipUitkomst {
     pub f_cm_mpa: f64,
     pub relative_humidity_pct: f64,
@@ -161,7 +167,9 @@ pub fn kruipcoefficient_bijlage_b(
     t_days: Option<f64>,
 ) -> Result<KruipUitkomst, String> {
     if !(f_cm_mpa.is_finite() && f_cm_mpa > 0.0) {
-        return Err(format!("f_cm = {f_cm_mpa} MPa: de gemiddelde druksterkte moet positief zijn."));
+        return Err(format!(
+            "f_cm = {f_cm_mpa} MPa: de gemiddelde druksterkte moet positief zijn."
+        ));
     }
     if !(relative_humidity_pct.is_finite()
         && relative_humidity_pct > 0.0
@@ -200,8 +208,7 @@ pub fn kruipcoefficient_bijlage_b(
 
     // (B.9) met t₀,T = t₀ (B.10 niet gerekend, zie de moduletekst).
     let alpha_cement = cement_class.alpha();
-    let t0_ongegrensd =
-        t0_days * (9.0 / (2.0 + t0_days.powf(1.2)) + 1.0).powi(alpha_cement);
+    let t0_ongegrensd = t0_days * (9.0 / (2.0 + t0_days.powf(1.2)) + 1.0).powi(alpha_cement);
     let t0_ondergrens_maatgevend = t0_ongegrensd < 0.5;
     let t0_adjusted_days = t0_ongegrensd.max(0.5);
 
@@ -270,7 +277,10 @@ pub fn kruipcoefficient_bijlage_b(
 /// hetzelfde getal zonder voorrangsregel is een stille keuze.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct CreepCoefficientRequest {
     /// De nationale bijlage. Bijlage B kent geen nationaal bepaalde
     /// parameters; het veld staat er voor dezelfde invoervorm als de andere
@@ -304,7 +314,10 @@ pub struct CreepCoefficientRequest {
 
 /// Het antwoord: alle tussenwaarden, de afleiding en de kanttekeningen.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct CreepCoefficientResponse {
     pub beam_id: u32,
     pub concrete_class: String,
@@ -338,26 +351,25 @@ pub fn creep_coefficient_request(
             req.concrete_class
         )
     })?;
-    let (h0_mm, a_c_mm2, u_mm) = match (&req.section, req.h0_mm) {
-        (Some(_), Some(_)) => {
-            return Err(
-                "Geef h₀ óf een doorsnede op, niet allebei: de fictieve dikte heeft dan twee \
+    let (h0_mm, a_c_mm2, u_mm) =
+        match (&req.section, req.h0_mm) {
+            (Some(_), Some(_)) => {
+                return Err(
+                    "Geef h₀ óf een doorsnede op, niet allebei: de fictieve dikte heeft dan twee \
                  bronnen zonder dat vastligt welke geldt."
-                    .into(),
-            )
-        }
-        (None, None) => {
-            return Err(
+                        .into(),
+                )
+            }
+            (None, None) => return Err(
                 "De fictieve dikte ontbreekt: geef `section` (h₀ = 2·A_c/u, (B.6)) of `h0_mm` op."
                     .into(),
-            )
-        }
-        (Some(s), None) => {
-            let (a_c, u) = ac_en_u(s)?;
-            (2.0 * a_c / u, Some(a_c), Some(u))
-        }
-        (None, Some(h0)) => (h0, None, None),
-    };
+            ),
+            (Some(s), None) => {
+                let (a_c, u) = ac_en_u(s)?;
+                (2.0 * a_c / u, Some(a_c), Some(u))
+            }
+            (None, Some(h0)) => (h0, None, None),
+        };
     let uitkomst = kruipcoefficient_bijlage_b(
         klasse.f_cm,
         req.relative_humidity_pct,
@@ -436,7 +448,10 @@ pub fn kruip_deelstappen(
         None,
         "",
         vec![
-            format!("Betonklasse {klasse}: f_cm = {} MPa (tabel 3.1).", nl(u.f_cm_mpa, 0)),
+            format!(
+                "Betonklasse {klasse}: f_cm = {} MPa (tabel 3.1).",
+                nl(u.f_cm_mpa, 0)
+            ),
             format!("Cementklasse {} (art. 3.1.2(6)).", u.cement_class.label()),
         ],
     ));
@@ -535,7 +550,10 @@ pub fn kruip_deelstappen(
         artikel,
         formule,
         ingevuld,
-        vec![nv("RH", u.relative_humidity_pct, "%"), nv("h_0", u.h0_mm, "mm")],
+        vec![
+            nv("RH", u.relative_humidity_pct, "%"),
+            nv("h_0", u.h0_mm, "mm"),
+        ],
         Some(u.phi_rh),
         "",
         vec![if u.hoge_sterkte_tak {
@@ -616,7 +634,8 @@ pub fn kruip_deelstappen(
         "Theoretische kruipcoëfficiënt",
         r"\varphi(\infty,t_0)",
         "(B.2), (B.1)",
-        r"\varphi(\infty,t_0) = \varphi_0 = \varphi_{RH} \cdot \beta(f_{cm}) \cdot \beta(t_0)".to_string(),
+        r"\varphi(\infty,t_0) = \varphi_0 = \varphi_{RH} \cdot \beta(f_{cm}) \cdot \beta(t_0)"
+            .to_string(),
         format!(
             r"\varphi_0 = {} \cdot {} \cdot {} = {}",
             lx(u.phi_rh, 3),
@@ -655,7 +674,8 @@ pub fn kruip_deelstappen(
             )
         } else {
             (
-                r"\beta_H = 1{,}5 \left[1 + (0{,}012\,RH)^{18}\right] h_0 + 250 \leq 1500".to_string(),
+                r"\beta_H = 1{,}5 \left[1 + (0{,}012\,RH)^{18}\right] h_0 + 250 \leq 1500"
+                    .to_string(),
                 format!(
                     r"\beta_H = \min\left(1{{,}}5 \left[1 + (0{{,}}012 \cdot {})^{{18}}\right] \cdot {} + 250;\ 1500\right) = {}",
                     lx(u.relative_humidity_pct, 1),
@@ -676,7 +696,10 @@ pub fn kruip_deelstappen(
             artikel,
             formule,
             ingevuld,
-            vec![nv("RH", u.relative_humidity_pct, "%"), nv("h_0", u.h0_mm, "mm")],
+            vec![
+                nv("RH", u.relative_humidity_pct, "%"),
+                nv("h_0", u.h0_mm, "mm"),
+            ],
             Some(u.beta_h),
             "",
             bh_notes,
@@ -696,7 +719,11 @@ pub fn kruip_deelstappen(
                 lx(u.t0_days, 1),
                 lx(beta_c, 3)
             ),
-            vec![nv("t", t, "d"), nv("t_0", u.t0_days, "d"), nv(r"\beta_H", u.beta_h, "")],
+            vec![
+                nv("t", t, "d"),
+                nv("t_0", u.t0_days, "d"),
+                nv(r"\beta_H", u.beta_h, ""),
+            ],
             Some(beta_c),
             "",
             vec![

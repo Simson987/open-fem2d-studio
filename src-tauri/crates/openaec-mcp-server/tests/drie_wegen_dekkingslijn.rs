@@ -57,8 +57,8 @@ fn beugels(x0: f64, x1: f64, s: f64) -> Value {
 /// zetten. In de app zorgt `SolverBeamInput.extraSneden` daarvoor.
 fn omhullende() -> Value {
     let stations = [
-        0.0, 500.0, 1000.0, 1500.0, 2000.0, 2500.0, 3000.0, 3500.0, 4000.0, 4500.0, 5000.0,
-        5500.0, L_MM,
+        0.0, 500.0, 1000.0, 1500.0, 2000.0, 2500.0, 3000.0, 3500.0, 4000.0, 4500.0, 5000.0, 5500.0,
+        L_MM,
     ];
     Value::Array(
         stations
@@ -138,8 +138,7 @@ fn tauri_lib_bron() -> String {
         .join("..")
         .join("src")
         .join("lib.rs");
-    std::fs::read_to_string(&pad)
-        .unwrap_or_else(|e| panic!("{} niet leesbaar: {e}", pad.display()))
+    std::fs::read_to_string(&pad).unwrap_or_else(|e| panic!("{} niet leesbaar: {e}", pad.display()))
 }
 
 // ── Weg 2: de toetsbrug ─────────────────────────────────────────────────────
@@ -298,7 +297,9 @@ fn weg_1_het_tauri_command_is_geregistreerd() {
         .find("generate_handler![")
         .expect("`generate_handler!` staat niet in src-tauri/src/lib.rs");
     let handler = &bron[start..];
-    let eind = handler.find(']').expect("`generate_handler!` is niet gesloten");
+    let eind = handler
+        .find(']')
+        .expect("`generate_handler!` is niet gesloten");
     let handler = &handler[..eind];
 
     assert!(
@@ -319,7 +320,9 @@ async fn de_drie_wegen_leveren_dezelfde_dekkingslijn() {
     let inv = verzoek();
     let tauri = weg_tauri(&inv).expect("Tauri-weg");
     let brug = weg_toetsbrug(inv.clone()).expect("toetsbrug-weg");
-    let mcp = weg_mcp(&mut stdin, &mut reader, 700, inv).await.expect("MCP-weg");
+    let mcp = weg_mcp(&mut stdin, &mut reader, 700, inv)
+        .await
+        .expect("MCP-weg");
 
     eis_gelijk("Tauri-command", &tauri, "toetsbrug", &brug);
     eis_gelijk("toetsbrug", &brug, "MCP-server", &mcp);
@@ -398,7 +401,8 @@ async fn de_uitkomst_zelf_staat_vast() {
             punten
                 .iter()
                 .find(|p| {
-                    (p["x_mm"].as_f64().unwrap() - 1500.0).abs() < 1e-6 && p["zijde"] == json!(zijde)
+                    (p["x_mm"].as_f64().unwrap() - 1500.0).abs() < 1e-6
+                        && p["zijde"] == json!(zijde)
                 })
                 .expect("punt op de zonegrens")["aanwezig_volledig_kn"]
                 .as_f64()
@@ -461,8 +465,17 @@ async fn normaalkracht_zonder_z_levert_langs_alle_drie_de_wegen_dezelfde_lijn() 
     let punten = tauri["onder"]["punten"].as_array().unwrap();
     for p in punten {
         let z = p["z_mm"].as_f64().unwrap();
-        assert!((z - 498.6).abs() < 1e-9, "x = {}: z = {z} ≠ 0,9·d", p["x_mm"]);
-        assert_eq!(p["z_grondslag"], json!("EvenwichtBegrensd"), "x = {}", p["x_mm"]);
+        assert!(
+            (z - 498.6).abs() < 1e-9,
+            "x = {}: z = {z} ≠ 0,9·d",
+            p["x_mm"]
+        );
+        assert_eq!(
+            p["z_grondslag"],
+            json!("EvenwichtBegrensd"),
+            "x = {}",
+            p["x_mm"]
+        );
         let zu = p["z_werkelijk_mm"].as_f64().unwrap();
         assert!(zu > 498.6 && zu < 554.0, "x = {}: z_u = {zu}", p["x_mm"]);
     }
@@ -515,7 +528,10 @@ async fn een_tikfout_in_een_veldnaam_wordt_geweigerd() {
     let mut inv = verzoek();
     inv["z_m"] = json!(500.0);
 
-    assert!(weg_toetsbrug(inv.clone()).is_err(), "de toetsbrug hoort dit te weigeren");
+    assert!(
+        weg_toetsbrug(inv.clone()).is_err(),
+        "de toetsbrug hoort dit te weigeren"
+    );
     assert!(
         weg_mcp(&mut stdin, &mut reader, 704, inv).await.is_err(),
         "de MCP-server hoort dit te weigeren"

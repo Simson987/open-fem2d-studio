@@ -34,35 +34,72 @@ const B: NationaleBijlage = NationaleBijlage::NL;
 fn en_1990_partiele_factoren_en_psi_komen_uit_de_naad() {
     let bron = Ndp1990::voor(B);
     use nen_en_1990::ConsequenceClass::{CC1, CC2, CC3};
-    for (klasse, rij) in [(CC1, bron.uls_cc1), (CC2, bron.uls_cc2), (CC3, bron.uls_cc3)] {
+    for (klasse, rij) in [
+        (CC1, bron.uls_cc1),
+        (CC2, bron.uls_cc2),
+        (CC3, bron.uls_cc3),
+    ] {
         let (a, b) = klasse.uls_factoren();
         assert_eq!(
-            (a.gamma_g_sup, a.gamma_g_inf, a.gamma_q, b.gamma_g_sup, b.gamma_g_inf, b.gamma_q),
             (
-                rij.0.gamma_g_sup, rij.0.gamma_g_inf, rij.0.gamma_q,
-                rij.1.gamma_g_sup, rij.1.gamma_g_inf, rij.1.gamma_q
+                a.gamma_g_sup,
+                a.gamma_g_inf,
+                a.gamma_q,
+                b.gamma_g_sup,
+                b.gamma_g_inf,
+                b.gamma_q
+            ),
+            (
+                rij.0.gamma_g_sup,
+                rij.0.gamma_g_inf,
+                rij.0.gamma_q,
+                rij.1.gamma_g_sup,
+                rij.1.gamma_g_inf,
+                rij.1.gamma_q
             ),
             "tabel NB.4/NB.5 voor {}",
             klasse.name()
         );
     }
-    assert_eq!((CC1.k_fi(), CC2.k_fi(), CC3.k_fi()), bron.k_fi, "K_FI bij tabel NB.4");
     assert_eq!(
-        (nen_en_1990::EQU.gamma_g_sup, nen_en_1990::EQU.gamma_g_inf, nen_en_1990::EQU.gamma_q),
+        (CC1.k_fi(), CC2.k_fi(), CC3.k_fi()),
+        bron.k_fi,
+        "K_FI bij tabel NB.4"
+    );
+    assert_eq!(
+        (
+            nen_en_1990::EQU.gamma_g_sup,
+            nen_en_1990::EQU.gamma_g_inf,
+            nen_en_1990::EQU.gamma_q
+        ),
         (bron.equ.gamma_g_sup, bron.equ.gamma_g_inf, bron.equ.gamma_q),
         "tabel NB.3, EQU"
     );
     // Alle dertien rijen van tabel NB.2-A1.1, in volgorde.
     let hier = [
-        nen_en_1990::PSI_A, nen_en_1990::PSI_B, nen_en_1990::PSI_C, nen_en_1990::PSI_C_MENIGTE,
-        nen_en_1990::PSI_D, nen_en_1990::PSI_E, nen_en_1990::PSI_F, nen_en_1990::PSI_G,
-        nen_en_1990::PSI_H, nen_en_1990::PSI_INDUSTRIE_KORT, nen_en_1990::PSI_INDUSTRIE_LANG,
-        nen_en_1990::PSI_WIND, nen_en_1990::PSI_SNOW,
+        nen_en_1990::PSI_A,
+        nen_en_1990::PSI_B,
+        nen_en_1990::PSI_C,
+        nen_en_1990::PSI_C_MENIGTE,
+        nen_en_1990::PSI_D,
+        nen_en_1990::PSI_E,
+        nen_en_1990::PSI_F,
+        nen_en_1990::PSI_G,
+        nen_en_1990::PSI_H,
+        nen_en_1990::PSI_INDUSTRIE_KORT,
+        nen_en_1990::PSI_INDUSTRIE_LANG,
+        nen_en_1990::PSI_WIND,
+        nen_en_1990::PSI_SNOW,
     ];
     assert_eq!(hier.len(), bron.psi.len());
     for (h, d) in hier.iter().zip(bron.psi.iter()) {
         assert_eq!(h.category, d.category);
-        assert_eq!((h.psi0, h.psi1, h.psi2), (d.psi0, d.psi1, d.psi2), "psi {}", d.category);
+        assert_eq!(
+            (h.psi0, h.psi1, h.psi2),
+            (d.psi0, d.psi1, d.psi2),
+            "psi {}",
+            d.category
+        );
     }
 }
 
@@ -75,7 +112,10 @@ fn en_1990_doorbuigingsgrenzen_komen_uit_de_naad() {
     use steel_check::DeflectionClass;
     let bron = Ndp1990::voor(B);
     for (klasse, noemer) in [
-        (DeflectionClass::FloorBrittlePartitions, bron.w_add_noemer_scheurgevoelig),
+        (
+            DeflectionClass::FloorBrittlePartitions,
+            bron.w_add_noemer_scheurgevoelig,
+        ),
         (DeflectionClass::Roof, bron.w_add_noemer_overige_daken),
         (DeflectionClass::Floor, bron.w_add_noemer_intensief),
     ] {
@@ -90,10 +130,22 @@ fn en_1990_doorbuigingsgrenzen_komen_uit_de_naad() {
 fn en_1992_ndp_komen_uit_de_naad() {
     use nen_en_1992_1_1::factors::{alpha_cc, eps_ud, gamma_c, gamma_ce, gamma_s, DesignSituation};
     let bron = Ndp1992::voor(B);
-    assert_eq!(gamma_c(B, DesignSituation::PersistentTransient), bron.gamma_c_blijvend);
-    assert_eq!(gamma_s(B, DesignSituation::PersistentTransient), bron.gamma_s_blijvend);
-    assert_eq!(gamma_c(B, DesignSituation::Accidental), bron.gamma_c_buitengewoon);
-    assert_eq!(gamma_s(B, DesignSituation::Accidental), bron.gamma_s_buitengewoon);
+    assert_eq!(
+        gamma_c(B, DesignSituation::PersistentTransient),
+        bron.gamma_c_blijvend
+    );
+    assert_eq!(
+        gamma_s(B, DesignSituation::PersistentTransient),
+        bron.gamma_s_blijvend
+    );
+    assert_eq!(
+        gamma_c(B, DesignSituation::Accidental),
+        bron.gamma_c_buitengewoon
+    );
+    assert_eq!(
+        gamma_s(B, DesignSituation::Accidental),
+        bron.gamma_s_buitengewoon
+    );
     assert_eq!(alpha_cc(B), bron.alpha_cc);
     assert_eq!(gamma_ce(B), bron.gamma_ce);
     // eps_ud = f * eps_uk: de factor terugrekenen uit de functie zelf.
@@ -109,7 +161,10 @@ fn en_1992_ndp_komen_uit_de_naad() {
         nen_en_1992_1_1::SteelBranch::Horizontal,
     );
     assert_eq!(mat.bijlage, B);
-    assert_eq!((mat.gamma_c, mat.gamma_s, mat.alpha_cc), (bron.gamma_c_blijvend, bron.gamma_s_blijvend, bron.alpha_cc));
+    assert_eq!(
+        (mat.gamma_c, mat.gamma_s, mat.alpha_cc),
+        (bron.gamma_c_blijvend, bron.gamma_s_blijvend, bron.alpha_cc)
+    );
 
     use nen_en_1992_1_1::dekking::{
         c_min_dur_mm, concrete_cover_request, standaard_constructieklasse, ConcreteCoverRequest,
@@ -141,12 +196,21 @@ fn en_1992_ndp_komen_uit_de_naad() {
     // Tabel 4.4N: elke cel die de dekkingsmodule teruggeeft staat in de rij van
     // de bijlage die bij die constructieklasse hoort.
     let klassen = [
-        StructuralClass::S1, StructuralClass::S2, StructuralClass::S3,
-        StructuralClass::S4, StructuralClass::S5, StructuralClass::S6,
+        StructuralClass::S1,
+        StructuralClass::S2,
+        StructuralClass::S3,
+        StructuralClass::S4,
+        StructuralClass::S5,
+        StructuralClass::S6,
     ];
     let kolommen = [
-        ExposureClass::X0, ExposureClass::XC1, ExposureClass::XC2, ExposureClass::XC4,
-        ExposureClass::XD1, ExposureClass::XD2, ExposureClass::XD3,
+        ExposureClass::X0,
+        ExposureClass::XC1,
+        ExposureClass::XC2,
+        ExposureClass::XC4,
+        ExposureClass::XD1,
+        ExposureClass::XD2,
+        ExposureClass::XD3,
     ];
     for (r, klasse) in klassen.iter().enumerate() {
         for kolom in kolommen {
@@ -164,7 +228,10 @@ fn en_1992_ndp_komen_uit_de_naad() {
         bron.lambda_lim_coefficient,
         "(5.13N) bij 5.8.3.1"
     );
-    assert!(bron.lambda_lim_is_eis, "de NB stelt 5.8.3.1 als eis, niet als aanbeveling");
+    assert!(
+        bron.lambda_lim_is_eis,
+        "de NB stelt 5.8.3.1 als eis, niet als aanbeveling"
+    );
     assert_eq!(
         nen_en_1992_1_1::verankering::alpha_6(
             B,
@@ -182,8 +249,10 @@ fn en_1992_ndp_komen_uit_de_naad() {
 fn en_1993_ndp_komen_uit_de_naad() {
     let bron = Ndp1993::voor(B);
     for g in [
-        nen_en_1993_1_1_section::S235, nen_en_1993_1_1_section::S275,
-        nen_en_1993_1_1_section::S355, nen_en_1993_1_1_section::S420,
+        nen_en_1993_1_1_section::S235,
+        nen_en_1993_1_1_section::S275,
+        nen_en_1993_1_1_section::S355,
+        nen_en_1993_1_1_section::S420,
         nen_en_1993_1_1_section::S460,
     ] {
         assert_eq!(
@@ -193,13 +262,25 @@ fn en_1993_ndp_komen_uit_de_naad() {
             g.name
         );
     }
-    assert_eq!(nen_en_1993_1_1_ltb::lambda_chi::LAMBDA_LT_0, bron.lambda_lt_0, "NB bij 6.3.2.3(1)");
-    assert_eq!(nen_en_1993_1_1_ltb::lambda_chi::BETA_LT, bron.beta_lt, "NB bij 6.3.2.3(1)");
+    assert_eq!(
+        nen_en_1993_1_1_ltb::lambda_chi::LAMBDA_LT_0,
+        bron.lambda_lt_0,
+        "NB bij 6.3.2.3(1)"
+    );
+    assert_eq!(
+        nen_en_1993_1_1_ltb::lambda_chi::BETA_LT,
+        bron.beta_lt,
+        "NB bij 6.3.2.3(1)"
+    );
     // De kipmethode is geen getal maar een werkwijze; de naad draagt hem, en de
     // kipkern heeft er een uitputtende match op staan.
     assert_eq!(bron.kipmethode, Kipmethode::NbNbFiguren);
 
-    assert_eq!(nen_en_1993_1_8_las::GAMMA_M2, Ndp1993Las::voor(B).gamma_m2, "NB:2011, tabel 2.1");
+    assert_eq!(
+        nen_en_1993_1_8_las::GAMMA_M2,
+        Ndp1993Las::voor(B).gamma_m2,
+        "NB:2011, tabel 2.1"
+    );
 }
 
 // ── NEN-EN 1995-1-1 ─────────────────────────────────────────────────────────
@@ -208,8 +289,16 @@ fn en_1993_ndp_komen_uit_de_naad() {
 fn en_1995_ndp_komen_uit_de_naad() {
     use nen_en_1995_1_1::factors::{gamma_m, TimberType};
     let bron = Ndp1995::voor(B);
-    assert_eq!(gamma_m(TimberType::Solid), bron.gamma_m_massief, "tabel 2.3 / 2.4.1");
-    assert_eq!(gamma_m(TimberType::Glulam), bron.gamma_m_gelamineerd, "tabel 2.3 / 2.4.1");
+    assert_eq!(
+        gamma_m(TimberType::Solid),
+        bron.gamma_m_massief,
+        "tabel 2.3 / 2.4.1"
+    );
+    assert_eq!(
+        gamma_m(TimberType::Glulam),
+        bron.gamma_m_gelamineerd,
+        "tabel 2.3 / 2.4.1"
+    );
     // k_cr: een prismatische doorsnede (b_lijf >= b_flens) geeft de ene grens,
     // een lijf van minder dan de halve flensbreedte de andere.
     assert_eq!(
@@ -217,9 +306,21 @@ fn en_1995_ndp_komen_uit_de_naad() {
         bron.k_cr_prismatisch,
         "NB bij 6.1.7"
     );
-    assert_eq!(nen_en_1995_1_1::shear::k_cr_nb(20.0, 100.0), bron.k_cr_dun_lijf, "NB bij 6.1.7");
-    assert_eq!(nen_en_1995_1_1::deflection::NOEMER_W_FIN, bron.noemer_w_fin, "NB bij 7.2");
-    assert_eq!(nen_en_1995_1_1::deflection::NOEMER_W_ADD, bron.noemer_w_add, "NB bij 7.2");
+    assert_eq!(
+        nen_en_1995_1_1::shear::k_cr_nb(20.0, 100.0),
+        bron.k_cr_dun_lijf,
+        "NB bij 6.1.7"
+    );
+    assert_eq!(
+        nen_en_1995_1_1::deflection::NOEMER_W_FIN,
+        bron.noemer_w_fin,
+        "NB bij 7.2"
+    );
+    assert_eq!(
+        nen_en_1995_1_1::deflection::NOEMER_W_ADD,
+        bron.noemer_w_add,
+        "NB bij 7.2"
+    );
 }
 
 // ── De normaanduidingen ─────────────────────────────────────────────────────
@@ -233,5 +334,8 @@ fn de_normaanduidingen_komen_uit_de_naad() {
     assert_eq!(report::NORM_TIMBER_FULL, a.norm_hout_omslag);
     // De kruislaaghouttoets schreef een derde schrijfwijze op papier; nu
     // dezelfde bron.
-    assert_eq!(nen_en_1995_1_1::clt_toets::NORM_HOUT_AANDUIDING, a.norm_hout_vol);
+    assert_eq!(
+        nen_en_1995_1_1::clt_toets::NORM_HOUT_AANDUIDING,
+        a.norm_hout_vol
+    );
 }

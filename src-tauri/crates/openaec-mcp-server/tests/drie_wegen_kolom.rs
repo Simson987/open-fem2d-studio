@@ -151,8 +151,7 @@ fn tauri_lib_bron() -> String {
         .join("..")
         .join("src")
         .join("lib.rs");
-    std::fs::read_to_string(&pad)
-        .unwrap_or_else(|e| panic!("{} niet leesbaar: {e}", pad.display()))
+    std::fs::read_to_string(&pad).unwrap_or_else(|e| panic!("{} niet leesbaar: {e}", pad.display()))
 }
 
 // ── Weg 2: de toetsbrug ─────────────────────────────────────────────────────
@@ -311,7 +310,9 @@ fn weg_1_het_tauri_command_is_geregistreerd() {
         .find("generate_handler![")
         .expect("`generate_handler!` staat niet in src-tauri/src/lib.rs");
     let handler = &bron[start..];
-    let eind = handler.find(']').expect("`generate_handler!` is niet gesloten");
+    let eind = handler
+        .find(']')
+        .expect("`generate_handler!` is niet gesloten");
     let handler = &handler[..eind];
 
     assert!(
@@ -391,7 +392,9 @@ async fn de_kniklengte_en_de_slankheid_staan_vast() {
 
     assert_eq!(uit["beam_id"], json!(12), "het staafnummer reist mee");
 
-    let l0 = uit["l0_mm"].as_f64().expect("l0_mm hoort een getal te zijn");
+    let l0 = uit["l0_mm"]
+        .as_f64()
+        .expect("l0_mm hoort een getal te zijn");
     assert!(
         (l0 - L_M * 1000.0).abs() < 1e-6,
         "figuur 5.7 a) geeft l₀ = l = {} mm, niet {l0}",
@@ -496,7 +499,11 @@ async fn de_drie_wegen_toetsen_dubbele_buiging_gelijk() {
     // tegenover e_z = 22 mm, dus 0,45 > 0,2 en (5.39) blijft vereist. De toets
     // is dan UITGEVOERD, niet "niet van toepassing".
     let standaard = weg_tauri(&met_kruip(verzoek_standaard())).expect("Tauri-weg");
-    for id in ["5.8.3.1_slankheidsgrens_z", "5.8.9_moment_z", "5.8.9_dubbele_buiging"] {
+    for id in [
+        "5.8.3.1_slankheidsgrens_z",
+        "5.8.9_moment_z",
+        "5.8.9_dubbele_buiging",
+    ] {
         let _ = zoek(&standaard, id);
     }
     let db = zoek(&standaard, "5.8.9_dubbele_buiging");
@@ -522,7 +529,11 @@ async fn de_drie_wegen_toetsen_dubbele_buiging_gelijk() {
     assert!(mcp["phi_ef_z"].is_null() && mcp["m_edz_knm"].is_null());
     for id in ["5.8.9_moment_z", "5.8.9_dubbele_buiging"] {
         let t = zoek(&mcp, id);
-        assert_ne!(t["kind"]["data"]["status"], json!("Ok"), "{id} mag zonder kruip niet groen");
+        assert_ne!(
+            t["kind"]["data"]["status"],
+            json!("Ok"),
+            "{id} mag zonder kruip niet groen"
+        );
         let notities = t["kind"]["data"]["notes"].to_string();
         assert!(notities.contains("ONDERGRENS"), "{id}: {notities}");
     }
@@ -557,7 +568,12 @@ async fn een_tegenstrijdige_aanname_levert_de_reden_en_geen_getal() {
     eis_gelijk("Tauri-command", &tauri, "toetsbrug", &brug);
     eis_gelijk("toetsbrug", &brug, "MCP-server", &mcp);
 
-    for veld in ["l0_mm", "lambda", "lambda_lim", "tweede_orde_verwaarloosbaar"] {
+    for veld in [
+        "l0_mm",
+        "lambda",
+        "lambda_lim",
+        "tweede_orde_verwaarloosbaar",
+    ] {
         assert!(
             tauri[veld].is_null(),
             "{veld} hoort leeg te blijven als de aanname zichzelf tegenspreekt, \

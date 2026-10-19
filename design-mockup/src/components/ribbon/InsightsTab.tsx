@@ -22,11 +22,13 @@ interface Props {
   onExportMatrixCsv?: () => void;
   /** Opent het venster Zichtbaarheid (issue #47). */
   onOpenZichtbaarheid?: () => void;
+  onOpenPrestressedBeam?: () => void;
+  onOpenVolumeWorkbench?: () => void;
 }
 
 const stub = (label: string) => () => console.log(`TODO: ${label}`);
 
-export default function InsightsTab({ onShowInsights, onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid }: Props) {
+export default function InsightsTab({ onShowInsights, onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid, onOpenPrestressedBeam, onOpenVolumeWorkbench }: Props) {
   const { t } = useTranslation("ribbon");
   const openInsights = () => onShowInsights?.();
   const goto = (mode: "element" | "system" | "dof" | "logs" | "errors") => () => {
@@ -45,6 +47,28 @@ export default function InsightsTab({ onShowInsights, onShowInsightsMode, onExpo
               label={t("insights.visibility")}
               size="large"
               onClick={onOpenZichtbaarheid}
+            />
+          </RibbonGroup>
+        )}
+
+        {onOpenPrestressedBeam && (
+          <RibbonGroup label={t("insights.solver")}>
+            <RibbonButton
+              icon={solverInfoIcon}
+              label={t("insights.prestressedBeam.open")}
+              size="large"
+              onClick={onOpenPrestressedBeam}
+            />
+          </RibbonGroup>
+        )}
+
+        {onOpenVolumeWorkbench && (
+          <RibbonGroup label={t("insights.solver")}>
+            <RibbonButton
+              icon={solverInfoIcon}
+              label={t("insights.volumeWorkbench")}
+              size="large"
+              onClick={onOpenVolumeWorkbench}
             />
           </RibbonGroup>
         )}

@@ -6,13 +6,25 @@ use nen_en_1993_1_1_ltb::nb_annex;
 #[test]
 fn s_parameter_hea320() {
     // S = (310/2)·√(210000·69852972 / (80769·1084313)) = 2006 mm
-    let s = nb_annex::s_parameter(310.0, nb_annex::E_MPA, 69852972.0, nb_annex::G_MPA, 1084313.0);
+    let s = nb_annex::s_parameter(
+        310.0,
+        nb_annex::E_MPA,
+        69852972.0,
+        nb_annex::G_MPA,
+        1084313.0,
+    );
     assert_relative_eq!(s, 2006.0, max_relative = 1e-3);
 }
 
 #[test]
 fn s_parameter_hea400() {
-    let s = nb_annex::s_parameter(390.0, nb_annex::E_MPA, 85638935.0, nb_annex::G_MPA, 1897649.0);
+    let s = nb_annex::s_parameter(
+        390.0,
+        nb_annex::E_MPA,
+        85638935.0,
+        nb_annex::G_MPA,
+        1897649.0,
+    );
     assert_relative_eq!(s, 2112.0, max_relative = 1e-3);
 }
 
@@ -39,11 +51,23 @@ fn alpha_neemt_af_bij_langere_ligger() {
 fn k_red_is_1_onder_slankheidsgrens() {
     // NB.NB.7: h/t_w ≤ 75 → k_red = 1, ongeacht α.
     // HEA 320: 310/9 = 34,4
-    assert_relative_eq!(nb_annex::k_red(310.0, 15.5, 9.0, 300.0, 8000.0), 1.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        nb_annex::k_red(310.0, 15.5, 9.0, 300.0, 8000.0),
+        1.0,
+        max_relative = 1e-9
+    );
     // HEA 400: 390/11 = 35,5
-    assert_relative_eq!(nb_annex::k_red(390.0, 19.0, 11.0, 300.0, 8000.0), 1.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        nb_annex::k_red(390.0, 19.0, 11.0, 300.0, 8000.0),
+        1.0,
+        max_relative = 1e-9
+    );
     // Grensgeval exact op 75 telt nog als niet-slank
-    assert_relative_eq!(nb_annex::k_red(750.0, 15.0, 10.0, 300.0, 8000.0), 1.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        nb_annex::k_red(750.0, 15.0, 10.0, 300.0, 8000.0),
+        1.0,
+        max_relative = 1e-9
+    );
 }
 
 #[test]
@@ -68,10 +92,16 @@ fn k_red_wordt_op_1_afgekapt_bij_kleine_alpha() {
 fn boven_alpha_5000_moet_de_gedrukte_rand_worden_getoetst() {
     // NB.NB.4.2(3): h/t_w > 75 én α > 5000 → geen k_red, maar toetsing 6.3.3.
     // α = 1000·20·1e12 / (10³·300·3000²) = 2,0e16 / 2,7e12 = 7407
-    assert!(nb_annex::vereist_toets_gedrukte_rand(1000.0, 20.0, 10.0, 300.0, 3000.0));
+    assert!(nb_annex::vereist_toets_gedrukte_rand(
+        1000.0, 20.0, 10.0, 300.0, 3000.0
+    ));
     // De referentieprofielen vallen hier niet onder.
-    assert!(!nb_annex::vereist_toets_gedrukte_rand(310.0, 15.5, 9.0, 300.0, 8000.0));
-    assert!(!nb_annex::vereist_toets_gedrukte_rand(390.0, 19.0, 11.0, 300.0, 8000.0));
+    assert!(!nb_annex::vereist_toets_gedrukte_rand(
+        310.0, 15.5, 9.0, 300.0, 8000.0
+    ));
+    assert!(!nb_annex::vereist_toets_gedrukte_rand(
+        390.0, 19.0, 11.0, 300.0, 8000.0
+    ));
 }
 
 #[test]
@@ -147,7 +177,11 @@ fn b_ster_hea400() {
 #[test]
 fn b_ster_is_1_zonder_veldbelasting() {
     // Alleen eindmomenten → B* = 1 (zuiver geval 1 uit tabel NB.NB.1)
-    assert_relative_eq!(nb_annex::b_ster(50.0e6, 0.0, 3000.0), 1.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        nb_annex::b_ster(50.0e6, 0.0, 3000.0),
+        1.0,
+        max_relative = 1e-9
+    );
 }
 
 #[test]
@@ -162,7 +196,11 @@ fn c2_correctie_voor_aangrijpingspunt() {
 
 #[test]
 fn c2_is_nul_bij_aangrijpen_op_zwaartepunt() {
-    assert_relative_eq!(nb_annex::c2_gecorrigeerd(0.074, 0.0, 310.0, 15.5), 0.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        nb_annex::c2_gecorrigeerd(0.074, 0.0, 310.0, 15.5),
+        0.0,
+        max_relative = 1e-9
+    );
 }
 
 #[test]
@@ -193,7 +231,13 @@ fn c1_c2_op_de_ankerpunten() {
 #[test]
 fn c1_bij_zuivere_eindmomenten_volgt_tabel_nb1() {
     // B* = 1: geval 1, C1 = 1,75 - 1,05β + 0,3β², afgekapt op 2,30; C2 = 0
-    for (beta, verwacht) in [(-1.0, 2.30), (-0.5, 2.30), (0.0, 1.75), (0.5, 1.30), (1.0, 1.00)] {
+    for (beta, verwacht) in [
+        (-1.0, 2.30),
+        (-0.5, 2.30),
+        (0.0, 1.75),
+        (0.5, 1.30),
+        (1.0, 1.00),
+    ] {
         let (c1, c2) = nb_annex::c1_c2_factors(beta, 1.0);
         assert_relative_eq!(c1, verwacht, max_relative = 5e-3);
         assert_relative_eq!(c2, 0.0, max_relative = 1e-9);
@@ -232,7 +276,13 @@ fn m_cr_hea320_via_de_volledige_nb_flow() {
     // Ankerwaarden uit de referentie: C1=1,529, C2=-0,078, S=2006, L_kip=3733,
     // L_g=8000 → C=18,886 → M_cr=2675,8 kNm. Met de gedigitaliseerde tabellen
     // komen we ~1% lager uit; dat is de aflezingsnauwkeurigheid van de figuren.
-    let s = nb_annex::s_parameter(310.0, nb_annex::E_MPA, 69852972.0, nb_annex::G_MPA, 1084313.0);
+    let s = nb_annex::s_parameter(
+        310.0,
+        nb_annex::E_MPA,
+        69852972.0,
+        nb_annex::G_MPA,
+        1084313.0,
+    );
     let (c1, c2_tab) = nb_annex::c1_c2_factors(0.0, 0.889);
     let c2 = nb_annex::c2_gecorrigeerd(c2_tab, 155.0, 310.0, 15.5);
     let l_kip = nb_annex::l_kip(0.0, 2667.0);
@@ -243,6 +293,9 @@ fn m_cr_hea320_via_de_volledige_nb_flow() {
 
     // λ_LT moet onder de drempel 0,4 blijven, net als in de referentie (0,378).
     let lambda = nen_en_1993_1_1_ltb::lambda_chi::lambda_lt(1628366.0, 235.0, m_cr);
-    assert!(lambda < 0.4, "λ_LT = {lambda} moet onder 0,4 blijven → χ_LT = 1,00");
+    assert!(
+        lambda < 0.4,
+        "λ_LT = {lambda} moet onder 0,4 blijven → χ_LT = 1,00"
+    );
     assert_relative_eq!(lambda, 0.378, max_relative = 3e-2);
 }

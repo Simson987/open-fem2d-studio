@@ -106,7 +106,9 @@ fn roep(naam: &str, args: Value, tijdslimiet_s: u64) -> Result<Value, RpcError> 
             .map_err(|e| RpcError::tool_exec(format!("antwoord van de app onleesbaar: {e}")))?,
         Err(ureq::Error::Status(code, r)) => {
             let tekst = r.into_string().unwrap_or_default();
-            return Err(RpcError::tool_exec(format!("de app antwoordde HTTP {code}: {tekst}")));
+            return Err(RpcError::tool_exec(format!(
+                "de app antwoordde HTTP {code}: {tekst}"
+            )));
         }
         Err(ureq::Error::Transport(t)) => {
             return Err(niet_bereikbaar(format!(
@@ -157,20 +159,36 @@ fn lees<T: for<'de> Deserialize<'de>>(naam: &str, args: Value) -> Result<T, RpcE
 #[derive(Deserialize)]
 struct Leeg {}
 #[derive(Deserialize)]
-struct MetPad { path: String }
+struct MetPad {
+    path: String,
+}
 #[derive(Deserialize)]
-struct MetId { id: u64 }
+struct MetId {
+    id: u64,
+}
 #[derive(Deserialize)]
-struct MetBeamId { beam_id: u64 }
+struct MetBeamId {
+    beam_id: u64,
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Splits3DStaaf { beam_id: u64, ratio: f64 }
+struct Splits3DStaaf {
+    beam_id: u64,
+    ratio: f64,
+}
 #[derive(Deserialize)]
-struct Korf { beam_id: u64, cage: Value }
+struct Korf {
+    beam_id: u64,
+    cage: Value,
+}
 #[derive(Deserialize)]
-struct Analyse { analysis_type: String }
+struct Analyse {
+    analysis_type: String,
+}
 #[derive(Deserialize)]
-struct Weergave { view: String }
+struct Weergave {
+    view: String,
+}
 #[derive(Deserialize)]
 struct Schermafdruk {
     #[serde(default = "hoofdvenster")]
@@ -179,7 +197,9 @@ struct Schermafdruk {
     #[serde(default)]
     dom: bool,
 }
-fn hoofdvenster() -> String { "main".into() }
+fn hoofdvenster() -> String {
+    "main".into()
+}
 
 /// `gui_export_report_pdf`. Strikt: een tikfout in een veldnaam (bijvoorbeeld
 /// `reporttype`) is een fout, geen stil genegeerd veld dat een ander rapport
@@ -214,7 +234,11 @@ struct ProjectKop {
 }
 
 /// Eén keuze uit een vaste lijst, of een invalid_params met de toegestane waarden.
-fn keuze(veld: &str, waarde: Option<String>, toegestaan: &[&str]) -> Result<Option<String>, RpcError> {
+fn keuze(
+    veld: &str,
+    waarde: Option<String>,
+    toegestaan: &[&str],
+) -> Result<Option<String>, RpcError> {
     match waarde {
         None => Ok(None),
         Some(v) if toegestaan.contains(&v.as_str()) => Ok(Some(v)),
@@ -289,8 +313,9 @@ fn export_report_pdf(args: Value) -> Result<Value, RpcError> {
         .and_then(Value::as_str)
         .ok_or_else(|| RpcError::tool_exec("de app gaf geen pad van de PDF terug"))?
         .to_string();
-    let bytes = std::fs::read(&geschreven)
-        .map_err(|e| RpcError::tool_exec(format!("de PDF op {geschreven} is niet te lezen: {e}")))?;
+    let bytes = std::fs::read(&geschreven).map_err(|e| {
+        RpcError::tool_exec(format!("de PDF op {geschreven} is niet te lezen: {e}"))
+    })?;
     if let Some(gemeld) = uit.get("bytes").and_then(Value::as_u64) {
         if gemeld != bytes.len() as u64 {
             return Err(RpcError::tool_exec(format!(
@@ -365,11 +390,19 @@ fn dispatch_sync(naam: &str, args: Value) -> Result<Value, RpcError> {
         }
         "gui_set_cage" => {
             let a: Korf = lees(naam, args)?;
-            roep("korf_zetten", json!({ "beamId": a.beam_id, "korf": a.cage }), 30)
+            roep(
+                "korf_zetten",
+                json!({ "beamId": a.beam_id, "korf": a.cage }),
+                30,
+            )
         }
         "gui_set_analysis" => {
             let a: Analyse = lees(naam, args)?;
-            roep("analysetype_zetten", json!({ "analysetype": a.analysis_type }), 30)
+            roep(
+                "analysetype_zetten",
+                json!({ "analysetype": a.analysis_type }),
+                30,
+            )
         }
         "gui_solve" => {
             let _: Leeg = lees(naam, args)?;
@@ -647,7 +680,10 @@ mod tests {
     }
 
     fn absoluut(naam: &str) -> String {
-        std::env::temp_dir().join(naam).to_string_lossy().into_owned()
+        std::env::temp_dir()
+            .join(naam)
+            .to_string_lossy()
+            .into_owned()
     }
 
     #[test]
@@ -672,7 +708,10 @@ mod tests {
             })
         );
         // Alleen het pad: de app gebruikt dan haar eigen rapportinstellingen.
-        assert_eq!(export(json!({ "path": pad })).unwrap(), json!({ "pad": pad }));
+        assert_eq!(
+            export(json!({ "path": pad })).unwrap(),
+            json!({ "pad": pad })
+        );
     }
 
     #[test]
@@ -683,8 +722,14 @@ mod tests {
         assert!(export(json!({ "path": pad, "page_size": "A5" })).is_err());
         assert!(export(json!({ "path": pad, "orientation": "staand" })).is_err());
         assert!(export(json!({ "path": pad, "project": { "naam": "Loods" } })).is_err());
-        assert!(export(json!({ "path": "rapport.pdf" })).is_err(), "relatief pad");
-        assert!(export(json!({ "path": absoluut("rapport.png") })).is_err(), "geen .pdf");
+        assert!(
+            export(json!({ "path": "rapport.pdf" })).is_err(),
+            "relatief pad"
+        );
+        assert!(
+            export(json!({ "path": absoluut("rapport.png") })).is_err(),
+            "geen .pdf"
+        );
         assert!(export(json!({})).is_err(), "pad ontbreekt");
     }
 
@@ -698,22 +743,37 @@ mod tests {
         let s = &d["inputSchema"];
         assert_eq!(s["additionalProperties"], json!(false));
         assert_eq!(s["required"], json!(["path"]));
-        assert_eq!(s["properties"]["project"]["additionalProperties"], json!(false));
-        assert_eq!(s["properties"]["report_type"]["enum"], json!(["volledig", "beperkt"]));
+        assert_eq!(
+            s["properties"]["project"]["additionalProperties"],
+            json!(false)
+        );
+        assert_eq!(
+            s["properties"]["report_type"]["enum"],
+            json!(["volledig", "beperkt"])
+        );
     }
 
     #[test]
     fn het_3d_schema_draagt_toetsing_revolutes_en_resultaatlagen() {
         let defs = tool_definitions();
-        let bouw = defs.iter().find(|d| d["name"] == "gui_build_3d_model").unwrap();
+        let bouw = defs
+            .iter()
+            .find(|d| d["name"] == "gui_build_3d_model")
+            .unwrap();
         let beam = &bouw["inputSchema"]["properties"]["beams"]["items"]["properties"];
         assert_eq!(beam["check_config"]["type"], json!("object"));
         assert_eq!(beam["roll_angle_deg"]["type"], json!("number"));
         assert_eq!(beam["releases"]["additionalProperties"], json!(false));
-        assert_eq!(beam["releases"]["properties"]["torsion_end"]["type"], json!("boolean"));
+        assert_eq!(
+            beam["releases"]["properties"]["torsion_end"]["type"],
+            json!("boolean")
+        );
         let member_load = &bouw["inputSchema"]["properties"]["member_loads"]["items"];
         assert_eq!(member_load["additionalProperties"], json!(false));
-        assert_eq!(member_load["properties"]["qz_start"]["type"], json!("number"));
+        assert_eq!(
+            member_load["properties"]["qz_start"]["type"],
+            json!("number")
+        );
         assert_eq!(member_load["properties"]["case_id"]["minimum"], json!(1));
         let point_load = &bouw["inputSchema"]["properties"]["member_point_loads"]["items"];
         assert_eq!(point_load["additionalProperties"], json!(false));
@@ -721,39 +781,95 @@ mod tests {
         assert_eq!(point_load["required"], json!(["beam", "position_m"]));
         let thermal = &bouw["inputSchema"]["properties"]["thermal_loads"]["items"];
         assert_eq!(thermal["additionalProperties"], json!(false));
-        assert_eq!(thermal["properties"]["delta_t_gradient_z_k"]["type"], json!("number"));
-        assert_eq!(bouw["inputSchema"]["properties"]["loads"]["items"]["properties"]["case_id"]["type"], json!("integer"));
+        assert_eq!(
+            thermal["properties"]["delta_t_gradient_z_k"]["type"],
+            json!("number")
+        );
+        assert_eq!(
+            bouw["inputSchema"]["properties"]["loads"]["items"]["properties"]["case_id"]["type"],
+            json!("integer")
+        );
         let plate = &bouw["inputSchema"]["properties"]["plates"]["items"];
         assert_eq!(plate["properties"]["nodes"]["minItems"], json!(3));
-        assert_eq!(plate["properties"]["openings"]["items"]["additionalProperties"], json!(false));
+        assert_eq!(
+            plate["properties"]["openings"]["items"]["additionalProperties"],
+            json!(false)
+        );
         let surface = &bouw["inputSchema"]["properties"]["surface_loads"]["items"];
         assert_eq!(surface["properties"]["qz"]["type"], json!("number"));
-        let support_types = bouw["inputSchema"]["properties"]["supports"]["items"]
-            ["properties"]["type"]["enum"].as_array().unwrap();
-        for kind in ["xRoller", "yRoller", "zRoller", "revoluteX", "revoluteY", "revoluteZ"] {
+        let support_types = bouw["inputSchema"]["properties"]["supports"]["items"]["properties"]
+            ["type"]["enum"]
+            .as_array()
+            .unwrap();
+        for kind in [
+            "xRoller",
+            "yRoller",
+            "zRoller",
+            "revoluteX",
+            "revoluteY",
+            "revoluteZ",
+        ] {
             assert!(support_types.contains(&json!(kind)), "{kind} ontbreekt");
         }
-        let springs = &bouw["inputSchema"]["properties"]["supports"]["items"]["properties"]["springs"];
+        let springs =
+            &bouw["inputSchema"]["properties"]["supports"]["items"]["properties"]["springs"];
         assert_eq!(springs["additionalProperties"], json!(false));
-        assert_eq!(springs["properties"]["kz_kn_per_m"]["exclusiveMinimum"], json!(0));
-        assert_eq!(springs["properties"]["kry_knm_per_rad"]["type"], json!("number"));
-        let prescribed = &bouw["inputSchema"]["properties"]["supports"]["items"]["properties"]["prescribed"];
+        assert_eq!(
+            springs["properties"]["kz_kn_per_m"]["exclusiveMinimum"],
+            json!(0)
+        );
+        assert_eq!(
+            springs["properties"]["kry_knm_per_rad"]["type"],
+            json!("number")
+        );
+        let prescribed =
+            &bouw["inputSchema"]["properties"]["supports"]["items"]["properties"]["prescribed"];
         assert_eq!(prescribed["additionalProperties"], json!(false));
         assert_eq!(prescribed["properties"]["ux_m"]["type"], json!("number"));
         assert_eq!(prescribed["properties"]["rz_rad"]["type"], json!("number"));
 
-        let view = defs.iter().find(|d| d["name"] == "gui_configure_3d_view").unwrap();
+        let view = defs
+            .iter()
+            .find(|d| d["name"] == "gui_configure_3d_view")
+            .unwrap();
         let visibility = &view["inputSchema"]["properties"]["visibility"]["properties"];
         for layer in [
-            "plates", "deformation", "reactions", "utilization", "axialForce", "shearY",
-            "shearZ", "torsion", "momentY", "momentZ",
+            "plates",
+            "deformation",
+            "reactions",
+            "utilization",
+            "axialForce",
+            "shearY",
+            "shearZ",
+            "torsion",
+            "momentY",
+            "momentZ",
         ] {
-            assert_eq!(visibility[layer]["type"], json!("boolean"), "{layer} ontbreekt");
+            assert_eq!(
+                visibility[layer]["type"],
+                json!("boolean"),
+                "{layer} ontbreekt"
+            );
         }
-        let select = defs.iter().find(|d| d["name"] == "gui_select_3d_combination").unwrap();
-        assert_eq!(select["inputSchema"]["properties"]["id"]["minimum"], json!(1));
-        let split = defs.iter().find(|d| d["name"] == "gui_split_3d_member").unwrap();
-        assert_eq!(split["inputSchema"]["required"], json!(["beam_id", "ratio"]));
-        assert_eq!(split["inputSchema"]["properties"]["ratio"]["exclusiveMaximum"], json!(1));
+        let select = defs
+            .iter()
+            .find(|d| d["name"] == "gui_select_3d_combination")
+            .unwrap();
+        assert_eq!(
+            select["inputSchema"]["properties"]["id"]["minimum"],
+            json!(1)
+        );
+        let split = defs
+            .iter()
+            .find(|d| d["name"] == "gui_split_3d_member")
+            .unwrap();
+        assert_eq!(
+            split["inputSchema"]["required"],
+            json!(["beam_id", "ratio"])
+        );
+        assert_eq!(
+            split["inputSchema"]["properties"]["ratio"]["exclusiveMaximum"],
+            json!(1)
+        );
     }
 }

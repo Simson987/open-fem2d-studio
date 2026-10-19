@@ -50,6 +50,8 @@
     "aanzichtBreedteHint": "Die Profilbreite b als Beschriftung an der Ansicht: die Ansicht zeigt die Höhe h, die Breite steht senkrecht zur Zeichnung.",
     "opleggingen": "Auflager",
     "opleggingenHint": "Die Auflagersymbole.",
+    "supportScale": "Größe der Auflager",
+    "supportScaleHint": "Nur die Darstellung; die Auflager in der Berechnung bleiben unverändert.",
     "scharnieren": "Gelenke und Federn",
     "scharnierenHint": "Die Gelenke und Federn an den Stabenden.",
     "stramien": "Raster",

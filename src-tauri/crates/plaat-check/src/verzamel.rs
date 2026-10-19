@@ -53,14 +53,21 @@ where
         let mut comb_best: Option<PlaatCombinatieUitkomst> = None;
         for el in &comb.elements {
             for (id, uc) in beoordeel(comb.combination_id, el) {
-                let punt = Punt { combination_id: comb.combination_id, element: *el, uc };
+                let punt = Punt {
+                    combination_id: comb.combination_id,
+                    element: *el,
+                    uc,
+                };
                 match v.per_toets.iter_mut().find(|m| m.check_id == id) {
                     Some(m) => {
                         if uc > m.punt.uc {
                             m.punt = punt;
                         }
                     }
-                    None => v.per_toets.push(Maatgevend { check_id: id.clone(), punt }),
+                    None => v.per_toets.push(Maatgevend {
+                        check_id: id.clone(),
+                        punt,
+                    }),
                 }
                 if comb_best.as_ref().map_or(true, |b| uc > b.uc) {
                     comb_best = Some(PlaatCombinatieUitkomst {
@@ -70,7 +77,10 @@ where
                         check_id: id.clone(),
                     });
                 }
-                match element_index.get(&el.element_id).map(|&i| &mut v.per_element[i]) {
+                match element_index
+                    .get(&el.element_id)
+                    .map(|&i| &mut v.per_element[i])
+                {
                     Some(e) => {
                         if uc > e.uc {
                             e.uc = uc;

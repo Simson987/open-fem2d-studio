@@ -374,7 +374,11 @@ fn extend_met_staaf(flow: &mut Vec<Box<dyn Flowable>>, r: &ConcreteBeamCheckResu
             for n in notes {
                 flow.push(Box::new(Paragraph::new(
                     format!("{titel} — {n}"),
-                    if matches!(status, CheckStatus::NotOk) { let_op_stijl() } else { style_note() },
+                    if matches!(status, CheckStatus::NotOk) {
+                        let_op_stijl()
+                    } else {
+                        style_note()
+                    },
                 )));
             }
         }
@@ -467,7 +471,11 @@ fn extend_met_toets_tweede_as(flow: &mut Vec<Box<dyn Flowable>>, nc: &NamedCheck
             style_mono(),
         )));
     }
-    let stijl = if matches!(c.status, CheckStatus::Ok) { style_note() } else { let_op_stijl() };
+    let stijl = if matches!(c.status, CheckStatus::Ok) {
+        style_note()
+    } else {
+        let_op_stijl()
+    };
     for n in &c.notes {
         flow.push(Box::new(Paragraph::new(n.clone(), stijl.clone())));
     }
@@ -488,12 +496,22 @@ fn detailleringstabel(eisen: &[&NamedCheck]) -> Table {
         .iter()
         .map(|nc| {
             let (titel, artikel, value, unit, uc, status) = match &nc.kind {
-                CheckKind::Resistance(c) => {
-                    (&c.title, &c.article, c.value, &c.unit, c.uc.as_ref(), &c.status)
-                }
-                CheckKind::Stability(c) => {
-                    (&c.title, &c.article, c.value, &c.unit, c.uc.as_ref(), &c.status)
-                }
+                CheckKind::Resistance(c) => (
+                    &c.title,
+                    &c.article,
+                    c.value,
+                    &c.unit,
+                    c.uc.as_ref(),
+                    &c.status,
+                ),
+                CheckKind::Stability(c) => (
+                    &c.title,
+                    &c.article,
+                    c.value,
+                    &c.unit,
+                    c.uc.as_ref(),
+                    &c.status,
+                ),
             };
             vec![
                 titel.clone(),
@@ -533,7 +551,10 @@ fn detailleringstabel(eisen: &[&NamedCheck]) -> Table {
 /// Een melding waar de lezer overheen moet struikelen — rood, dezelfde keuze
 /// als in `betonhoofdstuk`.
 fn let_op_stijl() -> openaec_layout::paragraph::ParagraphStyle {
-    openaec_layout::paragraph::ParagraphStyle { text_color: C_FAIL, ..style_note() }
+    openaec_layout::paragraph::ParagraphStyle {
+        text_color: C_FAIL,
+        ..style_note()
+    }
 }
 
 fn stijl_overzicht() -> TableStyleConfig {

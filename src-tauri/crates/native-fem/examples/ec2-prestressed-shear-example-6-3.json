@@ -1,0 +1,26 @@
+{
+  "spanM": 6.0,
+  "section": {
+    "areaM2": 0.02,
+    "inertiaM4": 0.0000666666666667,
+    "topFibreM": 0.1,
+    "bottomFibreM": 0.1,
+    "eMpa": 30000.0
+  },
+  "tendon": {
+    "kind": "straight",
+    "eccentricityM": 0.0
+  },
+  "initialForceKn": 100.0,
+  "lossFraction": 0.0,
+  "transferUniformDownwardKnPerM": 0.0,
+  "serviceUniformDownwardKnPerM": 0.0,
+  "shearWithoutLinks": {
+    "webWidthMm": 100.0,
+    "heightMm": 200.0,
+    "effectiveDepthMm": 175.0,
+    "fctdMpa": 1.66,
+    "vMinMpa": 0.626,
+    "k1": 0.15
+  }
+}

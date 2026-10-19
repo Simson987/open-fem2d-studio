@@ -1,10 +1,10 @@
 //! Result types for steel-check orchestrator.
 
+use nen_en_1993_1_1_section::classification::CrossSectionClass;
+use nen_en_1993_1_1_section::{CheckStatus, ResistanceCalc};
+use nen_en_1993_1_1_stability::StabilityCalc;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-use nen_en_1993_1_1_section::{ResistanceCalc, CheckStatus};
-use nen_en_1993_1_1_section::classification::CrossSectionClass;
-use nen_en_1993_1_1_stability::StabilityCalc;
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../../design-mockup/src/lib/types/steel/")]

@@ -152,8 +152,16 @@ impl Hoofdas {
             wel_v_min_mm3: wel_v_min,
             wel_u_mm3: wel_u_plus.min(wel_u_min),
             wel_v_mm3: wel_v_plus.min(wel_v_min),
-            iu_radius_mm: if area_mm2 > 0.0 { (iu_mm4 / area_mm2).sqrt() } else { 0.0 },
-            iv_radius_mm: if area_mm2 > 0.0 { (iv_mm4 / area_mm2).sqrt() } else { 0.0 },
+            iu_radius_mm: if area_mm2 > 0.0 {
+                (iu_mm4 / area_mm2).sqrt()
+            } else {
+                0.0
+            },
+            iv_radius_mm: if area_mm2 > 0.0 {
+                (iv_mm4 / area_mm2).sqrt()
+            } else {
+                0.0
+            },
         }
     }
 }
@@ -381,7 +389,11 @@ mod tests {
         assert!(rel(e1.iu_mm4, e0.iu_mm4) < 1e-12);
         assert!(rel(e1.iv_mm4, e0.iv_mm4) < 1e-12);
         // α draait mee: 0° → 30°.
-        assert!((e1.alpha_hoofdas_rad - hoek).abs() < 1e-9, "α = {}", e1.alpha_hoofdas_rad);
+        assert!(
+            (e1.alpha_hoofdas_rad - hoek).abs() < 1e-9,
+            "α = {}",
+            e1.alpha_hoofdas_rad
+        );
         // En alle hoofdas-grootheden zijn onveranderd.
         assert!(rel(hf1.wel_u_plus_mm3, hf0.wel_u_plus_mm3) < 1e-9);
         assert!(rel(hf1.wel_v_plus_mm3, hf0.wel_v_plus_mm3) < 1e-9);
@@ -418,7 +430,11 @@ mod tests {
         let e = d.bereken();
         assert!(rel(vormfactor(e.wpl_y_mm3, e.wel_y_boven_mm3), 1.5) < 1e-9);
         assert!(rel(vormfactor(e.wpl_z_mm3, e.wel_z_links_mm3), 1.5) < 1e-9);
-        assert!((e.z_pna_mm - h / 2.0).abs() < 1e-6, "z_pna = {}", e.z_pna_mm);
+        assert!(
+            (e.z_pna_mm - h / 2.0).abs() < 1e-6,
+            "z_pna = {}",
+            e.z_pna_mm
+        );
         assert!((e.y_pna_mm - b / 2.0).abs() < 1e-6);
         let pl = plastisch_hoofdas(&d, e.alpha_hoofdas_rad);
         assert!(pl.u_pna_mm.abs() < 1e-6 && pl.v_pna_mm.abs() < 1e-6);
@@ -458,7 +474,10 @@ mod tests {
         assert!(a_flens > a / 2.0);
         let z_pna = (h - tf) + (a / 2.0 - a_lijf) / b;
         assert!(rel(e.z_pna_mm, z_pna) < 1e-9, "z_pna = {}", e.z_pna_mm);
-        assert!(e.z_pna_mm > e.z_c_mm + 1.0, "de PNA hoort boven het zwaartepunt te liggen");
+        assert!(
+            e.z_pna_mm > e.z_c_mm + 1.0,
+            "de PNA hoort boven het zwaartepunt te liggen"
+        );
         // Wpl = A/2 · afstand tussen de zwaartepunten van beide helften.
         assert!(e.wpl_y_mm3 > 0.0);
         // Om de z-as is het T-profiel wél symmetrisch: de PNA valt samen.
@@ -472,7 +491,13 @@ mod tests {
     /// dus de tolerantie is die van de mesh, niet die van de contour.
     #[test]
     fn zj_is_nul_voor_een_i_profiel() {
-        let vorm = Profielvorm::IProfiel { h: 300.0, b: 150.0, tw: 7.1, tf: 10.7, r: 15.0 };
+        let vorm = Profielvorm::IProfiel {
+            h: 300.0,
+            b: 150.0,
+            tw: 7.1,
+            tf: 10.7,
+            r: 15.0,
+        };
         let m = bereken_uitgebreid(&vorm, None);
         let d = vorm.doorsnede();
         let mono = monosymmetrie_van_doorsnede(&d, &m.contour, m.props.y_s_mm, m.props.z_s_mm);
@@ -514,7 +539,11 @@ mod tests {
         // wat voor een T exact klopt (beide platen gaan door dat punt).
         let z_s = h - tf / 2.0;
         let mono = monosymmetrie_van_doorsnede(&d, &e, b / 2.0, z_s);
-        assert!(mono.z_j_mm > 1.0, "z_j = {:.3} mm, verwacht duidelijk positief", mono.z_j_mm);
+        assert!(
+            mono.z_j_mm > 1.0,
+            "z_j = {:.3} mm, verwacht duidelijk positief",
+            mono.z_j_mm
+        );
 
         // Omgekeerd: spiegel om z = h/2 door 180° te draaien en terug te
         // schuiven. Alles wat met z te maken heeft klapt om.
@@ -577,16 +606,32 @@ mod tests {
         assert!(rel(met_de_hand, -971_250_000.0) < 1e-12);
         let verwacht = (z_s - e.z_c_mm) - 0.5 * met_de_hand / e.iy_mm4;
         let mono = monosymmetrie_van_doorsnede(&d, &e, b / 2.0, z_s);
-        assert!(rel(mono.z_j_mm, verwacht) < 1e-10, "z_j = {:.6}", mono.z_j_mm);
-        assert!((mono.z_j_mm - 67.46).abs() < 0.01, "z_j = {:.4} mm", mono.z_j_mm);
+        assert!(
+            rel(mono.z_j_mm, verwacht) < 1e-10,
+            "z_j = {:.6}",
+            mono.z_j_mm
+        );
+        assert!(
+            (mono.z_j_mm - 67.46).abs() < 0.01,
+            "z_j = {:.4} mm",
+            mono.z_j_mm
+        );
     }
 
     /// Segmentlengtes: een kwartcirkel met straal `r` is `πr/2` lang.
     #[test]
     fn segmentlengte_van_een_boog() {
-        let s = Segment::Boog { centrum: (0.0, 0.0), straal: 10.0, theta1: 0.0, theta2: PI / 2.0 };
+        let s = Segment::Boog {
+            centrum: (0.0, 0.0),
+            straal: 10.0,
+            theta1: 0.0,
+            theta2: PI / 2.0,
+        };
         assert!(rel(s.lengte_mm(), PI * 5.0) < 1e-12);
-        let l = Segment::Lijn { van: (0.0, 0.0), naar: (3.0, 4.0) };
+        let l = Segment::Lijn {
+            van: (0.0, 0.0),
+            naar: (3.0, 4.0),
+        };
         assert!(rel(l.lengte_mm(), 5.0) < 1e-12);
     }
 }

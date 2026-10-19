@@ -144,7 +144,9 @@ fn kolomknik_rekent_om_de_hoofdassen_u_en_v() {
 
     // En de traagheidsstralen zijn écht i_u en i_v uit de catalogus, niet
     // i_y en i_z. Voor L 100×100×10 is i_y = i_z ≈ 30,4 mm en i_v ≈ 19,4 mm.
-    let profiel = steel_profiles::db().find("L 100x100x10").expect("L 100x100x10");
+    let profiel = steel_profiles::db()
+        .find("L 100x100x10")
+        .expect("L 100x100x10");
     let p = &profiel.properties;
     let i_v_mm = (p.iv_mm4 / p.area_mm2).sqrt();
     assert!(
@@ -172,10 +174,16 @@ fn knik_om_de_hoofdassen_is_ongunstiger_dan_om_de_eigen_assen() {
     let CheckKind::Stability(knik) = &toets(&r, "6.3.1_buckling").kind else {
         panic!("6.3.1 hoort stabiliteit te zijn")
     };
-    let p = &steel_profiles::db().find("L 100x100x10").unwrap().properties;
+    let p = &steel_profiles::db()
+        .find("L 100x100x10")
+        .unwrap()
+        .properties;
     let lambda_z = 3000.0 / p.iz_radius_mm;
     let lambda_v = tussenwaarde(&r, "6.3.1_buckling", r"\lambda_v");
-    assert!(lambda_v > lambda_z, "λ_v = {lambda_v} tegen λ_z = {lambda_z}");
+    assert!(
+        lambda_v > lambda_z,
+        "λ_v = {lambda_v} tegen λ_z = {lambda_z}"
+    );
     // χ daalt met de slankheid, dus de weerstand is lager dan met λ_z.
     assert!(knik.value > 0.0);
 }
@@ -193,7 +201,10 @@ fn kip_en_de_interactietoetsen_worden_geweigerd_met_reden() {
         );
     }
     let n = notities(&r, "6.3.2_ltb");
-    assert!(bevat(n, "M_cr veronderstelt dubbelsymmetrie"), "genoteerd: {n:?}");
+    assert!(
+        bevat(n, "M_cr veronderstelt dubbelsymmetrie"),
+        "genoteerd: {n:?}"
+    );
     let n61 = notities(&r, "6.3.3_eq_6_61");
     assert!(bevat(n61, "M_b,Rd"), "genoteerd: {n61:?}");
 }
@@ -209,7 +220,11 @@ fn buiging_draait_elastisch_en_zegt_dat_y_en_z_geen_hoofdassen_zijn() {
         "tabel 5.2 blad 3 kent hoekprofielen alleen een klasse-3-regel"
     );
     for id in ["6.2.5_bending_y", "6.2.5_bending_z"] {
-        assert_ne!(status(&r, id), CheckStatus::NotApplicable, "{id} hoort te draaien");
+        assert_ne!(
+            status(&r, id),
+            CheckStatus::NotApplicable,
+            "{id} hoort te draaien"
+        );
         let n = notities(&r, id);
         assert!(bevat(n, "geen hoofdassen"), "{id}: {n:?}");
         assert!(bevat(n, "W_el"), "{id}: {n:?}");
@@ -218,14 +233,20 @@ fn buiging_draait_elastisch_en_zegt_dat_y_en_z_geen_hoofdassen_zijn() {
     let CheckKind::Resistance(m) = &toets(&r, "6.2.5_bending_y").kind else {
         panic!("6.2.5 hoort een weerstandstoets te zijn")
     };
-    let p = &steel_profiles::db().find("L 100x100x10").unwrap().properties;
+    let p = &steel_profiles::db()
+        .find("L 100x100x10")
+        .unwrap()
+        .properties;
     let el = p.wel_y_mm3 * 235.0 * 1e-6;
     assert!(
         (m.value - el).abs() < 1e-6 * el,
         "M_y,c,Rd = {} kNm, verwacht W_el·f_y = {el} kNm",
         m.value
     );
-    assert!(p.wpl_y_mm3 > p.wel_y_mm3, "W_pl hoort groter te zijn — anders zegt de toets niets");
+    assert!(
+        p.wpl_y_mm3 > p.wel_y_mm3,
+        "W_pl hoort groter te zijn — anders zegt de toets niets"
+    );
 }
 
 // ── (e) Afschuiving onder 6.2.6(2) ──────────────────────────────────────────
@@ -233,12 +254,27 @@ fn buiging_draait_elastisch_en_zegt_dat_y_en_z_geen_hoofdassen_zijn() {
 #[test]
 fn afschuiving_gebruikt_het_been_evenwijdig_aan_de_kracht() {
     let r = hoeklijn("L 200x100x14", 3.0, 100.0);
-    let p = &steel_profiles::db().find("L 200x100x14").unwrap().properties;
+    let p = &steel_profiles::db()
+        .find("L 200x100x14")
+        .unwrap()
+        .properties;
     // A_v;z = h·t (lange been), A_v;y = b·t (korte been).
-    assert!((p.av_z_mm2 - 200.0 * 14.0).abs() < 1e-6, "A_v;z = {}", p.av_z_mm2);
-    assert!((p.av_y_mm2 - 100.0 * 14.0).abs() < 1e-6, "A_v;y = {}", p.av_y_mm2);
+    assert!(
+        (p.av_z_mm2 - 200.0 * 14.0).abs() < 1e-6,
+        "A_v;z = {}",
+        p.av_z_mm2
+    );
+    assert!(
+        (p.av_y_mm2 - 100.0 * 14.0).abs() < 1e-6,
+        "A_v;y = {}",
+        p.av_y_mm2
+    );
     for id in ["6.2.6_shear_z", "6.2.6_shear_y"] {
-        assert_ne!(status(&r, id), CheckStatus::NotApplicable, "{id} hoort te draaien");
+        assert_ne!(
+            status(&r, id),
+            CheckStatus::NotApplicable,
+            "{id} hoort te draaien"
+        );
         let n = notities(&r, id);
         assert!(bevat(n, "6.2.6(3) geeft geen uitdrukking"), "{id}: {n:?}");
         assert!(bevat(n, "6.2.6(2)"), "{id}: {n:?}");
@@ -256,7 +292,9 @@ fn een_i_profiel_houdt_zijn_eigen_assen_en_zijn_kiptoets() {
     let _ = tussenwaarde(&r, "6.3.1_buckling", r"\lambda_z");
     assert_ne!(status(&r, "6.3.2_ltb"), CheckStatus::NotApplicable);
     assert!(
-        notities(&r, "6.3.1_buckling").iter().all(|n| !n.contains("Hoekprofiel")),
+        notities(&r, "6.3.1_buckling")
+            .iter()
+            .all(|n| !n.contains("Hoekprofiel")),
         "een I-profiel hoort geen hoekprofielmelding te krijgen"
     );
     // Klasse 1 of 2 — welke van de twee hangt af van de normaalkracht in deze

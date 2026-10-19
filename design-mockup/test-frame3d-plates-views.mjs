@@ -13,7 +13,7 @@ import { createFrame3DPlateGeometry } from "./src/components/frame3d/frame3dPlat
 import { circularArcThroughPoints2D, sampleCircularArc3D } from "./src/components/frame3d/frame3dCircularArc.ts";
 import { frame3DViewFromCamera, parseFrame3DViewSets } from "./src/components/frame3d/frame3dViewSets.ts";
 import { buildFrame3DSolveRequest } from "./src/components/frame3d/frame3dSolver.ts";
-import { DEFAULT_FRAME_3D_VISIBILITY } from "./src/components/frame3d/frame3dVisibility.ts";
+import { DEFAULT_FRAME_3D_VISIBILITY, readFrame3DVisibility, saveFrame3DVisibility } from "./src/components/frame3d/frame3dVisibility.ts";
 import { toggleFrame3DSelection } from "./src/components/frame3d/frame3dSelection.ts";
 import { deserializeProject, serializeProject } from "./src/io/projectFile.ts";
 import { CONCRETE_E_CM } from "./src/lib/sectionResolver.ts";
@@ -138,10 +138,20 @@ assert.throws(() => parseFrame3DModel({
 const view = {
   id: "view-1", name: "UGT momentbeeld", view: "iso",
   camera: { position: [7, 8, 6], target: [3, 2, 0], up: [0, 0, 1] },
-  visibility: { ...DEFAULT_FRAME_3D_VISIBILITY, loads: false, momentY: true, deformation: false },
+  visibility: { ...DEFAULT_FRAME_3D_VISIBILITY, loads: false, momentY: true, deformation: false, supportScale: 1.8 },
   combinationId: 12,
 };
 assert.deepEqual(parseFrame3DViewSets([view]), [view]);
+assert.equal(parseFrame3DViewSets([{ ...view, visibility: { supports: true } }])[0].visibility.supportScale, 1,
+  "oude opgeslagen views behouden de standaardgrootte");
+const preferenceStore = new Map();
+globalThis.localStorage = {
+  getItem: (key) => preferenceStore.get(key) ?? null,
+  setItem: (key, value) => preferenceStore.set(key, value),
+};
+saveFrame3DVisibility({ ...DEFAULT_FRAME_3D_VISIBILITY, supportScale: 2.25 });
+assert.equal(readFrame3DVisibility().supportScale, 2.25, "opleggingsgrootte blijft lokaal bewaard");
+delete globalThis.localStorage;
 assert.deepEqual(parseFrame3DViewSets([{ ...view, mode: "model" }])[0].mode, "model");
 assert.throws(() => parseFrame3DViewSets([{ ...view, mode: "unknown" }]), /ongeldige tabstand/);
 assert.throws(() => parseFrame3DViewSets([view, view]), /dubbele id/);

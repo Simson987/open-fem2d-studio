@@ -693,6 +693,21 @@ export interface Plate {
    * meldt dat. Rekent niet mee in de stijfheid.
    */
   wapening?: PlaatWapeningInvoer;
+  /** Expliciete Blaauwendraad drie-lagen-deelcontrole voor de Rust-Q4-schijf. */
+  threeLayer?: PlateThreeLayerConfiguration;
+}
+
+export interface PlateThreeLayerConfiguration {
+  topSkinMm: number;
+  bottomSkinMm: number;
+  topAsX: number;
+  topAsY: number;
+  bottomAsX: number;
+  bottomAsY: number;
+  fcdMpa: number;
+  fydMpa: number;
+  nuPrime: number;
+  compressionModel: 'blaauwendraad2021' | 'ec2AnnexF';
 }
 
 export type PlateNonlinearLaw =

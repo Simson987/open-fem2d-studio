@@ -6,6 +6,7 @@ import {
   CONCRETE_E_CM,
   NU_BETON,
   NU_STAAL,
+  TIMBER_G_MEAN,
   parseRechthoek,
   resolveSection,
 } from "../../lib/sectionResolver";
@@ -14,7 +15,34 @@ import { STEEL_SECTION_DIMS } from "../../lib/steelSectionDims.generated";
 import { thermalAlphaForMaterial } from "../../lib/thermalAlpha";
 import { frame3DLoadCaseId, frame3DMemberAxes, type Frame3DModel } from "./frame3dModel";
 
-export type Frame3DAnalysisKind = "linear" | "p-delta" | "material";
+export type Frame3DAnalysisKind = "linear" | "p-delta" | "material" | "combined";
+
+const isMaterialNonlinear = (analysis: Frame3DAnalysisKind) =>
+  analysis === "material" || analysis === "combined";
+
+export type Frame3DProjectAnalysisMode =
+  | "eersteOrde" | "tweedeOrdeGeometrisch" | "tweedeOrdeFysisch" | "axiaalFysischRust";
+
+/** Map the shared project analysis selector onto the available 3D solver. */
+export function frame3DAnalysisForProject(
+  model: Pick<Frame3DModel, "beams" | "plates" | "volumes" | "volumeMaterialKinematics">,
+  mode: Frame3DProjectAnalysisMode,
+): Frame3DAnalysisKind {
+  if (mode === "eersteOrde") return "linear";
+  if ((model.volumes?.length ?? 0) > 0 && mode === "tweedeOrdeFysisch") {
+    return model.volumeMaterialKinematics === "finiteStrain"
+      && model.beams.some((beam) => !beam.axialOnly)
+      && model.volumes!.every((volume) => volume.materialLaw?.kind === "steelJ2")
+      ? "combined" : "material";
+  }
+  if ((model.volumes?.length ?? 0) > 0 && mode === "axiaalFysischRust"
+      && model.beams.some((beam) => !beam.axialOnly)) return "combined";
+  const frameOnly = model.beams.length > 0 && (model.plates?.length ?? 0) === 0
+    && (model.volumes?.length ?? 0) === 0;
+  if (frameOnly && (mode === "tweedeOrdeFysisch" || mode === "axiaalFysischRust")) return "combined";
+  if (mode === "tweedeOrdeFysisch") return "material";
+  return "p-delta";
+}
 
 export interface Frame3DDisplacement {
   nodeId: number;
@@ -40,8 +68,22 @@ export interface Frame3DPlateBendingResult {
   reactions: Array<{ meshNodeId: number; x: number; y: number; z: number;
     fx: number; fy: number; fz: number; mx: number; my: number; mz: number }>;
   elements: Array<{ quadId: number; momentKnmPerM: [number, number, number];
-    shearKnPerM: [number, number]; effectiveEMpa: number; maxFibreStrain: number;
-    reinforcement?: NativePlateReinforcementEnvelope }>;
+    shearKnPerM: [number, number]; effectiveEMpa: number; maxFibreStrain: number; maxCombinedStrain?: number;
+    maxEquivalentPlasticStrain?: number; maxTensileDamage?: number;
+    materialPoints?: Array<{ gaussIndex: [number, number]; positionM: [number, number];
+      membraneStrain: [number, number, number]; equivalentPlasticStrain: number; tensileDamage: number }>;
+    resultantSamples: Array<{ positionM: [number, number];
+      momentKnmPerM: [number, number, number]; shearKnPerM: [number, number] }>;
+    reinforcement?: NativePlateReinforcementEnvelope;
+    threeLayer?: {
+      checkedPoints: number;
+      status: "partial_check_passes" | "partial_check_exceeded";
+      governingPositionM: [number, number];
+      top: { utilizationAsX: number; utilizationAsY: number; utilizationCompression: number; reinforcementCase: string };
+      bottom: { utilizationAsX: number; utilizationAsY: number; utilizationCompression: number; reinforcementCase: string };
+      core: { utilizationShear: number | null; utilizationDiagonal: number | null };
+      notAssessed: string[];
+    } }>;
 }
 
 export interface Frame3DMemberForces {
@@ -49,6 +91,7 @@ export interface Frame3DMemberForces {
   lengthM: number;
   effectiveEMpa?: number;
   axialHistory?: { plasticStrain: number; equivalentPlasticStrain: number; tensileDamage: number; tangentEMpa: number };
+  sectionHistory?: { maximumAbsPlasticStrain: number; maximumEquivalentPlasticStrain: number; maximumTensileDamage: number };
   nStartKn: number; nEndKn: number;
   vyStartKn: number; vyEndKn: number;
   vzStartKn: number; vzEndKn: number;
@@ -103,6 +146,40 @@ export interface Frame3DSolveResult {
   reactions: Frame3DReaction[];
   memberForces: Frame3DMemberForces[];
   plateBending?: Frame3DPlateBendingResult;
+  /** Lineair, klein-vervormd volume op gedeelde knopen met eventuele 3D-staven. */
+  volume3D?: {
+    elements: Array<{
+      elementId: number;
+      kind: "tet4" | "hex8";
+      stressMpa: [number, number, number, number, number, number];
+      gaussStressMpa?: Array<[number, number, number, number, number, number]>;
+      gaussEquivalentPlasticStrain?: number[];
+      vonMisesMpa: number;
+      greenStrain?: [[number, number, number], [number, number, number], [number, number, number]];
+      firstPiolaMpa?: [[number, number, number], [number, number, number], [number, number, number]];
+      effectiveEMpa?: number;
+      equivalentPlasticStrain?: number;
+      tensileDamage?: number;
+    }>;
+    membranes?: Array<{ plateId: number; stressMpa: [number, number, number];
+      resultantsKnPerM: [number, number, number];
+      stressMeasure?: "secondPiolaKirchhoff" | "cauchy";
+      equivalentPlasticStrain?: number;
+      thicknessStretch?: number }>;
+    /** Coupled DKT bending-only plates. Centroid moments use elastic reference DKT stiffness. */
+    bendingPlates?: Array<{ plateId: number; triangleCount: number;
+      maxAbsWm: number; maxAbsRotationRad: number;
+      maxAbsMomentKnmPerM?: [number, number, number];
+      centroidMoments?: Array<{ triangleIndex: number; nodeIds: [number, number, number];
+        momentKnmPerM: [number, number, number] }> }>;
+    backendUsed: string;
+    linearIterations: number;
+    relativeResidual: number;
+    formulation?: "linear" | "totalLagrangian" | "smallStrainMaterial" | "totalLagrangianJ2";
+    newtonIterations?: number;
+    acceptedSteps?: number;
+    cutbacks?: number;
+  };
   materialIterations?: number;
   materialLoadPath?: number[];
   /** Sinds contract 1.1: door de solver bemonsterde snedekrachtlijnen. */
@@ -123,13 +200,19 @@ export interface Frame3DSolveResult {
 /** Controleer de globale statica ook wanneer de P-Delta-kern geen eigen evenwichtsobject levert. */
 export function frame3DGlobalForceBalance(
   input: Omit<ReturnType<typeof buildFrame3DSolveRequest>, "bucklingModes">,
-  result: Pick<Frame3DSolveResult, "reactions">,
+  result: Pick<Frame3DSolveResult, "reactions"> & Partial<Pick<Frame3DSolveResult, "displacements">>,
 ): NonNullable<Frame3DSolveResult["forceBalance"]> {
+  type Vector3 = [number, number, number];
   const applied: [number, number, number] = [0, 0, 0];
   const appliedMoment: [number, number, number] = [0, 0, 0];
   const nodeById = new Map(input.nodes.map((node) => [node.id, node]));
+  const displacementById = new Map((result.displacements ?? []).map((node) => [node.nodeId, node]));
+  const useDeformedGeometry = input.analysis === "p-delta" || input.analysis === "combined";
+  const nodePosition = (node: { id: number; x: number; y: number; z: number }): Vector3 => {
+    const displacement = useDeformedGeometry ? displacementById.get(node.id) : undefined;
+    return [node.x + (displacement?.ux ?? 0), node.y + (displacement?.uy ?? 0), node.z + (displacement?.uz ?? 0)];
+  };
   const memberById = new Map(input.members.map((member) => [member.id, member]));
-  type Vector3 = [number, number, number];
   const cross = (a: Vector3, b: Vector3): Vector3 => [
     a[1] * b[2] - a[2] * b[1],
     a[2] * b[0] - a[0] * b[2],
@@ -148,37 +231,59 @@ export function frame3DGlobalForceBalance(
     const start = member && nodeById.get(member.startNodeId);
     const end = member && nodeById.get(member.endNodeId);
     if (!start || !end) throw new Error(`Staaf ${memberId} ontbreekt bij de onafhankelijke krachtensom.`);
-    return { start, ...frame3DMemberAxes(start, end, member?.rollAngleRad ?? 0) };
+    return { start, end, ...frame3DMemberAxes(start, end, member?.rollAngleRad ?? 0) };
   };
   const localVector = (ey: readonly number[], ez: readonly number[], fy: number, fz: number): Vector3 => [
     fy * ey[0] + fz * ez[0], fy * ey[1] + fz * ez[1], fy * ey[2] + fz * ez[2],
   ];
-  const memberPoint = (start: { x: number; y: number; z: number }, ex: readonly number[], distance: number): Vector3 => [
-    start.x + distance * ex[0], start.y + distance * ex[1], start.z + distance * ex[2],
-  ];
+  const memberPoint = (
+    start: { id: number; x: number; y: number; z: number },
+    end: { id: number; x: number; y: number; z: number },
+    ex: readonly number[],
+    distance: number,
+  ): Vector3 => {
+    const p0 = nodePosition(start), p1 = nodePosition(end);
+    const currentAxis = useDeformedGeometry
+      ? [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]]
+      : [...ex];
+    const currentLength = Math.hypot(...currentAxis);
+    return [p0[0] + distance * currentAxis[0] / currentLength,
+      p0[1] + distance * currentAxis[1] / currentLength,
+      p0[2] + distance * currentAxis[2] / currentLength];
+  };
   const addLocalMemberForce = (memberId: number, fy: number, fz: number, positionM: number) => {
-    const { start, ex, ey, ez } = memberGeometry(memberId);
-    addForceAt(localVector(ey, ez, fy, fz), memberPoint(start, ex, positionM));
+    const { start, end, ex, ey, ez } = memberGeometry(memberId);
+    addForceAt(localVector(ey, ez, fy, fz), memberPoint(start, end, ex, positionM));
   };
   for (const load of input.nodalLoads) {
     const node = nodeById.get(load.nodeId);
     if (!node) throw new Error(`Knoop ${load.nodeId} ontbreekt bij de onafhankelijke krachtensom.`);
-    addForceAt([load.fx, load.fy, load.fz], [node.x, node.y, node.z], [load.mx, load.my, load.mz]);
+    addForceAt([load.fx, load.fy, load.fz], nodePosition(node), [load.mx, load.my, load.mz]);
   }
   for (const load of input.memberLoads) {
-    const { start, ex, ey, ez } = memberGeometry(load.memberId);
+    const { start, end, ex, ey, ez } = memberGeometry(load.memberId);
     const length = load.endPositionM - load.startPositionM;
     const fy = (load.qyStartKnPerM + load.qyEndKnPerM) * length / 2;
     const fz = (load.qzStartKnPerM + load.qzEndKnPerM) * length / 2;
     const force = localVector(ey, ez, fy, fz);
     add(applied, force);
-    add(appliedMoment, cross([start.x, start.y, start.z], force));
+    const startPosition = nodePosition(start);
+    add(appliedMoment, cross(startPosition, force));
     // ∫s·q(s)ds over a linearly varying load; a is measured from the member start.
     const sy = load.startPositionM * fy
       + length ** 2 * (load.qyStartKnPerM / 6 + load.qyEndKnPerM / 3);
     const sz = load.startPositionM * fz
       + length ** 2 * (load.qzStartKnPerM / 6 + load.qzEndKnPerM / 3);
-    add(appliedMoment, cross(ex as Vector3, localVector(ey, ez, sy, sz)));
+    const endPosition = nodePosition(end);
+    const currentAxis: Vector3 = useDeformedGeometry
+      ? [endPosition[0] - startPosition[0], endPosition[1] - startPosition[1], endPosition[2] - startPosition[2]]
+      : [...ex] as Vector3;
+    const currentLength = Math.hypot(...currentAxis);
+    add(appliedMoment, cross([
+      currentAxis[0] / currentLength,
+      currentAxis[1] / currentLength,
+      currentAxis[2] / currentLength,
+    ], localVector(ey, ez, sy, sz)));
   }
   for (const load of input.memberPointLoads) addLocalMemberForce(load.memberId, load.pyKn, load.pzKn, load.positionM);
   const finalFactor = input.loadPath ? input.loadPath[input.loadPath.length - 1] : 1;
@@ -194,7 +299,7 @@ export function frame3DGlobalForceBalance(
     imbalanceKn[0] += reaction.fx;
     imbalanceKn[1] += reaction.fy;
     imbalanceKn[2] += reaction.fz;
-    add(momentImbalanceKnm, cross([node.x, node.y, node.z], [reaction.fx, reaction.fy, reaction.fz]));
+    add(momentImbalanceKnm, cross(nodePosition(node), [reaction.fx, reaction.fy, reaction.fz]));
     add(momentImbalanceKnm, [reaction.mx, reaction.my, reaction.mz]);
   }
   const maxImbalanceKn = Math.max(...imbalanceKn.map(Math.abs));
@@ -202,7 +307,11 @@ export function frame3DGlobalForceBalance(
   const scaleKn = Math.max(1, ...applied.map(Math.abs));
   const scaleKnm = Math.max(1, ...appliedMoment.map(Math.abs));
   const toleranceKn = 1e-5 * scaleKn;
-  const momentToleranceKnm = 1e-5 * scaleKnm;
+  // P-Delta equilibrium is assembled in the displaced configuration. The
+  // independent statics check reconstructs nodal/member load arms from the
+  // deformed node line, so allow a small additional tolerance for this
+  // first-order geometric reconstruction.
+  const momentToleranceKnm = (useDeformedGeometry ? 1e-4 : 1e-5) * scaleKnm;
   return {
     imbalanceKn, maxImbalanceKn, toleranceKn,
     momentImbalanceKnm, maxMomentImbalanceKnm, momentToleranceKnm,
@@ -239,12 +348,14 @@ function rectangleTorsionConstant(bMm: number, hMm: number): number {
 }
 
 function poisson(material: string): number {
+  // ν is retained for the request schema; timber torsion uses explicit Gmean.
+  if (material in TIMBER_G_MEAN) return NU_STAAL;
   if (material in CONCRETE_E_CM) return NU_BETON;
   if (STEEL_GRADES.includes(material.toUpperCase())) return NU_STAAL;
   if (/^(EN\s*AW|ALUMINIUM|ALUMINUM|VRIJ:)/i.test(material)) return NU_STAAL;
   throw new Error(
     `Materiaal "${material}" heeft in 3D nog geen betrouwbare torsiestijfheid. ` +
-    "Gebruik voor deze eerste rekenroute staal, beton, aluminium of een vrij isotroop materiaal.",
+    "Gebruik staal, beton, aluminium, een bekende houtklasse of een vrij isotroop materiaal.",
   );
 }
 
@@ -258,13 +369,14 @@ export function buildFrame3DSolveRequest(
   model: Frame3DModel,
   analysis: Frame3DAnalysisKind = "p-delta",
   loadSelection?: Frame3DLoadSelection,
+  allowMixedMembranes = false,
 ) {
   if (model.materialLoadPath !== undefined && (!Array.isArray(model.materialLoadPath)
       || model.materialLoadPath.length === 0 || model.materialLoadPath.length > 100
       || model.materialLoadPath.some((factor) => !Number.isFinite(factor)))) {
     throw new Error("Het FNL-lastpad moet 1–100 eindige lastfactoren bevatten.");
   }
-  if ((model.plates?.length ?? 0) > 0 || (model.surfaceLoads?.length ?? 0) > 0) {
+  if (!allowMixedMembranes && ((model.plates?.length ?? 0) > 0 || (model.surfaceLoads?.length ?? 0) > 0)) {
     throw new Error(
       "De raamwerkkern rekent 3D-platen en oppervlaktebelastingen niet mee. " +
       "Gebruik de losse lineaire Rust-plaatroute voor een ondersteunde rechthoek; " +
@@ -310,7 +422,13 @@ export function buildFrame3DSolveRequest(
   });
   const hasPrescribedDisplacement = (model.supports ?? []).some((support) =>
     Object.keys(support.prescribed ?? {}).length > 0);
-  if (nodalLoads.length === 0 && memberLoads.length === 0 && memberPointLoads.length === 0 && thermalLoads.length === 0 && !hasPrescribedDisplacement) {
+  const hasVolumeLoad = (model.volumes?.length ?? 0) > 0 &&
+    [...(model.volumeBodyLoads ?? []), ...(model.volumeFaceLoads ?? [])].some((load) =>
+      factorForLoad(loadSelection, frame3DLoadCaseId(load)) !== 0);
+  const hasMembraneLoad = allowMixedMembranes && (model.surfaceLoads ?? []).some((load) =>
+    factorForLoad(loadSelection, frame3DLoadCaseId(load)) !== 0);
+  if (nodalLoads.length === 0 && memberLoads.length === 0 && memberPointLoads.length === 0
+      && thermalLoads.length === 0 && !hasPrescribedDisplacement && !hasVolumeLoad && !hasMembraneLoad) {
     throw new Error(loadSelection === undefined
       ? "Voeg minstens één 3D-belasting of opgelegde verplaatsing toe."
       : typeof loadSelection === "number"
@@ -320,17 +438,14 @@ export function buildFrame3DSolveRequest(
 
   type NativeLaw = { kind: "steelBilinear"; yield_mpa: number; hardening_ratio: number }
     | { kind: "concreteCracking"; tensile_mpa: number; residual_ratio: number };
-  const materials: { id: number; name: string; eMpa: number; nu: number; alphaPerK: number; law?: NativeLaw }[] = [];
+  const materials: { id: number; name: string; eMpa: number; nu: number; gMpa?: number; alphaPerK: number; law?: NativeLaw }[] = [];
   const sections: { id: number; name: string; areaM2: number; iyM4: number; izM4: number; torsionJM4: number }[] = [];
   const materialIds = new Map<string, number>();
   const sectionIds = new Map<string, number>();
 
-  if (analysis === "material") {
-    if (!model.beams.some((beam) => beam.nonlinearLaw)) {
+  if (isMaterialNonlinear(analysis)) {
+    if ((model.volumes?.length ?? 0) === 0 && !model.beams.some((beam) => beam.nonlinearLaw)) {
       throw new Error("Stel bij minstens één 3D-staaf een expliciete FNL-materiaalwet in.");
-    }
-    if (thermalLoads.some((load) => load.deltaTGradientYK !== 0 || load.deltaTGradientZK !== 0)) {
-      throw new Error("De experimentele 3D-FNL-kern ondersteunt nog geen temperatuurgradiënt over de doorsnede.");
     }
   }
   const members = model.beams.map((beam) => {
@@ -341,14 +456,14 @@ export function buildFrame3DSolveRequest(
     }
     const resolved = resolveSection(material, profile);
     if (resolved.bron === "default") throw new Error(`Staaf ${beam.id}: ${resolved.reden ?? "doorsnede onbekend"}.`);
-    if (analysis === "material" && beam.nonlinearLaw) {
+    if (isMaterialNonlinear(analysis) && beam.nonlinearLaw) {
       if (beam.nonlinearLaw.kind === "steelBilinear" && material in CONCRETE_E_CM
           || beam.nonlinearLaw.kind === "concreteCracking" && STEEL_GRADES.includes(material.toUpperCase())) {
         throw new Error(`Staaf ${beam.id}: de FNL-materiaalwet past niet bij materiaal ${material}.`);
       }
     }
 
-    const law: NativeLaw | undefined = analysis !== "material" || !beam.nonlinearLaw ? undefined
+    const law: NativeLaw | undefined = !isMaterialNonlinear(analysis) || !beam.nonlinearLaw ? undefined
       : beam.nonlinearLaw.kind === "steelBilinear"
         ? { kind: "steelBilinear", yield_mpa: beam.nonlinearLaw.yieldMpa,
           hardening_ratio: beam.nonlinearLaw.hardeningRatio }
@@ -361,6 +476,7 @@ export function buildFrame3DSolveRequest(
       materialIds.set(materialKey, materialId);
       materials.push({
         id: materialId, name: material, eMpa: resolved.E, nu: poisson(material),
+        ...(material in TIMBER_G_MEAN ? { gMpa: TIMBER_G_MEAN[material] } : {}),
         alphaPerK: thermalAlphaForMaterial(material),
         ...(law ? { law } : {}),
       });
@@ -449,7 +565,8 @@ export function buildFrame3DSolveRequest(
       deltaTGradientYK: load.deltaTGradientYK,
       deltaTGradientZK: load.deltaTGradientZK,
     })),
-    ...(analysis === "material" && model.materialLoadPath ? { loadPath: model.materialLoadPath } : {}),
+    ...(analysis === "combined" ? { loadPath: model.materialLoadPath ?? [1] }
+      : analysis === "material" && model.materialLoadPath ? { loadPath: model.materialLoadPath } : {}),
     maxIterations: 50,
     tolerance: 1e-8,
     bucklingModes: 3,
@@ -462,9 +579,25 @@ export async function solveFrame3D(
   analysis: Frame3DAnalysisKind = "p-delta",
   engine: SolverEngineId = "dedaliano",
 ): Promise<Frame3DSolveResult> {
+  if ((model.volumes?.length ?? 0) > 0) {
+    if (engine !== "openaec-native-fem") throw new Error("3D-volume-elementen vereisen de Open FEM Rust-kern.");
+    const frame = model.beams.length > 0 ? buildFrame3DSolveRequest(model, analysis, activeLoadCaseId, true) : undefined;
+    const { solveFrame3DVolume } = await import("./frame3dVolumeSolver");
+    return solveFrame3DVolume(model, activeLoadCaseId, frame, analysis);
+  }
+  if (model.beams.some((beam) => beam.axialOnly)) {
+    if (engine !== "openaec-native-fem") throw new Error("Axiale 3D-staven vereisen de Open FEM Rust-kern.");
+    if (analysis !== "linear") throw new Error("Axiale 3D-staven zonder volume ondersteunen voorlopig alleen lineaire analyse.");
+    const frame = buildFrame3DSolveRequest(model, analysis, activeLoadCaseId, true);
+    const { solveFrame3DVolume } = await import("./frame3dVolumeSolver");
+    return solveFrame3DVolume(model, activeLoadCaseId, frame, analysis);
+  }
   if ((model.plates?.length ?? 0) > 0) {
-    if (engine !== "openaec-native-fem" || analysis === "p-delta") {
-      throw new Error("3D-platen vereisen de lineaire of FNL Open FEM Rust-plaatroute.");
+    if (analysis === "combined") {
+      throw new Error("Gecombineerde axiale GNL/FNL is voorlopig alleen beschikbaar voor zuivere 3D-raamwerken.");
+    }
+    if (engine !== "openaec-native-fem") {
+      throw new Error("3D-platen vereisen de Open FEM Rust-plaatroute.");
     }
     const { solveFrame3DPlate } = await import("./frame3dPlateSolver");
     return solveFrame3DPlate(model, activeLoadCaseId, analysis);
@@ -481,9 +614,25 @@ export async function solveFrame3DCombination(
   analysis: Frame3DAnalysisKind = "p-delta",
   engine: SolverEngineId = "dedaliano",
 ): Promise<Frame3DSolveResult> {
+  if ((model.volumes?.length ?? 0) > 0) {
+    if (engine !== "openaec-native-fem") throw new Error("3D-volume-elementen vereisen de Open FEM Rust-kern.");
+    const frame = model.beams.length > 0 ? buildFrame3DSolveRequest(model, analysis, factors, true) : undefined;
+    const { solveFrame3DVolume } = await import("./frame3dVolumeSolver");
+    return solveFrame3DVolume(model, factors, frame, analysis);
+  }
+  if (model.beams.some((beam) => beam.axialOnly)) {
+    if (engine !== "openaec-native-fem") throw new Error("Axiale 3D-staven vereisen de Open FEM Rust-kern.");
+    if (analysis !== "linear") throw new Error("Axiale 3D-staven zonder volume ondersteunen voorlopig alleen lineaire analyse.");
+    const frame = buildFrame3DSolveRequest(model, analysis, factors, true);
+    const { solveFrame3DVolume } = await import("./frame3dVolumeSolver");
+    return solveFrame3DVolume(model, factors, frame, analysis);
+  }
   if ((model.plates?.length ?? 0) > 0) {
-    if (engine !== "openaec-native-fem" || analysis === "p-delta") {
-      throw new Error("3D-platen vereisen de lineaire of FNL Open FEM Rust-plaatroute.");
+    if (analysis === "combined") {
+      throw new Error("Gecombineerde axiale GNL/FNL is voorlopig alleen beschikbaar voor zuivere 3D-raamwerken.");
+    }
+    if (engine !== "openaec-native-fem") {
+      throw new Error("3D-platen vereisen de Open FEM Rust-plaatroute.");
     }
     const { solveFrame3DPlate } = await import("./frame3dPlateSolver");
     return solveFrame3DPlate(model, factors, analysis);
@@ -500,7 +649,8 @@ type Frame3DSolveRequest = Omit<ReturnType<typeof buildFrame3DSolveRequest>, "bu
 interface NativeFrame3DResult {
   nodes: Array<{ nodeId: number; displacement: number[]; reaction: number[] }>;
   members: Array<{ memberId: number; localEndForces: number[]; effectiveEMpa: number;
-    axialHistory?: Frame3DMemberForces["axialHistory"] }>;
+    axialHistory?: Frame3DMemberForces["axialHistory"];
+    sectionHistory?: Frame3DMemberForces["sectionHistory"] }>;
   diagrams: Frame3DDiagrams;
   buckling: Frame3DBuckling;
   iterations: number;
@@ -516,16 +666,33 @@ function adaptNativeFrame3DResult(
   input: Frame3DSolveRequest,
   native: NativeFrame3DResult,
 ): Frame3DSolveResult {
-  if (native.nodes?.length !== input.nodes.length || native.members?.length !== input.members.length
-      || !Number.isFinite(native.equilibriumResidual) || native.equilibriumResidual > 1e-7
-      || !Number.isFinite(native.relativeChange) || !Number.isFinite(native.maxAmplification)
-      || native.iterations < 1) {
+  if (!native || typeof native !== "object" || !Array.isArray(native.nodes)
+      || !Array.isArray(native.members) || native.nodes.length !== input.nodes.length
+      || native.members.length !== input.members.length
+      || native.nodes.some((node) => !node || typeof node !== "object")
+      || native.members.some((member) => !member || typeof member !== "object")
+      || !Number.isSafeInteger(native.iterations) || native.iterations < 1
+      || !Number.isFinite(native.equilibriumResidual) || native.equilibriumResidual < 0 || native.equilibriumResidual > 1e-7
+      || !Number.isFinite(native.relativeChange) || native.relativeChange < 0
+      || !Number.isFinite(native.maxAmplification) || native.maxAmplification < 0
+      || !native.diagrams || typeof native.diagrams !== "object") {
     throw new Error("De eigen Rust-raamwerkkern leverde geen volledig of evenwichtig resultaat.");
+  }
+  const exactIds = (actual: number[], expected: number[]) => {
+    const actualSet = new Set(actual);
+    return actualSet.size === actual.length && actual.length === expected.length
+      && expected.every((id) => actualSet.has(id));
+  };
+  if (!exactIds(native.nodes.map((node) => node.nodeId), input.nodes.map((node) => node.id))) {
+    throw new Error("De eigen Rust-raamwerkkern leverde geen één-op-één knoopresultaten.");
+  }
+  if (!exactIds(native.members.map((member) => member.memberId), input.members.map((member) => member.id))) {
+    throw new Error("De eigen Rust-raamwerkkern leverde geen één-op-één staafresultaten.");
   }
   const nodeById = new Map(input.nodes.map((node) => [node.id, node]));
   const memberById = new Map(input.members.map((member) => [member.id, member]));
   const displacements: Frame3DDisplacement[] = native.nodes.map((node) => {
-    if (!nodeById.has(node.nodeId) || node.displacement.length !== 6
+    if (!nodeById.has(node.nodeId) || !Array.isArray(node.displacement) || node.displacement.length !== 6
         || node.displacement.some((value) => !Number.isFinite(value))) {
       throw new Error("De eigen Rust-raamwerkkern leverde een ongeldige knoopverplaatsing.");
     }
@@ -533,7 +700,8 @@ function adaptNativeFrame3DResult(
     return { nodeId: node.nodeId, ux, uy, uz, rx, ry, rz };
   });
   const reactions: Frame3DReaction[] = native.nodes.map((node) => {
-    if (node.reaction.length !== 6 || node.reaction.some((value) => !Number.isFinite(value))) {
+    if (!Array.isArray(node.reaction) || node.reaction.length !== 6
+        || node.reaction.some((value) => !Number.isFinite(value))) {
       throw new Error("De eigen Rust-raamwerkkern leverde een ongeldige oplegreactie.");
     }
     const [fx, fy, fz, mx, my, mz] = node.reaction;
@@ -544,16 +712,28 @@ function adaptNativeFrame3DResult(
     const start = source && nodeById.get(source.startNodeId);
     const end = source && nodeById.get(source.endNodeId);
     if (!start || !end || !Number.isFinite(member.effectiveEMpa) || member.effectiveEMpa <= 0
-        || member.localEndForces.length !== 12
+        || !Array.isArray(member.localEndForces) || member.localEndForces.length !== 12
         || member.localEndForces.some((value) => !Number.isFinite(value))) {
       throw new Error("De eigen Rust-raamwerkkern leverde ongeldige staafeindkrachten.");
     }
     const history = member.axialHistory;
-    if (input.loadPath && (!history || !Number.isFinite(history.plasticStrain)
+    const sectionHistory = member.sectionHistory;
+    if (input.loadPath && !history && !sectionHistory) {
+      throw new Error("De eigen Rust-raamwerkkern leverde geen materiaalgeschiedenis voor het lastpad.");
+    }
+    if (history && (!Number.isFinite(history.plasticStrain)
         || !Number.isFinite(history.equivalentPlasticStrain) || history.equivalentPlasticStrain < 0
         || !Number.isFinite(history.tensileDamage) || history.tensileDamage < 0 || history.tensileDamage > 1
         || !Number.isFinite(history.tangentEMpa) || history.tangentEMpa < 0)) {
       throw new Error("De eigen Rust-raamwerkkern leverde een ongeldige axiale materiaaltoestand.");
+    }
+    if (sectionHistory && (!Number.isFinite(sectionHistory.maximumAbsPlasticStrain)
+        || sectionHistory.maximumAbsPlasticStrain < 0
+        || !Number.isFinite(sectionHistory.maximumEquivalentPlasticStrain)
+        || sectionHistory.maximumEquivalentPlasticStrain < 0
+        || !Number.isFinite(sectionHistory.maximumTensileDamage)
+        || sectionHistory.maximumTensileDamage < 0 || sectionHistory.maximumTensileDamage > 1)) {
+      throw new Error("De eigen Rust-raamwerkkern leverde een ongeldige doorsnedegeschiedenis.");
     }
     const f = member.localEndForces;
     return {
@@ -561,6 +741,7 @@ function adaptNativeFrame3DResult(
       lengthM: Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z),
       effectiveEMpa: member.effectiveEMpa,
       ...(history ? { axialHistory: history } : {}),
+      ...(sectionHistory ? { sectionHistory } : {}),
       nStartKn: -f[0], vyStartKn: f[1], vzStartKn: f[2],
       torsionStartKnm: f[3], myStartKnm: f[4], mzStartKnm: f[5],
       nEndKn: f[6], vyEndKn: -f[7], vzEndKn: -f[8],
@@ -568,26 +749,38 @@ function adaptNativeFrame3DResult(
     };
   });
   const diagrams = native.diagrams;
+  const stationTolerance = 1e-12;
   for (const key of ["momentY", "momentZ", "shearY", "shearZ", "axial", "torsion"] as const) {
     const curves = diagrams?.[key];
-    if (!Array.isArray(curves) || curves.length !== memberForces.length ||
-        curves.some((curve) => !memberById.has(curve.memberId) || curve.points?.length < 2 ||
-          curve.points.some((point) => !Number.isFinite(point.t) || !Number.isFinite(point.value)) ||
+    if (!Array.isArray(curves) || curves.length !== memberForces.length
+        || curves.some((curve) => !curve || typeof curve !== "object") ||
+        !exactIds(curves.map((curve) => curve.memberId), memberForces.map((member) => member.memberId)) ||
+        curves.some((curve) => !memberById.has(curve.memberId) || !Array.isArray(curve.points)
+          || curve.points.length < 2 || curve.points.some((point) => !point || typeof point !== "object")
+          || curve.points.some((point, index) =>
+            !Number.isFinite(point.t) || point.t < 0 || point.t > 1 || !Number.isFinite(point.value)
+            || (index > 0 && point.t < curve.points[index - 1].t - stationTolerance))
+          || Math.abs(curve.points[0].t) > stationTolerance
+          || Math.abs(curve.points[curve.points.length - 1].t - 1) > stationTolerance ||
           !Number.isFinite(curve.maxValue) || !Number.isFinite(curve.minValue) || !Number.isFinite(curve.maxAbsValue))) {
       throw new Error("De eigen Rust-raamwerkkern leverde ongeldige snedekrachtlijnen.");
     }
   }
-  const balance = frame3DGlobalForceBalance(input, { reactions });
+  const balance = frame3DGlobalForceBalance(input, { reactions, displacements });
   const residualOk = native.equilibriumResidual <= 1e-8;
-  const implicitThermalHistory = input.analysis === "material" && input.thermalLoads.length > 0
+  const implicitThermalHistory = isMaterialNonlinear(input.analysis) && input.thermalLoads.length > 0
     && !input.loadPath;
   const buckling = native.buckling;
   if (!buckling || !["available", "notApplicable", "failed"].includes(buckling.status)
       || (buckling.status === "available" && (
-        buckling.modes.length === 0 || buckling.modes.some((mode) => !Number.isFinite(mode.loadFactor) || mode.loadFactor <= 0)
-        || buckling.members.length !== memberForces.length
-        || buckling.members.some((member) => !memberById.has(member.memberId)
-          || !Number.isFinite(member.criticalForceKn) || !Number.isFinite(member.effectiveLengthM))))) {
+        !Array.isArray(buckling.modes) || buckling.modes.length === 0
+        || buckling.modes.some((mode) => !mode || typeof mode !== "object"
+          || !Number.isFinite(mode.loadFactor) || mode.loadFactor <= 0)
+        || !Array.isArray(buckling.members) || buckling.members.length !== memberForces.length
+        || buckling.members.some((member) => !member || typeof member !== "object"
+          || !memberById.has(member.memberId)
+          || !Number.isFinite(member.criticalForceKn) || !Number.isFinite(member.effectiveLengthM))
+        || !exactIds(buckling.members.map((member) => member.memberId), memberForces.map((member) => member.memberId))))) {
     throw new Error("De eigen Rust-raamwerkkern leverde een ongeldige eigenknikuitkomst.");
   }
   return {
@@ -608,28 +801,61 @@ function adaptNativeFrame3DResult(
     solverPath: "native-rust",
     diagnostics: [
       "Eigen Rust-raamwerkkern: 3D-raamwerk.",
-      ...(input.analysis === "material"
+      ...(isMaterialNonlinear(input.analysis)
         ? input.loadPath || implicitThermalHistory
           ? ["FNL-lastpad bewaart axiale plastische rek en betonschade per staaf; uniforme temperatuur werkt via mechanische rek. Buiging gebruikt nog een secant-E zonder doorsnedegeschiedenis."]
           : ["FNL gebruikt een monotone secant-E per staaf; plastische en scheurgeschiedenis ontbreken nog."] : []),
       ...(buckling.status === "failed" ? [`Eigenknik: ${buckling.reason}`] : []),
-      ...(input.analysis === "p-delta" && !balance.ok
-        ? ["De onafhankelijke momentensom gebruikt de onvervormde geometrie; bij P-Δ kan daardoor een momentrest ontstaan."]
+      ...(input.analysis !== "linear" && !balance.ok
+        ? ["De onafhankelijke momentensom gebruikt verplaatste knoopposities en rechte koordes; bij P-Δ kan een kleine momentrest overblijven."]
         : []),
     ],
   };
 }
 
 async function callFrame3DSolver(input: Frame3DSolveRequest, engine: SolverEngineId): Promise<Frame3DSolveResult> {
+  if (engine !== "openaec-native-fem" && input.materials.some((material) => material.gMpa !== undefined)) {
+    throw new Error("Houten 3D-staven vereisen Open FEM Rust voor de afzonderlijke afschuifmodulus Gmean.");
+  }
   const checked = (result: Frame3DSolveResult): Frame3DSolveResult => ({
     ...result,
     forceBalance: frame3DGlobalForceBalance(input, result),
   });
   if (engine === "openaec-native-fem") {
-    return checked(adaptNativeFrame3DResult(input,
-      await solveNativeFem<NativeFrame3DResult>("frame3d", input)));
+    let native: NativeFrame3DResult;
+    let recoveredWithFrontal = false;
+    // The assembled matrix is capped at 20,000 DOFs. A linear narrow-front
+    // frame can be solved elementwise above that cap.
+    const directFrontalForSize = input.analysis === "linear" && input.nodes.length * 6 > 20_000;
+    try {
+      native = await solveNativeFem<NativeFrame3DResult>("frame3d", directFrontalForSize
+        ? { ...input, linearBackend: "frontalWave", frontalMaxFrontDofs: 256 }
+        : input);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      const iterativeFailure = /sparse solver did not converge within|sparse solve lost residual accuracy/.test(reason);
+      if (directFrontalForSize || input.analysis !== "linear" || input.members.length > 2500
+          || !iterativeFailure) throw error;
+      try {
+        native = await solveNativeFem<NativeFrame3DResult>("frame3d", {
+          ...input, linearBackend: "frontalWave", frontalMaxFrontDofs: 256,
+        });
+        recoveredWithFrontal = true;
+      } catch (frontalError) {
+        const secondReason = frontalError instanceof Error ? frontalError.message : String(frontalError);
+        throw new Error(`3D-raamwerk: de iteratieve en frontale oplossers faalden: ${reason}; ${secondReason}`);
+      }
+    }
+    const result = checked(adaptNativeFrame3DResult(input, native));
+    return (recoveredWithFrontal || directFrontalForSize) ? {
+      ...result, solverPath: "native-rust-frame3d-frontal-wave",
+      diagnostics: [...result.diagnostics,
+        directFrontalForSize
+          ? "Het grote lineaire raamwerk is direct met de frontale methode opgelost."
+          : "De iteratieve raamwerkoplosser convergeerde niet; de frontale methode loste het lineaire model op."],
+    } : result;
   }
-  if (input.analysis === "material") {
+  if (isMaterialNonlinear(input.analysis)) {
     throw new Error("Fysisch niet-lineaire 3D-analyse is alleen beschikbaar met Open FEM Rust (experimenteel).");
   }
   const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);

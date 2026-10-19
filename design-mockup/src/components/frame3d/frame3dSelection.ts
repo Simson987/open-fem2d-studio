@@ -1,6 +1,6 @@
 export type Frame3DSelectionType =
   | "node" | "beam"
-  | "plate" | "nodalLoad" | "memberLoad" | "memberPointLoad" | "thermalLoad" | "surfaceLoad";
+  | "plate" | "volume" | "nodalLoad" | "memberLoad" | "memberPointLoad" | "thermalLoad" | "surfaceLoad";
 export type Frame3DSingleSelection = {
   [Type in Frame3DSelectionType]: { type: Type; id: number }
 }[Frame3DSelectionType];

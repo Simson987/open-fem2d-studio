@@ -112,11 +112,11 @@ use concrete_check::dekkingslijn::DekkingslijnAntwoord;
 use concrete_check::result::NietUitgevoerdeToets;
 use concrete_check::ConcreteBeamCheckResult;
 use nen_en_1993_1_1_section::{CheckStatus, Deelstap, NamedValue};
+use plaat_check::{PlateCheckInput, PlateCheckResult};
 use spanning_check::SpanningBeamCheckResult;
 use steel_check::result::{BeamCheckResult, CheckKind, NamedCheck, VerloopRapport};
 use timber_check::clt::CltBeamCheckResult;
 use timber_check::TimberBeamCheckResult;
-use plaat_check::{PlateCheckInput, PlateCheckResult};
 
 // ── Bundled fonts (Liberation Sans, OFL licence) ──────────────────────────────
 
@@ -599,7 +599,9 @@ fn extend_with_niet_uitgevoerd(flow: &mut Vec<Box<dyn Flowable>>, input: &Report
     if regels.is_empty() {
         return;
     }
-    flow.push(Box::new(Paragraph::new("Niet uitgevoerd", style_h3()).kop()));
+    flow.push(Box::new(
+        Paragraph::new("Niet uitgevoerd", style_h3()).kop(),
+    ));
     flow.push(Box::new(Paragraph::new(
         "Deze toetsen konden niet worden afgerekend; de reden staat bij de \
          toetsing van de staaf. Ontbreekt een toets die de draagkracht bepaalt, \
@@ -608,7 +610,10 @@ fn extend_with_niet_uitgevoerd(flow: &mut Vec<Box<dyn Flowable>>, input: &Report
         style_note(),
     )));
     for r in &regels {
-        flow.push(Box::new(Paragraph::new(niet_uitgevoerd_tekst(r), style_body())));
+        flow.push(Box::new(Paragraph::new(
+            niet_uitgevoerd_tekst(r),
+            style_body(),
+        )));
     }
     flow.push(Box::new(Spacer::from_mm(4.0)));
 }
@@ -634,7 +639,10 @@ impl ToegepasteKaders {
         // een geweigerde plaat (kruislaaghout, vrij materiaal, onbekende
         // klasse) is tegen geen enkele norm gerekend en claimt er dus ook geen.
         let plaat = |soort: plaat_check::PlaatMateriaalSoort| {
-            input.plate_results.iter().any(|r| r.soort == soort && r.geweigerd.is_none())
+            input
+                .plate_results
+                .iter()
+                .any(|r| r.soort == soort && r.geweigerd.is_none())
         };
         use plaat_check::PlaatMateriaalSoort as S;
         Self {
@@ -930,11 +938,8 @@ pub fn generate_report_pdf(input: ReportInput) -> Vec<u8> {
             .expect("register bold font");
         reg.register_ttf_bytes("LiberationSans-Italic", FONT_ITALIC.to_vec())
             .expect("register italic font");
-        reg.register_ttf_bytes(
-            "LiberationSans-BoldItalic",
-            FONT_BOLD_ITALIC.to_vec(),
-        )
-        .expect("register bold-italic font");
+        reg.register_ttf_bytes("LiberationSans-BoldItalic", FONT_BOLD_ITALIC.to_vec())
+            .expect("register bold-italic font");
         // Alias so `style.font_name = "LiberationSans"` resolves.
         reg.register_alias("LiberationSans", "LiberationSans-Regular");
     }
@@ -962,13 +967,12 @@ pub fn generate_report_pdf(input: ReportInput) -> Vec<u8> {
     ))
     .with_padding(Padding::all(Pt(0.0)));
 
-    let template = PageTemplate::new("content", A4, frame).with_callback(Box::new(
-        OpenAecHeaderFooter {
+    let template =
+        PageTemplate::new("content", A4, frame).with_callback(Box::new(OpenAecHeaderFooter {
             project: input.project_name.clone(),
             norms: norms.clone(),
             datum: datum_voluit(&input.date, input.taal),
-        },
-    ));
+        }));
     doc.add_page_template(template);
 
     // 3. Cover page (RawPage — drawn directly).
@@ -1118,9 +1122,18 @@ pub fn generate_report_pdf(input: ReportInput) -> Vec<u8> {
 /// regel als eigen alinea gezet omdat de opmaakmotor geen harde regeleinden in
 /// één alinea kent; er wordt niets aan de inhoud veranderd.
 fn extend_with_uitgangspunten(flow: &mut Vec<Box<dyn Flowable>>, input: &ReportInput) {
-    let scheefstand = input.scheefstand_toelichting.as_ref().filter(|t| !t.trim().is_empty());
-    let analyse = input.analyse_toelichting.as_ref().filter(|t| !t.trim().is_empty());
-    let wind = input.wind_toelichting.as_ref().filter(|t| !t.trim().is_empty());
+    let scheefstand = input
+        .scheefstand_toelichting
+        .as_ref()
+        .filter(|t| !t.trim().is_empty());
+    let analyse = input
+        .analyse_toelichting
+        .as_ref()
+        .filter(|t| !t.trim().is_empty());
+    let wind = input
+        .wind_toelichting
+        .as_ref()
+        .filter(|t| !t.trim().is_empty());
     if scheefstand.is_none() && analyse.is_none() && wind.is_none() {
         return;
     }
@@ -1187,7 +1200,10 @@ fn zet_regels(flow: &mut Vec<Box<dyn Flowable>>, tekst: &str) {
             continue;
         }
         let stijl = if regel.starts_with('!') {
-            ParagraphStyle { text_color: C_FAIL, ..style_note() }
+            ParagraphStyle {
+                text_color: C_FAIL,
+                ..style_note()
+            }
         } else {
             style_mono()
         };
@@ -1223,7 +1239,11 @@ fn extend_with_maatgevende_afleiding(flow: &mut Vec<Box<dyn Flowable>>, m: &Repo
         return;
     }
     flow.push(Box::new(
-        Paragraph::new(format!("Maatgevende toets, uitgeschreven: {titel}"), style_h3()).kop(),
+        Paragraph::new(
+            format!("Maatgevende toets, uitgeschreven: {titel}"),
+            style_h3(),
+        )
+        .kop(),
     ));
     extend_with_deelstappen(flow, stappen);
 }
@@ -1258,10 +1278,16 @@ pub(crate) fn extend_with_deelstappen(flow: &mut Vec<Box<dyn Flowable>>, stappen
             .kop(),
         ));
         if !stap.formula_latex.is_empty() {
-            flow.push(Box::new(Paragraph::new(stap.formula_latex.clone(), style_body())));
+            flow.push(Box::new(Paragraph::new(
+                stap.formula_latex.clone(),
+                style_body(),
+            )));
         }
         if !stap.ingevuld_latex.is_empty() {
-            flow.push(Box::new(Paragraph::new(stap.ingevuld_latex.clone(), style_body())));
+            flow.push(Box::new(Paragraph::new(
+                stap.ingevuld_latex.clone(),
+                style_body(),
+            )));
         }
         if stap.formula_latex.is_empty() && !stap.variables.is_empty() {
             let vars: String = stap
@@ -1273,7 +1299,11 @@ pub(crate) fn extend_with_deelstappen(flow: &mut Vec<Box<dyn Flowable>>, stappen
             flow.push(Box::new(Paragraph::new(vars, style_mono())));
         }
         if let Some(v) = stap.value {
-            let symbool = if stap.symbol.is_empty() { String::new() } else { format!("{} = ", stap.symbol) };
+            let symbool = if stap.symbol.is_empty() {
+                String::new()
+            } else {
+                format!("{} = ", stap.symbol)
+            };
             flow.push(Box::new(Paragraph::new(
                 format!("{symbool}{} {}", getal_tekst(v, 3), stap.unit),
                 style_amber_value(),
@@ -1330,26 +1360,12 @@ fn build_cover_page(input: &ReportInput, norm_regels: &[String]) -> RawPage {
 
     // Background tint band at top
     dl.set_fill_color(C_HEADER_BG);
-    dl.draw_rect(
-        Pt(0.0),
-        Pt(0.0),
-        A4.width,
-        Mm(70.0).into(),
-        true,
-        false,
-    );
+    dl.draw_rect(Pt(0.0), Pt(0.0), A4.width, Mm(70.0).into(), true, false);
 
     // Amber rule under the band
     let band_bottom: Pt = Mm(70.0).into();
     dl.set_fill_color(C_DIVIDER);
-    dl.draw_rect(
-        Pt(0.0),
-        band_bottom,
-        A4.width,
-        Pt(2.0),
-        true,
-        false,
-    );
+    dl.draw_rect(Pt(0.0), band_bottom, A4.width, Pt(2.0), true, false);
 
     let left: Pt = Mm(20.0).into();
 
@@ -1451,13 +1467,7 @@ struct OpenAecHeaderFooter {
 }
 
 impl PageCallback for OpenAecHeaderFooter {
-    fn on_page(
-        &self,
-        dl: &mut DrawList,
-        page_num: usize,
-        total_pages: usize,
-        page_size: Size,
-    ) {
+    fn on_page(&self, dl: &mut DrawList, page_num: usize, total_pages: usize, page_size: Size) {
         // Header strip (light tint, top 18mm)
         let header_h: Pt = Mm(18.0).into();
         dl.set_fill_color(C_HEADER_BG);
@@ -1514,14 +1524,7 @@ impl PageCallback for OpenAecHeaderFooter {
         // Footer rule + text
         let footer_y: Pt = Pt(page_size.height.0 - Mm(13.0).0 * 2.834_645_7);
         dl.set_fill_color(C_DIVIDER);
-        dl.draw_rect(
-            Pt(0.0),
-            footer_y,
-            page_size.width,
-            Pt(0.6),
-            true,
-            false,
-        );
+        dl.draw_rect(Pt(0.0), footer_y, page_size.width, Pt(0.6), true, false);
 
         dl.set_font("LiberationSans-Italic", Pt(7.5));
         dl.set_fill_color(C_MUTED);
@@ -1607,10 +1610,9 @@ pub(crate) fn extend_with_check_block_regel(
     let f = extract(kind);
 
     // Title with article reference appended in muted amber
-    flow.push(Box::new(Paragraph::new(
-        format!("{}    [{}]", f.title, f.article),
-        style_h3(),
-    ).kop()));
+    flow.push(Box::new(
+        Paragraph::new(format!("{}    [{}]", f.title, f.article), style_h3()).kop(),
+    ));
 
     // Force state line
     flow.push(Box::new(Paragraph::new(
@@ -1625,7 +1627,10 @@ pub(crate) fn extend_with_check_block_regel(
 
     // Formula (LaTeX rendered as plain text — KaTeX rendering is a future
     // enhancement; we already strip the dollars upstream).
-    flow.push(Box::new(Paragraph::new(f.formula.to_string(), style_body())));
+    flow.push(Box::new(Paragraph::new(
+        f.formula.to_string(),
+        style_body(),
+    )));
 
     // Variables on one condensed line
     if !f.variables.is_empty() {

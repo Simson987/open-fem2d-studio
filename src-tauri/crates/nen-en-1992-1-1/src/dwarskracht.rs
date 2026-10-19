@@ -546,7 +546,11 @@ pub fn shear_resistance_met_hefboomsarm(
     // d hoort bij de rij die op TREK staat. Bij een negatief moment is dat de
     // bovenwapening; d wordt dan vanaf de onderrand gemeten. `d_mm` gebruikt de
     // onderwapening, `d2_mm` de afstand van de bovenwapening tot de bovenrand.
-    let d = if trek_onder { cage.d_mm(h) } else { h - cage.d2_mm() };
+    let d = if trek_onder {
+        cage.d_mm(h)
+    } else {
+        h - cage.d2_mm()
+    };
     let a_c = section.area_mm2();
 
     let mut notes: Vec<String> = Vec::new();
@@ -566,7 +570,11 @@ pub fn shear_resistance_met_hefboomsarm(
              dat — maar wordt de wapening in werkelijkheid afgeknipt of eindigt zij vlak bij een \
              steunpunt, dan is A_sl daar KLEINER en is deze V_Rd,c te hoog. Geef A_sl dan zelf op.",
             nl(a_sl, 0),
-            if trek_onder { "onderwapening" } else { "bovenwapening" }
+            if trek_onder {
+                "onderwapening"
+            } else {
+                "bovenwapening"
+            }
         ));
     }
     if a_sl <= 0.0 {
@@ -579,7 +587,11 @@ pub fn shear_resistance_met_hefboomsarm(
 
     // ── k, ρ_l, σ_cp met hun begrenzingen ────────────────────────────────────
     let (k, k_begrensd) = k_factor(d);
-    let rho_l_ruw = if d > 0.0 && b_w > 0.0 { a_sl / (b_w * d) } else { 0.0 };
+    let rho_l_ruw = if d > 0.0 && b_w > 0.0 {
+        a_sl / (b_w * d)
+    } else {
+        0.0
+    };
     let rho_l_begrensd = rho_l_ruw > RHO_L_MAX;
     let rho_l = rho_l_ruw.min(RHO_L_MAX);
 
@@ -589,7 +601,11 @@ pub fn shear_resistance_met_hefboomsarm(
     let sigma_cp_begrensd = sigma_cp_ruw > sigma_cp_grens;
     // `+ 0.0` maakt van een negatieve nul een positieve nul (IEEE-754); zonder
     // dat staat er bij N_Ed = 0 een “−0” in het rapport.
-    let sigma_cp = if sigma_cp_begrensd { sigma_cp_grens } else { sigma_cp_ruw } + 0.0;
+    let sigma_cp = if sigma_cp_begrensd {
+        sigma_cp_grens
+    } else {
+        sigma_cp_ruw
+    } + 0.0;
     if sigma_cp_begrensd {
         notes.push(format!(
             "σ_cp = {} N/mm² overschrijdt de geldigheidsgrens 0,2·f_cd = {} N/mm² van 6.2.2(1); \
@@ -739,10 +755,10 @@ pub fn shear_resistance_met_hefboomsarm(
     // z volgens 6.2.3(1): opgegeven, anders 0,9·d zonder normaalkracht, anders
     // uit het spanningsblok bij N_Ed voor de rij die op trek staat. De regel
     // staat in `crate::hefboomsarm`; d is die van diezelfde rij.
-    let z_bepaling =
-        bepaal_z(section, cage, mat, trek_onder, n_ed_kn, d, opts.z_mm, vooraf);
-    let (vakwerk, vakwerk_reden) =
-        bouw_vakwerk(cage, mat, opts, b_w, v_ed_kn, nu, z_bepaling);
+    let z_bepaling = bepaal_z(
+        section, cage, mat, trek_onder, n_ed_kn, d, opts.z_mm, vooraf,
+    );
+    let (vakwerk, vakwerk_reden) = bouw_vakwerk(cage, mat, opts, b_w, v_ed_kn, nu, z_bepaling);
 
     // ── Weerstand, unity check en de resterende kanttekeningen ───────────────
     //
@@ -818,7 +834,12 @@ pub fn shear_resistance_met_hefboomsarm(
                     nl(rd_w, 1),
                     nl(rd_c, 1)
                 ));
-                (Some(Weerstandsroute::Dwarskrachtwapening), Some(rd_w), Some(uc_w), None)
+                (
+                    Some(Weerstandsroute::Dwarskrachtwapening),
+                    Some(rd_w),
+                    Some(uc_w),
+                    None,
+                )
             } else {
                 notes.push(format!(
                     "De aanwezige dwarskrachtwapening levert bij de gekozen θ V_Rd = {} kN, \
@@ -828,15 +849,26 @@ pub fn shear_resistance_met_hefboomsarm(
                     nl(rd_w, 1),
                     nl(rd_c, 1)
                 ));
-                (Some(Weerstandsroute::BetonZonderWapening), Some(rd_c), Some(uc_c), None)
+                (
+                    Some(Weerstandsroute::BetonZonderWapening),
+                    Some(rd_c),
+                    Some(uc_c),
+                    None,
+                )
             }
         }
-        (Some((_, rd_c, uc_c)), None) => {
-            (Some(Weerstandsroute::BetonZonderWapening), Some(rd_c), Some(uc_c), None)
-        }
-        (None, Some((_, rd_w, uc_w))) => {
-            (Some(Weerstandsroute::Dwarskrachtwapening), Some(rd_w), Some(uc_w), None)
-        }
+        (Some((_, rd_c, uc_c)), None) => (
+            Some(Weerstandsroute::BetonZonderWapening),
+            Some(rd_c),
+            Some(uc_c),
+            None,
+        ),
+        (None, Some((_, rd_w, uc_w))) => (
+            Some(Weerstandsroute::Dwarskrachtwapening),
+            Some(rd_w),
+            Some(uc_w),
+            None,
+        ),
         (None, None) => {
             let reden = vakwerk
                 .as_ref()
@@ -866,7 +898,11 @@ pub fn shear_resistance_met_hefboomsarm(
                 nl(grens, 1),
                 nl(rd, 1)
             ));
-            let uc = if grens > 0.0 { v_ed_kn / grens } else { f64::INFINITY };
+            let uc = if grens > 0.0 {
+                v_ed_kn / grens
+            } else {
+                f64::INFINITY
+            };
             (Some(grens), Some(uc))
         }
         (rd, uc, _) => (rd, uc),
@@ -993,10 +1029,16 @@ pub fn cot_theta_automatisch(v_rd_max_teller_n: f64, v_ed_n: f64) -> (f64, CotTh
     }
     let k = v_rd_max_teller_n / v_ed_n;
     if k < 2.0 {
-        return (COT_THETA_MIN, CotThetaKeuze::AutomatischDrukdiagonaalTeKlein);
+        return (
+            COT_THETA_MIN,
+            CotThetaKeuze::AutomatischDrukdiagonaalTeKlein,
+        );
     }
     let c = (k + (k * k - 4.0).sqrt()) / 2.0;
-    (c.clamp(COT_THETA_MIN, COT_THETA_MAX), CotThetaKeuze::Automatisch)
+    (
+        c.clamp(COT_THETA_MIN, COT_THETA_MAX),
+        CotThetaKeuze::Automatisch,
+    )
 }
 
 /// Het vakwerkmodel van 6.2.3 bij een al bepaalde hefboomsarm.
@@ -1189,7 +1231,11 @@ impl ShearResistance {
                 format!(
                     "d = {} mm is gemeten tot de {} — de rij die bij dit moment op trek staat.",
                     nl(c.d_mm, 0),
-                    if self.trek_onder { "onderwapening" } else { "bovenwapening" }
+                    if self.trek_onder {
+                        "onderwapening"
+                    } else {
+                        "bovenwapening"
+                    }
                 ),
                 "(6.2.a) is een EMPIRISCHE formule: f_ck in MPa, b_w en d in mm, uitkomst in N. \
                  Rekenen in kN of in m levert een fout antwoord."
@@ -1232,7 +1278,11 @@ impl ShearResistance {
                 d = lx(c.d_mm, 0),
                 r = lx(c.a_sl_mm2 / (c.b_w_mm * c.d_mm), 5)
             ),
-            vec![nv(r"A_{sl}", c.a_sl_mm2, "mm²"), nv("b_w", c.b_w_mm, "mm"), nv("d", c.d_mm, "mm")],
+            vec![
+                nv(r"A_{sl}", c.a_sl_mm2, "mm²"),
+                nv("b_w", c.b_w_mm, "mm"),
+                nv("d", c.d_mm, "mm"),
+            ],
             Some(c.rho_l),
             "-",
             vec![
@@ -1260,7 +1310,10 @@ impl ShearResistance {
                 ac = lx(c.a_c_mm2, 0),
                 s = lx(c.sigma_cp_mpa, 3)
             ),
-            vec![nv(r"N_{Ed}", -self.n_ed_kn, "kN (druk +)"), nv("A_c", c.a_c_mm2, "mm²")],
+            vec![
+                nv(r"N_{Ed}", -self.n_ed_kn, "kN (druk +)"),
+                nv("A_c", c.a_c_mm2, "mm²"),
+            ],
             Some(c.sigma_cp_mpa),
             "N/mm²",
             vec![
@@ -1270,7 +1323,11 @@ impl ShearResistance {
                 format!(
                     "De geldigheidsgrens 0,2·f_cd = {} N/mm² is {}.",
                     nl(SIGMA_CP_FACTOR * self.f_cd_mpa, 2),
-                    if c.sigma_cp_begrensd { "OVERSCHREDEN en afgekapt" } else { "niet bereikt" }
+                    if c.sigma_cp_begrensd {
+                        "OVERSCHREDEN en afgekapt"
+                    } else {
+                        "niet bereikt"
+                    }
                 ),
             ],
         ));
@@ -1302,7 +1359,10 @@ impl ShearResistance {
             r"C_{Rd,c}",
             "art. 6.2.2(1), NB",
             r"C_{Rd,c} = \frac{0{,}18}{\gamma_C}".to_string(),
-            format!(r"C_{{Rd,c}} = \frac{{0{{,}}18}}{{{g}}}", g = lx(self.gamma_c, 2)),
+            format!(
+                r"C_{{Rd,c}} = \frac{{0{{,}}18}}{{{g}}}",
+                g = lx(self.gamma_c, 2)
+            ),
             vec![nv(r"\gamma_C", self.gamma_c, "-")],
             Some(c.c_rd_c),
             "-",
@@ -1384,7 +1444,11 @@ impl ShearResistance {
                         "De onverminderde V_Ed moet altijd voldoen aan (6.5): V_Ed ≤ \
                          0,5·b_w·d·ν·f_cd = {} kN — {}.",
                         nl(b.grens_6_5_kn, 1),
-                        if b.voldoet_6_5 { "voldaan" } else { "NIET voldaan" }
+                        if b.voldoet_6_5 {
+                            "voldaan"
+                        } else {
+                            "NIET voldaan"
+                        }
                     ),
                 ],
             ));
@@ -1432,7 +1496,10 @@ impl ShearResistance {
                     ved = lx(self.v_ed_kn, 1),
                     vrdc = lx(c.v_rd_c_kn, 1)
                 ),
-                vec![nv(r"V_{Ed}", self.v_ed_kn, "kN"), nv(r"V_{Rd,c}", c.v_rd_c_kn, "kN")],
+                vec![
+                    nv(r"V_{Ed}", self.v_ed_kn, "kN"),
+                    nv(r"V_{Rd,c}", c.v_rd_c_kn, "kN"),
+                ],
                 None,
                 "",
                 vec![
@@ -1503,7 +1570,10 @@ impl ShearResistance {
                     c = lx(v.cot_theta, 3),
                     t = lx(v.theta_deg, 1)
                 ),
-                vec![nv(r"\cot\theta", v.cot_theta, "-"), nv(r"\theta", v.theta_deg, "°")],
+                vec![
+                    nv(r"\cot\theta", v.cot_theta, "-"),
+                    nv(r"\theta", v.theta_deg, "°"),
+                ],
                 Some(v.cot_theta),
                 "-",
                 vec![
@@ -1511,26 +1581,32 @@ impl ShearResistance {
                      Binnen die grenzen is θ een vrije ONTWERPKEUZE."
                         .to_string(),
                     match v.cot_theta_keuze {
-                        CotThetaKeuze::Opgegeven => "cot θ is door de gebruiker opgegeven.".to_string(),
-                        CotThetaKeuze::OpgegevenAfgekapt =>
+                        CotThetaKeuze::Opgegeven => {
+                            "cot θ is door de gebruiker opgegeven.".to_string()
+                        }
+                        CotThetaKeuze::OpgegevenAfgekapt => {
                             "De opgegeven cot θ lag buiten 1,0…2,5 en is op de grens afgekapt."
-                                .to_string(),
-                        CotThetaKeuze::Automatisch =>
+                                .to_string()
+                        }
+                        CotThetaKeuze::Automatisch => {
                             "Gekozen is de GROOTSTE cot θ binnen 1,0…2,5 waarbij de \
                              betondrukdiagonaal (6.9) V_Ed nog haalt. Dat geeft de kleinste \
                              benodigde beugelwapening, want (6.8) stijgt met cot θ terwijl (6.9) \
                              daalt."
-                                .to_string(),
-                        CotThetaKeuze::AutomatischDrukdiagonaalTeKlein =>
+                                .to_string()
+                        }
+                        CotThetaKeuze::AutomatischDrukdiagonaalTeKlein => {
                             "Zelfs bij cot θ = 1 — de waarde waarbij (6.9) MAXIMAAL is — haalt de \
                              betondrukdiagonaal V_Ed niet. cot θ = 1 is aangehouden; de toets \
                              loopt daarna op V_Rd,max stuk."
-                                .to_string(),
-                        CotThetaKeuze::GeenDwarskrachtwapening =>
+                                .to_string()
+                        }
+                        CotThetaKeuze::GeenDwarskrachtwapening => {
                             "Er ligt geen dwarskrachtwapening, dus er is geen vakwerkmodel om θ \
                              voor te kiezen. cot θ = 1 is aangehouden: daar is (6.9) maximaal, en \
                              V_Rd,max dient hier alleen als de bovengrens van 6.2.1(6)."
-                                .to_string(),
+                                .to_string()
+                        }
                     },
                 ],
             ));
@@ -1666,12 +1742,14 @@ impl ShearResistance {
                     Some(rd),
                     "kN",
                     vec![match v.tak {
-                        Some(VakwerkTak::WapeningVloeit) =>
-                            "(6.8) is maatgevend: de dwarskrachtwapening vloeit.".to_string(),
-                        Some(VakwerkTak::DrukdiagonaalBezwijkt) =>
+                        Some(VakwerkTak::WapeningVloeit) => {
+                            "(6.8) is maatgevend: de dwarskrachtwapening vloeit.".to_string()
+                        }
+                        Some(VakwerkTak::DrukdiagonaalBezwijkt) => {
                             "(6.9) is maatgevend: de betondrukdiagonaal bezwijkt. Méér beugels \
                              helpen niet."
-                                .to_string(),
+                                .to_string()
+                        }
                         None => String::new(),
                     }],
                 ));
@@ -1724,10 +1802,11 @@ impl ShearResistance {
                         r = lx(rd, 1)
                     ),
                     match self.spoor {
-                        Spoor::Vakwerkmodel =>
+                        Spoor::Vakwerkmodel => {
                             "V_Ed ligt boven V_Rd,c, dus 6.2.1(5) eist wapening en 6.2.3(3) geeft \
                              de weerstand."
-                                .to_string(),
+                                .to_string()
+                        }
                         Spoor::GeenBerekendeWapening => format!(
                             "6.2.1(3) eist hier geen BEREKENDE dwarskrachtwapening, maar de \
                              doorsnede DRAAGT wel beugels. 6.2.1(2) geeft voor een element met \
@@ -1776,7 +1855,10 @@ impl ShearResistance {
                     rd = lx(rd, 1),
                     uc = lx(uc, 3)
                 ),
-                vec![nv(r"V_{Ed}", self.toetsende_v_ed_kn(), "kN"), nv(r"V_{Rd}", rd, "kN")],
+                vec![
+                    nv(r"V_{Ed}", self.toetsende_v_ed_kn(), "kN"),
+                    nv(r"V_{Rd}", rd, "kN"),
+                ],
                 Some(uc),
                 "-",
                 vec![],
@@ -1959,8 +2041,14 @@ mod tests {
             ReinforcementCage {
                 cover_mm: 30.0,
                 stirrup_diameter_mm: 8.0,
-                top: RebarRow { count: 0, diameter_mm: 12.0 },
-                bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+                top: RebarRow {
+                    count: 0,
+                    diameter_mm: 12.0,
+                },
+                bottom: RebarRow {
+                    count: 3,
+                    diameter_mm: 16.0,
+                },
                 ..ReinforcementCage::default()
             },
         )
@@ -2003,14 +2091,24 @@ mod tests {
         assert_relative_eq!(v_min_mpa(2.0, 20.0), 0.442_718_9, max_relative = 1e-6);
         // k = 1,6637233 en f_ck = 30: k^1,5 = 1,6637233 · 1,2898537 = 2,14595965;
         // 0,035 · 2,14595965 · 5,47722558 = 0,035 · 11,7539051 = 0,41138668.
-        assert_relative_eq!(v_min_mpa(1.663_723_3, 30.0), 0.411_386_7, max_relative = 1e-6);
+        assert_relative_eq!(
+            v_min_mpa(1.663_723_3, 30.0),
+            0.411_386_7,
+            max_relative = 1e-6
+        );
     }
 
     #[test]
     fn v_rd_c_handberekening_zonder_normaalkracht() {
         let (s, k) = ligger();
         let m = c30();
-        let r = shear_resistance(&s, &k, &m, &snap(0.0, 40.0, 100.0), &ShearOptions::default());
+        let r = shear_resistance(
+            &s,
+            &k,
+            &m,
+            &snap(0.0, 40.0, 100.0),
+            &ShearOptions::default(),
+        );
         // d = 500 − (30 + 8 + 16/2) = 454 mm; A_sl = 3·π/4·16² = 603,18579 mm².
         assert_relative_eq!(r.vrd_c.d_mm, 454.0, max_relative = 1e-12);
         assert_relative_eq!(r.vrd_c.a_sl_mm2, 603.185_789, max_relative = 1e-6);
@@ -2037,7 +2135,13 @@ mod tests {
         // Grens 0,2·f_cd = 0,2 · 20 = 4,0 N/mm², dus niet afgekapt.
         // (6.2.a) = (0,4728496 + 0,15 · 3,0) · 136200 = 0,9228496 · 136200
         //         = 125 692 N = 125,69 kN.
-        let r = shear_resistance(&s, &k, &m, &snap(-450.0, 40.0, 100.0), &ShearOptions::default());
+        let r = shear_resistance(
+            &s,
+            &k,
+            &m,
+            &snap(-450.0, 40.0, 100.0),
+            &ShearOptions::default(),
+        );
         assert_relative_eq!(r.vrd_c.sigma_cp_mpa, 3.0, max_relative = 1e-12);
         assert!(!r.vrd_c.sigma_cp_begrensd);
         assert_relative_eq!(r.vrd_c.v_6_2a_kn, 125.692, max_relative = 1e-4);
@@ -2051,7 +2155,13 @@ mod tests {
         let (s, k) = ligger();
         let m = c30();
         // N_Ed = −900 kN → σ_cp = 6,0 N/mm² > 0,2·f_cd = 4,0 → afgekapt.
-        let r = shear_resistance(&s, &k, &m, &snap(-900.0, 40.0, 100.0), &ShearOptions::default());
+        let r = shear_resistance(
+            &s,
+            &k,
+            &m,
+            &snap(-900.0, 40.0, 100.0),
+            &ShearOptions::default(),
+        );
         assert!(r.vrd_c.sigma_cp_begrensd);
         assert_relative_eq!(r.vrd_c.sigma_cp_mpa, 4.0, max_relative = 1e-12);
     }
@@ -2062,7 +2172,13 @@ mod tests {
         let m = c30();
         // N_Ed = +150 kN (trek) → σ_cp = −1,0 N/mm²; k₁·σ_cp = −0,15.
         // (6.2.a) = (0,4728496 − 0,15) · 136200 = 43 972 N = 43,97 kN.
-        let r = shear_resistance(&s, &k, &m, &snap(150.0, 20.0, 100.0), &ShearOptions::default());
+        let r = shear_resistance(
+            &s,
+            &k,
+            &m,
+            &snap(150.0, 20.0, 100.0),
+            &ShearOptions::default(),
+        );
         assert_relative_eq!(r.vrd_c.sigma_cp_mpa, -1.0, max_relative = 1e-12);
         assert_relative_eq!(r.vrd_c.v_6_2a_kn, 43.972, max_relative = 1e-4);
         // Mét normaalkracht en zonder opgegeven z vervalt het vakwerk NIET
@@ -2074,7 +2190,10 @@ mod tests {
         let v = r.vakwerk.as_ref().expect("het vakwerk hoort er te zijn");
         assert!(r.vakwerk_reden.is_none());
         match &v.z_bepaling.grondslag {
-            ZGrondslag::Evenwicht { werkelijk, begrensd } => {
+            ZGrondslag::Evenwicht {
+                werkelijk,
+                begrensd,
+            } => {
                 assert!(*begrensd);
                 assert_relative_eq!(werkelijk.x_mm, 23.386, max_relative = 1e-3);
                 assert_relative_eq!(werkelijk.z_mm, 444.65, max_relative = 1e-3);
@@ -2092,7 +2211,13 @@ mod tests {
         let m = c30();
         // V_Ed = 200 kN > V_Rd,c = 64,4 kN → spoor B, maar de korf heeft geen
         // beugelafstand en geen aantal benen.
-        let r = shear_resistance(&s, &k, &m, &snap(0.0, 200.0, 100.0), &ShearOptions::default());
+        let r = shear_resistance(
+            &s,
+            &k,
+            &m,
+            &snap(0.0, 200.0, 100.0),
+            &ShearOptions::default(),
+        );
         assert_eq!(r.spoor, Spoor::Vakwerkmodel);
         let v = r.vakwerk.as_ref().unwrap();
         assert!(v.v_rd_s_kn.is_none());

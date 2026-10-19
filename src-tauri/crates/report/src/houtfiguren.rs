@@ -562,12 +562,7 @@ fn nl_kort(v: f64, decimalen: usize) -> String {
 /// De BREEDTE van de strook wordt niet op schaal getekend — een strook van
 /// 1000 mm naast een hoogte van 160 mm zou de lagen tot streepjes maken. Dat
 /// staat in het b-label.
-pub fn teken_clt_opbouw(
-    dl: &mut DrawList,
-    vlak: Rect,
-    fig: &CltOpbouwFiguur,
-    stijl: &Houtstijl,
-) {
+pub fn teken_clt_opbouw(dl: &mut DrawList, vlak: Rect, fig: &CltOpbouwFiguur, stijl: &Houtstijl) {
     let h_tot: f64 = fig.lagen.iter().map(|l| l.dikte_mm).sum();
     if !(h_tot > 0.0) || fig.lagen.is_empty() {
         return;
@@ -600,7 +595,10 @@ pub fn teken_clt_opbouw(
     dl.draw_text_center(
         k.x(XA + WA / 2.0),
         k.y(Y0 - 8.0),
-        &format!("b = {} (strook, breedte niet op schaal)", maat(fig.breedte_mm)),
+        &format!(
+            "b = {} (strook, breedte niet op schaal)",
+            maat(fig.breedte_mm)
+        ),
     );
 
     for (i, l) in fig.lagen.iter().enumerate() {
@@ -613,12 +611,8 @@ pub fn teken_clt_opbouw(
         dl.set_stroke_color(kl.arcering);
         dl.set_line_width(k.l(0.5));
         match l.richting {
-            CltLayerOrientation::Longitudinal => {
-                arcering_diagonaal(dl, &k, XA, y, XA + WA, y + h)
-            }
-            CltLayerOrientation::Transverse => {
-                arcering_horizontaal(dl, &k, XA, y, XA + WA, y + h)
-            }
+            CltLayerOrientation::Longitudinal => arcering_diagonaal(dl, &k, XA, y, XA + WA, y + h),
+            CltLayerOrientation::Transverse => arcering_horizontaal(dl, &k, XA, y, XA + WA, y + h),
         }
         // Contour.
         dl.set_stroke_color(if l.maatgevend {
@@ -645,7 +639,11 @@ pub fn teken_clt_opbouw(
         let twee_regels = l.maatgevend && h >= 16.0;
         dl.set_font(font, k.l(6.8));
         dl.set_fill_color(kl.tekst);
-        let y_label = if twee_regels { y + h / 2.0 - 1.0 } else { y + h / 2.0 + 2.4 };
+        let y_label = if twee_regels {
+            y + h / 2.0 - 1.0
+        } else {
+            y + h / 2.0 + 2.4
+        };
         dl.draw_text(k.x(XLAB), k.y(y_label), &label);
         if twee_regels {
             dl.set_fill_color(kl.tekst_maatgevend);
@@ -684,12 +682,7 @@ pub fn teken_clt_opbouw(
     dl.set_stroke_color(kl.maatlijn);
     dl.set_line_width(k.l(0.7));
     dl.draw_line(k.x(x_maat_h), k.y(Y0), k.x(x_maat_h), k.y(Y0 + DRAW_H));
-    dl.draw_line(
-        k.x(x_maat_h - TICK),
-        k.y(Y0),
-        k.x(x_maat_h + TICK),
-        k.y(Y0),
-    );
+    dl.draw_line(k.x(x_maat_h - TICK), k.y(Y0), k.x(x_maat_h + TICK), k.y(Y0));
     dl.draw_line(
         k.x(x_maat_h - TICK),
         k.y(Y0 + DRAW_H),
@@ -742,11 +735,7 @@ pub fn teken_clt_opbouw(
     if gov_op_eigen_regel {
         dl.set_font(font, k.l(6.5));
         dl.set_fill_color(kl.tekst);
-        dl.draw_text(
-            k.x(XA),
-            k.y(ly + 25.0),
-            "zware contour = maatgevende laag",
-        );
+        dl.draw_text(k.x(XA), k.y(ly + 25.0), "zware contour = maatgevende laag");
     }
 
     // ── Paneel 2: buigspanning ───────────────────────────────────────────
@@ -757,7 +746,17 @@ pub fn teken_clt_opbouw(
             streep_punt_lijn(dl, k.x(XB), k.y(yn), k.x(XB + WB), k.y(yn), k.s);
         }
         let schaal = (WB / 2.0 - 6.0) / max_abs(sigma) as f32;
-        teken_spanningspaneel(dl, &k, font, kl, sigma, XB + WB / 2.0, schaal, s, kl.sigma_vlak);
+        teken_spanningspaneel(
+            dl,
+            &k,
+            font,
+            kl,
+            sigma,
+            XB + WB / 2.0,
+            schaal,
+            s,
+            kl.sigma_vlak,
+        );
     }
 
     // ── Paneel 3: schuifspanning ─────────────────────────────────────────
@@ -801,12 +800,7 @@ fn teken_spanningspaneel(
 
     dl.set_stroke_color(kl.maatlijn);
     dl.set_line_width(k.l(0.6));
-    dl.draw_line(
-        k.x(x_as),
-        k.y(Y0 - 4.0),
-        k.x(x_as),
-        k.y(Y0 + DRAW_H + 4.0),
-    );
+    dl.draw_line(k.x(x_as), k.y(Y0 - 4.0), k.x(x_as), k.y(Y0 + DRAW_H + 4.0));
 
     // De vulling is op het scherm doorzichtig (0,8); op wit papier is
     // voormengen exact hetzelfde beeld.
@@ -920,11 +914,31 @@ mod tests {
         let layup = CltLayup::new(
             1000.0,
             vec![
-                CltLayer { thickness_mm: 40.0, orientation: CltLayerOrientation::Longitudinal, strength_class: "C24".into() },
-                CltLayer { thickness_mm: 20.0, orientation: CltLayerOrientation::Transverse, strength_class: "C24".into() },
-                CltLayer { thickness_mm: 30.0, orientation: CltLayerOrientation::Longitudinal, strength_class: "C24".into() },
-                CltLayer { thickness_mm: 20.0, orientation: CltLayerOrientation::Transverse, strength_class: "C24".into() },
-                CltLayer { thickness_mm: 60.0, orientation: CltLayerOrientation::Longitudinal, strength_class: "C24".into() },
+                CltLayer {
+                    thickness_mm: 40.0,
+                    orientation: CltLayerOrientation::Longitudinal,
+                    strength_class: "C24".into(),
+                },
+                CltLayer {
+                    thickness_mm: 20.0,
+                    orientation: CltLayerOrientation::Transverse,
+                    strength_class: "C24".into(),
+                },
+                CltLayer {
+                    thickness_mm: 30.0,
+                    orientation: CltLayerOrientation::Longitudinal,
+                    strength_class: "C24".into(),
+                },
+                CltLayer {
+                    thickness_mm: 20.0,
+                    orientation: CltLayerOrientation::Transverse,
+                    strength_class: "C24".into(),
+                },
+                CltLayer {
+                    thickness_mm: 60.0,
+                    orientation: CltLayerOrientation::Longitudinal,
+                    strength_class: "C24".into(),
+                },
             ],
         );
         let mech = layup.mechanics().expect("rekenbaar");
@@ -1028,10 +1042,18 @@ mod tests {
             lagen: lagen.clone(),
             breedte_mm: 1000.0,
             z0_mm: Some(20.0),
-            sigma: Some(Verloop { segmenten: vec![], label: "σ".into(), eenheid: "N/mm²".into(), noot: None }),
+            sigma: Some(Verloop {
+                segmenten: vec![],
+                label: "σ".into(),
+                eenheid: "N/mm²".into(),
+                noot: None,
+            }),
             tau: None,
         };
-        let smal = CltOpbouwFiguur { sigma: None, ..vol.clone() };
+        let smal = CltOpbouwFiguur {
+            sigma: None,
+            ..vol.clone()
+        };
         assert!(clt_kader(&smal).0 < clt_kader(&vol).0);
     }
 }

@@ -11,8 +11,8 @@ use nen_en_1995_1_1::stability::{
     ColumnStabilityInput,
 };
 use nen_en_1995_1_1::{
-    bending, beta_c, compression, deflection, design_strength, k_def, k_h, k_m, k_mod,
-    k_sys, shear, strength_class_by_name, LoadDurationClass, StrengthClass, TimberSection,
+    bending, beta_c, compression, deflection, design_strength, k_def, k_h, k_m, k_mod, k_sys,
+    shear, strength_class_by_name, LoadDurationClass, StrengthClass, TimberSection,
 };
 use steel_check::{CheckKind, CustomSection, NamedCheck};
 
@@ -46,11 +46,17 @@ where
 }
 
 fn make_resistance(check: ResistanceCalc) -> NamedCheck {
-    NamedCheck { id: check.id.clone(), kind: CheckKind::Resistance(check) }
+    NamedCheck {
+        id: check.id.clone(),
+        kind: CheckKind::Resistance(check),
+    }
 }
 
 fn make_stability(check: StabilityCalc) -> NamedCheck {
-    NamedCheck { id: check.id.clone(), kind: CheckKind::Stability(check) }
+    NamedCheck {
+        id: check.id.clone(),
+        kind: CheckKind::Stability(check),
+    }
 }
 
 fn uc_of(c: &NamedCheck) -> f64 {
@@ -226,8 +232,8 @@ fn toetsketen(k: &Keten, omhullende: &[ForcePoint], duur: LoadDurationClass) -> 
     // f_t,0,k, geen verlaging.
     let (kh_y, kh_z, kh_t) = if section.rechthoekig {
         (
-            k_h(mat.timber_type, section.h_mm),                  // buiging om y: hoogte h
-            k_h(mat.timber_type, section.b_mm),                  // buiging om z: hoogte b
+            k_h(mat.timber_type, section.h_mm), // buiging om y: hoogte h
+            k_h(mat.timber_type, section.b_mm), // buiging om z: hoogte b
             k_h(mat.timber_type, section.h_mm.max(section.b_mm)), // trek: grootste maat (§3.2(3))
         )
     } else {
@@ -254,9 +260,16 @@ fn toetsketen(k: &Keten, omhullende: &[ForcePoint], duur: LoadDurationClass) -> 
     let f_vd = design_strength(mat.f_vk, kmod, gamma, 1.0, ksys);
 
     // Maatgevende krachtspunten per toets (zelfde strategie als staal).
-    let gov_compression = governing_for(omhullende, |f| {
-        if f.n_ed < 0.0 { f.n_ed.abs() } else { 0.0 }
-    });
+    let gov_compression = governing_for(
+        omhullende,
+        |f| {
+            if f.n_ed < 0.0 {
+                f.n_ed.abs()
+            } else {
+                0.0
+            }
+        },
+    );
     let gov_tension = governing_for(omhullende, |f| f.n_ed.max(0.0));
     let gov_bending = governing_for(omhullende, |f| f.my_ed.abs() + f.n_ed.abs() * 0.01);
     let gov_shear = governing_for(omhullende, |f| f.vz_ed.abs());
@@ -278,7 +291,10 @@ fn toetsketen(k: &Keten, omhullende: &[ForcePoint], duur: LoadDurationClass) -> 
         section, f_myd, f_mzd, km, bend_state,
     )));
     checks.push(make_resistance(shear::check_shear(
-        section, f_vd, k_cr, shear_state,
+        section,
+        f_vd,
+        k_cr,
+        shear_state,
     )));
 
     // Kolomknik §6.3.2 op het maatgevende buigpunt (conform de
@@ -387,7 +403,9 @@ fn toetsketen(k: &Keten, omhullende: &[ForcePoint], duur: LoadDurationClass) -> 
         // Uitgezet door de invoer: NIET stil weglaten. De toets staat als
         // "niet van toepassing" in het resultaat, met de aanname (gedrukte
         // rand doorgaand gesteund, art. 6.3.3(5)) in de notitie.
-        checks.push(make_stability(kip_overgeslagen_drukzijde_gesteund(section, bend_state)));
+        checks.push(make_stability(kip_overgeslagen_drukzijde_gesteund(
+            section, bend_state,
+        )));
     }
 
     checks
@@ -409,10 +427,14 @@ struct PerKlasse {
 /// klasse (die staat vooraan): dat is de kant met de laagste k_mod.
 fn toets_per_klasse(k: &Keten, groepen: &[Groep]) -> PerKlasse {
     let service = k.input.service_class;
-    let kmods: Vec<f64> =
-        groepen.iter().map(|g| k_mod(k.mat.timber_type, service, g.duur)).collect();
-    let uitkomsten: Vec<Vec<NamedCheck>> =
-        groepen.iter().map(|g| toetsketen(k, &g.punten, g.duur)).collect();
+    let kmods: Vec<f64> = groepen
+        .iter()
+        .map(|g| k_mod(k.mat.timber_type, service, g.duur))
+        .collect();
+    let uitkomsten: Vec<Vec<NamedCheck>> = groepen
+        .iter()
+        .map(|g| toetsketen(k, &g.punten, g.duur))
+        .collect();
 
     let n = uitkomsten[0].len();
     let mut checks = Vec::with_capacity(n);
@@ -420,7 +442,10 @@ fn toets_per_klasse(k: &Keten, groepen: &[Groep]) -> PerKlasse {
     for i in 0..n {
         let mut beste = 0usize;
         for (gi, u) in uitkomsten.iter().enumerate().skip(1) {
-            debug_assert_eq!(u[i].id, uitkomsten[0][i].id, "de ketens horen dezelfde toetsvolgorde te hebben");
+            debug_assert_eq!(
+                u[i].id, uitkomsten[0][i].id,
+                "de ketens horen dezelfde toetsvolgorde te hebben"
+            );
             if uc_of(&u[i]) > uc_of(&uitkomsten[beste][i]) {
                 beste = gi;
             }
@@ -466,7 +491,12 @@ fn toets_per_klasse(k: &Keten, groepen: &[Groep]) -> PerKlasse {
         Some((_, gi, combinatie)) => (Some(combinatie), groepen[gi].duur),
         None => (None, groepen[0].duur),
     };
-    PerKlasse { checks, k_mod_per_load_duration, governing_combination_id, maatgevende_duur }
+    PerKlasse {
+        checks,
+        k_mod_per_load_duration,
+        governing_combination_id,
+        maatgevende_duur,
+    }
 }
 
 pub fn check_timber_beam(input: TimberBeamCheckInput) -> TimberBeamCheckResult {
@@ -482,8 +512,9 @@ pub fn check_timber_beam(input: TimberBeamCheckInput) -> TimberBeamCheckResult {
         input.deflection_limit_fin,
         input.deflection_limit_add,
     )
-    .and_then(|_| nen_en_1995_1_1::deflection::keur_langeduurzakking(input.deflection_quasi_perm_fin_mm))
-    {
+    .and_then(|_| {
+        nen_en_1995_1_1::deflection::keur_langeduurzakking(input.deflection_quasi_perm_fin_mm)
+    }) {
         return TimberBeamCheckResult {
             beam_id: input.beam_id,
             section_name: format!("{} x {}", input.width_mm, input.height_mm),
@@ -549,7 +580,7 @@ pub fn check_timber_beam(input: TimberBeamCheckInput) -> TimberBeamCheckResult {
                 governing_combination_id: None,
                 // Prismatische staaf: geen verloopgegevens.
                 verloop: None,
-            }
+            };
         }
     };
 
@@ -574,14 +605,18 @@ pub fn check_timber_beam(input: TimberBeamCheckInput) -> TimberBeamCheckResult {
                 governing_combination_id: None,
                 // Prismatische staaf: geen verloopgegevens.
                 verloop: None,
-            }
+            };
         }
     };
 
     // 2-6. De toetsen die van k_mod afhangen. Zonder belastingduur per
     //      combinatie één keten met `load_duration`; met die lijst één keten
     //      per aanwezige klasse (EN 1995-1-1 3.1.3(2)).
-    let keten = Keten { input: &input, section: &section, mat };
+    let keten = Keten {
+        input: &input,
+        section: &section,
+        mat,
+    };
     let (mut checks, k_mod_per_load_duration, governing_combination_id, load_duration) =
         match belastingduur::groepeer(
             &input.forces_envelope,
@@ -596,7 +631,12 @@ pub fn check_timber_beam(input: TimberBeamCheckInput) -> TimberBeamCheckResult {
             ),
             Some(groepen) => {
                 let pk = toets_per_klasse(&keten, &groepen);
-                (pk.checks, pk.k_mod_per_load_duration, pk.governing_combination_id, pk.maatgevende_duur)
+                (
+                    pk.checks,
+                    pk.k_mod_per_load_duration,
+                    pk.governing_combination_id,
+                    pk.maatgevende_duur,
+                )
             }
         };
 
@@ -620,7 +660,8 @@ pub fn check_timber_beam(input: TimberBeamCheckInput) -> TimberBeamCheckResult {
     // hij in voorkomt (w_fin = w_inst + k_def · w_qp). w_add volgt uit w_fin en
     // erft de aanname dus, wat in de toelichting zelf hoort te staan.
     fin.notes.extend(input.deflection_notes.iter().cloned());
-    fin.notes.extend(input.staaf_notities.iter().flatten().cloned());
+    fin.notes
+        .extend(input.staaf_notities.iter().flatten().cloned());
     checks.push(make_resistance(fin));
     checks.push(make_resistance(add));
 
@@ -634,7 +675,11 @@ pub fn check_timber_beam(input: TimberBeamCheckInput) -> TimberBeamCheckResult {
             governing_check_id = c.id.clone();
         }
     }
-    let status = if uc_max <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk };
+    let status = if uc_max <= 1.0 {
+        CheckStatus::Ok
+    } else {
+        CheckStatus::NotOk
+    };
 
     TimberBeamCheckResult {
         beam_id: input.beam_id,

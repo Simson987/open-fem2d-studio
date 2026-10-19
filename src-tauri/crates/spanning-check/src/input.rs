@@ -20,7 +20,10 @@ fn default_vezels() -> u32 {
 /// toelaatbare spanning komt volledig van de gebruiker; de kern rekent alleen
 /// de spanningen uit de snedekrachten en vergelijkt ze daarmee.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/spanning/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/spanning/"
+)]
 pub struct SpanningBeamCheckInput {
     pub beam_id: u32,
     /// De doorsnede: rechthoek, catalogusprofiel of vrij lagenmodel.

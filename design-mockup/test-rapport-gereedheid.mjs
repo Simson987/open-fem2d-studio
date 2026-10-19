@@ -283,6 +283,7 @@ log("\n[7] Bronteksten — kanaal en knop zijn één weg");
   const app = readFileSync(join(HIER, "src", "App.tsx"), "utf8");
   const preview = readFileSync(join(HIER, "src", "components", "panels", "ReportPreview.tsx"), "utf8");
   const shell = readFileSync(join(HIER, "src", "components", "report", "ReportShell.tsx"), "utf8");
+  const bedieningHook = /const bedieningActief = useBediening\(\{([\s\S]*?)\n  \}\);/.exec(app)?.[1] ?? "";
 
   const rekenen = /case "rekenen": \{([\s\S]*?)\n    \}/.exec(bediening)?.[1] ?? "";
   check("`rekenen` via het kanaal roept rekenDoor aan (de knop Berekenen)",
@@ -290,9 +291,9 @@ log("\n[7] Bronteksten — kanaal en knop zijn één weg");
   check("… en niet meer alleen computeAndStoreSolverOutputs",
     !/computeAndStoreSolverOutputs\s*\(/.test(rekenen) && !/computeAndStoreSolverOutputs\s*:/.test(bediening));
   check("App.tsx: rekenDoor geeft een belofte (Promise<RekengangUitkomst>)",
-    /const rekenDoor = useCallback\(\(\): Promise<RekengangUitkomst> =>/.test(app));
+    /const rekenDoor = useCallback\(\(selectedEngine\?: SolverEngineId\): Promise<RekengangUitkomst> =>/.test(app));
   check("App.tsx: de bediening krijgt rekenDoor en de rekentoestand",
-    /useBediening\(\{[\s\S]{0,400}?rekenDoor,[\s\S]{0,200}?rekenToestand:/.test(app));
+    /\brekenDoor,/.test(bedieningHook) && /rekenToestand:/.test(bedieningHook));
   check("App.tsx: de geplande herberekening is leesbaar (herberekeningGeplandRef)",
     /herberekeningGeplandRef\.current = true;[\s\S]{0,200}?window\.setTimeout/.test(app));
   check("zijbalk en export delen pasRapportTypeToe",

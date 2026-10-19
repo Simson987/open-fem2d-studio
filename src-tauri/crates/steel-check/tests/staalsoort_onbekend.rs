@@ -37,20 +37,44 @@ fn invoer(staalsoort: &str) -> BeamCheckInput {
             ForcePoint {
                 combination_id: 22,
                 position_mm: 0.0,
-                forces: InternalForces { n_ed: -233.911, vy_ed: 0.0, vz_ed: 17.357, mt_ed: 0.0, my_ed: -63.139, mz_ed: 0.0 },
+                forces: InternalForces {
+                    n_ed: -233.911,
+                    vy_ed: 0.0,
+                    vz_ed: 17.357,
+                    mt_ed: 0.0,
+                    my_ed: -63.139,
+                    mz_ed: 0.0,
+                },
             },
             ForcePoint {
                 combination_id: 21,
                 position_mm: 0.0,
-                forces: InternalForces { n_ed: -232.435, vy_ed: 0.0, vz_ed: 19.817, mt_ed: 0.0, my_ed: -66.036, mz_ed: 0.0 },
+                forces: InternalForces {
+                    n_ed: -232.435,
+                    vy_ed: 0.0,
+                    vz_ed: 19.817,
+                    mt_ed: 0.0,
+                    my_ed: -66.036,
+                    mz_ed: 0.0,
+                },
             },
             ForcePoint {
                 combination_id: 11,
                 position_mm: 0.0,
-                forces: InternalForces { n_ed: -201.988, vy_ed: 0.0, vz_ed: 17.184, mt_ed: 0.0, my_ed: -57.423, mz_ed: 0.0 },
+                forces: InternalForces {
+                    n_ed: -201.988,
+                    vy_ed: 0.0,
+                    vz_ed: 17.184,
+                    mt_ed: 0.0,
+                    my_ed: -57.423,
+                    mz_ed: 0.0,
+                },
             },
         ],
-        lateral_bracing: LateralBracing { top_flange_positions: vec![], bottom_flange_positions: vec![] },
+        lateral_bracing: LateralBracing {
+            top_flange_positions: vec![],
+            bottom_flange_positions: vec![],
+        },
         buckling_length_y_m: 2.5,
         buckling_length_z_m: 2.5,
         deflection_limit_class: DeflectionClass::Floor,
@@ -117,7 +141,10 @@ fn een_onbekende_staalsoort_wordt_geweigerd_en_niet_stil_s235() {
 fn de_bekende_staalsoorten_rekenen_en_de_staalsoort_telt_mee() {
     for naam in ["S235", "S275", "S355", "S420", "S460"] {
         let r = check_beam(invoer(naam));
-        assert!(!r.checks.is_empty(), "{naam} hoort gewoon getoetst te worden");
+        assert!(
+            !r.checks.is_empty(),
+            "{naam} hoort gewoon getoetst te worden"
+        );
         assert!(
             !r.governing_check_id.starts_with("ERROR"),
             "{naam}: {:?}",
@@ -127,7 +154,10 @@ fn de_bekende_staalsoorten_rekenen_en_de_staalsoort_telt_mee() {
     // N_c,Rd = A·f_y/γ_M0 (6.10), klasse 1 in beide soorten — zie de kop.
     let n235 = weerstand(&check_beam(invoer("S235")), "6.2.4_compression");
     let n355 = weerstand(&check_beam(invoer("S355")), "6.2.4_compression");
-    assert!((n235 - 1275.472).abs() / 1275.472 < 1e-3, "N_c,Rd S235 = {n235}");
+    assert!(
+        (n235 - 1275.472).abs() / 1275.472 < 1e-3,
+        "N_c,Rd S235 = {n235}"
+    );
     assert!(
         (n355 - 1275.472 * 355.0 / 235.0).abs() / 1926.78 < 1e-3,
         "N_c,Rd S355 = {n355}, verwacht 1275,472·355/235 = 1926,78 kN"

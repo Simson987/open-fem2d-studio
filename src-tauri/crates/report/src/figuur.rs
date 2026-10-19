@@ -90,9 +90,7 @@ pub enum Figuur {
     /// Geboxt omdat deze variant de lagen én twee spanningsverlopen draagt en
     /// daarmee veruit de grootste is; zonder box zou elke `Figuur` — ook een
     /// leeg M-κ-diagram — die omvang meedragen.
-    CltOpbouw {
-        opbouw: Box<CltOpbouwFiguur>,
-    },
+    CltOpbouw { opbouw: Box<CltOpbouwFiguur> },
     /// De momentendekkingslijn van één zijde van een betonstaaf — figuur 9.2
     /// als tekening, met de omhullende, de benodigde en de aanwezige
     /// trekkracht.
@@ -124,9 +122,7 @@ impl Figuur {
     /// Teken de figuur in `vlak`.
     pub fn teken(&self, dl: &mut DrawList, vlak: Rect, stijl: &Figuurstijl) {
         match self {
-            Figuur::Doorsnede { section, korf } => {
-                teken_doorsnede(dl, vlak, section, korf, stijl)
-            }
+            Figuur::Doorsnede { section, korf } => teken_doorsnede(dl, vlak, section, korf, stijl),
             Figuur::MnKappa { diagram, m_ed_knm } => {
                 teken_mn_kappa(dl, vlak, diagram.as_ref(), *m_ed_knm, stijl)
             }

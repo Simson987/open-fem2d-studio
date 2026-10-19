@@ -88,7 +88,11 @@ async fn verzoek(methode: &str, params: Value) -> Value {
 }
 
 async fn tool(naam: &str, argumenten: Value) -> Value {
-    verzoek("tools/call", json!({ "name": naam, "arguments": argumenten })).await
+    verzoek(
+        "tools/call",
+        json!({ "name": naam, "arguments": argumenten }),
+    )
+    .await
 }
 
 /// Vrij opgelegde houten balk van 3 m met 2 kN/m permanent en eigen gewicht aan.
@@ -96,7 +100,10 @@ async fn tool(naam: &str, argumenten: Value) -> Value {
 fn balk(met_kenmerk: bool) -> Value {
     let mut gevallen = vec![json!({ "id": 1, "name": "Permanent (G)", "type": "dead" })];
     if met_kenmerk {
-        gevallen.insert(0, json!({ "id": 5, "name": "Eigen gewicht", "type": "dead", "eigenGewicht": true }));
+        gevallen.insert(
+            0,
+            json!({ "id": 5, "name": "Eigen gewicht", "type": "dead", "eigenGewicht": true }),
+        );
     }
     json!({
         "nodes": [ { "id": 1, "x": 0, "z": 0 }, { "id": 2, "x": 3000, "z": 0 } ],
@@ -115,7 +122,11 @@ fn som_rz(uit: &Value, geval: &str) -> f64 {
     let reacties = &uit["structuredContent"]["per_case"][geval]["reactions"];
     ["1", "2"]
         .iter()
-        .map(|k| reacties[*k]["fz"].as_f64().unwrap_or_else(|| panic!("geen reactie op knoop {k} in geval {geval}: {uit}")))
+        .map(|k| {
+            reacties[*k]["fz"]
+                .as_f64()
+                .unwrap_or_else(|| panic!("geen reactie op knoop {k} in geval {geval}: {uit}"))
+        })
         .sum()
 }
 
@@ -131,12 +142,27 @@ async fn schema_kent_het_kenmerk_eigen_gewicht() {
             .find(|t| t["name"] == naam)
             .unwrap_or_else(|| panic!("{naam} ontbreekt: {lijst}"));
         let geval = &tool["inputSchema"]["properties"]["model"]["properties"]["loadCases"]["items"];
-        assert_eq!(geval["additionalProperties"], json!(false), "{naam}: {geval}");
+        assert_eq!(
+            geval["additionalProperties"],
+            json!(false),
+            "{naam}: {geval}"
+        );
         let veld = &geval["properties"]["eigenGewicht"];
-        assert_eq!(veld["type"], json!("boolean"), "{naam}: eigenGewicht ontbreekt in het schema: {geval}");
-        assert_eq!(veld["enum"], json!([true]), "{naam}: alleen true is toegestaan: {veld}");
+        assert_eq!(
+            veld["type"],
+            json!("boolean"),
+            "{naam}: eigenGewicht ontbreekt in het schema: {geval}"
+        );
+        assert_eq!(
+            veld["enum"],
+            json!([true]),
+            "{naam}: alleen true is toegestaan: {veld}"
+        );
         let beschrijving = veld["description"].as_str().unwrap_or("");
-        assert!(beschrijving.contains("eerste") && beschrijving.contains("dead"), "{naam}: {beschrijving}");
+        assert!(
+            beschrijving.contains("eerste") && beschrijving.contains("dead"),
+            "{naam}: {beschrijving}"
+        );
     }
 }
 
@@ -150,11 +176,21 @@ async fn eigen_gewicht_landt_in_het_gekenmerkte_geval() {
     let val = tool("validate_fem_model", json!({ "model": met.clone() })).await;
     assert_eq!(val["structuredContent"]["ok"], json!(true), "{val}");
     let uit = tool("solve_fem_model", json!({ "model": met })).await;
-    assert_eq!(uit["isError"], json!(false), "de berekening hoort te slagen: {uit}");
+    assert_eq!(
+        uit["isError"],
+        json!(false),
+        "de berekening hoort te slagen: {uit}"
+    );
     let eg = som_rz(&uit, "5");
     let g = som_rz(&uit, "1");
-    assert!((eg - EIGEN_GEWICHT_KN).abs() < 1e-9, "geval 5 hoort {EIGEN_GEWICHT_KN} kN te dragen, niet {eg}");
-    assert!((g - LAST_KN).abs() < 1e-9, "geval 1 hoort alleen de ingevoerde {LAST_KN} kN te dragen, niet {g}");
+    assert!(
+        (eg - EIGEN_GEWICHT_KN).abs() < 1e-9,
+        "geval 5 hoort {EIGEN_GEWICHT_KN} kN te dragen, niet {eg}"
+    );
+    assert!(
+        (g - LAST_KN).abs() < 1e-9,
+        "geval 1 hoort alleen de ingevoerde {LAST_KN} kN te dragen, niet {g}"
+    );
 
     // Oud model, geen kenmerk: eigen gewicht in het eerste blijvende geval.
     let uit = tool("solve_fem_model", json!({ "model": balk(false) })).await;
@@ -187,16 +223,31 @@ async fn ongeldig_kenmerk_wordt_geweigerd_met_reden() {
         (last_erin, "automatisch"),
     ] {
         let val = tool("validate_fem_model", json!({ "model": model.clone() })).await;
-        assert_eq!(val["structuredContent"]["ok"], json!(false), "hoort geweigerd te worden: {val}");
+        assert_eq!(
+            val["structuredContent"]["ok"],
+            json!(false),
+            "hoort geweigerd te worden: {val}"
+        );
         let fouten = val["structuredContent"]["errors"].to_string();
-        assert!(fouten.contains(trefwoord), "verwacht {trefwoord:?} in {fouten}");
+        assert!(
+            fouten.contains(trefwoord),
+            "verwacht {trefwoord:?} in {fouten}"
+        );
         let uit = tool("solve_fem_model", json!({ "model": model })).await;
-        assert_eq!(uit["isError"], json!(true), "de berekening hoort te weigeren: {uit}");
+        assert_eq!(
+            uit["isError"],
+            json!(true),
+            "de berekening hoort te weigeren: {uit}"
+        );
     }
 
     // `false` haalt het strikte schema niet eens.
     let mut onwaar = balk(true);
     onwaar["loadCases"][0]["eigenGewicht"] = json!(false);
     let uit = tool("solve_fem_model", json!({ "model": onwaar })).await;
-    assert_eq!(uit["isError"], json!(true), "eigenGewicht: false hoort geweigerd te worden: {uit}");
+    assert_eq!(
+        uit["isError"],
+        json!(true),
+        "eigenGewicht: false hoort geweigerd te worden: {uit}"
+    );
 }

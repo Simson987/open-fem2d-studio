@@ -22,15 +22,15 @@
 //! `bijwerken`.
 
 use nen_en_1992_1_1::section::{ConcreteSectionInput, ConcreteShape, ReinforcementCage};
-use report::betonfiguren::{
-    breedte_op_hoogte_mm, hart_x_mm, omtrek_punten, staaf_posities, Rij,
-};
+use report::betonfiguren::{breedte_op_hoogte_mm, hart_x_mm, omtrek_punten, staaf_posities, Rij};
 use serde::Deserialize;
 
 /// Het gedeelde bestand. Het pad staat hier vast in de bron: een test die zijn
 /// referentie niet kan vinden moet omvallen, niet stilletjes overslaan.
-const REFERENTIE: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/betonfiguren-referentie.json");
+const REFERENTIE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/golden/betonfiguren-referentie.json"
+);
 
 #[derive(Deserialize)]
 struct Referentie {
@@ -98,10 +98,12 @@ impl Tolerantie {
 fn omtrekpunten_volgen_de_gedeelde_referentie() {
     let ref_ = lees();
     for geval in &ref_.gevallen {
-        let section = geval
-            .doorsnede
-            .build()
-            .unwrap_or_else(|e| panic!("{}: de doorsnede uit de referentie bouwt niet: {e}", geval.naam));
+        let section = geval.doorsnede.build().unwrap_or_else(|e| {
+            panic!(
+                "{}: de doorsnede uit de referentie bouwt niet: {e}",
+                geval.naam
+            )
+        });
         let werkelijk = omtrek_punten(&section);
         assert_eq!(
             werkelijk.len(),
@@ -132,7 +134,10 @@ fn omtrekpunten_volgen_de_gedeelde_referentie() {
 fn staafharten_volgen_de_gedeelde_referentie() {
     let ref_ = lees();
     for geval in &ref_.gevallen {
-        let section = geval.doorsnede.build().expect("de doorsnede uit de referentie bouwt niet");
+        let section = geval
+            .doorsnede
+            .build()
+            .expect("de doorsnede uit de referentie bouwt niet");
         let werkelijk = staaf_posities(&geval.korf, &section);
         assert_eq!(
             werkelijk.len(),
@@ -146,7 +151,10 @@ fn staafharten_volgen_de_gedeelde_referentie() {
             let kant = match v.rij.as_str() {
                 "onder" => Rij::Onder,
                 "boven" => Rij::Boven,
-                anders => panic!("{}: staaf {i} heeft rij \"{anders}\"; alleen \"onder\" en \"boven\" bestaan", geval.naam),
+                anders => panic!(
+                    "{}: staaf {i} heeft rij \"{anders}\"; alleen \"onder\" en \"boven\" bestaan",
+                    geval.naam
+                ),
             };
             assert!(
                 ref_.tolerantie.gelijk(w.x_mm, v.x_mm)
@@ -171,7 +179,10 @@ fn breedte_en_hart_volgen_de_gedeelde_referentie() {
     let ref_ = lees();
     let mut bemonsterd = 0usize;
     for geval in &ref_.gevallen {
-        let section = geval.doorsnede.build().expect("de doorsnede uit de referentie bouwt niet");
+        let section = geval
+            .doorsnede
+            .build()
+            .expect("de doorsnede uit de referentie bouwt niet");
         for punt in &geval.breedte_op_hoogte {
             let b = breedte_op_hoogte_mm(&section, punt.z_mm);
             let hart = hart_x_mm(&section, punt.z_mm);
@@ -192,7 +203,10 @@ fn breedte_en_hart_volgen_de_gedeelde_referentie() {
             bemonsterd += 1;
         }
     }
-    assert!(bemonsterd >= 10, "de referentie bemonstert nog maar {bemonsterd} hoogten");
+    assert!(
+        bemonsterd >= 10,
+        "de referentie bemonstert nog maar {bemonsterd} hoogten"
+    );
 }
 
 /// De referentie moet blijven dekken wat hij hoort te dekken. Zonder deze test
@@ -201,10 +215,17 @@ fn breedte_en_hart_volgen_de_gedeelde_referentie() {
 #[test]
 fn de_referentie_dekt_alle_vormen() {
     let ref_ = lees();
-    assert!(ref_.gevallen.len() >= 9, "nog maar {} gevallen", ref_.gevallen.len());
+    assert!(
+        ref_.gevallen.len() >= 9,
+        "nog maar {} gevallen",
+        ref_.gevallen.len()
+    );
 
     let heeft = |f: &dyn Fn(&Geval) -> bool| ref_.gevallen.iter().any(|g| f(g));
-    assert!(heeft(&|g| g.doorsnede.shape == ConcreteShape::Rectangle), "geen rechthoek");
+    assert!(
+        heeft(&|g| g.doorsnede.shape == ConcreteShape::Rectangle),
+        "geen rechthoek"
+    );
     assert!(
         heeft(&|g| g.doorsnede.shape == ConcreteShape::Tee && !g.doorsnede.flange_at_bottom),
         "geen T met de flens boven"
@@ -226,31 +247,47 @@ fn de_referentie_dekt_alle_vormen() {
         heeft(&|g| g.doorsnede.shape == ConcreteShape::Ell && g.doorsnede.flange_at_bottom),
         "geen L met de flens onder"
     );
-    assert!(heeft(&|g| g.korf.top == g.korf.bottom), "geen symmetrisch gewapend geval");
-    assert!(heeft(&|g| g.korf.top != g.korf.bottom), "geen asymmetrisch gewapend geval");
-    assert!(heeft(&|g| g.korf.bottom.count == 1), "geen rij met één staaf");
+    assert!(
+        heeft(&|g| g.korf.top == g.korf.bottom),
+        "geen symmetrisch gewapend geval"
+    );
+    assert!(
+        heeft(&|g| g.korf.top != g.korf.bottom),
+        "geen asymmetrisch gewapend geval"
+    );
+    assert!(
+        heeft(&|g| g.korf.bottom.count == 1),
+        "geen rij met één staaf"
+    );
     // En die ene staaf moet ook ergens ANDERS liggen dan op b/2. In een
     // rechthoek vallen "het hart van de doorsnede" en "het hart van de band
     // waar de rij in ligt" samen, dus daar blijft het verwisselen van die twee
     // onzichtbaar; in een smal lijf onder een brede flens niet.
     assert!(
         heeft(&|g| g.korf.bottom.count == 1
-            && g
-                .staven
+            && g.staven
                 .iter()
                 .any(|s| s.rij == "onder" && (s.x_mm - g.doorsnede.b_mm / 2.0).abs() > 1e-9)),
         "geen rij met één staaf buiten het hart van de omhullende breedte"
     );
-    assert!(heeft(&|g| g.korf.top.is_empty()), "geen geval zonder bovenwapening");
+    assert!(
+        heeft(&|g| g.korf.top.is_empty()),
+        "geen geval zonder bovenwapening"
+    );
 
     // Elke korf uit de referentie moet ook door de kerncontrole komen. Een
     // proefdoorsnede die de kern zou weigeren, bewaakt een tekening die nooit
     // getekend wordt.
     for geval in &ref_.gevallen {
-        let section = geval.doorsnede.build().expect("de doorsnede uit de referentie bouwt niet");
-        geval
-            .korf
-            .validate(&section)
-            .unwrap_or_else(|e| panic!("{}: de korf uit de referentie is geen geldige korf: {e}", geval.naam));
+        let section = geval
+            .doorsnede
+            .build()
+            .expect("de doorsnede uit de referentie bouwt niet");
+        geval.korf.validate(&section).unwrap_or_else(|e| {
+            panic!(
+                "{}: de korf uit de referentie is geen geldige korf: {e}",
+                geval.naam
+            )
+        });
     }
 }

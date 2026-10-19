@@ -19,19 +19,18 @@ const hier = dirname(fileURLToPath(import.meta.url));
  * plug-in geeft de dev-server een eindpunt dat dezelfde rekenkern aanroept,
  * zodat de toetsing overal meeloopt met de berekening.
  *
- * Het is dezelfde binary die ook achter de Tauri-commands zit, dus er ontstaat
+ * De bridge en Tauri-commands gebruiken dezelfde Rust-rekenkern, dus er ontstaat
  * geen tweede implementatie: één rekenkern, twee manieren om hem te bereiken.
- * Bouwen met `cargo build --release -p toetsbrug` in src-tauri. (Met `--bin`
+ * Bouwen met `cargo build -p toetsbrug` in src-tauri; een nieuwere release-
+ * of debugbinary wordt per verzoek gekozen. (Met `--bin`
  * zoekt cargo de binary in het hoofdpakket en faalt met "no bin target named
  * toetsbrug in default-run packages"; `-p` wijst het juiste pakket aan.)
  */
 function toetsbrug(): Plugin {
-  const exe = resolve(
-    hier,
-    "../src-tauri/target/release",
-    // @ts-expect-error process is a nodejs global
-    process.platform === "win32" ? "toetsbrug.exe" : "toetsbrug",
-  );
+  // @ts-expect-error process is a nodejs global
+  const binary = process.platform === "win32" ? "toetsbrug.exe" : "toetsbrug";
+  const release = resolve(hier, "../src-tauri/target/release", binary);
+  const debug = resolve(hier, "../src-tauri/target/debug", binary);
 
   return {
     name: "openaec-toetsbrug",
@@ -43,6 +42,9 @@ function toetsbrug(): Plugin {
           res.end(JSON.stringify({ fout: "alleen POST" }));
           return;
         }
+        // Choose per request: a Rust rebuild must take effect without restarting Vite.
+        const exe = existsSync(debug) && (!existsSync(release) || statSync(debug).mtimeMs > statSync(release).mtimeMs)
+          ? debug : release;
         if (!existsSync(exe)) {
           res.statusCode = 503;
           res.setHeader("content-type", "application/json");
@@ -50,20 +52,20 @@ function toetsbrug(): Plugin {
             JSON.stringify({
               fout:
                 "De rekenkern is nog niet gebouwd. Draai in src-tauri: " +
-                "cargo build --release -p toetsbrug",
+                "cargo build -p toetsbrug (of cargo build --release -p toetsbrug)",
             }),
           );
           return;
         }
 
-        let body = "";
-        req.on("data", (c) => (body += c));
+        const bodyChunks: Buffer[] = [];
+        req.on("data", (chunk: Buffer) => bodyChunks.push(chunk));
         req.on("end", () => {
           const kind = spawn(exe, [], { stdio: ["pipe", "pipe", "pipe"] });
-          let uit = "";
-          let fout = "";
-          kind.stdout.on("data", (d) => (uit += d));
-          kind.stderr.on("data", (d) => (fout += d));
+          const outputChunks: Buffer[] = [];
+          const errorChunks: Buffer[] = [];
+          kind.stdout.on("data", (chunk: Buffer) => outputChunks.push(chunk));
+          kind.stderr.on("data", (chunk: Buffer) => errorChunks.push(chunk));
           kind.on("error", (e) => {
             res.statusCode = 500;
             res.setHeader("content-type", "application/json");
@@ -71,19 +73,19 @@ function toetsbrug(): Plugin {
           });
           kind.on("close", (code) => {
             res.setHeader("content-type", "application/json");
-            if (uit) {
+            if (outputChunks.length > 0) {
               // De brug schrijft ook fouten als JSON, dus afsluitcode 1 mét
               // inhoud is een nette foutmelding en geen crash.
               res.statusCode = code === 0 ? 200 : 400;
-              res.end(uit);
+              res.end(Buffer.concat(outputChunks));
             } else {
               res.statusCode = 500;
               res.end(
-                JSON.stringify({ fout: fout || `rekenkern stopte met code ${code}` }),
+                JSON.stringify({ fout: Buffer.concat(errorChunks).toString() || `rekenkern stopte met code ${code}` }),
               );
             }
           });
-          kind.stdin.end(body);
+          kind.stdin.end(Buffer.concat(bodyChunks));
         });
       });
     },

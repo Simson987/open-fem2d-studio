@@ -1,0 +1,1380 @@
+{
+  "format": "open-fem2d-studio-v2",
+  "version": 3,
+  "savedAt": "2026-10-08T00:00:00.000Z",
+  "nodes": [],
+  "beams": [],
+  "supports": [],
+  "plates": [],
+  "loads": [],
+  "loadCases": [
+    {
+      "id": 1,
+      "name": "J2-volume + plastische trekstaaf: kracht en ontlasten",
+      "type": "live"
+    }
+  ],
+  "activeLoadCaseId": 1,
+  "selfWeightEnabled": false,
+  "nonlinearEnabled": true,
+  "analysetype": "tweedeOrdeFysisch",
+  "modelDimension": "3d",
+  "model3d": {
+    "nodes": [
+      {
+        "id": 101,
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      {
+        "id": 102,
+        "x": 0.5,
+        "y": 0.0,
+        "z": 0.0
+      },
+      {
+        "id": 103,
+        "x": 1.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      {
+        "id": 104,
+        "x": 0.0,
+        "y": 0.5,
+        "z": 0.0
+      },
+      {
+        "id": 105,
+        "x": 0.5,
+        "y": 0.5,
+        "z": 0.0
+      },
+      {
+        "id": 106,
+        "x": 1.0,
+        "y": 0.5,
+        "z": 0.0
+      },
+      {
+        "id": 107,
+        "x": 0.0,
+        "y": 1.0,
+        "z": 0.0
+      },
+      {
+        "id": 108,
+        "x": 0.5,
+        "y": 1.0,
+        "z": 0.0
+      },
+      {
+        "id": 109,
+        "x": 1.0,
+        "y": 1.0,
+        "z": 0.0
+      },
+      {
+        "id": 110,
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.5
+      },
+      {
+        "id": 111,
+        "x": 0.5,
+        "y": 0.0,
+        "z": 0.5
+      },
+      {
+        "id": 112,
+        "x": 1.0,
+        "y": 0.0,
+        "z": 0.5
+      },
+      {
+        "id": 113,
+        "x": 0.0,
+        "y": 0.5,
+        "z": 0.5
+      },
+      {
+        "id": 114,
+        "x": 0.5,
+        "y": 0.5,
+        "z": 0.5
+      },
+      {
+        "id": 115,
+        "x": 1.0,
+        "y": 0.5,
+        "z": 0.5
+      },
+      {
+        "id": 116,
+        "x": 0.0,
+        "y": 1.0,
+        "z": 0.5
+      },
+      {
+        "id": 117,
+        "x": 0.5,
+        "y": 1.0,
+        "z": 0.5
+      },
+      {
+        "id": 118,
+        "x": 1.0,
+        "y": 1.0,
+        "z": 0.5
+      },
+      {
+        "id": 119,
+        "x": 0.0,
+        "y": 0.0,
+        "z": 1.0
+      },
+      {
+        "id": 120,
+        "x": 0.5,
+        "y": 0.0,
+        "z": 1.0
+      },
+      {
+        "id": 121,
+        "x": 1.0,
+        "y": 0.0,
+        "z": 1.0
+      },
+      {
+        "id": 122,
+        "x": 0.0,
+        "y": 0.5,
+        "z": 1.0
+      },
+      {
+        "id": 123,
+        "x": 0.5,
+        "y": 0.5,
+        "z": 1.0
+      },
+      {
+        "id": 124,
+        "x": 1.0,
+        "y": 0.5,
+        "z": 1.0
+      },
+      {
+        "id": 125,
+        "x": 0.0,
+        "y": 1.0,
+        "z": 1.0
+      },
+      {
+        "id": 126,
+        "x": 0.5,
+        "y": 1.0,
+        "z": 1.0
+      },
+      {
+        "id": 127,
+        "x": 1.0,
+        "y": 1.0,
+        "z": 1.0
+      }
+    ],
+    "beams": [
+      {
+        "id": 2001,
+        "startNodeId": 114,
+        "endNodeId": 115,
+        "profileName": "100x20",
+        "material": "VRIJ:Teststaal E=210000 rho=7850 f=235",
+        "axialOnly": true,
+        "nonlinearLaw": {
+          "kind": "steelBilinear",
+          "yieldMpa": 235.0,
+          "hardeningRatio": 0.01
+        }
+      }
+    ],
+    "volumes": [
+      {
+        "id": 1001,
+        "kind": "tet4",
+        "nodeIds": [
+          101,
+          102,
+          105,
+          114
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1002,
+        "kind": "tet4",
+        "nodeIds": [
+          101,
+          105,
+          104,
+          114
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1003,
+        "kind": "tet4",
+        "nodeIds": [
+          101,
+          104,
+          113,
+          114
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1004,
+        "kind": "tet4",
+        "nodeIds": [
+          101,
+          113,
+          110,
+          114
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1005,
+        "kind": "tet4",
+        "nodeIds": [
+          101,
+          110,
+          111,
+          114
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1006,
+        "kind": "tet4",
+        "nodeIds": [
+          101,
+          111,
+          102,
+          114
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1007,
+        "kind": "tet4",
+        "nodeIds": [
+          102,
+          103,
+          106,
+          115
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1008,
+        "kind": "tet4",
+        "nodeIds": [
+          102,
+          106,
+          105,
+          115
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1009,
+        "kind": "tet4",
+        "nodeIds": [
+          102,
+          105,
+          114,
+          115
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1010,
+        "kind": "tet4",
+        "nodeIds": [
+          102,
+          114,
+          111,
+          115
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1011,
+        "kind": "tet4",
+        "nodeIds": [
+          102,
+          111,
+          112,
+          115
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1012,
+        "kind": "tet4",
+        "nodeIds": [
+          102,
+          112,
+          103,
+          115
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1013,
+        "kind": "tet4",
+        "nodeIds": [
+          104,
+          105,
+          108,
+          117
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1014,
+        "kind": "tet4",
+        "nodeIds": [
+          104,
+          108,
+          107,
+          117
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1015,
+        "kind": "tet4",
+        "nodeIds": [
+          104,
+          107,
+          116,
+          117
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1016,
+        "kind": "tet4",
+        "nodeIds": [
+          104,
+          116,
+          113,
+          117
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1017,
+        "kind": "tet4",
+        "nodeIds": [
+          104,
+          113,
+          114,
+          117
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1018,
+        "kind": "tet4",
+        "nodeIds": [
+          104,
+          114,
+          105,
+          117
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1019,
+        "kind": "tet4",
+        "nodeIds": [
+          105,
+          106,
+          109,
+          118
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1020,
+        "kind": "tet4",
+        "nodeIds": [
+          105,
+          109,
+          108,
+          118
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1021,
+        "kind": "tet4",
+        "nodeIds": [
+          105,
+          108,
+          117,
+          118
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1022,
+        "kind": "tet4",
+        "nodeIds": [
+          105,
+          117,
+          114,
+          118
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1023,
+        "kind": "tet4",
+        "nodeIds": [
+          105,
+          114,
+          115,
+          118
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1024,
+        "kind": "tet4",
+        "nodeIds": [
+          105,
+          115,
+          106,
+          118
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1025,
+        "kind": "tet4",
+        "nodeIds": [
+          110,
+          111,
+          114,
+          123
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1026,
+        "kind": "tet4",
+        "nodeIds": [
+          110,
+          114,
+          113,
+          123
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1027,
+        "kind": "tet4",
+        "nodeIds": [
+          110,
+          113,
+          122,
+          123
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1028,
+        "kind": "tet4",
+        "nodeIds": [
+          110,
+          122,
+          119,
+          123
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1029,
+        "kind": "tet4",
+        "nodeIds": [
+          110,
+          119,
+          120,
+          123
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1030,
+        "kind": "tet4",
+        "nodeIds": [
+          110,
+          120,
+          111,
+          123
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1031,
+        "kind": "tet4",
+        "nodeIds": [
+          111,
+          112,
+          115,
+          124
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1032,
+        "kind": "tet4",
+        "nodeIds": [
+          111,
+          115,
+          114,
+          124
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1033,
+        "kind": "tet4",
+        "nodeIds": [
+          111,
+          114,
+          123,
+          124
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1034,
+        "kind": "tet4",
+        "nodeIds": [
+          111,
+          123,
+          120,
+          124
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1035,
+        "kind": "tet4",
+        "nodeIds": [
+          111,
+          120,
+          121,
+          124
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1036,
+        "kind": "tet4",
+        "nodeIds": [
+          111,
+          121,
+          112,
+          124
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1037,
+        "kind": "tet4",
+        "nodeIds": [
+          113,
+          114,
+          117,
+          126
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1038,
+        "kind": "tet4",
+        "nodeIds": [
+          113,
+          117,
+          116,
+          126
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1039,
+        "kind": "tet4",
+        "nodeIds": [
+          113,
+          116,
+          125,
+          126
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1040,
+        "kind": "tet4",
+        "nodeIds": [
+          113,
+          125,
+          122,
+          126
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1041,
+        "kind": "tet4",
+        "nodeIds": [
+          113,
+          122,
+          123,
+          126
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1042,
+        "kind": "tet4",
+        "nodeIds": [
+          113,
+          123,
+          114,
+          126
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1043,
+        "kind": "tet4",
+        "nodeIds": [
+          114,
+          115,
+          118,
+          127
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1044,
+        "kind": "tet4",
+        "nodeIds": [
+          114,
+          118,
+          117,
+          127
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1045,
+        "kind": "tet4",
+        "nodeIds": [
+          114,
+          117,
+          126,
+          127
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1046,
+        "kind": "tet4",
+        "nodeIds": [
+          114,
+          126,
+          123,
+          127
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1047,
+        "kind": "tet4",
+        "nodeIds": [
+          114,
+          123,
+          124,
+          127
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      },
+      {
+        "id": 1048,
+        "kind": "tet4",
+        "nodeIds": [
+          114,
+          124,
+          115,
+          127
+        ],
+        "eMpa": 210000,
+        "poisson": 0.3,
+        "materialLaw": {
+          "kind": "steelJ2",
+          "yieldMpa": 250,
+          "hardeningMpa": 2000
+        }
+      }
+    ],
+    "plates": [
+      {
+        "id": 5001,
+        "nodeIds": [
+          110,
+          111,
+          114
+        ],
+        "thicknessM": 0.02,
+        "membraneOnly": true,
+        "membraneEMpa": 70000.0,
+        "membranePoisson": 0.25
+      },
+      {
+        "id": 5002,
+        "nodeIds": [
+          110,
+          114,
+          113
+        ],
+        "thicknessM": 0.02,
+        "membraneOnly": true,
+        "membraneEMpa": 70000.0,
+        "membranePoisson": 0.25
+      },
+      {
+        "id": 5003,
+        "nodeIds": [
+          111,
+          112,
+          115
+        ],
+        "thicknessM": 0.02,
+        "membraneOnly": true,
+        "membraneEMpa": 70000.0,
+        "membranePoisson": 0.25
+      },
+      {
+        "id": 5004,
+        "nodeIds": [
+          111,
+          115,
+          114
+        ],
+        "thicknessM": 0.02,
+        "membraneOnly": true,
+        "membraneEMpa": 70000.0,
+        "membranePoisson": 0.25
+      },
+      {
+        "id": 5005,
+        "nodeIds": [
+          113,
+          114,
+          117
+        ],
+        "thicknessM": 0.02,
+        "membraneOnly": true,
+        "membraneEMpa": 70000.0,
+        "membranePoisson": 0.25
+      },
+      {
+        "id": 5006,
+        "nodeIds": [
+          113,
+          117,
+          116
+        ],
+        "thicknessM": 0.02,
+        "membraneOnly": true,
+        "membraneEMpa": 70000.0,
+        "membranePoisson": 0.25
+      },
+      {
+        "id": 5007,
+        "nodeIds": [
+          114,
+          115,
+          118
+        ],
+        "thicknessM": 0.02,
+        "membraneOnly": true,
+        "membraneEMpa": 70000.0,
+        "membranePoisson": 0.25
+      },
+      {
+        "id": 5008,
+        "nodeIds": [
+          114,
+          118,
+          117
+        ],
+        "thicknessM": 0.02,
+        "membraneOnly": true,
+        "membraneEMpa": 70000.0,
+        "membranePoisson": 0.25
+      }
+    ],
+    "supports": [
+      {
+        "nodeId": 101,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 102,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 103,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 104,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 105,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 106,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 107,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 108,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 109,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 110,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 111,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 112,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 113,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 115,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 116,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 117,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 118,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 119,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 120,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 121,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 122,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 123,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 124,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 125,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 126,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 127,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      }
+    ],
+    "loads": [
+      {
+        "id": 3001,
+        "nodeId": 114,
+        "fx": 500000,
+        "fy": -250000,
+        "fz": 150000,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 1
+      }
+    ],
+    "materialLoadPath": [
+      1,
+      0
+    ],
+    "volumeBackend": "automatic",
+    "volumeMaterialKinematics": "finiteStrain",
+    "volumeThreads": 4
+  },
+  "projectInfo": {
+    "name": "Tet4 J2 met plastische trekstaaf en Tri3-membranen",
+    "projectNumber": "VF-3D-FIN-J2-PLASTIC-TRUSS-01"
+  },
+  "frame3dViewSets": []
+}

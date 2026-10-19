@@ -1,11 +1,15 @@
 //! Dense reference solve for small systems, sparse Jacobi-PCG for larger
 //! positive-definite plate and membrane systems.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+
+use crate::csr::CsrAssembler;
+use crate::csr_ldlt::{self, DirectResult};
 
 const DENSE_LIMIT: usize = 600;
 const MAX_DOFS: usize = 20_000;
 const MAX_INERTIA_FACTOR_ENTRIES: usize = 2_000_000;
+const MAX_CSR_ASSEMBLY_ENTRIES: usize = 4_000_000;
 
 #[derive(Clone, Debug)]
 pub struct Matrix {
@@ -31,6 +35,9 @@ impl Matrix {
             sparse: (n > DENSE_LIMIT).then(|| vec![BTreeMap::new(); n]),
         })
     }
+    pub fn is_sparse(&self) -> bool {
+        self.sparse.is_some()
+    }
     pub fn get(&self, i: usize, j: usize) -> f64 {
         if let Some(rows) = &self.sparse {
             *rows[i].get(&j).unwrap_or(&0.0)
@@ -45,6 +52,23 @@ impl Matrix {
             self.data[i * self.n + j] += value;
         }
     }
+    pub fn add_matrix(&mut self, other: &Self) -> Result<(), String> {
+        if self.n != other.n || self.sparse.is_some() != other.sparse.is_some() {
+            return Err("cannot assemble matrices with different dimensions or storage".into());
+        }
+        if let (Some(rows), Some(other_rows)) = (&mut self.sparse, &other.sparse) {
+            for (row, other_row) in rows.iter_mut().zip(other_rows) {
+                for (&column, &value) in other_row {
+                    *row.entry(column).or_default() += value;
+                }
+            }
+        } else {
+            for (value, other_value) in self.data.iter_mut().zip(&other.data) {
+                *value += other_value;
+            }
+        }
+        Ok(())
+    }
     pub fn mul(&self, x: &[f64]) -> Vec<f64> {
         if let Some(rows) = &self.sparse {
             return rows
@@ -56,6 +80,50 @@ impl Matrix {
             .map(|i| (0..self.n).map(|j| self.get(i, j) * x[j]).sum())
             .collect()
     }
+
+    /// Convert the already assembled global matrix to CSR for bounded direct
+    /// factorization. This retains the coupled terms but no longer has the
+    /// original element boundaries required by a true frontal wavefront solve.
+    pub fn to_csr(&self) -> Result<crate::csr::CsrMatrix, String> {
+        let entries = if let Some(rows) = &self.sparse {
+            rows.iter()
+                .try_fold(0usize, |count, row| count.checked_add(row.len()))
+        } else {
+            self.n.checked_mul(self.n)
+        }
+        .ok_or("global matrix CSR entry count overflow")?;
+        if entries > MAX_CSR_ASSEMBLY_ENTRIES {
+            return Err(format!(
+                "global matrix CSR conversion exceeds {MAX_CSR_ASSEMBLY_ENTRIES} entry budget"
+            ));
+        }
+        let mut assembler = CsrAssembler::new(self.n)?;
+        if let Some(rows) = &self.sparse {
+            for (i, row) in rows.iter().enumerate() {
+                for (&j, &value) in row {
+                    assembler.add(i, j, value)?;
+                }
+            }
+        } else {
+            for i in 0..self.n {
+                for j in 0..self.n {
+                    assembler.add(i, j, self.data[i * self.n + j])?;
+                }
+            }
+        }
+        assembler.build()
+    }
+}
+
+/// Explicit direct backend for an already assembled global tangent. The
+/// factorization and result both verify the actual free residual.
+pub fn constrained_solve_sparse_direct(
+    k: &Matrix,
+    load: &[f64],
+    prescribed: &[Option<f64>],
+) -> Result<DirectResult, String> {
+    let csr = k.to_csr()?;
+    csr_ldlt::solve_constrained_ldlt(&csr, load, prescribed, MAX_INERTIA_FACTOR_ENTRIES)
 }
 
 /// Check that the restrained free stiffness has positive strain energy.
@@ -95,6 +163,88 @@ pub fn free_positive_definite(k: &Matrix, prescribed: &[Option<f64>]) -> Result<
     Ok(())
 }
 
+/// Certify a frame tangent using a minimum-degree ordering of complete node
+/// blocks. Symmetric permutation changes the fill, not the matrix inertia, so
+/// every free pivot is still checked by the same sparse LDLᵀ factorization.
+/// This is useful for multi-storey frames whose input node order creates a
+/// wide wavefront. The dense path keeps the reference ordering.
+pub fn free_positive_definite_block_ordered(
+    k: &Matrix,
+    prescribed: &[Option<f64>],
+    dofs_per_node: usize,
+) -> Result<(), String> {
+    if prescribed.len() != k.n || dofs_per_node == 0 || k.n % dofs_per_node != 0 {
+        return Err("matrix/constraint/block size mismatch".into());
+    }
+    let Some(rows) = &k.sparse else {
+        return free_positive_definite(k, prescribed);
+    };
+    let node_count = k.n / dofs_per_node;
+    let mut active = vec![false; node_count];
+    let mut graph = vec![BTreeSet::<usize>::new(); node_count];
+    for (dof, row) in rows.iter().enumerate() {
+        if prescribed[dof].is_some() {
+            continue;
+        }
+        let node = dof / dofs_per_node;
+        active[node] = true;
+        for (&column, &value) in row {
+            if value == 0.0 || prescribed[column].is_some() {
+                continue;
+            }
+            let other = column / dofs_per_node;
+            if node != other {
+                graph[node].insert(other);
+                graph[other].insert(node);
+            }
+        }
+    }
+    let mut free = Vec::with_capacity(prescribed.iter().filter(|value| value.is_none()).count());
+    for _ in 0..active.iter().filter(|&&node| node).count() {
+        let node = (0..node_count)
+            .filter(|&node| active[node])
+            .min_by_key(|&node| (graph[node].len(), node))
+            .expect("active node count is known");
+        for dof in node * dofs_per_node..(node + 1) * dofs_per_node {
+            if prescribed[dof].is_none() {
+                free.push(dof);
+            }
+        }
+        let neighbors: Vec<usize> = graph[node].iter().copied().collect();
+        for (index, &a) in neighbors.iter().enumerate() {
+            graph[a].remove(&node);
+            for &b in &neighbors[index + 1..] {
+                graph[a].insert(b);
+                graph[b].insert(a);
+            }
+        }
+        graph[node].clear();
+        active[node] = false;
+    }
+    sparse_positive_definite(rows, &free, k.n)
+}
+
+/// Certify the inertia of a sparse free stiffness when the bounded LDLᵀ fill
+/// fits in memory. A `false` result means callers should keep their iterative
+/// solver's curvature checks; it does not mean the matrix is unstable.
+pub fn check_sparse_inertia_if_fits(
+    k: &Matrix,
+    prescribed: &[Option<f64>],
+) -> Result<bool, String> {
+    if prescribed.len() != k.n {
+        return Err("matrix/constraint size mismatch".into());
+    }
+    let Some(rows) = &k.sparse else {
+        return Ok(false);
+    };
+    let free: Vec<usize> = (0..k.n).filter(|&i| prescribed[i].is_none()).collect();
+    match sparse_positive_definite(rows, &free, k.n) {
+        Ok(()) => Ok(true),
+        Err(error) if error.contains("sparse stability factor exceeded memory limit") => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
 /// Sparse symmetric LDLᵀ elimination. A non-positive pivot is an inertia
 /// certificate, including for an unloaded buckling mode that PCG may miss.
 /// Only fill created by the free stiffness graph is stored.
@@ -107,7 +257,13 @@ fn sparse_positive_definite(
     for (index, &dof) in free.iter().enumerate() {
         position[dof] = Some(index);
     }
-    let mut upper = vec![BTreeMap::<usize, f64>::new(); free.len()];
+    let stiffness_scale = free
+        .iter()
+        .flat_map(|&row| rows[row].values())
+        .copied()
+        .map(f64::abs)
+        .fold(0.0, f64::max);
+    let mut upper = vec![HashMap::<usize, f64>::new(); free.len()];
     let mut stored_entries = 0;
     for (index, &dof) in free.iter().enumerate() {
         for (&column, &value) in &rows[dof] {
@@ -123,7 +279,7 @@ fn sparse_positive_definite(
                 continue;
             }
             let reverse = *rows[column].get(&dof).unwrap_or(&0.0);
-            let scale = value.abs().max(reverse.abs()).max(1.0);
+            let scale = value.abs().max(reverse.abs()).max(stiffness_scale);
             if !reverse.is_finite() || (value - reverse).abs() > 1e-10 * scale {
                 return Err(format!(
                     "asymmetric sparse stiffness at DOFs {dof}, {column}"
@@ -156,11 +312,18 @@ fn sparse_positive_definite(
                 "non-positive free stiffness; compression may have reached buckling".into(),
             );
         }
-        let neighbors: Vec<(usize, f64)> = upper[pivot_index]
+        let mut neighbors: Vec<(usize, f64)> = upper[pivot_index]
             .iter()
             .filter(|(column, _)| **column > pivot_index)
             .map(|(&column, &value)| (column, value))
             .collect();
+        // Hash storage avoids a tree allocation for every fill entry. Keep
+        // the elimination order fixed so floating-point updates remain
+        // reproducible across randomized hash seeds.
+        neighbors.sort_unstable_by_key(|&(column, _)| column);
+        let pivot = std::mem::take(&mut upper[pivot_index]);
+        stored_entries -= pivot.len();
+        drop(pivot);
         for (a, &(row, value_row)) in neighbors.iter().enumerate() {
             for &(column, value_column) in &neighbors[a..] {
                 let current = upper[row].get(&column).copied();
@@ -177,8 +340,6 @@ fn sparse_positive_definite(
                 upper[row].insert(column, next);
             }
         }
-        stored_entries -= upper[pivot_index].len();
-        upper[pivot_index].clear();
     }
     Ok(())
 }
@@ -259,13 +420,19 @@ fn sparse_pcg(
 ) -> Result<Vec<f64>, String> {
     // PCG requires a symmetric operator. Check the assembled free block
     // explicitly; an asymmetric tangent must never be silently symmetrised.
+    let stiffness_scale = free
+        .iter()
+        .flat_map(|&row| rows[row].values())
+        .copied()
+        .map(f64::abs)
+        .fold(0.0, f64::max);
     for &row in free {
         for (&column, &value) in &rows[row] {
             if free_position[column].is_none() || column == row {
                 continue;
             }
             let transpose = *rows[column].get(&row).unwrap_or(&0.0);
-            let scale = value.abs().max(transpose.abs()).max(1.0);
+            let scale = value.abs().max(transpose.abs()).max(stiffness_scale);
             if (value - transpose).abs() > 1e-10 * scale {
                 return Err(format!(
                     "asymmetric sparse stiffness at DOFs {row}, {column}"
@@ -625,6 +792,53 @@ mod tests {
             .contains("non-positive"));
     }
     #[test]
+    fn sparse_inertia_finds_a_mechanism_orthogonal_to_the_pcg_probe() {
+        let mut k = Matrix::zeros(601).unwrap();
+        for dof in 0..601 {
+            k.add(dof, dof, 1.0);
+        }
+        // DOFs 0 and 31 receive equal probe values. This rank-one block has
+        // the null mode [1, -1], which is orthogonal to that probe.
+        k.add(0, 31, 1.0);
+        k.add(31, 0, 1.0);
+        let free: Vec<usize> = (0..601).collect();
+        let free_position: Vec<Option<usize>> = (0..601).map(Some).collect();
+        let probe: Vec<f64> = free
+            .iter()
+            .map(|&dof| 1.0 + (dof % 31) as f64 / 31.0)
+            .collect();
+        assert_eq!(probe[0], probe[31]);
+        assert!(sparse_pcg(k.sparse.as_ref().unwrap(), &free, &free_position, &probe).is_ok());
+        assert!(check_sparse_inertia_if_fits(&k, &vec![None; 601])
+            .unwrap_err()
+            .contains("non-positive"));
+    }
+    #[test]
+    fn block_ordered_inertia_matches_natural_order_and_detects_hidden_mechanism() {
+        let mut k = Matrix::zeros(606).unwrap();
+        for dof in 0..606 {
+            k.add(dof, dof, 2.0);
+            if dof >= 6 {
+                k.add(dof, dof - 6, -0.4);
+                k.add(dof - 6, dof, -0.4);
+            }
+        }
+        let fixed = vec![None; 606];
+        free_positive_definite(&k, &fixed).unwrap();
+        free_positive_definite_block_ordered(&k, &fixed, 6).unwrap();
+
+        // A disconnected pair has the null mode [1, -1]; the global matrix
+        // stays symmetric with positive diagonals but is not positive definite.
+        let mut singular = Matrix::zeros(606).unwrap();
+        for dof in 0..606 {
+            singular.add(dof, dof, 1.0);
+        }
+        singular.add(0, 6, 1.0);
+        singular.add(6, 0, 1.0);
+        assert!(free_positive_definite(&singular, &fixed).is_err());
+        assert!(free_positive_definite_block_ordered(&singular, &fixed, 6).is_err());
+    }
+    #[test]
     fn sparse_solver_rejects_asymmetric_free_stiffness() {
         let mut k = Matrix::zeros(601).unwrap();
         for i in 0..601 {
@@ -684,5 +898,21 @@ mod tests {
         let (u, reaction) = constrained_solve(&k, &vec![0.0; 601], &vec![None; 601]).unwrap();
         assert!(u.iter().all(|value| *value == 0.0));
         assert!(reaction.iter().all(|value| *value == 0.0));
+    }
+    #[test]
+    fn sparse_matrix_assembly_adds_cst_and_q4_contributions() {
+        let mut triangle = Matrix::zeros(601).unwrap();
+        let mut quad = Matrix::zeros(601).unwrap();
+        triangle.add(3, 3, 2.0);
+        triangle.add(3, 4, -0.5);
+        triangle.add(4, 3, -0.5);
+        quad.add(3, 3, 5.0);
+        quad.add(3, 4, -1.5);
+        quad.add(4, 3, -1.5);
+        triangle.add_matrix(&quad).unwrap();
+        assert_eq!(triangle.get(3, 3), 7.0);
+        assert_eq!(triangle.get(3, 4), -2.0);
+        assert_eq!(triangle.get(4, 3), -2.0);
+        assert!(triangle.is_sparse());
     }
 }

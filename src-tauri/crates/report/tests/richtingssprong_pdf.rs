@@ -28,7 +28,9 @@ fn inhoudsstromen(pdf: &[u8]) -> String {
     let doc = lopdf::Document::load_mem(pdf).expect("de PDF moet te lezen zijn");
     let mut uit = String::new();
     for (_, id) in doc.get_pages() {
-        let inhoud = doc.get_page_content(id).expect("de inhoudsstroom moet uit te pakken zijn");
+        let inhoud = doc
+            .get_page_content(id)
+            .expect("de inhoudsstroom moet uit te pakken zijn");
         uit.push_str(&String::from_utf8_lossy(&inhoud).to_uppercase());
     }
     uit
@@ -49,7 +51,9 @@ fn glief_hex(font: &[u8], woord: &str) -> String {
 
 fn eis_erin(stroom: &str, woord: &str) {
     assert!(
-        [FONT_REGULAR, FONT_BOLD].iter().any(|f| stroom.contains(&glief_hex(f, woord))),
+        [FONT_REGULAR, FONT_BOLD]
+            .iter()
+            .any(|f| stroom.contains(&glief_hex(f, woord))),
         "{woord:?} staat niet in de inhoudsstroom van de PDF"
     );
 }
@@ -87,9 +91,18 @@ fn de_pdf_toont_de_richtingssprong_bij_staal_en_beton() {
     }))
     .expect("staalinvoer met staafstand_notities hoort geldig te zijn");
     let staal = check_beam(staal);
-    let kip = staal.checks.iter().find(|c| c.id == "6.3.2_ltb").expect("kiptoets");
-    let CheckKind::Stability(k) = &kip.kind else { panic!("de kiptoets is een stabiliteitstoets") };
-    assert!(k.notes.iter().any(|n| n == STAAL), "de kern hoort de kanttekening bij de kiptoets te zetten");
+    let kip = staal
+        .checks
+        .iter()
+        .find(|c| c.id == "6.3.2_ltb")
+        .expect("kiptoets");
+    let CheckKind::Stability(k) = &kip.kind else {
+        panic!("de kiptoets is een stabiliteitstoets")
+    };
+    assert!(
+        k.notes.iter().any(|n| n == STAAL),
+        "de kern hoort de kanttekening bij de kiptoets te zetten"
+    );
 
     // Beton: 300 × 500 met een negatief moment, zodat 6.1 een trekzijde kiest.
     let beton: ConcreteBeamCheckInput = serde_json::from_value(json!({
@@ -122,7 +135,10 @@ fn de_pdf_toont_de_richtingssprong_bij_staal_en_beton() {
         BetonCheckKind::Resistance(r) => &r.notes,
         BetonCheckKind::Stability(s) => &s.notes,
     };
-    assert!(notes.iter().any(|n| n == BETON), "de kern hoort de kanttekening bij 6.1 te zetten");
+    assert!(
+        notes.iter().any(|n| n == BETON),
+        "de kern hoort de kanttekening bij 6.1 te zetten"
+    );
 
     let pdf = generate_report_pdf(ReportInput {
         bijlage: Default::default(),

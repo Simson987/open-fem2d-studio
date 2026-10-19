@@ -35,6 +35,13 @@ const number = (value: number, digits = 3) =>
 const signed = (value: number, digits = 3) =>
   Number.isFinite(value) ? value.toLocaleString("nl-NL", { maximumFractionDigits: digits, signDisplay: "exceptZero" }) : "—";
 
+const reinforcementCaseLabel = (value: string) => ({
+  "both-directions": "x en y",
+  "x-only": "alleen x",
+  "y-only": "alleen y",
+  "compression-only": "alleen druk",
+}[value] ?? value);
+
 function diagramMaximum(
   result: Frame3DSolveResult,
   key: keyof Frame3DDiagrams,
@@ -63,8 +70,11 @@ export default function Frame3DReport({
   combinations = [], combinationResults,
 }: Frame3DReportProps) {
   const maxDisplacement = result ? frame3DMaximumDisplacementM(model, result) : 0;
-  const plateReinforcement = result?.plateBending
-    ? model.plates?.find((plate) => plate.id === result.plateBending?.plateId)?.reinforcement : undefined;
+  const volumeResultById = new Map(result?.volume3D?.elements.map((element) => [element.elementId, element]) ?? []);
+  const plateInput = result?.plateBending
+    ? model.plates?.find((plate) => plate.id === result.plateBending?.plateId) : undefined;
+  const plateReinforcement = plateInput?.reinforcement;
+  const plateNonlinearLaw = plateInput?.nonlinearLaw;
   const firstMode = result?.buckling.status === "available" ? result.buckling.modes[0] : undefined;
   const equilibrium = result?.equilibrium;
   const factor = (caseId: number) => activeCombinationFactors
@@ -108,6 +118,22 @@ export default function Frame3DReport({
       qx: load.qx * loadFactor, qy: load.qy * loadFactor, qz: load.qz * loadFactor,
     }];
   });
+  const plateEdgeLoads = (model.plateEdgeLoads ?? []).flatMap((load) => {
+    const loadFactor = factor(load.caseId ?? 1);
+    return loadFactor === 0 ? [] : [{ ...load, loadFactor,
+      startKnPerM: load.startKnPerM * loadFactor, endKnPerM: load.endKnPerM * loadFactor }];
+  });
+  const dktPlates = result?.volume3D?.bendingPlates ?? [];
+  const dktTriangleCount = dktPlates.reduce((sum, plate) => sum + (plate.centroidMoments?.length ?? 0), 0);
+  const dktVisibleTriangles: Array<{ plateId: number; triangleIndex: number;
+    nodeIds: [number, number, number]; momentKnmPerM: [number, number, number] }> = [];
+  for (const plate of dktPlates) {
+    for (const triangle of plate.centroidMoments ?? []) {
+      if (dktVisibleTriangles.length === 250) break;
+      dktVisibleTriangles.push({ plateId: plate.plateId, ...triangle });
+    }
+    if (dktVisibleTriangles.length === 250) break;
+  }
 
   return (
     <div className="frame3d-report-shell" data-frame3d-report={result ? "calculated" : "pending"}>
@@ -119,14 +145,109 @@ export default function Frame3DReport({
         <header>
           <div>
             <p className="frame3d-report-kicker">Open FEM Studio</p>
-            <h1>{result?.plateBending ? "3D-plaatberekening" : "3D raamwerkberekening"}</h1>
+            <h1>{result?.plateBending ? "3D-plaatberekening"
+              : result?.volume3D?.bendingPlates?.length ? "3D-volume- en plaatberekening"
+                : result?.volume3D ? "3D-volume- en raamwerkberekening" : "3D raamwerkberekening"}</h1>
             <p>{projectName?.trim() || "Naamloos project"}</p>
           </div>
           <dl>
             <div><dt>Datum</dt><dd>{new Date().toLocaleDateString("nl-NL")}</dd></div>
-            <div><dt>Model</dt><dd>{model.nodes.length} knopen · {model.beams.length} staven · {model.plates?.length ?? 0} platen</dd></div>
+            <div><dt>Model</dt><dd>{model.nodes.length} knopen · {model.beams.length} staven · {model.plates?.length ?? 0} platen · {model.volumes?.length ?? 0} volumes</dd></div>
           </dl>
         </header>
+
+        {(model.volumes?.length ?? 0) > 0 && <section>
+          <h2>Volume-elementen</h2>
+          {result?.volume3D && <p className="frame3d-report-note">
+            {result.volume3D.formulation === "totalLagrangian"
+              ? `Totale-Lagrange Tet4-GNL met W = W₀ + βW₀²/(2E₀) (β=0: St Venant–Kirchhoff); Newton-tangent: ${result.volume3D.backendUsed}; ${result.volume3D.newtonIterations ?? 0} iteraties; ${result.volume3D.acceptedSteps ?? 0} geaccepteerde stappen; ${result.volume3D.cutbacks ?? 0} terugstappen. Getoonde spanningen zijn Cauchy-spanningen in de eindgeometrie.`
+              : result.volume3D.formulation === "totalLagrangianJ2"
+                ? `Totale-Lagrange Tet4/Hex8-GNL met J2-staalplastificatie; Newton-tangent: ${result.volume3D.backendUsed}; ${result.volume3D.newtonIterations ?? 0} iteraties; ${result.volume3D.acceptedSteps ?? 0} geaccepteerde stappen; ${result.volume3D.cutbacks ?? 0} terugstappen. Getoonde spanningen zijn Cauchy-spanningen in de eindgeometrie, berekend uit de eerste Piola-spanning; voor Hex8 het gemiddelde van acht Gauss-punten. Lasten zijn vast in de referentieconfiguratie.`
+              : result.volume3D.formulation === "smallStrainMaterial"
+                ? `Tet4-materiaal-FNL bij kleine rek; Newton-tangent: ${result.volume3D.backendUsed}; ${result.volume3D.newtonIterations ?? 0} iteraties; ${result.volume3D.acceptedSteps ?? 0} geaccepteerde stappen; ${result.volume3D.cutbacks ?? 0} terugstappen. Plastische rek of betontrekschade wordt per element bewaard.`
+              : `Lineaire oplosser: ${result.volume3D.backendUsed}; ${result.volume3D.linearIterations} iteraties; relatief residu ${result.volume3D.relativeResidual.toExponential(3)}. Spanningen zijn lineair en klein-vervormd.`}
+          </p>}
+          <table className="frame3d-report-wide"><thead><tr>
+            <th>ID</th><th>Type</th><th>Knoop-ID's</th><th>E [MPa]</th><th>ν</th><th>ρ [kg/m³]</th>
+            {result?.volume3D?.formulation === "totalLagrangian" && <><th>β</th><th>Eeff [MPa]</th></>}
+            {result?.volume3D && <><th>σxx [MPa]</th><th>σyy [MPa]</th><th>σzz [MPa]</th><th>τxy [MPa]</th><th>τyz [MPa]</th><th>τzx [MPa]</th><th>von Mises [MPa]</th></>}
+            {(result?.volume3D?.formulation === "smallStrainMaterial" || result?.volume3D?.formulation === "totalLagrangianJ2")
+              && <><th>εp,eq</th><th>Trekschade</th></>}
+          </tr></thead><tbody>
+            {(model.volumes ?? []).slice(0, 100).map((volume) => {
+              const stress = volumeResultById.get(volume.id);
+              return <tr key={volume.id}>
+                <td>{volume.id}</td><td>{volume.kind === "tet4" ? "Tet4" : "Hex8"}</td><td>{volume.nodeIds.join(" · ")}</td>
+                <td>{number(volume.eMpa, 1)}</td><td>{number(volume.poisson, 4)}</td><td>{volume.densityKgPerM3 === undefined ? "—" : number(volume.densityKgPerM3, 1)}</td>
+                {result?.volume3D?.formulation === "totalLagrangian" && <>
+                  <td>{number(volume.energyBeta ?? 0, 3)}</td>
+                  <td>{stress?.effectiveEMpa === undefined ? "—" : number(stress.effectiveEMpa, 3)}</td>
+                </>}
+                {result?.volume3D && <>{stress ? stress.stressMpa.map((value, index) => <td key={index}>{signed(value, 4)}</td>)
+                  : Array.from({ length: 6 }, (_, index) => <td key={index}>—</td>)}
+                  <td>{stress ? number(stress.vonMisesMpa, 4) : "—"}</td></>}
+                {(result?.volume3D?.formulation === "smallStrainMaterial" || result?.volume3D?.formulation === "totalLagrangianJ2")
+                  && <><td>{stress?.equivalentPlasticStrain === undefined ? "—" : number(stress.equivalentPlasticStrain, 7)}</td>
+                    <td>{stress?.tensileDamage === undefined ? "—" : number(stress.tensileDamage, 5)}</td></>}
+              </tr>;
+            })}
+          </tbody></table>
+          {(model.volumes?.length ?? 0) > 100 && <p className="frame3d-report-note">Eerste 100 van {model.volumes?.length} volume-elementen getoond; selecteer een element voor alle Gauss-spanningen.</p>}
+          {result?.volume3D && (result.volume3D.membranes?.length ?? 0) > 0 && <>
+            <h3>Gekoppelde Tri3-membranen</h3>
+            <table className="frame3d-report-wide"><thead><tr>
+              <th>Plaat</th><th>Spanningsmaat</th><th>σ11 [MPa]</th><th>σ22 [MPa]</th><th>τ12 [MPa]</th>
+              <th>N11 [kN/m]</th><th>N22 [kN/m]</th><th>N12 [kN/m]</th>
+              <th>εp,eq</th><th>Dikterekfactor</th>
+            </tr></thead><tbody>
+              {(result.volume3D.membranes ?? []).map((membrane) => <tr key={membrane.plateId}>
+                <td>{membrane.plateId}</td>
+                <td>{membrane.stressMeasure === "cauchy" ? "Cauchy, huidig"
+                  : membrane.stressMeasure === "secondPiolaKirchhoff" ? "2e Piola–Kirchhoff, referentie"
+                    : "Lineair, kleine rek"}</td>
+                {membrane.stressMpa.map((value, index) => <td key={`s${index}`}>{signed(value, 4)}</td>)}
+                {membrane.resultantsKnPerM.map((value, index) => <td key={`n${index}`}>{signed(value, 4)}</td>)}
+                <td>{membrane.equivalentPlasticStrain === undefined ? "—" : number(membrane.equivalentPlasticStrain, 7)}</td>
+                <td>{membrane.thicknessStretch === undefined ? "—" : number(membrane.thicknessStretch, 7)}</td>
+              </tr>)}
+            </tbody></table>
+            <p className="frame3d-report-note">Membraanwaarden gelden in de lokale 1/2-assen van de plaat. Cauchy-spanning en N horen bij de huidige lengte en dikte; tweede Piola–Kirchhoff-spanning hoort bij de referentieconfiguratie. Buiging is niet in dit element opgenomen.</p>
+          </>}
+          {result?.volume3D && (result.volume3D.bendingPlates?.length ?? 0) > 0 && <>
+            <h3>Gekoppelde XY-DKT-buigplaten</h3>
+            <table className="frame3d-report-wide"><thead><tr>
+              <th>Plaat</th><th>Tri3</th><th>Max. |w| [mm]</th><th>Max. |rotatie| [mrad]</th>
+              <th>Max. |Mx| [kNm/m]</th><th>Max. |My| [kNm/m]</th><th>Max. |Mxy| [kNm/m]</th>
+            </tr></thead><tbody>
+              {result.volume3D.bendingPlates!.slice(0, 250).map((plate) => <tr key={plate.plateId}>
+                <td>{plate.plateId}</td><td>{plate.triangleCount}</td>
+                <td>{number(plate.maxAbsWm * 1000, 4)}</td>
+                <td>{number(plate.maxAbsRotationRad * 1000, 4)}</td>
+                {plate.maxAbsMomentKnmPerM
+                  ? plate.maxAbsMomentKnmPerM.map((moment, axis) => <td key={axis}>{number(moment, 5)}</td>)
+                  : [0, 1, 2].map((axis) => <td key={axis}>—</td>)}
+              </tr>)}
+            </tbody></table>
+            {result.volume3D.bendingPlates!.length > 250 && <p className="frame3d-report-note">
+              Eerste 250 van {result.volume3D.bendingPlates!.length} platen getoond; de overige blijven in het berekeningsresultaat.
+            </p>}
+            {dktTriangleCount > 0 && <><h4>Elastische centroidmomenten per driehoek</h4>
+            <table className="frame3d-report-wide"><thead><tr>
+              <th>Plaat</th><th>Tri3</th><th>Knoop-ID's</th><th>Mx [kNm/m]</th><th>My [kNm/m]</th><th>Mxy [kNm/m]</th>
+            </tr></thead><tbody>
+              {dktVisibleTriangles.map((triangle) => <tr key={`${triangle.plateId}-${triangle.triangleIndex}`}>
+                <td>{triangle.plateId}</td><td>{triangle.triangleIndex}</td><td>{triangle.nodeIds.join(" / ")}</td>
+                {triangle.momentKnmPerM.map((moment, axis) => <td key={axis}>{signed(moment, 6)}</td>)}
+              </tr>)}
+            </tbody></table>
+            {dktTriangleCount > 250 && <p className="frame3d-report-note">
+              Eerste 250 van {dktTriangleCount} driehoeken getoond; {dktTriangleCount - 250} overige blijven in het berekeningsresultaat.
+            </p>}</>}
+            <p className="frame3d-report-note">{dktTriangleCount > 0
+              ? "De momenten zijn elastische globale XY-resultanten in het zwaartepunt van elke driehoek, herleid uit de laatste verplaatsingen met vaste referentiestijfheid; een positieve waarde wordt zonder aanvullende tekenomzetting getoond. Eigen plaat-GNL/FNL is niet berekend."
+              : "De XY-DKT-platen behouden elastische referentiestijfheid in de volume-GNL/J2-berekening. Eigen plaat-GNL/FNL en plaatmomenten zijn niet herleid."} Deze horizontale platen dragen alleen buiging. Plaatmembraan, dwarskrachtresultanten, oppervlaktespanning en constructieve plaattoetsing zijn niet berekend.</p>
+          </>}
+        </section>}
 
         {!result ? <>
           <section className="frame3d-report-empty">
@@ -137,7 +258,7 @@ export default function Frame3DReport({
           {(model.plates?.length ?? 0) > 0 && <section>
             <h2>Platen en openingen</h2>
             <table className="frame3d-report-wide"><thead><tr>
-              <th>Plaat</th><th>Contourknopen</th><th>Rand</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>Celmaat</th><th>Randopleggingen</th><th>E-rekcurve [MPa]</th><th>Wapening</th><th>Openingen</th>
+              <th>Plaat</th><th>Contourknopen</th><th>Rand</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>Celmaat</th><th>Randopleggingen</th><th>E-rekcurve [MPa]</th><th>Wapening</th><th>Drielageninvoer</th><th>Openingen</th>
             </tr></thead><tbody>
               {(model.plates ?? []).map((plate) => <tr key={plate.id}>
                 <td>{plate.id}</td><td>{plate.nodeIds.join(" · ")}</td><td>{plate.boundary ? `${plate.boundary.length} segmenten (${plate.boundary.filter((segment) => segment.kind === "arc").length} boog)` : "hoekpunten"}</td><td>{number(plate.thicknessM)} m</td>
@@ -146,6 +267,7 @@ export default function Frame3DReport({
                 <td>{(plate.edgeSupports ?? ["free", "free", "free", "free"]).map((kind, index) => `${index + 1}:${kind === "free" ? "vrij" : kind === "clamped" ? "vast" : "scharnier"}`).join(" · ")}</td>
                 <td>{plate.modulusCurve?.map((point) => `${number(point.strain, 8)}:${number(point.eMpa, 1)}`).join(" → ") ?? "—"}</td>
                 <td>{plate.reinforcement ? `${plate.reinforcement.limitState === "ultimate" ? "UGT" : "BGT"}; As ${[plate.reinforcement.topXMm2PerM, plate.reinforcement.topYMm2PerM, plate.reinforcement.bottomXMm2PerM, plate.reinforcement.bottomYMm2PerM].map((area) => number(area, 0)).join("/")} mm²/m` : "—"}</td>
+                <td>{plate.threeLayer ? `${plate.threeLayer.compressionModel === "blaauwendraad2021" ? "Blaauwendraad 2021" : "EC2 F"}; huid ${number(plate.threeLayer.topSkinMm, 1)}/${number(plate.threeLayer.bottomSkinMm, 1)} mm; fcd/fyd ${number(plate.threeLayer.fcdMpa, 1)}/${number(plate.threeLayer.fydMpa, 1)} MPa; As boven ${number(plate.threeLayer.topReinforcement.asX, 0)}/${number(plate.threeLayer.topReinforcement.asY, 0)}, onder ${number(plate.threeLayer.bottomReinforcement.asX, 0)}/${number(plate.threeLayer.bottomReinforcement.asY, 0)} mm²/m${plate.threeLayer.core ? `; vRdc ${number(plate.threeLayer.core.vRdcKnPerM, 1)} kN/m, tan θ ${number(plate.threeLayer.core.tanTheta, 2)}, Asv ${number(plate.threeLayer.core.providedShearMm2PerM2, 0)} mm²/m²` : "; kernschuif niet opgegeven"}` : "—"}</td>
                 <td>{(plate.openings ?? []).length === 0 ? "—" : (plate.openings ?? []).map((opening) =>
                   `#${opening.id}: ${opening.nodeIds.join(" · ")} (r=${number(opening.cornerRadiusM ?? 0)} m)`).join("; ")}</td>
               </tr>)}
@@ -162,17 +284,34 @@ export default function Frame3DReport({
               </tbody></table>
               <p className="frame3d-report-note">Intensiteiten in kN/m² en globale assen X/Y/Z.</p>
             </>}
+            {(model.plateEdgeLoads?.length ?? 0) > 0 && <>
+              <h3>Randlijnlasten</h3>
+              <table className="frame3d-report-wide"><thead><tr>
+                <th>ID</th><th>Geval</th><th>Plaat</th><th>Zijde</th><th>Begin</th><th>Eind</th><th>Factor</th>
+              </tr></thead><tbody>
+                {plateEdgeLoads.map((load) => <tr key={load.id}>
+                  <td>{load.id}</td><td>{load.caseId ?? 1}</td><td>{load.plateId}</td><td>{load.edgeIndex + 1}</td>
+                  <td>{signed(load.startKnPerM)} kN/m</td><td>{signed(load.endKnPerM)} kN/m</td><td>{number(load.loadFactor)}</td>
+                </tr>)}
+              </tbody></table>
+              <p className="frame3d-report-note">Lineaire intensiteitsverdeling langs de buitenrand, positief in de plaatnormaal.</p>
+            </>}
           </section>}
         </> : <>
           <section>
             <h2>Samenvatting</h2>
             <div className="frame3d-report-cards">
-              <div><span>Analyse</span><strong>{result.analysis === "p-delta" ? "2e orde (P-Δ)"
-                : result.analysis === "material" ? "Fysisch niet-lineair" : "1e orde"}</strong></div>
+              <div><span>Analyse</span><strong>{result.volume3D?.formulation === "totalLagrangianJ2" ? "GNL + J2-staal-FNL (Tet4)"
+                : result.volume3D?.formulation === "totalLagrangian" ? "GNL Tet4 (totale Lagrange)"
+                : result.analysis === "combined" ? "2e orde + FNL (GNL + materiaal)"
+                : result.analysis === "p-delta" ? "2e orde (P-Δ)"
+                  : result.analysis === "material" ? "Fysisch niet-lineair" : "1e orde"}</strong></div>
               {result.materialLoadPath && <div><span>FNL-lastpad</span><strong>{result.materialLoadPath.join(" → ")}</strong></div>}
               <div><span>Rekentoestand</span><strong>{activeCombinationName || activeLoadCaseName || `Geval ${activeLoadCaseId}`}</strong></div>
               <div><span>Max. verplaatsing</span><strong>{number(maxDisplacement * 1000)} mm</strong></div>
-              <div><span>Convergentie</span><strong>{result.materialIterations !== undefined
+              <div><span>Convergentie</span><strong>{result.volume3D?.newtonIterations !== undefined
+                ? `${result.volume3D.newtonIterations} Newton-iteraties`
+                : result.materialIterations !== undefined
                 ? `${result.materialIterations} materiaaliteraties`
                 : result.secondOrder ? `${result.secondOrder.iterations} iteratie${result.secondOrder.iterations === 1 ? "" : "s"}` : "direct"}</strong></div>
               <div><span>Eerste knikfactor αcr</span><strong>{firstMode ? number(firstMode.loadFactor) : "n.v.t."}</strong></div>
@@ -197,21 +336,46 @@ export default function Frame3DReport({
               {plateReinforcement.cRdc !== undefined && <tr><th>C_Rd,c</th><td>{number(plateReinforcement.cRdc)}</td><td colSpan={2} /></tr>}
             </tbody></table>}
             <p className="frame3d-report-note">Hybride Q4-buigplaat in lokale plaatassen. Hoekopleggingen komen uit het 3D-model; opgegeven randopleggingen gelden voor alle randroosterknopen. w is positief volgens de lokale plaatnormaal.</p>
-            <p className="frame3d-report-note">{result.analysis === "material"
+            <p className="frame3d-report-note">{result.analysis === "p-delta"
+              ? plateNonlinearLaw
+                ? `De Rust-plaatroute koppelt geometrische membraanrek en hybride plaatbuiging met von-Kármán-rekken. De ${plateNonlinearLaw.kind}-wet bewaart de materiaaltoestand op de shellmembraanpunten; de buigdoorsnede blijft elastisch/secant-E.`
+                : `De Rust-plaatroute koppelt geometrische membraanrek en hybride plaatbuiging met von-Kármán-rekken. εmax is de piek-hoofdrek aan beide plaatzijden op de Gauss-punten; ${plateInput?.modulusCurve?.length ? "Eeff volgt de secant-E-rekhistorie." : "deze run gebruikt de elastische E-modulus."}`
+              : result.analysis === "material"
               ? "De elementen gebruiken een secant-E op de bereikte maximale vezelrek. Dit is geen expliciete scheur- of plastische doorsnedewet."
               : "Dit overzicht bevat elastische snedekrachten."} {result.plateBending.elements.some((element) => element.reinforcement)
                 ? "De wapeningscontrole gebruikt de snedekrachten in de laatste lasttoestand en is per element op hoek- en integratiepunten bepaald. Extremen ertussen, scheurhistorie en normcombinaties zijn niet automatisch afgedekt."
                 : "Plaatwapening en scheurwijdte zijn niet getoetst."}</p>
             <table className="frame3d-report-wide"><thead><tr>
-              <th>Element</th><th>Mx [kNm/m]</th><th>My [kNm/m]</th><th>Mxy [kNm/m]</th><th>Vx [kN/m]</th><th>Vy [kN/m]</th><th>Eeff [MPa]</th>
+              <th>Element</th><th>Mx [kNm/m]</th><th>My [kNm/m]</th><th>Mxy [kNm/m]</th><th>Vx [kN/m]</th><th>Vy [kN/m]</th><th>Eeff [MPa]</th>{result.analysis === "p-delta" && <th>εmax [-]</th>}
+              {plateNonlinearLaw && <><th>εp,eq,max [-]</th><th>Dtrek,max [-]</th></>}
             </tr></thead><tbody>
               {result.plateBending.elements.map((element) => <tr key={element.quadId}>
                 <td>{element.quadId}</td>
                 {element.momentKnmPerM.map((value, index) => <td key={`m${index}`}>{signed(value)}</td>)}
                 {element.shearKnPerM.map((value, index) => <td key={`v${index}`}>{signed(value)}</td>)}
                 <td>{number(element.effectiveEMpa)}</td>
+                {result.analysis === "p-delta" && <td>{number(element.maxCombinedStrain ?? Number.NaN, 6)}</td>}
+                {plateNonlinearLaw && <>
+                  <td>{number(element.maxEquivalentPlasticStrain ?? Number.NaN, 6)}</td>
+                  <td>{number(element.maxTensileDamage ?? Number.NaN, 4)}</td>
+                </>}
               </tr>)}
             </tbody></table>
+            {plateNonlinearLaw && <details className="frame3d-report-details">
+              <summary>Materiaaltoestand per shell-Gauss-punt</summary>
+              <table className="frame3d-report-wide"><thead><tr>
+                <th>Element</th><th>Gauss-punt</th><th>x [m]</th><th>y [m]</th>
+                <th>εx</th><th>εy</th><th>γxy</th><th>εp,eq</th><th>Dtrek</th>
+              </tr></thead><tbody>
+                {result.plateBending.elements.flatMap((element) => (element.materialPoints ?? []).map((point) =>
+                  <tr key={`${element.quadId}-${point.gaussIndex.join("-")}`}>
+                    <td>{element.quadId}</td><td>{point.gaussIndex.map((index) => index + 1).join(", ")}</td>
+                    <td>{number(point.positionM[0], 4)}</td><td>{number(point.positionM[1], 4)}</td>
+                    {point.membraneStrain.map((value, index) => <td key={index}>{number(value, 7)}</td>)}
+                    <td>{number(point.equivalentPlasticStrain, 7)}</td><td>{number(point.tensileDamage, 5)}</td>
+                  </tr>))}
+              </tbody></table>
+            </details>}
             {result.plateBending.elements.some((element) => element.reinforcement) && <>
               <h3>Wapenings- en scheurtoets op de gekozen rekentoestand</h3>
               <table className="frame3d-report-wide"><thead><tr>
@@ -245,6 +409,36 @@ export default function Frame3DReport({
                   </tr>;
                 })}
               </tbody></table>
+            </>}
+            {result.plateBending.elements.some((element) => element.threeLayer) && <>
+              <h3>Blaauwendraad drie-lagen-deelcontrole op plaatresultaatpunten</h3>
+              <p className="frame3d-report-note">Bij in-vlakse knoop- of oppervlaktebelasting komen de membraanresultanten uit een aparte Rust-Q4-oplossing; zonder in-vlakse belasting is N nul. Buiging en membraanwerking zijn niet geometrisch gekoppeld. De controle gebruikt momenten en dwarskrachten op hoek-, midden- en 4×4 Gauss-punten; alleen de opgegeven deelcontroles zijn beoordeeld.</p>
+              <table className="frame3d-report-wide"><thead><tr>
+                <th>Element</th><th>Punten</th><th>Boven max As,x UC</th><th>Boven max As,y UC</th>
+                <th>Boven druk UC</th><th>Boven geval</th><th>Onder max As,x UC</th><th>Onder max As,y UC</th>
+                <th>Onder druk UC</th><th>Onder geval</th>
+                <th>Kern Asv UC</th><th>Kern diagonaal UC</th><th>Maatgevend lokaal punt [m]</th><th>Status</th>
+              </tr></thead><tbody>
+                {result.plateBending.elements.map((element) => {
+                  const check = element.threeLayer;
+                  if (!check) return null;
+                  return <tr key={element.quadId}>
+                    <td>{element.quadId}</td><td>{check.checkedPoints}</td>
+                    <td>{number(check.top.utilizationAsX, 3)}</td><td>{number(check.top.utilizationAsY, 3)}</td>
+                    <td>{number(check.top.utilizationCompression, 3)}</td><td>{reinforcementCaseLabel(check.top.reinforcementCase)}</td>
+                    <td>{number(check.bottom.utilizationAsX, 3)}</td><td>{number(check.bottom.utilizationAsY, 3)}</td>
+                    <td>{number(check.bottom.utilizationCompression, 3)}</td><td>{reinforcementCaseLabel(check.bottom.reinforcementCase)}</td>
+                    <td>{check.core.utilizationShear === null ? "—" : number(check.core.utilizationShear, 3)}</td>
+                    <td>{check.core.utilizationDiagonal === null ? "—" : number(check.core.utilizationDiagonal, 3)}</td>
+                    <td>{check.governingPositionM.map((value) => number(value, 4)).join(" / ")}</td>
+                    <td className={check.status === "partial_check_exceeded" ? "frame3d-report-bad" : "frame3d-report-good"}>
+                      {check.status === "partial_check_exceeded" ? "deelcontrole overschreden" : "deelcontrole binnen grens"}
+                    </td>
+                  </tr>;
+                })}
+              </tbody></table>
+              <p className="frame3d-report-note">Niet beoordeeld: {[...new Set(result.plateBending.elements
+                .flatMap((element) => element.threeLayer?.notAssessed ?? []))].join(", ") || "—"}.</p>
             </>}
             <h3>Reacties op vastgezette roosterknopen</h3>
             <table className="frame3d-report-wide"><thead><tr>
@@ -309,7 +503,7 @@ export default function Frame3DReport({
             {(model.plates?.length ?? 0) > 0 && <>
               <h3>Platen en openingen</h3>
               <table className="frame3d-report-wide"><thead><tr>
-                <th>Plaat</th><th>Contourknopen</th><th>Rand</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>Celmaat</th><th>Randopleggingen</th><th>E-rekcurve [MPa]</th><th>Wapening</th><th>Openingen</th>
+                <th>Plaat</th><th>Contourknopen</th><th>Rand</th><th>Dikte</th><th>Randstraal</th><th>Materiaal</th><th>Celmaat</th><th>Randopleggingen</th><th>E-rekcurve [MPa]</th><th>Wapening</th><th>Drielageninvoer</th><th>Openingen</th>
               </tr></thead><tbody>
                 {(model.plates ?? []).map((plate) => <tr key={plate.id}>
                   <td>{plate.id}</td><td>{plate.nodeIds.join(" · ")}</td><td>{plate.boundary ? `${plate.boundary.length} segmenten (${plate.boundary.filter((segment) => segment.kind === "arc").length} boog)` : "hoekpunten"}</td><td>{number(plate.thicknessM)} m</td>
@@ -318,6 +512,7 @@ export default function Frame3DReport({
                   <td>{(plate.edgeSupports ?? ["free", "free", "free", "free"]).map((kind, index) => `${index + 1}:${kind === "free" ? "vrij" : kind === "clamped" ? "vast" : "scharnier"}`).join(" · ")}</td>
                   <td>{plate.modulusCurve?.map((point) => `${number(point.strain, 8)}:${number(point.eMpa, 1)}`).join(" → ") ?? "—"}</td>
                   <td>{plate.reinforcement ? `${plate.reinforcement.limitState === "ultimate" ? "UGT" : "BGT"}; As ${[plate.reinforcement.topXMm2PerM, plate.reinforcement.topYMm2PerM, plate.reinforcement.bottomXMm2PerM, plate.reinforcement.bottomYMm2PerM].map((area) => number(area, 0)).join("/")} mm²/m` : "—"}</td>
+                  <td>{plate.threeLayer ? `${plate.threeLayer.compressionModel === "blaauwendraad2021" ? "Blaauwendraad 2021" : "EC2 F"}; huid ${number(plate.threeLayer.topSkinMm, 1)}/${number(plate.threeLayer.bottomSkinMm, 1)} mm; fcd/fyd ${number(plate.threeLayer.fcdMpa, 1)}/${number(plate.threeLayer.fydMpa, 1)} MPa; As boven ${number(plate.threeLayer.topReinforcement.asX, 0)}/${number(plate.threeLayer.topReinforcement.asY, 0)}, onder ${number(plate.threeLayer.bottomReinforcement.asX, 0)}/${number(plate.threeLayer.bottomReinforcement.asY, 0)} mm²/m${plate.threeLayer.core ? `; vRdc ${number(plate.threeLayer.core.vRdcKnPerM, 1)} kN/m, tan θ ${number(plate.threeLayer.core.tanTheta, 2)}, Asv ${number(plate.threeLayer.core.providedShearMm2PerM2, 0)} mm²/m²` : "; kernschuif niet opgegeven"}` : "—"}</td>
                   <td>{(plate.openings ?? []).length === 0 ? "—" : (plate.openings ?? []).map((opening) =>
                     `#${opening.id}: ${opening.nodeIds.join(" · ")} (r=${number(opening.cornerRadiusM ?? 0)} m)`).join("; ")}</td>
                 </tr>)}
@@ -364,6 +559,19 @@ export default function Frame3DReport({
               </tbody></table>
               <p className="frame3d-report-note">Intensiteiten in kN/m² en globale assen X/Y/Z.</p>
             </>}
+            {plateEdgeLoads.length > 0 && <>
+              <h3>Plaat-randlijnbelastingen</h3>
+              <table className="frame3d-report-wide"><thead><tr>
+                <th>ID</th><th>Geval</th><th>Factor</th><th>Plaat</th><th>Zijde</th><th>Begin</th><th>Eind</th>
+              </tr></thead><tbody>
+                {plateEdgeLoads.map((load) => <tr key={load.id}>
+                  <td>{load.id}</td><td>{load.caseId ?? 1}</td><td>{number(load.loadFactor, 3)}</td>
+                  <td>{load.plateId}</td><td>{load.edgeIndex + 1}</td>
+                  <td>{signed(load.startKnPerM)}</td><td>{signed(load.endKnPerM)}</td>
+                </tr>)}
+              </tbody></table>
+              <p className="frame3d-report-note">Lineaire normaalbelasting langs de buitenrand, intensiteiten in kN/m. De getoonde waarden bevatten de actieve combinatie-factor.</p>
+            </>}
             <h3>Staafbelastingen</h3>
             <table className="frame3d-report-wide"><thead><tr>
               <th>ID</th><th>Geval</th><th>Factor</th><th>Staaf</th><th>qy begin</th><th>qy eind</th><th>qz begin</th><th>qz eind</th><th>Bereik</th>
@@ -405,7 +613,7 @@ export default function Frame3DReport({
               <tr><th>Vastgezette revisie</th><td><code>{result.engine.revision.slice(0, 12)}</code></td></tr>
               <tr><th>Licentie</th><td>{result.engine.license}</td></tr>
               {result.materialLoadPath && <tr><th>Laatste lastfactor</th><td>{number(result.materialLoadPath[result.materialLoadPath.length - 1], 4)}</td></tr>}
-              <tr><th>{result.analysis === "material" ? "FNL-iteratie" : "Tweede orde"}</th><td>{result.materialIterations !== undefined
+              <tr><th>{result.analysis === "material" || result.analysis === "combined" ? "FNL-iteratie" : "Tweede orde"}</th><td>{result.materialIterations !== undefined
                 ? `${result.materialIterations} iteraties; geconvergeerd`
                 : result.secondOrder ? `${result.secondOrder.converged ? "geconvergeerd" : "niet geconvergeerd"}; ${result.secondOrder.stable ? "stabiel" : "instabiel"}` : "niet uitgevoerd"}</td></tr>
               <tr><th>Relatief evenwichtsresidu</th><td>{equilibrium ? number(equilibrium.relativeResidual, 8) : "niet beschikbaar"}</td></tr>
@@ -521,12 +729,12 @@ export default function Frame3DReport({
           <section>
             <h2>Staafkrachten</h2>
             <table className="frame3d-report-wide"><thead><tr>
-              <th>Staaf</th><th>L (m)</th>{result.analysis === "material" && <th>E effectief (MPa)</th>}
+              <th>Staaf</th><th>L (m)</th>{(result.analysis === "material" || result.analysis === "combined") && <th>E effectief (MPa)</th>}
               <th>|N|max (kN)</th><th>|Vy|max (kN)</th><th>|Vz|max (kN)</th><th>|T|max (kNm)</th><th>|My|max (kNm)</th><th>|Mz|max (kNm)</th>
             </tr></thead><tbody>
               {result.memberForces.map((member) => <tr key={member.memberId}>
                 <td>{member.memberId}</td><td>{number(member.lengthM)}</td>
-                {result.analysis === "material" && <td>{member.effectiveEMpa === undefined ? "—" : number(member.effectiveEMpa, 0)}</td>}
+                {(result.analysis === "material" || result.analysis === "combined") && <td>{member.effectiveEMpa === undefined ? "—" : number(member.effectiveEMpa, 0)}</td>}
                 <td>{number(diagramMaximum(result, "axial", member.memberId, Math.max(Math.abs(member.nStartKn), Math.abs(member.nEndKn))))}</td>
                 <td>{number(diagramMaximum(result, "shearY", member.memberId, Math.max(Math.abs(member.vyStartKn), Math.abs(member.vyEndKn))))}</td>
                 <td>{number(diagramMaximum(result, "shearZ", member.memberId, Math.max(Math.abs(member.vzStartKn), Math.abs(member.vzEndKn))))}</td>
@@ -548,7 +756,22 @@ export default function Frame3DReport({
                 <td>{number(member.axialHistory!.tensileDamage, 4)}</td><td>{number(member.axialHistory!.tangentEMpa, 0)}</td>
               </tr>)}
             </tbody></table>
-            <p className="frame3d-report-note">Alleen de axiale respons bewaart materiaalgeschiedenis; buiging gebruikt nog een secant-E.</p>
+            <p className="frame3d-report-note">De axiale materiaaltoestand wordt per staaf bijgehouden.</p>
+          </section>}
+
+          {result.memberForces.some((member) => member.sectionHistory) && <section>
+            <h2>Doorsnedegeschiedenis</h2>
+            <table className="frame3d-report-wide"><thead><tr>
+              <th>Staaf</th><th>Max. plastische rek</th><th>Max. equivalente plastische rek</th><th>Max. trekschade</th>
+            </tr></thead><tbody>
+              {result.memberForces.filter((member) => member.sectionHistory).map((member) => <tr key={member.memberId}>
+                <td>{member.memberId}</td>
+                <td>{number(member.sectionHistory!.maximumAbsPlasticStrain, 6)}</td>
+                <td>{number(member.sectionHistory!.maximumEquivalentPlasticStrain, 6)}</td>
+                <td>{number(member.sectionHistory!.maximumTensileDamage, 4)}</td>
+              </tr>)}
+            </tbody></table>
+            <p className="frame3d-report-note">De vezeltoestand wordt over beide lokale buigassen geïntegreerd. Momentreleases voldoen in FNL aan nul eindmoment met teruggevonden staafrotaties. Eindveren gebruiken de bestaande FNL-buigroute.</p>
           </section>}
 
           <section>

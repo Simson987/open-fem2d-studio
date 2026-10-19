@@ -38,6 +38,8 @@ python3 src-tauri/crates/native-fem/examples/plate_cases.py hybrid_fnl_cantileve
   src-tauri/target/debug/native-hybrid-plate
 src-tauri/target/debug/native-hybrid-plate \
   < src-tauri/crates/native-fem/examples/hybrid-plate-square-fnl.json
+src-tauri/target/debug/native-hybrid-plate \
+  < src-tauri/crates/native-fem/examples/hybrid-plate-edge-line-load.json
 python3 src-tauri/crates/native-fem/examples/plate_cases.py hybrid_linear_pressure |
   src-tauri/target/debug/native-hybrid-plate
 python3 src-tauri/crates/native-fem/examples/plate_cases.py cement_2021_cantilever |
@@ -46,6 +48,8 @@ python3 src-tauri/crates/native-fem/examples/plate_cases.py cement_2021_shear_ul
   src-tauri/target/debug/native-hybrid-plate
 python3 src-tauri/crates/native-fem/examples/plate_cases.py cement_2021_crack_sls |
   src-tauri/target/debug/native-hybrid-plate
+src-tauri/target/debug/native-three-layer \
+  < src-tauri/crates/native-fem/examples/three-layer-cement-2021.json
 ```
 
 | Geval | Berekening en controle |
@@ -55,10 +59,12 @@ python3 src-tauri/crates/native-fem/examples/plate_cases.py cement_2021_crack_sl
 | `hybrid_navier` | Vierzijdig vrij opgelegde vierkante buigplaat: a=2 m, t=0,1 m, E=30 GPa, ν=0,2, q=1 kN/m². De klassieke middenzakking 0,00406qa⁴/D is 2,49446×10⁻⁵ m. Het 6×6 rooster geeft 2,39106×10⁻⁵ m (4,1% verschil). |
 | `hybrid_fnl_cantilever` | Twee vierhoekige buigelementen met een afnemende E(vezelrek)-curve en een belast/ontlast-pad. De maximale vezelrek en de effectieve E blijven na ontlasten per element bewaard; de uitkraging keert bij deze secantwet elastisch terug naar nulverplaatsing. |
 | `hybrid-plate-square-fnl.json` | Twee vierkanten van 1×1 m vormen een ingeklemde plaat van 2×1 m. Bij een vezelrek boven 10⁻¹⁰ daalt E van 30 naar 15 GPa. Het pad `[1, 0, 0.5]` geeft in de laatste stap E=15 GPa in beide elementen, een vrije hoekzakking van −0,108681 mm en een vrije-DOF-restkracht van minder dan 10⁻¹² relatief. De maximale vezelrek blijft van de eerste volle belastingstap bewaard. Bij volledige belasting is de zakking precies tweemaal die van dezelfde lineair-elastische plaat, omdat de eindmodulus is gehalveerd. |
+| `hybrid-plate-edge-line-load.json` | Twee vakken vormen een 2×1 m ingeklemde plaat. Op de vrije rand loopt de dwarslijnlast lineair van −1 naar −3 kN/m. De lastresultante is −2 kN en het moment van die last om de steunlijn is 4 kNm; de Rust-reacties zijn respectievelijk +2 kN en +4 kNm. |
 | `hybrid_linear_pressure` | Uitkraging van 2×1 m met een per vierhoek bilineair opgegeven druk q(x)=−x kN/m². De analytische totale druk is −2 kN en de integraal van x·q over de plaat is −8/3 kNm; de verticale oplegreacties tellen op tot +2 kN. |
 | `cement_2021_cantilever` | Gebaseerd op figuur 14 van Braam en Blaauwendraad: 10 m breed, 8 m uitkraging, t=0,6 m, q=30 kN/m² en ν=0,2. In dit voorbeeld is **E=30 GPa aangenomen**. Het 2 m rooster geeft bij het eerste elementcentrum (1 m vanaf inklemming) v_y=210 kN/m, gelijk aan q×(8−1). |
 | `cement_2021_shear_uls` | Dezelfde plaat met illustratieve C20/25, z=500 mm, 2.000 mm²/m langs- en 1.200 mm²/m verticale dwarskrachtwapening, tanθ=1. Aan de steun vindt de herleiding v=240 kN/m=q×8; de eerste-generatie EC2-benadering geeft V_Rd,c=205,34 kN/m, benodigde dwarskrachtwapening 1.103,45 mm²/m², en σ_c=0,96 MPa < 7,36 MPa. De maatgevende benodigde bovenwapening in y is 4.689,66 mm²/m en overschrijdt de opgegeven 2.000 mm²/m. |
 | `cement_2021_crack_sls` | Dezelfde geometrie en illustratieve wapening, met **apart aangenomen** BGT-druk q=10 kN/m². De maatgevende scheurwijdte in de bovenste y-wapening is 0,347 mm; bij een opgegeven limiet van 0,30 mm meldt de code een overschrijding. Dit is geen uit het Cement-artikel overgenomen BGT-belasting of scheurresultaat. |
+| `three-layer-cement-2021.json` | Braam en Blaauwendraad (Cement 2021/8), figuur 14: 8 m uitkraging met q=30 kN/m² geeft aan de inklemming `VEd=240 kN/m`. Met expliciet aangenomen `z=500 mm`, `fyd=435 MPa`, `tan(theta)=1` en `vRdc=205,34 kN/m` levert de Rust-drielagenkern `Asw=1103,45 mm²/m²` en `sigma_c=0,96 MPa`; de shear shift voegt 120 kN/m in y-richting toe aan elk huidvlak. Het artikel publiceert de geometrie en dwarskrachtreferentie; de overige ontwerpwaarden zijn zichtbare invoeraannames. |
 
 `reinforcement.limitState` kiest `ultimate` (dwarskracht, betondrukdiagonaal
 en langsstaal) of `service` (scheurwijdte). De gebruiker moet zelf de passende
@@ -86,7 +92,27 @@ De hoogste absolute vezelrek per element blijft gedurende `loadPath` bewaard.
 Dat is een eigen FNL-uitbreiding van de elastische hybride plaat, geen
 scheurmodel of plastische doorsnedewet van Blaauwendraad. Ook zonder E-curve
 rapporteert `maxFibreStrain` de werkelijk bereikte vezelrek; bij ontlasten
-blijft het maximum van het lastpad zichtbaar. Opgegeven
+blijft het maximum van het lastpad zichtbaar.
+
+Een afzonderlijke experimentele `plate_fiber_section`-kern integreert nu
+vlakspanningsvezels over de plaatdikte voor elastische en staalplastische
+N/M-resultanten. Elke vezel heeft een eigen gecommitte toestand; een
+proefberekening wijzigt die toestand pas na expliciete acceptatie. Gerichte
+tests controleren de gesloten elastische A/B/D-stijfheid, plastisch buigen
+en ontlasten tegen fijne diktekwadratuur, en de buigtangent bij 512 lagen
+binnen 0,3% van een onafhankelijk gesplitste integraal. Een lokale inverse
+bepaalt bij `N=0` de krommingen voor opgegeven momenten; analytische
+elastische A/B/D-oplossingen en fijne staalvezelkwadratuur controleren deze
+route. De lokale `N=0`-buigtangent wordt uit `D−CA⁻¹B` berekend en tegen
+de exacte A/B/D-waarde en inverse gevoeligheid getoetst.
+Proeftoestanden uit uiteenlopende lastpadvertakkingen worden apart
+herkend. Alleen de **elastische** laagstapels zijn via `hybridPlateLayered`
+aan de hybride buigplaat en getypeerde apptransportlaag gekoppeld; de
+plastische sectiehistorie nog niet. De lokale `N=0`-condensatie waarborgt
+geen globale membraancompatibiliteit. Betonbuiging blijft
+afgewezen totdat een onderbouwde scheurbandlengte en regularisatie bestaan.
+
+Opgegeven
 `pressureKnM2` en optionele `quadPressures` worden via een 4×4
 Gauss-integratie van bilineaire vlakvormfuncties naar de vier knopen verdeeld.
 Per `quadId` geven `nodalPressureKnM2` de vier extra drukwaarden in de
@@ -100,6 +126,18 @@ elementdwarskracht voor wapening wordt lineair uit buurelementen herleid.
 Op een grof 2-cellen-uitkragingsrooster is de
 herstelde steundwarskracht 1,875 kN/m tegenover 2,0 kN/m uit evenwicht
 (6,25% verschil); op het 2 m Cement-rooster is 240 kN/m gevonden.
+
+Een `edgeLoads`-invoer belast een elementrand met `startKnPerM` en
+`endKnPerM`, gemeten langs lokale rand 0–3 in de volgorde van de quadknopen.
+De solver integreert de lineaire lijnlast met de kubische Hermite-randvormen
+en maakt daar consistente knoopkrachten en knoopmomenten van. De Rust-proef
+belast een vrije plaatrand van 1 m met −1 naar −3 kN/m: de totale
+oplegreactie is 2 kN en het herstelde moment door de lastarm is 4 kNm.
+Voor directe solverinvoer moet een lijnlast per elementrandsegment worden
+opgegeven. De app verdeelt een geometrische trapeziumlast op een van de vier
+buitenranden van een losse rechthoekige 3D-plaat automatisch over de passende
+Q4-randsegmenten. Lijnlasten rond openingen en algemene contouren zijn nog
+niet beschikbaar.
 
 De dwarskrachtcontrole volgt de evenwichtsopzet met betondrukdiagonaal,
 verticale beugels en extra trekkracht in de huiden uit het
@@ -118,10 +156,17 @@ De scheurwijdte volgt de eerste-generatie EC2 7.3.4-vorm
 randspanning `fctm` overschrijdt, schat de code de staalspanning uit de
 elastische plaathuidkracht / opgegeven As en de effectieve trekzone van een
 enkel gewapende doorsnede. De
-[JRC-brugvoorbeelden](https://eurocodes.jrc.ec.europa.eu/sites/default/files/2022-06/Bridge_Design-Eurocodes-Worked_examples.pdf)
-geven een onafhankelijke 7.3.4-referentie. De plaatoplossing zelf krijgt
-hierdoor **geen gescheurde doorsnedestijfheid**; de berekende scheurwijdte
-is dus een benadering. De code past niet automatisch een nationale bijlage,
+[Sétra-gids Eurocode 2 voor betonbruggen](https://piles.cerema.fr/IMG/pdf/setra_guide_methodologique_eurocode_2_application_aux_ponts_routes_en_beton_2008_cle7c2bef.pdf)
+geeft in bijlage VII, §2.3 een directe 7.3.4-referentie voor een 350 mm
+dekconsole. De Rust-proef berekent die volledige controleketen: bij
+`M_frequent=93 kNm/m`, `As=1230 mm²/m`, `c=30 mm`, `φ=14 mm` en `Es/Ec=15`
+volgt `σs=266,98 MPa`, `ρeff=1,422%`, `sr,max=269,31 mm` en
+`wk=0,2157 mm`, overeenkomend met de gepubliceerde `267 MPa`, `1,43%`,
+`269 mm` en `0,22 mm`. De andere directe referentie is het
+[JRC-brugvoorbeeld](https://eurocodes.jrc.ec.europa.eu/sites/default/files/2022-06/Bridge_Design-Eurocodes-Worked_examples.pdf)
+met `σs=94 MPa` en `wk=0,12 mm`. De plaatoplossing zelf krijgt hierdoor
+**geen gescheurde doorsnedestijfheid**; de berekende scheurwijdte is dus een
+benadering. De code past niet automatisch een nationale bijlage,
 belastingcombinatie, scheurgrens of materiaalveiligheidsfactor toe.
 Een kwantitatieve XFEM4U-vergelijking, breukenergie-regularisatie,
 ortotropie en GNL-buiging ontbreken.
@@ -146,7 +191,7 @@ Een combinatie met lastfactoren 1 en 0,5 op respectievelijk `−1` en `−2
 kN/m²` verdubbelt last, reacties en elastische zakking. Voor automatisch eigen
 gewicht levert `ρ = 2500 kg/m³` een extra `qz = −4,905 kN/m²` en een
 reactiesom van `+19,62 kN`. De route weigert momenteel bogen, afgeronde
-openingen, in-vlaklasten, gekoppelde staven, veren en GNL-buiging.
+openingen, gekoppelde staven, veren en GNL-buiging.
 Een asymmetrisch ingeklemde hoek controleert de tekenomzetting van de lokale
 plaatrotaties en reactiemomenten naar globale 3D Rx/Ry; ook een afzonderlijk
 globaal My-puntmoment sluit de onafhankelijke momentensom.
@@ -213,3 +258,52 @@ Ook deze app-toets is een eerste-generatie postprocessor op de berekende
 elastische of secant-E-momenten; hij corrigeert de plaatstijfheid niet voor
 scheuren, zoekt geen extrema tussen steekpunten en stelt geen nationale
 bijlage of combinatiefactoren vast.
+
+Als de Blaauwendraad-drielagencontrole is ingesteld, ondersteunt deze route
+ook in-vlakse knooplasten en `qx`/`qy`-oppervlaktelasten. Dezelfde Rust-Q4-mesh
+wordt aan `native-quad2d` gegeven; constante vlaklasten worden met consistente
+Q4-knooplasten verdeeld. De resulterende spanningen worden vanuit de vier
+Gauss-punten naar dezelfde 21 steekpunten als de buigresultanten
+geïnterpoleerd. De membraanreacties worden samen met de buigreacties in de
+globale balans opgenomen. Zonder drie-lagenconfiguratie weigert de route
+in-vlakse belasting in plaats van membraanresultanten weg te laten.
+
+De app-integratietest bevat een onafhankelijke uniaxiale Q4-trekproef: een
+plaat van 2×2 m, dikte 0,20 m, met in totaal 5 kN trekbelasting op de vrije
+rand. De handberekening geeft `σx = 5.000 N / (200 mm × 2.000 mm) =
+0,0125 MPa` en `Nx = σx × 200 mm = 2,5 kN/m`; alle 21 resulterende
+drielagenpunten moeten die waarde teruggeven. Dezelfde app-test controleert
+een rekafhankelijke `E(ε)`-curve, het doorlopen van `[0,5, 1]` en een
+effectieve E lager dan de beginmodulus.
+
+Dit blijft een ontkoppelde analyse: de Q4-membraan- en hybride buigoplossing
+wisselen geen geometrische stijfheid of buigrek uit. De route levert dus geen
+gekoppeld schaalelement en ondersteunt geen GNL-buiging.
+
+## GNL-shell: onafhankelijke vierkante-plaatreferentie
+
+`geometric_shell_matches_levy_large_deflection_square_plate` reproduceert de
+vierkante-plaatproef uit Samuel Levy, [NACA Report 737 (1942)](https://ntrs.nasa.gov/citations/19930091816),
+tabellen 8–9. De vier randen zijn in het vlak onbeweeglijk; uit het vlak zijn
+ze eenvoudig opgelegd (`w = 0`, vrije rotaties). Voor `ν = 0,316` en
+`p a⁴/(E h⁴) = 51,4` vermeldt Levy `w_center/h = 0,952` (zes-termenreeks).
+Een uniform Q4-rooster in de ondiepe-shellsolver geeft `w_center/h = 0,979106`
+op 4×4, `0,957550` op 8×8 en `0,950787` op 16×16. De afwijking van Levy's
+`0,952` neemt daarmee af van 2,85% via 0,58% tot 0,13%. Op alle drie roosters
+sluit ook de verticale reactieresultante op de totale druklast. Dit is een
+sterke meshverfijningscontrole voor dit benchmarkgeval, maar nog geen
+algemene asymptotische meshconvergentie of ontwerpvalidatie.
+
+De test gebruikt `E = 1000 MPa`, `h = 0,05 m` en `a = 1 m`, dus
+`p = 321,25 kN/m²`. De solver koppelt von-Kármán-membraanrek aan de hybride
+Kirchhoff-buiging en voert een Newton-laststap uit. Het materiaal blijft
+lineair elastisch in deze referentie; secant-E-FNL, staalplastificatie,
+betonscheuren en wapening zijn hiermee niet gevalideerd.
+
+De aparte proef `geometric_shell_secant_modulus_retains_peak_strain_after_unloading`
+controleert de actieve membraanrespons van een 1×1 m Q4-vak met `t = 0,1 m`,
+`ν = 0`, een totale trekkracht van 5 kN en een secantcurve die bij
+`ε = 10⁻¹⁰` van 30 GPa naar 15 GPa daalt. Op de piek is
+`ε = 5/(15·10⁶·0,1)` en de Green-Lagrange-relatie geeft de randverplaatsing
+`u = √(1+2ε)−1`. Na ontlasten naar nul controleert dezelfde proef dat de
+piekrek en lagere E bewaard blijven terwijl de verplaatsing terugkeert naar nul.

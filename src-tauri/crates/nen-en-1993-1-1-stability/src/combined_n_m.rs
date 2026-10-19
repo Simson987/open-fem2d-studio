@@ -1,20 +1,27 @@
 //! NEN-EN 1993-1-1 §6.3.3 — uniform members in bending and axial compression.
 
-use mechanics::ForceStateSnapshot;
-use nen_en_1993_1_1_section::{NamedValue, UnityCheck, CheckStatus};
-use crate::StabilityCalc;
 use crate::interaction_factors::InteractionFactors;
+use crate::StabilityCalc;
+use mechanics::ForceStateSnapshot;
+use nen_en_1993_1_1_section::{CheckStatus, NamedValue, UnityCheck};
 
 pub fn check_combined_n_my(
-    n_ed_kn: f64, n_b_rd_y_kn: f64,
-    m_y_ed_knm: f64, m_b_rd_knm: f64,
-    m_z_ed_knm: f64, m_z_rd_knm: f64,
+    n_ed_kn: f64,
+    n_b_rd_y_kn: f64,
+    m_y_ed_knm: f64,
+    m_b_rd_knm: f64,
+    m_z_ed_knm: f64,
+    m_z_rd_knm: f64,
     factors: &InteractionFactors,
     force_state: ForceStateSnapshot,
 ) -> StabilityCalc {
     let term_n = n_ed_kn / n_b_rd_y_kn;
     let term_my = factors.k_yy * m_y_ed_knm.abs() / m_b_rd_knm;
-    let term_mz = if m_z_rd_knm > 0.0 { factors.k_yz * m_z_ed_knm.abs() / m_z_rd_knm } else { 0.0 };
+    let term_mz = if m_z_rd_knm > 0.0 {
+        factors.k_yz * m_z_ed_knm.abs() / m_z_rd_knm
+    } else {
+        0.0
+    };
     let uc = term_n + term_my + term_mz;
 
     StabilityCalc {
@@ -48,15 +55,22 @@ pub fn check_combined_n_my(
 }
 
 pub fn check_combined_n_mz(
-    n_ed_kn: f64, n_b_rd_z_kn: f64,
-    m_y_ed_knm: f64, m_b_rd_knm: f64,
-    m_z_ed_knm: f64, m_z_rd_knm: f64,
+    n_ed_kn: f64,
+    n_b_rd_z_kn: f64,
+    m_y_ed_knm: f64,
+    m_b_rd_knm: f64,
+    m_z_ed_knm: f64,
+    m_z_rd_knm: f64,
     factors: &InteractionFactors,
     force_state: ForceStateSnapshot,
 ) -> StabilityCalc {
     let term_n = n_ed_kn / n_b_rd_z_kn;
     let term_my = factors.k_zy * m_y_ed_knm.abs() / m_b_rd_knm;
-    let term_mz = if m_z_rd_knm > 0.0 { factors.k_zz * m_z_ed_knm.abs() / m_z_rd_knm } else { 0.0 };
+    let term_mz = if m_z_rd_knm > 0.0 {
+        factors.k_zz * m_z_ed_knm.abs() / m_z_rd_knm
+    } else {
+        0.0
+    };
     let uc = term_n + term_my + term_mz;
 
     StabilityCalc {

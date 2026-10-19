@@ -10,7 +10,11 @@ fn snapshot(my_ed_knm: f64, vz_ed_kn: f64) -> ForceStateSnapshot {
     ForceStateSnapshot {
         combination_id: 21,
         position_mm: 4000.0,
-        forces: InternalForces { my_ed: my_ed_knm, vz_ed: vz_ed_kn, ..Default::default() },
+        forces: InternalForces {
+            my_ed: my_ed_knm,
+            vz_ed: vz_ed_kn,
+            ..Default::default()
+        },
     }
 }
 

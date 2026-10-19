@@ -138,7 +138,12 @@ pub fn bijlage_f(sx: f64, sz: f64, txy: f64) -> BijlageF {
     let (ftx, fty, scd, tak) = if s_x <= tau {
         (tau - s_x, tau - s_y, 2.0 * tau, "F.2–F.4")
     } else {
-        (0.0, tau * tau / s_x - s_y, s_x * (1.0 + (tau / s_x).powi(2)), "F.5–F.7")
+        (
+            0.0,
+            tau * tau / s_x - s_y,
+            s_x * (1.0 + (tau / s_x).powi(2)),
+            "F.5–F.7",
+        )
     };
     let (f_td_x, f_td_z) = if x_is_z { (fty, ftx) } else { (ftx, fty) };
     BijlageF {
@@ -176,7 +181,9 @@ fn valideer_mesh(input: &PlateCheckInput) -> Result<(), String> {
     use std::collections::BTreeSet;
 
     if let Some(fout) = &input.mesh_fout {
-        return Err(format!("Betonmesh: invoerbouwer meldt onbetrouwbare meshmetadata: {fout}; niet getoetst."));
+        return Err(format!(
+            "Betonmesh: invoerbouwer meldt onbetrouwbare meshmetadata: {fout}; niet getoetst."
+        ));
     }
     let ids = input.expected_element_ids.as_ref().ok_or_else(||
         "Betonmesh: onafhankelijke expected_element_ids ontbreekt; bereken opnieuw met volledige meshmetadata. Niet getoetst.".to_string()
@@ -189,7 +196,10 @@ fn valideer_mesh(input: &PlateCheckInput) -> Result<(), String> {
         return Err("Betonmesh: geen UGT-combinaties aangeleverd; niet getoetst.".into());
     }
     let mut combinaties = BTreeSet::new();
-    for (soort, cs) in [("UGT", &input.combinations), ("frequente BGT", &input.frequente_combinaties)] {
+    for (soort, cs) in [
+        ("UGT", &input.combinations),
+        ("frequente BGT", &input.frequente_combinaties),
+    ] {
         for c in cs {
             if !combinaties.insert(c.combination_id) {
                 return Err(format!("Betonmesh: dubbel combinatie-id {} bij {soort}; UGT/BGT moeten afzonderlijke ids hebben. Niet getoetst.", c.combination_id));
@@ -276,9 +286,9 @@ pub fn toets(input: &PlateCheckInput) -> PlateCheckResult {
                 .to_string(),
         );
     }
-    let nodig = wapening
-        .iter()
-        .any(|w| w.n_td_x_kn_per_m > WAPENING_DREMPEL * t || w.n_td_z_kn_per_m > WAPENING_DREMPEL * t);
+    let nodig = wapening.iter().any(|w| {
+        w.n_td_x_kn_per_m > WAPENING_DREMPEL * t || w.n_td_z_kn_per_m > WAPENING_DREMPEL * t
+    });
     let max_x = wapening
         .iter()
         .max_by(|a, b| a.n_td_x_kn_per_m.total_cmp(&b.n_td_x_kn_per_m))
@@ -403,19 +413,33 @@ pub fn toets(input: &PlateCheckInput) -> PlateCheckResult {
         elementen: v.per_element,
         niet_getoetst,
         geweigerd: None,
-        wapening: Some(PlaatWapening { max_x, max_z, elementen: wapening }),
+        wapening: Some(PlaatWapening {
+            max_x,
+            max_z,
+            elementen: wapening,
+        }),
         notes,
     }
 }
 
 fn nv(symbol: &str, value: f64, unit: &str) -> NamedValue {
-    NamedValue { symbol: symbol.to_string(), value, unit: unit.to_string() }
+    NamedValue {
+        symbol: symbol.to_string(),
+        value,
+        unit: unit.to_string(),
+    }
 }
 
 fn afleiding(id: &str, p: &Punt, klasse: &ConcreteClass, s: &Sterkte, t: f64) -> ResistanceCalc {
     let el = &p.element;
     let f = bijlage_f(el.sigma_x_mpa, el.sigma_y_mpa, el.tau_xy_mpa);
-    let richting = |z: bool| if z { "z (verticaal)" } else { "x (horizontaal)" };
+    let richting = |z: bool| {
+        if z {
+            "z (verticaal)"
+        } else {
+            "x (horizontaal)"
+        }
+    };
 
     let mut stappen = vec![
         Deelstap {
@@ -470,14 +494,26 @@ fn afleiding(id: &str, p: &Punt, klasse: &ConcreteClass, s: &Sterkte, t: f64) ->
         },
     ];
 
-    let (titel, artikel, formule, ed_sym, rd_sym, rd, mut notes) = if !f.gescheurd() && !f.geen_wapening {
+    let (titel, artikel, formule, ed_sym, rd_sym, rd, mut notes) = if !f.gescheurd()
+        && !f.geen_wapening
+    {
         stappen.push(Deelstap {
             id: "gebied".to_string(),
             titel: "Geen trek in dwarsrichting".to_string(),
             symbol: String::new(),
-            article: format!("bijlage F, F.1(4) {}", if f.tak == "F.2–F.4" { "(F.2)–(F.4)" } else { "(F.5)–(F.7)" }),
+            article: format!(
+                "bijlage F, F.1(4) {}",
+                if f.tak == "F.2–F.4" {
+                    "(F.2)–(F.4)"
+                } else {
+                    "(F.5)–(F.7)"
+                }
+            ),
             formula_latex: "f'_{tdx} = 0,\\quad f'_{tdy} = 0".to_string(),
-            ingevuld_latex: format!("\\sigma_{{cd}} = {}\\ \\mathrm{{N/mm^2}}", getal(f.sigma_c, 3)),
+            ingevuld_latex: format!(
+                "\\sigma_{{cd}} = {}\\ \\mathrm{{N/mm^2}}",
+                getal(f.sigma_c, 3)
+            ),
             variables: vec![],
             value: Some(f.sigma_c),
             unit: "N/mm²".to_string(),
@@ -527,7 +563,11 @@ fn afleiding(id: &str, p: &Punt, klasse: &ConcreteClass, s: &Sterkte, t: f64) ->
         )
     } else {
         // Terug naar de assen van bijlage F voor de ingevulde regel.
-        let (ftx, fty) = if f.x_is_z { (f.f_td_z, f.f_td_x) } else { (f.f_td_x, f.f_td_z) };
+        let (ftx, fty) = if f.x_is_z {
+            (f.f_td_z, f.f_td_x)
+        } else {
+            (f.f_td_x, f.f_td_z)
+        };
         let (fx_l, fy_l, sc_l, art) = if f.tak == "F.2–F.4" {
             (
                 "f'_{tdx} = |\\tau_{Edxy}| - \\sigma_{Edx}",
@@ -576,7 +616,9 @@ fn afleiding(id: &str, p: &Punt, klasse: &ConcreteClass, s: &Sterkte, t: f64) ->
             variables: vec![],
             value: Some(s.nu_accent),
             unit: "-".to_string(),
-            notes: vec!["NB: \"De waarde van ν' moet gelijk aan 1 − f_ck/250 zijn genomen.\"".to_string()],
+            notes: vec![
+                "NB: \"De waarde van ν' moet gelijk aan 1 − f_ck/250 zijn genomen.\"".to_string(),
+            ],
         });
         stappen.push(Deelstap {
             id: "sigma_rd_max".to_string(),
@@ -584,7 +626,11 @@ fn afleiding(id: &str, p: &Punt, klasse: &ConcreteClass, s: &Sterkte, t: f64) ->
             symbol: "\\sigma_{Rd,max}".to_string(),
             article: "art. 6.5.2(2) (6.56)".to_string(),
             formula_latex: "\\sigma_{Rd,max} = 0{,}6\\,\\nu'\\,f_{cd}".to_string(),
-            ingevuld_latex: format!("0{{,}}6 \\cdot {} \\cdot {}", getal(s.nu_accent, 3), getal(s.f_cd, 3)),
+            ingevuld_latex: format!(
+                "0{{,}}6 \\cdot {} \\cdot {}",
+                getal(s.nu_accent, 3),
+                getal(s.f_cd, 3)
+            ),
             variables: vec![],
             value: Some(s.sigma_rd_max),
             unit: "N/mm²".to_string(),
@@ -604,7 +650,10 @@ fn afleiding(id: &str, p: &Punt, klasse: &ConcreteClass, s: &Sterkte, t: f64) ->
     let uc = ed / rd;
     notes.insert(
         0,
-        format!("Element {} in combinatie {} is maatgevend voor deze toets.", el.element_id, p.combination_id),
+        format!(
+            "Element {} in combinatie {} is maatgevend voor deze toets.",
+            el.element_id, p.combination_id
+        ),
     );
     let _ = id;
 
@@ -622,8 +671,17 @@ fn afleiding(id: &str, p: &Punt, klasse: &ConcreteClass, s: &Sterkte, t: f64) ->
         deelstappen: stappen,
         value: ed,
         unit: "N/mm²".to_string(),
-        uc: Some(UnityCheck { ed, rd, uc, formula_latex: format!("{ed_sym} / {rd_sym}") }),
-        status: if uc <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk },
+        uc: Some(UnityCheck {
+            ed,
+            rd,
+            uc,
+            formula_latex: format!("{ed_sym} / {rd_sym}"),
+        }),
+        status: if uc <= 1.0 {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::NotOk
+        },
         notes,
     }
 }

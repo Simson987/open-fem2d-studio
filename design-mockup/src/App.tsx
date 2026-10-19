@@ -21,18 +21,20 @@ import ReportPreview, { DetachedReportPreview } from "./components/panels/Report
 import { ReportWindowSync } from "./components/report/reportSync";
 import type { ReportData } from "./components/report/ReportDataContext";
 import InsightsView from "./components/panels/InsightsView";
+import PrestressedBeamView from "./components/panels/PrestressedBeamView";
+import VolumeWorkbench from "./components/volume3d/VolumeWorkbench";
 import CheckPanel, { CheckPanelToggle } from "./components/panels/CheckPanel";
 import FemProjectTree from "./components/fem/FemProjectTree";
 import FemProperties from "./components/fem/FemProperties";
 import FemCanvas from "./components/fem/FemCanvas";
-import { FRAME3D_SUPPORT_PRESETS, addFrame3DSurfaceLoad, setFrame3DSupport, withFrame3DSelfWeight, type Frame3DModel, type Frame3DSupportPreset } from "./components/frame3d/frame3dModel";
+import { FRAME3D_SUPPORT_PRESETS, addFrame3DSurfaceLoad, frame3DLoadedCaseIds, setFrame3DSupport, withFrame3DSelfWeight, type Frame3DModel, type Frame3DSupportPreset } from "./components/frame3d/frame3dModel";
 import { frame3dHistoryReducer, type Frame3DEditMeta } from "./components/frame3d/frame3dHistory";
 import type { Frame3DTool, Frame3DView } from "./components/frame3d/frame3dCommands";
 import type { Frame3DSelection } from "./components/frame3d/frame3dSelection";
 import type { Frame3DCameraState, Frame3DViewSet } from "./components/frame3d/frame3dViewSets";
 import { readFrame3DVisibility, saveFrame3DVisibility } from "./components/frame3d/frame3dVisibility";
 import { convert2DTo3D } from "./components/frame3d/convert2DTo3D";
-import { solveFrame3D, solveFrame3DCombination, type Frame3DSolveResult } from "./components/frame3d/frame3dSolver";
+import { frame3DAnalysisForProject, solveFrame3D, solveFrame3DCombination, type Frame3DAnalysisKind, type Frame3DSolveResult } from "./components/frame3d/frame3dSolver";
 import Frame3DReport from "./components/frame3d/Frame3DReport";
 import Frame3DExplorer from "./components/frame3d/Frame3DExplorer";
 import Frame3DProperties from "./components/frame3d/Frame3DProperties";
@@ -59,7 +61,7 @@ import LoadCaseTabBar from "./components/fem/LoadCaseTabBar";
 import LoadCasesDialog from "./components/fem/LoadCasesDialog";
 import WindGeneratorDialog from "./lib/wind/WindGeneratorDialog";
 import WaterAccumulation2DDialog from "./components/fem/WaterAccumulation2DDialog";
-import { resolveSection } from "./lib/sectionResolver";
+import { resolveSection, TIMBER_G_MEAN } from "./lib/sectionResolver";
 import { windUitgangspunten } from "./lib/wind/windGenerator";
 import { useWindGenerator } from "./stores/windStore";
 import { pasRapportSnapshotToe, rapportSnapshot, useReportStore } from "./stores/reportStore";
@@ -74,7 +76,8 @@ import type { GridSettings, Tool } from "./components/fem/femTypes";
 import { DEFAULT_GRID, nonlinearVoorBestand } from "./components/fem/femTypes";
 import type { SolverResult } from "./components/fem/solver/types";
 import { solveAllCases, solveAllCasesNonlinear } from "./components/fem/solver/solver";
-import { solveAllCasesNativeMembrane2D, solveAllCombinationsNativeMembrane2D } from "./components/fem/solver/nativeMembraneRoute";
+import { solveAllCasesNativeMembrane2D, solveAllCombinationsNativeMembrane2D,
+  voegNativeDrieLagencontroleToe } from "./components/fem/solver/nativeMembraneRoute";
 import { solveAllCasesNativeFrame2D, solveAllCombinationsNativeFrame2D } from "./components/fem/solver/nativeFrame2DRoute";
 import {
   eersteOrdeCombinatieResultaat,
@@ -109,7 +112,7 @@ import {
 } from "./lib/betonStijfheid";
 import { bepaalKruipPerStaaf, kruipWaardenPerStaaf, modelHeeftBetonstaaf } from "./lib/kruipcoefficient";
 import { bepaalOnbepaaldheid } from "./lib/statischeOnbepaaldheid";
-import { losEindtoestandOp } from "./lib/houtEindstijfheid";
+import { losEindtoestandOp, losEindtoestandNativeOp } from "./lib/houtEindstijfheid";
 import { DEFAULT_DISPLAY_FLAGS, type DisplayFlags } from "./components/fem/FemResultsOverlay";
 import ZichtbaarheidVenster from "./components/fem/ZichtbaarheidVenster";
 import { WEERGAVE_VOORKEUREN_SLEUTEL, metVoorkeuren, voorkeurenVan } from "./lib/zichtbaarheid";
@@ -364,6 +367,13 @@ function App() {
   const [frame3dChecksRunning, setFrame3dChecksRunning] = useState(false);
   const [frame3dChecksError, setFrame3dChecksError] = useState<string | null>(null);
   const frame3dSolveGenerationRef = useRef(0);
+  const frame3dLargeSolveRef = useRef<{
+    model: Frame3DModel;
+    analysis: Frame3DAnalysisKind;
+    generation: number;
+    combinationIds: ReadonlySet<number>;
+  } | null>(null);
+  const frame3dCombinationRequestRef = useRef(0);
   const [visibility3DOpen, setVisibility3DOpen] = useState(false);
   const [frame3dVisibility, setFrame3dVisibility] = useState(readFrame3DVisibility);
   // De Model-tab is een weergavestand; het tonen van lastsymbolen is een
@@ -373,6 +383,8 @@ function App() {
   useEffect(() => saveFrame3DVisibility(frame3dVisibility), [frame3dVisibility]);
   useEffect(() => {
     frame3dSolveGenerationRef.current += 1;
+    frame3dLargeSolveRef.current = null;
+    frame3dCombinationRequestRef.current += 1;
     setFrame3dResult(null);
     setFrame3dCaseResults(new Map());
     setFrame3dCombinationResults(new Map());
@@ -420,6 +432,8 @@ function App() {
   useEffect(() => {
     if (modelDimension !== "3d") return;
     frame3dSolveGenerationRef.current += 1;
+    frame3dLargeSolveRef.current = null;
+    frame3dCombinationRequestRef.current += 1;
     setFrame3dResult(null);
     setFrame3dCaseResults(new Map());
     setFrame3dCombinationResults(new Map());
@@ -1639,9 +1653,6 @@ function App() {
       nodes: fem.nodes, beams: fem.beams, supports: fem.supports, plates: fem.plates,
       loads: fem.loads, loadCases: fem.loadCases,
     });
-    if (fem.actieveCombinaties.some(combination => combination.eindtoestand !== undefined)) {
-      throw new Error("Eindstijfheidvarianten zijn nog niet ondersteund door de Rust 2D-plaatroute.");
-    }
     const multiInput = bouwMultiInput({
       nodes: fem.nodes, beams: fem.beams, supports: fem.supports, plates: fem.plates,
       loadCases: fem.loadCases, loads: fem.loads,
@@ -1651,25 +1662,36 @@ function App() {
       scheefstandRichting: fem.scheefstandRichting,
       axialMaterialLoadPath: fem.axialMaterialLoadPath,
     });
+    // The concrete §5.8.6 iteration below updates each member's secant EI
+    // from the Rust M-N-κ service. Its seed solve is geometric P-Δ; applying
+    // the separate axial material law here would describe another analysis.
     const analysis = fem.analysetype === "eersteOrde" ? "linear"
-      : fem.analysetype === "tweedeOrdeFysisch" || fem.analysetype === "axiaalFysischRust"
-        ? "combined" : "geometric";
-    const nativeFrame = fem.plates.length === 0 && fem.beams.length > 0;
-    if (nativeFrame && fem.analysetype === "tweedeOrdeFysisch") {
-      throw new Error("Gescheurde buigdoorsneden van beton zijn nog niet gekoppeld aan de Rust 2D-raamwerkroute.");
-    }
+      : fem.analysetype === "axiaalFysischRust" ? "combined" : "geometric";
+    const nativeFrame = fem.beams.length > 0;
     if (!nativeFrame && fem.analysetype === "axiaalFysischRust")
       throw new Error("Axiale Rust-FNL vereist een zuiver 2D-raamwerk zonder platen.");
-    if (nativeFrame && fem.analysetype === "axiaalFysischRust"
+    if (nativeFrame && fem.plates.length === 0 && fem.analysetype === "axiaalFysischRust"
         && !fem.beams.some(beam => beam.axialMaterialLaw))
       throw new Error("Kies bij ten minste één staaf een axiale staal- of betonwet voor Rust-FNL.");
     const perCase = nativeFrame
       ? await solveAllCasesNativeFrame2D(multiInput, analysis)
       : await solveAllCasesNativeMembrane2D(multiInput, analysis);
     if (generatie !== rekenGeneratieRef.current) return null;
+    if (fem.actieveCombinaties.some(combination => combination.eindtoestand !== undefined)) {
+      if (analysis !== "linear") {
+        throw new Error("Eindstijfheidvarianten horen bij een eerste-orde-berekening en zijn niet beschikbaar bij Rust GNL/FNL.");
+      }
+      await losEindtoestandNativeOp(multiInput, perCase, fem.actieveCombinaties, fem.eindstijfheid,
+        adjustedInput => nativeFrame
+          ? solveAllCasesNativeFrame2D(adjustedInput, "linear")
+          : solveAllCasesNativeMembrane2D(adjustedInput, "linear"));
+      if (generatie !== rekenGeneratieRef.current) return null;
+    }
     const combinationResults = analysis === "linear"
-      ? new Map(fem.actieveCombinaties.map(combination =>
-        [combination.id, combineResults(combination, perCase)]))
+      ? new Map(await Promise.all(fem.actieveCombinaties.map(async combination => [
+        combination.id,
+        await voegNativeDrieLagencontroleToe(multiInput, combineResults(combination, perCase)),
+      ] as const)))
       : nativeFrame
         ? await solveAllCombinationsNativeFrame2D(multiInput, fem.actieveCombinaties,
           analysis === "combined" ? "combined" : "geometric")
@@ -1708,7 +1730,7 @@ function App() {
     perCase: Map<number, SolverResult>;
     combinationResults: Map<number, SolverResult>;
     envelope: ReturnType<typeof computeEnvelope>;
-  }, generatie: number, multiInput: MultiInput | null) => {
+  }, generatie: number, multiInput: MultiInput | null, nativeRust = false) => {
     const bewaak = () => {
       if (generatie !== rekenGeneratieRef.current) throw new Error("Verouderde rekengang");
     };
@@ -1780,7 +1802,7 @@ function App() {
 
     // Dezelfde model-invoer waarmee de synchrone gang gerekend heeft — niet
     // opnieuw opgebouwd, zodat er geen tweede vertaling van het model bestaat.
-    const input = getSecondOrderInput(outputs.perCase);
+    const input = getSecondOrderInput(outputs.perCase) ?? multiInput;
     if (!input) {
       notifyWarning(
         i18next.t("common:app.nonlinear.title"),
@@ -1788,15 +1810,27 @@ function App() {
       );
       return null;
     }
+    // The legacy second-order solver stores its input beside per-case results.
+    // Native results deliberately have no legacy cache, so use the exact input
+    // retained by the native route and obtain first-order cases from Rust for
+    // the EC2 creep ratio (5.19).
+    const firstOrderPerCase = nativeRust
+      ? await solveAllCasesNativeFrame2D(input, "linear")
+      : outputs.perCase;
+    bewaak();
     // Het spoor voor het rapporthoofdstuk: per combinatie de segmenttabel van
     // de laatste ronde plus het convergentieverloop. Wordt pas weggeschreven
     // als ALLE combinaties gelukt zijn — een half spoor hoort bij een
     // krachtsverdeling die er niet is.
     const spoor: StijfheidCombinatie[] = [];
+    const nativeCombinationResults = new Map<number, SolverResult>();
     // De staven die zonder kruipcoëfficiënt zijn gerekend (art. 3.1.4 niet
     // opgegeven). Verzameld over ALLE combinaties, want de melding erna moet
     // de staaf noemen en niet de combinatie.
     const zonderKruip = new Set<number>();
+    const nativeIterationAnalysis = nativeRust && fem.plates.some(plate =>
+      !!plate.nonlinearLaw || (plate.modulusCurve?.length ?? 0) > 0)
+      ? "combined" : "geometric";
     try {
       // ── (5.19): EERST de eerste orde ─────────────────────────────────────
       // EN 1992-1-1 5.8.4(2) φ_ef = φ(∞,t₀)·M₀Eqp/M₀Ed met EERSTE-ORDE-momenten
@@ -1811,7 +1845,9 @@ function App() {
       // issue #35) leest daarna dezelfde oplossingen in plaats van ze opnieuw
       // te rekenen. `input` is precies de invoer van die cache.
       const losEersteOrde = (_input: MultiInput, c: Parameters<typeof eersteOrdeCombinatieResultaat>[1]) =>
-        eersteOrdeCombinatieResultaat(outputs.perCase, c) ?? null;
+        nativeRust
+          ? combineResults(c as Parameters<typeof combineResults>[0], firstOrderPerCase)
+          : eersteOrdeCombinatieResultaat(outputs.perCase, c) ?? null;
       const quasiBlijvend = metKruip
         ? eersteOrdeQuasiBlijvend(
             input,
@@ -1854,11 +1890,28 @@ function App() {
           kruip519,
           // De bijlage van het project gaat de kromme van 5.8.6(3) in (normnaad).
           bijlage: bijlageVanProject(fem.nationaleBijlage),
+          ...(nativeRust ? {
+            losOp: async (iterationInput, iterationCombo) => {
+              const solved = await solveAllCombinationsNativeFrame2D(iterationInput, [{
+                id: iterationCombo.id,
+                name: iterationCombo.name,
+                type: "uls",
+                formula: "",
+                factors: iterationCombo.factors,
+                scheefstandRichting: iterationCombo.scheefstandRichting,
+              }], nativeIterationAnalysis);
+              return solved.get(iterationCombo.id) ?? null;
+            },
+          } : {}),
         });
         bewaak();
-        if (uit.zonderLasten) continue;
+        if (uit.zonderLasten) {
+          if (nativeRust) nativeCombinationResults.set(combo.id, combineResults(combo, outputs.perCase));
+          continue;
+        }
         for (const id of uit.zonderKruipcoefficient) zonderKruip.add(id);
-        zetCombinatieResultaat(outputs.perCase, combo, uit.resultaat);
+        if (nativeRust) nativeCombinationResults.set(combo.id, uit.resultaat);
+        else zetCombinatieResultaat(outputs.perCase, combo, uit.resultaat);
         spoor.push({
           combinatieId: combo.id,
           combinatieNaam: combo.name,
@@ -1934,9 +1987,12 @@ function App() {
       })),
     });
     const combinationResults = new Map(
-      fem.actieveCombinaties.map(c => [c.id, combineResults(c, outputs.perCase)]),
+      fem.actieveCombinaties.map(c => [c.id, nativeRust
+        ? nativeCombinationResults.get(c.id) ?? combineResults(c, outputs.perCase)
+        : combineResults(c, outputs.perCase)]),
     );
-    const envelope = computeEnvelope(fem.actieveCombinaties, outputs.perCase);
+    const envelope = computeEnvelope(fem.actieveCombinaties, outputs.perCase,
+      nativeRust ? combinationResults : undefined);
     const stabiliteit = multiInput
       ? bepaalStabiliteit(multiInput, combinationResults, generatie)
       : undefined;
@@ -2097,11 +2153,12 @@ function App() {
         setSolverStatus({ kind: "solved", at: Date.now() });
         return { gelukt: true, fysisch: "gedraaid" };
       }
-      if (fem.analysetype === "tweedeOrdeFysisch" && preference !== "openaec-native-fem") {
+      if (fem.analysetype === "tweedeOrdeFysisch") {
         // De toetsing wacht op de fysisch niet-lineaire ronde: hij hoort op de
         // gescheurde krachtsverdeling te draaien, niet op de ongescheurde
         // ertussenin.
-        const verse = await rekenFysischNietlineair(outputs, generatie, laatsteMultiInputRef.current);
+        const verse = await rekenFysischNietlineair(outputs, generatie, laatsteMultiInputRef.current,
+          preference === "openaec-native-fem");
         if (!actueel()) return verouderd();
         if (verse === null && rekenFoutRef.current !== null) {
           // De ronde MISLUKTE: de resultaten zijn gewist en de fout staat er.
@@ -2193,7 +2250,8 @@ function App() {
   const handleSolve = useCallback(async () => {
     const analysis: SolverAnalysisKind = modelDimension === "3d"
       ? fem.analysetype === "eersteOrde" ? "linear"
-        : fem.analysetype === "tweedeOrdeFysisch" ? "material-nonlinear" : "p-delta"
+        : fem.analysetype === "tweedeOrdeFysisch" || fem.analysetype === "axiaalFysischRust"
+          ? "material-nonlinear" : "p-delta"
       : fem.analysetype === "eersteOrde"
         ? "linear"
         : fem.analysetype === "tweedeOrdeFysisch" || fem.analysetype === "axiaalFysischRust"
@@ -2201,11 +2259,27 @@ function App() {
           : "p-delta";
     let selectedSolver: SolverDescriptor;
     try {
-      const preference = normaliseSolverPreference(
+      const requestedPreference = normaliseSolverPreference(
         await getSetting<unknown>(SOLVER_PREFERENCE_KEY, "automatic"),
       );
-      if (fem.analysetype === "axiaalFysischRust") {
-        if (modelDimension === "3d") throw new Error("Axiale Rust-FNL is alleen voor 2D-raamwerken beschikbaar.");
+      const hasTimberFrame = modelDimension === "3d" && frame3dCalculationModel.beams.some(
+        (beam) => !!beam.material && beam.material in TIMBER_G_MEAN,
+      );
+      if (hasTimberFrame && requestedPreference !== "automatic" && requestedPreference !== "openaec-native-fem") {
+        throw new Error("Houten 3D-staven vereisen Open FEM Rust vanwege de afzonderlijke Gmean. Kies deze solver in Instellingen → Berekening.");
+      }
+      const preference = hasTimberFrame && requestedPreference === "automatic"
+        ? "openaec-native-fem" : requestedPreference;
+      if (modelDimension === "3d"
+          && (fem.analysetype === "tweedeOrdeFysisch" || fem.analysetype === "axiaalFysischRust")
+          && preference !== "openaec-native-fem") {
+        throw new Error("Kies Open FEM Rust in Instellingen → Berekening voor de experimentele 3D-GNL/FNL-analyse.");
+      }
+      if (modelDimension === "3d" && fem.analysetype === "axiaalFysischRust"
+          && (frame3dCalculationModel.plates?.length ?? 0) > 0) {
+        throw new Error("3D-axiale Rust-FNL is voorlopig alleen beschikbaar voor een raamwerk zonder platen.");
+      }
+      if (fem.analysetype === "axiaalFysischRust" && modelDimension !== "3d") {
         if (preference !== "openaec-native-fem")
           throw new Error("Kies Open FEM Rust in Instellingen → Berekening voor axiale FNL.");
       }
@@ -2214,9 +2288,12 @@ function App() {
         dimension: modelDimension,
         analysis,
         elementFamilies: modelDimension === "3d"
-          ? (frame3dCalculationModel.plates?.length ?? 0) > 0
-            ? frame3dCalculationModel.beams.length > 0 ? ["frame", "plate"] : ["plate"]
-            : ["frame"]
+          ? (frame3dCalculationModel.volumes?.length ?? 0) > 0
+            ? ["solid", ...(frame3dCalculationModel.beams.length > 0 ? ["frame" as const] : []),
+              ...((frame3dCalculationModel.plates?.length ?? 0) > 0 ? ["plate" as const] : [])] as const
+            : (frame3dCalculationModel.plates?.length ?? 0) > 0
+              ? frame3dCalculationModel.beams.length > 0 ? ["frame", "plate"] : ["plate"]
+              : ["frame"]
           : fem.plates.length > 0 ? fem.beams.length > 0 ? ["frame", "plate"] : ["plate"] : ["frame"],
       });
     } catch (cause) {
@@ -2233,15 +2310,11 @@ function App() {
       setSolverStatus({ kind: "rekenen" });
       setFrame3dSolveError(null);
       const generation = ++frame3dSolveGenerationRef.current;
+      frame3dLargeSolveRef.current = null;
+      frame3dCombinationRequestRef.current += 1;
       try {
         if (frame3dCalculation.selfWeightError) throw new Error(frame3dCalculation.selfWeightError);
-        const loadedCaseIds = new Set<number>([
-          ...(frame3dCalculationModel.loads ?? []).map((load) => load.caseId ?? 1),
-          ...(frame3dCalculationModel.memberLoads ?? []).map((load) => load.caseId ?? 1),
-          ...(frame3dCalculationModel.memberPointLoads ?? []).map((load) => load.caseId ?? 1),
-          ...(frame3dCalculationModel.thermalLoads ?? []).map((load) => load.caseId ?? 1),
-          ...(frame3dCalculationModel.surfaceLoads ?? []).map((load) => load.caseId ?? 1),
-        ]);
+        const loadedCaseIds = frame3DLoadedCaseIds(frame3dCalculationModel);
         if ((frame3dCalculationModel.supports ?? []).some((support) =>
           Object.keys(support.prescribed ?? {}).length > 0)) {
           // Opgelegde verplaatsingen zijn een modelrandvoorwaarde en werken in
@@ -2250,20 +2323,41 @@ function App() {
           loadedCaseIds.add(fem.activeLoadCaseId);
         }
         if (loadedCaseIds.size === 0) throw new Error("Voeg minstens één 3D-belasting of opgelegde verplaatsing toe.");
-        const frame3dAnalysis = fem.analysetype === "eersteOrde" ? "linear"
-          : fem.analysetype === "tweedeOrdeFysisch" ? "material" : "p-delta";
+        const frame3dAnalysis = frame3DAnalysisForProject(frame3dCalculationModel, fem.analysetype);
         const combinations = fem.combinations.filter((combination) =>
           [...loadedCaseIds].some((caseId) => (combination.factors.get(caseId) ?? 0) !== 0));
 
         // Elk geval blijft afzonderlijk beschikbaar voor invoercontrole. Iedere
         // combinatie gaat als één volledige lastvector door de gekozen kern;
         // tweede-orde-uitkomsten worden dus nooit gesuperponeerd.
-        const [casePairs, combinationPairs] = await Promise.all([
-          Promise.all([...loadedCaseIds].map(async (caseId) =>
-            [caseId, await solveFrame3D(frame3dCalculationModel, caseId, frame3dAnalysis, selectedSolver.id)] as const)),
-          Promise.all(combinations.map(async (combination) =>
-            [combination.id, await solveFrame3DCombination(frame3dCalculationModel, combination.factors, frame3dAnalysis, selectedSolver.id)] as const)),
-        ]);
+        let casePairs: Array<readonly [number, Frame3DSolveResult]>;
+        let combinationPairs: Array<readonly [number, Frame3DSolveResult]>;
+        const massiveVolumes = (frame3dCalculationModel.volumes?.length ?? 0) >= 50_000;
+        if ((frame3dCalculationModel.volumes?.length ?? 0) >= 10_000) {
+          // Each native run owns its mesh, matrix-free cache and complete stress result.
+          // Do not launch every large combination at once and multiply peak memory.
+          casePairs = [];
+          combinationPairs = [];
+          for (const caseId of loadedCaseIds) {
+            if (generation !== frame3dSolveGenerationRef.current) break;
+            casePairs.push([caseId, await solveFrame3D(frame3dCalculationModel, caseId,
+              frame3dAnalysis, selectedSolver.id)]);
+          }
+          if (!massiveVolumes) {
+            for (const combination of combinations) {
+              if (generation !== frame3dSolveGenerationRef.current) break;
+              combinationPairs.push([combination.id, await solveFrame3DCombination(frame3dCalculationModel,
+                combination.factors, frame3dAnalysis, selectedSolver.id)]);
+            }
+          }
+        } else {
+          [casePairs, combinationPairs] = await Promise.all([
+            Promise.all([...loadedCaseIds].map(async (caseId) =>
+              [caseId, await solveFrame3D(frame3dCalculationModel, caseId, frame3dAnalysis, selectedSolver.id)] as const)),
+            Promise.all(combinations.map(async (combination) =>
+              [combination.id, await solveFrame3DCombination(frame3dCalculationModel, combination.factors, frame3dAnalysis, selectedSolver.id)] as const)),
+          ]);
+        }
         if (generation !== frame3dSolveGenerationRef.current) {
           const message = `De 3D-berekening is vervallen doordat model of rekeninstellingen tijdens de berekening wijzigden (generatie ${generation} → ${frame3dSolveGenerationRef.current}).`;
           setFrame3dSolveError(message);
@@ -2277,6 +2371,12 @@ function App() {
         if (!result) throw new Error("De 3D-rekenkern leverde geen resultaat voor de aanwezige belastingen.");
         setFrame3dCaseResults(caseResults);
         setFrame3dCombinationResults(combinationResults);
+        if (massiveVolumes) frame3dLargeSolveRef.current = {
+          model: frame3dCalculationModel,
+          analysis: frame3dAnalysis,
+          generation,
+          combinationIds: new Set(combinations.map((combination) => combination.id)),
+        };
         setFrame3dActiveCombinationId(null);
         setFrame3dResult(result);
         setSolverErrorText(null);
@@ -2296,10 +2396,14 @@ function App() {
           );
           return;
         }
-        if (result.plateBending) {
+        if (result.plateBending || result.volume3D) {
           setFrame3dChecks(null);
           setFrame3dConcreteChecks(null);
-          setFrame3dChecksError(null);
+          setFrame3dChecksError(result.volume3D
+            ? result.volume3D.elements.length > 0
+              ? "Volume-elementen zijn berekend; staal- en betontoetsing voor volume-elementen is nog niet beschikbaar."
+              : "Axiale 3D-staven zijn berekend; constructieve staal- en betontoetsing van deze gemengde Rust-route is nog niet gevalideerd."
+            : null);
           return;
         }
         if (result.materialLoadPath) {
@@ -2324,6 +2428,7 @@ function App() {
         setFrame3dChecksError(errors.length > 0 ? errors.join("; ") : null);
       } catch (cause) {
         if (generation !== frame3dSolveGenerationRef.current) return;
+        frame3dLargeSolveRef.current = null;
         const message = cause instanceof Error ? cause.message : String(cause);
         setFrame3dResult(null);
         setFrame3dCaseResults(new Map());
@@ -2360,6 +2465,47 @@ function App() {
     // Rekenen + toetsen; vanaf nu blijft het model live.
     void rekenDoor(selectedSolver.id);
   }, [fem, frame3d, frame3dCalculation, frame3dCalculationModel, modelDimension, rekenDoor]);
+
+  const selectFrame3DCombination = async (id: number) => {
+    const cached = frame3dCombinationResults.get(id);
+    if (cached) {
+      setFrame3dActiveCombinationId(id);
+      setFrame3dResult(cached);
+    } else {
+      const context = frame3dLargeSolveRef.current;
+      const combination = fem.combinations.find((item) => item.id === id);
+      if (!context?.combinationIds.has(id) || !combination) return;
+      const request = ++frame3dCombinationRequestRef.current;
+      setSolverStatus({ kind: "rekenen" });
+      setFrame3dSolveError(null);
+      try {
+        const result = await solveFrame3DCombination(context.model, combination.factors,
+          context.analysis, "openaec-native-fem");
+        if (context.generation !== frame3dSolveGenerationRef.current
+            || request !== frame3dCombinationRequestRef.current) return;
+        if (result.forceBalance?.ok === false) {
+          throw new Error(`Combinatie ${combination.name} sluit niet op krachtenevenwicht.`);
+        }
+        // A 250k+ result contains hundreds of thousands of stresses. Keep only
+        // the selected combination beside the load-case result in browser RAM.
+        setFrame3dCombinationResults(new Map([[id, result]]));
+        setFrame3dActiveCombinationId(id);
+        setFrame3dResult(result);
+        setSolverStatus({ kind: "solved", at: Date.now() });
+      } catch (cause) {
+        if (context.generation !== frame3dSolveGenerationRef.current
+            || request !== frame3dCombinationRequestRef.current) return;
+        const message = cause instanceof Error ? cause.message : String(cause);
+        setFrame3dSolveError(message);
+        setSolverErrorText(message);
+        setSolverStatus({ kind: "error" });
+      }
+    }
+    setActiveView("frame3d");
+    setResultsTabActive(true);
+    setTreeTab("results");
+    setFrame3dVisibility((value) => ({ ...value, loads: false }));
+  };
 
   // Keyboard: Ctrl+Z / Ctrl+Y for undo/redo. In vrije-tekstvelden blijft het de
   // tekst-undo van de browser; in getalvelden, keuzelijsten e.d. gaat het naar
@@ -2493,7 +2639,7 @@ function App() {
   const isLeftResizing = useRef(false);
 
   // Right panel state (Properties)
-  const [rightPanelWidth, setRightPanelWidth] = useState(240);
+  const [rightPanelWidth, setRightPanelWidth] = useState(288);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const isRightResizing = useRef(false);
   /**
@@ -2672,7 +2818,7 @@ function App() {
   // NIET bij: klikken op een UC-badge moet de toetsing van díé staaf NAAST het
   // model tonen, niet in de plaats daarvan. Zo blijft het model in beeld
   // terwijl je de afleiding leest, en zie je welke staaf je voor je hebt.
-  const isFullWidthView = activeView === "frame3d" || activeView === "viewer" || activeView === "ifc" || activeView === "report" || activeView === "insights";
+  const isFullWidthView = activeView === "frame3d" || activeView === "viewer" || activeView === "ifc" || activeView === "report" || activeView === "insights" || activeView === "prestressedBeam" || activeView === "volumeWorkbench";
 
   /**
    * De geselecteerde BETONstaaf, of `null`.
@@ -2774,8 +2920,7 @@ function App() {
                   setFrame3dActiveCombinationId(null);
                   setFrame3dResult(frame3dCaseResults.get(viewSet.loadCaseId ?? fem.activeLoadCaseId) ?? null);
                 } else {
-                  setFrame3dActiveCombinationId(viewSet.combinationId);
-                  setFrame3dResult(frame3dCombinationResults.get(viewSet.combinationId) ?? null);
+                  void selectFrame3DCombination(viewSet.combinationId);
                 }
               }}
             />
@@ -2806,6 +2951,10 @@ function App() {
         return <ReportPreview data={reportData} onDetach={handleDetachReport} />;
       case "insights":
         return <InsightsView nodes={fem.nodes} beams={fem.beams} supports={fem.supports} initialMode={insightsMode} solverError={solverErrorText} stabiliteitsMelding={stabiliteitsMelding} />;
+      case "prestressedBeam":
+        return <PrestressedBeamView />;
+      case "volumeWorkbench":
+        return <VolumeWorkbench />;
       case "viewer":
         return (
           <Suspense fallback={<div className="placeholder"><p>{t("app.view.loading3d")}</p></div>}>
@@ -2983,16 +3132,7 @@ function App() {
         setFrame3dViewRequest((previous) => ({ kind, token: previous.token + 1 }));
       },
       setSelection: setFrame3dSelection,
-      selectCombination: (id) => {
-        const result = frame3dCombinationResults.get(id);
-        if (!result) return;
-        setFrame3dActiveCombinationId(id);
-        setFrame3dResult(result);
-        setActiveView("frame3d");
-        setResultsTabActive(true);
-        setTreeTab("results");
-        setFrame3dVisibility((value) => ({ ...value, loads: false }));
-      },
+      selectCombination: (id) => { void selectFrame3DCombination(id); },
       updateBeam: (id, updates) => setFrame3d({
         ...frame3d,
         beams: frame3d.beams.map((beam) => beam.id === id ? { ...beam, ...updates } : beam),
@@ -3062,6 +3202,8 @@ function App() {
         frame3dTool={frame3dTool}
         onFrame3DToolChange={setFrame3dTool}
         canFrame3DDelete={frame3dSelection !== null}
+        canFrame3DTransform={frame3dSelection !== null
+          && ["node", "beam", "plate", "multi"].includes(frame3dSelection.type)}
         onFrame3DFit={() => setFrame3dFitToken((token) => token + 1)}
         onFrame3DViewChange={(kind) => setFrame3dViewRequest((previous) => ({ kind, token: previous.token + 1 }))}
         frame3dView={frame3dViewRequest.kind}
@@ -3143,6 +3285,8 @@ function App() {
         }}
         onShowInsightsMode={(m) => { setInsightsMode(m); setActiveView("insights"); }}
         onOpenZichtbaarheid={() => setZichtbaarheidOpen(true)}
+        onOpenPrestressedBeam={() => setActiveView("prestressedBeam")}
+        onOpenVolumeWorkbench={() => setActiveView("volumeWorkbench")}
         onExportMatrixCsv={async () => {
           try {
             const { exportMatricesAsCsv } = await import("./io/matrixExport");
@@ -3199,16 +3343,9 @@ function App() {
                     activeLoadCaseId={fem.activeLoadCaseId}
                     combinations={fem.combinations}
                     combinationResults={frame3dCombinationResults}
+                    lazyCombinationIds={frame3dLargeSolveRef.current?.combinationIds}
                     activeCombinationId={frame3dActiveCombinationId}
-                    setActiveCombinationId={(id) => {
-                      const result = frame3dCombinationResults.get(id);
-                      if (!result) return;
-                      setFrame3dActiveCombinationId(id);
-                      setFrame3dResult(result);
-                      setResultsTabActive(true);
-                      setTreeTab("results");
-                      setFrame3dVisibility((value) => ({ ...value, loads: false }));
-                    }}
+                    setActiveCombinationId={(id) => { void selectFrame3DCombination(id); }}
                   /> : <FemProjectTree
                     nodes={fem.nodes}
                     beams={fem.beams}
@@ -3302,8 +3439,7 @@ function App() {
                 <div className="right-panel-body">
                   {modelDimension === "3d" ? <Frame3DProperties
                     model={frame3d}
-                    analysis={fem.analysetype === "eersteOrde" ? "linear"
-                      : fem.analysetype === "tweedeOrdeFysisch" ? "material" : "p-delta"}
+                    analysis={frame3DAnalysisForProject(frame3d, fem.analysetype)}
                     selection={frame3dSelection}
                     onChange={setFrame3d}
                     result={frame3dShowLoadCase ? frame3dResult : null}
@@ -3403,9 +3539,9 @@ function App() {
         </aside>
       )}
 
-      {/* In 3D blijft dezelfde belastinggevallenstrook zichtbaar. Alleen de
-          2D-specifieke opties voor eigen gewicht, fysische niet-lineariteit en
-          scheefstand worden daar niet getoond. */}
+      {/* In 3D blijft dezelfde belastinggevallenstrook zichtbaar. Eigen gewicht
+          is ook voor 3D-volumes beschikbaar en moet bij grote proeven apart
+          uitgeschakeld kunnen worden. */}
       {(!isFullWidthView || activeView === "frame3d") && (modelDimension === "3d" ? (
         <LoadCaseTabBar
           loadCases={fem.loadCases}
@@ -3417,12 +3553,26 @@ function App() {
             setTreeTab("project");
           }}
           addLoadCase={fem.addLoadCase}
+          selfWeightEnabled={fem.selfWeightEnabled}
+          setSelfWeightEnabled={fem.setSelfWeightEnabled}
+          analysetype={fem.analysetype}
+          setAnalysetype={fem.setAnalysetype}
+          geometricAnalysisLabel={(frame3dCalculationModel.volumes?.length ?? 0) > 0
+            ? "GNL (alleen Tet4)" : undefined}
+          materialAnalysisLabel={(frame3dCalculationModel.volumes?.length ?? 0) > 0
+            ? frame3dCalculationModel.volumeMaterialKinematics === "finiteStrain"
+              ? "GNL + staal-FNL (Tet4/Hex8)" : "Materiaal-FNL (Tet4)" : undefined}
+          materialAnalysisDescription={frame3dCalculationModel.volumeMaterialKinematics === "finiteStrain"
+            ? "Tet4/Hex8-volume: totale-Lagrange J2-staalplastificatie bij eindige vervorming, met optionele elastische of plastische axiale trekstaven en Tri3-membranen op gedeelde knopen. Vaste referentielasten."
+            : undefined}
           loads={[
             ...(frame3dCalculationModel.loads ?? []).map((load) => ({ id: load.id, type: "pointForce" as const, caseId: load.caseId ?? 1 })),
             ...(frame3dCalculationModel.memberLoads ?? []).map((load) => ({ id: load.id, type: "lineLoad" as const, caseId: load.caseId ?? 1 })),
             ...(frame3dCalculationModel.memberPointLoads ?? []).map((load) => ({ id: load.id, type: "pointForce" as const, caseId: load.caseId ?? 1 })),
             ...(frame3dCalculationModel.thermalLoads ?? []).map((load) => ({ id: load.id, type: "thermal" as const, caseId: load.caseId ?? 1 })),
             ...(frame3dCalculationModel.surfaceLoads ?? []).map((load) => ({ caseId: load.caseId ?? 1 })),
+            ...(frame3dCalculationModel.volumeBodyLoads ?? []).map((load) => ({ caseId: load.caseId ?? 1 })),
+            ...(frame3dCalculationModel.volumeFaceLoads ?? []).map((load) => ({ caseId: load.caseId ?? 1 })),
           ]}
           showLoads={frame3dShowLoadCase}
           setShowLoads={(showLoadCase) => {
@@ -3530,7 +3680,8 @@ function App() {
         loadCount={modelDimension === "3d"
           ? (frame3d.loads ?? []).length + (frame3d.memberLoads ?? []).length +
             (frame3d.memberPointLoads ?? []).length + (frame3d.thermalLoads ?? []).length +
-            (frame3d.surfaceLoads ?? []).length +
+            (frame3d.surfaceLoads ?? []).length + (frame3d.volumeBodyLoads ?? []).length +
+            (frame3d.volumeFaceLoads ?? []).length +
             (frame3d.supports ?? []).filter((support) => Object.keys(support.prescribed ?? {}).length > 0).length
           : fem.loads.length}
         zoomPct={activeView === "default" ? zoomPct : undefined}

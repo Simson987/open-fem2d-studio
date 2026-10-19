@@ -53,9 +53,7 @@ fn hout() -> Value {
 
 /// De vijflaagse CLT-plaat met k_def = 0,8; dezelfde zakkingen.
 fn clt() -> Value {
-    let laag = |t: f64, richting: &str| {
-        json!({ "thickness_mm": t, "orientation": richting, "strength_class": "C24" })
-    };
+    let laag = |t: f64, richting: &str| json!({ "thickness_mm": t, "orientation": richting, "strength_class": "C24" });
     json!({
         "beam_id": 7,
         "layup": {
@@ -83,7 +81,12 @@ fn met_fin(mut v: Value, w: Value) -> Value {
 }
 
 fn toets<'a>(checks: &'a [steel_check::NamedCheck], id: &str) -> &'a ResistanceCalc {
-    match &checks.iter().find(|c| c.id == id).unwrap_or_else(|| panic!("{id} ontbreekt")).kind {
+    match &checks
+        .iter()
+        .find(|c| c.id == id)
+        .unwrap_or_else(|| panic!("{id} ontbreekt"))
+        .kind
+    {
         CheckKind::Resistance(r) => r,
         CheckKind::Stability(_) => panic!("{id} is een weerstandstoets"),
     }
@@ -94,13 +97,20 @@ fn weglaten_is_de_vereenvoudiging_tot_op_het_bit() {
     let zonder: TimberBeamCheckInput = serde_json::from_value(hout()).unwrap();
     let a = check_timber_beam(zonder);
     // Het veld expliciet op null zetten is hetzelfde als weglaten.
-    let met_null: TimberBeamCheckInput = serde_json::from_value(met_fin(hout(), Value::Null)).unwrap();
+    let met_null: TimberBeamCheckInput =
+        serde_json::from_value(met_fin(hout(), Value::Null)).unwrap();
     let b = check_timber_beam(met_null);
-    assert_eq!(serde_json::to_string(&a).unwrap(), serde_json::to_string(&b).unwrap());
+    assert_eq!(
+        serde_json::to_string(&a).unwrap(),
+        serde_json::to_string(&b).unwrap()
+    );
     // w_fin = −8 + 0,6·−5 = −11 mm.
     let fin = toets(&a.checks, "deflection_w_fin");
     assert!((fin.uc.as_ref().unwrap().ed - 11.0).abs() < 1e-12);
-    assert_eq!(fin.formula_latex, r"w_{fin,z} = w_z + k_{def} \cdot w_{qp,z}");
+    assert_eq!(
+        fin.formula_latex,
+        r"w_{fin,z} = w_z + k_{def} \cdot w_{qp,z}"
+    );
 }
 
 #[test]
@@ -109,16 +119,29 @@ fn massief_hout_rekent_2_2_3_4_met_de_aangeleverde_w_qp_fin() {
     // w_qp,fin = −9,5 mm (bijvoorbeeld: het houtveld kruipt in een gemengde
     // ligger harder dan (1 + k_def)·w_qp = −8 mm).
     let r = check_timber_beam(serde_json::from_value(met_fin(hout(), json!(-9.5))).unwrap());
-    assert_ne!(r.status, CheckStatus::NotApplicable, "{}", r.governing_check_id);
+    assert_ne!(
+        r.status,
+        CheckStatus::NotApplicable,
+        "{}",
+        r.governing_check_id
+    );
 
     // Met de hand: w_fin = −8 + (−9,5 − (−5)) = −12,5 mm; grens 5000/250 = 20.
     let fin = toets(&r.checks, "deflection_w_fin");
     assert!((fin.uc.as_ref().unwrap().ed - 12.5).abs() < 1e-12);
     assert!((fin.uc.as_ref().unwrap().uc - 12.5 / 20.0).abs() < 1e-12);
-    assert_eq!(fin.formula_latex, r"w_{fin,z} = w_z + \left(w_{qp,fin,z} - w_{qp,z}\right)");
-    assert!(fin.variables.iter().any(|v| v.symbol == "w_{qp,fin}" && v.value == -9.5));
+    assert_eq!(
+        fin.formula_latex,
+        r"w_{fin,z} = w_z + \left(w_{qp,fin,z} - w_{qp,z}\right)"
+    );
+    assert!(fin
+        .variables
+        .iter()
+        .any(|v| v.symbol == "w_{qp,fin}" && v.value == -9.5));
     assert!(
-        fin.notes.iter().any(|n| n.contains("2.2.3(4)") && n.contains("AANGELEVERD") && n.contains("-12,50")
+        fin.notes.iter().any(|n| n.contains("2.2.3(4)")
+            && n.contains("AANGELEVERD")
+            && n.contains("-12,50")
             && n.contains("-11,00")),
         "herkomst en vergelijking met de vereenvoudiging: {:?}",
         fin.notes
@@ -126,13 +149,24 @@ fn massief_hout_rekent_2_2_3_4_met_de_aangeleverde_w_qp_fin() {
     // w_add = w_fin − w₁ = −12,5 + 3 = −9,5 mm; w₂ = −4,5 mm.
     let add = toets(&r.checks, "deflection_w_add");
     assert!((add.uc.as_ref().unwrap().ed - 9.5).abs() < 1e-12);
-    assert!(add.notes.iter().any(|n| n.contains("w₂ + w₃") && n.contains("-4,50")), "{:?}", add.notes);
+    assert!(
+        add.notes
+            .iter()
+            .any(|n| n.contains("w₂ + w₃") && n.contains("-4,50")),
+        "{:?}",
+        add.notes
+    );
 
     // Alle andere toetsen zijn gelijk.
     for (x, y) in zonder.checks.iter().zip(r.checks.iter()) {
         assert_eq!(x.id, y.id);
         if !x.id.starts_with("deflection_") {
-            assert_eq!(serde_json::to_string(x).unwrap(), serde_json::to_string(y).unwrap(), "{}", x.id);
+            assert_eq!(
+                serde_json::to_string(x).unwrap(),
+                serde_json::to_string(y).unwrap(),
+                "{}",
+                x.id
+            );
         }
     }
 }
@@ -162,12 +196,18 @@ fn een_niet_eindige_w_qp_fin_wordt_geweigerd() {
     let r = check_timber_beam(h);
     assert_eq!(r.status, CheckStatus::NotApplicable);
     assert!(r.checks.is_empty());
-    assert!(r.governing_check_id.starts_with("ERROR: ") && r.governing_check_id.contains("w_qp,fin"));
+    assert!(
+        r.governing_check_id.starts_with("ERROR: ") && r.governing_check_id.contains("w_qp,fin")
+    );
 
     let mut c: CltBeamCheckInput = serde_json::from_value(clt()).unwrap();
     c.deflection_quasi_perm_fin_mm = Some(f64::INFINITY);
     let r = check_clt_beam(c);
     assert_eq!(r.status, CheckStatus::NotApplicable);
     assert!(r.checks.is_empty());
-    assert!(r.governing_check_id.contains("w_qp,fin"), "{}", r.governing_check_id);
+    assert!(
+        r.governing_check_id.contains("w_qp,fin"),
+        "{}",
+        r.governing_check_id
+    );
 }

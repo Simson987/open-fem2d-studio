@@ -73,8 +73,14 @@ fn koker(l_m: f64, q_n_per_mm: f64) -> BeamCheckResult {
 }
 
 fn kip(r: &BeamCheckResult) -> &nen_en_1993_1_1_stability::StabilityCalc {
-    let c = r.checks.iter().find(|c| c.id == "6.3.2_ltb").expect("kiptoets");
-    let CheckKind::Stability(s) = &c.kind else { panic!("kip hoort stabiliteit te zijn") };
+    let c = r
+        .checks
+        .iter()
+        .find(|c| c.id == "6.3.2_ltb")
+        .expect("kiptoets");
+    let CheckKind::Stability(s) = &c.kind else {
+        panic!("kip hoort stabiliteit te zijn")
+    };
     s
 }
 
@@ -102,11 +108,13 @@ fn de_notitie_claimt_geen_tabelrij_die_niet_bestaat() {
     let r = koker(10.0, 20.0);
     let n = &kip(&r).notes;
     assert!(
-        n.iter().any(|s| s.contains("kent voor deze doorsnede geen rij")),
+        n.iter()
+            .any(|s| s.contains("kent voor deze doorsnede geen rij")),
         "verwachtte een notitie dat tabel 6.5 deze doorsnede niet noemt; genoteerd: {n:?}"
     );
     assert!(
-        !n.iter().any(|s| s.contains("→ kipkromme d volgens tabel 6.5")),
+        !n.iter()
+            .any(|s| s.contains("→ kipkromme d volgens tabel 6.5")),
         "de notitie mag geen tabelrij aanhalen die niet bestaat; genoteerd: {n:?}"
     );
 }

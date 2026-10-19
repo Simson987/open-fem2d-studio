@@ -63,7 +63,7 @@
 // Draaien met: npx tsx test-hout-bgt-eindtoestand.mjs
 //         of : node scripts/run-tests.mjs --filter=hout-bgt-eindtoestand
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -185,12 +185,23 @@ function rekenOud(m) {
   return { data, hout: buildTimberCheckInputs(data) };
 }
 
-function kern(opdracht, inputs) {
-  const r = spawnSync(TOETSBRUG, [], {
-    input: JSON.stringify({ opdracht, inputs }), encoding: "utf8", maxBuffer: 256 << 20,
+async function kern(opdracht, inputs) {
+  const antwoord = await new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code !== 0) reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+      else resolve(out);
+    });
+    child.stdin.end(JSON.stringify({ opdracht, inputs }));
   });
-  if (r.status !== 0 || !r.stdout) throw new Error(`toetsbrug faalde: ${(r.stderr ?? "").slice(0, 300)}`);
-  const uit = JSON.parse(r.stdout);
+  const uit = JSON.parse(antwoord);
   if (uit.fout) throw new Error(uit.fout);
   return uit;
 }
@@ -271,7 +282,7 @@ let rStaal;
   ok("staalstaaf 2 is geen houtinvoer", !rStaal.hout.inputs.some((i) => i.beam_id === 2));
 
   if (heeftKern) {
-    const [res] = kern("check_timber_beams", [h]);
+    const [res] = (await kern("check_timber_beams", [h]));
     const fin = toets(res, "deflection_w_fin");
     const add = toets(res, "deflection_w_add");
     dicht("kern: w_fin = 13,0802 mm (2.2.3(4))", fin?.uc?.ed, H.fin, 2e-3);
@@ -285,7 +296,7 @@ let rStaal;
     // Dezelfde staaf zonder het veld: de vereenvoudiging, zoals vóór #23.
     const zonder = { ...h };
     delete zonder.deflection_quasi_perm_fin_mm;
-    const [oud] = kern("check_timber_beams", [zonder]);
+    const [oud] = (await kern("check_timber_beams", [zonder]));
     dicht("kern zonder w_qp,fin: w_fin = 13,9801 mm (vereenvoudiging)", toets(oud, "deflection_w_fin")?.uc?.ed, H.finVereenvoudigd, 2e-3);
   }
 }
@@ -325,7 +336,7 @@ log("\n[4] Hout + beton met en zonder φ(∞,t₀)");
   dicht("w_qp,fin = hand (beton met E_c,eff)", h.deflection_quasi_perm_fin_mm, -hand.qpFin, 1e-3);
   ok("beton kruipt harder dan hout: w_qp,fin/w_qp > 1 + k_def", hand.qpFin / hand.qp > 1.6, (hand.qpFin / hand.qp).toFixed(4));
   if (heeftKern) {
-    const [res] = kern("check_timber_beams", [h]);
+    const [res] = (await kern("check_timber_beams", [h]));
     dicht("kern: w_fin = hand, groter dan de vereenvoudiging", toets(res, "deflection_w_fin")?.uc?.ed, hand.fin, 2e-3);
     ok("... en dat is meer dan de vereenvoudiging", hand.fin > hand.vereenvoudigd);
   }

@@ -4,9 +4,13 @@ use std::io::{Read, Write};
 
 fn main() {
     let mut input = String::new();
-    let result = std::io::stdin().read_to_string(&mut input)
+    let result = std::io::stdin()
+        .read_to_string(&mut input)
         .map_err(|error| format!("stdin niet leesbaar: {error}"))
-        .and_then(|_| serde_json::from_str(&input).map_err(|error| format!("3D-verzoek niet te lezen: {error}")))
+        .and_then(|_| {
+            serde_json::from_str(&input)
+                .map_err(|error| format!("3D-verzoek niet te lezen: {error}"))
+        })
         .and_then(frame3d_solver::solve)
         .and_then(|result| serde_json::to_string(&result).map_err(|error| error.to_string()));
     let (body, code) = match result {

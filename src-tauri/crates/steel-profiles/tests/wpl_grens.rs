@@ -26,11 +26,28 @@ fn i_profielen() -> Vec<(&'static str, Profielvorm, f64, f64)> {
         .map(|p| {
             let g = &p.geometry;
             let vorm = if g.flange_slope > 0.0 {
-                Profielvorm::IProfielSchuin { h: g.h, b: g.b, tw: g.tw, tf: g.tf, r: g.r }
+                Profielvorm::IProfielSchuin {
+                    h: g.h,
+                    b: g.b,
+                    tw: g.tw,
+                    tf: g.tf,
+                    r: g.r,
+                }
             } else {
-                Profielvorm::IProfiel { h: g.h, b: g.b, tw: g.tw, tf: g.tf, r: g.r }
+                Profielvorm::IProfiel {
+                    h: g.h,
+                    b: g.b,
+                    tw: g.tw,
+                    tf: g.tf,
+                    r: g.r,
+                }
             };
-            (p.name.as_str(), vorm, p.properties.wpl_y_mm3, p.properties.wpl_z_mm3)
+            (
+                p.name.as_str(),
+                vorm,
+                p.properties.wpl_y_mm3,
+                p.properties.wpl_z_mm3,
+            )
         })
         .collect()
 }
@@ -38,20 +55,34 @@ fn i_profielen() -> Vec<(&'static str, Profielvorm, f64, f64)> {
 #[test]
 fn wpl_van_elk_i_profiel_binnen_een_half_procent_van_de_contour() {
     let lijst = i_profielen();
-    assert!(lijst.len() > 100, "verwachtte de hele I-catalogus, kreeg {}", lijst.len());
+    assert!(
+        lijst.len() > 100,
+        "verwachtte de hele I-catalogus, kreeg {}",
+        lijst.len()
+    );
     let mut fouten = Vec::new();
     for (naam, vorm, wpl_y_db, wpl_z_db) in &lijst {
         let e = vorm.doorsnede().bereken();
         let dy = (wpl_y_db - e.wpl_y_mm3) / e.wpl_y_mm3 * 100.0;
         let dz = (wpl_z_db - e.wpl_z_mm3) / e.wpl_z_mm3 * 100.0;
         if dy.abs() > 0.5 {
-            fouten.push(format!("{naam}: W_pl,y {wpl_y_db} tegen contour {:.0} ({dy:+.2} %)", e.wpl_y_mm3));
+            fouten.push(format!(
+                "{naam}: W_pl,y {wpl_y_db} tegen contour {:.0} ({dy:+.2} %)",
+                e.wpl_y_mm3
+            ));
         }
         if dz.abs() > 0.5 {
-            fouten.push(format!("{naam}: W_pl,z {wpl_z_db} tegen contour {:.0} ({dz:+.2} %)", e.wpl_z_mm3));
+            fouten.push(format!(
+                "{naam}: W_pl,z {wpl_z_db} tegen contour {:.0} ({dz:+.2} %)",
+                e.wpl_z_mm3
+            ));
         }
     }
-    assert!(fouten.is_empty(), "W_pl buiten de 0,5 %-grens:\n{}", fouten.join("\n"));
+    assert!(
+        fouten.is_empty(),
+        "W_pl buiten de 0,5 %-grens:\n{}",
+        fouten.join("\n")
+    );
 }
 
 /// De negen regels die in september 2026 uit de motor zijn overgenomen, met

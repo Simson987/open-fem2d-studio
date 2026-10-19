@@ -131,8 +131,7 @@ fn tauri_lib_bron() -> String {
         .join("..")
         .join("src")
         .join("lib.rs");
-    std::fs::read_to_string(&pad)
-        .unwrap_or_else(|e| panic!("{} niet leesbaar: {e}", pad.display()))
+    std::fs::read_to_string(&pad).unwrap_or_else(|e| panic!("{} niet leesbaar: {e}", pad.display()))
 }
 
 // ── Weg 2: de toetsbrug ─────────────────────────────────────────────────────
@@ -293,7 +292,9 @@ fn weg_1_de_tauri_commands_zijn_geregistreerd() {
         .find("generate_handler![")
         .expect("`generate_handler!` staat niet in src-tauri/src/lib.rs");
     let handler = &bron[handler_start..];
-    let handler_eind = handler.find(']').expect("`generate_handler!` is niet gesloten");
+    let handler_eind = handler
+        .find(']')
+        .expect("`generate_handler!` is niet gesloten");
     let handler = &handler[..handler_eind];
 
     assert!(
@@ -351,9 +352,15 @@ async fn de_drie_wegen_leveren_hetzelfde_oordeel() {
 async fn twee_zijden_van_dezelfde_vloer_geven_twee_eisen() {
     let (mut child, mut stdin, mut reader) = start_server().await;
 
-    let boven = weg_mcp(&mut stdin, &mut reader, 712, TOOL, invoer_bovenzijde_binnen())
-        .await
-        .expect("MCP-weg bovenzijde");
+    let boven = weg_mcp(
+        &mut stdin,
+        &mut reader,
+        712,
+        TOOL,
+        invoer_bovenzijde_binnen(),
+    )
+    .await
+    .expect("MCP-weg bovenzijde");
     assert_eq!(boven["side"], json!("Top"));
     assert_eq!(boven["c_min_dur_mm"], json!(15.0));
     assert_eq!(boven["c_nom_required_mm"], json!(20.0));
@@ -367,9 +374,15 @@ async fn twee_zijden_van_dezelfde_vloer_geven_twee_eisen() {
         "de toelichting moet zeggen welke zijde is getoetst"
     );
 
-    let onder = weg_mcp(&mut stdin, &mut reader, 713, TOOL, invoer_onderzijde_buiten())
-        .await
-        .expect("MCP-weg onderzijde");
+    let onder = weg_mcp(
+        &mut stdin,
+        &mut reader,
+        713,
+        TOOL,
+        invoer_onderzijde_buiten(),
+    )
+    .await
+    .expect("MCP-weg onderzijde");
     assert_eq!(onder["side"], json!("Bottom"));
     assert_eq!(onder["c_min_dur_mm"], json!(30.0));
     assert_eq!(onder["c_nom_required_mm"], json!(35.0));
@@ -390,7 +403,13 @@ async fn twee_zijden_van_dezelfde_vloer_geven_twee_eisen() {
         .await
         .expect("MCP-weg zonder zijde");
     assert_eq!(kaal["side"], Value::Null);
-    for veld in ["c_min_dur_mm", "c_min_mm", "c_nom_required_mm", "unity_check", "status"] {
+    for veld in [
+        "c_min_dur_mm",
+        "c_min_mm",
+        "c_nom_required_mm",
+        "unity_check",
+        "status",
+    ] {
         assert_eq!(kaal[veld], onder[veld], "{veld}");
     }
 
@@ -407,7 +426,11 @@ async fn xd3_met_20_mm_wordt_afgekeurd_met_de_juiste_getallen() {
         .await
         .expect("MCP-weg");
 
-    assert_eq!(uit["structural_class"], json!("S4"), "NB-default voor 50 jaar");
+    assert_eq!(
+        uit["structural_class"],
+        json!("S4"),
+        "NB-default voor 50 jaar"
+    );
     assert_eq!(uit["cover_column"], json!("XD3/XS3"));
     assert_eq!(uit["c_min_dur_mm"], json!(40.0));
     assert_eq!(uit["c_min_b_mm"], json!(8.0));

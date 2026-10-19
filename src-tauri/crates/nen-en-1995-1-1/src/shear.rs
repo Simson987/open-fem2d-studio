@@ -146,14 +146,39 @@ pub fn check_shear(
         title: "Dwarskracht".to_string(),
         article: "art. 6.1.7 (6.13)".to_string(),
         force_state,
-        formula_latex: r"\tau_d = \frac{V_{z,Ed} \cdot S_y}{I_y \cdot b_{ef}} \le f_{v,d}".to_string(),
+        formula_latex: r"\tau_d = \frac{V_{z,Ed} \cdot S_y}{I_y \cdot b_{ef}} \le f_{v,d}"
+            .to_string(),
         variables: vec![
-            NamedValue { symbol: r"V_{z,Ed}".to_string(), value: v_ed.abs(), unit: "kN".to_string() },
-            NamedValue { symbol: "S_y".to_string(), value: section.s_y_mm3, unit: "mm³".to_string() },
-            NamedValue { symbol: "I_y".to_string(), value: section.i_y_mm4, unit: "mm⁴".to_string() },
-            NamedValue { symbol: "b".to_string(), value: section.b_schuif_mm, unit: "mm".to_string() },
-            NamedValue { symbol: "k_{cr}".to_string(), value: k_cr, unit: "-".to_string() },
-            NamedValue { symbol: r"f_{v,d}".to_string(), value: f_vd_mpa, unit: "N/mm²".to_string() },
+            NamedValue {
+                symbol: r"V_{z,Ed}".to_string(),
+                value: v_ed.abs(),
+                unit: "kN".to_string(),
+            },
+            NamedValue {
+                symbol: "S_y".to_string(),
+                value: section.s_y_mm3,
+                unit: "mm³".to_string(),
+            },
+            NamedValue {
+                symbol: "I_y".to_string(),
+                value: section.i_y_mm4,
+                unit: "mm⁴".to_string(),
+            },
+            NamedValue {
+                symbol: "b".to_string(),
+                value: section.b_schuif_mm,
+                unit: "mm".to_string(),
+            },
+            NamedValue {
+                symbol: "k_{cr}".to_string(),
+                value: k_cr,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: r"f_{v,d}".to_string(),
+                value: f_vd_mpa,
+                unit: "N/mm²".to_string(),
+            },
         ],
         value: tau,
         unit: "N/mm²".to_string(),
@@ -178,7 +203,10 @@ mod tests {
         ForceStateSnapshot {
             combination_id: 12,
             position_mm: 0.0,
-            forces: InternalForces { vz_ed: v_kn, ..Default::default() },
+            forces: InternalForces {
+                vz_ed: v_kn,
+                ..Default::default()
+            },
         }
     }
 
@@ -250,7 +278,11 @@ mod tests {
         let tau = tau_d_mpa(30.0, &s, 1.0);
         assert_relative_eq!(tau, 4.9057, max_relative = 1e-3);
         let vereenvoudigd = 1.5 * 30.0e3 / s.a_mm2;
-        assert!(tau / vereenvoudigd > 9.0, "verhouding {}", tau / vereenvoudigd);
+        assert!(
+            tau / vereenvoudigd > 9.0,
+            "verhouding {}",
+            tau / vereenvoudigd
+        );
     }
 
     #[test]
@@ -258,7 +290,9 @@ mod tests {
         let s = referentie_samengesteld();
         let r = check_shear(&s, 2.4615, 1.0, snap(30.0));
         assert!(
-            r.notes.iter().any(|n| n.contains("71,0") || n.contains("71.0")),
+            r.notes
+                .iter()
+                .any(|n| n.contains("71,0") || n.contains("71.0")),
             "notities: {:?}",
             r.notes
         );

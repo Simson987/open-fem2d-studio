@@ -40,6 +40,10 @@ const TOETSBRUG = join(
   REPO, "src-tauri", "target", "release",
   process.platform === "win32" ? "toetsbrug.exe" : "toetsbrug",
 );
+const NATIVE_FRAME2D = join(
+  REPO, "src-tauri", "target", "debug",
+  process.platform === "win32" ? "native-frame2d.exe" : "native-frame2d",
+);
 
 const {
   losCombinatieFysischOp,
@@ -50,12 +54,15 @@ const {
   geschatSegmentAantal,
   iUitEi,
   STANDAARD_SEGMENTLENGTE_MM,
+  kruipInvoerVoorCombinatie,
   DOF_DREMPEL,
   DOF_GEHEUGENPLAFOND,
 } = await import("./src/lib/betonStijfheid.ts");
 const { solveCombinationSecondOrder, solveAllCasesNonlinear, zetCombinatieResultaat } =
   await import("./src/components/fem/solver/engine.ts");
 const { combineResults } = await import("./src/components/fem/solver/combinations.ts");
+const { solveAllCasesNativeFrame2D, solveAllCombinationsNativeFrame2D } =
+  await import("./src/components/fem/solver/nativeFrame2DRoute.ts");
 const { analysetypeUitBestand, nonlinearVoorBestand } =
   await import("./src/components/fem/femTypes.ts");
 
@@ -98,6 +105,37 @@ async function checkFout(naam, fn, moetBevatten) {
   passed++;
   log(`  ✓ ${naam}`);
   log(`      melding: ${melding.slice(0, 160)}${melding.length > 160 ? "…" : ""}`);
+}
+
+/** Draai de echte Rust 2D-frame-CLI achter dezelfde native FEM-clientroute. */
+async function metNativeFrame2D(callback) {
+  if (!existsSync(NATIVE_FRAME2D)) {
+    throw new Error(`${NATIVE_FRAME2D} ontbreekt; bouw native-frame2d voor deze regressieproef.`);
+  }
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    if (url !== "/api/toetsing") throw new Error(`onverwachte native endpoint ${url}`);
+    const body = JSON.parse(options.body);
+    if (body.opdracht !== "solve_native_fem" || body.inputs.kind !== "frame2d") {
+      throw new Error(`onverwachte native opdracht ${body.opdracht}/${body.inputs.kind}`);
+    }
+    const result = await new Promise((resolve, reject) => {
+      const child = spawn(NATIVE_FRAME2D, [], { stdio: ["pipe", "pipe", "pipe"] });
+      const stdout = [], stderr = [];
+      child.stdout.on("data", chunk => stdout.push(chunk));
+      child.stderr.on("data", chunk => stderr.push(chunk));
+      child.on("error", reject);
+      child.on("close", code => {
+        if (code !== 0) return reject(new Error(Buffer.concat(stderr).toString()));
+        try { resolve(JSON.parse(Buffer.concat(stdout).toString())); }
+        catch (error) { reject(error); }
+      });
+      child.stdin.end(JSON.stringify(body.inputs.input));
+    });
+    return new Response(JSON.stringify({ kind: "frame2d", result }), { status: 200 });
+  };
+  try { return await callback(); }
+  finally { globalThis.fetch = previousFetch; }
 }
 
 // ── Model- en korfgegevens ─────────────────────────────────────────────────
@@ -615,6 +653,62 @@ if (!existsSync(TOETSBRUG)) {
       `${deltaGescheurd.toFixed(2)} mm tegen ${deltaOngescheurd.toFixed(2)} mm`);
     check("M(½L) = qL²/8 blijft staan (statisch bepaald)",
       waardeBijX(el, "bendingMoment", L / 2), (q * L * L) / 8, 1e-6);
+
+    // The production app now sends each updated EI mesh to the native Rust
+    // frame route. Keep this full reinforced-section case on the real Rust
+    // M-N-kappa service, and compare both structural solvers at the same
+    // creep ratio derived from first-order ULS/SLS combinations.
+    log("\n  [10b-Rust] Gewapende ligger: echte M-N-κ-kern + native Rust-frame + kruip (5.19)");
+    {
+      const input = liggerInvoer(L, q);
+      const firstOrder = await metNativeFrame2D(() => solveAllCasesNativeFrame2D(input, "linear"));
+      const ugt = { id: 51, name: "UGT 1,0 G", type: "uls", formula: "1,0 G",
+        factors: new Map([[1, 1]]) };
+      const quasi = { id: 52, name: "6.16b 0,5 G", type: "sls", formula: "0,5 G",
+        factors: new Map([[1, 0.5]]) };
+      const reinforcedBeam = { ...staaf(1, L), phiInfT0: 0.8 };
+      const quasiResults = [{ combo: quasi, resultaat: combineResults(quasi, firstOrder) }];
+      const creepInput = kruipInvoerVoorCombinatie(input, ugt, quasiResults, [reinforcedBeam],
+        (_sameInput, combination) => combineResults(combination, firstOrder));
+      const creep = creepInput.get(1);
+      checkWaar("5.19 haalt φ_eff = 0,8 × 0,5 uit Rust-eerste-ordecombinaties",
+        !!creep && Math.abs(creep.phi_inf_t0 * creep.quasi_blijvend[0].m0_eqp_knm
+          / creep.m0_ed_knm - 0.4) < 1e-8,
+        `M₀Ed ${creep?.m0_ed_knm?.toFixed(2)} kNm; M₀Eqp ${creep?.quasi_blijvend[0]?.m0_eqp_knm?.toFixed(2)} kNm`);
+      const opties = { roep: echteKern, segmentLengteMm: 1000,
+        grenstoestand: "DesignValues", kruip519: creepInput };
+      const legacyCreep = await losCombinatieFysischOp(input, ugt, [reinforcedBeam], opties);
+      const nativeCreep = await metNativeFrame2D(() => losCombinatieFysischOp(input, ugt,
+        [reinforcedBeam], { ...opties, losOp: async (iterationInput, combination) => {
+          const solved = await solveAllCombinationsNativeFrame2D(iterationInput, [{
+            id: combination.id, name: combination.name, type: "uls", formula: "",
+            factors: combination.factors,
+          }], "geometric");
+          return solved.get(combination.id) ?? null;
+        } }));
+      const legacyEI = legacyCreep.laatsteRonde.get(1);
+      const rustEI = nativeCreep.laatsteRonde.get(1);
+      const eiDeviation = Math.max(...rustEI.segments.map((segment, index) =>
+        Math.abs(segment.ei_knm2 - legacyEI.segments[index].ei_knm2)
+          / legacyEI.segments[index].ei_knm2));
+      checkWaar("native Rust en bestaande frame-oplosser sluiten op dezelfde gewapende EI-verdeling",
+        eiDeviation < 0.03, `maximale EI-afwijking ${(100 * eiDeviation).toFixed(2)} %`);
+      checkWaar("de native frame-uitkomst behoudt de zes wapeninggestuurde secans-EI-segmenten",
+        rustEI.segment_count === 6 && nativeCreep.resultaat.elements.get(1).segmenten.length === 6);
+      checkWaar("de native oplossing convergeert met kruip 5.19",
+        rustEI.converged && rustEI.phi_ef !== null && Math.abs(rustEI.phi_ef - 0.4) < 1e-8,
+        `φ_eff = ${rustEI.phi_ef}; ronden = ${nativeCreep.ronden}`);
+      const nativeDeflection = waardeBijX(nativeCreep.resultaat.elements.get(1), "deflection", L / 2);
+      const legacyDeflection = waardeBijX(legacyCreep.resultaat.elements.get(1), "deflection", L / 2);
+      checkWaar("native Rust en bestaande solver sluiten op de middenzakking",
+        Math.abs(nativeDeflection - legacyDeflection) / Math.abs(legacyDeflection) < 0.03,
+        `${nativeDeflection.toFixed(3)} mm tegen ${legacyDeflection.toFixed(3)} mm`);
+      checkWaar("de native kruipoplossing zakt verder dan de ongescheurde doorsnede",
+        Math.abs(nativeDeflection) > Math.abs(deltaOngescheurd));
+      checkWaar("de native krachtsverdeling bewaart het statisch bepaalde middenmoment",
+        Math.abs(waardeBijX(nativeCreep.resultaat.elements.get(1), "bendingMoment", L / 2)
+          - q * L * L / 8) / (q * L * L / 8) < 1e-5);
+    }
   }
 
   // ── 10c. Slanke kolom: groter tweede-ordemoment dan ongescheurd ─────────

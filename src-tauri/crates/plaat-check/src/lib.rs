@@ -87,7 +87,10 @@ pub fn check_all_plates(inputs: Vec<PlateCheckInput>) -> Vec<PlateCheckResult> {
 /// Toets één plaat.
 pub fn check_plate(input: &PlateCheckInput) -> PlateCheckResult {
     if input.plooi.is_some() && input.soort != PlaatMateriaalSoort::Staal {
-        return geweigerd(input, "plaatplooi volgens NEN-EN 1993-1-5 is alleen beschikbaar voor staal".into());
+        return geweigerd(
+            input,
+            "plaatplooi volgens NEN-EN 1993-1-5 is alleen beschikbaar voor staal".into(),
+        );
     }
     if !(input.thickness_mm.is_finite() && input.thickness_mm > 0.0) {
         return geweigerd(

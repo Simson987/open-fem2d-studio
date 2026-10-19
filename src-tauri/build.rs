@@ -30,7 +30,8 @@ fn resource_voor_tests() {
     if !rc.exists() {
         return;
     }
-    if let Err(e) = embed_resource::compile_for_tests(&rc, embed_resource::NONE).manifest_required() {
+    if let Err(e) = embed_resource::compile_for_tests(&rc, embed_resource::NONE).manifest_required()
+    {
         panic!("resource voor de testbinaries niet gecompileerd: {e}");
     }
 }

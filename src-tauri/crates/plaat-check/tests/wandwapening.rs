@@ -68,10 +68,13 @@ fn handberekening_trek_en_scheurwijdte() {
 #[test]
 fn onvoldoende_en_alle_combinaties_assen_en_tekens() {
     let mut v = invoer();
-    v["expected_element_ids"] = json!([7,8]);
+    v["expected_element_ids"] = json!([7, 8]);
     let nul = json!({"element_id":8,"sigma_x_mpa":0.0,"sigma_y_mpa":0.0,"tau_xy_mpa":0.0});
     for veld in ["combinations", "frequente_combinaties"] {
-        v[veld][0]["elements"].as_array_mut().unwrap().push(nul.clone());
+        v[veld][0]["elements"]
+            .as_array_mut()
+            .unwrap()
+            .push(nul.clone());
     }
     v["combinations"]
         .as_array_mut()

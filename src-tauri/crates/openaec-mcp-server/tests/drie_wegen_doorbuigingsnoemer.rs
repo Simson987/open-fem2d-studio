@@ -83,9 +83,7 @@ fn hout(veld: &str, n: f64) -> Value {
 }
 
 fn clt(veld: &str, n: f64) -> Value {
-    let laag = |t: f64, richting: &str| {
-        json!({ "thickness_mm": t, "orientation": richting, "strength_class": "C24" })
-    };
+    let laag = |t: f64, richting: &str| json!({ "thickness_mm": t, "orientation": richting, "strength_class": "C24" });
     let mut v = json!({
         "beam_id": 7,
         "layup": {
@@ -134,7 +132,8 @@ fn weg_tauri_clt(invoer: &Value) -> Value {
 fn weg_toetsbrug(opdracht: &str, invoer: &Value) -> Value {
     let verzoek: toetsbrug::Verzoek =
         serde_json::from_value(json!({ "opdracht": opdracht, "inputs": [invoer] })).unwrap();
-    let antwoord = toetsbrug::behandel(verzoek).unwrap_or_else(|e| panic!("toetsbrug {opdracht}: {e}"));
+    let antwoord =
+        toetsbrug::behandel(verzoek).unwrap_or_else(|e| panic!("toetsbrug {opdracht}: {e}"));
     antwoord.as_array().expect("een lijst")[0].clone()
 }
 
@@ -215,7 +214,9 @@ fn eis_geweigerd(r: &Value, trefwoord: &str, wat: &str) {
     assert_eq!(r["checks"], json!([]), "{wat}: er is toch getoetst");
     let reden = r["governing_check_id"].as_str().unwrap_or("");
     assert!(
-        reden.starts_with("ERROR: ") && reden.contains(trefwoord) && reden.contains("niet getoetst"),
+        reden.starts_with("ERROR: ")
+            && reden.contains(trefwoord)
+            && reden.contains("niet getoetst"),
         "{wat}: reden ontbreekt of is onduidelijk: {reden:?}"
     );
 }
@@ -226,14 +227,29 @@ async fn staal_custom_noemer_nul_en_negatief_langs_de_drie_wegen() {
     let mut id = 10;
     let gevallen = [
         (staal("Custom", 0, 0.0), "'Custom'", "Custom, noemer 0"),
-        (staal("Custom", -300, 0.0), "'Custom'", "Custom, noemer -300"),
-        (staal("Floor", 333, -150.0), "w_add", "Floor, w_add-noemer -150"),
+        (
+            staal("Custom", -300, 0.0),
+            "'Custom'",
+            "Custom, noemer -300",
+        ),
+        (
+            staal("Floor", 333, -150.0),
+            "w_add",
+            "Floor, w_add-noemer -150",
+        ),
     ];
     for (invoer, trefwoord, wat) in gevallen {
         id += 1;
         let tauri = weg_tauri_staal(&invoer);
         let brug = weg_toetsbrug("check_steel_beams", &invoer);
-        let mcp = weg_mcp(&mut stdin, &mut reader, id, "check_steel_beam", invoer.clone()).await;
+        let mcp = weg_mcp(
+            &mut stdin,
+            &mut reader,
+            id,
+            "check_steel_beam",
+            invoer.clone(),
+        )
+        .await;
         eis_geweigerd(&tauri, trefwoord, &format!("Tauri, {wat}"));
         eis_geweigerd(&brug, trefwoord, &format!("toetsbrug, {wat}"));
         eis_geweigerd(&mcp, trefwoord, &format!("MCP, {wat}"));
@@ -254,7 +270,11 @@ async fn een_foute_staalnoemer_neemt_de_andere_staven_niet_mee() {
     let antwoord = toetsbrug::behandel(verzoek).expect("de aanroep als geheel slaagt");
     let lijst = antwoord.as_array().unwrap();
     assert_eq!(lijst.len(), 2);
-    assert_ne!(lijst[0]["status"], json!("NotApplicable"), "de goede staaf is getoetst");
+    assert_ne!(
+        lijst[0]["status"],
+        json!("NotApplicable"),
+        "de goede staaf is getoetst"
+    );
     eis_geweigerd(&lijst[1], "'Custom'", "tweede staaf, noemer -1");
 }
 
@@ -262,15 +282,24 @@ async fn een_foute_staalnoemer_neemt_de_andere_staven_niet_mee() {
 async fn hout_en_clt_noemer_nul_en_negatief_langs_de_drie_wegen() {
     let (mut child, mut stdin, mut reader) = start_server().await;
     let mut id = 100;
-    for (veld, trefwoord) in [("deflection_limit_fin", "w_fin"), ("deflection_limit_add", "w_add")] {
+    for (veld, trefwoord) in [
+        ("deflection_limit_fin", "w_fin"),
+        ("deflection_limit_add", "w_add"),
+    ] {
         for n in [0.0, -250.0] {
             id += 1;
             let wat = format!("hout, {veld} = {n}");
             let invoer = hout(veld, n);
             let tauri = weg_tauri_hout(&invoer);
             let brug = weg_toetsbrug("check_timber_beams", &invoer);
-            let mcp = weg_mcp(&mut stdin, &mut reader, id, "check_timber_beams", json!({ "inputs": [invoer] }))
-                .await["results"][0]
+            let mcp = weg_mcp(
+                &mut stdin,
+                &mut reader,
+                id,
+                "check_timber_beams",
+                json!({ "inputs": [invoer] }),
+            )
+            .await["results"][0]
                 .clone();
             for (weg, r) in [("Tauri", &tauri), ("toetsbrug", &brug), ("MCP", &mcp)] {
                 eis_geweigerd(r, trefwoord, &format!("{weg}, {wat}"));
@@ -283,8 +312,14 @@ async fn hout_en_clt_noemer_nul_en_negatief_langs_de_drie_wegen() {
             let invoer = clt(veld, n);
             let tauri = weg_tauri_clt(&invoer);
             let brug = weg_toetsbrug("check_clt_beams", &invoer);
-            let mcp = weg_mcp(&mut stdin, &mut reader, id, "check_clt_beams", json!({ "inputs": [invoer] }))
-                .await["results"][0]
+            let mcp = weg_mcp(
+                &mut stdin,
+                &mut reader,
+                id,
+                "check_clt_beams",
+                json!({ "inputs": [invoer] }),
+            )
+            .await["results"][0]
                 .clone();
             for (weg, r) in [("Tauri", &tauri), ("toetsbrug", &brug), ("MCP", &mcp)] {
                 eis_geweigerd(r, trefwoord, &format!("{weg}, {wat}"));

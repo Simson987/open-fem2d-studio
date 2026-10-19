@@ -84,7 +84,7 @@ export const SOLVER_REGISTRY: readonly SolverDescriptor[] = Object.freeze([
     capabilities: {
       dimensions: ["2d", "3d"],
       analyses: ["linear", "p-delta", "material-nonlinear"],
-      elementFamilies: ["frame", "plate"],
+      elementFamilies: ["frame", "plate", "solid"],
     },
   },
 ]);
@@ -99,6 +99,15 @@ export function normaliseSolverPreference(value: unknown): SolverPreference {
 
 export function supportsRequest(solver: SolverDescriptor, request: AnalysisRequest): boolean {
   const capabilities = solver.capabilities;
+  if (request.dimension === "3d" && request.elementFamilies.includes("solid")) {
+    return solver.id === "openaec-native-fem" && solver.available
+      && (request.analysis === "linear"
+        && request.elementFamilies.every((family) => family === "solid" || family === "frame" || family === "plate")
+        || request.analysis === "material-nonlinear"
+        && request.elementFamilies.every((family) => family === "solid" || family === "frame" || family === "plate")
+        || request.analysis === "p-delta"
+        && request.elementFamilies.length === 1 && request.elementFamilies[0] === "solid");
+  }
   // The native 2D app routes cover pure membranes and pure frames. Frame
   // material analysis requires an explicit axial law and a separate UI mode.
   if (solver.id === "openaec-native-fem" && request.dimension === "2d") {
@@ -110,9 +119,10 @@ export function supportsRequest(solver: SolverDescriptor, request: AnalysisReque
   }
   if (solver.id === "openaec-native-fem" && request.dimension === "3d"
       && request.elementFamilies.includes("plate")) {
-    // The app adapter handles a separate bending plate with an explicit
-    // secant-E curve for material analysis. Geometric and coupled analyses wait.
-    return solver.available && (request.analysis === "linear" || request.analysis === "material-nonlinear")
+    // Geometric shell GNL and material-only secant-E FNL both run through the
+    // app's native plate adapter; steel plasticity and cracked-shell laws wait.
+    return solver.available && (request.analysis === "linear" || request.analysis === "p-delta"
+      || request.analysis === "material-nonlinear")
       && request.elementFamilies.length === 1 && request.elementFamilies[0] === "plate";
   }
   return solver.available
@@ -139,7 +149,9 @@ export function resolveSolver(
   }
 
   const resolved = SOLVER_REGISTRY
-    .filter((solver) => solver.automaticEligible !== false && supportsRequest(solver, request))
+    .filter((solver) => (solver.automaticEligible !== false
+      || request.dimension === "3d" && request.elementFamilies.includes("solid"))
+      && supportsRequest(solver, request))
     .sort((a, b) => b.priority - a.priority)[0];
 
   if (!resolved) {

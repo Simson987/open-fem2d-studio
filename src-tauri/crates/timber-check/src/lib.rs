@@ -12,10 +12,10 @@
 //! materiaal-neutrale `check-core` crate zodra die bestaat.
 
 pub mod belastingduur; // k_mod per belastingduurklasse, EN 1995-1-1 3.1.3(2)
+pub mod clt; // kruislaaghout: CltBeamCheckInput → CltBeamCheckResult, toets per lamel
 pub mod input;
 pub mod orchestrator;
 pub mod result;
-pub mod clt; // kruislaaghout: CltBeamCheckInput → CltBeamCheckResult, toets per lamel
 pub mod verlopend; // verlopende rechthoek b(x) × h(x), toets per rekenpunt
 
 pub use belastingduur::{CombinationLoadDuration, KmodPerLoadDuration};

@@ -1,14 +1,18 @@
 //! NEN-EN 1993-1-1 §6.2.10 — bending, axial, and shear combined.
 
-use section_properties::SectionProperties;
-use mechanics::ForceStateSnapshot;
-use crate::{SteelGrade, ResistanceCalc};
 use crate::classification::CrossSectionClass;
 use crate::combined_mn::check_combined_mn;
+use crate::{ResistanceCalc, SteelGrade};
+use mechanics::ForceStateSnapshot;
+use section_properties::SectionProperties;
 
 pub fn check_combined_mnv(
-    p: &SectionProperties, grade: &SteelGrade, class: CrossSectionClass,
-    n_pl_rd_kn: f64, m_pl_y_rd_knm: f64, v_pl_z_rd_kn: f64,
+    p: &SectionProperties,
+    grade: &SteelGrade,
+    class: CrossSectionClass,
+    n_pl_rd_kn: f64,
+    m_pl_y_rd_knm: f64,
+    v_pl_z_rd_kn: f64,
     force_state: ForceStateSnapshot,
 ) -> ResistanceCalc {
     let v_ed = force_state.forces.vz_ed.abs();
@@ -28,6 +32,9 @@ pub fn check_combined_mnv(
     result.id = "6.2.10_combined_mnv".to_string();
     result.title = "Bending, axial, shear combined".to_string();
     result.article = "art. 6.2.10".to_string();
-    result.notes.insert(0, format!("rho = {:.4}, reduced M_pl,y,Rd = {:.3} kNm", rho, m_pl_red));
+    result.notes.insert(
+        0,
+        format!("rho = {:.4}, reduced M_pl,y,Rd = {:.3} kNm", rho, m_pl_red),
+    );
     result
 }

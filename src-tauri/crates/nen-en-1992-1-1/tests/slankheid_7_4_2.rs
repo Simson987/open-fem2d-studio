@@ -60,7 +60,11 @@ fn balk(
 }
 
 fn factor(r: &nen_en_1992_1_1::slankheid::SlendernessResponse, id: &str) -> f64 {
-    r.corrections.iter().find(|c| c.id == id).expect("correctie ontbreekt").factor
+    r.corrections
+        .iter()
+        .find(|c| c.id == id)
+        .expect("correctie ontbreekt")
+        .factor
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -119,11 +123,19 @@ fn vrij_opgelegde_balk_c25_zonder_correcties() {
     assert!(r.corrections.iter().all(|c| !c.filled_latex.is_empty()));
 
     assert_relative_eq!(r.limit_l_over_d, 22.375, max_relative = 1e-12);
-    assert_relative_eq!(r.actual_l_over_d, 13.333_333_333_333_334, max_relative = 1e-12);
+    assert_relative_eq!(
+        r.actual_l_over_d,
+        13.333_333_333_333_334,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(r.unity_check, 0.595_903_165_735_568, max_relative = 1e-12);
     assert_eq!(r.status, CheckStatus::Ok);
 
-    assert_relative_eq!(r.deflection_limits.appearance_mm, 24.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        r.deflection_limits.appearance_mm,
+        24.0,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(r.deflection_limits.damage_mm, 12.0, max_relative = 1e-12);
     assert_eq!(r.deflection_limits.combination, "quasi-blijvend");
 }
@@ -160,7 +172,14 @@ fn vrij_opgelegde_balk_c25_zonder_correcties() {
 /// zorgvuldiger moet worden gecontroleerd — langs 7.4.3.
 #[test]
 fn t_ligger_met_alle_drie_de_correcties() {
-    let mut req = balk(StructuralSystem::InteriorSpan, 30.0, 0.015, 10_000.0, 600.0, 250.0);
+    let mut req = balk(
+        StructuralSystem::InteriorSpan,
+        30.0,
+        0.015,
+        10_000.0,
+        600.0,
+        250.0,
+    );
     req.b_flange_mm = 1500.0;
     req.b_web_mm = 250.0;
     req.f_yk_mpa = Some(500.0);
@@ -176,12 +195,19 @@ fn t_ligger_met_alle_drie_de_correcties() {
     assert_relative_eq!(factor(&r, "flens"), 0.8, max_relative = 1e-15);
     assert_relative_eq!(factor(&r, "lange_overspanning"), 0.7, max_relative = 1e-12);
     assert_relative_eq!(r.limit_l_over_d, 11.76, max_relative = 1e-12);
-    assert_relative_eq!(r.actual_l_over_d, 16.666_666_666_666_668, max_relative = 1e-12);
+    assert_relative_eq!(
+        r.actual_l_over_d,
+        16.666_666_666_666_668,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(r.unity_check, 1.417_233_560_090_703, max_relative = 1e-12);
     assert_eq!(r.status, CheckStatus::NotOk);
     // De doorverwijzing naar 7.4.3 hoort in het antwoord te staan; zonder haar
     // leest een afkeuring als een definitief oordeel, en dat is zij niet.
-    assert!(r.notes.iter().any(|n| n.contains("7.4.2(1)P") && n.contains("7.4.3")));
+    assert!(r
+        .notes
+        .iter()
+        .any(|n| n.contains("7.4.2(1)P") && n.contains("7.4.3")));
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -202,9 +228,15 @@ fn t_ligger_met_alle_drie_de_correcties() {
 /// midden van de overspanning maar de OPLEGGING; ρ hoort daar te zijn bepaald.
 #[test]
 fn uitkraging_k_is_0_4() {
-    let r =
-        span_depth_limit(&balk(StructuralSystem::Cantilever, 25.0, 0.004, 2000.0, 250.0, 300.0))
-            .unwrap();
+    let r = span_depth_limit(&balk(
+        StructuralSystem::Cantilever,
+        25.0,
+        0.004,
+        2000.0,
+        250.0,
+        300.0,
+    ))
+    .unwrap();
     assert_relative_eq!(r.k, 0.4, max_relative = 1e-15);
     assert_relative_eq!(r.limit_l_over_d, 8.95, max_relative = 1e-12);
     assert_relative_eq!(r.actual_l_over_d, 8.0, max_relative = 1e-15);
@@ -240,15 +272,30 @@ fn uitkraging_k_is_0_4() {
 /// ORDEGROOTTE vast.
 #[test]
 fn vlakke_plaatvloer_met_de_8_5_m_regel() {
-    let mut req = balk(StructuralSystem::FlatSlab, 30.0, 0.005, 12_000.0, 700.0, 1000.0);
+    let mut req = balk(
+        StructuralSystem::FlatSlab,
+        30.0,
+        0.005,
+        12_000.0,
+        700.0,
+        1000.0,
+    );
     req.l_eff_mm = Some(12_000.0);
     req.carries_brittle_partitions = Some(true);
 
     let r = span_depth_limit(&req).unwrap();
     assert_relative_eq!(r.k, 1.2, max_relative = 1e-15);
     assert_relative_eq!(r.base_l_over_d, 24.620_186_645_245_38, max_relative = 1e-12);
-    assert_relative_eq!(factor(&r, "lange_overspanning"), 8.5 / 12.0, max_relative = 1e-12);
-    assert_relative_eq!(r.limit_l_over_d, 17.439_298_873_715_48, max_relative = 1e-12);
+    assert_relative_eq!(
+        factor(&r, "lange_overspanning"),
+        8.5 / 12.0,
+        max_relative = 1e-12
+    );
+    assert_relative_eq!(
+        r.limit_l_over_d,
+        17.439_298_873_715_48,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(r.unity_check, 0.983_001_510_954_942_5, max_relative = 1e-12);
     assert_eq!(r.status, CheckStatus::Ok);
 
@@ -265,11 +312,22 @@ fn vlakke_plaatvloer_met_de_8_5_m_regel() {
     let r = span_depth_limit(&req).unwrap();
     assert_relative_eq!(factor(&r, "lange_overspanning"), 1.0, max_relative = 1e-15);
 
-    let mut balkje = balk(StructuralSystem::InteriorSpan, 30.0, 0.005, 8000.0, 700.0, 300.0);
+    let mut balkje = balk(
+        StructuralSystem::InteriorSpan,
+        30.0,
+        0.005,
+        8000.0,
+        700.0,
+        300.0,
+    );
     balkje.l_eff_mm = Some(8000.0);
     balkje.carries_brittle_partitions = Some(true);
     let r = span_depth_limit(&balkje).unwrap();
-    assert_relative_eq!(factor(&r, "lange_overspanning"), 7.0 / 8.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        factor(&r, "lange_overspanning"),
+        7.0 / 8.0,
+        max_relative = 1e-12
+    );
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -322,8 +380,16 @@ fn tabel_7_4n_regel_voor_regel() {
             .base_l_over_d
     };
 
-    assert_relative_eq!(bij(0.015, StructuralSystem::SimplySupported), HOOG, max_relative = 1e-12);
-    assert_relative_eq!(bij(0.005, StructuralSystem::SimplySupported), LAAG, max_relative = 1e-12);
+    assert_relative_eq!(
+        bij(0.015, StructuralSystem::SimplySupported),
+        HOOG,
+        max_relative = 1e-12
+    );
+    assert_relative_eq!(
+        bij(0.005, StructuralSystem::SimplySupported),
+        LAAG,
+        max_relative = 1e-12
+    );
 
     let rijen: [(StructuralSystem, f64, f64, f64); 5] = [
         (StructuralSystem::SimplySupported, 1.0, 14.0, 20.0),
@@ -363,10 +429,20 @@ fn tabel_7_4n_regel_voor_regel() {
 /// hele grenswaarde leunt dan op de meerwapening.
 #[test]
 fn correctie_7_17_drie_gevallen() {
-    let gevallen: [(f64, f64, f64); 3] =
-        [(1200.0, 1200.0, 1.0), (800.0, 1000.0, 1.25), (600.0, 1200.0, 2.0)];
+    let gevallen: [(f64, f64, f64); 3] = [
+        (1200.0, 1200.0, 1.0),
+        (800.0, 1000.0, 1.25),
+        (600.0, 1200.0, 2.0),
+    ];
     for (a_req, a_prov, verwacht) in gevallen {
-        let mut req = balk(StructuralSystem::SimplySupported, 25.0, 0.004, 6000.0, 450.0, 300.0);
+        let mut req = balk(
+            StructuralSystem::SimplySupported,
+            25.0,
+            0.004,
+            6000.0,
+            450.0,
+            300.0,
+        );
         req.f_yk_mpa = Some(500.0);
         req.a_s_req_mm2 = Some(a_req);
         req.a_s_prov_mm2 = Some(a_prov);
@@ -383,7 +459,14 @@ fn correctie_7_17_drie_gevallen() {
 
     // Een andere staalsoort telt door: f_yk = 600, A_s,req = A_s,prov
     //   500/(600 · 1,0) = 0,833333…
-    let mut req = balk(StructuralSystem::SimplySupported, 25.0, 0.004, 6000.0, 450.0, 300.0);
+    let mut req = balk(
+        StructuralSystem::SimplySupported,
+        25.0,
+        0.004,
+        6000.0,
+        450.0,
+        300.0,
+    );
     req.f_yk_mpa = Some(600.0);
     req.a_s_req_mm2 = Some(900.0);
     req.a_s_prov_mm2 = Some(900.0);
@@ -412,8 +495,12 @@ fn correctie_7_17_drie_gevallen() {
 /// ```
 #[test]
 fn grenswaarden_7_4_1() {
-    let gevallen: [(f64, f64, f64); 4] =
-        [(4000.0, 16.0, 8.0), (6000.0, 24.0, 12.0), (7500.0, 30.0, 15.0), (12_000.0, 48.0, 24.0)];
+    let gevallen: [(f64, f64, f64); 4] = [
+        (4000.0, 16.0, 8.0),
+        (6000.0, 24.0, 12.0),
+        (7500.0, 30.0, 15.0),
+        (12_000.0, 48.0, 24.0),
+    ];
     for (l, w250, w500) in gevallen {
         let g = deflection_limits(l);
         assert_relative_eq!(g.span_mm, l, max_relative = 1e-15);
@@ -435,7 +522,14 @@ fn grenswaarden_7_4_1() {
 /// en verwijst naar 7.4.3.
 #[test]
 fn buiten_het_toepassingsgebied() {
-    let mut req = balk(StructuralSystem::SimplySupported, 25.0, 0.004, 6000.0, 450.0, 300.0);
+    let mut req = balk(
+        StructuralSystem::SimplySupported,
+        25.0,
+        0.004,
+        6000.0,
+        450.0,
+        300.0,
+    );
     req.n_ed_kn = Some(-45.0);
     let fout = span_depth_limit(&req).unwrap_err();
     assert!(fout.contains("ZONDER NORMAALDRUK"), "{fout}");
@@ -445,14 +539,25 @@ fn buiten_het_toepassingsgebied() {
     // reden onverkort in het rapport.
     let calc = check_span_depth_ratio(
         &req,
-        ForceStateSnapshot { combination_id: 2, position_mm: 3000.0, forces: Default::default() },
+        ForceStateSnapshot {
+            combination_id: 2,
+            position_mm: 3000.0,
+            forces: Default::default(),
+        },
     );
     assert_eq!(calc.status, CheckStatus::NotApplicable);
     assert!(calc.uc.is_none());
     assert!(calc.notes.iter().any(|n| n.contains("ZONDER NORMAALDRUK")));
 
     // ρ' ≥ ρ laat (7.16.b) door nul delen. Geen aftopping, maar een weigering.
-    let mut req = balk(StructuralSystem::SimplySupported, 25.0, 0.012, 6000.0, 450.0, 300.0);
+    let mut req = balk(
+        StructuralSystem::SimplySupported,
+        25.0,
+        0.012,
+        6000.0,
+        450.0,
+        300.0,
+    );
     req.rho_prime = 0.012;
     assert!(span_depth_limit(&req).unwrap_err().contains("ρ − ρ'"));
 }
@@ -472,7 +577,11 @@ fn de_afleiding_is_na_te_rekenen() {
     req.a_s_prov_mm2 = Some(1000.0);
     let calc = check_span_depth_ratio(
         &req,
-        ForceStateSnapshot { combination_id: 5, position_mm: 3750.0, forces: Default::default() },
+        ForceStateSnapshot {
+            combination_id: 5,
+            position_mm: 3750.0,
+            forces: Default::default(),
+        },
     );
 
     // HANDBEREKENING: 1,3 · 20,516822204… = 26,671868866…; (7.17) geeft 1,000;
@@ -514,7 +623,11 @@ fn de_afleiding_is_na_te_rekenen() {
     }
     // De NB-bepaling bij tabel 7.4N hoort zichtbaar te zijn: zij maakt de
     // tabel normatief en dat is de enige NBP in heel §7.4.
-    let k_stap = calc.deelstappen.iter().find(|s| s.id == "k_tabel_7_4n").unwrap();
+    let k_stap = calc
+        .deelstappen
+        .iter()
+        .find(|s| s.id == "k_tabel_7_4n")
+        .unwrap();
     assert!(k_stap.notes.iter().any(|n| n.contains("normatief")));
     // En de grenzen waarvoor de toets in de plaats komt, met de combinatie.
     assert!(calc

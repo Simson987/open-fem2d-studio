@@ -238,9 +238,18 @@ fn uitkraging_langer_dan_de_halve_aangrenzende_overspanning_wordt_geweigerd() {
     }
     // De melding noemt de reden en de getallen, zodat de lezer hem kan nagaan.
     let tekst = fout.to_string();
-    assert!(tekst.contains("2600"), "melding zonder de uitkraaglengte: {tekst}");
-    assert!(tekst.contains("2500"), "melding zonder de grenswaarde: {tekst}");
-    assert!(tekst.contains("figuur"), "melding zonder vindplaats: {tekst}");
+    assert!(
+        tekst.contains("2600"),
+        "melding zonder de uitkraaglengte: {tekst}"
+    );
+    assert!(
+        tekst.contains("2500"),
+        "melding zonder de grenswaarde: {tekst}"
+    );
+    assert!(
+        tekst.contains("figuur"),
+        "melding zonder vindplaats: {tekst}"
+    );
 }
 
 /// OPMERKING bij figuur 5.2: "de verhouding van aangrenzende overspanningen
@@ -486,8 +495,16 @@ fn drie_gelijke_velden() {
 #[test]
 fn constante_breedte_per_overspanning_is_de_velddoorsnede() {
     let v = beff_distribution(&referentielijn(), &t_doorsnede()).unwrap();
-    dichtbij(v.constant_for_span(0).unwrap(), 1720.0, "constante b_eff l1");
-    dichtbij(v.constant_for_span(1).unwrap(), 1400.0, "constante b_eff l2");
+    dichtbij(
+        v.constant_for_span(0).unwrap(),
+        1720.0,
+        "constante b_eff l1",
+    );
+    dichtbij(
+        v.constant_for_span(1).unwrap(),
+        1400.0,
+        "constante b_eff l2",
+    );
     assert_eq!(v.constant_for_span(2), None, "uitkraging heeft geen veld");
     // De veiligste enkele waarde is de kleinste over alle gebieden (960 mm,
     // boven het tussensteunpunt).

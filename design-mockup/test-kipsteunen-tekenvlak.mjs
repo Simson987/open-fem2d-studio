@@ -29,7 +29,7 @@
 // Draaien: npx tsx test-kipsteunen-tekenvlak.mjs
 //      of: node scripts/run-tests.mjs --filter=kipsteunen-tekenvlak
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -345,12 +345,23 @@ log("\n[8] Verlopende staaf, en staven zonder kiptoets");
 // [9] De rekenkern zelf. De L_st van het maatgevende kipveld (staal) en de ℓ
 // van tabel 6.1 (hout) moeten een veldlengte zijn die op de tekening staat.
 // ─────────────────────────────────────────────────────────────────────────
-const kern = (opdracht, inputs) => {
-  const r = spawnSync(TOETSBRUG, [], {
-    input: JSON.stringify({ opdracht, inputs }), maxBuffer: 256 * 1024 * 1024, encoding: "utf8",
+const kern = async (opdracht, inputs) => {
+  const antwoord = await new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code !== 0) reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+      else resolve(out);
+    });
+    child.stdin.end(JSON.stringify({ opdracht, inputs }));
   });
-  if (r.error) throw r.error;
-  const data = JSON.parse(r.stdout);
+  const data = JSON.parse(antwoord);
   if (data && !Array.isArray(data) && typeof data === "object" && "fout" in data) throw new Error(data.fout);
   return data;
 };
@@ -379,7 +390,7 @@ if (!existsSync(TOETSBRUG)) {
     const beams = [staalStaaf(cfg)];
     const { inputs } = staalInvoer(liggerNodes, beams, liggerSupports);
     const [beeld] = kipsteunBeelden({ nodes: liggerNodes, beams, supports: liggerSupports });
-    const [r] = kern("check_steel_beams", inputs);
+    const [r] = await kern("check_steel_beams", inputs);
     const kip = r.checks.find((c) => c.id === "6.3.2_ltb");
     const lSt = [...new Set(waardenVan(kip, "L_{st}").map((v) => Math.round(v * 1e6) / 1e6))];
     const ketting = beeld.kettingen.find((k) => k.zijde === "boven" || k.zijde === "beide");
@@ -391,7 +402,7 @@ if (!existsSync(TOETSBRUG)) {
     const beams = [houtStaaf(cfg)];
     const { inputs } = houtInvoer(liggerNodes, beams, liggerSupports);
     const [beeld] = kipsteunBeelden({ nodes: liggerNodes, beams, supports: liggerSupports });
-    const [r] = kern("check_timber_beams", inputs);
+    const [r] = await kern("check_timber_beams", inputs);
     const kip = r.checks.find((c) => c.id === "6.3.3_beam_stability");
     const lef = waardenVan(kip, "l_{ef}")[0];
     const l = beeld.kettingen[0].toetsLengteMm;

@@ -1,0 +1,139 @@
+{
+  "format": "open-fem2d-studio-v2",
+  "version": 3,
+  "savedAt": "2026-10-08T00:00:00.000Z",
+  "nodes": [],
+  "beams": [],
+  "supports": [],
+  "plates": [],
+  "loads": [],
+  "loadCases": [
+    {
+      "id": 5,
+      "name": "Eigen gewicht",
+      "type": "dead",
+      "eigenGewicht": true
+    }
+  ],
+  "activeLoadCaseId": 5,
+  "selfWeightEnabled": true,
+  "nonlinearEnabled": false,
+  "analysetype": "eersteOrde",
+  "modelDimension": "3d",
+  "model3d": {
+    "nodes": [
+      {
+        "id": 1,
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 2,
+        "x": 1,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 3,
+        "x": 1,
+        "y": 1,
+        "z": 0
+      },
+      {
+        "id": 4,
+        "x": 0,
+        "y": 1,
+        "z": 0
+      },
+      {
+        "id": 5,
+        "x": 0,
+        "y": 0,
+        "z": 1
+      },
+      {
+        "id": 6,
+        "x": 1,
+        "y": 0,
+        "z": 1
+      },
+      {
+        "id": 7,
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      {
+        "id": 8,
+        "x": 0,
+        "y": 1,
+        "z": 1
+      }
+    ],
+    "beams": [],
+    "volumes": [
+      {
+        "id": 1,
+        "kind": "hex8",
+        "nodeIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "eMpa": 30000,
+        "poisson": 0.2,
+        "densityKgPerM3": 2500
+      }
+    ],
+    "supports": [
+      {
+        "nodeId": 1,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 4,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 5,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 8,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      }
+    ],
+    "loads": []
+  },
+  "projectInfo": {
+    "name": "Hex8 eigen gewicht, ingeklemde zijde",
+    "projectNumber": "VF-3D-VOLUME-02"
+  },
+  "frame3dViewSets": []
+}

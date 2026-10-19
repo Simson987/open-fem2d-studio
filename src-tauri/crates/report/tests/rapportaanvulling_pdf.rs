@@ -105,8 +105,14 @@ fn kolomkorf() -> ReinforcementCage {
         stirrup_diameter_mm: 8.0,
         stirrup_spacing_mm: Some(200.0),
         stirrup_legs: Some(2),
-        top: RebarRow { count: 4, diameter_mm: 20.0 },
-        bottom: RebarRow { count: 4, diameter_mm: 20.0 },
+        top: RebarRow {
+            count: 4,
+            diameter_mm: 20.0,
+        },
+        bottom: RebarRow {
+            count: 4,
+            diameter_mm: 20.0,
+        },
         ..ReinforcementCage::default()
     }
 }
@@ -169,7 +175,10 @@ fn liggerzones() -> ReinforcementZones {
         longitudinal: vec![
             LongitudinalZone {
                 side: RebarSide::Bottom,
-                row: RebarRow { count: 3, diameter_mm: 16.0 },
+                row: RebarRow {
+                    count: 3,
+                    diameter_mm: 16.0,
+                },
                 x_start_mm: 0.0,
                 x_end_mm: 1500.0,
                 bar_shape: Staafvorm::Recht,
@@ -177,7 +186,10 @@ fn liggerzones() -> ReinforcementZones {
             },
             LongitudinalZone {
                 side: RebarSide::Bottom,
-                row: RebarRow { count: 5, diameter_mm: 16.0 },
+                row: RebarRow {
+                    count: 5,
+                    diameter_mm: 16.0,
+                },
                 x_start_mm: 1500.0,
                 x_end_mm: 4500.0,
                 bar_shape: Staafvorm::Recht,
@@ -185,7 +197,10 @@ fn liggerzones() -> ReinforcementZones {
             },
             LongitudinalZone {
                 side: RebarSide::Bottom,
-                row: RebarRow { count: 3, diameter_mm: 16.0 },
+                row: RebarRow {
+                    count: 3,
+                    diameter_mm: 16.0,
+                },
                 x_start_mm: 4500.0,
                 x_end_mm: 6000.0,
                 bar_shape: Staafvorm::Recht,
@@ -193,7 +208,10 @@ fn liggerzones() -> ReinforcementZones {
             },
             LongitudinalZone {
                 side: RebarSide::Top,
-                row: RebarRow { count: 2, diameter_mm: 12.0 },
+                row: RebarRow {
+                    count: 2,
+                    diameter_mm: 12.0,
+                },
                 x_start_mm: 0.0,
                 x_end_mm: 6000.0,
                 bar_shape: Staafvorm::Recht,
@@ -422,8 +440,14 @@ fn volledige_invoer() -> ReportInput {
             korf: ReinforcementCage {
                 cover_mm: 30.0,
                 stirrup_diameter_mm: 8.0,
-                top: RebarRow { count: 2, diameter_mm: 12.0 },
-                bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+                top: RebarRow {
+                    count: 2,
+                    diameter_mm: 12.0,
+                },
+                bottom: RebarRow {
+                    count: 3,
+                    diameter_mm: 16.0,
+                },
                 ..ReinforcementCage::default()
             },
             zones: liggerzones(),
@@ -469,14 +493,24 @@ fn de_kern_levert_een_slankheid_voor_de_proefkolom() {
 #[test]
 fn de_kern_levert_een_gevulde_dekkingslijn() {
     let d = reken_dekkingslijn();
-    assert!(!d.onder.punten.is_empty(), "de onderwapening hoort punten te hebben");
-    assert!(!d.onder.bundels.is_empty(), "de onderwapening hoort bundels te hebben");
+    assert!(
+        !d.onder.punten.is_empty(),
+        "de onderwapening hoort punten te hebben"
+    );
+    assert!(
+        !d.onder.bundels.is_empty(),
+        "de onderwapening hoort bundels te hebben"
+    );
     assert!(d.a_l_mm > 0.0, "a_l = {} moet positief zijn", d.a_l_mm);
     assert!(
         !d.a_l_artikel.is_empty(),
         "de vindplaats van a_l hoort meegeleverd te worden"
     );
-    assert_eq!(d.steunpunten.len(), 2, "beide staafuiteinden horen een eis te krijgen");
+    assert_eq!(
+        d.steunpunten.len(),
+        2,
+        "beide staafuiteinden horen een eis te krijgen"
+    );
 }
 
 /// De vier nieuwe stukken staan werkelijk op papier.

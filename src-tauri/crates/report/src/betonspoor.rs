@@ -66,7 +66,10 @@ use nen_en_1992_1_1::stress_strain::NonlinearBasis;
 
 /// Eén ronde van de lus — spiegel van `StijfheidRonde` in de store.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct StijfheidRonde {
     /// 1-gebaseerd; ronde 0 is de indeling en telt niet als oplossing mee.
     pub ronde: u32,
@@ -83,7 +86,10 @@ pub struct StijfheidRonde {
 /// `BetonSegmentStaaf` in `design-mockup/src/lib/betonStijfheid.ts`, beperkt
 /// tot wat er getekend wordt.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct BetonStaafDoorsnede {
     pub beam_id: u32,
     /// De doorsnede zoals de kern hem heeft gekregen — bij een T of een L dus
@@ -98,7 +104,10 @@ pub struct BetonStaafDoorsnede {
 /// stappen, en dat is erger dan een lange lijst: de lezer ziet dan niet dat
 /// die staaf de ongescheurde stijfheid heeft gehouden.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct OvergeslagenStaaf {
     pub beam_id: u32,
     /// Woordelijk de reden die de frontend heeft vastgesteld.
@@ -108,7 +117,10 @@ pub struct OvergeslagenStaaf {
 /// Wat één belastingcombinatie fysisch niet-lineair opleverde — spiegel van
 /// `StijfheidCombinatie` in de store.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct StijfheidCombinatie {
     pub combinatie_id: u32,
     pub combinatie_naam: String,
@@ -126,7 +138,10 @@ pub struct StijfheidCombinatie {
 
 /// Het hele spoor van één rekengang — spiegel van `BetonStijfheidState`.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct BetonStijfheidSpoor {
     /// De gewenste segmentlengte waarmee gerekend is, mm.
     pub segment_lengte_mm: f64,

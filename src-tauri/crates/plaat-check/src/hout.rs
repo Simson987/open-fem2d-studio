@@ -68,7 +68,9 @@
 use mechanics::{ForceStateSnapshot, InternalForces};
 use nationale_bijlage::{Aanduidingen, Ndp1995};
 use nen_en_1993_1_1_section::{CheckStatus, Deelstap, NamedValue, ResistanceCalc, UnityCheck};
-use nen_en_1995_1_1::{k_mod, strength_class_by_name, LoadDurationClass, ServiceClass, StrengthClass, TimberType};
+use nen_en_1995_1_1::{
+    k_mod, strength_class_by_name, LoadDurationClass, ServiceClass, StrengthClass, TimberType,
+};
 use steel_check::{CheckKind, NamedCheck};
 use timber_check::belastingduur::duurklasse_naam;
 
@@ -93,7 +95,12 @@ pub const TREK_90_ID: &str = "6.1.3_trek_loodrecht";
 /// wél binnen de norm kan doen: de trek loodrecht op de vezel vermijden.
 ///
 /// Publiek zodat paneel-, rapport- en PDF-tests de zin kunnen terugzoeken.
-pub fn reden_trek_loodrecht(sigma_t90_mpa: f64, element: u32, comb: u32, soort: TimberType) -> String {
+pub fn reden_trek_loodrecht(
+    sigma_t90_mpa: f64,
+    element: u32,
+    comb: u32,
+    soort: TimberType,
+) -> String {
     format!(
         "In deze plaat staat trek loodrecht op de vezel: σ_t,90,d tot {} N/mm² (element {} in \
          combinatie {}). NEN-EN 1995-1-1 6.1.3(1)P eist dat \"het volume-effect van een element\" \
@@ -149,7 +156,10 @@ pub fn hoofdspanningen(sx: f64, sy: f64, txy: f64) -> [(f64, f64); 2] {
     let m = 0.5 * (sx + sy);
     let r = (0.25 * (sx - sy) * (sx - sy) + txy * txy).sqrt();
     let hoek = 0.5 * (2.0 * txy).atan2(sx - sy);
-    [(m + r, hoek.to_degrees()), (m - r, hoek.to_degrees() + 90.0)]
+    [
+        (m + r, hoek.to_degrees()),
+        (m - r, hoek.to_degrees() + 90.0),
+    ]
 }
 
 /// f_c,α,d volgens (6.16).
@@ -195,7 +205,9 @@ fn beoordeel(el: &PlaatElementSpanning, hoek: f64, s: &Sterkten) -> Vec<(String,
         .iter()
         .filter(|(sp, _)| *sp < 0.0)
         .map(|(sp, richting)| -sp / f_c_alfa_d(s.c0, s.c90, richting - hoek))
-        .fold(None, |acc: Option<f64>, u| Some(acc.map_or(u, |a| a.max(u))));
+        .fold(None, |acc: Option<f64>, u| {
+            Some(acc.map_or(u, |a| a.max(u)))
+        });
     if let Some(u) = hoek_uc {
         uit.push((DRUK_HOEK_ID.to_string(), u));
     }
@@ -222,7 +234,11 @@ pub fn toets(input: &PlateCheckInput) -> PlateCheckResult {
         );
     };
     for c in &input.combinations {
-        if !input.load_duration_per_combination.iter().any(|d| d.combination_id == c.combination_id) {
+        if !input
+            .load_duration_per_combination
+            .iter()
+            .any(|d| d.combination_id == c.combination_id)
+        {
             return geweigerd(
                 input,
                 format!(
@@ -249,7 +265,13 @@ pub fn toets(input: &PlateCheckInput) -> PlateCheckResult {
             .map(|d| d.load_duration)
             .expect("hierboven gecontroleerd")
     };
-    let sterkte_van = |comb: u32| sterkten(klasse, k_mod(klasse.timber_type, klimaat, duur_van(comb)), gamma_m);
+    let sterkte_van = |comb: u32| {
+        sterkten(
+            klasse,
+            k_mod(klasse.timber_type, klimaat, duur_van(comb)),
+            gamma_m,
+        )
+    };
 
     // Trek loodrecht op de vezel: niet toetsbaar, wél opzoeken waar en hoeveel.
     let mut trek90: Option<(f64, u32, u32)> = None;
@@ -280,10 +302,11 @@ pub fn toets(input: &PlateCheckInput) -> PlateCheckResult {
     niet_getoetst.push(PlaatNietGetoetst {
         id: "6.3_stabiliteit".to_string(),
         titel: "Stabiliteit van de schijf (6.3)".to_string(),
-        reden: "6.3 geeft knik- en kipregels voor staven (kolommen en liggers), geen toets voor het \
+        reden:
+            "6.3 geeft knik- en kipregels voor staven (kolommen en liggers), geen toets voor het \
                 plooien van een schijf die in haar vlak op druk of afschuiving belast is. Niet \
                 getoetst; \"voldoet\" gaat alleen over de sterkte van de elementen."
-            .to_string(),
+                .to_string(),
         bepaalt_status: false,
     });
 
@@ -304,7 +327,10 @@ pub fn toets(input: &PlateCheckInput) -> PlateCheckResult {
             )),
         })
         .collect();
-    let maatgevend = v.per_toets.iter().max_by(|a, b| a.punt.uc.total_cmp(&b.punt.uc));
+    let maatgevend = v
+        .per_toets
+        .iter()
+        .max_by(|a, b| a.punt.uc.total_cmp(&b.punt.uc));
     let uc_max = maatgevend.map_or(0.0, |m| m.punt.uc);
 
     let mut notes = input.notities.clone();
@@ -376,7 +402,11 @@ fn basis_van(input: &PlateCheckInput, comb: u32) -> String {
 }
 
 fn nv(symbol: &str, value: f64, unit: &str) -> NamedValue {
-    NamedValue { symbol: symbol.to_string(), value, unit: unit.to_string() }
+    NamedValue {
+        symbol: symbol.to_string(),
+        value,
+        unit: unit.to_string(),
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -396,11 +426,41 @@ fn afleiding(
 
     // (symbool f_k, waarde f_k, symbool f_d, titel, artikel, uitdrukking σ, symbool σ)
     let (fk_sym, fk, fd_sym, titel, artikel) = match id {
-        TREK_0_ID => ("f_{t,0,k}", klasse.f_t0k, "f_{t,0,d}", "Trek evenwijdig aan de vezel", "art. 6.1.2 (6.1)"),
-        DRUK_0_ID => ("f_{c,0,k}", klasse.f_c0k, "f_{c,0,d}", "Druk evenwijdig aan de vezel", "art. 6.1.4 (6.2)"),
-        DRUK_90_ID => ("f_{c,90,k}", klasse.f_c90k, "f_{c,90,d}", "Druk loodrecht op de vezel", "art. 6.1.5 (6.3)"),
-        AFSCHUIF_ID => ("f_{v,k}", klasse.f_vk, "f_{v,d}", "Afschuiving in het vlak", "art. 6.1.7 (6.13)"),
-        _ => ("f_{c,0,k}", klasse.f_c0k, "f_{c,0,d}", "Druk onder een hoek met de vezel", "art. 6.2.2 (6.16)"),
+        TREK_0_ID => (
+            "f_{t,0,k}",
+            klasse.f_t0k,
+            "f_{t,0,d}",
+            "Trek evenwijdig aan de vezel",
+            "art. 6.1.2 (6.1)",
+        ),
+        DRUK_0_ID => (
+            "f_{c,0,k}",
+            klasse.f_c0k,
+            "f_{c,0,d}",
+            "Druk evenwijdig aan de vezel",
+            "art. 6.1.4 (6.2)",
+        ),
+        DRUK_90_ID => (
+            "f_{c,90,k}",
+            klasse.f_c90k,
+            "f_{c,90,d}",
+            "Druk loodrecht op de vezel",
+            "art. 6.1.5 (6.3)",
+        ),
+        AFSCHUIF_ID => (
+            "f_{v,k}",
+            klasse.f_vk,
+            "f_{v,d}",
+            "Afschuiving in het vlak",
+            "art. 6.1.7 (6.13)",
+        ),
+        _ => (
+            "f_{c,0,k}",
+            klasse.f_c0k,
+            "f_{c,0,d}",
+            "Druk onder een hoek met de vezel",
+            "art. 6.2.2 (6.16)",
+        ),
     };
     let fd = km * fk / gamma_m;
 
@@ -490,9 +550,19 @@ fn afleiding(
                  toegepast — aan de veilige kant."
                     .to_string(),
             );
-            ("\\sigma_{t,0,d} \\le f_{t,0,d}", "\\sigma_{t,0,d}", m.sigma_1, fd)
+            (
+                "\\sigma_{t,0,d} \\le f_{t,0,d}",
+                "\\sigma_{t,0,d}",
+                m.sigma_1,
+                fd,
+            )
         }
-        DRUK_0_ID => ("\\sigma_{c,0,d} \\le f_{c,0,d}", "\\sigma_{c,0,d}", -m.sigma_1, fd),
+        DRUK_0_ID => (
+            "\\sigma_{c,0,d} \\le f_{c,0,d}",
+            "\\sigma_{c,0,d}",
+            -m.sigma_1,
+            fd,
+        ),
         DRUK_90_ID => {
             notes.push(format!(
                 "k_c,90 = {}: 6.1.5(2) — de hogere waarden van (3) en (4) gelden voor elementen op \
@@ -500,7 +570,12 @@ fn afleiding(
                  is de spanning in het element zelf.",
                 tekst(K_C90, 2)
             ));
-            ("\\sigma_{c,90,d} \\le k_{c,90} \\, f_{c,90,d}", "\\sigma_{c,90,d}", -m.sigma_2, K_C90 * fd)
+            (
+                "\\sigma_{c,90,d} \\le k_{c,90} \\, f_{c,90,d}",
+                "\\sigma_{c,90,d}",
+                -m.sigma_2,
+                K_C90 * fd,
+            )
         }
         AFSCHUIF_ID => {
             notes.push(
@@ -526,7 +601,12 @@ fn afleiding(
                 symbol: "f_{c,90,d}".to_string(),
                 article: "art. 2.4.1 (2.14)".to_string(),
                 formula_latex: "f_{c,90,d} = \\frac{k_{mod} \\, f_{c,90,k}}{\\gamma_M}".to_string(),
-                ingevuld_latex: format!("\\frac{{{} \\cdot {}}}{{{}}}", getal(km, 3), getal(klasse.f_c90k, 3), getal(gamma_m, 3)),
+                ingevuld_latex: format!(
+                    "\\frac{{{} \\cdot {}}}{{{}}}",
+                    getal(km, 3),
+                    getal(klasse.f_c90k, 3),
+                    getal(gamma_m, 3)
+                ),
                 variables: vec![],
                 value: Some(f_c90d),
                 unit: "N/mm²".to_string(),
@@ -570,11 +650,20 @@ fn afleiding(
                 unit: "N/mm²".to_string(),
                 notes: vec![format!("k_c,90 = {} (6.1.5(2)).", tekst(K_C90, 2))],
             });
-            ("\\sigma_{c,\\alpha,d} \\le f_{c,\\alpha,d}", "\\sigma_{c,\\alpha,d}", -sp, fca)
+            (
+                "\\sigma_{c,\\alpha,d} \\le f_{c,\\alpha,d}",
+                "\\sigma_{c,\\alpha,d}",
+                -sp,
+                fca,
+            )
         }
     };
     let uc = ed / rd;
-    notes.push(format!("k_mod = {} ({}).", tekst(km, 2), duurklasse_naam(duur)));
+    notes.push(format!(
+        "k_mod = {} ({}).",
+        tekst(km, 2),
+        duurklasse_naam(duur)
+    ));
     let rd_sym = match id {
         DRUK_90_ID => "k_{c,90} f_{c,90,d}",
         DRUK_HOEK_ID => "f_{c,\\alpha,d}",
@@ -595,8 +684,17 @@ fn afleiding(
         deelstappen: stappen,
         value: ed,
         unit: "N/mm²".to_string(),
-        uc: Some(UnityCheck { ed, rd, uc, formula_latex: format!("{ed_sym} / {rd_sym}") }),
-        status: if uc <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk },
+        uc: Some(UnityCheck {
+            ed,
+            rd,
+            uc,
+            formula_latex: format!("{ed_sym} / {rd_sym}"),
+        }),
+        status: if uc <= 1.0 {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::NotOk
+        },
         notes,
     }
 }
@@ -613,7 +711,11 @@ mod tests {
         for hoek in [0.0, 17.0, 30.0, 45.0, 90.0, 133.0] {
             let m = naar_materiaalassen(3.0, -2.0, 1.5, hoek);
             assert_relative_eq!(m.sigma_1 + m.sigma_2, 1.0, epsilon = 1e-12);
-            assert_relative_eq!(m.sigma_1 * m.sigma_2 - m.tau_12 * m.tau_12, -6.0 - 2.25, epsilon = 1e-12);
+            assert_relative_eq!(
+                m.sigma_1 * m.sigma_2 - m.tau_12 * m.tau_12,
+                -6.0 - 2.25,
+                epsilon = 1e-12
+            );
         }
         let m = naar_materiaalassen(3.0, -2.0, 1.5, 90.0);
         assert_relative_eq!(m.sigma_1, -2.0, epsilon = 1e-12);

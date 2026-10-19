@@ -1,0 +1,30 @@
+{
+  "kind": "mixed2d",
+  "input": {
+    "analysis": "linear",
+    "nodes": [
+      { "id": 1, "x": 0.0, "y": 0.0 },
+      { "id": 2, "x": 1.0, "y": 0.0 },
+      { "id": 3, "x": 2.0, "y": 0.0 },
+      { "id": 4, "x": 0.0, "y": 1.0 },
+      { "id": 5, "x": 1.0, "y": 1.0 },
+      { "id": 6, "x": 2.0, "y": 1.0 }
+    ],
+    "materials": [{ "id": 1, "eMpa": 1000.0, "nu": 0.0 }],
+    "triangles": [
+      { "id": 10, "nodeIds": [1, 2, 5], "materialId": 1, "thicknessM": 0.1 },
+      { "id": 11, "nodeIds": [1, 5, 4], "materialId": 1, "thicknessM": 0.1 }
+    ],
+    "quads": [
+      { "id": 12, "nodeIds": [2, 3, 6, 5], "materialId": 1, "thicknessM": 0.1 }
+    ],
+    "supports": [
+      { "nodeId": 1, "ux": true, "uy": true },
+      { "nodeId": 4, "ux": true, "uy": false }
+    ],
+    "loads": [
+      { "nodeId": 3, "fx": 50.0, "fy": 0.0 },
+      { "nodeId": 6, "fx": 50.0, "fy": 0.0 }
+    ]
+  }
+}

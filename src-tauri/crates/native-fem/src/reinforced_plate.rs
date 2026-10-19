@@ -212,6 +212,10 @@ pub struct ReinforcementEnvelope {
     pub crack: Option<[LocatedCrack; 4]>,
 }
 
+/// Position, in-plane membrane force, bending moment, and transverse shear at
+/// one shell result point. Membrane force is shared equally by the two faces.
+pub type ShellResultantPoint = ([f64; 2], [f64; 3], [f64; 3], [f64; 2]);
+
 /// Check element corners and integration points; choose the governing
 /// demand independently for shear, each longitudinal direction and each
 /// crack direction. Extrema between sample points remain unproven.
@@ -221,15 +225,42 @@ pub fn envelope(
     ec_mpa: f64,
     samples: &[([f64; 2], [f64; 3], [f64; 2])],
 ) -> Result<ReinforcementEnvelope, String> {
-    if samples.is_empty() {
-        return Err("reinforcement envelope has no sample points".into());
-    }
+    envelope_points(
+        spec,
+        thickness_m,
+        ec_mpa,
+        samples
+            .iter()
+            .map(|(position, moment, shear)| (*position, [0.0; 3], *moment, *shear)),
+    )
+}
+
+/// Reinforcement post-processing for a shell must include membrane force as
+/// well as bending and shear. The membrane resultant is split equally between
+/// the two reinforced faces before computing face tension and crack width.
+pub fn shell_envelope(
+    spec: &ReinforcementSpec,
+    thickness_m: f64,
+    ec_mpa: f64,
+    samples: &[ShellResultantPoint],
+) -> Result<ReinforcementEnvelope, String> {
+    envelope_points(spec, thickness_m, ec_mpa, samples.iter().copied())
+}
+
+fn envelope_points(
+    spec: &ReinforcementSpec,
+    thickness_m: f64,
+    ec_mpa: f64,
+    samples: impl IntoIterator<Item = ShellResultantPoint>,
+) -> Result<ReinforcementEnvelope, String> {
     let mut best_shear: Option<LocatedShear> = None;
     let mut max_strut_utilization = 0.0_f64;
     let mut longitudinal: Option<LongitudinalEnvelope> = None;
     let mut cracks: Option<[LocatedCrack; 4]> = None;
-    for &(position, moment, shear) in samples {
-        let point = check(spec, thickness_m, ec_mpa, moment, shear)?;
+    let mut checked_points = 0;
+    for (position, membrane, moment, shear) in samples {
+        checked_points += 1;
+        let point = check_with_membrane(spec, thickness_m, ec_mpa, membrane, moment, shear)?;
         if let Some(value) = point.shear {
             max_strut_utilization =
                 max_strut_utilization.max(value.strut_stress_mpa / value.strut_resistance_mpa);
@@ -292,9 +323,12 @@ pub fn envelope(
             }
         }
     }
+    if checked_points == 0 {
+        return Err("reinforcement envelope has no sample points".into());
+    }
     Ok(ReinforcementEnvelope {
         limit_state: spec.limit_state,
-        checked_points: samples.len(),
+        checked_points,
         shear: best_shear,
         maximum_strut_utilization: if spec.limit_state == LimitState::Ultimate {
             Some(max_strut_utilization)
@@ -322,14 +356,15 @@ fn crack_formula(
     cover_mm: f64,
     diameter_mm: f64,
     rho_eff: f64,
+    k2: f64,
     fctm_mpa: f64,
     es_mpa: f64,
     ec_mpa: f64,
     long_term: bool,
 ) -> (f64, f64, f64) {
-    // EC2 7.3.4: k1=0.8 ribbed bars, k2=0.5 bending,
+    // EC2 7.3.4: k1=0.8 ribbed bars, k2 from the strain distribution,
     // k3=3.4 and k4=0.425 (recommended first-generation values).
-    let spacing = 3.4 * cover_mm + 0.425 * 0.8 * 0.5 * diameter_mm / rho_eff;
+    let spacing = 3.4 * cover_mm + 0.425 * 0.8 * k2 * diameter_mm / rho_eff;
     let kt = if long_term { 0.4 } else { 0.6 };
     let alpha_e = es_mpa / ec_mpa;
     let difference = ((sigma_s - kt * fctm_mpa / rho_eff * (1.0 + alpha_e * rho_eff)) / es_mpa)
@@ -342,7 +377,8 @@ fn crack_check(
     force_kn_per_m: f64,
     area_mm2_per_m: f64,
     thickness_m: f64,
-    lever_arm_m: f64,
+    surface_stress_mpa: f64,
+    k2: f64,
     ec_mpa: f64,
 ) -> CrackCheck {
     let zero = || CrackCheck {
@@ -359,12 +395,10 @@ fn crack_check(
     if force_kn_per_m <= 0.0 {
         return zero();
     }
-    let h = thickness_m * 1000.0;
-    // Equivalent uncracked face stress from the orthogonal shell-force demand.
-    let surface_stress = 6.0 * force_kn_per_m * lever_arm_m / (1000.0 * thickness_m.powi(2));
-    if surface_stress <= spec.fctm_mpa {
+    if surface_stress_mpa <= spec.fctm_mpa {
         return zero();
     }
+    let h = thickness_m * 1000.0;
     if area_mm2_per_m == 0.0 {
         return CrackCheck {
             cracked: true,
@@ -390,6 +424,7 @@ fn crack_check(
         spec.cover_mm,
         spec.bar_diameter_mm,
         rho_eff,
+        k2,
         spec.fctm_mpa,
         spec.es_mpa,
         ec_mpa,
@@ -408,6 +443,36 @@ fn crack_check(
     }
 }
 
+/// EC2 7.3.4 (7.13): interpolate k2 from the larger and smaller tensile
+/// strains at the two faces. A face in compression contributes zero tensile
+/// strain, giving k2=0.5 for bending; equal tension on both faces gives k2=1.
+fn crack_strain_distribution_k2(face: f64, opposite_face: f64) -> f64 {
+    let maximum = face.max(opposite_face).max(0.0);
+    if maximum <= 0.0 {
+        return 0.5;
+    }
+    let lesser = face.min(opposite_face).max(0.0);
+    ((maximum + lesser) / (2.0 * maximum)).clamp(0.5, 1.0)
+}
+
+fn shell_surface_tensile_stress_mpa(
+    membrane: [f64; 3],
+    moment: [f64; 3],
+    thickness_m: f64,
+    face_sign: f64,
+) -> [f64; 2] {
+    let h = thickness_m;
+    let normal_stress: [f64; 2] = std::array::from_fn(|axis| {
+        membrane[axis] / (1000.0 * h) + face_sign * 6.0 * moment[axis] / (1000.0 * h.powi(2))
+    });
+    let shear_stress =
+        membrane[2] / (1000.0 * h) + face_sign * 6.0 * moment[2] / (1000.0 * h.powi(2));
+    [
+        normal_stress[0] + shear_stress.abs(),
+        normal_stress[1] + shear_stress.abs(),
+    ]
+}
+
 pub fn check(
     spec: &ReinforcementSpec,
     thickness_m: f64,
@@ -415,9 +480,25 @@ pub fn check(
     moment: [f64; 3],
     shear: [f64; 2],
 ) -> Result<ReinforcementResult, String> {
+    check_with_membrane(spec, thickness_m, ec_mpa, [0.0; 3], moment, shear)
+}
+
+pub fn check_with_membrane(
+    spec: &ReinforcementSpec,
+    thickness_m: f64,
+    ec_mpa: f64,
+    membrane: [f64; 3],
+    moment: [f64; 3],
+    shear: [f64; 2],
+) -> Result<ReinforcementResult, String> {
     spec.validate(thickness_m)?;
     positive(ec_mpa, "concrete elastic modulus")?;
-    if !moment.iter().chain(&shear).all(|v| v.is_finite()) {
+    if !membrane
+        .iter()
+        .chain(&moment)
+        .chain(&shear)
+        .all(|v| v.is_finite())
+    {
         return Err("non-finite plate resultants".into());
     }
     let v = shear[0].hypot(shear[1]);
@@ -466,6 +547,7 @@ pub fn check(
         shifted * direction[1].powi(2),
         shifted * direction[0] * direction[1],
     ];
+    let face_membrane = membrane.map(|value| 0.5 * value);
     let shear_check = ShearCheck {
         demand_kn_per_m: v,
         direction,
@@ -482,8 +564,10 @@ pub fn check(
         shear_shift_skin_kn_per_m: shift,
     };
     let z = dv;
-    let top = orthogonal_tension(shell_forces(moment, z, -1.0, shift));
-    let bottom = orthogonal_tension(shell_forces(moment, z, 1.0, shift));
+    let top_shift = std::array::from_fn(|i| shift[i] + face_membrane[i]);
+    let bottom_shift = top_shift;
+    let top = orthogonal_tension(shell_forces(moment, z, -1.0, top_shift));
+    let bottom = orthogonal_tension(shell_forces(moment, z, 1.0, bottom_shift));
     let requirements = [top[0], top[1], bottom[0], bottom[1]].map(|n| 1000.0 * n / spec.fyd_mpa);
     let provided = [
         spec.top_x_mm2_per_m,
@@ -497,11 +581,36 @@ pub fn check(
         sufficient: std::array::from_fn(|i| provided[i] + 1e-9 >= requirements[i]),
     };
     // Service crack force excludes the ULS shear-induced shift.
-    let top_sls = orthogonal_tension(shell_forces(moment, z, -1.0, [0.0; 3]));
-    let bottom_sls = orthogonal_tension(shell_forces(moment, z, 1.0, [0.0; 3]));
+    let top_sls_resultant = shell_forces(moment, z, -1.0, face_membrane);
+    let bottom_sls_resultant = shell_forces(moment, z, 1.0, face_membrane);
+    let top_surface_stress = shell_surface_tensile_stress_mpa(membrane, moment, thickness_m, -1.0);
+    let bottom_surface_stress =
+        shell_surface_tensile_stress_mpa(membrane, moment, thickness_m, 1.0);
+    let top_sls = orthogonal_tension(top_sls_resultant);
+    let bottom_sls = orthogonal_tension(bottom_sls_resultant);
     let sls = [top_sls[0], top_sls[1], bottom_sls[0], bottom_sls[1]];
-    let crack =
-        std::array::from_fn(|i| crack_check(spec, sls[i], provided[i], thickness_m, z, ec_mpa));
+    let crack_surface_stress = [
+        top_surface_stress[0],
+        top_surface_stress[1],
+        bottom_surface_stress[0],
+        bottom_surface_stress[1],
+    ];
+    let top_k2: [f64; 2] = std::array::from_fn(|axis| {
+        crack_strain_distribution_k2(top_surface_stress[axis], bottom_surface_stress[axis])
+    });
+    let bottom_k2 = top_k2;
+    let crack_k2 = [top_k2[0], top_k2[1], bottom_k2[0], bottom_k2[1]];
+    let crack = std::array::from_fn(|i| {
+        crack_check(
+            spec,
+            sls[i],
+            provided[i],
+            thickness_m,
+            crack_surface_stress[i],
+            crack_k2[i],
+            ec_mpa,
+        )
+    });
     Ok(match spec.limit_state {
         LimitState::Ultimate => ReinforcementResult {
             limit_state: spec.limit_state,
@@ -548,13 +657,49 @@ mod tests {
     }
     #[test]
     fn ec2_crack_formula_matches_published_bridge_example() {
-        // Sétra/JRC bridge guide: sr,max≈408 mm, sigma_s=94 MPa,
+        // Sétra EC2 bridge guide: sr,max≈408 mm, sigma_s=94 MPa,
         // epsilon difference=0.6*94/200000, wk≈0.12 mm.
-        let (spacing, difference, width) =
-            crack_formula(94.0, 30.0, 20.0, 0.0111, 3.2, 200_000.0, 34_077.0, false);
+        let (spacing, difference, width) = crack_formula(
+            94.0, 30.0, 20.0, 0.0111, 0.5, 3.2, 200_000.0, 34_077.0, false,
+        );
         assert!((spacing - 408.0).abs() < 2.0, "{spacing}");
         assert!((difference - 0.000282).abs() < 1e-9);
         assert!((width - 0.12).abs() < 0.01, "{width}");
+    }
+
+    #[test]
+    fn ec2_crack_check_matches_setra_bridge_deck_example() {
+        // Sétra, Eurocode 2 - Application aux ponts-routes en béton,
+        // Annex VII §2.3: Mfrequent=93 kNm/m, h=350 mm, As=1230 mm²/m,
+        // c=30 mm, phi=14 mm, n=Es/Ec=15, sigma_s=267 MPa, wk≈0.22 mm.
+        let mut input = spec();
+        input.limit_state = LimitState::Service;
+        input.fctm_mpa = 3.2;
+        input.es_mpa = 200_000.0;
+        input.cover_mm = 30.0;
+        input.bar_diameter_mm = 14.0;
+        input.lever_arm_mm = Some(283.2);
+        input.bottom_x_mm2_per_m = 1230.0;
+
+        let result = check(
+            &input,
+            0.35,
+            input.es_mpa / 15.0,
+            [93.0, 0.0, 0.0],
+            [0.0, 0.0],
+        )
+        .unwrap();
+        let cracks = result.crack.unwrap();
+        let crack = &cracks[2];
+        assert!(crack.cracked);
+        assert!((crack.steel_stress_mpa.unwrap() - 267.0).abs() < 0.1);
+        assert!((crack.effective_reinforcement_ratio.unwrap() - 0.0143).abs() < 0.0002);
+        assert!((crack.maximum_spacing_mm.unwrap() - 269.0).abs() < 2.0);
+        assert!(
+            (crack.mean_strain_difference.unwrap() - 0.000801).abs() < 1e-7,
+            "{crack:?}"
+        );
+        assert!((crack.characteristic_width_mm.unwrap() - 0.22).abs() < 0.01);
     }
     #[test]
     fn shear_truss_and_sandwich_shift_follow_cement_equations() {
@@ -584,6 +729,95 @@ mod tests {
         assert!(crack[1].unreinforced_tension);
         assert_eq!(crack[1].characteristic_width_mm, None);
         assert_eq!(crack[1].passes_limit, Some(false));
+    }
+
+    #[test]
+    fn shell_membrane_tension_is_shared_between_faces_for_steel_and_crack_checks() {
+        // Uniform tension gives N/h = 3 MPa, above fctm. Each face takes N/2.
+        let membrane = [600.0, 0.0, 0.0];
+        let mut ultimate = spec();
+        ultimate.lever_arm_mm = Some(150.0);
+        ultimate.top_x_mm2_per_m = 1000.0;
+        ultimate.bottom_x_mm2_per_m = 1000.0;
+        let result =
+            check_with_membrane(&ultimate, 0.2, 30_000.0, membrane, [0.0; 3], [0.0; 2]).unwrap();
+        let required = 1000.0 * 300.0 / ultimate.fyd_mpa;
+        let longitudinal = result.longitudinal.unwrap();
+        assert!((longitudinal.required_mm2_per_m[0] - required).abs() < 1e-10);
+        assert!((longitudinal.required_mm2_per_m[2] - required).abs() < 1e-10);
+
+        let mut service = ultimate;
+        service.limit_state = LimitState::Service;
+        let result =
+            check_with_membrane(&service, 0.2, 30_000.0, membrane, [0.0; 3], [0.0; 2]).unwrap();
+        let crack = result.crack.unwrap();
+        for face in [0, 2] {
+            assert!((crack[face].tensile_force_kn_per_m - 300.0).abs() < 1e-12);
+            assert!(crack[face].cracked);
+            assert!(crack[face].characteristic_width_mm.unwrap() > 0.0);
+            let rho = crack[face].effective_reinforcement_ratio.unwrap();
+            let expected_spacing =
+                3.4 * service.cover_mm + 0.425 * 0.8 * 1.0 * service.bar_diameter_mm / rho;
+            assert!((crack[face].maximum_spacing_mm.unwrap() - expected_spacing).abs() < 1e-10);
+        }
+        assert_eq!(crack[1].tensile_force_kn_per_m, 0.0);
+        assert_eq!(crack[3].tensile_force_kn_per_m, 0.0);
+    }
+
+    #[test]
+    fn shell_membrane_crack_initiation_uses_n_over_h_stress() {
+        let mut service = spec();
+        service.limit_state = LimitState::Service;
+        service.lever_arm_mm = Some(150.0);
+        service.top_x_mm2_per_m = 1000.0;
+        service.bottom_x_mm2_per_m = 1000.0;
+        // N/h=1 MPa, below fctm=2.2 MPa. The reinforcement force is tensile,
+        // but the concrete section has not reached its crack initiation stress.
+        let result = check_with_membrane(
+            &service,
+            0.2,
+            30_000.0,
+            [200.0, 0.0, 0.0],
+            [0.0; 3],
+            [0.0; 2],
+        )
+        .unwrap();
+        let crack = result.crack.unwrap();
+        assert!(!crack[0].cracked);
+        assert_eq!(crack[0].characteristic_width_mm, Some(0.0));
+        assert!(!crack[2].cracked);
+    }
+
+    #[test]
+    fn crack_strain_distribution_uses_ec2_pure_and_eccentric_tension_factors() {
+        assert_eq!(crack_strain_distribution_k2(10.0, -10.0), 0.5);
+        assert_eq!(crack_strain_distribution_k2(10.0, 10.0), 1.0);
+        assert!((crack_strain_distribution_k2(10.0, 2.0) - 0.6).abs() < 1e-12);
+
+        let mut service = spec();
+        service.limit_state = LimitState::Service;
+        service.lever_arm_mm = Some(150.0);
+        service.top_x_mm2_per_m = 1000.0;
+        service.bottom_x_mm2_per_m = 1000.0;
+        let result = check_with_membrane(
+            &service,
+            0.2,
+            30_000.0,
+            [1600.0, 0.0, 0.0],
+            [18.0, 0.0, 0.0],
+            [0.0; 2],
+        )
+        .unwrap();
+        let crack = result.crack.unwrap();
+        // Surface stresses are 5.3 and 10.7 MPa: k2=(10.7+5.3)/(2*10.7).
+        let expected_k2 = 80.0 / 107.0;
+        for face in [0, 2] {
+            let check = &crack[face];
+            let k2 = (check.maximum_spacing_mm.unwrap() - 3.4 * service.cover_mm)
+                * check.effective_reinforcement_ratio.unwrap()
+                / (0.425 * 0.8 * service.bar_diameter_mm);
+            assert!((k2 - expected_k2).abs() < 1e-10, "{check:?}");
+        }
     }
 
     #[test]

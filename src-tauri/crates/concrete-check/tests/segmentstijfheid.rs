@@ -24,8 +24,14 @@ fn korf_asym() -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: 2, diameter_mm: 12.0 },
-        bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+        top: RebarRow {
+            count: 2,
+            diameter_mm: 12.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
         ..ReinforcementCage::default()
     }
 }
@@ -34,8 +40,14 @@ fn korf_sym() -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: 3, diameter_mm: 16.0 },
-        bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+        top: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
         ..ReinforcementCage::default()
     }
 }
@@ -70,7 +82,10 @@ fn verzoek(length_m: f64, cage: ReinforcementCage) -> SegmentStiffnessRequest {
 fn krachten(n_kn: f64, momenten: &[f64]) -> Vec<SegmentForces> {
     momenten
         .iter()
-        .map(|&m| SegmentForces { n_ed_kn: n_kn, m_ed_knm: m })
+        .map(|&m| SegmentForces {
+            n_ed_kn: n_kn,
+            m_ed_knm: m,
+        })
         .collect()
 }
 
@@ -108,8 +123,11 @@ fn ronde_nul_levert_alleen_de_indeling() {
 #[test]
 fn de_indeling_is_lastgeval_onafhankelijk() {
     let leeg = segment_stiffness(verzoek(4.3, korf_asym())).unwrap();
-    let grenzen: Vec<(f64, f64)> =
-        leeg.segments.iter().map(|s| (s.x_start_mm, s.x_end_mm)).collect();
+    let grenzen: Vec<(f64, f64)> = leeg
+        .segments
+        .iter()
+        .map(|s| (s.x_start_mm, s.x_end_mm))
+        .collect();
     assert_eq!(leeg.segment_count, 11); // round(4300/400) = round(10,75) = 11
 
     for (n, m) in [(0.0, 10.0), (-800.0, 40.0), (250.0, -25.0)] {
@@ -117,14 +135,22 @@ fn de_indeling_is_lastgeval_onafhankelijk() {
         v.segment_forces = krachten(n, &vec![m; grenzen.len()]);
         let r = segment_stiffness(v).unwrap();
         assert_eq!(r.segment_count, leeg.segment_count);
-        let g: Vec<(f64, f64)> = r.segments.iter().map(|s| (s.x_start_mm, s.x_end_mm)).collect();
+        let g: Vec<(f64, f64)> = r
+            .segments
+            .iter()
+            .map(|s| (s.x_start_mm, s.x_end_mm))
+            .collect();
         assert_eq!(g, grenzen, "de indeling verschoof bij N = {n}, M = {m}");
     }
     // En hij is ook dezelfde in de andere grenstoestand.
     let mut bgt = verzoek(4.3, korf_asym());
     bgt.limit_state = NonlinearBasis::MeanValues;
     let r = segment_stiffness(bgt).unwrap();
-    let g: Vec<(f64, f64)> = r.segments.iter().map(|s| (s.x_start_mm, s.x_end_mm)).collect();
+    let g: Vec<(f64, f64)> = r
+        .segments
+        .iter()
+        .map(|s| (s.x_start_mm, s.x_end_mm))
+        .collect();
     assert_eq!(g, grenzen);
 }
 
@@ -285,7 +311,10 @@ fn boven_het_scheurmoment_daalt_de_segment_ei_monotoon() {
             r.segments[i].m_ed_knm.unwrap() > r.segments[i - 1].m_ed_knm.unwrap(),
             "segment {i}: het moment loopt niet op"
         );
-        assert!(deze < vorige, "segment {i}: EI stijgt van {vorige} naar {deze}");
+        assert!(
+            deze < vorige,
+            "segment {i}: EI stijgt van {vorige} naar {deze}"
+        );
     }
     // En het verloop is symmetrisch, want het momentenverloop is dat ook.
     for i in 0..7 {
@@ -393,7 +422,11 @@ fn een_onbereikbaar_moment_levert_geen_getal() {
         assert_eq!(r.segments[i].status, SegmentStatus::Uncracked);
         assert!(r.segments[i].message.is_none());
     }
-    assert!(r.notes.iter().any(|n| n.contains("geen stijfheid")), "{:?}", r.notes);
+    assert!(
+        r.notes.iter().any(|n| n.contains("geen stijfheid")),
+        "{:?}",
+        r.notes
+    );
 
     // Te veel druk levert een even nette fout.
     let mut v = verzoek(4.0, korf_asym());
@@ -412,7 +445,10 @@ fn een_onbereikbaar_moment_levert_geen_getal() {
 #[test]
 fn dezelfde_krachten_twee_keer_geeft_convergentie() {
     let mut v = verzoek(4.0, korf_asym());
-    v.segment_forces = krachten(-400.0, &[10.0, 20.0, 30.0, 40.0, 50.0, 50.0, 40.0, 30.0, 20.0, 10.0]);
+    v.segment_forces = krachten(
+        -400.0,
+        &[10.0, 20.0, 30.0, 40.0, 50.0, 50.0, 40.0, 30.0, 20.0, 10.0],
+    );
     let eerste = segment_stiffness(v.clone()).unwrap();
     assert_eq!(eerste.status, SegmentRunStatus::NotConverged);
     assert!(eerste.max_relative_change.is_none());
@@ -423,7 +459,10 @@ fn dezelfde_krachten_twee_keer_geeft_convergentie() {
     assert_eq!(tweede.status, SegmentRunStatus::Converged);
     assert!(tweede.converged);
     let m = tweede.max_relative_change.expect("een maat");
-    println!("grootste relatieve verandering: {m:.3e} (segment {:?})", tweede.governing_segment);
+    println!(
+        "grootste relatieve verandering: {m:.3e} (segment {:?})",
+        tweede.governing_segment
+    );
     assert!(m < 1e-12, "{m}");
 }
 
@@ -460,10 +499,17 @@ fn relaxatie_kan_geen_convergentie_voorwenden() {
         gemeld
     );
     assert!(schijnbaar < 0.02, "de relaxatie dempte niet: {schijnbaar}");
-    assert!((gemeld - 0.5).abs() < 1e-9, "gemelde verandering = {gemeld}");
+    assert!(
+        (gemeld - 0.5).abs() < 1e-9,
+        "gemelde verandering = {gemeld}"
+    );
     assert!(!r.converged);
     assert_eq!(r.status, SegmentRunStatus::NotConverged);
-    assert!(r.notes.iter().any(|n| n.contains("ONBEWERKTE")), "{:?}", r.notes);
+    assert!(
+        r.notes.iter().any(|n| n.contains("ONBEWERKTE")),
+        "{:?}",
+        r.notes
+    );
 }
 
 /// **Een geklemde waarde is een verzinsel en telt nooit als convergentie.**
@@ -488,7 +534,10 @@ fn klemmen_is_zichtbaar_en_verhindert_convergentie() {
     assert_eq!(r.clamped_count, 10);
     let s = &r.segments[0];
     assert!(s.clamped);
-    assert!((s.ei_raw_knm2.unwrap() - raw).abs() < 1e-9, "de onbewerkte waarde is weg");
+    assert!(
+        (s.ei_raw_knm2.unwrap() - raw).abs() < 1e-9,
+        "de onbewerkte waarde is weg"
+    );
     assert!(s.ei_knm2.unwrap() > raw, "er is niet geklemd");
     assert!((s.ei_knm2.unwrap() - r.min_ei_knm2).abs() < 1e-9);
     let melding = s.message.as_ref().expect("een melding bij de klem");
@@ -498,7 +547,11 @@ fn klemmen_is_zichtbaar_en_verhindert_convergentie() {
     assert!(r.max_relative_change.unwrap() < 1e-12);
     assert!(!r.converged);
     assert_eq!(r.status, SegmentRunStatus::NotConverged);
-    assert!(r.notes.iter().any(|n| n.contains("geklemd")), "{:?}", r.notes);
+    assert!(
+        r.notes.iter().any(|n| n.contains("geklemd")),
+        "{:?}",
+        r.notes
+    );
 }
 
 // ── Besluit B1 en B2 ────────────────────────────────────────────────────────
@@ -523,7 +576,11 @@ fn de_kruipvermelding_van_besluit_b1_staat_in_het_antwoord() {
     met.segment_forces = krachten(-400.0, &[30.0; 10]);
     let met = segment_stiffness(met).unwrap();
     assert!(!met.creep_neglected);
-    assert!(met.creep_note.contains("1 + φ_ef) = 3.000"), "{}", met.creep_note);
+    assert!(
+        met.creep_note.contains("1 + φ_ef) = 3.000"),
+        "{}",
+        met.creep_note
+    );
 
     let mut zonder = verzoek(4.0, korf_asym());
     zonder.segment_forces = krachten(-400.0, &[30.0; 10]);
@@ -555,7 +612,10 @@ fn de_grenstoestand_staat_per_segment_in_het_antwoord() {
     assert!(bgt.limit_state_label.contains("BGT"));
     for s in &ugt.segments {
         assert_eq!(s.basis, NonlinearBasis::DesignValues);
-        assert!(s.zeta.is_none(), "5.8.6(5): in de UGT geen tension stiffening");
+        assert!(
+            s.zeta.is_none(),
+            "5.8.6(5): in de UGT geen tension stiffening"
+        );
     }
     for s in &bgt.segments {
         assert_eq!(s.basis, NonlinearBasis::MeanValues);
@@ -593,15 +653,42 @@ fn de_grenstoestand_staat_per_segment_in_het_antwoord() {
 #[test]
 fn ongeldige_instellingen_leveren_een_fout() {
     let geval: Vec<(&str, Box<dyn Fn(&mut SegmentStiffnessRequest)>)> = vec![
-        ("onbekende betonklasse", Box::new(|v: &mut SegmentStiffnessRequest| v.concrete_class = "C99/99".into())),
-        ("onbekend wapeningsstaal", Box::new(|v: &mut SegmentStiffnessRequest| v.reinforcement_grade = "B999".into())),
-        ("lengte nul", Box::new(|v: &mut SegmentStiffnessRequest| v.length_m = 0.0)),
-        ("negatieve φ_ef", Box::new(|v: &mut SegmentStiffnessRequest| v.phi_ef = -1.0)),
-        ("relaxatie nul", Box::new(|v: &mut SegmentStiffnessRequest| v.relaxation = 0.0)),
-        ("relaxatie boven 1", Box::new(|v: &mut SegmentStiffnessRequest| v.relaxation = 1.5)),
-        ("tolerantie nul", Box::new(|v: &mut SegmentStiffnessRequest| v.convergence_tolerance = 0.0)),
-        ("klemverhouding 1", Box::new(|v: &mut SegmentStiffnessRequest| v.min_ei_ratio = 1.0)),
-        ("korf past niet", Box::new(|v: &mut SegmentStiffnessRequest| v.cage.cover_mm = 400.0)),
+        (
+            "onbekende betonklasse",
+            Box::new(|v: &mut SegmentStiffnessRequest| v.concrete_class = "C99/99".into()),
+        ),
+        (
+            "onbekend wapeningsstaal",
+            Box::new(|v: &mut SegmentStiffnessRequest| v.reinforcement_grade = "B999".into()),
+        ),
+        (
+            "lengte nul",
+            Box::new(|v: &mut SegmentStiffnessRequest| v.length_m = 0.0),
+        ),
+        (
+            "negatieve φ_ef",
+            Box::new(|v: &mut SegmentStiffnessRequest| v.phi_ef = -1.0),
+        ),
+        (
+            "relaxatie nul",
+            Box::new(|v: &mut SegmentStiffnessRequest| v.relaxation = 0.0),
+        ),
+        (
+            "relaxatie boven 1",
+            Box::new(|v: &mut SegmentStiffnessRequest| v.relaxation = 1.5),
+        ),
+        (
+            "tolerantie nul",
+            Box::new(|v: &mut SegmentStiffnessRequest| v.convergence_tolerance = 0.0),
+        ),
+        (
+            "klemverhouding 1",
+            Box::new(|v: &mut SegmentStiffnessRequest| v.min_ei_ratio = 1.0),
+        ),
+        (
+            "korf past niet",
+            Box::new(|v: &mut SegmentStiffnessRequest| v.cage.cover_mm = 400.0),
+        ),
     ];
     for (naam, aanpassing) in geval {
         let mut v = verzoek(4.0, korf_asym());
@@ -622,7 +709,10 @@ fn kruip(m0_ed: f64, qp: &[(&str, f64)]) -> Kruip519Invoer {
         x_mm: 2000.0,
         quasi_blijvend: qp
             .iter()
-            .map(|(n, m)| QuasiBlijvendMoment { combinatie: (*n).into(), m0_eqp_knm: *m })
+            .map(|(n, m)| QuasiBlijvendMoment {
+                combinatie: (*n).into(),
+                m0_eqp_knm: *m,
+            })
             .collect(),
     }
 }
@@ -643,7 +733,11 @@ fn phi_ef_uit_5_19_handberekend_en_gelijk_aan_de_vaste_waarde() {
     assert!((r.phi_ef - 1.179_487_179_5).abs() < 1e-9);
     assert!(!a.bovengrens_gehouden);
     assert!(r.notes.iter().any(|n| n == &a.toelichting), "{:?}", r.notes);
-    assert!(a.toelichting.contains("51,75") && a.toelichting.contains("87,75"), "{}", a.toelichting);
+    assert!(
+        a.toelichting.contains("51,75") && a.toelichting.contains("87,75"),
+        "{}",
+        a.toelichting
+    );
     assert!(a.toelichting.contains("x = 2000 mm"), "{}", a.toelichting);
 
     let mut vast = verzoek(4.0, korf_asym());
@@ -665,12 +759,21 @@ fn phi_ef_uit_5_19_grenzen_en_meerdere_quasi_blijvende_combinaties() {
     .unwrap();
     assert_eq!(a.quasi_combinatie.as_deref(), Some("qp 2"));
     assert!((a.phi_ef - 1.0).abs() < 1e-12);
-    assert!(a.toelichting.contains("Van de 3 quasi-blijvende combinaties"), "{}", a.toelichting);
+    assert!(
+        a.toelichting
+            .contains("Van de 3 quasi-blijvende combinaties"),
+        "{}",
+        a.toelichting
+    );
 
     // Tegengesteld teken: de bovengrens wint dan van elke kleinere verhouding.
     let t = concrete_check::segments::kruip_5_19(&kruip(80.0, &[("qp", -20.0)])).unwrap();
     assert!(t.bovengrens_gehouden && t.phi_ef == 2.0 && t.verhouding.is_none());
-    assert!(t.toelichting.contains("tegengesteld teken"), "{}", t.toelichting);
+    assert!(
+        t.toelichting.contains("tegengesteld teken"),
+        "{}",
+        t.toelichting
+    );
 
     let nul = concrete_check::segments::kruip_5_19(&kruip(0.0, &[("qp", 20.0)])).unwrap();
     assert!(nul.bovengrens_gehouden && nul.phi_ef == 2.0);
@@ -678,7 +781,11 @@ fn phi_ef_uit_5_19_grenzen_en_meerdere_quasi_blijvende_combinaties() {
 
     let groter = concrete_check::segments::kruip_5_19(&kruip(20.0, &[("qp", 30.0)])).unwrap();
     assert!(groter.bovengrens_gehouden && groter.phi_ef == 2.0);
-    assert!(groter.toelichting.contains("GUNSTIGE kant"), "{}", groter.toelichting);
+    assert!(
+        groter.toelichting.contains("GUNSTIGE kant"),
+        "{}",
+        groter.toelichting
+    );
 
     // M₀Eqp = 0: (5.19) geeft φ_ef = 0, en dat is een uitkomst, geen bovengrens.
     let geen = concrete_check::segments::kruip_5_19(&kruip(80.0, &[("qp", 0.0)])).unwrap();

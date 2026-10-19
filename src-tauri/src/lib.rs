@@ -14,11 +14,11 @@ use frame3d_solver::{EngineInfo as Frame3DEngineInfo, SolveRequest3D, SolveResul
 use openaec_native_fem::dispatch::{NativeFemRequest, NativeFemResult};
 // Bijlage B — de kruipcoëfficiënt. Eigen `use`-regel om dezelfde reden.
 use nen_en_1992_1_1::{CreepCoefficientRequest, CreepCoefficientResponse};
-use nen_en_1993_1_1_section::{S235, S275, S355, S420, S460, SteelGrade};
+use nen_en_1993_1_1_section::{SteelGrade, S235, S275, S355, S420, S460};
 use nen_en_1993_1_8_las::{LasInput, LasResultaat};
 use nen_en_1995_1_1::clt::CltPreset;
 use plaat_check::{PlateCheckInput, PlateCheckResult};
-use report::{ReportInput, generate_report_pdf};
+use report::{generate_report_pdf, ReportInput};
 use section_properties::opdracht::{Invoer as DoorsnedeInvoer, Uitvoer as DoorsnedeUitvoer};
 use spanning_check::{SpanningBeamCheckInput, SpanningBeamCheckResult};
 use steel_check::{BeamCheckInput, BeamCheckResult};
@@ -310,9 +310,7 @@ async fn check_fillet_welds(inputs: Vec<LasInput>) -> Result<Vec<LasResultaat>, 
 /// de naam erbij: een halve lijst met stilzwijgend ontbrekende doorsneden is
 /// erger dan een duidelijke fout.
 #[tauri::command]
-async fn bereken_doorsneden(
-    invoer: Vec<DoorsnedeInvoer>,
-) -> Result<Vec<DoorsnedeUitvoer>, String> {
+async fn bereken_doorsneden(invoer: Vec<DoorsnedeInvoer>) -> Result<Vec<DoorsnedeUitvoer>, String> {
     let mut uit = Vec::with_capacity(invoer.len());
     for i in &invoer {
         match section_properties::opdracht::reken(i) {

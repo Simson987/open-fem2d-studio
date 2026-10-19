@@ -566,7 +566,11 @@ mod tests {
         let staaf = &def["inputSchema"]["properties"]["inputs"]["items"];
         // Alle drie de niveaus staan op `deny_unknown_fields` in de kern.
         assert_eq!(staaf["additionalProperties"], json!(false), "CLT-staaf");
-        assert_eq!(staaf["properties"]["layup"]["additionalProperties"], json!(false), "opbouw");
+        assert_eq!(
+            staaf["properties"]["layup"]["additionalProperties"],
+            json!(false),
+            "opbouw"
+        );
         assert_eq!(
             staaf["properties"]["layup"]["properties"]["layers"]["items"]["additionalProperties"],
             json!(false),

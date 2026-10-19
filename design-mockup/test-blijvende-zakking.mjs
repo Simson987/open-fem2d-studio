@@ -60,7 +60,7 @@
 // Draaien met: npx tsx test-blijvende-zakking.mjs
 //         of : node scripts/run-tests.mjs --filter=blijvende-zakking
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -174,12 +174,23 @@ function staal(m, opties = {}) {
   };
 }
 
-function kern(opdracht, inputs) {
-  const r = spawnSync(TOETSBRUG, [], {
-    input: JSON.stringify({ opdracht, inputs }), encoding: "utf8", maxBuffer: 256 << 20,
+async function kern(opdracht, inputs) {
+  const antwoord = await new Promise((resolve, reject) => {
+    const child = spawn(TOETSBRUG, [], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code !== 0) reject(new Error(`toetsbrug ${opdracht} stopte met code ${code ?? signal}: ${err || out}`));
+      else resolve(out);
+    });
+    child.stdin.end(JSON.stringify({ opdracht, inputs }));
   });
-  if (r.status !== 0 || !r.stdout) throw new Error(`toetsbrug ${opdracht} faalde: ${(r.stderr ?? "").slice(0, 300)}`);
-  const uit = JSON.parse(r.stdout);
+  const uit = JSON.parse(antwoord);
   if (uit.fout) throw new Error(uit.fout);
   return uit;
 }
@@ -205,7 +216,7 @@ log("\n[1] Hout mét blijvende BGT-combinatie");
   ok("rapport noemt de bewuste keuze: karakteristiek (EC5 2.2.3(2)) i.p.v. frequent (NB A1.4.3(3))",
     inv.deflection_notes.some((n) => /2\.2\.3\(2\)/.test(n) && /FREQUENTE/.test(n) && /strenger/.test(n)));
   if (heeftKern) {
-    const r = kern("check_timber_beams", [inv])[0];
+    const r = (await kern("check_timber_beams", [inv]))[0];
     const fin = toets(r, "deflection_w_fin"), add = toets(r, "deflection_w_add");
     dicht("kern w_fin = 21,554 mm", fin.uc.ed, hFin, 2e-3);
     dicht("kern UC w_fin = 1,7962", fin.uc.uc, 1.7962, 2e-4);
@@ -226,7 +237,7 @@ log("\n[2] Hout ZONDER blijvende BGT-combinatie: 0 met melding, nooit stil");
   ok("de melding zegt dat w_add daardoor de volledige zakking krijgt", /VOLLEDIGE zakking/.test(noot ?? ""));
   ok("de melding zegt hoe het te herstellen is (6.16b zonder veranderlijke gevallen)", /6\.16b in de opstelling zonder veranderlijke gevallen/.test(noot ?? ""));
   if (heeftKern) {
-    const r = kern("check_timber_beams", [inv])[0];
+    const r = (await kern("check_timber_beams", [inv]))[0];
     dicht("kern UC w_add = 2,3925 (het strenge oude getal)", toets(r, "deflection_w_add").uc.uc, 2.3925, 2e-4);
     ok("de melding reist mee in het kernresultaat (w_fin-notes)",
       toets(r, "deflection_w_fin").notes.some((n) => /is op 0 gezet/.test(n)));
@@ -287,11 +298,11 @@ log("\n[4] Staal mét blijvende BGT-combinatie, en de zeeg blijft erbuiten");
   ok("met 5 mm zeeg: pre_camber_mm gaat apart mee", invZ.pre_camber_mm === 5);
 
   if (heeftKern) {
-    const r = kern("check_steel_beams", [inv])[0];
+    const r = (await kern("check_steel_beams", [inv]))[0];
     dicht("kern w_add = 9,988 − 3,995 = 5,993 mm", toets(r, "deflection_w_add").uc.ed, sTot - sPerm, 2e-3);
     dicht("kern UC w_add = 0,3995 (was 0,6659)", toets(r, "deflection_w_add").uc.uc, 0.3995, 2e-4);
     dicht("kern w_fin = 9,988 mm (zonder zeeg)", toets(r, "deflection_w_fin").uc.ed, sTot, 2e-3);
-    const rz = kern("check_steel_beams", [invZ])[0];
+    const rz = (await kern("check_steel_beams", [invZ]))[0];
     dicht("kern met zeeg: w_add onveranderd 5,993 mm", toets(rz, "deflection_w_add").uc.ed, sTot - sPerm, 2e-3);
     ok("kern met zeeg: w_fin verandert wél", Math.abs(toets(rz, "deflection_w_fin").uc.ed - sTot) > 1,
       String(toets(rz, "deflection_w_fin").uc.ed));
@@ -306,7 +317,7 @@ log("\n[5] Staal ZONDER blijvende BGT-combinatie: 0 met melding");
   ok("w₁ = 0", inv.deflection_permanent_mm === 0);
   ok("melding aanwezig", inv.deflection_notes.some((n) => /is op 0 gezet/.test(n) && /VOLLEDIGE zakking/.test(n)));
   if (heeftKern) {
-    const r = kern("check_steel_beams", [inv])[0];
+    const r = (await kern("check_steel_beams", [inv]))[0];
     dicht("kern UC w_add = 0,6659", toets(r, "deflection_w_add").uc.uc, 0.6659, 2e-4);
   }
 }
@@ -342,7 +353,7 @@ log("\n[6] Stalen ligger: de volledige 6.16b (met ψ₂·Q) blijft, en de toets 
   dicht("alleen quasi-blijvend: w = w(G + 0,3·Q) = 5,793 mm (was 3,995)", invQp.deflection_actual_max_mm, -sQp, 1e-3);
   dicht("alleen quasi-blijvend: w₁ = 3,995 mm", invQp.deflection_permanent_mm, -sPerm, 1e-3);
   if (heeftKern) {
-    const r = kern("check_steel_beams", [invQp])[0];
+    const r = (await kern("check_steel_beams", [invQp]))[0];
     const fin = toets(r, "deflection_w_fin"), add = toets(r, "deflection_w_add");
     dicht("kern w_fin = 5,793 mm", fin.uc.ed, sQp, 2e-3);
     dicht("kern UC w_fin = 5,793 · 333 / 5000 = 0,3858", fin.uc.uc, 0.3858, 2e-4);

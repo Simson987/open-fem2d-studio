@@ -83,7 +83,9 @@ pub fn phi_lt(lambda_lt: f64, alpha_lt: f64) -> f64 {
 }
 
 pub fn lambda_lt(wpl_y_mm3: f64, fy_mpa: f64, m_cr_knm: f64) -> f64 {
-    if m_cr_knm <= 0.0 { return f64::INFINITY; }
+    if m_cr_knm <= 0.0 {
+        return f64::INFINITY;
+    }
     let m_cr_nmm = m_cr_knm * 1e6;
     (wpl_y_mm3 * fy_mpa / m_cr_nmm).sqrt()
 }

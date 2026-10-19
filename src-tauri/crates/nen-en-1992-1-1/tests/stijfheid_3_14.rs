@@ -32,8 +32,14 @@ fn korf(boven: u32) -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: boven, diameter_mm: 12.0 },
-        bottom: RebarRow { count: 3, diameter_mm: 16.0 },
+        top: RebarRow {
+            count: boven,
+            diameter_mm: 12.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
         ..ReinforcementCage::default()
     }
 }
@@ -83,7 +89,10 @@ fn doorsnedetoetsing_is_bit_identiek_gebleven() {
     let lagen = korf(2).layers(s.h_mm);
     let blok = stress_block(&s, &lagen, &m, 0.0, 1.0).unwrap();
     let mnk = mn_kappa_diagram(&s, &lagen, &m, 0.0, 1.0, &o);
-    assert_eq!(blok.m_rd_knm, 113.29232963145907, "spanningsblok, 2Ø12 boven");
+    assert_eq!(
+        blok.m_rd_knm, 113.29232963145907,
+        "spanningsblok, 2Ø12 boven"
+    );
     assert_eq!(mnk.m_max_knm, 113.12286139035288, "M-N-κ, 2Ø12 boven");
     assert_eq!(mnk.kappa_u_per_m, 0.07026452382057882);
 
@@ -130,7 +139,10 @@ fn een_niet_lineair_materiaal_besmet_het_toetsmateriaal_niet() {
         stress_block(&s, &lagen, &m, 0.0, 1.0).unwrap().m_rd_knm,
         113.29232963145907
     );
-    assert_eq!(mn_kappa_diagram(&s, &lagen, &m, 0.0, 1.0, &o).m_max_knm, 113.12286139035288);
+    assert_eq!(
+        mn_kappa_diagram(&s, &lagen, &m, 0.0, 1.0, &o).m_max_knm,
+        113.12286139035288
+    );
 }
 
 /// De secante buigstijfheid van de referentiedoorsnede, in beide varianten,
@@ -142,12 +154,20 @@ fn tabel_van_de_referentiedoorsnede() {
     let lagen: Vec<RebarLayer> = korf(2).layers(s.h_mm);
     let o = StiffnessOptions::default();
     let i_c = 300.0 * 500.0_f64.powi(3) / 12.0;
-    println!("E_cm·I_c (ongescheurd, bruto beton) = {:.1} MNm²", 33_000.0 * i_c * 1e-12);
-    println!("E_cd·I_c (E_cd = E_cm/1,2)          = {:.1} MNm²", 27_500.0 * i_c * 1e-12);
+    println!(
+        "E_cm·I_c (ongescheurd, bruto beton) = {:.1} MNm²",
+        33_000.0 * i_c * 1e-12
+    );
+    println!(
+        "E_cd·I_c (E_cd = E_cm/1,2)          = {:.1} MNm²",
+        27_500.0 * i_c * 1e-12
+    );
     for basis in [NonlinearBasis::DesignValues, NonlinearBasis::MeanValues] {
         let m = stijfheidsmateriaal(basis, 0.0);
         println!("\n{}", basis.label());
-        println!("   N [kN]   M [kNm]     κ [1/m]   EI [MNm²]   M₀ [kNm]  M_cr [kNm]  gescheurd   ζ");
+        println!(
+            "   N [kN]   M [kNm]     κ [1/m]   EI [MNm²]   M₀ [kNm]  M_cr [kNm]  gescheurd   ζ"
+        );
         for (n, mm) in [
             (0.0, 10.0),
             (0.0, 30.0),
@@ -212,20 +232,33 @@ fn rekentijd_van_de_kern() {
         per
     };
 
-    let profiel = if cfg!(debug_assertions) { "debug" } else { "release" };
+    let profiel = if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    };
     println!("\nprofiel: {profiel}; 50 stroken; referentiedoorsnede 300 × 500\n");
 
-    let t_solve = meet("solve_state (κ opgelegd, parabool-rechthoek 3.1.7)", &|i| {
-        let kap = 1e-3 + i as f64 * 1e-5;
-        solve_state(&s, &lagen, &toets, -400.0, kap, &mnk).unwrap().m_knm
-    });
+    let t_solve = meet(
+        "solve_state (κ opgelegd, parabool-rechthoek 3.1.7)",
+        &|i| {
+            let kap = 1e-3 + i as f64 * 1e-5;
+            solve_state(&s, &lagen, &toets, -400.0, kap, &mnk)
+                .unwrap()
+                .m_knm
+        },
+    );
     meet("solve_state (κ opgelegd, (3.14) UGT)", &|i| {
         let kap = 1e-3 + i as f64 * 1e-5;
-        solve_state(&s, &lagen, &ugt, -400.0, kap, &mnk).unwrap().m_knm
+        solve_state(&s, &lagen, &ugt, -400.0, kap, &mnk)
+            .unwrap()
+            .m_knm
     });
     let t_kappa = meet("kappa_from_nm ((N, M) → κ, (3.14) UGT)", &|i| {
         let mm = 20.0 + i as f64 * 0.1;
-        kappa_from_nm(&s, &lagen, &ugt, -400.0, mm, &mnk).unwrap().kappa_per_m
+        kappa_from_nm(&s, &lagen, &ugt, -400.0, mm, &mnk)
+            .unwrap()
+            .kappa_per_m
     });
     meet("m0_knm (M bij κ = 0)", &|i| {
         let n = -400.0 - i as f64 * 0.1;

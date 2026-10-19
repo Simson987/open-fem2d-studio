@@ -41,13 +41,37 @@ use crate::SectionProperties;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Profielvorm {
     /// Gewalst I/H-profiel met vier walsuitrondingen (IPE, HEA, HEB, HEM).
-    IProfiel { h: f64, b: f64, tw: f64, tf: f64, r: f64 },
+    IProfiel {
+        h: f64,
+        b: f64,
+        tw: f64,
+        tf: f64,
+        r: f64,
+    },
     /// I-profiel met **toelopende** flenzen (INP, DIN 1025-1, 14 % schuinte).
-    IProfielSchuin { h: f64, b: f64, tw: f64, tf: f64, r: f64 },
+    IProfielSchuin {
+        h: f64,
+        b: f64,
+        tw: f64,
+        tf: f64,
+        r: f64,
+    },
     /// U-profiel met **evenwijdige** flenzen (UPE, DIN 1026-2).
-    UProfiel { h: f64, b: f64, tw: f64, tf: f64, r: f64 },
+    UProfiel {
+        h: f64,
+        b: f64,
+        tw: f64,
+        tf: f64,
+        r: f64,
+    },
     /// U-profiel met **toelopende** flenzen (UNP, DIN 1026-1, 8 % schuinte).
-    UProfielSchuin { h: f64, b: f64, tw: f64, tf: f64, r: f64 },
+    UProfielSchuin {
+        h: f64,
+        b: f64,
+        tw: f64,
+        tf: f64,
+        r: f64,
+    },
     /// Warmgewalste koker volgens EN 10210-2 (`r_o = 1,5·t`, `r_i = 1,0·t`).
     Koker { h: f64, b: f64, t: f64 },
     /// Warmgewalste ronde buis; `d` is de **buiten**diameter.
@@ -63,7 +87,13 @@ pub enum Profielvorm {
     /// ongelijk aan nul en de norm rekent volgens de OPMERKING bij par. 1.7
     /// met u-u en v-v. Wie deze vorm doorrekent krijgt `iu_mm4`, `iv_mm4` en
     /// `alpha_hoofdas_rad` mee en hoort ze te gebruiken.
-    Hoeklijn { h: f64, b: f64, t: f64, r1: f64, r2: f64 },
+    Hoeklijn {
+        h: f64,
+        b: f64,
+        t: f64,
+        r1: f64,
+        r2: f64,
+    },
 }
 
 impl Profielvorm {
@@ -115,7 +145,9 @@ impl Profielvorm {
                 // Twee uitrondingen naast elkaar op een I, één op een U; en de
                 // uitronding mag de vrije lijfhoogte niet overschrijden.
                 let ruimte_breedte = match self {
-                    Profielvorm::IProfiel { .. } | Profielvorm::IProfielSchuin { .. } => (b - tw) / 2.0,
+                    Profielvorm::IProfiel { .. } | Profielvorm::IProfielSchuin { .. } => {
+                        (b - tw) / 2.0
+                    }
                     _ => b - tw,
                 };
                 if r > ruimte_breedte || 2.0 * r > h - 2.0 * tf {
@@ -311,11 +343,7 @@ pub fn bereken(vorm: &Profielvorm) -> SectionProperties {
 /// mesh-instellingen.
 pub fn bereken_uitgebreid(vorm: &Profielvorm, opties: Option<TorsieOpties>) -> MotorResultaat {
     let d = vorm.doorsnede();
-    let mut r = bereken_doorsnede_uitgebreid(
-        &d,
-        Afschuiving::AlsVorm(*vorm),
-        opties,
-    );
+    let mut r = bereken_doorsnede_uitgebreid(&d, Afschuiving::AlsVorm(*vorm), opties);
     let (h, b, tw, tf, straal) = vorm.maten();
     r.props.h_mm = h;
     r.props.b_mm = b;
@@ -396,7 +424,11 @@ pub fn bereken_doorsnede_uitgebreid(
         z_s_mm: if t.losse_delen { e.z_c_mm } else { t.z_s_mm },
     };
 
-    MotorResultaat { props, contour: e, torsie: t }
+    MotorResultaat {
+        props,
+        contour: e,
+        torsie: t,
+    }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -446,14 +478,26 @@ mod tests {
     /// geijkt en staat dus los van zowel de motor als de generator.
     #[test]
     fn koker_en10210_raakt_de_geijkte_seed() {
-        let p = bereken(&Profielvorm::Koker { h: 200.0, b: 200.0, t: 16.0 });
+        let p = bereken(&Profielvorm::Koker {
+            h: 200.0,
+            b: 200.0,
+            t: 16.0,
+        });
         // A = 11501,30 mm² uit de externe referentie-berekening.
         let f = rel(p.area_mm2, 11_501.30);
-        assert!(f < 1e-4, "A = {:.2} mm², {:.4} % naast 11501,30", p.area_mm2, f * 100.0);
+        assert!(
+            f < 1e-4,
+            "A = {:.2} mm², {:.4} % naast 11501,30",
+            p.area_mm2,
+            f * 100.0
+        );
         // Het concentrische model zou hier 1,4 % lager uitkomen; dat mag niet
         // ongemerkt terugsluipen.
         let concentrisch = contour::koker(200.0, 200.0, 16.0, 24.0).bereken().a_mm2;
-        assert!(concentrisch < 11_400.0, "concentrisch model verschilt niet meer");
+        assert!(
+            concentrisch < 11_400.0,
+            "concentrisch model verschilt niet meer"
+        );
     }
 
     /// De UNP-contour met 8 % schuinte moet het genormeerde oppervlak halen
@@ -469,8 +513,7 @@ mod tests {
             (300.0, 100.0, 10.0, 16.0, 16.0, 46.2),
         ] {
             let a_norm = massa / 7850.0 * 1e6; // kg/m → mm²
-            let schuin =
-                bereken(&Profielvorm::UProfielSchuin { h, b, tw, tf, r }).area_mm2;
+            let schuin = bereken(&Profielvorm::UProfielSchuin { h, b, tw, tf, r }).area_mm2;
             let recht = bereken(&Profielvorm::UProfiel { h, b, tw, tf, r }).area_mm2;
             let f_schuin = rel(schuin, a_norm);
             let f_recht = rel(recht, a_norm);
@@ -522,8 +565,16 @@ mod tests {
             // Dubbelsymmetrisch: zwaartepunt én schuifmiddelpunt in het hart
             // (beide in het beschrijvingsstelsel, dus op y = b/2).
             let u = bereken_uitgebreid(&Profielvorm::IProfielSchuin { h, b, tw, tf, r }, None);
-            assert!((u.props.y_c_mm - b / 2.0).abs() < 1e-6, "y_c = {:.4}", u.props.y_c_mm);
-            assert!((u.props.y_s_mm - b / 2.0).abs() < 1e-3, "y_s = {:.4}", u.props.y_s_mm);
+            assert!(
+                (u.props.y_c_mm - b / 2.0).abs() < 1e-6,
+                "y_c = {:.4}",
+                u.props.y_c_mm
+            );
+            assert!(
+                (u.props.y_s_mm - b / 2.0).abs() < 1e-3,
+                "y_s = {:.4}",
+                u.props.y_s_mm
+            );
         }
     }
 
@@ -550,15 +601,17 @@ mod tests {
     #[test]
     fn unp_schuifmiddelpunt_ligt_achter_het_lijf() {
         let (h, b, tw, tf, r) = (200.0, 75.0, 8.5, 11.5, 11.5);
-        let m = bereken_uitgebreid(
-            &Profielvorm::UProfielSchuin { h, b, tw, tf, r },
-            None,
-        );
+        let m = bereken_uitgebreid(&Profielvorm::UProfielSchuin { h, b, tw, tf, r }, None);
         let p = m.props;
         assert!(p.y_s_mm < 0.0, "schuifmiddelpunt op y = {:.2} mm", p.y_s_mm);
         assert!(p.y_c_mm > 0.0 && p.y_c_mm < b);
         let grens = p.iz_mm4 * (h - tf).powi(2) / 4.0;
-        assert!(p.iw_mm6 < grens, "Iw {:.3e} ≥ bovengrens {:.3e}", p.iw_mm6, grens);
+        assert!(
+            p.iw_mm6 < grens,
+            "Iw {:.3e} ≥ bovengrens {:.3e}",
+            p.iw_mm6,
+            grens
+        );
     }
 
     /// Een gelijkbenige hoeklijn: het schuifmiddelpunt ligt op het snijpunt
@@ -581,8 +634,17 @@ mod tests {
         // reeks steeds dunnere benen: de fout hoort mee te krimpen.
         let mut vorige = f64::INFINITY;
         for dun in [10.0_f64, 5.0, 2.5] {
-            let s = bereken(&Profielvorm::Hoeklijn { h, b, t: dun, r1: 0.0, r2: 0.0 });
-            let fout = (s.y_s_mm - dun / 2.0).abs().max((s.z_s_mm - dun / 2.0).abs()) / dun;
+            let s = bereken(&Profielvorm::Hoeklijn {
+                h,
+                b,
+                t: dun,
+                r1: 0.0,
+                r2: 0.0,
+            });
+            let fout = (s.y_s_mm - dun / 2.0)
+                .abs()
+                .max((s.z_s_mm - dun / 2.0).abs())
+                / dun;
             assert!(
                 fout < vorige,
                 "t = {dun}: fout {:.4}·t hoort kleiner dan {:.4}·t",
@@ -591,8 +653,17 @@ mod tests {
             );
             vorige = fout;
         }
-        assert!(vorige < 0.02, "dunwandige limiet niet gehaald: {vorige:.4}·t");
-        let scherp = bereken(&Profielvorm::Hoeklijn { h, b, t, r1: 0.0, r2: 0.0 });
+        assert!(
+            vorige < 0.02,
+            "dunwandige limiet niet gehaald: {vorige:.4}·t"
+        );
+        let scherp = bereken(&Profielvorm::Hoeklijn {
+            h,
+            b,
+            t,
+            r1: 0.0,
+            r2: 0.0,
+        });
         assert!(
             (scherp.y_s_mm - t / 2.0).abs() < 0.05 * t
                 && (scherp.z_s_mm - t / 2.0).abs() < 0.05 * t,
@@ -632,7 +703,12 @@ mod tests {
         // De hoofdassen staan onder 45°, en de zwakke hoofdas is écht zwakker
         // dan de z-as: dat is waarom kolomknik om u-u en v-v moet.
         assert!((p.alpha_hoofdas_rad - PI / 4.0).abs() < 1e-9);
-        assert!(p.iv_mm4 < p.iz_mm4, "I_v = {:.4e} ≥ I_z = {:.4e}", p.iv_mm4, p.iz_mm4);
+        assert!(
+            p.iv_mm4 < p.iz_mm4,
+            "I_v = {:.4e} ≥ I_z = {:.4e}",
+            p.iv_mm4,
+            p.iz_mm4
+        );
     }
 
     /// De motor moet dezelfde uitkomst geven als je hem via de contour
@@ -640,7 +716,13 @@ mod tests {
     /// één rekenweg is.
     #[test]
     fn vorm_en_losse_contour_geven_hetzelfde() {
-        let v = Profielvorm::IProfiel { h: 300.0, b: 150.0, tw: 7.1, tf: 10.7, r: 15.0 };
+        let v = Profielvorm::IProfiel {
+            h: 300.0,
+            b: 150.0,
+            tw: 7.1,
+            tf: 10.7,
+            r: 15.0,
+        };
         let a = bereken(&v);
         let b = bereken_doorsnede(&v.doorsnede(), Afschuiving::AlsVorm(v));
         assert_eq!(a.area_mm2, b.area_mm2);

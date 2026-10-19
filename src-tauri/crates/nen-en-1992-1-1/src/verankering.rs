@@ -284,7 +284,10 @@ impl Aanhechting {
 /// werk ter plaatse, waarbij van bovenaf wordt gestort en de onderwapening dus
 /// in de 'goede' zone ligt.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum Stortpositie {
     /// De staaf ligt aan de ONDERZIJDE van de doorsnede zoals gestort.
     ///
@@ -523,7 +526,10 @@ pub enum Verankeringssoort {
 
 /// De vorm van het staafeinde volgens de regel "Vorm van de staaf" in tabel 8.2.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum Staafvorm {
     /// Recht.
     #[default]
@@ -694,12 +700,7 @@ pub fn lambda_8_7_3(sum_a_st_mm2: f64, a_s_mm2: f64, sigma_sd_mpa: f64, f_yd_mpa
 /// * anders dan recht, TREK: α₁ = 0,7 als c_d > 3Φ, anders α₁ = 1,0;
 /// * anders dan recht, DRUK: α₁ = 1,0 — art. 8.4.1(3), ombuigingen en haken
 ///   dragen niet bij aan de verankering van drukstaven.
-pub fn alpha_1(
-    vorm: Staafvorm,
-    soort: Verankeringssoort,
-    c_d_mm: f64,
-    diameter_mm: f64,
-) -> f64 {
+pub fn alpha_1(vorm: Staafvorm, soort: Verankeringssoort, c_d_mm: f64, diameter_mm: f64) -> f64 {
     match (vorm, soort) {
         (Staafvorm::Recht, _) => 1.0,
         (Staafvorm::AndersDanRecht, Verankeringssoort::Druk) => 1.0,
@@ -721,12 +722,7 @@ pub fn alpha_1(
 ///
 /// Let op het verschil tussen de twee trekregels: 1Φ tegenover 3Φ. Wie de
 /// verkeerde neemt, rekent bij een ruime dekking te gunstig.
-pub fn alpha_2(
-    vorm: Staafvorm,
-    soort: Verankeringssoort,
-    c_d_mm: f64,
-    diameter_mm: f64,
-) -> f64 {
+pub fn alpha_2(vorm: Staafvorm, soort: Verankeringssoort, c_d_mm: f64, diameter_mm: f64) -> f64 {
     match (vorm, soort) {
         (_, Verankeringssoort::Druk) => 1.0,
         (Staafvorm::Recht, Verankeringssoort::Trek) => {
@@ -834,7 +830,10 @@ pub fn l_b_min_mm(
     };
     let kandidaten = [
         (fractie * l_b_rqd_mm, OndergrensTerm::FractieVanLbRqd),
-        (L_B_MIN_DIAMETERS * diameter_mm, OndergrensTerm::TienDiameters),
+        (
+            L_B_MIN_DIAMETERS * diameter_mm,
+            OndergrensTerm::TienDiameters,
+        ),
         (L_B_MIN_ABSOLUUT_MM, OndergrensTerm::HonderdMillimeter),
     ];
     let mut beste = kandidaten[0];
@@ -1010,7 +1009,9 @@ pub fn verankeringslengte(inv: &VerankeringInvoer) -> Result<Verankering, String
         return Err("De staafdiameter Φ moet groter dan nul zijn.".into());
     }
     if !(inv.f_ctk_005_mpa > 0.0) {
-        return Err("f_ctk;0,05 moet groter dan nul zijn; zonder treksterkte is er geen f_bd.".into());
+        return Err(
+            "f_ctk;0,05 moet groter dan nul zijn; zonder treksterkte is er geen f_bd.".into(),
+        );
     }
     if !(inv.gamma_c > 0.0) {
         return Err("γ_C moet groter dan nul zijn.".into());
@@ -1089,7 +1090,11 @@ pub fn verankeringslengte(inv: &VerankeringInvoer) -> Result<Verankering, String
             "α₁ = {} — anders dan recht (figuur 8.1 b/c/d) met c_d = {} mm {} 3Φ = {} mm.",
             nl(a1, 3),
             nl(inv.c_d_mm, 1),
-            if inv.c_d_mm > 3.0 * inv.diameter_mm { ">" } else { "≤" },
+            if inv.c_d_mm > 3.0 * inv.diameter_mm {
+                ">"
+            } else {
+                "≤"
+            },
             nl(3.0 * inv.diameter_mm, 1)
         ),
     });
@@ -1157,7 +1162,10 @@ pub fn verankeringslengte(inv: &VerankeringInvoer) -> Result<Verankering, String
             nl(phi_t, 1),
             nl(ALFA_4_MIN_PHI_T_FACTOR * inv.diameter_mm, 1)
         ),
-        None => format!("α₄ = {} — geen gelaste dwarswapening langs l_bd.", nl(a4, 3)),
+        None => format!(
+            "α₄ = {} — geen gelaste dwarswapening langs l_bd.",
+            nl(a4, 3)
+        ),
     });
     herkomst.push(match inv.soort {
         Verankeringssoort::Druk => format!(
@@ -1186,7 +1194,11 @@ pub fn verankeringslengte(inv: &VerankeringInvoer) -> Result<Verankering, String
     // (8.5) — het product α₂·α₃·α₅ is ten minste 0,7.
     let product_235 = a2 * a3 * a5;
     let begrensd_235 = product_235 < PRODUCT_A2_A3_A5_MIN - 1e-12;
-    let product_235_gebruikt = if begrensd_235 { PRODUCT_A2_A3_A5_MIN } else { product_235 };
+    let product_235_gebruikt = if begrensd_235 {
+        PRODUCT_A2_A3_A5_MIN
+    } else {
+        product_235
+    };
     if begrensd_235 {
         toelichting.push(format!(
             "Vergelijking (8.5): het product (α₂·α₃·α₅) = {} ligt onder 0,7 en is daarom op 0,7 \
@@ -1337,8 +1349,7 @@ pub fn verankering_deelstappen(v: &Verankering) -> Vec<Deelstap> {
                 nl(v.eta_2, 3),
                 nl(v.diameter_mm, 0)
             ),
-            "(8.2) geldt voor GERIBDE staven; voor gladde staven geeft §8.4 geen f_bd."
-                .to_string(),
+            "(8.2) geldt voor GERIBDE staven; voor gladde staven geeft §8.4 geen f_bd.".to_string(),
         ],
     ));
 
@@ -1545,24 +1556,26 @@ pub struct Verschuiving {
 /// 6.2.3(7). De twee wegen zijn gelijkwaardig, niet cumulatief.
 pub fn verschuiving(grondslag: Verschuivingsgrondslag) -> Verschuiving {
     match grondslag {
-        Verschuivingsgrondslag::MetDwarskrachtwapening { z_mm, cot_theta, cot_alpha } => {
-            Verschuiving {
-                a_l_mm: z_mm * (cot_theta - cot_alpha) / 2.0,
-                grondslag,
-                artikel: "art. 9.2.1.3(2) (9.2)",
-                toelichting: vec![
-                    "Alternatief voor ΔF_td volgens 6.2.3(7); de twee wegen zijn gelijkwaardig \
+        Verschuivingsgrondslag::MetDwarskrachtwapening {
+            z_mm,
+            cot_theta,
+            cot_alpha,
+        } => Verschuiving {
+            a_l_mm: z_mm * (cot_theta - cot_alpha) / 2.0,
+            grondslag,
+            artikel: "art. 9.2.1.3(2) (9.2)",
+            toelichting: vec![
+                "Alternatief voor ΔF_td volgens 6.2.3(7); de twee wegen zijn gelijkwaardig \
                      en mogen niet worden opgeteld."
-                        .to_string(),
-                    "De symbolen z, θ en α zijn gedefinieerd in 6.2.3. Bij rechte beugels \
+                    .to_string(),
+                "De symbolen z, θ en α zijn gedefinieerd in 6.2.3. Bij rechte beugels \
                      (α = 90°) is cot α = 0."
-                        .to_string(),
-                    "De verschuiving gaat in de ONGUNSTIGE richting; deze waarde is de grootte, \
+                    .to_string(),
+                "De verschuiving gaat in de ONGUNSTIGE richting; deze waarde is de grootte, \
                      niet de richting."
-                        .to_string(),
-                ],
-            }
-        }
+                    .to_string(),
+            ],
+        },
         Verschuivingsgrondslag::ZonderDwarskrachtwapening { d_mm } => Verschuiving {
             a_l_mm: d_mm,
             grondslag,
@@ -1571,8 +1584,7 @@ pub fn verschuiving(grondslag: Verschuivingsgrondslag) -> Verschuiving {
                 "Art. 6.2.2(5): de M_Ed-lijn wordt in het door buiging gescheurde deel over \
                  a_l = d in de ONGUNSTIGE richting verschoven."
                     .to_string(),
-                "Deze waarde is de grootte van de verschuiving, niet de richting."
-                    .to_string(),
+                "Deze waarde is de grootte van de verschuiving, niet de richting.".to_string(),
             ],
         },
     }
@@ -1880,7 +1892,12 @@ mod tests {
     /// Zelfde staaf, maar anders dan recht: 1 − 0,15·(40 − 48)/16 = 1,075 → 1,0.
     #[test]
     fn alpha_2_omgebogen_trekstaaf_wordt_op_1_begrensd() {
-        let a2 = alpha_2(Staafvorm::AndersDanRecht, Verankeringssoort::Trek, 40.0, 16.0);
+        let a2 = alpha_2(
+            Staafvorm::AndersDanRecht,
+            Verankeringssoort::Trek,
+            40.0,
+            16.0,
+        );
         assert_relative_eq!(a2, 1.0, max_relative = 1e-12);
     }
 
@@ -1993,7 +2010,11 @@ mod tests {
     /// 'Slechte' aanhechting maakt l_bd precies 1/0,7 keer zo lang.
     #[test]
     fn slechte_aanhechting_verlengt_met_een_factor_1_over_0_7() {
-        let goed = verankeringslengte(&VerankeringInvoer { c_d_mm: 16.0, ..basis() }).unwrap();
+        let goed = verankeringslengte(&VerankeringInvoer {
+            c_d_mm: 16.0,
+            ..basis()
+        })
+        .unwrap();
         let slecht = verankeringslengte(&VerankeringInvoer {
             c_d_mm: 16.0,
             stortpositie: Stortpositie::Bovenzijde,
@@ -2084,24 +2105,71 @@ mod tests {
     /// Tabel NB 8.3: de drukregel die de EN-tekst niet heeft.
     #[test]
     fn alpha_6_is_voor_druk_altijd_1_volgens_de_nb() {
-        assert_relative_eq!(alpha_6(nationale_bijlage::NationaleBijlage::NL, 50.0, Verankeringssoort::Druk), 1.0);
-        assert_relative_eq!(alpha_6(nationale_bijlage::NationaleBijlage::NL, 100.0, Verankeringssoort::Druk), 1.0);
-        // Trek: de formule (ρ₁/25)^0,5 met de grenzen 1,0 en 1,5.
-        assert_relative_eq!(alpha_6(nationale_bijlage::NationaleBijlage::NL, 20.0, Verankeringssoort::Trek), 1.0);
-        assert_relative_eq!(alpha_6(nationale_bijlage::NationaleBijlage::NL, 25.0, Verankeringssoort::Trek), 1.0);
         assert_relative_eq!(
-            alpha_6(nationale_bijlage::NationaleBijlage::NL, 50.0, Verankeringssoort::Trek),
+            alpha_6(
+                nationale_bijlage::NationaleBijlage::NL,
+                50.0,
+                Verankeringssoort::Druk
+            ),
+            1.0
+        );
+        assert_relative_eq!(
+            alpha_6(
+                nationale_bijlage::NationaleBijlage::NL,
+                100.0,
+                Verankeringssoort::Druk
+            ),
+            1.0
+        );
+        // Trek: de formule (ρ₁/25)^0,5 met de grenzen 1,0 en 1,5.
+        assert_relative_eq!(
+            alpha_6(
+                nationale_bijlage::NationaleBijlage::NL,
+                20.0,
+                Verankeringssoort::Trek
+            ),
+            1.0
+        );
+        assert_relative_eq!(
+            alpha_6(
+                nationale_bijlage::NationaleBijlage::NL,
+                25.0,
+                Verankeringssoort::Trek
+            ),
+            1.0
+        );
+        assert_relative_eq!(
+            alpha_6(
+                nationale_bijlage::NationaleBijlage::NL,
+                50.0,
+                Verankeringssoort::Trek
+            ),
             2.0_f64.sqrt(),
             max_relative = 1e-12
         );
-        assert_relative_eq!(alpha_6(nationale_bijlage::NationaleBijlage::NL, 100.0, Verankeringssoort::Trek), 1.5);
+        assert_relative_eq!(
+            alpha_6(
+                nationale_bijlage::NationaleBijlage::NL,
+                100.0,
+                Verankeringssoort::Trek
+            ),
+            1.5
+        );
     }
 
     #[test]
     fn ongeldige_invoer_levert_een_foutmelding_en_geen_getal() {
         assert!(verankeringslengte(&VerankeringInvoer::default()).is_err());
-        assert!(verankeringslengte(&VerankeringInvoer { diameter_mm: -1.0, ..basis() }).is_err());
-        assert!(verankeringslengte(&VerankeringInvoer { f_yd_mpa: 0.0, ..basis() }).is_err());
+        assert!(verankeringslengte(&VerankeringInvoer {
+            diameter_mm: -1.0,
+            ..basis()
+        })
+        .is_err());
+        assert!(verankeringslengte(&VerankeringInvoer {
+            f_yd_mpa: 0.0,
+            ..basis()
+        })
+        .is_err());
     }
 
     #[test]
@@ -2112,7 +2180,11 @@ mod tests {
         for s in &stappen {
             assert!(!s.article.is_empty(), "{} heeft geen vindplaats", s.id);
             assert!(!s.formula_latex.is_empty(), "{} heeft geen formule", s.id);
-            assert!(!s.ingevuld_latex.is_empty(), "{} heeft geen ingevulde regel", s.id);
+            assert!(
+                !s.ingevuld_latex.is_empty(),
+                "{} heeft geen ingevulde regel",
+                s.id
+            );
         }
         let lbd = stappen.iter().find(|s| s.id == "l_bd").unwrap();
         assert_relative_eq!(lbd.value.unwrap(), v.l_bd_mm, max_relative = 1e-12);

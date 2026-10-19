@@ -66,14 +66,14 @@
 use mechanics::{ForcePoint, ForceStateSnapshot};
 use nen_en_1992_1_1::checks::minimum_eccentricity_mm;
 use nen_en_1992_1_1::kolom::{
-    as_max_9_5_2, as_min_9_5_2, dubbele_buiging_deelstappen, e_i_5_2_mm, exponent_a_5_39,
-    a_toelichting, hoekstaven_9_5_2, interactie_5_39, kolom_deelstappen, kolom_deelstappen_om_as, kolomslankheid,
-    min_diameter_dwarswapening_9_5_3, min_diameter_langsstaaf_9_5_2, min_dwarsafmeting_9_5_1,
-    moment_tweede_as_deelstappen, n_rd_5_39_n, opgesloten_staven_9_5_3, s_cl_tmax_9_5_3,
-    scheefstand_5_1, toepassingsgebied_9_5_1, traagheidsstraal_mm, voorwaarde_5_38a,
-    voorwaarde_5_38b, Beugelzone, DubbeleBuiging, Knikgeval, Kniklengtebepaling, KolomInvoer,
-    KolomdetailleringInvoer, Kolomslankheid, MomentTweedeAs, Overlappingssituatie, Schoring,
-    TweedeOrdeDeel,
+    a_toelichting, as_max_9_5_2, as_min_9_5_2, dubbele_buiging_deelstappen, e_i_5_2_mm,
+    exponent_a_5_39, hoekstaven_9_5_2, interactie_5_39, kolom_deelstappen, kolom_deelstappen_om_as,
+    kolomslankheid, min_diameter_dwarswapening_9_5_3, min_diameter_langsstaaf_9_5_2,
+    min_dwarsafmeting_9_5_1, moment_tweede_as_deelstappen, n_rd_5_39_n, opgesloten_staven_9_5_3,
+    s_cl_tmax_9_5_3, scheefstand_5_1, toepassingsgebied_9_5_1, traagheidsstraal_mm,
+    voorwaarde_5_38a, voorwaarde_5_38b, Beugelzone, DubbeleBuiging, Knikgeval, Kniklengtebepaling,
+    KolomInvoer, KolomdetailleringInvoer, Kolomslankheid, MomentTweedeAs, Overlappingssituatie,
+    Schoring, TweedeOrdeDeel,
 };
 use nen_en_1992_1_1::{
     concrete_class_by_name, kappa_from_nm, mn_kappa_diagram, reinforcement_grade_by_name,
@@ -131,7 +131,10 @@ use ts_rs::TS;
 // hebben alleen VERPLICHTE velden, dus een tikfout in `geval` of `l0_m` levert
 // een "missing field"-fout en niet stilzwijgend een standaardwaarde.
 #[serde(tag = "soort")]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub enum Kniklengtekeuze {
     /// Een van de vijf vakjes van figuur 5.7 met een vaste l₀ = factor·l.
     ///
@@ -180,7 +183,10 @@ pub enum Kniklengtekeuze {
 /// (wringing, een schuine as) past er later naast.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct ConcreteColumnInput {
     /// Geschoord of ongeschoord — het ontwerpbesluit van §5.8.1. Verplicht.
     pub bracing: Schoring,
@@ -258,7 +264,10 @@ pub struct ConcreteColumnInput {
 /// dekkingstoets van 4.4.1 dat al doet) en voor een client buiten de app.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct ConcreteColumnCheckRequest {
     /// De nationale bijlage waarmee getoetst wordt.
     ///
@@ -311,7 +320,10 @@ pub struct ConcreteColumnCheckRequest {
 
 /// Antwoord op [`ConcreteColumnCheckRequest`].
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../../design-mockup/src/lib/types/concrete/")]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
 pub struct ConcreteColumnCheckResponse {
     pub beam_id: u32,
     pub section_name: String,
@@ -430,7 +442,10 @@ fn calc(
 }
 
 fn benoem(c: ResistanceCalc) -> NamedCheck {
-    NamedCheck { id: c.id.clone(), kind: CheckKind::Resistance(c) }
+    NamedCheck {
+        id: c.id.clone(),
+        kind: CheckKind::Resistance(c),
+    }
 }
 
 /// Een lege krachtenmomentopname, voor het geval de omhullende leeg is.
@@ -498,7 +513,11 @@ enum Eindmomenten {
     /// De tak r_m = 1,0 (C = 0,7) van §5.8.3.1(1), om een van twee redenen:
     /// er staat dwarsbelasting op de staaf, of er zijn helemaal geen
     /// eerste-orde-eindmomenten en dan komt wat er is uit imperfecties.
-    RmIsEen { dwarsbelasting: bool, m01: f64, m02: f64 },
+    RmIsEen {
+        dwarsbelasting: bool,
+        m01: f64,
+        m02: f64,
+    },
     /// De twee einden zijn in deze combinatie niet allebei aanwezig; r_m blijft
     /// onbekend en §5.8.3.1(1) staat dan C = 0,7 toe.
     Onbekend,
@@ -514,8 +533,10 @@ fn eindmomenten(
     lengte_mm: f64,
     moment: impl Fn(&ForcePoint) -> f64,
 ) -> Eindmomenten {
-    let mut punten: Vec<&ForcePoint> =
-        env.iter().filter(|p| p.combination_id == combinatie).collect();
+    let mut punten: Vec<&ForcePoint> = env
+        .iter()
+        .filter(|p| p.combination_id == combinatie)
+        .collect();
     if punten.len() < 2 || !(lengte_mm > 0.0) {
         return Eindmomenten::Onbekend;
     }
@@ -533,13 +554,24 @@ fn eindmomenten(
     let m_b = moment(laatste);
     // |M₀₂| ≥ |M₀₁| is de definitie van de norm; welke van de twee einden dat
     // is, doet er verder niet toe.
-    let (m01, m02) = if m_a.abs() <= m_b.abs() { (m_a, m_b) } else { (m_b, m_a) };
+    let (m01, m02) = if m_a.abs() <= m_b.abs() {
+        (m_a, m_b)
+    } else {
+        (m_b, m_a)
+    };
     let grootste_eind = m01.abs().max(m02.abs());
-    let grootste_veld = punten.iter().map(|p| moment(p).abs()).fold(0.0_f64, f64::max);
+    let grootste_veld = punten
+        .iter()
+        .map(|p| moment(p).abs())
+        .fold(0.0_f64, f64::max);
     // 1 % speling: een numeriek verschil in de laatste cijfers van de oplosser
     // mag geen dwarsbelasting voorwenden.
     if grootste_veld > grootste_eind * 1.01 + 1e-9 {
-        return Eindmomenten::RmIsEen { dwarsbelasting: true, m01, m02 };
+        return Eindmomenten::RmIsEen {
+            dwarsbelasting: true,
+            m01,
+            m02,
+        };
     }
     // M₀₂ = 0 is geen deelbaar getal, en de norm zegt zelf wat er dan geldt:
     // zijn er geen eerste-orde-eindmomenten, dan komt wat er aan
@@ -548,7 +580,11 @@ fn eindmomenten(
     // en zou de hele §5.8-toets van een centrisch gedrukte kolom wegvallen —
     // juist de kolom waarvoor zij is bedoeld.
     if grootste_eind <= 1e-9 {
-        return Eindmomenten::RmIsEen { dwarsbelasting: false, m01, m02 };
+        return Eindmomenten::RmIsEen {
+            dwarsbelasting: false,
+            m01,
+            m02,
+        };
     }
     Eindmomenten::Paar { m01, m02 }
 }
@@ -811,7 +847,9 @@ pub fn kolomtoetsen(
     };
 
     // ── De eindmomenten en de dwarsbelastingvraag ─────────────────────────
-    let einden = eindmomenten(momentlijst, gov.combination_id, lengte_mm, |p| p.forces.my_ed);
+    let einden = eindmomenten(momentlijst, gov.combination_id, lengte_mm, |p| {
+        p.forces.my_ed
+    });
     let (eindmomenten_knm, r_m_is_een) = match einden {
         Eindmomenten::Paar { m01, m02 } => (Some((m01, m02)), false),
         Eindmomenten::RmIsEen { .. } => (None, true),
@@ -916,15 +954,51 @@ pub fn kolomtoetsen(
         force_state: state,
         formula_latex: r"\lambda < \lambda_{lim} = \frac{20\,A\,B\,C}{\sqrt{n}}".to_string(),
         variables: vec![
-            NamedValue { symbol: "l".to_string(), value: slank.l_mm, unit: "mm".to_string() },
-            NamedValue { symbol: "l_0".to_string(), value: slank.l0_mm, unit: "mm".to_string() },
-            NamedValue { symbol: "i".to_string(), value: slank.i_mm, unit: "mm".to_string() },
-            NamedValue { symbol: "λ".to_string(), value: slank.lambda, unit: "-".to_string() },
-            NamedValue { symbol: "n".to_string(), value: slank.n, unit: "-".to_string() },
-            NamedValue { symbol: "ω".to_string(), value: slank.omega, unit: "-".to_string() },
-            NamedValue { symbol: "A".to_string(), value: slank.a, unit: "-".to_string() },
-            NamedValue { symbol: "B".to_string(), value: slank.b, unit: "-".to_string() },
-            NamedValue { symbol: "C".to_string(), value: slank.c, unit: "-".to_string() },
+            NamedValue {
+                symbol: "l".to_string(),
+                value: slank.l_mm,
+                unit: "mm".to_string(),
+            },
+            NamedValue {
+                symbol: "l_0".to_string(),
+                value: slank.l0_mm,
+                unit: "mm".to_string(),
+            },
+            NamedValue {
+                symbol: "i".to_string(),
+                value: slank.i_mm,
+                unit: "mm".to_string(),
+            },
+            NamedValue {
+                symbol: "λ".to_string(),
+                value: slank.lambda,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: "n".to_string(),
+                value: slank.n,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: "ω".to_string(),
+                value: slank.omega,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: "A".to_string(),
+                value: slank.a,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: "B".to_string(),
+                value: slank.b,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: "C".to_string(),
+                value: slank.c,
+                unit: "-".to_string(),
+            },
             NamedValue {
                 symbol: "λ_lim".to_string(),
                 value: slank.lambda_lim,
@@ -995,7 +1069,11 @@ pub fn kolomtoetsen(
         ));
     }
     match einden {
-        Eindmomenten::RmIsEen { dwarsbelasting: true, m01, m02 } => poort.notes.push(format!(
+        Eindmomenten::RmIsEen {
+            dwarsbelasting: true,
+            m01,
+            m02,
+        } => poort.notes.push(format!(
             "De eindmomenten van combinatie {} zijn M₀₁ = {} kNm en M₀₂ = {} kNm, maar érgens \
              tussen de einden staat een groter |M|. Er werkt dus dwarsbelasting op deze staaf, en \
              §5.8.3.1(1) schrijft dan r_m = 1,0 voor — C = 0,7 — \"voor geschoorde elementen \
@@ -1010,7 +1088,10 @@ pub fn kolomtoetsen(
             nl(m01, 1),
             nl(m02, 1)
         )),
-        Eindmomenten::RmIsEen { dwarsbelasting: false, .. } => poort.notes.push(
+        Eindmomenten::RmIsEen {
+            dwarsbelasting: false,
+            ..
+        } => poort.notes.push(
             "Aan geen van beide einden staat een eerste-orde-moment. r_m = M₀₁/M₀₂ is dan geen \
              deelbaar getal, en §5.8.3.1(1) wijst voor dat geval zelf de tak r_m = 1,0 aan — wat \
              er aan eerste-orde-effect is, komt uit imperfecties. C = 0,7."
@@ -1074,7 +1155,8 @@ pub fn kolomtoetsen(
         CheckStatus::Ok,
         Vec::new(),
     );
-    kruip.formula_latex = r"\varphi_{ef} = \varphi(\infty,t_0)\,\frac{M_{0Eqp}}{M_{0Ed}}".to_string();
+    kruip.formula_latex =
+        r"\varphi_{ef} = \varphi(\infty,t_0)\,\frac{M_{0Eqp}}{M_{0Ed}}".to_string();
     kruip.unit = "-".to_string();
     match (k.phi_inf_t0, slank.phi_ef, &slank.kruip) {
         (None, _, _) => {
@@ -1125,10 +1207,22 @@ pub fn kolomtoetsen(
                          aangehouden, en ze gelden alle drie tegelijk. φ(∞,t₀) ≤ 2: {}. λ ≤ 75: \
                          {} (λ = {}). M₀Ed/N_Ed ≥ h: {} (e₀ = {} mm tegenover h = {} mm). \
                          Uitkomst: φ_ef = 0 {}.",
-                        if v.kruipcoefficient_ten_hoogste_2 { "ja" } else { "NEE" },
-                        if v.slankheid_ten_hoogste_75 { "ja" } else { "NEE" },
+                        if v.kruipcoefficient_ten_hoogste_2 {
+                            "ja"
+                        } else {
+                            "NEE"
+                        },
+                        if v.slankheid_ten_hoogste_75 {
+                            "ja"
+                        } else {
+                            "NEE"
+                        },
                         nl(slank.lambda, 1),
-                        if v.excentriciteit_ten_minste_h { "ja" } else { "NEE" },
+                        if v.excentriciteit_ten_minste_h {
+                            "ja"
+                        } else {
+                            "NEE"
+                        },
                         nl(v.e0_mm, 0),
                         nl(section.h_mm, 0),
                         if v.toegestaan { "MAG" } else { "mag NIET" }
@@ -1311,7 +1405,11 @@ pub fn kolomtoetsen(
     }
     checks.push(benoem(opgesloten));
 
-    Kolomuitkomst { checks, slankheid: Some(slank), tweede_as: Some(tweede_as) }
+    Kolomuitkomst {
+        checks,
+        slankheid: Some(slank),
+        tweede_as: Some(tweede_as),
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1339,7 +1437,13 @@ pub fn column_check(
     // γ_S, α_cc en ε_ud (DesignMaterial) en de coëfficiënt van λ_lim
     // (KolomInvoer::bijlage, uit `mat.bijlage`). Een onbekende bijlage komt
     // hier niet: het lezen van `ConcreteColumnCheckRequest` weigert haar.
-    let mat = DesignMaterial::new(req.bijlage, beton, staal, req.design_situation, req.steel_branch);
+    let mat = DesignMaterial::new(
+        req.bijlage,
+        beton,
+        staal,
+        req.design_situation,
+        req.steel_branch,
+    );
 
     let uit = kolomtoetsen(
         &section,
@@ -1468,7 +1572,14 @@ const MAX_ITERATIES_E2: u32 = 500;
 /// id, en een ontbrekende toets is niet te onderscheiden van een geslaagde.
 fn tweede_as_niet_uitgevoerd(state: ForceStateSnapshot, reden: String) -> Vec<NamedCheck> {
     let mk = |id: &str, titel: &str, artikel: &str| {
-        benoem(calc(id, titel, artikel, state, CheckStatus::NotApplicable, vec![reden.clone()]))
+        benoem(calc(
+            id,
+            titel,
+            artikel,
+            state,
+            CheckStatus::NotApplicable,
+            vec![reden.clone()],
+        ))
     };
     vec![
         mk(
@@ -1798,16 +1909,49 @@ fn tweede_as_toetsen(
         CheckStatus::Ok,
         Vec::new(),
     );
-    poort_z.formula_latex = r"\lambda_z < \lambda_{lim,z} = \frac{20\,A\,B\,C}{\sqrt{n}}".to_string();
+    poort_z.formula_latex =
+        r"\lambda_z < \lambda_{lim,z} = \frac{20\,A\,B\,C}{\sqrt{n}}".to_string();
     poort_z.variables = vec![
-        NamedValue { symbol: "l_0,z".to_string(), value: slank_z.l0_mm, unit: "mm".to_string() },
-        NamedValue { symbol: "i_z".to_string(), value: slank_z.i_mm, unit: "mm".to_string() },
-        NamedValue { symbol: "λ_z".to_string(), value: slank_z.lambda, unit: "-".to_string() },
-        NamedValue { symbol: "n".to_string(), value: slank_z.n, unit: "-".to_string() },
-        NamedValue { symbol: "ω".to_string(), value: slank_z.omega, unit: "-".to_string() },
-        NamedValue { symbol: "A".to_string(), value: slank_z.a, unit: "-".to_string() },
-        NamedValue { symbol: "B".to_string(), value: slank_z.b, unit: "-".to_string() },
-        NamedValue { symbol: "C".to_string(), value: slank_z.c, unit: "-".to_string() },
+        NamedValue {
+            symbol: "l_0,z".to_string(),
+            value: slank_z.l0_mm,
+            unit: "mm".to_string(),
+        },
+        NamedValue {
+            symbol: "i_z".to_string(),
+            value: slank_z.i_mm,
+            unit: "mm".to_string(),
+        },
+        NamedValue {
+            symbol: "λ_z".to_string(),
+            value: slank_z.lambda,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "n".to_string(),
+            value: slank_z.n,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "ω".to_string(),
+            value: slank_z.omega,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "A".to_string(),
+            value: slank_z.a,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "B".to_string(),
+            value: slank_z.b,
+            unit: "-".to_string(),
+        },
+        NamedValue {
+            symbol: "C".to_string(),
+            value: slank_z.c,
+            unit: "-".to_string(),
+        },
         NamedValue {
             symbol: "λ_lim,z".to_string(),
             value: slank_z.lambda_lim,
@@ -1921,15 +2065,17 @@ fn tweede_as_toetsen(
     //   Is de toets daarmee al overschreden, dan blijft dat staan; anders
     //   WEIGEREN de toetsen om z met reden (`kruip_z_onbekend`).
     let (kruip_z, phi_note) = match (&slank_z.kruip, slank_z.phi_ef, k.phi_inf_t0) {
-        (Some(v), _, _) if v.toegestaan => (
-            Some(0.0),
-            format!(
+        (Some(v), _, _) if v.toegestaan => {
+            (
+                Some(0.0),
+                format!(
                 "§5.8.4(4): φ(∞,t₀) ≤ 2, λ_z ≤ 75 en M₀Ed/N_Ed ≥ b zijn alle drie vervuld, dus \
                  φ_ef = 0 mag worden aangehouden; e₂ is zonder kruip bepaald (φ_ef,z = 0, \
                  waar (5.19) {} zou geven).",
                 slank_z.phi_ef.map(|p| nl(p, 3)).unwrap_or_else(|| "geen waarde".to_string())
             ),
-        ),
+            )
+        }
         (_, Some(p), _) => (
             Some(p),
             format!(
@@ -1989,7 +2135,11 @@ fn tweede_as_toetsen(
     let mz_max = mz_gov_combi.iter().cloned().fold(0.0_f64, f64::max);
     let mz_min = mz_gov_combi.iter().cloned().fold(f64::INFINITY, f64::min);
     let mz_varieert = mz_gov_combi.len() > 1 && mz_max - mz_min > 0.01 * mz_max + 1e-9;
-    let c = if mz_varieert { C_ALGEMEEN } else { C_CONSTANT_MOMENT };
+    let c = if mz_varieert {
+        C_ALGEMEEN
+    } else {
+        C_CONSTANT_MOMENT
+    };
 
     // De (3.14)-kromme van §5.8.6(3) op rekenwaarden, met kruip volgens
     // §5.8.6(4) — het materiaal van de constructieve berekening, niet dat van
@@ -2017,9 +2167,21 @@ fn tweede_as_toetsen(
 
     let m1_gov = m0z_gov + n_gov_kn * e_i * 1e-3;
     let tweede_orde = if slank_z.tweede_orde_verwaarloosbaar {
-        TweedeOrdeDeel::Verwaarloosd { lambda: slank_z.lambda, lambda_lim: slank_z.lambda_lim }
+        TweedeOrdeDeel::Verwaarloosd {
+            lambda: slank_z.lambda,
+            lambda_lim: slank_z.lambda_lim,
+        }
     } else {
-        match e_2_iteratie(&section_z, &lagen_z, &mat_nl, gov.forces.n_ed, m1_gov, l0_z, c, &opts) {
+        match e_2_iteratie(
+            &section_z,
+            &lagen_z,
+            &mat_nl,
+            gov.forces.n_ed,
+            m1_gov,
+            l0_z,
+            c,
+            &opts,
+        ) {
             Ok((e_2_mm, kappa_per_m, iteraties)) => TweedeOrdeDeel::Gerekend {
                 e_2_mm,
                 kappa_per_m,
@@ -2048,8 +2210,13 @@ fn tweede_as_toetsen(
     // ── Per snede: M_Edz, M_Rdz, M_Edy, M_Rdy, (5.38b), a en (5.39) ──────
     let e_0z = minimum_eccentricity_mm(section.b_mm);
     let lagen_y = cage.layers(section.h_mm);
-    let n_rd_n = n_rd_5_39_n(section.area_mm2(), mat.f_cd(), cage.a_s_total_mm2(), mat.f_yd())
-        .unwrap_or(0.0);
+    let n_rd_n = n_rd_5_39_n(
+        section.area_mm2(),
+        mat.f_cd(),
+        cage.a_s_total_mm2(),
+        mat.f_yd(),
+    )
+    .unwrap_or(0.0);
     let voorwaarde_a = voorwaarde_5_38a(slank_y.lambda, slank_z.lambda).ok();
 
     // Kleine caches op N (op 0,1 kN afgerond): sneden met dezelfde
@@ -2069,7 +2236,10 @@ fn tweede_as_toetsen(
             }
         };
         let sign_y = if p.forces.my_ed < 0.0 { -1.0 } else { 1.0 };
-        let m_rdy = match cache_y.iter().find(|(s, t, _)| *s == sleutel && *t == sign_y) {
+        let m_rdy = match cache_y
+            .iter()
+            .find(|(s, t, _)| *s == sleutel && *t == sign_y)
+        {
             Some((_, _, v)) => *v,
             None => {
                 let v = m_rd_bij_n(section, &lagen_y, mat, p.forces.n_ed, sign_y, &opts);
@@ -2100,10 +2270,8 @@ fn tweede_as_toetsen(
             Err(_) => continue,
         };
         let apart = voorwaarde_a.map(|a| a.voldaan).unwrap_or(false) && voorwaarde_b.voldaan;
-        let (a, a_grondslag) = exponent_a_5_39(n_druk * 1e3, n_rd_n).unwrap_or((
-            1.0,
-            nen_en_1992_1_1::kolom::ExponentAGrondslag::OnderTabel,
-        ));
+        let (a, a_grondslag) = exponent_a_5_39(n_druk * 1e3, n_rd_n)
+            .unwrap_or((1.0, nen_en_1992_1_1::kolom::ExponentAGrondslag::OnderTabel));
         let interactie = match (m_rdz, m_rdy) {
             (Some(rz), Some(ry)) => interactie_5_39(m_edz_ruw, rz, m_edy, ry, a).ok(),
             _ => None,
@@ -2128,9 +2296,9 @@ fn tweede_as_toetsen(
     }
 
     // ── Toets 2: het moment om z tegen M_Rdz ─────────────────────────────
-    let gov_snede = sneden
-        .iter()
-        .find(|s| s.punt.combination_id == gov.combination_id && s.punt.position_mm == gov.position_mm);
+    let gov_snede = sneden.iter().find(|s| {
+        s.punt.combination_id == gov.combination_id && s.punt.position_mm == gov.position_mm
+    });
     let maatgevend_z = sneden
         .iter()
         .filter(|s| s.uc_z().is_some())
@@ -2143,7 +2311,11 @@ fn tweede_as_toetsen(
         e_i_mm: Some(e_i),
         // Zonder bekende kruip is e₂ een ondergrens en geen rekenwaarde; het
         // antwoord draagt dan geen getal (de toetsen zeggen waarom).
-        e_2_mm: if instabiel || kruip_z_onbekend { None } else { Some(e_2) },
+        e_2_mm: if instabiel || kruip_z_onbekend {
+            None
+        } else {
+            Some(e_2)
+        },
         phi_ef: kruip_z,
         m_edz_knm: None,
         m_rdz_knm: None,
@@ -2198,12 +2370,36 @@ fn tweede_as_toetsen(
             moment_z.deelstappen = moment_tweede_as_deelstappen(&mta);
             moment_z.value = mta.m_ed_knm;
             moment_z.variables = vec![
-                NamedValue { symbol: "N_Ed".to_string(), value: s.n_druk_kn, unit: "kN".to_string() },
-                NamedValue { symbol: "M_0Edz".to_string(), value: s.m0z_knm, unit: "kNm".to_string() },
-                NamedValue { symbol: "e_i".to_string(), value: e_i, unit: "mm".to_string() },
-                NamedValue { symbol: "e_2".to_string(), value: e_2, unit: "mm".to_string() },
-                NamedValue { symbol: "e_0".to_string(), value: e_0z, unit: "mm".to_string() },
-                NamedValue { symbol: "M_Edz".to_string(), value: mta.m_ed_knm, unit: "kNm".to_string() },
+                NamedValue {
+                    symbol: "N_Ed".to_string(),
+                    value: s.n_druk_kn,
+                    unit: "kN".to_string(),
+                },
+                NamedValue {
+                    symbol: "M_0Edz".to_string(),
+                    value: s.m0z_knm,
+                    unit: "kNm".to_string(),
+                },
+                NamedValue {
+                    symbol: "e_i".to_string(),
+                    value: e_i,
+                    unit: "mm".to_string(),
+                },
+                NamedValue {
+                    symbol: "e_2".to_string(),
+                    value: e_2,
+                    unit: "mm".to_string(),
+                },
+                NamedValue {
+                    symbol: "e_0".to_string(),
+                    value: e_0z,
+                    unit: "mm".to_string(),
+                },
+                NamedValue {
+                    symbol: "M_Edz".to_string(),
+                    value: mta.m_ed_knm,
+                    unit: "kNm".to_string(),
+                },
                 NamedValue {
                     symbol: "M_Rdz".to_string(),
                     value: m_rd.unwrap_or(0.0),
@@ -2249,7 +2445,11 @@ fn tweede_as_toetsen(
                         uc,
                         formula_latex: r"M_{Edz} / M_{Rdz}".to_string(),
                     });
-                    moment_z.status = if uc <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk };
+                    moment_z.status = if uc <= 1.0 {
+                        CheckStatus::Ok
+                    } else {
+                        CheckStatus::NotOk
+                    };
                 }
                 (_, None) => {
                     moment_z.status = CheckStatus::NotOk;
@@ -2369,17 +2569,61 @@ fn tweede_as_toetsen(
                     };
                     db.deelstappen = dubbele_buiging_deelstappen(&d);
                     db.variables = vec![
-                        NamedValue { symbol: "λ_y".to_string(), value: va.lambda_y, unit: "-".to_string() },
-                        NamedValue { symbol: "λ_z".to_string(), value: va.lambda_z, unit: "-".to_string() },
-                        NamedValue { symbol: "e_y".to_string(), value: s.voorwaarde_b.e_y_mm, unit: "mm".to_string() },
-                        NamedValue { symbol: "e_z".to_string(), value: s.voorwaarde_b.e_z_mm, unit: "mm".to_string() },
-                        NamedValue { symbol: "N_Ed".to_string(), value: s.n_druk_kn, unit: "kN".to_string() },
-                        NamedValue { symbol: "N_Rd".to_string(), value: n_rd_n * 1e-3, unit: "kN".to_string() },
-                        NamedValue { symbol: "a".to_string(), value: s.a, unit: "-".to_string() },
-                        NamedValue { symbol: "M_Edz".to_string(), value: s.m_edz_589_knm, unit: "kNm".to_string() },
-                        NamedValue { symbol: "M_Rdz".to_string(), value: rz, unit: "kNm".to_string() },
-                        NamedValue { symbol: "M_Edy".to_string(), value: s.m_edy_589_knm, unit: "kNm".to_string() },
-                        NamedValue { symbol: "M_Rdy".to_string(), value: ry, unit: "kNm".to_string() },
+                        NamedValue {
+                            symbol: "λ_y".to_string(),
+                            value: va.lambda_y,
+                            unit: "-".to_string(),
+                        },
+                        NamedValue {
+                            symbol: "λ_z".to_string(),
+                            value: va.lambda_z,
+                            unit: "-".to_string(),
+                        },
+                        NamedValue {
+                            symbol: "e_y".to_string(),
+                            value: s.voorwaarde_b.e_y_mm,
+                            unit: "mm".to_string(),
+                        },
+                        NamedValue {
+                            symbol: "e_z".to_string(),
+                            value: s.voorwaarde_b.e_z_mm,
+                            unit: "mm".to_string(),
+                        },
+                        NamedValue {
+                            symbol: "N_Ed".to_string(),
+                            value: s.n_druk_kn,
+                            unit: "kN".to_string(),
+                        },
+                        NamedValue {
+                            symbol: "N_Rd".to_string(),
+                            value: n_rd_n * 1e-3,
+                            unit: "kN".to_string(),
+                        },
+                        NamedValue {
+                            symbol: "a".to_string(),
+                            value: s.a,
+                            unit: "-".to_string(),
+                        },
+                        NamedValue {
+                            symbol: "M_Edz".to_string(),
+                            value: s.m_edz_589_knm,
+                            unit: "kNm".to_string(),
+                        },
+                        NamedValue {
+                            symbol: "M_Rdz".to_string(),
+                            value: rz,
+                            unit: "kNm".to_string(),
+                        },
+                        NamedValue {
+                            symbol: "M_Edy".to_string(),
+                            value: s.m_edy_589_knm,
+                            unit: "kNm".to_string(),
+                        },
+                        NamedValue {
+                            symbol: "M_Rdy".to_string(),
+                            value: ry,
+                            unit: "kNm".to_string(),
+                        },
                     ];
                     db.value = som;
                     if apart_toegestaan {
@@ -2407,7 +2651,11 @@ fn tweede_as_toetsen(
                                 r"\left(M_{Edz}/M_{Rdz}\right)^a + \left(M_{Edy}/M_{Rdy}\right)^a"
                                     .to_string(),
                         });
-                        db.status = if som <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk };
+                        db.status = if som <= 1.0 {
+                            CheckStatus::Ok
+                        } else {
+                            CheckStatus::NotOk
+                        };
                         db.notes.push(format!(
                             "§5.8.9(3) is niet vervuld{}: op {} van de {} sneden met normaaldruk \
                              geldt (5.38b) niet. §5.8.9(4) vraagt dan de interactie (5.39); de \

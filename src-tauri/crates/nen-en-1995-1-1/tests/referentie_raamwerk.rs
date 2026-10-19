@@ -2,9 +2,9 @@
 //! referentie-uitwerking (C24 96x450, klimaatklasse 1, middellang),
 //! opgebouwd uit de losse normfuncties.
 
-use nen_en_1993_1_1_stability::kniklengte::Kniklengte;
 use approx::assert_relative_eq;
 use mechanics::{ForceStateSnapshot, InternalForces};
+use nen_en_1993_1_1_stability::kniklengte::Kniklengte;
 use nen_en_1995_1_1::stability::{
     check_beam_stability, check_column_stability, BeamStabilityInput, ColumnStabilityInput,
 };
@@ -17,7 +17,11 @@ fn c24() -> &'static StrengthClass {
 fn rekenwaarden() -> (f64, f64, f64, f64) {
     let mat = c24();
     let g = gamma_m(mat.timber_type);
-    let km = k_mod(mat.timber_type, ServiceClass::Sc1, LoadDurationClass::MediumTerm);
+    let km = k_mod(
+        mat.timber_type,
+        ServiceClass::Sc1,
+        LoadDurationClass::MediumTerm,
+    );
     let f_c0d = design_strength(mat.f_c0k, km, g, 1.0, 1.0);
     let f_myd = design_strength(mat.f_mk, km, g, k_h(mat.timber_type, 450.0), 1.0);
     let f_mzd = design_strength(mat.f_mk, km, g, k_h(mat.timber_type, 96.0), 1.0);
@@ -47,7 +51,10 @@ fn staaf2_volledige_afleiding() {
         ForceStateSnapshot {
             combination_id: 12,
             position_mm: 1034.0,
-            forces: InternalForces { n_ed: -57.64, ..Default::default() },
+            forces: InternalForces {
+                n_ed: -57.64,
+                ..Default::default()
+            },
         },
     );
     assert_relative_eq!(druk.value, 1.33, max_relative = 5e-3);
@@ -61,7 +68,10 @@ fn staaf2_volledige_afleiding() {
         ForceStateSnapshot {
             combination_id: 12,
             position_mm: 0.0,
-            forces: InternalForces { vz_ed: 75.5676, ..Default::default() },
+            forces: InternalForces {
+                vz_ed: 75.5676,
+                ..Default::default()
+            },
         },
     );
     assert_relative_eq!(dwars.value, 2.62, max_relative = 3e-3);
@@ -71,7 +81,11 @@ fn staaf2_volledige_afleiding() {
     let veld = ForceStateSnapshot {
         combination_id: 12,
         position_mm: 3688.0,
-        forces: InternalForces { n_ed: -57.64, my_ed: 72.170, ..Default::default() },
+        forces: InternalForces {
+            n_ed: -57.64,
+            my_ed: 72.170,
+            ..Default::default()
+        },
     };
     let kolom = check_column_stability(
         &sectie,
@@ -113,8 +127,13 @@ fn staaf2_volledige_afleiding() {
     let kdef = k_def(mat.timber_type, ServiceClass::Sc1);
     assert_relative_eq!(kdef, 0.60);
     let (fin, add) = deflection::check_deflection_pair(
-        -24.5, -24.5, -24.5, kdef, 6342.0,
-        deflection::NOEMER_W_FIN, deflection::NOEMER_W_ADD,
+        -24.5,
+        -24.5,
+        -24.5,
+        kdef,
+        6342.0,
+        deflection::NOEMER_W_FIN,
+        deflection::NOEMER_W_ADD,
     );
     assert_relative_eq!(fin.uc.as_ref().unwrap().uc, 1.55, max_relative = 5e-3);
     assert_relative_eq!(add.uc.as_ref().unwrap().uc, 0.77, max_relative = 5e-3);

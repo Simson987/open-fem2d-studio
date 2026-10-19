@@ -32,7 +32,12 @@ fn punt(x_mm: f64, n: f64, vz: f64, my: f64) -> ForcePoint {
     ForcePoint {
         combination_id: 12, // combinatie 1.2 uit de referentie
         position_mm: x_mm,
-        forces: InternalForces { n_ed: n, vz_ed: vz, my_ed: my, ..Default::default() },
+        forces: InternalForces {
+            n_ed: n,
+            vz_ed: vz,
+            my_ed: my,
+            ..Default::default()
+        },
     }
 }
 
@@ -140,9 +145,17 @@ fn ligger_doorsnedetoetsen() {
 fn ligger_stabiliteitstoetsen() {
     let r = ligger();
     // art. 6.3.2 (6.23): UC 1,64.
-    assert_relative_eq!(uc_van(&r, "6.3.2_column_stability"), 1.64, max_relative = 5e-3);
+    assert_relative_eq!(
+        uc_van(&r, "6.3.2_column_stability"),
+        1.64,
+        max_relative = 5e-3
+    );
     // art. 6.3.3 (6.35): UC 2,40 — maatgevend.
-    assert_relative_eq!(uc_van(&r, "6.3.3_beam_stability"), 2.40, max_relative = 5e-3);
+    assert_relative_eq!(
+        uc_van(&r, "6.3.3_beam_stability"),
+        2.40,
+        max_relative = 5e-3
+    );
 }
 
 #[test]
@@ -172,7 +185,11 @@ fn kolom_toetsen() {
     // art. 6.1.7: V = 20,46 kN → UC 0,29.
     assert_relative_eq!(uc_van(&r, "6.1.7_shear"), 0.29, max_relative = 1e-2);
     // art. 6.3.2 (6.24 maatgevend): UC 1,74.
-    assert_relative_eq!(uc_van(&r, "6.3.2_column_stability"), 1.74, max_relative = 5e-3);
+    assert_relative_eq!(
+        uc_van(&r, "6.3.2_column_stability"),
+        1.74,
+        max_relative = 5e-3
+    );
     // Doorbuiging: 0,52 / 0,26.
     assert_relative_eq!(uc_van(&r, "deflection_w_fin"), 0.52, max_relative = 1e-2);
     assert_relative_eq!(uc_van(&r, "deflection_w_add"), 0.26, max_relative = 1e-2);
@@ -186,8 +203,14 @@ fn kolom_toetsen() {
 fn trektoets_niet_van_toepassing_in_dit_raamwerk() {
     // Beide staven staan overal op druk; de trektoets telt niet mee in uc_max.
     for r in [ligger(), kolom()] {
-        let trek = r.checks.iter().find(|c| c.id == "6.1.2_tension").expect("trektoets aanwezig");
-        let CheckKind::Resistance(t) = &trek.kind else { panic!("trektoets is een ResistanceCalc") };
+        let trek = r
+            .checks
+            .iter()
+            .find(|c| c.id == "6.1.2_tension")
+            .expect("trektoets aanwezig");
+        let CheckKind::Resistance(t) = &trek.kind else {
+            panic!("trektoets is een ResistanceCalc")
+        };
         assert_eq!(t.status, CheckStatus::NotApplicable);
     }
 }

@@ -24,6 +24,7 @@ import {
 } from "../../lib/kniklengte";
 import "./FemProperties.css";
 import PlateNonlinearEditor from "./PlateNonlinearEditor";
+import PlateThreeLayerEditor from "./PlateThreeLayerEditor";
 import type {
   Node, Beam, Plate, Support, Load, Selection, SupportType, BeamCheckConfig,
   BeamLoadRole,
@@ -187,7 +188,7 @@ export default function FemProperties(props: FemPropertiesProps) {
     if (!p) {
       return <div className="fem-properties"><div className="fem-prop-empty">{t("props.empty.plateNotFound")}</div></div>;
     }
-    return <PlateProperties plate={p} nodes={nodes} updatePlate={updatePlate} />;
+    return <PlateProperties plate={p} nodes={nodes} updatePlate={updatePlate} results={results} />;
   }
   if (selection.type === "load") {
     const ld = loads.find(l => l.id === selection.id);
@@ -476,6 +477,7 @@ function BeamProperties({ beam, nFrom, nTo, nodes, beams, loads, updateBeam, res
   const angDeg = (Math.atan2(dz, dx) * 180 / Math.PI);
   const beamLoads = loads.filter(l => l.beamId === beam.id);
   const axialHistory = results?.elements.get(beam.id)?.axialHistory;
+  const sectionHistory = results?.elements.get(beam.id)?.sectionHistory;
 
   const material = beam.material ?? "S235";
   const profile = beam.profile ?? "HEA160";
@@ -1244,6 +1246,11 @@ function BeamProperties({ beam, nFrom, nTo, nodes, beams, loads, updateBeam, res
             <Row label={t("props.beam.axialFnlDamage")}><code>{axialHistory.tensileDamage.toFixed(4)}</code></Row>
             <Row label={t("props.beam.axialFnlTangent")}><code>{axialHistory.tangentEMpa.toFixed(0)} MPa</code></Row>
           </>}
+          {sectionHistory && <>
+            <Row label={t("props.beam.sectionFnlPlasticStrain")}><code>{sectionHistory.maximumAbsPlasticStrain.toExponential(4)}</code></Row>
+            <Row label={t("props.beam.sectionFnlEquivalentPlasticStrain")}><code>{sectionHistory.maximumEquivalentPlasticStrain.toExponential(4)}</code></Row>
+            <Row label={t("props.beam.sectionFnlDamage")}><code>{sectionHistory.maximumTensileDamage.toFixed(4)}</code></Row>
+          </>}
         </Section>}
 
         <Section title={t("props.beam.boundaryConditions")} defaultOpen={false}>
@@ -1877,9 +1884,10 @@ function PlooiMaatVeld({ value, onCommit }: { value: number; onCommit: (value: n
     onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} />;
 }
 
-function PlateProperties({ plate, nodes, updatePlate }: {
+function PlateProperties({ plate, nodes, updatePlate, results }: {
   plate: Plate; nodes: Node[];
   updatePlate?: (id: number, updates: Partial<Plate>) => void;
+  results: SolverResult | null;
 }) {
   // Weergavewaarden mét defaults — een oude plaat zonder rekenvelden toont
   // dus de PLATE_DEFAULTS in plaats van lege invoervelden.
@@ -2269,10 +2277,13 @@ function PlateProperties({ plate, nodes, updatePlate }: {
             </div>
           )}
         </Section>
-        {updatePlate && <Section title="Fysisch niet-lineair (Rust 2D-plaat)">
+        {updatePlate && <Section title={t("props.plate.nonlinearTitle")}>
           <PlateNonlinearEditor plate={plate} baseEMpa={stijfheid?.E1}
             onApply={patch => updatePlate(plate.id, patch)} />
         </Section>}
+        {(stijfheid?.soort === "beton" || plate.threeLayer) &&
+          <PlateThreeLayerEditor plate={plate} updatePlate={updatePlate}
+            result={results?.plateElements?.find((result) => result.plateId === plate.id)} />}
         <Section title={t("props.plate.meshTitle")}>
           <Row label={t("props.plate.meshSize")}>
             <input

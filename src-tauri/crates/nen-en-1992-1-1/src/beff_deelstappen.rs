@@ -424,7 +424,10 @@ fn flensdeel_stap(index: usize, deel: &crate::beff::BeffPart, l0_mm: f64) -> Dee
         "NEN-EN 1992-1-1, 5.3.2.1(3), (5.7a) en (5.7b)",
         formule,
         ingevuld,
-        vec![nv(&format!("b_{{{nr}}}"), deel.b_i_mm, "mm"), nv("l_0", l0_mm, "mm")],
+        vec![
+            nv(&format!("b_{{{nr}}}"), deel.b_i_mm, "mm"),
+            nv("l_0", l0_mm, "mm"),
+        ],
         Some(deel.b_eff_i_mm),
         "mm",
         vec![winnaar],
@@ -603,7 +606,10 @@ mod tests {
     use crate::beff::beff_distribution;
 
     fn t_ligger() -> FlangeGeometry {
-        FlangeGeometry { b_w_mm: 300.0, b_i_mm: vec![2000.0, 2000.0] }
+        FlangeGeometry {
+            b_w_mm: 300.0,
+            b_i_mm: vec![2000.0, 2000.0],
+        }
     }
 
     /// Het portaal uit de opdracht: één overspanning van 12 m tussen twee
@@ -667,7 +673,11 @@ mod tests {
                 deel.ingevuld_latex
             );
         }
-        assert!(deel.notes[0].contains("(5.7a), eerste lid"), "{}", deel.notes[0]);
+        assert!(
+            deel.notes[0].contains("(5.7a), eerste lid"),
+            "{}",
+            deel.notes[0]
+        );
 
         let totaal = &keten[4];
         assert_eq!(totaal.value, Some(2780.0));
@@ -679,7 +689,11 @@ mod tests {
         // De begrenzing op de INGEVOERDE flensbreedte staat erbij: dat is het
         // getal dat de gebruiker intikte, en het verschil met 2780 is precies
         // wat verantwoord moet worden.
-        assert!(totaal.ingevuld_latex.contains("4300"), "{}", totaal.ingevuld_latex);
+        assert!(
+            totaal.ingevuld_latex.contains("4300"),
+            "{}",
+            totaal.ingevuld_latex
+        );
         // Deze regel sluit zichzelf af, dus het rapport plakt er niets achter.
         assert!(
             totaal.ingevuld_latex.contains(r"b_{eff} = 2780"),
@@ -697,7 +711,10 @@ mod tests {
             start: LineEnd::Support,
             end: LineEnd::Free,
         };
-        let flens = FlangeGeometry { b_w_mm: 300.0, b_i_mm: vec![1000.0, 1000.0] };
+        let flens = FlangeGeometry {
+            b_w_mm: 300.0,
+            b_i_mm: vec![1000.0, 1000.0],
+        };
         let v = beff_distribution(&lijn, &flens).unwrap();
         for idx in 0..v.zones.len() {
             for d in beff_deelstappen(&lijn, &flens, &v, idx) {
@@ -756,9 +773,16 @@ mod tests {
             start: LineEnd::Support,
             end: LineEnd::Free,
         };
-        let flens = FlangeGeometry { b_w_mm: 300.0, b_i_mm: vec![1000.0, 1000.0] };
+        let flens = FlangeGeometry {
+            b_w_mm: 300.0,
+            b_i_mm: vec![1000.0, 1000.0],
+        };
         let v = beff_distribution(&lijn, &flens).unwrap();
-        let formule = |i: usize| beff_deelstappen(&lijn, &flens, &v, i)[1].formula_latex.clone();
+        let formule = |i: usize| {
+            beff_deelstappen(&lijn, &flens, &v, i)[1]
+                .formula_latex
+                .clone()
+        };
 
         assert_eq!(v.zones[0].zone.case, L0Case::EndSpan);
         assert_eq!(formule(0), r"l_0 = 0{,}85 \, l_{1}");
@@ -779,7 +803,10 @@ mod tests {
             start: LineEnd::Support,
             end: LineEnd::Support,
         };
-        let flens = FlangeGeometry { b_w_mm: 300.0, b_i_mm: vec![1000.0, 1000.0] };
+        let flens = FlangeGeometry {
+            b_w_mm: 300.0,
+            b_i_mm: vec![1000.0, 1000.0],
+        };
         let v = beff_distribution(&lijn, &flens).unwrap();
         let idx = v
             .zones
@@ -804,7 +831,10 @@ mod tests {
             start: LineEnd::Support,
             end: LineEnd::Free,
         };
-        let flens = FlangeGeometry { b_w_mm: 300.0, b_i_mm: vec![1000.0, 1000.0] };
+        let flens = FlangeGeometry {
+            b_w_mm: 300.0,
+            b_i_mm: vec![1000.0, 1000.0],
+        };
         let v = beff_distribution(&lijn, &flens).unwrap();
         let keten = beff_deelstappen(&lijn, &flens, &v, 0);
         let g = keten.last().unwrap();

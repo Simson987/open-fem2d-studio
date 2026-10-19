@@ -34,8 +34,16 @@ pub fn check_bending(
     let sigma_my = sigma_m_mpa(force_state.forces.my_ed, section.w_y_mm3);
     let sigma_mz = sigma_m_mpa(force_state.forces.mz_ed, section.w_z_mm3);
 
-    let term_y = if f_myd_mpa > 0.0 { sigma_my / f_myd_mpa } else { 0.0 };
-    let term_z = if f_mzd_mpa > 0.0 { sigma_mz / f_mzd_mpa } else { 0.0 };
+    let term_y = if f_myd_mpa > 0.0 {
+        sigma_my / f_myd_mpa
+    } else {
+        0.0
+    };
+    let term_z = if f_mzd_mpa > 0.0 {
+        sigma_mz / f_mzd_mpa
+    } else {
+        0.0
+    };
     let eq_6_11 = term_y + k_m * term_z;
     let eq_6_12 = k_m * term_y + term_z;
     let uc = eq_6_11.max(eq_6_12);
@@ -88,7 +96,11 @@ mod tests {
         ForceStateSnapshot {
             combination_id: 12,
             position_mm: 3688.0,
-            forces: InternalForces { my_ed: my, mz_ed: mz, ..Default::default() },
+            forces: InternalForces {
+                my_ed: my,
+                mz_ed: mz,
+                ..Default::default()
+            },
         }
     }
 

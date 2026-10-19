@@ -9,9 +9,11 @@ fn basis() -> Value {
 }
 
 fn plaat() -> Value {
-    let combinaties = [11, 22].map(|id| json!({"combination_id": id, "elements": [
-        {"element_id": 701, "sigma_x_mpa": id, "sigma_y_mpa": 0, "tau_xy_mpa": 0}
-    ]}));
+    let combinaties = [11, 22].map(|id| {
+        json!({"combination_id": id, "elements": [
+            {"element_id": 701, "sigma_x_mpa": id, "sigma_y_mpa": 0, "tau_xy_mpa": 0}
+        ]})
+    });
     json!({"plate_id": 41, "soort": "Staal", "materiaal": "S235", "thickness_mm": 10,
         "combinations": combinaties})
 }

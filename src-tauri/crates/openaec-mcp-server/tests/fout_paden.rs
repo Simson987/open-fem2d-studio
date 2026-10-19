@@ -57,7 +57,12 @@ impl Server {
         let mut kind = cmd.spawn().expect("server starten");
         let stdin = kind.stdin.take().expect("stdin");
         let stdout = BufReader::new(kind.stdout.take().expect("stdout"));
-        let mut server = Self { kind, stdin, stdout, volgende_id: 1 };
+        let mut server = Self {
+            kind,
+            stdin,
+            stdout,
+            volgende_id: 1,
+        };
         // Handshake; het antwoord doet er hier niet toe, alleen dat hij er is.
         let _ = server.verzoek("initialize", json!({})).await;
         server
@@ -75,7 +80,10 @@ impl Server {
             .await
             .expect("wachten op antwoord duurde te lang")
             .expect("lezen van stdout");
-        assert!(n > 0, "einde-bestand op stdout — de server stopte onverwacht");
+        assert!(
+            n > 0,
+            "einde-bestand op stdout — de server stopte onverwacht"
+        );
         serde_json::from_str(lijn.trim())
             .unwrap_or_else(|e| panic!("ongeldige JSON-RPC-regel {lijn:?}: {e}"))
     }
@@ -90,8 +98,14 @@ impl Server {
             "method": methode,
             "params": params,
         });
-        let antwoord = self.ruwe_regel(&serde_json::to_string(&bericht).unwrap()).await;
-        assert_eq!(antwoord["id"], json!(id), "antwoord hoort bij een ander verzoek");
+        let antwoord = self
+            .ruwe_regel(&serde_json::to_string(&bericht).unwrap())
+            .await;
+        assert_eq!(
+            antwoord["id"],
+            json!(id),
+            "antwoord hoort bij een ander verzoek"
+        );
         antwoord
     }
 
@@ -99,7 +113,10 @@ impl Server {
     /// is hier een testfout: toolfouten horen in `result` te staan.
     async fn tool(&mut self, naam: &str, argumenten: Value) -> Value {
         let antwoord = self
-            .verzoek("tools/call", json!({ "name": naam, "arguments": argumenten }))
+            .verzoek(
+                "tools/call",
+                json!({ "name": naam, "arguments": argumenten }),
+            )
             .await;
         assert!(
             antwoord["error"].is_null(),
@@ -226,7 +243,11 @@ async fn het_analysetype_uit_het_projectbestand_wordt_gevolgd() {
             json!({ "project_path": pad.to_string_lossy() }),
         )
         .await;
-    assert_ne!(r["isError"], json!(true), "dit model hoort gewoon te rekenen: {r}");
+    assert_ne!(
+        r["isError"],
+        json!(true),
+        "dit model hoort gewoon te rekenen: {r}"
+    );
     assert_eq!(
         r["structuredContent"]["stability"]["analysis_type"],
         json!("tweedeOrdeGeometrisch"),
@@ -285,12 +306,16 @@ async fn ontbrekende_node_geeft_node_ontbreekt_in_structuredcontent() {
     let mut server = Server::start(Some("/bestaat/niet/node")).await;
 
     let resultaat = server
-        .tool("solve_fem_model", json!({ "model": model_zonder_opleggingen() }))
+        .tool(
+            "solve_fem_model",
+            json!({ "model": model_zonder_opleggingen() }),
+        )
         .await;
     let fout = foutinhoud(&resultaat);
 
     assert_eq!(
-        fout["error_code"], json!(NODE_ONTBREEKT),
+        fout["error_code"],
+        json!(NODE_ONTBREEKT),
         "de code van de sidecar hoort de MCP-grens te overleven: {fout}"
     );
 
@@ -304,8 +329,10 @@ async fn ontbrekende_node_geeft_node_ontbreekt_in_structuredcontent() {
     // `detail` gaat onaangetast mee: het geprobeerde pad is het enige dat een
     // gebruiker met een dichtgetimmerde machine verder helpt.
     assert_eq!(
-        fout["detail"]["geprobeerde_paden"], json!(["/bestaat/niet/node"]),
-        "detail: {}", fout["detail"]
+        fout["detail"]["geprobeerde_paden"],
+        json!(["/bestaat/niet/node"]),
+        "detail: {}",
+        fout["detail"]
     );
 
     server.stop().await;
@@ -323,18 +350,24 @@ async fn onoplosbaar_model_krijgt_een_andere_code_dan_een_ontbrekende_runtime() 
     let status = server.tool("fem_solver_status", json!({})).await;
     let status = &status["structuredContent"];
     assert_eq!(
-        status["available"], json!(true),
+        status["available"],
+        json!(true),
         "deze test vereist een werkende Node-runtime. Gemeld: [{}] {}",
-        status["error_code"], status["reason"]
+        status["error_code"],
+        status["reason"]
     );
 
     let resultaat = server
-        .tool("solve_fem_model", json!({ "model": model_zonder_opleggingen() }))
+        .tool(
+            "solve_fem_model",
+            json!({ "model": model_zonder_opleggingen() }),
+        )
         .await;
     let fout = foutinhoud(&resultaat);
 
     assert_eq!(
-        fout["error_code"], json!(MODEL_ONOPLOSBAAR),
+        fout["error_code"],
+        json!(MODEL_ONOPLOSBAAR),
         "een model dat de rekenkern weigert hoort MODEL_ONOPLOSBAAR te geven: {fout}"
     );
     // Dit is de kern van T11: de twee soorten storing zijn machineleesbaar te
@@ -351,7 +384,8 @@ async fn onoplosbaar_model_krijgt_een_andere_code_dan_een_ontbrekende_runtime() 
     assert_eq!(
         fout["detail"]["originele_melding"],
         json!("Model has no constraints - add boundary conditions"),
-        "detail: {}", fout["detail"]
+        "detail: {}",
+        fout["detail"]
     );
 
     server.stop().await;
@@ -373,12 +407,16 @@ async fn tools_zonder_eigen_foutdata_krijgen_een_afgeleide_code() {
     // mee, dus valt de code terug op de JSON-RPC-code -32602.
     let fout = foutinhoud(
         &server
-            .tool("compute_section_properties", json!({ "profile_name": "GEENPROFIEL" }))
+            .tool(
+                "compute_section_properties",
+                json!({ "profile_name": "GEENPROFIEL" }),
+            )
             .await,
     );
     assert_eq!(fout["error_code"], json!("ARGUMENT_ONGELDIG"), "{fout}");
     assert_eq!(
-        fout["remedie"], Value::Null,
+        fout["remedie"],
+        Value::Null,
         "zonder bekende remedie hoort de sleutel op null te staan, niet te ontbreken: {fout}"
     );
 
@@ -404,7 +442,9 @@ async fn jsonrpc_foutpaden_geven_de_juiste_codes() {
     assert!(antwoord["result"].is_null(), "{antwoord}");
 
     // -32602 — `tools/call` zonder toolnaam.
-    let antwoord = server.verzoek("tools/call", json!({ "arguments": {} })).await;
+    let antwoord = server
+        .verzoek("tools/call", json!({ "arguments": {} }))
+        .await;
     assert_eq!(antwoord["error"]["code"], json!(-32602), "{antwoord}");
     assert!(antwoord["result"].is_null(), "{antwoord}");
 

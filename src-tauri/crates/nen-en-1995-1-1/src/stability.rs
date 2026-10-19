@@ -118,8 +118,16 @@ pub fn check_column_stability(
 
     let term_c_y = sigma_c / (k_c_y * input.f_c0d_mpa);
     let term_c_z = sigma_c / (k_c_z * input.f_c0d_mpa);
-    let term_my = if input.f_myd_mpa > 0.0 { sigma_my / input.f_myd_mpa } else { 0.0 };
-    let term_mz = if input.f_mzd_mpa > 0.0 { sigma_mz / input.f_mzd_mpa } else { 0.0 };
+    let term_my = if input.f_myd_mpa > 0.0 {
+        sigma_my / input.f_myd_mpa
+    } else {
+        0.0
+    };
+    let term_mz = if input.f_mzd_mpa > 0.0 {
+        sigma_mz / input.f_mzd_mpa
+    } else {
+        0.0
+    };
 
     let low_slenderness = lambda_rel_y <= 0.3 && lambda_rel_z <= 0.3;
     let ratio_c = sigma_c / input.f_c0d_mpa;
@@ -159,7 +167,11 @@ pub fn check_column_stability(
             k_fac: k_y,
             k_c: k_c_y,
             vergelijking: eq_a,
-            drukterm: if low_slenderness { ratio_c * ratio_c } else { term_c_y },
+            drukterm: if low_slenderness {
+                ratio_c * ratio_c
+            } else {
+                term_c_y
+            },
             buigterm_y: term_my,
             buigterm_z: input.k_m * term_mz,
             nr: if low_slenderness { "(6.19)" } else { "(6.23)" },
@@ -177,7 +189,11 @@ pub fn check_column_stability(
             k_fac: k_z,
             k_c: k_c_z,
             vergelijking: eq_b,
-            drukterm: if low_slenderness { ratio_c * ratio_c } else { term_c_z },
+            drukterm: if low_slenderness {
+                ratio_c * ratio_c
+            } else {
+                term_c_z
+            },
             buigterm_y: input.k_m * term_my,
             buigterm_z: term_mz,
             nr: if low_slenderness { "(6.20)" } else { "(6.24)" },
@@ -218,7 +234,11 @@ pub fn check_column_stability(
             &force_state,
             &takken,
             maatgevend,
-            Spanningen { sigma_c, sigma_my, sigma_mz },
+            Spanningen {
+                sigma_c,
+                sigma_my,
+                sigma_mz,
+            },
             low_slenderness,
             uc,
         )
@@ -252,27 +272,103 @@ pub fn check_column_stability(
         force_state,
         formula_latex: formula,
         variables: vec![
-            NamedValue { symbol: r"\sigma_{c,0,d}".to_string(), value: sigma_c, unit: "N/mm²".to_string() },
-            NamedValue { symbol: r"\sigma_{m,y,d}".to_string(), value: sigma_my, unit: "N/mm²".to_string() },
-            NamedValue { symbol: r"\sigma_{m,z,d}".to_string(), value: sigma_mz, unit: "N/mm²".to_string() },
-            NamedValue { symbol: r"f_{c,0,d}".to_string(), value: input.f_c0d_mpa, unit: "N/mm²".to_string() },
-            NamedValue { symbol: r"f_{m,y,d}".to_string(), value: input.f_myd_mpa, unit: "N/mm²".to_string() },
-            NamedValue { symbol: r"f_{m,z,d}".to_string(), value: input.f_mzd_mpa, unit: "N/mm²".to_string() },
-            NamedValue { symbol: "k_m".to_string(), value: input.k_m, unit: "-".to_string() },
-            NamedValue { symbol: r"L_{cr,y}".to_string(), value: l_cr_y_mm, unit: "mm".to_string() },
-            NamedValue { symbol: r"L_{cr,z}".to_string(), value: l_cr_z_mm, unit: "mm".to_string() },
+            NamedValue {
+                symbol: r"\sigma_{c,0,d}".to_string(),
+                value: sigma_c,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"\sigma_{m,y,d}".to_string(),
+                value: sigma_my,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"\sigma_{m,z,d}".to_string(),
+                value: sigma_mz,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"f_{c,0,d}".to_string(),
+                value: input.f_c0d_mpa,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"f_{m,y,d}".to_string(),
+                value: input.f_myd_mpa,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"f_{m,z,d}".to_string(),
+                value: input.f_mzd_mpa,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: "k_m".to_string(),
+                value: input.k_m,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: r"L_{cr,y}".to_string(),
+                value: l_cr_y_mm,
+                unit: "mm".to_string(),
+            },
+            NamedValue {
+                symbol: r"L_{cr,z}".to_string(),
+                value: l_cr_z_mm,
+                unit: "mm".to_string(),
+            },
         ],
         intermediate_values: vec![
-            NamedValue { symbol: r"\lambda_y".to_string(), value: lambda_y, unit: "-".to_string() },
-            NamedValue { symbol: r"\lambda_z".to_string(), value: lambda_z, unit: "-".to_string() },
-            NamedValue { symbol: r"\lambda_{rel,y}".to_string(), value: lambda_rel_y, unit: "-".to_string() },
-            NamedValue { symbol: r"\lambda_{rel,z}".to_string(), value: lambda_rel_z, unit: "-".to_string() },
-            NamedValue { symbol: "k_y".to_string(), value: k_y, unit: "-".to_string() },
-            NamedValue { symbol: "k_z".to_string(), value: k_z, unit: "-".to_string() },
-            NamedValue { symbol: r"k_{c,y}".to_string(), value: k_c_y, unit: "-".to_string() },
-            NamedValue { symbol: r"k_{c,z}".to_string(), value: k_c_z, unit: "-".to_string() },
-            NamedValue { symbol: "(6.23)".to_string(), value: eq_a, unit: "-".to_string() },
-            NamedValue { symbol: "(6.24)".to_string(), value: eq_b, unit: "-".to_string() },
+            NamedValue {
+                symbol: r"\lambda_y".to_string(),
+                value: lambda_y,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: r"\lambda_z".to_string(),
+                value: lambda_z,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: r"\lambda_{rel,y}".to_string(),
+                value: lambda_rel_y,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: r"\lambda_{rel,z}".to_string(),
+                value: lambda_rel_z,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: "k_y".to_string(),
+                value: k_y,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: "k_z".to_string(),
+                value: k_z,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: r"k_{c,y}".to_string(),
+                value: k_c_y,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: r"k_{c,z}".to_string(),
+                value: k_c_z,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: "(6.23)".to_string(),
+                value: eq_a,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: "(6.24)".to_string(),
+                value: eq_b,
+                unit: "-".to_string(),
+            },
         ],
         deelstappen,
         value: uc,
@@ -330,7 +426,11 @@ fn kolom_deelstappen(
     low_slenderness: bool,
     uc: f64,
 ) -> Vec<Deelstap> {
-    let Spanningen { sigma_c, sigma_my, sigma_mz } = s;
+    let Spanningen {
+        sigma_c,
+        sigma_my,
+        sigma_mz,
+    } = s;
     let n_c = force_state.forces.n_ed.abs();
     let mut uit = Vec::with_capacity(2 + 7 * takken.len() + 1);
 
@@ -380,7 +480,11 @@ fn kolom_deelstappen(
         r"\sigma_{c,0,d}",
         "art. 6.1.4",
         r"\sigma_{c,0,d} = \frac{N_{c,Ed} \cdot 10^3}{A}".to_string(),
-        format!(r"\sigma_{{c,0,d}} = \frac{{{} \cdot 10^3}}{{{}}}", lx(n_c, 2), lx(section.a_mm2, 0)),
+        format!(
+            r"\sigma_{{c,0,d}} = \frac{{{} \cdot 10^3}}{{{}}}",
+            lx(n_c, 2),
+            lx(section.a_mm2, 0)
+        ),
         vec![nv("N_{c,Ed}", n_c, "kN"), nv("A", section.a_mm2, "mm²")],
         Some(sigma_c),
         "N/mm²",
@@ -398,8 +502,15 @@ fn kolom_deelstappen(
             &format!("i_{{{a}}}"),
             "art. 6.3.2(1)",
             format!(r"i_{{{a}}} = \sqrt{{\frac{{I_{{{a}}}}}{{A}}}}"),
-            format!(r"i_{{{a}}} = \sqrt{{\frac{{{}}}{{{}}}}}", lx(t.traagheid_mm4, 0), lx(section.a_mm2, 0)),
-            vec![nv(&format!("I_{{{a}}}"), t.traagheid_mm4, "mm⁴"), nv("A", section.a_mm2, "mm²")],
+            format!(
+                r"i_{{{a}}} = \sqrt{{\frac{{{}}}{{{}}}}}",
+                lx(t.traagheid_mm4, 0),
+                lx(section.a_mm2, 0)
+            ),
+            vec![
+                nv(&format!("I_{{{a}}}"), t.traagheid_mm4, "mm⁴"),
+                nv("A", section.a_mm2, "mm²"),
+            ],
             Some(t.radius_mm),
             "mm",
             Vec::new(),
@@ -568,7 +679,11 @@ fn kolom_deelstappen(
                 nl(t.drukterm, 4),
                 nl(t.buigterm_y, 4),
                 nl(t.buigterm_z, 4),
-                if t.vergelijking <= 1.0 { "Om deze as voldoet de staaf." } else { "Om deze as voldoet de staaf NIET." }
+                if t.vergelijking <= 1.0 {
+                    "Om deze as voldoet de staaf."
+                } else {
+                    "Om deze as voldoet de staaf NIET."
+                }
             )],
         ));
     }
@@ -651,7 +766,9 @@ pub fn l_ef_geval_tekst(case: LtbLoadCase) -> &'static str {
 /// correctie op l_ef erbij, voor de notitie bij de kiptoets.
 pub fn lastpositie_tekst(position: LtbLoadPosition) -> &'static str {
     match position {
-        LtbLoadPosition::CentreOfGravity => "belasting aangrijpend in het zwaartepunt (geen correctie)",
+        LtbLoadPosition::CentreOfGravity => {
+            "belasting aangrijpend in het zwaartepunt (geen correctie)"
+        }
         LtbLoadPosition::CompressionEdge => "belasting aangrijpend aan de DRUKzijde (l_ef + 2h)",
         LtbLoadPosition::TensionEdge => "belasting aangrijpend aan de TREKzijde (l_ef − 0,5h)",
     }
@@ -695,7 +812,12 @@ pub fn l_ef_toelichting(
 /// kipsteunafstand). Deze functie implementeert tabel 6.1 zoals afgedrukt in
 /// de normtekst; wie het referentiegedrag wil reproduceren geeft l_ef
 /// rechtstreeks op (zie `check_beam_stability`).
-pub fn effective_length_mm(l_mm: f64, case: LtbLoadCase, position: LtbLoadPosition, h_mm: f64) -> f64 {
+pub fn effective_length_mm(
+    l_mm: f64,
+    case: LtbLoadCase,
+    position: LtbLoadPosition,
+    h_mm: f64,
+) -> f64 {
     let base = l_ef_verhouding(case) * l_mm;
     match position {
         LtbLoadPosition::CentreOfGravity => base,
@@ -771,7 +893,11 @@ pub fn check_beam_stability(
 ) -> StabilityCalc {
     let n_ed = force_state.forces.n_ed;
     let sigma_m = sigma_m_mpa(force_state.forces.my_ed, section.w_y_mm3);
-    let sigma_c = if n_ed < 0.0 { sigma_axial_mpa(n_ed, section.a_mm2) } else { 0.0 };
+    let sigma_c = if n_ed < 0.0 {
+        sigma_axial_mpa(n_ed, section.a_mm2)
+    } else {
+        0.0
+    };
 
     // Niet-rechthoekig: (6.32) geldt niet en (6.31) is met de beschikbare
     // gegevens niet te maken. Dan wordt de toets NIET uitgevoerd én dat
@@ -791,7 +917,11 @@ pub fn check_beam_stability(
     let k_z = k_factor(lambda_rel_z, input.beta_c);
     let k_c_z = k_c(k_z, lambda_rel_z);
 
-    let bending_ratio = if input.f_myd_mpa > 0.0 { sigma_m / (kcrit * input.f_myd_mpa) } else { 0.0 };
+    let bending_ratio = if input.f_myd_mpa > 0.0 {
+        sigma_m / (kcrit * input.f_myd_mpa)
+    } else {
+        0.0
+    };
     let has_compression = sigma_c > 0.0;
     let (uc, formula, uc_formula) = if has_compression {
         (
@@ -818,23 +948,71 @@ pub fn check_beam_stability(
     StabilityCalc {
         id: "6.3.3_beam_stability".to_string(),
         title: "Kipstabiliteit (buiging en druk)".to_string(),
-        article: if has_compression { "art. 6.3.3 (6.35)".to_string() } else { "art. 6.3.3 (6.33)".to_string() },
+        article: if has_compression {
+            "art. 6.3.3 (6.35)".to_string()
+        } else {
+            "art. 6.3.3 (6.33)".to_string()
+        },
         force_state,
         formula_latex: formula,
         variables: vec![
-            NamedValue { symbol: r"\sigma_{m,y,d}".to_string(), value: sigma_m, unit: "N/mm²".to_string() },
-            NamedValue { symbol: r"\sigma_{c,0,d}".to_string(), value: sigma_c, unit: "N/mm²".to_string() },
-            NamedValue { symbol: r"f_{m,y,d}".to_string(), value: input.f_myd_mpa, unit: "N/mm²".to_string() },
-            NamedValue { symbol: r"f_{c,0,d}".to_string(), value: input.f_c0d_mpa, unit: "N/mm²".to_string() },
-            NamedValue { symbol: r"l_{ef}".to_string(), value: input.l_ef_mm, unit: "mm".to_string() },
-            NamedValue { symbol: r"E_{0,05}".to_string(), value: input.e0_05_mpa, unit: "N/mm²".to_string() },
+            NamedValue {
+                symbol: r"\sigma_{m,y,d}".to_string(),
+                value: sigma_m,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"\sigma_{c,0,d}".to_string(),
+                value: sigma_c,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"f_{m,y,d}".to_string(),
+                value: input.f_myd_mpa,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"f_{c,0,d}".to_string(),
+                value: input.f_c0d_mpa,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"l_{ef}".to_string(),
+                value: input.l_ef_mm,
+                unit: "mm".to_string(),
+            },
+            NamedValue {
+                symbol: r"E_{0,05}".to_string(),
+                value: input.e0_05_mpa,
+                unit: "N/mm²".to_string(),
+            },
         ],
         intermediate_values: vec![
-            NamedValue { symbol: r"\sigma_{m,crit}".to_string(), value: s_crit, unit: "N/mm²".to_string() },
-            NamedValue { symbol: r"\lambda_{rel,m}".to_string(), value: l_rel_m, unit: "-".to_string() },
-            NamedValue { symbol: r"k_{crit}".to_string(), value: kcrit, unit: "-".to_string() },
-            NamedValue { symbol: r"\lambda_{rel,z}".to_string(), value: lambda_rel_z, unit: "-".to_string() },
-            NamedValue { symbol: r"k_{c,z}".to_string(), value: k_c_z, unit: "-".to_string() },
+            NamedValue {
+                symbol: r"\sigma_{m,crit}".to_string(),
+                value: s_crit,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"\lambda_{rel,m}".to_string(),
+                value: l_rel_m,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: r"k_{crit}".to_string(),
+                value: kcrit,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: r"\lambda_{rel,z}".to_string(),
+                value: lambda_rel_z,
+                unit: "-".to_string(),
+            },
+            NamedValue {
+                symbol: r"k_{c,z}".to_string(),
+                value: k_c_z,
+                unit: "-".to_string(),
+            },
         ],
         // Zie hierboven: hout krijgt zijn afleiding later.
         deelstappen: vec![],
@@ -881,11 +1059,31 @@ fn kip_niet_bepaalbaar(
             r"\sigma_{m,crit} = \frac{\pi \sqrt{E_{0,05} I_z \, G_{0,05} I_{tor}}}{l_{ef} W_y}"
                 .to_string(),
         variables: vec![
-            NamedValue { symbol: r"\sigma_{m,y,d}".to_string(), value: sigma_m, unit: "N/mm²".to_string() },
-            NamedValue { symbol: r"\sigma_{c,0,d}".to_string(), value: sigma_c, unit: "N/mm²".to_string() },
-            NamedValue { symbol: r"l_{ef}".to_string(), value: input.l_ef_mm, unit: "mm".to_string() },
-            NamedValue { symbol: "I_z".to_string(), value: section.i_z_mm4, unit: "mm⁴".to_string() },
-            NamedValue { symbol: "W_y".to_string(), value: section.w_y_mm3, unit: "mm³".to_string() },
+            NamedValue {
+                symbol: r"\sigma_{m,y,d}".to_string(),
+                value: sigma_m,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"\sigma_{c,0,d}".to_string(),
+                value: sigma_c,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"l_{ef}".to_string(),
+                value: input.l_ef_mm,
+                unit: "mm".to_string(),
+            },
+            NamedValue {
+                symbol: "I_z".to_string(),
+                value: section.i_z_mm4,
+                unit: "mm⁴".to_string(),
+            },
+            NamedValue {
+                symbol: "W_y".to_string(),
+                value: section.w_y_mm3,
+                unit: "mm³".to_string(),
+            },
         ],
         intermediate_values: vec![],
         deelstappen: vec![],
@@ -893,17 +1091,15 @@ fn kip_niet_bepaalbaar(
         unit: "-".to_string(),
         uc: None,
         status: CheckStatus::NotApplicable,
-        notes: vec![
-            concat!(
-                "Kip is NIET getoetst. De doorsnede is niet rechthoekig, en de ",
-                "vereenvoudigde sigma_m,crit van (6.32) geldt volgens art. 6.3.3(2) ",
-                "alleen voor naaldhout met een gezaagde rechthoekige doorsnede. De ",
-                "algemene (6.31) vraagt G_0,05 en het torsietraagheidsmoment I_tor; ",
-                "die zijn hier niet beschikbaar en worden niet geschat. Toets de ",
-                "kipstabiliteit van deze ligger apart, of steun hem zijdelings af.",
-            )
-            .to_string(),
-        ],
+        notes: vec![concat!(
+            "Kip is NIET getoetst. De doorsnede is niet rechthoekig, en de ",
+            "vereenvoudigde sigma_m,crit van (6.32) geldt volgens art. 6.3.3(2) ",
+            "alleen voor naaldhout met een gezaagde rechthoekige doorsnede. De ",
+            "algemene (6.31) vraagt G_0,05 en het torsietraagheidsmoment I_tor; ",
+            "die zijn hier niet beschikbaar en worden niet geschat. Toets de ",
+            "kipstabiliteit van deze ligger apart, of steun hem zijdelings af.",
+        )
+        .to_string()],
     }
 }
 
@@ -929,7 +1125,11 @@ pub fn kip_overgeslagen_drukzijde_gesteund(
 ) -> StabilityCalc {
     let n_ed = force_state.forces.n_ed;
     let sigma_m = sigma_m_mpa(force_state.forces.my_ed, section.w_y_mm3);
-    let sigma_c = if n_ed < 0.0 { sigma_axial_mpa(n_ed, section.a_mm2) } else { 0.0 };
+    let sigma_c = if n_ed < 0.0 {
+        sigma_axial_mpa(n_ed, section.a_mm2)
+    } else {
+        0.0
+    };
     StabilityCalc {
         id: "6.3.3_beam_stability".to_string(),
         title: "Kipstabiliteit (buiging en druk)".to_string(),
@@ -937,28 +1137,36 @@ pub fn kip_overgeslagen_drukzijde_gesteund(
         force_state,
         formula_latex: r"k_{crit} = 1{,}0".to_string(),
         variables: vec![
-            NamedValue { symbol: r"\sigma_{m,y,d}".to_string(), value: sigma_m, unit: "N/mm²".to_string() },
-            NamedValue { symbol: r"\sigma_{c,0,d}".to_string(), value: sigma_c, unit: "N/mm²".to_string() },
+            NamedValue {
+                symbol: r"\sigma_{m,y,d}".to_string(),
+                value: sigma_m,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"\sigma_{c,0,d}".to_string(),
+                value: sigma_c,
+                unit: "N/mm²".to_string(),
+            },
         ],
-        intermediate_values: vec![
-            NamedValue { symbol: r"k_{crit}".to_string(), value: 1.0, unit: "-".to_string() },
-        ],
+        intermediate_values: vec![NamedValue {
+            symbol: r"k_{crit}".to_string(),
+            value: 1.0,
+            unit: "-".to_string(),
+        }],
         deelstappen: vec![],
         value: 0.0,
         unit: "-".to_string(),
         uc: None,
         status: CheckStatus::NotApplicable,
-        notes: vec![
-            concat!(
-                "Kiptoets overgeslagen op aanwijzing van de invoer (kiptoets uit): de gedrukte ",
-                "rand geldt als over de volle lengte zijdelings gesteund en de opleggingen als ",
-                "torsievast, zodat k_crit = 1,0 mag worden genomen (art. 6.3.3(5)). De buiging is ",
-                "dan getoetst in art. 6.1.6 en de druk in art. 6.3.2; (6.35) met k_crit = 1 kan ",
-                "daar niet strenger uitvallen. Deze aanname is een keuze van de constructeur en ",
-                "geen uitkomst van de berekening: controleer dat de steun er werkelijk is.",
-            )
-            .to_string(),
-        ],
+        notes: vec![concat!(
+            "Kiptoets overgeslagen op aanwijzing van de invoer (kiptoets uit): de gedrukte ",
+            "rand geldt als over de volle lengte zijdelings gesteund en de opleggingen als ",
+            "torsievast, zodat k_crit = 1,0 mag worden genomen (art. 6.3.3(5)). De buiging is ",
+            "dan getoetst in art. 6.1.6 en de druk in art. 6.3.2; (6.35) met k_crit = 1 kan ",
+            "daar niet strenger uitvallen. Deze aanname is een keuze van de constructeur en ",
+            "geen uitkomst van de berekening: controleer dat de steun er werkelijk is.",
+        )
+        .to_string()],
     }
 }
 
@@ -978,18 +1186,36 @@ mod tests {
     #[test]
     fn l_ef_toelichting_noemt_verhouding_correctie_en_uitkomst() {
         let drukzijde = l_ef_toelichting(
-            6000.0, "kipsteunafstand", LtbLoadCase::UniformLoad, LtbLoadPosition::CompressionEdge, 450.0,
+            6000.0,
+            "kipsteunafstand",
+            LtbLoadCase::UniformLoad,
+            LtbLoadPosition::CompressionEdge,
+            450.0,
         );
-        assert!(drukzijde.contains("0,9 · 6000 + 2 · 450 = 6300 mm"), "{drukzijde}");
+        assert!(
+            drukzijde.contains("0,9 · 6000 + 2 · 450 = 6300 mm"),
+            "{drukzijde}"
+        );
         assert!(drukzijde.contains("DRUKzijde"), "{drukzijde}");
         assert!(drukzijde.contains("kipsteunafstand"), "{drukzijde}");
         let zwaartepunt = l_ef_toelichting(
-            6000.0, "staaflengte", LtbLoadCase::UniformLoad, LtbLoadPosition::CentreOfGravity, 450.0,
+            6000.0,
+            "staaflengte",
+            LtbLoadCase::UniformLoad,
+            LtbLoadPosition::CentreOfGravity,
+            450.0,
         );
-        assert!(zwaartepunt.contains("0,9 · 6000 = 5400 mm"), "{zwaartepunt}");
+        assert!(
+            zwaartepunt.contains("0,9 · 6000 = 5400 mm"),
+            "{zwaartepunt}"
+        );
         assert!(zwaartepunt.contains("zwaartepunt"), "{zwaartepunt}");
         let trekzijde = l_ef_toelichting(
-            6000.0, "staaflengte", LtbLoadCase::UniformLoad, LtbLoadPosition::TensionEdge, 450.0,
+            6000.0,
+            "staaflengte",
+            LtbLoadCase::UniformLoad,
+            LtbLoadPosition::TensionEdge,
+            450.0,
         );
         assert!(trekzijde.contains("− 0,5 · 450 = 5175 mm"), "{trekzijde}");
     }
@@ -1001,7 +1227,11 @@ mod tests {
         let snap = ForceStateSnapshot {
             combination_id: 1,
             position_mm: 3000.0,
-            forces: InternalForces { n_ed: -10.0, my_ed: 40.0, ..Default::default() },
+            forces: InternalForces {
+                n_ed: -10.0,
+                my_ed: 40.0,
+                ..Default::default()
+            },
         };
         let k = kip_overgeslagen_drukzijde_gesteund(&sectie(), snap);
         assert_eq!(k.id, "6.3.3_beam_stability");
@@ -1016,7 +1246,11 @@ mod tests {
         ForceStateSnapshot {
             combination_id: 12,
             position_mm: 3688.0,
-            forces: InternalForces { n_ed: n, my_ed: my, ..Default::default() },
+            forces: InternalForces {
+                n_ed: n,
+                my_ed: my,
+                ..Default::default()
+            },
         }
     }
 
@@ -1038,8 +1272,16 @@ mod tests {
     fn slankheden_referentie_staaf2() {
         // lambda_y = 6342/129,9 = 48,82; lambda_z = 1268/27,7 = 45,77.
         let s = sectie();
-        assert_relative_eq!(slenderness(6342.0, s.radius_y_mm), 48.82, max_relative = 1e-3);
-        assert_relative_eq!(slenderness(1268.0, s.radius_z_mm), 45.77, max_relative = 1e-3);
+        assert_relative_eq!(
+            slenderness(6342.0, s.radius_y_mm),
+            48.82,
+            max_relative = 1e-3
+        );
+        assert_relative_eq!(
+            slenderness(1268.0, s.radius_z_mm),
+            45.77,
+            max_relative = 1e-3
+        );
         // lambda_rel,y = 0,828; lambda_rel,z = 0,776.
         assert_relative_eq!(lambda_rel(48.821, 21.0, 7400.0), 0.828, max_relative = 1e-3);
         assert_relative_eq!(lambda_rel(45.755, 21.0, 7400.0), 0.776, max_relative = 1e-3);
@@ -1109,19 +1351,68 @@ mod tests {
     #[test]
     fn effectieve_kiplengte_tabel_6_1() {
         // Vrij opgelegd, q-last: 0,9·l; puntlast: 0,8·l; constant moment: 1,0·l.
-        assert_relative_eq!(effective_length_mm(1268.0, LtbLoadCase::UniformLoad, LtbLoadPosition::CentreOfGravity, 450.0), 1141.2, max_relative = 1e-9);
-        assert_relative_eq!(effective_length_mm(1000.0, LtbLoadCase::ConcentratedMidspan, LtbLoadPosition::CentreOfGravity, 450.0), 800.0, max_relative = 1e-9);
-        assert_relative_eq!(effective_length_mm(1000.0, LtbLoadCase::ConstantMoment, LtbLoadPosition::CentreOfGravity, 450.0), 1000.0, max_relative = 1e-9);
+        assert_relative_eq!(
+            effective_length_mm(
+                1268.0,
+                LtbLoadCase::UniformLoad,
+                LtbLoadPosition::CentreOfGravity,
+                450.0
+            ),
+            1141.2,
+            max_relative = 1e-9
+        );
+        assert_relative_eq!(
+            effective_length_mm(
+                1000.0,
+                LtbLoadCase::ConcentratedMidspan,
+                LtbLoadPosition::CentreOfGravity,
+                450.0
+            ),
+            800.0,
+            max_relative = 1e-9
+        );
+        assert_relative_eq!(
+            effective_length_mm(
+                1000.0,
+                LtbLoadCase::ConstantMoment,
+                LtbLoadPosition::CentreOfGravity,
+                450.0
+            ),
+            1000.0,
+            max_relative = 1e-9
+        );
         // Drukzijde: +2h; trekzijde: −0,5h.
-        assert_relative_eq!(effective_length_mm(1000.0, LtbLoadCase::UniformLoad, LtbLoadPosition::CompressionEdge, 450.0), 1800.0, max_relative = 1e-9);
-        assert_relative_eq!(effective_length_mm(1000.0, LtbLoadCase::UniformLoad, LtbLoadPosition::TensionEdge, 450.0), 675.0, max_relative = 1e-9);
+        assert_relative_eq!(
+            effective_length_mm(
+                1000.0,
+                LtbLoadCase::UniformLoad,
+                LtbLoadPosition::CompressionEdge,
+                450.0
+            ),
+            1800.0,
+            max_relative = 1e-9
+        );
+        assert_relative_eq!(
+            effective_length_mm(
+                1000.0,
+                LtbLoadCase::UniformLoad,
+                LtbLoadPosition::TensionEdge,
+                450.0
+            ),
+            675.0,
+            max_relative = 1e-9
+        );
     }
 
     #[test]
     fn sigma_m_crit_referentie() {
         // 0,78·96²/(450·1268)·7400 = 93,2 N/mm2.
         let s = sectie();
-        assert_relative_eq!(sigma_m_crit_rect_mpa(&s, 1268.0, 7400.0), 93.2, max_relative = 1e-3);
+        assert_relative_eq!(
+            sigma_m_crit_rect_mpa(&s, 1268.0, 7400.0),
+            93.2,
+            max_relative = 1e-3
+        );
     }
 
     #[test]
@@ -1156,7 +1447,12 @@ mod tests {
         let r = check_beam_stability(&sectie(), &invoer, snap(-57.64, 72.170));
         assert_relative_eq!(r.uc.as_ref().unwrap().uc, 2.40, max_relative = 5e-3);
         assert_eq!(r.status, CheckStatus::NotOk);
-        let kcrit = r.intermediate_values.iter().find(|v| v.symbol == r"k_{crit}").unwrap().value;
+        let kcrit = r
+            .intermediate_values
+            .iter()
+            .find(|v| v.symbol == r"k_{crit}")
+            .unwrap()
+            .value;
         assert_relative_eq!(kcrit, 1.0, max_relative = 1e-9);
     }
 
@@ -1174,7 +1470,11 @@ mod tests {
             f_c0d_mpa: 12.923,
         };
         let r = check_beam_stability(&sectie(), &invoer, snap(0.0, 72.170));
-        assert_relative_eq!(r.uc.as_ref().unwrap().uc, 22.2747 / 14.769, max_relative = 1e-3);
+        assert_relative_eq!(
+            r.uc.as_ref().unwrap().uc,
+            22.2747 / 14.769,
+            max_relative = 1e-3
+        );
         assert!(r.article.contains("6.33"));
     }
 }

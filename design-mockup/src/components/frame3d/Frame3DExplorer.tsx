@@ -1,4 +1,4 @@
-import { Children, useState, type Dispatch, type SetStateAction } from "react";
+import { Children, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 import ExplorerViewTab from "../fem/ExplorerViewTab";
 import type { DisplayFlags } from "../fem/FemResultsOverlay";
@@ -36,6 +36,7 @@ interface Props {
   activeLoadCaseId?: number;
   combinations?: readonly LoadCombination[];
   combinationResults?: ReadonlyMap<number, Frame3DSolveResult>;
+  lazyCombinationIds?: ReadonlySet<number>;
   activeCombinationId?: number | null;
   setActiveCombinationId?: (id: number) => void;
 }
@@ -129,12 +130,20 @@ export default function Frame3DExplorer(props: Props) {
     ? props.concreteChecks.results.reduce((maximum, check) => Math.max(maximum, check.uc_max), 0)
     : undefined;
   const activeLoadCaseId = props.activeLoadCaseId ?? 1;
+  const volumeBodyLoadCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const load of props.model.volumeBodyLoads ?? []) counts.set(load.volumeId, (counts.get(load.volumeId) ?? 0) + 1);
+    for (const load of props.model.volumeFaceLoads ?? []) counts.set(load.volumeId, (counts.get(load.volumeId) ?? 0) + 1);
+    return counts;
+  }, [props.model.volumeBodyLoads, props.model.volumeFaceLoads]);
   const conditionModel = props.calculationModel ?? props.model;
   const nodalLoads = (conditionModel.loads ?? []).filter((load) => (load.caseId ?? 1) === activeLoadCaseId);
   const memberLoads = (conditionModel.memberLoads ?? []).filter((load) => (load.caseId ?? 1) === activeLoadCaseId);
   const memberPointLoads = (conditionModel.memberPointLoads ?? []).filter((load) => (load.caseId ?? 1) === activeLoadCaseId);
   const thermalLoads = (conditionModel.thermalLoads ?? []).filter((load) => (load.caseId ?? 1) === activeLoadCaseId);
   const surfaceLoads = (conditionModel.surfaceLoads ?? []).filter((load) => (load.caseId ?? 1) === activeLoadCaseId);
+  const volumeBodyLoads = (conditionModel.volumeBodyLoads ?? []).filter((load) => (load.caseId ?? 1) === activeLoadCaseId);
+  const volumeFaceLoads = (conditionModel.volumeFaceLoads ?? []).filter((load) => (load.caseId ?? 1) === activeLoadCaseId);
   const select = (event: React.MouseEvent<HTMLButtonElement>, item: Frame3DSingleSelection) =>
     props.setSelection(toggleFrame3DSelection(props.selection, item, event.shiftKey || event.ctrlKey || event.metaKey));
 
@@ -177,6 +186,14 @@ export default function Frame3DExplorer(props: Props) {
               onClick={(event) => select(event, { type: "plate", id: plate.id })} />;
           })}
         </Branch>
+        <ItemBranch label="Volume-elementen" items={props.model.volumes ?? []}
+          showNextLabel={(count) => t("tree.showNext", { count })} renderItem={(volume) =>
+          <Leaf key={volume.id} label={`${volume.kind === "tet4" ? "Tet4" : "Hex8"} ${volume.id}`}
+            value={`K${volume.nodeIds.join("–K")} · E ${volume.eMpa} MPa${
+              volumeBodyLoadCounts.has(volume.id) ? ` · ${volumeBodyLoadCounts.get(volume.id)} volumelast(en)` : ""}`}
+            active={frame3DSelectionContains(props.selection, "volume", volume.id)}
+            onClick={(event) => select(event, { type: "volume", id: volume.id })} />
+        } />
         <Branch label={t("tree.supports")} count={(props.model.supports ?? []).length}
           showNextLabel={(count) => t("tree.showNext", { count })}>
           {(props.model.supports ?? []).map((support) => <Leaf key={support.nodeId}
@@ -196,7 +213,7 @@ export default function Frame3DExplorer(props: Props) {
             active={frame3DSelectionContains(props.selection, "node", support.nodeId)}
             onClick={(event) => select(event, { type: "node", id: support.nodeId })} />)}
         </Branch>
-        <Branch label={t("tree.loads")} count={nodalLoads.length + memberLoads.length + memberPointLoads.length + thermalLoads.length + surfaceLoads.length}
+        <Branch label={t("tree.loads")} count={nodalLoads.length + memberLoads.length + memberPointLoads.length + thermalLoads.length + surfaceLoads.length + volumeBodyLoads.length + volumeFaceLoads.length}
           showNextLabel={(count) => t("tree.showNext", { count })}>
           {nodalLoads.map((load) => <Leaf key={load.id} label={`#${load.id} · ${t("tree.nodeLabel", { id: load.nodeId })}`}
             value={[load.fx && `Fx ${load.fx}`, load.fy && `Fy ${load.fy}`, load.fz && `Fz ${load.fz}`, load.mx && `Mx ${load.mx}`, load.my && `My ${load.my}`, load.mz && `Mz ${load.mz}`].filter(Boolean).join(" · ")}
@@ -226,6 +243,16 @@ export default function Frame3DExplorer(props: Props) {
             value={`qx ${load.qx} · qy ${load.qy} · qz ${load.qz} kN/m²`}
             active={frame3DSelectionContains(props.selection, "surfaceLoad", load.id)}
             onClick={(event) => select(event, { type: "surfaceLoad", id: load.id })} />)}
+          {volumeBodyLoads.map((load) => <Leaf key={`volume-body-${load.id}`}
+            label={`b#${load.id} · Volume ${load.volumeId}`}
+            value={`${load.forceKnPerM3.join(" / ")} kN/m³`}
+            active={frame3DSelectionContains(props.selection, "volume", load.volumeId)}
+            onClick={(event) => select(event, { type: "volume", id: load.volumeId })} />)}
+          {volumeFaceLoads.map((load) => <Leaf key={`volume-face-${load.id}`}
+            label={`t#${load.id} · Volume ${load.volumeId} vlak ${load.faceIndex + 1}`}
+            value={`${load.tractionKnPerM2.join(" / ")} kN/m²`}
+            active={frame3DSelectionContains(props.selection, "volume", load.volumeId)}
+            onClick={(event) => select(event, { type: "volume", id: load.volumeId })} />)}
         </Branch>
       </>}
       {tab === "view" && <ExplorerViewTab
@@ -237,26 +264,34 @@ export default function Frame3DExplorer(props: Props) {
       {tab === "results" && <div className="fem-results-tab" data-frame3d-results-tab>
         <div className="fem-results-section-title">{t("tree.resultsTab")}</div>
         {props.result ? <div className="fem-results-hint">
-          {props.result.analysis === "p-delta" ? "2e orde (P-Δ)"
-            : props.result.analysis === "material" ? "Fysisch niet-lineair" : "1e orde"} · Δmax {(maxDisplacement * 1000).toFixed(3)} mm · αcr {alphaCr?.toFixed(2) ?? "—"}
+          {props.result.volume3D?.formulation === "totalLagrangian" ? "GNL Tet4 (totale Lagrange)"
+            : props.result.analysis === "combined" ? "2e orde + FNL"
+            : props.result.analysis === "p-delta" ? "2e orde (P-Δ)"
+              : props.result.analysis === "material" ? "Fysisch niet-lineair" : "1e orde"} · Δmax {(maxDisplacement * 1000).toFixed(3)} mm · αcr {alphaCr?.toFixed(2) ?? "—"}
           {plateBending && <> · plaat {plateBending.plateId} · |M|max {maxPlateMoment.toFixed(3)} kNm/m</>}
+          {props.result.volume3D && props.result.volume3D.elements.length > 0 && <> · {props.result.volume3D.elements.length} volume-elementen · σvm,max {props.result.volume3D.elements.reduce((maximum, element) => Math.max(maximum, element.vonMisesMpa), 0).toFixed(3)} MPa</>}
+          {(props.result.volume3D?.bendingPlates?.length ?? 0) > 0 && <> · {props.result.volume3D!.bendingPlates!.length} gekoppelde DKT-buigplaten (alleen buiging)</>}
           {maxSteelUc !== undefined && <> · UC staal {maxSteelUc.toFixed(2)}</>}
           {maxConcreteUc !== undefined && <> · UC UGT beton {maxConcreteUc.toFixed(2)}</>}
           {props.checksRunning && <> · normtoetsing…</>}
           {props.checksError && <><br />Normtoetsing: {props.checksError}</>}
         </div> : <div className="fem-results-hint">{t("tree.clickCalculateBefore")} <strong>{t("tree.calculate")}</strong>.</div>}
-        {(props.combinations?.length ?? 0) > 0 && (props.combinationResults?.size ?? 0) > 0 && <Branch
+        {(props.combinations?.length ?? 0) > 0
+          && ((props.combinationResults?.size ?? 0) > 0 || (props.lazyCombinationIds?.size ?? 0) > 0) && <Branch
           label="Belastingcombinaties"
-          count={props.combinationResults?.size ?? 0}
+          count={props.combinations?.filter((combination) => props.combinationResults?.has(combination.id)
+            || props.lazyCombinationIds?.has(combination.id)).length ?? 0}
           showNextLabel={(count) => t("tree.showNext", { count })}
         >
-          {props.combinations?.filter((combination) => props.combinationResults?.has(combination.id)).map((combination) => {
+          {props.combinations?.filter((combination) => props.combinationResults?.has(combination.id)
+            || props.lazyCombinationIds?.has(combination.id)).map((combination) => {
             const result = props.combinationResults?.get(combination.id);
             const displacement = result ? frame3DMaximumDisplacementM(props.model, result) : 0;
             return <Leaf
               key={combination.id}
               label={combination.name}
-              value={`${combination.type === "uls" ? "UGT" : "BGT"} · Δ ${(displacement * 1000).toFixed(2)} mm`}
+              value={result ? `${combination.type === "uls" ? "UGT" : "BGT"} · Δ ${(displacement * 1000).toFixed(2)} mm`
+                : `${combination.type === "uls" ? "UGT" : "BGT"} · klik om te berekenen`}
               active={props.activeCombinationId === combination.id}
               onClick={() => props.setActiveCombinationId?.(combination.id)}
             />;

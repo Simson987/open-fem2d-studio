@@ -123,12 +123,18 @@ fn invoer(
             ForcePoint {
                 combination_id: 1,
                 position_mm: 0.0,
-                forces: InternalForces { vz_ed: v_ed_kn, ..Default::default() },
+                forces: InternalForces {
+                    vz_ed: v_ed_kn,
+                    ..Default::default()
+                },
             },
             ForcePoint {
                 combination_id: 1,
                 position_mm: L_M * 500.0,
-                forces: InternalForces { my_ed: m_ed_knm, ..Default::default() },
+                forces: InternalForces {
+                    my_ed: m_ed_knm,
+                    ..Default::default()
+                },
             },
         ],
         buckling_length_y_m: L_M,

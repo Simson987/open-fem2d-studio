@@ -82,7 +82,11 @@ fn fout(code: &str, melding: impl Into<String>, remedie: impl Into<String>) -> R
     let remedie = remedie.into();
     RpcError {
         // Een argumentfout is een fout van de aanroeper; de rest is uitvoering.
-        code: if code == ARGUMENT_ONGELDIG { -32602 } else { -32000 },
+        code: if code == ARGUMENT_ONGELDIG {
+            -32602
+        } else {
+            -32000
+        },
         message: format!("[{code}] {melding} — {remedie}"),
         data: Some(json!({
             "error_code": code,
@@ -203,10 +207,7 @@ struct CheckArgumenten {
     bijlage: Option<nationale_bijlage::NationaleBijlage>,
 }
 
-fn lees_argumenten<T: for<'de> Deserialize<'de>>(
-    tool: &str,
-    args: Value,
-) -> Result<T, RpcError> {
+fn lees_argumenten<T: for<'de> Deserialize<'de>>(tool: &str, args: Value) -> Result<T, RpcError> {
     serde_json::from_value(args).map_err(|e| {
         fout(
             ARGUMENT_ONGELDIG,
@@ -292,9 +293,8 @@ fn lees_projectbestand(pad: &str) -> Result<String, RpcError> {
 /// `steel_check_inputs` leeg — met waarschuwing, nooit stil.
 fn profielen() -> &'static Value {
     static PROFIELEN: OnceLock<Value> = OnceLock::new();
-    PROFIELEN.get_or_init(|| {
-        serde_json::to_value(steel_profiles::db().all()).unwrap_or(Value::Null)
-    })
+    PROFIELEN
+        .get_or_init(|| serde_json::to_value(steel_profiles::db().all()).unwrap_or(Value::Null))
 }
 
 // ── De vijf tools ───────────────────────────────────────────────────────────
@@ -473,8 +473,19 @@ async fn check_fem_model(naam: &str, args: Value) -> Result<Value, RpcError> {
     let maatgevend = staal_res
         .iter()
         .map(|r| ("staal", r.beam_id, r.uc_max, r.governing_check_id.as_str()))
-        .chain(hout_res.iter().map(|r| ("hout", r.beam_id, r.uc_max, r.governing_check_id.as_str())))
-        .chain(clt_res.iter().map(|r| ("kruislaaghout", r.beam_id, r.uc_max, r.governing_check_id.as_str())))
+        .chain(
+            hout_res
+                .iter()
+                .map(|r| ("hout", r.beam_id, r.uc_max, r.governing_check_id.as_str())),
+        )
+        .chain(clt_res.iter().map(|r| {
+            (
+                "kruislaaghout",
+                r.beam_id,
+                r.uc_max,
+                r.governing_check_id.as_str(),
+            )
+        }))
         .filter(|(_, _, uc, _)| uc.is_finite())
         .max_by(|a, b| a.2.total_cmp(&b.2))
         .map(|(materiaal, beam_id, uc_max, check)| {
@@ -548,7 +559,9 @@ async fn check_fem_model(naam: &str, args: Value) -> Result<Value, RpcError> {
 /// sleutel is de bundel ouder dan deze server en is geen enkele plaat getoetst.
 fn meld_niet_getoetste_platen(uit: &mut Value, model: Option<&Value>, platen_ondersteund: bool) {
     let Some(model) = model else { return };
-    let Some(platen) = model.get("plates").and_then(Value::as_array) else { return };
+    let Some(platen) = model.get("plates").and_then(Value::as_array) else {
+        return;
+    };
     let mut bekend: Vec<i64> = Vec::new();
     if let Some(lijst) = uit.get("plate_check_inputs").and_then(Value::as_array) {
         bekend.extend(lijst.iter().filter_map(|e| e.get("plate_id")?.as_i64()));
@@ -572,7 +585,9 @@ fn meld_niet_getoetste_platen(uit: &mut Value, model: Option<&Value>, platen_ond
     if nieuw.is_empty() {
         return;
     }
-    let Some(map) = uit.as_object_mut() else { return };
+    let Some(map) = uit.as_object_mut() else {
+        return;
+    };
     match map.get_mut("skipped_plates").and_then(Value::as_array_mut) {
         Some(lijst) => lijst.extend(nieuw),
         None => {
@@ -588,7 +603,9 @@ fn lees_toetsinvoer<T: for<'de> Deserialize<'de>>(
     veld: &str,
     typenaam: &str,
 ) -> Result<Option<Vec<T>>, RpcError> {
-    let Some(rauw) = uit.get(veld) else { return Ok(None) };
+    let Some(rauw) = uit.get(veld) else {
+        return Ok(None);
+    };
     serde_json::from_value(rauw.clone()).map(Some).map_err(|e| {
         fout(
             TOETSING_ONMOGELIJK,
@@ -678,7 +695,11 @@ fn reden_niet_getoetst(materiaal: &str, profiel: &str, hout_ondersteund: bool) -
              getoetst; meld dit met het model."
         );
     }
-    if materiaal.trim_start().to_ascii_uppercase().starts_with("VRIJ:") {
+    if materiaal
+        .trim_start()
+        .to_ascii_uppercase()
+        .starts_with("VRIJ:")
+    {
         return format!(
             "vrij materiaal \"{materiaal}\" — `check_fem_model` toetst staal en hout; de \
              spanningstoets voor vrij materiaal loopt niet via deze server. Deze staaf is \
@@ -736,12 +757,19 @@ fn meld_niet_getoetste_staven(
     hout_ondersteund: bool,
 ) {
     let Some(model) = model else { return };
-    let Some(staven) = model.get("beams").and_then(Value::as_array) else { return };
+    let Some(staven) = model.get("beams").and_then(Value::as_array) else {
+        return;
+    };
 
     // Alles wat al in het antwoord staat blijft ongemoeid: een staaf twee keer
     // melden leest als twee staven.
     let mut bekend: Vec<i64> = Vec::new();
-    for veld in ["steel_check_inputs", "timber_check_inputs", "clt_check_inputs", "skipped_beams"] {
+    for veld in [
+        "steel_check_inputs",
+        "timber_check_inputs",
+        "clt_check_inputs",
+        "skipped_beams",
+    ] {
         if let Some(lijst) = uit.get(veld).and_then(Value::as_array) {
             bekend.extend(lijst.iter().filter_map(|e| e.get("beam_id")?.as_i64()));
         }
@@ -749,7 +777,9 @@ fn meld_niet_getoetste_staven(
 
     let mut nieuw: Vec<Value> = Vec::new();
     for staaf in staven {
-        let Some(id) = staaf.get("id").and_then(Value::as_i64) else { continue };
+        let Some(id) = staaf.get("id").and_then(Value::as_i64) else {
+            continue;
+        };
         if bekend.contains(&id) {
             continue;
         }
@@ -773,11 +803,15 @@ fn meld_niet_getoetste_staven(
     // kwam het nergens terug: `beam_ids` [1, 99] gaf staaf 1 en zweeg over 99.
     // De bundel meldt het sindsdien zelf; dit vangt een oudere bundel op.
     if let Some(selectie) = beam_ids {
-        let in_model: Vec<i64> =
-            staven.iter().filter_map(|s| s.get("id").and_then(Value::as_i64)).collect();
+        let in_model: Vec<i64> = staven
+            .iter()
+            .filter_map(|s| s.get("id").and_then(Value::as_i64))
+            .collect();
         for &id in selectie {
             let al_gemeld = bekend.contains(&id)
-                || nieuw.iter().any(|n| n.get("beam_id").and_then(Value::as_i64) == Some(id));
+                || nieuw
+                    .iter()
+                    .any(|n| n.get("beam_id").and_then(Value::as_i64) == Some(id));
             if in_model.contains(&id) || al_gemeld {
                 continue;
             }
@@ -787,7 +821,9 @@ fn meld_niet_getoetste_staven(
     if nieuw.is_empty() {
         return;
     }
-    let Some(map) = uit.as_object_mut() else { return };
+    let Some(map) = uit.as_object_mut() else {
+        return;
+    };
     match map.get_mut("skipped_beams").and_then(Value::as_array_mut) {
         Some(lijst) => lijst.extend(nieuw),
         None => {
@@ -1231,7 +1267,6 @@ fn schema_fem_model() -> Value {
     })
 }
 
-
 fn schema_combinations() -> Value {
     json!({
         "type": "array",
@@ -1396,14 +1431,27 @@ mod tests {
         let model = schema_fem_model();
         let velden = model["properties"].as_object().expect("properties");
         for veld in [
-            "nodes", "beams", "supports", "plates", "loadCases", "loads",
-            "selfWeightEnabled", "scheefstandEnabled", "scheefstandNoemer",
+            "nodes",
+            "beams",
+            "supports",
+            "plates",
+            "loadCases",
+            "loads",
+            "selfWeightEnabled",
+            "scheefstandEnabled",
+            "scheefstandNoemer",
             "scheefstandRichting",
-            "scheefstandBron", "scheefstandHoogteM", "scheefstandAantalElementen",
+            "scheefstandBron",
+            "scheefstandHoogteM",
+            "scheefstandAantalElementen",
         ] {
             assert!(velden.contains_key(veld), "modelschema mist `{veld}`");
         }
-        assert_eq!(velden.len(), 13, "modelschema kent een veld dat de sidecar weigert");
+        assert_eq!(
+            velden.len(),
+            13,
+            "modelschema kent een veld dat de sidecar weigert"
+        );
         assert_eq!(model["additionalProperties"], json!(false));
     }
 
@@ -1421,7 +1469,10 @@ mod tests {
             .filter_map(Value::as_str)
             .collect();
         for veld in ["signature", "points", "triangles", "edgeNodeIndices"] {
-            assert!(verplicht.contains(&veld), "meshCache.required mist `{veld}`: {verplicht:?}");
+            assert!(
+                verplicht.contains(&veld),
+                "meshCache.required mist `{veld}`: {verplicht:?}"
+            );
         }
     }
 
@@ -1440,12 +1491,20 @@ mod tests {
             .find("const CHECKCONFIG_VELDEN = [")
             .expect("CHECKCONFIG_VELDEN staat niet (meer) in valideerModel.ts");
         let rest = &bron[start..];
-        let blok = &rest[..rest.find("] as const;").expect("CHECKCONFIG_VELDEN is niet gesloten")];
+        let blok = &rest[..rest
+            .find("] as const;")
+            .expect("CHECKCONFIG_VELDEN is niet gesloten")];
         let poort: std::collections::BTreeSet<String> = blok
             .lines()
             .skip(1)
             .filter(|l| !l.trim_start().starts_with("//"))
-            .flat_map(|l| l.split('"').skip(1).step_by(2).map(str::to_owned).collect::<Vec<_>>())
+            .flat_map(|l| {
+                l.split('"')
+                    .skip(1)
+                    .step_by(2)
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
             .collect();
         let schema: std::collections::BTreeSet<String> = schema_checkconfig()["properties"]
             .as_object()
@@ -1453,8 +1512,14 @@ mod tests {
             .keys()
             .cloned()
             .collect();
-        assert!(poort.contains("ltbSupportSpacing_m") && poort.len() >= 19, "{poort:?}");
-        assert_eq!(schema, poort, "schema_checkconfig en CHECKCONFIG_VELDEN lopen uiteen");
+        assert!(
+            poort.contains("ltbSupportSpacing_m") && poort.len() >= 19,
+            "{poort:?}"
+        );
+        assert_eq!(
+            schema, poort,
+            "schema_checkconfig en CHECKCONFIG_VELDEN lopen uiteen"
+        );
         assert_eq!(schema_checkconfig()["additionalProperties"], json!(false));
         assert_eq!(
             schema_checkconfig()["properties"]["deflectionClass"]["enum"],
@@ -1478,12 +1543,20 @@ mod tests {
             .find("const BEAM_VELDEN = [")
             .expect("BEAM_VELDEN staat niet (meer) in valideerModel.ts");
         let rest = &bron[start..];
-        let blok = &rest[..rest.find("] as const;").expect("BEAM_VELDEN is niet gesloten")];
+        let blok = &rest[..rest
+            .find("] as const;")
+            .expect("BEAM_VELDEN is niet gesloten")];
         let poort: std::collections::BTreeSet<String> = blok
             .lines()
             .skip(1)
             .filter(|l| !l.trim_start().starts_with("//"))
-            .flat_map(|l| l.split('"').skip(1).step_by(2).map(str::to_owned).collect::<Vec<_>>())
+            .flat_map(|l| {
+                l.split('"')
+                    .skip(1)
+                    .step_by(2)
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
             .collect();
         let items = &schema_beams()["items"];
         let schema: std::collections::BTreeSet<String> = items["properties"]
@@ -1492,7 +1565,10 @@ mod tests {
             .keys()
             .cloned()
             .collect();
-        assert!(poort.contains("profileEnd") && poort.contains("profile"), "{poort:?}");
+        assert!(
+            poort.contains("profileEnd") && poort.contains("profile"),
+            "{poort:?}"
+        );
         assert_eq!(schema, poort, "schema_beams en BEAM_VELDEN lopen uiteen");
         assert_eq!(items["additionalProperties"], json!(false));
     }
@@ -1515,7 +1591,9 @@ mod tests {
                 .find(&format!("const {naam} = ["))
                 .unwrap_or_else(|| panic!("{naam} staat niet (meer) in valideerModel.ts"));
             let rest = &bron[start..];
-            let blok = &rest[..rest.find("] as const;").unwrap_or_else(|| panic!("{naam} is niet gesloten"))];
+            let blok = &rest[..rest
+                .find("] as const;")
+                .unwrap_or_else(|| panic!("{naam} is niet gesloten"))];
             // GEEN `.skip(1)` hier: `OPENING_VELDEN` staat op ÉÉN regel
             // (`const OPENING_VELDEN = ["id", "punten"] as const;`), en de eerste
             // regel overslaan gaf daar een LEGE verzameling — de spiegeltest
@@ -1524,24 +1602,50 @@ mod tests {
             // levert hij vanzelf niets op, dus dit werkt voor beide vormen.
             blok.lines()
                 .filter(|l| !l.trim_start().starts_with("//"))
-                .flat_map(|l| l.split('"').skip(1).step_by(2).map(str::to_owned).collect::<Vec<_>>())
+                .flat_map(|l| {
+                    l.split('"')
+                        .skip(1)
+                        .step_by(2)
+                        .map(str::to_owned)
+                        .collect::<Vec<_>>()
+                })
                 .collect()
         };
         let sleutels = |v: &Value| -> std::collections::BTreeSet<String> {
-            v["properties"].as_object().expect("properties").keys().cloned().collect()
+            v["properties"]
+                .as_object()
+                .expect("properties")
+                .keys()
+                .cloned()
+                .collect()
         };
         let platen = &schema_plates()["items"];
-        assert_eq!(sleutels(platen), poort("PLATE_VELDEN"), "schema_plates en PLATE_VELDEN lopen uiteen");
+        assert_eq!(
+            sleutels(platen),
+            poort("PLATE_VELDEN"),
+            "schema_plates en PLATE_VELDEN lopen uiteen"
+        );
         let plooi = &platen["properties"]["plooi"];
         assert_eq!(sleutels(plooi), poort("PLOOI_VELDEN"));
         assert_eq!(plooi["additionalProperties"], false);
         assert_eq!(platen["additionalProperties"], json!(false));
-        assert_eq!(platen["properties"]["meshType"]["enum"], json!(["driehoeken", "vierhoeken"]));
+        assert_eq!(
+            platen["properties"]["meshType"]["enum"],
+            json!(["driehoeken", "vierhoeken"])
+        );
         let cache = schema_meshcache();
-        assert_eq!(sleutels(&cache), poort("MESHCACHE_VELDEN"), "schema_meshcache en MESHCACHE_VELDEN lopen uiteen");
+        assert_eq!(
+            sleutels(&cache),
+            poort("MESHCACHE_VELDEN"),
+            "schema_meshcache en MESHCACHE_VELDEN lopen uiteen"
+        );
         assert_eq!(cache["additionalProperties"], json!(false));
         let opening = &schema_openingen()["items"];
-        assert_eq!(sleutels(opening), poort("OPENING_VELDEN"), "schema_openingen en OPENING_VELDEN lopen uiteen");
+        assert_eq!(
+            sleutels(opening),
+            poort("OPENING_VELDEN"),
+            "schema_openingen en OPENING_VELDEN lopen uiteen"
+        );
         assert_eq!(opening["additionalProperties"], json!(false));
     }
 
@@ -1562,11 +1666,19 @@ mod tests {
             .find("const LOAD_VELDEN = [")
             .expect("LOAD_VELDEN staat niet (meer) in valideerModel.ts");
         let rest = &bron[start..];
-        let blok = &rest[..rest.find("] as const;").expect("LOAD_VELDEN is niet gesloten")];
+        let blok = &rest[..rest
+            .find("] as const;")
+            .expect("LOAD_VELDEN is niet gesloten")];
         let poort: std::collections::BTreeSet<String> = blok
             .lines()
             .filter(|l| !l.trim_start().starts_with("//"))
-            .flat_map(|l| l.split('"').skip(1).step_by(2).map(str::to_owned).collect::<Vec<_>>())
+            .flat_map(|l| {
+                l.split('"')
+                    .skip(1)
+                    .step_by(2)
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
             .collect();
         let items = &schema_loads()["items"];
         let schema: std::collections::BTreeSet<String> = items["properties"]
@@ -1599,7 +1711,9 @@ mod tests {
     /// sidecar; zonder die lijst blijft `steel_check_inputs` leeg.
     #[test]
     fn profielenlijst_is_een_gevulde_array() {
-        let lijst = profielen().as_array().expect("profielen moeten een array zijn");
+        let lijst = profielen()
+            .as_array()
+            .expect("profielen moeten een array zijn");
         assert!(!lijst.is_empty());
         assert!(lijst[0]["name"].is_string());
     }
@@ -1646,7 +1760,11 @@ mod tests {
         });
         meld_niet_getoetste_staven(&mut al_gemeld, Some(&model), None, false);
         assert_eq!(gemelde_ids(&al_gemeld), vec![5]);
-        assert_eq!(reden_van(&al_gemeld, 5), "andere reden", "de eerste reden blijft staan");
+        assert_eq!(
+            reden_van(&al_gemeld, 5),
+            "andere reden",
+            "de eerste reden blijft staan"
+        );
     }
 
     /// ELKE staaf die niet getoetst is wordt gemeld, en de reden volgt het
@@ -1676,7 +1794,9 @@ mod tests {
             assert_eq!(gemelde_ids(&uit), vec![5], "`{materiaal}`");
             let r = reden_van(&uit, 5);
             assert!(
-                r.contains("solverbundel") && r.contains("check_timber_beams") && !r.contains("check_concrete_beam"),
+                r.contains("solverbundel")
+                    && r.contains("check_timber_beams")
+                    && !r.contains("check_concrete_beam"),
                 "`{materiaal}` is hout, oude bundel: {r}"
             );
             let mut nieuw = json!({ "steel_check_inputs": [], "timber_check_inputs": [], "clt_check_inputs": [] });
@@ -1699,7 +1819,10 @@ mod tests {
                 vec![5],
                 "`{materiaal}`: ook een staaf zonder herkend materiaal mag niet spoorloos zijn"
             );
-            assert!(reden_van(&uit, 5).contains("NIET getoetst") || reden_van(&uit, 5).contains("niet getoetst"));
+            assert!(
+                reden_van(&uit, 5).contains("NIET getoetst")
+                    || reden_van(&uit, 5).contains("niet getoetst")
+            );
         }
     }
 
@@ -1725,7 +1848,11 @@ mod tests {
             "skipped_beams": [ { "beam_id": 99, "reason": "bestaat niet in het model (bundel)" } ]
         });
         meld_niet_getoetste_staven(&mut al_gemeld, Some(&model), Some(&[99]), false);
-        assert_eq!(gemelde_ids(&al_gemeld), vec![99], "niet dubbel: {al_gemeld}");
+        assert_eq!(
+            gemelde_ids(&al_gemeld),
+            vec![99],
+            "niet dubbel: {al_gemeld}"
+        );
 
         // Zonder selectie is er niets gevraagd, dus ook niets dat niet bestaat.
         let mut alles = json!({ "steel_check_inputs": [ { "beam_id": 5 } ] });

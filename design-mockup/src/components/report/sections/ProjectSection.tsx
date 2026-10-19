@@ -109,9 +109,9 @@ export default function ProjectSection() {
   const { beams, scheefstandToelichting, analyseToelichting, combinations, loads, loadCases } = useReportData();
 
   // Koptekst-regel: lokale draft tijdens het typen; commit (blur/Enter) →
-  // projectinfo-setting. In de browser (zonder Tauri) faalt setSetting stil
-  // en blijft de regel alleen voor deze sessie staan — in de desktop-app
-  // persisteert hij en volgt useProjectInfo het store-event.
+  // projectinfo-setting. In de browser bewaart localStorage deze waarde;
+  // in de desktop-app gebruikt de instelling de Tauri-store. useProjectInfo
+  // volgt in beide omgevingen de wijziging.
   const [headerDraft, setHeaderDraft] = useState<string | null>(null);
   const [sessionHeader, setSessionHeader] = useState<string | null>(null);
   useEffect(() => {

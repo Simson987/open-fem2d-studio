@@ -76,23 +76,88 @@ struct Rij {
 /// hier op één regel staan is de enige plek waar de koppeling wordt
 /// vastgelegd.
 const KRUISTABEL: &[Rij] = &[
-    Rij { tauri: Some("solve_native_fem"), toetsbrug: Some("solve_native_fem"), mcp: Some("solve_native_fem"), reden: "" },
-    Rij { tauri: Some("list_steel_profiles"), toetsbrug: Some("list_steel_profiles"), mcp: Some("list_steel_profiles"), reden: "" },
-    Rij { tauri: Some("list_steel_grades"), toetsbrug: Some("list_steel_grades"), mcp: Some("list_steel_grades"), reden: "" },
+    Rij {
+        tauri: Some("solve_native_fem"),
+        toetsbrug: Some("solve_native_fem"),
+        mcp: Some("solve_native_fem"),
+        reden: "",
+    },
+    Rij {
+        tauri: Some("list_steel_profiles"),
+        toetsbrug: Some("list_steel_profiles"),
+        mcp: Some("list_steel_profiles"),
+        reden: "",
+    },
+    Rij {
+        tauri: Some("list_steel_grades"),
+        toetsbrug: Some("list_steel_grades"),
+        mcp: Some("list_steel_grades"),
+        reden: "",
+    },
     // VOETANGEL: meervoud tegen enkelvoud. Het command en de opdracht nemen
     // een lijst staven, het gereedschap één staaf. Het invoer- en het
     // uitvoertype zijn wél hetzelfde.
-    Rij { tauri: Some("check_steel_beams"), toetsbrug: Some("check_steel_beams"), mcp: Some("check_steel_beam"), reden: "" },
-    Rij { tauri: Some("list_timber_grades"), toetsbrug: Some("list_timber_grades"), mcp: Some("list_timber_grades"), reden: "" },
-    Rij { tauri: Some("check_timber_beams"), toetsbrug: Some("check_timber_beams"), mcp: Some("check_timber_beams"), reden: "" },
-    Rij { tauri: Some("list_clt_presets"), toetsbrug: Some("list_clt_presets"), mcp: Some("list_clt_presets"), reden: "" },
-    Rij { tauri: Some("check_clt_beams"), toetsbrug: Some("check_clt_beams"), mcp: Some("check_clt_beams"), reden: "" },
-    Rij { tauri: Some("list_concrete_classes"), toetsbrug: Some("list_concrete_classes"), mcp: Some("list_concrete_classes"), reden: "" },
-    Rij { tauri: Some("list_reinforcement_grades"), toetsbrug: Some("list_reinforcement_grades"), mcp: Some("list_reinforcement_grades"), reden: "" },
+    Rij {
+        tauri: Some("check_steel_beams"),
+        toetsbrug: Some("check_steel_beams"),
+        mcp: Some("check_steel_beam"),
+        reden: "",
+    },
+    Rij {
+        tauri: Some("list_timber_grades"),
+        toetsbrug: Some("list_timber_grades"),
+        mcp: Some("list_timber_grades"),
+        reden: "",
+    },
+    Rij {
+        tauri: Some("check_timber_beams"),
+        toetsbrug: Some("check_timber_beams"),
+        mcp: Some("check_timber_beams"),
+        reden: "",
+    },
+    Rij {
+        tauri: Some("list_clt_presets"),
+        toetsbrug: Some("list_clt_presets"),
+        mcp: Some("list_clt_presets"),
+        reden: "",
+    },
+    Rij {
+        tauri: Some("check_clt_beams"),
+        toetsbrug: Some("check_clt_beams"),
+        mcp: Some("check_clt_beams"),
+        reden: "",
+    },
+    Rij {
+        tauri: Some("list_concrete_classes"),
+        toetsbrug: Some("list_concrete_classes"),
+        mcp: Some("list_concrete_classes"),
+        reden: "",
+    },
+    Rij {
+        tauri: Some("list_reinforcement_grades"),
+        toetsbrug: Some("list_reinforcement_grades"),
+        mcp: Some("list_reinforcement_grades"),
+        reden: "",
+    },
     // Dezelfde voetangel als bij staal.
-    Rij { tauri: Some("check_concrete_beams"), toetsbrug: Some("check_concrete_beams"), mcp: Some("check_concrete_beam"), reden: "" },
-    Rij { tauri: Some("concrete_mn_kappa"), toetsbrug: Some("concrete_mn_kappa"), mcp: Some("concrete_mn_kappa"), reden: "" },
-    Rij { tauri: Some("concrete_segment_stiffness"), toetsbrug: Some("concrete_segment_stiffness"), mcp: Some("concrete_segment_stiffness"), reden: "" },
+    Rij {
+        tauri: Some("check_concrete_beams"),
+        toetsbrug: Some("check_concrete_beams"),
+        mcp: Some("check_concrete_beam"),
+        reden: "",
+    },
+    Rij {
+        tauri: Some("concrete_mn_kappa"),
+        toetsbrug: Some("concrete_mn_kappa"),
+        mcp: Some("concrete_mn_kappa"),
+        reden: "",
+    },
+    Rij {
+        tauri: Some("concrete_segment_stiffness"),
+        toetsbrug: Some("concrete_segment_stiffness"),
+        mcp: Some("concrete_segment_stiffness"),
+        reden: "",
+    },
     // De kolomtoets van §5.8: l₀, λ = l₀/i, de slankheidsgrens λ_lim waaronder
     // de tweede-orde-effecten mogen vervallen, φ_ef en de §9.5-detaillering.
     // Eén naam langs alle drie de wegen — hij neemt ÉÉN staaf, dus hier is geen
@@ -101,20 +166,55 @@ const KRUISTABEL: &[Rij] = &[
     // `check_concrete_beams`; deze losse weg bestaat naast die toetsing om
     // dezelfde reden als `concrete_cover_check`: het invoerscherm moet λ en
     // λ_lim kunnen tonen terwijl de gebruiker typt.
-    Rij { tauri: Some("concrete_column_check"), toetsbrug: Some("concrete_column_check"), mcp: Some("concrete_column_check"), reden: "" },
+    Rij {
+        tauri: Some("concrete_column_check"),
+        toetsbrug: Some("concrete_column_check"),
+        mcp: Some("concrete_column_check"),
+        reden: "",
+    },
     // De dekkingslijn: §9.2.1.3 met figuur 9.2 voor de momenten en §6.2 voor de
     // dwarskracht, als gegevens. Eén naam langs alle drie de wegen — hij neemt
     // ÉÉN staaf, dus hier is geen meervoud/enkelvoud-voetangel zoals bij
     // `check_concrete_beams`.
-    Rij { tauri: Some("concrete_dekkingslijn"), toetsbrug: Some("concrete_dekkingslijn"), mcp: Some("concrete_dekkingslijn"), reden: "" },
-    Rij { tauri: Some("concrete_effective_flange_width"), toetsbrug: Some("concrete_effective_flange_width"), mcp: Some("concrete_effective_flange_width"), reden: "" },
-    Rij { tauri: Some("list_exposure_classes"), toetsbrug: Some("list_exposure_classes"), mcp: Some("list_exposure_classes"), reden: "" },
-    Rij { tauri: Some("concrete_cover_check"), toetsbrug: Some("concrete_cover_check"), mcp: Some("concrete_cover_check"), reden: "" },
+    Rij {
+        tauri: Some("concrete_dekkingslijn"),
+        toetsbrug: Some("concrete_dekkingslijn"),
+        mcp: Some("concrete_dekkingslijn"),
+        reden: "",
+    },
+    Rij {
+        tauri: Some("concrete_effective_flange_width"),
+        toetsbrug: Some("concrete_effective_flange_width"),
+        mcp: Some("concrete_effective_flange_width"),
+        reden: "",
+    },
+    Rij {
+        tauri: Some("list_exposure_classes"),
+        toetsbrug: Some("list_exposure_classes"),
+        mcp: Some("list_exposure_classes"),
+        reden: "",
+    },
+    Rij {
+        tauri: Some("concrete_cover_check"),
+        toetsbrug: Some("concrete_cover_check"),
+        mcp: Some("concrete_cover_check"),
+        reden: "",
+    },
     // De kruipcoëfficiënt volgens bijlage B; zie `tests/drie_wegen_kruip.rs`.
-    Rij { tauri: Some("concrete_creep_coefficient"), toetsbrug: Some("concrete_creep_coefficient"), mcp: Some("concrete_creep_coefficient"), reden: "" },
+    Rij {
+        tauri: Some("concrete_creep_coefficient"),
+        toetsbrug: Some("concrete_creep_coefficient"),
+        mcp: Some("concrete_creep_coefficient"),
+        reden: "",
+    },
     // De plaattoets (wandschijven); zie `tests/drie_wegen_plaat.rs`. Eén naam
     // en een lijst platen langs alle drie de wegen.
-    Rij { tauri: Some("check_plates"), toetsbrug: Some("check_plates"), mcp: Some("check_plates"), reden: "" },
+    Rij {
+        tauri: Some("check_plates"),
+        toetsbrug: Some("check_plates"),
+        mcp: Some("check_plates"),
+        reden: "",
+    },
 ];
 
 /// Wat geen drie wegen heeft — met de reden erbij.

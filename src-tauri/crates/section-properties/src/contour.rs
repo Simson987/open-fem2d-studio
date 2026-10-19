@@ -117,21 +117,36 @@ pub enum Segment {
     Lijn { van: (f64, f64), naar: (f64, f64) },
     /// Cirkelboog om `centrum` met straal `straal`, van hoek `theta1` tot
     /// `theta2` (rad). `theta2 > theta1` = tegen de klok in.
-    Boog { centrum: (f64, f64), straal: f64, theta1: f64, theta2: f64 },
+    Boog {
+        centrum: (f64, f64),
+        straal: f64,
+        theta1: f64,
+        theta2: f64,
+    },
 }
 
 impl Segment {
     pub fn beginpunt(&self) -> (f64, f64) {
         match *self {
             Segment::Lijn { van, .. } => van,
-            Segment::Boog { centrum, straal, theta1, .. } => punt_op_boog(centrum, straal, theta1),
+            Segment::Boog {
+                centrum,
+                straal,
+                theta1,
+                ..
+            } => punt_op_boog(centrum, straal, theta1),
         }
     }
 
     pub fn eindpunt(&self) -> (f64, f64) {
         match *self {
             Segment::Lijn { naar, .. } => naar,
-            Segment::Boog { centrum, straal, theta2, .. } => punt_op_boog(centrum, straal, theta2),
+            Segment::Boog {
+                centrum,
+                straal,
+                theta2,
+                ..
+            } => punt_op_boog(centrum, straal, theta2),
         }
     }
 
@@ -142,7 +157,12 @@ impl Segment {
                 van: (van.0 + dy, van.1 + dz),
                 naar: (naar.0 + dy, naar.1 + dz),
             },
-            Segment::Boog { centrum, straal, theta1, theta2 } => Segment::Boog {
+            Segment::Boog {
+                centrum,
+                straal,
+                theta1,
+                theta2,
+            } => Segment::Boog {
                 centrum: (centrum.0 + dy, centrum.1 + dz),
                 straal,
                 theta1,
@@ -159,8 +179,16 @@ impl Segment {
         let (s, c) = hoek.sin_cos();
         let d = |p: (f64, f64)| (p.0 * c - p.1 * s, p.0 * s + p.1 * c);
         match *self {
-            Segment::Lijn { van, naar } => Segment::Lijn { van: d(van), naar: d(naar) },
-            Segment::Boog { centrum, straal, theta1, theta2 } => Segment::Boog {
+            Segment::Lijn { van, naar } => Segment::Lijn {
+                van: d(van),
+                naar: d(naar),
+            },
+            Segment::Boog {
+                centrum,
+                straal,
+                theta1,
+                theta2,
+            } => Segment::Boog {
                 centrum: d(centrum),
                 straal,
                 theta1: theta1 + hoek,
@@ -172,10 +200,21 @@ impl Segment {
     /// Doorlooprichting omkeren (buitenrand ↔ gat).
     pub fn omgekeerd(&self) -> Segment {
         match *self {
-            Segment::Lijn { van, naar } => Segment::Lijn { van: naar, naar: van },
-            Segment::Boog { centrum, straal, theta1, theta2 } => {
-                Segment::Boog { centrum, straal, theta1: theta2, theta2: theta1 }
-            }
+            Segment::Lijn { van, naar } => Segment::Lijn {
+                van: naar,
+                naar: van,
+            },
+            Segment::Boog {
+                centrum,
+                straal,
+                theta1,
+                theta2,
+            } => Segment::Boog {
+                centrum,
+                straal,
+                theta1: theta2,
+                theta2: theta1,
+            },
         }
     }
 
@@ -183,9 +222,12 @@ impl Segment {
     fn momenten(&self) -> Momenten {
         match *self {
             Segment::Lijn { van, naar } => momenten_lijn(van, naar),
-            Segment::Boog { centrum, straal, theta1, theta2 } => {
-                momenten_boog(centrum, straal, theta1, theta2)
-            }
+            Segment::Boog {
+                centrum,
+                straal,
+                theta1,
+                theta2,
+            } => momenten_boog(centrum, straal, theta1, theta2),
         }
     }
 
@@ -194,9 +236,12 @@ impl Segment {
     fn boven(&self, snij: f64) -> (f64, f64) {
         match *self {
             Segment::Lijn { van, naar } => boven_lijn(van, naar, snij),
-            Segment::Boog { centrum, straal, theta1, theta2 } => {
-                boven_boog(centrum, straal, theta1, theta2, snij)
-            }
+            Segment::Boog {
+                centrum,
+                straal,
+                theta1,
+                theta2,
+            } => boven_boog(centrum, straal, theta1, theta2, snij),
         }
     }
 
@@ -207,9 +252,12 @@ impl Segment {
     fn breedte_bijdrage(&self, z: f64) -> f64 {
         match *self {
             Segment::Lijn { van, naar } => breedte_lijn(van, naar, z),
-            Segment::Boog { centrum, straal, theta1, theta2 } => {
-                breedte_boog(centrum, straal, theta1, theta2, z)
-            }
+            Segment::Boog {
+                centrum,
+                straal,
+                theta1,
+                theta2,
+            } => breedte_boog(centrum, straal, theta1, theta2, z),
         }
     }
 
@@ -217,9 +265,12 @@ impl Segment {
     fn derde_momenten(&self) -> DerdeMomenten {
         match *self {
             Segment::Lijn { van, naar } => derde_momenten_lijn(van, naar),
-            Segment::Boog { centrum, straal, theta1, theta2 } => {
-                derde_momenten_boog(centrum, straal, theta1, theta2)
-            }
+            Segment::Boog {
+                centrum,
+                straal,
+                theta1,
+                theta2,
+            } => derde_momenten_boog(centrum, straal, theta1, theta2),
         }
     }
 
@@ -227,7 +278,12 @@ impl Segment {
     pub fn lengte_mm(&self) -> f64 {
         match *self {
             Segment::Lijn { van, naar } => (naar.0 - van.0).hypot(naar.1 - van.1),
-            Segment::Boog { straal, theta1, theta2, .. } => straal.abs() * (theta2 - theta1).abs(),
+            Segment::Boog {
+                straal,
+                theta1,
+                theta2,
+                ..
+            } => straal.abs() * (theta2 - theta1).abs(),
         }
     }
 
@@ -240,9 +296,12 @@ impl Segment {
                 van.1.min(naar.1),
                 van.1.max(naar.1),
             ),
-            Segment::Boog { centrum, straal, theta1, theta2 } => {
-                uitersten_boog(centrum, straal, theta1, theta2)
-            }
+            Segment::Boog {
+                centrum,
+                straal,
+                theta1,
+                theta2,
+            } => uitersten_boog(centrum, straal, theta1, theta2),
         }
     }
 }
@@ -297,13 +356,9 @@ fn momenten_lijn(p1: (f64, f64), p2: (f64, f64)) -> Momenten {
         // Sz = ½·b·∫(y₁ + ta)² dt
         sz: 0.5 * b * (y1 * y1 + y1 * a + a * a / 3.0),
         // Iy = −⅓·a·∫(z₁ + tb)³ dt
-        iy: -(1.0 / 3.0)
-            * a
-            * (z1 * z1 * z1 + 1.5 * z1 * z1 * b + z1 * b * b + b * b * b / 4.0),
+        iy: -(1.0 / 3.0) * a * (z1 * z1 * z1 + 1.5 * z1 * z1 * b + z1 * b * b + b * b * b / 4.0),
         // Iz = ⅓·b·∫(y₁ + ta)³ dt
-        iz: (1.0 / 3.0)
-            * b
-            * (y1 * y1 * y1 + 1.5 * y1 * y1 * a + y1 * a * a + a * a * a / 4.0),
+        iz: (1.0 / 3.0) * b * (y1 * y1 * y1 + 1.5 * y1 * y1 * a + y1 * a * a + a * a * a / 4.0),
         // Iyz = ½·b·∫(y₁ + ta)²·(z₁ + tb) dt, met de haakjes uitgeschreven:
         //   t⁰: y₁²z₁ · 1
         //   t¹: (y₁²b + 2y₁az₁) · ½
@@ -359,9 +414,7 @@ fn momenten_boog(centrum: (f64, f64), r: f64, t1: f64, t2: f64) -> Momenten {
     let f_iyz = |t: f64| {
         let (s, c) = t.sin_cos();
         0.5 * r
-            * (yc * yc * zc * s
-                + yc * yc * r * (s * s / 2.0)
-                + 2.0 * yc * zc * r * cos2(t)
+            * (yc * yc * zc * s + yc * yc * r * (s * s / 2.0) + 2.0 * yc * zc * r * cos2(t)
                 - 2.0 * yc * r * r * c.powi(3) / 3.0
                 + zc * r * r * cos3(t)
                 - r.powi(3) * c.powi(4) / 4.0)
@@ -533,10 +586,11 @@ fn derde_momenten_boog(centrum: (f64, f64), r: f64, t1: f64, t2: f64) -> DerdeMo
     let f_yyz = |t: f64| {
         (1.0 / 3.0)
             * r
-            * (zc * (yc.powi(3) * c1(t)
-                + 3.0 * yc * yc * r * c2(t)
-                + 3.0 * yc * r * r * c3(t)
-                + r.powi(3) * c4(t))
+            * (zc
+                * (yc.powi(3) * c1(t)
+                    + 3.0 * yc * yc * r * c2(t)
+                    + 3.0 * yc * r * r * c3(t)
+                    + r.powi(3) * c4(t))
                 + r * (yc.powi(3) * cs1(t)
                     + 3.0 * yc * yc * r * cs2(t)
                     + 3.0 * yc * r * r * cs3(t)
@@ -546,10 +600,11 @@ fn derde_momenten_boog(centrum: (f64, f64), r: f64, t1: f64, t2: f64) -> DerdeMo
     let f_yzz = |t: f64| {
         (1.0 / 3.0)
             * r
-            * (yc * (zc.powi(3) * s1(t)
-                + 3.0 * zc * zc * r * s2(t)
-                + 3.0 * zc * r * r * s3(t)
-                + r.powi(3) * s4(t))
+            * (yc
+                * (zc.powi(3) * s1(t)
+                    + 3.0 * zc * zc * r * s2(t)
+                    + 3.0 * zc * r * r * s3(t)
+                    + r.powi(3) * s4(t))
                 + r * (zc.powi(3) * cs1(t)
                     + 3.0 * zc * zc * r * sc2(t)
                     + 3.0 * zc * r * r * sc3(t)
@@ -568,7 +623,12 @@ fn derde_momenten_boog(centrum: (f64, f64), r: f64, t1: f64, t2: f64) -> DerdeMo
 /// (`θ = n·π/2`) dat binnen het hoekbereik valt.
 fn uitersten_boog(centrum: (f64, f64), r: f64, t1: f64, t2: f64) -> (f64, f64, f64, f64) {
     let (lo, hi) = if t1 <= t2 { (t1, t2) } else { (t2, t1) };
-    let mut u = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    let mut u = (
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+    );
     let mut voeg_toe = |p: (f64, f64)| {
         u.0 = u.0.min(p.0);
         u.1 = u.1.max(p.0);
@@ -614,7 +674,11 @@ fn breedte_lijn(p1: (f64, f64), p2: (f64, f64), z: f64) -> f64 {
     if dz == 0.0 {
         return 0.0;
     }
-    let binnen = if dz > 0.0 { z1 <= z && z < z2 } else { z2 <= z && z < z1 };
+    let binnen = if dz > 0.0 {
+        z1 <= z && z < z2
+    } else {
+        z2 <= z && z < z1
+    };
     if !binnen {
         return 0.0;
     }
@@ -651,7 +715,11 @@ fn breedte_boog(centrum: (f64, f64), r: f64, t1: f64, t2: f64, z: f64) -> f64 {
         for k in k_min..=k_max {
             let theta = basis + TAU * f64::from(k);
             // Halfopen in de doorlooprichting, net als bij een rechte.
-            let binnen = if richting > 0.0 { t1 <= theta && theta < t2 } else { t2 < theta && theta <= t1 };
+            let binnen = if richting > 0.0 {
+                t1 <= theta && theta < t2
+            } else {
+                t2 < theta && theta <= t1
+            };
             if !binnen {
                 continue;
             }
@@ -748,7 +816,11 @@ fn boven_boog(centrum: (f64, f64), r: f64, t1: f64, t2: f64, snij: f64) -> (f64,
     }
     let zc = centrum.1;
     let d = zc - snij;
-    let (lo, hi, teken) = if t1 <= t2 { (t1, t2, 1.0) } else { (t2, t1, -1.0) };
+    let (lo, hi, teken) = if t1 <= t2 {
+        (t1, t2, 1.0)
+    } else {
+        (t2, t1, -1.0)
+    };
     let k = (snij - zc) / r;
 
     let sin2 = |t: f64| t / 2.0 - (2.0 * t).sin() / 4.0;
@@ -781,16 +853,29 @@ impl Contour {
     /// Doorlooprichting omkeren: buitenrand wordt gat en andersom.
     pub fn omgekeerd(&self) -> Contour {
         Contour {
-            segmenten: self.segmenten.iter().rev().map(Segment::omgekeerd).collect(),
+            segmenten: self
+                .segmenten
+                .iter()
+                .rev()
+                .map(Segment::omgekeerd)
+                .collect(),
         }
     }
 
     pub fn verschoven(&self, dy: f64, dz: f64) -> Contour {
-        Contour { segmenten: self.segmenten.iter().map(|s| s.verschoven(dy, dz)).collect() }
+        Contour {
+            segmenten: self
+                .segmenten
+                .iter()
+                .map(|s| s.verschoven(dy, dz))
+                .collect(),
+        }
     }
 
     pub fn gedraaid(&self, hoek: f64) -> Contour {
-        Contour { segmenten: self.segmenten.iter().map(|s| s.gedraaid(hoek)).collect() }
+        Contour {
+            segmenten: self.segmenten.iter().map(|s| s.gedraaid(hoek)).collect(),
+        }
     }
 
     /// Het teken van het omsloten oppervlak: `> 0` tegen de klok in.
@@ -856,13 +941,20 @@ pub struct ContourBouwer {
 
 impl ContourBouwer {
     pub fn nieuw(y: f64, z: f64) -> Self {
-        Self { start: (y, z), huidig: (y, z), segmenten: Vec::new() }
+        Self {
+            start: (y, z),
+            huidig: (y, z),
+            segmenten: Vec::new(),
+        }
     }
 
     /// Rechte lijn naar `(y, z)`.
     pub fn lijn(mut self, y: f64, z: f64) -> Self {
         if (y, z) != self.huidig {
-            self.segmenten.push(Segment::Lijn { van: self.huidig, naar: (y, z) });
+            self.segmenten.push(Segment::Lijn {
+                van: self.huidig,
+                naar: (y, z),
+            });
             self.huidig = (y, z);
         }
         self
@@ -891,7 +983,12 @@ impl ContourBouwer {
                 t2 -= TAU;
             }
         }
-        self.segmenten.push(Segment::Boog { centrum, straal: r, theta1: t1, theta2: t2 });
+        self.segmenten.push(Segment::Boog {
+            centrum,
+            straal: r,
+            theta1: t1,
+            theta2: t2,
+        });
         self.huidig = punt_op_boog(centrum, r, t2);
         self
     }
@@ -899,9 +996,14 @@ impl ContourBouwer {
     /// Sluit de contour (voegt zo nodig een sluitende lijn toe).
     pub fn sluit(mut self) -> Contour {
         if self.huidig != self.start {
-            self.segmenten.push(Segment::Lijn { van: self.huidig, naar: self.start });
+            self.segmenten.push(Segment::Lijn {
+                van: self.huidig,
+                naar: self.start,
+            });
         }
-        Contour { segmenten: self.segmenten }
+        Contour {
+            segmenten: self.segmenten,
+        }
     }
 }
 
@@ -994,17 +1096,27 @@ impl Doorsnede {
     }
 
     pub fn verschoven(&self, dy: f64, dz: f64) -> Doorsnede {
-        Doorsnede { contouren: self.contouren.iter().map(|c| c.verschoven(dy, dz)).collect() }
+        Doorsnede {
+            contouren: self
+                .contouren
+                .iter()
+                .map(|c| c.verschoven(dy, dz))
+                .collect(),
+        }
     }
 
     pub fn gedraaid(&self, hoek: f64) -> Doorsnede {
-        Doorsnede { contouren: self.contouren.iter().map(|c| c.gedraaid(hoek)).collect() }
+        Doorsnede {
+            contouren: self.contouren.iter().map(|c| c.gedraaid(hoek)).collect(),
+        }
     }
 
     /// Alle contouren omgekeerd doorlopen. Nodig als vangnet wanneer een
     /// doorsnede per ongeluk helemaal met de klok mee is ingevoerd.
     pub fn omgekeerd(&self) -> Doorsnede {
-        Doorsnede { contouren: self.contouren.iter().map(Contour::omgekeerd).collect() }
+        Doorsnede {
+            contouren: self.contouren.iter().map(Contour::omgekeerd).collect(),
+        }
     }
 
     fn alle_segmenten(&self) -> impl Iterator<Item = &Segment> {
@@ -1064,7 +1176,12 @@ impl Doorsnede {
 
     /// Omhullende rechthoek `(y_min, y_max, z_min, z_max)`.
     pub fn uitersten(&self) -> (f64, f64, f64, f64) {
-        let mut u = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+        let mut u = (
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        );
         for s in self.alle_segmenten() {
             let (a, b, c, d) = s.uitersten();
             u.0 = u.0.min(a);
@@ -1658,12 +1775,27 @@ mod tests {
         eis("rechthoek A", p.a_mm2, b * h, b * h);
         eis("rechthoek y_c", p.y_c_mm, b / 2.0, b);
         eis("rechthoek z_c", p.z_c_mm, h / 2.0, h);
-        eis("rechthoek Iy", p.iy_mm4, b * h.powi(3) / 12.0, b * h.powi(3));
-        eis("rechthoek Iz", p.iz_mm4, h * b.powi(3) / 12.0, h * b.powi(3));
+        eis(
+            "rechthoek Iy",
+            p.iy_mm4,
+            b * h.powi(3) / 12.0,
+            b * h.powi(3),
+        );
+        eis(
+            "rechthoek Iz",
+            p.iz_mm4,
+            h * b.powi(3) / 12.0,
+            h * b.powi(3),
+        );
         eis("rechthoek Iyz", p.iyz_mm4, 0.0, b * h * b * h);
         eis("rechthoek Wpl;y", p.wpl_y_mm3, b * h * h / 4.0, b * h * h);
         eis("rechthoek Wpl;z", p.wpl_z_mm3, h * b * b / 4.0, h * b * b);
-        eis("rechthoek Wel;y", p.wel_y_boven_mm3, b * h * h / 6.0, b * h * h);
+        eis(
+            "rechthoek Wel;y",
+            p.wel_y_boven_mm3,
+            b * h * h / 6.0,
+            b * h * h,
+        );
         eis("rechthoek i_y", p.i_y_straal_mm, h / 12f64.sqrt(), h);
     }
 
@@ -1688,7 +1820,12 @@ mod tests {
         // Het teken van y mag niet uitmaken: de rand aan de −y-zijde loopt
         // omlaag en telt daardoor met een minteken mee.
         let d = Doorsnede::nieuw().met(Contour::rechthoek(-60.0, 0.0, 96.0, 450.0));
-        eis("verschoven rechthoek breedte", d.breedte_op(225.0), 96.0, 96.0);
+        eis(
+            "verschoven rechthoek breedte",
+            d.breedte_op(225.0),
+            96.0,
+            96.0,
+        );
     }
 
     #[test]
@@ -1699,11 +1836,26 @@ mod tests {
             .met(Contour::rechthoek(0.0, 0.0, 1000.0, 40.0))
             .met(Contour::rechthoek(464.5, 40.0, 71.0, 40.0))
             .met(Contour::rechthoek(0.0, 80.0, 1000.0, 40.0));
-        eis("I-vorm breedte onderflens", d.breedte_op(20.0), 1000.0, 1000.0);
+        eis(
+            "I-vorm breedte onderflens",
+            d.breedte_op(20.0),
+            1000.0,
+            1000.0,
+        );
         eis("I-vorm breedte lijf", d.breedte_op(60.0), 71.0, 1000.0);
-        eis("I-vorm breedte bovenflens", d.breedte_op(100.0), 1000.0, 1000.0);
+        eis(
+            "I-vorm breedte bovenflens",
+            d.breedte_op(100.0),
+            1000.0,
+            1000.0,
+        );
         // Halfopen: op de sprong geldt de strook eróver.
-        eis("I-vorm breedte op de sprong", d.breedte_op(40.0), 71.0, 1000.0);
+        eis(
+            "I-vorm breedte op de sprong",
+            d.breedte_op(40.0),
+            71.0,
+            1000.0,
+        );
     }
 
     #[test]
@@ -1715,7 +1867,12 @@ mod tests {
         let d = Doorsnede::nieuw()
             .met(Contour::cirkel(m, ro))
             .met_gat(Contour::cirkel(m, ri));
-        eis("buis breedte door het hart", d.breedte_op(0.0), 2.0 * (ro - ri), ro);
+        eis(
+            "buis breedte door het hart",
+            d.breedte_op(0.0),
+            2.0 * (ro - ri),
+            ro,
+        );
         // Boven het gat is de koorde die van de volle buitencirkel.
         let z = 95.0;
         let verwacht = 2.0 * (ro * ro - z * z).sqrt();
@@ -1732,10 +1889,25 @@ mod tests {
         eis("cirkel Iz", p.iz_mm4, PI * r.powi(4) / 4.0, PI * r.powi(4));
         eis("cirkel Iyz", p.iyz_mm4, 0.0, PI * r.powi(4));
         eis("cirkel z_c", p.z_c_mm, 0.0, r);
-        eis("cirkel Wpl;y", p.wpl_y_mm3, 4.0 / 3.0 * r.powi(3), r.powi(3));
-        eis("cirkel Wpl;z", p.wpl_z_mm3, 4.0 / 3.0 * r.powi(3), r.powi(3));
+        eis(
+            "cirkel Wpl;y",
+            p.wpl_y_mm3,
+            4.0 / 3.0 * r.powi(3),
+            r.powi(3),
+        );
+        eis(
+            "cirkel Wpl;z",
+            p.wpl_z_mm3,
+            4.0 / 3.0 * r.powi(3),
+            r.powi(3),
+        );
         // d³/6 is dezelfde waarde, andersom geschreven.
-        eis("cirkel Wpl = d³/6", p.wpl_y_mm3, (2.0 * r).powi(3) / 6.0, r.powi(3));
+        eis(
+            "cirkel Wpl = d³/6",
+            p.wpl_y_mm3,
+            (2.0 * r).powi(3) / 6.0,
+            r.powi(3),
+        );
         eis("cirkel z_max", p.z_max_mm, r, r);
         eis("cirkel y_min", p.y_min_mm, -r, r);
     }
@@ -1756,7 +1928,12 @@ mod tests {
         eis("ring Iz", p.iz_mm4, i, i);
         eis("ring Iyz", p.iyz_mm4, 0.0, i);
         // Wpl van een ring: 2·(⅔)(R³ − r³) = (4/3)(R³ − r³).
-        eis("ring Wpl;y", p.wpl_y_mm3, 4.0 / 3.0 * (rr.powi(3) - ri.powi(3)), rr.powi(3));
+        eis(
+            "ring Wpl;y",
+            p.wpl_y_mm3,
+            4.0 / 3.0 * (rr.powi(3) - ri.powi(3)),
+            rr.powi(3),
+        );
     }
 
     // ── Driehoek ────────────────────────────────────────────────────────────
@@ -1765,7 +1942,10 @@ mod tests {
     fn driehoek_exact() {
         let (b, h) = (150.0, 240.0);
         // Rechthoekige driehoek met de rechte hoek in de oorsprong.
-        let c = ContourBouwer::nieuw(0.0, 0.0).lijn(b, 0.0).lijn(0.0, h).sluit();
+        let c = ContourBouwer::nieuw(0.0, 0.0)
+            .lijn(b, 0.0)
+            .lijn(0.0, h)
+            .sluit();
         let p = Doorsnede::nieuw().met(c).bereken();
         eis("driehoek A", p.a_mm2, 0.5 * b * h, 0.5 * b * h);
         eis("driehoek z_c", p.z_c_mm, h / 3.0, h);
@@ -1773,7 +1953,12 @@ mod tests {
         eis("driehoek Iy", p.iy_mm4, b * h.powi(3) / 36.0, b * h.powi(3));
         eis("driehoek Iz", p.iz_mm4, h * b.powi(3) / 36.0, h * b.powi(3));
         // Iyz om het zwaartepunt van deze driehoek: −b²h²/72.
-        eis("driehoek Iyz", p.iyz_mm4, -b * b * h * h / 72.0, b * b * h * h);
+        eis(
+            "driehoek Iyz",
+            p.iyz_mm4,
+            -b * b * h * h / 72.0,
+            b * b * h * h,
+        );
         // Gelijke-oppervlakte-as: z waar b(1−z/h)·(h−z)/... — eenvoudiger via
         // de gelijkvormige bovendriehoek: A⁺ = A·((h−c)/h)² = A/2 ⇒
         // c = h(1 − 1/√2).
@@ -1799,7 +1984,12 @@ mod tests {
         // Ook 10 000 mm verderop mag niets veranderen.
         let c = basis.verschoven(-10_000.0, 7_500.0).bereken();
         eis("ver verschoven Iy", c.iy_mm4, a.iy_mm4, a.iy_mm4);
-        eis("ver verschoven Wpl;y", c.wpl_y_mm3, a.wpl_y_mm3, a.wpl_y_mm3);
+        eis(
+            "ver verschoven Wpl;y",
+            c.wpl_y_mm3,
+            a.wpl_y_mm3,
+            a.wpl_y_mm3,
+        );
     }
 
     // ── Rotatie-invariantie ─────────────────────────────────────────────────
@@ -1812,7 +2002,12 @@ mod tests {
             let hoek = graden * PI / 180.0;
             let b = basis.gedraaid(hoek).bereken();
             eis("gedraaid A", b.a_mm2, a.a_mm2, a.a_mm2);
-            eis("gedraaid Iy+Iz", b.iy_mm4 + b.iz_mm4, a.iy_mm4 + a.iz_mm4, a.iy_mm4);
+            eis(
+                "gedraaid Iy+Iz",
+                b.iy_mm4 + b.iz_mm4,
+                a.iy_mm4 + a.iz_mm4,
+                a.iy_mm4,
+            );
             eis("gedraaid Iu", b.iu_mm4, a.iu_mm4, a.iu_mm4);
             eis("gedraaid Iv", b.iv_mm4, a.iv_mm4, a.iv_mm4);
         }
@@ -1892,8 +2087,18 @@ mod tests {
         eis("L Wpl;y", p.wpl_y_mm3, 83_600.0, 83_600.0);
         eis("L Wpl;z", p.wpl_z_mm3, 83_600.0, 83_600.0);
         // Elastische weerstandsmomenten per uiterste vezel.
-        eis("L Wel;y boven", p.wel_y_boven_mm3, iy_hand / (100.0 - 290.0 / 9.0), iy_hand);
-        eis("L Wel;y onder", p.wel_y_onder_mm3, iy_hand / (290.0 / 9.0), iy_hand);
+        eis(
+            "L Wel;y boven",
+            p.wel_y_boven_mm3,
+            iy_hand / (100.0 - 290.0 / 9.0),
+            iy_hand,
+        );
+        eis(
+            "L Wel;y onder",
+            p.wel_y_onder_mm3,
+            iy_hand / (290.0 / 9.0),
+            iy_hand,
+        );
     }
 
     // ── Wpl om een willekeurige as ──────────────────────────────────────────
@@ -1907,7 +2112,12 @@ mod tests {
         let a = 90.0;
         let d = rechthoek(a, a);
         let wpl = d.wpl_om_as(PI / 4.0);
-        eis("vierkant Wpl diagonaal", wpl.wpl_mm3, a.powi(3) * 2f64.sqrt() / 6.0, a.powi(3));
+        eis(
+            "vierkant Wpl diagonaal",
+            wpl.wpl_mm3,
+            a.powi(3) * 2f64.sqrt() / 6.0,
+            a.powi(3),
+        );
         // De as gaat door het zwaartepunt, dus de afstand is nul.
         eis("vierkant pna-afstand", wpl.as_afstand_mm, 0.0, a);
     }
@@ -1955,7 +2165,11 @@ mod tests {
                 .boog(m, p2, teken_y * teken_z < 0.0)
                 .sluit();
             // Zorg dat het vulstuk tegen de klok in loopt.
-            if c.oppervlak_mm2() >= 0.0 { c } else { c.omgekeerd() }
+            if c.oppervlak_mm2() >= 0.0 {
+                c
+            } else {
+                c.omgekeerd()
+            }
         };
 
         let los = Doorsnede::nieuw()
@@ -2045,7 +2259,12 @@ mod tests {
         eis("hoeklijn(0,0) Iz", iz1, iz2, iz2);
         eis("hoeklijn(0,0) Iyz", iyz1, iyz2, iy2);
         // En het oppervlak is de tabelformule zonder de straaltermen.
-        eis("hoeklijn(0,0) A analytisch", a1, t * (h + b - t), t * (h + b - t));
+        eis(
+            "hoeklijn(0,0) A analytisch",
+            a1,
+            t * (h + b - t),
+            t * (h + b - t),
+        );
     }
 
     /// Met stralen moet de contour precies op de gesloten tabelformule
@@ -2088,7 +2307,11 @@ mod tests {
         eis("L100 alpha", p.alpha_hoofdas_rad, PI / 4.0, PI);
         // Iyz is negatief: het materiaal zit in de kwadranten (−,+) en (+,−)
         // om het zwaartepunt. Iu = Iy + |Iyz|, Iv = Iy − |Iyz|.
-        assert!(p.iyz_mm4 < 0.0, "Iyz = {:.4e} hoort negatief te zijn", p.iyz_mm4);
+        assert!(
+            p.iyz_mm4 < 0.0,
+            "Iyz = {:.4e} hoort negatief te zijn",
+            p.iyz_mm4
+        );
         eis("L100 Iu", p.iu_mm4, p.iy_mm4 - p.iyz_mm4, p.iu_mm4);
         eis("L100 Iv", p.iv_mm4, p.iy_mm4 + p.iyz_mm4, p.iu_mm4);
         // i_v < i_z < i_u: de zwakste as is de hoofdas, niet de z-as.
@@ -2109,13 +2332,33 @@ mod tests {
     fn ongelijkbenige_hoeklijn_haalt_de_gedrukte_tabel() {
         let p = hoeklijn(200.0, 100.0, 14.0, 15.0, 7.5).bereken();
         let f = |gemeten: f64, tabel: f64| ((gemeten - tabel) / tabel).abs();
-        assert!(f(p.a_mm2, 4030.0) < 5e-3, "A = {:.1} mm² tegen 4030", p.a_mm2);
-        assert!((p.y_c_mm - 21.78).abs() < 0.1, "y_c = {:.2} mm tegen 21,78", p.y_c_mm);
-        assert!((p.z_c_mm - 71.2).abs() < 0.1, "z_c = {:.2} mm tegen 71,2", p.z_c_mm);
+        assert!(
+            f(p.a_mm2, 4030.0) < 5e-3,
+            "A = {:.1} mm² tegen 4030",
+            p.a_mm2
+        );
+        assert!(
+            (p.y_c_mm - 21.78).abs() < 0.1,
+            "y_c = {:.2} mm tegen 21,78",
+            p.y_c_mm
+        );
+        assert!(
+            (p.z_c_mm - 71.2).abs() < 0.1,
+            "z_c = {:.2} mm tegen 71,2",
+            p.z_c_mm
+        );
         // Het lange been staat langs z (par. 1.7(2)), dus I_y is de grote.
         assert!(p.iy_mm4 > p.iz_mm4, "I_y hoort groter dan I_z");
-        assert!(f(p.iy_mm4, 1650e4) < 0.015, "I_y = {:.4e} tegen 1650 cm⁴", p.iy_mm4);
-        assert!(f(p.iz_mm4, 282e4) < 0.015, "I_z = {:.4e} tegen 282 cm⁴", p.iz_mm4);
+        assert!(
+            f(p.iy_mm4, 1650e4) < 0.015,
+            "I_y = {:.4e} tegen 1650 cm⁴",
+            p.iy_mm4
+        );
+        assert!(
+            f(p.iz_mm4, 282e4) < 0.015,
+            "I_z = {:.4e} tegen 282 cm⁴",
+            p.iz_mm4
+        );
     }
 
     #[test]
@@ -2130,7 +2373,12 @@ mod tests {
         eis("buis Iy", p.iy_mm4, i, i);
         eis("buis Iz", p.iz_mm4, i, i);
         eis("buis y_c", p.y_c_mm, ro, d);
-        eis("buis Wpl", p.wpl_y_mm3, 4.0 / 3.0 * (ro.powi(3) - ri.powi(3)), ro.powi(3));
+        eis(
+            "buis Wpl",
+            p.wpl_y_mm3,
+            4.0 / 3.0 * (ro.powi(3) - ri.powi(3)),
+            ro.powi(3),
+        );
     }
 
     // ── Derde momenten ──────────────────────────────────────────────────────
@@ -2146,10 +2394,20 @@ mod tests {
         let a = PI * r * r;
         let i = PI * r.powi(4) / 4.0;
         let schaal = a * r.powi(3);
-        eis("cirkel ∬y³", m.iyyy_mm5, yc.powi(3) * a + 3.0 * yc * i, schaal);
+        eis(
+            "cirkel ∬y³",
+            m.iyyy_mm5,
+            yc.powi(3) * a + 3.0 * yc * i,
+            schaal,
+        );
         eis("cirkel ∬y²z", m.iyyz_mm5, yc * yc * zc * a + zc * i, schaal);
         eis("cirkel ∬yz²", m.iyzz_mm5, yc * zc * zc * a + yc * i, schaal);
-        eis("cirkel ∬z³", m.izzz_mm5, zc.powi(3) * a + 3.0 * zc * i, schaal);
+        eis(
+            "cirkel ∬z³",
+            m.izzz_mm5,
+            zc.powi(3) * a + 3.0 * zc * i,
+            schaal,
+        );
     }
 
     /// Een rechthoek `[0,b] × [0,h]`: `∬y³ dA = h·b⁴/4`, `∬y²z dA = b³h²/6`,
@@ -2160,8 +2418,18 @@ mod tests {
         let m = rechthoek(h, b).derde_momenten_om_oorsprong();
         let schaal = b * h * (b + h).powi(3);
         eis("rechthoek ∬y³", m.iyyy_mm5, h * b.powi(4) / 4.0, schaal);
-        eis("rechthoek ∬y²z", m.iyyz_mm5, b.powi(3) * h * h / 6.0, schaal);
-        eis("rechthoek ∬yz²", m.iyzz_mm5, b * b * h.powi(3) / 6.0, schaal);
+        eis(
+            "rechthoek ∬y²z",
+            m.iyyz_mm5,
+            b.powi(3) * h * h / 6.0,
+            schaal,
+        );
+        eis(
+            "rechthoek ∬yz²",
+            m.iyzz_mm5,
+            b * b * h.powi(3) / 6.0,
+            schaal,
+        );
         eis("rechthoek ∬z³", m.izzz_mm5, b * h.powi(4) / 4.0, schaal);
     }
 
@@ -2172,7 +2440,9 @@ mod tests {
     fn derde_momenten_zijn_nul_bij_dubbele_symmetrie() {
         let d = i_profiel(300.0, 150.0, 7.1, 10.7, 15.0);
         let e = d.bereken();
-        let m = d.verschoven(-e.y_c_mm, -e.z_c_mm).derde_momenten_om_oorsprong();
+        let m = d
+            .verschoven(-e.y_c_mm, -e.z_c_mm)
+            .derde_momenten_om_oorsprong();
         let schaal = e.a_mm2 * 300f64.powi(3);
         eis("I-profiel ∬y³", m.iyyy_mm5, 0.0, schaal);
         eis("I-profiel ∬y²z", m.iyyz_mm5, 0.0, schaal);
@@ -2193,7 +2463,12 @@ mod tests {
         let verwacht = 3.0 * c * e.iy_mm4 + c.powi(3) * e.a_mm2;
         eis("verschoven ∬z³", m.izzz_mm5, verwacht, verwacht.abs());
         // ∬y²z verschuift met c·Iz.
-        eis("verschoven ∬y²z", m.iyyz_mm5, c * e.iz_mm4, (c * e.iz_mm4).abs());
+        eis(
+            "verschoven ∬y²z",
+            m.iyyz_mm5,
+            c * e.iz_mm4,
+            (c * e.iz_mm4).abs(),
+        );
     }
 
     // ── Omtrek ──────────────────────────────────────────────────────────────
@@ -2254,6 +2529,11 @@ mod tests {
         let iy = b * h.powi(3) / 12.0 - PI * r.powi(4) / 4.0;
         eis("gat Iy", p.iy_mm4, iy, iy);
         // Wpl van de doorboorde rechthoek: b·h²/4 − (4/3)r³.
-        eis("gat Wpl;y", p.wpl_y_mm3, b * h * h / 4.0 - 4.0 / 3.0 * r.powi(3), b * h * h);
+        eis(
+            "gat Wpl;y",
+            p.wpl_y_mm3,
+            b * h * h / 4.0 - 4.0 / 3.0 * r.powi(3),
+            b * h * h,
+        );
     }
 }

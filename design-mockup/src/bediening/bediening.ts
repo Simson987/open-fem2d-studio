@@ -633,8 +633,14 @@ export async function voerUit(
         const current = a().frame3d.visibility;
         const next = { ...current };
         for (const [key, value] of Object.entries(args.visibility as Record<string, unknown>)) {
-          if (!(key in current) || typeof value !== "boolean") throw new Error(`ongeldige 3D-zichtbaarheidsoptie ${key}`);
-          next[key as keyof Frame3DVisibility] = value;
+          if (key === "supportScale") {
+            if (typeof value !== "number" || !Number.isFinite(value) || value < 0.25 || value > 3)
+              throw new Error("ongeldige 3D-opleggingsgrootte; kies 0,25 t/m 3");
+            next.supportScale = value;
+          } else {
+            if (!(key in current) || typeof value !== "boolean") throw new Error(`ongeldige 3D-zichtbaarheidsoptie ${key}`);
+            next[key as keyof Omit<Frame3DVisibility, "supportScale">] = value;
+          }
         }
         a().frame3d.setVisibility(next);
       }

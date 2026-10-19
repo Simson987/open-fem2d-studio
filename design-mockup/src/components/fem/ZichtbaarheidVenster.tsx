@@ -16,6 +16,7 @@ import "./FemProjectTree.css";
 import "./ZichtbaarheidVenster.css";
 import { DEFAULT_DISPLAY_FLAGS, type DisplayFlags } from "./FemResultsOverlay";
 import { useResultaatInfoStore } from "../../stores/resultaatInfoStore";
+import SupportScaleControl from "./SupportScaleControl";
 import {
   WEERGAVE_VOORKEUREN,
   ZICHTBAARHEID,
@@ -58,7 +59,7 @@ export default function ZichtbaarheidVenster({
     setDisplayFlags((f) => {
       let uit = f;
       for (const k of WEERGAVE_VOORKEUREN) uit = zetVlag(uit, k, DEFAULT_DISPLAY_FLAGS[k]);
-      return uit;
+      return { ...uit, supportScale: DEFAULT_DISPLAY_FLAGS.supportScale };
     });
 
   const renderRij = (r: ZichtbaarheidRij) => {
@@ -117,6 +118,9 @@ export default function ZichtbaarheidVenster({
             <div className="fem-results-section-title">{t(GROEP_TITEL[g])}</div>
             {g === "resultaten" && <div className="zichtbaarheid-noot">{t("zichtbaarheid.resultatenNoot")}</div>}
             <div className="fem-results-toggle-list">{rijen(g).map(renderRij)}</div>
+            {g === "geometrie" && <SupportScaleControl value={displayFlags.supportScale ?? 1}
+              onChange={(supportScale) => setDisplayFlags((flags) => ({ ...flags, supportScale }))}
+              showHint />}
           </section>
         ))}
       </div>

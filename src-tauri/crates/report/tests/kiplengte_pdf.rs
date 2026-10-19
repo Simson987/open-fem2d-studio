@@ -26,7 +26,9 @@ fn inhoudsstromen(pdf: &[u8]) -> String {
     let doc = lopdf::Document::load_mem(pdf).expect("de PDF moet te lezen zijn");
     let mut uit = String::new();
     for (_, id) in doc.get_pages() {
-        let inhoud = doc.get_page_content(id).expect("de inhoudsstroom moet uit te pakken zijn");
+        let inhoud = doc
+            .get_page_content(id)
+            .expect("de inhoudsstroom moet uit te pakken zijn");
         uit.push_str(&String::from_utf8_lossy(&inhoud).to_uppercase());
     }
     uit
@@ -46,7 +48,9 @@ fn glief_hex(font: &[u8], woord: &str) -> String {
 }
 
 fn staat_erin(stroom: &str, woord: &str) -> bool {
-    [FONT_REGULAR, FONT_BOLD].iter().any(|f| stroom.contains(&glief_hex(f, woord)))
+    [FONT_REGULAR, FONT_BOLD]
+        .iter()
+        .any(|f| stroom.contains(&glief_hex(f, woord)))
 }
 
 /// IPE 300, S235, L = 6 m onder 15 kN/m, last op de bovenflens.
@@ -119,10 +123,16 @@ fn de_pdf_legt_uit_waarom_l_kip_groter_is_dan_de_steunafstand() {
     // De afleiding komt alleen voor de maatgevende toets op papier; deze
     // ligger is zo gekozen dat dat de kiptoets is (UC 0,50 tegen 0,46 op
     // buiging).
-    assert_eq!(met.governing_check_id, "6.3.2_ltb", "de proef rekent op een maatgevende kiptoets");
+    assert_eq!(
+        met.governing_check_id, "6.3.2_ltb",
+        "de proef rekent op een maatgevende kiptoets"
+    );
     let stroom = pdf_van(met, "kiplengte_met_steunen.pdf");
     for woord in PROEFWOORDEN {
-        assert!(staat_erin(&stroom, woord), "{woord:?} staat niet in de PDF met kipsteunen");
+        assert!(
+            staat_erin(&stroom, woord),
+            "{woord:?} staat niet in de PDF met kipsteunen"
+        );
     }
     eis_ook(&stroom, "NB.NB.4.3");
 

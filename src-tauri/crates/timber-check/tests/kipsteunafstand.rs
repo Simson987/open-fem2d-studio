@@ -72,7 +72,10 @@ fn ligger(segment_m: f64, l_ef_override_m: f64) -> TimberBeamCheckResult {
         forces_envelope: vec![ForcePoint {
             combination_id: 1,
             position_mm: 3000.0,
-            forces: InternalForces { my_ed: 40.0, ..Default::default() },
+            forces: InternalForces {
+                my_ed: 40.0,
+                ..Default::default()
+            },
         }],
         buckling_length_y_m: L_M,
         buckling_length_z_m: L_M,
@@ -102,7 +105,11 @@ fn ligger(segment_m: f64, l_ef_override_m: f64) -> TimberBeamCheckResult {
 /// l_ef = 0,9 · 6000 = 5400 mm.
 #[test]
 fn nul_valt_terug_op_de_staaflengte() {
-    assert_relative_eq!(grootheid(&ligger(0.0, 0.0), r"l_{ef}"), 5400.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        grootheid(&ligger(0.0, 0.0), r"l_{ef}"),
+        5400.0,
+        max_relative = 1e-9
+    );
 }
 
 /// Handberekening: met vier tussensteunen op een ligger van 6 m is de
@@ -112,7 +119,11 @@ fn nul_valt_terug_op_de_staaflengte() {
 /// heen en wordt niet ergens onderweg door de staaflengte vervangen.
 #[test]
 fn de_opgegeven_kipsteunafstand_gaat_door_tabel_6_1() {
-    assert_relative_eq!(grootheid(&ligger(1.2, 0.0), r"l_{ef}"), 1080.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        grootheid(&ligger(1.2, 0.0), r"l_{ef}"),
+        1080.0,
+        max_relative = 1e-9
+    );
 }
 
 /// σ_m,crit = 0,78·b²/(h·l_ef)·E_0,05 is omgekeerd evenredig met l_ef, dus een
@@ -146,5 +157,9 @@ fn een_kortere_steunafstand_verlicht_de_kiptoets() {
 /// tabel 6.1 worden overruled.
 #[test]
 fn een_expliciete_l_ef_wint_van_de_steunafstand() {
-    assert_relative_eq!(grootheid(&ligger(1.2, 1.268), r"l_{ef}"), 1268.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        grootheid(&ligger(1.2, 1.268), r"l_{ef}"),
+        1268.0,
+        max_relative = 1e-9
+    );
 }

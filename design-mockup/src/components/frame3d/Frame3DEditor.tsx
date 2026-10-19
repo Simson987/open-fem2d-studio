@@ -12,6 +12,7 @@ import {
   removeFrame3DNodalLoad,
   removeFrame3DNode,
   removeFrame3DPlate,
+  removeFrame3DVolume,
   removeFrame3DSurfaceLoad,
   removeFrame3DThermalLoad,
   type Frame3DModel,
@@ -27,6 +28,10 @@ import { transformFrame3D, type Frame3DTransformCommand } from "./frame3dTransfo
 import { frame3DSelectionCount, type Frame3DSelection } from "./frame3dSelection";
 import type { Frame3DCameraState, Frame3DViewSet } from "./frame3dViewSets";
 import type { Frame3DEditMeta } from "./frame3dHistory";
+import { buildFrame3DFourFamilyExample, buildFrame3DVolumeExample, buildFrame3DVolumeMembraneExample,
+  LARGE_FRAME3D_VOLUME_DIMENSIONS } from "./frame3dVolumeExample";
+import { LARGE_IRREGULAR_DIMENSIONS, MASSIVE_IRREGULAR_DIMENSIONS } from "../volume3d/irregularMixed3dModel";
+import { buildFrame3DSteelExample } from "./frame3dSteelExample";
 import "./Frame3DEditor.css";
 
 const DRAW_HELP_KEYS: Partial<Record<Frame3DTool, string>> = {
@@ -99,6 +104,7 @@ export default function Frame3DEditor({
   };
   const [fitToken, setFitToken] = useState(0);
   const [drawError, setDrawError] = useState<string | null>(null);
+  const [volumeDraftCount, setVolumeDraftCount] = useState(0);
   const [internalVisibility, setInternalVisibility] = useState(readFrame3DVisibility);
   const [cameraState, setCameraState] = useState<Frame3DCameraState>(initialCamera ?? {
     position: [8, 8, 6], target: [0, 0, 0], up: [0, 0, 1],
@@ -141,9 +147,10 @@ export default function Frame3DEditor({
       : selection.type === "memberPointLoad" ? (model.memberPointLoads ?? []).some((load) => load.id === selection.id && loadInActiveCase(load))
       : selection.type === "thermalLoad" ? (model.thermalLoads ?? []).some((load) => load.id === selection.id && loadInActiveCase(load))
       : selection.type === "plate" ? (model.plates ?? []).some((plate) => plate.id === selection.id)
+      : selection.type === "volume" ? (model.volumes ?? []).some((volume) => volume.id === selection.id)
       : (model.surfaceLoads ?? []).some((load) => load.id === selection.id && loadInActiveCase(load));
     if (!exists) setSelection(null);
-  }, [model.nodes, model.beams, model.plates, model.loads, model.memberLoads, model.memberPointLoads, model.thermalLoads, model.surfaceLoads, selection, showLoadCase, activeLoadCaseId]);
+  }, [model.nodes, model.beams, model.plates, model.volumes, model.loads, model.memberLoads, model.memberPointLoads, model.thermalLoads, model.surfaceLoads, selection, showLoadCase, activeLoadCaseId]);
 
   useEffect(() => {
     if (deleteToken === lastDeleteToken.current) return;
@@ -162,6 +169,7 @@ export default function Frame3DEditor({
         : selection.type === "memberPointLoad" ? removeFrame3DMemberPointLoad(next, selection.id)
         : selection.type === "thermalLoad" ? removeFrame3DThermalLoad(next, selection.id)
         : selection.type === "plate" ? removeFrame3DPlate(next, selection.id)
+        : selection.type === "volume" ? removeFrame3DVolume(next, selection.id)
         : removeFrame3DSurfaceLoad(next, selection.id);
     }
     onChange(next);
@@ -194,6 +202,7 @@ export default function Frame3DEditor({
           conditionModel={calculationModel}
           onChange={onChange}
           onDrawError={setDrawError}
+          onVolumeDraftChange={setVolumeDraftCount}
           tool={tool}
           selection={selection}
           onSelect={setSelection}
@@ -216,9 +225,14 @@ export default function Frame3DEditor({
         />
         <div className="frame3d-stage-header">
           <strong>{t("frame3d.title")}</strong>
-          <span>{t(tool.startsWith("support:") ? "frame3d.supportPlacementHelp" : DRAW_HELP_KEYS[tool] ?? "frame3d.axisHelp", { defaultValue: t("frame3d.axisHelp") })}</span>
+          <span>{tool === "addTet4" ? "Tet4: klik 4 bestaande, verschillende knopen in elementvolgorde. Esc annuleert."
+            : tool === "addHex8" ? "Hex8: klik 4 knopen van het ondervlak en daarna de 4 bijbehorende knopen van het bovenvlak. Esc annuleert."
+              : t(tool.startsWith("support:") ? "frame3d.supportPlacementHelp" : DRAW_HELP_KEYS[tool] ?? "frame3d.axisHelp", { defaultValue: t("frame3d.axisHelp") })}</span>
           <button type="button" className="frame3d-views-button" onClick={onVisibilityOpen}>Views ({viewSets.length})</button>
         </div>
+        {(tool === "addTet4" || tool === "addHex8") && <div className="frame3d-volume-draft" role="status">
+          {volumeDraftCount} / {tool === "addTet4" ? 4 : 8} bestaande knopen gekozen
+        </div>}
         {drawError && <div className="frame3d-draw-error" role="alert">
           <span>{drawError}</span>
           <button type="button" aria-label="Melding sluiten" onClick={() => setDrawError(null)}>×</button>
@@ -245,9 +259,32 @@ export default function Frame3DEditor({
             <span><i data-uc="not-applicable" />{t("frame3d.notChecked")}</span>
           </div>
         )}
-        {model.nodes.length === 0 && <div className="frame3d-empty">{t("frame3d.empty")}</div>}
+        {model.nodes.length === 0 && <div className="frame3d-empty">
+          <p>{t("frame3d.empty")}</p>
+          <div className="frame3d-example-options">
+            {[
+              { label: "Groot staalgebouw · 2.432 3D-staven", build: () => buildFrame3DSteelExample() },
+              { label: "Hex8 + Tet4 + Tri3-plaat + 3D-staaf", build: () => buildFrame3DFourFamilyExample() },
+              { label: "Gemengd proefmodel · 863 volumes", build: () => buildFrame3DVolumeExample() },
+              { label: "Groot proefmodel · 2.248 volumes", build: () => buildFrame3DVolumeExample(LARGE_FRAME3D_VOLUME_DIMENSIONS) },
+              { label: "Groot model + Tri3-membranen", build: () => buildFrame3DVolumeMembraneExample() },
+              { label: "Extra groot · 55.232 volumes", build: () => buildFrame3DVolumeExample(LARGE_IRREGULAR_DIMENSIONS) },
+              { label: "Massief · 257.728 volumes", build: () => buildFrame3DVolumeExample(MASSIVE_IRREGULAR_DIMENSIONS) },
+            ].map((example) =>
+              <button key={example.label} type="button" className="frame3d-volume-example-button" onClick={() => {
+                try {
+                  onChange(example.build());
+                  onToolChange?.("select");
+                  setFitToken((token) => token + 1);
+                  setDrawError(null);
+                } catch (error) {
+                  setDrawError(error instanceof Error ? error.message : String(error));
+                }
+              }}>{example.label}</button>)}
+          </div>
+        </div>}
         <div className="frame3d-stage-footer">
-          <span>{t("frame3d.nodeCount", { count: model.nodes.length })} · {t("frame3d.beamCount", { count: model.beams.length })} · {model.plates?.length ?? 0} platen</span>
+          <span>{t("frame3d.nodeCount", { count: model.nodes.length })} · {t("frame3d.beamCount", { count: model.beams.length })} · {model.plates?.length ?? 0} platen · {model.volumes?.length ?? 0} volume-elementen</span>
           <span data-frame3d-solver-status={solveError ? "error" : solving ? "solving" : result?.forceBalance?.ok === false ? "warning" : result ? "solved" : "ready"}>
             {solveError ? solveError
               : solving ? t("frame3d.solving")

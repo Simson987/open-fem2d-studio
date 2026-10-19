@@ -75,8 +75,17 @@ assert.equal(request.loads[0].fx, 85);
 mesh.beamElements.set(99, {});
 assert.throws(() => buildNativePlate2DRequest(mesh), /staaf-plaatmodellen/);
 mesh.beamElements.delete(99);
-mesh.materials.set(1, { ...material, orthotroop: { E1: 1, E2: 1, nu12: 0, G12: 1, hoek: 0 } });
-assert.throws(() => buildNativePlate2DRequest(mesh), /orthotropie/);
+mesh.materials.set(1, { ...material, orthotroop: {
+  E1: material.E, E2: material.E / 2, nu12: 0.2, G12: material.E / 6, hoek: 23 * Math.PI / 180,
+} });
+const orthotropicRequest = buildNativePlate2DRequest(mesh);
+assert.equal(orthotropicRequest.orthotropicMaterials.length, 1);
+assert.equal(orthotropicRequest.orthotropicMaterials[0].materialId, 1);
+close(orthotropicRequest.orthotropicMaterials[0].e1Mpa, 30_000, 1e-9,
+  "CST-appadapter E1 orthotroop materiaal");
+const orthotropicResult = await invoke(orthotropicRequest);
+assert.ok(orthotropicResult.relativeResidual < 1e-8);
+assert.ok(orthotropicResult.elements.every(element => element.stressMpa.every(Number.isFinite)));
 mesh.materials.set(1, material);
 const own = await invoke(request);
 const k = new Matrix(8, 8);

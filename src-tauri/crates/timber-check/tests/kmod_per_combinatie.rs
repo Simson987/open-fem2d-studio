@@ -32,12 +32,21 @@ fn punt(combinatie: u32, x_mm: f64, n: f64, vz: f64, my: f64) -> ForcePoint {
     ForcePoint {
         combination_id: combinatie,
         position_mm: x_mm,
-        forces: InternalForces { n_ed: n, vz_ed: vz, my_ed: my, ..Default::default() },
+        forces: InternalForces {
+            n_ed: n,
+            vz_ed: vz,
+            my_ed: my,
+            ..Default::default()
+        },
     }
 }
 
 fn duur(combinatie: u32, d: LoadDurationClass, basis: &str) -> CombinationLoadDuration {
-    CombinationLoadDuration { combination_id: combinatie, load_duration: d, basis: basis.into() }
+    CombinationLoadDuration {
+        combination_id: combinatie,
+        load_duration: d,
+        basis: basis.into(),
+    }
 }
 
 fn ligger(klasse: &str, b: f64, h: f64, l_m: f64, env: Vec<ForcePoint>) -> TimberBeamCheckInput {
@@ -77,7 +86,10 @@ fn ligger(klasse: &str, b: f64, h: f64, l_m: f64, env: Vec<ForcePoint>) -> Timbe
 }
 
 fn toets<'a>(checks: &'a [NamedCheck], id: &str) -> &'a NamedCheck {
-    checks.iter().find(|c| c.id == id).unwrap_or_else(|| panic!("toets {id} ontbreekt"))
+    checks
+        .iter()
+        .find(|c| c.id == id)
+        .unwrap_or_else(|| panic!("toets {id} ontbreekt"))
 }
 
 fn uc(c: &NamedCheck) -> f64 {
@@ -121,14 +133,21 @@ fn alleen_blijvende_belasting_krijgt_k_mod_060() {
 
     // Zonder lijst: het oude gedrag, één klasse (middellang) voor alles.
     let oud = check_timber_beam(ligger("GL24h", 160.0, 400.0, 3.5, env.clone()));
-    assert_relative_eq!(uc(toets(&oud.checks, BUIGING)), uc_middellang, max_relative = 1e-9);
+    assert_relative_eq!(
+        uc(toets(&oud.checks, BUIGING)),
+        uc_middellang,
+        max_relative = 1e-9
+    );
     assert!(oud.k_mod_per_load_duration.is_empty());
     assert_eq!(oud.governing_combination_id, None);
 
     // Met lijst: combinatie 1 is alleen G → blijvend.
     let mut invoer = ligger("GL24h", 160.0, 400.0, 3.5, env);
-    invoer.load_duration_per_combination =
-        vec![duur(1, LoadDurationClass::Permanent, "alleen blijvende belasting: geval 1 G")];
+    invoer.load_duration_per_combination = vec![duur(
+        1,
+        LoadDurationClass::Permanent,
+        "alleen blijvende belasting: geval 1 G",
+    )];
     let r = check_timber_beam(invoer);
     let buiging = toets(&r.checks, BUIGING);
     assert_relative_eq!(uc(buiging), uc_blijvend, max_relative = 1e-9);
@@ -138,10 +157,16 @@ fn alleen_blijvende_belasting_krijgt_k_mod_060() {
     assert_eq!(r.k_mod_per_load_duration.len(), 1);
     assert_relative_eq!(r.k_mod_per_load_duration[0].k_mod, 0.60);
     assert_eq!(r.k_mod_per_load_duration[0].combination_ids, vec![1]);
-    assert_eq!(r.k_mod_per_load_duration[0].bases, vec!["combinatie 1: alleen blijvende belasting: geval 1 G".to_string()]);
+    assert_eq!(
+        r.k_mod_per_load_duration[0].bases,
+        vec!["combinatie 1: alleen blijvende belasting: geval 1 G".to_string()]
+    );
     let n = notities(buiging).join(" ");
     assert!(n.contains("k_mod = 0,60"), "{n}");
-    assert!(n.contains("klimaatklasse 1") && n.contains("blijvend") && n.contains("3.1.3(2)"), "{n}");
+    assert!(
+        n.contains("klimaatklasse 1") && n.contains("blijvend") && n.contains("3.1.3(2)"),
+        "{n}"
+    );
 }
 
 /// G = 4 en S = 3 kN/m op C24 100×300, L = 3 m (nr 15).
@@ -157,28 +182,56 @@ fn sneeuw_leidend_krijgt_k_mod_090_en_blijvend_rekent_mee() {
         punt(2, 1500.0, 0.0, 0.0, 9.30 * 9.0 / 8.0),
     ];
     let oud = check_timber_beam(ligger("C24", 100.0, 300.0, 3.0, env.clone()));
-    assert_relative_eq!(uc(toets(&oud.checks, BUIGING)), 6.975 / (0.80 * 24.0 / 1.30), max_relative = 1e-9);
+    assert_relative_eq!(
+        uc(toets(&oud.checks, BUIGING)),
+        6.975 / (0.80 * 24.0 / 1.30),
+        max_relative = 1e-9
+    );
     assert_relative_eq!(uc(toets(&oud.checks, BUIGING)), 0.472, max_relative = 1e-3);
 
     let mut invoer = ligger("C24", 100.0, 300.0, 3.0, env);
     invoer.load_duration_per_combination = vec![
-        duur(1, LoadDurationClass::Permanent, "alleen blijvende belasting"),
-        duur(2, LoadDurationClass::ShortTerm, "kortste: geval 3 Sneeuw (S), kort"),
+        duur(
+            1,
+            LoadDurationClass::Permanent,
+            "alleen blijvende belasting",
+        ),
+        duur(
+            2,
+            LoadDurationClass::ShortTerm,
+            "kortste: geval 3 Sneeuw (S), kort",
+        ),
     ];
     let r = check_timber_beam(invoer);
     let buiging = toets(&r.checks, BUIGING);
-    assert_relative_eq!(uc(buiging), 6.975 / (0.90 * 24.0 / 1.30), max_relative = 1e-9);
+    assert_relative_eq!(
+        uc(buiging),
+        6.975 / (0.90 * 24.0 / 1.30),
+        max_relative = 1e-9
+    );
     assert_relative_eq!(uc(buiging), 0.420, max_relative = 1e-3);
     assert_eq!(combinatie_van(buiging), 2);
     assert_eq!(r.load_duration, LoadDurationClass::ShortTerm);
     assert_eq!(r.governing_combination_id, Some(2));
-    let kmods: Vec<(LoadDurationClass, f64)> =
-        r.k_mod_per_load_duration.iter().map(|k| (k.load_duration, k.k_mod)).collect();
-    assert_eq!(kmods, vec![(LoadDurationClass::Permanent, 0.60), (LoadDurationClass::ShortTerm, 0.90)]);
+    let kmods: Vec<(LoadDurationClass, f64)> = r
+        .k_mod_per_load_duration
+        .iter()
+        .map(|k| (k.load_duration, k.k_mod))
+        .collect();
+    assert_eq!(
+        kmods,
+        vec![
+            (LoadDurationClass::Permanent, 0.60),
+            (LoadDurationClass::ShortTerm, 0.90)
+        ]
+    );
     let n = notities(buiging).join(" ");
     assert!(n.contains("k_mod = 0,90"), "{n}");
     // De andere klasse staat erbij, met haar eigen unity check: 4,05/11,077 = 0,366.
-    assert!(n.contains("blijvend (k_mod 0,60; combinatie 1) UC 0,366"), "{n}");
+    assert!(
+        n.contains("blijvend (k_mod 0,60; combinatie 1) UC 0,366"),
+        "{n}"
+    );
 }
 
 /// G = 9 en Q = 2 kN/m (categorie A, middellang) op C24 100×300, L = 3 m.
@@ -201,13 +254,20 @@ fn kleine_veranderlijke_last_laat_de_combinatie_met_alleen_g_maatgevend() {
     ];
     let r = check_timber_beam(invoer);
     let buiging = toets(&r.checks, BUIGING);
-    assert_relative_eq!(uc(buiging), 9.1125 / (0.60 * 24.0 / 1.30), max_relative = 1e-9);
+    assert_relative_eq!(
+        uc(buiging),
+        9.1125 / (0.60 * 24.0 / 1.30),
+        max_relative = 1e-9
+    );
     assert_relative_eq!(uc(buiging), 0.823, max_relative = 1e-3);
     assert_eq!(combinatie_van(buiging), 1);
     assert_eq!(r.governing_combination_id, Some(1));
     assert_eq!(r.k_mod_per_load_duration[1].combination_ids, vec![2, 3]);
     let n = notities(buiging).join(" ");
-    assert!(n.contains("middellang (k_mod 0,80; combinatie 2, 3) UC 0,701"), "{n}");
+    assert!(
+        n.contains("middellang (k_mod 0,80; combinatie 2, 3) UC 0,701"),
+        "{n}"
+    );
 }
 
 /// Opslag (categorie E) is lang: k_mod 0,70. Klimaatklasse 3: blijvend 0,50 en
@@ -219,9 +279,16 @@ fn k_mod_volgt_tabel_31_voor_lang_en_klimaatklasse_3() {
     invoer.load_duration_per_combination = vec![duur(5, LoadDurationClass::LongTerm, "opslag")];
     let r = check_timber_beam(invoer);
     assert_relative_eq!(r.k_mod_per_load_duration[0].k_mod, 0.70);
-    assert_relative_eq!(uc(toets(&r.checks, BUIGING)), (10.0e6 / 1.5e6) / (0.70 * 24.0 / 1.30), max_relative = 1e-9);
+    assert_relative_eq!(
+        uc(toets(&r.checks, BUIGING)),
+        (10.0e6 / 1.5e6) / (0.70 * 24.0 / 1.30),
+        max_relative = 1e-9
+    );
 
-    let env3 = vec![punt(1, 1500.0, 0.0, 0.0, 6.0), punt(2, 1500.0, 0.0, 0.0, 8.0)];
+    let env3 = vec![
+        punt(1, 1500.0, 0.0, 0.0, 6.0),
+        punt(2, 1500.0, 0.0, 0.0, 8.0),
+    ];
     let mut sc3 = ligger("C24", 100.0, 300.0, 3.0, env3);
     sc3.service_class = ServiceClass::Sc3;
     sc3.load_duration_per_combination = vec![
@@ -232,14 +299,21 @@ fn k_mod_volgt_tabel_31_voor_lang_en_klimaatklasse_3() {
     let k: Vec<f64> = r3.k_mod_per_load_duration.iter().map(|k| k.k_mod).collect();
     assert_eq!(k, vec![0.50, 0.70]);
     // 1: 4,0/(0,50·24/1,3) = 0,4333; 2: 5,333/(0,70·24/1,3) = 0,4127 → 1 maatgevend.
-    assert_relative_eq!(uc(toets(&r3.checks, BUIGING)), 4.0 / (0.50 * 24.0 / 1.30), max_relative = 1e-9);
+    assert_relative_eq!(
+        uc(toets(&r3.checks, BUIGING)),
+        4.0 / (0.50 * 24.0 / 1.30),
+        max_relative = 1e-9
+    );
 }
 
 /// Een combinatie die niet in de lijst staat, valt op `load_duration` van de
 /// staaf — zichtbaar in de basis, niet stil.
 #[test]
 fn onbekende_combinatie_valt_zichtbaar_terug_op_load_duration() {
-    let env = vec![punt(1, 1500.0, 0.0, 0.0, 6.0), punt(9, 1500.0, 0.0, 0.0, 7.0)];
+    let env = vec![
+        punt(1, 1500.0, 0.0, 0.0, 6.0),
+        punt(9, 1500.0, 0.0, 0.0, 7.0),
+    ];
     let mut invoer = ligger("C24", 100.0, 300.0, 3.0, env);
     invoer.load_duration = LoadDurationClass::LongTerm;
     invoer.load_duration_per_combination = vec![duur(1, LoadDurationClass::Permanent, "")];
@@ -270,7 +344,10 @@ fn doorbuiging_ongewijzigd_en_stabiliteit_op_het_buigpunt_van_haar_klasse() {
     ];
     let r = check_timber_beam(invoer);
     for id in ["7.2_w_fin", "7.2_w_add"] {
-        let (a, b) = (oud.checks.iter().find(|c| c.id.contains(id)), r.checks.iter().find(|c| c.id.contains(id)));
+        let (a, b) = (
+            oud.checks.iter().find(|c| c.id.contains(id)),
+            r.checks.iter().find(|c| c.id.contains(id)),
+        );
         if let (Some(a), Some(b)) = (a, b) {
             assert_relative_eq!(uc(a), uc(b), max_relative = 1e-12);
         }
@@ -288,14 +365,19 @@ fn doorbuiging_ongewijzigd_en_stabiliteit_op_het_buigpunt_van_haar_klasse() {
     let kolom = toets(&r.checks, "6.3.2_column_stability");
     assert_eq!(combinatie_van(kolom), 1);
     let n = notities(kolom).join(" ");
-    assert!(n.contains("kort (k_mod 0,90; combinatie 2) niet van toepassing"), "{n}");
+    assert!(
+        n.contains("kort (k_mod 0,90; combinatie 2) niet van toepassing"),
+        "{n}"
+    );
     assert!(!n.contains("UC 0,000"), "{n}");
     // Elke stabiliteitstoets rekent met het buigpunt (grootste |M| + 0,01·|N|)
     // van de klasse waarin hij maatgevend werd.
     for c in &r.checks {
         if let CheckKind::Stability(s) = &c.kind {
-            let klasse_pnt: Vec<&ForcePoint> =
-                env.iter().filter(|p| p.combination_id == s.force_state.combination_id).collect();
+            let klasse_pnt: Vec<&ForcePoint> = env
+                .iter()
+                .filter(|p| p.combination_id == s.force_state.combination_id)
+                .collect();
             let buigpunt = klasse_pnt
                 .iter()
                 .max_by(|a, b| {
@@ -321,10 +403,38 @@ fn doorbuiging_ongewijzigd_en_stabiliteit_op_het_buigpunt_van_haar_klasse() {
 #[test]
 fn clt_per_klasse_met_de_laagregel_uit_de_klasse_van_elke_toets() {
     let env = vec![
-        ForcePoint { combination_id: 1, position_mm: 0.0, forces: InternalForces { vz_ed: 5.0, ..Default::default() } },
-        ForcePoint { combination_id: 1, position_mm: 2500.0, forces: InternalForces { my_ed: 10.0, ..Default::default() } },
-        ForcePoint { combination_id: 2, position_mm: 0.0, forces: InternalForces { vz_ed: 10.0, ..Default::default() } },
-        ForcePoint { combination_id: 2, position_mm: 2500.0, forces: InternalForces { my_ed: 14.0, ..Default::default() } },
+        ForcePoint {
+            combination_id: 1,
+            position_mm: 0.0,
+            forces: InternalForces {
+                vz_ed: 5.0,
+                ..Default::default()
+            },
+        },
+        ForcePoint {
+            combination_id: 1,
+            position_mm: 2500.0,
+            forces: InternalForces {
+                my_ed: 10.0,
+                ..Default::default()
+            },
+        },
+        ForcePoint {
+            combination_id: 2,
+            position_mm: 0.0,
+            forces: InternalForces {
+                vz_ed: 10.0,
+                ..Default::default()
+            },
+        },
+        ForcePoint {
+            combination_id: 2,
+            position_mm: 2500.0,
+            forces: InternalForces {
+                my_ed: 14.0,
+                ..Default::default()
+            },
+        },
     ];
     let invoer = |lijst: Vec<CombinationLoadDuration>| CltBeamCheckInput {
         bijlage: Default::default(),
@@ -352,7 +462,11 @@ fn clt_per_klasse_met_de_laagregel_uit_de_klasse_van_elke_toets() {
     };
     let oud = check_clt_beam(invoer(vec![]));
     // Oud: middellang, M = 14 → 3,6842 / 14,769 = 0,2495.
-    assert_relative_eq!(oud.uc_max, 3.6842 / (0.80 * 24.0 / 1.3), max_relative = 1e-3);
+    assert_relative_eq!(
+        oud.uc_max,
+        3.6842 / (0.80 * 24.0 / 1.3),
+        max_relative = 1e-3
+    );
 
     let r = check_clt_beam(invoer(vec![
         duur(1, LoadDurationClass::Permanent, ""),
@@ -367,10 +481,18 @@ fn clt_per_klasse_met_de_laagregel_uit_de_klasse_van_elke_toets() {
     assert_relative_eq!(l1.sigma_top_mpa, -2.6316, max_relative = 1e-3);
     assert_relative_eq!(l1.f_vd_mpa, 0.90 * 4.0 / 1.3, max_relative = 1e-9);
     assert_relative_eq!(l1.tau_max_mpa, 0.07895, max_relative = 1e-3);
-    assert_relative_eq!(l1.uc_shear.unwrap(), 0.07895 / (0.90 * 4.0 / 1.3), max_relative = 1e-3);
+    assert_relative_eq!(
+        l1.uc_shear.unwrap(),
+        0.07895 / (0.90 * 4.0 / 1.3),
+        max_relative = 1e-3
+    );
     // De dwarslaag toont de rolschuifspanning bij de grootste dwarskracht.
     assert_relative_eq!(r.layup.layers[1].tau_max_mpa, 0.07895, max_relative = 1e-3);
-    assert!(r.notes.iter().any(|n| n.contains("Belastingduur per combinatie") && n.contains("blijvend (k_mod 0,60): combinatie 1")));
+    assert!(r
+        .notes
+        .iter()
+        .any(|n| n.contains("Belastingduur per combinatie")
+            && n.contains("blijvend (k_mod 0,60): combinatie 1")));
     let kmods: Vec<f64> = r.k_mod_per_load_duration.iter().map(|k| k.k_mod).collect();
     assert_eq!(kmods, vec![0.60, 0.90]);
 }

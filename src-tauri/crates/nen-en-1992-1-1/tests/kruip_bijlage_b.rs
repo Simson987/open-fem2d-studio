@@ -23,7 +23,10 @@ use nen_en_1992_1_1::{
 
 fn dicht(werkelijk: f64, verwacht: f64, rel: f64, wat: &str) {
     let fout = ((werkelijk - verwacht) / verwacht).abs();
-    assert!(fout <= rel, "{wat}: kern {werkelijk}, hand {verwacht} (relatief {fout:e} > {rel:e})");
+    assert!(
+        fout <= rel,
+        "{wat}: kern {werkelijk}, hand {verwacht} (relatief {fout:e} > {rel:e})"
+    );
 }
 
 const TOL: f64 = 1e-5;
@@ -50,8 +53,15 @@ const SEVENTIG_JAAR_D: f64 = 70.0 * 365.0; // 25 550 dagen
 /// nomogram (één pixel op lijn 2 verschuift de aflezing ±0,05).
 #[test]
 fn c25_30_binnen_h0_150_t0_28_cement_n() {
-    let u = kruipcoefficient_bijlage_b(33.0, 50.0, 150.0, 28.0, CementClass::N, Some(SEVENTIG_JAAR_D))
-        .unwrap();
+    let u = kruipcoefficient_bijlage_b(
+        33.0,
+        50.0,
+        150.0,
+        28.0,
+        CementClass::N,
+        Some(SEVENTIG_JAAR_D),
+    )
+    .unwrap();
     assert!(!u.hoge_sterkte_tak);
     assert_eq!(u.alpha_cement, 0);
     dicht(u.t0_adjusted_days, 28.0, TOL, "t₀ (B.9)");
@@ -89,8 +99,15 @@ fn c25_30_binnen_h0_150_t0_28_cement_n() {
 /// snijdt t₀ = 28 op de rasterlijn φ = 1,0, en die pixel bepaalt lijn 2).
 #[test]
 fn c30_37_binnen_h0_150_t0_28_cement_n() {
-    let u = kruipcoefficient_bijlage_b(38.0, 50.0, 150.0, 28.0, CementClass::N, Some(SEVENTIG_JAAR_D))
-        .unwrap();
+    let u = kruipcoefficient_bijlage_b(
+        38.0,
+        50.0,
+        150.0,
+        28.0,
+        CementClass::N,
+        Some(SEVENTIG_JAAR_D),
+    )
+    .unwrap();
     assert!(u.hoge_sterkte_tak);
     dicht(u.alpha_1, 0.944059, TOL, "α₁");
     dicht(u.alpha_2, 0.983687, TOL, "α₂");
@@ -127,8 +144,15 @@ fn c30_37_binnen_h0_150_t0_28_cement_n() {
 /// Figuur 3.1b (RH 80 %), C45/55, h₀ 300, t₀ 7, R: afgelezen 1,50.
 #[test]
 fn c45_55_buiten_h0_300_t0_7_cement_r() {
-    let u = kruipcoefficient_bijlage_b(53.0, 80.0, 300.0, 7.0, CementClass::R, Some(SEVENTIG_JAAR_D))
-        .unwrap();
+    let u = kruipcoefficient_bijlage_b(
+        53.0,
+        80.0,
+        300.0,
+        7.0,
+        CementClass::R,
+        Some(SEVENTIG_JAAR_D),
+    )
+    .unwrap();
     assert!(u.hoge_sterkte_tak);
     assert_eq!(u.alpha_cement, 1);
     dicht(u.alpha_1, 0.747919, TOL, "α₁");
@@ -159,7 +183,10 @@ fn cement_s_verkleint_de_aangepaste_ouderdom() {
     dicht(u.t0_adjusted_days, 1.167901, TOL, "t₀ (B.9)");
     dicht(u.beta_t0, 0.883760, TOL, "β(t₀)");
     dicht(u.phi_inf_t0, 4.474056, TOL, "φ(∞,t₀)");
-    assert!(u.beta_c.is_none() && u.phi_t_t0.is_none(), "zonder t geen β_c");
+    assert!(
+        u.beta_c.is_none() && u.phi_t_t0.is_none(),
+        "zonder t geen β_c"
+    );
 }
 
 /// Beide grenzen maatgevend: C20/25, RH 40 %, h₀ 1000 mm, t₀ 0,3 d, cement S,
@@ -178,7 +205,8 @@ fn cement_s_verkleint_de_aangepaste_ouderdom() {
 /// ```
 #[test]
 fn ondergrens_t0_en_bovengrens_beta_h() {
-    let u = kruipcoefficient_bijlage_b(28.0, 40.0, 1000.0, 0.3, CementClass::S, Some(10.0)).unwrap();
+    let u =
+        kruipcoefficient_bijlage_b(28.0, 40.0, 1000.0, 0.3, CementClass::S, Some(10.0)).unwrap();
     assert!(u.t0_ondergrens_maatgevend);
     dicht(u.t0_adjusted_days, 0.5, TOL, "t₀ ≥ 0,5");
     dicht(u.phi_rh, 1.6, TOL, "φ_RH");
@@ -194,9 +222,11 @@ fn ondergrens_t0_en_bovengrens_beta_h() {
 /// "> 35" van (B.3b) tegenover "≥ 35" van (B.8b) verandert geen getal.
 #[test]
 fn takken_vallen_samen_bij_35_mpa() {
-    let op = kruipcoefficient_bijlage_b(35.0, 60.0, 200.0, 14.0, CementClass::N, Some(1000.0)).unwrap();
+    let op =
+        kruipcoefficient_bijlage_b(35.0, 60.0, 200.0, 14.0, CementClass::N, Some(1000.0)).unwrap();
     let net_erboven =
-        kruipcoefficient_bijlage_b(35.0 + 1e-9, 60.0, 200.0, 14.0, CementClass::N, Some(1000.0)).unwrap();
+        kruipcoefficient_bijlage_b(35.0 + 1e-9, 60.0, 200.0, 14.0, CementClass::N, Some(1000.0))
+            .unwrap();
     assert!(!op.hoge_sterkte_tak && net_erboven.hoge_sterkte_tak);
     dicht(net_erboven.phi_rh, op.phi_rh, 1e-8, "φ_RH continu");
     dicht(net_erboven.beta_h, op.beta_h, 1e-8, "β_H continu");
@@ -227,7 +257,16 @@ fn verzoek_met_doorsnede_geeft_h0_en_afleiding() {
     let ids: Vec<&str> = uit.deelstappen.iter().map(|s| s.id.as_str()).collect();
     assert_eq!(
         ids,
-        ["kruip_uitgangspunten", "kruip_h0", "kruip_alpha", "kruip_phi_rh", "kruip_beta_fcm", "kruip_t0", "kruip_beta_t0", "kruip_phi_0"]
+        [
+            "kruip_uitgangspunten",
+            "kruip_h0",
+            "kruip_alpha",
+            "kruip_phi_rh",
+            "kruip_beta_fcm",
+            "kruip_t0",
+            "kruip_beta_t0",
+            "kruip_phi_0"
+        ]
     );
     let slot = uit.deelstappen.last().unwrap();
     assert_eq!(slot.value, Some(uit.uitkomst.phi_inf_t0));
@@ -250,17 +289,44 @@ fn weigeringen_met_reden() {
     };
     let fout = |r: CreepCoefficientRequest| creep_coefficient_request(r).unwrap_err();
 
-    assert!(fout(CreepCoefficientRequest { h0_mm: None, ..basis() }).contains("ontbreekt"));
+    assert!(fout(CreepCoefficientRequest {
+        h0_mm: None,
+        ..basis()
+    })
+    .contains("ontbreekt"));
     assert!(fout(CreepCoefficientRequest {
         section: Some(ConcreteSectionInput::rectangle(300.0, 500.0)),
         ..basis()
     })
     .contains("niet allebei"));
-    assert!(fout(CreepCoefficientRequest { relative_humidity_pct: 120.0, ..basis() }).contains("RH"));
-    assert!(fout(CreepCoefficientRequest { relative_humidity_pct: 0.0, ..basis() }).contains("RH"));
-    assert!(fout(CreepCoefficientRequest { h0_mm: Some(0.0), ..basis() }).contains("h₀"));
-    assert!(fout(CreepCoefficientRequest { t0_days: -1.0, ..basis() }).contains("t₀"));
-    assert!(fout(CreepCoefficientRequest { t_days: Some(20.0), ..basis() }).contains("t > t₀"));
-    assert!(fout(CreepCoefficientRequest { concrete_class: "C31/38".into(), ..basis() })
-        .contains("Onbekende betonklasse"));
+    assert!(fout(CreepCoefficientRequest {
+        relative_humidity_pct: 120.0,
+        ..basis()
+    })
+    .contains("RH"));
+    assert!(fout(CreepCoefficientRequest {
+        relative_humidity_pct: 0.0,
+        ..basis()
+    })
+    .contains("RH"));
+    assert!(fout(CreepCoefficientRequest {
+        h0_mm: Some(0.0),
+        ..basis()
+    })
+    .contains("h₀"));
+    assert!(fout(CreepCoefficientRequest {
+        t0_days: -1.0,
+        ..basis()
+    })
+    .contains("t₀"));
+    assert!(fout(CreepCoefficientRequest {
+        t_days: Some(20.0),
+        ..basis()
+    })
+    .contains("t > t₀"));
+    assert!(fout(CreepCoefficientRequest {
+        concrete_class: "C31/38".into(),
+        ..basis()
+    })
+    .contains("Onbekende betonklasse"));
 }

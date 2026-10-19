@@ -50,7 +50,7 @@ use openaec_layout::{
     types::{Color, Mm, Padding, Pt},
 };
 
-use concrete_check::segments::{SegmentStiffness, SegmentStiffnessResponse, SegmentStatus};
+use concrete_check::segments::{SegmentStatus, SegmentStiffness, SegmentStiffnessResponse};
 use nen_en_1992_1_1::mnkappa::MnKappaDiagram;
 use nen_en_1992_1_1::stiffness::SolveMethod;
 use nen_en_1992_1_1::stress_strain::NonlinearBasis;
@@ -62,9 +62,7 @@ use steel_check::NamedCheck;
 use crate::betonfiguren::{nl, Figuurstijl};
 use crate::betonspoor::{BetonStijfheidSpoor, StijfheidCombinatie};
 use crate::figuur::{Figuur, FiguurFlowable};
-use crate::{
-    style_body, style_h2, style_h3, style_mono, style_note, ReportInput, C_DEEP, C_FAIL,
-};
+use crate::{style_body, style_h2, style_h3, style_mono, style_note, ReportInput, C_DEEP, C_FAIL};
 
 use concrete_check::ConcreteBeamCheckResult;
 
@@ -298,7 +296,10 @@ fn extend_met_doorsnedeblok(
             FIGUUR_MAX_H,
         )
         .met_breedtefractie(0.78)
-        .met_bijschrift(mn_kappa_bijschrift(r.beam_id, r.mn_kappa.as_ref(), n_ed), style_note()),
+        .met_bijschrift(
+            mn_kappa_bijschrift(r.beam_id, r.mn_kappa.as_ref(), n_ed),
+            style_note(),
+        ),
     ));
 
     // 3. Het N-M-interactiediagram met het rekenpunt en de horizontale snede.
@@ -330,7 +331,11 @@ fn extend_met_doorsnedeblok(
 
 /// Het bijschrift bij het M-κ-diagram; noemt de normaalkracht waarbij het
 /// diagram hoort en de maximale waarden die de kern heeft gevonden.
-fn mn_kappa_bijschrift(beam_id: u32, diagram: Option<&MnKappaDiagram>, n_ed: Option<f64>) -> String {
+fn mn_kappa_bijschrift(
+    beam_id: u32,
+    diagram: Option<&MnKappaDiagram>,
+    n_ed: Option<f64>,
+) -> String {
     let bij_n = match n_ed {
         Some(n) => format!("bij N_Ed = {} kN", nl(n, 1)),
         None => "bij de normaalkracht van het maatgevende punt".to_string(),
@@ -440,7 +445,9 @@ fn extend_met_combinatie(
     ]);
     rijen.push(vec![
         "Grenstoestand en diagram".into(),
-        eerste.map(|r| r.limit_state_label.clone()).unwrap_or_else(|| "—".into()),
+        eerste
+            .map(|r| r.limit_state_label.clone())
+            .unwrap_or_else(|| "—".into()),
     ]);
     rijen.push(vec![
         "Segmentlengte".into(),
@@ -448,10 +455,14 @@ fn extend_met_combinatie(
             "gewenst {} mm; werkelijk {} mm ({} segmenten op de langste staaf). \
              Indelingsregel: {}",
             nl(segment_lengte_mm, 0),
-            eerste.map(|r| nl(r.segment_length_mm, 1)).unwrap_or_else(|| "—".into()),
+            eerste
+                .map(|r| nl(r.segment_length_mm, 1))
+                .unwrap_or_else(|| "—".into()),
             c.staven.iter().map(|r| r.segment_count).max().unwrap_or(0),
             // Woordelijk uit de kern.
-            eerste.map(|r| r.segmentation_rule.clone()).unwrap_or_else(|| "—".into()),
+            eerste
+                .map(|r| r.segmentation_rule.clone())
+                .unwrap_or_else(|| "—".into()),
         ),
     ]);
     rijen.push(vec![
@@ -476,10 +487,16 @@ fn extend_met_combinatie(
                     "gehaald: {} % in de laatste ronde (staaf {}, segment {})",
                     nl(100.0 * w, 3),
                     staaf.map(|s| s.to_string()).unwrap_or_else(|| "—".into()),
-                    segment.map(|s| (s + 1).to_string()).unwrap_or_else(|| "—".into()),
+                    segment
+                        .map(|s| (s + 1).to_string())
+                        .unwrap_or_else(|| "—".into()),
                 ),
             },
-            if conv { "geconvergeerd" } else { "NIET geconvergeerd" },
+            if conv {
+                "geconvergeerd"
+            } else {
+                "NIET geconvergeerd"
+            },
         ),
     ]);
     rijen.push(vec![
@@ -501,8 +518,12 @@ fn extend_met_combinatie(
         "Onderrelaxatie ω / ondergrens EI".into(),
         format!(
             "ω = {} · ondergrens EI = {} kNm²{}{}",
-            eerste.map(|r| nl(r.relaxation, 3)).unwrap_or_else(|| "—".into()),
-            eerste.map(|r| nl(r.min_ei_knm2, 0)).unwrap_or_else(|| "—".into()),
+            eerste
+                .map(|r| nl(r.relaxation, 3))
+                .unwrap_or_else(|| "—".into()),
+            eerste
+                .map(|r| nl(r.min_ei_knm2, 0))
+                .unwrap_or_else(|| "—".into()),
             match eerste {
                 Some(r) if r.ei_uncracked_knm2 > 0.0 => format!(
                     " ({} % van E_c·I_c)",
@@ -575,7 +596,9 @@ fn extend_met_combinatie(
             phi_519,
             // DE VERPLICHTE VERMELDING. Woordelijk uit het kernantwoord; niet
             // herformuleren, niet vertalen, niet inkorten.
-            eerste.map(|r| r.creep_note.clone()).unwrap_or_else(|| "—".into()),
+            eerste
+                .map(|r| r.creep_note.clone())
+                .unwrap_or_else(|| "—".into()),
         ),
     ]);
 
@@ -621,7 +644,11 @@ fn extend_met_staaf(
     stijl: &Figuurstijl,
 ) {
     let ei_ref = r.ei_uncracked_knm2;
-    let gescheurd = r.segments.iter().filter(|s| s.cracked == Some(true)).count();
+    let gescheurd = r
+        .segments
+        .iter()
+        .filter(|s| s.cracked == Some(true))
+        .count();
     let laagste = r
         .segments
         .iter()
@@ -632,7 +659,10 @@ fn extend_met_staaf(
         Paragraph::new(
             format!(
                 "Staaf {} — {} ({}, {}) · {}",
-                r.beam_id, r.section_name, r.concrete_class, r.reinforcement_grade,
+                r.beam_id,
+                r.section_name,
+                r.concrete_class,
+                r.reinforcement_grade,
                 r.reinforcement_summary
             ),
             style_h3(),
@@ -694,15 +724,17 @@ fn extend_met_staaf(
     // De uitleg onder de tabel — dezelfde tekst als in het live rapport, en
     // afhankelijk van de gebruikte variant.
     let uitleg = match r.limit_state {
-        NonlinearBasis::DesignValues =>
+        NonlinearBasis::DesignValues => {
             "In deze variant zegt de kolom Toestand alleen of |M_Ed| boven het scheurmoment \
              |M_cr| ligt. De stijfheid zelf wordt in beide gevallen zonder betontrek bepaald \
              (5.8.6(5)): zodra er trek in de doorsnede optreedt ligt EI daarom onder E_c·I_c, \
              ook bij een segment dat als ongescheurd staat aangemerkt, terwijl een segment \
-             waarin de normaalkracht de hele doorsnede op druk houdt vlak bij E_c·I_c blijft.",
-        NonlinearBasis::MeanValues =>
+             waarin de normaalkracht de hele doorsnede op druk houdt vlak bij E_c·I_c blijft."
+        }
+        NonlinearBasis::MeanValues => {
             "In deze variant interpoleert ζ van (7.19) tussen de ongescheurde en de volledig \
-             gescheurde toestand (7.4.3): ζ = 0 is ongescheurd, ζ → 1 volledig gescheurd.",
+             gescheurde toestand (7.4.3): ζ = 0 is ongescheurd, ζ → 1 volledig gescheurd."
+        }
     };
     flow.push(Box::new(Paragraph::new(uitleg, style_note())));
     flow.push(Box::new(Paragraph::new(
@@ -769,7 +801,11 @@ fn segmenttabel(r: &SegmentStiffnessResponse) -> Table {
         .map(|s| {
             vec![
                 (s.index + 1).to_string(),
-                format!("{}–{}", nl(s.x_start_mm / 1000.0, 2), nl(s.x_end_mm / 1000.0, 2)),
+                format!(
+                    "{}–{}",
+                    nl(s.x_start_mm / 1000.0, 2),
+                    nl(s.x_end_mm / 1000.0, 2)
+                ),
                 getal(s.n_ed_kn, 1),
                 getal(s.m_ed_knm, 2),
                 getal(s.m0_knm, 2),

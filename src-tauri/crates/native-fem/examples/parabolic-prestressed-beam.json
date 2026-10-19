@@ -15,5 +15,6 @@
   "initialForceKn": 1000,
   "lossFraction": 0.2,
   "transferUniformDownwardKnPerM": 0,
-  "serviceUniformDownwardKnPerM": 16
+  "serviceUniformDownwardKnPerM": 16,
+  "stationsXM": [2.5, 7.5]
 }

@@ -121,10 +121,12 @@ impl Tolerantie {
 }
 
 fn mechanica_van(geval: &Geval) -> CltMechanics {
-    geval
-        .opbouw
-        .mechanics()
-        .unwrap_or_else(|e| panic!("{}: de opbouw uit de referentie rekent niet: {e}", geval.naam))
+    geval.opbouw.mechanics().unwrap_or_else(|e| {
+        panic!(
+            "{}: de opbouw uit de referentie rekent niet: {e}",
+            geval.naam
+        )
+    })
 }
 
 /// De E-tabel. Hij staat twee keer met de hand overgetypt: in
@@ -135,7 +137,10 @@ fn mechanica_van(geval: &Geval) -> CltMechanics {
 #[test]
 fn de_e_modulus_per_klasse_volgt_de_gedeelde_referentie() {
     let ref_ = lees();
-    assert!(!ref_.e0_mean_mpa.is_empty(), "de referentie noemt geen enkele sterkteklasse");
+    assert!(
+        !ref_.e0_mean_mpa.is_empty(),
+        "de referentie noemt geen enkele sterkteklasse"
+    );
     for (klasse, e) in &ref_.e0_mean_mpa {
         let k = strength_class_by_name(klasse)
             .unwrap_or_else(|| panic!("sterkteklasse {klasse} bestaat niet in de kern"));
@@ -155,8 +160,19 @@ fn de_stijfheden_volgen_de_gedeelde_referentie() {
         let m = mechanica_van(geval);
         let v = &geval.mechanica;
         let t = &ref_.tolerantie;
-        assert!(t.gelijk(m.height_mm, v.hoogte_mm), "{}: h is {}", geval.naam, m.height_mm);
-        assert!(t.gelijk(m.z0_mm, v.z0_mm), "{}: z0 is {} in plaats van {}", geval.naam, m.z0_mm, v.z0_mm);
+        assert!(
+            t.gelijk(m.height_mm, v.hoogte_mm),
+            "{}: h is {}",
+            geval.naam,
+            m.height_mm
+        );
+        assert!(
+            t.gelijk(m.z0_mm, v.z0_mm),
+            "{}: z0 is {} in plaats van {}",
+            geval.naam,
+            m.z0_mm,
+            v.z0_mm
+        );
         assert!(
             t.gelijk(m.ei_ef_nmm2, v.ei_ef_nmm2),
             "{}: (EI)_ef is {} in plaats van {}",
@@ -210,7 +226,12 @@ fn de_opbouw_van_iy_volgt_de_gedeelde_referentie() {
         let mut som_ei = 0.0_f64;
         for (l, v) in m.layers.iter().zip(&geval.lagen) {
             let steiner = l.area_mm2 * l.arm_mm * l.arm_mm;
-            assert_eq!((l.index + 1) as u32, v.index, "{}: laagvolgorde", geval.naam);
+            assert_eq!(
+                (l.index + 1) as u32,
+                v.index,
+                "{}: laagvolgorde",
+                geval.naam
+            );
             for (naam, werkelijk, verwacht) in [
                 ("z_boven", l.z_top_mm, v.z_top_mm),
                 ("z_onder", l.z_bot_mm, v.z_bot_mm),
@@ -326,7 +347,11 @@ fn de_getekende_piek_haalt_de_tau_d_van_de_toets() {
 #[test]
 fn de_referentie_dekt_wat_hij_moet_dekken() {
     let ref_ = lees();
-    assert!(ref_.gevallen.len() >= 5, "nog maar {} opbouwen", ref_.gevallen.len());
+    assert!(
+        ref_.gevallen.len() >= 5,
+        "nog maar {} opbouwen",
+        ref_.gevallen.len()
+    );
     let heeft = |f: &dyn Fn(&Geval) -> bool| ref_.gevallen.iter().any(|g| f(g));
 
     assert!(
@@ -379,8 +404,14 @@ fn de_referentie_dekt_wat_hij_moet_dekken() {
             == Some(CltLayerOrientation::Transverse)),
         "geen opbouw met een dwarslaag als buitenlaag"
     );
-    assert!(heeft(&|g| g.krachten.k_cr != 1.0), "geen geval met k_cr ≠ 1");
-    assert!(heeft(&|g| g.krachten.my_ed_knm < 0.0), "geen geval met een negatief moment");
+    assert!(
+        heeft(&|g| g.krachten.k_cr != 1.0),
+        "geen geval met k_cr ≠ 1"
+    );
+    assert!(
+        heeft(&|g| g.krachten.my_ed_knm < 0.0),
+        "geen geval met een negatief moment"
+    );
     assert!(
         heeft(&|g| g.opbouw.layers.len() == 3),
         "geen geval met het kleinste toegestane aantal lagen"
@@ -391,7 +422,10 @@ fn de_referentie_dekt_wat_hij_moet_dekken() {
     // die nooit getekend wordt.
     for geval in &ref_.gevallen {
         geval.opbouw.validate().unwrap_or_else(|e| {
-            panic!("{}: de opbouw uit de referentie is niet geldig: {e}", geval.naam)
+            panic!(
+                "{}: de opbouw uit de referentie is niet geldig: {e}",
+                geval.naam
+            )
         });
     }
 }

@@ -34,6 +34,7 @@
  *
  * Gebruik:
  *   node scripts/run-tests.mjs [--bundel] [--filter=<deel>] [--breed]
+ *   OPEN_FEM_TEST_DIRECT_TSX=1 node scripts/run-tests.mjs [--filter=<deel>]
  *
  *   --bundel        draai de adaptertests tegen de sidecarbundel
  *   --filter=<deel> alleen tests waarvan de naam <deel> bevat
@@ -42,13 +43,17 @@
 
 import { spawn } from "node:child_process";
 import {
+  closeSync,
   existsSync,
+  mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -382,12 +387,54 @@ const ALLEEN_BRON = new Map([
   // De 3D-proeven raken React/Three, de projectadapter of de aparte Rust-kern.
   // Deze modules zitten niet in de 2D-sidecarbundel.
   ...[
+    "frame3d-analysis-mode", "frame3d-box-selection", "frame3d-campus-frame",
     "frame3d-beam-screen-pick", "frame3d-concrete-check", "frame3d-conditions", "frame3d-conversion",
     "frame3d-current", "frame3d-displacement", "frame3d-force-stations",
     "frame3d-history", "frame3d-large-frame", "frame3d-member-load",
     "frame3d-plates-views", "frame3d-profile-geometry", "frame3d-report-views",
-    "frame3d-steel-check", "frame3d-transform", "frame3d-utilization",
+    "frame3d-steel-check", "frame3d-steel-models", "frame3d-transform", "frame3d-utilization",
+    "frame3d-3584-volume-project", "frame3d-large-membrane-project", "frame3d-large-volume-project",
+    "frame3d-member-equivalent-loads", "frame3d-membrane-volume-app-route",
+    "frame3d-bending-volume-app-route", "frame3d-volume-app-route",
+    "frame3d-volume-batching", "frame3d-volume-body-loads", "frame3d-volume-concrete-3072-app-route",
+    "frame3d-volume-example", "frame3d-volume-face-loads", "frame3d-volume-finite-j2-3072-app-route",
+    "frame3d-volume-finite-j2-app-route", "frame3d-volume-finite-j2-truss-3072-app-route",
+    "frame3d-volume-finite-j2-truss-app-route", "frame3d-volume-gnl-app-route",
+    "frame3d-volume-material-app-route", "frame3d-volumes", "mixed3d-irregular-app", "mixed3d-workbench",
   ].map((name) => [name, "3D-app, Three-weergave of aparte Rust-kern; geen module van de 2D-sidecarbundel."]),
+  // Deze routes toetsen de getypeerde native-fem-client, de Rust-dispatcher
+  // en de app-adapters. De sidecarbundel bevat alleen de TypeScript 2D-kern.
+  ...[
+    "native-fem-client", "native-frame2d-app-route", "native-frame2d-comparison",
+    "native-frame3d-app-route", "native-frame3d-comparison",
+    "native-frame3d-plate-app-route", "native-plate-bending-comparison",
+    "native-plate2d-comparison", "native-prestressed-beam-route",
+    "native-quad2d-app-route", "native-quad2d-comparison",
+    "native-three-layer-adapter", "native-three-layer-combination",
+    "native-triangle2d-app-route",
+    "native-volume3d-app-route", "native-volume3d-j2-app-route",
+    "native-volume3d-concrete-damage-app-route", "native-volume3d-gnl-app-route",
+    "native-volume3d-finite-j2-app-route",
+    "frame3d-volume-finite-j2-membrane-app-route",
+    "frame3d-volume-finite-j2-membrane-force-app-route",
+    "frame3d-volume-finite-j2-plastic-membrane-app-route",
+    "frame3d-volume-plastic-truss-app-route",
+    "frame3d-volume-finite-j2-plastic-truss-3072-app-route",
+    "native-frame2d-large-front-route", "native-frame3d-large-front-route",
+    "native-geometric-shell-adapter", "native-hybrid-plate-fiber-app-route",
+    "native-hybrid-plate-layered-app-route", "native-mixed2d-sparse-app-route",
+    "native-mixed3d-app-route", "native-prestressed-beam-crack-width",
+    "native-volume-hex8-app-route",
+    "frame3d-1120-beam-app-route", "frame3d-coupled-hex-frame-grid-app-route",
+    "frame3d-volume-finite-j2-hex-mixed-app-route",
+    "frame3d-volume-finite-j2-hex-nonaffine-512-app-route",
+    "frame3d-volume-finite-j2-full-frame-app-route",
+    "frame3d-volume-finite-j2-frame-line-app-route",
+    "frame3d-volume-finite-j2-frame-g-app-route",
+    "saved-project-native-solve-matrix",
+    "verification-project-files",
+  ].map((name) => [name, "Rust-native FEM-dispatcher of app-adapterroute; geen TypeScript-sidecarkern."]),
+  ["browser-settings-store", "Browser- en voorkeurenopslag van de app; geen module van de 2D-sidecarbundel."],
   ["aluminium-materiaal", "Materiaalbibliotheek en doorsnedeadapter buiten de sidecarbarrel."],
   ["aluminium-solver-verificatie", "Bouwt het model met modelNaarSolverInput, buiten de sidecarbarrel."],
   ["aluminium-voorspanning-verificatie", "Aluminium- en voorspancontrole buiten de sidecarbarrel."],
@@ -782,6 +829,9 @@ const ALLEEN_BRON = new Map([
 const args = process.argv.slice(2);
 const bundelStand = args.includes("--bundel");
 const breed = args.includes("--breed");
+// The tsx CLI uses a Unix-domain IPC socket to launch its worker. In sandboxes
+// that deny local sockets, invoke its ESM loader directly instead.
+const directTsx = process.env.OPEN_FEM_TEST_DIRECT_TSX === "1";
 const filterArg = args.find((a) => a.startsWith("--filter="));
 const filter = filterArg ? filterArg.slice("--filter=".length) : null;
 
@@ -900,37 +950,65 @@ function schrijfBundelKopie(bestand) {
 function draai(commando, argumenten) {
   return new Promise((klaar) => {
     const start = process.hrtime.bigint();
-    const kind = spawn(commando, argumenten, {
-      cwd: frontendRoot,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const uitvoermap = mkdtempSync(join(tmpdir(), "open-fem-test-"));
+    const stdoutPad = join(uitvoermap, "stdout.log");
+    const stderrPad = join(uitvoermap, "stderr.log");
+    let stdoutFd = -1;
+    let stderrFd = -1;
+    let wekker;
+    let klaarGemeld = false;
+    let verlopen = false;
+    let foutBijStart = "";
 
-    let uit = "";
-    let fout = "";
-    kind.stdout.on("data", (d) => (uit += d));
-    kind.stderr.on("data", (d) => (fout += d));
-
-    const wekker = setTimeout(() => {
-      kind.kill("SIGKILL");
-      fout += `\n[runner] tijdslimiet van ${TIJDSLIMIET_MS / 1000} s overschreden.\n`;
-    }, TIJDSLIMIET_MS);
-
-    kind.on("error", (err) => {
-      clearTimeout(wekker);
-      klaar({ code: -1, uit, fout: `${fout}${err.message}`, ms: 0 });
-    });
-    kind.on("close", (code) => {
-      clearTimeout(wekker);
+    const rondAf = (code) => {
+      if (klaarGemeld) return;
+      klaarGemeld = true;
+      if (wekker) clearTimeout(wekker);
+      if (stdoutFd >= 0) closeSync(stdoutFd);
+      if (stderrFd >= 0) closeSync(stderrFd);
+      const uit = existsSync(stdoutPad) ? readFileSync(stdoutPad, "utf8") : "";
+      const fout = (existsSync(stderrPad) ? readFileSync(stderrPad, "utf8") : "")
+        + foutBijStart
+        + (verlopen
+          ? `\n[runner] tijdslimiet van ${TIJDSLIMIET_MS / 1000} s overschreden.\n`
+          : "");
+      rmSync(uitvoermap, { recursive: true, force: true });
       const ms = Number(process.hrtime.bigint() - start) / 1e6;
       klaar({ code, uit, fout, ms });
-    });
+    };
+
+    try {
+      stdoutFd = openSync(stdoutPad, "w");
+      stderrFd = openSync(stderrPad, "w");
+      const kind = spawn(commando, argumenten, {
+        cwd: frontendRoot,
+        // process.exit() can discard pending writes to pipes. Regular files
+        // preserve the complete suite output for check counting and diagnostics.
+        stdio: ["ignore", stdoutFd, stderrFd],
+      });
+
+      wekker = setTimeout(() => {
+        verlopen = true;
+        kind.kill("SIGKILL");
+      }, TIJDSLIMIET_MS);
+
+      kind.on("error", (err) => {
+        foutBijStart = err.message;
+        rondAf(-1);
+      });
+      kind.on("close", (code) => rondAf(code));
+    } catch (err) {
+      foutBijStart = err instanceof Error ? err.message : String(err);
+      rondAf(-1);
+    }
   });
 }
 
 /**
  * Haalt "<n> geslaagd, <m> gefaald" uit de uitvoer. De batterij schrijft die
  * regel in wisselende opmaak; de laatste treffer is de eindstand. Valt terug
- * op het tellen van vinkjes, zodat een test zonder slotregel geen nul meldt.
+ * op het tellen van vinkjes. Heeft een integratietest geen interne teller,
+ * dan blijft die teller onbekend in plaats van stil als nul te verschijnen.
  */
 function telChecks(tekst) {
   const treffers = [...tekst.matchAll(/(\d+)\s+geslaagd,\s+(\d+)\s+gefaald/g)];
@@ -938,10 +1016,11 @@ function telChecks(tekst) {
     const laatste = treffers[treffers.length - 1];
     return { geslaagd: Number(laatste[1]), gefaald: Number(laatste[2]) };
   }
-  return {
-    geslaagd: (tekst.match(/✓/g) ?? []).length,
-    gefaald: (tekst.match(/✗/g) ?? []).length,
-  };
+  const geslaagd = (tekst.match(/✓/g) ?? []).length;
+  const gefaald = (tekst.match(/✗/g) ?? []).length;
+  return geslaagd + gefaald > 0
+    ? { geslaagd, gefaald }
+    : { geslaagd: null, gefaald: null };
 }
 
 // ── Uitvoeren ─────────────────────────────────────────────────────────────
@@ -973,7 +1052,9 @@ for (const bestand of tests) {
       argumenten = [kopie];
     } else {
       commando = process.execPath;
-      argumenten = [TSX_CLI, join(frontendRoot, bestand)];
+      argumenten = directTsx
+        ? ["--import", "tsx/esm", join(frontendRoot, bestand)]
+        : [TSX_CLI, join(frontendRoot, bestand)];
     }
     uitslag = await draai(commando, argumenten);
   } catch (err) {
@@ -985,14 +1066,16 @@ for (const bestand of tests) {
   const alles = `${uitslag.uit}${uitslag.fout}`;
   const { geslaagd, gefaald } = telChecks(alles);
   const ok = uitslag.code === 0;
-  totaalGeslaagd += geslaagd;
-  totaalGefaald += gefaald;
+  if (geslaagd !== null) totaalGeslaagd += geslaagd;
+  if (gefaald !== null) totaalGefaald += gefaald;
   uitslagen.push({ naam, ok, geslaagd, gefaald, ms: uitslag.ms, alles });
 
   const merk = ok ? "PASS" : "FAAL";
+  const checkStand = geslaagd === null
+    ? "checkteller n.v.t."
+    : `${String(geslaagd).padStart(4)} geslaagd, ${String(gefaald).padStart(3)} gefaald`;
   console.log(
-    `  ${merk}  ${naam.padEnd(24)} ${String(geslaagd).padStart(4)} geslaagd, ` +
-      `${String(gefaald).padStart(3)} gefaald  (${uitslag.ms.toFixed(0)} ms)`,
+    `  ${merk}  ${naam.padEnd(24)} ${checkStand}  (${uitslag.ms.toFixed(0)} ms)`,
   );
   if (breed || !ok) {
     console.log(
@@ -1008,13 +1091,14 @@ for (const bestand of tests) {
 
 // ── Samenvatting ──────────────────────────────────────────────────────────
 const gefaaldeTests = uitslagen.filter((u) => !u.ok);
+const testsZonderTeller = uitslagen.filter((u) => u.geslaagd === null).length;
 
 console.log("");
 console.log("─".repeat(72));
 console.log(
   `${stand}: ${uitslagen.length - gefaaldeTests.length}/${uitslagen.length} ` +
     `testbestanden geslaagd — ${totaalGeslaagd} checks geslaagd, ` +
-    `${totaalGefaald} gefaald.`,
+    `${totaalGefaald} gefaald${testsZonderTeller ? `; ${testsZonderTeller} suite(s) hebben geen interne checkteller` : ""}.`,
 );
 
 if (bundelStand && !filter) {

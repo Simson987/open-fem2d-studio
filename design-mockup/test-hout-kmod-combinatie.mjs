@@ -21,7 +21,7 @@
 // Draaien met: npx tsx test-hout-kmod-combinatie.mjs
 // (node scripts/run-tests.mjs --filter=hout-kmod-combinatie)
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -240,28 +240,42 @@ log("\n[7] De echte kern (toetsbrug): GL24h 160×400, L = 3,5 m, alleen G = 26,4
     failed++;
     log(`  ✗ toetsbrug ontbreekt (${exe}) — bouw eerst: cargo build --release -p toetsbrug`);
   } else {
-    const kern = (inputs) => {
-      const r = spawnSync(exe, [], { input: JSON.stringify({ opdracht: "check_timber_beams", inputs }), encoding: "utf8", maxBuffer: 256 << 20 });
-      return JSON.parse(r.stdout);
+    const kern = async (inputs) => {
+      const antwoord = await new Promise((resolve, reject) => {
+        const child = spawn(exe, [], { stdio: ["pipe", "pipe", "pipe"] });
+        const stdout = [];
+        const stderr = [];
+        child.stdout.on("data", (chunk) => stdout.push(chunk));
+        child.stderr.on("data", (chunk) => stderr.push(chunk));
+        child.on("error", reject);
+        child.on("close", (code, signal) => {
+          const out = Buffer.concat(stdout).toString("utf8");
+          const err = Buffer.concat(stderr).toString("utf8");
+          if (code !== 0) reject(new Error(`toetsbrug stopte met code ${code ?? signal}: ${err || out}`));
+          else resolve(out);
+        });
+        child.stdin.end(JSON.stringify({ opdracht: "check_timber_beams", inputs }));
+      });
+      return JSON.parse(antwoord);
     };
     const buig = (res) => res.checks.find((c) => c.id === "6.1.6_bending").kind.data.uc.uc;
     // Hand: M = 1,35·26,45·3,5²/8 = 54,677 kNm; W = 160·400²/6 = 4,2667·10⁶ mm³;
     // σ = 12,815 N/mm²; k_h = (600/400)^0,1 = 1,0414; γ_M = 1,25.
     // k_mod 0,60 → f_m,d = 11,997 → UC 1,068. k_mod 0,80 → f_m,d = 15,996 → UC 0,801.
     const m = model({ materiaal: "GL24h", profiel: "160x400", L: 3500, lasten: { 1: -26.45 } });
-    const nieuw = kern([bouw(m).inputs[0]])[0];
+    const nieuw = (await kern([bouw(m).inputs[0]]))[0];
     dichtbij("met belastingduur per combinatie: buiging UC 1,068 (k_mod 0,60)", buig(nieuw), 1.068, 5e-4);
     check("maatgevende klasse blijvend", nieuw.load_duration, "Permanent");
     check("k_mod per klasse", nieuw.k_mod_per_load_duration.map((k) => [k.load_duration, k.k_mod]), [["Permanent", 0.6]]);
-    const oud = kern([bouw(m, { metGevallen: false }).inputs[0]])[0];
+    const oud = (await kern([bouw(m, { metGevallen: false }).inputs[0]]))[0];
     dichtbij("zonder loadCases (oude terugval): buiging UC 0,801", buig(oud), 0.801, 5e-4);
 
     // G = 9, Q = 2 op C24 100×300, L = 3 m: 1,35·G met k_mod 0,60 → 9,1125/11,077 = 0,823.
-    const gq = kern([bouw(model({ materiaal: "C24", profiel: "100x300", L: 3000, lasten: { 1: -9, 2: -2 } })).inputs[0]])[0];
+    const gq = (await kern([bouw(model({ materiaal: "C24", profiel: "100x300", L: 3000, lasten: { 1: -9, 2: -2 } })).inputs[0]]))[0];
     dichtbij("G = 9, Q = 2: buiging UC 0,823 (1,35·G, blijvend)", buig(gq), 0.823, 1e-3);
 
     // G = 4, S = 3: 1,2·G + 1,5·S = 9,3 kN/m met k_mod 0,90 → 6,975/16,615 = 0,420.
-    const gs = kern([bouw(model({ materiaal: "C24", profiel: "100x300", L: 3000, lasten: { 1: -4, 3: -3 } })).inputs[0]])[0];
+    const gs = (await kern([bouw(model({ materiaal: "C24", profiel: "100x300", L: 3000, lasten: { 1: -4, 3: -3 } })).inputs[0]]))[0];
     dichtbij("G = 4, S = 3: buiging UC 0,420 (sneeuw leidend, kort)", buig(gs), 0.420, 1e-3);
     check("G + S: maatgevend kort", gs.load_duration, "ShortTerm");
   }

@@ -28,16 +28,17 @@ use nen_en_1992_1_1::factors::{alpha_cc, f_cd, f_yd, gamma_c, gamma_s};
 use nen_en_1992_1_1::kolom::{
     aantal_beugels_las_9_5_3, as_max_9_5_2_mm2, as_min_9_5_2_mm2, factor_a, factor_b, grondslag_c,
     hoekstaven_9_5_2, k_begrensd, kolom_deelstappen, kolomdetailleringstoetsen, kolomslankheid,
-    kruip_verwaarloosbaar_5_8_4_4, l0_ondergrens_8_11_mm, opgesloten_staven_9_5_3,
-    l0_geschoord_5_15, l0_ongeschoord_5_16, l0_uit_knikbelasting_5_17, lambda_lim_5_13n,
-    min_diameter_dwarswapening_9_5_3_mm, niet_getoetste_9_5_eisen, omega, phi_ef_5_19,
-    phi_ef_5_19_begrensd,
+    kruip_verwaarloosbaar_5_8_4_4, l0_geschoord_5_15, l0_ondergrens_8_11_mm, l0_ongeschoord_5_16,
+    l0_uit_knikbelasting_5_17, lambda_lim_5_13n, min_diameter_dwarswapening_9_5_3_mm,
+    niet_getoetste_9_5_eisen, omega, opgesloten_staven_9_5_3, phi_ef_5_19, phi_ef_5_19_begrensd,
     s_cl_tmax_9_5_3_mm, slankheid_5_14, traagheidsstraal_rechthoek_mm, Beugelzone, Cgrondslag,
     Knikgeval, Kniklengtebepaling, KolomInvoer, KolomdetailleringInvoer, Overlappingssituatie,
     Schoring, ScltmaxTak,
 };
-use nen_en_1992_1_1::{concrete_class_by_name, reinforcement_grade_by_name, CheckStatus,
-    ConcreteSection, DesignSituation, RebarRow, ReinforcementCage};
+use nen_en_1992_1_1::{
+    concrete_class_by_name, reinforcement_grade_by_name, CheckStatus, ConcreteSection,
+    DesignSituation, RebarRow, ReinforcementCage,
+};
 
 // ───────────────────────────────────────────────────────────────────────────
 // Gedeelde uitgangspunten: één kolom die in bijna alle tests terugkomt.
@@ -58,9 +59,16 @@ const L_MM: f64 = 4000.0;
 /// verandert. Verwacht: 1,0 · 30 / 1,5 = 20 N/mm².
 fn f_cd_c30() -> f64 {
     let beton = concrete_class_by_name("C30/37").unwrap();
-    let gamma_c = gamma_c(nationale_bijlage::NationaleBijlage::NL, DesignSituation::PersistentTransient);
+    let gamma_c = gamma_c(
+        nationale_bijlage::NationaleBijlage::NL,
+        DesignSituation::PersistentTransient,
+    );
     assert_relative_eq!(gamma_c, 1.5, max_relative = 1e-12);
-    let waarde = f_cd(beton.f_ck, alpha_cc(nationale_bijlage::NationaleBijlage::NL), gamma_c);
+    let waarde = f_cd(
+        beton.f_ck,
+        alpha_cc(nationale_bijlage::NationaleBijlage::NL),
+        gamma_c,
+    );
     assert_relative_eq!(waarde, 20.0, max_relative = 1e-12);
     waarde
 }
@@ -68,7 +76,10 @@ fn f_cd_c30() -> f64 {
 /// f_yd uit de crate zelf. Verwacht: 500 / 1,15 = 434,782609 N/mm².
 fn f_yd_b500() -> f64 {
     let staal = reinforcement_grade_by_name("B500B").unwrap();
-    let gamma_s = gamma_s(nationale_bijlage::NationaleBijlage::NL, DesignSituation::PersistentTransient);
+    let gamma_s = gamma_s(
+        nationale_bijlage::NationaleBijlage::NL,
+        DesignSituation::PersistentTransient,
+    );
     assert_relative_eq!(gamma_s, 1.15, max_relative = 1e-12);
     let waarde = f_yd(staal.f_yk, gamma_s);
     assert_relative_eq!(waarde, 434.782_608_695_652_2, max_relative = 1e-12);
@@ -144,17 +155,35 @@ fn figuur_5_7_geeft_vijf_vaste_kniklengten_en_twee_bereiken() {
 /// zij hier vastgepind.
 #[test]
 fn de_knikgevallen_horen_bij_de_juiste_schoring() {
-    assert_eq!(Knikgeval::ScharnierendScharnierend.schoring(), Schoring::Geschoord);
+    assert_eq!(
+        Knikgeval::ScharnierendScharnierend.schoring(),
+        Schoring::Geschoord
+    );
     assert_eq!(
         Knikgeval::Console.schoring(),
         Schoring::Ongeschoord,
         "een console houdt zichzelf overeind en is dus een schorend element"
     );
-    assert_eq!(Knikgeval::IngeklemdScharnierend.schoring(), Schoring::Geschoord);
-    assert_eq!(Knikgeval::TweezijdigIngeklemdGeschoord.schoring(), Schoring::Geschoord);
-    assert_eq!(Knikgeval::GedeeltelijkIngeklemdGeschoord.schoring(), Schoring::Geschoord);
-    assert_eq!(Knikgeval::TweezijdigIngeklemdOngeschoord.schoring(), Schoring::Ongeschoord);
-    assert_eq!(Knikgeval::GedeeltelijkIngeklemdOngeschoord.schoring(), Schoring::Ongeschoord);
+    assert_eq!(
+        Knikgeval::IngeklemdScharnierend.schoring(),
+        Schoring::Geschoord
+    );
+    assert_eq!(
+        Knikgeval::TweezijdigIngeklemdGeschoord.schoring(),
+        Schoring::Geschoord
+    );
+    assert_eq!(
+        Knikgeval::GedeeltelijkIngeklemdGeschoord.schoring(),
+        Schoring::Geschoord
+    );
+    assert_eq!(
+        Knikgeval::TweezijdigIngeklemdOngeschoord.schoring(),
+        Schoring::Ongeschoord
+    );
+    assert_eq!(
+        Knikgeval::GedeeltelijkIngeklemdOngeschoord.schoring(),
+        Schoring::Ongeschoord
+    );
 }
 
 /// Een console: l₀ = 2·l en C = 0,7, want een ongeschoord element krijgt die
@@ -165,8 +194,11 @@ fn de_knikgevallen_horen_bij_de_juiste_schoring() {
 /// maatgevend, en dat hoort er ook uit te komen.
 #[test]
 fn een_console_is_ongeschoord_en_haalt_de_slankheidsgrens_ruim_niet() {
-    let inv =
-        kolom(Schoring::Ongeschoord, Kniklengtebepaling::Standaardgeval(Knikgeval::Console), -900.0);
+    let inv = kolom(
+        Schoring::Ongeschoord,
+        Kniklengtebepaling::Standaardgeval(Knikgeval::Console),
+        -900.0,
+    );
     let k = kolomslankheid(&inv).unwrap();
     assert_relative_eq!(k.l0_mm, 8000.0, max_relative = 1e-12);
     assert_relative_eq!(k.lambda, 92.376_043, max_relative = 1e-6);
@@ -189,7 +221,10 @@ fn een_console_is_ongeschoord_en_haalt_de_slankheidsgrens_ruim_niet() {
 fn vergelijking_5_15_handberekening() {
     let l0 = l0_geschoord_5_15(0.4, 0.8, 3600.0);
     assert_relative_eq!(l0, 2795.374, max_relative = 1e-6);
-    assert!(l0 > 0.5 * 3600.0 && l0 < 3600.0, "buiten het bereik van figuur 5.7 f)");
+    assert!(
+        l0 > 0.5 * 3600.0 && l0 < 3600.0,
+        "buiten het bereik van figuur 5.7 f)"
+    );
 }
 
 /// (5.16) met dezelfde k₁ = 0,4, k₂ = 0,8 en l = 3600 mm.
@@ -211,9 +246,16 @@ fn vergelijking_5_15_handberekening() {
 fn vergelijking_5_16_handberekening_en_het_bijschrift_van_figuur_5_7_g() {
     let l0 = l0_ongeschoord_5_16(0.4, 0.8, 3600.0);
     assert_relative_eq!(l0, 6893.475, max_relative = 1e-6);
-    assert!(l0 < 2.0 * 3600.0, "de formule kan wel degelijk onder 2l uitkomen");
+    assert!(
+        l0 < 2.0 * 3600.0,
+        "de formule kan wel degelijk onder 2l uitkomen"
+    );
     // Ondergrens van de formule zelf: k₁ = k₂ = 0 geeft l₀ = l.
-    assert_relative_eq!(l0_ongeschoord_5_16(0.0, 0.0, 3600.0), 3600.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        l0_ongeschoord_5_16(0.0, 0.0, 3600.0),
+        3600.0,
+        max_relative = 1e-12
+    );
 }
 
 /// (5.17): l₀ = π·√(EI/N_B).
@@ -248,7 +290,9 @@ fn de_ondergrens_van_k_wordt_gemeld_in_de_kanttekeningen() {
     assert_eq!(k.k_gebruikt, Some((0.1, 0.5)));
     assert_eq!(k.k_opgehoogd, (true, false));
     assert!(
-        k.kanttekeningen.iter().any(|t| t.contains("minimumwaarde van 0,1")),
+        k.kanttekeningen
+            .iter()
+            .any(|t| t.contains("minimumwaarde van 0,1")),
         "de toegepaste aanbeveling hoort in de kanttekeningen te staan"
     );
     // Handberekening van l₀ met k₁ = 0,1 en k₂ = 0,5:
@@ -300,9 +344,15 @@ fn geschoorde_kolom_volledige_handberekening() {
     assert_relative_eq!(k.omega, 0.303_535_5, max_relative = 1e-6);
     assert_relative_eq!(k.n, 0.5, max_relative = 1e-12);
     assert_relative_eq!(k.a, 0.7, max_relative = 1e-12);
-    assert!(k.a_standaard, "φ_ef is niet opgegeven, dus A = 0,7 is de standaardwaarde");
+    assert!(
+        k.a_standaard,
+        "φ_ef is niet opgegeven, dus A = 0,7 is de standaardwaarde"
+    );
     assert_relative_eq!(k.b, 1.267_703_06, max_relative = 1e-6);
-    assert!(!k.b_standaard, "ω is bekend, dus B mag niet de standaardwaarde 1,1 zijn");
+    assert!(
+        !k.b_standaard,
+        "ω is bekend, dus B mag niet de standaardwaarde 1,1 zijn"
+    );
     assert_relative_eq!(k.c, 1.2, max_relative = 1e-12);
     assert_relative_eq!(k.lambda_lim, 30.119_088, max_relative = 1e-6);
     assert!(!k.tweede_orde_verwaarloosbaar);
@@ -388,14 +438,25 @@ fn omega_handberekening() {
 fn slankheid_handberekening() {
     let i = traagheidsstraal_rechthoek_mm(300.0);
     assert_relative_eq!(i, 86.602_540_378_443_9, max_relative = 1e-12);
-    assert_relative_eq!(slankheid_5_14(2800.0, i).unwrap(), 32.331_615_07, max_relative = 1e-9);
+    assert_relative_eq!(
+        slankheid_5_14(2800.0, i).unwrap(),
+        32.331_615_07,
+        max_relative = 1e-9
+    );
 }
 
 /// λ_lim = 20·A·B·C/√n, los nagerekend met de vier factoren uit de
 /// geschoorde handberekening.
 #[test]
 fn lambda_lim_handberekening() {
-    let v = lambda_lim_5_13n(nationale_bijlage::NationaleBijlage::NL, 0.7, 1.267_703_058_358_676, 1.2, 0.5).unwrap();
+    let v = lambda_lim_5_13n(
+        nationale_bijlage::NationaleBijlage::NL,
+        0.7,
+        1.267_703_058_358_676,
+        1.2,
+        0.5,
+    )
+    .unwrap();
     assert_relative_eq!(v, 30.119_088_017_6, max_relative = 1e-9);
 }
 
@@ -417,7 +478,10 @@ fn phi_ef_handberekening_en_de_bijbehorende_factor_a() {
     let (a, standaard) = factor_a(Some(p));
     assert!(!standaard);
     assert_relative_eq!(a, 0.764_705_882_4, max_relative = 1e-9);
-    assert!(a > 0.7, "lichtere kruip dan φ_ef ≈ 2,14 hoort een gunstiger A te geven");
+    assert!(
+        a > 0.7,
+        "lichtere kruip dan φ_ef ≈ 2,14 hoort een gunstiger A te geven"
+    );
 }
 
 /// §5.8.4(4) — φ_ef = 0 mag alleen als ALLE DRIE de voorwaarden gelden.
@@ -459,16 +523,16 @@ fn kruip_verwaarlozing_kent_drie_voorwaarden_en_een_waarschuwing() {
     assert!(!zware_kruip.toegestaan);
 
     // λ = 80 > 75 → tweede voorwaarde valt af.
-    let slank =
-        kruip_verwaarloosbaar_5_8_4_4(1.8, 80.0, 150.0, 400.0, 300.0, Some(0.30)).unwrap();
+    let slank = kruip_verwaarloosbaar_5_8_4_4(1.8, 80.0, 150.0, 400.0, 300.0, Some(0.30)).unwrap();
     assert!(!slank.slankheid_ten_hoogste_75);
     assert!(!slank.toegestaan);
 
     // ω = 0,20 < 0,25 → de OPMERKING bij §5.8.4(4) hoort te worden gemeld.
-    let mager =
-        kruip_verwaarloosbaar_5_8_4_4(1.8, 60.0, 150.0, 400.0, 300.0, Some(0.20)).unwrap();
+    let mager = kruip_verwaarloosbaar_5_8_4_4(1.8, 60.0, 150.0, 400.0, 300.0, Some(0.20)).unwrap();
     assert!(mager.toegestaan);
-    let waarschuwing = mager.waarschuwing.expect("de OPMERKING hoort hier te worden gemeld");
+    let waarschuwing = mager
+        .waarschuwing
+        .expect("de OPMERKING hoort hier te worden gemeld");
     assert!(waarschuwing.contains("0,25"));
 }
 
@@ -505,7 +569,10 @@ fn een_trekstaaf_wordt_geweigerd_en_niet_stilzwijgend_doorgerekend() {
         900.0,
     );
     let fout = kolomslankheid(&inv).unwrap_err();
-    assert!(fout.contains("DRUK"), "de melding moet het tekenprobleem benoemen: {fout}");
+    assert!(
+        fout.contains("DRUK"),
+        "de melding moet het tekenprobleem benoemen: {fout}"
+    );
 }
 
 /// Een knikgeval uit figuur 5.7 dat niet bij de opgegeven schoring past, is een
@@ -555,7 +622,18 @@ fn de_afleiding_toont_zeven_stappen_met_hun_vindplaats() {
     let stappen = kolom_deelstappen(&k);
 
     let ids: Vec<&str> = stappen.iter().map(|s| s.id.as_str()).collect();
-    assert_eq!(ids, ["schoring", "l0", "lambda", "n_omega", "phi_ef", "abc", "lambda_lim"]);
+    assert_eq!(
+        ids,
+        [
+            "schoring",
+            "l0",
+            "lambda",
+            "n_omega",
+            "phi_ef",
+            "abc",
+            "lambda_lim"
+        ]
+    );
     for s in &stappen {
         assert!(!s.article.is_empty(), "stap {} mist een vindplaats", s.id);
         assert!(!s.notes.is_empty(), "stap {} mist kanttekeningen", s.id);
@@ -591,8 +669,14 @@ fn korf_4o20() -> ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
         stirrup_legs: Some(2),
-        top: RebarRow { count: 2, diameter_mm: 20.0 },
-        bottom: RebarRow { count: 2, diameter_mm: 20.0 },
+        top: RebarRow {
+            count: 2,
+            diameter_mm: 20.0,
+        },
+        bottom: RebarRow {
+            count: 2,
+            diameter_mm: 20.0,
+        },
         ..ReinforcementCage::default()
     }
 }
@@ -715,8 +799,16 @@ fn s_cl_tmax_9_5_3_handberekening_met_en_zonder_reductie() {
 /// ondergrens 6 mm; bij Ø32 is Φ_l,max/4 = 8 mm en wint die.
 #[test]
 fn min_diameter_dwarswapening_9_5_3_handberekening() {
-    assert_relative_eq!(min_diameter_dwarswapening_9_5_3_mm(20.0), 6.0, max_relative = 1e-12);
-    assert_relative_eq!(min_diameter_dwarswapening_9_5_3_mm(32.0), 8.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        min_diameter_dwarswapening_9_5_3_mm(20.0),
+        6.0,
+        max_relative = 1e-12
+    );
+    assert_relative_eq!(
+        min_diameter_dwarswapening_9_5_3_mm(32.0),
+        8.0,
+        max_relative = 1e-12
+    );
 }
 
 /// De tien §9.5-toetsen op een rij voor een kolom die aan alles voldoet.
@@ -749,13 +841,23 @@ fn een_te_smalle_en_een_te_platte_kolom_vallen_op_de_juiste_eis() {
     inv.a_c_mm2 = 150.0 * 600.0;
     let toetsen = kolomdetailleringstoetsen(&inv);
 
-    let breedte = toetsen.iter().find(|t| t.id == "9.5.1_min_dwarsafmeting").unwrap();
+    let breedte = toetsen
+        .iter()
+        .find(|t| t.id == "9.5.1_min_dwarsafmeting")
+        .unwrap();
     assert_eq!(breedte.status, CheckStatus::NotOk);
     // uc bij een minimumeis: vereist/aanwezig = 200/150 = 1,3333.
-    assert_relative_eq!(breedte.uc.as_ref().unwrap().uc, 1.333_333_3, max_relative = 1e-6);
+    assert_relative_eq!(
+        breedte.uc.as_ref().unwrap().uc,
+        1.333_333_3,
+        max_relative = 1e-6
+    );
 
     // 600 ≤ 4·150 = 600 — precies op de grens, dus nog nét een kolom.
-    let gebied = toetsen.iter().find(|t| t.id == "9.5.1_toepassingsgebied").unwrap();
+    let gebied = toetsen
+        .iter()
+        .find(|t| t.id == "9.5.1_toepassingsgebied")
+        .unwrap();
     assert_eq!(gebied.status, CheckStatus::Ok);
 
     inv.h_mm = 700.0;
@@ -763,7 +865,11 @@ fn een_te_smalle_en_een_te_platte_kolom_vallen_op_de_juiste_eis() {
         .into_iter()
         .find(|t| t.id == "9.5.1_toepassingsgebied")
         .unwrap();
-    assert_eq!(gebied.status, CheckStatus::NotOk, "700 > 4·150 = 600: dit is een wand");
+    assert_eq!(
+        gebied.status,
+        CheckStatus::NotOk,
+        "700 > 4·150 = 600: dit is een wand"
+    );
 }
 
 /// Ontbrekende gegevens leveren [`CheckStatus::NotApplicable`] met een reden —
@@ -777,7 +883,10 @@ fn ontbrekende_beugelgegevens_leveren_geen_stilzwijgend_groen_vinkje() {
     for id in ["9.5.3_min_diameter_dwars", "9.5.3_s_cl_tmax"] {
         let t = toetsen.iter().find(|t| t.id == id).unwrap();
         assert_eq!(t.status, CheckStatus::NotApplicable, "toets {id}");
-        assert!(t.uc.is_none(), "toets {id} hoort geen unity check te hebben");
+        assert!(
+            t.uc.is_none(),
+            "toets {id} hoort geen unity check te hebben"
+        );
         assert!(
             t.notes.iter().any(|n| n.contains("Niet te toetsen")),
             "toets {id} moet de reden noemen"
@@ -810,7 +919,10 @@ fn het_beugelaantal_geldt_alleen_nabij_een_las_met_dikke_staven() {
     // Reguliere doorsnede: geen las, dus geen eis.
     let t = aantal_beugels_las_9_5_3(&detaillering());
     assert_eq!(t.status, CheckStatus::NotApplicable);
-    assert!(t.uc.is_none(), "zonder eis hoort er geen unity check te staan");
+    assert!(
+        t.uc.is_none(),
+        "zonder eis hoort er geen unity check te staan"
+    );
     assert!(
         t.notes.iter().any(|n| n.contains("Niet van toepassing")),
         "de reden hoort erbij: {:?}",
@@ -850,7 +962,11 @@ fn drie_beugels_passen_zodra_s_binnen_de_helft_van_de_ondergrens_blijft() {
 
     inv.s_dwars_mm = Some(150.0);
     let t = aantal_beugels_las_9_5_3(&inv);
-    assert_eq!(t.status, CheckStatus::Ok, "precies op de grens hoort te voldoen");
+    assert_eq!(
+        t.status,
+        CheckStatus::Ok,
+        "precies op de grens hoort te voldoen"
+    );
     assert_relative_eq!(t.uc.as_ref().unwrap().uc, 1.0, max_relative = 1e-9);
 }
 
@@ -864,7 +980,10 @@ fn boven_de_ondergrens_wordt_er_niet_afgekeurd_maar_gemeld() {
     inv.s_dwars_mm = Some(250.0);
     let t = aantal_beugels_las_9_5_3(&inv);
     assert_eq!(t.status, CheckStatus::NotApplicable, "{:?}", t.notes);
-    assert!(t.uc.is_none(), "een onbeslist geval hoort geen unity check te dragen");
+    assert!(
+        t.uc.is_none(),
+        "een onbeslist geval hoort geen unity check te dragen"
+    );
     assert!(
         t.notes.iter().any(|n| n.contains("geen afkeuring")),
         "de melding moet zeggen dat dit geen afkeuring is: {:?}",
@@ -911,7 +1030,10 @@ fn de_niet_getoetste_eisen_worden_met_reden_opgesomd() {
     let lijst = niet_getoetste_9_5_eisen();
     assert_eq!(lijst.len(), 2);
     for eis in &lijst {
-        assert!(eis.starts_with("§9.5"), "elke regel begint met het artikel: {eis}");
+        assert!(
+            eis.starts_with("§9.5"),
+            "elke regel begint met het artikel: {eis}"
+        );
     }
     // §9.5.2(4), §9.5.3(6) en §9.5.3(4)ii staan er NIET meer in: die worden
     // werkelijk getoetst — de eerste twee sinds de korf staven per zijde kent,
@@ -961,12 +1083,22 @@ fn hoekstaven_9_5_2_telt_de_vier_hoeken_en_niet_de_staven() {
     assert_relative_eq!(goed.value, 4.0, max_relative = 1e-12);
 
     let midden = ReinforcementCage {
-        top: RebarRow { count: 1, diameter_mm: 20.0 },
-        bottom: RebarRow { count: 1, diameter_mm: 20.0 },
+        top: RebarRow {
+            count: 1,
+            diameter_mm: 20.0,
+        },
+        bottom: RebarRow {
+            count: 1,
+            diameter_mm: 20.0,
+        },
         ..korf_4o20()
     };
     let fout = hoekstaven_9_5_2(&detaillering_met(&midden, H_MM, H_MM));
-    assert_eq!(fout.status, CheckStatus::NotOk, "twee staven op de hartlijn bezetten geen hoek");
+    assert_eq!(
+        fout.status,
+        CheckStatus::NotOk,
+        "twee staven op de hartlijn bezetten geen hoek"
+    );
     assert_relative_eq!(fout.value, 0.0, max_relative = 1e-12);
     // uc bij een minimumeis is vereist/aanwezig; met nul hoekstaven is dat
     // oneindig, en dat hoort een afkeuring te zijn en geen deling door nul.
@@ -978,14 +1110,22 @@ fn hoekstaven_9_5_2_telt_de_vier_hoeken_en_niet_de_staven() {
 #[test]
 fn zijstaven_tellen_niet_als_hoekstaaf() {
     let met_zij = ReinforcementCage {
-        sides: Some(RebarRow { count: 2, diameter_mm: 16.0 }),
+        sides: Some(RebarRow {
+            count: 2,
+            diameter_mm: 16.0,
+        }),
         ..korf_4o20()
     };
     let toets = hoekstaven_9_5_2(&detaillering_met(&met_zij, H_MM, 600.0));
     assert_eq!(toets.status, CheckStatus::Ok);
     assert_relative_eq!(toets.value, 4.0, max_relative = 1e-12);
     // 2 onder + 2 boven + 2 x 2 opzij = 8 langsstaven, waarvan 4 in een hoek.
-    let n_langs = toets.variables.iter().find(|v| v.symbol == "n_langs").unwrap().value;
+    let n_langs = toets
+        .variables
+        .iter()
+        .find(|v| v.symbol == "n_langs")
+        .unwrap()
+        .value;
     assert_relative_eq!(n_langs, 8.0, max_relative = 1e-12);
 }
 
@@ -1001,8 +1141,14 @@ fn zijstaven_tellen_niet_als_hoekstaaf() {
 #[test]
 fn de_150_mm_regel_van_9_5_3_6_net_wel_en_net_niet() {
     let drie = ReinforcementCage {
-        top: RebarRow { count: 3, diameter_mm: 20.0 },
-        bottom: RebarRow { count: 3, diameter_mm: 20.0 },
+        top: RebarRow {
+            count: 3,
+            diameter_mm: 20.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 20.0,
+        },
         ..korf_4o20()
     };
     let net_wel = opgesloten_staven_9_5_3(&detaillering_met(&drie, 396.0, 300.0));
@@ -1013,7 +1159,11 @@ fn de_150_mm_regel_van_9_5_3_6_net_wel_en_net_niet() {
     let net_niet = opgesloten_staven_9_5_3(&detaillering_met(&drie, 400.0, 300.0));
     assert_relative_eq!(net_niet.value, 152.0, max_relative = 1e-9);
     assert_eq!(net_niet.status, CheckStatus::NotOk);
-    assert_relative_eq!(net_niet.uc.as_ref().unwrap().uc, 152.0 / 150.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        net_niet.uc.as_ref().unwrap().uc,
+        152.0 / 150.0,
+        max_relative = 1e-9
+    );
 }
 
 /// §9.5.3(6), eerste zin — zonder beugel wordt geen enkele hoekstaaf op zijn
@@ -1021,10 +1171,17 @@ fn de_150_mm_regel_van_9_5_3_6_net_wel_en_net_niet() {
 /// beugeldiameter 0 zegt dat er niets ligt.
 #[test]
 fn zonder_beugel_is_geen_staaf_opgesloten() {
-    let kaal = ReinforcementCage { stirrup_diameter_mm: 0.0, stirrup_legs: None, ..korf_4o20() };
+    let kaal = ReinforcementCage {
+        stirrup_diameter_mm: 0.0,
+        stirrup_legs: None,
+        ..korf_4o20()
+    };
     let toets = opgesloten_staven_9_5_3(&detaillering_met(&kaal, H_MM, H_MM));
     assert_eq!(toets.status, CheckStatus::NotOk);
-    assert!(toets.notes.iter().any(|n| n.contains("AFGEKEURD op de eerste zin")));
+    assert!(toets
+        .notes
+        .iter()
+        .any(|n| n.contains("AFGEKEURD op de eerste zin")));
 }
 
 /// Meer dan twee beugelbenen: er zijn tussenbeugels of haarspelden, en hun
@@ -1034,8 +1191,14 @@ fn zonder_beugel_is_geen_staaf_opgesloten() {
 fn meer_dan_twee_beugelbenen_levert_geen_oordeel_maar_wel_de_maat() {
     let breed = ReinforcementCage {
         stirrup_legs: Some(4),
-        top: RebarRow { count: 3, diameter_mm: 20.0 },
-        bottom: RebarRow { count: 3, diameter_mm: 20.0 },
+        top: RebarRow {
+            count: 3,
+            diameter_mm: 20.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 20.0,
+        },
         ..korf_4o20()
     };
     let toets = opgesloten_staven_9_5_3(&detaillering_met(&breed, 400.0, 300.0));
@@ -1049,10 +1212,22 @@ fn meer_dan_twee_beugelbenen_levert_geen_oordeel_maar_wel_de_maat() {
 /// de reden — dezelfde afspraak als bij de ontbrekende beugelgegevens.
 #[test]
 fn zonder_bekende_staafplaatsen_geen_stilzwijgend_groen_vinkje() {
-    let inv = KolomdetailleringInvoer { staafposities: Vec::new(), ..detaillering() };
+    let inv = KolomdetailleringInvoer {
+        staafposities: Vec::new(),
+        ..detaillering()
+    };
     for toets in [hoekstaven_9_5_2(&inv), opgesloten_staven_9_5_3(&inv)] {
-        assert_eq!(toets.status, CheckStatus::NotApplicable, "toets {}", toets.id);
-        assert!(toets.uc.is_none(), "toets {} hoort geen unity check te hebben", toets.id);
+        assert_eq!(
+            toets.status,
+            CheckStatus::NotApplicable,
+            "toets {}",
+            toets.id
+        );
+        assert!(
+            toets.uc.is_none(),
+            "toets {} hoort geen unity check te hebben",
+            toets.id
+        );
         assert!(
             toets.notes.iter().any(|n| n.contains("Niet te toetsen")),
             "toets {} moet de reden noemen",
@@ -1081,7 +1256,10 @@ mod tweede_as {
     #[test]
     fn theta_0_is_de_waarde_van_de_nationale_bijlage() {
         assert_relative_eq!(THETA_0_NB, 1.0 / 300.0, max_relative = 1e-15);
-        assert!(THETA_0_NB < 1.0 / 200.0, "1/300 is kleiner dan de EN-aanbeveling 1/200");
+        assert!(
+            THETA_0_NB < 1.0 / 200.0,
+            "1/300 is kleiner dan de EN-aanbeveling 1/200"
+        );
     }
 
     /// α_h = 2/√l met 2/3 ≤ α_h ≤ 1, en α_m = √(0,5·(1 + 1/m)).
@@ -1133,7 +1311,10 @@ mod tweede_as {
         let s = scheefstand_5_1(6.0, 1).unwrap();
         let e_i = e_i_5_2_mm(s.theta_i, 6000.0).unwrap();
         assert_relative_eq!(e_i, 8.164_965_809_277_26, max_relative = 1e-9);
-        assert!(e_i < 6000.0 / 400.0, "de vereenvoudiging l₀/400 hoort bij θ₀ = 1/200");
+        assert!(
+            e_i < 6000.0 / 400.0,
+            "de vereenvoudiging l₀/400 hoort bij θ₀ = 1/200"
+        );
         assert!(e_i_5_2_mm(s.theta_i, 0.0).is_err());
         assert!(e_i_5_2_mm(-1.0, 6000.0).is_err());
     }
@@ -1266,9 +1447,18 @@ mod tweede_as {
         let korf = ReinforcementCage {
             cover_mm: 30.0,
             stirrup_diameter_mm: 8.0,
-            top: RebarRow { count: 3, diameter_mm: 20.0 },
-            bottom: RebarRow { count: 3, diameter_mm: 20.0 },
-            sides: Some(RebarRow { count: 1, diameter_mm: 12.0 }),
+            top: RebarRow {
+                count: 3,
+                diameter_mm: 20.0,
+            },
+            bottom: RebarRow {
+                count: 3,
+                diameter_mm: 20.0,
+            },
+            sides: Some(RebarRow {
+                count: 1,
+                diameter_mm: 12.0,
+            }),
             ..ReinforcementCage::default()
         };
         let s = ConcreteSection::rectangle(300.0, 300.0);
@@ -1277,7 +1467,13 @@ mod tweede_as {
         assert_relative_eq!(gedraaid.h_mm, 300.0);
         let o20 = std::f64::consts::PI * 100.0;
         let o12 = std::f64::consts::PI * 36.0;
-        let verwacht = [(44.0, o12), (48.0, 2.0 * o20), (150.0, 2.0 * o20), (252.0, 2.0 * o20), (256.0, o12)];
+        let verwacht = [
+            (44.0, o12),
+            (48.0, 2.0 * o20),
+            (150.0, 2.0 * o20),
+            (252.0, 2.0 * o20),
+            (256.0, o12),
+        ];
         assert_eq!(lagen.len(), verwacht.len(), "{lagen:?}");
         for (laag, (z, opp)) in lagen.iter().zip(verwacht) {
             assert_relative_eq!(laag.z_mm, z, max_relative = 1e-12);
@@ -1289,7 +1485,9 @@ mod tweede_as {
 
         // Een niet-vierkante rechthoek draait mee: 300 breed × 600 hoog wordt
         // 600 breed × 300 hoog.
-        let (gedraaid2, _) = korf.lagen_om_z(&ConcreteSection::rectangle(300.0, 600.0)).unwrap();
+        let (gedraaid2, _) = korf
+            .lagen_om_z(&ConcreteSection::rectangle(300.0, 600.0))
+            .unwrap();
         assert_relative_eq!(gedraaid2.b_mm, 600.0);
         assert_relative_eq!(gedraaid2.h_mm, 300.0);
     }
@@ -1299,8 +1497,14 @@ mod tweede_as {
         let korf = ReinforcementCage {
             cover_mm: 30.0,
             stirrup_diameter_mm: 8.0,
-            top: RebarRow { count: 2, diameter_mm: 16.0 },
-            bottom: RebarRow { count: 2, diameter_mm: 16.0 },
+            top: RebarRow {
+                count: 2,
+                diameter_mm: 16.0,
+            },
+            bottom: RebarRow {
+                count: 2,
+                diameter_mm: 16.0,
+            },
             ..ReinforcementCage::default()
         };
         let t = ConcreteSection::tee(600.0, 150.0, 300.0, 500.0).unwrap();
@@ -1335,7 +1539,10 @@ mod tweede_as {
         };
         let stappen = moment_tweede_as_deelstappen(&m);
         let ids: Vec<&str> = stappen.iter().map(|d| d.id.as_str()).collect();
-        assert_eq!(ids, ["theta_i", "e_i", "e_2", "m_ed_tweede_as", "m_rd_tweede_as"]);
+        assert_eq!(
+            ids,
+            ["theta_i", "e_i", "e_2", "m_ed_tweede_as", "m_rd_tweede_as"]
+        );
         assert!(stappen[0].article.contains("5.2(5)") && stappen[0].article.contains("1/300"));
         assert!(stappen[1].article.contains("5.2(7)"));
         assert!(stappen[2].article.contains("5.8.6(6)"));
@@ -1366,12 +1573,21 @@ mod tweede_as {
         let ids: Vec<&str> = stappen.iter().map(|d| d.id.as_str()).collect();
         assert_eq!(
             ids,
-            ["voorwaarde_5_38a", "voorwaarde_5_38b", "n_rd", "exponent_a", "interactie_5_39"]
+            [
+                "voorwaarde_5_38a",
+                "voorwaarde_5_38b",
+                "n_rd",
+                "exponent_a",
+                "interactie_5_39"
+            ]
         );
         assert!(stappen[0].article.contains("(5.38a)"));
         assert!(stappen[1].article.contains("(5.38b)"));
         assert!(stappen[1].notes.iter().any(|n| n.contains("NIET vervuld")));
-        assert!(stappen[3].notes.iter().any(|n| n.contains("lineaire interpolatie")));
+        assert!(stappen[3]
+            .notes
+            .iter()
+            .any(|n| n.contains("lineaire interpolatie")));
         assert!(stappen[4].article.contains("(5.39)"));
         assert_relative_eq!(stappen[4].value.unwrap(), 0.644);
     }
@@ -1405,7 +1621,12 @@ fn factor_a_neemt_de_terugval_alleen_aan_de_veilige_kant() {
     );
     assert_eq!(
         factor_a_met_grondslag(None, Some(2.0)),
-        (0.7, AGrondslag::Standaardwaarde { phi_inf_t0: Some(2.0) })
+        (
+            0.7,
+            AGrondslag::Standaardwaarde {
+                phi_inf_t0: Some(2.0)
+            }
+        )
     );
     let (a, g) = factor_a_met_grondslag(None, Some(3.0));
     assert_relative_eq!(a, 0.625, max_relative = 1e-12);
@@ -1438,14 +1659,30 @@ fn kolomslankheid_met_kruipcoefficient_zonder_m0eqp_neemt_de_bovengrens() {
     let k = kolomslankheid(&inv).unwrap();
     assert!(k.phi_ef.is_none());
     assert!(!k.a_standaard);
-    assert_eq!(k.a_grondslag, AGrondslag::BovengrensKruip { phi_inf_t0: 3.0 });
+    assert_eq!(
+        k.a_grondslag,
+        AGrondslag::BovengrensKruip { phi_inf_t0: 3.0 }
+    );
     assert_relative_eq!(k.a, 0.625, max_relative = 1e-12);
     assert_relative_eq!(k.lambda_lim, 30.119_088 * 0.625 / 0.7, max_relative = 1e-6);
     let tekst = k.kanttekeningen.join(" ");
-    assert!(tekst.contains("WAARSCHUWING — A niet uit (5.19)"), "{tekst}");
-    assert!(tekst.contains("M₀Eqp uit de quasi-blijvende BGT-combinatie ontbreekt"), "{tekst}");
-    let abc = kolom_deelstappen(&k).into_iter().find(|s| s.id == "abc").unwrap();
-    assert!(abc.notes.iter().any(|n| n.contains("groter dan 2,14")), "{:?}", abc.notes);
+    assert!(
+        tekst.contains("WAARSCHUWING — A niet uit (5.19)"),
+        "{tekst}"
+    );
+    assert!(
+        tekst.contains("M₀Eqp uit de quasi-blijvende BGT-combinatie ontbreekt"),
+        "{tekst}"
+    );
+    let abc = kolom_deelstappen(&k)
+        .into_iter()
+        .find(|s| s.id == "abc")
+        .unwrap();
+    assert!(
+        abc.notes.iter().any(|n| n.contains("groter dan 2,14")),
+        "{:?}",
+        abc.notes
+    );
 }
 
 /// De begrensde regel van (5.19) die de slankheidspoort en de fysisch
@@ -1457,15 +1694,25 @@ fn kolomslankheid_met_kruipcoefficient_zonder_m0eqp_neemt_de_bovengrens() {
 #[test]
 fn phi_ef_5_19_begrensd_handberekening_en_grenzen() {
     let gewoon = phi_ef_5_19_begrensd(2.5, 40.0, 65.0).unwrap();
-    assert_relative_eq!(gewoon.phi_ef, phi_ef_5_19(2.5, 40.0, 65.0).unwrap(), max_relative = 1e-15);
-    assert_relative_eq!(gewoon.verhouding.unwrap(), 40.0 / 65.0, max_relative = 1e-15);
+    assert_relative_eq!(
+        gewoon.phi_ef,
+        phi_ef_5_19(2.5, 40.0, 65.0).unwrap(),
+        max_relative = 1e-15
+    );
+    assert_relative_eq!(
+        gewoon.verhouding.unwrap(),
+        40.0 / 65.0,
+        max_relative = 1e-15
+    );
     assert!(!gewoon.bovengrens_gehouden && gewoon.reden.is_none());
     // Beide negatief (steunpuntsmoment in beide combinaties): gewoon (5.19).
     let neg = phi_ef_5_19_begrensd(2.5, -40.0, -65.0).unwrap();
     assert_relative_eq!(neg.phi_ef, gewoon.phi_ef, max_relative = 1e-15);
 
     let nul = phi_ef_5_19_begrensd(2.5, 40.0, 0.0).unwrap();
-    assert!(nul.bovengrens_gehouden && nul.phi_ef == 2.5 && nul.reden.unwrap().contains("onbepaald"));
+    assert!(
+        nul.bovengrens_gehouden && nul.phi_ef == 2.5 && nul.reden.unwrap().contains("onbepaald")
+    );
     let teken = phi_ef_5_19_begrensd(2.5, -40.0, 65.0).unwrap();
     assert!(teken.bovengrens_gehouden && teken.phi_ef == 2.5);
     assert!(teken.reden.unwrap().contains("tegengesteld teken"));

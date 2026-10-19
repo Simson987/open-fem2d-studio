@@ -260,6 +260,22 @@ async function run() {
     gelijk(stramien, false, "stramien is de projectinstelling");
   });
 
+  await test("opleggingssymbolen schalen rond hun knoop zonder de modelinvoer te wijzigen", async () => {
+    mount(<Proef />);
+    await wacht();
+    const symbool = () => container.querySelector<SVGPolygonElement>("polygon.fem-support")!;
+    ok(symbool(), "opleggingssymbool aanwezig");
+    const normaal = symbool().getBoundingClientRect().width;
+    const modelVoor = JSON.stringify(model.supports);
+    mount(<Proef begin={{ ...DEFAULT_DISPLAY_FLAGS, supportScale: 2 }} />);
+    await wacht();
+    const dubbel = symbool().getBoundingClientRect().width;
+    ok(Math.abs(dubbel / normaal - 2) < 0.02, `schaal 200%: ${dubbel / normaal}`);
+    gelijk(flags.supportScale, 2, "weergaveschaal ingesteld");
+    gelijk(JSON.stringify(model.supports), modelVoor, "constructieve opleggingen ongewijzigd");
+    ok(container.querySelector(".zichtbaarheid-venster .fem-support-scale-control output")?.textContent === "200%", "waarde in het venster");
+  });
+
   await test("profielbreedte: alleen met het aanzicht, als b = … mm per staaf", async () => {
     mount(<Proef begin={{ ...DEFAULT_DISPLAY_FLAGS, aanzichtBreedte: true }} />);
     await wacht();

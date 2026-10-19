@@ -75,8 +75,14 @@ fn korf(onder: u32, beugelafstand: Option<f64>) -> ReinforcementCage {
     ReinforcementCage {
         cover_mm: 30.0,
         stirrup_diameter_mm: 8.0,
-        top: RebarRow { count: 2, diameter_mm: 12.0 },
-        bottom: RebarRow { count: onder, diameter_mm: 16.0 },
+        top: RebarRow {
+            count: 2,
+            diameter_mm: 12.0,
+        },
+        bottom: RebarRow {
+            count: onder,
+            diameter_mm: 16.0,
+        },
         stirrup_spacing_mm: beugelafstand,
         stirrup_legs: beugelafstand.map(|_| 2),
         ..ReinforcementCage::default()
@@ -86,7 +92,10 @@ fn korf(onder: u32, beugelafstand: Option<f64>) -> ReinforcementCage {
 fn onderzone(aantal: u32, van: f64, tot: f64) -> LongitudinalZone {
     LongitudinalZone {
         side: RebarSide::Bottom,
-        row: RebarRow { count: aantal, diameter_mm: 16.0 },
+        row: RebarRow {
+            count: aantal,
+            diameter_mm: 16.0,
+        },
         x_start_mm: van,
         x_end_mm: tot,
         bar_shape: Default::default(),
@@ -95,14 +104,25 @@ fn onderzone(aantal: u32, van: f64, tot: f64) -> LongitudinalZone {
 }
 
 fn beugelzone(van: f64, tot: f64, s: f64) -> StirrupZone {
-    StirrupZone { x_start_mm: van, x_end_mm: tot, spacing_mm: s, legs: 2, diameter_mm: 8.0 }
+    StirrupZone {
+        x_start_mm: van,
+        x_end_mm: tot,
+        spacing_mm: s,
+        legs: 2,
+        diameter_mm: 8.0,
+    }
 }
 
 fn punt(x_mm: f64, m_knm: f64, v_kn: f64) -> ForcePoint {
     ForcePoint {
         combination_id: 1,
         position_mm: x_mm,
-        forces: InternalForces { n_ed: 0.0, vz_ed: v_kn, my_ed: m_knm, ..Default::default() },
+        forces: InternalForces {
+            n_ed: 0.0,
+            vz_ed: v_kn,
+            my_ed: m_knm,
+            ..Default::default()
+        },
     }
 }
 
@@ -156,7 +176,10 @@ fn toets<'a>(r: &'a ConcreteBeamCheckResult, id: &str) -> &'a ResistanceCalc {
 }
 
 fn uc(rc: &ResistanceCalc) -> f64 {
-    rc.uc.as_ref().unwrap_or_else(|| panic!("toets {} heeft geen unity check", rc.id)).uc
+    rc.uc
+        .as_ref()
+        .unwrap_or_else(|| panic!("toets {} heeft geen unity check", rc.id))
+        .uc
 }
 
 fn notes(rc: &ResistanceCalc) -> String {
@@ -236,7 +259,11 @@ fn de_zwakke_langswapeningszone_wordt_gevonden_terwijl_de_staafkorf_hem_verbergt
         envelop,
     ));
     let blok_zonder = toets(&zonder, "6.1_bending_stress_block");
-    assert_relative_eq!(blok_zonder.force_state.position_mm, 1250.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        blok_zonder.force_state.position_mm,
+        1250.0,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(blok_zonder.value, m_rd_sterk, max_relative = 1e-12);
     assert_relative_eq!(uc(blok_zonder), 150.0 / m_rd_sterk, max_relative = 1e-9);
 
@@ -378,7 +405,10 @@ fn rho_w_min_wordt_per_beugelzone_getoetst() {
     let envelop = vec![punt(500.0, 40.0, 60.0), punt(2500.0, 150.0, 5.0)];
     let zones = ReinforcementZones {
         longitudinal: vec![],
-        stirrups: vec![beugelzone(0.0, 1000.0, 150.0), beugelzone(1000.0, LENGTE_MM, 350.0)],
+        stirrups: vec![
+            beugelzone(0.0, 1000.0, 150.0),
+            beugelzone(1000.0, LENGTE_MM, 350.0),
+        ],
     };
 
     let a_sw = 2.0 * std::f64::consts::PI / 4.0 * 64.0;
@@ -390,7 +420,11 @@ fn rho_w_min_wordt_per_beugelzone_getoetst() {
     // `value` is bij een MINIMUM-eis de vereiste waarde; de aanwezige ρ_w staat
     // in de unity check als `rd`.
     assert_relative_eq!(rho.value, rho_min, max_relative = 1e-9);
-    assert_relative_eq!(rho.uc.as_ref().unwrap().rd, rho_bij(350.0), max_relative = 1e-9);
+    assert_relative_eq!(
+        rho.uc.as_ref().unwrap().rd,
+        rho_bij(350.0),
+        max_relative = 1e-9
+    );
     assert_relative_eq!(uc(rho), rho_min / rho_bij(350.0), max_relative = 1e-9);
 
     let zonder = check_concrete_beam(invoer(
@@ -399,7 +433,11 @@ fn rho_w_min_wordt_per_beugelzone_getoetst() {
         envelop,
     ));
     let rho_zonder = toets(&zonder, "9.2.2_rho_w_min");
-    assert_relative_eq!(uc(rho_zonder), rho_min / rho_bij(150.0), max_relative = 1e-9);
+    assert_relative_eq!(
+        uc(rho_zonder),
+        rho_min / rho_bij(150.0),
+        max_relative = 1e-9
+    );
     assert!(
         uc(rho) > uc(rho_zonder) * 2.0,
         "de wijde beugelzone hoort een veel hogere unity check te geven"
@@ -425,7 +463,10 @@ fn een_te_dunne_beugel_in_een_stuk_zonder_rekenpunt_wordt_toch_gevonden() {
         longitudinal: vec![],
         stirrups: vec![
             beugelzone(0.0, 2000.0, 150.0),
-            StirrupZone { diameter_mm: 4.0, ..beugelzone(2000.0, LENGTE_MM, 150.0) },
+            StirrupZone {
+                diameter_mm: 4.0,
+                ..beugelzone(2000.0, LENGTE_MM, 150.0)
+            },
         ],
     };
     let r = check_concrete_beam(invoer(korf(3, Some(150.0)), zones, envelop));
@@ -454,7 +495,10 @@ fn een_krachtafhankelijke_eis_wordt_op_een_stuk_zonder_rekenpunt_overgeslagen() 
     let envelop = vec![punt(0.0, 0.0, 60.0), punt(1000.0, 80.0, 20.0)];
     let zones = ReinforcementZones {
         longitudinal: vec![],
-        stirrups: vec![beugelzone(0.0, 2000.0, 150.0), beugelzone(2000.0, LENGTE_MM, 350.0)],
+        stirrups: vec![
+            beugelzone(0.0, 2000.0, 150.0),
+            beugelzone(2000.0, LENGTE_MM, 350.0),
+        ],
     };
     let r = check_concrete_beam(invoer(korf(3, Some(150.0)), zones, envelop));
 
@@ -546,7 +590,10 @@ fn zones_die_de_staafkorf_herhalen_veranderen_niets() {
             onderzone(3, 0.0, LENGTE_MM),
             LongitudinalZone {
                 side: RebarSide::Top,
-                row: RebarRow { count: 2, diameter_mm: 12.0 },
+                row: RebarRow {
+                    count: 2,
+                    diameter_mm: 12.0,
+                },
                 x_start_mm: 0.0,
                 x_end_mm: LENGTE_MM,
                 bar_shape: Default::default(),
@@ -591,12 +638,19 @@ fn zones_die_de_staafkorf_herhalen_veranderen_niets() {
 fn de_negen_detailleringseisen_staan_nog_in_dezelfde_volgorde() {
     let zones = ReinforcementZones {
         longitudinal: vec![onderzone(5, 0.0, 2500.0), onderzone(3, 2500.0, LENGTE_MM)],
-        stirrups: vec![beugelzone(0.0, 1000.0, 150.0), beugelzone(1000.0, LENGTE_MM, 250.0)],
+        stirrups: vec![
+            beugelzone(0.0, 1000.0, 150.0),
+            beugelzone(1000.0, LENGTE_MM, 250.0),
+        ],
     };
     let r = check_concrete_beam(invoer(
         korf(5, Some(150.0)),
         zones,
-        vec![punt(500.0, 40.0, 60.0), punt(2500.0, 120.0, 0.0), punt(4500.0, 30.0, -60.0)],
+        vec![
+            punt(500.0, 40.0, 60.0),
+            punt(2500.0, 120.0, 0.0),
+            punt(4500.0, 30.0, -60.0),
+        ],
     ));
 
     let verwacht = [
@@ -701,7 +755,12 @@ fn wat_de_zones_kosten() {
                 ForcePoint {
                     combination_id: combi,
                     position_mm: x,
-                    forces: InternalForces { n_ed: 0.0, vz_ed: v, my_ed: m, ..Default::default() },
+                    forces: InternalForces {
+                        n_ed: 0.0,
+                        vz_ed: v,
+                        my_ed: m,
+                        ..Default::default()
+                    },
                 }
             })
             .collect()

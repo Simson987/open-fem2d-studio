@@ -1008,7 +1008,10 @@ mod tests {
         assert_eq!(leeg.klok(None).as_secs(), STANDAARD_TIMEOUT_S);
         assert_eq!(leeg.klok(Some(5)).as_secs(), 5);
 
-        let uit_omgeving = SidecarOpties { timeout_s: Some(120), ..Default::default() };
+        let uit_omgeving = SidecarOpties {
+            timeout_s: Some(120),
+            ..Default::default()
+        };
         assert_eq!(uit_omgeving.klok(None).as_secs(), 120);
         // Een expliciete waarde bij de tool-aanroep gaat vóór de omgeving.
         assert_eq!(uit_omgeving.klok(Some(7)).as_secs(), 7);

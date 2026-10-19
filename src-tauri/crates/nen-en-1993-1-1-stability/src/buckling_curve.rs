@@ -14,13 +14,22 @@ use ts_rs::TS;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../../design-mockup/src/lib/types/steel/")]
-pub enum BucklingCurve { A0, A, B, C, D }
+pub enum BucklingCurve {
+    A0,
+    A,
+    B,
+    C,
+    D,
+}
 
 impl BucklingCurve {
     pub fn alpha(self) -> f64 {
         match self {
-            Self::A0 => 0.13, Self::A => 0.21, Self::B => 0.34,
-            Self::C => 0.49, Self::D => 0.76,
+            Self::A0 => 0.13,
+            Self::A => 0.21,
+            Self::B => 0.34,
+            Self::C => 0.49,
+            Self::D => 0.76,
         }
     }
 
@@ -58,5 +67,9 @@ pub fn phi(lambda_bar: f64, alpha: f64) -> f64 {
 pub fn chi(lambda_bar: f64, alpha: f64) -> f64 {
     let phi = phi(lambda_bar, alpha);
     let denom = phi + (phi.powi(2) - lambda_bar.powi(2)).sqrt();
-    if denom > 0.0 { (1.0 / denom).min(1.0) } else { 1.0 }
+    if denom > 0.0 {
+        (1.0 / denom).min(1.0)
+    } else {
+        1.0
+    }
 }

@@ -85,9 +85,7 @@ pub fn is_concrete_tool(naam: &str) -> bool {
 
 pub async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError> {
     match naam {
-        "list_concrete_classes" => {
-            Ok(json!({ "classes": nen_en_1992_1_1::CONCRETE_CLASSES }))
-        }
+        "list_concrete_classes" => Ok(json!({ "classes": nen_en_1992_1_1::CONCRETE_CLASSES })),
         "list_reinforcement_grades" => {
             Ok(json!({ "grades": nen_en_1992_1_1::REINFORCEMENT_GRADES }))
         }
@@ -97,11 +95,10 @@ pub async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError> {
             // Blokkerend werk: het M-N-κ-diagram integreert de doorsnede in
             // `n_strips` stroken en loopt daarna nog twee interactiediagrammen
             // af. Op de stdio-lus zou dat de lezer laten stilstaan.
-            let result = tokio::task::spawn_blocking(move || {
-                concrete_check::check_concrete_beam(input)
-            })
-            .await
-            .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?;
+            let result =
+                tokio::task::spawn_blocking(move || concrete_check::check_concrete_beam(input))
+                    .await
+                    .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?;
             serde_json::to_value(result)
                 .map_err(|e| RpcError::tool_exec(format!("serialize result: {e}")))
         }
@@ -120,21 +117,20 @@ pub async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError> {
         }
         "concrete_segment_stiffness" => {
             let req: concrete_check::SegmentStiffnessRequest = serde_json::from_value(args)
-                .map_err(|e| {
-                    RpcError::invalid_params(format!("SegmentStiffnessRequest: {e}"))
-                })?;
+                .map_err(|e| RpcError::invalid_params(format!("SegmentStiffnessRequest: {e}")))?;
             // Blokkerend werk: per segment wordt de doorsnede in `n_strips`
             // stroken geïntegreerd en wordt er op de kromming geïtereerd. Een
             // staaf van 10 m in segmenten van 400 mm is 25 van die oplossingen.
-            let result = tokio::task::spawn_blocking(move || concrete_check::segment_stiffness(req))
-                .await
-                .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?
-                // Een onuitvoerbaar verzoek — onbekende sterkteklasse, een korf
-                // die niet past, een lijst krachten die niet bij de indeling
-                // hoort — is een toolfout met de reden erbij. Een segment dat
-                // niet convergeert is dat NIET: dat staat als `Failed` in de
-                // tabel, met de reden en zonder getal.
-                .map_err(RpcError::invalid_params)?;
+            let result =
+                tokio::task::spawn_blocking(move || concrete_check::segment_stiffness(req))
+                    .await
+                    .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?
+                    // Een onuitvoerbaar verzoek — onbekende sterkteklasse, een korf
+                    // die niet past, een lijst krachten die niet bij de indeling
+                    // hoort — is een toolfout met de reden erbij. Een segment dat
+                    // niet convergeert is dat NIET: dat staat als `Failed` in de
+                    // tabel, met de reden en zonder getal.
+                    .map_err(RpcError::invalid_params)?;
             serde_json::to_value(result)
                 .map_err(|e| RpcError::tool_exec(format!("serialize result: {e}")))
         }
@@ -1224,7 +1220,11 @@ mod tests {
         ] {
             assert!(velden.contains_key(veld), "korfschema mist `{veld}`");
         }
-        assert_eq!(velden.len(), 12, "korfschema kent een veld dat de kern weigert");
+        assert_eq!(
+            velden.len(),
+            12,
+            "korfschema kent een veld dat de kern weigert"
+        );
         // Elke zijde draagt precies twee gegevens: zijn dekking en zijn
         // milieuklasse. Meer zou `additionalProperties: false` op de kern
         // laten stuklopen, minder zou een geldig geval onbereikbaar maken.
@@ -1245,7 +1245,10 @@ mod tests {
         }
         // De zijstaven zijn OPTIONEEL en mogen `null` zijn: zo gaat "deze korf
         // heeft er geen" over de lijn, en zo blijft elk bestaand verzoek geldig.
-        assert_eq!(korf["properties"]["sides"]["type"], json!(["object", "null"]));
+        assert_eq!(
+            korf["properties"]["sides"]["type"],
+            json!(["object", "null"])
+        );
         // En het schema moet zeggen dat `count` per ZIJKANT telt; wie dat
         // verkeerd leest voert de helft van de wapening in.
         let omschrijving = korf["properties"]["sides"]["description"].as_str().unwrap();
@@ -1260,11 +1263,22 @@ mod tests {
     #[test]
     fn de_beugelvelden_staan_niet_in_required() {
         let korf = schema_korf();
-        assert_eq!(korf["required"], json!(["cover_mm", "stirrup_diameter_mm", "top", "bottom"]));
+        assert_eq!(
+            korf["required"],
+            json!(["cover_mm", "stirrup_diameter_mm", "top", "bottom"])
+        );
         // En nul is geen geldige waarde: leeglaten is de manier om "niet
         // opgegeven" te zeggen, precies zoals `ReinforcementCage::validate`.
-        for veld in ["stirrup_spacing_mm", "stirrup_leg_spacing_mm", "stirrup_fywk_mpa"] {
-            assert_eq!(korf["properties"][veld]["exclusiveMinimum"], json!(0), "{veld}");
+        for veld in [
+            "stirrup_spacing_mm",
+            "stirrup_leg_spacing_mm",
+            "stirrup_fywk_mpa",
+        ] {
+            assert_eq!(
+                korf["properties"][veld]["exclusiveMinimum"],
+                json!(0),
+                "{veld}"
+            );
         }
         assert_eq!(korf["properties"]["stirrup_legs"]["minimum"], json!(1));
     }

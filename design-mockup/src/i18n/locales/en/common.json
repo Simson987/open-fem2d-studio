@@ -50,6 +50,8 @@
     "aanzichtBreedteHint": "The section width b as a label at the elevation: the elevation shows the depth h, the width is perpendicular to the drawing.",
     "opleggingen": "Supports",
     "opleggingenHint": "The support symbols.",
+    "supportScale": "Support symbol size",
+    "supportScaleHint": "Display only; analysis restraints remain unchanged.",
     "scharnieren": "Hinges and springs",
     "scharnierenHint": "The hinges and springs at the member ends.",
     "stramien": "Structural grid",

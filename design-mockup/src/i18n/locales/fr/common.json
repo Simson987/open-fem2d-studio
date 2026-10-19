@@ -50,6 +50,8 @@
     "aanzichtBreedteHint": "La largeur b du profil en étiquette sur l’élévation : l’élévation montre la hauteur h, la largeur est perpendiculaire au dessin.",
     "opleggingen": "Appuis",
     "opleggingenHint": "Les symboles d’appui.",
+    "supportScale": "Taille des appuis",
+    "supportScaleHint": "Affichage uniquement ; les appuis du calcul restent inchangés.",
     "scharnieren": "Articulations et ressorts",
     "scharnierenHint": "Les articulations et ressorts aux extrémités des barres.",
     "stramien": "Trame",

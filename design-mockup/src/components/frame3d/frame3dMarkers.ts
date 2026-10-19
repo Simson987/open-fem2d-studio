@@ -555,6 +555,7 @@ export function addFrame3DConditionMarkers(
   group: THREE.Group, model: Frame3DModel,
   visibility: Frame3DConditionVisibility = { supports: true, loads: true },
   activeLoadCaseId?: number,
+  supportScale = 1,
 ): void {
   const visibleLoadCount = visibility.loads
     ? [model.loads, model.memberLoads, model.memberPointLoads, model.thermalLoads]
@@ -573,7 +574,7 @@ export function addFrame3DConditionMarkers(
   if (visibility.supports) {
     for (const support of model.supports ?? []) {
       const node = byId.get(support.nodeId);
-      if (node) addSupport(group, node, support, size);
+      if (node) addSupport(group, node, support, size * supportScale);
     }
     for (const plate of model.plates ?? []) {
       for (let edge = 0; edge < (plate.edgeSupports?.length ?? 0); edge++) {

@@ -63,10 +63,13 @@ export function parseFrame3DViewSets(value: unknown): Frame3DViewSet[] {
       throw new Error("Een opgeslagen 3D-weergave mist de zichtbaarheidsinstellingen.");
     }
     const visibility = { ...DEFAULT_FRAME_3D_VISIBILITY };
-    for (const key of Object.keys(visibility) as (keyof Frame3DVisibility)[]) {
+    for (const key of Object.keys(visibility).filter((key) => key !== "supportScale") as (keyof Omit<Frame3DVisibility, "supportScale">)[]) {
       const entry = (savedVisibility as Record<string, unknown>)[key];
       if (typeof entry === "boolean") visibility[key] = entry;
     }
+    const savedSupportScale = (savedVisibility as Record<string, unknown>).supportScale;
+    if (typeof savedSupportScale === "number" && Number.isFinite(savedSupportScale))
+      visibility.supportScale = Math.max(0.25, Math.min(3, savedSupportScale));
     const combinationId = raw.combinationId === null || raw.combinationId === undefined
       ? null
       : Number.isSafeInteger(raw.combinationId) && Number(raw.combinationId) > 0

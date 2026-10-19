@@ -74,17 +74,35 @@ pub struct Lamella {
 impl Lamella {
     /// Liggende plaat (`α = 0`): `b_mm` langs y, `t_mm` langs z.
     pub fn liggend(b_mm: f64, t_mm: f64, y_mm: f64, z_mm: f64) -> Self {
-        Self { b_mm, t_mm, y_mm, z_mm, alpha_rad: 0.0 }
+        Self {
+            b_mm,
+            t_mm,
+            y_mm,
+            z_mm,
+            alpha_rad: 0.0,
+        }
     }
 
     /// Staande plaat (`α = 90°`): `b_mm` langs z, `t_mm` langs y.
     pub fn staand(b_mm: f64, t_mm: f64, y_mm: f64, z_mm: f64) -> Self {
-        Self { b_mm, t_mm, y_mm, z_mm, alpha_rad: std::f64::consts::FRAC_PI_2 }
+        Self {
+            b_mm,
+            t_mm,
+            y_mm,
+            z_mm,
+            alpha_rad: std::f64::consts::FRAC_PI_2,
+        }
     }
 
     /// Plaat onder een vrije hoek.
     pub fn gedraaid(b_mm: f64, t_mm: f64, y_mm: f64, z_mm: f64, alpha_rad: f64) -> Self {
-        Self { b_mm, t_mm, y_mm, z_mm, alpha_rad }
+        Self {
+            b_mm,
+            t_mm,
+            y_mm,
+            z_mm,
+            alpha_rad,
+        }
     }
 
     pub fn oppervlak_mm2(&self) -> f64 {
@@ -128,7 +146,13 @@ pub struct CatalogusDeel {
 
 impl CatalogusDeel {
     pub fn nieuw(props: SectionProperties, y_mm: f64, z_mm: f64) -> Self {
-        Self { props, y_mm, z_mm, alpha_rad: 0.0, gespiegeld: false }
+        Self {
+            props,
+            y_mm,
+            z_mm,
+            alpha_rad: 0.0,
+            gespiegeld: false,
+        }
     }
 
     /// Spiegelt het deel om zijn eigen z-as (`y → −y`).
@@ -148,8 +172,16 @@ impl CatalogusDeel {
         let p = &self.props;
         // Oudere data kent y_c/z_c niet (velden zijn `default` = 0); dan is de
         // dubbelsymmetrische aanname b/2 resp. h/2 de juiste terugval.
-        let yc = if p.y_c_mm > 0.0 { p.y_c_mm } else { p.b_mm / 2.0 };
-        let zc = if p.z_c_mm > 0.0 { p.z_c_mm } else { p.h_mm / 2.0 };
+        let yc = if p.y_c_mm > 0.0 {
+            p.y_c_mm
+        } else {
+            p.b_mm / 2.0
+        };
+        let zc = if p.z_c_mm > 0.0 {
+            p.z_c_mm
+        } else {
+            p.h_mm / 2.0
+        };
         (-yc, p.b_mm - yc, -zc, p.h_mm - zc)
     }
 }
@@ -206,7 +238,12 @@ pub struct CompositeSection {
 
 impl Default for CompositeSection {
     fn default() -> Self {
-        Self { lamellen: Vec::new(), delen: Vec::new(), cellen: Vec::new(), eta_schuif: 1.2 }
+        Self {
+            lamellen: Vec::new(),
+            delen: Vec::new(),
+            cellen: Vec::new(),
+            eta_schuif: 1.2,
+        }
     }
 }
 
@@ -395,10 +432,18 @@ impl CompositeSection {
             let q = d.statisch_moment_boven(z) + (z - z_c) * d.oppervlak_boven(z);
             let verhouding = q / b;
             if beste.as_ref().is_none_or(|v| verhouding > v.s_mm3 / v.b_mm) {
-                beste = Some(Schuifvezel { z_mm: z, s_mm3: q, b_mm: b, b_max_mm: b });
+                beste = Some(Schuifvezel {
+                    z_mm: z,
+                    s_mm3: q,
+                    b_mm: b,
+                    b_max_mm: b,
+                });
             }
         }
-        beste.map(|v| Schuifvezel { b_max_mm: b_max, ..v })
+        beste.map(|v| Schuifvezel {
+            b_max_mm: b_max,
+            ..v
+        })
     }
 
     /// Reken de complete doorsnede door.
@@ -418,7 +463,11 @@ impl CompositeSection {
             s_y += a * d.y_mm;
             s_z += a * d.z_mm;
         }
-        let (y_c, z_c) = if a_tot > 0.0 { (s_y / a_tot, s_z / a_tot) } else { (0.0, 0.0) };
+        let (y_c, z_c) = if a_tot > 0.0 {
+            (s_y / a_tot, s_z / a_tot)
+        } else {
+            (0.0, 0.0)
+        };
 
         // ── 2. Traagheidsmomenten om de zwaartepuntsassen ────────────────────
         // De polygoonintegralen worden pas ná verschuiving naar het zwaartepunt
@@ -531,7 +580,13 @@ impl CompositeSection {
                 crate::uitgebreid::plastisch_hoofdas(&lam, alpha),
             )
         } else {
-            (0.0, 0.0, 0.0, 0.0, crate::uitgebreid::PlastischHoofdas::default())
+            (
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                crate::uitgebreid::PlastischHoofdas::default(),
+            )
         };
 
         // ── 6. Torsie ────────────────────────────────────────────────────────
@@ -621,8 +676,16 @@ impl CompositeSection {
             av_z_mm2: av_z,
             it_mm4: it,
             iw_mm6: iw,
-            iy_radius_mm: if a_tot > 0.0 { (iy / a_tot).sqrt() } else { 0.0 },
-            iz_radius_mm: if a_tot > 0.0 { (iz / a_tot).sqrt() } else { 0.0 },
+            iy_radius_mm: if a_tot > 0.0 {
+                (iy / a_tot).sqrt()
+            } else {
+                0.0
+            },
+            iz_radius_mm: if a_tot > 0.0 {
+                (iz / a_tot).sqrt()
+            } else {
+                0.0
+            },
             h_mm: z_max - z_min,
             b_mm: y_max - y_min,
             tw_mm: 0.0,
@@ -773,7 +836,13 @@ impl CompositeSection {
         let mut aantal = 1;
         while let Some(k) = stapel.pop() {
             for &(a, b, _) in &randen {
-                let buur = if a == k { Some(b) } else if b == k { Some(a) } else { None };
+                let buur = if a == k {
+                    Some(b)
+                } else if b == k {
+                    Some(a)
+                } else {
+                    None
+                };
                 if let Some(m) = buur {
                     if !gezien[m] {
                         gezien[m] = true;
@@ -1002,7 +1071,9 @@ mod tests {
         // Rechthoek 96 × 450 als één lamel: S = b·h²/8 = 2,43e6 mm³, b = 96.
         let (b, h) = (96.0, 450.0);
         let sec = CompositeSection::nieuw().met_lamel(Lamella::liggend(b, h, 0.0, h / 2.0));
-        let v = sec.maatgevende_schuifvezel().expect("rechthoek heeft een schuifvezel");
+        let v = sec
+            .maatgevende_schuifvezel()
+            .expect("rechthoek heeft een schuifvezel");
         assert_relative_eq!(v.z_mm, h / 2.0, max_relative = 1e-12);
         assert_relative_eq!(v.s_mm3, b * h * h / 8.0, max_relative = 1e-12);
         assert_relative_eq!(v.b_mm, b, max_relative = 1e-12);
@@ -1022,7 +1093,9 @@ mod tests {
             .met_lamel(Lamella::liggend(1000.0, 40.0, 0.0, 20.0))
             .met_lamel(Lamella::liggend(71.0, 40.0, 0.0, 60.0))
             .met_lamel(Lamella::liggend(1000.0, 40.0, 0.0, 100.0));
-        let v = sec.maatgevende_schuifvezel().expect("I-vorm heeft een schuifvezel");
+        let v = sec
+            .maatgevende_schuifvezel()
+            .expect("I-vorm heeft een schuifvezel");
         assert_relative_eq!(v.z_mm, 60.0, max_relative = 1e-12);
         assert_relative_eq!(v.s_mm3, 1_614_200.0, max_relative = 1e-12);
         assert_relative_eq!(v.b_mm, 71.0, max_relative = 1e-12);
@@ -1053,17 +1126,25 @@ mod tests {
         let sec = CompositeSection::nieuw()
             .met_lamel(Lamella::liggend(40.0, 160.0, 0.0, 80.0))
             .met_lamel(Lamella::liggend(800.0, 40.0, 0.0, 180.0));
-        let v = sec.maatgevende_schuifvezel().expect("T-vorm heeft een schuifvezel");
+        let v = sec
+            .maatgevende_schuifvezel()
+            .expect("T-vorm heeft een schuifvezel");
         assert_relative_eq!(v.z_mm, 160.0, max_relative = 1e-12);
         assert_relative_eq!(v.b_mm, 40.0, max_relative = 1e-12);
-        assert_relative_eq!(v.s_mm3, 32_000.0 * (180.0 - 6_272_000.0 / 38_400.0), max_relative = 1e-10);
+        assert_relative_eq!(
+            v.s_mm3,
+            32_000.0 * (180.0 - 6_272_000.0 / 38_400.0),
+            max_relative = 1e-10
+        );
         assert_relative_eq!(v.b_max_mm, 800.0, max_relative = 1e-12);
     }
 
     #[test]
     fn schuifvezel_ontbreekt_zonder_contour() {
         // Leeg: niets te meten.
-        assert!(CompositeSection::nieuw().maatgevende_schuifvezel().is_none());
+        assert!(CompositeSection::nieuw()
+            .maatgevende_schuifvezel()
+            .is_none());
     }
 
     // ── Groep 1: gelaste I uit drie platen ───────────────────────────────────
@@ -1258,7 +1339,11 @@ mod tests {
         assert!(p.iyz_mm4.abs() > 1.0);
 
         // Invarianten: Iu + Iv = Iy + Iz binnen 1e-10 relatief.
-        assert_relative_eq!(p.iu_mm4 + p.iv_mm4, p.iy_mm4 + p.iz_mm4, max_relative = 1e-10);
+        assert_relative_eq!(
+            p.iu_mm4 + p.iv_mm4,
+            p.iy_mm4 + p.iz_mm4,
+            max_relative = 1e-10
+        );
 
         // Iuv = ½(Iy − Iz)·sin 2α + Iyz·cos 2α moet nul zijn.
         let a = p.alpha_hoofdas_rad;
@@ -1292,11 +1377,20 @@ mod tests {
             .met_lamel(Lamella::liggend(50.0, 10.0, 35.0, 5.0))
             .bereken();
         let p = r.props;
-        assert!(p.iy_mm4 > p.iz_mm4, "Iy = {} moet groter zijn dan Iz = {}", p.iy_mm4, p.iz_mm4);
+        assert!(
+            p.iy_mm4 > p.iz_mm4,
+            "Iy = {} moet groter zijn dan Iz = {}",
+            p.iy_mm4,
+            p.iz_mm4
+        );
 
         let hand = 0.5 * (2.0 * p.iyz_mm4 / (p.iz_mm4 - p.iy_mm4)).atan();
         assert_relative_eq!(p.alpha_hoofdas_rad, hand, max_relative = 1e-12);
-        assert_relative_eq!(p.iu_mm4 + p.iv_mm4, p.iy_mm4 + p.iz_mm4, max_relative = 1e-10);
+        assert_relative_eq!(
+            p.iu_mm4 + p.iv_mm4,
+            p.iy_mm4 + p.iz_mm4,
+            max_relative = 1e-10
+        );
 
         let a = p.alpha_hoofdas_rad;
         let iuv = 0.5 * (p.iy_mm4 - p.iz_mm4) * (2.0 * a).sin() + p.iyz_mm4 * (2.0 * a).cos();
@@ -1364,7 +1458,11 @@ mod tests {
             lamellen: origineel
                 .lamellen
                 .iter()
-                .map(|l| Lamella { y_mm: l.y_mm + 1000.0, z_mm: l.z_mm + 1000.0, ..*l })
+                .map(|l| Lamella {
+                    y_mm: l.y_mm + 1000.0,
+                    z_mm: l.z_mm + 1000.0,
+                    ..*l
+                })
                 .collect(),
             ..Default::default()
         }
@@ -1375,8 +1473,16 @@ mod tests {
         assert_relative_eq!(verschoven.iz_mm4, basis.iz_mm4, max_relative = 1e-10);
         assert_relative_eq!(verschoven.wpl_y_mm3, basis.wpl_y_mm3, max_relative = 1e-10);
         // Het zwaartepunt schuift wél gewoon mee.
-        assert_relative_eq!(verschoven.y_c_mm, basis.y_c_mm + 1000.0, max_relative = 1e-12);
-        assert_relative_eq!(verschoven.z_c_mm, basis.z_c_mm + 1000.0, max_relative = 1e-12);
+        assert_relative_eq!(
+            verschoven.y_c_mm,
+            basis.y_c_mm + 1000.0,
+            max_relative = 1e-12
+        );
+        assert_relative_eq!(
+            verschoven.z_c_mm,
+            basis.z_c_mm + 1000.0,
+            max_relative = 1e-12
+        );
     }
 
     // ── Aanvullend: gedraaide lamel en asymmetrische vezels ──────────────────

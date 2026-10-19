@@ -26,7 +26,11 @@ pub fn check_compression_parallel(
     let area = section.a_mm2;
     let n_ed = force_state.forces.n_ed;
     let sigma = sigma_axial_mpa(n_ed, area);
-    let uc = if f_c0d_mpa > 0.0 { sigma / f_c0d_mpa } else { 0.0 };
+    let uc = if f_c0d_mpa > 0.0 {
+        sigma / f_c0d_mpa
+    } else {
+        0.0
+    };
     let status = if n_ed >= 0.0 {
         CheckStatus::NotApplicable
     } else if uc <= 1.0 {
@@ -43,9 +47,21 @@ pub fn check_compression_parallel(
         force_state,
         formula_latex: r"\sigma_{c,0,d} = \frac{N_{c,Ed}}{A} \le f_{c,0,d}".to_string(),
         variables: vec![
-            NamedValue { symbol: r"N_{c,Ed}".to_string(), value: n_ed.abs(), unit: "kN".to_string() },
-            NamedValue { symbol: "A".to_string(), value: area, unit: "mm²".to_string() },
-            NamedValue { symbol: r"f_{c,0,d}".to_string(), value: f_c0d_mpa, unit: "N/mm²".to_string() },
+            NamedValue {
+                symbol: r"N_{c,Ed}".to_string(),
+                value: n_ed.abs(),
+                unit: "kN".to_string(),
+            },
+            NamedValue {
+                symbol: "A".to_string(),
+                value: area,
+                unit: "mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"f_{c,0,d}".to_string(),
+                value: f_c0d_mpa,
+                unit: "N/mm²".to_string(),
+            },
         ],
         value: sigma,
         unit: "N/mm²".to_string(),
@@ -73,7 +89,11 @@ pub fn check_tension_parallel(
     let area = section.a_mm2;
     let n_ed = force_state.forces.n_ed;
     let sigma = sigma_axial_mpa(n_ed, area);
-    let uc = if f_t0d_mpa > 0.0 { sigma / f_t0d_mpa } else { 0.0 };
+    let uc = if f_t0d_mpa > 0.0 {
+        sigma / f_t0d_mpa
+    } else {
+        0.0
+    };
     let status = if n_ed <= 0.0 {
         CheckStatus::NotApplicable
     } else if uc <= 1.0 {
@@ -90,9 +110,21 @@ pub fn check_tension_parallel(
         force_state,
         formula_latex: r"\sigma_{t,0,d} = \frac{N_{t,Ed}}{A} \le f_{t,0,d}".to_string(),
         variables: vec![
-            NamedValue { symbol: r"N_{t,Ed}".to_string(), value: n_ed.abs(), unit: "kN".to_string() },
-            NamedValue { symbol: "A".to_string(), value: area, unit: "mm²".to_string() },
-            NamedValue { symbol: r"f_{t,0,d}".to_string(), value: f_t0d_mpa, unit: "N/mm²".to_string() },
+            NamedValue {
+                symbol: r"N_{t,Ed}".to_string(),
+                value: n_ed.abs(),
+                unit: "kN".to_string(),
+            },
+            NamedValue {
+                symbol: "A".to_string(),
+                value: area,
+                unit: "mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"f_{t,0,d}".to_string(),
+                value: f_t0d_mpa,
+                unit: "N/mm²".to_string(),
+            },
         ],
         value: sigma,
         unit: "N/mm²".to_string(),
@@ -117,7 +149,10 @@ mod tests {
         ForceStateSnapshot {
             combination_id: 12,
             position_mm: 1034.0,
-            forces: InternalForces { n_ed: n_kn, ..Default::default() },
+            forces: InternalForces {
+                n_ed: n_kn,
+                ..Default::default()
+            },
         }
     }
 

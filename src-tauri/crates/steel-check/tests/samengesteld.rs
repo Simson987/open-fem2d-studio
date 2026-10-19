@@ -18,13 +18,13 @@
 //!   W_pl,y  = 2·3000·207,5 + 2·(200·10)·100           =   1 645 000 mm³
 //!   A_v,z   = η·h_w·t_w = 1,2·400·10                  =       4800 mm²
 
-use steel_check::*;
+use approx::assert_relative_eq;
 use mechanics::{ForcePoint, InternalForces};
 use nen_en_1990::ConsequenceClass;
 use nen_en_1993_1_1_ltb::LateralBracing;
-use nen_en_1993_1_1_section::{CheckStatus, classification::CrossSectionClass};
+use nen_en_1993_1_1_section::{classification::CrossSectionClass, CheckStatus};
 use section_properties::SectionProperties;
-use approx::assert_relative_eq;
+use steel_check::*;
 
 // ── De weigeringsmeldingen, letterlijk ──────────────────────────────────────
 //
@@ -54,7 +54,11 @@ fn lamel(b_mm: f64, t_mm: f64, y_mm: f64, z_mm: f64, staand: bool) -> CustomLame
         t_mm,
         y_mm,
         z_mm,
-        alpha_rad: if staand { std::f64::consts::FRAC_PI_2 } else { 0.0 },
+        alpha_rad: if staand {
+            std::f64::consts::FRAC_PI_2
+        } else {
+            0.0
+        },
     }
 }
 
@@ -181,12 +185,13 @@ fn notities_van(c: &NamedCheck) -> Vec<String> {
 
 fn tussenwaarde(c: &NamedCheck, symbool: &str) -> f64 {
     match &c.kind {
-        CheckKind::Stability(x) => x
-            .intermediate_values
-            .iter()
-            .find(|v| v.symbol == symbool)
-            .unwrap_or_else(|| panic!("tussenwaarde {symbool} ontbreekt"))
-            .value,
+        CheckKind::Stability(x) => {
+            x.intermediate_values
+                .iter()
+                .find(|v| v.symbol == symbool)
+                .unwrap_or_else(|| panic!("tussenwaarde {symbool} ontbreekt"))
+                .value
+        }
         CheckKind::Resistance(_) => panic!("{} is geen stabiliteitstoets", c.id),
     }
 }
@@ -288,7 +293,12 @@ fn inline_heb300_wijkt_alleen_af_op_de_kipkromme_van_tabel_6_5() {
 
     for (a, b) in uit_db.checks.iter().zip(uit_inline.checks.iter()) {
         assert_eq!(a.id, b.id, "checklijst loopt uit de pas");
-        assert_eq!(status_van(a), status_van(b), "status verschilt bij {}", a.id);
+        assert_eq!(
+            status_van(a),
+            status_van(b),
+            "status verschilt bij {}",
+            a.id
+        );
         if VIA_CHI_LT.contains(&a.id.as_str()) {
             continue;
         }
@@ -393,7 +403,10 @@ fn databasepad_blijft_ongewijzigd() {
         .collect();
     assert_eq!(ids, verwacht);
     for id in TOETSEN {
-        assert!(uc_van(check(&r, id)).is_some(), "{id} zou een UC moeten hebben");
+        assert!(
+            uc_van(check(&r, id)).is_some(),
+            "{id} zou een UC moeten hebben"
+        );
     }
 
     // N_c,Rd = A·f_y/γ_M0 en UC = |N_Ed|/N_c,Rd, uit de catalogusgegevens.
@@ -425,10 +438,26 @@ fn databasepad_blijft_ongewijzigd() {
     // gedachtestreepje van NEN-EN 1990:2002/NB:2019 A1.4.3(3) — "overige
     // vloeren en daken die intensief door personen worden gebruikt" — dus
     // 3/1 000 deel van ℓ_rep = 18,0 mm → UC = 8/18 = 0,444.
-    assert_relative_eq!(uc_van(check(&r, "deflection_w_fin")).unwrap(), 0.666, max_relative = 1e-12);
-    assert_relative_eq!(uc_van(check(&r, "deflection_w_add")).unwrap(), 8.0 / 18.0, max_relative = 1e-12);
-    assert_relative_eq!(uc_van(check(&r, "6.3.3_eq_6_61")).unwrap(), 0.701527, max_relative = 1e-5);
-    assert_relative_eq!(uc_van(check(&r, "6.3.3_eq_6_62")).unwrap(), 0.720831, max_relative = 1e-5);
+    assert_relative_eq!(
+        uc_van(check(&r, "deflection_w_fin")).unwrap(),
+        0.666,
+        max_relative = 1e-12
+    );
+    assert_relative_eq!(
+        uc_van(check(&r, "deflection_w_add")).unwrap(),
+        8.0 / 18.0,
+        max_relative = 1e-12
+    );
+    assert_relative_eq!(
+        uc_van(check(&r, "6.3.3_eq_6_61")).unwrap(),
+        0.701527,
+        max_relative = 1e-5
+    );
+    assert_relative_eq!(
+        uc_van(check(&r, "6.3.3_eq_6_62")).unwrap(),
+        0.720831,
+        max_relative = 1e-5
+    );
     assert_relative_eq!(r.uc_max, 0.720831, max_relative = 1e-5);
     assert_eq!(r.governing_check_id, "6.3.3_eq_6_62");
 }
@@ -502,7 +531,11 @@ fn gelaste_i_levert_handrekenbare_uc_voor_n_v_en_m() {
     assert_relative_eq!(uc_van(v).unwrap(), 0.230326, max_relative = 1e-5);
 
     // 6.2.5 om de z-as: W_pl,z = 310 000 mm³ → M_z,Rd = 72,85 kNm.
-    assert_relative_eq!(waarde_van(check(&r, "6.2.5_bending_z")), 72.85, max_relative = 1e-3);
+    assert_relative_eq!(
+        waarde_van(check(&r, "6.2.5_bending_z")),
+        72.85,
+        max_relative = 1e-3
+    );
 
     // 6.2.9  a = (A − 2·b·t_f)/A = (10 000 − 6000)/10 000 = 0,40 en
     //        n = 0,2128 ≤ a, dus géén reductie: UC gelijk aan 6.2.5.
@@ -523,7 +556,11 @@ fn gelaste_i_levert_handrekenbare_uc_voor_n_v_en_m() {
     );
 
     // De doorbuigingstoets is puur EI en blijft altijd geldig.
-    assert_relative_eq!(uc_van(check(&r, "deflection_w_fin")).unwrap(), 0.666, max_relative = 1e-12);
+    assert_relative_eq!(
+        uc_van(check(&r, "deflection_w_fin")).unwrap(),
+        0.666,
+        max_relative = 1e-12
+    );
 
     // Geen enkele weigering op deze doorsnede.
     for id in TOETSEN {
@@ -547,8 +584,16 @@ fn gelaste_i_krijgt_kolomknik_met_de_gelaste_knikkromme_b_en_c() {
     // λ_1 = π√(E/f_y) = π√(210 000/235) = 93,913
     // λ̄_y = (6000/176,574)/93,913 = 0,36183
     // λ̄_z = (6000/ 44,759)/93,913 = 1,42741
-    assert_relative_eq!(tussenwaarde(knik, r"\bar{\lambda}_y"), 0.361826, max_relative = 1e-4);
-    assert_relative_eq!(tussenwaarde(knik, r"\bar{\lambda}_z"), 1.427411, max_relative = 1e-4);
+    assert_relative_eq!(
+        tussenwaarde(knik, r"\bar{\lambda}_y"),
+        0.361826,
+        max_relative = 1e-4
+    );
+    assert_relative_eq!(
+        tussenwaarde(knik, r"\bar{\lambda}_z"),
+        1.427411,
+        max_relative = 1e-4
+    );
 
     // Tabel 6.2, **gelaste** I met t_f = 15 mm ≤ 40 mm: kromme b om y-y
     // (α = 0,34) en kromme c om z-z (α = 0,49).
@@ -594,9 +639,19 @@ fn flens_dikker_dan_40_mm_krijgt_knikkromme_c_en_d() {
     // September 2026 (tabel 3.1, basisaudit nr 17): t_f = 50 mm > 40 mm geeft
     // f_y = 215 in plaats van 235, dus λ̄ = √(A·f_y/N_cr) krimpt met
     // √(215/235) = 0,95652: 0,302579 → 0,289417 en 1,211904 → 1,159187.
-    assert_relative_eq!(tussenwaarde(knik, r"\bar{\lambda}_y"), 0.289417, max_relative = 1e-4);
-    assert_relative_eq!(tussenwaarde(knik, r"\bar{\lambda}_z"), 1.159187, max_relative = 1e-4);
-    assert!(notities_van(knik).iter().any(|n| n.contains("40 mm < t ≤ 80 mm") && n.contains("215")));
+    assert_relative_eq!(
+        tussenwaarde(knik, r"\bar{\lambda}_y"),
+        0.289417,
+        max_relative = 1e-4
+    );
+    assert_relative_eq!(
+        tussenwaarde(knik, r"\bar{\lambda}_z"),
+        1.159187,
+        max_relative = 1e-4
+    );
+    assert!(notities_van(knik)
+        .iter()
+        .any(|n| n.contains("40 mm < t ≤ 80 mm") && n.contains("215")));
 
     // t_f = 50 mm > 40 mm ⇒ tabel 6.2 schuift op naar kromme c (y-y, α = 0,49)
     // en kromme d (z-z, α = 0,76). Met λ̄_y = 0,289417 en λ̄_z = 1,159187:
@@ -621,7 +676,10 @@ fn gelaste_i_krijgt_kip_want_dubbelsymmetrisch() {
     // ongewijzigd; alleen het veld waaruit χ_LT wordt gelezen, is nu het veld
     // dat hem werkelijk draagt.
     let chi_lt = tussenwaarde(kip, r"\chi_{LT}");
-    assert!(chi_lt > 0.0 && chi_lt <= 1.0, "χ_LT = {chi_lt} is geen reductiefactor");
+    assert!(
+        chi_lt > 0.0 && chi_lt <= 1.0,
+        "χ_LT = {chi_lt} is geen reductiefactor"
+    );
     assert!(
         !notities_van(kip).contains(&MELDING_KIP.to_string()),
         "kip hoort hier juist wél te draaien"
@@ -643,11 +701,18 @@ fn gelaste_i_krijgt_kip_want_dubbelsymmetrisch() {
     // Tabel 6.5 (art. 6.3.2.3): gelaste I met h/b = 430/200 = 2,15 > 2 →
     // kipkromme d → tabel 6.3 → α_LT = 0,76. Niet de 0,34 (kromme b) die hier
     // vast stond, en ook niet de 0,49 die bij h/b ≤ 2 zou gelden.
-    assert_relative_eq!(tussenwaarde(kip, r"\alpha_{LT}"), 0.76, max_relative = 1e-12);
+    assert_relative_eq!(
+        tussenwaarde(kip, r"\alpha_{LT}"),
+        0.76,
+        max_relative = 1e-12
+    );
 
     // Met kip is 6.3.3 gewoon te rekenen.
     for id in ["6.3.3_eq_6_61", "6.3.3_eq_6_62"] {
-        assert!(uc_van(check(&r, id)).is_some(), "{id} hoort hier een UC te hebben");
+        assert!(
+            uc_van(check(&r, id)).is_some(),
+            "{id} hoort hier een UC te hebben"
+        );
     }
 }
 
@@ -671,7 +736,10 @@ fn monosymmetrische_gelaste_i_krijgt_geen_kip_maar_wel_een_reden() {
     // De kipcontrole staat er wél, maar zonder getal en met de reden.
     let kip = check(&r, "6.3.2_ltb");
     assert_eq!(status_van(kip), CheckStatus::NotApplicable);
-    assert!(uc_van(kip).is_none(), "een geweigerde toets mag geen UC hebben");
+    assert!(
+        uc_van(kip).is_none(),
+        "een geweigerde toets mag geen UC hebben"
+    );
     assert_eq!(notities_van(kip), vec![MELDING_KIP.to_string()]);
 
     // 6.3.3 deelt door M_b,Rd en vervalt daarmee ook — mét beide redenen.
@@ -690,8 +758,16 @@ fn monosymmetrische_gelaste_i_krijgt_geen_kip_maar_wel_een_reden() {
     assert_eq!(status_van(n), CheckStatus::Ok);
     assert_relative_eq!(waarde_van(n), 2702.5, max_relative = 1e-9);
     assert_relative_eq!(uc_van(n).unwrap(), 500.0 / 2702.5, max_relative = 1e-9);
-    for id in ["6.2.5_bending_y", "6.2.5_bending_z", "6.2.6_shear_z", "6.2.9_combined_mn"] {
-        assert!(uc_van(check(&r, id)).is_some(), "{id} hoort door te rekenen");
+    for id in [
+        "6.2.5_bending_y",
+        "6.2.5_bending_z",
+        "6.2.6_shear_z",
+        "6.2.9_combined_mn",
+    ] {
+        assert!(
+            uc_van(check(&r, id)).is_some(),
+            "{id} hoort door te rekenen"
+        );
     }
     // Kolomknik blijft ook gewoon staan (gelaste kromme, t_f = 15 ≤ 40).
     assert!(uc_van(check(&r, "6.3.1_buckling")).is_some());
@@ -705,10 +781,22 @@ fn koker_krijgt_geen_kip() {
         gesloten_cellen: vec![CustomGeslotenCel {
             // Wandmiddellijn: vierkant 190×190.
             midlijn: vec![
-                CustomPunt { y_mm: -95.0, z_mm: -95.0 },
-                CustomPunt { y_mm: 95.0, z_mm: -95.0 },
-                CustomPunt { y_mm: 95.0, z_mm: 95.0 },
-                CustomPunt { y_mm: -95.0, z_mm: 95.0 },
+                CustomPunt {
+                    y_mm: -95.0,
+                    z_mm: -95.0,
+                },
+                CustomPunt {
+                    y_mm: 95.0,
+                    z_mm: -95.0,
+                },
+                CustomPunt {
+                    y_mm: 95.0,
+                    z_mm: 95.0,
+                },
+                CustomPunt {
+                    y_mm: -95.0,
+                    z_mm: 95.0,
+                },
             ],
             dikte_mm: vec![10.0; 4],
             lamellen: vec![0, 1, 2, 3],
@@ -719,7 +807,11 @@ fn koker_krijgt_geen_kip() {
     let r = check_beam(invoer("", Some(cel_gedeclareerd), -500.0, -100.0, 100.0));
 
     // A = 2·200·10 + 2·180·10 = 7600 mm² → N_Rd = 1786 kN.
-    assert_relative_eq!(waarde_van(check(&r, "6.2.4_compression")), 1786.0, max_relative = 1e-9);
+    assert_relative_eq!(
+        waarde_van(check(&r, "6.2.4_compression")),
+        1786.0,
+        max_relative = 1e-9
+    );
 
     // Een koker is geen gelaste I: kip wordt geweigerd, mét reden.
     let kip = check(&r, "6.3.2_ltb");
@@ -789,8 +881,16 @@ fn klasse_4_levert_geen_enkele_weerstands_uc() {
     // `databasepad_blijft_ongewijzigd`: van de vaste L/150 = 40 mm naar
     // 3/1 000 · ℓ_rep = 18,0 mm (NEN-EN 1990:2002/NB:2019 A1.4.3(3), tweede
     // gedachtestreepje) → UC = 8/18 = 0,444.
-    assert_relative_eq!(uc_van(check(&r, "deflection_w_fin")).unwrap(), 0.666, max_relative = 1e-12);
-    assert_relative_eq!(uc_van(check(&r, "deflection_w_add")).unwrap(), 8.0 / 18.0, max_relative = 1e-12);
+    assert_relative_eq!(
+        uc_van(check(&r, "deflection_w_fin")).unwrap(),
+        0.666,
+        max_relative = 1e-12
+    );
+    assert_relative_eq!(
+        uc_van(check(&r, "deflection_w_add")).unwrap(),
+        8.0 / 18.0,
+        max_relative = 1e-12
+    );
     assert_relative_eq!(r.uc_max, 0.666, max_relative = 1e-12);
 }
 
@@ -868,7 +968,10 @@ fn ongedeclareerde_gesloten_cel_meldt_onderschatte_torsie() {
     let melding = check(&r, "doorsnede_gesloten_cel");
     assert_eq!(status_van(melding), CheckStatus::NotApplicable);
     assert!(uc_van(melding).is_none());
-    assert_eq!(notities_van(melding), vec![MELDING_GESLOTEN_CEL.to_string()]);
+    assert_eq!(
+        notities_van(melding),
+        vec![MELDING_GESLOTEN_CEL.to_string()]
+    );
 
     // Mét declaratie verdwijnt de melding — dan rekent de kern met Bredt.
     let met_declaratie = CustomSection {
@@ -876,10 +979,22 @@ fn ongedeclareerde_gesloten_cel_meldt_onderschatte_torsie() {
         lamellen: koker(),
         gesloten_cellen: vec![CustomGeslotenCel {
             midlijn: vec![
-                CustomPunt { y_mm: -95.0, z_mm: -95.0 },
-                CustomPunt { y_mm: 95.0, z_mm: -95.0 },
-                CustomPunt { y_mm: 95.0, z_mm: 95.0 },
-                CustomPunt { y_mm: -95.0, z_mm: 95.0 },
+                CustomPunt {
+                    y_mm: -95.0,
+                    z_mm: -95.0,
+                },
+                CustomPunt {
+                    y_mm: 95.0,
+                    z_mm: -95.0,
+                },
+                CustomPunt {
+                    y_mm: 95.0,
+                    z_mm: 95.0,
+                },
+                CustomPunt {
+                    y_mm: -95.0,
+                    z_mm: 95.0,
+                },
             ],
             dikte_mm: vec![10.0; 4],
             lamellen: vec![0, 1, 2, 3],
@@ -945,5 +1060,8 @@ fn eigenschappen_zonder_vormaanduiding_worden_geweigerd() {
     // Een onbekende profielnaam blijft de bestaande melding geven.
     let r3 = check_beam(invoer("BESTAAT NIET", None, -500.0, 0.0, 200.0));
     assert_eq!(r3.status, CheckStatus::NotApplicable);
-    assert_eq!(r3.governing_check_id, "ERROR: profile BESTAAT NIET not found");
+    assert_eq!(
+        r3.governing_check_id,
+        "ERROR: profile BESTAAT NIET not found"
+    );
 }

@@ -188,7 +188,11 @@ impl CltLayup {
 
     /// Korte naam: "CLT 40/20/40/20/40".
     pub fn name(&self) -> String {
-        let dikten: Vec<String> = self.layers.iter().map(|l| format!("{:.0}", l.thickness_mm)).collect();
+        let dikten: Vec<String> = self
+            .layers
+            .iter()
+            .map(|l| format!("{:.0}", l.thickness_mm))
+            .collect();
         format!("CLT {}", dikten.join("/"))
     }
 
@@ -197,7 +201,10 @@ impl CltLayup {
     pub fn strength_classes_label(&self) -> String {
         let mut uniek: Vec<&str> = Vec::new();
         for l in &self.layers {
-            if !uniek.iter().any(|u| u.eq_ignore_ascii_case(&l.strength_class)) {
+            if !uniek
+                .iter()
+                .any(|u| u.eq_ignore_ascii_case(&l.strength_class))
+            {
                 uniek.push(&l.strength_class);
             }
         }
@@ -208,7 +215,10 @@ impl CltLayup {
     /// melding voor de gebruiker.
     pub fn validate(&self) -> Result<(), String> {
         if !(self.width_mm > 0.0) {
-            return Err(format!("plaatbreedte b = {} mm is niet positief", self.width_mm));
+            return Err(format!(
+                "plaatbreedte b = {} mm is niet positief",
+                self.width_mm
+            ));
         }
         if self.layers.len() < 3 {
             return Err(format!(
@@ -218,7 +228,11 @@ impl CltLayup {
         }
         for (i, l) in self.layers.iter().enumerate() {
             if !(l.thickness_mm > 0.0) {
-                return Err(format!("laag {} heeft dikte {} mm — moet positief zijn", i + 1, l.thickness_mm));
+                return Err(format!(
+                    "laag {} heeft dikte {} mm — moet positief zijn",
+                    i + 1,
+                    l.thickness_mm
+                ));
             }
             if strength_class_by_name(&l.strength_class).is_none() {
                 return Err(format!(
@@ -229,7 +243,10 @@ impl CltLayup {
             }
         }
         if self.n_longitudinal() == 0 {
-            return Err("de opbouw heeft geen enkele lengtelaag — niets draagt in de spanrichting".to_string());
+            return Err(
+                "de opbouw heeft geen enkele lengtelaag — niets draagt in de spanrichting"
+                    .to_string(),
+            );
         }
         Ok(())
     }
@@ -301,8 +318,13 @@ impl CltMechanics {
         let mut eaz_sum = 0.0;
         let mut voorlopig: Vec<(usize, &CltLayer, &'static StrengthClass, f64, f64)> = Vec::new();
         for (i, l) in layup.layers.iter().enumerate() {
-            let class = strength_class_by_name(&l.strength_class)
-                .ok_or_else(|| format!("laag {}: sterkteklasse \"{}\" onbekend", i + 1, l.strength_class))?;
+            let class = strength_class_by_name(&l.strength_class).ok_or_else(|| {
+                format!(
+                    "laag {}: sterkteklasse \"{}\" onbekend",
+                    i + 1,
+                    l.strength_class
+                )
+            })?;
             let z_top = z;
             let z_bot = z + l.thickness_mm;
             z = z_bot;
@@ -397,7 +419,10 @@ impl CltMechanics {
     /// Spanningen aan boven- en onderkant van laag `idx` (N/mm², trek-positief).
     pub fn layer_edge_stresses(&self, idx: usize, m_knm: f64) -> (f64, f64) {
         let l = &self.layers[idx];
-        (self.sigma_mpa(idx, l.z_top_mm, m_knm), self.sigma_mpa(idx, l.z_bot_mm, m_knm))
+        (
+            self.sigma_mpa(idx, l.z_top_mm, m_knm),
+            self.sigma_mpa(idx, l.z_bot_mm, m_knm),
+        )
     }
 
     /// (ES)(z) = ∫₀ᶻ E(ζ)·b·(ζ − z_0) dζ — het E-gewogen statisch moment van
@@ -442,11 +467,19 @@ impl CltMechanics {
         if l.e_mpa > 0.0 && self.z0_mm > l.z_top_mm && self.z0_mm < l.z_bot_mm {
             kandidaten.push(self.z0_mm);
         }
-        let mut best = LayerShear { tau_mpa: 0.0, z_mm: l.z_top_mm, es_nmm: 0.0 };
+        let mut best = LayerShear {
+            tau_mpa: 0.0,
+            z_mm: l.z_top_mm,
+            es_nmm: 0.0,
+        };
         for z in kandidaten {
             let tau = self.tau_mpa(z, v_kn, k_cr);
             if tau > best.tau_mpa || (tau == best.tau_mpa && best.es_nmm == 0.0) {
-                best = LayerShear { tau_mpa: tau, z_mm: z, es_nmm: self.es_above_nmm(z).abs() };
+                best = LayerShear {
+                    tau_mpa: tau,
+                    z_mm: z,
+                    es_nmm: self.es_above_nmm(z).abs(),
+                };
             }
         }
         best
@@ -537,7 +570,11 @@ mod tests {
         // Rolschuifspanning in de dwarslaag: constant 0,0789.
         let rol = m.layer_max_shear(1, 10.0, 1.0);
         assert_relative_eq!(rol.tau_mpa, 0.07895, max_relative = 1e-3);
-        assert_relative_eq!(m.tau_mpa(40.0, 10.0, 1.0), m.tau_mpa(60.0, 10.0, 1.0), max_relative = 1e-12);
+        assert_relative_eq!(
+            m.tau_mpa(40.0, 10.0, 1.0),
+            m.tau_mpa(60.0, 10.0, 1.0),
+            max_relative = 1e-12
+        );
         // Middenlaag: maximum op de zwaartelijn, 0,0855.
         let mid = m.layer_max_shear(2, 10.0, 1.0);
         assert_relative_eq!(mid.tau_mpa, 0.08553, max_relative = 1e-3);
@@ -573,9 +610,17 @@ mod tests {
                 .collect(),
         );
         let m = layup.mechanics().unwrap();
-        assert_relative_eq!(m.i_ef_net_mm4(), 1000.0 * 120.0_f64.powi(3) / 12.0, max_relative = 1e-12);
+        assert_relative_eq!(
+            m.i_ef_net_mm4(),
+            1000.0 * 120.0_f64.powi(3) / 12.0,
+            max_relative = 1e-12
+        );
         // Schuifspanning op de zwaartelijn = 1,5·V/A.
-        assert_relative_eq!(m.tau_mpa(60.0, 10.0, 1.0), 1.5 * 10e3 / 120e3, max_relative = 1e-12);
+        assert_relative_eq!(
+            m.tau_mpa(60.0, 10.0, 1.0),
+            1.5 * 10e3 / 120e3,
+            max_relative = 1e-12
+        );
     }
 
     #[test]
@@ -585,9 +630,21 @@ mod tests {
         let layup = CltLayup::new(
             1000.0,
             vec![
-                CltLayer { thickness_mm: 40.0, orientation: CltLayerOrientation::Longitudinal, strength_class: "C24".into() },
-                CltLayer { thickness_mm: 20.0, orientation: CltLayerOrientation::Transverse, strength_class: "C24".into() },
-                CltLayer { thickness_mm: 20.0, orientation: CltLayerOrientation::Longitudinal, strength_class: "C24".into() },
+                CltLayer {
+                    thickness_mm: 40.0,
+                    orientation: CltLayerOrientation::Longitudinal,
+                    strength_class: "C24".into(),
+                },
+                CltLayer {
+                    thickness_mm: 20.0,
+                    orientation: CltLayerOrientation::Transverse,
+                    strength_class: "C24".into(),
+                },
+                CltLayer {
+                    thickness_mm: 20.0,
+                    orientation: CltLayerOrientation::Longitudinal,
+                    strength_class: "C24".into(),
+                },
             ],
         );
         let m = layup.mechanics().unwrap();
@@ -601,22 +658,46 @@ mod tests {
         let layup = CltLayup::new(
             1000.0,
             vec![
-                CltLayer { thickness_mm: 40.0, orientation: CltLayerOrientation::Longitudinal, strength_class: "C24".into() },
-                CltLayer { thickness_mm: 20.0, orientation: CltLayerOrientation::Transverse, strength_class: "C16".into() },
-                CltLayer { thickness_mm: 40.0, orientation: CltLayerOrientation::Longitudinal, strength_class: "C16".into() },
+                CltLayer {
+                    thickness_mm: 40.0,
+                    orientation: CltLayerOrientation::Longitudinal,
+                    strength_class: "C24".into(),
+                },
+                CltLayer {
+                    thickness_mm: 20.0,
+                    orientation: CltLayerOrientation::Transverse,
+                    strength_class: "C16".into(),
+                },
+                CltLayer {
+                    thickness_mm: 40.0,
+                    orientation: CltLayerOrientation::Longitudinal,
+                    strength_class: "C16".into(),
+                },
             ],
         );
         let m = layup.mechanics().unwrap();
-        assert_relative_eq!(m.z0_mm, (11000.0 * 20.0 + 8000.0 * 80.0) / 19000.0, max_relative = 1e-9);
+        assert_relative_eq!(
+            m.z0_mm,
+            (11000.0 * 20.0 + 8000.0 * 80.0) / 19000.0,
+            max_relative = 1e-9
+        );
         assert_eq!(layup.strength_classes_label(), "C24/C16");
     }
 
     #[test]
     fn validatie_wijst_onbruikbare_opbouwen_af() {
-        assert!(CltLayup::alternating(1000.0, &[40.0, 20.0], "C24").validate().is_err());
-        assert!(CltLayup::alternating(1000.0, &[40.0, 0.0, 40.0], "C24").validate().is_err());
-        assert!(CltLayup::alternating(1000.0, &[40.0, 20.0, 40.0], "S235").validate().is_err());
-        assert!(CltLayup::alternating(0.0, &[40.0, 20.0, 40.0], "C24").validate().is_err());
+        assert!(CltLayup::alternating(1000.0, &[40.0, 20.0], "C24")
+            .validate()
+            .is_err());
+        assert!(CltLayup::alternating(1000.0, &[40.0, 0.0, 40.0], "C24")
+            .validate()
+            .is_err());
+        assert!(CltLayup::alternating(1000.0, &[40.0, 20.0, 40.0], "S235")
+            .validate()
+            .is_err());
+        assert!(CltLayup::alternating(0.0, &[40.0, 20.0, 40.0], "C24")
+            .validate()
+            .is_err());
         let alleen_dwars = CltLayup::new(
             1000.0,
             (0..3)
@@ -628,7 +709,9 @@ mod tests {
                 .collect(),
         );
         assert!(alleen_dwars.validate().is_err());
-        assert!(CltLayup::alternating(1000.0, &[40.0, 20.0, 40.0], "c24").validate().is_ok());
+        assert!(CltLayup::alternating(1000.0, &[40.0, 20.0, 40.0], "c24")
+            .validate()
+            .is_ok());
     }
 
     #[test]
@@ -637,11 +720,18 @@ mod tests {
         assert_eq!(l.name(), "CLT 40/20/40/20/40");
         assert_eq!(l.n_longitudinal(), 3);
         let presets = clt_presets();
-        assert!(presets.iter().any(|p| p.name == "5-laags 160" && p.height_mm == 160.0));
+        assert!(presets
+            .iter()
+            .any(|p| p.name == "5-laags 160" && p.height_mm == 160.0));
         for p in &presets {
             assert_relative_eq!(p.height_mm, p.thicknesses_mm.iter().sum::<f64>());
-            assert!(p.thicknesses_mm.len() % 2 == 1, "symmetrische opbouw met oneven aantal lagen");
-            assert!(CltLayup::alternating(1000.0, &p.thicknesses_mm, "C24").validate().is_ok());
+            assert!(
+                p.thicknesses_mm.len() % 2 == 1,
+                "symmetrische opbouw met oneven aantal lagen"
+            );
+            assert!(CltLayup::alternating(1000.0, &p.thicknesses_mm, "C24")
+                .validate()
+                .is_ok());
         }
     }
 }

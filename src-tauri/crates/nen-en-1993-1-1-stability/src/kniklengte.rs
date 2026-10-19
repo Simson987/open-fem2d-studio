@@ -301,7 +301,11 @@ pub fn steunpunten_hele_doorsnede(lengte_mm: f64, boven: &[f64], onder: &[f64]) 
     let alleen_boven = b.len() - punten.len();
     let alleen_onder = o.len() - gebruikt.iter().filter(|g| **g).count();
     if punten.is_empty() {
-        return Steunafleiding { alleen_boven, alleen_onder, ..leeg };
+        return Steunafleiding {
+            alleen_boven,
+            alleen_onder,
+            ..leeg
+        };
     }
 
     let mut grenzen = Vec::with_capacity(punten.len() + 2);
@@ -421,8 +425,16 @@ pub fn bepaal_kniklengte(
             toelichting.push(format!(
                 "Steunpunten over de hele doorsnede op x = {} mm; de velden zijn {} mm. \
                  L_cr,{as_naam} is het grootste veld: {} mm.",
-                a.steunpunten_mm.iter().map(|x| nl(*x, 0)).collect::<Vec<_>>().join(" · "),
-                a.velden_mm.iter().map(|x| nl(*x, 0)).collect::<Vec<_>>().join(" · "),
+                a.steunpunten_mm
+                    .iter()
+                    .map(|x| nl(*x, 0))
+                    .collect::<Vec<_>>()
+                    .join(" · "),
+                a.velden_mm
+                    .iter()
+                    .map(|x| nl(*x, 0))
+                    .collect::<Vec<_>>()
+                    .join(" · "),
                 nl(l_cr_mm, 0)
             ));
             if a.alleen_boven + a.alleen_onder > 0 {
@@ -517,14 +529,20 @@ pub fn kniklengte_deelstap(k: &Kniklengte, article: &str, norm_in_vlak: &str) ->
     let a = &k.as_naam;
     let symbool = k.symbool();
     let (formule, ingevuld) = match k.herkomst {
-        KniklengteHerkomst::Opgegeven => (format!(r"{symbool} = \text{{opgegeven}}"), String::new()),
+        KniklengteHerkomst::Opgegeven => {
+            (format!(r"{symbool} = \text{{opgegeven}}"), String::new())
+        }
         KniklengteHerkomst::Staaflengte => (format!(r"{symbool} = L"), String::new()),
         KniklengteHerkomst::VrijEind => (format!(r"{symbool} = 2 \cdot L"), String::new()),
         KniklengteHerkomst::Kipsteunen => (
             format!(r"{symbool} = \max_i \left( x_{{i+1}} - x_i \right)"),
             format!(
                 r"{symbool} = \max\left( {} \right)",
-                k.velden_mm.iter().map(|v| lx(*v, 0)).collect::<Vec<_>>().join(r" \,;\, ")
+                k.velden_mm
+                    .iter()
+                    .map(|v| lx(*v, 0))
+                    .collect::<Vec<_>>()
+                    .join(r" \,;\, ")
             ),
         ),
     };
@@ -540,7 +558,10 @@ pub fn kniklengte_deelstap(k: &Kniklengte, article: &str, norm_in_vlak: &str) ->
         ingevuld,
         // L alleen als hij bekend is; een NaN zou als "n.v.t." verschijnen.
         if k.staaflengte_mm.is_finite() {
-            vec![nv("L", k.staaflengte_mm, "mm"), nv(&symbool, k.l_cr_mm, "mm")]
+            vec![
+                nv("L", k.staaflengte_mm, "mm"),
+                nv(&symbool, k.l_cr_mm, "mm"),
+            ]
         } else {
             vec![nv(&symbool, k.l_cr_mm, "mm")]
         },
@@ -557,15 +578,29 @@ mod tests {
     const L: f64 = 9000.0;
 
     fn flens<'a>(boven: &'a [f64], onder: &'a [f64]) -> Option<Steunen<'a>> {
-        Some(Steunen { boven, onder, soort: Steunrand::Flens })
+        Some(Steunen {
+            boven,
+            onder,
+            soort: Steunrand::Flens,
+        })
     }
 
     #[test]
     fn opgegeven_gaat_voor_ook_als_de_steunen_iets_anders_zeggen() {
-        let k = bepaal_kniklengte("z", false, 4.5, L, flens(&[0.25, 0.5, 0.75], &[0.25, 0.5, 0.75]));
+        let k = bepaal_kniklengte(
+            "z",
+            false,
+            4.5,
+            L,
+            flens(&[0.25, 0.5, 0.75], &[0.25, 0.5, 0.75]),
+        );
         assert_eq!(k.herkomst, KniklengteHerkomst::Opgegeven);
         assert_eq!(k.l_cr_mm, 4500.0);
-        assert!(k.toelichting.iter().any(|t| t.contains("2250 mm")), "{:?}", k.toelichting);
+        assert!(
+            k.toelichting.iter().any(|t| t.contains("2250 mm")),
+            "{:?}",
+            k.toelichting
+        );
     }
 
     #[test]
@@ -573,7 +608,11 @@ mod tests {
         let k = bepaal_kniklengte("z", false, 0.0, L, None);
         assert_eq!(k.herkomst, KniklengteHerkomst::Staaflengte);
         assert_eq!(k.l_cr_mm, L);
-        assert_eq!(k.toelichting.len(), 1, "nul hoort geen 'genegeerd'-melding te geven");
+        assert_eq!(
+            k.toelichting.len(),
+            1,
+            "nul hoort geen 'genegeerd'-melding te geven"
+        );
     }
 
     #[test]
@@ -581,14 +620,24 @@ mod tests {
         for w in [-2.0, f64::NAN, f64::INFINITY] {
             let k = bepaal_kniklengte("y", true, w, L, None);
             assert_eq!(k.herkomst, KniklengteHerkomst::Staaflengte);
-            assert!(k.toelichting[0].contains("genegeerd"), "{w}: {:?}", k.toelichting);
+            assert!(
+                k.toelichting[0].contains("genegeerd"),
+                "{w}: {:?}",
+                k.toelichting
+            );
         }
     }
 
     #[test]
     fn steunen_aan_beide_flenzen_geven_het_grootste_veld() {
         // Steunpunten op 2250 en 6000 mm → velden 2250, 3750, 3000.
-        let k = bepaal_kniklengte("z", false, 0.0, L, flens(&[0.25, 2.0 / 3.0], &[2.0 / 3.0, 0.25]));
+        let k = bepaal_kniklengte(
+            "z",
+            false,
+            0.0,
+            L,
+            flens(&[0.25, 2.0 / 3.0], &[2.0 / 3.0, 0.25]),
+        );
         assert_eq!(k.herkomst, KniklengteHerkomst::Kipsteunen);
         assert!((k.l_cr_mm - 3750.0).abs() < 1e-9, "{}", k.l_cr_mm);
         assert_eq!(k.velden_mm.len(), 3);
@@ -599,7 +648,13 @@ mod tests {
         let k = bepaal_kniklengte("z", false, 0.0, L, flens(&[0.25, 0.5, 0.75], &[]));
         assert_eq!(k.herkomst, KniklengteHerkomst::Staaflengte);
         assert_eq!(k.l_cr_mm, L);
-        assert!(k.toelichting.iter().any(|t| t.contains("alleen de bovenflens (3)")), "{:?}", k.toelichting);
+        assert!(
+            k.toelichting
+                .iter()
+                .any(|t| t.contains("alleen de bovenflens (3)")),
+            "{:?}",
+            k.toelichting
+        );
     }
 
     #[test]
@@ -634,9 +689,15 @@ mod tests {
         assert_eq!(d.id, "l_cr_z");
         assert_eq!(d.symbol, "L_{cr,z}");
         assert_eq!(d.notes[0], "Herkomst: staaflengte (terugval).");
-        assert!(d.notes.iter().any(|n| n.contains("UIT het vlak") && n.contains("P-Δ")));
+        assert!(d
+            .notes
+            .iter()
+            .any(|n| n.contains("UIT het vlak") && n.contains("P-Δ")));
         let y = bepaal_kniklengte("y", true, 3.0, L, None);
         let dy = kniklengte_deelstap(&y, "art. 6.3.1.3(1)", "NEN-EN 1993-1-1 5.2.2(7)");
-        assert!(dy.notes.iter().any(|n| n.contains("IN het vlak") && n.contains("5.2.2(7)")));
+        assert!(dy
+            .notes
+            .iter()
+            .any(|n| n.contains("IN het vlak") && n.contains("5.2.2(7)")));
     }
 }

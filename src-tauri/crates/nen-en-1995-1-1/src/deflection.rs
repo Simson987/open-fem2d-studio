@@ -91,7 +91,11 @@ fn doorbuigingstoets(
     formule: &str,
     extra: Vec<NamedValue>,
 ) -> ResistanceCalc {
-    let grens = if noemer.is_finite() && noemer > 0.0 { lengte_mm / noemer } else { f64::INFINITY };
+    let grens = if noemer.is_finite() && noemer > 0.0 {
+        lengte_mm / noemer
+    } else {
+        f64::INFINITY
+    };
     // Zonder eindige, positieve grens is er niets getoetst: geen UC (een UC
     // van 0 leest als "ruim voldaan") en geen status Ok. Via de orkestratie
     // komt het zover niet — `keur_noemers` weigert de staaf eerder — maar een
@@ -99,9 +103,21 @@ fn doorbuigingstoets(
     let getoetst = grens.is_finite() && grens > 0.0;
     let uc = if getoetst { w_mm.abs() / grens } else { 0.0 };
     let mut variables = vec![
-        NamedValue { symbol: "L".to_string(), value: lengte_mm, unit: "mm".to_string() },
-        NamedValue { symbol: "w".to_string(), value: w_mm, unit: "mm".to_string() },
-        NamedValue { symbol: "n".to_string(), value: noemer, unit: "(L/n)".to_string() },
+        NamedValue {
+            symbol: "L".to_string(),
+            value: lengte_mm,
+            unit: "mm".to_string(),
+        },
+        NamedValue {
+            symbol: "w".to_string(),
+            value: w_mm,
+            unit: "mm".to_string(),
+        },
+        NamedValue {
+            symbol: "n".to_string(),
+            value: noemer,
+            unit: "(L/n)".to_string(),
+        },
     ];
     variables.extend(extra);
     ResistanceCalc {
@@ -168,8 +184,16 @@ pub fn check_deflection_pair(
             noemer_fin,
             r"w_{fin,z} = w_z + k_{def} \cdot w_{qp,z}",
             vec![
-                NamedValue { symbol: r"k_{def}".to_string(), value: k_def, unit: "-".to_string() },
-                NamedValue { symbol: r"w_{qp}".to_string(), value: w_quasi_perm_mm, unit: "mm".to_string() },
+                NamedValue {
+                    symbol: r"k_{def}".to_string(),
+                    value: k_def,
+                    unit: "-".to_string(),
+                },
+                NamedValue {
+                    symbol: r"w_{qp}".to_string(),
+                    value: w_quasi_perm_mm,
+                    unit: "mm".to_string(),
+                },
             ],
         ),
         doorbuigingstoets(
@@ -179,7 +203,11 @@ pub fn check_deflection_pair(
             lengte_mm,
             noemer_add,
             r"w_{add,z} = w_{fin,z} - w_{perm,z}",
-            vec![NamedValue { symbol: r"w_{perm}".to_string(), value: w_perm_mm, unit: "mm".to_string() }],
+            vec![NamedValue {
+                symbol: r"w_{perm}".to_string(),
+                value: w_perm_mm,
+                unit: "mm".to_string(),
+            }],
         ),
     )
 }
@@ -221,7 +249,13 @@ pub fn check_deflection_pair_met_langeduur(
 ) -> (ResistanceCalc, ResistanceCalc) {
     let Some(w_qp_fin) = w_quasi_perm_fin_mm else {
         return check_deflection_pair(
-            w_inst_mm, w_quasi_perm_mm, w_perm_mm, k_def, lengte_mm, noemer_fin, noemer_add,
+            w_inst_mm,
+            w_quasi_perm_mm,
+            w_perm_mm,
+            k_def,
+            lengte_mm,
+            noemer_fin,
+            noemer_add,
         );
     };
     let w_fin = w_fin_langeduur_mm(w_inst_mm, w_quasi_perm_mm, w_qp_fin);
@@ -236,8 +270,16 @@ pub fn check_deflection_pair_met_langeduur(
         noemer_fin,
         r"w_{fin,z} = w_z + \left(w_{qp,fin,z} - w_{qp,z}\right)",
         vec![
-            NamedValue { symbol: r"w_{qp}".to_string(), value: w_quasi_perm_mm, unit: "mm".to_string() },
-            NamedValue { symbol: r"w_{qp,fin}".to_string(), value: w_qp_fin, unit: "mm".to_string() },
+            NamedValue {
+                symbol: r"w_{qp}".to_string(),
+                value: w_quasi_perm_mm,
+                unit: "mm".to_string(),
+            },
+            NamedValue {
+                symbol: r"w_{qp,fin}".to_string(),
+                value: w_qp_fin,
+                unit: "mm".to_string(),
+            },
         ],
     );
     fin.notes.push(format!(
@@ -266,7 +308,11 @@ pub fn check_deflection_pair_met_langeduur(
         lengte_mm,
         noemer_add,
         r"w_{add,z} = w_{fin,z} - w_{perm,z}",
-        vec![NamedValue { symbol: r"w_{perm}".to_string(), value: w_perm_mm, unit: "mm".to_string() }],
+        vec![NamedValue {
+            symbol: r"w_{perm}".to_string(),
+            value: w_perm_mm,
+            unit: "mm".to_string(),
+        }],
     );
     add.notes.push(format!(
         "w_add = w_fin − w₁ = w₂ + w₃ (NEN-EN 1990:2002/NB:2019 figuur NB.1). Het kruipdeel w₂ is \
@@ -285,7 +331,8 @@ mod tests {
     #[test]
     fn referentie_staaf2_doorbuiging() {
         // w_fin = −39,2 → UC 1,55; w_add = −14,7 → UC 0,77.
-        let (fin, add) = check_deflection_pair(-24.5, -24.5, -24.5, 0.6, 6342.0, NOEMER_W_FIN, NOEMER_W_ADD);
+        let (fin, add) =
+            check_deflection_pair(-24.5, -24.5, -24.5, 0.6, 6342.0, NOEMER_W_FIN, NOEMER_W_ADD);
         assert_relative_eq!(fin.uc.as_ref().unwrap().ed, 39.2, max_relative = 1e-3);
         assert_relative_eq!(fin.uc.as_ref().unwrap().uc, 1.55, max_relative = 5e-3);
         assert_eq!(fin.status, CheckStatus::NotOk);
@@ -298,7 +345,8 @@ mod tests {
     fn referentie_staaf1_doorbuiging() {
         // w_inst = 4,3 mm → w_fin = 6,88; UC = 6,88/(3313/250) = 0,52;
         // w_add = 2,58; UC = 2,58/(3313/333) = 0,26.
-        let (fin, add) = check_deflection_pair(-4.3, -4.3, -4.3, 0.6, 3313.0, NOEMER_W_FIN, NOEMER_W_ADD);
+        let (fin, add) =
+            check_deflection_pair(-4.3, -4.3, -4.3, 0.6, 3313.0, NOEMER_W_FIN, NOEMER_W_ADD);
         assert_relative_eq!(fin.uc.as_ref().unwrap().uc, 0.52, max_relative = 1e-2);
         assert_relative_eq!(add.uc.as_ref().unwrap().uc, 0.26, max_relative = 1e-2);
     }
@@ -318,29 +366,62 @@ mod tests {
     #[test]
     fn langeduurzakking_volgens_2_2_3_4() {
         let (f0, a0) = check_deflection_pair(-10.0, -6.0, -4.0, 0.6, 5000.0, 250.0, 333.0);
-        let (f1, a1) = check_deflection_pair_met_langeduur(-10.0, -6.0, None, -4.0, 0.6, 5000.0, 250.0, 333.0);
+        let (f1, a1) =
+            check_deflection_pair_met_langeduur(-10.0, -6.0, None, -4.0, 0.6, 5000.0, 250.0, 333.0);
         assert_eq!(format!("{f0:?}"), format!("{f1:?}"));
         assert_eq!(format!("{a0:?}"), format!("{a1:?}"));
 
-        let (f2, a2) =
-            check_deflection_pair_met_langeduur(-10.0, -6.0, Some(-9.6), -4.0, 0.6, 5000.0, 250.0, 333.0);
+        let (f2, a2) = check_deflection_pair_met_langeduur(
+            -10.0,
+            -6.0,
+            Some(-9.6),
+            -4.0,
+            0.6,
+            5000.0,
+            250.0,
+            333.0,
+        );
         assert_relative_eq!(f2.variables[1].value, -13.6, max_relative = 1e-12);
-        assert_relative_eq!(f2.uc.as_ref().unwrap().ed, f0.uc.as_ref().unwrap().ed, max_relative = 1e-12);
-        assert_relative_eq!(a2.uc.as_ref().unwrap().ed, a0.uc.as_ref().unwrap().ed, max_relative = 1e-12);
+        assert_relative_eq!(
+            f2.uc.as_ref().unwrap().ed,
+            f0.uc.as_ref().unwrap().ed,
+            max_relative = 1e-12
+        );
+        assert_relative_eq!(
+            a2.uc.as_ref().unwrap().ed,
+            a0.uc.as_ref().unwrap().ed,
+            max_relative = 1e-12
+        );
 
         // Gemengd: het hout kruipt harder dan de vereenvoudiging zegt.
-        let (f3, a3) =
-            check_deflection_pair_met_langeduur(-10.0, -6.0, Some(-11.0), -4.0, 0.6, 5000.0, 250.0, 333.0);
+        let (f3, a3) = check_deflection_pair_met_langeduur(
+            -10.0,
+            -6.0,
+            Some(-11.0),
+            -4.0,
+            0.6,
+            5000.0,
+            250.0,
+            333.0,
+        );
         assert_relative_eq!(f3.variables[1].value, -15.0, max_relative = 1e-12);
         assert_relative_eq!(a3.variables[1].value, -11.0, max_relative = 1e-12);
         assert!(f3.formula_latex.contains("w_{qp,fin,z}"));
-        assert!(f3.notes.iter().any(|n| n.contains("2.2.3(4)") && n.contains("13,60")));
-        assert!(a3.notes.iter().any(|n| n.contains("w₂ + w₃") && n.contains("-5,00")));
+        assert!(f3
+            .notes
+            .iter()
+            .any(|n| n.contains("2.2.3(4)") && n.contains("13,60")));
+        assert!(a3
+            .notes
+            .iter()
+            .any(|n| n.contains("w₂ + w₃") && n.contains("-5,00")));
 
         assert!(keur_langeduurzakking(None).is_ok());
         assert!(keur_langeduurzakking(Some(-3.0)).is_ok());
         for w in [f64::NAN, f64::INFINITY] {
-            assert!(keur_langeduurzakking(Some(w)).unwrap_err().contains("w_qp,fin"));
+            assert!(keur_langeduurzakking(Some(w))
+                .unwrap_err()
+                .contains("w_qp,fin"));
         }
     }
 

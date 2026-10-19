@@ -49,7 +49,7 @@ use steel_profiles::{db, ProfileKind};
 use crate::input::{BeamCheckInput, CustomLamella, CustomSection};
 use crate::orchestrator::{check_beam, plak_notitie, uc_of};
 use crate::result::{
-    BeamCheckResult, MaatgevendPunt, NamedCheck, StabiliteitsDoorsnede, Toetsdoorsnede, ToetsUc,
+    BeamCheckResult, MaatgevendPunt, NamedCheck, StabiliteitsDoorsnede, ToetsUc, Toetsdoorsnede,
     VerloopMaten, VerloopRapport,
 };
 
@@ -85,8 +85,12 @@ const DOORSNEDETOETSEN: [&str; 8] = [
 ];
 
 /// De vier toetsen die met de kleinste doorsnede in het veld gaan.
-const STABILITEITSTOETSEN: [&str; 4] =
-    ["6.3.1_buckling", "6.3.2_ltb", "6.3.3_eq_6_61", "6.3.3_eq_6_62"];
+const STABILITEITSTOETSEN: [&str; 4] = [
+    "6.3.1_buckling",
+    "6.3.2_ltb",
+    "6.3.3_eq_6_61",
+    "6.3.3_eq_6_62",
+];
 
 /// De twee doorbuigingsregels; die hangen niet van de doorsnede af.
 const DOORBUIGING: [&str; 2] = ["deflection_w_fin", "deflection_w_add"];
@@ -169,8 +173,20 @@ pub fn maten_naar_doorsnede(m: Maten, naam: &str) -> CustomSection {
                 alpha_rad: std::f64::consts::FRAC_PI_2,
             },
             // Onderflens en bovenflens: liggend (alpha = 0), lengte b, dikte t_f.
-            CustomLamella { b_mm: m.b_mm, t_mm: m.tf_mm, y_mm: 0.0, z_mm: -z_flens, alpha_rad: 0.0 },
-            CustomLamella { b_mm: m.b_mm, t_mm: m.tf_mm, y_mm: 0.0, z_mm: z_flens, alpha_rad: 0.0 },
+            CustomLamella {
+                b_mm: m.b_mm,
+                t_mm: m.tf_mm,
+                y_mm: 0.0,
+                z_mm: -z_flens,
+                alpha_rad: 0.0,
+            },
+            CustomLamella {
+                b_mm: m.b_mm,
+                t_mm: m.tf_mm,
+                y_mm: 0.0,
+                z_mm: z_flens,
+                alpha_rad: 0.0,
+            },
         ],
         gesloten_cellen: vec![],
         eigenschappen: None,
@@ -190,15 +206,26 @@ pub fn maten_van_gelaste_i(cs: &CustomSection) -> Option<Maten> {
     if !cs.is_dubbelsymmetrische_gelaste_i() {
         return None;
     }
-    let liggend: Vec<&CustomLamella> =
-        cs.lamellen.iter().filter(|l| l.alpha_rad.sin().abs() < 1e-9).collect();
-    let lijf = cs.lamellen.iter().find(|l| l.alpha_rad.cos().abs() < 1e-9)?;
+    let liggend: Vec<&CustomLamella> = cs
+        .lamellen
+        .iter()
+        .filter(|l| l.alpha_rad.sin().abs() < 1e-9)
+        .collect();
+    let lijf = cs
+        .lamellen
+        .iter()
+        .find(|l| l.alpha_rad.cos().abs() < 1e-9)?;
     let flens = liggend.first()?;
     let h = lijf.b_mm + 2.0 * flens.t_mm;
     if !(h > 0.0 && flens.b_mm > 0.0 && lijf.t_mm > 0.0 && flens.t_mm > 0.0) {
         return None;
     }
-    Some(Maten { h_mm: h, b_mm: flens.b_mm, tw_mm: lijf.t_mm, tf_mm: flens.t_mm })
+    Some(Maten {
+        h_mm: h,
+        b_mm: flens.b_mm,
+        tw_mm: lijf.t_mm,
+        tf_mm: flens.t_mm,
+    })
 }
 
 /// Is deze staaf verlopend, en zo ja met welke twee doorsneden?
@@ -264,15 +291,17 @@ pub fn bepaal_verloop(input: &BeamCheckInput) -> Result<Option<Verloop>, String>
     // bestand een verlopende staaf sowieso al rekent, dus er komt geen tweede
     // rekenmodel bij: alleen een tweede manier om de maten aan te leveren.
     let van_custom = |cs: &CustomSection, rol: &str| -> Result<(String, Maten), String> {
-        maten_van_gelaste_i(cs).map(|m| (cs.naam.clone(), m)).ok_or_else(|| {
-            format!(
+        maten_van_gelaste_i(cs)
+            .map(|m| (cs.naam.clone(), m))
+            .ok_or_else(|| {
+                format!(
                 "verlopend profiel wordt voor deze doorsnede niet ondersteund: de eigen doorsnede \
                  \"{}\" van het {rol} is geen gelast, dubbelsymmetrisch I-profiel uit drie platen \
                  (lijf plus twee gelijke flenzen). Alleen zo'n doorsnede en een I/H-profiel uit de \
                  catalogus kunnen een uiteinde van een verloop zijn",
                 cs.naam
             )
-        })
+            })
     };
     let (begin_naam, begin) = match &input.custom_section {
         Some(cs) => van_custom(cs, "beginprofiel")?,
@@ -287,7 +316,12 @@ pub fn bepaal_verloop(input: &BeamCheckInput) -> Result<Option<Verloop>, String>
     if begin_naam == eind_naam {
         return Ok(None);
     }
-    Ok(Some(Verloop { begin_naam, eind_naam, begin, eind }))
+    Ok(Some(Verloop {
+        begin_naam,
+        eind_naam,
+        begin,
+        eind,
+    }))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -349,14 +383,13 @@ fn deelvraag(
     x_mm: f64,
     envelope: Vec<ForcePoint>,
 ) -> Deelvraag {
-    let t = if l_mm > 0.0 { (x_mm / l_mm).clamp(0.0, 1.0) } else { 0.0 };
+    let t = if l_mm > 0.0 {
+        (x_mm / l_mm).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     let maten = v.maten_op(t);
-    let naam = format!(
-        "{} → {} op x = {} mm",
-        v.begin_naam,
-        v.eind_naam,
-        mm(x_mm)
-    );
+    let naam = format!("{} → {} op x = {} mm", v.begin_naam, v.eind_naam, mm(x_mm));
     let mut deel = input.clone();
     deel.profile_end = None;
     // Ook het EINDveld wissen: de deelvraag is prismatisch, en een achtergebleven
@@ -364,7 +397,12 @@ fn deelvraag(
     deel.custom_section_end = None;
     deel.custom_section = Some(maten_naar_doorsnede(maten, &naam));
     deel.forces_envelope = envelope;
-    Deelvraag { x_mm, t, maten, resultaat: check_beam(deel) }
+    Deelvraag {
+        x_mm,
+        t,
+        maten,
+        resultaat: check_beam(deel),
+    }
 }
 
 /// Een resultaat dat zegt dat er NIET getoetst is, met de reden.
@@ -477,7 +515,9 @@ pub fn check_beam_verlopend(input: BeamCheckInput, v: Verloop) -> BeamCheckResul
     let mut stabiliteit: Vec<StabiliteitsDoorsnede> = Vec::new();
     for id in VOLGORDE {
         if DOORSNEDETOETSEN.contains(&id) {
-            let Some((i, mut c)) = kies(&per_punt, id) else { continue };
+            let Some((i, mut c)) = kies(&per_punt, id) else {
+                continue;
+            };
             let d = &per_punt[i];
             plak_notitie(
                 &mut c,
@@ -495,9 +535,12 @@ pub fn check_beam_verlopend(input: BeamCheckInput, v: Verloop) -> BeamCheckResul
             );
             checks.push(c);
         } else if STABILITEITSTOETSEN.contains(&id) {
-            let Some((i, mut c)) = kies(&per_grens, id) else { continue };
+            let Some((i, mut c)) = kies(&per_grens, id) else {
+                continue;
+            };
             let d = &per_grens[i];
-            let reden = format!(
+            let reden =
+                format!(
                 "VERLOPEND PROFIEL. Stabiliteit wordt veilig-zijdig met de KLEINSTE doorsnede in \
                  het beschouwde veld gerekend (ontwerpbesluit 15-09-2026). Alle {} \
                  kandidaatdoorsneden op de veldgrenzen (x = {}) zijn doorgerekend; maatgevend is \
@@ -510,7 +553,10 @@ pub fn check_beam_verlopend(input: BeamCheckInput, v: Verloop) -> BeamCheckResul
                 maten_tekst(d.maten)
             );
             plak_notitie(&mut c, &reden);
-            let props = maten_naar_doorsnede(d.maten, "").naar_composite().bereken().props;
+            let props = maten_naar_doorsnede(d.maten, "")
+                .naar_composite()
+                .bereken()
+                .props;
             stabiliteit.push(StabiliteitsDoorsnede {
                 toets_id: id.to_string(),
                 veld: String::new(),
@@ -563,7 +609,11 @@ pub fn check_beam_verlopend(input: BeamCheckInput, v: Verloop) -> BeamCheckResul
             governing_check_id = c.id.clone();
         }
     }
-    let status = if uc_max <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk };
+    let status = if uc_max <= 1.0 {
+        CheckStatus::Ok
+    } else {
+        CheckStatus::NotOk
+    };
 
     BeamCheckResult {
         beam_id: input.beam_id,
@@ -587,7 +637,10 @@ fn bouw_rapport(
     stabiliteit: Vec<StabiliteitsDoorsnede>,
 ) -> VerloopRapport {
     let doorsnede_van = |d: &Deelvraag| -> Toetsdoorsnede {
-        let props = maten_naar_doorsnede(d.maten, "").naar_composite().bereken().props;
+        let props = maten_naar_doorsnede(d.maten, "")
+            .naar_composite()
+            .bereken()
+            .props;
         Toetsdoorsnede {
             x_mm: d.x_mm,
             t: d.t,
@@ -633,7 +686,10 @@ fn bouw_rapport(
         }) else {
             continue;
         };
-        if toetsdoorsneden.iter().any(|t| (t.x_mm - d.x_mm).abs() < 1e-9) {
+        if toetsdoorsneden
+            .iter()
+            .any(|t| (t.x_mm - d.x_mm).abs() < 1e-9)
+        {
             continue;
         }
         toetsdoorsneden.push(doorsnede_van(d));

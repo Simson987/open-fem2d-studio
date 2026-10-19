@@ -170,7 +170,10 @@ async fn een_niet_gevulde_bijlage_wordt_langs_alle_drie_de_wegen_geweigerd() {
 
     // Weg 1 — de rekengang achter het Tauri-command.
     let fout1 = weg_tauri(&invoer).expect_err("weg 1 hoort te weigeren");
-    assert!(is_de_juiste_weigering(&fout1), "weg 1 (Tauri-command): {fout1}");
+    assert!(
+        is_de_juiste_weigering(&fout1),
+        "weg 1 (Tauri-command): {fout1}"
+    );
 
     // Weg 2 — de toetsbrug.
     let fout2 = weg_toetsbrug(&invoer).expect_err("weg 2 hoort te weigeren");
@@ -207,7 +210,8 @@ async fn de_gevulde_bijlage_en_een_weggelaten_veld_lopen_gewoon_door() {
         let invoer = invoer_houten_staaf(bijlage);
         let resp = weg_mcp(&mut stdin, &mut reader, id, &invoer).await;
         assert_eq!(
-            resp["result"]["isError"], false,
+            resp["result"]["isError"],
+            false,
             "weg 3 met {bijlage:?} gaf een fout: {}",
             resp["result"]["content"][0]["text"].as_str().unwrap_or("")
         );
@@ -317,10 +321,12 @@ fn betonbalk() -> Value {
 }
 
 fn betonkolom() -> Value {
-    let punt = |x: f64, m: f64| json!({
-        "combination_id": 1, "position_mm": x,
-        "forces": { "n_ed": -900.0, "vy_ed": 0.0, "vz_ed": 0.0, "mt_ed": 0.0, "my_ed": m, "mz_ed": 0.0 }
-    });
+    let punt = |x: f64, m: f64| {
+        json!({
+            "combination_id": 1, "position_mm": x,
+            "forces": { "n_ed": -900.0, "vy_ed": 0.0, "vz_ed": 0.0, "mt_ed": 0.0, "my_ed": m, "mz_ed": 0.0 }
+        })
+    };
     json!({
         "beam_id": 12,
         "section": { "shape": "Rectangle", "b_mm": 300.0, "h_mm": 300.0 },
@@ -393,7 +399,9 @@ fn plaat() -> Value {
 }
 
 fn lees<T: serde::de::DeserializeOwned>(v: &Value) -> Result<(), String> {
-    serde_json::from_value::<T>(v.clone()).map(|_| ()).map_err(|e| e.to_string())
+    serde_json::from_value::<T>(v.clone())
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 fn kernen() -> Vec<Kern> {
@@ -521,10 +529,18 @@ async fn elke_kern_weigert_een_niet_gevulde_bijlage_langs_alle_drie_de_wegen() {
         (k.zet_bijlage)(&mut invoer, NIET_GEVULD);
 
         let fout1 = (k.tauri)(&invoer).expect_err(k.naam);
-        assert!(is_de_juiste_weigering(&fout1), "{} weg 1 (Tauri-command): {fout1}", k.naam);
+        assert!(
+            is_de_juiste_weigering(&fout1),
+            "{} weg 1 (Tauri-command): {fout1}",
+            k.naam
+        );
 
         let fout2 = weg_toetsbrug_kern(k, invoer.clone()).expect_err(k.naam);
-        assert!(is_de_juiste_weigering(&fout2), "{} weg 2 (toetsbrug): {fout2}", k.naam);
+        assert!(
+            is_de_juiste_weigering(&fout2),
+            "{} weg 2 (toetsbrug): {fout2}",
+            k.naam
+        );
 
         let resp = weg_mcp_kern(&mut stdin, &mut reader, 100 + i as u32, k, invoer).await;
         let tekst = format!("{resp}");
@@ -555,13 +571,25 @@ async fn elke_kern_rekent_met_nl_en_zonder_veld_hetzelfde() {
             .unwrap_or_else(|e| panic!("{} weg 2 zonder veld: {e}", k.naam));
         let b = weg_toetsbrug_kern(k, met_nl.clone())
             .unwrap_or_else(|e| panic!("{} weg 2 met NL: {e}", k.naam));
-        assert_eq!(a, b, "{}: NL en een weggelaten veld horen hetzelfde antwoord te geven", k.naam);
+        assert_eq!(
+            a, b,
+            "{}: NL en een weggelaten veld horen hetzelfde antwoord te geven",
+            k.naam
+        );
 
         for (j, invoer) in [zonder, met_nl].into_iter().enumerate() {
-            let resp = weg_mcp_kern(&mut stdin, &mut reader, 200 + (10 * i + j) as u32, k, invoer).await;
+            let resp = weg_mcp_kern(
+                &mut stdin,
+                &mut reader,
+                200 + (10 * i + j) as u32,
+                k,
+                invoer,
+            )
+            .await;
             assert!(resp["error"].is_null(), "{} weg 3: {resp}", k.naam);
             assert_eq!(
-                resp["result"]["isError"], false,
+                resp["result"]["isError"],
+                false,
                 "{} weg 3 gaf een fout: {}",
                 k.naam,
                 resp["result"]["content"][0]["text"].as_str().unwrap_or("")
@@ -616,7 +644,11 @@ async fn check_fem_model_aanroep(
 async fn check_fem_model_kent_bijlage_in_het_schema_en_weigert_een_niet_gevulde() {
     let (mut child, mut stdin, mut reader) = start_server().await;
 
-    schrijf(&mut stdin, json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" })).await;
+    schrijf(
+        &mut stdin,
+        json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" }),
+    )
+    .await;
     let lijst = lees_bericht(&mut reader).await;
     let tool = lijst["result"]["tools"]
         .as_array()
@@ -626,7 +658,10 @@ async fn check_fem_model_kent_bijlage_in_het_schema_en_weigert_een_niet_gevulde(
         .expect("check_fem_model in tools/list")
         .clone();
     let veld = &tool["inputSchema"]["properties"]["bijlage"];
-    assert_eq!(veld["type"], "string", "bijlage ontbreekt in het schema: {tool}");
+    assert_eq!(
+        veld["type"], "string",
+        "bijlage ontbreekt in het schema: {tool}"
+    );
     assert_eq!(veld["enum"], json!(nationale_bijlage::BIJLAGEN_GEVULD));
     assert_eq!(tool["inputSchema"]["additionalProperties"], false);
 
@@ -639,7 +674,9 @@ async fn check_fem_model_kent_bijlage_in_het_schema_en_weigert_een_niet_gevulde(
     .await;
     let tekst = format!("{resp}");
     assert!(
-        tekst.contains("nationale bijlage") && tekst.contains("is niet gevuld") && tekst.contains(NIET_GEVULD),
+        tekst.contains("nationale bijlage")
+            && tekst.contains("is niet gevuld")
+            && tekst.contains(NIET_GEVULD),
         "check_fem_model hoort een niet-gevulde bijlage te weigeren met reden, kreeg: {tekst}"
     );
     let _ = child.kill().await;
@@ -648,10 +685,15 @@ async fn check_fem_model_kent_bijlage_in_het_schema_en_weigert_een_niet_gevulde(
 #[tokio::test(flavor = "multi_thread")]
 async fn check_fem_model_met_bijlage_nl_rekent_als_zonder() {
     let status = openaec_mcp_server::sidecar::status(&Default::default()).await;
-    assert!(status.available, "Deze test vereist Node.js: {:?}", status.reason);
+    assert!(
+        status.available,
+        "Deze test vereist Node.js: {:?}",
+        status.reason
+    );
 
     let (mut child, mut stdin, mut reader) = start_server().await;
-    let zonder = check_fem_model_aanroep(&mut stdin, &mut reader, 4, json!({ "model": ligger_c24() })).await;
+    let zonder =
+        check_fem_model_aanroep(&mut stdin, &mut reader, 4, json!({ "model": ligger_c24() })).await;
     let met = check_fem_model_aanroep(
         &mut stdin,
         &mut reader,
@@ -661,15 +703,27 @@ async fn check_fem_model_met_bijlage_nl_rekent_als_zonder() {
     .await;
     for (naam, r) in [("zonder", &zonder), ("met NL", &met)] {
         assert_eq!(
-            r["result"]["isError"], false,
+            r["result"]["isError"],
+            false,
             "check_fem_model {naam}: {}",
             r["result"]["content"][0]["text"].as_str().unwrap_or("")
         );
     }
-    let (a, b) = (&zonder["result"]["structuredContent"], &met["result"]["structuredContent"]);
-    assert_eq!(a["timber_results"], b["timber_results"], "NL en weglaten horen dezelfde uitkomst te geven");
-    let invoer = b["timber_check_inputs"].as_array().expect("timber_check_inputs");
-    assert!(!invoer.is_empty(), "er is geen houtinvoer om iets aan te bewijzen: {b}");
+    let (a, b) = (
+        &zonder["result"]["structuredContent"],
+        &met["result"]["structuredContent"],
+    );
+    assert_eq!(
+        a["timber_results"], b["timber_results"],
+        "NL en weglaten horen dezelfde uitkomst te geven"
+    );
+    let invoer = b["timber_check_inputs"]
+        .as_array()
+        .expect("timber_check_inputs");
+    assert!(
+        !invoer.is_empty(),
+        "er is geen houtinvoer om iets aan te bewijzen: {b}"
+    );
     assert!(invoer.iter().all(|i| i["bijlage"] == "NL"), "{invoer:?}");
     let _ = child.kill().await;
 }

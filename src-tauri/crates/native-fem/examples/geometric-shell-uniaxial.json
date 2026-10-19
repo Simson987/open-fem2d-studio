@@ -1,0 +1,28 @@
+{
+    "bending": {
+      "nodes": [
+        { "id": 1, "x": 0, "y": 0 },
+        { "id": 2, "x": 1, "y": 0 },
+        { "id": 3, "x": 1, "y": 1 },
+        { "id": 4, "x": 0, "y": 1 }
+      ],
+      "materials": [{ "id": 1, "eMpa": 30000, "nu": 0 }],
+      "quads": [
+        { "id": 1, "nodeIds": [1, 2, 3, 4], "materialId": 1, "thicknessM": 0.1 }
+      ],
+      "supports": [
+        { "nodeId": 1, "w": true, "thetaX": true, "thetaY": true },
+        { "nodeId": 2, "w": true, "thetaX": true, "thetaY": true },
+        { "nodeId": 3, "w": true, "thetaX": true, "thetaY": true },
+        { "nodeId": 4, "w": true, "thetaX": true, "thetaY": true }
+      ]
+    },
+    "membraneSupports": [
+      { "nodeId": 1, "u": true, "v": true },
+      { "nodeId": 4, "u": true, "v": true }
+    ],
+    "membraneLoads": [
+      { "nodeId": 2, "fxKn": 2.5, "fyKn": 0 },
+      { "nodeId": 3, "fxKn": 2.5, "fyKn": 0 }
+    ]
+}

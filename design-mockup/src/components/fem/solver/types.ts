@@ -373,6 +373,7 @@ export interface ScheefstandInput {
  */
 export interface SolverPlateInput {
   id: number;
+  threeLayer?: import("../femTypes").PlateThreeLayerConfiguration;
   nonlinearLaw?: import("../femTypes").PlateNonlinearLaw;
   modulusCurve?: import("../femTypes").PlateModulusPoint[];
   /**
@@ -584,6 +585,12 @@ export interface ElementForces {
     plasticStrain: number; equivalentPlasticStrain: number;
     tensileDamage: number; tangentEMpa: number;
   };
+  /** Maximum fiber-level nonlinear history over the Rust beam's integration points. */
+  sectionHistory?: {
+    maximumAbsPlasticStrain: number;
+    maximumEquivalentPlasticStrain: number;
+    maximumTensileDamage: number;
+  };
   V: number;        // N   (shear, end-A local convention)
   M_start: number;  // N·mm at node "from"
   M_end: number;    // N·mm at node "to"
@@ -700,6 +707,14 @@ export interface PlateElementStress {
   equivalentPlasticStrain?: number;
   /** Grootste trek-schadevariabele in het element (0…1). */
   tensileDamage?: number;
+  /** Rust Q4 membrane resultants at the four Gauss points; kept for combinations. */
+  threeLayerSamples?: Array<{
+    id: string;
+    positionM: [number, number];
+    nx: number;
+    ny: number;
+    nxy: number;
+  }>;
   /**
    * Dezelfde spanning in de MATERIAALASSEN (N/mm²): σ₁ langs hoofdrichting 1
    * (de vezel, bij kruislaaghout de lengtelagen), σ₂ loodrecht daarop en τ₁₂.
@@ -711,6 +726,14 @@ export interface PlateElementStress {
    * HOOFDSPANNINGEN, waarvan de richting per element verschilt.
    */
   materiaalassen?: PlateMaterialAxisStress;
+  /** Blaauwendraad deelcontrole uit de Rust-membraanresultanten, indien aangezet. */
+  threeLayer?: {
+    positionM: [number, number];
+    status: 'partial_check_passes' | 'partial_check_exceeded';
+    top: { utilizationAsX: number; utilizationAsY: number; utilizationCompression: number; reinforcementCase: string };
+    bottom: { utilizationAsX: number; utilizationAsY: number; utilizationCompression: number; reinforcementCase: string };
+    notAssessed: string[];
+  };
 }
 
 /** Spanning in de materiaalassen van een plaat — zie `PlateElementStress.materiaalassen`. */

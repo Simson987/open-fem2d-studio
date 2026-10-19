@@ -167,7 +167,10 @@ fn invoer(
             ForcePoint {
                 combination_id: 1,
                 position_mm: L_SPAN_M * 500.0,
-                forces: InternalForces { my_ed: m_ed_knm, ..Default::default() },
+                forces: InternalForces {
+                    my_ed: m_ed_knm,
+                    ..Default::default()
+                },
             },
         ],
         buckling_length_y_m: L_SPAN_M,
@@ -231,16 +234,20 @@ fn r20_bsh_ligger_langs_de_productieroute() {
     // (dus tabel 6.1 op de staaflengte van 14 m) en gebruikt de
     // KARAKTERISTIEKE zakking ook als quasi-blijvende zakking.
     let res_app = check_timber_beam(invoer(
-        m_ed, m_kraag, v_ed, w_inst, w_inst, K_CR_APP_DEFAULT, 0.0,
+        m_ed,
+        m_kraag,
+        v_ed,
+        w_inst,
+        w_inst,
+        K_CR_APP_DEFAULT,
+        0.0,
     ));
     let tau_app = waarde(&res_app.checks, "6.1.7_shear");
     let uc_shear_app = uc(&res_app.checks, "6.1.7_shear");
-    let sigma_m_crit_app =
-        variabele(&res_app.checks, "6.3.3_beam_stability", r"\sigma_{m,crit}");
+    let sigma_m_crit_app = variabele(&res_app.checks, "6.3.3_beam_stability", r"\sigma_{m,crit}");
     let lef_app_mm = variabele(&res_app.checks, "6.3.3_beam_stability", r"l_{ef}");
     let uc_kip_app = uc(&res_app.checks, "6.3.3_beam_stability");
-    let w_fin_app_mm =
-        uc(&res_app.checks, "deflection_w_fin") * (L_SPAN_M * 1000.0 / 200.0);
+    let w_fin_app_mm = uc(&res_app.checks, "deflection_w_fin") * (L_SPAN_M * 1000.0 / 200.0);
     let uc_max_app = res_app.uc_max;
     let maatgevend_app = res_app.governing_check_id.clone();
     // Kent de orchestrator een oplegdruktoets (f_c,90)? Nee — dit telt hem.
