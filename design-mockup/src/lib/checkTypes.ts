@@ -16,6 +16,7 @@ import type { CltBeamCheckResult } from "./types/timber/CltBeamCheckResult";
 import type { ConcreteBeamCheckResult } from "./types/concrete/ConcreteBeamCheckResult";
 import type { SpanningBeamCheckResult } from "./types/spanning/SpanningBeamCheckResult";
 import type { AluminiumBeamCheckResult } from "./types/aluminium/AluminiumBeamCheckResult";
+import type { KoudgevormdBeamCheckResult } from "./types/koudgevormd/KoudgevormdBeamCheckResult";
 
 /** Eén toetsresultaat: staal, hout, kruislaaghout, beton of vrije spanning. */
 export type MemberCheckResult =
@@ -24,7 +25,8 @@ export type MemberCheckResult =
   | CltBeamCheckResult
   | ConcreteBeamCheckResult
   | SpanningBeamCheckResult
-  | AluminiumBeamCheckResult;
+  | AluminiumBeamCheckResult
+  | KoudgevormdBeamCheckResult;
 
 /** Type-guard: alleen een staalresultaat heeft `profile_name`. */
 export function isSteelCheckResult(r: MemberCheckResult): r is BeamCheckResult {
@@ -50,6 +52,14 @@ export function isAluminiumCheckResult(r: MemberCheckResult): r is AluminiumBeam
   return "legering" in r;
 }
 
+/**
+ * Type-guard: alleen een resultaat voor koudgevormde profielen (EN 1993-1-3,
+ * issue #4) draagt `koudgevormd_staalsoort`.
+ */
+export function isKoudgevormdCheckResult(r: MemberCheckResult): r is KoudgevormdBeamCheckResult {
+  return "koudgevormd_staalsoort" in r;
+}
+
 /** Profiel of doorsnede voor de kopregel: "HEA 200", "96 x 450", "300 x 500". */
 export function sectionLabel(r: MemberCheckResult): string {
   return isSteelCheckResult(r) ? r.profile_name : r.section_name;
@@ -60,6 +70,7 @@ export function gradeLabel(r: MemberCheckResult): string {
   if (isSteelCheckResult(r)) return r.steel_grade;
   if (isConcreteCheckResult(r)) return r.concrete_class;
   if (isAluminiumCheckResult(r)) return r.legering;
+  if (isKoudgevormdCheckResult(r)) return r.koudgevormd_staalsoort;
   if (isStressCheckResult(r)) {
     const f = r.f_toel_mpa.toLocaleString("nl-NL", { maximumFractionDigits: 2 });
     return `${r.material_name}, f = ${f} N/mm²`;
@@ -82,7 +93,7 @@ export function isTimberCheckResult(r: MemberCheckResult): r is TimberBeamCheckR
 }
 
 /** Uit welke rekenkern een toetsresultaat komt. Eén soort per kern. */
-export type CheckSoort = "staal" | "hout" | "clt" | "beton" | "spanning" | "aluminium";
+export type CheckSoort = "staal" | "hout" | "clt" | "beton" | "spanning" | "aluminium" | "koudgevormd";
 
 /**
  * De soort van dit resultaat, of `null` voor een vorm die hier niet bekend is.
@@ -105,6 +116,7 @@ export function checkSoort(r: MemberCheckResult): CheckSoort | null {
   if (isConcreteCheckResult(r)) return "beton";
   if (isStressCheckResult(r)) return "spanning";
   if (isAluminiumCheckResult(r)) return "aluminium";
+  if (isKoudgevormdCheckResult(r)) return "koudgevormd";
   if (isCltCheckResult(r)) return "clt";
   if (isTimberCheckResult(r)) return "hout";
   return null;
@@ -128,6 +140,7 @@ export type OngedekteResultaatSoort = MoetLeegZijn<
     | ConcreteBeamCheckResult
     | SpanningBeamCheckResult
     | AluminiumBeamCheckResult
+    | KoudgevormdBeamCheckResult
     | CltBeamCheckResult
     | TimberBeamCheckResult
   >
@@ -152,6 +165,7 @@ const NORM_PER_SOORT: Record<CheckSoort, string | null> = {
   beton: "EN 1992-1-1",
   spanning: null,
   aluminium: "EN 1999-1-1",
+  koudgevormd: "EN 1993-1-3",
 };
 
 /** Wat er staat waar een norm hoort maar er geen is; zoals de rapportkern. */

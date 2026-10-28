@@ -34,6 +34,9 @@ use aluminium_check::{AluminiumBeamCheckInput, AluminiumBeamCheckResult};
 use nen_en_1999_1_1::AluminiumLegering;
 // Metselwerk (NEN-EN 1996-1-1, issue #98). Eigen `use`-regel.
 use metselwerk_check::{MetselwerkWandInput, MetselwerkWandResult};
+// Koudgevormde profielen (NEN-EN 1993-1-3, issue #4). Eigen `use`-regel.
+use koudgevormd_check::{KoudgevormdBeamCheckInput, KoudgevormdBeamCheckResult};
+use nen_en_1993_1_3::KvStaalsoort;
 
 /// Het bedieningskanaal van de app — alleen actief met de instelling
 /// "Bediening door een AI-assistent toestaan (MCP)" of `OPENAEC_GUI_CONTROL=1`.
@@ -310,6 +313,23 @@ async fn check_masonry_walls(
     Ok(metselwerk_check::check_all_metselwerk_walls(inputs))
 }
 
+/// Koudgevormde profielen (NEN-EN 1993-1-3): de ondersteunde staalsoorten uit
+/// tabel 3.1a. Dezelfde lijst als de toetsbrug-opdracht en het MCP-gereedschap
+/// van dezelfde naam (`koudgevormd_check::list_koudgevormd_staalsoorten`).
+#[tauri::command]
+fn list_koudgevormd_staalsoorten() -> Vec<KvStaalsoort> {
+    koudgevormd_check::list_koudgevormd_staalsoorten()
+}
+
+/// Koudgevormde profielen (NEN-EN 1993-1-3, issue #4): de staaftoets. Zelfde
+/// typen en dezelfde functie als de toetsbrug en de MCP-tool.
+#[tauri::command]
+async fn check_koudgevormd_beams(
+    inputs: Vec<KoudgevormdBeamCheckInput>,
+) -> Result<Vec<KoudgevormdBeamCheckResult>, String> {
+    Ok(koudgevormd_check::check_all_koudgevormd_beams(inputs))
+}
+
 /// Vrije spanningstoets (geen norm): een doorsnede plus een toelaatbare
 /// spanning, getoetst op de vergelijkspanning van von Mises. Bedoeld voor
 /// materialen die buiten EN 1992/1993/1995 vallen — natuursteen, een
@@ -572,6 +592,8 @@ pub fn run() {
             list_aluminium_alloys,
             check_aluminium_beams,
             check_masonry_walls,
+            list_koudgevormd_staalsoorten,
+            check_koudgevormd_beams,
             check_plates,
             check_fillet_welds,
             bereken_doorsneden,

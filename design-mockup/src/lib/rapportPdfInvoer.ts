@@ -68,6 +68,7 @@ import {
   isConcreteCheckResult,
   isStressCheckResult,
   isAluminiumCheckResult,
+  isKoudgevormdCheckResult,
   isSteelCheckResult,
   type CheckSkip,
   type MemberCheckResult,
@@ -254,6 +255,8 @@ function isHoutResultaat(r: MemberCheckResult): r is TimberBeamCheckResult {
     !isStressCheckResult(r) &&
     // Aluminium (EN 1999) gaat (nog) niet naar de PDF-kern: geen hout.
     !isAluminiumCheckResult(r) &&
+    // Koudgevormd (EN 1993-1-3) gaat (nog) niet naar de PDF-kern: geen hout.
+    !isKoudgevormdCheckResult(r) &&
     !isCltCheckResult(r)
   );
 }

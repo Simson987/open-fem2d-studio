@@ -41,6 +41,7 @@ import {
   isSteelCheckResult,
   isStressCheckResult,
   isAluminiumCheckResult,
+  isKoudgevormdCheckResult,
   sectionLabel,
   type MemberCheckResult,
 } from "../../../lib/checkTypes";
@@ -408,6 +409,8 @@ function MemberBlock({
         ? `${t("report.spanningGeenNorm", "vrije spanningstoets (geen norm)")} · f_toel = ${fmtValue(result.f_toel_mpa, 2)} N/mm² · γ_M = ${fmtValue(result.gamma_m, 2)} · f_d = ${fmtValue(result.f_d_mpa, 2)} N/mm²`
         : isAluminiumCheckResult(result)
           ? `EN 1999 · ${result.legering} · ${t("report.aluLasstatus", "lassen")}: ${t(`report.aluLas${result.lasstatus}`, result.lasstatus)}${result.niet_getoetst.length > 0 ? ` · ${t("report.aluNietGetoetst", "niet getoetst")}: ${result.niet_getoetst.join("; ")}` : ""}`
+        : isKoudgevormdCheckResult(result)
+          ? `EN 1993-1-3 · ${result.koudgevormd_staalsoort}${result.grootheden ? ` · f_ya = ${fmtValue(result.grootheden.f_ya, 1)} N/mm²` : ""}${result.niet_getoetst.length > 0 ? ` · ${t("report.aluNietGetoetst", "niet getoetst")}: ${result.niet_getoetst.join("; ")}` : ""}`
         : `EN 1995 · ${t("report.serviceClass", "klimaatklasse")} ${serviceClassLabel(result.service_class)} · ${belastingduurTekst(result, t, tCheck, combinatieLabel)}`;
 
   // Beknopt: alleen de maatgevende toets — de UC die telt, met dezelfde

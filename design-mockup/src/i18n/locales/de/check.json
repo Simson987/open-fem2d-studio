@@ -93,7 +93,10 @@
     "aluLasGeen": "Keine Schweißnähte",
     "aluLasGelast": "Geschweißt (MIG)",
     "aluZijdelings": "Seitlich gehalten (kein Biegedrillknicken)",
-    "aluZijdelingsHint": "Biegedrillknicken (§6.3.2) ist noch nicht implementiert. Nur ankreuzen, wenn der Druckrand über die ganze Länge seitlich gehalten ist; sonst bleibt es 'nicht nachgewiesen'."
+    "aluZijdelingsHint": "Biegedrillknicken (§6.3.2) ist noch nicht implementiert. Nur ankreuzen, wenn der Druckrand über die ganze Länge seitlich gehalten ist; sonst bleibt es 'nicht nachgewiesen'.",
+    "kvTitle": "Kaltprofil (EN 1993-1-3)",
+    "kvZijdelings": "Seitlich und gegen Verdrehen gehalten",
+    "kvZijdelingsHint": "Biegedrillknicken (§6.2.4) ist noch nicht implementiert. Nur ankreuzen, wenn der Stab über die ganze Länge seitlich und gegen Verdrehen gehalten ist (z. B. durch Dachbleche); sonst bleibt es 'nicht nachgewiesen'."
   },
   "profilePicker": {
     "titleChooseMaterial": "Profil zuweisen — Werkstoff wählen",
@@ -119,10 +122,27 @@
         "label": "Aluminium",
         "hint": "Strangpressprofil (I, Hohlprofil, Rechteck) + Legierung aus Tabelle 3.2b (EN 1999)"
       },
+      "koudgevormd": {
+        "label": "Kaltgeformter Stahl",
+        "hint": "C-, Z- oder U-Profil mit Abmessungen + Stahlsorte aus Tabelle 3.1a (EN 1993-1-3)"
+      },
       "overig": {
         "label": "Sonstige",
         "hint": "Freier Werkstoff: eigener Name, E, ρ und zulässige Spannung; Nachweis über die Vergleichsspannung (von Mises), ohne Norm"
       }
+    },
+    "kv": {
+      "vorm": {
+        "CProfiel": "C-Profil (mit Lippen)",
+        "ZProfiel": "Z-Profil (mit Lippen)",
+        "UProfiel": "U-Profil (ohne Lippen)"
+      },
+      "c": "Lippenlänge c (mm)",
+      "t": "Kernblechdicke t (mm)",
+      "r": "Innenradius r (mm)",
+      "grade": "Stahlsorte",
+      "hint": "Außenmaße; t ist die Kernblechdicke ohne Beschichtung (§3.2.4). E = 210 000 N/mm². Festigkeiten aus Tabelle 3.1a. Nachweis mit dem wirksamen Querschnitt (lokales Beulen und Randsteifen, §5.5). In den Stabeigenschaften angeben, ob der Stab seitlich gehalten ist.",
+      "invalid": "Gültige Abmessungen eingeben (h > 2(t + r), b > t + r, t/2 + r < c < h/2)"
     },
     "alu": {
       "vorm": {

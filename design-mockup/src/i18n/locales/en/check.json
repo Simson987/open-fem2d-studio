@@ -93,7 +93,10 @@
     "aluLasGeen": "No welds",
     "aluLasGelast": "Welded (MIG)",
     "aluZijdelings": "Laterally restrained (no LTB)",
-    "aluZijdelingsHint": "Lateral-torsional buckling (§6.3.2) is not implemented yet. Only tick this if the compression edge is laterally restrained over the full length; otherwise LTB stays 'not checked'."
+    "aluZijdelingsHint": "Lateral-torsional buckling (§6.3.2) is not implemented yet. Only tick this if the compression edge is laterally restrained over the full length; otherwise LTB stays 'not checked'.",
+    "kvTitle": "Cold-formed section (EN 1993-1-3)",
+    "kvZijdelings": "Laterally and torsionally restrained",
+    "kvZijdelingsHint": "Lateral-torsional buckling (§6.2.4) is not implemented yet. Only tick this if the member is restrained laterally and against twist over the full length (e.g. by sheeting); otherwise LTB stays 'not checked'."
   },
   "profilePicker": {
     "titleChooseMaterial": "Assign section — choose material",
@@ -119,10 +122,27 @@
         "label": "Aluminium",
         "hint": "Extruded profile (I, box, rectangle) + alloy from table 3.2b (EN 1999)"
       },
+      "koudgevormd": {
+        "label": "Cold-formed steel",
+        "hint": "C, Z or U section with dimensions + steel grade from table 3.1a (EN 1993-1-3)"
+      },
       "overig": {
         "label": "Other",
         "hint": "Free material: own name, E, ρ and allowable stress; checked on the equivalent stress (von Mises), without a code"
       }
+    },
+    "kv": {
+      "vorm": {
+        "CProfiel": "C section (lipped)",
+        "ZProfiel": "Z section (lipped)",
+        "UProfiel": "U section (plain)"
+      },
+      "c": "Lip length c (mm)",
+      "t": "Core thickness t (mm)",
+      "r": "Inner radius r (mm)",
+      "grade": "Steel grade",
+      "hint": "Outer dimensions; t is the core thickness without coating (§3.2.4). E = 210 000 N/mm². Strengths from table 3.1a. Checked with the effective cross-section (local buckling and edge stiffeners, §5.5). State in the member properties whether the member is laterally restrained.",
+      "invalid": "Enter valid dimensions (h > 2(t + r), b > t + r, t/2 + r < c < h/2)"
     },
     "alu": {
       "vorm": {

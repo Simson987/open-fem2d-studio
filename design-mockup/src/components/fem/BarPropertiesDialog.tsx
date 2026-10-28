@@ -29,6 +29,7 @@ import { isCltProfiel } from "../../lib/cltCheckBuilder";
 import { sanitizeRestraintFractions } from "../../lib/steelCheckBuilder";
 import { parseVrijMateriaal } from "../../lib/vrijMateriaal";
 import { isAluminiumMateriaal } from "../../lib/aluminiumMateriaal";
+import { isKoudgevormdMateriaal } from "../../lib/koudgevormdMateriaal";
 import ProfielKiezer, { profielenInGebruik } from "./ProfielKiezer";
 // Één bron voor de doorsnedenaam en de begin-/eindmaten van een verlopende
 // staaf — dezelfde keuring als de solver en de rekenkern; zie lib/verloopKeuze.
@@ -183,6 +184,8 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
   // Aluminium (EN 1999-1-1): "" = lasstatus onbekend (geen "voldoet").
   const [aluLas, setAluLas] = useState<"" | "geen" | "gelast">(cfg0.aluLasstatus ?? "");
   const [aluZijdelings, setAluZijdelings] = useState<boolean>(cfg0.aluZijdelingsGesteund === true);
+  // Koudgevormd (EN 1993-1-3): verklaring dat kip niet kan optreden.
+  const [kvZijdelings, setKvZijdelings] = useState<boolean>(cfg0.kvZijdelingsGesteund === true);
   // Dwarsspanning voor de vergelijkspanning van een vrij materiaal. Leeg = 0:
   // een staafelement kent alleen N, V en M, dus σ_z kan alleen van de
   // gebruiker komen (bijvoorbeeld een oplegdruk).
@@ -242,6 +245,8 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
   const vrij = parseVrijMateriaal(material);
   // Aluminium: EN 1999-1-1 (issue #5).
   const alu = isAluminiumMateriaal(material);
+  // Koudgevormd profiel: EN 1993-1-3 (issue #4).
+  const kv = isKoudgevormdMateriaal(material);
 
   /**
    * Bouw een schone checkConfig: alleen expliciet ingevulde waarden; alles
@@ -329,6 +334,8 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
     else delete cfg.aluLasstatus;
     if (aluZijdelings) cfg.aluZijdelingsGesteund = true;
     else delete cfg.aluZijdelingsGesteund;
+    if (kvZijdelings) cfg.kvZijdelingsGesteund = true;
+    else delete cfg.kvZijdelingsGesteund;
     // De betonvelden gaan onveranderd mee; zie de toelichting bij `betonCfg`.
     for (const [k, v] of Object.entries(betonCfg)) {
       if (v !== undefined) (cfg as Record<string, unknown>)[k] = v;
@@ -483,7 +490,7 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
           <button
             className={`bar-props-tab${tab === "norm" ? " active" : ""}`}
             onClick={() => setTab("norm")}
-          >{vrij ? t("barDialog.tabStress") : alu ? "EN 1999" : isTimber ? "EN 1995" : "EN 1993"}</button>
+          >{vrij ? t("barDialog.tabStress") : alu ? "EN 1999" : kv ? "EN 1993-1-3" : isTimber ? "EN 1995" : "EN 1993"}</button>
         </div>
 
         <div className="bar-props-body">
@@ -660,6 +667,7 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
                     {vrij
                       ? t("barDialog.standardNone")
                       : alu ? "NEN-EN 1999-1-1"
+                      : kv ? "NEN-EN 1993-1-3"
                       : isTimber ? "NEN-EN 1995-1-1" : "NEN-EN 1993-1-1"}
                   </code>
                 </div>
@@ -705,6 +713,19 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
                       type="checkbox"
                       checked={aluZijdelings}
                       onChange={(e) => setAluZijdelings(e.target.checked)}
+                    />
+                  </DialoogRij>
+                </div>
+              )}
+
+              {kv && (
+                <div className="bar-props-section">
+                  <div className="bar-props-section-title">{t("cfg.kvTitle")}</div>
+                  <DialoogRij label={t("cfg.kvZijdelings")} info={t("cfg.kvZijdelingsHint")}>
+                    <input
+                      type="checkbox"
+                      checked={kvZijdelings}
+                      onChange={(e) => setKvZijdelings(e.target.checked)}
                     />
                   </DialoogRij>
                 </div>
@@ -767,7 +788,7 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
                 </div>
               </div>
 
-              {!isTimber && !alu && (
+              {!isTimber && !alu && !kv && (
                 <div className="bar-props-section">
                   <div className="bar-props-section-title">{t("cfg.bracingTitle")}</div>
                   <DialoogRij label={t("cfg.bracingLabel")} info={t("cfg.bracingHint")}>

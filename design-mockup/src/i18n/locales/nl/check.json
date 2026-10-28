@@ -93,7 +93,10 @@
     "aluLasGeen": "Geen lassen",
     "aluLasGelast": "Gelast (MIG)",
     "aluZijdelings": "Zijdelings gesteund (geen kip)",
-    "aluZijdelingsHint": "Kip (§6.3.2) is nog niet geïmplementeerd. Vink dit alleen aan als de gedrukte rand over de hele lengte zijdelings gesteund is; anders blijft kip 'niet getoetst'."
+    "aluZijdelingsHint": "Kip (§6.3.2) is nog niet geïmplementeerd. Vink dit alleen aan als de gedrukte rand over de hele lengte zijdelings gesteund is; anders blijft kip 'niet getoetst'.",
+    "kvTitle": "Koudgevormd profiel (EN 1993-1-3)",
+    "kvZijdelings": "Zijdelings en tegen wringen gesteund",
+    "kvZijdelingsHint": "Kip (§6.2.4) is nog niet geïmplementeerd. Vink dit alleen aan als de staaf over de hele lengte zijdelings en tegen wringen gesteund is (bijv. door dakbeschot); anders blijft kip 'niet getoetst'."
   },
   "profilePicker": {
     "titleChooseMaterial": "Profiel toewijzen — kies materiaal",
@@ -119,10 +122,27 @@
         "label": "Aluminium",
         "hint": "Extrusieprofiel (I, koker, rechthoek) + legering uit tabel 3.2b (EN 1999)"
       },
+      "koudgevormd": {
+        "label": "Koudgevormd staal",
+        "hint": "C-, Z- of U-profiel met maten + staalsoort uit tabel 3.1a (EN 1993-1-3)"
+      },
       "overig": {
         "label": "Overig",
         "hint": "Vrij materiaal: eigen naam, E, ρ en toelaatbare spanning; getoetst op de vergelijkspanning (von Mises), zonder norm"
       }
+    },
+    "kv": {
+      "vorm": {
+        "CProfiel": "C-profiel (met lippen)",
+        "ZProfiel": "Z-profiel (met lippen)",
+        "UProfiel": "U-profiel (zonder lippen)"
+      },
+      "c": "Liplengte c (mm)",
+      "t": "Kerndikte t (mm)",
+      "r": "Binnenstraal r (mm)",
+      "grade": "Staalsoort",
+      "hint": "Buitenwerkse maten; t is de kerndikte zonder zinklaag (§3.2.4). E = 210 000 N/mm². Sterkten uit tabel 3.1a. Getoetst met de effectieve doorsnede (lokale plooi en randverstijvers, §5.5). Geef bij de staafeigenschappen op of de staaf zijdelings gesteund is.",
+      "invalid": "Vul geldige maten in (h > 2(t + r), b > t + r, t/2 + r < c < h/2)"
     },
     "alu": {
       "vorm": {

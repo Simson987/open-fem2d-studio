@@ -198,6 +198,9 @@ const CHECKCONFIG_VELDEN = [
   // Aluminium (NEN-EN 1999-1-1, issue #5): lasstatus en de verklaring dat
   // kip niet kan optreden. `aluminiumCheckBuilder` leest ze.
   "aluLasstatus", "aluZijdelingsGesteund",
+  // Koudgevormde profielen (NEN-EN 1993-1-3, issue #4): de verklaring dat
+  // kip niet kan optreden. `koudgevormdCheckBuilder` leest hem.
+  "kvZijdelingsGesteund",
 ] as const;
 
 /** De drie aangrijpingspunten van tabel 6.1, in de spelling van `checkConfig`. */
@@ -827,6 +830,9 @@ export function keurCheckConfig(waarde: unknown, cpad: string): string[] {
   keurEnum(cc.aluLasstatus, ["geen", "gelast"], `${cpad}.aluLasstatus`, fouten);
   if (cc.aluZijdelingsGesteund !== undefined && typeof cc.aluZijdelingsGesteund !== "boolean") {
     fouten.push(`${cpad}.aluZijdelingsGesteund: moet true of false zijn.`);
+  }
+  if (cc.kvZijdelingsGesteund !== undefined && typeof cc.kvZijdelingsGesteund !== "boolean") {
+    fouten.push(`${cpad}.kvZijdelingsGesteund: moet true of false zijn.`);
   }
   keurKorf(cc.betonKorf, `${cpad}.betonKorf`, fouten);
   keurZones(cc.betonZones, `${cpad}.betonZones`, fouten);

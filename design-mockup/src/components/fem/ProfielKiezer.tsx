@@ -164,6 +164,9 @@ import "./ProfielKiezer.css";
 import { ALUMINIUM_LEGERINGEN, aluminiumMateriaalNaam, parseAluminiumMateriaal } from "../../lib/aluminiumMateriaal";
 import { aluminiumGrootheden, aluminiumProfielNaam, parseAluminiumProfiel } from "../../lib/aluminiumProfiel";
 import type { AluDoorsnede } from "../../lib/types/aluminium/AluDoorsnede";
+import { KOUDGEVORMD_STAALSOORTEN, koudgevormdMateriaalNaam, parseKoudgevormdMateriaal } from "../../lib/koudgevormdMateriaal";
+import { koudgevormdGrootheden, koudgevormdProfielNaam, parseKoudgevormdProfiel } from "../../lib/koudgevormdProfiel";
+import type { KvDoorsnede } from "../../lib/types/koudgevormd/KvDoorsnede";
 // Klik op een rijlabel in de doorsnedetekening → aantal en diameter invullen,
 // dezelfde invoer als in het betonvenster.
 import RijBewerker from "../beton/RijBewerker";
@@ -260,6 +263,7 @@ const SOORTEN: Array<{ id: MateriaalSoort; beschikbaar: boolean }> = [
   { id: "hout", beschikbaar: true },
   { id: "beton", beschikbaar: true },
   { id: "aluminium", beschikbaar: true },
+  { id: "koudgevormd", beschikbaar: true },
   { id: "overig", beschikbaar: true },
 ];
 
@@ -359,6 +363,7 @@ export default function ProfielKiezer({
   const { t: tCommon } = useTranslation("common");
   const huidigVrij = parseVrijMateriaal(huidig?.material);
   const huidigAlu = parseAluminiumMateriaal(huidig?.material);
+  const huidigKv = parseKoudgevormdMateriaal(huidig?.material);
   const huidigIsBeton = !huidigVrij && matchSupportedConcreteClass(huidig?.material) !== null;
   const huidigIsHout =
     !huidigVrij && !huidigIsBeton && !!huidig?.material && (huidig.material in TIMBER_E_MEAN);
@@ -380,6 +385,7 @@ export default function ProfielKiezer({
     huidig?.material
       ? huidigVrij ? "overig"
         : huidigAlu ? "aluminium"
+        : huidigKv ? "koudgevormd"
         : huidigIsBeton ? "beton"
         : huidigIsHout ? "hout"
         : huidigIsEigen ? "eigen"
@@ -406,7 +412,7 @@ export default function ProfielKiezer({
   const [reeks, setReeks] = useState(eersteReeks);
   const [staalProfiel, setStaalProfiel] = useState(huidig?.profile ?? "");
   const [staalKlasse, setStaalKlasse] = useState(
-    huidig?.material && !huidigIsHout && !huidigIsBeton && !huidigAlu ? huidig.material : "S235",
+    huidig?.material && !huidigIsHout && !huidigIsBeton && !huidigAlu && !huidigKv ? huidig.material : "S235",
   );
 
   // ── Aluminium-stap (NEN-EN 1999-1-1, issue #5) ───────────────────────────
@@ -435,6 +441,25 @@ export default function ProfielKiezer({
       ? aluB > 0 && aluH > 0
       : parseAluminiumProfiel(aluProfielnaam) !== null;
   const aluEigenschappen = aluGeldig ? aluminiumGrootheden(aluDoorsnede) : null;
+
+  // ── Koudgevormd-stap (NEN-EN 1993-1-3, issue #4) ─────────────────────────
+  // Maten als invoer (buitenwerks, t = kerndikte). Startwaarden: een gangbare
+  // gording, geen normwaarde.
+  const huidigKvDoorsnede: KvDoorsnede | null = huidigKv ? parseKoudgevormdProfiel(huidig?.profile) : null;
+  const [kvSoort, setKvSoort] = useState<string>(huidigKv?.aanduiding ?? "S350GD");
+  const [kvVorm, setKvVorm] = useState<KvDoorsnede["vorm"]>(huidigKvDoorsnede?.vorm ?? "CProfiel");
+  const [kvH, setKvH] = useState<number>(huidigKvDoorsnede?.h_mm ?? 200);
+  const [kvB, setKvB] = useState<number>(huidigKvDoorsnede?.b_mm ?? 70);
+  const [kvC, setKvC] = useState<number>(huidigKvDoorsnede && huidigKvDoorsnede.vorm !== "UProfiel" ? huidigKvDoorsnede.c_mm : 20);
+  const [kvT, setKvT] = useState<number>(huidigKvDoorsnede?.t_mm ?? 2);
+  const [kvR, setKvR] = useState<number>(huidigKvDoorsnede?.r_mm ?? 3);
+  const kvDoorsnede: KvDoorsnede =
+    kvVorm === "UProfiel"
+      ? { vorm: "UProfiel", h_mm: kvH, b_mm: kvB, t_mm: kvT, r_mm: kvR }
+      : { vorm: kvVorm, h_mm: kvH, b_mm: kvB, c_mm: kvC, t_mm: kvT, r_mm: kvR };
+  const kvProfielnaam = koudgevormdProfielNaam(kvDoorsnede);
+  const kvGeldig = parseKoudgevormdProfiel(kvProfielnaam) !== null;
+  const kvEigenschappen = kvGeldig ? koudgevormdGrootheden(kvDoorsnede) : null;
 
   // ── Verlopend profiel (ontwerp 15-09-2026, §6) ───────────────────────────
   //
@@ -999,6 +1024,13 @@ export default function ProfielKiezer({
         profileEnd: undefined,
       });
       onClose();
+    } else if (soort === "koudgevormd" && kvGeldig) {
+      onApply({
+        material: koudgevormdMateriaalNaam(kvSoort),
+        profile: kvProfielnaam,
+        profileEnd: undefined,
+      });
+      onClose();
     } else if (soort === "overig" && overigGeldig) {
       // Het vrije materiaal reist als NAAM mee (zie vrijMateriaal.ts): zo
       // staat het in het projectbestand, de undo-historie en het rapport
@@ -1018,6 +1050,7 @@ export default function ProfielKiezer({
     : soort === "beton" ? !betonGeldig
     : soort === "overig" ? !overigGeldig
     : soort === "aluminium" ? !aluGeldig
+    : soort === "koudgevormd" ? !kvGeldig
     : true;
 
   // ── Toetsen in het zoekveld (issue #39) ──────────────────────────────────
@@ -2217,6 +2250,74 @@ export default function ProfielKiezer({
               {aluGeldig
                 ? <>{t("profilePicker.choice")} <strong>{aluProfielnaam} — {aluLegering}</strong></>
                 : t("profilePicker.alu.invalid")}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {soort === "koudgevormd" && (
+        <div className="pk-stap2">
+          <div className="pk-kolom pk-kolom-reeks">
+            <div className="pk-kolom-kop">{t("profilePicker.crossSection")}</div>
+            {(["CProfiel", "ZProfiel", "UProfiel"] as const).map((v) => (
+              <button
+                key={v}
+                className={`pk-rij${kvVorm === v ? " actief" : ""}`}
+                onClick={() => setKvVorm(v)}
+              >
+                {t(`profilePicker.kv.vorm.${v}`)}
+              </button>
+            ))}
+          </div>
+
+          <div className="pk-kolom pk-kolom-maat">
+            <div className="pk-kolom-kop">{t("profilePicker.dimensions")}</div>
+            <label className="pk-veld">
+              <span>{t("profilePicker.heightH")}</span>
+              <input type="number" min={1} step={1} value={kvH} onChange={(e) => setKvH(Number(e.target.value))} />
+            </label>
+            <label className="pk-veld">
+              <span>{t("profilePicker.widthB")}</span>
+              <input type="number" min={1} step={1} value={kvB} onChange={(e) => setKvB(Number(e.target.value))} />
+            </label>
+            {kvVorm !== "UProfiel" && (
+              <label className="pk-veld">
+                <span>{t("profilePicker.kv.c")}</span>
+                <input type="number" min={1} step={1} value={kvC} onChange={(e) => setKvC(Number(e.target.value))} />
+              </label>
+            )}
+            <label className="pk-veld">
+              <span>{t("profilePicker.kv.t")}</span>
+              <input type="number" min={0.45} step={0.05} value={kvT} onChange={(e) => setKvT(Number(e.target.value))} />
+            </label>
+            <label className="pk-veld">
+              <span>{t("profilePicker.kv.r")}</span>
+              <input type="number" min={0} step={0.5} value={kvR} onChange={(e) => setKvR(Number(e.target.value))} />
+            </label>
+          </div>
+
+          <div className="pk-kolom pk-kolom-detail">
+            <div className="pk-kolom-kop">{t("profilePicker.kv.grade")}</div>
+            <div className="pk-kolom-body">
+              <label className="pk-veld">
+                <span>{t("profilePicker.kv.grade")}</span>
+                <select value={kvSoort} onChange={(e) => setKvSoort(e.target.value)}>
+                  {KOUDGEVORMD_STAALSOORTEN.map((g) => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </label>
+              <div className="pk-hint">{t("profilePicker.kv.hint")}</div>
+              {kvEigenschappen && (
+                <div className="pk-eigenschappen">
+                  <div className="pk-eig-rij"><span>A</span><code>{nlGetal(kvEigenschappen.A)} mm²</code></div>
+                  <div className="pk-eig-rij"><span>I_y</span><code>{nlGetal(kvEigenschappen.Iy / 1e4)} cm⁴</code></div>
+                  <div className="pk-eig-rij"><span>E</span><code>210 000 N/mm²</code></div>
+                </div>
+              )}
+            </div>
+            <div className="pk-samenvatting">
+              {kvGeldig
+                ? <>{t("profilePicker.choice")} <strong>{kvProfielnaam} — {kvSoort}</strong></>
+                : t("profilePicker.kv.invalid")}
             </div>
           </div>
         </div>

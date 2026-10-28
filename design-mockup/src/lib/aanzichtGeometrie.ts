@@ -93,6 +93,7 @@ import { parseConcreteSection } from "./betonCheckBuilder";
 import { cltMechanica, isCltProfiel, parseCltProfiel } from "./cltCheckBuilder";
 import { zoekEigenDoorsnede } from "./profieleditor/eigenDoorsnedenStore";
 import { parseAluminiumProfiel } from "./aluminiumProfiel";
+import { parseKoudgevormdProfiel } from "./koudgevormdProfiel";
 import { matchSupportedTimberGrade } from "./timberCheckBuilder";
 import { referentieVanStaaf, staafInReferentierichting } from "./referentierichting";
 import { zoneGrenzenMm, ZONE_TOLERANTIE_MM } from "./betonZoneSneden";
@@ -398,6 +399,18 @@ export function aanzichtDoorsnede(material: string | undefined, profile: string 
         return { delen, zc: alu.h_mm / 2, naden: [] };
       }
       return rechthoekDoorsnede(alu.b_mm, alu.h_mm);
+    }
+    case "koudgevormd-profiel": {
+      // Koudgevormd C/Z/U (issue #4): flenzen, lijf en lippen als platen;
+      // in het aanzicht telt alleen de verdeling over de hoogte.
+      const kv = parseKoudgevormdProfiel(profile);
+      if (!kv) return null;
+      const { h_mm: h, b_mm: b, t_mm: t } = kv;
+      const delen = catalogusDelen("Channel", h, b, t, t);
+      if (kv.vorm !== "UProfiel") {
+        delen.push(rechthoek(b - t, t, b, kv.c_mm), rechthoek(b - t, h - kv.c_mm, b, h - t));
+      }
+      return { delen, zc: h / 2, naden: [] };
     }
     case "hout-bxh": {
       const rect = parseRechthoek(profile);

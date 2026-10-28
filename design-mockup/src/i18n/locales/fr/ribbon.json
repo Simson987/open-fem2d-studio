@@ -1632,6 +1632,7 @@
     "basisTimber": "bois : {{norm}}",
     "basisConcrete": "béton : {{norm}}",
     "basisAluminium": "aluminium : {{norm}}",
+    "basisKoudgevormd": "acier formé à froid : {{norm}}",
     "aluLasstatus": "soudures",
     "aluLasOnbekend": "inconnu",
     "aluLasGeen": "aucune",

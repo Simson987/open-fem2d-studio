@@ -1,7 +1,8 @@
 //! Strikt schema en strikte invoer voor `check_steel_beam`, voor de
 //! betontools (`check_concrete_beam`, `concrete_mn_kappa`) en voor de
 //! houttools (`check_timber_beams`, `check_clt_beams`) en de aluminiumtoets
-//! (`check_aluminium_beams`, issue #5).
+//! (`check_aluminium_beams`, issue #5) en de toets voor koudgevormde profielen
+//! (`check_koudgevormd_beams`, issue #4).
 //!
 //! Waarom deze test bestaat: het oude schema zette `additionalProperties` op
 //! `true` en verzweeg vijf velden met `#[serde(default)]`. Een client die dat
@@ -2182,6 +2183,63 @@ async fn metselwerkinvoer_rekent_en_een_tikfout_wordt_geweigerd() {
         };
         doel.as_object_mut().unwrap().insert(tikfout.into(), json!(1));
         let result = roep_tool_aan(&mut stdin, &mut reader, 72 + i as u32, "check_masonry_walls",
+            json!({ "inputs": [invoer] })).await;
+        assert_eq!(result["isError"], true, "{pad}: `{tikfout}` gaf een resultaat: {result}");
+        assert!(foutmelding(&result).contains(tikfout), "{pad}: {}", foutmelding(&result));
+    }
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+// ── Koudgevormde profielen (NEN-EN 1993-1-3, issue #4) ─────────────────────
+
+/// C 200×70×20×2 r1,5 in S350GD, de ligger van
+/// `koudgevormd-check/tests/handberekening.rs`; er wordt hier geen UC vastgelegd.
+fn geldige_koudgevormde_invoer() -> Value {
+    json!({
+        "beam_id": 5, "section_name": "KV-C 200x70x20x2 r1.5",
+        "doorsnede": { "vorm": "CProfiel", "h_mm": 200.0, "b_mm": 70.0, "c_mm": 20.0, "t_mm": 2.0, "r_mm": 1.5 },
+        "staalsoort": "S350GD", "length_m": 3.0,
+        "forces_envelope": [
+            { "combination_id": 1, "position_mm": 0.0,
+              "forces": { "n_ed": 0.0, "vy_ed": 0.0, "vz_ed": 5.0, "mt_ed": 0.0, "my_ed": 8.0, "mz_ed": 0.0 } }
+        ],
+        "buckling_length_y_m": 3.0, "buckling_length_z_m": 3.0
+    })
+}
+
+#[tokio::test]
+async fn schema_van_check_koudgevormd_beams_is_strikt_op_elk_niveau() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let tool = tooldefinitie(&mut stdin, &mut reader, 210, "check_koudgevormd_beams").await;
+    assert_eq!(tool["inputSchema"]["additionalProperties"], false, "omhulsel");
+    let staaf = &tool["inputSchema"]["properties"]["inputs"]["items"];
+    assert_eq!(staaf["additionalProperties"], false, "staaf");
+    assert_eq!(staaf["properties"].as_object().unwrap().len(), 12,
+        "precies de 12 velden van KoudgevormdBeamCheckInput (spiegeltest in koudgevormd_tools.rs)");
+    for variant in staaf["properties"]["doorsnede"]["oneOf"].as_array().unwrap() {
+        assert_eq!(variant["additionalProperties"], false, "doorsnedevariant {variant}");
+    }
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+#[tokio::test]
+async fn koudgevormde_invoer_rekent_en_een_tikfout_wordt_geweigerd() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let result = roep_tool_aan(&mut stdin, &mut reader, 211, "check_koudgevormd_beams",
+        json!({ "inputs": [geldige_koudgevormde_invoer()] })).await;
+    assert_eq!(result["isError"], false, "geldige invoer: {}", foutmelding(&result));
+    let r = &result["structuredContent"]["results"][0];
+    assert!(!r["checks"].as_array().unwrap().is_empty());
+    // Kip is niet geïmplementeerd en de staaf is niet gesteund opgegeven.
+    assert_eq!(r["status"], "NotApplicable");
+
+    for (i, (pad, tikfout)) in [("staaf", "zijdelings_gestuend"), ("doorsnede", "tw_mm")].into_iter().enumerate() {
+        let mut invoer = geldige_koudgevormde_invoer();
+        let doel = if pad == "staaf" { &mut invoer } else { &mut invoer["doorsnede"] };
+        doel.as_object_mut().unwrap().insert(tikfout.into(), json!(1));
+        let result = roep_tool_aan(&mut stdin, &mut reader, 212 + i as u32, "check_koudgevormd_beams",
             json!({ "inputs": [invoer] })).await;
         assert_eq!(result["isError"], true, "{pad}: `{tikfout}` gaf een resultaat: {result}");
         assert!(foutmelding(&result).contains(tikfout), "{pad}: {}", foutmelding(&result));

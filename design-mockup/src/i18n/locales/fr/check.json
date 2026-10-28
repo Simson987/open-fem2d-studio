@@ -93,7 +93,10 @@
     "aluLasGeen": "Pas de soudure",
     "aluLasGelast": "Soudé (MIG)",
     "aluZijdelings": "Maintenu latéralement (pas de déversement)",
-    "aluZijdelingsHint": "Le déversement (§6.3.2) n'est pas encore implémenté. Cochez uniquement si le bord comprimé est maintenu latéralement sur toute la longueur ; sinon il reste « non vérifié »."
+    "aluZijdelingsHint": "Le déversement (§6.3.2) n'est pas encore implémenté. Cochez uniquement si le bord comprimé est maintenu latéralement sur toute la longueur ; sinon il reste « non vérifié ».",
+    "kvTitle": "Profil formé à froid (EN 1993-1-3)",
+    "kvZijdelings": "Maintenu latéralement et en torsion",
+    "kvZijdelingsHint": "Le déversement (§6.2.4) n'est pas encore implémenté. Cochez uniquement si la barre est maintenue latéralement et en torsion sur toute la longueur (p. ex. par la couverture) ; sinon il reste « non vérifié »."
   },
   "profilePicker": {
     "titleChooseMaterial": "Affecter un profilé — choisir le matériau",
@@ -119,10 +122,27 @@
         "label": "Aluminium",
         "hint": "Profilé filé (I, tube rectangulaire, rectangle) + alliage du tableau 3.2b (EN 1999)"
       },
+      "koudgevormd": {
+        "label": "Acier formé à froid",
+        "hint": "Profil C, Z ou U avec dimensions + nuance d'acier du tableau 3.1a (EN 1993-1-3)"
+      },
       "overig": {
         "label": "Autre",
         "hint": "Matériau libre : nom, E, ρ et contrainte admissible ; vérifié sur la contrainte équivalente (von Mises), sans norme"
       }
+    },
+    "kv": {
+      "vorm": {
+        "CProfiel": "Profil C (à bords tombés)",
+        "ZProfiel": "Profil Z (à bords tombés)",
+        "UProfiel": "Profil U (sans bords tombés)"
+      },
+      "c": "Longueur du bord tombé c (mm)",
+      "t": "Épaisseur à cœur t (mm)",
+      "r": "Rayon intérieur r (mm)",
+      "grade": "Nuance d'acier",
+      "hint": "Dimensions extérieures ; t est l'épaisseur à cœur sans revêtement (§3.2.4). E = 210 000 N/mm². Résistances du tableau 3.1a. Vérifié avec la section efficace (voilement local et raidisseurs de bord, §5.5). Indiquez dans les propriétés de la barre si elle est maintenue latéralement.",
+      "invalid": "Saisissez des dimensions valides (h > 2(t + r), b > t + r, t/2 + r < c < h/2)"
     },
     "alu": {
       "vorm": {
