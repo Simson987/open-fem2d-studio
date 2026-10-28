@@ -42,6 +42,7 @@ import { bouwMultiInput } from "./modelNaarSolverInput";
 import { dubbelzinnigMateriaal, dubbelzinnigMateriaalTekst } from "./materiaalDubbelzinnig";
 import { keurPlaatMateriaal } from "./plaatMateriaal";
 import { vt, type VertaalbareTekst } from "./vertaalbareTekst";
+import { combineerOpleggingen } from "../components/fem/solver/opleggingen";
 
 /**
  * Standaard VERBINDINGSTOLERANTIE in mm (issue #55). Binnen deze afstand geldt
@@ -203,7 +204,9 @@ export type BevindingSoort =
   /** Last die het bestand wél draagt maar die geen solverinvoer oplevert. */
   | "stilleLast"
   /** Staafknoop tussen 1 en 50 mm van een plaatrand (omtrek of opening): niet gekoppeld. */
-  | "staafeindeBijPlaatrand";
+  | "staafeindeBijPlaatrand"
+  /** Opleggingen op één knoop die tegenstrijdig zijn of zijn samengevoegd (issue #223). */
+  | "oplegging";
 
 /**
  * Bewerking die de bevinding opheft. De store voert hem uit; de controle
@@ -249,7 +252,8 @@ export interface ControleModel {
     material?: string;
     checkConfig?: { betonKorf?: unknown } | null;
   })[];
-  supports?: Pick<Support, "nodeId">[];
+  /** `type` en `k` alleen voor de opleggingscontrole (`zoekOpleggingFouten`). */
+  supports?: (Pick<Support, "nodeId"> & { type?: string; k?: number })[];
   plates?: Pick<Plate, "id" | "nodeIds" | "openingen" | "materiaal" | "E" | "nu" | "cltG12" | "cltG12Bron" | "cltG12Bovengrens">[];
   /**
    * Optioneel: de lasten, voor de controle op plaatlasten en op lasten die
@@ -706,6 +710,44 @@ export function zoekLosseKnopen(model: ControleModel): Bevinding[] {
 }
 
 /**
+ * Opleggingen per knoop (issue #223): meerdere opleggingen op één knoop
+ * worden per vrijheidsgraad samengevoegd; star én verend, of twee veren in
+ * dezelfde richting, is tegenstrijdig en een FOUT (de engine weigert het met
+ * dezelfde regel, `opleggingen.ts`). Een samenvoeging zonder tegenspraak is
+ * een WAARSCHUWING: het kan een vergissing zijn. In de app kan per knoop maar
+ * één oplegging worden geplaatst; dit vangt een ingelezen of via de API
+ * opgebouwd model.
+ */
+export function zoekOpleggingFouten(model: ControleModel): Bevinding[] {
+  const steunen = (model.supports ?? [])
+    .filter((s): s is { nodeId: number; type: string; k?: number } => typeof s.type === "string");
+  const uit: Bevinding[] = [];
+  for (const b of combineerOpleggingen(steunen, "model").bevindingen) {
+    if (b.soort === "tegenstrijdig") {
+      const waarden = { knoop: b.nodeId, eerste: String(b.waarden.eerste), tweede: String(b.waarden.tweede) };
+      const tekst =
+        `Knoop ${waarden.knoop} heeft tegenstrijdige opleggingen (${waarden.eerste} en ` +
+        `${waarden.tweede}) in dezelfde richting. Houd per richting één steun aan; bij twee ` +
+        "parallelle veren één veer met de opgetelde stijfheid.";
+      uit.push({
+        soort: "oplegging", ernst: "fout", nodeIds: [b.nodeId], tekst,
+        tekstVertaalbaar: vt("common:canvas.modelCheck.support.conflict", tekst, waarden),
+      });
+    } else if (b.soort === "samengevoegd") {
+      const waarden = { knoop: b.nodeId, typen: String(b.waarden.typen) };
+      const tekst =
+        `Knoop ${waarden.knoop} heeft meer dan één oplegging (${waarden.typen}); ze worden ` +
+        "per richting samengevoegd. Controleer of dat de bedoeling is.";
+      uit.push({
+        soort: "oplegging", ernst: "waarschuwing", nodeIds: [b.nodeId], tekst,
+        tekstVertaalbaar: vt("common:canvas.modelCheck.support.merged", tekst, waarden),
+      });
+    }
+  }
+  return uit;
+}
+
+/**
  * Een materiaalnaam die hout én de korte naam van een betonklasse is
  * ("C16", "C20", "C30", "C35"). De solver en de houttoets rekenen hout; de
  * betontoets slaat de staaf over. Tot september 2026 zei niemand dat, en de
@@ -1009,6 +1051,7 @@ export function controleerModel(
   tolMm: number = CONTROLE_TOL_MM,
 ): Bevinding[] {
   const materiaal = zoekDubbelzinnigMateriaal(model);
+  const oplegging = zoekOpleggingFouten(model);
   const bijRand = zoekStaafeindenBijPlaatrand(model);
   const dubbel = zoekDubbeleKnopen(model, tolMm);
   const samenTeVoegen = new Set(dubbel.flatMap((d) => d.nodeIds));
@@ -1019,6 +1062,7 @@ export function controleerModel(
     ...zoekOpeningFouten(model),
     ...zoekPlaatMateriaalFouten(model),
     ...zoekStilleLasten(model),
+    ...oplegging.filter((o) => o.ernst === "fout"),
     ...materiaal.filter((m) => m.ernst === "fout"),
     ...bijRand.filter((b) => b.ernst === "fout" && !samenTeVoegen.has(b.nodeIds[0])),
   ];
@@ -1029,6 +1073,7 @@ export function controleerModel(
     // oorzaak, één regel — die melding zegt meer.
     ...zoekVrijeUiteinden(model).filter((w) => !bijRand.some((b) => b.nodeIds[0] === w.nodeIds[0])),
     ...zoekLosseKnopen(model),
+    ...oplegging.filter((o) => o.ernst === "waarschuwing"),
     ...materiaal.filter((m) => m.ernst === "waarschuwing"),
     ...bijRand.filter((b) => b.ernst === "waarschuwing"),
   ].filter((w) => !w.nodeIds.some((id) => alGemeld.has(id)));

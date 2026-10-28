@@ -428,6 +428,7 @@ const BUNDEL_TESTS = new Set([
   // `engine` — alles in de barrel. Horen óók tegen de bundel: de MCP-weg
   // valideert en rekent met de bundel.
   "mechanisme-raam",
+  "dubbele-oplegging",
   // Veldsgewijze plaatsing van veranderlijke vloerbelasting (#219): splitsen,
   // veldpatronen, omhullende en staalbouwer — alles in de barrel — en de
   // gebouwde MCP-server. Hoort ook tegen de bundel: de sidecar maakt de
@@ -483,6 +484,7 @@ const BUNDEL_TESTS = new Set([
  * vergeten regel.
  */
 const ALLEEN_BRON = new Map([
+  ["oplegging-app", "#223/#222: de modelcontrole en rekenpoort van de app (lib/modelControle, lib/rekenPoort), de vertaling via i18next en de Rust-raamwerkroute (nativeFrame2DRoute); geen van die modules staat in de barrel. De MCP-kant staat in dubbele-oplegging, die wél tegen de bundel draait"],
   ["categorie-h-combinaties", "#237: leest alleen de combinatiegenerator (normcombinaties.ts) rechtstreeks; geen sidecarpad"],
   ["backstage-import-export", "#235: leest de bron van Backstage.tsx en App.tsx (React-UI), niets uit de sidecarbundel"],
   ["chs-profielnaam", "#240: de profielsleutel (lib/strip.ts) en de CHS-toets via de 3D-staalbouwer (openFem3dSteelCheck, buiten de barrel) en de toetsbrug als apart proces; de kern zelf staat in steel-check/tests/chs_naam_en_kip.rs"],

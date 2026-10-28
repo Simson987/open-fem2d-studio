@@ -881,6 +881,10 @@
         "openingIndexMissing": "edge index {{i}} does not exist on opening {{opening}}: that opening has {{n}} edges (edgeIndex 0 to {{max}}).",
         "openingEdgeZero": "edge {{rand}} of opening {{opening}} has a length of {{lengte}} mm and cannot carry a load."
       },
+      "support": {
+        "conflict": "Node {{knoop}} has conflicting supports ({{eerste}} and {{tweede}}) in the same direction. Keep one support per direction; for two parallel springs, one spring with the summed stiffness.",
+        "merged": "Node {{knoop}} has more than one support ({{typen}}); they are combined per direction. Check that this is intended."
+      },
       "plateLoad": {
         "edgeLoad": "Edge load",
         "pointLoad": "Point load",

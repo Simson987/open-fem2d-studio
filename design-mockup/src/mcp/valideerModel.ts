@@ -68,6 +68,7 @@ import {
 } from "../lib/modelControle";
 import { bouwMultiInput, type FemModelInvoer } from "../lib/modelNaarSolverInput";
 import { zoekMechanisme } from "../components/fem/solver/engine";
+import { combineerOpleggingen } from "../components/fem/solver/opleggingen";
 import { bepaalVerloop, resolveSection } from "../lib/sectionResolver";
 import { keurPlaatMateriaal, plaatMateriaalSoort } from "../lib/plaatMateriaal";
 import { plaatPlooiGeometrieFout } from "../lib/plaatPlooi";
@@ -1558,6 +1559,18 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
       else if (richting === "z") vastgezetteRichtingen.z.push(knoop.x);
       else vastgezetteRichtingen.ry++;
     }
+  }
+
+  // Meerdere opleggingen op één knoop (issue #223): de engine voegt ze per
+  // vrijheidsgraad samen en weigert star én verend (of twee veren) in
+  // dezelfde richting. Vroeger telde alleen de laatste oplegging, en de
+  // reactietabel las de eerste — met een fictief veermoment als gevolg. Hier
+  // dezelfde regel (`opleggingen.ts`): de tegenstrijdigheid is een fout, een
+  // samenvoeging een waarschuwing.
+  for (const b of combineerOpleggingen(
+    supports.filter((s) => knoopById.has(s.nodeId) && actief.has(s.nodeId)), "model",
+  ).bevindingen) {
+    (b.ernst === "fout" ? errors : warnings).push(b.tekst);
   }
 
   // Mechanismecontrole — noodzakelijke voorwaarden voor een vlak raamwerk:

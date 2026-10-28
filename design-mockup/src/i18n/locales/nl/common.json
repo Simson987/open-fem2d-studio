@@ -881,6 +881,10 @@
         "openingIndexMissing": "rand-index {{i}} bestaat niet op opening {{opening}}: die opening heeft {{n}} randen (edgeIndex 0 t/m {{max}}).",
         "openingEdgeZero": "rand {{rand}} van opening {{opening}} heeft lengte {{lengte}} mm en kan geen last dragen."
       },
+      "support": {
+        "conflict": "Knoop {{knoop}} heeft tegenstrijdige opleggingen ({{eerste}} en {{tweede}}) in dezelfde richting. Houd per richting één steun aan; bij twee parallelle veren één veer met de opgetelde stijfheid.",
+        "merged": "Knoop {{knoop}} heeft meer dan één oplegging ({{typen}}); ze worden per richting samengevoegd. Controleer of dat de bedoeling is."
+      },
       "plateLoad": {
         "edgeLoad": "Randlast",
         "pointLoad": "Puntlast",

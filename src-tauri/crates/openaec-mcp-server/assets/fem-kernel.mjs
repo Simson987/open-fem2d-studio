@@ -19490,6 +19490,114 @@ var init_types2 = __esm({
   }
 });
 
+// src/components/fem/solver/opleggingen.ts
+function kInModel(type, k, eenheden) {
+  if (eenheden === "model") return k;
+  return type === "rotSpring" ? k / 1e6 : k / 1e3;
+}
+function kTekst(type, k, eenheden) {
+  if (k === void 0) return "(ontbreekt)";
+  if (!Number.isFinite(k)) return String(k);
+  const waarde = kInModel(type, k, eenheden);
+  const tekst2 = String(Number(waarde.toPrecision(6))).replace(".", ",").replace("-", "\u2212");
+  return `${tekst2} ${type === "rotSpring" ? "kNm/rad" : "kN/mm"}`;
+}
+function isGeldigeVeerstijfheid(k) {
+  return typeof k === "number" && Number.isFinite(k) && k > 0;
+}
+function steunTekst(s, type, eenheden) {
+  if (s.soort === "vrij") return "vrij";
+  if (s.soort === "star") return "star";
+  return `verend (k = ${kTekst(type, s.k, eenheden)})`;
+}
+function combineerOpleggingen(supports, eenheden = "model") {
+  const perKnoop = /* @__PURE__ */ new Map();
+  const bevindingen = [];
+  const metFout = /* @__PURE__ */ new Set();
+  for (const s of supports) {
+    const knoop = perKnoop.get(s.nodeId) ?? {
+      nodeId: s.nodeId,
+      x: { soort: "vrij" },
+      z: { soort: "vrij" },
+      ry: { soort: "vrij" },
+      typen: []
+    };
+    perKnoop.set(s.nodeId, knoop);
+    knoop.typen.push(s.type);
+    const veerRichting = VEER[s.type];
+    if (veerRichting !== void 0) {
+      const effectief = isGeldigeVeerstijfheid(s.k) ? { soort: "veer", k: s.k, door: s.type } : { soort: "star", door: s.type };
+      const huidig = knoop[veerRichting];
+      if (huidig.soort !== "vrij") {
+        metFout.add(s.nodeId);
+        bevindingen.push({
+          nodeId: s.nodeId,
+          ernst: "fout",
+          soort: "tegenstrijdig",
+          tekst: `Knoop ${s.nodeId} heeft twee opleggingen in de ${RICHTING_NAAM[veerRichting]}: ${huidig.door} (${huidig.soort === "star" ? "star" : "verend"}) en ${s.type} (${effectief.soort === "star" ? "star" : "verend"}). Dat is tegenstrijdig of dubbelzinnig; er wordt niet gegokt welke bedoeld is. Houd per richting \xE9\xE9n steun aan (bij twee parallelle veren \xE9\xE9n veer met de opgetelde stijfheid).`,
+          waarden: { knoop: s.nodeId, richting: veerRichting, eerste: huidig.door, tweede: s.type }
+        });
+        continue;
+      }
+      knoop[veerRichting] = effectief;
+      continue;
+    }
+    for (const r of STAR[s.type] ?? []) {
+      const huidig = knoop[r];
+      if (huidig.soort === "veer") {
+        metFout.add(s.nodeId);
+        bevindingen.push({
+          nodeId: s.nodeId,
+          ernst: "fout",
+          soort: "tegenstrijdig",
+          tekst: `Knoop ${s.nodeId} heeft twee opleggingen in de ${RICHTING_NAAM[r]}: ${huidig.door} (verend) en ${s.type} (star). Dat is tegenstrijdig of dubbelzinnig; er wordt niet gegokt welke bedoeld is. Houd per richting \xE9\xE9n steun aan (bij twee parallelle veren \xE9\xE9n veer met de opgetelde stijfheid).`,
+          waarden: { knoop: s.nodeId, richting: r, eerste: huidig.door, tweede: s.type }
+        });
+        continue;
+      }
+      if (huidig.soort === "vrij") knoop[r] = { soort: "star", door: s.type };
+    }
+  }
+  for (const knoop of perKnoop.values()) {
+    if (knoop.typen.length < 2 || metFout.has(knoop.nodeId)) continue;
+    const typeVan = (r) => {
+      const s = knoop[r];
+      return s.soort === "vrij" ? "" : s.door;
+    };
+    const samen = `x ${steunTekst(knoop.x, typeVan("x"), eenheden)}, z ${steunTekst(knoop.z, typeVan("z"), eenheden)}, rotatie ${steunTekst(knoop.ry, typeVan("ry"), eenheden)}`;
+    bevindingen.push({
+      nodeId: knoop.nodeId,
+      ernst: "waarschuwing",
+      soort: "samengevoegd",
+      tekst: `Knoop ${knoop.nodeId} heeft meer dan \xE9\xE9n oplegging (${knoop.typen.join(", ")}). Ze zijn per richting samengevoegd: ${samen}. Controleer of dat de bedoeling is.`,
+      waarden: { knoop: knoop.nodeId, typen: knoop.typen.join(", "), samen }
+    });
+  }
+  return { perKnoop, bevindingen };
+}
+var STAR, VEER, RICHTING_NAAM;
+var init_opleggingen = __esm({
+  "src/components/fem/solver/opleggingen.ts"() {
+    "use strict";
+    STAR = {
+      fixed: ["x", "z", "ry"],
+      pinned: ["x", "z"],
+      xRoller: ["x"],
+      zRoller: ["z"]
+    };
+    VEER = {
+      xSpring: "x",
+      zSpring: "z",
+      rotSpring: "ry"
+    };
+    RICHTING_NAAM = {
+      x: "horizontale richting (x)",
+      z: "verticale richting (z)",
+      ry: "rotatie (ry)"
+    };
+  }
+});
+
 // src/components/fem/solver/engine.ts
 function normaliseerSegmenten(beamId, segmenten, L_mm) {
   if (segmenten === void 0) return void 0;
@@ -19576,34 +19684,16 @@ function berekenPlaatrandSplitsFracties(nA, nB, plateRects, tolMm) {
   }
   return uniek;
 }
-function applySupportToMesh(mesh, meshNodeId, support) {
-  const k = support.k ?? 0;
-  switch (support.type) {
-    case "pinned":
-      mesh.updateNode(meshNodeId, { constraints: { x: true, y: true, rotation: false } });
-      break;
-    case "fixed":
-      mesh.updateNode(meshNodeId, { constraints: { x: true, y: true, rotation: true } });
-      break;
-    case "xRoller":
-      mesh.updateNode(meshNodeId, { constraints: { x: true, y: false, rotation: false } });
-      break;
-    case "zRoller":
-      mesh.updateNode(meshNodeId, { constraints: { x: false, y: true, rotation: false } });
-      break;
-    // Veren: k ≤ 0 of ontbrekend → star (contract in types.ts) — een veer met
-    // stijfheid 0 zou het DOF vrij én onverend laten en het stelsel singulier
-    // maken. springY/X/Rot alleen zetten bij k > 0.
-    case "zSpring":
-      mesh.updateNode(meshNodeId, k > 0 ? { constraints: { x: false, y: true, rotation: false, springY: k * 1e3 } } : { constraints: { x: false, y: true, rotation: false } });
-      break;
-    case "xSpring":
-      mesh.updateNode(meshNodeId, k > 0 ? { constraints: { x: true, y: false, rotation: false, springX: k * 1e3 } } : { constraints: { x: true, y: false, rotation: false } });
-      break;
-    case "rotSpring":
-      mesh.updateNode(meshNodeId, k > 0 ? { constraints: { x: false, y: false, rotation: true, springRot: k / 1e3 } } : { constraints: { x: false, y: false, rotation: true } });
-      break;
-  }
+function applySupportToMesh(mesh, meshNodeId, steun) {
+  const constraints = {
+    x: steun.x.soort !== "vrij",
+    y: steun.z.soort !== "vrij",
+    rotation: steun.ry.soort !== "vrij"
+  };
+  if (steun.x.soort === "veer") constraints.springX = steun.x.k * 1e3;
+  if (steun.z.soort === "veer") constraints.springY = steun.z.k * 1e3;
+  if (steun.ry.soort === "veer") constraints.springRot = steun.ry.k / 1e3;
+  mesh.updateNode(meshNodeId, { constraints });
 }
 function buildMesh(input, loadFactor, options = {}) {
   const mesh = new Mesh();
@@ -19635,10 +19725,15 @@ function buildMesh(input, loadFactor, options = {}) {
     const meshNode = mesh.addNode(n2.x / 1e3, n2.z / 1e3);
     nodeIdMap.set(n2.id, meshNode.id);
   }
-  for (const s of input.supports) {
-    const meshNid = nodeIdMap.get(s.nodeId);
+  const opleggingen = combineerOpleggingen(input.supports, "solver");
+  const opleggingFouten = opleggingen.bevindingen.filter((b) => b.ernst === "fout");
+  if (opleggingFouten.length > 0) {
+    throw new Error(opleggingFouten.map((f) => f.tekst).join(" "));
+  }
+  for (const steun of opleggingen.perKnoop.values()) {
+    const meshNid = nodeIdMap.get(steun.nodeId);
     if (meshNid === void 0) continue;
-    applySupportToMesh(mesh, meshNid, s);
+    applySupportToMesh(mesh, meshNid, steun);
   }
   const nodeById = /* @__PURE__ */ new Map();
   for (const n2 of input.nodes) nodeById.set(n2.id, { x: n2.x, z: n2.z });
@@ -20538,6 +20633,7 @@ function convertResult(mesh, engineResult, nodeIdMap, beamIdMap, supports, plate
   const displacements = /* @__PURE__ */ new Map();
   const reactions = /* @__PURE__ */ new Map();
   const elements = /* @__PURE__ */ new Map();
+  const steunPerKnoop = combineerOpleggingen(supports, "solver").perKnoop;
   let indexById;
   if (nodeIndex) {
     indexById = nodeIndex;
@@ -20555,17 +20651,14 @@ function convertResult(mesh, engineResult, nodeIdMap, beamIdMap, supports, plate
     const ry = engineResult.displacements[base + 2] ?? 0;
     const ux = ux_m * 1e3, uz = uz_m * 1e3;
     displacements.set(uiId, { ux, uz, ry });
-    const support = supports.find((s) => s.nodeId === uiId);
-    if (support) {
+    const steun = steunPerKnoop.get(uiId);
+    if (steun) {
       let fx = engineResult.reactions[base + 0] ?? 0;
       let fz = engineResult.reactions[base + 1] ?? 0;
       let my_Nmm = (engineResult.reactions[base + 2] ?? 0) * 1e3;
-      const k = support.k ?? 0;
-      if (k > 0) {
-        if (support.type === "zSpring") fz = -k * uz;
-        if (support.type === "xSpring") fx = -k * ux;
-        if (support.type === "rotSpring") my_Nmm = -k * ry;
-      }
+      if (steun.x.soort === "veer") fx = -steun.x.k * ux;
+      if (steun.z.soort === "veer") fz = -steun.z.k * uz;
+      if (steun.ry.soort === "veer") my_Nmm = -steun.ry.k * ry;
       reactions.set(uiId, { fx, fz, my: my_Nmm });
     }
   }
@@ -21109,6 +21202,7 @@ var init_engine = __esm({
     init_plaatMateriaal();
     init_grootsteVerplaatsing();
     init_types2();
+    init_opleggingen();
     MAX_MIXED_DOFS = 4e3;
     KNOOP_TOL_MM = 1;
     MIN_SEGMENT_MM = 25;
@@ -28831,6 +28925,13 @@ var AFBEELDINGEN = [
     nl: (m) => m.input
   },
   {
+    // engine.ts (buildMesh) en nativeFrame2DRoute.ts via opleggingen.ts:
+    // tegenstrijdige opleggingen op één knoop (issue #223).
+    patroon: /^Knoop \d+ heeft twee opleggingen in de /,
+    code: "MODEL_ONOPLOSBAAR",
+    nl: (m) => m.input
+  },
+  {
     // engine.ts (eisEindigeUitkomst): NaN of oneindig in het resultaat.
     patroon: /^De berekening leverde een ongeldig getal/,
     code: "MODEL_ONOPLOSBAAR",
@@ -36304,6 +36405,7 @@ function dubbelzinnigMateriaalTekst(beamId, d, metKorf) {
 // src/lib/modelControle.ts
 init_plaatMateriaal();
 init_vertaalbareTekst();
+init_opleggingen();
 var CONTROLE_TOL_MM = 5;
 var VERBINDINGSTOLERANTIE_MIN_MM = 0.1;
 var VERBINDINGSTOLERANTIE_MAX_MM = 25;
@@ -36508,7 +36610,7 @@ var AFRONDING_M = 1e-12;
 var SCHIJF_HOOGTE_M = 1e-3;
 var ASSEN_GELIJK = 1 - 1e-9;
 var DOF = ["ux", "uy", "uz", "rx", "ry", "rz"];
-var VEER = ["kxKnPerM", "kyKnPerM", "kzKnPerM", "krxKnmPerRad", "kryKnmPerRad", "krzKnmPerRad"];
+var VEER2 = ["kxKnPerM", "kyKnPerM", "kzKnPerM", "krxKnmPerRad", "kryKnmPerRad", "krzKnmPerRad"];
 var OPGELEGD = ["uxM", "uyM", "uzM", "rxRad", "ryRad", "rzRad"];
 var afstand2 = (p2, q) => Math.hypot(p2.x - q.x, p2.y - q.y, p2.z - q.z);
 var mm = (m) => Math.round(m * 1e6) / 1e3;
@@ -36759,7 +36861,7 @@ function voegGroepSamen(model, groep, keepId) {
     const springs = {};
     const prescribed = {};
     DOF.forEach((dof, i) => {
-      const veren2 = steunen.filter((s) => s.springs?.[VEER[i]] !== void 0);
+      const veren2 = steunen.filter((s) => s.springs?.[VEER2[i]] !== void 0);
       if (veren2.length > 1) weiger({ kind: "springs", dof });
       const waarden = [...new Set(steunen.filter((s) => s[dof]).map((s) => s.prescribed?.[OPGELEGD[i]] ?? 0))];
       if (waarden.length > 1) weiger({ kind: "prescribed", dof });
@@ -36767,7 +36869,7 @@ function voegGroepSamen(model, groep, keepId) {
         if (veren2.length === 1) notes.push({ kind: "springOverruled", nodeId: veren2[0].nodeId, keepNodeId: keepId, dof });
         if (waarden.length === 1 && waarden[0] !== 0) prescribed[OPGELEGD[i]] = waarden[0];
       } else if (veren2.length === 1) {
-        springs[VEER[i]] = veren2[0].springs[VEER[i]];
+        springs[VEER2[i]] = veren2[0].springs[VEER2[i]];
       }
     });
     const samen = {
@@ -42426,6 +42528,7 @@ async function opExtensieImporteren(payload) {
 init_femTypes();
 init_PlaatMesher();
 init_engine();
+init_opleggingen();
 init_sectionResolver();
 init_plaatMateriaal();
 init_plaatPlooi();
@@ -43647,6 +43750,12 @@ function valideerModel(rauw, opties = {}) {
       else if (richting2 === "z") vastgezetteRichtingen.z.push(knoop.x);
       else vastgezetteRichtingen.ry++;
     }
+  }
+  for (const b of combineerOpleggingen(
+    supports.filter((s) => knoopById.has(s.nodeId) && actief2.has(s.nodeId)),
+    "model"
+  ).bevindingen) {
+    (b.ernst === "fout" ? errors : warnings).push(b.tekst);
   }
   if (supports.length === 0) {
     errors.push(

@@ -881,6 +881,10 @@
         "openingIndexMissing": "Randindex {{i}} existiert an Öffnung {{opening}} nicht: Diese Öffnung hat {{n}} Ränder (edgeIndex 0 bis {{max}}).",
         "openingEdgeZero": "Rand {{rand}} der Öffnung {{opening}} hat die Länge {{lengte}} mm und kann keine Last tragen."
       },
+      "support": {
+        "conflict": "Knoten {{knoop}} hat widersprüchliche Auflager ({{eerste}} und {{tweede}}) in derselben Richtung. Behalten Sie je Richtung ein Auflager; bei zwei parallelen Federn eine Feder mit der aufsummierten Steifigkeit.",
+        "merged": "Knoten {{knoop}} hat mehr als ein Auflager ({{typen}}); sie werden je Richtung zusammengefasst. Prüfen Sie, ob dies beabsichtigt ist."
+      },
       "plateLoad": {
         "edgeLoad": "Randlast",
         "pointLoad": "Punktlast",

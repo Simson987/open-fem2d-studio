@@ -2,6 +2,7 @@ import { solveNativeFem, type NativeMixed2DResult } from "../../../lib/nativeFem
 import { beddingSplitsFracties, MIN_SEGMENT_MM, normaliseerSegmenten,
   buildMesh, registreerScheefstandRichtingen, SCHEEFSTAND_ID_OFFSET } from "./engine";
 import { grootsteVerplaatsing } from "./grootsteVerplaatsing";
+import { combineerOpleggingen } from "./opleggingen";
 import type { LoadCombination } from "./combinations";
 import type { ElementForces, MultiInput, SolverResult } from "./types";
 import { materialOptions, nativeMembraneResultToSolverResult, voegNativeDrieLagencontroleToe } from "./nativeMembraneRoute";
@@ -259,25 +260,21 @@ export function buildNativeFrame2DRequest(
   });
   type Support = { nodeId: number; ux: boolean; uy: boolean; rz: boolean;
     kxKnPerM?: number; kyKnPerM?: number; krzKnmPerRad?: number };
-  const supportsByNode = new Map<number, Support>();
-  for (const support of input.supports) {
-    const entry: Support = supportsByNode.get(support.nodeId) ?? { nodeId: support.nodeId, ux: false, uy: false, rz: false };
-    const k = finite(support.k ?? 0, `Oplegging ${support.nodeId} k`);
-    if (support.type === "fixed") { entry.ux = true; entry.uy = true; entry.rz = true; }
-    else if (support.type === "pinned") { entry.ux = true; entry.uy = true; }
-    else if (support.type === "xRoller") entry.ux = true;
-    else if (support.type === "zRoller") entry.uy = true;
-    else if (support.type === "xSpring") { if (k > 0) entry.kxKnPerM = k; else entry.ux = true; }
-    else if (support.type === "zSpring") { if (k > 0) entry.kyKnPerM = k; else entry.uy = true; }
-    else if (support.type === "rotSpring") { if (k > 0) entry.krzKnmPerRad = k / 1e6; else entry.rz = true; }
-    supportsByNode.set(support.nodeId, entry);
-  }
-  const supports = [...supportsByNode.values()];
-  for (const support of supports) {
-    if (support.ux && support.kxKnPerM || support.uy && support.kyKnPerM || support.rz && support.krzKnmPerRad) {
-      throw new Error(`Knoop ${support.nodeId} is tegelijk vast en verend in dezelfde vrijheidsgraad.`);
-    }
-  }
+  // Per knoop samengevoegd per vrijheidsgraad, met dezelfde regel als de
+  // TS-engine (`opleggingen.ts`, issue #223): tegenstrijdige opleggingen
+  // (star én verend, of twee veren in één richting) worden geweigerd. Vroeger
+  // overschreef een tweede veer in dezelfde richting de eerste stil.
+  const opleggingen = combineerOpleggingen(input.supports, "solver");
+  const opleggingFouten = opleggingen.bevindingen.filter((b) => b.ernst === "fout");
+  if (opleggingFouten.length > 0) throw new Error(opleggingFouten.map((f) => f.tekst).join(" "));
+  const supports: Support[] = [...opleggingen.perKnoop.values()].map((steun) => {
+    const entry: Support = { nodeId: steun.nodeId,
+      ux: steun.x.soort === "star", uy: steun.z.soort === "star", rz: steun.ry.soort === "star" };
+    if (steun.x.soort === "veer") entry.kxKnPerM = finite(steun.x.k, `Oplegging ${steun.nodeId} k`);
+    if (steun.z.soort === "veer") entry.kyKnPerM = finite(steun.z.k, `Oplegging ${steun.nodeId} k`);
+    if (steun.ry.soort === "veer") entry.krzKnmPerRad = finite(steun.ry.k, `Oplegging ${steun.nodeId} k`) / 1e6;
+    return entry;
+  });
   const nodalLoads = (input.pointLoads ?? []).flatMap(load => {
     const scale = finite(factor(load.caseId), `Belastinggeval ${load.caseId}`);
     if (scale === 0) return [];

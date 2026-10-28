@@ -306,6 +306,13 @@ const AFBEELDINGEN: Afbeelding[] = [
     nl: (m) => m.input,
   },
   {
+    // engine.ts (buildMesh) en nativeFrame2DRoute.ts via opleggingen.ts:
+    // tegenstrijdige opleggingen op één knoop (issue #223).
+    patroon: /^Knoop \d+ heeft twee opleggingen in de /,
+    code: "MODEL_ONOPLOSBAAR",
+    nl: (m) => m.input,
+  },
+  {
     // engine.ts (eisEindigeUitkomst): NaN of oneindig in het resultaat.
     patroon: /^De berekening leverde een ongeldig getal/,
     code: "MODEL_ONOPLOSBAAR",
