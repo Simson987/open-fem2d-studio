@@ -208,15 +208,22 @@ await check("legenda: bereik = min/max van de kernknopen; extremen in het paneel
     assert.ok(Math.abs(extreem.max - bereik.max) <= 1e-12 * Math.max(1, Math.abs(bereik.max)), `${key}: paneel-max ${extreem.max} tegen ${bereik.max}`);
   }
 });
-await check("opmaak: NL-notatie met vaste decimalen (3 onder 10, 2 onder 100, daarboven 1)", () => {
+await check("opmaak: NL-notatie, minstens drie significante cijfers (B3 opgelost)", () => {
   assert.equal(formatOpenFem3DPlateValue(0.8021), "0,802");
   assert.equal(formatOpenFem3DPlateValue(92.7), "92,70");
   assert.equal(formatOpenFem3DPlateValue(-108), "-108,0");
-  // Bevinding B3 (#217, docs/verificatie/nafems): de code noemt dit "drie significante cijfers",
-  // maar onder 1 zijn het vaste decimalen. Het veldmoment in E van LE6 (0,00822 kNm/m) staat
-  // daardoor als "0,008" in legenda en paneel: één significant cijfer. Dit legt de huidige
-  // stand vast; pas de regel aan als de opmaak verbetert.
-  assert.equal(formatOpenFem3DPlateValue(knoopE.mxxKnmPerM), "0,008");
+  assert.equal(formatOpenFem3DPlateValue(0), "0,000");
+  // Bevinding B3 (#217, docs/verificatie/nafems): onder 1 rondde de opmaak af op vaste
+  // decimalen, zodat het veldmoment in E van LE6 als "0,008" verscheen (één significant
+  // cijfer). Nu drie significante cijfers: de kernwaarde mxx_E zelf, en de waarden uit de
+  // bevinding (myy = 0,01314 en mxy = −0,00142 kNm/m).
+  const verwacht = knoopE.mxxKnmPerM.toLocaleString("nl-NL", { maximumSignificantDigits: 3, minimumSignificantDigits: 3 });
+  assert.equal(formatOpenFem3DPlateValue(knoopE.mxxKnmPerM), verwacht);
+  assert.match(verwacht, /^0,00\d{3}$/, `mxx_E = ${knoopE.mxxKnmPerM}: drie significante cijfers na 0,00`);
+  assert.equal(formatOpenFem3DPlateValue(0.00822), "0,00822");
+  assert.equal(formatOpenFem3DPlateValue(0.01314), "0,0131");
+  assert.equal(formatOpenFem3DPlateValue(-0.00142), "-0,00142");
+  assert.equal(formatOpenFem3DPlateValue(3e-17), "0,0000000000");
 });
 await check("contour en vervormde vorm: kleur en ligging van E in de tekenlaag volgen uit de kernwaarden", () => {
   const schaal = 200;

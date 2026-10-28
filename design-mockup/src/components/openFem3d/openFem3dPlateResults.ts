@@ -140,11 +140,19 @@ export function openFem3DContourGradientCss(): string {
   return `linear-gradient(90deg, ${STOPS.map((c, i) => `rgb(${c.join(",")}) ${(i / (STOPS.length - 1) * 100).toFixed(0)}%`).join(", ")})`;
 }
 
-/** Getal voor legenda en tabel: drie significante cijfers, NL-notatie. */
+/**
+ * Getal voor legenda en tabel: minstens drie significante cijfers, NL-notatie.
+ * Vanaf 1 vaste decimalen (3 onder 10, 2 onder 100, daarboven 1); onder 1
+ * zoveel decimalen als drie significante cijfers vragen, zodat een klein
+ * veldmoment niet tot één cijfer wegvalt (NAFEMS-bevinding B3: LE6, mxx =
+ * 0,00822 kNm/m stond als "0,008"). Hooguit 10 decimalen: wat daaronder valt
+ * is rekenruis en toont als 0.
+ */
 export function formatOpenFem3DPlateValue(value: number): string {
   if (!Number.isFinite(value)) return "—";
   const magnitude = Math.abs(value);
-  const digits = magnitude >= 100 ? 1 : magnitude >= 10 ? 2 : 3;
+  const digits = magnitude >= 100 ? 1 : magnitude >= 10 ? 2 : magnitude >= 1 || magnitude === 0 ? 3
+    : Math.min(10, Math.max(3, 2 - Math.floor(Math.log10(magnitude))));
   return value.toLocaleString("nl-NL", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
