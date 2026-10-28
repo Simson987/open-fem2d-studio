@@ -108,7 +108,8 @@ async fn stdio_roundtrip_initialize_list_call() {
     // gui_import_ifc_analysis_model, sinds issue #109 ook gui_start_app)
     // + project_import (lokale extensie) + list_aluminium_alloys en
     // check_aluminium_beams (issue #5) + de twee .ifcfemresults-tools
-    // (issue #87: fem_resultaten_ifc_schrijven en _lezen) = 59 vaste tools.
+    // (issue #87: fem_resultaten_ifc_schrijven en _lezen) + check_masonry_walls
+    // (issue #98) = 60 vaste tools.
     // Daarbij één tool per API-commando van de app, uit de ingebakken catalogus
     // (assets/api-catalogus.json, geschreven door `npm run build:sidecar`).
     // Ook die tellen exact: elk commando uit de catalogus, niets meer.
@@ -122,8 +123,8 @@ async fn stdio_roundtrip_initialize_list_call() {
         .collect();
     assert_eq!(
         tools.len(),
-        59 + api_namen.len(),
-        "expected 59 + {} tools, got {}",
+        60 + api_namen.len(),
+        "expected 60 + {} tools, got {}",
         api_namen.len(),
         tools.len()
     );

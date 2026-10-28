@@ -75,6 +75,9 @@ plaat-check = { path = "../plaat-check" }
 # Aluminium (NEN-EN 1999-1-1, issue #5): `check_aluminium_beams` en
 # `list_aluminium_alloys`, dezelfde functies als het Tauri-command en de toetsbrug.
 aluminium-check = { path = "../aluminium-check" }
+# Metselwerk (NEN-EN 1996-1-1, issue #98): `check_masonry_walls`, dezelfde
+# functie als het Tauri-command en de toetsbrug.
+metselwerk-check = { path = "../metselwerk-check" }
 nen-en-1999-1-1 = { path = "../nen-en-1999-1-1" }
 # Ruimtelijke raamwerken: exact dezelfde neutrale adapter en vastgezette
 # externe 3D-kern als het Tauri-command `solve_open_fem_3d`.

@@ -57,6 +57,8 @@ spanning-check = { path = "crates/spanning-check" }
 # Aluminium (NEN-EN 1999-1-1, issue #5).
 aluminium-check = { path = "crates/aluminium-check" }
 nen-en-1999-1-1 = { path = "crates/nen-en-1999-1-1" }
+# Metselwerk (NEN-EN 1996-1-1, issue #98).
+metselwerk-check = { path = "crates/metselwerk-check" }
 plaat-check = { path = "crates/plaat-check" }
 nen-en-1993-1-8-las = { path = "crates/nen-en-1993-1-8-las" }
 report = { path = "crates/report" }

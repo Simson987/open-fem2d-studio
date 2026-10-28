@@ -2118,3 +2118,74 @@ async fn combinaties_kennen_de_bevestigde_eigen_factoren_strikt() {
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }
+
+// ── Metselwerk (NEN-EN 1996-1-1, issue #98) ────────────────────────────────
+
+/// De voorbeeldwand van `metselwerk-check/tests/handberekening.rs` (alleen
+/// verticale belasting); er wordt hier geen UC vastgelegd.
+fn geldige_metselwerkinvoer() -> Value {
+    let nw = |w: f64| json!({ "waarde": w, "bron": "testwaarde" });
+    json!({
+        "wand_id": 1, "naam": "KZS 120",
+        "materiaal": {
+            "steensoort": "Kalkzandsteen", "steengroep": "Groep1", "mortel": "Lijm",
+            "f_b_mpa": 20.0, "k": nw(0.8), "langsvoeg": false, "gamma_m": nw(1.7),
+            "k_e": nw(1000.0), "phi_inf": nw(1.5), "stootvoegen_gevuld": false
+        },
+        "geometrie": { "t_mm": 120.0, "h_m": 2.6, "l_m": 3.6,
+            "steunranden": { "soort": "TweeVerticaleRanden", "l_m": 3.0 }, "betonvloeren": true },
+        "verticaal": { "n_boven_kn_m": 60.0, "m_boven_knm_m": 0.6, "n_midden_kn_m": 65.0,
+            "m_midden_knm_m": 0.3, "n_onder_kn_m": 70.0, "m_onder_knm_m": 0.0 }
+    })
+}
+
+#[tokio::test]
+async fn schema_van_check_masonry_walls_is_strikt_op_elk_niveau() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let tool = tooldefinitie(&mut stdin, &mut reader, 70, "check_masonry_walls").await;
+    assert_eq!(tool["inputSchema"]["additionalProperties"], false, "omhulsel");
+    let wand = &tool["inputSchema"]["properties"]["inputs"]["items"];
+    assert_eq!(wand["additionalProperties"], false, "wand");
+    for veld in ["materiaal", "geometrie", "verticaal", "afschuiving", "buiging"] {
+        assert_eq!(wand["properties"][veld]["additionalProperties"], false, "{veld}");
+    }
+    let mat = &wand["properties"]["materiaal"];
+    // K en γ_M zijn verplicht en hebben geen standaard (NDP, alleen met bron).
+    for veld in ["k", "gamma_m", "langsvoeg", "stootvoegen_gevuld"] {
+        assert!(mat["required"].as_array().unwrap().contains(&json!(veld)), "{veld} verplicht");
+        assert!(mat["properties"][veld].get("default").is_none(), "{veld} zonder standaard");
+    }
+    assert_eq!(mat["properties"]["k"]["additionalProperties"], false, "normwaarde");
+    for variant in wand["properties"]["geometrie"]["properties"]["steunranden"]["oneOf"].as_array().unwrap() {
+        assert_eq!(variant["additionalProperties"], false, "steunrandvariant {variant}");
+    }
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+#[tokio::test]
+async fn metselwerkinvoer_rekent_en_een_tikfout_wordt_geweigerd() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let result = roep_tool_aan(&mut stdin, &mut reader, 71, "check_masonry_walls",
+        json!({ "inputs": [geldige_metselwerkinvoer()] })).await;
+    assert_eq!(result["isError"], false, "geldige invoer: {}", foutmelding(&result));
+    let r = &result["structuredContent"]["results"][0];
+    assert!(r["checks"].as_array().unwrap().iter().any(|c| c["id"] == "druk_midden"));
+    assert_eq!(r["status"], "Ok");
+
+    for (i, (pad, tikfout)) in [("wand", "verticaa"), ("materiaal", "f_vk_0"), ("steunranden", "l_mm")].into_iter().enumerate() {
+        let mut invoer = geldige_metselwerkinvoer();
+        let doel = match pad {
+            "wand" => &mut invoer,
+            "materiaal" => &mut invoer["materiaal"],
+            _ => &mut invoer["geometrie"]["steunranden"],
+        };
+        doel.as_object_mut().unwrap().insert(tikfout.into(), json!(1));
+        let result = roep_tool_aan(&mut stdin, &mut reader, 72 + i as u32, "check_masonry_walls",
+            json!({ "inputs": [invoer] })).await;
+        assert_eq!(result["isError"], true, "{pad}: `{tikfout}` gaf een resultaat: {result}");
+        assert!(foutmelding(&result).contains(tikfout), "{pad}: {}", foutmelding(&result));
+    }
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
