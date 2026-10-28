@@ -626,6 +626,15 @@ impl Model {
             for &i in &keten { in_element[i] = true; }
             for paar in keten.windows(2) { unie.verbind(paar[0], paar[1]); }
         }
+        // Knoopkoppelingen (#97) tellen hier als starre verbinding tussen
+        // meester en slaaf: een gekoppelde latei hangt aan de wand. Een
+        // beweging in de niet-gekoppelde richtingen ziet deze controle niet;
+        // die meldt de kern als singuliere matrix.
+        for koppeling in &request.node_links {
+            if let (Some(&a), Some(&b)) = (index.get(&koppeling.master_node_id), index.get(&koppeling.slave_node_id)) {
+                unie.verbind(a, b);
+            }
+        }
 
         let mut delen: Vec<Deel> = Vec::new();
         let mut deel_bij_wortel: HashMap<usize, usize> = HashMap::new();
@@ -1722,7 +1731,7 @@ mod tests {
             sections: vec![Section3D { id: 1, name: "HEA".into(), area_m2: 5e-3, iy_m4: 1e-5, iz_m4: 1e-5,
                 torsion_j_m4: 1e-6, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }],
             members, supports, nodal_loads: vec![], member_loads: vec![], member_point_loads: vec![],
-            thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![],
+            thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![], node_links: vec![],
             tension_only_fit: None, tension_only_cross_rule: false, max_iterations: 50, tolerance: 1e-10, buckling_modes: 0,
         }
     }

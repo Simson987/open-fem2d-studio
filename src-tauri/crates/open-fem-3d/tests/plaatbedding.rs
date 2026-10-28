@@ -84,7 +84,7 @@ fn verzoek(nodes: Vec<Node3D>, e_mpa: f64, plates: Vec<Plate3D>, shell_elements:
         ],
         sections: vec![], members: vec![], supports: vec![], nodal_loads: vec![], member_loads: vec![],
         member_point_loads: vec![], thermal_loads: vec![], plates, shell_elements, surface_loads: vec![],
-        diaphragms: vec![], tension_only_fit: None, tension_only_cross_rule: false,
+        diaphragms: vec![], node_links: vec![], tension_only_fit: None, tension_only_cross_rule: false,
         max_iterations: 50, tolerance: 1e-10, buckling_modes: 0,
     }
 }

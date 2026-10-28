@@ -336,6 +336,25 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                         }
                     }
                 },
+                "nodeLinks": {
+                    "type": "array", "default": [],
+                    "description": "Knoopkoppelingen (#97): de slaafknoop volgt de meesterknoop in de gekozen globale vrijheidsgraden (EqualDOF). Beide knopen liggen op dezelfde plek (binnen 1e-6 m), minstens één vrijheidsgraad, een slaaf heeft één meester en is zelf geen meester, zit in geen schijf en is in de gekoppelde vrijheidsgraden niet opgelegd. Voorbeeld: een latei die het metselwerk boven een opening alleen verticaal en loodrecht op de wand draagt, zonder de penanten horizontaal te koppelen.",
+                    "items": {
+                        "type": "object", "additionalProperties": false,
+                        "required": ["id", "masterNodeId", "slaveNodeId"],
+                        "properties": {
+                            "id": { "type": "integer", "minimum": 1 },
+                            "masterNodeId": { "type": "integer", "minimum": 1 },
+                            "slaveNodeId": { "type": "integer", "minimum": 1 },
+                            "ux": { "type": "boolean", "default": false },
+                            "uy": { "type": "boolean", "default": false },
+                            "uz": { "type": "boolean", "default": false },
+                            "rx": { "type": "boolean", "default": false },
+                            "ry": { "type": "boolean", "default": false },
+                            "rz": { "type": "boolean", "default": false }
+                        }
+                    }
+                },
                 "tensionOnlyFit": {
                     "type": "object", "additionalProperties": false,
                     "description": "Montagelasten van de trek-alleen staven: de lasten die al op het frame staan als de verbanden gemonteerd worden (bijvoorbeeld de permanente belasting, factor 1). Elke trek-alleen staaf krijgt dan de spanningsloze lengte L + Δ0, met Δ0 de verlenging van haar koorde onder deze lasten, gepast tot de verbanden onder alleen deze lasten niets dragen (wat het frame zonder verbanden niet kan dragen, blijft in de verbanden). Zelfde vorm en keuring als de gewone lasten; opgelegde verplaatsingen doen niet mee. Het resultaat geeft Δ0 per staaf in tensionOnlyFit (memberId, deltaMm). Ontbreekt het veld, dan zijn de staven spanningsloos in de onvervormde stand.",
@@ -484,6 +503,23 @@ mod tests {
         assert_eq!((o.e_x_mpa, o.e_y_mpa, o.g_xy_mpa, o.nu_xy, o.g_xz_mpa), (0.005, 5000.0, 2000.0, 0.0, None));
         assert!(serde_json::from_value::<open_fem_3d::SolveRequest3D>(
             plaat(json!({ "eXMpa": 1, "eYMpa": 5000, "gxyMpa": 2000 }))).is_err());
+    }
+
+    /// Knoopkoppelingen (#97): strikt; de kern leest ze en weigert een tikfout.
+    #[test]
+    fn schema_kent_knoopkoppelingen_strikt() {
+        let definition = &tool_definitions()[0];
+        let item = &definition["inputSchema"]["properties"]["nodeLinks"]["items"];
+        assert_eq!(item["additionalProperties"], false);
+        assert_eq!(item["required"], json!(["id", "masterNodeId", "slaveNodeId"]));
+        let gelezen = serde_json::from_value::<open_fem_3d::SolveRequest3D>(json!({
+            "nodes": [], "materials": [],
+            "nodeLinks": [{ "id": 1, "masterNodeId": 1, "slaveNodeId": 2, "uz": true }]
+        })).unwrap();
+        assert!(gelezen.node_links[0].uz && !gelezen.node_links[0].ux);
+        assert!(serde_json::from_value::<open_fem_3d::SolveRequest3D>(json!({
+            "nodes": [], "materials": [], "nodeLinks": [{ "id": 1, "masterNode": 1, "slaveNodeId": 2 }]
+        })).is_err());
     }
 
     /// Staaf op bedding (#106): strikt object met widthM verplicht, de vier

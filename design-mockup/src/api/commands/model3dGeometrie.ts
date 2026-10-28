@@ -10,7 +10,8 @@ import { metModel3d, model3dVan } from "../projectDocument";
 import { eenVan, geheel, getal, id, jaNee, keuze, lijst, obj, ofNull, tekst } from "../schemaBouw";
 import {
   addOpenFem3DBeam, addOpenFem3DNode, addOpenFem3DPlate, addOpenFem3DPlateOpening, flipOpenFem3DBeamLocalAxes, pinOpenFem3DBeamsToColumns,
-  removeOpenFem3DBeam, removeOpenFem3DNode, removeOpenFem3DPlate, setOpenFem3DBeamBedding, setOpenFem3DBeamEndHinge, setOpenFem3DPlateBedding,
+  removeOpenFem3DBeam, removeOpenFem3DNode, removeOpenFem3DOpeningLintel, removeOpenFem3DPlate, setOpenFem3DBeamBedding,
+  setOpenFem3DOpeningLintel, setOpenFem3DPlateMasonry, type OpenFem3DLintelInput, setOpenFem3DBeamEndHinge, setOpenFem3DPlateBedding,
   setOpenFem3DReleasePreset, splitOpenFem3DBeam, updateOpenFem3DBeam, updateOpenFem3DNode, updateOpenFem3DPlate,
   type OpenFem3DBeamBedding, type OpenFem3DBeamEnd, type OpenFem3DBeamPatch, type OpenFem3DEndReleases, type OpenFem3DModel, type OpenFem3DPlateBedding,
   type OpenFem3DPlateBoundarySegment, type OpenFem3DPlateEdgeSupport, type OpenFem3DReleasePreset,
@@ -18,6 +19,9 @@ import {
 import { connectOpenFem3DNodesToBeams, OPEN_FEM_3D_CONNECT_TOLERANCE_MM } from "../../components/openFem3d/openFem3dAansluiten";
 import { mergeOpenFem3DNodes, OPEN_FEM_3D_MERGE_TOLERANCE_MM } from "../../components/openFem3d/openFem3dSamenvoegen";
 import { openFem3DPlateGroundSide } from "../../components/openFem3d/openFem3dPlateBedding";
+import {
+  OPEN_FEM_3D_LINTEL_DEFAULT, openFem3DLintelDesign, type OpenFem3DMasonryWall,
+} from "../../components/openFem3d/openFem3dMetselwerkwand";
 import { VERBINDINGSTOLERANTIE_MAX_MM, VERBINDINGSTOLERANTIE_MIN_MM } from "../../lib/modelControle";
 import { keurOpenFem3DStaafdoorsnede, onbekendeOpenFem3DDoorsneden } from "../../components/openFem3d/openFem3dDoorsnedeKeuring";
 
@@ -518,6 +522,57 @@ const plaatBeddingZetten = documentCommando<{ plateIds: number[]; bedding: OpenF
   },
 });
 
+const metselwerkwand = obj({
+  unitWeightKnM3: getal("Volumegewicht γ in kN/m³ (kalkzandsteen ca. 18–20); het eigen gewicht is γ·t per m² wand.", { exclusiveMinimum: 0, maximum: 100 }),
+  eMpa: getal("E van het metselwerk in verticale richting, N/mm² (E = K_E·f_k, NEN-EN 1996-1-1 §3.7.2).", { exclusiveMinimum: 0 }),
+}, ["unitWeightKnM3", "eMpa"], "Metselwerkwand (#97): de plaat rekent orthotroop met E verticaal = eMpa, E horizontaal = 1e-6·eMpa (de wand werkt niet als hoge ligger met de funderingsbalk samen) en G = 0,4·eMpa (NEN-EN 1996-1-1 §3.7.3; wind in het vlak gaat via afschuiving naar de fundering). De plaat moet verticaal staan; het materiaal van de plaat doet dan niet mee.");
+
+const plaatMetselwerk = documentCommando<{ plateId: number; masonry: OpenFem3DMasonryWall | null }, unknown>({
+  naam: "model3d.plate.setMasonry",
+  beschrijving: "Een verticale 3D-plaat tot metselwerkwand maken (#97), of terugzetten met null (dan verdwijnen ook de lateien van haar openingen; de lateistaven blijven als gewone staven staan).",
+  invoer: obj({
+    plateId: id("Id van de plaat."),
+    masonry: ofNull(metselwerkwand, "De metselwerkwand; null zet de plaat terug."),
+  }, ["plateId", "masonry"]),
+  uitvoeren: ({ plateId, masonry }, document) => {
+    const huidig = model3dVan(document);
+    vindPlaat(huidig, plateId);
+    const model = setOpenFem3DPlateMasonry(huidig, plateId, masonry);
+    return { uitkomst: { plate: vindPlaat(model, plateId) }, document: metModel3d(document, model) };
+  },
+});
+
+const latei = obj({
+  bearingM: getal("Opleglengte aan elke zijde van de opening, m.", { exclusiveMinimum: 0 }),
+  loadSpread: keuze(["triangle60", "fullHeight"], "Lateibelasting in de lateitoets: triangle60 = driehoek met hoeken van 60° (alleen als het metselwerk boven de latei minstens zo hoog is, anders volle hoogte), fullHeight = het metselwerk over de volle hoogte. Het rekenmodel legt altijd de volle hoogte op de latei (E horizontaal ≈ 0 vormt geen boog)."),
+  profileName: tekst(`Profiel van een nieuwe lateistaaf (standaard "${OPEN_FEM_3D_LINTEL_DEFAULT.profileName}"); een bestaande latei wijzig je met model3d.beam.update.`, { minLength: 1 }),
+  material: tekst(`Materiaal van een nieuwe lateistaaf (standaard "${OPEN_FEM_3D_LINTEL_DEFAULT.material}").`, { minLength: 1 }),
+}, ["bearingM", "loadSpread"], "Latei boven een opening: een gewone staaf langs de bovenrand van de opening, aan beide zijden met de opleglengte de wand in.");
+
+const openingLatei = documentCommando<{ plateId: number; openingId: number; lintel: OpenFem3DLintelInput | null }, unknown>({
+  naam: "model3d.plate.setLintel",
+  beschrijving: "Een latei boven een opening van een metselwerkwand zetten, wijzigen of weghalen (null; dan verdwijnt ook de lateistaaf). De opening moet een rechte, horizontale bovenrand hebben en de opleggingen moeten in het metselwerk liggen. De uitkomst geeft de staaf (beamId) en de lateibelasting voor de toets (design: karakteristiek eigen gewicht van het metselwerk, met de gekozen en de toegepaste spreiding).",
+  invoer: obj({
+    plateId: id("Id van de metselwerkwand."),
+    openingId: id("Id van de opening in die plaat."),
+    lintel: ofNull(latei, "De latei; null haalt haar weg."),
+  }, ["plateId", "openingId", "lintel"]),
+  uitvoeren: ({ plateId, openingId, lintel }, document) => {
+    const huidig = model3dVan(document);
+    const plate = vindPlaat(huidig, plateId);
+    if (!(plate.openings ?? []).some((opening) => opening.id === openingId)) throw nietGevonden("opening", openingId);
+    const model = lintel === null
+      ? removeOpenFem3DOpeningLintel(huidig, plateId, openingId)
+      : setOpenFem3DOpeningLintel(huidig, plateId, openingId, lintel);
+    const na = vindPlaat(model, plateId);
+    const opening = (na.openings ?? []).find((item) => item.id === openingId)!;
+    return {
+      uitkomst: { plateId, opening, design: openFem3DLintelDesign(model, na, opening) },
+      document: metModel3d(document, model),
+    };
+  },
+});
+
 const plaatVerwijderen = documentCommando<{ id: number }, unknown>({
   naam: "model3d.plate.delete",
   beschrijving: "Een 3D-plaat verwijderen, met haar openingen en oppervlaktelasten. De knopen blijven.",
@@ -555,4 +610,5 @@ export const MODEL3D_GEOMETRIE_COMMANDOS = [
   staafeindScharnier,
   liggersOpKolommen,
   plaatToevoegen, plaatWijzigen, plaatBeddingZetten, plaatVerwijderen, openingToevoegen,
+  plaatMetselwerk, openingLatei,
 ];

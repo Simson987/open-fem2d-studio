@@ -75,7 +75,7 @@ fn request(nodes: Vec<Node3D>, thickness: f64, orthotropy: PlateOrthotropy3D, el
         plates: vec![Plate3D { id: 1, material_id: 1, thickness_m: thickness, bedding: None, orthotropy: Some(orthotropy) }],
         shell_elements: elements,
         surface_loads: vec![],
-        diaphragms: vec![],
+        diaphragms: vec![], node_links: vec![],
         tension_only_fit: None,
         tension_only_cross_rule: false,
         max_iterations: 50,
@@ -288,4 +288,49 @@ fn metselwerkwand_werkt_niet_mee_met_de_funderingsbalk() {
     let isotropic = wall_on_beam(e_y, e_y, e_y / 2.0);
     println!("isotrope wand: M_balk = {isotropic:.3} kNm");
     assert!(isotropic < 0.5 * expected);
+}
+
+#[test]
+fn knoopkoppeling_draagt_alleen_de_gekoppelde_richtingen() {
+    use open_fem_3d::NodeLink3D;
+    // Knoop 2 ligt overal vast; knoop 3 ligt op dezelfde plek en volgt hem
+    // alleen in Z. Staaf 3→4 (langs X, 2 m) met knoop 4 vast in X, Y, Z en om X.
+    // F_z op knoop 3 gaat via de koppeling naar knoop 2, F_x via de staaf naar knoop 4.
+    let mut input = request(
+        vec![Node3D { id: 2, x: 0.0, y: 0.0, z: 0.0 }, Node3D { id: 3, x: 0.0, y: 0.0, z: 0.0 },
+             Node3D { id: 4, x: 2.0, y: 0.0, z: 0.0 }],
+        0.1, ortho(1.0, 1.0, 1.0, 0.0), vec![]);
+    input.plates.clear();
+    input.materials[0].e_mpa = 210_000.0;
+    input.sections.push(Section3D {
+        id: 1, name: "s".into(), area_m2: 0.01, iy_m4: 1e-5, iz_m4: 1e-5, torsion_j_m4: 1e-6,
+        shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None,
+    });
+    input.members.push(Member3D {
+        id: 1, start_node_id: 3, end_node_id: 4, material_id: 1, section_id: 1,
+        releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false,
+        bedding: None, part_section_ids: None,
+    });
+    support(&mut input.supports, 2, [true; 6]);
+    support(&mut input.supports, 4, [true, true, true, true, false, false]);
+    let link = NodeLink3D { id: 1, master_node_id: 2, slave_node_id: 3, ux: false, uy: false, uz: true, rx: false, ry: false, rz: false };
+    input.node_links.push(link.clone());
+    input.nodal_loads.push(load(1, 3, 5.0, -7.0));
+    let result = solve(input.clone()).unwrap();
+    let reaction = |id: usize| result.reactions.iter().find(|r| r.node_id == id).unwrap().clone();
+    let (r2, r4) = (reaction(2), reaction(4));
+    println!("koppeling: R2 = ({:.6}, {:.6}) kN, R4 = ({:.6}, {:.6}) kN", r2.fx, r2.fz, r4.fx, r4.fz);
+    assert!(r2.fx.abs() < 1e-9 && (r4.fx + 5.0).abs() < 1e-9, "F_x hoort naar knoop 4");
+    // F_z: knoop 3 hangt in Z aan knoop 2 (star), dus de staaf buigt niet.
+    assert!((r2.fz - 7.0).abs() < 1e-9 && r4.fz.abs() < 1e-9, "F_z hoort naar knoop 2");
+
+    let mut verkeerd = input.clone();
+    verkeerd.nodes[1].x = 0.01;
+    assert!(solve(verkeerd).unwrap_err().contains("uit elkaar"));
+    let mut opgelegd = input.clone();
+    support(&mut opgelegd.supports, 3, [false, false, true, false, false, false]);
+    assert!(solve(opgelegd).unwrap_err().contains("opgelegd"));
+    let mut leeg = input;
+    leeg.node_links[0].uz = false;
+    assert!(solve(leeg).unwrap_err().contains("geen enkele"));
 }

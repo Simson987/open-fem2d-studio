@@ -44,8 +44,23 @@ ook verschillende stijfheden per richting. Eén voorziening voor beide: een orth
      van platen.
    - **Latei:** een gewone staaf van het model, met doorsnede, materiaal, toetsing en rapport zoals
      elke staaf. Hij ligt op de bovenrand van de opening en loopt aan beide zijden met de
-     opleglengte de wand in. Het net deelt de knopen op zijn as. Omdat E_x ≈ 0, draagt het model het
-     metselwerk boven de opening via de latei af naar de penanten.
+     opleglengte de wand in. Omdat E_x ≈ 0, draagt het model het metselwerk boven de opening via
+     de latei af naar de penanten.
+   - **Knoopkoppelingen in plaats van gedeelde knopen.**
+     - Deelde de latei haar knopen met de wand, dan werkte zij als drukstaaf tussen de penanten.
+       Wand, latei en funderingsbalk vormden dan samen een vakwerkligger. Op een HEA 200 van 6 m
+       kwam het balkmoment daardoor 7,8 % onder de handberekening „wand als last” uit.
+     - Daarom krijgt de latei in het rekenverzoek eigen tweelingknopen. Die hangen met
+       `nodeLinks` (`Constraint::EqualDOF` in de kern, module `koppelingen.rs`) aan de wandknopen.
+       Langs de hele latei gekoppeld: verticaal, loodrecht op de wand, en de rotatie om de wandas.
+       Langs de wand alleen in de eerste knoop.
+     - Resultaat: 0,7 % onder de handberekening (`test-open-fem3d-metselwerkwand.mjs` [5]).
+     - Een wand die niet langs X of Y staat, kan dat niet met globale vrijheidsgraden. Daar wordt de
+       latei in alle translaties gekoppeld, met een melding.
+   - **Netfijnheid.** Een metselwerkwand krijgt standaard elementen van hoogstens 0,1 m. Met E_x ≈ 0
+     geven grove, scheve elementen rond een opening met latei parasitaire afschuiving boven de
+     opening. Bij 0,27 m kwam 22 % van de last boven de opening niet via de latei, bij 0,1 m 7 %,
+     bij 0,05 m 3 %. De lateitoets rekent daarom met de analytische lateibelasting.
    - **Lastspreiding boven de opening** (open punt in #97). Met E_x ≈ 0 kan het model geen boog
      vormen. Het rekenmodel legt daarom altijd de **volle hoogte** op de latei. Dat is veilig voor de
      latei, en de penanten krijgen dezelfde totale last. De keuze per opening (standaard „driehoek

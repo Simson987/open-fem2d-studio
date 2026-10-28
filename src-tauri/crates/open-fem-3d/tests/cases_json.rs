@@ -157,7 +157,7 @@ fn request_from_case(
         plates: vec![],
         shell_elements: vec![],
         surface_loads: vec![],
-        diaphragms: vec![],
+        diaphragms: vec![], node_links: vec![],
         tension_only_fit: None, tension_only_cross_rule: false,
         max_iterations: 50,
         tolerance: 1e-10,

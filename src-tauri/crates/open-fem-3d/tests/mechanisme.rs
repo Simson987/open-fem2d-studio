@@ -52,7 +52,7 @@ fn verzoek(nodes: Vec<Node3D>, members: Vec<Member3D>, supports: Vec<Support3D>)
             torsion_j_m4: 5e-6, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }],
         members, supports, nodal_loads: vec![], member_loads: vec![],
         member_point_loads: vec![], thermal_loads: vec![], plates: vec![], shell_elements: vec![],
-        surface_loads: vec![], diaphragms: vec![], tension_only_fit: None, tension_only_cross_rule: false,
+        surface_loads: vec![], diaphragms: vec![], node_links: vec![], tension_only_fit: None, tension_only_cross_rule: false,
         max_iterations: 100, tolerance: 1e-10, buckling_modes: 0,
     }
 }

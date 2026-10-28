@@ -733,6 +733,7 @@ const ALLEEN_BRON = new Map([
   ["aluminium-voorspanning-verificatie", "Aluminium- en voorspancontrole buiten de sidecarbarrel."],
   ["aluminium-check", "issue #5: EN 1999-1-1-keten. De aluminiumbouwer staat niet in de barrel, en de kern draait in de toetsbrug als apart proces."],
   ["metselwerk-check", "issue #98: EN 1996-1-1. De metselwerkbouwer (formulier) staat niet in de barrel, en de kern draait in de toetsbrug als apart proces."],
+  ["open-fem3d-metselwerkwand", "issue #97: metselwerkwand met latei langs de API, het plaatnet (Triangle) en de 3D-kern als apart proces; buiten de sidecarbarrel."],
   ["drie-lagen-beton-verificatie", "Specifieke betontoets buiten de sidecarbarrel."],
   ["ifc-3d", "3D-projectopslag en IFC-export buiten de sidecarbarrel."],
   [

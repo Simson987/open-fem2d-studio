@@ -260,7 +260,7 @@ mod tests {
                 releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: tussenknopen,
                 tension_only: false, bedding: None, part_section_ids: Some(ids) }],
             supports: vec![], nodal_loads: vec![], member_loads: vec![], member_point_loads: vec![],
-            thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![],
+            thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![], node_links: vec![],
             tension_only_fit: None, tension_only_cross_rule: false, max_iterations: 50, tolerance: 1e-8, buckling_modes: 0,
         }
     }

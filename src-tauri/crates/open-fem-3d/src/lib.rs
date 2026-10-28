@@ -17,6 +17,8 @@ mod plaatbedding;
 mod schijven;
 mod shell;
 mod orthotroop;
+mod koppelingen;
+pub use koppelingen::NodeLink3D;
 pub use orthotroop::PlateOrthotropy3D;
 mod trek_alleen;
 mod tweede_orde;
@@ -467,6 +469,10 @@ pub struct SolveRequest3D {
     pub surface_loads: Vec<SurfaceLoad3D>,
     #[serde(default)]
     pub diaphragms: Vec<Diaphragm3D>,
+    /// Knoopkoppelingen (#97): een slaafknoop volgt een meesterknoop op
+    /// dezelfde plek in de gekozen globale vrijheidsgraden. Zie `koppelingen`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub node_links: Vec<NodeLink3D>,
     /// Trek-alleen staven gemonteerd onder deze lasten: hun spanningsloze
     /// lengte volgt de koorde in die toestand. Ontbreekt het veld, dan zijn
     /// ze spanningsloos in de onvervormde stand, zoals voorheen.
@@ -1043,6 +1049,7 @@ fn validate(request: &SolveRequest3D) -> Result<HashMap<usize, shell::PlateGeome
         .map(|node| (node.id, [node.x, node.y, node.z])).collect();
     let plate_geometry = shell::validate_shells(request, &coordinates)?;
     schijven::valideer(request)?;
+    koppelingen::valideer(request)?;
     Ok(plate_geometry)
 }
 
@@ -1564,7 +1571,9 @@ fn to_engine_input(
     let plaat = plaatbedding::Kern::bouw(request, los, &mut nodes, &mut supports, &mut connectors, &mut next_engine_id, &mut grond);
     let input = SolverInput3D {
         nodes, materials, sections, elements, supports, loads,
-        constraints: schijven::koppelingen(request).0, left_hand: None,
+        constraints: schijven::koppelingen(request).0.into_iter()
+            .chain(koppelingen::constraints(request)).collect(),
+        left_hand: None,
         plates, quads, quad9s: HashMap::new(),
         solid_shells: HashMap::new(), curved_shells: HashMap::new(),
         curved_beams: vec![], connectors,

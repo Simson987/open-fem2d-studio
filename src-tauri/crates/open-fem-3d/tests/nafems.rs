@@ -50,7 +50,7 @@ fn request(nodes: Vec<Node3D>, e_mpa: f64, nu: f64) -> SolveRequest3D {
         plates: vec![],
         shell_elements: vec![],
         surface_loads: vec![],
-        diaphragms: vec![],
+        diaphragms: vec![], node_links: vec![],
         tension_only_fit: None,
         tension_only_cross_rule: false,
         max_iterations: 50,
