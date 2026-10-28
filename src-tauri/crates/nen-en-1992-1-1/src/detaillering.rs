@@ -596,14 +596,13 @@ pub fn benodigde_trekwapening_mm2(
     let ondergrens = 1e-3;
     match m_rd(ondergrens) {
         Some(m) if m >= doel => return Ok(0.0),
-        Some(_) => {}
-        None => {
-            return Err(
-                "de rechthoekige spanningsverdeling levert bij deze normaalkracht geen evenwicht; \
-                 de benodigde wapening is er niet mee te bepalen (zie de M-N-κ-toets)"
-                    .into(),
-            )
-        }
+        // Geen evenwicht bij (bijna) geen staal: bij een TREKKRACHT is dat de
+        // regel en geen reden om op te geven (issue #225). De trek moet door
+        // het staal; met meer staal ontstaat evenwicht, ook met een heel
+        // kleine drukzone of — ligt de last binnen de wapening — met x → 0,
+        // waar A_s = N/f_yd volgt. De bisectie hieronder zoekt dan naar boven;
+        // of er bij A_s,max wél evenwicht is, toetst de volgende stap.
+        Some(_) | None => {}
     }
     match m_rd(bovengrens) {
         Some(m) if m < doel => {
@@ -694,6 +693,34 @@ pub fn as_min_9_2_1_1(inv: &DetailleringInvoer) -> ResistanceCalc {
     // De minimumcombinatie (M_E,min; N_E,min) volgens de NB.
     let mb = match minimum_belasting(inv.section, inv.f_ctm_mpa, m_ed, n_ed) {
         Ok(mb) => mb,
+        // Drukkracht met de resultante binnen de kern (η ≤ 1): de doorsnede
+        // scheurt onder deze combinatie niet en de NB-minimumcombinatie bestaat
+        // niet. A_s,min = min(A_s,min1; A_s,min2) ≤ A_s,min2, dus A_s,min2 alleen
+        // is een VEILIGE bovengrens van de eis (issue #225: niet langer
+        // "niet van toepassing" zonder uitkomst, want dan verdrong deze
+        // niet-scheurende drukcombinatie in de omhullende de trekcombinatie).
+        Err(reden) if n_ed < 0.0 && reden.contains("kern") => {
+            let a_min2 = benodigde_trekwapening_mm2(inv.section, inv.cage, inv.mat, m_ed, n_ed)
+                .map(|a| A_S_MIN2_FACTOR_UGT * a);
+            let eis = eis.note(format!(
+                "A_s,min1 bestaat hier niet: {reden} Omdat A_s,min het MINIMUM van A_s,min1 en \
+                 A_s,min2 is, is A_s,min2 alleen een veilige bovengrens; daarmee is getoetst."
+            ));
+            return match a_min2 {
+                Ok(a) => eis
+                    .var(r"A_{s,\min 2}", a, "mm²")
+                    .note(format!(
+                        "A_s,min2 = 1,25 × de bij UGT-toetsing benodigde oppervlakte voor \
+                         (M_Ed = {:.1} kNm; N_Ed = {:.1} kN) = {a:.0} mm².",
+                        m_ed, n_ed
+                    ))
+                    .minimum(a_s_trek, a, "mm²", r"A_{s,\min 2} / A_{s,trek}"),
+                Err(r) => eis.niet_te_toetsen(format!(
+                    "A_s,min1 bestaat niet (drukkracht binnen de kern) en A_s,min2 is niet \
+                     bepaald: {r}"
+                )),
+            };
+        }
         Err(reden) => {
             return eis
                 .note(
@@ -2209,6 +2236,37 @@ mod tests {
         let s = ConcreteSection::new(300.0, 500.0);
         let a = benodigde_trekwapening_mm2(&s, &cage, &materiaal(), 36.25, 0.0).unwrap();
         assert_relative_eq!(a, 186.42, max_relative = 2e-3);
+    }
+
+    /// Issue #225 — de omkering bij TREK met buiging. Plaatstrook 1000 × 250,
+    /// C30/37, 5Ø12 onder (d = 214 mm, 89 mm onder het zwaartepunt), geen
+    /// bovenwapening.
+    ///
+    /// * N = +100 kN, M = 10 kNm (e = 100 mm, last 11 mm buiten de wapening):
+    ///   1,1 kNm = 0,8·x·1000·20·(214 − 0,4·x) → x = 0,3215 mm, C = 5,14 kN,
+    ///   A_s = (100 + 5,14)·10³/434,783 = 241,83 mm².
+    /// * N = +100 kN, M = 5 kNm (e = 50 mm, last BINNEN de wapening): er is
+    ///   geen drukzone nodig; A_s = N/f_yd = 100 000/434,783 = 230,00 mm².
+    #[test]
+    fn omkering_bij_trek_met_buiging_issue_225() {
+        let s = ConcreteSection::new(1000.0, 250.0);
+        let cage = ReinforcementCage {
+            cover_mm: 30.0,
+            stirrup_diameter_mm: 0.0,
+            top: RebarRow {
+                count: 0,
+                diameter_mm: 12.0,
+            },
+            bottom: RebarRow {
+                count: 5,
+                diameter_mm: 12.0,
+            },
+            ..ReinforcementCage::default()
+        };
+        let a = benodigde_trekwapening_mm2(&s, &cage, &materiaal(), 10.0, 100.0).unwrap();
+        assert_relative_eq!(a, 241.83, max_relative = 1e-4);
+        let a = benodigde_trekwapening_mm2(&s, &cage, &materiaal(), 5.0, 100.0).unwrap();
+        assert_relative_eq!(a, 100_000.0 / (500.0 / 1.15), max_relative = 1e-4);
     }
 
     /// De volledige A_s,min-keten, C30/37, 300 × 500, korf met 3Ø16 onder

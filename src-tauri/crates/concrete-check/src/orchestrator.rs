@@ -1146,16 +1146,46 @@ fn as_min_over_sneden(
     zaad: ResistanceCalc,
     aantal_env: usize,
 ) -> ResistanceCalc {
-    let mut beste: Zwaarste<ResistanceCalc> = Zwaarste::nieuw();
+    // Bepaalde en onbepaalde uitkomsten apart bijhouden (issue #225). Een
+    // snede waar A_s,min niet te bepalen is, mag een snede waar hij WEL bepaald
+    // is en niet voldoet nooit verdringen: dan zou een NotOk verdwijnen achter
+    // een "niet uitgevoerd". Volgorde: bepaald en afgekeurd > onbepaald >
+    // bepaald en voldoet (de strengste bepaalde).
+    let mut bepaald: Zwaarste<ResistanceCalc> = Zwaarste::nieuw();
+    let mut onbepaald: Zwaarste<ResistanceCalc> = Zwaarste::nieuw();
+    let mut bied = |calc: ResistanceCalc, belasting: f64| {
+        let z = zwaarte_van(&calc, belasting);
+        if calc.uc.is_some() {
+            bepaald.bied(z, calc);
+        } else {
+            onbepaald.bied(z, calc);
+        }
+    };
     let belasting_zaad = zaad.force_state.forces.my_ed.abs();
-    beste.bied(zwaarte_van(&zaad, belasting_zaad), zaad);
-
+    bied(zaad, belasting_zaad);
     for s in sneden {
         let calc = as_min_9_2_1_1(&basis.invoer(&s.korf, ForceStateSnapshot::from_point(&s.punt)));
-        beste.bied(zwaarte_van(&calc, s.punt.forces.my_ed.abs()), calc);
+        bied(calc, s.punt.forces.my_ed.abs());
     }
+    let bepaald = bepaald.uitkomst();
+    let onbepaald = onbepaald.uitkomst();
+    let mut uit = match (bepaald, onbepaald) {
+        (Some(b), _) if b.uc.as_ref().is_some_and(|u| u.uc > 1.0) => b,
+        (Some(b), Some(mut o)) => {
+            o.notes.push(format!(
+                "Op de overige sneden is A_s,min wél bepaald; de strengste daarvan geeft UC = {:.3} \
+                 (combinatie {} op x = {:.0} mm) en voldoet.",
+                b.uc.as_ref().map(|u| u.uc).unwrap_or(0.0),
+                b.force_state.combination_id,
+                b.force_state.position_mm
+            ));
+            o
+        }
+        (Some(b), None) => b,
+        (None, Some(o)) => o,
+        (None, None) => unreachable!("de zaaduitkomst is altijd geboden"),
+    };
 
-    let mut uit = beste.uitkomst().expect("de zaaduitkomst is altijd geboden");
     uit.notes.push(snedemelding(
         "Deze eis is op ELKE snede van de omhullende nagelopen en op de hoogste unity check \
          gekozen: A_s,min wordt tegen de AANWEZIGE trekwapening afgezet, en welke rij dat is volgt \
