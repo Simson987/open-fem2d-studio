@@ -11,7 +11,8 @@
 // Die afspraak is niet te bewaken door alleen de `fill` te lezen: de miniatuur
 // staat in `.pk-tekening` met `background: var(--theme-bg)`, dus zodra het pad
 // een dekking onder 1 heeft mengt de themakleur mee en is de uitkomst zowel
-// afwijkend als thema-afhankelijk. Met de dekking op 0,95:
+// afwijkend als thema-afhankelijk. Met de dekking op 0,95 (thema's van 2026.42;
+// sectie 3 rekent dit na voor de thema's van ontwerp 0.4):
 //
 //            licht         forge         openaec       blueprint     contrast
 //   beton    195-195-195   185-185-185   184-184-184   183-184-185   182-182-182
@@ -76,12 +77,6 @@ function token(css, naam) {
   const treffers = [...css.matchAll(new RegExp(`--${naam}\\s*:\\s*([^;]+);`, "g"))];
   if (!treffers.length) throw new Error(`token niet gevonden: --${naam}`);
   return treffers[treffers.length - 1][1].trim();
-}
-
-/** Zoals `token`, maar `null` in plaats van een uitzondering als hij ontbreekt. */
-function tokenOfNiets(css, naam) {
-  const treffers = [...css.matchAll(new RegExp(`--${naam}\\s*:\\s*([^;]+);`, "g"))];
-  return treffers.length ? treffers[treffers.length - 1][1].trim() : null;
 }
 
 function hexNaarRgb(hex) {
@@ -151,10 +146,16 @@ checkEq("vrij materiaal houdt zijn verzachting", Number(vrij.opacity), 0.95);
 // ── 2. De tokens waarmee de browser rekent ────────────────────────────────
 log("2. Tokens uit themes.css en ProfielKiezer.css");
 
-// Het materiaalkleurenblok staat op een KAAL `:root {`, ná de thema's. Dat is
-// een andere selector dan de `:root,` van het lichte thema, en er is er maar
-// één van.
-const materiaalBlok = blok(themesCss, ":root {");
+// Het materiaalkleurenblok staat op een KAAL `:root {` in themes.css. Sinds
+// ontwerp 0.4 zijn er meer van die blokken (het eerste koppelt de `--theme-*`-
+// namen aan de 0.4-tokens); het materiaalblok is het blok waarin de betonkleur
+// staat.
+const materiaalBlok = themesCss
+  .split(":root {")
+  .slice(1)
+  .map((d) => d.slice(0, d.indexOf("}")))
+  .find((b) => /--theme-beton-vlak\s*:/.test(b));
+if (!materiaalBlok) throw new Error("materiaalkleurenblok met --theme-beton-vlak niet gevonden in themes.css");
 for (const { token: tokenNaam, rgb } of Object.values(VAST)) {
   checkEq(
     `${tokenNaam} staat op ${rgb.join("-")}`,
@@ -172,28 +173,23 @@ checkTrue(
   paneel.trim().slice(0, 120),
 );
 
-// ALLE thema's uit themes.css, niet een greep eruit. Een thema dat later wordt
-// toegevoegd en hier niet in staat, wordt niet nagerekend; daarom telt de test
-// hieronder ook of het er nog evenveel zijn als er `--theme-bg` in het bestand
-// staan.
-const THEMAS = {
-  light: ':root,\n[data-theme="light"]',
-  forge: '[data-theme="forge"]',
-  openaec: '[data-theme="openaec"]',
-  blueprint: '[data-theme="blueprint"]',
-  contrast: '[data-theme="contrast"]',
-};
+// ALLE thema's, niet een greep eruit. Sinds ontwerp 0.4 (OpenAEC Blueprint)
+// staan de themakleuren als `--oa-*` per `[data-oa-theme=…]` in
+// openaec/openaec-tokens.css en koppelt themes.css er de `--theme-*`-namen aan;
+// `scripts/thema-tokens.mjs` rekent ze per thema uit zoals de browser. Hij kent
+// de vijf 0.4-thema's (2026.42: light, forge, openaec, blueprint, contrast); dat
+// het tokenbestand er niet meer heeft, telt de test hieronder na.
+const { THEMAS: THEMA_NAMEN, TOKENS_CSS, themaTokens } = await import("./scripts/thema-tokens.mjs");
+const THEMAS = Object.fromEntries(THEMA_NAMEN.map((t) => [t, themaTokens(t)]));
 const achtergrond = {};
-const themaBlok = {};
-for (const [naam, selector] of Object.entries(THEMAS)) {
-  themaBlok[naam] = blok(themesCss, selector);
-  achtergrond[naam] = hexNaarRgb(token(themaBlok[naam], "theme-bg"));
+for (const naam of Object.keys(THEMAS)) {
+  achtergrond[naam] = hexNaarRgb(THEMAS[naam].get("--theme-bg"));
 }
 log(`  · achtergronden: ${Object.entries(achtergrond).map(([k, v]) => `${k} rgb(${v})`).join(", ")}`);
 checkEq(
-  "elk thema in themes.css wordt nagerekend",
-  [...themesCss.matchAll(/--theme-bg\s*:/g)].length,
-  Object.keys(THEMAS).length,
+  "elk thema uit openaec-tokens.css wordt nagerekend",
+  [...new Set([...TOKENS_CSS.matchAll(/\[data-oa-theme="([\w-]+)"\]/g)].map((m) => m[1]))].sort(),
+  [...THEMA_NAMEN].sort(),
 );
 
 // ── 3. De kleur die op het scherm belandt ─────────────────────────────────
@@ -212,7 +208,7 @@ for (const [materiaal, { pad, token: tokenNaam, rgb }] of Object.entries(VAST)) 
   for (const naam of Object.keys(THEMAS)) {
     // De token zoals díé zou uitpakken in dit thema: de override van het thema
     // als hij er is, anders de waarde uit het materiaalkleurenblok.
-    const inThema = tokenOfNiets(themaBlok[naam], tokenNaam.slice(2));
+    const inThema = THEMAS[naam].get(tokenNaam);
     const vulRgb = hexNaarRgb(inThema ?? token(materiaalBlok, tokenNaam.slice(2)));
     const opScherm = meng(vulRgb, achtergrond[naam], dekking);
     uitkomsten.push(opScherm.join("-"));
@@ -296,7 +292,7 @@ for (const [stand, props] of [
   // Dezelfde mengsom als sectie 3, nu voor deze component: dekking 1, dus per
   // thema de tokenwaarde zelf — en die hoort in élk thema 192-192-192 te zijn.
   for (const naam of Object.keys(THEMAS)) {
-    const inThema = tokenOfNiets(themaBlok[naam], "theme-beton-vlak");
+    const inThema = THEMAS[naam].get("--theme-beton-vlak");
     const vulRgb = hexNaarRgb(inThema ?? token(materiaalBlok, "theme-beton-vlak"));
     checkEq(`${stand}: op het scherm in ${naam}`, meng(vulRgb, achtergrond[naam], 1), [192, 192, 192]);
   }

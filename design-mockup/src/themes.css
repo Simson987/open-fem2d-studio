@@ -128,6 +128,20 @@
   --theme-surface-2: var(--oa-raised);
 }
 
+/* ─── Vage tekst in de donkere thema's ───
+   `--theme-text-faint` staat hierboven op `--oa-text-disabled`, de kleur voor
+   UITGESCHAKELDE bediening. De app gebruikt hem echter vooral voor leesbare
+   bijtekst (eenheden, hints, bronvermeldingen); in Donker (3,5:1) en Blueprint
+   (3,6:1) haalt die kleur op de achtergrond de 4,5:1 van WCAG 2.1 (1.4.3) niet,
+   terwijl release 2026.42 dat in elk donker thema wel deed
+   (test-thema-tekstcontrast.mjs). Daar dus de secundaire tekstkleur van 0.4.
+   High contrast donker (8,3:1) en de lichte thema's blijven zoals Blueprint ze
+   koppelt. */
+[data-oa-theme="dark"],
+[data-oa-theme="blueprint"] {
+  --theme-text-faint: var(--oa-text-secondary);
+}
+
 /* ─── B2 icons: main colour follows the text, the accent the theme ─── */
 .oa-icon {
   width: 16px;

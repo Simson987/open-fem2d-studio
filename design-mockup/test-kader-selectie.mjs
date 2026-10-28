@@ -141,17 +141,27 @@ check("3D-editor: Delete verwijdert de selectie, niet in invoervelden",
   /event\.key === "Delete"[\s\S]{0,200}isInvoerVeld\(event\.target\) \|\| erIsEenDialoogOpen\(\)[\s\S]{0,120}deleteSelectionRef\.current\(\)/.test(editor3d));
 
 log("\n[7] thematokens: venster doorgetrokken, crossing gestippeld, in elk thema");
+// Ontwerp 0.4 (OpenAEC Blueprint): het thema hangt aan `data-oa-theme`, de vijf
+// thema's zijn light, dark, blueprint, high-contrast-dark en high-contrast-light
+// (2026.42: light, forge, openaec, blueprint, contrast). De tokens worden per
+// thema uitgerekend zoals de browser dat doet (scripts/thema-tokens.mjs), dus
+// ook een waarde die via `var(--…-light)` binnenkomt telt.
 const themes = lees("src", "themes.css");
-const blokken = themes.split(/\n(?=:root,|\[data-theme=)/);
-for (const thema of ["light", "forge", "openaec", "blueprint", "contrast"]) {
-  const blok = blokken.find((b) => b.includes(`[data-theme="${thema}"]`)) ?? "";
+const { THEMAS, themaTokens } = await import("./scripts/thema-tokens.mjs");
+const kader = Object.fromEntries(THEMAS.map((t) => [t, themaTokens(t)]));
+const kleur = (thema, naam) => kader[thema].get(`--theme-select-${naam}`);
+for (const thema of THEMAS) {
   check(`thema ${thema}: vier selectietokens`,
-    ["window-stroke", "window-fill", "crossing-stroke", "crossing-fill"].every((t) => blok.includes(`--theme-select-${t}:`)));
+    ["window-stroke", "window-fill", "crossing-stroke", "crossing-fill"].every((t) => kleur(thema, t)));
 }
-const kleur = (blok, naam) => new RegExp(`--theme-select-${naam}:\\s*([^;]+);`).exec(blok)?.[1]?.trim();
-const donker = blokken.find((b) => b.includes('[data-theme="openaec"]'));
-check("donker thema: andere kaderkleuren dan op een licht vlak", kleur(donker, "window-stroke") !== "#2563EB" && kleur(donker, "crossing-stroke") !== "#16A34A");
-check("venster en crossing hebben een andere kleur", kleur(donker, "window-stroke") !== kleur(donker, "crossing-stroke"));
+const donkereThemas = THEMAS.filter((t) => kader[t].get("color-scheme") === "dark");
+check("er zijn donkere thema's (dark, blueprint, high-contrast-dark)", donkereThemas.length === 3, donkereThemas.join(", "));
+for (const thema of donkereThemas) {
+  check(`donker thema ${thema}: andere kaderkleuren dan op een licht vlak`,
+    kleur(thema, "window-stroke") !== "#2563EB" && kleur(thema, "crossing-stroke") !== "#16A34A");
+}
+check("venster en crossing hebben een andere kleur, in elk thema",
+  THEMAS.every((t) => kleur(t, "window-stroke") !== kleur(t, "crossing-stroke")));
 check("licht vlak (licht thema en 3D-podium): vaste waarden", /--theme-select-window-stroke-light:\s*#2563EB/.test(themes) && /--theme-select-crossing-fill-light:/.test(themes));
 const css2d = lees("src", "components", "fem", "FemCanvas.css");
 check("2D-kader: venster zonder streepjes, crossing gestippeld, beide via tokens",
