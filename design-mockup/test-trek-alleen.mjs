@@ -378,7 +378,8 @@ log("[veldpatronen] trek-alleen staven maken de berekening niet-lineair (#219 ×
     /analysis === "linear" && !fem\.beams\.some\(\(b\) => b\.tensionOnly\) \? splitsVeldgevallen/.test(app));
   ok("store: waarschuwing in plaats van patronen", /lineair: analysetype === "eersteOrde" && !beams\.some\(\(b\) => b\.tensionOnly\)/.test(store));
   ok("sidecar: geen splitsing en wel de waarschuwing", /nonlinear \|\| metTrekAlleen \? null : splitsVeldgevallen/.test(sc)
-    && /lineair: !nonlinear && !metTrekAlleen/.test(sc));
+    && (/lineair: !nonlinear && !metTrekAlleen/.test(sc)
+      || (/const resultatenLineair = !nonlinear && !metTrekAlleen;/.test(sc) && /lineair: resultatenLineair/.test(sc))));
 }
 
 log(`\n${passed} geslaagd, ${failed} mislukt`);
