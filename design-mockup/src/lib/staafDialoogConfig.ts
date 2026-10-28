@@ -15,7 +15,7 @@ import { kipsteunenGelijk } from "./kipsteunenGelijk";
 export const DIALOOG_VELDEN = [
   "bucklingLengthY_m", "bucklingLengthZ_m", "lateralRestraints",
   "deflectionClass", "deflectionLimitNumerator", "deflectionAddLimitNumerator", "preCamber_mm",
-  "ltbSupportSpacing_m", "kCr", "cltKdef", "cltKdefBron", "performLtbCheck", "ltbLoadPosition",
+  "ltbSupportSpacing_m", "kCr", "cltKdef", "cltKdefBron", "cltFvRolK", "cltFvRolKBron", "performLtbCheck", "ltbLoadPosition",
   "serviceClass", "loadDuration", "spanningSigmaZ",
   "betonKorf", "betonMilieuklasse", "betonConstructieklasse", "betonStaalsoort", "betonStroken",
   "betonStaaltak", "betonKolom",

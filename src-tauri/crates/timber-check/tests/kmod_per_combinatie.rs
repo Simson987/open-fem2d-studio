@@ -511,6 +511,8 @@ fn clt_per_klasse_met_de_laagregel_uit_de_klasse_van_elke_toets() {
         // ze niet mee in uc_max.
         k_def: None,
         k_def_bron: None,
+        f_v_rol_k: None,
+        f_v_rol_k_bron: None,
         deflection_inst_mm: 0.0,
         deflection_quasi_perm_mm: 0.0,
         deflection_permanent_mm: 0.0,

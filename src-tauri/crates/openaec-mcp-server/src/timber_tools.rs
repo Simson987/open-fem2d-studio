@@ -354,6 +354,10 @@ fn schema_clt_staaf() -> Value {
                 "description": "Vervormingsfactor k_def voor de kruip van §7.2 (w_fin = w_inst + k_def * w_qp). GEEN default, met opzet: tabel 3.2 kent rijen voor gezaagd hout, gelijmd gelamineerd hout, LVL, multiplex, OSB, spaanplaat, vezelplaat en MDF, maar geen rij voor kruislaaghout, en de nationale bijlage voegt er geen toe. Weglaten = w_fin en w_add komen als NotApplicable met die reden in het resultaat. Neem de waarde uit de productverklaring of de ETA van de plaat, per klimaatklasse." },
             "k_def_bron": { "type": "string",
                 "description": "Herkomst van 'k_def', bijvoorbeeld \"ETA-00/0000, tabel 8, klimaatklasse 1\"; komt letterlijk in de notitie bij w_fin. VERPLICHT zodra 'k_def' is opgegeven — zonder bron weigert de kern de doorbuigingstoets met reden." },
+            "f_v_rol_k": { "type": "number", "exclusiveMinimum": 0,
+                "description": "Karakteristieke rolschuifsterkte f_v,rol,k (= f_r,k) van de dwarslagen in N/mm², uit de ETA of productverklaring van de plaat. GEEN default: NEN-EN 1995-1-1 kent geen CLT-regels en EN 338 geen f_v,rol. Opgegeven (met 'f_v_rol_k_bron') = elke dwarslaag wordt getoetst, tau_r,d <= f_v,rol,d = k_mod * k_sys * f_v,rol,k / gamma_M met k_mod en gamma_M van de sterkteklasse van die laag. Weglaten = rolschuif NIET getoetst (alleen de spanning, met die melding)." },
+            "f_v_rol_k_bron": { "type": "string",
+                "description": "Herkomst van 'f_v_rol_k', bijvoorbeeld \"ETA-00/0000, tabel 5\"; komt letterlijk in de rolschuiftoets. VERPLICHT zodra 'f_v_rol_k' is opgegeven — zonder bron wordt de rolschuif niet getoetst, met reden." },
             "deflection_inst_mm": { "type": "number", "default": 0,
                 "description": "Zakking onder de karakteristieke BGT-combinatie in mm, met teken (negatief = omlaag)." },
             "deflection_quasi_perm_mm": { "type": "number", "default": 0,
@@ -417,7 +421,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "check_clt_beams",
-            "description": "Check a list of cross-laminated-timber plate strips per lamella. EN 1995-1-1 has no CLT product, so the model is annex B with gamma_i = 1 (composite section, rigid bond): only the longitudinal layers carry in the span direction (E = E_0,mean), the transverse layers act as the shear connection (E = 0). Per layer it returns the edge stresses, the maximum shear stress, the design strengths and the unity checks for bending (§6.1.6) and shear (§6.1.7); transverse layers get their rolling-shear stress for information only, because f_v,rol is in neither the National Annex nor EN 338. The response also carries (EI)_ef, (EA)_ef, the neutral axis, the slenderness L/h and the assumptions as notes. Same input and output types as the Tauri command `check_clt_beams` and the toetsbrug opdracht of that name; all three run through `timber_check::clt::check_all_clt_beams`. The deflection pair w_fin/w_add (§7.2) is checked ONLY when `k_def` and `k_def_bron` are given: table 3.2 has no k_def row for cross-laminated timber and none is assumed, so without them both deflection rows come back as NotApplicable with that reason. NOT included: axial force, bending about the weak axis, buckling and lateral-torsional buckling.",
+            "description": "Check a list of cross-laminated-timber plate strips per lamella. EN 1995-1-1 has no CLT product, so the model is annex B with gamma_i = 1 (composite section, rigid bond): only the longitudinal layers carry in the span direction (E = E_0,mean), the transverse layers act as the shear connection (E = 0). Per layer it returns the edge stresses, the maximum shear stress, the design strengths and the unity checks for bending (§6.1.6) and shear (§6.1.7); transverse layers get their rolling-shear stress, and a rolling-shear check (tau_r,d <= k_mod*k_sys*f_v,rol,k/gamma_M) ONLY when the declared `f_v_rol_k` with its source `f_v_rol_k_bron` is given (ETA / product declaration): f_v,rol is in neither the National Annex nor EN 338, and without it the row states that rolling shear was NOT checked. The response also carries (EI)_ef, (EA)_ef, the neutral axis, the slenderness L/h and the assumptions as notes. Same input and output types as the Tauri command `check_clt_beams` and the toetsbrug opdracht of that name; all three run through `timber_check::clt::check_all_clt_beams`. The deflection pair w_fin/w_add (§7.2) is checked ONLY when `k_def` and `k_def_bron` are given: table 3.2 has no k_def row for cross-laminated timber and none is assumed, so without them both deflection rows come back as NotApplicable with that reason. NOT included: axial force, bending about the weak axis, buckling and lateral-torsional buckling.",
             "inputSchema": schema_invoerlijst(
                 schema_clt_staaf(),
                 "De CLT-staven die getoetst moeten worden.",
@@ -622,6 +626,9 @@ mod tests {
             "deflection_limit_add",
             "deflection_notes",
             "deflection_quasi_perm_fin_mm",
+            // Issue #232: de gedeclareerde rolschuifsterkte met bron.
+            "f_v_rol_k",
+            "f_v_rol_k_bron",
         ];
         for v in verwacht {
             assert!(velden.contains_key(v), "het CLT-schema mist `{v}`");

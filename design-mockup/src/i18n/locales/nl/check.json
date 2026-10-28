@@ -81,6 +81,10 @@
     "cltKdefLeeg": "verplicht",
     "cltKdefBron": "Bron k_def",
     "cltKdefBronLeeg": "ETA / productverklaring",
+    "cltFvRol": "f_v,rol,k rolschuif [N/mm²]",
+    "cltFvRolLeeg": "niet getoetst",
+    "cltFvRolBron": "Bron f_v,rol,k",
+    "cltFvRolHint": "NEN-EN 1995-1-1 en EN 338 kennen geen rolschuifsterkte voor kruislaaghout. Vul de gedeclareerde f_v,rol,k én de bron in (ETA of productverklaring); dan wordt elke dwarslaag getoetst met f_v,rol,d = k_mod·f_v,rol,k/γ_M. Leeg = rolschuif niet getoetst, met die melding in het rapport.",
     "cltKdefHint": "Tabel 3.2 van EN 1995-1-1 kent geen k_def voor kruislaaghout, en de nationale bijlage voegt er geen toe. Er wordt daarom geen waarde aangenomen: vul k_def én de bron in (ETA of productverklaring van de plaat, bij deze klimaatklasse). Ontbreekt een van beide, dan worden w_fin en w_add niet getoetst en staat die reden in het rapport."
   },
   "profilePicker": {

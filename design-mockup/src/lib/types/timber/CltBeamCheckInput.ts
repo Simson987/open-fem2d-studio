@@ -92,6 +92,22 @@ k_def?: number,
  */
 k_def_bron?: string, 
 /**
+ * Karakteristieke ROLSCHUIFSTERKTE f_v,rol,k (N/mm²) van de dwarslagen,
+ * uit de ETA of productverklaring van de plaat (issue #232).
+ *
+ * NEN-EN 1995-1-1 kent geen CLT-regels en EN 338 geen f_v,rol, dus is er
+ * geen normwaarde om op terug te vallen. `None` = de rolschuifspanning
+ * wordt alleen berekend, de toets staat als "niet getoetst" met die reden.
+ * Opgegeven (samen met [`Self::f_v_rol_k_bron`]) = elke dwarslaag wordt
+ * getoetst: τ_r,d ≤ k_mod·k_sys·f_v,rol,k/γ_M.
+ */
+f_v_rol_k?: number, 
+/**
+ * Waar `f_v_rol_k` vandaan komt — verplicht zodra die is opgegeven, om
+ * dezelfde reden als [`Self::k_def_bron`].
+ */
+f_v_rol_k_bron?: string, 
+/**
  * Zakking onder de karakteristieke BGT-combinatie (mm, negatief = omlaag).
  */
 deflection_inst_mm: number, 

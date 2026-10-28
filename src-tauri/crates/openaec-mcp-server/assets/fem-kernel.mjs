@@ -15465,6 +15465,8 @@ var init_referentierichting = __esm({
       // niet van de tekenrichting.
       cltKdef: "gelijk",
       cltKdefBron: "gelijk",
+      cltFvRolK: "gelijk",
+      cltFvRolKBron: "gelijk",
       // Boven en onder zijn ZIJDEN in de referentierichting, geen posities.
       betonKorf: "gelijk",
       betonMilieuklasse: "gelijk",
@@ -16372,6 +16374,11 @@ function buildCltCheckInputs(ruweData) {
       // met die reden in plaats van een waarde aan te nemen.
       ...cfg.cltKdef !== void 0 ? { k_def: cfg.cltKdef } : {},
       ...cfg.cltKdefBron !== void 0 ? { k_def_bron: cfg.cltKdefBron } : {},
+      // Rolschuifsterkte f_v,rol,k met bron (issue #232): alleen uit de ETA of
+      // productverklaring; zonder opgave toetst de kern de rolschuif niet en
+      // zegt dat.
+      ...cfg.cltFvRolK !== void 0 ? { f_v_rol_k: cfg.cltFvRolK } : {},
+      ...cfg.cltFvRolKBron !== void 0 ? { f_v_rol_k_bron: cfg.cltFvRolKBron } : {},
       deflection_inst_mm: doorbuiging.instMm,
       deflection_quasi_perm_mm: doorbuiging.quasiMm,
       // w_qp,fin (EN 1995-1-1 2.2.3(4)) alleen als 2.2.3(5) niet geldt; zie
@@ -42218,7 +42225,10 @@ var CHECKCONFIG_VELDEN = [
   // zonder deze twee blijft de doorbuigingstoets van een CLT-staaf uit, met
   // reden in het resultaat.
   "cltKdef",
-  "cltKdefBron"
+  "cltKdefBron",
+  // Issue #232: de gedeclareerde rolschuifsterkte van kruislaaghout met bron.
+  "cltFvRolK",
+  "cltFvRolKBron"
 ];
 var LTB_LASTPOSITIES = ["centreOfGravity", "compressionEdge", "tensionEdge"];
 var SCHUINE_RANDEN = ["Boven", "Onder", "Beide"];
@@ -42677,6 +42687,15 @@ function keurCheckConfig(waarde, cpad) {
   if (isGetal(cc.cltKdef) && (cc.cltKdefBron === void 0 || String(cc.cltKdefBron).trim() === "")) {
     fouten.push(
       `${cpad}.cltKdefBron: verplicht zodra cltKdef is opgegeven. Tabel 3.2 van EN 1995-1-1 kent geen k_def voor kruislaaghout, dus moet het rapport kunnen zeggen waar de waarde vandaan komt (productverklaring of ETA van de plaat, per klimaatklasse).`
+    );
+  }
+  keurGetal(cc.cltFvRolK, `${cpad}.cltFvRolK`, fouten, { positief: true });
+  if (cc.cltFvRolKBron !== void 0 && typeof cc.cltFvRolKBron !== "string") {
+    fouten.push(`${cpad}.cltFvRolKBron: moet een tekst zijn (de ETA of productverklaring), maar is ${JSON.stringify(cc.cltFvRolKBron)}.`);
+  }
+  if (isGetal(cc.cltFvRolK) && (cc.cltFvRolKBron === void 0 || String(cc.cltFvRolKBron).trim() === "")) {
+    fouten.push(
+      `${cpad}.cltFvRolKBron: verplicht zodra cltFvRolK is opgegeven. NEN-EN 1995-1-1 en EN 338 kennen geen rolschuifsterkte, dus moet het rapport kunnen zeggen waar de waarde vandaan komt.`
     );
   }
   keurEnum(cc.deflectionClass, ["floor", "floorBrittle", "roof", "cantilever", "custom"], `${cpad}.deflectionClass`, fouten);

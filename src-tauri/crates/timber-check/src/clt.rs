@@ -34,7 +34,9 @@
 use mechanics::{ForcePoint, ForceStateSnapshot, InternalForces};
 use nen_en_1993_1_1_section::{CheckStatus, ResistanceCalc};
 use nen_en_1995_1_1::clt::{CltLayerOrientation, CltLayup, CltMechanics};
-use nen_en_1995_1_1::clt_toets::{check_layer_bending, check_layer_shear, rolling_shear_info};
+use nen_en_1995_1_1::clt_toets::{
+    check_layer_bending, check_layer_shear, check_rolling_shear, rolling_shear_info,
+};
 use nen_en_1995_1_1::{deflection, design_strength, k_mod, k_sys, LoadDurationClass, ServiceClass};
 use serde::{Deserialize, Serialize};
 use steel_check::{CheckKind, NamedCheck};
@@ -131,6 +133,22 @@ pub struct CltBeamCheckInput {
     #[serde(default)]
     #[ts(optional)]
     pub k_def_bron: Option<String>,
+    /// Karakteristieke ROLSCHUIFSTERKTE f_v,rol,k (N/mm²) van de dwarslagen,
+    /// uit de ETA of productverklaring van de plaat (issue #232).
+    ///
+    /// NEN-EN 1995-1-1 kent geen CLT-regels en EN 338 geen f_v,rol, dus is er
+    /// geen normwaarde om op terug te vallen. `None` = de rolschuifspanning
+    /// wordt alleen berekend, de toets staat als "niet getoetst" met die reden.
+    /// Opgegeven (samen met [`Self::f_v_rol_k_bron`]) = elke dwarslaag wordt
+    /// getoetst: τ_r,d ≤ k_mod·k_sys·f_v,rol,k/γ_M.
+    #[serde(default)]
+    #[ts(optional)]
+    pub f_v_rol_k: Option<f64>,
+    /// Waar `f_v_rol_k` vandaan komt — verplicht zodra die is opgegeven, om
+    /// dezelfde reden als [`Self::k_def_bron`].
+    #[serde(default)]
+    #[ts(optional)]
+    pub f_v_rol_k_bron: Option<String>,
     /// Zakking onder de karakteristieke BGT-combinatie (mm, negatief = omlaag).
     #[serde(default)]
     pub deflection_inst_mm: f64,
@@ -326,6 +344,26 @@ fn kdef_uit_invoer(input: &CltBeamCheckInput) -> Result<(f64, String), String> {
     }
 }
 
+/// De opgegeven f_v,rol,k met bron (issue #232), `Ok(None)` als hij niet is
+/// opgegeven, of de reden waarom de opgave onbruikbaar is.
+fn f_vrol_uit_invoer(input: &CltBeamCheckInput) -> Result<Option<(f64, String)>, String> {
+    let bron = input.f_v_rol_k_bron.as_deref().map(str::trim).unwrap_or("");
+    match input.f_v_rol_k {
+        None => Ok(None),
+        Some(f) if !f.is_finite() || f <= 0.0 => Err(format!(
+            "f_v_rol_k = {f} is geen bruikbare rolschuifsterkte; verwacht is een eindig getal > 0 \
+             uit de ETA of productverklaring van de plaat."
+        )),
+        Some(_) if bron.is_empty() => Err(
+            "f_v_rol_k is opgegeven maar de bron ervan niet (f_v_rol_k_bron). NEN-EN 1995-1-1 en \
+             EN 338 kennen geen rolschuifsterkte, dus een waarde zonder herkomst is in het rapport \
+             niet te onderscheiden van een aangenomen getal. Noem de ETA of productverklaring."
+                .to_string(),
+        ),
+        Some(f) => Ok(Some((f, bron.to_string()))),
+    }
+}
+
 /// Een doorbuigingstoets die NIET is uitgevoerd, met de reden erin. Zo staat
 /// de regel in het rapport en is de afwezigheid zichtbaar; stil weglaten leest
 /// als "in orde bevonden".
@@ -486,13 +524,41 @@ fn lagen_toetsen(
                 (f_md, f_vd, uc_b, uc_v)
             }
             CltLayerOrientation::Transverse => {
-                let r = rolling_shear_info(mech, l.index, input.k_cr, shear_state);
+                // Met een gedeclareerde f_v,rol,k (en bron) een echte toets
+                // (issue #232); anders de spanning met de reden waarom niet.
+                let (r, f_vrol_d) = match f_vrol_uit_invoer(input) {
+                    Ok(Some((f_k, bron))) => {
+                        let gamma = gamma_van(l.class.timber_type);
+                        let kmod = k_mod(l.class.timber_type, input.service_class, duur);
+                        let f_d = design_strength(f_k, kmod, gamma, 1.0, ksys);
+                        (
+                            check_rolling_shear(mech, l.index, input.k_cr, f_k, f_d, &bron, shear_state),
+                            f_d,
+                        )
+                    }
+                    Ok(None) => {
+                        let mut r = rolling_shear_info(mech, l.index, input.k_cr, shear_state);
+                        r.notes.push(
+                            "Rolschuiving NIET GETOETST: geef de gedeclareerde rolschuifsterkte \
+                             f_v_rol_k met haar bron (f_v_rol_k_bron, ETA of productverklaring) op \
+                             om deze toets uit te voeren."
+                                .to_string(),
+                        );
+                        (r, 0.0)
+                    }
+                    Err(reden) => {
+                        let mut r = rolling_shear_info(mech, l.index, input.k_cr, shear_state);
+                        r.notes.push(format!("Rolschuiving NIET GETOETST: {reden}"));
+                        (r, 0.0)
+                    }
+                };
+                let uc = r.uc.as_ref().map(|u| u.uc);
                 ids.push(r.id.clone());
                 checks.push(NamedCheck {
                     id: r.id.clone(),
                     kind: CheckKind::Resistance(r),
                 });
-                (0.0, 0.0, None, None)
+                (0.0, f_vrol_d, None, uc)
             }
         };
         layers.push(CltLayerResult {
@@ -750,7 +816,20 @@ pub fn check_clt_beam(input: CltBeamCheckInput) -> CltBeamCheckResult {
             mech.width_mm
         ),
         "Rekenwaarden per laag: f_d = k_mod·k_sys·f_k/γ_M (2.14) met k_mod uit tabel 3.1 en γ_M uit de NB voor het materiaaltype van de sterkteklasse van die laag; k_h = 1,0 (§3.2(3) geldt voor een rechthoekig gezaagd element, niet voor een lamel in een verlijmde opbouw).".to_string(),
-        "Rolschuiving in de dwarslagen: spanning ter informatie, geen toets — f_v,rol staat niet in NEN-EN 1995-1-1/NB:2013 en niet in EN 338.".to_string(),
+        match f_vrol_uit_invoer(&input) {
+            Ok(Some((f, bron))) => format!(
+                "Rolschuiving in de dwarslagen GETOETST met de gedeclareerde f_v,rol,k = {} N/mm² \
+                 (bron: {bron}); f_v,rol,d = k_mod·k_sys·f_v,rol,k/γ_M. NEN-EN 1995-1-1/NB:2013 en \
+                 EN 338 geven zelf geen f_v,rol.",
+                nl(f, 2)
+            ),
+            Ok(None) => "Rolschuiving in de dwarslagen NIET GETOETST: f_v,rol staat niet in \
+                         NEN-EN 1995-1-1/NB:2013 en niet in EN 338; de spanning staat ter informatie \
+                         in het resultaat. Geef f_v_rol_k met bron (ETA of productverklaring) op om \
+                         te toetsen."
+                .to_string(),
+            Err(reden) => format!("Rolschuiving in de dwarslagen NIET GETOETST: {reden}"),
+        },
         "Niet getoetst: normaalkracht, buiging om de zwakke as, en knik/kip.".to_string(),
         match kdef_uit_invoer(&input) {
             Ok((k, bron)) => format!(
@@ -898,6 +977,8 @@ mod tests {
             // "niet van toepassing" met reden mee. Zie `kdef_uit_invoer`.
             k_def: None,
             k_def_bron: None,
+            f_v_rol_k: None,
+            f_v_rol_k_bron: None,
             deflection_inst_mm: 0.0,
             deflection_quasi_perm_mm: 0.0,
             deflection_permanent_mm: 0.0,
@@ -967,6 +1048,41 @@ mod tests {
         assert!(r.k_mod_per_load_duration.is_empty());
         assert_eq!(r.governing_combination_id, None);
         assert_eq!(r.load_duration, LoadDurationClass::MediumTerm);
+    }
+
+    /// Issue #232 (OFS-016): CLT 5 × 30, C24, L = 4,5 m, V = 18 kN aan de
+    /// einden, M = 20,25 kNm in het midden. τ_rol = 0,1455 N/mm²; met
+    /// f_v,rol,k = 1,1 (ETA-voorbeeld): f_v,rol,d = 0,8·1,1/1,3 = 0,6769 →
+    /// UC = 0,215. Zonder opgave: geen UC, met "NIET GETOETST".
+    #[test]
+    fn rolschuif_toetsbaar_met_gedeclareerde_sterkte() {
+        let mut i = invoer();
+        i.layup = CltLayup::alternating(1000.0, &[30.0; 5], "C24");
+        i.length_m = 4.5;
+        i.forces_envelope = vec![punt(0.0, 18.0, 0.0), punt(2250.0, 0.0, 20.25), punt(4500.0, -18.0, 0.0)];
+        let zonder = check_clt_beam(i.clone());
+        let rol = zonder.checks.iter().find(|c| c.id == "clt_rolschuif_laag_2").unwrap();
+        assert!(uc_of(rol).is_none());
+        assert!(serde_json::to_string(rol).unwrap().contains("NIET GETOETST"));
+        assert_relative_eq!(zonder.uc_max, 0.4616, max_relative = 1e-3);
+
+        i.f_v_rol_k = Some(1.1);
+        // Zonder bron: weigering met reden, geen UC.
+        let geen_bron = check_clt_beam(i.clone());
+        let rol = geen_bron.checks.iter().find(|c| c.id == "clt_rolschuif_laag_2").unwrap();
+        assert!(uc_of(rol).is_none());
+        assert!(serde_json::to_string(rol).unwrap().contains("f_v_rol_k_bron"));
+
+        i.f_v_rol_k_bron = Some("ETA-voorbeeld, f_r,k = 1,1".into());
+        let met = check_clt_beam(i);
+        for id in ["clt_rolschuif_laag_2", "clt_rolschuif_laag_4"] {
+            let rol = met.checks.iter().find(|c| c.id == id).unwrap();
+            assert_relative_eq!(uc_of(rol).unwrap(), 0.145455 / (0.8 * 1.1 / 1.3), max_relative = 1e-4);
+        }
+        assert_relative_eq!(met.layup.layers[1].uc_shear.unwrap(), 0.2149, max_relative = 1e-3);
+        assert_relative_eq!(met.layup.layers[1].f_vd_mpa, 0.8 * 1.1 / 1.3, max_relative = 1e-9);
+        // Buiging blijft maatgevend: 6,818/14,77 = 0,4616.
+        assert_relative_eq!(met.uc_max, 0.4616, max_relative = 1e-3);
     }
 
     #[test]

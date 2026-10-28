@@ -616,6 +616,8 @@ export const SPIEGELREGELS_TOETSCONFIG: { [K in keyof Required<BeamCheckConfig>]
   // niet van de tekenrichting.
   cltKdef: "gelijk",
   cltKdefBron: "gelijk",
+  cltFvRolK: "gelijk",
+  cltFvRolKBron: "gelijk",
   // Boven en onder zijn ZIJDEN in de referentierichting, geen posities.
   betonKorf: "gelijk",
   betonMilieuklasse: "gelijk",

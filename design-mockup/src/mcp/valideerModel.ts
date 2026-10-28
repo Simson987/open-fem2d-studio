@@ -182,6 +182,8 @@ const CHECKCONFIG_VELDEN = [
   // zonder deze twee blijft de doorbuigingstoets van een CLT-staaf uit, met
   // reden in het resultaat.
   "cltKdef", "cltKdefBron",
+  // Issue #232: de gedeclareerde rolschuifsterkte van kruislaaghout met bron.
+  "cltFvRolK", "cltFvRolKBron",
 ] as const;
 
 /** De drie aangrijpingspunten van tabel 6.1, in de spelling van `checkConfig`. */
@@ -776,6 +778,17 @@ export function keurCheckConfig(waarde: unknown, cpad: string): string[] {
       `${cpad}.cltKdefBron: verplicht zodra cltKdef is opgegeven. Tabel 3.2 van EN 1995-1-1 ` +
         `kent geen k_def voor kruislaaghout, dus moet het rapport kunnen zeggen waar de waarde ` +
         `vandaan komt (productverklaring of ETA van de plaat, per klimaatklasse).`,
+    );
+  }
+  // Rolschuifsterkte (issue #232): een sterkte is > 0, en de bron is verplicht.
+  keurGetal(cc.cltFvRolK, `${cpad}.cltFvRolK`, fouten, { positief: true });
+  if (cc.cltFvRolKBron !== undefined && typeof cc.cltFvRolKBron !== "string") {
+    fouten.push(`${cpad}.cltFvRolKBron: moet een tekst zijn (de ETA of productverklaring), maar is ${JSON.stringify(cc.cltFvRolKBron)}.`);
+  }
+  if (isGetal(cc.cltFvRolK) && (cc.cltFvRolKBron === undefined || String(cc.cltFvRolKBron).trim() === "")) {
+    fouten.push(
+      `${cpad}.cltFvRolKBron: verplicht zodra cltFvRolK is opgegeven. NEN-EN 1995-1-1 en EN 338 ` +
+        `kennen geen rolschuifsterkte, dus moet het rapport kunnen zeggen waar de waarde vandaan komt.`,
     );
   }
   keurEnum(cc.deflectionClass, ["floor", "floorBrittle", "roof", "cantilever", "custom"], `${cpad}.deflectionClass`, fouten);

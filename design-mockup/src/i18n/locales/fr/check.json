@@ -81,6 +81,10 @@
     "cltKdefLeeg": "obligatoire",
     "cltKdefBron": "Source de k_def",
     "cltKdefBronLeeg": "ETE / déclaration de produit",
+    "cltFvRol": "f_v,rol,k cisaillement roulant [N/mm²]",
+    "cltFvRolLeeg": "non vérifié",
+    "cltFvRolBron": "Source de f_v,rol,k",
+    "cltFvRolHint": "L'EN 1995-1-1 et l'EN 338 ne donnent pas de résistance au cisaillement roulant pour le bois lamellé-croisé. Saisissez la valeur déclarée f_v,rol,k et sa source (ETE ou déclaration de produit) ; chaque couche transversale est alors vérifiée avec f_v,rol,d = k_mod·f_v,rol,k/γ_M. Vide = cisaillement roulant non vérifié, avec mention dans la note de calcul.",
     "cltKdefHint": "Le tableau 3.2 de l'EN 1995-1-1 ne donne pas de k_def pour le bois lamellé-croisé, et l'annexe nationale n'en ajoute pas. Aucune valeur n'est donc supposée : saisissez k_def et sa source (ETE ou déclaration de produit du panneau, pour cette classe de service). Si l'un des deux manque, w_fin et w_add ne sont pas vérifiés et cette raison figure dans la note de calcul."
   },
   "profilePicker": {

@@ -671,6 +671,11 @@ export function buildCltCheckInputs(ruweData: CltBuildData): CltBuildResult {
       // met die reden in plaats van een waarde aan te nemen.
       ...(cfg.cltKdef !== undefined ? { k_def: cfg.cltKdef } : {}),
       ...(cfg.cltKdefBron !== undefined ? { k_def_bron: cfg.cltKdefBron } : {}),
+      // Rolschuifsterkte f_v,rol,k met bron (issue #232): alleen uit de ETA of
+      // productverklaring; zonder opgave toetst de kern de rolschuif niet en
+      // zegt dat.
+      ...(cfg.cltFvRolK !== undefined ? { f_v_rol_k: cfg.cltFvRolK } : {}),
+      ...(cfg.cltFvRolKBron !== undefined ? { f_v_rol_k_bron: cfg.cltFvRolKBron } : {}),
       deflection_inst_mm: doorbuiging.instMm,
       deflection_quasi_perm_mm: doorbuiging.quasiMm,
       // w_qp,fin (EN 1995-1-1 2.2.3(4)) alleen als 2.2.3(5) niet geldt; zie

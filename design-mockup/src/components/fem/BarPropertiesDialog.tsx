@@ -153,6 +153,9 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
   // die reden in het rapport.
   const [cltKdefStr, setCltKdefStr] = useState(cfg0.cltKdef?.toString() ?? "");
   const [cltKdefBron, setCltKdefBron] = useState(cfg0.cltKdefBron ?? "");
+  // Kruislaaghout: gedeclareerde rolschuifsterkte met bron (issue #232).
+  const [cltFvRolStr, setCltFvRolStr] = useState(cfg0.cltFvRolK?.toString() ?? "");
+  const [cltFvRolBron, setCltFvRolBron] = useState(cfg0.cltFvRolKBron ?? "");
   // Aangrijpingspunt van de belasting (tabel 6.1, voetnoot a); zwaartepunt =
   // geen correctie en wordt niet bewaard.
   const [ltbPositie, setLtbPositie] = useState<NonNullable<BeamCheckConfig["ltbLoadPosition"]>>(
@@ -297,6 +300,11 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
       cfg.cltKdef = cltKdef;
     }
     if (cltKdefBron.trim() !== "") cfg.cltKdefBron = cltKdefBron.trim();
+    const cltFvRol = parseFloat(cltFvRolStr.replace(",", "."));
+    if (cltFvRolStr.trim() !== "" && Number.isFinite(cltFvRol) && cltFvRol > 0) {
+      cfg.cltFvRolK = cltFvRol;
+    }
+    if (cltFvRolBron.trim() !== "") cfg.cltFvRolKBron = cltFvRolBron.trim();
     if (!kiptoets) cfg.performLtbCheck = false;
     if (ltbPositie !== "centreOfGravity") cfg.ltbLoadPosition = ltbPositie;
     if (serviceClass !== 1) cfg.serviceClass = serviceClass;
@@ -841,6 +849,26 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
                           placeholder={t("cfg.cltKdefBronLeeg", "ETA / productverklaring")}
                           value={cltKdefBron}
                           onChange={(e) => setCltKdefBron(e.target.value)}
+                        />
+                      </div>
+                      <DialoogRij
+                        label={t("cfg.cltFvRol")}
+                        info={t("cfg.cltFvRolHint")}
+                      >
+                        <input
+                          type="number" className="bar-props-input" step="0.05" min="0"
+                          placeholder={t("cfg.cltFvRolLeeg")}
+                          value={cltFvRolStr}
+                          onChange={(e) => setCltFvRolStr(e.target.value)}
+                        />
+                      </DialoogRij>
+                      <div className="bar-props-row">
+                        <span>{t("cfg.cltFvRolBron")}</span>
+                        <input
+                          type="text" className="bar-props-input"
+                          placeholder={t("cfg.cltKdefBronLeeg")}
+                          value={cltFvRolBron}
+                          onChange={(e) => setCltFvRolBron(e.target.value)}
                         />
                       </div>
                     </>

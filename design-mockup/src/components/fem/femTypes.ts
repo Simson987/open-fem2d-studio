@@ -275,6 +275,14 @@ export interface BeamCheckConfig {
    * onderscheiden van een aangenomen getal.
    */
   cltKdefBron?: string;
+  /**
+   * Kruislaaghout: gedeclareerde karakteristieke rolschuifsterkte f_v,rol,k
+   * (N/mm²) uit de ETA of productverklaring (issue #232). NEN-EN 1995-1-1 en
+   * EN 338 kennen geen f_v,rol; leeg = rolschuif niet getoetst, met melding.
+   */
+  cltFvRolK?: number;
+  /** Bron van `cltFvRolK` — verplicht zodra die is ingevuld. */
+  cltFvRolKBron?: string;
   // Beton (EN 1992)
   /**
    * Wapeningskorf: dekking, beugel, boven- en onderwapening. Zonder korf
