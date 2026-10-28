@@ -125,3 +125,9 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 ts-rs = "10"
 approx = "0.5"
 insta = { version = "1", features = ["json"] }
+
+# De externe 3D-rekenkern met één eigen uitbreiding: orthotrope MITC4-schaal-
+# elementen (#79, #97). Kopie van dezelfde vastgezette revisie in
+# vendor/dedaliano-engine; de wijzigingen staan in OPEN-FEM-WIJZIGINGEN.md daar.
+[patch."https://github.com/lambdaclass/stabileo.git"]
+dedaliano-engine = { path = "../vendor/dedaliano-engine" }

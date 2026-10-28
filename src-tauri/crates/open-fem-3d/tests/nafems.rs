@@ -154,7 +154,7 @@ fn le1_request(n_theta: usize, n_r: usize) -> SolveRequest3D {
         }
     }
     let mut input = request(nodes, 210_000.0, 0.3);
-    input.plates.push(Plate3D { id: 1, material_id: 1, thickness_m: t, bedding: None });
+    input.plates.push(Plate3D { id: 1, material_id: 1, thickness_m: t, bedding: None, orthotropy: None });
     for j in 0..n_theta {
         for i in 0..n_r {
             input.shell_elements.push(ShellElement3D {
@@ -253,7 +253,7 @@ fn le2(n_axial: usize, n_arc: usize) -> (f64, f64, f64) {
     for j in 0..n_arc {
         for i in 0..n_axial {
             let k = input.shell_elements.len() + 1;
-            input.plates.push(Plate3D { id: k, material_id: 1, thickness_m: t, bedding: None });
+            input.plates.push(Plate3D { id: k, material_id: 1, thickness_m: t, bedding: None, orthotropy: None });
             input.shell_elements.push(ShellElement3D {
                 id: k, plate_id: k,
                 node_ids: vec![id(i, j), id(i + 1, j), id(i + 1, j + 1), id(i, j + 1)],
@@ -337,7 +337,7 @@ fn le3(n: usize) -> f64 {
     let mut input = request(nodes, 68_250.0, 0.3);
     let add = |input: &mut SolveRequest3D, node_ids: Vec<usize>| {
         let k = input.shell_elements.len() + 1;
-        input.plates.push(Plate3D { id: k, material_id: 1, thickness_m: t, bedding: None });
+        input.plates.push(Plate3D { id: k, material_id: 1, thickness_m: t, bedding: None, orthotropy: None });
         input.shell_elements.push(ShellElement3D { id: k, plate_id: k, node_ids });
     };
     for j in 0..n - 1 {
@@ -435,7 +435,7 @@ fn le5(n_x: usize, n_f: usize) -> f64 {
     }
     let mut input = request(nodes, 210_000.0, 0.3);
     for (plate, range) in [(1, 0..n_f), (2, n_f..n_f + n_web), (3, n_f + n_web..m - 1)] {
-        input.plates.push(Plate3D { id: plate, material_id: 1, thickness_m: t, bedding: None });
+        input.plates.push(Plate3D { id: plate, material_id: 1, thickness_m: t, bedding: None, orthotropy: None });
         for s in range {
             for i in 0..n_x {
                 input.shell_elements.push(ShellElement3D {
@@ -513,7 +513,7 @@ fn le6(n: usize, graded: bool) -> f64 {
         }
     }
     let mut input = request(nodes, 210_000.0, 0.3);
-    input.plates.push(Plate3D { id: 1, material_id: 1, thickness_m: 0.01, bedding: None });
+    input.plates.push(Plate3D { id: 1, material_id: 1, thickness_m: 0.01, bedding: None, orthotropy: None });
     for j in 0..n {
         for i in 0..n {
             input.shell_elements.push(ShellElement3D {

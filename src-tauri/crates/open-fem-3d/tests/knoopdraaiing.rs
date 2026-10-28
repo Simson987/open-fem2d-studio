@@ -992,7 +992,7 @@ fn samen_met_een_plaat() {
         knoop(4, 0.0, 2.0, 0.0), knoop(5, 4.0, 0.0, 0.0)];
     let mut r = verzoek(nodes, vec![scharnierend(staaf(1, 2, 5))],
         vec![scharnier(1), scharnier(2), scharnier(3), scharnier(4), scharnier(5)]);
-    r.plates.push(open_fem_3d::Plate3D { id: 1, material_id: 1, thickness_m: 0.2, bedding: None });
+    r.plates.push(open_fem_3d::Plate3D { id: 1, material_id: 1, thickness_m: 0.2, bedding: None, orthotropy: None });
     r.shell_elements.push(open_fem_3d::ShellElement3D { id: 1, plate_id: 1, node_ids: vec![1, 2, 3, 4] });
     r.member_loads.push(q_lokaal(1, 1, -6.0));
     let uit = solve(r).unwrap_or_else(|fout| panic!("{fout}"));

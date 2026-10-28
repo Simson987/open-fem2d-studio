@@ -89,7 +89,7 @@ fn request(nodes: Vec<Node3D>, e_mpa: f64, nu: f64, thickness: f64, elements: Ve
         member_loads: vec![],
         member_point_loads: vec![],
         thermal_loads: vec![],
-        plates: vec![Plate3D { id: 1, material_id: 1, thickness_m: thickness, bedding: None }],
+        plates: vec![Plate3D { id: 1, material_id: 1, thickness_m: thickness, bedding: None, orthotropy: None }],
         shell_elements: elements,
         surface_loads: vec![],
         diaphragms: vec![],

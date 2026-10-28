@@ -565,7 +565,7 @@ fn e_bedding_plaatknopen_en_globale_lasten() {
     let mut r = verzoek(nodes, members, sections,
         vec![steun(id(0, 0), [true, true, false, false, false, false]), steun(id(n, 0), [false, true, false, false, false, false])]);
     r.materials[0] = Material3D { id: 1, name: "beton".into(), e_mpa: 30_000.0, nu: 0.2, g_mpa: None, alpha_per_k: None };
-    r.plates.push(Plate3D { id: 1, material_id: 1, thickness_m: 0.2, bedding: None });
+    r.plates.push(Plate3D { id: 1, material_id: 1, thickness_m: 0.2, bedding: None, orthotropy: None });
     r.shell_elements = shell_elements;
     r.surface_loads.push(SurfaceLoad3D { id: 1, plate_id: 1, qx_kn_per_m2: 0.0, qy_kn_per_m2: 0.0, qz_kn_per_m2: -5.0 });
     r.member_loads.push(globaal(1, 1, GlobalDirection3D::Z, [-8.0, -8.0], None));

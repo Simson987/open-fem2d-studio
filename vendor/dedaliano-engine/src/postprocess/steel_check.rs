@@ -1,0 +1,426 @@
+//! Steel member design checks per AISC 360 (LRFD).
+//!
+//! Given analysis results and member properties, computes unity ratios
+//! for axial, flexural, and combined loading interaction equations.
+
+use serde::{Deserialize, Serialize};
+
+use crate::postprocess::check_ledger::{CheckLedger, Unevaluated};
+
+// ==================== Types ====================
+
+/// Steel design parameters for a member.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SteelMemberData {
+    pub element_id: usize,
+    /// Yield stress (Pa or consistent units)
+    pub fy: f64,
+    /// Tensile strength Fu (Pa). Required for the D2-2 rupture check; without
+    /// it only gross-section yielding is evaluated.
+    #[serde(default)]
+    pub fu: Option<f64>,
+    /// Gross area (m² or consistent)
+    pub ag: f64,
+    /// Net area for tension (default = Ag)
+    #[serde(default)]
+    pub an: Option<f64>,
+    /// Effective net area factor U (default 1.0)
+    #[serde(default)]
+    pub u_factor: Option<f64>,
+    /// Web area Aw = d·tw (m²). Required for the G2 shear check.
+    #[serde(default)]
+    pub aw: Option<f64>,
+    /// Web shear strength coefficient Cv1 (default 1.0, AISC G2.1)
+    #[serde(default)]
+    pub cv1: Option<f64>,
+    /// Unbraced length for compression about Y-axis
+    pub lby: f64,
+    /// Unbraced length for compression about Z-axis
+    pub lbz: f64,
+    /// Effective length factor K for Y-axis (default 1.0)
+    #[serde(default)]
+    pub ky: Option<f64>,
+    /// Effective length factor K for Z-axis (default 1.0)
+    #[serde(default)]
+    pub kz: Option<f64>,
+    /// Moment of inertia about Y-axis
+    pub iy: f64,
+    /// Moment of inertia about Z-axis
+    pub iz: f64,
+    /// Radius of gyration about Y-axis
+    pub ry: f64,
+    /// Radius of gyration about Z-axis
+    pub rz: f64,
+    /// Plastic section modulus about Y-axis
+    pub zy: f64,
+    /// Plastic section modulus about Z-axis
+    pub zz: f64,
+    /// Elastic section modulus about Y-axis
+    pub sy: f64,
+    /// Elastic section modulus about Z-axis
+    pub sz: f64,
+    /// Torsion constant J
+    pub j: f64,
+    /// Warping constant Cw (set 0.0 for HSS)
+    #[serde(default)]
+    pub cw: Option<f64>,
+    /// Lateral-torsional buckling unbraced length Lb
+    #[serde(default)]
+    pub lb: Option<f64>,
+    /// Cb moment gradient factor (default 1.0)
+    #[serde(default)]
+    pub cb: Option<f64>,
+    /// Modulus of elasticity
+    pub e: f64,
+    /// Shear modulus (default E / 2.6)
+    #[serde(default)]
+    pub g: Option<f64>,
+    /// Depth of section (for LTB calculation)
+    #[serde(default)]
+    pub depth: Option<f64>,
+}
+
+/// Input for steel design check.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SteelCheckInput {
+    pub members: Vec<SteelMemberData>,
+    /// Element forces: (element_id, axial_start, shear_y_start, moment_z_start, axial_end, shear_y_end, moment_z_end)
+    pub forces: Vec<ElementDesignForces>,
+}
+
+/// Design forces for an element.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementDesignForces {
+    pub element_id: usize,
+    /// Axial force (positive = tension, negative = compression)
+    pub n: f64,
+    /// Bending moment about Y-axis (major axis)
+    pub my: f64,
+    /// Bending moment about Z-axis (minor axis)
+    #[serde(default)]
+    pub mz: Option<f64>,
+    /// Shear force
+    #[serde(default)]
+    pub vy: Option<f64>,
+}
+
+/// Result of steel design check for one member.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SteelCheckResult {
+    pub element_id: usize,
+    /// Overall unity ratio (max of all checks)
+    pub unity_ratio: f64,
+    /// Governing check name
+    pub governing_check: String,
+    /// Tension capacity check (Pr / phi*Pn_tension)
+    pub tension_ratio: f64,
+    /// Compression capacity check (Pr / phi*Pn_compression)
+    pub compression_ratio: f64,
+    /// Flexural capacity check about Y-axis (Mr / phi*Mn_y)
+    pub flexure_y_ratio: f64,
+    /// Flexural capacity check about Z-axis (Mr / phi*Mn_z)
+    pub flexure_z_ratio: f64,
+    /// Shear capacity check (Vr / phi*Vn), 0.0 when Aw was not supplied
+    pub shear_ratio: f64,
+    /// Combined interaction ratio (AISC H1-1)
+    pub interaction_ratio: f64,
+    /// Available shear strength (phi*Vn), 0.0 when Aw was not supplied
+    pub phi_vn: f64,
+    /// Available axial compression strength (phi*Pn)
+    pub phi_pn_compression: f64,
+    /// Available axial tension strength (phi*Pn)
+    pub phi_pn_tension: f64,
+    /// Available flexural strength about Y (phi*Mn)
+    pub phi_mn_y: f64,
+    /// Available flexural strength about Z (phi*Mn)
+    pub phi_mn_z: f64,
+    /// Checks whose capacity could not be evaluated. Non-empty means the
+    /// reported ratios do not cover the member.
+    #[serde(default)]
+    pub unevaluated: Unevaluated,
+}
+
+// ==================== AISC 360 Design Checks ====================
+
+const PHI_C: f64 = 0.90; // Compression
+const PHI_T: f64 = 0.90; // Tension (yielding)
+const PHI_TR: f64 = 0.75; // Tension (rupture on the net section)
+const PHI_B: f64 = 0.90; // Flexure
+/// AISC G1 general case. The phi_v = 1.00 of G2.1(a) needs h/tw <= 2.24*sqrt(E/Fy),
+/// which cannot be verified from the properties supplied here, so the lower
+/// value is used.
+const PHI_V: f64 = 0.90;
+
+
+/// Index the force records by id so each member is a hash lookup rather than a
+/// scan of the whole list. The pairing was O(members x forces): fine at 100
+/// members, quadratic at 10,000 — and this runs on every edit.
+fn index_forces<T>(forces: &[T], id_of: impl Fn(&T) -> usize) -> std::collections::HashMap<usize, &T> {
+    let mut map = std::collections::HashMap::with_capacity(forces.len());
+    for f in forces {
+        map.entry(id_of(f)).or_insert(f);
+    }
+    map
+}
+
+/// Run AISC 360 steel design checks on all members.
+pub fn check_steel_members(input: &SteelCheckInput) -> Vec<SteelCheckResult> {
+    let mut results = Vec::new();
+
+    let by_id = index_forces(&input.forces, |f| f.element_id);
+
+    for member in &input.members {
+        let forces = by_id.get(&member.element_id).copied();
+
+        let forces = match forces {
+            Some(f) => f,
+            None => continue,
+        };
+
+        let result = check_single_member(member, forces);
+        results.push(result);
+    }
+
+    results.sort_by_key(|r| r.element_id);
+    results
+}
+
+fn check_single_member(member: &SteelMemberData, forces: &ElementDesignForces) -> SteelCheckResult {
+    let eid = member.element_id;
+
+    // Available tension strength (AISC D2)
+    let phi_pn_tension = tension_capacity(member);
+
+    // Available compression strength (AISC E3)
+    let phi_pn_compression = compression_capacity(member);
+
+    // Available flexural strength (AISC F2 - compact doubly-symmetric I)
+    let phi_mn_y = flexural_capacity_y(member);
+    let phi_mn_z = flexural_capacity_z(member);
+
+    // Demand ratios
+    let n = forces.n;
+    let my = forces.my.abs();
+    let mz = forces.mz.unwrap_or(0.0).abs();
+
+    let mut ledger = CheckLedger::new();
+
+    let tension_ratio =
+        ledger.ratio_if_loaded("Tension D2", n.max(0.0), phi_pn_tension);
+    let compression_ratio =
+        ledger.ratio_if_loaded("Compression E3", (-n).max(0.0), phi_pn_compression);
+    let flexure_y_ratio = ledger.ratio_if_loaded("Flexure-Y F2", my, phi_mn_y);
+    let flexure_z_ratio = ledger.ratio_if_loaded("Flexure-Z F6", mz, phi_mn_z);
+
+    // A NaN demand never reaches a ratio above, so flag it explicitly.
+    if !n.is_finite() {
+        ledger.flag("Axial demand");
+    }
+
+    // AISC G2 shear
+    let phi_vn = shear_capacity(member);
+    let vy = forces.vy.unwrap_or(0.0).abs();
+    let shear_ratio = if phi_vn > 0.0 { vy / phi_vn } else { 0.0 };
+
+    // AISC H1 interaction (using appropriate axial capacity)
+    let axial_ratio = if n < 0.0 { compression_ratio } else { tension_ratio };
+    let interaction_ratio = ledger.require_finite(
+        "Interaction H1",
+        interaction_h1(axial_ratio, flexure_y_ratio, flexure_z_ratio),
+    );
+
+    // Governing
+    let checks = [
+        (tension_ratio, "Tension D2"),
+        (compression_ratio, "Compression E3"),
+        (flexure_y_ratio, "Flexure-Y F2"),
+        (flexure_z_ratio, "Flexure-Z F6"),
+        (shear_ratio, "Shear G2"),
+        (interaction_ratio, "Interaction H1"),
+    ];
+
+    let (unity_ratio, governing) = ledger.governing(&checks);
+    let governing_check = if ledger.all_evaluated() {
+        governing.to_string()
+    } else {
+        format!("{governing} (incomplete)")
+    };
+
+    SteelCheckResult {
+        element_id: eid,
+        unity_ratio,
+        governing_check,
+        tension_ratio,
+        compression_ratio,
+        flexure_y_ratio,
+        flexure_z_ratio,
+        shear_ratio,
+        interaction_ratio,
+        phi_vn,
+        phi_pn_compression,
+        phi_pn_tension,
+        phi_mn_y,
+        phi_mn_z,
+        unevaluated: ledger.into_unevaluated(),
+    }
+}
+
+/// AISC D2: available tensile strength — the lower of yielding on the gross
+/// section (D2-1) and rupture on the effective net section (D2-2).
+///
+/// Rupture is skipped when Fu is not supplied, since there is no basis for it.
+/// Where a member is bolted, rupture routinely governs: the smaller phi (0.75
+/// vs 0.90) and the hole deduction together typically cost 20 %.
+fn tension_capacity(m: &SteelMemberData) -> f64 {
+    let yielding = PHI_T * m.fy * m.ag;
+
+    match m.fu {
+        Some(fu) if fu > 0.0 => {
+            // D3: Ae = An·U
+            let an = m.an.unwrap_or(m.ag);
+            let u = m.u_factor.unwrap_or(1.0);
+            let rupture = PHI_TR * fu * an * u;
+            yielding.min(rupture)
+        }
+        _ => yielding,
+    }
+}
+
+/// AISC G2-1: Vn = 0.6·Fy·Aw·Cv1.
+///
+/// Returns 0.0 when the web area is unknown — there is no shear check to
+/// report rather than a capacity to invent.
+fn shear_capacity(m: &SteelMemberData) -> f64 {
+    match m.aw {
+        Some(aw) if aw > 0.0 => {
+            let cv1 = m.cv1.unwrap_or(1.0);
+            PHI_V * 0.6 * m.fy * aw * cv1
+        }
+        _ => 0.0,
+    }
+}
+
+/// AISC E3: Flexural buckling compression capacity.
+fn compression_capacity(m: &SteelMemberData) -> f64 {
+    let ky = m.ky.unwrap_or(1.0);
+    let kz = m.kz.unwrap_or(1.0);
+
+    // Slenderness ratio about each axis
+    let kl_r_y = if m.ry > 0.0 { ky * m.lby / m.ry } else { 0.0 };
+    let kl_r_z = if m.rz > 0.0 { kz * m.lbz / m.rz } else { 0.0 };
+    let kl_r = kl_r_y.max(kl_r_z);
+
+    if kl_r <= 0.0 { return PHI_C * m.fy * m.ag; }
+
+    // Euler buckling stress
+    let fe = std::f64::consts::PI * std::f64::consts::PI * m.e / (kl_r * kl_r);
+
+    // Critical stress (AISC E3-2, E3-3)
+    let fcr = if kl_r * (m.fy / m.e).sqrt() <= 4.71 {
+        // Inelastic buckling: Fcr = (0.658^(Fy/Fe)) * Fy
+        0.658_f64.powf(m.fy / fe) * m.fy
+    } else {
+        // Elastic buckling: Fcr = 0.877 * Fe
+        0.877 * fe
+    };
+
+    PHI_C * fcr * m.ag
+}
+
+/// AISC F2: Lateral-torsional buckling for doubly-symmetric I-shapes (major axis).
+fn flexural_capacity_y(m: &SteelMemberData) -> f64 {
+    let mp = m.fy * m.zy;
+    let lb = m.lb.unwrap_or(m.lby);
+    let cb = m.cb.unwrap_or(1.0);
+    let _g = m.g.unwrap_or(m.e / 2.6);
+    let cw = m.cw.unwrap_or(0.0);
+
+    if lb <= 0.0 || m.iy <= 0.0 {
+        return PHI_B * mp;
+    }
+
+    // Lp and Lr (AISC F2-5, F2-6)
+    let lp = 1.76 * m.rz * (m.e / m.fy).sqrt();
+
+    // AISC F2-7: rts² = √(Iy_weak * Cw) / Sx_strong
+    let c = 1.0; // For doubly-symmetric I-shapes
+
+    // `ho` is the distance between flange centroids. For a doubly-symmetric
+    // I-shape Cw = Iz·ho²/4, so when Cw is supplied ho follows from the section
+    // properties already given — no guess needed, and it lands within ~0.3 % of
+    // d - tf for rolled shapes. Falling back to a literal 0.3 m (the previous
+    // default) applied one section's depth to every section.
+    let ho = if cw > 0.0 && m.iz > 0.0 {
+        Some(2.0 * (cw / m.iz).sqrt())
+    } else {
+        m.depth
+    };
+
+    let rts = if m.sy > 1e-20 && cw > 0.0 {
+        let rts_sq = (m.iz * cw).sqrt() / m.sy;
+        rts_sq.sqrt()
+    } else {
+        // Fallback: rts ≈ bf / (2 * sqrt(3)) ≈ rz for I-shapes
+        m.rz
+    };
+
+    // St-Venant torsion term Jc/(Sx·ho), shared by F2-4 and F2-6. Without a
+    // usable ho there is no basis for it; dropping it to zero reduces Fcr to
+    // the pure-warping lower bound, which is the conservative reading.
+    let jc_sh = match ho {
+        Some(ho) if ho > 0.0 && m.sy > 1e-20 => m.j * c / (m.sy * ho),
+        _ => 0.0,
+    };
+
+    let lr = if rts > 0.0 && m.j > 0.0 && jc_sh > 0.0 {
+        // AISC F2-6: Lr = 1.95 * rts * (E/(0.7*Fy)) * sqrt(Jc/(Sx*ho) + sqrt(...))
+        let ratio_sq = (0.7 * m.fy / m.e).powi(2);
+        1.95 * rts * (m.e / (0.7 * m.fy))
+            * (jc_sh + (jc_sh * jc_sh + 6.76 * ratio_sq).sqrt()).sqrt()
+    } else {
+        // No basis for Lr: treat everything past Lp as elastic LTB rather than
+        // inventing a long inelastic plateau (the previous 10·Lp fallback ran
+        // the other way).
+        lp
+    };
+
+    let mn = if lb <= lp {
+        mp
+    } else if lb <= lr {
+        // Inelastic LTB (AISC F2-2)
+        let mn_ltb = cb * (mp - (mp - 0.7 * m.fy * m.sy) * (lb - lp) / (lr - lp));
+        mn_ltb.min(mp)
+    } else {
+        // Elastic LTB (AISC F2-3, F2-4)
+        let pi2 = std::f64::consts::PI * std::f64::consts::PI;
+        let lb_rts = lb / rts;
+        let fcr = cb * pi2 * m.e / lb_rts.powi(2)
+            * (1.0 + 0.078 * jc_sh * lb_rts.powi(2)).sqrt();
+        (fcr * m.sy).min(mp)
+    };
+
+    PHI_B * mn
+}
+
+/// AISC F6: Flexural capacity about minor axis (no LTB).
+fn flexural_capacity_z(m: &SteelMemberData) -> f64 {
+    let mp_z = m.fy * m.zz;
+    let my_z = m.fy * m.sz;
+    let mn = mp_z.min(1.6 * my_z); // AISC F6-1
+    PHI_B * mn
+}
+
+/// AISC H1-1: Combined axial and bending interaction.
+fn interaction_h1(pr_pc: f64, mry_mcy: f64, mrz_mcz: f64) -> f64 {
+    if pr_pc >= 0.2 {
+        // H1-1a: Pr/Pc + (8/9)(Mry/Mcy + Mrz/Mcz) <= 1.0
+        pr_pc + (8.0 / 9.0) * (mry_mcy + mrz_mcz)
+    } else {
+        // H1-1b: Pr/(2*Pc) + (Mry/Mcy + Mrz/Mcz) <= 1.0
+        pr_pc / 2.0 + mry_mcy + mrz_mcz
+    }
+}

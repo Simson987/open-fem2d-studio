@@ -69,7 +69,7 @@ fn vierhoeken(net: &Net, plate_id: usize, open: impl Fn(usize, usize) -> bool, e
 }
 
 fn plaat(id: usize, dikte: f64, k: f64, alleen_druk: bool) -> Plate3D {
-    Plate3D { id, material_id: 1, thickness_m: dikte, bedding: Some(PlateBedding3D { k_kn_per_m3: k, compression_only: alleen_druk }) }
+    Plate3D { id, material_id: 1, thickness_m: dikte, bedding: Some(PlateBedding3D { k_kn_per_m3: k, compression_only: alleen_druk }), orthotropy: None }
 }
 
 fn verzoek(nodes: Vec<Node3D>, e_mpa: f64, plates: Vec<Plate3D>, shell_elements: Vec<ShellElement3D>) -> SolveRequest3D {
@@ -201,7 +201,7 @@ fn zonder_bedding_blijft_een_plaat_zonder_opleggingen_geweigerd() {
     let g = net(&gelijk(2, 2.0), &gelijk(2, 2.0), [0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], &mut nodes);
     let mut elements = Vec::new();
     vierhoeken(&g, 1, |_, _| false, &mut elements);
-    let mut r = verzoek(nodes, E_BETON, vec![Plate3D { id: 1, material_id: 1, thickness_m: 0.2, bedding: None }], elements);
+    let mut r = verzoek(nodes, E_BETON, vec![Plate3D { id: 1, material_id: 1, thickness_m: 0.2, bedding: None, orthotropy: None }], elements);
     r.surface_loads.push(vlaklast(1, 1, [0.0, 0.0, -1.0]));
     let fout = solve(r).unwrap_err();
     assert!(fout.contains("oplegging"), "{fout}");
@@ -642,7 +642,7 @@ fn keuring_en_json_namen() {
     let json = serde_json::to_value(&r).unwrap();
     assert_eq!(json["plates"][0]["bedding"], serde_json::json!({ "kKnPerM3": 10000.0, "compressionOnly": true }));
     // Zonder bedding blijft het veld weg.
-    let zonder = Plate3D { id: 1, material_id: 1, thickness_m: 0.2, bedding: None };
+    let zonder = Plate3D { id: 1, material_id: 1, thickness_m: 0.2, bedding: None, orthotropy: None };
     assert!(serde_json::to_value(&zonder).unwrap().get("bedding").is_none());
     // compressionOnly is optioneel; een onbekend veld wordt geweigerd.
     let gelezen: Plate3D = serde_json::from_value(serde_json::json!({
@@ -793,7 +793,7 @@ fn vloer_met_wand_zonder_opleggingen_onder_een_kolomlast() {
                 });
             }
         }
-        let wandplaat = Plate3D { id: 2, material_id: 1, thickness_m: 0.2, bedding: None };
+        let wandplaat = Plate3D { id: 2, material_id: 1, thickness_m: 0.2, bedding: None, orthotropy: None };
         let mut r = verzoek(nodes, E_BETON, vec![plaat(1, 0.25, k, false), wandplaat], elements);
         r.surface_loads.push(vlaklast(1, 1, [0.0, 0.0, -q]));
         r.nodal_loads.push(knooplast(1, g.id(13, 3), [0.0, 0.0, -p]));
