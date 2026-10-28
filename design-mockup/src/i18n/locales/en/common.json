@@ -1232,6 +1232,8 @@
     "clickCalculateBefore": "Click",
     "calculate": "Solve",
     "clickCalculateAfter": "in the 2D tab to show diagrams.",
+    "activeCaseEmpty3d": "The active load case has no loads and therefore no result of its own. Shown: {{getoond}}. Choose another load case or a combination.",
+    "activeCaseEmpty3dNothing": "no result",
     "support": {
       "pinned": "Pinned",
       "fixed": "Fixed",

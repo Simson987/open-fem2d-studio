@@ -1232,6 +1232,8 @@
     "clickCalculateBefore": "Klik op",
     "calculate": "Berekenen",
     "clickCalculateAfter": "in de 2D-tab om diagrammen te tonen.",
+    "activeCaseEmpty3d": "Het actieve belastinggeval heeft geen belasting en dus geen eigen resultaat. Getoond: {{getoond}}. Kies een ander belastinggeval of een combinatie.",
+    "activeCaseEmpty3dNothing": "geen resultaat",
     "support": {
       "pinned": "Scharnier",
       "fixed": "Inklemming",

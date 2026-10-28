@@ -69,6 +69,11 @@ interface Props {
   structuralGrid: StructuralGrid;
   setStructuralGridEnabled: (enabled: boolean) => void;
   activeLoadCaseId?: number;
+  /**
+   * Er is gerekend, maar het actieve belastinggeval heeft geen eigen resultaat
+   * (geen last). De resultatentab zegt dat en noemt wat er getoond wordt (#245).
+   */
+  activeCaseEmpty?: boolean;
   combinations?: readonly LoadCombination[];
   combinationResults?: ReadonlyMap<number, OpenFem3DSolveResult>;
   activeCombinationId?: number | null;
@@ -428,6 +433,12 @@ export default function OpenFem3DExplorer(props: Props) {
           {props.checksError && <><br />Normtoetsing: {props.checksError}</>}
           {props.result.diagnostics.includes(OPEN_FEM_3D_PLATES_LINEAR_NOTICE) && <><br />{t("openFem3dPlate.linearNotice")}</>}
         </div> : <div className="fem-results-hint">{t("tree.clickCalculateBefore")} <strong>{t("tree.calculate")}</strong>.</div>}
+        {props.activeCaseEmpty && <div className="fem-results-hint" data-open-fem3d-active-case-empty>
+          {t("tree.activeCaseEmpty3d", {
+            getoond: props.combinations?.find((combination) => combination.id === props.activeCombinationId)?.name
+              ?? t("tree.activeCaseEmpty3dNothing"),
+          })}
+        </div>}
         {openFem3DPlateQuantitiesFor(props.result).length > 0 && props.setPlateQuantity && <label className="fem-results-scale-row" data-open-fem3d-plate-quantity>
           <span>{t("openFem3dPlate.result")}</span>
           <select className="fem-prop-input" style={{ flex: 1, minWidth: 0 }}

@@ -1232,6 +1232,8 @@
     "clickCalculateBefore": "Klicken Sie auf",
     "calculate": "Berechnen",
     "clickCalculateAfter": "in der Registerkarte 2D, um Diagramme anzuzeigen.",
+    "activeCaseEmpty3d": "Der aktive Lastfall hat keine Lasten und daher kein eigenes Ergebnis. Angezeigt: {{getoond}}. Wählen Sie einen anderen Lastfall oder eine Kombination.",
+    "activeCaseEmpty3dNothing": "kein Ergebnis",
     "support": {
       "pinned": "Gelenkig",
       "fixed": "Einspannung",

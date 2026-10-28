@@ -1289,7 +1289,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "gui_solve",
-            "description": format!("{vooraf}Runs the full calculation exactly as the Bereken button does and returns only when analysis and checks are finished. For 2D this covers all load cases/combinations and the physically non-linear concrete round when selected. For 3D it runs the P-Delta frame analysis, eigenvalue buckling, all six local member-force components, reactions, and EN 1992/EN 1993 checks. A 3D answer contains the complete result plus steel/concrete results and explicit skipped reasons."),
+            "description": format!("{vooraf}Runs the full calculation exactly as the Bereken button does and returns only when analysis and checks are finished. For 2D this covers all load cases/combinations and the physically non-linear concrete round when selected. For 3D it runs the P-Delta frame analysis, eigenvalue buckling, all six local member-force components, reactions, and EN 1992/EN 1993 checks. A 3D answer contains the complete result plus steel/concrete results and explicit skipped reasons. When the active load case has no loads (and so no result of its own), the answer is not an error: `result` then holds the first calculated combination (or the active case switches to a calculated case), and `melding` / `actiefBelastinggeval` say so."),
             "inputSchema": leeg_schema()
         }),
         json!({

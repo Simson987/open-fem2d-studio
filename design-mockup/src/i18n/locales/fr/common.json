@@ -1232,6 +1232,8 @@
     "clickCalculateBefore": "Cliquez sur",
     "calculate": "Calculer",
     "clickCalculateAfter": "dans l'onglet 2D pour afficher les diagrammes.",
+    "activeCaseEmpty3d": "Le cas de charge actif n'a pas de charges et donc pas de résultat propre. Affiché : {{getoond}}. Choisissez un autre cas de charge ou une combinaison.",
+    "activeCaseEmpty3dNothing": "aucun résultat",
     "support": {
       "pinned": "Articulation",
       "fixed": "Encastrement",
