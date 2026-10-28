@@ -562,7 +562,21 @@
       "done": "Berechnet in {{tijd}} s",
       "doneBody": "{{analyse}} · {{gevallen}} Lastfälle · {{combinaties}} Kombinationen",
       "doneMaxU": "größte |u| = {{u}} mm ({{geval}})",
-      "showResults": "Ergebnisse anzeigen"
+      "showResults": "Ergebnisse anzeigen",
+      "nativeRouteTitle": "Mit Open FEM Rust berechnet",
+      "nativeRouteText": "Dieses 3D-Modell enthält Bestandteile, die nur Open FEM Rust berechnet ({{features}}); die Berechnung läuft deshalb automatisch über diesen Kern statt über Open FEM 3D.",
+      "nativeFeature": {
+        "volumes": "Volumen (Tet4/Hex8)",
+        "volumeLoads": "Volumenlasten",
+        "plateEdgeLoads": "Plattenrandlasten",
+        "axialOnly": "Fachwerkstäbe",
+        "nonlinearLaw": "Materialgesetze",
+        "membraneOnly": "Membranplatten",
+        "modulusCurve": "E-Dehnungskurven",
+        "reinforcement": "Plattenbewehrung",
+        "threeLayer": "Dreischichtennachweis",
+        "materialLoadPath": "MNL-Lastpfad"
+      }
     },
     "nonlinear": {
       "title": "Physikalisch nichtlinear",

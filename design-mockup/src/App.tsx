@@ -81,6 +81,10 @@ import { openFem3DSectionBoxSchakel } from "./components/openFem3d/openFem3dSect
 import { readOpenFem3DPlateQuantity, saveOpenFem3DPlateQuantity } from "./components/openFem3d/openFem3dPlateResults";
 import { convert2DTo3D } from "./components/openFem3d/convert2DTo3D";
 import { solveOpenFem3D, solveOpenFem3DCombination, type OpenFem3DSolveResult } from "./components/openFem3d/openFem3dSolver";
+import {
+  chooseOpenFem3DRoute, openFem3DNativeAnalysis, openFem3DNativeCalculationModel, solveOpenFem3DNative,
+  solveOpenFem3DNativeCombination, type OpenFem3DRouteChoice,
+} from "./components/openFem3d/openFem3dNativeRoute";
 import OpenFem3DReport from "./components/openFem3d/OpenFem3DReport";
 import OpenFem3DExplorer from "./components/openFem3d/OpenFem3DExplorer";
 import OpenFem3DProperties from "./components/openFem3d/OpenFem3DProperties";
@@ -98,6 +102,7 @@ import {
 } from "./components/openFem3d/openFem3dTimberCheck";
 import {
   SOLVER_PREFERENCE_KEY,
+  SOLVER_REGISTRY,
   normaliseSolverPreference,
   resolveSolver,
   type SolverAnalysisKind,
@@ -2967,6 +2972,9 @@ function App() {
           ? "material-nonlinear"
           : "p-delta";
     let selectedSolver: SolverDescriptor;
+    // 3D: Open FEM 3D, of de native Rust-route (volumes, membranen, FNL;
+    // zie openFem3dNativeRoute). Null in 2D.
+    let openFem3dRoute: OpenFem3DRouteChoice | null = null;
     try {
       const preference = normaliseSolverPreference(
         await getSetting<unknown>(SOLVER_PREFERENCE_KEY, "automatic"),
@@ -2975,7 +2983,10 @@ function App() {
         if (preference !== "openaec-native-fem")
           throw new Error("Kies Open FEM Rust in Instellingen → Berekening voor axiale FNL.");
       }
-      selectedSolver = resolveSolver(preference, {
+      if (modelDimension === "3d") openFem3dRoute = chooseOpenFem3DRoute(openFem3d, preference);
+      selectedSolver = openFem3dRoute?.engineId === "openaec-native-fem"
+        ? SOLVER_REGISTRY.find((solver) => solver.id === "openaec-native-fem")!
+        : resolveSolver(preference, {
         schemaVersion: 1,
         dimension: modelDimension,
         analysis,
@@ -3027,9 +3038,25 @@ function App() {
           // actieve geval, zelfs wanneer eigen gewicht een ander geval vult.
           loadedCaseIds.add(fem.activeLoadCaseId);
         }
+        const nativeRoute = openFem3dRoute?.engineId === "openaec-native-fem";
+        // De native route kent ook volumelasten; die tellen als belast geval.
+        if (nativeRoute) {
+          for (const load of [...(openFem3d.volumeBodyLoads ?? []), ...(openFem3d.volumeFaceLoads ?? []),
+            ...(openFem3d.plateEdgeLoads ?? [])]) loadedCaseIds.add(load.caseId ?? 1);
+          if (openFem3dCalculation.selfWeightCaseId !== undefined && (openFem3d.volumes ?? []).some(
+            (volume) => volume.densityKgPerM3 !== undefined)) loadedCaseIds.add(openFem3dCalculation.selfWeightCaseId);
+        }
         if (loadedCaseIds.size === 0) throw new Error("Voeg minstens één 3D-belasting of opgelegde verplaatsing toe.");
-        if (fem.analysetype === "tweedeOrdeFysisch" || fem.analysetype === "axiaalFysischRust") {
-          throw new Error("Fysisch niet-lineaire 3D-analyse is nog niet beschikbaar. Kies eerste orde of tweede orde (P-Δ).");
+        if (!nativeRoute && (fem.analysetype === "tweedeOrdeFysisch" || fem.analysetype === "axiaalFysischRust")) {
+          throw new Error("Fysisch niet-lineaire 3D-analyse is nog niet beschikbaar in Open FEM 3D. Kies eerste orde of tweede orde (P-Δ), of Open FEM Rust in Instellingen → Berekening.");
+        }
+        if (openFem3dRoute?.automaticNative) {
+          void import("./io/notify").then(({ notifyInfo }) => notifyInfo(
+            i18next.t("common:app.solve.nativeRouteTitle"),
+            i18next.t("common:app.solve.nativeRouteText", {
+              features: openFem3dRoute!.features.map((feature) => i18next.t(`common:app.solve.nativeFeature.${feature}`)).join(", "),
+            }),
+          )).catch(() => {});
         }
         const openFem3dAnalysis = fem.analysetype === "eersteOrde" ? "linear" : "p-delta";
         // De blijvende gevallen (type "dead") zijn de montagelasten van
@@ -3049,14 +3076,45 @@ function App() {
         // Elk geval blijft afzonderlijk beschikbaar voor invoercontrole. Iedere
         // combinatie gaat als één volledige lastvector door de gekozen kern;
         // tweede-orde-uitkomsten worden dus nooit gesuperponeerd.
-        const [casePairs, combinationPairs] = await Promise.all([
-          Promise.all([...loadedCaseIds].map(async (caseId) =>
-            [caseId, await solveOpenFem3D(openFem3dCalculationModel, caseId, openFem3dAnalysis, openFem3dOptions)] as const)),
-          Promise.all(combinations.map(async (combination) =>
-            [combination.id, await solveOpenFem3DCombination(
-              openFem3dCalculationModel, combination.factors, openFem3dAnalysis,
-              scheefstandVanCombinatie(combination, scheefstandPhi), openFem3dOptions)] as const)),
-        ]);
+        let casePairs: Array<readonly [number, OpenFem3DSolveResult]>;
+        let combinationPairs: Array<readonly [number, OpenFem3DSolveResult]>;
+        if (nativeRoute) {
+          // Native Rust-route: het model omgezet naar het frame3d-rekenmodel,
+          // eigen gewicht inclusief volumes (dichtheid). Scheefstand-varianten
+          // kent deze route niet; die gaan als gewone combinatie door.
+          const nativeModel = openFem3DNativeCalculationModel(openFem3d, openFem3dCalculation.selfWeightCaseId);
+          const nativeAnalysis = openFem3DNativeAnalysis(nativeModel, fem.analysetype);
+          // Grote volumemodellen één voor één: elke native run houdt zijn eigen
+          // net en spanningsresultaat in het geheugen.
+          if ((nativeModel.volumes?.length ?? 0) >= 10_000) {
+            casePairs = [];
+            combinationPairs = [];
+            for (const caseId of loadedCaseIds) {
+              casePairs.push([caseId, await solveOpenFem3DNative(nativeModel, caseId, nativeAnalysis)]);
+            }
+            for (const combination of combinations) {
+              combinationPairs.push([combination.id,
+                await solveOpenFem3DNativeCombination(nativeModel, combination.factors, nativeAnalysis)]);
+            }
+          } else {
+            [casePairs, combinationPairs] = await Promise.all([
+              Promise.all([...loadedCaseIds].map(async (caseId) =>
+                [caseId, await solveOpenFem3DNative(nativeModel, caseId, nativeAnalysis)] as const)),
+              Promise.all(combinations.map(async (combination) =>
+                [combination.id, await solveOpenFem3DNativeCombination(
+                  nativeModel, combination.factors, nativeAnalysis)] as const)),
+            ]);
+          }
+        } else {
+          [casePairs, combinationPairs] = await Promise.all([
+            Promise.all([...loadedCaseIds].map(async (caseId) =>
+              [caseId, await solveOpenFem3D(openFem3dCalculationModel, caseId, openFem3dAnalysis, openFem3dOptions)] as const)),
+            Promise.all(combinations.map(async (combination) =>
+              [combination.id, await solveOpenFem3DCombination(
+                openFem3dCalculationModel, combination.factors, openFem3dAnalysis,
+                scheefstandVanCombinatie(combination, scheefstandPhi), openFem3dOptions)] as const)),
+          ]);
+        }
         if (generation !== openFem3dSolveGenerationRef.current) {
           const message = `De 3D-berekening is vervallen doordat model of rekeninstellingen tijdens de berekening wijzigden (generatie ${generation} → ${openFem3dSolveGenerationRef.current}).`;
           setOpenFem3dSolveError(message);

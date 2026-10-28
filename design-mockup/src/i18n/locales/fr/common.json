@@ -562,7 +562,21 @@
       "done": "Calculé en {{tijd}} s",
       "doneBody": "{{analyse}} · {{gevallen}} cas de charge · {{combinaties}} combinaisons",
       "doneMaxU": "|u| maximal = {{u}} mm ({{geval}})",
-      "showResults": "Afficher les résultats"
+      "showResults": "Afficher les résultats",
+      "nativeRouteTitle": "Calculé avec Open FEM Rust",
+      "nativeRouteText": "Ce modèle 3D contient des éléments que seul Open FEM Rust calcule ({{features}}) ; le calcul passe donc automatiquement par ce noyau au lieu d’Open FEM 3D.",
+      "nativeFeature": {
+        "volumes": "volumes (Tet4/Hex8)",
+        "volumeLoads": "charges volumiques",
+        "plateEdgeLoads": "charges de bord de plaque",
+        "axialOnly": "barres axiales",
+        "nonlinearLaw": "lois de matériau",
+        "membraneOnly": "plaques membranes",
+        "modulusCurve": "courbes E–déformation",
+        "reinforcement": "armature de plaque",
+        "threeLayer": "vérification à trois couches",
+        "materialLoadPath": "chemin de charge MNL"
+      }
     },
     "nonlinear": {
       "title": "Non-linéarité matérielle",

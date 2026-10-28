@@ -27571,6 +27571,23 @@ function attachOpenFem3DNativeFields(raw, model) {
     }
   });
 }
+function openFem3DNativeFeatures(model) {
+  const features = [];
+  if ((model.volumes?.length ?? 0) > 0) features.push("volumes");
+  if ((model.volumeBodyLoads?.length ?? 0) + (model.volumeFaceLoads?.length ?? 0) > 0) features.push("volumeLoads");
+  if ((model.plateEdgeLoads?.length ?? 0) > 0) features.push("plateEdgeLoads");
+  if (model.beams.some((beam) => beam.axialOnly)) features.push("axialOnly");
+  if (model.beams.some((beam) => beam.nonlinearLaw) || (model.plates ?? []).some((plate) => plate.nonlinearLaw)) {
+    features.push("nonlinearLaw");
+  }
+  const plates = model.plates ?? [];
+  if (plates.some((plate) => plate.membraneOnly)) features.push("membraneOnly");
+  if (plates.some((plate) => plate.modulusCurve)) features.push("modulusCurve");
+  if (plates.some((plate) => plate.reinforcement)) features.push("reinforcement");
+  if (plates.some((plate) => plate.threeLayer)) features.push("threeLayer");
+  if (model.materialLoadPath !== void 0) features.push("materialLoadPath");
+  return features;
+}
 function isFrame3DEdgeSupportTuple(value) {
   return Array.isArray(value) && value.every((kind) => typeof kind === "string");
 }
@@ -32281,6 +32298,10 @@ function contractLoads(loads, angles = /* @__PURE__ */ new Map()) {
   };
 }
 function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, plateMesh, options = {}) {
+  const nativeFeatures = openFem3DNativeFeatures(input);
+  if (nativeFeatures.length > 0) {
+    throw new Error(`Dit 3D-model bevat onderdelen die alleen Open FEM Rust rekent (${nativeFeatures.join(", ")}); Open FEM 3D rekent het niet.`);
+  }
   const model = (input.loadPanels?.length ?? 0) > 0 ? withOpenFem3DLoadPanels(input).model : input;
   const plates = model.plates ?? [];
   if (plates.length > 0 && !plateMesh) {

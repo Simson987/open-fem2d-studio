@@ -1,4 +1,6 @@
+import type { Frame3DAnalysisKind, Frame3DSolveResult } from "../frame3d/frame3dSolver";
 import { isTauriApp } from "../../lib/tauri";
+import { openFem3DNativeFeatures } from "./openFem3dNativeModel";
 import {
   CONCRETE_E_CM,
   NU_BETON,
@@ -217,6 +219,15 @@ export interface OpenFem3DSolveResult {
    * vóór K4 en bij een lineaire berekening.
    */
   secondOrderParts?: OpenFem3DSecondOrderMemberParts[];
+  /**
+   * Alleen bij de native Rust-route (openFem3dNativeRoute): de volledige
+   * analysesoort van die route, waaronder materiaal-FNL ("material") en
+   * gecombineerd ("combined"). `analysis` geeft dan alleen de meetkundige
+   * orde (lineair of P-Δ).
+   */
+  nativeAnalysis?: Frame3DAnalysisKind;
+  /** Alleen bij de native Rust-route: spanningen en rekken van de volumes en membranen. */
+  nativeVolume3D?: Frame3DSolveResult["volume3D"];
 }
 
 /** Eén knoop van het rekennet van een plaat op bedding (#107). */
@@ -649,6 +660,13 @@ export function buildOpenFem3DSolveRequest(
   plateMesh?: OpenFem3DPlateMesh,
   options: OpenFem3DSolveOptions = {},
 ): OpenFem3DSolveRequestBody {
+  // Volumes, membraanplaten, axiale staven en materiaalwetten rekent alleen de
+  // native Rust-route (openFem3dNativeRoute); deze kern zou ze stil overslaan.
+  const nativeFeatures = openFem3DNativeFeatures(input);
+  if (nativeFeatures.length > 0) {
+    throw new Error(`Dit 3D-model bevat onderdelen die alleen Open FEM Rust rekent (${nativeFeatures.join(", ")}); `
+      + "Open FEM 3D rekent het niet.");
+  }
   // Belastingvlakken worden hier, vóór de kern, gewone staaf- en knooplasten
   // in hun eigen belastinggeval. Een vlak dat niet kan afdragen, blokkeert
   // het rekenen met zijn melding: een last valt nooit stil weg.
