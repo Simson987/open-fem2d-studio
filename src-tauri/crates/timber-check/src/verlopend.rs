@@ -39,6 +39,7 @@
 //!    ongewijzigd uit de eerste deelvraag.
 
 use mechanics::ForcePoint;
+use nen_en_1995_1_1::afgeschuind::SchuineRand;
 use nen_en_1993_1_1_section::CheckStatus;
 use steel_check::{
     CheckKind, MaatgevendPunt, NamedCheck, StabiliteitsDoorsnede, ToetsUc, Toetsdoorsnede,
@@ -46,15 +47,16 @@ use steel_check::{
 };
 
 use crate::input::TimberBeamCheckInput;
-use crate::orchestrator::check_timber_beam;
+use crate::orchestrator::{check_timber_beam_intern, Afschuining};
 use crate::result::TimberBeamCheckResult;
 
 /// De volgorde waarin de toetsen in het resultaat staan — dezelfde als bij een
 /// prismatische staaf.
-const VOLGORDE: [&str; 12] = [
+const VOLGORDE: [&str; 13] = [
     "6.1.2_tension",
     "6.1.4_compression",
     "6.1.6_bending",
+    "6.4.2_tapered_edge",
     "6.2.3_bending_tension",
     "6.2.4_bending_compression",
     "6.1.7_shear",
@@ -67,10 +69,11 @@ const VOLGORDE: [&str; 12] = [
 ];
 
 /// Doorsnedetoetsen per rekenpunt met de plaatselijke maten.
-const DOORSNEDETOETSEN: [&str; 8] = [
+const DOORSNEDETOETSEN: [&str; 9] = [
     "6.1.2_tension",
     "6.1.4_compression",
     "6.1.6_bending",
+    "6.4.2_tapered_edge",
     "6.2.3_bending_tension",
     "6.2.4_bending_compression",
     "6.1.7_shear",
@@ -252,6 +255,7 @@ fn deelvraag(
     l_mm: f64,
     x_mm: f64,
     envelope: Vec<ForcePoint>,
+    afschuining: Option<Afschuining>,
 ) -> Deelvraag {
     let t = if l_mm > 0.0 {
         (x_mm / l_mm).clamp(0.0, 1.0)
@@ -269,7 +273,7 @@ fn deelvraag(
         x_mm,
         t,
         maten,
-        resultaat: check_timber_beam(deel),
+        resultaat: check_timber_beam_intern(deel, afschuining),
     }
 }
 
@@ -311,6 +315,16 @@ pub fn check_timber_beam_verlopend(
         );
     }
 
+    // §6.4.2 (issue #253): verloopt de HOOGTE, dan staat de buigspanning aan de
+    // schuine rand onder een hoek met de vezel en krijgt elk rekenpunt de toets
+    // σ_m,α,d ≤ k_m,α·f_m,d. tan α = Δh/L bij één schuine rand; welke rand dat
+    // is, staat in `schuine_rand` (weglaten = de ongunstigste, (6.39)).
+    let dh = (v.eind.h_mm - v.begin.h_mm).abs();
+    let afschuining = (dh > 1e-9).then(|| Afschuining {
+        tan_alpha_enkel: dh / l_mm,
+        rand: input.schuine_rand,
+    });
+
     // ── 1. Doorsnedetoetsen §6.1, per rekenpunt ─────────────────────────────
     let mut punten: Vec<f64> = input
         .forces_envelope
@@ -330,7 +344,7 @@ pub fn check_timber_beam_verlopend(
             .filter(|p| (p.position_mm - x).abs() < 1e-9)
             .cloned()
             .collect();
-        let d = deelvraag(&input, &v, l_mm, x, envelope);
+        let d = deelvraag(&input, &v, l_mm, x, envelope, afschuining);
         if d.resultaat.checks.is_empty() {
             // De deelvraag weigerde (onbekende sterkteklasse, onbruikbare
             // doorsnede). Een staaf die op één rekenpunt niet toetsbaar is, is
@@ -367,7 +381,7 @@ pub fn check_timber_beam_verlopend(
     grenzen.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
     let per_grens: Vec<Deelvraag> = grenzen
         .iter()
-        .map(|&x| deelvraag(&input, &v, l_mm, x, input.forces_envelope.clone()))
+        .map(|&x| deelvraag(&input, &v, l_mm, x, input.forces_envelope.clone(), None))
         .collect();
 
     // ── 3. Per toets de maatgevende deelvraag ───────────────────────────────
@@ -505,6 +519,30 @@ pub fn check_timber_beam_verlopend(
             }
         }
     }
+    let mut notities_642 = Vec::new();
+    if let Some(a) = afschuining {
+        notities_642.push(format!(
+            "De hoogte verloopt (tan α = Δh/L = {:.4}): op elk rekenpunt is ook art. 6.4.2 \
+             getoetst, de buigspanning aan de schuine rand met k_m,α uit (6.39)/(6.40). {}",
+            a.tan_alpha_enkel,
+            match a.rand {
+                None => "Welke rand schuin loopt is niet opgegeven; getoetst is de ongunstigste \
+                         aanname, de schuine rand op trek (6.39).",
+                Some(SchuineRand::Boven) => "Opgegeven: de bovenrand loopt schuin.",
+                Some(SchuineRand::Onder) => "Opgegeven: de onderrand loopt schuin.",
+                Some(SchuineRand::Beide) => {
+                    "Opgegeven: beide randen lopen symmetrisch schuin (tan α = Δh/(2L) per rand)."
+                }
+            }
+        ));
+    }
+    if (v.eind.b_mm - v.begin.b_mm).abs() > 1e-9 {
+        notities_642.push(
+            "De BREEDTE verloopt: art. 6.4.2 is voor een verloop in de breedte (buiging om z aan \
+             een schuine zijkant) NIET getoetst."
+                .to_string(),
+        );
+    }
     let rapport = VerloopRapport {
         begin_naam: v.begin.naam(),
         eind_naam: v.eind.naam(),
@@ -534,7 +572,10 @@ pub fn check_timber_beam_verlopend(
              tabel 6.1 gelden voor een prismatische ligger; bij een verlopende ligger zijn zij \
              met de kleinste doorsnede in het kipveld toegepast, wat aan de veilige kant ligt."
                 .to_string(),
-        ],
+        ]
+        .into_iter()
+        .chain(notities_642)
+        .collect(),
     };
 
     // ── 5. Samenvatten ──────────────────────────────────────────────────────

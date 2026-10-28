@@ -216,7 +216,7 @@ export function buildOpenFem3DTimberCheckInputs(
       ...notes, ...permanent.notes,
       ...(inklemming ? [
         openFem3DUitkragingNotitie(inklemming) +
-          (vrijEindZonderKlasse ? ` Dus w_fin tegen L/${limits.fin} en w_add tegen L/${limits.add} op de staaflengte.` : ""),
+          (vrijEindZonderKlasse ? ` Dus w_fin tegen L/${String(Math.round(limits.fin * 1000) / 1000).replace(".", ",")} en w_add tegen L/${String(Math.round(limits.add * 1000) / 1000).replace(".", ",")} op de staaflengte.` : ""),
       ] : []),
       ...(characteristic.length ? [] : ["Karakteristieke BGT-combinatie ontbreekt: w_inst is uit de beschikbare BGT-omhullende genomen."]),
       ...(quasi.length ? [] : ["Quasi-blijvende BGT-combinatie ontbreekt: w_qp = w_inst is veilig-zijdig aangehouden."]),

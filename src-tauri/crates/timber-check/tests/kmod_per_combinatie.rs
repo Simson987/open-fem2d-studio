@@ -69,7 +69,7 @@ fn ligger(klasse: &str, b: f64, h: f64, l_m: f64, env: Vec<ForcePoint>) -> Timbe
         buckling_length_z_m: 0.0,
         lateral_bracing: None,
         ltb_segment_length_m: 0.0,
-        ltb_load_case: nen_en_1995_1_1::stability::LtbLoadCase::UniformLoad,
+        ltb_load_case: Some(nen_en_1995_1_1::stability::LtbLoadCase::UniformLoad),
         ltb_load_position: nen_en_1995_1_1::stability::LtbLoadPosition::CentreOfGravity,
         ltb_effective_length_override_m: 0.0,
         perform_ltb_check: true,
@@ -82,9 +82,12 @@ fn ligger(klasse: &str, b: f64, h: f64, l_m: f64, env: Vec<ForcePoint>) -> Timbe
         deflection_limit_add: 333.0,
         deflection_notes: vec![],
         deflection_quasi_perm_fin_mm: None,
+        deflection_add_mm: None,
+        pre_camber_mm: None,
         staaf_notities: None,
         width_end_mm: None,
         height_end_mm: None,
+        schuine_rand: None,
         zijdelingse_knik_in_analyse: None,
     }
 }
@@ -510,6 +513,8 @@ fn clt_per_klasse_met_de_laagregel_uit_de_klasse_van_elke_toets() {
         // ze niet mee in uc_max.
         k_def: None,
         k_def_bron: None,
+        f_v_rol_k: None,
+        f_v_rol_k_bron: None,
         deflection_inst_mm: 0.0,
         deflection_quasi_perm_mm: 0.0,
         deflection_permanent_mm: 0.0,
@@ -517,6 +522,8 @@ fn clt_per_klasse_met_de_laagregel_uit_de_klasse_van_elke_toets() {
         deflection_limit_add: 333.0,
         deflection_notes: vec![],
         deflection_quasi_perm_fin_mm: None,
+        deflection_add_mm: None,
+        pre_camber_mm: None,
     };
     let oud = check_clt_beam(invoer(vec![]));
     // Oud: middellang, M = 14 → 3,6842 / 14,769 = 0,2495.

@@ -144,7 +144,7 @@ fn invoer(
         buckling_length_z_m: L_M,
         lateral_bracing: None,
         ltb_segment_length_m: 0.0,
-        ltb_load_case: nen_en_1995_1_1::stability::LtbLoadCase::UniformLoad,
+        ltb_load_case: Some(nen_en_1995_1_1::stability::LtbLoadCase::UniformLoad),
         ltb_load_position: nen_en_1995_1_1::stability::LtbLoadPosition::CentreOfGravity,
         ltb_effective_length_override_m: 0.0,
         // De bron: "zijdelings gesteund door de vloerplaat, dus geen kip".
@@ -160,9 +160,12 @@ fn invoer(
         deflection_limit_add: 333.0,
         deflection_notes: vec![],
         deflection_quasi_perm_fin_mm: None,
+        deflection_add_mm: None,
+        pre_camber_mm: None,
         staaf_notities: None,
         width_end_mm: None,
         height_end_mm: None,
+        schuine_rand: None,
         zijdelingse_knik_in_analyse: None,
     }
 }

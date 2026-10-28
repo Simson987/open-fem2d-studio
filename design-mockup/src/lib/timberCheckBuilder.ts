@@ -39,19 +39,20 @@
  *    de kern kiest (staaflengte, of om z uit steunen aan beide randen) en
  *    meldt de herkomst (zie de toelichting bij het `inputs.push`);
  *    kipsteunafstand = staaflengte;
- *    belastinggeval "gelijkmatig verdeeld"; aangrijpingspunt uit
+ *    belastinggeval van tabel 6.1: NIET opgegeven, de kern leidt het af uit
+ *    het momentverloop en het vrije eind (issue #220); aangrijpingspunt uit
  *    cfg.ltbLoadPosition, leeg → zwaartepunt; kiptoets uit
  *    cfg.performLtbCheck, leeg → aan; k_cr uit cfg.kCr, leeg → 1,0 (NB bij
  *    6.1.7); geen lastverdelend systeem;
- *  - doorbuiging: klasse "vloer" → w_fin ≤ L/250 en w_add ≤ L/333
+ *  - doorbuiging: klasse "vloer" → w_fin ≤ L/250 en w_add ≤ 3/1000·L
  *    (NB-standaard); w_qp komt uit de quasi-blijvende BGT-combinatie
  *    (G + Σ ψ₂,i · Q_k,i), en valt alleen mét een notitie in het rapport terug
  *    op de volle last; w_perm (w₁) komt uit de BGT-combinatie die alleen de
  *    blijvende belastinggevallen draagt (zie `lib/blijvendeZakking.ts`), zodat
  *    w_add werkelijk w₂ + w₃ is; ontbreekt die combinatie, dan 0 mét notitie.
- *    Zeeg kent de houtkern
- *    (nog) niet — preCamber_mm wordt hier bewust NIET geconsumeerd en de UI
- *    toont het veld niet voor hout.
+ *    Zeeg (preCamber_mm, positief omhoog) gaat als `pre_camber_mm` naar de
+ *    kern, die de netto eindzakking w_net,fin = w_fin − w_c toetst (EN 1995-1-1
+ *    7.2(2), issue #252); bij een staande staaf niet (`zeegVoorToets`).
  */
 import type { Beam, BeamCheckConfig, LoadCase, Node, Support } from "../components/fem/femTypes";
 import type { SolverResult } from "../components/fem/solver/types";
@@ -96,7 +97,7 @@ import {
   naarCustomSection,
   zoekEigenDoorsnede,
 } from "./profieleditor/eigenDoorsnedenStore";
-import { toetsdataInReferentierichting } from "./referentierichting";
+import { toetsdataInReferentierichting, zeegNotities, zeegVoorToets } from "./referentierichting";
 import { bepaalVerloop } from "./sectionResolver";
 import type { CustomSection } from "./types/steel/CustomSection";
 import { STANDAARD_BIJLAGE, type NationaleBijlageCode } from "./normAanduidingen";
@@ -176,19 +177,18 @@ export function kCrUitConfig(cfg: BeamCheckConfig): { kCr: number } | { fout: st
  * De w_fin-noemers volgen NEN-EN 1990:2002/NB:2019 A1.4.3(4) — w_max ≤ 1/250
  * deel van ℓ_rep bij zowel vloeren als daken. De w_add-noemers volgen
  * A1.4.3(3), dat vier categorieën voor w2 + w3 kent:
- *  - "floor":        fin 250, add 333 — het tweede gedachtestreepje, "overige
- *    vloeren en daken die intensief door personen worden gebruikt", 3/1 000
- *    deel van ℓ_rep. De 333 is de afronding naar beneden van 333⅓ en dus een
- *    fractie strenger dan de norm; de staalkern rekent sinds september 2026
- *    met 1000/3 exact. Bewust niet gelijkgetrokken: 333 is veilig-zijdig en
- *    het wijzigen zou de bevroren houtreferenties verschuiven;
+ *  - "floor":        fin 250, add 1000/3 — het tweede gedachtestreepje,
+ *    "overige vloeren en daken die intensief door personen worden gebruikt",
+ *    3/1 000 deel van ℓ_rep. EXACT 1000/3 (issue #236), zoals de staalkern:
+ *    tot oktober 2026 stond hier 333, een grens die 0,1 % te RUIM was (L/333
+ *    > 3·L/1000), dus niet veilig-zijdig;
  *  - "floorBrittle": fin 250, add 500 — het eerste gedachtestreepje, "vloeren
  *    die scheurgevoelige scheidingswanden dragen", 1/500 deel van ℓ_rep;
  *  - "roof":         fin 250, add 250 — het derde gedachtestreepje, "overige
  *    daken", 1/250 deel van ℓ_rep;
- *  - "cantilever":   fin 125, add 167 — de NB-conventie "ℓ_rep = tweemaal de
- *    lengte van een uitkraging" uitgedrukt als gehalveerde noemers op de
- *    staaflengte;
+ *  - "cantilever":   fin 125, add 500/3 — de NB-conventie "ℓ_rep = tweemaal
+ *    de lengte van een uitkraging" uitgedrukt als gehalveerde noemers op de
+ *    staaflengte (3/1000·2L = L/(500/3); tot oktober 2026 afgerond op 167);
  *  - "custom":       de opgegeven n geldt voor w_fin én w_add (één knop,
  *    transparant gedocumenteerd in de UI-hint). Zonder opgegeven n: 333,
  *    dezelfde terugval als de staalbouwer. Een OPGEGEVEN 0 of negatief getal
@@ -204,13 +204,13 @@ export function timberDeflectionNumerators(
   switch (cls) {
     case "roof":         return { fin: 250, add: 250 };
     case "floorBrittle": return { fin: 250, add: 500 };
-    case "cantilever":   return { fin: 125, add: 167 };
+    case "cantilever":   return { fin: 125, add: 500 / 3 };
     case "custom": {
       const n = customN ?? 333;
       return { fin: n, add: n };
     }
     case "floor":
-    default:             return { fin: 250, add: 333 };
+    default:             return { fin: 250, add: 1000 / 3 };
   }
 }
 
@@ -266,9 +266,9 @@ export function houtDoorbuigingsNoemers(
   return {
     ...uit,
     notitie:
-      `Uitkraging (vrij staafeind herkend): ℓ_rep = 2·L, dus w_fin tegen L/${uit.fin} en ` +
-      `w_add tegen L/${uit.add} op de staaflengte (de noemers ${klasse.fin} en ` +
-      `${klasse.add} van de klasse, op ℓ_rep).`,
+      `Uitkraging (vrij staafeind herkend): ℓ_rep = 2·L, dus w_fin tegen L/${getal(uit.fin)} en ` +
+      `w_add tegen L/${getal(uit.add)} op de staaflengte (de noemers ${getal(klasse.fin)} en ` +
+      `${getal(klasse.add)} van de klasse, op ℓ_rep).`,
   };
 }
 
@@ -524,6 +524,15 @@ export interface HoutDoorbuiging {
   quasiFinMm?: number;
   /** w₁ onder de BGT-combinatie met alleen de blijvende belasting (mm). */
   permMm: number;
+  /**
+   * w₃ = w_c − w₁ (mm, teken behouden) van de BGT-combinatie met de grootste
+   * |w₂ + w_c − w₁|, als dat NIET de combinatie van w_inst is; anders
+   * `undefined` en rekent de kern w_inst − w₁. Gaat als `deflection_add_mm`
+   * naar de hout- en de CLT-kern (issues #200, #210).
+   */
+  addMm?: number;
+  /** De herkomst van `addMm`, voor `deflection_notes`. */
+  addNotitie?: string;
   /** `deflection_notes` voor de kern: referentielijn, w_inst, w_qp en w₁. */
   notes: string[];
   /**
@@ -543,8 +552,11 @@ export interface HoutDoorbuiging {
 
 /**
  * k_def uit EN 1995-1-1 tabel 3.2 voor massief en gelijmd gelamineerd hout,
- * per klimaatklasse — ALLEEN om bij een lijn in delen het maatgevende deel te
- * kiezen (`houtDoorbuigingsInvoer`); de toets zelf neemt k_def uit de kern.
+ * per klimaatklasse — ALLEEN om te kiezen: bij een lijn in delen het
+ * maatgevende deel (`houtDoorbuigingsInvoer`), en de BGT-combinatie van w₃
+ * voor w_add (`houtDoorbuigingVanDeel`). De toets zelf neemt k_def uit de kern
+ * (bij kruislaaghout de opgegeven waarde; een andere k_def verandert alleen
+ * welke combinatie gekozen wordt, en de kern rekent w_add met haar eigen k_def).
  */
 const K_DEF_KEUZE: Record<1 | 2 | 3, number> = { 1: 0.6, 2: 0.8, 3: 2.0 };
 
@@ -599,10 +611,15 @@ export function houtDoorbuigingsInvoer(
   const wFin = (h: HoutDoorbuiging) =>
     Math.abs(h.instMm) +
     (h.quasiFinMm !== undefined ? Math.abs(h.quasiFinMm - h.quasiMm) : kDef * Math.abs(h.quasiMm));
+  // w_add: met een apart bepaalde w₃ w₂ + w₃ met teken, anders w_fin − |w₁|.
+  const wAdd = (h: HoutDoorbuiging) =>
+    h.addMm !== undefined
+      ? Math.abs(h.addMm + (h.quasiFinMm !== undefined ? h.quasiFinMm - h.quasiMm : kDef * h.quasiMm))
+      : wFin(h) - Math.abs(h.permMm);
   let m = 0;
   let beste = -1;
   perDeel.forEach((h, i) => {
-    const v = Math.max(wFin(h), Math.abs(wFin(h) - Math.abs(h.permMm))) / lRepVanDeelMm(delen[i]);
+    const v = Math.max(wFin(h), Math.abs(wAdd(h))) / lRepVanDeelMm(delen[i]);
     if (v > beste) {
       beste = v;
       m = i;
@@ -614,7 +631,7 @@ export function houtDoorbuigingsInvoer(
     0,
     delenNotitie(
       delen,
-      perDeel.map((h) => ({ wFinMm: wFin(h), wAddMm: wFin(h) - Math.abs(h.permMm) })),
+      perDeel.map((h) => ({ wFinMm: wFin(h), wAddMm: wAdd(h) })),
       m,
     ) +
       " (Hout: w = |w_inst| + k_def·|w_qp| met k_def = " +
@@ -725,12 +742,44 @@ function houtDoorbuigingVanDeel(
     },
   });
 
+  // w_add = w₂ + w₃ PER COMBINATIE (issues #200, #210): w₃ = w_c − w₁ over
+  // dezelfde combinaties als w_inst, en de combinatie met de grootste
+  // |w₂ + w₃| (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur NB.1). Niet
+  // "w_inst − w₁ van de combinatie met de grootste |w|": gaat de punt van een
+  // uitkraging onder de blijvende last omhoog en onder de veranderlijke omlaag,
+  // dan hoort de grootste |w| bij een combinatie dicht bij de blijvende, en valt
+  // w_add te laag uit. Het kruipdeel w₂ is dat van de quasi-blijvende
+  // combinatie; het teken telt. Alleen apart naar de kern als het een andere
+  // combinatie is dan die van w_inst: dan blijft de invoer byte-gelijk.
+  const quasiMm = langeduur.paar ? langeduur.paar.quasiMm : wQuasi.mm;
+  const w2 = langeduur.paar
+    ? langeduur.paar.quasiFinMm - langeduur.paar.quasiMm
+    : (K_DEF_KEUZE[beam.checkConfig?.serviceClass ?? 1] ?? 0.6) * quasiMm;
+  const w3Inst = wInstMm - wPerm.mm;
+  let w3: { w: number; naam: string } | null = inst ? { w: w3Inst, naam: inst.combo.name } : null;
+  for (const a of inst?.alle ?? []) {
+    const d = a.w - wPerm.mm;
+    if (w3 && Math.abs(w2 + d) > Math.abs(w2 + w3.w) + 1e-9) w3 = { w: d, naam: a.combo.name };
+  }
+  const addApart = inst && w3 && Math.abs(w3.w - w3Inst) > 1e-6 ? w3 : null;
+  const mmTekst = (x: number) => `${x.toFixed(2).replace(".", ",")} mm`;
 
   return {
     instMm: wInstMm,
-    quasiMm: langeduur.paar ? langeduur.paar.quasiMm : wQuasi.mm,
+    quasiMm,
     ...(langeduur.paar ? { quasiFinMm: langeduur.paar.quasiFinMm } : {}),
     permMm: wPerm.mm,
+    ...(addApart
+      ? {
+          addMm: addApart.w,
+          addNotitie:
+            `w₃ = w_c − w₁ = ${mmTekst(addApart.w)} komt uit "${addApart.naam}": daar is ` +
+            `|w₂ + w_c − w₁| het grootst (w₂ ≈ ${mmTekst(w2)}, w₁ = ${mmTekst(wPerm.mm)}). De ` +
+            `combinatie van w_inst ("${inst?.combo.name ?? "—"}") geeft w_inst − w₁ = ${mmTekst(w3Inst)}; ` +
+            "w₃ gaat daarom apart naar de kern, die w_add = w₂ + w₃ rekent (NEN-EN 1990:2002/NB:2019 " +
+            "A1.4.3(2), figuur NB.1: w₂ + w₃ = w_tot − w₁, per combinatie).",
+        }
+      : {}),
     inklemming,
     notes: [
       ...deflectionNotesFor(
@@ -953,10 +1002,9 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
     });
 
     // Per-staaf toetsconfiguratie; ontbrekende velden → defaults hierboven.
-    // preCamber_mm wordt voor hout bewust niet geconsumeerd: de houtkern
-    // kent geen zeeg, en de EN 1995-sectie van de dialoog biedt het veld
-    // daarom niet aan.
     const cfg = beam.checkConfig ?? {};
+    // Zeeg (issue #252): alleen bij een liggende staaf, zie `zeegVoorToets`.
+    const zeeg = zeegVoorToets(beam, data.nodes).preCamber_mm;
     // Kipsteunen per rand en de kipsteunafstand: één afleiding, gedeeld met het
     // tekenvlak (`lib/kipsteunen.ts`, issue #40).
     const kip = kipsteunenVanStaaf(cfg, lengthMm, "hout");
@@ -964,6 +1012,7 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
     // delen van een doorgaande lijn verwerkt — zie `houtDoorbuigingsNoemers`.
     const defl = houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm);
     if (defl.notitie) doorbuiging.notes.push(defl.notitie);
+    if (doorbuiging.addNotitie) doorbuiging.notes.push(doorbuiging.addNotitie);
     // Een scheurfactor buiten (0, 1] is geen keuze maar een fout; die gaat
     // niet stil op 1,0 maar houdt de staaf buiten de toetsing, met reden.
     const kCr = kCrUitConfig(cfg);
@@ -1003,6 +1052,9 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
       // de plaatselijke b(x) × h(x) en met k_h uit de hoogte ter plaatse.
       ...(bEindMm !== undefined ? { width_end_mm: bEindMm } : {}),
       ...(hEindMm !== undefined ? { height_end_mm: hEindMm } : {}),
+      // Welke rand schuin loopt, voor art. 6.4.2 (issue #253). Alleen bij een
+      // verloop; leeg = de kern toetst de ongunstigste aanname (6.39).
+      ...(hEindMm !== undefined && cfg.schuineRand !== undefined ? { schuine_rand: cfg.schuineRand } : {}),
       // Aanwezig = samengestelde doorsnede uit de profieleditor; de kern
       // rekent dan met de lamellen in plaats van met b × h. Afwezig = de
       // rechthoek hierboven, precies zoals voorheen.
@@ -1092,7 +1144,11 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
       // De waarde komt uit `lib/kipsteunen.ts`, dezelfde afleiding als het
       // tekenvlak toont (issue #40).
       ltb_segment_length_m: kip.ltb_segment_length_m,
-      ltb_load_case: "UniformLoad",
+      // Belastinggeval van tabel 6.1: bewust NIET opgegeven. De kern leidt het
+      // af uit het momentverloop van `forces_envelope` en `is_cantilever`
+      // (issue #220) en zet de afleiding in de kiptoets. Tot oktober 2026
+      // stond hier vast "UniformLoad" (0,9·ℓ), ook bij een constant moment
+      // (hoort 1,0·ℓ) en bij een uitkraging (0,5 of 0,8·ℓ).
       // Aangrijpingspunt van de belasting (tabel 6.1, voetnoot a): aan de
       // drukzijde l_ef + 2h, aan de trekzijde l_ef − 0,5h. Leeg = zwaartepunt,
       // het gedrag van vóór dit veld. Een dak of vloer op de bovenrand van een
@@ -1143,12 +1199,20 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
       // A1.4.3(2), figuur NB.1). Ontbreekt die combinatie, dan 0 — en dan
       // staat in de notities dat w_add daardoor de volledige zakking is.
       deflection_permanent_mm: doorbuiging.permMm,
+      // w₃ = w_c − w₁ per BGT-combinatie (issues #200, #210), alleen als die
+      // uit een andere combinatie komt dan w_inst; de kern rekent dan
+      // w_add = w₂ + w₃.
+      ...(doorbuiging.addMm !== undefined ? { deflection_add_mm: doorbuiging.addMm } : {}),
       deflection_limit_fin: defl.fin,
       deflection_limit_add: defl.add,
       // Referentielijn + eventuele waarschuwing over een doorgeknipte staaf
       // (gedeeld met de staalbouwer), gevolgd door de herkomst van w_inst,
       // w_qp en w₁.
-      deflection_notes: doorbuiging.notes,
+      deflection_notes: [...doorbuiging.notes, ...zeegNotities(beam, data.nodes)],
+      // Zeeg w_c (positief omhoog): de kern toetst dan w_net,fin = w_fin − w_c
+      // (EN 1995-1-1 7.2(2), (7.2)); w_add blijft zonder zeeg. Alleen een
+      // getal ≠ 0 gaat mee, zodat de invoer zonder zeeg byte-gelijk blijft.
+      ...(zeeg !== undefined && zeeg !== 0 ? { pre_camber_mm: zeeg } : {}),
       // De toelichting bij een doorgaande lijn die als een staaf is getoetst;
       // de kern zet hem bij de kolomtoets, de kiptoets en de eindzakking.
       ...(staafNotities.length > 0 ? { staaf_notities: staafNotities } : {}),

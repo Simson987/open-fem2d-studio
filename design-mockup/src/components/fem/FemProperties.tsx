@@ -907,6 +907,30 @@ function BeamProperties({ beam, nFrom, nTo, nodes, beams, loads, updateBeam, res
             </Section>
           )}
 
+          {/* Verlopende houten ligger: welke rand schuin loopt, voor art. 6.4.2
+              (issue #253). Leeg = niet bekend; de kern toetst dan de
+              ongunstigste aanname, de schuine rand op trek (6.39). */}
+          {isHout && verloopBeamMaten && verloopBeamMaten.begin.h !== verloopBeamMaten.eind.h && (
+            <Section title={t("props.beam.taperTitle")}>
+              <Row label={t("props.beam.taperEdge")} info={t("props.beam.taperEdgeHint")}>
+                <select
+                  className="fem-prop-select"
+                  value={cfg.schuineRand ?? ""}
+                  onChange={(e) => setCfg({
+                    schuineRand: e.target.value === ""
+                      ? undefined
+                      : (e.target.value as NonNullable<BeamCheckConfig["schuineRand"]>),
+                  })}
+                >
+                  <option value="">{t("props.beam.taperEdgeUnknown")}</option>
+                  <option value="Boven">{t("props.beam.taperEdgeTop")}</option>
+                  <option value="Onder">{t("props.beam.taperEdgeBottom")}</option>
+                  <option value="Beide">{t("props.beam.taperEdgeBoth")}</option>
+                </select>
+              </Row>
+            </Section>
+          )}
+
           {isHout && (
             <Section title={t("props.beam.shearTitle")}>
               {/* Scheurfactor k_cr, b_ef = k_cr · b (6.13a). Leeg = 1,0, de
@@ -1066,7 +1090,8 @@ function BeamProperties({ beam, nFrom, nTo, nodes, beams, loads, updateBeam, res
                 />
               </Row>
             )}
-            {!isHout && !isBeton && (
+            {/* Zeeg: ook voor hout (issue #252, EN 1995-1-1 7.2(2)). */}
+            {!isBeton && (
               <Row label={t("props.beam.preCamber")} info={t("cfg.preCamberHint")}>
                 <input
                   type="number" className="fem-prop-input" step="1"

@@ -159,6 +159,16 @@ log("\n[2] De bouwers geven het verloop door, of weigeren met reden");
   const h = bouw(model({ materiaal: "C24", profiel: "100x500", profielEind: "100x200", L: 3000, lasten: { 1: -4 } }), buildTimberCheckInputs);
   ok("hout: eindmaten gaan mee als b en h", h.inputs[0]?.width_end_mm === 100 && h.inputs[0]?.height_end_mm === 200,
     JSON.stringify([h.inputs[0]?.width_end_mm, h.inputs[0]?.height_end_mm]));
+  // Issue #253: zonder opgave geen `schuine_rand` (de kern neemt de
+  // ongunstigste rand), met opgave gaat hij mee — alleen bij een verloop.
+  ok("hout: zonder schuineRand geen `schuine_rand` in de invoer", !("schuine_rand" in (h.inputs[0] ?? {})));
+  const mr = model({ materiaal: "C24", profiel: "100x500", profielEind: "100x200", L: 3000, lasten: { 1: -4 } });
+  mr.beams[0].checkConfig = { schuineRand: "Boven" };
+  ok("hout: checkConfig.schuineRand gaat mee als `schuine_rand`", bouw(mr, buildTimberCheckInputs).inputs[0]?.schuine_rand === "Boven");
+  const mp = model({ materiaal: "C24", profiel: "100x500", L: 3000, lasten: { 1: -4 } });
+  mp.beams[0].checkConfig = { schuineRand: "Boven" };
+  ok("hout prismatisch: schuineRand doet niets, invoer zonder `schuine_rand`",
+    !("schuine_rand" in (bouw(mp, buildTimberCheckInputs).inputs[0] ?? {})));
 
   // Een eindprofiel van een andere soort komt in het model niet eens door de
   // solverpoort (`controleerDoorsneden` weigert het, en deel 1 toetst dat).
@@ -261,6 +271,23 @@ if (!existsSync(TOETSBRUG)) {
     ucVan(hout, "6.1.6_bending") / bijNul.toetsen.find((t) => t.id === "6.1.6_bending").uc, 25 / 24, 1e-5);
   ok("hout: k_h en klasse ontbreken bij hout (geen staalbegrip)", bijNul.klasse === null || bijNul.klasse === undefined);
 
+  // Issue #253 (controle 2026-10-26, deel 5b): C24 100 × 600 → 200, L = 4 m,
+  // q_d = 8 kN/m, k_mod = 0,6. Hand: σ = 8,00 N/mm² op x = 3000 (h = 300),
+  // f_m,d = 11,077, UC 6.1.6 = 0,722; tan α = 0,1, (6.39) k_m,α = 1/√2 →
+  // UC 6.4.2 = 1,0214 (voldoet niet); (6.40) k_m,α = 0,92481 → UC 0,7810.
+  const vijfB = (extra) => ({
+    beam_id: 1, width_mm: 100, height_mm: 600, height_end_mm: 200,
+    strength_class: "C24", service_class: "Sc1", load_duration: "Permanent",
+    length_m: 4.0, forces_envelope: punten(400, 4000, (u) => 8 * (4 * u) * (4 - 4 * u) / 2),
+    perform_ltb_check: false, ...extra,
+  });
+  const [n12, n12boven] = await kern("check_timber_beams", [vijfB({}), vijfB({ schuine_rand: "Boven" })]);
+  rel("#253: UC 6.1.6 = 8,00/11,077", ucVan(n12, "6.1.6_bending"), 0.72222, 1e-4);
+  rel("#253: UC 6.4.2 zonder opgave (6.39) = 1,0214", ucVan(n12, "6.4.2_tapered_edge"), 1.02138, 1e-4);
+  ok("#253: geen onterecht Ok — status NotOk, 6.4.2 maatgevend",
+    n12.status === "NotOk" && n12.governing_check_id === "6.4.2_tapered_edge", `${n12.status} ${n12.governing_check_id}`);
+  rel("#253: bovenrand schuin, druk (6.40): UC = 0,7810", ucVan(n12boven, "6.4.2_tapered_edge"), 0.78095, 1e-4);
+
   // Prismatisch blijft prismatisch, ook door de kern heen.
   const { height_end_mm: _weg, ...prismatisch } = HOUT_VERLOPEND;
   const prism = (await kern("check_timber_beams", [{ ...prismatisch, height_mm: 500 }]))[0];
@@ -342,11 +369,14 @@ if (!existsSync(MCP_SERVER)) {
       { id: 2, type: "lineLoad", caseId: 2, beamId: 1, q: -6 },
     ],
   };
-  const [hout, staal, femr] = await mcp([
+  const [hout, staal, femr, rand] = await mcp([
     { name: "check_timber_beams", arguments: { inputs: [HOUT_VERLOPEND] } },
     { name: "check_steel_beam", arguments: STAAL_VERLOPEND },
     { name: "check_fem_model", arguments: { model: femModel } },
+    { name: "check_timber_beams", arguments: { inputs: [{ ...HOUT_VERLOPEND, schuine_rand: "Onder" }] } },
   ]);
+  ok("MCP: `check_timber_beams` aanvaardt `schuine_rand` (strikt schema, issue #253)",
+    !rand?.error && !rand?.result?.isError, JSON.stringify(rand?.error ?? rand?.result?.content).slice(0, 200));
   const inhoud = (a) => a?.result?.structuredContent;
   ok("MCP: `check_timber_beams` aanvaardt `height_end_mm` (strikt schema)",
     !hout?.error && !hout?.result?.isError, JSON.stringify(hout?.error ?? hout?.result?.content).slice(0, 200));

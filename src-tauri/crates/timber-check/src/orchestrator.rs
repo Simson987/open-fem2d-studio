@@ -170,11 +170,24 @@ fn doorsnede_uit(input: &TimberBeamCheckInput) -> Result<(TimberSection, String)
     ))
 }
 
+/// De helling van een verlopende ligger voor §6.4.2, door `crate::verlopend`
+/// meegegeven aan de deelvraag van één rekenpunt (die zelf prismatisch is).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Afschuining {
+    /// |h_eind − h_begin| / L: de helling als één rand schuin loopt.
+    pub tan_alpha_enkel: f64,
+    pub rand: Option<nen_en_1995_1_1::afgeschuind::SchuineRand>,
+}
+
 /// Wat de toetsketen nodig heeft en NIET van de belastingduurklasse afhangt.
 struct Keten<'a> {
     input: &'a TimberBeamCheckInput,
     section: &'a TimberSection,
     mat: &'static StrengthClass,
+    afschuining: Option<Afschuining>,
+    /// Het belastinggeval van tabel 6.1, opgegeven of afgeleid (issue #220),
+    /// met de notitie over de afleiding.
+    kipgeval: (nen_en_1995_1_1::stability::LtbLoadCase, Option<String>),
 }
 
 /// De toetsen die van k_mod afhangen — doorsneden §6.1 en stabiliteit §6.3.2
@@ -260,6 +273,20 @@ fn toetsketen_punt(k: &Keten, punt: ForcePoint, duur: LoadDurationClass) -> Vec<
     checks.push(make_resistance(shear::check_shear(
         section, f_vd, k_cr, state,
     )));
+    // §6.4.2: buiging aan de schuine rand van een verlopende ligger (issue
+    // #253). Alleen in de deelvraag van een rekenpunt van een staaf waarvan
+    // de HOOGTE verloopt; een prismatische staaf houdt haar lijst.
+    if let Some(a) = k.afschuining {
+        let f_t90d = design_strength(mat.f_t90k, kmod, gamma, 1.0, ksys);
+        let f_c90d = design_strength(mat.f_c90k, kmod, gamma, 1.0, ksys);
+        checks.push(make_resistance(nen_en_1995_1_1::afgeschuind::check_tapered_edge(
+            section,
+            nen_en_1995_1_1::afgeschuind::Sterkten642 { f_md: f_myd, f_vd, f_t90d, f_c90d },
+            a.tan_alpha_enkel,
+            a.rand,
+            state,
+        )));
+    }
     // De nieuwe torsietoetsen verschijnen zodra de staaf in een van haar
     // combinaties torsie draagt. De 2D-referenties (T = 0) houden hun lijst.
     if input
@@ -361,14 +388,14 @@ fn toetsketen_punt(k: &Keten, punt: ForcePoint, duur: LoadDurationClass) -> Vec<
             (
                 effective_length_mm(
                     segment_mm,
-                    input.ltb_load_case,
+                    k.kipgeval.0,
                     input.ltb_load_position,
                     section.h_mm,
                 ),
                 l_ef_toelichting(
                     segment_mm,
                     segment_herkomst,
-                    input.ltb_load_case,
+                    k.kipgeval.0,
                     input.ltb_load_position,
                     section.h_mm,
                 ),
@@ -394,6 +421,11 @@ fn toetsketen_punt(k: &Keten, punt: ForcePoint, duur: LoadDurationClass) -> Vec<
         // welke L_cr,z hij bepaald is — en die kan op de staaflengte zijn
         // teruggevallen.
         kip.notes.push(l_ef_notitie);
+        if input.ltb_effective_length_override_m <= 0.0 {
+            if let Some(n) = &k.kipgeval.1 {
+                kip.notes.push(n.clone());
+            }
+        }
         kip.notes.push(format!(
             "k_c,z in de drukterm van (6.35) is bepaald met {kniklengte_z_samenvatting} — dezelfde \
              kniklengte als in de kolomtoets van art. 6.3.2, waar haar afleiding staat."
@@ -520,6 +552,15 @@ fn toets_per_klasse(k: &Keten, groepen: &[Groep]) -> PerKlasse {
 }
 
 pub fn check_timber_beam(input: TimberBeamCheckInput) -> TimberBeamCheckResult {
+    check_timber_beam_intern(input, None)
+}
+
+/// [`check_timber_beam`] met, voor een rekenpunt van een verlopende staaf, de
+/// helling voor §6.4.2 (zie `crate::verlopend`).
+pub(crate) fn check_timber_beam_intern(
+    input: TimberBeamCheckInput,
+    afschuining: Option<Afschuining>,
+) -> TimberBeamCheckResult {
     // -2. DE DOORBUIGINGSNOEMERS. Een opgegeven noemer van 0 of kleiner gaf
     //     tot september 2026 een oneindige grens, UC 0 en status Ok. Het is
     //     een invoerfout (beide velden hebben een NB-standaardwaarde voor als
@@ -534,7 +575,10 @@ pub fn check_timber_beam(input: TimberBeamCheckInput) -> TimberBeamCheckResult {
     )
     .and_then(|_| {
         nen_en_1995_1_1::deflection::keur_langeduurzakking(input.deflection_quasi_perm_fin_mm)
-    }) {
+    })
+    .and_then(|_| nen_en_1995_1_1::deflection::keur_w_add(input.deflection_add_mm))
+    .and_then(|_| nen_en_1995_1_1::deflection::keur_zeeg(input.pre_camber_mm))
+    {
         return TimberBeamCheckResult {
             beam_id: input.beam_id,
             section_name: format!("{} x {}", input.width_mm, input.height_mm),
@@ -636,6 +680,8 @@ pub fn check_timber_beam(input: TimberBeamCheckInput) -> TimberBeamCheckResult {
         input: &input,
         section: &section,
         mat,
+        afschuining,
+        kipgeval: crate::kipgeval::kipgeval(&input),
     };
     let (mut checks, k_mod_per_load_duration, governing_combination_id, load_duration) =
         match belastingduur::groepeer(
@@ -666,11 +712,15 @@ pub fn check_timber_beam(input: TimberBeamCheckInput) -> TimberBeamCheckResult {
     // Met een aangeleverde w_qp,fin volgens 2.2.3(4) (delen met verschillend
     // kruipgedrag), anders de vereenvoudiging van 2.2.3(5) — bit-identiek aan
     // de rekengang van vóór dat veld.
-    let (mut fin, mut add) = deflection::check_deflection_pair_met_langeduur(
+    // Met w₃ per BGT-combinatie (`deflection_add_mm`, issues #200/#210) is
+    // w_add = w₂ + w₃; zonder dat veld bit-identiek aan de rekengang van daarvoor.
+    let (mut fin, mut add) = deflection::check_deflection_pair_volledig(
         input.deflection_inst_mm,
         input.deflection_quasi_perm_mm,
         input.deflection_quasi_perm_fin_mm,
         input.deflection_permanent_mm,
+        input.deflection_add_mm,
+        input.pre_camber_mm.unwrap_or(0.0),
         kdef,
         input.length_m * 1e3,
         input.deflection_limit_fin,

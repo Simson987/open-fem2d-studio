@@ -153,7 +153,8 @@ fn weglaten_rekent_met_de_nb_waarden() {
     for (checks, soort) in [(&r.checks, "hout"), (&c.checks, "CLT")] {
         for (id, grens) in [
             ("deflection_w_fin", 20.0),
-            ("deflection_w_add", 5000.0 / 333.0),
+            // Issue #236: NB-grens 3/1000·L = 15,000 mm (was 5000/333 = 15,015).
+            ("deflection_w_add", 3.0 * 5000.0 / 1000.0),
         ] {
             let t = checks
                 .iter()

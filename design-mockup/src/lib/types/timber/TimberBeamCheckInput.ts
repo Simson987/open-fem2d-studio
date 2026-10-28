@@ -7,6 +7,7 @@ import type { LoadDurationClass } from "./LoadDurationClass";
 import type { LtbLoadCase } from "./LtbLoadCase";
 import type { LtbLoadPosition } from "./LtbLoadPosition";
 import type { NationaleBijlage } from "../norm/NationaleBijlage";
+import type { SchuineRand } from "./SchuineRand";
 import type { ServiceClass } from "./ServiceClass";
 import type { ZijdelingseKnikInAnalyse } from "../steel/ZijdelingseKnikInAnalyse";
 
@@ -153,8 +154,16 @@ lateral_bracing?: LateralBracing,
 ltb_segment_length_m: number,
 /**
  * Belastinggeval voor l_ef (tabel 6.1).
+ *
+ * `None` of weglaten = AFLEIDEN uit het momentverloop in
+ * `forces_envelope` en [`Self::is_cantilever`] (issue #220): constant
+ * moment 1,0·ℓ, parabool 0,9·ℓ, driehoek 0,8·ℓ, uitkraging 0,5·ℓ of
+ * 0,8·ℓ, en de bovengrens 1,0·ℓ voor een verloop dat bij geen rij past.
+ * De afleiding staat met reden in de kiptoets. Tot oktober 2026 was
+ * weglaten stil "gelijkmatig verdeeld" (0,9·ℓ), ook bij een constant
+ * moment — 10 % te gunstig.
  */
-ltb_load_case: LtbLoadCase,
+ltb_load_case?: LtbLoadCase,
 /**
  * Aangrijpingspunt van de belasting (tabel 6.1, voetnoot).
  */
@@ -201,7 +210,7 @@ deflection_permanent_mm: number,
  */
 deflection_limit_fin: number,
 /**
- * Noemer voor w_add (L/n), NB-standaard 333.
+ * Noemer voor w_add (L/n), NB-standaard 1000/3: w_add ≤ 3/1000·L (NEN-EN 1990:2002/NB:2019 A1.4.3(3), issue #236).
  */
 deflection_limit_add: number,
 /**
@@ -233,6 +242,27 @@ deflection_notes: Array<string>,
  * vóór dit veld. Een niet-eindig getal wordt geweigerd met reden.
  */
 deflection_quasi_perm_fin_mm?: number,
+/**
+ * De ogenblikkelijke bijkomende zakking w₃ = w_c − w₁ (mm, met teken,
+ * negatief = omlaag), door de invoerbouwer PER BGT-COMBINATIE bepaald: de
+ * combinatie c met de grootste |w₂ + w_c − w₁|. De kern rekent dan
+ * w_add = w₂ + w₃, met w₂ = w_fin − w_inst het kruipdeel van de
+ * quasi-blijvende combinatie (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur
+ * NB.1). Dezelfde tekenconventie als `deflection_add_mm` van de staalkern.
+ *
+ * `None` of weglaten = w₃ = w_inst − w₁, tot op het laatste bit het gedrag
+ * van vóór dit veld. Een niet-eindige waarde wordt geweigerd met reden.
+ */
+deflection_add_mm?: number,
+/**
+ * Zeeg w_c in mm, POSITIEF = OMHOOG (issue #252): de eindzakking wordt de
+ * NETTO eindzakking w_net,fin = w_fin − w_c (EN 1995-1-1 7.2(2), (7.2) en
+ * figuur 7.1), hier met zakking negatief omlaag geschreven als
+ * w_fin + w_zeeg. Telt NIET in w_add (A1.4.3(3)). Dezelfde
+ * tekenconventie als `pre_camber_mm` van de staalkern. `None` of 0 = geen
+ * zeeg, tot op het laatste bit het gedrag van vóór dit veld.
+ */
+pre_camber_mm?: number,
 /**
  * Reden waarom de BGT-zakking niet betrouwbaar kan worden bepaald.
  * De sterkte- en stabiliteitstoetsen blijven beschikbaar; w_fin en w_add
@@ -274,6 +304,18 @@ width_end_mm?: number,
  * rekenhoogte verloopt over de overspanning, en k_h verloopt mee.
  */
 height_end_mm?: number,
+/**
+ * Welke rand van een VERLOPENDE ligger (hoogte verloopt) schuin loopt,
+ * voor de toets van EN 1995-1-1 6.4.2 aan die rand (issue #253).
+ *
+ * `None` of weglaten = niet bekend (een 2D-model legt het niet vast): de
+ * kern toetst dan de ONGUNSTIGSTE aanname, één schuine rand op trek
+ * (6.39), en zegt dat in de toets. `Boven`/`Onder`: het momentteken per
+ * doorsnede kiest (6.39) of (6.40). `Beide`: symmetrisch verloop, elke
+ * rand met tan α = Δh/(2L). Zonder verloop in de hoogte doet het veld
+ * niets.
+ */
+schuine_rand?: SchuineRand,
 /**
  * Om welke assen de globale berekening tweede orde (P-Δ) MET scheefstand
  * is en de staaf kan laten uitbuigen. Alleen van belang bij een vrij

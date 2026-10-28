@@ -200,7 +200,8 @@ log("\n[3] Hout ZONDER checkConfig → gedocumenteerde defaults");
   check("zonder loadCases: load_duration MediumTerm (terugval)", i.load_duration, "MediumTerm");
   check("zonder loadCases: geen belastingduur per combinatie", JSON.stringify(i.load_duration_per_combination), "[]");
   check("deflection_limit_fin 250", i.deflection_limit_fin, 250);
-  check("deflection_limit_add 333", i.deflection_limit_add, 333);
+  // Issue #236: 3/1000·L exact (NB A1.4.3(3)), niet L/333.
+  check("deflection_limit_add 1000/3", i.deflection_limit_add, 1000 / 3);
   check("buckling_length_y_m = 0 (kern kiest)", i.buckling_length_y_m, 0);
 }
 
@@ -268,7 +269,7 @@ log("\n[4] Hout MET checkConfig → klimaatklasse/duurklasse/doorbuiging 1-op-1"
 
   const cant = run({ deflectionClass: "cantilever" });
   check("cantilever → fin 125", cant.deflection_limit_fin, 125);
-  check("cantilever → add 167", cant.deflection_limit_add, 167);
+  check("cantilever → add 500/3 (3/1000·2L, issue #236)", cant.deflection_limit_add, 500 / 3);
 
   const cust = run({ deflectionClass: "custom", deflectionLimitNumerator: 400 });
   check("custom 400 → fin 400", cust.deflection_limit_fin, 400);

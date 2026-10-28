@@ -212,6 +212,8 @@ fn schema_houten_staaf() -> Value {
                 "description": "Kniklengte om de sterke y-as in m (§6.3.2): knik IN het vlak van het model. 0 (of weglaten) = niet opgegeven; de kern houdt dan de staaflengte aan en zet in de kolomtoets dat die lengte een terugval is." },
             "buckling_length_z_m": { "type": "number", "default": 0,
                 "description": "Kniklengte om de zwakke z-as in m (§6.3.2): knik UIT het vlak van het model, een richting die de raamwerkberekening nooit ziet. 0 (of weglaten) = niet opgegeven; de kern leidt L_cr,z dan af uit 'lateral_bracing', maar ALLEEN op plaatsen waar een steun aan de boven- EN aan de onderrand zit (binnen 1 mm). Anders de staaflengte. De gebruikte waarde en haar herkomst staan in de kolomtoets en in de drukterm van de kiptoets." },
+            "ruimtelijk": { "type": "boolean", "default": false,
+                "description": "Ruimtelijk raamwerk (3D-berekening): de berekening ziet knik om BEIDE doorsnedeassen, dus knik om z is uitbuigen in het rekenvlak en de kolomtoets meldt dat niet als 'uit het vlak van het model'. Default false (2D)." },
             "is_cantilever": { "type": "boolean", "default": false,
                 "description": "Vrij staafeind (uitkraging, vrijstaande kolom): geen oplegging en geen aansluitende staaf aan één eind. Zonder opgegeven kniklengte geldt dan L_cr = 2*L, de ingeklemd-vrije staaf, behalve om een as uit 'zijdelingse_knik_in_analyse' (dan L). Weglaten = false: de terugval op de staaflengte, die beide einden als zijdelings gesteund aanneemt. `check_fem_model` en de app vullen dit uit het model." },
             "zijdelingse_knik_in_analyse": {
@@ -240,8 +242,7 @@ fn schema_houten_staaf() -> Value {
                 "type": "string",
                 "enum": ["ConstantMoment", "UniformLoad", "ConcentratedMidspan",
                          "CantileverUniform", "CantileverConcentratedEnd"],
-                "default": "UniformLoad",
-                "description": "Belastinggeval voor l_ef volgens tabel 6.1: l_ef/l = 1,0 bij \"ConstantMoment\", 0,9 bij \"UniformLoad\" (default), 0,8 bij \"ConcentratedMidspan\", 0,5 bij \"CantileverUniform\" en 0,8 bij \"CantileverConcentratedEnd\"."
+                "description": "Belastinggeval voor l_ef volgens tabel 6.1: l_ef/l = 1,0 bij \"ConstantMoment\", 0,9 bij \"UniformLoad\", 0,8 bij \"ConcentratedMidspan\", 0,5 bij \"CantileverUniform\" en 0,8 bij \"CantileverConcentratedEnd\". Weglaten = de kern LEIDT HET AF uit het momentverloop in 'forces_envelope' en 'is_cantilever': per UGT-combinatie constant, parabool (gelijkmatig), driehoek (puntlast midden) of bij een uitkraging d^2/d; een combinatie van twee lastvormen krijgt de grootste l_ef van die twee, een verloop dat bij geen rij past (eindmomenten, doorgaande ligger, minder dan 5 stations) de bovengrens 1,0. Over de combinaties telt de grootste l_ef; een kipsteunafstand korter dan de staaf geeft 1,0. De afleiding staat in de notities van de kiptoets. `check_fem_model` laat dit veld weg."
             },
             "ltb_load_position": {
                 "type": "string",
@@ -265,10 +266,16 @@ fn schema_houten_staaf() -> Value {
                 "description": "w1: zakking onder de BGT-combinatie met ALLEEN de blijvende belasting in mm (factor 1,0 op elk blijvend geval, geen veranderlijke), voor w_add = w_fin - w_perm = w2 + w3 (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur NB.1). 0 betekent w_add = w_fin: veilig-zijdig maar STRENGER dan de norm vraagt. `check_fem_model` vult dit uit de standaardcombinatie 'BGT quasi-blijvend 6.16b' zonder veranderlijke gevallen." },
             "deflection_limit_fin": { "type": "number", "exclusiveMinimum": 0, "default": 250,
                 "description": "Noemer n in de eis L/n voor de eindzakking w_fin. Default 250, de NB-waarde (geldt als het veld wegblijft). Een opgegeven 0, negatieve of niet-eindige waarde is een invoerfout: de staaf wordt dan niet getoetst en krijgt status NotApplicable met de reden in governing_check_id." },
-            "deflection_limit_add": { "type": "number", "exclusiveMinimum": 0, "default": 333,
-                "description": "Noemer n in de eis L/n voor de bijkomende zakking w_add. Default 333, de NB-waarde (geldt als het veld wegblijft). Een opgegeven 0, negatieve of niet-eindige waarde is een invoerfout: de staaf wordt dan niet getoetst en krijgt status NotApplicable met de reden in governing_check_id." },
+            "deflection_limit_add": { "type": "number", "exclusiveMinimum": 0, "default": nen_en_1995_1_1::deflection::NOEMER_W_ADD,
+                "description": "Noemer n in de eis L/n voor de bijkomende zakking w_add. Default 1000/3 = 333,333..., de NB-waarde 3/1000·L van NEN-EN 1990:2002/NB:2019 A1.4.3(3) (geldt als het veld wegblijft). Een opgegeven 0, negatieve of niet-eindige waarde is een invoerfout: de staaf wordt dan niet getoetst en krijgt status NotApplicable met de reden in governing_check_id." },
             "deflection_quasi_perm_fin_mm": { "type": "number",
                 "description": "Langeduurzakking w_qp,fin in mm, met teken: de zakking onder de quasi-blijvende BGT-combinatie, berekend met E_mean,fin = E_mean/(1 + k_def) voor het hout (EN 1995-1-1 2.3.2.2(1), uitdrukking 2.7) en de langeduurstijfheid van de andere delen. Alleen nodig in een statisch onbepaalde constructie met delen van VERSCHILLEND kruipgedrag (hout naast staal, beton of hout met een andere k_def): dan geldt de vereenvoudiging w_fin = w_inst + k_def * w_qp van 2.2.3(5) niet en rekent de kern volgens 2.2.3(4) w_fin = w_inst + (w_qp,fin - w_qp); w_add blijft w_fin - w_perm = w2 + w3, met w2 = w_qp,fin - w_qp. Weglaten = de vereenvoudiging. `check_fem_model` vult dit veld zelf in zo'n constructie, uit de eindtoestandvariant van de quasi-blijvende combinatie." },
+            "deflection_not_applicable_reason": { "type": "string",
+                "description": "Reden waarom de BGT-zakking van deze staaf niet betrouwbaar te bepalen is (bijvoorbeeld een ontbrekende BGT-combinatie, of verbonden delen met verschillend kruipgedrag zonder eindstijfheidsberekening, EN 1995-1-1 2.2.3(4)). Opgegeven = w_fin en w_add krijgen status NotApplicable zonder UC, met 'BGT niet getoetst: <reden>' in hun notities; de sterkte- en stabiliteitstoetsen lopen door. Weglaten = de doorbuiging wordt getoetst." },
+            "deflection_add_mm": { "type": "number",
+                "description": "w3 = w_c - w1 in mm, met teken (negatief = omlaag): de ogenblikkelijke zakking bovenop de blijvende, PER BGT-combinatie c bepaald, voor de combinatie met de grootste |w2 + w_c - w1|. De kern rekent dan w_add = w2 + w3, met w2 = w_fin - w_inst het kruipdeel van de quasi-blijvende combinatie (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur NB.1); dezelfde tekenconventie als 'deflection_add_mm' van de staaltoets. Nodig als de combinatie met de grootste |w| niet het grootste verschil met w1 geeft (bijvoorbeeld opwaartse wind tegenover vloerbelasting, of een uitkraging). Weglaten = w3 = deflection_inst_mm - deflection_permanent_mm. Een niet-eindig getal wordt geweigerd. `check_fem_model` vult dit veld zelf als het verschilt." },
+            "pre_camber_mm": { "type": "number",
+                "description": "Zeeg w_c in mm, POSITIEF = OMHOOG (tegen de doorbuiging in). De eindzakking wordt dan de NETTO eindzakking w_net,fin = w_fin - w_c (EN 1995-1-1 7.2(2), uitdrukking (7.2), figuur 7.1; NEN-EN 1990 A1.4.3: w_max = w_tot - w_c), met zakking negatief omlaag geschreven als w_fin + pre_camber_mm. Telt NIET mee in w_add (A1.4.3(3) begrenst w2 + w3). Dezelfde tekenconventie als 'pre_camber_mm' van de staaltoets. Weglaten of 0 = geen zeeg. `check_fem_model` vult dit uit checkConfig.preCamber_mm van een liggende staaf." },
             "deflection_notes": { "type": "array", "items": { "type": "string" }, "default": [],
                 "description": "Vrije toelichtingen bij de doorbuigingstoets; ze komen letterlijk in de 'notes' van de w_fin-regel van het resultaat. Bedoeld om zichtbaar te maken uit welke combinatie 'deflection_quasi_perm_mm' komt — of dat die combinatie niet gevonden is en er op de volle last is teruggevallen." },
             "staaf_notities": { "type": "array", "items": { "type": "string" }, "default": [],
@@ -276,7 +283,12 @@ fn schema_houten_staaf() -> Value {
             "width_end_mm": { "type": "number", "exclusiveMinimum": 0,
                 "description": "Breedte b aan het EIND van de staaf (x = L) van een VERLOPENDE staaf; 'width_mm' is dan de breedte aan het begin (x = 0). Weglaten = b verloopt niet." },
             "height_end_mm": { "type": "number", "exclusiveMinimum": 0,
-                "description": "Hoogte h aan het EIND van de staaf (x = L) van een VERLOPENDE staaf; 'height_mm' is dan de hoogte aan het begin (x = 0). Dit is de maat van een voor afschot schuin afgezaagde balk. De kern toetst elke doorsnedetoets (6.1.x) op elk rekenpunt met de plaatselijke rechthoek b(x) x h(x), met k_h van art. 3.2(3)/3.3(3) uit de hoogte ter plaatse, en rekent de stabiliteitstoetsen (6.3.2, 6.3.3) met de kleinste doorsnede in het veld; het resultaat krijgt dan een veld 'verloop' met de zes toetsdoorsneden en het maatgevende punt. Niet te combineren met 'custom_section'. Weglaten = h verloopt niet; zijn beide eindmaten weg of gelijk aan het begin, dan is de staaf prismatisch." }
+                "description": "Hoogte h aan het EIND van de staaf (x = L) van een VERLOPENDE staaf; 'height_mm' is dan de hoogte aan het begin (x = 0). Dit is de maat van een voor afschot schuin afgezaagde balk. De kern toetst elke doorsnedetoets (6.1.x) op elk rekenpunt met de plaatselijke rechthoek b(x) x h(x), met k_h van art. 3.2(3)/3.3(3) uit de hoogte ter plaatse, en rekent de stabiliteitstoetsen (6.3.2, 6.3.3) met de kleinste doorsnede in het veld; het resultaat krijgt dan een veld 'verloop' met de zes toetsdoorsneden en het maatgevende punt. Niet te combineren met 'custom_section'. Weglaten = h verloopt niet; zijn beide eindmaten weg of gelijk aan het begin, dan is de staaf prismatisch. Verloopt h, dan toetst elk rekenpunt ook art. 6.4.2 aan de schuine rand (toets '6.4.2_tapered_edge', k_m,α uit (6.39)/(6.40)); zie 'schuine_rand'." },
+            "schuine_rand": {
+                "type": "string",
+                "enum": ["Boven", "Onder", "Beide"],
+                "description": "Welke rand van een verlopende ligger (hoogte verloopt) schuin loopt, voor de toets van EN 1995-1-1 6.4.2: \"Boven\" of \"Onder\" (het momentteken per doorsnede kiest dan (6.39) schuine rand op trek of (6.40) schuine rand op druk; positief M_y = trek onder) of \"Beide\" (symmetrisch, per rand tan α = Δh/(2L), (6.39)). Weglaten = niet bekend: de kern toetst de ONGUNSTIGSTE aanname, één schuine rand op trek (6.39), en meldt dat in de toets. Zonder verloop in de hoogte doet dit veld niets."
+            }
         },
         "required": [
             "beam_id", "width_mm", "height_mm", "strength_class",
@@ -350,6 +362,10 @@ fn schema_clt_staaf() -> Value {
                 "description": "Vervormingsfactor k_def voor de kruip van §7.2 (w_fin = w_inst + k_def * w_qp). GEEN default, met opzet: tabel 3.2 kent rijen voor gezaagd hout, gelijmd gelamineerd hout, LVL, multiplex, OSB, spaanplaat, vezelplaat en MDF, maar geen rij voor kruislaaghout, en de nationale bijlage voegt er geen toe. Weglaten = w_fin en w_add komen als NotApplicable met die reden in het resultaat. Neem de waarde uit de productverklaring of de ETA van de plaat, per klimaatklasse." },
             "k_def_bron": { "type": "string",
                 "description": "Herkomst van 'k_def', bijvoorbeeld \"ETA-00/0000, tabel 8, klimaatklasse 1\"; komt letterlijk in de notitie bij w_fin. VERPLICHT zodra 'k_def' is opgegeven — zonder bron weigert de kern de doorbuigingstoets met reden." },
+            "f_v_rol_k": { "type": "number", "exclusiveMinimum": 0,
+                "description": "Karakteristieke rolschuifsterkte f_v,rol,k (= f_r,k) van de dwarslagen in N/mm², uit de ETA of productverklaring van de plaat. GEEN default: NEN-EN 1995-1-1 kent geen CLT-regels en EN 338 geen f_v,rol. Opgegeven (met 'f_v_rol_k_bron') = elke dwarslaag wordt getoetst, tau_r,d <= f_v,rol,d = k_mod * k_sys * f_v,rol,k / gamma_M met k_mod en gamma_M van de sterkteklasse van die laag. Weglaten = rolschuif NIET getoetst (alleen de spanning, met die melding)." },
+            "f_v_rol_k_bron": { "type": "string",
+                "description": "Herkomst van 'f_v_rol_k', bijvoorbeeld \"ETA-00/0000, tabel 5\"; komt letterlijk in de rolschuiftoets. VERPLICHT zodra 'f_v_rol_k' is opgegeven — zonder bron wordt de rolschuif niet getoetst, met reden." },
             "deflection_inst_mm": { "type": "number", "default": 0,
                 "description": "Zakking onder de karakteristieke BGT-combinatie in mm, met teken (negatief = omlaag)." },
             "deflection_quasi_perm_mm": { "type": "number", "default": 0,
@@ -358,10 +374,14 @@ fn schema_clt_staaf() -> Value {
                 "description": "w1: zakking onder de BGT-combinatie met ALLEEN de blijvende belasting in mm, voor w_add = w_fin - w_perm = w2 + w3 (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur NB.1). 0 betekent w_add = w_fin: veilig-zijdig maar strenger dan de norm vraagt." },
             "deflection_limit_fin": { "type": "number", "exclusiveMinimum": 0, "default": 250,
                 "description": "Noemer n in de eis L/n voor de eindzakking w_fin. Default 250, de NB-waarde (geldt als het veld wegblijft). Een opgegeven 0, negatieve of niet-eindige waarde is een invoerfout: de staaf wordt dan niet getoetst en krijgt status NotApplicable met de reden in governing_check_id." },
-            "deflection_limit_add": { "type": "number", "exclusiveMinimum": 0, "default": 333,
-                "description": "Noemer n in de eis L/n voor de bijkomende zakking w_add. Default 333, de NB-waarde (geldt als het veld wegblijft). Een opgegeven 0, negatieve of niet-eindige waarde is een invoerfout: de staaf wordt dan niet getoetst en krijgt status NotApplicable met de reden in governing_check_id." },
+            "deflection_limit_add": { "type": "number", "exclusiveMinimum": 0, "default": nen_en_1995_1_1::deflection::NOEMER_W_ADD,
+                "description": "Noemer n in de eis L/n voor de bijkomende zakking w_add. Default 1000/3 = 333,333..., de NB-waarde 3/1000·L van NEN-EN 1990:2002/NB:2019 A1.4.3(3) (geldt als het veld wegblijft). Een opgegeven 0, negatieve of niet-eindige waarde is een invoerfout: de staaf wordt dan niet getoetst en krijgt status NotApplicable met de reden in governing_check_id." },
             "deflection_quasi_perm_fin_mm": { "type": "number",
                 "description": "Langeduurzakking w_qp,fin in mm, met teken: de zakking onder de quasi-blijvende BGT-combinatie, berekend met E_mean,fin = E_mean/(1 + k_def) voor het hout (EN 1995-1-1 2.3.2.2(1), uitdrukking 2.7) en de langeduurstijfheid van de andere delen. Alleen nodig in een statisch onbepaalde constructie met delen van VERSCHILLEND kruipgedrag (hout naast staal, beton of hout met een andere k_def): dan geldt de vereenvoudiging w_fin = w_inst + k_def * w_qp van 2.2.3(5) niet en rekent de kern volgens 2.2.3(4) w_fin = w_inst + (w_qp,fin - w_qp); w_add blijft w_fin - w_perm = w2 + w3, met w2 = w_qp,fin - w_qp. Weglaten = de vereenvoudiging. `check_fem_model` vult dit veld zelf in zo'n constructie, uit de eindtoestandvariant van de quasi-blijvende combinatie." },
+            "deflection_add_mm": { "type": "number",
+                "description": "w3 = w_c - w1 in mm, met teken (negatief = omlaag): de ogenblikkelijke zakking bovenop de blijvende, PER BGT-combinatie c bepaald, voor de combinatie met de grootste |w2 + w_c - w1|. De kern rekent dan w_add = w2 + w3, met w2 = w_fin - w_inst het kruipdeel van de quasi-blijvende combinatie (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur NB.1); dezelfde tekenconventie als 'deflection_add_mm' van de staaltoets. Nodig als de combinatie met de grootste |w| niet het grootste verschil met w1 geeft (bijvoorbeeld opwaartse wind tegenover vloerbelasting, of een uitkraging). Weglaten = w3 = deflection_inst_mm - deflection_permanent_mm. Een niet-eindig getal wordt geweigerd. `check_fem_model` vult dit veld zelf als het verschilt." },
+            "pre_camber_mm": { "type": "number",
+                "description": "Zeeg w_c in mm, POSITIEF = OMHOOG (tegen de doorbuiging in). De eindzakking wordt dan de NETTO eindzakking w_net,fin = w_fin - w_c (EN 1995-1-1 7.2(2), uitdrukking (7.2), figuur 7.1; NEN-EN 1990 A1.4.3: w_max = w_tot - w_c), met zakking negatief omlaag geschreven als w_fin + pre_camber_mm. Telt NIET mee in w_add (A1.4.3(3) begrenst w2 + w3). Dezelfde tekenconventie als 'pre_camber_mm' van de staaltoets. Weglaten of 0 = geen zeeg. `check_fem_model` vult dit uit checkConfig.preCamber_mm van een liggende staaf." },
             "deflection_notes": { "type": "array", "items": { "type": "string" }, "default": [],
                 "description": "Vrije toelichtingen bij de doorbuigingstoets; ze komen letterlijk in de 'notes' van de w_fin-regel. Bedoeld om zichtbaar te maken uit welke combinatie elke zakking komt, en welke terugval er eventueel is toegepast." }
         },
@@ -400,7 +420,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "check_timber_beams",
-            "description": "Run the EN 1995-1-1 (+C1+A1:2011/NB:2013) timber check on a list of rectangular b x h members: tension and compression parallel to the grain (§6.1; at a tension point the compression check is NotApplicable with sigma_c,0,d = 0, and column buckling has no unity check), bending with k_m (§6.1.6), combined bending and axial tension (§6.2.3, eq. 6.17/6.18) and combined bending and axial compression on cross-section level (§6.2.4, eq. 6.19/6.20), shear with k_cr (§6.1.7), column buckling (§6.3.2), lateral-torsional buckling (§6.3.3) and the deflection pair w_fin/w_add including creep k_def (§7.2). k_mod: `load_duration` applies to ALL combinations unless `load_duration_per_combination` gives the class per ULS combination (EN 1995-1-1 3.1.3(2), the shortest-duration load in a combination governs); without that list the permanent-only combination is NOT checked with k_mod 'Permanent'. `check_fem_model` builds the list from the load cases. Returns one TimberBeamCheckResult per member with the full derivation, in the order of the input list. Same input and output types as the Tauri command `check_timber_beams` and the toetsbrug opdracht of that name; all three run through `timber_check::check_all_timber_beams`. NOT included: compression perpendicular to the grain, notched members, connections, fire and vibration.",
+            "description": "Run the EN 1995-1-1 (+C1+A1:2011/NB:2013) timber check on a list of rectangular b x h members: tension and compression parallel to the grain (§6.1; at a tension point the compression check is NotApplicable with sigma_c,0,d = 0, and column buckling has no unity check), bending with k_m (§6.1.6), combined bending and axial tension (§6.2.3, eq. 6.17/6.18) and combined bending and axial compression on cross-section level (§6.2.4, eq. 6.19/6.20), bending at the tapered edge of a member whose height varies (§6.4.2, eq. 6.38-6.40, see `schuine_rand`), shear with k_cr (§6.1.7), column buckling (§6.3.2), lateral-torsional buckling (§6.3.3) and the deflection pair w_fin/w_add including creep k_def (§7.2). k_mod: `load_duration` applies to ALL combinations unless `load_duration_per_combination` gives the class per ULS combination (EN 1995-1-1 3.1.3(2), the shortest-duration load in a combination governs); without that list the permanent-only combination is NOT checked with k_mod 'Permanent'. `check_fem_model` builds the list from the load cases. Returns one TimberBeamCheckResult per member with the full derivation, in the order of the input list. Same input and output types as the Tauri command `check_timber_beams` and the toetsbrug opdracht of that name; all three run through `timber_check::check_all_timber_beams`. NOT included: compression perpendicular to the grain, notched members, connections, fire and vibration.",
             "inputSchema": schema_invoerlijst(
                 schema_houten_staaf(),
                 "De houten staven die getoetst moeten worden.",
@@ -413,7 +433,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "check_clt_beams",
-            "description": "Check a list of cross-laminated-timber plate strips per lamella. EN 1995-1-1 has no CLT product, so the model is annex B with gamma_i = 1 (composite section, rigid bond): only the longitudinal layers carry in the span direction (E = E_0,mean), the transverse layers act as the shear connection (E = 0). Per layer it returns the edge stresses, the maximum shear stress, the design strengths and the unity checks for bending (§6.1.6) and shear (§6.1.7); transverse layers get their rolling-shear stress for information only, because f_v,rol is in neither the National Annex nor EN 338. The response also carries (EI)_ef, (EA)_ef, the neutral axis, the slenderness L/h and the assumptions as notes. Same input and output types as the Tauri command `check_clt_beams` and the toetsbrug opdracht of that name; all three run through `timber_check::clt::check_all_clt_beams`. The deflection pair w_fin/w_add (§7.2) is checked ONLY when `k_def` and `k_def_bron` are given: table 3.2 has no k_def row for cross-laminated timber and none is assumed, so without them both deflection rows come back as NotApplicable with that reason. NOT included: axial force, bending about the weak axis, buckling and lateral-torsional buckling.",
+            "description": "Check a list of cross-laminated-timber plate strips per lamella. EN 1995-1-1 has no CLT product, so the model is annex B with gamma_i = 1 (composite section, rigid bond): only the longitudinal layers carry in the span direction (E = E_0,mean), the transverse layers act as the shear connection (E = 0). Per layer it returns the edge stresses, the maximum shear stress, the design strengths and the unity checks for bending (§6.1.6) and shear (§6.1.7); transverse layers get their rolling-shear stress, and a rolling-shear check (tau_r,d <= k_mod*k_sys*f_v,rol,k/gamma_M) ONLY when the declared `f_v_rol_k` with its source `f_v_rol_k_bron` is given (ETA / product declaration): f_v,rol is in neither the National Annex nor EN 338, and without it the row states that rolling shear was NOT checked. The response also carries (EI)_ef, (EA)_ef, the neutral axis, the slenderness L/h and the assumptions as notes. Same input and output types as the Tauri command `check_clt_beams` and the toetsbrug opdracht of that name; all three run through `timber_check::clt::check_all_clt_beams`. The deflection pair w_fin/w_add (§7.2) is checked ONLY when `k_def` and `k_def_bron` are given: table 3.2 has no k_def row for cross-laminated timber and none is assumed, so without them both deflection rows come back as NotApplicable with that reason. NOT included: axial force, bending about the weak axis, buckling and lateral-torsional buckling.",
             "inputSchema": schema_invoerlijst(
                 schema_clt_staaf(),
                 "De CLT-staven die getoetst moeten worden.",
@@ -500,6 +520,18 @@ mod tests {
             json!(false),
             "het houten staafschema moet onbekende velden weigeren, net als de kern"
         );
+        // Ook hier de velden uit het TYPE zelf (zie de CLT-spiegeltest, issue
+        // #210): zo vielen `ruimtelijk` en `deflection_not_applicable_reason`
+        // op, die de kern kende maar het schema niet.
+        let uit_type = velden_van_het_type::<timber_check::TimberBeamCheckInput>(json!({
+            "beam_id": 1, "width_mm": 100.0, "height_mm": 300.0, "strength_class": "C24",
+            "service_class": "Sc1", "load_duration": "MediumTerm",
+            "length_m": 4.0, "forces_envelope": []
+        }));
+        for v in &uit_type {
+            assert!(velden.contains_key(v), "het staafschema mist het veld `{v}` van TimberBeamCheckInput");
+        }
+        assert_eq!(velden.len(), uit_type.len(), "het staafschema kent een veld dat TimberBeamCheckInput niet heeft");
         let verwacht = [
             // De nationale bijlage waarmee getoetst wordt (normnaad, september
             // 2026): zij bepaalt gamma_M, k_cr en de doorbuigingsnoemers.
@@ -537,9 +569,17 @@ mod tests {
             // eind van de staaf.
             "width_end_mm",
             "height_end_mm",
+            // Issue #253: welke rand schuin loopt, voor 6.4.2.
+            "schuine_rand",
             // Het vrije eind en de 2e-orde-regel daarbij (L in plaats van 2·L).
             "is_cantilever",
             "zijdelingse_knik_in_analyse",
+            "ruimtelijk",
+            "deflection_not_applicable_reason",
+            // Issues #200/#210: w₃ = w_c − w₁ per BGT-combinatie.
+            "deflection_add_mm",
+            // Issue #252: de zeeg in de netto eindzakking.
+            "pre_camber_mm",
         ];
         for v in verwacht {
             assert!(velden.contains_key(v), "het staafschema mist `{v}`");
@@ -571,6 +611,40 @@ mod tests {
         );
     }
 
+    /// De veldnamen van een invoertype, gelezen uit het type zelf: een
+    /// minimale invoer door serde heen en terug. Alle invoertypen hier staan
+    /// zonder `skip_serializing`, dus elk veld komt als sleutel terug.
+    fn velden_van_het_type<T: serde::de::DeserializeOwned + serde::Serialize>(
+        minimaal: Value,
+    ) -> Vec<String> {
+        let t: T = serde_json::from_value(minimaal).expect("minimale invoer is geldig");
+        serde_json::to_value(&t)
+            .expect("serialiseert")
+            .as_object()
+            .expect("een object")
+            .keys()
+            .cloned()
+            .collect()
+    }
+
+    /// Het mechanisme van de spiegeltest vangt een ontbrekend veld: haal één
+    /// veld uit het CLT-schema en de vergelijking met het type valt om.
+    #[test]
+    fn de_spiegeltest_vangt_een_ontbrekend_veld() {
+        let schema = schema_clt_staaf();
+        let mut velden = schema["properties"].as_object().unwrap().clone();
+        velden.remove("k_def_bron");
+        let uit_type = velden_van_het_type::<timber_check::clt::CltBeamCheckInput>(json!({
+            "beam_id": 1,
+            "layup": { "width_mm": 1000.0, "layers": [
+                { "thickness_mm": 40.0, "orientation": "Longitudinal", "strength_class": "C24" }
+            ]},
+            "service_class": "Sc1", "load_duration": "MediumTerm",
+            "length_m": 4.0, "forces_envelope": []
+        }));
+        assert!(uit_type.iter().any(|v| !velden.contains_key(v)), "de ontbrekende `k_def_bron` moet opvallen");
+    }
+
     /// Het CLT-schema is de spiegel van `CltBeamCheckInput` en `CltLayup`.
     #[test]
     fn het_clt_schema_kent_alle_velden_van_het_invoertype() {
@@ -592,6 +666,25 @@ mod tests {
             "laag"
         );
         let velden = staaf["properties"].as_object().expect("properties");
+        // Issue #210: de velden komen uit het INVOERTYPE zelf, niet uit een
+        // overgetypte lijst. Een minimale invoer gaat door serde (de
+        // standaardwaarden vullen de rest) en weer terug naar JSON; zonder
+        // `skip_serializing` staan dan ALLE velden van `CltBeamCheckInput`
+        // als sleutel in het resultaat. Een nieuw veld in de kern dat het
+        // schema niet kent, valt zo hier om — met `additionalProperties:
+        // false` zou het anders langs MCP geweigerd worden.
+        let uit_type = velden_van_het_type::<timber_check::clt::CltBeamCheckInput>(json!({
+            "beam_id": 1,
+            "layup": { "width_mm": 1000.0, "layers": [
+                { "thickness_mm": 40.0, "orientation": "Longitudinal", "strength_class": "C24" }
+            ]},
+            "service_class": "Sc1", "load_duration": "MediumTerm",
+            "length_m": 4.0, "forces_envelope": []
+        }));
+        for v in &uit_type {
+            assert!(velden.contains_key(v), "het CLT-schema mist het veld `{v}` van CltBeamCheckInput");
+        }
+        assert_eq!(velden.len(), uit_type.len(), "het CLT-schema kent een veld dat CltBeamCheckInput niet heeft");
         let verwacht = [
             // Zie het staafschema hierboven: de bijlage reist mee.
             "bijlage",
@@ -616,6 +709,13 @@ mod tests {
             "deflection_limit_add",
             "deflection_notes",
             "deflection_quasi_perm_fin_mm",
+            // Issue #232: de gedeclareerde rolschuifsterkte met bron.
+            "f_v_rol_k",
+            "f_v_rol_k_bron",
+            // Issue #210: w₃ = w_c − w₁ per BGT-combinatie, zoals bij hout.
+            "deflection_add_mm",
+            // Issue #252: de zeeg in de netto eindzakking.
+            "pre_camber_mm",
         ];
         for v in verwacht {
             assert!(velden.contains_key(v), "het CLT-schema mist `{v}`");
@@ -686,7 +786,8 @@ mod tests {
         assert_eq!(p["k_cr"]["default"], json!(1));
         assert_eq!(p["perform_ltb_check"]["default"], json!(true));
         assert_eq!(p["load_sharing"]["default"], json!(false));
-        assert_eq!(p["ltb_load_case"]["default"], json!("UniformLoad"));
+        // Issue #220: geen standaard meer; weglaten = afleiden uit het momentverloop.
+        assert!(p["ltb_load_case"].get("default").is_none());
         assert_eq!(p["ltb_load_position"]["default"], json!("CentreOfGravity"));
         assert_eq!(
             p["deflection_limit_fin"]["default"].as_f64(),

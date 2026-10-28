@@ -92,6 +92,22 @@ k_def?: number,
  */
 k_def_bron?: string, 
 /**
+ * Karakteristieke ROLSCHUIFSTERKTE f_v,rol,k (N/mm²) van de dwarslagen,
+ * uit de ETA of productverklaring van de plaat (issue #232).
+ *
+ * NEN-EN 1995-1-1 kent geen CLT-regels en EN 338 geen f_v,rol, dus is er
+ * geen normwaarde om op terug te vallen. `None` = de rolschuifspanning
+ * wordt alleen berekend, de toets staat als "niet getoetst" met die reden.
+ * Opgegeven (samen met [`Self::f_v_rol_k_bron`]) = elke dwarslaag wordt
+ * getoetst: τ_r,d ≤ k_mod·k_sys·f_v,rol,k/γ_M.
+ */
+f_v_rol_k?: number, 
+/**
+ * Waar `f_v_rol_k` vandaan komt — verplicht zodra die is opgegeven, om
+ * dezelfde reden als [`Self::k_def_bron`].
+ */
+f_v_rol_k_bron?: string, 
+/**
  * Zakking onder de karakteristieke BGT-combinatie (mm, negatief = omlaag).
  */
 deflection_inst_mm: number, 
@@ -109,7 +125,7 @@ deflection_permanent_mm: number,
  */
 deflection_limit_fin: number, 
 /**
- * Noemer voor w_add (L/n), NB-standaard 333.
+ * Noemer voor w_add (L/n), NB-standaard 1000/3: w_add ≤ 3/1000·L (NEN-EN 1990:2002/NB:2019 A1.4.3(3), issue #236).
  */
 deflection_limit_add: number, 
 /**
@@ -134,4 +150,25 @@ deflection_notes: Array<string>,
  * `None` (weglaten) = de vereenvoudiging van 2.2.3(5), precies zoals
  * vóór dit veld. Een niet-eindig getal wordt geweigerd met reden.
  */
-deflection_quasi_perm_fin_mm?: number, };
+deflection_quasi_perm_fin_mm?: number, 
+/**
+ * De ogenblikkelijke bijkomende zakking w₃ = w_c − w₁ (mm, met teken,
+ * negatief = omlaag), door de invoerbouwer PER BGT-COMBINATIE bepaald: de
+ * combinatie c met de grootste |w₂ + w_c − w₁|. De kern rekent dan
+ * w_add = w₂ + w₃, met w₂ = w_fin − w_inst het kruipdeel van de
+ * quasi-blijvende combinatie (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur
+ * NB.1). Dezelfde tekenconventie als `deflection_add_mm` van de staalkern.
+ *
+ * `None` of weglaten = w₃ = w_inst − w₁, tot op het laatste bit het gedrag
+ * van vóór dit veld. Een niet-eindige waarde wordt geweigerd met reden.
+ */
+deflection_add_mm?: number, 
+/**
+ * Zeeg w_c in mm, POSITIEF = OMHOOG (issue #252): de eindzakking wordt de
+ * NETTO eindzakking w_net,fin = w_fin − w_c (EN 1995-1-1 7.2(2), (7.2) en
+ * figuur 7.1), hier met zakking negatief omlaag geschreven als
+ * w_fin + w_zeeg. Telt NIET in w_add (A1.4.3(3)). Dezelfde
+ * tekenconventie als `pre_camber_mm` van de staalkern. `None` of 0 = geen
+ * zeeg, tot op het laatste bit het gedrag van vóór dit veld.
+ */
+pre_camber_mm?: number, };

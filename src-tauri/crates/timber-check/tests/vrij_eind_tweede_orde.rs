@@ -68,7 +68,7 @@ fn kolom(is_cantilever: bool, zijdelings: Option<ZijdelingseKnikInAnalyse>) -> T
         buckling_length_z_m: 0.0,
         lateral_bracing: None,
         ltb_segment_length_m: 0.0,
-        ltb_load_case: LtbLoadCase::UniformLoad,
+        ltb_load_case: Some(LtbLoadCase::UniformLoad),
         ltb_load_position: LtbLoadPosition::CentreOfGravity,
         ltb_effective_length_override_m: 0.0,
         perform_ltb_check: false,
@@ -81,9 +81,12 @@ fn kolom(is_cantilever: bool, zijdelings: Option<ZijdelingseKnikInAnalyse>) -> T
         deflection_limit_add: 333.0,
         deflection_notes: vec![],
         deflection_quasi_perm_fin_mm: None,
+        deflection_add_mm: None,
+        pre_camber_mm: None,
         staaf_notities: None,
         width_end_mm: None,
         height_end_mm: None,
+        schuine_rand: None,
         zijdelingse_knik_in_analyse: zijdelings,
     })
 }

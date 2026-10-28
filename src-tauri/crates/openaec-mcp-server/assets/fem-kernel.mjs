@@ -15469,10 +15469,14 @@ var init_referentierichting = __esm({
       kCr: "gelijk",
       performLtbCheck: "gelijk",
       ltbLoadPosition: "gelijk",
+      // Boven/onder is een ZIJDE in de referentierichting, geen positie.
+      schuineRand: "gelijk",
       // Een kruipfactor en de herkomst ervan: materiaaleigenschappen van de plaat,
       // niet van de tekenrichting.
       cltKdef: "gelijk",
       cltKdefBron: "gelijk",
+      cltFvRolK: "gelijk",
+      cltFvRolKBron: "gelijk",
       // Boven en onder zijn ZIJDEN in de referentierichting, geen posities.
       betonKorf: "gelijk",
       betonMilieuklasse: "gelijk",
@@ -16353,6 +16357,7 @@ function buildCltCheckInputs(ruweData) {
     const doorbuiging = houtDoorbuigingsInvoer(beam, data);
     const defl = houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm);
     if (defl.notitie) doorbuiging.notes.push(defl.notitie);
+    if (doorbuiging.addNotitie) doorbuiging.notes.push(doorbuiging.addNotitie);
     inputs.push({
       // De nationale bijlage van het project reist mee naar de kern; daar
       // bepaalt zij de nationaal bepaalde parameters van deze toetsing.
@@ -16380,15 +16385,28 @@ function buildCltCheckInputs(ruweData) {
       // met die reden in plaats van een waarde aan te nemen.
       ...cfg.cltKdef !== void 0 ? { k_def: cfg.cltKdef } : {},
       ...cfg.cltKdefBron !== void 0 ? { k_def_bron: cfg.cltKdefBron } : {},
+      // Rolschuifsterkte f_v,rol,k met bron (issue #232): alleen uit de ETA of
+      // productverklaring; zonder opgave toetst de kern de rolschuif niet en
+      // zegt dat.
+      ...cfg.cltFvRolK !== void 0 ? { f_v_rol_k: cfg.cltFvRolK } : {},
+      ...cfg.cltFvRolKBron !== void 0 ? { f_v_rol_k_bron: cfg.cltFvRolKBron } : {},
       deflection_inst_mm: doorbuiging.instMm,
       deflection_quasi_perm_mm: doorbuiging.quasiMm,
       // w_qp,fin (EN 1995-1-1 2.2.3(4)) alleen als 2.2.3(5) niet geldt; zie
       // `houtDoorbuigingsInvoer`.
       ...doorbuiging.quasiFinMm !== void 0 ? { deflection_quasi_perm_fin_mm: doorbuiging.quasiFinMm } : {},
       deflection_permanent_mm: doorbuiging.permMm,
+      // w₃ = w_c − w₁ per BGT-combinatie (issue #210), zoals bij massief hout;
+      // alleen als die uit een andere combinatie komt dan w_inst.
+      ...doorbuiging.addMm !== void 0 ? { deflection_add_mm: doorbuiging.addMm } : {},
       deflection_limit_fin: defl.fin,
       deflection_limit_add: defl.add,
-      deflection_notes: doorbuiging.notes
+      deflection_notes: [...doorbuiging.notes, ...zeegNotities(beam, data.nodes)],
+      // Zeeg (issue #252), zoals bij massief hout: w_net,fin = w_fin − w_c.
+      ...(() => {
+        const zeeg = zeegVoorToets(beam, data.nodes).preCamber_mm;
+        return zeeg !== void 0 && zeeg !== 0 ? { pre_camber_mm: zeeg } : {};
+      })()
     });
   }
   return { inputs, skipped };
@@ -18043,14 +18061,14 @@ function timberDeflectionNumerators(cls, customN) {
     case "floorBrittle":
       return { fin: 250, add: 500 };
     case "cantilever":
-      return { fin: 125, add: 167 };
+      return { fin: 125, add: 500 / 3 };
     case "custom": {
       const n2 = customN ?? 333;
       return { fin: n2, add: n2 };
     }
     case "floor":
     default:
-      return { fin: 250, add: 333 };
+      return { fin: 250, add: 1e3 / 3 };
   }
 }
 function houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm) {
@@ -18074,7 +18092,7 @@ function houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm) {
   const uit = { fin: klasse.fin / 2, add: klasse.add / 2 };
   return {
     ...uit,
-    notitie: `Uitkraging (vrij staafeind herkend): \u2113_rep = 2\xB7L, dus w_fin tegen L/${uit.fin} en w_add tegen L/${uit.add} op de staaflengte (de noemers ${klasse.fin} en ${klasse.add} van de klasse, op \u2113_rep).`
+    notitie: `Uitkraging (vrij staafeind herkend): \u2113_rep = 2\xB7L, dus w_fin tegen L/${getal5(uit.fin)} en w_add tegen L/${getal5(uit.add)} op de staaflengte (de noemers ${getal5(klasse.fin)} en ${getal5(klasse.add)} van de klasse, op \u2113_rep).`
   };
 }
 function matchSupportedTimberGrade(materialName, supportedGrades = SUPPORTED_TIMBER_GRADES) {
@@ -18178,10 +18196,11 @@ function houtDoorbuigingsInvoer(beam, data, opties = {}) {
   const kDef = K_DEF_KEUZE[beam.checkConfig?.serviceClass ?? 1] ?? 0.6;
   const perDeel = delen.map((d) => houtDoorbuigingVanDeel(beam, data, d));
   const wFin = (h) => Math.abs(h.instMm) + (h.quasiFinMm !== void 0 ? Math.abs(h.quasiFinMm - h.quasiMm) : kDef * Math.abs(h.quasiMm));
+  const wAdd = (h) => h.addMm !== void 0 ? Math.abs(h.addMm + (h.quasiFinMm !== void 0 ? h.quasiFinMm - h.quasiMm : kDef * h.quasiMm)) : wFin(h) - Math.abs(h.permMm);
   let m = 0;
   let beste = -1;
   perDeel.forEach((h, i) => {
-    const v = Math.max(wFin(h), Math.abs(wFin(h) - Math.abs(h.permMm))) / lRepVanDeelMm(delen[i]);
+    const v = Math.max(wFin(h), Math.abs(wAdd(h))) / lRepVanDeelMm(delen[i]);
     if (v > beste) {
       beste = v;
       m = i;
@@ -18193,7 +18212,7 @@ function houtDoorbuigingsInvoer(beam, data, opties = {}) {
     0,
     delenNotitie(
       delen,
-      perDeel.map((h) => ({ wFinMm: wFin(h), wAddMm: wFin(h) - Math.abs(h.permMm) })),
+      perDeel.map((h) => ({ wFinMm: wFin(h), wAddMm: wAdd(h) })),
       m
     ) + " (Hout: w = |w_inst| + k_def\xB7|w_qp| met k_def = " + kDef.toFixed(1).replace(".", ",") + " uit EN 1995-1-1 tabel 3.2, alleen om het maatgevende deel te kiezen.)"
   );
@@ -18246,11 +18265,25 @@ function houtDoorbuigingVanDeel(beam, data, meting) {
       return extractFieldDeflectionMm(beam, r, meting);
     }
   });
+  const quasiMm = langeduur.paar ? langeduur.paar.quasiMm : wQuasi.mm;
+  const w2 = langeduur.paar ? langeduur.paar.quasiFinMm - langeduur.paar.quasiMm : (K_DEF_KEUZE[beam.checkConfig?.serviceClass ?? 1] ?? 0.6) * quasiMm;
+  const w3Inst = wInstMm - wPerm.mm;
+  let w3 = inst ? { w: w3Inst, naam: inst.combo.name } : null;
+  for (const a of inst?.alle ?? []) {
+    const d = a.w - wPerm.mm;
+    if (w3 && Math.abs(w2 + d) > Math.abs(w2 + w3.w) + 1e-9) w3 = { w: d, naam: a.combo.name };
+  }
+  const addApart = inst && w3 && Math.abs(w3.w - w3Inst) > 1e-6 ? w3 : null;
+  const mmTekst3 = (x) => `${x.toFixed(2).replace(".", ",")} mm`;
   return {
     instMm: wInstMm,
-    quasiMm: langeduur.paar ? langeduur.paar.quasiMm : wQuasi.mm,
+    quasiMm,
     ...langeduur.paar ? { quasiFinMm: langeduur.paar.quasiFinMm } : {},
     permMm: wPerm.mm,
+    ...addApart ? {
+      addMm: addApart.w,
+      addNotitie: `w\u2083 = w_c \u2212 w\u2081 = ${mmTekst3(addApart.w)} komt uit "${addApart.naam}": daar is |w\u2082 + w_c \u2212 w\u2081| het grootst (w\u2082 \u2248 ${mmTekst3(w2)}, w\u2081 = ${mmTekst3(wPerm.mm)}). De combinatie van w_inst ("${inst?.combo.name ?? "\u2014"}") geeft w_inst \u2212 w\u2081 = ${mmTekst3(w3Inst)}; w\u2083 gaat daarom apart naar de kern, die w_add = w\u2082 + w\u2083 rekent (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur NB.1: w\u2082 + w\u2083 = w_tot \u2212 w\u2081, per combinatie).`
+    } : {},
     inklemming,
     notes: [
       ...deflectionNotesFor(
@@ -18381,9 +18414,11 @@ function buildTimberCheckInputs(ruweData) {
       steunpuntenMm: steunpuntenOpLijn(beam, data.nodes, lijnVanStaaf)
     });
     const cfg = beam.checkConfig ?? {};
+    const zeeg = zeegVoorToets(beam, data.nodes).preCamber_mm;
     const kip = kipsteunenVanStaaf(cfg, lengthMm, "hout");
     const defl = houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm);
     if (defl.notitie) doorbuiging.notes.push(defl.notitie);
+    if (doorbuiging.addNotitie) doorbuiging.notes.push(doorbuiging.addNotitie);
     const kCr = kCrUitConfig(cfg);
     if ("fout" in kCr) {
       skipped.push({ beamId: beam.id, reason: kCr.fout });
@@ -18416,6 +18451,9 @@ function buildTimberCheckInputs(ruweData) {
       // de plaatselijke b(x) × h(x) en met k_h uit de hoogte ter plaatse.
       ...bEindMm !== void 0 ? { width_end_mm: bEindMm } : {},
       ...hEindMm !== void 0 ? { height_end_mm: hEindMm } : {},
+      // Welke rand schuin loopt, voor art. 6.4.2 (issue #253). Alleen bij een
+      // verloop; leeg = de kern toetst de ongunstigste aanname (6.39).
+      ...hEindMm !== void 0 && cfg.schuineRand !== void 0 ? { schuine_rand: cfg.schuineRand } : {},
       // Aanwezig = samengestelde doorsnede uit de profieleditor; de kern
       // rekent dan met de lamellen in plaats van met b × h. Afwezig = de
       // rechthoek hierboven, precies zoals voorheen.
@@ -18502,7 +18540,11 @@ function buildTimberCheckInputs(ruweData) {
       // De waarde komt uit `lib/kipsteunen.ts`, dezelfde afleiding als het
       // tekenvlak toont (issue #40).
       ltb_segment_length_m: kip.ltb_segment_length_m,
-      ltb_load_case: "UniformLoad",
+      // Belastinggeval van tabel 6.1: bewust NIET opgegeven. De kern leidt het
+      // af uit het momentverloop van `forces_envelope` en `is_cantilever`
+      // (issue #220) en zet de afleiding in de kiptoets. Tot oktober 2026
+      // stond hier vast "UniformLoad" (0,9·ℓ), ook bij een constant moment
+      // (hoort 1,0·ℓ) en bij een uitkraging (0,5 of 0,8·ℓ).
       // Aangrijpingspunt van de belasting (tabel 6.1, voetnoot a): aan de
       // drukzijde l_ef + 2h, aan de trekzijde l_ef − 0,5h. Leeg = zwaartepunt,
       // het gedrag van vóór dit veld. Een dak of vloer op de bovenrand van een
@@ -18551,12 +18593,20 @@ function buildTimberCheckInputs(ruweData) {
       // A1.4.3(2), figuur NB.1). Ontbreekt die combinatie, dan 0 — en dan
       // staat in de notities dat w_add daardoor de volledige zakking is.
       deflection_permanent_mm: doorbuiging.permMm,
+      // w₃ = w_c − w₁ per BGT-combinatie (issues #200, #210), alleen als die
+      // uit een andere combinatie komt dan w_inst; de kern rekent dan
+      // w_add = w₂ + w₃.
+      ...doorbuiging.addMm !== void 0 ? { deflection_add_mm: doorbuiging.addMm } : {},
       deflection_limit_fin: defl.fin,
       deflection_limit_add: defl.add,
       // Referentielijn + eventuele waarschuwing over een doorgeknipte staaf
       // (gedeeld met de staalbouwer), gevolgd door de herkomst van w_inst,
       // w_qp en w₁.
-      deflection_notes: doorbuiging.notes,
+      deflection_notes: [...doorbuiging.notes, ...zeegNotities(beam, data.nodes)],
+      // Zeeg w_c (positief omhoog): de kern toetst dan w_net,fin = w_fin − w_c
+      // (EN 1995-1-1 7.2(2), (7.2)); w_add blijft zonder zeeg. Alleen een
+      // getal ≠ 0 gaat mee, zodat de invoer zonder zeeg byte-gelijk blijft.
+      ...zeeg !== void 0 && zeeg !== 0 ? { pre_camber_mm: zeeg } : {},
       // De toelichting bij een doorgaande lijn die als een staaf is getoetst;
       // de kern zet hem bij de kolomtoets, de kiptoets en de eindzakking.
       ...staafNotities.length > 0 ? { staaf_notities: staafNotities } : {}
@@ -31737,7 +31787,7 @@ function buildOpenFem3DTimberCheckInputs(model, result, combinationSet) {
       ...notes,
       ...permanent.notes,
       ...inklemming ? [
-        openFem3DUitkragingNotitie(inklemming) + (vrijEindZonderKlasse ? ` Dus w_fin tegen L/${limits.fin} en w_add tegen L/${limits.add} op de staaflengte.` : "")
+        openFem3DUitkragingNotitie(inklemming) + (vrijEindZonderKlasse ? ` Dus w_fin tegen L/${String(Math.round(limits.fin * 1e3) / 1e3).replace(".", ",")} en w_add tegen L/${String(Math.round(limits.add * 1e3) / 1e3).replace(".", ",")} op de staaflengte.` : "")
       ] : [],
       ...characteristic.length ? [] : ["Karakteristieke BGT-combinatie ontbreekt: w_inst is uit de beschikbare BGT-omhullende genomen."],
       ...quasi.length ? [] : ["Quasi-blijvende BGT-combinatie ontbreekt: w_qp = w_inst is veilig-zijdig aangehouden."]
@@ -42620,14 +42670,20 @@ var CHECKCONFIG_VELDEN = [
   "kCr",
   "performLtbCheck",
   "ltbLoadPosition",
+  // Issue #253: welke rand van een verlopende houten ligger schuin loopt (6.4.2).
+  "schuineRand",
   // Kruislaaghout: de vervormingsfactor k_def van §7.2 met zijn bron. Tabel 3.2
   // kent geen rij voor kruislaaghout, dus is er niets om op terug te vallen;
   // zonder deze twee blijft de doorbuigingstoets van een CLT-staaf uit, met
   // reden in het resultaat.
   "cltKdef",
-  "cltKdefBron"
+  "cltKdefBron",
+  // Issue #232: de gedeclareerde rolschuifsterkte van kruislaaghout met bron.
+  "cltFvRolK",
+  "cltFvRolKBron"
 ];
 var LTB_LASTPOSITIES = ["centreOfGravity", "compressionEdge", "tensionEdge"];
+var SCHUINE_RANDEN = ["Boven", "Onder", "Beide"];
 var KOLOM_VELDEN = [
   "bracing",
   "buckling_length",
@@ -43075,6 +43131,7 @@ function keurCheckConfig(waarde, cpad) {
     fouten.push(`${cpad}.performLtbCheck: moet true of false zijn, maar is ${JSON.stringify(cc.performLtbCheck)}.`);
   }
   keurEnum(cc.ltbLoadPosition, LTB_LASTPOSITIES, `${cpad}.ltbLoadPosition`, fouten);
+  keurEnum(cc.schuineRand, SCHUINE_RANDEN, `${cpad}.schuineRand`, fouten);
   keurGetal(cc.cltKdef, `${cpad}.cltKdef`, fouten, { nietNegatief: true });
   if (cc.cltKdefBron !== void 0 && typeof cc.cltKdefBron !== "string") {
     fouten.push(`${cpad}.cltKdefBron: moet een tekst zijn (de productverklaring of ETA), maar is ${JSON.stringify(cc.cltKdefBron)}.`);
@@ -43082,6 +43139,15 @@ function keurCheckConfig(waarde, cpad) {
   if (isGetal(cc.cltKdef) && (cc.cltKdefBron === void 0 || String(cc.cltKdefBron).trim() === "")) {
     fouten.push(
       `${cpad}.cltKdefBron: verplicht zodra cltKdef is opgegeven. Tabel 3.2 van EN 1995-1-1 kent geen k_def voor kruislaaghout, dus moet het rapport kunnen zeggen waar de waarde vandaan komt (productverklaring of ETA van de plaat, per klimaatklasse).`
+    );
+  }
+  keurGetal(cc.cltFvRolK, `${cpad}.cltFvRolK`, fouten, { positief: true });
+  if (cc.cltFvRolKBron !== void 0 && typeof cc.cltFvRolKBron !== "string") {
+    fouten.push(`${cpad}.cltFvRolKBron: moet een tekst zijn (de ETA of productverklaring), maar is ${JSON.stringify(cc.cltFvRolKBron)}.`);
+  }
+  if (isGetal(cc.cltFvRolK) && (cc.cltFvRolKBron === void 0 || String(cc.cltFvRolKBron).trim() === "")) {
+    fouten.push(
+      `${cpad}.cltFvRolKBron: verplicht zodra cltFvRolK is opgegeven. NEN-EN 1995-1-1 en EN 338 kennen geen rolschuifsterkte, dus moet het rapport kunnen zeggen waar de waarde vandaan komt.`
     );
   }
   keurEnum(cc.deflectionClass, ["floor", "floorBrittle", "roof", "cantilever", "custom"], `${cpad}.deflectionClass`, fouten);

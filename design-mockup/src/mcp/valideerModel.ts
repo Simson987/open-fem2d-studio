@@ -175,15 +175,21 @@ const CHECKCONFIG_VELDEN = [
   // kiptoets aan/uit (6.3.3(5)) en het aangrijpingspunt van de belasting
   // (tabel 6.1). Tot dan zaten ze vast in de houtbouwer.
   "kCr", "performLtbCheck", "ltbLoadPosition",
+  // Issue #253: welke rand van een verlopende houten ligger schuin loopt (6.4.2).
+  "schuineRand",
   // Kruislaaghout: de vervormingsfactor k_def van §7.2 met zijn bron. Tabel 3.2
   // kent geen rij voor kruislaaghout, dus is er niets om op terug te vallen;
   // zonder deze twee blijft de doorbuigingstoets van een CLT-staaf uit, met
   // reden in het resultaat.
   "cltKdef", "cltKdefBron",
+  // Issue #232: de gedeclareerde rolschuifsterkte van kruislaaghout met bron.
+  "cltFvRolK", "cltFvRolKBron",
 ] as const;
 
 /** De drie aangrijpingspunten van tabel 6.1, in de spelling van `checkConfig`. */
 const LTB_LASTPOSITIES = ["centreOfGravity", "compressionEdge", "tensionEdge"] as const;
+/** De schuine rand van een verlopende houten ligger (6.4.2), als de Rust-enum `SchuineRand`. */
+const SCHUINE_RANDEN = ["Boven", "Onder", "Beide"] as const;
 
 /**
  * De velden van het §5.8-blok (`ConcreteColumnInput`), inclusief de drie om de
@@ -758,6 +764,7 @@ export function keurCheckConfig(waarde: unknown, cpad: string): string[] {
     fouten.push(`${cpad}.performLtbCheck: moet true of false zijn, maar is ${JSON.stringify(cc.performLtbCheck)}.`);
   }
   keurEnum(cc.ltbLoadPosition, LTB_LASTPOSITIES, `${cpad}.ltbLoadPosition`, fouten);
+  keurEnum(cc.schuineRand, SCHUINE_RANDEN, `${cpad}.schuineRand`, fouten);
   // k_def is een KRUIPFACTOR: w_fin = w_inst + k_def · w_qp. Negatief zou de
   // eindzakking kleiner maken dan de momentane, wat geen kruip is; 0 betekent
   // "geen kruip" en mag. Er is geen bovengrens in de norm — tabel 3.2 gaat voor
@@ -771,6 +778,17 @@ export function keurCheckConfig(waarde: unknown, cpad: string): string[] {
       `${cpad}.cltKdefBron: verplicht zodra cltKdef is opgegeven. Tabel 3.2 van EN 1995-1-1 ` +
         `kent geen k_def voor kruislaaghout, dus moet het rapport kunnen zeggen waar de waarde ` +
         `vandaan komt (productverklaring of ETA van de plaat, per klimaatklasse).`,
+    );
+  }
+  // Rolschuifsterkte (issue #232): een sterkte is > 0, en de bron is verplicht.
+  keurGetal(cc.cltFvRolK, `${cpad}.cltFvRolK`, fouten, { positief: true });
+  if (cc.cltFvRolKBron !== undefined && typeof cc.cltFvRolKBron !== "string") {
+    fouten.push(`${cpad}.cltFvRolKBron: moet een tekst zijn (de ETA of productverklaring), maar is ${JSON.stringify(cc.cltFvRolKBron)}.`);
+  }
+  if (isGetal(cc.cltFvRolK) && (cc.cltFvRolKBron === undefined || String(cc.cltFvRolKBron).trim() === "")) {
+    fouten.push(
+      `${cpad}.cltFvRolKBron: verplicht zodra cltFvRolK is opgegeven. NEN-EN 1995-1-1 en EN 338 ` +
+        `kennen geen rolschuifsterkte, dus moet het rapport kunnen zeggen waar de waarde vandaan komt.`,
     );
   }
   keurEnum(cc.deflectionClass, ["floor", "floorBrittle", "roof", "cantilever", "custom"], `${cpad}.deflectionClass`, fouten);

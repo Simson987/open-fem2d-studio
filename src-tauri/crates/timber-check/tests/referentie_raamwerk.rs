@@ -62,7 +62,7 @@ fn basis(beam_id: u32) -> TimberBeamCheckInput {
         buckling_length_z_m: 0.0,
         lateral_bracing: None,
         ltb_segment_length_m: 0.0,
-        ltb_load_case: nen_en_1995_1_1::stability::LtbLoadCase::UniformLoad,
+        ltb_load_case: Some(nen_en_1995_1_1::stability::LtbLoadCase::UniformLoad),
         ltb_load_position: nen_en_1995_1_1::stability::LtbLoadPosition::CentreOfGravity,
         ltb_effective_length_override_m: 0.0,
         perform_ltb_check: true,
@@ -75,9 +75,12 @@ fn basis(beam_id: u32) -> TimberBeamCheckInput {
         deflection_limit_add: 333.0,
         deflection_notes: vec![],
         deflection_quasi_perm_fin_mm: None,
+        deflection_add_mm: None,
+        pre_camber_mm: None,
         staaf_notities: None,
         width_end_mm: None,
         height_end_mm: None,
+        schuine_rand: None,
         zijdelingse_knik_in_analyse: None,
     }
 }

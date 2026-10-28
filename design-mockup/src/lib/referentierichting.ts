@@ -610,10 +610,14 @@ export const SPIEGELREGELS_TOETSCONFIG: { [K in keyof Required<BeamCheckConfig>]
   kCr: "gelijk",
   performLtbCheck: "gelijk",
   ltbLoadPosition: "gelijk",
+  // Boven/onder is een ZIJDE in de referentierichting, geen positie.
+  schuineRand: "gelijk",
   // Een kruipfactor en de herkomst ervan: materiaaleigenschappen van de plaat,
   // niet van de tekenrichting.
   cltKdef: "gelijk",
   cltKdefBron: "gelijk",
+  cltFvRolK: "gelijk",
+  cltFvRolKBron: "gelijk",
   // Boven en onder zijn ZIJDEN in de referentierichting, geen posities.
   betonKorf: "gelijk",
   betonMilieuklasse: "gelijk",

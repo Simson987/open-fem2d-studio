@@ -339,6 +339,63 @@ pub fn rolling_shear_info(
     }
 }
 
+/// Rolschuiving in een dwarslaag GETOETST tegen een GEDECLAREERDE
+/// rolschuifsterkte (issue #232): τ_r,d ≤ f_v,rol,d met
+/// f_v,rol,d = k_mod·k_sys·f_v,rol,k/γ_M (2.14).
+///
+/// NEN-EN 1995-1-1 kent geen CLT-regels en geen f_v,rol; de karakteristieke
+/// waarde komt uit de ETA of productverklaring van de plaat (`bron`), en die
+/// herkomst staat letterlijk in de toets. Zonder opgegeven waarde blijft het
+/// [`rolling_shear_info`]: spanning zonder unity check.
+pub fn check_rolling_shear(
+    mech: &CltMechanics,
+    idx: usize,
+    k_cr: f64,
+    f_vrol_k: f64,
+    f_vrol_d: f64,
+    bron: &str,
+    force_state: ForceStateSnapshot,
+) -> ResistanceCalc {
+    let mut r = rolling_shear_info(mech, idx, k_cr, force_state);
+    let tau = r.value;
+    let i = idx + 1;
+    let getoetst = f_vrol_d > 0.0;
+    let uc = if getoetst { tau / f_vrol_d } else { 0.0 };
+    r.title = format!("Rolschuiving {}", laagnaam(mech, idx));
+    r.article = "bijlage B (B.9); f_v,rol uit ETA/productverklaring".to_string();
+    r.formula_latex = format!(
+        r"\tau_{{r,{i},d}} = \frac{{V_{{z,Ed}} \cdot (ES)_{{{i}}}}}{{(EI)_{{ef}} \cdot b_{{ef}}}} \le f_{{v,rol,d}} = \frac{{k_{{mod}} k_{{sys}} f_{{v,rol,k}}}}{{\gamma_M}}"
+    );
+    r.variables.push(NamedValue { symbol: r"f_{v,rol,k}".to_string(), value: f_vrol_k, unit: "N/mm²".to_string() });
+    r.variables.push(NamedValue { symbol: r"f_{v,rol,d}".to_string(), value: f_vrol_d, unit: "N/mm²".to_string() });
+    r.uc = getoetst.then(|| UnityCheck {
+        ed: tau,
+        rd: f_vrol_d,
+        uc,
+        formula_latex: r"\tau_{r,d} / f_{v,rol,d}".to_string(),
+    });
+    r.status = if !getoetst {
+        CheckStatus::NotApplicable
+    } else if uc <= 1.0 {
+        CheckStatus::Ok
+    } else {
+        CheckStatus::NotOk
+    };
+    r.notes = vec![
+        laagligging(mech, idx),
+        format!(
+            "Getoetst met een GEDECLAREERDE rolschuifsterkte f_v,rol,k = {} N/mm² (bron: {bron}). \
+             {NORM_HOUT_AANDUIDING} en EN 338 geven geen f_v,rol; de waarde is alleen zo \
+             betrouwbaar als die opgave. f_v,rol,d = k_mod·k_sys·f_v,rol,k/γ_M = {} N/mm² met \
+             k_mod en γ_M van de sterkteklasse van deze laag.",
+            format!("{f_vrol_k:.2}").replace('.', ","),
+            format!("{f_vrol_d:.3}").replace('.', ","),
+        ),
+        "De rolschuifspanning is constant over de dwarslaag en gelijk aan de schuifspanning op de grens met de aangrenzende lengtelaag.".to_string(),
+    ];
+    r
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -466,6 +523,21 @@ mod tests {
         assert_eq!(r.status, CheckStatus::NotApplicable);
         assert_eq!(r.id, "clt_rolschuif_laag_2");
         assert!(r.notes.iter().any(|n| n.contains("f_v,rol")));
+    }
+
+    /// Issue #232, model OFS-016: CLT 5 × 30 mm, C24, V = 18 kN.
+    /// τ_rol = V·E·S/(EI·b) met S = 1000·30·60: 18·10³·1,8·10⁶/(222,75·10⁶·1000)
+    /// = 0,14545 N/mm²; f_r,d = 0,8·1,1/1,3 = 0,67692 → UC = 0,2149.
+    #[test]
+    fn rolschuif_met_gedeclareerde_sterkte() {
+        let m = CltLayup::alternating(1000.0, &[30.0; 5], "C24").mechanics().unwrap();
+        let fd = 0.8 * 1.1 / 1.3;
+        let r = check_rolling_shear(&m, 1, 1.0, 1.1, fd, "ETA-voorbeeld", snap(18.0, 0.0));
+        assert_relative_eq!(r.value, 0.145455, max_relative = 1e-4);
+        assert_relative_eq!(r.uc.as_ref().unwrap().uc, 0.145455 / fd, max_relative = 1e-4);
+        assert_relative_eq!(r.uc.as_ref().unwrap().uc, 0.2149, max_relative = 1e-3);
+        assert_eq!(r.status, CheckStatus::Ok);
+        assert!(r.notes.iter().any(|n| n.contains("ETA-voorbeeld")));
     }
 
     #[test]

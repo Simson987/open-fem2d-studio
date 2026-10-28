@@ -151,6 +151,8 @@ fn cltstaaf() -> CltBeamCheckResult {
         // w_fin en w_add dan als "niet van toepassing" met reden in het resultaat.
         k_def: None,
         k_def_bron: None,
+        f_v_rol_k: None,
+        f_v_rol_k_bron: None,
         deflection_inst_mm: 0.0,
         deflection_quasi_perm_mm: 0.0,
         deflection_permanent_mm: 0.0,
@@ -158,6 +160,8 @@ fn cltstaaf() -> CltBeamCheckResult {
         deflection_limit_add: 333.0,
         deflection_notes: vec![],
         deflection_quasi_perm_fin_mm: None,
+        deflection_add_mm: None,
+        pre_camber_mm: None,
     })
 }
 
@@ -196,6 +200,8 @@ fn geweigerde_cltstaaf() -> CltBeamCheckResult {
         // w_fin en w_add dan als "niet van toepassing" met reden in het resultaat.
         k_def: None,
         k_def_bron: None,
+        f_v_rol_k: None,
+        f_v_rol_k_bron: None,
         deflection_inst_mm: 0.0,
         deflection_quasi_perm_mm: 0.0,
         deflection_permanent_mm: 0.0,
@@ -203,6 +209,8 @@ fn geweigerde_cltstaaf() -> CltBeamCheckResult {
         deflection_limit_add: 333.0,
         deflection_notes: vec![],
         deflection_quasi_perm_fin_mm: None,
+        deflection_add_mm: None,
+        pre_camber_mm: None,
     });
     assert!(
         r.checks.is_empty(),

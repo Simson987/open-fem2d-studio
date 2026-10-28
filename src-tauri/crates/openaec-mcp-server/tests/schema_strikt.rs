@@ -931,11 +931,15 @@ async fn schema_van_de_houttools_is_strikt_op_elk_niveau() {
     );
     assert_eq!(
         staaf["properties"].as_object().unwrap().len(),
-        33,
-        "het schema van de houten staaf hoort precies deze 33 velden van TimberBeamCheckInput te kennen 
+        38,
+        "het schema van de houten staaf hoort precies deze 38 velden van TimberBeamCheckInput te kennen 
          (25 + load_duration_per_combination + staaf_notities + width_end_mm + height_end_mm + bijlage
-         + deflection_quasi_perm_fin_mm + is_cantilever + zijdelingse_knik_in_analyse)"
+         + deflection_quasi_perm_fin_mm + is_cantilever + zijdelingse_knik_in_analyse + schuine_rand
+         + ruimtelijk + deflection_not_applicable_reason + deflection_add_mm + pre_camber_mm); de spiegeltest in timber_tools.rs leest
+         de velden uit het type zelf (issue #210)"
     );
+    // Issue #253: de schuine rand voor 6.4.2 is voor een client op te geven.
+    assert_eq!(staaf["properties"]["schuine_rand"]["enum"], json!(["Boven", "Onder", "Beide"]));
     // Issue #23: de langeduurzakking van 2.2.3(4) is voor een client op te geven.
     assert!(
         staaf["properties"]["deflection_quasi_perm_fin_mm"].is_object(),
@@ -944,6 +948,8 @@ async fn schema_van_de_houttools_is_strikt_op_elk_niveau() {
 
     let clt = tooldefinitie(&mut stdin, &mut reader, 31, "check_clt_beams").await;
     let cstaaf = &clt["inputSchema"]["properties"]["inputs"]["items"];
+    // Issue #210: w₃ per BGT-combinatie is ook voor CLT op te geven.
+    assert!(cstaaf["properties"]["deflection_add_mm"].is_object(), "CLT: deflection_add_mm ontbreekt");
     assert_eq!(cstaaf["additionalProperties"], false, "CLT-staaf");
     assert!(
         cstaaf["properties"]["deflection_quasi_perm_fin_mm"].is_object(),

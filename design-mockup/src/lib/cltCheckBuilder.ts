@@ -42,7 +42,7 @@ import type { CltLayupResult } from "./types/timber/CltLayupResult";
 import type { CltPreset } from "./types/timber/CltPreset";
 import type { CheckSkip, MemberCheckResult } from "./checkTypes";
 import { beamLengthMm, buildForcesEnvelope } from "./steelCheckBuilder";
-import { toetsdataInReferentierichting } from "./referentierichting";
+import { toetsdataInReferentierichting, zeegNotities, zeegVoorToets } from "./referentierichting";
 import {
   houtDoorbuigingsInvoer,
   houtDoorbuigingsNoemers,
@@ -641,6 +641,7 @@ export function buildCltCheckInputs(ruweData: CltBuildData): CltBuildResult {
     const doorbuiging = houtDoorbuigingsInvoer(beam, data);
     const defl = houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm);
     if (defl.notitie) doorbuiging.notes.push(defl.notitie);
+    if (doorbuiging.addNotitie) doorbuiging.notes.push(doorbuiging.addNotitie);
     inputs.push({
       // De nationale bijlage van het project reist mee naar de kern; daar
       // bepaalt zij de nationaal bepaalde parameters van deze toetsing.
@@ -671,6 +672,11 @@ export function buildCltCheckInputs(ruweData: CltBuildData): CltBuildResult {
       // met die reden in plaats van een waarde aan te nemen.
       ...(cfg.cltKdef !== undefined ? { k_def: cfg.cltKdef } : {}),
       ...(cfg.cltKdefBron !== undefined ? { k_def_bron: cfg.cltKdefBron } : {}),
+      // Rolschuifsterkte f_v,rol,k met bron (issue #232): alleen uit de ETA of
+      // productverklaring; zonder opgave toetst de kern de rolschuif niet en
+      // zegt dat.
+      ...(cfg.cltFvRolK !== undefined ? { f_v_rol_k: cfg.cltFvRolK } : {}),
+      ...(cfg.cltFvRolKBron !== undefined ? { f_v_rol_k_bron: cfg.cltFvRolKBron } : {}),
       deflection_inst_mm: doorbuiging.instMm,
       deflection_quasi_perm_mm: doorbuiging.quasiMm,
       // w_qp,fin (EN 1995-1-1 2.2.3(4)) alleen als 2.2.3(5) niet geldt; zie
@@ -679,9 +685,17 @@ export function buildCltCheckInputs(ruweData: CltBuildData): CltBuildResult {
         ? { deflection_quasi_perm_fin_mm: doorbuiging.quasiFinMm }
         : {}),
       deflection_permanent_mm: doorbuiging.permMm,
+      // w₃ = w_c − w₁ per BGT-combinatie (issue #210), zoals bij massief hout;
+      // alleen als die uit een andere combinatie komt dan w_inst.
+      ...(doorbuiging.addMm !== undefined ? { deflection_add_mm: doorbuiging.addMm } : {}),
       deflection_limit_fin: defl.fin,
       deflection_limit_add: defl.add,
-      deflection_notes: doorbuiging.notes,
+      deflection_notes: [...doorbuiging.notes, ...zeegNotities(beam, data.nodes)],
+      // Zeeg (issue #252), zoals bij massief hout: w_net,fin = w_fin − w_c.
+      ...((): { pre_camber_mm?: number } => {
+        const zeeg = zeegVoorToets(beam, data.nodes).preCamber_mm;
+        return zeeg !== undefined && zeeg !== 0 ? { pre_camber_mm: zeeg } : {};
+      })(),
     });
   }
 
