@@ -616,7 +616,11 @@
       "refusedNonlinear": "The physically non-linear round of the check forces did not converge: {{reden}} The check is refused; the results of the analysis remain.",
       "otherForcesTitle": "Not on the canvas",
       "otherForcesBody": "Combination \"{{naam}}\" of the check is not shown on the canvas with the same forces. The check forces are second order (P-Δ) with sway imperfection φ = 1/{{noemer}}; the results on the canvas follow the Analysis and Sway settings. Set Analysis to second order and switch Sway on, with φ = 1/{{noemer}}, to see the governing location there.",
-      "otherForcesBodySame": "Combination \"{{naam}}\" of the check is not shown on the canvas with the same forces, even though the results are second order with the same sway imperfection φ = 1/{{noemer}}. The check was calculated separately here, for example without the ULS final-state variants of timber (E_mean,fin). The forces on the canvas are therefore not those of the check."
+      "otherForcesBodySame": "Combination \"{{naam}}\" of the check is not shown on the canvas with the same forces, even though the results are second order with the same sway imperfection φ = 1/{{noemer}}. The check was calculated separately here, for example without the ULS final-state variants of timber (E_mean,fin). The forces on the canvas are therefore not those of the check.",
+      "forcesViewShow": "Check forces (2nd order)",
+      "forcesViewShowTitle": "Show on the canvas the forces the last code check used: second order (P-Δ) with sway imperfection, in +x and −x (issue #199). The results themselves do not change.",
+      "forcesViewOn": "Check forces (2nd order + sway imperfection φ = 1/{{noemer}}): {{naam}}",
+      "forcesViewBack": "Back to the results"
     },
     "layout": {
       "dragCheckSplit": "Drag to adjust the model/check split",

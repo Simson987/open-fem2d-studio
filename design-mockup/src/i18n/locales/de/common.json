@@ -616,7 +616,11 @@
       "refusedNonlinear": "Die physikalisch nichtlineare Runde der Nachweisschnittgrößen ist nicht konvergiert: {{reden}} Der Nachweis wird verweigert; die Ergebnisse der Analyse bleiben erhalten.",
       "otherForcesTitle": "Nicht auf der Zeichenfläche",
       "otherForcesBody": "Kombination \"{{naam}}\" des Nachweises steht nicht mit denselben Schnittgrößen auf der Zeichenfläche. Die Nachweisschnittgrößen sind Theorie II. Ordnung (P-Δ) mit Schiefstellung φ = 1/{{noemer}}; die Ergebnisse auf der Zeichenfläche folgen den Einstellungen Berechnung und Schiefstellung. Stellen Sie die Berechnung auf Theorie II. Ordnung und schalten Sie die Schiefstellung mit φ = 1/{{noemer}} ein, um die maßgebende Stelle dort zu sehen.",
-      "otherForcesBodySame": "Kombination \"{{naam}}\" des Nachweises steht nicht mit denselben Schnittgrößen auf der Zeichenfläche, obwohl die Ergebnisse nach Theorie II. Ordnung mit derselben Schiefstellung φ = 1/{{noemer}} gerechnet sind. Der Nachweis wurde hier separat gerechnet, zum Beispiel ohne die GZT-Endzustandsvarianten des Holzes (E_mean,fin). Die Schnittgrößen auf der Zeichenfläche sind deshalb nicht die des Nachweises."
+      "otherForcesBodySame": "Kombination \"{{naam}}\" des Nachweises steht nicht mit denselben Schnittgrößen auf der Zeichenfläche, obwohl die Ergebnisse nach Theorie II. Ordnung mit derselben Schiefstellung φ = 1/{{noemer}} gerechnet sind. Der Nachweis wurde hier separat gerechnet, zum Beispiel ohne die GZT-Endzustandsvarianten des Holzes (E_mean,fin). Die Schnittgrößen auf der Zeichenfläche sind deshalb nicht die des Nachweises.",
+      "forcesViewShow": "Nachweisschnittgrößen (Th. II. O.)",
+      "forcesViewShowTitle": "Zeigt auf der Zeichenfläche die Schnittgrößen des letzten Nachweises: Theorie II. Ordnung (P-Δ) mit Schiefstellung, in +x und −x (Issue #199). Die Ergebnisse selbst ändern sich nicht.",
+      "forcesViewOn": "Nachweisschnittgrößen (Th. II. O. + Schiefstellung φ = 1/{{noemer}}): {{naam}}",
+      "forcesViewBack": "Zurück zu den Ergebnissen"
     },
     "layout": {
       "dragCheckSplit": "Ziehen, um die Aufteilung Modell/Nachweis anzupassen",

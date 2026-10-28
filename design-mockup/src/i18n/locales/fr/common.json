@@ -616,7 +616,11 @@
       "refusedNonlinear": "Le calcul physiquement non linéaire des efforts de vérification n'a pas convergé : {{reden}} La vérification est refusée ; les résultats de l'analyse sont conservés.",
       "otherForcesTitle": "Pas sur la zone de dessin",
       "otherForcesBody": "La combinaison « {{naam}} » de la vérification ne figure pas avec les mêmes efforts sur la zone de dessin. Les efforts de vérification sont du second ordre (P-Δ) avec défaut d'aplomb φ = 1/{{noemer}} ; les résultats sur la zone de dessin suivent les réglages Analyse et Défaut d'aplomb. Choisissez l'analyse au second ordre et activez le défaut d'aplomb, avec φ = 1/{{noemer}}, pour y voir l'emplacement déterminant.",
-      "otherForcesBodySame": "La combinaison « {{naam}} » de la vérification ne figure pas avec les mêmes efforts sur la zone de dessin, bien que les résultats soient du second ordre avec le même défaut d'aplomb φ = 1/{{noemer}}. La vérification a été calculée séparément ici, par exemple sans les variantes d'état final ELU du bois (E_mean,fin). Les efforts sur la zone de dessin ne sont donc pas ceux de la vérification."
+      "otherForcesBodySame": "La combinaison « {{naam}} » de la vérification ne figure pas avec les mêmes efforts sur la zone de dessin, bien que les résultats soient du second ordre avec le même défaut d'aplomb φ = 1/{{noemer}}. La vérification a été calculée séparément ici, par exemple sans les variantes d'état final ELU du bois (E_mean,fin). Les efforts sur la zone de dessin ne sont donc pas ceux de la vérification.",
+      "forcesViewShow": "Efforts de vérification (2nd ordre)",
+      "forcesViewShowTitle": "Affiche sur le plan de travail les efforts utilisés par la dernière vérification : second ordre (P-Δ) avec défaut d'aplomb, en +x et −x (issue #199). Les résultats eux-mêmes ne changent pas.",
+      "forcesViewOn": "Efforts de vérification (2nd ordre + défaut d'aplomb φ = 1/{{noemer}}) : {{naam}}",
+      "forcesViewBack": "Retour aux résultats"
     },
     "layout": {
       "dragCheckSplit": "Faites glisser pour ajuster la répartition modèle/vérification",

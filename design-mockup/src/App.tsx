@@ -18,6 +18,8 @@ import { maakWachtpoort, type Wachtpoort } from "./io/bestandskoppeling";
 import SettingsDialog, { applyTheme, themeId, type SettingsTabId } from "./components/settings/SettingsDialog";
 import SneltoetsenDialog from "./components/SneltoetsenDialog";
 import OnopgeslagenDialog, { type OnopgeslagenKeuze } from "./components/OnopgeslagenDialog";
+import ToetsWeergaveBalk from "./components/fem/ToetsWeergaveBalk";
+import { kiesToetsCombinatie } from "./lib/toetsWeergave";
 import CanvasMeldingen from "./components/fem/CanvasMeldingen";
 import { materiaalVanStaaf } from "./lib/variantInvoer";
 import { erIsEenDialoogOpen } from "./components/Modal";
@@ -2146,6 +2148,25 @@ function App() {
   // Wanneer true: alle krachten-overlays aan (M+V+N+vervorming+reacties).
   // Wordt uit-gezet zodra de gebruiker op Model of een LC-tab klikt.
   const [resultsTabActive, setResultsTabActive] = useState(false);
+  // Issue #199, fase 6: het tekenvlak toont de TOETSSET in plaats van de
+  // resultaten. `null` = de resultaten; anders het id van de getoonde
+  // toetscombinatie (uit `lastRunData`, `lib/toetsWeergave.ts`).
+  const [toetsWeergaveId, setToetsWeergaveId] = useState<number | null>(null);
+  const toetsRonde = useCheckStore((s) => s.lastRunData);
+  const toetsWeergave = useMemo(() => {
+    const id = kiesToetsCombinatie(toetsRonde, toetsWeergaveId);
+    return id !== null && toetsRonde ? { id, ronde: toetsRonde } : null;
+  }, [toetsRonde, toetsWeergaveId]);
+  // Kiest de gebruiker zelf een combinatie of de omhullende, dan weer de
+  // resultaten op het tekenvlak.
+  const vorigeKeuzeRef = useRef({ combinatie: fem.activeCombinationId, omhullende: fem.envelopeView });
+  useEffect(() => {
+    const vorige = vorigeKeuzeRef.current;
+    vorigeKeuzeRef.current = { combinatie: fem.activeCombinationId, omhullende: fem.envelopeView };
+    if (vorige.combinatie !== fem.activeCombinationId || (!vorige.omhullende && fem.envelopeView)) {
+      setToetsWeergaveId(null);
+    }
+  }, [fem.activeCombinationId, fem.envelopeView]);
   // Tab in the project-tree (verkenner) — controlled door App zodat Berekenen
   // automatisch naar "results" springt.
   const [treeTab, setTreeTab] = useState<"project" | "view" | "results">("project");
@@ -2344,6 +2365,25 @@ function App() {
     const toetsing = useCheckStore.getState().lastRunData;
     const getoond = fem.combinationResults?.get(id);
     if (!getoond || toetsing?.combinationResults.get(id) !== getoond) {
+      // Issue #199, fase 6: de toetsset zelf op het tekenvlak, met de
+      // markering erop, in plaats van alleen een melding.
+      if (kiesToetsCombinatie(toetsing, id) !== null) {
+        setToetsWeergaveId(id);
+        fem.setEnvelopeView(false);
+        fem.setShowLoads(true);
+        setResultsTabActive(true);
+        if (doel.beamId !== undefined && doel.positieMm !== null) {
+          markering.zet({
+            beamId: doel.beamId,
+            positieMm: doel.positieMm,
+            combinatieId: id,
+            rondeVan: useCheckStore.getState().lastRunAt,
+          });
+        } else {
+          markering.wis();
+        }
+        return;
+      }
       markering.wis();
       const naam = toetsing?.combinations.find((c) => c.id === id)?.name ?? String(id);
       // Het advies noemt de φ van de TOETS (die kan door hout hoger liggen dan
@@ -2361,6 +2401,7 @@ function App() {
       )).catch(() => {});
       return;
     }
+    setToetsWeergaveId(null);
     fem.setActiveCombinationId(id);
     fem.setEnvelopeView(false);
     fem.setShowLoads(true);
@@ -4533,17 +4574,37 @@ function App() {
                 setStructuralGrid={fem.setStructuralGrid}
                 verplaatsStramienAs={fem.verplaatsStramienAs}
                 grid={grid}
-                combinations={fem.rekenCombinaties}
-                activeCombinationId={fem.activeCombinationId}
-                envelopeView={fem.envelopeView}
-                combinationResults={solverStatus.kind === "solved" ? fem.combinationResults : null}
-                envelope={solverStatus.kind === "solved" ? fem.envelope : null}
+                // Issue #199, fase 6: in de toetsweergave de toetsset.
+                combinations={toetsWeergave ? toetsWeergave.ronde.combinations : fem.rekenCombinaties}
+                activeCombinationId={toetsWeergave ? toetsWeergave.id : fem.activeCombinationId}
+                envelopeView={toetsWeergave ? false : fem.envelopeView}
+                combinationResults={toetsWeergave
+                  ? toetsWeergave.ronde.combinationResults
+                  : solverStatus.kind === "solved" ? fem.combinationResults : null}
+                envelope={toetsWeergave ? null : solverStatus.kind === "solved" ? fem.envelope : null}
                 displayFlags={displayFlags}
                 setDisplayFlags={setDisplayFlags}
                 resultsMode={resultsTabActive}
                 onZoomChange={setZoomPct}
                 onOpenCheckForBeam={handleOpenCheckForBeam}
               />
+              {resultsTabActive && (
+                <ToetsWeergaveBalk
+                  getoond={toetsWeergave
+                    ? toetsWeergave.ronde.combinations.find((c) => c.id === toetsWeergave.id)?.name ?? String(toetsWeergave.id)
+                    : null}
+                  noemer={toetsVanRonde?.analyse ? noemerTekst(toetsVanRonde.analyse.noemer) : null}
+                  beschikbaar={kiesToetsCombinatie(toetsRonde, fem.activeCombinationId, true) !== null}
+                  onAan={() => {
+                    const id = kiesToetsCombinatie(toetsRonde, fem.activeCombinationId, true);
+                    if (id === null) return;
+                    setToetsWeergaveId(id);
+                    fem.setEnvelopeView(false);
+                    fem.setShowLoads(true);
+                  }}
+                  onUit={() => setToetsWeergaveId(null)}
+                />
+              )}
               <CanvasMeldingen
                 meldingen={fem.belastingMeldingen}
                 onToonHout={() => {

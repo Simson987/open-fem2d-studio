@@ -616,7 +616,11 @@
       "refusedNonlinear": "De fysisch niet-lineaire ronde van de toetskrachten liep vast: {{reden}} De toetsing is geweigerd; de resultaten van de berekening blijven staan.",
       "otherForcesTitle": "Niet op het tekenvlak",
       "otherForcesBody": "Combinatie \"{{naam}}\" van de toetsing staat niet met dezelfde krachten op het tekenvlak. De toetskrachten zijn tweede orde (P-Δ) met scheefstand φ = 1/{{noemer}}; de resultaten op het tekenvlak volgen de instellingen Analyse en Scheefstand. Zet Analyse op tweede orde en de Scheefstand aan, met φ = 1/{{noemer}}, om de maatgevende plek daar te zien.",
-      "otherForcesBodySame": "Combinatie \"{{naam}}\" van de toetsing staat niet met dezelfde krachten op het tekenvlak, ook al rekenen de resultaten tweede orde met dezelfde scheefstand φ = 1/{{noemer}}. De toets rekende hier apart, bijvoorbeeld zonder de UGT-eindtoestandvarianten van hout (E_mean,fin). De krachten op het tekenvlak zijn daarom niet die van de toets."
+      "otherForcesBodySame": "Combinatie \"{{naam}}\" van de toetsing staat niet met dezelfde krachten op het tekenvlak, ook al rekenen de resultaten tweede orde met dezelfde scheefstand φ = 1/{{noemer}}. De toets rekende hier apart, bijvoorbeeld zonder de UGT-eindtoestandvarianten van hout (E_mean,fin). De krachten op het tekenvlak zijn daarom niet die van de toets.",
+      "forcesViewShow": "Toetskrachten (2e orde)",
+      "forcesViewShowTitle": "Toon op het tekenvlak de krachten waarop de laatste toetsing rekende: tweede orde (P-Δ) met scheefstand, in +x en −x (issue #199). De resultaten zelf veranderen niet.",
+      "forcesViewOn": "Toetskrachten (2e orde + scheefstand φ = 1/{{noemer}}): {{naam}}",
+      "forcesViewBack": "Terug naar de resultaten"
     },
     "layout": {
       "dragCheckSplit": "Sleep om de verdeling model/toetsing aan te passen",
