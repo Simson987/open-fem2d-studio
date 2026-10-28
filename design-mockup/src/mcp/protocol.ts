@@ -57,6 +57,12 @@ export const SIDECAR_OPS = [
   // ifcImportSidecar.ts.
   "ifc_importeren",
   "ifc_uitwerken",
+  // Resultaten als .ifcfemresults (issue #87, MCP-tools
+  // `fem_resultaten_ifc_schrijven` en `fem_resultaten_ifc_lezen`): rekenen
+  // zoals `solve` en het IFC4-bestand bouwen, en zo'n bestand teruglezen.
+  // Zie io/ifcResultaten.ts.
+  "ifcfemresults_schrijven",
+  "ifcfemresults_lezen",
   // De API-commando's van de app (src/api/) zonder app, op de tekst van een
   // projectbestand: de catalogus, en één commando uitvoeren. Zie apiSidecar.ts.
   "api_catalogus",

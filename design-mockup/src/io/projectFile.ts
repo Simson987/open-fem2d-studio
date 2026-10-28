@@ -24,6 +24,13 @@ import {
 
 export const PROJECT_FILE_EXT = "ifcfem";
 /** Oudere extensie: zulke bestanden openen nog steeds; nieuw opslaan gebeurt als .ifcfem. */
+/**
+ * Resultatenbestand (issue #87): IFC4 met model en resultaten, plus het
+ * projectbestand als IfcText. Geen projectbestand — Opslaan schrijft er nooit
+ * naartoe; Openen laadt het ingebedde project en toont de resultaten.
+ */
+export const RESULTATEN_FILE_EXT = "ifcfemresults";
+
 export const LEGACY_PROJECT_FILE_EXTS: readonly string[] = ["ifcfem2d"];
 /** Alle extensies die Openen en de lijst met recente bestanden als project herkennen. */
 export const PROJECT_FILE_EXTS: readonly string[] = [PROJECT_FILE_EXT, ...LEGACY_PROJECT_FILE_EXTS];
@@ -802,7 +809,10 @@ export async function saveProjectTo(path: string, text: string): Promise<void> {
  * file path (Tauri only) or filename (browser).
  */
 export async function openProject(importFilters: { name: string; extensions: string[] }[] = []): Promise<
-  { soort: "project"; text: string; path: string } | { soort: "import"; path: string } | null
+  | { soort: "project"; text: string; path: string }
+  | { soort: "resultaten"; text: string; path: string }
+  | { soort: "import"; path: string }
+  | null
 > {
   if (isTauri()) {
     const { open } = await import("@tauri-apps/plugin-dialog");
@@ -810,14 +820,16 @@ export async function openProject(importFilters: { name: string; extensions: str
     const selected = await open({
       multiple: false,
       filters: [
-        { name: "Alle ondersteunde bestanden", extensions: [...new Set([...PROJECT_FILE_EXTS, ...importFilters.flatMap((filter) => filter.extensions)])] },
+        { name: "Alle ondersteunde bestanden", extensions: [...new Set([...PROJECT_FILE_EXTS, RESULTATEN_FILE_EXT, ...importFilters.flatMap((filter) => filter.extensions)])] },
         { name: "Open FEM Studio project", extensions: [...PROJECT_FILE_EXTS] },
+        { name: "Open FEM Studio resultaten (IFC4)", extensions: [RESULTATEN_FILE_EXT] },
         ...importFilters,
       ],
     });
     if (!selected || Array.isArray(selected)) return null;
     const path = selected as string;
     const type = path.split(".").pop()?.toLowerCase() ?? "";
+    if (type === RESULTATEN_FILE_EXT) return { soort: "resultaten", text: await readTextFile(path), path };
     if (!PROJECT_FILE_EXTS.includes(type)) return { soort: "import", path };
     const text = await readTextFile(path);
     return { soort: "project", text, path };
@@ -826,10 +838,10 @@ export async function openProject(importFilters: { name: string; extensions: str
   return await new Promise(resolve => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = `${PROJECT_FILE_EXTS.map((e) => `.${e}`).join(",")},application/json`;
+    input.accept = `${[...PROJECT_FILE_EXTS, RESULTATEN_FILE_EXT].map((e) => `.${e}`).join(",")},application/json`;
     input.hidden = true;
     document.body.appendChild(input);
-    const finish = (value: { soort: "project"; text: string; path: string } | null) => {
+    const finish = (value: { soort: "project" | "resultaten"; text: string; path: string } | null) => {
       input.remove();
       resolve(value);
     };
@@ -837,7 +849,8 @@ export async function openProject(importFilters: { name: string; extensions: str
       const file = input.files?.[0];
       if (!file) { finish(null); return; }
       const text = await file.text();
-      finish({ soort: "project", text, path: file.name });
+      const resultaten = file.name.toLowerCase().endsWith(`.${RESULTATEN_FILE_EXT}`);
+      finish({ soort: resultaten ? "resultaten" : "project", text, path: file.name });
     };
     input.addEventListener("cancel", () => finish(null), { once: true });
     input.click();

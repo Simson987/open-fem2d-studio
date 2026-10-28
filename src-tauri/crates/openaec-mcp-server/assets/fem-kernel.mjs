@@ -6104,20 +6104,20 @@ function bepaalPlaatlastRand(punten, openingen, adres, tolMm = 1) {
       { opening: String(adres.openingId) }
     );
   }
-  const lijst2 = openingen ?? [];
-  if (lijst2.length === 0) {
+  const lijst3 = openingen ?? [];
+  if (lijst3.length === 0) {
     return randFout(
       "plateHasNoOpenings",
       `de last staat op opening ${adres.openingId}, maar deze plaat heeft geen openingen.`,
       { opening: adres.openingId }
     );
   }
-  const treffers = lijst2.map((o, i2) => ({ o, i: i2 })).filter(({ o }) => o.id === adres.openingId);
+  const treffers = lijst3.map((o, i2) => ({ o, i: i2 })).filter(({ o }) => o.id === adres.openingId);
   if (treffers.length === 0) {
     return randFout(
       "openingMissing",
-      `opening ${adres.openingId} bestaat niet op deze plaat. Aanwezig: ${lijst2.map((o) => o.id).join(", ")}.`,
-      { opening: adres.openingId, lijst: lijst2.map((o) => o.id).join(", ") }
+      `opening ${adres.openingId} bestaat niet op deze plaat. Aanwezig: ${lijst3.map((o) => o.id).join(", ")}.`,
+      { opening: adres.openingId, lijst: lijst3.map((o) => o.id).join(", ") }
     );
   }
   if (treffers.length > 1) {
@@ -16759,8 +16759,8 @@ function leidScheefstandGeometrieAf(model) {
   const perWortel = /* @__PURE__ */ new Map();
   for (const b of verticaal) {
     const r = wortel(b.from);
-    const lijst2 = perWortel.get(r);
-    if (lijst2) lijst2.push(b.id);
+    const lijst3 = perWortel.get(r);
+    if (lijst3) lijst3.push(b.id);
     else perWortel.set(r, [b.id]);
   }
   const kolomlijnen = [];
@@ -16790,7 +16790,7 @@ function leidScheefstandGeometrieAf(model) {
       { graden: VERTICAAL_VANAF_GRADEN2 }
     ));
   } else {
-    const lijst2 = {
+    const lijst3 = {
       lijst: kolomlijnen.map((k, i) => vt(
         `${S}columnLine`,
         `(${i + 1}) x = ${getal3(k.voetXmm, 0)} mm, staaf ${k.staafIds.join("+")}`,
@@ -16800,8 +16800,8 @@ function leidScheefstandGeometrieAf(model) {
     };
     afleiding.push(vt(
       `${S}membersDerived`,
-      `m = ${aantalElementen} \u2014 ${aantalElementen} kolomlijn${aantalElementen === 1 ? "" : "en"}: ` + nederlands(lijst2) + `. Een staaf telt als verticaal vanaf ${VERTICAAL_VANAF_GRADEN2}\xB0 met de horizontaal; staven die een knoop delen vormen samen \xE9\xE9n kolom, zodat een kolom door meerdere verdiepingen \xE9\xE9nmaal telt.`,
-      { count: aantalElementen, lijst: lijst2, graden: VERTICAAL_VANAF_GRADEN2 }
+      `m = ${aantalElementen} \u2014 ${aantalElementen} kolomlijn${aantalElementen === 1 ? "" : "en"}: ` + nederlands(lijst3) + `. Een staaf telt als verticaal vanaf ${VERTICAAL_VANAF_GRADEN2}\xB0 met de horizontaal; staven die een knoop delen vormen samen \xE9\xE9n kolom, zodat een kolom door meerdere verdiepingen \xE9\xE9nmaal telt.`,
+      { count: aantalElementen, lijst: lijst3, graden: VERTICAAL_VANAF_GRADEN2 }
     ));
   }
   afleiding.push(vt(
@@ -16980,11 +16980,11 @@ function bepaalScheefstand(keuze2, geometrie, toepasselijk) {
   const vergelijking = normen.map((n2) => phiVolgensNorm(n2, hoogteM, aantalElementen));
   const gekozen = vergelijking.reduce((a, b) => b.phi > a.phi ? b : a);
   if (bron === "ongunstigste" && vergelijking.length > 1) {
-    const lijst2 = vergelijking.map((v) => `${SCHEEFSTAND_BRON_LABEL[v.norm]} \u2192 1/${getal3(1 / v.phi, 0)}`).join(", ");
+    const lijst3 = vergelijking.map((v) => `${SCHEEFSTAND_BRON_LABEL[v.norm]} \u2192 1/${getal3(1 / v.phi, 0)}`).join(", ");
     waarschuwingen.push(vt(
       `${S}warn.governing`,
-      `Ongunstigste van ${lijst2}. Gekozen: ${SCHEEFSTAND_BRON_LABEL[gekozen.norm]}.`,
-      { lijst: lijst2, gekozen: SCHEEFSTAND_BRON_LABEL[gekozen.norm] }
+      `Ongunstigste van ${lijst3}. Gekozen: ${SCHEEFSTAND_BRON_LABEL[gekozen.norm]}.`,
+      { lijst: lijst3, gekozen: SCHEEFSTAND_BRON_LABEL[gekozen.norm] }
     ));
   }
   return {
@@ -17183,11 +17183,11 @@ function stabiliteitsMeldingen(uitkomsten, analysetype, scheefstandAan) {
   );
   if (teLaag.length > 0) {
     const laagste = teLaag.reduce((a, b) => (b.alphaCr ?? Infinity) < (a.alphaCr ?? Infinity) ? b : a);
-    const lijst2 = teLaag.map((u) => `${nl4(u.alphaCr ?? NaN)} ("${u.naam}")`).join(", ");
+    const lijst3 = teLaag.map((u) => `${nl4(u.alphaCr ?? NaN)} ("${u.naam}")`).join(", ");
     if (eersteOrde) {
       meldingen.push({
         niveau: "fout",
-        tekst: `EERSTE ORDE NIET TOEGESTAAN: \u03B1_cr = ${nl4(laagste.alphaCr ?? NaN)} in combinatie "${laagste.naam}" is kleiner dan ${ALPHA_CR_GRENS_EERSTE_ORDE}` + (teLaag.length > 1 ? ` (alle combinaties onder de grens: ${lijst2})` : "") + ". NEN-EN 1993-1-1 5.2.1(3) staat een eerste-orde-berekening dan niet toe: de tweede-orde-effecten (P-\u0394) zijn niet verwaarloosbaar, en de terugval van de kniklengte op de systeemlengte in de staaftoets veronderstelt juist krachten uit een tweede-orde-berekening met imperfecties (5.2.2(7)b). De krachten en de unity checks van deze berekening zijn daarom NIET bruikbaar als toetsing. Kies het analysetype tweede orde (P-\u0394) met de scheefstand aan, of geef per op druk belaste staaf de kniklengte uit de zijdelingse knikvorm op (5.2.2(8))."
+        tekst: `EERSTE ORDE NIET TOEGESTAAN: \u03B1_cr = ${nl4(laagste.alphaCr ?? NaN)} in combinatie "${laagste.naam}" is kleiner dan ${ALPHA_CR_GRENS_EERSTE_ORDE}` + (teLaag.length > 1 ? ` (alle combinaties onder de grens: ${lijst3})` : "") + ". NEN-EN 1993-1-1 5.2.1(3) staat een eerste-orde-berekening dan niet toe: de tweede-orde-effecten (P-\u0394) zijn niet verwaarloosbaar, en de terugval van de kniklengte op de systeemlengte in de staaftoets veronderstelt juist krachten uit een tweede-orde-berekening met imperfecties (5.2.2(7)b). De krachten en de unity checks van deze berekening zijn daarom NIET bruikbaar als toetsing. Kies het analysetype tweede orde (P-\u0394) met de scheefstand aan, of geef per op druk belaste staaf de kniklengte uit de zijdelingse knikvorm op (5.2.2(8))."
       });
     } else if (!scheefstandAan) {
       meldingen.push({
@@ -17211,9 +17211,9 @@ function stabiliteitsMeldingen(uitkomsten, analysetype, scheefstandAan) {
   }
   return meldingen;
 }
-function analyseToelichting(analysetype, label, omschrijving, uitkomsten, scheefstandAan) {
+function analyseToelichting(analysetype, label2, omschrijving, uitkomsten, scheefstandAan) {
   const regels = [];
-  regels.push(`Analysetype: ${label}. ${omschrijving}`);
+  regels.push(`Analysetype: ${label2}. ${omschrijving}`);
   regels.push("");
   if (uitkomsten.length === 0) {
     regels.push("Kritieke lastfactor \u03B1_cr: geen UGT-combinaties doorgerekend.");
@@ -17437,15 +17437,15 @@ function uitkragingZakkingMm(w, inklemming) {
   if (n2 === 0) return 0;
   const begin = w[0];
   const eind = w[n2 - 1];
-  let ref;
-  if (inklemming === "begin") ref = begin;
-  else if (inklemming === "eind") ref = eind;
-  else ref = Math.abs(begin) <= Math.abs(eind) ? begin : eind;
-  if (!Number.isFinite(ref)) ref = 0;
+  let ref2;
+  if (inklemming === "begin") ref2 = begin;
+  else if (inklemming === "eind") ref2 = eind;
+  else ref2 = Math.abs(begin) <= Math.abs(eind) ? begin : eind;
+  if (!Number.isFinite(ref2)) ref2 = 0;
   let max = 0;
   for (const v of w) {
     if (!Number.isFinite(v)) continue;
-    const d = v - ref;
+    const d = v - ref2;
     if (Math.abs(d) > Math.abs(max)) max = d;
   }
   return max;
@@ -17478,10 +17478,10 @@ function lRepVanDeelMm(deel) {
   return deel.inklemming ? 2 * l : l;
 }
 function delenNotitie(delen, perDeel, maatgevend) {
-  const nl10 = (v, d = 0) => v.toFixed(d).replace(".", ",");
+  const nl11 = (v, d = 0) => v.toFixed(d).replace(".", ",");
   const regels = delen.map((d, i) => {
-    const meetlijn = d.inklemming ? `gemeten vanaf de inklemming op x = ${nl10(d.inklemming === "begin" ? d.vanMm : d.totMm)} mm` : "gemeten vanaf de koorde tussen de eindpunten van het deel";
-    return `${d.soort} x = ${nl10(d.vanMm)}\u2013${nl10(d.totMm)} mm, ${meetlijn}, \u2113_rep = ` + (d.inklemming ? `2 \xD7 ${nl10(d.totMm - d.vanMm)} = ` : "") + `${nl10(lRepVanDeelMm(d))} mm: w = ${nl10(perDeel[i].wFinMm, 2)} mm, w_add = ${nl10(perDeel[i].wAddMm, 2)} mm`;
+    const meetlijn = d.inklemming ? `gemeten vanaf de inklemming op x = ${nl11(d.inklemming === "begin" ? d.vanMm : d.totMm)} mm` : "gemeten vanaf de koorde tussen de eindpunten van het deel";
+    return `${d.soort} x = ${nl11(d.vanMm)}\u2013${nl11(d.totMm)} mm, ${meetlijn}, \u2113_rep = ` + (d.inklemming ? `2 \xD7 ${nl11(d.totMm - d.vanMm)} = ` : "") + `${nl11(lRepVanDeelMm(d))} mm: w = ${nl11(perDeel[i].wFinMm, 2)} mm, w_add = ${nl11(perDeel[i].wAddMm, 2)} mm`;
   });
   return "Doorgaande lijn met een overstek: de doorbuiging is per deel getoetst, want \u2113_rep is de lengte van de overspanning of tweemaal die van de uitkraging (NEN-EN 1990:2002/NB:2019 A1.4.3), niet de lijnlengte. " + regels.join("; ") + `. Maatgevend (de grootste verhouding tot de grens) is het ${delen[maatgevend].soort}; dat deel staat in deze toets, met zijn eigen lengte en \u2113_rep.`;
 }
@@ -20248,16 +20248,16 @@ function buildMesh(input, loadFactor, options = {}) {
     for (const bpl of staafPuntlasten) {
       const t = Math.min(1, Math.max(0, bpl.posFrac ?? 0));
       if (t <= BPL_EPS || t >= 1 - BPL_EPS) continue;
-      const lijst2 = puntlastFracties.get(bpl.beamId) ?? [];
-      lijst2.push(t);
-      puntlastFracties.set(bpl.beamId, lijst2);
+      const lijst3 = puntlastFracties.get(bpl.beamId) ?? [];
+      lijst3.push(t);
+      puntlastFracties.set(bpl.beamId, lijst3);
     }
   }
   const extraSnedeFracties = /* @__PURE__ */ new Map();
   const voegSnedeToe = (beamId, t) => {
-    const lijst2 = extraSnedeFracties.get(beamId) ?? [];
-    lijst2.push(t);
-    extraSnedeFracties.set(beamId, lijst2);
+    const lijst3 = extraSnedeFracties.get(beamId) ?? [];
+    lijst3.push(t);
+    extraSnedeFracties.set(beamId, lijst3);
   };
   for (const ld of input.loads ?? []) {
     const qa = ld.qStart ?? ld.q ?? 0;
@@ -20512,7 +20512,7 @@ function buildMesh(input, loadFactor, options = {}) {
   if (plateRects.length > 0) {
     for (const { p: p2, raster, punten } of plateRects) {
       const k = zetPlatMeshInKern(p2, raster);
-      const naarIds = (lijst2) => lijst2.map((i) => k.knoopIdPerPunt[i]);
+      const naarIds = (lijst3) => lijst3.map((i) => k.knoopIdPerPunt[i]);
       const region = maakRegion(p2, raster, k, {
         bottom: naarIds(raster.randen.bottom),
         top: naarIds(raster.randen.top),
@@ -20572,13 +20572,13 @@ function buildMesh(input, loadFactor, options = {}) {
     let kandidaten;
     if (rand.openingIndex !== void 0) {
       const randen = info2.openingEdgeNodeIds[rand.openingIndex];
-      const lijst2 = randen?.[rand.edgeIndex];
-      if (!lijst2) {
+      const lijst3 = randen?.[rand.edgeIndex];
+      if (!lijst3) {
         throw new Error(
           `Plaat ${plateId}: ${wat} \u2014 rand ${rand.edgeIndex + 1} van opening ${rand.openingId} heeft geen rekenknopen in het rekenmesh. Wijzig de plaat zodat het mesh opnieuw wordt gemaakt.`
         );
       }
-      kandidaten = lijst2;
+      kandidaten = lijst3;
     } else if (info2.edgeNodeIds) {
       const n2 = info2.hoeken.length;
       let k = rand.edgeIndex;
@@ -20635,15 +20635,15 @@ function buildMesh(input, loadFactor, options = {}) {
         const n2 = o.punten.length;
         for (let j = 0; j < n2; j++) {
           const wat = `rand ${j + 1} van opening ${o.id}`;
-          const lijst2 = info2.openingEdgeNodeIds[oi]?.[j];
-          if (!lijst2) {
+          const lijst3 = info2.openingEdgeNodeIds[oi]?.[j];
+          if (!lijst3) {
             throw new Error(
               `Plaat ${info2.plateId}: ${wat} heeft geen rekenknopen in het rekenmesh. Wijzig de plaat zodat het mesh opnieuw wordt gemaakt.`
             );
           }
           const van = o.punten[j], naar = o.punten[(j + 1) % n2];
           const lengte = Math.hypot(naar.x - van.x, naar.z - van.z);
-          rijen.push({ plateId: info2.plateId, nodeIds: ordenOpRand(info2.plateId, lijst2, van, naar, lengte, wat).nodeIds });
+          rijen.push({ plateId: info2.plateId, nodeIds: ordenOpRand(info2.plateId, lijst3, van, naar, lengte, wat).nodeIds });
         }
       });
     }
@@ -22739,7 +22739,7 @@ function genereerWindbelastingBasis(model, inst) {
     const par = hellendDakParagraaf(hVorm);
     const e = r === "haaks" ? e_haaks : e_inVlak;
     const kop = `${par} tabel ${opz.tabel} (\u03B8 = ${opz.theta}\xB0, \u03B1 = ${graadTxt(hellend.alpha)}, ${rijTekst(opz)}), e = ${mm2(e)} mm`;
-    const band = (van, tot, zone, teken, ref2) => {
+    const band = (van, tot, zone, teken, ref3) => {
       const k = kiesCpe(opz.zones[zone], teken);
       const naam = zone === "Fhoog" ? "F_hoog" : zone === "Flaag" ? "F_laag" : zone;
       const vanT = Math.max(0, van), totT = Math.min(d_m, tot);
@@ -22749,37 +22749,37 @@ function genereerWindbelastingBasis(model, inst) {
         zone: naam,
         cpe: k.cpe,
         bron: `${opz.bron}, zone ${naam}, ${rijTekst(opz)}` + (k.teken ? `, ${k.teken === "neg" ? "negatieve" : "positieve"} waarde (opmerking 1)` : ""),
-        omschrijving: `${kop}: zone ${naam} ${mm2(vanT)}\u2013${mm2(totT)} mm vanaf de ${ref2}, c_pe,10 = ${tekenTxt(k.cpe)}` + (k.teken ? ` (${k.teken === "neg" ? "negatieve" : "positieve"} waarde)` : "")
+        omschrijving: `${kop}: zone ${naam} ${mm2(vanT)}\u2013${mm2(totT)} mm vanaf de ${ref3}, c_pe,10 = ${tekenTxt(k.cpe)}` + (k.teken ? ` (${k.teken === "neg" ? "negatieve" : "positieve"} waarde)` : "")
       };
     };
-    const hand = (van, tot, label, cpe) => ({
+    const hand = (van, tot, label2, cpe) => ({
       van_m: van,
       tot_m: tot,
-      zone: label,
+      zone: label2,
       cpe,
       bron: `NEN-EN 1991-1-4 tabel ${opz.tabel} (door de gebruiker ingevuld)`,
-      omschrijving: `${par} tabel ${opz.tabel} (\u03B8 = ${opz.theta}\xB0): ${label}, c_pe,10 = ${tekenTxt(cpe)} door de gebruiker ingevuld`
+      omschrijving: `${par} tabel ${opz.tabel} (\u03B8 = ${opz.theta}\xB0): ${label2}, c_pe,10 = ${tekenTxt(cpe)} door de gebruiker ingevuld`
     });
     const INF = Number.POSITIVE_INFINITY;
     if (r === "haaks") {
       const xAccent2 = (xMm) => (xMm - xLinks) / 1e3;
-      const ref2 = "linkergevel";
+      const ref3 = "linkergevel";
       if (yKop < e / 10) {
         const links = hVorm === "lessenaar" ? hellend.hoogKant === "links" ? "Fhoog" : "Flaag" : "F";
         const rechts = hVorm === "lessenaar" ? hellend.hoogKant === "rechts" ? "Fhoog" : "Flaag" : "F";
         return {
           xAccent: xAccent2,
           banden: [
-            band(-INF, e / 4, links, null, ref2),
-            band(e / 4, d_m - e / 4, "G", null, ref2),
-            band(d_m - e / 4, INF, rechts, null, ref2)
+            band(-INF, e / 4, links, null, ref3),
+            band(e / 4, d_m - e / 4, "G", null, ref3),
+            band(d_m - e / 4, INF, rechts, null, ref3)
           ]
         };
       }
-      return { xAccent: xAccent2, banden: [band(-INF, INF, yKop < e / 2 ? "H" : "I", null, ref2)] };
+      return { xAccent: xAccent2, banden: [band(-INF, INF, yKop < e / 2 ? "H" : "I", null, ref3)] };
     }
     const xAccent = (xMm) => r === "links" ? (xMm - xLinks) / 1e3 : (xRechts - xMm) / 1e3;
-    const ref = "loefgevel";
+    const ref2 = "loefgevel";
     const rand = randzoneFDak ? "F" : "G";
     if (hVorm === "lessenaar") {
       const handwaarde = opz.theta === 0 ? inst.cpeDakLoef : inst.cpeDakLij;
@@ -22788,8 +22788,8 @@ function genereerWindbelastingBasis(model, inst) {
       return {
         xAccent,
         banden: [
-          band(-INF, g1, rand, v.loef, ref),
-          ...d_m > g1 ? [band(g1, INF, "H", v.loef, ref)] : []
+          band(-INF, g1, rand, v.loef, ref2),
+          ...d_m > g1 ? [band(g1, INF, "H", v.loef, ref2)] : []
         ].map((b, k, alle) => k === alle.length - 1 ? { ...b, tot_m: INF } : b)
       };
     }
@@ -22798,14 +22798,14 @@ function genereerWindbelastingBasis(model, inst) {
     if (inst.cpeDakLoef !== null) banden.push(hand(-INF, xn, "loefdakvlak", inst.cpeDakLoef));
     else {
       const g1 = Math.min(e / 10, xn);
-      banden.push(band(-INF, g1, rand, v.loef, ref));
-      if (xn > g1) banden.push(band(g1, xn, "H", v.loef, ref));
+      banden.push(band(-INF, g1, rand, v.loef, ref2));
+      if (xn > g1) banden.push(band(g1, xn, "H", v.loef, ref2));
     }
     if (inst.cpeDakLij !== null) banden.push(hand(xn, INF, "lijdakvlak", inst.cpeDakLij));
     else {
       const j1 = Math.min(xn + e / 10, d_m);
-      banden.push(band(xn, j1 < d_m ? j1 : INF, "J", v.lij, ref));
-      if (j1 < d_m) banden.push(band(j1, INF, "I", v.lij, ref));
+      banden.push(band(xn, j1 < d_m ? j1 : INF, "J", v.lij, ref2));
+      if (j1 < d_m) banden.push(band(j1, INF, "I", v.lij, ref2));
     }
     return { xAccent, banden };
   };
@@ -24012,8 +24012,8 @@ function nl8(x) {
 function gelijk(a, b) {
   return Math.abs(a - b) <= 1e-9;
 }
-function namenLijst(lijst2, max = 8) {
-  return lijst2.slice(0, max).map((x) => `"${x.naam}"`).join(", ") + (lijst2.length > max ? ` en nog ${lijst2.length - max}` : "");
+function namenLijst(lijst3, max = 8) {
+  return lijst3.slice(0, max).map((x) => `"${x.naam}"`).join(", ") + (lijst3.length > max ? ` en nog ${lijst3.length - max}` : "");
 }
 function verwijderWeesFactoren(combinations, loadCases) {
   const ids = new Set(loadCases.map((c) => c.id));
@@ -24195,17 +24195,17 @@ function vervangVerouderdeCombinaties(staat) {
   const windVoor = staat.combinations.filter(isWindgeneratorCombinatie);
   const windNa = volgend.combinations.filter(isWindgeneratorCombinatie);
   const windAnders = windVoor.length !== windNa.length || windVoor.some((c, i) => !gelijkeInhoud(c, windNa[i]));
-  const lijst2 = (l) => l.map((c) => ({ id: c.id, naam: c.name }));
+  const lijst3 = (l) => l.map((c) => ({ id: c.id, naam: c.name }));
   if (oud.length === 0 && bijgewerkt.length === 0 && !windAnders) {
     return { staat: volgend, vervanging: null };
   }
   const kern = {
     gevolgklasse: staat.gevolgklasse,
     bijlage: staat.bijlage,
-    oudeStandaard: lijst2(oud),
-    bijgewerkt: lijst2(bijgewerkt),
-    wind: windAnders ? lijst2(windVoor) : [],
-    eigen: lijst2(volgend.combinations.filter((c) => c.standaard === void 0 && !isWindgeneratorCombinatie(c))),
+    oudeStandaard: lijst3(oud),
+    bijgewerkt: lijst3(bijgewerkt),
+    wind: windAnders ? lijst3(windVoor) : [],
+    eigen: lijst3(volgend.combinations.filter((c) => c.standaard === void 0 && !isWindgeneratorCombinatie(c))),
     aantalStandaard: naStandaard.size,
     aantalWind: windNa.length
   };
@@ -24595,13 +24595,13 @@ function blijvendeFactorAfwijkingen(p2) {
 }
 function regelsEnHerkomst(a) {
   const MAX = 8;
-  const lijst2 = a.regels.slice(0, MAX).map((r) => r.tekst).join("; ") + (a.regels.length > MAX ? `; en nog ${a.regels.length - MAX}` : "");
+  const lijst3 = a.regels.slice(0, MAX).map((r) => r.tekst).join("; ") + (a.regels.length > MAX ? `; en nog ${a.regels.length - MAX}` : "");
   const herkomst = a.oudeKolom !== null ? `Deze factoren komen overeen met de oude standaardkolom voor belastinggeval ${a.oudeKolom}, ${OUDE_GEVALLEN[a.oudeKolom]}. Controleer of dit een bewust gekozen eigen combinatie is; uit de factoren alleen is de leeftijd of herkomst van het project niet af te leiden.` : "De factoren kunnen bewust gekozen zijn. Uit deze afwijking is de leeftijd of herkomst van het project niet af te leiden.";
-  return { lijst: lijst2, herkomst };
+  return { lijst: lijst3, herkomst };
 }
 function tekstBlijvendeAfwijking(a) {
-  const { lijst: lijst2, herkomst } = regelsEnHerkomst(a);
-  return `Belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren die niet bij een blijvende belasting passen: ${lijst2}. Alle blijvende gevallen samen zijn \xE9\xE9n blijvende belasting G, met in elke combinatie dezelfde factor: \u03B3_G uit NEN-EN 1990 NB tabel NB.4/NB.5 in de UGT (0,9 waar zij gunstig werkt), 1,0 in de BGT (6.14b\u20136.16b). ${herkomst} De berekening gebruikt de getoonde factoren. Controleer of ze voor dit project bedoeld zijn; behoud ze als eigen factoren of kies "Vervang door standaardcombinaties" in Belastinggevallen & combinaties.`;
+  const { lijst: lijst3, herkomst } = regelsEnHerkomst(a);
+  return `Belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren die niet bij een blijvende belasting passen: ${lijst3}. Alle blijvende gevallen samen zijn \xE9\xE9n blijvende belasting G, met in elke combinatie dezelfde factor: \u03B3_G uit NEN-EN 1990 NB tabel NB.4/NB.5 in de UGT (0,9 waar zij gunstig werkt), 1,0 in de BGT (6.14b\u20136.16b). ${herkomst} De berekening gebruikt de getoonde factoren. Controleer of ze voor dit project bedoeld zijn; behoud ze als eigen factoren of kies "Vervang door standaardcombinaties" in Belastinggevallen & combinaties.`;
 }
 function meldingenBelastinggevallen(p2) {
   const meldingen = [];
@@ -24777,8 +24777,8 @@ function weesLastenTekst(weesIds, loads) {
   if (getroffen.length === 0) {
     return "Er stond geen last in, dus geen uitkomst van dit project verandert. ";
   }
-  const lijst2 = getroffen.map((l) => `last ${l.id} (geval ${l.caseId})`).join(", ");
-  return `LET OP: er ${getroffen.length === 1 ? "staat" : "staan"} w\xE9l ${getroffen.length === 1 ? "een last" : `${getroffen.length} lasten`} in een geval dat niet bestaat: ${lijst2}. ${getroffen.length === 1 ? "Die last telt" : "Die lasten tellen"} in geen enkele berekening mee; de modelcontrole weigert het model tot ${getroffen.length === 1 ? "hij in een bestaand belastinggeval staat" : "ze in een bestaand belastinggeval staan"}. `;
+  const lijst3 = getroffen.map((l) => `last ${l.id} (geval ${l.caseId})`).join(", ");
+  return `LET OP: er ${getroffen.length === 1 ? "staat" : "staan"} w\xE9l ${getroffen.length === 1 ? "een last" : `${getroffen.length} lasten`} in een geval dat niet bestaat: ${lijst3}. ${getroffen.length === 1 ? "Die last telt" : "Die lasten tellen"} in geen enkele berekening mee; de modelcontrole weigert het model tot ${getroffen.length === 1 ? "hij in een bestaand belastinggeval staat" : "ze in een bestaand belastinggeval staan"}. `;
 }
 function beoordeelCombinatiesBijOpenen(p2) {
   const weesFactoren = [...p2.weesFactoren ?? []];
@@ -24786,8 +24786,8 @@ function beoordeelCombinatiesBijOpenen(p2) {
   if (weesFactoren.length === 0 && blijvend.length === 0) return null;
   const weesIds = [...new Set(weesFactoren.flatMap((w) => w.caseIds))].sort((a, b) => a - b);
   const samenvatting = blijvend.map((a) => {
-    const { lijst: lijst2, herkomst } = regelsEnHerkomst(a);
-    return `LET OP: belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren die niet bij een blijvende belasting passen: ${lijst2}. Een blijvende belasting telt in de BGT met 1,0 en heeft in elke combinatie dezelfde factor als de andere blijvende gevallen. ${herkomst} De berekening gebruikt de getoonde factoren. De app laat deze eigen combinaties staan: kies "Behoud eigen factoren" als dit uw bedoeling is, corrigeer de factoren, of kies "Vervang door standaardcombinaties" in Belastinggevallen & combinaties. `;
+    const { lijst: lijst3, herkomst } = regelsEnHerkomst(a);
+    return `LET OP: belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren die niet bij een blijvende belasting passen: ${lijst3}. Een blijvende belasting telt in de BGT met 1,0 en heeft in elke combinatie dezelfde factor als de andere blijvende gevallen. ${herkomst} De berekening gebruikt de getoonde factoren. De app laat deze eigen combinaties staan: kies "Behoud eigen factoren" als dit uw bedoeling is, corrigeer de factoren, of kies "Vervang door standaardcombinaties" in Belastinggevallen & combinaties. `;
   }).join("") + (weesFactoren.length > 0 ? `In ${weesFactoren.length} belastingcombinatie(s) (${weesFactoren.map((w) => `"${w.naam}"`).join(", ")}) stonden factoren voor ` + (weesIds.length === 1 ? `belastinggeval ${weesIds[0]}, dat in dit project niet (meer) bestaat` : `belastinggevallen ${weesIds.join(", ")}, die in dit project niet (meer) bestaan`) + ": een rest van een verwijderd geval. Die factoren zijn bij het openen weggehaald. " + weesLastenTekst(weesIds, p2.loads) + `Een nieuw belastinggeval krijgt een id boven ${weesIds[weesIds.length - 1]} en kan ze niet meer erven.` : "");
   return { weesFactoren, blijvend, samenvatting: samenvatting.trim() };
 }
@@ -24906,11 +24906,11 @@ function liftSpringK(s) {
   return void 0;
 }
 function controleerDoorsneden(beams, opties = {}) {
-  const lijst2 = Array.from(beams);
-  const onbekend2 = onbekendeDoorsneden(lijst2);
+  const lijst3 = Array.from(beams);
+  const onbekend2 = onbekendeDoorsneden(lijst3);
   if (onbekend2.length === 0) {
     if (!opties.heeftPlaten) return;
-    const verlopend = lijst2.filter(
+    const verlopend = lijst3.filter(
       (b) => bepaalVerloop(b.material, b.profile, b.profileEnd).status === "verlopend"
     );
     if (verlopend.length === 0) return;
@@ -25192,8 +25192,8 @@ function bepaalVelden(model) {
   const graad = /* @__PURE__ */ new Map();
   for (const b of model.beams) {
     for (const k of [b.from, b.to]) {
-      const lijst2 = graad.get(k);
-      if (lijst2) lijst2.push(b.id);
+      const lijst3 = graad.get(k);
+      if (lijst3) lijst3.push(b.id);
       else graad.set(k, [b.id]);
     }
   }
@@ -25220,8 +25220,8 @@ function bepaalVelden(model) {
   const groepen2 = /* @__PURE__ */ new Map();
   for (const b of model.beams) {
     const r = wortel(b.id);
-    const lijst2 = groepen2.get(r);
-    if (lijst2) lijst2.push(b.id);
+    const lijst3 = groepen2.get(r);
+    if (lijst3) lijst3.push(b.id);
     else groepen2.set(r, [b.id]);
   }
   const staafVan = new Map(model.beams.map((b) => [b.id, b]));
@@ -25272,8 +25272,8 @@ function splitsVeldgevallen(input, loadCases) {
     const groepen2 = /* @__PURE__ */ new Map();
     const voeg = (sleutel, soort, last) => {
       const k = sleutel ?? "overig";
-      const lijst2 = groepen2.get(k);
-      if (lijst2) lijst2.push({ soort, last });
+      const lijst3 = groepen2.get(k);
+      if (lijst3) lijst3.push({ soort, last });
       else groepen2.set(k, [{ soort, last }]);
     };
     for (const l of input.loads) if (l.caseId === lc.id) voeg(zoek.staaf(l.beamId), "loads", l);
@@ -25421,8 +25421,8 @@ function veldpatroonVarianten(combinaties, splitsing, perCase, opties = {}) {
   const delen = splitsing.deelgevallen;
   const delenVan = /* @__PURE__ */ new Map();
   for (const d of delen) {
-    const lijst3 = delenVan.get(d.ouderId);
-    if (lijst3) lijst3.push(d.id);
+    const lijst4 = delenVan.get(d.ouderId);
+    if (lijst4) lijst4.push(d.id);
     else delenVan.set(d.ouderId, [d.id]);
   }
   const sets = [delen.map((d) => perCase.get(d.id))];
@@ -25461,16 +25461,16 @@ function veldpatroonVarianten(combinaties, splitsing, perCase, opties = {}) {
   }
   patronen.delete(delen.map((_, j) => j).join(","));
   const meldingen = [];
-  let lijst2 = [...patronen.values()].sort((a, b) => b.winst - a.winst || a.leden.length - b.leden.length || a.leden.join(",").localeCompare(b.leden.join(",")));
-  if (lijst2.length > MAX_VELDPATRONEN) {
-    const weg = lijst2.slice(MAX_VELDPATRONEN);
-    lijst2 = lijst2.slice(0, MAX_VELDPATRONEN);
+  let lijst3 = [...patronen.values()].sort((a, b) => b.winst - a.winst || a.leden.length - b.leden.length || a.leden.join(",").localeCompare(b.leden.join(",")));
+  if (lijst3.length > MAX_VELDPATRONEN) {
+    const weg = lijst3.slice(MAX_VELDPATRONEN);
+    lijst3 = lijst3.slice(0, MAX_VELDPATRONEN);
     meldingen.push(
       `Veldsgewijze plaatsing (NEN-EN 1991-1-1 6.2.1(1)): ${patronen.size} verschillende veldpatronen gevonden; de ${MAX_VELDPATRONEN} met de grootste winst zijn doorgerekend. De ${weg.length} weggelaten patronen verhogen een effect met hoogstens ${pct(weg[0].winst)} van het grootste veranderlijke aandeel van die grootheid.`
     );
   }
-  lijst2.sort((a, b) => a.leden.length - b.leden.length || a.leden.join(",").localeCompare(b.leden.join(","), void 0, { numeric: true }));
-  const gekozen = lijst2.map((p2) => p2.leden.map((j) => delen[j].id));
+  lijst3.sort((a, b) => a.leden.length - b.leden.length || a.leden.join(",").localeCompare(b.leden.join(","), void 0, { numeric: true }));
+  const gekozen = lijst3.map((p2) => p2.leden.map((j) => delen[j].id));
   const gezien = new Set(combinaties.map((c) => combinatieSleutel(c, c.factors, delenVan)));
   const deelVan = new Map(delen.map((d) => [d.id, d]));
   const varianten = [];
@@ -25513,8 +25513,8 @@ function voegVeldpatronenIn(combinaties, varianten) {
   const perBasis = /* @__PURE__ */ new Map();
   for (const v of varianten) {
     const b = v.veldpatroon.basisId;
-    const lijst2 = perBasis.get(b);
-    if (lijst2) lijst2.push(v);
+    const lijst3 = perBasis.get(b);
+    if (lijst3) lijst3.push(v);
     else perBasis.set(b, [v]);
   }
   return combinaties.flatMap((c) => [c, ...perBasis.get(c.id) ?? []]);
@@ -25808,12 +25808,12 @@ function bepaalEindstijfheidHout(model) {
     if (k.soort === "hout") metHout = true;
     groep(k).platen.push(i);
   });
-  const lijst2 = [...groepen2.values()];
-  if (!metHout) return { ...NVT_LEEG, groepen: lijst2, reden: "Het model bevat geen hout." };
-  if (lijst2.length <= 1) {
+  const lijst3 = [...groepen2.values()];
+  if (!metHout) return { ...NVT_LEEG, groepen: lijst3, reden: "Het model bevat geen hout." };
+  if (lijst3.length <= 1) {
     return {
       ...NVT_LEEG,
-      groepen: lijst2,
+      groepen: lijst3,
       reden: "Alle delen hebben hetzelfde kruipgedrag; E_mean volstaat (EN 1995-1-1 2.2.2(1)P, 2.2.3(5))."
     };
   }
@@ -25821,17 +25821,17 @@ function bepaalEindstijfheidHout(model) {
   if (onb.statischBepaald) {
     return {
       ...NVT_LEEG,
-      groepen: lijst2,
+      groepen: lijst3,
       onbepaaldheid: onb,
       reden: "De constructie is statisch bepaald: de krachtsverdeling hangt niet van de stijfheid af (EN 1995-1-1 2.2.2(1)P)."
     };
   }
-  const opsomming = lijst2.map(groepTekst).join(" \u2014 ");
+  const opsomming = lijst3.map(groepTekst).join(" \u2014 ");
   const kop = `Hout in een statisch onbepaalde constructie met verschillend kruipgedrag (${opsomming}). ${onb.toelichting} De vereenvoudiging van EN 1995-1-1 2.2.3(5) geldt daarom niet: in de eindtoestand kruipt het hout weg en verschuift de krachtsverdeling naar de stijvere delen (2.2.2(1)P, tweede streepje).`;
   if (model.analysetype !== "eersteOrde") {
     return {
       status: "alleenMelding",
-      groepen: lijst2,
+      groepen: lijst3,
       onbepaaldheid: onb,
       kDefPerStaaf: /* @__PURE__ */ new Map(),
       betonPhiPerStaaf: /* @__PURE__ */ new Map(),
@@ -25844,11 +25844,11 @@ function bepaalEindstijfheidHout(model) {
       }]
     };
   }
-  const zonderKdef = lijst2.filter((g) => g.sleutel === "hout:onbekend" || g.sleutel === "verbinding:onbekend");
+  const zonderKdef = lijst3.filter((g) => g.sleutel === "hout:onbekend" || g.sleutel === "verbinding:onbekend");
   if (zonderKdef.length > 0) {
     return {
       status: "alleenMelding",
-      groepen: lijst2,
+      groepen: lijst3,
       onbepaaldheid: onb,
       kDefPerStaaf: /* @__PURE__ */ new Map(),
       betonPhiPerStaaf: /* @__PURE__ */ new Map(),
@@ -25870,12 +25870,12 @@ function bepaalEindstijfheidHout(model) {
     else betonZonderPhi.push(b.id);
   }
   const bijzonder = [];
-  if (lijst2.some((g) => g.sleutel === "beton")) {
+  if (lijst3.some((g) => g.sleutel === "beton")) {
     bijzonder.push(
       "Beton houdt in de eindtoestand E_cm: zijn eigen kruip (EN 1992-1-1 3.1.4) zit niet in deze variant."
     );
   }
-  if (lijst2.some((g) => g.sleutel.startsWith("vrij:") || g.sleutel === "onbekend" || g.sleutel.startsWith("plaat-E:"))) {
+  if (lijst3.some((g) => g.sleutel.startsWith("vrij:") || g.sleutel === "onbekend" || g.sleutel.startsWith("plaat-E:"))) {
     bijzonder.push("Vrij of niet herkend materiaal houdt zijn opgegeven E; zijn kruip is onbekend.");
   }
   const metVeren = model.supports.some((s) => s.type === "zSpring" || s.type === "xSpring" || s.type === "rotSpring") || model.beams.some((b) => b.bedding && b.bedding.k > 0);
@@ -25893,13 +25893,13 @@ function bepaalEindstijfheidHout(model) {
       `Betonstaaf ${betonZonderPhi.join(", ")} houdt E_cm: voor die staaf is geen \u03C6(\u221E,t\u2080) opgegeven (niet in het \xA75.8-blok en niet als projectwaarde; een waarde volgens bijlage B wordt pas in de toetsing berekend). Zijn kruip ontbreekt dan in de eindtoestand, het beton trekt te veel kracht naar zich toe en de zakking van het hout kan te klein zijn. Geef \u03C6(\u221E,t\u2080) op om dat te voorkomen.`
     );
   }
-  if (lijst2.some((g) => g.sleutel.startsWith("vrij:") || g.sleutel === "onbekend" || g.sleutel.startsWith("plaat-E:"))) {
+  if (lijst3.some((g) => g.sleutel.startsWith("vrij:") || g.sleutel === "onbekend" || g.sleutel.startsWith("plaat-E:"))) {
     bgtBijzonder.push("Vrij of niet herkend materiaal houdt zijn opgegeven E; zijn kruip is onbekend.");
   }
   if (metVeren) bgtBijzonder.push("Verende opleggingen en bedding houden hun stijfheid.");
   return {
     status: "doorrekenen",
-    groepen: lijst2,
+    groepen: lijst3,
     onbepaaldheid: onb,
     kDefPerStaaf,
     betonPhiPerStaaf,
@@ -26236,10 +26236,10 @@ function parseOpenFem3DLayers(value) {
   if (!ids.has(0)) layers.unshift({ ...OPEN_FEM_3D_DEFAULT_LAYER });
   return layers.sort((a, b) => a.id - b.id);
 }
-function readOpenFem3DLayerId(value, layers, label) {
+function readOpenFem3DLayerId(value, layers, label2) {
   if (value === void 0 || value === null) return void 0;
   if (!Number.isSafeInteger(value) || Number(value) < 0 || !layers.some((layer) => layer.id === value)) {
-    throw new Error(`${label} verwijst naar een ongeldige of ontbrekende laag.`);
+    throw new Error(`${label2} verwijst naar een ongeldige of ontbrekende laag.`);
   }
   return Number(value) === 0 ? void 0 : Number(value);
 }
@@ -26876,11 +26876,11 @@ function readThermalLoad(value, model, id2, beamId) {
   const caseId = readOptionalCaseId(value.caseId);
   return { id: id2, beamId, ...caseId !== void 0 ? { caseId } : {}, deltaTUniformK, deltaTGradientYK, deltaTGradientZK };
 }
-function readPlateNodeLoop(value, nodeIds, label) {
-  if (!Array.isArray(value) || value.length < 3) throw new Error(`${label} moet minstens drie hoekknopen hebben.`);
+function readPlateNodeLoop(value, nodeIds, label2) {
+  if (!Array.isArray(value) || value.length < 3) throw new Error(`${label2} moet minstens drie hoekknopen hebben.`);
   const result = value.map(Number);
   if (result.some((id2, index) => !Number.isSafeInteger(id2) || !nodeIds.has(id2) || result.indexOf(id2) !== index)) {
-    throw new Error(`${label} bevat een ongeldige, ontbrekende of dubbele knoop.`);
+    throw new Error(`${label2} bevat een ongeldige, ontbrekende of dubbele knoop.`);
   }
   return result;
 }
@@ -26909,21 +26909,21 @@ function repairCopiedBoundary(value, loop, templates, nodes) {
   if (!segmentIds.every((id2) => idMap.has(Number(id2)))) return value;
   return value.map((segment) => segment.kind === "arc" ? { ...segment, startNodeId: idMap.get(segment.startNodeId), controlNodeId: idMap.get(segment.controlNodeId), endNodeId: idMap.get(segment.endNodeId) } : { ...segment, startNodeId: idMap.get(segment.startNodeId), endNodeId: idMap.get(segment.endNodeId) });
 }
-function readPlateBoundary(value, loop, nodeIds, nodes, label) {
+function readPlateBoundary(value, loop, nodeIds, nodes, label2) {
   if (value === void 0) return void 0;
-  if (!Array.isArray(value) || value.length < 2) throw new Error(`${label} bevat geen geldige getekende contour.`);
+  if (!Array.isArray(value) || value.length < 2) throw new Error(`${label2} bevat geen geldige getekende contour.`);
   const segments = value.map((raw, index) => {
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${label} bevat een ongeldig randsegment.`);
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${label2} bevat een ongeldig randsegment.`);
     const segment = raw;
     const startNodeId = Number(segment.startNodeId), endNodeId = Number(segment.endNodeId);
     if (!nodeIds.has(startNodeId) || !nodeIds.has(endNodeId) || startNodeId === endNodeId || !loop.includes(startNodeId) || !loop.includes(endNodeId)) {
-      throw new Error(`${label} bevat een randsegment met een ongeldige knoopverwijzing.`);
+      throw new Error(`${label2} bevat een randsegment met een ongeldige knoopverwijzing.`);
     }
     if (segment.kind === "line") return { kind: "line", startNodeId, endNodeId };
     if (segment.kind === "arc") {
       const controlNodeId = Number(segment.controlNodeId);
       if (!nodeIds.has(controlNodeId) || !loop.includes(controlNodeId) || controlNodeId === startNodeId || controlNodeId === endNodeId) {
-        throw new Error(`${label} bevat een boog met een ongeldige stuurknoop.`);
+        throw new Error(`${label2} bevat een boog met een ongeldige stuurknoop.`);
       }
       const start = nodes.get(startNodeId), control = nodes.get(controlNodeId), end = nodes.get(endNodeId);
       const first = [control.x - start.x, control.y - start.y, control.z - start.z];
@@ -26934,19 +26934,19 @@ function readPlateBoundary(value, loop, nodeIds, nodes, label) {
         first[0] * second[1] - first[1] * second[0]
       );
       if (cross6 <= 1e-12 * Math.hypot(...first) * Math.hypot(...second)) {
-        throw new Error(`${label} bevat een boog waarvan begin-, stuur- en eindpunt op \xE9\xE9n lijn liggen.`);
+        throw new Error(`${label2} bevat een boog waarvan begin-, stuur- en eindpunt op \xE9\xE9n lijn liggen.`);
       }
       return { kind: "arc", startNodeId, controlNodeId, endNodeId };
     }
-    throw new Error(`${label} bevat een onbekend randsegment op positie ${index + 1}.`);
+    throw new Error(`${label2} bevat een onbekend randsegment op positie ${index + 1}.`);
   });
   for (let index = 0; index < segments.length; index += 1) {
     const current = segments[index], next = segments[(index + 1) % segments.length];
-    if (current.endNodeId !== next.startNodeId) throw new Error(`${label} moet \xE9\xE9n aansluitende gesloten contour vormen.`);
+    if (current.endNodeId !== next.startNodeId) throw new Error(`${label2} moet \xE9\xE9n aansluitende gesloten contour vormen.`);
   }
   return segments;
 }
-function validatePlatePlane(nodes, nodeIds, label) {
+function validatePlatePlane(nodes, nodeIds, label2) {
   const points = nodeIds.map((id2) => nodes.find((node) => node.id === id2));
   const a = points[0];
   let normal = null;
@@ -26961,14 +26961,14 @@ function validatePlatePlane(nodes, nodeIds, label) {
     ];
     if (Math.hypot(...candidate) > 1e-10) normal = candidate;
   }
-  if (!normal) throw new Error(`${label} heeft geen oppervlakte.`);
+  if (!normal) throw new Error(`${label2} heeft geen oppervlakte.`);
   const length = Math.hypot(...normal);
   const scale4 = Math.max(1, ...points.map((point) => Math.hypot(point.x - a.x, point.y - a.y, point.z - a.z)));
   if (points.some((point) => Math.abs((point.x - a.x) * normal[0] + (point.y - a.y) * normal[1] + (point.z - a.z) * normal[2]) / length > scale4 * 1e-7)) {
-    throw new Error(`${label} moet vlak zijn.`);
+    throw new Error(`${label2} moet vlak zijn.`);
   }
 }
-function validateOpeningInsidePlate(nodes, plateLoop, plateBoundary, openingLoop, openingBoundary, label) {
+function validateOpeningInsidePlate(nodes, plateLoop, plateBoundary, openingLoop, openingBoundary, label2) {
   const contour2 = (loop, boundary) => {
     if (!boundary) return loop.map((id2) => nodes.get(id2));
     const points = [nodes.get(boundary[0].startNodeId)];
@@ -26981,7 +26981,7 @@ function validateOpeningInsidePlate(nodes, plateLoop, plateBoundary, openingLoop
           nodes.get(segment.endNodeId),
           32
         );
-        if (!arc) throw new Error(`${label} bevat een ongeldige cirkelboog.`);
+        if (!arc) throw new Error(`${label2} bevat een ongeldige cirkelboog.`);
         points.push(...arc.slice(1));
       }
     }
@@ -26999,7 +26999,7 @@ function validateOpeningInsidePlate(nodes, plateLoop, plateBoundary, openingLoop
     const cross6 = [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx];
     if (Math.hypot(...cross6) > 1e-12) normal = cross6;
   }
-  if (!normal) throw new Error(`${label} heeft geen vlakke buitencontour.`);
+  if (!normal) throw new Error(`${label2} heeft geen vlakke buitencontour.`);
   const norm5 = Math.hypot(...normal);
   const drop = Math.abs(normal[0]) > Math.abs(normal[1]) ? Math.abs(normal[0]) > Math.abs(normal[2]) ? "x" : "z" : Math.abs(normal[1]) > Math.abs(normal[2]) ? "y" : "z";
   const project = (point) => drop === "x" ? [point.y, point.z] : drop === "y" ? [point.x, point.z] : [point.x, point.y];
@@ -27026,7 +27026,7 @@ function validateOpeningInsidePlate(nodes, plateLoop, plateBoundary, openingLoop
       (point.x - origin.x) * normal[0] + (point.y - origin.y) * normal[1] + (point.z - origin.z) * normal[2]
     ) / norm5;
     if (planeDistance > tolerance || !inside(project(point))) {
-      throw new Error(`${label} moet volledig binnen de plaat liggen, zonder de buitenrand te raken.`);
+      throw new Error(`${label2} moet volledig binnen de plaat liggen, zonder de buitenrand te raken.`);
     }
   }
 }
@@ -27608,14 +27608,14 @@ function restraintsForKind(kind, axis) {
   }
   return restraints;
 }
-function legacyFrame3DEdgeSupportsToOpenFem3D(kinds, loop, nodeIndex, label) {
+function legacyFrame3DEdgeSupportsToOpenFem3D(kinds, loop, nodeIndex, label2) {
   if (loop.length !== 4 || kinds.length !== 4 || kinds.some((kind) => kind !== "free" && kind !== "simplySupported" && kind !== "clamped")) {
-    throw new Error(`${label} bevat een ongeldige randoplegging: het frame3d-formaat vraagt vier randen (vrij, scharnier of inklemming) bij vier hoekknopen.`);
+    throw new Error(`${label2} bevat een ongeldige randoplegging: het frame3d-formaat vraagt vier randen (vrij, scharnier of inklemming) bij vier hoekknopen.`);
   }
   if (kinds.every((kind) => kind === "free")) return [];
   const axis = plateNormalAxis(loop.map((id2) => nodeIndex.get(id2)));
   if (axis === null) {
-    throw new Error(`${label} bevat een randoplegging in plaatassen (frame3d-formaat); die is alleen om te zetten bij een plaat evenwijdig aan een globaal co\xF6rdinatenvlak.`);
+    throw new Error(`${label2} bevat een randoplegging in plaatassen (frame3d-formaat); die is alleen om te zetten bij een plaat evenwijdig aan een globaal co\xF6rdinatenvlak.`);
   }
   const supports = [];
   kinds.forEach((kind, edge) => {
@@ -27627,14 +27627,14 @@ function legacyFrame3DEdgeSupportsToOpenFem3D(kinds, loop, nodeIndex, label) {
 function openFem3DEdgeSupportsToFrame3D(plate, nodeIndex) {
   const supports = plate.edgeSupports ?? [];
   if (supports.length === 0) return void 0;
-  const label = `3D-plaat ${plate.id}`;
+  const label2 = `3D-plaat ${plate.id}`;
   const straightQuad = plate.nodeIds.length === 4 && (!plate.boundary || plate.boundary.length === 4 && plate.boundary.every((segment, index) => segment.kind === "line" && segment.startNodeId === plate.nodeIds[index]));
   if (!straightQuad) {
-    throw new Error(`${label}: Open FEM Rust rekent randopleggingen alleen op een plaat met vier rechte randen.`);
+    throw new Error(`${label2}: Open FEM Rust rekent randopleggingen alleen op een plaat met vier rechte randen.`);
   }
   const axis = plateNormalAxis(plate.nodeIds.map((id2) => nodeIndex.get(id2)));
   if (axis === null) {
-    throw new Error(`${label}: Open FEM Rust rekent randopleggingen alleen op een plaat evenwijdig aan een globaal co\xF6rdinatenvlak.`);
+    throw new Error(`${label2}: Open FEM Rust rekent randopleggingen alleen op een plaat evenwijdig aan een globaal co\xF6rdinatenvlak.`);
   }
   const kinds = ["free", "free", "free", "free"];
   const keys = ["ux", "uy", "uz", "rx", "ry", "rz"];
@@ -27644,7 +27644,7 @@ function openFem3DEdgeSupportsToFrame3D(plate, nodeIndex) {
       return keys.every((key) => expected[key] === support[key]);
     });
     if (!kind) {
-      throw new Error(`${label}: de randoplegging op rand ${support.edge + 1} is in Open FEM Rust niet te rekenen (alleen scharnierend of ingeklemd loodrecht op de plaat).`);
+      throw new Error(`${label2}: de randoplegging op rand ${support.edge + 1} is in Open FEM Rust niet te rekenen (alleen scharnierend of ingeklemd loodrecht op de plaat).`);
     }
     kinds[support.edge] = kind;
   }
@@ -27828,9 +27828,9 @@ function openFem3DMemberAxes(start, end, rollAngleRad = 0) {
   ];
   return { ex, ey, ez };
 }
-function readOptionalLevelId(value, label) {
+function readOptionalLevelId(value, label2) {
   if (value === void 0 || value === null) return void 0;
-  if (typeof value !== "string") throw new Error(`${label} heeft een ongeldige levelverwijzing.`);
+  if (typeof value !== "string") throw new Error(`${label2} heeft een ongeldige levelverwijzing.`);
   const trimmed = value.trim();
   return trimmed ? trimmed : void 0;
 }
@@ -28038,11 +28038,11 @@ function readThermalLoad2(value, model, id2, beamId) {
   const caseId = readOptionalCaseId2(value.caseId);
   return { id: id2, beamId, ...caseId !== void 0 ? { caseId } : {}, deltaTUniformK, deltaTGradientYK, deltaTGradientZK };
 }
-function readPlateNodeLoop2(value, nodeIds, label) {
-  if (!Array.isArray(value) || value.length < 3) throw new Error(`${label} moet minstens drie hoekknopen hebben.`);
+function readPlateNodeLoop2(value, nodeIds, label2) {
+  if (!Array.isArray(value) || value.length < 3) throw new Error(`${label2} moet minstens drie hoekknopen hebben.`);
   const result = value.map(Number);
   if (result.some((id2, index) => !Number.isSafeInteger(id2) || !nodeIds.has(id2) || result.indexOf(id2) !== index)) {
-    throw new Error(`${label} bevat een ongeldige, ontbrekende of dubbele knoop.`);
+    throw new Error(`${label2} bevat een ongeldige, ontbrekende of dubbele knoop.`);
   }
   return result;
 }
@@ -28078,21 +28078,21 @@ function hasCopiedBoundaryReference(value, loop) {
     return !loop.includes(Number(part.startNodeId)) || !loop.includes(Number(part.endNodeId)) || part.kind === "arc" && !loop.includes(Number(part.controlNodeId));
   });
 }
-function readPlateBoundary2(value, loop, nodeIds, nodes, label) {
+function readPlateBoundary2(value, loop, nodeIds, nodes, label2) {
   if (value === void 0) return void 0;
-  if (!Array.isArray(value) || value.length < 2) throw new Error(`${label} bevat geen geldige getekende contour.`);
+  if (!Array.isArray(value) || value.length < 2) throw new Error(`${label2} bevat geen geldige getekende contour.`);
   const segments = value.map((raw, index) => {
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${label} bevat een ongeldig randsegment.`);
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${label2} bevat een ongeldig randsegment.`);
     const segment = raw;
     const startNodeId = Number(segment.startNodeId), endNodeId = Number(segment.endNodeId);
     if (!nodeIds.has(startNodeId) || !nodeIds.has(endNodeId) || startNodeId === endNodeId || !loop.includes(startNodeId) || !loop.includes(endNodeId)) {
-      throw new Error(`${label} bevat een randsegment met een ongeldige knoopverwijzing.`);
+      throw new Error(`${label2} bevat een randsegment met een ongeldige knoopverwijzing.`);
     }
     if (segment.kind === "line") return { kind: "line", startNodeId, endNodeId };
     if (segment.kind === "arc") {
       const controlNodeId = Number(segment.controlNodeId);
       if (!nodeIds.has(controlNodeId) || !loop.includes(controlNodeId) || controlNodeId === startNodeId || controlNodeId === endNodeId) {
-        throw new Error(`${label} bevat een boog met een ongeldige stuurknoop.`);
+        throw new Error(`${label2} bevat een boog met een ongeldige stuurknoop.`);
       }
       const start = nodes.get(startNodeId), control = nodes.get(controlNodeId), end = nodes.get(endNodeId);
       const first = [control.x - start.x, control.y - start.y, control.z - start.z];
@@ -28103,19 +28103,19 @@ function readPlateBoundary2(value, loop, nodeIds, nodes, label) {
         first[0] * second[1] - first[1] * second[0]
       );
       if (cross6 <= 1e-12 * Math.hypot(...first) * Math.hypot(...second)) {
-        throw new Error(`${label} bevat een boog waarvan begin-, stuur- en eindpunt op \xE9\xE9n lijn liggen.`);
+        throw new Error(`${label2} bevat een boog waarvan begin-, stuur- en eindpunt op \xE9\xE9n lijn liggen.`);
       }
       return { kind: "arc", startNodeId, controlNodeId, endNodeId };
     }
-    throw new Error(`${label} bevat een onbekend randsegment op positie ${index + 1}.`);
+    throw new Error(`${label2} bevat een onbekend randsegment op positie ${index + 1}.`);
   });
   for (let index = 0; index < segments.length; index += 1) {
     const current = segments[index], next = segments[(index + 1) % segments.length];
-    if (current.endNodeId !== next.startNodeId) throw new Error(`${label} moet \xE9\xE9n aansluitende gesloten contour vormen.`);
+    if (current.endNodeId !== next.startNodeId) throw new Error(`${label2} moet \xE9\xE9n aansluitende gesloten contour vormen.`);
   }
   return segments;
 }
-function validatePlatePlane2(nodes, nodeIds, label) {
+function validatePlatePlane2(nodes, nodeIds, label2) {
   const points = nodeIds.map((id2) => nodes.find((node) => node.id === id2));
   const a = points[0];
   let normal = null;
@@ -28130,14 +28130,14 @@ function validatePlatePlane2(nodes, nodeIds, label) {
     ];
     if (Math.hypot(...candidate) > 1e-10) normal = candidate;
   }
-  if (!normal) throw new Error(`${label} heeft geen oppervlakte.`);
+  if (!normal) throw new Error(`${label2} heeft geen oppervlakte.`);
   const length = Math.hypot(...normal);
   const scale4 = Math.max(1, ...points.map((point) => Math.hypot(point.x - a.x, point.y - a.y, point.z - a.z)));
   if (points.some((point) => Math.abs((point.x - a.x) * normal[0] + (point.y - a.y) * normal[1] + (point.z - a.z) * normal[2]) / length > scale4 * 1e-7)) {
-    throw new Error(`${label} moet vlak zijn.`);
+    throw new Error(`${label2} moet vlak zijn.`);
   }
 }
-function validateOpeningInsidePlate2(nodes, plateLoop, plateBoundary, openingLoop, openingBoundary, label) {
+function validateOpeningInsidePlate2(nodes, plateLoop, plateBoundary, openingLoop, openingBoundary, label2) {
   const contour2 = (loop, boundary) => {
     if (!boundary) return loop.map((id2) => nodes.get(id2));
     const points = [nodes.get(boundary[0].startNodeId)];
@@ -28150,7 +28150,7 @@ function validateOpeningInsidePlate2(nodes, plateLoop, plateBoundary, openingLoo
           nodes.get(segment.endNodeId),
           32
         );
-        if (!arc) throw new Error(`${label} bevat een ongeldige cirkelboog.`);
+        if (!arc) throw new Error(`${label2} bevat een ongeldige cirkelboog.`);
         points.push(...arc.slice(1));
       }
     }
@@ -28168,7 +28168,7 @@ function validateOpeningInsidePlate2(nodes, plateLoop, plateBoundary, openingLoo
     const cross6 = [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx];
     if (Math.hypot(...cross6) > 1e-12) normal = cross6;
   }
-  if (!normal) throw new Error(`${label} heeft geen vlakke buitencontour.`);
+  if (!normal) throw new Error(`${label2} heeft geen vlakke buitencontour.`);
   const norm5 = Math.hypot(...normal);
   const drop = Math.abs(normal[0]) > Math.abs(normal[1]) ? Math.abs(normal[0]) > Math.abs(normal[2]) ? "x" : "z" : Math.abs(normal[1]) > Math.abs(normal[2]) ? "y" : "z";
   const project = (point) => drop === "x" ? [point.y, point.z] : drop === "y" ? [point.x, point.z] : [point.x, point.y];
@@ -28195,7 +28195,7 @@ function validateOpeningInsidePlate2(nodes, plateLoop, plateBoundary, openingLoo
       (point.x - origin.x) * normal[0] + (point.y - origin.y) * normal[1] + (point.z - origin.z) * normal[2]
     ) / norm5;
     if (planeDistance > tolerance || !inside(project(point))) {
-      throw new Error(`${label} moet volledig binnen de plaat liggen, zonder de buitenrand te raken.`);
+      throw new Error(`${label2} moet volledig binnen de plaat liggen, zonder de buitenrand te raken.`);
     }
   }
 }
@@ -28596,41 +28596,41 @@ function readEnvelopePanel(value, nodeIds) {
   const raw = value;
   const id2 = Number(raw.id);
   if (!Number.isSafeInteger(raw.id) || id2 <= 0) throw new Error("Het 3D-model bevat een schilpaneel met een ongeldige id.");
-  const label = `3D-schilpaneel ${id2}`;
-  const loop = readPlateNodeLoop2(raw.nodeIds, nodeIds, label);
-  if (raw.type !== "facade" && raw.type !== "roof") throw new Error(`${label} heeft een ongeldig type.`);
+  const label2 = `3D-schilpaneel ${id2}`;
+  const loop = readPlateNodeLoop2(raw.nodeIds, nodeIds, label2);
+  if (raw.type !== "facade" && raw.type !== "roof") throw new Error(`${label2} heeft een ongeldig type.`);
   if (!LOAD_PANEL_DISTRIBUTIONS.includes(raw.distribution)) {
-    throw new Error(`${label} heeft een ongeldige afdracht.`);
+    throw new Error(`${label2} heeft een ongeldige afdracht.`);
   }
   if (raw.flipOuterSide !== void 0 && typeof raw.flipOuterSide !== "boolean") {
-    throw new Error(`${label} heeft een ongeldige buitenzijde.`);
+    throw new Error(`${label2} heeft een ongeldige buitenzijde.`);
   }
   const weight = raw.claddingWeightKnPerM2;
   if (weight !== void 0 && (typeof weight !== "number" || !Number.isFinite(weight) || weight < 0)) {
-    throw new Error(`${label} heeft een ongeldig bekledingsgewicht.`);
+    throw new Error(`${label2} heeft een ongeldig bekledingsgewicht.`);
   }
   let spanDirection;
   if (raw.spanDirection !== void 0) {
     const vector2 = raw.spanDirection;
     if (!vector2 || typeof vector2 !== "object" || Array.isArray(vector2) || !["x", "y", "z"].every((axis) => typeof vector2[axis] === "number" && Number.isFinite(vector2[axis])) || Math.hypot(Number(vector2.x), Number(vector2.y), Number(vector2.z)) === 0) {
-      throw new Error(`${label} heeft een ongeldige overspanningsrichting.`);
+      throw new Error(`${label2} heeft een ongeldige overspanningsrichting.`);
     }
     spanDirection = { x: Number(vector2.x), y: Number(vector2.y), z: Number(vector2.z) };
   }
-  if (raw.distribution === "oneWay" && !spanDirection) throw new Error(`${label} mist de overspanningsrichting.`);
+  if (raw.distribution === "oneWay" && !spanDirection) throw new Error(`${label2} mist de overspanningsrichting.`);
   let openings;
   if (raw.openings !== void 0) {
-    if (!Array.isArray(raw.openings)) throw new Error(`${label} bevat een ongeldige lijst openingen.`);
+    if (!Array.isArray(raw.openings)) throw new Error(`${label2} bevat een ongeldige lijst openingen.`);
     const openingIds = /* @__PURE__ */ new Set();
     openings = raw.openings.map((item) => {
-      if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(`${label} bevat een ongeldige opening.`);
+      if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(`${label2} bevat een ongeldige opening.`);
       const opening = item;
       const openingId = Number(opening.id);
       if (!Number.isSafeInteger(opening.id) || openingId <= 0 || openingIds.has(openingId)) {
-        throw new Error(`${label} bevat een opening met een ongeldige of dubbele id.`);
+        throw new Error(`${label2} bevat een opening met een ongeldige of dubbele id.`);
       }
       openingIds.add(openingId);
-      return { id: openingId, nodeIds: readPlateNodeLoop2(opening.nodeIds, nodeIds, `Opening ${openingId} van ${label}`) };
+      return { id: openingId, nodeIds: readPlateNodeLoop2(opening.nodeIds, nodeIds, `Opening ${openingId} van ${label2}`) };
     });
   }
   return {
@@ -28642,7 +28642,7 @@ function readEnvelopePanel(value, nodeIds) {
     ...spanDirection ? { spanDirection } : {},
     ...openings?.length ? { openings } : {},
     ...weight !== void 0 ? { claddingWeightKnPerM2: weight } : {},
-    ...readOptionalName(raw.name, label) ? { name: readOptionalName(raw.name, label) } : {}
+    ...readOptionalName(raw.name, label2) ? { name: readOptionalName(raw.name, label2) } : {}
   };
 }
 function readLoadPanel(value, nodeIds, beamIds) {
@@ -28652,35 +28652,35 @@ function readLoadPanel(value, nodeIds, beamIds) {
   const raw = value;
   const id2 = Number(raw.id);
   if (!Number.isSafeInteger(raw.id) || id2 <= 0) throw new Error("Het 3D-model bevat een belastingvlak met een ongeldige id.");
-  const label = `3D-belastingvlak ${id2}`;
-  const loop = readPlateNodeLoop2(raw.nodeIds, nodeIds, label);
+  const label2 = `3D-belastingvlak ${id2}`;
+  const loop = readPlateNodeLoop2(raw.nodeIds, nodeIds, label2);
   const q = raw.q;
   if (typeof q !== "number" || !Number.isFinite(q) || q === 0) {
-    throw new Error(`${label} heeft een ongeldige intensiteit q; geef een eindige waarde ongelijk aan 0 in kN/m\xB2.`);
+    throw new Error(`${label2} heeft een ongeldige intensiteit q; geef een eindige waarde ongelijk aan 0 in kN/m\xB2.`);
   }
   if (!LOAD_PANEL_DIRECTIONS.includes(raw.direction)) {
-    throw new Error(`${label} heeft een onbekende lastrichting ${JSON.stringify(raw.direction)}; kies gravity, normal of verticalSurface.`);
+    throw new Error(`${label2} heeft een onbekende lastrichting ${JSON.stringify(raw.direction)}; kies gravity, normal of verticalSurface.`);
   }
   if (!LOAD_PANEL_DISTRIBUTIONS.includes(raw.distribution)) {
-    throw new Error(`${label} heeft een onbekende afdracht ${JSON.stringify(raw.distribution)}; kies oneWay of twoWay.`);
+    throw new Error(`${label2} heeft een onbekende afdracht ${JSON.stringify(raw.distribution)}; kies oneWay of twoWay.`);
   }
   let spanDirection;
   if (raw.spanDirection !== void 0) {
     const vector2 = raw.spanDirection;
     if (!vector2 || typeof vector2 !== "object" || Array.isArray(vector2) || !["x", "y", "z"].every((axis) => typeof vector2[axis] === "number" && Number.isFinite(vector2[axis])) || Math.hypot(Number(vector2.x), Number(vector2.y), Number(vector2.z)) === 0) {
-      throw new Error(`${label} heeft een ongeldige overspanningsrichting; geef een vector {x, y, z} ongelijk aan nul.`);
+      throw new Error(`${label2} heeft een ongeldige overspanningsrichting; geef een vector {x, y, z} ongelijk aan nul.`);
     }
     spanDirection = { x: Number(vector2.x), y: Number(vector2.y), z: Number(vector2.z) };
   }
   if (raw.distribution === "oneWay" && !spanDirection) {
-    throw new Error(`${label} draagt in \xE9\xE9n richting af maar mist de overspanningsrichting.`);
+    throw new Error(`${label2} draagt in \xE9\xE9n richting af maar mist de overspanningsrichting.`);
   }
   let excludedBeamIds;
   if (raw.excludedBeamIds !== void 0) {
-    if (!Array.isArray(raw.excludedBeamIds)) throw new Error(`${label} bevat geen geldige lijst uitgesloten staven.`);
+    if (!Array.isArray(raw.excludedBeamIds)) throw new Error(`${label2} bevat geen geldige lijst uitgesloten staven.`);
     const ids = raw.excludedBeamIds.map(Number);
     if (ids.some((beamId, index) => !Number.isSafeInteger(beamId) || !beamIds.has(beamId) || ids.indexOf(beamId) !== index)) {
-      throw new Error(`${label} sluit een ontbrekende of dubbele staaf uit.`);
+      throw new Error(`${label2} sluit een ontbrekende of dubbele staaf uit.`);
     }
     if (ids.length > 0) excludedBeamIds = ids;
   }
@@ -28688,10 +28688,10 @@ function readLoadPanel(value, nodeIds, beamIds) {
   let generated;
   if (raw.generated !== void 0) {
     const value2 = raw.generated;
-    if (!value2 || typeof value2 !== "object" || Array.isArray(value2)) throw new Error(`${label} heeft een ongeldige herkomst.`);
+    if (!value2 || typeof value2 !== "object" || Array.isArray(value2)) throw new Error(`${label2} heeft een ongeldige herkomst.`);
     const origin = value2;
     if (origin.source !== "envelope3d" || typeof origin.key !== "string" || !origin.key.trim() || !Number.isSafeInteger(origin.panelId) || Number(origin.panelId) <= 0 || typeof origin.zone !== "string" || !origin.zone.trim() || typeof origin.coefficient !== "number" || !Number.isFinite(origin.coefficient) || typeof origin.referencePressureKnPerM2 !== "number" || !Number.isFinite(origin.referencePressureKnPerM2) || typeof origin.sourceReference !== "string" || !origin.sourceReference.trim() || origin.internalPressureCoefficient !== void 0 && (typeof origin.internalPressureCoefficient !== "number" || !Number.isFinite(origin.internalPressureCoefficient)) || origin.windInternalPressureDerivation !== void 0 && (origin.internalPressureCoefficient === void 0 || !Array.isArray(origin.windInternalPressureDerivation) || origin.windInternalPressureDerivation.length === 0 || !origin.windInternalPressureDerivation.every((line) => line !== null && typeof line === "object" && !Array.isArray(line) && ["symbool", "waarde", "bron"].every((key) => typeof line[key] === "string" && Boolean(line[key].trim())))) || origin.windCodeId !== void 0 && (typeof origin.windCodeId !== "string" || !origin.windCodeId.trim()) || origin.windStructuralFactor !== void 0 && (typeof origin.windStructuralFactor !== "number" || !Number.isFinite(origin.windStructuralFactor) || origin.windStructuralFactor <= 0 || origin.internalPressureCoefficient === void 0) || origin.windReferenceHeightM !== void 0 && (typeof origin.windReferenceHeightM !== "number" || !Number.isFinite(origin.windReferenceHeightM) || origin.windReferenceHeightM <= 0 || origin.windReferenceHeightM > 200) || origin.windPressureDerivation !== void 0 && (!Array.isArray(origin.windPressureDerivation) || origin.windPressureDerivation.length === 0 || !origin.windPressureDerivation.every((line) => line !== null && typeof line === "object" && !Array.isArray(line) && ["symbool", "waarde", "bron"].every((key) => typeof line[key] === "string" && Boolean(line[key].trim())))) || origin.windPressureDerivation !== void 0 !== (origin.windReferenceHeightM !== void 0) || origin.windPressureMethod !== void 0 && (origin.windPressureMethod !== "en-terreinprofiel" && origin.windPressureMethod !== "handmatig-opgegeven" && origin.windPressureMethod !== "nbc-static" || origin.windPressureDerivation === void 0) || origin.windPressureMethod === "nbc-static" && (origin.windCodeId !== "ca-nbc-2025" || origin.windPressurePlan === void 0)) {
-      throw new Error(`${label} heeft een ongeldige herkomst van de 3D-belastinggenerator.`);
+      throw new Error(`${label2} heeft een ongeldige herkomst van de 3D-belastinggenerator.`);
     }
     let windPressurePlan;
     if (origin.windPressurePlan !== void 0) {
@@ -28701,7 +28701,7 @@ function readLoadPanel(value, nodeIds, beamIds) {
           throw new Error("Winddrukplan past niet bij de gegenereerde belasting.");
         }
       } catch {
-        throw new Error(`${label} heeft een ongeldig winddrukplan.`);
+        throw new Error(`${label2} heeft een ongeldig winddrukplan.`);
       }
     }
     generated = {
@@ -28724,15 +28724,15 @@ function readLoadPanel(value, nodeIds, beamIds) {
   }
   let openings;
   if (raw.openings !== void 0) {
-    if (!Array.isArray(raw.openings)) throw new Error(`${label} bevat een ongeldige lijst openingen.`);
+    if (!Array.isArray(raw.openings)) throw new Error(`${label2} bevat een ongeldige lijst openingen.`);
     const ids = /* @__PURE__ */ new Set();
     openings = raw.openings.map((item) => {
-      if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(`${label} bevat een ongeldige opening.`);
+      if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(`${label2} bevat een ongeldige opening.`);
       const opening = item;
       const openingId = Number(opening.id);
-      if (!Number.isSafeInteger(opening.id) || openingId <= 0 || ids.has(openingId)) throw new Error(`${label} bevat een opening met ongeldige of dubbele id.`);
+      if (!Number.isSafeInteger(opening.id) || openingId <= 0 || ids.has(openingId)) throw new Error(`${label2} bevat een opening met ongeldige of dubbele id.`);
       ids.add(openingId);
-      return { id: openingId, nodeIds: readPlateNodeLoop2(opening.nodeIds, nodeIds, `Opening ${openingId} van ${label}`) };
+      return { id: openingId, nodeIds: readPlateNodeLoop2(opening.nodeIds, nodeIds, `Opening ${openingId} van ${label2}`) };
     });
   }
   return {
@@ -28748,9 +28748,9 @@ function readLoadPanel(value, nodeIds, beamIds) {
     ...openings?.length ? { openings } : {}
   };
 }
-function readOptionalName(value, label) {
+function readOptionalName(value, label2) {
   if (value === void 0 || value === null) return void 0;
-  if (typeof value !== "string") throw new Error(`${label} heeft een ongeldige naam of groep.`);
+  if (typeof value !== "string") throw new Error(`${label2} heeft een ongeldige naam of groep.`);
   const trimmed = value.trim();
   return trimmed ? trimmed : void 0;
 }
@@ -28944,8 +28944,8 @@ function removeOpenFem3DThermalLoad(model, loadId) {
 }
 var OPEN_FEM_3D_SAME_POSITION_M = 1e-6;
 var OPEN_FEM_3D_DEFAULT_BEAM = { material: "S235", profileName: "IPE 200" };
-function readCoordinate(value, label) {
-  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${label} moet een eindig getal zijn.`);
+function readCoordinate(value, label2) {
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${label2} moet een eindig getal zijn.`);
   return value;
 }
 function nodeAtSamePosition(model, x, y, z, exceptId) {
@@ -28982,37 +28982,37 @@ function updateOpenFem3DNode(model, nodeId, patch) {
 function connectingBeam(model, a, b, exceptId) {
   return model.beams.find((beam) => beam.id !== exceptId && (beam.startNodeId === a && beam.endNodeId === b || beam.startNodeId === b && beam.endNodeId === a));
 }
-function readRequiredText(value, label) {
-  if (typeof value !== "string" || !value.trim()) throw new Error(`${label} mag niet leeg zijn.`);
+function readRequiredText(value, label2) {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`${label2} mag niet leeg zijn.`);
   return value.trim();
 }
 function withBeamFields(beam, patch) {
-  const label = `3D-staaf ${beam.id}`;
+  const label2 = `3D-staaf ${beam.id}`;
   const next = { ...beam };
   const set = (key, value) => {
     if (value === void 0) delete next[key];
     else next[key] = value;
   };
-  if (patch.profileName !== void 0) set("profileName", patch.profileName === null ? void 0 : readRequiredText(patch.profileName, `Het profiel van ${label}`));
+  if (patch.profileName !== void 0) set("profileName", patch.profileName === null ? void 0 : readRequiredText(patch.profileName, `Het profiel van ${label2}`));
   if (patch.profileNameEnd !== void 0) {
-    if (patch.profileNameEnd !== null && typeof patch.profileNameEnd !== "string") throw new Error(`Het eindprofiel van ${label} is ongeldig.`);
+    if (patch.profileNameEnd !== null && typeof patch.profileNameEnd !== "string") throw new Error(`Het eindprofiel van ${label2} is ongeldig.`);
     set("profileNameEnd", patch.profileNameEnd?.trim() || void 0);
   }
-  if (patch.material !== void 0) set("material", patch.material === null ? void 0 : readRequiredText(patch.material, `Het materiaal van ${label}`));
-  if (patch.rollAngleRad !== void 0) set("rollAngleRad", patch.rollAngleRad === null ? void 0 : readCoordinate(patch.rollAngleRad, `De rolhoek van ${label}`));
+  if (patch.material !== void 0) set("material", patch.material === null ? void 0 : readRequiredText(patch.material, `Het materiaal van ${label2}`));
+  if (patch.rollAngleRad !== void 0) set("rollAngleRad", patch.rollAngleRad === null ? void 0 : readCoordinate(patch.rollAngleRad, `De rolhoek van ${label2}`));
   if (patch.shearDeformation !== void 0) {
-    if (typeof patch.shearDeformation !== "boolean") throw new Error(`De afschuifvervorming van ${label} is ongeldig.`);
+    if (typeof patch.shearDeformation !== "boolean") throw new Error(`De afschuifvervorming van ${label2} is ongeldig.`);
     set("shearDeformation", patch.shearDeformation ? true : void 0);
   }
   if (patch.releases !== void 0) set("releases", patch.releases === null ? void 0 : readEndReleases2(patch.releases));
   if (patch.tensionOnly !== void 0) set("tensionOnly", patch.tensionOnly ? true : void 0);
-  if (patch.name !== void 0) set("name", readOptionalName(patch.name, label));
-  if (patch.group !== void 0) set("group", readOptionalName(patch.group, label));
+  if (patch.name !== void 0) set("name", readOptionalName(patch.name, label2));
+  if (patch.group !== void 0) set("group", readOptionalName(patch.group, label2));
   const verloopGeraakt = patch.profileName !== void 0 || patch.profileNameEnd !== void 0 || patch.material !== void 0;
   if (verloopGeraakt && next.profileNameEnd !== void 0) {
-    if (!next.profileName) throw new Error(`${label} heeft een eindprofiel maar geen beginprofiel.`);
+    if (!next.profileName) throw new Error(`${label2} heeft een eindprofiel maar geen beginprofiel.`);
     const verloop = openFem3DBeamVerloop(next);
-    if (verloop.status === "fout") throw new Error(`${label}: ${verloop.reden}.`);
+    if (verloop.status === "fout") throw new Error(`${label2}: ${verloop.reden}.`);
     if (verloop.status === "prismatisch") delete next.profileNameEnd;
   }
   return next;
@@ -29149,41 +29149,41 @@ function assertOpenFem3DBeddingFitsGeometry(model, beamIds) {
   if (fout) throw new OpenFem3DBeddingVerticalError(fout.id);
 }
 var BEDDING_KEYS = ["kKnPerM3", "widthM", "kLateralKnPerM3", "compressionOnly"];
-function readOpenFem3DBeamBedding(value, start, end, label) {
+function readOpenFem3DBeamBedding(value, start, end, label2) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${label}: de bedding moet een object zijn met k (kKnPerM3) en de contactbreedte (widthM).`);
+    throw new Error(`${label2}: de bedding moet een object zijn met k (kKnPerM3) en de contactbreedte (widthM).`);
   }
   const raw = value;
   const onbekend2 = Object.keys(raw).filter((key) => raw[key] !== void 0 && !BEDDING_KEYS.includes(key));
   if (onbekend2.length > 0) {
-    throw new Error(`${label}: onbekend veld in de bedding: ${onbekend2.join(", ")}. Toegestaan: ${BEDDING_KEYS.join(", ")}.`);
+    throw new Error(`${label2}: onbekend veld in de bedding: ${onbekend2.join(", ")}. Toegestaan: ${BEDDING_KEYS.join(", ")}.`);
   }
   const positief2 = (key, wat) => {
     const getal6 = raw[key];
     if (getal6 === void 0 || getal6 === null) return void 0;
     if (typeof getal6 !== "number" || !Number.isFinite(getal6) || getal6 <= 0) {
-      throw new Error(`${label}: ${wat} moet een eindig getal groter dan 0 zijn.`);
+      throw new Error(`${label2}: ${wat} moet een eindig getal groter dan 0 zijn.`);
     }
     return getal6;
   };
   const kKnPerM3 = positief2("kKnPerM3", "de beddingsconstante k (kN/m\xB3)");
   const widthM = positief2("widthM", "de contactbreedte b (m)");
   const kLateralKnPerM3 = positief2("kLateralKnPerM3", "de zijdelingse beddingsconstante (kN/m\xB3)");
-  if (widthM === void 0) throw new Error(`${label}: de bedding mist de contactbreedte b (widthM, in m).`);
+  if (widthM === void 0) throw new Error(`${label2}: de bedding mist de contactbreedte b (widthM, in m).`);
   if (raw.compressionOnly !== void 0 && typeof raw.compressionOnly !== "boolean") {
-    throw new Error(`${label}: "alleen druk" (compressionOnly) moet true of false zijn.`);
+    throw new Error(`${label2}: "alleen druk" (compressionOnly) moet true of false zijn.`);
   }
   if (kKnPerM3 === void 0 && kLateralKnPerM3 === void 0) {
-    throw new Error(`${label}: geef een beddingsconstante: k voor de verticale richting of de zijdelingse k.`);
+    throw new Error(`${label2}: geef een beddingsconstante: k voor de verticale richting of de zijdelingse k.`);
   }
   if (kKnPerM3 !== void 0 && openFem3DBeamIsColumn(
     { startNodeId: 1, endNodeId: 2 },
     /* @__PURE__ */ new Map([[1, start], [2, end]])
   )) {
-    throw new Error(`${label} staat (bijna) verticaal: daar kan geen verticale bedding (k) onder. Geef alleen een zijdelingse bedding (kLateralKnPerM3), zoals bij een paal in de grond; die werkt rondom, loodrecht op de paal.`);
+    throw new Error(`${label2} staat (bijna) verticaal: daar kan geen verticale bedding (k) onder. Geef alleen een zijdelingse bedding (kLateralKnPerM3), zoals bij een paal in de grond; die werkt rondom, loodrecht op de paal.`);
   }
   if (raw.compressionOnly === true && kKnPerM3 === void 0) {
-    throw new Error(`${label}: "alleen druk" geldt voor de verticale bedding, en deze bedding heeft geen verticale k.`);
+    throw new Error(`${label2}: "alleen druk" geldt voor de verticale bedding, en deze bedding heeft geen verticale k.`);
   }
   return {
     ...kKnPerM3 !== void 0 ? { kKnPerM3 } : {},
@@ -29220,23 +29220,23 @@ function setOpenFem3DBeamBedding(model, beamIds, bedding2) {
   return changed ? { ...model, beams } : model;
 }
 var PLATE_BEDDING_KEYS = ["kKnPerM3", "compressionOnly"];
-function readOpenFem3DPlateBedding(value, label) {
+function readOpenFem3DPlateBedding(value, label2) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${label}: de bedding moet een object zijn met de beddingsconstante k (kKnPerM3).`);
+    throw new Error(`${label2}: de bedding moet een object zijn met de beddingsconstante k (kKnPerM3).`);
   }
   const raw = value;
   const onbekend2 = Object.keys(raw).filter((key) => raw[key] !== void 0 && !PLATE_BEDDING_KEYS.includes(key));
   if (onbekend2.length > 0) {
-    throw new Error(`${label}: onbekend veld in de bedding: ${onbekend2.join(", ")}. Toegestaan: ${PLATE_BEDDING_KEYS.join(", ")}.`);
+    throw new Error(`${label2}: onbekend veld in de bedding: ${onbekend2.join(", ")}. Toegestaan: ${PLATE_BEDDING_KEYS.join(", ")}.`);
   }
   if (raw.kKnPerM3 === void 0 || raw.kKnPerM3 === null) {
-    throw new Error(`${label}: de bedding mist de beddingsconstante k (kKnPerM3, in kN/m\xB3).`);
+    throw new Error(`${label2}: de bedding mist de beddingsconstante k (kKnPerM3, in kN/m\xB3).`);
   }
   if (typeof raw.kKnPerM3 !== "number" || !Number.isFinite(raw.kKnPerM3) || raw.kKnPerM3 <= 0) {
-    throw new Error(`${label}: de beddingsconstante k (kN/m\xB3) moet een eindig getal groter dan 0 zijn.`);
+    throw new Error(`${label2}: de beddingsconstante k (kN/m\xB3) moet een eindig getal groter dan 0 zijn.`);
   }
   if (raw.compressionOnly !== void 0 && typeof raw.compressionOnly !== "boolean") {
-    throw new Error(`${label}: "alleen druk" (compressionOnly) moet true of false zijn.`);
+    throw new Error(`${label2}: "alleen druk" (compressionOnly) moet true of false zijn.`);
   }
   return { kKnPerM3: raw.kKnPerM3, ...raw.compressionOnly === true ? { compressionOnly: true } : {} };
 }
@@ -30805,19 +30805,19 @@ function insideOrOnPolygon(p2, polygon, tolerance) {
   return distanceToBoundary(p2, polygon) <= tolerance || pointInPolygon(p2, polygon);
 }
 function openFem3DLoadPanelGeometry(model, panel, nodeById) {
-  const label = `3D-belastingvlak ${panel.id}`;
+  const label2 = `3D-belastingvlak ${panel.id}`;
   const tolerance = OPEN_FEM_3D_LOAD_PANEL_TOLERANCE_M;
   const byId = nodeById ?? new Map(model.nodes.map((node) => [node.id, node]));
-  if (panel.nodeIds.length < 3) throw new Error(`${label} heeft minstens drie hoekknopen nodig.`);
+  if (panel.nodeIds.length < 3) throw new Error(`${label2} heeft minstens drie hoekknopen nodig.`);
   const points = panel.nodeIds.map((id2) => {
     const node = byId.get(id2);
-    if (!node) throw new Error(`${label}: hoekknoop ${id2} bestaat niet.`);
+    if (!node) throw new Error(`${label2}: hoekknoop ${id2} bestaat niet.`);
     return vec3(node);
   });
   for (let i = 0; i < points.length; i += 1) {
     for (let j = i + 1; j < points.length; j += 1) {
       if (norm3(sub3(points[i], points[j])) <= tolerance) {
-        throw new Error(`${label}: de hoekknopen ${panel.nodeIds[i]} en ${panel.nodeIds[j]} vallen samen.`);
+        throw new Error(`${label2}: de hoekknopen ${panel.nodeIds[i]} en ${panel.nodeIds[j]} vallen samen.`);
       }
     }
   }
@@ -30829,7 +30829,7 @@ function openFem3DLoadPanelGeometry(model, panel, nodeById) {
     newell2[2] += (a[0] - b[0]) * (a[1] + b[1]);
   }
   if (!(norm3(newell2) / 2 > tolerance * tolerance)) {
-    throw new Error(`${label} heeft geen oppervlakte: de hoekknopen liggen op \xE9\xE9n lijn.`);
+    throw new Error(`${label2} heeft geen oppervlakte: de hoekknopen liggen op \xE9\xE9n lijn.`);
   }
   const rawNormal = unit3(newell2);
   const origin = scale3(points.reduce((sum, point) => add3(sum, point), [0, 0, 0]), 1 / points.length);
@@ -30837,18 +30837,18 @@ function openFem3DLoadPanelGeometry(model, panel, nodeById) {
     const offset = Math.abs(dot3(sub3(point, origin), rawNormal));
     if (offset > tolerance) {
       throw new Error(
-        `${label} is niet vlak: hoekknoop ${panel.nodeIds[index]} ligt ${(offset * 1e3).toFixed(1)} mm buiten het vlak door de andere hoeken (toegestaan ${tolerance * 1e3} mm).`
+        `${label2} is niet vlak: hoekknoop ${panel.nodeIds[index]} ligt ${(offset * 1e3).toFixed(1)} mm buiten het vlak door de andere hoeken (toegestaan ${tolerance * 1e3} mm).`
       );
     }
   }
   const normal = canonicalNormal(rawNormal);
   let axisU;
   if (panel.distribution === "oneWay") {
-    if (!panel.spanDirection) throw new Error(`${label} draagt in \xE9\xE9n richting af maar mist de overspanningsrichting.`);
+    if (!panel.spanDirection) throw new Error(`${label2} draagt in \xE9\xE9n richting af maar mist de overspanningsrichting.`);
     const direction = [panel.spanDirection.x, panel.spanDirection.y, panel.spanDirection.z];
     const inPlane = sub3(direction, scale3(normal, dot3(direction, normal)));
     if (norm3(inPlane) <= 1e-6 * norm3(direction)) {
-      throw new Error(`${label}: de overspanningsrichting staat loodrecht op het vlak. Kies een richting in het vlak.`);
+      throw new Error(`${label2}: de overspanningsrichting staat loodrecht op het vlak. Kies een richting in het vlak.`);
     }
     axisU = unit3(inPlane);
   } else {
@@ -30871,13 +30871,13 @@ function openFem3DLoadPanelGeometry(model, panel, nodeById) {
     const c = polygon[(i + 2) % n2];
     const first = sub2(b, a), second = sub2(c, b);
     if (Math.abs(cross2(first, second)) <= 1e-12 * norm2(first) * norm2(second) && dot2(first, second) < 0) {
-      throw new Error(`${label} vouwt bij hoekknoop ${cornerNodeIds[(i + 1) % n2]} op zichzelf terug.`);
+      throw new Error(`${label2} vouwt bij hoekknoop ${cornerNodeIds[(i + 1) % n2]} op zichzelf terug.`);
     }
     for (let j = i + 2; j < n2; j += 1) {
       if (i === 0 && j === n2 - 1) continue;
       if (segmentsDistance2(a, b, polygon[j], polygon[(j + 1) % n2]) <= tolerance * 1e-3) {
         throw new Error(
-          `${label} snijdt zichzelf: de rand ${cornerNodeIds[i]}\u2013${cornerNodeIds[(i + 1) % n2]} raakt de rand ${cornerNodeIds[j]}\u2013${cornerNodeIds[(j + 1) % n2]}.`
+          `${label2} snijdt zichzelf: de rand ${cornerNodeIds[i]}\u2013${cornerNodeIds[(i + 1) % n2]} raakt de rand ${cornerNodeIds[j]}\u2013${cornerNodeIds[(j + 1) % n2]}.`
         );
       }
     }
@@ -30888,16 +30888,16 @@ function openFem3DLoadPanelGeometry(model, panel, nodeById) {
     openFem3DLoadPanelGeometry(model, { id: opening.id, nodeIds: opening.nodeIds, distribution: "twoWay" }, byId);
     const hole = opening.nodeIds.map((id2) => {
       const relative = sub3(vec3(byId.get(id2)), origin);
-      if (Math.abs(dot3(relative, normal)) > tolerance) throw new Error(`${label}: opening ${opening.id} ligt buiten het vlak.`);
+      if (Math.abs(dot3(relative, normal)) > tolerance) throw new Error(`${label2}: opening ${opening.id} ligt buiten het vlak.`);
       return [dot3(relative, axisU), dot3(relative, axisV)];
     });
     for (let i = 0; i < hole.length; i += 1) {
       if (!pointInPolygon(hole[i], polygon) || distanceToBoundary(hole[i], polygon) <= strict) {
-        throw new Error(`${label}: opening ${opening.id} ligt niet volledig binnen de buitenrand.`);
+        throw new Error(`${label2}: opening ${opening.id} ligt niet volledig binnen de buitenrand.`);
       }
       for (let j = 0; j < polygon.length; j += 1) {
         if (segmentsDistance2(hole[i], hole[(i + 1) % hole.length], polygon[j], polygon[(j + 1) % polygon.length]) <= strict) {
-          throw new Error(`${label}: opening ${opening.id} raakt de buitenrand.`);
+          throw new Error(`${label2}: opening ${opening.id} raakt de buitenrand.`);
         }
       }
     }
@@ -30906,11 +30906,11 @@ function openFem3DLoadPanelGeometry(model, panel, nodeById) {
   for (let i = 0; i < holePolygons.length; i += 1) for (let j = i + 1; j < holePolygons.length; j += 1) {
     const a = holePolygons[i], b = holePolygons[j];
     if (pointInPolygon(a[0], b) || pointInPolygon(b[0], a) || a.some((start, index) => b.some((other, otherIndex) => segmentsDistance2(start, a[(index + 1) % a.length], other, b[(otherIndex + 1) % b.length]) <= strict))) {
-      throw new Error(`${label}: openingen ${panel.openings[i].id} en ${panel.openings[j].id} overlappen.`);
+      throw new Error(`${label2}: openingen ${panel.openings[i].id} en ${panel.openings[j].id} overlappen.`);
     }
   }
   const areaM2 = outerAreaM2 - holePolygons.reduce((sum, hole) => sum + Math.abs(signedArea(hole)), 0);
-  if (!(areaM2 > tolerance * tolerance)) throw new Error(`${label} heeft geen netto oppervlak.`);
+  if (!(areaM2 > tolerance * tolerance)) throw new Error(`${label2} heeft geen netto oppervlak.`);
   const outerCentre = polygonCentroid(polygon);
   const weightedCentre = holePolygons.reduce((weighted, hole) => {
     const holeArea = Math.abs(signedArea(hole)), centre = polygonCentroid(hole);
@@ -31431,11 +31431,11 @@ function endCapAreas(receivers, geometry) {
 var formatArea = (value) => value.toLocaleString("nl-NL", { maximumFractionDigits: 3 });
 function analyseOpenFem3DLoadPanel(model, panel) {
   const byId = new Map(model.nodes.map((node) => [node.id, node]));
-  const label = `3D-belastingvlak ${panel.id}`;
+  const label2 = `3D-belastingvlak ${panel.id}`;
   const geometry = openFem3DLoadPanelGeometry(model, panel, byId);
   const forcePerArea = openFem3DLoadPanelForcePerArea(panel, geometry);
   const sourcePanel = panel.generated?.source === "envelope3d" ? (model.envelopePanels ?? []).find((item) => item.id === panel.generated.panelId) : void 0;
-  if (panel.generated && !sourcePanel) throw new Error(`${label} verwijst naar een ontbrekend schilpaneel.`);
+  if (panel.generated && !sourcePanel) throw new Error(`${label2} verwijst naar een ontbrekend schilpaneel.`);
   const supportGeometry = sourcePanel ? openFem3DLoadPanelGeometry(model, {
     id: sourcePanel.id,
     nodeIds: sourcePanel.nodeIds,
@@ -31463,11 +31463,11 @@ function analyseOpenFem3DLoadPanel(model, panel) {
     }
   }
   if (receivers.length === 0) {
-    throw new Error(panel.distribution === "oneWay" ? `${label} heeft geen ligger dwars op de overspanningsrichting (hoogstens ${OPEN_FEM_3D_ONE_WAY_ANGLE_TOLERANCE_DEG}\xB0 afwijking). Kies een andere overspanningsrichting of afdracht in twee richtingen.` : `${label} heeft geen ligger in het vlak; de last kan nergens heen. Teken de liggers (met beide eindknopen op de rand of binnen het vlak) of verwijder het vlak.`);
+    throw new Error(panel.distribution === "oneWay" ? `${label2} heeft geen ligger dwars op de overspanningsrichting (hoogstens ${OPEN_FEM_3D_ONE_WAY_ANGLE_TOLERANCE_DEG}\xB0 afwijking). Kies een andere overspanningsrichting of afdracht in twee richtingen.` : `${label2} heeft geen ligger in het vlak; de last kan nergens heen. Teken de liggers (met beide eindknopen op de rand of binnen het vlak) of verwijder het vlak.`);
   }
   if (partial.length > 0) {
     warnings.push(
-      `Staaf ${partial.join(", ")} ligt deels in ${label} maar een eindknoop valt buiten het vlak; die staaf krijgt geen last. Knip de staaf op de rand van het vlak.`
+      `Staaf ${partial.join(", ")} ligt deels in ${label2} maar een eindknoop valt buiten het vlak; die staaf krijgt geen last. Knip de staaf op de rand van het vlak.`
     );
   }
   if (excluded.size > 0) {
@@ -31488,7 +31488,7 @@ function analyseOpenFem3DLoadPanel(model, panel) {
       const nodes = edgeNodes(edge);
       unsupportedEdges.push(nodes);
       warnings.push(
-        `Rand ${nodes.startNodeId}\u2013${nodes.endNodeId} van ${label} heeft geen ligger dwars op de overspanning; ${formatArea(area3)} m\xB2 gaat als overstek naar de dichtstbijzijnde ligger.`
+        `Rand ${nodes.startNodeId}\u2013${nodes.endNodeId} van ${label2} heeft geen ligger dwars op de overspanning; ${formatArea(area3)} m\xB2 gaat als overstek naar de dichtstbijzijnde ligger.`
       );
     }
     const fallbacks = candidates.length > 0 ? candidates : receivers;
@@ -31508,7 +31508,7 @@ function analyseOpenFem3DLoadPanel(model, panel) {
     }
     for (const share of pointShares) {
       warnings.push(
-        `${formatArea(share.areaM2)} m\xB2 van ${label} ligt niet tussen liggers dwars op de overspanningsrichting en gaat als puntlast naar staaf ${share.beamId}.`
+        `${formatArea(share.areaM2)} m\xB2 van ${label2} ligt niet tussen liggers dwars op de overspanningsrichting en gaat als puntlast naar staaf ${share.beamId}.`
       );
     }
   } else {
@@ -31541,7 +31541,7 @@ function analyseOpenFem3DLoadPanel(model, panel) {
         const nodes = edgeNodes(index);
         unsupportedEdges.push(nodes);
         warnings.push(
-          `Rand ${nodes.startNodeId}\u2013${nodes.endNodeId} van ${label} heeft ${gap < lengthM - OPEN_FEM_3D_LOAD_PANEL_TOLERANCE_M ? "deels " : ""}geen ligger; de last langs die rand gaat naar de dichtstbijzijnde ligger.`
+          `Rand ${nodes.startNodeId}\u2013${nodes.endNodeId} van ${label2} heeft ${gap < lengthM - OPEN_FEM_3D_LOAD_PANEL_TOLERANCE_M ? "deels " : ""}geen ligger; de last langs die rand gaat naar de dichtstbijzijnde ligger.`
         );
       }
     });
@@ -31566,12 +31566,12 @@ function analyseOpenFem3DLoadPanel(model, panel) {
   const mismatch = Math.abs(assignedAreaM2 - geometry.areaM2) / geometry.areaM2;
   if (mismatch > 0.01) {
     throw new Error(
-      `${label}: de afdracht sluit niet (${formatArea(assignedAreaM2)} m\xB2 afgedragen van ${formatArea(geometry.areaM2)} m\xB2). Vereenvoudig de vorm of verdeel het vlak.`
+      `${label2}: de afdracht sluit niet (${formatArea(assignedAreaM2)} m\xB2 afgedragen van ${formatArea(geometry.areaM2)} m\xB2). Vereenvoudig de vorm of verdeel het vlak.`
     );
   }
   if (mismatch > 1e-6) {
     warnings.push(
-      `${label}: afgedragen oppervlak ${formatArea(assignedAreaM2)} m\xB2 wijkt ${(mismatch * 100).toFixed(4)} % af van het vlakoppervlak ${formatArea(geometry.areaM2)} m\xB2.`
+      `${label2}: afgedragen oppervlak ${formatArea(assignedAreaM2)} m\xB2 wijkt ${(mismatch * 100).toFixed(4)} % af van het vlakoppervlak ${formatArea(geometry.areaM2)} m\xB2.`
     );
   }
   return {
@@ -31783,15 +31783,15 @@ function duplicateOpenFem3DLoadPanel(model, panelId, caseId) {
 function convertOpenFem3DPlateToLoadPanels(model, plateId, options = {}) {
   const plate = (model.plates ?? []).find((item) => item.id === plateId);
   if (!plate) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
-  const label = `3D-plaat ${plateId}`;
+  const label2 = `3D-plaat ${plateId}`;
   if ((plate.openings?.length ?? 0) > 0) {
-    throw new Error(`${label} heeft openingen; een belastingvlak kent geen openingen. Verwijder de openingen of teken het vlak in delen.`);
+    throw new Error(`${label2} heeft openingen; een belastingvlak kent geen openingen. Verwijder de openingen of teken het vlak in delen.`);
   }
   if (plate.boundary?.some((segment) => segment.kind === "arc")) {
-    throw new Error(`${label} heeft een gebogen rand; een belastingvlak volgt alleen rechte randen tussen hoekknopen.`);
+    throw new Error(`${label2} heeft een gebogen rand; een belastingvlak volgt alleen rechte randen tussen hoekknopen.`);
   }
   if ((plate.cornerRadiusM ?? 0) > 0) {
-    throw new Error(`${label} heeft afgeronde hoeken; zet de randstraal op 0 voordat je de plaat omzet.`);
+    throw new Error(`${label2} heeft afgeronde hoeken; zet de randstraal op 0 voordat je de plaat omzet.`);
   }
   const geometry = openFem3DLoadPanelGeometry(model, { id: plateId, nodeIds: plate.nodeIds, distribution: "twoWay" });
   const n2 = geometry.normal;
@@ -31807,7 +31807,7 @@ function convertOpenFem3DPlateToLoadPanels(model, plateId, options = {}) {
       return { caseId: load.caseId, q: alongNormal, direction: "normal" };
     }
     throw new Error(
-      `Oppervlaktebelasting ${load.id} op ${label} staat schuin op de plaat; een belastingvlak draagt alleen een verticale of loodrechte last af. Splits of verwijder die last eerst.`
+      `Oppervlaktebelasting ${load.id} op ${label2} staat schuin op de plaat; een belastingvlak draagt alleen een verticale of loodrechte last af. Splits of verwijder die last eerst.`
     );
   });
   let next = {
@@ -32976,9 +32976,9 @@ function openFem3DMemberFieldVectorsM(model, beam, result, inklemming = null) {
     const lengte = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
     if (!(lengte > 0)) return [];
     const ex = [(end.x - start.x) / lengte, (end.y - start.y) / lengte, (end.z - start.z) / lengte];
-    const ref = inklemming === "begin" ? first : inklemming === "eind" ? last : first.magnitude <= last.magnitude ? first : last;
+    const ref2 = inklemming === "begin" ? first : inklemming === "eind" ? last : first.magnitude <= last.magnitude ? first : last;
     return stations.map((station) => {
-      const d = [station.ux - ref.ux, station.uy - ref.uy, station.uz - ref.uz];
+      const d = [station.ux - ref2.ux, station.uy - ref2.uy, station.uz - ref2.uz];
       const axiaal = d[0] * ex[0] + d[1] * ex[1] + d[2] * ex[2];
       return {
         t: station.t,
@@ -33734,8 +33734,8 @@ var StaalhalFout = class extends Error {
   }
 };
 var fmt = (waarde) => (Math.round(waarde * 1e3) / 1e3).toString().replace(".", ",");
-function probleem(lijst2, code, veld, melding, waarden) {
-  lijst2.push({ code, veld, melding, ...waarden ? { waarden } : {} });
+function probleem(lijst3, code, veld, melding, waarden) {
+  lijst3.push({ code, veld, melding, ...waarden ? { waarden } : {} });
 }
 function isObject(waarde) {
   return typeof waarde === "object" && waarde !== null && !Array.isArray(waarde);
@@ -34566,10 +34566,10 @@ function maakStaalhal(invoer = {}) {
     enabled: true,
     xAxes: Array.from({ length: nSpant }, (_, i) => ({ id: `spant-${i + 1}`, label: String(i + 1), position: i * maten.spantafstandMm })),
     yAxes: Array.from({ length: nOverspanningen + 1 }, (_, lijn) => {
-      const label = String.fromCharCode(65 + lijn);
+      const label2 = String.fromCharCode(65 + lijn);
       return {
-        id: lijn === 0 || lijn === nOverspanningen ? `gevel-${label}` : `as-${label}`,
-        label,
+        id: lijn === 0 || lijn === nOverspanningen ? `gevel-${label2}` : `as-${label2}`,
+        label: label2,
         position: lijn * maten.overspanningMm
       };
     }),
@@ -34956,6 +34956,12 @@ var StepGetypt = class {
     return this.args[0] ?? null;
   }
 };
+var StepGetal = class {
+  constructor(tekst2, waarde) {
+    this.tekst = tekst2;
+    this.waarde = waarde;
+  }
+};
 var STEP_AFGELEID = Object.freeze({ afgeleid: true });
 var StepLeesFout = class extends Error {
   constructor(melding) {
@@ -35035,8 +35041,9 @@ function decodeerStepTekst(ruw) {
   return uit;
 }
 var Lezer = class {
-  constructor(tekst2) {
+  constructor(tekst2, getallenAlsTekst = false) {
     this.tekst = tekst2;
+    this.getallenAlsTekst = getallenAlsTekst;
   }
   pos = 0;
   regel(pos = this.pos) {
@@ -35120,7 +35127,7 @@ var Lezer = class {
     const woord = t.slice(start, this.pos);
     const waarde = Number(woord);
     if (!Number.isFinite(waarde)) this.fout(`ongeldig getal '${woord}'`, start);
-    return waarde;
+    return this.getallenAlsTekst ? new StepGetal(woord, waarde) : waarde;
   }
   waarde() {
     const c = this.kijk();
@@ -35203,9 +35210,9 @@ var Lezer = class {
     return { type, args: this.lijst() };
   }
 };
-function leesStep(tekst2) {
+function leesStep(tekst2, opties = {}) {
   const t = tekst2.charCodeAt(0) === 65279 ? tekst2.slice(1) : tekst2;
-  const lezer = new Lezer(t);
+  const lezer = new Lezer(t, opties.getallenAlsTekst === true);
   lezer.wit();
   if (t.startsWith("PK", lezer.pos)) {
     throw new StepLeesFout("Dit is een ingepakt bestand (ifcZIP). Pak het eerst uit en kies het .ifc-bestand.");
@@ -35359,8 +35366,8 @@ var IfcInhoud = class {
     this.records = bestand.records;
     this.schema = bestand.schemas[0] ?? "";
     for (const r of this.records.values()) {
-      const lijst2 = this.perType.get(r.type);
-      if (lijst2) lijst2.push(r);
+      const lijst3 = this.perType.get(r.type);
+      if (lijst3) lijst3.push(r);
       else this.perType.set(r.type, [r]);
     }
     for (const type of T.toewijzing) {
@@ -35368,9 +35375,9 @@ var IfcInhoud = class {
         const groep = refVan(arg(r, 6));
         if (groep === null) continue;
         const factor = type === "IFCRELASSIGNSTOGROUPBYFACTOR" ? getalVan(arg(r, 7)) : null;
-        const lijst2 = this.toewijzingen.get(groep) ?? [];
-        for (const obj2 of refsVan(arg(r, 4))) lijst2.push({ obj: obj2, factor: factor ?? null });
-        this.toewijzingen.set(groep, lijst2);
+        const lijst3 = this.toewijzingen.get(groep) ?? [];
+        for (const obj2 of refsVan(arg(r, 4))) lijst3.push({ obj: obj2, factor: factor ?? null });
+        this.toewijzingen.set(groep, lijst3);
       }
     }
     for (const r of this.vanType("IFCRELCONNECTSSTRUCTURALACTIVITY")) {
@@ -35381,9 +35388,9 @@ var IfcInhoud = class {
       for (const r of this.vanType(type)) {
         const lid = refVan(arg(r, 4));
         if (lid === null) continue;
-        const lijst2 = this.staafKoppelingen.get(lid) ?? [];
-        lijst2.push(r);
-        this.staafKoppelingen.set(lid, lijst2);
+        const lijst3 = this.staafKoppelingen.get(lid) ?? [];
+        lijst3.push(r);
+        this.staafKoppelingen.set(lid, lijst3);
       }
     }
     for (const r of this.vanType("IFCRELASSOCIATESMATERIAL")) {
@@ -35404,8 +35411,8 @@ var IfcInhoud = class {
           let ruw = null;
           if (p2.type === "IFCPROPERTYSINGLEVALUE") ruw = arg(p2, 2);
           else if (p2.type === "IFCPROPERTYENUMERATEDVALUE") {
-            const lijst2 = arg(p2, 2);
-            ruw = Array.isArray(lijst2) ? lijst2[0] ?? null : null;
+            const lijst3 = arg(p2, 2);
+            ruw = Array.isArray(lijst3) ? lijst3[0] ?? null : null;
           } else continue;
           const waarde = tekstVan(ruw) ?? getalVan(ruw) ?? janeeVan(ruw);
           if (waarde !== null) waarden.push({ pset: psetNaam, naam, waarde });
@@ -35413,9 +35420,9 @@ var IfcInhoud = class {
       }
       if (waarden.length === 0) continue;
       for (const obj2 of refsVan(arg(r, 4))) {
-        const lijst2 = this.eigenschappen.get(obj2) ?? [];
-        lijst2.push(...waarden);
-        this.eigenschappen.set(obj2, lijst2);
+        const lijst3 = this.eigenschappen.get(obj2) ?? [];
+        lijst3.push(...waarden);
+        this.eigenschappen.set(obj2, lijst3);
       }
     }
   }
@@ -35505,9 +35512,9 @@ function eenheidVan(ifc, id2, bezocht = /* @__PURE__ */ new Set()) {
     };
   }
   if (r.type === "IFCCONVERSIONBASEDUNIT" || r.type === "IFCCONVERSIONBASEDUNITWITHOFFSET") {
-    const maat3 = ifc.get(refVan(arg(r, 3)));
-    const waarde = getalVan(arg(maat3, 0));
-    const basis = eenheidVan(ifc, refVan(arg(maat3, 1)), bezocht);
+    const maat4 = ifc.get(refVan(arg(r, 3)));
+    const waarde = getalVan(arg(maat4, 0));
+    const basis = eenheidVan(ifc, refVan(arg(maat4, 1)), bezocht);
     if (waarde === null || !basis) return null;
     return { factor: waarde * basis.factor, label: tekstVan(arg(r, 2)) ?? basis.label };
   }
@@ -35634,15 +35641,15 @@ var Meetkunde = class {
     if (r.type === "IFCAXIS2PLACEMENT3D") {
       const o = this.punt(refVan(arg(r, 0))) ?? [0, 0, 0];
       const z = this.richting(refVan(arg(r, 1))) ?? [0, 0, 1];
-      const ref = this.richting(refVan(arg(r, 2))) ?? (Math.abs(z[0] - 1) < KLEIN && Math.abs(z[1]) < KLEIN && Math.abs(z[2]) < KLEIN ? [0, 1, 0] : [1, 0, 0]);
-      const x0 = sub4(ref, scale2(z, dot5(ref, z)));
+      const ref2 = this.richting(refVan(arg(r, 2))) ?? (Math.abs(z[0] - 1) < KLEIN && Math.abs(z[1]) < KLEIN && Math.abs(z[2]) < KLEIN ? [0, 1, 0] : [1, 0, 0]);
+      const x0 = sub4(ref2, scale2(z, dot5(ref2, z)));
       const x = norm4(x0) > KLEIN ? unit2(x0) : unit2(cross4([0, 1, 0], z));
       return { x, y: cross4(z, x), z, o };
     }
     if (r.type === "IFCAXIS2PLACEMENT2D") {
       const o = this.punt(refVan(arg(r, 0))) ?? [0, 0, 0];
-      const ref = this.richting(refVan(arg(r, 1))) ?? [1, 0, 0];
-      const x = unit2([ref[0], ref[1], 0]);
+      const ref2 = this.richting(refVan(arg(r, 1))) ?? [1, 0, 0];
+      const x = unit2([ref2[0], ref2[1], 0]);
       return { x, y: cross4([0, 0, 1], x), z: [0, 0, 1], o: [o[0], o[1], 0] };
     }
     return IDENTITEIT;
@@ -35788,8 +35795,8 @@ function ifcAnalyseModellen(invoer) {
   return modellenVan(bestandVan(invoer)).map(info);
 }
 function kiesModel(modellen, keuze2) {
-  const lijst2 = modellen.map(info);
-  const opsomming = lijst2.map((m) => `${m.nummer} "${m.naam}"`).join(", ");
+  const lijst3 = modellen.map(info);
+  const opsomming = lijst3.map((m) => `${m.nummer} "${m.naam}"`).join(", ");
   if (modellen.length === 0) {
     throw new IfcImportFout(
       "geenAnalysemodel",
@@ -35801,7 +35808,7 @@ function kiesModel(modellen, keuze2) {
     throw new IfcImportFout(
       "modelKeuzeNodig",
       `Het bestand bevat ${modellen.length} analysemodellen: ${opsomming}. Kies er \xE9\xE9n, op naam of nummer.`,
-      lijst2
+      lijst3
     );
   }
   if (typeof keuze2 === "number") {
@@ -35815,7 +35822,7 @@ function kiesModel(modellen, keuze2) {
   throw new IfcImportFout(
     "modelOnbekend",
     `Analysemodel ${typeof keuze2 === "number" ? keuze2 : `"${keuze2}"`} staat niet in het bestand; kies uit ${opsomming}.`,
-    lijst2
+    lijst3
   );
 }
 var SERIE_VOORKEUR = ["IPE", "HEA", "HEB", "HEM", "UNP", "UPE", "SHS", "RHS", "CHS"];
@@ -35993,8 +36000,8 @@ var KnoopZoeker = class _KnoopZoeker {
   }
   voeg(knoop) {
     const s = `${_KnoopZoeker.cel(knoop.x)},${_KnoopZoeker.cel(knoop.y)},${_KnoopZoeker.cel(knoop.z)}`;
-    const lijst2 = this.cellen.get(s);
-    if (lijst2) lijst2.push(knoop);
+    const lijst3 = this.cellen.get(s);
+    if (lijst3) lijst3.push(knoop);
     else this.cellen.set(s, [knoop]);
   }
   zoek(p2) {
@@ -36106,37 +36113,37 @@ var Importeur = class {
   knopen() {
     for (const connectie of this.model.connecties) {
       const naam = (tekstVan(arg(connectie, 2)) ?? "").trim();
-      const label = naam ? `knoop "${naam}"` : `knoop #${connectie.id}`;
+      const label2 = naam ? `knoop "${naam}"` : `knoop #${connectie.id}`;
       const trafo = this.trafoVan(connectie);
       const vertexId = this.meetkunde.topologie(connectie).find((item) => item.type === "IFCVERTEXPOINT")?.id;
       const lokaal = vertexId !== void 0 ? this.meetkunde.vertex(vertexId) : null;
       if (!lokaal) {
-        this.meldingen.voeg("waarschuwing", "Knoop zonder topologie (IfcVertexPoint); op de oorsprong van zijn plaatsing gezet", label);
+        this.meldingen.voeg("waarschuwing", "Knoop zonder topologie (IfcVertexPoint); op de oorsprong van zijn plaatsing gezet", label2);
       }
       const p2 = pas(trafo, lokaal ?? [0, 0, 0]);
       let knoop = this.zoeker.zoek(p2);
       if (knoop) {
-        this.meldingen.voeg("waarschuwing", "Knopen van het analysemodel binnen 1 mm van elkaar zijn samengevoegd", label);
+        this.meldingen.voeg("waarschuwing", "Knopen van het analysemodel binnen 1 mm van elkaar zijn samengevoegd", label2);
         if (naam && !knoop.name) knoop.name = naam;
       } else {
         knoop = this.nieuweKnoop(p2, naam || void 0);
       }
       if (vertexId !== void 0) this.knoopVanVertex.set(vertexId, knoop.id);
       this.knoopVanConnectie.set(connectie.id, knoop.id);
-      this.oplegging(connectie, knoop, trafo, label);
+      this.oplegging(connectie, knoop, trafo, label2);
     }
   }
-  oplegging(connectie, knoop, trafo, label) {
+  oplegging(connectie, knoop, trafo, label2) {
     const conditieId = refVan(arg(connectie, 7));
     const c = condities(this.ifc, conditieId, this.eenheden, "vrij");
     if (!c) {
       if (conditieId !== null) {
-        this.meldingen.voeg("nietOndersteund", "Oplegconditie van een ander type dan IfcBoundaryNodeCondition; niet ingelezen", label);
+        this.meldingen.voeg("nietOndersteund", "Oplegconditie van een ander type dan IfcBoundaryNodeCondition; niet ingelezen", label2);
       }
       return;
     }
     if (c.some((x) => x.soort === "ongeldig")) {
-      this.meldingen.voeg("waarschuwing", "Ongeldige oplegwaarde (negatieve of onbekende stijfheid); als vrij ingelezen", label);
+      this.meldingen.voeg("waarschuwing", "Ongeldige oplegwaarde (negatieve of onbekende stijfheid); als vrij ingelezen", label2);
     }
     if (c.every((x) => x.soort === "vrij" || x.soort === "ongeldig")) return;
     const stelsel = refVan(arg(connectie, 8));
@@ -36148,12 +36155,12 @@ var Importeur = class {
         this.meldingen.voeg(
           "nietOndersteund",
           "Oplegging in een eigen, niet-globaal assenstelsel (ConditionCoordinateSystem) wordt niet ondersteund; als globaal ingelezen, controleer de richting",
-          label
+          label2
         );
       }
     }
     if (this.supports.some((s) => s.nodeId === knoop.id)) {
-      this.meldingen.voeg("waarschuwing", "Twee opleggingen op dezelfde knoop; de eerste is aangehouden", label);
+      this.meldingen.voeg("waarschuwing", "Twee opleggingen op dezelfde knoop; de eerste is aangehouden", label2);
       return;
     }
     const as3 = ["ux", "uy", "uz", "rx", "ry", "rz"];
@@ -36199,25 +36206,25 @@ var Importeur = class {
     const teller = { type: 0, rond: 0, strip: 0, pendel: 0 };
     for (const lid of this.model.staven) {
       const naam = (tekstVan(arg(lid, 2)) ?? "").trim();
-      const label = naam ? `staaf "${naam}"` : `staaf #${lid.id}`;
+      const label2 = naam ? `staaf "${naam}"` : `staaf #${lid.id}`;
       const trafo = this.trafoVan(lid);
       const rand = this.meetkunde.topologie(lid).map((item) => this.meetkunde.rand(item)).find((r) => r !== null);
       if (!rand) {
-        this.meldingen.voeg("nietOndersteund", "Staaf zonder rand (IfcEdge) in zijn topologie; niet ingelezen", label);
+        this.meldingen.voeg("nietOndersteund", "Staaf zonder rand (IfcEdge) in zijn topologie; niet ingelezen", label2);
         continue;
       }
-      if (rand.gebogen) this.meldingen.voeg("waarschuwing", "Gebogen staaf als rechte staaf tussen zijn eindpunten ingelezen", label);
+      if (rand.gebogen) this.meldingen.voeg("waarschuwing", "Gebogen staaf als rechte staaf tussen zijn eindpunten ingelezen", label2);
       if (lid.type === "IFCSTRUCTURALCURVEMEMBERVARYING") {
-        this.meldingen.voeg("nietOndersteund", "Staaf met een verlopende doorsnede (IfcStructuralCurveMemberVarying); met het eerste profiel ingelezen", label);
+        this.meldingen.voeg("nietOndersteund", "Staaf met een verlopende doorsnede (IfcStructuralCurveMemberVarying); met het eerste profiel ingelezen", label2);
       }
       const start = this.knoopVoorVertex(rand.start, trafo, "staafeinden");
       const eind = this.knoopVoorVertex(rand.eind, trafo, "staafeinden");
       if (!start || !eind) {
-        this.meldingen.voeg("nietOndersteund", "Staaf met een eindpunt zonder co\xF6rdinaten; niet ingelezen", label);
+        this.meldingen.voeg("nietOndersteund", "Staaf met een eindpunt zonder co\xF6rdinaten; niet ingelezen", label2);
         continue;
       }
       if (start.id === eind.id) {
-        this.meldingen.voeg("nietOndersteund", "Staaf korter dan 1 mm; niet ingelezen", label);
+        this.meldingen.voeg("nietOndersteund", "Staaf korter dan 1 mm; niet ingelezen", label2);
         continue;
       }
       const lengte = Math.hypot(eind.x - start.x, eind.y - start.y, eind.z - start.z);
@@ -36230,7 +36237,7 @@ var Importeur = class {
         if (norm4(loodrecht) > 1e-6) zIfc = unit2(loodrecht);
       }
       if (!zIfc) {
-        this.meldingen.voeg("waarschuwing", "Staaf zonder bruikbare Axis (ontbreekt of evenwijdig aan de staaf); rolhoek 0 aangenomen", label);
+        this.meldingen.voeg("waarschuwing", "Staaf zonder bruikbare Axis (ontbreekt of evenwijdig aan de staaf); rolhoek 0 aangenomen", label2);
         zIfc = basis.ez;
       }
       let roll = Math.atan2(-dot5(zIfc, basis.ey), dot5(zIfc, basis.ez));
@@ -36243,32 +36250,32 @@ var Importeur = class {
           this.meldingen.voeg(
             "nietOndersteund",
             `Materiaal "${materiaalNaam}" niet herkend (alleen staal S235\u2013S460); de staaf staat zonder materiaal`,
-            label
+            label2
           );
         }
       } else {
-        this.meldingen.voeg("nietOndersteund", "Staaf zonder materiaal in het bestand; de staaf staat zonder materiaal", label);
+        this.meldingen.voeg("nietOndersteund", "Staaf zonder materiaal in het bestand; de staaf staat zonder materiaal", label2);
       }
       const profiel = profielVan(
         this.ifc,
         this.meetkunde,
         mat.profiel,
         material !== void 0,
-        (soort2, tekst2) => this.meldingen.voeg(soort2, tekst2, label)
+        (soort2, tekst2) => this.meldingen.voeg(soort2, tekst2, label2)
       );
       roll += profiel.extraRol;
       if (mat.cardinalPoint !== null && mat.cardinalPoint !== 5 && mat.cardinalPoint !== 10) {
         this.meldingen.voeg(
           "nietOndersteund",
           `Profiel buiten het midden (CardinalPoint ${mat.cardinalPoint}) wordt niet ondersteund; de staaf ligt op de hartlijn`,
-          label
+          label2
         );
       }
       if (mat.offsets) {
-        this.meldingen.voeg("nietOndersteund", "Profiel met verschuivingen (IfcMaterialProfileWithOffsets) wordt niet ondersteund; de staaf ligt op de hartlijn", label);
+        this.meldingen.voeg("nietOndersteund", "Profiel met verschuivingen (IfcMaterialProfileWithOffsets) wordt niet ondersteund; de staaf ligt op de hartlijn", label2);
       }
-      if (mat.taps) this.meldingen.voeg("nietOndersteund", "Verlopend profiel (IfcMaterialProfileSetUsageTapering) wordt niet ondersteund; met het beginprofiel ingelezen", label);
-      if (mat.meerdere) this.meldingen.voeg("waarschuwing", "Profielset met meer dan \xE9\xE9n profiel; het eerste is aangehouden", label);
+      if (mat.taps) this.meldingen.voeg("nietOndersteund", "Verlopend profiel (IfcMaterialProfileSetUsageTapering) wordt niet ondersteund; met het beginprofiel ingelezen", label2);
+      if (mat.meerdere) this.meldingen.voeg("waarschuwing", "Profielset met meer dan \xE9\xE9n profiel; het eerste is aangehouden", label2);
       const soort = enumVan(arg(lid, 7)) ?? "NOTDEFINED";
       let tensionOnly = false;
       if (soort === "TENSION_MEMBER" || soort === "CABLE") {
@@ -36282,7 +36289,7 @@ var Importeur = class {
         teller.strip += 1;
       } else if (soort === "PIN_JOINED_MEMBER") teller.pendel += 1;
       else if (soort === "COMPRESSION_MEMBER") {
-        this.meldingen.voeg("nietOndersteund", "Druk-alleen staaf (COMPRESSION_MEMBER) wordt niet ondersteund; als gewone staaf ingelezen", label);
+        this.meldingen.voeg("nietOndersteund", "Druk-alleen staaf (COMPRESSION_MEMBER) wordt niet ondersteund; als gewone staaf ingelezen", label2);
       }
       const onderdeel = (this.ifc.eigenschappen.get(lid.id) ?? []).find((e) => e.naam.trim().toLowerCase() === "onderdeel" && typeof e.waarde === "string" && e.waarde.trim() !== "");
       const group = (typeof onderdeel?.waarde === "string" ? onderdeel.waarde : tekstVan(arg(lid, 4)) ?? "").trim();
@@ -36300,7 +36307,7 @@ var Importeur = class {
       const info2 = {
         beam,
         record: lid,
-        label,
+        label: label2,
         trafo,
         lengte,
         ketenVan: 0,
@@ -36347,16 +36354,16 @@ var Importeur = class {
         const connectieId = refVan(arg(koppeling, 5));
         const knoopId3 = this.knoopVanConnectie.get(connectieId ?? -1);
         if (connectieId === null || knoopId3 === void 0 || knoopId3 === a.id || knoopId3 === b.id) continue;
-        const label = `${info2.label} bij ${this.connectieLabel(connectieId)}`;
+        const label2 = `${info2.label} bij ${this.connectieLabel(connectieId)}`;
         const k = this.nodeById.get(knoopId3);
         const rel = sub4([k.x, k.y, k.z], [a.x, a.y, a.z]);
         const s = dot5(rel, ex);
         if (norm4(sub4(rel, scale2(ex, s))) > KNOOP_TOLERANTIE_M || s < -KNOOP_TOLERANTIE_M || s > info2.lengte + KNOOP_TOLERANTIE_M) {
-          this.meldingen.voeg("waarschuwing", "Aansluiting op een knoop die niet op de staaf ligt; genegeerd", label);
+          this.meldingen.voeg("waarschuwing", "Aansluiting op een knoop die niet op de staaf ligt; genegeerd", label2);
           continue;
         }
         if (s <= KNOOP_TOLERANTIE_M || s >= info2.lengte - KNOOP_TOLERANTIE_M) {
-          this.meldingen.voeg("waarschuwing", "Aansluiting op een knoop binnen 1 mm van een staafeinde; genegeerd", label);
+          this.meldingen.voeg("waarschuwing", "Aansluiting op een knoop binnen 1 mm van een staafeinde; genegeerd", label2);
           continue;
         }
         knippunten.set(knoopId3, s);
@@ -36365,11 +36372,11 @@ var Importeur = class {
           this.meldingen.voeg(
             "nietOndersteund",
             "Scharnier, veer of vrijheid in een aansluiting tussen de staafeinden wordt niet ondersteund; de staaf loopt daar star door",
-            label
+            label2
           );
         }
         if (c?.some((x) => x.soort === "ongeldig")) {
-          this.meldingen.voeg("waarschuwing", "Ongeldige waarde in een staafaansluiting; als star ingelezen", label);
+          this.meldingen.voeg("waarschuwing", "Ongeldige waarde in een staafaansluiting; als star ingelezen", label2);
         }
       }
       if (knippunten.size === 0) {
@@ -36433,16 +36440,16 @@ var Importeur = class {
     });
     for (const delen of this.staafVanRecord.values()) {
       const eerste = delen[0], laatste = delen[delen.length - 1];
-      const { label, record, ifcAssen, trafo } = eerste;
+      const { label: label2, record, ifcAssen, trafo } = eerste;
       const startId = eerste.beam.startNodeId, eindId = laatste.beam.endNodeId;
       const releases = geenScharnieren();
       const assen = openFem3DMemberAxes(this.nodeById.get(startId), this.nodeById.get(eindId), eerste.beam.rollAngleRad ?? 0);
       for (const koppeling of this.ifc.staafKoppelingen.get(record.id) ?? []) {
         if (koppeling.type === "IFCRELCONNECTSWITHECCENTRICITY") {
-          this.meldingen.voeg("nietOndersteund", "Excentrische aansluiting (IfcRelConnectsWithEccentricity) wordt niet ondersteund; centrisch ingelezen", label);
+          this.meldingen.voeg("nietOndersteund", "Excentrische aansluiting (IfcRelConnectsWithEccentricity) wordt niet ondersteund; centrisch ingelezen", label2);
         }
         if (refVan(arg(koppeling, 7)) !== null) {
-          this.meldingen.voeg("nietOndersteund", "Aanvullende aansluitvoorwaarden (AdditionalConditions) worden niet ondersteund; genegeerd", label);
+          this.meldingen.voeg("nietOndersteund", "Aanvullende aansluitvoorwaarden (AdditionalConditions) worden niet ondersteund; genegeerd", label2);
         }
         const knoopId3 = this.knoopVanConnectie.get(refVan(arg(koppeling, 5)) ?? -1);
         if (knoopId3 === void 0) continue;
@@ -36450,7 +36457,7 @@ var Importeur = class {
         if (!kant) continue;
         const c = condities(this.ifc, refVan(arg(koppeling, 6)), this.eenheden, "vast");
         if (!c) continue;
-        const kantLabel = `${label} (${kant === "Start" ? "begin" : "eind"})`;
+        const kantLabel = `${label2} (${kant === "Start" ? "begin" : "eind"})`;
         if (c.slice(0, 3).some((x) => x.soort === "vrij" || x.soort === "veer")) {
           this.meldingen.voeg(
             "nietOndersteund",
@@ -36497,7 +36504,7 @@ var Importeur = class {
         this.meldingen.voeg(
           "waarschuwing",
           "Beide staafeinden vrij in torsie is een mechanisme; torsie aan het begin is vastgezet",
-          label
+          label2
         );
       }
       if (!Object.values(releases).some(Boolean)) continue;
@@ -36617,14 +36624,14 @@ var Importeur = class {
   vlakLijst() {
     for (const vlak of this.model.vlakken) {
       const naam = (tekstVan(arg(vlak, 2)) ?? "").trim() || `vlak #${vlak.id}`;
-      const label = `vlak "${naam}"`;
+      const label2 = `vlak "${naam}"`;
       const trafo = this.trafoVan(vlak);
       const faces = this.meetkunde.topologie(vlak).filter((item) => item.type === "IFCFACESURFACE" || item.type === "IFCFACE");
       if (faces.length === 0) {
-        this.meldingen.voeg("nietOndersteund", "Vlak zonder vlaktopologie (IfcFaceSurface); niet ingelezen", label);
+        this.meldingen.voeg("nietOndersteund", "Vlak zonder vlaktopologie (IfcFaceSurface); niet ingelezen", label2);
         continue;
       }
-      if (faces.length > 1) this.meldingen.voeg("waarschuwing", "Vlak met meer dan \xE9\xE9n face; alleen de eerste is ingelezen", label);
+      if (faces.length > 1) this.meldingen.voeg("waarschuwing", "Vlak met meer dan \xE9\xE9n face; alleen de eerste is ingelezen", label2);
       const face = faces[0];
       const randen = refsVan(arg(face, 0)).map((id2) => this.ifc.get(id2)).filter((r) => !!r);
       const buiten = randen.find((r) => r.type === "IFCFACEOUTERBOUND") ?? randen.slice().sort((a, b) => {
@@ -36636,7 +36643,7 @@ var Importeur = class {
       })[0];
       const buitenLus = buiten ? this.lus(buiten, trafo) : null;
       if (!buitenLus) {
-        this.meldingen.voeg("nietOndersteund", "Vlak waarvan de buitenrand niet te lezen is (geen IfcEdgeLoop of IfcPolyLoop); niet ingelezen", label);
+        this.meldingen.voeg("nietOndersteund", "Vlak waarvan de buitenrand niet te lezen is (geen IfcEdgeLoop of IfcPolyLoop); niet ingelezen", label2);
         continue;
       }
       const openingen = randen.filter((r) => r !== buiten).length;
@@ -36644,12 +36651,12 @@ var Importeur = class {
         this.meldingen.voeg(
           "nietOndersteund",
           "Opening in een vlak: een belastingvlak kent geen openingen, dus de last ligt ook op de opening (te veel last) en een schijf loopt door",
-          `${label} (${aantal(openingen, "opening", "openingen")})`
+          `${label2} (${aantal(openingen, "opening", "openingen")})`
         );
       }
       const n2 = newell(buitenLus.punten);
       if (norm4(n2) / 2 <= 1e-9) {
-        this.meldingen.voeg("nietOndersteund", "Vlak zonder oppervlakte; niet ingelezen", label);
+        this.meldingen.voeg("nietOndersteund", "Vlak zonder oppervlakte; niet ingelezen", label2);
         continue;
       }
       const hoogte = buitenLus.punten.reduce((s, p2) => s + p2[2], 0) / buitenLus.punten.length;
@@ -36669,7 +36676,7 @@ var Importeur = class {
           this.meldingen.voeg(
             "nietOndersteund",
             "Membraanvlak dat niet horizontaal ligt (wand of schuin vlak): geen schijfwerking; alleen de lasten erop zijn ingelezen",
-            label
+            label2
           );
         }
       } else if (typeNaam === "SHELL" || typeNaam === "SHELL_ELEMENT" || typeNaam === "BENDING_ELEMENT") {
@@ -36677,7 +36684,7 @@ var Importeur = class {
         this.meldingen.voeg(
           "nietOndersteund",
           `Vlak met buigstijfheid (${typeNaam}) wordt niet als plaat ge\xEFmporteerd; alleen de lasten erop gaan als belastingvlak mee`,
-          label
+          label2
         );
       }
       let spanDirection;
@@ -36689,7 +36696,7 @@ var Importeur = class {
           this.meldingen.voeg(
             "waarschuwing",
             `Overspanningsrichting "${span.waarde}" noemt niet precies \xE9\xE9n van X en Y; afdracht in twee richtingen`,
-            label
+            label2
           );
         }
       }
@@ -36697,7 +36704,7 @@ var Importeur = class {
       const info2 = {
         record: vlak,
         naam,
-        label,
+        label: label2,
         knopen: buitenLus.knopen,
         soort,
         horizontaal,
@@ -36773,7 +36780,7 @@ var Importeur = class {
     for (const g of this.model.gevallen) {
       const id2 = this.loadCases.length + 1;
       const naam = (tekstVan(arg(g, 2)) ?? "").trim() || `Belastinggeval ${id2}`;
-      const label = `geval "${naam}"`;
+      const label2 = `geval "${naam}"`;
       const bron = enumVan(arg(g, 7));
       const type = gevalType(enumVan(arg(g, 6)), bron);
       const geval2 = { id: id2, name: naam, type };
@@ -36782,15 +36789,15 @@ var Importeur = class {
         this.meldingen.voeg(
           "waarschuwing",
           'Belastinggeval zonder herkenbaar type (ActionType/ActionSource); als "overig" ingelezen, kies het type zelf',
-          label
+          label2
         );
       }
       if (this.model.losseGroepen.includes(g)) {
-        this.meldingen.voeg("waarschuwing", "Lastgroep (LOAD_GROUP) die bij geen belastinggeval hoort; als eigen geval ingelezen", label);
+        this.meldingen.voeg("waarschuwing", "Lastgroep (LOAD_GROUP) die bij geen belastinggeval hoort; als eigen geval ingelezen", label2);
       }
       const coefficient = getalVan(arg(g, 8));
       if (coefficient !== null && Math.abs(coefficient - 1) > 1e-9) {
-        this.meldingen.voeg("nietOndersteund", `Factor (Coefficient ${NL2(coefficient)}) op een belastinggeval wordt niet ondersteund; genegeerd`, label);
+        this.meldingen.voeg("nietOndersteund", `Factor (Coefficient ${NL2(coefficient)}) op een belastinggeval wordt niet ondersteund; genegeerd`, label2);
       }
       const swc = g.type === "IFCSTRUCTURALLOADCASE" ? arg(g, 10) : null;
       if (Array.isArray(swc)) {
@@ -36803,15 +36810,15 @@ var Importeur = class {
           this.meldingen.voeg(
             "waarschuwing",
             "Tweede geval met eigen gewicht (SelfWeightCoefficients); alleen het eerste krijgt het automatische eigen gewicht",
-            label
+            label2
           );
         } else if (gewicht) {
-          this.meldingen.voeg("nietOndersteund", "Eigen gewicht (SelfWeightCoefficients) in een geval dat niet blijvend is; niet overgenomen", label);
+          this.meldingen.voeg("nietOndersteund", "Eigen gewicht (SelfWeightCoefficients) in een geval dat niet blijvend is; niet overgenomen", label2);
         } else if (c.some((x) => Math.abs(x) > 1e-12)) {
           this.meldingen.voeg(
             "nietOndersteund",
             `Eigen gewicht met co\xEBffici\xEBnten (${c.map((x) => NL2(x)).join("; ")}) wordt niet ondersteund; alleen (0; 0; \u22121) geeft het automatische eigen gewicht`,
-            label
+            label2
           );
         }
       }
@@ -36880,26 +36887,26 @@ var Importeur = class {
       const gevalNaam2 = this.loadCases[caseId - 1].name;
       for (const actie of this.actiesVan(g.id, /* @__PURE__ */ new Set())) {
         const actieNaam = (tekstVan(arg(actie, 2)) ?? "").trim();
-        const label = `last ${actieNaam ? `"${actieNaam}" ` : ""}in geval "${gevalNaam2}"`;
+        const label2 = `last ${actieNaam ? `"${actieNaam}" ` : ""}in geval "${gevalNaam2}"`;
         const element = this.ifc.get(this.ifc.aangrijping.get(actie.id));
         const last = this.ifc.get(refVan(arg(actie, 7)));
         if (!element) {
-          this.meldingen.voeg("nietOndersteund", "Last zonder aangrijpingspunt (IfcRelConnectsStructuralActivity); niet ingelezen", label);
+          this.meldingen.voeg("nietOndersteund", "Last zonder aangrijpingspunt (IfcRelConnectsStructuralActivity); niet ingelezen", label2);
           continue;
         }
         if (!last) {
-          this.meldingen.voeg("nietOndersteund", "Last zonder waarde (AppliedLoad); niet ingelezen", label);
+          this.meldingen.voeg("nietOndersteund", "Last zonder waarde (AppliedLoad); niet ingelezen", label2);
           continue;
         }
         if (last.type === "IFCSTRUCTURALLOADCONFIGURATION") {
-          this.meldingen.voeg("nietOndersteund", "Verlopende last (IfcStructuralLoadConfiguration) wordt niet ondersteund; niet ingelezen", label);
+          this.meldingen.voeg("nietOndersteund", "Verlopende last (IfcStructuralLoadConfiguration) wordt niet ondersteund; niet ingelezen", label2);
           continue;
         }
         const lokaal = enumVan(arg(actie, 8)) === "LOCAL_COORDS";
-        if (actie.type === "IFCSTRUCTURALPOINTACTION") this.puntlast(actie, last, element, caseId, lokaal, label);
+        if (actie.type === "IFCSTRUCTURALPOINTACTION") this.puntlast(actie, last, element, caseId, lokaal, label2);
         else if (actie.type === "IFCSTRUCTURALCURVEACTION" || actie.type === "IFCSTRUCTURALLINEARACTION") {
-          this.lijnlast(actie, last, element, caseId, lokaal, label);
-        } else this.vlaklast(actie, last, element, caseId, lokaal, label);
+          this.lijnlast(actie, last, element, caseId, lokaal, label2);
+        } else this.vlaklast(actie, last, element, caseId, lokaal, label2);
       }
     }
     for (const { nodeId, caseId, f } of this.axiaal.values()) {
@@ -36907,12 +36914,12 @@ var Importeur = class {
       this.loads.push({ id: this.loads.length + 1, nodeId, caseId, fx: f[0], fy: f[1], fz: f[2], mx: 0, my: 0, mz: 0 });
     }
   }
-  puntlast(actie, last, element, caseId, lokaal, label) {
+  puntlast(actie, last, element, caseId, lokaal, label2) {
     if (last.type !== "IFCSTRUCTURALLOADSINGLEFORCE" && last.type !== "IFCSTRUCTURALLOADSINGLEFORCEWARPING") {
       this.meldingen.voeg(
         "nietOndersteund",
         `Puntbelasting van het type ${ifcNaam(last.type)} (zoals een opgelegde verplaatsing) wordt niet ondersteund; niet ingelezen`,
-        label
+        label2
       );
       return;
     }
@@ -36922,11 +36929,11 @@ var Importeur = class {
     if (element.type === T.puntConnectie) {
       const nodeId = this.knoopVanConnectie.get(element.id);
       if (nodeId === void 0) {
-        this.meldingen.voeg("nietOndersteund", "Last op een knoop buiten dit analysemodel; niet ingelezen", label);
+        this.meldingen.voeg("nietOndersteund", "Last op een knoop buiten dit analysemodel; niet ingelezen", label2);
         return;
       }
       if (lokaal && refVan(arg(element, 8)) !== null) {
-        this.meldingen.voeg("waarschuwing", "Knooplast in een lokaal assenstelsel als globaal ingelezen", label);
+        this.meldingen.voeg("waarschuwing", "Knooplast in een lokaal assenstelsel als globaal ingelezen", label2);
       }
       this.loads.push({
         id: this.loads.length + 1,
@@ -36943,7 +36950,7 @@ var Importeur = class {
     }
     const keten = this.staafKeten(element);
     if (!keten) {
-      this.meldingen.voeg("nietOndersteund", "Puntlast op een vlak of buiten dit analysemodel wordt niet ondersteund; niet ingelezen", label);
+      this.meldingen.voeg("nietOndersteund", "Puntlast op een vlak of buiten dit analysemodel wordt niet ondersteund; niet ingelezen", label2);
       return;
     }
     const { a, assen } = keten;
@@ -36956,14 +36963,14 @@ var Importeur = class {
       const rel = sub4(p2, [a.x, a.y, a.z]);
       s = dot5(rel, assen.ex);
       if (norm4(sub4(rel, scale2(assen.ex, s))) > KNOOP_TOLERANTIE_M) {
-        this.meldingen.voeg("waarschuwing", "Puntlast ligt naast de staafas; loodrecht op de staaf geprojecteerd", label);
+        this.meldingen.voeg("waarschuwing", "Puntlast ligt naast de staafas; loodrecht op de staaf geprojecteerd", label2);
       }
       s = Math.max(0, Math.min(keten.lengte, s));
     } else {
-      this.meldingen.voeg("waarschuwing", "Puntlast op een staaf zonder plaats; op het begin van de staaf gezet", label);
+      this.meldingen.voeg("waarschuwing", "Puntlast op een staaf zonder plaats; op het begin van de staaf gezet", label2);
     }
     if (m.some((x) => Math.abs(x) > KLEIN)) {
-      this.meldingen.voeg("nietOndersteund", "Moment als puntlast op een staaf wordt niet ondersteund; alleen de kracht is ingelezen", label);
+      this.meldingen.voeg("nietOndersteund", "Moment als puntlast op een staaf wordt niet ondersteund; alleen de kracht is ingelezen", label2);
     }
     const fGlobaal = lokaal ? naarGlobaal(keten.eerste.ifcAssen, f) : f;
     const deel = keten.delen.find((d) => s < d.ketenTot) ?? keten.delen[keten.delen.length - 1];
@@ -36995,32 +37002,32 @@ var Importeur = class {
       deel.beam.rollAngleRad ?? 0
     );
   }
-  lijnlast(actie, last, element, caseId, lokaal, label) {
+  lijnlast(actie, last, element, caseId, lokaal, label2) {
     const keten = this.staafKeten(element);
     if (!keten) {
-      this.meldingen.voeg("nietOndersteund", "Lijnlast op een vlakrand of buiten dit analysemodel wordt niet ondersteund; niet ingelezen", label);
+      this.meldingen.voeg("nietOndersteund", "Lijnlast op een vlakrand of buiten dit analysemodel wordt niet ondersteund; niet ingelezen", label2);
       return;
     }
     const verloop = enumVan(arg(actie, 11)) ?? "CONST";
     if (verloop !== "CONST") {
-      this.meldingen.voeg("nietOndersteund", `Lijnlast met verloop ${verloop} wordt niet ondersteund; niet ingelezen`, label);
+      this.meldingen.voeg("nietOndersteund", `Lijnlast met verloop ${verloop} wordt niet ondersteund; niet ingelezen`, label2);
       return;
     }
     if (last.type !== "IFCSTRUCTURALLOADLINEARFORCE") {
-      this.meldingen.voeg("nietOndersteund", `Lijnbelasting van het type ${ifcNaam(last.type)} wordt niet ondersteund; niet ingelezen`, label);
+      this.meldingen.voeg("nietOndersteund", `Lijnbelasting van het type ${ifcNaam(last.type)} wordt niet ondersteund; niet ingelezen`, label2);
       return;
     }
     const q = [1, 2, 3].map((i) => (getalVan(arg(last, i)) ?? 0) * this.eenheden.lijnlast);
     const mq = [4, 5, 6].map((i) => (getalVan(arg(last, i)) ?? 0) * this.eenheden.lijnmoment);
     if (mq.some((x) => Math.abs(x) > KLEIN)) {
-      this.meldingen.voeg("nietOndersteund", "Verdeeld moment (LinearMoment) op een staaf wordt niet ondersteund; alleen de kracht is ingelezen", label);
+      this.meldingen.voeg("nietOndersteund", "Verdeeld moment (LinearMoment) op een staaf wordt niet ondersteund; alleen de kracht is ingelezen", label2);
     }
     const { a, assen } = keten;
     const geprojecteerd = enumVan(arg(actie, 10)) === "PROJECTED_LENGTH";
     let qGlobaal;
     if (lokaal) {
       if (geprojecteerd) {
-        this.meldingen.voeg("waarschuwing", "Lijnlast in lokale assen per geprojecteerde lengte; als per ware lengte ingelezen", label);
+        this.meldingen.voeg("waarschuwing", "Lijnlast in lokale assen per geprojecteerde lengte; als per ware lengte ingelezen", label2);
       }
       qGlobaal = naarGlobaal(keten.eerste.ifcAssen, q);
     } else if (geprojecteerd) {
@@ -37036,7 +37043,7 @@ var Importeur = class {
       van = Math.max(0, Math.min(...posities));
       tot = Math.min(keten.lengte, Math.max(...posities));
       if (tot - van <= KNOOP_TOLERANTIE_M) {
-        this.meldingen.voeg("nietOndersteund", "Lijnlast over een deel korter dan 1 mm; niet ingelezen", label);
+        this.meldingen.voeg("nietOndersteund", "Lijnlast over een deel korter dan 1 mm; niet ingelezen", label2);
         return;
       }
     }
@@ -37068,28 +37075,28 @@ var Importeur = class {
       }
     }
   }
-  vlaklast(actie, last, element, caseId, lokaal, label) {
+  vlaklast(actie, last, element, caseId, lokaal, label2) {
     const vlak = this.vlakVanRecord.get(element.id);
     if (!vlak) {
-      this.meldingen.voeg("nietOndersteund", "Vlaklast op iets anders dan een vlak van dit analysemodel; niet ingelezen", label);
+      this.meldingen.voeg("nietOndersteund", "Vlaklast op iets anders dan een vlak van dit analysemodel; niet ingelezen", label2);
       return;
     }
     const verloop = enumVan(arg(actie, 11)) ?? "CONST";
     if (verloop !== "CONST") {
-      this.meldingen.voeg("nietOndersteund", `Vlaklast met verloop ${verloop} wordt niet ondersteund; niet ingelezen`, label);
+      this.meldingen.voeg("nietOndersteund", `Vlaklast met verloop ${verloop} wordt niet ondersteund; niet ingelezen`, label2);
       return;
     }
     if (last.type !== "IFCSTRUCTURALLOADPLANARFORCE") {
-      this.meldingen.voeg("nietOndersteund", `Vlakbelasting van het type ${ifcNaam(last.type)} wordt niet ondersteund; niet ingelezen`, label);
+      this.meldingen.voeg("nietOndersteund", `Vlakbelasting van het type ${ifcNaam(last.type)} wordt niet ondersteund; niet ingelezen`, label2);
       return;
     }
     const face = this.faceVanVlaklast(actie, vlak);
     if (face === "onleesbaar") {
-      this.meldingen.voeg("nietOndersteund", "Vlaklast met een eigen topologie zonder leesbare face (buitenrand); niet ingelezen", label);
+      this.meldingen.voeg("nietOndersteund", "Vlaklast met een eigen topologie zonder leesbare face (buitenrand); niet ingelezen", label2);
       return;
     }
     if (face === "deel") {
-      this.meldingen.voeg("nietOndersteund", "Vlaklast op een deel van een vlak wordt niet ondersteund; niet ingelezen, voeg hem zelf toe", label);
+      this.meldingen.voeg("nietOndersteund", "Vlaklast op een deel van een vlak wordt niet ondersteund; niet ingelezen, voeg hem zelf toe", label2);
       return;
     }
     const p2 = [1, 2, 3].map((i) => (getalVan(arg(last, i)) ?? 0) * this.eenheden.vlaklast);
@@ -37106,7 +37113,7 @@ var Importeur = class {
     const nz = Math.abs(vlak.normaal[2]);
     if (Math.hypot(f[0], f[1]) <= 1e-9 * Math.max(1, Math.abs(f[2]))) {
       if (nz < 1e-6) {
-        this.meldingen.voeg("nietOndersteund", "Verticale vlaklast op een verticaal vlak; niet ingelezen", label);
+        this.meldingen.voeg("nietOndersteund", "Verticale vlaklast op een verticaal vlak; niet ingelezen", label2);
         return;
       }
       if (!vlak.horizontaal) {
@@ -37117,14 +37124,14 @@ var Importeur = class {
     }
     const langsNormaal = dot5(f, vlak.normaal);
     if (norm4(sub4(f, scale2(vlak.normaal, langsNormaal))) <= 1e-6 * norm4(f)) {
-      if (geprojecteerd) this.meldingen.voeg("waarschuwing", "Vlaklast loodrecht op het vlak per geprojecteerde oppervlakte; als per m\xB2 vlak ingelezen", label);
+      if (geprojecteerd) this.meldingen.voeg("waarschuwing", "Vlaklast loodrecht op het vlak per geprojecteerde oppervlakte; als per m\xB2 vlak ingelezen", label2);
       telOp("normal", langsNormaal);
       return;
     }
     this.meldingen.voeg(
       "nietOndersteund",
       "Vlaklast met een horizontale component (PlanarForceX/Y) die niet loodrecht op het vlak staat wordt niet ondersteund; alleen de verticale component is ingelezen",
-      label
+      label2
     );
     if (nz >= 1e-6) telOp("gravity", geprojecteerd ? -f[2] : -f[2] / nz);
   }
@@ -37181,11 +37188,11 @@ var Importeur = class {
       this.loadPanels.push(panel);
       this.panelBron.push(bron);
     }
-    for (const label of zonderRichting) {
+    for (const label2 of zonderRichting) {
       this.meldingen.voeg(
         "waarschuwing",
         'Vlak zonder overspanningsrichting (eigenschap "Overspanningsrichting"); afdracht in twee richtingen aangenomen',
-        label
+        label2
       );
     }
   }
@@ -37193,7 +37200,7 @@ var Importeur = class {
   combinaties() {
     for (const c of this.model.combinaties) {
       const naam = (tekstVan(arg(c, 2)) ?? "").trim() || `Combinatie ${this.combinations.length + 1}`;
-      const label = `combinatie "${naam}"`;
+      const label2 = `combinatie "${naam}"`;
       const factors = /* @__PURE__ */ new Map();
       for (const t of this.ifc.leden(c.id)) {
         const caseId = this.gevalVanRecord.get(t.obj);
@@ -37202,12 +37209,12 @@ var Importeur = class {
             this.meldingen.voeg(
               "nietOndersteund",
               "Combinatie met een lastgroep, een andere combinatie of een geval buiten dit model; dat deel is niet ingelezen",
-              label
+              label2
             );
           }
           continue;
         }
-        if (factors.has(caseId)) this.meldingen.voeg("waarschuwing", "Belastinggeval twee keer in een combinatie; de factoren zijn opgeteld", label);
+        if (factors.has(caseId)) this.meldingen.voeg("waarschuwing", "Belastinggeval twee keer in een combinatie; de factoren zijn opgeteld", label2);
         factors.set(caseId, (factors.get(caseId) ?? 0) + (t.factor ?? 1));
       }
       if (this.selfWeightCaseId !== void 0 && this.eigenGewichtLasten !== void 0 && factors.has(this.selfWeightCaseId)) {
@@ -37215,7 +37222,7 @@ var Importeur = class {
       }
       const coefficient = getalVan(arg(c, 8));
       if (coefficient !== null && Math.abs(coefficient - 1) > 1e-9) {
-        this.meldingen.voeg("nietOndersteund", `Factor (Coefficient ${NL2(coefficient)}) op een combinatie wordt niet ondersteund; genegeerd`, label);
+        this.meldingen.voeg("nietOndersteund", `Factor (Coefficient ${NL2(coefficient)}) op een combinatie wordt niet ondersteund; genegeerd`, label2);
       }
       let type = combinatieType((tekstVan(arg(c, 9)) ?? "").trim()) ?? combinatieType(naam);
       if (!type) {
@@ -37223,11 +37230,11 @@ var Importeur = class {
         this.meldingen.voeg(
           "waarschuwing",
           "Combinatie zonder herkenbare grenstoestand (Purpose of naam met ULS/UGT of SLS/BGT); als uiterste grenstoestand aangenomen",
-          label
+          label2
         );
       }
       if (this.model.wezen.includes(c)) {
-        this.meldingen.voeg("toelichting", "Combinatie buiten LoadedBy van het model, met gevallen van dit model; meegenomen", label);
+        this.meldingen.voeg("toelichting", "Combinatie buiten LoadedBy van het model, met gevallen van dit model; meegenomen", label2);
       }
       const formula = [...factors].map(([id2, f], i) => {
         const term = `${Math.abs(Math.abs(f) - 1) < 1e-12 && f > 0 ? "" : `${NL2(Math.abs(f))}\xB7`}${this.loadCases[id2 - 1].name}`;
@@ -37345,12 +37352,12 @@ var Importeur = class {
     }
     for (const analyse of analyseOpenFem3DLoadPanels(model3d)) {
       const bron = this.panelBron[analyse.panel.id - 1];
-      const label = `belastingvlak ${analyse.panel.id} (${bron?.vlak.label ?? "vlak ?"}, geval "${this.loadCases[(analyse.panel.caseId ?? 1) - 1]?.name ?? "?"}")`;
+      const label2 = `belastingvlak ${analyse.panel.id} (${bron?.vlak.label ?? "vlak ?"}, geval "${this.loadCases[(analyse.panel.caseId ?? 1) - 1]?.name ?? "?"}")`;
       if (analyse.error !== void 0) {
-        this.meldingen.voeg("waarschuwing", `Belastingvlak kan niet afdragen: ${analyse.error.replace(/\.$/, "")}`, label);
+        this.meldingen.voeg("waarschuwing", `Belastingvlak kan niet afdragen: ${analyse.error.replace(/\.$/, "")}`, label2);
         continue;
       }
-      for (const w of analyse.result.warnings) this.meldingen.voeg("waarschuwing", w.replace(/\.$/, ""), label);
+      for (const w of analyse.result.warnings) this.meldingen.voeg("waarschuwing", w.replace(/\.$/, ""), label2);
     }
     const project = this.ifc.vanType("IFCPROJECT")[0];
     const projectNaam = (tekstVan(arg(project, 2)) ?? "").trim() || (tekstVan(arg(project, 5)) ?? "").trim();
@@ -37750,6 +37757,4073 @@ function opIfcUitwerken(payload) {
   };
 }
 
+// src/io/ifcResultaten.ts
+init_plaatMateriaal();
+
+// src/io/ifcExport.ts
+init_femTypes();
+init_plaatMateriaal();
+init_sectionResolver();
+init_steelCheckBuilder();
+init_betonCheckBuilder();
+init_cltCheckBuilder();
+init_timberCheckBuilder();
+init_steelSectionDims_generated();
+init_strip();
+init_eigenDoorsnedenStore();
+
+// src/lib/checkTypes.ts
+function isSteelCheckResult(r) {
+  return "profile_name" in r;
+}
+function isConcreteCheckResult(r) {
+  return "concrete_class" in r;
+}
+function isStressCheckResult(r) {
+  return "f_toel_mpa" in r;
+}
+function isAluminiumCheckResult(r) {
+  return "legering" in r;
+}
+function sectionLabel(r) {
+  return isSteelCheckResult(r) ? r.profile_name : r.section_name;
+}
+function gradeLabel(r) {
+  if (isSteelCheckResult(r)) return r.steel_grade;
+  if (isConcreteCheckResult(r)) return r.concrete_class;
+  if (isAluminiumCheckResult(r)) return r.legering;
+  if (isStressCheckResult(r)) {
+    const f = r.f_toel_mpa.toLocaleString("nl-NL", { maximumFractionDigits: 2 });
+    return `${r.material_name}, f = ${f} N/mm\xB2`;
+  }
+  return r.strength_class;
+}
+function isCltCheckResult(r) {
+  return "layup" in r;
+}
+function isTimberCheckResult(r) {
+  return !isCltCheckResult(r) && "strength_class" in r;
+}
+function checkSoort(r) {
+  if (isSteelCheckResult(r)) return "staal";
+  if (isConcreteCheckResult(r)) return "beton";
+  if (isStressCheckResult(r)) return "spanning";
+  if (isAluminiumCheckResult(r)) return "aluminium";
+  if (isCltCheckResult(r)) return "clt";
+  if (isTimberCheckResult(r)) return "hout";
+  return null;
+}
+var NORM_PER_SOORT = {
+  staal: "EN 1993-1-1",
+  hout: "EN 1995-1-1",
+  clt: "EN 1995-1-1",
+  beton: "EN 1992-1-1",
+  spanning: null,
+  aluminium: "EN 1999-1-1"
+};
+var GEEN_NORM = "geen norm";
+function normAanduiding(r) {
+  const soort = checkSoort(r);
+  return soort === null ? null : NORM_PER_SOORT[soort];
+}
+function normLabel(r) {
+  return normAanduiding(r) ?? GEEN_NORM;
+}
+
+// src/components/openFem3d/openFem3dEnvelopePanels.ts
+var subtract = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+var dot6 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+var cross5 = (a, b) => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0]
+];
+var position = (node) => [node.x, node.y, node.z];
+var area = (loop) => Math.abs(loop.reduce((sum, a, i) => {
+  const b = loop[(i + 1) % loop.length];
+  return sum + a[0] * b[1] - b[0] * a[1];
+}, 0) / 2);
+function pointOnSegment(p2, a, b, tolerance) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const length2 = dx * dx + dy * dy;
+  const t = length2 > 0 ? Math.max(0, Math.min(1, ((p2[0] - a[0]) * dx + (p2[1] - a[1]) * dy) / length2)) : 0;
+  return Math.hypot(p2[0] - a[0] - t * dx, p2[1] - a[1] - t * dy) <= tolerance;
+}
+function strictlyInside(p2, loop, tolerance) {
+  let inside = false;
+  for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
+    const a = loop[i], b = loop[j];
+    if (pointOnSegment(p2, a, b, tolerance)) return false;
+    if (a[1] > p2[1] !== b[1] > p2[1] && p2[0] < a[0] + (p2[1] - a[1]) * (b[0] - a[0]) / (b[1] - a[1])) inside = !inside;
+  }
+  return inside;
+}
+function segmentsCross(a, b, c, d, tolerance) {
+  const orient = (p2, q, r) => (q[0] - p2[0]) * (r[1] - p2[1]) - (q[1] - p2[1]) * (r[0] - p2[0]);
+  if ([a, b].some((p2) => pointOnSegment(p2, c, d, tolerance)) || [c, d].some((p2) => pointOnSegment(p2, a, b, tolerance))) return true;
+  const x = orient(a, b, c), y = orient(a, b, d), u = orient(c, d, a), v = orient(c, d, b);
+  return x * y < 0 && u * v < 0;
+}
+function boundariesCross(a, b, tolerance) {
+  return a.some((start, i) => b.some((other, j) => segmentsCross(start, a[(i + 1) % a.length], other, b[(j + 1) % b.length], tolerance)));
+}
+function openFem3DEnvelopePanelGeometry(model, panel) {
+  const outer = openFem3DLoadPanelGeometry(model, {
+    id: panel.id,
+    nodeIds: panel.nodeIds,
+    distribution: panel.distribution,
+    spanDirection: panel.spanDirection
+  });
+  const byId = new Map(model.nodes.map((node) => [node.id, node]));
+  const project = (nodeId) => {
+    const node = byId.get(nodeId);
+    if (!node) throw new Error(`Schilpaneel ${panel.id}: knoop ${nodeId} bestaat niet.`);
+    const relative = subtract(position(node), outer.origin);
+    const distance = Math.abs(dot6(relative, outer.normal));
+    if (distance > OPEN_FEM_3D_LOAD_PANEL_TOLERANCE_M) {
+      throw new Error(`Opening van schilpaneel ${panel.id} ligt buiten het vlak.`);
+    }
+    return [dot6(relative, outer.axisU), dot6(relative, outer.axisV)];
+  };
+  const tolerance = OPEN_FEM_3D_LOAD_PANEL_TOLERANCE_M * 1e-3;
+  const holes = (panel.openings ?? []).map((opening) => {
+    openFem3DLoadPanelGeometry(model, { id: opening.id, nodeIds: opening.nodeIds, distribution: "twoWay" });
+    const polygon = opening.nodeIds.map(project);
+    if (polygon.some((point) => !strictlyInside(point, outer.polygon, tolerance)) || boundariesCross(polygon, outer.polygon, tolerance)) {
+      throw new Error(`Opening ${opening.id} van schilpaneel ${panel.id} ligt niet volledig binnen de buitenrand.`);
+    }
+    return { id: opening.id, polygon, areaM2: area(polygon) };
+  });
+  for (let i = 0; i < holes.length; i += 1) for (let j = i + 1; j < holes.length; j += 1) {
+    if (boundariesCross(holes[i].polygon, holes[j].polygon, tolerance) || strictlyInside(holes[i].polygon[0], holes[j].polygon, tolerance) || strictlyInside(holes[j].polygon[0], holes[i].polygon, tolerance)) {
+      throw new Error(`Openingen ${holes[i].id} en ${holes[j].id} van schilpaneel ${panel.id} overlappen.`);
+    }
+  }
+  const netAreaM2 = outer.areaM2 - holes.reduce((sum, hole) => sum + hole.areaM2, 0);
+  if (!(netAreaM2 > 0)) throw new Error(`Schilpaneel ${panel.id} heeft geen netto oppervlak.`);
+  const corners = panel.nodeIds.map((id2) => position(byId.get(id2)));
+  let oriented = [0, 0, 0];
+  for (let i = 1; i + 1 < corners.length; i += 1) {
+    oriented = cross5(subtract(corners[i], corners[0]), subtract(corners[i + 1], corners[0]));
+    if (Math.hypot(...oriented) > 1e-12) break;
+  }
+  const length = Math.hypot(...oriented);
+  const sign3 = panel.flipOuterSide ? -1 : 1;
+  const outwardNormal = oriented.map((value) => value === 0 ? 0 : sign3 * value / length);
+  return { outer, holes, netAreaM2, outwardNormal };
+}
+function addOpenFem3DEnvelopePanel(model, values) {
+  const id2 = (model.envelopePanels ?? []).reduce((max, panel) => Math.max(max, panel.id), 0) + 1;
+  const candidate = { ...values, id: id2, ...values.distribution === "oneWay" && !values.spanDirection ? { spanDirection: defaultOpenFem3DLoadPanelSpan(model, values.nodeIds) } : {} };
+  const parsed = parseOpenFem3DModel({ ...model, envelopePanels: [...model.envelopePanels ?? [], candidate] });
+  openFem3DEnvelopePanelGeometry(parsed, parsed.envelopePanels[parsed.envelopePanels.length - 1]);
+  return { ...model, envelopePanels: parsed.envelopePanels };
+}
+function updateOpenFem3DEnvelopePanel(model, id2, patch) {
+  if (!(model.envelopePanels ?? []).some((panel) => panel.id === id2)) throw new Error(`Schilpaneel ${id2} bestaat niet.`);
+  const parsed = parseOpenFem3DModel({ ...model, envelopePanels: model.envelopePanels.map((panel) => panel.id === id2 ? {
+    ...panel,
+    ...patch,
+    ...(patch.distribution ?? panel.distribution) === "oneWay" && !(patch.spanDirection ?? panel.spanDirection) ? { spanDirection: defaultOpenFem3DLoadPanelSpan(model, patch.nodeIds ?? panel.nodeIds) } : {}
+  } : panel) });
+  openFem3DEnvelopePanelGeometry(parsed, parsed.envelopePanels.find((panel) => panel.id === id2));
+  return { ...model, envelopePanels: parsed.envelopePanels };
+}
+function removeOpenFem3DEnvelopePanel(model, id2) {
+  return { ...model, envelopePanels: (model.envelopePanels ?? []).filter((panel) => panel.id !== id2) };
+}
+function addOpenFem3DEnvelopePanelLoad(model, panelId, caseId, q, direction) {
+  const panel = (model.envelopePanels ?? []).find((candidate) => candidate.id === panelId);
+  if (!panel) throw new Error(`Schilpaneel ${panelId} bestaat niet.`);
+  const geometry = openFem3DEnvelopePanelGeometry(model, panel);
+  const signedQ = direction === "normal" && dot6(geometry.outwardNormal, geometry.outer.normal) < 0 ? -q : q;
+  return addOpenFem3DLoadPanel(model, panel.nodeIds, {
+    caseId,
+    q: signedQ,
+    direction,
+    distribution: panel.distribution,
+    spanDirection: panel.spanDirection,
+    openings: panel.openings
+  });
+}
+
+// src/io/ifcExport.ts
+function normaliseerProfielnaam(naam) {
+  return profielSleutel(naam);
+}
+function profielAfmetingen(profiel) {
+  return STEEL_SECTION_DIMS[normaliseerProfielnaam(profiel)];
+}
+function isHoutMateriaal(mat) {
+  if (SUPPORTED_TIMBER_GRADES.includes(mat)) return true;
+  return /^(C\d{2}|D\d{2}|GL\d{2}[a-z]?)$/i.test(mat.trim());
+}
+function isBetonMateriaal(mat) {
+  return Object.prototype.hasOwnProperty.call(CONCRETE_E_CM, mat.trim());
+}
+function materiaalCategorie(mat) {
+  if (isHoutMateriaal(mat)) return "wood";
+  if (isBetonMateriaal(mat)) return "concrete";
+  return "steel";
+}
+function reeel(v) {
+  if (!Number.isFinite(v) || Object.is(v, -0)) v = 0;
+  let s = String(Number(v.toPrecision(10)));
+  const e = s.toLowerCase().indexOf("e");
+  if (e >= 0) {
+    let m = s.slice(0, e);
+    if (!m.includes(".")) m += ".";
+    return m + "E" + s.slice(e + 1).replace("+", "");
+  }
+  if (!s.includes(".")) s += ".";
+  return s;
+}
+function meter(mm2) {
+  return reeel(mm2 / 1e3);
+}
+function stepString(s) {
+  let uit = "";
+  let inX2 = false;
+  for (const ch of s) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code >= 32 && code <= 126) {
+      if (inX2) {
+        uit += "\\X0\\";
+        inX2 = false;
+      }
+      if (ch === "'") uit += "''";
+      else if (ch === "\\") uit += "\\\\";
+      else uit += ch;
+    } else {
+      if (!inX2) {
+        uit += "\\X2\\";
+        inX2 = true;
+      }
+      uit += code.toString(16).toUpperCase().padStart(4, "0");
+    }
+  }
+  if (inX2) uit += "\\X0\\";
+  return `'${uit}'`;
+}
+var IFC_GUID_TEKENS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$";
+function fnv1a32(tekst2, basis) {
+  let h = basis >>> 0;
+  for (let i = 0; i < tekst2.length; i++) {
+    h ^= tekst2.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+function ifcGuid(seed) {
+  const basissen = [2166136261, 2538058380, 789469025, 1818371886];
+  let n2 = 0n;
+  for (let i = 0; i < 4; i++) {
+    n2 = n2 << 32n | BigInt(fnv1a32(`${seed}\0${i}`, basissen[i]));
+  }
+  let uit = IFC_GUID_TEKENS[Number(n2 >> 126n)];
+  for (let i = 20; i >= 0; i--) {
+    uit += IFC_GUID_TEKENS[Number(n2 >> BigInt(i * 6) & 63n)];
+  }
+  return uit;
+}
+var SpfSchrijver = class {
+  regels = [];
+  volgendId = 1;
+  guids = /* @__PURE__ */ new Set();
+  /** Voeg een entiteit toe; retourneert het #id. */
+  ent(naam, ...attrs) {
+    const id2 = this.volgendId++;
+    this.regels.push(`#${id2}=${naam}(${attrs.join(",")});`);
+    return id2;
+  }
+  /**
+   * Vervang een eerder geschreven entiteit (zelfde #id). Voor een attribuut
+   * dat pas later bekend is, zoals `HasResults` van een analysemodel.
+   */
+  vervang(id2, naam, ...attrs) {
+    const index = this.regels.findIndex((regel2) => regel2.startsWith(`#${id2}=`));
+    if (index < 0) throw new Error(`#${id2} bestaat niet`);
+    this.regels[index] = `#${id2}=${naam}(${attrs.join(",")});`;
+  }
+  /** Unieke deterministische GUID als STEP-string-attribuut. */
+  guid(seed) {
+    let g = ifcGuid(seed);
+    let poging = 2;
+    while (this.guids.has(g)) g = ifcGuid(`${seed}~${poging++}`);
+    this.guids.add(g);
+    return `'${g}'`;
+  }
+  data() {
+    return this.regels.join("\n");
+  }
+};
+var ref = (id2) => `#${id2}`;
+var lijst = (ids) => `(${ids.map(ref).join(",")})`;
+function bouwIfcRekenmodel(model, opties = {}) {
+  const w = new SpfSchrijver();
+  const tekst2 = (v) => {
+    const s = v?.trim();
+    return s ? s : void 0;
+  };
+  const projectNaam = tekst2(model.project?.naam) ?? tekst2(model.projectNaam) ?? "Rekenmodel";
+  const projectOmschrijving = tekst2(model.project?.omschrijving);
+  const projectNummer = tekst2(model.project?.projectnummer);
+  const projectLocatie = tekst2(model.project?.locatie);
+  const uLengte = w.ent("IFCSIUNIT", "*", ".LENGTHUNIT.", "$", ".METRE.");
+  const uOpp = w.ent("IFCSIUNIT", "*", ".AREAUNIT.", "$", ".SQUARE_METRE.");
+  const uInhoud = w.ent("IFCSIUNIT", "*", ".VOLUMEUNIT.", "$", ".CUBIC_METRE.");
+  const uHoek = w.ent("IFCSIUNIT", "*", ".PLANEANGLEUNIT.", "$", ".RADIAN.");
+  const uKracht = w.ent("IFCSIUNIT", "*", ".FORCEUNIT.", "$", ".NEWTON.");
+  const uDruk = w.ent("IFCSIUNIT", "*", ".PRESSUREUNIT.", "$", ".PASCAL.");
+  const uMassa = w.ent("IFCSIUNIT", "*", ".MASSUNIT.", ".KILO.", ".GRAM.");
+  const uTijd = w.ent("IFCSIUNIT", "*", ".TIMEUNIT.", "$", ".SECOND.");
+  const uTemp = w.ent("IFCSIUNIT", "*", ".THERMODYNAMICTEMPERATUREUNIT.", "$", ".KELVIN.");
+  const eenheden = w.ent(
+    "IFCUNITASSIGNMENT",
+    lijst([uLengte, uOpp, uInhoud, uHoek, uKracht, uDruk, uMassa, uTijd, uTemp])
+  );
+  const oorsprong = w.ent("IFCCARTESIANPOINT", "(0.,0.,0.)");
+  const richtingZ = w.ent("IFCDIRECTION", "(0.,0.,1.)");
+  const richtingX = w.ent("IFCDIRECTION", "(1.,0.,0.)");
+  const wereldAssen = w.ent(
+    "IFCAXIS2PLACEMENT3D",
+    ref(oorsprong),
+    ref(richtingZ),
+    ref(richtingX)
+  );
+  const context = w.ent(
+    "IFCGEOMETRICREPRESENTATIONCONTEXT",
+    "$",
+    "'Model'",
+    "3",
+    "1.E-5",
+    ref(wereldAssen),
+    "$"
+  );
+  const plaatsingTerrein = w.ent("IFCLOCALPLACEMENT", "$", ref(wereldAssen));
+  const plaatsingGebouw = w.ent(
+    "IFCLOCALPLACEMENT",
+    ref(plaatsingTerrein),
+    ref(wereldAssen)
+  );
+  const project = w.ent(
+    "IFCPROJECT",
+    w.guid("project"),
+    "$",
+    stepString(projectNaam),
+    projectOmschrijving !== void 0 ? stepString(projectOmschrijving) : "$",
+    "$",
+    projectNummer !== void 0 ? stepString(projectNummer) : "$",
+    "$",
+    lijst([context]),
+    ref(eenheden)
+  );
+  const terrein = w.ent(
+    "IFCSITE",
+    w.guid("terrein"),
+    "$",
+    stepString(projectLocatie ?? "Terrein"),
+    "$",
+    "$",
+    ref(plaatsingTerrein),
+    "$",
+    "$",
+    ".ELEMENT.",
+    "$",
+    "$",
+    "$",
+    "$",
+    "$"
+  );
+  const gebouw = w.ent(
+    "IFCBUILDING",
+    w.guid("gebouw"),
+    "$",
+    "'Gebouw'",
+    "$",
+    "$",
+    ref(plaatsingGebouw),
+    "$",
+    "$",
+    ".ELEMENT.",
+    "$",
+    "$",
+    "$"
+  );
+  w.ent(
+    "IFCRELAGGREGATES",
+    w.guid("agg:project-terrein"),
+    "$",
+    "$",
+    "$",
+    ref(project),
+    lijst([terrein])
+  );
+  w.ent(
+    "IFCRELAGGREGATES",
+    w.guid("agg:terrein-gebouw"),
+    "$",
+    "$",
+    "$",
+    ref(terrein),
+    lijst([gebouw])
+  );
+  const groepPerCase = /* @__PURE__ */ new Map();
+  const soortNaarActie = {
+    dead: [".PERMANENT_G.", ".DEAD_LOAD_G."],
+    live: [".VARIABLE_Q.", ".LIVE_LOAD_Q."],
+    snow: [".VARIABLE_Q.", ".SNOW_S."],
+    wind: [".VARIABLE_Q.", ".WIND_W."],
+    other: [".NOTDEFINED.", ".NOTDEFINED."]
+  };
+  const zonderLasten = opties.zonderLasten === true;
+  const teExporterenLasten = zonderLasten ? [] : model.loads;
+  const alleCases = zonderLasten ? [] : [...model.loadCases];
+  for (const last of teExporterenLasten) {
+    if (!alleCases.some((c) => c.id === last.caseId)) {
+      alleCases.push({ id: last.caseId, name: `BG ${last.caseId}`, type: "other" });
+    }
+  }
+  for (const geval2 of alleCases) {
+    const [actieType, actieBron] = soortNaarActie[geval2.type] ?? soortNaarActie.other;
+    const groep = w.ent(
+      "IFCSTRUCTURALLOADGROUP",
+      w.guid(`lastgroep:${geval2.id}`),
+      "$",
+      stepString(geval2.name),
+      "$",
+      "$",
+      ".LOAD_CASE.",
+      actieType,
+      actieBron,
+      "$",
+      "$"
+    );
+    groepPerCase.set(geval2.id, groep);
+  }
+  const combinatieGroepen = [];
+  const groepPerCombinatie = /* @__PURE__ */ new Map();
+  const combinaties = zonderLasten ? [] : model.combinations ?? [];
+  for (const combo of combinaties) {
+    const groep = w.ent(
+      "IFCSTRUCTURALLOADGROUP",
+      w.guid(`combinatie:${combo.id}`),
+      "$",
+      stepString(combo.name),
+      "$",
+      "$",
+      ".LOAD_COMBINATION.",
+      ".USERDEFINED.",
+      ".USERDEFINED.",
+      "$",
+      stepString(combo.type === "uls" ? "UGT" : "BGT")
+    );
+    combinatieGroepen.push(groep);
+    groepPerCombinatie.set(combo.id, groep);
+    const factoren2 = [...combo.factors.entries()].filter(([caseId, f]) => f !== 0 && groepPerCase.has(caseId)).sort((a, b) => a[0] - b[0]);
+    for (const [caseId, factor] of factoren2) {
+      w.ent(
+        "IFCRELASSIGNSTOGROUPBYFACTOR",
+        w.guid(`combinatie:${combo.id}:geval:${caseId}`),
+        "$",
+        "$",
+        "$",
+        lijst([groepPerCase.get(caseId)]),
+        "$",
+        ref(groep),
+        reeel(factor)
+      );
+    }
+  }
+  const richtingMinY = w.ent("IFCDIRECTION", "(0.,-1.,0.)");
+  const vlakAssen = w.ent(
+    "IFCAXIS2PLACEMENT3D",
+    ref(oorsprong),
+    ref(richtingMinY),
+    ref(richtingX)
+  );
+  const groepIds = [...groepPerCase.values(), ...combinatieGroepen];
+  const analyseModelAttrs = [
+    w.guid("analysemodel"),
+    "$",
+    stepString(`Rekenmodel ${projectNaam}`),
+    "$",
+    "$",
+    ".IN_PLANE_LOADING_2D.",
+    ref(vlakAssen),
+    groepIds.length > 0 ? lijst(groepIds) : "$",
+    "$",
+    "$"
+  ];
+  const analyseModel = w.ent("IFCSTRUCTURALANALYSISMODEL", ...analyseModelAttrs);
+  w.ent(
+    "IFCRELSERVICESBUILDINGS",
+    w.guid("dienst:model-gebouw"),
+    "$",
+    "$",
+    "$",
+    ref(analyseModel),
+    lijst([gebouw])
+  );
+  {
+    const eig = [];
+    if (model.analysetype) eig.push(eLabel("Analysetype", model.analysetype));
+    if (model.scheefstand) {
+      eig.push(eJaNee("Scheefstand", model.scheefstand.enabled));
+      if (model.scheefstand.enabled) {
+        eig.push(eMaat("ScheefstandNoemer", "IFCREAL", model.scheefstand.noemer));
+        eig.push(eMaat("ScheefstandPhi", "IFCRATIOMEASURE", 1 / model.scheefstand.noemer));
+        eig.push(eLabel("ScheefstandRichting", model.scheefstand.richting > 0 ? "+x" : "-x"));
+        if (model.scheefstand.bron) eig.push(eLabel("ScheefstandBron", model.scheefstand.bron));
+        if (model.scheefstand.noemerInvoer !== void 0 && Math.abs(model.scheefstand.noemerInvoer - model.scheefstand.noemer) > 1e-9) {
+          eig.push(eMaat("ScheefstandNoemerInvoer", "IFCREAL", model.scheefstand.noemerInvoer));
+        }
+      }
+    }
+    schrijfEigenschappen(w, "OpenFEM_Analyse", "analyse", eig, [analyseModel]);
+  }
+  const stramien3 = model.structuralGrid;
+  if (stramien3?.enabled && stramien3.xAxes.length > 0 && stramien3.zAxes.length > 0 && model.nodes.length > 0) {
+    const xs = model.nodes.map((n2) => n2.x), zs = model.nodes.map((n2) => n2.z);
+    const marge = 1e3;
+    const xMin = Math.min(...xs, ...stramien3.xAxes.map((a) => a.position)) - marge;
+    const xMax = Math.max(...xs, ...stramien3.xAxes.map((a) => a.position)) + marge;
+    const zMin = Math.min(...zs, ...stramien3.zAxes.map((a) => a.position)) - marge;
+    const zMax = Math.max(...zs, ...stramien3.zAxes.map((a) => a.position)) + marge;
+    const as3 = (label2, p1, p2) => {
+      const a = w.ent("IFCCARTESIANPOINT", `(${meter(p1[0])},0.,${meter(p1[1])})`);
+      const b = w.ent("IFCCARTESIANPOINT", `(${meter(p2[0])},0.,${meter(p2[1])})`);
+      const lijn = w.ent("IFCPOLYLINE", lijst([a, b]));
+      return w.ent("IFCGRIDAXIS", stepString(label2), ref(lijn), ".T.");
+    };
+    const uAssen = stramien3.xAxes.map((a) => as3(a.label, [a.position, zMin], [a.position, zMax]));
+    const vAssen = stramien3.zAxes.map((a) => as3(a.label, [xMin, a.position], [xMax, a.position]));
+    const grid = w.ent(
+      "IFCGRID",
+      w.guid("stramien"),
+      "$",
+      "'Stramien'",
+      "$",
+      "$",
+      "$",
+      "$",
+      lijst(uAssen),
+      lijst(vAssen),
+      "$",
+      ".RECTANGULAR."
+    );
+    w.ent(
+      "IFCRELCONTAINEDINSPATIALSTRUCTURE",
+      w.guid("bevat:stramien"),
+      "$",
+      "$",
+      "$",
+      lijst([grid]),
+      ref(gebouw)
+    );
+  }
+  const steunPerKnoop = /* @__PURE__ */ new Map();
+  for (const s of model.supports) steunPerKnoop.set(s.nodeId, s);
+  const connectiePerKnoop = /* @__PURE__ */ new Map();
+  const vertexPerKnoop = /* @__PURE__ */ new Map();
+  const puntPerKnoop = /* @__PURE__ */ new Map();
+  for (const kn of model.nodes) {
+    const punt = w.ent(
+      "IFCCARTESIANPOINT",
+      `(${meter(kn.x)},0.,${meter(kn.z)})`
+    );
+    const vertex = w.ent("IFCVERTEXPOINT", ref(punt));
+    vertexPerKnoop.set(kn.id, vertex);
+    puntPerKnoop.set(kn.id, punt);
+    const topo = w.ent(
+      "IFCTOPOLOGYREPRESENTATION",
+      ref(context),
+      "'Reference'",
+      "'Vertex'",
+      lijst([vertex])
+    );
+    const vorm = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([topo]));
+    const steun = steunPerKnoop.get(kn.id);
+    const conditie = steun !== void 0 ? schrijfOplegging(w, steun) : void 0;
+    const connectie = w.ent(
+      "IFCSTRUCTURALPOINTCONNECTION",
+      w.guid(`knoop:${kn.id}`),
+      "$",
+      stepString(`Knoop ${kn.id}`),
+      "$",
+      "$",
+      "$",
+      ref(vorm),
+      conditie !== void 0 ? ref(conditie) : "$",
+      "$"
+    );
+    connectiePerKnoop.set(kn.id, connectie);
+  }
+  const richtingY = w.ent("IFCDIRECTION", "(0.,1.,0.)");
+  const memberPerStaaf = /* @__PURE__ */ new Map();
+  const staafInfo = /* @__PURE__ */ new Map();
+  const verwerkteStaven = [];
+  for (const staaf of model.beams) {
+    const van = model.nodes.find((n2) => n2.id === staaf.from);
+    const naar = model.nodes.find((n2) => n2.id === staaf.to);
+    const vertexVan = vertexPerKnoop.get(staaf.from);
+    const vertexNaar = vertexPerKnoop.get(staaf.to);
+    if (!van || !naar || vertexVan === void 0 || vertexNaar === void 0) {
+      console.warn(`[ifcExport] Staaf ${staaf.id} verwijst naar ontbrekende knoop \u2014 overgeslagen.`);
+      continue;
+    }
+    const lengteMm = Math.hypot(naar.x - van.x, naar.z - van.z);
+    staafInfo.set(staaf.id, {
+      lengteM: lengteMm / 1e3,
+      // Eenheidsvector van→naar; bij een staaf met lengte 0 (gedegenereerd
+      // model) valt hij terug op +X, zodat er geen NaN in het bestand komt.
+      ux: lengteMm > 0 ? (naar.x - van.x) / lengteMm : 1,
+      uz: lengteMm > 0 ? (naar.z - van.z) / lengteMm : 0,
+      xMmVan: van.x,
+      zMmVan: van.z,
+      xMmNaar: naar.x,
+      zMmNaar: naar.z
+    });
+    const rand = w.ent("IFCEDGE", ref(vertexVan), ref(vertexNaar));
+    const topo = w.ent(
+      "IFCTOPOLOGYREPRESENTATION",
+      ref(context),
+      "'Reference'",
+      "'Edge'",
+      lijst([rand])
+    );
+    const vorm = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([topo]));
+    const rel = staaf.releases ?? {};
+    const beideEindenScharnier = rel.startRy === true && rel.endRy === true;
+    const materiaal = staaf.material ?? "S235";
+    const profiel = staaf.profile ?? "HEA160";
+    const member = w.ent(
+      "IFCSTRUCTURALCURVEMEMBER",
+      w.guid(`staaf:${staaf.id}`),
+      "$",
+      stepString(`Staaf ${staaf.id}`),
+      stepString(`${materiaal} ${profiel}`),
+      "$",
+      "$",
+      ref(vorm),
+      beideEindenScharnier ? ".PIN_JOINED_MEMBER." : ".RIGID_JOINED_MEMBER.",
+      ref(richtingY)
+    );
+    memberPerStaaf.set(staaf.id, member);
+    verwerkteStaven.push({
+      staaf,
+      materiaal,
+      profiel,
+      member,
+      lengteMm,
+      ux: lengteMm > 0 ? (naar.x - van.x) / lengteMm : 1,
+      uz: lengteMm > 0 ? (naar.z - van.z) / lengteMm : 0,
+      xMmVan: van.x,
+      zMmVan: van.z,
+      // Hoek met de horizontaal in radialen, 0..π/2 — dezelfde grootheid als
+      // `hellingGradenVanStaaf` (steelCheckBuilder.ts), maar in de eenheid
+      // die IfcPlaneAngleMeasure hier heeft (RADIAN in de eenhedenlijst).
+      hellingRad: Math.atan2(
+        Math.abs(naar.z - van.z),
+        Math.abs(naar.x - van.x)
+      ),
+      kolom: isOverwegendVerticaal(staaf, model.nodes),
+      staaftype: BEAM_LOAD_ROLE_LABEL[rolVanStaaf(staaf, model.nodes)]
+    });
+    const veer = staaf.veren ?? {};
+    const einden = [
+      ["start", connectiePerKnoop.get(staaf.from), rel.startTx, rel.startTz, rel.startRy, veer.startTx, veer.startTz, veer.startRy],
+      ["eind", connectiePerKnoop.get(staaf.to), rel.endTx, rel.endTz, rel.endRy, veer.endTx, veer.endTz, veer.endRy]
+    ];
+    for (const [kant, connectie, losTx, losTz, losRy, kTx, kTz, kRy] of einden) {
+      let conditie;
+      const veerTx = losTx !== true && kTx !== void 0 && kTx > 0;
+      const veerTz = losTz !== true && kTz !== void 0 && kTz > 0;
+      const veerRy = losRy !== true && kRy !== void 0 && kRy > 0;
+      if (losTx === true || losTz === true || losRy === true || veerTx || veerTz || veerRy) {
+        const dof = (los, veer2, k, draai2) => los === true ? "IFCBOOLEAN(.F.)" : veer2 ? draai2 ? `IFCROTATIONALSTIFFNESSMEASURE(${reeel(k * 1e3)})` : `IFCLINEARSTIFFNESSMEASURE(${reeel(k * 1e6)})` : "IFCBOOLEAN(.T.)";
+        conditie = w.ent(
+          "IFCBOUNDARYNODECONDITION",
+          stepString(veerTx || veerTz || veerRy ? "Verende aansluiting" : "Scharnier"),
+          dof(losTx, veerTx, kTx, false),
+          "$",
+          dof(losTz, veerTz, kTz, false),
+          "$",
+          dof(losRy, veerRy, kRy, true),
+          "$"
+        );
+      }
+      w.ent(
+        "IFCRELCONNECTSSTRUCTURALMEMBER",
+        w.guid(`staafrel:${staaf.id}:${kant}`),
+        "$",
+        "$",
+        "$",
+        ref(member),
+        ref(connectie),
+        conditie !== void 0 ? ref(conditie) : "$",
+        "$",
+        "$",
+        "$"
+      );
+    }
+  }
+  const combos = schrijfMaterialenEnProfielen(w, model.beams, memberPerStaaf);
+  const plaatInfo = /* @__PURE__ */ new Map();
+  const knoopPerId = new Map(model.nodes.map((n2) => [n2.id, n2]));
+  for (const plaat of model.plates ?? []) {
+    const ids = (plaat.nodeIds ?? []).filter((id2) => puntPerKnoop.has(id2));
+    if (ids.length < 3) continue;
+    const lus = w.ent("IFCPOLYLOOP", lijst(ids.map((id2) => puntPerKnoop.get(id2))));
+    const rand = w.ent("IFCFACEOUTERBOUND", ref(lus), ".T.");
+    const openingen = (plaat.openingen ?? []).filter((o) => (o.punten?.length ?? 0) >= 3);
+    const binnenLussen = openingen.map((o) => {
+      const punten = o.punten.map((q) => w.ent(
+        "IFCCARTESIANPOINT",
+        `(${meter(q.x)},0.,${meter(q.z)})`
+      ));
+      const binnenLus = w.ent("IFCPOLYLOOP", lijst(punten));
+      return w.ent("IFCFACEBOUND", ref(binnenLus), ".T.");
+    });
+    const vlak = w.ent("IFCPLANE", ref(vlakAssen));
+    const vlakStuk = w.ent("IFCFACESURFACE", lijst([rand, ...binnenLussen]), ref(vlak), ".T.");
+    const topo = w.ent(
+      "IFCTOPOLOGYREPRESENTATION",
+      ref(context),
+      "'Reference'",
+      "'Face'",
+      lijst([vlakStuk])
+    );
+    const vorm = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([topo]));
+    const dikteMm = plaat.thickness ?? 20;
+    const openingTekst = openingen.length === 0 ? "" : `, ${openingen.length} ${openingen.length === 1 ? "opening" : "openingen"}`;
+    const member = w.ent(
+      "IFCSTRUCTURALSURFACEMEMBER",
+      w.guid(`plaat:${plaat.id}`),
+      "$",
+      stepString(`Plaat ${plaat.id}`),
+      stepString(`wandschijf t = ${nl10(dikteMm, 0)} mm${openingTekst}`),
+      "$",
+      "$",
+      ref(vorm),
+      ".SHELL.",
+      `IFCPOSITIVELENGTHMEASURE(${reeel(dikteMm / 1e3)})`
+    );
+    for (const id2 of ids) {
+      w.ent(
+        "IFCRELCONNECTSSTRUCTURALMEMBER",
+        w.guid(`plaatrel:${plaat.id}:${id2}`),
+        "$",
+        "$",
+        "$",
+        ref(member),
+        ref(connectiePerKnoop.get(id2)),
+        "$",
+        "$",
+        "$",
+        "$"
+      );
+    }
+    const stUit = bepaalPlaatStijfheid(plaat);
+    const st = stUit.ok ? stUit.stijfheid : null;
+    const eig = [
+      eGeheel("Plaatnummer", plaat.id),
+      eMaat("Dikte", "IFCPOSITIVELENGTHMEASURE", dikteMm / 1e3),
+      ...st ? [
+        eMaat("Elasticiteitsmodulus", "IFCMODULUSOFELASTICITYMEASURE", st.E1 * 1e6),
+        eMaat("Dwarscontractiecoefficient", "IFCRATIOMEASURE", st.nu12),
+        eMaat("Dichtheid", "IFCMASSDENSITYMEASURE", st.rho)
+      ] : [eLabel("Materiaalfout", stUit.ok ? "" : stUit.reden)],
+      eMaat("Meshgrootte", "IFCPOSITIVELENGTHMEASURE", (plaat.meshSize ?? 500) / 1e3),
+      eLabel("Hoekknopen", ids.join(", ")),
+      // Materiaal en richtingsafhankelijkheid (stap 3) — alleen als de plaat
+      // een materiaal draagt, zodat het bestand van een plaat zonder
+      // materiaal byte-gelijk blijft aan voorheen.
+      ...st && st.soort !== null ? [
+        eLabel("Materiaal", plaat.materiaal ?? "")
+      ] : [],
+      ...st?.orthotroop ? [
+        eMaat("ElasticiteitsmodulusDwars", "IFCMODULUSOFELASTICITYMEASURE", st.E2 * 1e6),
+        eMaat("Glijdingsmodulus", "IFCMODULUSOFELASTICITYMEASURE", st.G12 * 1e6),
+        // Kruislaaghout: WAAR G₁₂ vandaan komt (bron of bewuste bovengrens),
+        // zodat de lezer van het IFC-bestand het getal niet voor een normwaarde
+        // aanziet. Andere platen krijgen het veld niet en blijven byte-gelijk.
+        ...st.soort === "clt" ? [eLabel(
+          "GlijdingsmodulusBron",
+          st.bronG12 === "bovengrens" ? "bovengrens: uitgesmeerde G_mean, niet gereduceerd" : (plaat.cltG12Bron ?? "").trim()
+        )] : [],
+        eMaat("Hoofdrichting", "IFCPLANEANGLEMEASURE", st.hoekGraden * Math.PI / 180)
+      ] : [],
+      // Elementkeuze en openingen (stap 2) — alleen als ze er zijn, zodat het
+      // bestand van een plaat zonder beide byte-gelijk blijft aan voorheen.
+      ...plaat.meshType ? [eLabel("Elementtype", plaat.meshType)] : [],
+      ...openingen.length > 0 ? [eLabel("Openingen", openingen.map((o) => `${o.id}: ${o.punten.map((q) => `(${nl10(q.x, 0)}, ${nl10(q.z, 0)})`).join(" ")}`).join("; "))] : []
+    ];
+    schrijfEigenschappen(w, "OpenFEM_Plaat", `plaat:${plaat.id}`, eig, [member]);
+    plaatInfo.set(plaat.id, {
+      member,
+      nodeIds: ids,
+      knopen: knoopPerId,
+      vertexPerKnoop,
+      openingen: openingen.map((o) => ({ id: o.id, punten: o.punten }))
+    });
+  }
+  const actiesPerGroep = /* @__PURE__ */ new Map();
+  for (const last of teExporterenLasten) {
+    const actie = schrijfLast(w, last, connectiePerKnoop, memberPerStaaf, staafInfo, context, plaatInfo);
+    if (actie === void 0) continue;
+    const groep = groepPerCase.get(last.caseId);
+    if (groep !== void 0) {
+      const lijstje = actiesPerGroep.get(groep) ?? [];
+      lijstje.push(actie);
+      actiesPerGroep.set(groep, lijstje);
+    }
+  }
+  for (const [groep, acties] of actiesPerGroep) {
+    w.ent(
+      "IFCRELASSIGNSTOGROUP",
+      w.guid(`toekenning:groep:${groep}`),
+      "$",
+      "$",
+      "$",
+      lijst(acties),
+      "$",
+      ref(groep)
+    );
+  }
+  const bouwkundig = opties.zonderBouwkundig === true ? /* @__PURE__ */ new Map() : schrijfBouwkundigModel(w, {
+    staven: verwerkteStaven,
+    combos,
+    context,
+    plaatsingGebouw,
+    gebouw,
+    richtingZ,
+    richtingY,
+    oorsprong
+  });
+  for (const staafje of verwerkteStaven) {
+    const element = bouwkundig.get(staafje.staaf.id);
+    if (element === void 0) continue;
+    combos.get(comboSleutel(staafje.materiaal, staafje.profiel))?.objecten.push(element);
+  }
+  schrijfMateriaalkoppelingen(w, combos);
+  schrijfStaafEigenschappen(w, verwerkteStaven, combos, bouwkundig, model.toetsresultaten);
+  const leden = [
+    ...connectiePerKnoop.values(),
+    ...memberPerStaaf.values(),
+    ...[...plaatInfo.values()].map((p2) => p2.member)
+  ];
+  if (leden.length > 0) {
+    w.ent(
+      "IFCRELASSIGNSTOGROUP",
+      w.guid("toekenning:model"),
+      "$",
+      "$",
+      "$",
+      lijst(leden),
+      "$",
+      ref(analyseModel)
+    );
+  }
+  let drieD;
+  if (model.model3d !== void 0) {
+    const openFem3d = parseOpenFem3DModel(model.model3d);
+    schrijf3DSchilpanelen(w, openFem3d, context, gebouw);
+    if (openFem3d.beams.length > 0 || (openFem3d.plates?.length ?? 0) > 0 || (openFem3d.envelopePanels?.length ?? 0) > 0) {
+      drieD = schrijf3DRekenmodel(w, openFem3d, {
+        context,
+        gebouw,
+        richtingY,
+        richtingZ,
+        projectNaam,
+        zonderLasten,
+        loadCases: model.loadCases
+      });
+    }
+  }
+  if (opties.resultaten) {
+    const uit = opties.resultaten({
+      w,
+      project,
+      context,
+      tweeD: {
+        analyseModel,
+        connectiePerKnoop,
+        memberPerStaaf,
+        memberPerPlaat: new Map([...plaatInfo].map(([id2, info2]) => [id2, info2.member])),
+        groepPerCase,
+        groepPerCombinatie
+      },
+      drieD
+    });
+    if (uit.resultaten2D.length > 0) {
+      const attrs = [...analyseModelAttrs];
+      attrs[8] = lijst(uit.resultaten2D);
+      w.vervang(analyseModel, "IFCSTRUCTURALANALYSISMODEL", ...attrs);
+    }
+    if (drieD && uit.resultaten3D.length > 0) {
+      const attrs = [...drieD.attrs];
+      attrs[8] = lijst(uit.resultaten3D);
+      w.vervang(drieD.analyseModel, "IFCSTRUCTURALANALYSISMODEL", ...attrs);
+    }
+  }
+  const bestandsnaam = opties.bestandsnaam ?? `${projectNaam}.ifc`;
+  const tijdstempel = opties.tijdstempel ?? "";
+  const auteur = stepString(tekst2(model.project?.ingenieur) ?? "");
+  const organisatie = stepString(tekst2(model.project?.bedrijf) ?? "");
+  const beschrijving = [
+    "'ViewDefinition [StructuralAnalysisView]'",
+    ...opties.zonderBouwkundig === true ? [] : [
+      "'Rekenmodel met bouwkundige staven (IfcBeam/IfcColumn) en wapening'"
+    ]
+  ].join(",");
+  return [
+    "ISO-10303-21;",
+    "HEADER;",
+    `FILE_DESCRIPTION((${beschrijving}),'2;1');`,
+    `FILE_NAME(${stepString(bestandsnaam)},${stepString(tijdstempel)},(${auteur}),(${organisatie}),'Open FEM Studio','Open FEM Studio','');`,
+    "FILE_SCHEMA(('IFC4'));",
+    "ENDSEC;",
+    "DATA;",
+    w.data(),
+    "ENDSEC;",
+    "END-ISO-10303-21;",
+    ""
+  ].join("\n");
+}
+function schrijf3DSchilpanelen(w, model, context, gebouw) {
+  const byId = new Map(model.nodes.map((node) => [node.id, node]));
+  const coverings = [];
+  for (const panel of model.envelopePanels ?? []) {
+    const geometry = openFem3DEnvelopePanelGeometry(model, panel);
+    const loop = (ids) => w.ent("IFCPOLYLOOP", lijst(ids.map((id2) => {
+      const node = byId.get(id2);
+      return w.ent("IFCCARTESIANPOINT", `(${reeel(node.x)},${reeel(node.y)},${reeel(node.z)})`);
+    })));
+    const outer = w.ent("IFCFACEOUTERBOUND", ref(loop(panel.nodeIds)), ".T.");
+    const holes = (panel.openings ?? []).map((opening) => w.ent("IFCFACEBOUND", ref(loop(opening.nodeIds)), ".T."));
+    const face = w.ent("IFCFACE", lijst([outer, ...holes]));
+    const faceSet = w.ent("IFCCONNECTEDFACESET", lijst([face]));
+    const surface = w.ent("IFCFACEBASEDSURFACEMODEL", lijst([faceSet]));
+    const shape = w.ent("IFCSHAPEREPRESENTATION", ref(context), "'Body'", "'SurfaceModel'", lijst([surface]));
+    const productShape = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([shape]));
+    const covering = w.ent(
+      "IFCCOVERING",
+      w.guid(`3d:schilpaneel:${panel.id}`),
+      "$",
+      stepString(panel.name ?? `3D-schilpaneel ${panel.id}`),
+      stepString("OpenFEM 3D-schilpaneel zonder constructieve stijfheid"),
+      "$",
+      "$",
+      ref(productShape),
+      stepString(String(panel.id)),
+      panel.type === "roof" ? ".ROOFING." : ".CLADDING."
+    );
+    coverings.push(covering);
+    schrijfEigenschappen(w, "OpenFEM3D_Schilpaneel", `3d:schilpaneel:${panel.id}`, [
+      eGeheel("Paneelnummer", panel.id),
+      eLabel("Type", panel.type),
+      eLabel("Afdracht", panel.distribution),
+      eLabel("Hoekknopen", panel.nodeIds.join(",")),
+      eLabel("Openingen", (panel.openings ?? []).map((opening) => `${opening.id}:${opening.nodeIds.join(",")}`).join(";")),
+      eJaNee("BuitenwaartsOmgekeerd", !!panel.flipOuterSide),
+      eMaat("NettoOppervlak", "IFCAREAMEASURE", geometry.netAreaM2),
+      ...panel.claddingWeightKnPerM2 !== void 0 ? [eMaat("BekledingsgewichtKNPerM2", "IFCREAL", panel.claddingWeightKnPerM2)] : [],
+      ...panel.spanDirection ? [eLabel(
+        "Overspanningsrichting",
+        `${panel.spanDirection.x},${panel.spanDirection.y},${panel.spanDirection.z}`
+      )] : []
+    ], [covering]);
+  }
+  if (coverings.length > 0) w.ent(
+    "IFCRELCONTAINEDINSPATIALSTRUCTURE",
+    w.guid("3d:schilpanelen:gebouw"),
+    "$",
+    "$",
+    "$",
+    lijst(coverings),
+    ref(gebouw)
+  );
+}
+function schrijfOplegging(w, steun) {
+  const vast2 = "IFCBOOLEAN(.T.)";
+  const vrij = "IFCBOOLEAN(.F.)";
+  const veer = (kNperM) => `IFCLINEARSTIFFNESSMEASURE(${reeel(kNperM)})`;
+  const draaiveer = (kNmPerRad) => `IFCROTATIONALSTIFFNESSMEASURE(${reeel(kNmPerRad)})`;
+  const k = steun.k ?? 0;
+  let naam = "Oplegging";
+  let dx = vrij, dz = vrij, ry = vrij;
+  switch (steun.type) {
+    case "pinned":
+      naam = "Scharnieroplegging";
+      dx = vast2;
+      dz = vast2;
+      ry = vrij;
+      break;
+    case "fixed":
+      naam = "Inklemming";
+      dx = vast2;
+      dz = vast2;
+      ry = vast2;
+      break;
+    case "xRoller":
+      naam = "Rol (X vast)";
+      dx = vast2;
+      dz = vrij;
+      ry = vrij;
+      break;
+    case "zRoller":
+      naam = "Rol (Z vast)";
+      dx = vrij;
+      dz = vast2;
+      ry = vrij;
+      break;
+    case "zSpring":
+      naam = "Veer Z";
+      dx = vrij;
+      dz = veer(k * 1e6);
+      ry = vrij;
+      break;
+    case "xSpring":
+      naam = "Veer X";
+      dx = veer(k * 1e6);
+      dz = vrij;
+      ry = vrij;
+      break;
+    case "rotSpring":
+      naam = "Draaiveer";
+      dx = vrij;
+      dz = vrij;
+      ry = draaiveer(k * 1e3);
+      break;
+  }
+  return w.ent(
+    "IFCBOUNDARYNODECONDITION",
+    stepString(naam),
+    dx,
+    "$",
+    dz,
+    "$",
+    ry,
+    "$"
+  );
+}
+function gekoppelde3DKnopen(openFem3d) {
+  return /* @__PURE__ */ new Set([
+    ...openFem3d.beams.flatMap((staaf) => [staaf.startNodeId, staaf.endNodeId]),
+    ...(openFem3d.plates ?? []).flatMap((plaat) => [
+      ...plaat.nodeIds,
+      ...(plaat.openings ?? []).flatMap((opening) => opening.nodeIds)
+    ])
+  ]);
+}
+function bemonsterAfgeronde3DLus(punten, straal, segmenten = 10) {
+  if (punten.length < 3 || straal <= 0) return punten;
+  const verschil = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const lengte = (a) => Math.hypot(a[0], a[1], a[2]);
+  const schaal = (a, factor) => [a[0] * factor, a[1] * factor, a[2] * factor];
+  const plus = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const hoeken = punten.map((hoek, index) => {
+    const inkomend = verschil(punten[(index + punten.length - 1) % punten.length], hoek);
+    const uitgaand = verschil(punten[(index + 1) % punten.length], hoek);
+    const lengteIn = lengte(inkomend), lengteUit = lengte(uitgaand);
+    if (lengteIn <= 1e-12 || lengteUit <= 1e-12) return { start: hoek, hoek, einde: hoek };
+    const beperkt = Math.min(Math.max(0, straal), lengteIn * 0.45, lengteUit * 0.45);
+    return {
+      start: plus(hoek, schaal(inkomend, beperkt / lengteIn)),
+      hoek,
+      einde: plus(hoek, schaal(uitgaand, beperkt / lengteUit))
+    };
+  });
+  const resultaat = [];
+  for (let index = 0; index < hoeken.length; index += 1) {
+    const huidige = hoeken[index];
+    resultaat.push(huidige.start);
+    for (let stap = 1; stap <= segmenten; stap += 1) {
+      const t = stap / segmenten, s = 1 - t;
+      resultaat.push([
+        s * s * huidige.start[0] + 2 * s * t * huidige.hoek[0] + t * t * huidige.einde[0],
+        s * s * huidige.start[1] + 2 * s * t * huidige.hoek[1] + t * t * huidige.einde[1],
+        s * s * huidige.start[2] + 2 * s * t * huidige.hoek[2] + t * t * huidige.einde[2]
+      ]);
+    }
+  }
+  return resultaat;
+}
+function bemonsterGetekende3DLus(grens, knoopPerId, segmenten = 12) {
+  const punt = (id2) => {
+    const knoop = knoopPerId.get(id2);
+    return [knoop.x, knoop.y, knoop.z];
+  };
+  const resultaat = [punt(grens[0].startNodeId)];
+  for (const rand of grens) {
+    const einde = punt(rand.endNodeId);
+    if (rand.kind === "line") {
+      resultaat.push(einde);
+      continue;
+    }
+    const begin = punt(rand.startNodeId), stuur = punt(rand.controlNodeId);
+    for (let stap = 1; stap <= segmenten; stap += 1) {
+      const t = stap / segmenten, s = 1 - t;
+      resultaat.push([
+        s * s * begin[0] + 2 * s * t * stuur[0] + t * t * einde[0],
+        s * s * begin[1] + 2 * s * t * stuur[1] + t * t * einde[1],
+        s * s * begin[2] + 2 * s * t * stuur[2] + t * t * einde[2]
+      ]);
+    }
+  }
+  if (resultaat.length > 1) resultaat.pop();
+  return resultaat;
+}
+function schrijf3DRekenmodel(w, openFem3d, env) {
+  const gekoppeld = gekoppelde3DKnopen(openFem3d);
+  const knoopLasten = env.zonderLasten ? [] : (openFem3d.loads ?? []).filter((last) => gekoppeld.has(last.nodeId));
+  const staafLasten = env.zonderLasten ? [] : openFem3d.memberLoads ?? [];
+  const staafPuntLasten = env.zonderLasten ? [] : openFem3d.memberPointLoads ?? [];
+  const temperatuurLasten = env.zonderLasten ? [] : openFem3d.thermalLoads ?? [];
+  const oppervlakteLasten = env.zonderLasten ? [] : openFem3d.surfaceLoads ?? [];
+  const opgelegdeVerplaatsingen = env.zonderLasten ? [] : (openFem3d.supports ?? []).filter((steun) => Object.keys(steun.prescribed ?? {}).length > 0);
+  const opgelegdeVerplaatsingenGeval = 0;
+  const caseIds = [.../* @__PURE__ */ new Set([
+    ...knoopLasten.map(openFem3DLoadCaseId),
+    ...staafLasten.map(openFem3DLoadCaseId),
+    ...staafPuntLasten.map(openFem3DLoadCaseId),
+    ...temperatuurLasten.map(openFem3DLoadCaseId),
+    ...oppervlakteLasten.map(openFem3DLoadCaseId),
+    ...opgelegdeVerplaatsingen.length > 0 ? [opgelegdeVerplaatsingenGeval] : []
+  ])].sort((a, b) => a - b);
+  const loadGroepen = new Map(caseIds.map((caseId) => {
+    const naam = caseId === opgelegdeVerplaatsingenGeval ? "Opgelegde verplaatsingen" : env.loadCases.find((loadCase) => loadCase.id === caseId)?.name ?? `Belastinggeval ${caseId}`;
+    return [caseId, w.ent(
+      "IFCSTRUCTURALLOADGROUP",
+      w.guid(`3d:lastgroep:${caseId}`),
+      "$",
+      stepString(naam),
+      "$",
+      "$",
+      ".LOAD_CASE.",
+      ".NOTDEFINED.",
+      ".NOTDEFINED.",
+      "$",
+      "$"
+    )];
+  }));
+  const analyse3dAttrs = [
+    w.guid("3d:analysemodel"),
+    "$",
+    stepString(`3D-rekenmodel ${env.projectNaam}`),
+    "$",
+    "$",
+    ".LOADING_3D.",
+    "$",
+    loadGroepen.size > 0 ? lijst([...loadGroepen.values()]) : "$",
+    "$",
+    "$"
+  ];
+  const analyse3d = w.ent("IFCSTRUCTURALANALYSISMODEL", ...analyse3dAttrs);
+  w.ent(
+    "IFCRELSERVICESBUILDINGS",
+    w.guid("3d:dienst:model-gebouw"),
+    "$",
+    "$",
+    "$",
+    ref(analyse3d),
+    lijst([env.gebouw])
+  );
+  const steunPerKnoop = new Map((openFem3d.supports ?? []).map((steun) => [steun.nodeId, steun]));
+  const connectiePerKnoop = /* @__PURE__ */ new Map();
+  const puntPerKnoop = /* @__PURE__ */ new Map();
+  const vertexPerKnoop = /* @__PURE__ */ new Map();
+  const memberPerStaaf = /* @__PURE__ */ new Map();
+  const memberPerPlaat = /* @__PURE__ */ new Map();
+  const leden = [];
+  for (const knoop of openFem3d.nodes.filter((node) => gekoppeld.has(node.id))) {
+    const punt = w.ent(
+      "IFCCARTESIANPOINT",
+      `(${reeel(knoop.x)},${reeel(knoop.y)},${reeel(knoop.z)})`
+    );
+    puntPerKnoop.set(knoop.id, punt);
+    const vertex = w.ent("IFCVERTEXPOINT", ref(punt));
+    vertexPerKnoop.set(knoop.id, vertex);
+    const topo = w.ent(
+      "IFCTOPOLOGYREPRESENTATION",
+      ref(env.context),
+      "'Reference'",
+      "'Vertex'",
+      lijst([vertex])
+    );
+    const vorm = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([topo]));
+    const steun = steunPerKnoop.get(knoop.id);
+    const conditie = steun !== void 0 ? w.ent(
+      "IFCBOUNDARYNODECONDITION",
+      stepString(`3D-oplegging knoop ${knoop.id}`),
+      ...[
+        [steun.ux, steun.springs?.kxKnPerM, "linear"],
+        [steun.uy, steun.springs?.kyKnPerM, "linear"],
+        [steun.uz, steun.springs?.kzKnPerM, "linear"],
+        [steun.rx, steun.springs?.krxKnmPerRad, "rotational"],
+        [steun.ry, steun.springs?.kryKnmPerRad, "rotational"],
+        [steun.rz, steun.springs?.krzKnmPerRad, "rotational"]
+      ].map(([vast2, veerwaarde, soort]) => vast2 ? "IFCBOOLEAN(.T.)" : veerwaarde !== void 0 ? `${soort === "linear" ? "IFCLINEARSTIFFNESSMEASURE" : "IFCROTATIONALSTIFFNESSMEASURE"}(${reeel(veerwaarde * 1e3)})` : "IFCBOOLEAN(.F.)")
+    ) : void 0;
+    const connectie = w.ent(
+      "IFCSTRUCTURALPOINTCONNECTION",
+      w.guid(`3d:knoop:${knoop.id}`),
+      "$",
+      stepString(`3D-knoop ${knoop.id}`),
+      "$",
+      "$",
+      "$",
+      ref(vorm),
+      conditie !== void 0 ? ref(conditie) : "$",
+      "$"
+    );
+    connectiePerKnoop.set(knoop.id, connectie);
+    leden.push(connectie);
+  }
+  const knoopPerId = new Map(openFem3d.nodes.map((knoop) => [knoop.id, knoop]));
+  for (const staaf of openFem3d.beams) {
+    const van = knoopPerId.get(staaf.startNodeId);
+    const naar = knoopPerId.get(staaf.endNodeId);
+    const rand = w.ent("IFCEDGE", ref(vertexPerKnoop.get(van.id)), ref(vertexPerKnoop.get(naar.id)));
+    const topo = w.ent(
+      "IFCTOPOLOGYREPRESENTATION",
+      ref(env.context),
+      "'Reference'",
+      "'Edge'",
+      lijst([rand])
+    );
+    const vorm = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([topo]));
+    const lokaleAssen = openFem3DMemberAxes(van, naar, staaf.rollAngleRad ?? 0);
+    const dwarsrichting = w.ent(
+      "IFCDIRECTION",
+      "(" + reeel(lokaleAssen.ez[0]) + "," + reeel(lokaleAssen.ez[1]) + "," + reeel(lokaleAssen.ez[2]) + ")"
+    );
+    const rel = staaf.releases;
+    const beideEindenScharnier = !!rel && rel.myStart && rel.mzStart && rel.myEnd && rel.mzEnd;
+    const member = w.ent(
+      "IFCSTRUCTURALCURVEMEMBER",
+      w.guid(`3d:staaf:${staaf.id}`),
+      "$",
+      stepString(`3D-staaf ${staaf.id}`),
+      "$",
+      "$",
+      "$",
+      ref(vorm),
+      beideEindenScharnier ? ".PIN_JOINED_MEMBER." : ".RIGID_JOINED_MEMBER.",
+      ref(dwarsrichting)
+    );
+    memberPerStaaf.set(staaf.id, member);
+    leden.push(member);
+    const verloop = staaf.profileNameEnd !== void 0 ? openFem3DBeamVerloop(staaf) : null;
+    if (verloop?.status === "verlopend") {
+      schrijfEigenschappen(w, "OpenFEM3D_Staaf", `3d:staaf:${staaf.id}`, [
+        eGeheel("Staafnummer", staaf.id),
+        eLabel("Profiel", staaf.profileName ?? ""),
+        eLabel("Eindprofiel", staaf.profileNameEnd ?? ""),
+        eLabel("Materiaal", staaf.material ?? ""),
+        eTekst("Verloop", verloop.verloop.soort === "gelastI" ? "lineair van begin- naar eindprofiel, gerekend als gelast I-profiel zonder afrondingsstraal" : "lineair van begin- naar eindprofiel (rechthoek b x h)")
+      ], [member]);
+    }
+    for (const [kant, nodeId] of [["start", staaf.startNodeId], ["eind", staaf.endNodeId]]) {
+      const my = kant === "start" ? rel?.myStart : rel?.myEnd;
+      const mz = kant === "start" ? rel?.mzStart : rel?.mzEnd;
+      const torsion = kant === "start" ? rel?.torsionStart : rel?.torsionEnd;
+      const conditie = my || mz || torsion ? w.ent(
+        "IFCBOUNDARYNODECONDITION",
+        stepString("3D-staafscharnier " + staaf.id + " " + kant),
+        "IFCBOOLEAN(.T.)",
+        "IFCBOOLEAN(.T.)",
+        "IFCBOOLEAN(.T.)",
+        "IFCBOOLEAN(" + (torsion ? ".F." : ".T.") + ")",
+        "IFCBOOLEAN(" + (my ? ".F." : ".T.") + ")",
+        "IFCBOOLEAN(" + (mz ? ".F." : ".T.") + ")"
+      ) : void 0;
+      w.ent(
+        "IFCRELCONNECTSSTRUCTURALMEMBER",
+        w.guid(`3d:staafrel:${staaf.id}:${kant}`),
+        "$",
+        "$",
+        "$",
+        ref(member),
+        ref(connectiePerKnoop.get(nodeId)),
+        conditie !== void 0 ? ref(conditie) : "$",
+        "$",
+        "$",
+        "$"
+      );
+    }
+  }
+  for (const plaat of openFem3d.plates ?? []) {
+    const buitenKnopen = plaat.nodeIds.map((id2) => knoopPerId.get(id2));
+    const buitenPunten = buitenKnopen.map((knoop) => [knoop.x, knoop.y, knoop.z]);
+    const oorsprong = buitenPunten[0];
+    const eerste = buitenPunten[1];
+    const ux = eerste[0] - oorsprong[0], uy = eerste[1] - oorsprong[1], uz = eerste[2] - oorsprong[2];
+    const uLengte = Math.hypot(ux, uy, uz);
+    const u = [ux / uLengte, uy / uLengte, uz / uLengte];
+    let normaal = null;
+    for (let index = 2; index < buitenPunten.length && normaal === null; index += 1) {
+      const q = buitenPunten[index];
+      const vx = q[0] - oorsprong[0], vy = q[1] - oorsprong[1], vz = q[2] - oorsprong[2];
+      const nx = u[1] * vz - u[2] * vy;
+      const ny = u[2] * vx - u[0] * vz;
+      const nz = u[0] * vy - u[1] * vx;
+      const nLengte = Math.hypot(nx, ny, nz);
+      if (nLengte > 1e-12) normaal = [nx / nLengte, ny / nLengte, nz / nLengte];
+    }
+    if (normaal === null) continue;
+    const schrijfPunt = (punt) => w.ent(
+      "IFCCARTESIANPOINT",
+      `(${reeel(punt[0])},${reeel(punt[1])},${reeel(punt[2])})`
+    );
+    const buitenLusPunten = plaat.boundary ? bemonsterGetekende3DLus(plaat.boundary, knoopPerId) : bemonsterAfgeronde3DLus(buitenPunten, plaat.cornerRadiusM ?? 0);
+    const buitenLus = w.ent("IFCPOLYLOOP", lijst(buitenLusPunten.map(schrijfPunt)));
+    const buitenRand = w.ent("IFCFACEOUTERBOUND", ref(buitenLus), ".T.");
+    const binnenRanden = (plaat.openings ?? []).map((opening) => {
+      const openingPunten = opening.nodeIds.map((id2) => {
+        const knoop = knoopPerId.get(id2);
+        return [knoop.x, knoop.y, knoop.z];
+      });
+      const lusPunten = opening.boundary ? bemonsterGetekende3DLus(opening.boundary, knoopPerId) : bemonsterAfgeronde3DLus(openingPunten, opening.cornerRadiusM ?? 0);
+      const lus = w.ent("IFCPOLYLOOP", lijst(lusPunten.map(schrijfPunt)));
+      return w.ent("IFCFACEBOUND", ref(lus), ".T.");
+    });
+    const normaalRichting = w.ent(
+      "IFCDIRECTION",
+      `(${reeel(normaal[0])},${reeel(normaal[1])},${reeel(normaal[2])})`
+    );
+    const referentieRichting = w.ent(
+      "IFCDIRECTION",
+      `(${reeel(u[0])},${reeel(u[1])},${reeel(u[2])})`
+    );
+    const assen = w.ent(
+      "IFCAXIS2PLACEMENT3D",
+      ref(puntPerKnoop.get(plaat.nodeIds[0])),
+      ref(normaalRichting),
+      ref(referentieRichting)
+    );
+    const vlak = w.ent("IFCPLANE", ref(assen));
+    const vlakStuk = w.ent("IFCFACESURFACE", lijst([buitenRand, ...binnenRanden]), ref(vlak), ".T.");
+    const topo = w.ent(
+      "IFCTOPOLOGYREPRESENTATION",
+      ref(env.context),
+      "'Reference'",
+      "'Face'",
+      lijst([vlakStuk])
+    );
+    const vorm = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([topo]));
+    const member = w.ent(
+      "IFCSTRUCTURALSURFACEMEMBER",
+      w.guid(`3d:plaat:${plaat.id}`),
+      "$",
+      stepString(`3D-plaat ${plaat.id}`),
+      stepString(`${plaat.material ?? "geen materiaal"}; ${plaat.openings?.length ?? 0} opening(en); r=${nl10(plaat.cornerRadiusM ?? 0)} m`),
+      "$",
+      "$",
+      ref(vorm),
+      ".SHELL.",
+      `IFCPOSITIVELENGTHMEASURE(${reeel(plaat.thicknessM)})`
+    );
+    memberPerPlaat.set(plaat.id, member);
+    leden.push(member);
+    const gekoppeldePlaatknopen = [.../* @__PURE__ */ new Set([
+      ...plaat.nodeIds,
+      ...(plaat.openings ?? []).flatMap((opening) => opening.nodeIds)
+    ])];
+    for (const nodeId of gekoppeldePlaatknopen) {
+      w.ent(
+        "IFCRELCONNECTSSTRUCTURALMEMBER",
+        w.guid(`3d:plaatrel:${plaat.id}:${nodeId}`),
+        "$",
+        "$",
+        "$",
+        ref(member),
+        ref(connectiePerKnoop.get(nodeId)),
+        "$",
+        "$",
+        "$",
+        "$"
+      );
+    }
+    schrijfEigenschappen(w, "OpenFEM3D_Plaat", `3d:plaat:${plaat.id}`, [
+      eGeheel("Plaatnummer", plaat.id),
+      eMaat("Dikte", "IFCPOSITIVELENGTHMEASURE", plaat.thicknessM),
+      eMaat("Randstraal", "IFCPOSITIVELENGTHMEASURE", plaat.cornerRadiusM ?? 0),
+      eLabel("Materiaal", plaat.material ?? ""),
+      eLabel("Randsegmenten", plaat.boundary?.map((rand) => rand.kind === "arc" ? `boog ${rand.startNodeId}-${rand.controlNodeId}-${rand.endNodeId}` : `lijn ${rand.startNodeId}-${rand.endNodeId}`).join("; ") ?? "hoekpunten"),
+      eLabel("Hoekknopen", plaat.nodeIds.join(", ")),
+      eLabel("Openingen", (plaat.openings ?? []).map((opening) => `${opening.id}: ${opening.nodeIds.join(", ")} (r=${nl10(opening.cornerRadiusM ?? 0)} m)`).join("; ") || "geen")
+    ], [member]);
+  }
+  if (leden.length > 0) {
+    w.ent(
+      "IFCRELASSIGNSTOGROUP",
+      w.guid("3d:toekenning:model"),
+      "$",
+      "$",
+      "$",
+      lijst(leden),
+      "$",
+      ref(analyse3d)
+    );
+  }
+  if (loadGroepen.size > 0) {
+    const actiesPerGeval = new Map(caseIds.map((caseId) => [caseId, []]));
+    for (const last of knoopLasten) {
+      const kracht = w.ent(
+        "IFCSTRUCTURALLOADSINGLEFORCE",
+        stepString(`3D-last ${last.id}`),
+        ...[last.fx, last.fy, last.fz].map((f) => `IFCFORCEMEASURE(${reeel(f * 1e3)})`),
+        ...[last.mx, last.my, last.mz].map((m) => `IFCTORQUEMEASURE(${reeel(m * 1e3)})`)
+      );
+      const actie = w.ent(
+        "IFCSTRUCTURALPOINTACTION",
+        w.guid(`3d:last:${last.id}`),
+        "$",
+        stepString(`3D-knooplast ${last.id}`),
+        "$",
+        "$",
+        "$",
+        "$",
+        ref(kracht),
+        ".GLOBAL_COORDS.",
+        "$"
+      );
+      w.ent(
+        "IFCRELCONNECTSSTRUCTURALACTIVITY",
+        w.guid(`3d:lastrel:${last.id}`),
+        "$",
+        "$",
+        "$",
+        ref(connectiePerKnoop.get(last.nodeId)),
+        ref(actie)
+      );
+      actiesPerGeval.get(openFem3DLoadCaseId(last)).push(actie);
+    }
+    for (const steun of opgelegdeVerplaatsingen) {
+      const waarde = steun.prescribed;
+      const maat4 = w.ent(
+        "IFCSTRUCTURALLOADSINGLEDISPLACEMENT",
+        stepString(`3D-opgelegde verplaatsing knoop ${steun.nodeId}`),
+        ...[waarde.uxM, waarde.uyM, waarde.uzM].map((v) => v === void 0 ? "$" : `IFCLENGTHMEASURE(${reeel(v)})`),
+        ...[waarde.rxRad, waarde.ryRad, waarde.rzRad].map((v) => v === void 0 ? "$" : `IFCPLANEANGLEMEASURE(${reeel(v)})`)
+      );
+      const actie = w.ent(
+        "IFCSTRUCTURALPOINTACTION",
+        w.guid(`3d:opgelegde-verplaatsing:${steun.nodeId}`),
+        "$",
+        stepString(`3D-opgelegde verplaatsing knoop ${steun.nodeId}`),
+        "$",
+        "$",
+        "$",
+        "$",
+        ref(maat4),
+        ".GLOBAL_COORDS.",
+        "$"
+      );
+      w.ent(
+        "IFCRELCONNECTSSTRUCTURALACTIVITY",
+        w.guid(`3d:opgelegde-verplaatsing-rel:${steun.nodeId}`),
+        "$",
+        "$",
+        "$",
+        ref(connectiePerKnoop.get(steun.nodeId)),
+        ref(actie)
+      );
+      actiesPerGeval.get(opgelegdeVerplaatsingenGeval).push(actie);
+    }
+    for (const last of staafLasten) {
+      const member = memberPerStaaf.get(last.beamId);
+      const staaf = openFem3d.beams.find((item) => item.id === last.beamId);
+      if (member === void 0 || !staaf) continue;
+      const van = knoopPerId.get(staaf.startNodeId);
+      const naar = knoopPerId.get(staaf.endNodeId);
+      const lengte = Math.hypot(naar.x - van.x, naar.y - van.y, naar.z - van.z);
+      const globaal = isOpenFem3DGlobalMemberLoad(last) ? last : null;
+      const lijnkracht = (componenten2, naam) => w.ent(
+        "IFCSTRUCTURALLOADLINEARFORCE",
+        stepString(naam),
+        ...componenten2.map((q) => q === null ? "$" : `IFCLINEARFORCEMEASURE(${reeel(q * 1e3)})`),
+        "$",
+        "$",
+        "$"
+      );
+      const componenten = (eind) => {
+        if (!isOpenFem3DGlobalMemberLoad(last)) return [null, eind ? last.qyEnd : last.qyStart, eind ? last.qzEnd : last.qzStart];
+        const q = eind ? last.qEnd : last.qStart;
+        return OPEN_FEM_3D_GLOBAL_DIRECTIONS.map((as3) => as3 === last.globalDirection ? q : 0);
+      };
+      const nul = globaal ? [0, 0, 0] : [null, 0, 0];
+      const stelsel = globaal ? ".GLOBAL_COORDS." : ".LOCAL_COORDS.";
+      const lengteSoort = globaal?.perProjection ? ".PROJECTED_LENGTH." : ".TRUE_LENGTH.";
+      const volledig = last.startPositionM <= 1e-12 && Math.abs(last.endPositionM - lengte) <= 1e-9;
+      const eindwaarden = componenten(true);
+      const uniform = componenten(false).every((q, index) => q === eindwaarden[index]);
+      let actie;
+      if (volledig && uniform) {
+        const kracht = lijnkracht(componenten(false), `3D q ${last.id}`);
+        actie = w.ent(
+          "IFCSTRUCTURALLINEARACTION",
+          w.guid(`3d:staaflast:${last.id}`),
+          "$",
+          stepString(`3D-staaflast ${last.id}`),
+          "$",
+          "$",
+          "$",
+          "$",
+          ref(kracht),
+          stelsel,
+          "$",
+          lengteSoort,
+          ".CONST."
+        );
+      } else {
+        const waarden = [];
+        const posities = [];
+        if (last.startPositionM > 1e-12) {
+          waarden.push(lijnkracht(nul, `3D q ${last.id} nul`));
+          posities.push(reeel(0));
+        }
+        waarden.push(lijnkracht(componenten(false), `3D q ${last.id} begin`));
+        posities.push(reeel(last.startPositionM));
+        waarden.push(lijnkracht(componenten(true), `3D q ${last.id} eind`));
+        posities.push(reeel(last.endPositionM));
+        if (last.endPositionM < lengte - 1e-9) {
+          waarden.push(lijnkracht(nul, `3D q ${last.id} nul`));
+          posities.push(reeel(lengte));
+        }
+        const config = w.ent(
+          "IFCSTRUCTURALLOADCONFIGURATION",
+          stepString(`3D q ${last.id}`),
+          lijst(waarden),
+          `(${posities.map((positie) => `(${positie})`).join(",")})`
+        );
+        actie = w.ent(
+          "IFCSTRUCTURALCURVEACTION",
+          w.guid(`3d:staaflast:${last.id}`),
+          "$",
+          stepString(`3D-staaflast ${last.id}`),
+          "$",
+          "$",
+          "$",
+          "$",
+          ref(config),
+          stelsel,
+          "$",
+          lengteSoort,
+          volledig ? ".LINEAR." : ".POLYGONAL."
+        );
+      }
+      w.ent(
+        "IFCRELCONNECTSSTRUCTURALACTIVITY",
+        w.guid(`3d:staaflastrel:${last.id}`),
+        "$",
+        "$",
+        "$",
+        ref(member),
+        ref(actie)
+      );
+      actiesPerGeval.get(openFem3DLoadCaseId(last)).push(actie);
+    }
+    for (const last of staafPuntLasten) {
+      const member = memberPerStaaf.get(last.beamId);
+      const staaf = openFem3d.beams.find((item) => item.id === last.beamId);
+      if (member === void 0 || !staaf) continue;
+      const van = knoopPerId.get(staaf.startNodeId);
+      const naar = knoopPerId.get(staaf.endNodeId);
+      const lengte = Math.hypot(naar.x - van.x, naar.y - van.y, naar.z - van.z);
+      const fractie = lengte > 0 ? last.positionM / lengte : 0;
+      const punt = w.ent("IFCCARTESIANPOINT", `(${reeel(van.x + (naar.x - van.x) * fractie)},${reeel(van.y + (naar.y - van.y) * fractie)},${reeel(van.z + (naar.z - van.z) * fractie)})`);
+      const as3 = w.ent("IFCAXIS2PLACEMENT3D", ref(punt), "$", "$");
+      const plaatsing = w.ent("IFCLOCALPLACEMENT", "$", ref(as3));
+      const kracht = w.ent(
+        "IFCSTRUCTURALLOADSINGLEFORCE",
+        stepString(`3D-staafpuntlast ${last.id}`),
+        "IFCFORCEMEASURE(0)",
+        `IFCFORCEMEASURE(${reeel(last.py * 1e3)})`,
+        `IFCFORCEMEASURE(${reeel(last.pz * 1e3)})`,
+        "IFCTORQUEMEASURE(0)",
+        "IFCTORQUEMEASURE(0)",
+        "IFCTORQUEMEASURE(0)"
+      );
+      const actie = w.ent(
+        "IFCSTRUCTURALPOINTACTION",
+        w.guid(`3d:staafpuntlast:${last.id}`),
+        "$",
+        stepString(`3D-staafpuntlast ${last.id}`),
+        "$",
+        "$",
+        ref(plaatsing),
+        "$",
+        ref(kracht),
+        ".LOCAL_COORDS.",
+        "$"
+      );
+      w.ent(
+        "IFCRELCONNECTSSTRUCTURALACTIVITY",
+        w.guid(`3d:staafpuntlastrel:${last.id}`),
+        "$",
+        "$",
+        "$",
+        ref(member),
+        ref(actie)
+      );
+      actiesPerGeval.get(openFem3DLoadCaseId(last)).push(actie);
+    }
+    for (const last of temperatuurLasten) {
+      const member = memberPerStaaf.get(last.beamId);
+      if (member === void 0) continue;
+      const temperatuur = w.ent(
+        "IFCSTRUCTURALLOADTEMPERATURE",
+        stepString(`3D \u0394T ${last.id}`),
+        `IFCTHERMODYNAMICTEMPERATUREMEASURE(${reeel(last.deltaTUniformK)})`,
+        `IFCTHERMODYNAMICTEMPERATUREMEASURE(${reeel(last.deltaTGradientYK)})`,
+        `IFCTHERMODYNAMICTEMPERATUREMEASURE(${reeel(last.deltaTGradientZK)})`
+      );
+      const actie = w.ent(
+        "IFCSTRUCTURALLINEARACTION",
+        w.guid(`3d:temperatuur:${last.id}`),
+        "$",
+        stepString(`3D-temperatuur ${last.id}`),
+        "$",
+        "$",
+        "$",
+        "$",
+        ref(temperatuur),
+        ".LOCAL_COORDS.",
+        "$",
+        "$",
+        ".CONST."
+      );
+      w.ent(
+        "IFCRELCONNECTSSTRUCTURALACTIVITY",
+        w.guid(`3d:temperatuurrel:${last.id}`),
+        "$",
+        "$",
+        "$",
+        ref(member),
+        ref(actie)
+      );
+      actiesPerGeval.get(openFem3DLoadCaseId(last)).push(actie);
+    }
+    for (const last of oppervlakteLasten) {
+      const member = memberPerPlaat.get(last.plateId);
+      if (member === void 0) continue;
+      const belasting = w.ent(
+        "IFCSTRUCTURALLOADPLANARFORCE",
+        stepString(`3D-oppervlaktelast ${last.id}`),
+        `IFCPLANARFORCEMEASURE(${reeel(last.qx * 1e3)})`,
+        `IFCPLANARFORCEMEASURE(${reeel(last.qy * 1e3)})`,
+        `IFCPLANARFORCEMEASURE(${reeel(last.qz * 1e3)})`
+      );
+      const actie = w.ent(
+        "IFCSTRUCTURALSURFACEACTION",
+        w.guid(`3d:oppervlaktelast:${last.id}`),
+        "$",
+        stepString(`3D-oppervlaktelast ${last.id}`),
+        "$",
+        "$",
+        "$",
+        "$",
+        ref(belasting),
+        ".GLOBAL_COORDS.",
+        "$",
+        ".TRUE_LENGTH.",
+        ".CONST."
+      );
+      w.ent(
+        "IFCRELCONNECTSSTRUCTURALACTIVITY",
+        w.guid(`3d:oppervlaktelastrel:${last.id}`),
+        "$",
+        "$",
+        "$",
+        ref(member),
+        ref(actie)
+      );
+      actiesPerGeval.get(openFem3DLoadCaseId(last)).push(actie);
+    }
+    for (const [caseId, acties] of actiesPerGeval) {
+      if (acties.length === 0) continue;
+      w.ent(
+        "IFCRELASSIGNSTOGROUP",
+        w.guid(`3d:toekenning:groep:${caseId}`),
+        "$",
+        "$",
+        "$",
+        lijst(acties),
+        "$",
+        ref(loadGroepen.get(caseId))
+      );
+    }
+  }
+  return {
+    analyseModel: analyse3d,
+    attrs: analyse3dAttrs,
+    connectiePerKnoop,
+    memberPerStaaf,
+    memberPerPlaat,
+    groepPerCase: new Map(loadGroepen),
+    groepPerCombinatie: /* @__PURE__ */ new Map()
+  };
+}
+function comboSleutel(materiaal, profiel) {
+  return `${materiaal} ${profiel}`;
+}
+function schrijfMaterialenEnProfielen(w, staven, memberPerStaaf) {
+  const materiaalIds = /* @__PURE__ */ new Map();
+  const materiaalId = (naam) => {
+    const bestaand = materiaalIds.get(naam);
+    if (bestaand !== void 0) return bestaand;
+    const id2 = w.ent(
+      "IFCMATERIAL",
+      stepString(naam),
+      "$",
+      stepString(materiaalCategorie(naam))
+    );
+    materiaalIds.set(naam, id2);
+    return id2;
+  };
+  const rauw = /* @__PURE__ */ new Map();
+  for (const staaf of staven) {
+    const member = memberPerStaaf.get(staaf.id);
+    if (member === void 0) continue;
+    const materiaal = staaf.material ?? "S235";
+    const profiel = staaf.profile ?? "HEA160";
+    const sleutel = comboSleutel(materiaal, profiel);
+    const combo = rauw.get(sleutel) ?? { materiaal, profiel, members: [] };
+    combo.members.push(member);
+    rauw.set(sleutel, combo);
+  }
+  const combos = /* @__PURE__ */ new Map();
+  for (const [sleutel, { materiaal, profiel, members }] of rauw) {
+    const materiaalDef = materiaalId(materiaal);
+    const doorsnede = schrijfDoorsnede(w, materiaal, profiel);
+    let koppeling;
+    if (doorsnede.profielDef !== void 0) {
+      const matProfiel = w.ent(
+        "IFCMATERIALPROFILE",
+        stepString(profiel),
+        "$",
+        ref(materiaalDef),
+        ref(doorsnede.profielDef),
+        "$",
+        "$"
+      );
+      const profielSet = w.ent(
+        "IFCMATERIALPROFILESET",
+        stepString(sleutel),
+        "$",
+        lijst([matProfiel]),
+        "$"
+      );
+      koppeling = w.ent("IFCMATERIALPROFILESETUSAGE", ref(profielSet), "$", "$");
+    } else {
+      console.warn(`[ifcExport] Profiel "${profiel}" onbekend \u2014 alleen materiaal gekoppeld.`);
+      koppeling = materiaalDef;
+    }
+    combos.set(sleutel, {
+      materiaal,
+      profiel,
+      materiaalDef,
+      koppeling,
+      doorsnede,
+      objecten: [...members]
+    });
+  }
+  return combos;
+}
+function schrijfMateriaalkoppelingen(w, combos) {
+  for (const { materiaal, profiel, koppeling, objecten } of combos.values()) {
+    if (objecten.length === 0) continue;
+    w.ent(
+      "IFCRELASSOCIATESMATERIAL",
+      w.guid(`matkoppeling:${materiaal}:${profiel}`),
+      "$",
+      "$",
+      "$",
+      lijst(objecten),
+      ref(koppeling)
+    );
+  }
+}
+var eLabel = (naam, v) => ({ naam, waarde: `IFCLABEL(${stepString(v)})` });
+var eTekst = (naam, v) => ({ naam, waarde: `IFCTEXT(${stepString(v)})` });
+var eKenmerk = (naam, v) => ({ naam, waarde: `IFCIDENTIFIER(${stepString(v)})` });
+var eJaNee = (naam, v) => ({ naam, waarde: `IFCBOOLEAN(${v ? ".T." : ".F."})` });
+var eGeheel = (naam, v) => ({ naam, waarde: `IFCINTEGER(${Math.round(v)})` });
+var eMaat = (naam, type, v) => ({ naam, waarde: `${type}(${reeel(v)})` });
+function schrijfEigenschappen(w, setNaam, seed, eigenschappen, objecten) {
+  if (eigenschappen.length === 0 || objecten.length === 0) return;
+  const ids = eigenschappen.map((e) => w.ent(
+    "IFCPROPERTYSINGLEVALUE",
+    stepString(e.naam),
+    "$",
+    e.waarde,
+    "$"
+  ));
+  const set = w.ent(
+    "IFCPROPERTYSET",
+    w.guid(`pset:${seed}`),
+    "$",
+    stepString(setNaam),
+    "$",
+    lijst(ids)
+  );
+  w.ent(
+    "IFCRELDEFINESBYPROPERTIES",
+    w.guid(`psetrel:${seed}`),
+    "$",
+    "$",
+    "$",
+    lijst(objecten),
+    ref(set)
+  );
+}
+function schrijfBouwkundigModel(w, invoer) {
+  const uit = /* @__PURE__ */ new Map();
+  const bruikbaar = invoer.staven.filter((s) => s.lengteMm > 0 && invoer.combos.get(comboSleutel(s.materiaal, s.profiel))?.doorsnede.profielDef !== void 0);
+  if (bruikbaar.length === 0) return uit;
+  const lichaamContext = w.ent(
+    "IFCGEOMETRICREPRESENTATIONSUBCONTEXT",
+    "'Body'",
+    "'Model'",
+    "*",
+    "*",
+    "*",
+    "*",
+    ref(invoer.context),
+    "$",
+    ".MODEL_VIEW.",
+    "$"
+  );
+  const nulAssen = w.ent("IFCAXIS2PLACEMENT3D", ref(invoer.oorsprong), "$", "$");
+  const elementen = [];
+  const wapeningPerSoort = /* @__PURE__ */ new Map();
+  for (const s of bruikbaar) {
+    const combo = invoer.combos.get(comboSleutel(s.materiaal, s.profiel));
+    const profielDef = combo?.doorsnede.profielDef;
+    if (combo === void 0 || profielDef === void 0) continue;
+    const lengteM = s.lengteMm / 1e3;
+    const punt = w.ent(
+      "IFCCARTESIANPOINT",
+      `(${meter(s.xMmVan)},0.,${meter(s.zMmVan)})`
+    );
+    const staafAs = w.ent("IFCDIRECTION", `(${reeel(s.ux)},0.,${reeel(s.uz)})`);
+    const assen = w.ent(
+      "IFCAXIS2PLACEMENT3D",
+      ref(punt),
+      ref(staafAs),
+      ref(invoer.richtingY)
+    );
+    const plaatsing = w.ent(
+      "IFCLOCALPLACEMENT",
+      ref(invoer.plaatsingGebouw),
+      ref(assen)
+    );
+    const lichaam = w.ent(
+      "IFCEXTRUDEDAREASOLID",
+      ref(profielDef),
+      ref(nulAssen),
+      ref(invoer.richtingZ),
+      reeel(lengteM)
+    );
+    const weergave = w.ent(
+      "IFCSHAPEREPRESENTATION",
+      ref(lichaamContext),
+      "'Body'",
+      "'SweptSolid'",
+      lijst([lichaam])
+    );
+    const vorm = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([weergave]));
+    const soort = s.kolom ? "Kolom" : "Ligger";
+    const element = w.ent(
+      s.kolom ? "IFCCOLUMN" : "IFCBEAM",
+      w.guid(`element:${s.staaf.id}`),
+      "$",
+      stepString(`${soort} ${s.staaf.id}`),
+      stepString(comboSleutel(s.materiaal, s.profiel)),
+      "$",
+      ref(plaatsing),
+      ref(vorm),
+      stepString(String(s.staaf.id)),
+      s.kolom ? ".COLUMN." : ".BEAM."
+    );
+    uit.set(s.staaf.id, element);
+    elementen.push(element);
+    w.ent(
+      "IFCRELASSIGNSTOPRODUCT",
+      w.guid(`rekenkoppeling:${s.staaf.id}`),
+      "$",
+      "$",
+      "$",
+      lijst([s.member]),
+      "$",
+      ref(element)
+    );
+    schrijfHoeveelheden(w, s, element, lengteM);
+    schrijfEigenschappen(
+      w,
+      s.kolom ? "Pset_ColumnCommon" : "Pset_BeamCommon",
+      `gemeen:${s.staaf.id}`,
+      [eKenmerk("Reference", s.profiel), eJaNee("LoadBearing", true)],
+      [element]
+    );
+    const staven = schrijfWapening(
+      w,
+      s,
+      element,
+      plaatsing,
+      nulAssen,
+      lichaamContext,
+      combo.doorsnede
+    );
+    if (staven.length > 0) {
+      const soortStaal = wapeningsstaal(s.staaf);
+      const lijstje = wapeningPerSoort.get(soortStaal) ?? [];
+      lijstje.push(...staven);
+      wapeningPerSoort.set(soortStaal, lijstje);
+    }
+  }
+  if (elementen.length > 0) {
+    w.ent(
+      "IFCRELCONTAINEDINSPATIALSTRUCTURE",
+      w.guid("bevat:gebouw"),
+      "$",
+      "$",
+      "$",
+      lijst(elementen),
+      ref(invoer.gebouw)
+    );
+  }
+  for (const [soortStaal, staven] of wapeningPerSoort) {
+    const mat = w.ent("IFCMATERIAL", stepString(soortStaal), "$", "'steel'");
+    w.ent(
+      "IFCRELASSOCIATESMATERIAL",
+      w.guid(`wapeningmateriaal:${soortStaal}`),
+      "$",
+      "$",
+      "$",
+      lijst(staven),
+      ref(mat)
+    );
+  }
+  return uit;
+}
+function schrijfHoeveelheden(w, s, element, lengteM) {
+  const sectie = resolveSection(s.materiaal, s.profiel);
+  const hoeveelheden = [w.ent(
+    "IFCQUANTITYLENGTH",
+    "'Length'",
+    "$",
+    "$",
+    reeel(lengteM),
+    "$"
+  )];
+  const aM2 = (sectie.aBruto ?? sectie.A) / 1e6;
+  if (sectie.bron !== "default" && aM2 > 0) {
+    hoeveelheden.push(w.ent(
+      "IFCQUANTITYAREA",
+      "'CrossSectionArea'",
+      "$",
+      "$",
+      reeel(aM2),
+      "$"
+    ));
+    hoeveelheden.push(w.ent(
+      "IFCQUANTITYVOLUME",
+      "'GrossVolume'",
+      "$",
+      "$",
+      reeel(aM2 * lengteM),
+      "$"
+    ));
+  }
+  const set = w.ent(
+    "IFCELEMENTQUANTITY",
+    w.guid(`hoeveelheden:${s.staaf.id}`),
+    "$",
+    s.kolom ? "'Qto_ColumnBaseQuantities'" : "'Qto_BeamBaseQuantities'",
+    "$",
+    "$",
+    lijst(hoeveelheden)
+  );
+  w.ent(
+    "IFCRELDEFINESBYPROPERTIES",
+    w.guid(`hoeveelhedenrel:${s.staaf.id}`),
+    "$",
+    "$",
+    "$",
+    lijst([element]),
+    ref(set)
+  );
+}
+function wapeningsstaal(staaf) {
+  return staaf.checkConfig?.betonStaalsoort ?? "B500B";
+}
+function rijNotatie(aantal2, diameterMm) {
+  return `${aantal2}\xD8${diameterMm}`;
+}
+function schrijfWapening(w, s, element, plaatsingElement, nulAssen, lichaamContext, doorsnede) {
+  const korf = s.staaf.checkConfig?.betonKorf;
+  if (korf === void 0 || !isBetonMateriaal(s.materiaal)) return [];
+  const hMm = doorsnede.hMm;
+  const bwMm = doorsnede.bwMm;
+  if (hMm === void 0 || bwMm === void 0 || hMm <= 0 || bwMm <= 0) return [];
+  const cElementMm = Math.max(0, korf.cover_mm);
+  const cBovenMm = Math.max(0, korf.cover_top?.cover_mm ?? cElementMm);
+  const cOnderMm = Math.max(0, korf.cover_bottom?.cover_mm ?? cElementMm);
+  const cZijMm = Math.max(0, korf.cover_sides?.cover_mm ?? cElementMm);
+  const beugelMm = Math.max(0, korf.stirrup_diameter_mm);
+  const soortStaal = wapeningsstaal(s.staaf);
+  const staven = [];
+  const schrijfStaaf = (seed, naam, toelichting, punten, gesloten, diameterMm, lengteMm, soort) => {
+    const puntIds = punten.map(([x, y, z]) => w.ent("IFCCARTESIANPOINT", `(${meter(x)},${meter(y)},${meter(z)})`));
+    const lijn = w.ent(
+      "IFCPOLYLINE",
+      lijst(gesloten ? [...puntIds, puntIds[0]] : puntIds)
+    );
+    const lichaam = w.ent(
+      "IFCSWEPTDISKSOLID",
+      ref(lijn),
+      meter(diameterMm / 2),
+      "$",
+      "$",
+      "$"
+    );
+    const weergave = w.ent(
+      "IFCSHAPEREPRESENTATION",
+      ref(lichaamContext),
+      "'Body'",
+      "'AdvancedSweptSolid'",
+      lijst([lichaam])
+    );
+    const vorm = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([weergave]));
+    const plaatsing = w.ent(
+      "IFCLOCALPLACEMENT",
+      ref(plaatsingElement),
+      ref(nulAssen)
+    );
+    const oppervlakteM2 = Math.PI / 4 * (diameterMm / 1e3) ** 2;
+    return w.ent(
+      "IFCREINFORCINGBAR",
+      w.guid(`wapening:${s.staaf.id}:${seed}`),
+      "$",
+      stepString(naam),
+      stepString(toelichting),
+      "$",
+      ref(plaatsing),
+      ref(vorm),
+      stepString(`${s.staaf.id}-${seed}`),
+      stepString(soortStaal),
+      meter(diameterMm),
+      reeel(oppervlakteM2),
+      meter(lengteMm),
+      soort,
+      // Geribde wapening (B500-reeks); een gladde staaf zou .PLAIN. zijn.
+      ".TEXTURED."
+    );
+  };
+  const rijen = [
+    { zijde: "onder", rij: korf.bottom, teken: -1, cMm: cOnderMm },
+    { zijde: "boven", rij: korf.top, teken: 1, cMm: cBovenMm }
+  ];
+  for (const { zijde, rij, teken, cMm } of rijen) {
+    if (!(rij.count > 0 && rij.diameter_mm > 0)) continue;
+    const yMm = teken * Math.max(0, hMm / 2 - cMm - beugelMm - rij.diameter_mm / 2);
+    const halveSpreiding = Math.max(
+      0,
+      bwMm / 2 - cZijMm - beugelMm - rij.diameter_mm / 2
+    );
+    for (let i = 0; i < rij.count; i++) {
+      const xMm = rij.count === 1 ? 0 : -halveSpreiding + 2 * halveSpreiding * i / (rij.count - 1);
+      staven.push(schrijfStaaf(
+        `${zijde}:${i + 1}`,
+        `Staaf ${s.staaf.id} ${zijde} ${i + 1}/${rij.count}`,
+        `${rijNotatie(rij.count, rij.diameter_mm)} ${zijde}wapening`,
+        [[xMm, yMm, 0], [xMm, yMm, s.lengteMm]],
+        false,
+        rij.diameter_mm,
+        s.lengteMm,
+        ".MAIN."
+      ));
+    }
+  }
+  const xs = bwMm / 2 - cZijMm - beugelMm / 2;
+  const yOnder = -hMm / 2 + Math.min(hMm / 2, cOnderMm + beugelMm / 2);
+  const yBoven = hMm / 2 - Math.min(hMm / 2, cBovenMm + beugelMm / 2);
+  const ys = (yBoven - yOnder) / 2;
+  const yMidden = (yBoven + yOnder) / 2;
+  if (beugelMm > 0 && xs > 0 && ys > 0) {
+    const omtrekMm = 2 * (2 * xs + 2 * ys);
+    const beugel = schrijfStaaf(
+      "beugel",
+      `Staaf ${s.staaf.id} beugel`,
+      `Beugel \xD8${beugelMm}` + (korf.stirrup_spacing_mm !== void 0 && korf.stirrup_spacing_mm !== null ? ` h.o.h. ${korf.stirrup_spacing_mm} mm` : ""),
+      [
+        [-xs, yMidden - ys, 0],
+        [xs, yMidden - ys, 0],
+        [xs, yMidden + ys, 0],
+        [-xs, yMidden + ys, 0]
+      ],
+      true,
+      beugelMm,
+      omtrekMm,
+      ".LIGATURE."
+    );
+    staven.push(beugel);
+    const eigenschappen = [
+      eMaat("Diameter", "IFCPOSITIVELENGTHMEASURE", beugelMm / 1e3),
+      eTekst(
+        "Toelichting",
+        "Deze staaf stelt de HELE beugelreeks van de staaf voor; hij is getekend op de plaats van de eerste beugel. Aantal en hart-op-hart staan hieronder."
+      )
+    ];
+    const hoh = korf.stirrup_spacing_mm;
+    if (hoh !== void 0 && hoh !== null && hoh > 0) {
+      eigenschappen.push(eMaat("HartOpHart", "IFCPOSITIVELENGTHMEASURE", hoh / 1e3));
+      eigenschappen.push(eGeheel("Aantal", Math.floor(s.lengteMm / hoh) + 1));
+    }
+    if (korf.stirrup_legs !== void 0 && korf.stirrup_legs !== null) {
+      eigenschappen.push(eGeheel("AantalBenen", korf.stirrup_legs));
+    }
+    schrijfEigenschappen(
+      w,
+      "OpenFEM_Beugels",
+      `beugels:${s.staaf.id}`,
+      eigenschappen,
+      [beugel]
+    );
+  }
+  if (staven.length > 0) {
+    w.ent(
+      "IFCRELAGGREGATES",
+      w.guid(`wapeningkorf:${s.staaf.id}`),
+      "$",
+      "$",
+      "$",
+      ref(element),
+      lijst(staven)
+    );
+    const samenvatting = [
+      eLabel("Wapeningsstaal", soortStaal),
+      eMaat("Betondekking", "IFCPOSITIVELENGTHMEASURE", cElementMm / 1e3)
+    ];
+    if (korf.bottom.count > 0 && korf.bottom.diameter_mm > 0) {
+      samenvatting.push(eLabel(
+        "Onderwapening",
+        rijNotatie(korf.bottom.count, korf.bottom.diameter_mm)
+      ));
+    }
+    if (korf.top.count > 0 && korf.top.diameter_mm > 0) {
+      samenvatting.push(eLabel(
+        "Bovenwapening",
+        rijNotatie(korf.top.count, korf.top.diameter_mm)
+      ));
+    }
+    if (beugelMm > 0) {
+      samenvatting.push(eMaat(
+        "Beugeldiameter",
+        "IFCPOSITIVELENGTHMEASURE",
+        beugelMm / 1e3
+      ));
+    }
+    schrijfEigenschappen(
+      w,
+      "OpenFEM_Wapeningskorf",
+      `korf:${s.staaf.id}`,
+      samenvatting,
+      [element]
+    );
+  }
+  return staven;
+}
+function schrijfStaafEigenschappen(w, staven, combos, bouwkundig, toetsresultaten) {
+  const uitslagPerStaaf = /* @__PURE__ */ new Map();
+  for (const r of toetsresultaten ?? []) uitslagPerStaaf.set(r.beam_id, r);
+  for (const s of staven) {
+    const doelen = [s.member];
+    const element = bouwkundig.get(s.staaf.id);
+    if (element !== void 0) doelen.push(element);
+    const doorsnede = combos.get(comboSleutel(s.materiaal, s.profiel))?.doorsnede;
+    const sectie = resolveSection(s.materiaal, s.profiel);
+    const bekend = sectie.bron !== "default";
+    const dEig = [
+      eLabel("Profielnaam", s.profiel),
+      eLabel("Materiaal", s.materiaal),
+      eLabel("Materiaalsoort", materiaalCategorie(s.materiaal)),
+      eLabel("Doorsnedevorm", doorsnede?.vorm ?? "onbekend")
+    ];
+    if (doorsnede?.hMm !== void 0 && doorsnede.hMm > 0) {
+      dEig.push(eMaat("Hoogte", "IFCPOSITIVELENGTHMEASURE", doorsnede.hMm / 1e3));
+    }
+    if (doorsnede?.bMm !== void 0 && doorsnede.bMm > 0) {
+      dEig.push(eMaat("Breedte", "IFCPOSITIVELENGTHMEASURE", doorsnede.bMm / 1e3));
+    }
+    if (bekend && sectie.A > 0) {
+      dEig.push(eMaat("Oppervlakte", "IFCAREAMEASURE", sectie.A / 1e6));
+    }
+    if (bekend && sectie.I > 0) {
+      dEig.push(eMaat("TraagheidsmomentY", "IFCMOMENTOFINERTIAMEASURE", sectie.I / 1e12));
+    }
+    if (bekend && sectie.E > 0) {
+      dEig.push(eMaat(
+        "Elasticiteitsmodulus",
+        "IFCMODULUSOFELASTICITYMEASURE",
+        sectie.E * 1e6
+      ));
+    }
+    const props = doorsnede?.props;
+    if (props) {
+      dEig.push(eMaat("TraagheidsmomentZ", "IFCMOMENTOFINERTIAMEASURE", props.iz / 1e12));
+      dEig.push(eMaat("WeerstandsmomentElastischY", "IFCSECTIONMODULUSMEASURE", props.welY / 1e9));
+      dEig.push(eMaat("WeerstandsmomentPlastischY", "IFCSECTIONMODULUSMEASURE", props.wplY / 1e9));
+      dEig.push(eMaat("Torsietraagheidsmoment", "IFCMOMENTOFINERTIAMEASURE", props.it / 1e12));
+    }
+    schrijfEigenschappen(
+      w,
+      "OpenFEM_Doorsnede",
+      `doorsnede:${s.staaf.id}`,
+      dEig,
+      doelen
+    );
+    const rel = s.staaf.releases ?? {};
+    const sEig = [
+      eGeheel("Staafnummer", s.staaf.id),
+      eLabel("Staaftype", s.staaftype),
+      eLabel("Onderdeel", s.kolom ? "Kolom" : "Ligger"),
+      eMaat("HellingMetDeHorizontaal", "IFCPLANEANGLEMEASURE", s.hellingRad),
+      eJaNee("ScharnierBegin", rel.startRy === true),
+      eJaNee("ScharnierEind", rel.endRy === true)
+    ];
+    const veer = s.staaf.veren ?? {};
+    const veerEig = (naam, k, draai2) => {
+      if (k === void 0 || !(k > 0)) return;
+      sEig.push(draai2 ? eMaat(naam, "IFCROTATIONALSTIFFNESSMEASURE", k * 1e3) : eMaat(naam, "IFCLINEARSTIFFNESSMEASURE", k * 1e6));
+    };
+    veerEig("VeerNBegin", rel.startTx ? void 0 : veer.startTx, false);
+    veerEig("VeerVBegin", rel.startTz ? void 0 : veer.startTz, false);
+    veerEig("VeerMBegin", rel.startRy ? void 0 : veer.startRy, true);
+    veerEig("VeerNEind", rel.endTx ? void 0 : veer.endTx, false);
+    veerEig("VeerVEind", rel.endTz ? void 0 : veer.endTz, false);
+    veerEig("VeerMEind", rel.endRy ? void 0 : veer.endRy, true);
+    if (s.staaf.bedding && s.staaf.bedding.k > 0 && s.staaf.bedding.b > 0) {
+      sEig.push(eMaat("BeddingK", "IFCMODULUSOFSUBGRADEREACTIONMEASURE", s.staaf.bedding.k * 1e3));
+      sEig.push(eMaat("BeddingBreedte", "IFCPOSITIVELENGTHMEASURE", s.staaf.bedding.b / 1e3));
+    }
+    if (s.lengteMm > 0) {
+      sEig.splice(
+        3,
+        0,
+        eMaat("Lengte", "IFCPOSITIVELENGTHMEASURE", s.lengteMm / 1e3)
+      );
+    }
+    schrijfEigenschappen(w, "OpenFEM_Staaf", `staaf:${s.staaf.id}`, sEig, doelen);
+    const uitslag = uitslagPerStaaf.get(s.staaf.id);
+    if (uitslag === void 0) continue;
+    const maatgevend = uitslag.checks.find((c) => c.id === uitslag.governing_check_id)?.kind.data;
+    const tEig = [
+      eLabel("Norm", normLabel(uitslag)),
+      eLabel("MaatgevendeToets", maatgevend?.title ?? uitslag.governing_check_id),
+      eMaat("UnityCheck", "IFCRATIOMEASURE", uitslag.uc_max),
+      eLabel("GetoetsteDoorsnede", sectionLabel(uitslag)),
+      eLabel("Sterkteklasse", gradeLabel(uitslag))
+    ];
+    if (maatgevend?.article) {
+      tEig.splice(2, 0, eLabel("Normartikel", maatgevend.article));
+    }
+    if (uitslag.status !== "NotApplicable") {
+      tEig.push(eJaNee("Voldoet", uitslag.status === "Ok"));
+    }
+    if (isSteelCheckResult(uitslag)) {
+      tEig.push(eLabel(
+        "Doorsnedeklasse",
+        uitslag.classification.replace("Class", "klasse ")
+      ));
+    }
+    if (isConcreteCheckResult(uitslag) && uitslag.reinforcement_summary) {
+      tEig.push(eTekst("Wapening", uitslag.reinforcement_summary));
+    }
+    schrijfEigenschappen(
+      w,
+      "OpenFEM_Toetsing",
+      `toetsing:${s.staaf.id}`,
+      tEig,
+      doelen
+    );
+  }
+}
+function lastComponenten(q, qDir, lokaal, staaf) {
+  if (!lokaal || staaf === void 0) {
+    return qDir === "x" ? { qx: q, qz: 0 } : { qx: 0, qz: q };
+  }
+  const c = staaf.ux, s = staaf.uz;
+  return qDir === "x" ? { qx: q * c, qz: q * s } : { qx: -q * s, qz: q * c };
+}
+function randEindpunten(w, info2, last) {
+  const punten = info2.nodeIds.map((id2) => info2.knopen.get(id2));
+  if (punten.some((k) => k === void 0)) return void 0;
+  const rand = bepaalPlaatlastRand(
+    punten.map((k) => ({ x: k.x, z: k.z })),
+    info2.openingen,
+    { edge: last.edge, edgeIndex: last.edgeIndex, openingId: last.openingId }
+  );
+  if (!rand.ok) return void 0;
+  if (rand.openingIndex !== void 0) {
+    const vertex = (q) => w.ent(
+      "IFCVERTEXPOINT",
+      ref(w.ent("IFCCARTESIANPOINT", `(${meter(q.x)},0.,${meter(q.z)})`))
+    );
+    return { a: rand.van, b: rand.naar, vertexA: vertex(rand.van), vertexB: vertex(rand.naar) };
+  }
+  const idA = info2.nodeIds[rand.hoekVan], idB = info2.nodeIds[rand.hoekNaar];
+  const kA = info2.knopen.get(idA), kB = info2.knopen.get(idB);
+  const vA = info2.vertexPerKnoop.get(idA), vB = info2.vertexPerKnoop.get(idB);
+  if (!kA || !kB || vA === void 0 || vB === void 0) return void 0;
+  return { a: kA, b: kB, vertexA: vA, vertexB: vB };
+}
+function schrijfLast(w, last, connectiePerKnoop, memberPerStaaf, staafInfoPerStaaf, context, plaatInfo = /* @__PURE__ */ new Map()) {
+  const toelichting = last.omschrijving?.trim() ? stepString(last.omschrijving.trim()) : "$";
+  if (last.type === "pointForce" || last.type === "pointMoment") {
+    const kracht = w.ent(
+      "IFCSTRUCTURALLOADSINGLEFORCE",
+      stepString(`Last ${last.id}`),
+      last.fx !== void 0 ? `IFCFORCEMEASURE(${reeel(last.fx * 1e3)})` : "$",
+      "$",
+      last.fz !== void 0 ? `IFCFORCEMEASURE(${reeel(last.fz * 1e3)})` : "$",
+      "$",
+      last.my !== void 0 ? `IFCTORQUEMEASURE(${reeel(last.my * 1e3)})` : "$",
+      "$"
+    );
+    const naam = stepString(last.type === "pointMoment" ? `M ${last.id}` : `F ${last.id}`);
+    const connectie = last.nodeId !== void 0 ? connectiePerKnoop.get(last.nodeId) : void 0;
+    if (connectie !== void 0) {
+      const actie = w.ent(
+        "IFCSTRUCTURALPOINTACTION",
+        w.guid(`last:${last.id}`),
+        "$",
+        naam,
+        toelichting,
+        "$",
+        "$",
+        "$",
+        ref(kracht),
+        ".GLOBAL_COORDS.",
+        "$"
+      );
+      w.ent(
+        "IFCRELCONNECTSSTRUCTURALACTIVITY",
+        w.guid(`lastrel:${last.id}`),
+        "$",
+        "$",
+        "$",
+        ref(connectie),
+        ref(actie)
+      );
+      return actie;
+    }
+    const staaf = last.beamId !== void 0 ? staafInfoPerStaaf.get(last.beamId) : void 0;
+    const member = last.beamId !== void 0 ? memberPerStaaf.get(last.beamId) : void 0;
+    if (staaf !== void 0 && member !== void 0) {
+      const f = Math.min(1, Math.max(0, last.posFrac ?? 0));
+      const xMm = staaf.xMmVan + f * (staaf.xMmNaar - staaf.xMmVan);
+      const zMm = staaf.zMmVan + f * (staaf.zMmNaar - staaf.zMmVan);
+      const punt = w.ent("IFCCARTESIANPOINT", `(${meter(xMm)},0.,${meter(zMm)})`);
+      const vertex = w.ent("IFCVERTEXPOINT", ref(punt));
+      const topo = w.ent(
+        "IFCTOPOLOGYREPRESENTATION",
+        ref(context),
+        "'Reference'",
+        "'Vertex'",
+        lijst([vertex])
+      );
+      const vorm = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([topo]));
+      const actie = w.ent(
+        "IFCSTRUCTURALPOINTACTION",
+        w.guid(`last:${last.id}`),
+        "$",
+        naam,
+        toelichting,
+        "$",
+        "$",
+        ref(vorm),
+        ref(kracht),
+        ".GLOBAL_COORDS.",
+        "$"
+      );
+      w.ent(
+        "IFCRELCONNECTSSTRUCTURALACTIVITY",
+        w.guid(`lastrel:${last.id}`),
+        "$",
+        "$",
+        "$",
+        ref(member),
+        ref(actie)
+      );
+      return actie;
+    }
+    const plaat = last.plateId !== void 0 ? plaatInfo.get(last.plateId) : void 0;
+    const randGeo = plaat !== void 0 && last.type === "pointForce" ? randEindpunten(w, plaat, last) : void 0;
+    if (plaat !== void 0 && randGeo !== void 0) {
+      const kA = randGeo.a;
+      const kB = randGeo.b;
+      const f = Math.min(1, Math.max(0, last.posFrac ?? 0));
+      const xMm = kA.x + f * (kB.x - kA.x);
+      const zMm = kA.z + f * (kB.z - kA.z);
+      const punt = w.ent("IFCCARTESIANPOINT", `(${meter(xMm)},0.,${meter(zMm)})`);
+      const vertex = w.ent("IFCVERTEXPOINT", ref(punt));
+      const topo = w.ent(
+        "IFCTOPOLOGYREPRESENTATION",
+        ref(context),
+        "'Reference'",
+        "'Vertex'",
+        lijst([vertex])
+      );
+      const vorm = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([topo]));
+      const actie = w.ent(
+        "IFCSTRUCTURALPOINTACTION",
+        w.guid(`last:${last.id}`),
+        "$",
+        stepString(`F ${last.id} (plaatrand)`),
+        toelichting,
+        "$",
+        "$",
+        ref(vorm),
+        ref(kracht),
+        ".GLOBAL_COORDS.",
+        "$"
+      );
+      w.ent(
+        "IFCRELCONNECTSSTRUCTURALACTIVITY",
+        w.guid(`lastrel:${last.id}`),
+        "$",
+        "$",
+        "$",
+        ref(plaat.member),
+        ref(actie)
+      );
+      return actie;
+    }
+    console.warn(`[ifcExport] Last ${last.id} verwijst naar ontbrekende knoop, staaf of plaatrand \u2014 overgeslagen.`);
+    return void 0;
+  }
+  if (last.type === "edgeLoad") {
+    const info2 = last.plateId !== void 0 ? plaatInfo.get(last.plateId) : void 0;
+    const paar = info2 ? randEindpunten(w, info2, last) : void 0;
+    if (!info2 || !paar) {
+      console.warn(`[ifcExport] Randlast ${last.id} verwijst naar een plaat of rand die niet in het bestand staat \u2014 overgeslagen.`);
+      return void 0;
+    }
+    const lijnkracht = (q_kNm, naam) => w.ent(
+      "IFCSTRUCTURALLOADLINEARFORCE",
+      stepString(naam),
+      last.qDir === "x" ? `IFCLINEARFORCEMEASURE(${reeel(q_kNm * 1e3)})` : "$",
+      "$",
+      last.qDir === "x" ? "$" : `IFCLINEARFORCEMEASURE(${reeel(q_kNm * 1e3)})`,
+      "$",
+      "$",
+      "$"
+    );
+    const rand = w.ent("IFCEDGE", ref(paar.vertexA), ref(paar.vertexB));
+    const topo = w.ent("IFCTOPOLOGYREPRESENTATION", ref(context), "'Reference'", "'Edge'", lijst([rand]));
+    const vorm = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([topo]));
+    const qA = last.qStart ?? last.q ?? 0;
+    const qB = last.qEnd ?? last.q ?? 0;
+    const fA = Math.min(1, Math.max(0, last.startFrac ?? 0));
+    const fB = Math.min(1, Math.max(fA, last.endFrac ?? 1));
+    const deellast = fA > 0 || fB < 1;
+    let actie;
+    if (!deellast && qA === qB) {
+      const kracht = lijnkracht(qA, `q ${last.id}`);
+      actie = w.ent(
+        "IFCSTRUCTURALLINEARACTION",
+        w.guid(`last:${last.id}`),
+        "$",
+        stepString(`q ${last.id} (plaatrand)`),
+        toelichting,
+        "$",
+        "$",
+        ref(vorm),
+        ref(kracht),
+        ".GLOBAL_COORDS.",
+        "$",
+        ".TRUE_LENGTH.",
+        ".CONST."
+      );
+    } else {
+      const kA = paar.a, kB = paar.b;
+      const L = Math.hypot(kB.x - kA.x, kB.z - kA.z) / 1e3;
+      const waarden = [];
+      const posities = [];
+      const a = fA * L, b = fB * L;
+      if (fA > 0) {
+        waarden.push(lijnkracht(0, `q ${last.id} nul`));
+        posities.push(reeel(0));
+      }
+      waarden.push(lijnkracht(qA, `q ${last.id} begin`));
+      posities.push(reeel(a));
+      waarden.push(lijnkracht(qB, `q ${last.id} eind`));
+      posities.push(reeel(b));
+      if (fB < 1) {
+        waarden.push(lijnkracht(0, `q ${last.id} nul`));
+        posities.push(reeel(L));
+      }
+      const config = w.ent(
+        "IFCSTRUCTURALLOADCONFIGURATION",
+        stepString(`q ${last.id}`),
+        lijst(waarden),
+        `(${posities.map((p2) => `(${p2})`).join(",")})`
+      );
+      actie = w.ent(
+        "IFCSTRUCTURALCURVEACTION",
+        w.guid(`last:${last.id}`),
+        "$",
+        stepString(`q ${last.id} (plaatrand)`),
+        toelichting,
+        "$",
+        "$",
+        ref(vorm),
+        ref(config),
+        ".GLOBAL_COORDS.",
+        "$",
+        ".TRUE_LENGTH.",
+        deellast ? ".POLYGONAL." : ".LINEAR."
+      );
+    }
+    w.ent(
+      "IFCRELCONNECTSSTRUCTURALACTIVITY",
+      w.guid(`lastrel:${last.id}`),
+      "$",
+      "$",
+      "$",
+      ref(info2.member),
+      ref(actie)
+    );
+    return actie;
+  }
+  if (last.type === "lineLoad" || last.type === "thermal") {
+    const member = last.beamId !== void 0 ? memberPerStaaf.get(last.beamId) : void 0;
+    if (member === void 0) {
+      console.warn(`[ifcExport] Last ${last.id} verwijst naar ontbrekende staaf \u2014 overgeslagen.`);
+      return void 0;
+    }
+    const staaf = last.beamId !== void 0 ? staafInfoPerStaaf.get(last.beamId) : void 0;
+    let actie;
+    if (last.type === "thermal") {
+      const tLast = w.ent(
+        "IFCSTRUCTURALLOADTEMPERATURE",
+        stepString(`dT ${last.id}`),
+        `IFCTHERMODYNAMICTEMPERATUREMEASURE(${reeel(last.deltaT ?? 0)})`,
+        "$",
+        "$"
+      );
+      actie = w.ent(
+        "IFCSTRUCTURALLINEARACTION",
+        w.guid(`last:${last.id}`),
+        "$",
+        stepString(`dT ${last.id}`),
+        toelichting,
+        "$",
+        "$",
+        "$",
+        ref(tLast),
+        ".LOCAL_COORDS.",
+        "$",
+        "$",
+        ".CONST."
+      );
+    } else {
+      const qA = last.qStart ?? last.q ?? 0;
+      const qB = last.qEnd ?? last.q ?? 0;
+      const richting2 = last.qDir ?? "z";
+      const lokaal = last.qCoord === "local";
+      const lijnkracht = (q, naam) => {
+        const { qx, qz } = lastComponenten(q, richting2, lokaal, staaf);
+        const toonX = lokaal ? qx !== 0 : richting2 === "x";
+        const toonZ = lokaal ? qz !== 0 : richting2 === "z";
+        return w.ent(
+          "IFCSTRUCTURALLOADLINEARFORCE",
+          stepString(naam),
+          toonX ? `IFCLINEARFORCEMEASURE(${reeel(qx * 1e3)})` : "$",
+          "$",
+          toonZ ? `IFCLINEARFORCEMEASURE(${reeel(qz * 1e3)})` : "$",
+          "$",
+          "$",
+          "$"
+        );
+      };
+      const L = staaf?.lengteM ?? 0;
+      const fA = Math.min(1, Math.max(0, last.startFrac ?? 0));
+      const fB = Math.min(1, Math.max(fA, last.endFrac ?? 1));
+      const deellast = fA > 0 || fB < 1;
+      if (!deellast && qA === qB) {
+        const qLast = lijnkracht(qA, `q ${last.id}`);
+        actie = w.ent(
+          "IFCSTRUCTURALLINEARACTION",
+          w.guid(`last:${last.id}`),
+          "$",
+          stepString(`q ${last.id}`),
+          toelichting,
+          "$",
+          "$",
+          "$",
+          ref(qLast),
+          ".GLOBAL_COORDS.",
+          "$",
+          ".TRUE_LENGTH.",
+          ".CONST."
+        );
+      } else if (!deellast) {
+        const q1 = lijnkracht(qA, `q ${last.id} begin`);
+        const q2 = lijnkracht(qB, `q ${last.id} eind`);
+        const config = w.ent(
+          "IFCSTRUCTURALLOADCONFIGURATION",
+          stepString(`q ${last.id}`),
+          lijst([q1, q2]),
+          `((0.),(${reeel(L)}))`
+        );
+        actie = w.ent(
+          "IFCSTRUCTURALCURVEACTION",
+          w.guid(`last:${last.id}`),
+          "$",
+          stepString(`q ${last.id}`),
+          toelichting,
+          "$",
+          "$",
+          "$",
+          ref(config),
+          ".GLOBAL_COORDS.",
+          "$",
+          ".TRUE_LENGTH.",
+          ".LINEAR."
+        );
+      } else {
+        const nul = lijnkracht(0, `q ${last.id} nul`);
+        const waarden = [];
+        const posities = [];
+        const a = fA * L, b = fB * L;
+        if (fA > 0) {
+          waarden.push(nul);
+          posities.push(reeel(0));
+        }
+        waarden.push(lijnkracht(qA, `q ${last.id} begin`));
+        posities.push(reeel(a));
+        waarden.push(lijnkracht(qB, `q ${last.id} eind`));
+        posities.push(reeel(b));
+        if (fB < 1) {
+          waarden.push(nul);
+          posities.push(reeel(L));
+        }
+        const config = w.ent(
+          "IFCSTRUCTURALLOADCONFIGURATION",
+          stepString(`q ${last.id}`),
+          lijst(waarden),
+          `(${posities.map((p2) => `(${p2})`).join(",")})`
+        );
+        actie = w.ent(
+          "IFCSTRUCTURALCURVEACTION",
+          w.guid(`last:${last.id}`),
+          "$",
+          stepString(`q ${last.id}`),
+          toelichting,
+          "$",
+          "$",
+          "$",
+          ref(config),
+          ".GLOBAL_COORDS.",
+          "$",
+          ".TRUE_LENGTH.",
+          ".POLYGONAL."
+        );
+      }
+    }
+    w.ent(
+      "IFCRELCONNECTSSTRUCTURALACTIVITY",
+      w.guid(`lastrel:${last.id}`),
+      "$",
+      "$",
+      "$",
+      ref(member),
+      ref(actie)
+    );
+    return actie;
+  }
+  console.warn(`[ifcExport] Lasttype "${last.type}" wordt niet ge\xEBxporteerd \u2014 overgeslagen.`);
+  return void 0;
+}
+function nl10(v, decimalen = 3) {
+  return v.toFixed(decimalen).replace(".", ",");
+}
+var GUID_TEKENS_SET = new Set(IFC_GUID_TEKENS);
+var GEWORTELDE_ENTITEITEN = [
+  "IFCPROJECT",
+  "IFCSITE",
+  "IFCBUILDING",
+  "IFCGRID",
+  "IFCSTRUCTURALANALYSISMODEL",
+  "IFCSTRUCTURALLOADGROUP",
+  "IFCSTRUCTURALPOINTCONNECTION",
+  "IFCSTRUCTURALCURVEMEMBER",
+  "IFCSTRUCTURALSURFACEMEMBER",
+  "IFCSTRUCTURALPOINTACTION",
+  "IFCSTRUCTURALLINEARACTION",
+  "IFCSTRUCTURALCURVEACTION",
+  // Resultaten (.ifcfemresults, issue #87)
+  "IFCSTRUCTURALRESULTGROUP",
+  "IFCSTRUCTURALPOINTREACTION",
+  "IFCSTRUCTURALCURVEREACTION",
+  "IFCSTRUCTURALSURFACEREACTION",
+  // Bouwkundig model, eigenschappen en hoeveelheden
+  "IFCBEAM",
+  "IFCCOLUMN",
+  "IFCCOVERING",
+  "IFCREINFORCINGBAR",
+  "IFCPROPERTYSET",
+  "IFCELEMENTQUANTITY",
+  "IFCRELAGGREGATES",
+  "IFCRELSERVICESBUILDINGS",
+  "IFCRELCONNECTSSTRUCTURALMEMBER",
+  "IFCRELCONNECTSSTRUCTURALACTIVITY",
+  "IFCRELASSOCIATESMATERIAL",
+  "IFCRELASSIGNSTOGROUP",
+  "IFCRELASSIGNSTOGROUPBYFACTOR",
+  "IFCRELASSIGNSTOPRODUCT",
+  "IFCRELDEFINESBYPROPERTIES",
+  "IFCRELCONTAINEDINSPATIALSTRUCTURE"
+];
+function valideerIfc(ifc) {
+  const fouten = [];
+  const waarschuwingen = [];
+  const regels = ifc.split("\n");
+  if (!ifc.startsWith("ISO-10303-21;")) fouten.push("Bestand begint niet met ISO-10303-21;");
+  if (!ifc.trimEnd().endsWith("END-ISO-10303-21;")) fouten.push("Bestand eindigt niet met END-ISO-10303-21;");
+  if (!ifc.includes("\nHEADER;\n")) fouten.push("HEADER-sectie ontbreekt");
+  if (!ifc.includes("\nDATA;\n")) fouten.push("DATA-sectie ontbreekt");
+  if ((ifc.match(/^ENDSEC;$/gm) ?? []).length !== 2) fouten.push("Er horen precies twee ENDSEC;-regels te staan");
+  if (!/FILE_SCHEMA\(\('IFC4[^']*'\)\);/.test(ifc)) fouten.push("FILE_SCHEMA noemt geen IFC4-schema");
+  if (!/FILE_NAME\(/.test(ifc)) fouten.push("FILE_NAME ontbreekt in de header");
+  if (!/FILE_DESCRIPTION\(/.test(ifc)) fouten.push("FILE_DESCRIPTION ontbreekt in de header");
+  const gedefinieerd = /* @__PURE__ */ new Set();
+  const dubbeleIds = [];
+  let entiteiten = 0;
+  const vormfouten = [];
+  const leegteFouten = [];
+  const legeLijsten = [];
+  for (const regel2 of regels) {
+    if (!regel2.startsWith("#")) continue;
+    entiteiten++;
+    const m = /^#(\d+)=([A-Z][A-Z0-9_]*)\((.*)\);$/.exec(regel2);
+    if (!m) {
+      vormfouten.push(regel2.slice(0, 60));
+      continue;
+    }
+    if (gedefinieerd.has(m[1])) dubbeleIds.push(`#${m[1]}`);
+    gedefinieerd.add(m[1]);
+    let diepte = 0, inString = false;
+    const args = m[3];
+    for (let i = 0; i < args.length; i++) {
+      const c = args[i];
+      if (inString) {
+        if (c === "'") inString = false;
+        continue;
+      }
+      if (c === "'") inString = true;
+      else if (c === "(") diepte++;
+      else if (c === ")") diepte--;
+      if (diepte < 0) break;
+    }
+    if (diepte !== 0 || inString) vormfouten.push(`#${m[1]}: ongebalanceerde haakjes of string`);
+    let kaal = "";
+    let inTekst = false;
+    for (const c of args) {
+      if (inTekst) {
+        if (c === "'") inTekst = false;
+        continue;
+      }
+      if (c === "'") {
+        inTekst = true;
+        kaal += "x";
+        continue;
+      }
+      kaal += c;
+    }
+    if (/,,|\(,|,\)/.test(`(${kaal})`)) leegteFouten.push(`#${m[1]}`);
+    if (kaal.includes("()")) legeLijsten.push(`#${m[1]}`);
+  }
+  if (vormfouten.length > 0) {
+    fouten.push(`${vormfouten.length} regel(s) met een ongeldige entiteitsvorm: ${vormfouten.slice(0, 3).join(" | ")}`);
+  }
+  if (leegteFouten.length > 0) {
+    fouten.push(
+      `${leegteFouten.length} entiteit(en) met een LEGE parameter (hoort "$" te zijn): ` + leegteFouten.slice(0, 5).join(", ")
+    );
+  }
+  if (legeLijsten.length > 0) {
+    waarschuwingen.push(
+      `${legeLijsten.length} entiteit(en) met een lege lijst "()": in IFC4 eist bijna elke verzameling ten minste \xE9\xE9n element \u2014 ` + legeLijsten.slice(0, 5).join(", ")
+    );
+  }
+  if (dubbeleIds.length > 0) fouten.push(`Dubbele entiteits-id's: ${dubbeleIds.slice(0, 5).join(", ")}`);
+  const kapot = [];
+  for (const regel2 of regels) {
+    const eq = regel2.indexOf("=");
+    if (!regel2.startsWith("#") || eq < 0) continue;
+    for (const m of regel2.slice(eq + 1).matchAll(/#(\d+)/g)) {
+      if (!gedefinieerd.has(m[1])) kapot.push(`${regel2.slice(0, eq)} \u2192 #${m[1]}`);
+    }
+  }
+  if (kapot.length > 0) {
+    fouten.push(`${kapot.length} verwijzing(en) naar een niet-bestaande entiteit: ${kapot.slice(0, 3).join(", ")}`);
+  }
+  const guids = [...ifc.matchAll(
+    new RegExp(`^#\\d+=(?:${[...GEWORTELDE_ENTITEITEN].join("|")})\\('([^']*)'`, "gm")
+  )].map((m) => m[1]);
+  const foutieveGuids = guids.filter(
+    (g) => g.length !== 22 || [...g].some((c) => !GUID_TEKENS_SET.has(c))
+  );
+  if (foutieveGuids.length > 0) {
+    fouten.push(`${foutieveGuids.length} GlobalId('s) met een ongeldige vorm (22 tekens IFC-base64 verwacht)`);
+  }
+  if (new Set(guids).size !== guids.length) fouten.push("Niet alle GlobalId's zijn uniek");
+  if (/\bundefined\b/.test(ifc)) fouten.push("Het bestand bevat de tekst 'undefined'");
+  if (/\bNaN\b/.test(ifc)) fouten.push("Het bestand bevat de tekst 'NaN'");
+  for (const verplicht of [
+    "IFCPROJECT",
+    "IFCUNITASSIGNMENT",
+    "IFCGEOMETRICREPRESENTATIONCONTEXT",
+    "IFCSTRUCTURALANALYSISMODEL"
+  ]) {
+    if (!new RegExp(`^#\\d+=${verplicht}\\(`, "m").test(ifc)) {
+      fouten.push(`Verplichte entiteit ${verplicht} ontbreekt`);
+    }
+  }
+  if (!/^#\d+=IFCSTRUCTURALPOINTCONNECTION\(/m.test(ifc)) {
+    waarschuwingen.push("Geen enkele knoop in het bestand \u2014 is er een model geopend?");
+  }
+  if (!/^#\d+=IFCSTRUCTURALCURVEMEMBER\(/m.test(ifc)) {
+    waarschuwingen.push("Geen enkele staaf in het bestand.");
+  }
+  if (!/^#\d+=IFCBOUNDARYNODECONDITION\(/m.test(ifc)) {
+    waarschuwingen.push("Geen enkele oplegging in het bestand \u2014 het model is niet gesteund.");
+  }
+  return { fouten, waarschuwingen, entiteiten, regels: regels.length };
+}
+function bepaalVorm(materiaal, profiel) {
+  if (isHoutMateriaal(materiaal)) {
+    if (isCltProfiel(profiel)) {
+      const layup = parseCltProfiel(profiel, materiaal);
+      if (layup) {
+        const h = layup.layers.reduce((som, l) => som + l.thickness_mm, 0);
+        if (layup.width_mm > 0 && h > 0) {
+          return {
+            soort: "rechthoek",
+            vorm: "kruislaaghout-strook",
+            bMm: layup.width_mm,
+            hMm: h
+          };
+        }
+      }
+    }
+    const rect2 = parseRechthoek(profiel);
+    if (rect2) return { soort: "rechthoek", vorm: "rechthoek", bMm: rect2.b, hMm: rect2.h };
+    return { soort: "onbekend" };
+  }
+  if (isBetonMateriaal(materiaal)) {
+    const uitkomst = parseConcreteSection(profiel);
+    if (uitkomst.ok) {
+      const d = uitkomst.doorsnede;
+      if (d.shape === "Rectangle") {
+        return { soort: "rechthoek", vorm: "rechthoek", bMm: d.b_mm, hMm: d.h_mm };
+      }
+      const bw = d.b_w_mm ?? d.b_mm;
+      const hf = d.h_f_mm ?? 0;
+      if (bw > 0 && hf > 0 && hf < d.h_mm) {
+        return {
+          soort: "betonvorm",
+          tee: d.shape === "Tee",
+          bMm: d.b_mm,
+          hMm: d.h_mm,
+          bwMm: bw,
+          hfMm: hf,
+          flensOnder: d.flange_at_bottom
+        };
+      }
+    }
+  }
+  if (isEigenProfiel(profiel)) {
+    const d = zoekEigenDoorsnede(profiel);
+    if (d) return { soort: "eigen", doorsnede: d };
+  }
+  const dims = profielAfmetingen(profiel);
+  if (dims) return { soort: "catalogus", dims };
+  const rect = parseRechthoek(profiel);
+  if (rect) return { soort: "rechthoek", vorm: "rechthoek", bMm: rect.b, hMm: rect.h };
+  return { soort: "onbekend" };
+}
+function schrijfDoorsnede(w, materiaal, profiel) {
+  const naam = stepString(profiel);
+  const beschrijving = bepaalVorm(materiaal, profiel);
+  switch (beschrijving.soort) {
+    case "rechthoek":
+      return {
+        profielDef: w.ent(
+          "IFCRECTANGLEPROFILEDEF",
+          ".AREA.",
+          naam,
+          "$",
+          meter(beschrijving.bMm),
+          meter(beschrijving.hMm)
+        ),
+        vorm: beschrijving.vorm,
+        hMm: beschrijving.hMm,
+        bMm: beschrijving.bMm,
+        bwMm: beschrijving.bMm
+      };
+    case "betonvorm":
+      return {
+        profielDef: schrijfBetonPolygoon(w, naam, beschrijving),
+        vorm: beschrijving.tee ? "T-vorm" : "L-vorm",
+        hMm: beschrijving.hMm,
+        bMm: beschrijving.bMm,
+        bwMm: beschrijving.bwMm
+      };
+    case "catalogus": {
+      const dims = beschrijving.dims;
+      const p2 = parametrischProfiel(w, naam, dims, "$");
+      if (!p2) return { vorm: "onbekend" };
+      return { hMm: dims.h, bMm: dims.b, bwMm: dims.b, props: dims.props, profielDef: p2.profielDef, vorm: p2.vorm };
+    }
+    case "eigen":
+      return schrijfEigenDoorsnede(w, naam, beschrijving.doorsnede);
+    case "onbekend":
+      return { vorm: "onbekend" };
+  }
+}
+function parametrischProfiel(w, naam, dims, positie) {
+  const helling = dims.flensHelling ?? 0;
+  const flensHoek = helling > 0 ? reeel(Math.atan(helling)) : "$";
+  switch (dims.kind) {
+    case "ISection":
+      return {
+        vorm: "I-profiel",
+        profielDef: w.ent(
+          "IFCISHAPEPROFILEDEF",
+          ".AREA.",
+          naam,
+          positie,
+          meter(dims.b),
+          meter(dims.h),
+          meter(dims.tw),
+          meter(dims.tf),
+          meter(dims.r),
+          helling > 0 ? meter(0.6 * dims.r) : "$",
+          flensHoek
+        )
+      };
+    case "Channel":
+      return {
+        vorm: "U-profiel",
+        profielDef: w.ent(
+          "IFCUSHAPEPROFILEDEF",
+          ".AREA.",
+          naam,
+          positie,
+          meter(dims.h),
+          meter(dims.b),
+          meter(dims.tw),
+          meter(dims.tf),
+          meter(dims.r),
+          helling > 0 ? meter(dims.r / 2) : "$",
+          flensHoek
+        )
+      };
+    case "Shs":
+    case "Rhs":
+      return {
+        vorm: "koker",
+        profielDef: w.ent(
+          "IFCRECTANGLEHOLLOWPROFILEDEF",
+          ".AREA.",
+          naam,
+          positie,
+          meter(dims.b),
+          meter(dims.h),
+          meter(dims.tw),
+          "$",
+          dims.r > 0 ? meter(dims.r) : "$"
+        )
+      };
+    case "Chs":
+      return {
+        vorm: "buis",
+        profielDef: w.ent(
+          "IFCCIRCLEHOLLOWPROFILEDEF",
+          ".AREA.",
+          naam,
+          positie,
+          meter(dims.h / 2),
+          meter(dims.tw)
+        )
+      };
+    case "Angle":
+      return {
+        vorm: "hoeklijn",
+        profielDef: w.ent(
+          "IFCLSHAPEPROFILEDEF",
+          ".AREA.",
+          naam,
+          positie,
+          meter(dims.h),
+          meter(dims.b),
+          meter(dims.tw),
+          meter(dims.r),
+          dims.r2 ? meter(dims.r2) : "$",
+          "$"
+        )
+      };
+    case "RoundBar":
+      return {
+        vorm: "massief rond",
+        profielDef: w.ent(
+          "IFCCIRCLEPROFILEDEF",
+          ".AREA.",
+          naam,
+          positie,
+          meter(dims.h / 2)
+        )
+      };
+    case "FlatBar":
+      return {
+        vorm: "platstaal",
+        profielDef: w.ent(
+          "IFCRECTANGLEPROFILEDEF",
+          ".AREA.",
+          naam,
+          positie,
+          meter(dims.b),
+          meter(dims.h)
+        )
+      };
+  }
+  return void 0;
+}
+function schrijfEigenDoorsnede(w, naam, d) {
+  const e = d.eigenschappen;
+  const props = Number.isFinite(e.iz_mm4) ? {
+    iz: e.iz_mm4,
+    welY: e.wel_y_mm3,
+    welZ: e.wel_z_mm3,
+    wplY: e.wpl_y_mm3,
+    wplZ: e.wpl_z_mm3,
+    avY: e.av_y_mm2,
+    avZ: e.av_z_mm2,
+    it: e.it_mm4,
+    iw: e.iw_mm6,
+    iRadY: e.iy_radius_mm,
+    iRadZ: e.iz_radius_mm
+  } : void 0;
+  const gemeen = {
+    hMm: Number.isFinite(e.h_mm) && e.h_mm > 0 ? e.h_mm : void 0,
+    bMm: Number.isFinite(e.b_mm) && e.b_mm > 0 ? e.b_mm : void 0,
+    bwMm: Number.isFinite(e.b_mm) && e.b_mm > 0 ? e.b_mm : void 0,
+    props
+  };
+  const plaatsing = (yMm, zMm, hoekGraden) => {
+    const punt = w.ent("IFCCARTESIANPOINT", `(${meter(yMm)},${meter(zMm)})`);
+    const rad = hoekGraden * Math.PI / 180;
+    const netjes = (v) => Math.abs(v) < 1e-12 ? 0 : v;
+    const richting2 = w.ent("IFCDIRECTION", `(${reeel(netjes(Math.cos(rad)))},${reeel(netjes(Math.sin(rad)))})`);
+    return w.ent("IFCAXIS2PLACEMENT2D", ref(punt), ref(richting2));
+  };
+  if (d.ontwerp.soort === "gat") {
+    const basis = d.ontwerp.basis;
+    const dims = profielAfmetingen(basis.naam);
+    const p2 = dims ? parametrischProfiel(w, naam, dims, "$") : void 0;
+    const gaten = d.ontwerp.gaten.length;
+    return {
+      ...gemeen,
+      vorm: p2 ? `${p2.vorm} met ${gaten} gat${gaten === 1 ? "" : "en"} (niet in het profiel)` : "onbekend",
+      ...p2 ? { profielDef: p2.profielDef } : {}
+    };
+  }
+  const delen = [];
+  let deelnamen = [];
+  for (const l of d.ontwerp.lamellen) {
+    delen.push(w.ent(
+      "IFCRECTANGLEPROFILEDEF",
+      ".AREA.",
+      stepString(`lamel ${l.b_mm}x${l.t_mm}`),
+      ref(plaatsing(l.y_mm, l.z_mm, l.alphaGraden)),
+      meter(l.b_mm),
+      meter(l.t_mm)
+    ));
+    deelnamen.push(`lamel ${l.b_mm}x${l.t_mm}`);
+  }
+  for (const c of d.ontwerp.catalogusdelen) {
+    const dims = profielAfmetingen(c.profiel.naam);
+    if (!dims) continue;
+    const p2 = parametrischProfiel(
+      w,
+      stepString(c.profiel.naam),
+      dims,
+      ref(plaatsing(c.y_mm, c.z_mm, c.alphaGraden))
+    );
+    if (!p2) continue;
+    delen.push(p2.profielDef);
+    deelnamen.push(`${c.profiel.naam}${c.gespiegeld ? " (gespiegeld)" : ""}`);
+  }
+  if (delen.length === 0) return { ...gemeen, vorm: "onbekend" };
+  deelnamen = deelnamen.slice(0, 12);
+  const composiet = w.ent(
+    "IFCCOMPOSITEPROFILEDEF",
+    ".AREA.",
+    naam,
+    lijst(delen),
+    stepString(deelnamen.join(", "))
+  );
+  return { ...gemeen, vorm: `samenstelling van ${delen.length} delen`, profielDef: composiet };
+}
+function schrijfBetonPolygoon(w, naam, vorm) {
+  const { bMm, hMm, bwMm, hfMm } = vorm;
+  const b2 = bMm / 2, h2 = hMm / 2, bw2 = bwMm / 2;
+  const hoeken = vorm.tee ? [
+    [-b2, h2],
+    [b2, h2],
+    [b2, h2 - hfMm],
+    [bw2, h2 - hfMm],
+    [bw2, -h2],
+    [-bw2, -h2],
+    [-bw2, h2 - hfMm],
+    [-b2, h2 - hfMm]
+  ] : [
+    [-b2, h2],
+    [b2, h2],
+    [b2, h2 - hfMm],
+    [-b2 + bwMm, h2 - hfMm],
+    [-b2 + bwMm, -h2],
+    [-b2, -h2]
+  ];
+  const punten = (vorm.flensOnder ? hoeken.map(([x, y]) => [x, -y]) : hoeken).map(([x, y]) => w.ent("IFCCARTESIANPOINT", `(${meter(x)},${meter(y)})`));
+  const lijn = w.ent("IFCPOLYLINE", lijst([...punten, punten[0]]));
+  return w.ent("IFCARBITRARYCLOSEDPROFILEDEF", ".AREA.", naam, ref(lijn));
+}
+
+// src/io/ifcResultaten.ts
+var SLEUTEL = "OpenFEM:";
+var IfcResultatenFout = class extends Error {
+  constructor(melding) {
+    super(melding);
+    this.name = "IfcResultatenFout";
+  }
+};
+function reeelExact(x, verschuiving = 0) {
+  if (!Number.isFinite(x)) return "$";
+  if (x === 0) return "0.";
+  const [mantisse, exponent] = x.toExponential().split("e");
+  const m = mantisse.includes(".") ? mantisse : `${mantisse}.`;
+  return `${m}E${Number(exponent) + verschuiving}`;
+}
+function leesExact(waarde, verschuiving = 0) {
+  if (waarde instanceof StepGetypt) return leesExact(waarde.waarde, verschuiving);
+  if (waarde instanceof StepGetal) {
+    const m = /^([+-]?[0-9]*\.?[0-9]*)(?:[eE]([+-]?[0-9]+))?$/.exec(waarde.tekst);
+    if (!m) return waarde.waarde * 10 ** -verschuiving;
+    const exponent = Number(m[2] ?? 0) - verschuiving;
+    return Number(`${m[1]}e${exponent}`);
+  }
+  if (typeof waarde === "number") return verschuiving === 0 ? waarde : Number(`${waarde}e${-verschuiving}`);
+  return void 0;
+}
+var opt = (x, verschuiving = 0) => x === void 0 ? "$" : reeelExact(x, verschuiving);
+var PLAAT2D_VELDEN = [
+  ["sigmaX", "IFCPRESSUREMEASURE", 6],
+  ["sigmaY", "IFCPRESSUREMEASURE", 6],
+  ["tauXY", "IFCPRESSUREMEASURE", 6],
+  ["vonMises", "IFCPRESSUREMEASURE", 6],
+  ["sigma1", "IFCPRESSUREMEASURE", 6],
+  ["sigma2", "IFCPRESSUREMEASURE", 6],
+  ["angle", "IFCREAL", 0],
+  ["nx", "IFCLINEARFORCEMEASURE", 3],
+  ["ny", "IFCLINEARFORCEMEASURE", 3],
+  ["nxy", "IFCLINEARFORCEMEASURE", 3],
+  ["effectiveEMpa", "IFCMODULUSOFELASTICITYMEASURE", 6],
+  ["maxEquivalentStrain", "IFCREAL", 0],
+  ["equivalentPlasticStrain", "IFCREAL", 0],
+  ["tensileDamage", "IFCREAL", 0]
+];
+var SCHAAL_VELDEN = [
+  ["nxxKnPerM", "IFCLINEARFORCEMEASURE", 3],
+  ["nyyKnPerM", "IFCLINEARFORCEMEASURE", 3],
+  ["nxyKnPerM", "IFCLINEARFORCEMEASURE", 3],
+  ["mxxKnmPerM", "IFCLINEARMOMENTMEASURE", 3],
+  ["myyKnmPerM", "IFCLINEARMOMENTMEASURE", 3],
+  ["mxyKnmPerM", "IFCLINEARMOMENTMEASURE", 3],
+  ["vxKnPerM", "IFCLINEARFORCEMEASURE", 3],
+  ["vyKnPerM", "IFCLINEARFORCEMEASURE", 3],
+  ["sigmaXxTopMpa", "IFCPRESSUREMEASURE", 6],
+  ["sigmaYyTopMpa", "IFCPRESSUREMEASURE", 6],
+  ["tauXyTopMpa", "IFCPRESSUREMEASURE", 6],
+  ["vonMisesTopMpa", "IFCPRESSUREMEASURE", 6],
+  ["sigmaXxBottomMpa", "IFCPRESSUREMEASURE", 6],
+  ["sigmaYyBottomMpa", "IFCPRESSUREMEASURE", 6],
+  ["tauXyBottomMpa", "IFCPRESSUREMEASURE", 6],
+  ["vonMisesBottomMpa", "IFCPRESSUREMEASURE", 6]
+];
+var DIAGRAM_COMPONENTEN = [
+  ["axial", 1],
+  ["shearY", 2],
+  ["shearZ", 3],
+  ["torsion", 4],
+  ["momentY", 5],
+  ["momentZ", 6]
+];
+var STAAF3D_KRACHTEN = [
+  ["n", 1, "Kn"],
+  ["vy", 2, "Kn"],
+  ["vz", 3, "Kn"],
+  ["torsion", 4, "Knm"],
+  ["my", 5, "Knm"],
+  ["mz", 6, "Knm"]
+];
+function schrijfSet(w, setNaam, seed, eigenschappen, objecten) {
+  if (eigenschappen.length === 0 || objecten.length === 0) return;
+  const ids = eigenschappen.map((e) => w.ent("IFCPROPERTYSINGLEVALUE", stepString(e.naam), "$", e.waarde, "$"));
+  const set = w.ent("IFCPROPERTYSET", w.guid(`pset:${seed}`), "$", stepString(setNaam), "$", lijst(ids));
+  w.ent("IFCRELDEFINESBYPROPERTIES", w.guid(`psetrel:${seed}`), "$", "$", "$", lijst(objecten), ref(set));
+}
+var maat3 = (naam, type, v, verschuiving = 0) => ({ naam, waarde: `${type}(${reeelExact(v, verschuiving)})` });
+var label = (naam, v) => ({ naam, waarde: `IFCLABEL(${stepString(v)})` });
+var geheel = (naam, v) => ({ naam, waarde: `IFCINTEGER(${Math.round(v)})` });
+function veldEigenschappen(bron, velden, voorvoegsel = "") {
+  const uit = [];
+  for (const [veld, type, verschuiving] of velden) {
+    const v = bron[veld];
+    if (typeof v === "number" && Number.isFinite(v)) uit.push(maat3(voorvoegsel + veld, type, v, verschuiving));
+  }
+  return uit;
+}
+function theorie2D(analysetype) {
+  switch (analysetype) {
+    case "tweedeOrdeGeometrisch":
+      return { theorie: "SECOND_ORDER_THEORY", lineair: false };
+    case "tweedeOrdeFysisch":
+    case "axiaalFysischRust":
+      return { theorie: "FULL_NONLINEAR_THEORY", lineair: false };
+    default:
+      return { theorie: "FIRST_ORDER_THEORY", lineair: true };
+  }
+}
+function theorie3D(r) {
+  if (r.nativeAnalysis === "material" || r.nativeAnalysis === "combined") {
+    return { theorie: "FULL_NONLINEAR_THEORY", lineair: false };
+  }
+  return r.analysis === "p-delta" ? { theorie: "SECOND_ORDER_THEORY", lineair: false } : { theorie: "FIRST_ORDER_THEORY", lineair: true };
+}
+function koppel(w, seed, item, actie) {
+  if (item === void 0) return;
+  w.ent("IFCRELCONNECTSSTRUCTURALACTIVITY", w.guid(`${seed}:rel`), "$", "$", "$", ref(item), ref(actie));
+}
+function resultaatGroep(w, dim, soort, id2, naam, th, lastgroep) {
+  return w.ent(
+    "IFCSTRUCTURALRESULTGROUP",
+    w.guid(`resultaat:${dim}:${soort}:${id2}`),
+    "$",
+    stepString(`Resultaten ${naam}`),
+    "$",
+    stepString(`${SLEUTEL}${dim}:${soort}:${id2}`),
+    `.${th.theorie}.`,
+    lastgroep !== void 0 ? ref(lastgroep) : "$",
+    th.lineair ? ".T." : ".F."
+  );
+}
+function schrijf2DResultaat(w, ids, context, soort, id2, naam, r, analysetype) {
+  const p2 = `res:2d:${soort}:${id2}`;
+  const lastgroep = soort === "geval" ? ids.groepPerCase.get(id2) : ids.groepPerCombinatie.get(id2);
+  const groep = resultaatGroep(w, "2D", soort, id2, naam, theorie2D(analysetype), lastgroep);
+  const leden = [];
+  for (const [knoop, d] of r.displacements) {
+    const last = w.ent(
+      "IFCSTRUCTURALLOADSINGLEDISPLACEMENT",
+      stepString(`u ${knoop}`),
+      reeelExact(d.ux, -3),
+      "$",
+      reeelExact(d.uz, -3),
+      "$",
+      reeelExact(d.ry),
+      "$"
+    );
+    const actie = w.ent(
+      "IFCSTRUCTURALPOINTREACTION",
+      w.guid(`${p2}:u:${knoop}`),
+      "$",
+      stepString(`Verplaatsing knoop ${knoop}`),
+      "$",
+      stepString(`${SLEUTEL}verplaatsing:${knoop}`),
+      "$",
+      "$",
+      ref(last),
+      ".GLOBAL_COORDS."
+    );
+    koppel(w, `${p2}:u:${knoop}`, ids.connectiePerKnoop.get(knoop), actie);
+    leden.push(actie);
+  }
+  for (const [knoop, f] of r.reactions) {
+    const last = w.ent(
+      "IFCSTRUCTURALLOADSINGLEFORCE",
+      stepString(`R ${knoop}`),
+      reeelExact(f.fx),
+      "$",
+      reeelExact(f.fz),
+      "$",
+      reeelExact(f.my, -3),
+      "$"
+    );
+    const actie = w.ent(
+      "IFCSTRUCTURALPOINTREACTION",
+      w.guid(`${p2}:r:${knoop}`),
+      "$",
+      stepString(`Reactie knoop ${knoop}`),
+      "$",
+      stepString(`${SLEUTEL}reactie:${knoop}`),
+      "$",
+      "$",
+      ref(last),
+      ".GLOBAL_COORDS."
+    );
+    koppel(w, `${p2}:r:${knoop}`, ids.connectiePerKnoop.get(knoop), actie);
+    leden.push(actie);
+  }
+  for (const [knoop, d] of r.plateNodeDisplacements ?? []) {
+    const last = w.ent(
+      "IFCSTRUCTURALLOADSINGLEDISPLACEMENT",
+      stepString(`u ${knoop}`),
+      reeelExact(d.ux, -3),
+      "$",
+      reeelExact(d.uz, -3),
+      "$",
+      "$",
+      "$"
+    );
+    leden.push(w.ent(
+      "IFCSTRUCTURALPOINTREACTION",
+      w.guid(`${p2}:pu:${knoop}`),
+      "$",
+      stepString(`Verplaatsing plaatknoop ${knoop}`),
+      "$",
+      stepString(`${SLEUTEL}plaatknoop:${knoop}`),
+      "$",
+      "$",
+      ref(last),
+      ".GLOBAL_COORDS."
+    ));
+  }
+  for (const [staaf, e] of r.elements) {
+    const locaties = `(${e.stations_mm.map((s) => `(${reeelExact(s, -3)})`).join(",")})`;
+    const krachten = e.stations_mm.map((_, i) => w.ent(
+      "IFCSTRUCTURALLOADSINGLEFORCE",
+      "$",
+      opt(e.normalForce[i]),
+      opt(e.shearForce[i]),
+      "$",
+      "$",
+      "$",
+      opt(e.bendingMoment[i], -3)
+    ));
+    const configK = w.ent("IFCSTRUCTURALLOADCONFIGURATION", "'Snedekrachten'", lijst(krachten), locaties);
+    const actieK = w.ent(
+      "IFCSTRUCTURALCURVEREACTION",
+      w.guid(`${p2}:staaf:${staaf}:k`),
+      "$",
+      stepString(`Snedekrachten staaf ${staaf}`),
+      "$",
+      stepString(`${SLEUTEL}staaf:${staaf}:krachten`),
+      "$",
+      "$",
+      ref(configK),
+      ".LOCAL_COORDS.",
+      ".DISCRETE."
+    );
+    koppel(w, `${p2}:staaf:${staaf}:k`, ids.memberPerStaaf.get(staaf), actieK);
+    schrijfSet(w, "OpenFEM_Staafresultaat", `${p2}:staaf:${staaf}`, [
+      maat3("N", "IFCFORCEMEASURE", e.N),
+      maat3("V", "IFCFORCEMEASURE", e.V),
+      maat3("M_start", "IFCTORQUEMEASURE", e.M_start, -3),
+      maat3("M_end", "IFCTORQUEMEASURE", e.M_end, -3),
+      maat3("L", "IFCLENGTHMEASURE", e.L_mm, -3)
+    ], [actieK]);
+    const verpl = e.stations_mm.map((_, i) => w.ent(
+      "IFCSTRUCTURALLOADSINGLEDISPLACEMENT",
+      "$",
+      opt(e.axialDisp[i], -3),
+      opt(e.deflection[i], -3),
+      "$",
+      "$",
+      "$",
+      opt(e.rotation?.[i])
+    ));
+    const configU = w.ent("IFCSTRUCTURALLOADCONFIGURATION", "'Verplaatsingen'", lijst(verpl), locaties);
+    const actieU = w.ent(
+      "IFCSTRUCTURALCURVEREACTION",
+      w.guid(`${p2}:staaf:${staaf}:u`),
+      "$",
+      stepString(`Verplaatsingen staaf ${staaf}`),
+      "$",
+      stepString(`${SLEUTEL}staaf:${staaf}:verplaatsingen`),
+      "$",
+      "$",
+      ref(configU),
+      ".LOCAL_COORDS.",
+      ".DISCRETE."
+    );
+    koppel(w, `${p2}:staaf:${staaf}:u`, ids.memberPerStaaf.get(staaf), actieU);
+    leden.push(actieK, actieU);
+  }
+  const groepEig = [
+    label("Soort", soort),
+    geheel("Id", id2),
+    maat3("MaxVerplaatsing", "IFCLENGTHMEASURE", r.maxDisplacement, -3)
+  ];
+  if (r.trekAlleenUitgeschakeld) groepEig.push(label("TrekAlleenUitgeschakeld", r.trekAlleenUitgeschakeld.join(",")));
+  for (const plaat of r.plateElements ?? []) {
+    if (plaat.expectedElementIds) groepEig.push(label(`Plaat${plaat.plateId}_VerwachteElementen`, plaat.expectedElementIds.join(",")));
+    if (plaat.materiaalassen) groepEig.push(maat3(`Plaat${plaat.plateId}_MateriaalHoekGraden`, "IFCREAL", plaat.materiaalassen.hoekGraden));
+    if (plaat.elements.length === 0) groepEig.push(label(`Plaat${plaat.plateId}_Leeg`, "ja"));
+    for (const el of plaat.elements) {
+      const punten = el.corners.map((c) => w.ent(
+        "IFCCARTESIANPOINT",
+        `(${reeelExact(c.x, -3)},0.,${reeelExact(c.z, -3)})`
+      ));
+      let vorm = "$";
+      if (punten.length >= 3) {
+        const lus = w.ent("IFCPOLYLOOP", lijst(punten));
+        const rand = w.ent("IFCFACEOUTERBOUND", ref(lus), ".T.");
+        const vlak = w.ent("IFCFACE", lijst([rand]));
+        const topo = w.ent("IFCTOPOLOGYREPRESENTATION", ref(context), "'Reference'", "'Face'", lijst([vlak]));
+        vorm = ref(w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([topo])));
+      }
+      const last = w.ent(
+        "IFCSTRUCTURALLOADPLANARFORCE",
+        "'Membraanspanning'",
+        reeelExact(el.sigmaX, 6),
+        reeelExact(el.sigmaY, 6),
+        "$"
+      );
+      const actie = w.ent(
+        "IFCSTRUCTURALSURFACEREACTION",
+        w.guid(`${p2}:plaat:${plaat.plateId}:${el.elementId}`),
+        "$",
+        stepString(`Plaat ${plaat.plateId} element ${el.elementId}`),
+        "$",
+        stepString(`${SLEUTEL}plaatelement:${plaat.plateId}:${el.elementId}`),
+        "$",
+        vorm,
+        ref(last),
+        ".GLOBAL_COORDS.",
+        ".CONST."
+      );
+      koppel(w, `${p2}:plaat:${plaat.plateId}:${el.elementId}`, ids.memberPerPlaat.get(plaat.plateId), actie);
+      const eig = veldEigenschappen(el, PLAAT2D_VELDEN);
+      if (el.materiaalassen) {
+        eig.push(maat3("Materiaal_sigma1", "IFCPRESSUREMEASURE", el.materiaalassen.sigma1, 6));
+        eig.push(maat3("Materiaal_sigma2", "IFCPRESSUREMEASURE", el.materiaalassen.sigma2, 6));
+        eig.push(maat3("Materiaal_tau12", "IFCPRESSUREMEASURE", el.materiaalassen.tau12, 6));
+      }
+      schrijfSet(w, "OpenFEM_Plaatelement", `${p2}:plaat:${plaat.plateId}:${el.elementId}`, eig, [actie]);
+      leden.push(actie);
+    }
+  }
+  schrijfSet(w, "OpenFEM_Resultaatgroep", p2, groepEig, [groep]);
+  if (leden.length > 0) {
+    w.ent("IFCRELASSIGNSTOGROUP", w.guid(`${p2}:leden`), "$", "$", "$", lijst(leden), "$", ref(groep));
+  }
+  return groep;
+}
+function schrijf3DResultaat(w, ids, soort, id2, naam, r, lastgroep) {
+  const p2 = `res:3d:${soort}:${id2}`;
+  const groep = resultaatGroep(w, "3D", soort, id2, naam, theorie3D(r), lastgroep);
+  const leden = [];
+  for (const d of r.displacements) {
+    const last = w.ent(
+      "IFCSTRUCTURALLOADSINGLEDISPLACEMENT",
+      stepString(`u ${d.nodeId}`),
+      reeelExact(d.ux),
+      reeelExact(d.uy),
+      reeelExact(d.uz),
+      reeelExact(d.rx),
+      reeelExact(d.ry),
+      reeelExact(d.rz)
+    );
+    const actie = w.ent(
+      "IFCSTRUCTURALPOINTREACTION",
+      w.guid(`${p2}:u:${d.nodeId}`),
+      "$",
+      stepString(`Verplaatsing knoop ${d.nodeId}`),
+      "$",
+      stepString(`${SLEUTEL}verplaatsing:${d.nodeId}`),
+      "$",
+      "$",
+      ref(last),
+      ".GLOBAL_COORDS."
+    );
+    koppel(w, `${p2}:u:${d.nodeId}`, ids.connectiePerKnoop.get(d.nodeId), actie);
+    leden.push(actie);
+  }
+  for (const f of r.reactions) {
+    const last = w.ent(
+      "IFCSTRUCTURALLOADSINGLEFORCE",
+      stepString(`R ${f.nodeId}`),
+      reeelExact(f.fx, 3),
+      reeelExact(f.fy, 3),
+      reeelExact(f.fz, 3),
+      reeelExact(f.mx, 3),
+      reeelExact(f.my, 3),
+      reeelExact(f.mz, 3)
+    );
+    const actie = w.ent(
+      "IFCSTRUCTURALPOINTREACTION",
+      w.guid(`${p2}:r:${f.nodeId}`),
+      "$",
+      stepString(`Reactie knoop ${f.nodeId}`),
+      "$",
+      stepString(`${SLEUTEL}reactie:${f.nodeId}`),
+      "$",
+      "$",
+      ref(last),
+      ".GLOBAL_COORDS."
+    );
+    koppel(w, `${p2}:r:${f.nodeId}`, ids.connectiePerKnoop.get(f.nodeId), actie);
+    leden.push(actie);
+  }
+  for (const m of r.memberForces) {
+    const kracht = (kant) => {
+      const v = ["$", "$", "$", "$", "$", "$"];
+      for (const [veld, plek, eenheid] of STAAF3D_KRACHTEN) {
+        v[plek - 1] = reeelExact(m[`${veld}${kant}${eenheid}`], 3);
+      }
+      return w.ent("IFCSTRUCTURALLOADSINGLEFORCE", `'${kant}'`, ...v);
+    };
+    const config = w.ent(
+      "IFCSTRUCTURALLOADCONFIGURATION",
+      "'Eindkrachten'",
+      lijst([kracht("Start"), kracht("End")]),
+      `((0.),(${reeelExact(m.lengthM)}))`
+    );
+    const actie = w.ent(
+      "IFCSTRUCTURALCURVEREACTION",
+      w.guid(`${p2}:staaf:${m.memberId}:eind`),
+      "$",
+      stepString(`Eindkrachten staaf ${m.memberId}`),
+      "$",
+      stepString(`${SLEUTEL}staaf:${m.memberId}:eindkrachten`),
+      "$",
+      "$",
+      ref(config),
+      ".LOCAL_COORDS.",
+      ".DISCRETE."
+    );
+    koppel(w, `${p2}:staaf:${m.memberId}:eind`, ids.memberPerStaaf.get(m.memberId), actie);
+    leden.push(actie);
+  }
+  if (r.diagrams) {
+    const perStaaf = /* @__PURE__ */ new Map();
+    for (const [comp, plek] of DIAGRAM_COMPONENTEN) {
+      for (const d of r.diagrams[comp] ?? []) {
+        const lijstje = perStaaf.get(d.memberId) ?? [];
+        lijstje.push({ comp, plek, d });
+        perStaaf.set(d.memberId, lijstje);
+      }
+    }
+    const lengte = new Map(r.memberForces.map((m) => [m.memberId, m.lengthM]));
+    for (const [staaf, comps] of perStaaf) {
+      const groepen2 = /* @__PURE__ */ new Map();
+      for (const c of comps) {
+        const sleutel = c.d.points.map((q) => reeelExact(q.t)).join(",");
+        groepen2.set(sleutel, [...groepen2.get(sleutel) ?? [], c]);
+      }
+      let volgnummer = 0;
+      for (const leden2 of groepen2.values()) {
+        volgnummer += 1;
+        const punten = leden2[0].d.points;
+        const L = lengte.get(staaf) ?? 1;
+        const waarden = punten.map((_, i) => {
+          const v = ["$", "$", "$", "$", "$", "$"];
+          for (const c of leden2) v[c.plek - 1] = reeelExact(c.d.points[i].value, 3);
+          return w.ent("IFCSTRUCTURALLOADSINGLEFORCE", "$", ...v);
+        });
+        const config = w.ent(
+          "IFCSTRUCTURALLOADCONFIGURATION",
+          "'Snedekrachtlijnen'",
+          lijst(waarden),
+          `(${punten.map((q) => `(${reeelExact(q.t * L)})`).join(",")})`
+        );
+        const seed = `${p2}:staaf:${staaf}:lijn:${volgnummer}`;
+        const actie = w.ent(
+          "IFCSTRUCTURALCURVEREACTION",
+          w.guid(seed),
+          "$",
+          stepString(`Snedekrachtlijnen staaf ${staaf}`),
+          "$",
+          stepString(`${SLEUTEL}staaf:${staaf}:lijnen:${leden2.map((c) => c.comp).join("+")}`),
+          "$",
+          "$",
+          ref(config),
+          ".LOCAL_COORDS.",
+          ".DISCRETE."
+        );
+        koppel(w, seed, ids.memberPerStaaf.get(staaf), actie);
+        const eig = [{ naam: "T", waarde: `IFCLABEL(${stepString(punten.map((q) => reeelExact(q.t)).join(" "))})` }];
+        for (const c of leden2) {
+          eig.push(maat3(`${c.comp}_max`, "IFCREAL", c.d.maxValue, 3));
+          eig.push(maat3(`${c.comp}_min`, "IFCREAL", c.d.minValue, 3));
+          eig.push(maat3(`${c.comp}_maxAbs`, "IFCREAL", c.d.maxAbsValue, 3));
+        }
+        schrijfSet(w, "OpenFEM_Snedekrachtlijn", seed, eig, [actie]);
+        leden.push(actie);
+      }
+    }
+  }
+  for (const el of r.shellElements ?? []) {
+    const seed = `${p2}:schaal:${el.plateId}:${el.elementId}`;
+    const last = w.ent("IFCSTRUCTURALLOADPLANARFORCE", "'Schaalelement'", "$", "$", "$");
+    const actie = w.ent(
+      "IFCSTRUCTURALSURFACEREACTION",
+      w.guid(seed),
+      "$",
+      stepString(`Plaat ${el.plateId} element ${el.elementId}`),
+      "$",
+      stepString(`${SLEUTEL}schaalelement:${el.plateId}:${el.elementId}`),
+      "$",
+      "$",
+      ref(last),
+      ".LOCAL_COORDS.",
+      ".CONST."
+    );
+    koppel(w, seed, ids.memberPerPlaat.get(el.plateId), actie);
+    schrijfSet(w, "OpenFEM_Schaalelement", seed, [
+      maat3("ZwaartepuntX", "IFCLENGTHMEASURE", el.centroidM[0]),
+      maat3("ZwaartepuntY", "IFCLENGTHMEASURE", el.centroidM[1]),
+      maat3("ZwaartepuntZ", "IFCLENGTHMEASURE", el.centroidM[2]),
+      ...veldEigenschappen(el, SCHAAL_VELDEN)
+    ], [actie]);
+    leden.push(actie);
+  }
+  for (const kn of r.shellNodes ?? []) {
+    const seed = `${p2}:schaalknoop:${kn.plateId}:${kn.nodeId}`;
+    const last = w.ent("IFCSTRUCTURALLOADSINGLEDISPLACEMENT", "'w'", "$", "$", reeelExact(kn.wM), "$", "$", "$");
+    const actie = w.ent(
+      "IFCSTRUCTURALPOINTREACTION",
+      w.guid(seed),
+      "$",
+      stepString(`Plaat ${kn.plateId} knoop ${kn.nodeId}`),
+      "$",
+      stepString(`${SLEUTEL}schaalknoop:${kn.plateId}:${kn.nodeId}`),
+      "$",
+      "$",
+      ref(last),
+      ".LOCAL_COORDS."
+    );
+    schrijfSet(w, "OpenFEM_Schaalknoop", seed, veldEigenschappen(kn, SCHAAL_VELDEN), [actie]);
+    leden.push(actie);
+  }
+  const groepEig = [
+    label("Soort", soort),
+    geheel("Id", id2),
+    geheel("SchemaVersion", r.schemaVersion),
+    label("Analyse", r.analysis),
+    label("EngineId", r.engine.id),
+    label("EngineName", r.engine.name),
+    label("EngineRevision", r.engine.revision),
+    label("EngineLicense", r.engine.license)
+  ];
+  if (r.nativeAnalysis) groepEig.push(label("NativeAnalysis", r.nativeAnalysis));
+  if (r.inactiveMembers) groepEig.push(label("InactieveStaven", r.inactiveMembers.join(",")));
+  schrijfSet(w, "OpenFEM_Resultaatgroep", p2, groepEig, [groep]);
+  if (leden.length > 0) {
+    w.ent("IFCRELASSIGNSTOGROUP", w.guid(`${p2}:leden`), "$", "$", "$", lijst(leden), "$", ref(groep));
+  }
+  return groep;
+}
+function bouwIfcResultaten(model, resultaten, opties = {}) {
+  const geval2 = (id2) => model.loadCases.find((c) => c.id === id2)?.name ?? `Belastinggeval ${id2}`;
+  const combinatie = (id2) => model.combinations?.find((c) => c.id === id2)?.name ?? `Combinatie ${id2}`;
+  return bouwIfcRekenmodel(model, {
+    ...opties,
+    resultaten: ({ w, project, context, tweeD, drieD }) => {
+      if (resultaten.projectTekst !== void 0) {
+        schrijfSet(w, "OpenFEM_Projectbestand", "projectbestand", [
+          label("Formaat", "ifcfem"),
+          { naam: "Inhoud", waarde: `IFCTEXT(${stepString(resultaten.projectTekst)})` }
+        ], [project]);
+      }
+      const resultaten2D = [];
+      const resultaten3D = [];
+      if (resultaten.tweeD) {
+        for (const [id2, r] of resultaten.tweeD.perCase) {
+          resultaten2D.push(schrijf2DResultaat(w, tweeD, context, "geval", id2, geval2(id2), r, model.analysetype));
+        }
+        for (const [id2, r] of resultaten.tweeD.combinaties) {
+          resultaten2D.push(schrijf2DResultaat(w, tweeD, context, "combinatie", id2, combinatie(id2), r, model.analysetype));
+        }
+      }
+      if (resultaten.drieD) {
+        const ids3d = drieD ?? {
+          analyseModel: 0,
+          connectiePerKnoop: /* @__PURE__ */ new Map(),
+          memberPerStaaf: /* @__PURE__ */ new Map(),
+          memberPerPlaat: /* @__PURE__ */ new Map(),
+          groepPerCase: /* @__PURE__ */ new Map(),
+          groepPerCombinatie: /* @__PURE__ */ new Map()
+        };
+        for (const [id2, r] of resultaten.drieD.perCase) {
+          resultaten3D.push(schrijf3DResultaat(w, ids3d, "geval", id2, geval2(id2), r, ids3d.groepPerCase.get(id2)));
+        }
+        for (const [id2, r] of resultaten.drieD.combinaties) {
+          const combo = model.combinations?.find((c) => c.id === id2);
+          const lastgroep = w.ent(
+            "IFCSTRUCTURALLOADGROUP",
+            w.guid(`3d:combinatie:${id2}`),
+            "$",
+            stepString(combinatie(id2)),
+            "$",
+            "$",
+            ".LOAD_COMBINATION.",
+            ".USERDEFINED.",
+            ".USERDEFINED.",
+            "$",
+            stepString(combo?.type === "sls" ? "BGT" : "UGT")
+          );
+          for (const [caseId, factor] of [...combo?.factors ?? /* @__PURE__ */ new Map()].sort((a, b) => a[0] - b[0])) {
+            const g = ids3d.groepPerCase.get(caseId);
+            if (g === void 0 || factor === 0) continue;
+            w.ent(
+              "IFCRELASSIGNSTOGROUPBYFACTOR",
+              w.guid(`3d:combinatie:${id2}:geval:${caseId}`),
+              "$",
+              "$",
+              "$",
+              lijst([g]),
+              "$",
+              ref(lastgroep),
+              reeelExact(factor)
+            );
+          }
+          resultaten3D.push(schrijf3DResultaat(w, ids3d, "combinatie", id2, combinatie(id2), r, lastgroep));
+        }
+      }
+      return { resultaten2D, resultaten3D };
+    }
+  });
+}
+function verzamelPsets(records) {
+  const uit = /* @__PURE__ */ new Map();
+  for (const rec of records.values()) {
+    if (rec.type !== "IFCRELDEFINESBYPROPERTIES") continue;
+    const objecten = rec.args[4];
+    const setRef = rec.args[5];
+    if (!Array.isArray(objecten) || !(setRef instanceof StepRef)) continue;
+    const set = records.get(setRef.id);
+    if (!set || set.type !== "IFCPROPERTYSET" || !Array.isArray(set.args[4])) continue;
+    const eigenschappen = /* @__PURE__ */ new Map();
+    for (const e of set.args[4]) {
+      const p2 = e instanceof StepRef ? records.get(e.id) : void 0;
+      if (p2?.type === "IFCPROPERTYSINGLEVALUE" && typeof p2.args[0] === "string") eigenschappen.set(p2.args[0], p2.args[2]);
+    }
+    for (const o of objecten) {
+      if (!(o instanceof StepRef)) continue;
+      const bestaand = uit.get(o.id) ?? /* @__PURE__ */ new Map();
+      for (const [k, v] of eigenschappen) bestaand.set(k, v);
+      uit.set(o.id, bestaand);
+    }
+  }
+  return uit;
+}
+function tekstVan2(v) {
+  if (v instanceof StepGetypt) return tekstVan2(v.waarde);
+  return typeof v === "string" ? v : void 0;
+}
+function getalVan2(v, verschuiving = 0) {
+  const x = leesExact(v, verschuiving);
+  return x === void 0 ? NaN : x;
+}
+function idLijst(v) {
+  return v ? v.split(",").filter((s) => s.trim() !== "").map(Number) : [];
+}
+function leesIfcResultaten(tekst2) {
+  const bestand = leesStep(tekst2, { getallenAlsTekst: true });
+  if (!bestand.schemas.includes("IFC4")) {
+    throw new IfcResultatenFout("Dit is geen IFC4-bestand: FILE_SCHEMA noemt geen IFC4.");
+  }
+  const records = bestand.records;
+  const rec = (v) => v instanceof StepRef ? records.get(v.id) : void 0;
+  const psets = verzamelPsets(records);
+  let projectTekst = null;
+  for (const r of records.values()) {
+    if (r.type !== "IFCPROJECT") continue;
+    const inhoud = tekstVan2(psets.get(r.id)?.get("Inhoud"));
+    if (inhoud !== void 0) projectTekst = inhoud;
+  }
+  const ledenPerGroep = /* @__PURE__ */ new Map();
+  for (const r of records.values()) {
+    if (r.type !== "IFCRELASSIGNSTOGROUP") continue;
+    const g = r.args[6];
+    if (!(g instanceof StepRef) || !Array.isArray(r.args[4])) continue;
+    const lijstje = ledenPerGroep.get(g.id) ?? [];
+    for (const o of r.args[4]) {
+      const lid = rec(o);
+      if (lid) lijstje.push(lid);
+    }
+    ledenPerGroep.set(g.id, lijstje);
+  }
+  const uit = {
+    projectTekst,
+    tweeD: { perCase: /* @__PURE__ */ new Map(), combinaties: /* @__PURE__ */ new Map() },
+    drieD: { perCase: /* @__PURE__ */ new Map(), combinaties: /* @__PURE__ */ new Map() },
+    groepen: []
+  };
+  for (const g of records.values()) {
+    if (g.type !== "IFCSTRUCTURALRESULTGROUP") continue;
+    const sleutel = tekstVan2(g.args[4]) ?? "";
+    const m = /^OpenFEM:(2D|3D):(geval|combinatie):(-?\d+)$/.exec(sleutel);
+    if (!m) continue;
+    const dimensie = m[1];
+    const soort = m[2];
+    const id2 = Number(m[3]);
+    const naam = (tekstVan2(g.args[2]) ?? "").replace(/^Resultaten /, "");
+    const theorie = g.args[5] instanceof StepEnum ? g.args[5].waarde : "NOTDEFINED";
+    const lineair = g.args[7] instanceof StepEnum ? g.args[7].waarde === "T" : true;
+    uit.groepen.push({ dimensie, soort, id: id2, naam, theorie, lineair });
+    const leden = ledenPerGroep.get(g.id) ?? [];
+    const groepEig = psets.get(g.id) ?? /* @__PURE__ */ new Map();
+    if (dimensie === "2D") {
+      const r = lees2D(leden, groepEig, psets, rec);
+      (soort === "geval" ? uit.tweeD.perCase : uit.tweeD.combinaties).set(id2, r);
+    } else {
+      const r = lees3D(leden, groepEig, psets, rec);
+      (soort === "geval" ? uit.drieD.perCase : uit.drieD.combinaties).set(id2, r);
+    }
+  }
+  return uit;
+}
+function configuratie(actie, rec) {
+  const config = rec(actie.args[7]);
+  const waarden = Array.isArray(config?.args[1]) ? config.args[1].map(rec).filter((x) => x !== void 0) : [];
+  const locaties = Array.isArray(config?.args[2]) ? config.args[2].map((l) => Array.isArray(l) ? l[0] : l) : [];
+  return { waarden, locaties };
+}
+function lees2D(leden, groepEig, psets, rec) {
+  const displacements = /* @__PURE__ */ new Map();
+  const reactions = /* @__PURE__ */ new Map();
+  const elements = /* @__PURE__ */ new Map();
+  const plateNodeDisplacements = /* @__PURE__ */ new Map();
+  const platen = /* @__PURE__ */ new Map();
+  const staafVerpl = /* @__PURE__ */ new Map();
+  for (const lid of leden) {
+    const sleutel = tekstVan2(lid.args[4]) ?? "";
+    let m;
+    if (m = /^OpenFEM:verplaatsing:(-?\d+)$/.exec(sleutel)) {
+      const a = rec(lid.args[7])?.args ?? [];
+      displacements.set(Number(m[1]), { ux: getalVan2(a[1], -3), uz: getalVan2(a[3], -3), ry: getalVan2(a[5]) });
+    } else if (m = /^OpenFEM:reactie:(-?\d+)$/.exec(sleutel)) {
+      const a = rec(lid.args[7])?.args ?? [];
+      reactions.set(Number(m[1]), { fx: getalVan2(a[1]), fz: getalVan2(a[3]), my: getalVan2(a[5], -3) });
+    } else if (m = /^OpenFEM:plaatknoop:(-?\d+)$/.exec(sleutel)) {
+      const a = rec(lid.args[7])?.args ?? [];
+      plateNodeDisplacements.set(Number(m[1]), { ux: getalVan2(a[1], -3), uz: getalVan2(a[3], -3) });
+    } else if (m = /^OpenFEM:staaf:(-?\d+):krachten$/.exec(sleutel)) {
+      const { waarden, locaties } = configuratie(lid, rec);
+      const e = psets.get(lid.id) ?? /* @__PURE__ */ new Map();
+      elements.set(Number(m[1]), {
+        N: getalVan2(e.get("N")),
+        V: getalVan2(e.get("V")),
+        M_start: getalVan2(e.get("M_start"), -3),
+        M_end: getalVan2(e.get("M_end"), -3),
+        L_mm: getalVan2(e.get("L"), -3),
+        stations_mm: locaties.map((l) => getalVan2(l, -3)),
+        normalForce: waarden.map((w) => getalVan2(w.args[1])),
+        shearForce: waarden.map((w) => getalVan2(w.args[2])),
+        bendingMoment: waarden.map((w) => getalVan2(w.args[6], -3)),
+        deflection: [],
+        axialDisp: []
+      });
+    } else if (m = /^OpenFEM:staaf:(-?\d+):verplaatsingen$/.exec(sleutel)) {
+      staafVerpl.set(Number(m[1]), lid);
+    } else if (m = /^OpenFEM:plaatelement:(-?\d+):(-?\d+)$/.exec(sleutel)) {
+      const e = psets.get(lid.id) ?? /* @__PURE__ */ new Map();
+      const el = { elementId: Number(m[2]), corners: hoekpunten2(lid, rec) };
+      const doel = el;
+      for (const [veld, , verschuiving] of PLAAT2D_VELDEN) {
+        if (e.has(veld)) doel[veld] = getalVan2(e.get(veld), verschuiving);
+      }
+      if (e.has("Materiaal_sigma1")) {
+        el.materiaalassen = {
+          sigma1: getalVan2(e.get("Materiaal_sigma1"), 6),
+          sigma2: getalVan2(e.get("Materiaal_sigma2"), 6),
+          tau12: getalVan2(e.get("Materiaal_tau12"), 6)
+        };
+      }
+      const plaatId = Number(m[1]);
+      platen.set(plaatId, [...platen.get(plaatId) ?? [], el]);
+    }
+  }
+  for (const [staaf, lid] of staafVerpl) {
+    const e = elements.get(staaf);
+    if (!e) continue;
+    const { waarden } = configuratie(lid, rec);
+    e.axialDisp = waarden.map((w) => getalVan2(w.args[1], -3));
+    e.deflection = waarden.map((w) => getalVan2(w.args[2], -3));
+    if (waarden.some((w) => w.args[6] !== null)) e.rotation = waarden.map((w) => getalVan2(w.args[6]));
+  }
+  for (const naam of groepEig.keys()) {
+    const m = /^Plaat(-?\d+)_/.exec(naam);
+    if (m && !platen.has(Number(m[1]))) platen.set(Number(m[1]), []);
+  }
+  const uit = {
+    displacements,
+    reactions,
+    elements,
+    maxDisplacement: getalVan2(groepEig.get("MaxVerplaatsing"), -3)
+  };
+  if (platen.size > 0) {
+    uit.plateElements = [...platen].map(([plateId, els]) => plaatResultaat(plateId, els, groepEig));
+    uit.plateNodeDisplacements = plateNodeDisplacements;
+  }
+  const trek = tekstVan2(groepEig.get("TrekAlleenUitgeschakeld"));
+  if (trek !== void 0) uit.trekAlleenUitgeschakeld = idLijst(trek);
+  return uit;
+}
+function plaatResultaat(plateId, elements, groepEig) {
+  const bereik = (k) => {
+    let min = Infinity, max = -Infinity;
+    for (const el of elements) {
+      min = Math.min(min, el[k]);
+      max = Math.max(max, el[k]);
+    }
+    return Number.isFinite(min) ? { min, max } : { min: 0, max: 0 };
+  };
+  const uit = {
+    plateId,
+    elements,
+    ranges: {
+      sigmaX: bereik("sigmaX"),
+      sigmaY: bereik("sigmaY"),
+      tauXY: bereik("tauXY"),
+      vonMises: bereik("vonMises"),
+      nx: bereik("nx"),
+      ny: bereik("ny"),
+      nxy: bereik("nxy")
+    }
+  };
+  const verwacht = tekstVan2(groepEig.get(`Plaat${plateId}_VerwachteElementen`));
+  if (verwacht !== void 0) uit.expectedElementIds = idLijst(verwacht);
+  const hoek = groepEig.get(`Plaat${plateId}_MateriaalHoekGraden`);
+  if (hoek !== void 0) uit.materiaalassen = materiaalasRanges(elements, getalVan2(hoek));
+  return uit;
+}
+function hoekpunten2(actie, rec) {
+  const vorm = rec(actie.args[6]);
+  const topo = Array.isArray(vorm?.args[2]) ? rec(vorm.args[2][0]) : void 0;
+  const vlak = Array.isArray(topo?.args[3]) ? rec(topo.args[3][0]) : void 0;
+  const rand = Array.isArray(vlak?.args[0]) ? rec(vlak.args[0][0]) : void 0;
+  const lus = rec(rand?.args[0]);
+  if (!lus || !Array.isArray(lus.args[0])) return [];
+  return lus.args[0].map((p2) => {
+    const c = rec(p2)?.args[0];
+    const xyz = Array.isArray(c) ? c : [];
+    return { x: getalVan2(xyz[0], -3), z: getalVan2(xyz[2], -3) };
+  });
+}
+function lees3D(leden, groepEig, psets, rec) {
+  const t = (k) => tekstVan2(groepEig.get(k)) ?? "";
+  const uit = {
+    schemaVersion: getalVan2(groepEig.get("SchemaVersion")) === 2 ? 2 : 1,
+    engine: { id: t("EngineId"), name: t("EngineName"), revision: t("EngineRevision"), license: t("EngineLicense") },
+    analysis: t("Analyse") === "p-delta" ? "p-delta" : "linear",
+    displacements: [],
+    reactions: [],
+    memberForces: [],
+    buckling: { status: "notApplicable", reason: "Gelezen uit een .ifcfemresults-bestand; de knikanalyse wordt niet opgeslagen." },
+    diagnostics: []
+  };
+  const native = tekstVan2(groepEig.get("NativeAnalysis"));
+  if (native !== void 0) uit.nativeAnalysis = native;
+  const inactief = tekstVan2(groepEig.get("InactieveStaven"));
+  if (inactief !== void 0) uit.inactiveMembers = idLijst(inactief);
+  const diagrammen = { momentY: [], momentZ: [], shearY: [], shearZ: [], axial: [], torsion: [] };
+  let heeftDiagrammen = false;
+  const schaalElementen = [];
+  const schaalKnopen = [];
+  for (const lid of leden) {
+    const sleutel = tekstVan2(lid.args[4]) ?? "";
+    let m;
+    if (m = /^OpenFEM:verplaatsing:(-?\d+)$/.exec(sleutel)) {
+      const a = rec(lid.args[7])?.args ?? [];
+      uit.displacements.push({
+        nodeId: Number(m[1]),
+        ux: getalVan2(a[1]),
+        uy: getalVan2(a[2]),
+        uz: getalVan2(a[3]),
+        rx: getalVan2(a[4]),
+        ry: getalVan2(a[5]),
+        rz: getalVan2(a[6])
+      });
+    } else if (m = /^OpenFEM:reactie:(-?\d+)$/.exec(sleutel)) {
+      const a = rec(lid.args[7])?.args ?? [];
+      uit.reactions.push({
+        nodeId: Number(m[1]),
+        fx: getalVan2(a[1], 3),
+        fy: getalVan2(a[2], 3),
+        fz: getalVan2(a[3], 3),
+        mx: getalVan2(a[4], 3),
+        my: getalVan2(a[5], 3),
+        mz: getalVan2(a[6], 3)
+      });
+    } else if (m = /^OpenFEM:staaf:(-?\d+):eindkrachten$/.exec(sleutel)) {
+      const { waarden, locaties } = configuratie(lid, rec);
+      const krachten = { memberId: Number(m[1]), lengthM: getalVan2(locaties[1]) };
+      for (const [veld, plek, eenheid] of STAAF3D_KRACHTEN) {
+        krachten[`${veld}Start${eenheid}`] = getalVan2(waarden[0]?.args[plek], 3);
+        krachten[`${veld}End${eenheid}`] = getalVan2(waarden[1]?.args[plek], 3);
+      }
+      uit.memberForces.push(krachten);
+    } else if (m = /^OpenFEM:staaf:(-?\d+):lijnen:(.+)$/.exec(sleutel)) {
+      heeftDiagrammen = true;
+      const { waarden } = configuratie(lid, rec);
+      const e = psets.get(lid.id) ?? /* @__PURE__ */ new Map();
+      const ts = (tekstVan2(e.get("T")) ?? "").split(" ").filter(Boolean).map((s) => getalVan2(new StepGetal(s, Number(s))));
+      for (const comp of m[2].split("+")) {
+        const plek = DIAGRAM_COMPONENTEN.find(([c]) => c === comp)?.[1];
+        if (plek === void 0) continue;
+        diagrammen[comp].push({
+          memberId: Number(m[1]),
+          points: ts.map((tt, i) => ({ t: tt, value: getalVan2(waarden[i]?.args[plek], 3) })),
+          maxValue: getalVan2(e.get(`${comp}_max`), 3),
+          minValue: getalVan2(e.get(`${comp}_min`), 3),
+          maxAbsValue: getalVan2(e.get(`${comp}_maxAbs`), 3)
+        });
+      }
+    } else if (m = /^OpenFEM:schaalelement:(-?\d+):(-?\d+)$/.exec(sleutel)) {
+      const e = psets.get(lid.id) ?? /* @__PURE__ */ new Map();
+      const el = {
+        elementId: Number(m[2]),
+        plateId: Number(m[1]),
+        centroidM: [getalVan2(e.get("ZwaartepuntX")), getalVan2(e.get("ZwaartepuntY")), getalVan2(e.get("ZwaartepuntZ"))]
+      };
+      for (const [veld, , verschuiving] of SCHAAL_VELDEN) if (e.has(veld)) el[veld] = getalVan2(e.get(veld), verschuiving);
+      schaalElementen.push(el);
+    } else if (m = /^OpenFEM:schaalknoop:(-?\d+):(-?\d+)$/.exec(sleutel)) {
+      const e = psets.get(lid.id) ?? /* @__PURE__ */ new Map();
+      const a = rec(lid.args[7])?.args ?? [];
+      const kn = { nodeId: Number(m[2]), plateId: Number(m[1]), wM: getalVan2(a[3]) };
+      for (const [veld, , verschuiving] of SCHAAL_VELDEN) if (e.has(veld)) kn[veld] = getalVan2(e.get(veld), verschuiving);
+      schaalKnopen.push(kn);
+    }
+  }
+  if (heeftDiagrammen) uit.diagrams = diagrammen;
+  if (schaalElementen.length > 0) uit.shellElements = schaalElementen;
+  if (schaalKnopen.length > 0) uit.shellNodes = schaalKnopen;
+  return uit;
+}
+
 // src/api/schema.ts
 var isObject2 = (waarde) => typeof waarde === "object" && waarde !== null && !Array.isArray(waarde);
 function valideer(schema, waarde, pad = "") {
@@ -37995,11 +42069,11 @@ function obj(properties, required = [], beschrijving) {
 function getal5(beschrijving, grenzen = {}) {
   return metBeschrijving({ type: "number", ...grenzen }, beschrijving);
 }
-function geheel(beschrijving, grenzen = {}) {
+function geheel2(beschrijving, grenzen = {}) {
   return metBeschrijving({ type: "integer", ...grenzen }, beschrijving);
 }
 function id(beschrijving) {
-  return geheel(beschrijving, { exclusiveMinimum: 0 });
+  return geheel2(beschrijving, { exclusiveMinimum: 0 });
 }
 function tekst(beschrijving, eisen = {}) {
   return metBeschrijving({ type: "string", ...eisen }, beschrijving);
@@ -38010,7 +42084,7 @@ function keuze(waarden, beschrijving) {
 function jaNee(beschrijving) {
   return metBeschrijving({ type: "boolean" }, beschrijving);
 }
-function lijst(items, beschrijving, grenzen = {}) {
+function lijst2(items, beschrijving, grenzen = {}) {
   return metBeschrijving({ type: "array", items, ...grenzen }, beschrijving);
 }
 function ofNull(schema, beschrijving) {
@@ -38345,15 +42419,15 @@ function findOpenFem3DCoincidentNodes(model, toleranceMm = OPEN_FEM_3D_MERGE_TOL
   const leden = /* @__PURE__ */ new Map();
   for (const id2 of ouder.keys()) {
     const r = wortel(id2);
-    const lijst2 = leden.get(r);
-    if (lijst2) lijst2.push(id2);
+    const lijst3 = leden.get(r);
+    if (lijst3) lijst3.push(id2);
     else leden.set(r, [id2]);
   }
   const knoopOp = new Map(nodes.map((node) => [node.id, node]));
   const groepen2 = [];
-  for (const lijst2 of leden.values()) {
-    if (lijst2.length < 2) continue;
-    const nodeIds = [...lijst2].sort((a, b) => a - b);
+  for (const lijst3 of leden.values()) {
+    if (lijst3.length < 2) continue;
+    const nodeIds = [...lijst3].sort((a, b) => a - b);
     const keepNodeId = nodeIds.find((id2) => !geplaatst.has(id2)) ?? nodeIds[0];
     const keep = knoopOp.get(keepNodeId);
     let span = 0, verst = 0;
@@ -38514,8 +42588,8 @@ function voegGroepSamen(model, groep, keepId) {
   if (schijven.length === 1) {
     const schijf = schijven[0];
     const ids = [...new Set(schijf.nodeIds.map(naar))];
-    const hoogte = (lijst2) => {
-      const zs = lijst2.map((id2) => knoopOp.get(id2).z);
+    const hoogte = (lijst3) => {
+      const zs = lijst3.map((id2) => knoopOp.get(id2).z);
       return Math.max(...zs) - Math.min(...zs);
     };
     if (ids.length >= 2 && hoogte(ids) > SCHIJF_HOOGTE_M + AFRONDING_M && hoogte(schijf.nodeIds) <= SCHIJF_HOOGTE_M + AFRONDING_M) {
@@ -38598,16 +42672,16 @@ function voegGroepSamen(model, groep, keepId) {
   for (const beam of beams) {
     if (beam.startNodeId !== keepId && beam.endNodeId !== keepId) continue;
     const ander = beam.startNodeId === keepId ? beam.endNodeId : beam.startNodeId;
-    const lijst2 = perAnder.get(ander);
-    if (lijst2) lijst2.push(beam);
+    const lijst3 = perAnder.get(ander);
+    if (lijst3) lijst3.push(beam);
     else perAnder.set(ander, [beam]);
   }
   const mergedBeams = [];
   const opgegaan = /* @__PURE__ */ new Set();
   const blijvers = /* @__PURE__ */ new Set();
-  for (const lijst2 of perAnder.values()) {
-    if (lijst2.length < 2 || !lijst2.some((beam) => omgehangen.has(beam.id))) continue;
-    const [a, ...rest] = [...lijst2].sort((p2, q) => p2.id - q.id);
+  for (const lijst3 of perAnder.values()) {
+    if (lijst3.length < 2 || !lijst3.some((beam) => omgehangen.has(beam.id))) continue;
+    const [a, ...rest] = [...lijst3].sort((p2, q) => p2.id - q.id);
     const L = lengte(a);
     for (const b of rest) {
       const omgekeerd2 = b.startNodeId !== a.startNodeId;
@@ -38815,8 +42889,8 @@ var Soort = class {
   }
 };
 var oplopend = (plekken) => [...plekken].sort((a, b) => a - b);
-function klopt(aantal2, lijst2, wat) {
-  if (aantal2 !== (lijst2?.length ?? 0)) throw new Error(`Samenvoegen: ${wat} kwamen niet volledig terug uit het deelmodel.`);
+function klopt(aantal2, lijst3, wat) {
+  if (aantal2 !== (lijst3?.length ?? 0)) throw new Error(`Samenvoegen: ${wat} kwamen niet volledig terug uit het deelmodel.`);
 }
 var Werkmodel = class {
   constructor(model) {
@@ -38908,19 +42982,19 @@ var Werkmodel = class {
     for (const plek of staafPlekken) this.beams.zet(plek, verdwenen.has(this.beams.plekken[plek].id) ? null : na2.beams[i++]);
     klopt(i, na2.beams, "staven");
     const nul = new Set(uit.removedBeams.map((b) => b.beamId));
-    const lastenTerug = (soort, plekken, lijst2) => {
+    const lastenTerug = (soort, plekken, lijst3) => {
       if (!soort) return;
       let j = 0;
-      for (const plek of plekken) soort.zet(plek, nul.has(soort.plekken[plek].beamId) ? null : lijst2[j++]);
-      klopt(j, lijst2, "staaflasten");
+      for (const plek of plekken) soort.zet(plek, nul.has(soort.plekken[plek].beamId) ? null : lijst3[j++]);
+      klopt(j, lijst3, "staaflasten");
     };
     lastenTerug(this.memberLoads, lijnPlekken, na2.memberLoads);
     lastenTerug(this.memberPointLoads, puntPlekken, na2.memberPointLoads);
     lastenTerug(this.thermalLoads, warmtePlekken, na2.thermalLoads);
-    const eenOpEen = (soort, plekken, lijst2) => {
+    const eenOpEen = (soort, plekken, lijst3) => {
       if (!soort) return;
-      klopt(plekken.length, lijst2, "elementen");
-      plekken.forEach((plek, j) => soort.zet(plek, lijst2[j]));
+      klopt(plekken.length, lijst3, "elementen");
+      plekken.forEach((plek, j) => soort.zet(plek, lijst3[j]));
     };
     eenOpEen(this.loads, lastPlekken, na2.loads);
     eenOpEen(this.plates, plaatPlekken, na2.plates);
@@ -39109,8 +43183,8 @@ function knipOp(model, gevonden, tolM, bewaarTussendoorsnede = true) {
   if (gevonden.length === 0) return { model, splits: [], skipped: [], nodeCount: 0 };
   const perStaaf = /* @__PURE__ */ new Map();
   for (const paar of gevonden) {
-    const lijst2 = perStaaf.get(paar.beamId);
-    if (lijst2) lijst2.push(paar);
+    const lijst3 = perStaaf.get(paar.beamId);
+    if (lijst3) lijst3.push(paar);
     else perStaaf.set(paar.beamId, [paar]);
   }
   const knoopOp = new Map(model.nodes.map((node) => [node.id, node]));
@@ -39274,7 +43348,7 @@ var randSegment = eenVan([
     "Boog door begin-, stuur- en eindknoop."
   )
 ]);
-var contour = (wat) => lijst(knoopId, `Knoopvolgorde rond ${wat}; alle knopen in \xE9\xE9n vlak.`, { minItems: 3 });
+var contour = (wat) => lijst2(knoopId, `Knoopvolgorde rond ${wat}; alle knopen in \xE9\xE9n vlak.`, { minItems: 3 });
 function naarPatch(invoer) {
   const { rollAngleDeg, tensionOnly, shearDeformation, ...rest } = invoer;
   return {
@@ -39399,7 +43473,7 @@ var staafBedding = documentCommando({
   naam: "model3d.beam.setBedding",
   beschrijving: "E\xE9n of meer 3D-staven op dezelfde bedding zetten (Winkler, zoals het vinkje Op bedding in het eigenschappenpaneel), of de bedding weghalen met null. E\xE9n stap ongedaan maken. Een (bijna) verticale staaf krijgt alleen een zijdelingse bedding (kLateralKnPerM3); een verticale k wordt dan geweigerd.",
   invoer: obj({
-    beamIds: lijst(id("Id van een staaf."), "De staven.", { minItems: 1 }),
+    beamIds: lijst2(id("Id van een staaf."), "De staven.", { minItems: 1 }),
     bedding: ofNull(bedding, "De bedding voor alle genoemde staven; null haalt haar weg.")
   }, ["beamIds", "bedding"]),
   uitvoeren: ({ beamIds, bedding: nieuw }, document2) => {
@@ -39460,8 +43534,8 @@ var knopenAansluiten = documentCommando({
       `Verbindingstolerantie in mm (${VERBINDINGSTOLERANTIE_MIN_MM}\u2013${VERBINDINGSTOLERANTIE_MAX_MM}); weglaten = ${OPEN_FEM_3D_CONNECT_TOLERANCE_MM} mm, de standaard van de app.`,
       { minimum: VERBINDINGSTOLERANTIE_MIN_MM, maximum: VERBINDINGSTOLERANTIE_MAX_MM }
     ),
-    beamIds: lijst(id("Id van een staaf."), "Alleen deze staven splitsen (op elke knoop die erop ligt).", { minItems: 1 }),
-    nodeIds: lijst(knoopId, "Alleen deze knopen aansluiten (op elke staaf waarop ze liggen).", { minItems: 1 })
+    beamIds: lijst2(id("Id van een staaf."), "Alleen deze staven splitsen (op elke knoop die erop ligt).", { minItems: 1 }),
+    nodeIds: lijst2(knoopId, "Alleen deze knopen aansluiten (op elke staaf waarop ze liggen).", { minItems: 1 })
   }, []),
   uitvoeren: ({ toleranceMm, beamIds, nodeIds }, document2) => {
     const huidig = model3dVan(document2);
@@ -39491,7 +43565,7 @@ var knopenSamenvoegen = documentCommando({
       `Tolerantie in mm (${VERBINDINGSTOLERANTIE_MIN_MM}\u2013${VERBINDINGSTOLERANTIE_MAX_MM}); weglaten = ${OPEN_FEM_3D_MERGE_TOLERANCE_MM} mm, de verbindingstolerantie van de app.`,
       { minimum: VERBINDINGSTOLERANTIE_MIN_MM, maximum: VERBINDINGSTOLERANTIE_MAX_MM }
     ),
-    nodeIds: lijst(knoopId, "Alleen de groepen rond deze knopen samenvoegen (de paren met een van deze knopen).", { minItems: 1 })
+    nodeIds: lijst2(knoopId, "Alleen de groepen rond deze knopen samenvoegen (de paren met een van deze knopen).", { minItems: 1 })
   }, []),
   uitvoeren: ({ toleranceMm, nodeIds }, document2) => {
     const huidig = model3dVan(document2);
@@ -39530,7 +43604,7 @@ var scharnierSituatie = documentCommando({
   naam: "model3d.beam.setReleasePreset",
   beschrijving: "E\xE9n of meer 3D-staven een standaardsituatie voor hun eindscharnieren geven, zoals de knoppen Momentvast en Scharnierend in het eigenschappenpaneel. rigid (momentvast): geen scharnieren. pinned (scharnierend): My en Mz los aan beide einden; torsie gaat over, anders draait de staaf vrij om zijn as. Een losse combinatie zet je met model3d.beam.update (releases).",
   invoer: obj({
-    beamIds: lijst(id("Id van een staaf."), "De staven.", { minItems: 1 }),
+    beamIds: lijst2(id("Id van een staaf."), "De staven.", { minItems: 1 }),
     preset: keuze(["rigid", "pinned"], "rigid (momentvast) of pinned (scharnierend).")
   }, ["beamIds", "preset"]),
   uitvoeren: ({ beamIds, preset }, document2) => {
@@ -39564,7 +43638,7 @@ var liggersOpKolommen = documentCommando({
   naam: "model3d.beam.pinToColumns",
   beschrijving: "Liggers scharnierend op kolommen aansluiten, zoals de knop in het lint: elk eind van een ligger (een staaf die niet bijna verticaal staat; een schuine spant telt mee) op een kolomkop krijgt My en Mz los. Een kolomkop is het bovenste eind van een kolom (|ex\xB7Z| > 0,95) die naar beneden op een oplegging of veer steunt; het onderste eind telt niet, dus een balkrooster onder een kolomvoet of poer en een ligger waar een kolom op staat, blijven doorgaand. Kolommen blijven doorgaand; torsie blijft zoals hij is. Een eind blijft momentvast als het deel achter de ligger anders zou gaan draaien: reason cantilever (het hangt alleen aan die kolomkop, zoals een uitkraging of luifel) of hingeLine (het hangt alleen aan scharnieren op \xE9\xE9n lijn zonder staaf langs die lijn). Zonder beamIds alle staven, anders alleen de genoemde (een kolom ertussen wordt overgeslagen). Geeft de staafeinden die veranderden (changed, count) en die momentvast bleven (skipped); een eind dat al scharnierend was, telt niet mee.",
   invoer: obj({
-    beamIds: lijst(id("Id van een staaf."), "Alleen deze staven; weglaten = alle staven.", { minItems: 1 })
+    beamIds: lijst2(id("Id van een staaf."), "Alleen deze staven; weglaten = alle staven.", { minItems: 1 })
   }, []),
   uitvoeren: ({ beamIds }, document2) => {
     const huidig = model3dVan(document2);
@@ -39585,7 +43659,7 @@ var plaatToevoegen = documentCommando({
     thicknessM: getal5("Dikte in m.", { exclusiveMinimum: 0 }),
     material: tekst('Materiaal, bijv. "C30/37".', { minLength: 1 }),
     cornerRadiusM: getal5("Afrondingsstraal van de hoeken in m.", { minimum: 0 }),
-    boundary: lijst(randSegment, "Getekende contour met rechte stukken en bogen; ontbreekt = rechte randen tussen nodeIds."),
+    boundary: lijst2(randSegment, "Getekende contour met rechte stukken en bogen; ontbreekt = rechte randen tussen nodeIds."),
     bedding: plaatBedding
   }, ["nodeIds", "thicknessM"]),
   uitvoeren: ({ nodeIds, ...opties }, document2) => {
@@ -39604,9 +43678,9 @@ var plaatWijzigen = documentCommando({
     material: tekst("Materiaal.", { minLength: 1 }),
     cornerRadiusM: getal5("Afrondingsstraal van de hoeken in m.", { minimum: 0 }),
     meshSizeM: getal5("Gewenste elementgrootte in m.", { exclusiveMinimum: 0 }),
-    edgeSupports: lijst(
+    edgeSupports: lijst2(
       obj({
-        edge: geheel("Rand k: randstuk k van de contour (vanaf 0).", { minimum: 0 }),
+        edge: geheel2("Rand k: randstuk k van de contour (vanaf 0).", { minimum: 0 }),
         ux: jaNee(),
         uy: jaNee(),
         uz: jaNee(),
@@ -39629,7 +43703,7 @@ var plaatBeddingZetten = documentCommando({
   naam: "model3d.plate.setBedding",
   beschrijving: 'E\xE9n of meer 3D-platen op dezelfde bedding zetten (Winkler, bijvoorbeeld een vloer op zand; zoals het vinkje Op bedding in het eigenschappenpaneel), of de bedding weghalen met null. E\xE9n stap ongedaan maken. De uitkomst noemt per plaat de grondzijde (groundSide, bijv. "\u2212Z" onder een vloer) en waarschuwt bij een wand (warnings): daar ligt die zijde vast door de plaatassen.',
   invoer: obj({
-    plateIds: lijst(id("Id van een plaat."), "De platen.", { minItems: 1 }),
+    plateIds: lijst2(id("Id van een plaat."), "De platen.", { minItems: 1 }),
     bedding: ofNull(plaatBedding, "De bedding voor alle genoemde platen; null haalt haar weg.")
   }, ["plateIds", "bedding"]),
   uitvoeren: ({ plateIds, bedding: nieuw }, document2) => {
@@ -39662,7 +43736,7 @@ var openingToevoegen = documentCommando({
     plateId: id("Id van de plaat."),
     nodeIds: contour("de opening"),
     cornerRadiusM: getal5("Afrondingsstraal van de hoeken in m.", { minimum: 0 }),
-    boundary: lijst(randSegment, "Getekende contour van de opening; ontbreekt = rechte randen.")
+    boundary: lijst2(randSegment, "Getekende contour van de opening; ontbreekt = rechte randen.")
   }, ["plateId", "nodeIds"]),
   uitvoeren: ({ plateId, nodeIds, ...opties }, document2) => {
     const huidig = model3dVan(document2);
@@ -39731,123 +43805,6 @@ var MODEL3D_ANALYSIS_MATERIAL_COMMANDOS = [documentCommando({
     return { uitkomst: { material, settings: changed.analysisMaterials?.[material] ?? null }, document: metModel3d(document2, changed) };
   }
 })];
-
-// src/components/openFem3d/openFem3dEnvelopePanels.ts
-var subtract = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-var dot6 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-var cross5 = (a, b) => [
-  a[1] * b[2] - a[2] * b[1],
-  a[2] * b[0] - a[0] * b[2],
-  a[0] * b[1] - a[1] * b[0]
-];
-var position = (node) => [node.x, node.y, node.z];
-var area = (loop) => Math.abs(loop.reduce((sum, a, i) => {
-  const b = loop[(i + 1) % loop.length];
-  return sum + a[0] * b[1] - b[0] * a[1];
-}, 0) / 2);
-function pointOnSegment(p2, a, b, tolerance) {
-  const dx = b[0] - a[0], dy = b[1] - a[1];
-  const length2 = dx * dx + dy * dy;
-  const t = length2 > 0 ? Math.max(0, Math.min(1, ((p2[0] - a[0]) * dx + (p2[1] - a[1]) * dy) / length2)) : 0;
-  return Math.hypot(p2[0] - a[0] - t * dx, p2[1] - a[1] - t * dy) <= tolerance;
-}
-function strictlyInside(p2, loop, tolerance) {
-  let inside = false;
-  for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
-    const a = loop[i], b = loop[j];
-    if (pointOnSegment(p2, a, b, tolerance)) return false;
-    if (a[1] > p2[1] !== b[1] > p2[1] && p2[0] < a[0] + (p2[1] - a[1]) * (b[0] - a[0]) / (b[1] - a[1])) inside = !inside;
-  }
-  return inside;
-}
-function segmentsCross(a, b, c, d, tolerance) {
-  const orient = (p2, q, r) => (q[0] - p2[0]) * (r[1] - p2[1]) - (q[1] - p2[1]) * (r[0] - p2[0]);
-  if ([a, b].some((p2) => pointOnSegment(p2, c, d, tolerance)) || [c, d].some((p2) => pointOnSegment(p2, a, b, tolerance))) return true;
-  const x = orient(a, b, c), y = orient(a, b, d), u = orient(c, d, a), v = orient(c, d, b);
-  return x * y < 0 && u * v < 0;
-}
-function boundariesCross(a, b, tolerance) {
-  return a.some((start, i) => b.some((other, j) => segmentsCross(start, a[(i + 1) % a.length], other, b[(j + 1) % b.length], tolerance)));
-}
-function openFem3DEnvelopePanelGeometry(model, panel) {
-  const outer = openFem3DLoadPanelGeometry(model, {
-    id: panel.id,
-    nodeIds: panel.nodeIds,
-    distribution: panel.distribution,
-    spanDirection: panel.spanDirection
-  });
-  const byId = new Map(model.nodes.map((node) => [node.id, node]));
-  const project = (nodeId) => {
-    const node = byId.get(nodeId);
-    if (!node) throw new Error(`Schilpaneel ${panel.id}: knoop ${nodeId} bestaat niet.`);
-    const relative = subtract(position(node), outer.origin);
-    const distance = Math.abs(dot6(relative, outer.normal));
-    if (distance > OPEN_FEM_3D_LOAD_PANEL_TOLERANCE_M) {
-      throw new Error(`Opening van schilpaneel ${panel.id} ligt buiten het vlak.`);
-    }
-    return [dot6(relative, outer.axisU), dot6(relative, outer.axisV)];
-  };
-  const tolerance = OPEN_FEM_3D_LOAD_PANEL_TOLERANCE_M * 1e-3;
-  const holes = (panel.openings ?? []).map((opening) => {
-    openFem3DLoadPanelGeometry(model, { id: opening.id, nodeIds: opening.nodeIds, distribution: "twoWay" });
-    const polygon = opening.nodeIds.map(project);
-    if (polygon.some((point) => !strictlyInside(point, outer.polygon, tolerance)) || boundariesCross(polygon, outer.polygon, tolerance)) {
-      throw new Error(`Opening ${opening.id} van schilpaneel ${panel.id} ligt niet volledig binnen de buitenrand.`);
-    }
-    return { id: opening.id, polygon, areaM2: area(polygon) };
-  });
-  for (let i = 0; i < holes.length; i += 1) for (let j = i + 1; j < holes.length; j += 1) {
-    if (boundariesCross(holes[i].polygon, holes[j].polygon, tolerance) || strictlyInside(holes[i].polygon[0], holes[j].polygon, tolerance) || strictlyInside(holes[j].polygon[0], holes[i].polygon, tolerance)) {
-      throw new Error(`Openingen ${holes[i].id} en ${holes[j].id} van schilpaneel ${panel.id} overlappen.`);
-    }
-  }
-  const netAreaM2 = outer.areaM2 - holes.reduce((sum, hole) => sum + hole.areaM2, 0);
-  if (!(netAreaM2 > 0)) throw new Error(`Schilpaneel ${panel.id} heeft geen netto oppervlak.`);
-  const corners = panel.nodeIds.map((id2) => position(byId.get(id2)));
-  let oriented = [0, 0, 0];
-  for (let i = 1; i + 1 < corners.length; i += 1) {
-    oriented = cross5(subtract(corners[i], corners[0]), subtract(corners[i + 1], corners[0]));
-    if (Math.hypot(...oriented) > 1e-12) break;
-  }
-  const length = Math.hypot(...oriented);
-  const sign3 = panel.flipOuterSide ? -1 : 1;
-  const outwardNormal = oriented.map((value) => value === 0 ? 0 : sign3 * value / length);
-  return { outer, holes, netAreaM2, outwardNormal };
-}
-function addOpenFem3DEnvelopePanel(model, values) {
-  const id2 = (model.envelopePanels ?? []).reduce((max, panel) => Math.max(max, panel.id), 0) + 1;
-  const candidate = { ...values, id: id2, ...values.distribution === "oneWay" && !values.spanDirection ? { spanDirection: defaultOpenFem3DLoadPanelSpan(model, values.nodeIds) } : {} };
-  const parsed = parseOpenFem3DModel({ ...model, envelopePanels: [...model.envelopePanels ?? [], candidate] });
-  openFem3DEnvelopePanelGeometry(parsed, parsed.envelopePanels[parsed.envelopePanels.length - 1]);
-  return { ...model, envelopePanels: parsed.envelopePanels };
-}
-function updateOpenFem3DEnvelopePanel(model, id2, patch) {
-  if (!(model.envelopePanels ?? []).some((panel) => panel.id === id2)) throw new Error(`Schilpaneel ${id2} bestaat niet.`);
-  const parsed = parseOpenFem3DModel({ ...model, envelopePanels: model.envelopePanels.map((panel) => panel.id === id2 ? {
-    ...panel,
-    ...patch,
-    ...(patch.distribution ?? panel.distribution) === "oneWay" && !(patch.spanDirection ?? panel.spanDirection) ? { spanDirection: defaultOpenFem3DLoadPanelSpan(model, patch.nodeIds ?? panel.nodeIds) } : {}
-  } : panel) });
-  openFem3DEnvelopePanelGeometry(parsed, parsed.envelopePanels.find((panel) => panel.id === id2));
-  return { ...model, envelopePanels: parsed.envelopePanels };
-}
-function removeOpenFem3DEnvelopePanel(model, id2) {
-  return { ...model, envelopePanels: (model.envelopePanels ?? []).filter((panel) => panel.id !== id2) };
-}
-function addOpenFem3DEnvelopePanelLoad(model, panelId, caseId, q, direction) {
-  const panel = (model.envelopePanels ?? []).find((candidate) => candidate.id === panelId);
-  if (!panel) throw new Error(`Schilpaneel ${panelId} bestaat niet.`);
-  const geometry = openFem3DEnvelopePanelGeometry(model, panel);
-  const signedQ = direction === "normal" && dot6(geometry.outwardNormal, geometry.outer.normal) < 0 ? -q : q;
-  return addOpenFem3DLoadPanel(model, panel.nodeIds, {
-    caseId,
-    q: signedQ,
-    direction,
-    distribution: panel.distribution,
-    spanDirection: panel.spanDirection,
-    openings: panel.openings
-  });
-}
 
 // src/components/openFem3d/openFem3dPlaatsen.ts
 var OPEN_FEM_3D_DEFAULT_POINT_LOAD_KN = -10;
@@ -40129,14 +44086,14 @@ var vlakVelden = {
   direction: keuze(["gravity", "normal", "verticalSurface"], "gravity = verticaal per horizontale projectie; normal = loodrecht op het vlak; verticalSurface = verticaal per werkelijk vlakoppervlak."),
   distribution: keuze(["oneWay", "twoWay"], "Afdracht: oneWay naar de liggers dwars op de overspanning, twoWay naar alle randliggers."),
   spanDirection: vector,
-  excludedBeamIds: lijst(staafId, "Liggers in het vlak die geen last krijgen."),
-  openings: lijst(obj(
-    { id: id("Id van de opening."), nodeIds: lijst(knoopId2, "Hoekknopen van de opening.", { minItems: 3 }) },
+  excludedBeamIds: lijst2(staafId, "Liggers in het vlak die geen last krijgen."),
+  openings: lijst2(obj(
+    { id: id("Id van de opening."), nodeIds: lijst2(knoopId2, "Hoekknopen van de opening.", { minItems: 3 }) },
     ["id", "nodeIds"]
   ), "Openingen zonder vlaklast.")
 };
 var schilVelden = {
-  nodeIds: lijst(knoopId2, "Hoekknopen van het gevel- of dakpaneel.", { minItems: 3 }),
+  nodeIds: lijst2(knoopId2, "Hoekknopen van het gevel- of dakpaneel.", { minItems: 3 }),
   type: keuze(["facade", "roof"], "Gevel of dak."),
   name: tekst("Naam of groep van het paneel."),
   flipOuterSide: jaNee("Keer de buitenwaartse normaal om."),
@@ -40169,7 +44126,7 @@ var opleggingenZetten = documentCommando({
   naam: "model3d.support.setMany",
   beschrijving: "Meerdere knopen in \xE9\xE9n keer hetzelfde standaardtype oplegging geven, bijvoorbeeld alle opleggingen scharnierend (allSupports + preset pinned). Zoals een lintknop: veren en opgelegde verplaatsingen in richtingen die vrij blijven, blijven staan.",
   invoer: obj({
-    nodeIds: lijst(knoopId2, "De knopen; niet samen met allSupports."),
+    nodeIds: lijst2(knoopId2, "De knopen; niet samen met allSupports."),
     allSupports: jaNee("Alle knopen die nu een oplegging hebben."),
     preset: keuze(PRESETS, "Standaardtype: fixed (inklemming), pinned (scharnier), x-/y-/zRoller, revoluteX/Y/Z.")
   }, ["preset"]),
@@ -40450,7 +44407,7 @@ function lastVerwijderen(soort, sleutel, naam, verwijder) {
 var vlakToevoegen = documentCommando({
   naam: "model3d.loadPanel.add",
   beschrijving: "Een belastingvlak over bestaande knopen toevoegen: draagt zijn vlaklast af naar de liggers in het vlak (bijv. een dak of gevel). Standaard q = 1 kN/m\xB2, zwaartekracht, tweezijdig.",
-  invoer: obj({ nodeIds: lijst(id("Id van een hoekknoop."), "Hoekknopen in volgorde, in \xE9\xE9n vlak.", { minItems: 3 }), caseId: gevalId, ...vlakVelden }, ["nodeIds"]),
+  invoer: obj({ nodeIds: lijst2(id("Id van een hoekknoop."), "Hoekknopen in volgorde, in \xE9\xE9n vlak.", { minItems: 3 }), caseId: gevalId, ...vlakVelden }, ["nodeIds"]),
   uitvoeren: ({ nodeIds, caseId, ...opties }, document2) => {
     const model = model3dVan(document2);
     const nieuw = addOpenFem3DLoadPanel(model, nodeIds, { ...opties, caseId: geval(document2, caseId) });
@@ -40576,7 +44533,7 @@ function schijfWeigering(refusal) {
 var schijfToevoegen = documentCommando({
   naam: "model3d.diaphragm.add",
   beschrijving: "Een starre horizontale schijf (bijv. een vloer met druklaag) uit knopen op \xE9\xE9n hoogte: X, Y en rotatie om Z bewegen samen.",
-  invoer: obj({ nodeIds: lijst(knoopId2, "Knopen op \xE9\xE9n hoogte (binnen 1 mm).", { minItems: 2 }), name: tekst("Naam van de schijf.") }, ["nodeIds"]),
+  invoer: obj({ nodeIds: lijst2(knoopId2, "Knopen op \xE9\xE9n hoogte (binnen 1 mm).", { minItems: 2 }), name: tekst("Naam van de schijf.") }, ["nodeIds"]),
   uitvoeren: ({ nodeIds, name }, document2) => {
     const resultaat = addOpenFem3DDiaphragm(model3dVan(document2), nodeIds, name);
     if (!resultaat.ok) throw new ApiFout("GEWEIGERD", schijfWeigering(resultaat.refusal), { refusal: resultaat.refusal });
@@ -40596,7 +44553,7 @@ var schijfWeg = documentCommando({
 var trekAlleen = documentCommando({
   naam: "model3d.beam.setTensionOnly",
   beschrijving: "Staven trek-alleen maken (on: true) of weer gewoon (on: false).",
-  invoer: obj({ beamIds: lijst(staafId, "De staven.", { minItems: 1 }), on: jaNee("true = trek-alleen.") }, ["beamIds", "on"]),
+  invoer: obj({ beamIds: lijst2(staafId, "De staven.", { minItems: 1 }), on: jaNee("true = trek-alleen.") }, ["beamIds", "on"]),
   uitvoeren: ({ beamIds, on }, document2) => {
     const model = model3dVan(document2);
     for (const beamId of beamIds) vindStaaf2(model, beamId);
@@ -42166,7 +46123,7 @@ function zonder3DLastenVanGeval(model, caseId) {
 }
 var gevalType2 = keuze(GEVALTYPEN, "dead = blijvend; live = gebruiksbelasting; snow; wind; other.");
 var categorie = keuze(CATEGORIEEN, "Gebruikscategorie (NB tabel NB.2\u2013A1.1), alleen bij type live; ontbreekt = A.");
-var factoren = lijst(
+var factoren = lijst2(
   obj({ caseId: id("Bestaand belastinggeval."), factor: getal5("Factor.") }, ["caseId", "factor"]),
   "Factor per belastinggeval; een niet genoemd geval telt niet mee.",
   { minItems: 1 }
@@ -43367,11 +47324,11 @@ function openFem3DIdsVanElementen(elementen) {
       if (type) (ids.loads[type] ??= []).push(element.id);
     }
   }
-  const oplopend2 = (lijst2) => lijst2.sort((a, b) => a - b);
+  const oplopend2 = (lijst3) => lijst3.sort((a, b) => a - b);
   oplopend2(ids.nodeIds);
   oplopend2(ids.beamIds);
   oplopend2(ids.plateIds);
-  Object.values(ids.loads).forEach((lijst2) => oplopend2(lijst2));
+  Object.values(ids.loads).forEach((lijst3) => oplopend2(lijst3));
   return ids;
 }
 function filterOpenFem3D(model, levels, ids, criteria) {
@@ -43421,12 +47378,12 @@ function lastIdsUitInvoer(model, invoer) {
 }
 function lastIdSchema(rol) {
   return {
-    nodalLoadIds: lijst(id("Id van een knooplast."), `Knooplasten ${rol}.`),
-    memberLoadIds: lijst(id("Id van een lijnlast."), `Lijnlasten ${rol}.`),
-    memberPointLoadIds: lijst(id("Id van een puntlast op een staaf."), `Puntlasten op staven ${rol}.`),
-    thermalLoadIds: lijst(id("Id van een temperatuurlast."), `Temperatuurlasten ${rol}.`),
-    surfaceLoadIds: lijst(id("Id van een vlaklast."), `Vlaklasten ${rol}.`),
-    loadPanelIds: lijst(id("Id van een belastingvlak."), `Belastingvlakken ${rol}.`)
+    nodalLoadIds: lijst2(id("Id van een knooplast."), `Knooplasten ${rol}.`),
+    memberLoadIds: lijst2(id("Id van een lijnlast."), `Lijnlasten ${rol}.`),
+    memberPointLoadIds: lijst2(id("Id van een puntlast op een staaf."), `Puntlasten op staven ${rol}.`),
+    thermalLoadIds: lijst2(id("Id van een temperatuurlast."), `Temperatuurlasten ${rol}.`),
+    surfaceLoadIds: lijst2(id("Id van een vlaklast."), `Vlaklasten ${rol}.`),
+    loadPanelIds: lijst2(id("Id van een belastingvlak."), `Belastingvlakken ${rol}.`)
   };
 }
 function idsUitInvoer(model, invoer) {
@@ -43448,23 +47405,23 @@ var criterium = (property, values, beschrijving) => obj({ property, mode: modus,
 var criteriumSchema = eenVan([
   criterium(
     { const: "type" },
-    lijst(keuze([...FILTER_TYPEN]), "node, beam, plate, load, support (een knoop met een oplegging)."),
+    lijst2(keuze([...FILTER_TYPEN]), "node, beam, plate, load, support (een knoop met een oplegging)."),
     "Type element."
   ),
   criterium(
     keuze(["profile", "material", "group", "level"]),
-    lijst(tekst(), 'Profielnaam ("HEA 200"), materiaal, groep of level-id; "" = zonder.'),
+    lijst2(tekst(), 'Profielnaam ("HEA 200"), materiaal, groep of level-id; "" = zonder.'),
     "Profiel of materiaal (staaf; materiaal ook plaat), groep (staaf), level (knoop, staaf of plaat op dat level; id uit model3d.levels.get)."
   ),
   criterium(
     { const: "direction" },
-    lijst(keuze([...FILTER_RICHTINGEN]), "vertical: |ex\xB7Z| > 0,95; horizontal: |ex\xB7Z| < 0,05; anders sloped."),
+    lijst2(keuze([...FILTER_RICHTINGEN]), "vertical: |ex\xB7Z| > 0,95; horizontal: |ex\xB7Z| < 0,05; anders sloped."),
     "Richting van een staaf."
   ),
-  criterium({ const: "loadCase" }, lijst(id("Id van een belastinggeval.")), "Belastinggeval van een last."),
+  criterium({ const: "loadCase" }, lijst2(id("Id van een belastinggeval.")), "Belastinggeval van een last."),
   criterium(
     { const: "loadKind" },
-    lijst(
+    lijst2(
       keuze([...new Set(Object.values(OPEN_FEM_3D_FILTER_LAST_SOORT))]),
       "nodal (knooplast), line (lijnlast), memberPoint (puntlast op staaf), thermal, surface (vlaklast), loadPanel (belastingvlak)."
     ),
@@ -43481,11 +47438,11 @@ var selectieFilteren = {
   naam: "model3d.selection.filter",
   beschrijving: "Een selectie verfijnen zoals het venster Selectiefilter: id's in, id's uit. Zonder id's werkt het op het hele model. Criteria op type, profiel, materiaal, groep, richting, level, lengte (mm), belastinggeval en soort last; per criterium keep (alleen deze houden) of remove (deze weghalen); alle criteria samen (EN). Het document verandert niet. In de draaiende app zet select: true de uitkomst als selectie (zoals Toepassen); buiten de app zet het niets (selectionApplied: false).",
   invoer: obj({
-    nodeIds: lijst(id("Id van een knoop."), "Knopen in de selectie."),
-    beamIds: lijst(id("Id van een staaf."), "Staven in de selectie."),
-    plateIds: lijst(id("Id van een plaat."), "Platen in de selectie."),
+    nodeIds: lijst2(id("Id van een knoop."), "Knopen in de selectie."),
+    beamIds: lijst2(id("Id van een staaf."), "Staven in de selectie."),
+    plateIds: lijst2(id("Id van een plaat."), "Platen in de selectie."),
     ...lastIdSchema("in de selectie"),
-    criteria: lijst(criteriumSchema, "De criteria; een criterium zonder waarden doet niet mee."),
+    criteria: lijst2(criteriumSchema, "De criteria; een criterium zonder waarden doet niet mee."),
     select: jaNee("In de draaiende app de uitkomst als selectie zetten (zoals Toepassen).")
   }),
   soort: "document",
@@ -43808,9 +47765,9 @@ function levelWeigering(refusal, levels) {
 }
 var levelsUit = (levels) => levels.map((level) => ({ id: level.id, label: level.label, heightM: openFem3DLevelHeightM(level) }));
 var selectieVelden = {
-  nodeIds: lijst(id("Id van een 3D-knoop."), "Knopen."),
-  beamIds: lijst(id("Id van een 3D-staaf."), "Staven (hun knopen gaan mee)."),
-  plateIds: lijst(id("Id van een 3D-plaat."), "Platen (hun knopen en openingen gaan mee).")
+  nodeIds: lijst2(id("Id van een 3D-knoop."), "Knopen."),
+  beamIds: lijst2(id("Id van een 3D-staaf."), "Staven (hun knopen gaan mee)."),
+  plateIds: lijst2(id("Id van een 3D-plaat."), "Platen (hun knopen en openingen gaan mee).")
 };
 var as = keuze(["x", "y", "z"], "Globale as.");
 var transformatie = eenVan([
@@ -43866,7 +47823,7 @@ var levelsZetten = documentCommando({
   naam: "model3d.levels.set",
   beschrijving: "De levels (bouwlagen) zetten: elk een naam en een hoogte in m. Een level met een bestaande naam houdt zijn koppelingen; gekoppelde knopen en platen schuiven mee met de hoogte. Een level dat verdwijnt, laat zijn knopen los.",
   invoer: obj({
-    levels: lijst(obj(
+    levels: lijst2(obj(
       { label: tekst('Naam van het level, bijv. "vloer 1".', { minLength: 1 }), heightM: getal5("Hoogte in m.") },
       ["label", "heightM"]
     ), "Alle levels; vervangt de huidige lijst.")
@@ -43944,8 +47901,8 @@ var stramienZetten = documentCommando({
   beschrijving: "Het stramien zetten, zoals het venster Stramienen en levels: aan of uit, en de assen in X en/of Y. Een lijst vervangt de huidige; een as met een bestaande naam houdt zijn id. De levels zet model3d.levels.set.",
   invoer: obj({
     enabled: jaNee("Stramien aan (tonen en erop snappen) of uit."),
-    xAxes: lijst(as2, "Assen in X: lijnen met een vaste x (in 2D de verticale stramienlijnen)."),
-    yAxes: lijst(as2, "Assen in Y: lijnen met een vaste y (alleen in 3D).")
+    xAxes: lijst2(as2, "Assen in X: lijnen met een vaste x (in 2D de verticale stramienlijnen)."),
+    yAxes: lijst2(as2, "Assen in Y: lijnen met een vaste y (alleen in 3D).")
   }),
   uitvoeren: ({ enabled, xAxes, yAxes }, document2) => {
     if (enabled === void 0 && xAxes === void 0 && yAxes === void 0) {
@@ -44743,19 +48700,19 @@ function keurZones(waarde, pad, fouten) {
     return;
   }
   keurVelden(waarde, ["longitudinal", "stirrups"], pad, fouten);
-  for (const lijst2 of ["longitudinal", "stirrups"]) {
-    const zones = waarde[lijst2];
+  for (const lijst3 of ["longitudinal", "stirrups"]) {
+    const zones = waarde[lijst3];
     if (zones === void 0) continue;
     if (!Array.isArray(zones)) {
-      fouten.push(`${pad}.${lijst2}: moet een array zijn.`);
+      fouten.push(`${pad}.${lijst3}: moet een array zijn.`);
       continue;
     }
     zones.forEach((z, i) => {
-      const zpad = `${pad}.${lijst2}[${i}]`;
+      const zpad = `${pad}.${lijst3}[${i}]`;
       if (!isObject5(z)) return void fouten.push(`${zpad}: moet een object zijn.`);
       keurVelden(
         z,
-        lijst2 === "longitudinal" ? ZONE_LANGS_VELDEN : ZONE_BEUGEL_VELDEN,
+        lijst3 === "longitudinal" ? ZONE_LANGS_VELDEN : ZONE_BEUGEL_VELDEN,
         zpad,
         fouten
       );
@@ -44771,7 +48728,7 @@ function keurZones(waarde, pad, fouten) {
           `${zpad}: de zone begint niet v\xF3\xF3r zijn einde (x_start_mm ${z.x_start_mm}, x_end_mm ${z.x_end_mm}). Een lege of omgekeerde zone is geen wapening.`
         );
       }
-      if (lijst2 === "longitudinal") {
+      if (lijst3 === "longitudinal") {
         keurEnum(z.side, ["Bottom", "Top"], `${zpad}.side`, fouten);
         keurEnum(z.bar_shape, ["Recht", "AndersDanRecht"], `${zpad}.bar_shape`, fouten);
         keurEnum(
@@ -44961,9 +48918,9 @@ function keurCheckConfig(waarde, cpad) {
     fouten.push(`${cpad}.serviceClass: moet 1, 2 of 3 zijn.`);
   }
   for (const veld of ["lateralRestraints", "lateralRestraintsBottom"]) {
-    const lijst2 = cc[veld];
-    if (lijst2 === void 0) continue;
-    if (!Array.isArray(lijst2) || !lijst2.every(isGetal)) {
+    const lijst3 = cc[veld];
+    if (lijst3 === void 0) continue;
+    if (!Array.isArray(lijst3) || !lijst3.every(isGetal)) {
       fouten.push(`${cpad}.${veld}: moet een array van getallen (fracties 0..1) zijn.`);
     }
   }
@@ -45367,8 +49324,8 @@ function samenhangendeDelen(knoopIds, verbindingen) {
   const perWortel = /* @__PURE__ */ new Map();
   for (const id2 of knoopIds) {
     const wortel = zoek(id2);
-    const lijst2 = perWortel.get(wortel);
-    if (lijst2) lijst2.push(id2);
+    const lijst3 = perWortel.get(wortel);
+    if (lijst3) lijst3.push(id2);
     else perWortel.set(wortel, [id2]);
   }
   return [...perWortel.values()];
@@ -45600,9 +49557,9 @@ function valideerModel(rauw, opties = {}) {
     for (const b of beams) {
       const rel = b.releases ?? {};
       const voeg = (knoop, scharnier) => {
-        const lijst2 = eindenPerKnoop.get(knoop) ?? [];
-        lijst2.push(scharnier);
-        eindenPerKnoop.set(knoop, lijst2);
+        const lijst3 = eindenPerKnoop.get(knoop) ?? [];
+        lijst3.push(scharnier);
+        eindenPerKnoop.set(knoop, lijst3);
       };
       voeg(b.from, rel.startRy === true);
       voeg(b.to, rel.endRy === true);
@@ -45774,6 +49731,12 @@ var SIDECAR_OPS = [
   // ifcImportSidecar.ts.
   "ifc_importeren",
   "ifc_uitwerken",
+  // Resultaten als .ifcfemresults (issue #87, MCP-tools
+  // `fem_resultaten_ifc_schrijven` en `fem_resultaten_ifc_lezen`): rekenen
+  // zoals `solve` en het IFC4-bestand bouwen, en zo'n bestand teruglezen.
+  // Zie io/ifcResultaten.ts.
+  "ifcfemresults_schrijven",
+  "ifcfemresults_lezen",
   // De API-commando's van de app (src/api/) zonder app, op de tekst van een
   // projectbestand: de catalogus, en één commando uitvoeren. Zie apiSidecar.ts.
   "api_catalogus",
@@ -46260,11 +50223,11 @@ function leesProfielen(payload) {
 }
 function leesHoutklassen(payload) {
   if (payload.timber_grades === void 0) return null;
-  const lijst2 = eisArray(payload.timber_grades, "timber_grades");
-  if (!lijst2.every((g) => typeof g === "string")) {
+  const lijst3 = eisArray(payload.timber_grades, "timber_grades");
+  if (!lijst3.every((g) => typeof g === "string")) {
     throw new InvoerFout("Elk item in `timber_grades` moet tekst zijn.");
   }
-  return lijst2;
+  return lijst3;
 }
 function pasCheckConfigToe(beams, payload) {
   if (payload.check_config === void 0) return beams;
@@ -46681,6 +50644,8 @@ function rekenDoor(payload) {
     waarschuwingen.push(m.niveau === "fout" ? `FOUT: ${m.tekst}` : m.tekst);
   }
   return {
+    gelezen,
+    analysetype,
     combinaties,
     veldSplitsing,
     veldVarianten: veld.uitkomst?.combinaties ?? [],
@@ -46719,10 +50684,10 @@ function rekenDoor(payload) {
 function redenBestaatNiet(id2) {
   return `bestaat niet in het model \u2014 staaf ${id2} is gevraagd in \`beam_ids\`, maar het model heeft geen staaf met dit nummer; er is niets getoetst`;
 }
-function eenmaalPerStaaf(lijst2, getoetst) {
+function eenmaalPerStaaf(lijst3, getoetst) {
   const gezien = /* @__PURE__ */ new Set();
   const uit = [];
-  for (const s of lijst2) {
+  for (const s of lijst3) {
     if (getoetst.has(s.beam_id) || gezien.has(s.beam_id)) continue;
     gezien.add(s.beam_id);
     uit.push(s);
@@ -46827,8 +50792,8 @@ function opValidate(payload) {
   const gelezen = leesModel(payload);
   const { klasse } = leesGevolgklasse(payload, gelezen);
   const bijlage = leesBijlageVoorRekening(payload, gelezen);
-  const { lijst: lijst2, openMeldingen } = leesCombinaties(payload, gelezen, klasse, bijlage);
-  const actief2 = selecteerCombinaties(lijst2, gelezen.beams, gelezen.model.plates, {
+  const { lijst: lijst3, openMeldingen } = leesCombinaties(payload, gelezen, klasse, bijlage);
+  const actief2 = selecteerCombinaties(lijst3, gelezen.beams, gelezen.model.plates, {
     loadCases: gelezen.model.loadCases,
     gevolgklasse: klasse,
     bijlage,
@@ -46836,7 +50801,7 @@ function opValidate(payload) {
   }).actief;
   const uitkomst = valideerModel(gelezen.rauw, {
     combinaties: actief2,
-    alleCombinaties: lijst2,
+    alleCombinaties: lijst3,
     gevolgklasse: klasse,
     bijlage
   });
@@ -46861,11 +50826,11 @@ function opLoadProject(payload) {
   const m = gelezen.model;
   const klasse = leesGevolgklasse({}, gelezen);
   const bijlage = leesBijlageVoorRekening({}, gelezen);
-  const { lijst: lijst2, bron, openMeldingen } = leesCombinaties({}, gelezen, klasse.klasse, bijlage);
+  const { lijst: lijst3, bron, openMeldingen } = leesCombinaties({}, gelezen, klasse.klasse, bijlage);
   const warnings = [];
   const klasseMelding = gevolgklasseWaarschuwing(
     klasse,
-    bron === "standaard" || lijst2.some((c) => c.standaard),
+    bron === "standaard" || lijst3.some((c) => c.standaard),
     bijlage
   );
   if (klasseMelding) warnings.push(klasseMelding);
@@ -46873,8 +50838,8 @@ function opLoadProject(payload) {
   warnings.push(...gelezen.scheefstandMeldingen);
   for (const mld of meldingenBelastinggevallen({
     loadCases: m.loadCases,
-    combinations: lijst2,
-    alleCombinaties: lijst2,
+    combinations: lijst3,
+    alleCombinaties: lijst3,
     gevolgklasse: klasse.klasse,
     bijlage,
     loads: m.loads,
@@ -46891,7 +50856,7 @@ function opLoadProject(payload) {
     // keuze zelf gaat mee, zodat het model heen en weer kan zonder dat de
     // norm onderweg verdwijnt.
     model: { ...m, ...gelezen.scheefstandKeuze },
-    combinations: lijst2.map((c) => ({
+    combinations: lijst3.map((c) => ({
       id: c.id,
       name: c.name,
       type: c.type,
@@ -46911,9 +50876,72 @@ function opLoadProject(payload) {
       plates: m.plates.length,
       loads: m.loads.length,
       load_cases: m.loadCases.length,
-      combinations: lijst2.length
+      combinations: lijst3.length
     },
     warnings
+  };
+}
+function opIfcfemresultsSchrijven(payload) {
+  const { bestandsnaam, ...rekenPayload } = payload;
+  if (bestandsnaam !== void 0 && typeof bestandsnaam !== "string") {
+    throw new InvoerFout("`bestandsnaam` moet tekst zijn.");
+  }
+  const d = rekenDoor(rekenPayload);
+  const m = d.gelezen.model;
+  const perCase = gevalResultaten(d.perCase);
+  const project = rekenPayload.project;
+  const projectTekst = typeof project?.inhoud === "string" ? project.inhoud : void 0;
+  const naam = typeof bestandsnaam === "string" ? bestandsnaam.replace(/\.ifcfemresults$/i, "") : "rekenmodel";
+  const inhoud = bouwIfcResultaten({
+    projectNaam: naam,
+    nodes: m.nodes,
+    beams: d.gelezen.beams,
+    supports: m.supports,
+    loads: m.loads,
+    loadCases: m.loadCases,
+    plates: m.plates,
+    eigenGewicht: m.selfWeightEnabled,
+    combinations: [...d.combinaties, ...d.veldVarianten],
+    aantalCombinaties: d.combinaties.length,
+    analysetype: d.analysetype
+  }, { tweeD: { perCase, combinaties: d.combinationResults }, projectTekst }, {
+    bestandsnaam: typeof bestandsnaam === "string" ? bestandsnaam : void 0
+  });
+  const validatie = valideerIfc(inhoud);
+  return {
+    inhoud,
+    entiteiten: validatie.entiteiten,
+    validatie_fouten: validatie.fouten,
+    gevallen: [...perCase.keys()],
+    combinaties: [...d.combinationResults.keys()],
+    project_ingebed: projectTekst !== void 0,
+    warnings: d.waarschuwingen
+  };
+}
+function opIfcfemresultsLezen(payload) {
+  const onbekend2 = Object.keys(payload).filter((k) => k !== "inhoud" && k !== "detail");
+  if (onbekend2.length > 0) throw new InvoerFout(`Onbekend veld \`${onbekend2[0]}\`; bekend zijn: inhoud, detail.`);
+  if (typeof payload.inhoud !== "string" || payload.inhoud.length === 0) {
+    throw new InvoerFout("`inhoud` moet de tekst van het .ifcfemresults-bestand zijn.");
+  }
+  const volledig = payload.detail === "volledig";
+  const r = leesIfcResultaten(payload.inhoud);
+  const samenvatting2D = (res) => ({
+    max_displacement_mm: res.maxDisplacement,
+    reactions: Object.fromEntries([...res.reactions].map(([k, v]) => [String(k), { fx_kN: v.fx / 1e3, fz_kN: v.fz / 1e3, my_kNm: v.my / 1e6 }]))
+  });
+  return {
+    units: EENHEDEN,
+    project_ingebed: r.projectTekst !== null,
+    groepen: r.groepen,
+    tweeD: {
+      per_case: mapNaarObject(r.tweeD.perCase, (x) => volledig ? vormResultaat(x, true) : samenvatting2D(x)),
+      combinations: mapNaarObject(r.tweeD.combinaties, (x) => volledig ? vormResultaat(x, true) : samenvatting2D(x))
+    },
+    drieD: {
+      per_case: Object.fromEntries([...r.drieD.perCase].map(([k, v]) => [String(k), volledig ? v : { reactions: v.reactions }])),
+      combinations: Object.fromEntries([...r.drieD.combinaties].map(([k, v]) => [String(k), volledig ? v : { reactions: v.reactions }]))
+    }
   };
 }
 function verwerkVerzoek(verzoek) {
@@ -46937,6 +50965,10 @@ function verwerkVerzoek(verzoek) {
         return maakOk(verzoek.id, opIfcImporteren(verzoek.payload));
       case "ifc_uitwerken":
         return maakOk(verzoek.id, opIfcUitwerken(verzoek.payload));
+      case "ifcfemresults_schrijven":
+        return maakOk(verzoek.id, opIfcfemresultsSchrijven(verzoek.payload));
+      case "ifcfemresults_lezen":
+        return maakOk(verzoek.id, opIfcfemresultsLezen(verzoek.payload));
       case "api_catalogus":
         return maakOk(verzoek.id, opApiCatalogus());
       case "api_uitvoeren":
@@ -46959,6 +50991,9 @@ function verwerkVerzoek(verzoek) {
         reden: err.code,
         ...err.modellen.length > 0 ? { modellen: err.modellen } : {}
       });
+    }
+    if (err instanceof IfcResultatenFout || err instanceof StepLeesFout) {
+      return maakFout(verzoek.id, "BESTAND_ONLEESBAAR", err.message);
     }
     if (err instanceof IfcSidecarInvoerFout) {
       return maakFout(verzoek.id, "INVOER_ONGELDIG", err.message, { veld: err.veld });
@@ -47748,6 +51783,7 @@ export {
   SUPPORTED_TIMBER_GRADES,
   StaalhalFout,
   StepEnum,
+  StepGetal,
   StepGetypt,
   StepLeesFout,
   StepRef,

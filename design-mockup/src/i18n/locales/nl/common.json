@@ -545,6 +545,13 @@
       "openFolder": "Map openen",
       "savedNamed": "Opgeslagen: {{naam}}"
     },
+    "ifcResults": {
+      "noResults": "Nog geen resultaten",
+      "noResultsBody": "Bereken het model eerst; daarna kunnen de resultaten als .ifcfemresults worden opgeslagen.",
+      "exported": "Resultaten opgeslagen (.ifcfemresults)",
+      "exportFailed": "Resultaten opslaan mislukt",
+      "opened": "Resultaten geopend (zonder herberekening)"
+    },
     "ifc": {
       "exportErrors": "IFC-export bevat fouten",
       "exportedWithNotes": "IFC geëxporteerd — met kanttekeningen",

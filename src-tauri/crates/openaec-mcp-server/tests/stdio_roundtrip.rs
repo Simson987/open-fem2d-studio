@@ -107,7 +107,8 @@ async fn stdio_roundtrip_initialize_list_call() {
     // sinds de staalhal ook gui_build_3d_steel_hall, sinds de IFC-import ook
     // gui_import_ifc_analysis_model, sinds issue #109 ook gui_start_app)
     // + project_import (lokale extensie) + list_aluminium_alloys en
-    // check_aluminium_beams (issue #5) = 57 vaste tools.
+    // check_aluminium_beams (issue #5) + de twee .ifcfemresults-tools
+    // (issue #87: fem_resultaten_ifc_schrijven en _lezen) = 59 vaste tools.
     // Daarbij één tool per API-commando van de app, uit de ingebakken catalogus
     // (assets/api-catalogus.json, geschreven door `npm run build:sidecar`).
     // Ook die tellen exact: elk commando uit de catalogus, niets meer.
@@ -121,8 +122,8 @@ async fn stdio_roundtrip_initialize_list_call() {
         .collect();
     assert_eq!(
         tools.len(),
-        57 + api_namen.len(),
-        "expected 57 + {} tools, got {}",
+        59 + api_namen.len(),
+        "expected 59 + {} tools, got {}",
         api_namen.len(),
         tools.len()
     );
@@ -180,6 +181,9 @@ async fn stdio_roundtrip_initialize_list_call() {
         // sidecar, 3D-kern en staaltoets; zie `tests/ifc_import_mcp.rs`.
         "open_fem_3d_ifc_importeren",
         "gui_import_ifc_analysis_model",
+        // Resultaten als .ifcfemresults (issue #87); zie `tests/ifc_resultaten_mcp.rs`.
+        "fem_resultaten_ifc_schrijven",
+        "fem_resultaten_ifc_lezen",
         // De betontools (NEN-EN 1992-1-1). Dezelfde rekengang als het
         // Tauri-command en de toetsbrug; zie `tests/drie_wegen_beton.rs`,
         // `tests/drie_wegen_beff.rs` en `tests/drie_wegen_dekking.rs`.

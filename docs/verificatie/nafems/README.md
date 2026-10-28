@@ -179,7 +179,7 @@ voeden.
 | contourwaarden mxx, myy, mxy, w, σvm,onder per knoop | `openFem3DPlateQuantityValues` | = kernknoopwaarden (exact, w ×1000 naar mm) | ✅ |
 | legenda min/max | `openFem3DPlateQuantityRange` | = min/max over de kernknopen | ✅ |
 | extremen in het eigenschappenpaneel | `openFem3DPlateExtremes` | = `PlateSummary3D.extremes` = legenda | ✅ |
-| getalopmaak | `formatOpenFem3DPlateValue` | NL-notatie, vaste decimalen | ⚠️ B3 |
+| getalopmaak | `formatOpenFem3DPlateValue` | NL-notatie, minstens drie significante cijfers | ✅ (B3 opgelost) |
 | kleur van de contour in E | `buildOpenFem3DPlateOverlay` | = kleurschaal van (m − min)/(max − min) | ✅ |
 | vervormde vorm | `buildOpenFem3DPlateOverlay` | E ligt op x + schaal·u | ✅ |
 | teken: positief moment = trek onder | `shell.rs`, `values_from` | σ1 onder uit de getoonde momenten: 0,8112 MPa (+1,1 %) op het appnet (1 422 vierhoeken uit driehoeken, maaswijdte 1/32 m) | ✅ |
@@ -213,8 +213,8 @@ weinig lagen zijn enkele procenten te groot.
 "drie significante cijfers" maar rondt op vaste decimalen af (3 onder 10). Kleine waarden
 verliezen daardoor hun precisie: in LE6 staat mxx = 0,00822 kNm/m als "0,008", myy = 0,01314 als
 "0,013" en mxy = −0,00142 als "-0,001". De kernwaarden zelf kloppen; alleen de weergave is grof.
-Niet aangepast (weergavecode, buiten deze verificatie); de test legt de huidige stand vast.
-**Apart issue openen.**
+Opgelost: onder 1 krijgt de waarde zoveel decimalen als drie significante cijfers vragen
+(hooguit 10): mxx = 0,00822, myy = 0,0131, mxy = −0,00142. De test controleert dat nu.
 
 ## Conclusie
 

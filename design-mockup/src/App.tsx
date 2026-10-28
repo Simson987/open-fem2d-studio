@@ -1572,6 +1572,32 @@ function App() {
         })) : []);
       const opened = await openProject(filters);
       if (!opened) return;
+      if (opened.soort === "resultaten") {
+        // Issue #87: het ingebedde project laden (zonder pad: Opslaan schrijft
+        // nooit naar het .ifcfemresults), dan de opgeslagen resultaten tonen
+        // zonder te rekenen — pas nadat de modelwijziging verwerkt is.
+        const io = await import("./io/ifcResultatenApp");
+        const gelezen = io.leesIfcResultatenVoorApp(opened.text);
+        pasProjectToe(deserializeProject(gelezen.projectTekst));
+        setProjectPath("");
+        await io.wachtTotVerwerkt();
+        if (herberekenTimerRef.current !== null) window.clearTimeout(herberekenTimerRef.current);
+        herberekenTimerRef.current = null;
+        // `femRef`: de store NA het laden (de `fem` van deze closure is van ervoor).
+        const store = femRef.current;
+        if (gelezen.tweeD.perCase.size > 0 || gelezen.tweeD.combinaties.size > 0) {
+          store.setSolverOutputs(io.solverOutputsUitBestand(gelezen, store.rekenCombinaties));
+        }
+        if (gelezen.drieD.perCase.size > 0 || gelezen.drieD.combinaties.size > 0) {
+          setOpenFem3dCaseResults(gelezen.drieD.perCase);
+          setOpenFem3dCombinationResults(gelezen.drieD.combinaties);
+          setOpenFem3dSolvedCombinations(store.combinations.filter((c) => gelezen.drieD.combinaties.has(c.id)));
+        }
+        setSolverStatus({ kind: "solved", at: Date.now() });
+        const { notifySuccess } = await import("./io/notify");
+        notifySuccess(i18next.t("common:app.ifcResults.opened"), opened.path.split(/[\\/]/).pop());
+        return;
+      }
       if (opened.soort === "import") {
         const winkel = useExtensieStore.getState();
         let gekozen: string | undefined;
@@ -1844,6 +1870,34 @@ function App() {
       notifySuccess(i18next.t("common:app.ifc.exported"), i18next.t("common:app.ifc.validBody", { entiteiten: uitslag.entiteiten }));
     }
   }, [ifcModel]);
+
+  /**
+   * Resultaten als .ifcfemresults (issue #87): het IFC-rekenmodel plus de
+   * resultaten van de laatste rekengang en het projectbestand zelf, zodat
+   * Openen het model met resultaten toont zonder te rekenen.
+   */
+  const handleExportIfcResultaten = useCallback(async () => {
+    const { notifySuccess, notifyWarning } = await import("./io/notify");
+    const is3d = modelDimension === "3d";
+    const tweeD = !is3d && fem.multiLcResult ? { perCase: fem.multiLcResult, combinaties: fem.combinationResults ?? new Map() } : undefined;
+    const drieD = is3d && (openFem3dCaseResults.size > 0 || openFem3dCombinationResults.size > 0)
+      ? { perCase: openFem3dCaseResults, combinaties: openFem3dCombinationResults } : undefined;
+    if (!tweeD && !drieD) {
+      notifyWarning(i18next.t("common:app.ifcResults.noResults"), i18next.t("common:app.ifcResults.noResultsBody"));
+      return;
+    }
+    try {
+      const { bouwIfcResultaten } = await import("./io/ifcResultaten");
+      const { bewaarIfcResultaten } = await import("./io/ifcResultatenApp");
+      const naam = ifcModel.project?.naam?.trim() || ifcModel.projectNaam || "rekenmodel";
+      const inhoud = bouwIfcResultaten(ifcModel, { tweeD, drieD, projectTekst: serializeProject(buildProjectSnapshot()) },
+        { bestandsnaam: `${naam}.ifcfemresults`, tijdstempel: new Date().toISOString().slice(0, 19) });
+      const pad = await bewaarIfcResultaten(inhoud, naam);
+      if (pad !== null) notifySuccess(i18next.t("common:app.ifcResults.exported"), pad || `${naam}.ifcfemresults`);
+    } catch (e) {
+      notifyWarning(i18next.t("common:app.ifcResults.exportFailed"), e instanceof Error ? e.message : String(e));
+    }
+  }, [modelDimension, fem.multiLcResult, fem.combinationResults, openFem3dCaseResults, openFem3dCombinationResults, ifcModel, buildProjectSnapshot]);
 
   /** "Valideren" in het lint: controleert de export en meldt de uitslag. */
   const handleValidateIfc = useCallback(async () => {
@@ -4833,6 +4887,7 @@ function App() {
         onExportHtml={() => { void handleExportHtmlReport(); }}
         onExportIfc={() => { void handleExportIfc(false); }}
         onExportIfcStructural={() => { void handleExportIfc(true); }}
+        onExportIfcResults={() => { void handleExportIfcResultaten(); }}
       />
       <LoadCasesDialog
         open={loadCasesOpen}

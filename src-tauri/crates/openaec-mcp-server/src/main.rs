@@ -41,6 +41,10 @@ mod staalhal_tools;
 /// import van de app in de sidecar, rekenen met de 3D-kern en toetsen met
 /// `steel_check`, langs dezelfde keten als de stalen hal.
 mod ifc_import_tools;
+/// Resultaten als `.ifcfemresults` (issue #87): rekenen en het IFC4-bestand
+/// bouwen in de sidecar (`io/ifcResultaten.ts`, dezelfde functie als de
+/// exportkaart in de app), en zo'n bestand teruglezen.
+mod ifc_resultaten_tools;
 mod extensie_tools;
 
 /// De acht betontools (NEN-EN 1992-1-1). Ze roepen dezelfde `concrete_check`
@@ -542,6 +546,7 @@ fn tool_definitions() -> Value {
     lijst.extend(open_fem_3d_tools::tool_definitions());
     lijst.extend(staalhal_tools::tool_definitions());
     lijst.extend(ifc_import_tools::tool_definitions());
+    lijst.extend(ifc_resultaten_tools::tool_definitions());
     lijst.extend(extensie_tools::tool_definitions());
     lijst.extend(concrete_tools::tool_definitions());
     lijst.extend(timber_tools::tool_definitions());
@@ -638,6 +643,7 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
         }
         hal if staalhal_tools::is_staalhal_tool(hal) => staalhal_tools::dispatch(hal, args).await,
         ifc if ifc_import_tools::is_ifc_import_tool(ifc) => ifc_import_tools::dispatch(ifc, args).await,
+        res if ifc_resultaten_tools::is_ifc_resultaten_tool(res) => ifc_resultaten_tools::dispatch(res, args).await,
         extensie if extensie_tools::is_extensie_tool(extensie) => extensie_tools::dispatch(extensie, args).await,
         // De betontools. Ze roepen `concrete_check` aan — dezelfde functies die
         // `src-tauri/src/lib.rs` en `crates/toetsbrug` aanroepen. Zie

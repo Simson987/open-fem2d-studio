@@ -45,6 +45,17 @@ export class StepGetypt {
   }
 }
 
+/**
+ * Een getal MET zijn tekst uit het bestand, alleen met de leesoptie
+ * `getallenAlsTekst`. De resultatenlezer (`io/ifcResultaten.ts`) schaalt een
+ * waarde exact door de decimale komma te verschuiven (m → mm, N → kN) in
+ * plaats van door met 1000 te vermenigvuldigen, wat niet altijd bit-gelijk
+ * terugkomt. Zonder de optie levert de lezer gewone getallen, zoals altijd.
+ */
+export class StepGetal {
+  constructor(readonly tekst: string, readonly waarde: number) {}
+}
+
 /** `*`: een afgeleid attribuut; de waarde volgt uit andere attributen. */
 export const STEP_AFGELEID: { readonly afgeleid: true } = Object.freeze({ afgeleid: true as const });
 
@@ -55,6 +66,7 @@ export type StepWaarde =
   | StepRef
   | StepEnum
   | StepGetypt
+  | StepGetal
   | typeof STEP_AFGELEID
   | StepWaarde[];
 
@@ -164,7 +176,7 @@ export function decodeerStepTekst(ruw: string): string {
 class Lezer {
   pos = 0;
 
-  constructor(readonly tekst: string) {}
+  constructor(readonly tekst: string, readonly getallenAlsTekst = false) {}
 
   regel(pos = this.pos): number {
     let regels = 1;
@@ -245,7 +257,7 @@ class Lezer {
     return decodeerStepTekst(ruw);
   }
 
-  getal(): number {
+  getal(): number | StepGetal {
     const t = this.tekst;
     const start = this.pos;
     while (this.pos < t.length) {
@@ -257,7 +269,7 @@ class Lezer {
     const woord = t.slice(start, this.pos);
     const waarde = Number(woord);
     if (!Number.isFinite(waarde)) this.fout(`ongeldig getal '${woord}'`, start);
-    return waarde;
+    return this.getallenAlsTekst ? new StepGetal(woord, waarde) : waarde;
   }
 
   waarde(): StepWaarde {
@@ -333,10 +345,10 @@ class Lezer {
  * Lees een STEP-bestand. Gooit `StepLeesFout` met het regelnummer als de
  * tekst geen geldig STEP-bestand is.
  */
-export function leesStep(tekst: string): StepBestand {
+export function leesStep(tekst: string, opties: { getallenAlsTekst?: boolean } = {}): StepBestand {
   // Een byte-order-mark van een teksteditor is geen inhoud.
   const t = tekst.charCodeAt(0) === 0xfeff ? tekst.slice(1) : tekst;
-  const lezer = new Lezer(t);
+  const lezer = new Lezer(t, opties.getallenAlsTekst === true);
   lezer.wit();
   if (t.startsWith("PK", lezer.pos)) {
     throw new StepLeesFout("Dit is een ingepakt bestand (ifcZIP). Pak het eerst uit en kies het .ifc-bestand.");

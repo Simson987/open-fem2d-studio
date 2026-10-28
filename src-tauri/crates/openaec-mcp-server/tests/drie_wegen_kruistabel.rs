@@ -374,6 +374,18 @@ const UITZONDERINGEN: &[Rij] = &[
         reden: "Geen eigen rekenkern: de import van een IFC4-analysemodel is de TypeScript-functie achter de knop \"Rekenmodel importeren\", die in de app zelf draait en voor MCP in de solverbundel. Het rekenen en toetsen erachter gaat door `open_fem_3d::solve` en `steel_check::check_all_beams`, die als `solve_open_fem_3d` en `check_steel_beams` al langs hun wegen bereikbaar zijn; in de app importeert de knop het model en rekent de knop Berekenen.",
     },
     Rij {
+        tauri: None,
+        toetsbrug: None,
+        mcp: Some("fem_resultaten_ifc_schrijven"),
+        reden: "Geen eigen rekenkern: het .ifcfemresults-bestand (issue #87) bouwt de TypeScript-functie `bouwIfcResultaten` achter de exportkaart \"Resultaten (.ifcfemresults)\", die in de app zelf draait en voor MCP in de solverbundel. Het rekenen ervoor is `rekenDoor`, dezelfde doorrekening als solve_fem_model; een Tauri-command of toetsbrugopdracht zou geen rekenroute toevoegen.",
+    },
+    Rij {
+        tauri: None,
+        toetsbrug: None,
+        mcp: Some("fem_resultaten_ifc_lezen"),
+        reden: "Geen eigen rekenkern: het teruglezen van een .ifcfemresults-bestand is de TypeScript-functie `leesIfcResultaten`, die de app bij Openen zelf gebruikt en die voor MCP in de solverbundel staat. Er wordt niets gerekend.",
+    },
+    Rij {
         tauri: Some("open_fem_3d_engine_info"),
         toetsbrug: None,
         mcp: None,

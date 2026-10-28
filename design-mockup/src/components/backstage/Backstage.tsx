@@ -72,11 +72,13 @@ interface BackstageProps {
   onExportHtml?: () => void;
   onExportIfc?: () => void;
   onExportIfcStructural?: () => void;
+  /** Model en resultaten als .ifcfemresults (issue #87). */
+  onExportIfcResults?: () => void;
 }
 
 export default function Backstage({ open, onClose, onOpenSettings, onOpenFile,
   onSave, onSaveAs, onOpen, onNew, onImportIfcAnalysisModel,
-  onOpenSteelHall, onExportPdf, onExportHtml, onExportIfc, onExportIfcStructural,
+  onOpenSteelHall, onExportPdf, onExportHtml, onExportIfc, onExportIfcStructural, onExportIfcResults,
 }: BackstageProps) {
   const { t } = useTranslation("backstage");
   const [activePanel, setActivePanel] = useState<string>("none");
@@ -240,6 +242,7 @@ export default function Backstage({ open, onClose, onOpenSettings, onOpenFile,
               onHtml={onExportHtml ? () => actionAndClose(onExportHtml) : undefined}
               onIfc={onExportIfc ? () => actionAndClose(onExportIfc) : undefined}
               onIfcStructural={onExportIfcStructural ? () => actionAndClose(onExportIfcStructural) : undefined}
+              onIfcResults={onExportIfcResults ? () => actionAndClose(onExportIfcResults) : undefined}
             />
           )}
           {activePanel === "extensions" && <ExtensionManagerPanel />}
@@ -570,8 +573,8 @@ function OpenPanel({
   );
 }
 
-function ExportPanel({ onPdf, onHtml, onIfc, onIfcStructural }: {
-  onPdf?: () => void; onHtml?: () => void; onIfc?: () => void; onIfcStructural?: () => void;
+function ExportPanel({ onPdf, onHtml, onIfc, onIfcStructural, onIfcResults }: {
+  onPdf?: () => void; onHtml?: () => void; onIfc?: () => void; onIfcStructural?: () => void; onIfcResults?: () => void;
 }) {
   const { t } = useTranslation("backstage");
   const niet = (titel: string) => () => meldNietBeschikbaar(titel, t("exportPanel.notAvailable"));
@@ -585,6 +588,8 @@ function ExportPanel({ onPdf, onHtml, onIfc, onIfcStructural }: {
         <ActieKaart icoon={KAART_ICOON.ifcUit} titel={t("exportPanel.asIfcStructural")} tekst={t("exportPanel.asIfcStructuralDesc")} onClick={onIfcStructural ?? niet(t("exportPanel.asIfcStructural"))} />
         <ActieKaart icoon={KAART_ICOON.afbeelding} titel={t("exportPanel.asImage")} tekst={t("exportPanel.asImageDesc")}
           onClick={() => meldNietBeschikbaar(t("exportPanel.asImage"), t("exportPanel.imageSoon"))} />
+        {/* Achteraan, zodat de bestaande kaarten op hun plaats blijven (issue #87). */}
+        <ActieKaart icoon={KAART_ICOON.ifcUit} titel={t("exportPanel.asIfcResults")} tekst={t("exportPanel.asIfcResultsDesc")} onClick={onIfcResults ?? niet(t("exportPanel.asIfcResults"))} />
       </div>
     </div>
   );

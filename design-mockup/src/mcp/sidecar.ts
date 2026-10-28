@@ -112,6 +112,9 @@ import { opStaalhalMaken, opStaalhalUitwerken } from "./staalhalSidecar";
 import { StaalhalFout } from "../components/openFem3d/wizards/staalhal";
 import { IfcSidecarInvoerFout, opIfcImporteren, opIfcUitwerken } from "./ifcImportSidecar";
 import { IfcImportFout } from "../io/ifcAnalyseImport";
+import { bouwIfcResultaten, leesIfcResultaten, IfcResultatenFout } from "../io/ifcResultaten";
+import { valideerIfc } from "../io/ifcExport";
+import { StepLeesFout } from "../io/stepLezer";
 import { opApiCatalogus, opApiUitvoeren } from "./apiSidecar";
 import { opExtensieImporteren } from "./extensieSidecar";
 import { ApiFout } from "../api/register";
@@ -1420,6 +1423,8 @@ function rekenDoor(payload: Record<string, unknown>) {
   }
 
   return {
+    gelezen,
+    analysetype,
     combinaties,
     veldSplitsing,
     veldVarianten: veld.uitkomst?.combinaties ?? [],
@@ -1713,6 +1718,83 @@ function opLoadProject(payload: Record<string, unknown>) {
   };
 }
 
+// ── Resultaten als .ifcfemresults (issue #87) ─────────────────────────────
+
+/**
+ * `ifcfemresults_schrijven`: rekent het model door zoals `solve` (dezelfde
+ * `rekenDoor`, dus dezelfde combinaties, selectie en waarschuwingen) en bouwt
+ * het IFC4-bestand met model en resultaten (`bouwIfcResultaten`, dezelfde
+ * functie als de exportkaart in de app). Bij een projectbestand reist de
+ * projecttekst mee, zodat de app het model exact heropent. Rust schrijft het
+ * bestand weg; hier gebeurt geen schijf-I/O.
+ */
+function opIfcfemresultsSchrijven(payload: Record<string, unknown>) {
+  const { bestandsnaam, ...rekenPayload } = payload;
+  if (bestandsnaam !== undefined && typeof bestandsnaam !== "string") {
+    throw new InvoerFout("`bestandsnaam` moet tekst zijn.");
+  }
+  const d = rekenDoor(rekenPayload);
+  const m = d.gelezen.model;
+  const perCase = gevalResultaten(d.perCase);
+  const project = rekenPayload.project as { inhoud?: unknown } | undefined;
+  const projectTekst = typeof project?.inhoud === "string" ? project.inhoud : undefined;
+  const naam = typeof bestandsnaam === "string" ? bestandsnaam.replace(/\.ifcfemresults$/i, "") : "rekenmodel";
+  const inhoud = bouwIfcResultaten({
+    projectNaam: naam,
+    nodes: m.nodes, beams: d.gelezen.beams, supports: m.supports, loads: m.loads,
+    loadCases: m.loadCases, plates: m.plates,
+    eigenGewicht: m.selfWeightEnabled,
+    combinations: [...d.combinaties, ...d.veldVarianten],
+    aantalCombinaties: d.combinaties.length,
+    analysetype: d.analysetype,
+  }, { tweeD: { perCase, combinaties: d.combinationResults }, projectTekst }, {
+    bestandsnaam: typeof bestandsnaam === "string" ? bestandsnaam : undefined,
+  });
+  const validatie = valideerIfc(inhoud);
+  return {
+    inhoud,
+    entiteiten: validatie.entiteiten,
+    validatie_fouten: validatie.fouten,
+    gevallen: [...perCase.keys()],
+    combinaties: [...d.combinationResults.keys()],
+    project_ingebed: projectTekst !== undefined,
+    warnings: d.waarschuwingen,
+  };
+}
+
+/**
+ * `ifcfemresults_lezen`: leest een .ifcfemresults-bestand terug (alleen de
+ * resultaatgroepen die Open FEM Studio schreef) en geeft de 2D-resultaten in
+ * dezelfde vorm als `solve` (met stations), de 3D-resultaten zoals de 3D-kern
+ * ze geeft, en of er een projectbestand in zit.
+ */
+function opIfcfemresultsLezen(payload: Record<string, unknown>) {
+  const onbekend = Object.keys(payload).filter((k) => k !== "inhoud" && k !== "detail");
+  if (onbekend.length > 0) throw new InvoerFout(`Onbekend veld \`${onbekend[0]}\`; bekend zijn: inhoud, detail.`);
+  if (typeof payload.inhoud !== "string" || payload.inhoud.length === 0) {
+    throw new InvoerFout("`inhoud` moet de tekst van het .ifcfemresults-bestand zijn.");
+  }
+  const volledig = payload.detail === "volledig";
+  const r = leesIfcResultaten(payload.inhoud);
+  const samenvatting2D = (res: SolverResult) => ({
+    max_displacement_mm: res.maxDisplacement,
+    reactions: Object.fromEntries([...res.reactions].map(([k, v]) => [String(k), { fx_kN: v.fx / 1000, fz_kN: v.fz / 1000, my_kNm: v.my / 1e6 }])),
+  });
+  return {
+    units: EENHEDEN,
+    project_ingebed: r.projectTekst !== null,
+    groepen: r.groepen,
+    tweeD: {
+      per_case: mapNaarObject(r.tweeD.perCase, (x) => (volledig ? vormResultaat(x, true) : samenvatting2D(x))),
+      combinations: mapNaarObject(r.tweeD.combinaties, (x) => (volledig ? vormResultaat(x, true) : samenvatting2D(x))),
+    },
+    drieD: {
+      per_case: Object.fromEntries([...r.drieD.perCase].map(([k, v]) => [String(k), volledig ? v : { reactions: v.reactions }])),
+      combinations: Object.fromEntries([...r.drieD.combinaties].map(([k, v]) => [String(k), volledig ? v : { reactions: v.reactions }])),
+    },
+  };
+}
+
 // ── Hoofdlus ───────────────────────────────────────────────────────────────
 
 /**
@@ -1743,6 +1825,10 @@ export function verwerkVerzoek(verzoek: SidecarVerzoek): SidecarAntwoord {
         return maakOk(verzoek.id, opIfcImporteren(verzoek.payload));
       case "ifc_uitwerken":
         return maakOk(verzoek.id, opIfcUitwerken(verzoek.payload));
+      case "ifcfemresults_schrijven":
+        return maakOk(verzoek.id, opIfcfemresultsSchrijven(verzoek.payload));
+      case "ifcfemresults_lezen":
+        return maakOk(verzoek.id, opIfcfemresultsLezen(verzoek.payload));
       case "api_catalogus":
         return maakOk(verzoek.id, opApiCatalogus());
       case "api_uitvoeren":
@@ -1774,6 +1860,9 @@ export function verwerkVerzoek(verzoek: SidecarVerzoek): SidecarAntwoord {
         reden: err.code,
         ...(err.modellen.length > 0 ? { modellen: err.modellen } : {}),
       });
+    }
+    if (err instanceof IfcResultatenFout || err instanceof StepLeesFout) {
+      return maakFout(verzoek.id, "BESTAND_ONLEESBAAR", err.message);
     }
     if (err instanceof IfcSidecarInvoerFout) {
       return maakFout(verzoek.id, "INVOER_ONGELDIG", err.message, { veld: err.veld });

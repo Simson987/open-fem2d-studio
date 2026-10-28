@@ -33,7 +33,9 @@ console.log("[2] elke kaart is een knop met een actie");
 const actieKaart = /function ActieKaart[\s\S]*?\n}\n/.exec(bs)?.[0] ?? "";
 check("ActieKaart rendert een <button type=\"button\">", /<button type="button" className="bs-export-card" onClick=\{onClick\}>/.test(actieKaart));
 const kaarten = [...bs.matchAll(/<ActieKaart\b[\s\S]*?\/>/g)].map((m) => m[0]);
-check("zeven kaarten (2 import, 5 export)", kaarten.length === 7, `${kaarten.length}`);
+// Issue #87: de zesde exportkaart (Resultaten, .ifcfemresults) staat achteraan.
+check("acht kaarten (2 import, 6 export)", kaarten.length === 8, `${kaarten.length}`);
+check("de resultatenkaart is de laatste, de bestaande blijven op hun plaats", /asIfcResults/.test(kaarten[7] ?? ""));
 check("elke kaart heeft een onClick", kaarten.every((k) => /onClick=\{/.test(k)));
 
 console.log("[3] de acties komen van App.tsx");
@@ -50,6 +52,7 @@ for (const [prop, actie] of [
   ["onExportHtml", "handleExportHtmlReport"],
   ["onExportIfc", "handleExportIfc(false)"],
   ["onExportIfcStructural", "handleExportIfc(true)"],
+  ["onExportIfcResults", "handleExportIfcResultaten()"],
 ]) {
   check(`App geeft ${prop} door (${actie})`, backstageJsx.includes(`${prop}=`) && backstageJsx.includes(actie));
 }
