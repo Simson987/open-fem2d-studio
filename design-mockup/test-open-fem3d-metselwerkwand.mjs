@@ -20,7 +20,18 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { register as registreerLader } from "node:module";
 import { fileURLToPath } from "node:url";
+
+// Het bedieningskanaal importeert componenten met stylesheets; Node kent die niet.
+registreerLader(
+  "data:text/javascript," +
+    encodeURIComponent(
+      "export async function load(url, ctx, next) {" +
+        " if (url.split('?')[0].endsWith('.css')) return { format: 'module', source: 'export default {};', shortCircuit: true };" +
+        " return next(url, ctx); }",
+    ),
+);
 
 const stil = console.log;
 console.log = (...args) => { if (!String(args[0] ?? "").startsWith("[TriangleService]")) stil(...args); };
@@ -143,6 +154,37 @@ stil("[1] API: metselwerkwand en latei");
   for (const [x, y] of [[0, 0], [4, 0], [4, 3], [0, 3]]) v.doe("model3d.node.add", { x, y, z: 0 });
   v.doe("model3d.plate.add", { nodeIds: [1, 2, 3, 4], thicknessM: 0.2 });
   check("vloer als metselwerkwand → geweigerd", /verticaal/.test(v.faalt("model3d.plate.setMasonry", { plateId: 1, masonry: wand })?.message ?? ""));
+}
+
+stil("\n[1b] bedieningskanaal (model_3d_bouwen) met plates[].masonry");
+{
+  const { voerUit } = await import("./src/bediening/bediening.ts");
+  const acties = () => ({
+    fem: { nodes: [], beams: [], loads: [], loadCases: [], combinations: [], combinationResults: null },
+    modelDimension: "3d",
+    openFem3d: {
+      model: { nodes: [], beams: [] },
+      visibility: { nodes: true, beams: true, structuralGrid: true },
+      structuralGrid: { enabled: true, xAxes: [], yAxes: [], zAxes: [] },
+      replaceModel(model) { this.model = model; },
+      setVisibility() {}, setView() {}, setSelection() {},
+    },
+    setActiveView() {},
+  });
+  const voer = async (naam, args, a) => {
+    try { return await voerUit(naam, args, { current: a }, () => new Promise(() => {}), () => Promise.resolve()); }
+    catch (fout) { return { fout: fout instanceof Error ? fout.message : String(fout) }; }
+  };
+  const bouw = (masonry) => ({
+    nodes: [{ x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 0 }, { x: 4, y: 0, z: 2.7 }, { x: 0, y: 0, z: 2.7 }],
+    beams: [], plates: [{ nodes: [1, 2, 3, 4], thickness_m: 0.1, masonry }], supports: [{ node: 1, type: "fixed" }],
+  });
+  const a = acties();
+  const antwoord = await voer("model_3d_bouwen", bouw({ unit_weight_kn_m3: 19, e_mpa: 4000 }), a);
+  check("model_3d_bouwen zet de metselwerkwand in modelvorm", !antwoord.fout
+    && JSON.stringify(a.openFem3d.model.plates[0].masonry) === JSON.stringify({ unitWeightKnM3: 19, eMpa: 4000 }), antwoord.fout ?? "");
+  const tik = await voer("model_3d_bouwen", bouw({ unit_weight: 19, e_mpa: 4000 }), acties());
+  check("tikfout in masonry → geweigerd", /onbekend veld/.test(tik.fout ?? ""), tik.fout ?? "");
 }
 
 stil("\n[2] lateibelasting voor de toets (driehoek 60°)");

@@ -1190,7 +1190,10 @@ pub fn tool_definitions() -> Vec<Value> {
                             "openings":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"nodes":{"type":"array","minItems":3,"items":{"type":"integer","minimum":1}},"corner_radius_m":{"type":"number","minimum":0}},"required":["nodes"]}},
                             "bedding":{"type":"object","additionalProperties":false,"required":["k_kn_per_m3"],
                                 "description":"Plate on an elastic (Winkler) foundation, e.g. a ground floor slab on sand: the solver puts a spring k·A perpendicular to the plate on every node of its mesh. k_kn_per_m3 is the modulus of subgrade reaction in kN/m³; the soil lies on the underside of the plate (against the plate normal: below a floor). compression_only drops the springs where the plate lifts. Without a support in its plane the solver holds the plate there as long as the load is perpendicular to it; a load in the plane of the plate needs a support.",
-                                "properties":{"k_kn_per_m3":{"type":"number","exclusiveMinimum":0},"compression_only":{"type":"boolean"}}} }, "required": ["nodes"] } }
+                                "properties":{"k_kn_per_m3":{"type":"number","exclusiveMinimum":0},"compression_only":{"type":"boolean"}}},
+                            "masonry":{"type":"object","additionalProperties":false,"required":["unit_weight_kn_m3","e_mpa"],
+                                "description":"Masonry wall (issue #97), e.g. calcium silicate on a foundation beam. The plate must be vertical. It is analysed as an orthotropic wall plate: E vertical = e_mpa, E horizontal = 1e-6*e_mpa, so the wall does not act as a deep beam with the foundation beam; G = 0.4*e_mpa (EN 1996-1-1 §3.7.3), so in-plane wind goes to the foundation through shear. Self-weight is unit_weight_kn_m3 * thickness. material is then ignored. Lintels above openings: use the API command model3d.plate.setLintel (api_uitvoeren) after building.",
+                                "properties":{"unit_weight_kn_m3":{"type":"number","exclusiveMinimum":0,"maximum":100},"e_mpa":{"type":"number","exclusiveMinimum":0}}} }, "required": ["nodes"] } }
                     ,"surface_loads": { "type": "array", "description": "Global plate surface loads in kN/m².",
                         "items": { "type": "object", "additionalProperties": false,
                         "properties": { "plate":{"type":"integer","minimum":1}, "case_id":{"type":"integer","minimum":1}, "qx":{"type":"number"}, "qy":{"type":"number"}, "qz":{"type":"number"} }, "required": ["plate"] } }
@@ -1721,6 +1724,18 @@ mod tests {
         assert_eq!(bedding["properties"]["k_kn_per_m3"]["exclusiveMinimum"], json!(0));
         assert_eq!(bedding["properties"]["compression_only"]["type"], json!("boolean"));
         assert_eq!(bedding["properties"].as_object().unwrap().len(), 2);
+    }
+
+    /// Metselwerkwand (#97) in `gui_build_3d_model`: strikt, γ en E verplicht.
+    #[test]
+    fn het_3d_schema_draagt_metselwerkwand_strikt() {
+        let defs = tool_definitions();
+        let bouw = defs.iter().find(|d| d["name"] == "gui_build_3d_model").unwrap();
+        let wand = &bouw["inputSchema"]["properties"]["plates"]["items"]["properties"]["masonry"];
+        assert_eq!(wand["additionalProperties"], json!(false));
+        assert_eq!(wand["required"], json!(["unit_weight_kn_m3", "e_mpa"]));
+        assert_eq!(wand["properties"].as_object().unwrap().len(), 2);
+        assert!(wand["description"].as_str().unwrap().contains("model3d.plate.setLintel"));
     }
 
     /// Staaf op bedding (#106) in `gui_build_3d_model`: een strikt object met
