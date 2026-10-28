@@ -69,6 +69,11 @@ fn zuivere_afschuiving() {
         .niet_getoetst
         .iter()
         .any(|n| n.id == "wapening_aanwezig" && n.bepaalt_status));
+    // Issue #244, punt 026: de reden verwijst naar het bestaande invoerveld
+    // in plaats van te zeggen dat de app de wandwapening niet kent.
+    let reden = &r.niet_getoetst.iter().find(|n| n.id == "wapening_aanwezig").unwrap().reden;
+    assert!(reden.contains("niet ingevoerd") && reden.contains("`wapening_aanwezig`"), "{reden}");
+    assert!(!reden.contains("kent de app nog niet"), "{reden}");
     let calc = match &r.checks[0].kind {
         steel_check::CheckKind::Resistance(c) => c,
         _ => panic!(),
